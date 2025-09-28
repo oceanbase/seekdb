@@ -1,0 +1,284 @@
+/**
+ * Copyright (c) 2021 OceanBase
+ * OceanBase CE is licensed under Mulan PubL v2.
+ * You can use this software according to the terms and conditions of the Mulan PubL v2.
+ * You may obtain a copy of Mulan PubL v2 at:
+ *          http://license.coscl.org.cn/MulanPubL-2.0
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PubL v2 for more details.
+ */
+#define USING_LOG_PREFIX SERVER
+
+#include "observer/ob_srv_xlator.h"
+#include "share/deadlock/ob_deadlock_detector_rpc.h"
+#include "sql/engine/px/ob_px_rpc_processor.h"
+#include "sql/engine/px/p2p_datahub/ob_p2p_dh_rpc_process.h"
+#include "sql/das/ob_das_id_rpc.h"
+#include "storage/tablelock/ob_table_lock_rpc_processor.h"
+#include "storage/tx/ob_gti_rpc.h"
+#include "storage/tx/wrs/ob_weak_read_service_rpc_define.h"  // weak_read_service
+
+#include "observer/table/ob_table_execute_processor.h"
+#include "observer/table/ob_table_batch_execute_processor.h"
+#include "observer/table/ob_table_query_processor.h"
+#include "observer/table/ob_table_query_and_mutate_processor.h"
+#include "observer/table/ob_table_query_async_processor.h"
+#include "observer/table/ob_table_direct_load_processor.h"
+#include "observer/table/ob_table_ls_execute_processor.h"
+#include "observer/table/ob_redis_execute_processor.h"
+#include "observer/table/ob_redis_execute_processor_v2.h"
+#include "observer/table/ob_table_meta_processor.h"
+
+#include "storage/ob_storage_rpc.h"
+
+#include "rootserver/freeze/ob_major_freeze_rpc_define.h"        // ObTenantMajorFreezeP
+
+#include "observer/table_load/ob_table_load_rpc_processor.h"
+#include "observer/table_load/resource/ob_table_load_resource_processor.h"
+#include "observer/net/ob_net_endpoint_ingress_rpc_processor.h"
+#include "share/wr/ob_wr_snapshot_rpc_processor.h"
+#include "observer/net/ob_shared_storage_net_throt_rpc_processor.h"
+
+using namespace oceanbase;
+using namespace oceanbase::observer;
+using namespace oceanbase::lib;
+using namespace oceanbase::rpc;
+using namespace oceanbase::sql;
+using namespace oceanbase::common;
+using namespace oceanbase::transaction;
+using namespace oceanbase::transaction::tablelock;
+using namespace oceanbase::obrpc;
+using namespace oceanbase::obmysql;
+using namespace oceanbase::share;
+
+void oceanbase::observer::init_srv_xlator_for_partition(ObSrvRpcXlator *xlator) {
+  // RPC_PROCESSOR(ObGetMemberListP, gctx_.par_ser_);
+//  RPC_PROCESSOR(ObReachPartitionLimitP, gctx_);
+  // RPC_PROCESSOR(ObPTSAddMemberP, gctx_.par_ser_);
+  // RPC_PROCESSOR(ObPTSRemoveMemberP, gctx_.par_ser_);
+  // RPC_PROCESSOR(ObPTSRemoveReplicaP, gctx_.par_ser_);
+  // RPC_PROCESSOR(ObIsMemberChangeDoneP, gctx_.par_ser_);
+  // RPC_PROCESSOR(ObWarmUpRequestP, gctx_.par_ser_);
+  // RPC_PROCESSOR(ObBatchRemoveMemberP, gctx_.par_ser_);
+  // RPC_PROCESSOR(ObBatchAddMemberP, gctx_.par_ser_);
+  // RPC_PROCESSOR(ObBatchMemberChangeDoneP, gctx_.par_ser_);
+  // RPC_PROCESSOR(ObFetchMacroBlockOldP, gctx_.par_ser_, gctx_.bandwidth_throttle_);
+  RPC_PROCESSOR(ObDumpMemtableP, gctx_);
+  RPC_PROCESSOR(ObDumpTxDataMemtableP, gctx_);
+  RPC_PROCESSOR(ObDumpSingleTxDataP, gctx_);
+  RPC_PROCESSOR(ObForceSwitchILogFileP, gctx_);
+  RPC_PROCESSOR(ObForceSetAllAsSingleReplicaP, gctx_);
+  RPC_PROCESSOR(ObForceSetLSAsSingleReplicaP, gctx_);
+  // RPC_PROCESSOR(ObSplitDestPartitionRequestP, gctx_.par_ser_);
+  // RPC_PROCESSOR(ObReplicaSplitProgressRequestP, gctx_.par_ser_);
+  // RPC_PROCESSOR(ObCheckMemberMajorSSTableEnoughP, gctx_.par_ser_);
+  // RPC_PROCESSOR(ObBatchRemoveReplicaP, gctx_.par_ser_);
+  RPC_PROCESSOR(ObForceDisableBlacklistP, gctx_);
+  RPC_PROCESSOR(ObForceEnableBlacklistP, gctx_);
+  RPC_PROCESSOR(ObForceClearBlacklistP, gctx_);
+  RPC_PROCESSOR(ObAddDiskP, gctx_);
+  RPC_PROCESSOR(ObDropDiskP, gctx_);
+  RPC_PROCESSOR(ObForceSetServerListP, gctx_);
+  RPC_PROCESSOR(ObHandlePartTransCtxP, gctx_);
+  RPC_PROCESSOR(ObRpcSetMemberListP, gctx_);
+  RPC_PROCESSOR(ObRpcCreateLSP, gctx_);
+#ifdef OB_BUILD_ARBITRATION
+  RPC_PROCESSOR(ObRpcCreateArbP, gctx_);
+  RPC_PROCESSOR(ObRpcDeleteArbP, gctx_);
+#endif
+  RPC_PROCESSOR(ObRpcCheckLSCanOfflineP, gctx_);
+  RPC_PROCESSOR(ObCleanSequenceCacheP, gctx_);
+  RPC_PROCESSOR(ObRegisterTxDataP, gctx_);
+  RPC_PROCESSOR(ObRpcGetLSAccessModeP, gctx_);
+  RPC_PROCESSOR(ObRpcChangeLSAccessModeP, gctx_);
+  RPC_PROCESSOR(ObTabletLocationReceiveP, gctx_);
+  RPC_PROCESSOR(ObForceSetTenantLogDiskP, gctx_);
+  RPC_PROCESSOR(ObForceDumpServerUsageP, gctx_);
+  RPC_PROCESSOR(ObAdminForceDropLonelyLobAuxTableP, gctx_);
+}
+
+void oceanbase::observer::init_srv_xlator_for_migrator(ObSrvRpcXlator *xlator) {
+  // RPC_PROCESSOR(ObFetchPartitionInfoP, gctx_.par_ser_);
+  // RPC_PROCESSOR(ObFetchTableInfoP, gctx_.par_ser_);
+  // RPC_PROCESSOR(ObFetchLogicBaseMetaP, gctx_.par_ser_, gctx_.bandwidth_throttle_);
+  // RPC_PROCESSOR(ObFetchPhysicalBaseMetaP, gctx_.par_ser_, gctx_.bandwidth_throttle_);
+  // RPC_PROCESSOR(ObFetchLogicRowP, gctx_.par_ser_, gctx_.bandwidth_throttle_);
+  // RPC_PROCESSOR(ObFetchLogicDataChecksumP, gctx_.par_ser_, gctx_.bandwidth_throttle_);
+  // RPC_PROCESSOR(ObFetchLogicDataChecksumSliceP, gctx_.par_ser_, gctx_.bandwidth_throttle_);
+  // RPC_PROCESSOR(ObFetchLogicRowSliceP, gctx_.par_ser_, gctx_.bandwidth_throttle_);
+  // RPC_PROCESSOR(ObFetchMacroBlockP, gctx_.par_ser_, gctx_.bandwidth_throttle_);
+  // RPC_PROCESSOR(ObFetchOFSMacroBlockP, gctx_.par_ser_, gctx_.bandwidth_throttle_);
+  // RPC_PROCESSOR(ObFetchPartitionGroupInfoP, gctx_.par_ser_);
+  // RPC_PROCESSOR(ObFetchPGPartitioninfoP, gctx_.par_ser_, gctx_.bandwidth_throttle_);
+  // RPC_PROCESSOR(ObCheckMemberPGMajorSSTableEnoughP, gctx_.par_ser_);
+  // RPC_PROCESSOR(ObFetchReplicaInfoP, gctx_.par_ser_);
+  // RPC_PROCESSOR(ObSuspendPartitionP, gctx_.par_ser_);
+  // RPC_PROCESSOR(ObHandoverPartitionP, gctx_.par_ser_);
+}
+
+void oceanbase::observer::init_srv_xlator_for_migration(ObSrvRpcXlator *xlator)
+{
+  // restore
+  RPC_PROCESSOR(ObNotifyRestoreTabletsP, gctx_.bandwidth_throttle_);
+  RPC_PROCESSOR(ObInquireRestoreP, gctx_.bandwidth_throttle_);
+  RPC_PROCESSOR(ObUpdateLSMetaP, gctx_.bandwidth_throttle_);
+
+  // migrate warmup
+#ifdef OB_BUILD_SHARED_STORAGE
+  RPC_PROCESSOR(ObFetchMicroBlockKeysP);
+  RPC_PROCESSOR(ObFetchMicroBlockP, gctx_.bandwidth_throttle_);
+  RPC_PROCESSOR(ObGetMicroBlockCacheInfoP);
+  RPC_PROCESSOR(ObGetMigrationCacheJobInfoP);
+#endif
+
+}
+
+void oceanbase::observer::init_srv_xlator_for_others(ObSrvRpcXlator *xlator) {
+  RPC_PROCESSOR(ObGtsP);
+  RPC_PROCESSOR(ObGtsErrRespP);
+  RPC_PROCESSOR(ObGtiP);
+  RPC_PROCESSOR(ObDASIDP);
+
+  // Weakly Consistent Read Related
+  RPC_PROCESSOR(ObWrsGetClusterVersionP, gctx_.weak_read_service_);
+  RPC_PROCESSOR(ObWrsClusterHeartbeatP, gctx_.weak_read_service_);
+
+  // update optimizer statistic
+  RPC_PROCESSOR(ObUpdateLocalStatCacheP, gctx_);
+  RPC_PROCESSOR(ObInitSqcP, gctx_);
+  RPC_PROCESSOR(ObInitTaskP, gctx_);
+  RPC_PROCESSOR(ObInitFastSqcP, gctx_);
+  RPC_PROCESSOR(ObPxP2pDhMsgP, gctx_);
+  RPC_PROCESSOR(ObPxP2pDhClearMsgP, gctx_);
+  RPC_PROCESSOR(ObPxTenantTargetMonitorP, gctx_);
+  RPC_PROCESSOR(ObPxCleanDtlIntermResP, gctx_);
+  // SQL Estimate
+  RPC_PROCESSOR(ObEstimatePartitionRowsP, gctx_);
+
+  // table api
+  RPC_PROCESSOR(ObTableLoginP, gctx_);
+  RPC_PROCESSOR(ObTableApiExecuteP, gctx_);
+  RPC_PROCESSOR(ObTableBatchExecuteP, gctx_);
+  RPC_PROCESSOR(ObTableQueryP, gctx_);
+  RPC_PROCESSOR(ObTableQueryAndMutateP, gctx_);
+  RPC_PROCESSOR(ObTableQueryAsyncP, gctx_);
+  RPC_PROCESSOR(ObTableDirectLoadP, gctx_);
+  RPC_PROCESSOR(ObTenantTTLP, gctx_);
+  RPC_PROCESSOR(ObTableLSExecuteP, gctx_);
+  RPC_PROCESSOR(ObRedisExecuteP, gctx_);
+  RPC_PROCESSOR(ObRedisExecuteV2P, gctx_);
+  RPC_PROCESSOR(ObTableMetaP, gctx_);
+
+  // HA GTS
+  RPC_PROCESSOR(ObHaGtsPingRequestP, gctx_);
+  RPC_PROCESSOR(ObHaGtsGetRequestP, gctx_);
+  RPC_PROCESSOR(ObHaGtsGetResponseP, gctx_);
+  RPC_PROCESSOR(ObHaGtsHeartbeatP, gctx_);
+  RPC_PROCESSOR(ObHaGtsUpdateMetaP, gctx_);
+  RPC_PROCESSOR(ObHaGtsChangeMemberP, gctx_);
+
+  // DeadLock rpc
+  RPC_PROCESSOR(ObDeadLockCollectInfoMessageP, gctx_);
+  RPC_PROCESSOR(ObDetectorLCLMessageP, gctx_);
+  RPC_PROCESSOR(ObDeadLockNotifyParentMessageP, gctx_);
+
+  // table lock rpc
+  RPC_PROCESSOR(ObTableLockTaskP, gctx_);
+  RPC_PROCESSOR(ObHighPriorityTableLockTaskP, gctx_);
+  RPC_PROCESSOR(ObOutTransLockTableP, gctx_);
+  RPC_PROCESSOR(ObOutTransUnlockTableP, gctx_);
+  RPC_PROCESSOR(ObBatchLockTaskP, gctx_);
+  RPC_PROCESSOR(ObBatchReplaceLockTaskP, gctx_);
+  RPC_PROCESSOR(ObHighPriorityBatchLockTaskP, gctx_);
+  RPC_PROCESSOR(ObAdminRemoveLockP);
+  RPC_PROCESSOR(ObAdminUpdateLockP);
+
+
+
+  // flush opt stat monitoring info rpc
+  RPC_PROCESSOR(ObFlushLocalOptStatMonitoringInfoP, gctx_);
+  // send bloom filter
+  RPC_PROCESSOR(ObSendBloomFilterP);
+  // GC check member list
+  RPC_PROCESSOR(ObQueryLSIsValidMemberP, gctx_);
+
+  // tenant major freeze
+  RPC_PROCESSOR(ObTenantMajorFreezeP);
+  RPC_PROCESSOR(ObTenantAdminMergeP);
+
+  // checkpoint slog rpc
+  RPC_PROCESSOR(ObCheckpointSlogP, gctx_);
+
+  // check connectivity
+  RPC_PROCESSOR(ObRpcCheckBackupDestConnectivityP, gctx_);
+
+  // global auto increment service rpc
+  RPC_PROCESSOR(ObGAISNextAutoIncP);
+  RPC_PROCESSOR(ObGAISCurrAutoIncP);
+  RPC_PROCESSOR(ObGAISPushAutoIncP);
+  RPC_PROCESSOR(ObGAISClearAutoIncCacheP);
+  RPC_PROCESSOR(ObGAISNextSequenceP);
+
+  //sql optimizer estimate tablet block count
+  RPC_PROCESSOR(ObEstimateTabletBlockCountP, gctx_);
+
+  // lob
+  RPC_PROCESSOR(ObLobQueryP, gctx_.bandwidth_throttle_);
+  //standby switchover/failover
+  RPC_PROCESSOR(ObRpcGetLSSyncScnP, gctx_);
+  RPC_PROCESSOR(ObRefreshTenantInfoP, gctx_);
+  RPC_PROCESSOR(ObRpcGetLSReplayedScnP, gctx_);
+  RPC_PROCESSOR(ObUpdateTenantInfoCacheP, gctx_);
+  RPC_PROCESSOR(ObRefreshServiceNameP, gctx_);
+
+  RPC_PROCESSOR(ObSyncRewriteRulesP, gctx_);
+
+  RPC_PROCESSOR(ObNetEndpointRegisterP, gctx_);
+  RPC_PROCESSOR(ObNetEndpointPredictIngressP, gctx_);
+  RPC_PROCESSOR(ObNetEndpointSetIngressP, gctx_);
+  RPC_PROCESSOR(ObRpcGetTenantResP, gctx_);
+
+  // session info verification
+  RPC_PROCESSOR(ObSessInfoVerificationP, gctx_);
+  RPC_PROCESSOR(ObBroadcastConsensusVersionP, gctx_);
+
+  // direct load
+  RPC_PROCESSOR(ObDirectLoadControlP, gctx_);
+  // direct load resource
+  RPC_PROCESSOR(ObDirectLoadResourceP, gctx_);
+
+  // wr
+  RPC_PROCESSOR(ObWrAsyncSnapshotTaskP, gctx_);
+  RPC_PROCESSOR(ObWrAsyncPurgeSnapshotTaskP, gctx_);
+  RPC_PROCESSOR(ObWrSyncUserSubmitSnapshotTaskP, gctx_);
+  RPC_PROCESSOR(ObWrSyncUserModifySettingsTaskP, gctx_);
+
+  // share storage net throt
+  RPC_PROCESSOR(ObSharedStorageNetThrotRegisterP, gctx_);
+  RPC_PROCESSOR(ObSharedStorageNetThrotPredictP, gctx_);
+  RPC_PROCESSOR(ObSharedStorageNetThrotSetP, gctx_);
+
+  // kill client session
+  RPC_PROCESSOR(ObKillClientSessionP, gctx_);
+  // client session create time
+  RPC_PROCESSOR(ObClientSessionConnectTimeP, gctx_);
+
+  RPC_PROCESSOR(ObRpcChangeExternalStorageDestP, gctx_);
+
+  // limit calculator
+  RPC_PROCESSOR(ObResourceLimitCalculatorP, gctx_);
+  
+  // ddl
+  RPC_PROCESSOR(ObRpcCheckandCancelDDLComplementDagP, gctx_);
+
+  RPC_PROCESSOR(ObGAISBroadcastAutoIncCacheP);
+  // kill query client session
+  RPC_PROCESSOR(ObKillQueryClientSessionP, gctx_);
+
+  //sql optimizer estimate skip rate
+  RPC_PROCESSOR(ObEstimateSkipRateP, gctx_);
+  RPC_PROCESSOR(ObCheckNestedMViewMdsP, gctx_);
+
+}

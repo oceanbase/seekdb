@@ -1,0 +1,158 @@
+/**
+ * Copyright (c) 2021 OceanBase
+ * OceanBase CE is licensed under Mulan PubL v2.
+ * You can use this software according to the terms and conditions of the Mulan PubL v2.
+ * You may obtain a copy of Mulan PubL v2 at:
+ *          http://license.coscl.org.cn/MulanPubL-2.0
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PubL v2 for more details.
+ */
+
+#ifdef DEF_EXPR_INFO_FLAG
+DEF_EXPR_INFO_FLAG(IS_CONST, 0x0)   // const expression, e.g. 1.2, 'abc'
+DEF_EXPR_INFO_FLAG(IS_COLUMN)        // column expression, e.g. C1, T1.C1
+DEF_EXPR_INFO_FLAG(IS_STATIC_PARAM)         // vaiable expression, e.g. ?
+DEF_EXPR_INFO_FLAG(IS_AGG)           // aggregate function, e.g. max, avg
+DEF_EXPR_INFO_FLAG(IS_FUNC)          // system function
+DEF_EXPR_INFO_FLAG(IS_IN)
+DEF_EXPR_INFO_FLAG(IS_NOT)
+DEF_EXPR_INFO_FLAG(IS_OR)
+DEF_EXPR_INFO_FLAG(IS_SUB_QUERY)
+DEF_EXPR_INFO_FLAG(IS_ONETIME)
+DEF_EXPR_INFO_FLAG(IS_ALIAS)
+DEF_EXPR_INFO_FLAG(IS_CUR_TIME)
+DEF_EXPR_INFO_FLAG(IS_IS_EXPR)
+DEF_EXPR_INFO_FLAG(IS_VALUES)
+DEF_EXPR_INFO_FLAG(IS_DEFAULT)
+DEF_EXPR_INFO_FLAG(IS_DYNAMIC_USER_VARIABLE) // user variable which is assigned in query or query has udf
+DEF_EXPR_INFO_FLAG(IS_STATE_FUNC)
+DEF_EXPR_INFO_FLAG(IS_SET_OP)
+DEF_EXPR_INFO_FLAG(IS_LAST_INSERT_ID)
+DEF_EXPR_INFO_FLAG(IS_WINDOW_FUNC)
+DEF_EXPR_INFO_FLAG(IS_RAND_FUNC)         // rand(const) or rand() is a random function , rand(some column) is not a random function
+DEF_EXPR_INFO_FLAG(IS_PSEUDO_COLUMN)
+DEF_EXPR_INFO_FLAG(IS_OUTER_JOIN_SYMBOL)
+DEF_EXPR_INFO_FLAG(IS_SO_UDF_EXPR)   // expression contains user defined function(dll) expression. add prefix 'SO', means different with PL UDF.
+DEF_EXPR_INFO_FLAG(IS_PL_UDF)
+DEF_EXPR_INFO_FLAG(IS_SEQ_EXPR)
+DEF_EXPR_INFO_FLAG(IS_DYNAMIC_PARAM) //for opt to distinguish normal paramaterized const and exec-params
+DEF_EXPR_INFO_FLAG(IS_ENUM_OR_SET)
+DEF_EXPR_INFO_FLAG(IS_VOLATILE_CONST) // the const expr may be altered by overwrite, non-const in execution.
+DEF_EXPR_INFO_FLAG(IS_ORA_ROWSCN_EXPR)
+DEF_EXPR_INFO_FLAG(IS_OP_PSEUDO_COLUMN)
+DEF_EXPR_INFO_FLAG(IS_ASSIGN_EXPR)
+DEF_EXPR_INFO_FLAG(IS_MATCH_EXPR)
+DEF_EXPR_INFO_FLAG(IS_OBJ_ACCESS_EXPR)
+DEF_EXPR_INFO_FLAG(IS_UNPIVOT_EXPR)
+DEF_EXPR_INFO_FLAG(IS_ASSOCIATED_FLAG_END) //add IS_xxx flag before me
+  //IS_CONST_EXPR and CNT_CONST_EXPR are not in the flag of associated extraction
+DEF_EXPR_INFO_FLAG(IS_CONST_EXPR)   // expression contains calculable expression
+DEF_EXPR_INFO_FLAG(CNT_CONST_EXPR)    // IS_CONST_EXPR and CNT_CONST_EXPR at most one is true
+
+DEF_EXPR_INFO_FLAG(CNT_CONST)        // expression contains const
+DEF_EXPR_INFO_FLAG(CNT_COLUMN)       // expression contains column
+DEF_EXPR_INFO_FLAG(CNT_STATIC_PARAM)        // expression contains variable
+DEF_EXPR_INFO_FLAG(CNT_AGG)          // expression contains aggregate function
+DEF_EXPR_INFO_FLAG(CNT_FUNC)         // expression contains system function
+DEF_EXPR_INFO_FLAG(CNT_IN)           // expression contains In expression
+DEF_EXPR_INFO_FLAG(CNT_NOT)          // expression contains NOT expression
+DEF_EXPR_INFO_FLAG(CNT_OR)           // expression contains OR expression
+DEF_EXPR_INFO_FLAG(CNT_SUB_QUERY)
+DEF_EXPR_INFO_FLAG(CNT_ONETIME)
+DEF_EXPR_INFO_FLAG(CNT_ALIAS)
+DEF_EXPR_INFO_FLAG(CNT_CUR_TIME)
+DEF_EXPR_INFO_FLAG(CNT_IS_EXPR)
+DEF_EXPR_INFO_FLAG(CNT_VALUES)
+DEF_EXPR_INFO_FLAG(CNT_DEFAULT)
+DEF_EXPR_INFO_FLAG(CNT_DYNAMIC_USER_VARIABLE)
+DEF_EXPR_INFO_FLAG(CNT_STATE_FUNC)
+DEF_EXPR_INFO_FLAG(CNT_SET_OP)
+DEF_EXPR_INFO_FLAG(CNT_LAST_INSERT_ID)
+DEF_EXPR_INFO_FLAG(CNT_WINDOW_FUNC)
+DEF_EXPR_INFO_FLAG(CNT_RAND_FUNC)
+DEF_EXPR_INFO_FLAG(CNT_PSEUDO_COLUMN)
+DEF_EXPR_INFO_FLAG(CNT_OUTER_JOIN_SYMBOL)
+DEF_EXPR_INFO_FLAG(CNT_SO_UDF)      // expression contains user defined function(dll) expression. add prefix 'SO', means different with PL UDF.
+DEF_EXPR_INFO_FLAG(CNT_PL_UDF)
+DEF_EXPR_INFO_FLAG(CNT_SEQ_EXPR)
+DEF_EXPR_INFO_FLAG(CNT_DYNAMIC_PARAM)
+DEF_EXPR_INFO_FLAG(CNT_ENUM_OR_SET)
+DEF_EXPR_INFO_FLAG(CNT_VOLATILE_CONST)
+DEF_EXPR_INFO_FLAG(CNT_ORA_ROWSCN_EXPR)
+DEF_EXPR_INFO_FLAG(CNT_OP_PSEUDO_COLUMN)
+DEF_EXPR_INFO_FLAG(CNT_ASSIGN_EXPR)
+DEF_EXPR_INFO_FLAG(CNT_MATCH_EXPR)
+DEF_EXPR_INFO_FLAG(CNT_OBJ_ACCESS_EXPR)
+DEF_EXPR_INFO_FLAG(CNT_UNPIVOT_EXPR)
+DEF_EXPR_INFO_FLAG(CNT_ASSOCIATED_FLAG_END) //add CNT_xxx flag before me
+
+DEF_EXPR_INFO_FLAG(BE_USED) // expression has been applied
+DEF_EXPR_INFO_FLAG(IS_SIMPLE_COND)   // column = const
+DEF_EXPR_INFO_FLAG(IS_RANGE_COND)    // column belongs to a range
+DEF_EXPR_INFO_FLAG(IS_JOIN_COND)     // column = column of different tables
+DEF_EXPR_INFO_FLAG(IS_COLUMNLIZED)   // for code generator, @see ObExprGenerator
+DEF_EXPR_INFO_FLAG(IS_ROOT) //for code generator, @see ObExprGenerator
+DEF_EXPR_INFO_FLAG(IS_NEW_AGG_EXPR)
+DEF_EXPR_INFO_FLAG(IS_WITH_ALL)
+DEF_EXPR_INFO_FLAG(IS_WITH_ANY)
+DEF_EXPR_INFO_FLAG(IS_WITH_SUBQUERY)
+DEF_EXPR_INFO_FLAG(IS_INNER_ADDED_EXPR)
+DEF_EXPR_INFO_FLAG(IS_PL_ACCESS_IDX)
+DEF_EXPR_INFO_FLAG(IS_SELECT_REF)     // expr is refer to select item
+DEF_EXPR_INFO_FLAG(IS_SHARED_REF)
+DEF_EXPR_INFO_FLAG(IS_OP_OPERAND_IMPLICIT_CAST) // is implicit cast added for operand casting (add in type deducing)
+DEF_EXPR_INFO_FLAG(IS_UDT_UDF_SELF_PARAM) // this is a udt udf self param mock by pl engine
+DEF_EXPR_INFO_FLAG(IS_PL_MOCK_DEFAULT_EXPR)
+DEF_EXPR_INFO_FLAG(IS_PROBABLY_LOCAL) // probably executed in local thread, for partial expr serialization
+DEF_EXPR_INFO_FLAG(IS_MARKED)
+DEF_EXPR_INFO_FLAG(IS_TABLE_ASSIGN) // update t1 set c1 = const
+DEF_EXPR_INFO_FLAG(IS_AUTO_PART_EXPR)
+DEF_EXPR_INFO_FLAG(IS_ATTR_EXPR)  // collection attr expr
+DEF_EXPR_INFO_FLAG(IS_EXISTS)
+DEF_EXPR_INFO_FLAG(IS_CUT_CALC_EXPR)
+#endif
+
+#ifndef OCEANBASE_SRC_SQL_RESOLVER_EXPR_OB_EXPR_INFO_FLAG_H_
+#define OCEANBASE_SRC_SQL_RESOLVER_EXPR_OB_EXPR_INFO_FLAG_H_
+#include "lib/utility/ob_macro_utils.h"
+#include "lib/utility/ob_print_utils.h"
+namespace oceanbase
+{
+namespace sql
+{
+// IS_XXX 和 CNT_XXX 必须一一对应地添加
+enum ObExprInfoFlag
+{
+#define DEF_EXPR_INFO_FLAG(args...) CONCAT(DEF_EXPR_INFO_FLAG_, ARGS_NUM(args))(args)
+#define DEF_EXPR_INFO_FLAG_1(flag) flag,
+#define DEF_EXPR_INFO_FLAG_2(flag, val) flag = val,
+#include "ob_expr_info_flag.h"
+#undef DEF_EXPR_INFO_FLAG_2
+#undef DEF_EXPR_INFO_FLAG_1
+#undef DEF_EXPR_INFO_FLAG
+};
+
+#define IS_INFO_MASK_BEGIN  IS_CONST
+#define IS_INFO_MASK_END IS_ASSOCIATED_FLAG_END
+#define CNT_INFO_MASK_BEGIN CNT_CONST
+#define CNT_INFO_MASK_END CNT_ASSOCIATED_FLAG_END
+#define INHERIT_MASK_BEGIN  CNT_CONST_EXPR
+#define INHERIT_MASK_END CNT_ASSOCIATED_FLAG_END
+
+inline const char* get_expr_info_flag_str(const ObExprInfoFlag flag)
+{
+  const char* ret = "UNKNOWN";
+  switch(flag) {
+#define DEF_EXPR_INFO_FLAG(flag, args...) case flag: { ret = #flag; break; }
+#include "ob_expr_info_flag.h"
+#undef DEF_EXPR_INFO_FLAG
+    default:
+      break;
+  }
+  return ret;
+}
+}  // namespace sql
+}  // namespace oceabase
+#endif /* OCEANBASE_SRC_SQL_RESOLVER_EXPR_OB_EXPR_INFO_FLAG_H_ */

@@ -1,0 +1,203 @@
+#owner: ht353245
+#owner group: shenzhen
+--echo # ----------------------------------------------------------------------
+--echo # Test of GEOMETRY st_geomfromwkb
+--echo # ----------------------------------------------------------------------
+--source mysql_test/test_suite/geometry/t/import_default_srs_data_mysql.inc
+
+
+select ST_AsText(st_geomfromwkb(x'010100000000000000000044400000000000004440'));
+select ST_AsText(st_geomfromwkb(x'01010000000000000000004e400000000000005e40'));
+select ST_AsText(st_geomfromwkb(x'010100000000000000000044400000000000004440'));
+select ST_AsText(st_geomfromwkb(x'01010000000000000000004e400000000000004e40'));
+
+SET @wkb_pt = ST_GeomFromText('POINT(0 1)');
+SET @wkb_ln = ST_GeomFromText('LINESTRING(0 1,2 3,4 5,6 7,8 9, 10 11)');
+SET @wkb_py = ST_GeomFromText('POLYGON((0 0,0 10,10 10,10 0,0 0),(4 4,4 6,6 6,6 4,4 4))');
+SET @wkb_mpt = ST_GeomFromText('MULTIPOINT(0 1,2 3,4 5,6 7)');
+SET @wkb_mln = ST_GeomFromText('MULTILINESTRING((0 1,2 3,4 5),(6 7,8 9,10 11))');
+SET @wkb_mpy = ST_GeomFromText('MULTIPOLYGON(((0 1,0 10,10 11,10 0,0 1),(4 5,4 6,6 7,6 4,4 5)),'
+                                                     '((10 11,10 12,12 13,12 10,10 11)))');
+SET @wkb_gc = ST_GeomFromText('GEOMETRYCOLLECTION('
+                                       'POINT(0 1),'
+                                       'LINESTRING(0 1,10 11),'
+                                       'POLYGON((0 0,0 10,10 10,10 0, 0 0)),'
+                                       'MULTIPOINT(0 1,2 3,4 5,6 7,8 9,10 11),'
+                                       'MULTILINESTRING((0 1,10 11),(0 10,10 0)),'
+                                       'MULTIPOLYGON(((0 1,0 5,5 6,5 0,0 1)),((5 4,5 10,10 11,10 5,5 4))))');
+
+SELECT ST_AsText(ST_GeomFromWKB(st_aswkb(@wkb_pt)));
+SELECT ST_AsText(ST_GeomFromWKB(st_aswkb(@wkb_ln)));
+SELECT ST_AsText(ST_GeomFromWKB(st_aswkb(@wkb_py)));
+SELECT ST_AsText(ST_GeomFromWKB(st_aswkb(@wkb_mpt)));
+SELECT ST_AsText(ST_GeomFromWKB(st_aswkb(@wkb_mln)));
+SELECT ST_AsText(ST_GeomFromWKB(st_aswkb(@wkb_mpy)));
+SELECT ST_AsText(ST_GeomFromWKB(st_aswkb(@wkb_gc)));
+
+SELECT ST_AsText(ST_GeometryFromWKB(st_aswkb(@wkb_pt)));
+SELECT ST_AsText(ST_GeometryFromWKB(st_aswkb(@wkb_ln)));
+SELECT ST_AsText(ST_GeometryFromWKB(st_aswkb(@wkb_py)));
+SELECT ST_AsText(ST_GeometryFromWKB(st_aswkb(@wkb_mpt)));
+SELECT ST_AsText(ST_GeometryFromWKB(st_aswkb(@wkb_mln)));
+SELECT ST_AsText(ST_GeometryFromWKB(st_aswkb(@wkb_mpy)));
+SELECT ST_AsText(ST_GeometryFromWKB(st_aswkb(@wkb_gc)));
+
+
+SELECT ST_AsText(ST_GeomFromWKB(st_aswkb(@wkb_pt), 2000));
+SELECT ST_AsText(ST_GeomFromWKB(st_aswkb(@wkb_ln), 2000));
+SELECT ST_AsText(ST_GeomFromWKB(st_aswkb(@wkb_py), 2000));
+SELECT ST_AsText(ST_GeomFromWKB(st_aswkb(@wkb_mpt), 2000));
+SELECT ST_AsText(ST_GeomFromWKB(st_aswkb(@wkb_mln), 2000));
+SELECT ST_AsText(ST_GeomFromWKB(st_aswkb(@wkb_mpy), 2000));
+SELECT ST_AsText(ST_GeomFromWKB(st_aswkb(@wkb_gc), 2000));
+
+SELECT ST_AsText(ST_GeomFromWKB(st_aswkb(@wkb_pt), 2000, 'axis-order=long-lat'));
+SELECT ST_AsText(ST_GeomFromWKB(st_aswkb(@wkb_ln), 2000, 'axis-order=long-lat'));
+SELECT ST_AsText(ST_GeomFromWKB(st_aswkb(@wkb_py), 2000, 'axis-order=long-lat'));
+SELECT ST_AsText(ST_GeomFromWKB(st_aswkb(@wkb_mpt), 2000, 'axis-order=long-lat'));
+SELECT ST_AsText(ST_GeomFromWKB(st_aswkb(@wkb_mln), 2000, 'axis-order=long-lat'));
+SELECT ST_AsText(ST_GeomFromWKB(st_aswkb(@wkb_mpy), 2000, 'axis-order=long-lat'));
+SELECT ST_AsText(ST_GeomFromWKB(st_aswkb(@wkb_gc), 2000, 'axis-order=long-lat'));
+
+SELECT ST_AsText(ST_GeomFromWKB(st_aswkb(@wkb_pt), 4326));
+SELECT ST_AsText(ST_GeomFromWKB(st_aswkb(@wkb_ln), 4326));
+SELECT ST_AsText(ST_GeomFromWKB(st_aswkb(@wkb_py), 4326));
+SELECT ST_AsText(ST_GeomFromWKB(st_aswkb(@wkb_mpt), 4326));
+SELECT ST_AsText(ST_GeomFromWKB(st_aswkb(@wkb_mln), 4326));
+SELECT ST_AsText(ST_GeomFromWKB(st_aswkb(@wkb_mpy), 4326));
+SELECT ST_AsText(ST_GeomFromWKB(st_aswkb(@wkb_gc), 4326));
+
+SELECT ST_AsText(ST_GeomFromWKB(st_aswkb(@wkb_pt), 4326, 'axis-order=long-lat'));
+SELECT ST_AsText(ST_GeomFromWKB(st_aswkb(@wkb_ln), 4326, 'axis-order=long-lat'));
+SELECT ST_AsText(ST_GeomFromWKB(st_aswkb(@wkb_py), 4326, 'axis-order=long-lat'));
+SELECT ST_AsText(ST_GeomFromWKB(st_aswkb(@wkb_mpt), 4326, 'axis-order=long-lat'));
+SELECT ST_AsText(ST_GeomFromWKB(st_aswkb(@wkb_mln), 4326, 'axis-order=long-lat'));
+SELECT ST_AsText(ST_GeomFromWKB(st_aswkb(@wkb_mpy), 4326, 'axis-order=long-lat'));
+SELECT ST_AsText(ST_GeomFromWKB(st_aswkb(@wkb_gc), 4326, 'axis-order=long-lat'));
+
+
+--error ER_WRONG_PARAMCOUNT_TO_NATIVE_FCT
+SELECT ST_GeomFromWKB();
+
+SELECT ST_GeomFromWKB(NULL);
+
+--error ER_GIS_INVALID_DATA
+SELECT ST_GeomFromWKB(ST_GeomFromText('POINT()'));
+
+--error ER_GIS_INVALID_DATA
+SELECT ST_GeomFromWKB(ST_GeomFromText('LINESTRING(0 0,! 10)'));
+
+--error ER_GIS_INVALID_DATA
+select ST_GeometryFromWKB(x'010100000000000000000034C00000000000002E4000000000000034400000000000003440');
+--error ER_GIS_INVALID_DATA
+select ST_GeomFromWKB(x'010100000000000000000034C00000000000002E4000000000000034400000000000003440');
+--error ER_GIS_INVALID_DATA
+select ST_GeometryFromWKB(x'0101000000');
+--error ER_GIS_INVALID_DATA
+select ST_GeomFromWKB(x'01020000000200000000000000000059400000000000005e400000000000005940');
+
+--error 3617
+select st_geomfromwkb(x'01020000000200000000000000000059400000000000005e4000000000000059400000000000006e40',4326);
+--error 3616
+select st_geomfromwkb(x'010100000000000000008046400000000000006940',4326);
+
+# Wrong byte order at wkb header.
+--error ER_GIS_INVALID_DATA
+SELECT ST_GeomFromWKB(0x020100000000000000000000000000000000000000);
+# Wrong component type: a multipoint having a linestring component.
+--error ER_GIS_INVALID_DATA
+SELECT ST_GeomFromWKB(0x01040000000100000001020000000100000000000000000000000000000000000000);
+# Wrong byte order at 1st component's wkb header.
+--error ER_GIS_INVALID_DATA
+SELECT ST_GeomFromWKB(0x01040000000100000002020000000100000000000000000000000000000000000000);
+
+# Wrong component type: a multilinestring having a multipoint component.
+--error ER_GIS_INVALID_DATA
+SELECT ST_GeomFromWKB(0x01050000000100000001040000000100000000000000000000000000000000000000);
+# Wrong byte order at 1st component's wkb header.
+--error ER_GIS_INVALID_DATA
+SELECT ST_GeomFromWKB(0x01050000000100000002040000000100000000000000000000000000000000000000);
+# Wrong component type: a multipolygon having a linestring component.
+--error ER_GIS_INVALID_DATA
+SELECT ST_GeomFromWKB(0x01060000000100000001020000000100000000000000000000000000000000000000);
+
+# Wrong byte order at 1st component's wkb header.
+--error ER_GIS_INVALID_DATA
+SELECT ST_GeomFromWKB(0x01060000000100000003020000000100000000000000000000000000000000000000);
+# Wrong byte order at 1st component's wkb header.
+--error ER_GIS_INVALID_DATA
+SELECT ST_GeomFromWKB(0x01070000000100000002010000000000000000000000);
+# invalid polygon
+--error ER_GIS_INVALID_DATA
+select ST_GeomFromWKB(x'010300000001000000050000000000000000C056C000000000004054400000000000C0564000000000008056C000000000000054C000000000000034C000000000000000000000000000C056400000000000C056C00000000000405490');
+
+select ST_AsText(ST_GeometryFromWKB(x'010100000000000000000034C00000000000002E40',26918,'axis-order=lat-long'));
+select ST_AsText(ST_GeomFromWKB(x'010100000000000000000034C00000000000002E40',26918,'axis-order=lat-long'));
+
+--error 3559
+select ST_GeometryFromWKB(x'010100000000000000000034C00000000000002E40',4326,'axis-order=long-long');
+--error 3559
+select ST_GeomFromWKB(x'010100000000000000000034C00000000000002E40',4326,'axis-order=lat-lat');
+--error 3560
+select ST_GeomFromWKB(x'010100000000000000000034C00000000000002E40',4326,'axis-ord');
+--error 3560
+select ST_GeometryFromWKB(x'010100000000000000000034C00000000000002E40',4326,'axis-ord');
+--error 3560
+select ST_GeomFromWKB(x'010100000000000000000034C00000000000002E40',4326,11);
+--error 3560
+select ST_GeometryFromWKB(x'010100000000000000000034C00000000000002E40',4326,11);
+--error 3558
+select ST_GeometryFromWKB(x'010100000000000000000034C00000000000002E40','axis-order=long-lat','srid=4326');
+--error 3558
+select ST_GeomFromWKB(x'010100000000000000000034C00000000000002E40','axis-order=long-lat','srid=4326');
+
+# BigEnd
+# point
+select st_astext(st_geomfromwkb(x'000000000140340000000000004034000000000000'));
+select st_astext(st_geomfromwkb(x'000000000140340000000000004034000000000000', 4326));
+# linestring
+SELECT ST_astext(ST_GEOMFROMWKB(X'0000000002000000023FF00000000000003FF000000000000040000000000000004000000000000000'));
+# polygon
+SELECT ST_astext(ST_GEOMFROMWKB(X'00000000030000000100000005000000000000000000000000000000004008000000000000000000000000000040000000000000003FF00000000000003FF00000000000003FF000000000000000000000000000000000000000000000'));
+# multipoint
+SELECT ST_astext(ST_GEOMFROMWKB(X'00000000040000000200000000013FF00000000000003FF000000000000000000000013FF00000000000003FF0000000000000'));
+# multilinestring
+select st_astext(st_geomfromwkb(x'0000000005000000020000000002000000020000000000000000000000000000000040654000000000000000000000000000000000000200000002405400000000000000000000000000004054000000000000404E000000000000'));
+# multiPOLYGON
+select st_astext(st_geomfromwkb(x'0000000006000000010000000003000000010000000640140000000000004008000000000000401C00000000000040100000000000004022000000000000401400000000000040260000000000004018000000000000402A000000000000401C00000000000040140000000000004008000000000000'));
+# collection
+select st_astext(st_geomfromwkb(x'000000000700000008000000000100000000000000003FF000000000000000000000020000000200000000000000003FF000000000000040240000000000004026000000000000000000000300000001000000050000000000000000000000000000000000000000000000004024000000000000402400000000000040240000000000004024000000000000000000000000000000000000000000000000000000000000000000000400000006000000000100000000000000003FF000000000000000000000014000000000000000400800000000000000000000014010000000000000401400000000000000000000014018000000000000401C00000000000000000000014020000000000000402200000000000000000000014024000000000000402600000000000000000000020000000200000000000000003FF00000000000004024000000000000402600000000000000000000020000000200000000000000004024000000000000402400000000000000000000000000000000000003000000010000000500000000000000003FF000000000000000000000000000004014000000000000401400000000000040180000000000004014000000000000000000000000000000000000000000003FF0000000000000000000000300000001000000054014000000000000401000000000000040140000000000004024000000000000402400000000000040260000000000004024000000000000401400000000000040140000000000004010000000000000'));
+
+--echo bugfix: 53757359
+SELECT st_geometryfromwkb(null);
+SELECT st_geometryfromwkb(st_geometryfromwkb(null));
+SELECT st_geometryfromwkb(st_length(null));
+--error 0,1051
+drop table t2;
+create table t2 (it1 tinyint, it2 tinyint not null, i int not null, ib bigint, f float, d double, y year, da  datetime(6), dt datetime(6), sc char(50), sv varchar(50), b blob, tx text);
+insert into t2 values (NULL, 1, 3, 4, 1.5, 2.5, 1972, '1972-10-22', '1972-10-22 11:50', 'LINESTRING(0 0,10 10)', 'LINESTRING(0 0,10 10)', 'LINESTRING(0 0,10 10)', 'LINESTRING(0 0,10 10)');
+select st_geometryfromwkb(it1) from t2;
+--error 3037
+select st_geometryfromwkb(it2) from t2;
+--error 3037
+select st_geometryfromwkb(i) from t2;
+--error 3037
+select st_geometryfromwkb(ib) from t2;
+--error 3037
+select st_geometryfromwkb(f) from t2;
+--error 3037
+select st_geometryfromwkb(d) from t2;
+--error 3037
+select st_geometryfromwkb(y) from t2;
+--error 3037
+select st_geometryfromwkb(da) from t2;
+--error 3037
+select st_geometryfromwkb(dt) from t2;
+--error 3037
+select st_geometryfromwkb(sc) from t2;
+--error 3037
+select st_geometryfromwkb(sv) from t2;
+--error 3037
+select st_geometryfromwkb(b) from t2;
+--error 3037
+select st_geometryfromwkb(tx) from t2;

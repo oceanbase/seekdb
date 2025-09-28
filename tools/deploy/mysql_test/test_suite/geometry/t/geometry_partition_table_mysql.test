@@ -1,0 +1,184 @@
+#owner: ht353245
+#owner group: shenzhen
+--echo # ----------------------------------------------------------------------
+--echo # Base test of GEOMETRY spatial index.
+--echo # ----------------------------------------------------------------------
+--source mysql_test/test_suite/geometry/t/import_default_srs_data_mysql.inc
+
+  --disable_warnings
+  DROP TABLE IF EXISTS partition_t1;
+  --enable_warnings
+  create table partition_t1(c1 int primary key, g geometry not null srid 0) partition by hash(c1) partitions 2;
+  create spatial index idx on partition_t1 (g) local;
+  insert into partition_t1 (c1, g) values (0, st_geomfromtext('point(1 1)'));
+  explain select /*+index(partition_t1 idx)*/ st_astext(g) from partition_t1 where st_intersects(g, st_geomfromtext('point(1 1)'));
+  select /*+index(partition_t1 idx)*/ st_astext(g) from partition_t1 where st_intersects(g, st_geomfromtext('point(1 1)'));
+  drop table partition_t1;
+
+  --disable_warnings
+  DROP TABLE IF EXISTS t1;
+  --enable_warnings
+  create table t1(c1 int primary key, g geometry not null srid 0) partition by range(c1) ( partition p0 values less than (4),
+    partition p1 values less than (10));
+  create spatial index idx on t1 (g) local;
+  insert into t1 (c1, g) values (0, st_geomfromtext('point(1 1)'));
+  insert into t1 (c1, g) values (1, st_geomfromtext('point(1 1)'));
+  insert into t1 (c1, g) values (2, st_geomfromtext('point(1 1)'));
+  insert into t1 (c1, g) values (3, st_geomfromtext('point(1 1)'));
+  insert into t1 (c1, g) values (4, st_geomfromtext('point(1 1)'));
+  insert into t1 (c1, g) values (5, st_geomfromtext('point(1 1)'));
+  insert into t1 (c1, g) values (6, st_geomfromtext('point(1 1)'));
+  insert into t1 (c1, g) values (7, st_geomfromtext('point(1 1)'));
+  insert into t1 (c1, g) values (8, st_geomfromtext('point(1 1)'));
+  insert into t1 (c1, g) values (9, st_geomfromtext('point(1 1)'));
+  explain select /*+index(t1 idx)*/ st_astext(g) from t1 where st_intersects(g, st_geomfromtext('point(1 1)'));
+  select /*+index(t1 idx)*/ st_astext(g) from t1 where st_intersects(g, st_geomfromtext('point(1 1)'));
+  drop table t1;
+
+  connection default;
+  --disable_warnings
+  DROP TABLE IF EXISTS t1;
+  --enable_warnings
+  create table t1(c1 int primary key, g geometry not null srid 0) partition by hash(c1) partitions 2;
+  --error 1235
+  create spatial index idx on t1 (g) global;
+  # 支持分区表本地索引
+  create spatial index idx on t1 (g);
+  drop table t1;
+
+  --disable_warnings
+  DROP TABLE IF EXISTS t1;
+  --enable_warnings
+  --error 1235
+  create table t1(c1 int primary key, g geometry not null srid 0, spatial index(g) global) partition by hash(c1) partitions 2;
+  --disable_warnings
+  DROP TABLE IF EXISTS t1;
+  --enable_warnings
+  create table t1(c1 int primary key, g geometry not null srid 0, spatial index(g)) partition by hash(c1) partitions 2;
+  --disable_warnings
+  DROP TABLE IF EXISTS t1;
+  --enable_warnings
+  --error 1235
+  create table t1(c1 int primary key, g geometry not null srid 0, index(g) global) partition by hash(c1) partitions 2;
+  --disable_warnings
+  DROP TABLE IF EXISTS t1;
+  --enable_warnings
+  create table t1(c1 int primary key, g geometry not null srid 0, index(g)) partition by hash(c1) partitions 2;
+  --disable_warnings
+  DROP TABLE IF EXISTS t1;
+  --enable_warnings
+  create table t1(c1 int primary key, g geometry not null srid 0) partition by hash(c1) partitions 2;
+  alter table t1 add spatial index idx(g);
+  show index from t1;
+  drop index idx on t1;
+  --error 1235
+  alter table t1 add spatial index idx(g) global;
+  show index from t1;
+  alter table t1 add spatial index idx(g) local;
+  show index from t1;
+  drop index idx on t1;
+  show index from t1;
+  create index idx on t1(g);
+  show index from t1;
+  --error 1235
+  create index idx on t1(g) global;
+  show index from t1;
+  drop index idx on t1;
+  create index idx on t1(g) local;
+  show index from t1;
+  drop table t1;
+
+--disable_warnings
+  DROP TABLE IF EXISTS geo_maxpt_coords_100y, geo_maxpt_coords_100y_2, aoi_string_limit10;
+  --enable_warnings
+
+CREATE TABLE geo_maxpt_coords_100y (
+  poi_id VARCHAR(128) NOT NULL,
+  pwkt VARCHAR(128) NOT NULL DEFAULT '0',
+  geo_pwkt GEOMETRY NOT NULL srid 0,
+  -- PRIMARY KEY (`id`, k)
+  SPATIAL INDEX(geo_pwkt)
+) PARTITION BY key(poi_id) PARTITIONS 256;
+
+
+CREATE TABLE geo_maxpt_coords_100y_2 (
+  poi_id VARCHAR(128) NOT NULL,
+  pwkt VARCHAR(128) NOT NULL DEFAULT '0',
+  geo_pwkt GEOMETRY NOT NULL /*!80003 srid 0 */,
+  SPATIAL INDEX(geo_pwkt)
+);
+
+explain select count(*) from geo_maxpt_coords_100y  where st_intersects(geo_maxpt_coords_100y.geo_pwkt, st_geomfromtext('polygon((0 0,5 0,5 5,0 5,0 0))', 0));
+explain select /*+ parallel(1) */ count(*) from geo_maxpt_coords_100y  where st_intersects(geo_maxpt_coords_100y.geo_pwkt, st_geomfromtext('polygon((0 0,5 0,5 5,0 5,0 0))', 0));
+explain select /*+ parallel(3) */ count(*) from geo_maxpt_coords_100y  where st_intersects(geo_maxpt_coords_100y.geo_pwkt, st_geomfromtext('polygon((0 0,5 0,5 5,0 5,0 0))', 0));
+
+explain select count(*) from geo_maxpt_coords_100y_2  where st_intersects(geo_maxpt_coords_100y_2.geo_pwkt, st_geomfromtext('polygon((0 0,5 0,5 5,0 5,0 0))', 0));
+explain select /*+ parallel(1) */ count(*) from geo_maxpt_coords_100y_2  where st_intersects(geo_maxpt_coords_100y_2.geo_pwkt, st_geomfromtext('polygon((0 0,5 0,5 5,0 5,0 0))', 0));
+explain select /*+ parallel(3) */ count(*) from geo_maxpt_coords_100y_2  where st_intersects(geo_maxpt_coords_100y_2.geo_pwkt, st_geomfromtext('polygon((0 0,5 0,5 5,0 5,0 0))', 0));
+
+
+--disable_warnings
+  DROP TABLE IF EXISTS partition_t1;
+--enable_warnings
+create table partition_t1(c1 int primary key, g geometry not null srid 0, g1 geometry srid 0) partition by hash(c1) partitions 2;
+insert into partition_t1 values (0, st_geomfromtext('point(1 1)'), st_geomfromtext('point(2 2)'));
+insert into partition_t1 values (1, st_geomfromtext('point(1 0)'), st_geomfromtext('point(2 2)'));
+select /*+index(partition_t1 idx)*/ st_astext(g) from partition_t1 where st_intersects(g, st_geomfromtext('point(1 1)'));
+create spatial index idx on partition_t1 (g) local;
+select /*+index(partition_t1 idx)*/ st_astext(g) from partition_t1 where st_intersects(g, st_geomfromtext('point(1 1)'));
+drop table partition_t1;
+
+create table ptgeom1(c1 int, g geometry not null srid 0, g1 geometry not null srid 0) partition by hash(c1) partitions 3;
+insert into ptgeom1 values (0, st_geomfromtext('point(1 1)'), st_geomfromtext('point(2 2)'));
+insert into ptgeom1 values (1, st_geomfromtext('point(1 0)'), st_geomfromtext('point(2 2)'));
+select st_astext(g) from ptgeom1 where st_intersects(g, st_geomfromtext('point(1 1)'));
+create index pgidx1 on ptgeom1(g) local;
+explain select /*+index(ptgeom1 pgidx1)*/ st_astext(g) from ptgeom1 where st_intersects(g, st_geomfromtext('point(1 1)'));
+select /*+index(ptgeom1 pgidx1)*/ st_astext(g) from ptgeom1 where st_intersects(g, st_geomfromtext('point(1 1)'));
+drop table ptgeom1;
+
+--disable_warnings
+  DROP TABLE IF EXISTS group_change_info;
+--enable_warnings
+create table group_change_info(
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT COMMENT '主键',
+  `geom` geometry NOT NULL /*!80003 SRID 0 */,
+  `city_code` int(11) NOT NULL COMMENT '分区分表key',
+  `change_status` varchar(32) NOT NULL COMMENT '变化状态: ● INIT  初始\n● PROCESSING 进入产线\n● SUCCESS 产线变更完成\n● MTL_NG  采集NG\n● DELETE  删除\n● INTERCEPT 已拦截\n● DIFF_NG 差分NG',
+  `change_date` datetime NOT NULL COMMENT '变化时间，本来带的属性',
+  PRIMARY KEY (`id`, `city_code`),
+  SPATIAL KEY `idx_geom` (`geom`) BLOCK_SIZE 16384 LOCAL COMMENT '变化范围'
+) partition by list(city_code) (partition `p10` values in (10), partition `p20` values in (20));
+
+insert into group_change_info values(1, st_geomfromtext('point(1 1)', 0), 10, 'SUCCESS', '2023-06-07 00:00:00'),
+                                    (2, st_geomfromtext('point(1 0)', 0), 10, 'SUCCESS', '2023-06-07 00:00:00'),
+                                    (3, st_geomfromtext('point(1 1)', 0), 10, 'DELETE', '2023-06-07 00:00:00'),
+                                    (4, st_geomfromtext('point(1 1)', 0), 20, 'SUCCESS', '2023-06-07 00:00:00'),
+                                    (5, st_geomfromtext('point(1 1)', 0), 10, 'SUCCESS', '2023-06-06 00:00:00');
+
+explain select id, st_astext(geom) from group_change_info where st_intersects(geom, st_geomfromtext('point(1 1)', 0)) and city_code = 10
+  and change_status in ('INIT', 'PROCESSING', 'SUCCESS', 'DIFF_NG') and change_date != '2023-06-06 00:00:00';
+
+select id, st_astext(geom) from group_change_info where st_intersects(geom, st_geomfromtext('point(1 1)', 0)) and city_code = 10
+  and change_status in ('INIT', 'PROCESSING', 'SUCCESS', 'DIFF_NG') and change_date != '2023-06-06 00:00:00';
+
+explain select id, st_astext(geom) from group_change_info where city_code = 10 and st_intersects(geom, st_geomfromtext('point(1 1)', 0))
+  and change_status in ('INIT', 'PROCESSING', 'SUCCESS', 'DIFF_NG') and change_date != '2023-06-06 00:00:00';
+
+select id, st_astext(geom) from group_change_info where city_code = 10 and st_intersects(geom, st_geomfromtext('point(1 1)', 0))
+  and change_status in ('INIT', 'PROCESSING', 'SUCCESS', 'DIFF_NG') and change_date != '2023-06-06 00:00:00';
+
+explain select id, st_astext(geom) from group_change_info where city_code = 10 and change_status in ('INIT', 'PROCESSING', 'SUCCESS', 'DIFF_NG') 
+  and change_date != '2023-06-06 00:00:00' and st_intersects(geom, st_geomfromtext('point(1 1)', 0));
+
+select id, st_astext(geom) from group_change_info where city_code = 10 and change_status in ('INIT', 'PROCESSING', 'SUCCESS', 'DIFF_NG') 
+  and change_date != '2023-06-06 00:00:00' and st_intersects(geom, st_geomfromtext('point(1 1)', 0));
+
+explain select id, st_astext(geom) from group_change_info where city_code = 10 and change_status in ('INIT', 'PROCESSING', 'SUCCESS', 'DIFF_NG') 
+  and st_intersects(geom, st_geomfromtext('point(1 1)', 0)) and change_date != '2023-06-06 00:00:00';
+
+select id, st_astext(geom) from group_change_info where city_code = 10 and change_status in ('INIT', 'PROCESSING', 'SUCCESS', 'DIFF_NG') 
+   and st_intersects(geom, st_geomfromtext('point(1 1)', 0)) and change_date != '2023-06-06 00:00:00';
+
+
+drop table group_change_info;

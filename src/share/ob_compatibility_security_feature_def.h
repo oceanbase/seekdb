@@ -1,0 +1,33 @@
+/**
+ * Copyright (c) 2021 OceanBase
+ * OceanBase CE is licensed under Mulan PubL v2.
+ * You can use this software according to the terms and conditions of the Mulan PubL v2.
+ * You may obtain a copy of Mulan PubL v2 at:
+ *          http://license.coscl.org.cn/MulanPubL-2.0
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PubL v2 for more details.
+ */
+
+// define the feature list here whose behavior is different in MySQL5.7, MySQL8.0 or OB
+// DEF_COMPAT_CONTROL_FEATURE(type, id, is_dynanmic, description, lastest_version, patch_versions ...)
+
+#ifdef DEF_COMPAT_CONTROL_FEATURE
+DEF_COMPAT_CONTROL_FEATURE(MYSQL_PRIV_ENHANCE, "add privilege check to some command",
+    CLUSTER_VERSION_1_0_0_0)
+DEF_COMPAT_CONTROL_FEATURE(MYSQL_SET_VAR_PRIV_ENHANCE, "check privilege for set var subquery",
+    CLUSTER_VERSION_1_0_0_0)
+DEF_COMPAT_CONTROL_FEATURE(MYSQL_USER_REVOKE_ALL_ENHANCE, "use create_user to check privilege for revoke all from user",
+    CLUSTER_VERSION_1_0_0_0)
+DEF_COMPAT_CONTROL_FEATURE(MYSQL_LOCK_TABLES_PRIV_ENHANCE, "add privilege for lock tables",
+    CLUSTER_VERSION_1_0_0_0)
+DEF_COMPAT_CONTROL_FEATURE(MYSQL_USER_REVOKE_ALL_WITH_PL_PRIV_CHECK, "revoke all on db.* need check pl privilege",
+    CLUSTER_VERSION_1_0_0_0)
+DEF_COMPAT_CONTROL_FEATURE(MYSQL_REFERENCES_PRIV_ENHANCE, "add privilege check to references",
+    CLUSTER_VERSION_1_0_0_0)
+DEF_COMPAT_CONTROL_FEATURE(MYSQL_TRIGGER_PRIV_CHECK, "add trigger privilege check",
+    CLUSTER_VERSION_1_0_0_0)
+DEF_COMPAT_CONTROL_FEATURE(MYSQL_EVENT_PRIV_CHECK, "add event privilege check",
+    CLUSTER_VERSION_1_0_0_0)
+#endif

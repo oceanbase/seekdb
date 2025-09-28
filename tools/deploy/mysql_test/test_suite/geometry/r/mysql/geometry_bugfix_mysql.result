@@ -1,0 +1,777 @@
+# ----------------------------------------------------------------------
+# Base test of geometry ddl.
+# ----------------------------------------------------------------------
+set @g = point(1, 1);
+select length(@g);
+length(@g)
+25
+drop table if exists geo_table, tt1, T_GEO, tab, FF01, gis_point_plancache;
+CREATE TABLE geo_table(
+k int primary key,
+geom geometry NOT NULL,
+SPATIAL INDEX (geom)
+);
+INSERT INTO geo_table VALUES
+(1, ST_GeomFromText('POINT(1.0 1.0)')),
+(2, ST_GeomFromText('LINESTRING(1.0 1.0, 2.0 2.0)')),
+(3, ST_GeomFromText('POINT(3.0 3.0)')),
+(4, ST_GeomFromText('LINESTRING(4.0 4.0, 5.0 5.0)')),
+(5, ST_GeomFromText('LINESTRING(40.0 40.0, 41.0 41.0)')),
+(6, ST_GeomFromText('POLYGON((1.0 1.0, 5.0 1.0, 5.0 5.0, 1.0 5.0, 1.0 1.0))'));
+SELECT k FROM geo_table WHERE ST_Intersects(ST_GeomFromText('POINT(3.0 3.0)'), geom) ORDER BY k;
+k
+3
+6
+drop table geo_table;
+CREATE TABLE geo_table(
+k int primary key,
+geom geometry NOT NULL srid 4326,
+SPATIAL INDEX (geom) local
+);
+INSERT INTO geo_table VALUES (1, ST_GeomFromText('POINT(1.0 1.0)', 4326));
+SELECT k FROM geo_table WHERE ST_Intersects(ST_GeomFromText('POINT(1.0 1.0)', 0), geom) ORDER BY k;
+ERROR HY000: The SRID of the geometry does not match the SRID of the column. The SRID of the geometry is 0, but the SRID of the column is 4326. Consider changing the SRID of the geometry or the SRID property of the column.
+drop table geo_table;
+create table tt1(g GEOMETRY check(g=ST_GeomFromText('point(10 20)')));
+insert into tt1 values(ST_GeomFromText('point(10 20)',26918));
+ERROR HY000: check constraint violated
+insert into tt1 values(st_geomfromwkb(x'01040000000300000001010000000000000000c067400000000000805b4001010000000000000000c06240000000000080514001010000000000000000c06c400000000000805140'));
+ERROR HY000: check constraint violated
+insert into tt1 values(ST_GeomFromText('point(10 20)'));
+drop table tt1;
+create table T_GEO (GID int auto_increment primary key, geo_c geometrycollection,geo geometry);
+select * from T_GEO group by geo;
+GID	geo_c	geo
+select * from T_GEO order by geo_c;
+GID	geo_c	geo
+drop table T_GEO;
+CREATE TABLE tab(c1 int NOT NULL PRIMARY KEY,c2 POINT NOT NULL SRID 0,
+c3 LINESTRING NOT NULL SRID 0,c4 POLYGON NOT NULL SRID 0,c5 GEOMETRY NOT NULL SRID 0)
+ENGINE=InnoDB;
+Warnings:
+Warning	1286	Unknown storage engine 'InnoDB'
+INSERT INTO tab(c1,c2,c3,c4,c5)
+VALUES(1,ST_GeomFromText('POINT(10 10)'),ST_GeomFromText('LINESTRING(5 5,20 20,30 30)'),
+ST_GeomFromText('POLYGON((30 30,40 40,50 50,30 50,30 40,30 30))'),
+ST_GeomFromText('POLYGON((30 30,40 40,50 50,30 50,30 40,30 30))'));
+INSERT INTO tab(c1,c2,c3,c4,c5)
+VALUES(2,ST_GeomFromText('POINT(20 20)'),ST_GeomFromText('LINESTRING(20 20,30 30,40 40)'),
+ST_GeomFromText('POLYGON((40 50,40 70,50 100,70 100,80 80,70 50,40 50))'),
+ST_GeomFromText('POLYGON((40 50,40 70,50 100,70 100,80 80,70 50,40 50))'));
+INSERT INTO tab(c1,c2,c3,c4,c5)
+VALUES(3,ST_GeomFromText('POINT(4 4)'),ST_GeomFromText('LINESTRING(130 130,140 140,150 150)'),
+ST_GeomFromText('POLYGON((7 1,6 2,6 3,10 3,10 1,7 1))'),
+ST_GeomFromText('POLYGON((4 -2,5 -4,6 -5,7 -4,7 2,4 -2))'));
+INSERT INTO tab(c1,c2,c3,c4,c5)
+VALUES(4,ST_GeomFromText('POINT(50 50)'),ST_GeomFromText('LINESTRING(200 200,300 300,400 400)'),
+ST_GeomFromText('POLYGON((300 300,400 400,500 500,300 500,300 400,300 300))'),
+ST_GeomFromText('POLYGON((300 300,400 400,500 500,300 500,300 400,300 300))'));
+INSERT INTO tab(c1,c2,c3,c4,c5)
+VALUES(5,ST_GeomFromText('POINT(3 3)'),ST_GeomFromText('LINESTRING(400 400,500 500,600 700)'),
+ST_GeomFromText('POLYGON((1010 1010,1020 1020,1030 1030,1040 1030,1020 1010,1010 1010))'),
+ST_GeomFromText('POLYGON((1010 1010,1020 1020,1030 1030,1040 1030,1020 1010,1010 1010))'));
+INSERT INTO tab(c1,c2,c3,c4,c5)
+VALUES(6,ST_GeomFromText('POINT(3 3)'),ST_GeomFromText('LINESTRING(40 40,50 50,60 70)'),
+ST_GeomFromText('POLYGON((2010 2010,2020 2020,2030 2030,2040 2030,2020 2010,2010 2010))'),
+ST_GeomFromText('POLYGON((2010 2010,2020 2020,2030 2030,2040 2030,2020 2010,2010 2010))'));
+INSERT INTO tab(c1,c2,c3,c4,c5)
+VALUES(7,ST_GeomFromText('POINT(60 70)'),ST_GeomFromText('LINESTRING(40 40,50 50,60 70)'),
+ST_GeomFromText('POLYGON((3010 3010,3020 3020,3030 3030,3040 3030,3020 3010,3010 3010))'),
+ST_GeomFromText('POLYGON((3010 3010,3020 3020,3030 3030,3040 3030,3020 3010,3010 3010))'));
+INSERT INTO tab(c1,c2,c3,c4,c5)
+VALUES(8,ST_GeomFromText('POINT(0 0)'),ST_GeomFromText('LINESTRING(40 40,50 50,60 70)'),
+ST_GeomFromText('POLYGON((3010 3010,3020 3020,3030 3030,3040 3030,3020 3010,3010 3010))'),
+ST_GeomFromText('POLYGON((3010 3010,3020 3020,3030 3030,3040 3030,3020 3010,3010 3010))'));
+INSERT INTO tab(c1,c2,c3,c4,c5)
+VALUES(9,ST_GeomFromText('POINT(120 120)'),ST_GeomFromText('LINESTRING(100 100,110 110,120 120)'),
+ST_GeomFromText('POLYGON((4010 4010,4020 4020,4030 4030,4040 4030,4020 4010,4010 4010))'),
+ST_GeomFromText('POLYGON((4010 4010,4020 4020,4030 4030,4040 4030,4020 4010,4010 4010))'));
+INSERT INTO tab(c1,c2,c3,c4,c5)
+VALUES(10,ST_GeomFromText('POINT(160 160)'),ST_GeomFromText('LINESTRING(140 140,150 150,160 160)'),
+ST_GeomFromText('POLYGON((5010 5010,5020 5020,5030 5030,5040 5030,5020 5010,5010 5010))'),
+ST_GeomFromText('POLYGON((5010 5010,5020 5020,5030 5030,5040 5030,5020 5010,5010 5010))'));
+SELECT c1,ST_Astext(c2),ST_Astext(c4) FROM tab ORDER BY c1;
+c1	ST_Astext(c2)	ST_Astext(c4)
+1	POINT(10 10)	POLYGON((30 30,40 40,50 50,30 50,30 40,30 30))
+2	POINT(20 20)	POLYGON((40 50,40 70,50 100,70 100,80 80,70 50,40 50))
+3	POINT(4 4)	POLYGON((7 1,6 2,6 3,10 3,10 1,7 1))
+4	POINT(50 50)	POLYGON((300 300,400 400,500 500,300 500,300 400,300 300))
+5	POINT(3 3)	POLYGON((1010 1010,1020 1020,1030 1030,1040 1030,1020 1010,1010 1010))
+6	POINT(3 3)	POLYGON((2010 2010,2020 2020,2030 2030,2040 2030,2020 2010,2010 2010))
+7	POINT(60 70)	POLYGON((3010 3010,3020 3020,3030 3030,3040 3030,3020 3010,3010 3010))
+8	POINT(0 0)	POLYGON((3010 3010,3020 3020,3030 3030,3040 3030,3020 3010,3010 3010))
+9	POINT(120 120)	POLYGON((4010 4010,4020 4020,4030 4030,4040 4030,4020 4010,4010 4010))
+10	POINT(160 160)	POLYGON((5010 5010,5020 5020,5030 5030,5040 5030,5020 5010,5010 5010))
+SELECT c1,ST_Astext(c2),ST_Astext(c4) FROM tab ORDER BY c2;
+c1	ST_Astext(c2)	ST_Astext(c4)
+8	POINT(0 0)	POLYGON((3010 3010,3020 3020,3030 3030,3040 3030,3020 3010,3010 3010))
+5	POINT(3 3)	POLYGON((1010 1010,1020 1020,1030 1030,1040 1030,1020 1010,1010 1010))
+6	POINT(3 3)	POLYGON((2010 2010,2020 2020,2030 2030,2040 2030,2020 2010,2010 2010))
+3	POINT(4 4)	POLYGON((7 1,6 2,6 3,10 3,10 1,7 1))
+1	POINT(10 10)	POLYGON((30 30,40 40,50 50,30 50,30 40,30 30))
+2	POINT(20 20)	POLYGON((40 50,40 70,50 100,70 100,80 80,70 50,40 50))
+4	POINT(50 50)	POLYGON((300 300,400 400,500 500,300 500,300 400,300 300))
+7	POINT(60 70)	POLYGON((3010 3010,3020 3020,3030 3030,3040 3030,3020 3010,3010 3010))
+9	POINT(120 120)	POLYGON((4010 4010,4020 4020,4030 4030,4040 4030,4020 4010,4010 4010))
+10	POINT(160 160)	POLYGON((5010 5010,5020 5020,5030 5030,5040 5030,5020 5010,5010 5010))
+SELECT c1,ST_Astext(c2),ST_Astext(c4) FROM tab ORDER BY c3;
+c1	ST_Astext(c2)	ST_Astext(c4)
+1	POINT(10 10)	POLYGON((30 30,40 40,50 50,30 50,30 40,30 30))
+2	POINT(20 20)	POLYGON((40 50,40 70,50 100,70 100,80 80,70 50,40 50))
+6	POINT(3 3)	POLYGON((2010 2010,2020 2020,2030 2030,2040 2030,2020 2010,2010 2010))
+7	POINT(60 70)	POLYGON((3010 3010,3020 3020,3030 3030,3040 3030,3020 3010,3010 3010))
+8	POINT(0 0)	POLYGON((3010 3010,3020 3020,3030 3030,3040 3030,3020 3010,3010 3010))
+9	POINT(120 120)	POLYGON((4010 4010,4020 4020,4030 4030,4040 4030,4020 4010,4010 4010))
+4	POINT(50 50)	POLYGON((300 300,400 400,500 500,300 500,300 400,300 300))
+5	POINT(3 3)	POLYGON((1010 1010,1020 1020,1030 1030,1040 1030,1020 1010,1010 1010))
+3	POINT(4 4)	POLYGON((7 1,6 2,6 3,10 3,10 1,7 1))
+10	POINT(160 160)	POLYGON((5010 5010,5020 5020,5030 5030,5040 5030,5020 5010,5010 5010))
+SELECT c1,ST_Astext(c2),ST_Astext(c4) FROM tab ORDER BY c4;
+c1	ST_Astext(c2)	ST_Astext(c4)
+3	POINT(4 4)	POLYGON((7 1,6 2,6 3,10 3,10 1,7 1))
+1	POINT(10 10)	POLYGON((30 30,40 40,50 50,30 50,30 40,30 30))
+9	POINT(120 120)	POLYGON((4010 4010,4020 4020,4030 4030,4040 4030,4020 4010,4010 4010))
+6	POINT(3 3)	POLYGON((2010 2010,2020 2020,2030 2030,2040 2030,2020 2010,2010 2010))
+7	POINT(60 70)	POLYGON((3010 3010,3020 3020,3030 3030,3040 3030,3020 3010,3010 3010))
+8	POINT(0 0)	POLYGON((3010 3010,3020 3020,3030 3030,3040 3030,3020 3010,3010 3010))
+5	POINT(3 3)	POLYGON((1010 1010,1020 1020,1030 1030,1040 1030,1020 1010,1010 1010))
+10	POINT(160 160)	POLYGON((5010 5010,5020 5020,5030 5030,5040 5030,5020 5010,5010 5010))
+4	POINT(50 50)	POLYGON((300 300,400 400,500 500,300 500,300 400,300 300))
+2	POINT(20 20)	POLYGON((40 50,40 70,50 100,70 100,80 80,70 50,40 50))
+SELECT c1,ST_Astext(c2),ST_Astext(c4) FROM tab ORDER BY c5;
+c1	ST_Astext(c2)	ST_Astext(c4)
+3	POINT(4 4)	POLYGON((7 1,6 2,6 3,10 3,10 1,7 1))
+1	POINT(10 10)	POLYGON((30 30,40 40,50 50,30 50,30 40,30 30))
+9	POINT(120 120)	POLYGON((4010 4010,4020 4020,4030 4030,4040 4030,4020 4010,4010 4010))
+6	POINT(3 3)	POLYGON((2010 2010,2020 2020,2030 2030,2040 2030,2020 2010,2010 2010))
+7	POINT(60 70)	POLYGON((3010 3010,3020 3020,3030 3030,3040 3030,3020 3010,3010 3010))
+8	POINT(0 0)	POLYGON((3010 3010,3020 3020,3030 3030,3040 3030,3020 3010,3010 3010))
+5	POINT(3 3)	POLYGON((1010 1010,1020 1020,1030 1030,1040 1030,1020 1010,1010 1010))
+10	POINT(160 160)	POLYGON((5010 5010,5020 5020,5030 5030,5040 5030,5020 5010,5010 5010))
+4	POINT(50 50)	POLYGON((300 300,400 400,500 500,300 500,300 400,300 300))
+2	POINT(20 20)	POLYGON((40 50,40 70,50 100,70 100,80 80,70 50,40 50))
+SELECT c1,ST_Astext(c2),ST_Astext(c4) FROM tab GROUP BY c1;
+c1	ST_Astext(c2)	ST_Astext(c4)
+1	POINT(10 10)	POLYGON((30 30,40 40,50 50,30 50,30 40,30 30))
+2	POINT(20 20)	POLYGON((40 50,40 70,50 100,70 100,80 80,70 50,40 50))
+3	POINT(4 4)	POLYGON((7 1,6 2,6 3,10 3,10 1,7 1))
+4	POINT(50 50)	POLYGON((300 300,400 400,500 500,300 500,300 400,300 300))
+5	POINT(3 3)	POLYGON((1010 1010,1020 1020,1030 1030,1040 1030,1020 1010,1010 1010))
+6	POINT(3 3)	POLYGON((2010 2010,2020 2020,2030 2030,2040 2030,2020 2010,2010 2010))
+7	POINT(60 70)	POLYGON((3010 3010,3020 3020,3030 3030,3040 3030,3020 3010,3010 3010))
+8	POINT(0 0)	POLYGON((3010 3010,3020 3020,3030 3030,3040 3030,3020 3010,3010 3010))
+9	POINT(120 120)	POLYGON((4010 4010,4020 4020,4030 4030,4040 4030,4020 4010,4010 4010))
+10	POINT(160 160)	POLYGON((5010 5010,5020 5020,5030 5030,5040 5030,5020 5010,5010 5010))
+SELECT c1,ST_Astext(c2),ST_Astext(c4) FROM tab GROUP BY c2;
+c1	ST_Astext(c2)	ST_Astext(c4)
+1	POINT(10 10)	POLYGON((30 30,40 40,50 50,30 50,30 40,30 30))
+2	POINT(20 20)	POLYGON((40 50,40 70,50 100,70 100,80 80,70 50,40 50))
+3	POINT(4 4)	POLYGON((7 1,6 2,6 3,10 3,10 1,7 1))
+4	POINT(50 50)	POLYGON((300 300,400 400,500 500,300 500,300 400,300 300))
+5	POINT(3 3)	POLYGON((1010 1010,1020 1020,1030 1030,1040 1030,1020 1010,1010 1010))
+7	POINT(60 70)	POLYGON((3010 3010,3020 3020,3030 3030,3040 3030,3020 3010,3010 3010))
+8	POINT(0 0)	POLYGON((3010 3010,3020 3020,3030 3030,3040 3030,3020 3010,3010 3010))
+9	POINT(120 120)	POLYGON((4010 4010,4020 4020,4030 4030,4040 4030,4020 4010,4010 4010))
+10	POINT(160 160)	POLYGON((5010 5010,5020 5020,5030 5030,5040 5030,5020 5010,5010 5010))
+SELECT c1,ST_Astext(c2),ST_Astext(c4) FROM tab GROUP BY c3;
+c1	ST_Astext(c2)	ST_Astext(c4)
+1	POINT(10 10)	POLYGON((30 30,40 40,50 50,30 50,30 40,30 30))
+2	POINT(20 20)	POLYGON((40 50,40 70,50 100,70 100,80 80,70 50,40 50))
+3	POINT(4 4)	POLYGON((7 1,6 2,6 3,10 3,10 1,7 1))
+4	POINT(50 50)	POLYGON((300 300,400 400,500 500,300 500,300 400,300 300))
+5	POINT(3 3)	POLYGON((1010 1010,1020 1020,1030 1030,1040 1030,1020 1010,1010 1010))
+6	POINT(3 3)	POLYGON((2010 2010,2020 2020,2030 2030,2040 2030,2020 2010,2010 2010))
+9	POINT(120 120)	POLYGON((4010 4010,4020 4020,4030 4030,4040 4030,4020 4010,4010 4010))
+10	POINT(160 160)	POLYGON((5010 5010,5020 5020,5030 5030,5040 5030,5020 5010,5010 5010))
+SELECT c1,ST_Astext(c2),ST_Astext(c4) FROM tab GROUP BY c4;
+c1	ST_Astext(c2)	ST_Astext(c4)
+1	POINT(10 10)	POLYGON((30 30,40 40,50 50,30 50,30 40,30 30))
+2	POINT(20 20)	POLYGON((40 50,40 70,50 100,70 100,80 80,70 50,40 50))
+3	POINT(4 4)	POLYGON((7 1,6 2,6 3,10 3,10 1,7 1))
+4	POINT(50 50)	POLYGON((300 300,400 400,500 500,300 500,300 400,300 300))
+5	POINT(3 3)	POLYGON((1010 1010,1020 1020,1030 1030,1040 1030,1020 1010,1010 1010))
+6	POINT(3 3)	POLYGON((2010 2010,2020 2020,2030 2030,2040 2030,2020 2010,2010 2010))
+7	POINT(60 70)	POLYGON((3010 3010,3020 3020,3030 3030,3040 3030,3020 3010,3010 3010))
+9	POINT(120 120)	POLYGON((4010 4010,4020 4020,4030 4030,4040 4030,4020 4010,4010 4010))
+10	POINT(160 160)	POLYGON((5010 5010,5020 5020,5030 5030,5040 5030,5020 5010,5010 5010))
+SELECT c1,ST_Astext(c2),ST_Astext(c4) FROM tab GROUP BY c5;
+c1	ST_Astext(c2)	ST_Astext(c4)
+1	POINT(10 10)	POLYGON((30 30,40 40,50 50,30 50,30 40,30 30))
+2	POINT(20 20)	POLYGON((40 50,40 70,50 100,70 100,80 80,70 50,40 50))
+3	POINT(4 4)	POLYGON((7 1,6 2,6 3,10 3,10 1,7 1))
+4	POINT(50 50)	POLYGON((300 300,400 400,500 500,300 500,300 400,300 300))
+5	POINT(3 3)	POLYGON((1010 1010,1020 1020,1030 1030,1040 1030,1020 1010,1010 1010))
+6	POINT(3 3)	POLYGON((2010 2010,2020 2020,2030 2030,2040 2030,2020 2010,2010 2010))
+7	POINT(60 70)	POLYGON((3010 3010,3020 3020,3030 3030,3040 3030,3020 3010,3010 3010))
+9	POINT(120 120)	POLYGON((4010 4010,4020 4020,4030 4030,4040 4030,4020 4010,4010 4010))
+10	POINT(160 160)	POLYGON((5010 5010,5020 5020,5030 5030,5040 5030,5020 5010,5010 5010))
+SET sql_mode = 'ONLY_FULL_GROUP_BY';
+SELECT c1,ST_Astext(c2),ST_Astext(c4) FROM tab GROUP BY c2;
+ERROR 42000: nonaggregated column 'test.tab.c1' is not functionally dependent on columns in GROUP BY clause; this is incompatible with sql_mode=only_full_group_by
+SET sql_mode = ' ';
+drop table tab;
+CREATE TABLE FF01 (A INT,B GEOMETRY);
+INSERT INTO FF01 VALUES (1,NULL);
+INSERT INTO FF01 VALUES (2,POINT(1,2));
+INSERT INTO FF01 VALUES (3,POINT(-1,-2));
+SELECT ST_ASTEXT(B) FROM FF01 WHERE B = SOME (SELECT B FROM FF01 WHERE A=1);
+ST_ASTEXT(B)
+SELECT ST_ASTEXT(B) FROM FF01 WHERE B = SOME (SELECT A FROM FF01 WHERE B=POINT(1,2));
+ST_ASTEXT(B)
+SELECT ST_ASTEXT(B) FROM FF01 WHERE B IN (SELECT B FROM FF01 WHERE B=POINT(1,2));
+ST_ASTEXT(B)
+POINT(1 2)
+SELECT ST_ASTEXT(B) FROM FF01 WHERE B LIKE (SELECT B FROM FF01 WHERE B=POINT(1,2));
+ERROR HY000: Invalid argument
+SELECT ST_ASTEXT(B) FROM FF01 WHERE B NOT IN (SELECT B FROM FF01 WHERE B=POINT(1,2));
+ST_ASTEXT(B)
+POINT(-1 -2)
+SELECT ST_ASTEXT(B) FROM FF01 WHERE B = ANY (SELECT A FROM FF01 WHERE B=POINT(1,2));
+ST_ASTEXT(B)
+SELECT ST_ASTEXT(B) FROM FF01 WHERE B = ALL (SELECT A FROM FF01 WHERE B=POINT(1,2));
+ST_ASTEXT(B)
+drop table FF01;
+create table FF01 (gid int auto_increment primary key, geo geometry SRID 4326,geo_c GEOMETRYCOLLECTION SRID 26918,poi point SRID 4326,lin linestring SRID 26918,pol polygon SRID 4326,M_POI MULTIPOINT SRID 26918,M_LIN MULTILINESTRING SRID 4326 ,M_POL MULTIPOLYGON SRID 26918);
+SELECT ST_ASTEXT(POL) FROM FF01 WHERE (GEO,GEO_C) = (SELECT GEO,GEO_C FROM FF01 WHERE GID=1);
+ST_ASTEXT(POL)
+drop table FF01;
+create table FF01 (gid int auto_increment primary key, M_POI MULTIPOINT SRID 26918);
+create table FF02 (gid int auto_increment primary key, geo geometry SRID 4326);
+SELECT ST_ASTEXT(M_POI) FROM FF01 WHERE M_POI <=> (SELECT M_POI FROM FF02 WHERE GID=1);
+ST_ASTEXT(M_POI)
+drop table FF01;
+drop table FF02;
+alter system flush plan cache;
+create table gis_point_plancache (x double, y double, poi geometry);
+insert into gis_point_plancache (x,y,poi) values (88.9200873939389,-70.01650134265074,st_srid(point(88.9200873939389,-70.01650134265074),4326)),(-131.96607164968344,70.74339201768984,st_srid(point(-131.96607164968344,70.74339201768984),4326));
+insert into gis_point_plancache (x,y,poi) values (66.70676602312597,68.49638658511424,st_srid(point(66.70676602312597,68.49638658511424),4326)),(38.2111204280196,-84.97214528175294,st_srid(point(38.2111204280196,-84.97214528175294),4326));
+insert into gis_point_plancache (x,y,poi) values (-135.24378902766549,-45.111689570279204,st_srid(point(-135.24378902766549,-45.111689570279204),4326)),(54.43574907318134,11.87557381602113,st_srid(point(54.43574907318134,11.87557381602113),4326));
+insert into gis_point_plancache (x,y,poi) values (-51.28971091880538,-16.112290993511024,st_srid(point(-51.28971091880538,-16.112290993511024),4326)),(26.793719900045886,38.22676013634444,st_srid(point(26.793719900045886,38.22676013634444),4326));
+insert into gis_point_plancache (x,y,poi) values (1.1, 1.2, st_srid(linestring(point(1.1, 1.2), point(1.2, 1.3)), 4326));
+insert into gis_point_plancache (x,y,poi) values (1.111, 1.211, st_srid(linestring(point(1.111, 1.211), point(1.211, 1.311)), 4326));
+insert into gis_point_plancache (x,y,poi) values (1.111111, 1.211111, st_srid(linestring(point(1.111111, 1.211111), point(1.211111, 1.311111)), 4326));
+select x,y,st_astext(poi) from gis_point_plancache;
+x	y	st_astext(poi)
+88.9200873939389	-70.01650134265074	POINT(-70.01650134265074 88.9200873939389)
+-131.96607164968344	70.74339201768984	POINT(70.74339201768984 -131.96607164968344)
+66.70676602312597	68.49638658511424	POINT(68.49638658511424 66.70676602312597)
+38.2111204280196	-84.97214528175294	POINT(-84.97214528175294 38.2111204280196)
+-135.24378902766549	-45.111689570279204	POINT(-45.111689570279204 -135.24378902766549)
+54.43574907318134	11.87557381602113	POINT(11.87557381602113 54.43574907318134)
+-51.28971091880538	-16.112290993511024	POINT(-16.112290993511024 -51.28971091880538)
+26.793719900045886	38.22676013634444	POINT(38.22676013634444 26.793719900045886)
+1.1	1.2	LINESTRING(1.2 1.1,1.3 1.2)
+1.111	1.211	LINESTRING(1.211 1.111,1.311 1.211)
+1.111111	1.211111	LINESTRING(1.211111 1.111111,1.311111 1.211111)
+select executions, hit_count, substring(query_sql, 1, 100) as sql_text from oceanbase.GV$OB_PLAN_CACHE_PLAN_STAT where query_sql like '%x,y,poi%' order by plan_size desc limit 10;
+executions	hit_count	sql_text
+0	0	select executions, hit_count, substring(query_sql, 1, 100) as sql_text from oceanbase.GV$OB_PLAN_CAC
+1	0	insert into gis_point_plancache (x,y,poi) values (88.9200873939389,-70.01650134265074,st_srid(point(
+1	0	insert into gis_point_plancache (x,y,poi) values (-51.28971091880538,-16.112290993511024,st_srid(poi
+1	0	insert into gis_point_plancache (x,y,poi) values (66.70676602312597,68.49638658511424,st_srid(point(
+1	0	insert into gis_point_plancache (x,y,poi) values (-135.24378902766549,-45.111689570279204,st_srid(po
+1	0	insert into gis_point_plancache (x,y,poi) values (1.1, 1.2, st_srid(linestring(point(1.1, 1.2), poin
+1	0	insert into gis_point_plancache (x,y,poi) values (1.111, 1.211, st_srid(linestring(point(1.111, 1.21
+1	0	insert into gis_point_plancache (x,y,poi) values (1.111111, 1.211111, st_srid(linestring(point(1.111
+drop table gis_point_plancache;
+select json_array(1.1, 1.1, 1.1);
+json_array(1.1, 1.1, 1.1)
+[1.1, 1.1, 1.1]
+select json_array(1.1111, 1.1, 1.1);
+json_array(1.1111, 1.1, 1.1)
+[1.1111, 1.1, 1.1]
+select json_array(1.111111111, 1.1, 1.1);
+json_array(1.111111111, 1.1, 1.1)
+[1.111111111, 1.1, 1.1]
+select st_astext(point(cast(1.11 as double), 1.1)) as plancache_not_share;
+plancache_not_share
+POINT(1.11 1.1)
+select st_astext(point(cast(1.1111 as double), 1.1111)) as plancache_not_share;
+plancache_not_share
+POINT(1.1111 1.1111)
+select cast(1.11 as double), st_astext(point(1.1, 1.1)) as plancache_not_share;
+cast(1.11 as double)	plancache_not_share
+1.11	POINT(1.1 1.1)
+select cast(1.11111 as double), st_astext(point(1.1, 1.1111)) as plancache_not_share;
+cast(1.11111 as double)	plancache_not_share
+1.11111	POINT(1.1 1.1111)
+select executions, hit_count, substring(query_sql, 1, 100) as sql_text from oceanbase.GV$OB_PLAN_CACHE_PLAN_STAT where query_sql like '%plancache_not_share%' and query_sql not like '%OB_PLAN_CACHE_PLAN_STAT%' order by plan_size desc limit 10;
+executions	hit_count	sql_text
+1	0	select st_astext(point(cast(1.11 as double), 1.1)) as plancache_not_share
+1	0	select st_astext(point(cast(1.1111 as double), 1.1111)) as plancache_not_share
+1	0	select cast(1.11 as double), st_astext(point(1.1, 1.1)) as plancache_not_share
+1	0	select cast(1.11111 as double), st_astext(point(1.1, 1.1111)) as plancache_not_share
+drop table if exists tt2;
+create table tt2(g GEOMETRY);
+insert into tt2 values(ST_GeomFromText('LINESTRING(0 0, 10 10, 20 25, 50 60)'));
+ALTER TABLE tt2 ADD CONSTRAINT qq CHECK(g=ST_GeomFromText('point(10 20)'));
+ERROR HY000: check constraint violated
+ALTER TABLE tt2 ADD CONSTRAINT qq CHECK(g=ST_GeomFromText('LINESTRING(0 0, 10 10, 20 25, 50 60)'));
+drop table tt2;
+SELECT ST_CONTAINS(ST_GEOMFROMTEXT('GEOMETRYCOLLECTION(LINESTRING(2 0,2 0))'),ST_GEOMFROMTEXT('GEOMETRYCOLLECTION(POINT(2 0))')) A;
+A
+1
+SELECT ST_CONTAINS(ST_GEOMFROMTEXT('GEOMETRYCOLLECTION(LINESTRING(2 0,2 0))', 4326),ST_GEOMFROMTEXT('GEOMETRYCOLLECTION(POINT(2 0))', 4326)) A;
+A
+1
+SELECT ST_CONTAINS(ST_GEOMETRYFROMTEXT('POLYGON((2 0,0 0,0 0,2 0))'),ST_GEOMETRYFROMTEXT('GEOMETRYCOLLECTION(MULTIPOLYGON(((0 0,1 1,1 0,0 1,0 0))))'));
+ERROR 22023: Invalid GIS data provided to function.
+SELECT ST_CONTAINS(
+ST_GEOMFROMTEXT('MULTIPOLYGON(((0 1e+19,0 0,0 0,0 1e+19)))'),
+ST_GEOMFROMTEXT('POLYGON((0 0,0 0,0 0,0 0))'));
+ERROR 22003: value is out of range
+SELECT ST_CONTAINS(
+ST_GEOMFROMTEXT('MULTIPOLYGON(((0 9.22e+18,0 0,0 0,0 9.22e+18)))'),
+ST_GEOMFROMTEXT('POLYGON((0 0,0 0,0 0,0 0))'));
+ST_CONTAINS(
+ST_GEOMFROMTEXT('MULTIPOLYGON(((0 9.22e+18,0 0,0 0,0 9.22e+18)))'),
+ST_GEOMFROMTEXT('POLYGON((0 0,0 0,0 0,0 0))'))
+0
+SELECT ST_CONTAINS(
+ST_GEOMFROMTEXT('MULTIPOLYGON(((0 -9.22e+18,0 0,0 0,0 -9.22e+18)))'),
+ST_GEOMFROMTEXT('POLYGON((0 0,0 0,0 0,0 0))'));
+ST_CONTAINS(
+ST_GEOMFROMTEXT('MULTIPOLYGON(((0 -9.22e+18,0 0,0 0,0 -9.22e+18)))'),
+ST_GEOMFROMTEXT('POLYGON((0 0,0 0,0 0,0 0))'))
+0
+create table tt1(id int,p point);
+alter table tt1 change p p polygon;
+ERROR 22003: Cannot get geometry object from data you send to the GEOMETRY field.
+desc tt1;
+Field	Type	Null	Key	Default	Extra
+id	int(11)	YES		NULL	
+p	point	YES		NULL	
+drop table tt1;
+create table tt2(a blob);
+insert into tt2 values('E6100000010100000000000000000034400000000000002440');
+select cast(a as point) from tt2;
+ERROR SR001: There's no spatial reference system with SRID 808531525.
+drop table tt2;
+select hex(st_aswkb(x'E61000000108000000000000000e0066C00000000000A06640'));
+ERROR 22023: Invalid GIS data provided to function st_aswkb.
+select hex(st_asbinary(x'E61000000108000000000000000e0066C00000000000A06640'));
+ERROR 22023: Invalid GIS data provided to function st_asbinary.
+drop table if exists tt1,t1;
+CREATE TABLE tt1 (
+id INT NOT NULL ,
+g GEOMETRY not null srid 4236,
+p point  not null srid 0,
+l LINESTRING not null srid 26918,
+po POLYGON not null srid 4236,
+mu MULTIPOINT not null,
+ml MULTILINESTRING not null srid 0,
+mp MULTIPOLYGON not null srid 26918,
+ge GEOMETRYCOLLECTION not null srid 4236
+);
+CREATE  INDEX idx02 ON tt1(mu);
+CREATE  INDEX idx03 ON tt1(ml);
+CREATE  INDEX idx05 ON tt1(ge);
+insert into tt1  values(1,ST_GeomFromText('POINT(15 20)',4236),ST_GeomFromText('POINT(15 20)',0),ST_GeomFromText('LINESTRING(0 0, 10 10, 20 25, 50 60)',26918),ST_GeomFromText('POLYGON((0 1,10 0,9 10,0 10,0 1),(5 5,7 5,8 7,5 7, 5 5))',4236),ST_GeomFromText('MULTIPOINT(0 1, -20 25, 60 -60)'),
+ST_GeomFromText('MULTILINESTRING((11 10, 20 -20), (-15 20, 30 15))',0),ST_GeomFromText('MULTIPOLYGON(((0 0,10 0,10 11,0 10,0 0)),((-5 -6,7 5,7 7,5 7, -5 -6)))',26918),
+ST_GeomFromText('GEOMETRYCOLLECTION(POINT(11 10), POINT(30 -30), LINESTRING(-15 15, -20 20))',4236));
+insert into tt1  values(1,ST_GeomFromText('POINT(15 20)',4236),ST_GeomFromText('POINT(15 20)',0),ST_GeomFromText('LINESTRING(0 0, 10 10, 20 25, 50 60)',26918),ST_GeomFromText('POLYGON((0 1,10 0,9 10,0 10,0 1),(5 5,7 5,8 7,5 7, 5 5))',4236),ST_GeomFromText('MULTIPOINT(0 1, -20 25, 60 -60)'),
+ST_GeomFromText('MULTILINESTRING((11 10, 20 -20), (-15 20, 30 15))',0),ST_GeomFromText('MULTIPOLYGON(((0 0,10 0,10 11,0 10,0 0)),((-5 -6,7 5,7 7,5 7, -5 -6)))',26918),
+ST_GeomFromText('GEOMETRYCOLLECTION(POINT(11 10), POINT(30 -30), LINESTRING(-15 15, -20 20))',4236));
+insert into tt1  values(2,ST_GeomFromText('POINT(15 20)',4236),ST_GeomFromText('POINT(15 20)',0),ST_GeomFromText('LINESTRING(0 0, 10 10, 20 25, 50 60)',26918),ST_GeomFromText('POLYGON((0 1,10 0,9 10,0 10,0 1),(5 5,7 5,8 7,5 7, 5 5))',4236),ST_GeomFromText('MULTIPOINT(0 1, -20 25, 60 -60)'),
+ST_GeomFromText('MULTILINESTRING((11 10, 20 -20), (-15 20, 30 15))',0),ST_GeomFromText('MULTIPOLYGON(((0 0,10 0,10 11,0 10,0 0)),((-5 -6,7 5,7 7,5 7, -5 -6)))',26918),
+ST_GeomFromText('GEOMETRYCOLLECTION(POINT(11 10), POINT(30 -30), LINESTRING(-15 15, -20 20))',4236));
+insert into tt1  values(2,ST_GeomFromText('POINT(15 20)',4236),ST_GeomFromText('POINT(15 20)',0),ST_GeomFromText('LINESTRING(0 0, 10 10, 20 25, 50 60)',26918),ST_GeomFromText('POLYGON((0 1,10 0,9 10,0 10,0 1),(5 5,7 5,8 7,5 7, 5 5))',4236),ST_GeomFromText('MULTIPOINT(0 1, -20 25, 60 -60)'),
+ST_GeomFromText('MULTILINESTRING((11 10, 20 -20), (-15 20, 30 15))',0),ST_GeomFromText('MULTIPOLYGON(((1 1,10 0,10 11,0 10,1 1)),((-5 -6,7 5,7 7,5 7, -5 -6)))',26918),
+ST_GeomFromText('GEOMETRYCOLLECTION(POINT(11 10), POINT(30 -30), LINESTRING(-15 15, -20 20))',4236));
+insert into tt1  values(1,ST_GeomFromText('POINT(15 20)',4236),ST_GeomFromText('POINT(15 20)',0),ST_GeomFromText('LINESTRING(0 0, 10 10, 20 25, 50 60)',26918),ST_GeomFromText('POLYGON((0 1,10 0,9 10,0 10,0 1),(5 5,7 5,8 7,5 7, 5 5))',4236),ST_GeomFromText('MULTIPOINT(0 1, -20 25, 60 -60)'),
+ST_GeomFromText('MULTILINESTRING((11 10, 20 -20), (-15 20, 30 15))',0),ST_GeomFromText('MULTIPOLYGON(((0 0,10 0,10 11,0 10,0 0)),((5 6,7 5,7 7,5 7, 5 6)))',26918),
+ST_GeomFromText('GEOMETRYCOLLECTION(POINT(11 10), POINT(30 -30), LINESTRING(-15 15, -20 20))',4236));
+insert into tt1  values(1,ST_GeomFromText('POINT(15 20)',4236),ST_GeomFromText('POINT(15 20)',0),ST_GeomFromText('LINESTRING(0 0, 10 10, 20 25, 50 60)',26918),ST_GeomFromText('POLYGON((0 1,10 0,9 10,0 10,0 1),(5 5,7 5,8 7,5 7, 5 5))',4236),ST_GeomFromText('MULTIPOINT(0 1, -20 25, 60 -60)'),
+ST_GeomFromText('MULTILINESTRING((11 10, 20 -20), (-15 20, 30 15))',0),ST_GeomFromText('MULTIPOLYGON(((0 0,10 0,10 11,0 10,0 0)),((-5 -6,7 5,7 7,5 7, -5 -6)))',26918),
+ST_GeomFromText('GEOMETRYCOLLECTION(POINT(11 10), POINT(30 -30), LINESTRING(-15 15, -20 20))',4236));
+explain select id from tt1 where ST_Intersects(ge,ST_GeomFromText('POINT(15 20)',4236));
+Query Plan
+======================================================
+|ID|OPERATOR        |NAME      |EST.ROWS|EST.TIME(us)|
+------------------------------------------------------
+|0 |TABLE RANGE SCAN|tt1(idx05)|1       |240         |
+======================================================
+Outputs & filters:
+-------------------------------------
+  0 - output([tt1.id]), filter([ST_Intersects(tt1.ge, ST_GeomFromText('POINT(15 20)', 4236))])
+      access([tt1.__pk_increment], [tt1.ge], [tt1.id]), partitions(p0)
+      is_index_back=true, is_global_index=false, filter_before_indexback[false], 
+      range_key([tt1.__cellid_24], [tt1.__mbr_24], [tt1.__pk_increment]), range(1240640185631322860,MIN,MIN ; 1240640185631322860,MAX,MAX), (1240640185631322864,
+      MIN,MIN ; 1240640185631322864,MAX,MAX), (1240640185631322816,MIN,MIN ; 1240640185631322816,MAX,MAX), (1240640185631322880,MIN,MIN ; 1240640185631322880,
+      MAX,MAX), (1240640185631323136,MIN,MIN ; 1240640185631323136,MAX,MAX), (1240640185631322112,MIN,MIN ; 1240640185631322112,MAX,MAX), (1240640185631326208,
+      MIN,MIN ; 1240640185631326208,MAX,MAX), (1240640185631309824,MIN,MIN ; 1240640185631309824,MAX,MAX), (1240640185631506432,MIN,MIN ; 1240640185631506432,
+      MAX,MAX), (1240640185632292864,MIN,MIN ; 1240640185632292864,MAX,MAX), (1240640185633341440,MIN,MIN ; 1240640185633341440,MAX,MAX), (1240640185637535744,
+      MIN,MIN ; 1240640185637535744,MAX,MAX), (1240640185587204096,MIN,MIN ; 1240640185587204096,MAX,MAX), (1240640185520095232,MIN,MIN ; 1240640185520095232,
+      MAX,MAX), (1240640184714788864,MIN,MIN ; 1240640184714788864,MAX,MAX), (1240640185788530688,MIN,MIN ; 1240640185788530688,MAX,MAX), (1240640181493563392,
+      MIN,MIN ; 1240640181493563392,MAX,MAX), (1240640198673432576,MIN,MIN ; 1240640198673432576,MAX,MAX), (1240640267392909312,MIN,MIN ; 1240640267392909312,
+      MAX,MAX), (1240639442759188480,MIN,MIN ; 1240639442759188480,MAX,MAX), (1240640542270816256,MIN,MIN ; 1240640542270816256,MAX,MAX), (1240653736410349568,
+      MIN,MIN ; 1240653736410349568,MAX,MAX), (1240671328596393984,MIN,MIN ; 1240671328596393984,MAX,MAX), (1240460222363860992,MIN,MIN ; 1240460222363860992,
+      MAX,MAX), (1239615797433729024,MIN,MIN ; 1239615797433729024,MAX,MAX), (1238489897526886400,MIN,MIN ; 1238489897526886400,MAX,MAX), (1242993497154256896,
+      MIN,MIN ; 1242993497154256896,MAX,MAX), (1224979098644774912,MIN,MIN ; 1224979098644774912,MAX,MAX), (1441151880758558720,MIN,MIN ; 1441151880758558720,
+      MAX,MAX), (1152921504606846976,MIN,MIN ; 1152921504606846976,MAX,MAX), (1240640185631322861,MIN,MIN ; 1240640185631322861,MAX,MAX)
+drop table tt1;
+create table t1 (a geometry not null, spatial index(a)) row_format=dynamic;
+INSERT IGNORE INTO t1 VALUES (NULL);
+ERROR 23000: Column 'a' cannot be null
+drop table t1;
+drop table if exists t;
+create table t1(g geometry  NOT NULL SRID 3294);
+create index idx on t1 (g);
+INSERT INTO t1 (g) VALUES
+(ST_GeomFromText('POINT(0 0)', 3294)),
+(ST_GeomFromText('POINT(1 1)', 3294)),
+(ST_GeomFromText('POINT(2 2)', 3294)),
+(ST_GeomFromText('POINT(3 3)', 3294)),
+(ST_GeomFromText('POINT(4 4)', 3294)),
+(ST_GeomFromText('POINT(5 5.5)', 3294)),
+(ST_GeomFromText('POINT(6 6)', 3294)),
+(ST_GeomFromText('POINT(7 7)', 3294)),
+(ST_GeomFromText('LINESTRING(0 0, 3 3)',3294));
+explain select /*+dynamic_sampling(1)*/st_astext(a.g), st_astext(b.g) from t1 a join t1 b where _st_covers(a.g, b.g);
+Query Plan
+====================================================
+|ID|OPERATOR          |NAME  |EST.ROWS|EST.TIME(us)|
+----------------------------------------------------
+|0 |NESTED-LOOP JOIN  |      |21      |2335        |
+|1 |├─TABLE FULL SCAN |a     |9       |83          |
+|2 |└─TABLE RANGE SCAN|b(idx)|3       |250         |
+====================================================
+Outputs & filters:
+-------------------------------------
+  0 - output([st_astext(a.g)], [st_astext(b.g)]), filter(nil)
+      conds(nil), nl_params_([a.g(:0)]), use_batch=false
+  1 - output([a.g]), filter(nil)
+      access([a.g]), partitions(p0)
+      is_index_back=false, is_global_index=false, 
+      range_key([a.__pk_increment]), range(MIN ; MAX)always true
+  2 - output([b.g]), filter([_st_covers(:0, b.g)])
+      access([b.__pk_increment], [b.g]), partitions(p0)
+      is_index_back=true, is_global_index=false, filter_before_indexback[false], 
+      range_key([b.__cellid_16], [b.__mbr_16], [b.__pk_increment]), range(MIN ; MAX)
+explain select /*+dynamic_sampling(1)*/st_astext(a.g), st_astext(b.g) from t1 a join t1 b where st_contains(a.g, b.g);
+Query Plan
+====================================================
+|ID|OPERATOR          |NAME  |EST.ROWS|EST.TIME(us)|
+----------------------------------------------------
+|0 |NESTED-LOOP JOIN  |      |21      |2335        |
+|1 |├─TABLE FULL SCAN |a     |9       |83          |
+|2 |└─TABLE RANGE SCAN|b(idx)|3       |250         |
+====================================================
+Outputs & filters:
+-------------------------------------
+  0 - output([st_astext(a.g)], [st_astext(b.g)]), filter(nil)
+      conds(nil), nl_params_([a.g(:0)]), use_batch=false
+  1 - output([a.g]), filter(nil)
+      access([a.g]), partitions(p0)
+      is_index_back=false, is_global_index=false, 
+      range_key([a.__pk_increment]), range(MIN ; MAX)always true
+  2 - output([b.g]), filter([st_contains(:0, b.g)])
+      access([b.__pk_increment], [b.g]), partitions(p0)
+      is_index_back=true, is_global_index=false, filter_before_indexback[false], 
+      range_key([b.__cellid_16], [b.__mbr_16], [b.__pk_increment]), range(MIN ; MAX)
+explain select /*+dynamic_sampling(1)*/st_astext(a.g), st_astext(b.g) from t1 a join t1 b where st_within(a.g, b.g);
+Query Plan
+====================================================
+|ID|OPERATOR          |NAME  |EST.ROWS|EST.TIME(us)|
+----------------------------------------------------
+|0 |NESTED-LOOP JOIN  |      |21      |2335        |
+|1 |├─TABLE FULL SCAN |a     |9       |83          |
+|2 |└─TABLE RANGE SCAN|b(idx)|3       |250         |
+====================================================
+Outputs & filters:
+-------------------------------------
+  0 - output([st_astext(a.g)], [st_astext(b.g)]), filter(nil)
+      conds(nil), nl_params_([a.g(:0)]), use_batch=false
+  1 - output([a.g]), filter(nil)
+      access([a.g]), partitions(p0)
+      is_index_back=false, is_global_index=false, 
+      range_key([a.__pk_increment]), range(MIN ; MAX)always true
+  2 - output([b.g]), filter([st_within(:0, b.g)])
+      access([b.__pk_increment], [b.g]), partitions(p0)
+      is_index_back=true, is_global_index=false, filter_before_indexback[false], 
+      range_key([b.__cellid_16], [b.__mbr_16], [b.__pk_increment]), range(MIN ; MAX)
+explain select /*+dynamic_sampling(1)*/st_astext(a.g), st_astext(b.g) from t1 a join t1 b where _st_dwithin(a.g, b.g, 0.1);
+Query Plan
+====================================================
+|ID|OPERATOR          |NAME  |EST.ROWS|EST.TIME(us)|
+----------------------------------------------------
+|0 |NESTED-LOOP JOIN  |      |21      |2335        |
+|1 |├─TABLE FULL SCAN |a     |9       |83          |
+|2 |└─TABLE RANGE SCAN|b(idx)|3       |250         |
+====================================================
+Outputs & filters:
+-------------------------------------
+  0 - output([st_astext(a.g)], [st_astext(b.g)]), filter(nil)
+      conds(nil), nl_params_([a.g(:0)]), use_batch=false
+  1 - output([a.g]), filter(nil)
+      access([a.g]), partitions(p0)
+      is_index_back=false, is_global_index=false, 
+      range_key([a.__pk_increment]), range(MIN ; MAX)always true
+  2 - output([b.g]), filter([_st_dwithin(:0, b.g, cast(0.1, DOUBLE(2, 1)))])
+      access([b.__pk_increment], [b.g]), partitions(p0)
+      is_index_back=true, is_global_index=false, filter_before_indexback[false], 
+      range_key([b.__cellid_16], [b.__mbr_16], [b.__pk_increment]), range(MIN ; MAX)
+select st_astext(a.g), st_astext(b.g) from t1 a join t1 b where _st_covers(a.g, b.g);
+st_astext(a.g)	st_astext(b.g)
+POINT(0 0)	POINT(0 0)
+POINT(1 1)	POINT(1 1)
+POINT(2 2)	POINT(2 2)
+POINT(3 3)	POINT(3 3)
+POINT(4 4)	POINT(4 4)
+POINT(5 5.5)	POINT(5 5.5)
+POINT(6 6)	POINT(6 6)
+POINT(7 7)	POINT(7 7)
+LINESTRING(0 0,3 3)	POINT(0 0)
+LINESTRING(0 0,3 3)	POINT(1 1)
+LINESTRING(0 0,3 3)	POINT(2 2)
+LINESTRING(0 0,3 3)	POINT(3 3)
+LINESTRING(0 0,3 3)	LINESTRING(0 0,3 3)
+select st_astext(a.g), st_astext(b.g) from t1 a join t1 b where st_contains(a.g, b.g);
+st_astext(a.g)	st_astext(b.g)
+POINT(0 0)	POINT(0 0)
+POINT(1 1)	POINT(1 1)
+POINT(2 2)	POINT(2 2)
+POINT(3 3)	POINT(3 3)
+POINT(4 4)	POINT(4 4)
+POINT(5 5.5)	POINT(5 5.5)
+POINT(6 6)	POINT(6 6)
+POINT(7 7)	POINT(7 7)
+LINESTRING(0 0,3 3)	POINT(1 1)
+LINESTRING(0 0,3 3)	POINT(2 2)
+LINESTRING(0 0,3 3)	LINESTRING(0 0,3 3)
+select st_astext(a.g), st_astext(b.g) from t1 a join t1 b where st_within(a.g, b.g);
+st_astext(a.g)	st_astext(b.g)
+POINT(0 0)	POINT(0 0)
+POINT(1 1)	POINT(1 1)
+POINT(1 1)	LINESTRING(0 0,3 3)
+POINT(2 2)	POINT(2 2)
+POINT(2 2)	LINESTRING(0 0,3 3)
+POINT(3 3)	POINT(3 3)
+POINT(4 4)	POINT(4 4)
+POINT(5 5.5)	POINT(5 5.5)
+POINT(6 6)	POINT(6 6)
+POINT(7 7)	POINT(7 7)
+LINESTRING(0 0,3 3)	LINESTRING(0 0,3 3)
+select st_astext(a.g), st_astext(b.g) from t1 a join t1 b where _st_dwithin(a.g, b.g, 0.1);
+st_astext(a.g)	st_astext(b.g)
+POINT(0 0)	POINT(0 0)
+POINT(0 0)	LINESTRING(0 0,3 3)
+POINT(1 1)	POINT(1 1)
+POINT(1 1)	LINESTRING(0 0,3 3)
+POINT(2 2)	POINT(2 2)
+POINT(2 2)	LINESTRING(0 0,3 3)
+POINT(3 3)	POINT(3 3)
+POINT(3 3)	LINESTRING(0 0,3 3)
+POINT(4 4)	POINT(4 4)
+POINT(5 5.5)	POINT(5 5.5)
+POINT(6 6)	POINT(6 6)
+POINT(7 7)	POINT(7 7)
+LINESTRING(0 0,3 3)	POINT(0 0)
+LINESTRING(0 0,3 3)	POINT(1 1)
+LINESTRING(0 0,3 3)	POINT(2 2)
+LINESTRING(0 0,3 3)	POINT(3 3)
+LINESTRING(0 0,3 3)	LINESTRING(0 0,3 3)
+select st_astext(g) from t1 where st_within(ST_GeomFromText('POINT(2.5 2.5)', 3294),st_buffer(g, 0));
+st_astext(g)
+LINESTRING(0 0,3 3)
+drop table if exists FF01;
+CREATE TABLE FF01 (A INT,B GEOMETRY);
+INSERT INTO FF01 VALUES (1,NULL);
+INSERT INTO FF01 VALUES (2,POINT(1,2));
+INSERT INTO FF01 VALUES (3,POINT(-1,-2));
+SELECT ST_ASTEXT(B) FROM FF01 WHERE B NOT IN (SELECT /*+no_unnest*/B FROM FF01 WHERE B=POINT(1,2));
+ST_ASTEXT(B)
+POINT(-1 -2)
+drop table FF01;
+drop table if exists geek_poi_7;
+CREATE TABLE `geek_poi_7` (
+`p_id` bigint(20) NOT NULL COMMENT 'poi id',
+`p_name` varchar(255) NOT NULL DEFAULT '\'\'' COMMENT '场景名称',
+`p_branch_name` varchar(255) NOT NULL DEFAULT '\'\'' COMMENT '分店名称',
+`p_phone1` varchar(20) NOT NULL DEFAULT '\'\'' COMMENT '联系电话1',
+`p_phone2` varchar(20) NOT NULL DEFAULT '\'\'' COMMENT '联系电话2',
+`p_logo_url` longtext NOT NULL COMMENT '场景LOGO URL',
+`p_scene_url` longtext NOT NULL COMMENT '场景主页URL',
+`p_quickapp_url` longtext NOT NULL COMMENT '快应用场景主页URL',
+`p_service_list` varchar(255) NOT NULL DEFAULT '\'\'' COMMENT '服务列表，json数组',
+`c_id` bigint(20) NOT NULL DEFAULT '0' COMMENT '分类ID',
+`p_radius` double NOT NULL DEFAULT '0' COMMENT '半径大小，单位 m',
+`p_province` varchar(45) NOT NULL DEFAULT '\'\'' COMMENT '省',
+`p_city` varchar(45) NOT NULL DEFAULT '\'\'' COMMENT '市',
+`p_district` varchar(45) NOT NULL DEFAULT '\'\'' COMMENT '区县',
+`p_address` varchar(255) NOT NULL DEFAULT '\'\'' COMMENT '详细地址',
+`p_longitude` varchar(45) NOT NULL DEFAULT '\'\'' COMMENT '经度',
+`p_latitude` varchar(45) NOT NULL DEFAULT '\'\'' COMMENT '纬度',
+`p_altitude` varchar(255) NOT NULL DEFAULT '\'\'' COMMENT '海拔高度',
+`p_baidu_id` varchar(45) NOT NULL DEFAULT '\'\'' COMMENT '百度城市ID',
+`p_parent_id` bigint(20) NOT NULL DEFAULT '0' COMMENT '父级poi id',
+`p_parent_list` varchar(255) NOT NULL DEFAULT '\'\'' COMMENT '父级poi 列表',
+`pn_id` bigint(20) NOT NULL DEFAULT '0' COMMENT '合作方ID，默认为 0 - 梦享网络',
+`pb_id` bigint(20) NOT NULL DEFAULT '0' COMMENT '品牌id',
+`p_order` bigint(20) NOT NULL DEFAULT '0' COMMENT '排序次序',
+`p_coordinate` bigint(20) NOT NULL DEFAULT '0' COMMENT '坐标系 0 - WGS84 # 1 - GCJ02 # 2 - BD09',
+`p_category_list` varchar(255) NOT NULL DEFAULT '\'\'' COMMENT 'poi 分类ID列表',
+`geohash_code` varchar(20) NOT NULL DEFAULT '\'\'' COMMENT 'geog_poi 转换为 geohash 的值',
+`p_create_time` bigint(20) NOT NULL DEFAULT '0' COMMENT '创建时间',
+`p_update_time` bigint(20) NOT NULL DEFAULT '0' COMMENT '更新时间',
+`p_delete_time` bigint(20) NOT NULL DEFAULT '0' COMMENT '删除时间',
+`p_encryption_id` bigint(20) NOT NULL DEFAULT '0' COMMENT 'POI 加密ID',
+`p_class` bigint(20) NOT NULL DEFAULT '0' COMMENT '场景等级',
+`p_config` varchar(255) NOT NULL DEFAULT '\'\'' COMMENT '配置项，JSON对象',
+`p_tags_id` json NOT NULL COMMENT '标签列表',
+`geog_poi` geometry NOT NULL /*!80003 SRID 4326 */ COMMENT '经纬度转换后的WGS84坐标对应的geography数据',
+PRIMARY KEY (`p_id`),
+SPATIAL KEY `idx_geohash_code_geog_poi_7` (`geog_poi`) BLOCK_SIZE 16384 LOCAL,
+KEY `idx_poi_del_time_7` (`p_delete_time`) BLOCK_SIZE 16384 LOCAL
+);
+explain SELECT p.p_id,0 as distance FROM geek_poi_7 as p WHERE p.geohash_code like 'ws0emp%' and p.p_delete_time = 0 AND ST_Contains(p.geog_poi,_ST_GeogFromText('POINT(113.42416381835938 23.11138916015625)'));
+Query Plan
+==========================================================================
+|ID|OPERATOR        |NAME                          |EST.ROWS|EST.TIME(us)|
+--------------------------------------------------------------------------
+|0 |TABLE RANGE SCAN|p(idx_geohash_code_geog_poi_7)|3       |381         |
+==========================================================================
+Outputs & filters:
+-------------------------------------
+  0 - output([p.p_id], [0]), filter([p.p_delete_time = 0], [ST_Contains(p.geog_poi, _ST_GeogFromText('POINT(113.42416381835938 23.11138916015625)'))], [(T_OP_LIKE,
+       p.geohash_code, 'ws0emp%', '\\')])
+      access([p.p_id], [p.geog_poi], [p.geohash_code], [p.p_delete_time]), partitions(p0)
+      is_index_back=true, is_global_index=false, filter_before_indexback[false,false,false], 
+      range_key([p.__cellid_50], [p.__mbr_50], [p.p_id]), range(3748120789879095296,MIN,MIN ; 3748120789879095296,MAX,MAX), (3747839314902384640,MIN,MIN 
+      ; 3747839314902384640,MAX,MAX), (3747839675679637504,MIN,MIN ; 3747839675679637504,MAX,MAX), (3746994889972252672,MIN,MIN ; 3746994889972252672,MAX,MAX),
+       (3747843712948895744,MIN,MIN ; 3747843712948895744,MAX,MAX), (3747856907088429056,MIN,MIN ; 3747856907088429056,MAX,MAX), (3747839687826341888,MIN,MIN 
+      ; 3747839687826341888,MAX,MAX), (3747839687816876800,MIN,MIN ; 3747839687816876800,MAX,MAX), (3747909683646562304,MIN,MIN ; 3747909683646562304,MAX,MAX),
+       (3747840414414012416,MIN,MIN ; 3747840414414012416,MAX,MAX), (3747839687816839168,MIN,MIN ; 3747839687816839168,MAX,MAX), (3747839687816876032,MIN,MIN 
+      ; 3747839687816876032,MAX,MAX), (3458764513820540928,MIN,MIN ; 3458764513820540928,MAX,MAX), (3747839687490797568,MIN,MIN ; 3747839687490797568,MAX,MAX),
+       (3747839687816642560,MIN,MIN ; 3747839687816642560,MAX,MAX), (3747839687809564672,MIN,MIN ; 3747839687809564672,MAX,MAX), (3747839687816877056,MIN,MIN 
+      ; 3747839687816877056,MAX,MAX), (3747839687816876864,MIN,MIN ; 3747839687816876864,MAX,MAX), (3765009288481734656,MIN,MIN ; 3765009288481734656,MAX,MAX),
+       (3747839688564539392,MIN,MIN ; 3747839688564539392,MAX,MAX), (3819052484010180608,MIN,MIN ; 3819052484010180608,MAX,MAX), (3747839687813758976,MIN,MIN 
+      ; 3747839687813758976,MAX,MAX), (3747839658499768320,MIN,MIN ; 3747839658499768320,MAX,MAX), (3747839687816876905,MIN,MIN ; 3747839687816876905,MAX,MAX),
+       (3747839687816876908,MIN,MIN ; 3747839687816876908,MAX,MAX), (3747839589780291584,MIN,MIN ; 3747839589780291584,MAX,MAX), (3747839687816904704,MIN,MIN 
+      ; 3747839687816904704,MAX,MAX), (3747839687816876912,MIN,MIN ; 3747839687816876912,MAX,MAX), (3747839687759233024,MIN,MIN ; 3747839687759233024,MAX,MAX),
+       (3751498489599623168,MIN,MIN ; 3751498489599623168,MAX,MAX), (3747839687816888320,MIN,MIN ; 3747839687816888320,MAX,MAX)
+drop table geek_poi_7;
+drop table if exists t1;
+create table t1( g geometry );//
+drop PROCEDURE IF EXISTS pro;//
+CREATE PROCEDURE pro()
+BEGIN
+DECLARE g blob;
+select ST_SymDifference(point(2,3),ST_GeomFromText('MultiPolygon(((0 0,0 3,3 3,3 0,0 0),(0.5 1,1 2,2 2,2 1,0.5 1)))')) INTO g; 
+insert into t1 values(g);     
+END ;
+//
+call pro();//
+select ST_AsText(g) from t1;//
+ST_AsText(g)
+POLYGON((0 0,3 0,3 3,0 3,0 0),(0.5 1,1 2,2 2,2 1,0.5 1))
+DROP FUNCTION IF EXISTS getg;//
+CREATE FUNCTION getg(stuId blob) 
+RETURNS varchar(200)  DETERMINISTIC
+RETURN  ST_AsText(stuId) ; //
+select getg(ST_SymDifference(point(1,0),point(1,6)));//
+getg(ST_SymDifference(point(1,0),point(1,6)))
+MULTIPOINT((1 0),(1 6))
+drop table t1;
+drop table if exists highway_621;
+CREATE TABLE `highway_621` (
+`id` int(32) NOT NULL auto_increment,
+`the_geom` geometry NOT NULL /*!80003 SRID 4326 */,
+PRIMARY KEY (`id`),
+SPATIAL KEY `idx_the_geom_highway_6` (`the_geom`) BLOCK_SIZE 16384 LOCAL
+);
+insert into highway_621(the_geom) values(ST_GeomFromText('point(120.34904267189361 30.320965261625222)',4326, 'axis-order=long-lat'));
+insert into highway_621(the_geom) values(ST_GeomFromText('point(120.34904267189360 30.320965261625222)',4326, 'axis-order=long-lat'));
+insert into highway_621(the_geom) values(ST_GeomFromText('linestring(120.34904267189360 30.320965261625222, 120.34904267189361 30.320965261625222)',4326, 'axis-order=long-lat'));
+insert into highway_621(the_geom) values(ST_GeomFromText('linestring(120.34904267189361 30.320965261625222, 120.35612237862895 30.321118189268013)',4326, 'axis-order=long-lat'));
+insert into highway_621(the_geom) values(ST_GeomFromText('linestring(120.34904267189360 30.320965261625222, 120.34904267189360 30.320800629134425)',4326, 'axis-order=long-lat'));
+insert into highway_621(the_geom) values(ST_GeomFromText('MULTIPOLYGON (((120.34904267189361 30.320965261625222, 120.35612237862895 30.321118189268013, 120.35612237865006 30.32111818926693, 120.35460911503478 30.32080062911392, 120.3546091159729 30.320800629134425,  120.34904267189361 30.320965261625222)))',4326, 'axis-order=long-lat'));
+insert into highway_621(the_geom) values(ST_GeomFromText('MULTIPOLYGON (((110.34904267189361 30.320965261625222, 110.35812237862895 30.321118189268013, 110.35812237865006 30.32111818926693, 110.35460911503478 30.32080062911392, 110.3546091159729 30.320800629134425,  110.34904267189361 30.320965261625222)))',4326, 'axis-order=long-lat'));
+insert into highway_621(the_geom) values(ST_GeomFromText('GEOMETRYCOLLECTION(MULTIPOLYGON(((120.31599964855097 30.243634005580816,120.3160009095347 30.243635469782166,120.31600747846684 30.24364742764055,120.31601121779788 30.243660263421923,120.31601198353063 30.243673482839302,120.31599964855097 30.243634005580816)),((120.3160009095347 30.243635469782166,120.31600747846684 30.24364742764055,120.31601121779788 30.243660263421923,120.31601198353063 30.243673482839302,120.31601159806742 30.24367573874217,120.3160009095347 30.243635469782166))),POLYGON((120.31599964855097 30.243634005580816,120.3160009095347 30.243635469782166,120.31600747846684 30.24364742764055,120.31601121779788 30.243660263421923,120.31601198353063 30.243673482839302,120.31599964855097 30.243634005580816)),LINESTRING(120.31599964855097 30.243634005580816,120.3160009095347 30.243635469782166),MULTIPOINT(120.31599964855097 30.243634005580816,120.3160009095347 30.243635469782166,120.31600747846684 30.24364742764055),point(120.31599964855097 30.243634005580816))',4326, 'axis-order=long-lat'));
+explain select id, st_astext(the_geom) from highway_621 where ST_Intersects(the_geom, ST_GeomFromText('MULTIPOLYGON (((120.34904267189361 30.320965261625222, 120.35612237862895 30.321118189268013, 120.35612237865006 30.32111818926693, 120.35460911503478 30.32080062911392, 120.3546091159729 30.320800629134425,  120.34904267189361 30.320965261625222)))',4326, 'axis-order=long-lat'));
+Query Plan
+===============================================================================
+|ID|OPERATOR        |NAME                               |EST.ROWS|EST.TIME(us)|
+-------------------------------------------------------------------------------
+|0 |TABLE RANGE SCAN|highway_621(idx_the_geom_highway_6)|1       |530         |
+===============================================================================
+Outputs & filters:
+-------------------------------------
+  0 - output([highway_621.id], [st_astext(highway_621.the_geom)]), filter([ST_Intersects(highway_621.the_geom, ST_GeomFromText('MULTIPOLYGON (((120.34904267189361 
+      30.320965261625222, 120.35612237862895 30.321118189268013, 120.35612237865006 30.32111818926693, 120.35460911503478 30.32080062911392, 120.3546091159729 
+      30.320800629134425,  120.34904267189361 30.320965261625222)))', 4326, 'axis-order=long-lat'))])
+      access([highway_621.id], [highway_621.the_geom]), partitions(p0)
+      is_index_back=true, is_global_index=false, filter_before_indexback[false], 
+      range_key([highway_621.__cellid_17], [highway_621.__mbr_17], [highway_621.id]), range(3768553615552151552,MIN,MIN ; 3768553615552151552,MAX,MAX), 
+      (3768553615485042688,MIN,MIN ; 3768553615485042688,MAX,MAX), (3768553614679736320,MIN,MIN ; 3768553614679736320,MAX,MAX), (3768553611458510848,MIN,MIN ; 
+      3768553611458510848,MAX,MAX), (3768553615753478144,MIN,MIN ; 3768553615753478144,MAX,MAX), (3768553632933347328,MIN,MIN ; 3768553632933347328,MAX,MAX), 
+      (3768553839091777536,MIN,MIN ; 3768553839091777536,MAX,MAX), (3768553014458056704,MIN,MIN ; 3768553014458056704,MAX,MAX), (3768549715923173376,MIN,MIN ; 
+      3768549715923173376,MAX,MAX), (3768545317876662272,MIN,MIN ; 3768545317876662272,MAX,MAX), (3768598094434795520,MIN,MIN ; 3768598094434795520,MAX,MAX), 
+      (3768668463178973184,MIN,MIN ; 3768668463178973184,MAX,MAX), (3768386988202262528,MIN,MIN ; 3768386988202262528,MAX,MAX), (3769512888109105152,MIN,MIN ; 
+      3769512888109105152,MAX,MAX), (3765009288481734656,MIN,MIN ; 3765009288481734656,MAX,MAX), (3819052484010180608,MIN,MIN ; 3819052484010180608,MAX,MAX), 
+      (3746994889972252672,MIN,MIN ; 3746994889972252672,MAX,MAX), (3458764513820540928,MIN,MIN ; 3458764513820540928,MAX,MAX), (3768553615686369280,MIN,MIN ; 
+      3768553615686369280,MAX,MAX), (3768553615870918656,MIN,MIN ; 3768553615870918656,MAX,MAX), (3768553615820587008,MIN,MIN ; 3768553615820587008,MAX,MAX), 
+      (3768553616021913600,MIN,MIN ; 3768553616021913600,MAX,MAX), (3768553616827219968,MIN,MIN ; 3768553616827219968,MAX,MAX), (3768553620048445440,MIN,MIN ; 
+      3768553620048445440,MAX,MAX), (3768553615954804736,MIN,MIN ; 3768553615954804736,MAX,MAX), (3768553615938027520,MIN,MIN ; 3768553615938027520,MAX,MAX), 
+      (3768553615971581952,MIN,MIN ; 3768553615971581952,MAX,MAX), (3768553616642670592,MIN,MIN ; 3768553616642670592,MAX,MAX), (3768553616625893376,MIN,MIN ; 
+      3768553616625893376,MAX,MAX), (3768553616558784512,MIN,MIN ; 3768553616558784512,MAX,MAX), (3768553616760111104,MIN,MIN ; 3768553616760111104,MAX,MAX), 
+      (3768553616776888320,MIN,MIN ; 3768553616776888320,MAX,MAX), (3768553616894328832,MIN,MIN ; 3768553616894328832,MAX,MAX), (3768553617095655424,MIN,MIN ; 
+      3768553617095655424,MAX,MAX), (3768553617028546560,MIN,MIN ; 3768553617028546560,MAX,MAX), (3768553617045323776,MIN,MIN ; 3768553617045323776,MAX,MAX), 
+      (3768553622263037952,MIN,MIN ; 3768553622263037952,MAX,MAX), (3768553622464364544,MIN,MIN ; 3768553622464364544,MAX,MAX), (3768553623269670912,MIN,MIN ; 
+      3768553623269670912,MAX,MAX), (3768553622258843648,MIN,MIN ; 3768553622258843648,MAX,MAX), (3768553622246260736,MIN,MIN ; 3768553622246260736,MAX,MAX), 
+      (3768553622397255680,MIN,MIN ; 3768553622397255680,MAX,MAX), (3768553622531473408,MIN,MIN ; 3768553622531473408,MAX,MAX), (3768553622665691136,MIN,MIN ; 
+      3768553622665691136,MAX,MAX), (3768553622799908864,MIN,MIN ; 3768553622799908864,MAX,MAX), (3768553623001235456,MIN,MIN ; 3768553623001235456,MAX,MAX), 
+      (3768553623202562048,MIN,MIN ; 3768553623202562048,MAX,MAX), (3768553623252893696,MIN,MIN ; 3768553623252893696,MAX,MAX), (3768553643201003520,MIN,MIN ; 
+      3768553643201003520,MAX,MAX), (3768553643402330112,MIN,MIN ; 3768553643402330112,MAX,MAX), (3768553642597023744,MIN,MIN ; 3768553642597023744,MAX,MAX), 
+      (3768553645818249216,MIN,MIN ; 3768553645818249216,MAX,MAX), (3768553650113216512,MIN,MIN ; 3768553650113216512,MAX,MAX), (3768553643808129024,MIN,MIN ; 
+      3768553643808129024,MAX,MAX), (3768553643809177600,MIN,MIN ; 3768553643809177600,MAX,MAX), (3768553643821760512,MIN,MIN ; 3768553643821760512,MAX,MAX), 
+      (3768553643872092160,MIN,MIN ; 3768553643872092160,MAX,MAX), (3768553643939201024,MIN,MIN ; 3768553643939201024,MAX,MAX), (3768553644744507392,MIN,MIN ; 
+      3768553644744507392,MAX,MAX), (3768553615585705985,MIN,MIN ; 3768553615619260415,MAX,MAX), (3768553615619260417,MIN,MIN ; 3768553615652814847,MAX,MAX), 
+      (3768553615854141441,MIN,MIN ; 3768553615862530047,MAX,MAX), (3768553615879307265,MIN,MIN ; 3768553615887695871,MAX,MAX), (3768553615887695873,MIN,MIN ; 
+      3768553615921250303,MAX,MAX), (3768553615946416129,MIN,MIN ; 3768553615954804735,MAX,MAX), (3768553615954804737,MIN,MIN ; 3768553615963193343,MAX,MAX), 
+      (3768553615979970561,MIN,MIN ; 3768553615988359167,MAX,MAX), (3768553615988359169,MIN,MIN ; 3768553616021913599,MAX,MAX), (3768553616021913601,MIN,MIN ; 
+      3768553616156131327,MAX,MAX), (3768553616642670593,MIN,MIN ; 3768553616651059199,MAX,MAX), (3768553616651059201,MIN,MIN ; 3768553616659447807,MAX,MAX), 
+      (3768553616659447809,MIN,MIN ; 3768553616693002239,MAX,MAX), (3768553616693002241,MIN,MIN ; 3768553616726556671,MAX,MAX), (3768553616785276929,MIN,MIN ; 
+      3768553616793665535,MAX,MAX), (3768553616793665537,MIN,MIN ; 3768553616827219967,MAX,MAX), (3768553616827219969,MIN,MIN ; 3768553616860774399,MAX,MAX), 
+      (3768553616927883265,MIN,MIN ; 3768553616961437695,MAX,MAX), (3768553616961437697,MIN,MIN ; 3768553616994992127,MAX,MAX), (3768553616994992129,MIN,MIN ; 
+      3768553617028546559,MAX,MAX), (3768553617036935169,MIN,MIN ; 3768553617045323775,MAX,MAX), (3768553622195929089,MIN,MIN ; 3768553622229483519,MAX,MAX), 
+      (3768553622260940801,MIN,MIN ; 3768553622263037951,MAX,MAX), (3768553622263037953,MIN,MIN ; 3768553622296592383,MAX,MAX), (3768553622296592385,MIN,MIN ; 
+      3768553622330146815,MAX,MAX), (3768553622430810113,MIN,MIN ; 3768553622464364543,MAX,MAX), (3768553622464364545,MIN,MIN ; 3768553622497918975,MAX,MAX), 
+      (3768553622565027841,MIN,MIN ; 3768553622598582271,MAX,MAX), (3768553622598582273,MIN,MIN ; 3768553622632136703,MAX,MAX), (3768553622632136705,MIN,MIN ; 
+      3768553622665691135,MAX,MAX), (3768553622766354433,MIN,MIN ; 3768553622799908863,MAX,MAX), (3768553623001235457,MIN,MIN ; 3768553623135453183,MAX,MAX), 
+      (3768553623135453185,MIN,MIN ; 3768553623169007615,MAX,MAX), (3768553623169007617,MIN,MIN ; 3768553623202562047,MAX,MAX), (3768553623202562049,MIN,MIN ; 
+      3768553623236116479,MAX,MAX), (3768553623244505089,MIN,MIN ; 3768553623252893695,MAX,MAX), (3768553643167449089,MIN,MIN ; 3768553643201003519,MAX,MAX), 
+      (3768553643201003521,MIN,MIN ; 3768553643234557951,MAX,MAX), (3768553643536547841,MIN,MIN ; 3768553643670765567,MAX,MAX), (3768553643807604737,MIN,MIN ; 
+      3768553643808129023,MAX,MAX), (3768553643830149121,MIN,MIN ; 3768553643838537727,MAX,MAX)
+select id, st_astext(the_geom) from highway_621 where ST_Intersects(the_geom, ST_GeomFromText('MULTIPOLYGON (((120.34904267189361 30.320965261625222, 120.35612237862895 30.321118189268013, 120.35612237865006 30.32111818926693, 120.35460911503478 30.32080062911392, 120.3546091159729 30.320800629134425,  120.34904267189361 30.320965261625222)))',4326, 'axis-order=long-lat'));
+id	st_astext(the_geom)
+1	POINT(30.320965261625222 120.34904267189361)
+3	LINESTRING(30.320965261625222 120.3490426718936,30.320965261625222 120.34904267189361)
+4	LINESTRING(30.320965261625222 120.34904267189361,30.321118189268013 120.35612237862895)
+5	LINESTRING(30.320965261625222 120.3490426718936,30.320800629134425 120.3490426718936)
+6	MULTIPOLYGON(((30.320965261625222 120.34904267189361,30.321118189268013 120.35612237862895,30.32111818926693 120.35612237865006,30.32080062911392 120.35460911503478,30.320800629134425 120.3546091159729,30.320965261625222 120.34904267189361)))
+select id, st_astext(the_geom) from highway_621 where _ST_covers(ST_GeomFromText('MULTIPOLYGON (((120.34904267189361 30.320965261625222, 120.35612237862895 30.321118189268013, 120.35612237865006 30.32111818926693, 120.35460911503478 30.32080062911392, 120.3546091159729 30.320800629134425,  120.34904267189361 30.320965261625222)))',4326, 'axis-order=long-lat'), the_geom);
+id	st_astext(the_geom)
+1	POINT(30.320965261625222 120.34904267189361)
+4	LINESTRING(30.320965261625222 120.34904267189361,30.321118189268013 120.35612237862895)
+select id, st_astext(the_geom) from highway_621 ignore index(idx_the_geom_highway_6) where ST_Intersects(the_geom, ST_GeomFromText('MULTIPOLYGON (((120.34904267189361 30.320965261625222, 120.35612237862895 30.321118189268013, 120.35612237865006 30.32111818926693, 120.35460911503478 30.32080062911392, 120.3546091159729 30.320800629134425,  120.34904267189361 30.320965261625222)))',4326, 'axis-order=long-lat'));
+id	st_astext(the_geom)
+1	POINT(30.320965261625222 120.34904267189361)
+3	LINESTRING(30.320965261625222 120.3490426718936,30.320965261625222 120.34904267189361)
+4	LINESTRING(30.320965261625222 120.34904267189361,30.321118189268013 120.35612237862895)
+5	LINESTRING(30.320965261625222 120.3490426718936,30.320800629134425 120.3490426718936)
+6	MULTIPOLYGON(((30.320965261625222 120.34904267189361,30.321118189268013 120.35612237862895,30.32111818926693 120.35612237865006,30.32080062911392 120.35460911503478,30.320800629134425 120.3546091159729,30.320965261625222 120.34904267189361)))
+select id, st_astext(the_geom) from highway_621 ignore index(idx_the_geom_highway_6) where _ST_covers(ST_GeomFromText('MULTIPOLYGON (((120.34904267189361 30.320965261625222, 120.35612237862895 30.321118189268013, 120.35612237865006 30.32111818926693, 120.35460911503478 30.32080062911392, 120.3546091159729 30.320800629134425,  120.34904267189361 30.320965261625222)))',4326, 'axis-order=long-lat'), the_geom);
+id	st_astext(the_geom)
+1	POINT(30.320965261625222 120.34904267189361)
+4	LINESTRING(30.320965261625222 120.34904267189361,30.321118189268013 120.35612237862895)
+select id, st_astext(the_geom) from highway_621 where ST_Intersects(the_geom, ST_GeomFromText('GEOMETRYCOLLECTION(MULTIPOLYGON (((120.34904267189361 30.320965261625222, 120.35612237862895 30.321118189268013, 120.35612237865006 30.32111818926693, 120.35460911503478 30.32080062911392, 120.3546091159729 30.320800629134425,  120.34904267189361 30.320965261625222))),POLYGON ((120.34904267189361 30.320965261625222, 120.35612237862895 30.321118189268013, 120.35612237865006 30.32111818926693, 120.35460911503478 30.32080062911392, 120.3546091159729 30.320800629134425,  120.34904267189361 30.320965261625222)),multipoint(120.34904267189361 30.320965261625222, 120.35612237862895 30.321118189268013, 120.35612237865006 30.32111818926693),point(120.31601198353063 30.243673482839302))',4326, 'axis-order=long-lat'));
+id	st_astext(the_geom)
+1	POINT(30.320965261625222 120.34904267189361)
+2	POINT(30.320965261625222 120.3490426718936)
+3	LINESTRING(30.320965261625222 120.3490426718936,30.320965261625222 120.34904267189361)
+4	LINESTRING(30.320965261625222 120.34904267189361,30.321118189268013 120.35612237862895)
+5	LINESTRING(30.320965261625222 120.3490426718936,30.320800629134425 120.3490426718936)
+6	MULTIPOLYGON(((30.320965261625222 120.34904267189361,30.321118189268013 120.35612237862895,30.32111818926693 120.35612237865006,30.32080062911392 120.35460911503478,30.320800629134425 120.3546091159729,30.320965261625222 120.34904267189361)))
+8	GEOMETRYCOLLECTION(MULTIPOLYGON(((30.243634005580816 120.31599964855097,30.243635469782166 120.3160009095347,30.24364742764055 120.31600747846684,30.243660263421923 120.31601121779788,30.243673482839302 120.31601198353063,30.243634005580816 120.31599964855097)),((30.243635469782166 120.3160009095347,30.24364742764055 120.31600747846684,30.243660263421923 120.31601121779788,30.243673482839302 120.31601198353063,30.24367573874217 120.31601159806742,30.243635469782166 120.3160009095347))),POLYGON((30.243634005580816 120.31599964855097,30.243635469782166 120.3160009095347,30.24364742764055 120.31600747846684,30.243660263421923 120.31601121779788,30.243673482839302 120.31601198353063,30.243634005580816 120.31599964855097)),LINESTRING(30.243634005580816 120.31599964855097,30.243635469782166 120.3160009095347),MULTIPOINT((30.243634005580816 120.31599964855097),(30.243635469782166 120.3160009095347),(30.24364742764055 120.31600747846684)),POINT(30.243634005580816 120.31599964855097))
+drop table highway_621;

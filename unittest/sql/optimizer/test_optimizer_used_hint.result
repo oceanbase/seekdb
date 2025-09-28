@@ -1,0 +1,4663 @@
+***************   Case 1   ***************
+
+SQL: select /*+FULL(t4)*/* from t4; 
+
+===================================
+|ID|OPERATOR  |NAME|EST. ROWS|COST|
+-----------------------------------
+|0 |TABLE SCAN|t4  |100      |78  |
+===================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t4.c1], [t4.c2], [t4.c3]), filter(nil), 
+      access([t4.c1], [t4.c2], [t4.c3]), partitions(p0), 
+      is_index_back=false, 
+      range_key([t4.c1], [t4.c2]), range(MIN,MIN ; MAX,MAX)always true
+
+Used Hint:
+-------------------------------------
+  /*+
+<<<<<<< HEAD
+      FULL("t4")
+=======
+      FULL(@"SEL$1" "opt"."t4"@"SEL$1")
+>>>>>>> implement spm part1
+  */
+
+Outline Data:
+-------------------------------------
+  /*+
+      BEGIN_OUTLINE_DATA
+      FULL(@"SEL$1" "opt"."t4"@"SEL$1")
+<<<<<<< HEAD
+      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
+=======
+>>>>>>> implement spm part1
+      END_OUTLINE_DATA
+  */
+
+Plan Type:
+-------------------------------------
+LOCAL
+
+Optimization Info:
+-------------------------------------
+t4:table_rows:100, physical_range_rows:100, logical_range_rows:100, index_back_rows:0, output_rows:100, est_method:local_storage, optimization_method=cost_based, avaiable_index_name[t4], pruned_index_name[idx_t4_c2_c3,idx_t4_c3,idx_t4_c2]
+
+
+Parameters:
+-------------------------------------
+
+
+*************** Case 1(end)  ************** 
+
+***************   Case 2   ***************
+
+SQL: select /*+INDEX(t4 idx_t4_c2_c3)*/* from t4; 
+
+===============================================
+|ID|OPERATOR  |NAME            |EST. ROWS|COST|
+-----------------------------------------------
+|0 |TABLE SCAN|t4(idx_t4_c2_c3)|100      |78  |
+===============================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t4.c1], [t4.c2], [t4.c3]), filter(nil), 
+      access([t4.c1], [t4.c2], [t4.c3]), partitions(p0), 
+      is_index_back=false, 
+      range_key([t4.c2], [t4.c3], [t4.c1]), range(MIN,MIN,MIN ; MAX,MAX,MAX)always true
+
+Used Hint:
+-------------------------------------
+  /*+
+<<<<<<< HEAD
+      INDEX("t4" "idx_t4_c2_c3")
+=======
+      INDEX(@"SEL$1" "opt"."t4"@"SEL$1" "idx_t4_c2_c3")
+>>>>>>> implement spm part1
+  */
+
+Outline Data:
+-------------------------------------
+  /*+
+      BEGIN_OUTLINE_DATA
+      INDEX(@"SEL$1" "opt"."t4"@"SEL$1" "idx_t4_c2_c3")
+<<<<<<< HEAD
+      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
+=======
+>>>>>>> implement spm part1
+      END_OUTLINE_DATA
+  */
+
+Plan Type:
+-------------------------------------
+LOCAL
+
+Optimization Info:
+-------------------------------------
+t4:table_rows:100, physical_range_rows:100, logical_range_rows:100, index_back_rows:0, output_rows:100, est_method:local_storage, optimization_method=cost_based, avaiable_index_name[idx_t4_c2_c3], pruned_index_name[idx_t4_c3,idx_t4_c2,t4]
+
+
+Parameters:
+-------------------------------------
+
+
+*************** Case 2(end)  ************** 
+
+***************   Case 3   ***************
+
+SQL: select /*+INDEX(t4 idx_t4_c2)*/* from t4; 
+
+============================================
+|ID|OPERATOR  |NAME         |EST. ROWS|COST|
+--------------------------------------------
+|0 |TABLE SCAN|t4(idx_t4_c2)|100      |97  |
+============================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t4.c1], [t4.c2], [t4.c3]), filter(nil), 
+      access([t4.c1], [t4.c2], [t4.c3]), partitions(p0), 
+      is_index_back=true, 
+      range_key([t4.c2], [t4.c1]), range(MIN,MIN ; MAX,MAX)always true
+
+Used Hint:
+-------------------------------------
+  /*+
+<<<<<<< HEAD
+      INDEX("t4" "idx_t4_c2")
+=======
+      INDEX(@"SEL$1" "opt"."t4"@"SEL$1" "idx_t4_c2")
+>>>>>>> implement spm part1
+  */
+
+Outline Data:
+-------------------------------------
+  /*+
+      BEGIN_OUTLINE_DATA
+      INDEX(@"SEL$1" "opt"."t4"@"SEL$1" "idx_t4_c2")
+<<<<<<< HEAD
+      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
+=======
+>>>>>>> implement spm part1
+      END_OUTLINE_DATA
+  */
+
+Plan Type:
+-------------------------------------
+LOCAL
+
+Optimization Info:
+-------------------------------------
+t4:table_rows:100, physical_range_rows:100, logical_range_rows:100, index_back_rows:100, output_rows:100, est_method:local_storage, optimization_method=cost_based, avaiable_index_name[idx_t4_c2], pruned_index_name[idx_t4_c2_c3,idx_t4_c3,t4]
+
+
+Parameters:
+-------------------------------------
+
+
+*************** Case 3(end)  ************** 
+
+***************   Case 4   ***************
+
+SQL: select /*+INDEX(t4 idx_t4_c3)*/* from t4; 
+
+============================================
+|ID|OPERATOR  |NAME         |EST. ROWS|COST|
+--------------------------------------------
+|0 |TABLE SCAN|t4(idx_t4_c3)|100      |78  |
+============================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t4.c1], [t4.c2], [t4.c3]), filter(nil), 
+      access([t4.c1], [t4.c2], [t4.c3]), partitions(p0), 
+      is_index_back=false, 
+      range_key([t4.c3], [t4.c1], [t4.c2]), range(MIN,MIN,MIN ; MAX,MAX,MAX)always true
+
+Used Hint:
+-------------------------------------
+  /*+
+<<<<<<< HEAD
+      INDEX("t4" "idx_t4_c3")
+=======
+      INDEX(@"SEL$1" "opt"."t4"@"SEL$1" "idx_t4_c3")
+>>>>>>> implement spm part1
+  */
+
+Outline Data:
+-------------------------------------
+  /*+
+      BEGIN_OUTLINE_DATA
+      INDEX(@"SEL$1" "opt"."t4"@"SEL$1" "idx_t4_c3")
+<<<<<<< HEAD
+      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
+=======
+>>>>>>> implement spm part1
+      END_OUTLINE_DATA
+  */
+
+Plan Type:
+-------------------------------------
+LOCAL
+
+Optimization Info:
+-------------------------------------
+t4:table_rows:100, physical_range_rows:100, logical_range_rows:100, index_back_rows:0, output_rows:100, est_method:local_storage, optimization_method=cost_based, avaiable_index_name[idx_t4_c3], pruned_index_name[idx_t4_c2_c3,idx_t4_c2,t4]
+
+
+Parameters:
+-------------------------------------
+
+
+*************** Case 4(end)  ************** 
+
+***************   Case 5   ***************
+
+SQL: select /*+INDEX(t_pt t_pt_idx_1)*/* from t_pt where (c2,c1) > (300,200); 
+
+============================================================
+|ID|OPERATOR               |NAME            |EST. ROWS|COST|
+------------------------------------------------------------
+|0 |PX COORDINATOR         |                |0        |799 |
+|1 | EXCHANGE OUT DISTR    |:EX10000        |0        |799 |
+|2 |  PX PARTITION ITERATOR|                |0        |799 |
+|3 |   TABLE SCAN          |t_pt(t_pt_idx_1)|0        |799 |
+============================================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([INTERNAL_FUNCTION(t_pt.c1, t_pt.c2, t_pt.c3, t_pt.c4)]), filter(nil)
+  1 - output([INTERNAL_FUNCTION(t_pt.c1, t_pt.c2, t_pt.c3, t_pt.c4)]), filter(nil), dop=1
+  2 - output([t_pt.c1], [t_pt.c2], [t_pt.c3], [t_pt.c4]), filter(nil), 
+      force partition granule.
+  3 - output([t_pt.c1], [t_pt.c2], [t_pt.c3], [t_pt.c4]), filter([(t_pt.c2, t_pt.c1) > (?, ?)]), 
+      access([t_pt.c1], [t_pt.c2], [t_pt.c3], [t_pt.c4]), partitions(p[0-9]), 
+      is_index_back=true, filter_before_indexback[true], 
+      range_key([t_pt.c2], [t_pt.c1]), range(300,200 ; MAX,MAX)
+
+Used Hint:
+-------------------------------------
+  /*+
+<<<<<<< HEAD
+      INDEX("t_pt" "t_pt_idx_1")
+=======
+      INDEX(@"SEL$1" "opt"."t_pt"@"SEL$1" "t_pt_idx_1")
+>>>>>>> implement spm part1
+  */
+
+Outline Data:
+-------------------------------------
+  /*+
+      BEGIN_OUTLINE_DATA
+      INDEX(@"SEL$1" "opt"."t_pt"@"SEL$1" "t_pt_idx_1")
+<<<<<<< HEAD
+      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
+=======
+>>>>>>> implement spm part1
+      END_OUTLINE_DATA
+  */
+
+Plan Type:
+-------------------------------------
+DISTRIBUTED
+
+Optimization Info:
+-------------------------------------
+t_pt:table_rows:1000, physical_range_rows:1000, logical_range_rows:1000, index_back_rows:0, output_rows:0, est_method:default_stat, optimization_method=cost_based, avaiable_index_name[t_pt_idx_1], pruned_index_name[t_pt]
+
+
+Parameters:
+-------------------------------------
+{obj:{"BIGINT":300}, accuracy:{length:3, precision:3, scale:0}, flag:1, raw_text_pos:-1, raw_text_len:-1, param_meta:{type:"BIGINT", collation:"binary", coercibility:"NUMERIC"}}, {obj:{"BIGINT":200}, accuracy:{length:3, precision:3, scale:0}, flag:1, raw_text_pos:-1, raw_text_len:-1, param_meta:{type:"BIGINT", collation:"binary", coercibility:"NUMERIC"}}
+
+*************** Case 5(end)  ************** 
+
+***************   Case 6   ***************
+
+SQL: select /*+INDEX(t_pt primary)*/* from t_pt where (c2,c1) > (300,200); 
+
+====================================================
+|ID|OPERATOR               |NAME    |EST. ROWS|COST|
+----------------------------------------------------
+|0 |PX COORDINATOR         |        |0        |799 |
+|1 | EXCHANGE OUT DISTR    |:EX10000|0        |799 |
+|2 |  PX PARTITION ITERATOR|        |0        |799 |
+|3 |   TABLE SCAN          |t_pt    |0        |799 |
+====================================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([INTERNAL_FUNCTION(t_pt.c1, t_pt.c2, t_pt.c3, t_pt.c4)]), filter(nil)
+  1 - output([INTERNAL_FUNCTION(t_pt.c1, t_pt.c2, t_pt.c3, t_pt.c4)]), filter(nil), dop=1
+  2 - output([t_pt.c1], [t_pt.c2], [t_pt.c3], [t_pt.c4]), filter(nil), 
+      force partition granule.
+  3 - output([t_pt.c1], [t_pt.c2], [t_pt.c3], [t_pt.c4]), filter([(t_pt.c2, t_pt.c1) > (?, ?)]), 
+      access([t_pt.c1], [t_pt.c2], [t_pt.c3], [t_pt.c4]), partitions(p[0-9]), 
+      is_index_back=false, filter_before_indexback[false], 
+      range_key([t_pt.c1], [t_pt.c2]), range(MIN,MIN ; MAX,MAX)always true
+
+Used Hint:
+-------------------------------------
+  /*+
+<<<<<<< HEAD
+      INDEX("t_pt" "primary")
+=======
+      FULL(@"SEL$1" "opt"."t_pt"@"SEL$1")
+>>>>>>> implement spm part1
+  */
+
+Outline Data:
+-------------------------------------
+  /*+
+      BEGIN_OUTLINE_DATA
+      FULL(@"SEL$1" "opt"."t_pt"@"SEL$1")
+<<<<<<< HEAD
+      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
+=======
+>>>>>>> implement spm part1
+      END_OUTLINE_DATA
+  */
+
+Plan Type:
+-------------------------------------
+DISTRIBUTED
+
+Optimization Info:
+-------------------------------------
+t_pt:table_rows:1000, physical_range_rows:1000, logical_range_rows:1000, index_back_rows:0, output_rows:0, est_method:default_stat, optimization_method=cost_based, avaiable_index_name[t_pt], pruned_index_name[t_pt_idx_1]
+
+
+Parameters:
+-------------------------------------
+{obj:{"BIGINT":300}, accuracy:{length:3, precision:3, scale:0}, flag:1, raw_text_pos:-1, raw_text_len:-1, param_meta:{type:"BIGINT", collation:"binary", coercibility:"NUMERIC"}}, {obj:{"BIGINT":200}, accuracy:{length:3, precision:3, scale:0}, flag:1, raw_text_pos:-1, raw_text_len:-1, param_meta:{type:"BIGINT", collation:"binary", coercibility:"NUMERIC"}}
+
+*************** Case 6(end)  ************** 
+
+***************   Case 7   ***************
+
+SQL: select /*+INDEX(t_pt primary)*/* from t_pt where (c1,c2) > (200,300); 
+
+====================================================
+|ID|OPERATOR               |NAME    |EST. ROWS|COST|
+----------------------------------------------------
+|0 |PX COORDINATOR         |        |0        |799 |
+|1 | EXCHANGE OUT DISTR    |:EX10000|0        |799 |
+|2 |  PX PARTITION ITERATOR|        |0        |799 |
+|3 |   TABLE SCAN          |t_pt    |0        |799 |
+====================================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([INTERNAL_FUNCTION(t_pt.c1, t_pt.c2, t_pt.c3, t_pt.c4)]), filter(nil)
+  1 - output([INTERNAL_FUNCTION(t_pt.c1, t_pt.c2, t_pt.c3, t_pt.c4)]), filter(nil), dop=1
+  2 - output([t_pt.c1], [t_pt.c2], [t_pt.c3], [t_pt.c4]), filter(nil), 
+      force partition granule.
+  3 - output([t_pt.c1], [t_pt.c2], [t_pt.c3], [t_pt.c4]), filter([(t_pt.c1, t_pt.c2) > (?, ?)]), 
+      access([t_pt.c1], [t_pt.c2], [t_pt.c3], [t_pt.c4]), partitions(p[0-9]), 
+      is_index_back=false, filter_before_indexback[false], 
+      range_key([t_pt.c1], [t_pt.c2]), range(200,300 ; MAX,MAX)
+
+Used Hint:
+-------------------------------------
+  /*+
+<<<<<<< HEAD
+      INDEX("t_pt" "primary")
+=======
+      FULL(@"SEL$1" "opt"."t_pt"@"SEL$1")
+>>>>>>> implement spm part1
+  */
+
+Outline Data:
+-------------------------------------
+  /*+
+      BEGIN_OUTLINE_DATA
+      FULL(@"SEL$1" "opt"."t_pt"@"SEL$1")
+<<<<<<< HEAD
+      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
+=======
+>>>>>>> implement spm part1
+      END_OUTLINE_DATA
+  */
+
+Plan Type:
+-------------------------------------
+DISTRIBUTED
+
+Optimization Info:
+-------------------------------------
+t_pt:table_rows:1000, physical_range_rows:1000, logical_range_rows:1000, index_back_rows:0, output_rows:0, est_method:default_stat, optimization_method=cost_based, avaiable_index_name[t_pt], pruned_index_name[t_pt_idx_1]
+
+
+Parameters:
+-------------------------------------
+{obj:{"BIGINT":200}, accuracy:{length:3, precision:3, scale:0}, flag:1, raw_text_pos:-1, raw_text_len:-1, param_meta:{type:"BIGINT", collation:"binary", coercibility:"NUMERIC"}}, {obj:{"BIGINT":300}, accuracy:{length:3, precision:3, scale:0}, flag:1, raw_text_pos:-1, raw_text_len:-1, param_meta:{type:"BIGINT", collation:"binary", coercibility:"NUMERIC"}}
+
+*************** Case 7(end)  ************** 
+
+***************   Case 8   ***************
+
+SQL: select /*+INDEX(t4 idx_t4_invalid)*/* from t4; 
+
+===================================
+|ID|OPERATOR  |NAME|EST. ROWS|COST|
+-----------------------------------
+|0 |TABLE SCAN|t4  |100      |78  |
+===================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t4.c1], [t4.c2], [t4.c3]), filter(nil), 
+      access([t4.c1], [t4.c2], [t4.c3]), partitions(p0), 
+      is_index_back=false, 
+      range_key([t4.c1], [t4.c2]), range(MIN,MIN ; MAX,MAX)always true
+
+Used Hint:
+-------------------------------------
+  /*+
+  */
+
+Outline Data:
+-------------------------------------
+  /*+
+      BEGIN_OUTLINE_DATA
+      FULL(@"SEL$1" "opt"."t4"@"SEL$1")
+<<<<<<< HEAD
+      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
+=======
+>>>>>>> implement spm part1
+      END_OUTLINE_DATA
+  */
+
+Plan Type:
+-------------------------------------
+LOCAL
+
+Optimization Info:
+-------------------------------------
+t4:table_rows:100, physical_range_rows:100, logical_range_rows:100, index_back_rows:0, output_rows:100, est_method:local_storage, optimization_method=cost_based, avaiable_index_name[idx_t4_c2_c3,idx_t4_c3,t4], pruned_index_name[idx_t4_c2]
+
+
+Parameters:
+-------------------------------------
+
+
+*************** Case 8(end)  ************** 
+
+***************   Case 9   ***************
+
+SQL: select /*+INDEX(t4 idx_t4_c3) INDEX(t4 idx_t4_c2) INDEX(t4 idx_t4_c2_c3) */* from t4; 
+
+===============================================
+|ID|OPERATOR  |NAME            |EST. ROWS|COST|
+-----------------------------------------------
+|0 |TABLE SCAN|t4(idx_t4_c2_c3)|100      |78  |
+===============================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t4.c1], [t4.c2], [t4.c3]), filter(nil), 
+      access([t4.c1], [t4.c2], [t4.c3]), partitions(p0), 
+      is_index_back=false, 
+      range_key([t4.c2], [t4.c3], [t4.c1]), range(MIN,MIN,MIN ; MAX,MAX,MAX)always true
+
+Used Hint:
+-------------------------------------
+  /*+
+<<<<<<< HEAD
+      INDEX("t4" "idx_t4_c2_c3")
+=======
+      INDEX(@"SEL$1" "opt"."t4"@"SEL$1" "idx_t4_c3")
+>>>>>>> implement spm part1
+  */
+
+Outline Data:
+-------------------------------------
+  /*+
+      BEGIN_OUTLINE_DATA
+<<<<<<< HEAD
+      INDEX(@"SEL$1" "opt"."t4"@"SEL$1" "idx_t4_c2_c3")
+      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
+=======
+      INDEX(@"SEL$1" "opt"."t4"@"SEL$1" "idx_t4_c3")
+>>>>>>> implement spm part1
+      END_OUTLINE_DATA
+  */
+
+Plan Type:
+-------------------------------------
+LOCAL
+
+Optimization Info:
+-------------------------------------
+t4:table_rows:100, physical_range_rows:100, logical_range_rows:100, index_back_rows:0, output_rows:100, est_method:local_storage, optimization_method=cost_based, avaiable_index_name[idx_t4_c2_c3,idx_t4_c3], pruned_index_name[idx_t4_c2,t4]
+
+
+Parameters:
+-------------------------------------
+
+
+*************** Case 9(end)  ************** 
+
+***************   Case 10   ***************
+
+SQL: select * from t4 use index(idx_t4_c3, idx_t4_c2, idx_t4_c2_c3); 
+
+===============================================
+|ID|OPERATOR  |NAME            |EST. ROWS|COST|
+-----------------------------------------------
+|0 |TABLE SCAN|t4(idx_t4_c2_c3)|100      |78  |
+===============================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t4.c1], [t4.c2], [t4.c3]), filter(nil), 
+      access([t4.c1], [t4.c2], [t4.c3]), partitions(p0), 
+      is_index_back=false, 
+      range_key([t4.c2], [t4.c3], [t4.c1]), range(MIN,MIN,MIN ; MAX,MAX,MAX)always true
+
+Used Hint:
+-------------------------------------
+  /*+
+<<<<<<< HEAD
+      INDEX("opt"."t4" "idx_t4_c2_c3")
+=======
+      INDEX(@"SEL$1" "opt"."t4"@"SEL$1" "idx_t4_c3")
+>>>>>>> implement spm part1
+  */
+
+Outline Data:
+-------------------------------------
+  /*+
+      BEGIN_OUTLINE_DATA
+<<<<<<< HEAD
+      INDEX(@"SEL$1" "opt"."t4"@"SEL$1" "idx_t4_c2_c3")
+      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
+=======
+      INDEX(@"SEL$1" "opt"."t4"@"SEL$1" "idx_t4_c3")
+>>>>>>> implement spm part1
+      END_OUTLINE_DATA
+  */
+
+Plan Type:
+-------------------------------------
+LOCAL
+
+Optimization Info:
+-------------------------------------
+t4:table_rows:100, physical_range_rows:100, logical_range_rows:100, index_back_rows:0, output_rows:100, est_method:local_storage, optimization_method=cost_based, avaiable_index_name[idx_t4_c2_c3,idx_t4_c3], pruned_index_name[idx_t4_c2,t4]
+
+
+Parameters:
+-------------------------------------
+
+
+*************** Case 10(end)  ************** 
+
+***************   Case 11   ***************
+
+SQL: select * from t4 force index(idx_t4_c3, idx_t4_c2, idx_t4_c2_c3); 
+
+===============================================
+|ID|OPERATOR  |NAME            |EST. ROWS|COST|
+-----------------------------------------------
+|0 |TABLE SCAN|t4(idx_t4_c2_c3)|100      |78  |
+===============================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t4.c1], [t4.c2], [t4.c3]), filter(nil), 
+      access([t4.c1], [t4.c2], [t4.c3]), partitions(p0), 
+      is_index_back=false, 
+      range_key([t4.c2], [t4.c3], [t4.c1]), range(MIN,MIN,MIN ; MAX,MAX,MAX)always true
+
+Used Hint:
+-------------------------------------
+  /*+
+<<<<<<< HEAD
+      INDEX("opt"."t4" "idx_t4_c2_c3")
+=======
+      INDEX(@"SEL$1" "opt"."t4"@"SEL$1" "idx_t4_c3")
+>>>>>>> implement spm part1
+  */
+
+Outline Data:
+-------------------------------------
+  /*+
+      BEGIN_OUTLINE_DATA
+<<<<<<< HEAD
+      INDEX(@"SEL$1" "opt"."t4"@"SEL$1" "idx_t4_c2_c3")
+      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
+=======
+      INDEX(@"SEL$1" "opt"."t4"@"SEL$1" "idx_t4_c3")
+>>>>>>> implement spm part1
+      END_OUTLINE_DATA
+  */
+
+Plan Type:
+-------------------------------------
+LOCAL
+
+Optimization Info:
+-------------------------------------
+t4:table_rows:100, physical_range_rows:100, logical_range_rows:100, index_back_rows:0, output_rows:100, est_method:local_storage, optimization_method=cost_based, avaiable_index_name[idx_t4_c2_c3,idx_t4_c3], pruned_index_name[idx_t4_c2,t4]
+
+
+Parameters:
+-------------------------------------
+
+
+*************** Case 11(end)  ************** 
+
+***************   Case 12   ***************
+
+SQL: select /*+INDEX(t4 idx_t4_c3) FULL(t4) */* from t4; 
+
+===================================
+|ID|OPERATOR  |NAME|EST. ROWS|COST|
+-----------------------------------
+|0 |TABLE SCAN|t4  |100      |78  |
+===================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t4.c1], [t4.c2], [t4.c3]), filter(nil), 
+      access([t4.c1], [t4.c2], [t4.c3]), partitions(p0), 
+      is_index_back=false, 
+      range_key([t4.c1], [t4.c2]), range(MIN,MIN ; MAX,MAX)always true
+
+Used Hint:
+-------------------------------------
+  /*+
+<<<<<<< HEAD
+      FULL("t4")
+=======
+      INDEX(@"SEL$1" "opt"."t4"@"SEL$1" "idx_t4_c3")
+>>>>>>> implement spm part1
+  */
+
+Outline Data:
+-------------------------------------
+  /*+
+      BEGIN_OUTLINE_DATA
+<<<<<<< HEAD
+      FULL(@"SEL$1" "opt"."t4"@"SEL$1")
+      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
+=======
+      INDEX(@"SEL$1" "opt"."t4"@"SEL$1" "idx_t4_c3")
+>>>>>>> implement spm part1
+      END_OUTLINE_DATA
+  */
+
+Plan Type:
+-------------------------------------
+LOCAL
+
+Optimization Info:
+-------------------------------------
+t4:table_rows:100, physical_range_rows:100, logical_range_rows:100, index_back_rows:0, output_rows:100, est_method:local_storage, optimization_method=cost_based, avaiable_index_name[idx_t4_c3,t4], pruned_index_name[idx_t4_c2_c3,idx_t4_c2]
+
+
+Parameters:
+-------------------------------------
+
+
+*************** Case 12(end)  ************** 
+
+***************   Case 13   ***************
+
+SQL: select /*+INDEX(t4 idx_t4_c3) INDEX(t5 idx_t5_c2)*/* from t4,t5; 
+
+============================================================
+|ID|OPERATOR                  |NAME         |EST. ROWS|COST|
+------------------------------------------------------------
+|0 |NESTED-LOOP JOIN CARTESIAN|             |30000    |3069|
+|1 | TABLE SCAN               |t4(idx_t4_c3)|100      |78  |
+|2 | MATERIAL                 |             |300      |414 |
+|3 |  PX COORDINATOR          |             |300      |411 |
+|4 |   EXCHANGE OUT DISTR     |:EX10000     |300      |371 |
+|5 |    PX PARTITION ITERATOR |             |300      |290 |
+|6 |     TABLE SCAN           |t5(idx_t5_c2)|300      |290 |
+============================================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t4.c1], [t4.c2], [t4.c3], [t5.c1], [t5.c2], [t5.c3]), filter(nil), 
+      conds(nil), nl_params_(nil), batch_join=false
+  1 - output([t4.c1], [t4.c2], [t4.c3]), filter(nil), 
+      access([t4.c1], [t4.c2], [t4.c3]), partitions(p0), 
+      is_index_back=false, 
+      range_key([t4.c3], [t4.c1], [t4.c2]), range(MIN,MIN,MIN ; MAX,MAX,MAX)always true
+  2 - output([t5.c1], [t5.c2], [t5.c3]), filter(nil)
+  3 - output([t5.c1], [t5.c2], [t5.c3]), filter(nil)
+  4 - output([t5.c1], [t5.c2], [t5.c3]), filter(nil), dop=1
+  5 - output([t5.c2], [t5.c3], [t5.c1]), filter(nil), 
+      force partition granule.
+  6 - output([t5.c2], [t5.c3], [t5.c1]), filter(nil), 
+      access([t5.c2], [t5.c3], [t5.c1]), partitions(p[0-2]), 
+      is_index_back=true, 
+      range_key([t5.c2], [t5.c3]), range(MIN,MIN ; MAX,MAX)always true
+
+Used Hint:
+-------------------------------------
+  /*+
+<<<<<<< HEAD
+      INDEX("t4" "idx_t4_c3")
+      INDEX("t5" "idx_t5_c2")
+=======
+      INDEX(@"SEL$1" "opt"."t4"@"SEL$1" "idx_t4_c3")
+      INDEX(@"SEL$1" "opt"."t5"@"SEL$1" "idx_t5_c2")
+>>>>>>> implement spm part1
+  */
+
+Outline Data:
+-------------------------------------
+  /*+
+      BEGIN_OUTLINE_DATA
+<<<<<<< HEAD
+      LEADING(@"SEL$1" ("opt"."t4"@"SEL$1" "opt"."t5"@"SEL$1"))
+      USE_NL(@"SEL$1" "opt"."t5"@"SEL$1")
+      PQ_DISTRIBUTE(@"SEL$1" "opt"."t5"@"SEL$1" LOCAL LOCAL)
+      USE_NL_MATERIALIZATION(@"SEL$1" "opt"."t5"@"SEL$1")
+      INDEX(@"SEL$1" "opt"."t4"@"SEL$1" "idx_t4_c3")
+      INDEX(@"SEL$1" "opt"."t5"@"SEL$1" "idx_t5_c2")
+      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
+=======
+      LEADING(@"SEL$1" ("opt.t4"@"SEL$1" "opt.t5"@"SEL$1" ))
+      USE_NL(@"SEL$1" ("opt.t5"@"SEL$1" ))
+      PQ_DISTRIBUTE(@"SEL$1" ("opt.t5"@"SEL$1" ) LOCAL LOCAL)
+      USE_NL_MATERIALIZATION(@"SEL$1" ("opt.t5"@"SEL$1" ))
+      INDEX(@"SEL$1" "opt"."t4"@"SEL$1" "idx_t4_c3")
+      INDEX(@"SEL$1" "opt"."t5"@"SEL$1" "idx_t5_c2")
+>>>>>>> implement spm part1
+      END_OUTLINE_DATA
+  */
+
+Plan Type:
+-------------------------------------
+DISTRIBUTED
+
+Optimization Info:
+-------------------------------------
+t4:table_rows:100, physical_range_rows:100, logical_range_rows:100, index_back_rows:0, output_rows:100, est_method:local_storage, optimization_method=cost_based, avaiable_index_name[idx_t4_c3], pruned_index_name[idx_t4_c2_c3,idx_t4_c2,t4]
+
+t5:table_rows:300, physical_range_rows:300, logical_range_rows:300, index_back_rows:300, output_rows:300, est_method:default_stat, optimization_method=cost_based, avaiable_index_name[idx_t5_c2], pruned_index_name[idx_t5_c3,t5]
+
+
+Parameters:
+-------------------------------------
+
+
+*************** Case 13(end)  ************** 
+
+***************   Case 14   ***************
+
+SQL: select /*+INDEX(t4 idx_t4_c3)*/* from t4 as tt; 
+
+===================================
+|ID|OPERATOR  |NAME|EST. ROWS|COST|
+-----------------------------------
+|0 |TABLE SCAN|tt  |100      |78  |
+===================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([tt.c1], [tt.c2], [tt.c3]), filter(nil), 
+      access([tt.c1], [tt.c2], [tt.c3]), partitions(p0), 
+      is_index_back=false, 
+      range_key([tt.c1], [tt.c2]), range(MIN,MIN ; MAX,MAX)always true
+
+Used Hint:
+-------------------------------------
+  /*+
+  */
+
+Outline Data:
+-------------------------------------
+  /*+
+      BEGIN_OUTLINE_DATA
+      FULL(@"SEL$1" "opt"."tt"@"SEL$1")
+<<<<<<< HEAD
+      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
+=======
+>>>>>>> implement spm part1
+      END_OUTLINE_DATA
+  */
+
+Plan Type:
+-------------------------------------
+LOCAL
+
+Optimization Info:
+-------------------------------------
+tt:table_rows:100, physical_range_rows:100, logical_range_rows:100, index_back_rows:0, output_rows:100, est_method:local_storage, optimization_method=cost_based, avaiable_index_name[idx_t4_c2_c3,idx_t4_c3,t4], pruned_index_name[idx_t4_c2]
+
+
+Parameters:
+-------------------------------------
+
+
+*************** Case 14(end)  ************** 
+
+***************   Case 15   ***************
+
+SQL: select /*+INDEX(tt idx_t4_c3)*/* from t4 as tt; 
+
+============================================
+|ID|OPERATOR  |NAME         |EST. ROWS|COST|
+--------------------------------------------
+|0 |TABLE SCAN|tt(idx_t4_c3)|100      |78  |
+============================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([tt.c1], [tt.c2], [tt.c3]), filter(nil), 
+      access([tt.c1], [tt.c2], [tt.c3]), partitions(p0), 
+      is_index_back=false, 
+      range_key([tt.c3], [tt.c1], [tt.c2]), range(MIN,MIN,MIN ; MAX,MAX,MAX)always true
+
+Used Hint:
+-------------------------------------
+  /*+
+<<<<<<< HEAD
+      INDEX("tt" "idx_t4_c3")
+=======
+      INDEX(@"SEL$1" "opt"."tt"@"SEL$1" "idx_t4_c3")
+>>>>>>> implement spm part1
+  */
+
+Outline Data:
+-------------------------------------
+  /*+
+      BEGIN_OUTLINE_DATA
+      INDEX(@"SEL$1" "opt"."tt"@"SEL$1" "idx_t4_c3")
+<<<<<<< HEAD
+      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
+=======
+>>>>>>> implement spm part1
+      END_OUTLINE_DATA
+  */
+
+Plan Type:
+-------------------------------------
+LOCAL
+
+Optimization Info:
+-------------------------------------
+tt:table_rows:100, physical_range_rows:100, logical_range_rows:100, index_back_rows:0, output_rows:100, est_method:local_storage, optimization_method=cost_based, avaiable_index_name[idx_t4_c3], pruned_index_name[idx_t4_c2_c3,idx_t4_c2,t4]
+
+
+Parameters:
+-------------------------------------
+
+
+*************** Case 15(end)  ************** 
+
+***************   Case 16   ***************
+
+SQL: select * from t4 use index(); 
+
+===================================
+|ID|OPERATOR  |NAME|EST. ROWS|COST|
+-----------------------------------
+|0 |TABLE SCAN|t4  |100      |78  |
+===================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t4.c1], [t4.c2], [t4.c3]), filter(nil), 
+      access([t4.c1], [t4.c2], [t4.c3]), partitions(p0), 
+      is_index_back=false, 
+      range_key([t4.c1], [t4.c2]), range(MIN,MIN ; MAX,MAX)always true
+
+Used Hint:
+-------------------------------------
+  /*+
+  */
+
+Outline Data:
+-------------------------------------
+  /*+
+      BEGIN_OUTLINE_DATA
+      FULL(@"SEL$1" "opt"."t4"@"SEL$1")
+<<<<<<< HEAD
+      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
+=======
+>>>>>>> implement spm part1
+      END_OUTLINE_DATA
+  */
+
+Plan Type:
+-------------------------------------
+LOCAL
+
+Optimization Info:
+-------------------------------------
+t4:table_rows:100, physical_range_rows:100, logical_range_rows:100, index_back_rows:0, output_rows:100, est_method:local_storage, optimization_method=cost_based, avaiable_index_name[idx_t4_c2_c3,idx_t4_c3,t4], pruned_index_name[idx_t4_c2]
+
+
+Parameters:
+-------------------------------------
+
+
+*************** Case 16(end)  ************** 
+
+***************   Case 17   ***************
+
+SQL: select /*+INDEX(t4 idx_t4_c3) */* from t4 ignore index(idx_t4_c3); 
+
+===================================
+|ID|OPERATOR  |NAME|EST. ROWS|COST|
+-----------------------------------
+|0 |TABLE SCAN|t4  |100      |78  |
+===================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t4.c1], [t4.c2], [t4.c3]), filter(nil), 
+      access([t4.c1], [t4.c2], [t4.c3]), partitions(p0), 
+      is_index_back=false, 
+      range_key([t4.c1], [t4.c2]), range(MIN,MIN ; MAX,MAX)always true
+
+Used Hint:
+-------------------------------------
+  /*+
+<<<<<<< HEAD
+=======
+      INDEX(@"SEL$1" "opt"."t4"@"SEL$1" "idx_t4_c3")
+>>>>>>> implement spm part1
+  */
+
+Outline Data:
+-------------------------------------
+  /*+
+      BEGIN_OUTLINE_DATA
+<<<<<<< HEAD
+      FULL(@"SEL$1" "opt"."t4"@"SEL$1")
+      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
+=======
+      INDEX(@"SEL$1" "opt"."t4"@"SEL$1" "idx_t4_c3")
+>>>>>>> implement spm part1
+      END_OUTLINE_DATA
+  */
+
+Plan Type:
+-------------------------------------
+LOCAL
+
+Optimization Info:
+-------------------------------------
+t4:table_rows:100, physical_range_rows:100, logical_range_rows:100, index_back_rows:0, output_rows:100, est_method:local_storage, optimization_method=cost_based, avaiable_index_name[idx_t4_c2_c3,idx_t4_c3,t4], pruned_index_name[idx_t4_c2]
+
+
+Parameters:
+-------------------------------------
+
+
+*************** Case 17(end)  ************** 
+
+***************   Case 18   ***************
+
+SQL: select * from t4 ignore index(idx_t4_c3); 
+
+===================================
+|ID|OPERATOR  |NAME|EST. ROWS|COST|
+-----------------------------------
+|0 |TABLE SCAN|t4  |100      |78  |
+===================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t4.c1], [t4.c2], [t4.c3]), filter(nil), 
+      access([t4.c1], [t4.c2], [t4.c3]), partitions(p0), 
+      is_index_back=false, 
+      range_key([t4.c1], [t4.c2]), range(MIN,MIN ; MAX,MAX)always true
+
+Used Hint:
+-------------------------------------
+  /*+
+<<<<<<< HEAD
+      NO_INDEX("opt"."t4" "idx_t4_c3")
+=======
+      NO_INDEX(@"SEL$1" "opt"."t4"@"SEL$1" "idx_t4_c3")
+>>>>>>> implement spm part1
+  */
+
+Outline Data:
+-------------------------------------
+  /*+
+      BEGIN_OUTLINE_DATA
+<<<<<<< HEAD
+      FULL(@"SEL$1" "opt"."t4"@"SEL$1")
+      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
+=======
+      INDEX(@"SEL$1" "opt"."t4"@"SEL$1" "idx_t4_c2_c3")
+>>>>>>> implement spm part1
+      END_OUTLINE_DATA
+  */
+
+Plan Type:
+-------------------------------------
+LOCAL
+
+Optimization Info:
+-------------------------------------
+t4:table_rows:100, physical_range_rows:100, logical_range_rows:100, index_back_rows:0, output_rows:100, est_method:local_storage, optimization_method=cost_based, avaiable_index_name[idx_t4_c2_c3,t4], pruned_index_name[idx_t4_c3,idx_t4_c2]
+
+
+Parameters:
+-------------------------------------
+
+
+*************** Case 18(end)  ************** 
+
+***************   Case 19   ***************
+
+SQL: select * from t4 ignore index(idx_t4_c2); 
+
+===================================
+|ID|OPERATOR  |NAME|EST. ROWS|COST|
+-----------------------------------
+|0 |TABLE SCAN|t4  |100      |78  |
+===================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t4.c1], [t4.c2], [t4.c3]), filter(nil), 
+      access([t4.c1], [t4.c2], [t4.c3]), partitions(p0), 
+      is_index_back=false, 
+      range_key([t4.c1], [t4.c2]), range(MIN,MIN ; MAX,MAX)always true
+
+Used Hint:
+-------------------------------------
+  /*+
+<<<<<<< HEAD
+      NO_INDEX("opt"."t4" "idx_t4_c2")
+=======
+      NO_INDEX(@"SEL$1" "opt"."t4"@"SEL$1" "idx_t4_c2")
+>>>>>>> implement spm part1
+  */
+
+Outline Data:
+-------------------------------------
+  /*+
+      BEGIN_OUTLINE_DATA
+<<<<<<< HEAD
+      FULL(@"SEL$1" "opt"."t4"@"SEL$1")
+      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
+=======
+      INDEX(@"SEL$1" "opt"."t4"@"SEL$1" "idx_t4_c2_c3")
+>>>>>>> implement spm part1
+      END_OUTLINE_DATA
+  */
+
+Plan Type:
+-------------------------------------
+LOCAL
+
+Optimization Info:
+-------------------------------------
+t4:table_rows:100, physical_range_rows:100, logical_range_rows:100, index_back_rows:0, output_rows:100, est_method:local_storage, optimization_method=cost_based, avaiable_index_name[idx_t4_c2_c3,idx_t4_c3,t4], pruned_index_name[idx_t4_c2]
+
+
+Parameters:
+-------------------------------------
+
+
+*************** Case 19(end)  ************** 
+
+***************   Case 20   ***************
+
+SQL: select * from t4 ignore index(idx_t4_c3, idx_t4_c2); 
+
+===================================
+|ID|OPERATOR  |NAME|EST. ROWS|COST|
+-----------------------------------
+|0 |TABLE SCAN|t4  |100      |78  |
+===================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t4.c1], [t4.c2], [t4.c3]), filter(nil), 
+      access([t4.c1], [t4.c2], [t4.c3]), partitions(p0), 
+      is_index_back=false, 
+      range_key([t4.c1], [t4.c2]), range(MIN,MIN ; MAX,MAX)always true
+
+Used Hint:
+-------------------------------------
+  /*+
+<<<<<<< HEAD
+      NO_INDEX("opt"."t4" "idx_t4_c3")
+      NO_INDEX("opt"."t4" "idx_t4_c2")
+=======
+      NO_INDEX(@"SEL$1" "opt"."t4"@"SEL$1" "idx_t4_c3")
+      NO_INDEX(@"SEL$1" "opt"."t4"@"SEL$1" "idx_t4_c2")
+>>>>>>> implement spm part1
+  */
+
+Outline Data:
+-------------------------------------
+  /*+
+      BEGIN_OUTLINE_DATA
+<<<<<<< HEAD
+      FULL(@"SEL$1" "opt"."t4"@"SEL$1")
+      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
+=======
+      INDEX(@"SEL$1" "opt"."t4"@"SEL$1" "idx_t4_c2_c3")
+>>>>>>> implement spm part1
+      END_OUTLINE_DATA
+  */
+
+Plan Type:
+-------------------------------------
+LOCAL
+
+Optimization Info:
+-------------------------------------
+t4:table_rows:100, physical_range_rows:100, logical_range_rows:100, index_back_rows:0, output_rows:100, est_method:local_storage, optimization_method=cost_based, avaiable_index_name[idx_t4_c2_c3,t4], pruned_index_name[idx_t4_c3,idx_t4_c2]
+
+
+Parameters:
+-------------------------------------
+
+
+*************** Case 20(end)  ************** 
+
+***************   Case 21   ***************
+
+SQL: select * from t4 ignore index(idx_t4_c3) ignore index(idx_t4_c2); 
+
+===================================
+|ID|OPERATOR  |NAME|EST. ROWS|COST|
+-----------------------------------
+|0 |TABLE SCAN|t4  |100      |78  |
+===================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t4.c1], [t4.c2], [t4.c3]), filter(nil), 
+      access([t4.c1], [t4.c2], [t4.c3]), partitions(p0), 
+      is_index_back=false, 
+      range_key([t4.c1], [t4.c2]), range(MIN,MIN ; MAX,MAX)always true
+
+Used Hint:
+-------------------------------------
+  /*+
+<<<<<<< HEAD
+      NO_INDEX("opt"."t4" "idx_t4_c3")
+=======
+      NO_INDEX(@"SEL$1" "opt"."t4"@"SEL$1" "idx_t4_c3")
+>>>>>>> implement spm part1
+  */
+
+Outline Data:
+-------------------------------------
+  /*+
+      BEGIN_OUTLINE_DATA
+<<<<<<< HEAD
+      FULL(@"SEL$1" "opt"."t4"@"SEL$1")
+      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
+=======
+      INDEX(@"SEL$1" "opt"."t4"@"SEL$1" "idx_t4_c2_c3")
+>>>>>>> implement spm part1
+      END_OUTLINE_DATA
+  */
+
+Plan Type:
+-------------------------------------
+LOCAL
+
+Optimization Info:
+-------------------------------------
+t4:table_rows:100, physical_range_rows:100, logical_range_rows:100, index_back_rows:0, output_rows:100, est_method:local_storage, optimization_method=cost_based, avaiable_index_name[idx_t4_c2_c3,t4], pruned_index_name[idx_t4_c3,idx_t4_c2]
+
+
+Parameters:
+-------------------------------------
+
+
+*************** Case 21(end)  ************** 
+
+***************   Case 22   ***************
+
+SQL: select * from t4 tt ignore index(idx_t4_c3, idx_t4_c2); 
+
+===================================
+|ID|OPERATOR  |NAME|EST. ROWS|COST|
+-----------------------------------
+|0 |TABLE SCAN|tt  |100      |78  |
+===================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([tt.c1], [tt.c2], [tt.c3]), filter(nil), 
+      access([tt.c1], [tt.c2], [tt.c3]), partitions(p0), 
+      is_index_back=false, 
+      range_key([tt.c1], [tt.c2]), range(MIN,MIN ; MAX,MAX)always true
+
+Used Hint:
+-------------------------------------
+  /*+
+<<<<<<< HEAD
+      NO_INDEX("opt"."tt" "idx_t4_c3")
+      NO_INDEX("opt"."tt" "idx_t4_c2")
+=======
+      NO_INDEX(@"SEL$1" "opt"."tt"@"SEL$1" "idx_t4_c3")
+      NO_INDEX(@"SEL$1" "opt"."tt"@"SEL$1" "idx_t4_c2")
+>>>>>>> implement spm part1
+  */
+
+Outline Data:
+-------------------------------------
+  /*+
+      BEGIN_OUTLINE_DATA
+<<<<<<< HEAD
+      FULL(@"SEL$1" "opt"."tt"@"SEL$1")
+      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
+=======
+      INDEX(@"SEL$1" "opt"."tt"@"SEL$1" "idx_t4_c2_c3")
+>>>>>>> implement spm part1
+      END_OUTLINE_DATA
+  */
+
+Plan Type:
+-------------------------------------
+LOCAL
+
+Optimization Info:
+-------------------------------------
+tt:table_rows:100, physical_range_rows:100, logical_range_rows:100, index_back_rows:0, output_rows:100, est_method:local_storage, optimization_method=cost_based, avaiable_index_name[idx_t4_c2_c3,t4], pruned_index_name[idx_t4_c3,idx_t4_c2]
+
+
+Parameters:
+-------------------------------------
+
+
+*************** Case 22(end)  ************** 
+
+***************   Case 23   ***************
+
+SQL: select * from t4 tt ignore index(idx_t4_c3) ignore index(idx_t4_c2); 
+
+===================================
+|ID|OPERATOR  |NAME|EST. ROWS|COST|
+-----------------------------------
+|0 |TABLE SCAN|tt  |100      |78  |
+===================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([tt.c1], [tt.c2], [tt.c3]), filter(nil), 
+      access([tt.c1], [tt.c2], [tt.c3]), partitions(p0), 
+      is_index_back=false, 
+      range_key([tt.c1], [tt.c2]), range(MIN,MIN ; MAX,MAX)always true
+
+Used Hint:
+-------------------------------------
+  /*+
+<<<<<<< HEAD
+      NO_INDEX("opt"."tt" "idx_t4_c3")
+=======
+      NO_INDEX(@"SEL$1" "opt"."tt"@"SEL$1" "idx_t4_c3")
+>>>>>>> implement spm part1
+  */
+
+Outline Data:
+-------------------------------------
+  /*+
+      BEGIN_OUTLINE_DATA
+<<<<<<< HEAD
+      FULL(@"SEL$1" "opt"."tt"@"SEL$1")
+      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
+=======
+      INDEX(@"SEL$1" "opt"."tt"@"SEL$1" "idx_t4_c2_c3")
+>>>>>>> implement spm part1
+      END_OUTLINE_DATA
+  */
+
+Plan Type:
+-------------------------------------
+LOCAL
+
+Optimization Info:
+-------------------------------------
+tt:table_rows:100, physical_range_rows:100, logical_range_rows:100, index_back_rows:0, output_rows:100, est_method:local_storage, optimization_method=cost_based, avaiable_index_name[idx_t4_c2_c3,t4], pruned_index_name[idx_t4_c3,idx_t4_c2]
+
+
+Parameters:
+-------------------------------------
+
+
+*************** Case 23(end)  ************** 
+
+***************   Case 24   ***************
+
+SQL: select * from t4 tt ignore index(primary, idx_t4_c2); 
+
+===============================================
+|ID|OPERATOR  |NAME            |EST. ROWS|COST|
+-----------------------------------------------
+|0 |TABLE SCAN|tt(idx_t4_c2_c3)|100      |78  |
+===============================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([tt.c1], [tt.c2], [tt.c3]), filter(nil), 
+      access([tt.c1], [tt.c2], [tt.c3]), partitions(p0), 
+      is_index_back=false, 
+      range_key([tt.c2], [tt.c3], [tt.c1]), range(MIN,MIN,MIN ; MAX,MAX,MAX)always true
+
+Used Hint:
+-------------------------------------
+  /*+
+<<<<<<< HEAD
+      NO_INDEX("opt"."tt" "PRIMARY")
+      NO_INDEX("opt"."tt" "idx_t4_c2")
+=======
+      NO_INDEX(@"SEL$1" "opt"."tt"@"SEL$1" "primary")
+      NO_INDEX(@"SEL$1" "opt"."tt"@"SEL$1" "idx_t4_c2")
+>>>>>>> implement spm part1
+  */
+
+Outline Data:
+-------------------------------------
+  /*+
+      BEGIN_OUTLINE_DATA
+      INDEX(@"SEL$1" "opt"."tt"@"SEL$1" "idx_t4_c2_c3")
+<<<<<<< HEAD
+      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
+=======
+>>>>>>> implement spm part1
+      END_OUTLINE_DATA
+  */
+
+Plan Type:
+-------------------------------------
+LOCAL
+
+Optimization Info:
+-------------------------------------
+tt:table_rows:100, physical_range_rows:100, logical_range_rows:100, index_back_rows:0, output_rows:100, est_method:local_storage, optimization_method=cost_based, avaiable_index_name[idx_t4_c2_c3,idx_t4_c3], pruned_index_name[idx_t4_c2,t4]
+
+
+Parameters:
+-------------------------------------
+
+
+*************** Case 24(end)  ************** 
+
+***************   Case 25   ***************
+
+SQL: select * from t4 tt ignore index(primary) ignore index(idx_t4_c3); 
+
+===============================================
+|ID|OPERATOR  |NAME            |EST. ROWS|COST|
+-----------------------------------------------
+|0 |TABLE SCAN|tt(idx_t4_c2_c3)|100      |78  |
+===============================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([tt.c1], [tt.c2], [tt.c3]), filter(nil), 
+      access([tt.c1], [tt.c2], [tt.c3]), partitions(p0), 
+      is_index_back=false, 
+      range_key([tt.c2], [tt.c3], [tt.c1]), range(MIN,MIN,MIN ; MAX,MAX,MAX)always true
+
+Used Hint:
+-------------------------------------
+  /*+
+<<<<<<< HEAD
+      NO_INDEX("opt"."tt" "PRIMARY")
+=======
+      NO_INDEX(@"SEL$1" "opt"."tt"@"SEL$1" "primary")
+>>>>>>> implement spm part1
+  */
+
+Outline Data:
+-------------------------------------
+  /*+
+      BEGIN_OUTLINE_DATA
+      INDEX(@"SEL$1" "opt"."tt"@"SEL$1" "idx_t4_c2_c3")
+<<<<<<< HEAD
+      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
+=======
+>>>>>>> implement spm part1
+      END_OUTLINE_DATA
+  */
+
+Plan Type:
+-------------------------------------
+LOCAL
+
+Optimization Info:
+-------------------------------------
+tt:table_rows:100, physical_range_rows:100, logical_range_rows:100, index_back_rows:0, output_rows:100, est_method:local_storage, optimization_method=cost_based, avaiable_index_name[idx_t4_c2_c3,idx_t4_c3], pruned_index_name[idx_t4_c2,t4]
+
+
+Parameters:
+-------------------------------------
+
+
+*************** Case 25(end)  ************** 
+
+***************   Case 26   ***************
+
+SQL: select * from t4 tt ignore index(primary) ignore index(idx_t4_c2_); 
+
+===============================================
+|ID|OPERATOR  |NAME            |EST. ROWS|COST|
+-----------------------------------------------
+|0 |TABLE SCAN|tt(idx_t4_c2_c3)|100      |78  |
+===============================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([tt.c1], [tt.c2], [tt.c3]), filter(nil), 
+      access([tt.c1], [tt.c2], [tt.c3]), partitions(p0), 
+      is_index_back=false, 
+      range_key([tt.c2], [tt.c3], [tt.c1]), range(MIN,MIN,MIN ; MAX,MAX,MAX)always true
+
+Used Hint:
+-------------------------------------
+  /*+
+<<<<<<< HEAD
+      NO_INDEX("opt"."tt" "PRIMARY")
+=======
+      NO_INDEX(@"SEL$1" "opt"."tt"@"SEL$1" "primary")
+>>>>>>> implement spm part1
+  */
+
+Outline Data:
+-------------------------------------
+  /*+
+      BEGIN_OUTLINE_DATA
+      INDEX(@"SEL$1" "opt"."tt"@"SEL$1" "idx_t4_c2_c3")
+<<<<<<< HEAD
+      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
+=======
+>>>>>>> implement spm part1
+      END_OUTLINE_DATA
+  */
+
+Plan Type:
+-------------------------------------
+LOCAL
+
+Optimization Info:
+-------------------------------------
+tt:table_rows:100, physical_range_rows:100, logical_range_rows:100, index_back_rows:0, output_rows:100, est_method:local_storage, optimization_method=cost_based, avaiable_index_name[idx_t4_c2_c3,idx_t4_c3], pruned_index_name[idx_t4_c2,t4]
+
+
+Parameters:
+-------------------------------------
+
+
+*************** Case 26(end)  ************** 
+
+***************   Case 27   ***************
+
+SQL: select * from t4,t5; 
+
+=======================================================
+|ID|OPERATOR                  |NAME    |EST. ROWS|COST|
+-------------------------------------------------------
+|0 |NESTED-LOOP JOIN CARTESIAN|        |30000    |3012|
+|1 | TABLE SCAN               |t4      |100      |78  |
+|2 | MATERIAL                 |        |300      |357 |
+|3 |  PX COORDINATOR          |        |300      |354 |
+|4 |   EXCHANGE OUT DISTR     |:EX10000|300      |314 |
+|5 |    PX PARTITION ITERATOR |        |300      |233 |
+|6 |     TABLE SCAN           |t5      |300      |233 |
+=======================================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t4.c1], [t4.c2], [t4.c3], [t5.c1], [t5.c2], [t5.c3]), filter(nil), 
+      conds(nil), nl_params_(nil), batch_join=false
+  1 - output([t4.c1], [t4.c2], [t4.c3]), filter(nil), 
+      access([t4.c1], [t4.c2], [t4.c3]), partitions(p0), 
+      is_index_back=false, 
+      range_key([t4.c1], [t4.c2]), range(MIN,MIN ; MAX,MAX)always true
+  2 - output([t5.c1], [t5.c2], [t5.c3]), filter(nil)
+  3 - output([t5.c1], [t5.c2], [t5.c3]), filter(nil)
+  4 - output([t5.c1], [t5.c2], [t5.c3]), filter(nil), dop=1
+  5 - output([t5.c2], [t5.c3], [t5.c1]), filter(nil), 
+      force partition granule.
+  6 - output([t5.c2], [t5.c3], [t5.c1]), filter(nil), 
+      access([t5.c2], [t5.c3], [t5.c1]), partitions(p[0-2]), 
+      is_index_back=false, 
+      range_key([t5.c2], [t5.c3]), range(MIN,MIN ; MAX,MAX)always true
+
+Used Hint:
+-------------------------------------
+  /*+
+  */
+
+Outline Data:
+-------------------------------------
+  /*+
+      BEGIN_OUTLINE_DATA
+<<<<<<< HEAD
+      LEADING(@"SEL$1" ("opt"."t4"@"SEL$1" "opt"."t5"@"SEL$1"))
+      USE_NL(@"SEL$1" "opt"."t5"@"SEL$1")
+      PQ_DISTRIBUTE(@"SEL$1" "opt"."t5"@"SEL$1" LOCAL LOCAL)
+      USE_NL_MATERIALIZATION(@"SEL$1" "opt"."t5"@"SEL$1")
+      FULL(@"SEL$1" "opt"."t4"@"SEL$1")
+      FULL(@"SEL$1" "opt"."t5"@"SEL$1")
+      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
+=======
+      LEADING(@"SEL$1" ("opt.t4"@"SEL$1" "opt.t5"@"SEL$1" ))
+      USE_NL(@"SEL$1" ("opt.t5"@"SEL$1" ))
+      PQ_DISTRIBUTE(@"SEL$1" ("opt.t5"@"SEL$1" ) LOCAL LOCAL)
+      USE_NL_MATERIALIZATION(@"SEL$1" ("opt.t5"@"SEL$1" ))
+      FULL(@"SEL$1" "opt"."t4"@"SEL$1")
+      FULL(@"SEL$1" "opt"."t5"@"SEL$1")
+>>>>>>> implement spm part1
+      END_OUTLINE_DATA
+  */
+
+Plan Type:
+-------------------------------------
+DISTRIBUTED
+
+Optimization Info:
+-------------------------------------
+t4:table_rows:100, physical_range_rows:100, logical_range_rows:100, index_back_rows:0, output_rows:100, est_method:local_storage, optimization_method=cost_based, avaiable_index_name[idx_t4_c2_c3,idx_t4_c3,t4], pruned_index_name[idx_t4_c2]
+
+t5:table_rows:300, physical_range_rows:300, logical_range_rows:300, index_back_rows:0, output_rows:300, est_method:default_stat, optimization_method=cost_based, avaiable_index_name[t5], pruned_index_name[idx_t5_c2,idx_t5_c3]
+
+
+Parameters:
+-------------------------------------
+
+
+*************** Case 27(end)  ************** 
+
+***************   Case 28   ***************
+
+SQL: select /*+leading(t4 t5) use_nl(t5)*/* from t4,t5; 
+
+=======================================================
+|ID|OPERATOR                  |NAME    |EST. ROWS|COST|
+-------------------------------------------------------
+|0 |NESTED-LOOP JOIN CARTESIAN|        |30000    |3012|
+|1 | TABLE SCAN               |t4      |100      |78  |
+|2 | MATERIAL                 |        |300      |357 |
+|3 |  PX COORDINATOR          |        |300      |354 |
+|4 |   EXCHANGE OUT DISTR     |:EX10000|300      |314 |
+|5 |    PX PARTITION ITERATOR |        |300      |233 |
+|6 |     TABLE SCAN           |t5      |300      |233 |
+=======================================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t4.c1], [t4.c2], [t4.c3], [t5.c1], [t5.c2], [t5.c3]), filter(nil), 
+      conds(nil), nl_params_(nil), batch_join=false
+  1 - output([t4.c1], [t4.c2], [t4.c3]), filter(nil), 
+      access([t4.c1], [t4.c2], [t4.c3]), partitions(p0), 
+      is_index_back=false, 
+      range_key([t4.c1], [t4.c2]), range(MIN,MIN ; MAX,MAX)always true
+  2 - output([t5.c1], [t5.c2], [t5.c3]), filter(nil)
+  3 - output([t5.c1], [t5.c2], [t5.c3]), filter(nil)
+  4 - output([t5.c1], [t5.c2], [t5.c3]), filter(nil), dop=1
+  5 - output([t5.c2], [t5.c3], [t5.c1]), filter(nil), 
+      force partition granule.
+  6 - output([t5.c2], [t5.c3], [t5.c1]), filter(nil), 
+      access([t5.c2], [t5.c3], [t5.c1]), partitions(p[0-2]), 
+      is_index_back=false, 
+      range_key([t5.c2], [t5.c3]), range(MIN,MIN ; MAX,MAX)always true
+
+Used Hint:
+-------------------------------------
+  /*+
+      LEADING(("t4" "t5"))
+      USE_NL("t5")
+  */
+
+Outline Data:
+-------------------------------------
+  /*+
+      BEGIN_OUTLINE_DATA
+<<<<<<< HEAD
+      LEADING(@"SEL$1" ("opt"."t4"@"SEL$1" "opt"."t5"@"SEL$1"))
+      USE_NL(@"SEL$1" "opt"."t5"@"SEL$1")
+      PQ_DISTRIBUTE(@"SEL$1" "opt"."t5"@"SEL$1" LOCAL LOCAL)
+      USE_NL_MATERIALIZATION(@"SEL$1" "opt"."t5"@"SEL$1")
+      FULL(@"SEL$1" "opt"."t4"@"SEL$1")
+      FULL(@"SEL$1" "opt"."t5"@"SEL$1")
+      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
+=======
+      LEADING(@"SEL$1" ("opt.t4"@"SEL$1" "opt.t5"@"SEL$1" ))
+      USE_NL(@"SEL$1" ("opt.t5"@"SEL$1" ))
+      PQ_DISTRIBUTE(@"SEL$1" ("opt.t5"@"SEL$1" ) LOCAL LOCAL)
+      USE_NL_MATERIALIZATION(@"SEL$1" ("opt.t5"@"SEL$1" ))
+      FULL(@"SEL$1" "opt"."t4"@"SEL$1")
+      FULL(@"SEL$1" "opt"."t5"@"SEL$1")
+>>>>>>> implement spm part1
+      END_OUTLINE_DATA
+  */
+
+Plan Type:
+-------------------------------------
+DISTRIBUTED
+
+Optimization Info:
+-------------------------------------
+t4:table_rows:100, physical_range_rows:100, logical_range_rows:100, index_back_rows:0, output_rows:100, est_method:local_storage, optimization_method=cost_based, avaiable_index_name[idx_t4_c2_c3,idx_t4_c3,t4], pruned_index_name[idx_t4_c2]
+
+t5:table_rows:300, physical_range_rows:300, logical_range_rows:300, index_back_rows:0, output_rows:300, est_method:default_stat, optimization_method=cost_based, avaiable_index_name[t5], pruned_index_name[idx_t5_c2,idx_t5_c3]
+
+
+Parameters:
+-------------------------------------
+
+
+*************** Case 28(end)  ************** 
+
+***************   Case 29   ***************
+
+SQL: select /*+leading(tt4 tt5) use_nl(tt5)*/* from t4 tt4, t5 tt5; 
+
+=======================================================
+|ID|OPERATOR                  |NAME    |EST. ROWS|COST|
+-------------------------------------------------------
+|0 |NESTED-LOOP JOIN CARTESIAN|        |30000    |3012|
+|1 | TABLE SCAN               |tt4     |100      |78  |
+|2 | MATERIAL                 |        |300      |357 |
+|3 |  PX COORDINATOR          |        |300      |354 |
+|4 |   EXCHANGE OUT DISTR     |:EX10000|300      |314 |
+|5 |    PX PARTITION ITERATOR |        |300      |233 |
+|6 |     TABLE SCAN           |tt5     |300      |233 |
+=======================================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([tt4.c1], [tt4.c2], [tt4.c3], [tt5.c1], [tt5.c2], [tt5.c3]), filter(nil), 
+      conds(nil), nl_params_(nil), batch_join=false
+  1 - output([tt4.c1], [tt4.c2], [tt4.c3]), filter(nil), 
+      access([tt4.c1], [tt4.c2], [tt4.c3]), partitions(p0), 
+      is_index_back=false, 
+      range_key([tt4.c1], [tt4.c2]), range(MIN,MIN ; MAX,MAX)always true
+  2 - output([tt5.c1], [tt5.c2], [tt5.c3]), filter(nil)
+  3 - output([tt5.c1], [tt5.c2], [tt5.c3]), filter(nil)
+  4 - output([tt5.c1], [tt5.c2], [tt5.c3]), filter(nil), dop=1
+  5 - output([tt5.c2], [tt5.c3], [tt5.c1]), filter(nil), 
+      force partition granule.
+  6 - output([tt5.c2], [tt5.c3], [tt5.c1]), filter(nil), 
+      access([tt5.c2], [tt5.c3], [tt5.c1]), partitions(p[0-2]), 
+      is_index_back=false, 
+      range_key([tt5.c2], [tt5.c3]), range(MIN,MIN ; MAX,MAX)always true
+
+Used Hint:
+-------------------------------------
+  /*+
+      LEADING(("tt4" "tt5"))
+      USE_NL("tt5")
+  */
+
+Outline Data:
+-------------------------------------
+  /*+
+      BEGIN_OUTLINE_DATA
+<<<<<<< HEAD
+      LEADING(@"SEL$1" ("opt"."tt4"@"SEL$1" "opt"."tt5"@"SEL$1"))
+      USE_NL(@"SEL$1" "opt"."tt5"@"SEL$1")
+      PQ_DISTRIBUTE(@"SEL$1" "opt"."tt5"@"SEL$1" LOCAL LOCAL)
+      USE_NL_MATERIALIZATION(@"SEL$1" "opt"."tt5"@"SEL$1")
+      FULL(@"SEL$1" "opt"."tt4"@"SEL$1")
+      FULL(@"SEL$1" "opt"."tt5"@"SEL$1")
+      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
+=======
+      LEADING(@"SEL$1" ("opt.tt4"@"SEL$1" "opt.tt5"@"SEL$1" ))
+      USE_NL(@"SEL$1" ("opt.tt5"@"SEL$1" ))
+      PQ_DISTRIBUTE(@"SEL$1" ("opt.tt5"@"SEL$1" ) LOCAL LOCAL)
+      USE_NL_MATERIALIZATION(@"SEL$1" ("opt.tt5"@"SEL$1" ))
+      FULL(@"SEL$1" "opt"."tt4"@"SEL$1")
+      FULL(@"SEL$1" "opt"."tt5"@"SEL$1")
+>>>>>>> implement spm part1
+      END_OUTLINE_DATA
+  */
+
+Plan Type:
+-------------------------------------
+DISTRIBUTED
+
+Optimization Info:
+-------------------------------------
+tt4:table_rows:100, physical_range_rows:100, logical_range_rows:100, index_back_rows:0, output_rows:100, est_method:local_storage, optimization_method=cost_based, avaiable_index_name[idx_t4_c2_c3,idx_t4_c3,t4], pruned_index_name[idx_t4_c2]
+
+tt5:table_rows:300, physical_range_rows:300, logical_range_rows:300, index_back_rows:0, output_rows:300, est_method:default_stat, optimization_method=cost_based, avaiable_index_name[t5], pruned_index_name[idx_t5_c2,idx_t5_c3]
+
+
+Parameters:
+-------------------------------------
+
+
+*************** Case 29(end)  ************** 
+
+***************   Case 30   ***************
+
+SQL: select /*+leading (t4 t5) use_nl(t5) use_nl(t5) use_nl(t5)*/* from t4,t5; 
+
+=======================================================
+|ID|OPERATOR                  |NAME    |EST. ROWS|COST|
+-------------------------------------------------------
+|0 |NESTED-LOOP JOIN CARTESIAN|        |30000    |3012|
+|1 | TABLE SCAN               |t4      |100      |78  |
+|2 | MATERIAL                 |        |300      |357 |
+|3 |  PX COORDINATOR          |        |300      |354 |
+|4 |   EXCHANGE OUT DISTR     |:EX10000|300      |314 |
+|5 |    PX PARTITION ITERATOR |        |300      |233 |
+|6 |     TABLE SCAN           |t5      |300      |233 |
+=======================================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t4.c1], [t4.c2], [t4.c3], [t5.c1], [t5.c2], [t5.c3]), filter(nil), 
+      conds(nil), nl_params_(nil), batch_join=false
+  1 - output([t4.c1], [t4.c2], [t4.c3]), filter(nil), 
+      access([t4.c1], [t4.c2], [t4.c3]), partitions(p0), 
+      is_index_back=false, 
+      range_key([t4.c1], [t4.c2]), range(MIN,MIN ; MAX,MAX)always true
+  2 - output([t5.c1], [t5.c2], [t5.c3]), filter(nil)
+  3 - output([t5.c1], [t5.c2], [t5.c3]), filter(nil)
+  4 - output([t5.c1], [t5.c2], [t5.c3]), filter(nil), dop=1
+  5 - output([t5.c2], [t5.c3], [t5.c1]), filter(nil), 
+      force partition granule.
+  6 - output([t5.c2], [t5.c3], [t5.c1]), filter(nil), 
+      access([t5.c2], [t5.c3], [t5.c1]), partitions(p[0-2]), 
+      is_index_back=false, 
+      range_key([t5.c2], [t5.c3]), range(MIN,MIN ; MAX,MAX)always true
+
+Used Hint:
+-------------------------------------
+  /*+
+      LEADING(("t4" "t5"))
+      USE_NL("t5")
+  */
+
+Outline Data:
+-------------------------------------
+  /*+
+      BEGIN_OUTLINE_DATA
+<<<<<<< HEAD
+      LEADING(@"SEL$1" ("opt"."t4"@"SEL$1" "opt"."t5"@"SEL$1"))
+      USE_NL(@"SEL$1" "opt"."t5"@"SEL$1")
+      PQ_DISTRIBUTE(@"SEL$1" "opt"."t5"@"SEL$1" LOCAL LOCAL)
+      USE_NL_MATERIALIZATION(@"SEL$1" "opt"."t5"@"SEL$1")
+      FULL(@"SEL$1" "opt"."t4"@"SEL$1")
+      FULL(@"SEL$1" "opt"."t5"@"SEL$1")
+      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
+=======
+      LEADING(@"SEL$1" ("opt.t4"@"SEL$1" "opt.t5"@"SEL$1" ))
+      USE_NL(@"SEL$1" ("opt.t5"@"SEL$1" ))
+      PQ_DISTRIBUTE(@"SEL$1" ("opt.t5"@"SEL$1" ) LOCAL LOCAL)
+      USE_NL_MATERIALIZATION(@"SEL$1" ("opt.t5"@"SEL$1" ))
+      FULL(@"SEL$1" "opt"."t4"@"SEL$1")
+      FULL(@"SEL$1" "opt"."t5"@"SEL$1")
+>>>>>>> implement spm part1
+      END_OUTLINE_DATA
+  */
+
+Plan Type:
+-------------------------------------
+DISTRIBUTED
+
+Optimization Info:
+-------------------------------------
+t4:table_rows:100, physical_range_rows:100, logical_range_rows:100, index_back_rows:0, output_rows:100, est_method:local_storage, optimization_method=cost_based, avaiable_index_name[idx_t4_c2_c3,idx_t4_c3,t4], pruned_index_name[idx_t4_c2]
+
+t5:table_rows:300, physical_range_rows:300, logical_range_rows:300, index_back_rows:0, output_rows:300, est_method:default_stat, optimization_method=cost_based, avaiable_index_name[t5], pruned_index_name[idx_t5_c2,idx_t5_c3]
+
+
+Parameters:
+-------------------------------------
+
+
+*************** Case 30(end)  ************** 
+
+***************   Case 31   ***************
+
+SQL: select /*+use_nl(t4) use_nl(t5)*/* from t4,t5; 
+
+=======================================================
+|ID|OPERATOR                  |NAME    |EST. ROWS|COST|
+-------------------------------------------------------
+|0 |NESTED-LOOP JOIN CARTESIAN|        |30000    |3012|
+|1 | TABLE SCAN               |t4      |100      |78  |
+|2 | MATERIAL                 |        |300      |357 |
+|3 |  PX COORDINATOR          |        |300      |354 |
+|4 |   EXCHANGE OUT DISTR     |:EX10000|300      |314 |
+|5 |    PX PARTITION ITERATOR |        |300      |233 |
+|6 |     TABLE SCAN           |t5      |300      |233 |
+=======================================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t4.c1], [t4.c2], [t4.c3], [t5.c1], [t5.c2], [t5.c3]), filter(nil), 
+      conds(nil), nl_params_(nil), batch_join=false
+  1 - output([t4.c1], [t4.c2], [t4.c3]), filter(nil), 
+      access([t4.c1], [t4.c2], [t4.c3]), partitions(p0), 
+      is_index_back=false, 
+      range_key([t4.c1], [t4.c2]), range(MIN,MIN ; MAX,MAX)always true
+  2 - output([t5.c1], [t5.c2], [t5.c3]), filter(nil)
+  3 - output([t5.c1], [t5.c2], [t5.c3]), filter(nil)
+  4 - output([t5.c1], [t5.c2], [t5.c3]), filter(nil), dop=1
+  5 - output([t5.c2], [t5.c3], [t5.c1]), filter(nil), 
+      force partition granule.
+  6 - output([t5.c2], [t5.c3], [t5.c1]), filter(nil), 
+      access([t5.c2], [t5.c3], [t5.c1]), partitions(p[0-2]), 
+      is_index_back=false, 
+      range_key([t5.c2], [t5.c3]), range(MIN,MIN ; MAX,MAX)always true
+
+Used Hint:
+-------------------------------------
+  /*+
+      USE_NL("t5")
+  */
+
+Outline Data:
+-------------------------------------
+  /*+
+      BEGIN_OUTLINE_DATA
+<<<<<<< HEAD
+      LEADING(@"SEL$1" ("opt"."t4"@"SEL$1" "opt"."t5"@"SEL$1"))
+      USE_NL(@"SEL$1" "opt"."t5"@"SEL$1")
+      PQ_DISTRIBUTE(@"SEL$1" "opt"."t5"@"SEL$1" LOCAL LOCAL)
+      USE_NL_MATERIALIZATION(@"SEL$1" "opt"."t5"@"SEL$1")
+      FULL(@"SEL$1" "opt"."t4"@"SEL$1")
+      FULL(@"SEL$1" "opt"."t5"@"SEL$1")
+      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
+=======
+      LEADING(@"SEL$1" ("opt.t4"@"SEL$1" "opt.t5"@"SEL$1" ))
+      USE_NL(@"SEL$1" ("opt.t5"@"SEL$1" ))
+      PQ_DISTRIBUTE(@"SEL$1" ("opt.t5"@"SEL$1" ) LOCAL LOCAL)
+      USE_NL_MATERIALIZATION(@"SEL$1" ("opt.t5"@"SEL$1" ))
+      FULL(@"SEL$1" "opt"."t4"@"SEL$1")
+      FULL(@"SEL$1" "opt"."t5"@"SEL$1")
+>>>>>>> implement spm part1
+      END_OUTLINE_DATA
+  */
+
+Plan Type:
+-------------------------------------
+DISTRIBUTED
+
+Optimization Info:
+-------------------------------------
+t4:table_rows:100, physical_range_rows:100, logical_range_rows:100, index_back_rows:0, output_rows:100, est_method:local_storage, optimization_method=cost_based, avaiable_index_name[idx_t4_c2_c3,idx_t4_c3,t4], pruned_index_name[idx_t4_c2]
+
+t5:table_rows:300, physical_range_rows:300, logical_range_rows:300, index_back_rows:0, output_rows:300, est_method:default_stat, optimization_method=cost_based, avaiable_index_name[t5], pruned_index_name[idx_t5_c2,idx_t5_c3]
+
+
+Parameters:
+-------------------------------------
+
+
+*************** Case 31(end)  ************** 
+
+***************   Case 32   ***************
+
+SQL: select /*+leading (t4 t5) use_nl(t5)*/* from t4 left join t5 on t4.c1 = t5.c1; 
+
+======================================================
+|ID|OPERATOR                 |NAME    |EST. ROWS|COST|
+------------------------------------------------------
+|0 |NESTED-LOOP OUTER JOIN   |        |244      |1251|
+|1 | TABLE SCAN              |t4      |100      |78  |
+|2 | MATERIAL                |        |300      |357 |
+|3 |  PX COORDINATOR         |        |300      |354 |
+|4 |   EXCHANGE OUT DISTR    |:EX10000|300      |314 |
+|5 |    PX PARTITION ITERATOR|        |300      |233 |
+|6 |     TABLE SCAN          |t5      |300      |233 |
+======================================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t4.c1], [t4.c2], [t4.c3], [t5.c1], [t5.c2], [t5.c3]), filter(nil), 
+      conds([t4.c1 = t5.c1]), nl_params_(nil), batch_join=false
+  1 - output([t4.c1], [t4.c2], [t4.c3]), filter(nil), 
+      access([t4.c1], [t4.c2], [t4.c3]), partitions(p0), 
+      is_index_back=false, 
+      range_key([t4.c1], [t4.c2]), range(MIN,MIN ; MAX,MAX)always true
+  2 - output([t5.c1], [t5.c2], [t5.c3]), filter(nil)
+  3 - output([t5.c1], [t5.c2], [t5.c3]), filter(nil)
+  4 - output([t5.c1], [t5.c2], [t5.c3]), filter(nil), dop=1
+  5 - output([t5.c2], [t5.c3], [t5.c1]), filter(nil), 
+      force partition granule.
+  6 - output([t5.c2], [t5.c3], [t5.c1]), filter(nil), 
+      access([t5.c2], [t5.c3], [t5.c1]), partitions(p[0-2]), 
+      is_index_back=false, 
+      range_key([t5.c2], [t5.c3]), range(MIN,MIN ; MAX,MAX)always true
+
+Used Hint:
+-------------------------------------
+  /*+
+      LEADING(("t4" "t5"))
+      USE_NL("t5")
+  */
+
+Outline Data:
+-------------------------------------
+  /*+
+      BEGIN_OUTLINE_DATA
+<<<<<<< HEAD
+      LEADING(@"SEL$1" ("opt"."t4"@"SEL$1" "opt"."t5"@"SEL$1"))
+      USE_NL(@"SEL$1" "opt"."t5"@"SEL$1")
+      PQ_DISTRIBUTE(@"SEL$1" "opt"."t5"@"SEL$1" LOCAL LOCAL)
+      USE_NL_MATERIALIZATION(@"SEL$1" "opt"."t5"@"SEL$1")
+      FULL(@"SEL$1" "opt"."t4"@"SEL$1")
+      FULL(@"SEL$1" "opt"."t5"@"SEL$1")
+      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
+=======
+      LEADING(@"SEL$1" ("opt.t4"@"SEL$1" "opt.t5"@"SEL$1" ))
+      USE_NL(@"SEL$1" ("opt.t5"@"SEL$1" ))
+      PQ_DISTRIBUTE(@"SEL$1" ("opt.t5"@"SEL$1" ) LOCAL LOCAL)
+      USE_NL_MATERIALIZATION(@"SEL$1" ("opt.t5"@"SEL$1" ))
+      FULL(@"SEL$1" "opt"."t4"@"SEL$1")
+      FULL(@"SEL$1" "opt"."t5"@"SEL$1")
+>>>>>>> implement spm part1
+      END_OUTLINE_DATA
+  */
+
+Plan Type:
+-------------------------------------
+DISTRIBUTED
+
+Optimization Info:
+-------------------------------------
+t4:table_rows:100, physical_range_rows:100, logical_range_rows:100, index_back_rows:0, output_rows:100, est_method:local_storage, optimization_method=cost_based, avaiable_index_name[t4], pruned_index_name[idx_t4_c2_c3,idx_t4_c3,idx_t4_c2]
+
+t5:table_rows:300, physical_range_rows:300, logical_range_rows:300, index_back_rows:0, output_rows:300, est_method:default_stat, optimization_method=cost_based, avaiable_index_name[t5], pruned_index_name[idx_t5_c2,idx_t5_c3]
+
+
+Parameters:
+-------------------------------------
+
+
+*************** Case 32(end)  ************** 
+
+***************   Case 33   ***************
+
+SQL: select /*+leading (t5 t4) use_nl(t5)*/* from t4 left join t5 on t4.c1 = t5.c1; 
+
+=====================================================
+|ID|OPERATOR                |NAME    |EST. ROWS|COST|
+-----------------------------------------------------
+|0 |HASH RIGHT OUTER JOIN   |        |244      |530 |
+|1 | PX COORDINATOR         |        |300      |354 |
+|2 |  EXCHANGE OUT DISTR    |:EX10000|300      |314 |
+|3 |   PX PARTITION ITERATOR|        |300      |233 |
+|4 |    TABLE SCAN          |t5      |300      |233 |
+|5 | TABLE SCAN             |t4      |100      |78  |
+=====================================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t4.c1], [t4.c2], [t4.c3], [t5.c1], [t5.c2], [t5.c3]), filter(nil), 
+      equal_conds([t4.c1 = t5.c1]), other_conds(nil)
+  1 - output([t5.c1], [t5.c2], [t5.c3]), filter(nil)
+  2 - output([t5.c1], [t5.c2], [t5.c3]), filter(nil), dop=1
+  3 - output([t5.c2], [t5.c3], [t5.c1]), filter(nil), 
+      force partition granule.
+  4 - output([t5.c2], [t5.c3], [t5.c1]), filter(nil), 
+      access([t5.c2], [t5.c3], [t5.c1]), partitions(p[0-2]), 
+      is_index_back=false, 
+      range_key([t5.c2], [t5.c3]), range(MIN,MIN ; MAX,MAX)always true
+  5 - output([t4.c1], [t4.c2], [t4.c3]), filter(nil), 
+      access([t4.c1], [t4.c2], [t4.c3]), partitions(p0), 
+      is_index_back=false, 
+      range_key([t4.c1], [t4.c2]), range(MIN,MIN ; MAX,MAX)always true
+
+Used Hint:
+-------------------------------------
+  /*+
+      LEADING(("t5" "t4"))
+  */
+
+Outline Data:
+-------------------------------------
+  /*+
+      BEGIN_OUTLINE_DATA
+<<<<<<< HEAD
+      LEADING(@"SEL$1" ("opt"."t5"@"SEL$1" "opt"."t4"@"SEL$1"))
+      USE_HASH(@"SEL$1" "opt"."t4"@"SEL$1")
+      PQ_DISTRIBUTE(@"SEL$1" "opt"."t4"@"SEL$1" LOCAL LOCAL)
+      FULL(@"SEL$1" "opt"."t5"@"SEL$1")
+      FULL(@"SEL$1" "opt"."t4"@"SEL$1")
+      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
+=======
+      LEADING(@"SEL$1" ("opt.t5"@"SEL$1" "opt.t4"@"SEL$1" ))
+      USE_HASH(@"SEL$1" ("opt.t4"@"SEL$1" ))
+      PQ_DISTRIBUTE(@"SEL$1" ("opt.t4"@"SEL$1" ) LOCAL LOCAL)
+      FULL(@"SEL$1" "opt"."t5"@"SEL$1")
+      FULL(@"SEL$1" "opt"."t4"@"SEL$1")
+>>>>>>> implement spm part1
+      END_OUTLINE_DATA
+  */
+
+Plan Type:
+-------------------------------------
+DISTRIBUTED
+
+Optimization Info:
+-------------------------------------
+t5:table_rows:300, physical_range_rows:300, logical_range_rows:300, index_back_rows:0, output_rows:300, est_method:default_stat, optimization_method=cost_based, avaiable_index_name[t5], pruned_index_name[idx_t5_c2,idx_t5_c3]
+
+t4:table_rows:100, physical_range_rows:100, logical_range_rows:100, index_back_rows:0, output_rows:100, est_method:local_storage, optimization_method=cost_based, avaiable_index_name[t4], pruned_index_name[idx_t4_c2_c3,idx_t4_c3,idx_t4_c2]
+
+
+Parameters:
+-------------------------------------
+
+
+*************** Case 33(end)  ************** 
+
+***************   Case 34   ***************
+
+SQL: select /*+leading (t4 t5) use_nl(t5)*/* from t4 right join t5 on t4.c1 = t5.c1; 
+
+=====================================================
+|ID|OPERATOR                |NAME    |EST. ROWS|COST|
+-----------------------------------------------------
+|0 |HASH RIGHT OUTER JOIN   |        |300      |528 |
+|1 | TABLE SCAN             |t4      |100      |78  |
+|2 | PX COORDINATOR         |        |300      |354 |
+|3 |  EXCHANGE OUT DISTR    |:EX10000|300      |314 |
+|4 |   PX PARTITION ITERATOR|        |300      |233 |
+|5 |    TABLE SCAN          |t5      |300      |233 |
+=====================================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t4.c1], [t4.c2], [t4.c3], [t5.c1], [t5.c2], [t5.c3]), filter(nil), 
+      equal_conds([t4.c1 = t5.c1]), other_conds(nil)
+  1 - output([t4.c1], [t4.c2], [t4.c3]), filter(nil), 
+      access([t4.c1], [t4.c2], [t4.c3]), partitions(p0), 
+      is_index_back=false, 
+      range_key([t4.c1], [t4.c2]), range(MIN,MIN ; MAX,MAX)always true
+  2 - output([t5.c1], [t5.c2], [t5.c3]), filter(nil)
+  3 - output([t5.c1], [t5.c2], [t5.c3]), filter(nil), dop=1
+  4 - output([t5.c2], [t5.c3], [t5.c1]), filter(nil), 
+      force partition granule.
+  5 - output([t5.c2], [t5.c3], [t5.c1]), filter(nil), 
+      access([t5.c2], [t5.c3], [t5.c1]), partitions(p[0-2]), 
+      is_index_back=false, 
+      range_key([t5.c2], [t5.c3]), range(MIN,MIN ; MAX,MAX)always true
+
+Used Hint:
+-------------------------------------
+  /*+
+      LEADING(("t4" "t5"))
+  */
+
+Outline Data:
+-------------------------------------
+  /*+
+      BEGIN_OUTLINE_DATA
+<<<<<<< HEAD
+      LEADING(@"SEL$1" ("opt"."t4"@"SEL$1" "opt"."t5"@"SEL$1"))
+      USE_HASH(@"SEL$1" "opt"."t5"@"SEL$1")
+      PQ_DISTRIBUTE(@"SEL$1" "opt"."t5"@"SEL$1" LOCAL LOCAL)
+      FULL(@"SEL$1" "opt"."t4"@"SEL$1")
+      FULL(@"SEL$1" "opt"."t5"@"SEL$1")
+      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
+=======
+      LEADING(@"SEL$1" ("opt.t4"@"SEL$1" "opt.t5"@"SEL$1" ))
+      USE_HASH(@"SEL$1" ("opt.t5"@"SEL$1" ))
+      PQ_DISTRIBUTE(@"SEL$1" ("opt.t5"@"SEL$1" ) LOCAL LOCAL)
+      FULL(@"SEL$1" "opt"."t4"@"SEL$1")
+      FULL(@"SEL$1" "opt"."t5"@"SEL$1")
+>>>>>>> implement spm part1
+      END_OUTLINE_DATA
+  */
+
+Plan Type:
+-------------------------------------
+DISTRIBUTED
+
+Optimization Info:
+-------------------------------------
+t4:table_rows:100, physical_range_rows:100, logical_range_rows:100, index_back_rows:0, output_rows:100, est_method:local_storage, optimization_method=cost_based, avaiable_index_name[t4], pruned_index_name[idx_t4_c2_c3,idx_t4_c3,idx_t4_c2]
+
+t5:table_rows:300, physical_range_rows:300, logical_range_rows:300, index_back_rows:0, output_rows:300, est_method:default_stat, optimization_method=cost_based, avaiable_index_name[t5], pruned_index_name[idx_t5_c2,idx_t5_c3]
+
+
+Parameters:
+-------------------------------------
+
+
+*************** Case 34(end)  ************** 
+
+***************   Case 35   ***************
+
+SQL: select /*+leading (t5 t4) use_nl(t5)*/* from t4 right join t5 on t4.c1 = t5.c1; 
+
+=====================================================
+|ID|OPERATOR                |NAME    |EST. ROWS|COST|
+-----------------------------------------------------
+|0 |HASH OUTER JOIN         |        |300      |530 |
+|1 | PX COORDINATOR         |        |300      |354 |
+|2 |  EXCHANGE OUT DISTR    |:EX10000|300      |314 |
+|3 |   PX PARTITION ITERATOR|        |300      |233 |
+|4 |    TABLE SCAN          |t5      |300      |233 |
+|5 | TABLE SCAN             |t4      |100      |78  |
+=====================================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t4.c1], [t4.c2], [t4.c3], [t5.c1], [t5.c2], [t5.c3]), filter(nil), 
+      equal_conds([t4.c1 = t5.c1]), other_conds(nil)
+  1 - output([t5.c1], [t5.c2], [t5.c3]), filter(nil)
+  2 - output([t5.c1], [t5.c2], [t5.c3]), filter(nil), dop=1
+  3 - output([t5.c2], [t5.c3], [t5.c1]), filter(nil), 
+      force partition granule.
+  4 - output([t5.c2], [t5.c3], [t5.c1]), filter(nil), 
+      access([t5.c2], [t5.c3], [t5.c1]), partitions(p[0-2]), 
+      is_index_back=false, 
+      range_key([t5.c2], [t5.c3]), range(MIN,MIN ; MAX,MAX)always true
+  5 - output([t4.c1], [t4.c2], [t4.c3]), filter(nil), 
+      access([t4.c1], [t4.c2], [t4.c3]), partitions(p0), 
+      is_index_back=false, 
+      range_key([t4.c1], [t4.c2]), range(MIN,MIN ; MAX,MAX)always true
+
+Used Hint:
+-------------------------------------
+  /*+
+      LEADING(("t5" "t4"))
+  */
+
+Outline Data:
+-------------------------------------
+  /*+
+      BEGIN_OUTLINE_DATA
+<<<<<<< HEAD
+      LEADING(@"SEL$1" ("opt"."t5"@"SEL$1" "opt"."t4"@"SEL$1"))
+      USE_HASH(@"SEL$1" "opt"."t4"@"SEL$1")
+      PQ_DISTRIBUTE(@"SEL$1" "opt"."t4"@"SEL$1" LOCAL LOCAL)
+      FULL(@"SEL$1" "opt"."t5"@"SEL$1")
+      FULL(@"SEL$1" "opt"."t4"@"SEL$1")
+      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
+=======
+      LEADING(@"SEL$1" ("opt.t5"@"SEL$1" "opt.t4"@"SEL$1" ))
+      USE_HASH(@"SEL$1" ("opt.t4"@"SEL$1" ))
+      PQ_DISTRIBUTE(@"SEL$1" ("opt.t4"@"SEL$1" ) LOCAL LOCAL)
+      FULL(@"SEL$1" "opt"."t5"@"SEL$1")
+      FULL(@"SEL$1" "opt"."t4"@"SEL$1")
+>>>>>>> implement spm part1
+      END_OUTLINE_DATA
+  */
+
+Plan Type:
+-------------------------------------
+DISTRIBUTED
+
+Optimization Info:
+-------------------------------------
+t5:table_rows:300, physical_range_rows:300, logical_range_rows:300, index_back_rows:0, output_rows:300, est_method:default_stat, optimization_method=cost_based, avaiable_index_name[t5], pruned_index_name[idx_t5_c2,idx_t5_c3]
+
+t4:table_rows:100, physical_range_rows:100, logical_range_rows:100, index_back_rows:0, output_rows:100, est_method:local_storage, optimization_method=cost_based, avaiable_index_name[t4], pruned_index_name[idx_t4_c2_c3,idx_t4_c3,idx_t4_c2]
+
+
+Parameters:
+-------------------------------------
+
+
+*************** Case 35(end)  ************** 
+
+***************   Case 36   ***************
+
+SQL: select /*+leading (t4 t5) use_nl(t5)*/* from t4 full join t5 on t4.c1 = t5.c1; 
+
+=====================================================
+|ID|OPERATOR                |NAME    |EST. ROWS|COST|
+-----------------------------------------------------
+|0 |HASH FULL OUTER JOIN    |        |300      |528 |
+|1 | TABLE SCAN             |t4      |100      |78  |
+|2 | PX COORDINATOR         |        |300      |354 |
+|3 |  EXCHANGE OUT DISTR    |:EX10000|300      |314 |
+|4 |   PX PARTITION ITERATOR|        |300      |233 |
+|5 |    TABLE SCAN          |t5      |300      |233 |
+=====================================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t4.c1], [t4.c2], [t4.c3], [t5.c1], [t5.c2], [t5.c3]), filter(nil), 
+      equal_conds([t4.c1 = t5.c1]), other_conds(nil)
+  1 - output([t4.c1], [t4.c2], [t4.c3]), filter(nil), 
+      access([t4.c1], [t4.c2], [t4.c3]), partitions(p0), 
+      is_index_back=false, 
+      range_key([t4.c1], [t4.c2]), range(MIN,MIN ; MAX,MAX)always true
+  2 - output([t5.c1], [t5.c2], [t5.c3]), filter(nil)
+  3 - output([t5.c1], [t5.c2], [t5.c3]), filter(nil), dop=1
+  4 - output([t5.c2], [t5.c3], [t5.c1]), filter(nil), 
+      force partition granule.
+  5 - output([t5.c2], [t5.c3], [t5.c1]), filter(nil), 
+      access([t5.c2], [t5.c3], [t5.c1]), partitions(p[0-2]), 
+      is_index_back=false, 
+      range_key([t5.c2], [t5.c3]), range(MIN,MIN ; MAX,MAX)always true
+
+Used Hint:
+-------------------------------------
+  /*+
+      LEADING(("t4" "t5"))
+  */
+
+Outline Data:
+-------------------------------------
+  /*+
+      BEGIN_OUTLINE_DATA
+<<<<<<< HEAD
+      LEADING(@"SEL$1" ("opt"."t4"@"SEL$1" "opt"."t5"@"SEL$1"))
+      USE_HASH(@"SEL$1" "opt"."t5"@"SEL$1")
+      PQ_DISTRIBUTE(@"SEL$1" "opt"."t5"@"SEL$1" LOCAL LOCAL)
+      FULL(@"SEL$1" "opt"."t4"@"SEL$1")
+      FULL(@"SEL$1" "opt"."t5"@"SEL$1")
+      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
+=======
+      LEADING(@"SEL$1" ("opt.t4"@"SEL$1" "opt.t5"@"SEL$1" ))
+      USE_HASH(@"SEL$1" ("opt.t5"@"SEL$1" ))
+      PQ_DISTRIBUTE(@"SEL$1" ("opt.t5"@"SEL$1" ) LOCAL LOCAL)
+      FULL(@"SEL$1" "opt"."t4"@"SEL$1")
+      FULL(@"SEL$1" "opt"."t5"@"SEL$1")
+>>>>>>> implement spm part1
+      END_OUTLINE_DATA
+  */
+
+Plan Type:
+-------------------------------------
+DISTRIBUTED
+
+Optimization Info:
+-------------------------------------
+t4:table_rows:100, physical_range_rows:100, logical_range_rows:100, index_back_rows:0, output_rows:100, est_method:local_storage, optimization_method=cost_based, avaiable_index_name[t4], pruned_index_name[idx_t4_c2_c3,idx_t4_c3,idx_t4_c2]
+
+t5:table_rows:300, physical_range_rows:300, logical_range_rows:300, index_back_rows:0, output_rows:300, est_method:default_stat, optimization_method=cost_based, avaiable_index_name[t5], pruned_index_name[idx_t5_c2,idx_t5_c3]
+
+
+Parameters:
+-------------------------------------
+
+
+*************** Case 36(end)  ************** 
+
+***************   Case 37   ***************
+
+SQL: select /*+leading (t5 t4) use_nl(t5)*/* from t4 full join t5 on t4.c1 = t5.c1; 
+
+=====================================================
+|ID|OPERATOR                |NAME    |EST. ROWS|COST|
+-----------------------------------------------------
+|0 |HASH FULL OUTER JOIN    |        |300      |530 |
+|1 | PX COORDINATOR         |        |300      |354 |
+|2 |  EXCHANGE OUT DISTR    |:EX10000|300      |314 |
+|3 |   PX PARTITION ITERATOR|        |300      |233 |
+|4 |    TABLE SCAN          |t5      |300      |233 |
+|5 | TABLE SCAN             |t4      |100      |78  |
+=====================================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t4.c1], [t4.c2], [t4.c3], [t5.c1], [t5.c2], [t5.c3]), filter(nil), 
+      equal_conds([t4.c1 = t5.c1]), other_conds(nil)
+  1 - output([t5.c1], [t5.c2], [t5.c3]), filter(nil)
+  2 - output([t5.c1], [t5.c2], [t5.c3]), filter(nil), dop=1
+  3 - output([t5.c2], [t5.c3], [t5.c1]), filter(nil), 
+      force partition granule.
+  4 - output([t5.c2], [t5.c3], [t5.c1]), filter(nil), 
+      access([t5.c2], [t5.c3], [t5.c1]), partitions(p[0-2]), 
+      is_index_back=false, 
+      range_key([t5.c2], [t5.c3]), range(MIN,MIN ; MAX,MAX)always true
+  5 - output([t4.c1], [t4.c2], [t4.c3]), filter(nil), 
+      access([t4.c1], [t4.c2], [t4.c3]), partitions(p0), 
+      is_index_back=false, 
+      range_key([t4.c1], [t4.c2]), range(MIN,MIN ; MAX,MAX)always true
+
+Used Hint:
+-------------------------------------
+  /*+
+      LEADING(("t5" "t4"))
+  */
+
+Outline Data:
+-------------------------------------
+  /*+
+      BEGIN_OUTLINE_DATA
+<<<<<<< HEAD
+      LEADING(@"SEL$1" ("opt"."t5"@"SEL$1" "opt"."t4"@"SEL$1"))
+      USE_HASH(@"SEL$1" "opt"."t4"@"SEL$1")
+      PQ_DISTRIBUTE(@"SEL$1" "opt"."t4"@"SEL$1" LOCAL LOCAL)
+      FULL(@"SEL$1" "opt"."t5"@"SEL$1")
+      FULL(@"SEL$1" "opt"."t4"@"SEL$1")
+      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
+=======
+      LEADING(@"SEL$1" ("opt.t5"@"SEL$1" "opt.t4"@"SEL$1" ))
+      USE_HASH(@"SEL$1" ("opt.t4"@"SEL$1" ))
+      PQ_DISTRIBUTE(@"SEL$1" ("opt.t4"@"SEL$1" ) LOCAL LOCAL)
+      FULL(@"SEL$1" "opt"."t5"@"SEL$1")
+      FULL(@"SEL$1" "opt"."t4"@"SEL$1")
+>>>>>>> implement spm part1
+      END_OUTLINE_DATA
+  */
+
+Plan Type:
+-------------------------------------
+DISTRIBUTED
+
+Optimization Info:
+-------------------------------------
+t5:table_rows:300, physical_range_rows:300, logical_range_rows:300, index_back_rows:0, output_rows:300, est_method:default_stat, optimization_method=cost_based, avaiable_index_name[t5], pruned_index_name[idx_t5_c2,idx_t5_c3]
+
+t4:table_rows:100, physical_range_rows:100, logical_range_rows:100, index_back_rows:0, output_rows:100, est_method:local_storage, optimization_method=cost_based, avaiable_index_name[t4], pruned_index_name[idx_t4_c2_c3,idx_t4_c3,idx_t4_c2]
+
+
+Parameters:
+-------------------------------------
+
+
+*************** Case 37(end)  ************** 
+
+***************   Case 38   ***************
+
+SQL: select /*+leading (t4 t5) use_merge(t5)*/* from t4 left join t5 on t4.c1 = t5.c1; 
+
+========================================================
+|ID|OPERATOR                   |NAME    |EST. ROWS|COST|
+--------------------------------------------------------
+|0 |MERGE OUTER JOIN           |        |244      |704 |
+|1 | TABLE SCAN                |t4      |100      |78  |
+|2 | PX COORDINATOR MERGE SORT |        |300      |559 |
+|3 |  EXCHANGE OUT DISTR       |:EX10000|300      |520 |
+|4 |   SORT                    |        |300      |438 |
+|5 |    PX PARTITION ITERATOR  |        |300      |233 |
+|6 |     TABLE SCAN            |t5      |300      |233 |
+========================================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t4.c1], [t4.c2], [t4.c3], [t5.c1], [t5.c2], [t5.c3]), filter(nil), 
+      equal_conds([t4.c1 = t5.c1]), other_conds(nil), 
+      merge_directions([ASC])
+  1 - output([t4.c1], [t4.c2], [t4.c3]), filter(nil), 
+      access([t4.c1], [t4.c2], [t4.c3]), partitions(p0), 
+      is_index_back=false, 
+      range_key([t4.c1], [t4.c2]), range(MIN,MIN ; MAX,MAX)always true
+  2 - output([t5.c1], [t5.c2], [t5.c3]), filter(nil), sort_keys([t5.c1, ASC])
+  3 - output([t5.c1], [t5.c2], [t5.c3]), filter(nil), dop=1
+  4 - output([t5.c1], [t5.c2], [t5.c3]), filter(nil), sort_keys([t5.c1, ASC])
+  5 - output([t5.c2], [t5.c3], [t5.c1]), filter(nil), 
+      force partition granule.
+  6 - output([t5.c2], [t5.c3], [t5.c1]), filter(nil), 
+      access([t5.c2], [t5.c3], [t5.c1]), partitions(p[0-2]), 
+      is_index_back=false, 
+      range_key([t5.c2], [t5.c3]), range(MIN,MIN ; MAX,MAX)always true
+
+Used Hint:
+-------------------------------------
+  /*+
+      LEADING(("t4" "t5"))
+      USE_MERGE("t5")
+  */
+
+Outline Data:
+-------------------------------------
+  /*+
+      BEGIN_OUTLINE_DATA
+<<<<<<< HEAD
+      LEADING(@"SEL$1" ("opt"."t4"@"SEL$1" "opt"."t5"@"SEL$1"))
+      USE_MERGE(@"SEL$1" "opt"."t5"@"SEL$1")
+      PQ_DISTRIBUTE(@"SEL$1" "opt"."t5"@"SEL$1" LOCAL LOCAL)
+      FULL(@"SEL$1" "opt"."t4"@"SEL$1")
+      FULL(@"SEL$1" "opt"."t5"@"SEL$1")
+      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
+=======
+      LEADING(@"SEL$1" ("opt.t4"@"SEL$1" "opt.t5"@"SEL$1" ))
+      USE_MERGE(@"SEL$1" ("opt.t5"@"SEL$1" ))
+      PQ_DISTRIBUTE(@"SEL$1" ("opt.t5"@"SEL$1" ) LOCAL LOCAL)
+      FULL(@"SEL$1" "opt"."t4"@"SEL$1")
+      FULL(@"SEL$1" "opt"."t5"@"SEL$1")
+>>>>>>> implement spm part1
+      END_OUTLINE_DATA
+  */
+
+Plan Type:
+-------------------------------------
+DISTRIBUTED
+
+Optimization Info:
+-------------------------------------
+t4:table_rows:100, physical_range_rows:100, logical_range_rows:100, index_back_rows:0, output_rows:100, est_method:local_storage, optimization_method=cost_based, avaiable_index_name[t4], pruned_index_name[idx_t4_c2_c3,idx_t4_c3,idx_t4_c2]
+
+t5:table_rows:300, physical_range_rows:300, logical_range_rows:300, index_back_rows:0, output_rows:300, est_method:default_stat, optimization_method=cost_based, avaiable_index_name[t5], pruned_index_name[idx_t5_c2,idx_t5_c3]
+
+
+Parameters:
+-------------------------------------
+
+
+*************** Case 38(end)  ************** 
+
+***************   Case 39   ***************
+
+SQL: select /*+leading (t4 t5) use_merge(t5)*/* from t4 right join t5 on t4.c1 = t5.c1; 
+
+========================================================
+|ID|OPERATOR                   |NAME    |EST. ROWS|COST|
+--------------------------------------------------------
+|0 |MERGE RIGHT OUTER JOIN     |        |300      |704 |
+|1 | TABLE SCAN                |t4      |100      |78  |
+|2 | PX COORDINATOR MERGE SORT |        |300      |559 |
+|3 |  EXCHANGE OUT DISTR       |:EX10000|300      |520 |
+|4 |   SORT                    |        |300      |438 |
+|5 |    PX PARTITION ITERATOR  |        |300      |233 |
+|6 |     TABLE SCAN            |t5      |300      |233 |
+========================================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t4.c1], [t4.c2], [t4.c3], [t5.c1], [t5.c2], [t5.c3]), filter(nil), 
+      equal_conds([t4.c1 = t5.c1]), other_conds(nil), 
+      merge_directions([ASC])
+  1 - output([t4.c1], [t4.c2], [t4.c3]), filter(nil), 
+      access([t4.c1], [t4.c2], [t4.c3]), partitions(p0), 
+      is_index_back=false, 
+      range_key([t4.c1], [t4.c2]), range(MIN,MIN ; MAX,MAX)always true
+  2 - output([t5.c1], [t5.c2], [t5.c3]), filter(nil), sort_keys([t5.c1, ASC])
+  3 - output([t5.c1], [t5.c2], [t5.c3]), filter(nil), dop=1
+  4 - output([t5.c1], [t5.c2], [t5.c3]), filter(nil), sort_keys([t5.c1, ASC])
+  5 - output([t5.c2], [t5.c3], [t5.c1]), filter(nil), 
+      force partition granule.
+  6 - output([t5.c2], [t5.c3], [t5.c1]), filter(nil), 
+      access([t5.c2], [t5.c3], [t5.c1]), partitions(p[0-2]), 
+      is_index_back=false, 
+      range_key([t5.c2], [t5.c3]), range(MIN,MIN ; MAX,MAX)always true
+
+Used Hint:
+-------------------------------------
+  /*+
+      LEADING(("t4" "t5"))
+      USE_MERGE("t5")
+  */
+
+Outline Data:
+-------------------------------------
+  /*+
+      BEGIN_OUTLINE_DATA
+<<<<<<< HEAD
+      LEADING(@"SEL$1" ("opt"."t4"@"SEL$1" "opt"."t5"@"SEL$1"))
+      USE_MERGE(@"SEL$1" "opt"."t5"@"SEL$1")
+      PQ_DISTRIBUTE(@"SEL$1" "opt"."t5"@"SEL$1" LOCAL LOCAL)
+      FULL(@"SEL$1" "opt"."t4"@"SEL$1")
+      FULL(@"SEL$1" "opt"."t5"@"SEL$1")
+      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
+=======
+      LEADING(@"SEL$1" ("opt.t4"@"SEL$1" "opt.t5"@"SEL$1" ))
+      USE_MERGE(@"SEL$1" ("opt.t5"@"SEL$1" ))
+      PQ_DISTRIBUTE(@"SEL$1" ("opt.t5"@"SEL$1" ) LOCAL LOCAL)
+      FULL(@"SEL$1" "opt"."t4"@"SEL$1")
+      FULL(@"SEL$1" "opt"."t5"@"SEL$1")
+>>>>>>> implement spm part1
+      END_OUTLINE_DATA
+  */
+
+Plan Type:
+-------------------------------------
+DISTRIBUTED
+
+Optimization Info:
+-------------------------------------
+t4:table_rows:100, physical_range_rows:100, logical_range_rows:100, index_back_rows:0, output_rows:100, est_method:local_storage, optimization_method=cost_based, avaiable_index_name[t4], pruned_index_name[idx_t4_c2_c3,idx_t4_c3,idx_t4_c2]
+
+t5:table_rows:300, physical_range_rows:300, logical_range_rows:300, index_back_rows:0, output_rows:300, est_method:default_stat, optimization_method=cost_based, avaiable_index_name[t5], pruned_index_name[idx_t5_c2,idx_t5_c3]
+
+
+Parameters:
+-------------------------------------
+
+
+*************** Case 39(end)  ************** 
+
+***************   Case 40   ***************
+
+SQL: select /*+leading (t4 t5) use_merge(t5)*/* from t4 full join t5 on t4.c1 = t5.c1; 
+
+========================================================
+|ID|OPERATOR                   |NAME    |EST. ROWS|COST|
+--------------------------------------------------------
+|0 |MERGE FULL OUTER JOIN      |        |300      |704 |
+|1 | TABLE SCAN                |t4      |100      |78  |
+|2 | PX COORDINATOR MERGE SORT |        |300      |559 |
+|3 |  EXCHANGE OUT DISTR       |:EX10000|300      |520 |
+|4 |   SORT                    |        |300      |438 |
+|5 |    PX PARTITION ITERATOR  |        |300      |233 |
+|6 |     TABLE SCAN            |t5      |300      |233 |
+========================================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t4.c1], [t4.c2], [t4.c3], [t5.c1], [t5.c2], [t5.c3]), filter(nil), 
+      equal_conds([t4.c1 = t5.c1]), other_conds(nil), 
+      merge_directions([ASC])
+  1 - output([t4.c1], [t4.c2], [t4.c3]), filter(nil), 
+      access([t4.c1], [t4.c2], [t4.c3]), partitions(p0), 
+      is_index_back=false, 
+      range_key([t4.c1], [t4.c2]), range(MIN,MIN ; MAX,MAX)always true
+  2 - output([t5.c1], [t5.c2], [t5.c3]), filter(nil), sort_keys([t5.c1, ASC])
+  3 - output([t5.c1], [t5.c2], [t5.c3]), filter(nil), dop=1
+  4 - output([t5.c1], [t5.c2], [t5.c3]), filter(nil), sort_keys([t5.c1, ASC])
+  5 - output([t5.c2], [t5.c3], [t5.c1]), filter(nil), 
+      force partition granule.
+  6 - output([t5.c2], [t5.c3], [t5.c1]), filter(nil), 
+      access([t5.c2], [t5.c3], [t5.c1]), partitions(p[0-2]), 
+      is_index_back=false, 
+      range_key([t5.c2], [t5.c3]), range(MIN,MIN ; MAX,MAX)always true
+
+Used Hint:
+-------------------------------------
+  /*+
+      LEADING(("t4" "t5"))
+      USE_MERGE("t5")
+  */
+
+Outline Data:
+-------------------------------------
+  /*+
+      BEGIN_OUTLINE_DATA
+<<<<<<< HEAD
+      LEADING(@"SEL$1" ("opt"."t4"@"SEL$1" "opt"."t5"@"SEL$1"))
+      USE_MERGE(@"SEL$1" "opt"."t5"@"SEL$1")
+      PQ_DISTRIBUTE(@"SEL$1" "opt"."t5"@"SEL$1" LOCAL LOCAL)
+      FULL(@"SEL$1" "opt"."t4"@"SEL$1")
+      FULL(@"SEL$1" "opt"."t5"@"SEL$1")
+      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
+=======
+      LEADING(@"SEL$1" ("opt.t4"@"SEL$1" "opt.t5"@"SEL$1" ))
+      USE_MERGE(@"SEL$1" ("opt.t5"@"SEL$1" ))
+      PQ_DISTRIBUTE(@"SEL$1" ("opt.t5"@"SEL$1" ) LOCAL LOCAL)
+      FULL(@"SEL$1" "opt"."t4"@"SEL$1")
+      FULL(@"SEL$1" "opt"."t5"@"SEL$1")
+>>>>>>> implement spm part1
+      END_OUTLINE_DATA
+  */
+
+Plan Type:
+-------------------------------------
+DISTRIBUTED
+
+Optimization Info:
+-------------------------------------
+t4:table_rows:100, physical_range_rows:100, logical_range_rows:100, index_back_rows:0, output_rows:100, est_method:local_storage, optimization_method=cost_based, avaiable_index_name[t4], pruned_index_name[idx_t4_c2_c3,idx_t4_c3,idx_t4_c2]
+
+t5:table_rows:300, physical_range_rows:300, logical_range_rows:300, index_back_rows:0, output_rows:300, est_method:default_stat, optimization_method=cost_based, avaiable_index_name[t5], pruned_index_name[idx_t5_c2,idx_t5_c3]
+
+
+Parameters:
+-------------------------------------
+
+
+*************** Case 40(end)  ************** 
+
+***************   Case 41   ***************
+
+SQL: select /*+leading(tt t5) use_nl(t5)*/* from (select max(c1) from t1) tt, t5; 
+
+===============================================================
+|ID|OPERATOR                       |NAME       |EST. ROWS|COST|
+---------------------------------------------------------------
+|0 |NESTED-LOOP JOIN CARTESIAN     |           |300      |498 |
+|1 | SUBPLAN SCAN                  |tt         |1        |228 |
+|2 |  SCALAR GROUP BY              |           |1        |228 |
+|3 |   SUBPLAN SCAN                |VIEW1      |1        |228 |
+|4 |    LIMIT                      |           |1        |228 |
+|5 |     PX COORDINATOR MERGE SORT |           |1        |228 |
+|6 |      EXCHANGE OUT DISTR       |:EX10000   |1        |228 |
+|7 |       TOP-N SORT              |           |1        |227 |
+|8 |        PX PARTITION ITERATOR  |           |1        |227 |
+|9 |         TABLE SCAN            |t1(Reverse)|1        |227 |
+|10| PX COORDINATOR                |           |300      |354 |
+|11|  EXCHANGE OUT DISTR           |:EX20000   |300      |314 |
+|12|   PX PARTITION ITERATOR       |           |300      |233 |
+|13|    TABLE SCAN                 |t5         |300      |233 |
+===============================================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([tt.max(c1)], [t5.c1], [t5.c2], [t5.c3]), filter(nil), 
+      conds(nil), nl_params_(nil), batch_join=false
+  1 - output([tt.max(c1)]), filter(nil), 
+      access([tt.max(c1)])
+  2 - output([T_FUN_MAX(VIEW1.t1.c1)]), filter(nil), 
+      group(nil), agg_func([T_FUN_MAX(VIEW1.t1.c1)])
+  3 - output([VIEW1.t1.c1]), filter(nil), 
+      access([VIEW1.t1.c1])
+  4 - output([t1.c1]), filter(nil), limit(1), offset(nil)
+  5 - output([t1.c1]), filter(nil), sort_keys([t1.c1, DESC])
+  6 - output([t1.c1]), filter(nil), dop=1
+  7 - output([t1.c1]), filter(nil), sort_keys([t1.c1, DESC]), topn(1), local merge sort
+  8 - output([t1.c1]), filter(nil), 
+      force partition granule.
+  9 - output([t1.c1]), filter(nil), 
+      access([t1.c1]), partitions(p[0-4]), 
+      limit(1), offset(nil), 
+      is_index_back=false, 
+      range_key([t1.c1]), range(MIN ; MAX)always true
+  10 - output([t5.c1], [t5.c2], [t5.c3]), filter(nil)
+  11 - output([t5.c1], [t5.c2], [t5.c3]), filter(nil), dop=1
+  12 - output([t5.c2], [t5.c3], [t5.c1]), filter(nil), 
+      force partition granule.
+  13 - output([t5.c2], [t5.c3], [t5.c1]), filter(nil), 
+      access([t5.c2], [t5.c3], [t5.c1]), partitions(p[0-2]), 
+      is_index_back=false, 
+      range_key([t5.c2], [t5.c3]), range(MIN,MIN ; MAX,MAX)always true
+
+Used Hint:
+-------------------------------------
+  /*+
+      LEADING(("tt" "t5"))
+      USE_NL("t5")
+  */
+
+Outline Data:
+-------------------------------------
+  /*+
+      BEGIN_OUTLINE_DATA
+<<<<<<< HEAD
+      LEADING(@"SEL$1" ("tt"@"SEL$1" "opt"."t5"@"SEL$1"))
+      USE_NL(@"SEL$1" "opt"."t5"@"SEL$1")
+      PQ_DISTRIBUTE(@"SEL$1" "opt"."t5"@"SEL$1" LOCAL LOCAL)
+      FULL(@"SEL$7E047C3E" "opt"."t1"@"SEL$2")
+      FULL(@"SEL$1" "opt"."t5"@"SEL$1")
+      FAST_MINMAX(@"SEL$2")
+      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
+=======
+      LEADING(@"SEL$1" ("tt"@"SEL$1" "opt.t5"@"SEL$1" ))
+      USE_NL(@"SEL$1" ("opt.t5"@"SEL$1" ))
+      PQ_DISTRIBUTE(@"SEL$1" ("opt.t5"@"SEL$1" ) LOCAL LOCAL)
+      NO_USE_NL_MATERIALIZATION(@"SEL$1" ("opt.t5"@"SEL$1" ))
+      FULL(@"SEL$3" "opt"."t1"@"SEL$3")
+      FULL(@"SEL$1" "opt"."t5"@"SEL$1")
+>>>>>>> implement spm part1
+      END_OUTLINE_DATA
+  */
+
+Plan Type:
+-------------------------------------
+DISTRIBUTED
+
+Optimization Info:
+-------------------------------------
+t1:table_rows:500, physical_range_rows:500, logical_range_rows:500, index_back_rows:0, output_rows:500, est_method:default_stat, optimization_method=cost_based, avaiable_index_name[t1], pruned_index_name[idx_t1_c2]
+
+t5:table_rows:300, physical_range_rows:300, logical_range_rows:300, index_back_rows:0, output_rows:300, est_method:default_stat, optimization_method=cost_based, avaiable_index_name[t5], pruned_index_name[idx_t5_c2,idx_t5_c3]
+
+
+Parameters:
+-------------------------------------
+
+
+*************** Case 41(end)  ************** 
+
+***************   Case 42   ***************
+
+SQL: select /*+leading(t5 tt) use_nl(tt)*/* from (select max(c1) from t1) tt, t5; 
+
+================================================================
+|ID|OPERATOR                        |NAME       |EST. ROWS|COST|
+----------------------------------------------------------------
+|0 |NESTED-LOOP JOIN CARTESIAN      |           |300      |664 |
+|1 | PX COORDINATOR                 |           |300      |354 |
+|2 |  EXCHANGE OUT DISTR            |:EX10000   |300      |314 |
+|3 |   PX PARTITION ITERATOR        |           |300      |233 |
+|4 |    TABLE SCAN                  |t5         |300      |233 |
+|5 | MATERIAL                       |           |1        |228 |
+|6 |  SUBPLAN SCAN                  |tt         |1        |228 |
+|7 |   SCALAR GROUP BY              |           |1        |228 |
+|8 |    SUBPLAN SCAN                |VIEW1      |1        |228 |
+|9 |     LIMIT                      |           |1        |228 |
+|10|      PX COORDINATOR MERGE SORT |           |1        |228 |
+|11|       EXCHANGE OUT DISTR       |:EX20000   |1        |228 |
+|12|        TOP-N SORT              |           |1        |227 |
+|13|         PX PARTITION ITERATOR  |           |1        |227 |
+|14|          TABLE SCAN            |t1(Reverse)|1        |227 |
+================================================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([tt.max(c1)], [t5.c1], [t5.c2], [t5.c3]), filter(nil), 
+      conds(nil), nl_params_(nil), batch_join=false
+  1 - output([t5.c1], [t5.c2], [t5.c3]), filter(nil)
+  2 - output([t5.c1], [t5.c2], [t5.c3]), filter(nil), dop=1
+  3 - output([t5.c2], [t5.c3], [t5.c1]), filter(nil), 
+      force partition granule.
+  4 - output([t5.c2], [t5.c3], [t5.c1]), filter(nil), 
+      access([t5.c2], [t5.c3], [t5.c1]), partitions(p[0-2]), 
+      is_index_back=false, 
+      range_key([t5.c2], [t5.c3]), range(MIN,MIN ; MAX,MAX)always true
+  5 - output([tt.max(c1)]), filter(nil)
+  6 - output([tt.max(c1)]), filter(nil), 
+      access([tt.max(c1)])
+  7 - output([T_FUN_MAX(VIEW1.t1.c1)]), filter(nil), 
+      group(nil), agg_func([T_FUN_MAX(VIEW1.t1.c1)])
+  8 - output([VIEW1.t1.c1]), filter(nil), 
+      access([VIEW1.t1.c1])
+  9 - output([t1.c1]), filter(nil), limit(1), offset(nil)
+  10 - output([t1.c1]), filter(nil), sort_keys([t1.c1, DESC])
+  11 - output([t1.c1]), filter(nil), dop=1
+  12 - output([t1.c1]), filter(nil), sort_keys([t1.c1, DESC]), topn(1), local merge sort
+  13 - output([t1.c1]), filter(nil), 
+      force partition granule.
+  14 - output([t1.c1]), filter(nil), 
+      access([t1.c1]), partitions(p[0-4]), 
+      limit(1), offset(nil), 
+      is_index_back=false, 
+      range_key([t1.c1]), range(MIN ; MAX)always true
+
+Used Hint:
+-------------------------------------
+  /*+
+      LEADING(("t5" "tt"))
+      USE_NL("tt")
+  */
+
+Outline Data:
+-------------------------------------
+  /*+
+      BEGIN_OUTLINE_DATA
+<<<<<<< HEAD
+      LEADING(@"SEL$1" ("opt"."t5"@"SEL$1" "tt"@"SEL$1"))
+      USE_NL(@"SEL$1" "tt"@"SEL$1")
+      PQ_DISTRIBUTE(@"SEL$1" "tt"@"SEL$1" LOCAL LOCAL)
+      USE_NL_MATERIALIZATION(@"SEL$1" "tt"@"SEL$1")
+      FULL(@"SEL$1" "opt"."t5"@"SEL$1")
+      FULL(@"SEL$7E047C3E" "opt"."t1"@"SEL$2")
+      FAST_MINMAX(@"SEL$2")
+      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
+=======
+      LEADING(@"SEL$1" ("opt.t5"@"SEL$1" "tt"@"SEL$1" ))
+      USE_NL(@"SEL$1" ("tt"@"SEL$1" ))
+      PQ_DISTRIBUTE(@"SEL$1" ("tt"@"SEL$1" ) LOCAL LOCAL)
+      USE_NL_MATERIALIZATION(@"SEL$1" ("tt"@"SEL$1" ))
+      FULL(@"SEL$1" "opt"."t5"@"SEL$1")
+      FULL(@"SEL$3" "opt"."t1"@"SEL$3")
+>>>>>>> implement spm part1
+      END_OUTLINE_DATA
+  */
+
+Plan Type:
+-------------------------------------
+DISTRIBUTED
+
+Optimization Info:
+-------------------------------------
+t5:table_rows:300, physical_range_rows:300, logical_range_rows:300, index_back_rows:0, output_rows:300, est_method:default_stat, optimization_method=cost_based, avaiable_index_name[t5], pruned_index_name[idx_t5_c2,idx_t5_c3]
+
+t1:table_rows:500, physical_range_rows:500, logical_range_rows:500, index_back_rows:0, output_rows:500, est_method:default_stat, optimization_method=cost_based, avaiable_index_name[t1], pruned_index_name[idx_t1_c2]
+
+
+Parameters:
+-------------------------------------
+
+
+*************** Case 42(end)  ************** 
+
+***************   Case 43   ***************
+
+SQL: select /*+leading(t4 t5) use_bnl(t5)*/* from t4,t5; 
+
+=======================================================
+|ID|OPERATOR                  |NAME    |EST. ROWS|COST|
+-------------------------------------------------------
+|0 |NESTED-LOOP JOIN CARTESIAN|        |30000    |3012|
+|1 | TABLE SCAN               |t4      |100      |78  |
+|2 | MATERIAL                 |        |300      |357 |
+|3 |  PX COORDINATOR          |        |300      |354 |
+|4 |   EXCHANGE OUT DISTR     |:EX10000|300      |314 |
+|5 |    PX PARTITION ITERATOR |        |300      |233 |
+|6 |     TABLE SCAN           |t5      |300      |233 |
+=======================================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t4.c1], [t4.c2], [t4.c3], [t5.c1], [t5.c2], [t5.c3]), filter(nil), 
+      conds(nil), nl_params_(nil), batch_join=false
+  1 - output([t4.c1], [t4.c2], [t4.c3]), filter(nil), 
+      access([t4.c1], [t4.c2], [t4.c3]), partitions(p0), 
+      is_index_back=false, 
+      range_key([t4.c1], [t4.c2]), range(MIN,MIN ; MAX,MAX)always true
+  2 - output([t5.c1], [t5.c2], [t5.c3]), filter(nil)
+  3 - output([t5.c1], [t5.c2], [t5.c3]), filter(nil)
+  4 - output([t5.c1], [t5.c2], [t5.c3]), filter(nil), dop=1
+  5 - output([t5.c2], [t5.c3], [t5.c1]), filter(nil), 
+      force partition granule.
+  6 - output([t5.c2], [t5.c3], [t5.c1]), filter(nil), 
+      access([t5.c2], [t5.c3], [t5.c1]), partitions(p[0-2]), 
+      is_index_back=false, 
+      range_key([t5.c2], [t5.c3]), range(MIN,MIN ; MAX,MAX)always true
+
+Used Hint:
+-------------------------------------
+  /*+
+      LEADING(("t4" "t5"))
+  */
+
+Outline Data:
+-------------------------------------
+  /*+
+      BEGIN_OUTLINE_DATA
+<<<<<<< HEAD
+      LEADING(@"SEL$1" ("opt"."t4"@"SEL$1" "opt"."t5"@"SEL$1"))
+      USE_NL(@"SEL$1" "opt"."t5"@"SEL$1")
+      PQ_DISTRIBUTE(@"SEL$1" "opt"."t5"@"SEL$1" LOCAL LOCAL)
+      USE_NL_MATERIALIZATION(@"SEL$1" "opt"."t5"@"SEL$1")
+      FULL(@"SEL$1" "opt"."t4"@"SEL$1")
+      FULL(@"SEL$1" "opt"."t5"@"SEL$1")
+      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
+=======
+      LEADING(@"SEL$1" ("opt.t4"@"SEL$1" "opt.t5"@"SEL$1" ))
+      USE_NL(@"SEL$1" ("opt.t5"@"SEL$1" ))
+      PQ_DISTRIBUTE(@"SEL$1" ("opt.t5"@"SEL$1" ) LOCAL LOCAL)
+      USE_NL_MATERIALIZATION(@"SEL$1" ("opt.t5"@"SEL$1" ))
+      FULL(@"SEL$1" "opt"."t4"@"SEL$1")
+      FULL(@"SEL$1" "opt"."t5"@"SEL$1")
+>>>>>>> implement spm part1
+      END_OUTLINE_DATA
+  */
+
+Plan Type:
+-------------------------------------
+DISTRIBUTED
+
+Optimization Info:
+-------------------------------------
+t4:table_rows:100, physical_range_rows:100, logical_range_rows:100, index_back_rows:0, output_rows:100, est_method:local_storage, optimization_method=cost_based, avaiable_index_name[idx_t4_c2_c3,idx_t4_c3,t4], pruned_index_name[idx_t4_c2]
+
+t5:table_rows:300, physical_range_rows:300, logical_range_rows:300, index_back_rows:0, output_rows:300, est_method:default_stat, optimization_method=cost_based, avaiable_index_name[t5], pruned_index_name[idx_t5_c2,idx_t5_c3]
+
+
+Parameters:
+-------------------------------------
+
+
+*************** Case 43(end)  ************** 
+
+***************   Case 44   ***************
+
+SQL: select /*+leading(t4 t5) use_bnl(t5)*/* from t4,t5; 
+
+=======================================================
+|ID|OPERATOR                  |NAME    |EST. ROWS|COST|
+-------------------------------------------------------
+|0 |NESTED-LOOP JOIN CARTESIAN|        |30000    |3012|
+|1 | TABLE SCAN               |t4      |100      |78  |
+|2 | MATERIAL                 |        |300      |357 |
+|3 |  PX COORDINATOR          |        |300      |354 |
+|4 |   EXCHANGE OUT DISTR     |:EX10000|300      |314 |
+|5 |    PX PARTITION ITERATOR |        |300      |233 |
+|6 |     TABLE SCAN           |t5      |300      |233 |
+=======================================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t4.c1], [t4.c2], [t4.c3], [t5.c1], [t5.c2], [t5.c3]), filter(nil), 
+      conds(nil), nl_params_(nil), batch_join=false
+  1 - output([t4.c1], [t4.c2], [t4.c3]), filter(nil), 
+      access([t4.c1], [t4.c2], [t4.c3]), partitions(p0), 
+      is_index_back=false, 
+      range_key([t4.c1], [t4.c2]), range(MIN,MIN ; MAX,MAX)always true
+  2 - output([t5.c1], [t5.c2], [t5.c3]), filter(nil)
+  3 - output([t5.c1], [t5.c2], [t5.c3]), filter(nil)
+  4 - output([t5.c1], [t5.c2], [t5.c3]), filter(nil), dop=1
+  5 - output([t5.c2], [t5.c3], [t5.c1]), filter(nil), 
+      force partition granule.
+  6 - output([t5.c2], [t5.c3], [t5.c1]), filter(nil), 
+      access([t5.c2], [t5.c3], [t5.c1]), partitions(p[0-2]), 
+      is_index_back=false, 
+      range_key([t5.c2], [t5.c3]), range(MIN,MIN ; MAX,MAX)always true
+
+Used Hint:
+-------------------------------------
+  /*+
+      LEADING(("t4" "t5"))
+  */
+
+Outline Data:
+-------------------------------------
+  /*+
+      BEGIN_OUTLINE_DATA
+<<<<<<< HEAD
+      LEADING(@"SEL$1" ("opt"."t4"@"SEL$1" "opt"."t5"@"SEL$1"))
+      USE_NL(@"SEL$1" "opt"."t5"@"SEL$1")
+      PQ_DISTRIBUTE(@"SEL$1" "opt"."t5"@"SEL$1" LOCAL LOCAL)
+      USE_NL_MATERIALIZATION(@"SEL$1" "opt"."t5"@"SEL$1")
+      FULL(@"SEL$1" "opt"."t4"@"SEL$1")
+      FULL(@"SEL$1" "opt"."t5"@"SEL$1")
+      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
+=======
+      LEADING(@"SEL$1" ("opt.t4"@"SEL$1" "opt.t5"@"SEL$1" ))
+      USE_NL(@"SEL$1" ("opt.t5"@"SEL$1" ))
+      PQ_DISTRIBUTE(@"SEL$1" ("opt.t5"@"SEL$1" ) LOCAL LOCAL)
+      USE_NL_MATERIALIZATION(@"SEL$1" ("opt.t5"@"SEL$1" ))
+      FULL(@"SEL$1" "opt"."t4"@"SEL$1")
+      FULL(@"SEL$1" "opt"."t5"@"SEL$1")
+>>>>>>> implement spm part1
+      END_OUTLINE_DATA
+  */
+
+Plan Type:
+-------------------------------------
+DISTRIBUTED
+
+Optimization Info:
+-------------------------------------
+t4:table_rows:100, physical_range_rows:100, logical_range_rows:100, index_back_rows:0, output_rows:100, est_method:local_storage, optimization_method=cost_based, avaiable_index_name[idx_t4_c2_c3,idx_t4_c3,t4], pruned_index_name[idx_t4_c2]
+
+t5:table_rows:300, physical_range_rows:300, logical_range_rows:300, index_back_rows:0, output_rows:300, est_method:default_stat, optimization_method=cost_based, avaiable_index_name[t5], pruned_index_name[idx_t5_c2,idx_t5_c3]
+
+
+Parameters:
+-------------------------------------
+
+
+*************** Case 44(end)  ************** 
+
+***************   Case 45   ***************
+
+SQL: select /*+leading(tt t5) use_nl(t5)*/* from (select /*+leading(t4 t7) use_nl(t7)*/max(t4.c1) from t4,t7) tt, t5; 
+
+==========================================================
+|ID|OPERATOR                     |NAME    |EST. ROWS|COST|
+----------------------------------------------------------
+|0 |NESTED-LOOP JOIN CARTESIAN   |        |300      |3360|
+|1 | SUBPLAN SCAN                |tt      |1        |3090|
+|2 |  SCALAR GROUP BY            |        |1        |3090|
+|3 |   NESTED-LOOP JOIN CARTESIAN|        |10000    |2736|
+|4 |    TABLE SCAN               |t4      |100      |78  |
+|5 |    MATERIAL                 |        |100      |78  |
+|6 |     TABLE SCAN              |t7      |100      |78  |
+|7 | PX COORDINATOR              |        |300      |354 |
+|8 |  EXCHANGE OUT DISTR         |:EX10000|300      |314 |
+|9 |   PX PARTITION ITERATOR     |        |300      |233 |
+|10|    TABLE SCAN               |t5      |300      |233 |
+==========================================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([tt.max(t4.c1)], [t5.c1], [t5.c2], [t5.c3]), filter(nil), 
+      conds(nil), nl_params_(nil), batch_join=false
+  1 - output([tt.max(t4.c1)]), filter(nil), 
+      access([tt.max(t4.c1)])
+  2 - output([T_FUN_MAX(t4.c1)]), filter(nil), 
+      group(nil), agg_func([T_FUN_MAX(t4.c1)])
+  3 - output([t4.c1]), filter(nil), 
+      conds(nil), nl_params_(nil), batch_join=false
+  4 - output([t4.c1]), filter(nil), 
+      access([t4.c1]), partitions(p0), 
+      is_index_back=false, 
+      range_key([t4.c1], [t4.c2]), range(MIN,MIN ; MAX,MAX)always true
+  5 - output(nil), filter(nil)
+  6 - output(nil), filter(nil), 
+      access([t7.c1]), partitions(p0), 
+      is_index_back=false, 
+      range_key([t7.c1]), range(MIN ; MAX)always true
+  7 - output([t5.c1], [t5.c2], [t5.c3]), filter(nil)
+  8 - output([t5.c1], [t5.c2], [t5.c3]), filter(nil), dop=1
+  9 - output([t5.c2], [t5.c3], [t5.c1]), filter(nil), 
+      force partition granule.
+  10 - output([t5.c2], [t5.c3], [t5.c1]), filter(nil), 
+      access([t5.c2], [t5.c3], [t5.c1]), partitions(p[0-2]), 
+      is_index_back=false, 
+      range_key([t5.c2], [t5.c3]), range(MIN,MIN ; MAX,MAX)always true
+
+Used Hint:
+-------------------------------------
+  /*+
+      LEADING(("tt" "t5"))
+      USE_NL("t5")
+      LEADING(("t4" "t7"))
+      USE_NL("t7")
+  */
+
+Outline Data:
+-------------------------------------
+  /*+
+      BEGIN_OUTLINE_DATA
+<<<<<<< HEAD
+      LEADING(@"SEL$1" ("tt"@"SEL$1" "opt"."t5"@"SEL$1"))
+      USE_NL(@"SEL$1" "opt"."t5"@"SEL$1")
+      PQ_DISTRIBUTE(@"SEL$1" "opt"."t5"@"SEL$1" LOCAL LOCAL)
+      LEADING(@"SEL$2" ("opt"."t4"@"SEL$2" "opt"."t7"@"SEL$2"))
+      USE_NL(@"SEL$2" "opt"."t7"@"SEL$2")
+      USE_NL_MATERIALIZATION(@"SEL$2" "opt"."t7"@"SEL$2")
+      FULL(@"SEL$2" "opt"."t4"@"SEL$2")
+      FULL(@"SEL$2" "opt"."t7"@"SEL$2")
+      FULL(@"SEL$1" "opt"."t5"@"SEL$1")
+      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
+=======
+      LEADING(@"SEL$1" ("tt"@"SEL$1" "opt.t5"@"SEL$1" ))
+      USE_NL(@"SEL$1" ("opt.t5"@"SEL$1" ))
+      PQ_DISTRIBUTE(@"SEL$1" ("opt.t5"@"SEL$1" ) LOCAL LOCAL)
+      NO_USE_NL_MATERIALIZATION(@"SEL$1" ("opt.t5"@"SEL$1" ))
+      LEADING(@"SEL$2" ("opt.t4"@"SEL$2" "opt.t7"@"SEL$2" ))
+      USE_NL(@"SEL$2" ("opt.t7"@"SEL$2" ))
+      PQ_DISTRIBUTE(@"SEL$2" ("opt.t7"@"SEL$2" ) LOCAL LOCAL)
+      USE_NL_MATERIALIZATION(@"SEL$2" ("opt.t7"@"SEL$2" ))
+      INDEX(@"SEL$2" "opt"."t4"@"SEL$2" "idx_t4_c2")
+      FULL(@"SEL$2" "opt"."t7"@"SEL$2")
+      FULL(@"SEL$1" "opt"."t5"@"SEL$1")
+>>>>>>> implement spm part1
+      END_OUTLINE_DATA
+  */
+
+Plan Type:
+-------------------------------------
+DISTRIBUTED
+
+Optimization Info:
+-------------------------------------
+t4:table_rows:100, physical_range_rows:100, logical_range_rows:100, index_back_rows:0, output_rows:100, est_method:local_storage, optimization_method=cost_based, avaiable_index_name[idx_t4_c2_c3,idx_t4_c3,idx_t4_c2,t4]
+
+t7:table_rows:100, physical_range_rows:100, logical_range_rows:100, index_back_rows:0, output_rows:100, est_method:local_storage, optimization_method=cost_based, avaiable_index_name[t7]
+
+t5:table_rows:300, physical_range_rows:300, logical_range_rows:300, index_back_rows:0, output_rows:300, est_method:default_stat, optimization_method=cost_based, avaiable_index_name[t5], pruned_index_name[idx_t5_c2,idx_t5_c3]
+
+
+Parameters:
+-------------------------------------
+
+
+*************** Case 45(end)  ************** 
+
+***************   Case 46   ***************
+
+SQL: select /*+leading(t5 tt) use_nl(tt)*/* from (select /*+leading(t7 t4) use_nl(t4)*/max(t4.c1) from t4,t7) tt, t5; 
+
+===========================================================
+|ID|OPERATOR                      |NAME    |EST. ROWS|COST|
+-----------------------------------------------------------
+|0 |NESTED-LOOP JOIN CARTESIAN    |        |300      |3526|
+|1 | PX COORDINATOR               |        |300      |354 |
+|2 |  EXCHANGE OUT DISTR          |:EX10000|300      |314 |
+|3 |   PX PARTITION ITERATOR      |        |300      |233 |
+|4 |    TABLE SCAN                |t5      |300      |233 |
+|5 | MATERIAL                     |        |1        |3090|
+|6 |  SUBPLAN SCAN                |tt      |1        |3090|
+|7 |   SCALAR GROUP BY            |        |1        |3090|
+|8 |    NESTED-LOOP JOIN CARTESIAN|        |10000    |2736|
+|9 |     TABLE SCAN               |t7      |100      |78  |
+|10|     MATERIAL                 |        |100      |78  |
+|11|      TABLE SCAN              |t4      |100      |78  |
+===========================================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([tt.max(t4.c1)], [t5.c1], [t5.c2], [t5.c3]), filter(nil), 
+      conds(nil), nl_params_(nil), batch_join=false
+  1 - output([t5.c1], [t5.c2], [t5.c3]), filter(nil)
+  2 - output([t5.c1], [t5.c2], [t5.c3]), filter(nil), dop=1
+  3 - output([t5.c2], [t5.c3], [t5.c1]), filter(nil), 
+      force partition granule.
+  4 - output([t5.c2], [t5.c3], [t5.c1]), filter(nil), 
+      access([t5.c2], [t5.c3], [t5.c1]), partitions(p[0-2]), 
+      is_index_back=false, 
+      range_key([t5.c2], [t5.c3]), range(MIN,MIN ; MAX,MAX)always true
+  5 - output([tt.max(t4.c1)]), filter(nil)
+  6 - output([tt.max(t4.c1)]), filter(nil), 
+      access([tt.max(t4.c1)])
+  7 - output([T_FUN_MAX(t4.c1)]), filter(nil), 
+      group(nil), agg_func([T_FUN_MAX(t4.c1)])
+  8 - output([t4.c1]), filter(nil), 
+      conds(nil), nl_params_(nil), batch_join=false
+  9 - output(nil), filter(nil), 
+      access([t7.c1]), partitions(p0), 
+      is_index_back=false, 
+      range_key([t7.c1]), range(MIN ; MAX)always true
+  10 - output([t4.c1]), filter(nil)
+  11 - output([t4.c1]), filter(nil), 
+      access([t4.c1]), partitions(p0), 
+      is_index_back=false, 
+      range_key([t4.c1], [t4.c2]), range(MIN,MIN ; MAX,MAX)always true
+
+Used Hint:
+-------------------------------------
+  /*+
+      LEADING(("t5" "tt"))
+      USE_NL("tt")
+      LEADING(("t7" "t4"))
+      USE_NL("t4")
+  */
+
+Outline Data:
+-------------------------------------
+  /*+
+      BEGIN_OUTLINE_DATA
+<<<<<<< HEAD
+      LEADING(@"SEL$1" ("opt"."t5"@"SEL$1" "tt"@"SEL$1"))
+      USE_NL(@"SEL$1" "tt"@"SEL$1")
+      PQ_DISTRIBUTE(@"SEL$1" "tt"@"SEL$1" LOCAL LOCAL)
+      USE_NL_MATERIALIZATION(@"SEL$1" "tt"@"SEL$1")
+      FULL(@"SEL$1" "opt"."t5"@"SEL$1")
+      LEADING(@"SEL$2" ("opt"."t7"@"SEL$2" "opt"."t4"@"SEL$2"))
+      USE_NL(@"SEL$2" "opt"."t4"@"SEL$2")
+      USE_NL_MATERIALIZATION(@"SEL$2" "opt"."t4"@"SEL$2")
+      FULL(@"SEL$2" "opt"."t7"@"SEL$2")
+      FULL(@"SEL$2" "opt"."t4"@"SEL$2")
+      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
+=======
+      LEADING(@"SEL$1" ("opt.t5"@"SEL$1" "tt"@"SEL$1" ))
+      USE_NL(@"SEL$1" ("tt"@"SEL$1" ))
+      PQ_DISTRIBUTE(@"SEL$1" ("tt"@"SEL$1" ) LOCAL LOCAL)
+      USE_NL_MATERIALIZATION(@"SEL$1" ("tt"@"SEL$1" ))
+      FULL(@"SEL$1" "opt"."t5"@"SEL$1")
+      LEADING(@"SEL$2" ("opt.t7"@"SEL$2" "opt.t4"@"SEL$2" ))
+      USE_NL(@"SEL$2" ("opt.t4"@"SEL$2" ))
+      PQ_DISTRIBUTE(@"SEL$2" ("opt.t4"@"SEL$2" ) LOCAL LOCAL)
+      USE_NL_MATERIALIZATION(@"SEL$2" ("opt.t4"@"SEL$2" ))
+      FULL(@"SEL$2" "opt"."t7"@"SEL$2")
+      INDEX(@"SEL$2" "opt"."t4"@"SEL$2" "idx_t4_c2")
+>>>>>>> implement spm part1
+      END_OUTLINE_DATA
+  */
+
+Plan Type:
+-------------------------------------
+DISTRIBUTED
+
+Optimization Info:
+-------------------------------------
+t5:table_rows:300, physical_range_rows:300, logical_range_rows:300, index_back_rows:0, output_rows:300, est_method:default_stat, optimization_method=cost_based, avaiable_index_name[t5], pruned_index_name[idx_t5_c2,idx_t5_c3]
+
+t7:table_rows:100, physical_range_rows:100, logical_range_rows:100, index_back_rows:0, output_rows:100, est_method:local_storage, optimization_method=cost_based, avaiable_index_name[t7]
+
+t4:table_rows:100, physical_range_rows:100, logical_range_rows:100, index_back_rows:0, output_rows:100, est_method:local_storage, optimization_method=cost_based, avaiable_index_name[idx_t4_c2_c3,idx_t4_c3,idx_t4_c2,t4]
+
+
+Parameters:
+-------------------------------------
+
+
+*************** Case 46(end)  ************** 
+
+***************   Case 47   ***************
+
+SQL: select /*+ordered*/* from t4,t5; 
+
+=======================================================
+|ID|OPERATOR                  |NAME    |EST. ROWS|COST|
+-------------------------------------------------------
+|0 |NESTED-LOOP JOIN CARTESIAN|        |30000    |3012|
+|1 | TABLE SCAN               |t4      |100      |78  |
+|2 | MATERIAL                 |        |300      |357 |
+|3 |  PX COORDINATOR          |        |300      |354 |
+|4 |   EXCHANGE OUT DISTR     |:EX10000|300      |314 |
+|5 |    PX PARTITION ITERATOR |        |300      |233 |
+|6 |     TABLE SCAN           |t5      |300      |233 |
+=======================================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t4.c1], [t4.c2], [t4.c3], [t5.c1], [t5.c2], [t5.c3]), filter(nil), 
+      conds(nil), nl_params_(nil), batch_join=false
+  1 - output([t4.c1], [t4.c2], [t4.c3]), filter(nil), 
+      access([t4.c1], [t4.c2], [t4.c3]), partitions(p0), 
+      is_index_back=false, 
+      range_key([t4.c1], [t4.c2]), range(MIN,MIN ; MAX,MAX)always true
+  2 - output([t5.c1], [t5.c2], [t5.c3]), filter(nil)
+  3 - output([t5.c1], [t5.c2], [t5.c3]), filter(nil)
+  4 - output([t5.c1], [t5.c2], [t5.c3]), filter(nil), dop=1
+  5 - output([t5.c2], [t5.c3], [t5.c1]), filter(nil), 
+      force partition granule.
+  6 - output([t5.c2], [t5.c3], [t5.c1]), filter(nil), 
+      access([t5.c2], [t5.c3], [t5.c1]), partitions(p[0-2]), 
+      is_index_back=false, 
+      range_key([t5.c2], [t5.c3]), range(MIN,MIN ; MAX,MAX)always true
+
+Used Hint:
+-------------------------------------
+  /*+
+      ORDERED
+  */
+
+Outline Data:
+-------------------------------------
+  /*+
+      BEGIN_OUTLINE_DATA
+<<<<<<< HEAD
+      LEADING(@"SEL$1" ("opt"."t4"@"SEL$1" "opt"."t5"@"SEL$1"))
+      USE_NL(@"SEL$1" "opt"."t5"@"SEL$1")
+      PQ_DISTRIBUTE(@"SEL$1" "opt"."t5"@"SEL$1" LOCAL LOCAL)
+      USE_NL_MATERIALIZATION(@"SEL$1" "opt"."t5"@"SEL$1")
+      FULL(@"SEL$1" "opt"."t4"@"SEL$1")
+      FULL(@"SEL$1" "opt"."t5"@"SEL$1")
+      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
+=======
+      LEADING(@"SEL$1" ("opt.t4"@"SEL$1" "opt.t5"@"SEL$1" ))
+      USE_NL(@"SEL$1" ("opt.t5"@"SEL$1" ))
+      PQ_DISTRIBUTE(@"SEL$1" ("opt.t5"@"SEL$1" ) LOCAL LOCAL)
+      USE_NL_MATERIALIZATION(@"SEL$1" ("opt.t5"@"SEL$1" ))
+      FULL(@"SEL$1" "opt"."t4"@"SEL$1")
+      FULL(@"SEL$1" "opt"."t5"@"SEL$1")
+>>>>>>> implement spm part1
+      END_OUTLINE_DATA
+  */
+
+Plan Type:
+-------------------------------------
+DISTRIBUTED
+
+Optimization Info:
+-------------------------------------
+t4:table_rows:100, physical_range_rows:100, logical_range_rows:100, index_back_rows:0, output_rows:100, est_method:local_storage, optimization_method=cost_based, avaiable_index_name[idx_t4_c2_c3,idx_t4_c3,t4], pruned_index_name[idx_t4_c2]
+
+t5:table_rows:300, physical_range_rows:300, logical_range_rows:300, index_back_rows:0, output_rows:300, est_method:default_stat, optimization_method=cost_based, avaiable_index_name[t5], pruned_index_name[idx_t5_c2,idx_t5_c3]
+
+
+Parameters:
+-------------------------------------
+
+
+*************** Case 47(end)  ************** 
+
+***************   Case 48   ***************
+
+SQL: select /*+ordered*/* from t5,t4; 
+
+=======================================================
+|ID|OPERATOR                  |NAME    |EST. ROWS|COST|
+-------------------------------------------------------
+|0 |NESTED-LOOP JOIN CARTESIAN|        |30000    |8169|
+|1 | PX COORDINATOR           |        |300      |354 |
+|2 |  EXCHANGE OUT DISTR      |:EX10000|300      |314 |
+|3 |   PX PARTITION ITERATOR  |        |300      |233 |
+|4 |    TABLE SCAN            |t5      |300      |233 |
+|5 | MATERIAL                 |        |100      |79  |
+|6 |  TABLE SCAN              |t4      |100      |78  |
+=======================================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t5.c1], [t5.c2], [t5.c3], [t4.c1], [t4.c2], [t4.c3]), filter(nil), 
+      conds(nil), nl_params_(nil), batch_join=false
+  1 - output([t5.c1], [t5.c2], [t5.c3]), filter(nil)
+  2 - output([t5.c1], [t5.c2], [t5.c3]), filter(nil), dop=1
+  3 - output([t5.c2], [t5.c3], [t5.c1]), filter(nil), 
+      force partition granule.
+  4 - output([t5.c2], [t5.c3], [t5.c1]), filter(nil), 
+      access([t5.c2], [t5.c3], [t5.c1]), partitions(p[0-2]), 
+      is_index_back=false, 
+      range_key([t5.c2], [t5.c3]), range(MIN,MIN ; MAX,MAX)always true
+  5 - output([t4.c1], [t4.c2], [t4.c3]), filter(nil)
+  6 - output([t4.c1], [t4.c2], [t4.c3]), filter(nil), 
+      access([t4.c1], [t4.c2], [t4.c3]), partitions(p0), 
+      is_index_back=false, 
+      range_key([t4.c1], [t4.c2]), range(MIN,MIN ; MAX,MAX)always true
+
+Used Hint:
+-------------------------------------
+  /*+
+      ORDERED
+  */
+
+Outline Data:
+-------------------------------------
+  /*+
+      BEGIN_OUTLINE_DATA
+<<<<<<< HEAD
+      LEADING(@"SEL$1" ("opt"."t5"@"SEL$1" "opt"."t4"@"SEL$1"))
+      USE_NL(@"SEL$1" "opt"."t4"@"SEL$1")
+      PQ_DISTRIBUTE(@"SEL$1" "opt"."t4"@"SEL$1" LOCAL LOCAL)
+      USE_NL_MATERIALIZATION(@"SEL$1" "opt"."t4"@"SEL$1")
+      FULL(@"SEL$1" "opt"."t5"@"SEL$1")
+      FULL(@"SEL$1" "opt"."t4"@"SEL$1")
+      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
+=======
+      LEADING(@"SEL$1" ("opt.t5"@"SEL$1" "opt.t4"@"SEL$1" ))
+      USE_NL(@"SEL$1" ("opt.t4"@"SEL$1" ))
+      PQ_DISTRIBUTE(@"SEL$1" ("opt.t4"@"SEL$1" ) LOCAL LOCAL)
+      USE_NL_MATERIALIZATION(@"SEL$1" ("opt.t4"@"SEL$1" ))
+      FULL(@"SEL$1" "opt"."t5"@"SEL$1")
+      FULL(@"SEL$1" "opt"."t4"@"SEL$1")
+>>>>>>> implement spm part1
+      END_OUTLINE_DATA
+  */
+
+Plan Type:
+-------------------------------------
+DISTRIBUTED
+
+Optimization Info:
+-------------------------------------
+t5:table_rows:300, physical_range_rows:300, logical_range_rows:300, index_back_rows:0, output_rows:300, est_method:default_stat, optimization_method=cost_based, avaiable_index_name[t5], pruned_index_name[idx_t5_c2,idx_t5_c3]
+
+t4:table_rows:100, physical_range_rows:100, logical_range_rows:100, index_back_rows:0, output_rows:100, est_method:local_storage, optimization_method=cost_based, avaiable_index_name[idx_t4_c2_c3,idx_t4_c3,t4], pruned_index_name[idx_t4_c2]
+
+
+Parameters:
+-------------------------------------
+
+
+*************** Case 48(end)  ************** 
+
+***************   Case 49   ***************
+
+SQL: select /*+ordered*/* from t5; 
+
+====================================================
+|ID|OPERATOR               |NAME    |EST. ROWS|COST|
+----------------------------------------------------
+|0 |PX COORDINATOR         |        |300      |354 |
+|1 | EXCHANGE OUT DISTR    |:EX10000|300      |314 |
+|2 |  PX PARTITION ITERATOR|        |300      |233 |
+|3 |   TABLE SCAN          |t5      |300      |233 |
+====================================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([INTERNAL_FUNCTION(t5.c1, t5.c2, t5.c3)]), filter(nil)
+  1 - output([INTERNAL_FUNCTION(t5.c1, t5.c2, t5.c3)]), filter(nil), dop=1
+  2 - output([t5.c2], [t5.c3], [t5.c1]), filter(nil), 
+      force partition granule.
+  3 - output([t5.c2], [t5.c3], [t5.c1]), filter(nil), 
+      access([t5.c2], [t5.c3], [t5.c1]), partitions(p[0-2]), 
+      is_index_back=false, 
+      range_key([t5.c2], [t5.c3]), range(MIN,MIN ; MAX,MAX)always true
+
+Used Hint:
+-------------------------------------
+  /*+
+  */
+
+Outline Data:
+-------------------------------------
+  /*+
+      BEGIN_OUTLINE_DATA
+      FULL(@"SEL$1" "opt"."t5"@"SEL$1")
+<<<<<<< HEAD
+      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
+=======
+>>>>>>> implement spm part1
+      END_OUTLINE_DATA
+  */
+
+Plan Type:
+-------------------------------------
+DISTRIBUTED
+
+Optimization Info:
+-------------------------------------
+t5:table_rows:300, physical_range_rows:300, logical_range_rows:300, index_back_rows:0, output_rows:300, est_method:default_stat, optimization_method=cost_based, avaiable_index_name[t5], pruned_index_name[idx_t5_c2,idx_t5_c3]
+
+
+Parameters:
+-------------------------------------
+
+
+*************** Case 49(end)  ************** 
+
+***************   Case 50   ***************
+
+SQL: select /*+ordered*/* from t4 left join t5 on t4.c1=t5.c1; 
+
+=====================================================
+|ID|OPERATOR                |NAME    |EST. ROWS|COST|
+-----------------------------------------------------
+|0 |HASH OUTER JOIN         |        |244      |528 |
+|1 | TABLE SCAN             |t4      |100      |78  |
+|2 | PX COORDINATOR         |        |300      |354 |
+|3 |  EXCHANGE OUT DISTR    |:EX10000|300      |314 |
+|4 |   PX PARTITION ITERATOR|        |300      |233 |
+|5 |    TABLE SCAN          |t5      |300      |233 |
+=====================================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t4.c1], [t4.c2], [t4.c3], [t5.c1], [t5.c2], [t5.c3]), filter(nil), 
+      equal_conds([t4.c1 = t5.c1]), other_conds(nil)
+  1 - output([t4.c1], [t4.c2], [t4.c3]), filter(nil), 
+      access([t4.c1], [t4.c2], [t4.c3]), partitions(p0), 
+      is_index_back=false, 
+      range_key([t4.c1], [t4.c2]), range(MIN,MIN ; MAX,MAX)always true
+  2 - output([t5.c1], [t5.c2], [t5.c3]), filter(nil)
+  3 - output([t5.c1], [t5.c2], [t5.c3]), filter(nil), dop=1
+  4 - output([t5.c2], [t5.c3], [t5.c1]), filter(nil), 
+      force partition granule.
+  5 - output([t5.c2], [t5.c3], [t5.c1]), filter(nil), 
+      access([t5.c2], [t5.c3], [t5.c1]), partitions(p[0-2]), 
+      is_index_back=false, 
+      range_key([t5.c2], [t5.c3]), range(MIN,MIN ; MAX,MAX)always true
+
+Used Hint:
+-------------------------------------
+  /*+
+      ORDERED
+  */
+
+Outline Data:
+-------------------------------------
+  /*+
+      BEGIN_OUTLINE_DATA
+<<<<<<< HEAD
+      LEADING(@"SEL$1" ("opt"."t4"@"SEL$1" "opt"."t5"@"SEL$1"))
+      USE_HASH(@"SEL$1" "opt"."t5"@"SEL$1")
+      PQ_DISTRIBUTE(@"SEL$1" "opt"."t5"@"SEL$1" LOCAL LOCAL)
+      FULL(@"SEL$1" "opt"."t4"@"SEL$1")
+      FULL(@"SEL$1" "opt"."t5"@"SEL$1")
+      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
+=======
+      LEADING(@"SEL$1" ("opt.t4"@"SEL$1" "opt.t5"@"SEL$1" ))
+      USE_HASH(@"SEL$1" ("opt.t5"@"SEL$1" ))
+      PQ_DISTRIBUTE(@"SEL$1" ("opt.t5"@"SEL$1" ) LOCAL LOCAL)
+      FULL(@"SEL$1" "opt"."t4"@"SEL$1")
+      FULL(@"SEL$1" "opt"."t5"@"SEL$1")
+>>>>>>> implement spm part1
+      END_OUTLINE_DATA
+  */
+
+Plan Type:
+-------------------------------------
+DISTRIBUTED
+
+Optimization Info:
+-------------------------------------
+t4:table_rows:100, physical_range_rows:100, logical_range_rows:100, index_back_rows:0, output_rows:100, est_method:local_storage, optimization_method=cost_based, avaiable_index_name[t4], pruned_index_name[idx_t4_c2_c3,idx_t4_c3,idx_t4_c2]
+
+t5:table_rows:300, physical_range_rows:300, logical_range_rows:300, index_back_rows:0, output_rows:300, est_method:default_stat, optimization_method=cost_based, avaiable_index_name[t5], pruned_index_name[idx_t5_c2,idx_t5_c3]
+
+
+Parameters:
+-------------------------------------
+
+
+*************** Case 50(end)  ************** 
+
+***************   Case 51   ***************
+
+SQL: select /*+ordered*/* from t4 right join t5 on t4.c1=t5.c1; 
+
+=====================================================
+|ID|OPERATOR                |NAME    |EST. ROWS|COST|
+-----------------------------------------------------
+|0 |HASH OUTER JOIN         |        |300      |530 |
+|1 | PX COORDINATOR         |        |300      |354 |
+|2 |  EXCHANGE OUT DISTR    |:EX10000|300      |314 |
+|3 |   PX PARTITION ITERATOR|        |300      |233 |
+|4 |    TABLE SCAN          |t5      |300      |233 |
+|5 | TABLE SCAN             |t4      |100      |78  |
+=====================================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t4.c1], [t4.c2], [t4.c3], [t5.c1], [t5.c2], [t5.c3]), filter(nil), 
+      equal_conds([t4.c1 = t5.c1]), other_conds(nil)
+  1 - output([t5.c1], [t5.c2], [t5.c3]), filter(nil)
+  2 - output([t5.c1], [t5.c2], [t5.c3]), filter(nil), dop=1
+  3 - output([t5.c2], [t5.c3], [t5.c1]), filter(nil), 
+      force partition granule.
+  4 - output([t5.c2], [t5.c3], [t5.c1]), filter(nil), 
+      access([t5.c2], [t5.c3], [t5.c1]), partitions(p[0-2]), 
+      is_index_back=false, 
+      range_key([t5.c2], [t5.c3]), range(MIN,MIN ; MAX,MAX)always true
+  5 - output([t4.c1], [t4.c2], [t4.c3]), filter(nil), 
+      access([t4.c1], [t4.c2], [t4.c3]), partitions(p0), 
+      is_index_back=false, 
+      range_key([t4.c1], [t4.c2]), range(MIN,MIN ; MAX,MAX)always true
+
+Used Hint:
+-------------------------------------
+  /*+
+      ORDERED
+  */
+
+Outline Data:
+-------------------------------------
+  /*+
+      BEGIN_OUTLINE_DATA
+<<<<<<< HEAD
+      LEADING(@"SEL$1" ("opt"."t5"@"SEL$1" "opt"."t4"@"SEL$1"))
+      USE_HASH(@"SEL$1" "opt"."t4"@"SEL$1")
+      PQ_DISTRIBUTE(@"SEL$1" "opt"."t4"@"SEL$1" LOCAL LOCAL)
+      FULL(@"SEL$1" "opt"."t5"@"SEL$1")
+      FULL(@"SEL$1" "opt"."t4"@"SEL$1")
+      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
+=======
+      LEADING(@"SEL$1" ("opt.t5"@"SEL$1" "opt.t4"@"SEL$1" ))
+      USE_HASH(@"SEL$1" ("opt.t4"@"SEL$1" ))
+      PQ_DISTRIBUTE(@"SEL$1" ("opt.t4"@"SEL$1" ) LOCAL LOCAL)
+      FULL(@"SEL$1" "opt"."t5"@"SEL$1")
+      FULL(@"SEL$1" "opt"."t4"@"SEL$1")
+>>>>>>> implement spm part1
+      END_OUTLINE_DATA
+  */
+
+Plan Type:
+-------------------------------------
+DISTRIBUTED
+
+Optimization Info:
+-------------------------------------
+t5:table_rows:300, physical_range_rows:300, logical_range_rows:300, index_back_rows:0, output_rows:300, est_method:default_stat, optimization_method=cost_based, avaiable_index_name[t5], pruned_index_name[idx_t5_c2,idx_t5_c3]
+
+t4:table_rows:100, physical_range_rows:100, logical_range_rows:100, index_back_rows:0, output_rows:100, est_method:local_storage, optimization_method=cost_based, avaiable_index_name[t4], pruned_index_name[idx_t4_c2_c3,idx_t4_c3,idx_t4_c2]
+
+
+Parameters:
+-------------------------------------
+
+
+*************** Case 51(end)  ************** 
+
+***************   Case 52   ***************
+
+SQL: select /*+ordered*/* from t4 full join t5 on t4.c1=t5.c1; 
+
+=====================================================
+|ID|OPERATOR                |NAME    |EST. ROWS|COST|
+-----------------------------------------------------
+|0 |HASH FULL OUTER JOIN    |        |300      |528 |
+|1 | TABLE SCAN             |t4      |100      |78  |
+|2 | PX COORDINATOR         |        |300      |354 |
+|3 |  EXCHANGE OUT DISTR    |:EX10000|300      |314 |
+|4 |   PX PARTITION ITERATOR|        |300      |233 |
+|5 |    TABLE SCAN          |t5      |300      |233 |
+=====================================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t4.c1], [t4.c2], [t4.c3], [t5.c1], [t5.c2], [t5.c3]), filter(nil), 
+      equal_conds([t4.c1 = t5.c1]), other_conds(nil)
+  1 - output([t4.c1], [t4.c2], [t4.c3]), filter(nil), 
+      access([t4.c1], [t4.c2], [t4.c3]), partitions(p0), 
+      is_index_back=false, 
+      range_key([t4.c1], [t4.c2]), range(MIN,MIN ; MAX,MAX)always true
+  2 - output([t5.c1], [t5.c2], [t5.c3]), filter(nil)
+  3 - output([t5.c1], [t5.c2], [t5.c3]), filter(nil), dop=1
+  4 - output([t5.c2], [t5.c3], [t5.c1]), filter(nil), 
+      force partition granule.
+  5 - output([t5.c2], [t5.c3], [t5.c1]), filter(nil), 
+      access([t5.c2], [t5.c3], [t5.c1]), partitions(p[0-2]), 
+      is_index_back=false, 
+      range_key([t5.c2], [t5.c3]), range(MIN,MIN ; MAX,MAX)always true
+
+Used Hint:
+-------------------------------------
+  /*+
+      ORDERED
+  */
+
+Outline Data:
+-------------------------------------
+  /*+
+      BEGIN_OUTLINE_DATA
+<<<<<<< HEAD
+      LEADING(@"SEL$1" ("opt"."t4"@"SEL$1" "opt"."t5"@"SEL$1"))
+      USE_HASH(@"SEL$1" "opt"."t5"@"SEL$1")
+      PQ_DISTRIBUTE(@"SEL$1" "opt"."t5"@"SEL$1" LOCAL LOCAL)
+      FULL(@"SEL$1" "opt"."t4"@"SEL$1")
+      FULL(@"SEL$1" "opt"."t5"@"SEL$1")
+      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
+=======
+      LEADING(@"SEL$1" ("opt.t4"@"SEL$1" "opt.t5"@"SEL$1" ))
+      USE_HASH(@"SEL$1" ("opt.t5"@"SEL$1" ))
+      PQ_DISTRIBUTE(@"SEL$1" ("opt.t5"@"SEL$1" ) LOCAL LOCAL)
+      FULL(@"SEL$1" "opt"."t4"@"SEL$1")
+      FULL(@"SEL$1" "opt"."t5"@"SEL$1")
+>>>>>>> implement spm part1
+      END_OUTLINE_DATA
+  */
+
+Plan Type:
+-------------------------------------
+DISTRIBUTED
+
+Optimization Info:
+-------------------------------------
+t4:table_rows:100, physical_range_rows:100, logical_range_rows:100, index_back_rows:0, output_rows:100, est_method:local_storage, optimization_method=cost_based, avaiable_index_name[t4], pruned_index_name[idx_t4_c2_c3,idx_t4_c3,idx_t4_c2]
+
+t5:table_rows:300, physical_range_rows:300, logical_range_rows:300, index_back_rows:0, output_rows:300, est_method:default_stat, optimization_method=cost_based, avaiable_index_name[t5], pruned_index_name[idx_t5_c2,idx_t5_c3]
+
+
+Parameters:
+-------------------------------------
+
+
+*************** Case 52(end)  ************** 
+
+***************   Case 53   ***************
+
+SQL: select /*+index(t_normal_idx idx)*/* from t_normal_idx order by c3 limit 1; 
+
+=======================================================
+|ID|OPERATOR        |NAME              |EST. ROWS|COST|
+-------------------------------------------------------
+|0 |NESTED-LOOP JOIN|                  |1        |111 |
+|1 | TOP-N SORT     |                  |1        |80  |
+|2 |  TABLE SCAN    |t_normal_idx(idx) |100      |78  |
+|3 | TABLE GET      |t_normal_idx_alias|1        |31  |
+=======================================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t_normal_idx.c1], [t_normal_idx_alias.c2], [t_normal_idx.c3], [t_normal_idx_alias.c4], [t_normal_idx_alias.c5], [t_normal_idx_alias.c6], [t_normal_idx_alias.c7], [t_normal_idx_alias.c8], [t_normal_idx_alias.c9], [t_normal_idx_alias.c10]), filter(nil), 
+      conds(nil), nl_params_([t_normal_idx.c1]), batch_join=false
+  1 - output([t_normal_idx.c1], [t_normal_idx.c3]), filter(nil), sort_keys([t_normal_idx.c3, ASC]), topn(1)
+  2 - output([t_normal_idx.c1], [t_normal_idx.c3]), filter(nil), 
+      access([t_normal_idx.c1], [t_normal_idx.c3]), partitions(p0), 
+      is_index_back=false, 
+      range_key([t_normal_idx.c2], [t_normal_idx.c3], [t_normal_idx.c4], [t_normal_idx.c5], [t_normal_idx.c6], [t_normal_idx.c1]), range(MIN,MIN,MIN,MIN,MIN,MIN ; MAX,MAX,MAX,MAX,MAX,MAX)always true
+  3 - output([t_normal_idx_alias.c2], [t_normal_idx_alias.c4], [t_normal_idx_alias.c5], [t_normal_idx_alias.c6], [t_normal_idx_alias.c7], [t_normal_idx_alias.c8], [t_normal_idx_alias.c9], [t_normal_idx_alias.c10]), filter(nil), 
+      access([t_normal_idx_alias.c2], [t_normal_idx_alias.c4], [t_normal_idx_alias.c5], [t_normal_idx_alias.c6], [t_normal_idx_alias.c7], [t_normal_idx_alias.c8], [t_normal_idx_alias.c9], [t_normal_idx_alias.c10]), partitions(p0), 
+      is_index_back=false, 
+      range_key([t_normal_idx_alias.c1]), range(MIN ; MAX), 
+      range_cond([t_normal_idx_alias.c1 = ?])
+
+Used Hint:
+-------------------------------------
+  /*+
+<<<<<<< HEAD
+      INDEX("t_normal_idx" "idx")
+=======
+      INDEX(@"SEL$1" "opt"."t_normal_idx"@"SEL$1" "idx")
+>>>>>>> implement spm part1
+  */
+
+Outline Data:
+-------------------------------------
+  /*+
+      BEGIN_OUTLINE_DATA
+<<<<<<< HEAD
+      USE_LATE_MATERIALIZATION(@"SEL$1")
+      INDEX(@"SEL$1" "opt"."t_normal_idx"@"SEL$1" "idx")
+      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
+=======
+      LEADING(@"SEL$1" ("opt.t_normal_idx"@"SEL$1" "opt.t_normal_idx_alias"@"SEL$1" ))
+      USE_NL(@"SEL$1" ("opt.t_normal_idx_alias"@"SEL$1" ))
+      PQ_DISTRIBUTE(@"SEL$1" ("opt.t_normal_idx_alias"@"SEL$1" ) LOCAL LOCAL)
+      NO_USE_NL_MATERIALIZATION(@"SEL$1" ("opt.t_normal_idx_alias"@"SEL$1" ))
+      INDEX(@"SEL$1" "opt"."t_normal_idx"@"SEL$1" "idx")
+>>>>>>> implement spm part1
+      END_OUTLINE_DATA
+  */
+
+Plan Type:
+-------------------------------------
+LOCAL
+
+Optimization Info:
+-------------------------------------
+t_normal_idx:table_rows:100, physical_range_rows:100, logical_range_rows:100, index_back_rows:0, output_rows:100, est_method:local_storage, optimization_method=cost_based, avaiable_index_name[idx], pruned_index_name[t_normal_idx]
+
+
+Parameters:
+-------------------------------------
+
+
+*************** Case 53(end)  ************** 
+
+***************   Case 54   ***************
+
+SQL: select /*+use_late_materialization index(t_normal_idx idx)*/* from t_normal_idx order by c3 limit 1; 
+
+=======================================================
+|ID|OPERATOR        |NAME              |EST. ROWS|COST|
+-------------------------------------------------------
+|0 |NESTED-LOOP JOIN|                  |1        |111 |
+|1 | TOP-N SORT     |                  |1        |80  |
+|2 |  TABLE SCAN    |t_normal_idx(idx) |100      |78  |
+|3 | TABLE GET      |t_normal_idx_alias|1        |31  |
+=======================================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t_normal_idx.c1], [t_normal_idx_alias.c2], [t_normal_idx.c3], [t_normal_idx_alias.c4], [t_normal_idx_alias.c5], [t_normal_idx_alias.c6], [t_normal_idx_alias.c7], [t_normal_idx_alias.c8], [t_normal_idx_alias.c9], [t_normal_idx_alias.c10]), filter(nil), 
+      conds(nil), nl_params_([t_normal_idx.c1]), batch_join=false
+  1 - output([t_normal_idx.c1], [t_normal_idx.c3]), filter(nil), sort_keys([t_normal_idx.c3, ASC]), topn(1)
+  2 - output([t_normal_idx.c1], [t_normal_idx.c3]), filter(nil), 
+      access([t_normal_idx.c1], [t_normal_idx.c3]), partitions(p0), 
+      is_index_back=false, 
+      range_key([t_normal_idx.c2], [t_normal_idx.c3], [t_normal_idx.c4], [t_normal_idx.c5], [t_normal_idx.c6], [t_normal_idx.c1]), range(MIN,MIN,MIN,MIN,MIN,MIN ; MAX,MAX,MAX,MAX,MAX,MAX)always true
+  3 - output([t_normal_idx_alias.c2], [t_normal_idx_alias.c4], [t_normal_idx_alias.c5], [t_normal_idx_alias.c6], [t_normal_idx_alias.c7], [t_normal_idx_alias.c8], [t_normal_idx_alias.c9], [t_normal_idx_alias.c10]), filter(nil), 
+      access([t_normal_idx_alias.c2], [t_normal_idx_alias.c4], [t_normal_idx_alias.c5], [t_normal_idx_alias.c6], [t_normal_idx_alias.c7], [t_normal_idx_alias.c8], [t_normal_idx_alias.c9], [t_normal_idx_alias.c10]), partitions(p0), 
+      is_index_back=false, 
+      range_key([t_normal_idx_alias.c1]), range(MIN ; MAX), 
+      range_cond([t_normal_idx_alias.c1 = ?])
+
+Used Hint:
+-------------------------------------
+  /*+
+<<<<<<< HEAD
+      USE_LATE_MATERIALIZATION
+      INDEX("t_normal_idx" "idx")
+=======
+      INDEX(@"SEL$1" "opt"."t_normal_idx"@"SEL$1" "idx")
+>>>>>>> implement spm part1
+  */
+
+Outline Data:
+-------------------------------------
+  /*+
+      BEGIN_OUTLINE_DATA
+<<<<<<< HEAD
+      USE_LATE_MATERIALIZATION(@"SEL$1")
+      INDEX(@"SEL$1" "opt"."t_normal_idx"@"SEL$1" "idx")
+      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
+=======
+      LEADING(@"SEL$1" ("opt.t_normal_idx"@"SEL$1" "opt.t_normal_idx_alias"@"SEL$1" ))
+      USE_NL(@"SEL$1" ("opt.t_normal_idx_alias"@"SEL$1" ))
+      PQ_DISTRIBUTE(@"SEL$1" ("opt.t_normal_idx_alias"@"SEL$1" ) LOCAL LOCAL)
+      NO_USE_NL_MATERIALIZATION(@"SEL$1" ("opt.t_normal_idx_alias"@"SEL$1" ))
+      INDEX(@"SEL$1" "opt"."t_normal_idx"@"SEL$1" "idx")
+>>>>>>> implement spm part1
+      END_OUTLINE_DATA
+  */
+
+Plan Type:
+-------------------------------------
+LOCAL
+
+Optimization Info:
+-------------------------------------
+t_normal_idx:table_rows:100, physical_range_rows:100, logical_range_rows:100, index_back_rows:0, output_rows:100, est_method:local_storage, optimization_method=cost_based, avaiable_index_name[idx], pruned_index_name[t_normal_idx]
+
+
+Parameters:
+-------------------------------------
+
+
+*************** Case 54(end)  ************** 
+
+***************   Case 55   ***************
+
+SQL: select /*+no_use_late_materialization index(t_normal_idx idx)*/* from t_normal_idx where c2=1 order by c4 limit 1; 
+
+=================================================
+|ID|OPERATOR   |NAME             |EST. ROWS|COST|
+-------------------------------------------------
+|0 |TOP-N SORT |                 |1        |137 |
+|1 | TABLE SCAN|t_normal_idx(idx)|100      |134 |
+=================================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t_normal_idx.c1], [t_normal_idx.c2], [t_normal_idx.c3], [t_normal_idx.c4], [t_normal_idx.c5], [t_normal_idx.c6], [t_normal_idx.c7], [t_normal_idx.c8], [t_normal_idx.c9], [t_normal_idx.c10]), filter(nil), sort_keys([t_normal_idx.c4, ASC]), topn(1)
+  1 - output([t_normal_idx.c1], [t_normal_idx.c2], [t_normal_idx.c3], [t_normal_idx.c4], [t_normal_idx.c5], [t_normal_idx.c6], [t_normal_idx.c7], [t_normal_idx.c8], [t_normal_idx.c9], [t_normal_idx.c10]), filter(nil), 
+      access([t_normal_idx.c1], [t_normal_idx.c2], [t_normal_idx.c3], [t_normal_idx.c4], [t_normal_idx.c5], [t_normal_idx.c6], [t_normal_idx.c7], [t_normal_idx.c8], [t_normal_idx.c9], [t_normal_idx.c10]), partitions(p0), 
+      is_index_back=true, 
+      range_key([t_normal_idx.c2], [t_normal_idx.c3], [t_normal_idx.c4], [t_normal_idx.c5], [t_normal_idx.c6], [t_normal_idx.c1]), range(1,MIN,MIN,MIN,MIN,MIN ; 1,MAX,MAX,MAX,MAX,MAX), 
+      range_cond([t_normal_idx.c2 = ?])
+
+Used Hint:
+-------------------------------------
+  /*+
+<<<<<<< HEAD
+      NO_USE_LATE_MATERIALIZATION
+      INDEX("t_normal_idx" "idx")
+=======
+      INDEX(@"SEL$1" "opt"."t_normal_idx"@"SEL$1" "idx")
+>>>>>>> implement spm part1
+  */
+
+Outline Data:
+-------------------------------------
+  /*+
+      BEGIN_OUTLINE_DATA
+      INDEX(@"SEL$1" "opt"."t_normal_idx"@"SEL$1" "idx")
+<<<<<<< HEAD
+      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
+=======
+>>>>>>> implement spm part1
+      END_OUTLINE_DATA
+  */
+
+Plan Type:
+-------------------------------------
+LOCAL
+
+Optimization Info:
+-------------------------------------
+t_normal_idx:table_rows:100, physical_range_rows:100, logical_range_rows:100, index_back_rows:100, output_rows:100, est_method:local_storage, optimization_method=cost_based, avaiable_index_name[idx], pruned_index_name[t_normal_idx]
+
+
+Parameters:
+-------------------------------------
+{obj:{"BIGINT":1}, accuracy:{length:1, precision:1, scale:0}, flag:1, raw_text_pos:-1, raw_text_len:-1, param_meta:{type:"BIGINT", collation:"binary", coercibility:"NUMERIC"}}
+
+*************** Case 55(end)  ************** 
+
+***************   Case 56   ***************
+
+SQL: select * from t4; 
+
+===================================
+|ID|OPERATOR  |NAME|EST. ROWS|COST|
+-----------------------------------
+|0 |TABLE SCAN|t4  |100      |78  |
+===================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t4.c1], [t4.c2], [t4.c3]), filter(nil), 
+      access([t4.c1], [t4.c2], [t4.c3]), partitions(p0), 
+      is_index_back=false, 
+      range_key([t4.c1], [t4.c2]), range(MIN,MIN ; MAX,MAX)always true
+
+Used Hint:
+-------------------------------------
+  /*+
+  */
+
+Outline Data:
+-------------------------------------
+  /*+
+      BEGIN_OUTLINE_DATA
+      FULL(@"SEL$1" "opt"."t4"@"SEL$1")
+<<<<<<< HEAD
+      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
+=======
+>>>>>>> implement spm part1
+      END_OUTLINE_DATA
+  */
+
+Plan Type:
+-------------------------------------
+LOCAL
+
+Optimization Info:
+-------------------------------------
+t4:table_rows:100, physical_range_rows:100, logical_range_rows:100, index_back_rows:0, output_rows:100, est_method:local_storage, optimization_method=cost_based, avaiable_index_name[idx_t4_c2_c3,idx_t4_c3,t4], pruned_index_name[idx_t4_c2]
+
+
+Parameters:
+-------------------------------------
+
+
+*************** Case 56(end)  ************** 
+
+***************   Case 57   ***************
+
+SQL: select /*+qb_name(select_1)*/* from t4; 
+
+===================================
+|ID|OPERATOR  |NAME|EST. ROWS|COST|
+-----------------------------------
+|0 |TABLE SCAN|t4  |100      |78  |
+===================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t4.c1], [t4.c2], [t4.c3]), filter(nil), 
+      access([t4.c1], [t4.c2], [t4.c3]), partitions(p0), 
+      is_index_back=false, 
+      range_key([t4.c1], [t4.c2]), range(MIN,MIN ; MAX,MAX)always true
+
+Used Hint:
+-------------------------------------
+  /*+
+      QB_NAME(SELECT_1)
+  */
+
+Outline Data:
+-------------------------------------
+  /*+
+      BEGIN_OUTLINE_DATA
+<<<<<<< HEAD
+      FULL(@"SELECT_1" "opt"."t4"@"SELECT_1")
+      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
+=======
+      FULL(@"SEL$1" "opt"."t4"@"SEL$1")
+>>>>>>> implement spm part1
+      END_OUTLINE_DATA
+  */
+
+Plan Type:
+-------------------------------------
+LOCAL
+
+Optimization Info:
+-------------------------------------
+t4:table_rows:100, physical_range_rows:100, logical_range_rows:100, index_back_rows:0, output_rows:100, est_method:local_storage, optimization_method=cost_based, avaiable_index_name[idx_t4_c2_c3,idx_t4_c3,t4], pruned_index_name[idx_t4_c2]
+
+
+Parameters:
+-------------------------------------
+
+
+*************** Case 57(end)  ************** 
+
+***************   Case 58   ***************
+
+SQL: select /*+qb_name(select_1) qb_name(select_2)*/* from t4; 
+
+===================================
+|ID|OPERATOR  |NAME|EST. ROWS|COST|
+-----------------------------------
+|0 |TABLE SCAN|t4  |100      |78  |
+===================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t4.c1], [t4.c2], [t4.c3]), filter(nil), 
+      access([t4.c1], [t4.c2], [t4.c3]), partitions(p0), 
+      is_index_back=false, 
+      range_key([t4.c1], [t4.c2]), range(MIN,MIN ; MAX,MAX)always true
+
+Used Hint:
+-------------------------------------
+  /*+
+  */
+
+Outline Data:
+-------------------------------------
+  /*+
+      BEGIN_OUTLINE_DATA
+      FULL(@"SEL$1" "opt"."t4"@"SEL$1")
+<<<<<<< HEAD
+      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
+=======
+>>>>>>> implement spm part1
+      END_OUTLINE_DATA
+  */
+
+Plan Type:
+-------------------------------------
+LOCAL
+
+Optimization Info:
+-------------------------------------
+t4:table_rows:100, physical_range_rows:100, logical_range_rows:100, index_back_rows:0, output_rows:100, est_method:local_storage, optimization_method=cost_based, avaiable_index_name[idx_t4_c2_c3,idx_t4_c3,t4], pruned_index_name[idx_t4_c2]
+
+
+Parameters:
+-------------------------------------
+
+
+*************** Case 58(end)  ************** 
+
+***************   Case 59   ***************
+
+SQL: select /*+qb_name(select_1) */* from t4 where t4.c1 > any(select /*+qb_name(select_2)*/c1 from t5); 
+
+======================================================
+|ID|OPERATOR                 |NAME    |EST. ROWS|COST|
+------------------------------------------------------
+|0 |NESTED-LOOP SEMI JOIN    |        |34       |1167|
+|1 | TABLE SCAN              |t4      |100      |78  |
+|2 | MATERIAL                |        |300      |281 |
+|3 |  PX COORDINATOR         |        |300      |280 |
+|4 |   EXCHANGE OUT DISTR    |:EX10000|300      |263 |
+|5 |    PX PARTITION ITERATOR|        |300      |233 |
+|6 |     TABLE SCAN          |t5      |300      |233 |
+======================================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t4.c1], [t4.c2], [t4.c3]), filter(nil), 
+      conds([t4.c1 > t5.c1]), nl_params_(nil), batch_join=false
+  1 - output([t4.c1], [t4.c2], [t4.c3]), filter(nil), 
+      access([t4.c1], [t4.c2], [t4.c3]), partitions(p0), 
+      is_index_back=false, 
+      range_key([t4.c1], [t4.c2]), range(MIN,MIN ; MAX,MAX)always true
+  2 - output([t5.c1]), filter(nil)
+  3 - output([t5.c1]), filter(nil)
+  4 - output([t5.c1]), filter(nil), dop=1
+  5 - output([t5.c1]), filter(nil), 
+      force partition granule.
+  6 - output([t5.c1]), filter(nil), 
+      access([t5.c1]), partitions(p[0-2]), 
+      is_index_back=false, 
+      range_key([t5.c2], [t5.c3]), range(MIN,MIN ; MAX,MAX)always true
+
+Used Hint:
+-------------------------------------
+  /*+
+      QB_NAME(SELECT_1)
+      QB_NAME(SELECT_2)
+  */
+
+Outline Data:
+-------------------------------------
+  /*+
+      BEGIN_OUTLINE_DATA
+<<<<<<< HEAD
+      LEADING(@"SEL$B9A892BA" ("opt"."t4"@"SELECT_1" "opt"."t5"@"SELECT_2"))
+      USE_NL(@"SEL$B9A892BA" "opt"."t5"@"SELECT_2")
+      PQ_DISTRIBUTE(@"SEL$B9A892BA" "opt"."t5"@"SELECT_2" LOCAL LOCAL)
+      USE_NL_MATERIALIZATION(@"SEL$B9A892BA" "opt"."t5"@"SELECT_2")
+      FULL(@"SEL$B9A892BA" "opt"."t4"@"SELECT_1")
+      FULL(@"SEL$B9A892BA" "opt"."t5"@"SELECT_2")
+      UNNEST(@"SELECT_2")
+      MERGE(@"SELECT_2" > "SEL$3EFB26BC")
+      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
+=======
+      LEADING(@"SEL$1" ("opt.t4"@"SEL$1" "opt.t5"@"SEL$1" ))
+      USE_NL(@"SEL$1" ("opt.t5"@"SEL$1" ))
+      PQ_DISTRIBUTE(@"SEL$1" ("opt.t5"@"SEL$1" ) LOCAL LOCAL)
+      USE_NL_MATERIALIZATION(@"SEL$1" ("opt.t5"@"SEL$1" ))
+      FULL(@"SEL$1" "opt"."t4"@"SEL$1")
+      FULL(@"SEL$1" "opt"."t5"@"SEL$1")
+>>>>>>> implement spm part1
+      END_OUTLINE_DATA
+  */
+
+Plan Type:
+-------------------------------------
+DISTRIBUTED
+
+Optimization Info:
+-------------------------------------
+t4:table_rows:100, physical_range_rows:100, logical_range_rows:100, index_back_rows:0, output_rows:100, est_method:local_storage, optimization_method=cost_based, avaiable_index_name[idx_t4_c2_c3,idx_t4_c3,t4], pruned_index_name[idx_t4_c2]
+
+t5:table_rows:300, physical_range_rows:300, logical_range_rows:300, index_back_rows:0, output_rows:300, est_method:default_stat, optimization_method=cost_based, avaiable_index_name[t5], pruned_index_name[idx_t5_c2,idx_t5_c3]
+
+
+Parameters:
+-------------------------------------
+
+
+*************** Case 59(end)  ************** 
+
+***************   Case 60   ***************
+
+SQL: select /*+qb_name(select_1) */* from t4 where t4.c1 > any(select /*+qb_name(select_1)*/c1 from t5); 
+
+======================================================
+|ID|OPERATOR                 |NAME    |EST. ROWS|COST|
+------------------------------------------------------
+|0 |NESTED-LOOP SEMI JOIN    |        |34       |1167|
+|1 | TABLE SCAN              |t4      |100      |78  |
+|2 | MATERIAL                |        |300      |281 |
+|3 |  PX COORDINATOR         |        |300      |280 |
+|4 |   EXCHANGE OUT DISTR    |:EX10000|300      |263 |
+|5 |    PX PARTITION ITERATOR|        |300      |233 |
+|6 |     TABLE SCAN          |t5      |300      |233 |
+======================================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t4.c1], [t4.c2], [t4.c3]), filter(nil), 
+      conds([t4.c1 > t5.c1]), nl_params_(nil), batch_join=false
+  1 - output([t4.c1], [t4.c2], [t4.c3]), filter(nil), 
+      access([t4.c1], [t4.c2], [t4.c3]), partitions(p0), 
+      is_index_back=false, 
+      range_key([t4.c1], [t4.c2]), range(MIN,MIN ; MAX,MAX)always true
+  2 - output([t5.c1]), filter(nil)
+  3 - output([t5.c1]), filter(nil)
+  4 - output([t5.c1]), filter(nil), dop=1
+  5 - output([t5.c1]), filter(nil), 
+      force partition granule.
+  6 - output([t5.c1]), filter(nil), 
+      access([t5.c1]), partitions(p[0-2]), 
+      is_index_back=false, 
+      range_key([t5.c2], [t5.c3]), range(MIN,MIN ; MAX,MAX)always true
+
+Used Hint:
+-------------------------------------
+  /*+
+  */
+
+Outline Data:
+-------------------------------------
+  /*+
+      BEGIN_OUTLINE_DATA
+<<<<<<< HEAD
+      LEADING(@"SEL$612EAAC9" ("opt"."t4"@"SEL$1" "opt"."t5"@"SEL$2"))
+      USE_NL(@"SEL$612EAAC9" "opt"."t5"@"SEL$2")
+      PQ_DISTRIBUTE(@"SEL$612EAAC9" "opt"."t5"@"SEL$2" LOCAL LOCAL)
+      USE_NL_MATERIALIZATION(@"SEL$612EAAC9" "opt"."t5"@"SEL$2")
+      FULL(@"SEL$612EAAC9" "opt"."t4"@"SEL$1")
+      FULL(@"SEL$612EAAC9" "opt"."t5"@"SEL$2")
+      UNNEST(@"SEL$2")
+      MERGE(@"SEL$2" > "SEL$6FCAE2AA")
+      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
+=======
+      LEADING(@"SEL$1" ("opt.t4"@"SEL$1" "opt.t5"@"SEL$1" ))
+      USE_NL(@"SEL$1" ("opt.t5"@"SEL$1" ))
+      PQ_DISTRIBUTE(@"SEL$1" ("opt.t5"@"SEL$1" ) LOCAL LOCAL)
+      USE_NL_MATERIALIZATION(@"SEL$1" ("opt.t5"@"SEL$1" ))
+      FULL(@"SEL$1" "opt"."t4"@"SEL$1")
+      FULL(@"SEL$1" "opt"."t5"@"SEL$1")
+>>>>>>> implement spm part1
+      END_OUTLINE_DATA
+  */
+
+Plan Type:
+-------------------------------------
+DISTRIBUTED
+
+Optimization Info:
+-------------------------------------
+t4:table_rows:100, physical_range_rows:100, logical_range_rows:100, index_back_rows:0, output_rows:100, est_method:local_storage, optimization_method=cost_based, avaiable_index_name[idx_t4_c2_c3,idx_t4_c3,t4], pruned_index_name[idx_t4_c2]
+
+t5:table_rows:300, physical_range_rows:300, logical_range_rows:300, index_back_rows:0, output_rows:300, est_method:default_stat, optimization_method=cost_based, avaiable_index_name[t5], pruned_index_name[idx_t5_c2,idx_t5_c3]
+
+
+Parameters:
+-------------------------------------
+
+
+*************** Case 60(end)  ************** 
+
+***************   Case 61   ***************
+
+SQL: select /*+topk(1 100) hotspot max_concurrent(1)*/* from t4; 
+
+===================================
+|ID|OPERATOR  |NAME|EST. ROWS|COST|
+-----------------------------------
+|0 |TABLE SCAN|t4  |100      |78  |
+===================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t4.c1], [t4.c2], [t4.c3]), filter(nil), 
+      access([t4.c1], [t4.c2], [t4.c3]), partitions(p0), 
+      is_index_back=false, 
+      range_key([t4.c1], [t4.c2]), range(MIN,MIN ; MAX,MAX)always true
+
+Used Hint:
+-------------------------------------
+  /*+
+  */
+
+Outline Data:
+-------------------------------------
+  /*+
+      BEGIN_OUTLINE_DATA
+      FULL(@"SEL$1" "opt"."t4"@"SEL$1")
+<<<<<<< HEAD
+      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
+=======
+>>>>>>> implement spm part1
+      END_OUTLINE_DATA
+  */
+
+Plan Type:
+-------------------------------------
+LOCAL
+
+Optimization Info:
+-------------------------------------
+t4:table_rows:100, physical_range_rows:100, logical_range_rows:100, index_back_rows:0, output_rows:100, est_method:local_storage, optimization_method=cost_based, avaiable_index_name[idx_t4_c2_c3,idx_t4_c3,t4], pruned_index_name[idx_t4_c2]
+
+
+Parameters:
+-------------------------------------
+
+
+*************** Case 61(end)  ************** 
+
+***************   Case 62   ***************
+
+SQL: select /*+read_consistency("weak")*/* from t1; 
+
+====================================================
+|ID|OPERATOR               |NAME    |EST. ROWS|COST|
+----------------------------------------------------
+|0 |PX COORDINATOR         |        |500      |528 |
+|1 | EXCHANGE OUT DISTR    |:EX10000|500      |481 |
+|2 |  PX PARTITION ITERATOR|        |500      |387 |
+|3 |   TABLE SCAN          |t1      |500      |387 |
+====================================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([INTERNAL_FUNCTION(t1.c1, t1.c2)]), filter(nil)
+  1 - output([INTERNAL_FUNCTION(t1.c1, t1.c2)]), filter(nil), dop=1
+  2 - output([t1.c1], [t1.c2]), filter(nil), 
+      force partition granule.
+  3 - output([t1.c1], [t1.c2]), filter(nil), 
+      access([t1.c1], [t1.c2]), partitions(p[0-4]), 
+      is_index_back=false, 
+      range_key([t1.c1]), range(MIN ; MAX)always true
+
+Used Hint:
+-------------------------------------
+  /*+
+      READ_CONSISTENCY( WEAK )
+  */
+
+Outline Data:
+-------------------------------------
+  /*+
+      BEGIN_OUTLINE_DATA
+      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
+<<<<<<< HEAD
+      READ_CONSISTENCY( WEAK )
+      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
+=======
+      READ_CONSISTENCY("WEAK")
+>>>>>>> implement spm part1
+      END_OUTLINE_DATA
+  */
+
+Plan Type:
+-------------------------------------
+DISTRIBUTED
+
+Optimization Info:
+-------------------------------------
+t1:table_rows:500, physical_range_rows:500, logical_range_rows:500, index_back_rows:0, output_rows:500, est_method:default_stat, optimization_method=cost_based, avaiable_index_name[idx_t1_c2,t1]
+
+
+Parameters:
+-------------------------------------
+
+
+*************** Case 62(end)  ************** 
+
+***************   Case 63   ***************
+
+SQL: select /*+query_timeout(100)*/ * from t1; 
+
+====================================================
+|ID|OPERATOR               |NAME    |EST. ROWS|COST|
+----------------------------------------------------
+|0 |PX COORDINATOR         |        |500      |528 |
+|1 | EXCHANGE OUT DISTR    |:EX10000|500      |481 |
+|2 |  PX PARTITION ITERATOR|        |500      |387 |
+|3 |   TABLE SCAN          |t1      |500      |387 |
+====================================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([INTERNAL_FUNCTION(t1.c1, t1.c2)]), filter(nil)
+  1 - output([INTERNAL_FUNCTION(t1.c1, t1.c2)]), filter(nil), dop=1
+  2 - output([t1.c1], [t1.c2]), filter(nil), 
+      force partition granule.
+  3 - output([t1.c1], [t1.c2]), filter(nil), 
+      access([t1.c1], [t1.c2]), partitions(p[0-4]), 
+      is_index_back=false, 
+      range_key([t1.c1]), range(MIN ; MAX)always true
+
+Used Hint:
+-------------------------------------
+  /*+
+      QUERY_TIMEOUT(100)
+  */
+
+Outline Data:
+-------------------------------------
+  /*+
+      BEGIN_OUTLINE_DATA
+      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
+      QUERY_TIMEOUT(100)
+      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
+      END_OUTLINE_DATA
+  */
+
+Plan Type:
+-------------------------------------
+DISTRIBUTED
+
+Optimization Info:
+-------------------------------------
+t1:table_rows:500, physical_range_rows:500, logical_range_rows:500, index_back_rows:0, output_rows:500, est_method:default_stat, optimization_method=cost_based, avaiable_index_name[idx_t1_c2,t1]
+
+
+Parameters:
+-------------------------------------
+
+
+*************** Case 63(end)  ************** 
+
+***************   Case 64   ***************
+
+SQL: select /*+frozen_version(1)*/ * from t1; 
+
+====================================================
+|ID|OPERATOR               |NAME    |EST. ROWS|COST|
+----------------------------------------------------
+|0 |PX COORDINATOR         |        |500      |528 |
+|1 | EXCHANGE OUT DISTR    |:EX10000|500      |481 |
+|2 |  PX PARTITION ITERATOR|        |500      |387 |
+|3 |   TABLE SCAN          |t1      |500      |387 |
+====================================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([INTERNAL_FUNCTION(t1.c1, t1.c2)]), filter(nil)
+  1 - output([INTERNAL_FUNCTION(t1.c1, t1.c2)]), filter(nil), dop=1
+  2 - output([t1.c1], [t1.c2]), filter(nil), 
+      force partition granule.
+  3 - output([t1.c1], [t1.c2]), filter(nil), 
+      access([t1.c1], [t1.c2]), partitions(p[0-4]), 
+      is_index_back=false, 
+      range_key([t1.c1]), range(MIN ; MAX)always true
+
+Used Hint:
+-------------------------------------
+  /*+
+      FROZEN_VERSION(1)
+  */
+
+Outline Data:
+-------------------------------------
+  /*+
+      BEGIN_OUTLINE_DATA
+      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
+      FROZEN_VERSION(1)
+      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
+      END_OUTLINE_DATA
+  */
+
+Plan Type:
+-------------------------------------
+DISTRIBUTED
+
+Optimization Info:
+-------------------------------------
+t1:table_rows:500, physical_range_rows:500, logical_range_rows:500, index_back_rows:0, output_rows:500, est_method:default_stat, optimization_method=cost_based, avaiable_index_name[idx_t1_c2,t1]
+
+
+Parameters:
+-------------------------------------
+
+
+*************** Case 64(end)  ************** 
+
+***************   Case 65   ***************
+
+SQL: select /*+use_plan_cache(none)*/ * from t1; 
+
+====================================================
+|ID|OPERATOR               |NAME    |EST. ROWS|COST|
+----------------------------------------------------
+|0 |PX COORDINATOR         |        |500      |528 |
+|1 | EXCHANGE OUT DISTR    |:EX10000|500      |481 |
+|2 |  PX PARTITION ITERATOR|        |500      |387 |
+|3 |   TABLE SCAN          |t1      |500      |387 |
+====================================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([INTERNAL_FUNCTION(t1.c1, t1.c2)]), filter(nil)
+  1 - output([INTERNAL_FUNCTION(t1.c1, t1.c2)]), filter(nil), dop=1
+  2 - output([t1.c1], [t1.c2]), filter(nil), 
+      force partition granule.
+  3 - output([t1.c1], [t1.c2]), filter(nil), 
+      access([t1.c1], [t1.c2]), partitions(p[0-4]), 
+      is_index_back=false, 
+      range_key([t1.c1]), range(MIN ; MAX)always true
+
+Used Hint:
+-------------------------------------
+  /*+
+      USE_PLAN_CACHE( NONE )
+  */
+
+Outline Data:
+-------------------------------------
+  /*+
+      BEGIN_OUTLINE_DATA
+      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
+<<<<<<< HEAD
+      USE_PLAN_CACHE( NONE )
+      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
+=======
+      USE_PLAN_CACHE("NONE")
+>>>>>>> implement spm part1
+      END_OUTLINE_DATA
+  */
+
+Plan Type:
+-------------------------------------
+DISTRIBUTED
+
+Optimization Info:
+-------------------------------------
+t1:table_rows:500, physical_range_rows:500, logical_range_rows:500, index_back_rows:0, output_rows:500, est_method:default_stat, optimization_method=cost_based, avaiable_index_name[idx_t1_c2,t1]
+
+
+Parameters:
+-------------------------------------
+
+
+*************** Case 65(end)  ************** 
+
+***************   Case 66   ***************
+
+SQL: select /*+use_plan_cache(default)*/ * from t1; 
+
+====================================================
+|ID|OPERATOR               |NAME    |EST. ROWS|COST|
+----------------------------------------------------
+|0 |PX COORDINATOR         |        |500      |528 |
+|1 | EXCHANGE OUT DISTR    |:EX10000|500      |481 |
+|2 |  PX PARTITION ITERATOR|        |500      |387 |
+|3 |   TABLE SCAN          |t1      |500      |387 |
+====================================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([INTERNAL_FUNCTION(t1.c1, t1.c2)]), filter(nil)
+  1 - output([INTERNAL_FUNCTION(t1.c1, t1.c2)]), filter(nil), dop=1
+  2 - output([t1.c1], [t1.c2]), filter(nil), 
+      force partition granule.
+  3 - output([t1.c1], [t1.c2]), filter(nil), 
+      access([t1.c1], [t1.c2]), partitions(p[0-4]), 
+      is_index_back=false, 
+      range_key([t1.c1]), range(MIN ; MAX)always true
+
+Used Hint:
+-------------------------------------
+  /*+
+      USE_PLAN_CACHE( DEFAULT )
+  */
+
+Outline Data:
+-------------------------------------
+  /*+
+      BEGIN_OUTLINE_DATA
+      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
+<<<<<<< HEAD
+      USE_PLAN_CACHE( DEFAULT )
+      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
+=======
+      USE_PLAN_CACHE("DEFAULT")
+>>>>>>> implement spm part1
+      END_OUTLINE_DATA
+  */
+
+Plan Type:
+-------------------------------------
+DISTRIBUTED
+
+Optimization Info:
+-------------------------------------
+t1:table_rows:500, physical_range_rows:500, logical_range_rows:500, index_back_rows:0, output_rows:500, est_method:default_stat, optimization_method=cost_based, avaiable_index_name[idx_t1_c2,t1]
+
+
+Parameters:
+-------------------------------------
+
+
+*************** Case 66(end)  ************** 
+
+***************   Case 67   ***************
+
+SQL: select /*+use_plan_cache(nothing)*/ * from t1; 
+
+====================================================
+|ID|OPERATOR               |NAME    |EST. ROWS|COST|
+----------------------------------------------------
+|0 |PX COORDINATOR         |        |500      |528 |
+|1 | EXCHANGE OUT DISTR    |:EX10000|500      |481 |
+|2 |  PX PARTITION ITERATOR|        |500      |387 |
+|3 |   TABLE SCAN          |t1      |500      |387 |
+====================================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([INTERNAL_FUNCTION(t1.c1, t1.c2)]), filter(nil)
+  1 - output([INTERNAL_FUNCTION(t1.c1, t1.c2)]), filter(nil), dop=1
+  2 - output([t1.c1], [t1.c2]), filter(nil), 
+      force partition granule.
+  3 - output([t1.c1], [t1.c2]), filter(nil), 
+      access([t1.c1], [t1.c2]), partitions(p[0-4]), 
+      is_index_back=false, 
+      range_key([t1.c1]), range(MIN ; MAX)always true
+
+Used Hint:
+-------------------------------------
+  /*+
+  */
+
+Outline Data:
+-------------------------------------
+  /*+
+      BEGIN_OUTLINE_DATA
+      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
+<<<<<<< HEAD
+      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
+=======
+>>>>>>> implement spm part1
+      END_OUTLINE_DATA
+  */
+
+Plan Type:
+-------------------------------------
+DISTRIBUTED
+
+Optimization Info:
+-------------------------------------
+t1:table_rows:500, physical_range_rows:500, logical_range_rows:500, index_back_rows:0, output_rows:500, est_method:default_stat, optimization_method=cost_based, avaiable_index_name[idx_t1_c2,t1]
+
+
+Parameters:
+-------------------------------------
+
+
+*************** Case 67(end)  ************** 
+
+***************   Case 68   ***************
+
+SQL: select /*+no_rewrite*/ * from t1; 
+
+====================================================
+|ID|OPERATOR               |NAME    |EST. ROWS|COST|
+----------------------------------------------------
+|0 |PX COORDINATOR         |        |500      |528 |
+|1 | EXCHANGE OUT DISTR    |:EX10000|500      |481 |
+|2 |  PX PARTITION ITERATOR|        |500      |387 |
+|3 |   TABLE SCAN          |t1      |500      |387 |
+====================================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([INTERNAL_FUNCTION(t1.c1, t1.c2)]), filter(nil)
+  1 - output([INTERNAL_FUNCTION(t1.c1, t1.c2)]), filter(nil), dop=1
+  2 - output([t1.c1], [t1.c2]), filter(nil), 
+      force partition granule.
+  3 - output([t1.c1], [t1.c2]), filter(nil), 
+      access([t1.c1], [t1.c2]), partitions(p[0-4]), 
+      is_index_back=false, 
+      range_key([t1.c1]), range(MIN ; MAX)always true
+
+Used Hint:
+-------------------------------------
+  /*+
+      NO_REWRITE
+  */
+
+Outline Data:
+-------------------------------------
+  /*+
+      BEGIN_OUTLINE_DATA
+      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
+<<<<<<< HEAD
+      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
+=======
+      NO_REWRITE
+>>>>>>> implement spm part1
+      END_OUTLINE_DATA
+  */
+
+Plan Type:
+-------------------------------------
+DISTRIBUTED
+
+Optimization Info:
+-------------------------------------
+t1:table_rows:500, physical_range_rows:500, logical_range_rows:500, index_back_rows:0, output_rows:500, est_method:default_stat, optimization_method=cost_based, avaiable_index_name[idx_t1_c2,t1]
+
+
+Parameters:
+-------------------------------------
+
+
+*************** Case 68(end)  ************** 
+
+***************   Case 69   ***************
+
+SQL: select /*+trace_log*/ * from t1; 
+
+====================================================
+|ID|OPERATOR               |NAME    |EST. ROWS|COST|
+----------------------------------------------------
+|0 |PX COORDINATOR         |        |500      |528 |
+|1 | EXCHANGE OUT DISTR    |:EX10000|500      |481 |
+|2 |  PX PARTITION ITERATOR|        |500      |387 |
+|3 |   TABLE SCAN          |t1      |500      |387 |
+====================================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([INTERNAL_FUNCTION(t1.c1, t1.c2)]), filter(nil)
+  1 - output([INTERNAL_FUNCTION(t1.c1, t1.c2)]), filter(nil), dop=1
+  2 - output([t1.c1], [t1.c2]), filter(nil), 
+      force partition granule.
+  3 - output([t1.c1], [t1.c2]), filter(nil), 
+      access([t1.c1], [t1.c2]), partitions(p[0-4]), 
+      is_index_back=false, 
+      range_key([t1.c1]), range(MIN ; MAX)always true
+
+Used Hint:
+-------------------------------------
+  /*+
+      TRACE_LOG
+  */
+
+Outline Data:
+-------------------------------------
+  /*+
+      BEGIN_OUTLINE_DATA
+      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
+      TRACE_LOG
+      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
+      END_OUTLINE_DATA
+  */
+
+Plan Type:
+-------------------------------------
+DISTRIBUTED
+
+Optimization Info:
+-------------------------------------
+t1:table_rows:500, physical_range_rows:500, logical_range_rows:500, index_back_rows:0, output_rows:500, est_method:default_stat, optimization_method=cost_based, avaiable_index_name[idx_t1_c2,t1]
+
+
+Parameters:
+-------------------------------------
+
+
+*************** Case 69(end)  ************** 
+
+***************   Case 70   ***************
+
+SQL: select /*+log_level('INFO')*/ * from t1; 
+
+====================================================
+|ID|OPERATOR               |NAME    |EST. ROWS|COST|
+----------------------------------------------------
+|0 |PX COORDINATOR         |        |500      |528 |
+|1 | EXCHANGE OUT DISTR    |:EX10000|500      |481 |
+|2 |  PX PARTITION ITERATOR|        |500      |387 |
+|3 |   TABLE SCAN          |t1      |500      |387 |
+====================================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([INTERNAL_FUNCTION(t1.c1, t1.c2)]), filter(nil)
+  1 - output([INTERNAL_FUNCTION(t1.c1, t1.c2)]), filter(nil), dop=1
+  2 - output([t1.c1], [t1.c2]), filter(nil), 
+      force partition granule.
+  3 - output([t1.c1], [t1.c2]), filter(nil), 
+      access([t1.c1], [t1.c2]), partitions(p[0-4]), 
+      is_index_back=false, 
+      range_key([t1.c1]), range(MIN ; MAX)always true
+
+Used Hint:
+-------------------------------------
+  /*+
+      LOG_LEVEL("INFO")
+  */
+
+Outline Data:
+-------------------------------------
+  /*+
+      BEGIN_OUTLINE_DATA
+      FULL(@"SEL$1" "opt"."t1"@"SEL$1")
+<<<<<<< HEAD
+      LOG_LEVEL("INFO")
+      OPTIMIZER_FEATURES_ENABLE('4.0.0.0')
+=======
+      LOG_LEVEL('info')
+>>>>>>> implement spm part1
+      END_OUTLINE_DATA
+  */
+
+Plan Type:
+-------------------------------------
+DISTRIBUTED
+
+Optimization Info:
+-------------------------------------
+t1:table_rows:500, physical_range_rows:500, logical_range_rows:500, index_back_rows:0, output_rows:500, est_method:default_stat, optimization_method=cost_based, avaiable_index_name[idx_t1_c2,t1]
+
+
+Parameters:
+-------------------------------------
+
+
+*************** Case 70(end)  ************** 
+

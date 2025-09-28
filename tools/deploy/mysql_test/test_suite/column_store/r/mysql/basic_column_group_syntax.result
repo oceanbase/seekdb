@@ -1,0 +1,7 @@
+create table tt1(a int, b int, c int, primary key(a)) with column group (all columns, each column);
+create index idx_tt1 on tt1(b);
+create table tt2(d int, e int);
+alter table tt1 modify column c varchar(20);
+alter table tt1 drop column c;
+drop table tt1;
+drop table tt2;

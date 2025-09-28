@@ -1,0 +1,567 @@
+/**
+ * Copyright (c) 2021 OceanBase
+ * OceanBase CE is licensed under Mulan PubL v2.
+ * You can use this software according to the terms and conditions of the Mulan PubL v2.
+ * You may obtain a copy of Mulan PubL v2 at:
+ *          http://license.coscl.org.cn/MulanPubL-2.0
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PubL v2 for more details.
+ */
+
+#define USING_LOG_PREFIX SQL_ENG
+#include "sql/engine/expr/ob_expr_multiset.h"
+#include "src/pl/ob_pl.h"
+
+namespace oceanbase
+{
+using namespace common;
+namespace sql
+{
+OB_SERIALIZE_MEMBER((ObExprMultiSet, ObExprOperator),
+                    ms_type_,
+                    ms_modifier_);
+
+typedef hash::ObHashMap<ObObj, int64_t, common::hash::NoPthreadDefendMode> LocalNTSHashMap;
+
+ObExprMultiSet::ObExprMultiSet(ObIAllocator &alloc)
+  : ObExprOperator(alloc, T_OP_MULTISET, N_MULTISET, 2, VALID_FOR_GENERATED_COL, NOT_ROW_DIMENSION),
+    ms_type_(ObMultiSetType::MULTISET_TYPE_INVALID),
+    ms_modifier_(ObMultiSetModifier::MULTISET_MODIFIER_INVALID)
+{
+}
+
+ObExprMultiSet::~ObExprMultiSet()
+{
+}
+
+void ObExprMultiSet::reset()
+{
+  ms_type_ = ObMultiSetType::MULTISET_TYPE_INVALID;
+  ms_modifier_ = ObMultiSetModifier::MULTISET_MODIFIER_INVALID;
+  ObExprOperator::reset();
+}
+
+int ObExprMultiSet::assign(const ObExprOperator &other)
+{
+  int ret = OB_SUCCESS;
+  if (other.get_type() != T_OP_MULTISET) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("expr operator is mismatch", K(other.get_type()));
+  } else if (OB_FAIL(ObExprOperator::assign(other))) {
+    LOG_WARN("assign parent expr failed", K(ret));
+  } else {
+    const ObExprMultiSet &other_expr = static_cast<const ObExprMultiSet &>(other);
+    ms_type_ = other_expr.ms_type_;
+    ms_modifier_ = other_expr.ms_modifier_;
+  }
+  return ret;
+}
+
+int ObExprMultiSet::calc_result_type2(ObExprResType &type,
+                                    ObExprResType &type1,
+                                    ObExprResType &type2,
+                                    ObExprTypeCtx &type_ctx) const
+{
+  UNUSED(type_ctx);
+  int ret = OB_SUCCESS;
+  ret = OB_NOT_SUPPORTED;
+  LOG_USER_ERROR(OB_NOT_SUPPORTED, "this function in MySql mode");
+  LOG_WARN("multiset operator not support non udt type", K(type1), K(type2), K(ret));
+  return ret;
+}
+
+  #define FILL_ELEM(ca, dst, offset, allocator) \
+  do { \
+    const ObObj *elem = NULL; \
+    int64_t i = 0; \
+    int64_t cnt = 0; \
+    for (; OB_SUCC(ret) && i < ca->get_count(); ++i) { \
+      bool is_del = false; \
+      if (OB_FAIL(ca->is_elem_deleted(i, is_del))) { \
+        LOG_WARN("failed to test collection elem is deleted", K(ret)); \
+      } else if (!is_del) { \
+        CK (cnt < ca->get_actual_count()); \
+        if (OB_SUCC(ret)) { \
+          elem = static_cast<ObObj *>(ca->get_data()) + i; \
+          dst[cnt + offset].set_null();       \
+          if (OB_NOT_NULL(elem)) { \
+            if (elem->is_pl_extend() &&  \
+                elem->get_meta().get_extend_type() != pl::PL_REF_CURSOR_TYPE) { \
+              if (OB_FAIL(pl::ObUserDefinedType::deep_copy_obj(allocator, *elem, dst[cnt + offset], true))) { \
+                LOG_WARN("fail to fill obobj", K(*elem), K(ret)); \
+              } \
+            } else if (OB_FAIL(deep_copy_obj(allocator, *elem, dst[cnt + offset]))) { \
+              LOG_WARN("fail to fill obobj", K(*elem), K(ret)); \
+            } \
+            if (OB_SUCC(ret)) {  \
+              cnt++; \
+            } \
+          } else { \
+            ret = OB_ERR_UNEXPECTED; \
+            LOG_WARN("get null collection element", K(ret), K(i)); \
+          } \
+        } else { \
+          ret = OB_ERR_UNEXPECTED; \
+          LOG_WARN("collection element count illegal", K(ret)); \
+        } \
+      } \
+    } \
+  } while(0)
+
+  #define FILL_ELEM_DISTICT(ca, d_map, allow_dup) \
+  do { \
+    const ObObj *elem = NULL; \
+    int64_t i = 0; \
+    for (; OB_SUCC(ret) && i < ca->get_count(); ++i) { \
+      bool is_del = false; \
+      if (OB_FAIL(ca->is_elem_deleted(i, is_del))) { \
+        LOG_WARN("failed to test collection elem is deleted", K(ret)); \
+      } else if (!is_del) { \
+        elem = static_cast<ObObj *>(ca->get_data()) + i; \
+        ret = d_map.set_refactored(*elem, 1); \
+        if (OB_HASH_EXIST == ret) { \
+          if (allow_dup) { \
+            int64_t *dup_cnt = const_cast<int64_t *>(d_map.get(*elem)); \
+            if (OB_NOT_NULL(dup_cnt)) { \
+              *dup_cnt = *dup_cnt + 1; \
+              ret = OB_SUCCESS; \
+            } else { \
+              ret = OB_ERR_UNEXPECTED; \
+              LOG_WARN("get hash map value failed", K(ret), K(*elem)); \
+            } \
+          } else { \
+            ret = OB_SUCCESS; \
+          } \
+        } else if (OB_FAIL(ret)) { \
+          LOG_WARN("insert elem into hashmap failed.", K(ret)); \
+        } \
+      } \
+    }\
+  } while(0)
+
+
+
+int ObExprMultiSet::calc_ms_impl(common::ObIAllocator *coll_allocator,
+                                   pl::ObPLCollection *c1,
+                                   pl::ObPLCollection *c2,
+                                   ObObj *&data_arr,
+                                   int64_t &elem_count,
+                                   ObMultiSetType ms_type,
+                                   ObMultiSetModifier ms_modifier)
+{
+  int ret = OB_SUCCESS;
+  if (MULTISET_MODIFIER_ALL == ms_modifier) {
+    if (OB_FAIL(calc_ms_all_impl(coll_allocator, c1, c2, data_arr,
+                                 elem_count, true, ms_type, ms_modifier))) {
+      LOG_WARN("failed to calc except all", K(ret));
+    }
+  } else if (MULTISET_MODIFIER_DISTINCT == ms_modifier) {
+    if (OB_FAIL(calc_ms_distinct_impl(coll_allocator, c1, c2, data_arr,
+                                      elem_count, ms_type, ms_modifier))) {
+      LOG_WARN("failed to calc except distinct", K(ret));
+    }
+  } else {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected multiest except modifier", K(ms_modifier), K(ms_type));
+  }
+  return ret;
+}
+
+int ObExprMultiSet::calc_ms_one_distinct(common::ObIAllocator *coll_allocator,
+                                   ObObj *input_data,
+                                   int64_t count,
+                                   ObObj *&data_arr,
+                                   int64_t &elem_count)
+{
+  int ret = OB_SUCCESS;
+  LocalNTSHashMap dmap_c;
+  int res_cnt = 0;
+  int64_t real_count = 0;
+  ObObj objs[count];
+  for (int64_t i = 0; i < count; ++i) {
+    // skip deleted element
+    if (ObMaxType != input_data[i].get_type()) {
+      objs[real_count] = input_data[i];
+      real_count += 1;
+    }
+  }
+  if (0 == real_count) {
+    // do nothing
+  } else if (OB_ISNULL(objs)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("objs array is null", K(count), K(real_count));
+  } else {
+    if (OB_FAIL(dmap_c.create(real_count, ObModIds::OB_SQL_HASH_SET))) {
+      LOG_WARN("fail create hash map", K(real_count), K(ret));
+    } else {
+      const ObObj *elem = NULL;
+      for (int64_t i = 0; OB_SUCC(ret) && i < real_count; ++i) {
+        elem = objs + i;
+        ret = dmap_c.set_refactored(*elem, i);
+        if (OB_HASH_EXIST == ret) {
+          ret = OB_SUCCESS;
+          continue;
+        } else if (OB_SUCC(ret)) {
+          if (i != res_cnt) {
+            objs[res_cnt] = *elem;
+          }
+          res_cnt++;
+        } else {
+          LOG_WARN("insert elem into hashmap failed.", K(ret));
+        }
+      }
+    }
+    CK (res_cnt > 0);
+    if (OB_SUCC(ret)) {
+      data_arr = static_cast<ObObj *>(coll_allocator->alloc(res_cnt * sizeof(ObObj)));
+      if (OB_ISNULL(data_arr)) {
+        ret = OB_ALLOCATE_MEMORY_FAILED;
+        LOG_WARN("allocate result obobj array failed, size is: ", K(res_cnt));
+      } else {
+        for (int64_t i = 0; i < res_cnt; ++i) {
+          data_arr[i].set_null();
+          if (objs[i].is_pl_extend() &&
+              objs[i].get_meta().get_extend_type() != pl::PL_REF_CURSOR_TYPE) {
+            if (OB_FAIL(pl::ObUserDefinedType::deep_copy_obj(*coll_allocator, objs[i], data_arr[i], true))) {
+              LOG_WARN("copy obobj failed.", K(ret));
+            }
+          } else if (OB_FAIL(deep_copy_obj(*coll_allocator, objs[i], data_arr[i]))) {
+            LOG_WARN("copy obobj failed.", K(ret));
+          }
+        }
+      }
+      elem_count = res_cnt;
+    }
+  }
+  return ret;
+}
+
+int ObExprMultiSet::calc_ms_distinct_impl(common::ObIAllocator *coll_allocator,
+                                   pl::ObPLCollection *c1,
+                                   pl::ObPLCollection *c2,
+                                   ObObj *&data_arr,
+                                   int64_t &elem_count,
+                                   ObMultiSetType ms_type,
+                                   ObMultiSetModifier ms_modifier)
+{
+  int ret = OB_SUCCESS;
+  ObArenaAllocator tmp_alloc;
+  ObObj *tmp_res = NULL;
+  if (OB_FAIL(calc_ms_all_impl(&tmp_alloc, c1, c2, tmp_res,
+                               elem_count, false, ms_type, ms_modifier))) {
+    LOG_WARN("calc intersect or except failed.", K(ret));
+  } else if (OB_FAIL(calc_ms_one_distinct(coll_allocator,
+                                          tmp_res,
+                                          elem_count,
+                                          data_arr,
+                                          elem_count))) {
+    LOG_WARN("calc distinct failed.", K(ret));
+  }
+  for (int64_t i = 0; i < elem_count; ++i) {
+    if (tmp_res[i].is_pl_extend() &&
+        tmp_res[i].get_meta().get_extend_type() != pl::PL_REF_CURSOR_TYPE) {
+      pl::ObUserDefinedType::destruct_obj(tmp_res[i], nullptr);
+    }
+  }
+  return ret;
+}
+
+int ObExprMultiSet::calc_ms_all_impl(common::ObIAllocator *coll_allocator,
+                                   pl::ObPLCollection *c1,
+                                   pl::ObPLCollection *c2,
+                                   ObObj *&data_arr,
+                                   int64_t &elem_count,
+                                   bool allow_dup,
+                                   ObMultiSetType ms_type,
+                                   ObMultiSetModifier ms_modifier)
+{
+  UNUSED(ms_modifier);
+  int ret = OB_SUCCESS;
+  int64_t cnt1 = c1->get_actual_count();
+  int64_t i = 0, index = 0;
+  LocalNTSHashMap dmap_c2;
+  if (0 == cnt1) {
+    elem_count = 0;
+  } else if ( 0 == c2->get_actual_count()) {
+    if (MULTISET_TYPE_INTERSECT == ms_type) {
+      elem_count = 0;
+    } else if (MULTISET_TYPE_EXCEPT == ms_type) {
+      data_arr =
+       static_cast<ObObj *>(coll_allocator->alloc(c1->get_actual_count() * sizeof(ObObj)));
+      FILL_ELEM(c1, data_arr, 0, *coll_allocator);
+      OX (elem_count = c1->get_actual_count());
+    }
+  } else {
+    if (OB_FAIL(dmap_c2.create(c2->get_actual_count(), ObModIds::OB_SQL_HASH_SET))) {
+      LOG_WARN("fail create hash map", K(c2->get_actual_count()), K(ret));
+    } else {
+      FILL_ELEM_DISTICT(c2, dmap_c2, allow_dup);
+    }
+    if (OB_SUCC(ret)) {
+      const ObObj *elem = NULL;
+      data_arr =
+       static_cast<ObObj *>(coll_allocator->alloc(c1->get_actual_count() * sizeof(ObObj)));
+      if (OB_ISNULL(data_arr)) {
+        ret = OB_ALLOCATE_MEMORY_FAILED;
+        LOG_WARN("cann't alloc memory", K(c1->get_actual_count()), K(c1->get_count()));
+      } else {
+        int64_t *dup_cnt = NULL;
+        bool is_del = false;
+        for (i = 0; OB_SUCC(ret) && i < c1->get_count(); ++i) {
+          if (OB_FAIL(c1->is_elem_deleted(i, is_del))) {
+            LOG_WARN("failed to check collection elem deleted", K(ret));
+          } else if (!is_del) {
+            elem = static_cast<ObObj *>(c1->get_data()) + i;
+        #define COPY_ELEM(iscopy) \
+        do{ \
+          if (iscopy) { \
+            data_arr[index].set_null();  \
+            if (elem->is_pl_extend() && elem->get_meta().get_extend_type() != pl::PL_REF_CURSOR_TYPE) { \
+              OZ (pl::ObUserDefinedType::deep_copy_obj(*coll_allocator, *elem, data_arr[index], true)); \
+            } else {  \
+              OZ (common::deep_copy_obj(*coll_allocator, *elem, data_arr[index])); \
+            }  \
+            ++index; \
+          }\
+        } while(0)
+
+        /* The except ALL keyword instructs Oracle to return all elements in nested_table1 that are
+          not in nested_table2. For example, if a particular element occurs m times in
+          nested_table1 and n times in nested_table2, then the result will have (m-n)
+          occurrences of the element if m >n and 0 occurrences if m<=n.
+        */
+        /* The intersect ALL keyword instructs Oracle to return all common occurrences of elements
+          that are in the two input nested tables, including duplicate common values and
+          duplicate common NULL occurrences. For example, if a particular value occurs m
+          times in nested_table1 and n times in nested_table2, then the result would
+          contain the element min(m,n) times.
+        */
+            if (allow_dup) {
+              dup_cnt = const_cast<int64_t *>(dmap_c2.get(*elem));
+              if (MULTISET_TYPE_EXCEPT == ms_type) {
+                if (OB_ISNULL(dup_cnt)) {
+                  COPY_ELEM(true);
+                } else {
+                  if (OB_UNLIKELY(0 > *dup_cnt)) {
+                    ret = OB_ERR_UNEXPECTED;
+                    LOG_WARN("unexpected collection elem count in hash map", K(ret), K(*dup_cnt));
+                  } else if (0 != *dup_cnt) {
+                    *dup_cnt -= 1;
+                  } else {
+                    COPY_ELEM(true);
+                  }
+                }
+              } else {
+                if (OB_ISNULL(dup_cnt)) {
+                  // do nothing
+                } else {
+                  if (OB_UNLIKELY(0 > *dup_cnt)) {
+                    ret = OB_ERR_UNEXPECTED;
+                    LOG_WARN("unexpected collection elem count in hash map", K(ret), K(*dup_cnt));
+                  } else if (0 != *dup_cnt) {
+                    COPY_ELEM(true);
+                    *dup_cnt -= 1;
+                  } else {
+                  }
+                }
+              }
+            } else {
+              if (OB_ISNULL(dmap_c2.get(*elem))) {
+                COPY_ELEM(MULTISET_TYPE_EXCEPT == ms_type);
+              } else {
+                COPY_ELEM(MULTISET_TYPE_INTERSECT == ms_type);
+              }
+            }
+          }
+        }
+        elem_count = index;
+      }
+    }
+  }
+  return ret;
+}
+
+int ObExprMultiSet::append_collection(ObObj *buffer, int64_t buffer_size, int64_t &pos,
+                                      pl::ObPLCollection *c,
+                                      ObIAllocator &coll_alloc,
+                                      bool keep_deleted_elem)
+{
+  int ret = OB_SUCCESS;
+
+  CK (OB_NOT_NULL(buffer));
+  CK (OB_NOT_NULL(c));
+
+  if (OB_FAIL(ret)) {
+    // do nothing
+  } else if (buffer_size - pos < c->get_count()) {
+    ret = OB_SIZE_OVERFLOW;
+    LOG_WARN("buffer size not enough", K(ret), K(buffer_size), K(pos), KPC(c));
+  } else {
+    for (int64_t i = 0; OB_SUCC(ret) && i < c->get_count(); ++i) {
+      ObObj *curr = c->get_data() + i;
+      buffer[pos].reset();
+
+      CK (OB_NOT_NULL(curr));
+
+      if (OB_SUCC(ret)) {
+        if (ObMaxType == curr->get_type() && !keep_deleted_elem) {
+          // do nothing
+        } else {
+          if (curr->is_pl_extend() && pl::PL_REF_CURSOR_TYPE != curr->get_meta().get_extend_type()) {
+            if (OB_FAIL(pl::ObUserDefinedType::deep_copy_obj(coll_alloc, *curr, buffer[pos], true))) {
+              LOG_WARN("failed to deep_copy_obj", K(ret), K(i), KPC(c));
+            }
+          } else if (OB_FAIL(deep_copy_obj(coll_alloc, *curr, buffer[pos]))) {
+            LOG_WARN("failed to deep_copy_obj", K(ret), K(i), KPC(c));
+          }
+
+          if (OB_SUCC(ret)) {
+            pos += 1;
+          }
+        }
+      }
+    }
+  }
+
+  return ret;
+}
+
+int ObExprMultiSet::cg_expr(ObExprCGCtx &expr_cg_ctx,
+                            const ObRawExpr &raw_expr,
+                            ObExpr &rt_expr) const
+{
+  int ret = OB_SUCCESS;
+  if (2 != rt_expr.arg_cnt_) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("wrong param num for multi set", K(ret), K(rt_expr.arg_cnt_));
+  } else {
+    ObIAllocator &alloc = *expr_cg_ctx.allocator_;
+    const ObMultiSetRawExpr &fun_sys = static_cast<const ObMultiSetRawExpr &>(raw_expr);
+    ObExprMultiSetInfo *info = OB_NEWx(ObExprMultiSetInfo, (&alloc), alloc, T_OP_MULTISET);
+    if (NULL == info) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("allocate memory failed", K(ret));
+    } else {
+      OZ(info->from_raw_expr(fun_sys));
+      rt_expr.extra_info_ = info;
+    }
+    rt_expr.eval_func_ = eval_multiset;
+  }
+  return ret;
+}
+
+
+
+
+int ObExprMultiSet::eval_composite_relative_anonymous_block(ObExecContext &exec_ctx,
+                                                            const char *pl,
+                                                            ParamStore &params,
+                                                            ObBitSet<> &out_args) {
+  int ret = OB_SUCCESS;
+
+  CK (OB_NOT_NULL(GCTX.pl_engine_));
+  CK (OB_NOT_NULL(exec_ctx.get_sql_ctx()));
+
+  if (OB_SUCC(ret)) {
+    bool is_inner_mock_backup = false;
+    bool is_ps_backup = exec_ctx.get_sql_ctx()->is_prepare_protocol_;
+    bool is_pre_exec_backup = exec_ctx.get_sql_ctx()->is_pre_execute_;
+
+    exec_ctx.get_sql_ctx()->is_prepare_protocol_ = true;
+    exec_ctx.get_sql_ctx()->is_pre_execute_ = true;
+
+    if (OB_NOT_NULL(exec_ctx.get_pl_stack_ctx())) {
+      is_inner_mock_backup = exec_ctx.get_pl_stack_ctx()->get_is_inner_mock();
+      exec_ctx.get_pl_stack_ctx()->set_is_inner_mock(true);
+    }
+
+    DEFER(exec_ctx.get_sql_ctx()->is_prepare_protocol_ = is_ps_backup);
+    DEFER(exec_ctx.get_sql_ctx()->is_pre_execute_ = is_pre_exec_backup);
+    DEFER(if (OB_NOT_NULL(exec_ctx.get_pl_stack_ctx())) { exec_ctx.get_pl_stack_ctx()->set_is_inner_mock(is_inner_mock_backup); });
+
+    out_args.reuse();
+
+    CREATE_WITH_TEMP_CONTEXT(lib::ContextParam().set_mem_attr(MTL_ID(),
+                                                              GET_PL_MOD_STRING(pl::OB_PL_MULTISET),
+                                                              ObCtxIds::DEFAULT_CTX_ID)) {
+      char old_sql_id[common::OB_MAX_SQL_ID_LENGTH + 1];
+      MEMCPY(old_sql_id, exec_ctx.get_sql_ctx()->sql_id_, (int32_t)sizeof(exec_ctx.get_sql_ctx()->sql_id_));
+      MEMSET(exec_ctx.get_sql_ctx()->sql_id_, '\0', (int32_t)sizeof(exec_ctx.get_sql_ctx()->sql_id_));
+      if (OB_FAIL(GCTX.pl_engine_->execute(exec_ctx,
+                                          params,
+                                          OB_INVALID_ID,
+                                          pl,
+                                          out_args))) {
+        LOG_WARN("failed to execute PS anonymous bolck",
+                 K(ret), K(pl), K(params), K(out_args));
+      }
+      MEMCPY(exec_ctx.get_sql_ctx()->sql_id_, old_sql_id, (int32_t)sizeof(old_sql_id));
+    }
+  }
+
+  return ret;
+}
+
+int ObExprMultiSet::eval_multiset(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+{
+  int ret = OB_SUCCESS;
+  UNUSEDx(expr, ctx, res);
+  ret = OB_NOT_SUPPORTED;
+  LOG_WARN("not support udt", K(ret));
+  return ret;
+}
+
+OB_DEF_SERIALIZE(ObExprMultiSetInfo)
+{
+  int ret = OB_SUCCESS;
+  LST_DO_CODE(OB_UNIS_ENCODE,
+              ms_type_,
+              ms_modifier_);
+  return ret;
+}
+
+OB_DEF_DESERIALIZE(ObExprMultiSetInfo)
+{
+  int ret = OB_SUCCESS;
+  LST_DO_CODE(OB_UNIS_DECODE,
+              ms_type_,
+              ms_modifier_);
+  return ret;
+}
+
+OB_DEF_SERIALIZE_SIZE(ObExprMultiSetInfo)
+{
+  int64_t len = 0;
+  LST_DO_CODE(OB_UNIS_ADD_LEN,
+              ms_type_,
+              ms_modifier_);
+  return len;
+}
+
+int ObExprMultiSetInfo::deep_copy(common::ObIAllocator &allocator,
+                         const ObExprOperatorType type,
+                         ObIExprExtraInfo *&copied_info) const
+{
+  int ret = common::OB_SUCCESS;
+  OZ(ObExprExtraInfoFactory::alloc(allocator, type, copied_info));
+  ObExprMultiSetInfo &other = *static_cast<ObExprMultiSetInfo *>(copied_info);
+  other.ms_type_ = ms_type_;
+  other.ms_modifier_ = ms_modifier_;
+  return ret;
+}
+
+template <typename RE>
+int ObExprMultiSetInfo::from_raw_expr(RE &raw_expr)
+{
+  int ret = OB_SUCCESS;
+  ObMultiSetRawExpr &set_expr 
+       = const_cast<ObMultiSetRawExpr &> (static_cast<const ObMultiSetRawExpr&>(raw_expr));
+  ms_type_ = set_expr.get_multiset_type();
+  ms_modifier_ = set_expr.get_multiset_modifier();
+  return ret;
+}
+
+}  // namespace sql
+}  // namespace oceanbase

@@ -1,0 +1,767 @@
+/**
+ * Copyright (c) 2021 OceanBase
+ * OceanBase CE is licensed under Mulan PubL v2.
+ * You can use this software according to the terms and conditions of the Mulan PubL v2.
+ * You may obtain a copy of Mulan PubL v2 at:
+ *          http://license.coscl.org.cn/MulanPubL-2.0
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PubL v2 for more details.
+ */
+
+#define USING_LOG_PREFIX SQL_ENG
+
+#include "sql/engine/expr/ob_expr_substr.h"
+#include "sql/session/ob_sql_session_info.h"
+#include "sql/engine/expr/ob_expr_lob_utils.h"
+
+namespace oceanbase
+{
+using namespace common;
+namespace sql
+{
+
+ObExprSubstr::ObExprSubstr(ObIAllocator &alloc)
+    : ObStringExprOperator(alloc, T_FUN_SYS_SUBSTR, N_SUBSTR, TWO_OR_THREE, VALID_FOR_GENERATED_COL)
+{
+}
+
+ObExprSubstr::~ObExprSubstr()
+{
+}
+
+//计算substr结果的长度
+int ObExprSubstr::calc_result_length(ObExprResType *types_array,
+                                     int64_t param_num,
+                                     ObCollationType cs_type,
+                                     int64_t &res_len) const
+{
+  int ret = OB_SUCCESS;
+  ObString str_text;
+  int64_t start_pos = 1;
+  int64_t result_len = types_array[0].get_length(); //最大长度
+  int64_t substr_len = result_len;
+  ObExprCtx expr_ctx;
+  ObArenaAllocator allocator(common::ObModIds::OB_SQL_EXPR_CALC);
+  expr_ctx.calc_buf_ = &allocator;
+  res_len = result_len;
+  if (OB_UNLIKELY(2 != param_num && 3 != param_num)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("substr should have two or three arguments", K(param_num), K(ret));
+  } else {
+    const ObObj &start_obj = types_array[1].get_param();
+    if (!start_obj.is_null()) {
+      if (start_obj.is_int()) {
+        start_pos = start_obj.get_int();
+      }
+    }
+    if (OB_SUCC(ret) && 3 == param_num && !types_array[2].get_param().is_null()) {
+      const ObObj &len_obj = types_array[2].get_param();
+      if (len_obj.is_int()) {
+        substr_len = len_obj.get_int();
+      }
+    }
+  }
+  if (OB_SUCC(ret)) {
+    LOG_DEBUG("substr calc len", K(result_len), K(substr_len), K(start_pos), K(types_array[0].get_param()));
+    if (0 >= result_len || 0 >= substr_len || start_pos > result_len) {
+      res_len = 0;
+    } else {
+      const ObObj &text_obj = types_array[0].get_param();
+      //根据参数0是否为常量区别计算
+      if (ob_is_string_type(text_obj.get_type()) && OB_SUCC(text_obj.get_string(str_text))) {
+        int64_t mb_len = ObCharset::strlen_char(cs_type, str_text.ptr(), str_text.length());
+        start_pos = (start_pos >= 0) ? start_pos - 1 : start_pos + mb_len;
+        if (OB_UNLIKELY(start_pos < 0 || start_pos >= mb_len)) {
+          res_len = 0;
+        } else {
+          res_len = min(substr_len, mb_len - start_pos);
+          int64_t offset = ObCharset::charpos(cs_type, str_text.ptr(), str_text.length(), start_pos);
+          res_len = ObCharset::charpos(cs_type, str_text.ptr() + offset,
+                                      (offset == 0) ? str_text.length() : str_text.length() - offset + 1, res_len);
+        }
+      } else {
+        int64_t mbmaxlen = 0;
+        if (OB_FAIL(ObCharset::get_mbmaxlen_by_coll(cs_type, mbmaxlen))) {
+          SQL_RESV_LOG(WARN, "fail to get mbmaxlen", K(ret), K(cs_type));
+        } else if (0 == mbmaxlen) {
+          ret = OB_ERR_UNEXPECTED;
+          SQL_RESV_LOG(ERROR, "mbmaxlen can not be 0", K(ret));
+        } else {
+          if (LS_CHAR == types_array[0].get_length_semantics()) {
+            mbmaxlen = 1;
+          }
+          if (start_pos > 0 && substr_len > 0) {
+            if (start_pos <= INT64_MAX - substr_len && start_pos + substr_len <= result_len + 1) {
+              res_len = substr_len;
+            } else {
+              res_len = result_len - start_pos + 1;
+            }
+          } 
+          if (types_array[0].is_lob() && res_len > OB_MAX_LONGTEXT_LENGTH / mbmaxlen) {
+            res_len = OB_MAX_LONGTEXT_LENGTH / mbmaxlen;
+          }
+        }
+      }
+    }
+  }
+  return ret;
+}
+
+
+int ObExprSubstr::calc_result_typeN(ObExprResType &type,
+                                    ObExprResType *types_array,
+                                    int64_t param_num,
+                                    ObExprTypeCtx &type_ctx) const
+{
+  int ret = OB_SUCCESS;
+  int64_t len = 0;
+  CK(NULL != type_ctx.get_session());
+  CK(2 == param_num || 3 == param_num);
+  
+  const int32_t mbmaxlen = 4;
+  if (ObTextType == types_array[0].get_type()
+      || ObMediumTextType == types_array[0].get_type()
+      || ObLongTextType == types_array[0].get_type()) {
+    type.set_type(ObLongTextType);
+    type.set_length(OB_MAX_LONGTEXT_LENGTH / mbmaxlen);
+  } else if (ObTinyTextType == types_array[0].get_type()) {
+    type.set_type(ObTextType);
+    type.set_length(OB_MAX_TEXT_LENGTH / mbmaxlen);
+  } else {
+    type.set_varchar();
+  }
+  if (OB_SUCC(ret)
+      && ob_is_text_tc(type.get_type())
+      && 3 == param_num
+      && !types_array[2].get_param().is_null()) {
+    const ObObj &len_obj = types_array[2].get_param();
+    int64_t substr_len = len_obj.is_int() ? len_obj.get_int() : 0;
+    if (substr_len > 0 && substr_len <= OB_MAX_CAST_CHAR_VARCHAR_LENGTH) {
+      type.set_varchar();
+    }
+  }
+  OZ(aggregate_charsets_for_string_result(type, types_array, 1, type_ctx));
+  if (OB_SUCC(ret)) {
+    if (is_mysql_mode() && (types_array[0].is_text() || types_array[0].is_blob())) {
+      // do nothing
+    } else {
+      types_array[0].set_calc_type(ObVarcharType);
+      types_array[0].set_calc_collation_level(type.get_collation_level());
+      types_array[0].set_calc_collation_type(type.get_collation_type());
+    }
+  }
+  if (OB_SUCC(ret)) {
+    for (int i = 1; i < param_num; i++) {
+      types_array[i].set_calc_type(ObIntType);
+      types_array[i].set_calc_collation_level(type.get_collation_level());
+    }
+  }
+  if (OB_SUCC(ret) && !ob_is_text_tc(type.get_type())) {
+    // Set cast mode for integer parameters, truncate string to integer.
+    // see: ObExprSubstr::cast_param_type_for_mysql
+    OX(type_ctx.set_cast_mode(type_ctx.get_cast_mode() | CM_STRING_INTEGER_TRUNC));
+    OX(len = types_array[0].get_length());
+    // deduce max length.
+    OZ(calc_result_length(types_array, param_num, type.get_collation_type(), len));
+    CK(len <= INT32_MAX);
+    OX(type.set_length(static_cast<ObLength>(len)));
+  }
+  return ret;
+}
+
+// to make "select substr('abcd', '1.9')" compatible with mysql
+int ObExprSubstr::cast_param_type_for_mysql(const ObObj& in,
+                                         ObExprCtx& expr_ctx,
+                                         ObObj& out) const
+{
+  int ret = OB_SUCCESS;
+  ObCastMode cast_mode = CM_NONE;
+  EXPR_DEFINE_CAST_CTX(expr_ctx, cast_mode);
+  LOG_DEBUG("ObExprSubstr cast_param_type_for_mysql in.get_type(): ", K(in.get_type()));
+  // select substr('abcd', '1.9')中，MySQL对'1.9'进行trunc操作
+  // select substr('abcd', 1.9)中，MySQL对1.9进行round操作
+  if (ObVarcharType == in.get_type()) {
+    int64_t tmp = 0;
+    if (OB_FAIL(ObExprUtil::get_trunc_int64(in, expr_ctx, tmp))) {
+      LOG_WARN("ObExprSubstr get_trunc_int64 failed", K(in.get_type()));
+    } else if (INT_MAX < tmp) {
+      out.set_int(INT_MAX);
+    } else if (INT_MIN > tmp) {
+      out.set_int(INT_MIN);
+    } else {
+      out.set_int(static_cast<int>(tmp));
+    }
+  } else if (OB_FAIL(ObObjCaster::to_type(ObIntType, cast_ctx, in, out))) {
+    LOG_WARN("ObExprSubstr to_type failed", K(in.get_type()));
+  }
+  return ret;
+}
+
+
+
+int ObExprSubstr::calc_result3_for_mysql(ObObj &result,
+                                          const ObObj &text,
+                                          const ObObj &start_pos,
+                                          const ObObj &length,
+                                          ObExprCtx &expr_ctx) const
+{
+  int ret = OB_SUCCESS;
+  ObObj trunced_start_pos;
+  ObObj trunced_length;
+  ObCollationType cs_type = result_type_.get_collation_type();
+  if (OB_ISNULL(expr_ctx.calc_buf_)) {
+    LOG_WARN("varchar buffer not init");
+    ret = OB_NOT_INIT;
+  } else if (text.is_null() || start_pos.is_null() || length.is_null()) {
+    result.set_null();
+  } else {
+    if (OB_FAIL(cast_param_type_for_mysql(start_pos, expr_ctx, trunced_start_pos))) {
+      LOG_WARN("ObExprSubstr cast_param_type_for_mysql failed", K(start_pos.get_type()));
+    } else if (OB_FAIL(cast_param_type_for_mysql(length, expr_ctx, trunced_length))){
+      LOG_WARN("ObExprSubstr cast_param_type_for_mysql failed", K(length.get_type()));
+    } else {
+      // text param can be varchar or any type in text tc
+      TYPE_CHECK(trunced_start_pos, ObIntType);
+      TYPE_CHECK(trunced_length, ObIntType);
+      const ObString &str_val = text.get_varchar();
+      int64_t start_pos_val = trunced_start_pos.get_int();
+      int64_t length_val = trunced_length.get_int();
+      if (OB_FAIL(calc(result, str_val, start_pos_val, length_val, cs_type, false))) {
+        LOG_WARN("failed to calc for substr", K(text), K(trunced_start_pos),
+                                              K(trunced_length), K(ret));
+      } else {
+        if (!result.is_null()) {
+          result.set_collation(result_type_);
+        }
+      }
+    }
+  }
+  return ret;
+}
+
+
+int ObExprSubstr::substr(common::ObString &varchar,
+                         const common::ObString &text,
+                         const int64_t start_pos,
+                         const int64_t length,
+                         common::ObCollationType cs_type,
+                         const bool do_ascii_optimize_check,
+                         const bool is_arg_batch_ascii,
+                         bool &is_result_batch_ascii)
+{
+  int ret = OB_SUCCESS;
+  varchar = text;
+  if (OB_UNLIKELY(0 >= varchar.length() || 0 >= length)) {
+    varchar.assign(NULL, 0);
+  } else {
+    int64_t start = start_pos;
+    int64_t res_len = 0;
+    bool is_ascii = false;
+    start = (start >= 0) ? start - 1 : start + varchar.length();
+    if (OB_UNLIKELY(start < 0 || start >= varchar.length())) {
+      varchar.assign(NULL, 0);
+    } else {
+      if (is_arg_batch_ascii) {
+        res_len = min(length, varchar.length() - start);
+        varchar.assign_ptr(varchar.ptr() + start, static_cast<int32_t>(res_len));
+      } else {
+        if (do_ascii_optimize_check) { // ObCharsetType is CHARSET_UTF8MB4 or CHARSET_GBK
+          res_len = min(length, varchar.length() - start);
+          is_ascii = storage::is_ascii_str(varchar.ptr(), start + res_len);
+        }
+        if (is_ascii) {
+          varchar.assign_ptr(varchar.ptr() + start, static_cast<int32_t>(res_len));
+        } else { // If not all the front chars in param is ascii, rollback to original method.
+          is_result_batch_ascii = false;
+          start = start_pos;
+          res_len = 0;
+          int64_t mb_len = ObCharset::strlen_char(cs_type, varchar.ptr(), varchar.length());
+          start  = (start >= 0) ? start - 1 : start + mb_len;
+          if (OB_UNLIKELY(start < 0 || start >= mb_len)) {
+            varchar.assign(NULL, 0);
+          } else {
+            //It holds that 0<=start<mb_len && length > 0
+            res_len = min(length, mb_len - start);
+            int64_t offset = ObCharset::charpos(cs_type, varchar.ptr(), varchar.length(), start);
+            res_len = ObCharset::charpos(cs_type, varchar.ptr() + offset,
+                (offset == 0) ? varchar.length() : varchar.length() - offset, res_len);
+            varchar.assign_ptr(varchar.ptr() + offset, static_cast<int32_t>(res_len));
+          }
+        }
+      }
+    }
+  }
+
+  return ret;
+}
+
+int ObExprSubstr::calc(ObObj &result,
+                       const ObString &text,
+                       const int64_t start_pos,
+                       const int64_t length,
+                       ObCollationType cs_type,
+                       const bool is_clob)
+{
+  int ret = OB_SUCCESS;
+  ObString varchar;
+  bool is_result_batch_ascii = false;
+  if (OB_FAIL(substr(varchar, text, start_pos, length, cs_type,
+                     storage::can_do_ascii_optimize(cs_type), false, is_result_batch_ascii))) {
+    LOG_WARN("get substr failed", K(ret));
+  } else {
+    if (is_clob) {
+      result.set_lob_value(ObLongTextType, varchar.ptr(), varchar.length());
+    } else {
+      result.set_varchar(varchar);
+    }
+  }
+  return ret;
+}
+
+int ObExprSubstr::cg_expr(ObExprCGCtx &op_cg_ctx,
+                          const ObRawExpr &raw_expr,
+                          ObExpr &rt_expr) const
+{
+  int ret = OB_SUCCESS;
+  UNUSED(op_cg_ctx);
+  UNUSED(raw_expr);
+  CK(2 == rt_expr.arg_cnt_ || 3 == rt_expr.arg_cnt_);
+  if (OB_SUCC(ret)) {
+    rt_expr.eval_func_ = eval_substr;
+    if (2 == rt_expr.arg_cnt_
+        && rt_expr.args_[0]->is_batch_result()
+        && !rt_expr.args_[1]->is_batch_result()) {
+      rt_expr.eval_batch_func_ = eval_substr_batch;
+      rt_expr.eval_vector_func_ = eval_substr_vector;
+    } else if (3 == rt_expr.arg_cnt_
+               && rt_expr.args_[0]->is_batch_result()
+               && !rt_expr.args_[1]->is_batch_result()
+               && !rt_expr.args_[2]->is_batch_result()) {
+      rt_expr.eval_batch_func_ = eval_substr_batch;
+      rt_expr.eval_vector_func_ = eval_substr_vector;
+    }
+  }
+  return ret;
+}
+
+static int eval_substr_text(const ObCollationType &cs_type,
+                            ObTextStringIter &input_iter,
+                            ObTextStringDatumResult &output_result,
+                            int64_t &total_byte_len,
+                            int64_t &pos,
+                            int64_t &len,
+                            const bool do_ascii_optimize_check,
+                            const bool is_arg_batch_ascii,
+                            bool &is_result_batch_ascii,
+                            bool is_batch = false,
+                            int64_t batch_idx = 0)
+{
+  int ret = OB_SUCCESS;
+  int64_t mbmaxlen = 1;
+  int64_t result_byte_len = 0;
+  int64_t total_char_len = 0;
+  if (OB_FAIL(ObCharset::get_mbmaxlen_by_coll(cs_type, mbmaxlen))) {
+    LOG_WARN("fail to get mbmaxlen", K(cs_type), K(ret));
+  } else if (OB_FAIL(input_iter.get_char_len(total_char_len))) {
+    LOG_WARN("get input char len failed", K(ret));
+  } else if (FALSE_IT(result_byte_len = MIN((pos >= 0 ? total_byte_len - pos + 1 : -pos * mbmaxlen),
+                                            (MIN((len), (total_char_len)) * mbmaxlen)))) {
+  } else if (pos > total_char_len || len <= 0) {
+    if (!is_batch) {
+      ret = output_result.init(0); // fill empty lob result
+    } else {
+      ret = output_result.init_with_batch_idx(0, batch_idx);
+    }
+    if (OB_FAIL(ret)) {
+      LOG_WARN("init stringtext result failed", K(ret));
+    } else {
+      output_result.set_result();
+    }
+  } else {
+    if (!is_batch) {
+      ret = output_result.init(result_byte_len);
+    } else {
+      ret = output_result.init_with_batch_idx(result_byte_len, batch_idx);
+    }
+    if (OB_FAIL(ret)) {
+      LOG_WARN("init stringtext result failed", K(ret));
+    } else {
+      // iter settings only effective to outrow lobs
+      uint64_t start_offset = (pos >= 0 ? pos - 1 : total_char_len + pos);
+      if (start_offset >= total_char_len) {
+        output_result.set_result();
+      } else {
+        input_iter.set_start_offset((pos >= 0 ? pos - 1 : total_char_len + pos));
+        input_iter.set_access_len(len);
+        ObTextStringIterState state;
+        ObString src_block_data;
+        while (OB_SUCC(ret) 
+              && (state = input_iter.get_next_block(src_block_data)) == TEXTSTRING_ITER_NEXT) {
+          if (!input_iter.is_outrow_lob()) {
+            ObString inrow_result;
+            if (OB_FAIL(ObExprSubstr::substr(inrow_result, src_block_data, pos, len,
+                                            cs_type,
+                                            do_ascii_optimize_check,
+                                            is_arg_batch_ascii,
+                                            is_result_batch_ascii))) {
+              LOG_WARN("get substr failed", K(ret));
+            } else if (OB_FAIL(output_result.append(inrow_result))) {
+              LOG_WARN("append result failed", K(ret), K(output_result), K(src_block_data));
+            }
+          } else if (OB_FAIL(output_result.append(src_block_data))) {
+            LOG_WARN("append result failed", K(ret), K(output_result), K(src_block_data));
+          }
+        }
+        if (OB_FAIL(ret)) {
+        } else if (state != TEXTSTRING_ITER_NEXT && state != TEXTSTRING_ITER_END) {
+          ret = (input_iter.get_inner_ret() != OB_SUCCESS) ? 
+                  input_iter.get_inner_ret() : OB_INVALID_DATA;
+          LOG_WARN("iter state invalid", K(ret), K(state), K(input_iter)); 
+        } else {
+          output_result.set_result();
+        }
+      }
+    }
+  }
+  return ret;
+}
+
+int ObExprSubstr::eval_substr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
+{
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(expr.eval_param_value(ctx))) {
+    LOG_WARN("evaluate parameters failed", K(ret));
+  } else {
+    ObDatum *str_datum = &expr.locate_param_datum(ctx, 0);
+    ObDatum *pos_datum = &expr.locate_param_datum(ctx, 1);
+    ObDatum *len_datum = NULL;
+    if (expr.arg_cnt_ > 2) {
+      len_datum = &expr.locate_param_datum(ctx, 2);
+    }
+    if (str_datum->is_null() || pos_datum->is_null()
+        || (NULL != len_datum && len_datum->is_null())) {
+      expr_datum.set_null();
+    } else {
+      ObString input = str_datum->get_string();
+      int64_t pos = 0;
+      int64_t len = input.length();
+      pos = pos_datum->get_int();
+      len = NULL == len_datum ? len : len_datum->get_int();
+      const ObDatumMeta &input_meta = expr.args_[0]->datum_meta_;
+      if (OB_FAIL(ret)) {
+      } else if (!ob_is_text_tc(input_meta.type_)) {
+        ObString output;
+        bool is_result_batch_ascii = false;
+        if (OB_FAIL(substr(output, input, pos, len, expr.datum_meta_.cs_type_,
+                           storage::can_do_ascii_optimize(expr.datum_meta_.cs_type_), false,
+                           is_result_batch_ascii))) {
+          LOG_WARN("get substr failed", K(ret));
+        } else {
+          expr_datum.set_string(output);
+        }
+      } else { // text tc
+        ObEvalCtx::TempAllocGuard alloc_guard(ctx);
+        ObIAllocator &calc_alloc = alloc_guard.get_allocator();
+        const bool has_lob_header = expr.args_[0]->obj_meta_.has_lob_header();
+        ObTextStringIter input_iter(input_meta.type_, input_meta.cs_type_, str_datum->get_string(), has_lob_header);
+        ObTextStringDatumResult output_result(expr.datum_meta_.type_, &expr, &ctx, &expr_datum);
+        int64_t total_byte_len = 0;
+        if (OB_FAIL(ObTextStringHelper::build_text_iter(input_iter, &ctx.exec_ctx_, NULL/*session*/, &calc_alloc))) {
+          LOG_WARN("init input_iter failed ", K(ret), K(input_iter));
+        } else if (OB_FAIL(input_iter.get_byte_len(total_byte_len))) {
+          LOG_WARN("get input byte len failed", K(ret));
+        } else {
+          len = NULL == len_datum ? total_byte_len : len;
+        }
+        bool is_result_batch_ascii = false;
+        if (OB_FAIL(ret)) {
+        } else if (OB_FAIL(eval_substr_text(expr.datum_meta_.cs_type_,
+                                            input_iter,
+                                            output_result,
+                                            total_byte_len,
+                                            pos,
+                                            len,
+                                            false,
+                                            false,
+                                            is_result_batch_ascii))) {
+          LOG_WARN("eval substr text failed", K(ret));
+        }
+      }
+    }
+  }
+  return ret;
+}
+
+int ObExprSubstr::eval_substr_batch(const ObExpr &expr, ObEvalCtx &ctx,
+                                    const ObBitVector &skip, const int64_t batch_size)
+{
+  LOG_DEBUG("eval substr in batch mode", K(batch_size));
+  int ret = OB_SUCCESS;
+  ObDatum *results = expr.locate_batch_datums(ctx);
+
+  if (OB_ISNULL(results)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("expr results frame is not init", K(ret));
+  } else {
+    ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
+    const bool has_len_param = expr.arg_cnt_ > 2 ? true : false;
+    if (OB_FAIL(expr.args_[0]->eval_batch(ctx, skip, batch_size))) {
+      LOG_WARN("failed to eval batch result args0", K(ret));
+    } else {
+      ObDatum *datum_array = expr.args_[0]->locate_batch_datums(ctx);
+      ObString output;
+      ObString input;
+      ObDatum *pos_datum = NULL;
+      ObDatum *len_datum = NULL;
+      int64_t pos = 0;
+      int64_t len = INT_MAX64;
+      bool is_text_params_all_null = true; // used for mark if all the first params are all null
+      bool is_result_all_null = false;
+      for (int64_t j = 0; is_text_params_all_null && j < batch_size; ++j) {
+        if (skip.at(j) || eval_flags.at(j)) {
+          continue;
+        } else if (!datum_array[j].is_null()) {
+          is_text_params_all_null = false;
+        }
+      }
+      if (is_text_params_all_null) {
+        is_result_all_null = true;
+      } else if (OB_FAIL(expr.args_[1]->eval(ctx, pos_datum))) {
+        LOG_WARN("eval pos_datum failed", K(ret));
+      } else if (pos_datum->is_null()) {
+        is_result_all_null = true;
+      } else if (has_len_param && OB_FAIL(expr.args_[2]->eval(ctx, len_datum))) {
+        LOG_WARN("eval len_datum failed", K(ret));
+      } else if (has_len_param && len_datum->is_null()) {
+        is_result_all_null = true;
+      }
+      if (OB_FAIL(ret)) {
+      } else if (is_result_all_null) { // any param is null, result is null
+        for (int64_t j = 0; OB_SUCC(ret) && j < batch_size; ++j) {
+          if (skip.at(j) || eval_flags.at(j)) {
+            continue;
+          } else {
+            results[j].set_null();
+            eval_flags.set(j);
+          }
+        }
+      } else {
+        pos = pos_datum->get_int();
+        len = has_len_param ? len_datum->get_int() : len;
+        bool do_ascii_optimize_check = storage::can_do_ascii_optimize(expr.datum_meta_.cs_type_);
+        bool is_result_batch_ascii = true;
+        for (int64_t j = 0; OB_SUCC(ret) && (j < batch_size); ++j) {
+          if (skip.at(j) || eval_flags.at(j)) {
+            continue;
+          } else if (datum_array[j].is_null()) {
+            results[j].set_null();
+            eval_flags.set(j);
+          } else if(!ob_is_text_tc(expr.args_[0]->datum_meta_.type_)) {
+            if (OB_FAIL(substr(output, datum_array[j].get_string(), pos,
+                               min(len, datum_array[j].get_string().length()),
+                               expr.datum_meta_.cs_type_, do_ascii_optimize_check, false,
+                               is_result_batch_ascii))) {
+              LOG_WARN("get substr failed", K(ret));
+            } else {
+              results[j].set_string(output);
+              eval_flags.set(j);
+            }
+          } else { // text tc
+            const ObDatumMeta &input_meta = expr.args_[0]->datum_meta_;
+            const bool has_lob_header = expr.args_[0]->obj_meta_.has_lob_header();
+            ObEvalCtx::TempAllocGuard alloc_guard(ctx);
+            ObIAllocator &calc_alloc = alloc_guard.get_allocator();
+            ObTextStringIter input_iter(input_meta.type_, input_meta.cs_type_, datum_array[j].get_string(), has_lob_header);
+            ObTextStringDatumResult output_result(expr.datum_meta_.type_, &expr, &ctx, &results[j]);
+            int64_t total_byte_len = 0;
+            if (OB_FAIL(ObTextStringHelper::build_text_iter(input_iter, &ctx.exec_ctx_, NULL/*session*/, &calc_alloc))) {
+              LOG_WARN("init input_iter failed ", K(ret), K(input_iter));
+            } else if (OB_FAIL(input_iter.get_byte_len(total_byte_len))) {
+              LOG_WARN("get input byte len failed", K(ret), K(j));
+            } else if (OB_FAIL(eval_substr_text(expr.datum_meta_.cs_type_,
+                                                input_iter,
+                                                output_result,
+                                                total_byte_len,
+                                                pos,
+                                                len,
+                                                false,
+                                                false,
+                                                is_result_batch_ascii,
+                                                true,
+                                                j))) {
+              LOG_WARN("eval substr text failed", K(ret));
+            } else {
+              eval_flags.set(j);
+            }
+          }
+        }
+      }
+    }
+  }
+
+  return ret;
+}
+
+template <typename ArgVec, typename ResVec>
+int ObExprSubstr::vector_substr(VECTOR_EVAL_FUNC_ARG_DECL)
+{
+  int ret = OB_SUCCESS;
+
+  ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
+  const bool has_len_param = (expr.arg_cnt_ > 2);
+  const ArgVec *arg0_vec = static_cast<const ArgVec *>(expr.args_[0]->get_vector(ctx));
+  ResVec *res_vec = static_cast<ResVec *>(expr.get_vector(ctx));
+  ConstUniformFormat *pos_vec = NULL;
+  ConstUniformFormat *len_vec = NULL;
+  bool is_text_params_all_null = true; // used for mark if all the first params are all null
+  bool is_result_all_null = false;
+  // 1.1 check if result all null according to text param
+  for (int64_t j = bound.start(); is_text_params_all_null && j < bound.end(); ++j) {
+    if (skip.at(j) || eval_flags.at(j)) {
+      continue;
+    } else if (!arg0_vec->is_null(j)) {
+      is_text_params_all_null = false;
+    }
+  }
+  if (is_text_params_all_null) {
+    is_result_all_null = true;
+  } else if (OB_FAIL(expr.args_[1]->eval_vector(ctx, skip, bound))) {
+    LOG_WARN("failed to eval vector result args0", K(ret));
+  } else if (has_len_param && OB_FAIL(expr.args_[2]->eval_vector(ctx, skip, bound))) {
+    LOG_WARN("failed to eval vector result args0", K(ret));
+  } else {
+    // 1.2 check if result all null according to pos param and len param
+    pos_vec = static_cast<ConstUniformFormat *>(expr.args_[1]->get_vector(ctx));
+    if (pos_vec->is_null(0)) {
+      is_result_all_null = true;
+    } else if (has_len_param) {
+      len_vec = static_cast<ConstUniformFormat *>(expr.args_[2]->get_vector(ctx));
+      if (len_vec->is_null(0)) {
+        is_result_all_null = true;
+      }
+    }
+  }
+  if (OB_SUCC(ret)) {
+    if (is_result_all_null) { // any param is null, result is null
+      for (int64_t idx = bound.start(); idx < bound.end(); ++idx) {
+        if (skip.at(idx) || eval_flags.at(idx)) {
+          continue;
+        } else {
+          res_vec->set_null(idx);
+          eval_flags.set(idx);
+        }
+      }
+    } else {
+      // 2. calc substr while result is not all null
+      int64_t pos = 0;
+      int64_t len = INT_MAX64;
+      pos = pos_vec->get_int(0);
+      len = has_len_param ? len_vec->get_int(0) : len;
+      bool is_arg_batch_ascii = arg0_vec->is_batch_ascii();
+      bool is_result_batch_ascii = true;
+      bool do_ascii_optimize_check = storage::can_do_ascii_optimize(expr.datum_meta_.cs_type_);
+      for (int64_t idx = bound.start(); OB_SUCC(ret) && idx < bound.end(); ++idx) {
+        if (skip.at(idx) || eval_flags.at(idx)) {
+          continue;
+        } else if (arg0_vec->is_null(idx)) {
+          res_vec->set_null(idx);
+          eval_flags.set(idx);
+        } else {
+          // 2.1 deal with string tc
+          if (!ob_is_text_tc(expr.args_[0]->datum_meta_.type_)) {
+            ObString output;
+            if (OB_FAIL(substr(output, arg0_vec->get_string(idx), pos,
+                               min(len, arg0_vec->get_string(idx).length()),
+                               expr.datum_meta_.cs_type_, do_ascii_optimize_check, is_arg_batch_ascii,
+                               is_result_batch_ascii))) {
+              LOG_WARN("get substr failed", K(ret));
+            } else {
+              res_vec->set_string(idx, output);
+              eval_flags.set(idx);
+            }
+          // 2.2 deal with text tc
+          } else {
+            const ObDatumMeta &input_meta = expr.args_[0]->datum_meta_;
+            const bool has_lob_header = expr.args_[0]->obj_meta_.has_lob_header();
+            ObEvalCtx::TempAllocGuard alloc_guard(ctx);
+            ObIAllocator &calc_alloc = alloc_guard.get_allocator();
+            ObTextStringIter input_iter(input_meta.type_, input_meta.cs_type_,
+                                        arg0_vec->get_string(idx), has_lob_header);
+            ObTextStringDatumResult output_result(expr.datum_meta_.type_, &expr, &ctx, res_vec,
+                                                  idx);
+            int64_t total_byte_len = 0;
+            if (OB_FAIL(input_iter.init(0, NULL, &calc_alloc))) {
+              LOG_WARN("init input_iter failed ", K(ret), K(input_iter));
+            } else if (OB_FAIL(input_iter.get_byte_len(total_byte_len))) {
+              LOG_WARN("get input byte len failed", K(ret), K(idx));
+            } else if (OB_FAIL(eval_substr_text(expr.datum_meta_.cs_type_,
+                                                input_iter,
+                                                output_result,
+                                                total_byte_len,
+                                                pos,
+                                                len,
+                                                do_ascii_optimize_check,
+                                                is_arg_batch_ascii,
+                                                is_result_batch_ascii,
+                                                true,
+                                                idx))) {
+              LOG_WARN("eval substr text failed", K(ret));
+            } else {
+              eval_flags.set(idx);
+            }
+          }
+        }
+      }
+      // TODO Set set_is_batch_ascii = true only if bound is a whole batch and there is no skip.
+      /*
+      if (OB_SUCC(ret)) {
+        if (is_result_batch_ascii) {
+          res_vec->set_is_batch_ascii();
+        }
+      } */
+    }
+  }
+  return ret;
+}
+
+int ObExprSubstr::eval_substr_vector(VECTOR_EVAL_FUNC_ARG_DECL)
+{
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(expr.args_[0]->eval_vector(ctx, skip, bound))) {
+    LOG_WARN("failed to eval vector result args0", K(ret));
+  } else {
+    VectorFormat arg_format = expr.args_[0]->get_format(ctx);
+    VectorFormat res_format = expr.get_format(ctx);
+    if (VEC_DISCRETE == arg_format && VEC_DISCRETE == res_format) {
+      ret = vector_substr<StrDiscVec, StrDiscVec>(VECTOR_EVAL_FUNC_ARG_LIST);
+    } else if (VEC_UNIFORM == arg_format && VEC_DISCRETE == res_format) {
+      ret = vector_substr<StrUniVec, StrDiscVec>(VECTOR_EVAL_FUNC_ARG_LIST);
+    } else if (VEC_CONTINUOUS == arg_format && VEC_DISCRETE == res_format) {
+      ret = vector_substr<StrContVec, StrDiscVec>(VECTOR_EVAL_FUNC_ARG_LIST);
+    } else if (VEC_DISCRETE == arg_format && VEC_UNIFORM == res_format) {
+      ret = vector_substr<StrDiscVec, StrUniVec>(VECTOR_EVAL_FUNC_ARG_LIST);
+    } else if (VEC_UNIFORM == arg_format && VEC_UNIFORM == res_format) {
+      ret = vector_substr<StrUniVec, StrUniVec>(VECTOR_EVAL_FUNC_ARG_LIST);
+    } else if (VEC_CONTINUOUS == arg_format && VEC_UNIFORM == res_format) {
+      ret = vector_substr<StrContVec, StrUniVec>(VECTOR_EVAL_FUNC_ARG_LIST);
+    } else {
+      ret = vector_substr<ObVectorBase, ObVectorBase>(VECTOR_EVAL_FUNC_ARG_LIST);
+    }
+  }
+  if (OB_SUCC(ret)) {
+    SQL_LOG(DEBUG, "expr", K(ToStrVectorHeader(expr, ctx, &skip, bound)));
+    SQL_LOG(DEBUG, "expr.args_[0]", K(ToStrVectorHeader(*expr.args_[0], ctx, &skip, bound)));
+  }
+  return ret;
+}
+DEF_SET_LOCAL_SESSION_VARS(ObExprSubstr, raw_expr) {
+  int ret = OB_SUCCESS;
+  SET_LOCAL_SYSVAR_CAPACITY(1);
+  EXPR_ADD_LOCAL_SYSVAR(share::SYS_VAR_COLLATION_CONNECTION);
+  return ret;
+}
+
+} /* sql */
+} /* oceanbase */

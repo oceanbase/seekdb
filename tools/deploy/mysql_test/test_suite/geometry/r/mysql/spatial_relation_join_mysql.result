@@ -1,0 +1,186 @@
+# ----------------------------------------------------------------------
+# Test of GEOMETRY NLJ JOIN.
+# ----------------------------------------------------------------------
+drop table if exists tgnoindex1, tgnoindex2, tgeom1, tgeom2, ptgeom1, ptgeom2;
+create table tgnoindex1(g1 geometry not null srid 4326);
+create table tgnoindex2(g2 geometry not null srid 4326);
+insert into tgnoindex1 values(ST_GeomFromText('POLYGON((0 0, 5 0, 5 5, 0 5, 0 0))', 4326));
+insert into tgnoindex1 values(ST_GeomFromText('POLYGON((0 0, 10 0, 10 10, 0 10, 0 0))', 4326));
+insert into tgnoindex1 values(ST_GeomFromText('POLYGON((0 0, 15 0, 15 15, 0 15, 0 0))', 4326));
+insert into tgnoindex2 values(ST_GEOMFROMTEXT('POINT(6 6)', 4326));
+insert into tgnoindex2 values(ST_GEOMFROMTEXT('POINT(6 6)', 4326));
+insert into tgnoindex2 values(ST_GEOMFROMTEXT('POINT(6 6)', 4326));
+insert into tgnoindex2 values(ST_GEOMFROMTEXT('POINT(6 6)', 4326));
+insert into tgnoindex2 values(ST_GEOMFROMTEXT('POINT(6 6)', 4326));
+insert into tgnoindex2 values(ST_GEOMFROMTEXT('POINT(12 12)', 4326));
+insert into tgnoindex2 values(ST_GEOMFROMTEXT('POINT(12 12)', 4326));
+insert into tgnoindex2 values(ST_GEOMFROMTEXT('POINT(12 12)', 4326));
+insert into tgnoindex2 values(ST_GEOMFROMTEXT('POINT(12 12)', 4326));
+insert into tgnoindex2 values(ST_GEOMFROMTEXT('POINT(12 12)', 4326));
+select st_astext(tgnoindex1.g1),st_astext(tgnoindex2.g2) from tgnoindex1, tgnoindex2 where st_intersects(tgnoindex1.g1, tgnoindex2.g2);
+st_astext(tgnoindex1.g1)	st_astext(tgnoindex2.g2)
+POLYGON((0 0,10 0,10 10,0 10,0 0))	POINT(6 6)
+POLYGON((0 0,15 0,15 15,0 15,0 0))	POINT(6 6)
+POLYGON((0 0,10 0,10 10,0 10,0 0))	POINT(6 6)
+POLYGON((0 0,15 0,15 15,0 15,0 0))	POINT(6 6)
+POLYGON((0 0,10 0,10 10,0 10,0 0))	POINT(6 6)
+POLYGON((0 0,15 0,15 15,0 15,0 0))	POINT(6 6)
+POLYGON((0 0,10 0,10 10,0 10,0 0))	POINT(6 6)
+POLYGON((0 0,15 0,15 15,0 15,0 0))	POINT(6 6)
+POLYGON((0 0,10 0,10 10,0 10,0 0))	POINT(6 6)
+POLYGON((0 0,15 0,15 15,0 15,0 0))	POINT(6 6)
+POLYGON((0 0,15 0,15 15,0 15,0 0))	POINT(12 12)
+POLYGON((0 0,15 0,15 15,0 15,0 0))	POINT(12 12)
+POLYGON((0 0,15 0,15 15,0 15,0 0))	POINT(12 12)
+POLYGON((0 0,15 0,15 15,0 15,0 0))	POINT(12 12)
+POLYGON((0 0,15 0,15 15,0 15,0 0))	POINT(12 12)
+explain basic select * from tgnoindex1, tgnoindex2 where st_intersects(tgnoindex1.g1, tgnoindex2.g2);
+Query Plan
+===================================
+|ID|OPERATOR           |NAME      |
+-----------------------------------
+|0 |NESTED-LOOP JOIN   |          |
+|1 |├─TABLE FULL SCAN  |tgnoindex2|
+|2 |└─MATERIAL         |          |
+|3 |  └─TABLE FULL SCAN|tgnoindex1|
+===================================
+Outputs & filters:
+-------------------------------------
+  0 - output([tgnoindex1.g1], [tgnoindex2.g2]), filter(nil)
+      conds([st_intersects(tgnoindex1.g1, tgnoindex2.g2)]), nl_params_(nil), use_batch=false
+  1 - output([tgnoindex2.g2]), filter(nil)
+      access([tgnoindex2.g2]), partitions(p0)
+      is_index_back=false, is_global_index=false, 
+      range_key([tgnoindex2.__pk_increment]), range(MIN ; MAX)always true
+  2 - output([tgnoindex1.g1]), filter(nil)
+  3 - output([tgnoindex1.g1]), filter(nil)
+      access([tgnoindex1.g1]), partitions(p0)
+      is_index_back=false, is_global_index=false, 
+      range_key([tgnoindex1.__pk_increment]), range(MIN ; MAX)always true
+create table tgeom1(g1 geometry not null srid 4326);
+create index gidx1 on tgeom1(g1);
+create table tgeom2(g2 geometry not null srid 4326);
+create index gidx2 on tgeom2(g2);
+insert into tgeom1 values(ST_GeomFromText('POLYGON((0 0, 5 0, 5 5, 0 5, 0 0))', 4326));
+insert into tgeom1 values(ST_GeomFromText('POLYGON((0 0, 10 0, 10 10, 0 10, 0 0))', 4326));
+insert into tgeom1 values(ST_GeomFromText('POLYGON((0 0, 15 0, 15 15, 0 15, 0 0))', 4326));
+insert into tgeom2 values(ST_GEOMFROMTEXT('POINT(6 6)', 4326));
+insert into tgeom2 values(ST_GEOMFROMTEXT('POINT(6 6)', 4326));
+insert into tgeom2 values(ST_GEOMFROMTEXT('POINT(6 6)', 4326));
+insert into tgeom2 values(ST_GEOMFROMTEXT('POINT(6 6)', 4326));
+insert into tgeom2 values(ST_GEOMFROMTEXT('POINT(6 6)', 4326));
+insert into tgeom2 values(ST_GEOMFROMTEXT('POINT(12 12)', 4326));
+insert into tgeom2 values(ST_GEOMFROMTEXT('POINT(12 12)', 4326));
+insert into tgeom2 values(ST_GEOMFROMTEXT('POINT(12 12)', 4326));
+insert into tgeom2 values(ST_GEOMFROMTEXT('POINT(12 12)', 4326));
+insert into tgeom2 values(ST_GEOMFROMTEXT('POINT(12 12)', 4326));
+select st_astext(tgeom1.g1),st_astext(tgeom2.g2) from tgeom1, tgeom2 where st_intersects(tgeom1.g1, tgeom2.g2);
+st_astext(tgeom1.g1)	st_astext(tgeom2.g2)
+POLYGON((0 0,10 0,10 10,0 10,0 0))	POINT(6 6)
+POLYGON((0 0,10 0,10 10,0 10,0 0))	POINT(6 6)
+POLYGON((0 0,10 0,10 10,0 10,0 0))	POINT(6 6)
+POLYGON((0 0,10 0,10 10,0 10,0 0))	POINT(6 6)
+POLYGON((0 0,10 0,10 10,0 10,0 0))	POINT(6 6)
+POLYGON((0 0,15 0,15 15,0 15,0 0))	POINT(6 6)
+POLYGON((0 0,15 0,15 15,0 15,0 0))	POINT(6 6)
+POLYGON((0 0,15 0,15 15,0 15,0 0))	POINT(6 6)
+POLYGON((0 0,15 0,15 15,0 15,0 0))	POINT(6 6)
+POLYGON((0 0,15 0,15 15,0 15,0 0))	POINT(6 6)
+POLYGON((0 0,15 0,15 15,0 15,0 0))	POINT(12 12)
+POLYGON((0 0,15 0,15 15,0 15,0 0))	POINT(12 12)
+POLYGON((0 0,15 0,15 15,0 15,0 0))	POINT(12 12)
+POLYGON((0 0,15 0,15 15,0 15,0 0))	POINT(12 12)
+POLYGON((0 0,15 0,15 15,0 15,0 0))	POINT(12 12)
+explain basic select * from tgeom1, tgeom2 where st_intersects(tgeom1.g1, tgeom2.g2);
+Query Plan
+=====================================
+|ID|OPERATOR          |NAME         |
+-------------------------------------
+|0 |NESTED-LOOP JOIN  |             |
+|1 |├─TABLE FULL SCAN |tgeom1       |
+|2 |└─TABLE RANGE SCAN|tgeom2(gidx2)|
+=====================================
+Outputs & filters:
+-------------------------------------
+  0 - output([tgeom1.g1], [tgeom2.g2]), filter(nil)
+      conds(nil), nl_params_([tgeom1.g1(:0)]), use_batch=false
+  1 - output([tgeom1.g1]), filter(nil)
+      access([tgeom1.g1]), partitions(p0)
+      is_index_back=false, is_global_index=false, 
+      range_key([tgeom1.__pk_increment]), range(MIN ; MAX)always true
+  2 - output([tgeom2.g2]), filter([st_intersects(:0, tgeom2.g2)])
+      access([tgeom2.__pk_increment], [tgeom2.g2]), partitions(p0)
+      is_index_back=true, is_global_index=false, filter_before_indexback[false], 
+      range_key([tgeom2.__cellid_16], [tgeom2.__mbr_16], [tgeom2.__pk_increment]), range(MIN ; MAX)
+create table ptgeom1(c1 int, g1 geometry not null srid 4326) partition by hash(c1) partitions 3;
+create index pgidx1 on ptgeom1(g1) local;
+create table ptgeom2(c2 int, g2 geometry not null srid 4326) partition by hash(c2) partitions 3;
+create index pgidx2 on ptgeom2(g2) local;
+insert into ptgeom1 values(1, ST_GeomFromText('POLYGON((0 0, 5 0, 5 5, 0 5, 0 0))', 4326));
+insert into ptgeom1 values(2, ST_GeomFromText('POLYGON((0 0, 10 0, 10 10, 0 10, 0 0))', 4326));
+insert into ptgeom1 values(3, ST_GeomFromText('POLYGON((0 0, 15 0, 15 15, 0 15, 0 0))', 4326));
+insert into ptgeom2 values(1, ST_GEOMFROMTEXT('POINT(6 6)', 4326));
+insert into ptgeom2 values(2, ST_GEOMFROMTEXT('POINT(6 6)', 4326));
+insert into ptgeom2 values(3, ST_GEOMFROMTEXT('POINT(6 6)', 4326));
+insert into ptgeom2 values(4, ST_GEOMFROMTEXT('POINT(6 6)', 4326));
+insert into ptgeom2 values(5, ST_GEOMFROMTEXT('POINT(6 6)', 4326));
+insert into ptgeom2 values(6, ST_GEOMFROMTEXT('POINT(12 12)', 4326));
+insert into ptgeom2 values(7, ST_GEOMFROMTEXT('POINT(12 12)', 4326));
+insert into ptgeom2 values(8, ST_GEOMFROMTEXT('POINT(12 12)', 4326));
+insert into ptgeom2 values(9, ST_GEOMFROMTEXT('POINT(12 12)', 4326));
+insert into ptgeom2 values(10, ST_GEOMFROMTEXT('POINT(12 12)', 4326));
+select st_astext(ptgeom1.g1),st_astext(ptgeom2.g2) from ptgeom1, ptgeom2 where st_intersects(ptgeom1.g1, ptgeom2.g2) order by c1,c2;
+st_astext(ptgeom1.g1)	st_astext(ptgeom2.g2)
+POLYGON((0 0,10 0,10 10,0 10,0 0))	POINT(6 6)
+POLYGON((0 0,10 0,10 10,0 10,0 0))	POINT(6 6)
+POLYGON((0 0,10 0,10 10,0 10,0 0))	POINT(6 6)
+POLYGON((0 0,10 0,10 10,0 10,0 0))	POINT(6 6)
+POLYGON((0 0,10 0,10 10,0 10,0 0))	POINT(6 6)
+POLYGON((0 0,15 0,15 15,0 15,0 0))	POINT(6 6)
+POLYGON((0 0,15 0,15 15,0 15,0 0))	POINT(6 6)
+POLYGON((0 0,15 0,15 15,0 15,0 0))	POINT(6 6)
+POLYGON((0 0,15 0,15 15,0 15,0 0))	POINT(6 6)
+POLYGON((0 0,15 0,15 15,0 15,0 0))	POINT(6 6)
+POLYGON((0 0,15 0,15 15,0 15,0 0))	POINT(12 12)
+POLYGON((0 0,15 0,15 15,0 15,0 0))	POINT(12 12)
+POLYGON((0 0,15 0,15 15,0 15,0 0))	POINT(12 12)
+POLYGON((0 0,15 0,15 15,0 15,0 0))	POINT(12 12)
+POLYGON((0 0,15 0,15 15,0 15,0 0))	POINT(12 12)
+explain basic select * from ptgeom1, ptgeom2 where st_intersects(ptgeom1.g1, ptgeom2.g2);
+Query Plan
+=========================================================
+|ID|OPERATOR                            |NAME           |
+---------------------------------------------------------
+|0 |PX COORDINATOR                      |               |
+|1 |└─EXCHANGE OUT DISTR                |:EX10001       |
+|2 |  └─NESTED-LOOP JOIN                |               |
+|3 |    ├─EXCHANGE IN DISTR             |               |
+|4 |    │ └─EXCHANGE OUT DISTR (BC2HOST)|:EX10000       |
+|5 |    │   └─PX PARTITION ITERATOR     |               |
+|6 |    │     └─TABLE FULL SCAN         |ptgeom1        |
+|7 |    └─PX PARTITION ITERATOR         |               |
+|8 |      └─TABLE RANGE SCAN            |ptgeom2(pgidx2)|
+=========================================================
+Outputs & filters:
+-------------------------------------
+  0 - output([INTERNAL_FUNCTION(ptgeom1.c1, ptgeom1.g1, ptgeom2.c2, ptgeom2.g2)]), filter(nil)
+  1 - output([INTERNAL_FUNCTION(ptgeom1.c1, ptgeom1.g1, ptgeom2.c2, ptgeom2.g2)]), filter(nil)
+      dop=1
+  2 - output([ptgeom1.g1], [ptgeom1.c1], [ptgeom2.c2], [ptgeom2.g2]), filter(nil)
+      conds(nil), nl_params_([ptgeom1.g1(:0)]), use_batch=false
+  3 - output([ptgeom1.g1], [ptgeom1.c1]), filter(nil)
+  4 - output([ptgeom1.g1], [ptgeom1.c1]), filter(nil)
+      dop=1
+  5 - output([ptgeom1.c1], [ptgeom1.g1]), filter(nil)
+      force partition granule
+  6 - output([ptgeom1.c1], [ptgeom1.g1]), filter(nil)
+      access([ptgeom1.c1], [ptgeom1.g1]), partitions(p[0-2])
+      is_index_back=false, is_global_index=false, 
+      range_key([ptgeom1.__pk_increment]), range(MIN ; MAX)always true
+  7 - output([ptgeom2.c2], [ptgeom2.g2]), filter(nil)
+      access all, force partition granule
+  8 - output([ptgeom2.c2], [ptgeom2.g2]), filter([st_intersects(:0, ptgeom2.g2)])
+      access([ptgeom2.__pk_increment], [ptgeom2.c2], [ptgeom2.g2]), partitions(p[0-2])
+      is_index_back=true, is_global_index=false, filter_before_indexback[false], 
+      range_key([ptgeom2.__cellid_17], [ptgeom2.__mbr_17], [ptgeom2.__pk_increment]), range(MIN ; MAX)
+drop table tgnoindex1, tgnoindex2, tgeom1, tgeom2, ptgeom1, ptgeom2;

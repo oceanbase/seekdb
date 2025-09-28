@@ -1,0 +1,605 @@
+/**
+ * Copyright (c) 2021 OceanBase
+ * OceanBase CE is licensed under Mulan PubL v2.
+ * You can use this software according to the terms and conditions of the Mulan PubL v2.
+ * You may obtain a copy of Mulan PubL v2 at:
+ *          http://license.coscl.org.cn/MulanPubL-2.0
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PubL v2 for more details.
+ */
+
+#ifndef _OCEANBASE_SQL_REWRITE_RULE_H
+#define _OCEANBASE_SQL_REWRITE_RULE_H
+#include "lib/container/ob_se_array.h"
+#include "sql/resolver/dml/ob_raw_expr_sets.h"
+#include "sql/resolver/dml/ob_select_stmt.h"
+#include "sql/ob_optimizer_trace_impl.h"
+#include "sql/ob_sql_context.h"
+namespace oceanbase
+{
+namespace common
+{
+class ObIAllocator;
+class ObAddr;
+class ObOptStatManager;
+}
+namespace sql
+{
+class ObDMLStmt;
+class ObSelectStmt;
+class ObSQLSessionInfo;
+class ObSchemaChecker;
+class ObExecContext;
+class ObRawExprFactory;
+class ObStmtFactory;
+class ObPhysicalPlan;
+class ObCodeGeneratorImpl;
+class ObLogPlan;
+class StmtUniqueKeyProvider;
+
+struct MvInfo {
+  MvInfo() : mv_id_(common::OB_INVALID_ID),
+             data_table_id_(common::OB_INVALID_ID),
+             mv_schema_(NULL),
+             data_table_schema_(NULL),
+             db_schema_(NULL),
+             view_stmt_(NULL),
+             select_mv_stmt_(NULL),
+             mv_intersect_tbl_num_(0) {}
+  
+  MvInfo(uint64_t mv_id,
+          uint64_t data_table_id,
+          const ObTableSchema *mv_schema,
+          const ObTableSchema *data_table_schema,
+          const ObDatabaseSchema *db_schema,
+          ObSelectStmt *view_stmt,
+          ObSelectStmt *select_mv_stmt,
+          uint64_t mv_intersect_tbl_num)
+        : mv_id_(mv_id),
+          data_table_id_(data_table_id),
+          mv_schema_(mv_schema),
+          data_table_schema_(data_table_schema),
+          db_schema_(db_schema),
+          view_stmt_(view_stmt),
+          select_mv_stmt_(select_mv_stmt),
+          mv_intersect_tbl_num_(mv_intersect_tbl_num) {}
+
+  TO_STRING_KV(
+    K_(mv_id),
+    K_(data_table_id),
+    K_(mv_schema),
+    K_(data_table_schema),
+    K_(db_schema),
+    K_(view_stmt),
+    K_(select_mv_stmt),
+    K_(mv_intersect_tbl_num)
+  );
+
+  bool operator<(const MvInfo &other) {
+    return mv_intersect_tbl_num_ > other.mv_intersect_tbl_num_;
+  }
+
+  uint64_t mv_id_;
+  uint64_t data_table_id_;
+  const ObTableSchema *mv_schema_;          // schema of mv table
+  const ObTableSchema *data_table_schema_;  // schema of mv container table
+  const ObDatabaseSchema *db_schema_;
+  ObSelectStmt *view_stmt_;            // stmt of mv's definition
+  ObSelectStmt *select_mv_stmt_;       // stmt of "SELECT * FROM mv;"
+  uint64_t mv_intersect_tbl_num_;      // number of tables that appear in both mv and origin query, used for sort mv info
+};
+
+enum TransPolicy
+{
+  DISABLE_TRANS = 0,
+  LIMITED_TRANS = 1,
+  ENABLE_TRANS = 2,
+};
+
+struct ObTransformerCtx
+{
+  ObTransformerCtx()
+  : allocator_(NULL),
+    session_info_(NULL),
+    schema_checker_(NULL),
+    exec_ctx_(NULL),
+    expr_factory_(NULL),
+    stmt_factory_(NULL),
+    opt_stat_mgr_(NULL),
+    sql_schema_guard_(NULL),
+    self_addr_(NULL),
+    phy_plan_(NULL),
+    merged_version_(0),
+    expr_constraints_(),
+    plan_const_param_constraints_(),
+    equal_param_constraints_(),
+    is_set_stmt_oversize_(false),
+    happened_cost_based_trans_(0),
+    equal_sets_(),
+    ignore_semi_infos_(),
+    temp_table_ignore_stmts_(),
+    eval_cost_(false),
+    trans_list_loc_(0),
+    src_qb_name_(),
+    src_hash_val_(),
+    outline_trans_hints_(),
+    used_trans_hints_(),
+    groupby_pushdown_stmts_(),
+    is_groupby_placement_enabled_(true),
+    is_force_inline_(false),
+    is_force_materialize_(false),
+    push_down_filters_(),
+    iteration_level_(0),
+    mv_stmt_gen_count_(0),
+    cbqt_policy_(TransPolicy::DISABLE_TRANS),
+    complex_cbqt_table_num_(0),
+    max_table_num_(0),
+    inline_blacklist_(),
+    materialize_blacklist_(),
+    force_subquery_unnest_(false),
+    nested_loop_join_enabled_(true)
+  { }
+  virtual ~ObTransformerCtx() {}
+
+  // used to get hash value to generate qb name.
+  static const ObString SRC_STR_OR_EXPANSION_WHERE;
+  static const ObString SRC_STR_OR_EXPANSION_INNER_JOIN;
+  static const ObString SRC_STR_OR_EXPANSION_OUTER_JOIN;
+  static const ObString SRC_STR_OR_EXPANSION_SEMI;
+  static const ObString SRC_STR_CREATE_SIMPLE_VIEW;
+
+  int add_src_hash_val(const ObString &src_str);
+  int add_src_hash_val(uint64_t trans_type);
+  const char* get_trans_type_string(uint64_t trans_type);
+  int add_used_trans_hint(const ObHint *used_hint)
+  {
+    int ret = OB_SUCCESS;
+    if (NULL != used_hint) {
+      ret = add_var_to_array_no_dup(used_trans_hints_, used_hint->get_orig_hint());
+    }
+    return ret;
+  }
+
+  // for unittest
+  void reset();
+  bool is_valid();
+  common::ObIAllocator *allocator_;
+  ObSQLSessionInfo *session_info_;
+  ObSchemaChecker *schema_checker_;
+  ObExecContext *exec_ctx_;
+  ObRawExprFactory *expr_factory_;
+  ObStmtFactory *stmt_factory_;
+  common::ObOptStatManager *opt_stat_mgr_;
+  ObSqlSchemaGuard *sql_schema_guard_;
+  common::ObAddr *self_addr_;
+
+  /* member below is from phy_plan */
+  ObPhysicalPlan *phy_plan_;
+
+  int64_t merged_version_;
+  ObSEArray<ObExprConstraint, 4, common::ModulePageAllocator, true> expr_constraints_;
+  ObSEArray<ObPCConstParamInfo, 4, common::ModulePageAllocator, true> plan_const_param_constraints_;
+  ObSEArray<ObPCParamEqualInfo, 4, common::ModulePageAllocator, true> equal_param_constraints_;
+  bool is_set_stmt_oversize_;
+  // record cost based transformers
+  uint64_t happened_cost_based_trans_;
+  EqualSets equal_sets_;
+  //记录semi to inner改写中，代价竞争失败的semi info，避免下一轮迭代重复检查代价
+  ObSEArray<uint64_t, 8, common::ModulePageAllocator, true> ignore_semi_infos_;
+  ObSEArray<ObSelectStmt*, 8, common::ModulePageAllocator, true> temp_table_ignore_stmts_;
+  bool eval_cost_;  // mark whether the context is in the process of cost evaluation.
+  /* used for hint and outline below */
+  int64_t trans_list_loc_;  // outline mode, used to keep transform happened ordering in query_hint.trans_list_
+  ObString src_qb_name_;
+  ObSEArray<uint32_t, 4> src_hash_val_;
+  ObSEArray<const ObHint*, 8> outline_trans_hints_; // tranform hints to generate outline data
+  ObSEArray<const ObHint*, 8> used_trans_hints_;
+  ObSEArray<uint64_t, 4> groupby_pushdown_stmts_;
+  /* end used for hint and outline below */
+
+  // used for transform parameters
+  bool is_groupby_placement_enabled_;
+  bool is_force_inline_;
+  bool is_force_materialize_;
+
+  ObSEArray<ObRawExpr*, 8, common::ModulePageAllocator, true> push_down_filters_;
+  uint64_t iteration_level_;
+  ObSEArray<MvInfo, 4, common::ModulePageAllocator, true> mv_infos_; // used to perform mv rewrite
+  int64_t mv_stmt_gen_count_;
+  // used for cost based query transformation control
+  TransPolicy cbqt_policy_;
+  int64_t complex_cbqt_table_num_;
+  int64_t max_table_num_;
+  /* used for CTE inline && materialize */
+  ObSEArray<ObString, 8, common::ModulePageAllocator, true> inline_blacklist_;
+  ObSEArray<ObString, 8, common::ModulePageAllocator, true> materialize_blacklist_;
+
+  /* used to control subquery unnest behavior */
+  bool force_subquery_unnest_;
+  /* used for NLJ opportunity check */
+  bool nested_loop_join_enabled_;
+};
+
+enum TransMethod
+{
+  POST_ORDER = 0,
+  PRE_ORDER = 1,
+  ROOT_ONLY = 2,
+  MAX_TRANSFORMATION_METHOD
+};
+
+enum TRANSFORM_TYPE {
+  INVALID_TRANSFORM_TYPE     = 0,
+  PRE_PROCESS                   ,
+  POST_PROCESS                  ,
+  SIMPLIFY_DISTINCT             ,
+  SIMPLIFY_EXPR                 ,
+  SIMPLIFY_GROUPBY              ,
+  SIMPLIFY_LIMIT                ,
+  SIMPLIFY_ORDERBY              ,
+  SIMPLIFY_SUBQUERY             ,
+  SIMPLIFY_WINFUNC              ,
+  FASTMINMAX                    , // select min/max -> select order by limit 1
+  ELIMINATE_OJ                  , // 外连接消除
+  VIEW_MERGE                    , // 视图合并
+  WHERE_SQ_PULL_UP              , // where子查询 -> semi join
+  QUERY_PUSH_DOWN               , // push down limit
+  AGGR_SUBQUERY                 , // JA类型子查询改写
+  SIMPLIFY_SET                  , // set相关改写
+  PROJECTION_PRUNING            , // project pruning
+  OR_EXPANSION                  , // or expansion
+  WIN_MAGIC                     ,
+  JOIN_ELIMINATION              ,
+  GROUPBY_PUSHDOWN              ,
+  GROUPBY_PULLUP                ,
+  SUBQUERY_COALESCE             ,
+  PREDICATE_MOVE_AROUND         ,
+  NL_FULL_OUTER_JOIN            ,
+  SEMI_TO_INNER                 ,
+  JOIN_LIMIT_PUSHDOWN           ,
+  TEMP_TABLE_OPTIMIZATION       ,
+  CONST_PROPAGATE               ,
+  LEFT_JOIN_TO_ANTI             ,  // left join + is null -> anti-join
+  COUNT_TO_EXISTS               ,
+  SELECT_EXPR_PULLUP            ,
+  PROCESS_DBLINK                ,
+  DECORRELATE                   ,
+  CONDITIONAL_AGGR_COALESCE     ,
+  MV_REWRITE                    ,
+  LATE_MATERIALIZATION          ,
+  DISTINCT_AGGREGATE            ,
+  TRANSFORM_TYPE_COUNT_PLUS_ONE ,
+};
+
+struct ObParentDMLStmt
+{
+  ObParentDMLStmt() :
+      pos_(0), stmt_(NULL)
+  {
+  }
+  virtual ~ObParentDMLStmt() {}
+  int64_t pos_;
+  ObDMLStmt *stmt_;
+  TO_STRING_KV(K_(pos),
+               K_(stmt));
+};
+
+// use to keep view name/stmt id/qb name stable after copy stmt and try transform
+struct ObTryTransHelper
+{
+  ObTryTransHelper() :
+    available_tb_id_(0),
+    subquery_count_(0),
+    temp_table_count_(0),
+    qb_name_sel_start_id_(0),
+    qb_name_set_start_id_(0),
+    qb_name_other_start_id_(0),
+    unique_key_provider_(NULL)
+  {}
+  
+  int fill_helper(const ObQueryCtx *query_ctx);
+  int recover(ObQueryCtx *query_ctx);
+  int is_filled() const { return !qb_name_counts_.empty(); }
+  /** @brief update or recover query_ctx and temp table stmt after transformation
+   * call this function after transformation has been accepted or rejected (by higher cost)
+   */
+  int finish(bool trans_happened, ObQueryCtx *query_ctx, ObTransformerCtx *trans_ctx);
+
+  uint64_t available_tb_id_;
+  int64_t stmt_count_;
+  int64_t subquery_count_;
+  int64_t temp_table_count_;
+  int64_t anonymous_view_count_;
+  int64_t qb_name_sel_start_id_;
+  int64_t qb_name_set_start_id_;
+  int64_t qb_name_other_start_id_;
+  ObSEArray<int64_t, 4, common::ModulePageAllocator, true> qb_name_counts_;
+  StmtUniqueKeyProvider *unique_key_provider_;
+};
+
+// record context param values or array/list size
+// param name in this structure is same as the name in origin contexts
+struct ObEvalCostHelper
+{
+  int fill_helper(const ObPhysicalPlanCtx &phy_plan_ctx,
+                  const ObQueryCtx &query_ctx,
+                  const ObTransformerCtx &trans_ctx);
+  int recover_context(ObPhysicalPlanCtx &phy_plan_ctx,
+                      ObQueryCtx &query_ctx,
+                      ObTransformerCtx &trans_ctx);
+
+  // from query_ctx
+  int64_t question_marks_count_;
+  int64_t calculable_items_count_;
+  ObTryTransHelper try_trans_helper_;
+
+  // from transformer context
+  bool eval_cost_;
+  int64_t expr_constraints_count_;
+  int64_t plan_const_param_constraints_count_;
+  int64_t equal_param_constraints_count_;
+  ObString src_qb_name_;
+  int64_t outline_trans_hints_count_;
+  int64_t used_trans_hints_count_;
+};
+
+class ObTransformRule
+{
+public:
+  static const int64_t TRANSFORMER_DEFAULT_MAX_RECURSIVE_LEVEL = 150;
+  static const uint64_t ALL_TRANSFORM_RULES = (1L << TRANSFORM_TYPE_COUNT_PLUS_ONE) - 1L;
+  static const uint64_t ALL_HEURISTICS_RULES =
+      (1L << SIMPLIFY_EXPR) |
+      (1L << SIMPLIFY_DISTINCT) |
+      (1L << SIMPLIFY_GROUPBY) |
+      (1L << SIMPLIFY_WINFUNC) |
+      (1L << SIMPLIFY_ORDERBY) |
+      (1L << SIMPLIFY_LIMIT) |
+      (1L << SIMPLIFY_SUBQUERY) |
+      (1L << FASTMINMAX) |
+      (1L << ELIMINATE_OJ) |
+      (1L << VIEW_MERGE) |
+      (1L << WHERE_SQ_PULL_UP) |
+      (1L << QUERY_PUSH_DOWN) |
+      (1L << SIMPLIFY_SET) |
+      (1L << PROJECTION_PRUNING) |
+      (1L << JOIN_ELIMINATION) |
+      (1L << AGGR_SUBQUERY) |
+      (1L << PREDICATE_MOVE_AROUND) |
+      (1L << NL_FULL_OUTER_JOIN) |
+      (1L << JOIN_LIMIT_PUSHDOWN) |
+      (1L << CONST_PROPAGATE) |
+      (1L << LEFT_JOIN_TO_ANTI) |
+      (1L << COUNT_TO_EXISTS) |
+      (1L << CONDITIONAL_AGGR_COALESCE) |
+      (1L << SEMI_TO_INNER) |
+      (1L << DISTINCT_AGGREGATE);
+  static const uint64_t ALL_COST_BASED_RULES =
+      (1L << OR_EXPANSION) |
+      (1L << WIN_MAGIC) |
+      (1L << GROUPBY_PUSHDOWN) |
+      (1L << GROUPBY_PULLUP) |
+      (1L << SUBQUERY_COALESCE) |
+      (1L << SEMI_TO_INNER) |
+      (1L << TEMP_TABLE_OPTIMIZATION) |
+      (1L << MV_REWRITE) |
+      (1L << LATE_MATERIALIZATION);
+  
+  static const uint64_t ALL_EXPR_LEVEL_HEURISTICS_RULES =
+      (1L << SIMPLIFY_EXPR) |
+      (1L << SIMPLIFY_DISTINCT) |
+      (1L << SIMPLIFY_WINFUNC) |
+      (1L << SIMPLIFY_ORDERBY) |
+      (1L << SIMPLIFY_LIMIT) |
+      (1L << PROJECTION_PRUNING) |
+      (1L << PREDICATE_MOVE_AROUND) |
+      (1L << JOIN_LIMIT_PUSHDOWN) |
+      (1L << CONST_PROPAGATE);
+
+  ObTransformRule(ObTransformerCtx *ctx,
+                  TransMethod transform_method,
+                  ObItemType hint_type = T_INVALID)
+    : ctx_(ctx),
+      transform_method_(transform_method),
+      hint_type_(hint_type),
+      transformer_type_(INVALID_TRANSFORM_TYPE),
+      trans_happened_(false),
+      cost_based_trans_tried_(false),
+      current_temp_table_(NULL),
+      stmt_cost_(-1)
+  {
+  }
+  virtual ~ObTransformRule()
+  {
+  }
+  virtual int transform(ObDMLStmt *&stmt, uint64_t &transform_types);
+  
+  inline bool get_trans_happened() const
+  {
+    return trans_happened_;
+  }
+  inline void set_trans_happened()
+  {
+    trans_happened_ = true;
+  }
+  inline TransMethod get_transform_method()
+  {
+    return transform_method_;
+  }
+  inline void set_transform_method(TransMethod transform_method)
+  {
+    transform_method_ = transform_method;
+  }
+  inline void set_transformer_type(uint64_t transformer_type)
+  {
+    transformer_type_ = transformer_type;
+  }
+  inline uint64_t get_transformer_type() const
+  {
+    return transformer_type_;
+  }
+  static inline void add_trans_type(uint64_t &types, TRANSFORM_TYPE type)
+  {
+    types = (types | (1L << type));
+  }
+  int transform_self(common::ObIArray<ObParentDMLStmt> &parent_stmts,
+                     const int64_t current_level,
+                     ObDMLStmt *&stmt);
+protected:
+  /*
+   * This function tries to recursively transform all statements including its child statements
+   * By default, there are two options, pre-order transformation and post-order transformation
+   * If any rule want to change this behavior, rewrite this function
+   */
+  virtual int transform_stmt_recursively(common::ObIArray<ObParentDMLStmt> &parent_stmts,
+                                         const int64_t current_level,
+                                         ObDMLStmt *&stmt);
+  /*
+   * This function tries to transform one statement
+   * parent_stmts: some rule may use parent statement to decide how to do rewriting, so keep it for use
+   * Every rule should rewrite this function,
+   * parameter stmt: input statement
+   * parameter transformed_stmts: transformed statement
+   */
+  virtual int transform_one_stmt(common::ObIArray<ObParentDMLStmt> &parent_stmts,
+                                 ObDMLStmt *&stmt,
+                                 bool &trans_happened) = 0;
+
+  virtual int transform_one_stmt_with_outline(common::ObIArray<ObParentDMLStmt> &parent_stmts,
+                                              ObDMLStmt *&stmt,
+                                              bool &trans_happened);
+
+  /*
+   * this function is for cost-based rules,
+   * mainly used to check whether accept transformed stmt:
+   *  1. force accept due to hint/rule;
+   *  2. the transformed stmt has less cost than the origin stmt.
+   */
+  int accept_transform(common::ObIArray<ObParentDMLStmt> &parent_stmts,
+                       ObDMLStmt *&stmt,
+                       ObDMLStmt *trans_stmt,
+                       bool force_accept,
+                       bool check_original_plan,
+                       bool &trans_happened,
+                       bool eval_partial_cost,
+                       void *check_ctx = NULL);
+
+  /*
+   * after transforming a rule, this function try to figure out which rules to apply in the next iteration
+   */
+  virtual int adjust_transform_types(uint64_t &transform_types);
+
+  /*
+   * after transform happend, add a transform hint to transform context to generate outline data.
+   */
+  int add_transform_hint(ObDMLStmt &trans_stmt, void *trans_params = NULL);
+  virtual int construct_transform_hint(ObDMLStmt &stmt, void *trans_params);
+  bool is_normal_disabled_transform(const ObDMLStmt &stmt);
+
+  virtual int need_transform(const common::ObIArray<ObParentDMLStmt> &parent_stmts,
+                             const int64_t current_level,
+                             const ObDMLStmt &stmt,
+                             bool &need_trans);
+  
+  /**
+   * @brief In principle, every rewriting rule that implements validity check in a heavy manner should implement this method
+   * which involves prepositioning some checks that can be efficiently completed, primarily including 
+   * basic form check of the stmt and the presence of some special expressions.
+   */
+  virtual int check_rule_bypass(const ObDMLStmt &stmt, bool &reject_trans);
+
+  virtual int check_hint_status(const ObDMLStmt &stmt, bool &need_trans);
+
+  const ObHint* get_hint(const ObStmtHint &hint) const
+  { return hint.get_normal_hint(hint_type_); }
+  ObItemType get_hint_type() const  { return hint_type_; }
+
+  int deep_copy_temp_table(ObDMLStmt &stmt,
+                           ObStmtFactory &stmt_factory,
+                           ObRawExprFactory &expr_factory,
+                           ObIArray<ObSelectStmt*> &old_temp_table_stmts,
+                           ObIArray<ObSelectStmt*> &new_temp_table_stmts);
+  int adjust_transformed_stmt(common::ObIArray<ObParentDMLStmt> &parent_stmts,
+                              ObDMLStmt *stmt,
+                              ObDMLStmt *&orgin_stmt,
+                              ObDMLStmt *&root_stmt);
+  void reset_stmt_cost() { stmt_cost_ = -1; }
+  int prepare_eval_cost_stmt(common::ObIArray<ObParentDMLStmt> &parent_stmts,
+                             ObDMLStmt &stmt,
+                             ObDMLStmt *&copied_stmt,
+                             bool is_trans_stmt);
+private:
+  // pre-order transformation
+  int transform_pre_order(common::ObIArray<ObParentDMLStmt> &parent_stmts,
+                          const int64_t current_level,
+                          ObDMLStmt *&stmt);
+  // post-order transformation
+  int transform_post_order(common::ObIArray<ObParentDMLStmt> &parent_stmts,
+                           const int64_t current_level,
+                           ObDMLStmt *&stmt);
+  // root-only transformation
+  int transform_root_only(common::ObIArray<ObParentDMLStmt> &parent_stmts,
+                          const int64_t current_level,
+                          ObDMLStmt *&stmt);
+
+  // transform non_set children statements
+  int transform_children(common::ObIArray<ObParentDMLStmt> &parent_stmts,
+                         const int64_t current_level,
+                         ObDMLStmt *&stmt);
+  // transform temp table for root stmt
+  int transform_temp_tables(ObIArray<ObParentDMLStmt> &parent_stmts,
+                            const int64_t current_level,
+                            ObDMLStmt *&stmt);
+
+  int evaluate_cost(common::ObIArray<ObParentDMLStmt> &parent_stms,
+                    ObDMLStmt *&stmt,
+                    bool is_trans_stmt,
+                    double &plan_cost,
+                    bool &is_expected,
+                    void *check_ctx = NULL);
+  int prepare_root_stmt_with_temp_table_filter(ObDMLStmt &root_stmt, ObDMLStmt *&root_stmt_with_filter);
+
+  virtual int is_expected_plan(ObLogPlan *plan,
+                               void *check_ctx,
+                               bool is_trans_plan,
+                               bool& is_valid);
+  int update_trans_ctx(ObDMLStmt *stmt);
+  int update_max_table_num(ObDMLStmt *stmt);
+
+  bool skip_move_trans_loc() const
+  {
+    return TEMP_TABLE_OPTIMIZATION == transformer_type_ // move trans loc in transform rule
+           || POST_PROCESS == transformer_type_ // need not move trans loc
+           || PRE_PROCESS == transformer_type_ // need not move trans loc
+           || AGGR_SUBQUERY == transformer_type_; // move trans loc in transform rule
+  }
+
+  bool skip_adjust_qb_name() const   // qb name adjust by transform rule
+  {
+    return QUERY_PUSH_DOWN == transformer_type_
+           || PROJECTION_PRUNING == transformer_type_
+           || PREDICATE_MOVE_AROUND == transformer_type_;
+  }
+
+  DISALLOW_COPY_AND_ASSIGN(ObTransformRule);
+
+protected:
+  ObTransformerCtx *ctx_;
+  TransMethod transform_method_;
+  const ObItemType hint_type_;
+  uint64_t transformer_type_;
+  bool trans_happened_;
+  bool cost_based_trans_tried_;
+  ObDMLStmt::TempTableInfo *current_temp_table_;
+
+private:
+  double stmt_cost_;
+};
+
+} /* namespace sql */
+} /* namespace oceanbase */
+
+#endif /* _OCEANBASE_SQL_REWRITE_RULE_H */
+

@@ -1,0 +1,280 @@
+# ----------------------------------------------------------------------
+# Test of GEOMETRY st_geomfromwkb
+# ----------------------------------------------------------------------
+select ST_AsText(st_geomfromwkb(x'010100000000000000000044400000000000004440'));
+ST_AsText(st_geomfromwkb(x'010100000000000000000044400000000000004440'))
+POINT(40 40)
+select ST_AsText(st_geomfromwkb(x'01010000000000000000004e400000000000005e40'));
+ST_AsText(st_geomfromwkb(x'01010000000000000000004e400000000000005e40'))
+POINT(60 120)
+select ST_AsText(st_geomfromwkb(x'010100000000000000000044400000000000004440'));
+ST_AsText(st_geomfromwkb(x'010100000000000000000044400000000000004440'))
+POINT(40 40)
+select ST_AsText(st_geomfromwkb(x'01010000000000000000004e400000000000004e40'));
+ST_AsText(st_geomfromwkb(x'01010000000000000000004e400000000000004e40'))
+POINT(60 60)
+SET @wkb_pt = ST_GeomFromText('POINT(0 1)');
+SET @wkb_ln = ST_GeomFromText('LINESTRING(0 1,2 3,4 5,6 7,8 9, 10 11)');
+SET @wkb_py = ST_GeomFromText('POLYGON((0 0,0 10,10 10,10 0,0 0),(4 4,4 6,6 6,6 4,4 4))');
+SET @wkb_mpt = ST_GeomFromText('MULTIPOINT(0 1,2 3,4 5,6 7)');
+SET @wkb_mln = ST_GeomFromText('MULTILINESTRING((0 1,2 3,4 5),(6 7,8 9,10 11))');
+SET @wkb_mpy = ST_GeomFromText('MULTIPOLYGON(((0 1,0 10,10 11,10 0,0 1),(4 5,4 6,6 7,6 4,4 5)),'
+                                                     '((10 11,10 12,12 13,12 10,10 11)))');
+SET @wkb_gc = ST_GeomFromText('GEOMETRYCOLLECTION('
+                                       'POINT(0 1),'
+                                       'LINESTRING(0 1,10 11),'
+                                       'POLYGON((0 0,0 10,10 10,10 0, 0 0)),'
+                                       'MULTIPOINT(0 1,2 3,4 5,6 7,8 9,10 11),'
+                                       'MULTILINESTRING((0 1,10 11),(0 10,10 0)),'
+                                       'MULTIPOLYGON(((0 1,0 5,5 6,5 0,0 1)),((5 4,5 10,10 11,10 5,5 4))))');
+SELECT ST_AsText(ST_GeomFromWKB(st_aswkb(@wkb_pt)));
+ST_AsText(ST_GeomFromWKB(st_aswkb(@wkb_pt)))
+POINT(0 1)
+SELECT ST_AsText(ST_GeomFromWKB(st_aswkb(@wkb_ln)));
+ST_AsText(ST_GeomFromWKB(st_aswkb(@wkb_ln)))
+LINESTRING(0 1,2 3,4 5,6 7,8 9,10 11)
+SELECT ST_AsText(ST_GeomFromWKB(st_aswkb(@wkb_py)));
+ST_AsText(ST_GeomFromWKB(st_aswkb(@wkb_py)))
+POLYGON((0 0,0 10,10 10,10 0,0 0),(4 4,4 6,6 6,6 4,4 4))
+SELECT ST_AsText(ST_GeomFromWKB(st_aswkb(@wkb_mpt)));
+ST_AsText(ST_GeomFromWKB(st_aswkb(@wkb_mpt)))
+MULTIPOINT((0 1),(2 3),(4 5),(6 7))
+SELECT ST_AsText(ST_GeomFromWKB(st_aswkb(@wkb_mln)));
+ST_AsText(ST_GeomFromWKB(st_aswkb(@wkb_mln)))
+MULTILINESTRING((0 1,2 3,4 5),(6 7,8 9,10 11))
+SELECT ST_AsText(ST_GeomFromWKB(st_aswkb(@wkb_mpy)));
+ST_AsText(ST_GeomFromWKB(st_aswkb(@wkb_mpy)))
+MULTIPOLYGON(((0 1,0 10,10 11,10 0,0 1),(4 5,4 6,6 7,6 4,4 5)),((10 11,10 12,12 13,12 10,10 11)))
+SELECT ST_AsText(ST_GeomFromWKB(st_aswkb(@wkb_gc)));
+ST_AsText(ST_GeomFromWKB(st_aswkb(@wkb_gc)))
+GEOMETRYCOLLECTION(POINT(0 1),LINESTRING(0 1,10 11),POLYGON((0 0,0 10,10 10,10 0,0 0)),MULTIPOINT((0 1),(2 3),(4 5),(6 7),(8 9),(10 11)),MULTILINESTRING((0 1,10 11),(0 10,10 0)),MULTIPOLYGON(((0 1,0 5,5 6,5 0,0 1)),((5 4,5 10,10 11,10 5,5 4))))
+SELECT ST_AsText(ST_GeometryFromWKB(st_aswkb(@wkb_pt)));
+ST_AsText(ST_GeometryFromWKB(st_aswkb(@wkb_pt)))
+POINT(0 1)
+SELECT ST_AsText(ST_GeometryFromWKB(st_aswkb(@wkb_ln)));
+ST_AsText(ST_GeometryFromWKB(st_aswkb(@wkb_ln)))
+LINESTRING(0 1,2 3,4 5,6 7,8 9,10 11)
+SELECT ST_AsText(ST_GeometryFromWKB(st_aswkb(@wkb_py)));
+ST_AsText(ST_GeometryFromWKB(st_aswkb(@wkb_py)))
+POLYGON((0 0,0 10,10 10,10 0,0 0),(4 4,4 6,6 6,6 4,4 4))
+SELECT ST_AsText(ST_GeometryFromWKB(st_aswkb(@wkb_mpt)));
+ST_AsText(ST_GeometryFromWKB(st_aswkb(@wkb_mpt)))
+MULTIPOINT((0 1),(2 3),(4 5),(6 7))
+SELECT ST_AsText(ST_GeometryFromWKB(st_aswkb(@wkb_mln)));
+ST_AsText(ST_GeometryFromWKB(st_aswkb(@wkb_mln)))
+MULTILINESTRING((0 1,2 3,4 5),(6 7,8 9,10 11))
+SELECT ST_AsText(ST_GeometryFromWKB(st_aswkb(@wkb_mpy)));
+ST_AsText(ST_GeometryFromWKB(st_aswkb(@wkb_mpy)))
+MULTIPOLYGON(((0 1,0 10,10 11,10 0,0 1),(4 5,4 6,6 7,6 4,4 5)),((10 11,10 12,12 13,12 10,10 11)))
+SELECT ST_AsText(ST_GeometryFromWKB(st_aswkb(@wkb_gc)));
+ST_AsText(ST_GeometryFromWKB(st_aswkb(@wkb_gc)))
+GEOMETRYCOLLECTION(POINT(0 1),LINESTRING(0 1,10 11),POLYGON((0 0,0 10,10 10,10 0,0 0)),MULTIPOINT((0 1),(2 3),(4 5),(6 7),(8 9),(10 11)),MULTILINESTRING((0 1,10 11),(0 10,10 0)),MULTIPOLYGON(((0 1,0 5,5 6,5 0,0 1)),((5 4,5 10,10 11,10 5,5 4))))
+SELECT ST_AsText(ST_GeomFromWKB(st_aswkb(@wkb_pt), 2000));
+ST_AsText(ST_GeomFromWKB(st_aswkb(@wkb_pt), 2000))
+POINT(0 1)
+SELECT ST_AsText(ST_GeomFromWKB(st_aswkb(@wkb_ln), 2000));
+ST_AsText(ST_GeomFromWKB(st_aswkb(@wkb_ln), 2000))
+LINESTRING(0 1,2 3,4 5,6 7,8 9,10 11)
+SELECT ST_AsText(ST_GeomFromWKB(st_aswkb(@wkb_py), 2000));
+ST_AsText(ST_GeomFromWKB(st_aswkb(@wkb_py), 2000))
+POLYGON((0 0,0 10,10 10,10 0,0 0),(4 4,4 6,6 6,6 4,4 4))
+SELECT ST_AsText(ST_GeomFromWKB(st_aswkb(@wkb_mpt), 2000));
+ST_AsText(ST_GeomFromWKB(st_aswkb(@wkb_mpt), 2000))
+MULTIPOINT((0 1),(2 3),(4 5),(6 7))
+SELECT ST_AsText(ST_GeomFromWKB(st_aswkb(@wkb_mln), 2000));
+ST_AsText(ST_GeomFromWKB(st_aswkb(@wkb_mln), 2000))
+MULTILINESTRING((0 1,2 3,4 5),(6 7,8 9,10 11))
+SELECT ST_AsText(ST_GeomFromWKB(st_aswkb(@wkb_mpy), 2000));
+ST_AsText(ST_GeomFromWKB(st_aswkb(@wkb_mpy), 2000))
+MULTIPOLYGON(((0 1,0 10,10 11,10 0,0 1),(4 5,4 6,6 7,6 4,4 5)),((10 11,10 12,12 13,12 10,10 11)))
+SELECT ST_AsText(ST_GeomFromWKB(st_aswkb(@wkb_gc), 2000));
+ST_AsText(ST_GeomFromWKB(st_aswkb(@wkb_gc), 2000))
+GEOMETRYCOLLECTION(POINT(0 1),LINESTRING(0 1,10 11),POLYGON((0 0,0 10,10 10,10 0,0 0)),MULTIPOINT((0 1),(2 3),(4 5),(6 7),(8 9),(10 11)),MULTILINESTRING((0 1,10 11),(0 10,10 0)),MULTIPOLYGON(((0 1,0 5,5 6,5 0,0 1)),((5 4,5 10,10 11,10 5,5 4))))
+SELECT ST_AsText(ST_GeomFromWKB(st_aswkb(@wkb_pt), 2000, 'axis-order=long-lat'));
+ST_AsText(ST_GeomFromWKB(st_aswkb(@wkb_pt), 2000, 'axis-order=long-lat'))
+POINT(0 1)
+SELECT ST_AsText(ST_GeomFromWKB(st_aswkb(@wkb_ln), 2000, 'axis-order=long-lat'));
+ST_AsText(ST_GeomFromWKB(st_aswkb(@wkb_ln), 2000, 'axis-order=long-lat'))
+LINESTRING(0 1,2 3,4 5,6 7,8 9,10 11)
+SELECT ST_AsText(ST_GeomFromWKB(st_aswkb(@wkb_py), 2000, 'axis-order=long-lat'));
+ST_AsText(ST_GeomFromWKB(st_aswkb(@wkb_py), 2000, 'axis-order=long-lat'))
+POLYGON((0 0,0 10,10 10,10 0,0 0),(4 4,4 6,6 6,6 4,4 4))
+SELECT ST_AsText(ST_GeomFromWKB(st_aswkb(@wkb_mpt), 2000, 'axis-order=long-lat'));
+ST_AsText(ST_GeomFromWKB(st_aswkb(@wkb_mpt), 2000, 'axis-order=long-lat'))
+MULTIPOINT((0 1),(2 3),(4 5),(6 7))
+SELECT ST_AsText(ST_GeomFromWKB(st_aswkb(@wkb_mln), 2000, 'axis-order=long-lat'));
+ST_AsText(ST_GeomFromWKB(st_aswkb(@wkb_mln), 2000, 'axis-order=long-lat'))
+MULTILINESTRING((0 1,2 3,4 5),(6 7,8 9,10 11))
+SELECT ST_AsText(ST_GeomFromWKB(st_aswkb(@wkb_mpy), 2000, 'axis-order=long-lat'));
+ST_AsText(ST_GeomFromWKB(st_aswkb(@wkb_mpy), 2000, 'axis-order=long-lat'))
+MULTIPOLYGON(((0 1,0 10,10 11,10 0,0 1),(4 5,4 6,6 7,6 4,4 5)),((10 11,10 12,12 13,12 10,10 11)))
+SELECT ST_AsText(ST_GeomFromWKB(st_aswkb(@wkb_gc), 2000, 'axis-order=long-lat'));
+ST_AsText(ST_GeomFromWKB(st_aswkb(@wkb_gc), 2000, 'axis-order=long-lat'))
+GEOMETRYCOLLECTION(POINT(0 1),LINESTRING(0 1,10 11),POLYGON((0 0,0 10,10 10,10 0,0 0)),MULTIPOINT((0 1),(2 3),(4 5),(6 7),(8 9),(10 11)),MULTILINESTRING((0 1,10 11),(0 10,10 0)),MULTIPOLYGON(((0 1,0 5,5 6,5 0,0 1)),((5 4,5 10,10 11,10 5,5 4))))
+SELECT ST_AsText(ST_GeomFromWKB(st_aswkb(@wkb_pt), 4326));
+ST_AsText(ST_GeomFromWKB(st_aswkb(@wkb_pt), 4326))
+POINT(0 1)
+SELECT ST_AsText(ST_GeomFromWKB(st_aswkb(@wkb_ln), 4326));
+ST_AsText(ST_GeomFromWKB(st_aswkb(@wkb_ln), 4326))
+LINESTRING(0 1,2 3,4 5,6 7,8 9,10 11)
+SELECT ST_AsText(ST_GeomFromWKB(st_aswkb(@wkb_py), 4326));
+ST_AsText(ST_GeomFromWKB(st_aswkb(@wkb_py), 4326))
+POLYGON((0 0,0 10,10 10,10 0,0 0),(4 4,4 6,6 6,6 4,4 4))
+SELECT ST_AsText(ST_GeomFromWKB(st_aswkb(@wkb_mpt), 4326));
+ST_AsText(ST_GeomFromWKB(st_aswkb(@wkb_mpt), 4326))
+MULTIPOINT((0 1),(2 3),(4 5),(6 7))
+SELECT ST_AsText(ST_GeomFromWKB(st_aswkb(@wkb_mln), 4326));
+ST_AsText(ST_GeomFromWKB(st_aswkb(@wkb_mln), 4326))
+MULTILINESTRING((0 1,2 3,4 5),(6 7,8 9,10 11))
+SELECT ST_AsText(ST_GeomFromWKB(st_aswkb(@wkb_mpy), 4326));
+ST_AsText(ST_GeomFromWKB(st_aswkb(@wkb_mpy), 4326))
+MULTIPOLYGON(((0 1,0 10,10 11,10 0,0 1),(4 5,4 6,6 7,6 4,4 5)),((10 11,10 12,12 13,12 10,10 11)))
+SELECT ST_AsText(ST_GeomFromWKB(st_aswkb(@wkb_gc), 4326));
+ST_AsText(ST_GeomFromWKB(st_aswkb(@wkb_gc), 4326))
+GEOMETRYCOLLECTION(POINT(0 1),LINESTRING(0 1,10 11),POLYGON((0 0,0 10,10 10,10 0,0 0)),MULTIPOINT((0 1),(2 3),(4 5),(6 7),(8 9),(10 11)),MULTILINESTRING((0 1,10 11),(0 10,10 0)),MULTIPOLYGON(((0 1,0 5,5 6,5 0,0 1)),((5 4,5 10,10 11,10 5,5 4))))
+SELECT ST_AsText(ST_GeomFromWKB(st_aswkb(@wkb_pt), 4326, 'axis-order=long-lat'));
+ST_AsText(ST_GeomFromWKB(st_aswkb(@wkb_pt), 4326, 'axis-order=long-lat'))
+POINT(1 0)
+SELECT ST_AsText(ST_GeomFromWKB(st_aswkb(@wkb_ln), 4326, 'axis-order=long-lat'));
+ST_AsText(ST_GeomFromWKB(st_aswkb(@wkb_ln), 4326, 'axis-order=long-lat'))
+LINESTRING(1 0,3 2,5 4,7 6,9 8,11 10)
+SELECT ST_AsText(ST_GeomFromWKB(st_aswkb(@wkb_py), 4326, 'axis-order=long-lat'));
+ST_AsText(ST_GeomFromWKB(st_aswkb(@wkb_py), 4326, 'axis-order=long-lat'))
+POLYGON((0 0,10 0,10 10,0 10,0 0),(4 4,6 4,6 6,4 6,4 4))
+SELECT ST_AsText(ST_GeomFromWKB(st_aswkb(@wkb_mpt), 4326, 'axis-order=long-lat'));
+ST_AsText(ST_GeomFromWKB(st_aswkb(@wkb_mpt), 4326, 'axis-order=long-lat'))
+MULTIPOINT((1 0),(3 2),(5 4),(7 6))
+SELECT ST_AsText(ST_GeomFromWKB(st_aswkb(@wkb_mln), 4326, 'axis-order=long-lat'));
+ST_AsText(ST_GeomFromWKB(st_aswkb(@wkb_mln), 4326, 'axis-order=long-lat'))
+MULTILINESTRING((1 0,3 2,5 4),(7 6,9 8,11 10))
+SELECT ST_AsText(ST_GeomFromWKB(st_aswkb(@wkb_mpy), 4326, 'axis-order=long-lat'));
+ST_AsText(ST_GeomFromWKB(st_aswkb(@wkb_mpy), 4326, 'axis-order=long-lat'))
+MULTIPOLYGON(((1 0,10 0,11 10,0 10,1 0),(5 4,6 4,7 6,4 6,5 4)),((11 10,12 10,13 12,10 12,11 10)))
+SELECT ST_AsText(ST_GeomFromWKB(st_aswkb(@wkb_gc), 4326, 'axis-order=long-lat'));
+ST_AsText(ST_GeomFromWKB(st_aswkb(@wkb_gc), 4326, 'axis-order=long-lat'))
+GEOMETRYCOLLECTION(POINT(1 0),LINESTRING(1 0,11 10),POLYGON((0 0,10 0,10 10,0 10,0 0)),MULTIPOINT((1 0),(3 2),(5 4),(7 6),(9 8),(11 10)),MULTILINESTRING((1 0,11 10),(10 0,0 10)),MULTIPOLYGON(((1 0,5 0,6 5,0 5,1 0)),((4 5,10 5,11 10,5 10,4 5))))
+SELECT ST_GeomFromWKB();
+ERROR 42000: Incorrect parameter count in the call to native function 'ST_GeomFromWKB'
+SELECT ST_GeomFromWKB(NULL);
+ST_GeomFromWKB(NULL)
+NULL
+SELECT ST_GeomFromWKB(ST_GeomFromText('POINT()'));
+ERROR 22023: Invalid GIS data provided to function st_geomfromtext.
+SELECT ST_GeomFromWKB(ST_GeomFromText('LINESTRING(0 0,! 10)'));
+ERROR 22023: Invalid GIS data provided to function st_geomfromtext.
+select ST_GeometryFromWKB(x'010100000000000000000034C00000000000002E4000000000000034400000000000003440');
+ERROR 22023: Invalid GIS data provided to function st_geometryfromwkb.
+select ST_GeomFromWKB(x'010100000000000000000034C00000000000002E4000000000000034400000000000003440');
+ERROR 22023: Invalid GIS data provided to function st_geomfromwkb.
+select ST_GeometryFromWKB(x'0101000000');
+ERROR 22023: Invalid GIS data provided to function st_geometryfromwkb.
+select ST_GeomFromWKB(x'01020000000200000000000000000059400000000000005e400000000000005940');
+ERROR 22023: Invalid GIS data provided to function st_geomfromwkb.
+select st_geomfromwkb(x'01020000000200000000000000000059400000000000005e4000000000000059400000000000006e40',4326);
+ERROR 22S03: Latitude 100.000000 is out of range in function st_geomfromwkb. It must be within [-90.000000, 90.000000].
+select st_geomfromwkb(x'010100000000000000008046400000000000006940',4326);
+ERROR 22S02: Longitude 200.000000 is out of range in function st_geomfromwkb. It must be within (-180.000000, 180.000000].
+SELECT ST_GeomFromWKB(0x020100000000000000000000000000000000000000);
+ERROR 22023: Invalid GIS data provided to function st_geomfromwkb.
+SELECT ST_GeomFromWKB(0x01040000000100000001020000000100000000000000000000000000000000000000);
+ERROR 22023: Invalid GIS data provided to function st_geomfromwkb.
+SELECT ST_GeomFromWKB(0x01040000000100000002020000000100000000000000000000000000000000000000);
+ERROR 22023: Invalid GIS data provided to function st_geomfromwkb.
+SELECT ST_GeomFromWKB(0x01050000000100000001040000000100000000000000000000000000000000000000);
+ERROR 22023: Invalid GIS data provided to function st_geomfromwkb.
+SELECT ST_GeomFromWKB(0x01050000000100000002040000000100000000000000000000000000000000000000);
+ERROR 22023: Invalid GIS data provided to function st_geomfromwkb.
+SELECT ST_GeomFromWKB(0x01060000000100000001020000000100000000000000000000000000000000000000);
+ERROR 22023: Invalid GIS data provided to function st_geomfromwkb.
+SELECT ST_GeomFromWKB(0x01060000000100000003020000000100000000000000000000000000000000000000);
+ERROR 22023: Invalid GIS data provided to function st_geomfromwkb.
+SELECT ST_GeomFromWKB(0x01070000000100000002010000000000000000000000);
+ERROR 22023: Invalid GIS data provided to function st_geomfromwkb.
+select ST_GeomFromWKB(x'010300000001000000050000000000000000C056C000000000004054400000000000C0564000000000008056C000000000000054C000000000000034C000000000000000000000000000C056400000000000C056C00000000000405490');
+ERROR 22023: Invalid GIS data provided to function st_geomfromwkb.
+select ST_AsText(ST_GeometryFromWKB(x'010100000000000000000034C00000000000002E40',26918,'axis-order=lat-long'));
+ST_AsText(ST_GeometryFromWKB(x'010100000000000000000034C00000000000002E40',26918,'axis-order=lat-long'))
+POINT(-20 15)
+select ST_AsText(ST_GeomFromWKB(x'010100000000000000000034C00000000000002E40',26918,'axis-order=lat-long'));
+ST_AsText(ST_GeomFromWKB(x'010100000000000000000034C00000000000002E40',26918,'axis-order=lat-long'))
+POINT(-20 15)
+select ST_GeometryFromWKB(x'010100000000000000000034C00000000000002E40',4326,'axis-order=long-long');
+ERROR 22023: Invalid value 'long-long' for option 'axis-order' in function 'st_geometryfromwkb'.
+select ST_GeomFromWKB(x'010100000000000000000034C00000000000002E40',4326,'axis-order=lat-lat');
+ERROR 22023: Invalid value 'lat-lat' for option 'axis-order' in function 'st_geomfromwkb'.
+select ST_GeomFromWKB(x'010100000000000000000034C00000000000002E40',4326,'axis-ord');
+ERROR 22023: The string 'axis-ord' is not a valid key = value pair in function st_geomfromwkb.
+select ST_GeometryFromWKB(x'010100000000000000000034C00000000000002E40',4326,'axis-ord');
+ERROR 22023: The string 'axis-ord' is not a valid key = value pair in function st_geometryfromwkb.
+select ST_GeomFromWKB(x'010100000000000000000034C00000000000002E40',4326,11);
+ERROR 22023: The string '11' is not a valid key = value pair in function st_geomfromwkb.
+select ST_GeometryFromWKB(x'010100000000000000000034C00000000000002E40',4326,11);
+ERROR 22023: The string '11' is not a valid key = value pair in function st_geometryfromwkb.
+select ST_GeometryFromWKB(x'010100000000000000000034C00000000000002E40','axis-order=long-lat','srid=4326');
+ERROR 22023: Invalid option key 'srid' in function st_geometryfromwkb.
+select ST_GeomFromWKB(x'010100000000000000000034C00000000000002E40','axis-order=long-lat','srid=4326');
+ERROR 22023: Invalid option key 'srid' in function st_geomfromwkb.
+select st_astext(st_geomfromwkb(x'000000000140340000000000004034000000000000'));
+st_astext(st_geomfromwkb(x'000000000140340000000000004034000000000000'))
+POINT(20 20)
+select st_astext(st_geomfromwkb(x'000000000140340000000000004034000000000000', 4326));
+st_astext(st_geomfromwkb(x'000000000140340000000000004034000000000000', 4326))
+POINT(20 20)
+SELECT ST_astext(ST_GEOMFROMWKB(X'0000000002000000023FF00000000000003FF000000000000040000000000000004000000000000000'));
+ST_astext(ST_GEOMFROMWKB(X'0000000002000000023FF00000000000003FF000000000000040000000000000004000000000000000'))
+LINESTRING(1 1,2 2)
+SELECT ST_astext(ST_GEOMFROMWKB(X'00000000030000000100000005000000000000000000000000000000004008000000000000000000000000000040000000000000003FF00000000000003FF00000000000003FF000000000000000000000000000000000000000000000'));
+ST_astext(ST_GEOMFROMWKB(X'00000000030000000100000005000000000000000000000000000000004008000000000000000000000000000040000000000000003FF00000000000003FF00000000000003FF000000000000000000000000000000000000000000000'))
+POLYGON((0 0,3 0,2 1,1 1,0 0))
+SELECT ST_astext(ST_GEOMFROMWKB(X'00000000040000000200000000013FF00000000000003FF000000000000000000000013FF00000000000003FF0000000000000'));
+ST_astext(ST_GEOMFROMWKB(X'00000000040000000200000000013FF00000000000003FF000000000000000000000013FF00000000000003FF0000000000000'))
+MULTIPOINT((1 1),(1 1))
+select st_astext(st_geomfromwkb(x'0000000005000000020000000002000000020000000000000000000000000000000040654000000000000000000000000000000000000200000002405400000000000000000000000000004054000000000000404E000000000000'));
+st_astext(st_geomfromwkb(x'0000000005000000020000000002000000020000000000000000000000000000000040654000000000000000000000000000000000000200000002405400000000000000000000000000004054000000000000404E000000000000'))
+MULTILINESTRING((0 0,170 0),(80 0,80 60))
+select st_astext(st_geomfromwkb(x'0000000006000000010000000003000000010000000640140000000000004008000000000000401C00000000000040100000000000004022000000000000401400000000000040260000000000004018000000000000402A000000000000401C00000000000040140000000000004008000000000000'));
+st_astext(st_geomfromwkb(x'0000000006000000010000000003000000010000000640140000000000004008000000000000401C00000000000040100000000000004022000000000000401400000000000040260000000000004018000000000000402A000000000000401C000000000000401400000000000040080000
+MULTIPOLYGON(((5 3,7 4,9 5,11 6,13 7,5 3)))
+select st_astext(st_geomfromwkb(x'000000000700000008000000000100000000000000003FF000000000000000000000020000000200000000000000003FF000000000000040240000000000004026000000000000000000000300000001000000050000000000000000000000000000000000000000000000004024000000000000402400000000000040240000000000004024000000000000000000000000000000000000000000000000000000000000000000000400000006000000000100000000000000003FF000000000000000000000014000000000000000400800000000000000000000014010000000000000401400000000000000000000014018000000000000401C00000000000000000000014020000000000000402200000000000000000000014024000000000000402600000000000000000000020000000200000000000000003FF00000000000004024000000000000402600000000000000000000020000000200000000000000004024000000000000402400000000000000000000000000000000000003000000010000000500000000000000003FF000000000000000000000000000004014000000000000401400000000000040180000000000004014000000000000000000000000000000000000000000003FF0000000000000000000000300000001000000054014000000000000401000000000000040140000000000004024000000000000402400000000000040260000000000004024000000000000401400000000000040140000000000004010000000000000'));
+st_astext(st_geomfromwkb(x'000000000700000008000000000100000000000000003FF000000000000000000000020000000200000000000000003FF00000000000004024000000000000402600000000000000000000030000000100000005000000000000000000000000000000000000000000000000402400000000
+GEOMETRYCOLLECTION(POINT(0 1),LINESTRING(0 1,10 11),POLYGON((0 0,0 10,10 10,10 0,0 0)),MULTIPOINT((0 1),(2 3),(4 5),(6 7),(8 9),(10 11)),LINESTRING(0 1,10 11),LINESTRING(0 10,10 0),POLYGON((0 1,0 5,5 6,5 0,0 1)),POLYGON((5 4,5 10,10 11,10 5,5 4)))
+bugfix: 53757359
+SELECT st_geometryfromwkb(null);
+st_geometryfromwkb(null)
+NULL
+SELECT st_geometryfromwkb(st_geometryfromwkb(null));
+st_geometryfromwkb(st_geometryfromwkb(null))
+NULL
+SELECT st_geometryfromwkb(st_length(null));
+st_geometryfromwkb(st_length(null))
+NULL
+drop table t2;
+create table t2 (it1 tinyint, it2 tinyint not null, i int not null, ib bigint, f float, d double, y year, da  datetime(6), dt datetime(6), sc char(50), sv varchar(50), b blob, tx text);
+insert into t2 values (NULL, 1, 3, 4, 1.5, 2.5, 1972, '1972-10-22', '1972-10-22 11:50', 'LINESTRING(0 0,10 10)', 'LINESTRING(0 0,10 10)', 'LINESTRING(0 0,10 10)', 'LINESTRING(0 0,10 10)');
+select st_geometryfromwkb(it1) from t2;
+st_geometryfromwkb(it1)
+NULL
+select st_geometryfromwkb(it2) from t2;
+ERROR 22023: Invalid GIS data provided to function st_geometryfromwkb.
+select st_geometryfromwkb(i) from t2;
+ERROR 22023: Invalid GIS data provided to function st_geometryfromwkb.
+select st_geometryfromwkb(ib) from t2;
+ERROR 22023: Invalid GIS data provided to function st_geometryfromwkb.
+select st_geometryfromwkb(f) from t2;
+ERROR 22023: Invalid GIS data provided to function st_geometryfromwkb.
+select st_geometryfromwkb(d) from t2;
+ERROR 22023: Invalid GIS data provided to function st_geometryfromwkb.
+select st_geometryfromwkb(y) from t2;
+ERROR 22023: Invalid GIS data provided to function st_geometryfromwkb.
+select st_geometryfromwkb(da) from t2;
+ERROR 22023: Invalid GIS data provided to function st_geometryfromwkb.
+select st_geometryfromwkb(dt) from t2;
+ERROR 22023: Invalid GIS data provided to function st_geometryfromwkb.
+select st_geometryfromwkb(sc) from t2;
+ERROR 22023: Invalid GIS data provided to function st_geometryfromwkb.
+select st_geometryfromwkb(sv) from t2;
+ERROR 22023: Invalid GIS data provided to function st_geometryfromwkb.
+select st_geometryfromwkb(b) from t2;
+ERROR 22023: Invalid GIS data provided to function st_geometryfromwkb.
+select st_geometryfromwkb(tx) from t2;
+ERROR 22023: Invalid GIS data provided to function st_geometryfromwkb.

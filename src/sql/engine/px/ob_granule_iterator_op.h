@@ -1,0 +1,384 @@
+/**
+ * Copyright (c) 2021 OceanBase
+ * OceanBase CE is licensed under Mulan PubL v2.
+ * You can use this software according to the terms and conditions of the Mulan PubL v2.
+ * You may obtain a copy of Mulan PubL v2 at:
+ *          http://license.coscl.org.cn/MulanPubL-2.0
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PubL v2 for more details.
+ */
+
+#ifndef OCEANBASE_ENGINE_PX_EXCHANGE_OB_PX_GRANULE_ITERATOR_OP_H_
+#define OCEANBASE_ENGINE_PX_EXCHANGE_OB_PX_GRANULE_ITERATOR_OP_H_
+
+#include "sql/engine/ob_operator.h"
+#include "lib/container/ob_array.h"
+#include "lib/allocator/page_arena.h"
+#include "lib/string/ob_string.h"
+#include "sql/engine/ob_exec_context.h"
+#include "sql/engine/table/ob_table_scan_op.h"
+#include "sql/engine/px/ob_granule_pump.h"
+#include "sql/engine/px/p2p_datahub/ob_p2p_dh_share_info.h"
+#include "sql/engine/px/p2p_datahub/ob_p2p_dh_msg.h"
+#include "sql/engine/px/p2p_datahub/ob_runtime_filter_query_range.h"
+namespace oceanbase
+{
+namespace sql
+{
+class ObP2PDatahubMsgBase;
+class ObPartitionIdHashFunc
+{
+public:
+  uint64_t operator()(const int64_t partition_id, const uint64_t hash)
+  {
+       // TODO
+    uint64_t hash_val = hash;
+    hash_val = partition_id;
+    return hash_val;
+  }
+};
+
+class ObGITaskReBalancer
+{
+public:
+  int init(ObExecContext *ctx, ObGranulePump *gi_pump, int64_t total_worker_count,
+           int64_t split_gi_task_cost, int64_t initial_task_count, int64_t gi_op_id);
+  inline void scale_total_worker_count(int64_t total_worker_count)
+  {
+    total_worker_count_ = total_worker_count;
+  }
+  bool *get_worker_paused_flag(int64_t worker_id) {
+    return &worker_paused_flags_[worker_id];
+  }
+
+  bool is_worker_paused(int64_t worker_id) {
+    return ATOMIC_LOAD(&worker_paused_flags_[worker_id]);
+  }
+
+  void clear_worker_paused(int64_t worker_id) {
+    ATOMIC_STORE(&worker_paused_flags_[worker_id], false);
+  }
+
+  void pause_all_workers() {
+    for (int64_t i = 0; i < total_worker_count_; ++i) {
+      ATOMIC_STORE(&worker_paused_flags_[i], true);
+    }
+  }
+
+  bool all_worker_finished() {
+    return total_worker_count_ == ATOMIC_LOAD(&finished_workers_);
+  }
+
+  int wait_for_rebalance(ObGranuleIteratorOp *gi_op, bool wait_new_task);
+  int notify_new_task_ready();
+
+  void set_thread_id(int64_t worker_id, int64_t thread_id)
+  {
+    threads_id_[worker_id] = thread_id;
+  }
+
+private:
+  int process_finished_count(ObGranuleIteratorOp *gi_op);
+  int trigger_rebalance(ObGranuleIteratorOp *gi_op, bool &need_wait_new_task);
+  int wait_new_task(ObGranuleIteratorOp *gi_op);
+
+private:
+  static constexpr uint64_t COND_WAIT_TIME_USEC = 1000; // 1ms
+private:
+  ObGranulePump *gi_pump_{nullptr};
+  int64_t total_worker_count_{0};
+  int finished_workers_{0};
+  int64_t split_gi_task_cost_{0};
+  int64_t initial_task_count_{0};
+  int64_t gi_op_id_{-1};
+  bool *worker_paused_flags_{nullptr};
+  bool *maybe_has_new_task_{nullptr};
+  int64_t *threads_id_{nullptr};
+  ObThreadCond cond_; // for who is responsibility for detect
+  common::ObSpinLock pullup_version_lock_{common::ObLatchIds::SQL_GI_SHARE_POOL_LOCK};
+};
+
+class ObGIOpInput : public ObOpInput
+{
+  OB_UNIS_VERSION_V(1);
+public:
+  ObGIOpInput(ObExecContext &ctx, const ObOpSpec &spec);
+  virtual ~ObGIOpInput() {}
+  virtual void reset() override
+  {
+    table_location_keys_.reset();
+  }
+  virtual int init(ObTaskInfo &task_info) override;
+  virtual void set_deserialize_allocator(common::ObIAllocator *allocator) override;
+  inline int64_t get_parallelism() { return parallelism_; }
+  void set_granule_pump(ObGranulePump *pump) { pump_ = pump; }
+  void set_parallelism(int64_t parallelism) { parallelism_ = parallelism; }
+  void set_worker_id(int64_t worker_id) { worker_id_ = worker_id; }
+  int64_t get_worker_id() { return worker_id_; }
+  int64_t get_px_sequence_id() { return px_sequence_id_; }
+  void set_px_sequence_id(int64_t id) { px_sequence_id_ = id; }
+  int add_table_location_keys(common::ObIArray<const ObTableScanSpec*> &tscs);
+  int64_t get_rf_max_wait_time() { return rf_max_wait_time_; }
+  void set_rf_max_wait_time(int64_t rf_max_wait_time) { rf_max_wait_time_ = rf_max_wait_time; }
+  int init_task_rebalancer(ObExecContext *ctx, int64_t parallelism, int64_t split_gi_task_cost,
+                           int64_t initial_task_count, int64_t op_id);
+
+private:
+public:
+  // the dop, the QC decide the dop before our task send to SQC server
+  // but the dop may be change as the worker server don't has enough process.
+  int64_t parallelism_;
+  // 在 affinitize 模式下 GI 需要知道当前 GI 所属的 task id，以拉取对应的 partition 任务
+  int64_t worker_id_;
+
+  ObGranulePump *pump_;
+  //for partition pruning
+  common::ObSEArray<uint64_t, 2> table_location_keys_;
+  int64_t px_sequence_id_;
+  int64_t rf_max_wait_time_;
+
+  union {
+    ObGITaskReBalancer *task_balancer_;
+    uint64_t ser_task_balancer_;
+  };
+private:
+  common::ObIAllocator *deserialize_allocator_;
+};
+
+class ObGranuleIteratorSpec : public ObOpSpec
+{
+  OB_UNIS_VERSION_V(1);
+public:
+  ObGranuleIteratorSpec(common::ObIAllocator &alloc, const ObPhyOperatorType type);
+  ~ObGranuleIteratorSpec() {}
+
+  INHERIT_TO_STRING_KV("op_spec", ObOpSpec,
+                       K_(index_table_id), K_(tablet_size), K_(affinitize), K_(access_all));
+
+  void set_related_id(uint64_t index_id) { index_table_id_ = index_id; }
+  void set_tablet_size(int64_t tablet_size) { tablet_size_ = tablet_size; }
+  int64_t get_tablet_size() const { return tablet_size_; }
+
+  int set_px_rf_info(const ObPxRFStaticInfo &px_rf_info) { return px_rf_info_.assign(px_rf_info); }
+  ObPxRFStaticInfo &get_px_rf_info() { return px_rf_info_; }
+
+  void set_gi_flags(uint64_t flags) {
+    gi_attri_flag_ = flags;
+    affinitize_ = ObGranuleUtil::affinitize(gi_attri_flag_);
+    partition_wise_join_ = ObGranuleUtil::pwj_gi(gi_attri_flag_);
+    access_all_ = ObGranuleUtil::access_all(gi_attri_flag_);
+    nlj_with_param_down_ = ObGranuleUtil::with_param_down(gi_attri_flag_);
+  }
+  uint64_t get_gi_flags() const { return gi_attri_flag_; }
+  inline bool full_partition_wise() const { return partition_wise_join_ && (!affinitize_ || pw_dml_tsc_ids_.count() > 1); }
+public:
+  uint64_t index_table_id_;
+  int64_t tablet_size_;
+  // affinitize用于表示线程和任务是否有进行绑定。
+  bool affinitize_;
+  // 是否是partition wise join/union/subplan filter，注意，如果是hybrid的pwj这个
+  // flag也会被设置上的。
+  bool partition_wise_join_;
+  // 是否是每个线程扫描sqc包含的所有的partition。
+  bool access_all_;
+  // 是否是含有条件下降的nlj。
+  bool nlj_with_param_down_;
+  common::ObFixedArray<int64_t, ObIAllocator> pw_dml_tsc_ids_;
+  // 目前GI的所有属性都设置进了flag里面，使用的时候也尽量使用flag，而不是上面的
+  // 几个单独的变量。目前来说因为兼容性的原因，无法删除上面的几个变量了，新加的
+  // GI的属性都通过这个flag来进行判断。
+  uint64_t gi_attri_flag_;
+  // FULL PARTITION WISE情况下，GI可以分配在INSERT/REPLACE算子上，GI会控制insert/REPLACE表的任务划分
+  // for partition join filter
+  ObPxBFStaticInfo bf_info_;
+  ObHashFunc hash_func_;
+  //TODO: shanting. remove this expr in 4.3
+  ObExpr *tablet_id_expr_;
+  // end for partition join filter
+  int64_t repart_pruning_tsc_idx_;
+  // for runtime filter extract query range
+  ObPxRFStaticInfo px_rf_info_;
+  bool hash_part_;
+  bool enable_adaptive_task_splitting_;
+};
+
+class ObGranuleIteratorOp : public ObOperator
+{
+private:
+  enum ObGranuleIteratorState {
+    GI_UNINITIALIZED,
+    GI_PREPARED,
+    GI_TABLE_SCAN,
+    GI_GET_NEXT_GRANULE_TASK,
+    GI_END,
+  };
+  class RescanTasksInfo
+  {
+  public:
+    RescanTasksInfo() : use_opt_(false) {}
+    void reset() {
+      rescan_tasks_pos_.reset();
+      rescan_tasks_map_.clear();
+    }
+    void destroy() {
+      rescan_tasks_pos_.reset();
+      rescan_tasks_map_.destroy();
+    }
+    int insert_rescan_task(int64_t pos, const ObGranuleTaskInfo &info);
+    int64_t get_rescan_task_count() const { return use_opt_ ? rescan_tasks_map_.size() : rescan_tasks_pos_.count(); }
+    // use opt means partition_pruning is enabled and pos of task of each tablet is recorded in rescan_tasks_map_.
+    bool use_opt_;
+    common::ObSEArray<int64_t, OB_MIN_PARALLEL_TASK_COUNT * 2> rescan_tasks_pos_;
+    // key is tablet_id, value is 
+    // 1.non-pw: pos. call ObGITaskSet::get_task_at_pos(pos) to get ObGranuleTaskInfo.
+    // 2.pw: rescan_task_idx_. pwj_rescan_task_infos_[rescan_task_idx_] to get ObGranuleTaskInfo.
+    hash::ObHashMap<uint64_t, int64_t, common::hash::NoPthreadDefendMode> rescan_tasks_map_;
+  };
+public:
+  ObGranuleIteratorOp(ObExecContext &exec_ctx, const ObOpSpec &spec, ObOpInput *input);
+  ~ObGranuleIteratorOp() {}
+
+  virtual int inner_open() override;
+  virtual int rescan() override;
+  virtual int inner_get_next_row() override;
+  virtual int inner_get_next_batch(const int64_t max_row_cnt) override;
+  virtual void destroy() override;
+  virtual int inner_close() override;
+  int do_drain_exch() override;
+
+  void reset();
+  void reuse();
+
+  virtual OperatorOpenOrder get_operator_open_order() const override
+  { return OPEN_SELF_FIRST; }
+  int get_next_granule_task(bool prepare = false, bool round_robin = false);
+  int64_t get_worker_id() const { return worker_id_; }
+  ScanResumePoint &get_resume_point() { return scan_resume_point_; }
+  inline void set_paused() { scan_resume_point_.set_paused(); }
+  inline bool is_paused() const { return scan_resume_point_.is_paused(); }
+  inline void clear_paused() { scan_resume_point_.clear_paused(); }
+  bool has_add_to_finished_worker() { return has_add_to_finished_worker_; }
+  void set_has_add_to_finished_worker(bool value) { has_add_to_finished_worker_ = value; }
+  const common::ObIArray<int64_t> &get_pw_dml_tsc_ids() const { return MY_SPEC.pw_dml_tsc_ids_; }
+  ObGranulePumpArgs *pump_arg() { return pump_arg_; }
+private:
+  int parameters_init();
+  // 非full partition wise获得task的方式
+  // TODO: jiangting.lk 重构下函数名字
+  int try_fetch_task(ObGranuleTaskInfo &info, bool round_robin);
+  int get_next_task_pos(int64_t &pos, const ObGITaskSet *&taskset);
+  int pw_get_next_task_pos(const common::ObIArray<int64_t> &op_ids);
+  /**
+   * @brief
+   * full partition wise的模式下，通过op ids获得对应的task infos
+   * IN ctx
+   * IN op_ids 消费GI task的phy op对应的op ids
+   * OUT infos 每一个phy op对应的GI tasks
+   */
+  int fetch_full_pw_tasks(ObIArray<ObGranuleTaskInfo> &infos, const ObIArray<int64_t> &op_ids);
+  int try_fetch_tasks(ObIArray<ObGranuleTaskInfo> &infos, const ObIArray<const ObTableScanSpec *> &tscs);
+  int try_get_rows(const int64_t max_row_cnt);
+  int do_get_next_granule_task(bool &partition_pruning, bool round_robin);
+  int prepare_table_scan();
+  bool is_not_init() { return state_ == GI_UNINITIALIZED; }
+  // 获得消费GI task的node：
+  // 目前仅仅支持TSC或者Join
+  int get_gi_task_consumer_node(ObOperator *cur, ObOperator *&consumer) const;
+  // ---for nlj pkey
+  int try_pruning_repart_partition(
+      const ObGITaskSet &taskset,
+      int64_t &pos,
+      bool &partition_pruned);
+  bool repart_partition_pruned(const ObGranuleTaskInfo &info) {
+    return info.tablet_loc_->tablet_id_.id() != ctx_.get_gi_pruning_info().get_part_id();
+  }
+  // ---end
+  // for nlj/sbf param down, dynamic partition pruning
+  int do_dynamic_partition_pruning(const ObGranuleTaskInfo &gi_task_info,
+      bool &partition_pruning);
+  int do_dynamic_partition_pruning(const common::ObIArray<ObGranuleTaskInfo> &gi_task_infos,
+      bool &partition_pruning);
+  // ---end---
+
+  int fetch_rescan_pw_task_infos(const common::ObIArray<int64_t> &op_ids,
+      GIPrepareTaskMap *gi_prepare_map,
+      common::ObIArray<ObGranuleTaskInfo> &gi_task_infos);
+  int fetch_normal_pw_task_infos(const common::ObIArray<int64_t> &op_ids,
+      GIPrepareTaskMap *gi_prepare_map,
+      common::ObIArray<ObGranuleTaskInfo> &gi_task_infos);
+
+  //---for partition run time filter
+  bool enable_parallel_runtime_filter_pruning();
+  bool enable_single_runtime_filter_pruning();
+  int do_single_runtime_filter_pruning(const ObGranuleTaskInfo &gi_task_info, bool &partition_pruning);
+  int do_parallel_runtime_filter_pruning();
+  int wait_partition_runtime_filter_ready(bool &partition_pruning);
+  int do_join_filter_partition_pruning(int64_t tablet_id, bool &partition_pruning);
+  int try_build_tablet2part_id_map();
+  int init_rescan_tasks_info();
+  //---end----
+
+  // for runtime filter extract query_range
+  int wait_runtime_filter_ready(ObP2PDhKey &rf_key, ObP2PDatahubMsgBase *&rf_msg);
+  bool enable_single_runtime_filter_extract_query_range();
+  bool enable_parallel_runtime_filter_extract_query_range();
+  int do_single_runtime_filter_extract_query_range(ObGranuleTaskInfo &gi_task_info);
+  int do_parallel_runtime_filter_extract_query_range(bool need_regenerate_gi_task = true);
+  // ---end----
+  bool enable_adaptive_task_splitting()
+  {
+    return MY_SPEC.enable_adaptive_task_splitting_ && parallelism_ > 1;
+  }
+  int wait_task_rebalance(bool wait_new_task = true);
+  int gi_task_pause_process();
+private:
+  typedef common::hash::ObHashMap<int64_t, int64_t,
+      common::hash::NoPthreadDefendMode> ObPxTablet2PartIdMap;
+private:
+  int64_t parallelism_;
+  int64_t worker_id_;
+  uint64_t tsc_op_id_;
+  ObGranulePump *pump_;
+  int64_t pump_version_;
+  ObGranuleIteratorState state_;
+
+  bool all_task_fetched_;
+  bool is_rescan_;
+  const ObGITaskSet *rescan_taskset_ = NULL;
+  RescanTasksInfo rescan_tasks_info_;
+  int64_t rescan_task_idx_;
+  // full pwj场景下, 在执行过程中缓存住了自己的任务队列.
+  // 供GI rescan使用
+  common::ObSEArray<ObGranuleTaskInfo, 2> pwj_rescan_task_infos_;
+  // for px batch rescan and dynamic partition pruning
+  common::ObSEArray<uint64_t, 2> table_location_keys_;
+  common::ObSEArray<ObTabletID, 16> pruning_tablet_ids_;
+   //for partition pruning
+  int64_t filter_count_; // filtered part count when part pruning activated
+  int64_t total_count_; // total partition count or block count processed, rescan included
+  ObP2PDatahubMsgBase *rf_msg_;
+  ObP2PDhKey rf_key_;
+  int64_t rf_start_wait_time_;
+  ObPxTablet2PartIdMap tablet2part_id_map_;
+  ObOperator *real_child_;
+  bool is_parallel_runtime_filtered_;
+
+  // for runtime filter extract query range
+  bool is_parallel_rf_qr_extracted_; // parallel runtime filter query range extracted
+  ObSEArray<ObP2PDhKey, 2> query_range_rf_keys_;
+  ObSEArray<ObP2PDatahubMsgBase *, 2> query_range_rf_msgs_;
+  ObGranuleSplitterType splitter_type_;
+  // worker may enter gi pause sync point multiple times, use has_add_to_finished_worker_ to
+  // distinguish whether the counter has record it.
+  bool has_add_to_finished_worker_;
+  ScanResumePoint scan_resume_point_;
+  int64_t latest_pause_output_;
+  ObGranulePumpArgs *pump_arg_;
+};
+
+} // end namespace sql
+} // end namespace oceanbase
+
+#endif // OCEANBASE_ENGINE_PX_EXCHANGE_OB_PX_GRANULE_ITERATOR_OP_H_

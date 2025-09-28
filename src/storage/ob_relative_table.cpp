@@ -1,0 +1,506 @@
+/**
+ * Copyright (c) 2021 OceanBase
+ * OceanBase CE is licensed under Mulan PubL v2.
+ * You can use this software according to the terms and conditions of the Mulan PubL v2.
+ * You may obtain a copy of Mulan PubL v2 at:
+ *          http://license.coscl.org.cn/MulanPubL-2.0
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PubL v2 for more details.
+ */
+
+#define USING_LOG_PREFIX STORAGE
+
+#include "storage/ob_relative_table.h"
+
+#include "share/ob_unique_index_row_transformer.h"
+#include "share/schema/ob_table_dml_param.h"
+#include "storage/truncate_info/ob_truncate_partition_filter.h"
+
+namespace oceanbase
+{
+using namespace common;
+using namespace share;
+using namespace share::schema;
+namespace storage
+{
+// ------ ObRelativeTable ------ //
+ObRelativeTable::~ObRelativeTable()
+{
+  destroy();
+}
+
+bool ObRelativeTable::is_valid() const
+{
+  return OB_NOT_NULL(schema_param_) && schema_param_->is_valid() && tablet_id_.is_valid();
+}
+
+void ObRelativeTable::destroy()
+{
+  allow_not_ready_ = false;
+  schema_param_ = nullptr;
+  tablet_id_.reset();
+  tablet_iter_.reset();
+  is_inited_ = false;
+  if (nullptr != truncate_part_filter_) {
+    ObTruncatePartitionFilterFactory::destroy_truncate_partition_filter(truncate_part_filter_);
+  }
+}
+
+int ObRelativeTable::init(
+    const share::schema::ObTableSchemaParam *param,
+    const ObTabletID &tablet_id,
+    const bool allow_not_ready)
+{
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(is_inited_)) {
+    ret = OB_INIT_TWICE;
+    LOG_WARN("ObRelativeTable has been inited. ", K(ret), K(is_inited_));
+  } else if (OB_ISNULL(param) || OB_UNLIKELY(!tablet_id.is_valid())) {
+    LOG_WARN("invalid argument", K(ret), KP(param), K(tablet_id));
+  } else {
+    schema_param_ = param;
+    tablet_id_ = tablet_id;
+    allow_not_ready_ = allow_not_ready;
+    is_inited_ = true;
+  }
+  return ret;
+}
+
+uint64_t ObRelativeTable::get_table_id() const
+{
+  return schema_param_->get_table_id();
+}
+
+const ObTabletID& ObRelativeTable::get_tablet_id() const
+{
+  return tablet_id_;
+}
+
+const ObTabletHandle* ObRelativeTable::get_tablet_handle() const
+{
+  return tablet_iter_.get_tablet_handle_ptr();
+}
+
+
+int ObRelativeTable::get_col_desc(
+    const uint64_t column_id,
+    share::schema::ObColDesc &col_desc) const
+{
+  int ret = OB_SUCCESS;
+  if (!is_valid()) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("relative table is invalid", K(ret), K(*this));
+  } else {
+    const ObColumnParam *param = NULL;
+    if (NULL == (param = schema_param_->get_column(column_id))) {
+      ret = OB_INVALID_ARGUMENT;
+      LOG_WARN("wrong column id", K(ret), K(column_id), K(*schema_param_));
+    } else {
+      col_desc.col_id_ = column_id;
+      col_desc.col_type_ = param->get_meta_type();
+      col_desc.col_order_ = param->get_column_order();
+    }
+  }
+  return ret;
+}
+
+
+int ObRelativeTable::get_rowkey_col_desc_by_idx(
+    const int64_t idx,
+    share::schema::ObColDesc &col_desc) const
+{
+  int ret = OB_SUCCESS;
+  int64_t rowkey_size = 0;
+  col_desc.reset();
+  if (idx < 0 || idx >= (rowkey_size = get_rowkey_column_num())) {
+    ret = OB_ARRAY_OUT_OF_RANGE;
+    LOG_WARN("idx out of range", K(ret), K(rowkey_size));
+  } else {
+    const ObColumnParam *param = NULL;
+    if (NULL == (param = schema_param_->get_column_by_idx(idx))) {
+      ret = OB_INVALID_ARGUMENT;
+      LOG_WARN("wrong column id", K(ret), K(idx));
+    } else {
+      col_desc.col_id_ = param->get_column_id();
+      col_desc.col_type_ = param->get_meta_type();
+      col_desc.col_order_ = param->get_column_order();
+    }
+  }
+  return ret;
+}
+
+int ObRelativeTable::get_rowkey_col_id_by_idx(const int64_t idx, uint64_t &col_id) const
+{
+  int ret = OB_SUCCESS;
+  if (!is_valid()) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("relative table is invalid", K(ret), K(*this));
+  } else {
+    const int64_t rowkey_size = get_rowkey_column_num();
+    if (idx < 0 || idx >= rowkey_size) {
+      ret = OB_ARRAY_OUT_OF_RANGE;
+      LOG_WARN("idx out of range", K(ret), K(rowkey_size));
+    } else {
+      const ObColumnParam *param = NULL;
+      if (NULL == (param = schema_param_->get_rowkey_column_by_idx(idx))) {
+        ret = OB_INVALID_ARGUMENT;
+        LOG_WARN("wrong column id", K(ret), K(idx));
+      } else {
+        col_id = param->get_column_id();
+      }
+    }
+  }
+  return ret;
+}
+
+int ObRelativeTable::get_rowkey_column_ids(ObIArray<ObColDesc> &column_ids) const
+{
+  int ret = OB_SUCCESS;
+  if (!is_valid()) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("relative table is invalid", K(ret), K(*this));
+  } else if (OB_FAIL(schema_param_->get_rowkey_column_ids(column_ids))) {
+    LOG_WARN("get rowkey column ids from param fail", K(ret));
+  }
+  return ret;
+}
+
+int ObRelativeTable::get_rowkey_column_ids(ObIArray<uint64_t> &column_ids) const
+{
+  int ret = OB_SUCCESS;
+  if (!is_valid()) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("relative table is invalid", K(ret), KPC(this));
+  } else if (OB_FAIL(schema_param_->get_rowkey_column_ids(column_ids))) {
+    LOG_WARN("get rowkey column ids from param fail", K(ret));
+  }
+  return ret;
+}
+
+int ObRelativeTable::get_column_data_length(const uint64_t column_id, int32_t &len) const
+{
+  int ret = OB_SUCCESS;
+  if (!is_valid()) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("relative table is invalid", K(ret), K(*this));
+  } else {
+    const ObColumnParam *param = NULL;
+    if (NULL == (param = schema_param_->get_column(column_id))) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("column param shouldn't be NULL here", K(ret), K(column_id));
+    } else {
+      len = param->get_data_length();
+    }
+  }
+  return ret;
+}
+
+int ObRelativeTable::is_rowkey_column_id(const uint64_t column_id, bool &is_rowkey) const
+{
+  int ret = OB_SUCCESS;
+  is_rowkey = false;
+  if (!is_valid()) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("relative table is invalid", K(ret), K(*this));
+  } else if (OB_INVALID_ID == column_id) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid column id", K(ret), K(column_id));
+  } else if (OB_FAIL(schema_param_->is_rowkey_column(column_id, is_rowkey))) {
+    LOG_WARN("check is_rowkey fail", K(ret), K(column_id), K(*schema_param_));
+  }
+  return ret;
+}
+
+int ObRelativeTable::is_column_nullable_for_write(const uint64_t column_id,
+                                                  bool &is_nullable_for_write) const
+{
+  int ret = OB_SUCCESS;
+  is_nullable_for_write = false;
+  if (!is_valid()) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("relative table is invalid", K(ret), K(*this));
+  } else if (OB_INVALID_ID == column_id) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid column id", K(ret), K(column_id));
+  } else if (OB_FAIL(schema_param_->is_column_nullable_for_write(column_id, is_nullable_for_write))) {
+    LOG_WARN("check is_rowkey fail", K(ret), K(column_id), K(*schema_param_));
+  }
+  return ret;
+}
+
+int ObRelativeTable::is_column_nullable_for_read(const uint64_t column_id,
+                                                 bool &is_nullable_for_read) const
+{
+  int ret = OB_SUCCESS;
+  is_nullable_for_read = false;
+  if (!is_valid()) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("relative table is invalid", K(ret), K(*this));
+  } else if (OB_INVALID_ID == column_id) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid column id", K(ret), K(column_id));
+  } else {
+    const ObColumnParam *col = schema_param_->get_column(column_id);
+    if (OB_ISNULL(col)) {
+      ret = OB_SCHEMA_ERROR;
+      LOG_WARN("column schema is null", K(ret), K(column_id));
+    } else {
+      is_nullable_for_read = col->is_nullable_for_read();
+    }
+  }
+  return ret;
+}
+
+int ObRelativeTable::is_nop_default_value(const uint64_t column_id, bool &is_nop) const
+{
+  int ret = OB_SUCCESS;
+  is_nop = false;
+  if (!is_valid()) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("relative table is invalid", K(ret), K(*this));
+  } else if (OB_HIDDEN_ROWID_COLUMN_ID == column_id) {
+    //rowid column need to compute on fly
+    is_nop = true;
+  } else {
+    const ObColumnParam *param = NULL;
+    if (OB_ISNULL(param = schema_param_->get_column(column_id))) {
+      ret = OB_INVALID_ARGUMENT;
+      LOG_WARN("wrong column id", K(ret), K(column_id), K(*schema_param_));
+    } else if (param->get_cur_default_value().is_nop_value()) {
+      is_nop = true;
+    }
+  }
+  return ret;
+}
+
+int ObRelativeTable::has_udf_column(bool &has_udf) const
+{
+  int ret = OB_SUCCESS;
+  has_udf = false;
+  if (OB_FAIL(schema_param_->has_udf_column(has_udf))) {
+    LOG_WARN("check has udf column failed", K(ret));
+  }
+  return ret;
+}
+
+int ObRelativeTable::is_hidden_column(const uint64_t column_id, bool &is_hidden) const
+{
+  int ret = OB_SUCCESS;
+  is_hidden = false;
+  if (!is_valid()) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("relative table is invalid", K(ret), K(*this));
+  } else {
+    const ObColumnParam *col = schema_param_->get_column(column_id);
+    if (OB_ISNULL(col)) {
+      ret = OB_SCHEMA_ERROR;
+      LOG_WARN("column schema is null", K(ret), K(column_id));
+    } else {
+      is_hidden = col->is_hidden();
+    }
+  }
+  return ret;
+}
+
+int ObRelativeTable::is_gen_column(const uint64_t column_id, bool &is_gen_col) const
+{
+  int ret = OB_SUCCESS;
+  is_gen_col = false;
+  if (!is_valid()) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("relative table is invalid", K(ret), K(*this));
+  } else {
+    const ObColumnParam *col = schema_param_->get_column(column_id);
+    if (OB_ISNULL(col)) {
+      ret = OB_SCHEMA_ERROR;
+      LOG_WARN("column schema is null", K(ret), K(column_id));
+    } else {
+      is_gen_col = col->is_gen_col();
+    }
+  }
+  return ret;
+}
+
+int64_t ObRelativeTable::get_rowkey_column_num() const
+{
+  return schema_param_->get_rowkey_column_num();
+}
+
+int64_t ObRelativeTable::get_shadow_rowkey_column_num() const
+{
+  return schema_param_->get_shadow_rowkey_column_num();
+}
+
+int64_t ObRelativeTable::get_column_count() const
+{
+  return schema_param_->get_column_count();
+}
+
+
+
+
+
+int ObRelativeTable::get_index_name(ObString &index_name) const
+{
+  int ret = OB_SUCCESS;
+  if (!is_valid()) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("relative table is invalid", K(ret), K(*this));
+  } else if (OB_FAIL(schema_param_->get_index_name(index_name))) {
+    LOG_WARN("get index name from param fail", K(ret));
+  }
+  return ret;
+}
+
+int ObRelativeTable::get_primary_key_name(ObString &pk_name) const
+{
+  int ret = OB_SUCCESS;
+
+  if (!is_valid()) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("relative table is invalid", K(ret), K(*this));
+  } else {
+    pk_name = schema_param_->get_pk_name();
+  }
+
+  return ret;
+}
+
+bool ObRelativeTable::is_index_table() const
+{
+  return schema_param_->is_index_table();
+}
+
+bool ObRelativeTable::is_storage_index_table() const
+{
+  return schema_param_->is_storage_index_table();
+}
+
+bool ObRelativeTable::is_index_local_storage() const
+{
+  return schema_param_->is_index_local_storage();
+}
+
+bool ObRelativeTable::can_read_index() const
+{
+  return schema_param_->can_read_index();
+}
+
+bool ObRelativeTable::is_unique_index() const
+{
+  return schema_param_->is_unique_index();
+}
+
+
+
+
+bool ObRelativeTable::is_fts_index() const
+{
+  return schema_param_->is_fts_index();
+}
+
+bool ObRelativeTable::is_vector_index() const
+{
+  return schema_param_->is_vector_index();
+}
+
+
+
+DEF_TO_STRING(ObRelativeTable)
+{
+  int64_t pos = 0;
+  J_OBJ_START();
+  J_KV(K_(allow_not_ready),
+       K_(tablet_id),
+       KPC_(schema_param),
+       KPC_(truncate_part_filter),
+       K_(tablet_iter));
+  J_OBJ_END();
+  return pos;
+}
+
+int ObRelativeTable::set_index_value(
+    const ObNewRow &table_row,
+    const share::schema::ColumnMap &col_map,
+    const ObColDesc &col_desc,
+    const int64_t rowkey_size,
+    ObNewRow &index_row,
+    ObIArray<share::schema::ObColDesc> *idx_columns)
+{
+  int ret = OB_SUCCESS;
+  int32_t idx = -1;
+  uint64_t id = is_shadow_column(col_desc.col_id_) ?
+                col_desc.col_id_ - OB_MIN_SHADOW_COLUMN_ID :
+                col_desc.col_id_;
+  if (table_row.is_invalid() || !col_map.is_inited() || rowkey_size <= 0) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(table_row), K(rowkey_size), K(ret));
+  } else {
+    if (OB_FAIL(col_map.get(id, idx)) || idx < 0) {
+      ret = OB_ENTRY_NOT_EXIST;
+      LOG_WARN("failed to get column index",
+                  "column_id", id, "index", idx);
+    } else if (idx >= table_row.count_) {
+      ret = OB_ENTRY_NOT_EXIST;
+      ObCStringHelper helper;
+      LOG_WARN("can not get row value",
+                  "table_row", helper.convert(table_row), "column_id", id, "index", idx);
+    } else {
+      *(index_row.cells_ + index_row.count_++) = table_row.cells_[idx];
+    }
+  }
+  if (OB_SUCC(ret)) {
+    if (idx_columns) {
+      if (OB_FAIL(idx_columns->push_back(col_desc))) {
+        LOG_WARN("failed to add column id",
+                    "column_id", col_desc.col_id_);
+      }
+    }
+  }
+  return ret;
+}
+
+int ObRelativeTable::prepare_truncate_part_filter(
+  ObIAllocator &allocator,
+  const int64_t read_snapshot)
+{
+  int ret = OB_SUCCESS;
+  ObITable *table_ptr = nullptr;
+  const ObTabletHandle *tablet_handle = get_tablet_handle();
+  if (IS_NOT_INIT) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("not inited", K(ret));
+  } else if (OB_UNLIKELY(!tablet_iter_.table_iter()->is_valid())) {
+    LOG_DEBUG("[TRUNCATE INFO], empty tablet", KPC(tablet_iter_.table_iter()));
+  } else if (OB_FAIL(tablet_iter_.table_iter()->get_boundary_table(false, table_ptr))) {
+    LOG_WARN("failed to get boundary table", K(ret));
+  } else {
+    const int64_t major_table_version = nullptr != table_ptr && table_ptr->is_major_sstable() ?
+                                        table_ptr->get_snapshot_version() : 0;
+    ObVersionRange read_version_range(major_table_version, read_snapshot);
+    const storage::ObTableReadInfo &read_info = schema_param_->get_read_info();
+    if (OB_UNLIKELY(!read_version_range.is_valid())) {
+      LOG_DEBUG("[TRUNCATE INFO] invalid version range, filter is empty", K(ret), K(read_version_range), KPC_(truncate_part_filter));
+    } else if (OB_UNLIKELY(nullptr != table_ptr && table_ptr->is_major_sstable() && major_table_version <= 0)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("unexpected major sstable", K(ret), KPC(table_ptr));
+    } else if (OB_FAIL(ObTruncatePartitionFilterFactory::build_truncate_partition_filter(
+        *tablet_handle->get_obj(),
+        tablet_iter_.get_split_extra_tablet_handles_ptr(),
+        read_info.get_columns_desc(),
+        read_info.get_columns(),
+        read_version_range,
+        &allocator,
+        truncate_part_filter_))) {
+      LOG_WARN("failed to build truncate part filter", K(ret));
+    } else {
+      LOG_DEBUG("[TRUNCATE INFO]", K(ret), K(read_version_range), KPC_(truncate_part_filter));
+    }
+  }
+  return ret;
+}
+
+}//namespace oceanbase
+}//namespace storage

@@ -1,0 +1,9 @@
+oceanbase-ce:
+{{%% SERVERS %%}}
+  tag: latest
+  include: obd/observer.include.yaml
+  global: 
+    memory_limit: '4G'
+    datafile_size: '20G'
+    cpu_count: '24'
+{{%% PROXY_CONF %%}}
