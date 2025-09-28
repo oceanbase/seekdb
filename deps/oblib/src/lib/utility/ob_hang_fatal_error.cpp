@@ -1,0 +1,59 @@
+/**
+ * Copyright (c) 2021 OceanBase
+ * OceanBase CE is licensed under Mulan PubL v2.
+ * You can use this software according to the terms and conditions of the Mulan PubL v2.
+ * You may obtain a copy of Mulan PubL v2 at:
+ *          http://license.coscl.org.cn/MulanPubL-2.0
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PubL v2 for more details.
+ */
+
+#include "lib/utility/ob_hang_fatal_error.h"
+#include "common/ob_clock_generator.h"
+#include "lib/utility/utility.h"
+
+extern "C" {
+void right_to_die_or_duty_to_live_c()
+{
+  ::oceanbase::common::right_to_die_or_duty_to_live();
+}
+}
+
+namespace oceanbase
+{
+namespace common
+{
+_RLOCAL(bool, in_try_stmt);
+int64_t g_fatal_error_thread_id = -1;
+
+int64_t get_fatal_error_thread_id()
+{
+  return g_fatal_error_thread_id;
+}
+void set_fatal_error_thread_id(int64_t thread_id)
+{
+  g_fatal_error_thread_id = thread_id;
+}
+
+// To die or to live, it's a problem.
+void right_to_die_or_duty_to_live()
+{
+  const ObFatalErrExtraInfoGuard *extra_info = ObFatalErrExtraInfoGuard::get_thd_local_val_ptr();
+  set_fatal_error_thread_id(GETTID());
+  while (true) {
+    ObCStringHelper helper;
+    const char *info = (NULL == extra_info) ? NULL : helper.convert(*extra_info);
+    LOG_DBA_ERROR_V2(OB_SERVER_THREAD_PANIC, OB_ERR_THREAD_PANIC, "Trying so hard to die, info= ", info, ", lbt= ", lbt());
+  #ifndef FATAL_ERROR_HANG
+    if (in_try_stmt) {
+      throw OB_EXCEPTION<OB_ERR_UNEXPECTED>();
+    }
+  #endif
+    ob_usleep(60 * 1000 * 1000); // sleep 60s
+  }
+}
+
+} //common
+} //oceanbase

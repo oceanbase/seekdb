@@ -1,0 +1,158 @@
+/**
+ * Copyright (c) 2021 OceanBase
+ * OceanBase CE is licensed under Mulan PubL v2.
+ * You can use this software according to the terms and conditions of the Mulan PubL v2.
+ * You may obtain a copy of Mulan PubL v2 at:
+ *          http://license.coscl.org.cn/MulanPubL-2.0
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PubL v2 for more details.
+ */
+
+#ifndef _OB_CREATE_TABLE_RESOLVER_H
+#define _OB_CREATE_TABLE_RESOLVER_H 1
+#include "sql/resolver/ddl/ob_create_table_stmt.h"
+#include "sql/resolver/ddl/ob_create_table_resolver_base.h"
+#include "lib/container/ob_se_array.h"
+#include "share/ob_rpc_struct.h"
+#include "share/schema/ob_schema_struct.h"
+#include "share/schema/ob_column_schema.h"
+#include "share/config/ob_server_config.h"
+
+namespace oceanbase
+{
+namespace sql
+{
+
+class ObCreateTableResolver: public ObCreateTableResolverBase
+{
+public:
+  //store generated column and its' dependent expr.
+  struct GenColExpr
+  {
+    GenColExpr(uint64_t col_id,
+               ObRawExpr *gen_col_expr)
+        : col_id_(col_id), gen_col_expr_(gen_col_expr)
+    { }
+    GenColExpr()
+        : col_id_(common::OB_NOT_EXIST_COLUMN_ID), gen_col_expr_(NULL)
+    { }
+    TO_STRING_KV(K_(col_id), K_(gen_col_expr));
+
+    ~GenColExpr() { }
+    uint64_t col_id_;
+    ObRawExpr *gen_col_expr_;
+  };
+  explicit ObCreateTableResolver(ObResolverParams &params);
+  virtual ~ObCreateTableResolver();
+
+  virtual int resolve(const ParseNode &parse_tree);
+  static int set_nullable_for_cta_column(ObSelectStmt *select_stmt,
+                                  share::schema::ObColumnSchemaV2& column,
+                                  const ObRawExpr *expr,
+                                  const ObString &table_name,
+                                  common::ObIAllocator &allocator,
+                                  ObStmt *stmt);
+private:
+  enum ResolveRule
+    {
+      RESOLVE_ALL = 0,
+      RESOLVE_COL_ONLY,
+      RESOLVE_NON_COL
+    };
+  // types and constants
+private:
+  // disallow copy
+  DISALLOW_COPY_AND_ASSIGN(ObCreateTableResolver);
+  // function members
+  uint64_t gen_column_id();
+  uint64_t gen_udt_set_id();
+  int64_t get_primary_key_size() const;
+  int add_primary_key_part(const common::ObString &column_name, common::ObArray<ObColumnResolveStat> &stats, int64_t &pk_data_length);
+  int add_hidden_tablet_seq_col();
+  int add_hidden_external_table_pk_col();
+  int check_column_name_duplicate(const ParseNode *node);
+  int resolve_primary_key_node(const ParseNode &pk_node, common::ObArray<ObColumnResolveStat> &stats);
+  int resolve_table_elements(const ParseNode *node,
+                             common::ObArray<int> &idx_index_node,
+                             common::ObArray<int> &foreign_key_node_position_list,
+                             common::ObArray<int> &table_level_constraint_list,
+                             const int resolve_rule);
+  int resolve_insert_mode(const ParseNode *parse_tree);
+  int resolve_table_elements_from_select(const ParseNode &parse_tree);
+  int set_temp_table_info(share::schema::ObTableSchema &table_schema, ParseNode *commit_option_node);
+
+  int resolve_table_charset_info(const ParseNode *node);
+  int resolve_external_table_format_early(const ParseNode *node);
+  //index
+  int add_sort_column(const obrpc::ObColumnSortItem &sort_column);
+  int generate_index_arg(const bool process_heap_table_primary_key);
+  int set_index_name();
+  int set_index_option_to_arg();
+  int set_storing_column();
+  int resolve_index(const ParseNode *node, common::ObArray<int> &index_node_position_list);
+  int resolve_index_node(const ParseNode *node);
+  int resolve_index_name(
+      const ParseNode *node,
+      const common::ObString &first_column_name,
+      bool is_unique,
+      ObString &uk_name);
+  int resolve_table_level_constraint_for_mysql(
+      const ParseNode* node, ObArray<int> &constraint_position_list);
+  int build_partition_key_info(share::schema::ObTableSchema &table_schema,
+                               const bool is_subpart);
+  //resolve partition option only used in ObCreateTableResolver now.
+  int resolve_partition_option(ParseNode *node,
+                               share::schema::ObTableSchema &table_schema,
+                               const bool is_partition_option_node_with_opt);
+  //check generated column whether valid
+  int check_generated_partition_column(share::schema::ObTableSchema &table_schema);
+  ObRawExpr* find_gen_col_expr(const uint64_t column_id);
+  int get_resolve_stats_from_table_schema(const share::schema::ObTableSchema &table_schema,
+                                          ObArray<ObColumnResolveStat> &stats);
+  virtual int get_table_schema_for_check(const share::schema::ObTableSchema *&table_schema) override;
+  int add_new_column_for_oracle_temp_table(share::schema::ObTableSchema &table_schema, ObArray<ObColumnResolveStat> &stats);
+  int add_new_indexkey_for_oracle_temp_table(const int32_t org_key_len);
+  int add_pk_key_for_oracle_temp_table(ObArray<ObColumnResolveStat> &stats, int64_t &pk_data_length);
+  int set_partition_info_for_oracle_temp_table(share::schema::ObTableSchema &table_schema);
+  // following four functions should be used only in oracle mode
+
+  int check_external_table_generated_partition_column_sanity(ObTableSchema &table_schema, ObRawExpr *dependant_expr, ObIArray<int64_t> &external_part_idx);
+  typedef common::hash::ObPlacementHashSet<uint64_t, common::OB_MAX_USER_DEFINED_COLUMNS_COUNT> VPColumnIdHashSet;
+  uint64_t gen_column_group_id();
+  int add_inner_index_for_heap_gtt();
+  int check_max_row_data_length(const ObTableSchema &table_schema);  
+  int create_default_partition_for_table(ObTableSchema &table_schema);
+  int set_default_micro_index_clustered_(share::schema::ObTableSchema &table_schema);
+  int resolve_primary_key_node_in_heap_table(const ParseNode *element, common::ObArray<ObColumnResolveStat> &stats,
+                                             ObSEArray<ObColumnSchemaV2, SEARRAY_INIT_NUM> &resolved_cols);
+  int resolve_single_column_primary_key_node(const ParseNode *column_list_node, ObTableSchema &tbl_schema, bool &process_heap_table_primary_key, ObString &first_column_name);
+  int uk_or_heap_table_pk_add_to_index_list(ObArray<int> &index_node_position_list, const int32_t node_index);  int set_default_enable_macro_block_bloom_filter_(share::schema::ObTableSchema &table_schema);
+  int check_building_domain_index_legal();
+  int set_default_merge_engine_type_(share::schema::ObTableSchema &table_schema);
+
+private:
+  // data members
+  uint64_t cur_column_id_;
+  common::ObSEArray<uint64_t, 16> primary_keys_;
+  common::hash::ObPlacementHashSet<share::schema::ObColumnNameHashWrapper, common::OB_MAX_COLUMN_NUMBER> column_name_set_;
+  bool if_not_exist_;
+  obrpc::ObCreateIndexArg index_arg_;
+  IndexNameSet current_index_name_set_;
+  common::hash::ObHashSet<share::schema::ObIndexNameHashWrapper> index_aux_name_set_;
+  common::ObSEArray<GenColExpr, 5> gen_col_exprs_;//store generated column and dependent exprs
+  common::ObSEArray<ObRawExpr *, 5> constraint_exprs_;//store constraint exprs
+  common::ObSEArray<ObString, 16> cols_with_nullable_specified_;//store cols with explicitly specified defination for CTAS
+
+  uint64_t cur_udt_set_id_;
+  common::ObSEArray<uint64_t, 4> vec_index_col_ids_;
+  bool has_vec_index_;
+  bool has_fts_index_;
+  bool has_multivalue_index_;
+};
+
+} // end namespace sql
+} // end namespace oceanbase
+
+#endif /* _OB_CREATE_TABLE_RESOLVER_H */

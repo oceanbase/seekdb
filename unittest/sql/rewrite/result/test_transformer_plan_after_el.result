@@ -1,0 +1,2970 @@
+***************   Case 0   ***************
+SQL: select * from t2 left join (select * from t1) as v  on t2.c1 = v.c2 where (v.c2 is null) and (v.c2 not between -10 and 10); 
+=========================================
+|ID|OPERATOR        |NAME|EST. ROWS|COST|
+-----------------------------------------
+|0 |NESTED-LOOP JOIN|    |0        |82  |
+|1 | SUBPLAN SCAN   |v   |0        |82  |
+|2 |  TABLE SCAN    |t1  |100      |78  |
+|3 | TABLE GET      |t2  |1        |5   |
+=========================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t2.c1], [t2.c2], [t2.c3], [v.c1], [v.c2]), filter(nil), 
+      conds(nil), nl_params_([v.c2])
+  1 - output([v.c2], [v.c1]), filter([(T_OP_IS, v.c2, NULL, 0)], [v.c2 < ? OR v.c2 > ?]), 
+      access([v.c2], [v.c1])
+  2 - output([t1.c1], [t1.c2]), filter(nil), 
+      access([t1.c1], [t1.c2]), partitions(p0)
+  3 - output([t2.c1], [t2.c2], [t2.c3]), filter(nil), 
+      access([t2.c1], [t2.c2], [t2.c3]), partitions(p0)
+
+***************   Case 1   ***************
+SQL: select * from t2 left join (select * from t1) as v  on t2.c1 = v.c2 where (v.c2 is null) and (v.c2 <=> null); 
+==============================================
+|ID|OPERATOR             |NAME|EST. ROWS|COST|
+----------------------------------------------
+|0 |HASH RIGHT OUTER JOIN|    |0        |205 |
+|1 | SUBPLAN SCAN        |v   |100      |80  |
+|2 |  TABLE SCAN         |t1  |100      |78  |
+|3 | TABLE SCAN          |t2  |100      |78  |
+==============================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t2.c1], [t2.c2], [t2.c3], [v.c1], [v.c2]), filter([v.c2 <=> ?], [(T_OP_IS, v.c2, NULL, 0)]), 
+      equal_conds([t2.c1 = v.c2]), other_conds(nil)
+  1 - output([v.c2], [v.c1]), filter(nil), 
+      access([v.c2], [v.c1])
+  2 - output([t1.c1], [t1.c2]), filter(nil), 
+      access([t1.c1], [t1.c2]), partitions(p0)
+  3 - output([t2.c1], [t2.c2], [t2.c3]), filter(nil), 
+      access([t2.c1], [t2.c2], [t2.c3]), partitions(p0)
+
+***************   Case 2   ***************
+SQL: select * from t2 left join (select * from t1) as v  on t2.c1 = v.c2 where (v.c2 is null) and ((v.c2 + 2 > 1) + 2 < 0); 
+=========================================
+|ID|OPERATOR        |NAME|EST. ROWS|COST|
+-----------------------------------------
+|0 |NESTED-LOOP JOIN|    |0        |82  |
+|1 | SUBPLAN SCAN   |v   |0        |82  |
+|2 |  TABLE SCAN    |t1  |100      |78  |
+|3 | TABLE GET      |t2  |1        |5   |
+=========================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t2.c1], [t2.c2], [t2.c3], [v.c1], [v.c2]), filter(nil), 
+      conds(nil), nl_params_([v.c2])
+  1 - output([v.c2], [v.c1]), filter([(T_OP_IS, v.c2, NULL, 0)], [v.c2 + ? > ? + ? < ?]), 
+      access([v.c2], [v.c1])
+  2 - output([t1.c1], [t1.c2]), filter(nil), 
+      access([t1.c1], [t1.c2]), partitions(p0)
+  3 - output([t2.c1], [t2.c2], [t2.c3]), filter(nil), 
+      access([t2.c1], [t2.c2], [t2.c3]), partitions(p0)
+
+***************   Case 3   ***************
+SQL: select * from t2 left join (select * from t1) as v  on t2.c1 = v.c2 where (v.c2 is null) and (not(v.c2 and false)); 
+==============================================
+|ID|OPERATOR             |NAME|EST. ROWS|COST|
+----------------------------------------------
+|0 |HASH RIGHT OUTER JOIN|    |90       |205 |
+|1 | SUBPLAN SCAN        |v   |100      |80  |
+|2 |  TABLE SCAN         |t1  |100      |78  |
+|3 | TABLE SCAN          |t2  |100      |78  |
+==============================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t2.c1], [t2.c2], [t2.c3], [v.c1], [v.c2]), filter([(T_OP_IS, v.c2, NULL, 0)], [(T_OP_NOT, v.c2) OR (T_OP_NOT, ?)]), 
+      equal_conds([t2.c1 = v.c2]), other_conds(nil)
+  1 - output([v.c2], [v.c1]), filter(nil), 
+      access([v.c2], [v.c1])
+  2 - output([t1.c1], [t1.c2]), filter(nil), 
+      access([t1.c1], [t1.c2]), partitions(p0)
+  3 - output([t2.c1], [t2.c2], [t2.c3]), filter(nil), 
+      access([t2.c1], [t2.c2], [t2.c3]), partitions(p0)
+
+***************   Case 4   ***************
+SQL: select * from t2 left join (select * from t1) as v  on t2.c1 = v.c2 where (v.c2 is null) and (1 + 2 > v.c2); 
+=========================================
+|ID|OPERATOR        |NAME|EST. ROWS|COST|
+-----------------------------------------
+|0 |NESTED-LOOP JOIN|    |0        |82  |
+|1 | SUBPLAN SCAN   |v   |0        |82  |
+|2 |  TABLE SCAN    |t1  |100      |78  |
+|3 | TABLE GET      |t2  |1        |5   |
+=========================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t2.c1], [t2.c2], [t2.c3], [v.c1], [v.c2]), filter(nil), 
+      conds(nil), nl_params_([v.c2])
+  1 - output([v.c2], [v.c1]), filter([(T_OP_IS, v.c2, NULL, 0)], [? > v.c2]), 
+      access([v.c2], [v.c1])
+  2 - output([t1.c1], [t1.c2]), filter(nil), 
+      access([t1.c1], [t1.c2]), partitions(p0)
+  3 - output([t2.c1], [t2.c2], [t2.c3]), filter(nil), 
+      access([t2.c1], [t2.c2], [t2.c3]), partitions(p0)
+
+***************   Case 5   ***************
+SQL: select * from t2 left join (select * from t1) as v  on t2.c1 = v.c2 where (v.c2 is null) and (1 + 2 > (v.c2 is not null)); 
+==============================================
+|ID|OPERATOR             |NAME|EST. ROWS|COST|
+----------------------------------------------
+|0 |HASH RIGHT OUTER JOIN|    |30       |205 |
+|1 | SUBPLAN SCAN        |v   |100      |80  |
+|2 |  TABLE SCAN         |t1  |100      |78  |
+|3 | TABLE SCAN          |t2  |100      |78  |
+==============================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t2.c1], [t2.c2], [t2.c3], [v.c1], [v.c2]), filter([? > (T_OP_IS_NOT, v.c2, NULL, 0)], [(T_OP_IS, v.c2, NULL, 0)]), 
+      equal_conds([t2.c1 = v.c2]), other_conds(nil)
+  1 - output([v.c2], [v.c1]), filter(nil), 
+      access([v.c2], [v.c1])
+  2 - output([t1.c1], [t1.c2]), filter(nil), 
+      access([t1.c1], [t1.c2]), partitions(p0)
+  3 - output([t2.c1], [t2.c2], [t2.c3]), filter(nil), 
+      access([t2.c1], [t2.c2], [t2.c3]), partitions(p0)
+
+***************   Case 6   ***************
+SQL: select * from t2 left join (select * from t1) as v  on t2.c1 = v.c2 where (v.c2 is null) and (1 + 2 > (v.c2 is not null) and (v.c1 is not null)); 
+=========================================
+|ID|OPERATOR        |NAME|EST. ROWS|COST|
+-----------------------------------------
+|0 |NESTED-LOOP JOIN|    |0        |82  |
+|1 | SUBPLAN SCAN   |v   |0        |82  |
+|2 |  TABLE SCAN    |t1  |100      |78  |
+|3 | TABLE GET      |t2  |1        |5   |
+=========================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t2.c1], [t2.c2], [t2.c3], [v.c1], [v.c2]), filter(nil), 
+      conds(nil), nl_params_([v.c2])
+  1 - output([v.c2], [v.c1]), filter([(T_OP_IS, v.c2, NULL, 0)], [? > (T_OP_IS_NOT, v.c2, NULL, 0)]), 
+      access([v.c2], [v.c1])
+  2 - output([t1.c1], [t1.c2]), filter(nil), 
+      access([t1.c1], [t1.c2]), partitions(p0)
+  3 - output([t2.c1], [t2.c2], [t2.c3]), filter(nil), 
+      access([t2.c1], [t2.c2], [t2.c3]), partitions(p0)
+
+***************   Case 7   ***************
+SQL: select * from t1 left join t2 using(c1) where (t2.c1 is not null)=0; 
+===============================================
+|ID|OPERATOR              |NAME|EST. ROWS|COST|
+-----------------------------------------------
+|0 |MERGE RIGHT OUTER JOIN|    |1        |188 |
+|1 | TABLE SCAN           |t2  |100      |78  |
+|2 | TABLE SCAN           |t1  |100      |78  |
+===============================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t1.c1], [t1.c2], [t2.c2], [t2.c3]), filter([(T_OP_IS_NOT, t2.c1, NULL, 0) = ?]), 
+      equal_conds([t1.c1 = t2.c1]), other_conds(nil)
+  1 - output([t2.c1], [t2.c2], [t2.c3]), filter(nil), 
+      access([t2.c1], [t2.c2], [t2.c3]), partitions(p0)
+  2 - output([t1.c1], [t1.c2]), filter(nil), 
+      access([t1.c1], [t1.c2]), partitions(p0)
+
+***************   Case 8   ***************
+SQL: select * from t1 left join t2 using(c1) where (t2.c1 is not null) and (t2.c1 is null); 
+===================================================
+|ID|OPERATOR                  |NAME|EST. ROWS|COST|
+---------------------------------------------------
+|0 |NESTED-LOOP JOIN CARTESIAN|    |10000    |2736|
+|1 | TABLE SCAN               |t2  |100      |78  |
+|2 | MATERIAL                 |    |100      |79  |
+|3 |  TABLE SCAN              |t1  |100      |78  |
+===================================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t1.c1], [t1.c2], [t2.c2], [t2.c3]), filter(nil), startup_filter([0]), 
+      conds(nil), nl_params_(nil)
+  1 - output([t2.c2], [t2.c3]), filter(nil), 
+      access([t2.c2], [t2.c3]), partitions(p0)
+  2 - output([t1.c1], [t1.c2]), filter(nil)
+  3 - output([t1.c1], [t1.c2]), filter(nil), 
+      access([t1.c1], [t1.c2]), partitions(p0)
+
+***************   Case 9   ***************
+SQL: select * from t1 left join t2 using(c1) where (t2.c1 is null) and (t2.c1 > 0); 
+===================================================
+|ID|OPERATOR                  |NAME|EST. ROWS|COST|
+---------------------------------------------------
+|0 |NESTED-LOOP JOIN CARTESIAN|    |10000    |2736|
+|1 | TABLE SCAN               |t2  |100      |78  |
+|2 | MATERIAL                 |    |100      |79  |
+|3 |  TABLE SCAN              |t1  |100      |78  |
+===================================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t1.c1], [t1.c2], [t2.c2], [t2.c3]), filter(nil), startup_filter([0]), 
+      conds(nil), nl_params_(nil)
+  1 - output([t2.c2], [t2.c3]), filter(nil), 
+      access([t2.c2], [t2.c3]), partitions(p0)
+  2 - output([t1.c1], [t1.c2]), filter(nil)
+  3 - output([t1.c1], [t1.c2]), filter(nil), 
+      access([t1.c1], [t1.c2]), partitions(p0)
+
+***************   Case 10   ***************
+SQL: select * from t1 left join t2 using(c1) where (t2.c1 and false) < 1 + 1; 
+===============================================
+|ID|OPERATOR              |NAME|EST. ROWS|COST|
+-----------------------------------------------
+|0 |MERGE RIGHT OUTER JOIN|    |34       |188 |
+|1 | TABLE SCAN           |t2  |100      |78  |
+|2 | TABLE SCAN           |t1  |100      |78  |
+===============================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t1.c1], [t1.c2], [t2.c2], [t2.c3]), filter([t2.c1 AND ? < ?]), 
+      equal_conds([t1.c1 = t2.c1]), other_conds(nil)
+  1 - output([t2.c1], [t2.c2], [t2.c3]), filter(nil), 
+      access([t2.c1], [t2.c2], [t2.c3]), partitions(p0)
+  2 - output([t1.c1], [t1.c2]), filter(nil), 
+      access([t1.c1], [t1.c2]), partitions(p0)
+
+***************   Case 11   ***************
+SQL: select * from t1 left join t2 on t1.c1 > t2.c1 where lnnvl(t2.c2) and 1 > 0; 
+===============================================
+|ID|OPERATOR              |NAME|EST. ROWS|COST|
+-----------------------------------------------
+|0 |NESTED-LOOP OUTER JOIN|    |3334     |1391|
+|1 | TABLE SCAN           |t1  |100      |78  |
+|2 | TABLE SCAN           |t2  |34       |5   |
+===============================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t1.c1], [t1.c2], [t2.c1], [t2.c2], [t2.c3]), filter(nil), startup_filter([0]), 
+      conds(nil), nl_params_([t1.c1])
+  1 - output([t1.c1], [t1.c2]), filter(nil), 
+      access([t1.c1], [t1.c2]), partitions(p0)
+  2 - output([t2.c1], [t2.c2], [t2.c3]), filter(nil), 
+      access([t2.c1], [t2.c2], [t2.c3]), partitions(p0)
+
+***************   Case 12   ***************
+SQL: select * from t1 left join t2 on t1.c1 > t2.c1 where lnnvl(t2.c2 + 2 - 1) and 1 > 0; 
+===============================================
+|ID|OPERATOR              |NAME|EST. ROWS|COST|
+-----------------------------------------------
+|0 |NESTED-LOOP OUTER JOIN|    |3334     |1391|
+|1 | TABLE SCAN           |t1  |100      |78  |
+|2 | TABLE SCAN           |t2  |34       |5   |
+===============================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t1.c1], [t1.c2], [t2.c1], [t2.c2], [t2.c3]), filter(nil), startup_filter([0]), 
+      conds(nil), nl_params_([t1.c1])
+  1 - output([t1.c1], [t1.c2]), filter(nil), 
+      access([t1.c1], [t1.c2]), partitions(p0)
+  2 - output([t2.c1], [t2.c2], [t2.c3]), filter(nil), 
+      access([t2.c1], [t2.c2], [t2.c3]), partitions(p0)
+
+***************   Case 13   ***************
+SQL: select * from t1 left join t2 on t1.c1 > t2.c1 where t2.c1 + 1 > all(select c1 from t3 group by c2); 
+================================================
+|ID|OPERATOR               |NAME|EST. ROWS|COST|
+------------------------------------------------
+|0 |SUBPLAN FILTER         |    |1667     |3370|
+|1 | NESTED-LOOP OUTER JOIN|    |3334     |1391|
+|2 |  TABLE SCAN           |t1  |100      |78  |
+|3 |  TABLE SCAN           |t2  |34       |5   |
+|4 | HASH GROUP BY         |    |10       |104 |
+|5 |  TABLE SCAN           |t3  |100      |78  |
+================================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t1.c1], [t1.c2], [t2.c1], [t2.c2], [t2.c3]), filter([t2.c1 + ? > ALL(subquery(1))]), 
+      exec_params_(nil), onetime_exprs_(nil), init_plan_idxs_([1])
+  1 - output([t1.c1], [t1.c2], [t2.c1], [t2.c2], [t2.c3]), filter(nil), 
+      conds(nil), nl_params_([t1.c1])
+  2 - output([t1.c1], [t1.c2]), filter(nil), 
+      access([t1.c1], [t1.c2]), partitions(p0)
+  3 - output([t2.c1], [t2.c2], [t2.c3]), filter(nil), 
+      access([t2.c1], [t2.c2], [t2.c3]), partitions(p0)
+  4 - output([t3.c1]), filter(nil), 
+      group([t3.c2]), agg_func(nil)
+  5 - output([t3.c1], [t3.c2]), filter(nil), 
+      access([t3.c1], [t3.c2]), partitions(p0)
+
+***************   Case 14   ***************
+SQL: select * from t1 left join t2 on t1.c1 = t2.c1 left join t3 on t1.c2 = t3.c2 where t2.c1 > 0; 
+==============================================
+|ID|OPERATOR             |NAME|EST. ROWS|COST|
+----------------------------------------------
+|0 |HASH RIGHT OUTER JOIN|    |810      |315 |
+|1 | TABLE SCAN          |t3  |100      |78  |
+|2 | MERGE JOIN          |    |100      |188 |
+|3 |  TABLE SCAN         |t2  |100      |78  |
+|4 |  TABLE SCAN         |t1  |100      |78  |
+==============================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t1.c1], [t1.c2], [t2.c1], [t2.c2], [t2.c3], [t3.c1], [t3.c2], [t3.c3]), filter(nil), 
+      equal_conds([t1.c2 = t3.c2]), other_conds(nil)
+  1 - output([t3.c1], [t3.c2], [t3.c3]), filter(nil), 
+      access([t3.c1], [t3.c2], [t3.c3]), partitions(p0)
+  2 - output([t1.c1], [t1.c2], [t2.c1], [t2.c2], [t2.c3]), filter(nil), 
+      equal_conds([t1.c1 = t2.c1]), other_conds(nil)
+  3 - output([t2.c1], [t2.c2], [t2.c3]), filter(nil), 
+      access([t2.c1], [t2.c2], [t2.c3]), partitions(p0)
+  4 - output([t1.c1], [t1.c2]), filter(nil), 
+      access([t1.c1], [t1.c2]), partitions(p0)
+
+***************   Case 15   ***************
+SQL: select * from t1 left join t2 on t1.c1 = t2.c1 left join t3 on t1.c2 = t3.c2 where (case t2.c2 when 0 then 1 end) = 1; 
+================================================
+|ID|OPERATOR               |NAME|EST. ROWS|COST|
+------------------------------------------------
+|0 |HASH OUTER JOIN        |    |5        |289 |
+|1 | MERGE RIGHT OUTER JOIN|    |1        |188 |
+|2 |  TABLE SCAN           |t2  |100      |78  |
+|3 |  TABLE SCAN           |t1  |100      |78  |
+|4 | TABLE SCAN            |t3  |100      |78  |
+================================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t1.c1], [t1.c2], [t2.c1], [t2.c2], [t2.c3], [t3.c1], [t3.c2], [t3.c3]), filter(nil), 
+      equal_conds([t1.c2 = t3.c2]), other_conds(nil)
+  1 - output([t1.c1], [t1.c2], [t2.c1], [t2.c2], [t2.c3]), filter([CASE WHEN t2.c2 = ? THEN ? ELSE NULL END = ?]), 
+      equal_conds([t1.c1 = t2.c1]), other_conds(nil)
+  2 - output([t2.c1], [t2.c2], [t2.c3]), filter(nil), 
+      access([t2.c1], [t2.c2], [t2.c3]), partitions(p0)
+  3 - output([t1.c1], [t1.c2]), filter(nil), 
+      access([t1.c1], [t1.c2]), partitions(p0)
+  4 - output([t3.c1], [t3.c2], [t3.c3]), filter(nil), 
+      access([t3.c1], [t3.c2], [t3.c3]), partitions(p0)
+
+***************   Case 16   ***************
+SQL: select * from t1, t1 as v join t2 on v.c1 = t2.c1; 
+===================================================
+|ID|OPERATOR                  |NAME|EST. ROWS|COST|
+---------------------------------------------------
+|0 |NESTED-LOOP JOIN CARTESIAN|    |10000    |2846|
+|1 | MERGE JOIN               |    |100      |188 |
+|2 |  TABLE SCAN              |t2  |100      |78  |
+|3 |  TABLE SCAN              |v   |100      |78  |
+|4 | MATERIAL                 |    |100      |79  |
+|5 |  TABLE SCAN              |t1  |100      |78  |
+===================================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t1.c1], [t1.c2], [v.c1], [v.c2], [t2.c1], [t2.c2], [t2.c3]), filter(nil), 
+      conds(nil), nl_params_(nil)
+  1 - output([v.c1], [v.c2], [t2.c1], [t2.c2], [t2.c3]), filter(nil), 
+      equal_conds([v.c1 = t2.c1]), other_conds(nil)
+  2 - output([t2.c1], [t2.c2], [t2.c3]), filter(nil), 
+      access([t2.c1], [t2.c2], [t2.c3]), partitions(p0)
+  3 - output([v.c1], [v.c2]), filter(nil), 
+      access([v.c1], [v.c2]), partitions(p0)
+  4 - output([t1.c1], [t1.c2]), filter(nil)
+  5 - output([t1.c1], [t1.c2]), filter(nil), 
+      access([t1.c1], [t1.c2]), partitions(p0)
+
+***************   Case 17   ***************
+SQL: select * from t1 right join t2 on t1.c1 = t2.c1 right join t3 on t2.c2 = t3.c2; 
+==========================================
+|ID|OPERATOR         |NAME|EST. ROWS|COST|
+------------------------------------------
+|0 |HASH OUTER JOIN  |    |810      |315 |
+|1 | TABLE SCAN      |t3  |100      |78  |
+|2 | MERGE OUTER JOIN|    |100      |188 |
+|3 |  TABLE SCAN     |t2  |100      |78  |
+|4 |  TABLE SCAN     |t1  |100      |78  |
+==========================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t1.c1], [t1.c2], [t2.c1], [t2.c2], [t2.c3], [t3.c1], [t3.c2], [t3.c3]), filter(nil), 
+      equal_conds([t2.c2 = t3.c2]), other_conds(nil)
+  1 - output([t3.c1], [t3.c2], [t3.c3]), filter(nil), 
+      access([t3.c1], [t3.c2], [t3.c3]), partitions(p0)
+  2 - output([t1.c1], [t1.c2], [t2.c1], [t2.c2], [t2.c3]), filter(nil), 
+      equal_conds([t1.c1 = t2.c1]), other_conds(nil)
+  3 - output([t2.c1], [t2.c2], [t2.c3]), filter(nil), 
+      access([t2.c1], [t2.c2], [t2.c3]), partitions(p0)
+  4 - output([t1.c1], [t1.c2]), filter(nil), 
+      access([t1.c1], [t1.c2]), partitions(p0)
+
+***************   Case 18   ***************
+SQL: select * from t1 right join t2 on t1.c1 = t2.c1, t2 as v, t3 where t3.c2 is not null; 
+======================================================
+|ID|OPERATOR                   |NAME|EST. ROWS|COST  |
+------------------------------------------------------
+|0 |NESTED-LOOP JOIN CARTESIAN |    |900000   |234726|
+|1 | NESTED-LOOP JOIN CARTESIAN|    |9000     |2592  |
+|2 |  MERGE OUTER JOIN         |    |100      |188   |
+|3 |   TABLE SCAN              |t2  |100      |78    |
+|4 |   TABLE SCAN              |t1  |100      |78    |
+|5 |  MATERIAL                 |    |90       |82    |
+|6 |   TABLE SCAN              |t3  |90       |80    |
+|7 | MATERIAL                  |    |100      |80    |
+|8 |  TABLE SCAN               |v   |100      |78    |
+======================================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t1.c1], [t1.c2], [t2.c1], [t2.c2], [t2.c3], [v.c1], [v.c2], [v.c3], [t3.c1], [t3.c2], [t3.c3]), filter(nil), 
+      conds(nil), nl_params_(nil)
+  1 - output([t1.c1], [t1.c2], [t2.c1], [t2.c2], [t2.c3], [t3.c1], [t3.c2], [t3.c3]), filter(nil), 
+      conds(nil), nl_params_(nil)
+  2 - output([t1.c1], [t1.c2], [t2.c1], [t2.c2], [t2.c3]), filter(nil), 
+      equal_conds([t1.c1 = t2.c1]), other_conds(nil)
+  3 - output([t2.c1], [t2.c2], [t2.c3]), filter(nil), 
+      access([t2.c1], [t2.c2], [t2.c3]), partitions(p0)
+  4 - output([t1.c1], [t1.c2]), filter(nil), 
+      access([t1.c1], [t1.c2]), partitions(p0)
+  5 - output([t3.c1], [t3.c2], [t3.c3]), filter(nil)
+  6 - output([t3.c1], [t3.c2], [t3.c3]), filter([(T_OP_IS_NOT, t3.c2, NULL, 0)]), 
+      access([t3.c1], [t3.c2], [t3.c3]), partitions(p0)
+  7 - output([v.c1], [v.c2], [v.c3]), filter(nil)
+  8 - output([v.c1], [v.c2], [v.c3]), filter(nil), 
+      access([v.c1], [v.c2], [v.c3]), partitions(p0)
+
+***************   Case 19   ***************
+SQL: select * from t1 as table1 left join t1 as table2 on table1.c2 = table2.c1 where table1.c1 < table2.c1 or table1.c1 = table2.c2; 
+======================================
+|ID|OPERATOR   |NAME  |EST. ROWS|COST|
+--------------------------------------
+|0 |HASH JOIN  |      |31       |204 |
+|1 | TABLE SCAN|table1|100      |78  |
+|2 | TABLE SCAN|table2|100      |78  |
+======================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([table1.c1], [table1.c2], [table2.c1], [table2.c2]), filter(nil), 
+      equal_conds([table1.c2 = table2.c1]), other_conds([table1.c1 < table2.c1 OR table1.c1 = table2.c2])
+  1 - output([table1.c1], [table1.c2]), filter(nil), 
+      access([table1.c1], [table1.c2]), partitions(p0)
+  2 - output([table2.c1], [table2.c2]), filter(nil), 
+      access([table2.c1], [table2.c2]), partitions(p0)
+
+***************   Case 20   ***************
+SQL: select * from t1 as table1 left join t1 as table2 on table1.c2 = table2.c1 where table1.c1 < table2.c1 and table1.c1 = table2.c2; 
+======================================
+|ID|OPERATOR   |NAME  |EST. ROWS|COST|
+--------------------------------------
+|0 |HASH JOIN  |      |27       |207 |
+|1 | TABLE SCAN|table1|100      |78  |
+|2 | TABLE SCAN|table2|100      |78  |
+======================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([table1.c1], [table1.c2], [table2.c1], [table2.c2]), filter(nil), 
+      equal_conds([table1.c1 = table2.c2], [table1.c2 = table2.c1]), other_conds([table1.c1 < table2.c1])
+  1 - output([table1.c1], [table1.c2]), filter(nil), 
+      access([table1.c1], [table1.c2]), partitions(p0)
+  2 - output([table2.c1], [table2.c2]), filter(nil), 
+      access([table2.c1], [table2.c2]), partitions(p0)
+
+***************   Case 21   ***************
+SQL: select * from t1 join (select * from t2) as v on t1.c1 = v.c1 left join t3 on t1.c1 = t3.c1 where t3.c2 is not null; 
+======================================
+|ID|OPERATOR     |NAME|EST. ROWS|COST|
+--------------------------------------
+|0 |MERGE JOIN   |    |90       |298 |
+|1 | SUBPLAN SCAN|v   |100      |80  |
+|2 |  TABLE SCAN |t2  |100      |78  |
+|3 | MERGE JOIN  |    |90       |187 |
+|4 |  TABLE SCAN |t3  |90       |80  |
+|5 |  TABLE SCAN |t1  |100      |78  |
+======================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t1.c1], [t1.c2], [v.c1], [v.c2], [v.c3], [t3.c1], [t3.c2], [t3.c3]), filter(nil), 
+      equal_conds([t1.c1 = v.c1]), other_conds(nil)
+  1 - output([v.c1], [v.c2], [v.c3]), filter(nil), 
+      access([v.c1], [v.c2], [v.c3])
+  2 - output([t2.c1], [t2.c2], [t2.c3]), filter(nil), 
+      access([t2.c1], [t2.c2], [t2.c3]), partitions(p0)
+  3 - output([t1.c1], [t1.c2], [t3.c1], [t3.c2], [t3.c3]), filter(nil), 
+      equal_conds([t1.c1 = t3.c1]), other_conds(nil)
+  4 - output([t3.c1], [t3.c2], [t3.c3]), filter([(T_OP_IS_NOT, t3.c2, NULL, 0)]), 
+      access([t3.c1], [t3.c2], [t3.c3]), partitions(p0)
+  5 - output([t1.c1], [t1.c2]), filter(nil), 
+      access([t1.c1], [t1.c2]), partitions(p0)
+
+***************   Case 22   ***************
+SQL: select * from t1, t2, t3 where t1.c1 = t2.c1 and t1.c1 = t3.c1 and t3.c2 is not null; 
+=====================================
+|ID|OPERATOR    |NAME|EST. ROWS|COST|
+-------------------------------------
+|0 |MERGE JOIN  |    |90       |296 |
+|1 | TABLE SCAN |t2  |100      |78  |
+|2 | MERGE JOIN |    |90       |187 |
+|3 |  TABLE SCAN|t3  |90       |80  |
+|4 |  TABLE SCAN|t1  |100      |78  |
+=====================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t1.c1], [t1.c2], [t2.c1], [t2.c2], [t2.c3], [t3.c1], [t3.c2], [t3.c3]), filter(nil), 
+      equal_conds([t1.c1 = t2.c1]), other_conds(nil)
+  1 - output([t2.c1], [t2.c2], [t2.c3]), filter(nil), 
+      access([t2.c1], [t2.c2], [t2.c3]), partitions(p0)
+  2 - output([t1.c1], [t1.c2], [t3.c1], [t3.c2], [t3.c3]), filter(nil), 
+      equal_conds([t1.c1 = t3.c1]), other_conds(nil)
+  3 - output([t3.c1], [t3.c2], [t3.c3]), filter([(T_OP_IS_NOT, t3.c2, NULL, 0)]), 
+      access([t3.c1], [t3.c2], [t3.c3]), partitions(p0)
+  4 - output([t1.c1], [t1.c2]), filter(nil), 
+      access([t1.c1], [t1.c2]), partitions(p0)
+
+***************   Case 23   ***************
+SQL: select * from t1 left join t2 on t1.c1 = t2.c1 left join t3 on t1.c2 = t3.c2 where t3.c1 is not null and t2.c3 is not null; 
+=====================================
+|ID|OPERATOR    |NAME|EST. ROWS|COST|
+-------------------------------------
+|0 |HASH JOIN   |    |729      |315 |
+|1 | TABLE SCAN |t3  |100      |78  |
+|2 | MERGE JOIN |    |90       |191 |
+|3 |  TABLE SCAN|t2  |90       |84  |
+|4 |  TABLE SCAN|t1  |100      |78  |
+=====================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t1.c1], [t1.c2], [t2.c1], [t2.c2], [t2.c3], [t3.c1], [t3.c2], [t3.c3]), filter(nil), 
+      equal_conds([t1.c2 = t3.c2]), other_conds(nil)
+  1 - output([t3.c1], [t3.c2], [t3.c3]), filter(nil), 
+      access([t3.c1], [t3.c2], [t3.c3]), partitions(p0)
+  2 - output([t1.c1], [t1.c2], [t2.c1], [t2.c2], [t2.c3]), filter(nil), 
+      equal_conds([t1.c1 = t2.c1]), other_conds(nil)
+  3 - output([t2.c1], [t2.c3], [t2.c2]), filter([(T_OP_IS_NOT, t2.c3, NULL, 0)]), 
+      access([t2.c1], [t2.c3], [t2.c2]), partitions(p0)
+  4 - output([t1.c1], [t1.c2]), filter(nil), 
+      access([t1.c1], [t1.c2]), partitions(p0)
+
+***************   Case 24   ***************
+SQL: select * from t1, t2, t3 where t3.c1 is not null and t1.c2 = t3.c2 and t2.c3 is not null; 
+====================================================
+|ID|OPERATOR                  |NAME|EST. ROWS|COST |
+----------------------------------------------------
+|0 |NESTED-LOOP JOIN CARTESIAN|    |72900    |19088|
+|1 | HASH JOIN                |    |810      |204  |
+|2 |  TABLE SCAN              |t1  |100      |78   |
+|3 |  TABLE SCAN              |t3  |100      |78   |
+|4 | MATERIAL                 |    |90       |86   |
+|5 |  TABLE SCAN              |t2  |90       |84   |
+====================================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t1.c1], [t1.c2], [t2.c1], [t2.c2], [t2.c3], [t3.c1], [t3.c2], [t3.c3]), filter(nil), 
+      conds(nil), nl_params_(nil)
+  1 - output([t1.c1], [t1.c2], [t3.c1], [t3.c2], [t3.c3]), filter(nil), 
+      equal_conds([t1.c2 = t3.c2]), other_conds(nil)
+  2 - output([t1.c1], [t1.c2]), filter(nil), 
+      access([t1.c1], [t1.c2]), partitions(p0)
+  3 - output([t3.c1], [t3.c2], [t3.c3]), filter(nil), 
+      access([t3.c1], [t3.c2], [t3.c3]), partitions(p0)
+  4 - output([t2.c1], [t2.c2], [t2.c3]), filter(nil)
+  5 - output([t2.c1], [t2.c3], [t2.c2]), filter([(T_OP_IS_NOT, t2.c3, NULL, 0)]), 
+      access([t2.c1], [t2.c3], [t2.c2]), partitions(p0)
+
+***************   Case 25   ***************
+SQL: select * from t1 left join t2 on t1.c1 = t2.c1 left join t3 on t1.c2 = t3.c2 where t3.c1 is not null; 
+================================================
+|ID|OPERATOR               |NAME|EST. ROWS|COST|
+------------------------------------------------
+|0 |HASH JOIN              |    |810      |315 |
+|1 | TABLE SCAN            |t3  |100      |78  |
+|2 | MERGE RIGHT OUTER JOIN|    |100      |188 |
+|3 |  TABLE SCAN           |t2  |100      |78  |
+|4 |  TABLE SCAN           |t1  |100      |78  |
+================================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t1.c1], [t1.c2], [t2.c1], [t2.c2], [t2.c3], [t3.c1], [t3.c2], [t3.c3]), filter(nil), 
+      equal_conds([t1.c2 = t3.c2]), other_conds(nil)
+  1 - output([t3.c1], [t3.c2], [t3.c3]), filter(nil), 
+      access([t3.c1], [t3.c2], [t3.c3]), partitions(p0)
+  2 - output([t1.c1], [t1.c2], [t2.c1], [t2.c2], [t2.c3]), filter(nil), 
+      equal_conds([t1.c1 = t2.c1]), other_conds(nil)
+  3 - output([t2.c1], [t2.c2], [t2.c3]), filter(nil), 
+      access([t2.c1], [t2.c2], [t2.c3]), partitions(p0)
+  4 - output([t1.c1], [t1.c2]), filter(nil), 
+      access([t1.c1], [t1.c2]), partitions(p0)
+
+***************   Case 26   ***************
+SQL: select * from t1 left join t2 on t1.c1 = t2.c1, t3 where t3.c1 is not null and t1.c2 = t3.c2; 
+================================================
+|ID|OPERATOR               |NAME|EST. ROWS|COST|
+------------------------------------------------
+|0 |HASH JOIN              |    |810      |315 |
+|1 | TABLE SCAN            |t3  |100      |78  |
+|2 | MERGE RIGHT OUTER JOIN|    |100      |188 |
+|3 |  TABLE SCAN           |t2  |100      |78  |
+|4 |  TABLE SCAN           |t1  |100      |78  |
+================================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t1.c1], [t1.c2], [t2.c1], [t2.c2], [t2.c3], [t3.c1], [t3.c2], [t3.c3]), filter(nil), 
+      equal_conds([t1.c2 = t3.c2]), other_conds(nil)
+  1 - output([t3.c1], [t3.c2], [t3.c3]), filter(nil), 
+      access([t3.c1], [t3.c2], [t3.c3]), partitions(p0)
+  2 - output([t1.c1], [t1.c2], [t2.c1], [t2.c2], [t2.c3]), filter(nil), 
+      equal_conds([t1.c1 = t2.c1]), other_conds(nil)
+  3 - output([t2.c1], [t2.c2], [t2.c3]), filter(nil), 
+      access([t2.c1], [t2.c2], [t2.c3]), partitions(p0)
+  4 - output([t1.c1], [t1.c2]), filter(nil), 
+      access([t1.c1], [t1.c2]), partitions(p0)
+
+***************   Case 27   ***************
+SQL: select * from t1 join t2 on t1.c1 = t2.c1; 
+====================================
+|ID|OPERATOR   |NAME|EST. ROWS|COST|
+------------------------------------
+|0 |MERGE JOIN |    |100      |188 |
+|1 | TABLE SCAN|t2  |100      |78  |
+|2 | TABLE SCAN|t1  |100      |78  |
+====================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t1.c1], [t1.c2], [t2.c1], [t2.c2], [t2.c3]), filter(nil), 
+      equal_conds([t1.c1 = t2.c1]), other_conds(nil)
+  1 - output([t2.c1], [t2.c2], [t2.c3]), filter(nil), 
+      access([t2.c1], [t2.c2], [t2.c3]), partitions(p0)
+  2 - output([t1.c1], [t1.c2]), filter(nil), 
+      access([t1.c1], [t1.c2]), partitions(p0)
+
+***************   Case 28   ***************
+SQL: select * from t1, t2 where t1.c1 = t2.c1; 
+====================================
+|ID|OPERATOR   |NAME|EST. ROWS|COST|
+------------------------------------
+|0 |MERGE JOIN |    |100      |188 |
+|1 | TABLE SCAN|t2  |100      |78  |
+|2 | TABLE SCAN|t1  |100      |78  |
+====================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t1.c1], [t1.c2], [t2.c1], [t2.c2], [t2.c3]), filter(nil), 
+      equal_conds([t1.c1 = t2.c1]), other_conds(nil)
+  1 - output([t2.c1], [t2.c2], [t2.c3]), filter(nil), 
+      access([t2.c1], [t2.c2], [t2.c3]), partitions(p0)
+  2 - output([t1.c1], [t1.c2]), filter(nil), 
+      access([t1.c1], [t1.c2]), partitions(p0)
+
+***************   Case 29   ***************
+SQL: select * from t1 join t2 on t1.c1 = t2.c1 join t3 on t2.c1 = t3.c1; 
+=====================================
+|ID|OPERATOR    |NAME|EST. ROWS|COST|
+-------------------------------------
+|0 |MERGE JOIN  |    |100      |299 |
+|1 | MERGE JOIN |    |100      |188 |
+|2 |  TABLE SCAN|t2  |100      |78  |
+|3 |  TABLE SCAN|t1  |100      |78  |
+|4 | TABLE SCAN |t3  |100      |78  |
+=====================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t1.c1], [t1.c2], [t2.c1], [t2.c2], [t2.c3], [t3.c1], [t3.c2], [t3.c3]), filter(nil), 
+      equal_conds([t2.c1 = t3.c1]), other_conds(nil)
+  1 - output([t1.c1], [t1.c2], [t2.c1], [t2.c2], [t2.c3]), filter(nil), 
+      equal_conds([t1.c1 = t2.c1]), other_conds(nil)
+  2 - output([t2.c1], [t2.c2], [t2.c3]), filter(nil), 
+      access([t2.c1], [t2.c2], [t2.c3]), partitions(p0)
+  3 - output([t1.c1], [t1.c2]), filter(nil), 
+      access([t1.c1], [t1.c2]), partitions(p0)
+  4 - output([t3.c1], [t3.c2], [t3.c3]), filter(nil), 
+      access([t3.c1], [t3.c2], [t3.c3]), partitions(p0)
+
+***************   Case 30   ***************
+SQL: select * from t1, t2, t3 where t1.c1 = t2.c1 and t2.c1 = t3.c1; 
+=====================================
+|ID|OPERATOR    |NAME|EST. ROWS|COST|
+-------------------------------------
+|0 |MERGE JOIN  |    |100      |299 |
+|1 | MERGE JOIN |    |100      |188 |
+|2 |  TABLE SCAN|t2  |100      |78  |
+|3 |  TABLE SCAN|t1  |100      |78  |
+|4 | TABLE SCAN |t3  |100      |78  |
+=====================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t1.c1], [t1.c2], [t2.c1], [t2.c2], [t2.c3], [t3.c1], [t3.c2], [t3.c3]), filter(nil), 
+      equal_conds([t2.c1 = t3.c1]), other_conds(nil)
+  1 - output([t1.c1], [t1.c2], [t2.c1], [t2.c2], [t2.c3]), filter(nil), 
+      equal_conds([t1.c1 = t2.c1]), other_conds(nil)
+  2 - output([t2.c1], [t2.c2], [t2.c3]), filter(nil), 
+      access([t2.c1], [t2.c2], [t2.c3]), partitions(p0)
+  3 - output([t1.c1], [t1.c2]), filter(nil), 
+      access([t1.c1], [t1.c2]), partitions(p0)
+  4 - output([t3.c1], [t3.c2], [t3.c3]), filter(nil), 
+      access([t3.c1], [t3.c2], [t3.c3]), partitions(p0)
+
+***************   Case 31   ***************
+SQL: select * from t1 left join t2 on t1.c1 = t2.c1 where t2.c1 is not null; 
+====================================
+|ID|OPERATOR   |NAME|EST. ROWS|COST|
+------------------------------------
+|0 |MERGE JOIN |    |100      |188 |
+|1 | TABLE SCAN|t2  |100      |78  |
+|2 | TABLE SCAN|t1  |100      |78  |
+====================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t1.c1], [t1.c2], [t2.c1], [t2.c2], [t2.c3]), filter(nil), 
+      equal_conds([t1.c1 = t2.c1]), other_conds(nil)
+  1 - output([t2.c1], [t2.c2], [t2.c3]), filter(nil), 
+      access([t2.c1], [t2.c2], [t2.c3]), partitions(p0)
+  2 - output([t1.c1], [t1.c2]), filter(nil), 
+      access([t1.c1], [t1.c2]), partitions(p0)
+
+***************   Case 32   ***************
+SQL: select * from t1, t2 where t2.c1 is not null and t1.c1 = t2.c1; 
+====================================
+|ID|OPERATOR   |NAME|EST. ROWS|COST|
+------------------------------------
+|0 |MERGE JOIN |    |100      |188 |
+|1 | TABLE SCAN|t2  |100      |78  |
+|2 | TABLE SCAN|t1  |100      |78  |
+====================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t1.c1], [t1.c2], [t2.c1], [t2.c2], [t2.c3]), filter(nil), 
+      equal_conds([t1.c1 = t2.c1]), other_conds(nil)
+  1 - output([t2.c1], [t2.c2], [t2.c3]), filter(nil), 
+      access([t2.c1], [t2.c2], [t2.c3]), partitions(p0)
+  2 - output([t1.c1], [t1.c2]), filter(nil), 
+      access([t1.c1], [t1.c2]), partitions(p0)
+
+***************   Case 33   ***************
+SQL: select * from t1 left join t2 on t1.c1>1 where t2.c1 is not null; 
+===================================================
+|ID|OPERATOR                  |NAME|EST. ROWS|COST|
+---------------------------------------------------
+|0 |NESTED-LOOP JOIN CARTESIAN|    |10000    |2736|
+|1 | TABLE SCAN               |t2  |100      |78  |
+|2 | MATERIAL                 |    |100      |79  |
+|3 |  TABLE SCAN              |t1  |100      |78  |
+===================================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t1.c1], [t1.c2], [t2.c1], [t2.c2], [t2.c3]), filter(nil), 
+      conds(nil), nl_params_(nil)
+  1 - output([t2.c1], [t2.c2], [t2.c3]), filter(nil), 
+      access([t2.c1], [t2.c2], [t2.c3]), partitions(p0)
+  2 - output([t1.c1], [t1.c2]), filter(nil)
+  3 - output([t1.c1], [t1.c2]), filter(nil), 
+      access([t1.c1], [t1.c2]), partitions(p0)
+
+***************   Case 34   ***************
+SQL: select * from t1, t2 where t1.c1 > 1 and t2.c1 is not null; 
+===================================================
+|ID|OPERATOR                  |NAME|EST. ROWS|COST|
+---------------------------------------------------
+|0 |NESTED-LOOP JOIN CARTESIAN|    |10000    |2736|
+|1 | TABLE SCAN               |t2  |100      |78  |
+|2 | MATERIAL                 |    |100      |79  |
+|3 |  TABLE SCAN              |t1  |100      |78  |
+===================================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t1.c1], [t1.c2], [t2.c1], [t2.c2], [t2.c3]), filter(nil), 
+      conds(nil), nl_params_(nil)
+  1 - output([t2.c1], [t2.c2], [t2.c3]), filter(nil), 
+      access([t2.c1], [t2.c2], [t2.c3]), partitions(p0)
+  2 - output([t1.c1], [t1.c2]), filter(nil)
+  3 - output([t1.c1], [t1.c2]), filter(nil), 
+      access([t1.c1], [t1.c2]), partitions(p0)
+
+***************   Case 35   ***************
+SQL: select t1.c1 from t1 left join t2 on t1.c1 = t2.c1 and t1.c2 = t2.c2 where t2.c2 is not null; 
+====================================
+|ID|OPERATOR   |NAME|EST. ROWS|COST|
+------------------------------------
+|0 |MERGE JOIN |    |82       |185 |
+|1 | TABLE SCAN|t1  |100      |78  |
+|2 | TABLE SCAN|t2  |90       |80  |
+====================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t1.c1]), filter(nil), 
+      equal_conds([t1.c1 = t2.c1], [t1.c2 = t2.c2]), other_conds(nil)
+  1 - output([t1.c1], [t1.c2]), filter(nil), 
+      access([t1.c1], [t1.c2]), partitions(p0)
+  2 - output([t2.c1], [t2.c2]), filter([(T_OP_IS_NOT, t2.c2, NULL, 0)]), 
+      access([t2.c1], [t2.c2]), partitions(p0)
+
+***************   Case 36   ***************
+SQL: select t1.c1 from t1, t2 where t1.c1 = t2.c1 and t1.c2 = t2.c2 and t2.c2 is not null; 
+====================================
+|ID|OPERATOR   |NAME|EST. ROWS|COST|
+------------------------------------
+|0 |MERGE JOIN |    |82       |185 |
+|1 | TABLE SCAN|t1  |100      |78  |
+|2 | TABLE SCAN|t2  |90       |80  |
+====================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t1.c1]), filter(nil), 
+      equal_conds([t1.c1 = t2.c1], [t1.c2 = t2.c2]), other_conds(nil)
+  1 - output([t1.c1], [t1.c2]), filter(nil), 
+      access([t1.c1], [t1.c2]), partitions(p0)
+  2 - output([t2.c1], [t2.c2]), filter([(T_OP_IS_NOT, t2.c2, NULL, 0)]), 
+      access([t2.c1], [t2.c2]), partitions(p0)
+
+***************   Case 37   ***************
+SQL: select * from t1 inner join t2 on t1.c1>1 where t2.c3 is not null; 
+===================================================
+|ID|OPERATOR                  |NAME|EST. ROWS|COST|
+---------------------------------------------------
+|0 |NESTED-LOOP JOIN CARTESIAN|    |9000     |2484|
+|1 | TABLE SCAN               |t2  |90       |84  |
+|2 | MATERIAL                 |    |100      |79  |
+|3 |  TABLE SCAN              |t1  |100      |78  |
+===================================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t1.c1], [t1.c2], [t2.c1], [t2.c2], [t2.c3]), filter(nil), 
+      conds(nil), nl_params_(nil)
+  1 - output([t2.c1], [t2.c3], [t2.c2]), filter([(T_OP_IS_NOT, t2.c3, NULL, 0)]), 
+      access([t2.c1], [t2.c3], [t2.c2]), partitions(p0)
+  2 - output([t1.c1], [t1.c2]), filter(nil)
+  3 - output([t1.c1], [t1.c2]), filter(nil), 
+      access([t1.c1], [t1.c2]), partitions(p0)
+
+***************   Case 38   ***************
+SQL: select * from t1, t2 where t1.c1 > 1 and t2.c3 is not null; 
+===================================================
+|ID|OPERATOR                  |NAME|EST. ROWS|COST|
+---------------------------------------------------
+|0 |NESTED-LOOP JOIN CARTESIAN|    |9000     |2484|
+|1 | TABLE SCAN               |t2  |90       |84  |
+|2 | MATERIAL                 |    |100      |79  |
+|3 |  TABLE SCAN              |t1  |100      |78  |
+===================================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t1.c1], [t1.c2], [t2.c1], [t2.c2], [t2.c3]), filter(nil), 
+      conds(nil), nl_params_(nil)
+  1 - output([t2.c1], [t2.c3], [t2.c2]), filter([(T_OP_IS_NOT, t2.c3, NULL, 0)]), 
+      access([t2.c1], [t2.c3], [t2.c2]), partitions(p0)
+  2 - output([t1.c1], [t1.c2]), filter(nil)
+  3 - output([t1.c1], [t1.c2]), filter(nil), 
+      access([t1.c1], [t1.c2]), partitions(p0)
+
+***************   Case 39   ***************
+SQL: select * from t1 inner join t2 on t1.c1>1 where t2.c2 is not null; 
+===================================================
+|ID|OPERATOR                  |NAME|EST. ROWS|COST|
+---------------------------------------------------
+|0 |NESTED-LOOP JOIN CARTESIAN|    |9000     |2481|
+|1 | TABLE SCAN               |t2  |90       |80  |
+|2 | MATERIAL                 |    |100      |79  |
+|3 |  TABLE SCAN              |t1  |100      |78  |
+===================================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t1.c1], [t1.c2], [t2.c1], [t2.c2], [t2.c3]), filter(nil), 
+      conds(nil), nl_params_(nil)
+  1 - output([t2.c1], [t2.c2], [t2.c3]), filter([(T_OP_IS_NOT, t2.c2, NULL, 0)]), 
+      access([t2.c1], [t2.c2], [t2.c3]), partitions(p0)
+  2 - output([t1.c1], [t1.c2]), filter(nil)
+  3 - output([t1.c1], [t1.c2]), filter(nil), 
+      access([t1.c1], [t1.c2]), partitions(p0)
+
+***************   Case 40   ***************
+SQL: select * from t1, t2 where t1.c1 > 1 and t2.c2 is not null; 
+===================================================
+|ID|OPERATOR                  |NAME|EST. ROWS|COST|
+---------------------------------------------------
+|0 |NESTED-LOOP JOIN CARTESIAN|    |9000     |2481|
+|1 | TABLE SCAN               |t2  |90       |80  |
+|2 | MATERIAL                 |    |100      |79  |
+|3 |  TABLE SCAN              |t1  |100      |78  |
+===================================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t1.c1], [t1.c2], [t2.c1], [t2.c2], [t2.c3]), filter(nil), 
+      conds(nil), nl_params_(nil)
+  1 - output([t2.c1], [t2.c2], [t2.c3]), filter([(T_OP_IS_NOT, t2.c2, NULL, 0)]), 
+      access([t2.c1], [t2.c2], [t2.c3]), partitions(p0)
+  2 - output([t1.c1], [t1.c2]), filter(nil)
+  3 - output([t1.c1], [t1.c2]), filter(nil), 
+      access([t1.c1], [t1.c2]), partitions(p0)
+
+***************   Case 41   ***************
+SQL: select * from t1 inner join t2 on t1.c1 = t2.c1 where t2.c1 is not null; 
+====================================
+|ID|OPERATOR   |NAME|EST. ROWS|COST|
+------------------------------------
+|0 |MERGE JOIN |    |100      |188 |
+|1 | TABLE SCAN|t2  |100      |78  |
+|2 | TABLE SCAN|t1  |100      |78  |
+====================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t1.c1], [t1.c2], [t2.c1], [t2.c2], [t2.c3]), filter(nil), 
+      equal_conds([t1.c1 = t2.c1]), other_conds(nil)
+  1 - output([t2.c1], [t2.c2], [t2.c3]), filter(nil), 
+      access([t2.c1], [t2.c2], [t2.c3]), partitions(p0)
+  2 - output([t1.c1], [t1.c2]), filter(nil), 
+      access([t1.c1], [t1.c2]), partitions(p0)
+
+***************   Case 42   ***************
+SQL: select * from t1, t2 where t1.c1=t2.c1 and t2.c1 is not null; 
+====================================
+|ID|OPERATOR   |NAME|EST. ROWS|COST|
+------------------------------------
+|0 |MERGE JOIN |    |100      |188 |
+|1 | TABLE SCAN|t2  |100      |78  |
+|2 | TABLE SCAN|t1  |100      |78  |
+====================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t1.c1], [t1.c2], [t2.c1], [t2.c2], [t2.c3]), filter(nil), 
+      equal_conds([t1.c1 = t2.c1]), other_conds(nil)
+  1 - output([t2.c1], [t2.c2], [t2.c3]), filter(nil), 
+      access([t2.c1], [t2.c2], [t2.c3]), partitions(p0)
+  2 - output([t1.c1], [t1.c2]), filter(nil), 
+      access([t1.c1], [t1.c2]), partitions(p0)
+
+***************   Case 43   ***************
+SQL: select t1.c1 from t1 inner join t2 on t1.c1 = t2.c1 and t1.c2 = t2.c2 where t2.c2 is not null; 
+====================================
+|ID|OPERATOR   |NAME|EST. ROWS|COST|
+------------------------------------
+|0 |MERGE JOIN |    |82       |185 |
+|1 | TABLE SCAN|t1  |100      |78  |
+|2 | TABLE SCAN|t2  |90       |80  |
+====================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t1.c1]), filter(nil), 
+      equal_conds([t1.c1 = t2.c1], [t1.c2 = t2.c2]), other_conds(nil)
+  1 - output([t1.c1], [t1.c2]), filter(nil), 
+      access([t1.c1], [t1.c2]), partitions(p0)
+  2 - output([t2.c1], [t2.c2]), filter([(T_OP_IS_NOT, t2.c2, NULL, 0)]), 
+      access([t2.c1], [t2.c2]), partitions(p0)
+
+***************   Case 44   ***************
+SQL: select t1.c1 from t1, t2 where t1.c1=t2.c1 and t1.c2=t2.c2 and t2.c2 is not null; 
+====================================
+|ID|OPERATOR   |NAME|EST. ROWS|COST|
+------------------------------------
+|0 |MERGE JOIN |    |82       |185 |
+|1 | TABLE SCAN|t1  |100      |78  |
+|2 | TABLE SCAN|t2  |90       |80  |
+====================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t1.c1]), filter(nil), 
+      equal_conds([t1.c1 = t2.c1], [t1.c2 = t2.c2]), other_conds(nil)
+  1 - output([t1.c1], [t1.c2]), filter(nil), 
+      access([t1.c1], [t1.c2]), partitions(p0)
+  2 - output([t2.c1], [t2.c2]), filter([(T_OP_IS_NOT, t2.c2, NULL, 0)]), 
+      access([t2.c1], [t2.c2]), partitions(p0)
+
+***************   Case 45   ***************
+SQL: select * from t1 inner join t2 on t1.c1>1 where t2.c1 is not null; 
+===================================================
+|ID|OPERATOR                  |NAME|EST. ROWS|COST|
+---------------------------------------------------
+|0 |NESTED-LOOP JOIN CARTESIAN|    |10000    |2736|
+|1 | TABLE SCAN               |t2  |100      |78  |
+|2 | MATERIAL                 |    |100      |79  |
+|3 |  TABLE SCAN              |t1  |100      |78  |
+===================================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t1.c1], [t1.c2], [t2.c1], [t2.c2], [t2.c3]), filter(nil), 
+      conds(nil), nl_params_(nil)
+  1 - output([t2.c1], [t2.c2], [t2.c3]), filter(nil), 
+      access([t2.c1], [t2.c2], [t2.c3]), partitions(p0)
+  2 - output([t1.c1], [t1.c2]), filter(nil)
+  3 - output([t1.c1], [t1.c2]), filter(nil), 
+      access([t1.c1], [t1.c2]), partitions(p0)
+
+***************   Case 46   ***************
+SQL: select * from t1, t2 where t1.c1 > 1 and t2.c1 is not null; 
+===================================================
+|ID|OPERATOR                  |NAME|EST. ROWS|COST|
+---------------------------------------------------
+|0 |NESTED-LOOP JOIN CARTESIAN|    |10000    |2736|
+|1 | TABLE SCAN               |t2  |100      |78  |
+|2 | MATERIAL                 |    |100      |79  |
+|3 |  TABLE SCAN              |t1  |100      |78  |
+===================================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t1.c1], [t1.c2], [t2.c1], [t2.c2], [t2.c3]), filter(nil), 
+      conds(nil), nl_params_(nil)
+  1 - output([t2.c1], [t2.c2], [t2.c3]), filter(nil), 
+      access([t2.c1], [t2.c2], [t2.c3]), partitions(p0)
+  2 - output([t1.c1], [t1.c2]), filter(nil)
+  3 - output([t1.c1], [t1.c2]), filter(nil), 
+      access([t1.c1], [t1.c2]), partitions(p0)
+
+***************   Case 47   ***************
+SQL: select * from t1 inner join t2 on t1.c1>1 where t2.c2 is not null; 
+===================================================
+|ID|OPERATOR                  |NAME|EST. ROWS|COST|
+---------------------------------------------------
+|0 |NESTED-LOOP JOIN CARTESIAN|    |9000     |2481|
+|1 | TABLE SCAN               |t2  |90       |80  |
+|2 | MATERIAL                 |    |100      |79  |
+|3 |  TABLE SCAN              |t1  |100      |78  |
+===================================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t1.c1], [t1.c2], [t2.c1], [t2.c2], [t2.c3]), filter(nil), 
+      conds(nil), nl_params_(nil)
+  1 - output([t2.c1], [t2.c2], [t2.c3]), filter([(T_OP_IS_NOT, t2.c2, NULL, 0)]), 
+      access([t2.c1], [t2.c2], [t2.c3]), partitions(p0)
+  2 - output([t1.c1], [t1.c2]), filter(nil)
+  3 - output([t1.c1], [t1.c2]), filter(nil), 
+      access([t1.c1], [t1.c2]), partitions(p0)
+
+***************   Case 48   ***************
+SQL: select * from t1, t2 where t1.c1 > 1 and t2.c2 is not null; 
+===================================================
+|ID|OPERATOR                  |NAME|EST. ROWS|COST|
+---------------------------------------------------
+|0 |NESTED-LOOP JOIN CARTESIAN|    |9000     |2481|
+|1 | TABLE SCAN               |t2  |90       |80  |
+|2 | MATERIAL                 |    |100      |79  |
+|3 |  TABLE SCAN              |t1  |100      |78  |
+===================================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t1.c1], [t1.c2], [t2.c1], [t2.c2], [t2.c3]), filter(nil), 
+      conds(nil), nl_params_(nil)
+  1 - output([t2.c1], [t2.c2], [t2.c3]), filter([(T_OP_IS_NOT, t2.c2, NULL, 0)]), 
+      access([t2.c1], [t2.c2], [t2.c3]), partitions(p0)
+  2 - output([t1.c1], [t1.c2]), filter(nil)
+  3 - output([t1.c1], [t1.c2]), filter(nil), 
+      access([t1.c1], [t1.c2]), partitions(p0)
+
+***************   Case 49   ***************
+SQL: select * from t1 inner join t2 on t1.c1>1 where t2.c3 is not null; 
+===================================================
+|ID|OPERATOR                  |NAME|EST. ROWS|COST|
+---------------------------------------------------
+|0 |NESTED-LOOP JOIN CARTESIAN|    |9000     |2484|
+|1 | TABLE SCAN               |t2  |90       |84  |
+|2 | MATERIAL                 |    |100      |79  |
+|3 |  TABLE SCAN              |t1  |100      |78  |
+===================================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t1.c1], [t1.c2], [t2.c1], [t2.c2], [t2.c3]), filter(nil), 
+      conds(nil), nl_params_(nil)
+  1 - output([t2.c1], [t2.c3], [t2.c2]), filter([(T_OP_IS_NOT, t2.c3, NULL, 0)]), 
+      access([t2.c1], [t2.c3], [t2.c2]), partitions(p0)
+  2 - output([t1.c1], [t1.c2]), filter(nil)
+  3 - output([t1.c1], [t1.c2]), filter(nil), 
+      access([t1.c1], [t1.c2]), partitions(p0)
+
+***************   Case 50   ***************
+SQL: select * from t1, t2 where t1.c1 > 1 and t2.c3 is not null; 
+===================================================
+|ID|OPERATOR                  |NAME|EST. ROWS|COST|
+---------------------------------------------------
+|0 |NESTED-LOOP JOIN CARTESIAN|    |9000     |2484|
+|1 | TABLE SCAN               |t2  |90       |84  |
+|2 | MATERIAL                 |    |100      |79  |
+|3 |  TABLE SCAN              |t1  |100      |78  |
+===================================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t1.c1], [t1.c2], [t2.c1], [t2.c2], [t2.c3]), filter(nil), 
+      conds(nil), nl_params_(nil)
+  1 - output([t2.c1], [t2.c3], [t2.c2]), filter([(T_OP_IS_NOT, t2.c3, NULL, 0)]), 
+      access([t2.c1], [t2.c3], [t2.c2]), partitions(p0)
+  2 - output([t1.c1], [t1.c2]), filter(nil)
+  3 - output([t1.c1], [t1.c2]), filter(nil), 
+      access([t1.c1], [t1.c2]), partitions(p0)
+
+***************   Case 51   ***************
+SQL: select * from t1 left join t2 on t1.c1=t2.c1 left join t3 on t1.c1=t2.c1; 
+================================================
+|ID|OPERATOR               |NAME|EST. ROWS|COST|
+------------------------------------------------
+|0 |NESTED-LOOP OUTER JOIN |    |100      |1090|
+|1 | MERGE RIGHT OUTER JOIN|    |100      |188 |
+|2 |  TABLE SCAN           |t2  |100      |78  |
+|3 |  TABLE SCAN           |t1  |100      |78  |
+|4 | MATERIAL              |    |100      |80  |
+|5 |  TABLE SCAN           |t3  |100      |78  |
+================================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t1.c1], [t1.c2], [t2.c1], [t2.c2], [t2.c3], [t3.c1], [t3.c2], [t3.c3]), filter(nil), 
+      conds([t1.c1 = t2.c1]), nl_params_(nil)
+  1 - output([t1.c1], [t1.c2], [t2.c1], [t2.c2], [t2.c3]), filter(nil), 
+      equal_conds([t1.c1 = t2.c1]), other_conds(nil)
+  2 - output([t2.c1], [t2.c2], [t2.c3]), filter(nil), 
+      access([t2.c1], [t2.c2], [t2.c3]), partitions(p0)
+  3 - output([t1.c1], [t1.c2]), filter(nil), 
+      access([t1.c1], [t1.c2]), partitions(p0)
+  4 - output([t3.c1], [t3.c2], [t3.c3]), filter(nil)
+  5 - output([t3.c1], [t3.c2], [t3.c3]), filter(nil), 
+      access([t3.c1], [t3.c2], [t3.c3]), partitions(p0)
+
+***************   Case 52   ***************
+SQL: select t1.c1 from t1 left join t2 t on t1.c1=t.c1,t2 left join t3 on t2.c1=t3.c1, t1 tt where t1.c1 is not null; 
+======================================================
+|ID|OPERATOR                   |NAME|EST. ROWS|COST  |
+------------------------------------------------------
+|0 |NESTED-LOOP JOIN CARTESIAN |    |1000000  |260872|
+|1 | NESTED-LOOP JOIN CARTESIAN|    |10000    |2955  |
+|2 |  MERGE OUTER JOIN         |    |100      |187   |
+|3 |   TABLE SCAN              |t1  |100      |78    |
+|4 |   TABLE SCAN              |t   |100      |78    |
+|5 |  MATERIAL                 |    |100      |188   |
+|6 |   MERGE OUTER JOIN        |    |100      |187   |
+|7 |    TABLE SCAN             |t2  |100      |78    |
+|8 |    TABLE SCAN             |t3  |100      |78    |
+|9 | MATERIAL                  |    |100      |78    |
+|10|  TABLE SCAN               |tt  |100      |78    |
+======================================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t1.c1]), filter(nil), 
+      conds(nil), nl_params_(nil)
+  1 - output([t1.c1]), filter(nil), 
+      conds(nil), nl_params_(nil)
+  2 - output([t1.c1]), filter(nil), 
+      equal_conds([t1.c1 = t.c1]), other_conds(nil)
+  3 - output([t1.c1]), filter(nil), 
+      access([t1.c1]), partitions(p0)
+  4 - output([t.c1]), filter(nil), 
+      access([t.c1]), partitions(p0)
+  5 - output(nil), filter(nil)
+  6 - output(nil), filter(nil), 
+      equal_conds([t2.c1 = t3.c1]), other_conds(nil)
+  7 - output([t2.c1]), filter(nil), 
+      access([t2.c1]), partitions(p0)
+  8 - output([t3.c1]), filter(nil), 
+      access([t3.c1]), partitions(p0)
+  9 - output(nil), filter(nil)
+  10 - output(nil), filter(nil), 
+      access([tt.c1]), partitions(p0)
+
+***************   Case 53   ***************
+SQL: select t1.c1 from t1,t2,t3, t1 tt where t1.c1=t3.c1 and t1.c2=tt.c2 and t1.c1+t2.c1=tt.c1; 
+=========================================
+|ID|OPERATOR        |NAME|EST. ROWS|COST|
+-----------------------------------------
+|0 |NESTED-LOOP JOIN|    |810      |5968|
+|1 | HASH JOIN      |    |810      |313 |
+|2 |  TABLE SCAN    |tt  |100      |78  |
+|3 |  MERGE JOIN    |    |100      |187 |
+|4 |   TABLE SCAN   |t1  |100      |78  |
+|5 |   TABLE SCAN   |t3  |100      |78  |
+|6 | MATERIAL       |    |100      |78  |
+|7 |  TABLE SCAN    |t2  |100      |78  |
+=========================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t1.c1]), filter(nil), 
+      conds([t1.c1 + t2.c1 = tt.c1]), nl_params_(nil)
+  1 - output([t1.c1], [tt.c1]), filter(nil), 
+      equal_conds([t1.c2 = tt.c2]), other_conds(nil)
+  2 - output([tt.c1], [tt.c2]), filter(nil), 
+      access([tt.c1], [tt.c2]), partitions(p0)
+  3 - output([t1.c1], [t1.c2]), filter(nil), 
+      equal_conds([t1.c1 = t3.c1]), other_conds(nil)
+  4 - output([t1.c1], [t1.c2]), filter(nil), 
+      access([t1.c1], [t1.c2]), partitions(p0)
+  5 - output([t3.c1]), filter(nil), 
+      access([t3.c1]), partitions(p0)
+  6 - output([t2.c1]), filter(nil)
+  7 - output([t2.c1]), filter(nil), 
+      access([t2.c1]), partitions(p0)
+
+***************   Case 54   ***************
+SQL: select t1.c1 from t1 left join t2 t on t1.c1=t.c1,t2 left join t3 on t2.c1=t3.c1; 
+===================================================
+|ID|OPERATOR                  |NAME|EST. ROWS|COST|
+---------------------------------------------------
+|0 |NESTED-LOOP JOIN CARTESIAN|    |10000    |2955|
+|1 | MERGE OUTER JOIN         |    |100      |187 |
+|2 |  TABLE SCAN              |t1  |100      |78  |
+|3 |  TABLE SCAN              |t   |100      |78  |
+|4 | MATERIAL                 |    |100      |188 |
+|5 |  MERGE OUTER JOIN        |    |100      |187 |
+|6 |   TABLE SCAN             |t2  |100      |78  |
+|7 |   TABLE SCAN             |t3  |100      |78  |
+===================================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t1.c1]), filter(nil), 
+      conds(nil), nl_params_(nil)
+  1 - output([t1.c1]), filter(nil), 
+      equal_conds([t1.c1 = t.c1]), other_conds(nil)
+  2 - output([t1.c1]), filter(nil), 
+      access([t1.c1]), partitions(p0)
+  3 - output([t.c1]), filter(nil), 
+      access([t.c1]), partitions(p0)
+  4 - output(nil), filter(nil)
+  5 - output(nil), filter(nil), 
+      equal_conds([t2.c1 = t3.c1]), other_conds(nil)
+  6 - output([t2.c1]), filter(nil), 
+      access([t2.c1]), partitions(p0)
+  7 - output([t3.c1]), filter(nil), 
+      access([t3.c1]), partitions(p0)
+
+***************   Case 55   ***************
+SQL: select t1.c1 from t1 left join t2 t on t1.c1=t.c1,t2 left join t3 on t2.c1=t3.c1, t1 tt where t1.c1=t3.c1 and t1.c2=tt.c2 and t1.c1+t2.c1=tt.c1; 
+===============================================
+|ID|OPERATOR              |NAME|EST. ROWS|COST|
+-----------------------------------------------
+|0 |NESTED-LOOP OUTER JOIN|    |9        |471 |
+|1 | HASH JOIN            |    |9        |427 |
+|2 |  TABLE SCAN          |tt  |100      |78  |
+|3 |  MERGE JOIN          |    |100      |297 |
+|4 |   MERGE JOIN         |    |100      |187 |
+|5 |    TABLE SCAN        |t1  |100      |78  |
+|6 |    TABLE SCAN        |t3  |100      |78  |
+|7 |   TABLE SCAN         |t2  |100      |78  |
+|8 | TABLE GET            |t   |1        |5   |
+===============================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t1.c1]), filter(nil), 
+      conds(nil), nl_params_([t1.c1])
+  1 - output([t1.c1]), filter(nil), 
+      equal_conds([t1.c1 + t2.c1 = tt.c1], [t1.c2 = tt.c2]), other_conds(nil)
+  2 - output([tt.c1], [tt.c2]), filter(nil), 
+      access([tt.c1], [tt.c2]), partitions(p0)
+  3 - output([t1.c1], [t2.c1], [t1.c2]), filter(nil), 
+      equal_conds([t2.c1 = t3.c1]), other_conds(nil)
+  4 - output([t1.c1], [t3.c1], [t1.c2]), filter(nil), 
+      equal_conds([t1.c1 = t3.c1]), other_conds(nil)
+  5 - output([t1.c1], [t1.c2]), filter(nil), 
+      access([t1.c1], [t1.c2]), partitions(p0)
+  6 - output([t3.c1]), filter(nil), 
+      access([t3.c1]), partitions(p0)
+  7 - output([t2.c1]), filter(nil), 
+      access([t2.c1]), partitions(p0)
+  8 - output(nil), filter(nil), 
+      access([t.c1]), partitions(p0)
+
+***************   Case 56   ***************
+SQL: select t1.c1 from t1, t2 where t1.c1=t2.c1 limit 100; 
+=====================================
+|ID|OPERATOR    |NAME|EST. ROWS|COST|
+-------------------------------------
+|0 |LIMIT       |    |100      |189 |
+|1 | MERGE JOIN |    |100      |187 |
+|2 |  TABLE SCAN|t1  |100      |78  |
+|3 |  TABLE SCAN|t2  |100      |78  |
+=====================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t1.c1]), filter(nil), limit(100), offset(nil)
+  1 - output([t1.c1]), filter(nil), 
+      equal_conds([t1.c1 = t2.c1]), other_conds(nil)
+  2 - output([t1.c1]), filter(nil), 
+      access([t1.c1]), partitions(p0)
+  3 - output([t2.c1]), filter(nil), 
+      access([t2.c1]), partitions(p0)
+
+***************   Case 57   ***************
+SQL: select sum(c1), count(*) from t1 group by c2 order by c2 limit 100; 
+=======================================
+|ID|OPERATOR      |NAME|EST. ROWS|COST|
+---------------------------------------
+|0 |TOP-N SORT    |    |10       |109 |
+|1 | HASH GROUP BY|    |10       |107 |
+|2 |  TABLE SCAN  |t1  |100      |78  |
+=======================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([T_FUN_SUM(t1.c1)], [T_FUN_COUNT(*)]), filter(nil), sort_keys([t1.c2, ASC]), topn(100)
+  1 - output([t1.c2], [T_FUN_SUM(t1.c1)], [T_FUN_COUNT(*)]), filter(nil), 
+      group([t1.c2]), agg_func([T_FUN_SUM(t1.c1)], [T_FUN_COUNT(*)])
+  2 - output([t1.c1], [t1.c2]), filter(nil), 
+      access([t1.c1], [t1.c2]), partitions(p0)
+
+***************   Case 58   ***************
+SQL: select c1 from t1 as t order by c1; 
+===================================
+|ID|OPERATOR  |NAME|EST. ROWS|COST|
+-----------------------------------
+|0 |TABLE SCAN|t   |100      |78  |
+===================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t.c1]), filter(nil), 
+      access([t.c1]), partitions(p0)
+
+***************   Case 59   ***************
+SQL: select * from t2 left join t3 on t2.c1=t3.c1 and t2.c2<t3.c2 where t2.c3>t3.c3; 
+====================================
+|ID|OPERATOR   |NAME|EST. ROWS|COST|
+------------------------------------
+|0 |MERGE JOIN |    |12       |177 |
+|1 | TABLE SCAN|t2  |100      |78  |
+|2 | TABLE SCAN|t3  |100      |78  |
+====================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t2.c1], [t2.c2], [t2.c3], [t3.c1], [t3.c2], [t3.c3]), filter(nil), 
+      equal_conds([t2.c1 = t3.c1]), other_conds([t2.c3 > t3.c3], [t2.c2 < t3.c2])
+  1 - output([t2.c1], [t2.c2], [t2.c3]), filter(nil), 
+      access([t2.c1], [t2.c2], [t2.c3]), partitions(p0)
+  2 - output([t3.c1], [t3.c2], [t3.c3]), filter(nil), 
+      access([t3.c1], [t3.c2], [t3.c3]), partitions(p0)
+
+***************   Case 60   ***************
+SQL: select t1.c1 from t1,t2,t3 where t1.c1=t3.c1 and t1.c2=t2.c2 and t2.c3=t3.c3; 
+=====================================
+|ID|OPERATOR    |NAME|EST. ROWS|COST|
+-------------------------------------
+|0 |HASH JOIN   |    |9        |355 |
+|1 | TABLE SCAN |t2  |100      |78  |
+|2 | MERGE JOIN |    |100      |188 |
+|3 |  TABLE SCAN|t3  |100      |78  |
+|4 |  TABLE SCAN|t1  |100      |78  |
+=====================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t1.c1]), filter(nil), 
+      equal_conds([t2.c3 = t3.c3], [t1.c2 = t2.c2]), other_conds(nil)
+  1 - output([t2.c2], [t2.c3]), filter(nil), 
+      access([t2.c2], [t2.c3]), partitions(p0)
+  2 - output([t1.c1], [t3.c3], [t1.c2]), filter(nil), 
+      equal_conds([t1.c1 = t3.c1]), other_conds(nil)
+  3 - output([t3.c1], [t3.c3]), filter(nil), 
+      access([t3.c1], [t3.c3]), partitions(p0)
+  4 - output([t1.c1], [t1.c2]), filter(nil), 
+      access([t1.c1], [t1.c2]), partitions(p0)
+
+***************   Case 61   ***************
+SQL: select t1.c1 from t1 left join t2 t on t1.c1=t.c1,t2 left join t3 on t2.c1=t3.c1 where t1.c1=t3.c1; 
+===========================================
+|ID|OPERATOR          |NAME|EST. ROWS|COST|
+-------------------------------------------
+|0 |MERGE JOIN        |    |100      |406 |
+|1 | MERGE JOIN       |    |100      |297 |
+|2 |  MERGE OUTER JOIN|    |100      |187 |
+|3 |   TABLE SCAN     |t1  |100      |78  |
+|4 |   TABLE SCAN     |t   |100      |78  |
+|5 |  TABLE SCAN      |t3  |100      |78  |
+|6 | TABLE SCAN       |t2  |100      |78  |
+===========================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t1.c1]), filter(nil), 
+      equal_conds([t2.c1 = t3.c1]), other_conds(nil)
+  1 - output([t1.c1], [t3.c1]), filter(nil), 
+      equal_conds([t1.c1 = t3.c1]), other_conds(nil)
+  2 - output([t1.c1]), filter(nil), 
+      equal_conds([t1.c1 = t.c1]), other_conds(nil)
+  3 - output([t1.c1]), filter(nil), 
+      access([t1.c1]), partitions(p0)
+  4 - output([t.c1]), filter(nil), 
+      access([t.c1]), partitions(p0)
+  5 - output([t3.c1]), filter(nil), 
+      access([t3.c1]), partitions(p0)
+  6 - output([t2.c1]), filter(nil), 
+      access([t2.c1]), partitions(p0)
+
+***************   Case 62   ***************
+SQL: select * from t1 left join t2 on t1.c1=t2.c1 where false; 
+===============================================
+|ID|OPERATOR              |NAME|EST. ROWS|COST|
+-----------------------------------------------
+|0 |MERGE RIGHT OUTER JOIN|    |100      |188 |
+|1 | TABLE SCAN           |t2  |100      |78  |
+|2 | TABLE SCAN           |t1  |100      |78  |
+===============================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t1.c1], [t1.c2], [t2.c1], [t2.c2], [t2.c3]), filter(nil), startup_filter([0]), 
+      equal_conds([t1.c1 = t2.c1]), other_conds(nil)
+  1 - output([t2.c1], [t2.c2], [t2.c3]), filter(nil), 
+      access([t2.c1], [t2.c2], [t2.c3]), partitions(p0)
+  2 - output([t1.c1], [t1.c2]), filter(nil), 
+      access([t1.c1], [t1.c2]), partitions(p0)
+
+***************   Case 63   ***************
+SQL: select * from t1 left join t2 on t1.c1>1 where t2.c1 is null and t2.c2>1; 
+===================================================
+|ID|OPERATOR                  |NAME|EST. ROWS|COST|
+---------------------------------------------------
+|0 |NESTED-LOOP JOIN CARTESIAN|    |10000    |2736|
+|1 | TABLE SCAN               |t2  |100      |78  |
+|2 | MATERIAL                 |    |100      |79  |
+|3 |  TABLE SCAN              |t1  |100      |78  |
+===================================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t1.c1], [t1.c2], [t2.c1], [t2.c2], [t2.c3]), filter(nil), startup_filter([0]), 
+      conds(nil), nl_params_(nil)
+  1 - output([t2.c1], [t2.c2], [t2.c3]), filter(nil), 
+      access([t2.c1], [t2.c2], [t2.c3]), partitions(p0)
+  2 - output([t1.c1], [t1.c2]), filter(nil)
+  3 - output([t1.c1], [t1.c2]), filter(nil), 
+      access([t1.c1], [t1.c2]), partitions(p0)
+
+***************   Case 64   ***************
+SQL: select * from t1 right join t2 on t1.c1 = t2.c2; 
+==============================================
+|ID|OPERATOR             |NAME|EST. ROWS|COST|
+----------------------------------------------
+|0 |HASH RIGHT OUTER JOIN|    |100      |204 |
+|1 | TABLE SCAN          |t1  |100      |78  |
+|2 | TABLE SCAN          |t2  |100      |78  |
+==============================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t1.c1], [t1.c2], [t2.c1], [t2.c2], [t2.c3]), filter(nil), 
+      equal_conds([t1.c1 = t2.c2]), other_conds(nil)
+  1 - output([t1.c1], [t1.c2]), filter(nil), 
+      access([t1.c1], [t1.c2]), partitions(p0)
+  2 - output([t2.c1], [t2.c2], [t2.c3]), filter(nil), 
+      access([t2.c1], [t2.c2], [t2.c3]), partitions(p0)
+
+***************   Case 65   ***************
+SQL: select * from t1 inner join t2 on t1.c1 = t2.c2; 
+====================================
+|ID|OPERATOR   |NAME|EST. ROWS|COST|
+------------------------------------
+|0 |HASH JOIN  |    |91       |204 |
+|1 | TABLE SCAN|t1  |100      |78  |
+|2 | TABLE SCAN|t2  |100      |78  |
+====================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t1.c1], [t1.c2], [t2.c1], [t2.c2], [t2.c3]), filter(nil), 
+      equal_conds([t1.c1 = t2.c2]), other_conds(nil)
+  1 - output([t1.c1], [t1.c2]), filter(nil), 
+      access([t1.c1], [t1.c2]), partitions(p0)
+  2 - output([t2.c1], [t2.c2], [t2.c3]), filter(nil), 
+      access([t2.c1], [t2.c2], [t2.c3]), partitions(p0)
+
+***************   Case 66   ***************
+SQL: select c1 from t1 where c1 > 0 and c2 < 0 order by c2 limit 100; 
+====================================
+|ID|OPERATOR   |NAME|EST. ROWS|COST|
+------------------------------------
+|0 |TOP-N SORT |    |10       |80  |
+|1 | TABLE SCAN|t1  |10       |79  |
+====================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t1.c1]), filter(nil), sort_keys([t1.c2, ASC]), topn(100)
+  1 - output([t1.c1], [t1.c2]), filter([t1.c2 < ?]), 
+      access([t1.c1], [t1.c2]), partitions(p0)
+
+***************   Case 67   ***************
+SQL: select t1.c1 from t1, t2 limit 100; 
+====================================================
+|ID|OPERATOR                   |NAME|EST. ROWS|COST|
+----------------------------------------------------
+|0 |LIMIT                      |    |100      |151 |
+|1 | NESTED-LOOP JOIN CARTESIAN|    |100      |149 |
+|2 |  TABLE SCAN               |t1  |1        |46  |
+|3 |  MATERIAL                 |    |100      |78  |
+|4 |   TABLE SCAN              |t2  |100      |78  |
+====================================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t1.c1]), filter(nil), limit(100), offset(nil)
+  1 - output([t1.c1]), filter(nil), 
+      conds(nil), nl_params_(nil)
+  2 - output([t1.c1]), filter(nil), 
+      access([t1.c1]), partitions(p0)
+  3 - output(nil), filter(nil)
+  4 - output(nil), filter(nil), 
+      access([t2.c1]), partitions(p0)
+
+***************   Case 68   ***************
+SQL: select t1.c1 from t1, t2 where t1.c1=t2.c1 limit 100; 
+=====================================
+|ID|OPERATOR    |NAME|EST. ROWS|COST|
+-------------------------------------
+|0 |LIMIT       |    |100      |189 |
+|1 | MERGE JOIN |    |100      |187 |
+|2 |  TABLE SCAN|t1  |100      |78  |
+|3 |  TABLE SCAN|t2  |100      |78  |
+=====================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t1.c1]), filter(nil), limit(100), offset(nil)
+  1 - output([t1.c1]), filter(nil), 
+      equal_conds([t1.c1 = t2.c1]), other_conds(nil)
+  2 - output([t1.c1]), filter(nil), 
+      access([t1.c1]), partitions(p0)
+  3 - output([t2.c1]), filter(nil), 
+      access([t2.c1]), partitions(p0)
+
+***************   Case 69   ***************
+SQL: select * from t1 left join t2 on t1.c1 = t2.c1 ; 
+===============================================
+|ID|OPERATOR              |NAME|EST. ROWS|COST|
+-----------------------------------------------
+|0 |MERGE RIGHT OUTER JOIN|    |100      |188 |
+|1 | TABLE SCAN           |t2  |100      |78  |
+|2 | TABLE SCAN           |t1  |100      |78  |
+===============================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t1.c1], [t1.c2], [t2.c1], [t2.c2], [t2.c3]), filter(nil), 
+      equal_conds([t1.c1 = t2.c1]), other_conds(nil)
+  1 - output([t2.c1], [t2.c2], [t2.c3]), filter(nil), 
+      access([t2.c1], [t2.c2], [t2.c3]), partitions(p0)
+  2 - output([t1.c1], [t1.c2]), filter(nil), 
+      access([t1.c1], [t1.c2]), partitions(p0)
+
+***************   Case 70   ***************
+SQL: select t1.c1 from t1, t2 where t1.c1=t2.c1 limit 100; 
+=====================================
+|ID|OPERATOR    |NAME|EST. ROWS|COST|
+-------------------------------------
+|0 |LIMIT       |    |100      |189 |
+|1 | MERGE JOIN |    |100      |187 |
+|2 |  TABLE SCAN|t1  |100      |78  |
+|3 |  TABLE SCAN|t2  |100      |78  |
+=====================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t1.c1]), filter(nil), limit(100), offset(nil)
+  1 - output([t1.c1]), filter(nil), 
+      equal_conds([t1.c1 = t2.c1]), other_conds(nil)
+  2 - output([t1.c1]), filter(nil), 
+      access([t1.c1]), partitions(p0)
+  3 - output([t2.c1]), filter(nil), 
+      access([t2.c1]), partitions(p0)
+
+***************   Case 71   ***************
+SQL: select t1.c1 from t1, t2, t3 where t1.c1=t2.c1 and t1.c2>t2.c2 and t2.c3=t3.c3 and t3.c1>10; 
+=====================================
+|ID|OPERATOR    |NAME|EST. ROWS|COST|
+-------------------------------------
+|0 |HASH JOIN   |    |34       |312 |
+|1 | MERGE JOIN |    |34       |177 |
+|2 |  TABLE SCAN|t2  |100      |78  |
+|3 |  TABLE SCAN|t1  |100      |78  |
+|4 | TABLE SCAN |t3  |100      |78  |
+=====================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t1.c1]), filter(nil), 
+      equal_conds([t2.c3 = t3.c3]), other_conds(nil)
+  1 - output([t1.c1], [t2.c3]), filter(nil), 
+      equal_conds([t1.c1 = t2.c1]), other_conds([t1.c2 > t2.c2])
+  2 - output([t2.c1], [t2.c2], [t2.c3]), filter(nil), 
+      access([t2.c1], [t2.c2], [t2.c3]), partitions(p0)
+  3 - output([t1.c1], [t1.c2]), filter(nil), 
+      access([t1.c1], [t1.c2]), partitions(p0)
+  4 - output([t3.c3]), filter(nil), 
+      access([t3.c3]), partitions(p0)
+
+***************   Case 72   ***************
+SQL: select * from t2 left join t3 on t2.c1=t3.c1 and t2.c2<t3.c2 where t2.c3>t3.c3; 
+====================================
+|ID|OPERATOR   |NAME|EST. ROWS|COST|
+------------------------------------
+|0 |MERGE JOIN |    |12       |177 |
+|1 | TABLE SCAN|t2  |100      |78  |
+|2 | TABLE SCAN|t3  |100      |78  |
+====================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t2.c1], [t2.c2], [t2.c3], [t3.c1], [t3.c2], [t3.c3]), filter(nil), 
+      equal_conds([t2.c1 = t3.c1]), other_conds([t2.c3 > t3.c3], [t2.c2 < t3.c2])
+  1 - output([t2.c1], [t2.c2], [t2.c3]), filter(nil), 
+      access([t2.c1], [t2.c2], [t2.c3]), partitions(p0)
+  2 - output([t3.c1], [t3.c2], [t3.c3]), filter(nil), 
+      access([t3.c1], [t3.c2], [t3.c3]), partitions(p0)
+
+***************   Case 73   ***************
+SQL: select t1.c1 from t1 left join t2 on t1.c1=t2.c1 where t2.c2>1; 
+====================================
+|ID|OPERATOR   |NAME|EST. ROWS|COST|
+------------------------------------
+|0 |MERGE JOIN |    |86       |184 |
+|1 | TABLE SCAN|t2  |86       |79  |
+|2 | TABLE SCAN|t1  |100      |78  |
+====================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t1.c1]), filter(nil), 
+      equal_conds([t1.c1 = t2.c1]), other_conds(nil)
+  1 - output([t2.c1]), filter([t2.c2 > ?]), 
+      access([t2.c1], [t2.c2]), partitions(p0)
+  2 - output([t1.c1]), filter(nil), 
+      access([t1.c1]), partitions(p0)
+
+***************   Case 74   ***************
+SQL: select * from t1 left join t2 on t1.c1=t2.c1 and t1.c1>1; 
+===============================================
+|ID|OPERATOR              |NAME|EST. ROWS|COST|
+-----------------------------------------------
+|0 |MERGE RIGHT OUTER JOIN|    |100      |188 |
+|1 | TABLE SCAN           |t2  |100      |78  |
+|2 | TABLE SCAN           |t1  |100      |78  |
+===============================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t1.c1], [t1.c2], [t2.c1], [t2.c2], [t2.c3]), filter(nil), 
+      equal_conds([t1.c1 = t2.c1]), other_conds([t1.c1 > ?])
+  1 - output([t2.c1], [t2.c2], [t2.c3]), filter(nil), 
+      access([t2.c1], [t2.c2], [t2.c3]), partitions(p0)
+  2 - output([t1.c1], [t1.c2]), filter(nil), 
+      access([t1.c1], [t1.c2]), partitions(p0)
+
+***************   Case 75   ***************
+SQL: select * from t1 join t2 on t1.c1 = t2.c1 join t3 on t2.c2 = t3.c2; 
+=====================================
+|ID|OPERATOR    |NAME|EST. ROWS|COST|
+-------------------------------------
+|0 |HASH JOIN   |    |810      |315 |
+|1 | TABLE SCAN |t3  |100      |78  |
+|2 | MERGE JOIN |    |100      |188 |
+|3 |  TABLE SCAN|t2  |100      |78  |
+|4 |  TABLE SCAN|t1  |100      |78  |
+=====================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t1.c1], [t1.c2], [t2.c1], [t2.c2], [t2.c3], [t3.c1], [t3.c2], [t3.c3]), filter(nil), 
+      equal_conds([t2.c2 = t3.c2]), other_conds(nil)
+  1 - output([t3.c1], [t3.c2], [t3.c3]), filter(nil), 
+      access([t3.c1], [t3.c2], [t3.c3]), partitions(p0)
+  2 - output([t1.c1], [t1.c2], [t2.c1], [t2.c2], [t2.c3]), filter(nil), 
+      equal_conds([t1.c1 = t2.c1]), other_conds(nil)
+  3 - output([t2.c1], [t2.c2], [t2.c3]), filter(nil), 
+      access([t2.c1], [t2.c2], [t2.c3]), partitions(p0)
+  4 - output([t1.c1], [t1.c2]), filter(nil), 
+      access([t1.c1], [t1.c2]), partitions(p0)
+
+***************   Case 76   ***************
+SQL: select * from t1 right join t2 on t1.c1 = t2.c1 right join t3 on t3.c2 = t1.c2 where t2.c2 = 1; 
+==========================================
+|ID|OPERATOR         |NAME|EST. ROWS|COST|
+------------------------------------------
+|0 |HASH JOIN        |    |73       |232 |
+|1 | NESTED-LOOP JOIN|    |9        |128 |
+|2 |  TABLE SCAN     |t2  |9        |79  |
+|3 |  TABLE GET      |t1  |1        |5   |
+|4 | TABLE SCAN      |t3  |100      |78  |
+==========================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t1.c1], [t1.c2], [t2.c1], [t2.c2], [t2.c3], [t3.c1], [t3.c2], [t3.c3]), filter(nil), 
+      equal_conds([t3.c2 = t1.c2]), other_conds(nil)
+  1 - output([t1.c1], [t1.c2], [t2.c1], [t2.c2], [t2.c3]), filter(nil), 
+      conds(nil), nl_params_([t2.c1])
+  2 - output([t2.c1], [t2.c2], [t2.c3]), filter([t2.c2 = ?]), 
+      access([t2.c1], [t2.c2], [t2.c3]), partitions(p0)
+  3 - output([t1.c1], [t1.c2]), filter(nil), 
+      access([t1.c1], [t1.c2]), partitions(p0)
+  4 - output([t3.c1], [t3.c2], [t3.c3]), filter(nil), 
+      access([t3.c1], [t3.c2], [t3.c3]), partitions(p0)
+
+***************   Case 77   ***************
+SQL: select * from t1 right join t2 on t1.c1 = t2.c1 right join t3 on t3.c2 = t2.c2 where t2.c2 = 1; 
+================================================
+|ID|OPERATOR               |NAME|EST. ROWS|COST|
+------------------------------------------------
+|0 |HASH JOIN              |    |81       |232 |
+|1 | NESTED-LOOP OUTER JOIN|    |9        |128 |
+|2 |  TABLE SCAN           |t2  |9        |79  |
+|3 |  TABLE GET            |t1  |1        |5   |
+|4 | TABLE SCAN            |t3  |100      |78  |
+================================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t1.c1], [t1.c2], [t2.c1], [t2.c2], [t2.c3], [t3.c1], [t3.c2], [t3.c3]), filter(nil), 
+      equal_conds([t3.c2 = t2.c2]), other_conds(nil)
+  1 - output([t1.c1], [t1.c2], [t2.c1], [t2.c2], [t2.c3]), filter(nil), 
+      conds(nil), nl_params_([t2.c1])
+  2 - output([t2.c1], [t2.c2], [t2.c3]), filter([t2.c2 = ?]), 
+      access([t2.c1], [t2.c2], [t2.c3]), partitions(p0)
+  3 - output([t1.c1], [t1.c2]), filter(nil), 
+      access([t1.c1], [t1.c2]), partitions(p0)
+  4 - output([t3.c1], [t3.c2], [t3.c3]), filter(nil), 
+      access([t3.c1], [t3.c2], [t3.c3]), partitions(p0)
+
+***************   Case 78   ***************
+SQL: select * from t1 right join t2 on t1.c1 = t2.c1 right join t3 on t3.c2 = t2.c2 where t1.c2 = 1; 
+==========================================
+|ID|OPERATOR         |NAME|EST. ROWS|COST|
+------------------------------------------
+|0 |HASH JOIN        |    |73       |232 |
+|1 | NESTED-LOOP JOIN|    |9        |128 |
+|2 |  TABLE SCAN     |t1  |9        |79  |
+|3 |  TABLE GET      |t2  |1        |5   |
+|4 | TABLE SCAN      |t3  |100      |78  |
+==========================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t1.c1], [t1.c2], [t2.c1], [t2.c2], [t2.c3], [t3.c1], [t3.c2], [t3.c3]), filter(nil), 
+      equal_conds([t3.c2 = t2.c2]), other_conds(nil)
+  1 - output([t1.c1], [t1.c2], [t2.c1], [t2.c2], [t2.c3]), filter(nil), 
+      conds(nil), nl_params_([t1.c1])
+  2 - output([t1.c1], [t1.c2]), filter([t1.c2 = ?]), 
+      access([t1.c1], [t1.c2]), partitions(p0)
+  3 - output([t2.c1], [t2.c2], [t2.c3]), filter(nil), 
+      access([t2.c1], [t2.c2], [t2.c3]), partitions(p0)
+  4 - output([t3.c1], [t3.c2], [t3.c3]), filter(nil), 
+      access([t3.c1], [t3.c2], [t3.c3]), partitions(p0)
+
+***************   Case 79   ***************
+SQL: select t1.c1 as a1, t2.c1 as a2 from t1 left join t2 on t1.c1 != t2.c1 where t2.c2 in (1, 2, 3); 
+=========================================
+|ID|OPERATOR        |NAME|EST. ROWS|COST|
+-----------------------------------------
+|0 |NESTED-LOOP JOIN|    |2673     |919 |
+|1 | TABLE SCAN     |t1  |100      |78  |
+|2 | MATERIAL       |    |27       |81  |
+|3 |  TABLE SCAN    |t2  |27       |80  |
+=========================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t1.c1], [t2.c1]), filter(nil), 
+      conds([t1.c1 != t2.c1]), nl_params_(nil)
+  1 - output([t1.c1]), filter(nil), 
+      access([t1.c1]), partitions(p0)
+  2 - output([t2.c1]), filter(nil)
+  3 - output([t2.c1]), filter([t2.c2 IN (?, ?, ?)]), 
+      access([t2.c1], [t2.c2]), partitions(p0)
+
+***************   Case 80   ***************
+SQL: select t1.c1 as a1, t2.c1 as a2 from t1 left join t2 on t1.c1 != t2.c1 where t2.c2 not in (1, 2, 3); 
+=========================================
+|ID|OPERATOR        |NAME|EST. ROWS|COST|
+-----------------------------------------
+|0 |NESTED-LOOP JOIN|    |6237     |1931|
+|1 | TABLE SCAN     |t2  |63       |80  |
+|2 | MATERIAL       |    |100      |78  |
+|3 |  TABLE SCAN    |t1  |100      |78  |
+=========================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t1.c1], [t2.c1]), filter(nil), 
+      conds([t1.c1 != t2.c1]), nl_params_(nil)
+  1 - output([t2.c1]), filter([(T_OP_NOT_IN, t2.c2, (?, ?, ?))]), 
+      access([t2.c1], [t2.c2]), partitions(p0)
+  2 - output([t1.c1]), filter(nil)
+  3 - output([t1.c1]), filter(nil), 
+      access([t1.c1]), partitions(p0)
+
+***************   Case 81   ***************
+SQL: select t1.c1 as a1, t2.c1 as a2 from t1 left join t2 on t1.c1 != t2.c1 where t1.c2 in (1, 2, t2.c2); 
+===============================================
+|ID|OPERATOR              |NAME|EST. ROWS|COST|
+-----------------------------------------------
+|0 |NESTED-LOOP OUTER JOIN|    |2440     |2969|
+|1 | TABLE SCAN           |t1  |100      |78  |
+|2 | MATERIAL             |    |100      |79  |
+|3 |  TABLE SCAN          |t2  |100      |78  |
+===============================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t1.c1], [t2.c1]), filter([t1.c2 IN (?, ?) OR t1.c2 = t2.c2]), 
+      conds([t1.c1 != t2.c1]), nl_params_(nil)
+  1 - output([t1.c1], [t1.c2]), filter(nil), 
+      access([t1.c1], [t1.c2]), partitions(p0)
+  2 - output([t2.c1], [t2.c2]), filter(nil)
+  3 - output([t2.c1], [t2.c2]), filter(nil), 
+      access([t2.c1], [t2.c2]), partitions(p0)
+
+***************   Case 82   ***************
+SQL: select t1.c1 as a1, t2.c1 as a2 from t1 left join t2 on t1.c1 != t2.c1 where t2.c2 in (1, 2, NULL); 
+=========================================
+|ID|OPERATOR        |NAME|EST. ROWS|COST|
+-----------------------------------------
+|0 |NESTED-LOOP JOIN|    |1782     |666 |
+|1 | TABLE SCAN     |t1  |100      |78  |
+|2 | MATERIAL       |    |18       |81  |
+|3 |  TABLE SCAN    |t2  |18       |80  |
+=========================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t1.c1], [t2.c1]), filter(nil), 
+      conds([t1.c1 != t2.c1]), nl_params_(nil)
+  1 - output([t1.c1]), filter(nil), 
+      access([t1.c1]), partitions(p0)
+  2 - output([t2.c1]), filter(nil)
+  3 - output([t2.c1]), filter([t2.c2 IN (?, ?)]), 
+      access([t2.c1], [t2.c2]), partitions(p0)
+
+***************   Case 83   ***************
+SQL: select t1.c1 as a1, t2.c1 as a2 from t1 left join t2 on t1.c1 != t2.c1 where t2.c2 not in (1, 2, NULL); 
+===============================================
+|ID|OPERATOR              |NAME|EST. ROWS|COST|
+-----------------------------------------------
+|0 |NESTED-LOOP OUTER JOIN|    |9900     |2969|
+|1 | TABLE SCAN           |t1  |100      |78  |
+|2 | MATERIAL             |    |100      |78  |
+|3 |  TABLE SCAN          |t2  |100      |78  |
+===============================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t1.c1], [t2.c1]), filter(nil), startup_filter([0]), 
+      conds([t1.c1 != t2.c1]), nl_params_(nil)
+  1 - output([t1.c1]), filter(nil), 
+      access([t1.c1]), partitions(p0)
+  2 - output([t2.c1]), filter(nil)
+  3 - output([t2.c1]), filter(nil), 
+      access([t2.c1]), partitions(p0)
+
+***************   Case 84   ***************
+SQL: select * from t1 left join t2 on t1.c1 != t2.c1 left join t3 on t1.c1 != t3.c1 left join t4 on t1.c1 != t4.c1 where t2.c1 is NULL and t3.c1 is NULL and t4.c1 is NULL; 
+=================================================
+|ID|OPERATOR                |NAME|EST. ROWS|COST|
+-------------------------------------------------
+|0 |NESTED-LOOP OUTER JOIN  |    |1        |3162|
+|1 | NESTED-LOOP OUTER JOIN |    |1        |3080|
+|2 |  NESTED-LOOP OUTER JOIN|    |1        |2971|
+|3 |   TABLE SCAN           |t1  |100      |78  |
+|4 |   MATERIAL             |    |100      |80  |
+|5 |    TABLE SCAN          |t2  |100      |78  |
+|6 |  MATERIAL              |    |100      |80  |
+|7 |   TABLE SCAN           |t3  |100      |78  |
+|8 | MATERIAL               |    |100      |80  |
+|9 |  TABLE SCAN            |t4  |100      |78  |
+=================================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t1.c1], [t1.c2], [t2.c1], [t2.c2], [t2.c3], [t3.c1], [t3.c2], [t3.c3], [t4.c1], [t4.c2], [t4.c3]), filter([(T_OP_IS, t4.c1, NULL, 0)]), 
+      conds([t1.c1 != t4.c1]), nl_params_(nil)
+  1 - output([t1.c1], [t1.c2], [t2.c1], [t2.c2], [t2.c3], [t3.c1], [t3.c2], [t3.c3]), filter([(T_OP_IS, t3.c1, NULL, 0)]), 
+      conds([t1.c1 != t3.c1]), nl_params_(nil)
+  2 - output([t1.c1], [t1.c2], [t2.c1], [t2.c2], [t2.c3]), filter([(T_OP_IS, t2.c1, NULL, 0)]), 
+      conds([t1.c1 != t2.c1]), nl_params_(nil)
+  3 - output([t1.c1], [t1.c2]), filter(nil), 
+      access([t1.c1], [t1.c2]), partitions(p0)
+  4 - output([t2.c1], [t2.c2], [t2.c3]), filter(nil)
+  5 - output([t2.c1], [t2.c2], [t2.c3]), filter(nil), 
+      access([t2.c1], [t2.c2], [t2.c3]), partitions(p0)
+  6 - output([t3.c1], [t3.c2], [t3.c3]), filter(nil)
+  7 - output([t3.c1], [t3.c2], [t3.c3]), filter(nil), 
+      access([t3.c1], [t3.c2], [t3.c3]), partitions(p0)
+  8 - output([t4.c1], [t4.c2], [t4.c3]), filter(nil)
+  9 - output([t4.c1], [t4.c2], [t4.c3]), filter(nil), 
+      access([t4.c1], [t4.c2], [t4.c3]), partitions(p0)
+
+***************   Case 85   ***************
+SQL: select * from t1 left join t2 on t1.c1 != t2.c1 left join t3 on t1.c1 != t3.c1 left join t4 on t1.c1 != t4.c1 where t2.c1 is NULL and t3.c1 is NULL and t4.c1 = 0; 
+================================================
+|ID|OPERATOR               |NAME|EST. ROWS|COST|
+------------------------------------------------
+|0 |NESTED-LOOP OUTER JOIN |    |1        |3122|
+|1 | NESTED-LOOP OUTER JOIN|    |1        |3013|
+|2 |  NESTED-LOOP JOIN     |    |99       |148 |
+|3 |   TABLE GET           |t4  |1        |46  |
+|4 |   TABLE SCAN          |t1  |100      |78  |
+|5 |  MATERIAL             |    |100      |80  |
+|6 |   TABLE SCAN          |t2  |100      |78  |
+|7 | MATERIAL              |    |100      |80  |
+|8 |  TABLE SCAN           |t3  |100      |78  |
+================================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t1.c1], [t1.c2], [t2.c1], [t2.c2], [t2.c3], [t3.c1], [t3.c2], [t3.c3], [t4.c1], [t4.c2], [t4.c3]), filter([(T_OP_IS, t3.c1, NULL, 0)]), 
+      conds([t1.c1 != t3.c1]), nl_params_(nil)
+  1 - output([t1.c1], [t1.c2], [t2.c1], [t2.c2], [t2.c3], [t4.c1], [t4.c2], [t4.c3]), filter([(T_OP_IS, t2.c1, NULL, 0)]), 
+      conds([t1.c1 != t2.c1]), nl_params_(nil)
+  2 - output([t1.c1], [t1.c2], [t4.c1], [t4.c2], [t4.c3]), filter(nil), 
+      conds([t1.c1 != t4.c1]), nl_params_(nil)
+  3 - output([t4.c1], [t4.c2], [t4.c3]), filter(nil), 
+      access([t4.c1], [t4.c2], [t4.c3]), partitions(p0)
+  4 - output([t1.c1], [t1.c2]), filter(nil), 
+      access([t1.c1], [t1.c2]), partitions(p0)
+  5 - output([t2.c1], [t2.c2], [t2.c3]), filter(nil)
+  6 - output([t2.c1], [t2.c2], [t2.c3]), filter(nil), 
+      access([t2.c1], [t2.c2], [t2.c3]), partitions(p0)
+  7 - output([t3.c1], [t3.c2], [t3.c3]), filter(nil)
+  8 - output([t3.c1], [t3.c2], [t3.c3]), filter(nil), 
+      access([t3.c1], [t3.c2], [t3.c3]), partitions(p0)
+
+***************   Case 86   ***************
+SQL: select * from t1 left join t2 on t1.c1 != t2.c1 left join t3 on t1.c1 != t3.c1 left join t4 on t1.c1 != t4.c1 where t2.c1 is NULL and t3.c1 = 0 and t4.c1 is NULL; 
+================================================
+|ID|OPERATOR               |NAME|EST. ROWS|COST|
+------------------------------------------------
+|0 |NESTED-LOOP OUTER JOIN |    |1        |3122|
+|1 | NESTED-LOOP OUTER JOIN|    |1        |3013|
+|2 |  NESTED-LOOP JOIN     |    |99       |148 |
+|3 |   TABLE GET           |t3  |1        |46  |
+|4 |   TABLE SCAN          |t1  |100      |78  |
+|5 |  MATERIAL             |    |100      |80  |
+|6 |   TABLE SCAN          |t2  |100      |78  |
+|7 | MATERIAL              |    |100      |80  |
+|8 |  TABLE SCAN           |t4  |100      |78  |
+================================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t1.c1], [t1.c2], [t2.c1], [t2.c2], [t2.c3], [t3.c1], [t3.c2], [t3.c3], [t4.c1], [t4.c2], [t4.c3]), filter([(T_OP_IS, t4.c1, NULL, 0)]), 
+      conds([t1.c1 != t4.c1]), nl_params_(nil)
+  1 - output([t1.c1], [t1.c2], [t2.c1], [t2.c2], [t2.c3], [t3.c1], [t3.c2], [t3.c3]), filter([(T_OP_IS, t2.c1, NULL, 0)]), 
+      conds([t1.c1 != t2.c1]), nl_params_(nil)
+  2 - output([t1.c1], [t1.c2], [t3.c1], [t3.c2], [t3.c3]), filter(nil), 
+      conds([t1.c1 != t3.c1]), nl_params_(nil)
+  3 - output([t3.c1], [t3.c2], [t3.c3]), filter(nil), 
+      access([t3.c1], [t3.c2], [t3.c3]), partitions(p0)
+  4 - output([t1.c1], [t1.c2]), filter(nil), 
+      access([t1.c1], [t1.c2]), partitions(p0)
+  5 - output([t2.c1], [t2.c2], [t2.c3]), filter(nil)
+  6 - output([t2.c1], [t2.c2], [t2.c3]), filter(nil), 
+      access([t2.c1], [t2.c2], [t2.c3]), partitions(p0)
+  7 - output([t4.c1], [t4.c2], [t4.c3]), filter(nil)
+  8 - output([t4.c1], [t4.c2], [t4.c3]), filter(nil), 
+      access([t4.c1], [t4.c2], [t4.c3]), partitions(p0)
+
+***************   Case 87   ***************
+SQL: select * from t1 left join t2 on t1.c1 != t2.c1 left join t3 on t1.c1 != t3.c1 left join t4 on t1.c1 != t4.c1 where t2.c1 is NULL and t3.c1 = 0 and t4.c1 = 0; 
+===============================================
+|ID|OPERATOR              |NAME|EST. ROWS|COST|
+-----------------------------------------------
+|0 |NESTED-LOOP OUTER JOIN|    |1        |3056|
+|1 | NESTED-LOOP JOIN     |    |99       |219 |
+|2 |  TABLE GET           |t4  |1        |46  |
+|3 |  NESTED-LOOP JOIN    |    |99       |148 |
+|4 |   TABLE GET          |t3  |1        |46  |
+|5 |   TABLE SCAN         |t1  |100      |78  |
+|6 | MATERIAL             |    |100      |80  |
+|7 |  TABLE SCAN          |t2  |100      |78  |
+===============================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t1.c1], [t1.c2], [t2.c1], [t2.c2], [t2.c3], [t3.c1], [t3.c2], [t3.c3], [t4.c1], [t4.c2], [t4.c3]), filter([(T_OP_IS, t2.c1, NULL, 0)]), 
+      conds([t1.c1 != t2.c1]), nl_params_(nil)
+  1 - output([t1.c1], [t1.c2], [t3.c1], [t3.c2], [t3.c3], [t4.c1], [t4.c2], [t4.c3]), filter(nil), 
+      conds([t1.c1 != t4.c1]), nl_params_(nil)
+  2 - output([t4.c1], [t4.c2], [t4.c3]), filter(nil), 
+      access([t4.c1], [t4.c2], [t4.c3]), partitions(p0)
+  3 - output([t1.c1], [t1.c2], [t3.c1], [t3.c2], [t3.c3]), filter(nil), 
+      conds([t1.c1 != t3.c1]), nl_params_(nil)
+  4 - output([t3.c1], [t3.c2], [t3.c3]), filter(nil), 
+      access([t3.c1], [t3.c2], [t3.c3]), partitions(p0)
+  5 - output([t1.c1], [t1.c2]), filter(nil), 
+      access([t1.c1], [t1.c2]), partitions(p0)
+  6 - output([t2.c1], [t2.c2], [t2.c3]), filter(nil)
+  7 - output([t2.c1], [t2.c2], [t2.c3]), filter(nil), 
+      access([t2.c1], [t2.c2], [t2.c3]), partitions(p0)
+
+***************   Case 88   ***************
+SQL: select * from t1 left join t2 on t1.c1 != t2.c1 left join t3 on t1.c1 != t3.c1 left join t4 on t1.c1 != t4.c1 where t2.c1 = 0 and t3.c1 is NULL and t4.c1 is NULL; 
+================================================
+|ID|OPERATOR               |NAME|EST. ROWS|COST|
+------------------------------------------------
+|0 |NESTED-LOOP OUTER JOIN |    |1        |3122|
+|1 | NESTED-LOOP OUTER JOIN|    |1        |3013|
+|2 |  NESTED-LOOP JOIN     |    |99       |148 |
+|3 |   TABLE GET           |t2  |1        |46  |
+|4 |   TABLE SCAN          |t1  |100      |78  |
+|5 |  MATERIAL             |    |100      |80  |
+|6 |   TABLE SCAN          |t3  |100      |78  |
+|7 | MATERIAL              |    |100      |80  |
+|8 |  TABLE SCAN           |t4  |100      |78  |
+================================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t1.c1], [t1.c2], [t2.c1], [t2.c2], [t2.c3], [t3.c1], [t3.c2], [t3.c3], [t4.c1], [t4.c2], [t4.c3]), filter([(T_OP_IS, t4.c1, NULL, 0)]), 
+      conds([t1.c1 != t4.c1]), nl_params_(nil)
+  1 - output([t1.c1], [t1.c2], [t2.c1], [t2.c2], [t2.c3], [t3.c1], [t3.c2], [t3.c3]), filter([(T_OP_IS, t3.c1, NULL, 0)]), 
+      conds([t1.c1 != t3.c1]), nl_params_(nil)
+  2 - output([t1.c1], [t1.c2], [t2.c1], [t2.c2], [t2.c3]), filter(nil), 
+      conds([t1.c1 != t2.c1]), nl_params_(nil)
+  3 - output([t2.c1], [t2.c2], [t2.c3]), filter(nil), 
+      access([t2.c1], [t2.c2], [t2.c3]), partitions(p0)
+  4 - output([t1.c1], [t1.c2]), filter(nil), 
+      access([t1.c1], [t1.c2]), partitions(p0)
+  5 - output([t3.c1], [t3.c2], [t3.c3]), filter(nil)
+  6 - output([t3.c1], [t3.c2], [t3.c3]), filter(nil), 
+      access([t3.c1], [t3.c2], [t3.c3]), partitions(p0)
+  7 - output([t4.c1], [t4.c2], [t4.c3]), filter(nil)
+  8 - output([t4.c1], [t4.c2], [t4.c3]), filter(nil), 
+      access([t4.c1], [t4.c2], [t4.c3]), partitions(p0)
+
+***************   Case 89   ***************
+SQL: select * from t1 left join t2 on t1.c1 != t2.c1 left join t3 on t1.c1 != t3.c1 left join t4 on t1.c1 != t4.c1 where t2.c1 = 0 and t3.c1 is NULL and t4.c1 = 0; 
+===============================================
+|ID|OPERATOR              |NAME|EST. ROWS|COST|
+-----------------------------------------------
+|0 |NESTED-LOOP OUTER JOIN|    |1        |3056|
+|1 | NESTED-LOOP JOIN     |    |99       |219 |
+|2 |  TABLE GET           |t4  |1        |46  |
+|3 |  NESTED-LOOP JOIN    |    |99       |148 |
+|4 |   TABLE GET          |t2  |1        |46  |
+|5 |   TABLE SCAN         |t1  |100      |78  |
+|6 | MATERIAL             |    |100      |80  |
+|7 |  TABLE SCAN          |t3  |100      |78  |
+===============================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t1.c1], [t1.c2], [t2.c1], [t2.c2], [t2.c3], [t3.c1], [t3.c2], [t3.c3], [t4.c1], [t4.c2], [t4.c3]), filter([(T_OP_IS, t3.c1, NULL, 0)]), 
+      conds([t1.c1 != t3.c1]), nl_params_(nil)
+  1 - output([t1.c1], [t1.c2], [t2.c1], [t2.c2], [t2.c3], [t4.c1], [t4.c2], [t4.c3]), filter(nil), 
+      conds([t1.c1 != t4.c1]), nl_params_(nil)
+  2 - output([t4.c1], [t4.c2], [t4.c3]), filter(nil), 
+      access([t4.c1], [t4.c2], [t4.c3]), partitions(p0)
+  3 - output([t1.c1], [t1.c2], [t2.c1], [t2.c2], [t2.c3]), filter(nil), 
+      conds([t1.c1 != t2.c1]), nl_params_(nil)
+  4 - output([t2.c1], [t2.c2], [t2.c3]), filter(nil), 
+      access([t2.c1], [t2.c2], [t2.c3]), partitions(p0)
+  5 - output([t1.c1], [t1.c2]), filter(nil), 
+      access([t1.c1], [t1.c2]), partitions(p0)
+  6 - output([t3.c1], [t3.c2], [t3.c3]), filter(nil)
+  7 - output([t3.c1], [t3.c2], [t3.c3]), filter(nil), 
+      access([t3.c1], [t3.c2], [t3.c3]), partitions(p0)
+
+***************   Case 90   ***************
+SQL: select * from t1 left join t2 on t1.c1 != t2.c1 left join t3 on t1.c1 != t3.c1 left join t4 on t1.c1 != t4.c1 where t2.c1 = 0 and t3.c1 = 0 and t4.c1 IS NULL; 
+===============================================
+|ID|OPERATOR              |NAME|EST. ROWS|COST|
+-----------------------------------------------
+|0 |NESTED-LOOP OUTER JOIN|    |1        |3056|
+|1 | NESTED-LOOP JOIN     |    |99       |219 |
+|2 |  TABLE GET           |t3  |1        |46  |
+|3 |  NESTED-LOOP JOIN    |    |99       |148 |
+|4 |   TABLE GET          |t2  |1        |46  |
+|5 |   TABLE SCAN         |t1  |100      |78  |
+|6 | MATERIAL             |    |100      |80  |
+|7 |  TABLE SCAN          |t4  |100      |78  |
+===============================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t1.c1], [t1.c2], [t2.c1], [t2.c2], [t2.c3], [t3.c1], [t3.c2], [t3.c3], [t4.c1], [t4.c2], [t4.c3]), filter([(T_OP_IS, t4.c1, NULL, 0)]), 
+      conds([t1.c1 != t4.c1]), nl_params_(nil)
+  1 - output([t1.c1], [t1.c2], [t2.c1], [t2.c2], [t2.c3], [t3.c1], [t3.c2], [t3.c3]), filter(nil), 
+      conds([t1.c1 != t3.c1]), nl_params_(nil)
+  2 - output([t3.c1], [t3.c2], [t3.c3]), filter(nil), 
+      access([t3.c1], [t3.c2], [t3.c3]), partitions(p0)
+  3 - output([t1.c1], [t1.c2], [t2.c1], [t2.c2], [t2.c3]), filter(nil), 
+      conds([t1.c1 != t2.c1]), nl_params_(nil)
+  4 - output([t2.c1], [t2.c2], [t2.c3]), filter(nil), 
+      access([t2.c1], [t2.c2], [t2.c3]), partitions(p0)
+  5 - output([t1.c1], [t1.c2]), filter(nil), 
+      access([t1.c1], [t1.c2]), partitions(p0)
+  6 - output([t4.c1], [t4.c2], [t4.c3]), filter(nil)
+  7 - output([t4.c1], [t4.c2], [t4.c3]), filter(nil), 
+      access([t4.c1], [t4.c2], [t4.c3]), partitions(p0)
+
+***************   Case 91   ***************
+SQL: select * from t1 left join t2 on t1.c1 != t2.c1 left join t3 on t1.c1 != t3.c1 left join t4 on t1.c1 != t4.c1 where t2.c1 = 0 and t3.c1 = 0 and t4.c1 = 0; 
+===========================================
+|ID|OPERATOR          |NAME|EST. ROWS|COST|
+-------------------------------------------
+|0 |NESTED-LOOP JOIN  |    |98       |289 |
+|1 | TABLE GET        |t4  |1        |46  |
+|2 | NESTED-LOOP JOIN |    |99       |219 |
+|3 |  TABLE GET       |t3  |1        |46  |
+|4 |  NESTED-LOOP JOIN|    |99       |148 |
+|5 |   TABLE GET      |t2  |1        |46  |
+|6 |   TABLE SCAN     |t1  |100      |78  |
+===========================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t1.c1], [t1.c2], [t2.c1], [t2.c2], [t2.c3], [t3.c1], [t3.c2], [t3.c3], [t4.c1], [t4.c2], [t4.c3]), filter(nil), 
+      conds([t1.c1 != t4.c1]), nl_params_(nil)
+  1 - output([t4.c1], [t4.c2], [t4.c3]), filter(nil), 
+      access([t4.c1], [t4.c2], [t4.c3]), partitions(p0)
+  2 - output([t1.c1], [t1.c2], [t2.c1], [t2.c2], [t2.c3], [t3.c1], [t3.c2], [t3.c3]), filter(nil), 
+      conds([t1.c1 != t3.c1]), nl_params_(nil)
+  3 - output([t3.c1], [t3.c2], [t3.c3]), filter(nil), 
+      access([t3.c1], [t3.c2], [t3.c3]), partitions(p0)
+  4 - output([t1.c1], [t1.c2], [t2.c1], [t2.c2], [t2.c3]), filter(nil), 
+      conds([t1.c1 != t2.c1]), nl_params_(nil)
+  5 - output([t2.c1], [t2.c2], [t2.c3]), filter(nil), 
+      access([t2.c1], [t2.c2], [t2.c3]), partitions(p0)
+  6 - output([t1.c1], [t1.c2]), filter(nil), 
+      access([t1.c1], [t1.c2]), partitions(p0)
+
+***************   Case 92   ***************
+SQL: select * from (t1 left join t2 on t1.c1 != t2.c1) left join (t3 left join t4 on t4.c1 != t3.c1) on t1.c1 != t4.c1 where t2.c1 is NULL and t3.c1 is NULL and t4.c1 is NULL; 
+====================================================
+|ID|OPERATOR               |NAME|EST. ROWS|COST    |
+----------------------------------------------------
+|0 |NESTED-LOOP OUTER JOIN |    |0        |27838549|
+|1 | NESTED-LOOP OUTER JOIN|    |980100   |281825  |
+|2 |  TABLE SCAN           |t1  |100      |78      |
+|3 |  MATERIAL             |    |9900     |3396    |
+|4 |   NESTED-LOOP JOIN    |    |9900     |2971    |
+|5 |    TABLE SCAN         |t3  |100      |78      |
+|6 |    MATERIAL           |    |100      |80      |
+|7 |     TABLE SCAN        |t4  |100      |78      |
+|8 | MATERIAL              |    |100      |80      |
+|9 |  TABLE SCAN           |t2  |100      |78      |
+====================================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t1.c1], [t1.c2], [t2.c1], [t2.c2], [t2.c3], [t3.c1], [t3.c2], [t3.c3], [t4.c1], [t4.c2], [t4.c3]), filter([(T_OP_IS, t3.c1, NULL, 0)], [(T_OP_IS, t4.c1, NULL, 0)], [(T_OP_IS, t2.c1, NULL, 0)]), 
+      conds([t1.c1 != t2.c1]), nl_params_(nil)
+  1 - output([t1.c1], [t1.c2], [t3.c1], [t3.c2], [t3.c3], [t4.c1], [t4.c2], [t4.c3]), filter(nil), 
+      conds([t1.c1 != t4.c1]), nl_params_(nil)
+  2 - output([t1.c1], [t1.c2]), filter(nil), 
+      access([t1.c1], [t1.c2]), partitions(p0)
+  3 - output([t3.c1], [t3.c2], [t3.c3], [t4.c1], [t4.c2], [t4.c3]), filter(nil)
+  4 - output([t3.c1], [t3.c2], [t3.c3], [t4.c1], [t4.c2], [t4.c3]), filter(nil), 
+      conds([t4.c1 != t3.c1]), nl_params_(nil)
+  5 - output([t3.c1], [t3.c2], [t3.c3]), filter(nil), 
+      access([t3.c1], [t3.c2], [t3.c3]), partitions(p0)
+  6 - output([t4.c1], [t4.c2], [t4.c3]), filter(nil)
+  7 - output([t4.c1], [t4.c2], [t4.c3]), filter(nil), 
+      access([t4.c1], [t4.c2], [t4.c3]), partitions(p0)
+  8 - output([t2.c1], [t2.c2], [t2.c3]), filter(nil)
+  9 - output([t2.c1], [t2.c2], [t2.c3]), filter(nil), 
+      access([t2.c1], [t2.c2], [t2.c3]), partitions(p0)
+
+***************   Case 93   ***************
+SQL: select * from (t1 left join t2 on t1.c1 != t2.c1) left join (t3 left join t4 on t4.c1 != t3.c1) on t1.c1 != t4.c1 where t2.c1 is NULL and t3.c1 is NULL and t4.c1 = 0; 
+========================================================
+|ID|OPERATOR                   |NAME|EST. ROWS|COST    |
+--------------------------------------------------------
+|0 |NESTED-LOOP JOIN CARTESIAN |    |99000000 |25784252|
+|1 | NESTED-LOOP JOIN CARTESIAN|    |990000   |258311  |
+|2 |  NESTED-LOOP OUTER JOIN   |    |9900     |2971    |
+|3 |   TABLE SCAN              |t1  |100      |78      |
+|4 |   MATERIAL                |    |100      |80      |
+|5 |    TABLE SCAN             |t2  |100      |78      |
+|6 |  MATERIAL                 |    |100      |80      |
+|7 |   TABLE SCAN              |t3  |100      |78      |
+|8 | MATERIAL                  |    |100      |80      |
+|9 |  TABLE SCAN               |t4  |100      |78      |
+========================================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t1.c1], [t1.c2], [t2.c1], [t2.c2], [t2.c3], [t3.c1], [t3.c2], [t3.c3], [t4.c1], [t4.c2], [t4.c3]), filter(nil), startup_filter([0]), 
+      conds(nil), nl_params_(nil)
+  1 - output([t1.c1], [t1.c2], [t2.c1], [t2.c2], [t2.c3], [t3.c1], [t3.c2], [t3.c3]), filter(nil), 
+      conds(nil), nl_params_(nil)
+  2 - output([t1.c1], [t1.c2], [t2.c1], [t2.c2], [t2.c3]), filter(nil), 
+      conds([t1.c1 != t2.c1]), nl_params_(nil)
+  3 - output([t1.c1], [t1.c2]), filter(nil), 
+      access([t1.c1], [t1.c2]), partitions(p0)
+  4 - output([t2.c1], [t2.c2], [t2.c3]), filter(nil)
+  5 - output([t2.c1], [t2.c2], [t2.c3]), filter(nil), 
+      access([t2.c1], [t2.c2], [t2.c3]), partitions(p0)
+  6 - output([t3.c1], [t3.c2], [t3.c3]), filter(nil)
+  7 - output([t3.c1], [t3.c2], [t3.c3]), filter(nil), 
+      access([t3.c1], [t3.c2], [t3.c3]), partitions(p0)
+  8 - output([t4.c1], [t4.c2], [t4.c3]), filter(nil)
+  9 - output([t4.c1], [t4.c2], [t4.c3]), filter(nil), 
+      access([t4.c1], [t4.c2], [t4.c3]), partitions(p0)
+
+***************   Case 94   ***************
+SQL: select * from (t1 left join t2 on t1.c1 != t2.c1) left join (t3 left join t4 on t4.c1 != t3.c1) on t1.c1 != t4.c1 where t2.c1 is NULL and t3.c1 = 0 and t4.c1 is NULL; 
+========================================================
+|ID|OPERATOR                   |NAME|EST. ROWS|COST    |
+--------------------------------------------------------
+|0 |NESTED-LOOP JOIN CARTESIAN |    |99000000 |25784252|
+|1 | NESTED-LOOP JOIN CARTESIAN|    |990000   |258311  |
+|2 |  NESTED-LOOP OUTER JOIN   |    |9900     |2971    |
+|3 |   TABLE SCAN              |t1  |100      |78      |
+|4 |   MATERIAL                |    |100      |80      |
+|5 |    TABLE SCAN             |t2  |100      |78      |
+|6 |  MATERIAL                 |    |100      |80      |
+|7 |   TABLE SCAN              |t3  |100      |78      |
+|8 | MATERIAL                  |    |100      |80      |
+|9 |  TABLE SCAN               |t4  |100      |78      |
+========================================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t1.c1], [t1.c2], [t2.c1], [t2.c2], [t2.c3], [t3.c1], [t3.c2], [t3.c3], [t4.c1], [t4.c2], [t4.c3]), filter(nil), startup_filter([0]), 
+      conds(nil), nl_params_(nil)
+  1 - output([t1.c1], [t1.c2], [t2.c1], [t2.c2], [t2.c3], [t3.c1], [t3.c2], [t3.c3]), filter(nil), 
+      conds(nil), nl_params_(nil)
+  2 - output([t1.c1], [t1.c2], [t2.c1], [t2.c2], [t2.c3]), filter(nil), 
+      conds([t1.c1 != t2.c1]), nl_params_(nil)
+  3 - output([t1.c1], [t1.c2]), filter(nil), 
+      access([t1.c1], [t1.c2]), partitions(p0)
+  4 - output([t2.c1], [t2.c2], [t2.c3]), filter(nil)
+  5 - output([t2.c1], [t2.c2], [t2.c3]), filter(nil), 
+      access([t2.c1], [t2.c2], [t2.c3]), partitions(p0)
+  6 - output([t3.c1], [t3.c2], [t3.c3]), filter(nil)
+  7 - output([t3.c1], [t3.c2], [t3.c3]), filter(nil), 
+      access([t3.c1], [t3.c2], [t3.c3]), partitions(p0)
+  8 - output([t4.c1], [t4.c2], [t4.c3]), filter(nil)
+  9 - output([t4.c1], [t4.c2], [t4.c3]), filter(nil), 
+      access([t4.c1], [t4.c2], [t4.c3]), partitions(p0)
+
+***************   Case 95   ***************
+SQL: select * from (t1 left join t2 on t1.c1 != t2.c1) left join (t3 left join t4 on t4.c1 != t3.c1) on t1.c1 != t4.c1 where t2.c1 is NULL and t3.c1 = 0 and t4.c1 = 0; 
+===============================================
+|ID|OPERATOR              |NAME|EST. ROWS|COST|
+-----------------------------------------------
+|0 |NESTED-LOOP OUTER JOIN|    |0        |173 |
+|1 | NESTED-LOOP JOIN     |    |0        |92  |
+|2 |  NESTED-LOOP JOIN    |    |0        |92  |
+|3 |   TABLE GET          |t3  |1        |46  |
+|4 |   TABLE GET          |t4  |1        |46  |
+|5 |  TABLE SCAN          |t1  |100      |78  |
+|6 | MATERIAL             |    |100      |80  |
+|7 |  TABLE SCAN          |t2  |100      |78  |
+===============================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t1.c1], [t1.c2], [t2.c1], [t2.c2], [t2.c3], [t3.c1], [t3.c2], [t3.c3], [t4.c1], [t4.c2], [t4.c3]), filter([(T_OP_IS, t2.c1, NULL, 0)]), 
+      conds([t1.c1 != t2.c1]), nl_params_(nil)
+  1 - output([t1.c1], [t1.c2], [t3.c1], [t3.c2], [t3.c3], [t4.c1], [t4.c2], [t4.c3]), filter(nil), 
+      conds([t1.c1 != t4.c1]), nl_params_(nil)
+  2 - output([t3.c1], [t3.c2], [t3.c3], [t4.c1], [t4.c2], [t4.c3]), filter(nil), 
+      conds([t4.c1 != t3.c1]), nl_params_(nil)
+  3 - output([t3.c1], [t3.c2], [t3.c3]), filter(nil), 
+      access([t3.c1], [t3.c2], [t3.c3]), partitions(p0)
+  4 - output([t4.c1], [t4.c2], [t4.c3]), filter(nil), 
+      access([t4.c1], [t4.c2], [t4.c3]), partitions(p0)
+  5 - output([t1.c1], [t1.c2]), filter(nil), 
+      access([t1.c1], [t1.c2]), partitions(p0)
+  6 - output([t2.c1], [t2.c2], [t2.c3]), filter(nil)
+  7 - output([t2.c1], [t2.c2], [t2.c3]), filter(nil), 
+      access([t2.c1], [t2.c2], [t2.c3]), partitions(p0)
+
+***************   Case 96   ***************
+SQL: select * from (t1 left join t2 on t1.c1 != t2.c1) left join (t3 left join t4 on t4.c1 != t3.c1) on t1.c1 != t4.c1 where t2.c1 = 0 and t3.c1 is NULL and t4.c1 is NULL; 
+==================================================
+|ID|OPERATOR               |NAME|EST. ROWS|COST  |
+--------------------------------------------------
+|0 |NESTED-LOOP JOIN       |    |0        |326632|
+|1 | TABLE GET             |t2  |1        |46    |
+|2 | NESTED-LOOP OUTER JOIN|    |980100   |281825|
+|3 |  TABLE SCAN           |t1  |100      |78    |
+|4 |  MATERIAL             |    |9900     |3396  |
+|5 |   NESTED-LOOP JOIN    |    |9900     |2971  |
+|6 |    TABLE SCAN         |t3  |100      |78    |
+|7 |    MATERIAL           |    |100      |80    |
+|8 |     TABLE SCAN        |t4  |100      |78    |
+==================================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t1.c1], [t1.c2], [t2.c1], [t2.c2], [t2.c3], [t3.c1], [t3.c2], [t3.c3], [t4.c1], [t4.c2], [t4.c3]), filter(nil), 
+      conds([(T_OP_IS, t3.c1, NULL, 0)], [(T_OP_IS, t4.c1, NULL, 0)], [t1.c1 != t2.c1]), nl_params_(nil)
+  1 - output([t2.c1], [t2.c2], [t2.c3]), filter(nil), 
+      access([t2.c1], [t2.c2], [t2.c3]), partitions(p0)
+  2 - output([t1.c1], [t1.c2], [t3.c1], [t3.c2], [t3.c3], [t4.c1], [t4.c2], [t4.c3]), filter(nil), 
+      conds([t1.c1 != t4.c1]), nl_params_(nil)
+  3 - output([t1.c1], [t1.c2]), filter(nil), 
+      access([t1.c1], [t1.c2]), partitions(p0)
+  4 - output([t3.c1], [t3.c2], [t3.c3], [t4.c1], [t4.c2], [t4.c3]), filter(nil)
+  5 - output([t3.c1], [t3.c2], [t3.c3], [t4.c1], [t4.c2], [t4.c3]), filter(nil), 
+      conds([t4.c1 != t3.c1]), nl_params_(nil)
+  6 - output([t3.c1], [t3.c2], [t3.c3]), filter(nil), 
+      access([t3.c1], [t3.c2], [t3.c3]), partitions(p0)
+  7 - output([t4.c1], [t4.c2], [t4.c3]), filter(nil)
+  8 - output([t4.c1], [t4.c2], [t4.c3]), filter(nil), 
+      access([t4.c1], [t4.c2], [t4.c3]), partitions(p0)
+
+***************   Case 97   ***************
+SQL: select * from (t1 left join t2 on t1.c1 != t2.c1) left join (t3 left join t4 on t4.c1 != t3.c1) on t1.c1 != t4.c1 where t2.c1 = 0 and t3.c1 is NULL and t4.c1 = 0; 
+=========================================================
+|ID|OPERATOR                    |NAME|EST. ROWS|COST    |
+---------------------------------------------------------
+|0 |NESTED-LOOP JOIN CARTESIAN  |    |100000000|26044433|
+|1 | NESTED-LOOP JOIN CARTESIAN |    |1000000  |260656  |
+|2 |  NESTED-LOOP JOIN CARTESIAN|    |10000    |2737    |
+|3 |   TABLE SCAN               |t2  |100      |78      |
+|4 |   MATERIAL                 |    |100      |80      |
+|5 |    TABLE SCAN              |t3  |100      |78      |
+|6 |  MATERIAL                  |    |100      |80      |
+|7 |   TABLE SCAN               |t4  |100      |78      |
+|8 | MATERIAL                   |    |100      |79      |
+|9 |  TABLE SCAN                |t1  |100      |78      |
+=========================================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t1.c1], [t1.c2], [t2.c1], [t2.c2], [t2.c3], [t3.c1], [t3.c2], [t3.c3], [t4.c1], [t4.c2], [t4.c3]), filter(nil), startup_filter([0]), 
+      conds(nil), nl_params_(nil)
+  1 - output([t2.c1], [t2.c2], [t2.c3], [t3.c1], [t3.c2], [t3.c3], [t4.c1], [t4.c2], [t4.c3]), filter(nil), 
+      conds(nil), nl_params_(nil)
+  2 - output([t2.c1], [t2.c2], [t2.c3], [t3.c1], [t3.c2], [t3.c3]), filter(nil), 
+      conds(nil), nl_params_(nil)
+  3 - output([t2.c1], [t2.c2], [t2.c3]), filter(nil), 
+      access([t2.c1], [t2.c2], [t2.c3]), partitions(p0)
+  4 - output([t3.c1], [t3.c2], [t3.c3]), filter(nil)
+  5 - output([t3.c1], [t3.c2], [t3.c3]), filter(nil), 
+      access([t3.c1], [t3.c2], [t3.c3]), partitions(p0)
+  6 - output([t4.c1], [t4.c2], [t4.c3]), filter(nil)
+  7 - output([t4.c1], [t4.c2], [t4.c3]), filter(nil), 
+      access([t4.c1], [t4.c2], [t4.c3]), partitions(p0)
+  8 - output([t1.c1], [t1.c2]), filter(nil)
+  9 - output([t1.c1], [t1.c2]), filter(nil), 
+      access([t1.c1], [t1.c2]), partitions(p0)
+
+***************   Case 98   ***************
+SQL: select * from (t1 left join t2 on t1.c1 != t2.c1) left join (t3 left join t4 on t4.c1 != t3.c1) on t1.c1 != t4.c1 where t2.c1 = 0 and t3.c1 = 0 and t4.c1 IS NULL; 
+=========================================================
+|ID|OPERATOR                    |NAME|EST. ROWS|COST    |
+---------------------------------------------------------
+|0 |NESTED-LOOP JOIN CARTESIAN  |    |100000000|26044433|
+|1 | NESTED-LOOP JOIN CARTESIAN |    |1000000  |260656  |
+|2 |  NESTED-LOOP JOIN CARTESIAN|    |10000    |2737    |
+|3 |   TABLE SCAN               |t2  |100      |78      |
+|4 |   MATERIAL                 |    |100      |80      |
+|5 |    TABLE SCAN              |t3  |100      |78      |
+|6 |  MATERIAL                  |    |100      |80      |
+|7 |   TABLE SCAN               |t4  |100      |78      |
+|8 | MATERIAL                   |    |100      |79      |
+|9 |  TABLE SCAN                |t1  |100      |78      |
+=========================================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t1.c1], [t1.c2], [t2.c1], [t2.c2], [t2.c3], [t3.c1], [t3.c2], [t3.c3], [t4.c1], [t4.c2], [t4.c3]), filter(nil), startup_filter([0]), 
+      conds(nil), nl_params_(nil)
+  1 - output([t2.c1], [t2.c2], [t2.c3], [t3.c1], [t3.c2], [t3.c3], [t4.c1], [t4.c2], [t4.c3]), filter(nil), 
+      conds(nil), nl_params_(nil)
+  2 - output([t2.c1], [t2.c2], [t2.c3], [t3.c1], [t3.c2], [t3.c3]), filter(nil), 
+      conds(nil), nl_params_(nil)
+  3 - output([t2.c1], [t2.c2], [t2.c3]), filter(nil), 
+      access([t2.c1], [t2.c2], [t2.c3]), partitions(p0)
+  4 - output([t3.c1], [t3.c2], [t3.c3]), filter(nil)
+  5 - output([t3.c1], [t3.c2], [t3.c3]), filter(nil), 
+      access([t3.c1], [t3.c2], [t3.c3]), partitions(p0)
+  6 - output([t4.c1], [t4.c2], [t4.c3]), filter(nil)
+  7 - output([t4.c1], [t4.c2], [t4.c3]), filter(nil), 
+      access([t4.c1], [t4.c2], [t4.c3]), partitions(p0)
+  8 - output([t1.c1], [t1.c2]), filter(nil)
+  9 - output([t1.c1], [t1.c2]), filter(nil), 
+      access([t1.c1], [t1.c2]), partitions(p0)
+
+***************   Case 99   ***************
+SQL: select * from (t1 left join t2 on t1.c1 != t2.c1) left join (t3 left join t4 on t4.c1 != t3.c1) on t1.c1 != t4.c1 where t2.c1 = 0 and t3.c1 = 0 and t4.c1 = 0; 
+===========================================
+|ID|OPERATOR          |NAME|EST. ROWS|COST|
+-------------------------------------------
+|0 |NESTED-LOOP JOIN  |    |0        |138 |
+|1 | NESTED-LOOP JOIN |    |0        |92  |
+|2 |  NESTED-LOOP JOIN|    |0        |92  |
+|3 |   TABLE GET      |t3  |1        |46  |
+|4 |   TABLE GET      |t4  |1        |46  |
+|5 |  TABLE SCAN      |t1  |100      |78  |
+|6 | MATERIAL         |    |1        |46  |
+|7 |  TABLE GET       |t2  |1        |46  |
+===========================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t1.c1], [t1.c2], [t2.c1], [t2.c2], [t2.c3], [t3.c1], [t3.c2], [t3.c3], [t4.c1], [t4.c2], [t4.c3]), filter(nil), 
+      conds([t1.c1 != t2.c1]), nl_params_(nil)
+  1 - output([t1.c1], [t1.c2], [t3.c1], [t3.c2], [t3.c3], [t4.c1], [t4.c2], [t4.c3]), filter(nil), 
+      conds([t1.c1 != t4.c1]), nl_params_(nil)
+  2 - output([t3.c1], [t3.c2], [t3.c3], [t4.c1], [t4.c2], [t4.c3]), filter(nil), 
+      conds([t4.c1 != t3.c1]), nl_params_(nil)
+  3 - output([t3.c1], [t3.c2], [t3.c3]), filter(nil), 
+      access([t3.c1], [t3.c2], [t3.c3]), partitions(p0)
+  4 - output([t4.c1], [t4.c2], [t4.c3]), filter(nil), 
+      access([t4.c1], [t4.c2], [t4.c3]), partitions(p0)
+  5 - output([t1.c1], [t1.c2]), filter(nil), 
+      access([t1.c1], [t1.c2]), partitions(p0)
+  6 - output([t2.c1], [t2.c2], [t2.c3]), filter(nil)
+  7 - output([t2.c1], [t2.c2], [t2.c3]), filter(nil), 
+      access([t2.c1], [t2.c2], [t2.c3]), partitions(p0)
+
+***************   Case 100   ***************
+SQL: select * from (t1 full join t2 on t1.c1 = t2.c1) left join (t3 left join t4 on t4.c1 = t3.c1) on t1.c1 = t4.c1 where t2.c1 is NULL and t3.c1 is NULL and t4.c1 is NULL; 
+==============================================
+|ID|OPERATOR             |NAME|EST. ROWS|COST|
+----------------------------------------------
+|0 |MERGE FULL OUTER JOIN|    |2        |414 |
+|1 | MERGE OUTER JOIN    |    |100      |303 |
+|2 |  TABLE SCAN         |t1  |100      |78  |
+|3 |  MERGE JOIN         |    |100      |189 |
+|4 |   TABLE SCAN        |t3  |100      |78  |
+|5 |   TABLE SCAN        |t4  |100      |78  |
+|6 | TABLE SCAN          |t2  |100      |78  |
+==============================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t1.c1], [t1.c2], [t2.c1], [t2.c2], [t2.c3], [t3.c1], [t3.c2], [t3.c3], [t4.c1], [t4.c2], [t4.c3]), filter([(T_OP_IS, t2.c1, NULL, 0)], [(T_OP_IS, t3.c1, NULL, 0)], [(T_OP_IS, t4.c1, NULL, 0)]), 
+      equal_conds([t1.c1 = t2.c1]), other_conds(nil)
+  1 - output([t1.c1], [t1.c2], [t3.c1], [t3.c2], [t3.c3], [t4.c1], [t4.c2], [t4.c3]), filter(nil), 
+      equal_conds([t1.c1 = t4.c1]), other_conds(nil)
+  2 - output([t1.c1], [t1.c2]), filter(nil), 
+      access([t1.c1], [t1.c2]), partitions(p0)
+  3 - output([t3.c1], [t3.c2], [t3.c3], [t4.c1], [t4.c2], [t4.c3]), filter(nil), 
+      equal_conds([t4.c1 = t3.c1]), other_conds(nil)
+  4 - output([t3.c1], [t3.c2], [t3.c3]), filter(nil), 
+      access([t3.c1], [t3.c2], [t3.c3]), partitions(p0)
+  5 - output([t4.c1], [t4.c2], [t4.c3]), filter(nil), 
+      access([t4.c1], [t4.c2], [t4.c3]), partitions(p0)
+  6 - output([t2.c1], [t2.c2], [t2.c3]), filter(nil), 
+      access([t2.c1], [t2.c2], [t2.c3]), partitions(p0)
+
+***************   Case 101   ***************
+SQL: select * from (t1 full join t2 on t1.c1 = t2.c1) left join (t3 left join t4 on t4.c1 = t3.c1) on t1.c1 = t4.c1 where t2.c1 is NULL and t3.c1 is NULL and t4.c1 = 0; 
+======================================================
+|ID|OPERATOR                   |NAME|EST. ROWS|COST  |
+------------------------------------------------------
+|0 |NESTED-LOOP JOIN CARTESIAN |    |1000000  |260766|
+|1 | NESTED-LOOP JOIN CARTESIAN|    |10000    |2847  |
+|2 |  MERGE RIGHT OUTER JOIN   |    |100      |188   |
+|3 |   TABLE SCAN              |t2  |100      |78    |
+|4 |   TABLE SCAN              |t1  |100      |78    |
+|5 |  MATERIAL                 |    |100      |80    |
+|6 |   TABLE SCAN              |t3  |100      |78    |
+|7 | MATERIAL                  |    |100      |80    |
+|8 |  TABLE SCAN               |t4  |100      |78    |
+======================================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t1.c1], [t1.c2], [t2.c1], [t2.c2], [t2.c3], [t3.c1], [t3.c2], [t3.c3], [t4.c1], [t4.c2], [t4.c3]), filter(nil), startup_filter([0]), 
+      conds(nil), nl_params_(nil)
+  1 - output([t1.c1], [t1.c2], [t2.c1], [t2.c2], [t2.c3], [t3.c1], [t3.c2], [t3.c3]), filter(nil), 
+      conds(nil), nl_params_(nil)
+  2 - output([t1.c1], [t1.c2], [t2.c1], [t2.c2], [t2.c3]), filter(nil), 
+      equal_conds([t1.c1 = t2.c1]), other_conds(nil)
+  3 - output([t2.c1], [t2.c2], [t2.c3]), filter(nil), 
+      access([t2.c1], [t2.c2], [t2.c3]), partitions(p0)
+  4 - output([t1.c1], [t1.c2]), filter(nil), 
+      access([t1.c1], [t1.c2]), partitions(p0)
+  5 - output([t3.c1], [t3.c2], [t3.c3]), filter(nil)
+  6 - output([t3.c1], [t3.c2], [t3.c3]), filter(nil), 
+      access([t3.c1], [t3.c2], [t3.c3]), partitions(p0)
+  7 - output([t4.c1], [t4.c2], [t4.c3]), filter(nil)
+  8 - output([t4.c1], [t4.c2], [t4.c3]), filter(nil), 
+      access([t4.c1], [t4.c2], [t4.c3]), partitions(p0)
+
+***************   Case 102   ***************
+SQL: select * from (t1 full join t2 on t1.c1 = t2.c1) left join (t3 left join t4 on t4.c1 = t3.c1) on t1.c1 = t4.c1 where t2.c1 is NULL and t3.c1 = 0 and t4.c1 is NULL; 
+======================================================
+|ID|OPERATOR                   |NAME|EST. ROWS|COST  |
+------------------------------------------------------
+|0 |NESTED-LOOP JOIN CARTESIAN |    |1000000  |260766|
+|1 | NESTED-LOOP JOIN CARTESIAN|    |10000    |2847  |
+|2 |  MERGE RIGHT OUTER JOIN   |    |100      |188   |
+|3 |   TABLE SCAN              |t2  |100      |78    |
+|4 |   TABLE SCAN              |t1  |100      |78    |
+|5 |  MATERIAL                 |    |100      |80    |
+|6 |   TABLE SCAN              |t3  |100      |78    |
+|7 | MATERIAL                  |    |100      |80    |
+|8 |  TABLE SCAN               |t4  |100      |78    |
+======================================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t1.c1], [t1.c2], [t2.c1], [t2.c2], [t2.c3], [t3.c1], [t3.c2], [t3.c3], [t4.c1], [t4.c2], [t4.c3]), filter(nil), startup_filter([0]), 
+      conds(nil), nl_params_(nil)
+  1 - output([t1.c1], [t1.c2], [t2.c1], [t2.c2], [t2.c3], [t3.c1], [t3.c2], [t3.c3]), filter(nil), 
+      conds(nil), nl_params_(nil)
+  2 - output([t1.c1], [t1.c2], [t2.c1], [t2.c2], [t2.c3]), filter(nil), 
+      equal_conds([t1.c1 = t2.c1]), other_conds(nil)
+  3 - output([t2.c1], [t2.c2], [t2.c3]), filter(nil), 
+      access([t2.c1], [t2.c2], [t2.c3]), partitions(p0)
+  4 - output([t1.c1], [t1.c2]), filter(nil), 
+      access([t1.c1], [t1.c2]), partitions(p0)
+  5 - output([t3.c1], [t3.c2], [t3.c3]), filter(nil)
+  6 - output([t3.c1], [t3.c2], [t3.c3]), filter(nil), 
+      access([t3.c1], [t3.c2], [t3.c3]), partitions(p0)
+  7 - output([t4.c1], [t4.c2], [t4.c3]), filter(nil)
+  8 - output([t4.c1], [t4.c2], [t4.c3]), filter(nil), 
+      access([t4.c1], [t4.c2], [t4.c3]), partitions(p0)
+
+***************   Case 103   ***************
+SQL: select * from (t1 full join t2 on t1.c1 = t2.c1) left join (t3 left join t4 on t4.c1 = t3.c1) on t1.c1 = t4.c1 where t2.c1 is NULL and t3.c1 = 0 and t4.c1 = 0; 
+================================================
+|ID|OPERATOR               |NAME|EST. ROWS|COST|
+------------------------------------------------
+|0 |NESTED-LOOP JOIN       |    |1        |57  |
+|1 | NESTED-LOOP OUTER JOIN|    |1        |57  |
+|2 |  NESTED-LOOP JOIN     |    |1        |51  |
+|3 |   TABLE GET           |t4  |1        |46  |
+|4 |   TABLE GET           |t1  |1        |5   |
+|5 |  TABLE GET            |t2  |1        |5   |
+|6 | TABLE GET             |t3  |1        |4   |
+================================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t1.c1], [t1.c2], [t2.c1], [t2.c2], [t2.c3], [t3.c1], [t3.c2], [t3.c3], [t4.c1], [t4.c2], [t4.c3]), filter(nil), 
+      conds(nil), nl_params_([t4.c1])
+  1 - output([t4.c1], [t1.c1], [t1.c2], [t2.c1], [t2.c2], [t2.c3], [t4.c2], [t4.c3]), filter([(T_OP_IS, t2.c1, NULL, 0)]), 
+      conds(nil), nl_params_([t1.c1])
+  2 - output([t4.c1], [t1.c1], [t1.c2], [t4.c2], [t4.c3]), filter(nil), 
+      conds(nil), nl_params_([t4.c1])
+  3 - output([t4.c1], [t4.c2], [t4.c3]), filter(nil), 
+      access([t4.c1], [t4.c2], [t4.c3]), partitions(p0)
+  4 - output([t1.c1], [t1.c2]), filter(nil), 
+      access([t1.c1], [t1.c2]), partitions(p0)
+  5 - output([t2.c1], [t2.c2], [t2.c3]), filter(nil), 
+      access([t2.c1], [t2.c2], [t2.c3]), partitions(p0)
+  6 - output([t3.c1], [t3.c2], [t3.c3]), filter(nil), 
+      access([t3.c1], [t3.c2], [t3.c3]), partitions(p0)
+
+***************   Case 104   ***************
+SQL: select * from (t1 full join t2 on t1.c1 = t2.c1) left join (t3 left join t4 on t4.c1 = t3.c1) on t1.c1 = t4.c1 where t2.c1 = 0 and t3.c1 is NULL and t4.c1 is NULL; 
+================================================
+|ID|OPERATOR               |NAME|EST. ROWS|COST|
+------------------------------------------------
+|0 |NESTED-LOOP OUTER JOIN |    |1        |350 |
+|1 | TABLE GET             |t2  |1        |46  |
+|2 | MERGE RIGHT OUTER JOIN|    |100      |299 |
+|3 |  MERGE JOIN           |    |100      |189 |
+|4 |   TABLE SCAN          |t3  |100      |78  |
+|5 |   TABLE SCAN          |t4  |100      |78  |
+|6 |  TABLE SCAN           |t1  |100      |78  |
+================================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t1.c1], [t1.c2], [t2.c1], [t2.c2], [t2.c3], [t3.c1], [t3.c2], [t3.c3], [t4.c1], [t4.c2], [t4.c3]), filter([(T_OP_IS, t3.c1, NULL, 0)], [(T_OP_IS, t4.c1, NULL, 0)]), 
+      conds([t1.c1 = t2.c1]), nl_params_(nil)
+  1 - output([t2.c1], [t2.c2], [t2.c3]), filter(nil), 
+      access([t2.c1], [t2.c2], [t2.c3]), partitions(p0)
+  2 - output([t1.c1], [t1.c2], [t3.c1], [t3.c2], [t3.c3], [t4.c1], [t4.c2], [t4.c3]), filter(nil), 
+      equal_conds([t1.c1 = t4.c1]), other_conds(nil)
+  3 - output([t3.c1], [t3.c2], [t3.c3], [t4.c1], [t4.c2], [t4.c3]), filter(nil), 
+      equal_conds([t4.c1 = t3.c1]), other_conds(nil)
+  4 - output([t3.c1], [t3.c2], [t3.c3]), filter(nil), 
+      access([t3.c1], [t3.c2], [t3.c3]), partitions(p0)
+  5 - output([t4.c1], [t4.c2], [t4.c3]), filter(nil), 
+      access([t4.c1], [t4.c2], [t4.c3]), partitions(p0)
+  6 - output([t1.c1], [t1.c2]), filter(nil), 
+      access([t1.c1], [t1.c2]), partitions(p0)
+
+***************   Case 105   ***************
+SQL: select * from (t1 full join t2 on t1.c1 = t2.c1) left join (t3 left join t4 on t4.c1 = t3.c1) on t1.c1 = t4.c1 where t2.c1 = 0 and t3.c1 is NULL and t4.c1 = 0; 
+=========================================================
+|ID|OPERATOR                    |NAME|EST. ROWS|COST    |
+---------------------------------------------------------
+|0 |NESTED-LOOP JOIN CARTESIAN  |    |100000000|26044433|
+|1 | NESTED-LOOP JOIN CARTESIAN |    |1000000  |260656  |
+|2 |  NESTED-LOOP JOIN CARTESIAN|    |10000    |2737    |
+|3 |   TABLE SCAN               |t2  |100      |78      |
+|4 |   MATERIAL                 |    |100      |80      |
+|5 |    TABLE SCAN              |t3  |100      |78      |
+|6 |  MATERIAL                  |    |100      |80      |
+|7 |   TABLE SCAN               |t4  |100      |78      |
+|8 | MATERIAL                   |    |100      |79      |
+|9 |  TABLE SCAN                |t1  |100      |78      |
+=========================================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t1.c1], [t1.c2], [t2.c1], [t2.c2], [t2.c3], [t3.c1], [t3.c2], [t3.c3], [t4.c1], [t4.c2], [t4.c3]), filter(nil), startup_filter([0]), 
+      conds(nil), nl_params_(nil)
+  1 - output([t2.c1], [t2.c2], [t2.c3], [t3.c1], [t3.c2], [t3.c3], [t4.c1], [t4.c2], [t4.c3]), filter(nil), 
+      conds(nil), nl_params_(nil)
+  2 - output([t2.c1], [t2.c2], [t2.c3], [t3.c1], [t3.c2], [t3.c3]), filter(nil), 
+      conds(nil), nl_params_(nil)
+  3 - output([t2.c1], [t2.c2], [t2.c3]), filter(nil), 
+      access([t2.c1], [t2.c2], [t2.c3]), partitions(p0)
+  4 - output([t3.c1], [t3.c2], [t3.c3]), filter(nil)
+  5 - output([t3.c1], [t3.c2], [t3.c3]), filter(nil), 
+      access([t3.c1], [t3.c2], [t3.c3]), partitions(p0)
+  6 - output([t4.c1], [t4.c2], [t4.c3]), filter(nil)
+  7 - output([t4.c1], [t4.c2], [t4.c3]), filter(nil), 
+      access([t4.c1], [t4.c2], [t4.c3]), partitions(p0)
+  8 - output([t1.c1], [t1.c2]), filter(nil)
+  9 - output([t1.c1], [t1.c2]), filter(nil), 
+      access([t1.c1], [t1.c2]), partitions(p0)
+
+***************   Case 106   ***************
+SQL: select * from (t1 full join t2 on t1.c1 = t2.c1) left join (t3 left join t4 on t4.c1 = t3.c1) on t1.c1 = t4.c1 where t2.c1 = 0 and t3.c1 = 0 and t4.c1 IS NULL; 
+=========================================================
+|ID|OPERATOR                    |NAME|EST. ROWS|COST    |
+---------------------------------------------------------
+|0 |NESTED-LOOP JOIN CARTESIAN  |    |100000000|26044433|
+|1 | NESTED-LOOP JOIN CARTESIAN |    |1000000  |260656  |
+|2 |  NESTED-LOOP JOIN CARTESIAN|    |10000    |2737    |
+|3 |   TABLE SCAN               |t2  |100      |78      |
+|4 |   MATERIAL                 |    |100      |80      |
+|5 |    TABLE SCAN              |t3  |100      |78      |
+|6 |  MATERIAL                  |    |100      |80      |
+|7 |   TABLE SCAN               |t4  |100      |78      |
+|8 | MATERIAL                   |    |100      |79      |
+|9 |  TABLE SCAN                |t1  |100      |78      |
+=========================================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t1.c1], [t1.c2], [t2.c1], [t2.c2], [t2.c3], [t3.c1], [t3.c2], [t3.c3], [t4.c1], [t4.c2], [t4.c3]), filter(nil), startup_filter([0]), 
+      conds(nil), nl_params_(nil)
+  1 - output([t2.c1], [t2.c2], [t2.c3], [t3.c1], [t3.c2], [t3.c3], [t4.c1], [t4.c2], [t4.c3]), filter(nil), 
+      conds(nil), nl_params_(nil)
+  2 - output([t2.c1], [t2.c2], [t2.c3], [t3.c1], [t3.c2], [t3.c3]), filter(nil), 
+      conds(nil), nl_params_(nil)
+  3 - output([t2.c1], [t2.c2], [t2.c3]), filter(nil), 
+      access([t2.c1], [t2.c2], [t2.c3]), partitions(p0)
+  4 - output([t3.c1], [t3.c2], [t3.c3]), filter(nil)
+  5 - output([t3.c1], [t3.c2], [t3.c3]), filter(nil), 
+      access([t3.c1], [t3.c2], [t3.c3]), partitions(p0)
+  6 - output([t4.c1], [t4.c2], [t4.c3]), filter(nil)
+  7 - output([t4.c1], [t4.c2], [t4.c3]), filter(nil), 
+      access([t4.c1], [t4.c2], [t4.c3]), partitions(p0)
+  8 - output([t1.c1], [t1.c2]), filter(nil)
+  9 - output([t1.c1], [t1.c2]), filter(nil), 
+      access([t1.c1], [t1.c2]), partitions(p0)
+
+***************   Case 107   ***************
+SQL: select * from (t1 full join t2 on t1.c1 = t2.c1) left join (t3 left join t4 on t4.c1 = t3.c1) on t1.c1 = t4.c1 where t2.c1 = 0 and t3.c1 = 0 and t4.c1 = 0; 
+===========================================
+|ID|OPERATOR          |NAME|EST. ROWS|COST|
+-------------------------------------------
+|0 |NESTED-LOOP JOIN  |    |1        |56  |
+|1 | NESTED-LOOP JOIN |    |1        |55  |
+|2 |  NESTED-LOOP JOIN|    |1        |51  |
+|3 |   TABLE GET      |t2  |1        |46  |
+|4 |   TABLE GET      |t1  |1        |5   |
+|5 |  TABLE GET       |t4  |1        |4   |
+|6 | TABLE GET        |t3  |1        |4   |
+===========================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t1.c1], [t1.c2], [t2.c1], [t2.c2], [t2.c3], [t3.c1], [t3.c2], [t3.c3], [t4.c1], [t4.c2], [t4.c3]), filter(nil), 
+      conds(nil), nl_params_([t4.c1])
+  1 - output([t4.c1], [t1.c1], [t1.c2], [t2.c1], [t2.c2], [t2.c3], [t4.c2], [t4.c3]), filter(nil), 
+      conds(nil), nl_params_([t1.c1])
+  2 - output([t1.c1], [t1.c2], [t2.c1], [t2.c2], [t2.c3]), filter(nil), 
+      conds(nil), nl_params_([t2.c1])
+  3 - output([t2.c1], [t2.c2], [t2.c3]), filter(nil), 
+      access([t2.c1], [t2.c2], [t2.c3]), partitions(p0)
+  4 - output([t1.c1], [t1.c2]), filter(nil), 
+      access([t1.c1], [t1.c2]), partitions(p0)
+  5 - output([t4.c1], [t4.c2], [t4.c3]), filter(nil), 
+      access([t4.c1], [t4.c2], [t4.c3]), partitions(p0)
+  6 - output([t3.c1], [t3.c2], [t3.c3]), filter(nil), 
+      access([t3.c1], [t3.c2], [t3.c3]), partitions(p0)
+
+***************   Case 108   ***************
+SQL: select * from (t1 left join t2 on t1.c1 = t2.c1) full join (t3 left join t4 on t4.c1 = t3.c1) on t1.c1 = t4.c1 where t2.c1 is NULL and t3.c1 is NULL and t4.c1 is NULL; 
+==============================================
+|ID|OPERATOR             |NAME|EST. ROWS|COST|
+----------------------------------------------
+|0 |HASH RIGHT OUTER JOIN|    |0        |442 |
+|1 | TABLE SCAN          |t2  |100      |78  |
+|2 | HASH FULL OUTER JOIN|    |100      |315 |
+|3 |  TABLE SCAN         |t1  |100      |78  |
+|4 |  MERGE OUTER JOIN   |    |100      |189 |
+|5 |   TABLE SCAN        |t3  |100      |78  |
+|6 |   TABLE SCAN        |t4  |100      |78  |
+==============================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t1.c1], [t1.c2], [t2.c1], [t2.c2], [t2.c3], [t3.c1], [t3.c2], [t3.c3], [t4.c1], [t4.c2], [t4.c3]), filter([(T_OP_IS, t3.c1, NULL, 0)], [(T_OP_IS, t4.c1, NULL, 0)], [(T_OP_IS, t2.c1, NULL, 0)]), 
+      equal_conds([t1.c1 = t2.c1]), other_conds(nil)
+  1 - output([t2.c1], [t2.c2], [t2.c3]), filter(nil), 
+      access([t2.c1], [t2.c2], [t2.c3]), partitions(p0)
+  2 - output([t1.c1], [t1.c2], [t3.c1], [t3.c2], [t3.c3], [t4.c1], [t4.c2], [t4.c3]), filter(nil), 
+      equal_conds([t1.c1 = t4.c1]), other_conds(nil)
+  3 - output([t1.c1], [t1.c2]), filter(nil), 
+      access([t1.c1], [t1.c2]), partitions(p0)
+  4 - output([t3.c1], [t3.c2], [t3.c3], [t4.c1], [t4.c2], [t4.c3]), filter(nil), 
+      equal_conds([t4.c1 = t3.c1]), other_conds(nil)
+  5 - output([t3.c1], [t3.c2], [t3.c3]), filter(nil), 
+      access([t3.c1], [t3.c2], [t3.c3]), partitions(p0)
+  6 - output([t4.c1], [t4.c2], [t4.c3]), filter(nil), 
+      access([t4.c1], [t4.c2], [t4.c3]), partitions(p0)
+
+***************   Case 109   ***************
+SQL: select * from (t1 left join t2 on t1.c1 = t2.c1) full join (t3 left join t4 on t4.c1 = t3.c1) on t1.c1 = t4.c1 where t2.c1 is NULL and t3.c1 is NULL and t4.c1 = 0; 
+=================================================
+|ID|OPERATOR                |NAME|EST. ROWS|COST|
+-------------------------------------------------
+|0 |NESTED-LOOP OUTER JOIN  |    |0        |61  |
+|1 | NESTED-LOOP JOIN       |    |1        |55  |
+|2 |  NESTED-LOOP OUTER JOIN|    |1        |51  |
+|3 |   TABLE GET            |t4  |1        |46  |
+|4 |   TABLE GET            |t1  |1        |5   |
+|5 |  TABLE GET             |t3  |1        |4   |
+|6 | TABLE GET              |t2  |1        |5   |
+=================================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t1.c1], [t1.c2], [t2.c1], [t2.c2], [t2.c3], [t3.c1], [t3.c2], [t3.c3], [t4.c1], [t4.c2], [t4.c3]), filter([(T_OP_IS, t2.c1, NULL, 0)]), 
+      conds(nil), nl_params_([t1.c1])
+  1 - output([t1.c1], [t1.c2], [t3.c1], [t3.c2], [t3.c3], [t4.c1], [t4.c2], [t4.c3]), filter(nil), 
+      conds(nil), nl_params_([t4.c1])
+  2 - output([t1.c1], [t1.c2], [t4.c1], [t4.c2], [t4.c3]), filter(nil), 
+      conds(nil), nl_params_([t4.c1])
+  3 - output([t4.c1], [t4.c2], [t4.c3]), filter(nil), 
+      access([t4.c1], [t4.c2], [t4.c3]), partitions(p0)
+  4 - output([t1.c1], [t1.c2]), filter(nil), 
+      access([t1.c1], [t1.c2]), partitions(p0)
+  5 - output([t3.c1], [t3.c2], [t3.c3]), filter(nil), 
+      access([t3.c1], [t3.c2], [t3.c3]), partitions(p0)
+  6 - output([t2.c1], [t2.c2], [t2.c3]), filter(nil), 
+      access([t2.c1], [t2.c2], [t2.c3]), partitions(p0)
+
+***************   Case 110   ***************
+SQL: select * from (t1 left join t2 on t1.c1 = t2.c1) full join (t3 left join t4 on t4.c1 = t3.c1) on t1.c1 = t4.c1 where t2.c1 is NULL and t3.c1 = 0 and t4.c1 is NULL; 
+=================================================
+|ID|OPERATOR                |NAME|EST. ROWS|COST|
+-------------------------------------------------
+|0 |NESTED-LOOP OUTER JOIN  |    |1        |51  |
+|1 | NESTED-LOOP OUTER JOIN |    |1        |51  |
+|2 |  NESTED-LOOP OUTER JOIN|    |1        |51  |
+|3 |   TABLE GET            |t3  |1        |46  |
+|4 |   TABLE GET            |t4  |1        |5   |
+|5 |  TABLE GET             |t1  |1        |5   |
+|6 | TABLE GET              |t2  |1        |5   |
+=================================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t1.c1], [t1.c2], [t2.c1], [t2.c2], [t2.c3], [t3.c1], [t3.c2], [t3.c3], [t4.c1], [t4.c2], [t4.c3]), filter([(T_OP_IS, t2.c1, NULL, 0)]), 
+      conds(nil), nl_params_([t1.c1])
+  1 - output([t1.c1], [t1.c2], [t3.c1], [t3.c2], [t3.c3], [t4.c1], [t4.c2], [t4.c3]), filter(nil), 
+      conds(nil), nl_params_([t4.c1])
+  2 - output([t3.c1], [t3.c2], [t3.c3], [t4.c1], [t4.c2], [t4.c3]), filter([(T_OP_IS, t4.c1, NULL, 0)]), 
+      conds(nil), nl_params_([t3.c1])
+  3 - output([t3.c1], [t3.c2], [t3.c3]), filter(nil), 
+      access([t3.c1], [t3.c2], [t3.c3]), partitions(p0)
+  4 - output([t4.c1], [t4.c2], [t4.c3]), filter(nil), 
+      access([t4.c1], [t4.c2], [t4.c3]), partitions(p0)
+  5 - output([t1.c1], [t1.c2]), filter(nil), 
+      access([t1.c1], [t1.c2]), partitions(p0)
+  6 - output([t2.c1], [t2.c2], [t2.c3]), filter(nil), 
+      access([t2.c1], [t2.c2], [t2.c3]), partitions(p0)
+
+***************   Case 111   ***************
+SQL: select * from (t1 left join t2 on t1.c1 = t2.c1) full join (t3 left join t4 on t4.c1 = t3.c1) on t1.c1 = t4.c1 where t2.c1 is NULL and t3.c1 = 0 and t4.c1 = 0; 
+=================================================
+|ID|OPERATOR                |NAME|EST. ROWS|COST|
+-------------------------------------------------
+|0 |NESTED-LOOP OUTER JOIN  |    |0        |61  |
+|1 | NESTED-LOOP JOIN       |    |1        |55  |
+|2 |  NESTED-LOOP OUTER JOIN|    |1        |51  |
+|3 |   TABLE GET            |t4  |1        |46  |
+|4 |   TABLE GET            |t1  |1        |5   |
+|5 |  TABLE GET             |t3  |1        |4   |
+|6 | TABLE GET              |t2  |1        |5   |
+=================================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t1.c1], [t1.c2], [t2.c1], [t2.c2], [t2.c3], [t3.c1], [t3.c2], [t3.c3], [t4.c1], [t4.c2], [t4.c3]), filter([(T_OP_IS, t2.c1, NULL, 0)]), 
+      conds(nil), nl_params_([t1.c1])
+  1 - output([t1.c1], [t1.c2], [t3.c1], [t3.c2], [t3.c3], [t4.c1], [t4.c2], [t4.c3]), filter(nil), 
+      conds(nil), nl_params_([t4.c1])
+  2 - output([t1.c1], [t1.c2], [t4.c1], [t4.c2], [t4.c3]), filter(nil), 
+      conds(nil), nl_params_([t4.c1])
+  3 - output([t4.c1], [t4.c2], [t4.c3]), filter(nil), 
+      access([t4.c1], [t4.c2], [t4.c3]), partitions(p0)
+  4 - output([t1.c1], [t1.c2]), filter(nil), 
+      access([t1.c1], [t1.c2]), partitions(p0)
+  5 - output([t3.c1], [t3.c2], [t3.c3]), filter(nil), 
+      access([t3.c1], [t3.c2], [t3.c3]), partitions(p0)
+  6 - output([t2.c1], [t2.c2], [t2.c3]), filter(nil), 
+      access([t2.c1], [t2.c2], [t2.c3]), partitions(p0)
+
+***************   Case 112   ***************
+SQL: select * from (t1 left join t2 on t1.c1 = t2.c1) full join (t3 left join t4 on t4.c1 = t3.c1) on t1.c1 = t4.c1 where t2.c1 = 0 and t3.c1 is NULL and t4.c1 is NULL; 
+================================================
+|ID|OPERATOR               |NAME|EST. ROWS|COST|
+------------------------------------------------
+|0 |NESTED-LOOP JOIN       |    |0        |350 |
+|1 | TABLE GET             |t2  |1        |46  |
+|2 | MERGE RIGHT OUTER JOIN|    |100      |299 |
+|3 |  MERGE JOIN           |    |100      |189 |
+|4 |   TABLE SCAN          |t3  |100      |78  |
+|5 |   TABLE SCAN          |t4  |100      |78  |
+|6 |  TABLE SCAN           |t1  |100      |78  |
+================================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t1.c1], [t1.c2], [t2.c1], [t2.c2], [t2.c3], [t3.c1], [t3.c2], [t3.c3], [t4.c1], [t4.c2], [t4.c3]), filter(nil), 
+      conds([(T_OP_IS, t3.c1, NULL, 0)], [(T_OP_IS, t4.c1, NULL, 0)], [t1.c1 = t2.c1]), nl_params_(nil)
+  1 - output([t2.c1], [t2.c2], [t2.c3]), filter(nil), 
+      access([t2.c1], [t2.c2], [t2.c3]), partitions(p0)
+  2 - output([t1.c1], [t1.c2], [t3.c1], [t3.c2], [t3.c3], [t4.c1], [t4.c2], [t4.c3]), filter(nil), 
+      equal_conds([t1.c1 = t4.c1]), other_conds(nil)
+  3 - output([t3.c1], [t3.c2], [t3.c3], [t4.c1], [t4.c2], [t4.c3]), filter(nil), 
+      equal_conds([t4.c1 = t3.c1]), other_conds(nil)
+  4 - output([t3.c1], [t3.c2], [t3.c3]), filter(nil), 
+      access([t3.c1], [t3.c2], [t3.c3]), partitions(p0)
+  5 - output([t4.c1], [t4.c2], [t4.c3]), filter(nil), 
+      access([t4.c1], [t4.c2], [t4.c3]), partitions(p0)
+  6 - output([t1.c1], [t1.c2]), filter(nil), 
+      access([t1.c1], [t1.c2]), partitions(p0)
+
+***************   Case 113   ***************
+SQL: select * from (t1 left join t2 on t1.c1 = t2.c1) full join (t3 left join t4 on t4.c1 = t3.c1) on t1.c1 = t4.c1 where t2.c1 = 0 and t3.c1 is NULL and t4.c1 = 0; 
+=========================================================
+|ID|OPERATOR                    |NAME|EST. ROWS|COST    |
+---------------------------------------------------------
+|0 |NESTED-LOOP JOIN CARTESIAN  |    |100000000|26044433|
+|1 | NESTED-LOOP JOIN CARTESIAN |    |1000000  |260656  |
+|2 |  NESTED-LOOP JOIN CARTESIAN|    |10000    |2737    |
+|3 |   TABLE SCAN               |t3  |100      |78      |
+|4 |   MATERIAL                 |    |100      |80      |
+|5 |    TABLE SCAN              |t4  |100      |78      |
+|6 |  MATERIAL                  |    |100      |80      |
+|7 |   TABLE SCAN               |t2  |100      |78      |
+|8 | MATERIAL                   |    |100      |79      |
+|9 |  TABLE SCAN                |t1  |100      |78      |
+=========================================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t1.c1], [t1.c2], [t2.c1], [t2.c2], [t2.c3], [t3.c1], [t3.c2], [t3.c3], [t4.c1], [t4.c2], [t4.c3]), filter(nil), startup_filter([0]), 
+      conds(nil), nl_params_(nil)
+  1 - output([t2.c1], [t2.c2], [t2.c3], [t3.c1], [t3.c2], [t3.c3], [t4.c1], [t4.c2], [t4.c3]), filter(nil), 
+      conds(nil), nl_params_(nil)
+  2 - output([t3.c1], [t3.c2], [t3.c3], [t4.c1], [t4.c2], [t4.c3]), filter(nil), 
+      conds(nil), nl_params_(nil)
+  3 - output([t3.c1], [t3.c2], [t3.c3]), filter(nil), 
+      access([t3.c1], [t3.c2], [t3.c3]), partitions(p0)
+  4 - output([t4.c1], [t4.c2], [t4.c3]), filter(nil)
+  5 - output([t4.c1], [t4.c2], [t4.c3]), filter(nil), 
+      access([t4.c1], [t4.c2], [t4.c3]), partitions(p0)
+  6 - output([t2.c1], [t2.c2], [t2.c3]), filter(nil)
+  7 - output([t2.c1], [t2.c2], [t2.c3]), filter(nil), 
+      access([t2.c1], [t2.c2], [t2.c3]), partitions(p0)
+  8 - output([t1.c1], [t1.c2]), filter(nil)
+  9 - output([t1.c1], [t1.c2]), filter(nil), 
+      access([t1.c1], [t1.c2]), partitions(p0)
+
+***************   Case 114   ***************
+SQL: select * from (t1 left join t2 on t1.c1 = t2.c1) full join (t3 left join t4 on t4.c1 = t3.c1) on t1.c1 = t4.c1 where t2.c1 = 0 and t3.c1 = 0 and t4.c1 IS NULL; 
+=========================================================
+|ID|OPERATOR                    |NAME|EST. ROWS|COST    |
+---------------------------------------------------------
+|0 |NESTED-LOOP JOIN CARTESIAN  |    |100000000|26044433|
+|1 | NESTED-LOOP JOIN CARTESIAN |    |1000000  |260656  |
+|2 |  NESTED-LOOP JOIN CARTESIAN|    |10000    |2737    |
+|3 |   TABLE SCAN               |t3  |100      |78      |
+|4 |   MATERIAL                 |    |100      |80      |
+|5 |    TABLE SCAN              |t4  |100      |78      |
+|6 |  MATERIAL                  |    |100      |80      |
+|7 |   TABLE SCAN               |t2  |100      |78      |
+|8 | MATERIAL                   |    |100      |79      |
+|9 |  TABLE SCAN                |t1  |100      |78      |
+=========================================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t1.c1], [t1.c2], [t2.c1], [t2.c2], [t2.c3], [t3.c1], [t3.c2], [t3.c3], [t4.c1], [t4.c2], [t4.c3]), filter(nil), startup_filter([0]), 
+      conds(nil), nl_params_(nil)
+  1 - output([t2.c1], [t2.c2], [t2.c3], [t3.c1], [t3.c2], [t3.c3], [t4.c1], [t4.c2], [t4.c3]), filter(nil), 
+      conds(nil), nl_params_(nil)
+  2 - output([t3.c1], [t3.c2], [t3.c3], [t4.c1], [t4.c2], [t4.c3]), filter(nil), 
+      conds(nil), nl_params_(nil)
+  3 - output([t3.c1], [t3.c2], [t3.c3]), filter(nil), 
+      access([t3.c1], [t3.c2], [t3.c3]), partitions(p0)
+  4 - output([t4.c1], [t4.c2], [t4.c3]), filter(nil)
+  5 - output([t4.c1], [t4.c2], [t4.c3]), filter(nil), 
+      access([t4.c1], [t4.c2], [t4.c3]), partitions(p0)
+  6 - output([t2.c1], [t2.c2], [t2.c3]), filter(nil)
+  7 - output([t2.c1], [t2.c2], [t2.c3]), filter(nil), 
+      access([t2.c1], [t2.c2], [t2.c3]), partitions(p0)
+  8 - output([t1.c1], [t1.c2]), filter(nil)
+  9 - output([t1.c1], [t1.c2]), filter(nil), 
+      access([t1.c1], [t1.c2]), partitions(p0)
+
+***************   Case 115   ***************
+SQL: select * from (t1 left join t2 on t1.c1 = t2.c1) full join (t3 left join t4 on t4.c1 = t3.c1) on t1.c1 = t4.c1 where t2.c1 = 0 and t3.c1 = 0 and t4.c1 = 0; 
+===========================================
+|ID|OPERATOR          |NAME|EST. ROWS|COST|
+-------------------------------------------
+|0 |NESTED-LOOP JOIN  |    |1        |56  |
+|1 | NESTED-LOOP JOIN |    |1        |55  |
+|2 |  NESTED-LOOP JOIN|    |1        |51  |
+|3 |   TABLE GET      |t4  |1        |46  |
+|4 |   TABLE GET      |t1  |1        |5   |
+|5 |  TABLE GET       |t2  |1        |4   |
+|6 | TABLE GET        |t3  |1        |4   |
+===========================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t1.c1], [t1.c2], [t2.c1], [t2.c2], [t2.c3], [t3.c1], [t3.c2], [t3.c3], [t4.c1], [t4.c2], [t4.c3]), filter(nil), 
+      conds(nil), nl_params_([t4.c1])
+  1 - output([t4.c1], [t1.c1], [t1.c2], [t2.c1], [t2.c2], [t2.c3], [t4.c2], [t4.c3]), filter(nil), 
+      conds(nil), nl_params_([t1.c1])
+  2 - output([t4.c1], [t1.c1], [t1.c2], [t4.c2], [t4.c3]), filter(nil), 
+      conds(nil), nl_params_([t4.c1])
+  3 - output([t4.c1], [t4.c2], [t4.c3]), filter(nil), 
+      access([t4.c1], [t4.c2], [t4.c3]), partitions(p0)
+  4 - output([t1.c1], [t1.c2]), filter(nil), 
+      access([t1.c1], [t1.c2]), partitions(p0)
+  5 - output([t2.c1], [t2.c2], [t2.c3]), filter(nil), 
+      access([t2.c1], [t2.c2], [t2.c3]), partitions(p0)
+  6 - output([t3.c1], [t3.c2], [t3.c3]), filter(nil), 
+      access([t3.c1], [t3.c2], [t3.c3]), partitions(p0)
+

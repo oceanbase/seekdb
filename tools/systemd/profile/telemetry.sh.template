@@ -1,0 +1,94 @@
+#!/bin/bash
+
+url="https://openwebapi.oceanbase.com/api/web/oceanbase/report"
+type=@CPACK_PACKAGE_NAME@
+version=@CPACK_PACKAGE_VERSION@
+release=@CPACK_RPM_PACKAGE_RELEASE@
+prefix=@CPACK_PACKAGING_INSTALL_PREFIX@
+ip=$(hostname -I | awk '/^[0-9]/ {print $1; exit}')
+hostHash=$(echo -n "$ip" | sha1sum | awk '{print $1}')
+osName=$(cat /etc/os-release | grep "^ID=" | cut -f2 -d= | tr -d '"')
+osRelease=$(cat /etc/os-release | grep "^VERSION_ID=" | cut -f2 -d= | tr -d '"')
+cnf_file='/etc/oceanbase.cnf'
+json_pre_file="$prefix/profile/telemetry-pre.json"
+json_file="$prefix/profile/telemetry.json"
+
+step='none'
+reporter='none'
+
+function add_observer_config {
+    rm -rf $json_file
+    cp $json_pre_file $json_file
+    local temp_file=$(mktemp)
+    first_observer_configration=true
+
+    while IFS='=' read -r key value; do
+        # delete empty and comment line
+        if [[ ! $key || $key =~ ^[[:space:]]*# ]]; then
+            continue
+        fi
+
+        key=$(echo "$key" | awk '{$1=$1};1')
+        value=$(echo "$value" | awk '{$1=$1};1')
+        value=$(echo "$value" | sed 's/^"//' | sed 's/"$//')
+        if [[ -n "$key" && ! "$key" =~ ^\; && $key != *"rootPwd"* ]]; then
+            if $first_observer_configration; then
+                first_observer_configration=false
+                sed "s/\"observerConfig\": {}/\"observerConfig\": {\n                \"$key\": \"$value\"\n            }/" "$json_file" > "$temp_file"
+            else
+                observer_config_line=$(grep -n "observerConfig" $json_file | head -n 1 | cut -d: -f1)
+                sed "$((observer_config_line+1))i\\        \"$key\": \"$value\"," "$json_file" > "$temp_file"
+            fi
+            mv "$temp_file" "$json_file"
+        fi
+    done < "$cnf_file"
+}
+
+function update_json {
+    sed -i "s|#reporter#|${reporter}|g" $json_file
+    sed -i "s|#type#|${type}|g" $json_file
+    sed -i "s|#step#|${step}|g" $json_file
+    sed -i "s|#version#|${version}|g" $json_file
+    sed -i "s|#release#|${release}|g" $json_file
+    sed -i "s|#hostHash#|${hostHash}|g" $json_file
+    sed -i "s|#osName#|${osName}|g" $json_file
+    sed -i "s|#osRelease#|${osRelease}|g" $json_file
+}
+
+# Function Name: do_telemetry
+# Purpose: prepare the telemetry json data
+# Arguments: arg1 - 0 means rpm uninstall, 1 means rpm install, 2 means rpm upgrade, 3 means systemd deploy
+# Arguments: arg2 - systemd step: 10 means only start, 11 means start successfully with bootstrap,
+# 12 means start successfully without bootstrap
+# Return Value: None
+function do_telemetry {
+    # arg1 0 means rpm uninstall, 1 means rpm install, 2 means rpm upgrade, 3 means systemd deploy
+    # arg2 means systemd step
+    if [ "$1" -eq 0 ]; then
+        # rpm uninstall step
+        step="0"
+        reporter="rpm"
+    elif [ "$1" -eq 1 ]; then
+        # rpm install step
+        step="1"
+        reporter="rpm"
+    elif [ "$1" -eq 2 ]; then
+        # rpm upgrade step
+        step="2"
+        reporter="rpm"
+        add_observer_config
+    elif [ "$1" -eq 3 ]; then
+        step="$2"
+        reporter="systemd"
+        add_observer_config
+    fi
+    update_json
+
+    nohup curl -X POST \
+        -H "Content-Type: application/json" \
+        -d @"$json_file" "$url" >/dev/null 2>&1 &
+}
+
+if [[ -z "$TELEMETRY_MODE" ]] || ( [[ "$TELEMETRY_MODE" =~ ^-?[0-9]+$ ]] && [[ "$TELEMETRY_MODE" -eq 1 ]] ); then
+    do_telemetry $1 "$2"
+fi

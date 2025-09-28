@@ -1,0 +1,251 @@
+# owner: yuchen.wyc
+# owner group: SQL1
+# description: foobar
+# tags:dml,dml_ignore
+--disable_warnings
+DROP TABLE IF EXISTS t1;
+DROP TABLE IF EXISTS z0case;
+--enable_warnings
+CREATE TABLE t1(c1 TINYINT NOT NULL);
+INSERT INTO t1 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
+UPDATE   t1 SET c1 = -1 WHERE c1 >= 5;
+SELECT * FROM t1 ORDER BY c1;
+UPDATE   t1 SET c1 = -10;
+SELECT * FROM t1 ORDER BY c1;
+DROP TABLE t1;
+CREATE TABLE t1(c1 SMALLINT NOT NULL);
+INSERT INTO t1 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
+UPDATE   t1 SET c1 = -1 WHERE c1 >= 5;
+SELECT * FROM t1 ORDER BY c1;
+UPDATE   t1 SET c1 = -10;
+SELECT * FROM t1 ORDER BY c1;
+DROP TABLE t1;
+CREATE TABLE t1(c1 MEDIUMINT NOT NULL);
+INSERT INTO t1 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
+UPDATE   t1 SET c1 = -1 WHERE c1 >= 5;
+SELECT * FROM t1 ORDER BY c1;
+UPDATE   t1 SET c1 = -10;
+SELECT * FROM t1 ORDER BY c1;
+DROP TABLE t1;
+CREATE TABLE t1(c1 INT NOT NULL);
+INSERT INTO t1 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
+UPDATE   t1 SET c1 = -1 WHERE c1 >= 5;
+SELECT * FROM t1 ORDER BY c1;
+UPDATE   t1 SET c1 = -10;
+SELECT * FROM t1 ORDER BY c1;
+DROP TABLE t1;
+CREATE TABLE t1(c1 INTEGER NOT NULL);
+INSERT INTO t1 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
+UPDATE   t1 SET c1 = -1 WHERE c1 >= 5;
+SELECT * FROM t1 ORDER BY c1;
+UPDATE   t1 SET c1 = -10;
+SELECT * FROM t1 ORDER BY c1;
+DROP TABLE t1;
+CREATE TABLE t1(c1 BIGINT NOT NULL);
+INSERT INTO t1 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
+UPDATE   t1 SET c1 = -1 WHERE c1 >= 5;
+SELECT * FROM t1 ORDER BY c1;
+UPDATE   t1 SET c1 = -10;
+SELECT * FROM t1 ORDER BY c1;
+
+drop table t1;
+create table t1(a bigint not null);
+##插入非法字符串，预期插入0
+insert into t1 values(1);
+update ignore t1 set a='a' where a=1;
+select * from t1;
+##更新多行非法字符串，预期都更新成0
+insert into t1 values(2), (3), (4);
+update ignore t1 set a='a' where a>0;
+select * from t1;
+delete from t1;
+##更新为null,预期插入0
+update ignore t1 set a=null where a>0;
+select * from t1;
+
+##测试字符串类型
+drop table t1;
+create table t1(a varchar(2) primary key);
+##超长截断
+insert into t1 values('aa');
+update ignore t1 set a='aaaaa' where a='aa';
+select * from t1;
+##更新为null,预期插入空串
+update ignore t1 set a=null where a='aa';
+select * from t1;
+DROP TABLE t1;
+CREATE TABLE t1(c1 TINYINT NOT NULL);
+INSERT INTO t1 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
+UPDATE IGNORE t1 SET c1 = -1 WHERE c1 >= 5;
+SELECT * FROM t1 ORDER BY c1;
+UPDATE IGNORE t1 SET c1 = -10;
+SELECT * FROM t1 ORDER BY c1;
+DROP TABLE t1;
+CREATE TABLE t1(c1 SMALLINT NOT NULL);
+INSERT INTO t1 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
+UPDATE IGNORE t1 SET c1 = -1 WHERE c1 >= 5;
+SELECT * FROM t1 ORDER BY c1;
+UPDATE IGNORE t1 SET c1 = -10;
+SELECT * FROM t1 ORDER BY c1;
+DROP TABLE t1;
+CREATE TABLE t1(c1 MEDIUMINT NOT NULL);
+INSERT INTO t1 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
+UPDATE IGNORE t1 SET c1 = -1 WHERE c1 >= 5;
+SELECT * FROM t1 ORDER BY c1;
+UPDATE IGNORE t1 SET c1 = -10;
+SELECT * FROM t1 ORDER BY c1;
+DROP TABLE t1;
+CREATE TABLE t1(c1 INT NOT NULL);
+INSERT INTO t1 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
+UPDATE IGNORE t1 SET c1 = -1 WHERE c1 >= 5;
+SELECT * FROM t1 ORDER BY c1;
+UPDATE IGNORE t1 SET c1 = -10;
+SELECT * FROM t1 ORDER BY c1;
+DROP TABLE t1;
+CREATE TABLE t1(c1 INTEGER NOT NULL);
+INSERT INTO t1 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
+UPDATE IGNORE t1 SET c1 = -1 WHERE c1 >= 5;
+SELECT * FROM t1 ORDER BY c1;
+UPDATE IGNORE t1 SET c1 = -10;
+SELECT * FROM t1 ORDER BY c1;
+DROP TABLE t1;
+CREATE TABLE t1(c1 BIGINT NOT NULL);
+INSERT INTO t1 (c1) VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
+UPDATE IGNORE t1 SET c1 = -1 WHERE c1 >= 5;
+SELECT * FROM t1 ORDER BY c1;
+UPDATE IGNORE t1 SET c1 = -10;
+SELECT * FROM t1 ORDER BY c1;
+DROP TABLE t1;
+
+create table t1 (c1 int primary key, c2 int) partition by key(c1) partitions 4;
+insert into t1 values (0,0);
+insert into t1 values (1,1);
+select * from t1;
+--error ER_NOT_SUPPORTED_YET
+update ignore t1 set c1 = 0 where c2 = 1;
+select * from t1;
+--error ER_NOT_SUPPORTED_YET
+update ignore t1 set c1 = null where c2 = 1;
+select * from t1;
+drop table t1;
+
+CREATE TABLE Z0CASE (T1 CHAR(10) PRIMARY KEY,T2 VARCHAR(10)) DEFAULT charset= 'binary' DEFAULT collate = 'binary'
+PARTITION BY KEY(T1) PARTITIONS 3 ;
+INSERT INTO  Z0CASE VALUES(11,11);
+INSERT INTO  Z0CASE VALUES('','');
+select * from z0case;
+
+UPDATE  ignore Z0CASE SET T1=NULL WHERE T2='11';
+select * from z0case;
+
+UPDATE Z0CASE SET T1='AbC' WHERE T2='11';
+select * from z0case;
+drop table z0case;
+
+CREATE TABLE Z0CASE (T1 VARCHAR(10) PRIMARY KEY,T2 VARCHAR(10)) DEFAULT charset= 'binary' DEFAULT collate = 'binary'
+PARTITION BY KEY(T1) PARTITIONS 3 ;
+INSERT INTO  Z0CASE VALUES(11,11);
+INSERT INTO  Z0CASE VALUES('','');
+select * from z0case;
+
+UPDATE ignore Z0CASE SET T1=NULL WHERE T2='11';
+select * from z0case;
+
+UPDATE Z0CASE SET T1='AbC' WHERE T2='11';
+select * from z0case;
+drop table z0case;
+
+--disable_warnings
+drop table if exists table0_innodb_key_pk_parts_2;
+
+CREATE TABLE table0_innodb_key_pk_parts_2 (
+col_bit bit,
+col_blob blob,
+col_char_key char (1),
+col_blob_not_null blob not null,
+col_int_not_null_key int not null,
+col_float_not_null float not null,
+col_bit_not_null bit not null,
+col_decimal_not_null_key decimal not null,
+col_decimal decimal,
+col_set_not_null set ('a','b','c','d','e','f','g','h','i','j','k','l','m','n','o','p','q','r','s','t','u','v','w','x','y','z') not null,
+col_bit_not_null_key bit not null,
+col_int_key int,
+col_char_not_null_key char (1) not null,
+col_int_unsigned_not_null_key int unsigned not null,
+col_decimal_not_null decimal not null,
+col_bit_key bit,
+col_set_not_null_key set ('a','b','c','d','e','f','g','h','i','j','k','l','m','n','o','p','q','r','s','t','u','v','w','x','y','z') not null,
+col_set_key set ('a','b','c','d','e','f','g','h','i','j','k','l','m','n','o','p','q','r','s','t','u','v','w','x','y','z'),
+col_enum_not_null enum ('a','b','c','d','e','f','g','h','i','j','k','l','m','n','o','p','q','r','s','t','u','v','w','x','y','z') not null,
+col_float_unsigned_not_null_ke float unsigned not null,
+col_int_unsigned_key int unsigned,
+col_int_unsigned int unsigned,
+col_int_not_null int not null,
+col_float float,
+col_char char (1),
+col_decimal_unsigned decimal unsigned,
+col_enum_not_null_key enum ('a','b','c','d','e','f','g','h','i','j','k','l','m','n','o','p','q','r','s','t','u','v','w','x','y','z') not null,
+col_set set ('a','b','c','d','e','f','g','h','i','j','k','l','m','n','o','p','q','r','s','t','u','v','w','x','y','z'),
+col_decimal_unsigned_key decimal unsigned,
+col_char_not_null char (1) not null,
+col_float_unsigned_not_null float unsigned not null,
+pk int,
+col_decimal_unsigned_not_null decimal unsigned not null,
+col_decimal_unsigned_not_null_ decimal unsigned not null,
+col_float_key float,
+col_float_not_null_key float not null,
+col_blob_not_null_key blob not null,
+col_decimal_key decimal,
+col_int int,
+col_enum_key enum ('a','b','c','d','e','f','g','h','i','j','k','l','m','n','o','p','q','r','s','t','u','v','w','x','y','z'),
+col_blob_key blob,
+col_enum enum ('a','b','c','d','e','f','g','h','i','j','k','l','m','n','o','p','q','r','s','t','u','v','w','x','y','z'),
+col_float_unsigned float unsigned,
+col_float_unsigned_key float unsigned,
+col_int_unsigned_not_null int unsigned not null,
+/*Indices*/
+key idx13(col_char_key ),
+key idx9(col_int_not_null_key ),
+key idx41(col_decimal_not_null_key ),
+key idx3(col_bit_not_null_key ),
+key idx5(col_int_key ),
+key idx15(col_char_not_null_key ),
+key idx11(col_int_unsigned_not_null_key ),
+key idx1(col_bit_key ),
+key idx23(col_set_not_null_key ),
+key idx21(col_set_key ),
+key idx35(col_float_unsigned_not_null_ke ),
+key idx7(col_int_unsigned_key ),
+key idx19(col_enum_not_null_key ),
+key idx39(col_decimal_unsigned_key ),
+key idx43(col_decimal_unsigned_not_null_ ),
+key idx29(col_float_key ),
+key idx33(col_float_not_null_key ),
+key idx27(col_blob_not_null_key  (255)),
+key idx37(col_decimal_key ),
+key idx17(col_enum_key ),
+key idx25(col_blob_key  (255)),
+key idx31(col_float_unsigned_key ))  ENGINE=innodb  PARTITION BY key (pk) partitions 2;
+
+set sql_mode = '';
+
+INSERT /*+ ENABLE_PARALLEL_DML PARALLEL(3) */ INTO table0_innodb_key_pk_parts_2 ( col_blob_not_null , col_float , col_float_unsigned_not_null_ke ) VALUES ( '2009-06-17 02:00:49' , '2008-05-04 09:58:22.031383' , -24420 );
+--error 1048
+INSERT /*+ ENABLE_PARALLEL_DML PARALLEL(3) */ INTO table0_innodb_key_pk_parts_2 ( col_decimal_key , col_set_not_null , col_bit_not_null_key ) VALUES ( '2002-08-21 15:50:49' , NULL , '2008-04-08 00:54:35.035855' );
+INSERT /*+ ENABLE_PARALLEL_DML PARALLEL(3) */ INTO table0_innodb_key_pk_parts_2 ( col_decimal_unsigned_not_null , col_set_key , col_enum_key ) VALUES ( 4 , -4338432 , '05:31:13' );
+INSERT /*+ ENABLE_PARALLEL_DML PARALLEL(3) */ INTO table0_innodb_key_pk_parts_2 ( col_char_not_null_key , col_enum_not_null , col_enum ) VALUES ( '2003-06-24 04:26:58.057298' , 'arzwkjqshciwulehkuyzewxtpbpfmfj' , '2003' );
+INSERT /*+ ENABLE_PARALLEL_DML PARALLEL(3) */ INTO table0_innodb_key_pk_parts_2 ( col_decimal_unsigned , col_int_key , col_float ) VALUES ( 'lq' , '2005' , '2003-06-11 10:08:30' );
+INSERT /*+ ENABLE_PARALLEL_DML PARALLEL(3) */ INTO table0_innodb_key_pk_parts_2 ( col_char_not_null , col_char , col_int_not_null_key ) VALUES ( 8 , -7474944 , 896512 );
+INSERT /*+ ENABLE_PARALLEL_DML PARALLEL(3) */ INTO table0_innodb_key_pk_parts_2 ( col_bit_not_null_key , col_blob_not_null , pk ) VALUES ( '20:58:15' , 'hrzplcvmxggypuvoppkxwfvkhchskzmiwiombucu' , 30604 );
+INSERT /*+ ENABLE_PARALLEL_DML PARALLEL(3) */ INTO table0_innodb_key_pk_parts_2 ( col_float_unsigned_not_null_ke , col_char_key , col_char ) VALUES ( '2008' , '2001' , 3 );
+--error 1048
+INSERT /*+ ENABLE_PARALLEL_DML PARALLEL(3) */ INTO table0_innodb_key_pk_parts_2 ( col_enum_not_null_key , col_decimal_unsigned_not_null_ , col_blob ) VALUES ( 26681 , NULL , 14465 );
+INSERT /*+ ENABLE_PARALLEL_DML PARALLEL(3) */ INTO table0_innodb_key_pk_parts_2 ( col_enum , col_enum_not_null , col_decimal ) VALUES ( '2006-04-09 05:33:14.045216' , '2008' , '2004-09-17 09:11:54.004359' );
+INSERT /*+ ENABLE_PARALLEL_DML PARALLEL(3) */ INTO table0_innodb_key_pk_parts_2 ( col_blob_key , col_int_unsigned_not_null , col_int_not_null_key ) VALUES ( '20:35:45' , 47682 , 1319 );
+
+--error 1048
+UPDATE /*+ ENABLE_PARALLEL_DML PARALLEL(3) */ table0_innodb_key_pk_parts_2 SET col_blob_not_null_key = NULL WHERE col_bit_not_null <> '08:59:21';
+select * from table0_innodb_key_pk_parts_2;
+drop table table0_innodb_key_pk_parts_2;
+--enable_warnings

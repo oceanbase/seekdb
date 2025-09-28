@@ -1,0 +1,199 @@
+/**
+ * Copyright (c) 2021 OceanBase
+ * OceanBase CE is licensed under Mulan PubL v2.
+ * You can use this software according to the terms and conditions of the Mulan PubL v2.
+ * You may obtain a copy of Mulan PubL v2 at:
+ *          http://license.coscl.org.cn/MulanPubL-2.0
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PubL v2 for more details.
+ */
+
+#define USING_LOG_PREFIX SQL_OPT
+#include "ob_log_delete.h"
+#include "sql/optimizer/ob_join_order.h"
+
+using namespace oceanbase;
+using namespace sql;
+using namespace oceanbase::common;
+
+const char *ObLogDelete::get_name() const
+{
+  const char *name = NULL;
+  if (is_multi_part_dml()) {
+    name = "DISTRIBUTED DELETE";
+  } else if (is_pdml() && is_index_maintenance()) {
+    // PDML 索引表的delete，使用 INDEX DELETE
+    name = "INDEX DELETE";
+  } else {
+    // 默认Delete的name：DELETE
+    // PDML 主表的delete，也默认使用name：DELETE
+    name = ObLogDelUpd::get_name();
+  }
+  return name;
+}
+
+int ObLogDelete::est_cost()
+{
+  int ret = OB_SUCCESS;
+  ObLogicalOperator *child = NULL;
+  if (OB_ISNULL(child = get_child(ObLogicalOperator::first_child))) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("child is null", K(ret), K(child));
+  } else {
+    double op_cost = 0.0;
+    if (OB_FAIL(inner_est_cost(child->get_card(), op_cost))) {
+      LOG_WARN("failed to get delete cost", K(ret));
+    } else {
+      set_op_cost(op_cost);
+      set_cost(child->get_cost() + get_op_cost());
+      set_card(child->get_card());
+    }
+  }
+  return ret;
+}
+
+int ObLogDelete::do_re_est_cost(EstimateCostInfo &param, double &card, double &op_cost, double &cost)
+{
+  int ret = OB_SUCCESS;
+  ObLogicalOperator *child = NULL;
+  if (OB_ISNULL(child = get_child(ObLogicalOperator::first_child))) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get unexpected null", K(child), K(ret));
+  } else {
+    double child_card = child->get_card();
+    double child_cost = child->get_cost();
+    if (OB_FAIL(SMART_CALL(child->re_est_cost(param, child_card, child_cost)))) {
+      LOG_WARN("failed to re est exchange cost", K(ret));
+    } else if (OB_FAIL(inner_est_cost(child_card, op_cost))) {
+      LOG_WARN("failed to get delete cost", K(ret));
+    } else {
+      cost = child_cost + op_cost;
+      card = child_card;
+    }
+  }
+  return ret;
+}
+
+int ObLogDelete::inner_est_cost(double child_card, double &op_cost)
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(get_plan())) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get unexpected null", K(ret), K(get_plan()));
+  } else if (OB_FAIL(inner_est_cost(get_plan()->get_optimizer_context(),
+                                    get_index_dml_infos(),
+                                    child_card,
+                                    op_cost))) {
+    LOG_WARN("failed to get delete cost", K(ret));
+  }
+  return ret;
+}
+
+int ObLogDelete::inner_est_cost(const ObOptimizerContext &opt_ctx,
+                                const ObIArray<IndexDMLInfo*> &index_infos,
+                                const double child_card,
+                                double &op_cost)
+{
+  int ret = OB_SUCCESS;
+  ObDelUpCostInfo cost_info(0,0,0);
+  cost_info.affect_rows_ = child_card;
+  cost_info.index_count_ = index_infos.count();
+  IndexDMLInfo* delete_dml_info = nullptr;
+  if (OB_UNLIKELY(cost_info.index_count_ <= 0) ||
+      OB_ISNULL(delete_dml_info = index_infos.at(0))) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get unexpected null", K(ret), K(delete_dml_info));
+  } else if (OB_FALSE_IT(cost_info.constraint_count_ = delete_dml_info->ck_cst_exprs_.count())) {
+  } else if (OB_FAIL(ObOptEstCost::cost_delete(cost_info, op_cost, opt_ctx))) {
+    LOG_WARN("failed to get delete cost", K(ret));
+  }
+  return ret;
+}
+
+int ObLogDelete::get_op_exprs(ObIArray<ObRawExpr*> &all_exprs)
+{
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(ObLogDelUpd::inner_get_op_exprs(all_exprs, true))) {
+    LOG_WARN("failed to get op exprs", K(ret));
+  } else { /*do nothing*/ }
+  return ret;
+}
+
+int ObLogDelete::is_my_fixed_expr(const ObRawExpr *expr, bool &is_fixed)
+{
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(is_dml_fixed_expr(expr, get_index_dml_infos(), is_fixed))) {
+    LOG_WARN("failed to check is my fixed expr", K(ret));
+  }
+  return ret;
+}
+
+int ObLogDelete::generate_multi_part_partition_id_expr()
+{
+  int ret = OB_SUCCESS;
+  for (int64_t i = 0; OB_SUCC(ret) && i < get_index_dml_infos().count(); ++i) {
+    if (OB_ISNULL(get_index_dml_infos().at(i))) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("index dml info is null", K(ret));
+    } else if (OB_FAIL(generate_old_calc_partid_expr(*get_index_dml_infos().at(i)))) {
+      LOG_WARN("failed to generate calc partid expr", K(ret));
+    } else { /*do nothing*/ }
+  }
+  return ret;
+}
+
+int ObLogDelete::generate_part_id_expr_for_foreign_key(ObIArray<ObRawExpr*> &all_exprs)
+{
+  // NOTE: for delete parent table, don't support foregin key checks use das task now,
+  // no need to generate part id expr, do nothing here
+  int ret = OB_SUCCESS;
+  
+  return ret;
+}
+
+int ObLogDelete::get_plan_item_info(PlanText &plan_text, 
+                                    ObSqlPlanItem &plan_item)
+{
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(ObLogDelUpd::get_plan_item_info(plan_text, plan_item))) {
+    LOG_WARN("failed to get plan item info", K(ret));
+  } else {
+    BEGIN_BUF_PRINT; 
+    if (OB_FAIL(print_table_infos(ObString::make_string("table_columns"),
+                                  buf, 
+                                  buf_len, 
+                                  pos,
+                                  type))) {
+      LOG_WARN("failed to print table infos", K(ret));
+    } else if (need_barrier()) {
+      ret = BUF_PRINTF(", ");
+      ret = BUF_PRINTF("with_barrier");
+    }
+    if (OB_SUCC(ret) && get_das_dop() > 0) {
+      ret = BUF_PRINTF(", das_dop=%ld", this->get_das_dop());
+    }
+    END_BUF_PRINT(plan_item.special_predicates_, 
+                  plan_item. special_predicates_len_);
+  }
+  return ret;
+}
+
+int ObLogDelete::op_is_update_pk_with_dop(bool &is_update)
+{
+  int ret = OB_SUCCESS;
+  is_update = false;
+  if (!index_dml_infos_.empty()) {
+    IndexDMLInfo *index_dml_info = index_dml_infos_.at(0);
+    if (OB_ISNULL(index_dml_info)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("unexpected nullptr", K(ret), K(index_dml_infos_));
+    } else if (!is_pdml_update_split_) {
+      // is_update = false;
+    } else if (index_dml_info->is_update_primary_key_ && (is_pdml() || get_das_dop() > 1)) {
+      is_update = true;
+    }
+  }
+  return ret;
+}

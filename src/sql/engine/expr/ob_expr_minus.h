@@ -1,0 +1,219 @@
+/**
+ * Copyright (c) 2021 OceanBase
+ * OceanBase CE is licensed under Mulan PubL v2.
+ * You can use this software according to the terms and conditions of the Mulan PubL v2.
+ * You may obtain a copy of Mulan PubL v2 at:
+ *          http://license.coscl.org.cn/MulanPubL-2.0
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PubL v2 for more details.
+ */
+
+#ifndef _OB_EXPR_MINUS_H_
+#define _OB_EXPR_MINUS_H_
+#include <math.h>
+#include "sql/engine/expr/ob_expr_operator.h"
+namespace oceanbase
+{
+namespace sql
+{
+class ObExprCGCtx;
+class ObExprMinus: public ObArithExprOperator
+{
+public:
+  ObExprMinus();
+  explicit  ObExprMinus(common::ObIAllocator &alloc, ObExprOperatorType type = T_OP_MINUS);
+  virtual ~ObExprMinus() {};
+  virtual int calc_result_type2(ObExprResType &type,
+                                ObExprResType &type1,
+                                ObExprResType &type2,
+                                common::ObExprTypeCtx &type_ctx) const;
+  static int minus_datetime(common::ObObj &res,
+                            const common::ObObj &left,
+                            const common::ObObj &right,
+                            common::ObIAllocator *allocator,
+                            common::ObScale scale);
+  virtual int cg_expr(ObExprCGCtx &op_cg_ctx,
+                      const ObRawExpr &raw_expr,
+                      ObExpr &rt_expr) const override;
+private:
+  OB_INLINE static int minus_int(common::ObObj &res,
+                       const common::ObObj &left,
+                       const common::ObObj &right,
+                       common::ObIAllocator *allocator,
+                       common::ObScale scale);
+  OB_INLINE static int minus_uint(common::ObObj &res,
+                        const common::ObObj &left,
+                        const common::ObObj &right,
+                        common::ObIAllocator *allocator,
+                        common::ObScale scale);
+  static int minus_double(common::ObObj &res,
+                          const common::ObObj &left,
+                          const common::ObObj &right,
+                          common::ObIAllocator *allocator,
+                          common::ObScale scale);
+  static int minus_double_no_overflow(common::ObObj &res,
+                                      const common::ObObj &left,
+                                      const common::ObObj &right,
+                                      common::ObIAllocator *allocator,
+                                      common::ObScale scale);
+  static int minus_number(common::ObObj &res,
+                          const common::ObObj &left,
+                          const common::ObObj &right,
+                          common::ObIAllocator *allocator,
+                          common::ObScale scale);
+
+
+  DISALLOW_COPY_AND_ASSIGN(ObExprMinus);
+
+public:
+  static int minus_null(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum);
+  static int minus_int_int(EVAL_FUNC_ARG_DECL);
+  static int minus_int_int_batch(BATCH_EVAL_FUNC_ARG_DECL);
+  static int minus_int_int_vector(VECTOR_EVAL_FUNC_ARG_DECL);
+
+  static int minus_int_uint(EVAL_FUNC_ARG_DECL);
+  static int minus_int_uint_batch(BATCH_EVAL_FUNC_ARG_DECL);
+  static int minus_int_uint_vector(VECTOR_EVAL_FUNC_ARG_DECL);
+
+  static int minus_uint_uint(EVAL_FUNC_ARG_DECL);
+  static int minus_uint_uint_batch(BATCH_EVAL_FUNC_ARG_DECL);
+  static int minus_uint_uint_vector(VECTOR_EVAL_FUNC_ARG_DECL);
+
+  static int minus_uint_int(EVAL_FUNC_ARG_DECL);
+  static int minus_uint_int_batch(BATCH_EVAL_FUNC_ARG_DECL);
+  static int minus_uint_int_vector(VECTOR_EVAL_FUNC_ARG_DECL);
+
+  static int minus_float_float(EVAL_FUNC_ARG_DECL);
+  static int minus_float_float_batch(BATCH_EVAL_FUNC_ARG_DECL);
+  static int minus_float_float_vector(VECTOR_EVAL_FUNC_ARG_DECL);
+
+  static int minus_double_double(EVAL_FUNC_ARG_DECL);
+  static int minus_double_double_batch(BATCH_EVAL_FUNC_ARG_DECL);
+  static int minus_double_double_vector(VECTOR_EVAL_FUNC_ARG_DECL);
+
+  static int minus_number_number(EVAL_FUNC_ARG_DECL);
+  static int minus_number_number_batch(BATCH_EVAL_FUNC_ARG_DECL);
+    static int minus_number_number_vector(VECTOR_EVAL_FUNC_ARG_DECL);
+
+  static int minus_datetime_number(EVAL_FUNC_ARG_DECL);
+  static int minus_datetime_number_batch(BATCH_EVAL_FUNC_ARG_DECL);
+
+  static int minus_datetime_datetime_oracle(EVAL_FUNC_ARG_DECL);
+  static int minus_datetime_datetime_oracle_batch(BATCH_EVAL_FUNC_ARG_DECL);
+
+  static int minus_datetime_datetime(EVAL_FUNC_ARG_DECL);
+  static int minus_datetime_datetime_batch(BATCH_EVAL_FUNC_ARG_DECL);
+  static int minus_decimalint32(EVAL_FUNC_ARG_DECL);
+  static int minus_decimalint32_batch(BATCH_EVAL_FUNC_ARG_DECL);
+  static int minus_decimalint32_vector(VECTOR_EVAL_FUNC_ARG_DECL);
+  static int minus_decimalint64(EVAL_FUNC_ARG_DECL);
+  static int minus_decimalint64_batch(BATCH_EVAL_FUNC_ARG_DECL);
+  static int minus_decimalint64_vector(VECTOR_EVAL_FUNC_ARG_DECL);
+  static int minus_decimalint128(EVAL_FUNC_ARG_DECL);
+  static int minus_decimalint128_batch(BATCH_EVAL_FUNC_ARG_DECL);
+  static int minus_decimalint128_vector(VECTOR_EVAL_FUNC_ARG_DECL);
+  static int minus_decimalint256(EVAL_FUNC_ARG_DECL);
+  static int minus_decimalint256_batch(BATCH_EVAL_FUNC_ARG_DECL);
+  static int minus_decimalint256_vector(VECTOR_EVAL_FUNC_ARG_DECL);
+  static int minus_decimalint512(EVAL_FUNC_ARG_DECL);
+  static int minus_decimalint512_batch(BATCH_EVAL_FUNC_ARG_DECL);
+  static int minus_decimalint512_vector(VECTOR_EVAL_FUNC_ARG_DECL);
+  static int minus_decimalint512_with_check(EVAL_FUNC_ARG_DECL);
+  static int minus_decimalint512_with_check_batch(BATCH_EVAL_FUNC_ARG_DECL);
+  static int minus_decimalint512_with_check_vector(VECTOR_EVAL_FUNC_ARG_DECL);
+  static int minus_decimalint32_oracle(EVAL_FUNC_ARG_DECL);
+  static int minus_decimalint32_oracle_batch(BATCH_EVAL_FUNC_ARG_DECL);
+  static int minus_decimalint32_oracle_vector(VECTOR_EVAL_FUNC_ARG_DECL);
+  static int minus_decimalint64_oracle(EVAL_FUNC_ARG_DECL);
+  static int minus_decimalint64_oracle_batch(BATCH_EVAL_FUNC_ARG_DECL);
+  static int minus_decimalint64_oracle_vector(VECTOR_EVAL_FUNC_ARG_DECL);
+  static int minus_decimalint128_oracle(EVAL_FUNC_ARG_DECL);
+  static int minus_decimalint128_oracle_batch(BATCH_EVAL_FUNC_ARG_DECL);
+  static int minus_decimalint128_oracle_vector(VECTOR_EVAL_FUNC_ARG_DECL);
+  static int minus_collection_collection_int8_t(EVAL_FUNC_ARG_DECL);
+  static int minus_collection_collection_int8_t_batch(BATCH_EVAL_FUNC_ARG_DECL);
+  static int minus_collection_collection_int8_t_vector(VECTOR_EVAL_FUNC_ARG_DECL);
+  static int minus_collection_collection_int16_t(EVAL_FUNC_ARG_DECL);
+  static int minus_collection_collection_int16_t_batch(BATCH_EVAL_FUNC_ARG_DECL);
+  static int minus_collection_collection_int16_t_vector(VECTOR_EVAL_FUNC_ARG_DECL);
+  static int minus_collection_collection_int32_t(EVAL_FUNC_ARG_DECL);
+  static int minus_collection_collection_int32_t_batch(BATCH_EVAL_FUNC_ARG_DECL);
+  static int minus_collection_collection_int32_t_vector(VECTOR_EVAL_FUNC_ARG_DECL);
+  static int minus_collection_collection_int64_t(EVAL_FUNC_ARG_DECL);
+  static int minus_collection_collection_int64_t_batch(BATCH_EVAL_FUNC_ARG_DECL);
+  static int minus_collection_collection_int64_t_vector(VECTOR_EVAL_FUNC_ARG_DECL);
+  static int minus_collection_collection_float(EVAL_FUNC_ARG_DECL);
+  static int minus_collection_collection_float_batch(BATCH_EVAL_FUNC_ARG_DECL);
+  static int minus_collection_collection_float_vector(VECTOR_EVAL_FUNC_ARG_DECL);
+  static int minus_collection_collection_double(EVAL_FUNC_ARG_DECL);
+  static int minus_collection_collection_double_batch(BATCH_EVAL_FUNC_ARG_DECL);
+  static int minus_collection_collection_double_vector(VECTOR_EVAL_FUNC_ARG_DECL);
+  static int minus_collection_collection_uint64_t(EVAL_FUNC_ARG_DECL);
+  static int minus_collection_collection_uint64_t_batch(BATCH_EVAL_FUNC_ARG_DECL);
+  static int minus_collection_collection_uint64_t_vector(VECTOR_EVAL_FUNC_ARG_DECL);
+
+
+public:
+  OB_INLINE static bool is_int_int_out_of_range(int64_t val1, int64_t val2, int64_t res)
+  {
+    // top digit:
+    // 0 - 0     : safe
+    // 1 - 1     : safe
+    // 0 - 1 = 1 : overflow
+    // 0 - 1 = 0 : safe
+    // 1 - 0 = 1 : safe
+    // 1 - 0 = 0 : underflow
+    return (val1 >> SHIFT_OFFSET) != (res >>SHIFT_OFFSET) &&
+           (val2 >> SHIFT_OFFSET) == (res >> SHIFT_OFFSET);
+  }
+  OB_INLINE static bool is_int_uint_out_of_range(int64_t val1, uint64_t val2, uint64_t res)
+  {
+    // top digit:
+    // 0 - 0 = 0 : safe
+    // 0 - 0 = 1 : underflow
+    // 0 - 1     : underflow
+    // 1 - 0     : underflow
+    // 1 - 1     : underflow
+    return !(0 == (val1 >> SHIFT_OFFSET) &&
+             0 == (val2 >> SHIFT_OFFSET) &&
+             0 == (res >> SHIFT_OFFSET));
+  }
+  OB_INLINE static bool is_uint_int_out_of_range(uint64_t val1, int64_t val2, uint64_t res)
+  {
+    // top digit:
+    // 0 - 1     : safe
+    // 1 - 1 = 0 : overflow
+    // 1 - 1 = 1 : safe
+    // 0 - 0 = 0 : safe
+    // 0 - 0 = 1 : underflow
+    // 0 - 1     : safe
+    return (val1 >> SHIFT_OFFSET) == (static_cast<uint64_t>(val2) >> SHIFT_OFFSET) &&
+           (val1 >> SHIFT_OFFSET) != (res >> SHIFT_OFFSET);
+  }
+  OB_INLINE static bool is_uint_uint_out_of_range(uint64_t val1, uint64_t val2, uint64_t res)
+  {
+    UNUSED(res);
+    return val1 < val2;
+  }
+private:
+  static ObArithFunc minus_funcs_[common::ObMaxTC];
+  static ObArithFunc agg_minus_funcs_[common::ObMaxTC];
+  static const int64_t SHIFT_OFFSET = 63;
+};
+
+// Minus expr for aggregation, different with ObExprMinus:
+//  No overflow check for double type.
+class ObExprAggMinus : public ObExprMinus
+{
+public:
+  explicit ObExprAggMinus(common::ObIAllocator &alloc)
+      : ObExprMinus(alloc, T_OP_AGG_MINUS)
+  {
+  }
+};
+
+}
+}
+#endif  /* _OB_EXPR_MINUS_H_ */

@@ -1,0 +1,270 @@
+/**
+ * Copyright (c) 2021 OceanBase
+ * OceanBase CE is licensed under Mulan PubL v2.
+ * You can use this software according to the terms and conditions of the Mulan PubL v2.
+ * You may obtain a copy of Mulan PubL v2 at:
+ *          http://license.coscl.org.cn/MulanPubL-2.0
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PubL v2 for more details.
+ */
+
+#ifndef _OB_EXPR_MUL_H_
+#define _OB_EXPR_MUL_H_
+
+#include <cmath>
+#include "sql/engine/expr/ob_expr_operator.h"
+namespace oceanbase
+{
+namespace sql
+{
+using namespace common::number;
+class ObExprMul: public ObArithExprOperator
+{
+public:
+  ObExprMul();
+  explicit  ObExprMul(common::ObIAllocator &alloc, ObExprOperatorType type = T_OP_MUL);
+  virtual ~ObExprMul() {};
+  virtual int calc_result_type2(ObExprResType &type,
+                                ObExprResType &type1,
+                                ObExprResType &type2,
+                                common::ObExprTypeCtx &type_ctx) const;
+
+  static int mul_int_int(EVAL_FUNC_ARG_DECL);
+  static int mul_int_int_batch(BATCH_EVAL_FUNC_ARG_DECL);
+  static int mul_int_int_vector(VECTOR_EVAL_FUNC_ARG_DECL);
+
+  static int mul_int_uint(EVAL_FUNC_ARG_DECL);
+  static int mul_int_uint_batch(BATCH_EVAL_FUNC_ARG_DECL);
+  static int mul_int_uint_vector(VECTOR_EVAL_FUNC_ARG_DECL);
+
+  static int mul_uint_int(EVAL_FUNC_ARG_DECL);
+  static int mul_uint_int_batch(BATCH_EVAL_FUNC_ARG_DECL);
+  static int mul_uint_int_vector(VECTOR_EVAL_FUNC_ARG_DECL);
+
+  static int mul_uint_uint(EVAL_FUNC_ARG_DECL);
+  static int mul_uint_uint_batch(BATCH_EVAL_FUNC_ARG_DECL);
+  static int mul_uint_uint_vector(VECTOR_EVAL_FUNC_ARG_DECL);
+
+  static int mul_float(EVAL_FUNC_ARG_DECL);
+  static int mul_float_batch(BATCH_EVAL_FUNC_ARG_DECL);
+  static int mul_float_vector(VECTOR_EVAL_FUNC_ARG_DECL);
+
+  static int mul_double(EVAL_FUNC_ARG_DECL);
+  static int mul_double_batch(BATCH_EVAL_FUNC_ARG_DECL);
+  static int mul_double_vector(VECTOR_EVAL_FUNC_ARG_DECL);
+
+  static int mul_number(EVAL_FUNC_ARG_DECL);
+  static int mul_number_batch(BATCH_EVAL_FUNC_ARG_DECL);
+  static int mul_number_vector(VECTOR_EVAL_FUNC_ARG_DECL);
+  static int mul_decimalint32_int32_int32(EVAL_FUNC_ARG_DECL);
+  static int mul_decimalint32_int32_int32_batch(BATCH_EVAL_FUNC_ARG_DECL);
+  static int mul_decimalint32_int32_int32_vector(VECTOR_EVAL_FUNC_ARG_DECL);
+  static int mul_decimalint64_int32_int32(EVAL_FUNC_ARG_DECL);
+  static int mul_decimalint64_int32_int32_batch(BATCH_EVAL_FUNC_ARG_DECL);
+  static int mul_decimalint64_int32_int32_vector(VECTOR_EVAL_FUNC_ARG_DECL);
+  static int mul_decimalint64_int32_int64(EVAL_FUNC_ARG_DECL);
+  static int mul_decimalint64_int32_int64_batch(BATCH_EVAL_FUNC_ARG_DECL);
+  static int mul_decimalint64_int32_int64_vector(VECTOR_EVAL_FUNC_ARG_DECL);
+  static int mul_decimalint64_int64_int32(EVAL_FUNC_ARG_DECL);
+  static int mul_decimalint64_int64_int32_batch(BATCH_EVAL_FUNC_ARG_DECL);
+  static int mul_decimalint64_int64_int32_vector(VECTOR_EVAL_FUNC_ARG_DECL);
+  static int mul_decimalint128_int32_int64(EVAL_FUNC_ARG_DECL);
+  static int mul_decimalint128_int32_int64_batch(BATCH_EVAL_FUNC_ARG_DECL);
+  static int mul_decimalint128_int32_int64_vector(VECTOR_EVAL_FUNC_ARG_DECL);
+  static int mul_decimalint128_int64_int32(EVAL_FUNC_ARG_DECL);
+  static int mul_decimalint128_int64_int32_batch(BATCH_EVAL_FUNC_ARG_DECL);
+  static int mul_decimalint128_int64_int32_vector(VECTOR_EVAL_FUNC_ARG_DECL);
+  static int mul_decimalint128_int32_int128(EVAL_FUNC_ARG_DECL);
+  static int mul_decimalint128_int32_int128_batch(BATCH_EVAL_FUNC_ARG_DECL);
+  static int mul_decimalint128_int32_int128_vector(VECTOR_EVAL_FUNC_ARG_DECL);
+  static int mul_decimalint128_int128_int32(EVAL_FUNC_ARG_DECL);
+  static int mul_decimalint128_int128_int32_batch(BATCH_EVAL_FUNC_ARG_DECL);
+  static int mul_decimalint128_int128_int32_vector(VECTOR_EVAL_FUNC_ARG_DECL);
+  static int mul_decimalint128_int64_int64(EVAL_FUNC_ARG_DECL);
+  static int mul_decimalint128_int64_int64_batch(BATCH_EVAL_FUNC_ARG_DECL);
+  static int mul_decimalint128_int64_int64_vector(VECTOR_EVAL_FUNC_ARG_DECL);
+  static int mul_decimalint128_int64_int128(EVAL_FUNC_ARG_DECL);
+  static int mul_decimalint128_int64_int128_batch(BATCH_EVAL_FUNC_ARG_DECL);
+  static int mul_decimalint128_int64_int128_vector(VECTOR_EVAL_FUNC_ARG_DECL);
+  static int mul_decimalint128_int128_int64(EVAL_FUNC_ARG_DECL);
+  static int mul_decimalint128_int128_int64_batch(BATCH_EVAL_FUNC_ARG_DECL);
+  static int mul_decimalint128_int128_int64_vector(VECTOR_EVAL_FUNC_ARG_DECL);
+  static int mul_decimalint128_int128_int128(EVAL_FUNC_ARG_DECL);
+  static int mul_decimalint128_int128_int128_batch(BATCH_EVAL_FUNC_ARG_DECL);
+  static int mul_decimalint128_int128_int128_vector(VECTOR_EVAL_FUNC_ARG_DECL);
+  static int mul_decimalint256_int32_int128(EVAL_FUNC_ARG_DECL);
+  static int mul_decimalint256_int32_int128_batch(BATCH_EVAL_FUNC_ARG_DECL);
+  static int mul_decimalint256_int32_int128_vector(VECTOR_EVAL_FUNC_ARG_DECL);
+  static int mul_decimalint256_int128_int32(EVAL_FUNC_ARG_DECL);
+  static int mul_decimalint256_int128_int32_batch(BATCH_EVAL_FUNC_ARG_DECL);
+  static int mul_decimalint256_int128_int32_vector(VECTOR_EVAL_FUNC_ARG_DECL);
+  static int mul_decimalint256_int32_int256(EVAL_FUNC_ARG_DECL);
+  static int mul_decimalint256_int32_int256_batch(BATCH_EVAL_FUNC_ARG_DECL);
+  static int mul_decimalint256_int32_int256_vector(VECTOR_EVAL_FUNC_ARG_DECL);
+  static int mul_decimalint256_int256_int32(EVAL_FUNC_ARG_DECL);
+  static int mul_decimalint256_int256_int32_batch(BATCH_EVAL_FUNC_ARG_DECL);
+  static int mul_decimalint256_int256_int32_vector(VECTOR_EVAL_FUNC_ARG_DECL);
+  static int mul_decimalint256_int64_int128(EVAL_FUNC_ARG_DECL);
+  static int mul_decimalint256_int64_int128_batch(BATCH_EVAL_FUNC_ARG_DECL);
+  static int mul_decimalint256_int64_int128_vector(VECTOR_EVAL_FUNC_ARG_DECL);
+  static int mul_decimalint256_int128_int64(EVAL_FUNC_ARG_DECL);
+  static int mul_decimalint256_int128_int64_batch(BATCH_EVAL_FUNC_ARG_DECL);
+  static int mul_decimalint256_int128_int64_vector(VECTOR_EVAL_FUNC_ARG_DECL);
+  static int mul_decimalint256_int64_int256(EVAL_FUNC_ARG_DECL);
+  static int mul_decimalint256_int64_int256_batch(BATCH_EVAL_FUNC_ARG_DECL);
+  static int mul_decimalint256_int64_int256_vector(VECTOR_EVAL_FUNC_ARG_DECL);
+  static int mul_decimalint256_int256_int64(EVAL_FUNC_ARG_DECL);
+  static int mul_decimalint256_int256_int64_batch(BATCH_EVAL_FUNC_ARG_DECL);
+  static int mul_decimalint256_int256_int64_vector(VECTOR_EVAL_FUNC_ARG_DECL);
+  static int mul_decimalint256_int128_int128(EVAL_FUNC_ARG_DECL);
+  static int mul_decimalint256_int128_int128_batch(BATCH_EVAL_FUNC_ARG_DECL);
+  static int mul_decimalint256_int128_int128_vector(VECTOR_EVAL_FUNC_ARG_DECL);
+  static int mul_decimalint256_int128_int256(EVAL_FUNC_ARG_DECL);
+  static int mul_decimalint256_int128_int256_batch(BATCH_EVAL_FUNC_ARG_DECL);
+  static int mul_decimalint256_int128_int256_vector(VECTOR_EVAL_FUNC_ARG_DECL);
+  static int mul_decimalint256_int256_int128(EVAL_FUNC_ARG_DECL);
+  static int mul_decimalint256_int256_int128_batch(BATCH_EVAL_FUNC_ARG_DECL);
+  static int mul_decimalint256_int256_int128_vector(VECTOR_EVAL_FUNC_ARG_DECL);
+  static int mul_decimalint512_int512_int512(EVAL_FUNC_ARG_DECL);
+  static int mul_decimalint512_int512_int512_batch(BATCH_EVAL_FUNC_ARG_DECL);
+  static int mul_decimalint512_int512_int512_vector(VECTOR_EVAL_FUNC_ARG_DECL);
+  static int mul_decimalint512_with_check(EVAL_FUNC_ARG_DECL);
+  static int mul_decimalint512_with_check_batch(BATCH_EVAL_FUNC_ARG_DECL);
+  static int mul_decimalint512_with_check_vector(VECTOR_EVAL_FUNC_ARG_DECL);
+  static int mul_decimalint64_round(EVAL_FUNC_ARG_DECL);
+  static int mul_decimalint64_round_batch(BATCH_EVAL_FUNC_ARG_DECL);
+  static int mul_decimalint64_round_vector(VECTOR_EVAL_FUNC_ARG_DECL);
+  static int mul_decimalint128_round(EVAL_FUNC_ARG_DECL);
+  static int mul_decimalint128_round_batch(BATCH_EVAL_FUNC_ARG_DECL);
+  static int mul_decimalint128_round_vector(VECTOR_EVAL_FUNC_ARG_DECL);
+  static int mul_decimalint256_round(EVAL_FUNC_ARG_DECL);
+  static int mul_decimalint256_round_batch(BATCH_EVAL_FUNC_ARG_DECL);
+  static int mul_decimalint256_round_vector(VECTOR_EVAL_FUNC_ARG_DECL);
+  static int mul_decimalint512_round(EVAL_FUNC_ARG_DECL);
+  static int mul_decimalint512_round_batch(BATCH_EVAL_FUNC_ARG_DECL);
+  static int mul_decimalint512_round_vector(VECTOR_EVAL_FUNC_ARG_DECL);
+  static int mul_decimalint512_round_with_check(EVAL_FUNC_ARG_DECL);
+  static int mul_decimalint512_round_with_check_batch(BATCH_EVAL_FUNC_ARG_DECL);
+  static int mul_decimalint512_round_with_check_vector(VECTOR_EVAL_FUNC_ARG_DECL);
+  static int mul_decimalint32_int32_int32_oracle(EVAL_FUNC_ARG_DECL);
+  static int mul_decimalint32_int32_int32_oracle_batch(BATCH_EVAL_FUNC_ARG_DECL);
+  static int mul_decimalint32_int32_int32_oracle_vector(VECTOR_EVAL_FUNC_ARG_DECL);
+  static int mul_decimalint64_int32_int32_oracle(EVAL_FUNC_ARG_DECL);
+  static int mul_decimalint64_int32_int32_oracle_batch(BATCH_EVAL_FUNC_ARG_DECL);
+  static int mul_decimalint64_int32_int32_oracle_vector(VECTOR_EVAL_FUNC_ARG_DECL);
+  static int mul_decimalint64_int32_int64_oracle(EVAL_FUNC_ARG_DECL);
+  static int mul_decimalint64_int32_int64_oracle_batch(BATCH_EVAL_FUNC_ARG_DECL);
+  static int mul_decimalint64_int32_int64_oracle_vector(VECTOR_EVAL_FUNC_ARG_DECL);
+  static int mul_decimalint64_int64_int32_oracle(EVAL_FUNC_ARG_DECL);
+  static int mul_decimalint64_int64_int32_oracle_batch(BATCH_EVAL_FUNC_ARG_DECL);
+  static int mul_decimalint64_int64_int32_oracle_vector(VECTOR_EVAL_FUNC_ARG_DECL);
+  static int mul_decimalint128_int32_int64_oracle(EVAL_FUNC_ARG_DECL);
+  static int mul_decimalint128_int32_int64_oracle_batch(BATCH_EVAL_FUNC_ARG_DECL);
+  static int mul_decimalint128_int32_int64_oracle_vector(VECTOR_EVAL_FUNC_ARG_DECL);
+  static int mul_decimalint128_int64_int32_oracle(EVAL_FUNC_ARG_DECL);
+  static int mul_decimalint128_int64_int32_oracle_batch(BATCH_EVAL_FUNC_ARG_DECL);
+  static int mul_decimalint128_int64_int32_oracle_vector(VECTOR_EVAL_FUNC_ARG_DECL);
+  static int mul_decimalint128_int32_int128_oracle(EVAL_FUNC_ARG_DECL);
+  static int mul_decimalint128_int32_int128_oracle_batch(BATCH_EVAL_FUNC_ARG_DECL);
+  static int mul_decimalint128_int32_int128_oracle_vector(VECTOR_EVAL_FUNC_ARG_DECL);
+  static int mul_decimalint128_int128_int32_oracle(EVAL_FUNC_ARG_DECL);
+  static int mul_decimalint128_int128_int32_oracle_batch(BATCH_EVAL_FUNC_ARG_DECL);
+  static int mul_decimalint128_int128_int32_oracle_vector(VECTOR_EVAL_FUNC_ARG_DECL);
+  static int mul_decimalint128_int64_int64_oracle(EVAL_FUNC_ARG_DECL);
+  static int mul_decimalint128_int64_int64_oracle_batch(BATCH_EVAL_FUNC_ARG_DECL);
+  static int mul_decimalint128_int64_int64_oracle_vector(VECTOR_EVAL_FUNC_ARG_DECL);
+  static int mul_decimalint128_int64_int128_oracle(EVAL_FUNC_ARG_DECL);
+  static int mul_decimalint128_int64_int128_oracle_batch(BATCH_EVAL_FUNC_ARG_DECL);
+  static int mul_decimalint128_int64_int128_oracle_vector(VECTOR_EVAL_FUNC_ARG_DECL);
+  static int mul_decimalint128_int128_int64_oracle(EVAL_FUNC_ARG_DECL);
+  static int mul_decimalint128_int128_int64_oracle_batch(BATCH_EVAL_FUNC_ARG_DECL);
+  static int mul_decimalint128_int128_int64_oracle_vector(VECTOR_EVAL_FUNC_ARG_DECL);
+  static int mul_decimalint128_int128_int128_oracle(EVAL_FUNC_ARG_DECL);
+  static int mul_decimalint128_int128_int128_oracle_batch(BATCH_EVAL_FUNC_ARG_DECL);
+  static int mul_decimalint128_int128_int128_oracle_vector(VECTOR_EVAL_FUNC_ARG_DECL);
+
+  static int mul_vec_vec(EVAL_FUNC_ARG_DECL);
+  static int mul_vec_vec_batch(BATCH_EVAL_FUNC_ARG_DECL);
+
+  // temporary used, remove after all expr converted
+  virtual int cg_expr(ObExprCGCtx &op_cg_ctx,
+                      const ObRawExpr &raw_expr,
+                      ObExpr &rt_expr) const override;
+
+  static int mul_int(common::ObObj &res,
+                     const common::ObObj &left,
+                     const common::ObObj &right,
+                     common::ObIAllocator *allocator,
+                     common::ObScale scale);
+  static int mul_uint(common::ObObj &res,
+                      const common::ObObj &left,
+                      const common::ObObj &right,
+                      common::ObIAllocator *allocator,
+                      common::ObScale scale);
+  static int mul_double(common::ObObj &res,
+                        const common::ObObj &left,
+                        const common::ObObj &right,
+                        common::ObIAllocator *allocator,
+                        common::ObScale scale);
+  static int mul_double_no_overflow(common::ObObj &res,
+                                    const common::ObObj &left,
+                                    const common::ObObj &right,
+                                    common::ObIAllocator *allocator,
+                                    common::ObScale scale);
+  static int mul_number(common::ObObj &res,
+                        const common::ObObj &left,
+                        const common::ObObj &right,
+                        common::ObIAllocator *allocator,
+                        common::ObScale scale);
+private:
+  DISALLOW_COPY_AND_ASSIGN(ObExprMul);
+public:
+  //very very effective implementation
+  //if false is returned, the result of multiplication will be stored in res
+  template<typename T1, typename T2, typename T3>
+  OB_INLINE static bool is_mul_out_of_range(T1 val1, T2 val2, T3 &res)
+  {
+    return __builtin_mul_overflow(val1, val2, &res);
+  }
+  OB_INLINE static bool is_int_uint_mul_out_of_range(int64_t val1, uint64_t val2)
+  {
+    bool overflow = false;
+    if ((val1 < 0) && (0 != val2)) {
+      overflow = true;
+    } else {
+      overflow = is_uint_uint_mul_out_of_range(static_cast<uint64_t>(val1), val2);
+    }
+    return overflow;
+  }
+  OB_INLINE static bool is_uint_uint_mul_out_of_range(uint64_t val1, uint64_t val2) 
+  {
+    int overflow = false;
+    unsigned long long res;
+    overflow = __builtin_umulll_overflow(val1, val2, &res);
+    return overflow;
+  }
+  static int set_decimal_int_eval_func(ObExpr &rt_expr, const bool is_oracle);
+private:
+  static ObArithFunc mul_funcs_[common::ObMaxTC];
+  static ObArithFunc agg_mul_funcs_[common::ObMaxTC];
+  static const int64_t SHIFT_OFFSET = 32;
+};
+
+
+// Mul expr for aggregation, different with ObExprMul:
+//  No overflow check for double type.
+class ObExprAggMul: public ObExprMul
+{
+public:
+  explicit ObExprAggMul(common::ObIAllocator &alloc)
+      : ObExprMul(alloc, T_OP_AGG_MUL)
+  {
+  }
+};
+
+}
+}
+
+#endif  /* _OB_NAME_NUL_H_*/

@@ -1,0 +1,130 @@
+#owner: shouju.zyp
+#owner group: RS
+#tags: schema
+#description: check sys view definition in sys tenant
+--disable_abort_on_error
+connect (sys,$OBMYSQL_MS0,root,,oceanbase,$OBMYSQL_PORT);
+connection sys;
+use test;
+--source mysql_test/test_suite/histogram/include/gather_sys_table_stat.inc
+let $tenant_id = 1;
+let $cnt = query_get_value(select count(*) as cnt from oceanbase.__all_virtual_table where tenant_id = $tenant_id and table_type = 1, cnt, 1);
+
+let $idx = 1;
+while ($idx <= $cnt)
+{
+let $database_name = query_get_value(select d.database_name from oceanbase.__all_virtual_table as t join oceanbase.__all_virtual_database as d on t.tenant_id = d.tenant_id and t.database_id = d.database_id where t.tenant_id = $tenant_id and table_type = 1 order by t.table_id, database_name, $idx);
+let $table_name = query_get_value(select table_name from oceanbase.__all_virtual_table where tenant_id = $tenant_id and table_type = 1 order by table_id, table_name, $idx);
+eval desc $database_name.$table_name;
+
+let $query_type = 1;
+if ($table_name == 'CDB_IND_COLUMNS')
+{
+let $query_type = 2;
+}
+if ($table_name == 'CDB_PART_KEY_COLUMNS')
+{
+let $query_type = 2;
+}
+if ($table_name == 'CDB_SUBPART_KEY_COLUMNS')
+{
+let $query_type = 2;
+}
+if ($table_name == 'CDB_TAB_COL_STATISTICS')
+{
+let $query_type = 2;
+}
+if ($table_name == 'CDB_TAB_COLS')
+{
+let $query_type = 2;
+}
+if ($table_name == 'CDB_TAB_COLS_V$')
+{
+let $query_type = 2;
+}
+if ($table_name == 'KEY_COLUMN_USAGE')
+{
+let $query_type = 2;
+}
+if ($table_name == 'DBA_TAB_COL_STATISTICS')
+{
+let $query_type = 2;
+}
+if ($table_name == 'CDB_OB_SERVER_SPACE_USAGE')
+{
+let $query_type = 3;
+}
+
+if ($query_type == 1)
+{
+--replace_column 1 1
+eval select /*+QUERY_TIMEOUT(60000000)*/ count(*) as cnt from (select * from $database_name.$table_name limit 1);
+}
+
+if ($query_type == 2)
+{
+eval select /*+QUERY_TIMEOUT(1000000000)*/ IF(count(*) >= 0, 1, 0) from $database_name.$table_name;
+}
+
+if ($query_type == 3)
+{
+--disable_warnings
+--replace_column 1 1
+eval select /*+QUERY_TIMEOUT(60000000)*/ count(*) as cnt from (select * from $database_name.$table_name limit 1);
+--enable_warnings
+}
+
+inc $idx;
+}
+
+connection sys;
+#It is expected to be an empty set, which means that all GV$ and V$ view column names are defined consistently.
+--disable_warnings
+select case cnt when 0 then NULL else 'UNEXPECTED ERROR: It is expected to be an empty set, which means that all GV$ and V$ view column names are defined consistently' end ERROR_INFO from (select /*+no_rewrite*/ count(*) cnt from
+(SELECT t.table_name,
+       group_concat(c.column_name) as column_name_list
+FROM   oceanbase.__all_table t,
+        oceanbase.__all_column c
+WHERE  c.table_id = t.table_id
+       AND t.table_id > 20000
+       AND t.table_id < 25000
+       AND t.table_id != 21342
+       AND t.object_status = 1
+       AND t.table_name LIKE 'V$%'
+GROUP  BY t.table_name) t1
+join
+(SELECT t.table_name,
+       group_concat(c.column_name) as column_name_list
+FROM   oceanbase.__all_table t,
+        oceanbase.__all_column c
+WHERE  c.table_id = t.table_id
+       AND t.table_id > 20000
+       AND t.table_id < 25000
+       AND t.table_name LIKE 'GV$%'
+GROUP  BY t.table_name) t2
+on t1.table_name = substr(t2.table_name,2) and t1.column_name_list != t2.column_name_list) T;
+
+select /*+no_rewrite*/ t1.table_name,t2.table_name from
+(SELECT t.table_name,
+       group_concat(c.column_name) as column_name_list
+FROM   oceanbase.__all_table t,
+        oceanbase.__all_column c
+WHERE  c.table_id = t.table_id
+       AND t.table_id > 20000
+       AND t.table_id < 25000
+       AND t.table_id != 21342
+       AND t.object_status = 1
+       AND t.table_name LIKE 'V$%'
+GROUP  BY t.table_name) t1
+join
+(SELECT t.table_name,
+       group_concat(c.column_name) as column_name_list
+FROM   oceanbase.__all_table t,
+        oceanbase.__all_column c
+WHERE  c.table_id = t.table_id
+       AND t.table_id > 20000
+       AND t.table_id < 25000
+       AND t.table_name LIKE 'GV$%'
+GROUP  BY t.table_name) t2
+on t1.table_name = substr(t2.table_name,2) and t1.column_name_list != t2.column_name_list;
+

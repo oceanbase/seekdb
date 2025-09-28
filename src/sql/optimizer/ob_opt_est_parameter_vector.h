@@ -1,0 +1,348 @@
+/**
+ * Copyright (c) 2021 OceanBase
+ * OceanBase CE is licensed under Mulan PubL v2.
+ * You can use this software according to the terms and conditions of the Mulan PubL v2.
+ * You may obtain a copy of Mulan PubL v2 at:
+ *          http://license.coscl.org.cn/MulanPubL-2.0
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PubL v2 for more details.
+ */
+
+#ifndef OCEANBASE_SQL_OPTIMIZER_OB_OPT_EST_PARAMETER_VECTOR_
+#define OCEANBASE_SQL_OPTIMIZER_OB_OPT_EST_PARAMETER_VECTOR_
+#include "ob_opt_cost_model_parameter.h"
+
+namespace oceanbase
+{
+namespace sql
+{
+
+const static double VECTOR_CPU_TUPLE_COST = 0.00264692180695 * DEFAULT_CPU_SPEED;
+const static double VECTOR_TABLE_SCAN_CPU_TUPLE_COST = 0.00816675438377 * DEFAULT_CPU_SPEED;
+const static double VECTOR_MICRO_BLOCK_SEQ_COST = 1.19603792057955 * DEFAULT_DISK_SEQ_READ_SPEED / DEFAULT_MACR_BLOCK_SIZE;
+const static double VECTOR_MICRO_BLOCK_RND_COST = 1.6742435644151 * DEFAULT_DISK_RND_READ_SPEED / DEFAULT_MACR_BLOCK_SIZE;
+const static double VECTOR_FETCH_ROW_RND_COST = 2.294445334 * DEFAULT_CPU_SPEED;
+const static double VECTOR_MATERIALIZE_PER_BYTE_WRITE_COST = 0.0019941666625 * DEFAULT_CPU_SPEED;
+const static double VECTOR_READ_MATERIALIZED_PER_ROW_COST = 0.00279052036722 * DEFAULT_CPU_SPEED;
+const static double VECTOR_PER_AGGR_FUNC_COST = 0.01547711103333 * DEFAULT_CPU_SPEED;
+const static double VECTOR_PER_WIN_FUNC_COST = 0.6489393333 * DEFAULT_CPU_SPEED;
+const static double VECTOR_CPU_OPERATOR_COST = 0.00441003086296 * DEFAULT_CPU_SPEED;
+const static double VECTOR_JOIN_PER_ROW_COST = 0.02229222638004 * DEFAULT_CPU_SPEED;
+const static double VECTOR_BUILD_HASH_PER_ROW_COST = 0.12472949246032 * DEFAULT_CPU_SPEED;
+const static double VECTOR_PROBE_HASH_PER_ROW_COST = 0.07363102503623 * DEFAULT_CPU_SPEED;
+const static double VECTOR_RESCAN_COST = 0.76306366670000 * DEFAULT_CPU_SPEED;
+const static double VECTOR_NETWORK_SER_PER_BYTE_COST = 0.0094539370039375 * DEFAULT_CPU_SPEED;
+const static double VECTOR_NETWORK_DESER_PER_BYTE_COST = 0.0094539370039375 * DEFAULT_CPU_SPEED;
+const static double VECTOR_NETWORK_TRANS_PER_BYTE_COST = 0.011832508338 * DEFAULT_NETWORK_SPEED;
+const static double VECTOR_PX_RESCAN_PER_ROW_COST = 398.267410467 * DEFAULT_CPU_SPEED;
+const static double VECTOR_PX_BATCH_RESCAN_PER_ROW_COST = 49.5841472833 * DEFAULT_CPU_SPEED;
+const static double VECTOR_DAS_RESCAN_PER_ROW_RPC_COST = 258.3167 * DEFAULT_NETWORK_SPEED;
+const static double VECTOR_DAS_BATCH_RESCAN_PER_ROW_RPC_COST = 2.1243 * DEFAULT_NETWORK_SPEED;
+const static double VECTOR_NL_SCAN_COST = 17.92 * DEFAULT_CPU_SPEED;
+const static double VECTOR_BATCH_NL_SCAN_COST = 15.32 * DEFAULT_CPU_SPEED;
+const static double VECTOR_NL_GET_COST = 6.4 * DEFAULT_CPU_SPEED;
+const static double VECTOR_BATCH_NL_GET_COST = 6.4 * DEFAULT_CPU_SPEED;
+const static double VECTOR_TABLE_LOOPUP_PER_ROW_RPC_COST = 20.9591092914652749211572741 * DEFAULT_CPU_SPEED;
+const static double VECTOR_INSERT_PER_ROW_COST = 6.330037500000001 * DEFAULT_CPU_SPEED;
+const static double VECTOR_INSERT_INDEX_PER_ROW_COST = 6.583673124999999 * DEFAULT_CPU_SPEED;
+const static double VECTOR_INSERT_CHECK_PER_ROW_COST = 96.2424 * DEFAULT_CPU_SPEED;
+const static double VECTOR_UPDATE_PER_ROW_COST = 7.562755000000001 * DEFAULT_CPU_SPEED;
+const static double VECTOR_UPDATE_INDEX_PER_ROW_COST = 23.969286875 * DEFAULT_CPU_SPEED;
+const static double VECTOR_UPDATE_CHECK_PER_ROW_COST = 92.15352 * DEFAULT_CPU_SPEED;
+const static double VECTOR_DELETE_PER_ROW_COST = 5.0310162499999995 * DEFAULT_CPU_SPEED;
+const static double VECTOR_DELETE_INDEX_PER_ROW_COST = 6.549611874999999 * DEFAULT_CPU_SPEED;
+const static double VECTOR_DELETE_CHECK_PER_ROW_COST = 59.4583275 * DEFAULT_CPU_SPEED;
+const static double VECTOR_SPATIAL_PER_ROW_COST = 3.2434868757557513 * DEFAULT_CPU_SPEED;  // todo: fix later
+const static double VECTOR_RANGE_COST = 2.1 * DEFAULT_CPU_SPEED;
+
+//project cost params
+//row store
+const static double VECTOR_ROW_STORE_PROJECT_COLUMN_SEQ_INT_COST = 0.02314121667000 * DEFAULT_CPU_SPEED;
+const static double VECTOR_ROW_STORE_PROJECT_COLUMN_SEQ_NUMBER_COST = 0.01602888420961 * DEFAULT_CPU_SPEED;
+const static double VECTOR_ROW_STORE_PROJECT_COLUMN_SEQ_CHAR_COST = 0.00028227202574 * DEFAULT_CPU_SPEED;
+const static double VECTOR_ROW_STORE_PROJECT_COLUMN_SEQ_LOB_COST = 6.5 * DEFAULT_CPU_SPEED;
+const static double VECTOR_ROW_STORE_PROJECT_COLUMN_SEQ_JSON_COST = 9.7 * DEFAULT_CPU_SPEED;
+const static double VECTOR_ROW_STORE_PROJECT_COLUMN_SEQ_GIS_COST = 8.9 * DEFAULT_CPU_SPEED;
+
+const static double VECTOR_ROW_STORE_PROJECT_COLUMN_RND_INT_COST = 0.08067736535000 * DEFAULT_CPU_SPEED;
+const static double VECTOR_ROW_STORE_PROJECT_COLUMN_RND_NUMBER_COST = 0.08806720526487 * DEFAULT_CPU_SPEED;
+const static double VECTOR_ROW_STORE_PROJECT_COLUMN_RND_CHAR_COST = 0.0025971659266159 * DEFAULT_CPU_SPEED;
+const static double VECTOR_ROW_STORE_PROJECT_COLUMN_RND_LOB_COST = 24.3 * DEFAULT_CPU_SPEED;
+const static double VECTOR_ROW_STORE_PROJECT_COLUMN_RND_JSON_COST = 36.7 * DEFAULT_CPU_SPEED;
+const static double VECTOR_ROW_STORE_PROJECT_COLUMN_RND_GIS_COST = 32.4 * DEFAULT_CPU_SPEED;
+//column store
+const static double VECTOR_COLUMN_STORE_PROJECT_COLUMN_SEQ_INT_COST = 0.002314121667000 * DEFAULT_CPU_SPEED;
+const static double VECTOR_COLUMN_STORE_PROJECT_COLUMN_SEQ_NUMBER_COST = 0.0041602888420961 * DEFAULT_CPU_SPEED;
+const static double VECTOR_COLUMN_STORE_PROJECT_COLUMN_SEQ_CHAR_COST = 0.000128227202574 * DEFAULT_CPU_SPEED;
+const static double VECTOR_COLUMN_STORE_PROJECT_COLUMN_SEQ_LOB_COST = 6.5 * DEFAULT_CPU_SPEED;
+const static double VECTOR_COLUMN_STORE_PROJECT_COLUMN_SEQ_JSON_COST = 9.7 * DEFAULT_CPU_SPEED;
+const static double VECTOR_COLUMN_STORE_PROJECT_COLUMN_SEQ_GIS_COST = 8.9 * DEFAULT_CPU_SPEED;
+
+const static double VECTOR_COLUMN_STORE_PROJECT_COLUMN_RND_INT_COST = 0.08067736535000 * DEFAULT_CPU_SPEED;
+const static double VECTOR_COLUMN_STORE_PROJECT_COLUMN_RND_NUMBER_COST = 0.08806720526487 * DEFAULT_CPU_SPEED;
+const static double VECTOR_COLUMN_STORE_PROJECT_COLUMN_RND_CHAR_COST = 0.0025971659266159 * DEFAULT_CPU_SPEED;
+const static double VECTOR_COLUMN_STORE_PROJECT_COLUMN_RND_LOB_COST = 24.3 * DEFAULT_CPU_SPEED;
+const static double VECTOR_COLUMN_STORE_PROJECT_COLUMN_RND_JSON_COST = 36.7 * DEFAULT_CPU_SPEED;
+const static double VECTOR_COLUMN_STORE_PROJECT_COLUMN_RND_GIS_COST = 32.4 * DEFAULT_CPU_SPEED;
+
+//compare cost params
+const static double VECTOR_CMP_INT_COST = 0.0084782994043 * DEFAULT_CPU_SPEED;
+const static double VECTOR_CMP_NUMBER_COST = 0.0144099836801 * DEFAULT_CPU_SPEED;
+const static double VECTOR_CMP_CHAR_COST = 0.03754351606603 * DEFAULT_CPU_SPEED;
+//mock complex expr cost
+const static double VECTOR_CMP_SPATIAL_COST = 19.311884382850465 * DEFAULT_CPU_SPEED;  // gis vector is not supported
+const static double VECTOR_CMP_UDF_COST = 100.0 * DEFAULT_CPU_SPEED;
+const static double VECTOR_CMP_LOB_COST = 9.707028746051587301587301588 * DEFAULT_CPU_SPEED; //NORMAL_CMP_CHAR_COST * 100
+const static double VECTOR_CMP_ERR_HANDLE_EXPR_COST = 1.00087103407539 * DEFAULT_CPU_SPEED; //NORMAL_CMP_INT_COST * 100
+//jinmao TODO: 系数要测算后再填
+const static double VECTOR_FUNCTIONAL_LOOKUP_PER_ROW_COST = 100.0 * DEFAULT_CPU_SPEED;
+const static double VECTOR_INVALID_CMP_COST = -1;
+
+//hash cost params
+const static double VECTOR_HASH_INT_COST = 0.00742821518373 * DEFAULT_CPU_SPEED;
+const static double VECTOR_HASH_NUMBER_COST = 0.01494804432806 * DEFAULT_CPU_SPEED;
+const static double VECTOR_HASH_CHAR_COST = 0.18684685876579 * DEFAULT_CPU_SPEED;
+const static double VECTOR_INVALID_HASH_COST = -1;
+
+const static double comparison_params_vector[ObMaxTC+1] = {
+  VECTOR_CMP_INT_COST,            // null
+  VECTOR_CMP_INT_COST,            // int8, int16, int24, int32, int64.
+  VECTOR_CMP_INT_COST,            // uint8, uint16, uint24, uint32, uint64.
+  VECTOR_CMP_INT_COST,            // float, ufloat.
+  VECTOR_CMP_INT_COST,            // double, udouble.
+  VECTOR_CMP_NUMBER_COST,         // number, unumber.
+  VECTOR_CMP_INT_COST,            // datetime, timestamp.
+  VECTOR_CMP_INT_COST,            // date
+  VECTOR_CMP_INT_COST,            // time
+  VECTOR_CMP_INT_COST,            // year
+  VECTOR_CMP_CHAR_COST,           // varchar, char, varbinary, binary.
+  VECTOR_CMP_INT_COST,            // extend
+  VECTOR_INVALID_CMP_COST,        // unknown
+  VECTOR_CMP_LOB_COST,            // TinyText,MediumText, Text ,LongText
+  VECTOR_CMP_INT_COST,            // Bit
+  VECTOR_CMP_CHAR_COST,           // enum, set
+  VECTOR_CMP_INT_COST,            // ObEnumSetInnerTC
+  VECTOR_CMP_INT_COST,            // timestamp with time zone
+  VECTOR_CMP_CHAR_COST,           // raw
+  VECTOR_CMP_INT_COST,            // interval
+  VECTOR_CMP_INT_COST,            // rowid
+  VECTOR_CMP_LOB_COST,            // lob
+  VECTOR_CMP_LOB_COST,            // json
+  VECTOR_CMP_SPATIAL_COST,        // geometry
+  VECTOR_CMP_UDF_COST,            // user defined type
+  VECTOR_CMP_NUMBER_COST,         // ObDecimalIntTC
+  VECTOR_CMP_LOB_COST,           // collection sql type
+  VECTOR_CMP_INT_COST,            // mysql date
+  VECTOR_CMP_INT_COST,            // mysql datetime
+  VECTOR_CMP_CHAR_COST,           // roaringbitmap
+};
+
+const static double hash_params_vector[ObMaxTC+1] = {
+  VECTOR_HASH_INT_COST,            // null
+  VECTOR_HASH_INT_COST,            // int8, int16, int24, int32, int64.
+  VECTOR_HASH_INT_COST,            // uint8, uint16, uint24, uint32, uint64.
+  VECTOR_HASH_INT_COST,            // float, ufloat.
+  VECTOR_HASH_INT_COST,            // double, udouble.
+  VECTOR_HASH_NUMBER_COST,         // number, unumber.
+  VECTOR_HASH_INT_COST,            // datetime, timestamp.
+  VECTOR_HASH_INT_COST,            // date
+  VECTOR_HASH_INT_COST,            // time
+  VECTOR_HASH_INT_COST,            // year
+  VECTOR_HASH_CHAR_COST,           // varchar, char, varbinary, binary.
+  VECTOR_HASH_INT_COST,            // extend
+  VECTOR_INVALID_HASH_COST,        // unknown
+  VECTOR_HASH_CHAR_COST,           // TinyText,MediumText, Text ,LongText
+  VECTOR_HASH_INT_COST,            // Bit
+  VECTOR_HASH_CHAR_COST,           // enum, set
+  VECTOR_HASH_INT_COST,            // ObEnumSetInnerTC
+  VECTOR_HASH_INT_COST,            // timestamp with time zone
+  VECTOR_HASH_CHAR_COST,           // raw
+  VECTOR_HASH_INT_COST,            // interval
+  VECTOR_HASH_INT_COST,            // rowid
+  VECTOR_HASH_CHAR_COST,           // lob
+  VECTOR_HASH_CHAR_COST,           // json
+  VECTOR_HASH_CHAR_COST,           // geometry
+  VECTOR_HASH_CHAR_COST,           // user defined type
+  VECTOR_HASH_NUMBER_COST,         // ObDecimalIntTC
+  VECTOR_HASH_CHAR_COST,           // collection sql type
+  VECTOR_HASH_INT_COST,            // mysql date
+  VECTOR_HASH_INT_COST,            // mysql datetime
+  VECTOR_HASH_CHAR_COST,           // roaringbitmap
+};
+
+const static double project_params_vector[2][2][ObMaxTC+1] = {
+  {
+    {// row store sequence access
+      VECTOR_ROW_STORE_PROJECT_COLUMN_SEQ_INT_COST,            // null
+      VECTOR_ROW_STORE_PROJECT_COLUMN_SEQ_INT_COST,            // int8, int16, int24, int32, int64.
+      VECTOR_ROW_STORE_PROJECT_COLUMN_SEQ_INT_COST,            // uint8, uint16, uint24, uint32, uint64.
+      VECTOR_ROW_STORE_PROJECT_COLUMN_SEQ_INT_COST,            // float, ufloat.
+      VECTOR_ROW_STORE_PROJECT_COLUMN_SEQ_INT_COST,            // double, udouble.
+      VECTOR_ROW_STORE_PROJECT_COLUMN_SEQ_NUMBER_COST,         // number, unumber.
+      VECTOR_ROW_STORE_PROJECT_COLUMN_SEQ_NUMBER_COST,         // datetime, timestamp.
+      VECTOR_ROW_STORE_PROJECT_COLUMN_SEQ_NUMBER_COST,         // date
+      VECTOR_ROW_STORE_PROJECT_COLUMN_SEQ_NUMBER_COST,         // time
+      VECTOR_ROW_STORE_PROJECT_COLUMN_SEQ_NUMBER_COST,         // year
+      VECTOR_ROW_STORE_PROJECT_COLUMN_SEQ_CHAR_COST,           // varchar, char, varbinary, binary.
+      VECTOR_ROW_STORE_PROJECT_COLUMN_SEQ_CHAR_COST,           // extend
+      VECTOR_ROW_STORE_PROJECT_COLUMN_SEQ_CHAR_COST,           // unknown
+      VECTOR_ROW_STORE_PROJECT_COLUMN_SEQ_LOB_COST,            // TinyText,MediumText, Text ,LongText
+      VECTOR_ROW_STORE_PROJECT_COLUMN_SEQ_INT_COST,            // Bit
+      VECTOR_ROW_STORE_PROJECT_COLUMN_SEQ_INT_COST,            // enum, set
+      VECTOR_ROW_STORE_PROJECT_COLUMN_SEQ_INT_COST,            // ObEnumSetInnerTC
+      VECTOR_ROW_STORE_PROJECT_COLUMN_SEQ_NUMBER_COST,         // timestamp with time zone
+      VECTOR_ROW_STORE_PROJECT_COLUMN_SEQ_INT_COST,            // raw
+      VECTOR_ROW_STORE_PROJECT_COLUMN_SEQ_INT_COST,            // interval
+      VECTOR_ROW_STORE_PROJECT_COLUMN_SEQ_NUMBER_COST,         // rowid
+      VECTOR_ROW_STORE_PROJECT_COLUMN_SEQ_LOB_COST,            // lob
+      VECTOR_ROW_STORE_PROJECT_COLUMN_SEQ_JSON_COST,           // json
+      VECTOR_ROW_STORE_PROJECT_COLUMN_SEQ_GIS_COST,            // geometry
+      VECTOR_ROW_STORE_PROJECT_COLUMN_SEQ_INT_COST,            // user defined type
+      VECTOR_ROW_STORE_PROJECT_COLUMN_SEQ_NUMBER_COST,         // ObDecimalIntTC
+      VECTOR_ROW_STORE_PROJECT_COLUMN_SEQ_LOB_COST,            // collection sql type
+    },
+    {// row store random access
+      VECTOR_ROW_STORE_PROJECT_COLUMN_RND_INT_COST,            // null
+      VECTOR_ROW_STORE_PROJECT_COLUMN_RND_INT_COST,            // int8, int16, int24, int32, int64.
+      VECTOR_ROW_STORE_PROJECT_COLUMN_RND_INT_COST,            // uint8, uint16, uint24, uint32, uint64.
+      VECTOR_ROW_STORE_PROJECT_COLUMN_RND_INT_COST,            // float, ufloat.
+      VECTOR_ROW_STORE_PROJECT_COLUMN_RND_INT_COST,            // double, udouble.
+      VECTOR_ROW_STORE_PROJECT_COLUMN_RND_NUMBER_COST,         // number, unumber.
+      VECTOR_ROW_STORE_PROJECT_COLUMN_RND_NUMBER_COST,         // datetime, timestamp.
+      VECTOR_ROW_STORE_PROJECT_COLUMN_RND_NUMBER_COST,         // date
+      VECTOR_ROW_STORE_PROJECT_COLUMN_RND_NUMBER_COST,         // time
+      VECTOR_ROW_STORE_PROJECT_COLUMN_RND_NUMBER_COST,         // year
+      VECTOR_ROW_STORE_PROJECT_COLUMN_RND_CHAR_COST,           // varchar, char, varbinary, binary.
+      VECTOR_ROW_STORE_PROJECT_COLUMN_RND_CHAR_COST,           // extend
+      VECTOR_ROW_STORE_PROJECT_COLUMN_RND_CHAR_COST,           // unknown
+      VECTOR_ROW_STORE_PROJECT_COLUMN_RND_LOB_COST,            // TinyText,MediumText, Text ,LongText
+      VECTOR_ROW_STORE_PROJECT_COLUMN_RND_INT_COST,            // Bit
+      VECTOR_ROW_STORE_PROJECT_COLUMN_RND_INT_COST,            // enum, set
+      VECTOR_ROW_STORE_PROJECT_COLUMN_RND_INT_COST,            // ObEnumSetInnerTC
+      VECTOR_ROW_STORE_PROJECT_COLUMN_RND_NUMBER_COST,         // timestamp with time zone
+      VECTOR_ROW_STORE_PROJECT_COLUMN_RND_INT_COST,            // raw
+      VECTOR_ROW_STORE_PROJECT_COLUMN_RND_INT_COST,            // interval
+      VECTOR_ROW_STORE_PROJECT_COLUMN_RND_NUMBER_COST,         // rowid
+      VECTOR_ROW_STORE_PROJECT_COLUMN_RND_LOB_COST,            // lob
+      VECTOR_ROW_STORE_PROJECT_COLUMN_RND_JSON_COST,           // json
+      VECTOR_ROW_STORE_PROJECT_COLUMN_RND_GIS_COST,            // geometry
+      VECTOR_ROW_STORE_PROJECT_COLUMN_RND_INT_COST,            // user defined type
+      VECTOR_ROW_STORE_PROJECT_COLUMN_RND_NUMBER_COST,         // ObDecimalIntTC
+      VECTOR_ROW_STORE_PROJECT_COLUMN_RND_LOB_COST,            // collection sql type
+    }
+  },
+  {
+    {// column store sequence access
+      VECTOR_COLUMN_STORE_PROJECT_COLUMN_SEQ_INT_COST,            // null
+      VECTOR_COLUMN_STORE_PROJECT_COLUMN_SEQ_INT_COST,            // int8, int16, int24, int32, int64.
+      VECTOR_COLUMN_STORE_PROJECT_COLUMN_SEQ_INT_COST,            // uint8, uint16, uint24, uint32, uint64.
+      VECTOR_COLUMN_STORE_PROJECT_COLUMN_SEQ_INT_COST,            // float, ufloat.
+      VECTOR_COLUMN_STORE_PROJECT_COLUMN_SEQ_INT_COST,            // double, udouble.
+      VECTOR_COLUMN_STORE_PROJECT_COLUMN_SEQ_NUMBER_COST,         // number, unumber.
+      VECTOR_COLUMN_STORE_PROJECT_COLUMN_SEQ_NUMBER_COST,         // datetime, timestamp.
+      VECTOR_COLUMN_STORE_PROJECT_COLUMN_SEQ_NUMBER_COST,         // date
+      VECTOR_COLUMN_STORE_PROJECT_COLUMN_SEQ_NUMBER_COST,         // time
+      VECTOR_COLUMN_STORE_PROJECT_COLUMN_SEQ_NUMBER_COST,         // year
+      VECTOR_COLUMN_STORE_PROJECT_COLUMN_SEQ_CHAR_COST,           // varchar, char, varbinary, binary.
+      VECTOR_COLUMN_STORE_PROJECT_COLUMN_SEQ_CHAR_COST,           // extend
+      VECTOR_COLUMN_STORE_PROJECT_COLUMN_SEQ_CHAR_COST,           // unknown
+      VECTOR_COLUMN_STORE_PROJECT_COLUMN_SEQ_LOB_COST,            // TinyText,MediumText, Text ,LongText
+      VECTOR_COLUMN_STORE_PROJECT_COLUMN_SEQ_INT_COST,            // Bit
+      VECTOR_COLUMN_STORE_PROJECT_COLUMN_SEQ_INT_COST,            // enum, set
+      VECTOR_COLUMN_STORE_PROJECT_COLUMN_SEQ_INT_COST,            // ObEnumSetInnerTC
+      VECTOR_COLUMN_STORE_PROJECT_COLUMN_SEQ_NUMBER_COST,         // timestamp with time zone
+      VECTOR_COLUMN_STORE_PROJECT_COLUMN_SEQ_INT_COST,            // raw
+      VECTOR_COLUMN_STORE_PROJECT_COLUMN_SEQ_INT_COST,            // interval
+      VECTOR_COLUMN_STORE_PROJECT_COLUMN_SEQ_NUMBER_COST,         // rowid
+      VECTOR_COLUMN_STORE_PROJECT_COLUMN_SEQ_LOB_COST,            // lob
+      VECTOR_COLUMN_STORE_PROJECT_COLUMN_SEQ_JSON_COST,           // json
+      VECTOR_COLUMN_STORE_PROJECT_COLUMN_SEQ_GIS_COST,            // geometry
+      VECTOR_COLUMN_STORE_PROJECT_COLUMN_SEQ_INT_COST,            // user defined type
+      VECTOR_COLUMN_STORE_PROJECT_COLUMN_SEQ_NUMBER_COST,         // ObDecimalIntTC
+      VECTOR_COLUMN_STORE_PROJECT_COLUMN_SEQ_LOB_COST,            // collection sql type
+    },
+    {// column store random access
+      VECTOR_COLUMN_STORE_PROJECT_COLUMN_RND_INT_COST,            // null
+      VECTOR_COLUMN_STORE_PROJECT_COLUMN_RND_INT_COST,            // int8, int16, int24, int32, int64.
+      VECTOR_COLUMN_STORE_PROJECT_COLUMN_RND_INT_COST,            // uint8, uint16, uint24, uint32, uint64.
+      VECTOR_COLUMN_STORE_PROJECT_COLUMN_RND_INT_COST,            // float, ufloat.
+      VECTOR_COLUMN_STORE_PROJECT_COLUMN_RND_INT_COST,            // double, udouble.
+      VECTOR_COLUMN_STORE_PROJECT_COLUMN_RND_NUMBER_COST,         // number, unumber.
+      VECTOR_COLUMN_STORE_PROJECT_COLUMN_RND_NUMBER_COST,         // datetime, timestamp.
+      VECTOR_COLUMN_STORE_PROJECT_COLUMN_RND_NUMBER_COST,         // date
+      VECTOR_COLUMN_STORE_PROJECT_COLUMN_RND_NUMBER_COST,         // time
+      VECTOR_COLUMN_STORE_PROJECT_COLUMN_RND_NUMBER_COST,         // year
+      VECTOR_COLUMN_STORE_PROJECT_COLUMN_RND_CHAR_COST,           // varchar, char, varbinary, binary.
+      VECTOR_COLUMN_STORE_PROJECT_COLUMN_RND_CHAR_COST,           // extend
+      VECTOR_COLUMN_STORE_PROJECT_COLUMN_RND_CHAR_COST,           // unknown
+      VECTOR_COLUMN_STORE_PROJECT_COLUMN_RND_LOB_COST,            // TinyText,MediumText, Text ,LongText
+      VECTOR_COLUMN_STORE_PROJECT_COLUMN_RND_INT_COST,            // Bit
+      VECTOR_COLUMN_STORE_PROJECT_COLUMN_RND_INT_COST,            // enum, set
+      VECTOR_COLUMN_STORE_PROJECT_COLUMN_RND_INT_COST,            // ObEnumSetInnerTC
+      VECTOR_COLUMN_STORE_PROJECT_COLUMN_RND_NUMBER_COST,         // timestamp with time zone
+      VECTOR_COLUMN_STORE_PROJECT_COLUMN_RND_INT_COST,            // raw
+      VECTOR_COLUMN_STORE_PROJECT_COLUMN_RND_INT_COST,            // interval
+      VECTOR_COLUMN_STORE_PROJECT_COLUMN_RND_NUMBER_COST,         // rowid
+      VECTOR_COLUMN_STORE_PROJECT_COLUMN_RND_LOB_COST,            // lob
+      VECTOR_COLUMN_STORE_PROJECT_COLUMN_RND_JSON_COST,           // json
+      VECTOR_COLUMN_STORE_PROJECT_COLUMN_RND_GIS_COST,            // geometry
+      VECTOR_COLUMN_STORE_PROJECT_COLUMN_RND_INT_COST,            // user defined type
+      VECTOR_COLUMN_STORE_PROJECT_COLUMN_RND_NUMBER_COST,         // ObDecimalIntTC
+      VECTOR_COLUMN_STORE_PROJECT_COLUMN_RND_LOB_COST,            // collection sql type
+    }
+  }
+};
+
+const static ObOptCostModelParameter cost_params_vector(
+   VECTOR_CPU_TUPLE_COST,
+   VECTOR_TABLE_SCAN_CPU_TUPLE_COST,
+   VECTOR_MICRO_BLOCK_SEQ_COST,
+   VECTOR_MICRO_BLOCK_RND_COST,
+   VECTOR_FETCH_ROW_RND_COST,
+   VECTOR_CMP_SPATIAL_COST,
+   VECTOR_MATERIALIZE_PER_BYTE_WRITE_COST,
+   VECTOR_READ_MATERIALIZED_PER_ROW_COST,
+   VECTOR_PER_AGGR_FUNC_COST,
+   VECTOR_PER_WIN_FUNC_COST,
+   VECTOR_CPU_OPERATOR_COST,
+   VECTOR_JOIN_PER_ROW_COST,
+   VECTOR_BUILD_HASH_PER_ROW_COST,
+   VECTOR_PROBE_HASH_PER_ROW_COST,
+   VECTOR_RESCAN_COST,
+   VECTOR_NETWORK_SER_PER_BYTE_COST,
+   VECTOR_NETWORK_DESER_PER_BYTE_COST,
+   VECTOR_NETWORK_TRANS_PER_BYTE_COST,
+   VECTOR_PX_RESCAN_PER_ROW_COST,
+   VECTOR_PX_BATCH_RESCAN_PER_ROW_COST,
+   VECTOR_DAS_RESCAN_PER_ROW_RPC_COST,
+   VECTOR_DAS_BATCH_RESCAN_PER_ROW_RPC_COST,
+   VECTOR_NL_SCAN_COST,
+   VECTOR_BATCH_NL_SCAN_COST,
+   VECTOR_NL_GET_COST,
+   VECTOR_BATCH_NL_GET_COST,
+   VECTOR_TABLE_LOOPUP_PER_ROW_RPC_COST,
+   VECTOR_INSERT_PER_ROW_COST,
+   VECTOR_INSERT_INDEX_PER_ROW_COST,
+   VECTOR_INSERT_CHECK_PER_ROW_COST,
+   VECTOR_UPDATE_PER_ROW_COST,
+   VECTOR_UPDATE_INDEX_PER_ROW_COST,
+   VECTOR_UPDATE_CHECK_PER_ROW_COST,
+   VECTOR_DELETE_PER_ROW_COST,
+   VECTOR_DELETE_INDEX_PER_ROW_COST,
+   VECTOR_DELETE_CHECK_PER_ROW_COST,
+   VECTOR_SPATIAL_PER_ROW_COST,
+   VECTOR_RANGE_COST,
+   VECTOR_CMP_UDF_COST,
+   VECTOR_CMP_LOB_COST,
+   VECTOR_CMP_ERR_HANDLE_EXPR_COST,
+   VECTOR_FUNCTIONAL_LOOKUP_PER_ROW_COST,
+   comparison_params_vector,
+   hash_params_vector,
+   project_params_vector
+);
+
+}
+}
+#endif /*OCEANBASE_SQL_OPTIMIZER_OB_OPT_EST_PARAMETER_VECTOR_*/

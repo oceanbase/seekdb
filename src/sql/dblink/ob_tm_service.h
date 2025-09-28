@@ -1,0 +1,38 @@
+// Copyright (c) 2021 OceanBase
+// OceanBase is licensed under Mulan PubL v2.
+// You can use this software according to the terms and conditions of the Mulan PubL v2.
+// You may obtain a copy of Mulan PubL v2 at:
+//          http://license.coscl.org.cn/MulanPubL-2.0
+// THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+// EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+// MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+// See the Mulan PubL v2 for more details.
+
+#ifndef OCEANBASE_SQL_OB_TM_SERVICE_H
+#define OCEANBASE_SQL_OB_TM_SERVICE_H
+
+#include "sql/engine/ob_exec_context.h"
+#include "storage/tx/ob_trans_define.h"
+
+namespace oceanbase
+{
+using namespace transaction;
+namespace sql
+{
+class ObTMService
+{
+public:
+  static int tm_create_savepoint(ObExecContext &exec_ctx,
+                                 const ObString &sp_name);
+  static int tm_rollback_to_savepoint(ObExecContext &exec_ctx,
+                                      const ObString &sp_name);
+  // for callback link
+  static int revert_tx_for_callback(ObExecContext &exec_ctx);
+private:
+  DISALLOW_COPY_AND_ASSIGN(ObTMService);
+};
+
+} // end of namespace sql
+} // end of namespace oceanbase
+
+#endif // OCEANBASE_SQL_OB_TM_SERVICE_H
