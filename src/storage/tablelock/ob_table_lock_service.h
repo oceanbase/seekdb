@@ -214,8 +214,7 @@ public:
     : location_service_(nullptr),
       sql_proxy_(nullptr),
       obj_lock_garbage_collector_(),
-      is_inited_(false),
-      old_is_empty_(false) {}
+      is_inited_(false) {}
   ~ObTableLockService() {}
   int init();
   static int mtl_init(ObTableLockService* &lock_service);
@@ -283,8 +282,6 @@ public:
                    const ObReplaceAllLocksRequest &replace_req);
   int garbage_collect_right_now();
   int get_obj_lock_garbage_collector(ObOBJLockGarbageCollector *&obj_lock_garbage_collector);
-  void set_old_detect_table_is_empty() { ATOMIC_STORE(&old_is_empty_, true); }
-  bool old_detect_table_is_empty() { return ATOMIC_LOAD(&old_is_empty_); }
 
 private:
   int check_cluster_version_after_(const uint64_t version);
@@ -476,7 +473,6 @@ private:
   common::ObMySQLProxy *sql_proxy_;
   ObOBJLockGarbageCollector obj_lock_garbage_collector_;
   bool is_inited_;
-  bool old_is_empty_;
 };
 }
 }
