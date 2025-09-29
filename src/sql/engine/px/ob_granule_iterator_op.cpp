@@ -671,7 +671,8 @@ int ObGranuleIteratorOp::rescan()
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected null real_child_", K(spec_.get_id()));
       } else if (PHY_BLOCK_SAMPLE_SCAN == real_child_->get_spec().type_ ||
-          PHY_ROW_SAMPLE_SCAN == real_child_->get_spec().type_) {
+          PHY_ROW_SAMPLE_SCAN == real_child_->get_spec().type_ ||
+          PHY_DDL_BLOCK_SAMPLE_SCAN == real_child_->get_spec().type_) {
         OZ(const_cast<ObGranulePump *>(pump_)->reset_gi_task());
       } else {
         is_rescan_ = true;
@@ -1403,10 +1404,14 @@ int ObGranuleIteratorOp::get_gi_task_consumer_node(ObOperator *cur,
   if (0 == child_cnt) {
     if (PHY_TABLE_SCAN == cur->get_spec().type_
         || PHY_BLOCK_SAMPLE_SCAN == cur->get_spec().type_
-        || PHY_ROW_SAMPLE_SCAN == cur->get_spec().type_) {
-      consumer = cur;
-      LOG_TRACE("find the gi_task consumer node", K(cur->get_spec().id_),
-                K(cur->get_spec().type_));
+        || PHY_ROW_SAMPLE_SCAN == cur->get_spec().type_
+        || PHY_DDL_BLOCK_SAMPLE_SCAN == cur->get_spec().type_) {
+      const ObTableScanSpec &tsc_spec = static_cast<const ObTableScanSpec&>(cur->get_spec());
+      if (!tsc_spec.use_dist_das_) {
+        consumer = cur;
+        LOG_TRACE("find the gi_task consumer node", K(cur->get_spec().id_),
+                  K(cur->get_spec().type_));
+      }
     }
   } else {
     ObOperator *child = nullptr;

@@ -75,6 +75,7 @@ int ObStaticDataStoreDesc::assign(const ObStaticDataStoreDesc &desc)
   is_delete_insert_table_ = desc.is_delete_insert_table_;
   encoding_granularity_ = desc.encoding_granularity_;
   semistruct_encoding_type_ = desc.semistruct_encoding_type_;
+  concurrent_cnt_ = desc.concurrent_cnt_;
   return ret;
 }
 
@@ -125,6 +126,7 @@ int ObStaticDataStoreDesc::init(
     const int64_t cluster_version,
     const compaction::ObExecMode exec_mode,
     const bool micro_index_clustered,
+    const int64_t concurrent_cnt,
     const bool need_submit_io,
     const uint64_t encoding_granularity)
 {
@@ -145,6 +147,7 @@ int ObStaticDataStoreDesc::init(
     exec_mode_ = exec_mode;
     encoding_granularity_ = encoding_granularity;
     enable_macro_block_bloom_filter_ = merge_schema.get_enable_macro_block_bloom_filter();
+    concurrent_cnt_ = concurrent_cnt;
 
     if (compaction::is_mds_merge(merge_type_)) {
       // Disable for mds table.
@@ -917,6 +920,7 @@ int ObWholeDataStoreDesc::init(
     const int64_t cluster_version,
     const bool micro_index_clustered,
     const int64_t tablet_transfer_seq,
+    const int64_t concurrent_cnt,
     const share::SCN &end_scn,
     const storage::ObStorageColumnGroupSchema *cg_schema,
     const uint16_t table_cg_idx,
@@ -937,7 +941,8 @@ int ObWholeDataStoreDesc::init(
 
   if (OB_FAIL(static_desc_.init(is_ddl, merge_schema, ls_id, tablet_id, tablet_transfer_seq, merge_type,
                                 snapshot_version, end_scn, cluster_version,
-                                exec_mode, micro_index_clustered, need_submit_io, encoding_granularity))) {
+                                exec_mode, micro_index_clustered, concurrent_cnt,
+                                need_submit_io, encoding_granularity))) {
     STORAGE_LOG(WARN, "failed to init static desc", KR(ret));
   } else if (OB_FAIL(inner_init(merge_schema, cg_schema, table_cg_idx))) {
     STORAGE_LOG(WARN, "failed to init", KR(ret), K(merge_schema), K(cg_schema), K(table_cg_idx));

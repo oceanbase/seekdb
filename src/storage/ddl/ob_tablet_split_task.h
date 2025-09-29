@@ -36,7 +36,7 @@ public:
     : src_sst_key_(src_key), dest_tablet_id_(dst_tablet_id)
   { }
   ~ObSplitSSTableTaskKey() = default;
-  int64_t hash() const { return src_sst_key_.hash() + dest_tablet_id_.hash(); }
+  uint64_t hash() const { return src_sst_key_.hash() + dest_tablet_id_.hash(); }
   int hash(uint64_t &hash_val) const { hash_val = hash(); return OB_SUCCESS; }
   bool operator== (const ObSplitSSTableTaskKey &other) const {
     return src_sst_key_ == other.src_sst_key_ && dest_tablet_id_ == other.dest_tablet_id_;
@@ -156,7 +156,7 @@ public:
   virtual ~ObTabletSplitDag();
   virtual int init_by_param(const share::ObIDagInitParam *param) override;
   virtual int create_first_task() override;
-  int64_t hash() const;
+  virtual uint64_t hash() const override;
   bool operator ==(const share::ObIDag &other) const;
   bool is_inited() const { return is_inited_; }
   ObTabletSplitCtx &get_context() { return context_; }
@@ -431,6 +431,10 @@ private:
 struct ObTabletSplitUtil final
 {
 public:
+  static int check_split_minors_can_be_accepted(
+      const ObSSTableArray &old_store_minors,
+      const ObIArray<ObITable *> &tables_array,
+      bool &is_update_firstly);
   static int get_participants(
       const share::ObSplitSSTableType &split_sstable_type,
       const ObTableStoreIterator &table_store_iterator,

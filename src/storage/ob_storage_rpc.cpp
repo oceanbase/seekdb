@@ -20,6 +20,7 @@
 #ifdef OB_BUILD_SHARED_STORAGE
 #include "storage/shared_storage/prewarm/ob_replica_prewarm_struct.h"
 #endif
+#include "storage/ddl/ob_direct_load_mgr_utils.h"
 #include "lib/thread/thread.h"
 #include "lib/worker.h"
 

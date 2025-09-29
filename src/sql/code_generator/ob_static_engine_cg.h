@@ -104,6 +104,7 @@ class ObTableRowStoreSpec;
 //class ObMultiTableReplaceSpec;
 class ObRowSampleScanSpec;
 class ObBlockSampleScanSpec;
+class ObDDLBlockSampleScanSpec;
 class ObDirectReceiveSpec;
 class ObDirectTransmitSpec;
 class ObTableScanWithIndexBackSpec;
@@ -433,12 +434,16 @@ private:
 
   int generate_spec(ObLogTableScan &op, ObRowSampleScanSpec &spec, const bool in_root_job);
   int generate_spec(ObLogTableScan &op, ObBlockSampleScanSpec &spec, const bool in_root_job);
+  int generate_spec(ObLogTableScan &op, ObDDLBlockSampleScanSpec &spec, const bool);
+
+  int generate_spec(ObLogTableScan &op, ObTableScanWithIndexBackSpec &spec,                                                                                                                                                                                                                                                                                                                                     const bool in_root_job);
 
   // pdml code gen
   int generate_spec(ObLogDelete &op, ObPxMultiPartDeleteSpec &spec, const bool in_root_job);
   int generate_spec(ObLogInsert &op, ObPxMultiPartInsertSpec &spec, const bool in_root_job);
   int generate_spec(ObLogUpdate &op, ObPxMultiPartUpdateSpec &spec, const bool in_root_job);
   int generate_spec(ObLogInsert &op, ObPxMultiPartSSTableInsertSpec &spec, const bool in_root_job);
+  int generate_spec(ObLogInsert &op, ObPxMultiPartSSTableInsertVecSpec &spec, const bool in_root_job);
   int generate_spec(ObLogSelectInto &op, ObSelectIntoSpec &spec, const bool in_root_job);
   int generate_spec(ObLogFunctionTable &op, ObFunctionTableSpec &spec, const bool in_root_job);
   int generate_spec(ObLogJsonTable &op, ObJsonTableSpec &spec, const bool in_root_job);

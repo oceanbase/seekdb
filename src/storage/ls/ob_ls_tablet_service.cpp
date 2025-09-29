@@ -48,6 +48,7 @@
 #include "share/vector_index/ob_plugin_vector_index_service.h"
 #include "storage/meta_mem/ob_tablet_pointer.h"
 #include "storage/truncate_info/ob_truncate_partition_filter.h"
+#include "storage/meta_store/ob_tenant_storage_meta_service.h"
 
 using namespace oceanbase::share;
 using namespace oceanbase::common;
@@ -2377,9 +2378,11 @@ int ObLSTabletService::create_tablet(
     const bool micro_index_clustered,
     const bool has_cs_replica,
     const ObTabletID &split_src_tablet_id,
+    const uint64_t data_format_version,
     ObTabletHandle &tablet_handle)
 {
   int ret = OB_SUCCESS;
+  UNUSED(data_format_version);
   common::ObArenaAllocator tmp_allocator(common::ObMemAttr(MTL_ID(), "CreateTab"));
   common::ObArenaAllocator *allocator = nullptr;
   ObTenantMetaMemMgr *t3m = MTL(ObTenantMetaMemMgr*);
@@ -2975,6 +2978,37 @@ int ObLSTabletService::replay_set_tablet_status(
   return ret;
 }
 
+int ObLSTabletService::set_ddl_complete(
+  const common::ObTabletID &tablet_id,
+  const mds::DummyKey &key,
+  const ObTabletDDLCompleteMdsUserData &ddl_complete,
+  mds::MdsCtx &ctx,
+  const int64_t timeout_us)
+{
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(!is_inited_)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("not inited", K(ret), K(is_inited_));
+  } else if (ddl_complete.has_complete_ && ddl_complete.data_format_version_ < DDL_IDEM_DATA_FORMAT_VERSION) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(ret), K(ddl_complete));
+  } else if ((GCTX.is_shared_storage_mode() && !is_incremental_major_direct_load(ddl_complete.direct_load_type_))
+             || tablet_id.is_inner_tablet()) {
+    /* skip */
+  } else {
+    ObBucketHashWLockGuard lock_guard(bucket_lock_, tablet_id.hash());
+    ObTabletHandle tablet_handle;
+    if (OB_FAIL(direct_get_tablet(tablet_id, tablet_handle))) {
+      LOG_WARN("fail to get tablet", K(ret), K(tablet_id));
+    } else if (OB_FAIL(tablet_handle.get_obj()->set_ddl_complete(key, ddl_complete, ctx, timeout_us))) {
+      LOG_WARN("fail to set ddl info", K(ret), K(key), K(tablet_id), K(ddl_complete), K(timeout_us));
+    } else {
+      LOG_INFO("succeeded to set ddl info", K(ret), "ls_id", ls_->get_ls_id(), K(tablet_id), K(key), K(ddl_complete), K(timeout_us));
+    }
+  }
+  return ret;
+}
+
 int ObLSTabletService::set_ddl_info(
     const common::ObTabletID &tablet_id,
     const ObTabletBindingMdsUserData &ddl_data,
@@ -3034,6 +3068,39 @@ int ObLSTabletService::replay_set_ddl_info(
       LOG_WARN("fail to set ddl info", K(ret), K(tablet_id), K(ddl_data), K(scn));
     } else {
       LOG_INFO("succeeded to set ddl info", K(ret), "ls_id", ls_->get_ls_id(), K(tablet_id), K(ddl_data), K(scn));
+    }
+  }
+  return ret;
+}
+
+int ObLSTabletService::replay_set_ddl_complete(
+    const common::ObTabletID &tablet_id,
+    const share::SCN &scn,
+    const mds::DummyKey &key,
+    const ObTabletDDLCompleteMdsUserData &ddl_data,
+    mds::MdsCtx &ctx)
+{
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(!is_inited_)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("not inited", K(ret), K_(is_inited));
+  } else if (OB_UNLIKELY(!tablet_id.is_valid())) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid arguments", K(ret), K(tablet_id), K(ddl_data));
+  } else {
+    ObBucketHashWLockGuard lock_guard(bucket_lock_, tablet_id.hash());
+    ObTabletHandle tablet_handle;
+    if (OB_FAIL(direct_get_tablet(tablet_id, tablet_handle))) {
+      if (OB_TABLET_NOT_EXIST == ret) {
+        ret = OB_EAGAIN;
+        LOG_WARN("this tablet has been deleted, skip it", K(ret), K(tablet_id));
+      } else {
+        LOG_WARN("fail to get tablet", K(ret));
+      }
+    } else if (OB_FAIL(tablet_handle.get_obj()->replay_set_ddl_complete(scn, key, ddl_data, ctx))) {
+      LOG_WARN("fail to replay set ddl info", K(ret), K(tablet_id), K(key), K(ddl_data), K(scn));
+    } else {
+      LOG_INFO("succeeded to replay set ddl info", K(ret), "ls_id", ls_->get_ls_id(), K(tablet_id), K(key), K(ddl_data), K(scn));
     }
   }
   return ret;

@@ -55,7 +55,7 @@ public:
 private:
   void enable_by_direct_load_hint(const ObDirectLoadHint &hint);
   void enable_by_append_hint();
-  void enable_by_config();
+  void enable_by_config(ObExecContext *exec_ctx);
   void enable_by_overwrite();
   int check_semantics();
   int check_support_insert_overwrite(const ObGlobalHint &global_hint);

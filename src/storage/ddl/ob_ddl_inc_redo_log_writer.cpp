@@ -667,46 +667,29 @@ ObDDLIncRedoLogWriterCallback::~ObDDLIncRedoLogWriterCallback()
   (void)wait();
 }
 
-int ObDDLIncRedoLogWriterCallback::init(
-    const share::ObLSID &ls_id,
-    const ObTabletID &tablet_id,
-    const ObDDLMacroBlockType block_type,
-    const ObITable::TableKey &table_key,
-    const int64_t task_id,
-    const share::SCN &start_scn,
-    const uint64_t data_format_version,
-    const ObDirectLoadType direct_load_type,
-    ObTxDesc *tx_desc,
-    const ObTransID &trans_id,
-    const int64_t parallel_cnt,
-    const int64_t cg_cnt,
-    const ObTxSEQ seq_no)
+int ObDDLIncRedoLogWriterCallback::init(ObDDLRedoLogWriterCallbackInitParam &param)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
     LOG_WARN("inited twice", K(ret));
-  } else if (OB_UNLIKELY(!ls_id.is_valid() || !tablet_id.is_valid() || block_type == DDL_MB_INVALID_TYPE || 
-                         !table_key.is_valid() || task_id == 0 || data_format_version < 0 || 
-                         !is_valid_direct_load(direct_load_type) || OB_ISNULL(tx_desc) || !trans_id.is_valid() ||
-                         !seq_no.is_valid())) {
+  } else if (OB_UNLIKELY(!param.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), K(ls_id), K(tablet_id), K(block_type), K(table_key), K(task_id), K(data_format_version), 
-        K(direct_load_type), KP(tx_desc), K(trans_id), K(seq_no));
-  } else if (OB_FAIL(ddl_inc_writer_.init(ls_id, tablet_id))) {
-    LOG_WARN("fail to init ddl_inc_writer_", K(ret), K(ls_id), K(tablet_id));
+    LOG_WARN("invalid arguments", K(ret), K(param));
+  } else if (OB_FAIL(ddl_inc_writer_.init(param.ls_id_, param.tablet_id_))) {
+    LOG_WARN("fail to init ddl_inc_writer_", K(ret), K(param));
   } else {
-    block_type_ = block_type;
-    table_key_ = table_key;
-    task_id_ = task_id;
-    start_scn_ = start_scn;
-    data_format_version_ = data_format_version;
-    direct_load_type_ = direct_load_type;
-    tx_desc_ = tx_desc;
-    trans_id_ = trans_id;
-    seq_no_ = seq_no;
-    parallel_cnt_ =  parallel_cnt;
-    cg_cnt_ = cg_cnt;
+    block_type_ = param.block_type_;
+    table_key_ = param.table_key_;
+    task_id_ = param.task_id_;
+    start_scn_ = param.start_scn_;
+    data_format_version_ = param.data_format_version_;
+    direct_load_type_ = param.direct_load_type_;
+    tx_desc_ = param.tx_desc_;
+    trans_id_ = param.trans_id_;
+    seq_no_ = param.seq_no_;
+    parallel_cnt_ =  param.parallel_cnt_;
+    cg_cnt_ = param.cg_cnt_;
     is_inited_ = true;
   }
 

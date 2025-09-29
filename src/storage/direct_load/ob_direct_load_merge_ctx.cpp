@@ -246,7 +246,8 @@ int ObDirectLoadMergeCtx::build_merge_task(ObDirectLoadTableStore &table_store, 
 }
 
 int ObDirectLoadMergeCtx::build_del_lob_task(ObDirectLoadTableStore &table_store,
-                                             int64_t thread_cnt)
+                                             int64_t thread_cnt,
+                                             const bool for_dag)
 {
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
@@ -280,9 +281,16 @@ int ObDirectLoadMergeCtx::build_del_lob_task(ObDirectLoadTableStore &table_store
         ObDirectLoadTabletMergeCtx *tablet_merge_ctx = tablet_merge_ctx_array_.at(i);
         ObDirectLoadInsertTabletContext *insert_tablet_ctx =
           tablet_merge_ctx->get_insert_tablet_ctx();
-        if (OB_FAIL(tablet_merge_ctx->build_del_lob_task(
-              table_store.get_table_data_desc(), table_handle_array, range_splitter, thread_cnt))) {
-          LOG_WARN("fail to build del lob task", KR(ret));
+        if (for_dag) {
+          if (OB_FAIL(tablet_merge_ctx->build_del_lob_task_for_dag(
+                table_store.get_table_data_desc(), table_handle_array, range_splitter, thread_cnt))) {
+            LOG_WARN("fail to build del lob task", KR(ret));
+          }
+        } else {
+          if (OB_FAIL(tablet_merge_ctx->build_del_lob_task(
+                table_store.get_table_data_desc(), table_handle_array, range_splitter, thread_cnt))) {
+            LOG_WARN("fail to build del lob task", KR(ret));
+          }
         }
       }
     }
@@ -808,11 +816,13 @@ int ObDirectLoadTabletMergeCtx::build_del_lob_task(
         parallel_idx = 0;
       }
       if (insert_front) {
-        if (OB_FAIL(ObDDLUtil::init_macro_block_seq(parallel_idx, data_seq))) {
+        if (OB_FAIL(ObDDLUtil::init_macro_block_seq(parallel_idx,
+                                                    data_seq))) {
           LOG_WARN("fail to init macro block seq", KR(ret), K(parallel_idx));
         }
       } else {
-        if (OB_FAIL(ObDDLUtil::init_macro_block_seq(last_parallel_idx + parallel_idx + 1, data_seq))) {
+        if (OB_FAIL(ObDDLUtil::init_macro_block_seq(last_parallel_idx + parallel_idx + 1,
+                                                    data_seq))) {
           LOG_WARN("fail to init macro block seq", KR(ret), K(last_parallel_idx), K(parallel_idx));
         }
       }
@@ -834,6 +844,57 @@ int ObDirectLoadTabletMergeCtx::build_del_lob_task(
           allocator_.free(del_lob_task);
           del_lob_task = nullptr;
         }
+      }
+    }
+  }
+  return ret;
+}
+
+int ObDirectLoadTabletMergeCtx::build_del_lob_task_for_dag(
+    const ObDirectLoadTableDataDesc &table_data_desc,
+    const ObDirectLoadTableHandleArray &multiple_sstable_array,
+    ObDirectLoadMultipleMergeRangeSplitter &range_splitter,
+    const int64_t max_parallel_degree)
+{
+  int ret = OB_SUCCESS;
+  int64_t parallel_idx = 0;
+  if (IS_NOT_INIT) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("ObDirectLoadTabletMergeCtx is not init", KR(ret));
+  } else if (OB_UNLIKELY(max_parallel_degree <= 0)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid max parallel degree", KR(ret), K(max_parallel_degree));
+  } else if (OB_FAIL(range_splitter.split_range(tablet_id_, nullptr /*origin_table*/,
+                                                max_parallel_degree, range_array_, allocator_))) {
+    LOG_WARN("fail to split range", KR(ret));
+  } else if (OB_UNLIKELY(range_array_.count() > max_parallel_degree)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected range count", KR(ret), K(max_parallel_degree), K(range_array_.count()));
+  }
+  // construct task per range
+  for (int64_t i = 0; OB_SUCC(ret) && i < range_array_.count(); ++i) {
+    const ObDatumRange &range = range_array_.at(i);
+    ObMacroDataSeq data_seq;
+    ObDirectLoadPartitionDelLobTask *del_lob_task = nullptr;
+    if (OB_FAIL(ObDDLUtil::init_macro_block_seq(parallel_idx,
+                                                data_seq))) {
+      LOG_WARN("fail to init macro block seq", KR(ret), K(parallel_idx));
+    } else if (OB_ISNULL(del_lob_task =
+                          OB_NEWx(ObDirectLoadPartitionDelLobTask, (&allocator_)))) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("fail to new ObDirectLoadPartitionDelLobTask", KR(ret));
+    } else if (OB_FAIL(del_lob_task->init(this, origin_table_, table_data_desc,
+                                          multiple_sstable_array, range, data_seq,
+                                          parallel_idx++))) {
+      LOG_WARN("fail to init del lob task", KR(ret));
+    } else if (OB_FAIL(merge_task_array_.push_back(del_lob_task))) {
+      LOG_WARN("fail to push back del lob task", KR(ret));
+    }
+    if (OB_FAIL(ret)) {
+      if (nullptr != del_lob_task) {
+        del_lob_task->~ObDirectLoadPartitionDelLobTask();
+        allocator_.free(del_lob_task);
+        del_lob_task = nullptr;
       }
     }
   }

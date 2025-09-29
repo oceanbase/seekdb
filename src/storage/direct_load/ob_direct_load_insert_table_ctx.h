@@ -33,25 +33,38 @@ class ObTableLoadSqlStatistics;
 namespace storage
 {
 class ObDirectLoadInsertTableContext;
+class ObDirectLoadInsertLobTableContext;
 class ObDirectLoadInsertLobTabletContext;
 class ObDirectLoadBatchRows;
 class ObDirectLoadDatumRow;
 class ObDirectLoadRowFlag;
+class ObDDLIndependentDag;
 
 struct ObDirectLoadInsertTableRowInfo
 {
 public:
   ObDirectLoadInsertTableRowInfo()
-    : row_flag_(), mvcc_row_flag_(), trans_version_(INT64_MAX), trans_id_(), seq_no_(0)
+    : row_flag_(),
+      mvcc_row_flag_(),
+      trans_version_(INT64_MAX),
+      trans_id_(),
+      seq_no_(0),
+      trans_version_vector_(nullptr),
+      seq_no_vector_(nullptr)
   {
   }
   bool is_valid() const
   {
     return row_flag_.is_valid() & mvcc_row_flag_.is_valid() &&
-           ((INT64_MAX == trans_version_ && trans_id_.is_valid() && seq_no_ > 0) ||
-            (INT64_MAX != trans_version_ && !trans_id_.is_valid() && 0 == seq_no_));
+           (INT64_MAX != trans_version_ || (trans_id_.is_valid() && seq_no_ > 0));
   }
-  TO_STRING_KV(K_(row_flag), K_(mvcc_row_flag), K_(trans_version), K_(trans_id), K_(seq_no));
+  TO_STRING_KV(K_(row_flag),
+               K_(mvcc_row_flag),
+               K_(trans_version),
+               K_(trans_id),
+               K_(seq_no),
+               KP_(trans_version_vector),
+               KP_(seq_no_vector));
 
 public:
   blocksstable::ObDmlRowFlag row_flag_;
@@ -59,6 +72,8 @@ public:
   int64_t trans_version_;
   transaction::ObTransID trans_id_;
   int64_t seq_no_;
+  ObIVector *trans_version_vector_;
+  ObIVector *seq_no_vector_;
 };
 
 struct ObDirectLoadInsertTableParam
@@ -73,7 +88,7 @@ public:
                K_(is_table_without_pk), K_(is_table_with_hidden_pk_column), K_(is_index_table),
                K_(online_opt_stat_gather), K_(is_incremental), K_(reuse_pk), K_(trans_param), KP_(datum_utils),
                KP_(col_descs), KP_(cmp_funcs), KP_(col_nullables), KP_(lob_column_idxs),
-               K_(online_sample_percent), K_(is_no_logging), K_(max_batch_size));
+               K_(online_sample_percent), K_(is_no_logging), K_(max_batch_size), K_(enable_dag), KP_(dag));
 
 public:
   uint64_t table_id_; // 目标表的table_id, 目前用于填充统计信息收集结果
@@ -103,6 +118,8 @@ public:
   double online_sample_percent_;
   bool is_no_logging_;
   int64_t max_batch_size_;
+  bool enable_dag_;
+  ObDDLIndependentDag *dag_;
 };
 
 struct ObDirectLoadInsertTabletWriteCtx
@@ -125,19 +142,25 @@ public:
   virtual void cancel() = 0;
 
   //////////////////////// write interface ////////////////////////
+  int get_slice_idx(int64_t &slice_idx);
   int get_write_ctx(ObDirectLoadInsertTabletWriteCtx &write_ctx);
   const blocksstable::ObMacroDataSeq &get_last_data_seq() { return start_seq_; }
   int get_row_info(ObDirectLoadInsertTableRowInfo &row_info, const bool is_delete = false);
   int init_datum_row(blocksstable::ObDatumRow &datum_row, const bool is_delete = false);
   virtual int open_sstable_slice(const blocksstable::ObMacroDataSeq &start_seq,
                                  const int64_t slice_idx,
-                                 int64_t &slice_id) = 0;
+                                 int64_t &slice_id,
+                                 ObDirectLoadMgrAgent &ddl_agent) = 0;
   virtual int fill_sstable_slice(const int64_t &slice_id, ObIStoreRowIterator &iter,
+                                 ObDirectLoadMgrAgent &ddl_agent,
                                  int64_t &affected_rows) = 0;
   virtual int fill_sstable_slice(const int64_t &slice_id,
-                                 const blocksstable::ObBatchDatumRows &datum_rows) = 0;
-  virtual int close_sstable_slice(const int64_t slice_id, const int64_t slice_idx) = 0;
-
+                                 const blocksstable::ObBatchDatumRows &datum_rows,
+                                 ObDirectLoadMgrAgent &ddl_agent) = 0;
+  virtual int close_sstable_slice(const int64_t slice_id,
+                                  const int64_t slice_idx,
+                                  ObDirectLoadMgrAgent &ddl_agent) = 0;
+  virtual int get_ddl_agent(ObDirectLoadMgrAgent &tmp_agent) = 0;
 protected:
   static const int64_t PK_CACHE_SIZE = 5000000;
   static const int64_t WRITE_BATCH_SIZE = 5000000;
@@ -189,6 +212,8 @@ public:
   DEFINE_INSERT_TABLE_PARAM_GETTER(const common::ObIArray<int64_t> *, lob_column_idxs, nullptr);
   DEFINE_INSERT_TABLE_PARAM_GETTER(bool, is_no_logging, false);
   DEFINE_INSERT_TABLE_PARAM_GETTER(int64_t, max_batch_size, 0);
+  DEFINE_INSERT_TABLE_PARAM_GETTER(bool, enable_dag, false);
+  DEFINE_INSERT_TABLE_PARAM_GETTER(ObDDLIndependentDag *, dag, nullptr);
 
 #undef DEFINE_INSERT_TABLE_PARAM_GETTER
 
@@ -233,15 +258,19 @@ protected:
 
 class ObDirectLoadInsertTableContext
 {
+  friend class ObDirectLoadInsertTabletContext;
+
   typedef common::hash::ObHashMap<common::ObTabletID, ObDirectLoadInsertTabletContext *>
     TabletCtxMap;
 
 public:
   ObDirectLoadInsertTableContext();
   virtual ~ObDirectLoadInsertTableContext();
-  virtual void reset();
+  virtual int close() { return OB_SUCCESS; }
+  void cancel();
   int get_tablet_context(const common::ObTabletID &tablet_id,
                          ObDirectLoadInsertTabletContext *&tablet_ctx) const;
+  const ObDirectLoadInsertTableParam &get_param() const { return param_; }
   OB_INLINE TabletCtxMap &get_tablet_ctx_map() { return tablet_ctx_map_; }
 
   //////////////////////// sql stats interface ////////////////////////
@@ -291,9 +320,10 @@ protected:
 
 protected:
   common::ObArenaAllocator allocator_;
-  common::ObSafeArenaAllocator safe_allocator_;
   ObDirectLoadInsertTableParam param_;
   TabletCtxMap tablet_ctx_map_; // origin_tablet_id => tablet_ctx
+  ObIVector *trans_version_vector_;
+  ObIVector *seq_no_vector_;
   bool is_inited_;
 };
 

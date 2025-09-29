@@ -30,14 +30,22 @@ class ObDDLTableMergeDagParam;
 class ObTabletDDLCompleteArg;
 class ObTabletDDLCompleteMdsUserData
 {
-  OB_UNIS_VERSION(1);
 public:
   ObTabletDDLCompleteMdsUserData();
+  ~ObTabletDDLCompleteMdsUserData();
+  void reset();
   bool is_valid() const ;
   int assign(const ObTabletDDLCompleteMdsUserData &other);
+  int generate_merge_param(ObDDLTableMergeDagParam &merge_param);
+  int set_with_merge_arg(const ObTabletDDLCompleteArg &merge_param);
+  int set_storage_schema(const ObStorageSchema &other);
+  ObStorageSchema &get_storage_schema() { return storage_schema_; }
+  int serialize(char *buf, const int64_t buf_len, int64_t &pos) const;
+  int deserialize(const char *buf, const int64_t data_len, int64_t &pos);
+  int64_t get_serialize_size() const;
   TO_STRING_KV(K_(has_complete), K_(direct_load_type), K_(has_complete),
                K_(data_format_version), K_(snapshot_version),
-               K_(table_key));
+               K_(table_key), K_(write_stat), K_(storage_schema));
 public:
   bool has_complete_;
   /* for merge param */
@@ -45,6 +53,9 @@ public:
   uint64_t data_format_version_;
   int64_t snapshot_version_;
   ObITable::TableKey table_key_;
+  ObStorageSchema storage_schema_;
+  ObDDLWriteStat write_stat_;
+  ObArenaAllocator allocator_;
 };
 } // namespace storage
 } // namespace oceanbase

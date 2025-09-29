@@ -63,7 +63,9 @@ ObDirectLoadInsertTableParam::ObDirectLoadInsertTableParam()
     lob_column_idxs_(nullptr),
     online_sample_percent_(1.),
     is_no_logging_(false),
-    max_batch_size_(0)
+    max_batch_size_(0),
+    enable_dag_(false),
+    dag_(nullptr)
 {
 }
 
@@ -77,7 +79,8 @@ bool ObDirectLoadInsertTableParam::is_valid() const
          column_count_ >= rowkey_column_count_ && lob_inrow_threshold_ >= 0 &&
          (!is_incremental_ || trans_param_.is_valid()) && nullptr != datum_utils_ &&
          nullptr != col_descs_ && col_descs_->count() == column_count_ && nullptr != cmp_funcs_ &&
-         nullptr != col_nullables_ && nullptr != lob_column_idxs_ && max_batch_size_ > 0;
+         nullptr != col_nullables_ && nullptr != lob_column_idxs_ && max_batch_size_ > 0 &&
+         (!enable_dag_ || nullptr != dag_);
 }
 
 /**
@@ -104,6 +107,7 @@ ObDirectLoadInsertTabletContext::ObDirectLoadInsertTabletContext()
 ObDirectLoadInsertTabletContext::~ObDirectLoadInsertTabletContext() {}
 
 //////////////////////// write interface ////////////////////////
+
 
 int ObDirectLoadInsertTabletContext::refresh_pk_cache(const ObTabletID &tablet_id,
                                                       ObTabletCacheInterval &pk_cache)
@@ -136,6 +140,20 @@ int ObDirectLoadInsertTabletContext::get_pk_interval(uint64_t count,
         LOG_WARN("fail to fetch from pk cache", KR(ret));
       }
     }
+  }
+  return ret;
+}
+
+int ObDirectLoadInsertTabletContext::get_slice_idx(int64_t &slice_idx)
+{
+  int ret = OB_SUCCESS;
+  if (IS_NOT_INIT) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("ObDirectLoadInsertTabletContext not init", KR(ret), KP(this));
+  } else {
+    ObMutexGuard guard(mutex_);
+    slice_idx = slice_idx_;
+    ++slice_idx_;
   }
   return ret;
 }
@@ -182,6 +200,8 @@ int ObDirectLoadInsertTabletContext::get_row_info(ObDirectLoadInsertTableRowInfo
     row_info.trans_version_ = !param_->is_incremental_ ? param_->snapshot_version_ : INT64_MAX;
     row_info.trans_id_ = param_->trans_param_.tx_id_;
     row_info.seq_no_ = param_->trans_param_.tx_seq_.cast_to_int();
+    row_info.trans_version_vector_ = table_ctx_->trans_version_vector_;
+    row_info.seq_no_vector_ = table_ctx_->seq_no_vector_;
   }
   return ret;
 }
@@ -226,14 +246,15 @@ int ObDirectLoadInsertTabletContext::init_datum_row(ObDatumRow &datum_row, const
  */
 
 ObDirectLoadInsertTableContext::ObDirectLoadInsertTableContext()
-  : allocator_("TLD_InsTblCtx"), safe_allocator_(allocator_), is_inited_(false)
+  : allocator_("TLD_InsTblCtx"),
+    trans_version_vector_(nullptr),
+    seq_no_vector_(nullptr),
+    is_inited_(false)
 {
   allocator_.set_tenant_id(MTL_ID());
 }
 
-ObDirectLoadInsertTableContext::~ObDirectLoadInsertTableContext() { reset(); }
-
-void ObDirectLoadInsertTableContext::reset()
+ObDirectLoadInsertTableContext::~ObDirectLoadInsertTableContext()
 {
   if (tablet_ctx_map_.created()) {
     FOREACH(iter, tablet_ctx_map_)
@@ -252,6 +273,16 @@ int ObDirectLoadInsertTableContext::inner_init()
   int ret = OB_SUCCESS;
   if (OB_FAIL(tablet_ctx_map_.create(1024, "TLD_InsTabCtx", "TLD_InsTabCtx", MTL_ID()))) {
     LOG_WARN("fail to create tablet ctx map", KR(ret));
+  } else if (param_.enable_dag_) {
+    const int64_t trans_version = !param_.is_incremental_ ? param_.snapshot_version_ : INT64_MAX;
+    const int64_t seq_no = param_.trans_param_.tx_seq_.cast_to_int();
+    if (OB_FAIL(ObDirectLoadVectorUtils::make_const_multi_version_vector(-trans_version, allocator_,
+                                                                         trans_version_vector_))) {
+      LOG_WARN("fail to make trans version vector", KR(ret));
+    } else if (OB_FAIL(ObDirectLoadVectorUtils::make_const_multi_version_vector(-seq_no, allocator_,
+                                                                                seq_no_vector_))) {
+      LOG_WARN("fail to make seq no vector", KR(ret));
+    }
   }
   return ret;
 }

@@ -1947,7 +1947,6 @@ int ObCopyRemoteSSTableInfoObProducer::init(
 {
   int ret = OB_SUCCESS;
   ObTablet *tablet = nullptr;
-  bool is_ready_for_read = false;
 
   if (is_inited_) {
     ret = OB_INIT_TWICE;
@@ -1961,7 +1960,7 @@ int ObCopyRemoteSSTableInfoObProducer::init(
   } else if (OB_ISNULL(tablet = tablet_handle_.get_obj())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("tablet should not be NULL", K(ret), K(tablet_handle_));
-  } else if (OB_FAIL(tablet->get_ha_tables(iter_, is_ready_for_read))) {
+  } else if (OB_FAIL(tablet->get_ha_tables(iter_))) {
     LOG_WARN("failed to get read tables", K(ret), KPC(tablet));
   } else {
     ls_id_ = ls->get_ls_id();
@@ -1979,7 +1978,6 @@ int ObCopyRemoteSSTableInfoObProducer::get_next_sstable_info(
   sstable_info.reset();
   ObLSTabletService *tablet_svr = nullptr;
   ObITable *table = nullptr;
-  bool is_ready_for_read = false;
 
   if (!is_inited_) {
     ret = OB_NOT_INIT;

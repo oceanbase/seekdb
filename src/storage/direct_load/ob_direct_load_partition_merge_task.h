@@ -34,6 +34,7 @@ class ObDirectLoadExternalTable;
 class ObDirectLoadMultipleSSTable;
 class ObDirectLoadMultipleHeapTable;
 class ObDirectLoadInsertTabletContext;
+class ObDirectLoadMgrAgent;
 
 class ObDirectLoadPartitionMergeTask : public ObDirectLoadIMergeTask
 {
@@ -42,6 +43,7 @@ public:
   virtual ~ObDirectLoadPartitionMergeTask();
   int process() override;
   void stop() override;
+  int init_iterator(ObITabletSliceRowIterator *&row_iterator) override;
   ObDirectLoadTabletMergeCtx *get_merge_ctx() override { return merge_ctx_; }
   TO_STRING_KV(KPC_(merge_param), KPC_(merge_ctx), K_(parallel_idx));
 
@@ -54,7 +56,8 @@ protected:
 
 private:
   int fill_sstable_slice(const int64_t slice_id,
-                         const ObIArray<ObDirectLoadIStoreRowIterator *> &row_iters);
+                         const ObIArray<ObDirectLoadIStoreRowIterator *> &row_iters,
+                         ObDirectLoadMgrAgent &ddl_agnet);
   int fill_sstable_slice_batch(const int64_t slice_id,
                                const ObIArray<ObDirectLoadIStoreRowIterator *> &row_iters);
 
@@ -69,6 +72,8 @@ protected:
   // 需要在最后插入的时候收集
   bool need_handle_dml_row_;
   bool is_stop_;
+  ObArray<ObDirectLoadIStoreRowIterator *> row_iters_;
+  ObArenaAllocator allocator_;
   bool is_inited_;
 };
 
@@ -119,6 +124,7 @@ public:
            int64_t parallel_idx);
   int process() override;
   void stop() override;
+  int init_iterator(ObITabletSliceRowIterator *&row_iterator) override { return OB_NOT_IMPLEMENT;}
   ObDirectLoadTabletMergeCtx *get_merge_ctx() override { return merge_ctx_; }
   TO_STRING_KV(KPC_(merge_param), KPC_(merge_ctx), K_(parallel_idx));
 private:

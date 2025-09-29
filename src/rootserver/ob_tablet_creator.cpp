@@ -15,6 +15,8 @@
 #include "storage/tx/ob_trans_service.h"
 #include "rootserver/ob_split_partition_helper.h"
 #include "observer/ob_inner_sql_connection.h"
+#include "storage/tx/ob_tx_log.h"
+#include "storage/tablet/ob_tablet_ddl_complete_mds_helper.h"
 
 namespace oceanbase
 {

@@ -186,6 +186,10 @@ public:
   int set_upper_trans_version(
       common::ObArenaAllocator &allocator,
       const int64_t upper_trans_version);
+  int backfill_commit_version(
+      common::ObArenaAllocator &allocator,
+      const int64_t commit_version,
+      const share::SCN &filled_tx_scn);
   virtual int64_t get_upper_trans_version() const override
   {
     return meta_cache_.upper_trans_version_;

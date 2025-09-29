@@ -519,6 +519,24 @@ int ObTempColumnStore::init(const IVectorPtrs &vectors,
   return ret;
 }
 
+int ObTempColumnStore::init(const common::ObIArray<storage::ObColumnSchemaItem> &col_array,
+                            const int64_t max_batch_size,
+                            const lib::ObMemAttr &mem_attr,
+                            const int64_t mem_limit,
+                            const bool enable_dump,
+                            const common::ObCompressorType compressor_type)
+{
+  int ret = OB_SUCCESS;
+  ObArenaAllocator arena;
+  ObArray<ObIVector *> vectors;
+  if (OB_FAIL(init_vectors(col_array, arena, vectors))) {
+    LOG_WARN("init vectors failed", K(ret));
+  } else if (OB_FAIL(init(vectors, max_batch_size, mem_attr, mem_limit, enable_dump, compressor_type))) {
+    LOG_WARN("init with vectors failed", K(ret), K(col_array));
+  }
+  return ret;
+}
+
 int ObTempColumnStore::init_vectors(const ObIArray<ObColumnSchemaItem> &col_array,
                                     ObIAllocator &allocator,
                                     IVectorPtrs &vectors)

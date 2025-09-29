@@ -471,6 +471,7 @@ int ObTableLoadService::check_support_direct_load(ObSchemaGetterGuard &schema_gu
     bool has_fts_index = false;
     bool has_non_normal_local_index = false;
     bool is_heap_table_with_single_unique_index = false;
+    bool has_delete_insert_engine_index = false;
     // check if it is a user table
     const char *tmp_prefix = ObDirectLoadMode::is_insert_overwrite(load_mode) ? InsertOverwritePrefix : EmptyPrefix;
 

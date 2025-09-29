@@ -854,7 +854,7 @@ int ObDropVecIndexTask::check_and_cancel_del_dag(bool &all_dag_exit)
   } else if (!vec_index_snapshot_data_.is_valid() || !del_lob_meta_row_task_submitted_) {
     all_dag_exit = true;
   } else if (OB_FAIL(ObDDLUtil::check_and_cancel_single_replica_dag(this, vec_index_snapshot_data_.table_id_, 
-            vec_index_snapshot_data_.table_id_, check_dag_exit_tablets_map_, check_dag_exit_retry_cnt_, false/*is_complement_data_dag*/, all_dag_exit))) {
+            vec_index_snapshot_data_.table_id_, check_dag_exit_tablets_map_, data_format_version_, check_dag_exit_retry_cnt_, false/*is_complement_data_dag*/, all_dag_exit))) {
     LOG_WARN("fail to check and cancel delete lob mete row dag", K(ret), K(vec_index_snapshot_data_));
   }
   return ret;

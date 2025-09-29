@@ -834,6 +834,11 @@ struct ObVecExtraInfoObj {
   }
   int from_datum(const ObDatum &datum, const common::ObObjMeta &type, ObIAllocator *allocator = nullptr);
   int from_obj(const ObObj &obj, ObIAllocator *allocator = nullptr);
+  int from_vector(
+      const ObIVector &vector,
+      const int row_pos,
+      const common::ObObjMeta &type,
+      ObIAllocator *allocator /*nullptr*/);
   const char *ptr_;
   int32_t len_;
   common::ObObjDatumMapType obj_map_type_;

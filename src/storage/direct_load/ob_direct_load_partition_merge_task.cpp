@@ -15,6 +15,7 @@
 #include "observer/table_load/ob_table_load_table_ctx.h"
 #include "storage/direct_load/ob_direct_load_compare.h"
 #include "storage/direct_load/ob_direct_load_conflict_check.h"
+#include "storage/direct_load/ob_direct_load_dag_insert_table_row_iterator.h"
 #include "storage/direct_load/ob_direct_load_data_fuse.h"
 #include "storage/direct_load/ob_direct_load_data_insert.h"
 #include "storage/direct_load/ob_direct_load_data_with_origin_query.h"
@@ -46,11 +47,26 @@ ObDirectLoadPartitionMergeTask::ObDirectLoadPartitionMergeTask()
     affected_rows_(0),
     need_handle_dml_row_(false),
     is_stop_(false),
+    allocator_("TLD_MergeExec"),
     is_inited_(false)
 {
+  allocator_.set_tenant_id(MTL_ID());
+  row_iters_.set_block_allocator(ModulePageAllocator(allocator_));
 }
 
-ObDirectLoadPartitionMergeTask::~ObDirectLoadPartitionMergeTask() {}
+ObDirectLoadPartitionMergeTask::~ObDirectLoadPartitionMergeTask()
+{
+  for (int64_t i = 0; i < row_iters_.count(); ++i) {
+    ObDirectLoadIStoreRowIterator *row_iter = row_iters_.at(i);
+    if (row_iter != nullptr) {
+      row_iter->~ObDirectLoadIStoreRowIterator();
+      allocator_.free(row_iter);
+      row_iter = nullptr;
+    }
+  }
+  row_iters_.reset();
+  allocator_.reset();
+}
 
 int ObDirectLoadPartitionMergeTask::inner_init(ObDirectLoadTabletMergeCtx *merge_ctx,
                                                int64_t parallel_idx,
@@ -85,16 +101,21 @@ int ObDirectLoadPartitionMergeTask::process()
     ObArray<ObDirectLoadIStoreRowIterator *> row_iters;
     allocator.set_tenant_id(MTL_ID());
     row_iters.set_block_allocator(ModulePageAllocator(allocator));
-    if (OB_FAIL(
-          merge_param_->insert_table_ctx_->get_tablet_context(tablet_id, insert_tablet_ctx_))) {
+    ObDirectLoadMgrAgent ddl_agent;
+    if (OB_FAIL(merge_param_->insert_table_ctx_->get_tablet_context(tablet_id, insert_tablet_ctx_))) {
       LOG_WARN("fail to get tablet context ", KR(ret), K(tablet_id));
     } else if (OB_FAIL(construct_row_iters(row_iters, allocator))) {
       LOG_WARN("fail to construct row iters", KR(ret));
+    } else if (OB_FAIL(insert_tablet_ctx_->get_ddl_agent(ddl_agent))) {
+      LOG_WARN("fail to init tmp agent", K(ret));
+    } else if (!ddl_agent.is_inited()) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("ddl agent should not be null", K(ret));
     }
     // 对于全量导入, 无论一个分区有没有数据, 都需要创建ddl对象来为该分区创建major sstable
     else if (OB_FAIL(ObDDLUtil::init_macro_block_seq(parallel_idx_, block_start_seq))) {
       LOG_WARN("fail to set parallel degree", KR(ret), K(parallel_idx_));
-    } else if (OB_FAIL(insert_tablet_ctx_->open_sstable_slice(block_start_seq, parallel_idx_/*slice_idx*/, slice_id))) {
+    } else if (OB_FAIL(insert_tablet_ctx_->open_sstable_slice(block_start_seq, parallel_idx_/*slice_idx*/, slice_id, ddl_agent))) {
       LOG_WARN("fail to open sstable slice ", KR(ret), K(block_start_seq));
     } else if (row_iters.empty()) {
       // do nothing
@@ -114,15 +135,15 @@ int ObDirectLoadPartitionMergeTask::process()
             LOG_WARN("fail to fill sstable slice batch", KR(ret), K(slice_id));
           }
         } else {
-          if (OB_FAIL(fill_sstable_slice(slice_id, row_iters))) {
-            LOG_WARN("fail to fill sstable slice", KR(ret), K(slice_id));
+          if (OB_FAIL(fill_sstable_slice(slice_id, row_iters, ddl_agent))) {
+            LOG_WARN("fail to fill sstable slice", KR(ret), K(slice_id), K(ddl_agent));
           }
         }
       }
       LOG_INFO("add sstable slice end", KR(ret), K(tablet_id), K(parallel_idx_), K(affected_rows_));
     }
     if (OB_SUCC(ret)) {
-      if (OB_FAIL(insert_tablet_ctx_->close_sstable_slice(slice_id, parallel_idx_/*slice_idx*/))) {
+      if (OB_FAIL(insert_tablet_ctx_->close_sstable_slice(slice_id, parallel_idx_/*slice_idx*/, ddl_agent))) {
         LOG_WARN("fail to close writer", KR(ret));
       }
     }
@@ -140,7 +161,8 @@ int ObDirectLoadPartitionMergeTask::process()
 
 int ObDirectLoadPartitionMergeTask::fill_sstable_slice(
   const int64_t slice_id,
-  const ObIArray<ObDirectLoadIStoreRowIterator *> &row_iters)
+  const ObIArray<ObDirectLoadIStoreRowIterator *> &row_iters,
+  ObDirectLoadMgrAgent &ddl_agent)
 {
   int ret = OB_SUCCESS;
   ObDirectLoadInsertTableRowIterator insert_table_row_iter;
@@ -149,9 +171,8 @@ int ObDirectLoadPartitionMergeTask::fill_sstable_slice(
                                          need_handle_dml_row_ ? merge_param_->dml_row_handler_ : nullptr,
                                          ctx_->job_stat_))) {
     LOG_WARN("fail to init insert table row iter", KR(ret));
-  } else if (OB_FAIL(insert_tablet_ctx_->fill_sstable_slice(slice_id,
-                                                            insert_table_row_iter,
-                                                            affected_rows_))) {
+  } else if (OB_FAIL(insert_tablet_ctx_->fill_sstable_slice(slice_id, insert_table_row_iter,
+                                                            ddl_agent, affected_rows_))) {
     LOG_WARN("fail to fill sstable slice", KR(ret));
   } else if (OB_FAIL(insert_table_row_iter.close())) {
     LOG_WARN("fail to close insert table row iter", KR(ret));
@@ -196,6 +217,38 @@ void ObDirectLoadPartitionMergeTask::stop()
   if (OB_NOT_NULL(insert_tablet_ctx_)) {
     insert_tablet_ctx_->cancel();
   }
+}
+
+int ObDirectLoadPartitionMergeTask::init_iterator(ObITabletSliceRowIterator *&row_iterator)
+{
+  int ret = OB_SUCCESS;
+  if (IS_NOT_INIT) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("ObDirectLoadPartitionMergeTask not init", KR(ret), KP(this));
+  } else {
+    row_iterator = nullptr;
+    ObDirectLoadDagInsertTableRowIterator *iter = nullptr;
+    ObMemAttr attr(MTL_ID(), "TLD_SliceIter");
+    if (OB_UNLIKELY(!row_iters_.empty())) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("unexpected row iters not empty", KR(ret));
+    } else if (OB_FAIL(construct_row_iters(row_iters_, allocator_))) {
+      LOG_WARN("fail to construct row iters", KR(ret));
+    } else if (OB_ISNULL(iter = OB_NEW(ObDirectLoadDagInsertTableRowIterator, attr))) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("fail to alloc memory", KR(ret));
+    } else if (OB_FAIL(iter->init(insert_tablet_ctx_, parallel_idx_ /*slice_idx*/, row_iters_,
+                                  need_handle_dml_row_ ? merge_param_->dml_row_handler_ : nullptr,
+                                  ObDirectLoadMergeMode::NORMAL == merge_param_->merge_mode_))) {
+      LOG_WARN("fail to init insert table row iter", KR(ret));
+    } else {
+      row_iterator = iter;
+    }
+    if (OB_FAIL(ret)) {
+      OB_DELETE(ObDirectLoadDagInsertTableRowIterator, attr, iter);
+    }
+  }
+  return ret;
 }
 
 /**

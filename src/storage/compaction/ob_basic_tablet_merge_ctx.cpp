@@ -912,6 +912,7 @@ int ObBasicTabletMergeCtx::init_static_desc()
                                 static_param_.data_version_,
                                 static_param_.get_exec_mode(),
                                 get_tablet()->get_tablet_meta().micro_index_clustered_,
+                                get_concurrent_cnt(),
                                 true,
                                 static_param_.encoding_granularity_))) {
     LOG_WARN("failed to init static desc", KR(ret), KPC(this));
@@ -1016,7 +1017,6 @@ int ObBasicTabletMergeCtx::build_update_table_store_param(
 
   param.storage_schema_ = static_param_.schema_;
   param.rebuild_seq_ = get_ls_rebuild_seq();
-  const bool need_check_sstable = is_minor_merge(merge_type) || is_history_minor_merge(merge_type);
   param.ddl_info_.update_with_major_flag_ = false;
 
   param.sstable_ = sstable;
@@ -1024,7 +1024,6 @@ int ObBasicTabletMergeCtx::build_update_table_store_param(
 
   if (OB_FAIL(param.init_with_ha_info(ObHATableStoreParam(
           get_tablet()->get_tablet_meta().transfer_info_.transfer_seq_,
-          need_check_sstable,
           true /*need_check_transfer_seq*/)))) {
     LOG_WARN("failed to init with ha info", KR(ret));
   } else if (OB_FAIL(param.init_with_compaction_info(ObCompactionTableStoreParam(

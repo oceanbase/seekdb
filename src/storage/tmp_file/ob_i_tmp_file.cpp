@@ -374,7 +374,6 @@ int ObITmpFile::delete_file()
   LOG_INFO("tmp file delete start", K(fd_));
   common::TCRWLock::WLockGuard guard(meta_lock_);
   if (IS_INIT && !is_deleting_) {
-    LOG_INFO("tmp file inner delete start", KR(ret), KPC(this));
     if (OB_FAIL(inner_delete_file_())) {
       LOG_WARN("fail to inner delete file", KR(ret), KPC(this));
     } else {
@@ -383,7 +382,6 @@ int ObITmpFile::delete_file()
     }
   }
 
-  LOG_INFO("tmp file delete over", KR(ret), KPC(this));
   return ret;
 }
 

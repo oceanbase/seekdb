@@ -7214,7 +7214,7 @@ int ObDDLService::create_aux_index_task_(
                                parent_task_id);
     param.tenant_data_version_ = tenant_data_version;
     param.ddl_need_retry_at_executor_ = share::schema::is_rowkey_doc_aux(create_index_arg.index_type_)
-                                        &&  GCTX.is_shared_storage_mode();
+                                        && !create_index_arg.is_offline_rebuild_;
     param.new_snapshot_version_ = snapshot_version;
     if (OB_FAIL(ObSysDDLSchedulerUtil::create_ddl_task(param, trans, task_record))) {
       if (OB_ENTRY_EXIST == ret) {
@@ -7449,6 +7449,7 @@ int ObDDLService::lock_tables_in_recyclebin(const ObDatabaseSchema &database_sch
   }
   return ret;
 }
+
 
 int ObDDLService::create_index_tablet(const ObTableSchema &index_schema,
                                       ObMySQLTransaction &trans,
@@ -15630,6 +15631,9 @@ int ObDDLService::check_is_offline_ddl(ObAlterTableArg &alter_table_arg,
         && ObDDLType::DDL_DROP_COLUMN_INSTANT != ddl_type
         && ObDDLType::DDL_DROP_COLUMN == alter_table_ddl_type) {
         ddl_type = ObDDLType::DDL_TABLE_REDEFINITION;
+    }
+    if (OB_SUCC(ret) && ObDDLType::DDL_COLUMN_REDEFINITION == ddl_type && GCTX.is_shared_storage_mode()) {
+      ddl_type = ObDDLType::DDL_TABLE_REDEFINITION;
     }
     if (OB_SUCC(ret) && share::ObDDLTaskType::DELETE_COLUMN_FROM_SCHEMA == alter_table_arg.ddl_task_type_) {
       // alter table drop unused column[s].

@@ -116,20 +116,7 @@ class ObDDLIncRedoLogWriterCallback : public blocksstable::ObIMacroBlockFlushCal
 public:
   ObDDLIncRedoLogWriterCallback();
   virtual ~ObDDLIncRedoLogWriterCallback();
-  int init(
-      const share::ObLSID &ls_id,
-      const ObTabletID &tablet_id,
-      const storage::ObDDLMacroBlockType block_type,
-      const ObITable::TableKey &table_key,
-      const int64_t task_id,
-      const share::SCN &start_scn,
-      const uint64_t data_format_version,
-      const storage::ObDirectLoadType direct_load_type,
-      transaction::ObTxDesc *tx_desc,
-      const transaction::ObTransID &trans_id,
-      const int64_t parallel_cnt,
-      const int64_t cg_cnt,
-      const transaction::ObTxSEQ seq_no);
+  int init(ObDDLRedoLogWriterCallbackInitParam &param);
   int write(
       const blocksstable::ObStorageObjectHandle &macro_handle,
       const blocksstable::ObLogicMacroBlockId &logic_id,

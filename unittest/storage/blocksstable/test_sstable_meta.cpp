@@ -25,6 +25,7 @@ using namespace common;
 using namespace share;
 using namespace storage;
 using namespace blocksstable;
+using namespace compaction;
 namespace unittest
 {
 static ObSimpleMemLimitGetter getter;
@@ -892,6 +893,7 @@ TEST_F(TestSSTableMeta, test_sstable_meta_deep_copy)
   OB_LOG(INFO, "cooper", K(src_meta), K(sizeof(ObSSTableMeta)), K(deep_copy_size));
   OB_LOG(INFO, "cooper", K(*flat_meta_1));
   ASSERT_EQ(src_meta.basic_meta_, flat_meta_1->basic_meta_);
+  OB_LOG(INFO, "kyle", K(src_meta.macro_info_), K(flat_meta_1->macro_info_), K(sizeof(src_meta.macro_info_)), K(sizeof(flat_meta_1->macro_info_)));
   ASSERT_EQ(0, MEMCMP((char*)&src_meta.data_root_info_, (char*)&flat_meta_1->data_root_info_, sizeof(src_meta.data_root_info_)));
   ASSERT_EQ(0, MEMCMP((char*)&src_meta.macro_info_, (char*)&flat_meta_1->macro_info_, sizeof(src_meta.macro_info_)));
   // ASSERT_EQ(0, MEMCMP((char*)&src_meta.cg_sstables_, (char*)&flat_meta_1->cg_sstables_, sizeof(src_meta.cg_sstables_)));
@@ -901,7 +903,6 @@ TEST_F(TestSSTableMeta, test_sstable_meta_deep_copy)
   ASSERT_EQ(src_meta.tx_ctx_.len_, flat_meta_1->tx_ctx_.len_);
   ASSERT_EQ(src_meta.tx_ctx_.count_, flat_meta_1->tx_ctx_.count_);
   ASSERT_EQ(0, MEMCMP(src_meta.tx_ctx_.tx_descs_, flat_meta_1->tx_ctx_.tx_descs_, flat_meta_1->tx_ctx_.get_variable_size()));
-
   // test deep copy from flat memory meta to flat memory meta
   pos = 0;
   char *flat_buf_2 = (char*)ob_malloc_align(4<<10, buf_size, ObMemAttr());

@@ -613,7 +613,6 @@ int ObLogDelUpd::inner_get_op_exprs(ObIArray<ObRawExpr*> &all_exprs, bool need_c
     LOG_WARN("failed to allocate partition id expr", K(ret));
   } else if (get_plan()->get_optimizer_context().is_online_ddl()
       && !get_plan()->get_optimizer_context().is_heap_table_ddl()
-      && GCTX.is_shared_storage_mode()
       && OB_FAIL(generate_ddl_slice_id_expr())) {
     LOG_WARN("failed to allocate ddl slice id expr", K(ret));
   } else if (OB_FAIL(find_trans_info_producer())) {

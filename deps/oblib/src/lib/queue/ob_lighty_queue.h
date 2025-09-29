@@ -99,6 +99,7 @@ public:
   bool is_inited() const { return queue_.is_inited(); }
   int push(void *data, const int64_t timeout = 0);
   int pop(void *&data, const int64_t timeout = 0);
+  int64_t to_string(char* buf, const int64_t buf_len) const { return 0; }
 private:
   typedef ObOrderedFixedQueue<void> Queue;
   Queue queue_;

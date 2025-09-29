@@ -702,16 +702,9 @@ int ObRAWIndexBlockRowIterator::get_next(const ObIndexBlockRowHeader *&idx_row_h
   } else if (OB_UNLIKELY(nullptr == idx_row_header || !endkey.is_valid())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("Unexpected null index block row header/endkey", K(ret), KP(idx_row_header), K(endkey));
-  } else if (idx_row_header->is_data_index() && !idx_row_header->is_major_node()) {
-    if (OB_FAIL(idx_row_parser_.get_minor_meta(idx_minor_info))) {
-      LOG_WARN("Fail to get minor meta info", K(ret));
-    }
-  } else if (!idx_row_header->is_major_node() || !idx_row_header->is_pre_aggregated()) {
-    // Do not have aggregate data
-  } else if (OB_FAIL(idx_row_parser_.get_agg_row(agg_row_buf, agg_buf_size))) {
-    LOG_WARN("Fail to get aggregate", K(ret));
-  }
-  if (OB_SUCC(ret)) {
+  } else if (OB_FAIL(idx_row_parser_.parse_minor_meta_and_agg_row(idx_minor_info, agg_row_buf, agg_buf_size))) {
+    LOG_WARN("Fail to parse minor meta and agg row", K(ret));
+  } else {
     row_offset = idx_row_parser_.get_row_offset();
     is_scan_left_border = current_ == start_;
     is_scan_right_border = current_ == end_;
@@ -983,16 +976,9 @@ int ObTFMIndexBlockRowIterator::get_next(const ObIndexBlockRowHeader *&idx_row_h
   } else if (OB_UNLIKELY(nullptr == idx_row_header || !endkey.is_valid())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("Unexpected null index block row header/endkey", K(ret), KP(idx_row_header), K(endkey));
-  } else if (idx_row_header->is_data_index() && !idx_row_header->is_major_node()) {
-    if (OB_FAIL(idx_row_parser_.get_minor_meta(idx_minor_info))) {
-      LOG_WARN("Fail to get minor meta info", K(ret));
-    }
-  } else if (!idx_row_header->is_major_node() || !idx_row_header->is_pre_aggregated()) {
-    // Do not have aggregate data
-  } else if (OB_FAIL(idx_row_parser_.get_agg_row(agg_row_buf, agg_buf_size))) {
-    LOG_WARN("Fail to get aggregate", K(ret));
-  }
-  if (OB_SUCC(ret)) {
+  } else if (OB_FAIL(idx_row_parser_.parse_minor_meta_and_agg_row(idx_minor_info, agg_row_buf, agg_buf_size))) {
+    LOG_WARN("Fail to parse minor meta and agg row", K(ret));
+  } else {
     row_offset = idx_row_parser_.get_row_offset();
     is_scan_left_border = current_ == start_;
     is_scan_right_border = current_ == end_;
@@ -1668,9 +1654,6 @@ int ObIndexBlockRowScanner::init_by_micro_data(const ObMicroBlockData &idx_block
   if (ObMicroBlockData::INDEX_BLOCK == idx_block_data.type_ || ObMicroBlockData::DDL_MERGE_INDEX_BLOCK == idx_block_data.type_) {
     if (ObMicroBlockData::DDL_MERGE_INDEX_BLOCK == idx_block_data.type_ && is_ddl_merge_type() && is_normal_query_) {
       if (!ObDDLUtil::need_rescan_column_store(iter_param_.tablet_->get_tablet_meta().ddl_data_format_version_)) {
-        ret = OB_NOT_SUPPORTED;
-        LOG_WARN("column store must rescan to fill data", K(ret));
-        /*
         if (OB_NOT_NULL(ddl_slice_iter_)) {
           iter_ = ddl_slice_iter_;
           index_format_ = ObIndexFormat::DDL_SLICE;
@@ -1684,7 +1667,6 @@ int ObIndexBlockRowScanner::init_by_micro_data(const ObMicroBlockData &idx_block
             index_format_ = ObIndexFormat::DDL_SLICE;
           }
         }
-        */
       } else {
         if (OB_NOT_NULL(ddl_merge_iter_)) {
           iter_ = ddl_merge_iter_;

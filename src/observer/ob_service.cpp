@@ -580,7 +580,8 @@ int ObService::calc_column_checksum_request(const obrpc::ObCalcColumnChecksumReq
                                            arg.schema_version_,
                                            arg.task_id_,
                                            arg.execution_id_,
-                                           arg.snapshot_version_))) {
+                                           arg.snapshot_version_,
+                                           arg.user_parallelism_))) {
             STORAGE_LOG(WARN, "fail to init ObUniqueCheckingDag", KR(tmp_ret));
           } else if (OB_TMP_FAIL(dag->alloc_global_index_task_callback(calc_item.tablet_id_,
                                                                        arg.target_table_id_,
@@ -589,7 +590,7 @@ int ObService::calc_column_checksum_request(const obrpc::ObCalcColumnChecksumReq
                                                                        arg.task_id_,
                                                                        callback))) {
             STORAGE_LOG(WARN, "fail to alloc global index task callback", KR(tmp_ret));
-          } else if (OB_TMP_FAIL(dag->alloc_unique_checking_prepare_task(callback))) {
+          } else if (OB_TMP_FAIL(dag->alloc_unique_checking_prepare_task(dag->get_param(), dag->get_context()))) {
             STORAGE_LOG(WARN, "fail to alloc unique checking prepare task", KR(tmp_ret));
           } else if (OB_TMP_FAIL(dag_scheduler->add_dag(dag))) {
             saved_ret = tmp_ret;

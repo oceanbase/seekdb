@@ -451,10 +451,15 @@ public:
 
   int wait_release_memtables();
 
+  // ATTENTION!!!
+  // 1. release ddl memtables from this tablet.
+  // 2. If a tablet may be being accessed, shouldn't call this function.
+  int clear_ddl_memtables();
+
   int get_storage_schema_for_transfer_in(
       common::ObArenaAllocator &allocator,
       ObStorageSchema &storage_schema) const;
-  int get_restore_status(ObTabletRestoreStatus::STATUS &restore_status);
+  int get_restore_status(ObTabletRestoreStatus::STATUS &restore_status) const;
 
   // static help function
   static int deserialize_id(
@@ -476,8 +481,7 @@ public:
       const blocksstable::ObSSTableMergeRes &res,
       blocksstable::ObMigrationSSTableParam &mig_sstable_param) const;
   int get_ha_tables(
-      ObTableStoreIterator &iter,
-      bool &is_ready_for_read);
+      ObTableStoreIterator &iter);
   int get_ha_sstable_size(int64_t &data_size);
   //transfer
   int build_transfer_tablet_param(
@@ -607,6 +611,14 @@ public:
       const share::SCN &scn,
       const ObTabletBindingMdsUserData &ddl_info,
       mds::MdsCtx &ctx);
+  int set_ddl_complete(const mds::DummyKey &key,
+                       const ObTabletDDLCompleteMdsUserData &ddl_complete,
+                       mds::MdsCtx &ctx,
+                       const int64_t lock_timeout_us);
+  int replay_set_ddl_complete(const share::SCN &scn,
+                              const mds::DummyKey &key,
+                              const ObTabletDDLCompleteMdsUserData &ddl_complete,
+                              mds::MdsCtx &ctx);
   int set_truncate_info(
       const ObTruncateInfoKey &key,
       const ObTruncateInfo &value,

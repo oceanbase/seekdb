@@ -614,7 +614,6 @@ int ObDynamicSamplePieceMsgCtx::on_message(
   }
   received_ += piece.piece_count_;
   LOG_DEBUG("process a sample picece msg", K(piece), "all_got", received_, "expected", task_cnt_);
-
   // send whole message when all piece received
   if (OB_SUCC(ret) && received_ == task_cnt_) {
     if (OB_FAIL(send_whole_msg(sqcs))) {

@@ -92,6 +92,7 @@ namespace sql
    (type) == PHY_PX_MULTI_PART_INSERT || \
    (type) == PHY_PX_MULTI_PART_UPDATE || \
    (type) == PHY_PX_MULTI_PART_SSTABLE_INSERT || \
+   (type) == PHY_VEC_PX_MULTI_PART_SSTABLE_INSERT || \
    (type) == PHY_LOCK || \
    (type) == PHY_TABLE_DIRECT_INSERT)
 

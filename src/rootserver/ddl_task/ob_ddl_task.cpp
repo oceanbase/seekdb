@@ -2311,7 +2311,8 @@ int ObDDLWaitColumnChecksumCtx::init(
     const int64_t schema_version,
     const int64_t snapshot_version,
     const int64_t execution_id,
-    const int64_t timeout_us)
+    const int64_t timeout_us,
+    const int64_t parallelism)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(is_inited_)) {
@@ -2374,6 +2375,7 @@ int ObDDLWaitColumnChecksumCtx::init(
       task_id_ = task_id;
       tenant_id_ = tenant_id;
       is_inited_ = true;
+      parallelism_ = parallelism;
     }
   }
   return ret;
@@ -2392,6 +2394,7 @@ void ObDDLWaitColumnChecksumCtx::reset()
   stat_array_.reset();
   task_id_ = 0;
   tenant_id_ = OB_INVALID_ID;
+  parallelism_ = 0;
 }
 
 int ObDDLWaitColumnChecksumCtx::try_wait(bool &is_column_checksum_ready)
@@ -2625,6 +2628,7 @@ int ObDDLWaitColumnChecksumCtx::send_calc_rpc(int64_t &send_succ_count)
       arg.schema_version_ = schema_version_;
       arg.execution_id_ = execution_id_;
       arg.snapshot_version_ = snapshot_version_;
+      arg.user_parallelism_ = parallelism_;
       for (int64_t i = 0; OB_SUCC(ret) && i < send_array.count(); ++i) {
         const SendItem &send_item = send_array.at(i);
         if (send_item.leader_addr_ != last_addr) {

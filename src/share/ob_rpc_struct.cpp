@@ -2952,7 +2952,10 @@ DEF_TO_STRING(ObCreateIndexArg)
        K_(index_cgs),
        K_(vidx_refresh_info),
        K_(is_rebuild_index),
-       K_(is_index_scope_specified));
+       K_(is_index_scope_specified),
+       K_(is_offline_rebuild),
+       K_(index_key),
+       K_(data_version));
   J_OBJ_END();
   return pos;
 }
@@ -3446,7 +3449,7 @@ bool ObCalcColumnChecksumRequestArg::is_valid() const
   bool bret = OB_INVALID_ID != tenant_id_ &&  OB_INVALID_ID != target_table_id_
       && OB_INVALID_VERSION != schema_version_ && execution_id_ >= 0
       && OB_INVALID_VERSION != snapshot_version_ && OB_INVALID_ID != source_table_id_ 
-      && task_id_ > 0;
+      && task_id_ > 0 && user_parallelism_ > 0;
   for (int64_t i = 0; bret && i < calc_items_.count(); ++i) {
     bret = calc_items_.at(i).is_valid();
   }

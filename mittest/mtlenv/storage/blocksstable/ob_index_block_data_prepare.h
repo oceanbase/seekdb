@@ -623,7 +623,8 @@ void TestIndexBlockDataPrepare::prepare_data(const int64_t micro_block_size)
   scn.convert_for_tx(SNAPSHOT_VERSION);
   ObWholeDataStoreDesc desc;
   ASSERT_EQ(OB_SUCCESS, desc.init(false/*is_ddl*/, table_schema_, ObLSID(ls_id_), ObTabletID(tablet_id_), merge_type_, SNAPSHOT_VERSION,
-                                  DATA_CURRENT_VERSION, table_schema_.get_micro_index_clustered(), 0 /*transfer_seq*/, scn));
+                                  DATA_CURRENT_VERSION, table_schema_.get_micro_index_clustered(), 0 /*transfer_seq*/,
+                                  0/*concurrent_cnt*/, scn));
   desc.get_desc().static_desc_->schema_version_ = 10;
   void *builder_buf = allocator_.alloc(sizeof(ObSSTableIndexBuilder));
   root_index_builder_ = new (builder_buf) ObSSTableIndexBuilder(false /* not need writer buffer*/);
@@ -672,7 +673,8 @@ void TestIndexBlockDataPrepare::prepare_discontinuous_data(const int64_t micro_b
   scn.convert_for_tx(SNAPSHOT_VERSION);
   ObWholeDataStoreDesc desc;
   ASSERT_EQ(OB_SUCCESS, desc.init(false/*is_ddl*/, table_schema_, ObLSID(ls_id_), ObTabletID(tablet_id_), merge_type_, SNAPSHOT_VERSION,
-                                  DATA_CURRENT_VERSION, table_schema_.get_micro_index_clustered(), 0 /*transfer_seq*/, scn));
+                                  DATA_CURRENT_VERSION, table_schema_.get_micro_index_clustered(), 0 /*transfer_seq*/, 0/*concurrent_cnt*/,
+                                  scn));
   desc.get_desc().static_desc_->schema_version_ = 10;
   void *builder_buf = allocator_.alloc(sizeof(ObSSTableIndexBuilder));
   root_index_builder_ = new (builder_buf) ObSSTableIndexBuilder(false /* not need writer buffer*/);
@@ -744,7 +746,8 @@ void TestIndexBlockDataPrepare::prepare_cg_data()
   ObWholeDataStoreDesc desc;
   share::SCN scn;
   scn.convert_for_tx(SNAPSHOT_VERSION);
-  ASSERT_EQ(OB_SUCCESS, desc.init(false/*is_ddl*/, table_schema_, ObLSID(ls_id_), ObTabletID(tablet_id_), merge_type_, SNAPSHOT_VERSION, DATA_CURRENT_VERSION, table_schema_.get_micro_index_clustered(), 0 /*transfer_seq*/, scn));
+  ASSERT_EQ(OB_SUCCESS, desc.init(false/*is_ddl*/, table_schema_, ObLSID(ls_id_), ObTabletID(tablet_id_), merge_type_,
+    SNAPSHOT_VERSION, DATA_CURRENT_VERSION, table_schema_.get_micro_index_clustered(), 0 /*transfer_seq*/, 0/*concurrent_cnt*/, scn));
   ObIArray<ObColDesc> &col_descs = desc.get_desc().col_desc_->col_desc_array_;
   for (int64_t i = 0; i < col_descs.count(); ++i) {
     if (col_descs.at(i).col_type_.type_ == ObIntType) {
@@ -766,8 +769,7 @@ void TestIndexBlockDataPrepare::prepare_cg_data()
   OK(data_desc.init(false/*is_ddl*/, table_schema_, ObLSID(ls_id_), ObTabletID(tablet_id_),
                     merge_type_, SNAPSHOT_VERSION, DATA_CURRENT_VERSION,
                     table_schema_.get_micro_index_clustered(),
-                    0 /*transfer_seq*/,
-                    scn, &cg_schema, 0));
+                    0 /*transfer_seq*/, 0/*concurrent_cnt*/, scn, &cg_schema, 0));
   data_desc.get_desc().static_desc_->schema_version_ = 10;
   void *builder_buf = allocator_.alloc(sizeof(ObSSTableIndexBuilder));
   root_index_builder_ = new (builder_buf) ObSSTableIndexBuilder(false /* not need writer buffer*/);
@@ -811,7 +813,9 @@ void TestIndexBlockDataPrepare::prepare_ddl_memtable()
 
   share::SCN ddl_start_scn;
   ddl_start_scn.convert_from_ts(ObTimeUtility::current_time());
-  ASSERT_EQ(OB_SUCCESS, ddl_memtable_.init(allocator_, *tablet_handle.get_obj(), sstable_.get_key(), ddl_start_scn, DATA_CURRENT_VERSION));
+  ObStorageSchema *storage_schema = nullptr;
+  ASSERT_EQ(OB_SUCCESS, tablet_handle.get_obj()->load_storage_schema(allocator_, storage_schema));
+  ASSERT_EQ(OB_SUCCESS, ddl_memtable_.init(allocator_, *tablet_handle.get_obj(), sstable_.get_key(), ddl_start_scn, DATA_CURRENT_VERSION, storage_schema));
 
   SMART_VAR(ObSSTableSecMetaIterator, meta_iter) {
     ObDatumRange query_range;
@@ -942,9 +946,12 @@ void TestIndexBlockDataPrepare::prepare_partial_ddl_data()
   ObMacroBlockWriter writer;
   row_generate_.reset();
   ObWholeDataStoreDesc desc;
+  const share::SCN reorganization_scn(share::SCN::min_scn());
   share::SCN end_scn;
   end_scn.convert_from_ts(ObTimeUtility::current_time());
-  ASSERT_EQ(OB_SUCCESS, desc.init(true/*is ddl*/, table_schema_, ObLSID(ls_id_), ObTabletID(tablet_id_), merge_type_, SNAPSHOT_VERSION, CLUSTER_CURRENT_VERSION, table_schema_.get_micro_index_clustered(), 0 /*transfer_seq*/, end_scn));
+  ASSERT_EQ(OB_SUCCESS, desc.init(true/*is ddl*/, table_schema_, ObLSID(ls_id_), ObTabletID(tablet_id_),
+      merge_type_, SNAPSHOT_VERSION, CLUSTER_CURRENT_VERSION, table_schema_.get_micro_index_clustered(), 0 /*transfer_seq*/,
+      0/*concurrent_cnt*/, end_scn));
   void *builder_buf = allocator_.alloc(sizeof(ObSSTableIndexBuilder));
   merge_root_index_builder_ = new (builder_buf) ObSSTableIndexBuilder(false /* not need writer buffer */);
   ASSERT_NE(nullptr, merge_root_index_builder_);
@@ -1019,7 +1026,9 @@ void TestIndexBlockDataPrepare::prepare_partial_cg_data()
   ObWholeDataStoreDesc desc;
   share::SCN end_scn;
   end_scn.convert_from_ts(ObTimeUtility::current_time());
-  ASSERT_EQ(OB_SUCCESS, desc.init(true/*is ddl*/, table_schema_, ObLSID(ls_id_), ObTabletID(tablet_id_), merge_type_, SNAPSHOT_VERSION, CLUSTER_CURRENT_VERSION, table_schema_.get_micro_index_clustered(), 0 /*transfer_seq*/, end_scn));
+  ASSERT_EQ(OB_SUCCESS, desc.init(true/*is ddl*/, table_schema_, ObLSID(ls_id_), ObTabletID(tablet_id_),
+      merge_type_, SNAPSHOT_VERSION, CLUSTER_CURRENT_VERSION, table_schema_.get_micro_index_clustered(), 0 /*transfer_seq*/,
+      0/*concurrent_cnt*/, end_scn));
   void *builder_buf = allocator_.alloc(sizeof(ObSSTableIndexBuilder));
   merge_root_index_builder_ = new (builder_buf) ObSSTableIndexBuilder(false /* not need index buffer */);
   ASSERT_NE(nullptr, merge_root_index_builder_);
@@ -1256,7 +1265,9 @@ void TestIndexBlockDataPrepare::prepare_contrastive_sstable()
   ObWholeDataStoreDesc desc;
   share::SCN end_scn;
   end_scn.convert_from_ts(ObTimeUtility::current_time());
-  ASSERT_EQ(OB_SUCCESS, desc.init(false/*is_ddl*/, table_schema_, ObLSID(ls_id_), ObTabletID(tablet_id_), merge_type_, SNAPSHOT_VERSION, CLUSTER_CURRENT_VERSION, table_schema_.get_micro_index_clustered(), 0 /*transfer_seq*/, end_scn));
+  ASSERT_EQ(OB_SUCCESS, desc.init(false/*is_ddl*/, table_schema_, ObLSID(ls_id_), ObTabletID(tablet_id_),
+      merge_type_, SNAPSHOT_VERSION, CLUSTER_CURRENT_VERSION, table_schema_.get_micro_index_clustered(), 0 /*transfer_seq*/,
+      0/*concurrent_cnt*/, end_scn));
   void *builder_buf = allocator_.alloc(sizeof(ObSSTableIndexBuilder));
   root_index_builder_ = new (builder_buf) ObSSTableIndexBuilder(false /* not need writer buffer*/);
   ASSERT_NE(nullptr, root_index_builder_);
@@ -1317,13 +1328,19 @@ void TestIndexBlockDataPrepare::prepare_merge_ddl_kvs()
   ObITable::TableKey ddl_key = sstable_.get_key();
   ddl_key.table_type_ = ObITable::TableType::MAJOR_SSTABLE;
   for (int64_t i = 0; i < DDL_KVS_CNT; ++i) {
-    void *buf = allocator_.alloc(sizeof(ObDDLMemtable));
+    void *buf = ddl_kv_handle_.get_obj()->ddl_memtable_allocator_.alloc(sizeof(ObDDLMemtable));
     ASSERT_NE(nullptr, buf);
     ObDDLMemtable *new_ddl_table = new (buf) ObDDLMemtable;
     ddl_key.slice_range_.start_slice_idx_ = 0;
     ddl_key.slice_range_.end_slice_idx_ = 0;
-    ASSERT_EQ(OB_SUCCESS, new_ddl_table->init(allocator_, *tablet_handle.get_obj(), ddl_key, ddl_start_scn, 4000));
+    ObStorageSchema *storage_schema = nullptr;
+    void *buf2 = ddl_kv_handle_.get_obj()->ddl_memtable_allocator_.alloc(sizeof(ObArenaAllocator));
+    ASSERT_NE(nullptr, buf2);
+    ObArenaAllocator *allocator = new (buf2) ObArenaAllocator();
+    ASSERT_EQ(OB_SUCCESS, tablet_handle.get_obj()->load_storage_schema(allocator_, storage_schema));
+    ASSERT_EQ(OB_SUCCESS, new_ddl_table->init(*allocator, *tablet_handle.get_obj(), ddl_key, ddl_start_scn, 4000, storage_schema));
     ASSERT_EQ(OB_SUCCESS, ddl_kv_handle_.get_obj()->get_ddl_memtables().push_back(new_ddl_table));
+    ASSERT_EQ(OB_SUCCESS, ddl_kv_handle_.get_obj()->get_ddl_memtable_allocators().push_back(allocator));
   }
   ObDDLKVHandle kv_handle;
   ObDDLKvMgrHandle ddl_kv_mgr_handle;

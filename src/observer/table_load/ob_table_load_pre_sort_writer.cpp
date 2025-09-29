@@ -87,6 +87,7 @@ int ObTableLoadPreSortWriter::write(int32_t session_id,
     for (int64_t i = 0; OB_SUCC(ret) && i < row_array.count(); ++i) {
       const ObTableLoadTabletObjRow &row = row_array.at(i);
       if (OB_FAIL(store_writer_->cast_row(session_id, row.obj_row_, datum_row))) {
+        LOG_INFO("write row error", K(ret), K(row));
         if (OB_FAIL(error_row_handler_->handle_error_row(ret))) {
           LOG_WARN("failed to handle error row", K(ret), K(row));
         } else {

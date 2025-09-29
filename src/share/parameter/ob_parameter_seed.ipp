@@ -103,7 +103,7 @@ DEF_INT(cpu_count, OB_CLUSTER_PARAMETER, "0", "[0,]",
         ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 DEF_TIME(trace_log_slow_query_watermark, OB_CLUSTER_PARAMETER, "1s", "[1ms,]",
         "the threshold of execution time (in milliseconds) of a query beyond "
-        "which it is considered to be a \\'slow query\\'. Range: [1ms,+∞)",
+        "which it is considered to be \\'slow query\\'. Range: [1ms,+∞)",
         ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 DEF_BOOL(enable_record_trace_log, OB_CLUSTER_PARAMETER, "True",
          "specifies whether to always record the trace log. The default value is True.",

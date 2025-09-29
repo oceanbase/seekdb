@@ -40,13 +40,14 @@ const char *ObLogTableScan::get_name() const
     }
   }
   if (sample_method != SampleInfo::NO_SAMPLE) {
-    name = (sample_method == SampleInfo::ROW_SAMPLE) ? "TABLE ROW SAMPLE SCAN" : "TABLE BLOCK SAMPLE SCAN";
     if (sample_method == SampleInfo::ROW_SAMPLE) {
       name = "TABLE ROW SAMPLE SCAN";
     } else if (sample_method == SampleInfo::BLOCK_SAMPLE) {
       name = "TABLE BLOCK SAMPLE SCAN";
     } else if (sample_method == SampleInfo::HYBRID_SAMPLE) {
       name = "TABLE HYBRID SAMPLE SCAN";
+    } else if (sample_method == SampleInfo::DDL_BLOCK_SAMPLE) {
+      name = "TABLE DDL BLOCK SAMPLE SCAN";
     }
   } else if (is_text_retrieval_scan()) {
     name = use_das() ? "DISTRIBUTED TEXT RETRIEVAL SCAN" : "TEXT RETRIEVAL SCAN";

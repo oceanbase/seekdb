@@ -303,7 +303,7 @@ int ObLockTable::online()
     if (!sstables.empty()) {
       ObStorageMetaHandle loaded_sstable_handle;
       ObSSTable *loaded_sstable = nullptr;
-      if (OB_FAIL(ObTabletTableStore::load_sstable_on_demand(
+      if (OB_FAIL(ObCacheSSTableHelper::load_sstable_on_demand(
           table_store_wrapper.get_meta_handle(),
           *sstables[0],
           loaded_sstable_handle,
@@ -368,7 +368,6 @@ int ObLockTable::remove_tablet()
   }
   return ret;
 }
-
 
 int ObLockTable::get_lock_memtable(ObTableHandleV2 &handle)
 {

@@ -398,6 +398,11 @@ void ObSSTableBasicMeta::set_upper_trans_version(const int64_t upper_trans_versi
   }
 }
 
+void ObSSTableBasicMeta::set_filled_tx_scn(const share::SCN &filled_tx_scn)
+{
+  filled_tx_scn_ = std::max(filled_tx_scn, filled_tx_scn_);
+}
+
 //================================== ObTxDesc & ObTxContext ==================================
 int ObTxContext::ObTxDesc::serialize(char *buf, const int64_t buf_len, int64_t &pos) const
 {
@@ -690,20 +695,6 @@ int ObSSTableMeta::init_data_index_tree_info(
   return ret;
 }
 
-int ObSSTableMeta::prepare_tx_context(
-  const ObTxContext::ObTxDesc &tx_desc,
-  common::ObArenaAllocator &allocator)
-{
-  int ret = OB_SUCCESS;
-  ObSEArray<ObTxContext::ObTxDesc, 1> tx_desc_arr;
-  if (OB_FAIL(tx_desc_arr.push_back(tx_desc))) {
-    LOG_WARN("push back tx desc fail", K(ret), K(tx_desc));
-  } else if (OB_FAIL(tx_ctx_.init(tx_desc_arr, allocator))) {
-    LOG_WARN("failed to alloc memory for tx_ids_", K(ret), K(tx_desc));
-  }
-  return ret;
-}
-
 bool ObSSTableMeta::check_meta() const
 {
   return basic_meta_.is_valid()
@@ -741,12 +732,6 @@ int ObSSTableMeta::init(
       // empty co sstable no need to init cg
     } else if (OB_FAIL(cg_sstables_.init_empty_array_for_cg(allocator, param.column_group_cnt_ - 1/*exclude basic cg*/))) {
       LOG_WARN("failed to alloc memory for cg sstable array", K(ret), K(param));
-    }
-  }
-
-  if (OB_SUCC(ret) && transaction::ObTransID(param.uncommitted_tx_id_).is_valid()) {
-    if (OB_FAIL(prepare_tx_context(ObTxContext::ObTxDesc(param.uncommitted_tx_id_, 0), allocator))) {
-      LOG_WARN("failed to alloc memory for tx_ids_", K(ret), K(param));
     }
   }
 
@@ -1241,10 +1226,9 @@ int ObMigrationSSTableParam::deserialize_(const char *buf, const int64_t data_le
   } else if (pos < data_len && OB_FAIL(addr_deserialize(buf, data_len, pos,
       data_block_macro_meta_addr_, data_block_macro_meta_buf_))) {
     STORAGE_LOG(WARN, "fail to deserialize address and buf", K(ret), KP(buf), K(data_len), K(pos));
-  } 
+  }
 
   LST_DO_CODE(OB_UNIS_DECODE, is_meta_root_);
-
   return ret;
 }
 

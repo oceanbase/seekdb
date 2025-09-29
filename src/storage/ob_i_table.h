@@ -175,6 +175,7 @@ public:
     OB_INLINE bool is_mds_mini_sstable() const { return ObITable::is_mds_mini_sstable(table_type_); }
     OB_INLINE bool is_mds_minor_sstable() const { return ObITable::is_mds_minor_sstable(table_type_); }
     OB_INLINE bool is_ddl_sstable() const { return ObITable::is_ddl_sstable(table_type_); }
+    OB_INLINE bool is_ddl_type_sstable() const { return ObITable::is_ddl_type_sstable(table_type_); }
     OB_INLINE bool is_ddl_dump_sstable() const { return ObITable::is_ddl_dump_sstable(table_type_); }
     OB_INLINE bool is_ddl_mem_sstable() const { return ObITable::is_ddl_mem_sstable(table_type_); }
     OB_INLINE bool is_table_with_scn_range() const { return ObITable::is_table_with_scn_range(table_type_); }
@@ -303,6 +304,7 @@ public:
   virtual OB_INLINE int64_t get_timestamp() const { return 0; }
   virtual bool is_mds_sstable() const { return is_mds_sstable(key_.table_type_); }
   virtual bool is_ddl_sstable() const { return is_ddl_sstable(key_.table_type_); }
+  virtual bool is_ddl_type_sstable() const { return is_ddl_type_sstable(key_.table_type_); }
   virtual bool is_ddl_dump_sstable() const { return is_ddl_dump_sstable(key_.table_type_); }
   virtual bool is_ddl_mem_sstable() const { return is_ddl_mem_sstable(key_.table_type_); }
   virtual bool is_ddl_merge_sstable() const { return is_ddl_merge_sstable(key_.table_type_); }
@@ -444,6 +446,10 @@ public:
       || ObITable::TableType::DDL_MEM_SSTABLE == table_type
       || ObITable::TableType::DDL_MEM_CO_SSTABLE == table_type
       || ObITable::TableType::DDL_MEM_CG_SSTABLE == table_type;
+  }
+  static bool is_ddl_type_sstable(const TableType table_type)
+  {
+    return is_ddl_sstable(table_type);
   }
   static bool is_ddl_dump_sstable(const TableType table_type)
   {

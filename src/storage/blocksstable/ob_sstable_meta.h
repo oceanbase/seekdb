@@ -126,6 +126,7 @@ public:
   int decode_for_compat(const char *buf, const int64_t data_len, int64_t &pos);
 
   void set_upper_trans_version(const int64_t upper_trans_version);
+  void set_filled_tx_scn(const share::SCN &filled_tx_scn);
   int serialize(char *buf, const int64_t buf_len, int64_t &pos) const;
   int deserialize(const char *buf, const int64_t data_len, int64_t& pos);
   int64_t get_serialize_size() const;
@@ -221,8 +222,6 @@ public:
   OB_INLINE const ObSSTableBasicMeta &get_basic_meta() const { return basic_meta_; }
   OB_INLINE int64_t get_col_checksum_cnt() const { return column_ckm_struct_.count_; }
   OB_INLINE int64_t *get_col_checksum() const { return column_ckm_struct_.column_checksums_; }
-  OB_INLINE int64_t get_tx_id_count() const { return tx_ctx_.get_count(); }
-  OB_INLINE int64_t get_tx_ids(const int64_t idx) const { return tx_ctx_.get_tx_id(idx); }
   OB_INLINE int64_t get_data_checksum() const { return basic_meta_.data_checksum_; }
   OB_INLINE int64_t get_rowkey_column_count() const { return basic_meta_.rowkey_column_count_; }
   OB_INLINE int64_t get_column_count() const { return basic_meta_.column_cnt_; }
@@ -324,9 +323,6 @@ private:
   int init_data_index_tree_info(
       const storage::ObTabletCreateSSTableParam &param,
       common::ObArenaAllocator &allocator);
-  int prepare_tx_context(
-    const ObTxContext::ObTxDesc &tx_desc,
-    common::ObArenaAllocator &allocator);
   int serialize_(char *buf, const int64_t buf_len, int64_t &pos) const;
   int deserialize_(
       common::ObArenaAllocator &allocator,
@@ -345,7 +341,7 @@ private:
   ObSSTableMacroInfo macro_info_;
   ObSSTableArray cg_sstables_;
   ObColumnCkmStruct column_ckm_struct_;
-  ObTxContext tx_ctx_;
+  ObTxContext tx_ctx_;  // abandon meta !!!
   // The following fields don't to persist
   bool is_inited_;
   DISALLOW_COPY_AND_ASSIGN(ObSSTableMeta);

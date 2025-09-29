@@ -320,7 +320,7 @@ int ObSSTable::copy_from_old_sstable(const ObSSTable &src, common::ObArenaAlloca
         LOG_WARN("unexpected error, cg table is nullptr", K(ret), K(i), KPC(table), KPC(sstable));
       } else if (table->is_loaded()) {
         loaded_table = table;
-      } else if (OB_FAIL(ObTabletTableStore::load_sstable(table->get_addr(), false/*is_co_sstable*/, handle))) {
+      } else if (OB_FAIL(ObCacheSSTableHelper::load_sstable(table->get_addr(), false/*is_co_sstable*/, handle))) {
         LOG_WARN("fail to load cg sstable", K(ret), KPC(table));
       } else if (OB_FAIL(handle.get_sstable(loaded_table))) {
         LOG_WARN("fail to get sstable", K(ret), K(handle));
@@ -818,6 +818,30 @@ int ObSSTable::set_upper_trans_version(
 
   LOG_INFO("finish set upper trans version", K(ret), K(key_), K_(meta),
       K(old_val), K(upper_trans_version), K_(meta_cache));
+  return ret;
+}
+
+int ObSSTable::backfill_commit_version(
+    common::ObArenaAllocator &allocator,
+    const int64_t commit_version,
+    const share::SCN &filled_tx_scn)
+{
+  int ret = OB_SUCCESS;
+  const int64_t old_upper_trans_version = meta_cache_.upper_trans_version_;
+  const SCN &old_filled_tx_scn = meta_cache_.filled_tx_scn_;
+
+  if (!is_loaded() && OB_FAIL(bypass_load_meta(allocator))) {
+    LOG_WARN("failed to load sstable meta", K(ret), K(key_));
+  }
+  if (OB_SUCC(ret) && is_loaded()) {
+    (void) meta_->basic_meta_.set_upper_trans_version(commit_version);
+    (void) meta_cache_.set_upper_trans_version(commit_version);
+
+    (void) meta_->basic_meta_.set_filled_tx_scn(filled_tx_scn);
+  }
+
+  LOG_INFO("finish backfill commit version", K(ret), K(key_), K_(meta),
+            K(old_upper_trans_version), K(old_filled_tx_scn), K(commit_version), K_(meta_cache));
   return ret;
 }
 

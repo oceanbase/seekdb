@@ -411,6 +411,7 @@ public:
                                   int64_t table_id,
                                   ObIvfCacheMgrGuard &cache_mgr_guard);
   int acquire_ivf_cache_mgr_guard(ObLSID ls_id, const ObIvfCacheMgrKey &key, ObIvfCacheMgrGuard &cache_mgr_guard);
+  lib::MemoryContext &get_memory_context() { return memory_context_; }
   uint64_t *get_all_vsag_use_mem() { return all_vsag_use_mem_; }
 
   TO_STRING_KV(K_(is_inited), K_(has_start), K_(tenant_id),

@@ -449,10 +449,10 @@ int ObTabletLobSplitDag::calc_total_row_count() {
   LOG_INFO("calc row count of the src tablet", K(ret), K(context_));
   return ret;
 }
-int64_t ObTabletLobSplitDag::hash() const
+uint64_t ObTabletLobSplitDag::hash() const
 {
   int tmp_ret = OB_SUCCESS;
-  int64_t hash_val = 0;
+  uint64_t hash_val = 0;
   if (OB_UNLIKELY(!is_inited_ || !param_.is_valid())) {
     tmp_ret = OB_ERR_SYS;
     LOG_ERROR("table schema must not be NULL", K(tmp_ret), K(is_inited_), K(param_));
@@ -1301,6 +1301,7 @@ int ObTabletLobWriteDataTask::prepare_sstable_index_builder(const ObTabletLobWri
         snapshot_version,
         param_->data_format_version_,
         ctx_->lob_meta_tablet_handle_.get_obj()->get_tablet_meta().micro_index_clustered_,
+        0/*concurrent_cnt*/,
         tablet_handle.get_obj()->get_transfer_seq(),
         write_sstable_ctx.table_key_.get_end_scn()))) {
     LOG_WARN("fail to init data store desc", K(ret), "dest_tablet_id", new_tablet_id, KPC(param_), KPC(ctx_));

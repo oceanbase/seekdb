@@ -433,28 +433,49 @@ private:
   ObTablet shared_tablet_;
 };
 
+struct ObDDLRedoLogWriterCallbackInitParam
+{
+  ObDDLRedoLogWriterCallbackInitParam();
+  ~ObDDLRedoLogWriterCallbackInitParam();
+  bool is_valid() const;
+  void reset();
+  TO_STRING_KV(K_(ls_id), K_(tablet_id), K_(direct_load_type), K_(block_type),
+               K_(table_key), K_(start_scn), K_(task_id), K_(data_format_version),
+               K_(parallel_cnt), K_(cg_cnt), K_(with_cs_replica), K_(need_delay),
+               K_(need_submit_io), K_(row_id_offset), K_(merge_slice_idx),
+               KP_(macro_meta_store), KP_(write_stat), KP_(tx_desc), K_(trans_id), K_(seq_no));
+  share::ObLSID ls_id_;
+  common::ObTabletID tablet_id_;
+  storage::ObDirectLoadType direct_load_type_;
+  storage::ObDDLMacroBlockType block_type_;
+  ObITable::TableKey table_key_;
+  share::SCN start_scn_;
+  int64_t task_id_;
+  uint64_t data_format_version_;
+  int64_t parallel_cnt_;
+  int64_t cg_cnt_;
+  bool with_cs_replica_;
+  bool need_delay_;
+  bool need_submit_io_;
+  // if has one macro block with 100 rows before, this macro block's ddl_start_row_offset will be 100.
+  // if current macro block finish with 50 rows, current macro block's end_row_offset will be 149.
+  // end_row_offset = ddl_start_row_offset + curr_row_count - 1.
+  int64_t row_id_offset_;
+  int64_t merge_slice_idx_;
+  blocksstable::ObMacroMetaTempStore *macro_meta_store_;
+  ObDDLWriteStat *write_stat_;
+  transaction::ObTxDesc *tx_desc_;
+  transaction::ObTransID trans_id_;
+  transaction::ObTxSEQ seq_no_;
+  bool is_inc_major_log_;
+};
 // write macro redo for data block, need to set lsn on ObDDLRedoLogWriter when commit.
 class ObDDLRedoLogWriterCallback : public blocksstable::ObIMacroBlockFlushCallback
 {
 public:
   ObDDLRedoLogWriterCallback();
   virtual ~ObDDLRedoLogWriterCallback();
-  int init(
-      const share::ObLSID &ls_id,
-      const ObTabletID &tablet_id,
-      const storage::ObDDLMacroBlockType block_type,
-      const ObITable::TableKey &table_key,
-      const int64_t task_id,
-      const share::SCN &start_scn,
-      const uint64_t data_format_version,
-      const int64_t parallel_cnt,
-      const int64_t cg_cnt,
-      const storage::ObDirectLoadType direct_load_type,
-      const int64_t row_id_offset = -1,
-      const bool need_delay = false,
-      const bool with_cs_replica = false,
-      const bool need_submit_io = true,
-      blocksstable::ObMacroMetaTempStore *macro_meta_store = nullptr);
+  int init(ObDDLRedoLogWriterCallbackInitParam &init_param);
   void reset();
   int write(
       const blocksstable::ObStorageObjectHandle &macro_handle,
@@ -463,8 +484,8 @@ public:
       const int64_t buf_len,
       const int64_t row_count) override;
   int wait();
-  virtual int64_t get_ddl_start_row_offset() const override { return row_id_offset_; }
-  void set_merge_slice_idx(const int64_t slice_idx) { merge_slice_idx_ = slice_idx; }
+  virtual int64_t get_ddl_start_row_offset() const override { return param_.row_id_offset_; }
+  void set_merge_slice_idx(const int64_t slice_idx) { param_.merge_slice_idx_ = slice_idx; }
 private:
   bool is_column_group_info_valid() const;
   int inner_write(const ObDDLMacroBlockRedoInfo &redo_info);
@@ -474,27 +495,11 @@ private:
             const blocksstable::MacroBlockId &macro_block_id);
 private:
   bool is_inited_;
-  storage::ObDDLMacroBlockType block_type_;
-  ObITable::TableKey table_key_;
+  ObDDLRedoLogWriterCallbackInitParam param_;
   ObDDLRedoLogWriter ddl_writer_;
-  int64_t task_id_;
-  share::SCN start_scn_;
-  uint64_t data_format_version_;
-  storage::ObDirectLoadType direct_load_type_;
-  // if has one macro block with 100 rows before, this macro block's ddl_start_row_offset will be 100.
-  // if current macro block finish with 50 rows, current macro block's end_row_offset will be 149.
-  // end_row_offset = ddl_start_row_offset + curr_row_count - 1.
-  int64_t row_id_offset_;
-  int64_t parallel_cnt_;
-  int64_t cg_cnt_;
   ObDDLKvMgrHandle kv_mgr_handle_;
-  bool need_delay_;
   ObArenaAllocator allocator_;
   ObSEArray<ObDDLMacroBlockRedoInfo, 2> redo_info_array_;
-  bool with_cs_replica_;
-  bool need_submit_io_;
-  int64_t merge_slice_idx_;
-  blocksstable::ObMacroMetaTempStore *macro_meta_store_;
 };
 
 #ifdef OB_BUILD_SHARED_STORAGE

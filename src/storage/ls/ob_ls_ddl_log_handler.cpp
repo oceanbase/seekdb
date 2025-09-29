@@ -16,6 +16,9 @@
 #include "storage/tablet/ob_tablet_iterator.h"
 #include "storage/ddl/ob_ddl_replay_executor.h"
 #include "observer/ob_server_event_history_table_operator.h"
+#include "storage/ddl/ob_direct_load_mgr_utils.h"
+#include "storage/ddl/ob_ddl_merge_schedule.h"
+#include "storage/ddl/ob_direct_insert_sstable_ctx_new.h"
 
 namespace oceanbase
 {
@@ -368,6 +371,7 @@ int ObLSDDLLogHandler::flush(SCN &rec_scn)
   int ret = OB_SUCCESS;
   ObLSTabletIterator tablet_iter(ObMDSGetTabletMode::READ_WITHOUT_CHECK);
   ObTenantDirectLoadMgr *tenant_direct_load_mgr = MTL(ObTenantDirectLoadMgr *);
+  ObTabletHandle tablet_handle;
   if (OB_FAIL(ls_->get_tablet_svr()->build_tablet_iter(tablet_iter))) {
     LOG_WARN("failed to build ls tablet iter", K(ret), K(ls_));
   } else {
@@ -382,6 +386,7 @@ int ObLSDDLLogHandler::flush(SCN &rec_scn)
         ObArray<ObDDLKVHandle> ddl_kvs_handle;
         ObDDLKvMgrHandle ddl_kv_mgr_handle;
         ObTabletDirectLoadMgrHandle direct_load_mgr_hdl;
+        ObDDLTableMergeDagParam param;
         bool is_major_sstable_exist = false;
         int tmp_ret = OB_SUCCESS;
         if (OB_FAIL(tablet_iter.get_next_ddl_kv_mgr(ddl_kv_mgr_handle))) {
@@ -399,15 +404,19 @@ int ObLSDDLLogHandler::flush(SCN &rec_scn)
         } else if (ddl_kvs_handle.empty()) {
           LOG_TRACE("empty ddl kv", "tablet_id", ddl_kv_mgr_handle.get_obj()->get_tablet_id());
       #ifdef OB_BUILD_SHARED_STORAGE
-        } else if (ObDDLUtil::use_idempotent_mode()) {
+        } else if (GCTX.is_shared_storage_mode()) {
           DEBUG_SYNC(BEFORE_DDL_CHECKPOINT);
-          if (OB_TMP_FAIL(ObTabletDDLUtil::schedule_ddl_minor_merge_on_demand(true/*need_freeze*/, ls_->get_ls_id(), ddl_kv_mgr_handle))) {
+          if (OB_TMP_FAIL(ObDDLMergeScheduler::schedule_ddl_minor_merge_on_demand(true/*need_freeze*/, ls_->get_ls_id(), ddl_kv_mgr_handle))) {
             LOG_WARN("schdule ddl minor merge failed", K(tmp_ret), "ls_id", ls_->get_ls_id(), "tablet_id", ddl_kv_mgr_handle.get_obj()->get_tablet_id());
           }
       #endif
-        } else {
+        } else if (!ddl_kvs_handle.at(0).is_valid()) {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("ddl kv handle should not be empty here", K(ret));
+        } else if (DDL_IDEM_DATA_FORMAT_VERSION > ddl_kvs_handle.at(0).get_obj()->get_data_format_version()) {
           bool is_major_sstable_exist = false;
           ObTabletDirectLoadMgrHandle direct_load_mgr_hdl;
+          // TODO @zhuoran.zzr wait to remove it
           if (OB_TMP_FAIL(tenant_direct_load_mgr->get_tablet_mgr_and_check_major(
                 ls_->get_ls_id(),
                 ddl_kv_mgr_handle.get_obj()->get_tablet_id(),
@@ -421,14 +430,13 @@ int ObLSDDLLogHandler::flush(SCN &rec_scn)
             }
           } else {
             DEBUG_SYNC(BEFORE_DDL_CHECKPOINT);
-            ObDDLTableMergeDagParam param;
             param.ls_id_               = ls_->get_ls_id();
             param.tablet_id_           = ddl_kv_mgr_handle.get_obj()->get_tablet_id();
             param.start_scn_           = direct_load_mgr_hdl.get_full_obj()->get_start_scn();
             param.rec_scn_             = rec_scn;
             param.direct_load_type_    = direct_load_mgr_hdl.get_full_obj()->get_direct_load_type();
             param.is_commit_           = false;
-            param.data_format_version_ = direct_load_mgr_hdl.get_full_obj()->get_data_format_version();
+            param.data_format_version_ = direct_load_mgr_hdl.get_full_obj()->get_tenant_data_version();
             param.snapshot_version_    = direct_load_mgr_hdl.get_full_obj()->get_table_key().get_snapshot_version();
             LOG_INFO("schedule ddl merge dag", K(param));
             if (OB_TMP_FAIL(ObTabletDDLUtil::freeze_ddl_kv(param))) {
@@ -437,9 +445,35 @@ int ObLSDDLLogHandler::flush(SCN &rec_scn)
               LOG_WARN("try schedule ddl merge dag failed when ddl kv is full ", K(tmp_ret), K(param));
             }
           }
+          (void)tenant_direct_load_mgr->gc_tablet_direct_load();
+        } else {
+          ObTabletCreateDeleteMdsUserData user_data;
+          ObTabletDDLCompleteMdsUserData  ddl_complete;
+          if (OB_FAIL(ls_->get_tablet(ddl_kv_mgr_handle.get_obj()->get_tablet_id(),
+                                           tablet_handle, ObTabletCommon::DEFAULT_GET_TABLET_DURATION_US,
+                                           ObMDSGetTabletMode::READ_WITHOUT_CHECK))) {
+            LOG_WARN("failed to get tablet handle", K(ret), K(ls_->get_ls_id()), K(ddl_kv_mgr_handle.get_obj()->get_tablet_id()));
+          } else if (OB_FAIL(tablet_handle.get_obj()->get_ddl_complete(share::SCN::max_scn(), ddl_complete))) {
+            if (OB_EMPTY_RESULT == ret) {
+              ret = OB_SUCCESS;
+              LOG_INFO("no ddl complete", K(ret), K(ls_->get_ls_id()), K(ddl_kv_mgr_handle.get_obj()->get_tablet_id()));
+            } else {
+              LOG_WARN("failed to get ddl complete", K(ret));
+            }
+          }
+
+          if (OB_FAIL(ret)) {
+          } else if (OB_FAIL(ObDirectLoadMgrUtil::generate_merge_param(ddl_complete, *(tablet_handle.get_obj()), param))) {
+            LOG_WARN("failed to generate merge param", K(ret));
+          } else if (OB_FAIL(ObTabletDDLUtil::freeze_ddl_kv(param))) {
+            LOG_WARN("try to freeze ddl kv failed", K(tmp_ret), K(param));
+          } else if (FALSE_IT(param.rec_scn_ = ddl_kv_mgr_handle.get_obj()->get_max_freeze_scn())) {
+          } else if (OB_TMP_FAIL(compaction::ObScheduleDagFunc::schedule_ddl_table_merge_dag(param))) {
+            LOG_WARN("try schedule ddl merge dag failed when ddl kv is full ", K(tmp_ret), K(param));
+          }
+          FLOG_INFO("schedule ddl dump merge task", K(ret), K(ls_->get_ls_id()), K(tablet_handle.get_obj()->get_tablet_id()));
         }
       }
-      (void)tenant_direct_load_mgr->gc_tablet_direct_load();
     }
   }
   return OB_SUCCESS;

@@ -392,7 +392,8 @@ void ObTableAccessContext::inc_micro_access_cnt()
 int ObTableAccessContext::init_scan_allocator(ObTableScanParam &scan_param)
 {
   int ret = OB_SUCCESS;
-  if (OB_LIKELY(!scan_param.sample_info_.is_block_sample())) {
+  if (OB_LIKELY(!(scan_param.sample_info_.is_block_sample() ||
+                  scan_param.sample_info_.is_ddl_block_sample()))) {
     allocator_ = scan_param.scan_allocator_;
   } else {
     if (scan_mem_ == nullptr) {

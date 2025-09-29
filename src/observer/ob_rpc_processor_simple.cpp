@@ -2544,7 +2544,8 @@ int ObRpcRemoteWriteDDLIncCommitLogP::process()
       } else if (ObRole::LEADER != role) {
         ret = OB_NOT_MASTER;
         LOG_INFO("leader may not have finished replaying clog, caller retry", K(ret), K(MTL_ID()), K(arg_.ls_id_));
-      } else if (OB_FAIL(sstable_redo_writer.init(arg_.ls_id_, arg_.tablet_id_))) {
+      } else if (OB_FAIL(sstable_redo_writer.init(arg_.ls_id_,
+                                                  arg_.tablet_id_))) {
         LOG_WARN("init sstable redo writer", K(ret), K(arg_.tablet_id_));
       } else if (OB_FAIL(sstable_redo_writer.write_inc_commit_log_with_retry(false/*allow_remote_write*/,
                                                                              arg_.lob_meta_tablet_id_,

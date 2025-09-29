@@ -192,7 +192,7 @@ int ObDASUtils::project_storage_row(const ObDASDMLBaseCtDef &dml_ctdef,
     } else if (FALSE_IT(storage_row.storage_datums_[i].shallow_copy_from_datum(dml_row.cells()[projector_idx]))) {
     } else if (storage_row.storage_datums_[i].is_null()) {
       //nothing to do
-    } else if (OB_FAIL(reshape_datum_value(col_type, col_accuracy, allocator, storage_row.storage_datums_[i]))) {
+    } else if (OB_FAIL(reshape_datum_value(col_type, col_accuracy, false, allocator, storage_row.storage_datums_[i]))) {
       LOG_WARN("reshape storage value failed", K(ret));
     } else if (col_type.is_lob_storage() && col_type.has_lob_header()) {
       storage_row.storage_datums_[i].set_has_lob_header();
@@ -267,6 +267,7 @@ int ObDASUtils::padding_fixed_string_value(int64_t max_len, ObIAllocator &alloca
 
 int ObDASUtils::reshape_datum_value(const ObObjMeta &col_type,
                                     const ObAccuracy &col_accuracy,
+                                    const bool enable_oracle_empty_char_reshape_to_null,
                                     ObIAllocator &allocator,
                                     blocksstable::ObStorageDatum &datum_value)
 {
@@ -287,6 +288,10 @@ int ObDASUtils::reshape_datum_value(const ObObjMeta &col_type,
         datum_value.set_string(ObString(binary_len, dest_str));
       }
     }
+  } else if (lib::is_oracle_mode() && enable_oracle_empty_char_reshape_to_null && col_type.is_character_type() && datum_value.len_ == 0) {
+    // Oracle compatibility mode: '' as null
+    LOG_DEBUG("reshape empty string to null", K(datum_value));
+    datum_value.set_null();
   } else if (col_type.is_fixed_len_char_type()) {
     const char *str = datum_value.ptr_;
     int32_t len = datum_value.len_;
@@ -301,6 +306,86 @@ int ObDASUtils::reshape_datum_value(const ObObjMeta &col_type,
   return ret;
 }
 
+int ObDASUtils::reshape_datum_vector_value(const ObObjMeta &col_type,
+                                           const ObAccuracy &col_accuracy,
+                                           ObIAllocator &allocator,
+                                           const ObDatumVector &datum_vector,
+                                           ObBatchSelector &batch_selector)
+{
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(!batch_selector.is_valid())) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid args", KR(ret), K(batch_selector));
+  } else {
+    ObBatchSelector single_selector(0L, 1);
+    ObBatchSelector &selector = datum_vector.is_batch() ? batch_selector : single_selector;
+    if (col_type.is_binary()) {
+      const int32_t binary_len = col_accuracy.get_length();
+      const char pad_char = '\0';
+      int64_t i = 0;
+      while (OB_SUCC(ret) && OB_SUCC(selector.get_next(i))) {
+        ObDatum &datum = datum_vector.datums_[i];
+        if (!datum.is_null() && datum.len_ < binary_len) {
+          const char *str = datum.ptr_;
+          ObLength len = datum.len_;
+          char *dest_str = nullptr;
+          if (OB_ISNULL(dest_str = (char *)(allocator.alloc(binary_len)))) {
+            ret = OB_ALLOCATE_MEMORY_FAILED;
+            LOG_WARN("fail to alloc mem to binary", K(ret), K(binary_len));
+          } else {
+            MEMCPY(dest_str, str, len);
+            MEMSET(dest_str + len, pad_char, binary_len - len);
+            datum.ptr_ = dest_str;
+            datum.len_ = binary_len;
+          }
+        }
+      }
+      if (OB_LIKELY(OB_ITER_END == ret)) {
+        ret = OB_SUCCESS;
+      }
+    } else if (col_type.is_fixed_len_char_type()) {
+      const ObString space_pattern = ObCharsetUtils::get_const_str(col_type.get_collation_type(), ' ');
+      int64_t i = 0;
+      while (OB_SUCC(ret) && OB_SUCC(selector.get_next(i))) {
+        ObDatum &datum = datum_vector.datums_[i];
+        if (!datum.is_null()) {
+          ObLength len = datum.len_;
+          if (lib::is_oracle_mode() && 0 == len) {
+            // Oracle compatibility mode: '' as null
+            LOG_DEBUG("reshape empty string to null", K(i));
+            datum.set_null();
+          } else {
+            const char *str = datum.ptr_;
+            for (; len >= space_pattern.length(); len -= space_pattern.length()) {
+              if (0 != MEMCMP(str + len - space_pattern.length(), space_pattern.ptr(), space_pattern.length())) {
+                break;
+              }
+            }
+            datum.len_ = len;
+          }
+        }
+      }
+      if (OB_LIKELY(OB_ITER_END == ret)) {
+        ret = OB_SUCCESS;
+      }
+    } else if (lib::is_oracle_mode() && col_type.is_character_type()) {
+      // Oracle compatibility mode: '' as null
+      int64_t i = 0;
+      while (OB_SUCC(ret) && OB_SUCC(selector.get_next(i))) {
+        ObDatum &datum = datum_vector.datums_[i];
+        if (!datum.is_null() && 0 == datum.len_) {
+          LOG_DEBUG("reshape empty string to null", K(i));
+          datum.set_null();
+        }
+      }
+      if (OB_LIKELY(OB_ITER_END == ret)) {
+        ret = OB_SUCCESS;
+      }
+    }
+  }
+  return ret;
+}
+
 static bool fast_check_vector_is_all_null(ObIVector *vector, const int64_t batch_size)
 {
   bool is_all_null = false;
@@ -308,9 +393,11 @@ static bool fast_check_vector_is_all_null(ObIVector *vector, const int64_t batch
   switch (format) {
     case VEC_FIXED:
     case VEC_DISCRETE:
-    case VEC_CONTINUOUS:
-      is_all_null = static_cast<ObBitmapNullVectorBase *>(vector)->get_nulls()->is_all_true(batch_size);
+    case VEC_CONTINUOUS: {
+      ObBitmapNullVectorBase *base = static_cast<ObBitmapNullVectorBase *>(vector);
+      is_all_null = base->has_null() && base->get_nulls()->is_all_true(batch_size);
       break;
+    }
     default:
       break;
   }
@@ -386,15 +473,16 @@ static int new_discrete_vector(VecValueTypeClass value_tc,
 
 int ObDASUtils::reshape_vector_value(const ObObjMeta &col_type,
                                      const ObAccuracy &col_accuracy,
+                                     const bool enable_oracle_empty_char_reshape_to_null,
                                      ObIAllocator &allocator,
                                      ObIVector *&vector,
-                                     const int64_t size)
+                                     ObBatchSelector &selector)
 {
   int ret = OB_SUCCESS;
-  if (OB_ISNULL(vector) || size <= 0) {
+  if (OB_ISNULL(vector) || !selector.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", KR(ret), KP(vector), K(size));
-  } else if (fast_check_vector_is_all_null(vector, size)) {
+    LOG_WARN("invalid args", KR(ret), KP(vector), K(selector));
+  } else if (fast_check_vector_is_all_null(vector, selector.get_max())) {
     // do nothing
   } else if (col_type.is_binary()) {
     const int32_t binary_len = col_accuracy.get_length();
@@ -413,13 +501,14 @@ int ObDASUtils::reshape_vector_value(const ObObjMeta &col_type,
         VecValueTypeClass value_tc = get_vec_value_tc(col_type.get_type(),
                                                       col_type.get_scale(),
                                                       col_type.get_stored_precision());
-        if (OB_FAIL(new_discrete_vector(value_tc, size, allocator, discrete_vec))) {
+        if (OB_FAIL(new_discrete_vector(value_tc, selector.get_max(), allocator, discrete_vec))) {
           LOG_WARN("fail to new discrete vector", KR(ret));
         } else {
           ptrs = discrete_vec->get_ptrs();
           lens = discrete_vec->get_lens();
         }
-        for (int64_t i = 0; OB_SUCC(ret) && i < size; ++i) {
+        int64_t i = 0;
+        while (OB_SUCC(ret) && OB_SUCC(selector.get_next(i))) {
           if (continuous_vec->is_null(i)) {
             discrete_vec->set_null(i);
           } else {
@@ -443,6 +532,9 @@ int ObDASUtils::reshape_vector_value(const ObObjMeta &col_type,
             }
           }
         }
+        if (OB_ITER_END == ret) {
+          ret = OB_SUCCESS;
+        }
         if (OB_SUCC(ret) && has_value_change) {
           vector = discrete_vec;
         }
@@ -453,7 +545,8 @@ int ObDASUtils::reshape_vector_value(const ObObjMeta &col_type,
         ObDiscreteBase *discrete_vec = static_cast<ObDiscreteBase *>(vector);
         char **ptrs = discrete_vec->get_ptrs();
         ObLength *lens =discrete_vec->get_lens();
-        for (int64_t i = 0; OB_SUCC(ret) && i < size; ++i) {
+        int64_t i = 0;
+        while (OB_SUCC(ret) && OB_SUCC(selector.get_next(i))) {
           if (!discrete_vec->is_null(i) && lens[i] < binary_len) {
             char *str = ptrs[i];
             ObLength len = lens[i];
@@ -469,13 +562,17 @@ int ObDASUtils::reshape_vector_value(const ObObjMeta &col_type,
             }
           }
         }
+        if (OB_ITER_END == ret) {
+          ret = OB_SUCCESS;
+        }
         break;
       }
       case VEC_UNIFORM:
       {
         ObUniformBase *uniform_vec = static_cast<ObUniformBase *>(vector);
         ObDatum *datums = uniform_vec->get_datums();
-        for (int64_t i = 0; OB_SUCC(ret) && i < size; ++i) {
+        int64_t i = 0;
+        while (OB_SUCC(ret) && OB_SUCC(selector.get_next(i))) {
           ObDatum &datum = datums[i];
           if (!datum.is_null() && datum.len_ < binary_len) {
             const char *str = datum.ptr_;
@@ -491,6 +588,9 @@ int ObDASUtils::reshape_vector_value(const ObObjMeta &col_type,
               datum.len_ = binary_len;
             }
           }
+        }
+        if (OB_ITER_END == ret) {
+          ret = OB_SUCCESS;
         }
         break;
       }
@@ -535,30 +635,41 @@ int ObDASUtils::reshape_vector_value(const ObObjMeta &col_type,
         VecValueTypeClass value_tc = get_vec_value_tc(col_type.get_type(),
                                                       col_type.get_scale(),
                                                       col_type.get_stored_precision());
-        if (OB_FAIL(new_discrete_vector(value_tc, size, allocator, discrete_vec))) {
+        if (OB_FAIL(new_discrete_vector(value_tc, selector.get_max(), allocator, discrete_vec))) {
           LOG_WARN("fail to new discrete vector", KR(ret));
         } else {
           ptrs = discrete_vec->get_ptrs();
           lens = discrete_vec->get_lens();
         }
-        for (int64_t i = 0; OB_SUCC(ret) && i < size; ++i) {
+        int64_t i = 0;
+        while (OB_SUCC(ret) && OB_SUCC(selector.get_next(i))) {
           if (continuous_vec->is_null(i)) {
             discrete_vec->set_null(i);
           } else {
             const ObLength length = offsets[i + 1] - offsets[i];
-            ObLength len = length;
-            char *str = data + offsets[i];
-            for (; len >= space_pattern.length(); len -= space_pattern.length()) {
-              if (0 != MEMCMP(str + len - space_pattern.length(), space_pattern.ptr(), space_pattern.length())) {
-                break;
+            if (lib::is_oracle_mode() && enable_oracle_empty_char_reshape_to_null && 0 == length) {
+              // Oracle compatibility mode: '' as null
+              LOG_DEBUG("reshape empty string to null", K(i));
+              continuous_vec->set_null(i);
+              discrete_vec->set_null(i);
+            } else {
+              ObLength len = length;
+              char *str = data + offsets[i];
+              for (; len >= space_pattern.length(); len -= space_pattern.length()) {
+                if (0 != MEMCMP(str + len - space_pattern.length(), space_pattern.ptr(), space_pattern.length())) {
+                  break;
+                }
+              }
+              ptrs[i] = str;
+              lens[i] = len;
+              if (len != length) {
+                has_value_change = true;
               }
             }
-            ptrs[i] = str;
-            lens[i] = len;
-            if (len != length) {
-              has_value_change = true;
-            }
           }
+        }
+        if (OB_ITER_END == ret) {
+          ret = OB_SUCCESS;
         }
         if (OB_SUCC(ret) && has_value_change) {
           vector = discrete_vec;
@@ -570,17 +681,27 @@ int ObDASUtils::reshape_vector_value(const ObObjMeta &col_type,
         ObDiscreteBase *discrete_vec = static_cast<ObDiscreteBase *>(vector);
         char **ptrs = discrete_vec->get_ptrs();
         ObLength *lens =discrete_vec->get_lens();
-        for (int64_t i = 0; OB_SUCC(ret) && i < size; ++i) {
+        int64_t i = 0;
+        while (OB_SUCC(ret) && OB_SUCC(selector.get_next(i))) {
           if (!discrete_vec->is_null(i)) {
             ObLength len = lens[i];
-            const char *str = ptrs[i];
-            for (; len >= space_pattern.length(); len -= space_pattern.length()) {
-              if (0 != MEMCMP(str + len - space_pattern.length(), space_pattern.ptr(), space_pattern.length())) {
-                break;
+            if (lib::is_oracle_mode() && enable_oracle_empty_char_reshape_to_null && 0 == len) {
+              // Oracle compatibility mode: '' as null
+              LOG_DEBUG("reshape empty string to null", K(i));
+              discrete_vec->set_null(i);
+            } else {
+              const char *str = ptrs[i];
+              for (; len >= space_pattern.length(); len -= space_pattern.length()) {
+                if (0 != MEMCMP(str + len - space_pattern.length(), space_pattern.ptr(), space_pattern.length())) {
+                  break;
+                }
               }
             }
             lens[i] = len;
           }
+        }
+        if (OB_ITER_END == ret) {
+          ret = OB_SUCCESS;
         }
         break;
       }
@@ -588,10 +709,42 @@ int ObDASUtils::reshape_vector_value(const ObObjMeta &col_type,
       {
         ObUniformBase *uniform_vec = static_cast<ObUniformBase *>(vector);
         ObDatum *datums = uniform_vec->get_datums();
-        for (int64_t i = 0; OB_SUCC(ret) && i < size; ++i) {
+        int64_t i = 0;
+        while (OB_SUCC(ret) && OB_SUCC(selector.get_next(i))) {
           ObDatum &datum = datums[i];
           if (!datum.is_null()) {
             ObLength len = datum.len_;
+            if (lib::is_oracle_mode() && enable_oracle_empty_char_reshape_to_null && 0 == len) {
+              // Oracle compatibility mode: '' as null
+              LOG_DEBUG("reshape empty string to null", K(i));
+              datum.set_null();
+            } else {
+              const char *str = datum.ptr_;
+              for (; len >= space_pattern.length(); len -= space_pattern.length()) {
+                if (0 != MEMCMP(str + len - space_pattern.length(), space_pattern.ptr(), space_pattern.length())) {
+                  break;
+                }
+              }
+              datum.len_ = len;
+            }
+          }
+        }
+        if (OB_ITER_END == ret) {
+          ret = OB_SUCCESS;
+        }
+        break;
+      }
+      case VEC_UNIFORM_CONST:
+      {
+        ObUniformBase *uniform_vec = static_cast<ObUniformBase *>(vector);
+        ObDatum &datum = uniform_vec->get_datums()[0];
+        if (!datum.is_null()) {
+          ObLength len = datum.len_;
+          if (lib::is_oracle_mode() && enable_oracle_empty_char_reshape_to_null && 0 == len) {
+            // Oracle compatibility mode: '' as null
+            LOG_DEBUG("reshape empty string to null");
+            datum.set_null();
+          } else {
             const char *str = datum.ptr_;
             for (; len >= space_pattern.length(); len -= space_pattern.length()) {
               if (0 != MEMCMP(str + len - space_pattern.length(), space_pattern.ptr(), space_pattern.length())) {
@@ -603,19 +756,71 @@ int ObDASUtils::reshape_vector_value(const ObObjMeta &col_type,
         }
         break;
       }
+      default:
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("unexpected fixed len char vector format", KR(ret), K(format), K(col_type));
+        break;
+    }
+  } else if (lib::is_oracle_mode() && col_type.is_character_type() && enable_oracle_empty_char_reshape_to_null) {
+    // Oracle compatibility mode: '' as null
+    const VectorFormat format = vector->get_format();
+    switch (format) {
+      case VEC_CONTINUOUS:
+      {
+        ObContinuousBase *continuous_vec = static_cast<ObContinuousBase *>(vector);
+        uint32_t *offsets = continuous_vec->get_offsets();
+        int64_t i = 0;
+        while (OB_SUCC(ret) && OB_SUCC(selector.get_next(i))) {
+          if (!continuous_vec->is_null(i) && offsets[i + 1] == offsets[i]) {
+            LOG_DEBUG("reshape empty string to null", K(i));
+            continuous_vec->set_null(i);
+          }
+        }
+        if (OB_ITER_END == ret) {
+          ret = OB_SUCCESS;
+        }
+        break;
+      }
+      case VEC_DISCRETE:
+      {
+        ObDiscreteBase *discrete_vec = static_cast<ObDiscreteBase *>(vector);
+        ObLength *lens =discrete_vec->get_lens();
+        int64_t i = 0;
+        while (OB_SUCC(ret) && OB_SUCC(selector.get_next(i))) {
+          if (!discrete_vec->is_null(i) && 0 == lens[i]) {
+            LOG_DEBUG("reshape empty string to null", K(i));
+            discrete_vec->set_null(i);
+          }
+        }
+        if (OB_ITER_END == ret) {
+          ret = OB_SUCCESS;
+        }
+        break;
+      }
+      case VEC_UNIFORM:
+      {
+        ObUniformBase *uniform_vec = static_cast<ObUniformBase *>(vector);
+        ObDatum *datums = uniform_vec->get_datums();
+        int64_t i = 0;
+        while (OB_SUCC(ret) && OB_SUCC(selector.get_next(i))) {
+          ObDatum &datum = datums[i];
+          if (!datum.is_null() && 0 == datum.len_) {
+            LOG_DEBUG("reshape empty string to null", K(i));
+            datum.set_null();
+          }
+        }
+        if (OB_ITER_END == ret) {
+          ret = OB_SUCCESS;
+        }
+        break;
+      }
       case VEC_UNIFORM_CONST:
       {
         ObUniformBase *uniform_vec = static_cast<ObUniformBase *>(vector);
         ObDatum &datum = uniform_vec->get_datums()[0];
-        if (!datum.is_null()) {
-          ObLength len = datum.len_;
-          const char *str = datum.ptr_;
-          for (; len >= space_pattern.length(); len -= space_pattern.length()) {
-            if (0 != MEMCMP(str + len - space_pattern.length(), space_pattern.ptr(), space_pattern.length())) {
-              break;
-            }
-          }
-          datum.len_ = len;
+        if (!datum.is_null() && 0 == datum.len_) {
+          LOG_DEBUG("reshape empty string to null");
+          datum.set_null();
         }
         break;
       }

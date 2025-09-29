@@ -2296,7 +2296,6 @@ int ObStorageHATabletBuilderUtil::inner_update_tablet_table_store_with_major_(
     if (OB_FAIL(param.init_with_ha_info(
             ObHATableStoreParam(transfer_seq, 
                                 true /*need_check_sstable*/,
-                                true /*need_check_transfer_seq*/,
                                 batch_extra_param.need_replace_remote_sstable_,
                                 batch_extra_param.is_only_replace_major_)))) {
       LOG_WARN("failed to init with ha info", KR(ret));

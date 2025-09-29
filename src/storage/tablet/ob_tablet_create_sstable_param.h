@@ -211,7 +211,7 @@ private:
 private:
   friend class blocksstable::ObSSTableMeta;
   friend class blocksstable::ObSSTableMacroInfo;
-private:
+public:
   ObITable::TableKey table_key_;
   int16_t sstable_logic_seq_;
   int64_t schema_version_;

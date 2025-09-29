@@ -15,6 +15,7 @@
 
 #include "ob_macro_block_reader.h"
 #include "ob_micro_block_reader_helper.h"
+#include "storage/blocksstable/index_block/ob_index_block_row_struct.h"
 
 
 namespace oceanbase
@@ -37,6 +38,14 @@ public:
       const int64_t macro_block_buf_size,
       const bool need_check_data_integrity = false,
       const bool need_deserialize = true);
+
+  // whole macro block scan for micro_index_info
+  //      Only after calling this interface can the get_next function retrieve micro_index_info.
+  int open_for_whole_range(
+      const char *macro_block_buf,
+      const int64_t macro_block_buf_size,
+      const bool need_deserialize);
+
   // scan by range
   int open(
       const char *macro_block_buf,
@@ -55,9 +64,12 @@ public:
                                 const ObDataStoreDesc &data_store_desc,
                                 ObIAllocator &allocator,
                                 const bool need_check_sum);
+  int get_next_micro_block_desc(ObMicroBlockDesc &uncompressed_micro_block_desc,
+                                ObMicroBlockDesc &micro_block_desc,
+                                ObIAllocator &allocator);
   int get_next_micro_block_desc(
       ObMicroBlockDesc &micro_block_desc,
-      ObMicroIndexInfo &micro_index_info,
+      ObMicroIndexData &micro_index_data,
       ObIAllocator &rowkey_allocator);
   int get_macro_block_header(ObSSTableMacroBlockHeader &macro_header);
   int get_micro_block_count(int64_t &micro_block_count);
@@ -76,6 +88,26 @@ protected:
       const bool is_left_border,
       const bool is_right_border);
   int set_reader(const ObRowStoreType store_type);
+private:
+  int generate_uncompressed_micro_block(
+    const ObDatumRowkey &rowkey,
+    const ObMicroBlockHeader *header,
+    const ObMicroBlockData &micro_block,
+    ObIAllocator &allocator,
+    ObMicroBlockDesc &micro_block_desc);
+  int generate_micro_block(
+    const ObDatumRowkey &rowkey,
+    const ObMicroBlockHeader *header,
+    int64_t block_offset,
+    const char *micro_buf,
+    ObIAllocator &allocator,
+    ObMicroBlockDesc &micro_block_desc);
+  int generate_basic_micro_block_desc(
+    const ObDatumRowkey &rowkey,
+    const ObMicroBlockHeader *header,
+    ObIAllocator &allocator,
+    ObMicroBlockDesc &micro_block_desc);
+  int get_micro_block_header(const char *buf, int64_t buf_len, ObMicroBlockHeader *&header) const;
 protected:
   ObArenaAllocator allocator_;
   const char *macro_block_buf_;
@@ -87,6 +119,7 @@ protected:
   ObIMicroBlockReader *reader_;
   ObMicroBlockReaderHelper micro_reader_helper_;
   int64_t index_rowkey_cnt_;
+  int64_t column_cnt_;
   int64_t begin_idx_;
   int64_t end_idx_;
   int64_t iter_idx_;

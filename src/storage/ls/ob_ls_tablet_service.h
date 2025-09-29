@@ -175,6 +175,7 @@ public:
       const bool micro_index_clustered,
       const bool has_cs_replica,
       const ObTabletID &split_src_tablet_id,
+      const uint64_t data_format_version,
       ObTabletHandle &tablet_handle);
   int create_transfer_in_tablet(
       const share::ObLSID &ls_id,
@@ -326,6 +327,18 @@ public:
       const common::ObTabletID &tablet_id,
       const share::SCN &scn,
       const ObTabletBindingMdsUserData &ddl_info,
+      mds::MdsCtx &ctx);
+  int set_ddl_complete(
+      const common::ObTabletID &tablet_id,
+      const mds::DummyKey &key,
+      const ObTabletDDLCompleteMdsUserData &ddl_complete,
+      mds::MdsCtx &ctx,
+      const int64_t timeout);
+  int replay_set_ddl_complete(
+      const common::ObTabletID &tablet_id,
+      const share::SCN &scn,
+      const mds::DummyKey &key,
+      const ObTabletDDLCompleteMdsUserData &ddl_data,
       mds::MdsCtx &ctx);
 
   // DAS interface

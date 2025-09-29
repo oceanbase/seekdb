@@ -140,7 +140,7 @@ public:
   ObTabletResidentInfo get_tablet_resident_info(const ObTabletMapKey &key) const;
   ObTabletMDSTruncateLock &get_mds_truncate_lock() const { return mds_lock_; }
   void set_initial_state(const bool initial_state);
-  int create_ddl_kv_mgr(const share::ObLSID &ls_id, const ObTabletID &tablet_id, ObDDLKvMgrHandle &ddl_kv_mgr_handle);
+  int create_ddl_kv_mgr(const share::ObLSID &ls_id, const ObTabletID &tablet_id, ObDDLKvMgrHandle &ddl_kv_mgr_handle, bool &is_created);
   void get_ddl_kv_mgr(ObDDLKvMgrHandle &ddl_kv_mgr_handle);
   int set_ddl_kv_mgr(const ObDDLKvMgrHandle &ddl_kv_mgr_handle);
   int remove_ddl_kv_mgr(const ObDDLKvMgrHandle &ddl_kv_mgr_handle);

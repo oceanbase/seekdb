@@ -20,6 +20,7 @@
 #include "share/location_cache/ob_location_struct.h"
 #include "storage/blocksstable/ob_block_sstable_struct.h"
 #include "storage/tablet/ob_tablet_common.h"
+#include "share/ob_batch_selector.h"
 
 namespace oceanbase
 {
@@ -47,10 +48,19 @@ namespace blocksstable
 }
 namespace storage
 {
+struct ObColumnSchemaItem;
 class ObTabletHandle;
 class ObLSHandle;
 struct ObStorageColumnGroupSchema;
 class ObCOSSTableV2;
+class ObDDLIndependentDag;
+class ObCgMacroBlockWriter;
+class ObLobMacroBlockWriter;
+class ObDDLTableSchema;
+class ObWriteMacroParam;
+class ObDirectLoadBatchRows;
+class ObITabletSliceWriter;
+struct ObDDLWriteStat;
 }
 namespace rootserver
 {
@@ -1262,7 +1272,8 @@ public:
      share::ObDDLTaskStatus &task_status,
      uint64_t &target_object_id,
      int64_t &schema_version,
-     bool &is_no_logging);
+     bool &is_no_logging,
+     bool &is_offline_index_rebuild);
 
   static int replace_user_tenant_id(
     const ObDDLType &ddl_type,
@@ -1421,6 +1432,7 @@ public:
       const uint64_t table_id,
       const uint64_t target_table_id,
       common::hash::ObHashMap<common::ObTabletID, common::ObTabletID>& check_dag_exit_tablets_map,
+      const uint64_t data_format_version,
       int64_t &check_dag_exit_retry_cnt,
       bool is_complement_data_dag,
       bool &all_dag_exit);
@@ -1466,8 +1478,144 @@ public:
       const ObTableSchema &index_table_schema,
       ObSchemaService *schema_service,
       int64_t &new_fetched_snapshot);
+  static bool need_reshape(const ObObjMeta &col_type);
+  static int check_null_and_length(
+      const bool is_index_table,
+      const bool has_lob_rowkey,
+      const int64_t rowkey_column_cnt,
+      const blocksstable::ObDatumRow &row_val);
+  static int report_ddl_checksum_from_major_sstable(
+      const ObLSID &ls_id,
+      const ObTabletID &tablet_id,
+      const uint64_t table_id,
+      const int64_t execution_id,
+      const int64_t ddl_task_id,
+      const int64_t tenant_data_version);
+  static int report_ddl_sstable_checksum(
+      const ObLSID &ls_id,
+      const ObTabletID &tablet_id,
+      const uint64_t target_table_id,
+      const int64_t execution_id,
+      const int64_t ddl_task_id,
+      const int64_t tenant_data_version,
+      ObTabletHandle &tablet_handle,
+      blocksstable::ObSSTable *first_major_sstable);
+  static int init_datum_row_with_snapshot(
+      const int64_t request_column_count,
+      const int64_t rowkey_column_count,
+      const int64_t snapshot_version,
+      blocksstable::ObDatumRow &datum_row);
+  static int init_cg_macro_block_writers(
+      const ObWriteMacroParam &param,
+      ObIAllocator &allocator,
+      const ObStorageSchema *&storage_schema,
+      ObIArray<ObCgMacroBlockWriter *> &cg_writers);
+  static int init_inc_macro_block_writer(
+      const ObWriteMacroParam &param,
+      ObIAllocator &allocator,
+      ObCgMacroBlockWriter *&macro_block_writer);
+  static int prepare_lob_writer(
+      const ObTabletID &tablet_id,
+      const int64_t slice_idx,
+      const ObWriteMacroParam &param,
+      ObLobMacroBlockWriter *&lob_writer);
+  static int handle_lob_columns(
+      const ObTabletID &tablet_id,
+      const int64_t slice_idx,
+      ObWriteMacroParam &param,
+      ObLobMacroBlockWriter *&lob_writer,
+      ObArenaAllocator &allocator,
+      blocksstable::ObDatumRow &datum_row);
+  // ContinuousVector会被更换成DiscreteVector
+  static int handle_lob_column(
+      const ObTabletID &tablet_id,
+      const int64_t slice_idx,
+      ObWriteMacroParam &param,
+      ObLobMacroBlockWriter *&lob_writer,
+      ObArenaAllocator &allocator,
+      const ObColumnSchemaItem &column_schema_item,
+      share::ObBatchSelector &selector,
+      ObIVector *&vector);
+  static int handle_lob_columns(
+      const ObTabletID &tablet_id,
+      const int64_t slice_idx,
+      ObWriteMacroParam &param,
+      ObLobMacroBlockWriter *&lob_writer,
+      ObArenaAllocator &allocator,
+      blocksstable::ObBatchDatumRows &batch_rows);
+  static int check_null_and_length(
+      const bool is_index_table,
+      const bool has_lob_rowkey,
+      const int64_t rowkey_column_num,
+      blocksstable::ObBatchDatumRows &batch_rows);
+  static int convert_to_storage_row(
+      const ObTabletID &tablet_id,
+      const int64_t slice_idx,
+      const ObWriteMacroParam &param,
+      ObLobMacroBlockWriter *&lob_writer,
+      ObArenaAllocator &row_arena,
+      blocksstable::ObDatumRow &current_row);
+  static int fill_ddl_table_schema(
+      const uint64_t tenant_id,
+      const uint64_t table_id,
+      ObArenaAllocator &allocator,
+      ObDDLTableSchema &ddl_table_schema);
+  static int fill_writer_param(
+      const ObTabletID &tablet_id,
+      const int64_t slice_idx,
+      const int64_t cg_idx,
+      ObDDLIndependentDag *dag,
+      const int64_t max_batch_size,
+      ObWriteMacroParam &param);
+  static int get_task_ranges(
+      const int64_t task_id,
+      const share::ObLSID &ls_id,
+      const common::ObTabletID &tablet_id,
+      const int64_t tablet_size,
+      const int64_t hint_parallelism,
+      common::ObArenaAllocator &allocator_,
+      ObArray<blocksstable::ObDatumRange> &ranges);
+  static int init_batch_rows(
+      const ObDDLTableSchema &ddl_table_schema,
+      const int64_t batch_size,
+      ObDirectLoadBatchRows &batch_rows);
+  static bool is_vector_index_complement(const ObIndexType index_type);
+  static int get_table_lob_col_idx(const ObTableSchema &table_schema, ObIArray<uint64_t> &lob_col_idxs);
+  static int64_t generate_idempotent_value(
+      const int64_t slice_count,
+      const int64_t slice_idx,
+      const int64_t range_interval,
+      const int64_t slice_row_idx);
+  static int convert_to_storage_schema(
+      const ObTableSchema *table_schema,
+      ObIAllocator &allocator,
+      ObStorageSchema *&storage_schema);
+
+  static int is_ls_leader(ObLS &ls, bool &is_leader);
+  static int alloc_storage_macro_block_writer(
+      const ObWriteMacroParam &param,
+      ObIAllocator &allocator,
+      ObITabletSliceWriter *&tablet_slice_writer);
+  static int get_ddl_write_stat(
+      const ObWriteMacroParam &param,
+      const ObITable::TableKey &table_key,
+      ObDDLWriteStat *&ddl_write_stat);
 
 private:
+  static int fill_vector_index_schema_item(
+      const uint64_t tenant_id,
+      ObSchemaGetterGuard &schema_guard,
+      const ObTableSchema *table_schema,
+      ObArenaAllocator &allocator,
+      const ObIArray<ObColDesc> &column_descs,
+      ObDDLTableSchema &ddl_table_schema);
+  static int check_need_update_domain_index_share_table_snapshot(
+    const ObTableSchema *table_schema,
+    const ObTableSchema *index_schema,
+    const int64_t task_id,
+    const obrpc::ObCreateIndexArg &create_index_arg,
+    bool &need_update_snapshot);
+
   static int hold_snapshot(
       common::ObMySQLTransaction &trans,
       rootserver::ObDDLTask* task,

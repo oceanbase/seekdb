@@ -41,9 +41,26 @@ public:
                              mds::TwoPhaseCommitState &trans_stat,
                              share::SCN &trans_version,
                              const int64_t read_seq = 0) const;
+  int get_ddl_complete(const share::SCN &snapshot,
+                       ObTabletDDLCompleteMdsUserData &data,
+                       const int64_t timeout = ObTabletCommon::DEFAULT_GET_TABLET_DURATION_US) const;
 
+  int get_latest_committed_tablet_status(ObTabletCreateDeleteMdsUserData &data) const;
+  int get_latest_binding_info(ObTabletBindingMdsUserData &data,
+    mds::MdsWriter &writer,
+    mds::TwoPhaseCommitState &trans_stat,
+    share::SCN &trans_version) const;
   // customized get_snapshot
   // TODO (jiahua.cjh): move interface from ob_i_tablet_mds_interface to this file
+};
+
+struct ReadDDLCompleteOp
+{
+  ReadDDLCompleteOp(ObTabletDDLCompleteMdsUserData &ddl_complete) :  ddl_complete_(ddl_complete) {}
+  int operator() (const ObTabletDDLCompleteMdsUserData &ddl_complete) {
+    return ddl_complete_.assign(ddl_complete);
+  }
+  ObTabletDDLCompleteMdsUserData &ddl_complete_;
 };
 
 }

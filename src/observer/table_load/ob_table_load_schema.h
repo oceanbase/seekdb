@@ -74,8 +74,13 @@ public:
   ~ObTableLoadSchema();
   void reset();
   int init(uint64_t tenant_id, uint64_t table_id, const int64_t schema_version);
+  bool is_delete_insert_merge_engine() const
+  {
+    return is_delete_insert_engine_;
+  }
   bool is_valid() const { return is_inited_; }
   bool is_column_store() const { return cg_cnt_ > 1; }
+  bool is_local_unique_index() const { return is_local_unique_index_table(index_type_); }
   TO_STRING_KV(K_(table_name), K_(is_partitioned_table), K_(is_table_without_pk), K_(is_table_with_hidden_pk_column),
                K_(has_autoinc_column), K_(has_identity_column), K_(has_lob_rowkey), K_(rowkey_column_count), K_(store_column_count),
                K_(cg_cnt), K_(collation_type), K_(column_descs), K_(is_inited));
@@ -94,6 +99,7 @@ public:
   bool is_partitioned_table_;
   bool is_table_without_pk_;
   bool is_table_with_hidden_pk_column_;
+  bool is_delete_insert_engine_;
   share::schema::ObIndexType index_type_;
   bool has_autoinc_column_;
   bool has_identity_column_;

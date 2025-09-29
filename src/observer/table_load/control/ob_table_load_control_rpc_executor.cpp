@@ -708,7 +708,7 @@ int ObDirectLoadControlInitEmptyTabletsExecutor::process()
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObTableLoadService::check_tenant())) {
     LOG_WARN("fail to check tenant", KR(ret));
-  } else if (OB_FAIL(ObTableLoadEmptyInsertTabletCtxManager::execute(
+  } else if (OB_FAIL(ObTableLoadEmptyInsertTabletCtxManager::execute_for_dag(
                                                     arg_.table_id_,
                                                     arg_.ddl_param_,
                                                     arg_.partition_id_array_,

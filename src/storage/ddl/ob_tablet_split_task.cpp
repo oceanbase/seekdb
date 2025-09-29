@@ -364,12 +364,14 @@ int ObTabletSplitCtx::prepare_index_builder(
   } else if (OB_FAIL(split_data.get_storage_schema(storage_schema))) {
     LOG_WARN("failed to get storage schema", K(ret));
   } else {
+    compaction::ObExecMode exec_mode = GCTX.is_shared_storage_mode() ? ObExecMode::EXEC_MODE_OUTPUT : ObExecMode::EXEC_MODE_LOCAL;
     for (int64_t i = 0; OB_SUCC(ret) && i < sstables.count(); i++) {
       ObSSTable *sstable = static_cast<ObSSTable *>(sstables.at(i));
       for (int64_t j = 0; OB_SUCC(ret) && j < param.dest_tablets_id_.count(); j++) {
         void *buf = nullptr;
         ObWholeDataStoreDesc data_desc;
         ObSSTableIndexBuilder *sstable_index_builder = nullptr;
+        const ObTabletID dst_tablet_id = param.dest_tablets_id_.at(j);
         ObSplitSSTableTaskKey key;
         ObITable::TableKey dest_table_key = sstable->get_key();
         dest_table_key.tablet_id_ = param.dest_tablets_id_.at(j);
@@ -386,10 +388,17 @@ int ObTabletSplitCtx::prepare_index_builder(
           LOG_WARN("get storage schema via sstable failed", K(ret));
         } else if (OB_FAIL(ObDDLUtil::ddl_get_tablet(ls_handle_, param.dest_tablets_id_.at(j), tablet_handle))) {
           LOG_WARN("get tablet failed", K(ret));
-        } else if (OB_FAIL(ObTabletDDLUtil::prepare_index_data_desc(*tablet_handle.get_obj(), 
-            dest_table_key, snapshot_version, param.data_format_version_,
-            nullptr/*first_ddl_sstable*/, clipped_storage_schema, data_desc))) {
-          LOG_WARN("prepare index data desc failed", K(ret));
+        } else if (OB_FAIL(data_desc.init(
+            true/*is_ddl*/, *clipped_storage_schema, param.ls_id_,
+            dst_tablet_id, merge_type, snapshot_version, param.data_format_version_,
+            tablet_handle.get_obj()->get_tablet_meta().micro_index_clustered_,
+            tablet_handle.get_obj()->get_transfer_seq(),
+            0/*concurrent_cnt*/,
+            sstable->get_end_scn(),
+            nullptr/*cg_schema*/,
+            0/*table_cg_idx*/,
+            exec_mode))) {
+          LOG_WARN("fail to init data store desc", K(ret), K(dst_tablet_id), K(param));
         } else if (OB_ISNULL(buf = allocator_.alloc(sizeof(ObSSTableIndexBuilder)))) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
           LOG_WARN("alloc memory failed", K(ret));
@@ -505,8 +514,6 @@ int ObTabletSplitDag::create_first_task()
     LOG_WARN("unexpected nullptr task", K(ret));
   } else if (OB_FAIL(merge_task->init(param_, context_))) {
     LOG_WARN("init merge task failed", K(ret));
-  } else if (OB_FAIL(add_task(*merge_task))) {
-    LOG_WARN("add task failed", K(ret));
   } else if (param_.can_reuse_macro_block_) {
     // concurrent cnt equals to the count of sstables.
     for (int64_t i = 0; OB_SUCC(ret) && i < source_sstables.count(); i++) {
@@ -528,6 +535,10 @@ int ObTabletSplitDag::create_first_task()
       } else if (OB_FAIL(write_task->add_child(*merge_task))) {
         LOG_WARN("add child task failed", K(ret));
       }
+    }
+    // child task is recommended to be added after all the other tasks are added.
+    if (FAILEDx(add_task(*merge_task))) {
+      LOG_WARN("add task failed", K(ret));
     }
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < source_sstables.count(); i++) {
@@ -552,16 +563,21 @@ int ObTabletSplitDag::create_first_task()
         }
       }
     }
+    // child task is recommended to be added after all the other tasks are added.
+    if (FAILEDx(add_task(*merge_task))) {
+      LOG_WARN("add task failed", K(ret));
+    }
   }
+
   FLOG_INFO("create first task finish", K(ret), 
     "can_reuse_macro_block", param_.can_reuse_macro_block_, "sstables_count", source_sstables.count(), K(param_), K(context_));
   return ret;
 }
 
-int64_t ObTabletSplitDag::hash() const
+uint64_t ObTabletSplitDag::hash() const
 {
   int ret = OB_SUCCESS;
-  int64_t hash_val = 0;
+  uint64_t hash_val = 0;
   if (OB_UNLIKELY(!is_inited_ || !param_.is_valid())) {
     ret = OB_ERR_SYS;
     LOG_ERROR("invalid argument", K(ret), K(is_inited_), K(param_));
@@ -997,6 +1013,8 @@ int ObTabletSplitWriteTask::prepare_macro_block_writer(
     macro_seq_param.seq_type_ = ObMacroSeqParam::SEQ_TYPE_INC;
     macro_seq_param.start_ = macro_start_seq.macro_data_seq_;
     const bool micro_index_clustered = context_->tablet_handle_.get_obj()->get_tablet_meta().micro_index_clustered_;
+    compaction::ObExecMode exec_mode = GCTX.is_shared_storage_mode() ? ObExecMode::EXEC_MODE_OUTPUT : ObExecMode::EXEC_MODE_LOCAL;
+
     for (int64_t i = 0; OB_SUCC(ret) && i < param_->dest_tablets_id_.count(); i++) {
       ObPreWarmerParam pre_warm_param;
       ObSSTablePrivateObjectCleaner *object_cleaner = nullptr;
@@ -1022,7 +1040,11 @@ int ObTabletSplitWriteTask::prepare_macro_block_writer(
                                         param_->data_format_version_,
                                         micro_index_clustered,
                                         tablet_handle.get_obj()->get_transfer_seq(),
-                                        sstable_->get_end_scn()))) {
+                                        0/*concurrent_cnt*/,
+                                        sstable_->get_end_scn(),
+                                        nullptr/* cg_schema */,
+                                        0/* table_cg_idx */,
+                                        exec_mode))) {
         LOG_WARN("fail to init data store desc", K(ret), K(dst_tablet_id), KPC(param_));
       } else if (FALSE_IT(data_desc.get_desc().sstable_index_builder_ = sst_idx_builder)) {
       } else if (FALSE_IT(data_desc.get_static_desc().is_ddl_ = true)) {
@@ -2629,7 +2651,6 @@ int ObTabletSplitUtil::check_data_split_finished(
   return ret;
 }
 
-
 int ObTabletSplitUtil::check_satisfy_split_condition(
     const ObLSHandle &ls_handle,
     const ObTabletHandle &source_tablet_handle,
@@ -3132,6 +3153,50 @@ int ObTabletSplitUtil::check_tablet_ha_status(
       }
     }
   }
+  return ret;
+}
+
+int ObTabletSplitUtil::check_split_minors_can_be_accepted(
+    const ObSSTableArray &old_store_minors,
+    const ObIArray<ObITable *> &new_tables_array,
+    bool &is_update_firstly)
+{
+  int ret = OB_SUCCESS;
+  is_update_firstly = true;
+  share::ObScnRange old_store_range;
+  share::ObScnRange new_input_range;
+  const int64_t old_store_minors_cnt = old_store_minors.count();
+  if (OB_UNLIKELY(new_tables_array.empty())) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid args", K(ret), K(new_tables_array));
+  } else if (old_store_minors_cnt == 0) {
+    is_update_firstly = true; // accept all inputs.
+  } else {
+    old_store_range.start_scn_ = old_store_minors[0]->get_start_scn();
+    old_store_range.end_scn_ = old_store_minors[old_store_minors_cnt - 1]->get_end_scn();
+    new_input_range.start_scn_ = new_tables_array.at(0)->get_start_scn();
+    new_input_range.end_scn_ = new_tables_array.at(new_tables_array.count() - 1)->get_end_scn();
+    if (OB_UNLIKELY(!new_input_range.is_valid() || !old_store_range.is_valid())) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("unexpected scn_range", K(ret), K(new_input_range), K(old_store_range));
+    } else if (OB_UNLIKELY(new_input_range.end_scn_ < old_store_range.start_scn_)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("unexpected scn range", K(ret), K(old_store_range), K(new_input_range));
+    } else if (OB_LIKELY(new_input_range.end_scn_ == old_store_range.start_scn_)) {
+      // update firstly.
+      is_update_firstly = true;
+      LOG_TRACE("expected scn range when updating firstly", K(ret), K(old_store_range), K(new_input_range));
+    } else { // new_input_range.end_scn_ > old_store_range.start_scn_
+      if (OB_LIKELY(old_store_range.start_scn_ <= new_input_range.start_scn_ && old_store_range.end_scn_ >= new_input_range.end_scn_)) {
+        is_update_firstly = false;
+        LOG_INFO("update split minors repeatedly", K(old_store_range), K(new_input_range));
+      } else {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("unexpected err is caught", K(ret), K(old_store_range), K(new_input_range));
+      }
+    }
+  }
+  FLOG_INFO("CHANGE TO TRACE LATER, check_split_minors_can_be_accepted", K(ret), K(is_update_firstly), K(old_store_minors_cnt), K(old_store_range), K(new_input_range));
   return ret;
 }
 

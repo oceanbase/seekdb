@@ -207,6 +207,12 @@ public:
            const int64_t mem_limit,
            const bool enable_dump,
            const common::ObCompressorType compressor_type);
+  int init(const common::ObIArray<storage::ObColumnSchemaItem> &col_array,
+           const int64_t max_batch_size,
+           const lib::ObMemAttr &mem_attr,
+           const int64_t mem_limit,
+           const bool enable_dump,
+           const common::ObCompressorType compressor_type);
   static int init_vectors(const common::ObIArray<storage::ObColumnSchemaItem> &col_array,
                           common::ObIAllocator &allocator,
                           IVectorPtrs &vectors);

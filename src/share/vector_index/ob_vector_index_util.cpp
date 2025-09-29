@@ -5005,6 +5005,50 @@ int ObVecExtraInfoObj::from_obj(const ObObj &obj, ObIAllocator *allocator /*null
   return ret;
 }
 
+int ObVecExtraInfoObj::from_vector(
+    const ObIVector &vector,
+    const int row_pos,
+    const common::ObObjMeta &type,
+    ObIAllocator *allocator /*nullptr*/)
+{
+  int ret = OB_SUCCESS;
+  // Note: extra_info must not null
+  if (OB_UNLIKELY(vector.is_null(row_pos) || !ObVecExtraInfo::is_obj_type_supported(type.get_type()))) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid param, extra_info must not null, or type not supported", K(ret), K(vector), K(row_pos), K(type));
+  } else {
+    const common::ObObjDatumMapType &obj_map_type = common::ObDatum::get_obj_datum_map_type(type.get_type());
+    ObString s = vector.get_string(row_pos);
+    if (allocator == nullptr) {
+      if (ObVecExtraInfo::is_fixed_length_type(obj_map_type)) {
+        ptr_ = s.ptr();
+        len_ = ObDatum::get_reserved_size(obj_map_type);
+        obj_map_type_ = obj_map_type;
+      } else if (obj_map_type == common::ObObjDatumMapType::OBJ_DATUM_STRING) {
+        ptr_ = s.ptr();
+        len_ = s.length();
+        obj_map_type_ = obj_map_type;
+      }
+    } else {
+      if (ObVecExtraInfo::is_fixed_length_type(obj_map_type)) {
+        len_ = ObDatum::get_reserved_size(obj_map_type);
+      } else if (obj_map_type == common::ObObjDatumMapType::OBJ_DATUM_STRING) {
+        len_ = s.length();
+      }
+      char *buf = nullptr;
+      if (OB_ISNULL(buf = static_cast<char *>(allocator->alloc(len_)))) {
+        ret = OB_ALLOCATE_MEMORY_FAILED;
+        LOG_WARN("fail to alloc memory", K(ret));
+      } else {
+        MEMCPY(buf, s.ptr(), len_);
+        ptr_ = buf;
+        obj_map_type_ = obj_map_type;
+      }
+    }
+  }
+  return ret;
+}
+
 int ObVectorIndexUtil::set_vector_index_param(const ObTableSchema *&vec_index_schema, 
                                               ObVecIdxExtraInfo &vec_extra_info,
                                               double &selectivity,

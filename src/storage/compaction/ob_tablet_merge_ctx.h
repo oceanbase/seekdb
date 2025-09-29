@@ -93,8 +93,6 @@ protected:
   virtual int cal_merge_param() override;
   int get_tables_by_key(ObGetMergeTablesResult &get_merge_table_result);
   virtual int prepare_compaction_filter() override; // for tx_minor
-private:
-  int init_static_param_tx_id();
 };
 
 struct ObTabletMajorMergeCtx : public ObTabletMergeCtx

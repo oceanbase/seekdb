@@ -45,6 +45,7 @@ class ObISampleIterator;
 class ObMemtableRowSampleIterator;
 class ObRowSampleIterator;
 class ObBlockSampleIterator;
+class ObDDLBlockSampleIterator;
 
 class ObTableScanIterator : public common::ObNewRowIterator, public ObStorageCheckedObjectBase
 {
@@ -125,6 +126,8 @@ private:
   ObSEArray<ObDatumRange, 1> sample_ranges_;
   CachedIteratorNode *cached_iter_node_;
   ObQueryRowIterator **cached_iter_;
+  ObDDLBlockSampleIterator *ddl_block_sample_iterator_;
+
 private:
   DISALLOW_COPY_AND_ASSIGN(ObTableScanIterator);
 };

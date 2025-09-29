@@ -27,6 +27,7 @@
 #include "observer/table_load/ob_table_load_index_long_wait.h"
 #include "observer/omt/ob_tenant.h"
 #include "storage/direct_load/ob_direct_load_mem_define.h"
+#include "storage/ddl/ob_cg_row_tmp_file.h"
 #include "observer/table_load/ob_table_load_empty_insert_tablet_ctx_manager.h"
 
 namespace oceanbase
@@ -415,6 +416,14 @@ int ObTableLoadCoordinator::calc_memory_size(
     }
   }
 
+  // pk table also direct load many time
+  if (OB_SUCC(ret) && !task_need_sort) {
+    if (!ctx_->schema_.is_table_without_pk_ &&
+        ObDirectLoadMethod::is_incremental(ctx_->param_.method_)) {
+      task_need_sort = true;
+    }
+  }
+
   for (int64_t i = 0; OB_SUCC(ret) && i < store_server_count; i++) {
     ObDirectLoadResourceUnit &unit = apply_arg.apply_array_[i];
     int64_t min_memory = MIN(min_part_memory *  unit.thread_count_, memory_limit); // 至少需要分配的内存
@@ -466,8 +475,12 @@ int ObTableLoadCoordinator::gen_apply_arg(ObDirectLoadResourceApplyArg &apply_ar
         min_part_memory = MACROBLOCK_BUFFER_SIZE; // DDL构造宏块的内存
       } else {
         // 列存
-        part_unsort_memory = ctx_->schema_.cg_cnt_ * CG_BUFFER_SIZE * 10; // DDL多cg同时写临时文件的内存
-        min_part_memory = MAX(ctx_->schema_.cg_cnt_ * CG_BUFFER_SIZE * 10, MACROBLOCK_BUFFER_SIZE); // DDL多cg同时写临时文件的内存, rescan按cg构造宏块内存
+        part_unsort_memory =
+          ctx_->schema_.cg_cnt_ *
+          ObCGRowFilesGenerater::CG_ROW_FILE_MEMORY_LIMIT; // DDL多cg同时写临时文件的内存
+        min_part_memory =
+          MAX(ctx_->schema_.cg_cnt_ * ObCGRowFilesGenerater::CG_ROW_FILE_MEMORY_LIMIT,
+              MACROBLOCK_BUFFER_SIZE); // DDL多cg同时写临时文件的内存, rescan按cg构造宏块内存
       }
     } else {
       if (!ctx_->schema_.is_column_store() ||
@@ -478,7 +491,9 @@ int ObTableLoadCoordinator::gen_apply_arg(ObDirectLoadResourceApplyArg &apply_ar
       } else {
         // 列存
         part_unsort_memory = SSTABLE_BUFFER_SIZE; // 按行写临时文件的内存
-        min_part_memory = MAX(ctx_->schema_.cg_cnt_ * CG_BUFFER_SIZE * 10, MACROBLOCK_BUFFER_SIZE); // DDL多cg同时写临时文件的内存, rescan按cg构造宏块内存
+        min_part_memory =
+          MAX(ctx_->schema_.cg_cnt_ * ObCGRowFilesGenerater::CG_ROW_FILE_MEMORY_LIMIT,
+              MACROBLOCK_BUFFER_SIZE); // DDL多cg同时写临时文件的内存, rescan按cg构造宏块内存
       }
     }
     while (OB_SUCC(ret)) {
@@ -641,6 +656,7 @@ int ObTableLoadCoordinator::pre_begin_peers(ObDirectLoadResourceApplyArg &apply_
       } else if (ObTableLoadUtils::is_local_addr(addr)) { // 本机
         ctx_->param_.session_count_ = arg.config_.parallel_;
         ctx_->param_.avail_memory_ = arg.avail_memory_;
+        LOG_INFO("table load local pre begin", K(arg));
         if (OB_FAIL(ObTableLoadStore::init_ctx(ctx_, arg.partition_id_array_, arg.target_partition_id_array_))) {
           LOG_WARN("fail to store init ctx", KR(ret));
         } else {
@@ -786,6 +802,7 @@ int ObTableLoadCoordinator::confirm_begin_peers()
       ObTableLoadCoordinatorCtx::StoreInfo &store_info = coordinator_ctx_->store_infos_.at(i);
       const ObAddr &addr = store_info.addr_;
       if (ObTableLoadUtils::is_local_addr(addr)) { // 本机
+        LOG_INFO("table load local confirm begin", K(arg));
         ObTableLoadStore store(ctx_);
         if (OB_FAIL(store.init())) {
           LOG_WARN("fail to init store", KR(ret));
@@ -1009,6 +1026,7 @@ int ObTableLoadCoordinator::pre_merge_peers()
     for (int64_t i = 0; OB_SUCC(ret) && i < coordinator_ctx_->store_infos_.count(); ++i) {
       const ObAddr &addr = coordinator_ctx_->store_infos_.at(i).addr_;
       if (ObTableLoadUtils::is_local_addr(addr)) { // 本机
+        LOG_INFO("table load local pre merge", K(arg));
         ObTableLoadStore store(ctx_);
         if (OB_FAIL(store.init())) {
           LOG_WARN("fail to init store", KR(ret));
@@ -1034,6 +1052,7 @@ int ObTableLoadCoordinator::start_merge_peers()
     for (int64_t i = 0; OB_SUCC(ret) && i < coordinator_ctx_->store_infos_.count(); ++i) {
       const ObAddr &addr = coordinator_ctx_->store_infos_.at(i).addr_;
       if (ObTableLoadUtils::is_local_addr(addr)) { // 本机
+        LOG_INFO("table load local start merge", K(arg));
         ObTableLoadStore store(ctx_);
         if (OB_FAIL(store.init())) {
           LOG_WARN("fail to init store", KR(ret));
@@ -1269,6 +1288,7 @@ int ObTableLoadCoordinator::commit_peers(ObTableLoadSqlStatistics &sql_statistic
       ObTableLoadCoordinatorCtx::StoreInfo &store_info = coordinator_ctx_->store_infos_.at(i);
       const ObAddr &addr = store_info.addr_;
       if (ObTableLoadUtils::is_local_addr(addr)) { // 本机
+        LOG_INFO("table load local commit begin", K(arg));
         ObTableLoadStore store(ctx_);
         if (OB_FAIL(store.init())) {
           LOG_WARN("fail to init store", KR(ret));
@@ -1898,6 +1918,8 @@ public:
         LOG_WARN("column count doesn't match value count", KR(ret), K(src_obj_row),
                  K(ctx_->param_.column_count_));
         ObNewRow new_row(src_obj_row.cells_, src_obj_row.count_);
+        LOG_INFO("column count doesn't match value count", KR(ret), K(src_obj_row),
+                 K(ctx_->param_.column_count_));
         if (OB_FAIL(error_row_handler->handle_error_row(ret))) {
           LOG_WARN("fail to handle error row", KR(ret));
         }

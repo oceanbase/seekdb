@@ -922,14 +922,15 @@ public:
       const int64_t schema_version,
       const int64_t snapshot_version,
       const int64_t execution_id,
-      const int64_t timeout_us);
+      const int64_t timeout_us,
+      const int64_t parallelism);
   void reset();
   bool is_inited() const { return is_inited_; }
   int try_wait(bool &is_column_checksum_ready);
   int update_status(const common::ObTabletID &tablet_id, const int ret_code);
   TO_STRING_KV(K(is_inited_), K(source_table_id_), K(target_table_id_),
       K(schema_version_), K(snapshot_version_), K(execution_id_), K(timeout_us_),
-      K(last_drive_ts_), K(stat_array_), K_(tenant_id));
+      K(last_drive_ts_), K(stat_array_), K_(tenant_id), K_(parallelism));
 
 private:
   int send_calc_rpc(int64_t &send_succ_count);
@@ -948,6 +949,7 @@ private:
   int64_t task_id_;
   uint64_t tenant_id_;
   common::SpinRWLock lock_;
+  int64_t parallelism_;
 };
 
 } // end namespace rootserver

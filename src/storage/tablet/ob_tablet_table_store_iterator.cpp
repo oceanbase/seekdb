@@ -30,7 +30,8 @@ ObTableStoreIterator::ObTableStoreIterator(const bool reverse, const bool need_l
     pos_(INT64_MAX),
     memstore_retired_(nullptr),
     transfer_src_table_store_handle_(nullptr),
-    split_extra_table_store_handles_()
+    split_extra_table_store_handles_(),
+    ddl_co_sstable_handle_(nullptr)
 {
   step_ = reverse ? -1 : 1;
   sstable_handle_array_.set_attr(ObMemAttr(MTL_ID(), "TblHdlArray"));
@@ -54,6 +55,21 @@ int ObTableStoreIterator::assign(const ObTableStoreIterator& other)
       }
     } else if (sstable_handle_array_.count() > 0) {
       sstable_handle_array_.reset();
+    }
+
+    if (OB_SUCC(ret)) {
+      if (OB_UNLIKELY(nullptr != ddl_co_sstable_handle_)) {
+        ddl_co_sstable_handle_->reset();
+      }
+      if (OB_UNLIKELY(nullptr != other.ddl_co_sstable_handle_)) {
+        if (nullptr == ddl_co_sstable_handle_
+            && OB_ISNULL(ddl_co_sstable_handle_ = OB_NEW(ObTableHandleV2, ObMemAttr(MTL_ID(), "ddl_co_hdl")))) {
+          ret = OB_ALLOCATE_MEMORY_FAILED;
+          LOG_WARN("allocate memory failed", K(ret));
+        } else {
+          *ddl_co_sstable_handle_ = *other.ddl_co_sstable_handle_;
+        }
+      }
     }
 
     if (OB_FAIL(ret)) {
@@ -96,6 +112,7 @@ ObTableStoreIterator::~ObTableStoreIterator()
 
 void ObTableStoreIterator::reset()
 {
+  OB_DELETE(ObTableHandleV2, ObMemAttr(MTL_ID(), "ddl_co_hdl"), ddl_co_sstable_handle_);
   table_ptr_array_.reset();
   sstable_handle_array_.reset();
   table_store_handle_.reset();
@@ -248,6 +265,26 @@ int ObTableStoreIterator::add_table(ObITable *table)
   return ret;
 }
 
+int ObTableStoreIterator::add_ddl_co_table(ObTableHandleV2 &table_handle, ObITable *co_table)
+{
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(!table_handle.is_valid() || nullptr == co_table)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("sstable handle is invalid", KR(ret), K(table_handle), KP(co_table));
+  } else if (OB_UNLIKELY(nullptr != ddl_co_sstable_handle_ && ddl_co_sstable_handle_->is_valid())) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("ddl co sstable handle set twice", K(ret), K(ddl_co_sstable_handle_));
+  } else if (nullptr == ddl_co_sstable_handle_
+      && OB_ISNULL(ddl_co_sstable_handle_ = OB_NEW(ObTableHandleV2, ObMemAttr(MTL_ID(), "ddl_co_hdl")))) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_WARN("allocate memory failed", K(ret));
+  } else if (FALSE_IT(*ddl_co_sstable_handle_ = table_handle)) {
+  } else if (OB_FAIL(add_table(co_table))) {
+    LOG_WARN("fail to add table", KR(ret), K(table_handle), KPC(co_table));
+  }
+  return ret;
+}
+
 int ObTableStoreIterator::get_table_ptr_with_meta_handle(
     const ObSSTable *table,
     TablePtr &table_ptr)
@@ -256,7 +293,7 @@ int ObTableStoreIterator::get_table_ptr_with_meta_handle(
   ObStorageMetaHandle sstable_meta_hdl;
   ObSSTable *sstable = nullptr;
 
-  if (OB_FAIL(ObTabletTableStore::load_sstable(table->get_addr(),
+  if (OB_FAIL(ObCacheSSTableHelper::load_sstable(table->get_addr(),
       table->is_co_sstable(), sstable_meta_hdl))) {
     LOG_WARN("fail to load sstable", K(ret));
   } else if (OB_FAIL(sstable_handle_array_.push_back(sstable_meta_hdl))) {

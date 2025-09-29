@@ -48,9 +48,10 @@ protected:
       const share::SCN &scn,
       bool &need_replay);
   static int check_need_replay_ddl_inc_log_(
-      const ObLS *ls,
+      ObLS *ls,
       const ObTabletHandle &tablet_handle,
       const share::SCN &scn,
+      const ObDirectLoadType direct_load_type,
       bool &need_replay);
 
   static int get_lob_meta_tablet_id(
@@ -131,7 +132,8 @@ private:
   int do_inc_replay_(
       ObTabletHandle &tablet_handle, 
       blocksstable::ObMacroBlockWriteInfo &write_info, 
-      storage::ObDDLMacroBlock &macro_block);
+      storage::ObDDLMacroBlock &macro_block,
+      const ObDirectLoadType direct_load_type);
   int do_full_replay_(
       ObTabletHandle &tablet_handle, 
       blocksstable::ObMacroBlockWriteInfo &write_info, 
@@ -197,10 +199,10 @@ private:
 };
 #endif
 
-class ObDDLIncStartReplayExecutor final : public ObDDLReplayExecutor
+class ObDDLIncMinorStartReplayExecutor final : public ObDDLReplayExecutor
 {
 public:
-  ObDDLIncStartReplayExecutor();
+  ObDDLIncMinorStartReplayExecutor();
 
   int init(ObLS *ls, const common::ObTabletID &tablet_id, const share::SCN &scn);
 
@@ -216,10 +218,10 @@ private:
   common::ObTabletID tablet_id_;
 };
 
-class ObDDLIncCommitReplayExecutor final : public ObDDLReplayExecutor
+class ObDDLIncMinorCommitReplayExecutor final : public ObDDLReplayExecutor
 {
 public:
-  ObDDLIncCommitReplayExecutor();
+  ObDDLIncMinorCommitReplayExecutor();
 
   int init(ObLS *ls, const common::ObTabletID &tablet_id, const share::SCN &scn);
 
@@ -234,6 +236,7 @@ protected:
 private:
   common::ObTabletID tablet_id_;
 };
+
 
 class ObSplitStartReplayExecutor final : public ObDDLReplayExecutor
 {

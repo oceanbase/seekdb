@@ -365,20 +365,14 @@ public:
   ObHATableStoreParam();
   ObHATableStoreParam(
     const int64_t transfer_seq,
-    const bool need_check_sstable,
-    const bool need_check_transfer_seq);
-  ObHATableStoreParam(
-    const int64_t transfer_seq,
-    const bool need_check_sstable,
     const bool need_check_transfer_seq,
-    const bool need_replace_remote_sstable,
-    const bool is_only_replace_major);
+    const bool need_replace_remote_sstable = false,
+    const bool is_only_replace_major = false);
   ~ObHATableStoreParam() = default;
   bool is_valid() const;
-  TO_STRING_KV(K_(transfer_seq), K_(need_check_sstable), K_(need_check_transfer_seq), K_(need_replace_remote_sstable), K_(is_only_replace_major));
+  TO_STRING_KV(K_(transfer_seq), K_(need_check_transfer_seq), K_(need_replace_remote_sstable), K_(is_only_replace_major));
 public:
   int64_t transfer_seq_;
-  bool need_check_sstable_;
   bool need_check_transfer_seq_;
   bool need_replace_remote_sstable_; // only true for restore replace sstable.
   bool is_only_replace_major_;
@@ -429,7 +423,8 @@ struct ObUpdateTableStoreParam
     const ObStorageSchema *storage_schema,
     const int64_t rebuild_seq,
     const blocksstable::ObSSTable *sstable = NULL,
-    const bool allow_duplicate_sstable = false);
+    const bool allow_duplicate_sstable = false,
+    const bool need_wait_check_flag = true);
   ObUpdateTableStoreParam(
     const int64_t snapshot_version,
     const int64_t multi_version_start,
@@ -440,15 +435,16 @@ struct ObUpdateTableStoreParam
     const ObCompactionTableStoreParam &comp_param,
     ObArenaAllocator *allocator = NULL);
   int init_with_ha_info(const ObHATableStoreParam &ha_param);
+  void set_upper_trans_param(const UpdateUpperTransParam upper_trans_param) { upper_trans_param_ = upper_trans_param; }
   bool is_valid() const;
   bool need_report_major() const;
+  bool get_need_check_sstable() const { return is_minor_merge_type(compaction_info_.merge_type_); }
   #define PARAM_DEFINE_FUNC(var_type, param, var_name) \
     OB_INLINE var_type get_##var_name() const { return param. var_name##_; }
   #define HA_PARAM_FUNC(var_type, var_name) \
     PARAM_DEFINE_FUNC(var_type, ha_info_, var_name)
   #define COMP_PARAM_FUNC(var_type, var_name) \
     PARAM_DEFINE_FUNC(var_type, compaction_info_, var_name)
-  HA_PARAM_FUNC(bool, need_check_sstable);
   HA_PARAM_FUNC(bool, need_check_transfer_seq);
   HA_PARAM_FUNC(int64_t, transfer_seq);
   COMP_PARAM_FUNC(compaction::ObMergeType, merge_type);

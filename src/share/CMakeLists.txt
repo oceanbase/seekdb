@@ -281,6 +281,7 @@ ob_set_subtarget(ob_share common
   ob_device_credential_task.cpp
   ob_dynamic_partition_manager.cpp
   ob_scheduled_manage_dynamic_partition.cpp
+  ob_batch_selector.cpp
   ob_timezone_importer.cpp
   ob_srs_importer.cpp
 )
@@ -364,6 +365,7 @@ ob_set_subtarget(ob_share common_mixed
   table/ob_table_util.cpp
   table/ob_table_object.cpp
   scheduler/ob_tenant_dag_scheduler.cpp
+  scheduler/ob_independent_dag.cpp
   scheduler/ob_sys_task_stat.cpp
   scheduler/ob_dag_warning_history_mgr.cpp
   scheduler/ob_partition_auto_split_helper.cpp

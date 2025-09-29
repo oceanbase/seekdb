@@ -82,6 +82,7 @@
   #include "src/storage/truncate_info/ob_truncate_info.h"
   #include "src/storage/truncate_info/ob_truncate_info_mds_helper.h"
   #include "src/storage/mview/ob_mview_mds.h"
+  #include "src/storage/tablet/ob_tablet_ddl_complete_mds_helper.h"
   #include "src/storage/tablet/ob_tablet_ddl_complete_mds_data.h"
 #endif
 /**************************************************************************************************/
@@ -215,10 +216,18 @@ _GENERATE_MDS_FRAME_CODE_FOR_TRANSACTION_(HELPER_CLASS, BUFFER_CTX_TYPE, ID, ENU
                                           ::oceanbase::storage::ObMViewMdsOpCtx, \
                                           40,\
                                           MVIEW_MDS_OP)
+  GENERATE_MDS_FRAME_CODE_FOR_TRANSACTION(::oceanbase::storage::ObTabletDDLCompleteMdsHelper,\
+                                          ::oceanbase::storage::mds::MdsCtx,\
+                                          41,\
+                                          DDL_COMPLETE_MDS)
   // GENERATE_MDS_FRAME_CODE_FOR_TRANSACTION(::oceanbase::storage::ObTabletDDLCompleteMdsHelper,\
   //                                         ::oceanbase::storage::mds::MdsCtx,\
   //                                         41,\
   //                                         DDL_COMPLETE_MDS)
+  // GENERATE_MDS_FRAME_CODE_FOR_TRANSACTION(::oceanbase::storage::ObTTLFilterInfoMdsHelper,\
+  //                                         ::oceanbase::storage::mds::MdsCtx, \
+  //                                         43,\
+  //                                         SYNC_TTL_FILTER_INFO)
   // # 余留位置（此行之前占位）
 #undef GENERATE_MDS_FRAME_CODE_FOR_TRANSACTION
 #endif
