@@ -486,7 +486,7 @@ int ObCSEncodingTestBase::check_get_row_count(const ObMicroBlockHeader *header,
     }
 
     uint64_t seed = ObTimeUtil::current_time();
-    std::shuffle(row_ids, row_ids + header->row_count_, std::default_random_engine(seed)); // 随机打乱数组
+    std::shuffle(row_ids, row_ids + header->row_count_, std::default_random_engine(seed)); // randomly shuffle array
 
     for (int64_t col_idx = 0; OB_SUCC(ret) && col_idx < col_cnt; col_idx++) {
       if (OB_FAIL(decoder.get_row_count(col_idx, row_ids, header->row_count_, contains_null, nullptr, real_row_count))) {

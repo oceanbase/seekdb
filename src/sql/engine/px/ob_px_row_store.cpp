@@ -21,19 +21,19 @@ using namespace oceanbase::common;
 using namespace oceanbase::sql;
 
 /*
- * 本文件说明：
- * 为了提高效率，在反序列化流程上 ObPxNewRow 做了一些比较 trick 的事情
+ * This file describes:
+ * To improve efficiency, ObPxNewRow does some rather trick things in the deserialization process
  *
- * 一般流程：
+ * General process:
  *  obj -> netbuf -> transport -> netbuf -> obj -> use it
  *      sender           |            receiver
  *
- * ObPxNewRow 流程：
+ * ObPxNewRow process:
  *  obj -> netbuf -> transport -> netbuf -> copy netbuf to local buf -> obj -> use it
  *      sender           |            receiver
  *
- * 为什么要 copy netbuf to local buf 呢？因为 process(DtlMsg) 结束后 DtlMsg 还需要保持住，
- * 不能随着 process() 结束、netbuf 释放而释放
+ * Why copy netbuf to local buf? Because after process(DtlMsg) ends, DtlMsg still needs to be kept,
+ * cannot be released with the end of process() and the release of netbuf
  */
 
 void ObPxNewRow::set_eof_row()
@@ -87,7 +87,7 @@ OB_DEF_DESERIALIZE(ObPxNewRow)
       ret = OB_SERIALIZE_ERROR;
       LOG_WARN("invalid serialization data", K(pos), K(data_len), K_(row_cell_count), K(ret));
     } else {
-      // 延迟到 get_row 阶段读取 row 的 cells
+      // Delay reading row's cells until the get_row stage
       des_row_buf_ = (char*)buf + pos;
       des_row_buf_size_ = data_len - pos;
       pos += des_row_buf_size_;
@@ -95,12 +95,10 @@ OB_DEF_DESERIALIZE(ObPxNewRow)
   }
   return ret;
 }
-
-// 用于将 row 从 DTL 内存中拷贝到 get_next_row 上下文中对外吐出
-// 如果不拷贝，则 DTL process 调用结束后， row 的内存就会被释放,
-// get_next_row 中获得的将是非法内存引用
-
-// 将远端传来的 row 反序列出来，构造成 ObNewRow 结构
+// Used to copy row from DTL memory to get_next_row context for output
+// If not copied, the memory of row will be released after the DTL process call ends,
+// get_next_row will obtain an illegal memory reference
+// Deserialize the row received from the remote end and construct it into an ObNewRow structure
 
 int ObReceiveRowReader::add_buffer(dtl::ObDtlLinkedBuffer &buf, bool &transferred)
 {
@@ -398,8 +396,7 @@ int ObReceiveRowReader::get_next_row(const ObIArray<ObExpr*> &exprs,
 
   return ret;
 }
-
-// todo: shanting2.0 实现向量化接口，format为continuous。
+// todo: shanting2.0 implement vectorized interface, format as continuous.
 int ObReceiveRowReader::attach_rows(const common::ObIArray<ObExpr*> &exprs,
                                     const ObIArray<ObExpr*> &dynamic_const_exprs,
                                     ObEvalCtx &eval_ctx,

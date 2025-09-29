@@ -58,7 +58,7 @@ public:
   ObJitMemoryBlock *next_;
   char *addr_;
   int64_t size_;
-  char *alloc_end_;   //第一个没有分配的位置
+  char *alloc_end_;   // the first position not allocated
 };
 
 DEF_TO_STRING(ObJitMemoryGroup)
@@ -95,12 +95,12 @@ ObJitMemoryBlock ObJitMemory::allocate_mapped_memory(int64_t num_bytes,
   uintptr_t start = 0;
   int64_t mm_flags = MAP_PRIVATE | MAP_ANONYMOUS;
   void *addr = nullptr;
-  //循环mmap内存, 直到分配出内存, 避免分配不出内存后, llvm内部直接core
+  // Loop mmap memory, until memory is allocated, avoid core dump by llvm internal if memory allocation fails
   do {
     addr = ::mmap(reinterpret_cast<void*>(start), page_size*num_pages,
                   p_flags, mm_flags, fd, 0);
     if (MAP_FAILED == addr) {
-      if (REACH_TIME_INTERVAL(10000000)) { //间隔10s打印日志
+      if (REACH_TIME_INTERVAL(10000000)) { // interval 10s print log
         LOG_ERROR_RET(common::OB_ALLOCATE_MEMORY_FAILED, "allocate jit memory failed", K(addr), K(num_bytes), K(page_size), K(num_pages));
       }
       ::usleep(100000); //100ms
@@ -230,9 +230,9 @@ ObJitMemoryBlock *ObJitMemoryGroup::alloc_new_block(int64_t sz, int64_t p_flags)
   if (OB_ISNULL(block.addr_) || 0 == block.size_) {
     ret = NULL;
   } else if (NULL != (ret = new ObJitMemoryBlock(block.addr_,
-                                                 block.size_))) { //TODO 该模块new方法会替换为OB的allocator
+                                                 block.size_))) { //TODO This module's new method will be replaced with OB's allocator
     //do nothing
-  } else { //new失败,释放mmap出来的内存
+  } else { // new failed, release the memory mmaped out
     ObJitMemory::release_mapped_memory(block);
   }
 

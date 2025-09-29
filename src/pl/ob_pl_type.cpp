@@ -297,15 +297,12 @@ uint64_t ObPLDataType::get_user_type_id() const
   }
   return user_type_id;
 }
-
-//基本数据类型在LLVM里的全局符号表存储的数据类型
+//Basic data types in the global symbol table of LLVM
 int ObPLDataType::get_llvm_type(common::ObObjType obj_type, jit::ObLLVMHelper& helper, ObPLADTService &adt_service, jit::ObLLVMType &type)
 {
   return get_datum_type(obj_type, helper, adt_service, type);
 }
-
-
-//基本数据类型在sql里的数据的实际存储类型全部都是ObObj
+//Basic data types in SQL are actually stored as ObObj in the database
 int ObPLDataType::get_datum_type(common::ObObjType obj_type, jit::ObLLVMHelper& helper, ObPLADTService &adt_service, jit::ObLLVMType &type)
 {
   UNUSED(obj_type); UNUSED(helper); UNUSED(adt_service);
@@ -845,7 +842,7 @@ int ObPLDataType::add_package_routine_schema_param(const ObPLResolveCtx &resolve
 {
   int ret = OB_SUCCESS;
   ObRoutineParam param_info;
-  if (is_obj_type()) { // 基础数据类型
+  if (is_obj_type()) { // basic data type
     param_info.set_tenant_id(routine_info.get_tenant_id());
     param_info.set_routine_id(routine_info.get_routine_id());
     param_info.set_sequence(sequence++);
@@ -856,7 +853,7 @@ int ObPLDataType::add_package_routine_schema_param(const ObPLResolveCtx &resolve
     OZ (param_info.set_param_name(param_name));
     OX (param_info.set_param_type(*get_data_type()));
     OZ (routine_info.add_routine_param(param_info));
-  } else { // 复杂数据类型
+  } else { // complex data type
     const ObUserDefinedType *user_type = NULL;
     ObString type_package_name;
     uint64_t type_package_id = OB_INVALID_ID;
@@ -896,8 +893,8 @@ int ObPLDataType::add_package_routine_schema_param(const ObPLResolveCtx &resolve
     OZ (param_info.set_type_name(user_type->get_name()));
     OX (param_info.set_param_type(ObExtendType));
     OZ (routine_info.add_routine_param(param_info));
-    // TODO: Oracle的实现会将复杂类型在Routine系统表中展开, 同时在Type系统表中记录一份, 暂时未看出这么做的用意,
-    // Type中记录的信息已经足够使用, 因此这里不将复杂类型展开, 仅保留接口
+    // TODO: Oracle's implementation will expand complex types in the Routine system table, while recording a copy in the Type system table, the purpose of which is not yet clear,
+    // The information recorded in Type is sufficient for use, therefore here we do not expand complex types, only retaining the interface
     // OZ (user_type->add_package_routine_schema_param(resolve_ctx, block_ns, package_name,
     //              param_name, mode, position, level, sequence, routine_info));
   }
@@ -1720,12 +1717,11 @@ int ObObjAccessIdx::datum_need_copy(const ObRawExpr *into, const ObRawExpr *valu
     LOG_WARN("Invalid exor", K(into), K(value), K(ret));
   } else {
     /*
-     * 如果我们的表达式计算能够保证计算的结果一定不会复用输入表达式的内存，那么其实不需要做任何拷贝。
-     * 如果我们的表达式计算不保证这一点，例如如果CAST的类型和输入类型一致，那么其实返回结果还是原始表达式，那么需要拷贝内存。
-     * 但是我们没有办法区分哪些表达式是重新申请了内存，哪些是用的原来的内存。简单点的办法，如果涉及到Collection那么就COPY？？？
+     * If our expression evaluation can guarantee that the result will never reuse the memory of the input expression, then we actually do not need to make any copies.
+     * If our expression evaluation does not guarantee this, for example if the CAST type is the same as the input type, then the result returned is still the original expression, so we need to copy the memory.
+     * However, we have no way to distinguish which expressions reallocate memory and which use the original memory. A simpler approach, if it involves a Collection, then COPY???
      */
-
-    //如果目的端是包变量，那么一定需要copy
+    //If the destination is a package variable, then a copy is definitely required
     if (OB_SUCC(ret) && IS_INVALID == alloc_scop) {
       if (into->is_sys_func_expr() && T_OP_GET_PACKAGE_VAR == into->get_expr_type()) {
         alloc_scop = IS_PKG; //TODO: @ryan.ly PKG
@@ -1736,8 +1732,7 @@ int ObObjAccessIdx::datum_need_copy(const ObRawExpr *into, const ObRawExpr *valu
         }
       } else { /*do nothing*/ }
     }
-
-    //如果源数据来源于NestedTable，那么一定要重新copy
+    //If the source data comes from NestedTable, then it must be recopied
     if (OB_SUCC(ret)
         && IS_INVALID == alloc_scop
         && OB_NOT_NULL(value)) {
@@ -1747,8 +1742,7 @@ int ObObjAccessIdx::datum_need_copy(const ObRawExpr *into, const ObRawExpr *valu
         alloc_scop = IS_LOCAL;
       }
     }
-
-    //如果目的端是NestedTable，那么一定要重新copy
+    //If the destination is NestedTable, then it must be recopied
     if (OB_SUCC(ret)
         && IS_INVALID == alloc_scop
         && into->is_obj_access_expr()) {
@@ -1758,8 +1752,7 @@ int ObObjAccessIdx::datum_need_copy(const ObRawExpr *into, const ObRawExpr *valu
           alloc_scop = IS_LOCAL;
       }
     }
-
-    //如果源数据和目的端不同属于一个Allocator Scope，那么也要copy
+    //If the source data and destination belong to the same Allocator Scope, then it should also be copied
     if (OB_SUCC(ret) && IS_INVALID == alloc_scop) {
       bool src_pkg = false;
       bool dest_local = false;
@@ -1936,7 +1929,7 @@ int ObPLCursorInfo::close(sql::ObSQLSessionInfo &session, bool is_reuse)
 {
   int ret = OB_SUCCESS;
   LOG_DEBUG("close cursor", K(isopen()), K(id_), K(this), K(*this), K(session.get_server_sid()));
-  if (isopen()) { //如果游标已经打开，需要释放资源
+  if (isopen()) { //If the cursor is already open, resources need to be released
     if (!is_server_cursor()) {   // delete cursor from cursor map first, then release resource
       session.del_non_session_cursor(this);
     } else {
@@ -1987,11 +1980,11 @@ int ObPLCursorInfo::get_found(bool &found, bool &isnull) const
       found = fetched_with_row_;
     }
   } else {
-    // 对于隐式游标
-    // 在PL开始执行时将session上的ObPLCursor变量初始化,
-    // 并且在PL中第一个DML开始时open,
-    // 在整个PL执行过程中不close
-    if (!isopen_) { // 说明当前PL中还没有执行过DML
+    // For implicit cursor
+    // Initialize the ObPLCursor variable on the session when PL starts execution,
+    // and open at the start of the first DML in PL,
+    // Do not close throughout the entire PL execution process
+    if (!isopen_) { // Indicates that no DML has been executed in the current PL yet
       isnull = true;
     } else {
       found = 0 != rowcount_;
@@ -2052,7 +2045,7 @@ int ObPLCursorInfo::set_rowcount(int64_t rowcount)
     } else {
       rowcount_ = rowcount;
     }
-    isopen_ = true; // 隐式游标用这个值来判断是否有执行过dml，因此每次set_rowcount都设置这个值
+    isopen_ = true; // The implicit cursor uses this value to determine if any DML has been executed, so this value is set every time set_rowcount is called
   }
   return ret;
 }
@@ -2083,12 +2076,12 @@ int ObPLCursorInfo::set_bulk_exception(int64_t error)
   if (!in_forall_) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("can not set bulk exception when not in forall", K(ret), K(in_forall_));
-  } else if (OB_FAIL(set_rowcount(0))) { // 将失败语句的行设置为0
+  } else if (OB_FAIL(set_rowcount(0))) { // Set the row count of the failed statement to 0
     LOG_WARN("failed to set rowcount for bulk exception", K(ret));
   } else if (OB_FAIL(add_bulk_exception(bulk_rowcount_.count(), error))) {
     LOG_WARN("failed to set exception for bulk exception", K(ret));
   }
-  if (OB_FAIL(ret)) { // 设置bulk exception失败后将退出for_all_环境，为了避免隐式游标的值不完整重置隐式游标
+  if (OB_FAIL(ret)) { // Set bulk exception failed, will exit for_all_ environment, to avoid incomplete reset of implicit cursor, reset implicit cursor
     reset();
   }
   return ret;

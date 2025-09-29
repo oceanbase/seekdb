@@ -39,7 +39,7 @@ ObLSID id(1);
 TEST(TestObReplayService, test_ob_replay_service)
 {
   replay_service.init(&palf_env, &ls_service);
-  // add_ls接口会直接开始回放已有的未回放已确认日志
+  // add_ls interface will directly start replaying the existing un-replayed confirmed logs
   replay_service.add_ls(id, ObReplicaType::REPLICA_TYPE_FULL, initial_lsn, initial_log_ts);
   sleep(1);
   bool is_done = false;

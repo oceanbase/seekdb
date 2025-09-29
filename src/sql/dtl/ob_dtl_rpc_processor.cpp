@@ -43,10 +43,10 @@ int ObDtlSendMessageP::process_msg(ObDtlRpcDataResponse &response, ObDtlSendArgs
     }
   } else if (OB_FAIL(DTL.get_channel(arg.chid_, chan))) {
     int tmp_ret = ret;
-    // cache版本升级不需要处理，数据发送到receive端大致几种情况：
-    // 1) new|old -> old 无需处理，不涉及到cache问题
-    // 2) old -> new，is_data_msg 为false，和老逻辑一致
-    // 3) new -> new, is_data_msg可能为true，则new版本之间采用blocking逻辑，不影响其他
+    // cache version upgrade does not require processing, data sent to receive end roughly several cases:
+    // 1) new|old -> old no need to process, does not involve cache issues
+    // 2) old -> new, is_data_msg is false, and consistent with the old logic
+    // 3) new -> new, is_data_msg may be true, then blocking logic is used between new versions, without affecting others
     // only buffer data msg
     ObDtlMsgHeader header;
     const bool keep_pos = true;
@@ -67,11 +67,11 @@ int ObDtlSendMessageP::process_msg(ObDtlRpcDataResponse &response, ObDtlSendArgs
       ret = tmp_ret;
       LOG_WARN("failed to get channel", K(ret));
     } else {
-      // 太多的get channel fail，用trace
+      // Too many get channel fail, use trace
       LOG_TRACE("get DTL channel fail", KP(arg.chid_), K(ret), K(tmp_ret));
     }
   } else {
-    // 添加tenant上下文，方便后续如果需要release channel，可以调用MTL_GET拿到dtl manager相关信息
+    // Add tenant context, convenient for subsequent release channel if needed, can call MTL_GET to get dtl manager related information
     ObDtlRpcChannel *rpc_chan = reinterpret_cast<ObDtlRpcChannel*>(chan);
     ObDtlLinkedBuffer *buf = &arg.buffer_;
     if (OB_FAIL(rpc_chan->feedup(buf))) {
@@ -80,7 +80,7 @@ int ObDtlSendMessageP::process_msg(ObDtlRpcDataResponse &response, ObDtlSendArgs
       LOG_TRACE("dfc of rpc channel is null", K(response.is_block_), KP(arg.chid_), K(ret),
         KP(rpc_chan->get_id()), K(rpc_chan->get_peer()));
     } else if (rpc_chan->belong_to_receive_data()) {
-      // 必须是receive端，才可以主动回包让transmit端block
+      // Must be the receive end, in order to actively send a response to block the transmit end
       response.is_block_ = rpc_chan->get_dfc()->is_block(rpc_chan);
       LOG_TRACE("need blocking", K(response.is_block_), KP(arg.chid_), K(ret),
         K(arg.buffer_.seq_no()),
@@ -130,7 +130,7 @@ int ObDtlBCSendMessageP::process()
     }
   }
   LOG_TRACE("finish process broadcast msg", K(ret), K(arg_.bc_buffer_), K(resps), K(args));
-  // rpc的回包一定要返回OB_SUCCESS，不然response不会被序列化
+  // rpc response must return OB_SUCCESS, otherwise response will not be serialized
   return OB_SUCCESS;
 }
 
@@ -160,14 +160,14 @@ int ObDtlSendMessageP::process_px_bloom_filter_data(ObDtlLinkedBuffer *&buffer)
             bf_key, filter))) {
           LOG_WARN("fail to get px bloom filter", K(ret));
         }
-        // get_px_bf_for_merge_filter只有在成功后会增加filter的引用计数
+        // get_px_bf_for_merge_filter will only increase the filter's reference count upon success
         if (OB_SUCC(ret) && OB_NOT_NULL(filter)) {
           if (OB_FAIL(filter->merge_filter(&bf_data.filter_))) {
             LOG_WARN("fail to merge filter", K(ret));
           } else if (OB_FAIL(filter->process_recieve_count(bf_data.bloom_filter_count_))) {
             LOG_WARN("fail to process receive count", K(ret));
           }
-          // merge以及process操作完成之后, 需要减少其引用计数.
+          // merge and process operations completed, need to decrease its reference count.
           (void)filter->dec_merge_filter_count();
         }
       }

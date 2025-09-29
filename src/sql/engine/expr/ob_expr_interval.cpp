@@ -198,7 +198,7 @@ int ObExprInterval::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr,
 
     if (OB_SUCC(ret)) {
       const ObObjType &arg_type = rt_expr.args_[0]->datum_meta_.type_;
-      // 数字比较不用考虑collation,
+      // Number comparison does not consider collation,
       // do not care NULL_FIRST or NULL_LAST, will ignore null in calc_interval_expr()
       rt_expr.inner_functions_[0] = reinterpret_cast<void*>(
           ObDatumFuncs::get_nullsafe_cmp_func(arg_type, arg_type, default_null_pos(),

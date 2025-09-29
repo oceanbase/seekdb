@@ -19,9 +19,8 @@
 
 namespace oceanbase {
 namespace sql {
-
-// 使用模型：记录第一次/最后一次（row、buffer）输入和输出的时间，如receive收到第一行数据，如dtl收到第一个buffer等
-//         同时提供间隔时间的计算，通过开关控制打开是否计算这些统计项，如dtl写buffer时间等
+// Use model: record the time of the first/last (row, buffer) input and output, such as receive receiving the first row of data, such as dtl receiving the first buffer etc
+//         At the same time provide the calculation of interval time, through the switch to control whether to calculate these statistics, such as dtl write buffer time etc
 class ObOpMetric
 {
   OB_UNIS_VERSION(1);
@@ -96,8 +95,7 @@ private:
   bool enable_audit_;
   int64_t id_;
   MetricType type_;
-
-  // 每间隔 INTERVAL 次累计算一下
+  // Every INTERVAL times calculate once
   static const int64_t INTERVAL = 1;
   int64_t interval_cnt_;
   int64_t interval_start_time_;
@@ -157,7 +155,7 @@ OB_INLINE void ObOpMetric::mark_interval_end(int64_t *out_exec_time, int64_t int
       } else {
         exec_time_ += (interval_end_time_ - interval_start_time_);
       }
-      // 重复利用上一个start time
+      // Reuse the previous start time
       interval_start_time_ = interval_end_time_;
     } else if (INTERVAL - 1 == interval_cnt_ % interval) {
       interval_end_time_ = common::ObTimeUtility::current_time();
@@ -166,7 +164,7 @@ OB_INLINE void ObOpMetric::mark_interval_end(int64_t *out_exec_time, int64_t int
       } else {
         exec_time_ += (interval_end_time_ - interval_start_time_);
       }
-      // 重复利用上一个start time
+      // Reuse the previous start time
       interval_start_time_ = interval_end_time_;
     }
   }

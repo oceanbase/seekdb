@@ -223,10 +223,10 @@ struct ObPLExternTypeInfo
     type_subname_.reset();
   }
 
-  int64_t flag_; // 表示当前Type的来源
+  int64_t flag_; // indicates the source of the current Type
   uint64_t type_owner_; // TypeOwner
   common::ObString type_name_; // TypeName
-  common::ObString type_subname_; // 根据flag确定是PackageName还是TableName
+  common::ObString type_subname_; // Determine if it is PackageName or TableName based on the flag
   share::schema::ObSchemaObjVersion obj_version_;
   TO_STRING_KV(K_(flag), K_(type_owner), K_(type_name), K_(type_subname), K_(obj_version));
 };
@@ -445,7 +445,7 @@ public:
   inline bool is_object_type() const {
     return (is_record_type() || is_opaque_type()) && is_udt_type();
   }
-  //存储过程内部通过type定义的record
+  //Stored procedure internal record defined by type
   inline bool is_type_record() const {
     return is_record_type() && !is_udt_type();
   }
@@ -494,11 +494,9 @@ public:
     common::ObIAllocator &allocator,
     const char* src, const int64_t src_len, int64_t &src_pos, char *&dst) const;
   // ------ new session serialize/deserialize interface -------
-
-
-  //LLVM里存储的类型
+  //The type stored in LLVM
   static int get_llvm_type(common::ObObjType obj_type, jit::ObLLVMHelper& helper, ObPLADTService &adt_service, jit::ObLLVMType &type);
-  //sql里存储的类型
+  //type stored in sql
   static int get_datum_type(common::ObObjType obj_type, jit::ObLLVMHelper& helper, ObPLADTService &adt_service, jit::ObLLVMType &type);
 
   virtual int generate_assign_with_null(ObPLCodeGenerator &generator,
@@ -720,32 +718,32 @@ private:
 class ObObjAccessIdx
 {
 public:
-  enum AccessType //必须与enum ExternalType的定义保持一致
+  enum AccessType //must be consistent with the definition of enum ExternalType
   {
     IS_INVALID            = -1,
-    IS_LOCAL              = 0,//本地变量：PL内部定义的变量
-    IS_DB_NS              = 1,//外部变量：包变量所属的DB
-    IS_PKG_NS             = 2,//外部变量：包变量所属的PKG
-    IS_PKG                = 3,//外部变量：包变量
-    IS_USER               = 4,//外部变量：用户变量
-    IS_SESSION            = 5,//外部变量：SESSION系统变量
-    IS_GLOBAL             = 6,//外部变量：GLOBAL系统变量
-    IS_TABLE_NS           = 7,//外部变量: 用户表,用于实现 %TYPE, %ROWTYPE
-    IS_TABLE_COL          = 8,//外部变量: 用户列,用于实现 %TYPE
+    IS_LOCAL              = 0,//Local variable: A variable defined internally by PL
+    IS_DB_NS              = 1,//External variable: DB to which the package variable belongs
+    IS_PKG_NS             = 2,//External variable: Package variable belongs to PKG
+    IS_PKG                = 3,//External variable: package variable
+    IS_USER               = 4,//External variable: user variable
+    IS_SESSION            = 5,//External variable: SESSION system variable
+    IS_GLOBAL             = 6,//External variable: GLOBAL system variable
+    IS_TABLE_NS           = 7,//External variable: User table, used to implement %TYPE, %ROWTYPE
+    IS_TABLE_COL          = 8,//External variable: User column, used to implement %TYPE
     IS_LABEL_NS           = 9,//Label
     IS_SUBPROGRAM_VAR     = 10,//Subprogram Var
     IS_EXPR               = 11,//for table type access index
-    IS_CONST              = 12,//常量 special case for is_expr
-    IS_PROPERTY           = 13,//固有属性，如count
-    IS_INTERNAL_PROC      = 14,//Package中的Procedure
-    IS_EXTERNAL_PROC      = 15,//Standalone的Procedure
+    IS_CONST              = 12,//constant special case for is_expr
+    IS_PROPERTY           = 13,//intrinsic property, such as count
+    IS_INTERNAL_PROC      = 14,//Procedure in the Package
+    IS_EXTERNAL_PROC      = 15,//Standalone procedure
     IS_NESTED_PROC        = 16,//
-    IS_TYPE_METHOD        = 17,//自定义类型的方法
-    IS_SYSTEM_PROC        = 18,//系统中已经预定义的Procedure(如: RAISE_APPLICATION_ERROR)
+    IS_TYPE_METHOD        = 17,//custom type method
+    IS_SYSTEM_PROC        = 18,//System predefined Procedure (e.g.: RAISE_APPLICATION_ERROR)
     IS_UDT_NS             = 19,
     IS_UDF_NS             = 20,
-    IS_LOCAL_TYPE         = 21,// 本地的自定义类型
-    IS_PKG_TYPE           = 22,// 包中的自定义类型
+    IS_LOCAL_TYPE         = 21,// local custom type
+    IS_PKG_TYPE           = 22,// custom type in the package
     IS_SELF_ATTRIBUTE     = 23,// self attribute for udt
     IS_DBLINK_PKG_NS      = 24,// dblink package
     IS_UDT_MEMBER_ROUTINE = 25,// UDT member routine
@@ -767,7 +765,7 @@ public:
                  const ObPLDataType &var_type,
                  int64_t value = 0
                  );
-  //不实现析构函数，避免LLVM映射麻烦
+  //Do not implement the destructor to avoid LLVM mapping trouble
 
   int deep_copy(common::ObIAllocator &allocator, sql::ObRawExprFactory &expr_factory, const ObObjAccessIdx &src);
   void reset();
@@ -850,17 +848,17 @@ public:
   static int64_t get_subprogram_idx(const common::ObIArray<ObObjAccessIdx> &access_idxs);
 
 public:
-  ObPLDataType elem_type_; //通过本变量访问得到的struct结构类型
+  ObPLDataType elem_type_; //The struct type accessed through this variable
   AccessType access_type_;
   common::ObString var_name_;
-  ObPLDataType var_type_; //本变量本身的数据结构，大多时候和elem_type_是一样的。当通过变量作为下标访问数据的时候不同。
+  ObPLDataType var_type_; //The data structure of this variable itself, which is mostly the same as elem_type_. It differs when accessing data through the variable as an index.
   union {
-    int64_t var_index_; //注意：ObObjAccessIdx在不同的地方，本变量的含义不同：在PL里代表的是该变量在全局符号表里的下标；在ObObjAccessRawExpr里代表的是该变量在var_indexs_和param_exprs里的下标
-    const ObPLBlockNS *label_ns_; //当AccessType是LABEL_NS时,这里记录的是Label对应的NameSpace
+    int64_t var_index_; // Note: ObObjAccessIdx in different places, the meaning of this variable is different: in PL it represents the index of the variable in the global symbol table; in ObObjAccessRawExpr it represents the index of the variable in var_indexs_ and param_exprs
+    const ObPLBlockNS *label_ns_; // When AccessType is LABEL_NS, here it records the NameSpace corresponding to the Label
   };
   union {
     share::schema::ObIRoutineInfo *routine_info_;
-    const ObPLBlockNS *var_ns_; //当AccessType是SUBPROGRAM_VAR时,这里记录的是VAR对应的NS
+    const ObPLBlockNS *var_ns_; // When AccessType is SUBPROGRAM_VAR, this records the NS corresponding to VAR
   };
   common::ObSEArray<int64_t, 4> type_method_params_;
   sql::ObRawExpr *get_sysfunc_; //user/session/pkg var or table index expr
@@ -930,13 +928,13 @@ public:
 
   void reuse()
   {
-    // reuse接口不充值id
+    // reuse interface does not recharge id
     if (nullptr != entity_) {
       DESTROY_CONTEXT(entity_);
       entity_ = nullptr;
       spi_cursor_ = nullptr;
     }
-//    is_explicit_ = true; //一个CURSOR的is_explicit_属性永远不会改变
+//    is_explicit_ = true; //the is_explicit_ attribute of a CURSOR will never change
     for_update_ = false;
     has_hidden_rowid_ = false;
     is_streaming_ = false;
@@ -955,7 +953,7 @@ public:
     }else {
       cursor_flag_ = CURSOR_FLAG_UNDEF;
     }
-    // ref_count_ = 0; // 这个不要清零，因为oracle在close之后，它的ref count还是保留的
+    // ref_count_ = 0; // This should not be reset to zero, because Oracle retains its ref count after close.
     is_scrollable_ = false;
     last_execute_time_ = 0;
     trans_id_.reset();
@@ -1012,7 +1010,7 @@ public:
   }
   inline void unset_in_forall()
   {
-    // 清除掉in_forall标识, 不清除其他信息, 后续SQL%BULK_ROWCOUNT需要这些信息, 由下一个DML语句到达时清除
+    // Clear the in_forall flag, do not clear other information, subsequent SQL%BULK_ROWCOUNT needs this information, to be cleared when the next DML statement arrives
     in_forall_ = false;
   }
   inline int64_t get_id() const { return id_; }
@@ -1164,40 +1162,40 @@ public:
 protected:
   int64_t id_;            // Cursor ID
   lib::MemoryContext entity_;
-  bool is_explicit_;      // 是否是显式游标
-  bool for_update_;    //是否可更新游标
-  bool has_hidden_rowid_;    //是否包含隐藏ROWID属性
-  bool is_streaming_;    //是否流式
-  bool isopen_;          // 游标是否OPEN, 隐式游标利用该值表示PL中是否有DML执行过
-  bool fetched_;          // 显示游标是否执行过fetch
-  bool fetched_with_row_; // 显式游标表示上次执行fetch是否获得行
-  int64_t rowcount_;      // 当前读取的行数
-  int64_t current_position_; //当前行的位置，用于offset
-  ObNewRow current_row_;    //当前行
-  ObNewRow first_row_;    // 首行
-  ObNewRow last_row_;     // 尾行
-  bool in_forall_;        // 是否是forall中的隐式游标
-  bool save_exception_;   // 在forall中是否需要遇到错误继续执行
-  bool forall_rollback_;  // 是否Forall语句会退到了Single Sql mode
+  bool is_explicit_;      // whether it is an explicit cursor
+  bool for_update_;    //whether the cursor is updatable
+  bool has_hidden_rowid_;    //whether it contains the hidden ROWID attribute
+  bool is_streaming_;    // whether streaming
+  bool isopen_;          // Is the cursor OPEN, the implicit cursor uses this value to indicate if any DML has been executed in PL
+  bool fetched_;          // Indicates whether the cursor has executed a fetch
+  bool fetched_with_row_; // Explicit cursor indicates whether the last fetch operation obtained a row
+  int64_t rowcount_;      // current number of rows read
+  int64_t current_position_; //The position of the current line, used for offset
+  ObNewRow current_row_;    //current row
+  ObNewRow first_row_;    // First row
+  ObNewRow last_row_;     // last row
+  bool in_forall_;        // whether it is an implicit cursor in forall
+  bool save_exception_;   // Whether to continue execution upon encountering an error in forall
+  bool forall_rollback_;  // Whether the Forall statement has rolled back to Single Sql mode
   transaction::ObTransID trans_id_; // used to check txn liveness when cursor is a 'for update cursor'
   common::ObArray<int64_t> bulk_rowcount_;
   common::ObArray<ObCursorBulkException> bulk_exceptions_;
-  void *spi_cursor_; //Mysql模式读取结果的handler为sql::ObSPICursor(数据缓存)，Oracle模式是ObMySQLProxy::MySQLResult(流式读取)
+  void *spi_cursor_; //Handler for reading results in Mysql mode is sql::ObSPICursor (data cache), in Oracle mode it is ObMySQLProxy::MySQLResult (streaming read)
   ObIAllocator *allocator_;
   ObPLCursorFlag cursor_flag_; // OBPLCURSORFLAG;
   int64_t ref_count_; // a ref cursor may referenced by many ref cursor
-  bool is_scrollable_; // 是否是滚动游标
+  bool is_scrollable_; // whether it is a scrollable cursor
   transaction::ObTxReadSnapshot snapshot_;
   // If cursor has valid snapshot
   // and the snapshot were acquired in an active transaction
   // it is required to check snapshot state is valid before doing fetch
   bool is_need_check_snapshot_;
-  int64_t last_execute_time_; // 记录上一次cursor操作的时间点
-  bool last_stream_cursor_; // cursor复用场景下，记录上一次是否是流式cursor
+  int64_t last_execute_time_; // Record the timestamp of the last cursor operation
+  bool last_stream_cursor_; // cursor reuse scenario, record whether the last one was a stream cursor
   ObCurTraceId::TraceId sql_trace_id_; // trace id of cursor sql statement
   bool is_packed_;
-  ObString sql_text_;     //non seesion的非流式游标保存sql text
-  char sql_id_[common::OB_MAX_SQL_ID_LENGTH + 1]; //保存非流式游标的sql id
+  ObString sql_text_;     // non-session non-streaming cursor saves sql text
+  char sql_id_[common::OB_MAX_SQL_ID_LENGTH + 1]; // save the sql id of non-streaming cursors
 };
 
 class ObPLGetCursorAttrInfo
@@ -1267,11 +1265,11 @@ public:
     PL_CURSOR_BULK_EXCEPTIONS_COUNT,
   };
 
-  int64_t type_; // 获取的属性类型
+  int64_t type_; // The type of the attribute obtained
   int64_t bulk_rowcount_idx_;
   int64_t bulk_exceptions_idx_;
   bool bulk_exceptions_need_code_;
-  bool is_explicit_; // 是否是显式游标
+  bool is_explicit_; // whether it is an explicit cursor
 
   TO_STRING_KV(K_(type),
                K_(bulk_rowcount_idx), K_(bulk_exceptions_idx),

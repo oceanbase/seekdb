@@ -117,7 +117,7 @@ void ObAsyncTaskQueue::run2()
     while (!stop_) {
       IGNORE_RETURN lib::Thread::update_loop_ts(ObTimeUtility::fast_current_time());
       if (REACH_TIME_INTERVAL(600 * 1000 * 1000)) {
-        //每隔一段时间，打印队列的大小
+        // Print the size of the queue at regular intervals
         LOG_INFO("[ASYNC TASK QUEUE]", "queue_size", queue_.size());
       }
       ObAsyncTask *task = NULL;

@@ -1150,15 +1150,15 @@ private:
   // HyperLogLogCount-related functions
   int llc_init(AggrCell &aggr_cell);
   int llc_init_empty(ObExpr &expr, ObEvalCtx &eval_ctx);
-  /** (@ banliu.zyd)
-   * 对一行计算HyperLogLogCount所需要的hash值，如果行中存在某列有NULL值，has_null_cell会置true
-   * @note 需要NULL值判断的原因是APPROX_COUNT_DISTINCT统计时不考虑存在NULL的行，而计算hash值
-   * 和判断是否有NULL值可以同时进行以提高效率
-   * @param[in] oprands 带计算hash值的行
-   * @param[in] cs_type 对于字符串计算hash值时需要的collation
-   * @param[out] has_null_cell 为true如果该行某列为NULL值
-   * @return 计算出的hash值，如果传出的has_null_cell为true那么这个值无效
-   */
+  /**
+ * Calculate the hash value required for HyperLogLogCount for one row, if any column in the row has a NULL value, has_null_cell will be set to true
+ * @note The reason for checking NULL values is that APPROX_COUNT_DISTINCT does not consider rows with NULLs when counting, and calculating hash values
+ * and checking for NULLs can be done simultaneously to improve efficiency
+ * @param[in] oprands The row for which to calculate hash values
+ * @param[in] cs_type Collation needed for calculating hash values for strings
+ * @param[out] has_null_cell Set to true if any column in the row is NULL
+ * @return Calculated hash value, this value is invalid if the output has_null_cell is true
+ */
   static int llc_calc_hash_value(const ObChunkDatumStore::StoredRow &stored_row,
                                  const ObIArray<ObExpr *> &param_exprs,
                                  bool &has_null_cell,
@@ -1302,7 +1302,7 @@ private:
   static void check_mysql_decimal_int_overflow(ObDatum &datum);
 
   // HyperLogLogCount-related data members
-  // banliu.zyd: hllc算法中桶数这里取相对合理的值(1<<10)。
+  // banliu.zyd: hllc algorithm bucket count here takes a relatively reasonable value (1<<10).
   static const int8_t LLC_BUCKET_BITS = 10;
   static const int64_t LLC_NUM_BUCKETS = (1 << LLC_BUCKET_BITS);
 

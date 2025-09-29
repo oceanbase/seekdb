@@ -40,7 +40,7 @@ private:
   common::ObStrings users_;//user1,host1; usr2,host2;...
   uint64_t tenant_id_;
   bool if_exists_;
-  obrpc::ObDropUserArg drop_user_arg_; // 用于返回exec_tenant_id_
+  obrpc::ObDropUserArg drop_user_arg_; // used to return exec_tenant_id_
 private:
   DISALLOW_COPY_AND_ASSIGN(ObDropUserStmt);
 };

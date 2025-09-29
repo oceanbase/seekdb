@@ -27,7 +27,7 @@ public:
   ObDirectLoadSSTableDataBlockWriter();
   virtual ~ObDirectLoadSSTableDataBlockWriter();
   int append_row(const T &row);
-  // 在flush buffer的时候读最后一行
+  // When flushing the buffer, read the last line
   int get_flush_last_row(T &row);
 private:
   int pre_write_item() override;

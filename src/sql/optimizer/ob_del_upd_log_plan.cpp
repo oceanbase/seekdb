@@ -296,13 +296,12 @@ int ObDelUpdLogPlan::prepare_dml_infos()
 {
   return OB_SUCCESS;
 }
-
-// check_table_rowkey_distinct 从逻辑上看计划是否可能有一行数据被更新多次
-// 如果有可能，则会产生一个 distinct 运算，以去重。去哪一行，未定义。
+// check_table_rowkey_distinct From a logical perspective, whether the plan might update a row of data multiple times
+// If possible, a distinct operation will be generated to remove duplicates. Which row is removed, undefined.
 //
-// Q: 什么场景下一行数据会被更新多次呢？
-// A: 一种可能的场景是可更新视图，不过这种场景在创建 view 时就被拦下来了
-//    另一种场景是 MySQL 的 multi table update，例如：
+// Q: In what scenarios would a row of data be updated multiple times?
+// A: One possible scenario is an updatable view, but this scenario is intercepted when creating the view
+//    Another scenario is MySQL's multi table update, for example:
 //
 //      UPDATE Books, Orders
 //      SET Orders.Quantity = Orders.Quantity+2,
@@ -310,16 +309,15 @@ int ObDelUpdLogPlan::prepare_dml_infos()
 //      WHERE
 //          Books.BookID = Orders.BookID
 //
-//   这时就有 join 发生了，并且 join 结果的顺序并不保证
-
-// Q: 做 UPDATE 时，如果不检查重复行，会有什么后果？
-// A: 一行数据可能被更新多次。虽然存储层不会报错，
-//    但是有可能会导致主表和索引表数据不一致。
-//    (因为主表、索引表更新顺序可能不同，导致终态不一致)
+//   This is when join occurs, and the order of the join result is not guaranteed
+// Q: What are the consequences of doing an UPDATE without checking for duplicate rows?
+// A: A line of data may be updated multiple times. Although the storage layer will not report an error,
+//    But it might lead to inconsistency between the main table and the index table.
+//    (Because the update order of the main table and index table may be different, leading to inconsistent final states)
 //
-// Q: 使用 HASH DISTINCT 去重，保留谁、丢掉谁，有讲究吗？
-// A: 我们是保留第一个。MySQL说随机一行，但它实际也是第一行
-//    不过，这个第一行根据不同的join算法有随机性。
+// Q: Using HASH DISTINCT for deduplication, does it matter who to keep and who to discard?
+// A: We are keeping the first one. MySQL says random row, but it is actually also the first row
+//    However, this first row has randomness depending on the different join algorithms.
 //
 int ObDelUpdLogPlan::check_table_rowkey_distinct(
     const ObIArray<IndexDMLInfo *> &index_dml_infos,
@@ -340,7 +338,7 @@ int ObDelUpdLogPlan::check_table_rowkey_distinct(
     LOG_WARN("get unexpected null", K(ret));
   } else if (!del_upd_stmt->is_dml_table_from_join() ||
              del_upd_stmt->has_instead_of_trigger()) {
-    //dml语句中不包含join条件，可以保证dml涉及到的行都来自于target table，不存在重复行，因此不需要去重
+    // DML statement does not contain join conditions, it can guarantee that all rows involved in the DML come from the target table, there are no duplicate rows, therefore deduplication is not needed
     LOG_TRACE("skip check_table_rowkey_distinct", K(del_upd_stmt->is_dml_table_from_join()),
               K(del_upd_stmt->dml_source_from_join()), K(del_upd_stmt->has_instead_of_trigger()));
   } else {
@@ -519,7 +517,7 @@ int ObDelUpdLogPlan::calculate_table_location(const ObDelUpdStmt &stmt,
   } else if (OB_FAIL(table_partition_info.calc_phy_table_loc_and_select_leader(*exec_ctx,
                                                                                 *params,
                                                                                 dtc_params))) {
-    //对于insert而言，计算出来的partition顺序保持跟value row对应，不应该重排序
+    // For insert, the calculated partition order should match the value row correspondence, and should not be reordered
     LOG_WARN("failed to calculate table location", K(ret));
   } else {
     LOG_TRACE("succeed to compute table location", K(table_partition_info), K(filters));
@@ -587,8 +585,7 @@ int ObDelUpdLogPlan::compute_exchange_info_for_pdml_del_upd(const ObShardingInfo
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("get unexpected partition level", K(part_level) ,K(ret));
     }
-
-    // 为static engine 初始化calc part id exprs的内容
+    // Initialize the content of calc part id exprs for static engine
     if (OB_SUCC(ret) &&
         (part_level == share::schema::PARTITION_LEVEL_ONE ||
          part_level == share::schema::PARTITION_LEVEL_TWO)) {
@@ -625,10 +622,10 @@ int ObDelUpdLogPlan::compute_hash_dist_exprs_for_pdml_del_upd(ObExchangeInfo &ex
     LOG_WARN("unexpected count", K(dml_info.get_real_uk_cnt()), K(dml_info.column_exprs_), K(ret));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < dml_info.get_real_uk_cnt(); ++i) {
-      // 为了让主键（new value）相同的行交给同一个线程处理，需要对 new value 做 hash
-      // 对于 update：如果目标表的列被更新了
-      // 那么就选择更新后的值，否则选择更新前的值。
-      // 对于 delete，因为 assignment 为空，所以会直接 push rowkey
+      // To let rows with the same primary key (new value) be processed by the same thread, we need to do a hash on new value
+      // For update: if the columns of the target table are updated
+      // Then choose the updated value, otherwise choose the value before the update.
+      // For delete, because assignment is empty, so it will directly push rowkey
       ObRawExpr *target_expr = dml_info.column_exprs_.at(i);
       if (OB_FAIL(replace_assignment_expr_from_dml_info(dml_info, target_expr))) {
         LOG_WARN("failed to replace assignment expr", K(ret));
@@ -680,7 +677,7 @@ int ObDelUpdLogPlan::compute_exchange_info_for_pdml_insert(const ObShardingInfo 
       exch_info.slice_count_ = target_sharding.get_part_cnt();
     }
     if (share::schema::PARTITION_LEVEL_ONE == part_level) {
-      // pdml op对应的表是分区表，分区内并行处理，使用pkey random shuffle方式
+      // pdml op corresponding table is a partitioned table, parallel processing within partitions, using pkey random shuffle method
       exch_info.repartition_type_ = OB_REPARTITION_ONE_SIDE_ONE_LEVEL;
       if ((get_optimizer_context().is_online_ddl() && get_optimizer_context().is_heap_table_ddl())
            || (get_optimizer_context().is_pdml_heap_table() && !is_index_maintenance)) {
@@ -691,7 +688,7 @@ int ObDelUpdLogPlan::compute_exchange_info_for_pdml_insert(const ObShardingInfo 
         exch_info.dist_method_ = ObPQDistributeMethod::PARTITION_HASH;
       }
     } else if (share::schema::PARTITION_LEVEL_TWO == part_level) {
-      // pdml op对应的表是分区表，分区内并行处理，使用pkey random shuffle方式
+      // pdml op corresponding table is a partitioned table, parallel processing within partitions, using pkey random shuffle method
       exch_info.repartition_type_ = OB_REPARTITION_ONE_SIDE_TWO_LEVEL;
       if ((get_optimizer_context().is_online_ddl() && get_optimizer_context().is_heap_table_ddl())
            || (get_optimizer_context().is_pdml_heap_table() && !is_index_maintenance)) {
@@ -702,7 +699,7 @@ int ObDelUpdLogPlan::compute_exchange_info_for_pdml_insert(const ObShardingInfo 
         exch_info.dist_method_ = ObPQDistributeMethod::PARTITION_HASH;
       }
     } else if (share::schema::PARTITION_LEVEL_ZERO == part_level) {
-      // pdml op对应的表是非分区表，分区内并行处理，使用random shuffle方式
+      // pdml op corresponding table is a non-partitioned table, parallel processing within partition, using random shuffle method
       exch_info.repartition_type_ = OB_REPARTITION_NO_REPARTITION;
       if ((get_optimizer_context().is_online_ddl() && get_optimizer_context().is_heap_table_ddl())
            || (get_optimizer_context().is_pdml_heap_table() && !is_index_maintenance)) {
@@ -1327,8 +1324,8 @@ int ObDelUpdLogPlan::allocate_pdml_insert_as_top(ObLogicalOperator *&top,
                                                  IndexDMLInfo *dml_info)
 {
   int ret = OB_SUCCESS;
-  // 从 table_columns 中拿到 index_dml_infos_，里面包含了这个索引中的所有列
-  // 这些列数据类型都是严格类型，无需在外面包装 conv function
+  // Get index_dml_infos_ from table_columns, which contains all columns in this index
+  // These column data types are strictly typed, no need to wrap with conv function
   ObLogInsert *insert_op = NULL;
   if (OB_ISNULL(top) || OB_ISNULL(get_stmt()) ||
       OB_ISNULL(table_partition_info) || OB_ISNULL(dml_info)) {
@@ -1348,7 +1345,7 @@ int ObDelUpdLogPlan::allocate_pdml_insert_as_top(ObLogicalOperator *&top,
       insert_op->set_pdml_is_returning(get_stmt()->is_returning());
       insert_op->set_is_returning(get_stmt()->is_returning());
     } else {
-      insert_op->set_pdml_is_returning(true); // 默认pdml的每一个delete都需要向上吐/返回数据
+      insert_op->set_pdml_is_returning(true); // Default pdml needs to return data for every delete
     }
     insert_op->set_table_partition_info(table_partition_info);
     insert_op->set_need_allocate_partition_id_expr(need_partition_id);
@@ -1511,7 +1508,7 @@ int ObDelUpdLogPlan::allocate_pdml_update_as_top(ObLogicalOperator *&top,
       update_op->set_pdml_is_returning(update_stmt->is_returning());
       update_op->set_is_returning(update_stmt->is_returning());
     } else {
-      update_op->set_pdml_is_returning(true); // 默认pdml的每一个delete都需要向上吐/返回数据
+      update_op->set_pdml_is_returning(true); // Default pdml needs to return data for every delete
     }
     update_op->set_first_dml_op(!is_index_maintenance);
     update_op->set_index_maintenance(is_index_maintenance);

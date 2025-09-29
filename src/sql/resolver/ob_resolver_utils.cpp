@@ -912,7 +912,7 @@ int ObResolverUtils::check_type_match(const pl::ObPLResolveCtx &resolve_ctx,
                                      dst_pl_type.get_obj_type())));
   } else if (T_NULL == expr->get_expr_type()
             || ObNullTC == ob_obj_type_class(src_type)) {
-    // NULL可以匹配任何类型
+    // NULL can match any type
     OX (match_info =
       (ObRoutineMatchInfo::MatchInfo(false,
                                      dst_pl_type.get_obj_type(),
@@ -948,7 +948,7 @@ int ObResolverUtils::check_type_match(const pl::ObPLResolveCtx &resolve_ctx,
           (ObRoutineMatchInfo::MatchInfo(
             false, dst_pl_type.get_obj_type(), dst_pl_type.get_obj_type())));
       } else {
-        // BLOB和CLOB不能隐式转换, 如果LOB类型不同, 直接淘汰掉
+        // BLOB and CLOB cannot be implicitly converted, if LOB types are different, directly discard
         ret = OB_ERR_INVALID_TYPE_FOR_OP;
         LOG_WARN("PLS-00382: expression is of wrong type",
                  K(ret), K(src_type_id), K(dst_pl_type), K(src_type));
@@ -957,7 +957,7 @@ int ObResolverUtils::check_type_match(const pl::ObPLResolveCtx &resolve_ctx,
                  && CS_TYPE_BINARY == src_coll_type)
               || ((ObLongTextType == dst_pl_type.get_obj_type())
                   && CS_TYPE_BINARY == dst_pl_type.get_meta_type()->get_collation_type())) {
-      // BLOB不能向其他类型转, 其他类型也不能向Blob转, 因此是Blob直接淘汰
+      // BLOB cannot be converted to other types, other types cannot be converted to Blob, therefore Blob is directly eliminated
       ret = OB_ERR_INVALID_TYPE_FOR_OP;
       LOG_WARN("PLS-00382: expression is of wrong type",
                 K(ret), K(src_type_id), K(dst_pl_type), K(src_type));
@@ -986,10 +986,10 @@ int ObResolverUtils::check_type_match(const pl::ObPLResolveCtx &resolve_ctx,
   (ObRawTC == ob_obj_type_class(type) ? ObStringTC : ob_obj_type_class(type))
 
   ObObjType dst_type = dst_pl_type.get_obj_type();
-  // Case1: 处理TypeClass相同的情形
+  // Case1: processing the same TypeClass scenario
   if (OBJ_TO_TYPE_CLASS(src_type) == OBJ_TO_TYPE_CLASS(dst_type)) {
-    if (ob_obj_type_class(src_type) != ObExtendTC // 普通类型TypeClass相同
-        || src_type_id == dst_pl_type.get_user_type_id()) { // 复杂类型TypeID相同
+    if (ob_obj_type_class(src_type) != ObExtendTC // Normal type TypeClass is the same
+        || src_type_id == dst_pl_type.get_user_type_id()) { // Complex type TypeID is the same
       OX (match_info =
         (ObRoutineMatchInfo::MatchInfo(
           ObLongTextType == dst_type ? true : false,
@@ -1001,7 +1001,7 @@ int ObResolverUtils::check_type_match(const pl::ObPLResolveCtx &resolve_ctx,
     } else if (resolve_ctx.is_prepare_protocol_ &&
                ObExtendType == src_type &&
                is_mocked_anonymous_array_id(src_type_id) &&
-               T_QUESTIONMARK == expr->get_expr_type()) { // 匿名数组
+               T_QUESTIONMARK == expr->get_expr_type()) { // anonymous array
       const ObConstRawExpr *const_expr = static_cast<const ObConstRawExpr*>(expr);
       int64_t idx = const_expr->get_value().get_unknown();
       CK (OB_NOT_NULL(resolve_ctx.params_.param_list_));
@@ -1068,7 +1068,7 @@ int ObResolverUtils::check_type_match(const pl::ObPLResolveCtx &resolve_ctx,
         }
       }
     } else {
-      // 复杂类型的TypeClass相同, 需要检查兼容性
+      // Complex type TypeClass is the same, need to check compatibility
       bool is_compatible = false;
       OZ (ObPLResolver::check_composite_compatible(
               NULL == resolve_ctx.params_.secondary_namespace_
@@ -1086,7 +1086,7 @@ int ObResolverUtils::check_type_match(const pl::ObPLResolveCtx &resolve_ctx,
         LOG_WARN("PLS-00382: expression is of wrong type",K(ret), K(src_type_id), K(dst_pl_type));
       }
     }
-  // Case2: 处理TypeClass不同的情形
+  // Case2: Handle the scenario where TypeClass is different
   } else {
     // xmltype can not cast with varchar, 
     if ((ObExtendTC == ob_obj_type_class(src_type)
@@ -1102,7 +1102,7 @@ int ObResolverUtils::check_type_match(const pl::ObPLResolveCtx &resolve_ctx,
                 || ObGeometryTC == ob_obj_type_class(src_type)))) {
       ret = OB_ERR_INVALID_TYPE_FOR_OP;
       LOG_WARN("argument count not match", K(ret), K(src_type), K(dst_type));
-    } else if (ObExtendTC == ob_obj_type_class(src_type) // 普通类型与复杂类型不能互转
+    } else if (ObExtendTC == ob_obj_type_class(src_type) // Ordinary type cannot be converted to complex type and vice versa
         || ObExtendTC == ob_obj_type_class(dst_type)) {
       if (ObUserDefinedSQLTC == ob_obj_type_class(src_type)
           || ObUserDefinedSQLTC == ob_obj_type_class(dst_type)
@@ -1113,7 +1113,7 @@ int ObResolverUtils::check_type_match(const pl::ObPLResolveCtx &resolve_ctx,
         ret = OB_ERR_INVALID_TYPE_FOR_OP;
         LOG_WARN("argument count not match", K(ret), K(src_type), K(dst_type));
       }
-    } else { // 检查普通类型之间是否可以互转
+    } else { // Check if normal types can be mutually converted
       if (!cast_supported(
         src_type, src_coll_type, dst_type, dst_pl_type.get_meta_type()->get_collation_type())) {
         ret = OB_ERR_INVALID_TYPE_FOR_OP;
@@ -1157,8 +1157,7 @@ int ObResolverUtils::get_type_and_type_id(
   CK (is_valid_obj_type(type));
   return ret;
 }
-
-// 检查当前参数是否与当前routine匹配
+// Check if the current parameters match the current routine
 int ObResolverUtils::check_match(const pl::ObPLResolveCtx &resolve_ctx,
                                  const common::ObIArray<ObRawExpr *> &expr_params,
                                  const ObIRoutineInfo *routine_info,
@@ -1174,7 +1173,7 @@ int ObResolverUtils::check_match(const pl::ObPLResolveCtx &resolve_ctx,
              K(ret), K(expr_params.count()), K(routine_info->get_param_count()));
   }
   OX (match_info.routine_info_ = routine_info);
-  // MatchInfo初始化
+  // MatchInfo initialization
   for (int64_t i = 0; OB_SUCC(ret) && i < routine_info->get_param_count(); ++i) {
     OZ (match_info.match_info_.push_back(ObRoutineMatchInfo::MatchInfo()));
   }
@@ -1234,8 +1233,7 @@ int ObResolverUtils::check_match(const pl::ObPLResolveCtx &resolve_ctx,
       }
     }
   }
-
-  // 解析参数表达式数组
+  // Parse parameter expression array
   bool has_assign_param = false;
   int arg_cnt = routine_info->get_param_count();
   for (int64_t i = 0; OB_SUCC(ret) && offset < arg_cnt && i < expr_params.count(); ++i) {
@@ -1268,7 +1266,7 @@ int ObResolverUtils::check_match(const pl::ObPLResolveCtx &resolve_ctx,
       OX (expr = expr_params.at(i));
       OZ (get_type_and_type_id(expr_params.at(i), src_type, src_type_id));
     }
-    // 如果在相同的位置已经进行过匹配, 说明给定的参数在参数列表中出现了两次
+    // If a match has already been performed at the same position, it means that the given parameter appears twice in the parameter list
     if (OB_SUCC(ret)
         && (OB_INVALID_ID == position
             || position >= match_info.match_info_.count()
@@ -1280,7 +1278,7 @@ int ObResolverUtils::check_match(const pl::ObPLResolveCtx &resolve_ctx,
              K(routine_info->get_param_count()),
              K(position));
     }
-    // 取出匹配位置的type信息, 进行对比
+    // Retrieve the type information at the matching position, for comparison
     ObIRoutineParam *routine_param = NULL;
     OZ (routine_info->get_routine_param(position, routine_param));
     CK (OB_NOT_NULL(routine_param));
@@ -1309,8 +1307,7 @@ int ObResolverUtils::check_match(const pl::ObPLResolveCtx &resolve_ctx,
       LOG_WARN("argument type not match", K(ret), K(i), KPC(expr_params.at(i)), K(src_type), K(dst_pl_type));
     }
   }
-
-  // 处理空缺参数
+  // Handle missing parameters
   OZ (match_vacancy_parameters(*routine_info, match_info));
   return ret;
 }
@@ -1320,7 +1317,7 @@ int ObResolverUtils::match_vacancy_parameters(
 {
   int ret = OB_SUCCESS;
   SET_LOG_CHECK_MODE();
-  // 处理空缺参数, 如果有默认值填充默认值, 否则报错
+  // Handle missing parameters, if there is a default value fill with default value, otherwise throw an error
   for (int64_t i = 0; OB_SUCC(ret) && i < match_info.match_info_.count(); ++i) {
     ObIRoutineParam *routine_param = NULL;
     if(ObMaxType == match_info.match_info_.at(i).dest_type_) {
@@ -1345,11 +1342,10 @@ int ObResolverUtils::match_vacancy_parameters(
   CANCLE_LOG_CHECK_MODE();
   return ret;
 }
-
-// 处理存在多个匹配的情况
-// 主要处理需要cast的情况, 如果某一个routine完全不需要cast即可调用, 则是最优匹配
-// 但是如果存在多个不需要cast即可匹配的情况则报错
-// 如果所有的匹配都需要cast同样报错
+// Handle the case where there are multiple matches
+// Mainly handles cases that require cast, if a routine can be called without any cast, then it is the best match
+// However, if there are multiple cases that can match without cast then report an error
+// If all matches need to cast the same error
 int ObResolverUtils::pick_routine(ObIArray<ObRoutineMatchInfo> &match_infos,
                                   const ObIRoutineInfo *&routine_info)
 {
@@ -1357,15 +1353,14 @@ int ObResolverUtils::pick_routine(ObIArray<ObRoutineMatchInfo> &match_infos,
   routine_info = NULL;
   CK (match_infos.count() > 1);
   CK (OB_NOT_NULL(match_infos.at(0).routine_info_));
-  // TODO: 处理Prepare协议下的选择, 因为Prepare时没有参数类型, 如果存在多个匹配, 随机选择一个
+  // TODO: processing Prepare protocol selection, because there is no parameter type during Prepare, if multiple matches exist, randomly select one
   for (int64_t i = 0; OB_SUCC(ret) && i < match_infos.count(); ++i) {
     if (match_infos.at(i).has_unknow_type()) {
       routine_info = match_infos.at(i).routine_info_;
       break;
     }
   }
-
-  // 选择一个不需要Cast即可匹配的Routine
+  // Select a Routine that can match without Cast
   ObSEArray<ObRoutineMatchInfo, 16> tmp_match_infos;
   if (OB_SUCC(ret) && OB_ISNULL(routine_info)) {
     for (int64_t i = 0; OB_SUCC(ret) && i < match_infos.count(); ++i) {
@@ -1400,18 +1395,17 @@ int ObResolverUtils::pick_routine(ObIArray<ObRoutineMatchInfo> &match_infos,
 // 2. NUMBER
 // 3. BINARY_FLOAT
 // 4. BINARY_DOUBLE
-// 实际测试下来, PLS_INTEGER的优先级最低
+// Actually tested, the priority of PLS_INTEGER is the lowest
 
 #define NUMRIC_TYPE_LEVEL(type)                                \
   (ob_is_number_tc(type) || ob_is_decimal_int(type)) ? 1       \
     : ob_is_float_tc(type) ? 2                                 \
       : ob_is_double_tc(type) ? 3                              \
         : ob_is_int_tc(type) || ob_is_uint_tc(type) ? 4 : 5;
-
-  // 处理所有的匹配都需要经过Cast的情况
+  // Processing all matches requires going through Cast
   if (OB_SUCC(ret) && OB_ISNULL(routine_info)) {
     ObSEArray<int, 16> numric_args;
-    // 判断是否仅是Numric不同, 如果不是则直接报错, 否则记录Numric不同的参数位置
+    // Determine if only Numric is different, if not then report an error directly, otherwise record the position of the Numric different parameters
     for (int64_t i = 0; OB_SUCC(ret) && i < tmp_match_infos.at(0).match_info_.count(); ++i) {
       for (int64_t j = 1; OB_SUCC(ret) && j < tmp_match_infos.count(); ++j) {
         if (ob_obj_type_class(tmp_match_infos.at(0).get_type(i))
@@ -1429,7 +1423,7 @@ int ObResolverUtils::pick_routine(ObIArray<ObRoutineMatchInfo> &match_infos,
         }
       }
     }
-    // 按照优先级选择一个Routine
+    // Select a Routine according to priority
     int64_t pos = -1;
     for (int64_t i = 0; OB_SUCC(ret) && i < numric_args.count(); ++i) {
       int64_t tmp_pos = 0;
@@ -1469,8 +1463,7 @@ int ObResolverUtils::pick_routine(ObIArray<ObRoutineMatchInfo> &match_infos,
 }
 
 #undef IS_NUMRIC_TYPE
-
-// 从多个同名的routine中寻找一个最佳匹配
+// Find the best match from multiple routines with the same name
 int ObResolverUtils::pick_routine(const pl::ObPLResolveCtx &resolve_ctx,
                                   const common::ObIArray<ObRawExpr *> &expr_params, 
                                   const common::ObIArray<const ObIRoutineInfo *> &routine_infos,
@@ -1491,15 +1484,15 @@ int ObResolverUtils::pick_routine(const pl::ObPLResolveCtx &resolve_ctx,
     }
   }
   if (OB_FAIL(ret)) {
-  } else if (0 == match_infos.count()) { // 没有匹配的routine直接报错
+  } else if (0 == match_infos.count()) { // No matching routine, directly report an error
     ret = OB_ERR_SP_WRONG_ARG_NUM;
     // ret = OB_ERR_CALL_WRONG_ARG;
     LOG_WARN("PLS-00306: wrong number or types of arguments in call to 'string'",
              K(ret), KPC(routine_info), K(expr_params), K(routine_infos));
-  } else if (1 == match_infos.count()) { // 恰好有一个, 直接返回
+  } else if (1 == match_infos.count()) { // exactly one, directly return
     CK (OB_NOT_NULL(match_infos.at(0).routine_info_));
     OX (routine_info = match_infos.at(0).routine_info_);
-  } else { // 存在多个匹配, 继续pick
+  } else { // Multiple matches exist, continue pick
     OZ (pick_routine(match_infos, routine_info));
   }
   return ret;
@@ -1720,7 +1713,7 @@ int ObResolverUtils::resolve_sp_access_name(ObSchemaChecker &schema_checker,
             db_name = current_database;
           }
           if (OB_FAIL(ret)) {
-            // 如果package_or_db_name作为package获取失败,则把package_or_db_name当做database去获取
+            // If package_or_db_name as package retrieval fails, then treat package_or_db_name as database to retrieve
             ret = OB_SUCCESS;
             if (OB_FAIL(schema_checker.get_database_id(tenant_id, package_or_db_name, database_id))) {
               int64_t old_ret = ret;
@@ -1878,7 +1871,7 @@ int ObResolverUtils::resolve_obj_access_ref_node(ObRawExprFactory &expr_factory,
     ObNameCaseMode case_mode = OB_NAME_CASE_INVALID;
     ObExprResolveContext ctx(expr_factory, &tz_info, case_mode);
     ctx.session_info_ = &session_info;
-    //not set query_ctx, 这个函数只会由PL Resolver调用, PL Resolver中没有query ctx
+    //not set query_ctx, this function will only be called by PL Resolver, there is no query ctx in PL Resolver
     // ??
     //ctx.is_oracle_compatible_ = (T_OBJ_ACCESS_REF == node->type_);
 
@@ -2230,9 +2223,8 @@ int ObResolverUtils::set_string_val_charset(ObIAllocator &allocator,
         val.set_string(val.get_type(), buf, static_cast<int32_t>(val.get_string_len() + align_offset));
       }
     }
-
-    // 为了跟mysql报错一样，这里检查一下字符串是否合法，仅仅是检查，不合法则报错，不做其他操作
-    // check_well_formed_str的ret_error参数为true的时候，is_strict_mode参数失效，因此这里is_strict_mode直接传入true
+    // To be consistent with MySQL error reporting, we check if the string is valid here, just a check, if invalid then report an error, no other operations are performed
+    // check_well_formed_str's ret_error parameter is true, the is_strict_mode parameter is invalid, therefore is_strict_mode is directly passed as true here
     if (OB_SUCC(ret) && OB_FAIL(ObSQLUtils::check_well_formed_str(val, result_val, is_strict_mode, return_ret))) {
       LOG_WARN("invalid str", K(ret), K(val), K(is_strict_mode), K(return_ret));
     }
@@ -2350,12 +2342,10 @@ int ObResolverUtils::resolve_const(const ParseNode *node,
         val.set_length(length);
         val.set_length_semantics(LS_CHAR);
       }
-
-      // 对于字符，此处使用的是连接里设置的字符集，在Oracle模式下，需要
-      // 转换成server使用的字符集，MySQL不需要
-
-      // 为了跟mysql报错一样，这里检查一下字符串是否合法，仅仅是检查，不合法则报错，不做其他操作
-      // check_well_formed_str的ret_error参数为true的时候，is_strict_mode参数失效，因此这里is_strict_mode直接传入true
+      // For characters, the character set used here is the one set in the connection, in Oracle mode, it needs
+      // Convert to character set used by server, MySQL does not need
+      // To be consistent with MySQL error reporting, we check if the string is valid here, just a check, if invalid then report an error, no other operations are performed
+      // check_well_formed_str's ret_error parameter is true, the is_strict_mode parameter is invalid, therefore is_strict_mode is directly passed as true here
       //if (OB_SUCC(ret) && lib::is_mysql_mode() &&
       //    OB_FAIL(ObSQLUtils::check_well_formed_str(val, result_val, true, true))) {
       //  LOG_WARN("invalid str", K(ret), K(val));
@@ -2457,7 +2447,7 @@ int ObResolverUtils::resolve_const(const ParseNode *node,
       int tmp_ret = OB_E(EventTable::EN_ENABLE_ORA_DECINT_CONST) OB_SUCCESS;
 
       if (enable_decimal_int_type && !is_from_pl && OB_SUCC(tmp_ret)) {
-        // 如果开启decimal int类型，T_NUMBER解析成decimal int
+        // If decimal int type is enabled, T_NUMBER is parsed as decimal int
         int32_t val_len = 0;
         ret = wide::from_string(node->str_value_, node->str_len_, allocator, scale, precision,
                                 val_len, decint);
@@ -2510,7 +2500,7 @@ int ObResolverUtils::resolve_const(const ParseNode *node,
       if (!is_paramlize) {
         val.set_unknown(node->value_);
       } else {
-        //used for sql 限流
+        // used for sql rate limiting
         val.set_int(0);
         val.set_scale(0);
         val.set_precision(1);
@@ -2672,7 +2662,7 @@ int ObResolverUtils::resolve_timestamp_node(const bool is_set_null,
                                             ObColumnSchemaV2 &column)
 {
   int ret = OB_SUCCESS;
-  //mysql的非标准行为：
+  //mysql's non-standard behavior:
   bool explicit_value = false;
   if (OB_ISNULL(session_info)) {
     ret = OB_INVALID_ARGUMENT;
@@ -2680,16 +2670,16 @@ int ObResolverUtils::resolve_timestamp_node(const bool is_set_null,
   } else if (OB_FAIL(session_info->get_explicit_defaults_for_timestamp(explicit_value))) {
     LOG_WARN("fail to get explicit_defaults_for_timestamp", K(ret));
   } else if (!explicit_value && !column.is_generated_column()) {
-    //（1）每个表的第一个timestamp列，如果没有显式的指定NULL属性，也没有显示的指定default
-    //系统会自动为该列添加Default current_timestamp、on update current_timestamp属性；
+    // (1) Each table's first timestamp column, if the NULL attribute is not explicitly specified, and the default is not explicitly specified
+    // The system will automatically add Default current_timestamp, on update current_timestamp attributes to this column;
     if (is_first_timestamp_column && !is_set_null && !is_set_default && !column.is_on_update_current_timestamp()) {
       column.set_nullable(false);
       const_cast<ObObj*>(&column.get_cur_default_value())->set_ext(ObActionFlag::OP_DEFAULT_NOW_FLAG);
       column.set_on_update_current_timestamp(true);
     } else if (!is_set_null) {
-      //（2）timestamp列默认为not null
+      //（2）timestamp column default is not null
       column.set_nullable(false);
-      //(3)如果没有显式指定默认值，此时timestamp列的默认值为0
+      //(3)If no default value is explicitly specified, the default value of the timestamp column is 0
       if (!is_set_default) {
         if (is_no_zero_date(session_info->get_sql_mode())) {
           ret = OB_INVALID_DEFAULT;
@@ -2698,12 +2688,12 @@ int ObResolverUtils::resolve_timestamp_node(const bool is_set_null,
           const_cast<ObObj*>(&column.get_cur_default_value())->set_timestamp(ObTimeConverter::ZERO_DATETIME);
         }
       } else if (column.get_cur_default_value().is_null()) {
-        //(4) timestamp类型的列默认是NOT NULL，所以不容许设定列default NULL
+        //(4) timestamp type columns are default NOT NULL, so it is not allowed to set column default NULL
         ret = OB_INVALID_DEFAULT;
         LOG_USER_ERROR(OB_INVALID_DEFAULT, column.get_column_name_str().length(), column.get_column_name_str().ptr());
       }
     } else {
-      //如果主动设置可以为NULL
+      // If actively set can be NULL
       column.set_nullable(true);
       if (!is_set_default) {
         const_cast<ObObj*>(&column.get_cur_default_value())->set_null();
@@ -2769,8 +2759,8 @@ int ObResolverUtils::resolve_columns_for_const_expr(ObRawExpr *&expr, ObArray<Ob
         LOG_WARN("push back error", K(ret));
       }
     }
-    //因为obj access的参数拉平处理，a(b,c)在columns会被存储为b,c,a，所以解释完一个ObQualifiedName
-    //都要把他前面的ObQualifiedName拿过来尝试替换一遍参数
+    // Because obj access parameters are flattened, a(b,c) will be stored as b,c,a in columns, so after explaining one ObQualifiedName
+    // need to take the preceding ObQualifiedName and try to replace parameters
     for (int64_t i = 0; OB_SUCC(ret) && i < real_exprs.count(); ++i) {
       OZ (ObRawExprUtils::replace_ref_column(
         real_ref_expr, columns.at(i).ref_expr_, real_exprs.at(i)));
@@ -2979,8 +2969,8 @@ bool ObResolverUtils::is_valid_partition_column_type(const ObObjType type,
       PARTITION_FUNC_TYPE_RANGE == part_type ||
       PARTITION_FUNC_TYPE_INTERVAL == part_type ||
       PARTITION_FUNC_TYPE_LIST == part_type) {
-    //对partition by hash(c1) 中列的类型进行检查
-    //对partition by range(c1) 中列的类型进行检查
+    // Check the type of the column in partition by hash(c1)
+    // Check the type of the column in partition by range(c1)
     LOG_DEBUG("check partition column type", K(part_type), K(type), K(lbt()));
     if (ob_is_integer_type(type) || ObYearType == type || ObBitType == type) {
       bret = true;
@@ -3021,12 +3011,12 @@ bool ObResolverUtils::is_valid_partition_column_type(const ObObjType type,
 */
 
 /*
- * 参考mysql的实现
- * 对于 partition by range(expr) partitions p0 values less than(value_expr)
- * 如果part_expr 是int/uint类型, 那么期望 value_expr是 int/uint类型
- * 如果part_expr 是DateTime/Date/Time 那么期望value_expr是 string类型
- *  例如 create table ta (c1 datetime) partition by range columns (c1) (partition p0 values less than ('2011-1-1 10:10:00'));
- *  enum set bit is not allowed  type for range columns partition
+ * Refer to the implementation of mysql
+ * For partition by range(expr) partitions p0 values less than(value_expr)
+ * If part_expr is int/uint type, then expect value_expr to be int/uint type
+ * If part_expr is DateTime/Date/Time, then expect value_expr to be string type
+ *  For example create table ta (c1 datetime) partition by range columns (c1) (partition p0 values less than ('2011-1-1 10:10:00'));
+ *  Enum set bit is not allowed type for range columns partition
  */
 int ObResolverUtils::check_partition_range_value_result_type(const ObPartitionFuncType part_func_type,
                                                              const ObColumnRefRawExpr &part_column_expr,
@@ -3114,7 +3104,7 @@ int ObResolverUtils::check_part_value_result_type(const ObPartitionFuncType part
     if (ObNullTC == part_value_expr_tc && PARTITION_FUNC_TYPE_LIST_COLUMNS == part_func_type) {
       is_allow = true;
     } else {
-      /* 处理mysql的date，datetime数据类型。
+      /* Handle mysql's date, datetime data types.
           
           create table t1_date(c1 date,c2 int) partition by range columns(c1) (partition p0 values less than (date '2020-10-10'));
           create table t1_date(c1 datetime,c2 int) partition by range columns(c1) (partition p0 values less than (time '10:10:00'));
@@ -3182,7 +3172,7 @@ int ObResolverUtils::deduce_expect_value_tc(const ObObjType part_column_expr_typ
                                             ObObjTypeClass &expect_value_tc)
 {
   int ret = OB_SUCCESS;
-  bool need_cs_check = false; //表示是否需要字符集检测，not used now
+  bool need_cs_check = false; // indicates whether character set check is needed, not used now
   switch(part_column_expr_type) {
     case ObTinyIntType:
     case ObSmallIntType:
@@ -3259,9 +3249,9 @@ int ObResolverUtils::deduce_expect_value_tc(const ObObjType part_column_expr_typ
 }
 
 /**
- * hash/range 只能允许 partition by 中的列为int或uint类型，year类型mysql文档没写明，但是mysql5.6可以测试通过
- * 这里只用于partition by range(expr)/hash(expr) expr是column的表达式进行检查
- * range columns(column1, column2) 可以允许列的类型为integer, time,和 varchar等类型
+ * hash/range only allows columns in partition by to be of int or uint type, the year type is not specified in the MySQL documentation, but it can be tested to work with MySQL 5.6
+ * Here it is only used to check expressions for partition by range(expr)/hash(expr) where expr is an expression of a column
+ * range columns(column1, column2) can allow column types such as integer, time, and varchar
  */
 int ObResolverUtils::check_column_valid_for_partition(const ObRawExpr &part_expr,
                                                       const ObPartitionFuncType part_func_type,
@@ -3298,8 +3288,7 @@ int ObResolverUtils::check_partition_value_expr_for_range(const ObString &part_n
                                                           const bool &in_tablegroup)
 {
   int ret = OB_SUCCESS;
-
-  //对value less than (xxx) 中expr的类型进行检查, 具体可以参考mysql的白名单
+  // Check the type of expr for value less than (xxx),specific can reference mysql's whitelist
   if (OB_SUCC(ret)) {
     bool gen_col_check = false;
     bool accept_charset_function = in_tablegroup;
@@ -3314,7 +3303,7 @@ int ObResolverUtils::check_partition_value_expr_for_range(const ObString &part_n
         || PARTITION_FUNC_TYPE_INTERVAL == part_type) {
       ObObjType value_type = part_value_expr.get_data_type();
       if (lib::is_mysql_mode() && ob_is_integer_type(value_type)) {
-        // partition by range(xx) partition p0 values less than (expr) 中expr只允许integer类型
+        // partition by range(xx) partition p0 values less than (expr) expr only allows integer type
       } else if (ObNullTC == part_value_expr.get_type_class() && PARTITION_FUNC_TYPE_LIST == part_type) {
         //do nothing
       } else {
@@ -3350,8 +3339,7 @@ int ObResolverUtils::check_partition_value_expr_for_range(const ObString &part_n
                                                           const bool interval_check)
 {
   int ret = OB_SUCCESS;
-
-  //对value less than (xxx) 中expr的类型进行检查, 具体可以参考mysql的白名单
+  // Check the type of expr for value less than (xxx), specific details can refer to MySQL's whitelist
   if (OB_SUCC(ret)) {
     bool gen_col_check = false;
     bool accept_charset_function = in_tablegroup;
@@ -3364,7 +3352,7 @@ int ObResolverUtils::check_partition_value_expr_for_range(const ObString &part_n
   if (OB_SUCC(ret)) {
     if (PARTITION_FUNC_TYPE_RANGE == part_type || PARTITION_FUNC_TYPE_LIST == part_type
         || PARTITION_FUNC_TYPE_INTERVAL == part_type) {
-      //partition by range(xx) partition p0 values less than (expr) 中expr只允许integer类型
+      //partition by range(xx) partition p0 values less than (expr) expr only allows integer type
       if (!ob_is_integer_type(part_value_expr.get_data_type())) {
         ret = OB_ERR_VALUES_IS_NOT_INT_TYPE_ERROR;
         LOG_USER_ERROR(OB_ERR_VALUES_IS_NOT_INT_TYPE_ERROR,
@@ -3387,8 +3375,7 @@ int ObResolverUtils::check_partition_value_expr_for_range(const ObString &part_n
   }
   return ret;
 }
-
-//用于oracle模式hash分区的有效性检查: 1), 可以是多key; 2), 数据类型限定; 3),char/varchar的字符集限定
+// Used for validity check of hash partition in oracle mode: 1), can be multi-key; 2), data type restriction; 3), character set restriction for char/varchar
 
 int ObResolverUtils::check_expr_valid_for_partition(ObRawExpr &expr,
                                                     ObSQLSessionInfo &session_info,
@@ -3401,7 +3388,7 @@ int ObResolverUtils::check_expr_valid_for_partition(ObRawExpr &expr,
   LOG_DEBUG("check_expr_valid_for_partition", K(ret), K(expr), K(part_type), K(in_tablegroup));
 
   if (is_hash_part(part_type)) {
-    //因为partition by hash(xx) 这里的expr是hash(xx)函数，这里只检查xx
+    // Because partition by hash(xx) here the expr is hash(xx) function, here we only check xx
     if (expr.get_param_count() != 1 || T_FUN_SYS_PART_HASH != expr.get_expr_type()) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("param count of hash func should be 1", K(ret),
@@ -3421,7 +3408,7 @@ int ObResolverUtils::check_expr_valid_for_partition(ObRawExpr &expr,
       part_expr = &expr;
     }
   } else if (is_range_part(part_type) || is_list_part(part_type) || is_key_part(part_type)) {
-    //对于partition by range(xx) 这里的expr是xx
+    // For partition by range(xx) here the expr is xx
     part_expr = &expr;
   } else {
     ret = OB_ERR_UNEXPECTED;
@@ -3445,8 +3432,8 @@ int ObResolverUtils::check_expr_valid_for_partition(ObRawExpr &expr,
     } else if (OB_FAIL(check_column_valid_for_partition(*part_expr, part_type, tbl_schema))) {
       LOG_WARN("chck_valid_column_for_hash_func failed", K(ret));
     } else {
-      //对partition by hash(to_days(c1)) 对hash中允许的函数进行白名单的检查·
-      //对parttiion by range(xxx) 中允许的函数进行白名单检查
+      // Check the whitelist of allowed functions in partition by hash(to_days(c1))
+      // Check whitelist of allowed functions in partition by range(xxx)
       bool gen_col_check = false;
       bool accept_charset_function = in_tablegroup;
       ObRawExprPartFuncChecker part_func_checker(gen_col_check, accept_charset_function);
@@ -3459,8 +3446,8 @@ int ObResolverUtils::check_expr_valid_for_partition(ObRawExpr &expr,
     } else if (is_key_part(part_type)) {
       // do not check part expr.
     } else {
-      //对允许的函数的入参进行检查，例如partition by hash(to_days(c1)) c1 只能是date或者是datetime类型
-      //partition by range(to_days(c1))同理
+      // Check the parameters of allowed functions, for example partition by hash(to_days(c1)) c1 can only be date or datetime type
+      // partition by range(to_days(c1)) similarly
       ObRawExprPartExprChecker part_expr_checker(part_type);
       if (OB_FAIL(part_expr->formalize(&session_info))) {
         LOG_WARN("part expr formalize failed", K(ret));
@@ -3563,9 +3550,8 @@ int ObResolverUtils::resolve_partition_list_value_expr(ObResolverParams &params,
   }
   return ret;
 }
-
-//这个函数需要自己写，其他的函数可以重用。
-//这个函数要分析
+// This function needs to be written by yourself, the other functions can be reused.
+// This function is to analyze
 int ObResolverUtils::resolve_partition_range_value_expr(ObResolverParams &params,
                                                         const ParseNode &node,
                                                         const ObString &part_name,
@@ -3965,8 +3951,8 @@ int ObResolverUtils::resolve_partition_expr(ObResolverParams &params,
       ret = OB_ERR_PARTITION_FUNCTION_IS_NOT_ALLOWED;
 
     } else if (columns.size() <= 0) {
-      //处理partition中为常量表达式的情况 partition by hash(1+1+1) /partition by range (1+1+1)
-      //用于限制 partition by hash(1)
+      // Handle the case where partition is a constant expression partition by hash(1+1+1) /partition by range (1+1+1)
+      // Used to limit partition by hash(1)
       ret = OB_ERR_WRONG_EXPR_IN_PARTITION_FUNC_ERROR;
       LOG_WARN("const expr is invalid for thie type of partitioning", K(ret));
     } else if (udf_info.count() > 0) {
@@ -4260,7 +4246,7 @@ int ObResolverUtils::build_file_column_expr_for_parquet(
     }
     if (OB_SUCC(ret)) {
       //get type
-      ObExprTypeCtx type_ctx; // 用于将session等全局变量传入calc_result_type
+      ObExprTypeCtx type_ctx; // used to pass session etc. global variables into calc_result_type
       type_ctx.set_raw_expr(expr);
       ObSQLUtils::init_type_ctx(&session_info, type_ctx);
       if (OB_NOT_NULL(cast_expr)) {
@@ -4587,8 +4573,7 @@ int ObResolverUtils::generate_subschema_id(ObSQLSessionInfo &session_info,
   }
   return ret;
 }
-
-// 解析生成列表达式时，首先在table_schema中的column_schema中寻找依赖的列，如果找不到，再在 resolved_cols中找
+// Parse the list expression by first looking for dependent columns in column_schema of table_schema, if not found, then look in resolved_cols
 int ObResolverUtils::resolve_generated_column_expr(ObResolverParams &params,
                                                    const ParseNode *node,
                                                    ObTableSchema &tbl_schema,
@@ -5030,7 +5015,7 @@ int ObResolverUtils::resolve_check_constraint_expr(
   common::ObSEArray<uint64_t, common::SEARRAY_INIT_NUM> column_ids;
 
   if (NULL != column_schema) {
-    // column_schema 为 NULL 表示约束为表级约束
+    // column_schema is NULL indicates that the constraint is a table-level constraint
     is_col_level_cst = true;
   }
   if (OB_ISNULL(expr_factory) || OB_ISNULL(session_info) || OB_ISNULL(node) || OB_ISNULL(params.schema_checker_)) {
@@ -5095,7 +5080,7 @@ int ObResolverUtils::resolve_check_constraint_expr(
         LOG_WARN("Check constraint cannot refer to an auto-increment column", K(ret), K(column_schema->get_column_id()));
       }
       if (OB_SUCC(ret)) {
-        // 当添加重复的 column id 时，需要去重
+        // When adding duplicate column id, need to remove duplicates
         if (column_ids.end() == std::find(column_ids.begin(), column_ids.end(), column_schema->get_column_id())) {
           if (OB_FAIL(column_ids.push_back(column_schema->get_column_id()))) {
             LOG_WARN("push back to column_ids failed", K(ret), K(column_schema->get_column_id()));
@@ -5291,7 +5276,7 @@ int ObResolverUtils::check_unique_index_cover_partition_column(const ObTableSche
 {
   int ret = OB_SUCCESS;
   if (!(table_schema.is_partitioned_table() || table_schema.is_auto_partitioned_table())
-      //todo@lanyi 看能不能抽象成统一函数
+      //todo@lanyi see if it can be abstracted into a unified function
       || (INDEX_TYPE_PRIMARY != arg.index_type_
           && INDEX_TYPE_UNIQUE_LOCAL != arg.index_type_
           && INDEX_TYPE_UNIQUE_MULTIVALUE_LOCAL != arg.index_type_
@@ -5580,7 +5565,7 @@ int ObResolverUtils::resolve_data_type(const ParseNode &type_node,
         ret = OB_ERR_TOO_BIG_PRECISION;
         LOG_USER_ERROR(OB_ERR_TOO_BIG_PRECISION, scale, ident_name.ptr(), OB_MAX_DATETIME_PRECISION);
       } else {
-        // TODO@nijia.nj 这里precision应该算上小数点的一位, ob_schama_macro_define.h中也要做相应修改
+        // TODO@nijia.nj Here precision should include one digit after the decimal point, ob_schema_macro_define.h also needs to be modified accordingly
         data_type.set_precision(static_cast<int16_t>(default_accuracy.get_precision() + scale));
         data_type.set_scale(scale);
         // the datetime and timestamp type share the same type class, so we need to distinguish the
@@ -5606,7 +5591,7 @@ int ObResolverUtils::resolve_data_type(const ParseNode &type_node,
         if (scale < 0) {
           scale = default_accuracy.get_scale();
         }
-        // TODO@nijia.nj 这里precision应该算上小数点的一位, ob_schama_macro_define.h中也要做相应修改
+        // TODO@nijia.nj Here precision should include one digit after the decimal point, ob_schema_macro_define.h also needs to be modified accordingly
         data_type.set_precision(static_cast<int16_t>(default_accuracy.get_precision() + scale));
         data_type.set_scale(scale);
       }
@@ -5739,7 +5724,7 @@ int ObResolverUtils::resolve_data_type(const ParseNode &type_node,
       } else if (precision > OB_MAX_BIT_LENGTH) {
         ret = OB_ERR_TOO_BIG_DISPLAYWIDTH;
         LOG_USER_ERROR(OB_ERR_TOO_BIG_DISPLAYWIDTH, ident_name.ptr(), OB_MAX_BIT_LENGTH);
-      } else if (0 == precision ) {//暂时与5.6兼容，5.7中会报错
+      } else if (0 == precision ) {//temporarily compatible with 5.6, will error in 5.7}
         data_type.set_precision(default_accuracy.get_precision());
         data_type.set_scale(default_accuracy.get_scale());
       } else {
@@ -5926,7 +5911,7 @@ int ObResolverUtils::set_sync_ddl_id_str(ObSQLSessionInfo *session_info, ObStrin
     if (OB_FAIL(session_info->get_user_variable_value(var_name, var_obj))) {
       if (OB_ERR_USER_VARIABLE_UNKNOWN == ret) {
         LOG_DEBUG("no __oceanbase_ddl_id user variable: ", K(ddl_id_str));
-        ret = OB_SUCCESS; // 没有设置session变量，需要正常返回
+        ret = OB_SUCCESS; // No session variable is set, need to return normally
       } else {
         LOG_WARN("failed to get value of __oceanbase_ddl_id user variable", K(ret), K(var_name));
       }
@@ -6004,14 +5989,13 @@ int ObResolverUtils::check_dup_foreign_keys_exist(
 
   return ret;
 }
-
-// description: 检查主表的外键列是否满足唯一约束或者主键约束
+// description: check if the foreign key columns of the main table satisfy unique constraint or primary key constraint
 //
-// @param [in] parent_table_schema  父表 schema
+// @param [in] parent_table_schema  parent table schema
 // @param [in] schema_checker       ObSchemaChecker
-// @param [in] parent_columns       父表外键列的列名
-// @param [in] index_arg_list       子表所有索引的 arg 构成的数组（注意：只有自引用的时候，index_arg_list 里才会有子表的索引信息）
-// @param [out] is_match            主表的外键列是否满足唯一约束或者主键约束的检查结果
+// @param [in] parent_columns       foreign key column names of the parent table
+// @param [in] index_arg_list       An array of args for all indexes of the sub-table (Note: The index information of the sub-table will only be in index_arg_list when there is a self-reference)
+// @param [out] is_match            Whether the foreign key column of the main table satisfies the check for unique constraint or primary key constraint
 //
 // @return oceanbase error code defined in lib/ob_errno.def
 int ObResolverUtils::foreign_key_column_match_index_column(const ObTableSchema &parent_table_schema,
@@ -6030,21 +6014,19 @@ int ObResolverUtils::foreign_key_column_match_index_column(const ObTableSchema &
   if (OB_FAIL(GET_MIN_DATA_VERSION(parent_table_schema.get_tenant_id(), tenant_version))) {
     LOG_WARN("get tenant data version failed", K(ret), K(parent_table_schema.get_tenant_id()));
   } else {
-    // 在[4253, 430) 和 [4351, )版本且非Oracle模式下enable
+    // In versions [4253, 430) and [4351, ) and non-Oracle mode enable
     allow_non_unique = !is_oracle_mode &&
                        (tenant_version >= DATA_VERSION_4_3_5_1 ||
                         (tenant_version >= MOCK_DATA_VERSION_4_2_5_3 &&
                          tenant_version < DATA_VERSION_4_3_0_0));
   }
-
-  // 优先match pk, uk, 如果两者都没有再match non-unique index. 
-  // match pk, uk的话fk_ref_type会是PRIMARY_KEY或UNIQUE，match non-unique index的话是NON_UNIQUE。
-  // 行为：match的non-unique index如果多个，那么选择最后一个。match的pk，uk如果多个，那么选择第一个。
+  // Prioritize match pk, uk, if neither exists then match non-unique index.
+  // match pk, uk if fk_ref_type will be PRIMARY_KEY or UNIQUE, match non-unique index if it is NON_UNIQUE.
+  // Behavior: if there are multiple match non-unique indexes, choose the last one. If there are multiple match pk, uk, choose the first one.
   bool is_pk_uk_match = false;
   bool tmp_is_match = false;
-
-  // 1.检查 parent columns（父表中的外键列） 是否和 rowkey columns（父表中的主键列） 匹配
-  // 通过 rowkey_info 把父表的主键列列名拿出来，然后放到 pk_columns 里面
+  // 1.Check parent columns (foreign key columns in the parent table) whether they match rowkey columns (primary key columns in the parent table)
+  // Through rowkey_info get the primary key column names of the parent table, then put them into pk_columns
   const ObRowkeyInfo &rowkey_info = parent_table_schema.get_rowkey_info();
   common::ObSEArray<ObString, 8> pk_columns;
   for (int64_t i = 0; OB_SUCC(ret) && i < rowkey_info.get_size(); ++i) {
@@ -6063,9 +6045,9 @@ int ObResolverUtils::foreign_key_column_match_index_column(const ObTableSchema &
     } else { } // do nothing
   }
   if (OB_SUCC(ret)) {
-    // 检查父表外键列是否和主键列匹配
-    // check_match_columns: 只允许完全匹配。如(a, b, c) 匹配 (a, b, c)
-    // check_paritial_match_columns: 允许匹配一个前缀，如(a, b) 匹配 (a, b, c)
+    // Check if the foreign key column of the parent table matches the primary key column
+    // check_match_columns: Only allow complete match. E.g. (a, b, c) matches (a, b, c)
+    // check_partial_match_columns: allow matching a prefix, such as (a, b) matching (a, b, c)
     if (!allow_non_unique) {
       if (OB_FAIL(check_match_columns(parent_columns, pk_columns, tmp_is_match))) {
         LOG_WARN("Failed to check_match_columns", K(ret));
@@ -6080,7 +6062,7 @@ int ObResolverUtils::foreign_key_column_match_index_column(const ObTableSchema &
     } else if (tmp_is_match) {
       is_match = true;
       if (parent_columns.count() == pk_columns.count()) {
-        // 完全匹配一个主键的全部列
+        // Completely match all columns of a primary key
         fk_ref_type = FK_REF_TYPE_PRIMARY_KEY;
         is_pk_uk_match = true;
         if (is_oracle_mode) {
@@ -6096,20 +6078,19 @@ int ObResolverUtils::foreign_key_column_match_index_column(const ObTableSchema &
         ref_cst_id = parent_table_schema.get_table_id();
       }
     } else if (index_arg_list.count() > 0) {
-      // 2. 匹配index_arg_list里面的index
-
-      // 只有 create table 时创建自引用外键的时候， index_arg_list 里才会有子表的索引信息
-      // 当出现自依赖的情况, 父表的 index 信息需要从子表的 CreateTableArg 中获取,
-      // 因为父表和子表为同一张表，所以父表信息此时还没有 publish 到 table schema 中
-      // 现在把子表里的所有索引依次拿出来和父表的外键列作比较，查看是否满足自引用
-      // *mysql允许匹配non-unique index, oracle 不允许
+      // 2. match index in index_arg_list
+      // Only when creating a self-referencing foreign key during create table, index_arg_list will have the index information of the subtable
+      // When a self-dependency occurs, the index information of the parent table needs to be obtained from the CreateTableArg of the child table,
+      // Because the parent table and child table are the same table, so the parent table information has not been published to the table schema at this time
+      // Now take all the indexes from the sub-table one by one and compare them with the foreign key column of the parent table to check if self-reference is satisfied
+      // *mysql allows matching non-unique index, oracle does not allow
       for (int64_t i = 0; OB_SUCC(ret) && !is_pk_uk_match && i < index_arg_list.count(); ++i) {
         SMART_VAR(ObCreateIndexArg, index_arg) {
           if (OB_FAIL(index_arg.assign(index_arg_list.at(i)))) {
             LOG_WARN("fail to assign schema", K(ret));
           } else {
             ObSEArray<ObString, 8> key_columns;
-            // 通过 index_arg 把index的列拿出来，然后放到 key_columns 里面
+            // Through index_arg get the index column, then put it into key_columns
             for (int64_t j = 0; OB_SUCC(ret) && j < index_arg.index_columns_.count(); ++j) {
               const ObColumnSortItem &sort_item = index_arg.index_columns_.at(j);
               if(OB_FAIL(key_columns.push_back(sort_item.column_name_))) {
@@ -6133,27 +6114,27 @@ int ObResolverUtils::foreign_key_column_match_index_column(const ObTableSchema &
                 LOG_WARN("Failed to check_partial_match_columns", K(ret));
               } else if (tmp_is_match) {
                 is_match = true;
-                /* unique当且仅当index是unique index而且所有的列都match */
+                /* unique when and only when index is unique index and all columns match */
                 if (index_arg.is_unique_primary_index() && parent_columns.count() == key_columns.count()) {
                   fk_ref_type = FK_REF_TYPE_UNIQUE_KEY;
                   is_pk_uk_match = true;
                 } else {
                   fk_ref_type = FK_REF_TYPE_NON_UNIQUE_KEY;
                 }
-                // RS 端会在 ObDDLService::get_uk_cst_id_for_self_ref / ObDDLService::get_index_cst_id_for_self_ref
-                // 填上 arg.ref_cst_id_
+                // RS end would handle ObDDLService::get_uk_cst_id_for_self_ref / ObDDLService::get_index_cst_id_for_self_ref
+                // Fill in arg.ref_cst_id_
               }  
             }
           }
         }
       }
     } else {
-      // 3. 匹配父表其他的index
+      // 3. match parent table other index
       ObSEArray<ObAuxTableMetaInfo, 16> simple_index_infos;
       if (OB_FAIL(parent_table_schema.get_simple_index_infos(simple_index_infos))) {
         LOG_WARN("get simple_index_infos failed", K(ret));
       }
-      // 枚举所有index
+      // Enumerate all index
       for (int64_t i = 0; OB_SUCC(ret) && !is_pk_uk_match && i < simple_index_infos.count(); ++i) {
         const ObTableSchema *index_table_schema = NULL;
         if (OB_FAIL(schema_checker.get_table_schema(parent_table_schema.get_tenant_id(), simple_index_infos.at(i).table_id_, index_table_schema))) {
@@ -6167,7 +6148,7 @@ int ObResolverUtils::foreign_key_column_match_index_column(const ObTableSchema &
           const ObColumnSchemaV2 *index_col = NULL;
           const ObIndexInfo &index_info = index_table_schema->get_index_info();
           ObSEArray<ObString, 8> key_columns;
-          // 提取当前index的所有列
+          // Extract all columns of the current index
           for (int64_t i = 0; OB_SUCC(ret) && i < index_info.get_size(); ++i) {
             if (OB_ISNULL(index_col = index_table_schema->get_column_schema(index_info.get_column(i)->column_id_))) {
               ret = OB_ERR_UNEXPECTED;
@@ -6182,7 +6163,7 @@ int ObResolverUtils::foreign_key_column_match_index_column(const ObTableSchema &
           if (OB_FAIL(ret)) {
             // do nothing
           } else if (!allow_non_unique) {
-            // 只允许匹配unique index的全部列
+            // Only allow matching all columns of a unique index
             if (OB_FAIL(check_match_columns(parent_columns, key_columns, is_pk_uk_match))) {
               LOG_WARN("Failed to check_match_columns", K(ret));
             } else if (is_pk_uk_match) {
@@ -6195,7 +6176,7 @@ int ObResolverUtils::foreign_key_column_match_index_column(const ObTableSchema &
               LOG_WARN("Failed to check_partial_match_columns", K(ret));
             } else if (tmp_is_match) {
               is_match = true;
-              /* unique当且仅当index是unique index而且所有的列都match */
+              /* unique when and only when index is unique index and all columns match */
               if (index_table_schema->is_unique_index() && parent_columns.count() == key_columns.count()) {
                 fk_ref_type = FK_REF_TYPE_UNIQUE_KEY;
                 is_pk_uk_match = true;
@@ -6220,7 +6201,7 @@ int ObResolverUtils::check_self_reference_fk_columns_satisfy(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arg", K(ret), K(arg.parent_columns_), K(arg.child_columns_));
   } else {
-    // 如果属于自引用，则参考列必须都不同
+    // If it is a self-reference, then the reference columns must all be different
     for (int64_t i = 0; OB_SUCC(ret) && i < arg.parent_columns_.count(); ++i) {
       for (int64_t j = 0; OB_SUCC(ret) && j < arg.child_columns_.count(); ++j) {
         if (0 == arg.parent_columns_.at(i).compare(arg.child_columns_.at(j))) {
@@ -6269,9 +6250,8 @@ int ObResolverUtils::check_foreign_key_set_null_satisfy(
   }
   return ret;
 }
-
-// description: oracle 模式下检查两个外键子表中的外键列和父表中的关联列匹配关系是否一致
-// oracle 模式下 (c1, c2) references t1(c1, c2) 和 (c2, c1) references t1(c2, c1) 被认为是相同外键
+// description: oracle mode check whether the foreign key columns in two foreign key sub-tables match the associated columns in the parent table
+// oracle mode (c1, c2) references t1(c1, c2) and (c2, c1) references t1(c2, c1) are considered the same foreign key
 //
 // eg: in oracle mode
 // create table t1(c1 int, c2 int, primary key(c1, c2));
@@ -6344,13 +6324,12 @@ bool ObResolverUtils::is_match_columns_with_order(
 
   return dup_foreign_keys_exist;
 }
-
-// description: 检查子表中的外键列和父表中的主键列或者唯一索引列是否匹配, 顺序可以不一致
+// description: check if the foreign key columns in the sub-table match the primary key columns or unique index columns in the parent table, the order can be inconsistent
 //              eg: parent table: unique key(c1, c2)
 //                  child table:  references(c2, c1)
 //
-// @param [in] parent_columns  父表中的外键列名
-// @param [in] key_columns     父表中的主键列名或者唯一索引列名
+// @param [in] parent_columns  foreign key column names in the parent table
+// @param [in] key_columns     primary key column names or unique index column names in the parent table
 //
 // @return oceanbase error code defined in lib/ob_errno.def
 int ObResolverUtils::check_match_columns(const ObIArray<ObString> &parent_columns,
@@ -6403,14 +6382,13 @@ int ObResolverUtils::check_match_columns(
   }
   return ret;
 }
-
-// description: 检查子表中的外键列是否和父表的一个index的列的一个前缀匹配, 顺序可以不一致
-//              index可以是non-unique
+// description: check if the foreign key columns in the child table match a prefix of the columns in one index of the parent table, the order can be inconsistent
+//              index can be non-unique
 //              eg: parent table: create index t1_index on t1(a1, a2, a3)
 //                  child table: references t1(a2, a1)
 //
-// @param [in] parent_columns  子表中的外键列名（这些列属于父表，所以叫parent_columns）
-// @param [in] key_columns     父表中的主键列名或者唯一索引列名
+// @param [in] parent_columns  foreign key column names in the child table (these columns belong to the parent table, so they are called parent_columns)
+// @param [in] key_columns     primary key column names or unique index column names in the parent table
 //
 // @return oceanbase error code defined in lib/ob_errno.def
 int ObResolverUtils::check_partial_match_columns(const ObIArray<ObString> &parent_columns,
@@ -6421,10 +6399,10 @@ int ObResolverUtils::check_partial_match_columns(const ObIArray<ObString> &paren
   is_match = false;
   if (parent_columns.count() <= key_columns.count() && parent_columns.count() > 0) {
     bool is_tmp_match = true;
-    /* 对于parent columns的每一列，寻找key columns里面对应的列。外键保证key里面没有重复列所以正确 */
+    /* For each column in parent columns, find the corresponding column in key columns. The foreign key ensures there are no duplicate columns in key, so it is correct */
     for (int64_t i = 0; is_tmp_match && i < parent_columns.count(); ++i) {
       bool has_col = false;
-      /* 寻找key columns 对应的列 */
+      /* find key columns corresponding columns */
       for (int64_t j = 0; !has_col && j < parent_columns.count(); j++) {
         if (ObColumnSchemaHashWrapper(key_columns.at(i)) == ObColumnSchemaHashWrapper(parent_columns.at(j))) {
           has_col = true;
@@ -6440,10 +6418,9 @@ int ObResolverUtils::check_partial_match_columns(const ObIArray<ObString> &paren
   }
   return ret;
 }
-
-// description: 用于在 oracle 模式下检查同一表中的主键列和唯一约束列是否完全匹配, 各个列的顺序必须一致才算完全匹配
-//              eg: index(c1, c2) 和 index(c2, c1) 认为是匹配
-//                  index(c1, c2) 和 index(c1, c2) 认为是不匹配
+// description: used to check if the primary key columns and unique constraint columns in the same table are completely matched in oracle mode, the order of each column must be consistent to be considered a complete match
+//              eg: index(c1, c2) and index(c2, c1) are considered a match
+//                  index(c1, c2) and index(c1, c2) are considered mismatched
 //
 // @return oceanbase error code defined in lib/ob_errno.def
 int ObResolverUtils::check_match_columns_strict(const ObIArray<ObString> &columns_array_1,
@@ -6465,12 +6442,11 @@ int ObResolverUtils::check_match_columns_strict(const ObIArray<ObString> &column
   }
   return ret;
 }
-
-// description: 用于在 oracle 模式下检查同一表中的两个索引的列是否完全匹配, 各列的顺序一致且各列的 order 顺序一致才算完全匹配
-//              eg: index(c1, c2) 和 index(c2, c1) 认为是两个不同的索引
-//                  index(c1, c2 asc) 和 index(c1, c2 desc) 认为是两个不同的索引
-//                  index(c1 desc, c2) 和 index(c1 desc, c2) 认为是两个相同的索引
-//                  index(c1) 和 index(C1) oracle 认为是两个不同的索引
+// description: used to check if two indexes in the same table are completely matched under oracle mode, with columns in the same order and each column's order sequence consistent to be considered a complete match
+//              eg: index(c1, c2) and index(c2, c1) are considered two different indices
+//                  index(c1, c2 asc) and index(c1, c2 desc) are considered two different indexes
+//                  index(c1 desc, c2) and index(c1 desc, c2) are considered two identical indexes
+//                  index(c1) and index(C1) oracle considers as two different indexes
 //
 // @return oceanbase error code defined in lib/ob_errno.def
 int ObResolverUtils::check_match_columns_strict_with_order(const ObTableSchema *index_table_schema,
@@ -6513,14 +6489,12 @@ int ObResolverUtils::check_match_columns_strict_with_order(const ObTableSchema *
 
   return ret;
 }
-
-
-// description: 检查创建外键时父表和子表的外键列的列数和类型是否匹配
+// description: check the number and type of foreign key columns in the parent and child tables when creating a foreign key
 //
-// @param [in] child_table_schema   子表的 schema
-// @param [in] parent_table_schema  父表的 schema
-// @param [in] child_columns        子表外键列各个列的列名
-// @param [in] parent_columns       父表外键列各个列的列名
+// @param [in] child_table_schema   schema of the child table
+// @param [in] parent_table_schema  schema of the parent table
+// @param [in] child_columns        column names of the foreign key columns in the child table
+// @param [in] parent_columns       foreign key column names of the parent table
 
 // @return oceanbase error code defined in lib/ob_errno.def
 int ObResolverUtils::check_foreign_key_columns_type(const bool is_mysql_compat_mode,
@@ -6531,7 +6505,7 @@ int ObResolverUtils::check_foreign_key_columns_type(const bool is_mysql_compat_m
                                                     const share::schema::ObColumnSchemaV2 *column)
 {
   int ret = OB_SUCCESS;
-  // 子表和父表外键列的列数必须相同
+  // The number of foreign key columns in the sub-table and parent table must be the same
   if (child_columns.count() != parent_columns.count()) {
     ret = OB_ERR_WRONG_FK_DEF;
     LOG_WARN("the count of foreign key columns is not equal to the count of reference columns", K(ret), K(child_columns.count()), K(parent_columns.count()));
@@ -6564,13 +6538,13 @@ int ObResolverUtils::check_foreign_key_columns_type(const bool is_mysql_compat_m
         } else if ((child_col->get_data_type() != parent_col->get_data_type())
                       && !is_synonymous_type(child_col->get_data_type(),
                                               parent_col->get_data_type())) {
-          // 这里类型必须相同的
+          // Here the types must be the same
           ret = OB_ERR_CANNOT_ADD_FOREIGN;
           LOG_WARN("Column data types between child table and parent table are different", K(ret),
               K(child_col->get_data_type()),
               K(parent_col->get_data_type()));
         } else if (ob_is_string_type(child_col->get_data_type())) {
-          // 列类型一致，对于数据宽度要求子表大于父表, 目前只考虑 string 类型,
+          // Column types are consistent, for data width requirements, the sub-table should be greater than the parent table, currently only considering string type,
           if (child_col->get_collation_type() != parent_col->get_collation_type()) {
             ret = OB_ERR_CANNOT_ADD_FOREIGN;
             LOG_WARN("The collation types are different", K(ret),
@@ -6584,7 +6558,7 @@ int ObResolverUtils::check_foreign_key_columns_type(const bool is_mysql_compat_m
                 child_col->get_column_name_str().ptr(),
                 parent_col->get_column_name_str().length(),
                 parent_col->get_column_name_str().ptr());
-          } else { } // 对于其他bit/int/number /datetime/time/year 不做data_length要求
+          } else { } // For other bit/int/number /datetime/time/year no data_length requirement
         }
       }
     }
@@ -6800,7 +6774,7 @@ int ObResolverUtils::resolve_opt_suspend(const ParseNode *node, int64_t & flag)
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected val", K(node->value_), K(ret));
     } else {
-      // 目前这里进行里检查，可以不管直接赋值然后给执行时报错
+      // Currently here we are doing a check, you can ignore it and directly assign then throw an error during execution
       ret = OB_TRANS_XA_INVAL;
       LOG_WARN("not support start arguments", K(node->value_), K(ret));
     }
@@ -7111,9 +7085,9 @@ int ObResolverUtils::resolve_external_param_info(ExternalParams &param_infos,
         }
       } else {
         /*
-        * 把Stmt里的替换成QuestionMark，以便reconstruct_sql的时候会被打印成？，按prepare_param_count_编号
-        * 如果原本就是QuestionMark，也需要重新生成一个按照prepare_param_count_从0开始编号的QuestionMark，
-        * 以此保证传递给PL的参数顺序和prepare出来的参数化语句里的编号一致
+        * Replace the content in Stmt with QuestionMark so that it will be printed as ? when reconstruct_sql is called, numbered according to prepare_param_count_
+        * If it was already a QuestionMark, it also needs to regenerate a QuestionMark numbered from 0 according to prepare_param_count_,
+        * to ensure that the order of parameters passed to PL is consistent with the numbering in the parameterized statement prepared
         */
         SET_RESULT_TYPE(prepare_param_count++);
         if (OB_SUCC(ret)) {
@@ -7145,7 +7119,7 @@ int ObResolverUtils::uv_check_basic(ObSelectStmt &stmt, const bool is_insert)
         ret = is_insert ? OB_ERR_NON_INSERTABLE_TABLE : OB_ERR_NON_UPDATABLE_TABLE;
         LOG_WARN("not updatable", K(ret));
       }
-    //oracle mode下，含有fetch的insert/update/delete统一报错，兼容oracle行为
+    // In oracle mode, insert/update/delete statements containing fetch are uniformly reported as errors to be compatible with oracle behavior
     } else if (stmt.has_fetch()) {
       ret = OB_ERR_VIRTUAL_COL_NOT_ALLOWED;
       LOG_WARN("subquery with fetch can't occur in insert/update/delete stmt", K(ret));
@@ -7632,9 +7606,8 @@ int ObResolverUtils::check_duplicated_column(ObSelectStmt &select_stmt,
                                              bool can_skip/*default false*/)
 {
   int ret = OB_SUCCESS;
-   /*oracle模式允许sel/upd/del stmt中的generated table含有重复列，只要外层没有引用到重复列就行，同时对于外层引用
-  * 到的列是否为重复列会在检查column时进行检测，eg: select 1 from (select c1,c1 from t1);
-  * 因此对于oracle模式下sel/upd/del stmt进行检测时，检测到重复列时只需skip，但是仍然需要添加相关plan cache约束
+   /*Oracle mode allows the generated table in sel/upd/del stmt to contain duplicate columns, as long as the outer layer does not reference the duplicate columns, and whether the referenced columns by the outer layer are duplicate columns will be detected during column checking, eg: select 1 from (select c1,c1 from t1);
+  * Therefore, when detecting sel/upd/del stmt under Oracle mode, if duplicate columns are detected, just skip, but still need to add relevant plan cache constraints
   * 
    */
   if (!can_skip) {
@@ -9325,7 +9298,7 @@ int ObResolverUtils::calc_unistr(const common::ObString &src,
     Functor(char* buf, const int64_t buf_len, int32_t &pos, int64_t total_str_len, const common::ObCollationType dst_cs_type)
       : buf(buf), buf_len(buf_len), pos(pos), total_str_len(total_str_len), dst_cs_type(dst_cs_type) {}
     // for unicode inner scan loop
-    // 以下四元组构成改造中的循环不变量, incomming_char_len 外层循环参数, unicode_inner_len 内部循环参数
+    // The following quadruple constitutes the loop invariant during transformation, incomming_char_len outer loop parameter, unicode_inner_len inner loop parameter
     // (incomming_char_len, total_str_len, (unicode_inner_len, unicode_encoding_value), (buf, buf_len, pos))
     int incoming_char_len = 0;
 

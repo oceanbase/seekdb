@@ -1,1 +1,1 @@
-包含LLVM模式的Code Generator逻辑
+Contains LLVM-based Code Generator logic

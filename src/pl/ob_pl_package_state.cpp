@@ -367,7 +367,7 @@ int ObPLPackageState::set_package_var_val(const int64_t var_idx,
     ret = OB_ARRAY_OUT_OF_RANGE;
     LOG_WARN("invalid var index", K(var_idx), K(vars_.count()), K(ret));
   } else {
-    // VAR的生命周期是SESSION级, 因此这里需要深拷贝下
+    // The lifecycle of VAR is SESSION-level, therefore a deep copy is needed here
     if (value.need_deep_copy() && deep_copy_complex) {
       int64_t pos = 0;
       char *buf = static_cast<char*>(inner_allocator_.alloc(value.get_deep_copy_size()));

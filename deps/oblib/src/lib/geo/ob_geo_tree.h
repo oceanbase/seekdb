@@ -523,17 +523,17 @@ public:
   static int create_polygon(ObGeoCRS crs, uint32_t srid,
                             ObIAllocator &allocator, ObPolygon*& output);
   virtual bool empty() const = 0;
-  // 内外边界总数
+  // Total number of inner and outer boundaries
   virtual uint64_t size() const = 0;
-  // 内边界总数
+  // Total number of inner boundaries
   virtual uint64_t inner_ring_size() const = 0;
-  // 获取外边界
+  // Get the outer boundary
   virtual ObLinearring& exterior_ring() = 0;
   virtual const ObLinearring& exterior_ring() const = 0;
-  // 获取第n个内边界
+  // Get the nth inner boundary
   virtual ObLinearring& inner_ring(uint32_t n) = 0;
   virtual const ObLinearring& inner_ring(uint32_t n) const = 0;
-  // 添加Linearring到polygon中
+  // Add Linearring to polygon
   virtual int push_back(const ObLinearring &lr) = 0;
   // visitor
   // virtual int do_visit(ObIGeoVisitor &visitor) = 0;
@@ -562,12 +562,12 @@ public:
 
   int push_back(const ObLinearring &ring) override;
   bool empty() const override { return (exterior_.empty() && inner_rings_.size() == 0); }
-  uint64_t size() const override { return !exterior_.empty() ? inner_ring_size() + 1 : inner_ring_size(); } // 内外边界总数
-  uint64_t inner_ring_size() const override { return inner_rings_.size(); }// 内边界总数
-  const ObCartesianLinearring& exterior_ring() const override { return exterior_; } // 获取外边界
-  ObCartesianLinearring& exterior_ring() override { return exterior_; } // 获取外边界
-  const ObCartesianLinearring& inner_ring(uint32_t n) const override { return inner_rings_[n]; } // 获取第n个内边界
-  ObCartesianLinearring& inner_ring(uint32_t n) override { return inner_rings_[n]; } // 获取第n个内边界
+  uint64_t size() const override { return !exterior_.empty() ? inner_ring_size() + 1 : inner_ring_size(); } // Total number of inner and outer boundaries
+  uint64_t inner_ring_size() const override { return inner_rings_.size(); }// total number of inner rings
+  const ObCartesianLinearring& exterior_ring() const override { return exterior_; } // get exterior boundary
+  ObCartesianLinearring& exterior_ring() override { return exterior_; } // get exterior boundary
+  const ObCartesianLinearring& inner_ring(uint32_t n) const override { return inner_rings_[n]; } // Get the nth inner boundary
+  ObCartesianLinearring& inner_ring(uint32_t n) override { return inner_rings_[n]; } // Get the nth inner boundary
   // used for Boost
   ObCartesianLinearring &cartesian_exterior_ring() const { return const_cast<ObCartesianLinearring &>(exterior_); }
   ObGeomVector<ObCartesianLinearring> &interior_rings() { return inner_rings_; }
@@ -605,12 +605,12 @@ public:
 
   int push_back(const ObLinearring &ring) override;
   bool empty() const override { return (exterior_.empty() && inner_rings_.size() == 0); }
-  uint64_t size() const override { return !exterior_.empty() ? inner_ring_size() + 1 : inner_ring_size(); } // 内外边界总数
-  uint64_t inner_ring_size() const override { return inner_rings_.size(); }// 内边界总数
-  const ObGeographLinearring& exterior_ring() const override { return exterior_; } // 获取外边界
-  ObGeographLinearring& exterior_ring() override { return exterior_; } // 获取外边界
-  const ObGeographLinearring& inner_ring(uint32_t n) const override { return inner_rings_[n]; } // 获取第n个内边界
-  ObGeographLinearring& inner_ring(uint32_t n) override { return inner_rings_[n]; } // 获取第n个内边界
+  uint64_t size() const override { return !exterior_.empty() ? inner_ring_size() + 1 : inner_ring_size(); } // Total number of inner and outer boundaries
+  uint64_t inner_ring_size() const override { return inner_rings_.size(); }// total number of inner boundaries
+  const ObGeographLinearring& exterior_ring() const override { return exterior_; } // get exterior boundary
+  ObGeographLinearring& exterior_ring() override { return exterior_; } // get exterior boundary
+  const ObGeographLinearring& inner_ring(uint32_t n) const override { return inner_rings_[n]; } // Get the nth inner boundary
+  ObGeographLinearring& inner_ring(uint32_t n) override { return inner_rings_[n]; } // Get the nth inner boundary
   // used for Boost
   ObGeographLinearring &geographic_exterior_ring() const { return const_cast<ObGeographLinearring &>(exterior_); }
   ObGeomVector<ObGeographLinearring> &interior_rings() { return inner_rings_; }

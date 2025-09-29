@@ -87,7 +87,7 @@ int ObExprLowerUpper::calc_result_typeN(ObExprResType &type,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("Invalid argument", K(ret), K(param_num), K(texts));
   } else {
-    // 根据第一个参数计算即可
+    // Calculate based on the first parameter
     ObSEArray<ObExprResType*, 1, ObNullAllocator> param;
     OZ(param.push_back(&texts[0]));
     OZ(aggregate_string_type_and_charset_oracle(*session, param, type));

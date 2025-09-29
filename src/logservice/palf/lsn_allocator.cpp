@@ -318,7 +318,7 @@ int LSNAllocator::try_freeze(LSN &last_lsn, int64_t &last_log_id)
 }
 
 int LSNAllocator::alloc_lsn_scn(const SCN &base_scn,
-                                const int64_t size, // 已包含LogHeader size
+                                const int64_t size, // already includes LogHeader size
                                 const int64_t log_id_upper_bound,
                                 const LSN &lsn_upper_bound,
                                 LSN &lsn,
@@ -335,7 +335,7 @@ int LSNAllocator::alloc_lsn_scn(const SCN &base_scn,
     ret = OB_INVALID_ARGUMENT;
     PALF_LOG(WARN, "invalid arguments", K(ret), K(base_scn), K(size), K(log_id_upper_bound), K(lsn_upper_bound));
   } else {
-    // 生成新日志时需加上log_group_entry_header的size
+    // When generating a new log, add the size of log_group_entry_header
     const int64_t new_group_log_size = size + LogGroupEntryHeader::HEADER_SER_SIZE;
     bool need_update_base = false;
     do {
@@ -376,10 +376,10 @@ int LSNAllocator::alloc_lsn_scn(const SCN &base_scn,
         const uint64_t tmp_next_scn = std::max(base_scn.get_val_for_logservice(), last_scn + 1);
 
         if ((tmp_next_scn + 1) - scn_base_ >= LOG_TS_DELTA_UPPER_BOUND) {
-          // 对于可能生成的padding log, 也会占用一个scn
+          // For the possible padding log generated, it will also occupy one scn
           need_update_base = true;
         } else if ((last.log_id_delta_ + 2) >= LOG_ID_DELTA_UPPER_BOUND) {
-          // 对于可能生成的padding log, 也会占用一个log_id
+          // For the possible padding log, it will also occupy a log_id
           need_update_base = true;
         } else {
           // do nothing
@@ -392,78 +392,78 @@ int LSNAllocator::alloc_lsn_scn(const SCN &base_scn,
         uint64_t tmp_next_block_id = lsn_2_block(LSN(last.lsn_val_), PALF_BLOCK_SIZE);
         uint64_t tmp_next_log_id_delta = last.log_id_delta_;
         uint64_t tmp_next_scn_delta = tmp_next_scn - scn_base_;
-        // 下一条日志是否需要cut
+        // Is the next log entry required to be cut?
         bool is_next_need_cut = false;
         const uint64_t last_block_offset = lsn_2_offset(LSN(last.lsn_val_), PALF_BLOCK_SIZE);
         uint64_t tmp_next_block_offset = 0;
         if (last.is_need_cut_) {
-          // 上一条日志不再聚合，需生成新日志
+          // The previous log is no longer aggregated, a new log needs to be generated
           is_new_group_log = true;
           tmp_next_block_offset = last_block_offset + new_group_log_size;
-          // 判断新日志是否会达到/跨过2M边界，是则下一条日志要触发freeze
+          // Determine if the new log will reach/cross the 2MB boundary, if so, the next log should trigger freeze
           if ((last_block_offset & LOG_CUT_TRIGGER_MASK) + new_group_log_size >= LOG_CUT_TRIGGER) {
             is_next_need_cut = true;
           }
         } else if (last_block_offset > 0
                    && (last_block_offset & LOG_CUT_TRIGGER_MASK) == 0) {
-          // 上一条日志末尾恰好已到2M边界,预期不会出现，因为这种情况last.is_need_cut_一定为true
+          // The end of the previous log is exactly at the 2M boundary, which is expected not to happen, because in this case last.is_need_cut_ must be true
           ret = OB_ERR_UNEXPECTED;
           PALF_LOG(WARN, "last_block_offset is reach 2M boundary", K(ret), K(last_block_offset));
         } else if (last_block_offset > 0
                    && ((last_block_offset & LOG_CUT_TRIGGER_MASK) + size) > LOG_CUT_TRIGGER) {
-          // 上一条日志聚合本条日志后会跨2M边界，本条日志不再聚合
+          // The previous log aggregation with this log would cross the 2MB boundary, this log will not be aggregated
           is_new_group_log = true;
           is_next_need_cut = false;
           tmp_next_block_offset = last_block_offset + new_group_log_size;
-          // 判断新日志是否会达到/跨过2M边界，是则下一条日志要触发freeze
+          // Determine if the new log will reach/cross the 2MB boundary, if so, the next log should trigger freeze
           if ((last_block_offset & LOG_CUT_TRIGGER_MASK) + new_group_log_size >= LOG_CUT_TRIGGER) {
             is_next_need_cut = true;
           }
         } else {
-          // 聚合到上一条日志尾部
+          // Aggregate to the end of the previous log
           is_new_group_log = false;
           is_next_need_cut = false;
           tmp_next_block_offset = last_block_offset + size;
-          // 判断新日志是否会达到/跨过2M边界，是则下一条日志要触发freeze
+          // Determine if the new log will reach/cross the 2MB boundary, if so, the next log should trigger freeze
           if ((last_block_offset & LOG_CUT_TRIGGER_MASK) + size >= LOG_CUT_TRIGGER) {
             is_next_need_cut = true;
           }
         }
         if (tmp_next_block_offset < PALF_BLOCK_SIZE) {
-          // 未超过文件size，需判断文件末尾空间是否小于4K
-          // 是则以padding形式聚合到日志末尾
-          // 否则不处理
+          // Not exceeded file size, need to determine if the space at the end of the file is less than 4K
+          // If so, aggregate in padding form to the end of the log
+          // Otherwise do not process
           if (PALF_BLOCK_SIZE - tmp_next_block_offset < CLOG_FILE_TAIL_PADDING_TRIGGER) {
-            // 文件尾小于4K, 需生成padding entry补齐，将新日志存到下一个文件中
+            // File tail is less than 4K, need to generate padding entry to fill it up, and store new logs in the next file
             is_new_group_log = true;
             need_gen_padding_entry = true;
-            // padding_len包含padding_log的log_group_entry_header_size
+            // padding_len contains the log_group_entry_header_size of padding_log
             padding_len = PALF_BLOCK_SIZE - last_block_offset;
             tmp_next_block_id++;  // block_id++
             tmp_next_block_offset = new_group_log_size;
             is_next_need_cut = false;
-            // 判断新日志是否会达到/跨过2M边界，是则下一条日志要触发freeze
+            // Determine if the new log will reach/cross the 2MB boundary, if so, the next log should trigger freeze
             if (new_group_log_size >= LOG_CUT_TRIGGER) {
               is_next_need_cut = true;
             }
           }
         } else if (tmp_next_block_offset == PALF_BLOCK_SIZE) {
-          // 恰好到达文件尾
+          // Exactly reached the end of the file
           tmp_next_block_id++;  // block_id++
           tmp_next_block_offset = 0;
           is_next_need_cut = true;
         } else {
-          // 当前文件无法容纳该日志, 需要切文件
-          // 首先在本文件尾生成一个padding_entry,它的scn与后一条日志相同
-          // 然后将新日志写到下一个文件开头
+          // The current file cannot accommodate this log, a file switch is needed
+          // First generate a padding_entry at the end of this file, its scn is the same as the next log entry
+          // Then write the new log to the beginning of the next file
           is_new_group_log = true;
           need_gen_padding_entry = true;
-          // padding_len包含padding_log的log_group_entry_header_size
+          // padding_len contains the log_group_entry_header_size of padding_log
           padding_len = PALF_BLOCK_SIZE - last_block_offset;
           tmp_next_block_id++;  // block_id++
           tmp_next_block_offset = new_group_log_size;
           is_next_need_cut = false;
-          // 判断新日志是否会达到/跨过2M边界，是则下一条日志要触发freeze
+          // Determine if the new log will reach/cross the 2MB boundary, if so, the next log should trigger freeze
           if (new_group_log_size >= LOG_CUT_TRIGGER) {
             is_next_need_cut = true;
           }

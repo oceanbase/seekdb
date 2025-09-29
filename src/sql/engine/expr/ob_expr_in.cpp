@@ -25,7 +25,7 @@ using namespace common;
 using namespace hash;
 namespace sql
 {
-//计算当前数字二进制排列组合的下一个数， 例如 001->010->100
+// Calculate the next number of the current binary permutation, for example 001->010->100
 static unsigned next_perm(unsigned int cur_num)
 {
     unsigned int t = cur_num | (cur_num - 1); // t gets cur_num's least significant 0 bits set to 1
@@ -33,15 +33,15 @@ static unsigned next_perm(unsigned int cur_num)
     // set to 0 the least significant ones, and add the necessary 1 bits.
     return (t + 1) | (((~t & -~t) - 1) >> (__builtin_ctz(cur_num) + 1));
 }
-//计算当前数字二进制排列组合的下一个数，如果当前数字的高位全部为1，则增加一个1并放到低位
-//例如 11000->00111
+// Calculate the next number of the current number's binary permutation, if all the higher bits of the current number are 1, then add a 1 and place it in the lower bit
+// For example 11000->00111
 static unsigned next(unsigned int cur_num, unsigned int max)
 {
-  // 这里和next_perm中重复计算的cur | (cur_num - 1)会被编译器自动在内联时提取出来，不会额外计算一次
+  // Here and cur | (cur_num - 1) which is recalculated in next_perm will be automatically extracted by the compiler during inlining, and will not be calculated again
   return ((cur_num - 1) | cur_num) >= max - 1
          ? (1U << (__builtin_popcount(cur_num) + 1)) - 1 : next_perm(cur_num);
 }
-//用于求解cur num的上一个二进制排列组合， 例如 111->110->101->011->100->010->001， max为111
+// Used to solve the previous binary permutation combination of cur num, for example 111->110->101->011->100->010->001, max is 111
 static unsigned last(unsigned int cur_num, unsigned int max)
 {
   unsigned int num = (cur_num ^ max);
@@ -232,7 +232,7 @@ int ObExprInHashMap<T>::set_refactored(const Row<T> &row)
     }
   } else {
     int exist = ObExprInHashMap<T>::HASH_CMP_FALSE;
-    //去重
+    // Remove duplicates
     for (int i = 0; OB_SUCC(ret)
                     && ObExprInHashMap<T>::HASH_CMP_TRUE != exist
                     && i < arr_ptr->count(); ++i) {
@@ -259,7 +259,7 @@ int ObExprInHashMap<T>::exist_refactored(const Row<T> &row, int &exist_ret)
   tmp_row_key.meta_ = &meta_;
   const ObArray<Row<T>> *arr_ptr = map_.get(tmp_row_key);
   if (OB_ISNULL(arr_ptr)) {
-    exist_ret = ObExprInHashMap<T>::HASH_CMP_FALSE;  //在hash表中不存在
+    exist_ret = ObExprInHashMap<T>::HASH_CMP_FALSE;  // does not exist in hash table
   } else {
     int exist = ObExprInHashMap<T>::HASH_CMP_FALSE;
     for (int i=0; 0 != exist_ret && i < arr_ptr->count(); ++i) {
@@ -519,14 +519,14 @@ init_right_datums(int64_t param_num,
 {
   int ret = OB_SUCCESS;
   right_datums_ = NULL;
-  int64_t datums_buf_size = sizeof(ObDatum *) * param_num; //ObDatum *指针数组大小
+  int64_t datums_buf_size = sizeof(ObDatum *) * param_num; // size of ObDatum * pointer array
   if (OB_ISNULL(right_datums_ =
               (ObDatum **)
                ((exec_ctx->get_allocator()).alloc(datums_buf_size)))) {
      ret = OB_ALLOCATE_MEMORY_FAILED;
      LOG_WARN("failed to allocate memory for ObDatum **", K(ret));
   } else {
-    for (int i =0; OB_SUCC(ret) && i < param_num; ++i) {//初始化每个ObDatum *
+    for (int i =0; OB_SUCC(ret) && i < param_num; ++i) {//initialize each ObDatum *}
        if (OB_ISNULL(right_datums_[i] =
              static_cast<ObDatum *> (((exec_ctx->get_allocator()).alloc(sizeof(ObDatum) * row_dimension))))) {
          ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -599,7 +599,7 @@ int ObExprInOrNotIn::calc_result_typeN(ObExprResType &type,
   return ret;
 }
 
-/* 比较规则：
+/* Comparison rules:
  * Oracle document:
  * Two nested table variables are equal if and only if they have the same set of elements (in any order).
 
@@ -759,7 +759,7 @@ int ObExprInOrNotIn::cg_expr(ObExprCGCtx &expr_cg_ctx,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid right expr type", K(ret));
   } else if (T_REF_QUERY == raw_expr.get_param_expr(0)->get_expr_type()
-             //output column == 1 由subplan filter负责迭代数据
+             //output column == 1 by subplan filter responsible for iterating data
              && raw_expr.get_param_expr(0)->get_output_column() > 1) {
     ret = cg_expr_with_subquery(expr_cg_ctx, raw_expr, rt_expr);
   } else if (T_OP_ROW == raw_expr.get_param_expr(0)->get_expr_type()) {
@@ -815,7 +815,7 @@ int ObExprInOrNotIn::cg_expr_without_row(ObExprCGCtx &expr_cg_ctx,
       }
       //now only support c1 in (1,2,3,4...) to be vectorized
       if (is_param_can_vectorized()) {
-        //目前认为右边参数 <= 2时， nest_loop算法的效果一定比hash更好
+        // Currently it is believed that when the right parameter <= 2, the nest_loop algorithm performs better than hash
         int tmp_in_ret = OB_E(EventTable::EN_ENABLE_VECTOR_IN) OB_SUCCESS;
         if (rt_expr.inner_func_cnt_ <= 2 ||
             (ob_is_json(left_type) || ob_is_json(right_type))) {
@@ -895,7 +895,7 @@ int ObExprInOrNotIn::cg_expr_with_row(ObExprCGCtx &expr_cg_ctx,
     }
     if (OB_SUCC(ret)) {
       void **func_buf = NULL;
-      int func_buf_size = sizeof(void *) * LEFT_ROW->arg_cnt_ ; //这里初始化row_dimension
+      int func_buf_size = sizeof(void *) * LEFT_ROW->arg_cnt_ ; // Here initialize row_dimension
       rt_expr.inner_func_cnt_ = LEFT_ROW->arg_cnt_;
       if (OB_ISNULL(func_buf = (void **)expr_cg_ctx.allocator_->alloc(func_buf_size))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -1007,8 +1007,8 @@ int ObExprInOrNotIn::eval_in_without_row_fallback(const ObExpr &expr,
                                          ObDatum &expr_datum)
 {
   int ret = OB_SUCCESS;
-  // TODO [zongmei.zzm] 原先的In或者NotIn实现，如果没有向量，并且满足need_hash的条件
-  // 会先计算出所有的右孩子的节点值并构建hash表，现在只实现了短路逻辑比较
+  // TODO [zongmei.zzm] The original In or NotIn implementation, if there is no vector and it meets the need_hash condition
+  // Will first calculate all the right child node values and build a hash table, now only short-circuit logic comparison is implemented
   ObDatum *left = NULL;
   ObDatum *right = NULL;
   bool cnt_null = false;
@@ -1384,9 +1384,9 @@ int ObExprInOrNotIn::eval_in_with_row(const ObExpr &expr,
   ObExprInCtx *in_ctx = NULL;
   ObExecContext *exec_ctx = &ctx.exec_ctx_;
   uint64_t in_id = static_cast<uint64_t>(expr.expr_ctx_id_);
-  bool is_completely_cmp = false;//完全匹配，in返回true，not in返回false
-  bool is_null_cmp = false;//第二轮null值匹配，匹配上至少返回null
-  bool left_has_null = false;//左边是否存在null
+  bool is_completely_cmp = false;//complete match, in returns true, not in returns false
+  bool is_null_cmp = false;//Second round null value match, match at least return null
+  bool left_has_null = false;//Does null exist on the left
   bool is_right_all_null = false;
   bool is_left_all_null = false;
 
@@ -1408,7 +1408,7 @@ int ObExprInOrNotIn::eval_in_with_row(const ObExpr &expr,
       LOG_WARN("failed to create operator ctx", K(ret));
     } else if (OB_FAIL(in_ctx->init_static_engine_hashset_vecs(right_param_num,
                                                                row_dimension,
-                                                               exec_ctx))) { //hashset集合
+                                                               exec_ctx))) { //hashset set
       LOG_WARN("failed to init hashset", K(ret));
     } else if (OB_FAIL(in_ctx->init_hashset_vecs_all_null(row_dimension, exec_ctx))) {
       LOG_WARN("failed to init hashset_vecs_all_null", K(ret));
@@ -1423,7 +1423,7 @@ int ObExprInOrNotIn::eval_in_with_row(const ObExpr &expr,
           LOG_WARN("invalid null arg", K(ret), K(RIGHT_ROW(i)), K(i));
         } else {
           int null_idx = 0;
-          //遍历整个向量，记录null元素的位置； 将剩余非null值进行全排列，与null元素按位异或后插入对应位置
+          // Traverse the entire vector, record the position of null elements; Permute the remaining non-null values, XOR them with null elements bit by bit, and insert them into the corresponding positions
           for (int64_t j = 0; OB_SUCC(ret) && j < row_dimension; ++j) {
             if (OB_ISNULL(RIGHT_ROW_ELE(i, j))) {
               ret = OB_INVALID_ARGUMENT;
@@ -1431,8 +1431,8 @@ int ObExprInOrNotIn::eval_in_with_row(const ObExpr &expr,
             } else if (OB_FAIL(RIGHT_ROW_ELE(i, j)->eval(ctx, right))) {
               LOG_DEBUG("param evaluate fail, hash set lookup disabled for in expr", K(ret), K(i));
               in_ctx->disable_hash_calc();
-            } else if (!in_ctx->is_hash_calc_disabled()) {//遍历确定null_idx
-            //探测null元素的位置并记录
+            } else if (!in_ctx->is_hash_calc_disabled()) {//traverse to determine null_idx
+            // Detect the position of null elements and record
               if (right->is_null()) {
                 null_idx = null_idx ^ (1 << j);
                 in_ctx->right_has_null_ = true;
@@ -1454,7 +1454,7 @@ int ObExprInOrNotIn::eval_in_with_row(const ObExpr &expr,
                     LOG_WARN("failed to allocate memory", K(ret));
                   }
                 }
-                //设置ObDatum的hash函数
+                // Set the hash function for ObDatum
                 if (OB_SUCC(ret)) {
                   in_ctx->hash_func_buff_[j] =
                            (void *)(RIGHT_ROW_ELE(i, j)->basic_funcs_->murmur_hash_v2_);
@@ -1465,7 +1465,7 @@ int ObExprInOrNotIn::eval_in_with_row(const ObExpr &expr,
                 //do nothing
             }
           }
-          //这里对所有hash表进行函数指针的设定
+          // Here set the function pointers for all hash tables
           if (OB_SUCC(ret) && !in_ctx->funcs_ptr_set_) {
             for (int i = 0; i < (1 << row_dimension); ++i) {
               in_ctx->set_hash_funcs_ptr(i, in_ctx->hash_func_buff_);
@@ -1475,19 +1475,19 @@ int ObExprInOrNotIn::eval_in_with_row(const ObExpr &expr,
           }
 
           /*
-          *从 1~2^col迭代，选取的全为非null值的时候，，记录这个idx，
-          *将其设置进row中,这个idx用于hash值的计算，以及进入hashset的下标，和operator == 不用于compare_with_null
-          *对设置好idx的row，进入对应的hashtable，
-          *此时operator == 要求key值完全匹配
+          * Iterate from 1 to 2^col, when all selected values are non-null, record this idx,
+          * set it into row, this idx is used for hash value calculation, as well as the index for entering the hashset, and operator == is not used for compare_with_null
+          * For the row with idx set, enter the corresponding hashtable,
+          * at this point, operator == requires key values to match completely
           */
           Row<ObDatum> tmp_row;
           for (int64_t k = 1; OB_SUCC(ret) && k < (1 << row_dimension); ++k) {
             int hash_idx = k;
-            if (0 == (k & null_idx)) {//k代表选取的列，这些列不能包含null
+            if (0 == (k & null_idx)) {// k represents the selected columns, these columns cannot contain null}
               if (OB_FAIL(tmp_row.set_elem(in_ctx->get_datum_row(i)))) {
                 LOG_WARN("failed to set elem", K(ret));
               }
-              //此次排列进入hash表对应位置
+              // This arrangement enters the hash table at the corresponding position
               if (OB_SUCC(ret)) {
                 if (OB_FAIL(in_ctx->add_to_static_engine_hashset_vecs(tmp_row, hash_idx))) {
                   LOG_WARN("failed to add hashset", K(ret));
@@ -1495,12 +1495,12 @@ int ObExprInOrNotIn::eval_in_with_row(const ObExpr &expr,
                   //do nothing
                 }
               }
-            } else if (null_idx == (k | null_idx)) {//k选取的列为null的子集，将这里的全null置为true
+            } else if (null_idx == (k | null_idx)) {// k selected columns are a subset of null, set all null here to true
               if (OB_FAIL(in_ctx->set_hashset_vecs_all_null_true(k))) {
                 LOG_WARN("failed to set hashset vecs all null true", K(ret));
               }
             } else {
-              //此次排列不入hash表
+              // This arrangement is not entered into the hash table
             }
           }
         }
@@ -1512,7 +1512,7 @@ int ObExprInOrNotIn::eval_in_with_row(const ObExpr &expr,
     if (OB_UNLIKELY(in_ctx->is_hash_calc_disabled())) {
       //fall_back = true;//TODO : lack param fallback
     } else if (!fallback) {
-      //遍历提取左向量
+      // Traverse to extract left vector
       int null_idx = 0;
       Row<ObDatum> tmp_row;
       ObDatum datum_ptr[row_dimension];
@@ -1523,7 +1523,7 @@ int ObExprInOrNotIn::eval_in_with_row(const ObExpr &expr,
         } else if (OB_FAIL(LEFT_ROW_ELE(j)->eval(ctx, left))) {
           LOG_WARN("failed to eval", K(ret));
         } else {
-          //探测null元素的位置并记录
+          // Detect the position of null elements and record
           if (left->is_null()) {
             null_idx = null_idx ^ (1 << j);
             left_has_null = true;
@@ -1556,20 +1556,19 @@ int ObExprInOrNotIn::eval_in_with_row(const ObExpr &expr,
       }
       if (OB_SUCC(ret)) {
         tmp_row.set_elem(datum_ptr);
-        //首先检查左边是否有null，有null则检查反面的hashset是否为全null
+        // First check if there is null on the left, if there is null then check if the hashset on the opposite side is all null
         if (null_idx != 0 &&
-            OB_FAIL(in_ctx->get_hashset_vecs_all_null((1 <<row_dimension) - 1 - null_idx/*取反*/,
+            OB_FAIL(in_ctx->get_hashset_vecs_all_null((1 <<row_dimension) - 1 - null_idx/*Invert*/,
                                                       is_null_cmp))) {
           LOG_WARN("failed to get hashset vecs all null", K(ret));
         }
-
-        //左表取出所有非null进行排列组合，按照赋予的hashkey查询hash值是否存在，
-        //如果存在，则取出这个桶进行遍历，按照方法cmp_with_null得出最后的结论，true直接结束
+        // Take all non-null from the left table for combination, query the hash value according to the assigned hashkey to see if it exists,
+        // If it exists, retrieve this bucket for traversal, according to the method cmp_with_null derive the final conclusion, true ends directly
         int exist_ret = ObExprInHashMap<ObDatum>::HASH_CMP_FALSE;
         for (int64_t k = (1 << row_dimension) - 1;
              !is_null_cmp && !is_completely_cmp && OB_SUCC(ret) && k >= 1;
-             k = static_cast<int64_t>(last(k, (1 << row_dimension) -1))) { //k 代表选取的列，即idx
-          if (0 == (k & null_idx)) {//k不包含null列
+             k = static_cast<int64_t>(last(k, (1 << row_dimension) -1))) { // k represents the selected column, i.e., idx
+          if (0 == (k & null_idx)) {//k does not contain null column}
            if (OB_FAIL(in_ctx->exist_in_static_engine_hashset_vecs(tmp_row, k, exist_ret))) {
               LOG_WARN("failed to search in hashset", K(ret));
             } else {
@@ -1581,7 +1580,7 @@ int ObExprInOrNotIn::eval_in_with_row(const ObExpr &expr,
                 //do nothing
               }
             }
-            if (!left_has_null && !in_ctx->right_has_null_) {//左右均没有null值，第一次探测完成后直接退出
+            if (!left_has_null && !in_ctx->right_has_null_) {//Both left and right do not have null values, exit directly after the first probe}
               break;
             }
           }
@@ -1733,8 +1732,8 @@ int ObExprInOrNotIn::eval_batch_in_without_row(const ObExpr &expr,
     } else {
       ObDatum *input_left = expr.args_[0]->locate_batch_datums(ctx);
       ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
-      bool fallback = false; //建hash表过程中eval 失败，需要尝试nest_loop
-      Row<ObDatum> tmp_row; //放置left
+      bool fallback = false; // During hash table construction, eval failed, need to try nest_loop
+      Row<ObDatum> tmp_row; // place left
       ObDatum *left = nullptr;
       int64_t right_param_num = expr.inner_func_cnt_;
       bool right_has_null = false;
@@ -2187,7 +2186,7 @@ int ObExprInOrNotIn::calc_for_row_static_engine(const ObExpr &expr,
           if (OB_FAIL(((DatumCmpFunc)expr.inner_functions_[j])(*right, *left, cmp_ret))) {
             LOG_WARN("failed to compare", K(ret));
           } else if (0 != cmp_ret) {
-            //如果在向量的比较中，有明确的false，表明这个向量不成立，所以应该将has_null置为false
+            // If there is a clear false in the vector comparison, it indicates that this vector does not hold, so has_null should be set to false
             row_is_equal = false;
             row_cnt_null = false;
           }
@@ -2407,7 +2406,7 @@ int ObExprInOrNotIn::build_hash_set(
         }
       } else {
         Row<ObDatum> tmp_row;
-        //这里所有hash函数和cmp函数已经加载完毕，设置tmp_row的函数指针
+        // Here all hash functions and cmp functions have been loaded, set the function pointers of tmp_row
         if (OB_FAIL(ret)) {
         } else if (OB_FAIL(tmp_row.set_elem(in_ctx->get_datum_row(i)))) {
           LOG_WARN("failed to load datum", K(ret), K(i));

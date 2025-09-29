@@ -145,12 +145,12 @@ int ObMPInitDB::process()
                      K(session->get_server_sid()),
                      K(session->get_proxy_sessid()));
           } else if (RETRY_TYPE_LOCAL == retry_type) {
-            // 在本线程重试
+            // Retry in this thread
             force_local_retry = true;
           } else if (RETRY_TYPE_PACKET == retry_type) {
-            // 扔回队列中重试
+            // Put back into the queue for retry
             if (!THIS_WORKER.can_retry()) {
-              // 不允许丢回队列，在本线程重试
+              // Do not requeue, retry in this thread
               // FIXME: when will we be here?
               force_local_retry = true;
               LOG_WARN("fail to set retry flag, force to do local retry");
@@ -181,7 +181,7 @@ int ObMPInitDB::process()
     if (false == is_packet_retry && need_disconnect && is_conn_valid()) {
       force_disconnect();
       LOG_WARN("disconnect connection when process query", K(ret));
-    } else  if (false == is_packet_retry && OB_FAIL(send_error_packet(ret, NULL))) { // 覆盖ret, 无需继续抛出
+    } else  if (false == is_packet_retry && OB_FAIL(send_error_packet(ret, NULL))) { // override ret, no need to throw further
       LOG_WARN("failed to send error packet", K(ret));
     }
   } else if (OB_LIKELY(NULL != session)) {
@@ -226,9 +226,9 @@ int ObMPInitDB::do_process(sql::ObSQLSessionInfo *session)
   } else if (OB_FAIL(schema_guard.check_db_access(session_priv, session->get_enable_role_array(), catalog_id, db_name_))) {
     LOG_WARN("fail to check db access.", K(catalog_id), K_(db_name), K(ret));
     if (OB_ERR_NO_DB_SELECTED == ret) {
-      sret = OB_ERR_BAD_DATABASE; // 将错误码抛出让外层重试
+      sret = OB_ERR_BAD_DATABASE; // Throw the error code to let the upper layer retry
     } else {
-      sret = ret; // 保险起见，也抛出
+      sret = ret; // For safety, throw it as well
     }
   } else {
     // for external catalog, we will assign mocked db_id

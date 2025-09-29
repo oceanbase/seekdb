@@ -405,7 +405,7 @@ public:
   //for delete plan
   //for delete directive
   //for delete group
-  //随directive refresh而定期刷新(最晚10S一次)
+  //Refresh periodically with directive refresh (at most once every 10S)
   int refresh_group_io_config();
   const ObTenantIOConfig &get_io_config();
   int trace_request_if_need(const ObIORequest *req, const char* msg, ObIOTracer::TraceType trace_type);

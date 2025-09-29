@@ -263,7 +263,7 @@ int ObTableTTLDeleteTask::process_one()
   ObTableTransParam trans_param;
   ObTableTTLOperationResult result;
   ObTableApiSpec *scan_spec = nullptr;
-  observer::ObReqTimeGuard req_timeinfo_guard; // 引用cache资源必须加ObReqTimeGuard
+  observer::ObReqTimeGuard req_timeinfo_guard; // Reference cache resources must add ObReqTimeGuard
   ObKvSchemaCacheGuard schema_cache_guard;
   ObTableApiCacheGuard cache_guard;
   ObTableTTLOperation ttl_operation(info_.tenant_id_,

@@ -53,12 +53,12 @@ ObExprDllUdf::~ObExprDllUdf()
 }
 
 /*
- * UDF的结果是强制性的，UDF的ret仅仅只有三种类型，分别是STRING，DOUBLE，LONG LONG。
- * 这里不存类型的推导。
- * UDF的输入则是可以是任何类型，
- * 比如select udf_sum(t1.c1) from t1
+ * The result of UDF is mandatory, and UDF's ret only has three types, which are STRING, DOUBLE, LONG LONG.
+ * There is no type inference here.
+ * The input to UDF can be any type,
+ * for example select udf_sum(t1.c1) from t1
  *     select udf_sum(t2.c1) from t2
- * t1.c1是varchar，t2.c1是int，只要udf_sum的执行函数里面写清楚执行逻辑即可。
+ * t1.c1 is varchar, t2.c1 is int, as long as the execution logic inside the udf_sum function is clearly written.
  * */
 int ObExprDllUdf::calc_result_typeN(ObExprResType &type,
                                     ObExprResType *types,
@@ -127,7 +127,7 @@ int ObExprDllUdf::init_udf(const common::ObIArray<ObRawExpr*> &param_exprs)
       // generate the sql expression
      // ObObj tmp_res;
      // ObNewRow empty_row;
-     // RowDesc row_desc; //空的行描述符，可计算的表达式，不需要行描述符
+     // RowDesc row_desc; // empty row descriptor, calculable expression, no need for row descriptor
      // ObSqlExpression *sql_expr = NULL;
      // ObExprGeneratorImpl expr_generator(expr_op_factory_, 0, 0, NULL, row_desc);
      // if (OB_FAIL(sql_expression_factory_.alloc(sql_expr))) {

@@ -35,8 +35,7 @@ public:
       callback_ret_(OB_SUCCESS)
   {
   }
-
-  // ref_count 为1表示所有session均不依赖当前cache中对象;
+  // ref_count is 1 indicates that all sessions do not depend on the objects in the current cache;
   int operator()(common::hash::HashMapPair<ObPsStmtId, ObPsStmtInfo*> &entry)
   {
     int &ret = callback_ret_;

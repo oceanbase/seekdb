@@ -284,12 +284,12 @@ int ObDmlCgService::check_is_update_uk(ObLogDelUpd &op,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null", K(ret));
   } else if (index_dml_info.is_primary_index_) {
-    // 主表
+    // main table
     if (OB_FAIL(table_schema->get_rowkey_column_ids(rowkey_cids))) {
       LOG_WARN("fail to get rowkey cids", K(ret));
     }
   } else if (!table_schema->is_global_unique_index_table()) {
-    // 非global unique index，不需要检查
+    // Not a global unique index, no need to check
   } else if (OB_FAIL(table_schema->get_rowkey_column_ids(rowkey_cids))) {
     LOG_WARN("fail to get rowkey cids", K(ret));
   }
@@ -667,7 +667,7 @@ int ObDmlCgService::convert_data_table_rowkey_info(ObLogDelUpd &op,
   ObSEArray<uint64_t, 8> rowkey_column_ids;
   ObSEArray<ObRawExpr *, 8> rowkey_exprs;
   ObSEArray<ObObjMeta, 8> rowkey_column_types;
-  // rowkey_exprs的类型一定是column_ref表达式
+  // the type of rowkey_exprs must be column_ref expression
   if (OB_ISNULL(primary_dml_info)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("primary_index_dml_info is null", K(ret));
@@ -792,7 +792,7 @@ int ObDmlCgService::generate_conflict_checker_ctdef(ObLogInsert &op,
     conflict_checker_ctdef.use_dist_das_ = op.is_multi_part_dml();
     conflict_checker_ctdef.rowkey_count_ = index_dml_info.rowkey_cnt_;
   }
-  // 生成回表的partition id 计算表达式，使用index_del_info的old_part_id_expr_
+  // Generate the partition id calculation expression for back-table lookup, using index_del_info's old_part_id_expr_
   if (OB_SUCC(ret) && op.is_multi_part_dml()) {
     ObRawExpr *part_id_expr_for_lookup = NULL;
     ObExpr *rt_part_id_expr = NULL;
@@ -899,7 +899,7 @@ int ObDmlCgService::generate_constraint_infos(ObLogInsert &op,
         LOG_WARN("fail to push_back", K(ret), KPC(expr));
       }
     }
-    //这里推导constraint_info->rowkey_expr_依赖的calc exprs
+    //Here we derive the calc exprs that constraint_info->rowkey_expr_ depends on
     if (OB_SUCC(ret)) {
       if (OB_FAIL(cg_.generate_calc_exprs(constraint_dep_exprs,
                                           constraint_raw_exprs,
@@ -967,7 +967,7 @@ int ObDmlCgService::generate_scan_ctdef(ObLogInsert &op,
   ObArray<ObRawExpr*> domain_id_raw_expr;
   ObArray<ObExpr *> domain_id_expr;
   uint64_t ref_table_id = index_dml_info.ref_table_id_;
-  // 主表的index_tid_和ref_table_id_都是一样的
+  // The index_tid_ and ref_table_id_ of the main table are the same
   scan_ctdef.ref_table_id_ = ref_table_id;
   const uint64_t tenant_id = MTL_ID();
   if (OB_ISNULL(op.get_plan()) ||
@@ -2615,7 +2615,7 @@ int ObDmlCgService::need_fire_update_event(const ObTableSchema &table_schema,
     need_fire = true;
   } else {
     need_fire = false;
-    // session只是为了传入sql mode？那应该传trigger info中记录的信息。
+    // session is just for passing sql mode? Then it should pass the information recorded in trigger info.
     ObParser parser(allocator, session.get_sql_mode());
     ParseResult parse_result;
     const ParseNode *update_columns_node = NULL;
@@ -2813,9 +2813,9 @@ int ObDmlCgService::convert_normal_triggers(ObLogDelUpd &log_op,
             ++cs_iter;
           }
         } else {
-          // instead trigger基于view, view可能由多个基表组成,所以每个column_id可能出现多次
-          // 所以这里不能认为column_id = OB_APP_MIN_COLUMN_ID + i, 直接让 col_idx = i,
-          // 因为前面保证了列顺序和view_schema一致
+          // instead trigger based on view, view may be composed of multiple base tables, so each column_id may appear multiple times
+          // So here we cannot assume that column_id = OB_APP_MIN_COLUMN_ID + i, directly let col_idx = i,
+          // Because the column order and view_schema are guaranteed to be consistent before this point
           col_idx = i;
         }
         LOG_DEBUG("debug trigger column", K(ret), K(is_hidden), K(i),
@@ -2913,7 +2913,7 @@ int ObDmlCgService::convert_normal_triggers(ObLogDelUpd &log_op,
       }
       if (is_forbid_parallel) {
         cg_.phy_plan_->set_has_nested_sql(true);
-        //为了支持触发器/UDF支持异常捕获，要求含有trigger的涉及修改表数据的dml串行执行
+        //To support exception capture for triggers/UDFs, DML statements involving table data modification with triggers must be executed serially
         cg_.phy_plan_->set_need_serial_exec(true);
         cg_.phy_plan_->set_contain_pl_udf_or_trigger(true);
       }
@@ -2943,14 +2943,14 @@ int ObDmlCgService::add_all_column_infos(ObLogDelUpd &op,
     } else {
       const int64_t table_id = column->get_table_id();
       const TableItem *table_item = stmt->get_table_item_by_id(table_id);
-      // 对于可更新视图，这里拿到的column expr是视图的输出。此时column expr中NOT_NULL_FLAG表示的是
-      // 视图的输出里这个column是否具有NOT NULL的性质，不再表示原始column expr在基表上的约束，因此需
-      // 要递归地从视图中获取基表的column expr，并根据基表的column expr判断是否column是否是NOT NULL的
+      // For updatable views, the column expr obtained here is the output of the view. At this time, NOT_NULL_FLAG in the column expr indicates that
+      // Whether this column in the view output has the NOT NULL property, it no longer indicates the constraint of the original column expr on the base table, therefore it needs
+      // Recursively get the column expr of the base table from the view, and determine if the column is NOT NULL based on the base table's column expr
       // e.g. create table t1 (c1 int default null);
       //      update (select c1 from t1 where c1 > 10) v set c1 = null;
-      //   这里t1.c1是NULLABLE的，但是视图v的输出中v.c1是NOT NULL的(因为视图中存在空值拒绝条件`c1 > 10`)
+      //   Here t1.c1 is NULLABLE, but the output of view v has v.c1 as NOT NULL (because there is a null rejection condition `c1 > 10` in the view)
       if (OB_ISNULL(table_item) || op.has_instead_of_trigger()) {
-        // 找不到说明column expr是shadow pk，直接从column中获取flag信息
+        // Can't find it means column expr is shadow pk, directly get flag info from column
       } else if ((table_item->is_generated_table() || table_item->is_temp_table()) &&
                  OB_FAIL(cg_.recursive_get_column_expr(column, *table_item))) {
         LOG_WARN("failed to recursive get column expr", K(ret));

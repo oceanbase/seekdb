@@ -30,8 +30,7 @@ using namespace share::detector;
 using namespace share;
 using namespace std;
 static ObDetectorUserReportInfo user_report_info;
-
-// 用户自定义的operation操作
+// User-defined operation operation
 class TestOperation {
 public:
   TestOperation(uint64_t hash) : hash_(hash) {
@@ -97,8 +96,7 @@ public:
   static vector<int> v_killed_node;
   static decltype(chrono::high_resolution_clock::now()) loop_occurd_time;
 };
-
-// 真实使用过程中注册和搭建依赖关系的时间点是随机的，通过随机休眠模拟使用场景
+// The timing of registration and setting up dependencies during actual use is random, through random sleep to simulate the usage scenario
 auto collect_callback = [](ObDetectorUserReportInfo& arg){ return arg.assign(user_report_info); };
 
 #define JUDGE_RECORDER(v1,v2,v3,v4,v5,v6,v7,v8)\
@@ -158,7 +156,7 @@ public:
     int64_t release_count_from_obj = mgr->get_detector_release_count();
     DETECT_LOG(INFO, "print count", K(release_count_from_mtl), K(release_count_from_obj));
     ASSERT_EQ(MTL(ObDeadLockDetectorMgr*)->get_detector_create_count(), MTL(ObDeadLockDetectorMgr*)->get_detector_release_count());
-    ASSERT_EQ(0, TestOperation::alive_count);// 预期用户创建的operation对象销毁
+    ASSERT_EQ(0, TestOperation::alive_count);// Expected user-created operation objects to be destroyed
     delete MTL(ObDeadLockDetectorMgr*);
   }
   template <typename T>
@@ -212,33 +210,32 @@ TEST_F(TestObDeadLockDetector, test_ObDetectorUserReportInfo) {
   }
   ASSERT_EQ(a[0], '2');
 }
-
-// 正常的注册key和注销key的流程
-// 测试重点：
-// 1，用户registrer_key后，对应的detector节点会创建，可以拿到对应的resource_id。
-// 2，用户ungister_key之后，对应的detector节点预期会被销毁。
-// 3，detector节点销毁之后，预期用户创建的operation对象也会被销毁。
+// Normal registration key and unregistration key process
+// Test focus:
+// 1, after the user registrer_key, the corresponding detector node will be created, and you can get the corresponding resource_id.
+// 2, after the user unregisters the key, the corresponding detector node is expected to be destroyed.
+// 3, after detector node is destroyed, expected user-created operation object will also be destroyed.
 TEST_F(TestObDeadLockDetector, register_ungister_key) {
-  // 由外层来构造自己的operation对象
+  // Construct your own operation object from the outer layer
   TestOperation* op = new TestOperation(7710038271457258879UL);
-  ASSERT_EQ(1, TestOperation::alive_count);// 用户创建了一个operation对象
-  ASSERT_EQ(OB_SUCCESS, MTL(ObDeadLockDetectorMgr*)->register_key(ObDeadLockTestIntKey(1), *op, collect_callback, 1));// 注册key
+  ASSERT_EQ(1, TestOperation::alive_count);// A user created an operation object
+  ASSERT_EQ(OB_SUCCESS, MTL(ObDeadLockDetectorMgr*)->register_key(ObDeadLockTestIntKey(1), *op, collect_callback, 1));// register key
   //JUDGE_RECORDER()
   auto call_back = get_detector_ptr(ObDeadLockTestIntKey(1));
-  ASSERT_EQ(1, MTL(ObDeadLockDetectorMgr*)->get_detector_create_count());// 预期同步创建出了一个detector对象
+  ASSERT_EQ(1, MTL(ObDeadLockDetectorMgr*)->get_detector_create_count());// Expected to synchronously create one detector object
   ObIDeadLockDetector *ptr = get_detector_ptr(ObDeadLockTestIntKey(1));
-  ASSERT_EQ(OB_SUCCESS, MTL(ObDeadLockDetectorMgr*)->unregister_key(ObDeadLockTestIntKey(1)));// 注销key
+  ASSERT_EQ(OB_SUCCESS, MTL(ObDeadLockDetectorMgr*)->unregister_key(ObDeadLockTestIntKey(1))); // unregister key
   delete op;
 }
-
-// 异常注册和注销key时的处理
-// 测试重点：
-// 1，
-// 2，同一类型的重复的key的注册应当失败。
-// 3，一个key在注册并且注销后，应当可以重新注册
-// 4，一个key在未注册的情况下，注销操作应当失败
-// 5，一个已经注册的key在已经注销的情况下，二次注销应当失败
-// 6, 在ObDeadLockDetectorMgr销毁的时候，还存在detector没有销毁，预期Mgr销毁后，所有创建的detector都销毁
+// Handling registration and deregistration of key during exceptions
+// Test focus:
+// 1,
+// 2, the registration of duplicate keys of the same type should fail.
+// 3, a key should be able to register again after registration and cancellation
+// 3, a key should be able to register again after registration and deregistration
+// 4, a key should fail to unregister if it has not been registered
+// 5, a registered key that has already been deregistered should fail on a second deregistration attempt
+// 6, When ObDeadLockDetectorMgr is destroyed, there are still detectors that have not been destroyed. It is expected that all created detectors will be destroyed after Mgr is destroyed.
 TEST_F(TestObDeadLockDetector, register_ungister_in_wrong_way) {
   // do not use rpc, will core dump
   TestOperation *op = new TestOperation(7710038271457258879UL);
@@ -246,82 +243,80 @@ TEST_F(TestObDeadLockDetector, register_ungister_in_wrong_way) {
   //auto &call_back = ((ObLCLNode*)(get_detector_ptr(ObDeadLockTestIntKey(12))))->get_detect_callback_();
   //TestOperation &op_cp = static_cast<ObFunction<int(const common::ObIArray<ObDetectorInnerReportInfo> &, const int64_t)>::Derived<TestOperation>*>(call_back.get_func_ptr())->func_;
   DETECT_LOG(INFO, "1");
-  ASSERT_NE(OB_SUCCESS, MTL(ObDeadLockDetectorMgr*)->register_key(ObDeadLockTestIntKey(12), *op, collect_callback, 1));// 2，同一类型的重复的key的注册应当失败
+  ASSERT_NE(OB_SUCCESS, MTL(ObDeadLockDetectorMgr*)->register_key(ObDeadLockTestIntKey(12), *op, collect_callback, 1));// 2, the registration of duplicate keys of the same type should fail
   DETECT_LOG(INFO, "2");
   ASSERT_EQ(OB_SUCCESS, MTL(ObDeadLockDetectorMgr*)->unregister_key(ObDeadLockTestIntKey(12)));
   DETECT_LOG(INFO, "3");
-  ASSERT_EQ(OB_SUCCESS, MTL(ObDeadLockDetectorMgr*)->register_key(ObDeadLockTestIntKey(12), *op, collect_callback, 1));// 3，一个key在注册并且注销后，应当可以重新注册
+  ASSERT_EQ(OB_SUCCESS, MTL(ObDeadLockDetectorMgr*)->register_key(ObDeadLockTestIntKey(12), *op, collect_callback, 1));// 3, a key should be able to be re-registered after registration and deregistration
   DETECT_LOG(INFO, "4");
-  ASSERT_NE(OB_SUCCESS, MTL(ObDeadLockDetectorMgr*)->unregister_key(ObDeadLockTestIntKey(13)));// 4，一个key在未注册的情况下，注销操作应当失败
+  ASSERT_NE(OB_SUCCESS, MTL(ObDeadLockDetectorMgr*)->unregister_key(ObDeadLockTestIntKey(13))); // 4, an unregistered key should fail to unregister
   DETECT_LOG(INFO, "5");
   cout << MTL(ObDeadLockDetectorMgr*)->get_detector_create_count() << " " << MTL(ObDeadLockDetectorMgr*)->get_detector_release_count();
   std::this_thread::sleep_for(chrono::milliseconds(100));
   ASSERT_EQ(OB_SUCCESS, MTL(ObDeadLockDetectorMgr*)->unregister_key(ObDeadLockTestIntKey(12)));
   DETECT_LOG(INFO, "6");
-  ASSERT_NE(OB_SUCCESS, MTL(ObDeadLockDetectorMgr*)->unregister_key(ObDeadLockTestIntKey(12)));// 5，一个已经注册的key在已经注销的情况下，二次注销应当失败
-  ASSERT_EQ(OB_SUCCESS, MTL(ObDeadLockDetectorMgr*)->register_key(ObDeadLockTestIntKey(12), *op, collect_callback, 1));// 6, 在ObDeadLockDetectorMgr销毁的时候，还存在detector没有销毁，预期Mgr销毁后，所有创建的detector都销毁
+  ASSERT_NE(OB_SUCCESS, MTL(ObDeadLockDetectorMgr*)->unregister_key(ObDeadLockTestIntKey(12))); // 5, a key that has already been registered should fail when unregistered again after being unregistered
+  ASSERT_EQ(OB_SUCCESS, MTL(ObDeadLockDetectorMgr*)->register_key(ObDeadLockTestIntKey(12), *op, collect_callback, 1));// 6, When ObDeadLockDetectorMgr is destroyed, there are still detectors that have not been destroyed. It is expected that all created detectors will be destroyed after Mgr is destroyed
   std::this_thread::sleep_for(chrono::microseconds(PERIOD * 2));
   delete op;
 }
-
-// block和activate的流程
-// 测试重点：
-// 1，block某个已经存在的key可以成功
-// 2，block一个已经block过的key返回失败
-// 3，可以block多个不同的已经存在的key
-// 4，block某个不存在的key返回失败
-// 5，activate某个block过的key可以成功
-// 6，重复activate一个key返回失败
-// 7，activate一个从未注册过的key返回失败
-// 8，activate一个不在block列表里但是已经注册过的key返回失败
+// block and activate process flow
+// Test focus:
+// 1, block an existing key can succeed
+// 2, block a key that has already been blocked returns failure
+// 3, can block multiple different existing keys
+// 4, block a non-existent key returns failure
+// 5, activate a blocked key can succeed
+// 6, repeat activate a key returns failure
+// 7, activate an unregistered key returns failure
+// 8, activate a key that is not in the block list but has already been registered returns failure
 TEST_F(TestObDeadLockDetector, block_and_activate) {
   TestOperation *op = new TestOperation(7710038271457258879UL);
-  // 注册第一个key
+  // Register the first key
   ASSERT_EQ(OB_SUCCESS, MTL(ObDeadLockDetectorMgr*)->register_key(ObDeadLockTestIntKey(1), *op, collect_callback, 1));
-  // 注册第二个key
+  // Register the second key
   ASSERT_EQ(OB_SUCCESS, MTL(ObDeadLockDetectorMgr*)->register_key(ObDeadLockTestIntKey(2), *op, collect_callback, 1));
-  // 注册第三个key
+  // Register the third key
   ASSERT_EQ(OB_SUCCESS, MTL(ObDeadLockDetectorMgr*)->register_key(ObDeadLockTestDoubleKey(3.0), *op, collect_callback, 1));
-  // 注册第四个key
+  // Register the fourth key
   ASSERT_EQ(OB_SUCCESS, MTL(ObDeadLockDetectorMgr*)->register_key(ObDeadLockTestDoubleKey(4.0), *op, collect_callback, 1));
-  // 为两个key搭建依赖关系
-  ASSERT_EQ(OB_SUCCESS, MTL(ObDeadLockDetectorMgr*)->block(ObDeadLockTestIntKey(1), ObDeadLockTestIntKey(2)));// 1，block某个已经存在的key可以成功
-  ASSERT_NE(OB_SUCCESS, MTL(ObDeadLockDetectorMgr*)->block(ObDeadLockTestIntKey(1), ObDeadLockTestIntKey(2)));// 2，block一个已经block过的key返回失败
-  ASSERT_EQ(OB_SUCCESS, MTL(ObDeadLockDetectorMgr*)->block(ObDeadLockTestIntKey(1), ObDeadLockTestDoubleKey(3.0)));// 3，可以block多个不同的已经存在的key
-  // ASSERT_NE(OB_SUCCESS, MTL(ObDeadLockDetectorMgr*)->block(ObDeadLockTestIntKey(1), ObDeadLockTestDoubleKey(5.0)));// 4，block某个不存在的key返回失败
-  ASSERT_EQ(OB_SUCCESS, MTL(ObDeadLockDetectorMgr*)->activate(ObDeadLockTestIntKey(1), ObDeadLockTestIntKey(2)));// 5，activate某个block过的key可以成功
-  ASSERT_NE(OB_SUCCESS, MTL(ObDeadLockDetectorMgr*)->activate(ObDeadLockTestIntKey(1), ObDeadLockTestIntKey(2)));// 6，重复activate一个key返回失败
-  ASSERT_NE(OB_SUCCESS, MTL(ObDeadLockDetectorMgr*)->activate(ObDeadLockTestIntKey(1), ObDeadLockTestDoubleKey(5.0)));// 7，activate一个从未注册过的key返回失败
-  ASSERT_NE(OB_SUCCESS, MTL(ObDeadLockDetectorMgr*)->activate(ObDeadLockTestIntKey(1), ObDeadLockTestDoubleKey(4.0)));// 8，activate一个不在block列表里但是已经注册过的key返回失败
+  // Set up dependency relationship for two keys
+  ASSERT_EQ(OB_SUCCESS, MTL(ObDeadLockDetectorMgr*)->block(ObDeadLockTestIntKey(1), ObDeadLockTestIntKey(2)));// 1, block an already existing key can succeed
+  ASSERT_NE(OB_SUCCESS, MTL(ObDeadLockDetectorMgr*)->block(ObDeadLockTestIntKey(1), ObDeadLockTestIntKey(2)));// 2, block an already blocked key returns failure
+  ASSERT_EQ(OB_SUCCESS, MTL(ObDeadLockDetectorMgr*)->block(ObDeadLockTestIntKey(1), ObDeadLockTestDoubleKey(3.0)));// 3, can block multiple different existing keys
+  // ASSERT_NE(OB_SUCCESS, MTL(ObDeadLockDetectorMgr*)->block(ObDeadLockTestIntKey(1), ObDeadLockTestDoubleKey(5.0))); // 4, block a non-existent key returns failure
+  ASSERT_EQ(OB_SUCCESS, MTL(ObDeadLockDetectorMgr*)->activate(ObDeadLockTestIntKey(1), ObDeadLockTestIntKey(2)));// 5, activate a blocked key can succeed
+  ASSERT_NE(OB_SUCCESS, MTL(ObDeadLockDetectorMgr*)->activate(ObDeadLockTestIntKey(1), ObDeadLockTestIntKey(2)));// 6, duplicate activate a key returns failure
+  ASSERT_NE(OB_SUCCESS, MTL(ObDeadLockDetectorMgr*)->activate(ObDeadLockTestIntKey(1), ObDeadLockTestDoubleKey(5.0))); // 7, activate an unregistered key returns failure
+  ASSERT_NE(OB_SUCCESS, MTL(ObDeadLockDetectorMgr*)->activate(ObDeadLockTestIntKey(1), ObDeadLockTestDoubleKey(4.0))); // 8, activate a key that is not in the block list but has already been registered returns failure
   delete op;
 }
-
-// 测试死锁的探测功能
-// 测试重点：
-// 1，未形成死锁时不会探测到死锁
-// 2，形成死锁后在一定时间内可以探测到死锁，探测时间不超过(节点数+1)*Transmit间隔
+// Test the deadlock detection function
+// Test focus:
+// 1, deadlock will not be detected when deadlock has not formed
+// 2, After a deadlock is formed, it can be detected within a certain period of time, the detection time does not exceed (number of nodes + 1) * Transmit interval
 TEST_F(TestObDeadLockDetector, dead_lock) {
   int loop_times = 5;
   std::srand(std::time(nullptr));
-  for (int i = 0; i < loop_times; ++i) {// 进行多次测试，看探测时延的最大、最小、平均值
+  for (int i = 0; i < loop_times; ++i) {// perform multiple tests to see the maximum, minimum, and average values of detection latency
     int index = i * 5;
     std::this_thread::sleep_for(chrono::milliseconds(std::rand() % 300));
-    // 注册第一个key
+    // register the first key
     // TestOperation *op1 = new TestOperation(ObDeadLockTestIntKey(index + 1));
     // ASSERT_EQ(OB_SUCCESS, MTL(ObDeadLockDetectorMgr*)->register_key(ObDeadLockTestIntKey(index + 1), *op1, collect_callback, 1, std::rand() % 100));
-    // 注册第二个key
+    // register the second key
     TestOperation *op2 = new TestOperation(ObDeadLockTestIntKey(index + 2));
     ASSERT_EQ(OB_SUCCESS, MTL(ObDeadLockDetectorMgr*)->register_key(ObDeadLockTestIntKey(index + 2), *op2, collect_callback, 1, std::rand() % 100));
-    // 注册第三个key
+    // Register the third key
     TestOperation *op3 = new TestOperation(ObDeadLockTestIntKey(index + 3));
     ASSERT_EQ(OB_SUCCESS, MTL(ObDeadLockDetectorMgr*)->register_key(ObDeadLockTestIntKey(index + 3), *op3, collect_callback, 1, std::rand() % 100));
-    // 注册第四个key
+    // Register the fourth key
     TestOperation *op4 = new TestOperation(ObDeadLockTestIntKey(index + 4));
     ASSERT_EQ(OB_SUCCESS, MTL(ObDeadLockDetectorMgr*)->register_key(ObDeadLockTestIntKey(index + 4), *op4, collect_callback, 1, std::rand() % 100));
-    // 注册第五个key
+    // Register the fifth key
     TestOperation *op5 = new TestOperation(ObDeadLockTestIntKey(index + 5));
     ASSERT_EQ(OB_SUCCESS, MTL(ObDeadLockDetectorMgr*)->register_key(ObDeadLockTestIntKey(index + 5), *op5, collect_callback, 1, std::rand() % 100));
-    // 为两个key搭建依赖关系
+    // Set up dependency relationship for two keys
     // ASSERT_EQ(OB_SUCCESS, MTL(ObDeadLockDetectorMgr*)->block(ObDeadLockTestIntKey(index + 1), ObDeadLockTestIntKey(index + 2)));
     ASSERT_EQ(OB_SUCCESS, MTL(ObDeadLockDetectorMgr*)->add_parent(ObDeadLockTestIntKey(index + 2), GCTX.self_addr(), ObDeadLockTestIntKey(index + 1)));
     ASSERT_EQ(OB_SUCCESS, MTL(ObDeadLockDetectorMgr*)->block(ObDeadLockTestIntKey(index + 2), ObDeadLockTestIntKey(index + 3)));
@@ -336,9 +331,9 @@ TEST_F(TestObDeadLockDetector, dead_lock) {
     delete op3;
     delete op4;
     delete op5;
-    ASSERT_EQ(i + 1, TestOperation::v_killed_node.size());// 一个环中只能有一个节点探测到死锁
+    ASSERT_EQ(i + 1, TestOperation::v_killed_node.size());// Only one node can detect deadlock in a cycle
   }
-  ASSERT_EQ(loop_times, TestOperation::v_killed_node.size());// 一个环中只能有一个节点探测到死锁
+  ASSERT_EQ(loop_times, TestOperation::v_killed_node.size());// Only one node can detect deadlock in a loop
   ASSERT_EQ(loop_times, TestOperation::v_record_is_lowest_priority.size());
   for (int i = 0; i < TestOperation::v_record_is_lowest_priority.size(); ++i)
     ASSERT_EQ(true, TestOperation::v_record_is_lowest_priority[i]);
@@ -383,25 +378,25 @@ TEST_F(TestObDeadLockDetector, test_timeout) {
 
 // 1 -> 5 -> 3 -> 4 -> 1
 // 1 -> 2 - > 3 -> 4 -> 1
-// 2 有全局最小优先级
+// 2 has global minimum priority
 TEST_F(TestObDeadLockDetector, small_cycle_in_big_cycle_bad_case) {
   int loop_times = 5;
-  // 注册第一个key
+  // Register the first key
   TestOperation *op1 = new TestOperation(ObDeadLockTestIntKey(1));
   ASSERT_EQ(OB_SUCCESS, MTL(ObDeadLockDetectorMgr*)->register_key(ObDeadLockTestIntKey(1), *op1, collect_callback, 9));
-  // 注册第二个key
+  // Register the second key
   TestOperation *op2 = new TestOperation(ObDeadLockTestIntKey(2));
   ASSERT_EQ(OB_SUCCESS, MTL(ObDeadLockDetectorMgr*)->register_key(ObDeadLockTestIntKey(2), *op2, collect_callback, 0));// should kill this node
-  // 注册第三个key
+  // Register the third key
   TestOperation *op3 = new TestOperation(ObDeadLockTestIntKey(3));
   ASSERT_EQ(OB_SUCCESS, MTL(ObDeadLockDetectorMgr*)->register_key(ObDeadLockTestIntKey(3), *op3, collect_callback, 9));
-  // 注册第四个key
+  // Register the fourth key
   TestOperation *op4 = new TestOperation(ObDeadLockTestIntKey(4));
   ASSERT_EQ(OB_SUCCESS, MTL(ObDeadLockDetectorMgr*)->register_key(ObDeadLockTestIntKey(4), *op4, collect_callback, 9));
-  // 注册第五个key
+  // Register the fifth key
   TestOperation *op5 = new TestOperation(ObDeadLockTestIntKey(5));
   ASSERT_EQ(OB_SUCCESS, MTL(ObDeadLockDetectorMgr*)->register_key(ObDeadLockTestIntKey(5), *op5, collect_callback, 1));
-  // 为两个key搭建依赖关系
+  // Set up dependency relationship for two keys
   // ASSERT_EQ(OB_SUCCESS, MTL(ObDeadLockDetectorMgr*)->block(ObDeadLockTestIntKey(index + 1), ObDeadLockTestIntKey(index + 2)));
   ASSERT_EQ(OB_SUCCESS, MTL(ObDeadLockDetectorMgr*)->block(ObDeadLockTestIntKey(1), ObDeadLockTestIntKey(5)));
   ASSERT_EQ(OB_SUCCESS, MTL(ObDeadLockDetectorMgr*)->block(ObDeadLockTestIntKey(5), ObDeadLockTestIntKey(3)));

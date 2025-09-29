@@ -110,7 +110,7 @@ int IndexDMLInfo::init_assignment_info(const ObAssignments &assignments,
   assignments_.reset();
   for (int64_t i = 0; OB_SUCC(ret) && i < assignments.count(); ++i) {
     if (has_exist_in_array(column_exprs_, assignments.at(i).column_expr_)) {
-      //将更新表达式的index添加到index info中，表示该index跟assignment有关
+      // Add the index of the update expression to the index info, indicating that this index is related to the assignment
       if (OB_FAIL(assignments_.push_back(assignments.at(i)))) {
         LOG_WARN("add assignment index to assign info failed", K(ret));
       }
@@ -144,10 +144,10 @@ int IndexDMLInfo::get_rowkey_exprs(ObIArray<ObRawExpr *> &rowkey, bool need_spk)
 
 int IndexDMLInfo::init_column_convert_expr(const ObAssignments &assignments)
 {
-  // 将 col1 = expr1 这种表达式中的 expr1 放到 column_convert_exprs
-  // 中，用于后面的插入操作
+  // Put expr1 in the expression col1 = expr1 into column_convert_exprs
+  // , used for the subsequent insert operation
   int ret = OB_SUCCESS;
-  int found = 0; // 在 assignment 中找到匹配表达式的个数
+  int found = 0; // The number of matching expressions found in the assignment
   column_convert_exprs_.reset();
   for (int i = 0; OB_SUCC(ret) && i < column_exprs_.count(); ++i) {
     ObRawExpr *insert_expr = column_exprs_.at(i);
@@ -379,7 +379,7 @@ int ObLogDelUpd::allocate_granule_post(AllocGIContext &ctx)
   if (OB_ISNULL(get_plan())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(ret));
-  } else if (OB_FAIL(pw_allocate_granule_post(ctx))){ // 分配完GI以后，会对ctx的状态进行清理
+  } else if (OB_FAIL(pw_allocate_granule_post(ctx))){ // After allocating GI, the status of ctx will be cleaned up
     LOG_WARN("failed to allocate pw gi post", K(ret));
   } else {
     if (is_partition_wise_state && ctx.is_op_set_pw(this)) {
@@ -393,7 +393,7 @@ int ObLogDelUpd::allocate_granule_post(AllocGIContext &ctx)
           // do nothing
           set_gi_above(true);
         } else {
-          // tsc op与当前dml算子都需要set gi above
+          // tsc op and current dml operator both need to set gi above
           ARRAY_FOREACH(tsc_ops, idx) {
             ObLogTableScan *tsc_op = static_cast<ObLogTableScan*>(tsc_ops.at(idx));
             tsc_op->set_gi_above(true);
@@ -415,9 +415,9 @@ int ObLogDelUpd::allocate_granule_post(AllocGIContext &ctx)
 int ObLogDelUpd::generate_pdml_partition_id_expr()
 {
   int ret = OB_SUCCESS;
-  // pdml 分配 partition id expr
-  // 1. 如果当前pdml op对应的表是非分区表，就不分配partition id expr
-  // 2. 如果当前pdml op对应的表是分区表，就分配partition id expr
+  // pdml assign partition id expr
+  // 1. If the table corresponding to the current pdml op is a non-partitioned table, do not allocate partition id expr
+  // 2. If the table corresponding to the current pdml op is a partitioned table, allocate partition id expr
   uint64_t table_id = OB_INVALID_ID;
   ObOpPseudoColumnRawExpr *partition_id_expr = nullptr;
   ObLogExchange *producer = NULL;
@@ -486,23 +486,23 @@ int ObLogDelUpd::find_pdml_part_id_producer(ObLogicalOperator *op,
   } else if (op->is_dml_operator()) {
     // for pdml insert split by update, generate partition id by exchange above delete
   } else if (op->get_type() == log_op_def::LOG_TABLE_SCAN) {
-    // PDML partition id expr在table scan分配的逻辑
-    // pdml table scan分配partition id expr的producer
-    // table scan中分配partition id expr的producer的逻辑比较特殊：
-    //  分配partition id的时候，需要保证partition id expr对应的table id与table
-    // scan的table id是相同的
-    //  对应insert的dml操作，例如：insert into t1 select from t1，
-    //  产生的计划如下：
+    // PDML partition id expr allocation logic in table scan
+    // pdml table scan assign partition id expr's producer
+    // The logic of the producer that allocates partition id expr in table scan is special:
+    //  Assign partition id when, need to ensure partition id expr corresponding table id with table
+    // scan's table id is the same
+    //  Corresponding insert DML operation, for example: insert into t1 select from t1,
+    //  The generated plan is as follows:
     //      insert
     //        subplan
     //          GI
     //            TSC
     //            ....
     //
-    // 这种情况下，如果给TSC算子分配partition idexpr，那么根据表达式分配的框架，
-    // 其会被裁剪掉，因此目前insert与subplan之间会添加一个EX算子.
-    // 后期会进行优化，如果insert与subplan是一个full partition wise
-    // join，那么就在insert算子上分配一个GI算子，目前先使用在subplan上分配EX算子的方式实现
+    // In this case, if the partition idexpr is assigned to the TSC operator, then according to the framework of expression-based allocation,
+    // It will be trimmed, therefore an EX operator will be added between insert and subplan currently.
+    // Later will be optimized, if insert with subplan is a full partition wise
+    // join, then allocate a GI operator on the insert operator, currently implemented by allocating an EX operator on the subplan
     ObLogTableScan *tsc = static_cast<ObLogTableScan*>(op);
     if (loc_tid == tsc->get_table_id() &&
         ref_tid == (tsc->get_is_index_global() ? tsc->get_index_table_id() : tsc->get_ref_table_id())) {

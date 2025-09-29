@@ -308,7 +308,7 @@ TEST_F(TestCodeGenerator, basic_test)
   of_result.close();
   // verify results
   UNUSED(result_file);
-  // TODO @ banliu.zyd: case有问题，暂时注释
+  // TODO @ banliu.zyd: case has a problem, temporarily commented out
   // ASSERT_NO_FATAL_FAILURE(TestSqlUtils::is_equal_content(tmp_file, result_file));
 }
 }

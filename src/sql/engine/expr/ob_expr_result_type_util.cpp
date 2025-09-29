@@ -476,15 +476,15 @@ int CHECK_STRING_RES_TYPE_ORACLE(const ObExprResType &type)
 }
 
 /**
- * @brief Oracle 模式专用
- * 在表达式类型推导时，如果参数需要被隐式转化为字符串类型，那么使用该函数可以获得参数转化为字符串之后的最大长度。
- * 比如参数为 date，那么根据nls_date_format的不同，可以推导出不同的长度。
- * TODO: 常量的长度推导还需要优化，目前推导结果是过长的
- * @param dtc_params 类型转换信息，通过 type_ctx.get_session()->get_dtc_params() 获取
- * @param orig_type 被转化的参数类型
- * @param target_type 目标类型
- * @param length 推导出的最大长度，语义和 target_type 中的长度语义匹配
- * @param calc_ls 当参数的长度语义需要和结果不同时，可以显示指定，例如replace、translate表达式
+ * @brief Oracle mode specific
+ * In expression type inference, if the parameter needs to be implicitly converted to a string type, this function can be used to obtain the maximum length of the parameter after conversion to a string.
+ * For example, if the parameter is a date, then different lengths can be inferred based on the different nls_date_format settings.
+ * TODO: The length inference for constants still needs optimization; the current inference result is too long.
+ * @param dtc_params Type conversion information, obtained through type_ctx.get_session()->get_dtc_params()
+ * @param orig_type The type of the parameter being converted
+ * @param target_type The target type
+ * @param length The inferred maximum length, with semantics matching the length semantics in target_type
+ * @param calc_ls When the length semantics of the parameter need to differ from the result, it can be explicitly specified, for example, in replace, translate expressions
  * @return ret
  */
 int ObExprResultTypeUtil::deduce_max_string_length_oracle(const ObDataTypeCastParams &dtc_params,

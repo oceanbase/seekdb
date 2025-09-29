@@ -45,11 +45,10 @@ struct ObExprCallDepth
   int64_t max_call_depth_;
   int64_t checked_parent_cnt_;
 };
-
-// 1. 将所有raw exprs展开
+// 1. Expand all raw exprs
 //    cg: c1 + 1, c1 + c2  ==>  c1, 1, c1 + 1, c2, c1 + c2
-// 2. 构造ObExpr, 并将ObExpr对应设置到对应ObRawExpr中
-// 3. 初始化ObExpr所有成员, 并返回Frame相关信息
+// 2. Construct ObExpr, and set the corresponding ObExpr to the corresponding ObRawExpr
+// 3. Initialize all members of ObExpr, and return Frame related information
 int ObStaticEngineExprCG::generate(const ObRawExprUniqueSet &all_raw_exprs,
                                    ObExprFrameInfo &expr_info)
 {
@@ -203,8 +202,7 @@ ObExpr *ObStaticEngineExprCG::get_rt_expr(const ObRawExpr &raw_expr)
 {
   return raw_expr.rt_expr_;
 }
-
-// 构造ObExpr, 并将ObExpr对应设置到对应ObRawExpr中
+// Construct ObExpr, and set the corresponding ObExpr to the corresponding ObRawExpr
 int ObStaticEngineExprCG::construct_exprs(const ObIArray<ObRawExpr *> &raw_exprs,
                                           ObIArray<ObExpr> &rt_exprs)
 {
@@ -225,7 +223,7 @@ int ObStaticEngineExprCG::cg_exprs(const ObIArray<ObRawExpr *> &raw_exprs,
                                   ObExprFrameInfo &expr_info)
 {
   int ret = OB_SUCCESS;
-  // 此处判空后, cg_exprs调用的所有私有函数不再对raw_expr和rt_expr判空
+  // After this null check, all private functions called by cg_exprs no longer check raw_expr and rt_expr for null
   for (int64_t i = 0; OB_SUCC(ret) && i < raw_exprs.count(); i++) {
     ObExpr *rt_expr = NULL;
     if (OB_ISNULL(raw_exprs.at(i))
@@ -645,8 +643,7 @@ int ObStaticEngineExprCG::cg_all_frame_layout(const ObIArray<ObRawExpr *> &raw_e
 
   return ret;
 }
-
-// 将表达式按所属frame类型分成4类
+// Divide the expression into 4 categories based on its frame type
 int ObStaticEngineExprCG::classify_exprs(const ObIArray<ObRawExpr *> &raw_exprs,
                                         ObIArray<ObRawExpr *> &const_exprs,
                                         ObIArray<ObRawExpr *> &param_exprs,
@@ -681,8 +678,7 @@ int ObStaticEngineExprCG::classify_exprs(const ObIArray<ObRawExpr *> &raw_exprs,
   }
   return ret;
 }
-
-// 初始化const expr在frame中布局
+// Initialize const expr layout in frame
 int ObStaticEngineExprCG::cg_const_frame_layout(const ObIArray<ObRawExpr *> &const_exprs,
                                                int64_t &frame_index_pos,
                                                ObIArray<ObFrameInfo> &frame_info_arr)
@@ -720,11 +716,10 @@ void ObStaticEngineExprCG::get_param_frame_idx(const int64_t idx,
     datum_idx = (idx - original_param_cnt_) % cnt_per_frame;
   }
 }
-
-// 初始化param frame内存布局, 不需要有res_buf_, 在生成param frame时, 均使用动态分配的内存;
-// 1. 根据param_expr, 找到该表达式在param store中下标
-// 2. 根据param store下标初始化ObExpr中frame布局frame_idx_, datum_off_
-// 3. 初始化每个frame的ObFrameInfo
+// Initialize param frame memory layout, no need for res_buf_, when generating param frame, always use dynamically allocated memory;
+// 1. According to param_expr, find the index of this expression in param store
+// 2. Initialize ObExpr's frame layout frame_idx_, datum_off_ according to the index of param store
+// 3. Initialize each frame's ObFrameInfo
 int ObStaticEngineExprCG::cg_param_frame_layout(const ObIArray<ObRawExpr *> &param_exprs,
                                                int64_t &frame_index_pos,
                                                ObIArray<ObFrameInfo> &frame_info_arr)
@@ -770,11 +765,11 @@ int ObStaticEngineExprCG::cg_param_frame_layout(const ObIArray<ObRawExpr *> &par
         }
         rt_expr->res_buf_off_ = 0;
         rt_expr->res_buf_len_ = 0;
-        // 对于T_QUESTIONMARK的param表达式, 使用extra_记录其实际value在
-        // datam_param_store中下标,  通过该下标, 在执行期可以访问
-        // datum_param_store中存放的信息,
-        // 当前使用场景是在ObExprValuesOp中进行动态cast时,
-        // 可以通过该下标最终获取参数化后原始参数值的类型;
+        // For the param expression of T_QUESTIONMARK, use extra_ to record its actual value in
+        // index in datam_param_store, through this index, it can be accessed during execution
+        // information stored in datum_param_store,
+        // The current usage scenario is during dynamic cast in ObExprValuesOp,
+        // can be used to obtain the type of the original parameter value after parameterization;
         if (is_dynamic_eval_qm(*param_exprs.at(i))) {
           // already set in `cg_expr_by_operator`
         } else {
@@ -784,7 +779,7 @@ int ObStaticEngineExprCG::cg_param_frame_layout(const ObIArray<ObRawExpr *> &par
     }
   }
   if (OB_SUCC(ret) && !param_exprs.empty()) {
-    // 就进行param frame内存分配及初始化;
+    // Just perform param frame memory allocation and initialization;
     int64_t total = param_cnt_;
     int64_t frame_cnt = 0;
     if (total > 0) {
@@ -814,14 +809,13 @@ int ObStaticEngineExprCG::cg_param_frame_layout(const ObIArray<ObRawExpr *> &par
 
   return ret;
 }
-
-// 初始化dynamic param expr在frame中布局
+// Initialize dynamic param expr layout in frame
 int ObStaticEngineExprCG::cg_dynamic_frame_layout(const ObIArray<ObRawExpr *> &exprs,
                                                   int64_t &frame_index_pos,
                                                   ObIArray<ObFrameInfo>& frame_info_arr)
 {
   const bool reserve_empty_string = false;
-  //需要保证continuous_datum = true， 因为在expr_frame_info中将所有datum预先置为null
+  // Need to ensure continuous_datum = true, because all datum are pre-set to null in expr_frame_info
   const bool continuous_datum = true;
   return cg_frame_layout(exprs,
                          reserve_empty_string,
@@ -829,8 +823,7 @@ int ObStaticEngineExprCG::cg_dynamic_frame_layout(const ObIArray<ObRawExpr *> &e
                          frame_index_pos,
                          frame_info_arr);
 }
-
-// 初始化非const和param expr在frame中布局
+// Initialize non-const and param expr layout in frame
 int ObStaticEngineExprCG::cg_datum_frame_layouts(const ObIArray<ObRawExpr *> &exprs,
                                                 int64_t &frame_index_pos,
                                                 ObIArray<ObFrameInfo>& frame_info_arr)
@@ -897,11 +890,11 @@ int ObStaticEngineExprCG::cg_frame_layout(const ObIArray<ObRawExpr *> &exprs,
                                           ObIArray<ObFrameInfo>& frame_info_arr)
 {
   int ret = OB_SUCCESS;
-  int64_t start_pos = 0; // frame中第一个expr在rt_exprs中偏移
+  int64_t start_pos = 0; // offset of the first expr in rt_exprs within the frame
   int64_t frame_expr_cnt = 0;
   int64_t frame_size = 0;
   int32_t frame_idx = 0;
-  //获取每个frame size, expr cnt, frame_idx, 以及涉及的expr在该类expr中的偏移
+  // Get each frame size, expr cnt, frame_idx, as well as the offset of the involved expr in this class of expr
   ObSEArray<TmpFrameInfo, 4> tmp_frame_infos;
   //init res_buf_len_
   for (int64_t i = 0; OB_SUCC(ret) && i < exprs.count(); i++) {
@@ -910,8 +903,8 @@ int ObStaticEngineExprCG::cg_frame_layout(const ObIArray<ObRawExpr *> &exprs,
                                                       rt_expr->datum_meta_.precision_);
     if (ObDynReserveBuf::supported(rt_expr->datum_meta_.type_)) {
       if (!reserve_empty_string) {
-        // 有的表达式没有设置accuracy的length，这里的max_length_就是默认的-1
-        // 负数的情况下，对于string的res_buf_len_依然使用def_res_len
+        // Some expressions do not set the accuracy length, here max_length_ is the default -1
+        // In the case of a negative number, for string's res_buf_len_ still use def_res_len
         if (rt_expr->max_length_ > 0) {
           rt_expr->res_buf_len_ = min(def_res_len,
                                       static_cast<uint32_t>(rt_expr->max_length_));
@@ -960,7 +953,7 @@ int ObStaticEngineExprCG::cg_frame_layout(const ObIArray<ObRawExpr *> &exprs,
       }
     }
   } // for end
-  //将最后一个frame加到tmp_frame_infos中
+  // Add the last frame to tmp_frame_infos
   if (OB_SUCC(ret) && 0 != frame_size) {
     if (OB_FAIL(tmp_frame_infos.push_back(TmpFrameInfo(start_pos,
                                                        frame_expr_cnt,
@@ -972,7 +965,7 @@ int ObStaticEngineExprCG::cg_frame_layout(const ObIArray<ObRawExpr *> &exprs,
       LOG_WARN("fail to push frame_size", K(ret), K(frame_size));
     }
   }
-  //初始化每个ObExpr中frame_idx, datum_off_, res_buf_off_
+  // Initialize each ObExpr's frame_idx, datum_off_, res_buf_off_
   for (int64_t idx = 0; OB_SUCC(ret) && idx < tmp_frame_infos.count(); idx++) {
     const ObFrameInfo &frame = tmp_frame_infos.at(idx).frame_info_;
     int64_t expr_start_pos = tmp_frame_infos.at(idx).expr_start_pos_;
@@ -1291,8 +1284,7 @@ int ObStaticEngineExprCG::arrange_datums_data(ObIArray<ObRawExpr *> &exprs,
   }
   return ret;
 }
-
-// 分配常量表达式frame内存, 并初始化
+// Allocate constant expression frame memory, and initialize
 int ObStaticEngineExprCG::alloc_const_frame(const ObIArray<ObRawExpr *> &exprs,
                                             const ObIArray<ObFrameInfo> &const_frames,
                                             ObIArray<char *> &frame_ptrs)
@@ -1595,7 +1587,7 @@ int ObStaticEngineExprCG::create_tmp_frameinfo(const common::ObIArray<ObRawExpr 
   int64_t frame_size = 0;
   int64_t zero_init_pos = 0;
   int64_t zero_init_size = 0;
-  int64_t initial_expr_id = 0; // frame中第一个expr在rt_exprs数组中id
+  int64_t initial_expr_id = 0; // id of the first expr in the rt_exprs array in frame
   for (int64_t expr_idx = 0; OB_SUCC(ret) && expr_idx < raw_exprs.count(); expr_idx++) {
     ObExpr *rt_expr = get_rt_expr(*raw_exprs.at(expr_idx));
     const int64_t expr_datums_size = get_expr_datums_size(*rt_expr);

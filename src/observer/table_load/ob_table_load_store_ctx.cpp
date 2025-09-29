@@ -92,7 +92,7 @@ ObTableLoadStoreCtx::~ObTableLoadStoreCtx()
 
 void ObTableLoadStoreCtx::destroy()
 {
-  // 先让工作线程停下来
+  // First let the worker thread stop
   if (nullptr != write_ctx_.pre_sorter_) {
     write_ctx_.pre_sorter_->stop();
   }
@@ -111,7 +111,7 @@ void ObTableLoadStoreCtx::destroy()
   if (OB_NOT_NULL(dag_task_scheduler_)) {
     dag_task_scheduler_->wait();
   }
-  // 按顺序析构对象, 被依赖的最后析构
+  // Destruct objects in order, dependencies are destructed last
   if (nullptr != dag_exec_ctx_.dag_) {
     dag_exec_ctx_.dag_->~ObTableLoadDag();
     allocator_.free(dag_exec_ctx_.dag_);
@@ -530,7 +530,7 @@ int ObTableLoadStoreCtx::init_sort_param()
   // sort params
   int64_t wa_mem_limit = 0;
   if (ctx_->param_.exe_mode_ == ObTableLoadExeMode::MAX_TYPE) {
-    // 无资源控制模式
+    // No resource control mode
     if (OB_FAIL(ObTableLoadService::get_memory_limit(wa_mem_limit))) {
       LOG_WARN("fail to get memory limit", KR(ret));
     } else if (wa_mem_limit < ObDirectLoadMemContext::MIN_MEM_LIMIT) {
@@ -550,7 +550,7 @@ int ObTableLoadStoreCtx::init_sort_param()
       heap_table_mem_chunk_size_ = wa_mem_limit / thread_cnt_;
     }
   } else {
-    // 资源控制模式
+    // Resource control mode
     wa_mem_limit = ctx_->param_.avail_memory_;
     merge_count_per_round_ =
       min(wa_mem_limit / basic_table_data_desc_.sstable_data_block_size_ / thread_cnt_,
@@ -595,20 +595,20 @@ int ObTableLoadStoreCtx::init_write_ctx()
     }
     // is_fast_heap_table_, is_multiple_mode_
     switch (ctx_->param_.exe_mode_) {
-      // 堆表快速写入
+      // Heap table fast write
       case ObTableLoadExeMode::FAST_HEAP_TABLE:
         write_ctx_.is_fast_heap_table_ = true;
         break;
-      // 有主键表不排序
+      // Table with primary key does not need sorting
       case ObTableLoadExeMode::GENERAL_TABLE_COMPACT:
         break;
-      // 堆表排序
+      // heap table sort
       case ObTableLoadExeMode::MULTIPLE_HEAP_TABLE_COMPACT:
-      // 有主键表排序
+      // Table with primary key sorting
       case ObTableLoadExeMode::MEM_COMPACT:
         write_ctx_.is_multiple_mode_ = true;
         break;
-      // 无资源控制
+      // No resource control
       case ObTableLoadExeMode::MAX_TYPE: {
         const int64_t part_cnt = data_store_table_ctx_->ls_partition_ids_.count();
         int64_t wa_mem_limit = 0;
@@ -621,18 +621,18 @@ int ObTableLoadStoreCtx::init_write_ctx()
           int64_t part_mem_size = 0;
           if (!data_store_table_ctx_->schema_->is_column_store() ||
               ObDirectLoadMethod::is_incremental(ctx_->param_.method_)) {
-            // 行存
+            // row storage
             part_mem_size = MACRO_BLOCK_WRITER_MEM_SIZE;
           } else {
-            // 列存
+            // column store
             part_mem_size = data_store_table_ctx_->schema_->cg_cnt_ * cg_chunk_mem_limit * 10;
           }
           const int64_t bucket_cnt = MAX(1, wa_mem_limit / (thread_cnt_ * part_mem_size));
           if (part_cnt <= bucket_cnt || !ctx_->param_.need_sort_) {
-            // 堆表快速写入
+            // Fast write to heap table
             write_ctx_.is_fast_heap_table_ = true;
           } else {
-            // 堆表排序
+            // heap table sort
             write_ctx_.is_multiple_mode_ = true;
           }
         } else {
@@ -675,7 +675,7 @@ int ObTableLoadStoreCtx::init_write_ctx()
                                                       table_schema))) {
         LOG_WARN("fail to get table schema", KR(ret), K(ctx_->param_));
       }
-      // mysql模式下SQL执行计划会包含虚拟生成列
+      // In MySQL mode, the SQL execution plan will include virtual generated columns
       else if (OB_FAIL(table_schema->get_column_ids(col_descs, lib::is_oracle_mode()/*no_virtual*/))) {
         LOG_WARN("fail to get column ids", KR(ret));
       } else if (OB_FAIL(ObTableLoadSchema::prepare_col_descs(table_schema, col_descs))) {
@@ -693,19 +693,19 @@ int ObTableLoadStoreCtx::init_write_ctx()
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("unexpected col schema is null", KR(ret), K(col_desc));
           }
-          // SQL执行计划包含隐藏主键列、虚拟生成列以及其他普通列
+          // SQL execution plan includes hidden primary key columns, virtual generated columns, and other ordinary columns
           else if (OB_FAIL(write_ctx_.px_column_descs_.push_back(col_desc))) {
             LOG_WARN("fail to push back", KR(ret));
           } else if (OB_FAIL(write_ctx_.px_column_accuracys_.push_back(col_schema->get_accuracy()))) {
             LOG_WARN("fail to push back", KR(ret));
           }
-          // 存储层不写虚拟生成列
+          // Storage layer does not write virtual generated columns
           else if (col_schema->is_virtual_generated_column()) {
             if (OB_FAIL(write_ctx_.px_column_project_idxs_.push_back(-1))) {
               LOG_WARN("fail to push back", KR(ret));
             }
           } else {
-            // 旁路不接收隐藏主键列
+            // Bypass does not receive hidden primary key column
             if (ObColumnSchemaV2::is_hidden_pk_column_id(col_desc.col_id_)) {
               if (OB_FAIL(write_ctx_.px_column_project_idxs_.push_back(-1))) {
                 LOG_WARN("fail to push back", KR(ret));
@@ -749,7 +749,7 @@ int ObTableLoadStoreCtx::init_write_ctx()
         }
       }
     }
-    // 堆表快速写入需要提前创建insert_table_ctx
+    // Heap table fast write requires pre-creating insert_table_ctx
     if (OB_SUCC(ret) && write_ctx_.is_fast_heap_table_) {
       if (ObDirectLoadMethod::is_incremental(ctx_->param_.method_) &&
           OB_FAIL(init_trans_param(write_ctx_.trans_param_))) {
@@ -778,20 +778,20 @@ int ObTableLoadStoreCtx::init_write_ctx_for_dag()
   static const int64_t cg_chunk_mem_limit = 64 * 1024L; // 64K
   // is_fast_heap_table_, is_multiple_mode_
   switch (ctx_->param_.exe_mode_) {
-    // 堆表快速写入
+    // Fast heap table write
     case ObTableLoadExeMode::FAST_HEAP_TABLE:
       write_ctx_.is_fast_heap_table_ = true;
       break;
-    // 有主键表不排序
+    // Primary key table without sorting
     case ObTableLoadExeMode::GENERAL_TABLE_COMPACT:
       break;
-    // 堆表排序
+    // Heap table sorting
     case ObTableLoadExeMode::MULTIPLE_HEAP_TABLE_COMPACT:
-    // 有主键表排序
+    // Primary key table sorting
     case ObTableLoadExeMode::MEM_COMPACT:
       write_ctx_.is_multiple_mode_ = true;
       break;
-    // 无资源控制
+    // No resource control
     case ObTableLoadExeMode::MAX_TYPE: {
       const int64_t part_cnt = data_store_table_ctx_->ls_partition_ids_.count();
       int64_t wa_mem_limit = 0;
@@ -804,18 +804,18 @@ int ObTableLoadStoreCtx::init_write_ctx_for_dag()
         int64_t part_mem_size = 0;
         if (!data_store_table_ctx_->schema_->is_column_store() ||
             ObDirectLoadMethod::is_incremental(ctx_->param_.method_)) {
-          // 行存
+          // Row storage
           part_mem_size = MACRO_BLOCK_WRITER_MEM_SIZE;
         } else {
-          // 列存
+          // Column storage
           part_mem_size = data_store_table_ctx_->schema_->cg_cnt_ * cg_chunk_mem_limit * 10;
         }
         const int64_t bucket_cnt = MAX(1, wa_mem_limit / (thread_cnt_ * part_mem_size));
         if (part_cnt <= bucket_cnt || !ctx_->param_.need_sort_) {
-          // 堆表快速写入
+          // Fast heap table write
           write_ctx_.is_fast_heap_table_ = true;
         } else {
-          // 堆表排序
+          // Heap table sorting
           write_ctx_.is_multiple_mode_ = true;
         }
       } else {
@@ -845,7 +845,7 @@ int ObTableLoadStoreCtx::init_write_ctx_for_dag()
                                                     schema_guard, table_schema))) {
       LOG_WARN("fail to get table schema", KR(ret), K(ctx_->param_));
     }
-    // mysql模式下SQL执行计划会包含虚拟生成列
+    // In MySQL mode, SQL execution plan includes virtual generated columns
     else if (OB_FAIL(
                table_schema->get_column_ids(col_descs, lib::is_oracle_mode() /*no_virtual*/))) {
       LOG_WARN("fail to get column ids", KR(ret));
@@ -864,19 +864,19 @@ int ObTableLoadStoreCtx::init_write_ctx_for_dag()
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("unexpected col schema is null", KR(ret), K(col_desc));
         }
-        // SQL执行计划包含隐藏主键列、虚拟生成列以及其他普通列
+        // SQL execution plan includes hidden primary key columns, virtual generated columns and other normal columns
         else if (OB_FAIL(write_ctx_.px_column_descs_.push_back(col_desc))) {
           LOG_WARN("fail to push back", KR(ret));
         } else if (OB_FAIL(write_ctx_.px_column_accuracys_.push_back(col_schema->get_accuracy()))) {
           LOG_WARN("fail to push back", KR(ret));
         }
-        // 存储层不写虚拟生成列
+        // Storage layer does not write virtual generated columns
         else if (col_schema->is_virtual_generated_column()) {
           if (OB_FAIL(write_ctx_.px_column_project_idxs_.push_back(-1))) {
             LOG_WARN("fail to push back", KR(ret));
           }
         } else {
-          // 旁路不接收隐藏主键列
+          // Bypass does not accept hidden primary key columns
           if (ObColumnSchemaV2::is_hidden_pk_column_id(col_desc.col_id_)) {
             if (OB_FAIL(write_ctx_.px_column_project_idxs_.push_back(-1))) {
               LOG_WARN("fail to push back", KR(ret));
@@ -929,7 +929,7 @@ int ObTableLoadStoreCtx::init_dag()
   if (OB_FAIL(ObTableLoadPlan::create_plan(this, allocator_, dag_exec_ctx_.plan_))) {
     LOG_WARN("fail to create plan", KR(ret));
   }
-  // 依赖write_ctx_里的信息
+  // Depends on information in write_ctx_
   else if (OB_FAIL(dag_exec_ctx_.plan_->generate())) {
     LOG_WARN("fail to generate plan", KR(ret));
   }
@@ -960,7 +960,7 @@ int ObTableLoadStoreCtx::generate_autoinc_params(AutoincParam &autoinc_param)
     ret = OB_TABLE_NOT_EXIST;
     LOG_WARN("table not exist", KR(ret), K(ctx_->param_.tenant_id_), K(ctx_->param_.table_id_));
   } else {
-    //ddl对于auto increment是最后进行自增值同步，对于autoinc_param参数初始化得使用原表table id的table schema
+    //ddl for auto increment synchronizes the auto-increment value last, and the initialization of the autoinc_param parameter should use the table schema of the original table's table id
     ObColumnSchemaV2 *autoinc_column_schema = nullptr;
     uint64_t column_id = 0;
     for (ObTableSchema::const_column_iterator iter = table_schema->column_begin();
@@ -1022,7 +1022,7 @@ int ObTableLoadStoreCtx::init_sequence()
                                                   target_table_schema))) {
     LOG_WARN("fail to get table schema", KR(ret), K(tenant_id), K(table_id));
   } else {
-    //ddl对于identity是建表的时候进行自增值同步，对于sequence参数初始化得用隐藏表table id的table schema
+    //ddl for identity is to synchronize the auto-increment value when creating a table, for sequence parameter initialization must use the hidden table's table schema of table id
     for (ObTableSchema::const_column_iterator iter = target_table_schema->column_begin();
           OB_SUCC(ret) && iter != target_table_schema->column_end(); ++iter) {
       ObColumnSchemaV2 *column_schema = *iter;
@@ -1100,12 +1100,12 @@ int ObTableLoadStoreCtx::alloc_trans_ctx(const ObTableLoadTransId &trans_id,
 {
   int ret = OB_SUCCESS;
   trans_ctx = nullptr;
-  // 分配trans_ctx
+  // allocate trans_ctx
   if (OB_ISNULL(trans_ctx = ctx_->alloc_trans_ctx(trans_id))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("fail to alloc trans ctx", KR(ret), K(trans_id));
   }
-  // 把trans_ctx插入map
+  // Insert trans_ctx into map
   else if (OB_FAIL(trans_ctx_map_.set_refactored(trans_ctx->trans_id_, trans_ctx))) {
     LOG_WARN("fail to set trans ctx", KR(ret), K(trans_ctx->trans_id_));
   }
@@ -1124,11 +1124,11 @@ int ObTableLoadStoreCtx::alloc_trans(const ObTableLoadTransId &trans_id,
   int ret = OB_SUCCESS;
   trans = nullptr;
   ObTableLoadTransCtx *trans_ctx = nullptr;
-  // 分配trans_ctx
+  // allocate trans_ctx
   if (OB_FAIL(alloc_trans_ctx(trans_id, trans_ctx))) {
     LOG_WARN("fail to alloc trans ctx", KR(ret), K(trans_id));
   }
-  // 构造trans
+  // construct trans
   else if (OB_ISNULL(trans = trans_allocator_.alloc(trans_ctx))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("fail to alloc ObTableLoadStoreTrans", KR(ret));
@@ -1179,8 +1179,8 @@ int ObTableLoadStoreCtx::start_trans(const ObTableLoadTransId &trans_id,
         if (OB_FAIL(alloc_trans(trans_id, trans))) {
           LOG_WARN("fail to alloc trans", KR(ret));
         }
-        // trans初始化会创建后台pipeline, pipeline通过持有trans的引用计数来保证channel的生命周期
-        // 初始化失败场景, pipeline可能被创建出来, trans不能立即释放
+        // Trans initialization creates background pipeline, pipeline ensures channel lifecycle through holding trans reference count
+        // In initialization failure scenario, pipeline may be created, trans cannot be released immediately
         else if (OB_FAIL(trans->init())) {
           LOG_WARN("fail to init trans", KR(ret), K(trans_id));
         } else {
@@ -1439,13 +1439,13 @@ int ObTableLoadStoreCtx::get_table_store_from_committed_trans_stores(ObDirectLoa
   table_store.clear();
   table_store.set_table_data_desc(write_ctx_.table_data_desc_);
   if (write_ctx_.is_fast_heap_table_) {
-    // 堆表快速路径, 空数据, 随便填一个类型
+    // Heap table fast path, empty data, just fill in a type
     table_store.set_external_table();
   } else if (ctx_->param_.need_sort_) {
-    // 排序路径, 有主键表现在走pre_sort了
+    // Sort path, if there is a primary key, it now goes through pre_sort
     table_store.set_external_table();
   } else {
-    // 有主键表不排序路径
+    // Table with primary key does not sort path
     table_store.set_multiple_sstable();
   }
   obsys::ObRLockGuard guard(rwlock_);
@@ -1467,10 +1467,10 @@ int ObTableLoadStoreCtx::get_table_store_for_store_write(ObDirectLoadTableStore 
   int ret = OB_SUCCESS;
   table_store.clear();
   if (write_ctx_.is_multiple_mode_) {
-    // 排序路径, 写出的是未排序数据
+    // Sorting path, writes unsorted data
     table_store.set_external_table();
   } else {
-    // 有主键表不排序路径
+    // Primary key table non-sorting path
     table_store.set_multiple_sstable();
   }
   obsys::ObRLockGuard guard(rwlock_);
@@ -1513,7 +1513,7 @@ int ObTableLoadStoreCtx::start_merge()
   } else if (OB_FAIL(start_merge_op())) {
     LOG_WARN("fail to start merge op", KR(ret));
   } else {
-    // 清空trans store, 以便在合并过程中释放磁盘空间
+    // Clear trans store, in order to release disk space during the merge process
     clear_committed_trans_stores();
   }
   return ret;
@@ -1531,7 +1531,7 @@ int ObTableLoadStoreCtx::handle_pre_sort_success()
   } else if (OB_FAIL(start_merge_op())) {
     LOG_WARN("fail to start merge op", KR(ret));
   } else {
-    // 清空trans store, 释放内存, 里面也没啥东西
+    // Clear trans store, release memory, there's nothing much in it
     clear_committed_trans_stores();
   }
   return ret;

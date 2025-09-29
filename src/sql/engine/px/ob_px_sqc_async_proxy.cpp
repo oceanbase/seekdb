@@ -134,13 +134,13 @@ int ObPxSqcAsyncProxy::launch_one_rpc_request(ObPxRpcInitSqcArgs &args, int64_t 
                     K(args), K(cb));
         }
       }
-      // ret为TIME_OUT，或者在重新发送异步rpc的时候失败，都需要把对应的callback回收掉
-      // 如果remove对应的callback失败，就不能对callback进行析构
+      // ret is TIME_OUT, or when the asynchronous rpc is resent and fails, the corresponding callback needs to be recycled
+      // If removing the corresponding callback fails, the callback cannot be destructed
       if (OB_FAIL(ret) && cb != NULL) {
-        // 使用temp_ret的原因是需要保留原始 ret 错误码
+        // The reason for using temp_ret is to retain the original ret error code
         int temp_ret = callbacks_.remove(idx);
         if (temp_ret != OB_SUCCESS) {
-          // 这里需要将callback标记为无效，等待`fail_process`处理
+          // Here we need to mark callback as invalid, waiting for `fail_process` to handle
           cb->set_invalid(true);
           LOG_WARN("callback obarray remove element failed", K(ret));
         } else {
@@ -157,10 +157,10 @@ int ObPxSqcAsyncProxy::launch_one_rpc_request(ObPxRpcInitSqcArgs &args, int64_t 
 int ObPxSqcAsyncProxy::wait_all() {
   int ret = OB_SUCCESS;
   LOG_TRACE("wail all async sqc rpc to end", K(dfo_));
-  // 退出while的条件：3个条件任意满足即退出while循环
-  // 1. 在有效时间内获得足够多并且正确的callback结果
-  // 2. 超时，ret = OB_TIMEOUT
-  // 3. retry一个rpc失败
+  // Exit the while loop condition: exit the while loop if any of the 3 conditions are met
+  // 1. Obtain enough and correct callback results within the valid time frame
+  // 2. Timeout, ret = OB_TIMEOUT
+  // 3. retry an rpc failure
   oceanbase::lib::Thread::WaitGuard guard(oceanbase::lib::Thread::WAIT_FOR_PX_MSG);
   while (return_cb_count_ < sqcs_.count() && OB_SUCC(ret)) {
 
@@ -175,9 +175,9 @@ int ObPxSqcAsyncProxy::wait_all() {
     ARRAY_FOREACH_X(callbacks_, idx, count, OB_SUCC(ret)) {
       ObSqcAsyncCB &callback = *callbacks_.at(idx);
       if (!callback.is_visited() && callback.is_timeout()) {
-        // callback超时，不需要重试
-        // 可能只是RPC超时, 但不是QUERY超时, 实现上需要区分
-        // 这种情况需要标记为RPC CONNECT ERROR进行重试
+        // callback timeout, no need to retry
+        // It might just be an RPC timeout, but not a QUERY timeout, implementation-wise they need to be distinguished
+        // This situation needs to be marked as RPC CONNECT ERROR for retry
         return_cb_count_++;
         if (phy_plan_ctx_->get_timeout_timestamp() -
           ObTimeUtility::current_time() > 0) {
@@ -188,7 +188,7 @@ int ObPxSqcAsyncProxy::wait_all() {
         }
         callback.set_visited(true);
       } else if (!callback.is_visited() && callback.is_invalid()) {
-        // rpc解析pack失败，callback调用on_invalid方法，不需要重试
+        // rpc parsing pack failed, callback calls on_invalid method, no need to retry
         return_cb_count_++;
         ret = callback.get_error() == OB_ALLOCATE_MEMORY_FAILED ?
               OB_ALLOCATE_MEMORY_FAILED : OB_RPC_PACKET_INVALID;
@@ -200,35 +200,34 @@ int ObPxSqcAsyncProxy::wait_all() {
         if (OB_SUCC(callback.get_ret_code().rcode_)) {
           const ObPxRpcInitSqcResponse &cb_result = callback.get_result();
           if (cb_result.rc_ == OB_ERR_INSUFFICIENT_PX_WORKER) {
-            // 没有获得足够的px worker，不需要再做内部SQC的重试，防止死锁
-            // SQC如果没有获得足够的worker，外层直接进行query级别的重试
+            // No sufficient px worker obtained, no need to retry internal SQC to prevent deadlock
+            // SQC if it does not obtain enough workers, the outer layer directly performs query-level retry
             // 
             LOG_INFO("can't get enough worker resource, and not retry",
                 K(cb_result.rc_), K(sqcs_.at(idx)));
           }
           if (OB_FAIL(cb_result.rc_)) {
-            // 错误可能包含 is_data_not_readable_err或者其他类型的错误
+            // Error may contain is_data_not_readable_err or other types of errors
             if (is_data_not_readable_err(ret)) {
               error_index_ = idx;
             }
           } else {
-            // 获得正确的返回结果
+            // Obtain the correct return result
             results_.at(idx) = &cb_result;
           }
         } else {
-          // RPC框架错误，直接返回对应的错误码，当前SQC不需要再进行重试
+          // RPC framework error, directly return the corresponding error code, current SQC does not need to retry again
           ret = callback.get_ret_code().rcode_;
           LOG_WARN("call rpc failed", K(ret), K(callback.get_ret_code()));
         }
       }
     }
   }
-
-  // wait_all的结果：
-  // 1. sqc对应的所有callback都返回正确的结果，return_cb_count_=sqcs_.count()，直接返回OB_SUCCESS;
-  // 2. 由于超时或者重试sqc rpc失败，这种情况下需要等待所有callback响应结束后，才能返回ret。
+  // wait_all result:
+  // 1. sqc corresponds to all callbacks returning the correct result, return_cb_count_=sqcs_.count(), directly return OB_SUCCESS;
+  // 2. Due to timeout or retry sqc rpc failure, in this case, we need to wait for all callback responses to end before returning ret.
   if (return_cb_count_ < callbacks_.count()) {
-    // 还有未处理完的callback，需要等待所有的callback响应结束才能够退出`wait_all`方法
+    // There are still unprocessed callbacks, need to wait for all callbacks to respond before exiting the `wait_all` method
     fail_process();
   }
   return ret;

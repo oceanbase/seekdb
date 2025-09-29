@@ -136,7 +136,7 @@ public:
   ObServerSuperBlock();
   ~ObServerSuperBlock() = default;
 
-  // represents an entry to an empty linked list， distinguished with the invalid macro block id
+  // represents an entry to an empty linked list, distinguished with the invalid macro block id
   static const blocksstable::MacroBlockId EMPTY_LIST_ENTRY_BLOCK;
 
   bool is_valid() const;

@@ -57,7 +57,7 @@ int ObLocalIdentityTaskSpliter::get_next_task(ObTaskInfo *&task)
       task_->set_task_location(task_loc);
       task_->set_state(OB_TASK_STATE_NOT_INIT);
       task_->set_root_spec(job_->get_root_spec());
-      // 将task_作为类成员的目的是为了保证第二次调用get_next_task能返回OB_ITER_END
+      // The purpose of making task_ a class member is to ensure that the second call to get_next_task returns OB_ITER_END
       task = task_;
     }
   }

@@ -75,7 +75,7 @@ int ObExprPow::calc_pow_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_da
   // pow(base, exp)
   ObDatum *base = NULL;
   ObDatum *exp = NULL;
-  // 验证了下第一个参数是NULL时，MySQL依然会计算第二个参数
+  // Verified that when the first parameter is NULL, MySQL still calculates the second parameter
   int ret_base = expr.args_[0]->eval(ctx, base);
   int ret_exp  = expr.args_[1]->eval(ctx, exp);
   if (OB_SUCCESS == ret_base && OB_SUCCESS == ret_exp) {

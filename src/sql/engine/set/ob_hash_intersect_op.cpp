@@ -100,11 +100,11 @@ int ObHashIntersectOp::inner_get_next_row()
     } else if (OB_FAIL(build_hash_table_from_left(true))) {
       LOG_WARN("failed to build hash table", K(ret));
     } else {
-      // 当前内存中存在hash表，开始扫描右边，dump数据到右partition
+      // Current memory contains a hash table, start scanning to the right, dump data to the right partition
       hp_infras_.switch_right();
     }
   }
-  //从右边拿行，最开始从right算子 拿数据，后面从hp中的part拿数据
+  // From the right side, start by taking data from the right operand, then take data from part in hp
   while (OB_SUCC(ret) && !got_row) {
     if (!has_got_part_) {
       if (OB_FAIL(get_right_row())) {

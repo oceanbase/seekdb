@@ -119,8 +119,8 @@ protected:
 private:
   void reset_expr_datum_ptr();
   static const int64_t MIN_GROUP_INDEX = -1;
-  int64_t cur_group_idx_;        // 本次要读的group_idx
-  int64_t available_group_idx_;  // 当前row_store中可读的最小group_idx
+  int64_t cur_group_idx_;        // The group_idx to be read this time
+  int64_t available_group_idx_;  // The smallest group_idx that is readable in the current row_store
   int64_t group_size_;
   bool need_check_output_datum_;
   ObGroupResultSaveRows group_save_rows_;

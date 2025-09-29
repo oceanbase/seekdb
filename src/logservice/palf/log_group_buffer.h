@@ -32,14 +32,13 @@ public:
   int init(const LSN &start_lsn);
   void reset();
   void destroy();
-
   //
-  // 功能: 将日志体填充到聚合buffer
+  // Function: Fill the log body into the aggregation buffer
   //
-  // @param [in] lsn, 聚合buffer中填充起始偏移量
-  // @param [in] data, 数据内容指针
-  // @param [in] data_len, 数据长度
-  // @param [in] cb, 回调对象指针
+  // @param [in] lsn, starting offset for filling in the aggregation buffer
+  // @param [in] data, data content pointer
+  // @param [in] data_len, data length
+  // @param [in] cb, callback object pointer
   //
   // return code:
   //      OB_SUCCESS
@@ -100,21 +99,21 @@ private:
             const char *data,
             const int64_t data_len);
 private:
-  // buffer起始位置对应的lsn
+  // buffer start position corresponding lsn
   LSN start_lsn_;
-  // buffer可复用起点对应的lsn, 与max_flushed_end_lsn预期最终是相等的.
-  // 所有更新max_flushed_end_lsn的逻辑都要考虑一并更新该值.
+  // buffer reusable start point corresponding lsn, which is expected to be equal to max_flushed_end_lsn eventually.
+  // All logic that updates max_flushed_end_lsn should also consider updating this value.
   LSN reuse_lsn_;
   // lock for truncate operation.
   mutable common::ObSpinLock truncate_lock_;
   // This field is used for recording the readable begin lsn.
   // It won't fallback.
   LSN readable_begin_lsn_;
-  // 分配的buffer size
+  // allocated buffer size
   int64_t reserved_buffer_size_;
-  // 当前可用的buffer size
+  // current available buffer size
   int64_t available_buffer_size_;
-  // buffer指针
+  // buffer pointer
   char *data_buf_;
   bool is_inited_;
 private:

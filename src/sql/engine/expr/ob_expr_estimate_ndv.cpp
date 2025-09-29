@@ -57,7 +57,7 @@ void ObExprEstimateNdv::llc_estimate_ndv(int64_t &result, const ObString &bitmap
   if (OB_FAIL(llc_estimate_ndv(res_double, bitmap_str))) {
     LOG_WARN("calculate estimate ndv failed.");
   } else if (OB_UNLIKELY(res_double > UINT64_MAX)) {
-    // 基本不会走到这里
+    // Basic will not reach here
     LOG_WARN("estimate ndv value overflows", K(res_double));
   } else {
     result = static_cast<int64_t>(res_double);
@@ -124,7 +124,7 @@ int ObExprEstimateNdv::llc_estimate_ndv(double &estimate_ndv,
 
 bool ObExprEstimateNdv::llc_is_num_buckets_valid(int64_t num_buckets)
 {
-  // 要求 LLC_NUM_BUCKETS_MIN <= 桶数 <= LLC_NUM_BUCKETS_MAX 且是2的次幂
+  // Require LLC_NUM_BUCKETS_MIN <= number of buckets <= LLC_NUM_BUCKETS_MAX and is a power of 2
   return (num_buckets >= LLC_NUM_BUCKETS_MIN)
       && (num_buckets <= LLC_NUM_BUCKETS_MAX)
       && !(num_buckets & (num_buckets - 1));
@@ -142,7 +142,7 @@ int ObExprEstimateNdv::calc_estimate_ndv_expr(const ObExpr &expr, ObEvalCtx &ctx
              OB_FAIL(ObExprEstimateNdv::llc_estimate_ndv(res_double, arg->get_string()))) {
     LOG_WARN("calculate estimate ndv failed.");
   } else if (OB_UNLIKELY(res_double > INT64_MAX)) {
-    // 基本不会走到这里
+    // Basically will not reach here
     LOG_WARN("estimate ndv value overflows", K(res_double));
     res_datum.set_null();
   } else {

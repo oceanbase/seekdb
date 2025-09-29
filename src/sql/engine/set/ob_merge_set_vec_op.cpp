@@ -374,7 +374,7 @@ int ObMergeSetVecOp::distinct_for_batch(ObOperator &child_op, const ObBatchRows 
       const sql::ObExpr &col_expr = *child_op.get_spec().output_.at(col_idx);
       switch (vec->get_format()) {
         case VEC_FIXED : {
-          // 对big_int进行特化
+          // Specialize for big_int
           if (ob_is_integer_type(child_op.get_spec().output_.at(col_idx)->datum_meta_.type_)) {
             ObFixedLengthVector<int64_t, VectorBasicOp<VEC_TC_INTEGER>> *fixed_vec = 
               static_cast<ObFixedLengthVector<int64_t, VectorBasicOp<VEC_TC_INTEGER>> *> (vec);

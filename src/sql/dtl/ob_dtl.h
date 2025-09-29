@@ -144,10 +144,10 @@ private:
       ObDtlFlowControl *dfc, const bool need_free_chan);
   int get_dtl_channel_manager(uint64_t hash_val, ObDtlChannelManager *&ch_mgr);
 private:
-  // bucket number必须是hash_cnt的整数倍，目前有依赖
-  // 当前认为一个ch_mgr管理一批bucket，采用hash_cnt的倍数关系进行上锁
-  // 如 ch_mgr(0) lock [0, 256, 512, ..., ]
-  // 所以hash_value对于ch_mgr和hash_table必须是同一个
+  // bucket number must be an integer multiple of hash_cnt, there is currently a dependency
+  // Currently it is considered that a ch_mgr manages a batch of buckets, using a multiple relationship of hash_cnt for locking
+  // like ch_mgr(0) lock [0, 256, 512, ..., ]
+  // So hash_value for ch_mgr and hash_table must be the same
   static const int64_t HASH_CNT = 8;
   static const int64_t BUCKET_NUM = 256;
   bool is_inited_;

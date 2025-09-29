@@ -439,8 +439,8 @@ int ObTransferPartitionCommand::execute_cancel_transfer_partition_all_(const ObT
       }
     }
     if (OB_SUCC(ret) && init_task.count() > 0) {
-      //存在init状态的任务，不管有没有doing状态的任务，为了保证新创建出来的日志流都可以回收掉
-      //都要挨个处理balance_task的part_list，不能简单的把balance_job给cancel掉。
+      //There are tasks in the init state, regardless of whether there are tasks in the doing state, to ensure that newly created log streams can all be recycled
+      //Each part_list of balance_task needs to be processed individually, and the balance_job cannot simply be canceled.
       if (OB_FAIL(cancel_all_init_transfer_partition_(tenant_id, init_task, trans))) {
         LOG_WARN("failed to cancel all init transfer partition", KR(ret), K(tenant_id), K(init_task));
       } else if (OB_FAIL(ObTransferPartitionTaskTableOperator::finish_task(
@@ -532,26 +532,26 @@ int ObTransferPartitionCommand::cancel_all_init_transfer_partition_(const uint64
     ObTransferPartList new_part_list;
     new_part_list.reset();
     if (!transfer_task_id.is_valid()) {
-      //如果没有发起过transfer，直接清空当前的part_list
+      //If transfer has not been initiated, directly clear the current part_list
     } else {
       for (int64_t j = 0; OB_SUCC(ret) && j < balance_task.get_part_list().count(); ++j) {
         const ObTransferPartInfo &part = balance_task.get_part_list().at(j);
         if (!has_exist_in_array(init_list, part)) {
-          //如果part不是init task的范围，则需要保留
+          //If part is not within the range of init task, it needs to be retained
           if (OB_FAIL(new_part_list.push_back(part))) {
             LOG_WARN("failed to push back", KR(ret), K(part), K(balance_task), K(new_part_list));
           }
         }
       }//end for j
       if (OB_SUCC(ret) && 0 == new_part_list.count()) {
-        //如果存在current_transfer_task，则这个balance_task肯定有part处于doing状态
+        //If current_transfer_task exists, then this balance_task must have a part in doing state
         ret = OB_ERR_UNEXPECTED;
         LOG_ERROR("part list can not be empty", KR(ret), K(balance_task), K(init_list));
       }
     }
     if (OB_FAIL(ret)) {
     } else if (balance_task.get_part_list().count() == new_part_list.count()) {
-      //个数相等应该part_list就是相等的，不去做其他的校验了
+      //The number being equal means part_list should be equal, no further validation is done.
       LOG_INFO("part list no change, no need update", K(balance_task), K(new_part_list), K(init_list));
     } else if (OB_FAIL(ObBalanceTaskTableOperator::update_task_part_list(tenant_id,
             balance_task.get_balance_task_id(), new_part_list, trans))) {
@@ -582,7 +582,7 @@ int ObTransferPartitionCommand::try_cancel_transfer_partition_(
     LOG_WARN("failed to assign comment", KR(ret), K(task));
   } else if (task.get_task_status().is_waiting()) {
   } else if (task.get_task_status().is_init()) {
-    //直接去修改balance_task的part_list
+    //Directly modify the part_list of balance_task
     if (OB_FAIL(cancel_transfer_partition_in_init_(
             task, trans))) {
       LOG_WARN("failed to cancel transfer partition", KR(ret), K(task));
@@ -612,7 +612,7 @@ int ObTransferPartitionCommand::cancel_transfer_partition_in_init_(
   ObTransferPartList part_list;
   ObBalanceTaskArray balance_tasks;
   const uint64_t tenant_id = task.get_tenant_id();
-  bool found = false;//不存在找不到balance_task的情况，也可能一个transfer_partition涉及多个task
+  bool found = false;//There is no situation where balance_task is not found, it is also possible that one transfer_partition involves multiple tasks
   ObBalanceJob balance_job;
   int64_t start_time = 0, finish_time = 0;//no used
 
@@ -706,7 +706,7 @@ int ObTransferPartitionCommand::cancel_balance_job_in_trans_(
       }
     } else if (balance_job.get_job_status().is_success()
         || balance_job.get_job_status().is_canceled()) {
-      //已经执行结束了，不报错，但是也不修改状态
+      //Execution has ended, no error, but the status is not modified
     } else {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("balance job is unexpected", KR(ret), K(balance_job));

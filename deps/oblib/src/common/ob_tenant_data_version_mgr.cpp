@@ -551,7 +551,7 @@ int ObTenantDataVersionMgr::write_to_file_(char *buf, int64_t buf_length, int64_
           // it's OK to continue if we fail to backup history file, so we ignore the err ret here
           COMMON_LOG(WARN, "fail to backup history config file", KERRMSG, K(ret));
         }
-        // 运行到这里的时候可能掉电，导致没有 conf 文件，需要 DBA 手工拷贝 tmp 文件到这里
+        // When running to here, a power outage may occur, resulting in no conf file, requiring the DBA to manually copy the tmp file here
         if (0 != ::rename(tmp_path, file_path)) {
           ret = OB_ERR_SYS;
           COMMON_LOG(WARN, "fail to move tmp config file", KERRMSG, K(ret));

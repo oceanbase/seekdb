@@ -64,7 +64,7 @@ class ObDASIDRpcProxy : public obrpc::ObRpcProxy
 {
 public:
     DEFINE_TO(ObDASIDRpcProxy);
-    //fetch_das_id的请求要使用最高优先级的RPC队列进行处理，保证fetch das id的请求不被其它RPC阻塞，否则整个执行将会被卡死
+    // fetch_das_id request should be processed using the highest priority RPC queue to ensure that the fetch das id request is not blocked by other RPCs, otherwise the entire execution will be stuck
     RPC_S(PR1 sync_fetch_das_id, OB_DAS_SYNC_FETCH_ID, (sql::ObDASIDRequest), ObDASIDRpcResult);
 };
 

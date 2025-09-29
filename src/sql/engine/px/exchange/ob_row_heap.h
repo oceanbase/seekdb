@@ -140,7 +140,7 @@ public:
 };
 
 /*
- * 对来自 N 个 CHANNEL 的行堆排序，N 随着 EOF 通道增多而减少
+ * Sort rows from N CHANNELS, N decreases as EOF channels increase
  * ref:  
  */
 template <class COMPARE = ObRowComparer, class ROW = common::ObNewRow>
@@ -150,12 +150,12 @@ public:
   ObRowHeap<COMPARE, ROW>();
   ~ObRowHeap<COMPARE, ROW>();
 
-  /* 初始化方法(1) */
+  /* Initialization method (1) */
   int init(int64_t capacity, const ObIArray<ObSortFieldCollation> *sort_collations,
       const ObIArray<ObSortCmpFunc> *sort_cmp_funs);
 
-  /* 初始化方法(2) */
-  /* 对于 ObPxMergeSort 来说，上面的 init 函数的两个参数无法同时获得，拆成两个函数来做 init */
+  /* Initialization method (2) */
+  /* For ObPxMergeSort, the two parameters of the above init function cannot be obtained at the same time, so it is split into two functions for init */
   void set_capacity(int64_t capacity) { capacity_ = capacity; }
   void set_sort_columns(const common::ObIArray<ObSortColumn> &sort_columns)
   { sort_columns_ = &sort_columns; }
@@ -163,7 +163,7 @@ public:
   void set_row_meta(const RowMeta &row_meta) { indexed_row_comparer_.set_row_meta(row_meta); }
   int push(const ROW *row);
   int pop(const ROW *&row);
-  //本接口仅用于清空 heap 释放内存
+  // This interface is only used to clear heap and release memory
   int raw_pop(const ROW *&row);
   void shrink();
   int64_t writable_channel_idx() const { return writable_ch_idx_; }
@@ -200,7 +200,7 @@ private:
   bool inited_;
   int64_t writable_ch_idx_;
   int64_t capacity_;
-  const common::ObIArray<ObSortColumn> *sort_columns_; /* 用于 init() 接口 */
+  const common::ObIArray<ObSortColumn> *sort_columns_; /* Used for init() interface */
   common::ObArray<int64_t> row_idx_;
   common::ObArray<const ROW*> row_arr_;
   COMPARE indexed_row_comparer_;
@@ -245,8 +245,8 @@ int ObRowHeap<COMPARE, ROW>::init(int64_t capacity,
   return ret;
 }
 
-/* 对于 ObPxMergeSortCoord 来说，上面的 init(capacity, sort_columns)
- * 函数的两个参数无法同时获得，拆成两个函数来做设置参数，然后调用 init
+/* For ObPxMergeSortCoord, the two parameters of the above init(capacity, sort_columns)
+ * function cannot be obtained at the same time, so we split it into two functions to set the parameters, then call init
  */
 template <class COMPARE, class ROW>
 int ObRowHeap<COMPARE, ROW>::init()
@@ -260,10 +260,10 @@ int ObRowHeap<COMPARE, ROW>::init()
   return ret;
 }
 
-/* 注意：在 heap 未满之前，需要连续 push 多次让 heap 满；
- *       heap 满之后，每 push 一次必须 pop 一次，否则出错。
+/* Note: Before the heap is full, multiple continuous pushes are needed to fill the heap;
+ *       after the heap is full, each push must be accompanied by a pop, otherwise an error occurs.
  *
- * 假设：外部 push 进来的这一行，一定是 writable_ch_idx 指定的通道上读进来的
+ * Assumption: The row pushed externally is always read from the channel specified by writable_ch_idx
  */
 template <class COMPARE, class ROW>
 int ObRowHeap<COMPARE, ROW>::push(const ROW *row)
@@ -349,7 +349,7 @@ template <class COMPARE, class ROW>
 void ObRowHeap<COMPARE, ROW>::shrink()
 {
   capacity_--;
-  writable_ch_idx_++; // heap 未满之时有效，之后会被 pop 覆盖
+  writable_ch_idx_++; // heap not full, valid; will be covered by popafter
 }
 
 }

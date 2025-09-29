@@ -37,7 +37,7 @@ class ObMultiVersionValueIterator
 public:
   ObMultiVersionValueIterator();
   virtual ~ObMultiVersionValueIterator();
-  //用来迭代冻结memtable多版本和事务未提交的row
+  // Used to iterate over frozen memtable multi-versions and uncommitted transaction rows
 public:
   int init(ObMvccAccessCtx *ctx,
            const common::ObVersionRange &version_range,

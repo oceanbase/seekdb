@@ -71,18 +71,18 @@ int ObTableLoadPartitionCalc::init(const ObTableLoadParam &param,
       LOG_WARN("fail to get table schema", KR(ret), K(tenant_id), K(table_id));
     } else {
       const bool is_partitioned = table_schema->is_partitioned_table();
-      if (!is_partitioned) {  // 非分区表
+      if (!is_partitioned) {  // non-partitioned table
         if (OB_FAIL(table_schema->get_tablet_and_object_id(partition_id_.tablet_id_,
                                                           partition_id_.partition_id_))) {
           LOG_WARN("fail to get tablet and object", KR(ret));
         }
-      } else {  // 分区表
-        // 初始化table_location_
+      } else {  // partition table
+        // Initialize table_location_
         if (OB_FAIL(
               table_location_.init_partition_ids_by_rowkey2(exec_ctx_, *session_info, schema_guard_, table_id))) {
           LOG_WARN("fail to init table location", KR(ret));
         }
-        // 获取part_key_obj_index_
+        // get part_key_obj_index_
         else if (OB_FAIL(init_part_key_index(table_schema, allocator_))) {
           LOG_WARN("fail to get rowkey index", KR(ret));
         } else if (ObDirectLoadLevel::PARTITION == param.load_level_) {

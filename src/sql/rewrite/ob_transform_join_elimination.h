@@ -86,11 +86,11 @@ private:
                        bool &is_valid);
   /**
    * @brief eliminate_join_self_key
-   * self key join消除场景有：
-   * stmt from items中的basic_table或generated_table
-   * semi items中的basic_table或generated_table
-   * stmt items中的joined_table中的inner join tables
-   * semi items中的joined_table中的inner join tables
+   * self key join elimination scenarios include:
+   * basic_table or generated_table in stmt from items
+   * basic_table or generated_table in semi items
+   * inner join tables in joined_table of stmt items
+   * inner join tables in joined_table of semi items
    */
   int eliminate_join_self_foreign_key(ObDMLStmt *stmt,
                                       bool &trans_happened,
@@ -104,8 +104,8 @@ private:
                                           EqualSets *equal_sets);
   /**
    * @brief eliminate_SKJ_in_from_base_table
-   * 消除stmt from items中的basic_table或generated_table
-   * 存在的self key loseless join
+   * eliminate basic_table or generated_table in stmt from items
+   * existing self key lossless join
    */
   int eliminate_join_in_from_base_table(ObDMLStmt *stmt,
                                         bool &trans_happened,
@@ -126,8 +126,8 @@ private:
 
   /**
    * @brief eliminate_join_in_joined_table
-   * 消除joined_table中的inner join tables
-   * 存在的self key loseless join
+   * eliminate inner join tables in joined_table
+   * existing self key lossless join
    */
   int eliminate_join_in_joined_table(ObDMLStmt *stmt,
                                      bool &trans_happened,
@@ -135,7 +135,7 @@ private:
 
   /**
    * @brief eliminate_join_in_joined_table
-   * 如果from_item是joined table，尝试消除，并更新joined_table结构
+   * If from_item is a joined table, attempt to eliminate it and update the joined_table structure
    */
   int eliminate_join_in_joined_table(ObDMLStmt *stmt,
                                      FromItem &from_item,
@@ -145,7 +145,7 @@ private:
   
   /**
    * @brief eliminate_join_in_joined_table
-   * 尝试消除joined table,如果是inner join，并且是无损自连接
+   * Try to eliminate joined table, if it is an inner join and a lossless self-join
    */
   int eliminate_join_in_joined_table(ObDMLStmt *stmt,
                                      TableItem *&table_item,
@@ -241,10 +241,10 @@ private:
                                   const ObIArray<int64_t> &table_map);
   /**
    * @brief trans_table_item
-   * 将关联target_table的结构改写为关联source_table
-   * 从from item中删除target table
-   * 从partition信息中删除target table
-   * 重构 rel_idx
+   * Rewrite the structure associated with target_table to be associated with source_table
+   * Remove target table from from item
+   * Remove target table from partition information
+   * Reconstruct rel_idx
    * @param stmt
    * @param source_table
    * @param target_table
@@ -276,27 +276,27 @@ private:
 
   /**
    * @brief check_transform_validity_foreign_key
-   * 检查source_table和target_table是否可以进行主外键连接消除。
-   * 对于任意存在主外键约束的两表，主外键连接消除的条件:
-   *    1. 只涉及到父表的主键列
-   *    2. 连接条件中存在主外键一一对应的等值condition（即保证连接是unique的）
+   * Check if source_table and target_table can perform foreign key join elimination.
+   * For any two tables with a foreign key constraint, the conditions for foreign key join elimination are:
+   *    1. Only involves the primary key columns of the parent table
+   *    2. The join condition contains a one-to-one corresponding equality condition for the foreign key (i.e., ensuring the join is unique)
    *
-   *  举例 t1(c1, c2, c3, primary key (c1, c2))
+   *  Example t1(c1, c2, c3, primary key (c1, c2))
    *       t2(c1, c2, c3, c4,
    *          foreign key (c1, c2) references t1(c1, c2),
    *          foreign key (c3, c4) references t1(c1, c2))
-   *  则 1. select * from t1, t2 where t1.c1 = t2.c1 and t1.c2 = t2.c2;
-   *        \-> 不能消除，引用了父表的非主键列，需要读取父表才能获取该列的值。
+   *  Then 1. select * from t1, t2 where t1.c1 = t2.c1 and t1.c2 = t2.c2;
+   *        \-> Cannot be eliminated, references non-primary key columns of the parent table, need to read the parent table to get the value of that column.
    *
    *     2. select t1.c1, t2.* from t1, t2 where t1.c1 = t2.c1;
-   *        |   不能消除，连接条件中不存在主外键一一对应的等值condition，
-   *        \-> t2中的一列可能会连接到t1中的多行，需要读取t1进行验证。
+   *        |   Cannot be eliminated, the join condition does not contain a one-to-one corresponding equality condition for the foreign key,
+   *        \-> One column in t2 may connect to multiple rows in t1, need to read t1 for verification.
    *
    *     3. select t1.c1, t2.* from t1, t2 where t1.c1 = t2.c1 and t1.c2 and t2.c2;
-   *        |   可以消除，连接条件中存在主外键一一对应的等值condition，保证了
-   *        |   t2的每一列最多只能连接到t1中的一行；且只引用父表的主键列，可以
-   *        |   使用子表对应的外键列代替。
-   *        |   本查询可改写为
+   *        |   Can be eliminated, the join condition contains a one-to-one corresponding equality condition for the foreign key, ensuring that
+   *        |   each column in t2 can connect to at most one row in t1; and only references the primary key columns of the parent table, can
+   *        |   use the corresponding foreign key columns in the child table instead.
+   *        |   This query can be rewritten as
    *        \-> select t2.c1, t2.* from t2 where t2.c1 is not null and t2. c2 is not null;
    */
   int check_transform_validity_foreign_key(const ObDMLStmt *stmt,
@@ -326,19 +326,19 @@ private:
 
   /**
    * @brief check_transform_validity_outer_join
-   * 检查joined table是否可以做外连接消除
-   * 对于外连接可消除的改写，条件如下：
-   *    1. 连接条件中右表的连接列是unqiue的
-   *    2. 需要为左外连接的类型
-   *    3. 右表的列不存在于select item，groupby，orderby, having中。
-   * 举例：t1(a int, b int, c int);
-   *       t2(a int, b int, c int, primary key(a,b))
+   * Check if the joined table can perform outer join elimination
+   * For outer join elimination rewrite, the conditions are as follows:
+   *    1. The join columns of the right table in the join condition must be unique
+   *    2. It needs to be of left outer join type
+   *    3. Columns of the right table do not exist in select item, groupby, orderby, having.
+   * Example: t1(a int, b int, c int);
+   *          t2(a int, b int, c int, primary key(a,b))
    *    1. select t1.* from t1 inner join on t2 on t1.a=t2.a and t1.b=t2,b;
-   *       \->不能消除，不是left join的类型
+   *       \->Cannot eliminate, not a left join type
    *    2. select t1.* from t1 left join on t2 on t1.a=t2.a
-   *       \->不能消除，连接条件不是unique的
+   *       \->Cannot eliminate, join condition is not unique
    *    3. select t1.*, t2.a from t1 left join t2 on t1.a=t2.a and t1.b=t2.b
-   *       \->不能改写，因为select items中含有右表列。
+   *       \->Cannot rewrite, because select items contain columns of the right table.
    */
   int check_transform_validity_outer_join(ObDMLStmt *stmt,
                                           JoinedTable *joined_table,
@@ -353,7 +353,7 @@ private:
 
   /**
    *  @brief check_all_column_primary_key
-   *  检查stmt中属于table_id的列是否全部在foreign key info的父表列中
+   *  Check if all columns in stmt belonging to table_id are in the parent table columns of foreign key info
    */
   int check_all_column_primary_key(const ObDMLStmt *stmt,
                                    const uint64_t table_id,
@@ -362,11 +362,11 @@ private:
 
   /**
    * @brief trans_column_items_foreign_key
-   * 如果col0 \in child, col1 \in parent，且两者存在存在主外键关系，
-   * 那么删除col1，并将所有表达式中指向col1的指针改为指向col0。
+   * If col0 \in child, col1 \in parent, and there exists a foreign key relationship between them,
+   * then delete col1 and change all pointers pointing to col1 in expressions to point to col0.
    *
-   * 在主外键连接消除中，父表的列出现时，一定存在对应的子表列，
-   * 因此不需要处理col单独出现在父表中的情况。
+   * In foreign key join elimination, when a column of the parent table appears, there must be a corresponding column in the child table,
+   * so there is no need to handle the case where col appears alone in the parent table.
    */
   int trans_column_items_foreign_key(ObDMLStmt *stmt,
                                      const TableItem *child_table,
@@ -375,24 +375,23 @@ private:
 
   /**
    * @brief get_child_column_id_by_parent_column_id
-   * 从foreign key info中获取父表列id对应的子表列id
+   * Get child table column id corresponding to parent table column id from foreign key info
    */
   int get_child_column_id_by_parent_column_id(const share::schema::ObForeignKeyInfo *info,
                                               const uint64_t parent_column_id,
                                               uint64_t &child_column_id);
-
-  //zhenling.zzg增强semi anti 的self join消除
+  //zhenling.zzg enhance semi anti self join elimination
   /**
    * @brief eliminate_semi_join_self_key
-   * 消除自连接的semi、anti join
-   * 消除semi join的规则要求：
-   * 1、condition至少有一个简单连接谓词（相同列相等的连接谓词）；
-   * 2、join_expr的简单连接谓词含有唯一性约束；（或者join_expr都是简单连接的and连接，没有其他谓词，则不需要唯一性约束）
-   * 3、如果有partition hint，inner table引用的分区包含outer table引用的分区；
-   * 消除anti join的规则要求：
-   * 1、join_expr的and连接树中，都是简单连接谓词（相同列相等的连接谓词）,inner table 的过滤谓词为简单and树；
-   * 2、join_expr的简单连接谓词含有唯一性约束；（或者join_expr都是简单连接的and连接，并且inner table没有过滤谓词，则不需要唯一性约束）
-   * 3、如果有partition hint，inner table引用的分区包含outer table引用的分区；
+   * Eliminate semi and anti join of self-joins
+   * Rules for eliminating semi join:
+   * 1、condition must have at least one simple join predicate (equality predicate on the same column);
+   * 2、simple join predicates in join_expr must have a uniqueness constraint; (or if join_expr consists only of simple joins connected by AND without other predicates, a uniqueness constraint is not required)
+   * 3、if there is a partition hint, the partitions referenced by the inner table must include the partitions referenced by the outer table;
+   * Rules for eliminating anti join:
+   * 1、the AND connection tree in join_expr must consist only of simple join predicates (equality predicates on the same column), and the filter predicates of the inner table must be a simple AND tree;
+   * 2、simple join predicates in join_expr must have a uniqueness constraint; (or if join_expr consists only of simple joins connected by AND and the inner table has no filter predicates, a uniqueness constraint is not required)
+   * 3、if there is a partition hint, the partitions referenced by the inner table must include the partitions referenced by the outer table;
    */
   //int eliminate_semi_join_self_key(ObDMLStmt *stmt,
   //                                bool &trans_happened);
@@ -475,12 +474,12 @@ private:
 
   /**
    * @brief check_transform_validity_semi_self_key
-   * 检查semi_info包含的semi join是否可以消除
+   * Check if the semi join contained in semi_info can be eliminated
    * @param stmt 
-   * @param semi_join 待检查的semi join
-   * @param stmt_map_infos semi_join相关的generated_table的映射关系
-   * @param rel_map_info semi_join的左右表集的映射关系
-   * @param can_be_eliminated 是否能消除
+   * @param semi_join The semi join to be checked
+   * @param stmt_map_infos The mapping relationship of generated_table related to semi_join
+   * @param rel_map_info The mapping relationship of the left and right table sets of semi_join
+   * @param can_be_eliminated Whether it can be eliminated
    */
   int check_transform_validity_semi_self_key(ObDMLStmt *stmt,
                                              SemiInfo *semi_info,
@@ -503,20 +502,19 @@ private:
 
   /**
    * @brief check_semi_join_condition
-   * 检测semi join的condition
+   * check the semi join condition
    * @param stmt
    * @param semi_info
    * @param source_tables semi_info->left_tables_
    * @param target_tables semi_info->right_tables_
-   * @param stmt_map_info generate table的映射关系
-   * @param rel_map_info source tables、target tables的映射关系
-   * @param source_exprs 返回source tables参与semi join的列
-   * @param target_exprs 返回target tables参与semi join的列
-   * @param is_simple_join_condition semi join condition是否只有相同列等式
-   * @param target_tables_have_filter target tables上是否有过滤谓词
-   * 如果target tables有多个表，且内部有连接谓词，那连接谓词算笛卡尔积后的过滤谓词
-   * @param is_simple_filter 如果target table上有filter，返回所有的filter
-   * 是否是由简单谓词and构成
+   * @param stmt_map_info generate table mapping relationship
+   * @param rel_map_info source tables, target tables mapping relationship
+   * @param source_exprs return columns from source tables participating in semi join
+   * @param target_exprs return columns from target tables participating in semi join
+   * @param is_simple_join_condition whether the semi join condition consists only of equality on the same columns
+   * @param target_tables_have_filter whether there are filter predicates on target tables
+   * if target tables have multiple tables and internal join predicates, those join predicates are considered as filter predicates after Cartesian product
+   * @param is_simple_filter if there is a filter on the target table, return whether all filters are simple predicates connected by AND
    */
   // source_table and target_table come from the same stmt
   int check_semi_join_condition(ObDMLStmt *stmt,
@@ -552,9 +550,9 @@ private:
 
   /**
    * @is_equal_column
-   * source_col与target_col是否存在映射关系
-   * @param is_equal 是否存在映射关系
-   * @param is_reverse 是否是翻转后匹配映射关系
+   * does source_col have a mapping relationship with target_col
+   * @param is_equal whether there is a mapping relationship
+   * @param is_reverse whether it is a reverse match mapping relationship
    */
   int is_equal_column(const ObIArray<TableItem*> &source_tables,
                       const ObIArray<TableItem*> &target_tables,
@@ -574,9 +572,9 @@ private:
   
   /**
    * @brief do_elimination_semi_join_self_key
-   * 消除semi join后的谓词处理
-   * anti join的处理比较特殊
-   * 需要先改写谓词再删除inner table、更新table hash idx
+   * predicate processing after eliminating semi join
+   * the handling of anti join is quite special
+   * need to rewrite predicates first, then delete inner table and update table hash idx
    */
   int do_elimination_semi_join_self_key(ObDMLStmt *stmt,
                                         SemiInfo *semi_info,
@@ -587,10 +585,10 @@ private:
   
    /**
    * @brief trans_semi_table_item
-   * 将关联target_table的结构改写为关联source_table
-   * 从table items中删除target table
-   * 从partition信息中删除target table
-   * 重构 rel_idx
+   * Rewrite the structure associated with target_table to be associated with source_table
+   * Remove target table from table items
+   * Remove target table from partition information
+   * Reconstruct rel_idx
    * @param stmt
    * @param source_table
    * @param target_table
@@ -601,39 +599,39 @@ private:
 
   /**
    * @brief trans_semi_condition_exprs
-   * 消除anti join的谓词改写与消除semi join不同，需要在adjust table item
-   * 之前做，因为对于target table上的过滤谓词表达式需要取LNNVL，source table
-   * 上的过滤谓词不需要处理，所以如果adjust table item之后，就无法区分source table
-   * 与target table
+   * Eliminate anti join predicate rewriting is different from eliminating semi join, it needs to be done before adjust table item
+   * because the filter predicate expressions on the target table need to take LNNVL, while the filter predicates on the source table
+   * do not need to be processed, so if adjust table item is done afterwards, it will be unable to distinguish between source table
+   * and target table
    */
   int trans_semi_condition_exprs(ObDMLStmt *stmt,
                                  SemiInfo *semi_info);
 
   /**
    * @brief eliminate_semi_join_foreign_key
-   * 消除主外键连接的semi、anti join
-   * 消除semi join的规则要求：
-   * 1、主外键连接；
-   * 2、outer table为外键所在表；
-   * 3、inner table上没有partition hint
-   * 4、inner table上没有非主键过滤谓词；
-   * 5、当主外键索引时NOVALIDATE + norely 状态时，不应该用这个约束做主外键连接消除；
-   * 消除semi join的规则要求：
-   * 1、主外键连接；
-   * 2、outer table为外键所在表；
-   * 3、inner table上没有partition hint
-   * 4、inner table上没有过滤谓词；
-   * 5、当主外键索引时NOVALIDATE + norely 状态时，不应该用这个约束做主外键连接消除；
+   * Eliminate semi, anti join of foreign key primary key join
+   * Rules for eliminating semi join:
+   * 1、Primary foreign key join;
+   * 2、Outer table is the table where the foreign key is located;
+   * 3、Inner table has no partition hint
+   * 4、Inner table has no non-primary key filter predicates;
+   * 5、When the primary foreign key index is in NOVALIDATE + norely status, this constraint should not be used for primary foreign key join elimination;
+   * Rules for eliminating semi join:
+   * 1、Primary foreign key join;
+   * 2、Outer table is the table where the foreign key is located;
+   * 3、Inner table has no partition hint
+   * 4、Inner table has no filter predicates;
+   * 5、When the primary foreign key index is in NOVALIDATE + norely status, this constraint should not be used for primary foreign key join elimination;
    */
   //int eliminate_semi_join_foreign_key(ObDMLStmt *stmt,
   //                                    bool &trans_happened);
 
   /**
    * @brief check_transform_validity_semi_foreign_key
-   * 检查semi_info包含的semi join是否可以消除
+   * Check if the semi join contained in semi_info can be eliminated
    * @param stmt 
-   * @param semi_join 待检查的semi join
-   * @param can_be_eliminated 是否能消除
+   * @param semi_join The semi join to be checked
+   * @param can_be_eliminated Whether it can be eliminated
    */
   int check_transform_validity_semi_foreign_key(ObDMLStmt *stmt,
                                                 SemiInfo *semi_info,
@@ -659,17 +657,17 @@ private:
 
   // functions below trans self equal conditions to not null
   /**
-   * 重写 stmt 中同一列上的等值判断条件
-   * 如果是not null col，直接删除; 如果是nullable col，替换为 IS_NOT_NULL
+   * Rewrite equality condition on the same column in stmt
+   * If it is not null col, delete directly; if it is nullable col, replace with IS_NOT_NULL
    */
   int trans_self_equal_conds(ObDMLStmt *stmt);
   int trans_self_equal_conds(ObDMLStmt *stmt, ObIArray<ObRawExpr*> &cond_exprs);
-  // 检查col是否是nullable,如果是，那么添加is_not_null表达式
+  // Check if col is nullable, if so, then add is_not_null expression
   int add_is_not_null_if_needed(ObDMLStmt *stmt,
                                 ObIArray<ObColumnRefRawExpr *> &col_exprs,
                                 ObIArray<ObRawExpr*> &cond_exprs);
-  // 对于expr如果 column 没有非空约束，则替换为IS NOT NULL;
-  // 否则替换为TRUE, 对于OR、AND表达式，会对子表达式递归改写
+  // For expr if column does not have a NOT NULL constraint, then replace with IS NOT NULL;
+  // Otherwise replace with TRUE, for OR, AND expressions, it will recursively rewrite sub-expressions
   int recursive_trans_equal_join_condition(ObDMLStmt *stmt, ObRawExpr *expr);
   int do_trans_equal_join_condition(ObDMLStmt *stmt,
                                     ObRawExpr *expr,

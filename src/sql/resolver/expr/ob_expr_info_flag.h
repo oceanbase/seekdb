@@ -122,7 +122,7 @@ namespace oceanbase
 {
 namespace sql
 {
-// IS_XXX 和 CNT_XXX 必须一一对应地添加
+// IS_XXX and CNT_XXX must be added one-to-one
 enum ObExprInfoFlag
 {
 #define DEF_EXPR_INFO_FLAG(args...) CONCAT(DEF_EXPR_INFO_FLAG_, ARGS_NUM(args))(args)

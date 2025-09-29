@@ -265,9 +265,9 @@ int ObPLCursorTable::add_cursor(uint64_t pkg_id,
                                 bool has_hidden_rowid,
                                 uint64_t rowid_table_id,
                                 const common::ObIArray<ObSchemaObjVersion> &ref_objects,
-                                const ObRecordType* row_desc, //sql返回的行描述(record)
-                                const ObPLDataType& cursor_type, // cursor返回值类型(record)
-                                const common::ObIArray<int64_t> &formal_params, //cursor的形参
+                                const ObRecordType* row_desc, //sql returned row description(record)
+                                const ObPLDataType& cursor_type, // cursor return value type(record)
+                                const common::ObIArray<int64_t> &formal_params, // formal parameters of cursor
                                 ObPLCursor::CursorState state,
                                 bool has_dup_column_name,
                                 bool skip_locked)
@@ -1015,7 +1015,7 @@ int ObPLBlockNS::add_cursor(const ObString &name,
                             uint64_t rowid_table_id,
                             const common::ObIArray<ObSchemaObjVersion> &ref_objects,
                             const ObRecordType *row_desc,
-                            const ObPLDataType &cursor_type, // cursor返回值类型(record)
+                            const ObPLDataType &cursor_type, // cursor return value type(record)
                             const common::ObIArray<int64_t> &formal_params,
                             ObPLCursor::CursorState state,
                             bool has_dup_column_name,
@@ -1112,7 +1112,7 @@ int ObPLBlockNS::check_dup_symbol(const ObString &name, const ObPLDataType &type
             type.get_type() != symbol_table_->get_symbol(symbols_.at(i))->get_type().get_type()) {
           /* do nothing */
         } else {
-          //名字相同，且类型相同才认为是相同
+          //Names are the same and types are the same to be considered identical
           is_dup = true;
           ObPLVar *pl_var = const_cast<ObPLVar *>(symbol_table_->get_symbol(symbols_.at(i)));
           pl_var->set_dup_declare(is_dup);
@@ -1429,9 +1429,9 @@ int ObPLExternalNS::resolve_external_symbol(const common::ObString &name,
         }
       }
       //then database name
-      // 尝试看是不是系统变量的特殊写法，如 set SQL_MODE='ONLY_FULL_GROUP_BY';
+      // Try to see if it is a special syntax for system variables, such as set SQL_MODE='ONLY_FULL_GROUP_BY';
       if (OB_SUCC(ret)
-          && !resolve_ctx_.is_sql_scope_  // 纯SQL语境过来的表达式解析不需要尝试解析为SESSION VAR
+          && !resolve_ctx_.is_sql_scope_  // Expression parsing from pure SQL context does not need to attempt resolving as SESSION VAR
           && ObPLExternalNS::INVALID_VAR == type && lib::is_mysql_mode()) {
         type = SESSION_VAR;
         if (OB_FAIL(
@@ -1501,7 +1501,7 @@ int ObPLExternalNS::resolve_external_symbol(const common::ObString &name,
           const ObUserDefinedType *user_type = NULL;
           if (OB_FAIL(package_manager.get_package_var(resolve_ctx_, parent_id, name, var, var_idx))) {
             LOG_WARN("get package var failed", K(ret), K(parent_id), K(name));
-          } else if (OB_ISNULL(var)) { // 不是PackageVar尝试下是不是PackageType
+          } else if (OB_ISNULL(var)) { // is not PackageVar, try if it is PackageType
             if (OB_FAIL(package_manager.get_package_type(resolve_ctx_,
                                                          parent_id,
                                                          name,
@@ -1580,7 +1580,7 @@ int ObPLExternalNS::resolve_external_symbol(const common::ObString &name,
     break;
   case USER_VAR: {
     if (NULL == (session_info.get_user_variable(name))) {
-      //用户变量找不到可能是正常的，跳出 why? guangang.gg
+      //User variable not found might be normal, break why? guangang.gg
     } else {
       obj_type.set_obj_type(session_info.get_user_variable(name)->meta_.get_type());
       data_type.set_data_type(obj_type);
@@ -1592,7 +1592,7 @@ int ObPLExternalNS::resolve_external_symbol(const common::ObString &name,
       ObBasicSysVar *sys_var = NULL;
       if (OB_FAIL(session_info.get_sys_variable_by_name(name, sys_var))) {
         if (OB_ERR_SYS_VARIABLE_UNKNOWN == ret) {
-          //没找到退出即可，这里不报错，外面根据ObPLExternalNS::INVALID_VAR判断报错
+          //If not found, exit is sufficient, no error here, the caller will check ObPLExternalNS::INVALID_VAR to report an error
           type = ObPLExternalNS::INVALID_VAR;
           ret = OB_SUCCESS;
         } else {
@@ -1929,7 +1929,7 @@ int ObPLBlockNS::resolve_local_symbol(const ObString &name,
               ? ObPLExternalNS::PKG_VAR : ObPLExternalNS::LOCAL_VAR;
     }
   }
-  // 尝试匹配为当前NS的TYPE
+  // Try to match as TYPE for the current NS
   if (OB_SUCC(ret) && OB_INVALID_INDEX == var_idx) {
     for (int64_t i = 0; OB_SUCC(ret) && i < get_types().count(); ++i) {
       const ObUserDefinedType* user_type = type_table_->get_type(get_types().at(i));
@@ -2122,7 +2122,7 @@ int ObPLBlockNS::resolve_symbol(const ObString &var_name,
     if (OB_INVALID_INDEX == var_idx && OB_NOT_NULL(external_ns_)) {
       OZ (SMART_CALL(
         external_ns_->resolve_external_symbol(var_name, type, data_type, parent_id, var_idx)));
-      if (OB_SUCC(ret) && data_type.is_composite_type()) { // 来自外部的user_type需要在本namespace中展开
+      if (OB_SUCC(ret) && data_type.is_composite_type()) { // user_type from external needs to be expanded in this namespace
         const ObUserDefinedType *user_type = NULL;
         ObSEArray<ObDataType, 8> types;
         OZ (get_pl_data_type_by_id(data_type.get_user_type_id(), user_type));
@@ -2132,7 +2132,7 @@ int ObPLBlockNS::resolve_symbol(const ObString &var_name,
       }
     }
   } else {
-    // 尝试匹配为当前NS的VAR
+    // Try to match as VAR for the current NS
     for (int64_t i = 0;
          OB_SUCC(ret)
          && OB_INVALID_INDEX == var_idx
@@ -2157,7 +2157,7 @@ int ObPLBlockNS::resolve_symbol(const ObString &var_name,
         }
       } else { /*do nothing*/ }
     }
-    // 尝试匹配为当前NS的TYPE
+    // Try to match as TYPE for the current NS
     if (OB_SUCC(ret) && OB_INVALID_INDEX == var_idx && OB_INVALID_INDEX == parent_id) {
       for (int64_t i = 0; OB_SUCC(ret) && i < get_types().count(); ++i) {
         const ObUserDefinedType* user_type = type_table_->get_type(get_types().at(i));
@@ -2183,7 +2183,7 @@ int ObPLBlockNS::resolve_symbol(const ObString &var_name,
         parent_id = get_database_id();
       }
     }
-    // 尝试匹配为当前NS的Label
+    // Try to match as the Label of the current NS
     for (int64_t i = 0;
          OB_SUCC(ret)
          && OB_INVALID_INDEX == var_idx
@@ -2263,12 +2263,12 @@ int ObPLBlockNS::resolve_symbol(const ObString &var_name,
         }
       }
     }
-    // 尝试解析为外部符号
+    // Attempt to parse as external symbol
     if (OB_SUCC(ret) && OB_INVALID_INDEX == var_idx && resolve_external) {
       if (OB_NOT_NULL(external_ns_)) {
         OZ (SMART_CALL(
           external_ns_->resolve_external_symbol(var_name, type, data_type, parent_id, var_idx)));
-        if (OB_SUCC(ret) && data_type.is_composite_type()) { // 来自外部的user_type需要在本namespace中展开
+        if (OB_SUCC(ret) && data_type.is_composite_type()) { // user_type from external needs to be expanded in this namespace
           const ObUserDefinedType *user_type = NULL;
           ObSEArray<ObDataType, 8> types;
           OZ (get_pl_data_type_by_id(data_type.get_user_type_id(), user_type), K(data_type));
@@ -2692,14 +2692,14 @@ int ObPLBlockNS::get_pl_data_type_by_id(uint64_t type_id, const ObUserDefinedTyp
 {
   int ret = OB_SUCCESS;
   user_type = NULL;
-  if (OB_ISNULL(type_table_)) { //type id不会重复，所以不用像name那样逐层查找
+  if (OB_ISNULL(type_table_)) { // type id will not be duplicated, so it does not need to be searched layer by layer like name
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("user type table is null");
   } else if (OB_ISNULL(user_type = type_table_->get_type(type_id))) {
     if (OB_ISNULL(user_type = type_table_->get_external_type(type_id))) {
       ObSEArray<ObDataType, 8> types;
       if (NULL == external_ns_) {
-        //external_ns_为空说明已经到了package最上层名称空间，返回NULL即可
+        //external_ns_ is empty indicating that we have reached the top-level namespace of the package, return NULL immediately
       } else if (OB_FAIL(
           SMART_CALL(external_ns_->resolve_external_type_by_id(type_id, user_type)))) {
         LOG_WARN("resolve external type by id failed", K(ret), K(type_id));
@@ -2733,12 +2733,12 @@ int ObPLBlockNS::get_cursor(uint64_t pkg_id, uint64_t routine_id, int64_t idx,
 {
   int ret = OB_SUCCESS;
   cursor = NULL;
-  if (OB_ISNULL(cursor_table_)) { //id不会重复，所以不用像name那样逐层查找
+  if (OB_ISNULL(cursor_table_)) { // id will not be duplicated, so there is no need to search layer by layer like name
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("user type table is null");
   } else if (OB_ISNULL(cursor = cursor_table_->get_cursor(pkg_id, routine_id, idx))) {
     if (NULL == external_ns_ || NULL == external_ns_->get_parent_ns()) {
-      //external_ns_为空说明已经到了package最上层名称空间，返回NULL即可
+      //external_ns_ is empty indicating that we have reached the top-level namespace of the package, return NULL immediately
     } else if (OB_FAIL(external_ns_->get_parent_ns()->get_cursor(pkg_id, routine_id, idx,
                                                                  cursor))) {
       LOG_WARN("resolve external type by id failed", K(ret), K(pkg_id), K(routine_id), K(idx));
@@ -3132,7 +3132,7 @@ int ObPLInto::generate_into_variable_info(ObPLBlockNS &ns, const ObRawExpr &expr
           is_type_record_ = true;
           OZ (ns.get_pl_data_type_by_id(final_type.get_user_type_id(), user_type));
           CK (OB_NOT_NULL(user_type));
-          // 只能展一层
+          // Only expand one level
           OZ (ns.expand_data_type_once(user_type, basic_types, &not_null_flags, &pls_ranges));
           OZ (append(data_type_, basic_types));
           OZ (append(not_null_flags_, not_null_flags));
@@ -3599,7 +3599,7 @@ int ObPLStmtBlock::generate_symbol_debuginfo(
   int ret = OB_SUCCESS;
   int start = 0;
   int end = 0;
-  // 当前Block的Line范围
+  // Current Block's Line range
   for (int64_t i = 0; OB_SUCC(ret) && i < stmts_.count(); ++i) {
     ObPLStmt *stmt = stmts_.at(i);
     CK (OB_NOT_NULL(stmt));
@@ -3608,7 +3608,7 @@ int ObPLStmtBlock::generate_symbol_debuginfo(
       end = end < stmt->get_line() ? stmt->get_line() : end;
     }
   }
-  // 设置当前Block内符号的范围
+  // Set the range of symbols within the current Block
   for (int64_t i = 0; OB_SUCC(ret) && i < ns_.get_symbols().count(); ++i) {
     int64_t idx = ns_.get_symbols().at(i);
     const ObPLSymbolTable *symbol_table = ns_.get_symbol_table();
@@ -3618,7 +3618,7 @@ int ObPLStmtBlock::generate_symbol_debuginfo(
     OZ (symbol_debuginfo_table.add(
       idx, var->get_name(), var->get_pl_data_type().get_type(), start, end));
   }
-  // 递归设置Block内部的Block
+  // Recursively set the Block inside the Block
   for (int64_t i = 0; OB_SUCC(ret) && i < stmts_.count(); ++i) {
     ObPLStmt *stmt = stmts_.at(i);
     if (OB_ISNULL(stmt)) {
@@ -3671,8 +3671,8 @@ int ObPLFunctionAST::add_argument(const common::ObString &name,
 {
   int ret = OB_SUCCESS;
   ObPLDataType copy = type;
-  // is_read_only设置 : oracle mode根据真实情况设置
-  // mysql mode 如果是record type,说明是在trigger中使用,也根据实际情况设置,否则为false
+  // is_read_only setting : oracle mode set according to the actual situation
+  // mysql mode if it is record type, it means it is used in a trigger, also set according to the actual situation, otherwise false
   bool is_read_only = (PL_RECORD_TYPE == type.get_type() ? read_only : false);
   if (copy.is_obj_type()) {
     ObDataType *type = copy.get_data_type();
@@ -3723,7 +3723,7 @@ int ObPLFunctionAST::add_argument(const common::ObString &name,
                                         dummy_hidden_rowid,
                                         OB_INVALID_ID,
                                         dummy_ref_objects,
-                                        NULL, /*ref cursor的row desc不确定*/
+                                        NULL, /*row desc of ref cursor is uncertain*/
                                         dummy_return_type,
                                         dummy_formal_params,
                                         ObPLCursor::PASSED_IN,
@@ -4083,8 +4083,8 @@ extern "C" {
 #endif
 
 /*
- 从ObPLBlockNS里解析一个symbol，并给出在符号表里的下标，如果找不到返回值为OB_SUCCESS，但是下标返回OB_INVALID_INDEX；
- 封装成C接口供Parser调用
+ Parse a symbol from ObPLBlockNS and provide the index in the symbol table, if not found return OB_SUCCESS but the index returns OB_INVALID_INDEX;
+ Encapsulated as a C interface for Parser to call
  */
 int lookup_pl_symbol(const void *pl_ns, const char *symbol, size_t len, int64_t *idx)
 {

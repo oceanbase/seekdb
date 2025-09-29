@@ -136,8 +136,7 @@ public:
     return pos;
   }
 };
-
-// TODO 待参数调整
+// TODO parameters to be adjusted
 int ObTenantBase::init(ObCgroupCtrl *cgroup)
 {
   int ret = OB_SUCCESS;
@@ -483,7 +482,7 @@ void ObTenantEnv::set_tenant(ObTenantBase *ctx)
     ob_get_tenant_id() = ctx->id();
   }
   lib::set_tenant_tg_helper(ctx);
-  // 跳过系统租户的检查是因为系统租户的启动有特殊性
+  // Skip the system tenant check because the system tenant's startup has special characteristics
   if (ctx != nullptr && ctx->id() != OB_SYS_TENANT_ID && ctx->enable_tenant_ctx_check_) {
     lib::Threads::get_expect_run_wrapper() = ctx;
   } else {

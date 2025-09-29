@@ -139,7 +139,7 @@ int ObGrantResolver::resolve_grant_user(
 /* grant_system_privileges:
 role_list TO grantee_clause opt_with_admin_option
 [0]: role_list
-[1]: grantee_cluase
+[1]: grantee_clause
 [2]: opt_with_admin_option
 
 enum GrantParseOffset
@@ -149,8 +149,8 @@ enum GrantParseOffset
   PARSE_GRANT_ROLE_OPT_WITH,
   PARSE_GRANT_ROLE_MAX_IDX
 };
-从grant_role中解析出grantee和role_list，将grantee和role_list放入grant_stmt的role里面.
-role[0]：user_name of grantee
+Parse grantee and role_list from grant_role, and put grantee and role_list into role of grant_stmt.
+role[0]: user_name of grantee
 role[1]: host_name of grantee
 ...
 */
@@ -478,7 +478,7 @@ int ObGrantResolver::resolve_mysql(const ParseNode &parse_tree)
 
         //resolve users
         if (OB_SUCC(ret)) {
-          // oracle 模式下 grant 时，如果用户不存在，不允许创建该用户；fix #17900015
+          // In oracle mode during grant, if user does not exist, do not allow creating this user; fix #17900015
           bool need_create_user = false;
           CHECK_COMPATIBILITY_MODE(session_info_);
           need_create_user = !is_no_auto_create_user(params_.session_info_->get_sql_mode());

@@ -103,10 +103,10 @@ public:
   bool enable_pre_sort_;
   ObTableLoadPreSorter *pre_sorter_;
   int64_t px_writer_cnt_;
-  // px写入的列(包含隐藏主键列)
+  // px written columns (including hidden primary key column)
   ObArray<share::schema::ObColDesc> px_column_descs_;
   ObArray<common::ObAccuracy> px_column_accuracys_;
-  // px写入的列到写入旁路导入列的映射
+  // Mapping from px write columns to bypass import columns
   ObArray<int64_t> px_column_project_idxs_;
   ObTabletID single_tablet_id_;
   ObIVector *single_tablet_id_vector_;
@@ -246,8 +246,8 @@ public:
   storage::ObDirectLoadTableDataDesc basic_table_data_desc_;
   int64_t merge_count_per_round_;
   int64_t max_mem_chunk_count_;
-  int64_t mem_chunk_size_; // 在资源控制模式下, 动态获取
-  int64_t heap_table_mem_chunk_size_; // 在资源控制模式下, 动态获取
+  int64_t mem_chunk_size_; // Dynamically obtained in resource control mode
+  int64_t heap_table_mem_chunk_size_; // Dynamically obtained in resource control mode
   // dag
   ObTableLoadDagExecCtx dag_exec_ctx_;
   bool enable_dag_;
@@ -280,7 +280,7 @@ private:
     TransCtxMap;
   typedef common::ObLinkHashMap<table::ObTableLoadSegmentID, SegmentCtx> SegmentCtxMap;
 private:
-  ObTableLoadObjectAllocator<ObTableLoadStoreTrans> trans_allocator_; // 多线程安全
+  ObTableLoadObjectAllocator<ObTableLoadStoreTrans> trans_allocator_; // thread-safe
   lib::ObMutex op_lock_;
   mutable obsys::ObRWLock status_lock_;
   table::ObTableLoadStatusType status_;

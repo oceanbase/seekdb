@@ -926,9 +926,7 @@ TEST_F(TestChunkRowStore, disk_with_chunk)
 
   rs.reset();
 }
-
-
-// test chunk row store根据内存比例进行dump，去掉了这层逻辑，是否dump由上层驱动
+// test chunk row store dump according to memory ratio, removed this layer of logic, whether to dump is driven by the upper layer
 //case from oarowstore
 // TEST_F(TestChunkRowStore, start_dump_by_total_mem_used)
 // {

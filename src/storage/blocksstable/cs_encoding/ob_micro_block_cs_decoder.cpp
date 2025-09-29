@@ -1245,7 +1245,7 @@ int ObMicroBlockCSDecoder::filter_pushdown_filter(
   int ret = OB_SUCCESS;
   if (filter->is_filter_black_node()) {
     sql::ObBlackFilterExecutor *black_filter = static_cast<sql::ObBlackFilterExecutor *>(filter);
-    // TODO 暂时不考虑vectorize
+    // TODO temporarily do not consider vectorize
     if (OB_FAIL(filter_pushdown_filter(parent, black_filter, pd_filter_info, result_bitmap))) {
       LOG_WARN("fail to filter pushdown black filter", KR(ret));
     }
@@ -1254,7 +1254,7 @@ int ObMicroBlockCSDecoder::filter_pushdown_filter(
     if (OB_FAIL(filter_pushdown_filter(parent, white_filter, pd_filter_info, result_bitmap))) {
       LOG_WARN("fail to filter pushdown white filter", KR(ret));
     }
-  } else if (filter->is_filter_node()) { // TODO @donglou.zl 直接下压白盒子树
+  } else if (filter->is_filter_node()) { // TODO @donglou.zl directly push down the white box tree
     sql::ObPushdownFilterExecutor **children = filter->get_childs();
     for (int64_t i = 0; OB_SUCC(ret) && (i < filter->get_child_count()); ++i) {
       if (OB_ISNULL(children[i])) {

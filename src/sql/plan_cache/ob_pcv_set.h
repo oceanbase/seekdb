@@ -91,8 +91,8 @@ public:
   common::ObIAllocator *get_pc_allocator() const { return pc_alloc_; }
   void set_plan_cache_key(ObPlanCacheKey &key) { pc_key_ = key; }
   // @shaoge
-  // plan cache中,相同的pcv_set对象在map中可能同时存在三条记录，这三条记录的key为
-  // old_stmt_id, new_stmt_id以及sql，下面接口返回的key是old_stmt_id
+  // plan cache, the same pcv_set object may exist with three records in the map at the same time, these three records have keys of
+  // old_stmt_id, new_stmt_id and sql, the key returned by the following interface is old_stmt_id
   ObPlanCacheKey &get_plan_cache_key() { return pc_key_; }
   const ObString &get_sql() { return sql_; }
   int deep_copy_sql(const common::ObString &sql);
@@ -110,23 +110,22 @@ private:
   int64_t get_plan_num() const { return plan_num_; }
   int create_new_pcv(ObPlanCacheValue *&new_pcv);
   void free_pcv(ObPlanCacheValue *pcv);
-
-  // 如果sql包含子查询，并且子查询的投影列被参数化，由于子查询有同名列的约束，plan cache在匹配的时候需要进行约束检查
-  // 比如 select * (select 1, 2, 3 from dual), 参数化后select * (select ?, ?, ? from dual)，plan cache缓存了这一计划
-  // 如果来了一条sql select * (select 1, 1, 3 from dual), 命中计划，但是子查询有通名列
-  // plan cache应该拒绝命中计划，并让sql走硬解析，抛出同名列错误
+  // If sql contains a subquery, and the projection columns of the subquery are parameterized, due to the constraint of having the same column names in the subquery, plan cache needs to perform constraint checking when matching
+  // For example select * (select 1, 2, 3 from dual), parameterized as select * (select ?, ?, ? from dual), plan cache cached this plan
+  // If a sql select * (select 1, 1, 3 from dual) comes in, it hits the plan, but the subquery has ambiguous columns
+  // plan cache should reject hitting the plan, and let sql go through hard parsing, throw duplicate column name error
   int set_raw_param_info_if_needed(ObPlanCacheObject *cache_obj);
   int check_raw_param_for_dup_col(ObPlanCacheCtx &pc_ctx, bool &contain_dup_col);
 private:
   bool is_inited_;
   ObPlanCacheKey pc_key_; //used for manager key memory
   common::ObIAllocator *pc_alloc_;
-  common::ObString sql_;  // 往plan cache中增加以sql为key的kv对时需要本成员
+  common::ObString sql_;  // when adding a kv pair with sql as the key to the plan cache, this member is needed
   common::ObDList<ObPlanCacheValue> pcv_list_;
-  //正常parser时能够识别的常量的个数，用于校验faster parse识别的常量个数与正常parser识别个数是否一致。
+  // Number of constants that can be recognized by normal parser, used to verify if the number of constants recognized by faster parse is consistent with that recognized by normal parser.
   int64_t normal_parse_const_cnt_;
   int64_t min_cluster_version_;
-  // 记录该pcv_set下面挂了多少plan，上限为MAX_PCV_SET_PLAN_NUM
+  // Record how many plans are hanging under this pcv_set, with a limit of MAX_PCV_SET_PLAN_NUM
   int64_t plan_num_;
   common::ObSEArray<common::ObString, 4> sql_ids_;
   bool need_check_gen_tbl_col_;

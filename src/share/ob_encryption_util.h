@@ -119,11 +119,11 @@ struct ObBackupEncryptionMode final
 {
   enum EncryptionMode
   {
-    NONE = 0, // 不加密
-    PASSWORD = 1, // 密码校验
-    PASSWORD_ENCRYPTION = 2,//密码校验+加密
-    TRANSPARENT_ENCRYPTION = 3,//透明加密
-    DUAL_MODE_ENCRYPTION = 4,//透明加密+密码校验
+    NONE = 0, // no encryption
+    PASSWORD = 1, // password validation
+    PASSWORD_ENCRYPTION = 2,//password validation + encryption
+    TRANSPARENT_ENCRYPTION = 3,//transparent encryption
+    DUAL_MODE_ENCRYPTION = 4,//Transparent encryption + password validation
     MAX_MODE
   };
   static bool is_valid(const EncryptionMode &mode);

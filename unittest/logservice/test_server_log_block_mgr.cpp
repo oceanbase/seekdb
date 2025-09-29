@@ -392,7 +392,7 @@ TEST_F(TestServerLogBlockMgr, resize_failed_and_restar)
   meta.status_ = ObServerLogBlockMgr::EXPANDING_STATUS;
   meta.next_total_size_ = aligned_reserved_size;
   log_block_mgr_.update_log_pool_meta_guarded_by_lock_(meta);
-  // 触发trim
+  // trigger trim
   system("touch clog_disk/clog/log_pool/100050");
   system("touch clog_disk/clog/log_pool/100000");
 

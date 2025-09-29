@@ -195,7 +195,7 @@ int ObAllVirtualHADiagnose::insert_stat_(storage::DiagnoseInfo &diagnose_info)
       case GC_START_TS:
         cur_row_.cells_[i].set_int(-1);
         break;
-      //TODO: @keqing.llt archive_scn列目前只占位
+      //TODO: @keqing.llt archive_scn column is currently just a placeholder
       case ARCHIVE_SCN:
         cur_row_.cells_[i].set_uint64(0);
         break;

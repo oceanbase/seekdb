@@ -216,8 +216,7 @@ public:
   VIRTUAL_TO_STRING_KV("IPalfEnvImpl", "Dummy");
 
 };
-
-// 日志服务的容器类，同时管理logservice对象的生命周期
+// Container class for the log service, also manages the lifecycle of the logservice object
 class PalfEnvImpl : public IPalfEnvImpl
 {
 public:
@@ -237,11 +236,10 @@ public:
            share::ObLocalDevice *log_local_device,
            share::ObResourceManager *resource_manager,
            common::ObIOManager *io_manager);
-
-  // start函数包含两层含义：
+  // start function contains two meanings:
   //
-  // 1. 启动PalfEnvImpl所包含的各类工作线程
-  // 2. 根据base_dir中包含的log_storage和meta_storage文件，加载所有日志流所需的元信息及日志，执行故障恢复
+  // 1. Start all the worker threads contained in PalfEnvImpl
+  // 2. According to the log_storage and meta_storage files included in base_dir, load all the required metadata and logs for the log streams, and perform fault recovery
   //
   // @return :TODO
   int start();
@@ -249,18 +247,18 @@ public:
   void wait();
   void destroy();
 public:
-  // 创建日志流接口
-  // @param [in] palf_id，待创建日志流的标识符
-  // @param [in] palf_base_info，palf的日志起点信息
-  // @param [out] palf_handle_impl，创建成功后生成的palf_handle_impl对象
-  //                           在不再使用palf_handle_impl对象时，需要调用者执行revert_palf_handle_impl
+  // Create log stream interface
+  // @param [in] palf_id, identifier of the log stream to be created
+  // @param [in] palf_base_info, palf's log start information
+  // @param [out] palf_handle_impl, the generated palf_handle_impl object after successful creation
+  //                           When the palf_handle_impl object is no longer in use, the caller needs to execute revert_palf_handle_impl
   int create_palf_handle_impl(const int64_t palf_id,
                               const AccessMode &access_mode,
                               const PalfBaseInfo &palf_base_info,
                               IPalfHandleImpl *&palf_handle_impl) override final;
-  // 删除日志流, 由Garbage Collector调用
+  // Delete log stream, called by Garbage Collector
   //
-  // @param [in] palf_id，删除的日志流标识符
+  // @param [in] palf_id, the identifier of the log stream to be deleted
   //
   // @return :TODO
   int remove_palf_handle_impl(const int64_t palf_id) override final;

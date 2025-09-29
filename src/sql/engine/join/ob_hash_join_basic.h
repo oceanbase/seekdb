@@ -399,7 +399,7 @@ public:
 
   int32_t get_part_level() { return part_level_; }
   int32_t get_part_id() { return part_id_; }
-  bool is_dumped() { return batch_->is_dumped(); } //需要实现
+  bool is_dumped() { return batch_->is_dumped(); } // need to implement
 
   int check();
   void reset();

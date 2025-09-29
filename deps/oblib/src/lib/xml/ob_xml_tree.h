@@ -346,7 +346,7 @@ private:
     uint16 flags_; 
     struct { 
       uint16_t standalone_ : 4;    // : default 0, yes 1, no 2, other 3;
-      uint16_t has_xml_decl_: 1;   // no 0， yes 1
+      uint16_t has_xml_decl_: 1;   // no 0, yes 1
       uint16_t is_empty_: 1;       // empty
       uint16_t is_unparse_: 1;     // well format element
       uint16_t encoding_val_empty_: 1;    //  has encoding clause but encoding value is null
@@ -511,7 +511,7 @@ public:
   const ObString get_text() { return text_; }  // get TEXT
   size_t get_length() { return length_; }  // get length
   void set_text(const ObString text) {text_.assign_ptr(text.ptr(), text.length()); length_ = text.length();} // set text and length
-  void set_length(int length) { length_ = length; } // update length。
+  void set_length(int length) { length_ = length; } // update length.
   bool is_space() { return is_space_; }
   void set_is_space(bool is_space) { is_space_ = is_space; }
   int64_t get_serialize_size();

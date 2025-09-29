@@ -96,9 +96,9 @@ protected:
 protected:
   common::ObArenaAllocator alloc_;
   Compare cmp_;
-  bool need_skip_init_row_; //是否需要跳过和最初的 last_output_row_ 比较; false: 不需要; true: 需要;
-                            //目前仅针对 merge except 和 merge intersect 置为TRUE, 因为无法区分 last_output_row_
-                            //是来自初始化时的全NULL or 左侧child的全NULL, see bug
+  bool need_skip_init_row_; // Whether to skip comparison with the initial last_output_row_; false: no; true: yes;
+                            //Currently only for merge except and merge intersect set to TRUE, because cannot distinguish last_output_row_
+                            // is from all NULL at initialization or all NULL from the left child, see bug
   int64_t last_row_idx_;
   bool use_last_row_;
   // for vec2.0

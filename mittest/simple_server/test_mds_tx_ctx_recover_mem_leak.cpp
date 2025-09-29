@@ -126,7 +126,7 @@ TEST_F(ObTestMdsTxCtxRecoverMemLeakAfterRecover, after_recover_test)
   ASSERT_EQ(OB_SUCCESS, delete_tenant("tt1"));
   OCCAM_LOG(INFO, "step 11: after delete tenant");
   int64_t result_num = 0;
-  // 等待租户的MTL组建析构，此时会检查内存泄露
+  // Wait for the tenant's MTL construction destruction, at this time it will check for memory leaks
   do {
     char where_condition[512] = { 0 };
     databuff_printf(where_condition, 512, "where event = 'remove_tenant' and value1 = 1002");

@@ -101,7 +101,7 @@ do {                                                                            
 #define MAX_VARCHAR_LENGTH 4194303
 #define OUT_OF_STR_LEN -2
 #define DEFAULT_STR_LENGTH -1
-#define BINARY_COLLATION 63     /*需要重构，改为c++ parser避免重复定义 */
+#define BINARY_COLLATION 63     /*Need to refactor, change to c++ parser to avoid duplicate definitions */
 #define INVALID_COLLATION 0
 
 extern ParseNode *merge_tree(void *malloc_pool, int *fatal_error, ObItemType node_tag, ParseNode *source_tree);

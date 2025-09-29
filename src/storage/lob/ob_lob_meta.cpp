@@ -145,8 +145,8 @@ int ObLobMetaScanIter::get_next_row_local(ObLobMetaScanResult &result)
       result.len_ = cur_len;
       // if scan backward, do full scan, not support range
       // if (!scan_backward_) {
-        // 3种场景，meta_info与左右边界相交，或者被包含
-        if (cur_pos < offset_) { // 越过左边界,
+        // 3 scenarios, meta_info intersects with the left or right boundary, or is contained
+        if (cur_pos < offset_) { // exceed left boundary,
           if (cur_pos + cur_len < offset_) {
             ret = OB_ERR_INTERVAL_INVALID;
             LOG_WARN("Invalid query result at left edge.", K(ret), K(cur_pos), K(cur_len), K(offset_), K(len_));
@@ -160,7 +160,7 @@ int ObLobMetaScanIter::get_next_row_local(ObLobMetaScanResult &result)
           }
         }
         if (OB_SUCC(ret)) {
-          if (cur_pos + cur_len > offset_ + len_) { // 越过右边界
+          if (cur_pos + cur_len > offset_ + len_) { // exceed right boundary
             if (cur_pos > offset_ + len_) {
               ret = OB_ERR_INTERVAL_INVALID;
               LOG_WARN("Invalid query result at right edge.", K(ret), K(cur_pos), K(cur_len), K(offset_), K(len_));

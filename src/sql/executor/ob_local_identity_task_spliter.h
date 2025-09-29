@@ -21,10 +21,9 @@ namespace sql
 {
 class ObPhysicalPlan;
 class ObTaskInfo;
-
-// 该类仅用于只生成一个本地task的情况，而在executor阶段如果判断到
-// 切分类型为ObTaskSpliter::LOCAL_IDENTITY_SPLIT则会直接优化掉，不走切分job的流程，
-// 相当于这个类的大部分函数都不会被调用到
+// This class is only used for generating a single local task, and during the executor stage if it is determined that
+// Split type is ObTaskSpliter::LOCAL_IDENTITY_SPLIT will be directly optimized out, not going through the split job process,
+// Equivalent to most functions of this class not being called
 class ObLocalIdentityTaskSpliter : public ObTaskSpliter
 {
 public:

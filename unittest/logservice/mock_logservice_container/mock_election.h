@@ -42,7 +42,7 @@ public:
     UNUSED(new_config_version);
     return ret;
   }
-  // 设置成员列表
+  // Set member list
   int set_memberlist(const MemberList &new_member_list) override final
   {
     int ret = OB_SUCCESS;
@@ -57,7 +57,7 @@ public:
   }
   int set_priority(ElectionPriority *) override final { return  OB_SUCCESS; }
   int reset_priority() override final { return  OB_SUCCESS; }
-  // 获取选举当前的角色
+  // Get the current role of the election
   int get_role(common::ObRole &role, int64_t &epoch) const override final
   {
     int ret = OB_SUCCESS;
@@ -65,7 +65,7 @@ public:
     epoch = leader_epoch_;
     return ret;
   }
-  // 如果自己是leader，那么拿到的就是准确的leader，如果自己不是leader，那么拿到lease的owner
+  // If you are the leader, then you get the accurate leader, if you are not the leader, then you get the lease owner
   int get_current_leader_likely(common::ObAddr &p_addr,
                                 int64_t &p_cur_leader_epoch) const override final
   {
@@ -74,7 +74,7 @@ public:
     p_cur_leader_epoch = leader_epoch_;
     return ret;
   }
-  // 供内部测试的时候切主使用
+  // For internal testing to switch the main use
   virtual int change_leader_to(const common::ObAddr &dest_addr) override final
   {
     int ret = OB_SUCCESS;
@@ -88,19 +88,19 @@ public:
     UNUSED(reason);
     return OB_SUCCESS;
   }
-  // 拿本机地址
+  // Get local address
   const common::ObAddr &get_self_addr() const override final
   {
     return self_;
   }
-  // 打印日志
+  // print log
   virtual int64_t to_string(char *buf, const int64_t buf_len) const override final
   {
     UNUSED(buf);
     UNUSED(buf_len);
     return 0;
   }
-  // 处理消息
+  // Process message
   virtual int handle_message(const ElectionPrepareRequestMsg &msg) override final
   {
     int ret = OB_SUCCESS;

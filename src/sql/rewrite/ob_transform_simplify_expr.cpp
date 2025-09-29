@@ -223,12 +223,12 @@ int ObTransformSimplifyExpr::flatten_exprs(common::ObIArray<ObRawExpr*> &exprs, 
 
 // for select/update/delete
 //
-// 1.当condition中含有column is NULL(is not NULL)时，判断column是否为NOT NULL，如果是，则将column is NULL替换为false(true)
-// 2.改写的条件：
-//   1）column 含有not null属性
-//   2）column的类型不能为datetime和date，含有auto_increament属性并且sql_auto_is_null非0(is not null不受这个限制),原因详见：http://dev.mysql.com/doc/refman/5.7/en/comparison-operators.html#operator_is-null
-//   3）column不能来自子查询，通过1）能够过滤
-//   4）column不能来自left join的右枝，right join的左枝，full outer join的左右枝
+// 1.When condition contains column is NULL(is not NULL), determine if column is NOT NULL, if so, replace column is NULL with false(true)
+// 2. Rewritten condition:
+//   1）column contains not null attribute
+//   2）the type of column cannot be datetime and date, contains auto_increment attribute and sql_auto_is_null is not 0 (is not null is not restricted by this), for details see: http://dev.mysql.com/doc/refman/5.7/en/comparison-operators.html#operator_is-null
+//   3) column cannot come from a subquery, filtered by 1)
+//   4) column cannot come from the right branch of a left join, the left branch of a right join, or either branch of a full outer join
 int ObTransformSimplifyExpr::replace_is_null_condition(ObDMLStmt *stmt, bool &trans_happened)
 {
   int ret = OB_SUCCESS;
@@ -552,8 +552,8 @@ int ObTransformSimplifyExpr::convert_preds_vector_to_scalar(ObDMLStmt *stmt, boo
   } else if (!stmt->is_sel_del_upd()) {
     //do nothing
   } else {
-    /// 需要转换的谓词有: where, join condition.
-    /// having 中能下降的都下降过了.
+    /// The predicates that need to be converted are: where, join condition.
+    /// having all that can be reduced have been reduced.
     for (int64_t i = 0; OB_SUCC(ret) && i < stmt->get_condition_size(); i++) {
       if (OB_FAIL(ObTransformUtils::convert_preds_vector_to_scalar(*ctx_,
                                              stmt->get_condition_expr(i), new_cond, is_happened))) {
@@ -3697,7 +3697,7 @@ int ObTransformSimplifyExpr::check_convert_then_exprs_validity(ObRawExpr *parent
       if (OB_ISNULL(enum_expr = enum_exprs.at(i))) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("expr is NULL", K(ret), K(enum_expr));
-        // 一般情况下，每个分支的目标表达式即使类型不完全相同也至少是可比较的。NULL 比较特殊，这里做特殊适配
+        // Generally, the target expression of each branch is at least comparable even if the types are not exactly the same. NULL is special, so we make a special adaptation here
       } else if (enum_expr->is_const_expr() && enum_expr->get_result_type().is_null() &&
                  OB_FAIL(ObTransformUtils::add_cast_for_replace_if_need(*(ctx_->expr_factory_), 
                                                                         case_expr, 

@@ -190,9 +190,9 @@ typedef enum ObItemType
   T_OBJ_ACCESS_REF = 167,
   T_OP_CONNECT_BY_ROOT = 168,
 
-  /*regexp_substr这个函数注册已经由T_FUN_SYS_REGEXP_SUBSTR代替,因为将其注册在这会造成oracle无法识别这个函数，
-  因此同时不确定删除会不会影响其它,因此选择了保留*/
-  T_OP_REGEXP_SUBSTR = 169,
+  /*regexp_substr this function registration has been replaced by T_FUN_SYS_REGEXP_SUBSTR, because registering it here would cause Oracle to fail to recognize this function,
+  therefore it is also uncertain whether deletion would affect others, so the decision was made to retain it
+  T_OP_REGEXP_SUBSTR = 169,*/
   T_OP_GET_PACKAGE_VAR = 170,
   T_OP_SHADOW_UK_PROJECT = 171,
 
@@ -1248,7 +1248,7 @@ typedef enum ObItemType
   T_MINVALUE = 3437,
   T_NOMINVALUE = 3438,
   T_CYCLE = 3439,
-  /*T_NOCYCLE, defined */
+  //T_NOCYCLE, defined
   T_ORDER = 3440,
   T_NOORDER = 3441,
   T_CACHE = 3442,
@@ -1467,7 +1467,7 @@ typedef enum ObItemType
   T_NO_DISTINCT_PUSHDOWN = 3644,
   T_USE_HASH_SET = 3645,
   T_NO_USE_HASH_SET = 3646,
-  T_NEG_SIGN = 3647, /* 用于支持hint里的负数 */
+  T_NEG_SIGN = 3647, /* Used to support negative numbers in hint */
   T_USE_LATE_MATERIALIZATION = 3648,
   T_NO_USE_LATE_MATERIALIZATION = 3649,
   T_NO_REWRITE = 3650,
@@ -3026,7 +3026,7 @@ extern const char *get_type_name(int type);
                              (op) == T_FUNC_SYS_ARRAY_FILTER || \
                              (op) == T_FUNC_SYS_ARRAY_SORTBY)
 /**
- * @notice: 目前只支持IS_BASIC_CMP_OP这个宏里定义的op type，如果有在这之外的需求，请扩展这个接口的实现
+ * @notice: Currently only supports op types defined in the IS_BASIC_CMP_OP macro, if there are requirements outside of this, please extend the implementation of this interface
  * */
 inline ObItemType get_opposite_compare_type(ObItemType src_type)
 {

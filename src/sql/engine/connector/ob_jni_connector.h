@@ -28,95 +28,95 @@ class ObJniConnector {
 public:
   enum OdpsType {
     /**
-     * 8字节有符号整型
+     * 8-byte signed integer
      */
     BIGINT,
     /**
-     * 双精度浮点
+     * double precision floating point
      */
     DOUBLE,
     /**
-     * 布尔型
+     * Boolean
      */
     BOOLEAN,
     /**
-     * 日期类型
+     * Date type
      */
     DATETIME,
     /**
-     * 字符串类型
+     * string type
      */
     STRING,
     /**
-     * 精确小数类型
+     * precise decimal type
      */
     DECIMAL,
     /**
-     * MAP类型
+     * MAP type
      */
     MAP,
     /**
-     * ARRAY类型
+     * ARRAY type
      */
     ARRAY,
     /**
-     * 空
+     * empty
      */
     VOID,
     /**
-     * 1字节有符号整型
+     * 1 byte signed integer
      */
     TINYINT,
     /**
-     * 2字节有符号整型
+     * 2-byte signed integer
      */
     SMALLINT,
     /**
-     * 4字节有符号整型
+     * 4-byte signed integer
      */
     INT,
     /**
-     * 单精度浮点
+     * single precision float
      */
     FLOAT,
     /**
-     * 固定长度字符串
+     * Fixed length string
      */
     CHAR,
     /**
-     * 可变长度字符串
+     * variable length string
      */
     VARCHAR,
     /**
-     * 时间类型
+     * Time type
      */
     DATE,
     /**
-     * 时间戳
+     * timestamp
      */
     TIMESTAMP,
     /**
-     * 字节数组
+     * byte array
      */
     BINARY,
     /**
-     * 日期间隔
+     * Date interval
      */
     INTERVAL_DAY_TIME,
     /**
-     * 年份间隔
+     * Year interval
      */
     INTERVAL_YEAR_MONTH,
     /**
-     * 结构体
+     * structure
      */
     STRUCT,
     /**
-     * JSON类型
+     * JSON type
      */
     JSON,
     /**
-     * 时区无关的时间戳
+     * Time zone agnostic timestamp
      */
     TIMESTAMP_NTZ,
     /**

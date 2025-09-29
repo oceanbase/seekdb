@@ -43,15 +43,15 @@ struct AbstractPriority
 {
   friend class unittest::TestElectionPriority;
   AbstractPriority() : is_valid_(false) {}
-  // 判断该优先级从哪个版本开始生效
+  // Determine from which version this priority starts to take effect
   virtual uint64_t get_started_version() const = 0;
-  // 序列化相关
+  // Serialization related
   virtual int serialize(char* buf, const int64_t buf_len, int64_t& pos) const = 0;
   virtual int deserialize(const char* buf, const int64_t data_len, int64_t& pos) = 0;
   virtual int64_t get_serialize_size(void) const = 0;
-  // 相同优先级版本的比较策略
+  // Comparison strategy for versions with the same priority
   virtual int compare(const AbstractPriority &rhs, int &result, ObStringHolder &reason) const = 0;
-  // 刷新优先级的方法
+  // The method to refresh priority
   int refresh(const share::ObLSID &ls_id) {
     int ret = OB_SUCCESS;
     is_valid_ = false;
@@ -60,9 +60,9 @@ struct AbstractPriority
     }
     return ret;
   }
-  // 判断字段内容是否有效的方法，或者refresh()成功后也是true
+  // The method to determine if the field content is valid, or true after refresh() succeeds
   bool is_valid() const { return is_valid_; }
-  // fatal failure将绕过RCS在选举层面直接切主
+  // fatal failure will bypass RCS and directly perform a leader switch at the election level
   bool has_fatal_failure() const { return is_valid_ && has_fatal_failure_(); }
   virtual TO_STRING_KV(K_(is_valid));
 protected:
@@ -82,16 +82,16 @@ public:
   PriorityV1() : is_observer_stopped_(false), is_server_stopped_(false), is_zone_stopped_(false),
                  is_primary_region_(false), is_in_blacklist_(false),  is_manual_leader_(false),
                  zone_priority_(INT64_MAX) {scn_.set_min();}
-  // 判断该优先级策略是否适用于特定的版本
+  // Determine whether this priority strategy is applicable to a specific version
   virtual uint64_t get_started_version() const override { return CLUSTER_VERSION_1_0_0_0; }
-  // 相同优先级版本的比较策略
+  // Comparison strategy for versions with the same priority
   virtual int compare(const AbstractPriority &rhs, int &result, ObStringHolder &reason) const override;
   // int assign(const PriorityV1 &rhs);
   TO_STRING_KV(K_(is_valid), K_(is_observer_stopped), K_(is_server_stopped), K_(is_zone_stopped),
                K_(fatal_failures), K_(is_primary_region), K_(serious_failures), K_(is_in_blacklist),
                K_(in_blacklist_reason), K_(scn), K_(is_manual_leader), K_(zone_priority));
 protected:
-  // 刷新优先级的方法
+  // The method to refresh priority
   virtual int refresh_(const share::ObLSID &ls_id) override;
   virtual bool has_fatal_failure_() const override;
   int get_scn_(const share::ObLSID &ls_id, share::SCN &scn);
@@ -138,13 +138,13 @@ public:
   ElectionPriorityImpl(const share::ObLSID ls_id) : ls_id_(ls_id), lock_(common::ObLatchIds::ELECTION_LOCK) {}
   virtual ~ElectionPriorityImpl() {}
   void set_ls_id(const share::ObLSID ls_id);
-  // 优先级需要序列化能力，以便通过消息传递给其他副本
+  // Priority needs serialization capability to be passed to other replicas via messages
   virtual int serialize(char* buf, const int64_t buf_len, int64_t& pos) const;
   virtual int deserialize(const char* buf, const int64_t data_len, int64_t& pos);
   virtual int64_t get_serialize_size(void) const;
-  // 主动刷新选举优先级的方法
+  // The method for actively refreshing election priority
   virtual int refresh();
-  // 在priority间进行比较的方法
+  // The method for comparing between priorities
   virtual int compare_with(const palf::election::ElectionPriority &rhs,
                            const uint64_t compare_version,
                            const bool decentralized_voting,
@@ -152,7 +152,7 @@ public:
                            ObStringHolder &reason) const;
   virtual int get_size_of_impl_type() const;
   virtual void placement_new_impl(void *ptr) const;
-  // fatal failure跳过RCS直接切主
+  // fatal failure skip RCS directly switch to leader
   virtual bool has_fatal_failure() const;
   int64_t to_string(char *buf, const int64_t buf_len) const override;
 private:

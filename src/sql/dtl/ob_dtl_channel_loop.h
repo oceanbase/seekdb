@@ -124,7 +124,7 @@ private:
   common::ObSEArray<ObDtlChannel*, 128> chans_;
   int64_t next_idx_;
   uint16_t last_msg_type_;
-  common::SimpleCond cond_; // 1对1的唤醒模式，用SimpleCond即可
+  common::SimpleCond cond_; // 1-to-1 wake-up mode, SimpleCond is sufficient
   bool ignore_interrupt_;
   uint64_t tenant_id_;
   int64_t timeout_;
@@ -158,7 +158,7 @@ OB_INLINE void ObDtlChannelLoop::add_last_data_list(ObDtlChannel *ch)
 OB_INLINE void ObDtlChannelLoop::remove_data_list(ObDtlChannel *ch, bool force = false)
 {
   if (OB_UNLIKELY(force)) {
-    // 当unlink channel时去掉ch的prev_link和next_link，这样其他channel就避免了依赖
+    // When unlink channel remove ch's prev_link and next_link, so other channels avoid dependency
     ObLockGuard<ObSpinLock> lock_guard(spin_lock_);
     ch->remove_self();
   } else {

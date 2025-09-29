@@ -243,8 +243,7 @@ int ObTableApiTTLExecutor::do_insert()
 {
   int ret = OB_SUCCESS;
   const ObTableEntity *entity = static_cast<const ObTableEntity*>(tb_ctx_.get_entity());
-
-  // do_insert前被conflict checker刷成了旧行，需要重新刷一遍
+  // do_insert was brushed to the old row by the conflict checker, need to brush it again
   if (OB_FAIL(refresh_exprs_frame(entity))) {
     LOG_WARN("fail to refresh exprs frame", K(ret));
   } else if (OB_FAIL(insert_row_to_das())) {
@@ -275,7 +274,7 @@ int ObTableApiTTLExecutor::update_row_to_conflict_checker()
   } else {
     upd_rtdef.found_rows_++;
     const ObChunkDatumStore::StoredRow *upd_new_row = insert_row;
-    const ObChunkDatumStore::StoredRow *upd_old_row = constraint_values.at(0).current_datum_row_; // 这里只取第一行是和mysql对齐的
+    const ObChunkDatumStore::StoredRow *upd_old_row = constraint_values.at(0).current_datum_row_; // Here only the first row is taken to align with MySQL
     if (OB_ISNULL(upd_old_row)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("upd_old_row is NULL", K(ret));
@@ -303,11 +302,11 @@ int ObTableApiTTLExecutor::update_row_to_conflict_checker()
 //                unique key idx0(c2), unique key idx1(c3));
 // insert into t values(1, 1, 1),(2, 2, 2),(3, 3, 3);
 // insert into t values(3,1,2) ON DUPLICATE KEY UPDATE c1=4;
-// 执行insert后map中有3个元素：
+// Execute insert and there are 3 elements in the map:
 //  1->(base:1, 1, 1 curr:1, 1, 1), 
 //  2->(base:2, 2, 2 curr:2, 2, 2), 
 //  3->(base:3, 3, 3 curr:3, 3, 3);
-// 执行conflict_checker_.update_row后:
+// After executing conflict_checker_.update_row:
 //  1->(base:1, 1, 1 curr:nul), 
 //  2->(base:2, 2, 2 curr:nul), 
 //  3->(base:3, 3, 3 curr:4, 3, 3);
@@ -337,8 +336,8 @@ int ObTableApiTTLExecutor::update_row_to_das()
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected row source", K(ret), K(constraint_value.new_row_source_));
     } else { // FROM_UPDATE
-      // baseline_datum_row_ 代表存储扫描回来的冲突旧行
-      // current_datum_row_ 当前更新的新行
+      // baseline_datum_row_ represents the storage of the conflicting old row scanned back
+      // current_datum_row_ the new row being updated
       if (NULL != constraint_value.baseline_datum_row_ &&
           NULL != constraint_value.current_datum_row_) {
         if (OB_FAIL(stored_row_to_exprs(*constraint_value.baseline_datum_row_,
@@ -358,7 +357,7 @@ int ObTableApiTTLExecutor::update_row_to_das()
           }
         }
       } else if (NULL == constraint_value.baseline_datum_row_ &&
-                 NULL != constraint_value.current_datum_row_) { // 单单是唯一索引冲突的时候，会走这个分支
+                 NULL != constraint_value.current_datum_row_) { // This branch is taken only when there is a unique index conflict
         OZ(to_expr_skip_old(*constraint_value.current_datum_row_,
                             ttl_spec_.get_ctdefs().at(0)->upd_ctdef_));
         OZ(insert_upd_new_row_to_das());
@@ -397,25 +396,24 @@ int ObTableApiTTLExecutor::insert_upd_new_row_to_das()
 int ObTableApiTTLExecutor::do_update()
 {
   int ret = OB_SUCCESS;
-  // 1. 刷frame，刷到upd_ctdef.new_row中
+  // 1. Brush frame, brush to upd_ctdef.new_row
   // 2. conflict_checker_.update_row
-  // 3. 遍历冲突map，do_update,参考ObTableApiInsertUpExecutor::do_update
+  // 3. Traverse the conflict map, do_update, refer to ObTableApiInsertUpExecutor::do_update
 
-  if (OB_FAIL(conflict_checker_.do_lookup_and_build_base_map(1))) { // 1. 使用冲突行去回表，构造冲突行map，key为rowkey，value为旧行
+  if (OB_FAIL(conflict_checker_.do_lookup_and_build_base_map(1))) { // 1. Use the conflicting row to look up and construct a conflict row map, key is rowkey, value is the old row
     LOG_WARN("fail to do table lookup", K(ret));
-  } else if (OB_FAIL(update_row_to_conflict_checker())) { // 2. 将更新的行刷到conflict_checker，目的是检查更新的行是否还有冲突
+  } else if (OB_FAIL(update_row_to_conflict_checker())) { // 2. Flush the updated row to conflict_checker, the purpose is to check if the updated row still has conflicts
     LOG_WARN("fail to update row to conflict checker", K(ret));
-  } else if (OB_FAIL(update_row_to_das())) { // 3. 根据实际情况更新行到das
+  } else if (OB_FAIL(update_row_to_das())) { // 3. Update row to das based on the actual situation
     LOG_WARN("fail to update row to das", K(ret));
   }
 
   return ret;
 }
-
-// 1. 过期，删除旧行，写入新行
-// 2. 未过期
-//   a. 当前是insert操作，则报错OB_ERR_ROWKEY_CONFLICT
-//   b. 当前是insertUp操作，则做update
+// 1. Expired, delete the old line, write the new line
+// 2. Not expired
+//   a. If the current operation is insert, then report OB_ERR_ROWKEY_CONFLICT
+//   b. Current is insertUp operation, then do update
 int ObTableApiTTLExecutor::process_expire()
 {
   int ret = OB_SUCCESS;
@@ -432,12 +430,12 @@ int ObTableApiTTLExecutor::process_expire()
       const ObRowkey &rowkey = start->first;
       ObConflictValue &old_row = start->second;
       if (NULL != old_row.baseline_datum_row_) {
-        // 将旧行刷到表达式中，判断是否过期
+        // Flush the old row to the expression and determine if it has expired
         if (OB_FAIL(stored_row_to_exprs(*old_row.baseline_datum_row_, get_primary_table_upd_old_row(), eval_ctx_))) {
           LOG_WARN("fail to store row to exprs", K(ret));
         } else if (OB_FAIL(check_expired(is_expired_))) {
           LOG_WARN("fail to check expired", K(ret));
-        } else if (is_expired_) { // 过期，删除旧行，写入新行
+        } else if (is_expired_) { // expired, delete the old row, write the new row
           LOG_DEBUG("row is expired", K(ret));
           // Notice: here need to clear the evaluated flag, cause the new_row used in try_insert is the same as old_row in do_delete
           //  and if we don't clear the evaluated flag, the generated columns in old_row won't refresh and will use the new_row result 
@@ -455,7 +453,7 @@ int ObTableApiTTLExecutor::process_expire()
           } else {
             insert_rows_ = 1;
           }
-        } else { // 未过期, insert操作，则报错OB_ERR_ROWKEY_CONFLICT; insertUp操作，则做update
+        } else { // Not expired, for insert operation, then report OB_ERR_ROWKEY_CONFLICT; for insertUp operation, then do update
           if (OB_UNLIKELY(tb_ctx_.is_inc_or_append())) {
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("unexpect execution of increment or append", K(ret), K(tb_ctx_.get_opertion_type()));
@@ -494,14 +492,13 @@ void ObTableApiTTLExecutor::set_need_fetch_conflict()
 int ObTableApiTTLExecutor::reset_das_env()
 {
   int ret = OB_SUCCESS;
-  // 释放第一次try insert的das task
+  // release the das task from the first try insert
   if (OB_FAIL(dml_rtctx_.das_ref_.close_all_task())) {
     LOG_WARN("fail to close all das task", K(ret));
   } else {
     dml_rtctx_.das_ref_.reuse();
   }
-
-  // 因为第二次插入不需要fetch conflict result了
+  // Because the second insertion does not need to fetch conflict result anymore
   for (int64_t i = 0; OB_SUCC(ret) && i < ttl_rtdefs_.count(); i++) {
     ObTableInsRtDef &ins_rtdef = ttl_rtdefs_.at(i).ins_rtdef_;
     ins_rtdef.das_rtdef_.need_fetch_conflict_ = false;
@@ -510,18 +507,16 @@ int ObTableApiTTLExecutor::reset_das_env()
 
   return ret;
 }
-
-
-// 1. 获取快照点
-// 2. 写入记录
-//   a. 不冲突，写入成功
-//   b. 冲突，需要进一步判断是否是过期
-//     ⅰ . 回归到快照点
-//     ⅰⅰ. 处理过期逻辑
-//       1. 过期，删除旧行，写入新行
-//       2. 未过期
-//         a. 当前是insert操作，则报错OB_ERR_ROWKEY_CONFLICT
-//         b. 当前是insertUp操作，则做update
+// 1. Get the snapshot point
+// 2. Write record
+//   a. No conflict, write successful
+//   b. Conflict, need further judgment to determine if it is expired
+//     ⅰ . Roll back to the snapshot point
+//     ⅰⅰ. Handle expiration logic
+//       1. Expired, delete the old line, write the new line
+//       2. Not expired
+//         a. If the current operation is insert, then report OB_ERR_ROWKEY_CONFLICT
+//         b. Current is insertUp operation, then do update
 int ObTableApiTTLExecutor::get_next_row()
 {
   int ret = OB_SUCCESS;
@@ -535,13 +530,13 @@ int ObTableApiTTLExecutor::get_next_row()
   } else if (!is_duplicated()) {
     insert_rows_ = 1;
     LOG_DEBUG("no duplicated, insert successfully");
-  } else if (OB_FAIL(fetch_conflict_rowkey(conflict_checker_))) {// 获取所有的冲突主键
+  } else if (OB_FAIL(fetch_conflict_rowkey(conflict_checker_))) {// fetch all conflict rowkeys
     LOG_WARN("fail to fetch conflict rowkey", K(ret));
-  } else if (OB_FAIL(reset_das_env())) { // reuse das 相关信息
+  } else if (OB_FAIL(reset_das_env())) { // reuse das related information
     LOG_WARN("fail to reset das env", K(ret));
-  } else if (OB_FAIL(ObSqlTransControl::rollback_savepoint(exec_ctx_, savepoint_no))) { // 本次插入存在冲突, 回滚到save_point
+  } else if (OB_FAIL(ObSqlTransControl::rollback_savepoint(exec_ctx_, savepoint_no))) { // This insertion has conflicts, rollback to save_point
     LOG_WARN("fail to rollback to save_point", K(ret), K(savepoint_no));
-  } else if (OB_FAIL(process_expire())) { // 处理过期
+  } else if (OB_FAIL(process_expire())) { // process expiration
     LOG_WARN("fail to process expire", K(ret));
   }
 

@@ -110,7 +110,7 @@ int ObSystemConfig::find_newest(const ObSystemConfigKey &key,
     if (it->first.match(key) && it->first.get_version() > max_version) {
       max_version = it->first.get_version();
       pvalue = it->second;
-      // for循环旨在找到最新版本,需要迭代完,不需要OB_SUCC(ret)
+      // for loop aims to find the latest version, needs to iterate through all, no need for OB_SUCC(ret)
       ret = OB_SUCCESS;
     }
   }
@@ -191,18 +191,18 @@ int ObSystemConfig::read_config(
   int ret = OB_SUCCESS;
   const ObSystemConfigValue *pvalue = NULL;
   int64_t version = 0;
-  // key 中带上了当前 item 的版本号，如果记录的所有
-  // newest 值的版本都不比 key 中的版本大，那么 find_newest
-  // 直接返回 OB_SEARCH_NOT_FOUND，外部选择忽略该错误或做对应处理
+  // key includes the version number of the current item, if the record of all
+  // the version of the newest value is not greater than the version in key, then find_newest
+  // Directly return OB_SEARCH_NOT_FOUND, external selection to ignore the error or handle it accordingly
   //
-  // version 机制的用途之一是避免重复将 pvalue 写到 item 中，
-  // 如果 version 没变，并不需要重复更新 item。
+  // The purpose of the version mechanism is to avoid writing pvalue to the item repeatedly,
+  // If version has not changed, there is no need to update the item again.
   if (OB_SUCC(find_newest(key, pvalue, version))) {
     if (OB_ISNULL(pvalue)) {
       ret = OB_ERR_UNEXPECTED;
     } else {
       if (item.reboot_effective()) {
-        // 每次都要将最新值更新到 reboot_value 中，用于写入 spfile
+        // Each time, update the latest value to reboot_value for writing to spfile
         if (!item.set_reboot_value(pvalue->value())) {
           ret = OB_ERR_UNEXPECTED;
           SHARE_LOG(WARN, "set config item reboot value failed",
@@ -255,7 +255,7 @@ int ObSystemConfig::read_config(
           }
         }
       } else if (item.reboot_effective()) {
-        // 以 STATIC_EFFECTIVE 的 stack_size 举例说明：
+        // Illustrate with the stack_size of STATIC_EFFECTIVE:
         //   > show parameters like 'stack_size'
         //     stack_size = 4M
         //   > alter system set stack_size = '5M'
@@ -265,11 +265,11 @@ int ObSystemConfig::read_config(
         //   > show parameters like 'stack_size'
         //     stack_size = 5M
         //
-        // 为了实现上述行为，
-        // stack_size 只会在 restart 后首次时调用 set_value 时将 value 保存到 item 中，
-        // 之后无论 stack_size 被用户修改成什么，都不会写入 item，
-        // 通过 show parameter 只能看到旧值 4M ，必须 restart 后才能
-        // 看到更新后的值 5M。
+        // To achieve the above behavior,
+        // stack_size will only call set_value to save the value to item for the first time after restart,
+        // Afterward, no matter what the user modifies stack_size to, it will not be written to item,
+        // Through show parameter you can only see the old value 4M, must restart to be able to
+        // See the updated value 5M.
       } else {
         item.set_version(version);
         if (!item.set_value_unsafe(pvalue->value())) {
@@ -284,8 +284,7 @@ int ObSystemConfig::read_config(
           }
         }
       }
-
-      // 双关，既表示 root_value 被设置过 (if any)，也表示 value 被设置过(if any)
+      // Double entendre, it indicates that root_value has been set (if any), as well as value has been set (if any)
       item.initial_value_set();
     }
   }

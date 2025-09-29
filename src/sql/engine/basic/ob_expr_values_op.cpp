@@ -356,7 +356,7 @@ int ObExprValuesOp::get_real_batch_obj_type(ObDatumMeta &src_meta,
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("invalid param idx", K(ret), K(param_idx));
     } else if (plan_ctx->get_param_store().at(param_idx).is_ext_sql_array()) {
-      // 如果是is_ext_sql_array的参数
+      // If the parameter is is_ext_sql_array
       if (OB_ISNULL(array_obj =
           reinterpret_cast<const ObSqlArrayObj*>(plan_ctx->get_param_store().at(param_idx).get_ext()))) {
         ret = OB_ERR_UNEXPECTED;
@@ -371,7 +371,7 @@ int ObExprValuesOp::get_real_batch_obj_type(ObDatumMeta &src_meta,
         update_src_meta(src_meta, src_obj_meta, src_obj_acc);
       }
     } else {
-      // 如果不是is_ext_sql_array的参数
+      // If not the is_ext_sql_array parameter
       src_obj_meta = plan_ctx->get_param_store().at(param_idx).meta_;
       const ObAccuracy &src_obj_acc = plan_ctx->get_param_store().at(param_idx).get_accuracy();
       update_src_meta(src_meta, src_obj_meta, src_obj_acc);
@@ -521,21 +521,21 @@ OB_INLINE int ObExprValuesOp::calc_next_row()
         // do nothing
       } else if (src_expr == dst_expr) {
         // do nothing
-        // 处理select 1, 2, 3; 这种情况, values_和output中表达式指针相同,
-        // 不需要进行动态cast, 后面直接计算output就可以;
+        // Handle select 1, 2, 3; this case, values_ and output have the same expression pointer,
+        // No need for dynamic cast, just calculate output directly;
         //
-        // 如果这里也进行了动态cast, 动态构造的cast表达式指向的expr datum为output expr
-        // 指向的expr datum, 也就是与value expr指向的相同的expr datum内存区域;
-        // 构造的cast表达式进行eval计算时, 如果发现datum中ptr执行的内存不为reserve内存，
-        // 则会将ptr指向reserve内存， 而在参数化情况下，value expr和output expr均为
-        // T_QUESTIONMARK的表达式, 该表达式是没有reserve内存的，因此会导致ptr指向非预期
-        // 内存， 可能出现结果不对
+        // If dynamic cast is also performed here, the expr datum pointed to by the dynamic cast expression is the output expr
+        // pointed expr datum, which is the same expr datum memory region as the value expr points to;
+        // The constructed cast expression during eval calculation, if it finds that the memory pointed to by ptr in datum is not reserve memory,
+        // then it will point ptr to reserve memory, while in parameterized cases, value expr and output expr are both
+        // T_QUESTIONMARK expression, this expression does not reserve memory, therefore it will cause ptr to point to an unexpected location
+        // memory, possible incorrect result
       } else if (src_meta.type_ == dst_expr->datum_meta_.type_
                  && src_meta.cs_type_ == dst_expr->datum_meta_.cs_type_
                  && src_obj_meta.has_lob_header() == dst_expr->obj_meta_.has_lob_header()
                  && !need_adjust_decimal_int
                  && !need_cast_collection_element) {
-        // 将values中数据copy到output中
+        // Copy data from values to output
         if (OB_FAIL(src_expr->eval(eval_ctx_, datum))) {
           // catch err and print log later
         } else {
@@ -545,19 +545,19 @@ OB_INLINE int ObExprValuesOp::calc_next_row()
       } else if (OB_FAIL(ObCharset::check_valid_implicit_convert(src_meta.cs_type_, dst_expr->datum_meta_.cs_type_))) {
         LOG_WARN("failed to check valid implicit convert", K(ret));
       } else {
-        // 需要动态cast原因:
-        // 对于以下场景:
+        // Need dynamic cast reason:
+        // For the following scenario:
         //   create table t1(c1 int primary key);
         //   sql_1: insert into t1 values(null);
         //   sql_2: insert into t1 values('1');
-        // sql_1和sql_2会命中相同的执行计划, 但sql_1中values类型是null类型,
-        // sql_2中values类型为varchar类型, 最终output均为int类型, 为了在新引擎下
-        // 对于不同类型输入(values值), 能够最终转化为相同数据类型输出(output),
-        // 因此引入了动态cast; 根据不同values值类型, 动态确定cast 函数, 并将结果
-        // 存入output中;
-        // 对于不同values值类型, 如果是参数化场景, 不能直接使用plan中values expr
-        // 的meta信息, 该meta信息存放的是第一次生成计划时对应sql的值的meta信息,
-        // 需要根据param store中实际值确定values类型, 然后获取动态cast函数
+        // sql_1 and sql_2 will hit the same execution plan, but the values type in sql_1 is null type,
+        // sql_2 where values type is varchar type, the final output is all int type, to work under the new engine
+        // For different types of input(values), it can ultimately be transformed into the same data type output(output),
+        // Therefore introduced dynamic cast; according to different values value types, dynamically determine cast function, and will result
+        // Store in output;
+        // For different values value types, if it is a parameterized scenario, the values expr in plan cannot be used directly
+        // the meta information, this meta information stores the meta information of the values corresponding to the SQL at the time of the first plan generation,
+        // Need to determine the type of values based on the actual value in param store, then obtain the dynamic cast function
         ObExpr real_src_expr = *src_expr;
         real_src_expr.datum_meta_ = src_meta;
         real_src_expr.obj_meta_ = src_obj_meta;

@@ -51,7 +51,7 @@ private:
   volatile int64_t finish_worker_count_;
   int64_t expect_worker_count_;
   common::SimpleCond cond_;
-  // 为了方面追踪rpc启动的是哪些worker
+  // For convenience in tracing which workers are started by rpc
   common::ObArray<int64_t> tid_array_;
 };
 
@@ -142,7 +142,7 @@ private:
   int64_t reserved_px_thread_count_;
   uint64_t process_flags_;
   int end_ret_;
-  // sqc handler内存使用者个数，默认为1，因为它一定是某个线程从工厂重取出来的。
+  // sqc handler memory user count, default is 1, because it must be retrieved from the factory by some thread.
   volatile int64_t reference_count_;
   ObPxWorkNotifier *notifier_;
   sql::ObDesExecContext *exec_ctx_;

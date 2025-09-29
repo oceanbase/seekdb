@@ -11,8 +11,8 @@
  */
 
 #include <gtest/gtest.h>
-#define private public  // 获取private成员
-#define protected public  // 获取protect成员
+#define private public  // get private member
+#define protected public  // get protected member
 #include "observer/table/ob_table_cg_service.cpp"
 #include "observer/table/ob_table_cache.h"
 #include "../share/schema/mock_schema_service.h"
@@ -67,10 +67,10 @@ void fill_table_schema(ObTableSchema &table)
   table.get_sub_part_option().set_part_expr (ObString::make_string("rand() mod 111"));
   table.get_sub_part_option().set_part_num(666);
 }
-// 填充一个column_schema，类型：ObIntType
-// rowkey_pos： >0时为rowkey列，表示rowkey的顺序
-// index_key_pos：>0时为索引列，表示索引列顺序
-// part_key_pos：>0时为分区键，表示分区间顺序
+// Fill a column_schema, type: ObIntType
+// rowkey_pos: >0 when it is the rowkey column, indicating the order of the rowkey
+// index_key_pos: >0 when it is an index column, indicating the order of the index column
+// part_key_pos: >0 when it is a partition key, indicating the order between partitions
 void fill_column_schema(ObColumnSchemaV2 &column, uint64_t id, const char *name,
                         uint64_t rowkey_pos = 1, uint64_t index_key_pos = 1,
                         uint64_t part_key_pos = 1, ObOrderType rowkey_order = ObOrderType::ASC)

@@ -43,13 +43,13 @@ class ObIDirectLoadPartitionTableBuilder;
 class ObDirectLoadTmpFileManager;
 class ObDirectLoadTableStore;
 
-// NORMAL : 将导入数据直接构造成sstable, 目前给DELETE_INSERT_ENGINE用
-// NORMAL_WITH_PK_DELETE_ROW : 将导入数据直接构造成sstable, DELETE行只保留PK，
-// MERGE_WITH_ORIGIN_DATA : 将导入数据与已有数据合并, 场景: full+normal写数据表
-// MERGE_WITH_CONFLICT_CHECK : 将导入数据与已有数据进行冲突检测, 冲突行插入sstable
-// incremental或inc_replace但是表上有lob或索引 MERGE_WITH_ORIGIN_QUERY_FOR_LOB : 目前是给del_lob用的,
-// MERGE_WITH_ORIGIN_QUERY_FOR_DATA: 给数据表用，根据rowkey去原表查询，DELETE行只保留主键, 构造完整行后插入sstable
-// 根据lob_id去原表查询
+// NORMAL : Directly construct imported data into sstable, currently used by DELETE_INSERT_ENGINE
+// NORMAL_WITH_PK_DELETE_ROW : Directly construct imported data into sstable, DELETE rows only keep PK,
+// MERGE_WITH_ORIGIN_DATA : Merge imported data with existing data, scenario: full+normal write data table
+// MERGE_WITH_CONFLICT_CHECK : Perform conflict detection between imported data and existing data, insert conflicting rows into sstable
+// incremental or inc_replace but table has lob or index MERGE_WITH_ORIGIN_QUERY_FOR_LOB : Currently used for del_lob,
+// MERGE_WITH_ORIGIN_QUERY_FOR_DATA: Used for data table, query original table by rowkey, DELETE rows only keep primary key, insert into sstable after constructing complete row
+// Query original table by lob_id
 struct ObDirectLoadMergeMode
 {
 #define OB_DIRECT_LOAD_MERGE_MODE_DEF(DEF)                 \
@@ -103,22 +103,22 @@ public:
                KP_(ctx));
 
 public:
-  // 本次合并要写入的表的属性, 可能是数据表、索引表、lob表
+  // The attributes of the table to be written in this merge, which may be a data table, index table, or lob table
   uint64_t table_id_; // origin table id
   int64_t rowkey_column_num_;
   int64_t column_count_;
   const common::ObIArray<share::schema::ObColDesc> *col_descs_;
   const blocksstable::ObStorageDatumUtils *datum_utils_;
   const common::ObArray<int64_t> *lob_column_idxs_;
-  // 合并模式
+  // Merge mode
   ObDirectLoadMergeMode::Type merge_mode_;
   bool use_batch_mode_;
-  ObDirectLoadDMLRowHandler *dml_row_handler_; // rescan时为nullptr
+  ObDirectLoadDMLRowHandler *dml_row_handler_; // rescan when it is nullptr
   ObDirectLoadInsertTableContext *insert_table_ctx_;
-  // 任务级参数
+  // Task-level parameters
   ObDirectLoadTransParam trans_param_;
   ObDirectLoadTmpFileManager *file_mgr_;
-  // TODO 更新进度信息
+  // TODO update progress information
   observer::ObTableLoadTableCtx *ctx_;
 };
 
@@ -163,24 +163,23 @@ public:
   void reset();
   int init(ObDirectLoadMergeCtx *merge_ctx,
            const table::ObTableLoadLSIdAndPartitionId &ls_partition_id);
-
-  // 无导入数据合并任务
+  // No import data merge task
   int build_empty_data_merge_task(const ObDirectLoadTableDataDesc &table_data_desc,
                                   int64_t max_parallel_degree);
-  // 有主键数据合并任务, 按分区排序
+  // Primary key data merge task, sort by partition
   int build_merge_task_for_sstable(const ObDirectLoadTableDataDesc &table_data_desc,
                                    const ObDirectLoadTableHandleArray &sstable_array,
                                    int64_t max_parallel_degree);
-  // 有主键数据合并任务, 分区混合排序
+  // Primary key data merge task, partition mixed sort
   int build_merge_task_for_multiple_sstable(
     const ObDirectLoadTableDataDesc &table_data_desc,
     const ObDirectLoadTableHandleArray &multiple_sstable_array,
     ObDirectLoadMultipleMergeRangeSplitter &range_splitter, int64_t max_parallel_degree);
-  // 无主键数据排序合并任务
+  // No primary key data sorting and merging task
   int build_merge_task_for_multiple_heap_table(
     const ObDirectLoadTableDataDesc &table_data_desc,
     const ObDirectLoadTableHandleArray &multiple_heap_table_array, int64_t max_parallel_degree);
-  // 无主键数据聚合合并任务, 用于分区比较多的场景, 以分区为粒度进行并行合并
+  // Data aggregation and merge task without primary key, used for scenarios with many partitions, merging in parallel at the partition level
   int build_aggregate_merge_task_for_multiple_heap_table(
     const ObDirectLoadTableDataDesc &table_data_desc,
     const ObDirectLoadTableHandleArray &multiple_heap_table_array);

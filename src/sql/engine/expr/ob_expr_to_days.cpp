@@ -45,9 +45,9 @@ int calc_todays_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
 {
   int ret = OB_SUCCESS;
   ObDatum *day_datum = NULL;
-  // 这里没有像老框架一样，判断cast的返回值是否是OB_INVLIAD_DATE_VALUE
-  // 如果转换失败，结果会被置为ZERO_DATE（cast mode默认是ZERO_ON_WARN）
-  // MySQL的行为是，结果是zero date时，返回NULL
+  // Here there is no judgment like in the old framework, whether the return value of cast is OB_INVALID_DATE_VALUE
+  // If the conversion fails, the result will be set to ZERO_DATE (cast mode default is ZERO_ON_WARN)
+  // MySQL's behavior is, when the result is zero date, it returns NULL
   if (OB_FAIL(expr.args_[0]->eval(ctx, day_datum))) {
     LOG_WARN("eval arg failed", K(ret));
   } else if (day_datum->is_null()) {
@@ -72,8 +72,8 @@ int ObExprToDays::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("raw_expr should got one child", K(ret), K(raw_expr));
   } else if (ObDateType != rt_expr.args_[0]->datum_meta_.type_) {
-    // 类型推导部分有针对enum/set设置的calc type，但是新框架cast目前对enum/set支持不完整
-    // 这里先报错，后续补上对enum/set的处理
+    // Type inference part has a calc type set for enum/set, but the new framework cast currently does not fully support enum/set
+    // Here we report an error first, subsequent handling of enum/set will be added
     // enum/set->varchar->date
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("param type should be date", K(ret), K(rt_expr));

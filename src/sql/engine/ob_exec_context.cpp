@@ -214,7 +214,7 @@ ObExecContext::~ObExecContext()
   
   if (NULL != phy_plan_ctx_) {
     if (!THIS_WORKER.has_req_flag()) {
-      //对于后台线程, 需要调用析构
+      // For background threads, need to call destructor
       phy_plan_ctx_->~ObPhysicalPlanCtx();
     } else {
       // free subschema map memory
@@ -806,7 +806,7 @@ int ObExecContext::init_physical_plan_ctx(const ObPhysicalPlan &plan)
       }
     }
     if (OB_SUCC(ret)) {
-      if (stmt::T_SELECT == plan.get_stmt_type()) { // select才有weak
+      if (stmt::T_SELECT == plan.get_stmt_type()) { // select has weak
         if (sql_ctx_->is_protocol_weak_read_) {
           consistency = WEAK;
         } else if (OB_UNLIKELY(phy_plan_hint.read_consistency_ != INVALID_CONSISTENCY)) {

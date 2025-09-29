@@ -40,7 +40,7 @@ private:
   uint64_t tenant_id_;
   common::ObStrings user_;//user1,host1; usr2,host2;...
   bool locked_;
-  obrpc::ObLockUserArg lock_user_arg_; // 用于返回exec_tenant_id_
+  obrpc::ObLockUserArg lock_user_arg_; // used to return exec_tenant_id_
 private:
   DISALLOW_COPY_AND_ASSIGN(ObLockUserStmt);
 };

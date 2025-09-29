@@ -56,16 +56,16 @@ public:
                K_(use_auto_partition_clause));
 private:
 /**
- * part_values_exprs的组织形式如下:
- * range 分区平铺, e.g.
+ * The organization form of part_values_exprs is as follows:
+ * range partition tiling, e.g.
  * partition by range(c1) (partition p0 values less than (100), partition p1 values less than (200))
  * array = [100, 200]
  * partition by range columns (c1,c2) (partition p0 values less than (100, 200), partition p1 values less than (300, 300))
  * array = [100, 200, 300, 400]
- * list 分区将每个分区的值平铺到一个row中, array中保存row, e.g.
- * partition by list(c1) (partition p0 values in (1,2,3,4,5), partition p1 values less in (6,7,8,9,10))
+ * list partition spreads the values of each partition into one row, array stores rows, e.g.
+ * partition by list(c1) (partition p0 values in (1,2,3,4,5), partition p1 values in (6,7,8,9,10))
  * array = [(1,2,3,4,5), (6,7,8,9,10)]
- * partition by list columns (c1,c2) (partition p0 values in ((1,1),(2,2),(3,3)), partition p1 values less in ((6,6),(7,7),(8,8)))
+ * partition by list columns (c1,c2) (partition p0 values in ((1,1),(2,2),(3,3)), partition p1 values in ((6,6),(7,7),(8,8)))
  * array = [(1,1,2,2,3,3), (6,6,7,7,8,8)]
  */
   array_t part_fun_exprs_;       // for part fun expr

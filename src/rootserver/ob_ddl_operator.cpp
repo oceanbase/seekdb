@@ -602,9 +602,8 @@ int ObDDLOperator::drop_database(const ObDatabaseSchema &db_schema,
       LOG_WARN("purge_table_in_db failed", K(ret));
     }
   }
-
-  //delete triggers in database, 只删除trigger_database != base_table_database 的trigger
-  // trigger_database == base_table_database 的trigger会在下面删除表的时候删除
+  //delete triggers in database, only delete trigger_database != base_table_database triggers
+  // trigger_database == base_table_database's trigger will be deleted when the table is deleted below
   OZ (ObPLDDLOperator::drop_trigger_in_drop_database(tenant_id, db_schema, *this, trans));
 
   // delete tables in database

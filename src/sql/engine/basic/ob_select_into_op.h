@@ -102,7 +102,7 @@ public:
   common::ObObj outfile_name_;
   common::ObObj field_str_; // FARM COMPAT WHITELIST FOR filed_str_: renamed
   common::ObObj line_str_;
-  // 431以下版本select into无法并行执行, 不会序列化算子, 修改closed_cht_类型不会导致升级兼容性问题
+  // Versions below 431 cannot execute select into in parallel, will not serialize operators, modifying closed_cht_type will not cause upgrade compatibility issues
   common::ObObj closed_cht_; // FARM COMPAT WHITELIST FOR closed_cht_: change type
   bool is_optional_;
   common::ObFixedArray<ObExpr*, common::ObIAllocator> select_exprs_;
@@ -449,7 +449,7 @@ private:
   common::ObObjPrintParams print_params_;
   ObEscapePrinter escape_printer_;
   bool do_partition_;
-  char *json_buf_;  //json需要多一个buffer用来放转义前的string
+  char *json_buf_;  // json needs one more buffer to hold the string before escaping
   int64_t json_buf_len_;
   char *shared_buf_;
   int64_t shared_buf_len_;

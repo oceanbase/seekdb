@@ -163,7 +163,7 @@ void LogStateMgr::update_role_and_state_(const common::ObRole &new_role, const O
   if (ATOMIC_BCAS(&role_state_val_, old_val, new_val)) {
     // update success
   } else {
-    // 更新role/state时会加palf_handle的写锁，因此预期不应该失败
+    // When updating role/state, a write lock on palf_handle is acquired, so the expectation is that it should not fail
     PALF_LOG_RET(ERROR, OB_ERR_UNEXPECTED, "update_role_and_state_ failed", K_(palf_id), K(old_val), K(new_val));
   }
 }
@@ -572,8 +572,8 @@ int LogStateMgr::pending_to_follower_active_()
 {
   int ret = OB_SUCCESS;
   update_role_and_state_(FOLLOWER, ACTIVE);
-  // 需先更新role/state，再提交role_change_event
-  // 否则handle role_change event执行可能先执行导致角色切换失败
+  // Need to update role/state first, then submit role_change_event
+  // Otherwise handle role_change event execution may occur first leading to role switch failure
   if (OB_FAIL(to_follower_active_())) {
     PALF_LOG(ERROR, "to_follower_active_ failed", K(ret), K_(palf_id));
   }
@@ -663,8 +663,8 @@ int LogStateMgr::reconfirm_to_leader_active_()
     PALF_LOG(WARN, "sw leader_active failed", K(ret), K_(palf_id));
   } else {
     update_role_and_state_(LEADER, ACTIVE);
-    // 需先更新role/state和committed_end_lsn，再提交role_change_event
-    // 否则handle role_change event执行可能先执行导致角色切换失败
+    // Need to update role/state and committed_end_lsn first, then submit role_change_event
+    // Otherwise handle role_change event execution may occur first leading to role switch failure
     if (OB_FAIL(to_leader_active_())) {
       PALF_LOG(ERROR, "to_leader_active_ failed", K(ret), K_(palf_id));
     } else if (OB_FAIL(mm_->submit_broadcast_leader_info(get_proposal_id()))) {

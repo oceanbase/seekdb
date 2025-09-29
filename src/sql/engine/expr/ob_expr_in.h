@@ -248,12 +248,11 @@ private:
   bool cmp_end_space_{false};
   common::ObArenaAllocator alloc_;
 };
-
-//成员解释：
-//idx_ 的二进制数代表hash表选中Row的那些列作为key， 例如向量(1,2,3)存储在idx_为3的hash表中，binary(3)=011，即低2位被选中,key=(1,2)
-//row_dimension_ 存储Row的维度
-//hash_funcs_ 长度为row_dimension_， datum的hash函数，obj不会设置和使用
-//cmp_funcs_ 长度为row_dimension_， datum的compare函数，obj不会设置和使用
+// Member explanation:
+// idx_ The binary number represents which columns of the selected Row in the hash table are used as keys, for example, vector (1,2,3) is stored in the hash table with idx_ of 3, binary(3)=011, i.e., the lower 2 bits are selected, key=(1,2)
+//row_dimension_ stores the dimension of Row
+//hash_funcs_ length is row_dimension_, datum's hash function, obj will not set and use
+//cmp_funcs_ length of row_dimension_, datum's compare function, obj will not set and use
 struct HashMapMeta {
   HashMapMeta() : idx_(-1), row_dimension_(-1), hash_funcs_(NULL), cmp_funcs_(NULL) {}
   ~HashMapMeta() {}
@@ -264,8 +263,8 @@ struct HashMapMeta {
 };
 
 /*
-*通用的行结构体，封装datum或者obj，datum的比较方法需要依靠外界传入
-*参数idx代表被选取的列，出现在hashtable的比较方法和hash方法中
+*Generic row structure, encapsulating datum or obj, the comparison method for datum needs to be provided externally
+*Parameter idx represents the selected column, appearing in the comparison method and hash method of hashtable
 */
 template <class T>
 class Row
@@ -274,7 +273,7 @@ public:
   Row() : elems_(NULL) {}
   ~Row() {}
   bool equal_key(const Row &other, void **cmp_funcs, const int idx) const;
-  //hash 函数和cmp函数，为datum和obj特化
+  // hash function and cmp function, specialized for datum and obj
   int hash_key(void **hash_funcs, const int idx, uint64_t seed, uint64_t &hash_val) const;
   int compare_with_null(const Row &other, void **cmp_funcs, const int64_t row_dimension, int &exist_ret) const;
   int set_elem(T *elems);
@@ -285,7 +284,7 @@ private:
   T *elems_;
 };
 /*
-*将Row封装为hash表的key
+*Encapsulate Row as the key of the hash table
 */
 template <class T>
 struct RowKey
@@ -295,9 +294,9 @@ public:
   ~RowKey() {}
   bool operator==(const RowKey<T> &other) const;
   int hash(uint64_t &hash_val, uint64_t seed = 0) const;
-  Row<T> row_;//指向in_ctx中存储的数据
+  Row<T> row_;//points to the data stored in in_ctx
   uint64_t hash_val_;
-  HashMapMeta *meta_;//进入hash表达时候被设置为此hash表的meta
+  HashMapMeta *meta_;//set to this hash table's meta when entering hash expression
 };
 
 template <class T>
@@ -312,7 +311,7 @@ const static int HASH_CMP_UNKNOWN = 1;
   void destroy()
   {
     if (map_.created()) {
-      //将map_管理的ObArray 释放
+      // Release the ObArray managed by map_
       for (auto it = map_.begin(); it != map_.end(); ++it) {
         it->second.destroy();
       }
@@ -493,10 +492,10 @@ class ObExprInOrNotIn : public ObVectorExprOperator
     ObColumnHashSet<StrKey> str_ht_;
     bool use_colht_;
   private:
-    common::ObDatum **right_datums_;//IN 右边的常量储存于此
+    common::ObDatum **right_datums_;//IN right constants are stored here
     ObExprInHashSet<common::ObDatum> static_engine_hashset_;
     ObExprInHashMap<common::ObDatum> *static_engine_hashset_vecs_;
-    common::ObFixedArray<bool, common::ObIAllocator> hashset_vecs_all_null_; //下标代表的列全为null
+    common::ObFixedArray<bool, common::ObIAllocator> hashset_vecs_all_null_; // Index represents the column that is all null
     ObExprCalcType cmp_type_;
     // mysql> select 1 in (2.0, 1 / 0);
     // +-------------------+
@@ -643,11 +642,11 @@ protected:
   inline bool is_param_is_ext_type_oracle() const;
   inline bool is_param_is_subquery() const;
   inline bool is_param_can_vectorized() const;
-  //获取subquery row的type信息
+  // Get subquery row type information
   int get_param_types(const ObRawExpr &param,
                        const bool is_iter,
                        common::ObIArray<sql::ObExprResType> &types) const;
-  //从subquery iter中获取row
+  // Get row from subquery iter
   static int setup_row(ObExpr **expr, ObEvalCtx &ctx, const bool is_iter,
                        const int64_t cmp_func_cnt, ObSubQueryIterator *&iter, ObExpr **&row);
   static void check_right_can_cmp_mem(const ObDatum &datum, 

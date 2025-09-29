@@ -165,8 +165,8 @@ int ObVariableSetExecutor::execute(ObExecContext &ctx, ObVariableSetStmt &stmt)
             const bool is_set_stmt = true;
             if (OB_FAIL(session->get_sys_variable_by_name(node.variable_name_, sys_var))) {
               if (OB_ERR_SYS_VARIABLE_UNKNOWN == ret) {
-                // session中没有找到这个名字的系统变量，有可能是proxy同步的时候发过来的新版本的数据，
-                // 因此先去系统表__all_sys_variable中查一下
+                // session did not find a system variable with this name, possibly new version data sent over during proxy synchronization,
+                // Therefore first check in the system table __all_sys_variable
                 ret = OB_SUCCESS;
                 const uint64_t tenant_id = session->get_effective_tenant_id();
                 const uint64_t exec_tenant_id = ObSchemaUtils::get_exec_tenant_id(tenant_id);
@@ -188,15 +188,15 @@ int ObVariableSetExecutor::execute(ObExecContext &ctx, ObVariableSetStmt &stmt)
                     LOG_WARN("fail to get sql result", K(ret));
                   } else if (OB_FAIL(result->next())) {
                     if (OB_ITER_END == ret) {
-                      //内部表中没有发现该系统变量，说明这不是一个系统变量
+                      // The system variable was not found in the internal table, indicating that this is not a system variable
                       ret = OB_ERR_SYS_VARIABLE_UNKNOWN;
                       LOG_USER_ERROR(OB_ERR_SYS_VARIABLE_UNKNOWN, node.variable_name_.length(), node.variable_name_.ptr());
                     } else {
                       LOG_WARN("get result failed", K(ret));
                     }
                   } else {
-                    // 从系统表__all_sys_variable中查到了，说明是由于版本兼容导致的，
-                    // 返回值设为OB_SYS_VARS_MAYBE_DIFF_VERSION，后面将其设为OB_SUCCESS
+                    // Found in system table __all_sys_variable, indicating it is due to version compatibility,
+                    // Return value set to OB_SYS_VARS_MAYBE_DIFF_VERSION, set it to OB_SUCCESS later
                     ret = OB_SYS_VARS_MAYBE_DIFF_VERSION;
                     LOG_INFO("try to set sys var from new version, ignore it", K(ret), K(node.variable_name_));
                   }
@@ -220,14 +220,14 @@ int ObVariableSetExecutor::execute(ObExecContext &ctx, ObVariableSetStmt &stmt)
               } else if (FALSE_IT(value_obj = out_obj)) {
               } else if (node.variable_name_ == OB_SV_AUTO_INCREMENT_INCREMENT
                          || node.variable_name_ == OB_SV_AUTO_INCREMENT_OFFSET) {
-                if (OB_FAIL(process_auto_increment_hook(session->get_sql_mode(), //FIXME 参考mysql源码移到ObBasicSysVar的函数中
+                if (OB_FAIL(process_auto_increment_hook(session->get_sql_mode(), //FIXME Refer to MySQL source code and move to the function in ObBasicSysVar
                                                         node.variable_name_,
                                                         value_obj))) {
                   LOG_WARN("fail to process auto increment hook", K(ret));
                 } else {}
               } else if (node.variable_name_ == OB_SV_LAST_INSERT_ID) {
                 if (OB_FAIL(process_last_insert_id_hook(plan_ctx,
-                                                        session->get_sql_mode(), //FIXME 参考mysql源码移到ObBasicSysVar的函数中
+                                                        session->get_sql_mode(), //FIXME refer to mysql source code and move to the function in ObBasicSysVar
                                                         node.variable_name_,
                                                         value_obj))) {
                   LOG_WARN("fail to process auto increment hook", K(ret));
@@ -251,10 +251,10 @@ int ObVariableSetExecutor::execute(ObExecContext &ctx, ObVariableSetStmt &stmt)
 
               if (OB_FAIL(ret)) {
               } else if (ObSetVar::SET_SCOPE_SESSION == node.set_scope_) {
-                // 处理autocommit的特殊情况,必须先于update_sys_variable调用
-                // 因为update_sys_variable会改变ac的值
+                // Handle special cases of autocommit, must be called before update_sys_variable
+                // Because update_sys_variable will change the value of ac
                 if (node.variable_name_ == OB_SV_AUTOCOMMIT) {
-                  //FIXME 参考mysql源码移到ObBasicSysVar的函数中
+                  //FIXME refer to mysql source code and move the function to ObBasicSysVar
                   if (OB_UNLIKELY(OB_SUCCESS != (ret_ac = process_session_autocommit_hook(
                                   ctx, value_obj)))) {
                     LOG_WARN("fail to process session autocommit", K(ret), K(ret_ac));
@@ -343,7 +343,7 @@ int ObVariableSetExecutor::execute(ObExecContext &ctx, ObVariableSetStmt &stmt)
                     LOG_WARN("fail to update", K(ret), K(*sys_var), K(set_var), K(value_obj));
                   }
                 }
-                //某些变量需要立即更新状态
+                // Some variables need to be updated immediately
                 if (OB_SUCC(ret)) {
                   if (OB_FAIL(sys_var->update(ctx, set_var, value_obj))) {
                     LOG_WARN("update sys var state failed", K(ret), K(set_var));
@@ -354,7 +354,7 @@ int ObVariableSetExecutor::execute(ObExecContext &ctx, ObVariableSetStmt &stmt)
           }
         }
         if (OB_SYS_VARS_MAYBE_DIFF_VERSION == ret) {
-          // 版本兼容，ret改为OB_SUCCESS以便让for循环继续
+          // Version compatibility, ret changed to OB_SUCCESS to allow for loop to continue
           ret = OB_SUCCESS;
         }
       }
@@ -367,7 +367,7 @@ int ObVariableSetExecutor::execute(ObExecContext &ctx, ObVariableSetStmt &stmt)
     }
   }
   if (OB_SUCCESS != ret_ac) {
-    // 事务超时的时候，不返回赋值错误码，返回事务超时的错误码
+    // When transaction timeout occurs, do not return an assignment error code, return the transaction timeout error code
     ret = ret_ac;
   }
   return ret;
@@ -896,7 +896,7 @@ int ObVariableSetExecutor::check_and_convert_sys_var(ObExecContext &ctx,
         || (set_var.var_name_ == OB_SV_NLS_TERRITORY && new_value.case_compare(DEFAULT_VALUE_TERRITORY) != 0)
         || (set_var.var_name_ == OB_SV_NLS_SORT && new_value.case_compare(DEFAULT_VALUE_SORT) != 0)
         || (set_var.var_name_ == OB_SV_NLS_COMP && new_value.case_compare(DEFAULT_VALUE_COMP) != 0)
-        || (set_var.var_name_ == OB_SV_NLS_CHARACTERSET) //不允许修改charset
+        || (set_var.var_name_ == OB_SV_NLS_CHARACTERSET) // do not allow modification of charset
         || (set_var.var_name_ == OB_SV_NLS_NCHAR_CHARACTERSET && new_value.case_compare(DEFAULT_VALUE_NCHAR_CHARACTERSET) != 0)
         || (set_var.var_name_ == OB_SV_NLS_DATE_LANGUAGE && new_value.case_compare(DEFAULT_VALUE_DATE_LANGUAGE) != 0)
         || (set_var.var_name_ == OB_SV_NLS_NCHAR_CONV_EXCP && new_value.case_compare(DEFAULT_VALUE_NCHAR_CONV_EXCP) != 0)
@@ -977,11 +977,10 @@ int ObVariableSetExecutor::cast_value(ObExecContext &ctx,
   }
   return ret;
 }
-
-// 当执行set autocommit=1的时候, 可能会触发implicit commit。
-// 事务控制语句：BEGIN、START TRANSACTION、SET AUTOCOMMIT=1（如果当前状态是
-// AC=0时）会触发implicit commit,
-// 这保证了事务不会嵌套。
+// When executing set autocommit=1, it may trigger implicit commit.
+// Transaction control statements: BEGIN, START TRANSACTION, SET AUTOCOMMIT=1 (if current status is
+// AC=0 when it triggers implicit commit,
+// This guarantees that transactions will not be nested.
 int ObVariableSetExecutor::process_session_autocommit_hook(ObExecContext &exec_ctx,
                                                            const ObObj &val)
 {
@@ -1052,7 +1051,7 @@ int ObVariableSetExecutor::process_session_autocommit_hook(ObExecContext &exec_c
           LOG_WARN("fail implicit commit trans", K(ret));
         }
       } else {
-        // 其它只影响AC标志位，但无需做commit操作
+        // Other only affects the AC flag bit, but no commit operation is needed
       }
     }
   }

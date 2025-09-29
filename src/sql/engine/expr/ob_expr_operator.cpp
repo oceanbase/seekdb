@@ -324,12 +324,12 @@ int OB_INLINE ObExprOperator::cast_operand_type(common::ObObj &res_obj,
             K(res_type.get_calc_type()), K(res_obj));
       }
     } else {
-      // TODO: (jiuren, xiaochu) 更复杂的转换模式在这里实现
-      /* 类型转换collation设置逻辑如下：
-       * 1.cast_ctx中设置的目标collation是系统默认的collation，目前是utf8mb4
-       * 2.如果目标和源类型都是ObStringTC，根据以下逻辑设置：
-       *   a.如果设置了calc_collation，使用该collation
-       *   b.如果没有，使用源类型collation
+      // TODO: (jiuren, xiaochu) Implement more complex conversion patterns here
+      /* Type conversion collation setting logic as follows:
+       * 1.cast_ctx sets the target collation to the system default collation, which is currently utf8mb4
+       * 2.If both the target and source types are ObStringTC, set according to the following logic:
+       *   a.If calc_collation is set, use that collation
+       *   b.If not, use the source type collation
        */
       EXPR_DEFINE_CAST_CTX(expr_ctx, cast_mode);
       if (ob_is_string_or_lob_type(calc_type)) {
@@ -380,9 +380,9 @@ int ObExprOperator::cast_operand_type(ObObj *params,
 
   /*
    * TODO: (xiaochu)
-   * 1. Optimizer阶段为了计算partition index，会生造ObExprOperator，此时导致input_types_没有被初始化
-   * 2. cast和conv在CG阶段路径有点异常，还没搞清楚
-   * 3. 向量怎么搞，多行数据怎么搞？暂时先跳过，不转
+   * 1. During the Optimizer stage, to calculate the partition index, ObExprOperator is artificially created, which leads to input_types_ not being initialized
+   * 2. The path for cast and conv in the CG stage is a bit abnormal, haven't figured it out yet
+   * 3. How to handle vectors, how to handle multi-row data? Skip for now, don't convert
    */
   const bool fallback_old_mode = false;
   if (OB_ISNULL(params) || OB_UNLIKELY(param_num < 0)
@@ -395,7 +395,7 @@ int ObExprOperator::cast_operand_type(ObObj *params,
   }  else if (OB_UNLIKELY(real_param_num_ <= 0 ||
               0 == input_types_.count() ||
               NOT_ROW_DIMENSION != row_dimension_ ||
-              /* insert default time, expr生成不规范 */
+              /* insert default time, expr generation is not standardized */
               T_FUN_SYS_TIMESTAMP_NVL == get_type() /*||
               T_FUN_SYS_CAST == get_type() ||
               T_OP_CASE == get_type() ||
@@ -406,8 +406,8 @@ int ObExprOperator::cast_operand_type(ObObj *params,
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("real_param_num_ is wrong",K(input_types_.count()), K_(real_param_num));
   } else {
-    // 转化Operator每一个参数的数据类型
-    // 仅当和目标类型不一致的时候才需要转换
+    // Convert the data type of each parameter of Operator
+    // Only conversion is needed when it is inconsistent with the target type
     for (int64_t i = 0; OB_SUCC(ret) && i < real_param_num_; ++i) {
       if (OB_FAIL(cast_operand_type(params[i], input_types_.at(i), expr_ctx))) {
         LOG_WARN("cast failed", K(ret), K(params[i]), K(input_types_.at(i)));
@@ -446,8 +446,7 @@ int ObExprOperator::call(ObObj *stack, int64_t &stack_size, ObExprCtx &expr_ctx)
       stack[stack_size - param_num] = result;
       stack_size -= (param_num - 1);
     }
-
-  // FIXME: (xiaochu.yh) 有Row的情况下，不cast_operand_type，由用户自己处理?
+  // FIXME: (xiaochu.yh) In the case of Row, do not cast_operand_type, let the user handle it themselves?
   } else if (operand_auto_cast_
       && OB_FAIL(cast_operand_type(stack + stack_size - real_param_num_,
       real_param_num_, expr_ctx))) {
@@ -468,11 +467,10 @@ int ObExprOperator::call(ObObj *stack, int64_t &stack_size, ObExprCtx &expr_ctx)
                 K_(row_dimension), K(input_types_.count()),
                 K(stack_size), K(ret));
     }
-
-    // 这里使用 @param_num_ 是因为它是一个和Operator类型绑定的静态值，
-    // Operator的定义中指定了它能接受的参数的个数。
-    // 对于concat、partition_key等函数来说，param_num_是一个负数，
-    // 提示call调用自己的calc_resultN方法
+    // Here @param_num_ is used because it is a static value bound to the Operator type,
+    // The definition of Operator specifies the number of parameters it can accept.
+    // For concat, partition_key, etc., functions, param_num_ is a negative number,
+    // Prompt call its own calc_resultN method
     if (OB_SUCC(ret)) {
       switch (param_num_) {
       case 0: {
@@ -970,10 +968,10 @@ int ObExprOperator::aggregate_charsets(
 }
 
 /**
- * @brief 表达式字符集推导: 综合考虑输入参数(params)的type和collation，得出result的type和collation
- * @param result 表达式结果类型
- * @param params 表达式参与推导的参数数组
- * @param deduce_flag 某些表达式对推导有一些特殊配置
+ * @brief Expression character set derivation: Comprehensive consideration of the type and collation of input parameters (params), to derive the type and collation of result
+ * @param result Expression result type
+ * @param params Array of parameters involved in the derivation of the expression
+ * @param deduce_flag Some expressions have special configurations for derivation
  * @return
  */
 int ObExprOperator::aggregate_string_type_and_charset_oracle(
@@ -994,20 +992,20 @@ int ObExprOperator::aggregate_string_type_and_charset_oracle(
     const ObExprResType *param_meta = params.at(i);
     CK (OB_NOT_NULL(param_meta));
     if (OB_SUCC(ret)) {
-      if (param_meta->is_string_or_lob_locator_type()) {  //当前可以区分null和空串
+      if (param_meta->is_string_or_lob_locator_type()) {  // Currently can distinguish null and empty string
         has_clob_type |= param_meta->is_clob();
         has_character_type |= param_meta->is_character_type();
         has_varying_len_string_type |= param_meta->is_varying_len_char_type();
       } else {
-        //非string类型会转成varchar
+        // Non-string type will be converted to varchar
         has_varying_len_string_type = true;
       }
     }
   }
 
   /* 1. deduce type + charset
-   *    综合考虑每个param type得到result type
-   *    从session获取类型对应的collation得到result collation
+   *    comprehensively consider each param type to get result type
+   *    get result collation from session based on the type's corresponding collation
    * */
   ObObjType result_type = ObMaxType;
   ObCollationType result_charset = CS_TYPE_INVALID;
@@ -1036,7 +1034,7 @@ int ObExprOperator::aggregate_string_type_and_charset_oracle(
   }
 
 
-  /* 2. deduce 长度语义
+  /* 2. deduce length semantics
    * */
   OZ (aggregate_length_semantics_oracle(session, params, result, deduce_flag));
 
@@ -1057,10 +1055,10 @@ int ObExprOperator::aggregate_length_semantics_oracle(
 }
 
 /**
- * @brief 表达式字符集推导: 根据表达式结果(result)的type和collation，给参数的calc type赋值
- * @param result 表达式结果类型
- * @param params 表达式需要参与推导的参数数组
- * @param calc_ls 当参数的长度语义需要和结果不同时，可以显示指定
+ * @brief Expression character set derivation: According to the type and collation of the expression result (result), assign the calc type to the parameters
+ * @param result Expression result type
+ * @param params Array of parameters involved in the derivation of the expression
+ * @param calc_ls Can be explicitly specified when the length semantics of the parameter need to be different from the result
  * @return
  */
 int ObExprOperator::deduce_string_param_calc_type_and_charset(
@@ -2038,8 +2036,8 @@ bool ObRelationalExprOperator::can_cmp_without_cast(ObExprResType type1,
 {
   bool need_no_cast = false;
   bool has_lob_header = type1.has_lob_header() || type2.has_lob_header();
-  //特殊处理显示调用compare(例如：c1 > c2)，此时enum/set均应该转换成string处理
-  //内部比较（order by）,enum/set不需要转换。
+  // Special processing display call compare(e.g.: c1 > c2), at this time enum/set should all be converted to string handling
+  // Internal comparison (order by), enum/set does not need conversion.
   if (ob_is_enum_or_set_type(type1.get_type())
       && ob_is_enum_or_set_type(type2.get_type())) {
     need_no_cast = false;
@@ -2148,9 +2146,8 @@ int ObRelationalExprOperator::get_equal_meta(ObObjMeta &meta,
   }
   return ret;
 }
-
-// MySQL使用item_cmp_type来计算要比较的值需要转换成什么类型之后再比较
-// Note: 比较用的类型，不是结果类型. compare的结果类型是LongLong
+// MySQL uses item_cmp_type to calculate what type the values need to be converted to before comparison
+// Note: comparison type, not result type. compare result type is LongLong
 int ObExprOperator::calc_cmp_type2(ObExprResType &type,
                                    const ObExprResType &type1,
                                    const ObExprResType &type2,
@@ -2281,8 +2278,7 @@ int ObExprOperator::calc_cmp_type3(ObExprResType &type,
   }
   return ret;
 }
-
-//用于三角函数以及开方，指数，对数函数的类型推导
+// Used for type inference of trigonometric functions as well as square root, exponential, and logarithmic functions
 int ObExprOperator::calc_trig_function_result_type1(ObExprResType &type,
                                                     ObExprResType &type1,
                                                     common::ObExprTypeCtx &type_ctx) const
@@ -2298,7 +2294,7 @@ int ObExprOperator::calc_trig_function_result_type1(ObExprResType &type,
     type.set_double();
   } 
   type1.set_calc_type(type.get_type());
-  //mysql/oracle 均未为三角函数、exp、ln函数的返回值添加NOT_NULL约束。
+  //mysql/oracle have not added NOT_NULL constraint to the return values of trigonometric functions, exp, ln functions.
   return ret;
 }
 
@@ -2540,10 +2536,10 @@ int ObRelationalExprOperator::calc_result_typeN(ObExprResType &type,
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("param_num is wrong", K(param_num), K(ret));
   } else {
-    // (xiaochu.yh) MySQL处理(a,b) = (c, d)的策略是针对每一对参与比较的数字
-    // 进行独立第比较，并不会将所有数字转向同一个类型。例如：
+    // (xiaochu.yh) MySQL handles (a,b) = (c, d) by comparing each pair of numbers involved
+    // Perform independent comparison, and will not convert all numbers to the same type. For example:
     // select (1, '1.000000') = ('1.00x', '1.000000');
-    // 1和'1.00x'会转为int然后比较，'1.00000'和'1.000000'会直接做字符串比较
+    // 1 and '1.00x' will be converted to int and then compared, '1.00000' and '1.000000' will be directly compared as strings
     ObExprResType tmp_res_type;
     for (int64_t i = 0; OB_SUCC(ret) && i < row_dimension_; ++i) {
       if (OB_FAIL(ObRelationalExprOperator::calc_result_type2(tmp_res_type,
@@ -2829,13 +2825,13 @@ int ObRelationalExprOperator::pl_udt_compare2(CollectionPredRes &cmp_result,
   do { \
     cmp_result = CO_EQ == cmp_op ? eq_cond : CO_NE == cmp_op ? ne_cond : other_cond;\
   } while(0)
-  /* 比较规则：
-     * 1、去除null之后相等，但是c1或c2包含null，结果是null
-     * 2、c2未初始化，结果是null
-     * 3、c1未初始化，结果是null
-     * 4、nt1 in nt1, true, 但是，两个未初始化集合比较，结果为null，空集和空集比较，true
-     * 5、除上面情况，不相等，false
-     * 6、其它情况，true
+  /* Comparison rules:
+     * 1、Equal after removing null, but if c1 or c2 contains null, the result is null
+     * 2、If c2 is not initialized, the result is null
+     * 3、If c1 is not initialized, the result is null
+     * 4、nt1 in nt1, true, but comparing two uninitialized collections results in null, comparing empty sets results in true
+     * 5、Except for the above cases, not equal, false
+     * 6、Other cases, true
   */
   if (OB_ISNULL(c1) || OB_ISNULL(c2)) {
     ret = OB_ERR_UNEXPECTED;
@@ -3133,8 +3129,8 @@ int ObRelationalExprOperator::eval_batch_min_max_compare(
 }
 
 /*
-  通过get_payload的方式可以获取obdatum的数据，但不能获取obdatum的is_ext的信息
-  这里从vec_uniform_const的向量里获取了is_ext属性，从get_payload里获取了obdatum数据。
+  Through the get_payload method, you can obtain the data of obdatum, but you cannot obtain the is_ext information of obdatum.
+  Here, the is_ext attribute is obtained from the vec_uniform_const vector, and the obdatum data is obtained from get_payload.
 */
 int ObRelationalExprOperator::eval_vector_min_max_compare(
     const ObExpr &expr, ObEvalCtx &ctx, const ObBitVector &skip, const EvalBound &bound)
@@ -3269,9 +3265,8 @@ int ObSubQueryRelationalExpr::assign(const ObExprOperator &other)
   }
   return ret;
 }
-
-//类型推导中本应该做兼容类型检查，但是目前子查询还没有实现类型检查，所以暂时不做参数检查
-//比较操作符的返回类型一定是bool类型
+// Type inference should perform compatibility type checking, but subqueries have not yet implemented type checking, so parameter checking is temporarily not performed
+// Comparison operator return type must be bool type
 int ObSubQueryRelationalExpr::calc_result_type2(ObExprResType &type,
                                                 ObExprResType &type1,
                                                 ObExprResType &type2,
@@ -3347,7 +3342,7 @@ int ObSubQueryRelationalExpr::calc_result2(ObObj &result,
                                            const ObObj &obj2,
                                            ObExprCtx &expr_ctx) const
 {
-  //在calc_result2这个接口中右操作符一定是一个迭代器
+  // In the calc_result2 interface, the right operand must be an iterator
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!right_is_iter_) || OB_ISNULL(expr_ctx.subplan_iters_)) {
     ret = OB_ERR_UNEXPECTED;
@@ -3390,7 +3385,7 @@ int ObSubQueryRelationalExpr::calc_result2(ObObj &result,
           LOG_WARN("calc result with any failed", K(ret));
         }
       } else if (T_WITH_NONE == subquery_key_) {
-        //向量比较，出现这种情况只可能是左右两边都是子查询
+        // Vector comparison, this situation can only occur if both sides are subqueries
         if (OB_UNLIKELY(!left_is_iter_)) {
           ret = OB_ERR_UNEXPECTED;
           LOG_ERROR("left_is_iter_ is wrong", K(ret));
@@ -3406,12 +3401,12 @@ int ObSubQueryRelationalExpr::calc_result2(ObObj &result,
       ObNewRow *tmp_left_row = NULL;
       if (OB_FAIL(left_row_iter->get_next_row(tmp_left_row))) {
         if (OB_LIKELY(OB_ITER_END == ret)) {
-          ret = OB_SUCCESS; //第一次迭代出了数据，无法迭代出第二行数据，符合with none的语义，返回OB_SUCCESS
+          ret = OB_SUCCESS; // First iteration returned data, unable to iterate to the second row of data, meets the semantics of none, return OB_SUCCESS
         } else {
           LOG_WARN("get next row from iter failed", K(ret));
         }
       } else {
-        //第二次又迭代出数据，不符合向量的语义，所以应该对外报错
+        //The second iteration produced data that does not conform to the semantics of the vector, so an error should be reported externally
         ret = OB_SUBQUERY_TOO_MANY_ROW;
       }
     }
@@ -3436,7 +3431,7 @@ int ObSubQueryRelationalExpr::calc_resultN(ObObj &result,
              K(param_num), K(left_is_iter_), K(right_is_iter_),
              K(expr_ctx.subplan_iters_), K(param_array), K(ret));
   } else {
-    //对于calc_resultN接口来说，param_array至少有一个iterator参数，但是又不都是iterator参数
+    // For the calc_resultN interface, param_array has at least one iterator parameter, but not all are iterator parameters
     int64_t subquery_idx = OB_INVALID_ID;
     ObNewRow tmp_row;
     ObNewRow *left_row = NULL;
@@ -3467,12 +3462,12 @@ int ObSubQueryRelationalExpr::calc_resultN(ObObj &result,
           LOG_WARN("compare single row failed", K(ret));
         } else if (OB_FAIL(row_iter->get_next_row(tmp_left_row))) {
           if (OB_ITER_END == ret) {
-            ret = OB_SUCCESS; //第一次迭代出了数据，无法迭代出第二行数据，符合with none的语义，返回OB_SUCCESS
+            ret = OB_SUCCESS; // First iteration returned data, unable to iterate to the second row of data, meets the semantics of none, return OB_SUCCESS
           } else {
             LOG_WARN("get next row from iter failed", K(ret));
           }
         } else {
-           //第二次又迭代出数据，不符合向量的语义，所以应该对外报错
+           //The second iteration produced data that does not conform to the semantics of the vector, so an error should be reported externally
           ret = OB_SUBQUERY_TOO_MANY_ROW;
         }
       }
@@ -3523,12 +3518,12 @@ int ObSubQueryRelationalExpr::call(ObObj *stack,
     LOG_WARN("stack is null or the param is wrong",
              K(stack_size), K(real_param_num_), K(ret));
   } else {
-    //subquery的运算和普通运算不一样，没有参数维度和向量维度的概念，
-    //subquery相关的表达式运算，左边参数是non-subquery的参数个数，右边是一个subquery ref参数
-    //对于exist(subquery)参数个数为1，参数只有subquery ref operator
-    //对于c1>(subquery)这种情况，参数个数为2，左边参数是column_ref(c1)，右边是subquery_ref index
-    //对于(c1, c2)=(subquery)这种情况，参数个数是3，左边参数是ccolumn_ref(c1), column_ref(c2),
-    // 右边参数是subquery_ref index
+    // subquery's operation is different from ordinary operation, there is no concept of parameter dimension and vector dimension,
+    // subquery-related expression operations, left parameter is the number of non-subquery parameters, right is a subquery ref parameter
+    // For exist(subquery) parameter count is 1, parameter is only subquery ref operator
+    // For c1 > (subquery) this situation, parameter count is 2, left parameter is column_ref(c1), right is subquery_ref index
+    // For (c1, c2)=(subquery) this situation, parameter count is 3, left parameters are column_ref(c1), column_ref(c2),
+    // Right parameter is subquery_ref index
     switch (real_param_num_) {
     case 1: {
         if (OB_FAIL(calc_result1(result, stack[stack_size - 1], expr_ctx))) {
@@ -3639,12 +3634,12 @@ int ObSubQueryRelationalExpr::calc_result_with_none(ObObj &result,
   if (OB_SUCC(ret)) {
     if (OB_FAIL(row_iter->get_next_row(row))) {
       if (OB_ITER_END == ret) {
-        ret = OB_SUCCESS; //第一次迭代出了数据，无法迭代出第二行数据，符合with none的语义，返回OB_SUCCESS
+        ret = OB_SUCCESS; // First iteration returned data, unable to iterate out the second row of data, meets the semantics of none, return OB_SUCCESS
       } else {
         LOG_WARN("get next row from iter failed", K(ret));
       }
     } else {
-      //第二次又迭代出数据，不符合向量的语义，所以应该对外报错
+      //Second iteration produced data, which does not conform to the semantics of the vector, so an error should be reported externally
       ret = OB_SUBQUERY_TOO_MANY_ROW;
     }
   }
@@ -3652,11 +3647,11 @@ int ObSubQueryRelationalExpr::calc_result_with_none(ObObj &result,
 }
 
 /**
- * ALL的语义是所有值比较都为true整个表达式才为true
- * 如果有一个值的结果为false，那么整个表达式的条件一定不成立，结果为false
- * 如果有一个值的结果为NULL(NULL的语义是结果不确定)
- * 那么需要看剩下的结果，如果剩下的结果都为true,那么应该返会NULL，因为有不确定的行值
- * 其它情况返回true
+ * ALL means the entire expression is true only if all value comparisons are true
+ * If one of the values is false, then the condition of the entire expression is definitely not met, resulting in false
+ * If one of the values is NULL (NULL means the result is uncertain)
+ * Then we need to look at the remaining results, if the remaining results are all true, then NULL should be returned, because there is an uncertain row value
+ * Other cases return true
  */
 int ObSubQueryRelationalExpr::calc_result_with_all(ObObj &result,
                                                    const ObNewRow &left_row,
@@ -3679,7 +3674,7 @@ int ObSubQueryRelationalExpr::calc_result_with_all(ObObj &result,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("subquery result iterator is null");
   } else {
-    //mysql和oracle的行为是如果ALL集合是空集，那么比较结果为true，所以初始化为true
+    // mysql and oracle behavior is if ALL collection is empty, then comparison result is true, so initialize to true
     tmp_result.set_bool(true);
     while (OB_SUCC(ret) && OB_SUCC(row_iter->get_next_row(row))) {
       if (OB_ISNULL(row)) {
@@ -3695,7 +3690,7 @@ int ObSubQueryRelationalExpr::calc_result_with_all(ObObj &result,
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("result type type is invalid", K(tmp_result));
         } else if (tmp_result.is_false()) {
-          //只要有一个元素不满足条件，整个表达式就为false，所以需要跳出循环
+          // As long as one element does not meet the condition, the entire expression is false, so we need to break out of the loop
           break;
         } else if (tmp_result.is_null()) {
           cnt_null = true;
@@ -3716,11 +3711,11 @@ int ObSubQueryRelationalExpr::calc_result_with_all(ObObj &result,
 }
 
 /**
- * ANY的语义是集合中存在值比较为true整个表达式就为true
- * 如果有一个值的结果为true，那么整个表达式的条件一定成立，结果为true
- * 如果存在值的结果为NULL(NULL的语义是结果不确定)
- * 那么需要看剩下的结果，如果剩下的结果都为false,那么应该返会NULL，因为有不确定的值
- * 其它情况返回true
+ * ANY's semantics is that if any value in the collection evaluates to true, the entire expression is true
+ * If one of the values results in true, then the condition of the entire expression is definitely met, resulting in true
+ * If there exists a value that results in NULL (NULL's semantics is that the result is uncertain)
+ * Then we need to look at the remaining results, if all the remaining results are false, then NULL should be returned, because there is an uncertain value
+ * Other cases return true
  */
 int ObSubQueryRelationalExpr::calc_result_with_any(ObObj &result,
                                                    const ObNewRow &left_row,
@@ -3743,7 +3738,7 @@ int ObSubQueryRelationalExpr::calc_result_with_any(ObObj &result,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("subquery result iterator is null");
   } else {
-    //mysql和oracle的行为是如果ANY集合是空集，那么比较结果为false，所以初始化为false
+    // mysql and oracle behavior is if ANY collection is empty, then the comparison result is false, so initialize to false
     tmp_result.set_bool(false);
     while (OB_SUCC(ret) && OB_SUCC(row_iter->get_next_row(row))) {
       if (OB_UNLIKELY(left_row.get_count() != row->get_count())) {
@@ -3757,7 +3752,7 @@ int ObSubQueryRelationalExpr::calc_result_with_any(ObObj &result,
           LOG_WARN("result type type is invalid", K(tmp_result), K(ret));
         } else if(tmp_result.is_true()) {
           break;
-          //只要有一个元素满足条件，结果就为true，所以跳出迭代
+          // As long as one element satisfies the condition, the result is true, so break the iteration
         } else if (tmp_result.is_null()) {
           cnt_null = true;
         }
@@ -4169,7 +4164,7 @@ int ObSubQueryRelationalExpr::subquery_cmp_eval_with_any(
     LOG_WARN("iter should not be null", K(ret));
   } else {
     bool cnt_null = false;
-    //mysql和oracle的行为是如果ANY集合是空集，那么比较结果为false，所以初始化为false
+    // mysql and oracle behavior is if ANY collection is empty, then the comparison result is false, so initialize to false
     res.set_false();
     while (OB_SUCC(ret) && OB_SUCC(r_iter->get_next_row())) {
       // use subquery's eval ctx for right row to avoid ObEvalCtx::alloc_ expanding.
@@ -4177,7 +4172,7 @@ int ObSubQueryRelationalExpr::subquery_cmp_eval_with_any(
         LOG_WARN("compare single row failed", K(ret));
       } else if (res.is_true()) {
         break;
-        //只要有一个元素满足条件，结果就为true，所以跳出迭代
+        // As long as one element satisfies the condition, the result is true, so break the iteration
       } else if (res.is_null()) {
         cnt_null = true;
       }
@@ -4208,7 +4203,7 @@ int ObSubQueryRelationalExpr::subquery_cmp_eval_with_all(
     LOG_WARN("iter should not be null", K(ret));
   } else {
     bool cnt_null = false;
-    //mysql和oracle的行为是如果ALL集合是空集，那么比较结果为true，所以初始化为true
+    // mysql and oracle behavior is if ALL collection is empty, then comparison result is true, so initialize to true
     res.set_true();
     while (OB_SUCC(ret) && OB_SUCC(r_iter->get_next_row())) {
       // use subquery's eval ctx for right row to avoid ObEvalCtx::alloc_ expanding.
@@ -4216,7 +4211,7 @@ int ObSubQueryRelationalExpr::subquery_cmp_eval_with_all(
         LOG_WARN("compare single row failed", K(ret));
       } else if (res.is_false()) {
         break;
-        //只要有一个元素满足条件，结果就为true，所以跳出迭代
+        // As long as one element satisfies the condition, the result is true, so break the iteration
       } else if (res.is_null()) {
         cnt_null = true;
       }
@@ -4732,9 +4727,9 @@ ObObjType ObStringExprOperator::get_result_type_mysql(int64_t char_length) const
 // for static_typing_engine
 int ObBitwiseExprOperator::set_calc_type(ObExprResType &type)
 {
-  // 如果参数的结果类型是number tc，则calc type也应该是number tc
-  // 在实际计算时，针对number tc有round/trunc处理
-  // 如果参数的结果类型不是number tc,则calc type都设置为int/uint
+  // If the result type of the parameter is number tc, then the calc type should also be number tc
+  // In actual calculation, there is round/trunc handling for number tc
+  // If the result type of the parameter is not number tc, then set calc type to int/uint
   if (ObNumberType == type.get_type() || ObDecimalIntType == type.get_type()) {
     type.set_precision(DEFAULT_NUMBER_PRECISION_FOR_INTEGER);
     type.set_scale(DEFAULT_NUMBER_SCALE_FOR_INTEGER);
@@ -4892,8 +4887,8 @@ int ObBitwiseExprOperator::calc_result2_mysql(const ObExpr &expr, ObEvalCtx &ctx
                                   session->get_stmt_type(),
                                   session->is_ignore_stmt(),
                                   sql_mode, cast_mode);
-    // choose_get_int_func可以想办法放到cg阶段，但是bitwise表达式
-    // 应该不是性能敏感的地方
+    // choose_get_int_func can find a way to put it into the cg stage, but bitwise expression
+    // Should not be a performance sensitive place
     if (OB_FAIL(choose_get_int_func(left_meta, get_uint_func0))) {
       LOG_WARN("choose_get_int_func failed", K(ret), K(left_meta));
     } else if (OB_FAIL((reinterpret_cast<GetUIntFunc>(get_uint_func0)(left_meta, *left, true,
@@ -4944,7 +4939,7 @@ int ObBitwiseExprOperator::cg_bitwise_expr(ObExprCGCtx &expr_cg_ctx, const ObRaw
       rt_expr.eval_vector_func_ = calc_bitwise_result2_mysql_vector;
     } else {
       // must be set in its cg_expr method
-      // bit_neg和bit_count有自己的计算函数
+      // bit_neg and bit_count have their own calculation functions
       rt_expr.eval_func_ = NULL;
     }
   }
@@ -5260,7 +5255,7 @@ int ObBitwiseExprOperator::choose_get_int_func(const ObDatumMeta datum_meta, voi
   } else if (ObDecimalIntTC == ob_obj_type_class(type)) {
     out_func = reinterpret_cast<void*>(ObBitwiseExprOperator::get_uint64_from_decimalint_type);
   } else {
-    // 针对非number的输入，类型推导阶段会增加implicit cast将其转为int64/uint64
+    // For non-number input, the type inference stage will add implicit cast to convert it to int64/uint64
     out_func = reinterpret_cast<void*>(ObBitwiseExprOperator::get_uint64_from_int_tc);
   }
   return ret;
@@ -5537,7 +5532,7 @@ int ObMinMaxExprOperator::calc_result_meta_for_comparison(
   }
 
   // cmp_type
-  // 都是varchar，采用varchar比较，否则转成数值比较
+  // All are varchar, use varchar comparison, otherwise convert to numeric comparison
   if (OB_SUCC(ret)) {
     ret = aggregate_cmp_type_for_comparison(type, types_stack, param_num);
   }
@@ -5579,15 +5574,15 @@ int ObMinMaxExprOperator::calc_result_meta_for_comparison(
       ObScale result_scale = static_cast<ObScale>(NOT_FIXED_DEC == max_scale ? -1 : max_scale);
       const int64_t int32_max_precision = 11;
       if (result_scale > 0 && ob_is_int_tc(type.get_type())) {
-      //兼容mysql行为，least(datetime/time/timestamp,int)结果类型为int
-      //least(datetime(3)/time(3)/timestamp(3),int)结果类型为decimal。
+      // Compatible with MySQL behavior, least(datetime/time/timestamp,int) result type is int
+      // least(datetime(3)/time(3)/timestamp(3),int) result type is decimal.
         if (enable_decimal_int) {
           type.set_type(ObDecimalIntType);
         } else {
           type.set_type(ObNumberType);
         }
       } else if (max_precision > int32_max_precision && ObInt32Type == type.get_type()) {
-      //兼容mysql行为对类型进行提升。
+      // Compatible with MySQL behavior to promote types.
         type.set_type(ObIntType);
       }
       if (lib::is_mysql_mode() && ob_is_real_type(type.get_type())) {
@@ -5895,9 +5890,8 @@ int ObLocationExprOperator::get_pos_int64(const ObObj &obj, ObExprCtx &expr_ctx,
   }
   return ret;
 }
-
-// location相关的表达式的第一个和第二个参数在计算前，cs_type要设定为一样的，否则
-// ObCharset::locate()无法确定使用哪个cs_type进行计算
+// location-related expressions' first and second parameters, cs_type should be set to the same before calculation, otherwise
+// ObCharset::locate() cannot determine which cs_type to use for calculation
 int ObLocationExprOperator::get_calc_cs_type(const ObExpr &expr, ObCollationType &calc_cs_type)
 {
   int ret = OB_SUCCESS;
@@ -5929,10 +5923,9 @@ int ObLocationExprOperator::calc_location_expr(const ObExpr &expr, ObEvalCtx &ct
   }
   return ret;
 }
-
-// instr和locate的参数顺序正好相反，所以需要抽出这个函数
-// eg: locate(sub_str, ori_str): 待搜索的子串是第一个参数
-//     instr(ori_str, sub_str): 待搜索的子串时第二个参数
+// instr and locate parameter order is exactly opposite, so this function needs to be extracted
+// eg: locate(sub_str, ori_str): the substring to be searched is the first parameter
+//     instr(ori_str, sub_str): the substring to be searched is the second parameter
 int ObLocationExprOperator::calc_(const ObExpr &expr, const ObExpr &sub_arg,
                                   const ObExpr &ori_arg, ObEvalCtx &ctx,
                                   ObDatum &res_datum)
@@ -5942,7 +5935,7 @@ int ObLocationExprOperator::calc_(const ObExpr &expr, const ObExpr &sub_arg,
   ObDatum *ori = NULL;
   ObDatum *pos = NULL;
   bool has_result = false;
-  // 第一个和第二个参数有null时不会短路，第三个参数才会短路
+  // The first and second parameters will not short-circuit when they are null, only the third parameter will short-circuit
   if (OB_FAIL(sub_arg.eval(ctx, sub)) || OB_FAIL(ori_arg.eval(ctx, ori))) {
     LOG_WARN("eval arg failed", K(ret));
   } else if (sub->is_null() || ori->is_null()) {
@@ -5955,7 +5948,7 @@ int ObLocationExprOperator::calc_(const ObExpr &expr, const ObExpr &sub_arg,
     if (OB_FAIL(expr.args_[2]->eval(ctx, pos))) {
       LOG_WARN("eval arg 2 failed", K(ret));
     } else if (!pos->is_null()) {
-      // TODO: 验证MySQL下uint64超过int64值域范围，隐式cast的结果
+      // TODO: Verify that uint64 exceeds the int64 value range under MySQL, the result of implicit cast
       // 
       pos_int = pos->get_int();
     } else {
@@ -6916,7 +6909,7 @@ int ObRelationalExprOperator::get_min_max_cmp_ret(
         LOG_WARN("unexpected cmp result", KPC(left), KPC(right));
       }
     } else {   // left and right is all ext
-      // 在filter表达式过滤的场景里不可能出现left和right同时为is_ext的场景
+      // In the scenario filtered by the filter expression, it is impossible for both left and right to be is_ext at the same time
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("Unexpected expr datum compare", K(ret), KPC(left), KPC(right));
     }

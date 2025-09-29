@@ -111,7 +111,7 @@ int ObPxMultiPartInsertOp::read_row(ObExecContext &ctx,
 {
   int ret = OB_SUCCESS;
   UNUSED(ctx);
-  // 从child中读取数据，数据存储在child的output exprs中
+  // Read data from child, data is stored in child's output exprs
   if (OB_ISNULL(child_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("child op is null", K(ret));
@@ -121,14 +121,14 @@ int ObPxMultiPartInsertOp::read_row(ObExecContext &ctx,
     }
   } else {
     op_monitor_info_.otherstat_2_value_++;
-    // 每一次从child节点获得新的数据都需要进行清除计算标记
+    // Every time new data is obtained from the child node, a clear calculation flag is required
     clear_evaluated_flag();
     if (OB_FAIL(ObDMLService::process_insert_row(MY_SPEC.ins_ctdef_, ins_rtdef_, *this, is_skipped))) {
       LOG_WARN("process insert row failed", K(ret));
     } else if (!is_skipped) {
-      // 通过partition id expr获得对应行对应的分区
+      // Obtain the corresponding partition for the row through the partition id expr
       const int64_t part_id_idx = MY_SPEC.row_desc_.get_part_id_index();
-      // 返回的值是child的output exprs
+      // The returned value is child's output exprs
       row = &child_->get_spec().output_;
       if (NO_PARTITION_ID_FLAG == part_id_idx) {
         ObDASTableLoc *table_loc = ins_rtdef_.das_rtdef_.table_loc_;
@@ -161,7 +161,7 @@ int ObPxMultiPartInsertOp::write_rows(ObExecContext &ctx,
   int ret = OB_SUCCESS;
   UNUSED(ctx);
   ObPhysicalPlanCtx *plan_ctx = NULL;
-  // 向存储层写入数据
+  // Write data to storage layer
   if (OB_ISNULL(plan_ctx = ctx_.get_physical_plan_ctx())) {
     ret = OB_ERR_NULL_VALUE;
     LOG_WARN("get physical plan context failed", K(ret));

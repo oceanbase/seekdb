@@ -668,7 +668,7 @@ int ObTableApiSessNodeReplaceOp::operator()(MapKV &entry)
       ObTableApiSessNode *old_node = entry.second;
       entry.second = new_node;
       // 3. move old node to retired list
-      pool_.move_node_to_retired_list(old_node); // 添加到链表末尾，不会出错，故不判断返回值
+      pool_.move_node_to_retired_list(old_node); // add to the end of the list, will not fail, so do not check the return value
     }
   }
 

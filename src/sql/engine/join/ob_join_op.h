@@ -67,7 +67,7 @@ public:
   { return static_cast<const ObJoinSpec &>(spec_); }
 
 public:
-  // 记录当前join算子output是否生成，用于结束状态机的while循环
+  // Record whether the current join operator output is generated, used to end the while loop of the state machine
   bool output_row_produced_;
   bool left_row_joined_;
 private:

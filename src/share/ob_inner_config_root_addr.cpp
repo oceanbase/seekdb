@@ -197,8 +197,8 @@ int ObInnerConfigRootAddr::parse_rs_addr(char *addr_buf, ObAddr &addr, int64_t &
     char *save_ptr = nullptr;
 
     /*
-     * ipv4格式: a.b.c.d:port1:port2, proxy只使用一个port
-     * ipv6格式: [a:b:c:d:e:f:g:h]:port1:port2, proxy只使用一个port
+     * ipv4 format: a.b.c.d:port1:port2, proxy only uses one port
+     * ipv6 format: [a:b:c:d:e:f:g:h]:port1:port2, proxy only uses one port
      *
      */
     if ('[' != addr_buf[0]) { /* ipv4 */

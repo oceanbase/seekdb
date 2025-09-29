@@ -163,7 +163,7 @@ int ObDirectLoadMergeCtx::build_merge_task(ObDirectLoadTableStore &table_store, 
     LOG_WARN("invalid args", KR(ret), K(table_store), K(thread_cnt));
   } else {
     if (table_store.empty()) {
-      // 无导入数据
+      // No import data
       for (int64_t i = 0; OB_SUCC(ret) && i < tablet_merge_ctx_array_.count(); ++i) {
         ObDirectLoadTabletMergeCtx *tablet_merge_ctx = tablet_merge_ctx_array_.at(i);
         if (OB_FAIL(tablet_merge_ctx->build_empty_data_merge_task(table_store.get_table_data_desc(),
@@ -172,11 +172,11 @@ int ObDirectLoadMergeCtx::build_merge_task(ObDirectLoadTableStore &table_store, 
         }
       }
     } else if (table_store.is_multiple_heap_table()) {
-      // 无主键排序数据, 多分区混合
+      // Unkeyed sort data, multi-partition mixed
       abort_unless(1 == table_store.size());
       const ObDirectLoadTableHandleArray &multiple_heap_table_array = *table_store.begin()->second;
       if (tablet_merge_ctx_array_.count() > thread_cnt * 2) {
-        // 分区数目超过线程数目的2倍, 一个分区构造一个合并任务
+        // The number of partitions exceeds twice the number of threads, one partition constructs one merge task
         for (int64_t i = 0; OB_SUCC(ret) && i < tablet_merge_ctx_array_.count(); ++i) {
           ObDirectLoadTabletMergeCtx *tablet_merge_ctx = tablet_merge_ctx_array_.at(i);
           if (OB_FAIL(tablet_merge_ctx->build_aggregate_merge_task_for_multiple_heap_table(
@@ -185,7 +185,7 @@ int ObDirectLoadMergeCtx::build_merge_task(ObDirectLoadTableStore &table_store, 
           }
         }
       } else {
-        // 每个分区都构造多个合并任务
+        // Each partition constructs multiple merge tasks
         for (int64_t i = 0; OB_SUCC(ret) && i < tablet_merge_ctx_array_.count(); ++i) {
           ObDirectLoadTabletMergeCtx *tablet_merge_ctx = tablet_merge_ctx_array_.at(i);
           if (OB_FAIL(tablet_merge_ctx->build_merge_task_for_multiple_heap_table(
@@ -195,12 +195,12 @@ int ObDirectLoadMergeCtx::build_merge_task(ObDirectLoadTableStore &table_store, 
         }
       }
     } else if (table_store.is_multiple_sstable()) {
-      // 现在的sstable是通过multiple_sstable模拟的
-      // multiple_sstable和sstable在这里的主要差别是划分range的方式不同
-      // 这里先简单通过table_map.size()是否大于1判断是不是sstable
-      // 当table_map.size()为1时, 可能是sstable也可能是multiple_sstable, 这时候划分range的方式就没差别了, 统一走multiple_sstable逻辑
+      // The current sstable is simulated by multiple_sstable
+      // the main difference between multiple_sstable and sstable here is the different way of range partitioning
+      // Here we simply judge if it's an sstable by checking if table_map.size() is greater than 1
+      // When table_map.size() is 1, it could be either sstable or multiple_sstable, at this point the way to partition the range is the same, so we unify the logic for multiple_sstable
       if (table_store.size() > 1) { // sstable
-        // 有主键表不排序, 各分区独立
+        // Table with primary key does not sort, each partition is independent
         ObDirectLoadTableHandleArray *sstable_array = nullptr;
         for (int64_t i = 0; OB_SUCC(ret) && i < tablet_merge_ctx_array_.count(); ++i) {
           ObDirectLoadTabletMergeCtx *tablet_merge_ctx = tablet_merge_ctx_array_.at(i);
@@ -221,7 +221,7 @@ int ObDirectLoadMergeCtx::build_merge_task(ObDirectLoadTableStore &table_store, 
           }
         }
       } else { // multipe_sstable
-        // 有主键表排序数据, 多分区混合
+        // Table with primary key sorting data, multi-partition mixed
         const ObDirectLoadTableHandleArray &multiple_sstable_array = *table_store.begin()->second;
         ObDirectLoadMultipleMergeRangeSplitter range_splitter;
         if (OB_FAIL(range_splitter.init(multiple_sstable_array, table_store.get_table_data_desc(),
@@ -258,7 +258,7 @@ int ObDirectLoadMergeCtx::build_del_lob_task(ObDirectLoadTableStore &table_store
     LOG_WARN("invalid args", KR(ret), K(table_store));
   } else {
     if (table_store.empty()) {
-      // 没有需要删除的lob数据
+      // There is no lob data to be deleted
       for (int64_t i = 0; OB_SUCC(ret) && i < tablet_merge_ctx_array_.count(); ++i) {
         ObDirectLoadTabletMergeCtx *tablet_merge_ctx = tablet_merge_ctx_array_.at(i);
         if (OB_FAIL(tablet_merge_ctx->build_empty_data_merge_task(table_store.get_table_data_desc(),
@@ -647,7 +647,7 @@ int ObDirectLoadTabletMergeCtx::build_merge_task_for_multiple_heap_table(
       }
     }
   }
-  // 如果没有构造出merge_task, 则需要补上一个空的任务来关闭tablet
+  // If the merge_task is not constructed, then an empty task needs to be added to close the tablet
   if (OB_SUCC(ret) && merge_task_array_.empty()) {
     if (OB_FAIL(build_empty_merge_task())) {
       LOG_WARN("fail to build empty merge task", KR(ret));
@@ -661,7 +661,7 @@ int ObDirectLoadTabletMergeCtx::build_aggregate_merge_task_for_multiple_heap_tab
   const ObDirectLoadTableHandleArray &multiple_heap_table_array)
 {
   int ret = OB_SUCCESS;
-  // 1. 统计所有multiple_heap_table中的行数
+  // 1. Count all rows in multiple_heap_table
   int64_t total_row_count = 0;
   for (int64_t i = 0; OB_SUCC(ret) && i < multiple_heap_table_array.count(); ++i) {
     const ObDirectLoadTableHandle &table_handle = multiple_heap_table_array.at(i);
@@ -679,10 +679,10 @@ int ObDirectLoadTabletMergeCtx::build_aggregate_merge_task_for_multiple_heap_tab
       total_row_count += row_count;
     }
   }
-  // 2. 构造merge_task
+  // 2. Construct merge_task
   if (OB_SUCC(ret)) {
     if (total_row_count == 0) {
-      // 没有这个分区的数据
+      // There is no data for this partition
       if (OB_FAIL(build_empty_data_merge_task(table_data_desc, 1 /*max_parallel_degree*/))) {
         LOG_WARN("fail to build empty data merge task", KR(ret));
       }
@@ -742,12 +742,12 @@ int ObDirectLoadTabletMergeCtx::build_del_lob_task(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", KR(ret), K(max_parallel_degree), K(multiple_sstable_array));
   } else {
-    // 预期中, 删除的lob_id < 插入的lob_id
-    // 由于dml和旁路生成lob_id的规则不一致, 导致dml的lob_id > 旁路的lob_id
-    // 也就是: 待删除的旁路lob_id < 插入的旁路lob_id < 待删除的dml的lob_id
-    // 1. 当本次导入没有插入旁路的outrow数据, 则可以忽略这个问题
-    // 2. 本次导入有插入旁路的outrow数据, 则del_lob数据要以插入的旁路lob_id(取min_insert_lob_id)为界, 分成两部分写
-    //      sstable数据分布: [删除的旁路的lob_id] [插入的旁路的lob_id] [删除的dml的lob_id]
+    // Expected that, deleted lob_id < inserted lob_id
+    // Due to the inconsistent rules for generating lob_id between dml and bypass, it leads to dml's lob_id > bypass's lob_id
+    // that is: lob_id of bypass to be deleted < lob_id of bypass to be inserted < lob_id of dml to be deleted
+    // 1. When this import does not insert outrow data for the bypass, this issue can be ignored
+    // 2. This import has outrow data with inserted bypass, then the del_lob data should be divided into two parts based on the inserted bypass lob_id (take min_insert_lob_id as the boundary) for writing
+    //      sstable data distribution: [bypassed lob_id of deleted] [bypassed lob_id of inserted] [dml lob_id of deleted]
     //      range: (min, dl_k1], ..., (dl_kn, min_insert_lob_id] + (min_insert_lob_id, dml_k1], ..., (dml_km, max)
     //      data_seq: [0, parallel] + [last_data_seq.parallel_idx_ + 1, ...]
     const ObLobId &min_insert_lob_id =
@@ -762,8 +762,8 @@ int ObDirectLoadTabletMergeCtx::build_del_lob_task(
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected range count", KR(ret), K(max_parallel_degree), K(range_array_.count()));
     } else if (min_insert_lob_id.is_valid()) {
-      // 本次导入有插入旁路的outrow数据, 将range以min_insert_lob_id为界拆分
-      // first_no_insert_front_idx是第一个待删除的dml的lob_id所属的range
+      // This import has outrow data with inserted bypass, split the range with min_insert_lob_id as the boundary
+      // first_no_insert_front_idx is the first dml to be deleted's lob_id belonging range
       int cmp_ret = 0;
       ObStorageDatum min_insert_lob_id_datum;
       ObDatumRowkey tmp_min_insert_lob_id_rowkey;
@@ -782,7 +782,7 @@ int ObDirectLoadTabletMergeCtx::build_del_lob_task(
         if (OB_FAIL(end_key.compare(min_insert_lob_id_rowkey, *param_->datum_utils_, cmp_ret))) {
           LOG_WARN("fail to compare lob id", KR(ret), K(end_key), K(min_insert_lob_id_rowkey));
         } else if (cmp_ret > 0) {
-          // 将当前range拆分成2个range: range, new_range
+          // Split the current range into 2 ranges: range, new_range
           ObDatumRange new_range = range;
           range.end_key_ = min_insert_lob_id_rowkey;
           range.set_right_closed();
@@ -791,7 +791,7 @@ int ObDirectLoadTabletMergeCtx::build_del_lob_task(
           if (OB_FAIL(range_array_.push_back(new_range))) {
             LOG_WARN("fail to push back", KR(ret));
           } else if (i < range_array_.count() - 1) {
-            // 拆分的不是最后一个range, 需要把后面的range都后移
+            // The split range is not the last one, need to shift all subsequent ranges backward
             for (int64_t j = range_array_.count() - 1; j > i; --j) {
               range_array_[j] = range_array_[j - 1];
             }
@@ -966,12 +966,12 @@ int ObDirectLoadTabletMergeCtx::inc_finish_count(int ret_code, bool &is_ready)
     ObMutexGuard guard(mutex_);
     ++task_finish_cnt_;
     if (OB_TMP_FAIL(task_ret_code_)) {
-      // 其他任务已经失败,
+      // Other tasks have failed,
     } else if (OB_TMP_FAIL(ret_code)) {
-      // 当前任务失败, 设置错误码
+      // Current task failed, set error code
       task_ret_code_ = ret_code;
     } else {
-      // 没有任务失败
+      // No task failed
       is_ready = (task_finish_cnt_ >= merge_task_array_.count());
     }
   }

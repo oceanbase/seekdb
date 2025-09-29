@@ -101,8 +101,7 @@ ObArchivePiece &ObArchivePiece::operator++()
   inc();
   return *this;
 }
-
-// 不同interval piece不可比
+// Different interval pieces are not comparable
 bool ObArchivePiece::operator==(const ObArchivePiece &other) const
 {
   if (interval_us_ != other.interval_us_) {

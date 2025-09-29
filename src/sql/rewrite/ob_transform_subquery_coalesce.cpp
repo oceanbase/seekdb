@@ -62,9 +62,9 @@ int ObTransformSubqueryCoalesce::transform_one_stmt(common::ObIArray<ObParentDML
     }
   }
   if (OB_SUCC(ret)) {
-    /* 将能够合并的尽量合并,如:select * from t1 where t1.c1 in (select 1 from t2 where t2.c2 = t1.c2) 
+    /* Merge as much as possible, e.g.: select * from t1 where t1.c1 in (select 1 from t2 where t2.c2 = t1.c2)
     * and c1 not in (select 1 from t2 where t2.c2 = t1.c2 and t2.c2 > 3) and c1 in (select 1 from t2 where t2.c2 = t1.c2);
-    * 本来这条语句可以为恒fasle,但是第一次合并可能无法判断出，因此需要第二次合并才能判断出。
+    * Originally this statement could be false, but it may not be determined during the first merge, so a second merge is needed to determine it.
     */
     ObSEArray<ObPCParamEqualInfo, 4> rule_based_equal_infos;
     ObSEArray<ObPCParamEqualInfo, 4> cost_based_equal_infos;
@@ -598,7 +598,7 @@ int ObTransformSubqueryCoalesce::check_conditions_validity(ObDMLStmt *stmt,
   ObSqlBitSet<> removed;
   QueryRelation relation = QueryRelation::QUERY_UNCOMPARABLE;
   has_false_conds = false;
-  bool is_used = false;//用于标记一个子查询已经与一个子查询结合,防止一个子查询二次结合,从而出错
+  bool is_used = false;//used to mark that a subquery has already been combined with another subquery, preventing a subquery from being combined twice, which could cause errors
   bool force_trans = false;
   bool force_no_trans = false;
   if (OB_ISNULL(stmt)) {
@@ -703,7 +703,7 @@ int ObTransformSubqueryCoalesce::check_conditions_validity(ObDMLStmt *stmt,
           LOG_WARN("get the same classify exprs failed", K(ret));
         } else {
           removed.reset();
-          bool can_coalesce = (left_type[k] == T_OP_SQ_EQ) ? true : false;//仅仅in于not in可以合并为lnnvl这种情形
+          bool can_coalesce = (left_type[k] == T_OP_SQ_EQ) ? true : false;//Only in and not in can be combined into lnnvl in this scenario
           for (int64_t i = 0; OB_SUCC(ret) && !has_false_conds && i < left_exprs.count(); ++i) {
             param.any_expr_ = left_exprs.at(i);
             param.trans_flag_ = ANY_ALL;

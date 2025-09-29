@@ -68,7 +68,7 @@ int ObTenantShowTables::inner_open()
     }
     if (OB_SUCC(ret)) {
       if (OB_UNLIKELY(!is_valid_id(database_id_))) {
-        // FIXME(tingshuai.yts):暂时定为显示该错误信息，只有直接查询该虚拟表才可能出现
+        // FIXME(tingshuai.yts): Temporarily set to display this error message, which will only occur when directly querying this virtual table
         ret = OB_NOT_SUPPORTED;
         LOG_USER_ERROR(OB_NOT_SUPPORTED, "select a table which is used for show clause");
       } else if (is_external_object_id(database_id_)) {

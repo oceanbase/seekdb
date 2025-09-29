@@ -10,8 +10,8 @@
  * See the Mulan PubL v2 for more details.
  */
 
-#define private public  // 获取私有成员
-#define protected public  // 获取私有成员
+#define private public  // get private members
+#define protected public  // get private members
 #include "observer/table/object_pool/ob_table_object_pool.h"
 #include "mtlenv/mock_tenant_module_env.h"
 

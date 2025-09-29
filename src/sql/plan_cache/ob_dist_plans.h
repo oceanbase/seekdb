@@ -99,7 +99,7 @@ private:
                     ObPlanCacheCtx &pc_ctx) const;
 
   /**
-   * @brief 为pc_ctx.exec_ctx设置table location
+   * @brief Set table location for pc_ctx.exec_ctx
    *
    */
   int set_phy_table_locations_for_ctx(ObPlanCacheCtx &pc_ctx,

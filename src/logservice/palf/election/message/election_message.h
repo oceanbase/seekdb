@@ -204,7 +204,7 @@ public:
   TO_STRING_KV(BASE, K_(accepted), K_(lease), K_(request_debug_ts));
   #undef BASE
 private:
-  bool accepted_;// 请求是否被接受
+  bool accepted_;// Whether the request was accepted
   Lease lease_;// may be "EMPTY"
   ElectionMsgDebugTs request_debug_ts_;
 };

@@ -40,7 +40,7 @@ int ObMySQLResultSet::to_mysql_field(const ObField &field, ObMySQLField &mfield)
     mfield.length_ = field.length_;
     ObScale decimals = mfield.accuracy_.get_scale();
     ObPrecision pre = mfield.accuracy_.get_precision();
-    // TIMESTAMP、UNSIGNED通过map直接映射
+    // TIMESTAMP, UNSIGNED are directly mapped through map
     if (0 == field.type_name_.case_compare("SYS_REFCURSOR")) {
       mfield.type_ = MYSQL_TYPE_CURSOR;
     } else {
@@ -116,7 +116,7 @@ int ObMySQLResultSet::to_oracle_field(const ObField &field, ObMySQLField &mfield
     mfield.length_ = field.length_;
     ObScale decimals = mfield.accuracy_.get_scale();
     ObPrecision pre = mfield.accuracy_.get_precision();
-    // TIMESTAMP、UNSIGNED通过map直接映射
+    // TIMESTAMP, UNSIGNED are directly mapped through map
     if (0 == field.type_name_.case_compare("SYS_REFCURSOR")) {
       mfield.type_ = MYSQL_TYPE_CURSOR;
     } else {

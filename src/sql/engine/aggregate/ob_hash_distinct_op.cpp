@@ -229,7 +229,7 @@ int ObHashDistinctOp::build_distinct_data(bool is_block)
       }
       if (OB_FAIL(ret)) {
       } else if (is_block) {
-        // 如果是block模式，则处理完一批数据（可能来自于child或者dump的partition),则开始返回数据
+        // If it is block mode, then after processing a batch of data (which may come from child or dump partition), start returning the data
         LOG_TRACE("trace block", K(is_block));
         break;
       } else if (OB_FAIL(hp_infras_.end_round())) {
@@ -544,7 +544,7 @@ int ObHashDistinctOp::do_block_distinct()
     } else if (OB_FAIL(hp_infras_.open_hash_table_part())) {
       LOG_WARN("failed to open hash table part", K(ret));
     }
-    // 这里进行clear主要为了如果在dump情况下，distinct_exprs被写过值，不进行clean，可能导致被计算的值没有覆盖
+    // Here we perform clear mainly to ensure that if distinct_exprs has been assigned a value during dump, not cleaning it could lead to calculated values not being overwritten
     clear_evaluated_flag();
     first_got_row_ = false;
   }

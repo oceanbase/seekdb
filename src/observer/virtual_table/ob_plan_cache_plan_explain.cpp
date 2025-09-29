@@ -379,7 +379,7 @@ int ObPlanCachePlanExplain::inner_open()
     LOG_WARN("set tenant id and plan id failed", K(ret));
   } else if (!scan_all_plan_) {
     ObPlanCache *plan_cache = NULL;
-    // !!!引用plan cache资源之前必须加ObReqTimeGuard
+    // !!!Before referencing plan cache resources, ObReqTimeGuard must be added
     ObReqTimeGuard req_timeinfo_guard;
     ObCacheObjGuard guard(PLAN_EXPLAIN_HANDLE);
     int tmp_ret = OB_SUCCESS;

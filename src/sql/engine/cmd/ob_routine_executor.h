@@ -74,8 +74,7 @@ public:
 private:
   DISALLOW_COPY_AND_ASSIGN(ObAlterRoutineExecutor);
 };
-
-//参考alter system定义
+// Reference alter system definition
 DEF_SIMPLE_EXECUTOR(ObDropRoutine);
 
 class ObCallProcedureExecutor

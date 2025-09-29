@@ -219,13 +219,13 @@ public:
     for (int64_t palf_id = 1; palf_id < MAX_PALF_ID; palf_id++) {
       delete_palf(tenant_id, palf_id);
     }
-    // 本地盘的delete_tenant操作要求tenant目录下不为空
+    // The delete_tenant operation on the local disk requires that the tenant directory is not empty
     return SHARED_LOG_GLOBAL_UTILS.delete_tenant(tenant_id);
   }
   int delete_palf(const uint64_t tenant_id,
                   const int64_t palf_id)
   {
-    // 本地盘的delete_palf操作要求palf目录下不为空
+    // The delete_palf operation on the local disk requires that the palf directory is not empty
     SHARED_LOG_GLOBAL_UTILS.delete_blocks(tenant_id, ObLSID(palf_id), 0, MAX_BLOCK_ID);
     return SHARED_LOG_GLOBAL_UTILS.delete_ls(tenant_id, ObLSID(palf_id));    
   }

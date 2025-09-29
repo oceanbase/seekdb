@@ -58,11 +58,11 @@ public:
   virtual void reset();
 
 private:
-  // 过滤得到需要处理的租户
+  // Filter to get the tenants that need processing
   virtual bool is_need_process(uint64_t tenant_id) override;
-  // 处理当前迭代的租户
+  // Process the tenant of the current iteration
   virtual int process_curr_tenant(common::ObNewRow *&row) override;
-  // 释放上一个租户的资源
+  // Release the resources of the previous tenant
   virtual void release_last_tenant() override;
 
 private:
@@ -73,7 +73,7 @@ private:
   common::ObAddr addr_;
   char ip_buf_[common::OB_IP_STR_BUFF];
   char address_[STRING_LEN];
-  /* 跨租户访问的资源必须由ObMultiTenantOperator来处理释放*/
+  /* The resources for cross-tenant access must be handled and released by ObMultiTenantOperator */
   int64_t pool_idx_;
   ObSEArray<ObTenantMetaMemStatus, POOL_NUM> status_arr_;
 private:

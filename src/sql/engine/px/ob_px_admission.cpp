@@ -52,13 +52,12 @@ int ObPxAdmission::get_parallel_session_target(ObSQLSessionInfo &session,
                         K(parallel_servers_target), K(minimal_session_target), K(session_target));
   return ret;
 }
-
-// 如果当前剩余线程数能满足 req_cnt，则分配线程给请求
-// 但考虑到系统空闲时，要允许第一个请求执行，需要处理下面的特殊情况：
-//   如果 请求的线程数 req_cnt 大于 limit，并且当前没有其它 px 请求（used = 0）
-//   那么 就把所有线程分配给这个请求 (admit_cnt = req_cnt, used = limit)
+// If the current remaining number of threads can meet req_cnt, then allocate threads to the request
+// But considering that the system should allow the first request to execute when idle, need to handle the following special cases:
+//   If the number of request threads req_cnt is greater than limit, and there are no other px requests currently (used = 0)
+//   Then assign all threads to this request (admit_cnt = req_cnt, used = limit)
 //
-//   推论：一个需要**过量**线程的请求，只会在系统空闲下来之后才会被调度
+//   Inference: A request that requires **excess** threads will only be scheduled after the system becomes idle
 int64_t ObPxAdmission::admit(ObSQLSessionInfo &session, ObExecContext &exec_ctx,
                              int64_t wait_time_us, int64_t minimal_px_worker_count,
                              int64_t &session_target, ObHashMap<ObAddr, int64_t> &worker_map,
@@ -109,7 +108,7 @@ int ObPxAdmission::enter_query_admission(ObSQLSessionInfo &session,
                                          ObPhysicalPlan &plan)
 {
   int ret = OB_SUCCESS;
-  // 对于只有dop=1 的场景跳过检查，因为这种场景走 RPC 线程，不消耗 PX 线程
+  // For the scenario where only dop=1, skip the check, because this scenario goes through the RPC thread and does not consume PX threads
   // 
   if (stmt::T_EXPLAIN != stmt_type
       && plan.is_use_px()
@@ -134,8 +133,8 @@ int ObPxAdmission::enter_query_admission(ObSQLSessionInfo &session,
       int64_t req_worker_count = plan.get_expected_worker_count();
       int64_t minimal_px_worker_count = plan.get_minimal_worker_count();
       int64_t admit_worker_count = 0;
-      // 如果一直得不到线程资源，需要超时退出。
-      // 下面处理带 timeout hint 的情景
+      // If thread resources are not obtained for a long time, a timeout exit is required.
+      // Below processing the scenario with timeout hint
       if (plan.get_phy_plan_hint().query_timeout_ > 0) {
         THIS_WORKER.set_timeout_ts(
             session.get_query_start_time() + plan.get_phy_plan_hint().query_timeout_);
@@ -170,10 +169,10 @@ int ObPxAdmission::enter_query_admission(ObSQLSessionInfo &session,
           ret = OB_ERR_UNEXPECTED;
         } else {
           plan_ctx->set_worker_count(admit_worker_count);
-          // 表示 optimizer 计算的数量
+          // indicates the number calculated by optimizer
           task_exec_ctx->set_expected_worker_cnt(req_worker_count);
           task_exec_ctx->set_minimal_worker_cnt(minimal_px_worker_count);
-          // 表示 admission 根据当前资源排队情况实际分配的数量
+          // Indicates the actual number of allocations made by admission based on the current resource queue situation
           task_exec_ctx->set_admited_worker_cnt(admit_worker_count);
         }
         LOG_TRACE("PX admission set the plan worker count", K(req_worker_count), K(minimal_px_worker_count), K(admit_worker_count));
@@ -216,9 +215,8 @@ void ObPxAdmission::exit_query_admission(ObSQLSessionInfo &session,
     LOG_DEBUG("release resource, notify wait threads");
   }
 }
-
-// 供给 SQC 端使用的 Admission 模块
-// 每个租户一个资源池
+// Supply SQC end used Admission module
+// Each tenant one resource pool
 void ObPxSubAdmission::acquire(int64_t max, int64_t min, int64_t &acquired_cnt)
 {
   UNUSED(min);

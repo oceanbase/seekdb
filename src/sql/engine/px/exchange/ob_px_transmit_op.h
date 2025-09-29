@@ -57,7 +57,7 @@ public:
     UNUSED(task_info);
     return ret;
   }
-  // 由 sqc 设置好后发给 task，该指针会序列化给 task
+  // Set up by sqc and sent to task, this pointer will be serialized to task
   void set_sqc_proxy(ObPxSQCProxy &sqc_proxy)
   {
     ch_provider_ptr_ = reinterpret_cast<uint64_t>(&sqc_proxy);
@@ -68,7 +68,7 @@ public:
   int get_self_sqc_info(dtl::ObDtlSqcInfo &sqc_info);
 
   uint64_t get_ch_provider_ptr() { return  ch_provider_ptr_; }
-  uint64_t ch_provider_ptr_; // 因为要从 sqc 序列化到本机 task 端，只能先用整数表示，才能序列化
+  uint64_t ch_provider_ptr_; // Because it needs to be serialized from sqc to the local task end, it can only be represented by an integer first, in order to serialize
 };
 
 class ObPxTransmitSpec : public ObTransmitSpec
@@ -193,14 +193,14 @@ protected:
           }
           batch_info_guard.set_batch_idx(i);
           metric_.count();
-          //TODO: shanting2.0 支持wf2.0时做一下简单适配
+          //TODO: shanting2.0 support wf2.0 when doing simple adaptation
           if (OB_FAIL(set_wf_hybrid_slice_id_calc_type(slice_calc))) {
             LOG_WARN("failed to set wf hybrid keys", K(ret));
           } else if (OB_FAIL((slice_calc.get_slice_indexes<CALC_TYPE, true>(get_spec().output_,
                               eval_ctx_, slice_idx_array, brs_.skip_)))) {
             LOG_WARN("fail get slice idx", K(ret));
           } else if (NULL != spec.tablet_id_expr_
-          // 为什么要获取上一次的tablet_id
+          // Why do we need to get the last tablet_id
                     && OB_FAIL(slice_calc.get_previous_row_tablet_id(tablet_id))) {
             LOG_WARN("failed to get previous row tablet_id", K(ret));
           }

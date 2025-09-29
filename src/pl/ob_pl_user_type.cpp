@@ -183,7 +183,7 @@ int ObUserDefinedType::deep_copy(common::ObIAllocator &alloc, const ObUserDefine
 
 int ObUserDefinedType::generate_new(ObPLCodeGenerator &generator,
                                           const ObPLINS &ns,
-                                          jit::ObLLVMValue &value, //返回值是一个int64_t，代表extend的值
+                                          jit::ObLLVMValue &value, //The return value is an int64_t, representing the extend value
                                           jit::ObLLVMValue &allocator,
                                           bool is_top_level,
                                           const pl::ObPLStmt *s) const
@@ -350,9 +350,8 @@ int ObUserDefinedType::reset_record(ObObj &src, ObSQLSessionInfo *session)
 
   return ret;
 }
-
-// keep_composite_attr = true, 保留其allocator属性，对于record而言，保留data域
-// 否则, 所有内存都清理
+// keep_composite_attr = true, retain its allocator attribute, for record, retain the data field
+// Otherwise, all memory is cleaned
 int ObUserDefinedType::destruct_obj(ObObj &src, ObSQLSessionInfo *session, bool keep_composite_attr)
 {
   int ret = OB_SUCCESS;
@@ -387,7 +386,7 @@ int ObUserDefinedType::destruct_obj(ObObj &src, ObSQLSessionInfo *session, bool 
       if (OB_SUCC(ret)) {
         common::ObIAllocator *record_allocator = record->get_allocator();
         if (NULL == record_allocator) {
-          //只定义过而没有用过的Record的allocator为空，这是正常的，跳过即可
+          //The allocator for Record that was only defined but never used is empty, this is normal, skip it
           LOG_DEBUG("Notice: a record declared but not used", K(src), K(ret));
         } else {
           ObPLAllocator1 *pl_allocator = dynamic_cast<ObPLAllocator1 *>(record_allocator);
@@ -929,7 +928,7 @@ int64_t ObRecordType::get_notnull_offset()
 
 int64_t ObRecordType::get_meta_offset(int64_t count)
 {
-  return ObRecordType::get_notnull_offset() + 8 * ((count - 1) / 8 + 1); //notnull是bool，需要对齐
+  return ObRecordType::get_notnull_offset() + 8 * ((count - 1) / 8 + 1); // notnull is bool, needs alignment
 }
 
 int64_t ObRecordType::get_data_offset(int64_t count)
@@ -1117,7 +1116,7 @@ int ObRecordType::generate_alloc_complex_addr(ObPLCodeGenerator &generator,
                                               int8_t type,
                                               int64_t user_type_id,
                                               int64_t init_size,
-                                              jit::ObLLVMValue &value, //返回值是一个int64_t，代表extend的值
+                                              jit::ObLLVMValue &value, //The return value is an int64_t, representing the extend value
                                               jit::ObLLVMValue &allocator,
                                               const pl::ObPLStmt *s)
 {
@@ -1180,8 +1179,7 @@ int ObRecordType::generate_default_value(ObPLCodeGenerator &generator,
   ObLLVMValue obobj_res;
   ObLLVMValue ptr_elem;
   ObObj null_obj;
-
-  //设置composite和count
+  //Set composite and count
   OZ (generator.get_helper().get_int32(type_, type_value));
   OZ (generator.extract_type_ptr_from_record(value, type_ptr));
   OZ (generator.get_helper().create_store(type_value, type_ptr));
@@ -1200,7 +1198,7 @@ int ObRecordType::generate_default_value(ObPLCodeGenerator &generator,
   OZ (generator.get_helper().create_store(count_value, count_ptr));
   OZ (ObUserDefinedType::generate_init_composite(generator, ns, value, stmt, allocator, true, is_top_level));
   OZ (generator.generate_debug("generate_default_value", value));
-  //设置meta和数据
+  //Set meta and data
   null_obj.set_null();
   CK (OB_NOT_NULL(stmt));
   for (int64_t i = 0; OB_SUCC(ret) && i < get_record_member_count(); ++i) {
@@ -1209,8 +1207,7 @@ int ObRecordType::generate_default_value(ObPLCodeGenerator &generator,
 
     member = get_record_member(i);
     CK (OB_NOT_NULL(member));
-
-    //设置notnull和meta
+    //Set notnull and meta
     if (OB_SUCC(ret)) {
       meta.reset();
       if (NULL == member->member_type_.get_data_type()) {
@@ -1226,8 +1223,7 @@ int ObRecordType::generate_default_value(ObPLCodeGenerator &generator,
     }
 
     OZ (buffer_guard.get_objparam_buffer(result));
-
-    //设置数据
+    //Set data
     if (OB_SUCC(ret)) {
       if (OB_INVALID_INDEX != member->get_default()) {
         if (OB_NOT_NULL(member->get_default_expr())) {
@@ -1250,7 +1246,7 @@ int ObRecordType::generate_default_value(ObPLCodeGenerator &generator,
         OZ (generator.generate_debug("generate_extract_value", ptr_elem));
         if (OB_FAIL(ret)) {
         } else if (member->member_type_.is_obj_type() || OB_INVALID_INDEX != member->get_default()) {
-          //不论基础类型还是复杂类型，如果有default，直接把default值存入即可
+          //Regardless of the basic type or complex type, if there is a default, directly store the default value
           if (OB_INVALID_INDEX != member->get_default()) {
             ObLLVMValue record_allocator;
             ObLLVMValue src_datum;
@@ -1316,7 +1312,7 @@ int ObRecordType::generate_default_value(ObPLCodeGenerator &generator,
             // final branch
             OZ (generator.set_current(final_branch));
           }
-        } else { //复杂类型如果没有default，调用generate_new
+        } else { //Complex type without default, call generate_new
           ObLLVMValue extend_value;
           ObLLVMValue type_value;
           ObLLVMValue init_value;
@@ -1793,7 +1789,7 @@ int ObPLComposite::assign(ObPLComposite *src, ObIAllocator *allocator)
 }
 
 /*
- * 为了ObPLComposite及其继承类和LLVM之间的内存映射，本函数不能实现虚函数
+ * For memory mapping between ObPLComposite and its derived classes and LLVM, this function cannot implement a virtual function
  * */
 int64_t ObPLComposite::get_init_size() const
 {
@@ -2081,11 +2077,11 @@ int ObPLCollection::init_allocator(common::ObIAllocator &allocator, bool need_ne
 }
 
 /*
- * 我们约定一个原则：
- * 1、所有Collection内部的data域的ObObj数组（包括sort域和key域的内存）的内存都必须由该Collection自己的allocator分配，而不允许是其他任何allocator；
- * 2、如果data域里是基础数据类型，那么内存也应由Collection自己的allocator分配；
- * 3、如果data域是record，那么该record本身的内存同样由Collection自己的allocator分配；record里的基础数据类型的内存同样由Collection自己的allocator分配；
- * 4、如果data域里是子Collection，那么该子Collection数据结构本身由父Collection的allocator分配，子Collection的内存管理递归遵循此约定。
+ * We agree on a principle:
+ * 1、All ObObj arrays in the data field of a Collection (including memory in the sort and key fields) must be allocated by the Collection's own allocator, and not by any other allocator;
+ * 2、If the data field contains basic data types, the memory should also be allocated by the Collection's own allocator;
+ * 3、If the data field is a record, the memory for the record itself should also be allocated by the Collection's own allocator; the memory for basic data types within the record should also be allocated by the Collection's own allocator;
+ * 4、If the data field contains a sub-Collection, the sub-Collection data structure itself should be allocated by the parent Collection's allocator; memory management for the sub-Collection should recursively follow this agreement.
  * */
 
 int ObPLCollection::assign(ObPLCollection *src, ObIAllocator *allocator)
@@ -2187,9 +2183,9 @@ int ObPLCollection::update_first_impl()
     } }while(0)
 
     bool is_deleted = false;
-    // 当有赋值的时候，first和last都会被置成该值，所以需要从头遍历一遍。
-    // 为啥需要这个，是为了优化性能，比如现在first是4，这个时候2的赋值赋值的。
-    // 所以需要从头遍历。但是delete的时候，不会做这个操作，所以，只要判断first对应的是否有效又可以了。
+    // When there is an assignment, both first and last will be set to that value, so a full traversal from the beginning is needed.
+    // Why is this needed, it is to optimize performance, for example, now first is 4, at this time the assignment of 2 is being assigned.
+    // So it needs to traverse from the beginning. However, when delete is performed, this operation is not done, so we only need to check if the one corresponding to first is valid.
     if (OB_INVALID_INDEX == first_) {
       FIND_FIRST(0, count_ - 1);
     } else {
@@ -2292,12 +2288,12 @@ void ObPLCollection::print() const
 
 
 /*
- * Collection里的数据有多重情况需要分开处理：
- * 1、简单类型，element_不是extend，col_cnt_是1：直接按顺序写进Obj即可
- * 2、复杂类型，element_是extend，col_cnt_是1：此时两种情况：
- *        a、可能是个Record，里面只有一个元素：需要构造Record空间
- *        b、可能是个Collection，直接写进Obj即可
- * 3、复杂类型，element_是extend，col_cnt_大于1：说明是个Record：需要构造Record空间
+ * The data in the Collection has multiple cases that need to be handled separately:
+ * 1、Simple type, element_ is not extend, col_cnt_ is 1: directly write in order to Obj
+ * 2、Complex type, element_ is extend, col_cnt_ is 1: there are two possible situations:
+ *        a、it might be a Record with only one element: need to construct Record space
+ *        b、it might be a Collection, directly write to Obj
+ * 3、Complex type, element_ is extend, col_cnt_ greater than 1: indicates it's a Record: need to construct Record space
  * */
 int ObPLCollection::set_row(const ObIArray<ObObj> &row, int64_t idx, bool deep_copy)
 {
@@ -2311,7 +2307,7 @@ int ObPLCollection::set_row(const ObIArray<ObObj> &row, int64_t idx, bool deep_c
   } else {
     ObObj &data_obj = data_[idx];
     if (element_.is_composite_type()) {
-      if (data_obj.is_ext()) { //已经是extend，说明该空间已经分配了内存，直接在内存写即可
+      if (data_obj.is_ext()) { // already extend, which means the space has already allocated memory, we can directly write to the memory
         CK (0 != data_obj.get_ext());
         if (OB_SUCC(ret)) {
           ObPLComposite *composite = reinterpret_cast<ObPLComposite*>(data_obj.get_ext());
@@ -2327,7 +2323,7 @@ int ObPLCollection::set_row(const ObIArray<ObObj> &row, int64_t idx, bool deep_c
             LOG_WARN("Unexpected composite in array", K(*composite), K(ret));
           }
         }
-      } else if (data_obj.is_null()) { //还没有分配空间，需要分配
+      } else if (data_obj.is_null()) { // space has not been allocated, need to allocate
         if (element_.is_record_type()) {
           ObPLRecord *new_record = reinterpret_cast<ObPLRecord*>(
               allocator_->alloc(ObRecordType::get_init_size(element_.get_field_count())));

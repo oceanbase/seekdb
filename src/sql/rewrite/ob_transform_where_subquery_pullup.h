@@ -23,32 +23,31 @@ namespace sql
 {
 
 /**
- * 这个类主要进行和子查询相关的SQL改写，它主要分为两类：
- * 1. eliminate_subquery 简化子查询的某一部分，或者移除整个冗余的子查询
- *    （1）移除整个冗余的子查询
- *         1. 对于在执行前即可计算出恒TURE或者恒FALSE的EXIST / NOT EXIST
- *            语句，可以在这一阶段消除，替换成相应的TURE或者FALSE，判断规则见
+ * This class mainly performs SQL rewriting related to subqueries, which is divided into two categories:
+ * 1. eliminate_subquery Simplify part of the subquery, or remove the entire redundant subquery
+ *    (1) Remove the entire redundant subquery
+ *         1. For EXISTS / NOT EXISTS statements that can be evaluated as TRUE or FALSE before execution,
+ *            they can be eliminated at this stage and replaced with the corresponding TRUE or FALSE. The judgment rule is seen in
  *            subquery_can_be_eliminated_in_exists()
- *    （2）简化子查询的一部分
- *         1. 对于不能消除的EXIST / NOT EXIST，它的SELECT LIST和ORDER BY均可
- *            消除；在一定条件下，GROUP BY也可以消除，判断规则见
+ *    (2) Simplify part of the subquery
+ *         1. For EXISTS / NOT EXISTS that cannot be eliminated, its SELECT LIST and ORDER BY can be eliminated;
+ *            under certain conditions, GROUP BY can also be eliminated. The judgment rule is seen in
  *            groupby_can_be_eliminated_in_exists()
- *         2. 对于不能消除的EXIST / NOT EXIST，如果本身没有LIMIT语句，会为它加
- *            上LIMIT 1。
- *         3. 对于ANY / ALL子查询，在一定条件下，GROUP BY也可以消除，判断规则见
+ *         2. For EXISTS / NOT EXISTS that cannot be eliminated, if there is no LIMIT statement itself, a LIMIT 1 will be added to it.
+ *         3. For ANY / ALL subqueries, under certain conditions, GROUP BY can also be eliminated. The judgment rule is seen in
  *            groupby_can_be_eliminated_in_any_all()
  *
- * 2. pullup_subquery 将子查询提升为一个view或者合并到主查询中
- *    （1）将子查询合并到主查询中，改写成SEMI JOIN或者ANTI JOIN
- *         通常认为改写（2）要优于改写（3），如果能直接合并入主查询中，不会再进行改写（3）
+ * 2. pullup_subquery Pull up the subquery as a view or merge it into the main query
+ *    (1) Merge the subquery into the main query, rewrite it as SEMI JOIN or ANTI JOIN
+ *         It is generally considered that rewriting (2) is better than rewriting (3). If it can be directly merged into the main query, rewriting (3) will not be performed again
  *     e.g.
- *        （示例1：子查询和主查询相关联）
+ *        (Example 1: The subquery is associated with the main query)
  *        SELECT * FROM T1 WHERE T1.c1 in (SELECT T2.c1 FROM T2 WHERE T1.c2 < T2.c2)
  *        ->
  *        SELECT *
  *        FROM T1 SEMI JOIN T2
  *        WHERE T1.c1 = T2.c1 AND T1.c2 < T2.c2
- *    （2）将和主查询无关的子查询提升为一个view，改写成SEMI JOIN或者ANTI JOIN
+ *    (2) Pull up the subquery unrelated to the main query as a view, rewrite it as SEMI JOIN or ANTI JOIN
  *     e.g.
  *        SELECT * FROM T1 WHERE T1.c1 in (SELECT T2.c1 FROM T2 LIMIT 3)
  *        ->
@@ -108,8 +107,8 @@ struct SingleSetParam {
     ObQueryRefRawExpr *subquery_expr_;//the query expr
     ObSelectStmt *subquery_; //subquery select stmt
     ObRawExpr *left_hand_; //the all/any op left expr
-    bool can_be_transform_; //能否被改写
-    bool is_correlated_;//是否直接相关的
+    bool can_be_transform_; // can be rewritten
+    bool is_correlated_;//whether directly correlated
     bool need_create_spj_;
     //Just in case different parameters hit same plan, firstly we need add const param constraint
     bool need_add_limit_constraint_;

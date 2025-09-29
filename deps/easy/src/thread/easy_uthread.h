@@ -6,7 +6,7 @@
 #include <ucontext.h>
 
 /**
- * 创建一用户态线程
+ * Create a user-mode thread
  */
 
 EASY_CPP_START
@@ -44,8 +44,7 @@ struct easy_uthread_control_t {
     easy_uthread_t             *running;
     ucontext_t                 context;
 };
-
-// 函数
+// function
 void easy_uthread_init(easy_uthread_control_t *control);
 void easy_uthread_destroy();
 easy_uthread_t *easy_uthread_create(easy_uthread_start_pt *start, void *args, int stack_size);
@@ -62,7 +61,7 @@ int easy_uthread_get_errcode();
 void easy_uthread_set_errcode(easy_uthread_t *t, int errcode);
 
 //////////////////////
-// 下面对main的处理
+// The following is the processing of main
 #define EASY_UTHREAD_RUN_MAIN(main_name)                                                \
     static int              easy_uthread_stacksize = 0;                                          \
     static int              easy_uthread_argc;                                                   \

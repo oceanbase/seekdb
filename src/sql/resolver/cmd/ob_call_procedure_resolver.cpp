@@ -55,12 +55,11 @@ int ObCallProcedureResolver::resolve_cparams(const ParseNode *params_node,
 
   CK (OB_NOT_NULL(routine_info));
   CK (OB_NOT_NULL(call_proc_info));
-
-  // Step 1: 初始化参数列表
+  // Step 1: Initialize parameter list
   for (int64_t i = 0; OB_SUCC(ret) && i < routine_info->get_param_count(); ++i) {
     OZ (params.push_back(NULL));
   }
-  // Step 2: 从ParamsNode中解析参数
+  // Step 2: Parse parameters from ParamsNode
   if (OB_SUCC(ret) && OB_NOT_NULL(params_node)) {
     if (T_SP_CPARAM_LIST != params_node->type_) {
       ret = OB_INVALID_ARGUMENT;
@@ -83,10 +82,10 @@ int ObCallProcedureResolver::resolve_cparams(const ParseNode *params_node,
       }
     }
   }
-  // Step 3: 处理空缺参数, 如果有默认值填充默认值, 否则报错
+  // Step 3: process missing parameters, if there are default values fill with default values, otherwise report an error
   for (int64_t i = 0; OB_SUCC(ret) && i < params.count(); ++i) {
     ObConstRawExpr *default_expr = NULL;
-    if (OB_ISNULL(params.at(i))) { // 空缺参数
+    if (OB_ISNULL(params.at(i))) { // missing parameter
       params_.is_default_param_ = true;
       ObRoutineParam *routine_param = routine_info->get_routine_params().at(i);
       CK (OB_NOT_NULL(routine_param));
@@ -103,7 +102,7 @@ int ObCallProcedureResolver::resolve_cparams(const ParseNode *params_node,
     }
   }
 
-  if (OB_SUCC(ret)) { // 判断所有参数没有复杂表达式参数
+  if (OB_SUCC(ret)) { // Determine that all parameters do not have complex expression parameters
     bool v = (false == has_assign_param);
     for (int64_t i = 0; v && OB_SUCC(ret) && i < params.count(); i ++) {
       if (OB_ISNULL(params.at(i))) {
@@ -267,7 +266,7 @@ int ObCallProcedureResolver::add_call_proc_info(ObCallProcedureInfo *call_info)
       ret = OB_SUCCESS;
       LOG_DEBUG("this plan has been added by others, need not add again", KPC(call_info));
     } else if (OB_REACH_MEMORY_LIMIT == ret || OB_SQL_PC_PLAN_SIZE_LIMIT == ret) {
-      if (REACH_TIME_INTERVAL(1000000)) { //1s, 当内存达到上限时, 该日志打印会比较频繁, 所以以1s为间隔打印
+      if (REACH_TIME_INTERVAL(1000000)) { //1s, when memory reaches its limit, this log print will be relatively frequent, so it is printed at an interval of 1s
         LOG_DEBUG("can't add plan to plan cache",
                 K(ret), K(call_info->get_mem_size()), K(pc_ctx.key_),
                 K(plan_cache->get_mem_used()));
@@ -277,8 +276,8 @@ int ObCallProcedureResolver::add_call_proc_info(ObCallProcedureInfo *call_info)
       ret = OB_SUCCESS;
       LOG_DEBUG("plan cache don't support add this kind of plan now",  KPC(call_info));
     } else {
-      if (OB_REACH_MAX_CONCURRENT_NUM != ret && OB_REACH_MAX_CCL_CONCURRENT_NUM != ret) { //如果是达到限流上限, 则将错误码抛出去
-        ret = OB_SUCCESS; //add plan出错, 覆盖错误码, 确保因plan cache失败不影响正常执行路径
+      if (OB_REACH_MAX_CONCURRENT_NUM != ret && OB_REACH_MAX_CCL_CONCURRENT_NUM != ret) { // If it reaches the rate limit upper limit, then throw out the error code
+        ret = OB_SUCCESS; // add plan error, overwrite error code, ensure that failure of plan cache does not affect normal execution path
         LOG_WARN("Failed to add plan to ObPlanCache", K(ret));
       }
     }
@@ -355,8 +354,7 @@ int ObCallProcedureResolver::resolve(const ParseNode &parse_tree)
                                   session_info_->get_effective_tenant_id()));
     OX (call_proc_info = static_cast<ObCallProcedureInfo*>(stmt->get_cacheobj_guard().get_cache_obj()));
     CK (OB_NOT_NULL(call_proc_info));
-
-    // 解析过程名称
+    // Parsing process name
     if (OB_SUCC(ret)) {
       if (T_SP_ACCESS_NAME != name_node->type_) {
         ret = OB_ERR_UNEXPECTED;
@@ -384,7 +382,7 @@ int ObCallProcedureResolver::resolve(const ParseNode &parse_tree)
     }
     ObSEArray<ObRawExpr*, 16> expr_params;
     pl::ObPLDependencyTable deps;
-    // 获取routine schem info
+    // Get routine schema info
     if (OB_SUCC(ret)) {
       if (OB_NOT_NULL(params_node)
           && OB_FAIL(resolve_param_exprs(params_node, expr_params))) {
@@ -492,8 +490,8 @@ int ObCallProcedureResolver::resolve(const ParseNode &parse_tree)
                                       ObString("SYS_REFCURSOR"),
                                       ObString("")));
             } else if (pl_type.is_user_type()) {
-              // 通过Call语句执行PL且参数是复杂类型的情况, 仅在PS模式支持, 通过客户端无法构造复杂数据类型;
-              // PS模式仅支持UDT作为出参, 这里将其他模式的复杂类型出参禁掉;
+              // Through Call statement to execute PL and the parameter is a complex type, only supported in PS mode, complex data types cannot be constructed by the client;
+              // PS mode only supports UDT as output parameter, here we disable complex type output parameters for other modes;
               ret = OB_NOT_SUPPORTED;
               LOG_WARN("not supported other type as out parameter except udt", K(ret), K(pl_type.is_user_type()));
               LOG_USER_ERROR(OB_NOT_SUPPORTED, "other complex type as out parameter except user define type");

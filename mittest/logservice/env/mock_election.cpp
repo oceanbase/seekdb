@@ -121,8 +121,7 @@ int MockElection::reset_priority()
   int ret = OB_SUCCESS;
   return ret;
 }
-
-// 处理消息
+// Process message
 int MockElection::handle_message(const ElectionPrepareRequestMsg &msg)
 {
   int ret = OB_SUCCESS;

@@ -46,7 +46,7 @@ public:
    */
   virtual void set_deserialize_allocator(common::ObIAllocator *allocator);
 private:
-  //一个分区对应一个row store
+  // One partition corresponds to one row store
   common::ObFixedArray<ObChunkDatumStore *, common::ObIAllocator> multi_row_store_;
   common::ObIAllocator *allocator_;
 private:

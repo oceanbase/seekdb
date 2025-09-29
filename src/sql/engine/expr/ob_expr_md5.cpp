@@ -38,8 +38,7 @@ inline int ObExprMd5::calc_result_type1(ObExprResType &type, ObExprResType &str,
   type.set_length(MD5_RES_BIT_LENGTH);
   type.set_collation_type(get_default_collation_type(type.get_type(), type_ctx));
   type.set_collation_level(CS_LEVEL_COERCIBLE);
-
-  // str参数总是应该被转换成字符串
+  // str parameter should always be converted to a string
   str.set_calc_type(ObVarcharType);
 
   return ret;

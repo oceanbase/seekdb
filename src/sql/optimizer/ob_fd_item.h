@@ -71,7 +71,7 @@ public:
   VIRTUAL_TO_STRING_KV(K_(parent_exprs), K_(is_unique));
 protected:
   ObRawExprSet *parent_exprs_;
-  // 表示parent exprs在当前logical operator/join order中是否是unique的，主要用来加速一些判断
+  // Indicates whether parent exprs are unique in the current logical operator/join order, mainly used to accelerate some judgments
   bool is_unique_;
 };
 
@@ -166,8 +166,7 @@ public:
                           const ObExprFdItem &other);
 
   int copy_fd_item(ObFdItem *&fd_item, const ObFdItem &other);
-
-  //利用已有 fd_item_set/const/equal_set 推导添加新 fd/const
+  // Utilize existing fd_item_set/const/equal_set to derive and add new fd/const
   int deduce_fd_item_set(const EqualSets &equal_sets,
                          ObIArray<ObRawExpr *> &column_exprs,
                          ObIArray<ObRawExpr *> &const_exprs,

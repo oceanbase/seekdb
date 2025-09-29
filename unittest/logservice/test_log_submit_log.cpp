@@ -57,7 +57,7 @@ public:
     PALF_LOG(INFO, "on_success", K(j_), K(i_));
     return OB_SUCCESS;
   }
-  // 日志未形成多数派时会调用此函数，调用此函数后对象不再使用
+  // The function will be called when the log has not formed a majority, and the object will no longer be used after calling this function
   int on_failure() override {
     PALF_LOG(INFO, "on_failure", K(j_), K(i_));
     return OB_SUCCESS;
@@ -212,7 +212,7 @@ TEST_F(TestLogSubmitLog, test_submit_group_log)
   int64_t last_submit_log_ts = -1;
 
   PalfAppendOptions opts; opts.need_check_proposal_id = false; opts.need_nonblock = false;
-  for (int64_t j = 0; j < 10; j++) {  // 调大循环次数可以测试写多个clog文件场景
+  for (int64_t j = 0; j < 10; j++) {  // Increase the loop count to test writing multiple clog files scenario
     LSN offset_array[LOG_LOG_CNT];
     int64_t log_size_array[LOG_LOG_CNT];
     int64_t data_checksum_array[LOG_LOG_CNT];

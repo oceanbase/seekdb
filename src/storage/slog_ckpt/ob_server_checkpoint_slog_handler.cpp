@@ -37,7 +37,7 @@ void ObServerCheckpointSlogHandler::ObWriteCheckpointTask::runTimerTask()
       LOG_WARN("fail to write checkpoint", K(ret));
     }
   } else {
-    // 必须等待所有的slog回放完成才能做ckpt,否则有些macro block可能没有被mark
+    // Must wait for all slog replays to complete before doing ckpt, otherwise some macro blocks may not be marked
     LOG_INFO("slog replay not finish, do not write checkpoint");
   }
 }
@@ -434,7 +434,7 @@ int ObServerCheckpointSlogHandler::replay_create_tenant_prepare(const char *buf,
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("tenant create_status should be creating in prepare log", K(ret), K(meta));
   } else {
-    // 可能已经在快照中, 如果之后任然发现prepare日志, 以之后的为准，即使快照已经表明create commit
+    // May already be in the snapshot, if prepare log is found later, use the later one, even if the snapshot indicates create commit
     if (OB_FAIL(tenant_meta_map_for_replay_->set_refactored(meta.super_block_.tenant_id_, meta, 1))) {
       LOG_WARN("failed to set tenant meta map", K(ret), K(meta));
     }

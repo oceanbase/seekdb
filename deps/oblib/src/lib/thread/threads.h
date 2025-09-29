@@ -63,8 +63,8 @@ public:
   int try_thread_recycle();
 
   int init();
-  // IRunWrapper 用于创建多租户线程时指定租户上下文
-  // cgroup_ctrl 和IRunWrapper配合使用，实现多租户线程的CPU隔离
+  // IRunWrapper is used to specify the tenant context when creating multi-tenant threads
+  // cgroup_ctrl and IRunWrapper work together to achieve CPU isolation for multi-tenant threads
   void set_run_wrapper(IRunWrapper *run_wrapper)
   {
     run_wrapper_ = run_wrapper;

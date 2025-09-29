@@ -70,20 +70,20 @@ void ObAdminLogExecutor::print_usage()
 {
   fprintf(stdout,
           "Usages:\n"
-          "$ob_admin log_tool dump_log log_files ## ./ob_admin log_tool dump_log log_files... ##将log文件中的内容全部打印出来\n"
-          "$ob_admin log_tool dump_tx_format log_files ## ./ob_admin log_tool dump_tx_format log_files ##将log文件中的事务相关内容以json格式打印\n"
+          "$ob_admin log_tool dump_log log_files ## ./ob_admin log_tool dump_log log_files... ## Print out all contents in log files\n"
+          "$ob_admin log_tool dump_tx_format log_files ## ./ob_admin log_tool dump_tx_format log_files ## Print transaction-related content in log files in JSON format\n"
           "$ob_admin log_tool dump_filter 'filter_conditions' log_files ## ./ob_admin log_tool dump_filter 'tx_id=xxxx;tablet_id=xxx' '$path'"
-          "## 按照过滤条件将log文件中的事务相关内容打印,目前支持按照事务id(tx_id=xxxx),tablet_id(tablet_id=xxxx)进行过滤，多个条件之间以;隔开\n"
+          "## Print transaction-related content in log files according to filter conditions, currently supports filtering by transaction id (tx_id=xxxx) and tablet_id (tablet_id=xxxx), multiple conditions separated by semicolons\n"
           "$ob_admin log_tool stat log_files ## ./ob_admin log_tool stat 1\n"
           "$ob_admin log_tool dmp_meta log_files ## ./ob_admin log_tool dump_meta 1\n"
-          "一些注意事项:\n"
-          "1. 为避免在clog目录生成一些ob_amdin的输出文件，强烈建议使用绝对路径\n"
-          "2. log_files 支持绝对路径、相对路径\n"
-          "3. log_files 支持同时解析多个文件\n"
-          "4. 支持解析归档文件\n"
-          "5. 如何通过LSN快速定位日志:\n"
-          "   1. 获取文件ID: BLOCK_ID=LSN/(64MB-4KB)\n"
-          "   2. 根据LSN去输出文件中执行grep操作"
+          "Some notes:\n"
+          "1. To avoid generating ob_admin output files in the clog directory, it is strongly recommended to use absolute paths\n"
+          "2. log_files supports both absolute and relative paths\n"
+          "3. log_files supports parsing multiple files simultaneously\n"
+          "4. Supports parsing archive files\n"
+          "5. How to quickly locate logs through LSN:\n"
+          "   1. Get file ID: BLOCK_ID=LSN/(64MB-4KB)\n"
+          "   2. Execute grep operation on output files based on LSN"
          );
 }
 

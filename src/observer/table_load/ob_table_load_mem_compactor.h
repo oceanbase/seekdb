@@ -61,7 +61,7 @@ private:
   ObTableLoadStoreCtx *store_ctx_;
   ObTableLoadStoreTableCtx *store_table_ctx_;
   ObTableLoadMergeMemSortOp *op_;
-  common::ObArenaAllocator allocator_; //需要最后析构
+  common::ObArenaAllocator allocator_; // needs to be destructed last
   ObDirectLoadMemContext mem_ctx_;
   ObITableLoadTaskScheduler *task_scheduler_;
   int64_t finish_thread_cnt_ CACHE_ALIGNED;

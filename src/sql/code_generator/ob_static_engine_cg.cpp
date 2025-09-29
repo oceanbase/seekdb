@@ -285,9 +285,9 @@ int ObStaticEngineCG::postorder_generate_op(ObLogicalOperator &op,
   // Corresponding ObStaticEngineCG::generate_spec() will be called by
   // ObOperatorFactory::generate_spec() if operator registered appropriately
   // in ob_operator_reg.h.
-  // 对于存在subplan的算子, 比如multi part和table lookup算子, 在生成这些原始算子时,
-  // 嵌套调用postorder_generate_op生成subplan, 此时会将原始算子对应的cur_op_exprs_
-  // reset掉, 导致原始算子对应的calc_exprs不对, 因此在这里会进行临时备份和复原的处理;
+  // For operators that have subplans, such as multi part and table lookup operators, when generating these original operators,
+  // Nested call to postorder_generate_op to generate subplan, at this time it will convert the cur_op_exprs_ corresponding to the original operator
+  // reset it, causing the original operator's corresponding calc_exprs to be incorrect, therefore a temporary backup and restoration will be performed here;
   ObSEArray<ObRawExpr *, 8> tmp_cur_op_exprs;
   ObSEArray<ObRawExpr *, 8> tmp_cur_op_self_produced_exprs;
   if (is_subplan) {
@@ -650,22 +650,21 @@ int ObStaticEngineCG::check_vectorize_supported(bool &support,
   }
   return ret;
 }
-
-// 从raw expr中获取rt_expr，并将raw expr push到cur_op_exprs_中
+// Get rt_expr from raw expr, and push raw expr to cur_op_exprs_
 //
-// 设置operator的rt expr, 从raw expr中获取时，均需要通过该接口，
-// 其中ObStaticEngineExprCG::generate_rt_expr是ObRawExpr的友元函数， 可直接访问ObRawExpr中rt expr，
+// Set operator's rt expr, get from raw expr through this interface,
+// Where ObStaticEngineExprCG::generate_rt_expr is a friend function of ObRawExpr, can directly access rt expr of ObRawExpr,
 //
-// 为什么不是ObRawExpr中直接提供访问rt expr的接口给外部使用， 而是用友元函数的方式处理？
+// Why not provide an interface to access rt expr directly in ObRawExpr for external use, but handle it with friend functions?
 //
-// 因为在CG过程中，我们需要获取到该operator所有需要生成的表达式(也就是执行时需要的表达式),
-// 用于当前operator中calc_expr的生成, 因此通过友元的方式限制对ObRawExpr中rt expr的获取必须使用
-// 该接口，并收集到当前operator中所有需要的表达式. 如果ObRawExpr直接提过访问rt expr的接口，
-// 其他人在实现operator的表达式cg时，可能直接通过该接口获取rt expr并赋值给operator中对应表达式，
-// 这样就没办法收集到完整的当前operator涉及到的表达式, 可能导致结果出错。
+// Because in the CG process, we need to obtain all the expressions that this operator needs to generate (i.e., the expressions required at runtime),
+// Used for generating calc_expr in the current operator, therefore access to rt expr in ObRawExpr must be done through the friend way
+// This interface, and collect all required expressions to the current operator. If ObRawExpr directly provides access to rt expr's interface,
+// Others may directly obtain the rt expr through this interface when implementing the operator's expression cg and assign it to the corresponding expression in the operator,
+// This way it is not possible to collect the complete expression involved by the current operator, which may lead to incorrect results.
 //
-// 没有直接将ObStaticEngineCG::generate_rt_expr()作为ObRawExpr友元函数原因：
-// ob_static_engine_cg.h和ob_raw_expr.h会存在相互依赖, 需要整理依赖关系, 暂时没处理
+// The reason ObStaticEngineCG::generate_rt_expr() was not directly made a friend function of ObRawExpr:
+// ob_static_engine_cg.h and ob_raw_expr.h will have mutual dependencies, need to organize the dependency relationships, temporarily not handled
 int ObStaticEngineCG::generate_rt_expr(const ObRawExpr &src, ObExpr *&dst)
 {
   int ret = OB_SUCCESS;
@@ -674,8 +673,7 @@ int ObStaticEngineCG::generate_rt_expr(const ObRawExpr &src, ObExpr *&dst)
   }
   return ret;
 }
-
-// 从raw expr中获取rt_expr，并将raw expr push到cur_op_exprs_中
+// Get rt_expr from raw expr, and push raw expr to cur_op_exprs_
 int ObStaticEngineCG::generate_rt_exprs(const ObIArray<ObRawExpr *> &src,
                                         ObIArray<ObExpr *> &dst)
 {
@@ -737,12 +735,12 @@ int ObStaticEngineCG::generate_spec_basic(ObLogicalOperator &op,
                K(cur_op_exprs_.count()));
     }
   }
-  // 生成calc expr
-  // 1. 获取所有child operator的output exprs
-  // 2. 获取当前operator的所有表达式, 并展开
-  // 3. 将展开后的表达式中不存在于子节点output exprs的计算表达式
-  //    (非T_REF_COLUMN, T_QUESTIONMARK, IS_CONST_LITERAL, 可计算表达式)
-  //    对应ObExpr添加到calc_exprs_
+  // Generate calc expr
+  // 1. Get all child operator's output exprs
+  // 2. Get all expressions of the current operator, and expand
+  // 3. Include the calculation expressions in the expanded expression that do not exist in the child node output exprs
+  //    (non-T_REF_COLUMN, non-T_QUESTIONMARK, non-IS_CONST_LITERAL, computable expression)
+  //    Corresponding ObExpr added to calc_exprs_
   if (OB_SUCC(ret)) {
     // get all child output exprs
     ObSEArray<ObRawExpr *, 16> child_outputs;
@@ -918,7 +916,7 @@ int ObStaticEngineCG::generate_calc_exprs(
           && !raw_expr->is_op_pseudo_column_expr()
           && !has_exist_in_array(dep_exprs, flattened_cur_exprs_arr.at(i))
           && (raw_expr->has_flag(CNT_VOLATILE_CONST)
-              || contain_batch_stmt_parameter // 计算包含batch优化的折叠参数
+              || contain_batch_stmt_parameter // calculate the folding parameter containing batch optimization
               || !raw_expr->is_const_expr())) {
         if (check_eval_once
             && T_PSEUDO_EXTERNAL_FILE_COL != raw_expr->get_expr_type()
@@ -948,8 +946,8 @@ int ObStaticEngineCG::generate_calc_exprs(
     }
   } // for end
   if (OB_SUCC(ret) && !calc_raw_exprs.empty()) {
-    //此次调用会将calc_exprs push到cur_op_exprs_中，实际是无意义的，暂不处理
-    //因为没有更好的接口来获取ObRawExpr中rt_expr_
+    // This call will push calc_exprs to cur_op_exprs_, which is actually meaningless, and is not handled for now
+    // Because there is no better interface to get rt_expr_ from ObRawExpr
     if (OB_FAIL(generate_rt_exprs(calc_raw_exprs, calc_exprs))) {
       LOG_WARN("fail to append calc exprs", K(ret), K(calc_raw_exprs));
     }
@@ -1118,8 +1116,8 @@ int ObStaticEngineCG::generate_merge_distinct_spec(
         ret = OB_ERR_INVALID_TYPE_FOR_OP;
         LOG_WARN("select distinct array not allowed", K(ret));
       } else if (raw_expr->is_const_expr()) {
-          // distinct const value, 这里需要注意：distinct 1被跳过了，
-          // 但ObMergeDistinct中，如果没有distinct列，则默认所有值都相等，这个语义正好是符合预期的。
+          // distinct const value, here we need to note: distinct 1 was skipped,
+          // But in ObMergeDistinct, if there is no distinct column, then all values are considered equal by default, which is exactly the expected semantics.
           continue;
       } else if (OB_FAIL(generate_rt_expr(*raw_expr, expr))) {
         LOG_WARN("failed to generate rt expr", K(ret));
@@ -1204,8 +1202,8 @@ int ObStaticEngineCG::generate_spec(
           ret = OB_ERR_INVALID_TYPE_FOR_OP;
           LOG_WARN("select distinct array not allowed", K(ret));
         } else if (raw_expr->is_const_expr()) {
-            // distinct const value, 这里需要注意：distinct 1被跳过了，
-            // 但ObMergeDistinct中，如果没有distinct列，则默认所有值都相等，这个语义正好是符合预期的。
+            // distinct const value, here we need to note: distinct 1 was skipped,
+            // But in ObMergeDistinct, if there is no distinct column, then all values are considered equal by default, which is exactly the expected semantics.
             continue;
         } else if (OB_FAIL(generate_rt_expr(*raw_expr, expr))) {
           LOG_WARN("failed to generate rt expr", K(ret));
@@ -1229,7 +1227,7 @@ int ObStaticEngineCG::generate_spec(
           cmp_func.cmp_func_ = ObDatumFuncs::get_nullsafe_cmp_func(
                                 expr->datum_meta_.type_,
                                 expr->datum_meta_.type_,
-                                NULL_LAST,//这里null last还是first无所谓
+                                NULL_LAST,//Here null last or first does not matter
                                 expr->datum_meta_.cs_type_,
                                 expr->datum_meta_.scale_,
                                 false,
@@ -1264,8 +1262,8 @@ int ObStaticEngineCG::generate_spec(
           ret = OB_ERR_UNEXPECTED;
           LOG_ERROR("null pointer", K(ret));
         } else if (raw_expr->is_const_expr()) {
-            // distinct const value, 这里需要注意：distinct 1被跳过了，
-            // 但ObMergeDistinct中，如果没有distinct列，则默认所有值都相等，这个语义正好是符合预期的。
+            // distinct const value, here we need to note: distinct 1 was skipped,
+            // But in ObMergeDistinct, if there is no distinct column, then all values are considered equal by default, which is exactly the expected semantics.
             continue;
         } else if (OB_FAIL(generate_rt_expr(*raw_expr, expr))) {
           LOG_WARN("failed to generate rt expr", K(ret));
@@ -1318,8 +1316,8 @@ int ObStaticEngineCG::generate_spec(ObLogDistinct &op, ObHashDistinctVecSpec &sp
           ret = OB_ERR_INVALID_TYPE_FOR_OP;
           LOG_WARN("select distinct array not allowed", K(ret));
         } else if (raw_expr->is_const_expr()) {
-          // distinct const value, 这里需要注意：distinct 1被跳过了，
-          // 但ObMergeDistinct中，如果没有distinct列，则默认所有值都相等，这个语义正好是符合预期的。
+          // distinct const value, here we need to note: distinct 1 was skipped,
+          // But in ObMergeDistinct, if there is no distinct column, then all values are considered equal by default, which is exactly the expected semantics.
           continue;
         } else if (OB_FAIL(generate_rt_expr(*raw_expr, expr))) {
           LOG_WARN("failed to generate rt expr", K(ret));
@@ -1355,8 +1353,8 @@ int ObStaticEngineCG::generate_spec(ObLogDistinct &op, ObHashDistinctVecSpec &sp
           ret = OB_ERR_UNEXPECTED;
           LOG_ERROR("null pointer", K(ret));
         } else if (raw_expr->is_const_expr()) {
-            // distinct const value, 这里需要注意：distinct 1被跳过了，
-            // 但ObMergeDistinct中，如果没有distinct列，则默认所有值都相等，这个语义正好是符合预期的。
+            // distinct const value, here we need to note: distinct 1 was skipped,
+            // But in ObMergeDistinct, if there is no distinct column, then all values are considered equal by default, which is exactly the expected semantics.
             continue;
         } else if (OB_FAIL(generate_rt_expr(*raw_expr, expr))) {
           LOG_WARN("failed to generate rt expr", K(ret));
@@ -1370,8 +1368,8 @@ int ObStaticEngineCG::generate_spec(ObLogDistinct &op, ObHashDistinctVecSpec &sp
 }
 
 /*
- * Material算子由于本身没有其他额外运行时的变量需要进行处理，所以Codegen时，不需要做任何处理
- * 都交给了basic等公共方法弄好了，所以这里实现不需要任何处理，全部为UNUSED
+ * Material operator does not have any other extra runtime variables to process, so during Codegen, no processing is needed
+ * All of this is handled by common methods like basic, so here no implementation is needed, everything is UNUSED
  */
 int ObStaticEngineCG::generate_spec(ObLogMaterial &op, ObMaterialSpec &spec, const bool in_root_job)
 {
@@ -1645,7 +1643,7 @@ int ObStaticEngineCG::generate_hash_set_spec(ObLogSet &op, ObHashSetSpec &spec)
   } else if (OB_FAIL(spec.hash_funcs_.init(spec.set_exprs_.count()))) {
     LOG_WARN("failed to compare function", K(ret));
   } else {
-    // 初始化compare func和hash func
+    // Initialize compare func and hash func
     for (int64_t i = 0; i < spec.set_exprs_.count() && OB_SUCC(ret); ++i) {
       ObRawExpr *raw_expr = out_raw_exprs.at(i);
       ObExpr *expr = spec.set_exprs_.at(i);
@@ -1948,8 +1946,7 @@ int ObStaticEngineCG::generate_recursive_union_all_spec(ObLogSet &op, ObRecursiv
       static_cast<ObFakeCTETableSpec *>(cte_spec)->is_bulk_search_ = false;
       spec.set_search_strategy(ObRecursiveInnerDataOp::SearchStrategyType::BREADTH_FRIST);
     }
-
-    //recursive union all的输出中的前n项一定是T_OP_UNION,与cte表的非伪列一一对应
+    //recursive union all's output of the first n items must be T_OP_UNION, corresponding one-to-one with the non-pseudo columns of the cte table
     ObSEArray<ObExpr *, 2> output_union_exprs;
     ObSEArray<uint64_t, 2> output_union_offsets;
     OZ(spec.output_union_exprs_.init(left->output_.count()));
@@ -2114,7 +2111,7 @@ int ObStaticEngineCG::fill_sort_funcs(
   return ret;
 }
 /**
- * Sort将排序列的ObExpr放在最前面，后面跟output_所有的ObExpr，同时会去重
+ * Sort places the ObExpr of the sort columns at the front, followed by all ObExpr in output_, and also removes duplicates
  * all_expr: sort_exprs + output_exprs
  **/
 int ObStaticEngineCG::generate_spec(ObLogSort &op, ObSortSpec &spec, const bool in_root_job)
@@ -2526,8 +2523,8 @@ int ObStaticEngineCG::generate_spec(ObLogExprValues &op,
   UNUSED(in_root_job);
   if (!op.get_value_exprs().empty()) {
     spec.contain_ab_param_ = op.contain_array_binding_param();
-    // 对于insert values(x,x,x)的batch优化场景，折叠参数没当成一个参数视图，contain_ab_param_是false
-    // 但是为了后续的行为上的一致，还是把contain_ab_param_置为spec.ins_values_batch_opt_
+    // For the batch optimization scenario of insert values(x,x,x), folding parameters did not become a single parameter view, contain_ab_param_ is false
+    // But for consistency in subsequent behavior, we still set contain_ab_param_ to spec.ins_values_batch_opt_
     spec.ins_values_batch_opt_ = op.is_ins_values_batch_opt();
     if (spec.ins_values_batch_opt_) {
       spec.contain_ab_param_ = true;
@@ -2900,11 +2897,10 @@ int ObStaticEngineCG::generate_delete_with_das(ObLogDelete &op, ObTableDeleteSpe
   }
   return ret;
 }
-
-// 1、ins_ctdef_->storage_row_output_  使用的是insert的convert_expr
-// 2、del_ctdef_->storage_row_output_  使用的是column_ref表达式
-// 3、spec.table_column_exprs_ 使用的是column_ref表达式
-// 4、scan_ctdef_ storage_row_output_ 使用的是column_ref表达式（用于承载回表查询数据）
+// 1、ins_ctdef_->storage_row_output_  using the convert_expr of insert
+// 2、del_ctdef_->storage_row_output_  using column_ref expression
+// 3、spec.table_column_exprs_ uses column_ref expression
+// 4、scan_ctdef_ storage_row_output_ uses column_ref expression (used to hold data for table lookups)
 int ObStaticEngineCG::generate_spec(ObLogInsert &op, ObTableReplaceSpec &spec, const bool in_root_job)
 {
   int ret = OB_SUCCESS;
@@ -2980,8 +2976,7 @@ int ObStaticEngineCG::generate_spec(ObLogInsert &op, ObTableReplaceSpec &spec, c
     OZ(check_only_one_unique_key(*log_plan, table_schema, spec.only_one_unique_key_));
     uint64_t ft_col_id = OB_INVALID_ID;
     OZ(table_schema->get_fulltext_column_ids(spec.doc_id_col_id_, ft_col_id));
-
-    // 记录当前主表的rowkey的column_ref表达式和column_id
+    // Record the column_ref expression and column_id of the rowkey of the current main table
     CK(primary_dml_info->column_exprs_.count() == primary_dml_info->column_convert_exprs_.count());
     CK(del_dml_infos.count() == insert_dml_infos.count());
     OZ(spec.replace_ctdefs_.allocate_array(phy_plan_->get_allocator(), insert_dml_infos.count()));
@@ -3151,8 +3146,8 @@ int ObStaticEngineCG::generate_update_with_das(ObLogUpdate &op, ObTableUpdateSpe
         for (int64_t k = 0; OB_SUCC(ret) && k < fk_args.at(j).columns_.count() && !is_dup; ++k) {
           const ObForeignKeyColumn& fk_col = fk_args.at(j).columns_.at(k);
           const uint64_t col_id = upd_ctdef.column_ids_.at(fk_col.idx_);
-          // check_fk_nested_dup_upd 检查是否有环，也就是从ref_table_ids开始，通过cascade update，可能更新回ref_table_ids
-          // 对于每一个有外键的列都检查一下
+          // check_fk_nested_dup_upd check for cycles, i.e., starting from ref_table_ids, through cascade update, it may update back to ref_table_ids
+          // For every column with a foreign key check it
           if(OB_FAIL(check_fk_nested_dup_upd(ref_table_ids, table_id, col_id, visited_columns, is_dup))) {
             LOG_WARN("failed to perform nested duplicate table check (foreign key cascade update)", K(ret), K(table_id));
           } else if (is_dup) {
@@ -3906,7 +3901,7 @@ int ObStaticEngineCG::generate_spec(ObLogGranuleIterator &op, ObGranuleIteratorS
   if (log_op_def::LOG_TABLE_SCAN == child_log_op->get_type()) {
     ObLogTableScan *log_tsc = NULL;
     log_tsc = static_cast<ObLogTableScan*>(child_log_op);
-    //这里拿index_table_id和table_scan->get_loc_ref_table_id保持一致。
+    // Here keep index_table_id and table_scan->get_loc_ref_table_id consistent.
     spec.set_related_id(log_tsc->get_index_table_id());
   }
   ObPhyPlanType execute_type = spec.plan_->get_plan_type();
@@ -4104,9 +4099,9 @@ int ObStaticEngineCG::generate_basic_transmit_spec(
               K(op.support_rich_format_vectorize()));
     }
   }
-  // 处理PDML partition_id 伪列
+  // Process PDML partition_id pseudo column
   if (OB_SUCC(ret)) {
-    // 仅仅处理repart情况
+    // Simply handle repart case
     if (spec.type_ == PHY_PX_REPART_TRANSMIT) {
       if (NULL != op.get_partition_id_expr()) {
         OZ(generate_rt_expr(*op.get_partition_id_expr(), spec.tablet_id_expr_));
@@ -4148,7 +4143,7 @@ int ObStaticEngineCG::generate_basic_receive_spec(ObLogExchange &op, ObPxReceive
 {
   int ret = OB_SUCCESS;
   if ((in_root_job || op.is_rescanable()) && op.is_sort_local_order()) {
-    // root节点不会出现需要local order的exchange-in
+    // root node will not have exchange-in that requires local order
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected plan that has merge sort receive with local order in root job", K(ret));
   } else if (OB_ISNULL(spec.get_left())) {
@@ -4221,9 +4216,8 @@ int ObStaticEngineCG::init_recieve_dynamic_exprs(const ObIArray<ObExpr *> &child
 
   return ret;
 }
-
-// 目前都是假设receive和transmit数据列一致，如果不一致，则拿receive收transmit数据就需要根据child exprs来拿数据
-// 暂时取消这种假设，所以需要额外的child_exprs来获取dtl传过来的数据
+// Currently all assume receive and transmit data columns are consistent, if not consistent, then to get transmit data from receive, it needs to be based on child exprs to get data
+// Temporarily cancel this assumption, so additional child_exprs are needed to obtain data passed from dtl
 int ObStaticEngineCG::generate_spec(ObLogExchange &op, ObPxFifoReceiveSpec &spec, const bool in_root_job)
 {
   int ret = OB_SUCCESS;
@@ -5271,7 +5265,7 @@ int ObStaticEngineCG::generate_normal_tsc(ObLogTableScan &op, ObTableScanSpec &s
   }
 
   if (OB_SUCC(ret) && 0 != op.get_session_id()) {
-    //此时一定是临时表扫描, 记下session_id供计划缓存匹配时使用
+    // At this point it must be a temporary table scan, record the session_id for use in plan cache matching
     phy_plan_->set_session_id(op.get_session_id());
   }
   if (OB_SUCC(ret)) {
@@ -6122,7 +6116,7 @@ int ObStaticEngineCG::generate_join_spec(ObLogJoin &op, ObJoinSpec &spec)
         OZ(generate_param_spec(op.get_nl_params(), nlj_spec.rescan_params_));
 
         if (OB_SUCC(ret)) {
-          // 当nlj条件下推做分布式rescan, 开启px batch rescan
+          // When nlj condition pushdown performs distributed rescan, enable px batch rescan
           ObNestedLoopJoinSpec &nlj = static_cast<ObNestedLoopJoinSpec &>(spec);
           if (op.enable_px_batch_rescan()) {
             nlj.enable_px_batch_rescan_ = true;
@@ -6248,7 +6242,7 @@ int ObStaticEngineCG::generate_join_spec(ObLogJoin &op, ObJoinSpec &spec)
         }
       }
       if (OB_SUCC(ret)) {
-        // 这里暂时不去重，简化后面执行逻辑
+        // Here we do not deduplicate for now, simplify the execution logic later
         if (OB_FAIL(append(hj_spec.all_join_keys_, right_key_exprs))) {
           LOG_WARN("failed to append join keys", K(ret));
         } else if (OB_FAIL(append(hj_spec.all_hash_funcs_, right_hash_funcs))) {
@@ -6471,8 +6465,7 @@ int ObStaticEngineCG::set_partition_range_info(ObLogTableScan &op, ObTableScanSp
   }
   return ret;
 }
-
-// 递归地找出column expr在generated table中对应的基表的column expr
+// Recursively find the base table's column expr corresponding to the column expr in the generated table
 int ObStaticEngineCG::recursive_get_column_expr(const ObColumnRefRawExpr *&column,
                                                 const TableItem &table_item)
 {
@@ -6821,7 +6814,7 @@ int ObStaticEngineCG::generate_spec(ObLogInsert &op,
       spec.row_desc_.set_part_id_index(partition_expr_idx);
     }
     LOG_TRACE("pdml static cg information", K(ret), K(partition_expr_idx), K(index_dml_info));
-    // 处理pdml-insert中的insert_row_exprs
+    // Process insert_row_exprs in pdml-insert
     OZ(dml_cg_service_.generate_insert_ctdef(op, index_dml_info, spec.ins_ctdef_));
     // table columns exprs in dml need to set IS_COLUMNLIZED flag
     OZ(mark_expr_self_produced(index_dml_info.column_exprs_));
@@ -8502,9 +8495,9 @@ int ObStaticEngineCG::set_properties_post(const ObLogPlan &log_plan, ObPhysicalP
   //resolve the first array index of array binding, and store in physical plan
   if (OB_SUCC(ret)
       && OB_NOT_NULL(my_session->get_pl_implicit_cursor())
-      && my_session->get_pl_implicit_cursor()->get_in_forall() // 仅在FORALL语境中才需要走Array Binding优化
+      && my_session->get_pl_implicit_cursor()->get_in_forall() // Only need Array Binding optimization in FORALL context
       && (!log_plan.get_optimizer_context().is_batched_multi_stmt())) {
-    //batch multi stmt使用了param store的array参数，但是它不是一个array binding优化，因此，这里需要排除掉
+    // batch multi stmt used param store's array parameter, but it is not an array binding optimization, therefore, it needs to be excluded here
     bool is_found = false;
     const ParamStore &param_store = plan_ctx->get_param_store();
     for (int64_t i = 0; OB_SUCC(ret) && !is_found && i < param_store.count(); ++i) {
@@ -8535,7 +8528,7 @@ int ObStaticEngineCG::set_properties_post(const ObLogPlan &log_plan, ObPhysicalP
       if (log_plan.get_stmt()->is_insert_stmt() ||
           log_plan.get_stmt()->is_update_stmt() ||
           log_plan.get_stmt()->is_delete_stmt()) {
-        //为了支持触发器/UDF支持异常捕获，要求含有pl udf的涉及修改表数据的dml串行执行
+        // To support trigger/UDF exception capture, it requires that DMLs involving table data modification with pl udf be executed serially
         phy_plan_->set_need_serial_exec(true);
       }
       phy_plan_->set_has_nested_sql(true);
@@ -8783,7 +8776,7 @@ int ObStaticEngineCG::get_phy_op_type(ObLogicalOperator &log_op,
         } else if (op.get_plan()->get_optimizer_context().is_online_ddl() && ObPQDistributeMethod::PARTITION_RANGE == op.get_dist_method()) {
           type = PHY_PX_REPART_TRANSMIT;
         } else {
-          // NOTE: 优化器需要和执行器保持一致，既没有分区、又没有HASH、或其它重分区方式时，就使用All To One
+          // NOTE: The optimizer needs to be consistent with the executor, i.e., when there is no partitioning, no HASH, or other repartitioning methods, use All To One
           type = PHY_PX_REDUCE_TRANSMIT;
         }
       } else {
@@ -8801,7 +8794,7 @@ int ObStaticEngineCG::get_phy_op_type(ObLogicalOperator &log_op,
             type = PHY_PX_FIFO_COORD;
           }
           if (op.is_sort_local_order()) {
-                // root节点不会出现需要local order的exchange-in
+                // root node will not have exchange-in that requires local order
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("unexpected plan that has merge sort receive "
                          "with local order in root job", K(ret));
@@ -9137,8 +9130,8 @@ int ObStaticEngineCG::map_value_param_index(const ObInsertStmt *insert_stmt,
       }
     }
   }
-  //根据得到的param->row的map关系，转换得到row->param的映射关系,由于存在共有的param，不单独属于任何一行表达式，所以将index=0作为公共param的槽位
-  //每一行的param从index=1开始存储
+  // According to the obtained param->row map relationship, convert to get the row->param mapping relationship, since there are common params that do not belong to any single row expression, so use index=0 as the slot for the common param
+  // Each line's param starts storing from index=1
   if (OB_SUCC(ret)) {
     if (OB_FAIL(row_params_map.prepare_allocate(insert_stmt->get_insert_row_count() + 1))) {
       LOG_WARN("prepare allocate row params map failed", K(ret), K(insert_stmt->get_insert_row_count()));
@@ -9146,12 +9139,12 @@ int ObStaticEngineCG::map_value_param_index(const ObInsertStmt *insert_stmt,
     for (int64_t i = 0; OB_SUCC(ret) && i < params_row_map.count(); ++i) {
       for (int64_t j = 0; OB_SUCC(ret) && j < params_row_map.at(i).count(); ++j) {
         if (params_row_map.at(i).at(j) == OB_INVALID_INDEX) {
-          //公共参数
+          // public parameters
           if (OB_FAIL(row_params_map.at(0).push_back(i))) {
             LOG_WARN("add param index to row params map failed", K(ret), K(i), K(j));
           }
         } else {
-          //具体行中表达式依赖的param
+          // Specific expression in the line depends on the param
           if (OB_FAIL(row_params_map.at(params_row_map.at(i).at(j) + 1).push_back(i))) {
             LOG_WARN("add param index to row params map failed", K(ret), K(i), K(j));
           }
@@ -9368,11 +9361,11 @@ int ObStaticEngineCG::check_fk_nested_dup_del(const uint64_t table_id,
 }
 
 /*
- * 检查是否从(root_table_id, root_column_id)开始，可以cascade update到table_ids里面的table。
- * table_ids: 需要检查的table_id
- * root_table_id, root_column_id: 当前在的列
- * visited_columns: 已经访问过的列，访问过的列不必再访问
- * is_dup: 是否已经重复，即已经确定存在可以cascade update到table_ids里面的table
+ * Check if cascade update can start from (root_table_id, root_column_id) to the tables in table_ids.
+ * table_ids: The table_ids to be checked
+ * root_table_id, root_column_id: The current column
+ * visited_columns: Columns that have already been visited, no need to visit again
+ * is_dup: Whether duplication has already occurred, i.e., it has been determined that cascade update can reach the tables in table_ids
  **/
 int ObStaticEngineCG::check_fk_nested_dup_upd(const ObIArray<uint64_t>& table_ids, const uint64_t root_table_id, const uint64_t root_column_id, ObIArray<std::pair<uint64_t, uint64_t>> &visited_columns, bool& is_dup) {
   int ret = OB_SUCCESS;
@@ -9615,7 +9608,7 @@ int ObStaticEngineCG::generate_spec(ObLogInsert &op,
       spec.row_desc_.set_part_id_index(partition_expr_idx);
     }
     LOG_TRACE("pdml static cg information", K(ret), K(partition_expr_idx), K(index_dml_info));
-    // 处理pdml-insert中的insert_row_exprs
+    // Process insert_row_exprs in pdml-insert
     OZ(dml_cg_service_.generate_insert_ctdef(op, index_dml_info, spec.ins_ctdef_));
     // table columns exprs in dml need to set IS_COLUMNLIZED flag
     OZ(mark_expr_self_produced(index_dml_info.column_exprs_));

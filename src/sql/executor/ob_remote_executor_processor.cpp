@@ -76,10 +76,10 @@ int ObRemoteBaseExecuteP<T>::base_before_process(int64_t tenant_schema_version,
   } else if (FALSE_IT(THIS_WORKER.set_compatibility_mode(
       ORACLE_MODE == session_info->get_compatibility_mode() ?
           lib::Worker::CompatMode::ORACLE : lib::Worker::CompatMode::MYSQL))) {
-    //设置RPC work线程的租户兼容模式
+    // Set RPC work thread tenant compatibility mode
   } else if (OB_FAIL(gctx_.schema_service_->get_tenant_refreshed_schema_version(tenant_id, tenant_local_version))) {
     if (OB_ENTRY_NOT_EXIST == ret) {
-      // 本地schema可能还没刷出来
+      // Local schema may not have been refreshed yet
       tenant_local_version = OB_INVALID_VERSION;
       ret = OB_SUCCESS;
     } else {
@@ -168,15 +168,15 @@ int ObRemoteBaseExecuteP<T>::base_before_process(int64_t tenant_schema_version,
   if (OB_FAIL(ret)) {
     if (local_tenant_schema_version != tenant_schema_version) {
       if (is_schema_error(ret)) {
-        ret = OB_ERR_WAIT_REMOTE_SCHEMA_REFRESH; // 重写错误码，使得scheduler端能等待远端schema刷新并重试
+        ret = OB_ERR_WAIT_REMOTE_SCHEMA_REFRESH; // Rewrite error code, so that the scheduler end can wait for remote schema refresh and retry
       }
     } else if (ret == OB_TENANT_NOT_EXIST) {
       // fix bug: 
-      // 控制端重启observer，导致租户schema没刷出来，发送过来的schema_version异常, 让对端重试
+      // Control end restarts observer, causing tenant schema not to be refreshed, sent schema_version is abnormal, let the other side retry
       ret = OB_ERR_WAIT_REMOTE_SCHEMA_REFRESH;
     } else {
       if (OB_SCHEMA_ERROR == ret || OB_SCHEMA_EAGAIN == ret) {
-        ret = OB_ERR_WAIT_REMOTE_SCHEMA_REFRESH; // 针对OB_SCHEMA_ERROR 和OB_SCHEMA_EAGAIN这两个错误码，远程执行暂时先考虑重写，等待远端schema刷新并重试
+        ret = OB_ERR_WAIT_REMOTE_SCHEMA_REFRESH; // For OB_SCHEMA_ERROR and OB_SCHEMA_EAGAIN these two error codes, remote execution temporarily consider rewriting, wait for the remote schema to refresh and retry
       }
     }
     // overwrite ret to make sure sql will retry
@@ -199,14 +199,14 @@ int ObRemoteBaseExecuteP<T>::auto_start_phy_trans()
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("plan_ctx or my_session is NULL", K(ret), K(plan_ctx), K(my_session));
   } else {
-    // 远程单partition并且是autocommit的情况下才运行start_trans和start_stmt
+    // Run start_trans and start_stmt only if it's a remote single partition and autocommit is enabled
     // bool in_trans = my_session->is_in_transaction();
     bool ac = true;
     my_session->set_early_lock_release(plan_ctx->get_phy_plan()->stat_.enable_early_lock_release_);
     if (OB_FAIL(my_session->get_autocommit(ac))) {
       LOG_WARN("fail to get autocommit", K(ret));
     } else
-    //这里不能用本地生成的执行计划，因为其plan type是local
+    // Here cannot use the locally generated execution plan, because its plan type is local
     // if (ObSqlTransUtil::is_remote_trans(ac, in_trans, OB_PHY_PLAN_REMOTE)) {
     // NOTE: autocommit modfied by PL cannot sync to remote,
     // use has_start_stmt to test transaction prepared on original node
@@ -228,7 +228,7 @@ int ObRemoteBaseExecuteP<T>::auto_start_phy_trans()
     }
 
     if (OB_UNLIKELY(DAS_CTX(exec_ctx_).get_table_loc_list().empty())) {
-      //uncertain plan的分区信息在执行前可能为空，因此如果是uncertain plan，这里直接跳过
+      // The partition information of uncertain plan may be empty before execution, therefore, if it is an uncertain plan, we skip here directly
       if (OB_PHY_PLAN_UNCERTAIN != plan_ctx->get_phy_plan()->get_location_type()
           && !plan_ctx->get_phy_plan()->use_das()) {
         ret = OB_ERR_UNEXPECTED;
@@ -238,8 +238,7 @@ int ObRemoteBaseExecuteP<T>::auto_start_phy_trans()
   }
   return ret;
 }
-
-/// 将结果同步回复给客户端
+/// Synchronize the result and reply to the client
 template<typename T>
 int ObRemoteBaseExecuteP<T>::sync_send_result(ObExecContext &exec_ctx,
                                               const ObPhysicalPlan &plan,
@@ -247,7 +246,7 @@ int ObRemoteBaseExecuteP<T>::sync_send_result(ObExecContext &exec_ctx,
 {
   int ret = OB_SUCCESS;
   const ObNewRow *row = NULL;
-  int last_row_used = true;// scanner满时标记缓存上一行
+  int last_row_used = true;// scanner full marks the previous row in the cache
   int64_t total_row_cnt = 0;
   ObOperator *se_op = NULL;
   ObPhysicalPlanCtx *plan_ctx = GET_PHY_PLAN_CTX(exec_ctx_);
@@ -300,10 +299,10 @@ int ObRemoteBaseExecuteP<T>::sync_send_result(ObExecContext &exec_ctx,
             if (OB_FAIL(ObRpcProcessor<T>::flush(THIS_WORKER.get_timeout_remain(), &ObRpcProcessor<T>::arg_.get_ctrl_server()))) {
               LOG_WARN("fail to flush", K(ret));
             } else {
-              // 超过1个scanner的情况，每次发送都打印一条日志
+              // More than 1 scanner, print a log each time a message is sent
               NG_TRACE_EXT(scanner, OB_ID(row_count), scanner.get_row_count(),
                            OB_ID(total_count), total_row_cnt);
-              // 数据发送完成后，scanner可以重用
+              // Data sending completed, scanner can be reused
               scanner.reuse();
             }
           }
@@ -313,7 +312,7 @@ int ObRemoteBaseExecuteP<T>::sync_send_result(ObExecContext &exec_ctx,
           total_row_cnt++;
         }
       }
-      // 如果上次读取的数据还没有吐出到scanner，则跳过本次获取row
+      // If the data read last time has not been output to the scanner, skip this row acquisition
       if (OB_SUCC(ret)) {
         if (last_row_used) {
           if (OB_FAIL(se_op->is_vectorized() ? br_it_.get_next_row() : se_op->get_next_row())) {
@@ -329,7 +328,7 @@ int ObRemoteBaseExecuteP<T>::sync_send_result(ObExecContext &exec_ctx,
     }
   }
   if (OB_SUCC(ret)) {
-    //所有需要通过scanner传回的数据先存入collector
+    // All data that needs to be passed back through scanner is first stored in collector
     if (OB_FAIL(scanner.set_session_var_map(exec_ctx.get_my_session()))) {
       LOG_WARN("set user var to scanner failed");
     } else {
@@ -340,7 +339,7 @@ int ObRemoteBaseExecuteP<T>::sync_send_result(ObExecContext &exec_ctx,
         LOG_WARN("fail to set row duplicated count",
                  K(ret), K(plan_ctx->get_row_duplicated_count()));
       } else {
-        // 对于INSERT UPDATE等，立即设置affected row，对于select，这里总为0
+        // For INSERT UPDATE etc., immediately set affected row, for select, this is always 0
         scanner.set_affected_rows(plan_ctx->get_affected_rows());
         //scanner.set_force_rollback(plan_ctx->is_force_rollback());
       }
@@ -373,7 +372,7 @@ int ObRemoteBaseExecuteP<T>::sync_send_result(ObExecContext &exec_ctx,
     }
   }
   // TODO:
-  // 如果发生了错误，如何主动通知客户端，使其提前终止
+  // If an error occurs, how to proactively notify the client to terminate early
   //
 
   return ret;
@@ -386,9 +385,10 @@ int ObRemoteBaseExecuteP<T>::auto_end_phy_trans(bool is_rollback)
   int end_ret = OB_SUCCESS;
   bool ac = false;
   ObSQLSessionInfo *my_session = GET_MY_SESSION(exec_ctx_);
-  // NOTE: 事务状态已经在auto_start_phy_trans()里面改变过了，
-  // 不可以再调用ObSqlTransUtil::is_remote_trans来判断。
-  // 所以依据内部的trans_state_来判断即可
+  // NOTE: The transaction status has already been changed in auto_start_phy_trans(),
+  // Cannot call ObSqlTransUtil::is_remote_trans to determine anymore.
+  // So we can judge based on internal trans_state_
+
   if (trans_state_.is_start_stmt_executed() &&
       trans_state_.is_start_stmt_success()) {
     if (OB_SUCCESS != (end_ret = ObSqlTransControl::end_stmt(
@@ -438,7 +438,7 @@ int ObRemoteBaseExecuteP<T>::execute_remote_plan(ObExecContext &exec_ctx,
           LOG_WARN("init expr operator ctx buckets failed", K(ret), K(plan.get_expr_operator_size()));
         }
       }
-      // ========================== 开启事务 ===========================
+      // ========================== start transaction ===========================
       if (OB_FAIL(ret)) {
 
       } else if (OB_LIKELY(plan.is_need_trans()) && OB_FAIL(auto_start_phy_trans())) {
@@ -477,13 +477,12 @@ int ObRemoteBaseExecuteP<T>::execute_remote_plan(ObExecContext &exec_ctx,
         }
         NG_TRACE_EXT(process_ret, OB_ID(process_ret), ret);
       }
-
-      // ========================== 结束事务 ===========================
-      // 注意!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-      // 改代码的时候要小心，不要把结束事务这一段包进if(OB_SUCC(ret))之类条件的大括号里面，
-      // 不管ret是什么，只要调用了auto_start_phy_trans都必须要调用auto_end_phy_trans
+      // ========================== End transaction ===========================
+      // Note!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+      // Change the code carefully, do not put the end transaction part inside the curly braces of conditions like if(OB_SUCC(ret)),
+      // No matter what ret is, as long as auto_start_phy_trans is called, auto_end_phy_trans must be called
       bool is_rollback = false;
-      // 如果必要，结束事务
+      // If necessary, end the transaction
       if (OB_FAIL(ret)) {
         is_rollback = true;
       }
@@ -516,22 +515,22 @@ bool ObRemoteBaseExecuteP<T>::query_can_retry_in_remote(int &last_err,
     bret = false;  // remote execute using remote_phy_plan, should not retry
   } else {
     if (ObSqlTransUtil::is_remote_trans(ac, in_trans, OB_PHY_PLAN_REMOTE) && retry_times <= 100) {
-      //暂时拍脑袋决定重试100次不成功就直接返回，不要让控制端等太久的时间
+      // Temporarily decided to retry 100 times, if unsuccessful, return directly, do not let the control end wait too long
       if (is_try_lock_row_err(err)) {
         bret = true;
       } else if (is_transaction_set_violation_err(err) || is_snapshot_discarded_err(err)) {
         if (!ObSqlTransControl::is_isolation_RR_or_SE(session.get_tx_isolation())) {
-          //不是Serializable隔离级别，可以在远端重试
+          // Not Serializable isolation level, can be retried remotely
           bret = true;
         }
       }
       if (bret) {
-        //重试之前保存当前错误码
+        // Save the current error code before retrying
         last_err = err;
         if (OB_SUCCESS != (err = exec_ctx_.check_status())) {
           bret = false;
           LOG_WARN_RET(err, "cehck execute status failed", K(err), K(last_err), K(bret));
-          err = last_err; //返回真实值
+          err = last_err; // return real value
         } else {
           LOG_INFO("query retry in remote", K(retry_times), K(last_err));
           ++retry_times;
@@ -541,7 +540,7 @@ bool ObRemoteBaseExecuteP<T>::query_can_retry_in_remote(int &last_err,
       }
     }
     if (!bret && is_try_lock_row_err(last_err) && is_timeout_err(err)) {
-      //锁冲突重试到超时，最后直接给用户报LOCK CONFLICT错误
+      // Lock conflict retry to timeout, finally directly report LOCK CONFLICT error to user
       LOG_WARN_RET(err, "retry query until query timeout", K(last_err), K(err));
       err = OB_ERR_EXCLUSIVE_LOCK_CONFLICT;
     }
@@ -590,8 +589,7 @@ void ObRemoteBaseExecuteP<T>::record_sql_audit_and_plan_stat(
       audit_record.is_hit_plan_cache_ = true;
       audit_record.is_multi_stmt_ = false;
       audit_record.is_perf_event_closed_ = !lib::is_diagnose_info_enabled();
-
-      //统计plan相关的信息
+      // Statistics related to plan information
       ObPhysicalPlanCtx *plan_ctx = GET_PHY_PLAN_CTX(exec_ctx_);
       ObIArray<ObTableRowCount> *table_row_count_list = NULL;
       if (NULL != plan_ctx) {
@@ -655,15 +653,14 @@ int ObRemoteBaseExecuteP<T>::execute_with_sql(ObRemoteTask &task)
 
   const common::ObAddr &control_addr = task.get_ctrl_server();
   uint64_t node_sequence_id;
-
-  // 设置诊断功能环境
+  // Set diagnostic function environment
   if (OB_SUCC(ret)) {
     const bool enable_sqlstat =  session->is_sqlstat_enabled();
     SQL_INFO_GUARD(task.get_remote_sql_info()->remote_sql_, session->get_cur_sql_id());
-    // 初始化ObTask的执行环节
+    // Initialize the execution stages of ObTask
     //
     //
-    // 执行ObTask, 处理结果通过Result返回
+    // Execute ObTask, processing result returned through Result
     ObWaitEventDesc max_wait_desc;
     ObWaitEventStat total_wait_desc;
     ObAuditRecordData &audit_record = session->get_raw_audit_record();
@@ -700,8 +697,7 @@ int ObRemoteBaseExecuteP<T>::execute_with_sql(ObRemoteTask &task)
           LOG_WARN("check ls list failed", K(ret),  K(new_ls_list), K(task.get_all_ls()));
         }
       }
-
-      //监控项统计开始
+      // Monitoring item statistics start
       exec_start_timestamp_ = ObTimeUtility::current_time();
       exec_ctx_.set_plan_start_time(exec_start_timestamp_);
 
@@ -727,15 +723,15 @@ int ObRemoteBaseExecuteP<T>::execute_with_sql(ObRemoteTask &task)
         }
       }
       // ===============================================================
-      //处理重试
+      // processing retry
       if (OB_FAIL(ret)) {
         if (local_tenant_schema_version != task.get_tenant_schema_version()) {
           if (is_schema_error(ret)) {
-            ret = OB_ERR_WAIT_REMOTE_SCHEMA_REFRESH; // 重写错误码，使得scheduler端能等待远端schema刷新并重试
+            ret = OB_ERR_WAIT_REMOTE_SCHEMA_REFRESH; // Rewrite error code, so that the scheduler end can wait for remote schema refresh and retry
           }
         } else {
           if (OB_SCHEMA_ERROR == ret || OB_SCHEMA_EAGAIN == ret) {
-            ret = OB_ERR_WAIT_REMOTE_SCHEMA_REFRESH; // 针对OB_SCHEMA_ERROR 和OB_SCHEMA_EAGAIN这两个错误码，远程执行暂时先考虑重写，等待远端schema刷新并重试
+            ret = OB_ERR_WAIT_REMOTE_SCHEMA_REFRESH; // For OB_SCHEMA_ERROR and OB_SCHEMA_EAGAIN these two error codes, remote execution is temporarily considered to be rewritten, waiting for the remote schema refresh and retry
           }
         }
         // overwrite ret to make sure sql will retry
@@ -747,7 +743,7 @@ int ObRemoteBaseExecuteP<T>::execute_with_sql(ObRemoteTask &task)
         }
         DAS_CTX(exec_ctx_).get_location_router().refresh_location_cache_by_errno(true, ret);
       }
-      //监控项统计结束
+      // Monitoring item statistics end
       exec_end_timestamp_ = ObTimeUtility::current_time();
 
       // some statistics must be recorded for plan stat, even though sql audit disabled
@@ -769,7 +765,7 @@ int ObRemoteBaseExecuteP<T>::execute_with_sql(ObRemoteTask &task)
       sqlstat_record.set_is_plan_cache_hit(exec_ctx_.get_sql_ctx()->plan_cache_hit_);
       sqlstat_record.move_to_sqlstat_cache(*session, exec_ctx_.get_sql_ctx()->cur_sql_ ,plan);
     }
-    //此处代码要放在scanner.set_err_code(ret)代码前,避免ret被都写成了OB_SUCCESS
+    // This code should be placed before the scanner.set_err_code(ret) code to avoid ret being overwritten with OB_SUCCESS
     record_sql_audit_and_plan_stat(plan, session);
   }
   if (OB_NOT_NULL(plan)) {
@@ -778,7 +774,7 @@ int ObRemoteBaseExecuteP<T>::execute_with_sql(ObRemoteTask &task)
     }
   }
   NG_TRACE(exec_remote_plan_end);
-  //执行相关的错误信息记录在exec_errcode_中，通过scanner向控制端返回，所以这里给RPC框架返回成功
+  // Execute related error information is recorded in exec_errcode_, returned to the control end through scanner, so here we return success to the RPC framework
 
   return ret;
 }
@@ -952,7 +948,7 @@ int ObRpcRemoteExecuteP::process()
   ObExecutingSqlStatRecord sqlstat_record;
   ObExecTimestamp exec_timestamp;
   exec_timestamp.exec_type_ = RpcProcessor;
-  // arg_是一个ObTask对象
+  // arg_ is an ObTask object
   ObTask &task = arg_;
   ObExecContext *exec_ctx = NULL;
   ObSQLSessionInfo *session = NULL;
@@ -977,15 +973,14 @@ int ObRpcRemoteExecuteP::process()
 
   const common::ObAddr &control_addr = task.get_ctrl_server();
   uint64_t node_sequence_id;
-
-  // 设置诊断功能环境
+  // Set diagnostic function environment
   if (OB_SUCC(ret)) {
     const bool enable_sqlstat =  session->is_sqlstat_enabled();
     SQL_INFO_GUARD(task.get_sql_string(), session->get_cur_sql_id());
-    // 初始化ObTask的执行环节
+    // Initialize the execution stages of ObTask
     //
     //
-    // 执行ObTask, 处理结果通过Result返回
+    // Execute ObTask, processing result returned through Result
     ObOpSpec *op_spec = task.get_root_spec();
     ObPhysicalPlanCtx *plan_ctx = NULL;
     ObWaitEventDesc max_wait_desc;
@@ -1010,7 +1005,7 @@ int ObRpcRemoteExecuteP::process()
         LOG_ERROR("op_spec is NULL");
         ret = OB_ERR_UNEXPECTED;
       }
-      //监控项统计开始
+      // Monitoring item statistics start
       exec_start_timestamp_ = ObTimeUtility::current_time();
       exec_ctx->set_plan_start_time(exec_start_timestamp_);
 
@@ -1035,11 +1030,11 @@ int ObRpcRemoteExecuteP::process()
       if (OB_FAIL(ret)) {
         if (local_tenant_schema_version != exec_ctx_.get_task_exec_ctx().get_query_tenant_begin_schema_version()) {
           if (is_schema_error(ret)) {
-            ret = OB_ERR_WAIT_REMOTE_SCHEMA_REFRESH; // 重写错误码，使得scheduler端能等待远端schema刷新并重试
+            ret = OB_ERR_WAIT_REMOTE_SCHEMA_REFRESH; // Rewrite error code so that the scheduler end can wait for remote schema refresh and retry
           }
         } else {
           if (OB_SCHEMA_ERROR == ret || OB_SCHEMA_EAGAIN == ret) {
-            ret = OB_ERR_WAIT_REMOTE_SCHEMA_REFRESH; // 针对OB_SCHEMA_ERROR 和OB_SCHEMA_EAGAIN这两个错误码，远程执行暂时先考虑重写，等待远端schema刷新并重试
+            ret = OB_ERR_WAIT_REMOTE_SCHEMA_REFRESH; // For OB_SCHEMA_ERROR and OB_SCHEMA_EAGAIN these two error codes, remote execution temporarily consider rewriting, wait for the remote schema refresh and retry
           }
         }
         // overwrite ret to make sure sql will retry
@@ -1050,7 +1045,7 @@ int ObRpcRemoteExecuteP::process()
           ret = OB_ERR_REMOTE_SCHEMA_NOT_FULL;
         }
       }
-      //监控项统计结束
+      // Monitoring item statistics end
       exec_end_timestamp_ = ObTimeUtility::current_time();
 
       // some statistics must be recorded for plan stat, even though sql audit disabled
@@ -1071,15 +1066,14 @@ int ObRpcRemoteExecuteP::process()
       sqlstat_record.set_is_plan_cache_hit(exec_ctx_.get_sql_ctx()->plan_cache_hit_);
       sqlstat_record.move_to_sqlstat_cache(*session, exec_ctx_.get_sql_ctx()->cur_sql_, &phy_plan_);
     }
-
-    //此处代码要放在scanner.set_err_code(ret)代码前,避免ret被都写成了OB_SUCCESS
+    // This code should be placed before the scanner.set_err_code(ret) code to avoid ret being overwritten with OB_SUCCESS
     record_sql_audit_and_plan_stat(&phy_plan_, session);
   }
 
   //vt_iter_factory_.reuse();
   phy_plan_.destroy();
   NG_TRACE(exec_remote_plan_end);
-  //执行相关的错误信息记录在exec_errcode_中，通过scanner向控制端返回，所以这里给RPC框架返回成功
+  // Execute related error information is recorded in exec_errcode_, returned to the control end through scanner, so here we return success to the RPC framework
   return OB_SUCCESS;
 }
 
@@ -1155,10 +1149,10 @@ int ObRpcRemoteSyncExecuteP::send_result_to_controller(ObExecContext &exec_ctx,
 int ObRpcRemoteSyncExecuteP::process()
 {
   int &ret = exec_errcode_;
-  // arg_是一个ObRemoteTask对象
+  // arg_ is an ObRemoteTask object
   ObRemoteTask &task = arg_;
   ret = execute_with_sql(task);
-  //执行相关的错误信息记录在exec_errcode_中，通过scanner向控制端返回，所以这里给RPC框架返回成功
+  // Execute related error information is recorded in exec_errcode_, returned to the control end through scanner, so here we return success to the RPC framework
   return OB_SUCCESS;
 }
 

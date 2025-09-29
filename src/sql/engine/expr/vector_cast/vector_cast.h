@@ -241,11 +241,10 @@ struct VectorCasterUtil
 };
 } // end sql
 } // end oceanbase
-
-// 出现错误时,处理如下：
-// 如果只设置了WARN_ON_FAIL，会覆盖错误码
-// 如果设置了WARN_ON_FAIL和ZERO_ON_WARN,会覆盖错误码，且结果被置为0
-// 如果设置了WARN_ON_FAIL和NULL_ON_WARN,会覆盖错误码，且结果被置为null
+// When an error occurs, handle as follows:
+// If only WARN_ON_FAIL is set, it will override the error code
+// If WARN_ON_FAIL and ZERO_ON_WARN are set, it will override the error code, and the result will be set to 0
+// If WARN_ON_FAIL and NULL_ON_WARN are set, it will override the error code, and the result will be set to null
 #define SET_RES_OBJ(cast_mode, func_val, zero_value, value, idx)       \
   do {                                                            \
     if (OB_SUCC(ret)) {                                           \

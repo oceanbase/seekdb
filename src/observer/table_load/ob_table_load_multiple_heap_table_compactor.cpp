@@ -352,7 +352,7 @@ int ObTableLoadMultipleHeapTableCompactor::construct_compactors()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected not external table", KR(ret), KPC(table_store));
   } else {
-    // 根据table_store构造任务
+    // Construct task based on table_store
     FOREACH_X(it, *table_store, OB_SUCC(ret))
     {
       ObDirectLoadTableHandleArray *table_handle_array = it->second;
@@ -363,7 +363,7 @@ int ObTableLoadMultipleHeapTableCompactor::construct_compactors()
       }
     }
     if (OB_SUCC(ret)) {
-      // 清空table_store, 以便在排序过程中能释放磁盘空间
+      // Clear table_store to release disk space during sorting process
       table_store->clear();
     }
   }
@@ -405,19 +405,19 @@ int ObTableLoadMultipleHeapTableCompactor::start_sort()
   ObTableLoadTableCtx *ctx = store_ctx_->ctx_;
   for (int64_t i = 0; OB_SUCC(ret) && i < mem_ctx_.load_thread_cnt_; ++i) {
     ObTableLoadTask *task = nullptr;
-    // 1. 分配task
+    // 1. assign task
     if (OB_FAIL(ctx->alloc_task(task))) {
       LOG_WARN("fail to alloc task", KR(ret));
     }
-    // 2. 设置processor
+    // 2. Set processor
     else if (OB_FAIL(task->set_processor<CompactTaskProcessor>(ctx, &mem_ctx_))) {
       LOG_WARN("fail to set compact task processor", KR(ret));
     }
-    // 3. 设置callback
+    // 3. Set callback
     else if (OB_FAIL(task->set_callback<CompactTaskCallback>(ctx, this))) {
       LOG_WARN("fail to set compact task callback", KR(ret));
     }
-    // 4. 把task放入调度器
+    // 4. Put task into scheduler
     else if (OB_FAIL(store_ctx_->task_scheduler_->add_task(i, task))) {
       LOG_WARN("fail to add task", KR(ret), K(i), KPC(task));
     }
@@ -432,7 +432,7 @@ int ObTableLoadMultipleHeapTableCompactor::start_sort()
 
 void ObTableLoadMultipleHeapTableCompactor::stop()
 {
-  set_has_error(); //先设置为error，因为stop的场景就是error
+  set_has_error(); //Set to error first, because the stop scenario is an error
 }
 
 int ObTableLoadMultipleHeapTableCompactor::handle_compact_task_finish(int ret_code)
@@ -455,7 +455,7 @@ int ObTableLoadMultipleHeapTableCompactor::finish()
 {
   int ret = OB_SUCCESS;
   ObDirectLoadTableStore *table_store = op_->merge_table_ctx_->table_store_;
-  // 将排序后的数据保存到table_store
+  // Save the sorted data to table_store
   table_store->clear();
   table_store->set_table_data_desc(mem_ctx_.table_data_desc_);
   table_store->set_multiple_heap_table();

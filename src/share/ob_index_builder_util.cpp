@@ -760,7 +760,7 @@ int ObIndexBuilderUtil::adjust_ordinary_index_column_args(
         new_sort_item.prefix_len_ = 0;
       }
     } else if (!new_sort_item.is_func_index_) {
-      //非函数索引情况下, 走此路径.
+      //In the case of non-function index, take this path.
       const ObColumnSchemaV2 *col_schema = data_schema.get_column_schema(new_sort_item.column_name_);
       if (OB_ISNULL(col_schema)) {
         ret = OB_ERR_KEY_COLUMN_DOES_NOT_EXITS;
@@ -896,7 +896,7 @@ int ObIndexBuilderUtil::adjust_ordinary_index_column_args(
       } else if (OB_FAIL(new_sort_items.push_back(new_sort_item))) {
         LOG_WARN("store new sort item failed", K(ret), K(new_sort_item));
       } else if (data_schema.get_column_count() > old_cnt) {
-        //新生成了新的生成列，需要保存新的生成列
+        //A new generated column has been created, and the new generated column needs to be saved
         LOG_INFO("column info", KPC(gen_col), K(old_cnt), K(data_schema.get_column_count()));
         if (OB_FAIL(gen_columns.push_back(gen_col))) {
           LOG_WARN("store generated column failed", K(ret));
@@ -955,9 +955,9 @@ int ObIndexBuilderUtil::generate_ordinary_generated_column(
         char col_name_buf[OB_MAX_COLUMN_NAMES_LENGTH] = {'\0'};
         pos = 0;
         default_value.set_varchar(expr_def);
-        tmp_gen_col.set_rowkey_position(0); //非主键列
-        tmp_gen_col.set_index_position(0); //非索引列
-        tmp_gen_col.set_tbl_part_key_pos(0); //非partition key
+        tmp_gen_col.set_rowkey_position(0); //non-primary key column
+        tmp_gen_col.set_index_position(0); //non-index column
+        tmp_gen_col.set_tbl_part_key_pos(0); //not partition key
         tmp_gen_col.set_tenant_id(data_schema.get_tenant_id());
         tmp_gen_col.set_table_id(data_schema.get_table_id());
         tmp_gen_col.set_column_id(data_schema.get_max_used_column_id() + 1);
@@ -1064,11 +1064,11 @@ int ObIndexBuilderUtil::generate_prefix_column(
                                        sort_item.prefix_len_, old_column->get_column_id()))) {
       LOG_WARN("print generate column prefix name failed", K(ret));
     } else if ((prefix_col = data_schema.get_column_schema(ObString(name_pos, col_name_buf))) != NULL) {
-      //索引依赖的生成列已经存在，就引用该生成列，不重新创建了
+      //The generated column that the index depends on already exists, so we will reference that generated column and not recreate it.
       if (OB_INVALID_ID != spec_id) {
-        // 只有备份恢复create index才会设置column id --> ObCreateIndexResolver::resolve_index_column_node
-        // 该column id指定的是前缀索引生成列的column id
-        // 可能出现多个前缀索引共用一个生成列, 基线备份时指定的生成列id必须一致
+        // Only backup recovery create index will set column id --> ObCreateIndexResolver::resolve_index_column_node
+        // This column id specifies the column id of the prefix index generation column
+        // Multiple prefix indexes may share a single generated column, the generated column id specified during baseline backup must be consistent
         if (spec_id != prefix_col->get_column_id()) {
           ret = OB_ERR_INVALID_COLUMN_ID;
           LOG_USER_ERROR(OB_ERR_INVALID_COLUMN_ID,
@@ -1104,10 +1104,10 @@ int ObIndexBuilderUtil::generate_prefix_column(
           prefix_column.set_data_type(ObVarcharType);
           prefix_column.set_data_scale(0);
         }
-        prefix_column.set_rowkey_position(0); //非主键列
-        prefix_column.set_index_position(0); //非索引列
-        prefix_column.set_tbl_part_key_pos(0); //非partition key
-        //前缀索引的生成列的长度应该是依赖列和前缀长度的最小值
+        prefix_column.set_rowkey_position(0); //non-primary key column
+        prefix_column.set_index_position(0); //non-index column
+        prefix_column.set_tbl_part_key_pos(0); //not partition key
+        //The length of the generated column for prefix index should be the minimum value between the dependent column and the prefix length
         int32_t data_len = static_cast<int32_t>(min(sort_item.prefix_len_, old_column->get_data_length()));
         prefix_column.set_data_length(data_len);
         prefix_column.add_column_flag(VIRTUAL_GENERATED_COLUMN_FLAG);
@@ -1122,8 +1122,8 @@ int ObIndexBuilderUtil::generate_prefix_column(
         prefix_column.set_prev_column_id(UINT64_MAX);
         prefix_column.set_next_column_id(UINT64_MAX);
         if (OB_INVALID_ID != spec_id) {
-          // 只有备份恢复create index才会设置column id --> ObCreateIndexResolver::resolve_index_column_node
-          // 该column id指定的是前缀索引生成列的column id
+          // Only backup recovery create index will set column id --> ObCreateIndexResolver::resolve_index_column_node
+          // This column id specifies the column id of the prefix index generation column
           ObColumnSchemaV2 *tmp_col = data_schema.get_column_schema(spec_id);
           if (is_invalid || NULL != tmp_col) {
           				ret = OB_ERR_INVALID_COLUMN_ID;
@@ -1252,9 +1252,9 @@ int ObIndexBuilderUtil::generate_spatial_cellid_column(
       col_schema.add_column_flag(GENERATED_DEPS_CASCADE_FLAG);
       ObObj default_value;
       default_value.set_varchar(cellid_expr_def, static_cast<int32_t>(def_pos));
-      column_schema.set_rowkey_position(0); //非主键列
-      column_schema.set_index_position(0); //非索引列
-      column_schema.set_tbl_part_key_pos(0); //非partition key
+      column_schema.set_rowkey_position(0); //non-primary key column
+      column_schema.set_index_position(0); // non-index column
+      column_schema.set_tbl_part_key_pos(0); // not partition key
       column_schema.set_tenant_id(data_schema.get_tenant_id());
       column_schema.set_table_id(data_schema.get_table_id());
       column_schema.set_column_id(data_schema.get_max_used_column_id() + 1);
@@ -1317,9 +1317,9 @@ int ObIndexBuilderUtil::generate_spatial_mbr_column(
       col_schema.add_column_flag(GENERATED_DEPS_CASCADE_FLAG);
       ObObj default_value;
       default_value.set_varchar(mbr_expr_def, static_cast<int32_t>(def_pos));
-      column_schema.set_rowkey_position(0); //非主键列
-      column_schema.set_index_position(0); //非索引列
-      column_schema.set_tbl_part_key_pos(0); //非partition key
+      column_schema.set_rowkey_position(0); //non-primary key column
+      column_schema.set_index_position(0); // non-index column
+      column_schema.set_tbl_part_key_pos(0); // not partition key
       column_schema.set_tenant_id(data_schema.get_tenant_id());
       column_schema.set_table_id(data_schema.get_table_id());
       column_schema.set_column_id(data_schema.get_max_used_column_id() + 1);

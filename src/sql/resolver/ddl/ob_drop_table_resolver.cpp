@@ -62,7 +62,7 @@ int ObDropTableResolver::resolve(const ParseNode &parse_tree)
     } else if (T_DROP_TABLE == parse_tree.type_) {
       if (NULL != parse_tree.children_[MATERIALIZED_NODE]
           && T_TEMPORARY == parse_tree.children_[MATERIALIZED_NODE]->type_) {
-        // mysql临时表特有用法
+        // mysql temporary table special usage
         drop_table_arg.table_type_ = share::schema::TMP_TABLE;
       } else {
         drop_table_arg.table_type_ = share::schema::USER_TABLE; //xiyu@TODO: SYSTEM_TABLE???

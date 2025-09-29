@@ -58,7 +58,7 @@ public:
     PALF_LOG(INFO, "on_success");
     return OB_SUCCESS;
   }
-  // 日志未形成多数派时会调用此函数，调用此函数后对象不再使用
+  // The function will be called when the log has not formed a majority, and the object will no longer be used after calling this function
   int on_failure() override {
     PALF_LOG(INFO, "on_failure");
     return OB_SUCCESS;
@@ -95,7 +95,7 @@ TestLogService::~TestLogService()
 
 void TestLogService::SetUp()
 {
-// 因为rpc不能用，接入选举会core掉
+// Because rpc cannot be used, connecting to the election will cause a core dump
 //   int ret = OB_SUCCESS;
 //   TestDataFilePrepare::SetUp();
 // #ifdef ERRSIM

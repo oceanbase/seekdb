@@ -247,7 +247,7 @@ DEFINE_GET_SERIALIZE_SIZE(ObPostExprItem)
 ObPostfixExpression::ObPostfixExpression(ObIAllocator &alloc, int64_t item_count)
     : post_exprs_(),
       str_buf_(alloc),
-      output_column_count_(1) //默认为1
+      output_column_count_(1) // default to 1
 {
   UNUSED(item_count);
 }
@@ -326,7 +326,7 @@ int ObPostfixExpression::calc(common::ObExprCtx &expr_ctx, const common::ObNewRo
       result_val = *value;
     }
   } else if (OB_UNLIKELY(post_exprs_.at(last_idx).get_item_type() == T_OP_SHADOW_UK_PROJECT)) {
-    //对于shadow unique key project表达式走优化路径
+    // For shadow unique key project expression take the optimized path
     if (OB_FAIL(uk_fast_project(expr_ctx, row, result_val))) {
       LOG_WARN("fail to do uk fast project", K(ret));
     }
@@ -447,8 +447,8 @@ int ObPostfixExpression::calc_result_row(ObExprCtx &expr_ctx, const common::ObNe
 
     int64_t idx = 0;
     RLOCAL(int64_t, stack_top);
-    //在每次计算的开始，应该保留栈的开始位置，如果计算是正常结束，计算栈里面的值会自然的被弹空
-    //但是如果计算是异常退出，压栈的元素不能被弹出，需要在退出的时候将栈置为开始的位置,不然会导致栈异常增长
+    // At the beginning of each calculation, the start position of the stack should be retained. If the calculation ends normally, the values in the calculation stack will naturally be popped empty
+    // However, if the calculation exits abnormally, the stacked elements cannot be popped out, and the stack needs to be reset to the starting position at the time of exit; otherwise, it will lead to abnormal growth of the stack
     int64_t stack_start = stack_top;
     ObObj *stack = NULL;
     auto *the_stack = GET_TSI_MULT(ObPostfixExpressionCalcStack, 1);
@@ -522,8 +522,8 @@ int ObPostfixExpression::calc_result_row(ObExprCtx &expr_ctx, const common::ObNe
   int ret = OB_SUCCESS;
   int64_t idx = 0;
   RLOCAL(int64_t, stack_top);
-  //在每次计算的开始，应该保留栈的开始位置，如果计算是正常结束，计算栈里面的值会自然的被弹空
-  //但是如果计算是异常退出，压栈的元素不能被弹出，需要在退出的时候将栈置为开始的位置,不然会导致栈异常增长
+  // At the beginning of each calculation, the start position of the stack should be retained. If the calculation ends normally, the values in the calculation stack will naturally be popped empty
+  // However, if the calculation exits abnormally, the stacked elements cannot be popped out, and the stack needs to be reset to the starting position at the time of exit; otherwise, it will lead to abnormal stack growth
   int64_t stack_start = stack_top;
   ObObj *stack = NULL;
   auto *the_stack = GET_TSI_MULT(ObPostfixExpressionCalcStack, 2);
@@ -600,7 +600,7 @@ OB_INLINE int ObPostfixExpression::calc_agg_param_list(ObNewRow &result_row,
                                                        ObObj *stack, int64_t stack_top) const
 {
   int ret = OB_SUCCESS;
-  //根据dimension取出栈中的元素填充到result_row中
+  // According to dimension retrieve elements from the stack and fill them into result_row
   const ObExprOperator *agg_param_list = item.get_expr_operator();
   if (OB_ISNULL(stack) || OB_ISNULL(agg_param_list) || OB_ISNULL(result_row.cells_)
       || OB_UNLIKELY(stack_top < 0 || stack_top >= ObPostfixExpressionCalcStack::STACK_SIZE)) {

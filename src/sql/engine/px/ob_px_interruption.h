@@ -25,9 +25,7 @@ namespace sql
 class ObDfo;
 class ObPxTask;
 class ObPxSqcMeta;
-
-
-//在px中由于需要记录两个中断ID，px中的中断id均来自此结构体
+// In px, since two interrupt IDs need to be recorded, all interrupt IDs in px come from this structure
 struct ObPxInterruptID
 {
   OB_UNIS_VERSION(1);
@@ -44,9 +42,9 @@ public:
            px_interrupt_id_ == other.px_interrupt_id_;
   }
   TO_STRING_KV(K_(query_interrupt_id), K_(px_interrupt_id));
-  // 用于sqc以及task向qc发送中断的id,query注册中断时也使用该id
+  // Used for sqc and task to send interrupt id to qc, query also uses this id when registering interrupt
   common::ObInterruptibleTaskID query_interrupt_id_;    
-  // 用于qc向所属sqc和tasks发送中断的id，sqc以及tasks注册中断时也使用该id
+  // Used for qc to send interrupt id to its sqc and tasks, sqc and tasks also use this id when registering interrupts
   common::ObInterruptibleTaskID px_interrupt_id_;  
 };
 
@@ -65,22 +63,22 @@ private:
 class ObInterruptUtil
 {
 public:
-  // QC 向 px 下的所有 SQC 以及Tasks发送中断
+  // QC sends interrupt to all SQCs and Tasks under px
   static int broadcast_px(common::ObIArray<sql::ObDfo *> &dfos, int code);
-  // QC 向 dfo 下的所有 SQC 以及Tasks发送中断
+  // QC sends interrupt to all SQCs and Tasks under dfo
   static int broadcast_dfo(ObDfo *dfo, int code);
-  // SQC 向所有 tasks 发送中断，以催促尽快退出。应对 task 丢 qc 中断的场景
+  // SQC sends an interrupt to all tasks to urge them to exit as soon as possible. Handles the scenario where a task misses the QC interrupt
   static int interrupt_tasks(ObPxSqcMeta &sqc, int code);
-  // DFO 重试时，需要使用新的中断号，避免遇到中断残余，被误中断
+  // DFO retry, need to use a new interrupt number to avoid being misinterrupted by interrupt residue
   static int regenerate_interrupt_id(ObDfo &dfo);
   // Only in normal px worker thread executing process call this function will set
   // px_worker_execute_start_schema_version
   static void update_schema_error_code(ObExecContext *exec_ctx, int &code,
                            int64_t px_worker_execute_start_schema_version = OB_INVALID_VERSION);
-  // SQC 以及 Tasks 向 QC 发送中断
+  // SQC and Tasks send interrupt to QC
   static int interrupt_qc(ObPxSqcMeta &sqc, int code, ObExecContext *exec_ctx);
   static int interrupt_qc(ObPxTask &task, int code, ObExecContext *exec_ctx);
-  // 将server_id、execution_id、qc_id共同组成中断id
+  // Combine server_id, execution_id, and qc_id to form the interrupt id
   // Suggest using GCTX.get_server_index() instead of GCTX.get_server_id(),
   // as it guarantees uniqueness within the cluster and is constrained to a maximum value of MAX_SERVER_COUNT.
   static int generate_query_interrupt_id(const uint32_t server_index,

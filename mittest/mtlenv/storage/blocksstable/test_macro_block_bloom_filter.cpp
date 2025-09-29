@@ -392,7 +392,7 @@ TEST_F(TestMacroBlockBloomFilter, test_serialize_0)
   mb_bf.row_count_ = 1;
   val = mb_bf.get_serialize_size();
   ASSERT_NE(val, 0);
-  // TODO(baichangmin): 补齐 false positive prob 不达标以后的 serialize size
+  // TODO(baichangmin): complete the serialize size after false positive prob does not meet the standard
 }
 
 TEST_F(TestMacroBlockBloomFilter, test_serialize_1)

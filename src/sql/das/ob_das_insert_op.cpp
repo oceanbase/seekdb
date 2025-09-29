@@ -443,7 +443,7 @@ int ObDASInsertOp::fill_task_result(ObIDASTaskResult &task_result, bool &has_mor
 
   if (OB_SUCC(ret)) {
     ObDASInsertResult &ins_result = static_cast<ObDASInsertResult&>(task_result);
-    // 只有need fetch conflict row, 回冲突行
+    // Only need fetch conflict row, return conflict row
     if (ins_rtdef_->need_fetch_conflict_) {
       if (OB_FAIL(store_conflict_row(ins_result))) {
         LOG_WARN("fail to fetch conflict row", K(ret));
@@ -574,7 +574,7 @@ int ObDASInsertResult::init(const ObIDASTaskOp &op, common::ObIAllocator &alloc)
   } else {
     const ObDASDMLBaseCtDef *ins_ctdef = static_cast<const ObDASDMLBaseCtDef*>(base_ctdef);
     tenant_id = MTL_ID();
-    // replace和insert_up拉回冲突数据的das_write_buff暂时不需要带pay_load
+    // replace and insert_up pull back conflict data's das_write_buff temporarily does not need to carry pay_load
     if (!result_buffer_.is_inited()
         && OB_FAIL(result_buffer_.init(alloc, 0 /*row_extend_size*/, tenant_id, "DASInsRsultBuffer"))) {
       LOG_WARN("init result buffer failed", K(ret));

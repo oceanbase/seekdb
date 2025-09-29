@@ -222,10 +222,10 @@ private:
   int64_t one_pass_size_;
   int64_t expect_size_;
   int64_t global_bound_size_;
-  // 取 min(cache_size, global_bound_size)
-  // sort场景，在global_bound_size比较大情况下，sort理论上有data和extra内存，data应该是one-pass size
-  // 也就是expect_size
-  // 但总体内存应该是global_bound_size和cache size更小值，其实也可以用expect_size和global_bound_size取最大值
+  // Take min(cache_size, global_bound_size)
+  // sort scenario, in case of large global_bound_size, sort theoretically has data and extra memory, data should be one-pass size
+  // that is expect_size
+  // But overall memory should be the smaller value between global_bound_size and cache size, actually it can also use the larger value between expect_size and global_bound_size
   int64_t max_bound_;
 public:
   int64_t delta_size_;
@@ -261,7 +261,7 @@ public:
     active_avg_time_(0), max_temp_size_(0), last_temp_size_(0), is_auto_policy_(false)
   {}
 public:
-  // key: (sql_id, plan_id, operator_id, database_id) 可以确认相同执行的统计
+  // key: (sql_id, plan_id, operator_id, database_id) can confirm the statistics of the same execution
   struct WorkareaKey {
     WorkareaKey(uint64_t plan_id, uint64_t operator_id, uint64_t database_id) :
       plan_id_(plan_id), operator_id_(operator_id), database_id_(database_id)
@@ -359,20 +359,20 @@ public:
 public:
   int64_t seqno_;
   WorkareaKey workarea_key_;
-  ObPhyOperatorType op_type_;     // operator类型
-  int64_t est_cache_size_;        // 估计的全内存大小
-  int64_t est_one_pass_size_;     // 估计的one pass大小
-  int64_t last_memory_used_;      // 上次执行内存使用大小
-  int64_t last_execution_;        // 上次执行的状态，是optimal、onepass还是multipass
-  int64_t last_degree_;           // 上次执行dop
-  int64_t total_executions_;      // 每个worker算执行一次
-  int64_t optimal_executions_;    // 全内存执行次数
-  int64_t onepass_executions_;    // onepass执行次数
-  int64_t multipass_executions_;  // 多路执行次数
-  int64_t active_avg_time_;       // 平均活跃时间
-  int64_t max_temp_size_;         // 最大写临时文件大小
-  int64_t last_temp_size_;        // 上次写临时文件大小
-  bool is_auto_policy_;                 // 是否是auto还是manual，1: auto 0:manual
+  ObPhyOperatorType op_type_;     // operator type
+  int64_t est_cache_size_;        // estimated full memory size
+  int64_t est_one_pass_size_;     // estimated one pass size
+  int64_t last_memory_used_;      // Last execution memory usage size
+  int64_t last_execution_;        // The status of the last execution, is it optimal, onepass, or multipass
+  int64_t last_degree_;           // Last execution dop
+  int64_t total_executions_;      // Each worker counts as one execution
+  int64_t optimal_executions_;    // Full memory execution count
+  int64_t onepass_executions_;    // onepass execution count
+  int64_t multipass_executions_;  // Multipass execution count
+  int64_t active_avg_time_;       // average active time
+  int64_t max_temp_size_;         // maximum write temporary file size
+  int64_t last_temp_size_;        // Last write temporary file size
+  bool is_auto_policy_;                 // Whether it is auto or manual, 1: auto 0: manual
 };
 
 class ObSqlWorkareaProfileInfo
@@ -441,13 +441,13 @@ private:
   int64_t total_hash_cnt_;
   int64_t total_hash_size_;
   int64_t total_sort_cnt_;
-  int64_t total_sort_size_; // 主要用于sort的one pass内存
+  int64_t total_sort_size_; // mainly used for sort's one pass memory
   int64_t total_sort_one_pass_size_;
-  // 用来处理sort对应的one pass的统计，与total_sort_one_pass_size_区别在于当不能cache时，统计内存时
-  // 需要减去前者（可以任务是所有sort对应的one pass大小）
-  // 后者时one pass size在的某个interval中，当跨越间隔后，bound小于one pass size，前者是bound小于cache size
-  // 所以一个interval有3个点：hash size、sort size、one_pass size
-  // 这里其实可以把统计放到total_hash中统计，暂时实现是分开
+  // Used to handle the one pass statistics corresponding to sort, with the difference from total_sort_one_pass_size_ being that when caching is not possible, it counts memory usage
+  // Need to subtract the former (can be considered as the one pass size corresponding to all sort)
+  // The latter is when one pass size is within a certain interval, and after crossing the interval, bound is less than one pass size, the former is bound less than cache size
+  // So an interval has 3 points: hash size, sort size, one_pass size
+  // Here actually the statistics can be put into total_hash for counting, the current implementation is separate
   int64_t total_one_pass_cnt_;
   int64_t total_one_pass_size_;
 };
@@ -490,7 +490,7 @@ public:
   void set_mem_target(int64_t mem_target) { mem_target_ = mem_target; }
 private:
   int64_t interval_idx_;
-  int64_t interval_cache_size_; //当前下标对应的内存值
+  int64_t interval_cache_size_; // current index corresponding memory value
   int64_t mem_target_;
   ObSqlWorkAreaIntervalStat interval_stat_;
 };
@@ -642,7 +642,7 @@ public:
   int get_work_area_size(ObIAllocator *allocator, ObSqlWorkAreaProfile &profile);
 
   int register_work_area_profile(ObSqlWorkAreaProfile &profile);
-  // 由外层逻辑更新profile的信息以及一些变化信息
+  // By outer logic update profile information and some change information
   int update_work_area_profile(
     common::ObIAllocator *allocator,
     ObSqlWorkAreaProfile &profile,
@@ -723,15 +723,15 @@ private:
     ObSqlWorkAreaProfile &profile);
 private:
   //interval define
-  // 1 区间间隔划分(单位为M)
-  //   区间     -> 间隔大小 间隔个数
-  //   [0,100] -> 1, 100个点
-  //   [100, 500] -> 2， 200个点
-  //   [500, 1000] -> 5， 100个点
-  //   [1000, 5000] -> 10, 400个点
-  //   [5000, 10000] -> 50, 100个点
-  //   [10000, 100000] -> 900, 100个点
-  //   [100000, 1000000] -> 9000, 100个点
+  // 1 interval division (unit in M)
+  //   interval -> interval size interval count
+  //   [0,100] -> 1, 100 points
+  //   [100, 500] -> 2, 200 points
+  //   [500, 1000] -> 5, 100 points
+  //   [1000, 5000] -> 10, 400 points
+  //   [5000, 10000] -> 50, 100 points
+  //   [10000, 100000] -> 900, 100 points
+  //   [100000, 1000000] -> 9000, 100 points
   static const int64_t INTERVAL_NUM = 1100;
   static const int64_t LESS_THAN_100M_INTERVAL_SIZE = 1 * 1024 * 1024;
   static const int64_t LESS_THAN_100M_CNT = 100;

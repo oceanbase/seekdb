@@ -1135,7 +1135,7 @@ int ObRangeGenerator::cast_value_type(ObTmpRange &range)
       } else if (start_cmp > 0) {
         // after cast, the result becomes smaller
         // * if is last value. `[` -> `(`
-        // 	  e.g. [1, 2, 3.1; max, max, max) -> （1, 2, 3; max, max, max)
+        // 	  e.g. [1, 2, 3.1; max, max, max) -> (1, 2, 3; max, max, max)
         // * if is not last value. `[x, val, x` -> `(x, val, max`
         //    e.g. [1, 2.1, 3; max, max, max) -> (1, 2, max; max, max, max)
         if (i == range.column_cnt_ - 1) {

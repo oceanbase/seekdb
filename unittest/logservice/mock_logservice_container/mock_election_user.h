@@ -29,8 +29,7 @@ namespace unittest
 {
 
 extern int64_t MSG_DELAY;
-
-// 定义用于hash map的判等方法
+// Define the equality method for hash map
 struct LogStreamKey
 {
   LogStreamKey(const common::ObAddr &addr, const int64_t logstream_id) : addr_(addr), logstream_id_(logstream_id) {}
@@ -42,8 +41,7 @@ struct LogStreamKey
 
 }
 }
-
-// 定义用于hash map的hash方法
+// Define the hash method used for the hash map
 namespace std
 {
 
@@ -64,20 +62,17 @@ namespace unittest {
 using namespace common;
 using namespace palf::election;
 using namespace std;
-
-// 线程局部的buffer，用于序列化消息
+// thread-local buffer, used for serializing messages
 constexpr int BUFFER_SIZE = 1024;
 struct MsgBuffer {
   char buffer_[BUFFER_SIZE];
   TO_STRING_KV(K_(buffer));
 };
 thread_local MsgBuffer TH_BUFFER;
-
-// 全局的timer 和 thread pool，用于模拟网络延迟和接收端的工作线程
+// global timer and thread pool, used for simulating network latency and receiver's worker threads
 ObOccamTimer TIMER;
 ObOccamThreadPool THREAD_POOL;
-
-// 这是收发消息的方法
+// This is the method for sending and receiving messages
 class MockNetService : public ElectionMsgSender
 {
 public:

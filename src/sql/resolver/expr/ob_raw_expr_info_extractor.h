@@ -52,7 +52,7 @@ private:
   int visit_interm_node(ObRawExpr &expr);
   int visit_subquery_node(ObOpRawExpr &expr);
   int visit_left_param(ObRawExpr &expr);
-  //需要根据右边的操作符来修改根节点信息，所以需要传入最上层根节点
+  // Need to modify the root node information based on the operator on the right, so the topmost root node needs to be passed in
   int visit_right_param(ObOpRawExpr &expr);
   int clear_info(ObRawExpr &expr);
   int pull_info(ObRawExpr &expr);

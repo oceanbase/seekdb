@@ -344,7 +344,7 @@ private:
   virtual int before_process();
   virtual int after_process(int error_code);
   int response_query_header(sql::ObSQLSessionInfo &session, pl::ObDbmsCursorInfo &cursor);
-  //重载response，在response中不去调用flush_buffer(true)；flush_buffer(true)在需要回包时显示调用
+  // Overload response, do not call flush_buffer(true) in response; flush_buffer(true) should be explicitly called when a response packet is needed to be sent
 
 
   // copy or convert string, resove %extra_buf_len before result string.
@@ -370,7 +370,7 @@ protected:
   int64_t arraybinding_size_;
   int64_t arraybinding_rowcnt_;
 
-  ObPSCursorType ps_cursor_type_;   // cursor read only 类型的语句
+  ObPSCursorType ps_cursor_type_;   // cursor read only type statement
 
   int64_t single_process_timestamp_;
   int64_t exec_start_timestamp_;

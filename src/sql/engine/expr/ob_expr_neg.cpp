@@ -233,7 +233,7 @@ int ObExprNeg::calc_result_type1(ObExprResType &type, ObExprResType &type1, ObEx
     }
     if (OB_SUCC(ret)) {
       // collation
-      // 结果不可能为字符类型，无需专门设置collation
+      // The result cannot be of character type, no need to set collation
 
       // null flag
       ObExprOperator::calc_result_flag1(type, type1);

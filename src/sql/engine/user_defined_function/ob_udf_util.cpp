@@ -45,22 +45,19 @@ int ObUdfUtil::calc_udf_result_type(common::ObIAllocator &allocator,
   int ret = OB_SUCCESS;
   bool init_succ = false;
   /*
-   *  基于如下事实：
-   *  1. OB计算expr的result type是在ExprDeduceType的时候去被调用的，在resolver阶段/改写阶段/CG阶段
-   *  都会被调用。在CG阶段会将ObExprResType的ObAccuracy设置到ObPostExprItem中去，作为计算时候规整
-   *  数据的依据。
-   *  例如数据在ob_expr_udf的calc_resultN中计算结果为3.1666666666, 最后变成3.1667是依赖于后缀表达式，
-   *  后缀表达式规整的依据又是ObAccuracy。
-   *  2. 用户UDF的init函数，可以对UDF_INIT结构进行赋值，设定max_length和decimal，对类型的精度
-   *  做出了指定。也就要求在最早的计划生成阶段就执行init函数，获得max_length和decimal。
-   *  3. 一个物理Expr在执行过程中，udf函数接口要使用的UDF_INIT和UDF_ARG两个结构作为成员变量，Expr
-   *  需要将这两个结构以非const的姿态传给了用户编写的函数。例如用户可以在自己的执行udf函数中
-   *  对UDF_INIT结构体中的ptr指向的内存进行操作。
-   *      从2的角度来说，UDF_INIT和UDF_ARG是静态的属性；从3的角度说他们又是更像是执行ctx。
-   *  在这种前提下，Expr必须将UDF_INIT/UDF_ARG作为执行期的ctx组成部分，又必须执行init函数用以
-   *  获得精度，使其作为逻辑阶段就必须要有的参数，那么比较好的解决方法就是先调用一次udf的init
-   *  和deinit函数，专门用于获得精度。但是这里又有一个问题，就是如果init函数比较废或者是阻塞，
-   *  这个计划的生成阶段也就很费了。
+   *  Based on the following facts:
+   *  1. OB calculates the result type of expr during ExprDeduceType, which is called at the resolver stage/rewrite stage/CG stage.
+   *  It will set ObAccuracy of ObExprResType to ObPostExprItem during the CG stage, as the basis for data normalization during computation.
+   *  For example, if the result of calculation in ob_expr_udf's calc_resultN is 3.1666666666, it becomes 3.1667 depending on the postfix expression,
+   *  and the postfix expression's normalization is based on ObAccuracy.
+   *  2. The init function of user-defined UDF can assign values to the UDF_INIT structure, setting max_length and decimal, specifying the precision of the type.
+   *  Therefore, the init function must be executed at the earliest plan generation stage to obtain max_length and decimal.
+   *  3. A physical Expr uses the UDF_INIT and UDF_ARG structures as member variables during execution, and Expr needs to pass these two structures
+   *  to the user-written functions in a non-const manner. For example, users can operate on the memory pointed to by ptr in the UDF_INIT structure within their own UDF execution function.
+   *      From the perspective of point 2, UDF_INIT and UDF_ARG are static attributes; from the perspective of point 3, they are more like execution contexts.
+   *  Under these circumstances, Expr must include UDF_INIT/UDF_ARG as part of the execution context, and must execute the init function to obtain precision,
+   *  making it a necessary parameter at the logical stage. Therefore, a better solution would be to call the udf's init and deinit functions once specifically
+   *  to obtain precision. However, there is another issue here: if the init function is inefficient or blocking, it would make the plan generation stage very costly.
    * */
   /* do the user defined init func */
   ObUdfFunction::ObUdfCtx udf_ctx;
@@ -235,7 +232,7 @@ int ObUdfUtil::load_so(const common::ObString dl, ObUdfSoHandler &handler)
 {
   int ret = OB_SUCCESS;
   ObUdfSoHandler handler_tmp = nullptr;
-  //由于ObString没有存最后一个\0 所以还是采用这种方式，不然dlopen会失败。
+  // Since ObString does not store the last \0, we still use this method, otherwise dlopen will fail.
   int so_name_max_len = OB_MAX_UDF_NAME_LENGTH + ObUdfUtil::UDF_MAX_EXPAND_LENGTH;
   char so_name[OB_MAX_UDF_NAME_LENGTH + ObUdfUtil::UDF_MAX_EXPAND_LENGTH];
   MEMSET(so_name, 0, so_name_max_len);
@@ -397,11 +394,11 @@ int ObUdfUtil::set_udf_args(common::ObExprCtx &expr_ctx, int64_t param_num, comm
 {
   int ret = OB_SUCCESS;
   /*
-   * mysql需要各种缓冲区将数据拷贝到临时内存中给予UDF去使用，
-   * 由于我们在前面已经将传入的ObObj全部都深拷过一次了，所以
-   * 这些内存直接给UDF拿去用就好了不需要再拷贝一次了。
-   * 差别在于mysql的int/double这段区域是连续的，如果UDF利用了
-   * 这个隐藏条件，可能会导致core。
+   * mysql requires various buffers to copy data into temporary memory for UDF to use,
+   * since we have already deep copied all the incoming ObObj earlier, so
+   * this memory can be directly used by UDF without copying again.
+   * The difference is that the int/double section in mysql is contiguous, if UDF utilizes
+   * this hidden condition, it may lead to core dump.
    * */
   if (param_num != udf_args.arg_count) {
     ret = OB_ERR_UNEXPECTED;
@@ -738,7 +735,7 @@ int ObUdfUtil::convert_mysql_type_to_udf_type(const obmysql::EMySQLFieldType &my
 {
   int ret = OB_SUCCESS;
   /*
-   * mysql的表达式item中，似乎每个种类返回硬编码的result type和field type.
+   * In the expression item of mysql, it seems that each kind returns a hard-coded result type and field type.
    *
    * */
   switch (mysql_type) {

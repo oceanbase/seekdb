@@ -140,12 +140,11 @@ public :
   int64_t pump_version_;
   //-----end
 };
-
-// 引入 TaskSet 的概念，是为了处理一个 GI 下管多张表的场景。
+// Introduce the concept of TaskSet, which is to handle the scenario where multiple tables are managed under a single GI.
 //
-// 对于单表扫描来说，ObGITaskSet 中 partition_keys_ 等几个数组里，都只有一个元素
-// 对于 Partition Wise 的 N 表扫描（一个 GI 下挂多个 table）场景，ObGITaskSet 中 partition_keys_
-// 等几个数组里，有 N 个元素。
+// For single table scan, there is only one element in several arrays like partition_keys_ in ObGITaskSet
+// For the Partition Wise N-table scan (multiple tables hanging under one GI) scenario, partition_keys_ in ObGITaskSet
+// There are N elements in several arrays.
 class ObGITaskSet {
 public:
   struct ObGITaskInfo
@@ -213,7 +212,7 @@ struct GITaskArrayItem
 
   TO_STRING_KV(K(tsc_op_id_), K(taskset_array_));
   // table scan operator id or insert op id
-  // TODO: jiangting.lk 先不修改变量名字，后期统一调整
+  // TODO: jiangting.lk Do not modify variable names for now, unify adjustments later
   uint64_t tsc_op_id_;
   // gi task set array
   ObGITaskArray taskset_array_;
@@ -302,8 +301,8 @@ class ObPartitionWiseGranuleSplitter : public ObGranuleSplitter
 public:
   ObPartitionWiseGranuleSplitter() = default;
   virtual ~ObPartitionWiseGranuleSplitter() = default;
-  // FULL PARITION WISE情况下的任务划分与其他类型的`spliter`有非常大的不同；普通的spliter仅仅需要考虑TSC，
-  // 但是PARTITION WISE情况下，有可能需要考虑DML（目前仅仅是INSERT)
+  // FULL PARTITION WISE situationtask division is very different from other types`spliter`very different；ordinaryspliteronly need to considerTSC，
+  // But PARTITION WISE case, it might be necessary to consider DML (currently only INSERT)
   int split_granule(ObGranulePumpArgs &args,
                     ObIArray<const ObTableScanSpec *> &scan_ops,
                     const ObTableModifySpec *modify_op,
@@ -312,8 +311,8 @@ public:
                     bool partition_granule = true);
 
 private:
-//  FULL PARTITION WISE划分任务的情况下，有可能需要对INSERT进行划分
-//  TSC的任务划分，直接使用`split_gi_task`方法
+// FULL PARTITION WISE partitioning tasks, there may be a need to partition INSERT
+//  TSC task division, directly use `split_gi_task` method
 int split_insert_gi_task(ObGranulePumpArgs &args,
                         const uint64_t insert_table_id,
                         const int64_t row_key_count,
@@ -423,7 +422,7 @@ public:
                          uint64_t tsc_op_id,
                          uint64_t fetched_task_cnt,
                          ObGranuleSplitterType splitter_type);
-  // 通过phy op ids获得其对应的gi tasks
+  // Obtain gi tasks corresponding to phy op ids
   int try_fetch_pwj_tasks(ObIArray<ObGranuleTaskInfo> &infos,
                           const ObIArray<int64_t> &op_ids,
                           int64_t worker_id,
@@ -527,7 +526,7 @@ private:
   int fill_shared_pool(ObGITaskSet &new_task_set, GITaskArrayItem &taskset_array_item);
 
 private:
-  //TODO::muhang 自旋锁还是阻塞锁，又或者按静态划分任务避免锁竞争？
+  //TODO::muhang spin lock or blocking lock, or divide tasks statically to avoid lock contention?
   common::ObSpinLock lock_;
   int64_t parallelism_;
   int64_t tablet_size_;

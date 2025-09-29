@@ -148,9 +148,8 @@ int ObPhysicalPlanCtx::reserve_param_space(int64_t param_count)
   }
   return ret;
 }
-
-// 1. 生成datum_param_store_
-// 2. 生成param frame
+// 1. Generate datum_param_store_
+// 2. Generate param frame
 int ObPhysicalPlanCtx::init_datum_param_store()
 {
   int ret = OB_SUCCESS;
@@ -160,7 +159,7 @@ int ObPhysicalPlanCtx::init_datum_param_store()
   if (OB_FAIL(datum_param_store_.prepare_allocate(param_store_.count()))) {
     LOG_WARN("fail to prepare allocate", K(ret), K(param_store_.count()));
   }
-  // 通过param_store, 生成datum_param_store
+  // Through param_store, generate datum_param_store
   for (int64_t i = 0; OB_SUCC(ret) && i < param_store_.count(); i++) {
     ObDatumObjParam &datum_param = datum_param_store_.at(i);
     if (OB_FAIL(datum_param.alloc_datum_reserved_buff(param_store_.at(i).meta_,
@@ -171,7 +170,7 @@ int ObPhysicalPlanCtx::init_datum_param_store()
       LOG_WARN("fail to convert obj param", K(ret), K(param_store_.at(i)));
     }
   }
-  // 分配param frame内存, 并设置param datum
+  // Allocate param frame memory, and set param datum
   if (OB_SUCC(ret)) {
     const int64_t old_size = 0;
     if (OB_FAIL(extend_param_frame(old_size))) {
@@ -213,8 +212,8 @@ int ObPhysicalPlanCtx::sync_last_value_global()
 
 void ObPhysicalPlanCtx::set_cur_time(const int64_t &session_val, const ObSQLSessionInfo &session)
 {
-  //如果系统变量设置了timestamp, 则该请求内部是用设置的timestamp
-  //如果没有设置, 则使用当前请求执行时的时间
+  // If the system variable sets timestamp, then the request internally uses the set timestamp
+  // If not set, then use the time when the current request is executed
   int64_t ts = session.get_local_timestamp();
   if (0 != ts) {
     cur_time_.set_timestamp(ts);
@@ -268,11 +267,9 @@ void ObPhysicalPlanCtx::set_phy_plan(const ObPhysicalPlan *phy_plan)
 {
   phy_plan_ = phy_plan;
 }
-
-
-//设置batch update stmt的partition id和param index的映射关系
-//batch update stmt中的参数被构造成nested table对象存储在param store上
-//partition_ids:array index是batch update stmt中参数的下标，值是param对应的partition id
+// Set batch update stmt's partition id and param index mapping relationship
+// batch update stmtinparameterconstructed asnested tableobjectstorageon
+//partition_ids: array index is the subscript of the parameter in the batch update stmt, value is the partition id corresponding to the param
 
 
 int ObPhysicalPlanCtx::merge_implicit_cursors(const ObIArray<ObImplicitCursorInfo> &implicit_cursor)
@@ -565,7 +562,7 @@ OB_DEF_SERIALIZE(ObPhysicalPlanCtx)
   } else {
     param_store = &param_store_;
   }
-  //按老的序列方式进行
+  // Follow the old sequence method
   OB_UNIS_ENCODE(tenant_id_);
   OB_UNIS_ENCODE(tsc_snapshot_timestamp_);
   OB_UNIS_ENCODE(cur_time_);
@@ -584,13 +581,13 @@ OB_DEF_SERIALIZE(ObPhysicalPlanCtx)
   if (OB_SUCC(ret) && row_id_list_array != NULL &&
       !row_id_list_array->empty() &&
       phy_plan_ != NULL && !(param_store_.empty())) {
-    //按需序列化param store
-    //先序列化param store的槽位
-    //需要序列化param store个数
-    //序列化param index
-    //序列化param value
+    // Serialize param store as needed
+    // Serialize param store slots
+    // Need to serialize param store count
+    // Serialize param index
+    // Serialize param value
     OB_UNIS_ENCODE(param_store_.count());
-    //序列化完才知道被序列化的参数值有多少，所以先跳掉count的位置
+    // Serialization is needed to know how many parameter values are serialized, so skip the count position first
     int64_t seri_param_cnt_pos = pos;
     int32_t real_param_cnt = 0;
     pos += serialization::encoded_length_i32(real_param_cnt);
@@ -610,7 +607,7 @@ OB_DEF_SERIALIZE(ObPhysicalPlanCtx)
       auto row_id_list = row_id_list_array->at(k);
       CK(OB_NOT_NULL(row_id_list));
       for (int64_t i = 0; OB_SUCC(ret) && i < row_id_list->count(); ++i) {
-        //row_param_map从1开始，因为index=0的位置用来存放公共param了
+        // row_param_map starts from 1, because index=0 is used to store the common param
         int64_t row_idx = row_id_list->at(i) + 1;
         if (OB_UNLIKELY(row_idx >= phy_plan_->get_row_param_map().count()) || OB_UNLIKELY(row_idx < 0)) {
           ret = OB_ERR_UNEXPECTED;
@@ -696,7 +693,7 @@ OB_DEF_SERIALIZE_SIZE(ObPhysicalPlanCtx)
   } else {
     param_store = &param_store_;
   }
-  //按老的序列方式进行
+  // Follow the old sequence method
   OB_UNIS_ADD_LEN(tenant_id_);
   OB_UNIS_ADD_LEN(tsc_snapshot_timestamp_);
   OB_UNIS_ADD_LEN(cur_time_);
@@ -714,12 +711,12 @@ OB_DEF_SERIALIZE_SIZE(ObPhysicalPlanCtx)
   OB_UNIS_ADD_LEN(is_ignore_stmt_);
   if (row_id_list_array != NULL && !row_id_list_array->empty() &&
       phy_plan_ != NULL && !(param_store_.empty())) {
-    //按需序列化param store
-    //需要序列化param store个数
-    //序列化param index
-    //序列化param value
+    // Serialize param store as needed
+    // Need to serialize param store count
+    // Serialize param index
+    // Serialize param value
     OB_UNIS_ADD_LEN(param_store_.count());
-    //序列化完才知道被序列化的参数值有多少，所以先跳掉count的位置
+    // Serialization is needed to know how many parameter values are serialized, so skip the count position first
     int32_t real_param_cnt = 0;
     len += serialization::encoded_length_i32(real_param_cnt);
     if (phy_plan_->get_row_param_map().count() > 0) {
@@ -733,7 +730,7 @@ OB_DEF_SERIALIZE_SIZE(ObPhysicalPlanCtx)
       auto row_id_list = row_id_list_array->at(k);
       if (OB_NOT_NULL(row_id_list)) {
         for (int64_t i = 0; i < row_id_list->count(); ++i) {
-          //row_param_map从1开始，因为index=0的位置用来存放公共param了
+          // row_param_map starts from 1, because index=0 is used to store the common param
           int64_t row_idx = row_id_list->at(i) + 1;
           if (row_idx < phy_plan_->get_row_param_map().count() && row_idx >= 0) {
             const ObIArray<int64_t> &param_idxs = phy_plan_->get_row_param_map().at(row_idx);
@@ -790,7 +787,7 @@ OB_DEF_DESERIALIZE(ObPhysicalPlanCtx)
   // used for function sys_view_bigint_param(idx), @note unused anymore
   ObSEArray<common::ObObj, 1> sys_view_bigint_params_;
   char message_[1] = {'\0'}; //error msg buffer, unused anymore
-  //按老的序列方式进行
+  // Follow the old sequence method
   OB_UNIS_DECODE(tenant_id_);
   OB_UNIS_DECODE(tsc_snapshot_timestamp_);
   OB_UNIS_DECODE(cur_time_);
@@ -829,8 +826,8 @@ OB_DEF_DESERIALIZE(ObPhysicalPlanCtx)
     }
   }
   if (OB_SUCC(ret) && param_cnt <= 0) {
-    //param count <= 0不为按需序列化分区相关的param store，直接序列化所有的param
-    //所以需要对param store的所有元素都执行一次深拷贝
+    //param count <= 0 not related to on-demand serialization partition param store, directly serialize all param
+    // So need to perform a deep copy on all elements of param store
   	for (int64_t i = 0; OB_SUCC(ret) && i < param_store_.count(); ++i) {
   	  const ObObjParam &objpara = param_store_.at(i);
       ObObjParam tmp = objpara;

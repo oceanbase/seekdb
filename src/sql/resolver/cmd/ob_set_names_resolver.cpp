@@ -52,9 +52,9 @@ int ObSetNamesResolver::resolve(const ParseNode &parse_tree)
           ObString charset;
           charset.assign_ptr(parse_tree.children_[0]->str_value_,
                              static_cast<int32_t>(parse_tree.children_[0]->str_len_));
-          // 目前支持gbk，utf16和utf8mb4，只有set names utf16不支持
-          // 如果后续支持更多的字符集，这里需要考虑怎么实现形式更好，
-          // 最好使用函数，目前没有必要
+          // Currently supports gbk, utf16 and utf8mb4, only set names utf16 is not supported
+          // If more character sets are supported in the future, we need to consider how to implement it better,
+          // It is better to use a function, there is no need currently
           ObCollationType col_type = ObCharset::get_default_collation(ObCharset::charset_type(charset));
           if (!ObCharset::is_valid_collation(col_type)) {
             ret = OB_ERR_UNKNOWN_CHARSET;

@@ -104,9 +104,9 @@ int ObCreateViewResolver::resolve(const ParseNode &parse_tree)
     ObCreateTableArg &create_arg = stmt->get_create_table_arg();
     ObTableSchema &table_schema = create_arg.schema_;
     ObSelectStmt *select_stmt = NULL;
-    // 原来兼容mysql，先resolve view_definition 再 resolve view_name
-    // resolve view_name不依赖view_definition， 但是resolve view_definition检查循环依赖时需要view_name，
-    // 因此交换两个resolve的位置
+    // Originally compatible with mysql, first resolve view_definition then resolve view_name
+    // resolve view_name does not depend on view_definition, but resolve view_definition checks for circular dependencies and needs view_name,
+    // Therefore exchange the positions of the two resolves
     // resolve view name; create view [ or replace] view <view_name>[column_list] [table_id]
     create_arg.if_not_exist_ = NULL != parse_tree.children_[IF_NOT_EXISTS_NODE]
                                || 1 == parse_tree.reserved_;
@@ -242,7 +242,7 @@ int ObCreateViewResolver::resolve(const ParseNode &parse_tree)
                     && (OB_TABLE_NOT_EXIST == ret || OB_ERR_BAD_FIELD_ERROR == ret
                         || OB_ERR_KEY_DOES_NOT_EXISTS == ret)) {
           // ret: OB_TABLE_NOT_EXIST || OB_ERR_BAD_FIELD_ERROR
-          // resolve select_stmt_mode可能会出现表或者列不存在，这里做规避
+          // resolve select_stmt_mode may result in table or column not existing, here we avoid it
           LOG_WARN("resolve select in create view failed", K(ret));
           ret = OB_SUCCESS;
         } else {
@@ -414,8 +414,8 @@ int ObCreateViewResolver::resolve(const ParseNode &parse_tree)
       if (OB_FAIL(GET_MIN_DATA_VERSION(session_info_->get_effective_tenant_id(), compat_version))) {
         LOG_WARN("get min data_version failed", K(ret), K(session_info_->get_effective_tenant_id()));
       } else if (!is_force_view && !is_sync_ddl_user) {
-        // 前面用建view的sql直接设置过table_schema.set_view_definition
-        // 基线备份时create view必须都用show create view里面的view definition
+        // The view definition was directly set using the SQL for creating the view in table_schema.set_view_definition
+        // Baseline backup when creating view must all use the view definition inside show create view
         // create force view use origin view_define
         if (OB_FAIL(print_rebuilt_view_stmt(select_stmt,
                                             0 == column_list.count() ? NULL : &column_list,
@@ -426,8 +426,7 @@ int ObCreateViewResolver::resolve(const ParseNode &parse_tree)
         }
       }
     }
-
-    // 权限添加需要拿到完整stmt信息，慎重调整本段代码位置
+    // Permission addition requires complete stmt information, adjust the position of this code segment with caution
     if (OB_SUCC(ret) && !(is_sync_ddl_user && session_info_->is_inner())
         && !(select_stmt == NULL && !resolve_succ)
         && OB_FAIL(check_privilege_needed(*stmt, *select_stmt, is_force_view))) {
@@ -550,11 +549,11 @@ int ObCreateViewResolver::check_view_columns(ObSelectStmt &select_stmt,
                                              bool &add_undefined_columns)
 {
   int ret = OB_SUCCESS;
-  // oracle 模式下, create view时要求每一个select expr有明确的别名
-  // 1. expr 本身是一个列
-  // 2. expr是计算表达式，但是有用户显示指定的别名
-  // 3. create veiw (c1,c2,c3) as select，view定义中指定了列名
-  // 并且oracle规定view的列名不能重复
+  // oracle mode, create view requires every select expr to have an explicit alias
+  // 1. expr itself is a column
+  // 2. expr is the calculation expression, but there is a user-specified alias
+  // 3. create view (c1,c2,c3) as select, view definition specifies column names
+  // And Oracle specifies that column names in a view cannot be duplicated
   bool is_col_dup = false;
   ObString dup_col_name;
   hash::ObHashSet<ObString> view_col_names;
@@ -1026,8 +1025,7 @@ int ObCreateViewResolver::check_view_stmt_col_name(
   }
   return ret;
 }
-
-// 这个函数用于当非列别名的列名超过 64 时，将列名置为为系统自动生成的列名，eg: Name_exp_1
+// This function is used when the non-alias column name exceeds 64 characters, set the column name to a system-generated column name, eg: Name_exp_1
 int ObCreateViewResolver::create_alias_names_auto(
     ObArray<int64_t> &index_array,
     ObSelectStmt *select_stmt,
@@ -1045,7 +1043,7 @@ int ObCreateViewResolver::create_alias_names_auto(
         LOG_WARN("fail to get collation_connection", K(ret));
   }
   for (int64_t j = 0; OB_SUCC(ret) && j < long_col_name_num; ++j) {
-    // 创建系统自动生成的列名，并检查冲突
+    // Create system-generated column names and check for conflicts
     hash_ret = OB_HASH_EXIST;
     char temp_str_buf[number::ObNumber::MAX_PRINTABLE_SIZE];
     while (OB_SUCC(ret) && OB_HASH_EXIST == hash_ret) {
@@ -1068,7 +1066,7 @@ int ObCreateViewResolver::create_alias_names_auto(
         SQL_RESV_LOG(WARN, "Can not malloc space for constraint name", K(ret));
       } else {
         select_stmt->get_select_item(index_array[j]).alias_name_.assign_ptr(col_name.ptr(), col_name.length());
-        // 向 hash set 插入 col_name
+        // Insert col_name into hash set
         if (OB_FAIL(ObCharset::tolower(cs_type, col_name, dup_col_name, *allocator_))) {
           LOG_WARN("fail to lower string", K(ret));
         } else if (OB_FAIL(view_col_names.set_refactored(dup_col_name, 0))) {

@@ -72,7 +72,7 @@ int ObExprXor::eval_xor(const ObExpr &expr,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret));
   } else {
-    // xor支持短路，如果有null，直接返回null
+    // xor supports short-circuit, if there is null, directly return null
     ObDatum *param = NULL;
     bool found_null = false;
     bool cur_bool_v = false;

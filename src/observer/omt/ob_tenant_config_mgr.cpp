@@ -175,12 +175,11 @@ void ObTenantConfigMgr::refresh_config_version_map(const ObIArray<uint64_t> &ten
     }
   }
 }
-
-// 背景：每个 server 上需要保存所有租户的 config 信息
-// 当新建租户/删除租户时需要对应维护 config 状态。
+// Background: Each server needs to save the config information of all tenants
+// When a new tenant is created/deleted, the corresponding config state needs to be maintained.
 // 
-// IN: 当前活跃租户
-// ACTION: 根据 tenants 信息，决定要添加/删除哪些租户配置项
+// IN: current active tenant
+// ACTION: According to the tenants information, decide which tenant configuration items to add/delete
 int ObTenantConfigMgr::refresh_tenants(const ObIArray<uint64_t> &tenants)
 {
   int ret = OB_SUCCESS;
@@ -188,14 +187,14 @@ int ObTenantConfigMgr::refresh_tenants(const ObIArray<uint64_t> &tenants)
   ObSEArray<uint64_t, 1> del_tenants;
 
   if (tenants.count() > 0) {
-    // 探测要加的 config
+    // detect the config to be added
     {
       DRWLock::RDLockGuard guard(rwlock_);
       for (int i = 0; i < tenants.count(); ++i) {
         uint64_t tenant_id = tenants.at(i);
         ObTenantConfig *const *config = nullptr;
         if (NULL == (config = config_map_.get(ObTenantID(tenant_id)))) {
-          // 如果 tenant 不存在，则添加到 config_map 中
+          // If tenant does not exist, then add to config_map
           if (OB_FAIL(new_tenants.push_back(tenant_id))) {
             LOG_WARN("fail add tenant config", K(tenant_id), K(ret));
           }
@@ -218,7 +217,7 @@ int ObTenantConfigMgr::refresh_tenants(const ObIArray<uint64_t> &tenants)
         }
       }
     }
-    // 探测要删的 config
+    // detect the config to be deleted
     {
       DRWLock::RDLockGuard guard(rwlock_);
       TenantConfigMap::const_iterator it = config_map_.begin();
@@ -243,7 +242,7 @@ int ObTenantConfigMgr::refresh_tenants(const ObIArray<uint64_t> &tenants)
     }
   }
   int tmp_ret = OB_SUCCESS;
-  // 加 config
+  // add config
   for (int i = 0; i < new_tenants.count(); ++i) {
     if (OB_TMP_FAIL(add_tenant_config(new_tenants.at(i)))) {
       LOG_WARN("fail add tenant config", K(i), K(new_tenants.at(i)), K(ret), K(tmp_ret));
@@ -251,7 +250,7 @@ int ObTenantConfigMgr::refresh_tenants(const ObIArray<uint64_t> &tenants)
       LOG_INFO("add created tenant config succ", K(i), K(new_tenants.at(i)));
     }
   }
-  // 删 config
+  // delete config
   // use timeout to avoid holding the write lock of ObTenantConfigMgr::rwlock_ for too long
   int64_t delete_abs_timeout_us = ObTimeUtility::current_time() + 500 * 1000;
   for (int i = 0; i < del_tenants.count(); ++i) {
@@ -469,8 +468,7 @@ int64_t ObTenantConfigMgr::get_tenant_config_version(uint64_t tenant_id)
   }
   return version;
 }
-
-// 由 RS 调用
+// Called by RS
 int ObTenantConfigMgr::get_lease_response(share::ObLeaseResponse &lease_response)
 {
   int ret = OB_SUCCESS;
@@ -491,7 +489,7 @@ int ObTenantConfigMgr::get_lease_response(share::ObLeaseResponse &lease_response
     }
   }
   if (OB_FAIL(ret)) {
-    // 和 obs 端约定，如果 lease_response 中没有返回任何 config version，则 obs 什么都不做
+    // Agree with the obs end that if no config version is returned in lease_response, obs will do nothing
     lease_response.tenant_config_version_.reset();
   } else if (0 == config_version_map_.size()) {
     ret = OB_ENTRY_NOT_EXIST;
@@ -501,8 +499,7 @@ int ObTenantConfigMgr::get_lease_response(share::ObLeaseResponse &lease_response
   }
   return ret;
 }
-
-// 由各个 observer 调用
+// Called by each observer
 void ObTenantConfigMgr::get_lease_request(share::ObLeaseRequest &lease_request)
 {
   int ret = OB_SUCCESS;

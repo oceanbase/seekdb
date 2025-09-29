@@ -166,8 +166,8 @@ int ObGetObjectDefinition::get_ddl_creation_str(ObString &ddl_str,
   int ret = OB_SUCCESS;
   switch(object_type) {
     case T_GET_DDL_TABLE:
-      // table, procedure, package仍使用原来的实现方式，未使用tenant_virtual_object_definition虚拟表
-      // 在下一个barrier版本的下一个版本改为使用tenant_virtual_object_definition虚拟表，并删去旧的虚拟表
+      // table, procedure, package still use the original implementation method, without using the tenant_virtual_object_definition virtual table
+      // In the version after the next barrier version, change to use the tenant_virtual_object_definition virtual table and delete the old virtual table
       //ret = get_table_definition(ddl_str, object_id);
       ret = OB_NOT_SUPPORTED;
       break;
@@ -634,8 +634,8 @@ int ObGetObjectDefinition::get_user_definition(ObString &ddl_str,
     ret = print_error_log(object_type, db_name, user_name);
     LOG_WARN("user not found", K(ret));
   } else if (users_info.count() > 1) {
-    //用户名不能作为用户的唯一标识，username+hostname才是。
-    //但是由于oracle模式创建用户时会同时创建同名数据库，所以不会允许创建username相同的用户，即使它们的hostname不同。
+    //Username cannot be used as the unique identifier for a user, username+hostname is required.
+    //However, since Oracle mode creates a database with the same name as the user when creating a user, it will not allow the creation of users with the same username, even if their hostnames are different.
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("users with same name is not allowed in oracle mode", K(ret));
   } else if (OB_ISNULL(user_info = users_info.at(0))) {

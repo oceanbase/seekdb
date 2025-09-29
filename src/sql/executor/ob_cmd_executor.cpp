@@ -173,7 +173,7 @@ int ObCmdExecutor::execute(ObExecContext &ctx, ObICmd &cmd)
       LOG_WARN("session is null", K(ret));
     } else if (stmt::T_VARIABLE_SET == static_cast<stmt::StmtType>(cmd.get_cmd_type())
         && !static_cast<ObVariableSetStmt*>(&cmd)->has_global_variable()) {
-      // 只有 set global variable 才是 DDL 操作，session 级别的 variable 变更不是 DDL
+      // Only set global variable is DDL operation, session level variable change is not DDL
       // do nothing
     } else {
       my_session->get_query_timeout(ori_query_timeout);
@@ -194,16 +194,16 @@ int ObCmdExecutor::execute(ObExecContext &ctx, ObICmd &cmd)
             my_session->get_query_start_time() + GCONF._ob_ddl_timeout);
       }
       if (OB_SUCC(ret)) {
-        // DDL 在向 RS 发 rpc 之前释放所持有的特定版本的 schema_mgr
-        // 避免在排队的 DDL 始终占用槽位导致 RS 正在处理的 DDL 没有新槽位可用而相互死锁的问题
+        // DDL release the specific version of schema_mgr held before sending rpc to RS
+        // Avoid the DDL in the queue always occupying slots causing the DDL being processed by RS to have no new slots available and resulting in a deadlock issue
         if (stmt::T_CREATE_OUTLINE == static_cast<stmt::StmtType>(cmd.get_cmd_type())
             || stmt::T_ALTER_OUTLINE == static_cast<stmt::StmtType>(cmd.get_cmd_type())
-          // create outline 和 alter outline 会在 execute 的时候继续使用 schema guard 生成逻辑计划
-          // reset 延后到 ObCreateOutlineExecutor::execute 和 ObAlterOutlineExecutor::execute 里进行
+          // create outline and alter outline will continue to use schema guard to generate logical plan at execute
+          // reset delay to ObCreateOutlineExecutor::execute and ObAlterOutlineExecutor::execute
             || (stmt::T_CREATE_TABLE == static_cast<stmt::StmtType>(cmd.get_cmd_type()))
-          // ctas 需要在 execute_ctas 中使用 ObCreateTableStmt 中的 ObSelectStmt 拼出类似于 insert into select 的语句
-          // 拼 SQL 过程中，ObSelectStmt 中的成员需要继续依赖从特定版本 schema guard 中获取的 schema
-          // reset 延后到 ObCreateTableExecutor::execute 和 ObCreateTableExecutor::execute_cta 里进行
+          // ctas needs to use ObSelectStmt in execute_ctas to construct a statement similar to insert into select
+          // During the SQL assembly process, the members of ObSelectStmt need to continue relying on the schema obtained from a specific version schema guard
+          // reset delay to ObCreateTableExecutor::execute and ObCreateTableExecutor::execute_cta inside
         ) {
         } else if (OB_FAIL(ctx.get_sql_ctx()->schema_guard_->reset())){
           LOG_WARN("schema_guard reset failed", K(ret));
@@ -1104,7 +1104,7 @@ int ObCmdExecutor::execute(ObExecContext &ctx, ObICmd &cmd)
   }
 
   if (is_ddl_or_dcl_stmt) {
-    // ddl/dcl 执行过程中修改了 session 的 query_timeout 和 trx_timeout，执行完需要还原回去
+    // ddl/dcl execution process modified the session's query_timeout and trx_timeout, need to restore after execution
     int tmp_ret = ret;
     ObObj ori_query_timeout_obj;
     ObObj ori_trx_timeout_obj;

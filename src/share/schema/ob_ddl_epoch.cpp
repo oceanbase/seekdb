@@ -199,7 +199,7 @@ int ObDDLEpochMgr::promote_ddl_epoch_inner_(const uint64_t tenant_id, int64_t &n
     LOG_WARN("trans start fail", KR(ret), K(tenant_id));
   } else if (OB_FAIL(ObGlobalStatProxy::select_ddl_epoch_for_update(trans, tenant_id, ddl_epoch_tmp))) {
     LOG_WARN("update ddl epoch", KR(ret), K(tenant_id));
-    // 兼容性
+    // Compatibility
     if (ret == OB_ITER_END) {
       ret = OB_SUCCESS;
       if (OB_FAIL(proxy.set_ddl_epoch(1, false))) {

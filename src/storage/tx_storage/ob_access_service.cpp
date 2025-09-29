@@ -362,7 +362,7 @@ int ObAccessService::table_scan(
     ObStoreAccessType::READ_LATEST : ObStoreAccessType::READ;
   SCN user_specified_snapshot_scn;
   if (ObAccessTypeCheck::is_read_access_type(access_type) && param.fb_snapshot_.is_valid()) {
-    //todo lixinze:后续会判断是否有效
+    //todo lixinze:subsequent will determine if it is valid
     user_specified_snapshot_scn = param.fb_snapshot_;
   }
   NG_TRACE(storage_table_scan_begin);
@@ -442,7 +442,7 @@ int ObAccessService::table_rescan(
       ObStoreAccessType::READ_LATEST : ObStoreAccessType::READ;
     SCN user_specified_snapshot_scn;
     if (ObAccessTypeCheck::is_read_access_type(access_type) && param.fb_snapshot_.is_valid()) {
-      //todo lixinze:后续会判断是否有效
+      //todo lixinze:subsequent will determine if it is valid
       user_specified_snapshot_scn = param.fb_snapshot_;
     }
     NG_TRACE(storage_table_scan_begin);

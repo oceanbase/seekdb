@@ -111,8 +111,8 @@ int SendMsgResponse::wait()
     int64_t end_t = 0;
     int64_t interval = 60000; // ms
     while (!finish_ && OB_SUCC(ret)) {
-      // 这里为什么是while true等待，因为callback引用了当前线程一些变量，
-      // 如果采用中断，提前退出，会导致callback如果晚于线程退出，则引用非法东西而core掉
+      // Here why it is while true waiting, because callback referenced some variables of the current thread,
+      // If using interrupt, premature exit, will lead to callback referencing invalid things and core dump if it is later than thread exit
       cond_.wait(1);
       ++count_v;
       // 60s
@@ -168,7 +168,7 @@ ObDtlBasicChannel::ObDtlBasicChannel(
 {
   ObRandom rand;
   hash_val_ = rand.get();
-  // dtl创建时候的server版本决定发送老的ser方式还是新的chunk row store方式
+  // dtl creation server version determines sending old ser method or new chunk row store method
   use_crs_writer_ = true;
   msg_response_.set_id(id_);
 }
@@ -203,7 +203,7 @@ ObDtlBasicChannel::ObDtlBasicChannel(
           msg_count_(0),
           meta_(nullptr)
 {
-  // dtl创建时候的server版本决定发送老的ser方式还是新的chunk row store方式
+  // The server version at dtl creation determines whether to send the old ser method or the new chunk row store method
   use_crs_writer_ = true;
   msg_response_.set_id(id_);
 }
@@ -302,7 +302,7 @@ int ObDtlBasicChannel::send(const ObDtlMsg &msg, int64_t timeout_ts,
   // | ObDtlLinkedBuffer structure | message serialize size | serialized message |
   //
   is_data_msg_ = belong_to_transmit_data() && msg.is_data_msg();
-  // 这里直接与发送eof row正交化了，即没有通过判断是eof row来决定是否是last msg
+  // Here it is orthogonal to sending eof row, i.e., it does not decide if it is the last msg by judging if it is an eof row
   channel_is_eof_ = is_eof;
   if (is_data_msg_) {
     metric_.mark_first_in();
@@ -411,7 +411,7 @@ int ObDtlBasicChannel::attach(ObDtlLinkedBuffer *&linked_buffer, bool inc_recv_b
     // after push back linked buffer, cannot use the linked buffer again
     // because the buffer may have been released(finished using) by the receiver
     linked_buffer = nullptr;
-    // 将attach收到的是自己申请的，因为释放权交给了当前channel，所以认为这次申请也是自己，与free保持一致，方便统计
+    // The attach received is for its own application, because the release right has been handed over to the current channel, so this application is also considered its own, consistent with free, for easy statistics
     alloc_buffer_count();
     if (inc_recv_buf_cnt) {
       inc_recv_buffer_cnt();
@@ -438,7 +438,7 @@ int ObDtlBasicChannel::block_on_increase_size(int64_t size)
   if (belong_to_receive_data()) {
     ObDfcServer &dfc_server = DTL.get_dfc_server();
     int64_t ch_idx = OB_INVALID_ID;
-    // block 和unblock在可能在register和unregister时进行，所以idx会动态修改
+    // block and unblock may occur during register and unregister, so idx will be dynamically modified
     if (OB_FAIL(dfc_->find(this, ch_idx))) {
       LOG_WARN("failed to find channel", K(ret));
     } else if (OB_FAIL(dfc_server.block_on_increase_size(dfc_, ch_idx, size))) {
@@ -603,7 +603,7 @@ int ObDtlBasicChannel::process1(
               free_buf(buffer);
             }
             buffer = nullptr;
-            // 测试发现每次一个channel读数据，性能更好，将之前由读一个buffer改为读一个channel所有buffer
+            // Test found that reading data from one channel performs better, changed from reading one buffer to reading all buffers from one channel
             // last_row_in_buffer = true;
           }
         }
@@ -695,9 +695,8 @@ int ObDtlBasicChannel::send1(
   }
   return ret;
 }
-
-// force_flush 表示需要把channel所有的msg全部发送
-// wait_resp 表示是否要等RPC的回包，为了与之前语义兼容，必须强制发送msg以及wait_resp才会等待回包
+// force_flush indicates that all msgs in the channel need to be sent
+// wait_resp indicates whether to wait for the RPC response, to maintain compatibility with previous semantics, msg must be forcibly sent along with wait_resp to wait for the response
 int ObDtlBasicChannel::flush(bool force_flush, bool wait_resp)
 {
   int ret = OB_SUCCESS;
@@ -810,7 +809,7 @@ int ObDtlBasicChannel::wait_unblocking()
             got_channel_idx))) {
           // no msg, then don't process
           if (OB_DTL_WAIT_EAGAIN == ret) {
-            // 这里需要检查是否超时以及worker是否已经处于异常状态(退出等)，否则当worker退出时，一直陷入在while中
+            // Here we need to check if there is a timeout and whether the worker is already in an abnormal state (exit, etc.), otherwise when the worker exits, it will get stuck in the while loop
             int64_t end_t = ObTimeUtility::current_time();
             if (end_t > timeout_ts) {
               ret = OB_TIMEOUT;
@@ -883,9 +882,9 @@ ObDtlLinkedBuffer *ObDtlBasicChannel::alloc_buf(const int64_t payload_size)
     //int64_t hash = nullptr != dfc_ ? reinterpret_cast<int64_t>(dfc_) : id_;
     // int64_t hash = reinterpret_cast<int64_t>(this);
     // int64_t hash = GETTID();
-    // 通过duplicate_join_table sysbench压测，发现channel申请buffer时
-    // 如果采用channel id、线程id(GETTID())，或者dfc_和channel内存地址，都无法很好散列
-    // 而采用random则可以很好散列
+    // Through duplicate_join_table sysbench test, it was found that when channel applies for buffer
+    // If using channel id, thread id (GETTID()), or dfc_ and channel memory address, they cannot be well hashed
+    // And using random can achieve good distribution
     buf = tenant_mem_mgr->alloc(hash_val_, payload_size);
     if (nullptr != buf) {
       alloc_buffer_count();
@@ -922,7 +921,7 @@ void ObDtlBasicChannel::clean_broadcast_buffer()
 {
   int ret = OB_SUCCESS;
   bool done = false;
-  // 理论上只有1个
+  // Theoretically only 1
   if (nullptr != process_buffer_ && process_buffer_->is_bcast()) {
     done = true;
     process_buffer_ = nullptr;
@@ -946,7 +945,7 @@ int ObDtlBasicChannel::push_back_send_list()
   if (OB_FAIL(send_list_.push(write_buffer_))) {
     LOG_WARN("failed to push back send list", K(ret));
   } else {
-    // 为了清理上一次的内部write buffer
+    // To clean up the internal write buffer from the last time
     inc_msg_seq_no();
     write_buffer_->size() = write_buffer_->pos();
     write_buffer_->seq_no() = get_msg_seq_no();

@@ -258,10 +258,10 @@ class ObISqlExpression
 public:
 
   /**
-   * 根据表达式语义对row的值进行计算
+   * Calculate the value of row based on the expression semantics
    *
-   * @param row [in] 输入行
-   * @param result [out] 计算结果
+   * @param row [in] input row
+   * @param result [out] calculation result
    *
    * @return error code
    */

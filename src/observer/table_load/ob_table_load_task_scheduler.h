@@ -45,7 +45,7 @@ private:
 class ObTableLoadTaskThreadPoolScheduler final : public ObITableLoadTaskScheduler
 {
   static const int64_t DEFAULT_TIMEOUT_US = 10LL * 1000 * 1000; // 10s
-  // 运行状态
+  // Running status
   static const int STATE_ZERO = 0;
   static const int STATE_STARTING = 1;
   static const int STATE_RUNNING = 2;
@@ -76,9 +76,9 @@ private:
   {
     return state_ == STATE_RUNNING;
   }
-  // 启动成功才会调用
+  // Will be called only if startup is successful
   void before_running();
-  // 启动失败也可能调用
+  // Startup failure may also call
   void after_running();
   void clear_all_task();
 private:
@@ -101,7 +101,7 @@ private:
     int64_t worker_id_;
     common::ObThreadCond cond_;
     bool need_signal_;
-    common::LightyQueue task_queue_; // 多线程安全
+    common::LightyQueue task_queue_; // thread-safe
   };
   int execute_worker_tasks(WorkerContext &worker_ctx);
 private:

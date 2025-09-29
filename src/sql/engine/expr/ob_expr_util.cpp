@@ -42,8 +42,8 @@ int ObExprUtil::get_int64_from_obj(const ObObj &obj,
       out = INT64_MAX;
     }
   } else {
-    // 除了 number 之外的类型，强制转换成 number
-    // 并 trunc 成一个整数
+    // Except for type number, force conversion to number
+    // and trunc to an integer
     number::ObNumber nmb;
     EXPR_DEFINE_CAST_CTX(expr_ctx, CM_NONE);
     EXPR_GET_NUMBER_V2(obj, nmb);
@@ -99,8 +99,8 @@ int ObExprUtil::get_int64_from_num(number::ObNumber &nmb,
   } else if (pnmb->is_valid_uint64(tmp_uint)) {
     out = (tmp_uint > INT64_MAX) ? INT64_MAX : static_cast<int64_t>(tmp_uint);
   } else {
-    //即使number取值超过INT64值域也不报错,
-    //select substr('abcd',-18446744073709551615) from dual; 期望返回NULL
+    //Even if number exceeds the INT64 value range, no error is reported,
+    //select substr('abcd',-18446744073709551615) from dual; expect to return NULL
     out = INT64_MAX;
   }
     // ret = OB_ERR_TRUNCATED_WRONG_VALUE;
@@ -352,11 +352,10 @@ int ObExprUtil::kmp_next_reverse(const char *pattern,
   }
   return ret;
 }
-
-// 获取multiple bytes字符串中每个字符的字节offset
-// 以及每个mb字符占用的字节数
-// byte_offsets中第一个元素是第二个字符的起始字节位置，最后一个元素是字符串的长度
-// byte_num中每个元素对应输入str每个字符所占的字节数
+// Get the byte offset of each character in the multiple bytes string
+// as well as the number of bytes each mb character occupies
+// byte_offsets: the first element is the starting byte position of the second character, the last element is the length of the string
+// byte_num each element corresponds to the number of bytes each character in the input str occupies
 // ori_str: abc
 // ori_str_byte_offsets: [0, 1, 2, 3]
 // ori_str_byte_num: [1, 1, 1]
@@ -397,8 +396,7 @@ int ObExprUtil::get_mb_str_info(const ObString &str,
           LOG_WARN("byte_offsets.push_back failed", K(ret), K(byte_offsets));
         }
       }
-
-      // 获取每个字符占用的字节数
+      // Get the number of bytes each character occupies
       for (size_t i = 1; OB_SUCC(ret) && (i < byte_offsets.count()); ++i) {
         if (OB_FAIL(byte_num.push_back(byte_offsets.at(i) - byte_offsets.at(i-1)))) {
           LOG_WARN("byte_num.push_back failed", K(ret), K(byte_num));
@@ -431,7 +429,7 @@ uint64_t ObExprUtil::round_uint64(uint64_t val, int64_t dec)
 {
   uint64_t res = 0;
   if (dec >= 0) {
-    // 整形没有小数点后位数，直接赋值
+    // Integer has no decimal places, directly assign
     res = val;
   } else {
     dec = -dec;

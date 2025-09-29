@@ -123,9 +123,9 @@ public:
   template <bool USE_VEC>
   int get_slice_indexes_inner(
     const ObIArray<ObExpr*> &exprs, ObEvalCtx &eval_ctx, SliceIdxArray &slice_idx_array, ObBitVector *skip = NULL);
-  // 获取前一次调用 get_slice_indexes 时传入的 row 对应的目标 partition
-  // 本接口目前仅用于 ObRepartSliceIdxCalc 和 ObAffinitizedRepartSliceIdxCalc
-  // 计算出的 tablet_id 用于告诉目标算子当前处理的行属于哪个分区
+  // Get the target partition corresponding to the row passed in the previous call to get_slice_indexes
+  // This interface is currently only used for ObRepartSliceIdxCalc and ObAffinitizedRepartSliceIdxCalc
+  // The calculated tablet_id is used to tell the target operator which partition the current row belongs to
   virtual int get_previous_row_tablet_id(ObObj &tablet_id);
 
   // support vectorized slice indexes calculation.
@@ -179,8 +179,7 @@ public:
                       ObNullDistributeMethod::Type null_row_dist_method)
       : ObSliceIdxCalc(alloc, null_row_dist_method) {}
 };
-
-// 专门针对顶层 DFO，给 QC 传数据用，多对一
+// Specifically for top-level DFO, used to send data to QC, many-to-one
 class ObAllToOneSliceIdxCalc : public ObSliceIdxCalc
 {
 public:
@@ -321,9 +320,8 @@ protected:
   ObRepartitionType repart_type_;
   ObPxPart2TabletIdMap part2tablet_id_map_;
 };
-
-// 作为 pkey+hash、pkey+random、pkey+range 等的父类
-// 提取了一些他们的共用逻辑到基类，如 init 方法
+// As the parent class for pkey+hash, pkey+random, pkey+range, etc.
+// Extracted some of their shared logic to the base class, such as the init method
 class ObSlaveMapRepartIdxCalcBase : public ObRepartSliceIdxCalc
 {
 protected:
@@ -370,19 +368,18 @@ protected:
   virtual int init(uint64_t tenant_id = OB_SERVER_TENANT_ID) override;
   virtual int destroy() override;
 protected:
-  // 存储同一个partition所对应的所有task id
+  // Store all task ids corresponding to the same partition
   typedef sql::ObTMArray<int64_t> TaskIdxArray;
-  // pkey random情况下：数据可以发送到对应partition所在的SQC的任意一个task上，因此每一个partition都对应着
-  // 一组task id
+  // pkey random case: data can be sent to any task of the SQC where the corresponding partition resides, therefore each partition corresponds to
+  // A group of task ids
   // key: tablet_id
   // value: task_ids
   typedef common::hash::ObHashMap<int64_t, TaskIdxArray,
                           common::hash::NoPthreadDefendMode> PartId2TaskIdxArrayMap;
-
-  // pkey - random/hash/range 等情况下，每一个partition可以被其所在的SQC的特定task处理
-  // 对于 random，随机选task
-  // 对于 hash，用 hash 值定位 task
-  // 对于 range，用 range 值定位 task
+  // pkey - random/hash/range etc., each partition can be processed by a specific task of its SQC
+  // For random, randomly select task
+  // For hash, use hash value to locate task
+  // For range, use range value to locate task
   PartId2TaskIdxArrayMap part_to_task_array_map_;
 };
 
@@ -798,9 +795,9 @@ public:
   bool obj_casted_;
 
   // for static typing engine.
-  // 例如：murmurhash(c1+c2)，那么
-  //  - hash_dist_exprs_ 里面存 c1+c2 表达式
-  //  - hash_funcs 里面存 murmurhash 表达式
+  // For example: murmurhash(c1+c2), then
+  //  - hash_dist_exprs_ stores the c1+c2 expression
+  //  - hash_funcs contains murmurhash expression
   const ObIArray<ObExpr*> *hash_dist_exprs_;
   const ObIArray<ObHashFunc> *hash_funcs_;
   int64_t n_keys_;
@@ -1043,7 +1040,7 @@ public:
       ObPQDistributeMethod::Type unmatch_row_dist_method,
       ObNullDistributeMethod::Type null_row_dist_method,
       const ObPxPartChInfo &part_ch_info,
-      int64_t task_count, /* 这个task count 不会被使用，实际会用 ch id array 的 count */
+      int64_t task_count, /* This task count will not be used, actually ch id array's count will be used */
       const ExprFixedArray &dist_exprs,
       const common::ObHashFuncs &dist_hash_funcs,
       ObRepartitionType repart_type,

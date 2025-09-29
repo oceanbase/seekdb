@@ -975,9 +975,8 @@ const double REAL_MAX_VAL[ObMaxType] =
   FLT_MAX,
   DBL_MAX
 };
-
-// [in] pos : 开始查找的位置
-// [out] pos : 匹配的下标；-1表示没有找到
+// [in] pos : start position for search
+// [out] pos : matched index; -1 indicates not found
 int find_type(const ObIArray<common::ObString> &type_infos,
               ObCollationType cs_type, const ObString &val, int32_t &pos)
 {

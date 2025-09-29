@@ -120,7 +120,7 @@ int ObExprNvl::calc_result_type2(ObExprResType &type,
       }
     }
     type.set_length(MAX(type1.get_length(), type2.get_length()));
-    //对于 int 和uint64的混合类型，需要提升类型至decimal
+    // For int and uint64 mixed types, need to promote type to decimal
     if (lib::is_mysql_mode()
         && (ObUInt64Type == type1.get_type() || ObUInt64Type == type2.get_type())
         && ObIntType == type.get_type()) {

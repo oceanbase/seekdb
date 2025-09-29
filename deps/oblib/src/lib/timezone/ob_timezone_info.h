@@ -185,11 +185,10 @@ public:
   UnionTZCtx time_ctx_;   //time ctx, such as version, tail_ns, tz_id...
   int64_t time_us_;     //full time with usec, same as timestamp
 }__attribute__ ((packed));
-
-// 老版本的ObOTimestampData，原来是time_us_在前，time_ctx_在后。
-// 对于ObTimestampNanoType类型，time_ctx_只有前两个字节有效，因此crc64_v2中直接计算前10个字节的checksum。
-// 实现新引擎时做了一点优化，将ObOTimestampData中两个成员换了位置，导致crc64_v2计算出的结果与老版本不兼容，
-// 存储层巡检时报错。 添加ObOTimestampDataOld类，用于计算与老版本兼容的checksum值。
+// The old version of ObOTimestampData, originally time_us_ was first, time_ctx_ was after.
+// For ObTimestampNanoType type, only the first two bytes of time_ctx_ are valid, therefore crc64_v2 directly calculates the checksum of the first 10 bytes.
+// When implementing the new engine, I made some optimizations by swapping the positions of two members in ObOTimestampData, which led to the crc64_v2 calculation producing results incompatible with the old version,
+// Storage layer inspection error. Add ObOTimestampDataOld class, used for calculating checksum value compatible with the old version.
 struct ObOTimestampDataOld {
   int64_t time_us_;
   int32_t time_ctx_;
@@ -439,7 +438,7 @@ private:
   DISALLOW_COPY_AND_ASSIGN(ObTZRevertTypeInfo);
 public:
   TypeInfoClass type_class_;
-  //当type_class_为overlap时，下成员记录另一份type info
+  // When type_class_ is overlap, the following member records another type info
   ObTZTransitionStruct extra_info_;
 };
 
@@ -589,12 +588,12 @@ public:
   int add_tran_type_info(const ObTZTransitionTypeInfo &type_info);
   int set_default_tran_type(const ObTZTransitionTypeInfo &tran_type);
   inline const ObTZTransitionTypeInfo &get_default_trans_type() const { return default_type_; }
-  // 这里用了一个 trick 来做“多版本”
-  // 有2个槽位，一个是当前槽位，一个是未来新 timezone 信息槽位
-  // 当有新的 timezone 信息从内部表读入后，会写入未来新 timezone 槽位，
-  // 然后通过 curr_idx_++ 操作，将未来新 timezone 槽位升级为“当前槽位”
+  // Here we used a trick to do "multi-version"
+  // There are 2 slots, one is the current slot, the other is the future new timezone information slot
+  // When new timezone information is read from the internal table, it will be written to the future new timezone slot,
+  // Then through the curr_idx_++ operation, upgrade the future new timezone slot to "current slot"
   //
-  // 每个槽位里，记录了 tz_id 时区下所有 timezone offset 信息（夏令时）
+  // Each slot records all timezone offset information (daylight saving time) for the tz_id timezone
   inline int32_t get_curr_idx() const { return curr_idx_; }
   inline int32_t get_next_idx() const { return curr_idx_ + 1; }
   inline void inc_curr_idx() { ++curr_idx_; }

@@ -113,7 +113,7 @@ int ObTableLoadIndexTableBuilder::append_insert_row(const ObTabletID &tablet_id,
     ret = OB_NOT_INIT;
     LOG_WARN("ObTableLoadIndexTableBuilder not init", KR(ret), KP(this));
   } else {
-    insert_row_.seq_no_ = 0; // seq_no丢失
+    insert_row_.seq_no_ = 0; // seq_no lost
     ObTabletID index_tablet_id;
     if (OB_FAIL(project_->projector(tablet_id, datum_row, index_tablet_id, insert_row_))) {
       LOG_WARN("fail to projector", KR(ret), K(tablet_id), K(datum_row));
@@ -132,7 +132,7 @@ int ObTableLoadIndexTableBuilder::append_insert_batch(const ObTabletID &tablet_i
     ret = OB_NOT_INIT;
     LOG_WARN("ObTableLoadIndexTableBuilder not init", KR(ret), KP(this));
   } else {
-    insert_row_.seq_no_ = 0; // seq_no丢失
+    insert_row_.seq_no_ = 0; // seq_no lost
     ObTabletID index_tablet_id;
     if (OB_FAIL(project_->get_dest_tablet_id(tablet_id, index_tablet_id))) {
       LOG_WARN("fail to get index tablet id", KR(ret));

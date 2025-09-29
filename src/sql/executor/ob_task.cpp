@@ -66,8 +66,7 @@ OB_DEF_SERIALIZE(ObTask)
   LST_DO_CODE(OB_UNIS_ENCODE, ctrl_svr_);
   LST_DO_CODE(OB_UNIS_ENCODE, runner_svr_);
   LST_DO_CODE(OB_UNIS_ENCODE, ob_task_id_);
-
-  // 序列化Task的核心部分到远端：sub plan tree
+  // Serialize the core part of Task to remote: sub plan tree
   if (OB_SUCC(ret)) {
     const ObExprFrameInfo *frame_info = &ser_phy_plan_->get_expr_frame_info();
     if (OB_ISNULL(root_spec_)) {
@@ -414,7 +413,7 @@ OB_DEF_DESERIALIZE(ObRemoteTask)
               *ps_params,
               tenant_id);
   if (OB_SUCC(ret)) {
-    //后续创建session需要依赖tenant_id
+    // Subsequent session creation requires dependency on tenant_id
     remote_sql_info_->ps_param_cnt_ = static_cast<int32_t>(ps_params->count());
     if (OB_FAIL(exec_ctx_->create_my_session(tenant_id))) {
       LOG_WARN("create my session failed", K(ret), K(tenant_id));
@@ -491,8 +490,7 @@ int ObRemoteTask::assign_ls_list(const share::ObLSArray ls_ids) {
   }
   return ret;
 }
-
-// 需保证两个ls array中元素不重复
+// Need to ensure that elements in the two ls arrays are not duplicated
 bool ObRemoteTask::check_ls_list(share::ObLSArray &ls_ids) const {
   bool is_valid = true;
 

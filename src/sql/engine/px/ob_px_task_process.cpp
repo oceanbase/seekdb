@@ -69,9 +69,9 @@ int ObPxTaskProcess::check_inner_stat()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("sqc hanlder is null", K(ret));
   } else {
-    // 为了尽快确定任务超时，启动 task 的超时时间很短，10ms 左右
-    // 这会导致 after process 中发起任意内部查询都会很快 10ms 超时
-    // 所以这里需要重新设置超时为实际 query 超时时间
+    // To quickly determine task timeout, the task timeout is set very short, around 10ms
+    // This will cause any internal query initiated after process to time out very quickly at 10ms
+    // So here we need to reset the timeout to the actual query timeout time
     THIS_WORKER.set_timeout_ts(plan_ctx->get_timeout_timestamp());
   }
   return ret;
@@ -127,7 +127,7 @@ int ObPxTaskProcess::process()
   } else if (OB_FAIL(session->store_query_string(ObString::make_string("PX DFO EXECUTING")))) {
     LOG_WARN("store query string to session failed", K(ret));
   } else {
-    // 设置诊断功能环境
+    // Set diagnostic function environment
     ObPxRpcInitSqcArgs &arg = arg_.sqc_handler_->get_sqc_init_arg();
     SQL_INFO_GUARD(arg.sqc_.get_monitoring_info().cur_sql_, session->get_cur_sql_id());
     const bool enable_perf_event = lib::is_diagnose_info_enabled();
@@ -151,7 +151,7 @@ int ObPxTaskProcess::process()
     arg_.exec_ctx_->set_px_sqc_id(arg_.task_.get_sqc_id());
     arg_.exec_ctx_->set_branch_id(arg_.task_.get_branch_id());
     {
-      //统计等待事件的guard生命周期必须小于收集统计信息的逻辑，才能保证后续获取到的时间准确
+      // The lifecycle of the guard for statistics waiting events must be less than the logic for collecting statistics to ensure the accuracy of the subsequent time obtained
       ObMaxWaitGuard max_wait_guard(enable_perf_event ? &max_wait_desc : NULL);
       ObTotalWaitGuard total_wait_guard(enable_perf_event ? &total_wait_desc : NULL);
       ObDiagnosticInfo *di = ObLocalDiagnosticInfo::get();
@@ -166,15 +166,13 @@ int ObPxTaskProcess::process()
         sqlstat_record.set_is_in_retry(session->get_is_in_retry());
         session->sql_sess_record_sql_stat_start_value(sqlstat_record);
       }
-
-      //监控项统计开始
+      // Monitoring item statistics start
       exec_start_timestamp_ = enqueue_timestamp_;
 
       if (OB_FAIL(do_process())) {
         LOG_WARN("failed to process", K(get_tenant_id()), K(ret), K(get_qc_id()), K(get_dfo_id()));
       }
-
-      //监控项统计结束
+      // Monitoring item statistics end
       exec_end_timestamp_ = ObTimeUtility::current_time();
     }
 
@@ -264,8 +262,8 @@ int ObPxTaskProcess::execute(const ObOpSpec &root_spec)
   int ret = OB_SUCCESS;
   ObExecContext &ctx = *arg_.exec_ctx_;
   int close_ret = OB_SUCCESS;
-  // root op 是 transmit，不需要调用 get_next_row，由 open
-  // 内部驱动下层算子的 get_next_row
+  // root op is transmit, do not need to call get_next_row, by open
+  // Internal driver for the lower-level operator's get_next_row
   ObOperatorKit *kit = ctx.get_operator_kit(root_spec.id_);
   if (OB_ISNULL(kit) || OB_ISNULL(kit->op_)) {
     ret = OB_ERR_UNEXPECTED;
@@ -287,9 +285,9 @@ int ObPxTaskProcess::execute(const ObOpSpec &root_spec)
     bool need_fill_batch_info = false;
     LOG_TRACE("trace run op spec root", K(&ctx), K(ctx.get_frames()),
               K(batch_count), K(root_spec.get_id()), K(&(root->get_exec_ctx())));
-    //  这里统一处理了 batch rescan 和非 batch rescan 的场景
-    //  一般场景下，传入的参数是 batch_count = 0
-    //  为了复用下面的循环代码,将batch_count 改为1, 但无需初始化rescan 参数
+    //  Here we uniformly handle the batch rescan and non-batch rescan scenarios
+    //  In general scenarios, the input parameter is batch_count = 0
+    //  To reuse the loop code below, change batch_count to 1, but do not initialize the rescan parameter
     if (batch_count < 1) {
       batch_count = 1;
     } else {
@@ -332,8 +330,8 @@ int ObPxTaskProcess::execute(const ObOpSpec &root_spec)
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("the sqc task ptr is null", K(ret));
     } else {
-      // pdml情况下，每一个task执行结束以后，会有affected rows
-      // 需要将对应的affected row存储到sqc task中
+      // In pdml case, there will be affected rows after each task execution ends
+      // Need to store the corresponding affected row into sqc task
       arg_.sqc_task_ptr_->set_affected_rows(ctx.get_physical_plan_ctx()->get_affected_rows());
       arg_.sqc_task_ptr_->dml_row_info_.set_px_dml_row_info(*ctx.get_physical_plan_ctx());
       LOG_TRACE("the affected row from sqc task", K(arg_.sqc_task_ptr_->get_affected_rows()));
@@ -341,7 +339,7 @@ int ObPxTaskProcess::execute(const ObOpSpec &root_spec)
     // record ret code
     if (OB_FAIL(ret)) {
       OpPostparation setter(ret);
-      ObPxOperatorVisitor visitor; // 遍历 DFO 所有 Operator
+      ObPxOperatorVisitor visitor; // Traverse all Operator in DFO
       int tmp_ret = OB_SUCCESS;
       if (OB_SUCCESS != (tmp_ret = visitor.visit(*arg_.exec_ctx_, *arg_.op_spec_root_, setter))) {
         ret = OB_SUCCESS == ret ? tmp_ret : ret;
@@ -381,19 +379,19 @@ int ObPxTaskProcess::do_process()
   } else if (OB_FAIL(check_inner_stat())) {
     LOG_WARN("check task processor inner stat fail", K(ret));
   } else {
-    // 1. 构建执行环境
-    //   - 参考 sql/executor/ob_executor_rpc_processor.cpp
-    //   - exec, stat 等
-    // 在input里面带有算子们的执行参数，
-    // 如果input在旧框架里面是在发送之前填充到，
-    // 计划里面，然后序列化发送出去的。
+    // 1. Build execution environment
+    //   - reference sql/executor/ob_executor_rpc_processor.cpp
+    //   - exec, stat etc.
+    // In input there are the execution parameters of the operators,
+    // If input was populated before sending in the old framework,
+    // Plan it, then serialize and send it out.
     //
-    // 2. 初始化 GranuleIterator 的输入
-    //   - 在Sqc端已经通过 GI Input 初始化好，这里不做任何事情
-    // 3. 初始化 Receive(if any), Transmit 算子执行参数:
-    //   - Data Channel Info 在Sqc端已经通过 Recv/Trans Input 设置好
-    //   - Task Id 编号需要设置
-    // 4. 执行
+    // 2. Initialize GranuleIterator input
+    //   - Already initialized at the Sqc end through GI Input, no action is taken here
+    // 3. Initialize Receive(if any), Transmit operator execution parameters:
+    //   - Data Channel Info has already been set up on the Sqc end through Recv/Trans Input
+    //   - Task Id number needs to be set
+    // 4. Execute
     LOG_TRACE("TIMERECORD ", "reserve:=0 name:=TASK dfoid:",dfo_id,"sqcid:",
              sqc_id,"taskid:", task_id,"start:", ObTimeUtility::current_time(),
              "addr:", arg_.task_.get_exec_addr());
@@ -418,7 +416,7 @@ int ObPxTaskProcess::do_process()
                  arg_.exec_ctx_->get_my_session()->get_effective_tenant_id(), arg_.task_.px_worker_execute_start_schema_version_))) {
         LOG_WARN("get px worker start schema version failed", K(ret));
       } else {
-        // 用于远端执行的虚拟表的参数的初始化
+        // Used for the initialization of parameters of the virtual table for remote execution
         ObVirtualTableCtx vt_ctx;
         ObExecContext &exec_ctx = *arg_.exec_ctx_;
         vt_ctx.vt_iter_factory_ = &vt_iter_factory_;
@@ -435,17 +433,17 @@ int ObPxTaskProcess::do_process()
     }
 
     if (OB_SUCC(ret)) {
-      // 向 DFO 中的 transmit input, receive input, gi input 里设置 task id
+      // Set task id to transmit input, receive input, gi input in DFO
       OpPreparation setter;
-      ObPxOperatorVisitor visitor; // 遍历 DFO 所有 Operator
+      ObPxOperatorVisitor visitor; // Traverse all Operators of DFO
       setter.set_task_id(task_id);
       setter.set_dfo_id(dfo_id);
       setter.set_sqc_id(sqc_id);
       setter.set_exec_ctx(arg_.exec_ctx_);
       setter.set_px_task(arg_.sqc_task_ptr_);
       if (nullptr != arg_.op_spec_root_) {
-        // 为什么放在这里，主要是因为operator创建时候，需要赋值eval_ctx
-        // 所以必须eval_ctx在operator create之前创建
+        // Why put here, mainly because operator creation requires assigning eval_ctx
+        // So eval_ctx must be created before operator create
         ObOperator *op = nullptr;
         if (OB_FAIL(arg_.op_spec_root_->create_operator(*arg_.exec_ctx_, op))) {
           LOG_WARN("create operator from spec failed", K(ret));
@@ -500,8 +498,7 @@ int ObPxTaskProcess::do_process()
   LOG_TRACE("TIMERECORD ", "reserve:=0 name:=TASK dfoid:",dfo_id,"sqcid:",
            sqc_id,"taskid:", task_id,"end:", ObTimeUtility::current_time(),
            "addr:", arg_.task_.get_exec_addr());
-
-  // Task 和 Sqc 在两个不同线程中时，task 需要和 sqc 通信
+  // Task and Sqc are in two different threads, task needs to communicate with sqc
   if (NULL != arg_.sqc_task_ptr_) {
     if (OB_FAIL(ret)) {
       ObInterruptUtil::update_schema_error_code(arg_.exec_ctx_, ret, arg_.task_.px_worker_execute_start_schema_version_);
@@ -514,10 +511,10 @@ int ObPxTaskProcess::do_process()
     if (OB_SUCC(ret)) {
       // nop
     } else if (IS_INTERRUPTED()) {
-      //当前是被QC中断的，不再向QC发送中断，退出即可。
+      // The current process was interrupted by QC, no need to send an interrupt to QC again, just exit.
     } else if (arg_.get_sqc_handler()->get_sqc_init_arg().sqc_.is_ignore_vtable_error()
                && ObVirtualTableErrorWhitelist::should_ignore_vtable_error(ret)) {
-      // 忽略虚拟表错误
+      // Ignore virtual table error
     } else {
       int tmp_ret = OB_SUCCESS;
       if (OB_SUCCESS == ERRSIM_INTERRUPT_QC_FAILED) {

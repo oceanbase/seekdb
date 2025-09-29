@@ -156,7 +156,7 @@ namespace sql
   public:
     static const int64_t FLT_SPAN_PAGE_SIZE = (1LL << 21) - ACHUNK_PRESERVE_SIZE; // 2M - 17k
     static const int32_t BATCH_RELEASE_COUNT = 1000;
-    //初始化queue大小为10w
+    // Initialize queue size to 100,000
     static const int64_t MAX_QUEUE_SIZE = 100000; //10w
     static const int64_t RELEASE_QUEUE_SIZE = 50000; //1w
     static const int64_t EVICT_INTERVAL = 1000000; //1s

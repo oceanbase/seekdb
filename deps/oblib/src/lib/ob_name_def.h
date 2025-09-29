@@ -14,7 +14,7 @@
 #define OCEANBASE_LIB_OB_NAME_DEF_H_
 
 // define common names to be used in logs (e.g. to_string, databuff_xxx and ObPhyOperator::to_string)
-// 名字不区分单复数，都用单数名词
+// Name does not distinguish between singular and plural, use singular noun
 #define N_NULL "null"
 #define N_TRUE "true"
 #define N_FALSE "false"

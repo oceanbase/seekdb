@@ -311,7 +311,7 @@ void TestMdsTable::insert_multi_row() {
   ExampleUserData1 data2(2);
   MdsCtx ctx2(mds::MdsWriter(ObTransID(2)));// commit finally
   ASSERT_EQ(OB_SUCCESS, mds_table_.set(key2, data2, ctx2));
-  ASSERT_EQ(OB_SUCCESS, mds_table_.set(key, data2, ctx2));// 因为只存储单版本，所以data1读不到了
+  ASSERT_EQ(OB_SUCCESS, mds_table_.set(key, data2, ctx2));// Because only a single version is stored, data1 cannot be read
   ctx2.on_redo(mock_scn(2));
   ctx2.before_prepare();
   ctx2.on_prepare(mock_scn(2));
@@ -332,7 +332,7 @@ void TestMdsTable::get_multi_row() {
   int ret = mds_table_.get_snapshot<ExampleUserKey, ExampleUserData1>(ExampleUserKey(1), read_op, mock_scn(2));
   ASSERT_EQ(OB_SUCCESS, ret);
   ASSERT_EQ(2, read_data.value_);
-  ret = mds_table_.get_snapshot<ExampleUserKey, ExampleUserData1>(ExampleUserKey(1), read_op, mock_scn(1));// 没有转储，旧版本还是保留的
+  ret = mds_table_.get_snapshot<ExampleUserKey, ExampleUserData1>(ExampleUserKey(1), read_op, mock_scn(1)); // There is no dump, the old version is still retained
   ASSERT_EQ(OB_SUCCESS, ret);
   ASSERT_EQ(1, read_data.value_);
 
@@ -460,17 +460,17 @@ void TestMdsTable::test_flush() {
   ctx2.on_redo(mock_scn(200));
 
   int idx = 0;
-  ASSERT_EQ(OB_SUCCESS, mds_table_.flush(mock_scn(300), mock_scn(500)));// 1. 以300为版本号进行flush动作
-  ASSERT_EQ(mock_scn(199), mds_table_.p_mds_table_base_->flushing_scn_);// 2. 实际上以199为版本号进行flush动作
+  ASSERT_EQ(OB_SUCCESS, mds_table_.flush(mock_scn(300), mock_scn(500))); // 1. Flush action with version number 300
+  ASSERT_EQ(mock_scn(199), mds_table_.p_mds_table_base_->flushing_scn_);// 2. Actually flush with version number 199
   ASSERT_EQ(OB_SUCCESS, (mds_table_.scan_all_nodes_to_dump<ScanRowOrder::ASC, ScanNodeOrder::FROM_OLD_TO_NEW>(
-    [&idx](const MdsDumpKV &kv) -> int {// 2. 转储时扫描mds table
-      MDS_ASSERT(kv.v_.end_scn_ < mock_scn(199));// 扫描时看不到199版本以上的提交
+    [&idx](const MdsDumpKV &kv) -> int {// 2. Scan mds table during dump}
+      MDS_ASSERT(kv.v_.end_scn_ < mock_scn(199)); // Scan does not see submissions above version 199
       MDS_ASSERT(idx < 10);
       MDS_LOG(INFO, "print dump node kv", K(kv));
       return OB_SUCCESS;
     }, 0, true)
   ));
-  mds_table_.on_flush(mock_scn(199), OB_SUCCESS);// 3. 推大rec_scn【至少】到200
+  mds_table_.on_flush(mock_scn(199), OB_SUCCESS);// 3. Push rec_scn to at least 200
   share::SCN rec_scn;
   ASSERT_EQ(OB_SUCCESS, mds_table_.get_rec_scn(rec_scn));
   MDS_LOG(INFO, "print rec scn", K(rec_scn));
@@ -482,13 +482,13 @@ void TestMdsTable::test_flush() {
   ctx3.on_abort(mock_scn(100));
 
   ScanOp op;
-  // 未转储：一个已决node + 一个未决node
-  MDS_LOG(INFO, "print free times", K(oceanbase::storage::mds::MdsAllocator::get_alloc_times()), K(oceanbase::storage::mds::MdsAllocator::get_free_times()));// 回收已转储的node
+  // Not dumped: one resolved node + one unresolved node
+  MDS_LOG(INFO, "print free times", K(oceanbase::storage::mds::MdsAllocator::get_alloc_times()), K(oceanbase::storage::mds::MdsAllocator::get_free_times()));//recycle already dumped node
   ASSERT_EQ(OB_SUCCESS, mds_table_.try_recycle(mock_scn(200)));
   // ASSERT_EQ(OB_SUCCESS, mds_table_.for_each_scan_node(op));
   // ASSERT_EQ(op.valid_count_, 2);
   ctx2.on_abort(mock_scn(200));
-  MDS_LOG(INFO, "print free times", K(oceanbase::storage::mds::MdsAllocator::get_free_times()));// 回收已转储的node
+  MDS_LOG(INFO, "print free times", K(oceanbase::storage::mds::MdsAllocator::get_free_times()));//recycle already dumped node
 }
 // <ExampleUserKey, ExampleUserData1> : <1> : (data:100, writer:100, ver:19001)
 
@@ -559,48 +559,48 @@ TEST_F(TestMdsTable, test_multi_key_remove) { TestMdsTable::test_multi_key_remov
 
 TEST_F(TestMdsTable, basic_trans_example) {
   MdsTableHandle mth;
-  // 1. 初始化为UnitTestMdsTable
+  // 1. Initialize to UnitTestMdsTable
   ASSERT_EQ(OB_SUCCESS, mth.init<UnitTestMdsTable>(mds::DefaultAllocator::get_instance(),
                                                    ObTabletID(1),
                                                    share::ObLSID(1),
                                                    share::SCN::min_scn(),
                                                    nullptr));
-  MdsTableHandle mth2 = mth;// 两个引用计数
-  MdsCtx ctx(mds::MdsWriter(ObTransID(123)));// 创建一个写入句柄，接入多源事务，ctx由事务层创建
-  // 2. 写入数据
-  ASSERT_EQ(OB_SUCCESS, mth.set(ExampleUserData1(1), ctx));// 写入第一个数据单元，成功
-  ASSERT_EQ(OB_OBJ_TYPE_ERROR, mth.set((int)54321, ctx));// 写入第二个数据单元，但UnitTestMdsTable并未注册该类型数据，Type ERROR
-  // 3. 对写入数据写CLOG并进行两阶段提交，接入多源事务，则该流程由事务层代为执行， 用户无感知
+  MdsTableHandle mth2 = mth;// two reference counts
+  MdsCtx ctx(mds::MdsWriter(ObTransID(123))); // Create a write handle, connect to multi-source transaction, ctx is created by the transaction layer
+  // 2. Write data
+  ASSERT_EQ(OB_SUCCESS, mth.set(ExampleUserData1(1), ctx)); // Write the first data unit, success
+  ASSERT_EQ(OB_OBJ_TYPE_ERROR, mth.set((int)54321, ctx)); // Write the second data unit, but UnitTestMdsTable has not registered this type of data, Type ERROR
+  // 3. Write the data to CLOG and perform a two-phase commit, if multi-source transactions are involved, this process will be executed by the transaction layer, and the user will be unaware
   ctx.on_redo(mock_scn(100));
   ctx.before_prepare();
   ctx.on_prepare(mock_scn(100));
   ctx.on_commit(mock_scn(100), mock_scn(100));
-  // 4. 读取最新已提交数据
+  // 4. Read the latest submitted data
   ASSERT_EQ(OB_SUCCESS, mth.get_snapshot<ExampleUserData1>([](const ExampleUserData1 &data) {
                                                              return data.value_ != 1 ? OB_ERR_UNEXPECTED : OB_SUCCESS;
                                                            }));
-}// 5. 最后一个Handle析构的时候，MdsTable发生真正的析构行为
+}// 5. The MdsTable undergoes actual destruction when the last Handle is destructed
 
 TEST_F(TestMdsTable, basic_non_trans_example) {
   MdsTableHandle mth;
-  // 1. 初始化为UnitTestMdsTable
+  // 1. Initialize to UnitTestMdsTable
   ASSERT_EQ(OB_SUCCESS, mth.init<UnitTestMdsTable>(mds::DefaultAllocator::get_instance(),
                                                    ObTabletID(1),
                                                    share::ObLSID(1),
                                                    share::SCN::min_scn(),
                                                    nullptr));
-  MdsTableHandle mth2 = mth;// 两个引用计数
-  MdsCtx ctx(MdsWriter(WriterType::AUTO_INC_SEQ, 1));// 创建一个写入句柄，不接入事务，自己写日志
-  // 2. 写入数据
-  ASSERT_EQ(OB_SUCCESS, mth.set(ExampleUserData1(1), ctx));// 写入第一个数据单元，成功
-  ASSERT_EQ(OB_OBJ_TYPE_ERROR, mth.set((int)54321, ctx));// 写入第二个数据单元，但UnitTestMdsTable并未注册该类型数据，Type ERROR
-  // 3. 对写入数据写CLOG并进行单条日志提交
+  MdsTableHandle mth2 = mth;// two reference counts
+  MdsCtx ctx(MdsWriter(WriterType::AUTO_INC_SEQ, 1)); // Create a write handle, not joining the transaction, writing logs by itself
+  // 2. Write data
+  ASSERT_EQ(OB_SUCCESS, mth.set(ExampleUserData1(1), ctx)); // Write the first data unit, success
+  ASSERT_EQ(OB_OBJ_TYPE_ERROR, mth.set((int)54321, ctx)); // Write the second data unit, but UnitTestMdsTable has not registered this type of data, Type ERROR
+  // 3. Write the data to CLOG and perform a single log commit
   ctx.single_log_commit(mock_scn(100), mock_scn(100));
-  // 4. 读取最新已提交数据
+  // 4. Read the latest submitted data
   ASSERT_EQ(OB_SUCCESS, mth.get_snapshot<ExampleUserData1>([](const ExampleUserData1 &data) {
                                                              return data.value_ != 1 ? OB_ERR_UNEXPECTED : OB_SUCCESS;
                                                            }));
-}// 5. 最后一个Handle析构的时候，MdsTable发生真正的析构行为
+}// 5. The MdsTable undergoes actual destruction when the last Handle is destructed
 
 TEST_F(TestMdsTable, test_recycle) {
   int64_t alloc_times = oceanbase::storage::mds::MdsAllocator::get_alloc_times();
@@ -609,7 +609,7 @@ TEST_F(TestMdsTable, test_recycle) {
   ASSERT_EQ(OB_SUCCESS, mds_table_.try_recycle(mock_scn(20000)));
   int64_t valid_cnt = 0;
   ASSERT_EQ(OB_SUCCESS, mds_table_.get_node_cnt(valid_cnt));
-  ASSERT_EQ(1, valid_cnt);// 此时还有一个19001版本的已提交数据，因为rec_scn没有推上去
+  ASSERT_EQ(1, valid_cnt);// At this time, there is still submitted data of version 19001, because rec_scn has not been pushed up
   ASSERT_EQ(OB_SUCCESS, mds_table_.flush(mock_scn(20000), mock_scn(40000)));
   mds_table_.scan_all_nodes_to_dump<ScanRowOrder::ASC, ScanNodeOrder::FROM_OLD_TO_NEW>([](const MdsDumpKV &){
     return OB_SUCCESS;
@@ -621,7 +621,7 @@ TEST_F(TestMdsTable, test_recycle) {
   ASSERT_EQ(share::SCN::max_scn(), rec_scn);
   ASSERT_EQ(OB_SUCCESS, mds_table_.try_recycle(mock_scn(40000)));
   ASSERT_EQ(OB_SUCCESS, mds_table_.get_node_cnt(valid_cnt));
-  ASSERT_EQ(0, valid_cnt);// 此时还有一个19001版本的已提交数据，因为rec_scn没有推上去
+  ASSERT_EQ(0, valid_cnt);// At this time, there is still submitted data of version 19001, because rec_scn has not been pushed up
 }
 
 TEST_F(TestMdsTable, test_recalculate_flush_scn_op) {

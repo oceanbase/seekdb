@@ -209,7 +209,7 @@ public:
     } else {
       // do nothing
     }
-    //外面需要遍历所有的租户，此处不能返回false
+    // Outside needs to traverse all tenants, here cannot return false
     return true;
   }
 private:
@@ -320,29 +320,29 @@ public:
   int interrupt_gts_callback_for_ls_offline(const uint64_t tenant_id, const share::ObLSID ls_id);
 public:
   int update_gts(const uint64_t tenant_id, const int64_t gts, bool &update);
-  //根据stc获取合适的gts值，如果条件不满足需要注册gts task，等异步回调
+  // According to stc get the appropriate gts value, if the conditions are not met, need to register gts task, wait for asynchronous callback
   int get_gts(const uint64_t tenant_id,
               const MonotonicTs stc,
               ObTsCbTask *task,
               share::SCN &scn,
               MonotonicTs &receive_gts_ts);
   /** 
-   * 与`get_gts`相对应的同步接口，用于同步获取合适的GTS时间戳，可传入超时时间以避免长时间等待。
-   * 相较于原有同步接口`get_ts_sync`，本接口的性能更好
+   * The synchronous interface corresponding to `get_gts`, used for synchronously obtaining an appropriate GTS timestamp, with a timeout parameter to avoid long waits.
+   * Compared to the original synchronous interface `get_ts_sync`, this interface has better performance.
    * @param[in] tenant_id
-   * @param[in] stc: 需要获取GTS的时间点，一般取current time
-   * @param[in] timeout_us: 超时时长，单位us
-   * @param[out] scn: 获取到的GTS时间戳结果
-   * @param[out] receive_gts_ts: 收到GTS response的时间点
+   * @param[in] stc: The point in time to obtain the GTS, generally current time
+   * @param[in] timeout_us: Timeout duration, unit us
+   * @param[out] scn: The result of the obtained GTS timestamp
+   * @param[out] receive_gts_ts: The point in time when the GTS response was received
    */
   int get_gts_sync(const uint64_t tenant_id,
                    const MonotonicTs stc,
                    const int64_t timeout_us,
                    share::SCN &scn,
                    MonotonicTs &receive_gts_ts);
-  //仅仅获取本地gts cache的最新值，但可能会失败，失败之后处理逻辑如下:
-  //1. 如果task == NULL，说明调用者不需要异步回调，直接返回报错，由调用者处理
-  //2. 如果task != NULL，需要注册异步回调任务
+  //Only get the latest value from local gts cache, but it may fail, failure handling logic as follows:
+  //1. If task == NULL, it means the caller does not need asynchronous callbacks, directly return the error, and let the caller handle it
+  //2. If task != NULL, need to register asynchronous callback task
   int get_gts(const uint64_t tenant_id, ObTsCbTask *task, share::SCN &scn);
   int get_ts_sync(const uint64_t tenant_id, const int64_t timeout_us,
       share::SCN &scn, bool &is_external_consistent);

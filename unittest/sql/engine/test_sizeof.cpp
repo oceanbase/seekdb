@@ -137,7 +137,7 @@ TEST_F(ObPhyOperatorTest, physical_plan_size)
     ObSqlExpressionFactory sql_expression_factory_;
     ObExprOperatorFactory expr_op_factory_;
     stmt::StmtType stmt_type_;
-    stmt::StmtType literal_stmt_type_; // 含义参考ObBasicStmt中对应定义
+    stmt::StmtType literal_stmt_type_; // meaning refers to the corresponding definition in ObBasicStmt
     ObPhyPlanType plan_type_;
     common::ObConsistencyLevel hint_consistency_;
     uint32_t next_phy_operator_id_; //share val
@@ -145,13 +145,13 @@ TEST_F(ObPhyOperatorTest, physical_plan_size)
     int16_t regexp_op_count_;
     bool is_sfu_;
     bool fetch_cur_time_;
-    bool is_contain_virtual_table_;//为虚拟表服务，如果判断出语句中涉及虚拟表
+    bool is_contain_virtual_table_;//for virtual table service, if it is determined that the statement involves a virtual table
     bool is_require_sys_tenant_priv_;
     //if the stmt  contains user variable assignment
     //such as @a:=123
     //we may need to serialize the map to remote server
     bool is_contains_assignment_;
-    bool affected_last_insert_id_; //不需要序列化远端，只在本地生成执行计划和open resultset的时候需要
+    bool affected_last_insert_id_; //No need to serialize remotely, only needed when generating execution plan and opening result set locally
     bool is_affect_found_row_; //not need serialize
   };
 

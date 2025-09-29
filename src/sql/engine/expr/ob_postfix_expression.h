@@ -199,12 +199,12 @@ public:
 
 protected:
   //common::ObObj v1_;
-  //为了省内存，考虑到v1_和union中的成员是互斥使用的，，将v1_移动到union内部
-  //但是union中的成员只能是简单数据类型，所以只能通过一个buf空间来构造一个obobj;
-  //要保证v1_的内存是对齐的。
+  // To save memory, considering that the members of v1_ and union are mutually exclusive, move v1_ inside the union
+  // But the members of union can only be simple data types, so it can only construct an obobj through one buf space;
+  // To ensure that the memory of v1_ is aligned.
   union
   {
-    char v1_[sizeof(common::ObObj)]; //用来保存obobj
+    char v1_[sizeof(common::ObObj)]; // used to save obobj
     int64_t query_id_;
     int64_t cell_index_;  // column reference, aka cell index in ObRow
     ObExprOperator *op_;  // expression operator
@@ -220,8 +220,7 @@ OB_INLINE bool ObPostExprItem::can_get_value_directly() const
 {
   return IS_DATATYPE_OR_QUESTIONMARK_OP(item_type_) || T_REF_COLUMN == item_type_;
 }
-
-//当item时column或者常量(包括param常量)的时候，可以直接获取值，避免冗余的参数检查
+// When item is column or constant (including param constant), you can directly get the value, avoiding redundant parameter checks
 OB_INLINE int ObPostExprItem::get_item_value_directly(const ObPhysicalPlanCtx &plan_ctx,
                                                       const common::ObNewRow &row,
                                                       const common::ObObj *&value) const
@@ -229,8 +228,8 @@ OB_INLINE int ObPostExprItem::get_item_value_directly(const ObPhysicalPlanCtx &p
   int ret = common::OB_SUCCESS;
   switch (item_type_) {
     case T_REF_COLUMN: {
-      //后缀计算使用的是row的真实位置，没有使用通过投影后的逻辑位置，这里跟后缀计算的寻址方式保持一致
-      //直接使用真实位置减少一次间接寻址的逻辑
+      // Suffix calculation uses the row's actual position, not the logical position obtained through projection, here it is consistent with the addressing method of suffix calculation
+      // Directly use the real position to reduce the logic of one indirect addressing
       if (OB_UNLIKELY(get_column() >= row.count_) || OB_UNLIKELY(get_column() < 0) || OB_ISNULL(row.cells_)) {
         ret = common::OB_INVALID_ARGUMENT;
         SQL_ENG_LOG(WARN, "value index is invalid", K(ret), K(get_column()), K_(row.count), K_(row.cells));
@@ -246,7 +245,7 @@ OB_INLINE int ObPostExprItem::get_item_value_directly(const ObPhysicalPlanCtx &p
       break;
     }
     case T_QUESTIONMARK: {
-      //column convert的值来自于param store后者本身
+      // column convert's value comes from param store or itself
       if (OB_FAIL(get_indirect_const(plan_ctx, value))) {
         SQL_ENG_LOG(WARN, "get indirect const from value item failed", K(ret), K(*this));
       }
@@ -328,7 +327,7 @@ public:
   int add_expr_item(const ObPostExprItem &item);
   inline const ObSqlFixedArray<ObPostExprItem> &get_expr_items() const { return post_exprs_; }
   void reset();
-  /* 将row中的值代入到expr计算结果 */
+  /* Substitute the values in row into expr for calculation result */
   int calc(common::ObExprCtx &expr_ctx, const common::ObNewRow &row, common::ObObj &result_val) const;
   int calc(common::ObExprCtx &expr_ctx, const common::ObNewRow &row1, const common::ObNewRow &row2,
            common::ObObj &result_val) const;
@@ -361,7 +360,7 @@ public:
   int64_t to_string(char *buf, const int64_t buf_len) const;
   NEED_SERIALIZE_AND_DESERIALIZE;
 private:
-  // 辅助函数，检查表达式是否表示const或者column index
+  // Helper function, check if the expression represents const or column index
   int check_expr_type(const int64_t type_val, bool &is_type, const int64_t stack_len) const;
 private:
   static const int64_t DEF_STRING_BUF_SIZE = 64 * 1024L;

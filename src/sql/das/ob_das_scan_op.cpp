@@ -637,9 +637,8 @@ void ObDASScanOp::reset_access_datums_ptr(const ObDASBaseCtDef *ctdef, ObEvalCtx
     }
   }
 }
-
-//对于远程执行返回的TSC result，DASScanOp解析ObDASTaskResult,
-//并将result iterator link到DASScan Task上，输出给对应的TableScan Operator
+// For remote execution returned TSC result, DASScanOp parses ObDASTaskResult,
+//and link result iterator to DASScan Task, output to the corresponding TableScan Operator
 int ObDASScanOp::decode_task_result(ObIDASTaskResult *task_result)
 {
   int ret = OB_SUCCESS;
@@ -670,9 +669,8 @@ int ObDASScanOp::decode_task_result(ObIDASTaskResult *task_result)
   }
   return ret;
 }
-
-//远程执行返回的TSC result,通过RPC回包带回给DAS Scheduler，
-//如果结果集超过一个RPC，标记RPC包为has_more，剩余结果集通过DTL传输回DAS Scheduler
+// Remote execution returns the TSC result, through RPC response back to DAS Scheduler,
+// If the result set exceeds one RPC, mark the RPC packet as has_more, remaining result set is transmitted back to DAS Scheduler via DTL
 int ObDASScanOp::fill_task_result(ObIDASTaskResult &task_result, bool &has_more, int64_t &memory_limit)
 {
   int ret = OB_SUCCESS;

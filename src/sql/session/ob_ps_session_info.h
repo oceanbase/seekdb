@@ -31,11 +31,11 @@ public:
   /*
     sizeof(oceanbase::obmysql::EMySQLFieldType)=4
     sizeof(oceanbase::sql::ObPsSessionInfo)=688
-    ObPsSessionInfo由SmallBlockAllocator负责分配内存，小块大小为4K，所以需要调整ParamsType的定义使得size
-    尽可能小，且用4K块切割后没有太多浪费。4096-688*5=656，每个4K块会浪费这么多内存。也就是每5个ps浪费656字节，
-    可以接受。
-    2DArray中存储block的一维数组为SEArray，其Local数组的大小是可调的。一方面，MySQL最大允许绑定变量个数为
-    65535，如果要避免二维数组中block数组的内存分配，需要65535*4/4K=64个小块即可。所以SEArray大小设置为64.
+    ObPsSessionInfo is responsible for memory allocation by SmallBlockAllocator, with a small block size of 4K, so we need to adjust the definition of ParamsType to make the size
+    as small as possible, and after cutting with 4K blocks, there should not be too much waste. 4096-688*5=656, each 4K block will waste this much memory. That is, every 5 ps wastes 656 bytes,
+    which can be accepted.
+    The one-dimensional array storing blocks in 2DArray is SEArray, and the size of its Local array is adjustable. On one hand, the maximum number of bind variables allowed by MySQL is
+    65535, if we want to avoid memory allocation for the block array in the two-dimensional array, 65535*4/4K=64 small blocks are needed. Therefore, the size of SEArray is set to 64.
    */
   typedef common::ObSegmentArray<oceanbase::obmysql::EMySQLFieldType, OB_SESSION_SMALL_BLOCK_SIZE,
                             common::ObWrapperAllocator,

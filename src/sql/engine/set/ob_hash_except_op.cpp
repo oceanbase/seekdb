@@ -69,20 +69,20 @@ int ObHashExceptOp::build_hash_table_by_part(const int64_t batch_size)
     if (OB_FAIL(hp_infras_.get_next_pair_partition(InputSide::LEFT))) {
       LOG_WARN("failed to get next partition", K(ret));
     } else if (!hp_infras_.has_cur_part(InputSide::LEFT)) {
-      //左边没有part，则没有可返回的数据
+      // Left side has no part, then there is no data to return
       ret = OB_ITER_END;
-    } else if (0 == batch_size && OB_FAIL(build_hash_table_from_left(false))) { //根据左边构建hash表
+    } else if (0 == batch_size && OB_FAIL(build_hash_table_from_left(false))) { // build hash table from left
       LOG_WARN("failed to build hash table", K(ret));
     } else if (batch_size > 0 && OB_FAIL(build_hash_table_from_left_batch(false, batch_size))) {
       LOG_WARN("failed to build hash table batch", K(ret));
-    } else if (!hp_infras_.has_cur_part(InputSide::RIGHT)) {//右边为null，直接从左边的hash表拿数据
+    } else if (!hp_infras_.has_cur_part(InputSide::RIGHT)) {//right is null, directly get data from the hash table on the left}
       get_row_from_hash_table_ = true;
       found = true;
     } else if (OB_FAIL(hp_infras_.open_cur_part(InputSide::RIGHT))) {
       LOG_WARN("failed to open cur part");
     } else {
       found = true;
-      hp_infras_.switch_right();//dump 逻辑落在右边
+      hp_infras_.switch_right();//dump logic falls on the right
     }
   }
   return ret;
@@ -165,7 +165,7 @@ int ObHashExceptOp::batch_process_right() {
           LOG_WARN("failed to insert row into partitions", K(ret));
         }
       } else {
-        //没有dumped， 也没有匹配上的right会被忽略
+        // No dumped, and unmatched right will be ignored
       }
     }
   }
@@ -260,7 +260,7 @@ get_next_row_from_hashtable(const ObChunkDatumStore::StoredRow *&store_row)
       } else {
         const ObHashPartStoredRow *sr = static_cast<const ObHashPartStoredRow *> (store_row);
         if (sr->is_match()) {
-          //继续寻找下一行
+          // Continue searching for the next line
         } else {
           got_row = true;
         }

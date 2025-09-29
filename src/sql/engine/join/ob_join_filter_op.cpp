@@ -757,7 +757,7 @@ int ObJoinFilterOp::inner_get_next_row()
           break;
         }
       } else if (MY_SPEC.is_use_mode()) {
-        /*交给表达式计算, 算子中无需处理相关计算逻辑*/
+        /*handed to expression calculation, operator does not need to handle related calculation logic*/
         break;
       } else {
         ret = OB_ERR_UNEXPECTED;

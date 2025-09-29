@@ -87,10 +87,10 @@ public:
   //Note that if you use complex structure as variables, the complex structure should also keep compatibility.
 
   //The following variables need to be serialized
-  int16_t attr_;       //低8位0,1,2,3,4,5分别表示空闲,sstable数据,tablet元数据,schema,compressor name,宏块元数据;其余位置0；
+  int16_t attr_;       // Low 8 bits 0, 1, 2, 3, 4, 5 represent idle, sstable data, tablet metadata, schema, compressor name, macro block metadata; other positions are 0;
   union
   {
-    uint64_t data_version_;  //sstable宏块：sstable的主版本号(高48位)及，小版本号(低16位)
+    uint64_t data_version_;  // sstable macro block: major version number (high 48 bits) and minor version number (low 16 bits)
     int64_t previous_block_index_; // nonsstable: previous_block_index_ link.
   };
   int16_t column_number_;            // column count of this table (size of column_checksum_)

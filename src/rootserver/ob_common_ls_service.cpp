@@ -165,8 +165,8 @@ int ObCommonLSService::try_create_ls_(const share::schema::ObTenantSchema &tenan
   }
   return ret;
 }
-//不管是主库还是备库都有概率存在一个日志流组内的日志流记录的unit_group不一致的情况
-//所有的日志流都对齐日志流id最小的日志流,虽然不是最优，但是可以保证最终一致性
+//Whether it is the primary database or the secondary database, there is a probability that the unit_group recorded in the log streams within a log stream group may be inconsistent.
+// All log streams are aligned with the log stream having the smallest log stream id, although not optimal, it can ensure eventual consistency
 int ObCommonLSService::try_modify_ls_unit_group_(
     const share::schema::ObTenantSchema &tenant_schema)
 {

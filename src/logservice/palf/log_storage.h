@@ -165,9 +165,9 @@ private:
   int append_block_header_(const LSN &block_min_lsn, const share::SCN &block_min_scn);
   int update_block_header_(const block_id_t block_id, const LSN &block_min_lsn, const share::SCN &block_min_scn);
   bool need_switch_block_() const;
-  // 1. 使用group_entry_iterator迭代最后一个文件, 重建block_header;
-  // 2. 从iterator中获取终点信息；
-  // 3. 初始化dio_aligned_buf.
+  // 1. Use group_entry_iterator to iterate the last file, and rebuild block_header;
+  // 2. Get endpoint information from iterator;
+  // 3. Initialize dio_aligned_buf.
   template <class EntryHeaderType>
   int locate_log_tail_and_last_valid_entry_header_(const block_id_t min_block_id,
                                                    const block_id_t max_block_id,

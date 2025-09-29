@@ -21,7 +21,7 @@ namespace oceanbase
 {
 namespace sql
 {
-//修改了之前定义的T_OP_REGEXP_SUBSTR为T_FUN_SYS_REGEXP_SUBSTR，因为之前T_OP_REGEXP_SUBSTR的注册值仅在mysql当中
+// Modified the previously defined T_OP_REGEXP_SUBSTR to T_FUN_SYS_REGEXP_SUBSTR, because the previous T_OP_REGEXP_SUBSTR registration value was only in MySQL
 ObExprRegexpSubstr::ObExprRegexpSubstr(ObIAllocator &alloc)
   : ObStringExprOperator(alloc, T_FUN_SYS_REGEXP_SUBSTR, N_REGEXP_SUBSTR, MORE_THAN_ONE, NOT_VALID_FOR_GENERATED_COL)
 {

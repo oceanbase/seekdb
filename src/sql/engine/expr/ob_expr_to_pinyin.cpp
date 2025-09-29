@@ -89,8 +89,8 @@ ObString convert_word_to_pinyin(ObIAllocator &alloc, ObString input) {
   int ret = OB_SUCCESS;
   uint64_t input_sortkey = convert_to_sortkey(alloc, input);
   ObString result;
-  // 根据sortkey转换为拼音
-  // 二分查找
+  // Convert to pinyin according to sortkey
+  // Binary search
   PinyinPair target = {0, input_sortkey, ""};
   PinyinPair *it = std::lower_bound(PINYIN_TABLE, PINYIN_TABLE + PINYIN_COUNT, target, compare_end);
   if(it != PINYIN_TABLE + PINYIN_COUNT &&

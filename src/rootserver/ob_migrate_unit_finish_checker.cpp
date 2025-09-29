@@ -138,7 +138,7 @@ int ObMigrateUnitFinishChecker::try_check_migrate_unit_finish_not_in_tenant()
       if (OB_FAIL(unit_mgr_->finish_migrate_unit_not_in_tenant(pool))) {
         LOG_WARN("fail to finish migrate unit not in tenant", KR(ret));
       }
-      ret = OB_SUCCESS; //ignore ret 保证所有的pool都能运行
+      ret = OB_SUCCESS; // ignore ret ensure all pools can run
     }
   }
   return ret;

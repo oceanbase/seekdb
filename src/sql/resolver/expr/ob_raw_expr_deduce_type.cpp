@@ -234,7 +234,7 @@ int ObRawExprDeduceType::calc_result_type_with_const_arg(
       } else {
         ObObj &value = static_cast<ObConstRawExpr*>(arg)->get_value();
         if (value.is_unknown()) {
-          // 由const 参数决定类型，不可以被参数化
+          // By const parameter determines type, cannot be parameterized
           ret = OB_INVALID_ARGUMENT;
           LOG_WARN("invalid argument.", K(ret));
         } else if (OB_FAIL(arg_arrs.push_back(&value))) {
@@ -434,7 +434,7 @@ int ObRawExprDeduceType::calc_result_type(ObNonTerminalRawExpr &expr,
 #define GET_TYPE_ARRAY(types) (types.count() == 0 ? NULL : &(types.at(0)))
 
   int ret = OB_SUCCESS;
-  ObExprTypeCtx type_ctx; // 用于将session等全局变量传入calc_result_type
+  ObExprTypeCtx type_ctx; // used to pass session etc. global variables into calc_result_type
   type_ctx.set_raw_expr(&expr);
   ObExprOperator *op = expr.get_op();
   ObExprResTypes ori_types;
@@ -505,10 +505,9 @@ int ObRawExprDeduceType::calc_result_type(ObNonTerminalRawExpr &expr,
         T_FUN_SYS_CAST == expr.get_expr_type()) {
       result_type.add_decimal_int_cast_mode(expr.get_cast_mode());
     }
-
-    // 预先把所有参数的calc_type都设置成和type一致，
-    // 以防calc_result_typeX没有对其进行设置
-    // 理想情况下，不应该要这个循环，所有calc_type的设置都在calc_result_typeX中完成
+    // Pre-set all parameters' calc_type to be consistent with type,
+    // In case calc_result_typeX has not set it
+    // Ideally, this loop should not be needed, all calc_type settings are completed in calc_result_typeX
 
     // For avg(), internally it will call 'division', which requires that both input are
     // casted into number. However, this requirements are not remembered in the input_types
@@ -646,18 +645,16 @@ int ObRawExprDeduceType::calc_result_type(ObNonTerminalRawExpr &expr,
     }
 
     LOG_DEBUG("debug for expr params calc meta", K(types));
-
-    //这里是一个验证：
-    //新框架oracle模式string类型的结果的字符集与session上定义的charset一致
-    //不一致可能是表达式推导有问题
-    //参考 
+    // Here is a validation:
+    // New framework oracle mode string type result's character set is consistent with the charset defined on the session
+    // Inconsistency may be due to a problem with expression derivation
+    // reference
     //
     //
-    //新引擎稳定后，去掉这里的判断，改为trace日志用于调试
-
-    //这里的check需要忽略隐式cast，因为底层转换函数只能处理utf8的string，所以隐式cast
-    //再遇到非utf8的输入时，会将其转为utf8，所以cast推导的结果有可能不符合
-    //nls_collation_xxx()的要求
+    // After the new engine is stable, remove this judgment and change it to trace log for debugging
+    // Here the check needs to ignore implicit cast, because the underlying conversion function can only handle utf8 string, so implicit cast
+    // When encountering non-utf8 input again, it will be converted to utf8, so the result of cast inference might not match
+    //nls_collation_xxx() requirements
     const bool is_implicit_cast = (T_FUN_SYS_CAST == expr.get_expr_type()) &&
                                   CM_IS_IMPLICIT_CAST(expr.get_cast_mode());
 
@@ -676,16 +673,14 @@ int ObRawExprDeduceType::calc_result_type(ObNonTerminalRawExpr &expr,
          */
         result_type.set_accuracy(expr.get_accuracy());
       }
-
-      // FIXME (xiaochu.yh) 这一句的意义是什么?
-      // op后面哪里会用到呢，CG阶段会重新分配一个op，并不使用这个。
+      // FIXME (xiaochu.yh) What is the meaning of this sentence?
+      // Where will op be used after this, CG phase will reallocate an op and not use this one.
       op->set_result_type(result_type);
       if (is_lob_param_conversion_exempt(expr.get_expr_type())) {
         // do nothing
       }
-
-      // result_type和input_type都记录到expr中，
-      // CG阶段利用expr中这些信息生成ObExprOperator
+      // result_type and input_type are both recorded in expr,
+      // CG phase utilizes this information in expr to generate ObExprOperator
       if (OB_SUCC(ret)) {
         expr.set_result_type(result_type);
         if (OB_FAIL(set_extra_calc_type_info(expr, result_type))) {
@@ -822,7 +817,7 @@ int ObRawExprDeduceType::visit(ObOpRawExpr &expr)
         } else if (T_REF_QUERY == param_expr->get_expr_type()
                     && T_OP_EXISTS != expr.get_expr_type()
                     && T_OP_NOT_EXISTS != expr.get_expr_type()) {
-          //exist/not exist(subquery)的参数类型没有意义
+          //exist/not exist(subquery) parameter type has no meaning
           const ObQueryRefRawExpr *ref_expr = static_cast<const ObQueryRefRawExpr*>(param_expr);
           const ObIArray<ObRawExprResType> &column_types = ref_expr->get_column_types();
           for (int64_t j = 0; OB_SUCC(ret) && j < column_types.count(); ++j) {
@@ -848,7 +843,7 @@ int ObRawExprDeduceType::visit(ObOpRawExpr &expr)
             if (T_OP_EXISTS == expr.get_expr_type() || T_OP_NOT_EXISTS == expr.get_expr_type()) {
               //let row_dimension of exists be ObExprOperator::NOT_ROW_DIMENSION
             } else if (ref_expr->get_output_column() > 1) {
-              //subquery的结果作为向量
+              // subquery result as vector
               row_dimension = static_cast<int32_t>(ref_expr->get_output_column());
             } else if (T_OP_IN == expr.get_expr_type() || T_OP_NOT_IN == expr.get_expr_type()) {
               row_dimension = 1;
@@ -876,8 +871,8 @@ int ObRawExprDeduceType::visit(ObOpRawExpr &expr)
 int ObRawExprDeduceType::check_row_param(ObOpRawExpr &expr)
 {
   int ret = OB_SUCCESS;
-  bool cnt_row = false; //向量中的元素仍然是一个向量表达式
-  bool cnt_scalar = false; //向量的元素是一个标量表达式
+  bool cnt_row = false; // The elements in the vector are still vector expressions
+  bool cnt_scalar = false; // the element of the vector is a scalar expression
   if (T_OP_ROW == expr.get_expr_type()) {
     for (int64_t i = 0; OB_SUCC(ret) && i < expr.get_param_count(); ++i) {
       if (OB_ISNULL(expr.get_param_expr(i))) {
@@ -935,7 +930,7 @@ int ObRawExprDeduceType::check_expr_param(ObOpRawExpr &expr)
       int64_t left_output_column = left_ref->get_output_column();
       //oracle mode not allow: select 1 from dual where (select 1,2 from dual) in (1,2)
       if (expr.get_param_expr(1)->get_expr_type() == T_OP_ROW) {
-        //如果是向量，那么右边输出列的个数就是向量表达式的个数
+        // If it is a vector, then the number of columns in the right output is the number of vector expressions
         for (int64_t i = 0; OB_SUCC(ret) && i < expr.get_param_expr(1)->get_param_count(); i++) {
           if (T_OP_ROW == expr.get_param_expr(1)->get_param_expr(i)->get_expr_type()) {
             if(left_output_column != expr.get_param_expr(1)->get_param_expr(i)->get_param_count()) {
@@ -974,7 +969,7 @@ int ObRawExprDeduceType::check_expr_param(ObOpRawExpr &expr)
             // refer 
             LOG_WARN("failed to check param expr op row", K(ret));
           }
-        } else {//如果expr(1)的孩子不为T_OP_ROW,那么expr(0)只能输出1列数据，否则报错
+        } else {//if expr(1)'s child is not T_OP_ROW, then expr(0) can only output 1 column of data, otherwise it will error}
           if (column_count != 1) {
             ret = OB_ERR_INVALID_COLUMN_NUM;
             LOG_USER_ERROR(OB_ERR_INVALID_COLUMN_NUM, column_count);
@@ -988,7 +983,7 @@ int ObRawExprDeduceType::check_expr_param(ObOpRawExpr &expr)
     }
   } else if (expr.has_flag(CNT_SUB_QUERY) && T_OP_ROW != expr.get_expr_type()) {
     if (IS_COMPARISON_OP(expr.get_expr_type())) {
-      //二元操作符，先处理左边操作符，再处理右边操作符
+      // Binary operator, process the left operand first, then the right operand
       if (OB_UNLIKELY(expr.get_param_count() != 2)
           || OB_ISNULL(expr.get_param_expr(0))) {
         ret = OB_ERR_UNEXPECTED;
@@ -1005,7 +1000,7 @@ int ObRawExprDeduceType::check_expr_param(ObOpRawExpr &expr)
         LOG_WARN("visit right param failed", K(ret));
       }
     } else if (T_OP_EXISTS != expr.get_expr_type() && T_OP_NOT_EXISTS != expr.get_expr_type()) {
-      //在其它情况下如果操作符中出现了子查询，只能作为标量
+      // In other cases if a subquery appears in the operator, it can only be used as a scalar
       for (int64_t i = 0; OB_SUCC(ret) && i < expr.get_param_count(); ++i) {
         ObRawExpr *param_expr = expr.get_param_expr(i);
         if (OB_ISNULL(param_expr)) {
@@ -1018,7 +1013,7 @@ int ObRawExprDeduceType::check_expr_param(ObOpRawExpr &expr)
       }
     }
   } else if (IS_COMMON_COMPARISON_OP(expr.get_expr_type())) {
-    //普通的二元比较符,左右参数个数应该相等
+    // ordinary binary comparison operator, the number of parameters on both sides should be equal
     ObRawExpr *left_expr = expr.get_param_expr(0);
     ObRawExpr *right_expr = expr.get_param_expr(1);
     if (OB_ISNULL(left_expr) || OB_ISNULL(right_expr)) {
@@ -1051,7 +1046,7 @@ int ObRawExprDeduceType::check_expr_param(ObOpRawExpr &expr)
     }
   } else if (T_OP_ROW != expr.get_expr_type()
              && OB_FAIL(check_param_expr_op_row(&expr, 1))) {
-    //其它普通操作符不能包含向量
+    // Other ordinary operators cannot contain vectors
     LOG_WARN("failed to check param expr op row", K(ret));
   }
   return ret;
@@ -1062,7 +1057,7 @@ int ObRawExprDeduceType::visit_left_param(ObRawExpr &expr)
   int ret = OB_SUCCESS;
   if (T_OP_ROW == expr.get_expr_type()) {
     for (int64_t i = 0; OB_SUCC(ret) && i < expr.get_param_count(); ++i) {
-      //左边的操作符是向量，那么向量里面的每个元素只能是一个标量
+      // The left operator is a vector, then each element inside the vector can only be a scalar
       ObRawExpr *left_param = expr.get_param_expr(i);
       if (OB_ISNULL(left_param)) {
         ret = OB_ERR_UNEXPECTED;
@@ -1089,7 +1084,7 @@ int ObRawExprDeduceType::visit_right_param(ObOpRawExpr &expr)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("param expr is null", K(expr.get_param_expr(0)), K(right_expr));
   } else if (expr.get_param_expr(0)->get_expr_type() == T_OP_ROW) {
-    //如果是向量，那么左边输出列的个数就是向量表达式的个数
+    // If it is a vector, then the number of columns output on the left is the number of vector expressions
     left_output_column = expr.get_param_expr(0)->get_param_count();
   } else if (expr.get_param_expr(0)->has_flag(IS_SUB_QUERY)) {
     //oracle mode not allow:
@@ -1100,14 +1095,14 @@ int ObRawExprDeduceType::visit_right_param(ObOpRawExpr &expr)
   }
   if (OB_SUCC(ret)) {
     if (right_expr->has_flag(IS_SUB_QUERY)) {
-      //如果右操作符是由子查询构成的，那么比较左右操作符的输出列个数
+      // If the right operand is constructed by a subquery, then compare the number of output columns of the left and right operands
       ObQueryRefRawExpr *right_ref = static_cast<ObQueryRefRawExpr*>(right_expr);
-      //根据mysql的语义，只有=[ANY/ALL](subquery)才允许出现多列的比较
-      //例如：select * from t1 where (c1, c2)=ANY(select c1, c2 from t2)
-      //或者右边的子查询结果不是集合，而是一个向量，无论是什么比较操作，都可以出现多列
-      //例如：select * from t1 where ROW(1, 2)=(select c1, c2 from t2 where c1=1)
-      //其他的操作符只能是单列比较
-      //例如：select * from t1 where c1>ANY(select c1 from t2)
+      // According to the semantics of mysql, only =[ANY/ALL](subquery) allows multiple column comparisons
+      // For example: select * from t1 where (c1, c2)=ANY(select c1, c2 from t2)
+      // or the result of the right subquery is not a set but a vector, any comparison operation can involve multiple columns
+      // For example: select * from t1 where ROW(1, 2)=(select c1, c2 from t2 where c1=1)
+      // Other operators can only be single-column comparisons
+      // For example: select * from t1 where c1>ANY(select c1 from t2)
       if (T_OP_SQ_EQ == expr.get_expr_type()
           || T_OP_SQ_NSEQ == expr.get_expr_type()
           || T_OP_SQ_NE == expr.get_expr_type()
@@ -1123,7 +1118,7 @@ int ObRawExprDeduceType::visit_right_param(ObOpRawExpr &expr)
         }
       }
     } else if (right_expr->get_expr_type() == T_OP_ROW) {
-      //右操作符是向量并且根操作符是in表达式，那么向量中的每个元素的输出列需要和左边相等
+      // Right operator is a vector and the root operator is an in expression, then the output column of each element in the vector needs to be equal to the left side
       ObOpRawExpr *right_op_expr = static_cast<ObOpRawExpr*>(right_expr);
       if (expr.has_flag(IS_IN)) {
         for (int64_t i = 0; OB_SUCC(ret) && i < right_op_expr->get_param_count(); ++i) {
@@ -1136,7 +1131,7 @@ int ObRawExprDeduceType::visit_right_param(ObOpRawExpr &expr)
         if (T_OP_ROW == right_op_expr->get_param_expr(0)->get_expr_type()) {
           right_op_expr = static_cast<ObOpRawExpr*>(right_op_expr->get_param_expr(0));
         }
-        //如果根操作符不是in表达式，那么向量的个数应该和左边输出列相等，并且向量中的每个元素必须是标量
+        // If the root operator is not an in expression, then the number of vectors should be equal to the number of columns on the left output, and each element in the vector must be a scalar
         if (OB_SUCC(ret) && get_expr_output_column(*right_op_expr) != left_output_column) {
           ret = OB_ERR_INVALID_COLUMN_NUM;
           LOG_USER_ERROR(OB_ERR_INVALID_COLUMN_NUM, left_output_column);
@@ -1149,7 +1144,7 @@ int ObRawExprDeduceType::visit_right_param(ObOpRawExpr &expr)
         }
       }
     } else {
-      //右操作符既不是子查询，也不是向量，那么作为普通操作符，左边的表达式必须是一个输出列
+      // Right operator is neither a subquery nor a vector, then as a regular operator, the left expression must be an output column
       if (left_output_column != 1) {
         ret = OB_ERR_INVALID_COLUMN_NUM;
         LOG_USER_ERROR(OB_ERR_INVALID_COLUMN_NUM, left_output_column);
@@ -1415,16 +1410,16 @@ int ObRawExprDeduceType::visit(ObAggFunRawExpr &expr)
     bool need_add_cast = false;
     bool override_calc_meta = true;
     switch (expr.get_expr_type()) {
-      //count_sum是在分布式的count(*)中上层为了避免select a, count(a) from t1这种语句a出现NULL这种非期望值
-      //而生成的内部表达式
+      // count_sum is used in distributed count(*) to avoid unexpected NULL values of a in statements like select a, count(a) from t1 at the upper level
+      // and generated internal expression
       case T_FUN_COUNT:
       case T_FUN_REGR_COUNT:
       case T_FUN_COUNT_SUM:
       case T_FUN_APPROX_COUNT_DISTINCT:
       case T_FUN_KEEP_COUNT:
       case T_FUN_SUM_OPNSIZE: {
-        //mysql中暂时没有支持approx_count_distinct，这里我们mysql模式也支持，返回类型
-        //和count函数返回相同，ob的oracle模式则和oracle保持兼容，为decimal类型。
+        //mysql does not currently support approx_count_distinct, here we also support it in mysql mode, return type
+        // and count function returns the same, ob's oracle mode then keeps compatible with oracle, as decimal type.
         expr.set_data_type(ObIntType);
         expr.set_scale(0);
         expr.set_precision(MAX_BIGINT_WIDTH);
@@ -1567,7 +1562,7 @@ int ObRawExprDeduceType::visit(ObAggFunRawExpr &expr)
                      T_FUN_STDDEV_SAMP == expr.get_expr_type() ||
                      T_FUN_VAR_POP == expr.get_expr_type() ||
                      T_FUN_VAR_SAMP == expr.get_expr_type()) {
-            //mysql模式返回类型为double
+            // mysql mode return type is double
             ObObjType from_type = child_expr->get_result_type().get_type();
             const ObObjType to_type = (ob_is_double_type(from_type) ? from_type : ObDoubleType);
             result_type.set_type(to_type);
@@ -1788,7 +1783,7 @@ int ObRawExprDeduceType::visit(ObAggFunRawExpr &expr)
       case T_FUN_REGR_SXX:
       case T_FUN_REGR_SYY:
       case T_FUN_REGR_SXY:
-        need_add_cast = true;//兼容oracle行为，covar_pop/covar_samp不用添加cast
+        need_add_cast = true;//compatible with oracle behavior, covar_pop/covar_samp do not need to add cast
       case T_FUN_REGR_AVGX:
       case T_FUN_REGR_AVGY:
       case T_FUN_COVAR_POP:
@@ -1848,7 +1843,7 @@ int ObRawExprDeduceType::visit(ObAggFunRawExpr &expr)
           result_type.set_precision(
             ObAccuracy::DDL_DEFAULT_ACCURACY2[ORACLE_MODE][ObNumberType].get_precision());
           expr.set_result_type(result_type);
-          //group相关的rank比较特殊，新引擎需要单独进行cast判定
+          //group-related rank comparison is special, new engine needs separate cast determination
           ObCastMode def_cast_mode = CM_NONE;
           if (OB_FAIL(ObSQLUtils::get_default_cast_mode(false, 0, my_session_,
                                                         def_cast_mode))) {
@@ -2135,13 +2130,13 @@ int ObRawExprDeduceType::check_group_aggr_param(ObAggFunRawExpr &expr)
   return ret;
 }
 
-/*@brief,ObRawExprDeduceType::check_group_rank_aggr_param检查rank、dense_rank、percent_rank、
- * cume_dist等聚合函数参数的有效:
- *  1.aggr参数需要与order by item的一一对应,eg：
+/*@brief,ObRawExprDeduceType::check_group_rank_aggr_param checks the validity of parameters for rank, dense_rank, percent_rank,
+ * cume_dist etc. aggregate functions:
+ *  1.aggr parameter needs to correspond one-to-one with order by item, eg：
  *    select rank(1,2) within group(order by c1, c2) from t1; ==> (v)
  *    select rank(1,2) within group(order by c1) from t1; ==> (x)
  *    select rank(2) within group(order by c1,c2) from t1; ==> (x)
- *  2.aggr参数为常量表达式，eg:
+ *  2.aggr parameter must be a constant expression, eg:
  *    select rank(c1) within group(order by c1,c2) from t1; ==> (x)
  */
 int ObRawExprDeduceType::check_group_rank_aggr_param(ObAggFunRawExpr &expr)
@@ -2352,13 +2347,13 @@ int ObRawExprDeduceType::visit(ObSysFunRawExpr &expr)
       } else if (!expr.is_calc_part_expr() &&
                  !param_expr->is_multiset_expr() &&
                  get_expr_output_column(*param_expr) != 1) {
-        //函数的每个参数的值都应该是标量，包括子查询的结果作为参数,不能是row or table
+        // The value of each parameter of the function should be a scalar, including the result of a subquery as a parameter, cannot be row or table
         ret = OB_ERR_INVALID_COLUMN_NUM;
         LOG_USER_ERROR(OB_ERR_INVALID_COLUMN_NUM, (int64_t)1);
       } else if (T_FUN_COLUMN_CONV == expr.get_expr_type()
                 || (T_FUN_SYS_DEFAULT == expr.get_expr_type() && !is_default_col)) {
         //column_conv(type, collation_type, accuracy_expr, nullable, value)
-        //前面四个参数都要特殊处理
+        // The first four parameters need special processing
         if (OB_FAIL(deduce_type_visit_for_special_func(i, *param_expr, types))) {
           LOG_WARN("fail to visit for column_conv", K(ret), K(i));
         }
@@ -2483,7 +2478,7 @@ int ObRawExprDeduceType::visit(ObWinFunRawExpr &expr)
   if (func_params.count() <= 0) {
     if (NULL == expr.get_agg_expr()) {
       ObRawExprResType result_type;
-      // @TODO : nijia.nj, 细分各种window_funciton
+      // @TODO : nijia.nj,subdivision various window_function
       if (T_WIN_FUN_CUME_DIST == expr.get_func_type() ||
           T_WIN_FUN_PERCENT_RANK == expr.get_func_type()) {
         const uint64_t ob_version = GET_MIN_CLUSTER_VERSION();
@@ -2543,7 +2538,7 @@ int ObRawExprDeduceType::visit(ObWinFunRawExpr &expr)
       }
     }
   } else if (T_WIN_FUN_NTH_VALUE == expr.get_func_type()) {
-    // nth_value函数的返回类型可以为null. lead和lag也是
+    // nth_value function's return type can be null. lead and lag are also
     // bug: 
     expr.set_result_type(func_params.at(0)->get_result_type());
     expr.unset_result_flag(NOT_NULL_FLAG);
@@ -2623,7 +2618,7 @@ int ObRawExprDeduceType::visit(ObWinFunRawExpr &expr)
       res_type.unset_result_flag(NOT_NULL_FLAG);
       expr.set_result_type(res_type);
     }
-    // lead和lag函数的第三个参数，应当转换为第一个参数的类型，加cast，这里不能在执行层转。
+    // lead and lag function's third parameter, should be converted to the type of the first parameter, add cast, here it cannot be converted at the execution layer.
     // bug: 
     if (OB_SUCC(ret) && func_params.count() == 3) {
       ObRawExpr *cast_expr = NULL;
@@ -2716,7 +2711,7 @@ int ObRawExprDeduceType::visit(ObWinFunRawExpr &expr)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("order by expr should not be null!", K(ret));
   } else {
-    //检查frame是range时数据类型的有效性
+    // Check the validity of data type when frame is range
     ObRawExpr *bound_expr_arr[2] = {expr.upper_.interval_expr_, expr.lower_.interval_expr_};
     ObRawExpr *order_expr = expr.get_order_items().at(0).expr_;
     const ObObjType &order_res_type = order_expr->get_data_type();
@@ -2907,9 +2902,9 @@ int ObRawExprDeduceType::set_agg_udf_result_type(ObAggFunRawExpr &expr)
       const_args.idx_in_udf_arg_ = idx;
       UNUSED(param_obj);
       //FIXME muhang
-      //这里实在是不具备计算的条件，没有办法产生和计算物理表达式。
-      //如果用户的init中强依赖于可计算表达式的结果，那么可能会在calc_udf_result_type
-      //出错。
+      //Here it is simply not possible to compute, unable to generate and calculate the physical expression.
+      // If the user's init strongly depends on the result of a computable expression, then it may happen in calc_udf_result_type
+      // Error.
       if (OB_FAIL(const_results.push_back(const_args))) {
         LOG_WARN("failed to push back const args", K(ret));
       }
@@ -2981,7 +2976,7 @@ int ObRawExprDeduceType::set_agg_group_concat_result_type(ObAggFunRawExpr &expr,
 
   if (OB_SUCC(ret)) {
     ObExprVersion dummy_op(alloc_);
-    //bug16528381, mysql结果为text, 在ob支持text前采用varchar(65536)
+    //bug16528381, mysql result is text, before ob supports text use varchar(65536)
     result_type.set_length(OB_MAX_SQL_LENGTH);
     result_type.set_varchar();
     if (OB_FAIL(ret)) {
@@ -3115,10 +3110,10 @@ int ObRawExprDeduceType::set_agg_regr_result_type(ObAggFunRawExpr &expr, ObExprR
     ObCollationType from_cs_type1 = expr.get_param_expr(0)->get_result_type().get_collation_type();
     ObCollationType from_cs_type2 = expr.get_param_expr(1)->get_result_type().get_collation_type();
     if (expr.get_expr_type() == T_FUN_REGR_SXX ||
-        expr.get_expr_type() == T_FUN_REGR_AVGX) {//这里根据函数特性兼容oracle行为设置
+        expr.get_expr_type() == T_FUN_REGR_AVGX) {//Here according to function characteristics, compatibility with Oracle behavior is set}
       from_type1 = ObNumberType;
     } else if (expr.get_expr_type() == T_FUN_REGR_SYY ||
-                expr.get_expr_type() == T_FUN_REGR_AVGY) {//这里根据函数特性兼容oracle行为设置
+                expr.get_expr_type() == T_FUN_REGR_AVGY) {//Here according to function characteristics, Oracle behavior is compatible and set}
       from_type2 = ObNumberType;
     }
     ObObjType to_type = ObNumberType;
@@ -3355,12 +3350,11 @@ static inline bool skip_cast_json_expr(const ObRawExpr *expr,
   
   return b_ret;
 }
-
-// 该函数会给case表达式按需增加隐式cast
-// 对于case when x1 then y1 when x2 then y2 else y3
-// input_types的顺序是: x1 x2 y1 y2 y3
-// 而ObCaseOpRawExpr::get_param_expr()要求的顺序是: x1 y1 x2 y2 y3
-// 所以需要对input_type进行重新排序
+// The function will add implicit cast to the case expression as needed
+// For case when x1 then y1 when x2 then y2 else y3
+// input_types order is: x1 x2 y1 y2 y3
+// And ObCaseOpRawExpr::get_param_expr() requires the order to be: x1 y1 x2 y2 y3
+// So need to reorder input_type
 int ObRawExprDeduceType::add_implicit_cast(ObCaseOpRawExpr &parent,
                                            const ObIExprResTypes &input_types,
                                            const ObCastMode &cast_mode)
@@ -3375,7 +3369,7 @@ int ObRawExprDeduceType::add_implicit_cast(ObCaseOpRawExpr &parent,
     ObArenaAllocator allocator;
     ObFixedArray<ObExprResType, ObIAllocator> input_types_reorder(&allocator,
                                                                   input_types.count());
-    // push_back when_expr以及对应的then_expr结果类型
+    // push_back when_expr and corresponding then_expr result type
     for (int64_t i = 0; OB_SUCC(ret) && i < when_size; ++i) {
       if (OB_FAIL(input_types_reorder.push_back(input_types.at(i)))) {
         LOG_WARN("push back res type failed", K(ret), K(i));
@@ -3383,8 +3377,7 @@ int ObRawExprDeduceType::add_implicit_cast(ObCaseOpRawExpr &parent,
         LOG_WARN("push back res type failed", K(ret), K(i + when_size));
       }
     }
-
-    // push_back else_expr的结果类型
+    // push_back else_expr result type
     if (OB_SUCC(ret)) {
       if (input_types_reorder.count() + 1 == input_types.count()) {
         if (OB_FAIL(input_types_reorder.push_back(
@@ -3403,7 +3396,7 @@ int ObRawExprDeduceType::add_implicit_cast(ObCaseOpRawExpr &parent,
     }
     LOG_DEBUG("input types reorder done", K(ret), K(input_types_reorder), K(input_types));
     ObRawExpr *child_ptr = NULL;
-    // 开始插入隐式cast
+    // Start inserting implicit cast
     for (int64_t child_idx = 0; OB_SUCC(ret) && (child_idx < parent.get_param_count());
                                                                           ++child_idx) {
       if (OB_ISNULL(child_ptr = parent.get_param_expr(child_idx))) {
@@ -3452,7 +3445,7 @@ int ObRawExprDeduceType::add_implicit_cast(ObOpRawExpr &parent,
           CK(OB_NOT_NULL(child_ptr->get_param_expr(0)));
           if (OB_SUCC(ret)) {
             if (T_OP_ROW == child_ptr->get_param_expr(0)->get_expr_type()) {
-              // (1, 2) in ((2, 2), (1, 2)), 右支是向量的向量
+              // (1, 2) in ((2, 2), (1, 2)), right branch is a vector of vectors
               ele_cnt = ele_cnt * child_ptr->get_param_expr(0)->get_param_count();
             }
           }
@@ -3510,7 +3503,7 @@ int ObRawExprDeduceType::add_implicit_cast(ObAggFunRawExpr &parent,
     ObRawExpr *&child_ptr = real_param_exprs.at(i);
     if (skip_cast_expr(parent, i)) {
       // do nothing
-    //兼容oracle行为,regr_sxx和regr_syy只需在计算的参数加cast,regr_sxy行为和regr_syy一致，比较诡异，暂时兼容
+    // Compatible with Oracle behavior, regr_sxx and regr_syy only need to add cast to the calculated parameters, regr_sxy behavior is consistent with regr_syy, which is quite strange, temporarily compatible
     } else if ((parent.get_expr_type() == T_FUN_JSON_OBJECTAGG ||
                 parent.get_expr_type() == T_FUN_JSON_ARRAYAGG) &&
                 child_ptr->get_result_type().is_enum_set_with_subschema()) {
@@ -3644,10 +3637,10 @@ int ObRawExprDeduceType::try_add_cast_expr_above_for_deduce_type(ObRawExpr &expr
                       : dst_type.get_calc_accuracy().get_accuracy();
     cast_dst_type.set_udt_id(udt_id);
   }
-  // 这里仅设置部分情况的accuracy，其他情况的accuracy信息交给cast类型推导设置
+  // Here only set the accuracy for some cases, other cases' accuracy information is left to be set by cast type inference
   if (lib::is_mysql_mode() && cast_dst_type.is_string_type() &&
       cast_dst_type.has_result_flag(ZEROFILL_FLAG)) {
-    // get_length()必须手动调用，里面会有根据int precision设定长度的代码
+    // get_length() must be manually called, there will be code inside that sets the length based on int precision
     cast_dst_type.set_length(child_res_type.get_length());
   }
   if (OB_SUCC(ret)) {

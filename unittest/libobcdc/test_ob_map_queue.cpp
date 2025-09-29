@@ -102,7 +102,7 @@ public:
 	int64_t pop_count_ CACHE_ALIGNED;
 	// record poped count for all threads
 	int64_t *end_pop_count_ CACHE_ALIGNED;
-  // 保存pop出来的数据
+  // Save the popped data
 	Type *array_;
 
 	virtual int routine()

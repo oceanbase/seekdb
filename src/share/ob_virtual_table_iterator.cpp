@@ -568,7 +568,7 @@ int ObVirtualTableIterator::check_priv(const ObString &level_str,
   if (OB_SUCC(ret)) {
     //tenant_id in table is static casted to int64_t,
     //and use statis_cast<uint64_t> for retrieving(same with schema_service)
-    // schema拆分后，普通租户schema表的tenant_id为0，此时鉴权取session_priv.tenant_id_
+    // After schema split, the tenant_id of the normal tenant schema table is 0, at this time, authentication takes session_priv.tenant_id_
     if (session_priv.tenant_id_ != static_cast<uint64_t>(tenant_id)
         && OB_INVALID_TENANT_ID != tenant_id) {
       //not current tenant's row

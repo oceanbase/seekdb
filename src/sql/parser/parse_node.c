@@ -751,8 +751,7 @@ bool parsenode_equal(const ParseNode *lnode, const ParseNode *rnode, int *ret)
   }
   return result;
 }
-
-//根据名字寻找，找到后返回该名字的下标，找不到把名字加入并返回下标
+// Find by name, return the index of the name if found, otherwise add the name and return the index
 int64_t get_question_mark(ObQuestionMarkCtx *ctx, void *malloc_pool, const char *name)
 {
   int64_t idx = -1;

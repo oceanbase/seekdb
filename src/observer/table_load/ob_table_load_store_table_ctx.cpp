@@ -415,14 +415,14 @@ int ObTableLoadStoreDataTableCtx::init_insert_table_ctx(const ObDirectLoadTransP
     LOG_WARN("unexpected insert table ctx not null", KR(ret));
   } else {
     ObDirectLoadInsertTableParam insert_table_param;
-    // 目标表table_id, 目前只用于填充统计信息收集结果
+    // target table table_id, currently only used for filling statistical information collection results
     insert_table_param.table_id_ = store_ctx_->ctx_->ddl_param_.dest_table_id_;
     insert_table_param.schema_version_ = store_ctx_->ctx_->ddl_param_.schema_version_;
     insert_table_param.snapshot_version_ = store_ctx_->ctx_->ddl_param_.snapshot_version_;
     insert_table_param.ddl_task_id_ = store_ctx_->ctx_->ddl_param_.task_id_;
     insert_table_param.data_version_ = store_ctx_->ctx_->ddl_param_.data_version_;
     insert_table_param.parallel_ = store_ctx_->thread_cnt_;
-    // 全量在快速堆表路径需要为存量数据预留parallel
+    // Full scan on the fast heap table path needs to reserve parallel for existing data
     insert_table_param.reserved_parallel_ =
       store_ctx_->write_ctx_.is_fast_heap_table_ ? store_ctx_->thread_cnt_ : 0;
     insert_table_param.rowkey_column_count_ = schema_->rowkey_column_count_;
@@ -761,14 +761,14 @@ int ObTableLoadStoreLobTableCtx::init_insert_table_ctx(const ObDirectLoadTransPa
     LOG_WARN("unexpected insert table ctx not null", KR(ret));
   } else {
     ObDirectLoadInsertTableParam insert_table_param;
-    // TODO 目标表table_id, lob依附于数据表并不创建真正的ddl对象, 先填数据表的table_id
+    // TODO target table table_id, lob is attached to the data table and does not create a real ddl object, fill in the table_id of the data table first
     insert_table_param.table_id_ = store_ctx_->ctx_->ddl_param_.dest_table_id_;
     insert_table_param.schema_version_ = store_ctx_->ctx_->ddl_param_.schema_version_;
     insert_table_param.snapshot_version_ = store_ctx_->ctx_->ddl_param_.snapshot_version_;
     insert_table_param.ddl_task_id_ = store_ctx_->ctx_->ddl_param_.task_id_;
     insert_table_param.data_version_ = store_ctx_->ctx_->ddl_param_.data_version_;
     insert_table_param.parallel_ = store_ctx_->thread_cnt_;
-    // 增量需要为del_lob预留parallel
+    // Increment needs to reserve parallel for del_lob
     insert_table_param.reserved_parallel_ =
       ObDirectLoadMethod::is_incremental(store_ctx_->ctx_->param_.method_) ? store_ctx_->thread_cnt_
                                                                            : 0;
@@ -1078,7 +1078,7 @@ int ObTableLoadStoreIndexTableCtx::init_insert_table_ctx(const ObDirectLoadTrans
     LOG_WARN("unexpected insert table ctx not null", KR(ret));
   } else {
     ObDirectLoadInsertTableParam insert_table_param;
-    // TODO 目标表table_id, 索引只在增量场景, 目标表和原表是同一个
+    // TODO target table table_id, index is only in incremental scenarios, the target table and source table are the same
     insert_table_param.table_id_ = table_id_;
     insert_table_param.schema_version_ = store_ctx_->ctx_->ddl_param_.schema_version_;
     insert_table_param.snapshot_version_ = store_ctx_->ctx_->ddl_param_.snapshot_version_;

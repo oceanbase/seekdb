@@ -36,7 +36,7 @@ int ObExprInsert::calc_result_typeN(ObExprResType &type,
 {
   int ret = OB_SUCCESS;
   ObSEArray<ObObjMeta, 16> coll_types;
-  ObObjMeta coll0, coll3; // insert 的第一个、第四个参数才需要参与计算 charset
+  ObObjMeta coll0, coll3; // insert's first and fourth parameters need to participate in the calculation of charset
   if (4 != param_num) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("insert should have four arguments",K(ret));
@@ -155,25 +155,25 @@ int ObExprInsert::calc(ObString &result, const ObString &text, const int64_t sta
     int64_t text_len = ObCharset::strlen_char(cs_type, origin_text.ptr(), origin_text.length());
     int64_t rep_text_len = ObCharset::strlen_char(cs_type, rep_text.ptr(), rep_text.length());
     if (OB_UNLIKELY(start < 0 || start >= text_len)) {
-      result.assign(origin_text.ptr(), origin_text.length());   //返回整个串
+      result.assign(origin_text.ptr(), origin_text.length());   // return the entire string
     } else {
       if (expect_length < 0 || start + expect_length > text_len || start > INT64_MAX - expect_length) {
         expect_length = text_len - start;
       }
       if ((text_len - expect_length + rep_text_len) > 0) {
-        int64_t start_char = ObCharset::charpos(cs_type, origin_text.ptr(), origin_text.length(), start);  //原始串第一段字节结束位置
+        int64_t start_char = ObCharset::charpos(cs_type, origin_text.ptr(), origin_text.length(), start);  // End position of the first segment of bytes in the original string
         int64_t res_length = ObCharset::charpos(cs_type,
                                                 origin_text.ptr(),
                                                 origin_text.length(),
-                                                expect_length + start);  //原始串第二个字节开始位置
+                                                expect_length + start);  // starting position of the second byte of the original string
         int64_t text_len_char = ObCharset::charpos(cs_type,
                                                    origin_text.ptr(),
                                                    origin_text.length(),
-                                                   text_len);  //原始串字节数
+                                                   text_len);  // original string byte count
         int64_t rep_text_len_char = ObCharset::charpos(cs_type,
                                                        rep_text.ptr(),
                                                        rep_text.length(),
-                                                       rep_text_len);  //替换串字节数
+                                                       rep_text_len);  // replacement string byte count
         char *buf = reinterpret_cast<char *>(allocator.alloc(text_len_char
                                                              - res_length
                                                              + rep_text_len_char + start_char));

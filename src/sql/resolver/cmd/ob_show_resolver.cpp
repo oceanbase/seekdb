@@ -400,7 +400,7 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
                                    static_cast<ObString::obstr_size_t>(
                                        show_resv_ctx.condition_node_->children_[0]->str_len_), // cast int64_t to obstr_size_t
                                    show_resv_ctx.condition_node_->children_[0]->str_value_);
-                    // 多加OB_PUBLIC_SCHEMA_NAME为了匹配三个参数
+                    // Add OB_PUBLIC_SCHEMA_NAME to match three parameters
                     GEN_SQL_STEP_2(ObShowSqlSet::SHOW_DATABASES_LIKE,
                                     OB_SYS_DATABASE_NAME,
                                     OB_ALL_DATABASE_TNAME,
@@ -429,7 +429,7 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
                                  catalog_id);
                 } else {
                   GEN_SQL_STEP_1(ObShowSqlSet::SHOW_DATABASES);
-                  // 多加OB_PUBLIC_SCHEMA_NAME为了匹配三个参数
+                  // Add OB_PUBLIC_SCHEMA_NAME to match three parameters
                   GEN_SQL_STEP_2(ObShowSqlSet::SHOW_DATABASES,
                                   OB_SYS_DATABASE_NAME,
                                   OB_ALL_DATABASE_TNAME,
@@ -1358,7 +1358,7 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
                 ObString show_tenant_name(tenant_node->children_[0]->str_len_,
                                      tenant_node->children_[0]->str_value_);
                 if (ObString::make_string("seed") == show_tenant_name) {
-                  params_.show_seed_ = true; // 传递给 stmt
+                  params_.show_seed_ = true; // pass to stmt
                 } else if (OB_FAIL(schema_checker_->get_tenant_id(show_tenant_name, show_tenant_id))
                             || OB_INVALID_ID == show_tenant_id) {
                   ret = OB_ERR_INVALID_TENANT_NAME;
@@ -2290,20 +2290,20 @@ int ObShowResolver::get_database_info(const uint64_t session_catalog_id,
   }
   return ret;
 }
-//判断各个show语句是否会影响found_row的结果
+// Determine whether each show statement affects the result of found_row
 int ObShowResolver::process_select_type(ObSelectStmt *select_stmt,
                                         stmt::StmtType stmt_type,
                                         const ParseNode &parse_tree)
 {
-  //注释掉的代码不要删掉，等对应功能实现以后，还要加回来的 by rongxuan.lc
-  //并不是完全枚举，其中去掉里一些OB应该不会实现的功能，比如：show master status； show open tables
-  //具体可以参照mysql_test/t/found_rows_show_stmt.test中被注释掉的case
+  // Commented out code should not be deleted, it will be added back after the corresponding function is implemented by rongxuan.lc
+  //is not a complete enumeration, where some OB functions that should not be implemented are removed, for example: show master status; show open tables
+  // Specifically you can refer to the commented out case in mysql_test/t/found_rows_show_stmt.test
   int ret = OB_SUCCESS;
   if ((stmt_type == stmt::T_SHOW_ERRORS
        || stmt_type == stmt::T_SHOW_WARNINGS)
       && parse_tree.children_[0] != NULL
       && T_FUN_COUNT == parse_tree.children_[0]->type_) {
-    //select count(*) error/warn 特殊处理
+    //select count(*) error/warn special handling
     select_stmt->set_select_type(AFFECT_FOUND_ROWS);
   } else if (stmt_type == stmt::T_SHOW_CREATE_TABLE
              //|| stmt_type == stmt::T_SHOW_CREATE_TRIGGER
@@ -2372,7 +2372,7 @@ int ObShowResolver::resolve_show_from_table(const ParseNode *from_table_node,
       if(OB_UNLIKELY(is_database_unselected && NULL == from_table_node->children_[0])) {
         ret = OB_ERR_NO_DB_SELECTED;
         LOG_WARN("no database selected");
-      } else {      // database从table子句中取
+      } else {      // get from table clause in database
         ObString synonym_name;
         ObString synonym_db_name;
         ObString catalog_name;
@@ -2416,7 +2416,7 @@ int ObShowResolver::resolve_show_from_table(const ParseNode *from_table_node,
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("from_database_clause_node->children_[0] is NULL", K(ret));
     } else {
-      // database从from database子句中取
+      // database from from database clause
       if (OB_UNLIKELY(T_FROM_LIST != from_database_clause_node->type_
                       || from_database_clause_node->num_child_ != 1
                       || NULL == from_table_node->children_)) {
@@ -2432,8 +2432,8 @@ int ObShowResolver::resolve_show_from_table(const ParseNode *from_table_node,
             K(ret),
             K(from_database_clause_node->children_[0]));
       } else {
-        // 目前只支持解析 database_factor，catalog_factor 的解析暂未支持
-        // 所以这里用的 show_catalog_id 是直接来源于 session_info_ 的。
+        // Currently only supports parsing database_factor, catalog_factor parsing is not yet supported
+        // So here the show_catalog_id is directly sourced from session_info_.
         ParseNode *relation_node = from_table_node->children_[1];
         show_table_name.assign_ptr(const_cast<char *>(relation_node->str_value_),
                                    static_cast<int32_t>(relation_node->str_len_));
@@ -2451,7 +2451,7 @@ int ObShowResolver::resolve_show_from_table(const ParseNode *from_table_node,
     }
     const bool is_index = false;
     uint64_t org_session_id = OB_INVALID_ID;
-    //bug16913178, 设置 session id = 0以便返回view, 否则临时表会返回
+    //bug16913178, set session id = 0 to return view, otherwise temporary table will return
     if (T_SHOW_CREATE_VIEW == node_type
         && OB_NOT_NULL(schema_checker_->get_schema_mgr())) {
       org_session_id = schema_checker_->get_schema_mgr()->get_session_id();
@@ -2546,7 +2546,7 @@ int ObShowResolver::resolve_show_from_routine(const ParseNode *from_routine_node
     if(OB_UNLIKELY(is_database_unselected && NULL == from_routine_node->children_[0])) {
       ret = OB_ERR_NO_DB_SELECTED;
       LOG_WARN("no database selected");
-    } else {      // database从procedure子句中取
+    } else {      // database from procedure clause
       show_routine_name.assign_ptr(from_routine_node->children_[1]->str_value_, static_cast<int32_t>(from_routine_node->children_[1]->str_len_));
 
       // handle catalog name
@@ -3376,11 +3376,10 @@ namespace sql
 {
 #define DEFINE_SHOW_CLAUSE(clause_type, string)                         \
   const char *ObShowResolver::ObShowSqlSet::clause_type = string
-
-// @SHOW_STMT_TYPE : 标识show语句的种类，如果相同show语句使用不subquery或select，则需要定义更个不同的SHOW_STMT_TYPE
-// @select_str : NULL为采用默认值(默认为"select *"), 其他情况需要自己编写select语句
-// @subquery : 此项不能为NULL
-// @like_str : like 语句所使用的列，如果该show语句不支持like语法，设置为NULL
+// @SHOW_STMT_TYPE : Identify the type of show statement, if the same show statement does not use subquery or select, then a different SHOW_STMT_TYPE needs to be defined
+// @select_str : NULL to use default value (default is "select *"), other cases require writing your own select statement
+// @subquery : This item cannot be NULL
+// @like_str : like statement used column, if this show statement does not support like syntax, set to NULL
 #define DEFINE_SHOW_CLAUSE_SET(SHOW_STMT_TYPE, select_str, subquery_str, ora_subquery_str, like_str) \
   DEFINE_SHOW_CLAUSE(SHOW_STMT_TYPE##_SELECT, select_str);              \
   DEFINE_SHOW_CLAUSE(SHOW_STMT_TYPE##_SUBQUERY, subquery_str);          \

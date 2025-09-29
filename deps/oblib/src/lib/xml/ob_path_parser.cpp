@@ -1022,7 +1022,7 @@ int ObPathParser::parse_primary_expr_node(ObPathArgType patharg_type)
 {
   INIT_SUCC(ret);
   ObXPathUtil::skip_whitespace(expression_, index_);
-  // 记得index + n
+  // Remember index + n
   bool is_cmp = false;
   if (index_ < len_) {
     if (expression_[index_] == ObPathItem::DOLLAR) {

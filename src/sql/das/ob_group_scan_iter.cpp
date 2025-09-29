@@ -137,38 +137,34 @@ ObGroupScanIter::ObGroupScanIter()
     iter_(&result_tmp_iter_)
 {
 }
-
-
-// 旧版本算法:
-// 1. 如果last_group_idx > cur_group_idx 则返回iter_end
-// 2. 如果last_group_idx = cur_group_idx
-//     则将缓存的行store到对应output行表达式的中, 设置last_group_idx = -1, 返回行
-// 3. 如果last_group_idx < cur_group_idx
-//     3.1 从存储层获取一行数据
-//     3.2 判断该行数据中group_idx是否与当前cur_group_idx相同
-//         如果相同:
-//           则返回;
-//         如果不相同:
-//           记录当前读到的行的group_idx到last_group_idx
-//           对当前行进行深拷贝暂存
-//           返回iter end
-
-
-// 2022-12-03 更新支持跳读算法:
-// 1. 如果last_group_idx > cur_group_idx 则返回iter_end
-// 2. 如果last_group_idx == cur_group_idx
-//     则将缓存的行store到对应output行表达式的中, 设置last_group_idx = -1, 返回行
-// 3. 如果last_group_idx < cur_group_idx
-//    3.1 循环条件 last_group_idx < cur_group_idx
-//     从存储层获取一行数据
-//         如果ITER_END，存储层所有数据消费完了，返回ITER_END，设置last_group_idx为INT_MAX。
-//     设置last_group_idx为当前行的group_idx.
-//    3.2 判断last_group_idx是否与当前cur_group_idx相同
-//         a. 如果相同:
-//             则返回数据，并且设置last_group_idx = -1;
-//         b. 如果不相同，说明last_group_idx > cur_group_idx出的循环:
-//             对当前行进行深拷贝暂存
-//             返回iter end
+// Old version algorithm:
+// 1. If last_group_idx > cur_group_idx then return iter_end
+// 2. If last_group_idx = cur_group_idx
+//     then store the cached row to the corresponding output row expression, set last_group_idx = -1, return row
+// 3. If last_group_idx < cur_group_idx
+//     3.1 Get a row of data from the storage layer
+//     3.2 Determine if group_idx in this row of data is the same as the current cur_group_idx
+//         If the same:
+//           then return;
+//         if not the same:
+//           record the current read line's group_idx to last_group_idx
+//           Perform a deep copy of the current line for temporary storage
+//           return iter end
+// 2022-12-03 update support for skip reading algorithm:
+// 1. If last_group_idx > cur_group_idx then return iter_end
+// 2. If last_group_idx == cur_group_idx
+//     then store the cached row to the corresponding output row expression, set last_group_idx = -1, return row
+// 3. If last_group_idx < cur_group_idx
+//    3.1 Loop condition last_group_idx < cur_group_idx
+//     Get a row of data from the storage layer
+//         If ITER_END, all data in the storage layer has been consumed, return ITER_END, set last_group_idx to INT_MAX.
+//     Set last_group_idx to the group_idx of the current row.
+//    3.2 Determine if last_group_idx is the same as current cur_group_idx
+//         a. If the same:
+//             then return the data, and set last_group_idx = -1;
+//         b. If not the same, it indicates that the loop exited because last_group_idx > cur_group_idx:
+//             Perform a deep copy of the current line for temporary storage
+//             return iter end
 int ObGroupScanIter::get_next_row()
 {
   int ret = OB_SUCCESS;
@@ -179,14 +175,14 @@ int ObGroupScanIter::get_next_row()
     last_group_idx_ = MIN_GROUP_INDEX;
   } else {
     //last_group_idx_ < cur_group_idx_
-    //last_group_idx_ 是MIN_GROUP_INDEX或者需要跳读。
+    // last_group_idx_ is MIN_GROUP_INDEX or needs to be skipped.
     ObDatum *datum_group_idx = NULL;
     while(OB_SUCC(ret) && last_group_idx_ < cur_group_idx_) {
       if (OB_FAIL(get_iter()->get_next_row())) {
         if (OB_ITER_END != ret) {
           LOG_WARN("fail to get next row", K(ret));
         } else {
-          //store的OB_ITER_END说明后面没有数据了，以后都返回ITER_END.
+          //store's OB_ITER_END indicates that there is no more data, and ITER_END will be returned from now on.
           last_group_idx_ = INT64_MAX;
         }
       } else if (OB_FAIL(group_id_expr_->eval(*row_store_.eval_ctx_,
@@ -214,42 +210,39 @@ int ObGroupScanIter::get_next_row()
 
   return ret;
 }
-
-// 旧版本算法:
-// 1. 如果last_group_idx > cur_group_idx 则返回iter_end
-// 2. 如果last_group_idx = cur_group_idx
-//     2.1 遍历缓存的行, 计算对应group_idx, 当前行是否属于cur_group_idx:
-//       a. 如果group_idx = cur_group_idx, 则重复2.1
-//       b. 如果group_idx != cur_group_idx,  则将group_idx记录到last_group_idx,
-//          记录本次缓存数据下次访问的开始点
-//     2.2 如果遍历结束, 则iter_end, last_group_idx = -1
-// 3. 如果last_group_idx < cur_group_idx
-//     3.1 从存储层获取一批数据
-//     3.2 依次遍历每行数据中group_idx, 看下当前行是否属于cur_group_idx:
-//        a. 如果group_idx = cur_group_idx, 则重复第3.2步
-//        b. 如果group_idx != cur_group_idx, 则记录将group_idx记录到last_group_idx,
-//           并将后面的batch数据深拷贝缓存
+// Old version algorithm:
+// 1. If last_group_idx > cur_group_idx then return iter_end
+// 2. If last_group_idx = cur_group_idx
+//     2.1 Traverse the cached rows, calculate the corresponding group_idx, whether the current row belongs to cur_group_idx:
+//       a. If group_idx = cur_group_idx, then repeat 2.1
+//       b. If group_idx != cur_group_idx, then record group_idx to last_group_idx,
+//          Record the starting point for the next access of this cache data
+//     2.2 If traversal ends, then iter_end, last_group_idx = -1
+// 3. If last_group_idx < cur_group_idx
+//     3.1 Fetch a batch of data from the storage layer
+//     3.2 Traverse each group_idx in the row data to see if the current row belongs to cur_group_idx:
+//        a. If group_idx = cur_group_idx, then repeat step 3.2
+//        b. If group_idx != cur_group_idx, then record group_idx to last_group_idx,
+//           and copy the batch data to cache deeply
 //        c. iter_end
-//     3.3 如果遍历结束, 则iter_end, last_group_idx = -1
-
-
-// 2022-12-03 更新支持跳读算法:
-// 1. 如果last_group_idx > cur_group_idx 则返回iter_end 算法结束。
-// 2. 如果row_store_里有数据 (即 MIN_GROUP_INDEX != last_group_idx_)
-//     循环遍历row_store_。
-//       如果row_store_被消费完，设置last_group_idx = MIN_GROUP_INDEX，退出循环。
-//       如果row_store_中找到last_group_idx >= cur_group_idx，退出循环。
-// 3. 循环判断last_group_idx是否是MIN_GROUP_INDEX
-//     3.1 如果last_group_idx != MIN_GROUP_INDEX说明row_store_里有数据，退出循环。
-//     3.2 从存储层读出一批数据
-//          a. 完全ITER_END说明所有数据消费完了，算法结束，last_group_idx=INT64_MAX。
-//          b. 如果能找到符合group_idx >= cur_group_idx
-//               将数据深拷贝到row_store_中备用,更新last_group_idx = group_idx。
-//          c. 保持last_group_idx为MIN_GROUP_INDEX，从存储层读取下一批数据
-// 此时，last_group_idx要么是INT64_MAX，要么last_group_idx>=cur_group_idx
-// 4. 判断last_group_idx == cur_group_idx
-//     4.1 如果相等，吐行，更新last_group_idx
-//     4.2 如果不想等，此时必有last_group_idx>cur_group_idx返回ITER_END
+//     3.3 If traversal ends, then iter_end, last_group_idx = -1
+// 2022-12-03 update support for skip reading algorithm:
+// 1. If last_group_idx > cur_group_idx then return iter_end algorithm ends.
+// 2. If row_store_ has data (i.e., MIN_GROUP_INDEX != last_group_idx_)
+//     Loop through row_store_.
+//       If row_store_ is consumed, set last_group_idx = MIN_GROUP_INDEX, exit the loop.
+//       If last_group_idx >= cur_group_idx is found in row_store_, exit the loop.
+// 3. Loop to determine if last_group_idx is MIN_GROUP_INDEX
+//     3.1 If last_group_idx != MIN_GROUP_INDEX indicates that there is data in row_store_, exit the loop.
+//     3.2 Read a batch of data from the storage layer
+//          a. Complete ITER_END indicates that all data has been consumed, the algorithm ends, last_group_idx=INT64_MAX.
+//          b. If you can find a match with group_idx >= cur_group_idx
+//               Deep copy data to row_store_ for backup, update last_group_idx = group_idx.
+//          c. Keep last_group_idx as MIN_GROUP_INDEX, read the next batch of data from the storage layer
+// At this point, last_group_idx is either INT64_MAX, or last_group_idx >= cur_group_idx
+// 4. Determine last_group_idx == cur_group_idx
+//     4.1 If equal, output the line, update last_group_idx
+//     4.2 If not equal, at this point it must be last_group_idx > cur_group_idx return ITER_END
 
 
 int ObGroupScanIter::get_next_rows(int64_t &count, int64_t capacity)

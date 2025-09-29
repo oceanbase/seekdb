@@ -705,11 +705,10 @@ TEST_F(TestObjectStorage, test_util_list_adaptive_files)
           ASSERT_EQ(OB_SUCCESS, appender.close());
         }
       };
-      
-      // 文件层级
-      // 第一级：0-normal, 0-appendable, 0-appendable.back .... 9-normal, 9-appendable, 9-appendable.back
-      // 第二级：0/0-normal, 0/0-appendable, 0/0-appendable.back, ... 9/9-normal, 9/9-appendable, 9/9-appendable.back
-      // 第三级：0/0/0-normal, 0/0/0-appendable, 0/0/0-appendable.back, ... 9/4/4-normal, 9/4/4-appendable, 9/4/4-appendable.back、
+      // file hierarchy
+      // First level: 0-normal, 0-appendable, 0-appendable.back .... 9-normal, 9-appendable, 9-appendable.back
+      // Second level: 0/0-normal, 0/0-appendable, 0/0-appendable.back, ... 9/9-normal, 9/9-appendable, 9/9-appendable.back
+      // Third level: 0/0/0-normal, 0/0/0-appendable, 0/0/0-appendable.back, ... 9/4/4-normal, 9/4/4-appendable, 9/4/4-appendable.back,
       write_group_files(10, "");
       std::string prefix;
       for (int64_t i = 0; i < 10; i++) {
@@ -1157,8 +1156,7 @@ TEST_F(TestObjectStorage, test_append_rw)
     }
   }
 }
-
-// 写入一个模拟追加写文件，包含一个format文件和500个数据文件，共501个子文件
+// Write a simulated append write file, including one format file and 500 data files, totaling 501 sub-files
 int write_appendable_object(const char *obj_name, ObObjectStorageInfo &storage_info)
 {
   int ret = OB_SUCCESS;

@@ -123,7 +123,7 @@ int ObExprConcat::calc(common::ObObj &result,
     max_length = is_oracle_mode ? OB_MAX_ORACLE_VARCHAR_LENGTH : OB_MAX_VARCHAR_LENGTH;
   }
   if (OB_UNLIKELY(this_len + other_len > max_length)) {
-    //FIXME: 合并后的字符串长度超过了最大限制，结果设置为NULL
+    //FIXME: The length of the merged string exceeds the maximum limit, the result is set to NULL
     result.set_null();
     ret = OB_SIZE_OVERFLOW;
   } else if (OB_UNLIKELY(this_len <= 0)) {
@@ -160,8 +160,7 @@ int ObExprConcat::calc_result_typeN(ObExprResType &type,
   }
 
   CK (OB_NOT_NULL(type_ctx.get_session()));
-
-  //类型 + 字符集推导
+  // Type + character set inference
   bool has_text = false;
   for (int64_t i = 0; !has_text && i < param_num; ++i) {
     if (ObTinyTextType != types[i].get_type() && types[i].is_lob()) {
@@ -182,8 +181,7 @@ int ObExprConcat::calc_result_typeN(ObExprResType &type,
     types[i].set_calc_collation_type(type.get_collation_type());
     types[i].set_calc_collation_level(type.get_collation_level());
   }
-
-  //结果的长度推导
+  // Length derivation of the result
   if (OB_SUCC(ret)) {
     ObLength max_len = 0;
     for (int64_t i = 0; i < param_num; ++i) {

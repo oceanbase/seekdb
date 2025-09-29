@@ -89,7 +89,7 @@ private:
   int response_query_header(sql::ObSQLSessionInfo &session, const ColumnsFieldArray *fields);
   virtual int before_process();
   void record_stat(const sql::stmt::StmtType type, const int64_t end_time) const;
-  //重载response，在response中不去调用flush_buffer(true)；flush_buffer(true)在需要回包时显示调用
+  // Overload response, do not call flush_buffer(true) in response; flush_buffer(true) should be explicitly called when a response packet is needed to be sent
 private:
   int64_t cursor_id_;
   int64_t fetch_rows_;

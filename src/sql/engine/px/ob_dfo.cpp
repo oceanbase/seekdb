@@ -119,8 +119,8 @@ void ObQCMonitoringInfo::reset() {
 int ObPxSqcMeta::assign(const ObPxSqcMeta &other)
 {
   int ret = OB_SUCCESS;
-  // 注意：非通用函数，不能用于保存已经初始化过的 ObPxSqcMeta
-  //       仅用于 assign 执行地址
+  // Note: Non-generic function, cannot be used to save already initialized ObPxSqcMeta
+  //       Only used for assign execution address
   if (NULL != qc_channel_) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("should only add a new sqc. you are adding an inited one", K(ret));
@@ -219,7 +219,7 @@ int ObDfo::get_sqc(int64_t idx, ObPxSqcMeta *&sqc)
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("NULL ptr", K(sqc), K(ret));
     } else if (idx != sqc->get_sqc_id()) {
-      // 按照设计预期，sqc 加入 sqcs_ 的顺序和 id 应该一致
+      // According to design expectations, the order of sqc added to sqcs_ and id should be consistent
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("idx and sqc id mismatch", K(idx), "id", sqc->get_sqc_id(), K(ret));
     }
@@ -357,8 +357,7 @@ int ObDfo::get_task_receive_chs(int64_t child_dfo_id,
   }
   return ret;
 }
-
-// child dfo保存是child和parent的sqc信息，parent直接从child拿就可以
+// child dfo saves the sqc information of child and parent, parent can directly get it from child
 int ObDfo::get_dfo_ch_info(int64_t sqc_idx, ObDtlChTotalInfo *&ch_info)
 {
   int ret = OB_SUCCESS;
@@ -431,7 +430,7 @@ int ObPxRpcInitSqcArgs::serialize_common_parts_2(
     LOG_WARN("unexpected status: op root is null", K(ret));
   } else {
     int64_t old_pos = pos;
-    // 序列化Task的核心部分到远端：sub plan tree
+    // Serialize the core part of Task to remote: sub plan tree
     const ObExprFrameInfo *frame_info = NULL;
     if (OB_UNLIKELY(!IS_PX_TRANSMIT(op_spec_root_->type_))) {
       ret = OB_ERR_UNEXPECTED;
@@ -568,8 +567,8 @@ int ObPxRpcInitSqcArgs::do_deserialize(int64_t &pos, const char *net_buf, int64_
 {
   int ret = OB_SUCCESS;
   /**
-   * 不需要记录des allocator分配出来这段buf，因为sqc handler回收的时候，一定
-   * 会进行reset，从而释放掉该内存。
+   * Do not need to record the buf allocated by des allocator, because sqc handler will
+   * definitely perform a reset duringrecycle, thus releasing this memory.
    */
   char *buf = nullptr;
   if (OB_ISNULL(exec_ctx_) || OB_ISNULL(des_phy_plan_) || OB_ISNULL(des_allocator_)
@@ -677,7 +676,7 @@ OB_DEF_SERIALIZE(ObPxRpcInitTaskArgs)
     LST_DO_CODE(OB_UNIS_ENCODE, sqc_handler_ptr_val);
 
     LOG_TRACE("serialize task", KP_(sqc_task_ptr), KP_(sqc_handler), K_(task));
-    // 序列化Task的核心部分到执行端：sub plan tree
+    // Serialize the core part of Task to the execution end: sub plan tree
     if (OB_SUCC(ret)) {
       const ObExprFrameInfo *frame_info = &ser_phy_plan_->get_expr_frame_info();
       if (OB_ISNULL(op_spec_root_)) {
@@ -701,7 +700,7 @@ OB_DEF_SERIALIZE(ObPxRpcInitTaskArgs)
     LST_DO_CODE(OB_UNIS_ENCODE, sqc_handler_ptr_val);
 
     LOG_TRACE("serialize task", KP_(sqc_task_ptr), KP_(sqc_handler), K_(task));
-    // 序列化Task的核心部分到执行端：sub plan tree
+    // Serialize the core part of Task to the execution end: sub plan tree
     if (OB_SUCC(ret)) {
       const ObExprFrameInfo &frame_info = ser_phy_plan_->get_expr_frame_info();
       if (OB_ISNULL(op_spec_root_)) {
@@ -907,8 +906,8 @@ int ObPxRpcInitTaskArgs::deep_copy_assign(ObPxRpcInitTaskArgs &src,
 {
   int ret = OB_SUCCESS;
   UNIS_VERSION_GUARD(lib::get_unis_global_compat_version());
-  // 深拷贝 arg 中所有元素，入session、op tree 等
-  // 暂时通过序列化+反序列化完成
+  // Deep copy all elements in arg, into session, op tree etc.
+  // Temporarily complete through serialization+deserialization
   int64_t ser_pos = 0;
   int64_t des_pos = 0;
   void *ser_ptr = NULL;

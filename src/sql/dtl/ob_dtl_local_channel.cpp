@@ -56,14 +56,12 @@ int ObDtlLocalChannel::init()
 void ObDtlLocalChannel::destroy()
 {
 }
-
-// 共享内存方式
+// Shared memory method
 int ObDtlLocalChannel::feedup(ObDtlLinkedBuffer *&linked_buffer)
 {
   return attach(linked_buffer);
 }
-
-// 每一条return路径都必须设置on_finish否则后续会卡死
+// Each return path must set on_finish otherwise subsequent operations will hang
 int ObDtlLocalChannel::send_shared_message(ObDtlLinkedBuffer *&buf)
 {
   int ret = OB_SUCCESS;
@@ -88,10 +86,10 @@ int ObDtlLocalChannel::send_shared_message(ObDtlLinkedBuffer *&buf)
       LOG_WARN("vector is not supported in local channel", K(ret), K(buf->msg_type()));
     } else if (OB_FAIL(DTL.get_channel(peer_id_, chan))) {
       int tmp_ret = ret;
-      // cache版本升级不需要处理，数据发送到receive端大致几种情况：
-      // 1) new|old -> old 无需处理，不涉及到cache问题
-      // 2) old -> new，is_data_msg 为false，和老逻辑一致
-      // 3) new -> new, is_data_msg可能为true，则new版本之间采用blocking逻辑，不影响其他
+      // cache version upgrade does not require processing, data sent to receive end roughly several cases:
+      // 1) new|old -> old no need to process, does not involve cache issues
+      // 2) old -> new, is_data_msg is false, and consistent with the old logic
+      // 3) new -> new, is_data_msg may be true, then blocking logic is used between new versions, without affecting others
       // only buffer data msg
       ObDtlMsgHeader header;
       const bool keep_pos = true;
@@ -114,7 +112,7 @@ int ObDtlLocalChannel::send_shared_message(ObDtlLinkedBuffer *&buf)
       } else if (OB_ISNULL(local_chan->get_dfc())) {
         LOG_TRACE("dfc of rpc channel is null", K(msg_response_.is_block()), KP(peer_id_), K(ret), KP(local_chan->get_id()), K(local_chan->get_peer()));
       } else if (local_chan->belong_to_receive_data()) {
-        // 必须是receive端，才可以主动回包让transmit端block
+        // Must be the receive end, in order to actively send a response to block the transmit end
         is_block = local_chan->get_dfc()->is_block(local_chan);
         LOG_TRACE("need blocking", K(msg_response_.is_block()), KP(peer_id_), K(ret), KP(local_chan->get_id()),
           K(local_chan->get_peer()), K(local_chan->belong_to_receive_data()), K(local_chan->get_processed_buffer_cnt()), K(local_chan->get_recv_buffer_cnt()));
@@ -122,7 +120,7 @@ int ObDtlLocalChannel::send_shared_message(ObDtlLinkedBuffer *&buf)
       DTL.release_channel(local_chan);
     }
     if (nullptr == buf) {
-      // 成功attach后，认为申请成功了，由于申请动作由自己申请，但释放权交给了另外一个channel，所以这里假设也是自己申请的，方便统计申请与释放一致
+      // After successful attach, it is considered that the application was successful. Since the application action was initiated by oneself, but the release right was handed over to another channel, it is assumed here that it was also applied by oneself for convenient statistics of consistent application and release
       free_buffer_count();
     }
   }
@@ -135,7 +133,7 @@ int ObDtlLocalChannel::send_shared_message(ObDtlLinkedBuffer *&buf)
     }
     metric_.set_last_out_ts(::oceanbase::common::ObTimeUtility::current_time());
   }
-  //统一返回消息
+  // Unified return message
   msg_response_.on_finish(is_block, ret);
   return ret;
 }

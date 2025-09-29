@@ -112,14 +112,14 @@ enum class PRIORITY_SEED_BIT : uint64_t
 constexpr int64_t MSG_DELAY_WARN_THRESHOLD = 200_ms;
 constexpr int64_t MAX_LEASE_TIME = 10_s;
 constexpr int64_t PRIORITY_BUFFER_SIZE = 512;
-constexpr int64_t INVALID_VALUE = -1;// 所有int64_t变量的初始默认无效值
+constexpr int64_t INVALID_VALUE = -1;// The initial default invalid value for all int64_t variables
 constexpr int64_t CACHE_EXPIRATION_TIME = 5_s;
-extern int64_t MAX_TST; // 最大单程消息延迟，暂设为1s，在单测中会将其调低，日后可改为配置项，现阶段先用全局变量代替
-inline int64_t CALCULATE_RENEW_LEASE_INTERVAL() { return  std::min<int64_t>(0.5 * MAX_TST, 500_ms); }// 续约周期固定为消息延迟的一半，最大不超过500ms
-inline int64_t CALCULATE_TIME_WINDOW_SPAN_TS() { return  2 * MAX_TST; }// 时间窗口的长度，为两个最大单程消息延迟， 默认为2s
-inline int64_t CALCULATE_MAX_ELECT_COST_TIME() { return  10 * MAX_TST; }// 一次选举可能出现的最大耗时设置，默认为10s
-inline int64_t CALCULATE_LEASE_INTERVAL() { return 4 * MAX_TST; }// 4个消息延迟，默认是4s
-inline int64_t CALCULATE_TRIGGER_ELECT_WATER_MARK() { return std::min<int64_t>(MAX_TST, 1_s); }// 触发无主选举的Lease剩余水位线，1个最大消息延迟，最大不超过1s
+extern int64_t MAX_TST; // Maximum one-way message delay, temporarily set to 1s, it will be lowered in unit tests, can be changed to a configuration item later, for now use a global variable as a substitute
+inline int64_t CALCULATE_RENEW_LEASE_INTERVAL() { return  std::min<int64_t>(0.5 * MAX_TST, 500_ms); }// Renewal interval is fixed at half of the message delay, with a maximum of 500ms
+inline int64_t CALCULATE_TIME_WINDOW_SPAN_TS() { return  2 * MAX_TST; }// The length of the time window, which is two times the maximum one-way message delay, default is 2s
+inline int64_t CALCULATE_MAX_ELECT_COST_TIME() { return  10 * MAX_TST; }// The maximum time an election may take, default is 10s
+inline int64_t CALCULATE_LEASE_INTERVAL() { return 4 * MAX_TST; }// 4 message delays, default is 4s
+inline int64_t CALCULATE_TRIGGER_ELECT_WATER_MARK() { return std::min<int64_t>(MAX_TST, 1_s); }// Water mark for triggering leader election, 1 max message delay, not exceeding 1s
 
 }// namespace election
 }// namespace palf

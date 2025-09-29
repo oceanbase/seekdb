@@ -21,27 +21,27 @@ namespace sql {
 namespace dtl {
 
 /**
- * 该接口与make_receive_channel类似，主要用于tranmist和receive端收到channel信息后构建channel
- * 之前的make_channel是在PX(coord)端创建好，然后分别发送sqc,即给transmit和receive端，
- * transmit和receive端直接根据创建好的channel信息来new channel实例。但这种方式存在性能问题
- * 之前方式实现算法复杂度是：transmit_dfo_task_cnt * receive_dfo_task_cnt，假设dop=512，则至少512*512
- * 随着dop增大耗时更长。见bug 
- * 新方案：
- *        新方案从PX端不再构建所有channel具体信息，
- *        而是PX构建channel的总体信息，将channel总体信息发给所有的dfo的sqc，
- *        然后每个(task)worker根据channel总体信息各自构建自己的信息,
- *        将之前 make_channel 替换成 make_transmit(receive)_channel
- *        即channel provider提供get_data_ch接口，然后transmti和receive分别构建属于自己的channel
- * 假设： M: Transmit dfo的worker数量
- *       N: Receive dfo的worker数量
- *       start_ch_id: 是申请(M * N)的channel个数的start id
- * 对于某个worker来讲，构建channel大致公式为：
- * transmit端：
+ * This interface is similar to make_receive_channel, mainly used for constructing channels after the transmit and receive ends receive channel information
+ * The previous make_channel was created at the PX(coord) end, then sent sqc to both the transmit and receive ends,
+ * where the transmit and receive ends directly create channel instances based on the created channel information. However, this method has performance issues
+ * The algorithm complexity of the previous approach is: transmit_dfo_task_cnt * receive_dfo_task_cnt, assuming dop=512, it would be at least 512*512
+ * As dop increases, the time taken becomes longer. See bug
+ * New solution:
+ *        The new solution no longer constructs all channel specific information at the PX end,
+ *        but instead constructs overall channel information at the PX end, sending this overall channel information to all dfo sqcs,
+ *        then each (task) worker constructs its own information based on the overall channel information,
+ *        replacing the previous make_channel with make_transmit(receive)_channel
+ *        That is, the channel provider provides the get_data_ch interface, then transmit and receive construct their own channels respectively
+ * Assumption: M: Number of workers in Transmit dfo
+ *             N: Number of workers in Receive dfo
+ *             start_ch_id: Is the start id of the (M * N) requested channel count
+ * For a certain worker, the formula for constructing the channel is approximately:
+ * transmit end:
  * i = cur_worker_idx;
  * for (j = 0; j < N; j++) {
  *  chid = start_ch_id + j + i * N;
  * }
- * receive端：
+ * receive end:
  * i = cur_worker_idx;
  * for (j = 0; j < M; j++) {
  *  chid = start_ch_id + j * N + i;
@@ -124,7 +124,7 @@ int ObDtlChannelGroup::link_channel(const ObDtlChannelInfo &ci, ObDtlChannel *&c
 {
   int ret = OB_SUCCESS;
   const auto chid = ci.chid_;
-  //流控则可以使用local，即data channel
+  // Flow control can use local, i.e., data channel
   if (nullptr != dfc && ci.type_ == DTL_CT_LOCAL) {
     if (OB_FAIL(DTL.create_local_channel(ci.tenant_id_, ci.chid_, ci.peer_, chan, dfc))) {
       LOG_WARN("create local channel fail", KP(chid), K(ret));
@@ -143,8 +143,7 @@ int ObDtlChannelGroup::unlink_channel(const ObDtlChannelInfo &ci)
 {
   return DTL.destroy_channel(ci.chid_);
 }
-
-//从dtl的map中删除channel
+// Remove channel from dtl's map
 int ObDtlChannelGroup::remove_channel(const ObDtlChannelInfo &ci, ObDtlChannel *&ch)
 {
   return DTL.remove_channel(ci.chid_, ch);

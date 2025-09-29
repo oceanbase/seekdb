@@ -10,7 +10,7 @@
  * See the Mulan PubL v2 for more details.
  */
  
-#define private public  // 获取私有成员
+#define private public  // get private members
 #include "share/index_usage/ob_index_usage_info_mgr.h"
 #include "mtlenv/mock_tenant_module_env.h"
 

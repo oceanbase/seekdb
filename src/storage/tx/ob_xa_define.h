@@ -122,7 +122,7 @@ public:
     OBTEMPTABLE = 0x100000000,
   };
 public:
-  // 用于检查xa请求传入的flag
+  // Used to check the flag passed in by xa request
   // check the flag brought by xa calls
   static bool is_valid(const int64_t flag, const int64_t xa_req_type);
   // check the flag stored in inner table

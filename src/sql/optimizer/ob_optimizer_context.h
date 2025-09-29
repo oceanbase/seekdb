@@ -821,7 +821,7 @@ private:
   ObLogPlanFactory log_plan_factory_;
   bool force_serial_set_order_; //to keep a serial execute for set query
   int64_t parallel_;
-  // 决定计划并行度的规则
+  // Determine the rule for plan parallelism
   PXParallelRule px_parallel_rule_;
   bool can_use_pdml_; // can use pdml after check parallel
   bool can_use_parallel_das_dml_; // can use parallel das dml after check parallel

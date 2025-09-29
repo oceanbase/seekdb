@@ -415,7 +415,7 @@ bool ObChunkRowStore::shrink_block(int64_t size)
             K(item->get_buffer()->data_size()), K(item->get_buffer()->mem_size()), K(size));
       }
       dumped_row_cnt_ += item->rows();
-      // 不论成功与否，都需要释放内存
+      // Regardless of success or failure, memory needs to be released
       freed_size += item->get_buffer()->mem_size();
       LOG_DEBUG("RowStore shrink dump and free", K(size), K(freed_size),
           K(item->get_buffer()->mem_size()), K(item));
@@ -505,8 +505,7 @@ inline int ObChunkRowStore::dump_one_block(BlockBuffer *item)
 }
 
 // only clean memory data
-
-// 添加一种模式，dump时候只dump已经写满的block,剩下最后一个block
+// Add a mode, dump only the blocks that are full, leaving the last block
 int ObChunkRowStore::dump(bool reuse, bool all_dump)
 {
   int ret = OB_SUCCESS;
@@ -530,7 +529,7 @@ int ObChunkRowStore::dump(bool reuse, bool all_dump)
         if (!buf->is_empty() && OB_FAIL(dump_one_block(buf))) {
           LOG_WARN("failed to dump block", K(ret));
         }
-        // 不论成功与否，都需要释放内存
+        // Regardless of success or failure, memory needs to be released
         if (!buf->is_empty()) {
           mem_used_ -= buf->mem_size();
           dumped_row_cnt_ += cur->rows();
@@ -969,9 +968,9 @@ int ObChunkRowStore::load_next_block(ChunkIterator &it)
                       (it.chunk_read_size_ > min_blk_size_ ? it.chunk_read_size_ : min_blk_size_);
       int64_t read_size = block_size - sizeof(BlockBuffer);
       if (it.chunk_mem_ != NULL) {
-        // 一般情况下，写入磁盘的数据都会大于一个block size，但当测试时，如强制写入N行就写入磁盘
-        // 会导致读数据时，由于整个数据比较小，小于blk size，这个时候会申请内存和写入数据的大小一样大（节省内存）
-        // 这种情况下才会走到这里，主要用来测试代码
+        // Generally, the data written to disk will be greater than one block size, but when testing, such as forcing the write of N lines, it will be written to disk
+        // will cause reading data to, since the entire data is relatively small, less than blk size, at this time it will allocate memory the same size as the data being written (to save memory)
+        // This situation will lead to here, mainly used for testing the code
         allocator_->free(it.chunk_mem_);
         it.chunk_mem_ = NULL;
         it.cur_iter_blk_ = NULL;

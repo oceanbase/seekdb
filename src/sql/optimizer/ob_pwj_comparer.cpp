@@ -137,7 +137,7 @@ int ObPwjComparer::extract_all_partition_indexes(const ObCandiTableLoc &phy_tabl
     // do nothing
   } else if (share::schema::PARTITION_LEVEL_ONE == part_level) {
     for (int64_t i = 0; OB_SUCC(ret) && i < phy_partitions.count(); ++i) {
-      // 对于一级分区表part_id(一级逻辑分区id) = partition_id(物理分区id)
+      // For the first-level partition table part_id(first-level logical partition id) = partition_id(physical partition id)
       ObTabletID tablet_id = phy_partitions.at(i).get_partition_location().get_tablet_id();
       int64_t part_index = -1;
       int64_t subpart_index = -1;
@@ -174,7 +174,7 @@ int ObPwjComparer::extract_all_partition_indexes(const ObCandiTableLoc &phy_tabl
   }
   if (OB_SUCC(ret) && share::schema::PARTITION_LEVEL_TWO == part_level) {
     if (all_partition_indexes.count() > 0) {
-      // 检查是否只涉及到一个一级分区
+      // Check if it only involves one first-level partition
       const int64_t first_part_id = all_partition_indexes.at(0);
       is_partition_single = true;
       for (int64_t i = 1; i < all_partition_indexes.count(); ++i) {
@@ -185,7 +185,7 @@ int ObPwjComparer::extract_all_partition_indexes(const ObCandiTableLoc &phy_tabl
       }
     }
     if (all_subpartition_indexes.count() > 0) {
-      // 是否每个一级分区都只涉及一个二级分区
+      // Whether each first-level partition involves only one second-level partition
       is_subpartition_single = true;
       ObSqlBitSet<> part_ids;
       for (int64_t i = 0; OB_SUCC(ret) && i < all_partition_indexes.count(); ++i) {
@@ -567,7 +567,7 @@ int ObStrictPwjComparer::check_logical_equal_and_calc_match_map(const PwjTable &
       } else if (OB_FAIL(is_sub_partition_logically_equal(l_table, r_table, is_match))) {
         LOG_WARN("failed to compare logical equal subpartition", K(ret));
       }
-    // 一级分区表partition_id(物理分区id) = part_id(一级逻辑分区id)
+    // First-level partition table partition_id(physical partition id) = part_id(first-level logical partition id)
     } else {
       for (int64_t i = 0; OB_SUCC(ret) && i < part_tablet_id_map_.count(); ++i) {
         if (OB_FAIL(phy_part_map_.set_refactored(part_tablet_id_map_.at(i).first, part_tablet_id_map_.at(i).second))) {
@@ -620,7 +620,7 @@ int ObStrictPwjComparer::is_first_partition_logically_equal(const PwjTable &l_ta
   } else if (l_used_partition_indexes.count() != r_used_partition_indexes.count()) {
     is_equal = false;
   } else if (is_hash_like_part(l_table.part_type_)) {
-    // hash/key分区, 要求分区数量必须一致, 且左表每一个part_index都有一个相等的右表part_index
+    // hash/key partition, requirement partition number must be consistent, and each part_index of the left table has an equal part_index of the right table
     if (OB_FAIL(check_hash_partition_equal(l_table,
                                            r_table,
                                            l_used_partition_indexes,
@@ -631,7 +631,7 @@ int ObStrictPwjComparer::is_first_partition_logically_equal(const PwjTable &l_ta
       LOG_WARN("failed to check hash partition equal", K(ret));
     }
   } else if (is_range_part(l_table.part_type_)) {
-    // range分区, 要求对应的分区上界一致
+    // range partition, require the corresponding partition upper bounds to be consistent
     if (OB_FAIL(check_range_partition_equal(l_table.partition_array_,
                                             r_table.partition_array_,
                                             l_used_partition_indexes,
@@ -642,7 +642,7 @@ int ObStrictPwjComparer::is_first_partition_logically_equal(const PwjTable &l_ta
       LOG_WARN("failed to get range partition match map", K(ret));
     }
   } else if (is_list_part(l_table.part_type_)) {
-    // list分区, 要求左侧的每一个分区能在右侧找到对应的分区
+    // list partition, require each partition on the left to find a corresponding partition on the right
     if (OB_FAIL(check_list_partition_equal(l_table.partition_array_,
                                            r_table.partition_array_,
                                            l_used_partition_indexes,
@@ -692,7 +692,7 @@ int ObStrictPwjComparer::is_sub_partition_logically_equal(const PwjTable &l_tabl
       } else if (l_used_partition_indexes.count() != r_used_partition_indexes.count()) {
         is_equal = false;
       } else if (is_hash_like_part(l_table.subpart_type_)) {
-        // hash/key分区, 要求分区数量必须一致, 且左表每一个part_index都有一个相等的右表part_index
+        // hash/key partition, require the number of partitions to be consistent, and each part_index of the left table must have an equal part_index in the right table
         if (l_part->get_sub_part_num() != r_part->get_sub_part_num()) {
           is_equal = false;
         } else if (OB_FAIL(check_hash_subpartition_equal(l_part->get_subpart_array(),
@@ -704,7 +704,7 @@ int ObStrictPwjComparer::is_sub_partition_logically_equal(const PwjTable &l_tabl
           LOG_WARN("failed to get hash subpartition match map", K(ret));
         }
       } else if (is_range_part(l_table.subpart_type_)) {
-        // range分区, 要求使用到的分区数一致, 且对应的分区上界一致
+        // range partition, require the number of partitions used to be consistent, and the corresponding partition upper bounds to be consistent
         if (OB_FAIL(check_range_subpartition_equal(l_part->get_subpart_array(),
                                                    r_part->get_subpart_array(),
                                                    l_used_partition_indexes,
@@ -714,7 +714,7 @@ int ObStrictPwjComparer::is_sub_partition_logically_equal(const PwjTable &l_tabl
           LOG_WARN("failed to get range subpartition match map", K(ret));
         }
       } else if (is_list_part(l_table.subpart_type_)) {
-        // list分区, 要求使用到的分区数一致, 且左侧的每一个分区能在右侧找到对应的分区
+        // list partition, require the number of partitions used to be consistent, and each partition on the left can find a corresponding partition on the right
         if (OB_FAIL(check_list_subpartition_equal(l_part->get_subpart_array(),
                                                   r_part->get_subpart_array(),
                                                   l_used_partition_indexes,
@@ -768,7 +768,7 @@ int ObStrictPwjComparer::check_hash_partition_equal(const PwjTable &l_table,
 {
   int ret = OB_SUCCESS;
   is_equal = true;
-  // hash分区还不支持分区管理，part_id一定等于part_index，不需要遍历part_array
+  // hash partition does not support partition management, part_id must equal part_index, no need to traverse part_array
   if (l_table.part_number_ != r_table.part_number_) {
     is_equal = false;
   } else {
@@ -811,7 +811,7 @@ int ObStrictPwjComparer::check_hash_subpartition_equal(ObSubPartition **l_subpar
 {
   int ret = OB_SUCCESS;
   is_equal = true;
-  // hash分区还不支持分区管理，part_id一定等于part_index，不需要遍历part_array
+  // hash partition does not support partition management, part_id must equal part_index, no need to traverse part_array
   UNUSED(l_subpartition_array);
   UNUSED(r_subpartition_array);
   for (int64_t i = 0; OB_SUCC(ret) && is_equal && i < l_indexes.count(); ++i) {

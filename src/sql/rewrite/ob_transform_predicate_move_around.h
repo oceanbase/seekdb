@@ -89,20 +89,20 @@ private:
 
   /**
    * @brief pullup_predicates_from_set
-   * set stmt的左右子查询中谓词上拉
+   * pull up predicates from the subqueries of set stmt
    * @param stmt
-   * @param pullup_preds 上拉的谓词
-   * @param parent_stmt set stmt的上层stmt，用于改写上拉谓词
+   * @param pullup_preds predicates to be pulled up
+   * @param parent_stmt the upper stmt of set stmt, used for rewriting pulled-up predicates
    */
   int pullup_predicates_from_set(ObSelectStmt *stmt,
                                 ObIArray<ObRawExpr *> &pullup_preds);
   
   /**
    * @brief check_pullup_predicates
-   * 根据set op类型选择需要输出的谓词
-   * union：选择同构谓词；
-   * interset：合并两侧的谓词；
-   * except：选择左侧的谓词
+   * Select the predicates to output based on the set op type
+   * union: select isomorphic predicates;
+   * intersect: merge predicates from both sides;
+   * except: select predicates from the left side
    */
   int check_pullup_predicates(ObSelectStmt *stmt,
                               ObIArray<ObRawExpr *> &left_pullup_preds,
@@ -166,9 +166,9 @@ private:
 
   /**
    * @brief pushdown_into_set_stmt
-   * 下推谓词到set stmt的左右子查询中
+   * Push down predicates into the left and right subqueries of the set stmt
    * @param stmt
-   * @param predicates 待下推的谓词
+   * @param predicates Predicates to be pushed down
    */
   int pushdown_into_set_stmt(ObSelectStmt *stmt,
                             ObIArray<ObRawExpr *> &pullup_preds,
@@ -176,10 +176,10 @@ private:
 
   /**
    * @brief check_pushdown_predicates
-   * 根据左右谓词下推的情况，决定哪些谓词需要加回上层stmt
-   * union：合并左右两侧未下推的谓词；（union需要左右两侧都下推成功）
-   * intersect：选择左右两侧均未下推的谓词；（intersect只需要下推到任意一侧）
-   * except：选择左侧未下推的谓词；（except只需要左侧成功下推）
+   * According to the situation of predicate pushdown on both sides, decide which predicates need to be added back to the upper layer stmt
+   * union: merge predicates that were not pushed down on both sides; (union requires successful pushdown on both sides)
+   * intersect: select predicates that were not pushed down on both sides; (intersect only needs to be pushed down to either side)
+   * except: select predicates that were not pushed down on the left side; (except only needs successful pushdown on the left side)
    */
   int check_pushdown_predicates(ObSelectStmt *stmt,
                                 ObIArray<ObRawExpr *> &left_pushdown_preds,
@@ -194,10 +194,10 @@ private:
 
   /**
    * @brief pushdown_into_set_stmt
-   * 下推谓词到set stmt的子查询中
+   * Push down predicates into the subqueries of set stmt
    * @param stmt
-   * @param predicates 待下推的谓词
-   * @param 返回没有下推的谓词，需要加回上层
+   * @param predicates Predicates to be pushed down
+   * @param Return predicates that were not pushed down, need to be added back to the upper layer
    */
   int pushdown_into_set_stmt(ObSelectStmt *stmt,
                             ObIArray<ObRawExpr *> &pullup_preds,
@@ -206,13 +206,13 @@ private:
 
   /**
    * @brief rename_set_op_predicates
-   * 重命名谓词
+   * Rename predicates
    * @param child_stmt 
    * @param parent_stmt
-   * @param preds 待改写的谓词
+   * @param preds Predicates to be rewritten
    * @param is_pullup
-   * 如果是pullup谓词，则需要从child_stmt改写到parent_stmt
-   * 如果是pushdown谓词，则需要从parent_stmt改写到child_stmt
+   * If it is a pullup predicate, then it needs to be rewritten from child_stmt to parent_stmt
+   * If it is a pushdown predicate, then it needs to be rewritten from parent_stmt to child_stmt
    */
   int rename_set_op_predicates(ObSelectStmt &child_stmt,
                               ObSelectStmt &parent_stmt,

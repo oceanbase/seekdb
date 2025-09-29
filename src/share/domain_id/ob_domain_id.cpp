@@ -99,7 +99,7 @@ int ObDomainIdUtils::check_table_need_domain_id_merge(ObDomainIDType type, const
         break;
       }
       case ObDomainIDType::IVFFLAT_CID: {
-        // TODO(@liyao): 使用merge_iter补cid_vector
+        // TODO(@liyao): use merge_iter to populate cid_vector
         // if (ddl_table_schema->is_vec_ivfflat_cid_vector_index()) {
         //   res = true;
         // }

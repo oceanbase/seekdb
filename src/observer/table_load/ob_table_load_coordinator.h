@@ -41,7 +41,7 @@ class ObTableLoadCoordinator
   static const int64_t WAIT_INTERVAL_US = 1 * 1000 * 1000; // 1s
   static const int64_t DEFAULT_TIMEOUT_US = 10LL * 1000 * 1000; // 10s
   static const int64_t HEART_BEAT_RPC_TIMEOUT_US = 1LL * 1000 * 1000; // 1s
-  // 申请和释放资源失败等待间隔时间
+  // Application and resource release failure wait interval time
   static const int64_t RESOURCE_OP_WAIT_INTERVAL_US = 5 * 1000LL * 1000LL; // 5s
   static const int64_t SSTABLE_BUFFER_SIZE = 68 * 1024LL;;  // 64K + 4K
   static const int64_t MACROBLOCK_BUFFER_SIZE = 10 * 1024LL * 1024LL;  // 10MB
@@ -126,9 +126,9 @@ public:
 private:
   int pre_start_trans_peers(ObTableLoadCoordinatorTrans *trans);
   int confirm_start_trans_peers(ObTableLoadCoordinatorTrans *trans);
-  // - OB_SUCCESS: 成功
-  // - OB_EAGAIN: 重试
-  // - else: 失败
+  // - OB_SUCCESS: Success
+  // - OB_EAGAIN: retry
+  // - else: failure
   int pre_finish_trans_peers(ObTableLoadCoordinatorTrans *trans);
   int confirm_finish_trans_peers(ObTableLoadCoordinatorTrans *trans);
   int abandon_trans_peers(ObTableLoadCoordinatorTrans *trans);
@@ -144,7 +144,7 @@ public:
             const table::ObTableLoadObjRowArray &obj_rows);
   // for client
   int flush(ObTableLoadCoordinatorTrans *trans);
-  // 只写到主节点
+  // Only write to the leader node
   int write_peer_leader(const table::ObTableLoadTransId &trans_id, int32_t session_id,
                         uint64_t sequence_no, const table::ObTableLoadTabletObjRowArray &tablet_obj_rows,
                         const common::ObAddr &addr);

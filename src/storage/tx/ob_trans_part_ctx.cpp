@@ -1316,7 +1316,7 @@ int ObPartTransCtx::check_scheduler_status()
       TRANS_LOG(DEBUG, "don't need ask scheduler status", K(ret), KPC(this));
     } else if (exec_info_.scheduler_ != addr_ && OB_FAIL(check_rs_scheduler_is_alive_(is_alive))) {
       TRANS_LOG(WARN, "check rs scheduler is alive error", KR(ret), K(is_alive), KPC(this));
-      // scheduler已宕机
+      // scheduler has crashed
     } else if (!is_alive) {
       TRANS_LOG(WARN, "[TRANS GC] scheduler server is not alive, participant will GC", KPC(this));
       if (OB_FAIL(gc_ctx_())) {

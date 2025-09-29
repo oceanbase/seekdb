@@ -69,10 +69,10 @@ void create_or_find_test_table(const char *table_name, share::ObLSID &ls_id, ObT
     int64_t _;
     char create_table_sql[512] = { 0 };
     databuff_printf(create_table_sql, 512, "create table %s(a int)", table_name);
-    // 1. 新建一个tablet
+    // 1. Create a new tablet
     ASSERT_EQ(OB_SUCCESS, GCTX.sql_proxy_->write(OB_SYS_TENANT_ID, create_table_sql, _));
   }
-  // 2. 从表名拿到它的tablet_id
+  // 2. Get its tablet_id from the table name
   char where_condition1[512] = { 0 };
   databuff_printf(where_condition1, 512, "where table_name = '%s'", table_name);
   ASSERT_EQ(OB_SUCCESS, ObTableAccessHelper::read_single_row(OB_SYS_TENANT_ID,
@@ -80,7 +80,7 @@ void create_or_find_test_table(const char *table_name, share::ObLSID &ls_id, ObT
                                                             OB_ALL_TABLE_TNAME,
                                                             where_condition1,
                                                             tablet_id));
-  // 3. 从tablet_id拿到它的ls_id
+  // 3. Get its ls_id from tablet_id
   char where_condition2[512] = {  0 };
   databuff_printf(where_condition2, 512, "where tablet_id = %ld", tablet_id.id());
   ASSERT_EQ(OB_SUCCESS, ObTableAccessHelper::read_single_row(OB_SYS_TENANT_ID,
@@ -88,7 +88,7 @@ void create_or_find_test_table(const char *table_name, share::ObLSID &ls_id, ObT
                                                             OB_ALL_TABLET_TO_LS_TNAME,
                                                             where_condition2,
                                                             ls_id));
-  // 4. 从ls_id找到ls
+  // 4. Find ls from ls_id
   storage::ObLSHandle ls_handle;
   ASSERT_EQ(OB_SUCCESS, MTL(storage::ObLSService *)->get_ls(ls_id, ls_handle, ObLSGetMod::TRANS_MOD));
 }
@@ -98,7 +98,7 @@ void insert_row_to_write_inc_seq(const char *table_name)
   int64_t _;
   char insert_sql[512] = { 0 };
   databuff_printf(insert_sql, 512, "insert into %s values(0)", table_name);
-  // 1. 插入数据
+  // 1. Insert data
   ASSERT_EQ(OB_SUCCESS, GCTX.sql_proxy_->write(OB_SYS_TENANT_ID, insert_sql, _));
 }
 
@@ -107,9 +107,9 @@ void add_column_to_write_dll_info(const char *table_name, share::ObLSID &ls_id, 
   int64_t _;
   char insert_sql[512] = { 0 };
   databuff_printf(insert_sql, 512, "alter table %s add b int after a", table_name);
-  // 1. 加列
+  // 1. Add column
   ASSERT_EQ(OB_SUCCESS, GCTX.sql_proxy_->write(OB_SYS_TENANT_ID, insert_sql, _));
-  // 2. 从表名拿到它的tablet_id
+  // 2. Get its tablet_id from the table name
   char where_condition1[512] = { 0 };
   databuff_printf(where_condition1, 512, "where table_name = '%s'", table_name);
   ASSERT_EQ(OB_SUCCESS, ObTableAccessHelper::read_single_row(OB_SYS_TENANT_ID,
@@ -117,7 +117,7 @@ void add_column_to_write_dll_info(const char *table_name, share::ObLSID &ls_id, 
                                                             OB_ALL_TABLE_TNAME,
                                                             where_condition1,
                                                             tablet_id));
-  // 3. 从tablet_id拿到它的ls_id
+  // 3. Get its ls_id from tablet_id
   char where_condition2[512] = { 0 };
   databuff_printf(where_condition2, 512, "where tablet_id = %ld", tablet_id.id());
   ASSERT_EQ(OB_SUCCESS, ObTableAccessHelper::read_single_row(OB_SYS_TENANT_ID,
@@ -125,7 +125,7 @@ void add_column_to_write_dll_info(const char *table_name, share::ObLSID &ls_id, 
                                                             OB_ALL_TABLET_TO_LS_TNAME,
                                                             where_condition2,
                                                             ls_id));
-  // 4. 从ls_id找到ls
+  // 4. Find ls from ls_id
   storage::ObLSHandle ls_handle;
   ASSERT_EQ(OB_SUCCESS, MTL(storage::ObLSService *)->get_ls(ls_id, ls_handle, ObLSGetMod::TRANS_MOD));
 }
@@ -133,29 +133,29 @@ void add_column_to_write_dll_info(const char *table_name, share::ObLSID &ls_id, 
 void do_major_to_write_medium_info()
 {
   int64_t _;
-  // 1. 插入数据
+  // 1. Insert data
   ASSERT_EQ(OB_SUCCESS, GCTX.sql_proxy_->write(OB_SYS_TENANT_ID, "alter system minor freeze", _));
 }
 
 void do_flush_mds_table(share::ObLSID ls_id, ObTabletID tablet_id)
 {
-  // 1. 从ls_id找到ls
+  // 1. Find ls from ls_id
   storage::ObLSHandle ls_handle;
   ASSERT_EQ(OB_SUCCESS, MTL(storage::ObLSService *)->get_ls(ls_id, ls_handle, ObLSGetMod::TRANS_MOD));
-  // 2. 从ls拿到tablet handle
+  // 2. Get tablet handle from ls
   storage::ObTabletHandle tablet_handle;
   ASSERT_EQ(OB_SUCCESS, ls_handle.get_ls()->get_tablet(tablet_id, tablet_handle));
-  // 3. 从tablet handle拿到tablet pointer
+  // 3. Get tablet pointer from tablet handle
   const ObTabletPointerHandle &pointer_handle = tablet_handle.get_obj()->get_pointer_handle();
   ObTabletPointer *tablet_pointer = pointer_handle.get_resource_ptr();
-  // 4. 做flush动作
+  // 4. do flush action
   mds::MdsTableHandle handle;
   share::SCN max_decided_scn;
   ASSERT_EQ(OB_SUCCESS, ls_handle.get_ls()->get_max_decided_scn(max_decided_scn));
   ASSERT_EQ(OB_SUCCESS, tablet_pointer->get_mds_table(tablet_id, handle));
   ASSERT_EQ(OB_SUCCESS, handle.flush(share::SCN::max_scn(), max_decided_scn));
   ASSERT_EQ(true, handle.p_mds_table_base_->flushing_scn_.is_valid());
-  // 5. 等flush完成
+  // 5. Wait for flush to complete
   share::SCN rec_scn = share::SCN::min_scn();
   while (!rec_scn.is_max()) {
     ASSERT_EQ(OB_SUCCESS, handle.get_rec_scn(rec_scn));
@@ -167,10 +167,10 @@ void do_flush_mds_table(share::ObLSID ls_id, ObTabletID tablet_id)
 void do_recycle_and_gc_mds_table(share::ObLSID ls_id, ObTabletID tablet_id)
 {
   int ret = OB_SUCCESS;
-  // 1. 从ls_id找到ls
+  // 1. Find ls from ls_id
   storage::ObLSHandle ls_handle;
   ASSERT_EQ(OB_SUCCESS, MTL(storage::ObLSService *)->get_ls(ls_id, ls_handle, ObLSGetMod::TRANS_MOD));
-  // 2. 从ls拿到tablet handle
+  // 2. Get tablet handle from ls
   storage::ObTabletHandle tablet_handle;
   ASSERT_EQ(OB_SUCCESS, ls_handle.get_ls()->get_tablet(tablet_id, tablet_handle));
   // 3. gc mds table
@@ -220,12 +220,12 @@ void read_virtual_mds_stat(share::ObLSID ls_id, ObTabletID tablet_id, VirtualTab
 void advance_checkpoint(share::ObLSID ls_id, share::SCN aim_scn)
 {
   int ret = OB_SUCCESS;
-  // 1. 从ls_id找到ls
+  // 1. Find ls from ls_id
   storage::ObLSHandle ls_handle;
   ASSERT_EQ(OB_SUCCESS, MTL(storage::ObLSService *)->get_ls(ls_id, ls_handle, ObLSGetMod::TRANS_MOD));
   int64_t retry_times = 60;
   SCN checkpoint = SCN::min_scn();
-  // 2. 等max_decided_scn推过目标点
+  // 2. Wait until max_decided_scn surpasses the target point
   SCN max_decided_scn; 
   do {
     ret = ls_handle.get_ls()->get_max_decided_scn(max_decided_scn);
@@ -237,7 +237,7 @@ void advance_checkpoint(share::ObLSID ls_id, share::SCN aim_scn)
   } while (OB_SUCC(ret) && max_decided_scn <= aim_scn);
   ASSERT_EQ(OB_SUCCESS, ret);
   ASSERT_GT(max_decided_scn, aim_scn);
-  // 3. 推checkpoint并且等checkpoint推过
+  // 3. Push checkpoint and wait for the checkpoint to be pushed through
   while (--retry_times > 0) {
     checkpoint = ls_handle.get_ls()->get_clog_checkpoint_scn();
     if (checkpoint > aim_scn) {
@@ -256,7 +256,7 @@ void advance_checkpoint(share::ObLSID ls_id, share::SCN aim_scn)
     }
   }
   ASSERT_GT(ls_handle.get_ls()->get_clog_checkpoint_scn(), aim_scn);
-  // 4. 等CLOG回收日志
+  // 4. Wait for CLOG to recycle logs
   SCN min_start_scn = SCN::min_scn();
   SCN keep_alive_scn =  SCN::min_scn();
   MinStartScnStatus status = MinStartScnStatus::UNKOWN;

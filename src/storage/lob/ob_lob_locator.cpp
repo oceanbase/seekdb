@@ -102,7 +102,7 @@ int ObLobLocatorHelper::init(const uint64_t table_id,
   } else if (OB_FAIL(tx_read_snapshot_.build_snapshot_for_lob(ctx.mvcc_acc_ctx_.snapshot_, ls_id))) {
     STORAGE_LOG(WARN, "build_snapshot_for_lob fail", K(ret), K(ls_id), K(snapshot_version), K(ctx.mvcc_acc_ctx_.snapshot_));
   } else {
-    // table id只用来判断是不是systable, 这个接口创建的locator不会构造真正的rowid
+    // table id is only used to determine if it is a systable, this interface created locator will not construct a real rowid
     table_id_ = table_id;
     tablet_id_ = tablet_id;
     ls_id_ = ls_id.id();

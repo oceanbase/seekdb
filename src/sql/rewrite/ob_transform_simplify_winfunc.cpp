@@ -48,7 +48,7 @@ int ObTransformSimplifyWinfunc::transform_one_stmt(common::ObIArray<ObParentDMLS
   return ret;
 }
 
-/* window function partition by 唯一时, 消去window function
+/* window function partition by unique time, eliminate window function
 create table t(pk int primary key, c1 int);
 select max(c1) over(partition by pk) from t;
 =>
@@ -117,14 +117,14 @@ int ObTransformSimplifyWinfunc::check_aggr_win_can_be_removed(const ObDMLStmt *s
     case T_FUN_COUNT: //case when 1 or 0
     case T_FUN_MAX: //return expr
     case T_FUN_MIN:
-      //case T_FUN_APPROX_COUNT_DISTINCT_SYNOPSIS_MERGE: //不进行改写
+      //case T_FUN_APPROX_COUNT_DISTINCT_SYNOPSIS_MERGE: //do not rewrite
     case T_FUN_AVG: //return expr
     case T_FUN_COUNT_SUM:
     case T_FUN_SUM:
-      //case T_FUN_APPROX_COUNT_DISTINCT: // return 1 or 0 //不进行改写
-      //case T_FUN_APPROX_COUNT_DISTINCT_SYNOPSIS://不进行改写
+      //case T_FUN_APPROX_COUNT_DISTINCT: // return 1 or 0 //do not rewrite
+      //case T_FUN_APPROX_COUNT_DISTINCT_SYNOPSIS://do not rewrite
     case T_FUN_GROUP_CONCAT:// return expr
-      // case T_FUN_GROUP_RANK:// return 1 or 2    需要考虑order desc、nulls first、多列条件，暂不改写
+      // case T_FUN_GROUP_RANK:// return 1 or 2    need to consider order desc, nulls first, multi-column conditions, do not rewrite for now
       // case T_FUN_GROUP_DENSE_RANK:
       // case T_FUN_GROUP_PERCENT_RANK:// return 1 or 0
       // case T_FUN_GROUP_CUME_DIST:// return 1 or 0.5
@@ -135,7 +135,7 @@ int ObTransformSimplifyWinfunc::check_aggr_win_can_be_removed(const ObDMLStmt *s
     case T_FUN_KEEP_MIN:
     case T_FUN_KEEP_COUNT: // return 1 or 0
     case T_FUN_KEEP_SUM: // return expr
-      // 部分数学分析函数会在改写阶段进行展开:
+      // Some mathematical analysis functions will be expanded during the rewrite phase:
       // ObExpandAggregateUtils::expand_aggr_expr
       // ObExpandAggregateUtils::expand_window_aggr_expr
 
@@ -231,13 +231,13 @@ int ObTransformSimplifyWinfunc::check_aggr_win_can_be_removed(const ObDMLStmt *s
       }
       break;
     }
-    case T_WIN_FUN_RATIO_TO_REPORT: { //resolver 阶段被转化为 expr/sum（expr）
+    case T_WIN_FUN_RATIO_TO_REPORT: { // resolver stage is converted to expr/sum(expr)
       can_remove = true;
       break;
     }
-    case T_WIN_FUN_SUM: //无效
-    case T_WIN_FUN_MAX: //无效
-    case T_WIN_FUN_AVG: //无效
+    case T_WIN_FUN_SUM: // invalid
+    case T_WIN_FUN_MAX: // invalid
+    case T_WIN_FUN_AVG: // invalid
     default: {
       can_remove = false;
       break;
@@ -247,10 +247,11 @@ int ObTransformSimplifyWinfunc::check_aggr_win_can_be_removed(const ObDMLStmt *s
   return ret;
 }
 
-/** 改写aggr/win为普通的expr,如:
- *   count(x) --> case when x is not null then 1 esle 0 end
+/**
+ * Rewrite aggr/win as a normal expr, e.g.:
+ *   count(x) --> case when x is not null then 1 else 0 end
  *   count(*) --> 1
-**/
+ **/
 int ObTransformSimplifyWinfunc::transform_aggr_win_to_common_expr(ObSelectStmt *select_stmt,
                                                                   ObRawExpr *expr,
                                                                   ObRawExpr *&new_expr)
@@ -272,7 +273,7 @@ int ObTransformSimplifyWinfunc::transform_aggr_win_to_common_expr(ObSelectStmt *
     win_func = static_cast<ObWinFunRawExpr*>(expr);
     func_type = win_func->get_func_type();
     aggr = win_func->get_agg_expr();
-    // to fix bug: win magic 可能导致 func type 与 aggr 不一致
+    // to fix bug: win magic may cause func type to be inconsistent with aggr
     func_type = NULL == aggr ? win_func->get_func_type() : aggr->get_expr_type();
   } else {
     ret = OB_ERR_UNEXPECTED;
@@ -450,8 +451,7 @@ int ObTransformSimplifyWinfunc::transform_aggr_win_to_common_expr(ObSelectStmt *
       break;
     }
     }
-
-    //尝试添加类型转化
+    // Try adding type conversion
     if (OB_FAIL(ret)) {
       /*do nothing*/
     } else if (OB_ISNULL(new_expr = param_expr)) {
@@ -543,7 +543,8 @@ int ObTransformSimplifyWinfunc::check_stmt_win_can_be_removed(ObSelectStmt *sele
   } else if (BoundType::BOUND_CURRENT_ROW != win_expr->get_lower().type_
              && BoundType::BOUND_CURRENT_ROW != win_expr->get_upper().type_
              && win_expr->get_upper().is_preceding_ == win_expr->get_lower().is_preceding_) {
-    //upper 与 lower 均非 BOUND_CURRENT_ROW 且 is_preceding 相同时, 可能出现不包含当前行的窗口, 禁止消除
+    // upper and lower are both not BOUND_CURRENT_ROW and is_preceding are the same, a window that does not include the current row may appear, prohibit elimination
+  // Elimination is prohibited
   } else if (OB_FAIL(check_aggr_win_can_be_removed(select_stmt, win_expr, can_remove))) {
     LOG_WARN("failed to check win can be removed", K(ret));
   } else if (!can_remove) {
@@ -552,8 +553,8 @@ int ObTransformSimplifyWinfunc::check_stmt_win_can_be_removed(ObSelectStmt *sele
              OB_FAIL(check_window_contain_aggr(win_expr, contain))) {
     LOG_WARN("failed to check window contain aggr", K(ret));
   } else if (contain) {
-    // scala group by 时, 若 win func 窗口的 order by/ partition by 中含有 aggr,
-    // 为了避免移除所有 aggr 导致丢失 group by, 暂不做移除. 如下查询, 移除 win func 后无法保持 scala group by
+    // scala group by when, if win func window's order by/ partition by contains aggr,
+    // To avoid removing all aggr and losing group by, do not remove for now. The following query cannot maintain scala group by after removing win func
     // select count(1) over (partition by max(a) order by min(a)) from t1;
     can_be = false;
   } else {

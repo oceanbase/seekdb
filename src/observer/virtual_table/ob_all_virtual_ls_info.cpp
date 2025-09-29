@@ -35,7 +35,7 @@ ObAllVirtualLSInfo::~ObAllVirtualLSInfo()
 
 void ObAllVirtualLSInfo::reset()
 {
-  // 注意这里跨租户资源必须由ObMultiTenantOperator释放, 因此必须放在最前面调用
+  // Note that cross-tenant resources must be released by ObMultiTenantOperator, therefore it must be called first
   omt::ObMultiTenantOperator::reset();
   addr_.reset();
   ObVirtualTableScannerIterator::reset();

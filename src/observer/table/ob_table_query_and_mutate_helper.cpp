@@ -157,7 +157,7 @@ int QueryAndMutateHelper::execute_htable_delete(const ObTableOperation &table_op
                       simple_table_schema_->get_table_name_str(),
                       &audit_ctx_, table_operation);
   const ObITableEntity &entity = table_operation.entity();
-  observer::ObReqTimeGuard req_timeinfo_guard;  // 引用cache资源必须加ObReqTimeGuard
+  observer::ObReqTimeGuard req_timeinfo_guard;  // Reference to cache resources must add ObReqTimeGuard
   ObTableApiCacheGuard cache_guard;
   ObTableApiExecutor *executor = nullptr;
   ObTableApiSpec *spec = nullptr;
@@ -380,7 +380,7 @@ int QueryAndMutateHelper::generate_new_value(const ObITableEntity *old_entity,
     if (ObHTableConstants::LATEST_TIMESTAMP == new_ts) {
       new_ts = now_ms;
     }
-    if (OB_NOT_NULL(old_entity)) { // 旧行存在，构造新值（base + delta）
+    if (OB_NOT_NULL(old_entity)) { // The old row exists, construct new value (base + delta)
       ObObj base_obj_t, base_obj_v;
       if (OB_FAIL(old_entity->get_rowkey_value(ObHTableConstants::COL_IDX_T, base_obj_t))) {
         LOG_WARN("failed to get timestamp", K(ret), K(old_entity));
@@ -485,9 +485,8 @@ int QueryAndMutateHelper::generate_new_value(const ObITableEntity *old_entity,
 
   return ret;
 }
-
-// 1. 执行query获取到最新版本旧行的V
-// 2. 基于旧V执行mutate
+// 1. Execute query to get the V of the latest version of the row
+// 2. Based on old V execute mutate
 int QueryAndMutateHelper::execute_htable_inc_or_append(ObTableQueryResult *result)
 {
   int ret = OB_SUCCESS;
@@ -732,7 +731,7 @@ int QueryAndMutateHelper::execute_one_mutation(ObIAllocator &allocator,
   const int64_t N = rk_names.count();
 
   bool is_check_and_insert = (mutation.type() == ObTableOperationType::INSERT);
-  // 判断是否为check and insert 操作
+  // Determine if it is a check and insert operation
   if (mutate_entity.get_rowkey_size() > 0 && !is_check_and_insert) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("do not set mutation rowkey in query_and_mutate, invalid mutation", K(ret), K(mutation));
@@ -746,7 +745,7 @@ int QueryAndMutateHelper::execute_one_mutation(ObIAllocator &allocator,
     while (OB_SUCC(ret) && OB_SUCC(one_result.get_next_entity(query_res_entity))) {
       // 1. construct new entity
       if (is_check_and_insert) {
-        end_in_advance = true; // 若为check and insert, 则无需构造new_entity, 由于只插入一次, 故提前终止
+        end_in_advance = true; // If it is check and insert, then there is no need to construct new_entity, as it is only inserted once, hence terminate in advance
       } else if (OB_ISNULL(new_entity = default_entity_factory_.alloc())) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
         LOG_WARN("fail to alloc entity", K(ret));
@@ -792,7 +791,7 @@ int QueryAndMutateHelper::execute_one_mutation(ObIAllocator &allocator,
             }
             break;
           }
-          case ObTableOperationType::INSERT: { // 使用mutation上的entity执行insert
+          case ObTableOperationType::INSERT: { // use the entity on mutation to execute insert
             ret = process_insert(mutate_entity, tmp_affect_rows);
             if (OB_SUCC(ret)) {
               affected_rows += tmp_affect_rows;
@@ -828,7 +827,7 @@ int QueryAndMutateHelper::execute_table_mutation(ObTableQueryResultIterator *res
   } else {
     ObTableQueryResult *one_result = nullptr;
     bool end_in_advance = false;
-    while (OB_SUCC(ret) && !end_in_advance) { // 在check and insert 情境下会有提前终止
+    while (OB_SUCC(ret) && !end_in_advance) { // In the check and insert scenario, there may be an early termination
       OB_TABLE_START_AUDIT(credential_,
                            *tb_ctx_.get_sess_guard(),
                            tb_ctx_.get_table_name(),
@@ -881,7 +880,7 @@ int QueryAndMutateHelper::execute_table_mutation(ObTableQueryResultIterator *res
 int QueryAndMutateHelper::execute_query_and_mutate()
 {
   int ret = OB_SUCCESS;
-  observer::ObReqTimeGuard req_timeinfo_guard; // 引用cache资源必须加ObReqTimeGuard
+  observer::ObReqTimeGuard req_timeinfo_guard; // Reference cache resources must add ObReqTimeGuard
   ObTableApiCacheGuard cache_guard;
   ObTableApiSpec *scan_spec = nullptr;
   set_result_affected_rows(0);

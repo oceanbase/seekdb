@@ -157,7 +157,7 @@ int ObLiteEmbed::do_open_(const char* db_dir)
     std::string log_file = db_abs_dir + "/log/oblite.log";
     OB_LOGGER.set_file_name(log_file.c_str(), true, false, log_file.c_str(), log_file.c_str(), log_file.c_str(), log_file.c_str());
 
-    int saved_stdout = dup(STDOUT_FILENO); // 保存当前stdout
+    int saved_stdout = dup(STDOUT_FILENO); // Save current stdout
     dup2(OB_LOGGER.get_elec_log().fd_, STDOUT_FILENO);
 
     ObPLogWriterCfg log_cfg;

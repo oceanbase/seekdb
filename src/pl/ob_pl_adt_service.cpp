@@ -44,7 +44,7 @@ int ObPLADTService::get_objmeta(ObLLVMType &type)
         uint8_t type_;
         uint8_t cs_level_;    // collation level
         uint8_t cs_type_;     // collation type
-        int8_t scale_;        // scale, 当type_ 为ObBitType时，该字段存储bit的length
+        int8_t scale_;        // scale, when type_ is ObBitType, this field stores the length of bit
        */
       if (OB_FAIL(obj_meta.push_back(int8_type))) {
         LOG_WARN("push_back error", K(ret));
@@ -452,7 +452,7 @@ int ObPLADTService::get_unwind_exception(ObLLVMType &type)
       _Unwind_Word private_1;
       _Unwind_Word private_2;
      */
-    //只映射第一项exception_class
+    //Only map the first item exception_class
     ObLLVMType int64_type;
     if (OB_FAIL(helper_.get_llvm_type(ObIntType, int64_type))) {
       LOG_WARN("failed to get_llvm_type", K(ret));
@@ -566,9 +566,9 @@ int ObPLADTService::get_seg_pointer_array(jit::ObLLVMType &type)
         T *data_;
         int64_t count_;
         char local_data_buf_[LOCAL_ARRAY_SIZE * sizeof(T)];
-        int64_t block_size_; // 申请内存的块单位
-        int64_t capacity_; // 标记ObSEArray的内部可用空间
-        int64_t max_print_count_; //表示最大需要打印的元素数量；
+        int64_t block_size_; // memory block unit for allocation
+        int64_t capacity_; // marks the internal available space of ObSEArray
+        int64_t max_print_count_; // indicates the maximum number of elements to be printed;
         int32_t error_;  //
         ObWrapperAllocator block_allocator_;
         bool has_alloc_;

@@ -269,13 +269,13 @@ int ObSrvMySQLXlator::translate(rpc::ObRequest &req, ObReqProcessor *&processor)
             break;
           }
           case obmysql::COM_FIELD_LIST: {
-          /*为了和proxy进行适配，对于COM_FIELD_LIST命令的支持，按照以下原则支持：
-          * 1. 如果是非Proxy模式，返回正常的查询结果包
-          * 2. 如果是Proxy模式：
-          *   2.1. 如果有版本号：1.7.6 以下返回不支持错误包；
-          *                    1.7.6 及以上返回正常额查询结果；
-          *                    无效版本号返回不支持错误包
-          *   2.2. 如果没有版本号，返回不支持错误包；
+          /*To adapt with proxy, for the support of COM_FIELD_LIST command, follow these principles:
+          * 1. If it is not in Proxy mode, return a normal query result packet
+          * 2. If it is in Proxy mode:
+          *   2.1. If there is a version number: return an unsupported error packet for versions below 1.7.6;
+          *                    return a normal query result for versions 1.7.6 and above;
+          *                    return an unsupported error packet for invalid version numbers
+          *   2.2. If there is no version number, return an unsupported error packet;
           */
             ObSMConnection *conn = reinterpret_cast<ObSMConnection* >(
                 SQL_REQ_OP.get_sql_session(&req));

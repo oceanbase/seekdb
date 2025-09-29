@@ -62,8 +62,8 @@ TEST_F(TestTransferPartition, TransferPartitionTask)
   ObTransferPartitionTaskStatus status(ObTransferPartitionTaskStatus::TRP_TASK_STATUS_WAITING);
   ObTransferPartitionTaskStatus invalid_status;
   ObString comment;
-  // case 1: 验证task的init
-  //simple_init不校验task_id，但是init校验
+  // case 1: validate task's init
+  // simple_init does not validate task_id, but init does validate
   ASSERT_EQ(OB_INVALID_ARGUMENT, task.simple_init(tenant_id_, invalid_part, ls, task_id));
   ASSERT_EQ(OB_INVALID_ARGUMENT, task.simple_init(tenant_id_, part_info, invalid_ls, task_id));
   ASSERT_EQ(OB_SUCCESS, task.simple_init(tenant_id_, part_info, ls, invalid_task_id));
@@ -74,7 +74,7 @@ TEST_F(TestTransferPartition, TransferPartitionTask)
         job_id, ObTransferTaskID(1), invalid_status, comment));
   ASSERT_EQ(OB_SUCCESS, task.init(tenant_id_, part_info, ls, task_id, job_id,
         ObTransferTaskID(1), status, comment));
-  // case 2: 验证task的插入
+  // case 2: validate task insertion
   ObMySQLTransaction trans;
   ObArray<ObTransferPartitionTask> task_array;
   ASSERT_EQ(OB_SUCCESS, trans.start(&sql_proxy, tenant_id_));
@@ -86,8 +86,7 @@ TEST_F(TestTransferPartition, TransferPartitionTask)
   ASSERT_EQ(1, task_array.count());
   LOG_INFO("[MITTEST]new task", K(task_array));
   ASSERT_EQ(status, task_array.at(0).get_task_status());
-   
-  // case 3: 验证不同的事务，在第一个事务没有提交之前，另外一个事务不能写入
+  // case 3: validate different transactions, another transaction cannot write before the first transaction is committed
   ASSERT_EQ(OB_SUCCESS, trans.start(&sql_proxy, tenant_id_));
   ObTransferPartitionTask new_task;
   ObTransferPartInfo part_info2(1, 2);
@@ -109,12 +108,11 @@ TEST_F(TestTransferPartition, TransferPartitionTask)
   ASSERT_EQ(3, task_array.count());
   LOG_INFO("[MITTEST]new task", K(task_array));
   ASSERT_EQ(OB_SUCCESS, trans1.end(true));
-  // case 4: 验证table_id,object_id不能重复
+  // case 4: validate that table_id, object_id cannot be duplicated
   ASSERT_EQ(OB_SUCCESS, trans.start(&sql_proxy, tenant_id_));
   ASSERT_EQ(OB_ERR_PRIMARY_KEY_DUPLICATE, ObTransferPartitionTaskTableOperator::insert_new_task(tenant_id_, part_info, ls, trans));
   ASSERT_EQ(OB_SUCCESS, trans.end(false));
-
-  // case 5: 验证使用第一个task_id开始执行
+  // case 5: validate starting execution with the first task_id
   ObTransferPartitionTaskID task_id2 = task_array.at(1).get_task_id();
   ASSERT_EQ(OB_SUCCESS, trans.start(&sql_proxy, tenant_id_));
   ASSERT_EQ(OB_ERR_UNEXPECTED, ObTransferPartitionTaskTableOperator::set_all_tasks_schedule(
@@ -131,8 +129,7 @@ TEST_F(TestTransferPartition, TransferPartitionTask)
   ASSERT_EQ(1, task_array.at(0).get_balance_job_id().id());
   ASSERT_EQ(1, task_array.at(1).get_balance_job_id().id());
   ASSERT_EQ(-1, task_array.at(2).get_balance_job_id().id());
-
-  //case 6: 开始transfer，三个分区放进去会不匹配
+  //case 6: start transfer, three partitions going in will not match
   ObTransferPartList part_list;
   ASSERT_EQ(OB_SUCCESS, part_list.push_back(part_info));
   ASSERT_EQ(OB_SUCCESS, part_list.push_back(part_info2));
@@ -167,8 +164,7 @@ TEST_F(TestTransferPartition, TransferPartitionTask)
   ASSERT_EQ(100, task_array.at(0).get_transfer_task_id().id());
   ASSERT_EQ(100, task_array.at(1).get_transfer_task_id().id());
   ASSERT_EQ(-1, task_array.at(2).get_transfer_task_id().id());
-
-  //case 7: 结束transfer
+  //case 7: end transfer
   ASSERT_EQ(OB_SUCCESS, part_list.remove(0));
   ASSERT_EQ(OB_SUCCESS, part_list.push_back(part_info2));
   ASSERT_EQ(OB_SUCCESS, trans.start(&sql_proxy, tenant_id_));
@@ -203,8 +199,7 @@ TEST_F(TestTransferPartition, TransferPartitionTask)
     LOG_INFO("[MITTEST]balance_task", K(start_time), K(finish_time), K(new_task3));
 
   }
-  
-  //case 8: 验证rollback
+  //case 8: validate rollback
   ASSERT_EQ(OB_SUCCESS, trans.start(&sql_proxy, tenant_id_));
   ASSERT_EQ(OB_INVALID_ARGUMENT, ObTransferPartitionTaskTableOperator::rollback_all_to_waitting(
         tenant_id_, ObBalanceJobID(), trans));

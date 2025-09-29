@@ -3408,7 +3408,7 @@ int ObDDLScheduler::create_rebuild_index_task(
   } else if (!index_schema->is_vec_index() && !index_schema->is_mlog_table()) { // current only support vector index and mlog ddl rebuild task
     ret = OB_NOT_SUPPORTED;
     LOG_WARN("only vec index and mlog are supported", KR(ret), KPC(index_schema));
-  } else if (index_schema->is_vec_index() && index_schema->is_built_in_vec_index()) { // 期望是可见性表发起的重建（hnsw delta buffer表或者ivf centroid表）
+  } else if (index_schema->is_vec_index() && index_schema->is_built_in_vec_index()) { // Expecting the rebuild to be initiated by the visibility table (hnsw delta buffer table or ivf centroid table)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected index schema", KR(ret), KPC(index_schema));
   } else if (OB_FAIL(ObDDLTask::fetch_new_task_id(*GCTX.sql_proxy_, index_schema->get_tenant_id(), task_id))) {

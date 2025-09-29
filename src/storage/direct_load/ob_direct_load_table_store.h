@@ -51,7 +51,7 @@ public:
   void set_table_type(ObDirectLoadTableType::Type table_type) { table_type_ = table_type; }
   int get_tablet_tables(const ObTabletID &tablet_id,
                         ObDirectLoadTableHandleArray *&table_handle_array);
-  // 添加table之前需要先设置 table_data_desc_, table_type_
+  // Before adding the table, you need to set table_data_desc_, table_type_
   int add_table(const ObDirectLoadTableHandle &table_handle);
   int add_tables(const ObDirectLoadTableHandleArray &table_handle_array);
   int add_tablet_tables(const ObTabletID &tablet_id,

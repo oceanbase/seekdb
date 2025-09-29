@@ -136,8 +136,7 @@ int ObSMConnectionCallback::init(ObSqlSockSession& sess, ObSMConnection& conn)
     sess.set_tls_version_option(tls_version_option);
     LOG_INFO("sm conn init succ", K(conn.sessid_), K(sess.client_addr_));
   }
-
-  //如果当前function发生错误，应该在当前function中进行mark_sessid_unused
+  //If the current function encounters an error, it should mark_sessid_unused within the current function
   if (OB_SUCCESS == ret && OB_SUCCESS == conn.ret_) {
     conn.is_need_clear_sessid_ = true;
   }

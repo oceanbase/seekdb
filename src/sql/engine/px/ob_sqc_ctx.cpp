@@ -70,7 +70,7 @@ int ObSqcCtx::get_whole_msg_provider(uint64_t op_id, dtl::ObDtlMsgType msg_type,
       break;
     }
   }
-  // 预期在 sqc 启动时就要遍历算子并注册好 provider
+  // Expected to traverse operators and register providers when sqc starts
   if (nullptr == provider) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("should have a whole msg provider for op", K(op_id), K(ret), K(msg_type));

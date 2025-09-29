@@ -173,7 +173,7 @@ public:
   void set_root_doc(ObJsonObject *root_doc) {root_doc_ = root_doc;}
   OB_INLINE ObJsonArray* get_schema_map() {return schema_map_;}
 private:
-  int inner_build_schema_tree(ObJsonObject* origin_schema,        // origin json schema，must be object
+  int inner_build_schema_tree(ObJsonObject* origin_schema,        // origin json schema, must be object
                               bool is_composition,                // true: add schema in composition
                                                                   // false: add schema in schema
                               ObJsonArray* comp_array = nullptr); // array of composition

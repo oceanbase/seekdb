@@ -185,8 +185,7 @@
 
 // ORA-01410: invalid ROWID
 #define OER_INVALID_ROWID 1410
-
-// ORA-01416: 两表无法彼此外部连接
+// ORA-01416: the two tables cannot be outer-joined to each other
 // 01416. 00000 -  "two tables cannot be outer-joined to each other"
 #define OER_OUTER_JOIN_NESTED 1416
 
@@ -233,8 +232,7 @@
 
 //ORA-01465: invalid hex number
 #define OER_INVALID_HEX_NUMBER   1465
-
-// ORA-01468: 一个谓词只能引用一个外部联接的表
+// ORA-01468: A predicate can reference only one outer-joined table
 // 01468. 00000 -  "a predicate may reference only one outer-joined table"
 #define OER_MULTI_OUTER_JOIN_TABLE 1468
 
@@ -262,8 +260,7 @@
 //Cause: rollback records needed by a reader for consistent read are overwritten by other writers
 //Action: If in Automatic Undo Management mode, increase undo_retention setting. Otherwise, use larger rollback segments
 #define OER_SNAPSHOT_TOO_OLD 1555
-
-// ORA-01705: 无法在关联列中指定外部联接
+// ORA-01705: cannot specify outer join on an associated column
 // 01705. 00000 -  "an outer join cannot be specified on a correlation column"
 #define OER_OUTER_JOIN_ON_CORRELATION_COLUMN 1705
 
@@ -274,8 +271,7 @@
 //Cause: Attempt to specify BY ACCESS | SESSION in a NOAUDIT statement.
 //Action: Remove BY ACCESS | SESSION.
 #define OER_BY_ACCESS_OR_SESSION_CLAUSE_NOT_ALLOWED_FOR_NOAUDIT      1718
-
-// ORA-01719: OR 或 IN 操作数中不允许外部联接运算符 (+)
+// ORA-01719: External join operator (+) not allowed in OR or IN operands
 // 01719. 00000 -  "outer join operator (+) not allowed in operand of OR or IN"
 // *Cause:    An outer join appears in an or clause.
 // *Action:   If A and B are predicates, to get the effect of (A(+) or B),
@@ -363,8 +359,7 @@
 
 //ORA-01796: this operator cannot be used with lists
 #define OPERATOR_CANNOT_BE_USED_WITH_LISTS 1796
-
-// ORA-01799: 列不能外部联接到子查询
+// ORA-01799: column may not be outer-joined to a subquery
 // 01799. 00000 -  "a column may not be outer-joined to a subquery"
 // *Cause:    <expression>(+) <relop> (<subquery>) is not allowed.
 // *Action:   Either remove the (+) or make a view out of the subquery.
@@ -1057,9 +1052,8 @@
 //action: Use DBMS_LOB functions such as DBMS_LOB.INSTR() and DBMS_LOB.SUBSTR() or use PLSQL
 //        DBMS_LOB.READ/WRITE to access LOB data.
 #define OER_CLOB_ONLY_SUPPORT_WITH_MULTIBYTE_FUN 22998
-
 //
-// ORA-25156: 旧样式的外部联接 (+) 不能与 ANSI 联接一起使用
+// ORA-25156: Old-style outer join (+) cannot be used with ANSI joins
 // 25156. 00000 -  "old style outer join (+) cannot be used with ANSI joins"
 // *Cause:    When a query block uses ANSI style joins, the old notation
 //            for specifying outer joins (+) cannot be used.
@@ -1158,8 +1152,7 @@
 
 //ORA-30562: SAMPLE percentage must be in the range [0.000001,100)
 #define OER_INVALID_SAMPLING_RANGE 30562
-
-// ORA-30563: 此处不允许使用外部联接运算符 (+)
+// ORA-30563: The external join operator (+) is not allowed here
 // 30563. 00000 -  "outer join operator (+) is not allowed here"
 // *Cause:    An attempt was made to reference (+) in either the select-list,
 //            CONNECT BY clause, START WITH clause, or ORDER BY clause.

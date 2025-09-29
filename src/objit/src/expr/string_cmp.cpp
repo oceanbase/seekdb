@@ -1763,7 +1763,7 @@ int64_t jit_strcmpsp(const char *str1,
     //so no need to do it again. why bother yourself ? Just use it !
     //
     //ob_ctype_utf8.c
-    //实际调用ob_strnncollsp_utf8mb4
+    // Actual call to ob_strnncollsp_utf8mb4
     result = (int64_t)ob_strnncollsp_utf8mb4(reinterpret_cast<const uchar *>(str1),
                                 str1_len,
                                 reinterpret_cast<const uchar *>(str2),

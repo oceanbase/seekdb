@@ -129,7 +129,7 @@ struct ObSTSToken
   int set(const ObString &token);
   int assign(const ObSTSToken &token);
   const char *get_data() const;
-  // "阿里云STS服务返回的安全令牌（STS Token）的长度不固定，强烈建议您不要假设安全令牌的最大长度。"
+  // "The length of the security token (STS Token) returned by the Alibaba Cloud STS service is not fixed, it is strongly recommended that you do not assume the maximum length of the security token."
   // therefore, use allocator to alloc mem for sts_token dynamically
   int64_t length() const {return data_len_;};
   bool is_below_predefined_length() const {return is_below_predefined_length_;};
@@ -223,10 +223,9 @@ public:
   ObStorageDeleteMode delete_mode_;
   ObSTSToken sts_token_;
 };
-
-// ObObjectStorageInfo 存储了需要访问对象存储的所有信息，包括 ak、sk、endpoint 等等
-// ObObjectStorageInfo 可以由一个特定格式的字符串进行初始化，也可以由另外一个 ObObjectStorageInfo 对象赋值，除此之外不提供修改数据的途径
-// 一些字段是可选的，例如 region, checksum_type, addressing_model，它们存在 extension 字段中，但为了方便提取，使用成员变量存放副本
+// ObObjectStorageInfo stores all the information needed to access object storage, including ak, sk, endpoint, etc.
+// ObObjectStorageInfo can be initialized by a string of a specific format, or by another ObObjectStorageInfo object, no other means of modifying the data are provided
+// Some fields are optional, for example region, checksum_type, addressing_model, they exist in the extension field, but for convenience of extraction, use member variables to store copies
 class ObObjectStorageInfo
 {
   OB_UNIS_VERSION(1);

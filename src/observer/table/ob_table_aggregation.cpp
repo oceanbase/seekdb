@@ -38,9 +38,8 @@ int ObTableAggCalculator::init() {
   }
   return ret;
 }
-
-// 在min/max字符串类型时，需要不断的替换最大值/最小值，导致中间内存耗费很多
-// 因此使用中间临时内存，临时内存足够大时，可以复用，不够大时，先释放后重新申请
+// When the type is min/max string, it requires continuous replacement of the maximum/minimum values, leading to significant memory consumption in between
+// Therefore, use intermediate temporary memory, which can be reused if it is large enough, or released and reallocated if it is not
 int ObTableAggCalculator::deep_copy_value(int64_t idx, const ObObj &src, ObObj &dst)
 {
   int ret = OB_SUCCESS;

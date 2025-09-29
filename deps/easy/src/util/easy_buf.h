@@ -2,7 +2,7 @@
 #define EASY_BUF_H_
 
 /**
- * 网络的读写的BUFFER
+ * The BUFFER for network read and write
  */
 #include "easy_define.h"
 #include "util/easy_pool.h"

@@ -42,12 +42,12 @@ int ObExprLeastGreatest::calc_result_typeN(ObExprResType &type,
   return ret;
 }
 
-/* MySQL中greatest行为：
- * *. cached_field_type是用标准逻辑agg_field_type()推导, 作为结果列类型。
- * *. collation的计算过程: 如果参数中包含数值类型，则为binary，否则通过规则辗转计算
- * *. 计算过程却是根据get_cmp_type()来找到一个中间结果，然后所有数值转到中间结果上在作比较运算
- *    也就是说，比较过程与cached_field_type无关。get_calc_type()的逻辑是：只有参数都是STRING的情况下，
- *    返回类型才是STRING，否则返回数值类型。返回数值类型的时候，则所有参数都转成数值类型再做比较。
+/* Behavior of greatest in MySQL:
+ * *. cached_field_type is derived using standard logic agg_field_type(), as the result column type.
+ * *. Calculation process of collation: If the parameters include numeric types, it is binary; otherwise, it is calculated through rules.
+ * *. The calculation process is based on get_cmp_type() to find an intermediate result, then all numbers are converted to the intermediate result for comparison operations.
+ *    That is to say, the comparison process is unrelated to cached_field_type. The logic of get_calc_type() is: if all parameters are STRING,
+ *    the return type is STRING; otherwise, it returns a numeric type. When returning a numeric type, all parameters are converted to numeric types for comparison.
  */
 int ObExprLeastGreatest::calc_result_typeN_mysql(ObExprResType &type,
                                                  ObExprResType *types,
@@ -63,8 +63,8 @@ int ObExprLeastGreatest::calc_result_typeN_mysql(ObExprResType &type,
   } else {
     const ObSQLSessionInfo *session = static_cast<const ObSQLSessionInfo*>(type_ctx.get_session());
     ObExprOperator::calc_result_flagN(type, types, param_num);
-    // 如果所有参数都是IntTC或UIntTC, 那么不对参数做cast，结果类型根据参数的长度做类型提升。
-    // 否则将所有参数都cast到推导出都calc_type
+    // If all parameters are IntTC or UIntTC, then do not cast the parameters, and the result type is promoted based on the length of the parameters.
+    // Otherwise cast all parameters to the derived calc_type
     bool all_integer = true;
     for (int i = 0; i < param_num && all_integer; ++i) {
       ObObjType obj_type = types[i].get_type();
@@ -257,11 +257,11 @@ int ObExprLeastGreatest::calc_mysql(const ObExpr &expr, ObEvalCtx &ctx,
   uint32_t param_num = expr.arg_cnt_;
   bool has_null = false;
   int64_t cmp_res_offset = 0;
-  //这里要对参数进行按需求值，发现有参数值为null的话不再计算后面的参数的值
+  // Here we need to process the parameters according to the required values, if a parameter value is null, we will no longer calculate the values of the subsequent parameters
   //create table t(c1 int, c2 varchar(10));
   //insert into t values(null, 'a');
-  //select least(c2, c1) from t; mysql会报warning, oracle会报错
-  //select least(c1, c2) from t; mysql不会报warning, oracle正常输出null
+  // select least(c2, c1) from t; mysql will report warning, oracle will report error
+  // select least(c1, c2) from t; mysql will not report warning, oracle normally outputs null
   for (int i = 0; OB_SUCC(ret) && !has_null && i < param_num; ++i) {
     ObDatum *tmp_datum = NULL;
     if (OB_FAIL(expr.args_[i]->eval(ctx, tmp_datum))) {

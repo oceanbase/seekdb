@@ -29,22 +29,21 @@ namespace table
 {
 class ObTableExprCgService;
 class ObTableFtsTscCgService;
-
-// 构造表达式的静态类
+// Static class for constructing expressions
 class ObTableExprCgService
 {
 public:
   friend class ObTableFtsExprCgService;
 public:
-  // 构造表达式
+  // Construct expression
   static int generate_exprs(ObTableCtx &ctx,
                              common::ObIAllocator &allocator,
                              ObExprFrameInfo &expr_frame_info);
-  // 基于原生表达式生成表达式内存布局
+  // Generate expression memory layout based on native expression
   static int generate_expr_frame_info(ObTableCtx &ctx,
                                         common::ObIAllocator &allocator,
                                         ObExprFrameInfo &expr_frame_info);
-  // 基于内存表达式内存布局申请内存(这里只是申请了frame内存，dml场景还需要初始化)
+  // Allocate memory based on the memory layout of the in-memory expression (here only frame memory is allocated, initialization is still needed for DML scenarios)
   static int alloc_exprs_memory(ObTableCtx &ctx, ObExprFrameInfo &expr_frame_info);
   static int refresh_insert_exprs_frame(ObTableCtx &ctx,
                                         const common::ObIArray<sql::ObExpr *> &exprs,

@@ -52,17 +52,17 @@ namespace sql
           ObPxResourceAnalyzer &px_res_analyzer, bool append_map
 
 enum DfoStatus {
-  INIT,  // 未调度，不占用线程资源
-  SCHED, // 执行中，占用线程资源
-  FINISH // 执行完成，释放线程资源
+  INIT,  // not scheduled, does not occupy thread resources
+  SCHED, // executing, occupying thread resources
+  FINISH // Execution completed, release thread resources
 };
 
 template <class T>
 class DfoTreeNormalizer
 {
 public:
-  // 将叶子节点旋转至右边，确保中间节点在左边。
-  // 同时检测 bushy tree 的情形，报错退出
+  // Rotate the leaf node to the right, ensuring the middle node is on the left.
+  // Simultaneously detect the bushy tree scenario, error out and exit
   static int normalize(T &root);
 };
 
@@ -158,7 +158,7 @@ public:
 class ObLogExchange;
 
 /*
- * 计算逻辑计划需要预约多少组线程才能调度成功
+ * Calculate how many groups of threads are needed to schedule the logical plan successfully
  */
 class ObPxResourceAnalyzer
 {
@@ -288,31 +288,31 @@ int DfoTreeNormalizer<T>::normalize(T &root)
   }
   if (non_leaf_cnt > 1 || need_force_bushy) {
     // UPDATE:
-    // 考虑到这种场景很少见，对于 bushy tree 不做右深树变左深树的优化，
-    // 直接按照树本来形态调度
+    // Considering this scenario is rare, no optimization from right-deep tree to left-deep tree is done for bushy tree,
+    // Directly schedule according to the original tree structure
   } else if (0 < non_leaf_pos) {
     /*
      * swap dfos to reorder schedule seq
      *
-     * 最简单的模式：
+     * The simplest pattern:
      *
      *      inode                 inode
      *      /   \       ===>      /   \
      *    leaf  inode           inode  leaf
      *
-     * [*] inode 表示非叶子节点
+     * [*] inode indicates a non-leaf node
      *
-     * 复杂一些的模式：
+     * A more complex pattern:
      *
-     * root 节点有 4 个 孩子，其中第三个是中间，其余是叶子节点
+     * root node has 4 children, where the third one is intermediate, and the rest are leaf nodes
      *
      *      root  --------+-----+
      *      |      |      |     |
      *      leaf0  leaf1  inode leaf2
      *
-     * dependence 关系为：inode 依赖 leaf0 和 leaf1，且期待先调度 leaf0，再调度 leaf1
+     * dependence relationship is: inode depends on leaf0 and leaf1, and expects leaf0 to be scheduled first, then leaf1
      *
-     *  变换后：
+     *  After transformation:
      *
      *     root  --------+-----+
      *      |     |      |     |
@@ -320,9 +320,9 @@ int DfoTreeNormalizer<T>::normalize(T &root)
      */
 
     // (1) build dependence
-    // 特别说明：逻辑上，inode 节点拥有一个数组，上面依次记录了它依赖
-    // 的叶子节点。为了避免维护数组的开销，让这些依赖的叶子节点形成一个
-    // 依赖链条，其效果就等价于在 inode 上设置一个数组了。如上图。
+    // Special note: logically, the inode node has an array that records its dependencies in sequence
+    // The leaf nodes. To avoid the overhead of maintaining an array, let these dependent leaf nodes form a
+    // Dependency chain, its effect is equivalent to setting an array on the inode. As shown in the above figure.
     T *inode = root.child_dfos_.at(non_leaf_pos);
     for (int64_t i = 1; i < non_leaf_pos; ++i) {
       root.child_dfos_.at(i - 1)->set_depend_sibling(root.child_dfos_.at(i));
@@ -331,7 +331,7 @@ int DfoTreeNormalizer<T>::normalize(T &root)
     inode->set_has_depend_sibling(true);
 
     // (2) transform
-    // 将 inode 节点"荡"到最开始的位置
+    // Move the inode node to the beginning position
     for (int64_t i = non_leaf_pos; i > 0; --i) {
       root.child_dfos_.at(i) = root.child_dfos_.at(i-1);
     }

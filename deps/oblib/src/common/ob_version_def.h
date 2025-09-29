@@ -71,9 +71,9 @@ cal_version(const uint64_t major, const uint64_t minor, const uint64_t major_pat
 #define CLUSTER_VERSION_2200 (oceanbase::common::cal_version(2, 2, 0, 0))
 #define CLUSTER_VERSION_2210 (oceanbase::common::cal_version(2, 2, 0, 1))
 /*
- * FIXME: cluster_version目前最高是4位，此处定义要和CMakeLists.txt、tools/upgrade、src/share/parameter/ob_parameter_seed.ipp的定义保持一致
- *        当最后一位非0时，需要注意。比方说2.2.2版本实际上代表的是2.2.02版本，但实际我们想定义成2.2.20版本，和我们的意图不符。
- *        但2.2.1及之前的版本已经发版，为了避免引入兼容性问题，不改历史版本的cluster_version定义。
+ * FIXME: cluster_version is currently up to 4 digits, this definition needs to be consistent with the definitions in CMakeLists.txt, tools/upgrade, src/share/parameter/ob_parameter_seed.ipp
+ *        When the last digit is not 0, attention is needed. For example, version 2.2.2 actually represents 2.2.02, but we actually want to define it as 2.2.20, which does not match our intention.
+ *        However, versions 2.2.1 and earlier have already been released, to avoid introducing compatibility issues, the cluster_version definition of historical versions will not be changed.
  */
 #define CLUSTER_VERSION_2220 (oceanbase::common::cal_version(2, 2, 0, 20))
 #define CLUSTER_VERSION_2230 (oceanbase::common::cal_version(2, 2, 0, 30))
@@ -98,13 +98,13 @@ cal_version(const uint64_t major, const uint64_t minor, const uint64_t major_pat
 // ATTENSION!!!!!!!!!!!!!!!!!
 //
 // Cluster Version which is less than "3.2.3":
-// - 1. It's composed by 3 parts(major、minor、minor_patch)
+// - 1. It's composed by 3 parts(major, minor, minor_patch)
 // - 2. String: cluster version will be format as "major.minor.minor_patch[.0]", and string like "major.minor.x.minor_patch" is invalid.
 // - 3. Integer: for compatibility, cluster version will be encoded into "major|minor|x|minor_patch". "x" must be 0, otherwise, it's invalid.
 // - 4. Print: cluster version str will be still printed as 3 parts.
 //
 // Cluster Version which is not less than "3.2.3":
-// - 1. It's composed by 4 parts(major、minor、major_patch、minor_patch)
+// - 1. It's composed by 4 parts(major, minor, major_patch, minor_patch)
 // - 2. String: cluster version will be format as "major.minor.major_patch.minor_patch".
 // - 3. Integer: cluster version will be encoded into "major|minor|major_patch|minor_patch".
 // - 4. Print: cluster version str will be printed as 4 parts.

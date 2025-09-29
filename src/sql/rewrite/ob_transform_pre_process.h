@@ -317,7 +317,7 @@ private:
 
   /**
    * @brief recursively_eliminate_full_join
-   * 以左-右-后的方式后续遍历from item及semi from item中的joined_table结构
+   * traverse the joined_table structure in from item and semi from item in a post-order left-right-back manner
    */
   int recursively_eliminate_full_join(ObDMLStmt &stmt,
                                       TableItem *table_item,

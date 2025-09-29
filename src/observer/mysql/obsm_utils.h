@@ -37,15 +37,15 @@ class ObField;
 class ObSMUtils {
 public:
   /**
-   * 序列化一个cell到buf + pos的位置。
+   * Serialize a cell to the position of buf + pos.
    *
-   * @param [in] obj 需要序列化的cell
-   * @param [in] buf 输出的buf
-   * @param [in] len buf的大小
-   * @param [in,out] pos 写入buf的位置
+   * @param [in] obj The cell to be serialized
+   * @param [in] buf The output buffer
+   * @param [in] len The size of the buffer
+   * @param [in,out] pos The position in the buffer to write
    * @param [in] cell index for binary protocol
    *
-   * @return 成功返回OB_SUCCESS， 失败返回oceanbase error code
+   * @return Returns OB_SUCCESS on success, or an oceanbase error code on failure
    */
   static int cell_str(
       char *buf, const int64_t len,

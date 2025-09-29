@@ -431,10 +431,10 @@ ObBackgroundSessionIdGenerator &ObBackgroundSessionIdGenerator::get_instance() {
 // |                         Local Seq                          |1|2|3|4|
 // +---------------------------+----------------------------------------+
 //
-// Local Seq: 从0递增的int64原子变量
-// 1: rpc请求置为1
-// 2: 后台会话置为1
-// 3: inner sql置为1
+// Local Seq: an int64 atomic variable that increments from 0
+// 1: rpc request set to 1
+// 2: Set background session to 1
+// 3: set inner sql to 1
 // 4: reserved
 // Roughly speaking, over 500k ids would be consumed over 1 minutes.
 uint64_t ObBackgroundSessionIdGenerator::get_next_rpc_session_id() {

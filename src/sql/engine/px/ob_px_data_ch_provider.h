@@ -72,7 +72,7 @@ public:
   }
   virtual ~ObPxReceiveChProvider() = default;
   int init();
-  // 如果 child_dfo_id 的 ch sets 不存在，则等待，由 add_msg 唤醒。
+  // If the ch sets of child_dfo_id do not exist, wait to be awakened by add_msg.
   int get_data_ch(const int64_t child_dfo_id,
                   const int64_t sqc_id,
                   const int64_t task_id,
@@ -107,8 +107,7 @@ private:
   common::ObSpinLock lock_;
   DISALLOW_COPY_AND_ASSIGN(ObPxReceiveChProvider);
 };
-
-// Root Dfo 专用的 Provider
+// Root Dfo dedicated Provider
 class ObPxRootReceiveChProvider
 {
 public:

@@ -15,17 +15,17 @@
 
 
 /*****************************************************************************
- * 全局对象缓存池，每个类型独立的缓存池。
- * 共核数 2 倍的缓存队列，线程根据线程 ID 映射到缓存队列上。
+ * Global object cache pool, each type has its independent cache pool.
+ * Cache queues are twice the number of cores, threads map to cache queues based on thread ID.
  *
- *   sop_borrow(type) 用于获取一个对象
- *   sop_return(type, ptr) 归还一个对象
+ *   sop_borrow(type) is used to obtain an object
+ *   sop_return(type, ptr) returns an object
  *
- *   sop_borrow(type) 等价于 ObServerObjectPool<type>::get_instance().borrow_object()
- *   sop_return(type, ptr) 等价于 ObServerObjectPool<type>::get_instance().return_object(ptr)
+ *   sop_borrow(type) is equivalent to ObServerObjectPool<type>::get_instance().borrow_object()
+ *   sop_return(type, ptr) is equivalent to ObServerObjectPool<type>::get_instance().return_object(ptr)
  *
- * 通过虚拟表 __all_virtual_server_object_pool 可以查看所有对象缓存池的每个缓存队列的信息，
- * 虚拟表每列的含义参考 ObPoolArenaHead 里每个属性的注释
+ * The virtual table __all_virtual_server_object_pool can be used to view information about each cache queue of all object cache pools,
+ * the meaning of each column in the virtual table refers to the comments of each attribute in ObPoolArenaHead
  *
  *****************************************************************************/
 
@@ -89,12 +89,12 @@ struct ObPoolArenaHead
 };
 
 /**
- * ObServerObjectPool 是全局单例，用于缓存 Object，主要用处是缓存构造和析构代价大的大对象。
- * 此类会缓存对象，使用核数乘以 2 个数的缓存链表。
+ * ObServerObjectPool is a global singleton used to cache Objects, mainly used for caching large objects with high construction and destruction costs.
+ * This class caches objects, using a number of cache linked lists equal to the number of cores multiplied by 2.
  *
- * 接口：
- *   borrow_object: 获取对象
- *   return_object: 归还对象
+ * Interfaces:
+ *   borrow_object: acquire object
+ *   return_object: return object
  */
 template <class T>
 class ObServerObjectPool
@@ -167,11 +167,11 @@ public:
   }
 
   /**
-   * 粗暴的在 Pool 构造时给每个入口分配 16 个可用的对象
-   * 内存直接根据总大小一次性 ob_malloc 出来
-   * 所有对象塞到各个入口中
-   * 因为是全局单例，所以是在程序启动时机完成了这些工作
-   * TODO: 改为按需分配
+   * Brutally allocate 16 available objects for each entry at Pool construction time
+   * Memory is directly allocated in one go using ob_malloc based on the total size
+   * All objects are placed into their respective entries
+   * Since it is a global singleton, this work is completed at program startup
+   * TODO: Change to on-demand allocation
    */
   ObServerObjectPool(const int64_t tenant_id, const bool regist, const bool is_mini_mode,
                      const int64_t cpu_count)

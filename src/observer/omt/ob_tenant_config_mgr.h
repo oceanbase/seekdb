@@ -179,7 +179,7 @@ private:
   bool inited_;
   common::ObAddr self_;
   common::ObMySQLProxy *sql_proxy_;
-  // 租户配置项的映射
+  // Mapping of tenant configuration items
   TenantConfigMap config_map_;
   TenantConfigVersionMap config_version_map_;
   common::ObConfigManager *sys_config_mgr_;

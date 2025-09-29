@@ -180,7 +180,7 @@ int ObSortOp::get_topn_count(int64_t &topn_cnt)
       ret = OB_ERR_ILLEGAL_VALUE;
       LOG_WARN("Invalid limit/offset value", K(limit), K(offset), K(ret));
     } else {
-      // TODO & FIXME by longzhong.wlz : 等groupby实现后，再来处理这段逻辑
+      // TODO & FIXME by longzhong.wlz : Wait for groupby implementation to handle this logic
       topn_cnt = std::max(MY_SPEC.minimum_row_count_, limit + offset);
       int64_t row_count = 0;
       ObPhyOperatorType op_type = child_->get_spec().type_;

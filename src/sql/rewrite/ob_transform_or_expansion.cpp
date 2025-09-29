@@ -1376,9 +1376,8 @@ int ObTransformOrExpansion::convert_expect_ordering(ObDMLStmt *orig_stmt,
   }
   return ret;
 }
-
-//or-expansion打开dml只能针对单表的更新、删除；对于多表的更新、删除目前不能打开，因为一个目前实现的方式一个视图
-//只能设置一个base table item，无法处理多表的情况, 如：delete t1,t2 from t1,t2;
+//or-expansion opens dml can only target single table updates, deletes; for multi-table updates, deletes it cannot be opened currently, because one current implementation method is a view
+// Only one base table item can be set, unable to handle multiple tables, e.g.: delete t1,t2 from t1,t2;
 int ObTransformOrExpansion::check_upd_del_stmt_validity(const ObDelUpdStmt &stmt,
                                                         bool &is_valid)
 {
@@ -1417,9 +1416,9 @@ int ObTransformOrExpansion::disable_pdml_for_upd_del_stmt(ObDMLStmt &stmt)
 
 /**
  * @brief ObTransformOrExpansion::create_spj_view
- * 将 stmt 分解成两层：
- * 内层做 table scan, join 和 filter，构成一次 SPJ 查询
- * 外层做 distinct, group-by, order-by, window function 等非 SPJ 的操作
+ * Decompose stmt into two layers:
+ * Inner layer performs table scan, join, and filter, forming an SPJ query
+ * Outer layer performs distinct, group-by, order-by, window function, etc., non-SPJ operations
  */
 int ObTransformOrExpansion::get_trans_view(ObDMLStmt *stmt,
                                            ObDMLStmt *&upper_stmt,
@@ -1512,16 +1511,16 @@ int ObTransformOrExpansion::remove_stmt_select_item(ObSelectStmt *select_stmt,
 
 /**
  * @brief ObTransformOrExpansion::check_condition_on_same_columns
- * 检查 or 条件的参数是不是同构的：
- * 1. 使用相同的列集合
- * 2. 所有的列都是关联同一张表的
+ * Check if the parameters of the OR condition are isomorphic:
+ * 1. Use the same set of columns
+ * 2. All columns are associated with the same table
  * e.g. select * from t where t.a = 1 or t.a = 2;
  *      select * from t where (1 < t.a and t.a < 2) or (5 < t.a and t.a < 6);
  *      select * from t where (t.a = 1 and t.b = 2) or (t.a = 10 and t.b = 20);
- * 以下情况认为 or 条件的参数不同构
+ * The following cases are considered non-isomorphic parameters for the OR condition
  * e.g. select * from t where t.a = 1 or t.b = 2;
  *      select * from t, s where t.a = s.a or t.b = s.b;
- *  第二个SQL进行 or expansion 后，我们可以将 or 中的等值条件下降为等值连接条件。
+ *  After OR expansion on the second SQL, we can push down the equality conditions in the OR to equality join conditions.
  */
 int ObTransformOrExpansion::check_condition_on_same_columns(const ObDMLStmt &stmt,
                                                             const ObRawExpr &expr,
@@ -1590,7 +1589,7 @@ int ObTransformOrExpansion::extract_columns(const ObRawExpr *expr,
 /**
  * @brief ObTransformOrExpansion::get_common_columns_in_condition
  * get common column exprs use in T_OP_OR/T_OP_IN:
- * 1. 使用相同的列集合
+ * 1. use the same set of columns
  */
 int ObTransformOrExpansion::get_common_columns_in_condition(const ObDMLStmt *stmt,
                                                             const ObRawExpr *expr,

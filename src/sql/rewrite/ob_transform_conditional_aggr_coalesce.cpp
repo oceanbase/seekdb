@@ -530,8 +530,7 @@ int ObTransformConditionalAggrCoalesce::check_statistics_threshold(ObSelectStmt 
   }
   return ret;
 }
-
-// 根据是否有 distinct 对两类聚合函数分别计数，不能糅在一起，因为带 distinct 聚合函数计算代价远超普通聚合函数
+// Count the two categories of aggregate functions separately based on whether there is distinct, they cannot be combined, because aggregate functions with distinct have a much higher computational cost than ordinary aggregate functions
 int ObTransformConditionalAggrCoalesce::check_aggrs_count_decrease(ObIArray<ObAggFunRawExpr*> &old_aggrs,
                                                                    ObIArray<ObAggFunRawExpr*> &new_aggrs,
                                                                    bool &is_cnt_decrease)
@@ -1015,8 +1014,7 @@ int ObTransformConditionalAggrCoalesce::refresh_project_name(ObDMLStmt *parent_s
   }
   return ret;
 }
-
-// 这个函数假设输入表达式中的聚合函数类型有且仅有一种 (纯聚合 / case when 聚合)
+// This function assumes that there is only one type of aggregate function in the input expression (pure aggregation / case when aggregation)
 int ObTransformConditionalAggrCoalesce::get_aggr_type(ObRawExpr* expr, ObItemType &aggr_type)
 {
   int ret = OB_SUCCESS;

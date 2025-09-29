@@ -55,7 +55,7 @@ int ObRemoteTaskExecutor::execute(ObExecContext &query_ctx, ObJob *job, ObTaskIn
     } else if (OB_FAIL(handler->reset_and_init_result())) {
       LOG_WARN("fail to reset and init result", K(ret));
     } else {
-      // 将task_info设成OB_TASK_STATE_RUNNING状态，后面如果重试可能会用到该状态
+      // Set task_info to OB_TASK_STATE_RUNNING state, which may be used for retries later
       task_info->set_state(OB_TASK_STATE_RUNNING);
       const int32_t group_id = OB_INVALID_ID == session->get_expect_group_id() ? 0 : session->get_expect_group_id();
       ObExecutorRpcCtx rpc_ctx(session->get_rpc_tenant_id(),
@@ -80,7 +80,7 @@ int ObRemoteTaskExecutor::execute(ObExecContext &query_ctx, ObJob *job, ObTaskIn
         } else if (true == skip_failed_tasks) {
           // should skip failed tasks, log user warning and skip it, and set handler's error code to
           // OB_ERR_TASK_SKIPPED, than return OB_SUCCESS
-          // 将task_info设成OB_TASK_STATE_SKIPPED状态，后面如果重试可能会用到该状态
+          // Set task_info to OB_TASK_STATE_SKIPPED state, which may be used if a retry occurs later
           task_info->set_state(OB_TASK_STATE_SKIPPED);
           LOG_WARN("fail to do task on the remote server, log user warning and skip it",
                    K(ret), K(task_info->get_task_location().get_server()), K(*job));
@@ -116,9 +116,9 @@ int ObRemoteTaskExecutor::execute(ObExecContext &query_ctx, ObJob *job, ObTaskIn
       NG_TRACE_EXT(remote_task_completed, OB_ID(ret), ret,
                    OB_ID(runner_svr), task_info->get_task_location().get_server(),
                    OB_ID(task), task);
-      // 说明：本函数返回后，最终控制权会进入到ObDirectReceive中,
-      // 它通过get_stream_handler()来获得当前handler
-      // 然后阻塞等待在handler上收取返回结果
+      // Description: After this function returns, control will eventually enter ObDirectReceive,
+      // It obtains the current handler through get_stream_handler()
+      // Then block waiting to receive the result on handler
 
       //
       // nothing more to do
@@ -126,9 +126,9 @@ int ObRemoteTaskExecutor::execute(ObExecContext &query_ctx, ObJob *job, ObTaskIn
     }
 
     if (OB_FAIL(ret)) {
-      // 如果失败了，则将task_info设成OB_TASK_STATE_FAILED状态，
-      // 这样后面如果需要重试则可能会根据这个状态将该task_info中的partition信息
-      // 加入到需要重试的partition里面
+      // If failed, then set task_info to OB_TASK_STATE_FAILED state,
+      // This way if a retry is needed later, it may use this status to retrieve the partition information from this task_info
+      // Add to the partition that needs retry
       task_info->set_state(OB_TASK_STATE_FAILED);
     }
   }
@@ -142,7 +142,7 @@ int ObRemoteTaskExecutor::build_task(ObExecContext &query_ctx,
                                      ObTask &task)
 {
   int ret = OB_SUCCESS;
-  /* 需要序列化的内容包括：
+  /* The content to be serialized includes:
    *  1. ObPhysicalPlanCtx
    *  2. ObPhyOperator Tree
    *  3. ObPhyOperator Tree Input

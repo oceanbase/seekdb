@@ -80,7 +80,7 @@ struct ObTableMetaInfo
   int64_t part_count_;  //partition count
   int64_t micro_block_size_;  //main table micro block size
   int64_t table_column_count_; // table column count
-  int64_t table_rowkey_count_; // table rowkey count, used in index_back cost calc.index_back时候会从索引表获取主键
+  int64_t table_rowkey_count_; // table rowkey count, used in index_back cost calc. During index_back, primary key will be retrieved from index table
 
   /// the following fields come from access path estimation
   int64_t table_row_count_; // table row count in stat.
@@ -289,8 +289,7 @@ struct ObCostTableScanInfo
   common::ObSEArray<ColumnItem, 4, common::ModulePageAllocator, true> range_columns_; // all the range columns
   common::ObSEArray<ColumnItem, 4, common::ModulePageAllocator, true> access_column_items_; // all the access columns
   common::ObSEArray<ColumnItem, 4, common::ModulePageAllocator, true> index_access_column_items_; // all the access columns
-
-  //这几个filter的分类参考ObJoinOrder::fill_filters()
+  // The classification of these filters refers to ObJoinOrder::fill_filters()
   common::ObSEArray<ObRawExpr *, 4, common::ModulePageAllocator, true> prefix_filters_; // filters match index prefix
   common::ObSEArray<ObRawExpr *, 4, common::ModulePageAllocator, true> pushdown_prefix_filters_; // filters match index prefix along pushed down filter
   common::ObSEArray<ObRawExpr *, 4, common::ModulePageAllocator, true> ss_postfix_range_filters_;  // range conditions extract postfix range for skip scan
@@ -313,9 +312,9 @@ struct ObCostTableScanInfo
   double join_filter_sel_;
   double ss_prefix_ndv_;  // skip scan prefix columns NDV
   double ss_postfix_range_filters_sel_;
-  double logical_query_range_row_count_;// 估计出的抽出的query range中所包含的行数(logical)
-  double phy_query_range_row_count_;// 估计出的抽出的query range中所包含的行数(physical)
-  double index_back_row_count_;// 估计出的需要回表的行数
+  double logical_query_range_row_count_;// Estimated number of rows contained in the extracted query range (logical)
+  double phy_query_range_row_count_;// Estimated number of rows contained in the extracted query range (physical)
+  double index_back_row_count_;// Estimated number of rows that need to go back to the table
   double output_row_count_;
   common::ObSimpleBatch::ObBatchType batch_type_;
   SampleInfo sample_info_;
@@ -707,11 +706,10 @@ public:
 														const bool need_sort,
 														const int64_t prefix_pos,
 														double &cost);
-
-  // 对外提供两个估算排序算子代价的接口，一个使用ObRawExpr表示sort key，另一个使用
+  // Provide two interfaces for estimating the cost of sort operators, one using ObRawExpr to represent the sort key, another using
   // OrderItem。
-  // 其它的参数信息通过cost_info传入，内部基于参数信息应该采用哪种排序
-  // 算法（目前包括普通排序、top-n 排序、前缀排序），对外暂不暴露实际排序算法的估算接口
+  // The other parameter information is passed through cost_info, internally it should adopt which sorting based on the parameter information
+  // Algorithm (currently includes ordinary sorting, top-n sorting, prefix sorting), do not expose the actual sorting algorithm estimation interface externally
   int cost_sort(const ObSortCostInfo &cost_info,
                 double &cost);
 

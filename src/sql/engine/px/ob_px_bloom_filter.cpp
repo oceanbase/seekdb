@@ -679,8 +679,7 @@ int ObPxBloomFilter::might_contain_vector(const ObExpr &expr, ObEvalCtx &ctx,
 #endif
   return ret;
 }
-
-//-------------------------------------分割线----------------------------
+//-------------------------------------division line----------------------------
 int ObPxBFStaticInfo::init(int64_t tenant_id, int64_t filter_id,
     int64_t server_id, bool is_shared,
     bool skip_subpart, int64_t p2p_dh_id,
@@ -703,14 +702,14 @@ int ObPxBFStaticInfo::init(int64_t tenant_id, int64_t filter_id,
   }
   return ret;
 }
-//-------------------------------------分割线----------------------------
+//-------------------------------------division line----------------------------
 void ObPxReadAtomicGetBFCall::operator() (common::hash::HashMapPair<ObPXBloomFilterHashWrapper,
       ObPxBloomFilter *> &entry)
 {
   bloom_filter_ = entry.second;
   bloom_filter_->inc_merge_filter_count();
 }
-//-------------------------------------分割线----------------------------
+//-------------------------------------division line----------------------------
 ObPxBloomFilterManager &ObPxBloomFilterManager::instance()
 {
   static ObPxBloomFilterManager the_px_bloom_filter_manager;

@@ -84,8 +84,8 @@ int ObSimpleIterator<T, LABEL, LOCAL_ARRAY_SIZE>::set_ready()
 }
 
 /*
- * 遍历的过程中，第一行返回的是item_arr_..begin()；
- * 接下来返回的是++it，这样有利于判断it是否到达尾部,避免数组越界的风险
+ * During the traversal, the first row returns item_arr_..begin();
+ * The next one returns ++it, which helps in judging whether it has reached the end, avoiding the risk of array out-of-bounds.
  */
 template <typename T, const char *LABEL, int64_t LOCAL_ARRAY_SIZE>
 int ObSimpleIterator<T, LABEL, LOCAL_ARRAY_SIZE>::get_next(T &item)

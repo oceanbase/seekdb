@@ -42,8 +42,7 @@ public:
       K_(is_bulk_search), K_(is_union_distinct));
 
   virtual ~ObFakeCTETableSpec() {}
-
-  //数组下标指的是output_里面的下标，数组内容是在cte表中原始列的偏移位置
+  // Array index refers to the index inside output_, array content is the offset position of the original column in the cte table
   common::ObFixedArray<int64_t, common::ObIAllocator> column_involved_offset_;
   common::ObFixedArray<ObExpr *, common::ObIAllocator> column_involved_exprs_;
   //for breadth search first
@@ -83,7 +82,7 @@ public:
                   int64_t cnt, const common::ObIArray<int64_t> &chosen_datums,
                   char *buf, const int64_t size, const int64_t row_size,
                   const uint32_t row_extend_size);
-  //从src_row中拷贝chosen_index中包含的cell到dst_row中
+  // Copy cells included in chosen_index from src_row to dst_row
   int deep_copy_row(const ObChunkDatumStore::StoredRow *src_row,
                     const ObChunkDatumStore::StoredRow *&dst_row,
                     const common::ObIArray<int64_t> &chosen_index,

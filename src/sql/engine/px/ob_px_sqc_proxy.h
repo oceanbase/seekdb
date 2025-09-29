@@ -153,7 +153,7 @@ public:
   void get_self_dfo_key(dtl::ObDtlDfoKey &key);
 
   void get_parent_dfo_key(dtl::ObDtlDfoKey &key);
-  // 向qc汇报sqc的结束
+  // Report the end of sqc to qc
   int report(int end_ret) const;
 
   bool get_transmit_use_interm_result() const { return sqc_arg_.sqc_.transmit_use_interm_result(); }
@@ -206,11 +206,10 @@ public:
   ObSqcCtx &sqc_ctx_;
 private:
   ObPxRpcInitSqcArgs &sqc_arg_;
-  // 所有 worker 都抢这个锁，抢到者为 leader，负责推进 msg loop
+  // All worker nodes race for this lock, the winner becomes the leader, responsible for advancing the msg loop
   common::ObSpinLock leader_token_lock_;
-
-  // 这个锁是临时用，用于互斥多个线程同时用 sqc channel 发数据，
-  // Dtl 支持并发访问后可以删掉
+  // This lock is temporary, used for mutual exclusion of multiple threads sending data through the sqc channel,
+  // Dtl supports concurrent access after which it can be removed
   common::ObSpinLock dtl_lock_;
   common::ObArray<ObBloomFilterSendCtx> bf_send_ctx_array_; // record bloom filters ready to be sent
   ObDynamicSamplePieceMsg sample_msg_;
@@ -362,7 +361,7 @@ int ObPxSQCProxy::send_dh_piece_msg(const PieceMsg &piece, int64_t timeout_ts)
   if (OB_ISNULL(ch)) {
     ret = common::OB_ERR_UNEXPECTED;
     SQL_LOG(WARN, "empty channel", K(ret));
-  } else if (OB_FAIL(ch->send(piece, timeout_ts))) { // 尽力而为，如果 push 失败就由其它机制处理
+  } else if (OB_FAIL(ch->send(piece, timeout_ts))) { // Do our best, if push fails it will be handled by other mechanisms
     SQL_LOG(WARN, "fail push data to channel", K(ret));
   } else if (OB_FAIL(ch->flush())) {
     SQL_LOG(WARN, "fail flush dtl data", K(ret));

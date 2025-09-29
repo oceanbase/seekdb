@@ -88,21 +88,21 @@ int ObRawExprPartFuncChecker::visit(ObOpRawExpr &expr)
     case T_OP_BIT_NEG:
     case T_OP_BIT_LEFT_SHIFT:
     case T_OP_BIT_RIGHT_SHIFT: {
-      //限制bit操作符和bool运算符不能作为partition by range(part_expr) partition p0 values less than (value_expr)
-      //part_expr和value_expr中的运算符类型
+      // Limit bit operators and bool operators cannot be used as partition by range(part_expr) partition p0 values less than (value_expr)
+      // operator types in part_expr and value_expr
       ret = OB_ERR_PARTITION_FUNCTION_IS_NOT_ALLOWED;
       LOG_WARN("invalid partition function", K(ret),
                "item_type", expr.get_expr_type());
       break;
     }
-    // 仅oracle模式生成列支持
+    // Only Oracle mode column generation is supported
     case T_OP_DIV:    // /
     {
       ret = OB_ERR_PARTITION_FUNCTION_IS_NOT_ALLOWED;
       LOG_WARN("invalid partition function", K(ret), "item_type", expr.get_expr_type());
       break;
     }
-    // mysql模式及oracle模式生成列支持
+    // MySQL mode and Oracle mode generated column support
     case T_OP_ADD:    // +
     case T_OP_MINUS:  // -
     case T_OP_MUL:    // *
@@ -159,7 +159,7 @@ int ObRawExprPartFuncChecker::visit(ObSysFunRawExpr &expr)
      */
     //white list, some of them are not implemented now
     switch(expr.get_expr_type()) {
-      // mysql模式及oracle模式都支持
+      // MySQL mode and Oracle mode are both supported
       case T_FUN_SYS_DAY:
       case T_FUN_SYS_DAY_OF_MONTH:
       case T_FUN_SYS_DAY_OF_WEEK:
@@ -194,7 +194,7 @@ int ObRawExprPartFuncChecker::visit(ObSysFunRawExpr &expr)
           ret = OB_SUCCESS;
           break;
         }
-        // 仅生成列支持
+        // Only generate column support
       case T_FUN_SYS_SUBSTR:
       case T_FUN_SYS_SUBSTRING_INDEX:
       case T_OP_CNN:
@@ -220,7 +220,7 @@ int ObRawExprPartFuncChecker::visit(ObSysFunRawExpr &expr)
           }
           break;
         }
-        // mysql模式及oracle生成列支持
+        // MySQL mode and Oracle generated column support
       case T_OP_ABS:  //ABS()
       case T_FUN_SYS_CEIL:  //CEILING()
       case T_FUN_SYS_CEILING:
@@ -235,7 +235,7 @@ int ObRawExprPartFuncChecker::visit(ObSysFunRawExpr &expr)
           }
           break;
         }
-        // 仅oracle模式支持
+        // Only oracle mode is supported
       case T_FUN_SYS_RPAD:
         {
           ret = OB_ERR_PARTITION_FUNCTION_IS_NOT_ALLOWED;

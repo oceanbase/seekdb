@@ -159,8 +159,7 @@ int ObPxMSReceiveVecOp::inner_open()
   }
   return ret;
 }
-
-//提前释放row store数据，而不是等到close时释放
+// Release row store data in advance, rather than waiting until close to release
 int ObPxMSReceiveVecOp::release_merge_inputs()
 {
   int ret = OB_SUCCESS;
@@ -327,11 +326,10 @@ bool ObPxMSReceiveVecOp::GlobalOrderInput::is_empty()
   }
   return is_empty;
 }
-
-// 拿行前调用此接口，进行get_row_store_切换，调用前确保了两个row_store_中至少有一个有行。
+// Call this interface before fetching a row, to perform get_row_store_ switch, ensure that at least one of the two row_store_ has a row before calling.
 int ObPxMSReceiveVecOp::GlobalOrderInput::switch_get_row_store() {
   int ret = OB_SUCCESS;
-  // get_row_store_为NULL那么去add_row_store_中读数据
+  // get_row_store_ is NULL then read data from add_row_store_
   if (OB_ISNULL(get_row_store_)) {
     get_row_store_ = add_row_store_;
     if (OB_FAIL(get_reader_.init(get_row_store_))) {
@@ -340,18 +338,18 @@ int ObPxMSReceiveVecOp::GlobalOrderInput::switch_get_row_store() {
       get_row_reader_ = &get_reader_;
     }
   }
-  // 如果两个指针相等，因为之后要从这个store中读数据了，因此把add_row_store_置空。
-  // 这个只有上面的if条件也满足时，即之前只写过数据，没有读过，get_row_store_为NULL
-  // 此时要把get_row_store_指向add_row_store_，并把add_row_store_置为NULL。
-  // 稍微add_row时发现add_row_store_为NULL，会创建第二个store
+  // If two pointers are equal, because data will be read from this store later, therefore set add_row_store_ to empty.
+  // This only happens when the above if condition is also met, i.e., data was written before but not read, get_row_store_ is NULL
+  // At this time, set get_row_store_ to point to add_row_store_, and set add_row_store_ to NULL.
+  // Slightly add_row when it is found that add_row_store_ is NULL, a second store will be created
   if (add_row_store_ == get_row_store_) {
     add_row_reader_->reset();
     add_row_reader_ = nullptr;
     add_row_store_ = nullptr;
   }
   if (OB_SUCC(ret) && !get_row_reader_->has_next()) {
-    // get_row_reader_中没数据了，add_row_reader_一定还有，因为调这个函数前判断过一定还有数据没读完
-    // 那么交换两个指针，开始读有数据的store，向空store中写数据。
+    // get_row_reader_ has no more data, add_row_reader_ must still have data, because before calling this function, it was determined that there is still data to be read
+    // Then swap the two pointers, start reading from the store with data, and write data to the empty store.
     if (OB_ISNULL(add_row_store_) || !add_row_reader_->has_next()) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("fail to get row store, all row store is empty", K(ret));
@@ -359,7 +357,7 @@ int ObPxMSReceiveVecOp::GlobalOrderInput::switch_get_row_store() {
       LOG_WARN("failed to finish add row", K(ret));
     } else {
       // switch row store that has data
-      // 这里之前为了避免频繁的将row store来回切的同时来回reset，所以数据是append到一定量后才开始真正清空
+      // Here previously to avoid frequent role switch of row store and reset, the data was appended to a certain amount before actually clearing
       ObTempRowStore::Iterator *tmp_reader = get_row_reader_;
       get_row_reader_ = add_row_reader_;
       add_row_reader_ = tmp_reader;
@@ -376,9 +374,9 @@ int ObPxMSReceiveVecOp::GlobalOrderInput::switch_get_row_store() {
   }
   return ret;
 }
-
-// heap中弹出的值是第channel_idx个channel的数据，因此要从channel_idx中拿数据填入heap中，
-// 如果这个channel对应的store此时是空的，那么调用此接口从channel中读消息把数据填入store中
+// heapvalue popped from is thechanneldata，therefore need to get data from and fill inheapin，
+// The value popped from the heap is the data of the channel_idx-th channel, therefore, data should be taken from channel_idx to fill into the heap,
+// If this channel corresponding store is empty at this time, then call this interface to read messages from the channel and fill the data into the store
 int ObPxMSReceiveVecOp::GlobalOrderInput::get_rows_from_channels(
   ObPxMSReceiveVecOp *ms_receive_op,
   ObPhysicalPlanCtx *phy_plan_ctx,
@@ -390,8 +388,8 @@ int ObPxMSReceiveVecOp::GlobalOrderInput::get_rows_from_channels(
   int64_t hint_channel_idx = channel_idx;
   int64_t got_channel_idx = OB_INVALID_INDEX_INT64;
   bool fetched = false;
-  // 一直拿数据直到拿到的数据是channel_idx相同，则row_heap可以进行堆排序返回一行
-  // 当前策略是，如果channel_idx的数据没有拿到，则需要轮询所有channel之后再拿channel_idx的数据
+  // Keep fetching data until the fetched data has the same channel_idx, then row_heap can be heap sorted to return one row
+  // The current strategy is, if the data for channel_idx is not obtained, then all channels need to be polled before obtaining the data for channel_idx
   while (OB_SUCC(ret) && !fetched && !is_finish()) {
     got_channel_idx = hint_channel_idx;
     if (OB_FAIL(ms_receive_op->ptr_row_msg_loop_->process_one(got_channel_idx))) {
@@ -576,7 +574,7 @@ int ObPxMSReceiveVecOp::GlobalOrderInput::create_temp_row_store(
     LOG_WARN("create ra row store fail", K(ret));
   } else {
     row_store = new (buf) ObTempRowStore(alloc_);
-    // TODO: llongzhong.wlz 这里应该使用一个参数来控制row_store存储的数据量，或者SQL内存管理自动控制
+    // TODO: llongzhong.wlz Here should use a parameter to control the amount of data stored in row_store, or let SQL memory management control automatically
     int64_t mem_limit = 0;
     row_store->set_allocator(*alloc_);
     row_store->set_callback(sql_mem_processor_);
@@ -597,8 +595,7 @@ int ObPxMSReceiveVecOp::GlobalOrderInput::create_temp_row_store(
   }
   return ret;
 }
-
-// 向add_row_store_中写入行
+// Write row to add_row_store_
 int ObPxMSReceiveVecOp::GlobalOrderInput::add_batch(
   ObPxMSReceiveVecOp &ms_receive_op,
   const ObIArray<ObExpr*> &exprs,
@@ -625,7 +622,7 @@ int ObPxMSReceiveVecOp::GlobalOrderInput::add_batch(
       LOG_WARN("add row store is null or is same as get row store", K(ret));
     } else {
       bool reset = false;
-      // 往add_row_store_中写行前先调一次reset，如果store没数据了，reset返回true，此时重置add_row_store
+      // Before writing a row to add_row_store_, call reset once. If store has no data, reset returns true, at which point reset add_row_store
       if (OB_FAIL(reset_add_row_store(reset))) {
         LOG_WARN("fail to switch add row store", K(ret));
       } else if (reset) {
@@ -669,7 +666,7 @@ int ObPxMSReceiveVecOp::inner_get_next_batch(const int64_t max_row_cnt)
   int ret = OB_SUCCESS;
   clear_evaluated_flag();
   clear_dynamic_const_parent_flag();
-  // 从channel sets 读取数据，并向上迭代
+  // Read data from channel sets and iterate upwards
   const ObPxReceiveSpec &spec = static_cast<const ObPxReceiveSpec &>(get_spec());
   ObPhysicalPlanCtx *phy_plan_ctx = NULL;
   if (OB_ISNULL(phy_plan_ctx = GET_PHY_PLAN_CTX(ctx_))) {
@@ -681,7 +678,7 @@ int ObPxMSReceiveVecOp::inner_get_next_batch(const int64_t max_row_cnt)
     LOG_WARN("fail to send bloom filter", K(ret));
   }
   if (OB_SUCC(ret) && MY_SPEC.local_order_ && !finish_) {
-    // local order需要先把channel里的数据拿完，每个channel的数据分段后生成一组inputs
+    // local order needs to first take all the data from the channel, each channel's data is segmented to generate a group of inputs
     ret = get_all_rows_from_channels(phy_plan_ctx);
   }
   if (OB_FAIL(ret)) {
@@ -692,9 +689,9 @@ int ObPxMSReceiveVecOp::inner_get_next_batch(const int64_t max_row_cnt)
     output_iter_.reset();
     output_store_.reset();
     while (OB_SUCC(ret) && output_store_.get_row_cnt() < max_row_cnt) {
-      // (1) 向 heap 中添加一个或多个元素，直至 heap 满
+      // (1) Add one or more elements to the heap until the heap is full
       while (OB_SUCC(ret) && row_heap_.capacity() > row_heap_.count()) {
-        // 不断从inputs中拿行放入row_heap_中，直到放满。
+        // Continuously take lines from inputs and put them into row_heap_ until it is full.
         if (OB_FAIL(get_one_row_from_channels(phy_plan_ctx,
                                               row_heap_.writable_channel_idx(),
                                               MY_SPEC.all_exprs_,
@@ -710,8 +707,7 @@ int ObPxMSReceiveVecOp::inner_get_next_batch(const int64_t max_row_cnt)
           LOG_WARN("fail push row to heap", K(ret));
         }
       }
-
-      // (2) 从 heap 中弹出最大值
+      // (2) Pop the maximum value from the heap
       if (OB_SUCC(ret)) {
         ObCompactRow *out_row = NULL;
         if (0 == row_heap_.capacity()) {
@@ -723,7 +719,7 @@ int ObPxMSReceiveVecOp::inner_get_next_batch(const int64_t max_row_cnt)
             LOG_WARN("failed to release merge sort and row store", K(ret), K(release_ret));
           }
         } else if (row_heap_.capacity() == row_heap_.count()) {
-          //弹出最大值，放入表达式datum中
+          // Pop the maximum value, put it into the expression datum
           if (OB_FAIL(row_heap_.pop(store_row))) {
             LOG_WARN("fail pop row from heap", K(ret));
           } else if (OB_FAIL(output_store_.add_row(store_row, out_row))) {
@@ -766,11 +762,10 @@ int ObPxMSReceiveVecOp::inner_get_next_batch(const int64_t max_row_cnt)
   }
   return ret;
 }
-
-// 从指定channel中读一行数据
-// local order场景：每个channel包含一批inputs，所有channel的input都存在merge_inputs_中，
-//                 数据也都从channel读过来存在input的chunk store中了，input->get_row直接从store中拿行。
-// global order场景：数据可能还没从channel中读上来，先判断下reader里还有没有行，没有的话从channel里拿msg
+// Read a line of data from the specified channel
+// local order scenario: each channel contains a batch of inputs, all channel's inputs are stored in merge_inputs_,
+//                 Data are also read from the channel and stored in the chunk store of input. input->get_row directly retrieves rows from the store.
+// global order scenario: data may not have been read from the channel yet, first check if there are any lines left in the reader, if not, get msg from the channel
 int ObPxMSReceiveVecOp::get_one_row_from_channels(
   ObPhysicalPlanCtx *phy_plan_ctx,
   int64_t channel_idx,
@@ -829,17 +824,15 @@ int ObPxMSReceiveVecOp::new_local_order_input(MergeSortInput *&out_msi)
   }
   return ret;
 }
-
-
-// local order场景，每个channel把所有数据都收上来，每个channel的数据分段有序，分段后创建一组LocalOrderInput
-// 利用分组情况，将datum内的数据加入TempStore中, 加入时会拿到compact row数据，将最后一个记录到last_rows中
+// local order scenario, each channel collects all data, the data from each channel is segmented and ordered, after segmentation, a group of LocalOrderInput is created
+// Utilize grouping situation, add data within datum to TempStore, when adding, will obtain compact row data, record the last one to last_rows
 int ObPxMSReceiveVecOp::get_all_rows_from_channels(ObPhysicalPlanCtx *phy_plan_ctx)
 {
   int ret = OB_SUCCESS;
   if (!finish_) {
     int64_t n_channel = get_channel_count();
     common::ObArray<const ObCompactRow *> last_store_row_array;
-    // 存放每个channel上当前最后一个LocalOrderInput中的ObTempRowStore
+    // Store the ObTempRowStore from the current last LocalOrderInput on each channel
     common::ObArray<ObTempRowStore*> temp_store_array;
     common::ObArray<ObTempRowStore *> full_dump_array;
     ObTempRowStore *cur_temp_store = nullptr;
@@ -852,7 +845,7 @@ int ObPxMSReceiveVecOp::get_all_rows_from_channels(ObPhysicalPlanCtx *phy_plan_c
       if (OB_FAIL(cmp_fun.init(&MY_SPEC.sort_collations_, &MY_SPEC.sort_cmp_funs_))) {
         LOG_WARN("failed to init cmp function", K(ret));
       }
-      // 每个channel的数据是local sort，所以需要切分出哪段有序，同时生成MergeSortInput信息
+      // Each channel's data is local sort, so it is necessary to segment which part is ordered, and at the same time generate MergeSortInput information
       while (OB_SUCC(ret) && !finish_) {
         if (ptr_row_msg_loop_->all_eof(task_channels_.count())) {
           finish_ = true;
@@ -992,7 +985,7 @@ int ObPxMSReceiveVecOp::get_all_rows_from_channels(ObPhysicalPlanCtx *phy_plan_c
           LocalOrderInput *local_order_input = static_cast<LocalOrderInput*>(merge_inputs_.at(i));
           if (OB_FAIL(local_order_input->row_store_.finish_add_row())) {
             LOG_WARN("failed to finish add row", K(ret));
-          // open时初始化reader_, 后续get_row时将直接从reader_中拿行。
+          // open when initializing reader_, subsequent get_row will directly fetch rows from reader_.
           } else if (OB_FAIL(local_order_input->open())) {
             LOG_WARN("failed to open local order input", K(ret));
           }
@@ -1029,7 +1022,7 @@ int ObPxMSReceiveVecOp::eval_all_exprs(const int64_t size)
 int ObPxMSReceiveVecOp::try_link_channel()
 {
   int ret = OB_SUCCESS;
-  // 从channel sets 读取数据，并向上迭代
+  // Read data from channel sets and iterate upwards
   ObPhysicalPlanCtx *phy_plan_ctx = NULL;
   if (OB_ISNULL(phy_plan_ctx = GET_PHY_PLAN_CTX(ctx_))) {
     ret = OB_ERR_UNEXPECTED;

@@ -30,15 +30,15 @@ public:
   ObMockSqlExecutorRpc();
   virtual ~ObMockSqlExecutorRpc();
   /*
-   * 提交一个异步task执行请求, 在OB_TASK_NOTIFY_FETCH消息的驱动下收取结果数据
+   * Submit an asynchronous task execution request, receive result data driven by the OB_TASK_NOTIFY_FETCH message
    */
   virtual int task_submit(
       ObExecContext &ctx,
       ObTask &task,
       const common::ObAddr &svr);
   /*
-   * 发送一个task并阻塞等待，直到对端返回执行状态
-   * 将执行句柄保存在handler中, 随后可以通过handler收取数据
+   * Send a task and block waiting until the remote end returns the execution status
+   * Save the execution handle in handler, and subsequently data can be received through handler
    * */
   virtual int task_execute(
       ObExecContext &ctx,
@@ -46,26 +46,26 @@ public:
       const common::ObAddr &svr,
       RemoteExecuteStreamHandle &handler);
   /*
-   * 发送杀死一个task的命令并阻塞等待对端返回执行状态
+   * Send a command to kill a task and block waiting for the remote end to return the execution status
    * */
   virtual int task_kill(
       ObTaskInfo &task,
       const common::ObAddr &svr);
   /*
-   * Task在Worker端执行完成，通知Scheduler启动Task读取结果
+   * Task execution completed on the Worker side, notify Scheduler to start Task reading results
    * */
   virtual int task_complete(
       ObTaskEvent &task_event,
       const common::ObAddr &svr);
 
   /*
-   * 发送一个task的执行结果，不等待返回
+   * Send the execution result of a task, do not wait for a response
    * */
   virtual int task_notify_fetch(
       ObTaskEvent &task_event,
       const common::ObAddr &svr);
   /*
-   * 获取一个task的中间结果的所有scanner，阻塞等待直到所有的scanner都返回
+   * Get all scanners of an intermediate result of a task, blocking until all scanners return
    * */
   virtual int task_fetch_result(
       const ObSliceID &ob_slice_id,
@@ -110,13 +110,13 @@ public:
 private:
   bool task_location_exist(ObTaskLocation task_loc);
 private:
-  // task_submit的时候填入进来
+  // when task_submit is called, fill it in here
   common::ObArray<ObTaskLocation> task_loc_array_;
   common::ObAddr server_;
   ObSliceID ob_slice_id_;
 };
 
-/************************************模拟 packet queue********************************/
+/************************************simulate packet queue********************************/
 class ObMockPacketQueueThread : public share::ObThreadPool
 {
 public:

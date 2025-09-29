@@ -180,13 +180,12 @@ int ObCreateTableExecutor::ObInsSQLPrinter::inner_print(char *buf, int64_t buf_l
   }
   return ret;
 }
-
-//准备查询插入的脚本
+// Prepare query insertion script
 int ObCreateTableExecutor::prepare_ins_arg(ObCreateTableStmt &stmt,
                                            const ObSQLSessionInfo *my_session,
                                            ObSchemaGetterGuard *schema_guard,
                                            const ParamStore *param_store,
-                                           ObSqlString &ins_sql) //out, 最终的查询插入语句
+                                           ObSqlString &ins_sql) // out, final query insert statement
 {
   int ret = OB_SUCCESS;
   ObArenaAllocator allocator("CreateTableExec");
@@ -243,12 +242,11 @@ int ObCreateTableExecutor::prepare_ins_arg(ObCreateTableStmt &stmt,
   LOG_DEBUG("ins str preparation complete!", K(ins_sql), K(ret));
   return ret;
 }
-
-//准备alter table 的参数
+// Prepare alter table parameters
 int ObCreateTableExecutor::prepare_alter_arg(ObCreateTableStmt &stmt,
                                              const ObSQLSessionInfo *my_session,
                                              const ObString &create_table_name,
-                                             obrpc::ObAlterTableArg &alter_table_arg) //out, 最终的alter table arg, set session_id = 0;
+                                             obrpc::ObAlterTableArg &alter_table_arg) //out, final alter table arg, set session_id = 0;
 {
   int ret = OB_SUCCESS;
   const obrpc::ObCreateTableArg &create_table_arg = stmt.get_create_table_arg();
@@ -290,12 +288,11 @@ int ObCreateTableExecutor::prepare_alter_arg(ObCreateTableStmt &stmt,
   LOG_DEBUG("alter table arg preparation complete!", K(*alter_table_schema), K(ret));
   return ret;
 }
-
-//准备drop table的参数
+// Prepare drop table parameters
 int ObCreateTableExecutor::prepare_drop_arg(const ObCreateTableStmt &stmt,
                                             const ObSQLSessionInfo *my_session,
                                             obrpc::ObTableItem &table_item,
-                                            obrpc::ObDropTableArg &drop_table_arg) //out, drop table的参数
+                                            obrpc::ObDropTableArg &drop_table_arg) // out, drop table arguments
 {
   int ret = OB_SUCCESS;
   const ObString &db_name = stmt.get_database_name();
@@ -319,8 +316,7 @@ int ObCreateTableExecutor::prepare_drop_arg(const ObCreateTableStmt &stmt,
   LOG_DEBUG("drop table arg preparation complete!", K(drop_table_arg), K(table_item), K(ret));
   return ret;
 }
-
-//查询建表的处理, 通过内部session执行查询插入代码参考了 ObTableModify::ObTableModifyCtx::open_inner_conn() 实现
+// Query table creation processing, through internal session execution query insert code reference ObTableModify::ObTableModifyCtx::open_inner_conn() implementation
 int ObCreateTableExecutor::execute_ctas(ObExecContext &ctx,
                                         ObCreateTableStmt &stmt,
                                         obrpc::ObCommonRpcProxy *common_rpc_proxy)
@@ -364,7 +360,7 @@ int ObCreateTableExecutor::execute_ctas(ObExecContext &ctx,
         LOG_WARN("init oracle sql proxy failed", K(ret));
       } else if (OB_FAIL(prepare_stmt(stmt, *my_session, create_table_name))) {
         LOG_WARN("failed to prepare stmt", K(ret));
-      } else if (OB_FAIL(prepare_ins_arg(stmt, my_session, ctx.get_sql_ctx()->schema_guard_, &plan_ctx->get_param_store(), ins_sql))) { //1, 参数准备;
+      } else if (OB_FAIL(prepare_ins_arg(stmt, my_session, ctx.get_sql_ctx()->schema_guard_, &plan_ctx->get_param_store(), ins_sql))) { //1, parameter preparation;
         LOG_WARN("failed to prepare insert table arg", K(ret));
       } else if (OB_FAIL(prepare_alter_arg(stmt, my_session, create_table_name, alter_table_arg))) {
         LOG_WARN("failed to prepare alter table arg", K(ret));
@@ -372,11 +368,11 @@ int ObCreateTableExecutor::execute_ctas(ObExecContext &ctx,
         LOG_WARN("failed to prepare drop table arg", K(ret));
       } else if (OB_FAIL(ctx.get_sql_ctx()->schema_guard_->reset())){
         LOG_WARN("schema_guard reset failed", K(ret));
-      } else if (OB_FAIL(common_rpc_proxy->create_table(create_table_arg, create_table_res))) { //2, 建表;
+      } else if (OB_FAIL(common_rpc_proxy->create_table(create_table_arg, create_table_res))) { //2, create table;
         LOG_WARN("rpc proxy create table failed", K(ret), "dst", common_rpc_proxy->get_server());
       } else if (!(OB_INVALID_ID == create_table_res.table_id_
                   || (OB_INVALID_ID != create_table_res.table_id_
-                      && true == create_table_res.do_nothing_)) ) { //如果表已存在则后续的查询插入不进行
+                      && true == create_table_res.do_nothing_)) ) { // If the table already exists, subsequent query inserts will not be performed
         // 1. for old rs
         // when table_exist, table_id == invalid_id, and do_nothing will alway be false
         // 2. for new rs
@@ -395,7 +391,7 @@ int ObCreateTableExecutor::execute_ctas(ObExecContext &ctx,
         }
         #ifdef ERRSIM
         {
-          int tmp_ret = OB_E(EventTable::EN_CTAS_FAIL_NO_DROP_ERROR) OB_SUCCESS; //错误注入, 使表不能清理
+          int tmp_ret = OB_E(EventTable::EN_CTAS_FAIL_NO_DROP_ERROR) OB_SUCCESS; // error injection, make the table unable to be cleaned
           if (OB_FAIL(tmp_ret)) {
             ret = tmp_ret;
             need_clean = false;
@@ -404,8 +400,7 @@ int ObCreateTableExecutor::execute_ctas(ObExecContext &ctx,
         #else
           //do nothing...
         #endif
-
-        //3, 插入数据
+        //3, insert data
         if (OB_SUCC(ret)) {
           bool is_mysql_temp_table = stmt.get_create_table_arg().schema_.is_mysql_tmp_table();
           bool in_trans = my_session->is_in_transaction();
@@ -445,8 +440,7 @@ int ObCreateTableExecutor::execute_ctas(ObExecContext &ctx,
         }
 
         DEBUG_SYNC(BEFORE_EXECUTE_CTAS_CLEAR_SESSION_ID);
-
-        //4, 刷新schema, 将table的sess id重置为0
+        //4, refresh schema, reset table's sess id to 0
         if (OB_SUCC(ret)) {
           obrpc::ObAlterTableRes res;
           alter_table_arg.compat_mode_ = ORACLE_MODE == my_session->get_compatibility_mode() ?
@@ -472,7 +466,7 @@ int ObCreateTableExecutor::execute_ctas(ObExecContext &ctx,
           }
         }
 
-        if (OB_FAIL(ret)) { //5, 查询建表失败, 需要清理环境即DROP TABLE
+        if (OB_FAIL(ret)) { //5, query table creation failed, need to clean up environment i.e. DROP TABLE
           my_session->update_last_active_time();
           if (OB_LIKELY(need_clean)) {
             int tmp_ret = OB_SUCCESS;
@@ -590,7 +584,7 @@ int ObCreateTableExecutor::execute(ObExecContext &ctx, ObCreateTableStmt &stmt)
     } else if (OB_ISNULL(common_rpc_proxy)){
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("common rpc proxy should not be null", K(ret));
-    } else if (OB_ISNULL(select_stmt)) { // 普通建表的处理
+    } else if (OB_ISNULL(select_stmt)) { // Processing for normal table creation
       if (OB_FAIL(ctx.get_sql_ctx()->schema_guard_->reset())){
         LOG_WARN("schema_guard reset failed", KR(ret));
       } else if (table_schema.is_view_table()
@@ -665,7 +659,7 @@ int ObCreateTableExecutor::execute(ObExecContext &ctx, ObCreateTableStmt &stmt)
       if (table_schema.is_external_table()) {
         ret = OB_NOT_SUPPORTED;
         LOG_USER_ERROR(OB_NOT_SUPPORTED, "create external table as select");
-      } else if (OB_FAIL(execute_ctas(ctx, stmt, common_rpc_proxy))){  // 查询建表的处理
+      } else if (OB_FAIL(execute_ctas(ctx, stmt, common_rpc_proxy))){  // Processing of query-based table creation
         LOG_WARN("execute create table as select failed", KR(ret));
       }
     }
@@ -748,7 +742,7 @@ int ObAlterTableExecutor::refresh_schema_for_table(
     LOG_WARN("fail to get global version", K(ret), "tenant_id", tenant_id);
   } else if (local_version < global_version) {
     LOG_INFO("try to refresh schema", K(local_version), K(global_version));
-    // force refresh schema最新版本
+    // force refresh schema latest version
     ObSEArray<uint64_t, 1> tenant_ids;
     if (OB_FAIL(tenant_ids.push_back(tenant_id))) {
       LOG_WARN("fail to push back tenant_id", K(ret), "tenant_id", tenant_id);
@@ -759,9 +753,9 @@ int ObAlterTableExecutor::refresh_schema_for_table(
   return ret;
 }
 
-/* 从 3100 开始的版本 alter table 逻辑是将建索引和其他操作放到同一个 rpc 里发到 rs，返回后对每个创建的索引进行同步等，如果一个索引创建失败，则回滚全部索引
-   mysql 模式下支持 alter table 同时做建索引操作和其他操作，需要保证 rs 在处理 drop index 之后再处理 add index
-   否则前缀索引会有问题：
+/* From version 3100 onwards, the alter table logic is to put index creation and other operations into the same rpc sent to rs, and after returning, synchronize each created index, etc., if an index creation fails, roll back all indexes
+   MySQL mode supports alter table to perform index creation operations and other operations simultaneously, need to ensure that rs processes drop index after processing add index
+   Otherwise, prefix indexes will have issues:
 */
 int ObAlterTableExecutor::alter_table_rpc_v2(
     obrpc::ObAlterTableArg &alter_table_arg,
@@ -840,7 +834,7 @@ int ObAlterTableExecutor::alter_table_rpc_v2(
     } else if (OB_FAIL(common_rpc_proxy->alter_table(alter_table_arg, res))) {
       LOG_WARN("rpc proxy alter table failed", KR(ret), "dst", common_rpc_proxy->get_server(), K(alter_table_arg));
     } else {
-      // 在回滚时不会重试，也不检查 schema version
+      // In rollback, retries will not be attempted, nor will the schema version be checked
       alter_table_arg.based_schema_object_infos_.reset();
     }
   }
@@ -858,7 +852,7 @@ int ObAlterTableExecutor::alter_table_rpc_v2(
   if (OB_SUCC(ret)) {
     ObCreateIndexExecutor create_index_executor;
     uint64_t failed_index_no = OB_INVALID_ID;
-    // 对drop/truncate分区全局索引的处理
+    // Handling of global index for drop/truncate partition
     if (!is_sync_ddl_user && alter_table_arg.is_update_global_indexes_
         && (obrpc::ObAlterTableArg::DROP_PARTITION == alter_table_arg.alter_part_type_
         || obrpc::ObAlterTableArg::DROP_SUB_PARTITION == alter_table_arg.alter_part_type_
@@ -876,7 +870,7 @@ int ObAlterTableExecutor::alter_table_rpc_v2(
       }
     } else if (is_create_index(res.ddl_type_) || DDL_NORMAL_TYPE == res.ddl_type_) {
       // TODO(shuangcan): alter table create index returns DDL_NORMAL_TYPE now, check if we can fix this later
-      // 同步等索引建成功
+      // Synchronize until index creation is successful
       for (int64_t i = 0; OB_SUCC(ret) && i < add_index_arg_list.size(); ++i) {
         obrpc::ObIndexArg *index_arg = add_index_arg_list.at(i);
         obrpc::ObCreateIndexArg *create_index_arg = NULL;
@@ -895,23 +889,23 @@ int ObAlterTableExecutor::alter_table_rpc_v2(
           // TODO yunshan.tys temporary bypass, since res.res_arg_array_ is empty
           // TODO yunyi temporary bypass, since res.res_arg_array_ is empty
         } else if (!is_sync_ddl_user) {
-          // 只考虑非备份恢复时的索引同步检查
+          // Only consider index synchronization check when not in backup recovery
           create_index_arg->index_schema_.set_table_id(res.res_arg_array_.at(i).schema_id_);
           create_index_arg->index_schema_.set_schema_version(res.res_arg_array_.at(i).schema_version_);
-          // 只考虑非备份恢复时的索引同步检查
+          // Only consider index synchronization check when not in backup recovery
           if (OB_FAIL(create_index_executor.sync_check_index_status(*my_session, *common_rpc_proxy, *create_index_arg, res, allocator))) {
             failed_index_no = i;
             LOG_WARN("failed to sync_check_index_status", KR(ret), K(*create_index_arg), K(i));
           }
         }
       }
-      // 回滚所有已经建立的 index
+      // Rollback all established index
       if (OB_FAIL(ret)) {
         int tmp_ret = OB_SUCCESS;
         uint64_t tenant_id = OB_INVALID_ID;
         for (int64_t i = 0; (OB_SUCCESS == tmp_ret) && (i < add_index_arg_list.size()); ++i) {
           if (failed_index_no == i) {
-            // 同步建索引逻辑里已经把这个失败的删掉了
+            // Synchronization index building logic has already deleted this failure
             continue;
           } else {
             obrpc::ObDropIndexArg drop_index_arg;
@@ -965,7 +959,7 @@ int ObAlterTableExecutor::alter_table_exchange_partition_rpc(obrpc::ObExchangePa
   } else if (OB_FAIL(common_rpc_proxy->exchange_partition(exchange_partition_arg, res))) {
     LOG_WARN("rpc proxy alter table failed", K(ret), "dst", common_rpc_proxy->get_server(), K(exchange_partition_arg));
   } else {
-    // 在回滚时不会重试，也不检查 schema version
+    // In rollback, retries will not be attempted, nor will the schema version be checked
     exchange_partition_arg.based_schema_object_infos_.reset();
   }
   return ret;
@@ -1102,8 +1096,8 @@ int ObAlterTableExecutor::execute(ObExecContext &ctx, ObAlterTableStmt &stmt)
             LOG_WARN("check whether need check failed", K(ret));
           }
         }
-        // 如果追加 validate 属性的外键或者 modify 外键为 validate 属性时，不立即生效
-        // 校验已有数据满足外键的 validate 属性要求之后再生效，确保优化器可以正确地根据外键的 validate 属性进行优化
+        // If appending a foreign key with the validate attribute or modifying a foreign key to have the validate attribute, it does not take effect immediately
+        // Validate existing data meets the foreign key's validate attribute requirements before activation, ensuring the optimizer can correctly optimize based on the foreign key's validate attribute
         if (OB_SUCC(ret) && alter_table_arg.foreign_key_checks_ && 1 == alter_table_arg.foreign_key_arg_list_.count()) {
           if ((!alter_table_arg.foreign_key_arg_list_.at(0).is_modify_fk_state_
               && alter_table_arg.foreign_key_arg_list_.at(0).validate_flag_)

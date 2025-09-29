@@ -70,8 +70,7 @@ private:
   common::ObKVCache<ObCatalogSchemaCacheKey, schema::ObSchemaCacheValue> schema_cache_;
   // common::ObKVCache<ObCatalogSchemaCacheKey, ObExternalTableFiles> file_cache_;
 };
-
-// 判断 Cache 是否过期的逻辑，只做在 ObCachingCatalogMetaGetter 这一层，不要侵入内部 Catalog 的 API
+// The logic to determine if the Cache is expired should only be implemented in the ObCachingCatalogMetaGetter layer, do not intrude into the internal Catalog's API
 class ObCachedCatalogMetaGetter final : public ObICatalogMetaGetter
 {
 public:

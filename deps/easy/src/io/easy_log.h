@@ -2,7 +2,7 @@
 #define EASY_LOG_H_
 
 /**
- * 简单的log输出
+ * simple log output
  */
 #include "easy_define.h"
 #include "util/easy_string.h"
@@ -42,7 +42,7 @@ typedef enum {
 #define easy_debug_log(format, args...) easy_common_log(EASY_LOG_DEBUG, format, ## args)
 #define easy_trace_log(format, args...) easy_common_log(EASY_LOG_TRACE, format, ## args)
 #define SYS_ERROR(format...) easy_error_log(format)
-// 打印backtrace
+// print backtrace
 #define EASY_PRINT_BT(format, args...) \
   {easy_log_format(EASY_LOG_OFF, __FILE__, __LINE__, __FUNCTION__, "%s" format, easy_lbt(), ## args);}
 

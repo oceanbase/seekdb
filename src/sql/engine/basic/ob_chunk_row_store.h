@@ -414,7 +414,7 @@ public:
   void set_callback(ObSqlMemoryCallback *callback) { callback_ = callback; }
   void reset_callback() { callback_ = nullptr; }
   int dump(bool reuse, bool all_dump);
-  // 目前dir id 的策略是上层逻辑（一般是算子）统一申请，然后再set过来
+  // The current strategy for dir id is that the upper-level logic (usually an operator) applies for it uniformly, and then sets it over
   void set_dir_id(int64_t dir_id) { io_.dir_id_ = dir_id; }
   int alloc_dir_id();
   uint64_t get_tenant_id() { return tenant_id_; }

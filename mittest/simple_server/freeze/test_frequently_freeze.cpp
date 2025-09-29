@@ -251,15 +251,15 @@ TEST_F(TestFrequentlyFreeze, create_table)
 }
 
 /**
- * 本case主要用于验证在超多Tablet且都存在少量写入的场景下触发频繁的冻结是否会有问题。
- * 主要的流程为：
- * 1. 创建了三个具有4000个分区的表，分区方式是主键的hash
- * 2. 每个表都插入了少量数据，按主键递增的方式插入，插入行数为分区数的5倍，尽量保证每个分区都有数据
- * 3. 启动了20个线程在插入数据的过程中执行tablet冻结，其中10个异步冻结，10个同步冻结。异步冻结会重复做10次，同步冻结只做了1次
- *    总共预计是会执行13万次Tablet级冻结。
- * 4. 启动了1个线程执行同步日志流冻结，每隔50秒一次，总计执行20次
- * 5. 启动了1个线程执行异步日志流冻结，每隔50秒一次，总结执行20次
- * 6. 最后确认ObFreezer中没有残留的待异步的冻结的分区
+ * This case is mainly used to verify whether there will be any issues when frequent freezing is triggered in a scenario with a large number of Tablets and minor writes to each.
+ * The main process is as follows:
+ * 1. Created three tables with 4000 partitions each, using hash partitioning on the primary key.
+ * 2. Inserted a small amount of data into each table in ascending order of the primary key, with the number of inserted rows being five times the number of partitions, to ensure that each partition has data.
+ * 3. Started 20 threads to perform tablet freezing during the data insertion process, with 10 asynchronous freezes and 10 synchronous freezes. Asynchronous freezing was repeated 10 times, while synchronous freezing was done only once.
+ *    A total of approximately 130,000 Tablet-level freezes are expected to be executed.
+ * 4. Started 1 thread to perform synchronous log stream freezing every 50 seconds, totaling 20 executions.
+ * 5. Started 1 thread to perform asynchronous log stream freezing every 50 seconds, totaling 20 executions.
+ * 6. Finally confirmed that there are no pending asynchronous freezing partitions left in ObFreezer.
  */
 TEST_F(TestFrequentlyFreeze, frequently_freeze)
 {

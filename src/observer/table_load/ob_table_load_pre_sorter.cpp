@@ -78,7 +78,7 @@ int ObTableLoadPreSorter::ChunkSorter::work()
     LOG_WARN("fail to sort chunk", KR(ret), K(chunk_node_id_));
   } else if (0 == pre_sorter_->dec_sort_chunk_task_cnt()
              && ATOMIC_LOAD(&pre_sorter_->all_trans_finished_)) {
-    mem_ctx_->load_thread_cnt_ = 0; // 用于让sample线程退出
+    mem_ctx_->load_thread_cnt_ = 0; // used to let the sample thread exit
   }
   return ret;
 }
@@ -106,7 +106,7 @@ ObTableLoadPreSorter::~ObTableLoadPreSorter()
 void ObTableLoadPreSorter::reset()
 {
   is_inited_ = false;
-  // 先把sample线程停下来
+  // First stop the sample thread
   mem_ctx_.has_error_ = true;
   if (OB_NOT_NULL(sample_task_scheduler_)) {
     sample_task_scheduler_->stop();
@@ -127,7 +127,7 @@ void ObTableLoadPreSorter::reset()
   finish_thread_cnt_ = 0;
   sort_chunk_task_cnt_ = 0;
   all_trans_finished_ = false;
-  // 分配器最后reset
+  // dispatcher final reset
   allocator_.reset();
 }
 
@@ -321,19 +321,19 @@ int ObTableLoadPreSorter::start_finish()
 {
   int ret = OB_SUCCESS;
   ObTableLoadTask *task = nullptr;
-  // 1. 分配task
+  // 1. assign task
   if (OB_FAIL(ctx_->alloc_task(task))) {
     LOG_WARN("fail to alloc task", KR(ret));
   }
-  // 2. 设置processor
+  // 2. Set processor
   else if (OB_FAIL(task->set_processor<FinishTaskProcessor>(ctx_, this))) {
     LOG_WARN("fail to set finish task processor", KR(ret));
   }
-  // 3. 设置callback
+  // 3. Set callback
   else if (OB_FAIL(task->set_callback<FinishTaskCallback>(ctx_))) {
     LOG_WARN("fail to set finish task callback", KR(ret));
   }
-  // 4. 把task放入调度器
+  // 4. Put task into scheduler
   else if (OB_FAIL(store_ctx_->task_scheduler_->add_task(0, task))) {
     LOG_WARN("fail to add task", KR(ret), KPC(task));
   }

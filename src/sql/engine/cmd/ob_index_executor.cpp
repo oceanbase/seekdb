@@ -135,7 +135,7 @@ int ObCreateIndexExecutor::execute(ObExecContext &ctx, ObCreateIndexStmt &stmt)
   if (FAILEDx(ObResolverUtils::check_sync_ddl_user(my_session, is_sync_ddl_user))) {
     LOG_WARN("Failed to check sync_dll_user", K(ret));
   } else if (!is_sys_index && !is_sync_ddl_user) {
-    // 只考虑非系统表和非备份恢复时的索引同步检查
+    // Only consider index synchronization check for non-system tables and non-backup recovery scenarios
     bool build_index_need_retry_at_executor = false;
     create_index_arg.index_schema_.set_table_id(res.index_table_id_);
     create_index_arg.index_schema_.set_schema_version(res.schema_version_);
@@ -208,7 +208,7 @@ int ObCreateIndexExecutor::sync_check_index_status(sql::ObSQLSessionInfo &my_ses
     bool is_update_global_indexes)
 {
   int ret = OB_SUCCESS;
-  // 强制刷schema版本, 保证observer版本最新
+  // Force refresh schema version, ensure observer version is latest
   THIS_WORKER.set_timeout_ts(ObTimeUtility::current_time() + OB_MAX_USER_SPECIFIED_TIMEOUT);
   bool is_finish = false;
   const static int CHECK_INTERVAL = 100 * 1000; // 100ms
@@ -241,20 +241,20 @@ int ObCreateIndexExecutor::sync_check_index_status(sql::ObSQLSessionInfo &my_ses
   }
 
   while (OB_SUCC(ret) && !is_finish) {
-    // 判断rs端返回的index_table_id是否合法
+    // Determine if the index_table_id returned by the rs end is valid
     if (OB_UNLIKELY(OB_INVALID_ID == index_table_id)) {
-      is_finish = true; // 不合法的index_table_id直接直接终止check index status
+      is_finish = true; // Invalid index_table_id directly terminates check index status
       if (true == create_index_arg.if_not_exist_) {
-        // if not exist忽略错误码
-        // 并直接退出check index status
-        // 由于该索引并为创建，因此无需drop index进行回滚
+        // if not exist ignore error code
+        // and directly exit check index status
+        // Since the index was not created, there is no need to drop index for rollback
         break;
       } else {
         ret = OB_ERR_ADD_INDEX;
         LOG_WARN("index table id is invalid", KR(ret), K(index_table_id));
       }
     }
-    // 先处理session超时或者kill异常场景
+    // First handle session timeout or kill exception scenarios
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(handle_session_exception(my_session))) {
       if (is_query_killed_return(ret)
@@ -276,8 +276,8 @@ int ObCreateIndexExecutor::sync_check_index_status(sql::ObSQLSessionInfo &my_ses
         LOG_WARN("failed to handle_session_exception", KR(ret));
       }
     }
-    //处理主备库切换的场景，生效过程中发生切换的话，直接返回用户session_killed;
-    //后续有备库来处理该索引；
+    // Handle the scenario of leader-follower switch, if a switch occurs during activation, directly return user session_killed;
+    // Subsequent standby database will handle this index;
     if (OB_FAIL(ret)) {
     } else if (OB_SYS_TENANT_ID == tenant_id) {
       //no need to process sys tenant

@@ -213,7 +213,7 @@ private:
 private:
   bool is_inited_;
   ObIndexUsageInfoMgr *mgr_;
-  common::ObMySQLProxy *sql_proxy_; // 写入内部表需要 sql proxy
+  common::ObMySQLProxy *sql_proxy_; // Write to internal table requires sql proxy
   IndexUsageDeletedMap deleted_map_;
 };
 
@@ -259,7 +259,7 @@ private:
 
 class ObIndexUsageInfoMgr final 
 {
-  static const int64_t SAMPLE_RATIO = 10; // 采样模式下的采样比例 10%
+  static const int64_t SAMPLE_RATIO = 10; // Sampling ratio in sampling mode 10%
   static const int64_t DEFAULT_MAX_HASH_BUCKET_CNT = 3000;
   static const int64_t INDEX_USAGE_REFRESH_CONF_INTERVAL = 2 * 1000 * 1000L; // 2s
   static const int64_t ONE_HASHMAP_MEMORY = 4 << 20; // 4M

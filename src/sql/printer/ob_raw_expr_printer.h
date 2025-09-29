@@ -98,9 +98,8 @@ class ObRawExprPrinter
     PRINT_IDENT(ident_str);               \
     PRINT_QUOT;                           \
   } while (0)
-  
-// cast函数在parse阶段用到这两个宏, 但定义在sql_parse_tab.c中
-// cast函数功能不完善，beta之前不会修改, 先定义在这里
+// cast function uses these two macros in the parse phase, but they are defined in sql_parse_tab.c
+// cast function functionality is incomplete, will not be modified before beta, define here first
 // TODO@nijia.nj
 #define BINARY_COLLATION 63
 #define INVALID_COLLATION 0
@@ -114,7 +113,7 @@ public:
 
   void init(char *buf, int64_t buf_len, int64_t *pos, ObSchemaGetterGuard *schema_guard,
             ObObjPrintParams print_params, const ParamStore *param_store = NULL);
-  // stmt中会出现若干expr, 为了避免反复实例化，这里将expr作为do_print的参数
+  // stmt will contain several exprs, to avoid repeated instantiation, here expr is passed as a parameter to do_print
   int do_print(ObRawExpr *expr, ObStmtScope scope, bool only_column_namespace = false, bool print_cte = false);
 private:
   int print_bool_expr(ObRawExpr *expr);

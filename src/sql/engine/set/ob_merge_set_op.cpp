@@ -80,8 +80,8 @@ void ObMergeSetOp::destroy()
 }
 
 /**
- * 拿数据时，由child_op来驱动，如果是left，则拿的就是left的数据，则后续就是需要用left来获取output的ObExprs
- * 相反，如果是right op，则拿的就是right的数据，则后续需要用right来获取output的ObExprs
+ * When fetching data, it is driven by child_op. If it is left, then the data fetched is from left, and subsequently, ObExprs for output should be obtained using left.
+ * Conversely, if it is right op, then the data fetched is from right, and subsequently, ObExprs for output should be obtained using right.
  **/
 int ObMergeSetOp::do_strict_distinct(
   ObOperator &child_op,

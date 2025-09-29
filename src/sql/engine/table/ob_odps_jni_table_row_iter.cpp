@@ -96,9 +96,8 @@ int ObODPSJNITableRowIterator::init_jni_schema_scanner(const ObODPSGeneralFormat
     }
     LOG_TRACE("timer init schema scanner and end open connection");
   }
-
-  // 成功的分支revert_scan_iter兜底
-  // 失败分支失败或者临时变量的时候处理析构函数兜底
+  // Successful branch revert_scan_iter fallback
+  // Failure branch failure or temporary variable handling destructor fallback
   return ret;
 }
 
@@ -169,9 +168,8 @@ int ObODPSJNITableRowIterator::init_jni_meta_scanner(const ObODPSGeneralFormat &
     }
     LOG_TRACE("timer init schema scanner and end connection");
   }
-
-  // 成功的分支revert_scan_iter兜底
-  // 失败分支失败或者临时变量的时候处理析构函数兜底
+  // Successful branch revert_scan_iter fallback
+  // Failure branch failure or temporary variable handling destructor fallback
   return ret;
 }
 
@@ -243,9 +241,8 @@ int ObODPSJNITableRowIterator::init(const storage::ObTableScanParam *scan_param)
       LOG_WARN("failed to init expected columns and related types", K(ret));
     }
   }
-
-  // 成功的分支revert_scan_iter兜底
-  // 失败分支失败处理析构函数兜底
+  // Successful branch revert_scan_iter fallback
+  // Failure branch failure handling destructor fallback
   return ret;
 }
 
@@ -837,8 +834,8 @@ int ObODPSJNITableRowIterator::init_all_columns_name_as_odps_params()
     }
     
     /**
-     * tunnel 不需要分区列，但是性能差，因为每个分区都要开session
-     * storage 需要把分区列，透给java
+     * tunnel does not need a partition column, but performance is poor, because a session needs to be opened for each partition
+     * storage needs to pass the partition column to java
      */
     ObSqlString required_fields;
     ObSqlString field_types;
@@ -1061,7 +1058,7 @@ int ObODPSJNITableRowIterator::get_next_rows_storage_api(int64_t &count, int64_t
 
       if (OB_FAIL(ret)) {
       } else if (eof) {
-        // eof 分支中可能也有空元结构体生成
+        // eof branch may also generate empty struct
         if (OB_FAIL(ret)) {
         } else if (state_.odps_jni_scanner_->get_split_mode() == JniScanner::SplitMode::RETURN_OB_BATCH) {
           if (OB_FAIL(state_.odps_jni_scanner_->release_table(should_read_rows))) {
@@ -1163,7 +1160,7 @@ int ObODPSJNITableRowIterator::next_task_storage(const int64_t capacity)
       } else {
         state_.odps_jni_scanner_ = nullptr;
       }
-    }  // 覆盖ret正确，后续查询不在做了
+    }  // Coverage of ret is correct, subsequent queries will not be performed
   } else {
     int64_t part_id = scan_param_->key_ranges_.at(task_idx)
                           .get_start_key()
@@ -1209,7 +1206,7 @@ int ObODPSJNITableRowIterator::next_task_storage(const int64_t capacity)
         } else {
           state_.odps_jni_scanner_ = nullptr;
         }
-      }  // 覆盖ret正确，后续查询不在做了
+      }  // Coverage of ret is correct, subsequent queries will not be performed
     } else if (OB_FAIL(build_storage_task_state(
                    task_idx, part_id, start_split, end_split, start, step, session_id, capacity))) {
       LOG_WARN("failed to build storage task state ");
@@ -1240,10 +1237,10 @@ int ObODPSJNITableRowIterator::build_storage_task_state(int64_t task_idx, int64_
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("jni scanner should not be inited", K(ret));
     } else if (OB_FAIL(state_.odps_jni_scanner_->do_init(odps_params_map_))) {
-      // 注意在init_data_storage_reader_params构造odps_params_map_的函数
-      // 这个函数在每次切换task的时候都要插入新的值，所以set factor的时候一定要覆盖
-      // 否则obstring是里面是过期的ptr导致use after free的问题
-      // 这里注意判断错误码
+      // Note in init_data_storage_reader_params construct odps_params_map_ the function
+      // This function inserts new values every time a task switch occurs, so when setting the factor, it must always overwrite
+      // Otherwise obstring contains expired ptr causing use after free issue
+      // Here note judging error code
       // If the jni scanner is total new fresh, then init before open.
       LOG_WARN("failed to init next odps jni scanner", K(ret));
     } else if (OB_FAIL(state_.odps_jni_scanner_->do_open())) {
@@ -1294,7 +1291,7 @@ int ObODPSJNITableRowIterator::init_data_storage_reader_params(int64_t start_spl
     ObString start_split;
     ObString end_split;
     ObString start_offset;
-    ObString split_size;  // 这个命名比较困惑但是实际上代表row count
+    ObString split_size;  // This naming is confusing but actually represents row count
     ObString capacity_obstr;
     if (OB_FAIL(ob_write_string(task_alloc_, start_split_str, start_split, true))) {
       LOG_WARN("failed to write c_str style for start", K(ret));
@@ -1605,7 +1602,7 @@ int ObODPSJNITableRowIterator::next_task_tunnel(const int64_t capacity)
       int tmp_ret = state_.odps_jni_scanner_->do_close();
       if (OB_SUCCESS != tmp_ret) {
         LOG_WARN("failed to close the jni scanner for this state", K(tmp_ret));
-        ret = tmp_ret;  // OB_ITER_END被覆盖，这里发生错误，停止
+        ret = tmp_ret;  // OB_ITER_END is overwritten, an error occurs here, stop
       }
     }
   } else {
@@ -1631,7 +1628,7 @@ int ObODPSJNITableRowIterator::next_task_tunnel(const int64_t capacity)
         int tmp_ret = state_.odps_jni_scanner_->do_close();
         if (OB_SUCCESS != tmp_ret) {
           LOG_WARN("failed to close the jni scanner for this state", K(tmp_ret));
-          ret = tmp_ret;  // OB_ITER_END被覆盖，这里发生错误，停止
+          ret = tmp_ret;  // OB_ITER_END is overwritten, an error occurs here, stop
         }
       }
       LOG_TRACE("iterator of odps jni scanner is end with dummy file", K(ret));
@@ -2416,10 +2413,10 @@ int ObODPSJNITableRowIterator::fill_column_arrow(ObEvalCtx &ctx, const ObExpr &e
         for (int64_t row_idx = 0; OB_SUCC(ret) && row_idx < num_rows; ++row_idx) {
           batch_info_guard.set_batch_idx(row_idx);
           if (!s_array->IsNull(row_idx)) {
-            // out_length是真实长度
+            // out_length is the actual length
             int32_t out_length = 0;
             const char *str = reinterpret_cast<const char *>(s_array->GetValue(row_idx, &out_length));
-            // judge length是语义长度
+            // judge length is semantic length
             int32_t judge_length = 0;
             if (CHARSET_UTF8MB4 == out_charset) {
               judge_length = ObCharset::strlen_char(CS_TYPE_UTF8MB4_BIN, str, out_length);
@@ -3520,7 +3517,7 @@ int ObODPSJNITableRowIterator::OdpsArrayTypeDecoder::decode(ObEvalCtx &ctx, cons
           }
         } else {
           ObArrayNested *nested_array = static_cast<ObArrayNested *>(array_);
-          // 这个init函数需要在child_array中的元素已经填充完毕后调用，即在child_decoder->decode之后调用。否则无法正确初始化类成员。
+          // This init function needs to be called after the elements in child_array have been filled, i.e., after child_decoder->decode. Otherwise, the class members cannot be initialized correctly.
           if (OB_FAIL(child_array->init())) {
             LOG_WARN("failed to init child array");
           } else if (OB_FAIL(nested_array->push_back(*child_array))) {
@@ -3981,7 +3978,7 @@ bool ObODPSJNITableRowIterator::is_zero_time(const ObObj &obj)
 
 // ------------------- ObOdpsPartitionJNIScannerMgr -------------------
 /*
- * 切分任务
+ * Split task
  */
 int ObOdpsPartitionJNIScannerMgr::fetch_row_count(ObExecContext &exec_ctx, uint64_t tenant_id, const ObString &properties,
     ObIArray<ObExternalFileInfo> &external_table_files, bool &use_partition_gi)
@@ -4038,7 +4035,7 @@ int ObOdpsPartitionJNIScannerMgr::fetch_row_count(ObExecContext &exec_ctx, uint6
 }
 
 /*
- * 刷新数据
+ * Refresh data
  */
 int ObOdpsPartitionJNIScannerMgr::fetch_row_count(
     ObExecContext &exec_ctx, const ObString part_spec, const ObString &properties, int64_t &row_count)
@@ -4060,7 +4057,7 @@ int ObOdpsPartitionJNIScannerMgr::fetch_row_count(
 }
 
 /*
- * 刷新数据
+ * Refresh data
  */
 int ObOdpsPartitionJNIScannerMgr::fetch_storage_row_count(
     ObExecContext &exec_ctx, const ObString part_spec, const ObString &properties,  int64_t &row_count)
@@ -4295,8 +4292,8 @@ int ObOdpsJniUploaderMgr::init_writer_params_in_px(
       LOG_TRACE("succ to init odps uploader", K(ret), K(ref_));
     }
   }
-  //  成功后上层出去之后由ObSelectIntoOp::destroy析构
-  // 如果不幸没走到op由析构函数兜底
+  //  After success, it will be destructed by ObSelectIntoOp::destroy when the upper layer exits
+  // If unfortunately it doesn't reach op, the destructor will handle it
   return ret;
 }
 
@@ -4318,7 +4315,7 @@ int ObOdpsJniUploaderMgr::get_writer_sid(
   } else if (OB_FAIL(ob_write_string(alloc, tmp_sid, sid, true))) {
     LOG_WARN("failed to write string", K(ret));
   }
-  // 成功和失败后上层出去之后由ObSelectIntoOp::destroy析构
+  // Success and failure after the upper layer exits are destructed by ObSelectIntoOp::destroy
   return ret;
 }
 
@@ -4341,7 +4338,7 @@ int ObOdpsJniUploaderMgr::get_odps_uploader_in_px(
     if (OB_SUCC(ret)) {
       odps_uploader.writer_ptr = writer_ptr;
     } 
-    // 成功和失败后上层出去之后由ObSelectIntoOp::destroy析构
+    // Success and failure after the upper layer exits are destructed by ObSelectIntoOp::destroy
   }
   return ret;
 }

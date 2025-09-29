@@ -23,8 +23,8 @@ namespace common
 class ObObj;
 
 /**
- * 用于区分紧凑格式的四种存储类型
- * DENSE_SPARSE和DENSE_DENSE实际实现是rowkey和普通列分属于两行
+ * Used to distinguish four types of storage formats
+ * DENSE_SPARSE and DENSE_DENSE are actually implemented with rowkey and regular columns belonging to two different rows
  */
 enum ObCompactStoreType
 {

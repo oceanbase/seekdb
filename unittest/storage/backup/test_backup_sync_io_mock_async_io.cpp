@@ -304,8 +304,7 @@ TEST_F(TestBackupMockAsyncIO, test_sync_io_mock_async_io)
   // OK(prepare_read_io_info(macro_id, read_info, &read_device_handle, read_io_info));
   // OK(ObIOManager::get_instance().aio_read(read_io_info, read_io_handle));
   // OK(read_io_handle.wait(wait_timeout));
-
-  // // 比较read_buf和write_buf的内容
+  // // Compare the contents of read_buf and write_buf
   // bool is_same = true;
   // for (int64_t i = 0; i < length; ++i) {
   //   if (read_io_info.buf_[i] != write_buf[i]) {

@@ -82,7 +82,7 @@ public:
 
   int init(const uint64_t tenant_id, const share::ObLSID &ls_id, 
       const int64_t &timeout = -1);
-  //TODO 判断是否可以加减成员, meta or sys directly return success
+  //TODO Determine if members can be added or removed, meta or sys directly return success
   /*
    * @description: Used to check whether the readable_SCN of this member has surpassed the reported readable_SCN,
    * for the purpose of judging member changes and the addition of replicas during timeout.
@@ -285,18 +285,18 @@ private:
   bool is_inited_;
   uint64_t tenant_id_;
   ObLS *ls_;
-  ObCond ref_cond_;//用于加锁等待唤醒
+  ObCond ref_cond_;//used for locking and waiting to be awakened
   int64_t ref_cnt_;//use for Concurrency control
   common::SpinRWLock lock_;
-  //存储内部表和统计出来的最大值
-  //只在config_version_in_inner_合法的时候有效
+  // Store internal table and the maximum value calculated
+  //Only valid when config_version_in_inner_ is legal
   share::SCN readable_scn_upper_limit_;//the max readable_scn of inner_table and memory
   palf::LogConfigVersion config_version_in_inner_;//config_version in inner_table
   common::ObAddr extra_server_;//for add replica, need to gather add_replica's readable_scn
-  int64_t last_dump_ts_;//用于记录上次打印内存可读点的时间戳
-  palf::LogConfigVersion config_version_;//记录统计可读点replicas_scn_使用的config_version
-  //成员列表里面最多只有OB_MAX_MEMBER_NUMBER，这个时候可能触发迁移，所以需要增加一个成员
-  ObSEArray<ObLSReplicaReadableSCN, OB_MAX_MEMBER_NUMBER + 1, ObNullAllocator> replicas_scn_;//缓存每个副本的可读位点
+  int64_t last_dump_ts_;//used to record the timestamp of the last memory readable point print
+  palf::LogConfigVersion config_version_;//record the config_version used by replicas_scn_ for statistics readability
+  //The member list contains at most OB_MAX_MEMBER_NUMBER, at which point a migration may be triggered, so an additional member needs to be added
+  ObSEArray<ObLSReplicaReadableSCN, OB_MAX_MEMBER_NUMBER + 1, ObNullAllocator> replicas_scn_;//cache the readable checkpoint of each replica
 };
 
 template <typename... Args>

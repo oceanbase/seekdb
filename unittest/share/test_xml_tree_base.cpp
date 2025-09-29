@@ -125,8 +125,7 @@ public:
   }
 
   void set_standalone(uint16_t standalone) {  }
-
-  // 用于确定key是否匹配
+  // Used to determine if the key matches
   int compare(const ObString& key, int& res) { 
     UNUSED(key); 
     res = 0; 
@@ -147,13 +146,13 @@ public:
   bool has_flags(ObMulModeNodeFlag flag) { return false; }
   bool get_unparse() { return false; }
   bool get_is_empty() { return false; }
-  // 返回节点具体类型
-  // 例如：json返回jsonInt，jsonDouble
-  // xml 返回xmlElment, XmlAttribute
+  // Return the specific type of the node
+  // For example: json returns jsonInt, jsonDouble
+  // xml returns xmlElment, XmlAttribute
   int node_type() const { return 0; }
 
   // @return see ObObjType.
-  // 用于对应该数据的原始sql类型，当前是json在使用
+  // Used to correspond to the original sql type of this data, currently json is in use
   ObObjType field_type() const { return ObNullType;}
 
   virtual int append(ObIMulModeBase* node)

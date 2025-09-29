@@ -37,7 +37,7 @@ public:
   ObTableLoadInstance();
   ~ObTableLoadInstance();
   void destroy();
-  // column_ids不包含堆表的hidden pk
+  // column_ids does not include the hidden pk of the heap table
   int init(ObTableLoadParam &param,
            const common::ObIArray<uint64_t> &column_ids,
            const common::ObIArray<common::ObTabletID> &tablet_ids,

@@ -75,8 +75,7 @@ int ObExprExtraInfoFactory::alloc(common::ObIAllocator &alloc,
 void ObExprExtraInfoFactory::register_expr_extra_infos()
 {
   MEMSET(ALLOC_FUNS_, 0, sizeof(ALLOC_FUNS_));
-
-  // 添加ObExpr extra info的结构, 需要在这里进行注册
+  // Add ObExpr extra info structure, need to register here
   REG_EXTRA_INFO(T_FUN_SYS_CALC_PARTITION_ID, CalcPartitionBaseInfo);
   REG_EXTRA_INFO(T_FUN_ENUM_TO_STR, ObEnumSetInfo);
   REG_EXTRA_INFO(T_FUN_SET_TO_STR, ObEnumSetInfo);

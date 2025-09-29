@@ -91,7 +91,7 @@ int ObVariableSetResolver::resolve(const ParseNode &parse_tree)
         ParseNode *var = NULL;
         switch (set_node->value_) {
           case 0:
-            //为了兼容mysql，这里为SET_SCOPE_SESSION而不是SET_SCOPE_NEXT_TRANS
+            // To be compatible with mysql, here it is SET_SCOPE_SESSION instead of SET_SCOPE_NEXT_TRANS
             //var_node.set_scope_ = ObSetVar::SET_SCOPE_NEXT_TRANS;
             var_node.set_scope_ = ObSetVar::SET_SCOPE_SESSION;
             break;
@@ -113,7 +113,7 @@ int ObVariableSetResolver::resolve(const ParseNode &parse_tree)
         } else {
           ObString var_name;
           if (T_IDENT == var->type_) {
-            var_node.is_system_variable_ = true; //PL的set语句在PL resolver里解析，不会走到这里，所以到这里的肯定是系统变量的缺省写法
+            var_node.is_system_variable_ = true; // PL's set statement is resolved in the PL resolver, so it won't reach here, thus anything reaching here must be the default writing of a system variable
             var_name.assign_ptr(var->str_value_, static_cast<int32_t>(var->str_len_));
           } else if (T_OBJ_ACCESS_REF == var->type_) { //Oracle mode
             const ParseNode *name_node = NULL;
@@ -125,7 +125,7 @@ int ObVariableSetResolver::resolve(const ParseNode &parse_tree)
               LOG_WARN("unknown SET option", K(ret), K(name_node->type_), K(var->children_[1]));
               LOG_USER_ERROR(OB_ERR_UNKNOWN_SET_OPTION, name_node->str_value_);
             } else {
-              var_node.is_system_variable_ = true; //PL的set语句在PL resolver里解析，不会走到这里，所以到这里的肯定是系统变量的缺省写法
+              var_node.is_system_variable_ = true; // PL's set statement is resolved in the PL resolver, so it won't reach here, thus reaching here means it must be the default writing of a system variable
               var_name.assign_ptr(name_node->str_value_, static_cast<int32_t>(name_node->str_len_));
             }
           } else {
@@ -144,7 +144,7 @@ int ObVariableSetResolver::resolve(const ParseNode &parse_tree)
             ret = OB_INVALID_ARGUMENT;
             LOG_WARN("value node is NULL", K(ret));
           } else if (T_DEFAULT == set_node->children_[1]->type_) {
-            // set 系统变量 = default
+            // set system variable = default
             var_node.is_set_default_ = true;
           } else if (var_node.is_system_variable_) {
             ParseNode value_node;
@@ -220,7 +220,7 @@ int ObVariableSetResolver::resolve(const ParseNode &parse_tree)
               LOG_WARN("invalid scope for agg function", K(ret));
             } else if (OB_NOT_NULL(var_node.value_expr_)
                       && var_node.value_expr_->get_result_type().get_type() == ObCollectionSQLType) {
-              // set 系统变量 = array type isn't supported
+              // set system variable = array type isn't supported
              ret = OB_NOT_SUPPORTED;
                   LOG_WARN("Variable value type is not supported", K(ret), K(set_node->children_[1]->type_));
                   LOG_USER_ERROR(OB_NOT_SUPPORTED, "Variable value type");

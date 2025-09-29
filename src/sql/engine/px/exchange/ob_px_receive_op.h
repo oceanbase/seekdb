@@ -51,7 +51,7 @@ public:
   }
   void set_child_dfo_id(int64_t child_dfo_id) { child_dfo_id_ = child_dfo_id; }
   int64_t get_child_dfo_id() const { return child_dfo_id_; }
-  // 由 sqc 设置好后发给 task，该指针会序列化给 task
+  // Set up by sqc and sent to task, this pointer will be serialized to task
   void set_sqc_proxy(ObPxSQCProxy &sqc_proxy)
   {
     ch_provider_ptr_ = reinterpret_cast<uint64_t>(&sqc_proxy);
@@ -79,7 +79,7 @@ public:
   virtual const common::ObIArray<ObExpr *> *get_all_exprs() const { return NULL; }
   virtual int register_to_datahub(ObExecContext &ctx) const override;
   virtual int register_init_channel_msg(ObExecContext &ctx) override;
-  // 保存child是为了获取child的数据，由于数据是shuffle过来，所以拿数据只能全部拿过来
+  // Save child to get child's data, since the data is shuffled over, so we can only get all the data
   ExprFixedArray child_exprs_;
   int64_t repartition_table_id_;
   ExprFixedArray dynamic_const_exprs_; // const expr which contain dynamic param

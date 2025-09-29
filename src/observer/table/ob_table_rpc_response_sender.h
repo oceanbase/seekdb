@@ -69,7 +69,7 @@ private:
 private:
   rpc::ObRequest *req_;
   table::ObITableResult *result_;
-  const int exec_ret_code_; // processor执行的返回码
+  const int exec_ret_code_; // return code of the processor execution
   ObRpcPacketCode pcode_;
   common::ObDataBuffer *using_buffer_;
 };

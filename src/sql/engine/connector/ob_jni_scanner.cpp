@@ -560,7 +560,7 @@ int JniScanner::do_get_next_split_by_odps(int64_t *read_rows, bool *eof, int cap
   }
   if (OB_FAIL(ret)) {
   } else if (remain_total_rows_ == 0) {
-    // release table和release slice相互可冲入这里可以不调用
+    // release table and release slice can be interleaved here so this call can be omitted
     if (OB_FAIL(release_table(start_offset_))) {
       LOG_WARN("failed to release table", K(ret));
     }
@@ -568,7 +568,7 @@ int JniScanner::do_get_next_split_by_odps(int64_t *read_rows, bool *eof, int cap
     struct ArrowSchema arrowSchema = {};
     struct ArrowArray arrowArray = {};
     if (OB_SUCC(ret)) {
-      // 这里一旦发动就必须要读取，先在假定num_rows等于0是最后一个块数据，这个时候结构为空
+      // Here once initiated, it must be read, first assuming num_rows equals 0 is the last block of data, at this time the structure is empty
       num_rows = env->CallLongMethod(jni_scanner_obj_,
           jni_scanner_get_next_arrow_,
           static_cast<jlong>(reinterpret_cast<uintptr_t>(&arrowSchema)),
@@ -603,16 +603,16 @@ int JniScanner::do_get_next_split_by_odps(int64_t *read_rows, bool *eof, int cap
         LOG_WARN("UNEXPECTED null pointer of arrow", K(ret));
       }
     } else {
-      // num_rows == 0, 说明已经读完了
-      // 这里需要将cur_reader_释放掉
-      // close之前理论上这里必须执行
+      // num_rows == 0, indicates that all have been read
+      // Here we need to release cur_reader_
+      // close before theoretically this must be executed
       *eof = true;
       remain_total_rows_ = 0;
     }
   }
   if (OB_FAIL(ret)) {
   } else if (remain_total_rows_ == 0) {
-    // 这里也可以不调用等close的时候调用
+    // Here it can also be not called and called when close
     release_table(start_offset_);
     start_offset_ = 0;
     *read_rows = 0;

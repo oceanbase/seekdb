@@ -113,9 +113,8 @@ TEST_F(TestRecusiveUnionAll, test_recursive_cte_muti_round_breadth)
   ASSERT_EQ(OB_SUCCESS, recursive_cte.open(ctx));
   ASSERT_EQ(OB_SUCCESS, fake_cte.open(ctx));
   ASSERT_EQ(OB_SUCCESS, result_table.open(ctx));
-
-  //第一轮不会产生数据，因为planb并不会被访问到，但是会有数据向fake cte table 输出，即A
-  //下一论出来的数据则是A被拿去planb中查处来的数据
+  // The first round will not generate data, because planb will not be accessed, but there will be data output to the fake cte table, i.e., A
+  // The data that comes out next is the data retrieved from planb for A
   ADD_ROW(planA_output_table, COL(1), COL(2), COL(1.0), COL("A"), COL(null));
   ADD_ROW(planA_output_table, COL(2), COL(3), COL(7), COL("B"), COL("oceanbase"));
 
@@ -197,9 +196,8 @@ TEST_F(TestRecusiveUnionAll, test_recursive_cte_muti_round_depth)
   ASSERT_EQ(OB_SUCCESS, recursive_cte.open(ctx));
   ASSERT_EQ(OB_SUCCESS, fake_cte.open(ctx));
   ASSERT_EQ(OB_SUCCESS, result_table.open(ctx));
-
-  //第一轮不会产生数据，因为planb并不会被访问到，但是会有数据向fake cte table 输出，即A
-  //下一论出来的数据则是A被拿去planb中查处来的数据
+  // The first round will not generate data, because planb will not be accessed, but there will be data output to the fake cte table, i.e., A
+  // The data that comes out next is the data retrieved from planb for A
   ADD_ROW(planA_output_table, COL(1), COL(2), COL(1.0), COL("A"), COL(null));
   ADD_ROW(planA_output_table, COL(2), COL(3), COL(7), COL("B"), COL("oceanbase"));
 
@@ -299,7 +297,7 @@ TEST_F(TestRecusiveUnionAll, test_recursive_cte_muti_round_depth_search_by_col3)
   fake_cte.get_next_row(ctx, row);
   ASSERT_FALSE(NULL == row);
   EXPECT_SAME_ROW((*row), result_table, 0, 4, agg_cs_type, COL(1), COL(2), COL(1.0), COL("A"), COL(null));
-  //由于union all 自身关闭了排序逻辑，所以这里必须按序加入结果集
+  // Since union all itself turns off the sorting logic, the results must be added in order here
   ADD_ROW(planB_output_table, COL(2), COL(2), COL(4.0), COL("AA"), COL(null));
   ADD_ROW(planB_output_table, COL(2), COL(2), COL(4.0), COL("AB"), COL(null));
   ADD_ROW(planB_output_table, COL(2), COL(2), COL(4.0), COL("AC"), COL(null));
@@ -420,15 +418,14 @@ TEST_F(TestRecusiveUnionAll, test_recursive_cte_muti_round_breadth_search_by_col
   ASSERT_EQ(OB_SUCCESS, recursive_cte.open(ctx));
   ASSERT_EQ(OB_SUCCESS, fake_cte.open(ctx));
   ASSERT_EQ(OB_SUCCESS, result_table.open(ctx));
-
   //
-  // 下图展示了测试使用的图，其中AAA与先祖A在列2的值上发生了重复，是重复列。在oracle中测试，同一层的指定值重复也不算环
+  // The figure below shows the test graph, where AAA and ancestor A have duplicate values in column 2, making it a duplicate column. In Oracle testing, duplicate specified values at the same level are not considered a cycle
   //                  A （1）       B （2）
   //           AA（3）  AB（4）    BA（5）
   //     AAA（1）   ABA（5）       BAA (4)
   //
-  //第一轮不会产生数据，因为planb并不会被访问到，但是会有数据向fake cte table 输出，即A
-  //下一论出来的数据则是A被拿去planb中查处来的数据
+  //The first round will not generate data, because planb will not be accessed, but there will be data output to the fake cte table, i.e., A
+  // The data that comes out next is the data retrieved from planb for A
   ADD_ROW(planA_output_table, COL(1), COL(2), COL(1), COL("A"), COL(null));
   ADD_ROW(planA_output_table, COL(2), COL(3), COL(2), COL("B"), COL("oceanbase"));
 
@@ -472,7 +469,7 @@ TEST_F(TestRecusiveUnionAll, test_recursive_cte_muti_round_breadth_search_by_col
   ASSERT_TRUE(NULL == row);
   //EXPECT_SAME_ROW((*row), result_table, 0, 4, agg_cs_type, COL(1), COL(2), COL(5), COL("BA"), COL(null));
   ADD_ROW(planB_output_table, COL(1), COL(2), COL(4), COL("BAA"), COL(null));
-  //AAA 列2值为1，与A列2值为1重复，A是AAA的先祖，所以AAA不会进入到fake table中，会直接出队
+  // Column 2 value of AAA is 1, which duplicates column 2 value of A being 1, A is the ancestor of AAA, so AAA will not enter the fake table and will be dequeued directly
   ADD_ROW(result_table, COL(1), COL(2), COL(1), COL("AAA"), COL(null));
   ADD_ROW(result_table, COL(1), COL(2), COL(5), COL("ABA"), COL(null));
   except_result_with_row_count(ctx, result_table, 2, recursive_cte, 0, 4, agg_cs_type);
@@ -522,16 +519,15 @@ TEST_F(TestRecusiveUnionAll, test_recursive_cte_muti_round_depth_search_by_col3_
   ASSERT_EQ(OB_SUCCESS, recursive_cte.open(ctx));
   ASSERT_EQ(OB_SUCCESS, fake_cte.open(ctx));
   ASSERT_EQ(OB_SUCCESS, result_table.open(ctx));
-
   //
-  // 下图展示了测试使用的图，其中AAA与先祖A在列2的值上发生了重复，是重复列。在oracle中测试，同一层的指定值重复也不算环
-  // 右图是节点在数组tree中的偏移量
+  // The figure below shows the test graph, where AAA and ancestor A have duplicate values in column 2, making it a duplicate column. In Oracle testing, duplicate specified values at the same level are not considered a cycle
+  // The right figure is the offset of the node in the array tree
   //                  A （1）       B （2）                  uint64      uint64
   //           AA（3）  AB（4）    BA（5）               0       0            1
   //     AAA（1）   ABA（5）       BAA (4)          2         3              4
   //
-  // 第一轮不会产生数据，因为planb并不会被访问到，但是会有数据向fake cte table 输出，即A
-  // 下一论出来的数据则是A被拿去planb中查处来的数据
+  // The first round will not generate data, because planb will not be accessed, but there will be data output to the fake cte table, i.e., A
+  // The data that comes out next is the data retrieved from planb for A
   ADD_ROW(planA_output_table, COL(1), COL(2), COL(1), COL("A"), COL(null));
   ADD_ROW(planA_output_table, COL(2), COL(3), COL(2), COL("B"), COL("oceanbase"));
 
@@ -552,9 +548,9 @@ TEST_F(TestRecusiveUnionAll, test_recursive_cte_muti_round_depth_search_by_col3_
   EXPECT_SAME_ROW((*row), result_table, 0, 4, agg_cs_type, COL(1), COL(2), COL(3), COL("AA"), COL(null));
   ADD_ROW(planB_output_table, COL(1), COL(2), COL(1), COL("AAA"), COL(null));
 
-  ADD_ROW(result_table, COL(1), COL(2), COL(1), COL("AAA"), COL(null));//由于AAA列2的值为1，与栈顶节点"A"的值一样，因此AAA不会进入到fake cte table算子中
+  ADD_ROW(result_table, COL(1), COL(2), COL(1), COL("AAA"), COL(null));//Since the value of column AAA at row 2 is 1, which is the same as the value of the top node "A", therefore AAA will not enter the fake cte table operator
   except_result_with_row_count(ctx, result_table, 1, recursive_cte, 0, 4, agg_cs_type);
-  //AAA不会进入到fake table中，符合预期
+  //AAA will not enter the fake table, as expected
 
   ADD_ROW(result_table, COL(2), COL(2), COL(4), COL("AB"), COL(null));
   except_result_with_row_count(ctx, result_table, 1, recursive_cte, 0, 4, agg_cs_type);
@@ -588,7 +584,7 @@ TEST_F(TestRecusiveUnionAll, test_recursive_cte_muti_round_depth_search_by_col3_
   ADD_ROW(planB_output_table, COL(1), COL(2), COL(4), COL("BAA"), COL(null));
 
   ADD_ROW(result_table, COL(1), COL(2), COL(4), COL("BAA"), COL(null));
-  except_result_with_row_count(ctx, result_table, 1, recursive_cte, 0, 4, agg_cs_type);//测试时，内存中的RS栈为 B BA BAA与预期符合
+  except_result_with_row_count(ctx, result_table, 1, recursive_cte, 0, 4, agg_cs_type);//During testing, the RS stack in memory is B BA BAA as expected
   row = NULL;
   fake_cte.get_next_row(ctx, row);
   ASSERT_FALSE(NULL == row);

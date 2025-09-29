@@ -42,8 +42,7 @@ public:
   {
   }
   ~ObJitMemoryGroup() { free(); }
-
-  //分配时遍历block_list, 如果有可用大小的block, 则直接从block中获取内存
+  // Traverse block_list when allocating, if there is a block with available size, then directly get memory from the block
   void *alloc_align(int64_t sz, int64_t align, int64_t p_flags = PROT_READ | PROT_WRITE);
   int finalize(int64_t p_flags);
   //free all

@@ -176,7 +176,7 @@ TEST_F(TestObOccamTimer, schedule_repeat_ignore_handle_destroyed_in_timer) {
                                                                           } else {
                                                                             return false;
                                                                           }
-                                                                        });// 将在20ms后析构该任务
+                                                                        });// Will be destructed after 20ms
   ASSERT_EQ(ret, OB_SUCCESS);
   this_thread::sleep_for(chrono::milliseconds(250));
   p.reset();

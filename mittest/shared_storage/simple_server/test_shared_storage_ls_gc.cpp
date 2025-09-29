@@ -70,7 +70,7 @@ int ObCheckDirEmptOp::func(const dirent *entry)
 class ObSharedStorageTest : public ObSimpleClusterTestBase
 {
 public:
-  // 指定case运行目录前缀 test_ob_simple_cluster_
+  // Specify the case run directory prefix test_ob_simple_cluster_
   ObSharedStorageTest() : ObSimpleClusterTestBase("test_shared_storage_ls_gc_", "50G", "50G", "50G")
   {}
   int get_block_ids_from_dir(

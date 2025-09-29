@@ -203,10 +203,10 @@ int ObVecIVFIndexBuildTask::init(const ObDDLTaskRecord &task_record)
 }
 
 /*
-  建表顺序：
-  1. flat表，centroid first，其他随意
-  2. sq8表，meta first，centroid second，其他随意
-  3. pq表，centroid first，pq centroid second，其他随意
+  Table creation order:
+  1. flat table, centroid first, others arbitrary
+  2. sq8 table, meta first, centroid second, others arbitrary
+  3. pq table, centroid first, pq centroid second, others arbitrary
 */
 int ObVecIVFIndexBuildTask::process()
 {

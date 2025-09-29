@@ -63,10 +63,9 @@ public:
   T *get_item(int64_t idx) {
     return item_list_[idx];
   }
-
-  // start如果是nullptr，表示min
-  // end如果是nullptr，表示max
-  ObDirectLoadMemChunkIter<T, Compare> scan(T *start, T *end, Compare &compare) { //左开右闭
+  // start if it is nullptr, indicates min
+  // end if it is nullptr, indicates max
+  ObDirectLoadMemChunkIter<T, Compare> scan(T *start, T *end, Compare &compare) { // left open right closed
     int64_t start_idx = 0;
     int64_t end_idx = 0;
     if (start != nullptr) {

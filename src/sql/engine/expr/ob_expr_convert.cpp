@@ -61,8 +61,8 @@ int ObExprConvert::calc_result_type2(ObExprResType &type,
       //set calc type
       //only set type2 here.
       type2.set_calc_type(ObVarcharType);
-      // cast表达式会对convert表达式的第一个子节点cast为type1,计算时convert的结果就是第一个
-      // 子节点的结果
+      // cast expression will cast the first child node of convert expression to type1, calculation result of convert is the first one
+      // Subnode result
       type1.set_calc_meta(type.get_obj_meta());
       type1.set_calc_collation_type(type.get_collation_type());
       type1.set_calc_collation_level(type.get_collation_level());

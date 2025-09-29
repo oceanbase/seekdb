@@ -88,10 +88,10 @@ int ObDtlPacketProc<Packet>::process(const ObDtlLinkedBuffer &buffer, bool &tran
   } else if (OB_SUCC(decode(buffer))) {
     ret = process(pkt_);
   }
-  // packet 处理完成后需要释放内存
-  // 否则会有内存泄漏
+  // packet processing completed, memory needs to be released
+  // Otherwise there will be memory leaks
   // 
-  // 无论处理是否成功，都需要reset对应的packet
+  // Regardless of whether the processing is successful, the corresponding packet needs to be reset
   pkt_.reset();
   return ret;
 }

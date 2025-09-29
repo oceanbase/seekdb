@@ -469,7 +469,7 @@ int ObDASIndexDMLAdaptor<N, DMLIterator>::write_tablet_with_ignore(DMLIterator &
     ObDASWriteBuffer single_row_buffer;
     ObDASWriteBuffer::DmlShadowRow dsr;
     bool added = false;
-    //这里后续要删掉，临时处理
+    // Here subsequent code will be removed, temporary processing
     ObChunkDatumStore::StoredRow *store_row = nullptr;
     dsr.store_row_ = const_cast<ObDASWriteBuffer::DmlRow*>(dml_row);
     if (OB_FAIL(ObDMLService::create_anonymous_savepoint(*tx_desc_, savepoint_no))) {

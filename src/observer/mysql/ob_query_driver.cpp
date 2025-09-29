@@ -37,7 +37,7 @@ int ObQueryDriver::response_query_header(ObResultSet &result,
 {
   int ret = OB_SUCCESS;
   if (is_prexecute_) {
-    // 二合一协议发送 header 包, 不单独发送 column 
+    // Two-in-one protocol sends header package, does not send column separately
     if (OB_FAIL(static_cast<ObMPStmtPrexecute&>(sender_).response_query_header(session_, result, need_flush_buffer))) {
       LOG_WARN("prexecute response query head fail. ", K(ret));
     } 
@@ -78,17 +78,16 @@ int ObQueryDriver::response_query_header(const ColumnsFieldIArray &fields,
   } else if (OB_FAIL(session_.get_autocommit(ac))) {
     LOG_WARN("fail to get autocommit", K(ret));
   } else if (!(NULL != result && result->get_is_com_filed_list())) {
-    // 普通协议发送 cnt 值
+    // Normal protocol sends cnt value
     OMPKResheader rhp;
     rhp.set_field_count(fields.count());
     if (OB_FAIL(sender_.response_packet(rhp, &session_))) {
       LOG_WARN("response packet fail", K(ret));
     }
   } else {
-    // com field 协议在这里什么都不发，直接发送 field 信息
+    // com field protocol sends nothing here, directly sending field information
   }
-
-  // 发送 field 信息
+  // send field information
   if (OB_SUCC(ret)) {
     for (int64_t i = 0; OB_SUCC(ret) && i < fields.count(); ++i) {
       bool is_not_match = false;
@@ -140,7 +139,7 @@ int ObQueryDriver::response_query_header(const ColumnsFieldIArray &fields,
     flags.status_flags_.OB_SERVER_STATUS_AUTOCOMMIT = (ac ? 1 : 0);
     flags.status_flags_.OB_SERVER_MORE_RESULTS_EXISTS = has_more_result;
     flags.status_flags_.OB_SERVER_PS_OUT_PARAMS = need_set_ps_out_flag ? 1 : 0;
-    // NULL == result 说明是老协议 ps cursor execute 回包，或者fetch 协议回包， cursor_exit = true
+    // NULL == result indicates it is an old protocol ps cursor execute response, or fetch protocol response, cursor_exit = true
     flags.status_flags_.OB_SERVER_STATUS_CURSOR_EXISTS = NULL == result ? 1 : 0; 
     if (!session_.is_obproxy_mode()) {
       // in java client or others, use slow query bit to indicate partition hit or not
@@ -149,8 +148,8 @@ int ObQueryDriver::response_query_header(const ColumnsFieldIArray &fields,
     eofp.set_server_status(flags);
 
     if (ps_cursor_execute && sender_.need_send_extra_ok_packet()) {
-      // 老协议 ps cursor execute 回包， 只回 field 信息， 所以对于 proxy ， 需要额外回一个 OK包
-      // 但是由于 2.0 协议需要在回 OK 包的同时了解 EOF 包的情况，所以这个 OK 包没办法抽到 execute 协议层处理
+      // Old protocol ps cursor execute response, only returns field information, so for proxy, an additional OK packet needs to be returned
+      // However, since the 2.0 protocol needs to understand the EOF packet situation at the same time as sending an OK packet, this OK packet cannot be extracted to the execute protocol layer for processing
       if (OB_FAIL(sender_.update_last_pkt_pos())) {
         LOG_WARN("failed to update last packet pos", K(ret));
       } else {
@@ -230,10 +229,10 @@ int ObQueryDriver::response_query_result(ObResultSet &result,
       LOG_DEBUG("is_prexecute_ and row_num is equal with limit_count", K(limit_count));
       break;
     }
-    // 如果是第一行，则先给客户端回复field等信息
+    // If it is the first line, then reply to the client with field information etc.
     if (is_first_row) {
       is_first_row = false;
-      can_retry = false; // 已经获取到第一行数据，不再重试了
+      can_retry = false; // Already obtained the first row of data, no longer retrying
       if (OB_FAIL(response_query_header(result, has_more_result, false))) {
         LOG_WARN("fail to response query header", K(ret), K(row_num), K(can_retry));
       }
@@ -315,7 +314,7 @@ int ObQueryDriver::response_query_result(ObResultSet &result,
     LOG_WARN("fail to iterate and response", K(ret), K(row_num), K(can_retry));
   }
   if (OB_SUCC(ret) && 0 == row_num) {
-    // 如果是一行数据也没有，则还是要给客户端回复field等信息，并且不再重试了
+    // If there is no data at all, we still need to reply to the client with field information, and no more retries will be attempted
     can_retry = false;
     if (OB_FAIL(response_query_header(result, has_more_result, false))) {
       LOG_WARN("fail to response query header", K(ret), K(row_num), K(can_retry));
@@ -470,8 +469,8 @@ int ObQueryDriver::convert_lob_locator_to_longtext(ObObj& value,
                                                    ObIAllocator *allocator)
 {
   int ret = OB_SUCCESS;
-  // 如果客户端使用新的lob locator, 则返回lob locator数据
-  // 如果客户端使用老的lob(没有locator头, 仅数据), 则返回老的lob
+  // If the client uses the new lob locator, then return the lob locator data
+  // If the client uses the old lob (without locator header, only data), then return the old lob
   if (lib::is_mysql_mode()) {
     // do nothing for mysql
   }
@@ -736,9 +735,9 @@ int ObQueryDriver::convert_text_value_charset(ObObj& value,
   return ret;
 }
 
-/*@brief:is_com_filed_list_match_wildcard_str 用于匹配client发过来的COM_FIELD_LIST中包含的参数中有匹配符
-* 情形,eg:COM_FIELD_LIST(t1, c*) , t1 中有c1,c2,pk 三列 ==> 仅返回c1, c2，不返回 pk，因为他和 c* 不匹配;
-* 其规则类似于like情形；详细参考链接：
+/*@brief: is_com_filed_list_match_wildcard_str is used to match the parameters in the COM_FIELD_LIST sent by the client that contain wildcard characters
+* Scenario, e.g.: COM_FIELD_LIST(t1, c*) , t1 has columns c1, c2, pk ==> only return c1, c2, do not return pk, because it does not match c*;
+* The rule is similar to the like scenario; for details, refer to the link:
 * 
 */
 int ObQueryDriver::is_com_filed_list_match_wildcard_str(ObResultSet &result,
@@ -751,7 +750,7 @@ int ObQueryDriver::is_com_filed_list_match_wildcard_str(ObResultSet &result,
   if (!result.get_is_com_filed_list() || result.get_wildcard_string().empty()) {
     /*do nothing*/
   } else {
-    /*需要考虑不同的字符集之间进行比较时需要转换为同一种字符集进行比较*/
+    /*Need to consider converting to the same character set for comparison when comparing between different character sets*/
     ObIAllocator &allocator = result.get_mem_pool();
     ObString wildcard_str;
     if (result.get_session().get_nls_collation() != from_collation) {

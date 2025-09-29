@@ -58,28 +58,26 @@ struct PwjTable {
 
   const ObCandiTableLoc *phy_table_loc_info_;
   ObSEArray<common::ObAddr, 8> server_list_;
-  // 分区级别
+  // Partition level
   share::schema::ObPartitionLevel part_level_;
-  // 一级分区类型
+  // First-level partition type
   share::schema::ObPartitionFuncType part_type_;
-  // 二级分区类型
+  // Secondary partition type
   share::schema::ObPartitionFuncType subpart_type_;
-  // 二级分区表的phy_table_location_info_中，是否只涉及到一个一级分区
+  // Whether only one primary partition is involved in the phy_table_location_info_ of the secondary partition table
   bool is_partition_single_;
-  // 二级分区表的phy_table_location_info_中，是否每个一级分区都只涉及一个二级分区
+  // In phy_table_location_info_ of the secondary partition table, does each primary partition involve only one secondary partition
   bool is_subpartition_single_;
-  // 一级分区array
+  // first-level partition array
   share::schema::ObPartition **partition_array_;
-  // 一级分区数量
+  // First-level partition count
   int64_t part_number_;
-  // phy_table_location_info_中所有的partition_id(物理分区id)
-  // ObPwjComparer在生成_id的映射关系时要按照左表这个数组中的partition_id的顺序生成
+  // All partition_id (physical partition id) in phy_table_location_info_
+  // ObPwjComparer generates the _id mapping relationship according to the order of partition_id in this array on the left table
   common::ObSEArray<uint64_t, 8> ordered_tablet_ids_;
-  // phy_table_location_info_中每一个partition_id(物理分区id)的
-  // part_id(一级逻辑分区id)在part_array中的偏移
+  // part_id(logical partition id level 1) in part_array offset
   common::ObSEArray<int64_t, 8> all_partition_indexes_;
-  // phy_table_location_info_中每一个partition_id(物理分区id)的
-  // subpart_id(二级逻辑分区id)在subpart_array中的偏移
+  // subpart_id(subpartition id) in subpart_array offset
   common::ObSEArray<int64_t, 8> all_subpartition_indexes_;
 };
 
@@ -104,8 +102,7 @@ public:
   int64_t group_id_{0};
   TabletIdArray tablet_id_array_;
 };
-
-// TODO yibo 用PartitionIdArray的指针作为value, 否则每次get都要拷贝一次array
+// TODO yibo use a pointer to PartitionIdArray as value, otherwise each get will copy the array once
 typedef common::hash::ObHashMap<uint64_t, TabletIdArray, common::hash::NoPthreadDefendMode> PWJTabletIdMap;
 typedef common::hash::ObHashMap<uint64_t, GroupPWJTabletIdInfo, common::hash::NoPthreadDefendMode> GroupPWJTabletIdMap;
 typedef common::hash::ObHashMap<uint64_t, uint64_t, common::hash::NoPthreadDefendMode,
@@ -132,25 +129,25 @@ public:
   inline common::ObIArray<PwjTable> &get_pwj_tables() { return pwj_tables_; }
   
   /**
-   * 向ObPwjComparer中添加一个PwjTable，会以第一个添加的PwjTable为基准与后续添加的PwjTable进行比较
-   * 其中严格比较会生成tablet_id的映射。
+   * Add a PwjTable to ObPwjComparer, it will compare subsequent added PwjTables with the first added PwjTable as the baseline.
+   * Strict comparison will generate a mapping of tablet_id.
    */
   virtual int add_table(PwjTable &table, bool &is_match_pwj);
 
   /**
-   * 从phy_table_location_info中提取以下分区相关的信息
+   * Extract the following partition-related information from phy_table_location_info
    * @param all_partition_ids:
-   *    phy_table_location_info中所有的partition_id(物理分区id)
+   *    all partition_id (physical partition id) in phy_table_location_info
    * @param all_partition_indexes:
-   *    phy_table_location_info中每一个partition_id(物理分区id)的
-   *    part_id(一级逻辑分区id)在part_array中的偏移
+   *    the offset of part_id (first-level logical partition id) of each partition_id (physical partition id)
+   *    in part_array in phy_table_location_info
    * @param all_subpartition_indexes:
-   *    phy_table_location_info中每一个partition_id(物理分区id)的
-   *    subpart_id(二级逻辑分区id)在subpart_array中的偏移
+   *    the offset of subpart_id (second-level logical partition id) of each partition_id (physical partition id)
+   *    in subpart_array in phy_table_location_info
    * @param is_partition_single:
-   *    二级分区表的phy_table_location_info_中，是否只涉及到一个一级分区
+   *    whether only one first-level partition is involved in phy_table_location_info_ of a secondary partition table
    * @param is_subpartition_single:
-   *    二级分区表的phy_table_location_info_中，是否每个一级分区都只涉及一个二级分区
+   *    whether each first-level partition involves only one second-level partition in phy_table_location_info_ of a secondary partition table
    */
   static int extract_all_partition_indexes(const ObCandiTableLoc &phy_table_location_info,
                                            const share::schema::ObTableSchema &table_schema,
@@ -161,7 +158,7 @@ public:
                                            bool &is_subpartition_single);
 
   /**
-   * 检查l_partition和r_partition的定义是否相等
+   * Check if the definitions of l_partition and r_partition are equal
    */
   static int is_partition_equal(const share::schema::ObPartition *l_partition,
                                 const share::schema::ObPartition *r_partition,
@@ -169,7 +166,7 @@ public:
                                 bool &is_equal);
 
   /**
-   * 检查l_subpartition和r_subpartition的定义是否相等
+   * Check if the definitions of l_subpartition and r_subpartition are equal
    */
   static int is_subpartition_equal(const share::schema::ObSubPartition *l_subpartition,
                                    const share::schema::ObSubPartition *r_subpartition,
@@ -195,11 +192,11 @@ public:
   TO_STRING_KV(K_(is_strict), K_(pwj_tables));
 
 protected:
-  // 是否以严格模式检查partition wise join
-  // 严格模式要求两个基表的分区逻辑上和物理上都相等
-  // 非严格模式要求两个基表的数据分布节点相同
+  // Whether to check partition wise join in strict mode
+  // Strict mode requires that the partition logic and physical structure of the two base tables are equal
+  // Non-strict mode requires that the data distribution nodes of the two base tables are the same
   bool is_strict_;
-  // 保存一组pwj约束涉及到的基表信息
+  // Save a set of pwj constraint related base table information
   common::ObSEArray<PwjTable, 4> pwj_tables_;
   static const int64_t MIN_ID_LOCATION_BUCKET_NUMBER;
   static const int64_t DEFAULT_ID_ID_BUCKET_NUMBER;
@@ -215,51 +212,51 @@ public:
   inline common::ObIArray<TabletIdArray> &get_tablet_id_group() { return tablet_id_group_;}
 
   /**
-   * 向ObPwjComparer中添加一个PwjTable，会以第一个添加的PwjTable为基准与后续添加的PwjTable进行严格比较
-   * 并生成tablet_id的映射。
+   * Add a PwjTable to ObPwjComparer, it will strictly compare with subsequent added PwjTables based on the first added PwjTable
+   * and generate a mapping of tablet_id.
    */
   virtual int add_table(PwjTable &table, bool &is_match_pwj) override;
 
   /**
-   * 检查l_table和r_table的分区是否逻辑上相等，并计算出逻辑上相等的partition_id(物理分区id)的映射
+   * Check if the partitions of l_table and r_table are logically equal, and calculate the mapping of logically equal partition_id (physical partition id)
    */
   int check_logical_equal_and_calc_match_map(const PwjTable &l_table,
                                              const PwjTable &r_table,
                                              bool &is_match);
 
   /**
-   * 检查l_table和r_table的一级分区是否逻辑上相等
+   * Check if the first-level partitions of l_table and r_table are logically equal
    */
   int is_first_partition_logically_equal(const PwjTable &l_table,
                                          const PwjTable &r_table,
                                          bool &is_equal);
 
   /**
-   * 从所有(sub)part_index中按照升序取出用到的(sub)part_index
-   * 例如 all_partition_indexes = [0,0,3,3,1] 可以得到 used_partition_indexes = [0,1,3]
+   * Retrieve the used (sub)part_index in ascending order from all (sub)part_index
+   * For example all_partition_indexes = [0,0,3,3,1] can get used_partition_indexes = [0,1,3]
    */
   int get_used_partition_indexes(const int64_t part_count,
                                  const ObIArray<int64_t> &all_partition_indexes,
                                  ObIArray<int64_t> &used_partition_indexes);
 
   /**
-   * 检查l_table和r_table的二级分区是否逻辑上相等
+   * Check if the secondary partitions of l_table and r_table are logically equal
    */
   int is_sub_partition_logically_equal(const PwjTable &l_table,
                                        const PwjTable &r_table,
                                        bool &is_equal);
 
   /**
-   * 获取指定part_index下的所有用到的二级分区的subpart_index，并按升序排列
+   * Get all used subpart_index under the specified part_index and sort them in ascending order
    */
   int get_subpartition_indexes_by_part_index(const PwjTable &table,
                                              const int64_t part_index,
                                              ObIArray<int64_t> &used_subpart_indexes);
 
   /**
-   * 检查一级hash/key分区是否逻辑上相等, 要求:
-   * 1. 左右表分区数量一致
-   * 2. 左表每一个part_index都有一个相等的右表part_index
+   * Check if the first-level hash/key partition is logically equal, requirements:
+   * 1. The number of partitions on both left and right tables are consistent
+   * 2. Every part_index on the left table has an equal part_index on the right table
    */
   int check_hash_partition_equal(const PwjTable &l_table,
                                  const PwjTable &r_table,
@@ -270,9 +267,9 @@ public:
                                  bool &is_equal);
 
   /**
-   * 检查二级hash/key分区是否逻辑上相等, 要求:
-   * 1. 左右表分区数量一致
-   * 2. 左表每一个subpart_index都有一个相等的右表subpart_index
+   * Check if the secondary hash/key partition is logically equal, requirements:
+   * 1. The number of partitions on the left and right tables are consistent
+   * 2. Every subpart_index on the left table has an equal subpart_index on the right table
    */
   int check_hash_subpartition_equal(share::schema::ObSubPartition **l_subpartition_array,
                                     share::schema::ObSubPartition **r_subpartition_array,
@@ -285,8 +282,8 @@ public:
                          const ObPartitionFuncType part_type2);
 
   /**
-   * 检查一级range分区是否逻辑上相等, 要求:
-   * 1. 左右表对应分区的上界相同
+   * Check if the first-level range partitions are logically equal, requirements:
+   * 1. The upper bounds of corresponding partitions in the left and right tables are the same
    */
   int check_range_partition_equal(share::schema::ObPartition **left_partition_array,
                                   share::schema::ObPartition **right_partition_array,
@@ -297,8 +294,8 @@ public:
                                   bool &is_equal);
 
   /**
-   * 检查二级range分区是否逻辑上相等, 要求:
-   * 1. 左右表对应分区的上界相同
+   * Check if the secondary range partitions are logically equal, requirements:
+   * 1. The upper bounds of corresponding partitions in the left and right tables are the same
    */
   int check_range_subpartition_equal(share::schema::ObSubPartition **left_subpartition_array,
                                      share::schema::ObSubPartition **right_subpartition_array,
@@ -308,8 +305,8 @@ public:
                                      bool &is_equal);
 
   /**
-   * 检查一级list分区是否逻辑上相等, 要求:
-   * 1. 左表的每一个分区能在右表找到边界相同的分区
+   * Check if the first-level list partitions are logically equal, requirements:
+   * 1. Each partition in the left table can find a partition with the same boundaries in the right table
    */
   int check_list_partition_equal(share::schema::ObPartition **left_partition_array,
                                  share::schema::ObPartition **right_partition_array,
@@ -320,8 +317,8 @@ public:
                                  bool &is_equal);
 
   /**
-   * 检查二级list分区是否逻辑上相等, 要求:
-   * 1. 左表的每一个分区能在右表找到边界相同的分区
+   * Check if the secondary list partitions are logically equal, requirements:
+   * 1. Each partition in the left table can find a partition with the same boundaries in the right table
    */
   int check_list_subpartition_equal(share::schema::ObSubPartition **left_subpartition_array,
                                     share::schema::ObSubPartition **right_subpartition_array,
@@ -331,39 +328,39 @@ public:
                                     bool &is_equal);
 
   /**
-   * 根据phy_part_map_中的partition_id(物理分区id)的映射关系，检查两表对应的分区是否物理位置相同
+   * According to the mapping relationship of partition_id (physical partition id) in phy_part_map_, check if the corresponding partitions in the two tables are in the same physical location
    */
   int is_physically_equal_partitioned(const PwjTable &l_table,
                                       const PwjTable &r_table,
                                       bool &is_physical_equal);
 
   /**
-   * 获取part_index(一级逻辑分区在part_array中的偏移)对应分区的part_id(一级逻辑分区id)
+   * Get the part_id (primary logical partition id) of the partition corresponding to part_index (offset of the primary logical partition in part_array)
    */
   int get_part_tablet_id_by_part_index(const PwjTable &table,
                                        const int64_t part_index,
                                        uint64_t &tablet_id);
 
   /**
-   * 获取二级分区表某个part_index对应的二级分区的subpart_id(二级逻辑分区id)
+   * Get the subpart_id (secondary logical partition id) of the secondary partition corresponding to a certain part_index in the secondary partition table
    */
   int get_sub_part_tablet_id(const PwjTable &table,
                              const int64_t &part_index,
                              uint64_t &sub_part_tablet_id);
 
 private:
-  // 保存基表part_id(一级逻辑分区id)的映射关系
+  // Save the mapping relationship of base table part_id (primary logical partition id)
   common::ObSEArray<std::pair<uint64_t, uint64_t>, 8, common::ModulePageAllocator, true> part_tablet_id_map_;
-  // 保存基表part_index(一级逻辑分区在part_array中的偏移)的映射关系
+  // Save the mapping relationship of base table part_index (the offset of the first-level logical partition in part_array)
   common::ObSEArray<std::pair<int64_t, int64_t>, 8, common::ModulePageAllocator, true> part_index_map_;
-  // 保存基表subpart_id(二级逻辑分区id)的映射关系
+  // Save the mapping relationship of base table subpart_id (secondary logical partition id)
   common::ObSEArray<std::pair<uint64_t, uint64_t>, 8, common::ModulePageAllocator, true> subpart_tablet_id_map_;
-  // 保存基表partition_id(物理分区id)的映射关系
+  // Save the mapping relationship of base table partition_id (physical partition id)
   TabletIdIdMap phy_part_map_;
-  // 保存一组pwj约束中基表的tablet_id的映射关系
-  // 例如 pwj约束中包括[t1,t2,t3],
-  //      t1,t2 的tablet_id映射关系是 [0,1,2] <-> [1,2,0]
-  //      t2,t3 的tablet_id映射关系是 [0,1,2] <-> [2,1,0]
+  // Save the mapping relationship of tablet_id for the base table in a group of pwj constraints
+  // For example, the pwj constraint includes [t1,t2,t3],
+  //      t1,t2's tablet_id mapping relationship is [0,1,2] <-> [1,2,0]
+  //      t2,t3's tablet_id mapping relationship is [0,1,2] <-> [2,1,0]
   // tablet_id_group_ = [[0,1,2], [1,2,0], [1,0,2]]
   common::ObSEArray<TabletIdArray, 4, common::ModulePageAllocator, true> tablet_id_group_;
   DISALLOW_COPY_AND_ASSIGN(ObStrictPwjComparer);
@@ -376,7 +373,7 @@ public:
     : ObPwjComparer(false) {};
   virtual ~ObNonStrictPwjComparer() {};
   /**
-   * 向ObPwjComparer中添加一个PwjTable，会以第一个添加的PwjTable为基准与后续添加的PwjTable进行非严格比较
+   * Add a PwjTable to ObPwjComparer, it will perform a non-strict comparison with subsequent PwjTables using the first added PwjTable as the baseline
    */
   virtual int add_table(PwjTable &table, bool &is_match_nonstrict_pw) override;
   /**

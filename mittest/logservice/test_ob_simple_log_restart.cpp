@@ -86,25 +86,22 @@ TEST_F(TestObSimpleLogClusterRestart, read_block_in_flashback)
   EXPECT_EQ(-1, ::openat(log_storage->block_mgr_.dir_fd_, block_name, LOG_READ_FLAG));
   EXPECT_EQ(OB_NEED_RETRY, read_log(leader));
   EXPECT_EQ(OB_NEED_RETRY, log_storage->get_block_min_scn(max_block_id, scn));
-
-  // 测试边界场景，read_log_tail_为文件中间，最后一个文件完全被flashback掉, 此时log_tail_是最后一个文件头
+  // Test boundary scenario, read_log_tail_ is in the middle of the file, the last file is completely flashbacked, at this time log_tail_ is the header of the last file
   log_storage->log_tail_ = LSN(2*PALF_BLOCK_SIZE);
   EXPECT_EQ(OB_NEED_RETRY, read_log(leader));
   EXPECT_EQ(OB_NEED_RETRY, log_storage->get_block_min_scn(max_block_id, scn));
-
-  // 测试边界场景，read_log_tail_最后一个文件头，最后一个文件完全被flashback掉
+  // Test boundary scenario, read_log_tail_ last file header, last file completely flashbacked
   log_storage->log_tail_ = LSN(2*PALF_BLOCK_SIZE);
   log_storage->readable_log_tail_ = LSN(2*PALF_BLOCK_SIZE);
   EXPECT_EQ(OB_ITER_END, read_log(leader));
   EXPECT_EQ(OB_ERR_OUT_OF_UPPER_BOUND, log_storage->get_block_min_scn(max_block_id, scn));
-
- // 不太好模拟这种场景，考虑引入debug sync
- // // 测试边界场景，readable_log_tail_还没改变前检验是否可读通过，直接读文件时报错文件不存在。
+// It is not easy to simulate this scenario, consider introducing debug sync
+// // Test boundary scenario, check if readable before readable_log_tail_ changes, directly reading the file throws an error indicating the file does not exist.
  // log_storage->log_tail_ = LSN(3*PALF_BLOCK_SIZE);
  // log_storage->readable_log_tail_ = LSN(3*PALF_BLOCK_SIZE);
- // // 设置max_block_id_为1是为了构造check_read_out_of_bound返回OB_ERR_OUT_OF_UPPER_BOUND的场景
+// // Set max_block_id_ to 1 to construct the scenario where check_read_out_of_bound returns OB_ERR_OUT_OF_UPPER_BOUND
  // log_storage->block_mgr_.max_block_id_ = 1;
- // // log_storage返回OB_ERR_OUT_OF_UPPER_BOUND, iterator将其转换为OB_ITER_END
+// // log_storage returns OB_ERR_OUT_OF_UPPER_BOUND, iterator converts it to OB_ITER_END
  // EXPECT_EQ(OB_ITER_END, read_log(leader));
  // EXPECT_EQ(OB_ERR_OUT_OF_UPPER_BOUND, log_storage->get_block_min_scn(max_block_id, scn));
 }
@@ -115,13 +112,13 @@ TEST_F(TestObSimpleLogClusterRestart, restart_when_first_log_block_is_empty)
   OB_LOGGER.set_log_level("TRACE");
   const int64_t id = ATOMIC_AAF(&palf_id_, 1);
   int64_t leader_idx = 0;
-  // 创建日志流后不写入任何数据
+  // Create log stream without writing any data
   {
     PalfHandleImplGuard leader;
     EXPECT_EQ(OB_SUCCESS, create_paxos_group(id, leader_idx, leader));
   }
   EXPECT_EQ(OB_SUCCESS, restart_paxos_groups());
-  // 测试truncate场景
+  // Test truncate scenario
   {
     PalfHandleImplGuard leader;
     EXPECT_EQ(OB_SUCCESS, get_leader(id, leader, leader_idx));
@@ -132,7 +129,7 @@ TEST_F(TestObSimpleLogClusterRestart, restart_when_first_log_block_is_empty)
   }
   EXPECT_EQ(OB_SUCCESS, restart_paxos_groups());
   LSN rebuild_lsn(2*PALF_BLOCK_SIZE);
-  // 测试rebuild场景
+  // Test rebuild scenario
   {
     PalfHandleImplGuard leader;
     EXPECT_EQ(OB_SUCCESS, get_leader(id, leader, leader_idx));
@@ -157,7 +154,7 @@ TEST_F(TestObSimpleLogClusterRestart, restart_when_first_log_block_is_empty)
     }
   }
   EXPECT_EQ(OB_SUCCESS, restart_paxos_groups());
-  // 测试flashback场景
+  // Test flashback scene
   {
     PalfHandleImplGuard leader;
     EXPECT_EQ(OB_SUCCESS, get_leader(id, leader, leader_idx));
@@ -208,8 +205,7 @@ TEST_F(TestObSimpleLogClusterRestart, test_restart)
   system(log_fd);
   PALF_LOG(INFO, "first restart_paxos_groups, after meta dir is empty while log dir is not");
   EXPECT_EQ(OB_SUCCESS, restart_paxos_groups());
-
-  // 验证切文件过程中宕机重启
+  // Validate system crash and restart during file slicing process
   {
     PalfHandleImplGuard leader;
     EXPECT_EQ(OB_SUCCESS, create_paxos_group(id, leader_idx, leader));
@@ -221,7 +217,7 @@ TEST_F(TestObSimpleLogClusterRestart, test_restart)
     LogStorage *meta_storage = &leader.get_palf_handle_impl()->log_engine_.log_meta_storage_;
     EXPECT_EQ(OB_SUCCESS, log_storage->get_block_id_range(min_block_id, max_block_id));
     EXPECT_EQ(1, max_block_id);
-    // 模拟只switch block，但没有更新manifest, 此时manifest依旧是1, 宕机重启后由于2号文件为空，manifest会被更新为2
+    // Simulate only switch block, but do not update manifest, at this time manifest is still 1, after shutdown and restart, since file 2 is empty, manifest will be updated to 2
     EXPECT_EQ(OB_SUCCESS, log_storage->truncate(LSN(PALF_BLOCK_SIZE)));
     EXPECT_EQ(OB_SUCCESS, log_storage->update_manifest_(1));
     EXPECT_EQ(PALF_BLOCK_SIZE, log_storage->curr_block_writable_size_);
@@ -232,14 +228,14 @@ TEST_F(TestObSimpleLogClusterRestart, test_restart)
   {
     PalfHandleImplGuard leader;
     EXPECT_EQ(OB_SUCCESS, get_leader(id, leader, leader_idx));
-    //检查manifest是否为3
+    // Check if manifest is version 3
     EXPECT_EQ(OB_SUCCESS, submit_log(leader, 1, id, log_entry_size));
     LogStorage *meta_storage = &leader.get_palf_handle_impl()->log_engine_.log_meta_storage_;
     EXPECT_EQ(2, lsn_2_block(meta_storage->log_block_header_.min_lsn_, PALF_BLOCK_SIZE));
   }
   PALF_LOG(INFO, "third restart_paxos_groups");
   EXPECT_EQ(OB_SUCCESS, restart_paxos_groups());
-  // 验证重启后新建日志流
+  // Validate new log stream creation after restart
   {
     PalfHandleImplGuard leader;
     id = ATOMIC_AAF(&palf_id_, 1);
@@ -248,34 +244,34 @@ TEST_F(TestObSimpleLogClusterRestart, test_restart)
     wait_lsn_until_flushed(leader.palf_handle_impl_->get_max_lsn(), leader);
     EXPECT_EQ(OB_ITER_END, read_log(leader));
   }
-  // 验证truncate或flashback过程中，修改完manifest后，删除文件前宕机重启（删除1个文件）
+  // Validate system restart during truncate or flashback process, after modifying the manifest but before deleting files (deleting 1 file)
   {
     PalfHandleImplGuard leader;
     EXPECT_EQ(OB_SUCCESS, get_leader(id, leader, leader_idx));
     block_id_t min_block_id, max_block_id;
-    // 此时manifest为3
+    // At this point manifest is 3
     LogStorage *log_storage = &leader.palf_handle_impl_->log_engine_.log_storage_;
     LogStorage *meta_storage = &leader.get_palf_handle_impl()->log_engine_.log_meta_storage_;
     EXPECT_EQ(OB_SUCCESS, log_storage->get_block_id_range(min_block_id, max_block_id));
     EXPECT_EQ(2, max_block_id);
     EXPECT_EQ(3, lsn_2_block(meta_storage->log_block_header_.min_lsn_, PALF_BLOCK_SIZE));
-    // truncate 或 flashback会先更新manifest为2
+    // truncate or flashback will first update manifest to 2
     EXPECT_EQ(OB_SUCCESS, log_storage->update_manifest_(2));
     EXPECT_EQ(2, lsn_2_block(meta_storage->log_block_header_.min_lsn_, PALF_BLOCK_SIZE));
   }
   PALF_LOG(INFO, "fourth restart_paxos_groups after modify manifest while not delete block");
-  // 验证truncate或flashback过程中，修改完manifest后，truncaet/flashback正好将最后一个文件清空
+  // Verify that during the truncate or flashback process, after modifying the manifest, the truncate/flashback exactly empties the last file
   EXPECT_EQ(OB_SUCCESS, restart_paxos_groups());
   {
     PalfHandleImplGuard leader;
     EXPECT_EQ(OB_SUCCESS, get_leader(id, leader, leader_idx));
     block_id_t min_block_id, max_block_id;
-    // 此时manifest为2
+    // At this point manifest is 2
     LogStorage *log_storage = &leader.palf_handle_impl_->log_engine_.log_storage_;
     LogStorage *meta_storage = &leader.get_palf_handle_impl()->log_engine_.log_meta_storage_;
     EXPECT_EQ(OB_SUCCESS, log_storage->get_block_id_range(min_block_id, max_block_id));
     EXPECT_EQ(2, max_block_id);
-    // 尽管manifest为2，但在这种场景下，2号文件是可以删除的
+    // Although manifest is 2, in this scenario, file 2 can be deleted
     EXPECT_EQ(2, lsn_2_block(meta_storage->log_block_header_.min_lsn_, PALF_BLOCK_SIZE));
     EXPECT_EQ(OB_SUCCESS, log_storage->truncate(LSN(2*PALF_BLOCK_SIZE)));
     EXPECT_EQ(OB_SUCCESS, log_storage->update_manifest_(2));
@@ -286,7 +282,7 @@ TEST_F(TestObSimpleLogClusterRestart, test_restart)
     PalfHandleImplGuard leader;
     EXPECT_EQ(OB_SUCCESS, get_leader(id, leader, leader_idx));
     block_id_t min_block_id, max_block_id;
-    // 重启之后，由于磁盘上最大的文件为2，同时该文件为空，此时会更新manifest为3
+    // After restarting, since the largest file on the disk is 2 and this file is empty, the manifest will be updated to 3
     LogStorage *log_storage = &leader.palf_handle_impl_->log_engine_.log_storage_;
     LogStorage *meta_storage = &leader.get_palf_handle_impl()->log_engine_.log_meta_storage_;
     EXPECT_EQ(OB_SUCCESS, log_storage->get_block_id_range(min_block_id, max_block_id));
@@ -297,7 +293,7 @@ TEST_F(TestObSimpleLogClusterRestart, test_restart)
     EXPECT_EQ(3, lsn_2_block(meta_storage->log_block_header_.min_lsn_, PALF_BLOCK_SIZE));
   }
   PALF_LOG(INFO, "six restart_paxos_groups");
-  // 验证base lsn 大于持久化的committed 位点
+  // Validate base lsn greater than persisted committed point
   {
     PalfHandleImplGuard leader;
     EXPECT_EQ(OB_SUCCESS, get_leader(id, leader, leader_idx));
@@ -307,7 +303,7 @@ TEST_F(TestObSimpleLogClusterRestart, test_restart)
     int64_t palf_id = leader.palf_handle_impl_->palf_id_;
     EXPECT_EQ(OB_SUCCESS, submit_log(leader, 29, id, log_entry_size));
     EXPECT_EQ(OB_SUCCESS, wait_lsn_until_flushed(leader.palf_handle_impl_->get_max_lsn(), leader));
-    // 预期log_tail接近文件2的尾部
+    // Expected log_tail to be near the end of file 2
     EXPECT_LE(LSN(3*PALF_BLOCK_SIZE) - log_storage->log_tail_, 5*1024*1024);
     EXPECT_EQ(OB_SUCCESS, wait_until_has_committed(leader, leader.palf_handle_impl_->get_end_lsn()));
     sleep(1);
@@ -338,7 +334,7 @@ TEST_F(TestObSimpleLogClusterRestart, test_restart)
   }
   EXPECT_EQ(OB_SUCCESS, restart_paxos_groups());
   PALF_LOG(INFO, "seven restart_paxos_groups after committed lsn is smaller than base lsn");
-  // 验证rebuild过程中持久化palf_base_info后，宕机重启
+  // Validate that after persisting palf_base_info during rebuild, the system can crash and restart
   {
     PalfHandleImplGuard leader;
     EXPECT_EQ(OB_SUCCESS, get_leader(id, leader, leader_idx));
@@ -500,7 +496,7 @@ TEST_F(TestObSimpleLogClusterRestart, restart_and_clear_tmp_files)
       guard.click("read_log");
       PALF_LOG(INFO, "finish read_log", KPC(log_storage), K(lsn_origin_log_tail), KPC(leader1.palf_handle_impl_));
     }
-    // 验证tenant下有临时文件的场景，该临时文件需要归还给log_pool
+    // Validate the scenario where there are temporary files under tenant, these temporary files need to be returned to log_pool
     {
       PalfHandleImplGuard leader1;
       int64_t leader_idx1 = 0;

@@ -31,8 +31,8 @@ public:
   virtual int init_job_finish_queue(ObExecContext &ctx);
 //  int arrange_jobs();
   /*
-   * @input ob_execution_id 用于在IRM中区分不同execution的结果，
-   * 仅对Distributed模式有效，其余模式均为INVALID_ID
+   * @input ob_execution_id used to distinguish different execution results in IRM,
+   * only valid for Distributed mode, others are INVALID_ID
    */
   int create_job(common::ObIAllocator &alloc,
                  const ObExecutionID &ob_execution_id,

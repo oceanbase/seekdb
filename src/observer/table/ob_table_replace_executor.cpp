@@ -73,7 +73,7 @@ int ObTableApiReplaceExecutor::generate_replace_rtdefs()
                                           replace_rtdef.del_rtdef_))) {
       LOG_WARN("fail to generate delete rtdef", K(ret));
     } else {
-      replace_rtdef.ins_rtdef_.das_rtdef_.table_loc_->is_writing_ = true; //todo:linjing其他的executor还没有设置is_writting
+      replace_rtdef.ins_rtdef_.das_rtdef_.table_loc_->is_writing_ = true; //todo:linjing other executors have not set is_writing
     }
   }
 
@@ -360,10 +360,10 @@ int ObTableApiReplaceExecutor::get_next_row()
     } else if (OB_FAIL(fetch_conflict_rowkey(conflict_checker_))) {
       LOG_WARN("fail to fetch conflict row", K(ret));
     } else if (OB_FAIL(reset_das_env())) {
-      // 这里需要reuse das 相关信息
+      // Here we need to reuse das related information
       LOG_WARN("fail to reset das env", K(ret));
     } else if (OB_FAIL(ObSqlTransControl::rollback_savepoint(exec_ctx_, savepoint_no))) {
-      // 本次插入存在冲突, 回滚到save_point
+      // This insertion has conflicts, rollback to save_point
       LOG_WARN("fail to rollback to save_point", K(ret));
     } else if (OB_FAIL(conflict_checker_.do_lookup_and_build_base_map(1))) {
       LOG_WARN("fail to do table lookup", K(ret));
@@ -374,8 +374,8 @@ int ObTableApiReplaceExecutor::get_next_row()
     }
 
     if (OB_SUCC(ret) && !is_iter_end) {
-      // 只有还有下一个batch时才需要做reuse，如果没有下一个batch，close和destroy中会释放内存
-      // 前边逻辑执行成功，这一批batch成功完成replace, reuse环境, 准备下一个batch
+      // Only need to do reuse if there is a next batch, memory will be released in close and destroy if there is no next batch
+      // The previous logic executed successfully, this batch has successfully completed replace, reuse environment, prepare for the next batch
       if (OB_FAIL(reuse())) {
         LOG_WARN("fail to reuse", K(ret));
       }
@@ -384,7 +384,7 @@ int ObTableApiReplaceExecutor::get_next_row()
 
   if (OB_SUCC(ret)) {
     affected_rows_ = replace_rtdefs_.at(0).ins_rtdef_.cur_row_num_ + replace_rtdefs_.at(0).del_rtdef_.cur_row_num_;
-    // auto inc 操作中, 同步全局自增值value
+    // auto inc operation, synchronize global auto increment value
     if (tb_ctx_.has_auto_inc() && OB_FAIL(tb_ctx_.update_auto_inc_value())) {
       LOG_WARN("fail to update auto inc value", K(ret));
     }
@@ -395,16 +395,14 @@ int ObTableApiReplaceExecutor::get_next_row()
 int ObTableApiReplaceExecutor::reset_das_env()
 {
   int ret = OB_SUCCESS;
-
-  // 释放第一次try insert的das task
+  // release the das task from the first try insert
   if (OB_FAIL(dml_rtctx_.das_ref_.close_all_task())) {
     LOG_WARN("close all das task failed", K(ret));
   } else {
     dml_rtctx_.das_ref_.reuse();
   }
-
-  // 因为第二次插入不需要fetch conflict result了，如果有conflict
-  // 就说明replace into的某些逻辑处理有问题
+  // Because the second insertion does not need to fetch conflict result anymore, if there is a conflict
+  // This indicates that there is a problem with some logic handling of replace into
   for (int64_t i = 0; i < replace_rtdefs_.count(); i++) {
     ObTableInsRtDef &ins_rtdef = replace_rtdefs_.at(i).ins_rtdef_;
     ins_rtdef.das_rtdef_.need_fetch_conflict_ = false;

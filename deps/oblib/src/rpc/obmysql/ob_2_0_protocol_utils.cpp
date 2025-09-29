@@ -490,8 +490,8 @@ inline int ObProto20Utils::fill_proto20_payload(ObProtoEncodeParam &param, bool 
         LOG_ERROR("impossible", "read_avail", easy_buffer.read_avail_size(),
                   "header len", proto20_context.header_len_, K(ret));
       } else if (param.is_composed_ok_pkt_) {
-        // 遇到了err+ok，但是ok包过大且已经写入了err包的内容，这里不可以变为FILL_TAILER_STEP状态，
-        // 否则err和ok就不算在一个包里面了
+        // Encountered err+ok, but ok is too large and its content has already been written to the err package, here it cannot be changed to FILL_TAILER_STEP state,
+        // Otherwise err and ok are not in the same package
         param.need_flush_ = true; // break, alloc more memory
         need_break = true;
       } else {

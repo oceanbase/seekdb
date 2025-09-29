@@ -1922,7 +1922,7 @@ int ObSplitSampler::query_ranges(const uint64_t tenant_id,
 }
 
 /*
-  如果是重建自动分区全局索引非分区表，part_column_cnt为潜在的分区键
+  If it is a rebuild of an auto-partitioned global index on a non-partitioned table, part_column_cnt is the potential partition key
 */
 int ObSplitSampler::fill_query_range_bounder(
     const PartitionMeta& part_meta,

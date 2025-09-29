@@ -29,7 +29,7 @@ ObExprAutoincNextval::ObExprAutoincNextval(ObIAllocator &alloc)
                          ZERO_OR_ONE,
                          NOT_VALID_FOR_GENERATED_COL, NOT_ROW_DIMENSION)
 {
-  /* NextVal是一个人肉生成的FuncOp */
+  /* NextVal is a human-generated FuncOp */
   disable_operand_auto_cast();
 }
 
@@ -67,8 +67,8 @@ int ObExprAutoincNextval::calc_result_typeN(ObExprResType &type,
 {
   int ret = OB_SUCCESS;
   if (param_num == 1) {
-    // 显式插入一个值，如 nextval(16, __values.c1)
-    // 此场景下 nextval 的返回值类型和插入值保持一致
+    // Explicitly insert a value, such as nextval(16, __values.c1)
+    // In this scenario, the return type of nextval and the inserted value remain consistent
     type = types_array[0];
   } else {
     type.set_uint64();
@@ -99,19 +99,17 @@ int ObExprAutoincNextval::calc_result_typeN(ObExprResType &type,
 }
 
 //check generate auto-inc value or not and cast.
-
-
-// 这个函数要解决的问题是：当用户插入一个负数到 signed int 自增列时，
-// 要允许插入。需要一个机制来判断：用户插入的是负数。本函数就是解决这个问题
+// This function addresses the issue of: when a user inserts a negative number into a signed int auto-increment column,
+// To allow insertion. A mechanism is needed to determine: whether the user is inserting a negative number. This function addresses this issue
 //
-// 详细 MySQL 行为参考 ：
+// Detailed MySQL behavior reference :
 //
-// 出参说明：
-// casted_value 用于设置到 ObPacket 的 lii_ 域，是一个 unsigned 值
-//    当 param 是一个负数的时候，casted_value = UINT64_MAX
-// try_sync 是为了处理兼容性问题：当 casted_value = UINT64_MAX 时，
-//    通过设置 try_sync = false，使得不去和 last_sync_value 比较，
-//    否则总是会把 UINT64_MAX sync 到其它节点作为插入的最大值。这不对。
+// Output parameter description:
+// casted_value is used to set to the lii_ field of ObPacket, it is an unsigned value
+//    When param is a negative number, casted_value = UINT64_MAX
+// try_sync is for handling compatibility issues: when casted_value = UINT64_MAX
+//    Through setting try_sync = false, makes it not compare with last_sync_value,
+//    Otherwise it will always sync UINT64_MAX to other nodes as the maximum value for insertion. This is incorrect.
 int ObExprAutoincNextval::get_casted_value_by_result_type(ObCastCtx &cast_ctx,
                                                           ObObjType result_type,
                                                           const ObObj &param,

@@ -43,7 +43,7 @@ namespace oceanbase
 {
 namespace common
 {
-// 这里只考虑进行非multi类型的比对，multi类型需额外处理
+// Here only non-multi type comparison is considered, multi type requires additional handling
 bool ObGeoTypeUtil::is_geo1_dimension_higher_than_geo2(ObGeoType type1, ObGeoType type2)
 {
   bool res = false;
@@ -1532,11 +1532,10 @@ int ObGeoBoxUtil::get_geom_poly_box(const ObWkbGeomPolygon &poly, bool not_calc_
   }
   return ret;
 }
-
-// 1. geometry类型可以存储所有其他空间类型;
-// 2. POINT, LINESTRING, 和 POLYGON只能存储各自对应的类型(由表达式校验);
-// 3. GEOMETRYCOLLECTION可以存储任何类型的对象的集合，
-//    MULTIPOINT, MULTILINESTRING, 和 MULTIPOLYGON将集合成员限制为具有特定几何类型的成员
+// 1. geometry type can store all other spatial types;
+// 2. POINT, LINESTRING, and POLYGON can only store their corresponding types (validated by the expression);
+// 3. GEOMETRYCOLLECTION can store a collection of any type of objects,
+//    MULTIPOINT, MULTILINESTRING, and MULTIPOLYGON restrict collection members to members with specific geometric types
 int ObGeoTypeUtil::check_geo_type(const ObGeoType column_type, const ObString &wkb_str)
 {
   int ret = OB_SUCCESS;

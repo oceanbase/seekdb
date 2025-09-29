@@ -22,7 +22,7 @@ namespace observer
 class ObDumpTaskGenerator
 {
   /*
-    1. etc/dump.config文件写入相应指令
+    1. Write the corresponding instructions to the etc/dump.config file
        dump entity all
        dump entity p_entity='0xffffffffff',slot_idx=1000
        dump chunk all
@@ -32,7 +32,7 @@ class ObDumpTaskGenerator
        set option leak_rate = xxx
        dump memory leak
     2. kill -62 pid
-    3. 结果见log/memory_meta文件
+    3. See the results in log/memory_meta file
   */
   enum TaskType
   {

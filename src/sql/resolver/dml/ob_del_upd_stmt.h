@@ -238,10 +238,10 @@ public:
                K_(column_in_values_vector));
   bool is_replace_;  // replace semantic for mysql
   bool is_overwrite_;
-  // 下面两个变量组合在一起描述了 INSERT 的 VALUES 结构
-  // 以 INSERT INTO T1 (i, j, k) VALUES (1,2,3),(4,5,6) 为例：
-  //  - values_desc_ 的大小为 3，里面保存了 i, j, k 三列的 column reference expr
-  //  - value_vectors_ 的大小为 6，保存的内容为 1,2,3,4,5,6 这几个表达式
+  // The following two variables together describe the VALUES structure of INSERT
+  // For example: INSERT INTO T1 (i, j, k) VALUES (1,2,3),(4,5,6)
+  //  - values_desc_ size is 3, inside it saves the column reference expr of columns i, j, k
+  //  - value_vectors_ of size is 6, storing the contents of the expressions 1,2,3,4,5,6
   common::ObSEArray<ObColumnRefRawExpr*, 16, common::ModulePageAllocator, true> values_desc_;
   common::ObSEArray<ObRawExpr*, 16, common::ModulePageAllocator, true> values_vector_;
   common::ObSEArray<ObRawExpr*, 16, common::ModulePageAllocator, true> column_conv_exprs_;

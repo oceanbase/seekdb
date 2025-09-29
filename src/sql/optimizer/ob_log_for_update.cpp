@@ -106,7 +106,7 @@ int ObLogForUpdate::allocate_granule_post(AllocGIContext &ctx)
   if (OB_ISNULL(get_plan())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(ret));
-  } else if (OB_FAIL(pw_allocate_granule_post(ctx))) { // 分配完GI以后，会对ctx的状态进行清理
+  } else if (OB_FAIL(pw_allocate_granule_post(ctx))) { // After allocating GI, the status of ctx will be cleaned up
     LOG_WARN("failed to allocate pw gi post", K(ret));
   } else {
     if (is_partition_wise_state && ctx.is_op_set_pw(this)) {
@@ -117,7 +117,7 @@ int ObLogForUpdate::allocate_granule_post(AllocGIContext &ctx)
         // do nothing
         set_gi_above(true);
       } else {
-        // tsc op与当前dml算子都需要set gi above
+        // tsc op and current dml operator both need to set gi above
         ARRAY_FOREACH(tsc_ops, idx) {
           ObLogTableScan *tsc_op = static_cast<ObLogTableScan*>(tsc_ops.at(idx));
           tsc_op->set_gi_above(true);

@@ -790,11 +790,11 @@ int ObRoleChangeService::diagnose(RCDiagnoseInfo &diagnose_info)
 {
   int ret = OB_SUCCESS;
   if (diagnose_info.id_ == ATOMIC_LOAD(&cur_task_info_.id_)) {
-    // 当前日志流的切主任务正在被处理
+    // The leader switch task for the current log stream is being processed
     diagnose_info.state_ = ATOMIC_LOAD(&cur_task_info_.state_);
     diagnose_info.log_type_ = ATOMIC_LOAD(&cur_task_info_.log_type_);
   } else {
-    // 当前日志流切主任务尚未被处理, 可能是因为其他日志流的切主任务卡住
+    // The current log stream leader switch task has not been processed, possibly because the leader switch task of another log stream is stuck
     diagnose_info.state_ = logservice::TakeOverState::UNKNOWN_TAKE_OVER_STATE;
     diagnose_info.log_type_ = logservice::ObLogBaseType::INVALID_LOG_BASE_TYPE;
   }

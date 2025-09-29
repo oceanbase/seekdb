@@ -324,7 +324,7 @@ int ObIDService::switch_to_follower_gracefully()
   //   const int64_t limited_id = ATOMIC_LOAD(&limited_id_);
   //   // Caution: set limit id before submit log, make sure limit id <= last id
   //   ATOMIC_STORE(&limited_id_, last_id);
-  //   //提交日志但不要求一定成功，防止阻塞卸任
+  //   //Submit log but do not require success to prevent blocking role switch
   //   submit_log_(ATOMIC_LOAD(&last_id_), limited_id);
   //   rwlock_.unlock();
   //   locked = false;

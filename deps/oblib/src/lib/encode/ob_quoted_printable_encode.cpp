@@ -22,7 +22,7 @@ char ObQuotedPrintableEncoder::hex[] = "0123456789ABCDEF";
 //todo for mime '?' is not printable
 
 //this func only for encode raw to one line, do not do soft break
-//为text encode 设计， 换行可以没有CR
+// Designed for text encoding, newline can have no CR
 
 
 } //namespace common

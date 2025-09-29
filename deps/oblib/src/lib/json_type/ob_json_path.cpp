@@ -1060,7 +1060,7 @@ int ObJsonPathUtil::append_array_index(uint64_t index, bool from_end, ObJsonBuff
       LOG_WARN("fail to append the 'last' ", K(ret));
     } else {
       // if index > 0, it should have '-' after 'last' 
-      // such as：$[last-3 to last-1]
+      // such as: $[last-3 to last-1]
       if (index > 0) {
         if (OB_FAIL(str.append("-"))) {
           LOG_WARN("fail to append the '-' ", K(ret));
@@ -1826,7 +1826,7 @@ int ObJsonPath::parse_wildcard_ellipsis_node()
   return ret;
 }
 
-// get array index, range：
+// get array index, range:
 // start from expression[index_] until non-digit char
 // parse str to int32_t, return index
 int ObJsonPathUtil::get_index_num(const ObString& expression, uint64_t& idx, uint64_t& array_idx)
@@ -1903,7 +1903,7 @@ int ObJsonPath::parse_single_array_index(uint64_t& array_index, bool& from_end)
     }
   }
 
-  // Here will be three situation：
+  // Here will be three situation:
   // 'last' : get the last
   // 'last-num', such as 'last-3' : get the last number
   // 'num' : get the first number
@@ -1936,7 +1936,7 @@ int ObJsonPath::parse_single_array_index(uint64_t& array_index, bool& from_end)
 
 // parse **(JPN_ARRAY_CELL & RANGE)
 // @return  the error code.
-// three situation：
+// three situation:
 // '[*]' : just build ObJsonPathNode with type JPN_ARRAY_CELL_WILDCARD, and append to JsonPath
 // otherwise call parse_single_array_index() to do parse
 // if type is CELL, process one arg
@@ -2817,7 +2817,7 @@ int ObJsonPath::parse_oracle_path_node()
         }
         break;
       }
-      // may be ？
+      // may be ?
       case ObJsonPathItem::FILTER_FLAG: {
         ++index_;
         if (OB_FAIL(parse_filter_node())) {
@@ -4401,7 +4401,7 @@ int ObJsonPath::parse_condition(ObFilterArrayPointers& filter_stack, ObCharArray
                 if (OB_FAIL(filter_cond_node->init_cond_right(right_comp))) {
                   LOG_WARN("fail to init the right side of condition!", K(top));
                 } else {
-                // cond_node的参数正确初始化，加入filter_stack
+                // cond_node parameters are correctly initialized, added to filter_stack
                   if (OB_FAIL(filter_stack.push_back(filter_cond_node))) {
                     LOG_WARN("fail to append new filter_cond_node!", K(top));
                   } else {

@@ -92,8 +92,8 @@ public:
       uint32_t flags_;
       struct
       {
-        // is_update_属性貌似没用,trigger中update_columns_是通过ObDASUpdCtDef.updated_column_infos_
-        // 中的column_name进行初始化的
+        // is_update_ attribute seems unused, update_columns_ in trigger is through ObDASUpdCtDef.updated_column_infos_
+        // initialize the column_name
         uint32_t is_hidden_:1;
         uint32_t is_update_:1;
         uint32_t is_gen_col_:1;
@@ -326,7 +326,7 @@ public:
       rowkey_count_(0),
       rowkey_ids_(alloc)
   {}
-  // 父表的主表/unique索引表对应的分区键
+  // Parent table's primary table/unique index table corresponding partition key
 
   TO_STRING_KV(KPC_(calc_part_id_expr),
                K_(part_id_dep_exprs),
@@ -336,9 +336,9 @@ public:
                K_(tablet_id),
                K_(rowkey_count));
   ObExpr *calc_part_id_expr_;
-  // calc_part_id_expr_计算所依赖的表达式，用于clear_eval_flag
+  // calc_part_id_expr_calculate the dependent expression, used for clear_eval_flag
   ExprFixedArray part_id_dep_exprs_;
-  // 回表查询，为了结构统一，主表也需要一次回表，第一次的insert都返回主表的主键
+  // Back-table query, to maintain structural consistency, the main table also needs a back-table query, the first insert returns the primary key of the main table
   ObDASScanCtDef das_scan_ctdef_;
   ObDASTableLocMeta loc_meta_;
   bool is_part_table_;

@@ -65,9 +65,9 @@ class ObIMvccCtx
 public:
   ObIMvccCtx()
     : alloc_type_(0),
-    //记录一个事务内第一次执行的table version
+    // Record the table version of the first execution within a transaction
     min_table_version_(0),
-    //记录一个事务内存最大的一次table version
+    // Record the maximum table version of a transaction in memory
     max_table_version_(0),
     trans_version_(share::SCN::max_scn()),
     commit_version_(share::SCN::min_scn()),
@@ -131,17 +131,17 @@ public:
   inline void set_table_version(const int64_t table_version)
   {
     if (INT64_MAX == min_table_version_) {
-      //第一次更新，需要防御入参为INT64_MAX
+      //First update, need to defend against input parameter being INT64_MAX
       if (INT64_MAX == table_version) {
         TRANS_LOG_RET(WARN, common::OB_ERR_UNEXPECTED, "unexpected table version", K(table_version), K(*this));
       } else {
         min_table_version_ = table_version;
         max_table_version_ = table_version;
       }
-      //table version取最小值
+      //table version take minimum value
     } else if (table_version < max_table_version_) {
       TRANS_LOG(DEBUG, "current table version lower the last one", K(table_version), K(*this));
-      //非第一次更新table version，预期不会是int64_max
+      //Not the first update of table version, expected not to be int64_max
     } else if (INT64_MAX == table_version) {
       TRANS_LOG_RET(ERROR, common::OB_ERR_UNEXPECTED, "unexpected table version", K(table_version), K(*this));
     } else {

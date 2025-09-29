@@ -111,8 +111,8 @@ class ObTenantMdsService;
 } // namespace storage
 
 namespace transaction {
-  class ObTenantWeakReadService; // 租户弱一致性读服务
-  class ObTransService;          // 事务服务
+  class ObTenantWeakReadService; // tenant weak consistency read service
+  class ObTransService;          // transaction service
   class ObTimestampService;
   class ObStandbyTimestampService;
   class ObTimestampAccess;
@@ -209,8 +209,7 @@ namespace observer
   class ObTenantQueryRespTimeCollector;
   class ObTableQueryASyncMgr;
 }
-
-// for ObTenantSwitchGuard 临时使用>>>>>>>>
+// for ObTenantSwitchGuard temporary use>>>>>>>>
 namespace observer
 {
   class ObAllVirtualTabletInfo;
@@ -285,10 +284,9 @@ namespace detector
 #define PublicBlockGCService
 #define StorageCachePolicyService
 #endif
-
-// 在这里列举需要添加的租户局部变量的类型，租户会为每种类型创建一个实例。
-// 实例的初始化和销毁逻辑由MTL_BIND接口指定。
-// 使用MTL接口可以获取实例。
+// List the types of tenant-local variables that need to be added here, the tenant will create an instance for each type.
+// The initialization and destruction logic of the instance is specified by the MTL_BIND interface.
+// Use the MTL interface to obtain an instance.
 using ObPartTransCtxObjPool = common::ObServerObjectPool<transaction::ObPartTransCtx>;
 using ObTableScanIteratorObjPool = common::ObServerObjectPool<oceanbase::storage::ObTableScanIterator>;
 #define MTL_MEMBERS                                  \
@@ -431,60 +429,55 @@ using ObTableScanIteratorObjPool = common::ObServerObjectPool<oceanbase::storage
       rootserver::ObDDLScheduler*,                   \
       sql::ObSQLCCLRuleManager*                      \
   )
-
-
-// 获取租户ID
+// Get tenant ID
 #define MTL_ID() share::ObTenantEnv::get_tenant_local()->id()
-// 获取租户epoch id
+// Get tenant epoch id
 #define MTL_EPOCH_ID() share::ObTenantEnv::get_tenant_local()->get_epoch()
-// 租户switchover epoch
+// tenant switchover epoch
 #define MTL_GET_SWITCHOVER_EPOCH() share::ObTenantEnv::get_tenant()->get_switchover_epoch()
 #define MTL_SET_SWITCHOVER_EPOCH(switchover_epoch) share::ObTenantEnv::get_tenant()->set_switchover_epoch(switchover_epoch)
-// 获取是否为主租户
+// Get whether it is the primary tenant
 #define MTL_TENANT_ROLE_CACHE_IS_PRIMARY() share::ObTenantEnv::get_tenant()->is_primary_tenant()
-//由于之前租户默认为主库，兼容性写法
+//Since the previous tenant was default as the primary database, this is a compatibility writing method
 #define MTL_TENANT_ROLE_CACHE_IS_PRIMARY_OR_INVALID() share::ObTenantEnv::get_tenant()->is_primary_or_invalid_tenant()
-//租户角色为初始化成功，未invalid
+// Tenant role is initialized successfully, not invalid
 #define MTL_TENANT_ROLE_CACHE_IS_INVALID() share::ObTenantEnv::get_tenant()->is_invalid_tenant()
-// 租户是否处于恢复中
+// Is the tenant in the process of recovery
 #define MTL_TENANT_ROLE_CACHE_IS_RESTORE() share::ObTenantEnv::get_tenant()->is_restore_tenant()
-// 租户是否处于克隆中
+// Is the tenant in the cloning process
 #define MTL_TENANT_ROLE_CACHE_IS_CLONE() share::ObTenantEnv::get_tenant()->is_clone_tenant()
-// 更新租户role
+// Update tenant role
 #define MTL_SET_TENANT_ROLE_CACHE(tenant_role) share::ObTenantEnv::get_tenant()->set_tenant_role(tenant_role)
-// 获取租户role
+// get tenant role
 #define MTL_GET_TENANT_ROLE_CACHE() share::ObTenantEnv::get_tenant()->get_tenant_role()
-// 获取租户模块
+// Get tenant module
 #define MTL_CTX() (share::ObTenantEnv::get_tenant())
-// 获取租户初始化参数,仅在初始化时使用
+// Get tenant initialization parameters, used only during initialization
 #define MTL_INIT_CTX() (share::ObTenantEnv::get_tenant_local()->get_mtl_init_ctx())
-// 获取租户模块检查租户ID
+// Get tenant module to check tenant ID
 #define MTL_WITH_CHECK_TENANT(TYPE, tenant_id) share::ObTenantEnv::mtl<TYPE>(tenant_id)
-// 注册线程池动态变更
+// Register thread pool dynamic change
 #define MTL_REGISTER_THREAD_DYNAMIC(factor, th) \
   share::ObTenantEnv::get_tenant() == nullptr ? OB_ERR_UNEXPECTED : share::ObTenantEnv::get_tenant()->register_module_thread_dynamic(factor, th)
-// 取消线程池动态变更
+// Cancel thread pool dynamic change
 #define MTL_UNREGISTER_THREAD_DYNAMIC(th) \
   share::ObTenantEnv::get_tenant() == nullptr ? OB_ERR_UNEXPECTED : share::ObTenantEnv::get_tenant()->unregister_module_thread_dynamic(th)
 #define MTL_IS_MINI_MODE() share::ObTenantEnv::get_tenant()->is_mini_mode()
 #define MTL_CPU_COUNT() share::ObTenantEnv::get_tenant()->unit_max_cpu()
 #define MTL_MEM_SIZE() share::ObTenantEnv::get_tenant()->unit_memory_size()
-// 设置租户prepare gc状态
+// Set tenant prepare gc state
 #define MTL_SET_TENANT_PREPARE_GC_STATE() share::ObTenantEnv::get_tenant()->set_prepare_unit_gc()
-// 获取租户prepare gc状态
+// Get tenant prepare gc status
 #define MTL_GET_TENANT_PREPARE_GC_STATE() share::ObTenantEnv::get_tenant()->is_prepare_unit_gc()
-
-// 注意MTL_BIND调用需要在租户创建之前，否则会导致租户创建时无法调用到绑定的函数。
+// Note that the MTL_BIND call must be made before tenant creation, otherwise it will result in the bound functions not being callable during tenant creation.
 #define MTL_BIND2(NEW, INIT, START, STOP, WAIT, DESTROY) \
   share::ObTenantBase::mtl_bind_func(NEW, INIT, START, STOP, WAIT, DESTROY);
-
-// 获取租户局部的实例
+// Get the tenant-local instance
 //
-// 需要和租户上下文配合使用，获取指定类型的租户局部实例。
-// 比如MTL(ObPxPools*)就可以获取当前租户的PX池子。
+// Need to be used in conjunction with the tenant context to obtain the specified type of tenant local instance.
+// For example, MTL(ObPxPools*) can be used to obtain the current tenant's PX pool.
 #define MTL(TYPE) ::oceanbase::share::ObTenantEnv::mtl<TYPE>()
-
-// 辅助函数
+// Helper function
 #define MTL_LIST(...) __VA_ARGS__
 
 // thread dynamic impl interface
@@ -549,12 +542,12 @@ private:
 };
 
 //======================================================================//
-// 暴露给各个模块的Tenant类, 需要暴露的接口放在这里(租户级的service，mgr等)
+// Expose the Tenant class to various modules, place the interfaces to be exposed here (tenant-level service, mgr, etc.)
 class ObTenantBase : public lib::TGHelper
 {
-// get_tenant时omt内部会给tenant加读锁,
-// ObTenantSpaceFetcher析构需要解锁，
-// 因此将unlock接口暴露给ObTenantSpaceFetcher
+// get_tenant when omt internally adds a read lock to the tenant,
+// ObTenantSpaceFetcher destructor needs to unlock,
+// Therefore expose the unlock interface to ObTenantSpaceFetcher
 friend class ObTenantSpaceFetcher;
 friend class omt::ObTenant;
 friend class ObTenantEnv;

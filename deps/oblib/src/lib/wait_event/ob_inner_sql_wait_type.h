@@ -45,7 +45,6 @@ DEF_INNER_SQL_WAIT(LOG_GET_LS_PRIMARY_ZONE_INFO, 50005)
 DEF_INNER_SQL_WAIT(LOG_GET_TENANT_RECOVERY_STAT, 50006)
 //***************  end of log   ***************
 
-
 //***************  start of observer ***************
 DEF_INNER_SQL_WAIT(OMT_FETCH_ALL_SRS, 60001)
 //***************  end of observer   ***************
@@ -55,16 +54,15 @@ DEF_INNER_SQL_WAIT(SQL_DYNAMIC_SAMPLING_ESTIMATE_ROWCOUNT, 70001)
 //***************  end of sql   ***************
 
 //***************  start of location ***************
-DEF_INNER_SQL_WAIT(RENEW_TABLET_LOCATION, 80001)  // 获取location
-DEF_INNER_SQL_WAIT(GET_TABLET_LOCATION, 80002)  // 刷新location
+DEF_INNER_SQL_WAIT(RENEW_TABLET_LOCATION, 80001)  // get location
+DEF_INNER_SQL_WAIT(GET_TABLET_LOCATION, 80002)  // refresh location
 //***************  end of location   ***************
 
 //***************  start of schema ***************
-DEF_INNER_SQL_WAIT(WAIT_REFRESH_SCHEMA, 90001)  // 同步等待schema刷新到指定版本
-DEF_INNER_SQL_WAIT(ASYNC_REFRESH_SCHEMA, 90002)  // 刷新schema任务
-DEF_INNER_SQL_WAIT(REFRESH_SCHEMA, 90003)  // 后台刷新schema任务
+DEF_INNER_SQL_WAIT(WAIT_REFRESH_SCHEMA, 90001)  // synchronous wait for schema refresh to specified version
+DEF_INNER_SQL_WAIT(ASYNC_REFRESH_SCHEMA, 90002)  // schema refresh task
+DEF_INNER_SQL_WAIT(REFRESH_SCHEMA, 90003)  // background schema refresh task
 //***************  end of schema   ***************
-
 
 #endif // DEF_INNER_SQL_WAIT
 

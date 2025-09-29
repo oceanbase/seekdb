@@ -85,12 +85,12 @@ int ObDelUpdResolver::resolve_assignments(const ParseNode &parse_node,
   } else if (OB_FAIL(resolve_column_and_values(parse_node, column_list, value_list))) {
     LOG_WARN("failed to resovle column and values", K(ret));
   } else {
-  // 处理配对后的value
+  // Process the paired value
     ObAssignment assignment;
     ColumnItem *column = NULL;
     TableItem *table = NULL;
     for (int64_t i = 0; OB_SUCC(ret) && i < column_list.count(); i++) {
-      // 处理column
+      // process column
       ObColumnRefRawExpr *ref_expr = column_list.at(i);
       if (OB_ISNULL(column = stmt->get_column_item_by_id(
                         ref_expr->get_table_id(), ref_expr->get_column_id()))) {
@@ -134,15 +134,15 @@ int ObDelUpdResolver::resolve_assignments(const ParseNode &parse_node,
           LOG_WARN("fail to add value desc", K(ret));
         }
       }
-      // 处理表达式
+      // process expression
       if (OB_SUCC(ret)) {
         assignment.column_expr_ = column->expr_;
         ObRawExpr *expr = value_list.at(i);
         bool is_generated_column = true;
         SQL_RESV_LOG(DEBUG, "is standard assignment", K(is_mysql_mode()));
-        // 这里Oracle和Mysql的逻辑不一样
-        // Mysql仅允许将生成列update为默认值
-        // Oracle不允许update生成列，因此分开进行处理
+        // Here the logic for Oracle and Mysql is different
+        // Mysql only allows updating generated columns to their default value
+        // Oracle does not allow update on generated columns, therefore handle them separately
         if (OB_FAIL(check_basic_column_generated(ref_expr, stmt, is_generated_column))) {
           LOG_WARN("check basic column generated failed", K(ret));
         } else {
@@ -229,7 +229,7 @@ int ObDelUpdResolver::resolve_column_and_values(const ParseNode &assign_list,
     LOG_WARN("resolver invalid status", K(ret), K(assign_list.type_));
   } else {
     if (1 == assign_list.num_child_ && T_OBJ_ACCESS_REF == assign_list.children_[0]->type_) {
-      //update set ROW=record的扩展用法
+      //update set ROW=record extended usage
       CK (OB_NOT_NULL(get_stmt()));
       if (OB_SUCC(ret)) {
         if (!get_stmt()->is_update_stmt()) {
@@ -810,7 +810,7 @@ int ObDelUpdResolver::check_need_assignment(const common::ObIArray<ObAssignment>
     ret = OB_NOT_INIT;
     LOG_WARN("stmt is NULL", K(ret));
   } else if (stmt->has_instead_of_trigger()) {
-    // 兼容oracle,这里的列不级联更新
+    // Compatible with oracle, here the columns are not cascaded updated
     // do nothing
   } else if (column.is_generated_column()) {
     if (OB_FAIL(ObResolverUtils::check_whether_assigned(stmt, assigns, table_id, column.get_column_id(), exist))) {
@@ -1039,7 +1039,7 @@ int ObDelUpdResolver::set_base_table_for_view(TableItem &table_item, const bool 
       }
     }
     if (log_error && OB_SUCCESS != ret) {
-      ObString del_str = "DELETE";//仅仅只有mysql模式下的delete会用到这个报错信息
+      ObString del_str = "DELETE";//Only the delete in mysql mode will use this error message
       if (OB_ERR_NON_UPDATABLE_TABLE == ret) {
         LOG_USER_ERROR(OB_ERR_NON_UPDATABLE_TABLE,
             table_item.table_name_.length(), table_item.table_name_.ptr(),
@@ -1232,8 +1232,8 @@ int ObDelUpdResolver::add_all_column_to_updatable_view(ObDMLStmt &stmt,
           }
           if (OB_SUCC(ret)) {
             if (stmt::T_SELECT == stmt.get_stmt_type() && !has_need_fired_tg_on_view) {
-              // 包含instead-of-trigger的语句这里不需要加入到select_items_里面，因为此前的
-              // select_items_已恰好足够使用
+              // Include statements with instead-of-trigger here do not need to be added to select_items_, because previously
+              // select_items_is_just_sufficient_to_use
               if (OB_FAIL(add_select_item_func(static_cast<ObSelectStmt &>(stmt), *col_item))) {
                 LOG_WARN("add column item to select item failed", K(ret));
               }
@@ -1309,8 +1309,8 @@ int ObDelUpdResolver::check_err_log_table(ObString &table_name, ObString &databa
           ret = OB_ERR_MISS_ERR_LOG_MANDATORY_COLUMN;
           LOG_USER_ERROR(OB_ERR_MISS_ERR_LOG_MANDATORY_COLUMN, static_cast<int>(strlen(err_log_default_columns_[index])), err_log_default_columns_[index]);
         } else {
-          // TODO oracle默认的5列类型不能为LONG 由于暂时不支持LONG类型，所以暂时不做检查
-          // 暂时不实现 ORA_ERR_TAG$ 列
+          // TODO oracle default 5 column types cannot be LONG Due to temporary lack of support for LONG type, no check is currently performed
+          // Temporarily do not implement ORA_ERR_TAG$ column
         }
         index++;
       } else {
@@ -2546,11 +2546,11 @@ int ObDelUpdResolver::build_column_conv_function_with_default_expr(ObInsertTable
             LOG_WARN("Build padding expr error", K(ret));
           }
         }
-        // maybe 没有必要再加一层column
-        // conv函数，如果能够保证schema表中的默认值已经是合法值
+        // maybe no need to add another layer of column
+        // conv function, if it can be guaranteed that the default values in the schema table are already valid values
         if (OB_FAIL(ret)) {
         } else if (expr->get_expr_type() == T_TABLET_AUTOINC_NEXTVAL) {
-          // 如果是堆表的隐藏自增列，不需要构建conv表达式
+          // If it is the hidden auto-increment column of a heap table, there is no need to build the conv expression
           function_expr = expr;
         } else if (OB_FAIL(ObRawExprUtils::build_column_conv_expr(*params_.expr_factory_,
                                                                   *params_.allocator_,
@@ -2968,8 +2968,8 @@ int ObDelUpdResolver::resolve_insert_values(const ParseNode *node,
                 ret = OB_ERR_UNEXPECTED;
                 LOG_WARN("get column item by id failed", K(table_info.table_id_), K(column_id));
               } else  if (column_expr->is_generated_column()) {
-                //values中对应的生成列出现了default关键字，我们统一将default替换成生成列对应的表达式
-                //下面的统一处理逻辑会为values中的column进行替换
+                // default keyword appeared in the generated column corresponding to values, we uniformly replace default with the expression corresponding to the generated column
+                //The following unified processing logic will replace the column in values
                 if (OB_FAIL(copy_schema_expr(*params_.expr_factory_,
                                              column_item->expr_->get_dependant_expr(),
                                              expr))) {
@@ -3056,7 +3056,7 @@ int ObDelUpdResolver::resolve_insert_values(const ParseNode *node,
                                           value_count, is_all_default))) {
         LOG_WARN("fail to check column value count", K(ret));
       } else if (is_all_default) {
-        //处理insert into test values(),()的情况
+        // Handle insert into test values(),() situation
         if (OB_FAIL(build_row_for_empty_brackets(value_row, table_info))) {
           LOG_WARN( "fail to build row for empty brackets", K(ret));
         }
@@ -3079,7 +3079,7 @@ int ObDelUpdResolver::check_column_value_pair(ObArray<ObRawExpr*> *value_row,
                                               bool& is_all_default)
 {
   int ret = OB_SUCCESS;
-  //如果现实指定了列，那么values（）不容许为空
+  // If reality specified columns, then values() are not allowed to be empty
   is_all_default = false;
   if (OB_ISNULL(value_row)) {
     ret = OB_INVALID_ARGUMENT;
@@ -3107,10 +3107,8 @@ int ObDelUpdResolver::check_column_value_pair(ObArray<ObRawExpr*> *value_row,
   }
   return ret;
 }
-
-
-//如果values后面跟的是空括号的话，需要根据stmt语句中column列表的顺序加入default value;
-//特例，如果stmt中没有指定column列表的话，则会在resolve_insert_column时加入全部的列
+// If values is followed by empty parentheses, need to add default value according to the order of column list in stmt statement;
+// Special case, if no column list is specified in stmt, then all columns will be added in resolve_insert_column
 int ObDelUpdResolver::build_row_for_empty_brackets(ObArray<ObRawExpr*> &value_row,
                                                    ObInsertTableInfo& table_info)
 {
@@ -3142,8 +3140,8 @@ int ObDelUpdResolver::build_row_for_empty_brackets(ObArray<ObRawExpr*> &value_ro
           LOG_WARN("fail to push back value expr", K(ret));
         }
       } else if (item->is_auto_increment()) {
-        // insert into t (..) values (); 场景下不可以自动生成 nextval 表达式，而应该生成 null
-        // 否则会出现问题：
+        // insert into t (..) values (); In this scenario, the nextval expression should not be automatically generated, and null should be generated instead
+        // Otherwise there will be a problem:
         if (OB_FAIL(ObRawExprUtils::build_null_expr(*params_.expr_factory_, expr))) {
           LOG_WARN("failed to build next_val expr as null", K(ret));
         } else if (OB_FAIL(value_row.push_back(expr))) {
@@ -3310,7 +3308,7 @@ int ObDelUpdResolver::check_heap_table_update(ObTableAssignment &tas)
     LOG_WARN("fail to get table schema", K(ret),
              "base_table_id", table->get_base_table_item().ref_id_);
   } else if (table_schema->is_table_with_pk()) {
-    // 不是堆表，什么都不需要做
+    // Not a heap table, nothing needs to be done
   } else if (OB_FAIL(check_update_part_key(tas,
                                            table->get_base_table_item().ref_id_,
                                            is_update_part_key,
@@ -3318,7 +3316,7 @@ int ObDelUpdResolver::check_heap_table_update(ObTableAssignment &tas)
     LOG_WARN("fail to check whether update part key", K(ret), K(tas),
              "base_table_id", table->get_base_table_item().ref_id_);
   } else if (!is_update_part_key) {
-    // 不更新分区建，do nothing
+    // Do not update partition key, do nothing
   } else if (OB_FAIL(build_hidden_pk_assignment(tas, table, table_schema))) {
     LOG_WARN("fail to build hidden_pk assignment", K(ret), K(tas), KPC(table));
   }
@@ -3549,7 +3547,7 @@ int ObDelUpdResolver::add_select_items(ObSelectStmt &select_stmt, const ObIArray
 }
 
 /**
- * set stmt的左右子查询添加select item后需要为set stmt创建select item
+ * set stmt's left and right subqueries need to create select items for set stmt after adding select items
  */
 int ObDelUpdResolver::add_select_list_for_set_stmt(ObSelectStmt &select_stmt)
 {
@@ -3667,7 +3665,7 @@ int ObDelUpdResolver::replace_column_ref(ObArray<ObRawExpr*> *value_row,
                                         ObRawExpr *&expr,
                                         bool in_generated_column)
 {
-  //对于merge stmt，该function并不对expr进行替换
+  // For merge stmt, this function does not replace expr
   UNUSED(expr);
   UNUSED(value_row);
   UNUSED(in_generated_column);

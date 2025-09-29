@@ -184,10 +184,9 @@ int ObTenantNodeBalancer::notify_create_tenant(const obrpc::TenantServerUnitConf
 
   return ret;
 }
-
-// 标记删除，而不是直接删，是因为并发时，另一个线程可能刷到tenant了，但是还没有refresh tenant，
-// 此时drop tenant将tenant删除了，另一个线程过一会refresh tenant时，又给加回来了
-// 所以这里只做标记，删除tenant统一在refresh tenant里做
+// Mark as deleted rather than directly deleting, because during concurrency, another thread might have fetched the tenant but has not yet refreshed the tenant,
+// At this point, drop tenant will delete the tenant, and another thread will add it back when it refreshes the tenant a while later
+// So here we only make a mark, the deletion of tenant is uniformly done in refresh tenant
 int ObTenantNodeBalancer::try_notify_drop_tenant(const int64_t tenant_id)
 {
   LOG_INFO("[DELETE_TENANT] succ to receive notify of dropping tenant", K(tenant_id));

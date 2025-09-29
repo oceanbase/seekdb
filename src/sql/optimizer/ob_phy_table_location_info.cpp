@@ -117,7 +117,7 @@ int ObOptTabletLoc::assign_with_only_readable_replica(const ObObjectID &partitio
 
 bool ObOptTabletLoc::is_valid() const
 {
-  //为了兼容性考虑，1.4.x和2.1升级到2.2之后，pg_key可能是无效的，因此此处不检查pg_key_
+  // For compatibility considerations, after upgrading from 1.4.x and 2.1 to 2.2, pg_key may be invalid, therefore pg_key is not checked here
   return OB_INVALID_INDEX != partition_id_;
 }
 
@@ -211,7 +211,7 @@ int ObCandiTabletLoc::set_selected_replica_idx_with_priority()
       LOG_WARN("fail to set selected replica idx", K(priority_replica_idxs_), K(ret));
     }
   } else if (priority_replica_idxs_.count() > 1) {
-    //多个priority时，本地优先; 多个replica的priority相同则随机选
+    // Multiple priorities, local priority first; if priorities of multiple replicas are the same, select randomly
     ObSEArray<int64_t, 16> same_priority_ids;
     bool is_first = true;
     selected_replica.attr_.pos_type_ = ObRoutePolicy::POSITION_TYPE_MAX;
@@ -386,8 +386,7 @@ int ObCandiTableLoc::assign(const ObCandiTableLoc &other)
   }
   return ret;
 }
-
-//此前已经判断是复制表, 不是session重试 & 复制表不在DML修改对象之中, 优先选择本地的副本, 如果没有本地副本则选择leader副本
+// Previously it was determined to be a copy table, not a session retry & the copy table is not among the DML modification objects, prioritize choosing the local copy, if there is no local copy then choose the leader copy
 int ObCandiTableLoc::all_select_local_replica_or_leader(bool &is_on_same_server,
                                                               ObAddr &same_server,
                                                               const ObAddr &local_server)
@@ -421,7 +420,7 @@ int ObCandiTableLoc::all_select_local_replica_or_leader(bool &is_on_same_server,
       //do nothing ...
     } else if (phy_part_loc_info.has_selected_replica()
         && phy_part_loc_info.get_selected_replica_idx() != replica_idx) {
-      // FIXME qianfu 子查询的weak属性和主查询的不一样的时候有可能会报这个错，后面会修掉
+      // FIXME qianfu The weak attribute of the subquery and the main query are different, which might cause this error, it will be fixed later
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("selected replica is not leader", K(ret), K(phy_part_loc_info));
     } else if (OB_FAIL(phy_part_loc_info.set_selected_replica_idx(replica_idx))) {
@@ -456,7 +455,7 @@ int ObCandiTableLoc::all_select_leader(bool &is_on_same_server,
       LOG_WARN("fail to get leader", K(ret), K(phy_part_loc_info.get_partition_location()));
     } else if (phy_part_loc_info.has_selected_replica()
                && phy_part_loc_info.get_selected_replica_idx() != replica_idx) {
-      // FIXME qianfu 子查询的weak属性和主查询的不一样的时候有可能会报这个错，后面会修掉
+      // FIXME qianfu The weak attribute of the subquery and the main query are different, which might cause this error, it will be fixed later
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("selected replica is not leader", K(ret), K(phy_part_loc_info));
     } else if (OB_FAIL(phy_part_loc_info.set_selected_replica_idx(replica_idx))) {
@@ -474,9 +473,8 @@ int ObCandiTableLoc::all_select_leader(bool &is_on_same_server,
   }
   return ret;
 }
-
-// 目前只用于mv，若要用于其他地方，注意下面的OB_NO_READABLE_REPLICA这个返回码，
-// 看看所用的地方合不合适，因为它会涉及到重试。
+// Currently only used for mv, if to be used elsewhere, note the OB_NO_READABLE_REPLICA return code,
+// Check if the usage is appropriate, as it involves retries.
 
 int ObCandiTableLoc::get_all_servers(common::ObIArray<common::ObAddr> &servers) const
 {
@@ -495,9 +493,8 @@ int ObCandiTableLoc::get_all_servers(common::ObIArray<common::ObAddr> &servers) 
   }
   return ret;
 }
-
-//给定ObCandiTableLoc 和ObCandiTabletLoc(来自复制表)
-//判断是否前者的每个分区leader都在同一个server, 且上面都存在复制表的副本, 如果是则返回TRUE
+// Given ObCandiTableLoc and ObCandiTabletLoc (from the replica table)
+// Determine whether each partition leader of the former is on the same server, and if replicas of the replicated tables exist there, return TRUE
 
 
 void ObCandiTableLoc::set_table_location_key(uint64_t table_location_key, uint64_t ref_table_id)

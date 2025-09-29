@@ -827,11 +827,10 @@ int ObLoadDataSPImpl::exec_shuffle(int64_t task_id, ObShuffleTaskHandle *handle)
   ObSEArray<ObString, 32> insert_values;
   int64_t parsed_line_num = 0;
   ObStringBuf str_buf("LoadDataStrBuf", OB_MALLOC_MIDDLE_BLOCK_SIZE);
-
-  //为了调用 part_buf_mgr.for_each，使用了匿名函数, &引用了外部的 frag_mgr
+  // To call part_buf_mgr.for_each, an anonymous function is used, & references the external frag_mgr
   auto save_frag = [&] (ObTabletID tablet_id, ObDataFrag *frag) -> bool
   {
-    //将存满数据的frag按照分区放入frag_mgr
+    // Place the frag filled with data into frag_mgr according to the partition
     int ret = OB_SUCCESS;
     ObPartDataFragMgr *part_datafrag_mgr = NULL;
     if (OB_FAIL(handle->datafrag_mgr.get_part_datafrag(tablet_id,
@@ -928,7 +927,7 @@ int ObLoadDataSPImpl::exec_shuffle(int64_t task_id, ObShuffleTaskHandle *handle)
       }
       if (OB_SUCC(ret) && nrows > 0) {
         int64_t cur_line_num = parsed_line_num++;
-        //计算partition id
+        // Calculate partition id
         ObObj result;
         ObTabletID tablet_id;
         //insert_values.reuse();
@@ -960,8 +959,7 @@ int ObLoadDataSPImpl::exec_shuffle(int64_t task_id, ObShuffleTaskHandle *handle)
 
         LOG_DEBUG("LOAD DATA", "TheadId", get_tid_cache(), K(cur_line_num), K(tablet_id),
                   "line", handle->parser.get_fields_per_line(), "values", insert_values);
-
-        //序列化到DataFrag
+        // Serialize to DataFrag
         int64_t len = 0;
         OB_UNIS_ADD_LEN(insert_values);
         OB_UNIS_ADD_LEN(cur_line_num);
@@ -973,7 +971,7 @@ int ObLoadDataSPImpl::exec_shuffle(int64_t task_id, ObShuffleTaskHandle *handle)
           int temp_ret = part_buf_mgr.get(tablet_id, frag);
           bool frag_exist = (OB_SUCCESS == temp_ret);
           if (!frag_exist || len > frag->get_remain()) {
-            //新建一个
+            // Create a new
             ObDataFrag *new_frag = NULL;
             if (OB_FAIL(handle->datafrag_mgr.create_datafrag(new_frag, len))) {
               LOG_WARN("fail to create data fragment", K(ret));
@@ -1151,7 +1149,7 @@ int ObLoadDataSPImpl::wait_shuffle_task_return(ToolBox &box)
   int ret = OB_SUCCESS;
   int ret_bak = OB_SUCCESS;
   for (int64_t i = 0; i < box.parallel; ++i) {
-    //ret失败也要循环，保证所有发出的task都返回或超时
+    // ret failure also needs to loop, ensure all issued tasks return or timeout
     ObShuffleTaskHandle *handle = NULL;
     if (OB_FAIL(box.shuffle_task_controller.on_next_task())) {
       LOG_WARN("fail to on next task", K(ret));
@@ -1243,8 +1241,7 @@ int ObLoadDataSPImpl::next_file_buffer(ObExecContext &ctx,
     if (OB_UNLIKELY(handle->data_buffer->get_struct_size() < box.data_trimer.get_buffer_size())) {
       OZ (handle->expand_buf(box.batch_buffer_size, box.data_trimer.get_buffer_size()));
     }
-
-    //从data_trimer中恢复出上次读取剩下的数据
+    // Restore the remaining data from data_trimer
     OZ (box.data_trimer.recover_incomplate_data(*handle->data_buffer));
 
     OZ (box.file_reader->readn(handle->data_buffer->current_ptr(),
@@ -1253,7 +1250,7 @@ int ObLoadDataSPImpl::next_file_buffer(ObExecContext &ctx,
 
     if (OB_SUCC(ret)) {
       if (OB_LIKELY(box.read_cursor.read_size_ > 0)) {
-        handle->data_buffer->update_pos(box.read_cursor.read_size_); //更新buffer中数据长度
+        handle->data_buffer->update_pos(box.read_cursor.read_size_); // update buffer data length
         int64_t last_proccessed_GBs = box.read_cursor.get_total_read_GBs();
         box.read_cursor.commit_read();
         int64_t processed_GBs = box.read_cursor.get_total_read_GBs();
@@ -1267,8 +1264,7 @@ int ObLoadDataSPImpl::next_file_buffer(ObExecContext &ctx,
         LOG_DEBUG("LOAD DATA reach file end", K(box.read_cursor));        
       }
     }
-
-    //从buffer中找出完整的行，剩下的备份到 data_trimer
+    // Find complete lines from buffer, the remaining backup to data_trimer
     if (OB_SUCC(ret) && OB_LIKELY(handle->data_buffer->is_valid())) {
       int64_t complete_cnt = limit;
       int64_t complete_len = 0;
@@ -1563,7 +1559,7 @@ int ObLoadDataSPImpl::handle_returned_insert_task(ObExecContext &ctx,
         LOG_WARN("fail to update location cache", K(ret));
       }
     } else {
-      //由于意外错误导致失败，默认
+      // Due to unexpected error causing failure, default
       task_status = TASK_FAILED;
     }
   }
@@ -1782,21 +1778,21 @@ int ObLoadDataSPImpl::execute(ObExecContext &ctx, ObLoadDataStmt &load_stmt)
 
       //main while
       while (OB_SUCC(ret) && !box.read_cursor.is_end_file()) {
-        /* 执行分两步并行
-         * 1. 并行计算分区 (shuffle_task_gen_and_dispatch)
-         * 2. 并行插入 (insert_task_gen_and_dispatch)
-         * 每次循环从文件读取 data_frag_mem_usage_limit * MAX_BUFFER_SIZE = 100M 在内存缓存
+        /* Execution is divided into two parallel steps
+         * 1. Parallel partition calculation (shuffle_task_gen_and_dispatch)
+         * 2. Parallel insertion (insert_task_gen_and_dispatch)
+         * Each loop reads data_frag_mem_usage_limit * MAX_BUFFER_SIZE = 100M into memory cache
          */
         OZ (shuffle_task_gen_and_dispatch(ctx, box));
         OW (wait_shuffle_task_return(box));
         OZ (insert_task_gen_and_dispatch(ctx, box));
         //OW (wait_insert_task_return(ctx, box));
 
-        /* 所有异步task都已经返回了，这些task依赖的datafrag可以被释放
+        /* All asynchronous tasks have returned, the datafrag they depend on can be released
          */
         OW (box.data_frag_mgr.free_unused_datafrag());
 
-        /* 检查session是否有效，无效时可直接退出
+        /* Check if the session is valid, exit directly if invalid
          */
         OZ (ObLoadDataUtils::check_session_status(*ctx.get_my_session()));
       }
@@ -2854,7 +2850,7 @@ int ObLoadDataSPImpl::ToolBox::init(ObExecContext &ctx, ObLoadDataStmt &load_stm
       } else if (OB_FAIL(insert_task->timezone_.deep_copy(ctx.get_my_session()->get_tz_info_wrap()))) {
         LOG_WARN("fail to copy timezone", K(ret));
       } else {
-        //insert的column name都是一样的，所有的task共用一块儿buf做序列化就可以了
+        // insert's column name are all the same, all tasks can share a buffer for serialization
         insert_task->insert_stmt_head_ = insert_stmt_head_buff;
         insert_task->column_count_ = insert_infos.count();
         insert_task->row_count_ = batch_row_count;
@@ -3060,8 +3056,7 @@ int ObLoadDataURLImpl::construct_sql(ObLoadDataStmt &load_stmt, ObSqlString &sql
   ObLoadDataHint stmt_hints = load_stmt.get_hints();
 
   OZ (sql.append(load_args.dupl_action_ == ObLoadDupActionType::LOAD_REPLACE ? "replace " : "insert "));
-  
-  // 只有当hint不为空时才添加
+  // Only when hint is not empty should it be added
   if (!stmt_hints.get_hint_str().empty()) {
 
     const ObString &hint_str = stmt_hints.get_hint_str();
@@ -3094,10 +3089,9 @@ int ObLoadDataURLImpl::construct_sql(ObLoadDataStmt &load_stmt, ObSqlString &sql
     }
     OZ (sql.append(") "));
   }
-
-  // 获取字段列表
+  // Get field list
   const ObIArray<ObLoadDataStmt::FieldOrVarStruct> &field_list = load_stmt.get_field_or_var_list();
-  // 检查是否存在非table column
+  // Check for non-table column
   for (int64_t i = 0; OB_SUCC(ret) && i < field_list.count(); ++i) {
     const ObLoadDataStmt::FieldOrVarStruct &field = field_list.at(i);
     if (OB_UNLIKELY(!field.is_table_column_)) {
@@ -3107,7 +3101,7 @@ int ObLoadDataURLImpl::construct_sql(ObLoadDataStmt &load_stmt, ObSqlString &sql
   }
 
   if (OB_SUCC(ret)) {
-    // 添加列名列表
+    // Add column name list
     if (field_list.count() > 0) {
       OZ (sql.append("("));
       bool first = true;

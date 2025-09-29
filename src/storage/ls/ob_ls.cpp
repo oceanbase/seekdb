@@ -654,7 +654,7 @@ void ObLS::destroy()
   if (OB_ISNULL(txs_svr)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("tx service is null, may be memory leak", KP(txs_svr));
-  //少数派follower在GC时强杀事务需要走非gracefully流程,多数派GC写offline日志时已经判断了事务结束
+  // Minority follower kills transaction forcefully during GC needs to follow non-gracefully process, majority GC writes offline log when it has already determined the transaction is finished
   } else if (OB_FAIL(txs_svr->remove_ls(ls_meta_.ls_id_, false))) {
     // we may has remove it before.
     LOG_WARN("remove log stream from txs service failed", K(ret), K(ls_meta_.ls_id_));
@@ -2178,11 +2178,11 @@ int ObLS::diagnose(DiagnoseInfo &info) const
     STORAGE_LOG(WARN, "diagnose_arb_srv failed", K(ret), K(ls_id));
 #endif
   } else if (info.is_role_sync()) {
-    // 角色同步时不需要诊断role change service
+    // Role synchronization does not require diagnosis role change service
     info.rc_diagnose_info_.state_ = TakeOverState::TAKE_OVER_FINISH;
     info.rc_diagnose_info_.log_type_ = ObLogBaseType::INVALID_LOG_BASE_TYPE;
   } else if (OB_FAIL(log_service->diagnose_role_change(info.rc_diagnose_info_))) {
-    // election, palf, log handler角色不统一时可能出现无主
+    // election, palf, log handler roles are not unified when a leaderless situation may occur
     STORAGE_LOG(WARN, "diagnose rc service failed", K(ret), K(ls_id));
   }
   DiagnoseFunctor fn(MTL_ID(), ls_id, info.read_only_tx_info_, 0, sizeof(info.read_only_tx_info_));

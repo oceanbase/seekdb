@@ -146,8 +146,8 @@ private:
   ObSubTransCtrl trans_ctrl_;
   ObDDLCtrl ddl_ctrl_; // for ddl insert sstable
   common::ObSafeArena allocator_;
-  ObPxLocalWorkerFactory local_worker_factory_; // 当仅有1个task时，使用 local 构造 worker
-  ObPxThreadWorkerFactory thread_worker_factory_; // 超过1个task的部分，使用thread 构造 worker
+  ObPxLocalWorkerFactory local_worker_factory_; // When there is only 1 task, use local to construct worker
+  ObPxThreadWorkerFactory thread_worker_factory_; // For tasks exceeding 1, use thread to construct worker
   int64_t reserved_thread_count_;
   bool is_single_tsc_leaf_dfo_;
   ObArray<int64_t> all_shared_rf_msgs_; // for clear

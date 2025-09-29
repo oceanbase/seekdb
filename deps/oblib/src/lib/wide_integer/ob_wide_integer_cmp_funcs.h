@@ -55,7 +55,7 @@ private:
 };
 
 // TODO: unittest
-// decimal int 比较，scale必须先提升到一样
+// decimal int comparison, scale must be raised to the same level first
 // helper functions
 template<typename T, typename P>
 int compare(const T &lhs, const P &rhs, int &result)

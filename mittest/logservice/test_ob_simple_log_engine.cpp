@@ -179,8 +179,7 @@ std::string ObSimpleLogClusterTestBase::test_name_ = TEST_NAME;
 bool ObSimpleLogClusterTestBase::need_add_arb_server_  = false;
 bool ObSimpleLogClusterTestBase::need_shared_storage_ = false;
 int64_t log_entry_size = 2 * 1024 * 1024 + 16 * 1024;
-
-// 验证flashback过程中宕机重启
+// Validate flashback process during shutdown and restart
 TEST_F(TestObSimpleLogClusterLogEngine, flashback_restart)
 {
   SET_CASE_LOG_FILE(TEST_NAME, "flashback_restart");
@@ -309,12 +308,11 @@ TEST_F(TestObSimpleLogClusterLogEngine, exception_path)
   EXPECT_EQ(OB_SUCCESS, log_storage->get_block_id_range(min_block_id, max_block_id));
   EXPECT_EQ(0, min_block_id);
   EXPECT_EQ(11, max_block_id);
-
-  // 测试truncate场景
+  // Test truncate scenario
   block_id_t truncate_block_id = max_block_id - 2;
   EXPECT_EQ(OB_SUCCESS, log_storage->truncate(LSN(truncate_block_id * PALF_BLOCK_SIZE)));
   EXPECT_EQ(OB_SUCCESS, log_storage->get_block_id_range(min_block_id, max_block_id));
-  // 此时最后一个block是空的
+  // At this point the last block is empty
   EXPECT_EQ(log_storage->log_tail_, LSN(truncate_block_id * PALF_BLOCK_SIZE));
   EXPECT_EQ(truncate_block_id, max_block_id);
   EXPECT_EQ(lsn_2_block(log_engine_->log_meta_storage_.log_block_header_.min_lsn_, PALF_BLOCK_SIZE), truncate_block_id + 1);
@@ -341,16 +339,14 @@ TEST_F(TestObSimpleLogClusterLogEngine, exception_path)
   LSN log_tail = log_engine_->log_storage_.log_tail_;
   share::SCN ts_origin = scn_11;
   PALF_LOG(INFO, "after second write_several_blocks 1", K(truncate_block_id), K(max_block_id));
-  // 由于truncate之后，最后一个文件是空的，因此max_block_id = truncate_block_id
+  // Since the last file is empty after truncate, therefore max_block_id = truncate_block_id
   EXPECT_EQ(OB_SUCCESS, write_several_blocks(0, 1));
   EXPECT_EQ(OB_SUCCESS, log_storage->get_block_min_scn(truncate_block_id, scn_11));
   EXPECT_NE(scn_11, ts_origin);
-
-  // 测试重启场景
+  // Test restart scenario
   EXPECT_EQ(OB_SUCCESS, reload(log_engine_->log_storage_.log_tail_, log_engine_->log_meta_storage_.log_tail_, log_engine_->log_meta_.log_snapshot_meta_.base_lsn_));
   PALF_LOG(INFO, "after reload1");
-
-  //测试truncate_prefix 场景
+  // Test truncate_prefix scenario
   block_id_t truncate_prefix_block_id = 4;
   prev_log_info.lsn_ = LSN(truncate_prefix_block_id*PALF_BLOCK_SIZE)-100;
   prev_log_info.log_id_ = 0;
@@ -362,14 +358,13 @@ TEST_F(TestObSimpleLogClusterLogEngine, exception_path)
   EXPECT_EQ(OB_SUCCESS, log_engine_->append_log_meta_(log_engine_->log_meta_));
   EXPECT_EQ(OB_SUCCESS,
             log_storage->truncate_prefix_blocks(LSN(truncate_prefix_block_id * PALF_BLOCK_SIZE)));
-  // 测试truncate_prefix后,继续写一个block
+  // Test truncate_prefix after, continue to write a block
   write_several_blocks(0, 1);
   EXPECT_EQ(OB_SUCCESS, log_storage->get_block_id_range(min_block_id, max_block_id));
   EXPECT_EQ(truncate_prefix_block_id, min_block_id);
   EXPECT_EQ(truncate_block_id+2, max_block_id);
-
-  // 测试目录清空场景，此时log_tail应该为truncate_prefix_block_id
-  // 目录清空之后，会重置log_tail
+  // Test directory clear scenario, at this point log_tail should be truncate_prefix_block_id
+  // Directory cleared, log_tail will be reset
   truncate_prefix_block_id = max_block_id + 2;
   LSN new_base_lsn(truncate_prefix_block_id*PALF_BLOCK_SIZE);
   prev_log_info.lsn_ = new_base_lsn - 100;
@@ -383,14 +378,13 @@ TEST_F(TestObSimpleLogClusterLogEngine, exception_path)
   const LSN old_log_tail = log_engine_->log_storage_.log_tail_;
   EXPECT_EQ(OB_SUCCESS, log_engine_->truncate_prefix_blocks(new_base_lsn));
   EXPECT_EQ(OB_ENTRY_NOT_EXIST, log_storage->get_block_id_range(min_block_id, max_block_id));
-  // truncate_prefix_block_id 和 prev_lsn对应的block_id一样
+  // truncate_prefix_block_id and prev_lsn corresponding block_id are the same
   EXPECT_EQ(log_storage->log_tail_, LSN(truncate_prefix_block_id * PALF_BLOCK_SIZE));
-  // truncate_prefxi_blocks后，min_block_info被置为无效
+  // after truncate_prefix_blocks, min_block_info is set to invalid
   EXPECT_EQ(false, is_valid_block_id(log_engine_->min_block_id_));
   EXPECT_EQ(false, log_engine_->min_block_min_scn_.is_valid());
   EXPECT_EQ(false, log_engine_->min_block_max_scn_.is_valid());
-
-  // 测试目录清空后，读数据是否正常报错
+  // Test directory cleared, is data read error reported normally
   ReadBufGuard buf_guard("dummy", 100);
   int64_t out_read_size;
   LogIOContext io_ctx(LogIOUser::DEFAULT);
@@ -406,7 +400,7 @@ TEST_F(TestObSimpleLogClusterLogEngine, exception_path)
                                buf_guard.read_buf_,
                                out_read_size,
                                io_ctx));
-  // 测试目录清空后，重启是否正常
+  // Test directory cleared, does restart work normally
   EXPECT_EQ(OB_SUCCESS, reload(log_engine_->log_storage_.log_tail_, log_engine_->log_meta_storage_.log_tail_, log_engine_->log_meta_.log_snapshot_meta_.base_lsn_));
   {
     block_id_t tmp_block_id = LOG_INVALID_BLOCK_ID;
@@ -415,8 +409,8 @@ TEST_F(TestObSimpleLogClusterLogEngine, exception_path)
   }
 
   PALF_LOG(INFO, "directory is empty");
-  // 测试目录清空后，写数据是否正常
-  // 此时log_tail为truncate_prefix_block_id的头部
+  // Test directory cleared, is data writing normal
+  // At this time log_tail is the head of truncate_prefix_block_id
   const block_id_t expected_min_block_id = lsn_2_block(log_storage->log_tail_, log_storage->logical_block_size_);
   EXPECT_EQ(OB_SUCCESS, write_several_blocks(expected_min_block_id, 3));
   EXPECT_EQ(OB_SUCCESS, log_storage->get_block_id_range(min_block_id, max_block_id));
@@ -424,8 +418,7 @@ TEST_F(TestObSimpleLogClusterLogEngine, exception_path)
   EXPECT_EQ(expected_min_block_id+3, max_block_id);
   share::SCN scn_cur;
   EXPECT_EQ(OB_SUCCESS, log_engine_->get_block_min_scn(max_block_id, scn_cur));
-
-  // 测试人为删除文件的重启场景
+  // Test the restart scenario when a file is manually deleted
   EXPECT_EQ(OB_SUCCESS, log_engine_->get_block_id_range(min_block_id, max_block_id));
   EXPECT_EQ(OB_SUCCESS, delete_block_by_human(max_block_id));
   EXPECT_EQ(OB_ERR_UNEXPECTED, reload(log_engine_->log_storage_.log_tail_, log_engine_->log_meta_storage_.log_tail_, log_engine_->log_meta_.log_snapshot_meta_.base_lsn_));
@@ -460,8 +453,8 @@ TEST_F(TestObSimpleLogClusterLogEngine, io_reducer_basic_func)
 	LogEngine *log_engine = &leader_1.palf_handle_impl_->log_engine_;
 	IOTaskCond io_task_cond_1(id_1, log_engine->palf_epoch_);
   IOTaskVerify io_task_verify_1(id_1, log_engine->palf_epoch_);
-  // 单日志流场景
-  // 卡住log_io_worker的处理
+  // Single log stream scenario
+  // Block the processing of log_io_worker
   {
     EXPECT_EQ(OB_SUCCESS, log_io_worker->submit_io_task(&io_task_cond_1));
     EXPECT_EQ(OB_SUCCESS, submit_log(leader_1, 1024, id_1, 110));
@@ -470,13 +463,13 @@ TEST_F(TestObSimpleLogClusterLogEngine, io_reducer_basic_func)
     io_task_cond_1.cond_.signal();
     wait_lsn_until_flushed(max_lsn, leader_1);
     EXPECT_EQ(OB_ITER_END, read_log(leader_1));
-    // sw内部做了自适应freeze之后这个等式可能不成立, 因为上层可能基于写盘反馈触发提交下一个io_task
+    // After sw performs adaptive freeze internally, this equation may not hold, because the upper layer may trigger submission of the next io_task based on disk write feedback
     prev_log_id_1 = log_id;
   }
-  // 单日志流场景
-  // 当聚合度为1的时候，应该走正常的提交流程，目前暂未实现，先通过has_batched_size不计算绕过
+  // Single log stream scenario
+  // When the aggregation degree is 1, the normal submission process should be followed, which is currently not implemented, so we bypass it by not calculating through has_batched_size
   {
-    // 聚合度为1的忽略
+    // Aggregation degree of 1 is ignored
     EXPECT_EQ(OB_SUCCESS, log_io_worker->submit_io_task(&io_task_cond_1));
     EXPECT_EQ(OB_SUCCESS, submit_log(leader_1, 1, id_1, 110));
     sleep(1);
@@ -490,8 +483,7 @@ TEST_F(TestObSimpleLogClusterLogEngine, io_reducer_basic_func)
     EXPECT_EQ(2, io_task_verify_1.count_);
     prev_log_id_1 = log_id;
   }
-
-  // 多日志流场景
+  // Multi-log stream scenario
   int64_t id_2 = ATOMIC_AAF(&palf_id_, 1);
   int64_t prev_log_id_2 = 0;
   int64_t leader_idx_2 = 0;
@@ -501,7 +493,7 @@ TEST_F(TestObSimpleLogClusterLogEngine, io_reducer_basic_func)
   IOTaskVerify io_task_verify_2(id_2, leader_2.get_palf_handle_impl()->log_engine_.palf_epoch_);
   {
     LogIOWorker *log_io_worker = leader_2.palf_handle_impl_->log_engine_.log_io_worker_;
-    // 聚合度为1的忽略
+    // Aggregation degree of 1 is ignored
     EXPECT_EQ(OB_SUCCESS, log_io_worker->submit_io_task(&io_task_cond_2));
     EXPECT_EQ(OB_SUCCESS, submit_log(leader_1, 1, id_1, 110));
     EXPECT_EQ(OB_SUCCESS, submit_log(leader_2, 1, id_2, 110));
@@ -522,14 +514,12 @@ TEST_F(TestObSimpleLogClusterLogEngine, io_reducer_basic_func)
     wait_lsn_until_flushed(max_lsn_2, leader_2);
     EXPECT_EQ(3, io_task_verify_1.count_);
     EXPECT_EQ(1, io_task_verify_2.count_);
-
-    // ls1已经有个一个log_id被忽略聚合了
+    // ls1 already has a log_id that was ignored during aggregation
     prev_log_id_2 = log_id_2;
     prev_log_id_1 = log_id_1;
   }
-
-  // 三个日志流，stripe为2
-  // 目前不支持可配的LogIOWorkerConfig，此测试暂时不打开，但结果是对的
+  // three log streams, stripe is 2
+  // Currently does not support configurable LogIOWorkerConfig, this test is temporarily not enabled, but the result is correct
   // int64_t id_3 = ATOMIC_AAF(&palf_id_, 1);
   // int64_t leader_idx_3 = 0;
   // int64_t prev_log_id_3 = 0;
@@ -557,7 +547,7 @@ TEST_F(TestObSimpleLogClusterLogEngine, io_reducer_basic_func)
   //   wait_lsn_until_flushed(max_lsn_2, leader_2);
   //   wait_lsn_until_flushed(max_lsn_3, leader_3);
   // }
-  // 验证切文件场景
+  // Validate the split file scenario
   int64_t id_3 = ATOMIC_AAF(&palf_id_, 1);
   int64_t leader_idx_3 = 0;
   int64_t prev_log_id_3 = 0;
@@ -602,8 +592,7 @@ TEST_F(TestObSimpleLogClusterLogEngine, io_reducer_basic_func)
     wait_lsn_until_flushed(max_lsn_1, leader_1);
     EXPECT_EQ(OB_ITER_END, read_log(leader_1));
   }
-
-  // 测试epoch change
+  // test epoch change
   PALF_LOG(INFO, "begin test epoch change");
   int64_t id_4 = ATOMIC_AAF(&palf_id_, 1);
   int64_t leader_idx_4 = 0;
@@ -620,8 +609,8 @@ TEST_F(TestObSimpleLogClusterLogEngine, io_reducer_basic_func)
     LSN max_lsn = leader_4.palf_handle_impl_->sw_.get_max_lsn();
     io_task_cond_4.cond_.signal();
     PALF_LOG(INFO, "after signal");
-    // signal之后需要sleep一会等前面的日志都提交给io_worker,
-    // 否则在反馈模式下, 这批日志可能会延迟submit, 排在下一个cond task后面
+    // After signal, need to sleep for a while to wait for all previous logs to be submitted to io_worker,
+    // Otherwise in feedback mode, this batch of logs may be delayed submit, placed after the next cond task
     sleep(1);
     wait_lsn_until_flushed(max_lsn, leader_4);
     EXPECT_EQ(OB_SUCCESS, log_io_worker->submit_io_task(&io_task_cond_4));
@@ -636,8 +625,7 @@ TEST_F(TestObSimpleLogClusterLogEngine, io_reducer_basic_func)
     PALF_LOG(INFO, "after flused case 4", K(max_lsn), K(log_tail));
     EXPECT_EQ(max_lsn, log_tail);
   }
-
-  // 测试truncate
+  // test truncate
   PALF_LOG(INFO, "begin test truncate");
   int64_t id_5 = ATOMIC_AAF(&palf_id_, 1);
   int64_t leader_idx_5 = 0;
@@ -653,7 +641,7 @@ TEST_F(TestObSimpleLogClusterLogEngine, io_reducer_basic_func)
     EXPECT_EQ(OB_SUCCESS, submit_log(leader_5, 10, id_5, 110));
     LSN max_lsn = leader_5.palf_handle_impl_->sw_.get_max_lsn();
     sleep(2);
-    // 在提交truncate log task之前需先等待之前的日志提交写盘
+    // Before submitting the truncate log task, you need to wait for the previous log submission to be written to disk
     io_task_cond_5.cond_.signal();
     wait_lsn_until_flushed(max_lsn, leader_5);
     EXPECT_EQ(OB_SUCCESS, leader_5.palf_handle_impl_->log_engine_.submit_truncate_log_task(ctx));
@@ -666,8 +654,8 @@ TEST_F(TestObSimpleLogClusterLogEngine, io_reducer_basic_func)
   }
 
   PALF_LOG(INFO, "begin test sw full case");
-  // 测试滑动窗口满场景
-  // 聚合的两条日志分别在头尾部
+  // Test sliding window full scenario
+  // The aggregated two logs are at the beginning and end respectively
   int64_t id_6 = ATOMIC_AAF(&palf_id_, 1);
   int64_t leader_idx_6 = 0;
   int64_t prev_log_id_6 = 0;
@@ -725,7 +713,7 @@ TEST_F(TestObSimpleLogClusterLogEngine, io_reducer_basic_func)
 TEST_F(TestObSimpleLogClusterLogEngine, limit_reduce_task)
 {
   SET_CASE_LOG_FILE(TEST_NAME, "limit_reduce_task");
-  // 验证限制单个reduce task size为1M
+  // Validate the restriction of a single reduce task size to 1M
   int64_t id_7 = ATOMIC_AAF(&palf_id_, 1);
   int64_t leader_idx_7 = 0;
   int64_t prev_log_id_7 = 0;
@@ -738,8 +726,8 @@ TEST_F(TestObSimpleLogClusterLogEngine, limit_reduce_task)
     BatchLogIOFlushLogTask::SINGLE_TASK_MAX_SIZE = 1*1024*1024;
     LogIOWorker *log_io_worker = leader_7.palf_handle_impl_->log_engine_.log_io_worker_;
     log_io_worker->batch_io_task_mgr_.handle_count_ = 0;
-    // case1: 测试单条日志超过SINGLE_TASK_MAX_SIZE
-    // 阻塞提交
+    // case1: test single log exceeds SINGLE_TASK_MAX_SIZE
+    // Block submission
     EXPECT_EQ(OB_SUCCESS, log_io_worker->submit_io_task(&io_task_cond_7));
     EXPECT_EQ(OB_SUCCESS, submit_log(leader_7, 15, id_7, log_entry_size));
     io_task_cond_7.cond_.signal();
@@ -747,13 +735,12 @@ TEST_F(TestObSimpleLogClusterLogEngine, limit_reduce_task)
       LSN max_lsn = leader_7.palf_handle_impl_->sw_.get_max_lsn();
       wait_lsn_until_flushed(max_lsn, leader_7);
     }
-    // 单条日志超过SINGLE_TASK_MAX_SIZE，会reduce一次, 第二条日志不会被reduce
+    // A single log exceeding SINGLE_TASK_MAX_SIZE will trigger one reduce, the second log will not be reduced
     EXPECT_EQ(8, log_io_worker->batch_io_task_mgr_.handle_count_);
 
     PALF_LOG(INFO, "case 2");
-
-    // case2：测试日志大小混合场景
-    // 阻塞提交
+    // case2: test log size mixed scenario
+    // Block submission
     EXPECT_EQ(OB_SUCCESS, log_io_worker->submit_io_task(&io_task_cond_7));
     EXPECT_EQ(OB_SUCCESS, submit_log(leader_7, 15, id_7, 1024));
     io_task_cond_7.cond_.signal();
@@ -778,8 +765,7 @@ TEST_F(TestObSimpleLogClusterLogEngine, limit_reduce_task)
     EXPECT_EQ(prev_handle_count+1, log_io_worker->batch_io_task_mgr_.handle_count_);
     prev_handle_count = log_io_worker->batch_io_task_mgr_.handle_count_;
     PALF_LOG(INFO, "after first LT");
-    
-    // case3：测试小日志场景
+    // case3: test small log scenario
     EXPECT_EQ(OB_SUCCESS, log_io_worker->submit_io_task(&io_task_cond_7));
     EXPECT_EQ(OB_SUCCESS, submit_log(leader_7, 30, id_7, 1024));
     io_task_cond_7.cond_.signal();

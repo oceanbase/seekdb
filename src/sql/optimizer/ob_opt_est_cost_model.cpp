@@ -199,8 +199,8 @@ double ObIndexMetaInfo::get_micro_block_numbers() const
 }
 
 /**
- * @brief    估算Nested Loop Join的代价
- * @formula  cost(总代价) = get_next_row_cost
+ * @brief    Estimate the cost of Nested Loop Join
+ * @formula  cost(total cost) = get_next_row_cost
  *                         + left_cost + right_cost
  *                         + left_rows * rescan_cost
  *                         + JOIN_PER_ROW_COST * output_rows
@@ -227,10 +227,8 @@ int ObOptEstCostModel::cost_nestloop(const ObCostNLJoinInfo &est_cost_info,
     } else {
       out_tuples = left_rows * right_rows * join_sel;
     }
-
-
-    // 再次扫描右表全表的代价。如果不使用物化，就是读取一次右表和本层get_next_row的代价；
-    // 如果物化，则为读取物化后的行的代价。
+    // The cost of rescanning the entire right table. If materialization is not used, it is the cost of reading the right table once and the cost of this layer's get_next_row;
+    // If materialized, then it is the cost of reading the materialized rows.
     double once_rescan_cost = 0.0;
     if (est_cost_info.need_mat_) {
       once_rescan_cost = cost_read_materialized(right_rows);
@@ -265,14 +263,14 @@ int ObOptEstCostModel::cost_nestloop(const ObCostNLJoinInfo &est_cost_info,
 }
 
 /**
- * @brief    估算Merge Join的代价
- * @formula  cost(总代价) = left_cost + right_cost
+ * @brief    Estimate the cost of Merge Join
+ * @formula  cost(total cost) = left_cost + right_cost
  *                         + get_next_row_cost
  *                         + qual_cost
  *                         + COST_JOIN_PER_ROW * output_rows
  *
- * @param[in]  est_cost_info       用于计算merge join代价的一些参数
- * @param[out] merge_cost          merge join算子的总代价
+ * @param[in]  est_cost_info       Parameters used to calculate the merge join cost
+ * @param[out] merge_cost          Total cost of the merge join operator
  */
 int ObOptEstCostModel::cost_mergejoin(const ObCostMergeJoinInfo &est_cost_info,
                                  			double &cost)
@@ -305,12 +303,12 @@ int ObOptEstCostModel::cost_mergejoin(const ObCostMergeJoinInfo &est_cost_info,
     cond_tuples = left_rows * right_rows * cond_sel;
   }
   out_tuples = cond_tuples * filter_sel;
-  // get_next_row()获取左表和右表所有行的代价
+  // get_next_row() gets the cost of all rows from the left table and right table
   cost += cost_params_.get_cpu_tuple_cost(sys_stat_) * (left_rows + right_rows);
-  // 谓词代价
+  // Predicate cost
   cost += cost_quals(cond_tuples, est_cost_info.equal_join_conditions_) + 
           cost_quals(cond_tuples, est_cost_info.other_join_conditions_);
-  // JOIN连接的代价
+  // JOIN cost
   cost += cost_params_.get_join_per_row_cost(sys_stat_)  * out_tuples;
   cost += cost_material(left_rows, left_width);
   cost += cost_read_materialized(left_rows);
@@ -325,17 +323,17 @@ int ObOptEstCostModel::cost_mergejoin(const ObCostMergeJoinInfo &est_cost_info,
 }
 
 /**
- * @brief    估算Hash Join的代价
- * @formula  cost(总代价) = left_cost + right_cost
+ * @brief    Estimate the cost of Hash Join
+ * @formula  cost(total cost) = left_cost + right_cost
  *                         + left_rows * BUILD_HASH_PER_ROW_COST
  *                         + material_cost
  *                         + right_rows * PROBE_HASH_PER_ROW_COST
  *                         + (left_rows + right_rows) * HASH_COST
  *                         + qual_cost
  *                         + JOIN_PER_ROW_COST * output_rows
- * @param[in]  est_cost_info       用于计算hash join代价的一些参数
- * @param[out] hash_cost           hash join算子的总代价
- * @param[in]  all_predicate_sel   各个谓词的选择率
+ * @param[in]  est_cost_info       Parameters used to calculate the hash join cost
+ * @param[out] hash_cost           Total cost of the hash join operator
+ * @param[in]  all_predicate_sel   Selectivity of each predicate
  */
 int ObOptEstCostModel::cost_hashjoin(const ObCostHashJoinInfo &est_cost_info,
                                 		 double &cost)
@@ -372,10 +370,10 @@ int ObOptEstCostModel::cost_hashjoin(const ObCostHashJoinInfo &est_cost_info,
   double join_filter_cost = 0.0;
   for (int i = 0; i < est_cost_info.join_filter_infos_.count(); ++i) {
     const JoinFilterInfo& info = est_cost_info.join_filter_infos_.at(i);
-    //bloom filter构建、使用代价
+    // bloom filter construction, usage cost
     join_filter_cost += cost_hash(left_rows, info.lexprs_) + cost_hash(right_rows, info.rexprs_);
     if (info.need_partition_join_filter_) {
-      //partition join filter代价
+      // partition join filter cost
       join_filter_cost += cost_hash(left_rows, info.lexprs_);
     }
     right_rows *= info.join_filter_selectivity_;
@@ -493,8 +491,8 @@ int ObOptEstCostModel::cost_sort(const ObSortCostInfo &cost_info,
   int ret = OB_SUCCESS;
   ObSEArray<ObRawExpr*, 4> order_exprs;
   ObSEArray<ObRawExprResType, 4> order_types;
-  // top-n排序不会进行前缀排序
-  // 如果获取不到est_sel_info，也回退到普通的排序代价估算
+  // top-n sorting will not perform prefix sorting
+  // If est_sel_info cannot be obtained, fall back to ordinary sorting cost estimation
   cost = 0.0;
   if (OB_FAIL(ObOptimizerUtil::get_expr_and_types(cost_info.order_items_,
                                                          order_exprs,
@@ -506,7 +504,7 @@ int ObOptEstCostModel::cost_sort(const ObSortCostInfo &cost_info,
     if (OB_FAIL(cost_local_order_sort(cost_info, order_types, cost))) {
       LOG_WARN("failed to cost local order sort", K(ret));
     } else {
-      // get_next_row获取下层算子行的代价
+      // get_next_row get cost of row from lower operator
       cost += cost_params_.get_cpu_tuple_cost(sys_stat_) * cost_info.rows_;
     }
   } else if (cost_info.prefix_pos_ > 0) {
@@ -514,7 +512,7 @@ int ObOptEstCostModel::cost_sort(const ObSortCostInfo &cost_info,
     if (OB_FAIL(cost_prefix_sort(cost_info, order_exprs, cost_info.topn_, cost))) {
       LOG_WARN("failed to calc prefix cost", K(ret));
     } else {
-      // get_next_row获取下层算子行的代价
+      // get_next_row get cost of row from lower operator
       cost += cost_params_.get_cpu_tuple_cost(sys_stat_) * cost_info.rows_;
     }
   } else if (cost_info.part_cnt_ > 0 && cost_info.topn_ >= 0) {
@@ -522,7 +520,7 @@ int ObOptEstCostModel::cost_sort(const ObSortCostInfo &cost_info,
     if (OB_FAIL(cost_part_topn_sort(cost_info, order_exprs, order_types, cost))) {
       LOG_WARN("failed to calc part cost", K(ret));
     } else {
-      // get_next_row获取下层算子行的代价
+      // get_next_row get cost of row from lower operator
       cost += cost_params_.get_cpu_tuple_cost(sys_stat_) * cost_info.rows_;
     }
   } else if (cost_info.topn_ >= 0) {
@@ -530,7 +528,7 @@ int ObOptEstCostModel::cost_sort(const ObSortCostInfo &cost_info,
     if (OB_FAIL(cost_topn_sort(cost_info, order_types, cost))) {
       LOG_WARN("failed to calc topn sort cost", K(ret));
     } else {
-      // get_next_row获取下层算子行的代价
+      // get_next_row get cost of row from lower operator
       cost += cost_params_.get_cpu_tuple_cost(sys_stat_) * cost_info.rows_;
     }
   } else if (cost_info.part_cnt_ > 0) {
@@ -538,7 +536,7 @@ int ObOptEstCostModel::cost_sort(const ObSortCostInfo &cost_info,
     if (OB_FAIL(cost_part_sort(cost_info, order_exprs, order_types, cost))) {
       LOG_WARN("failed to calc part cost", K(ret));
     } else {
-      // get_next_row获取下层算子行的代价
+      // get_next_row get cost of row from lower operator
       cost += cost_params_.get_cpu_tuple_cost(sys_stat_) * cost_info.rows_;
     }
   } else {
@@ -546,7 +544,7 @@ int ObOptEstCostModel::cost_sort(const ObSortCostInfo &cost_info,
     if (OB_FAIL(cost_sort(cost_info, order_types, cost))) {
       LOG_WARN("failed to calc cost", K(ret));
     } else {
-      // get_next_row获取下层算子行的代价
+      // get_next_row get cost of row from lower operator
       cost += cost_params_.get_cpu_tuple_cost(sys_stat_) * cost_info.rows_;
     }
   }
@@ -555,15 +553,15 @@ int ObOptEstCostModel::cost_sort(const ObSortCostInfo &cost_info,
 }
 
 /**
- * @brief      估算Sort算子代价的函数。
+ * @brief      Function to estimate the cost of the Sort operator.
  * @formula    cost = material_cost + sort_cost
  *             material_cost = cost_material(...) + cost_read_materialized(...)
  *             sort_cost = cost_cmp_per_row * N * logN
- * @param[in]  cost_info   估算排序代价的一些参数
- *                         row         待排序的行数
- *                         width       平均行长
- * @param[in]  order_cols  排序列
- * @param[out] cost        排序算子自身的代价
+ * @param[in]  cost_info   Some parameters for estimating the sorting cost
+ *                         row         Number of rows to be sorted
+ *                         width       Average row width
+ * @param[in]  order_cols  Order columns
+ * @param[out] cost        Cost of the Sort operator itself
  */
 int ObOptEstCostModel::cost_sort(const ObSortCostInfo &cost_info,
                                  const ObIArray<ObRawExprResType> &order_col_types,
@@ -591,19 +589,19 @@ int ObOptEstCostModel::cost_sort(const ObSortCostInfo &cost_info,
 }
 
 /**
- * 理想假设：行数为2的指数倍（保证桶数量和行数量相等），输入数据具有任意性，桶内所有数据哈希值不同。
- * @brief      估算 PART_SORT Sort算子代价的函数，与窗口函数连用。
+ * Ideal assumption: The number of rows is a power of 2 (ensuring the number of buckets equals the number of rows), input data is arbitrary, all data hash values in the bucket are different.
+ * @brief      Function to estimate the cost of the PART_SORT Sort operator, used in conjunction with window functions.
  * @formula    cost = material_cost + hash_cost + sort_cost
  *             material_cost = cost_material(...) + cost_read_materialized(...)
  *             hash_cost = calc_hash * part_expr * rows + build_hash * rows
  *             sort_cost = cost_cmp_per_row * rows * theoretical_cmp_times
- * @param[in]  cost_info          估算排序代价的一些参数
- *                                rows        待排序的行数
- *                                width       平均行长
- * @param[in]  order_exprs        需要排序的表达式，前半部分是 part by，后半部分是 order by
- * @param[in]  order_col_types    需要排序的列的类型，order by 部分用作桶内排序
- * @param[in]  part_cnt          表达式组中 part by 部分所占个数，用作桶间排序
- * @param[out] cost               排序算子自身的代价
+ * @param[in]  cost_info          Some parameters for estimating the sorting cost
+ *                                rows        Number of rows to be sorted
+ *                                width       Average row length
+ * @param[in]  order_exprs        Expressions to be sorted, the first half is part by, the second half is order by
+ * @param[in]  order_col_types    Types of columns to be sorted, the order by part is used for sorting within the bucket
+ * @param[in]  part_cnt           Number of expressions in the part by part of the expression group, used for sorting between buckets
+ * @param[out] cost               Cost of the sort operator itself
  */
 int ObOptEstCostModel::cost_part_sort(const ObSortCostInfo &cost_info,
                                       const ObIArray<ObRawExpr *> &order_exprs,
@@ -769,7 +767,7 @@ int ObOptEstCostModel::cost_prefix_sort(const ObSortCostInfo &cost_info,
       } else { /*do nothing*/ }
     }
     if (OB_SUCC(ret)) {
-      // 前缀排序的每个部分不会进行前缀排序，也不会进行topn排序
+      // Prefix sorted each part will not be prefix sorted, nor will it be topn sorted
       int64_t prefix_pos = 0;
       double num_rows_per_group = 0;
       double num_distinct_rows = rows;
@@ -810,7 +808,7 @@ int ObOptEstCostModel::cost_prefix_sort(const ObSortCostInfo &cost_info,
 }
 
 /**
- * @brief 计算排序算子实际排序部分的代价
+ * @brief Calculate the cost of the actual sorting part of the sort operator
  *
  *    cost = cost_cmp * rows * log(row_count)
  */
@@ -824,7 +822,7 @@ int ObOptEstCostModel::cost_sort_inner(const ObIArray<ObRawExprResType> &types,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid row count", K(row_count), K(ret));
   } else if (row_count < 1.0) {
-    // LOG2(x) 在x小于1时为负数，这里需要特殊处理
+    // LOG2(x) is negative when x is less than 1, special handling is required here
     cost = 0.0;
   } else {
     double cost_cmp = 0.0;
@@ -850,7 +848,7 @@ int ObOptEstCostModel::cost_local_order_sort_inner(const common::ObIArray<sql::O
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid row count", K(row_count), K(ret));
   } else if (row_count < 1.0) {
-    // LOG2(x) 在x小于1时为负数，这里需要特殊处理
+    // LOG2(x) is negative when x is less than 1, special handling is required here
     cost = 0.0;
   } else {
     double cost_cmp = 0.0;
@@ -867,17 +865,17 @@ int ObOptEstCostModel::cost_local_order_sort_inner(const common::ObIArray<sql::O
 }
 
 /**
- * @brief      估算TOP-N Sort算子代价的函数。
+ * @brief      Function to estimate the cost of the TOP-N Sort operator.
  * @formula    cost = material_cost + sort_cost
  *             material_cost = cost_material(...)
  *             sort_cost = cost_cmp_per_row * rows * logN
- * @param[in]  cost_info   估算排序代价的一些参数
- *                         rows        待排序的行数
+ * @param[in]  cost_info   Some parameters for estimating the sorting cost
+ *                         rows        Number of rows to be sorted
  *                         topn        TOP-N
- *                         width       平均行长
- * @param[in]  store_cols  需要进行物化的所有列
- * @param[in]  order_cols  排序列
- * @param[out] cost        排序算子自身的代价
+ *                         width       Average row length
+ * @param[in]  store_cols  All columns that need to be materialized
+ * @param[in]  order_cols  Order columns
+ * @param[out] cost        Cost of the sort operator itself
  */
 int ObOptEstCostModel::cost_topn_sort(const ObSortCostInfo &cost_info,
 																			const ObIArray<ObRawExprResType> &types,
@@ -896,8 +894,8 @@ int ObOptEstCostModel::cost_topn_sort(const ObSortCostInfo &cost_info,
     if (topn > rows) {
       topn = rows;
     }
-    // top-n sort至少物化n行，至多物化rows行
-    // 我们认为topn sort大约需要物化两者的平均数(n + rows) / 2
+    // top-n sort materializes at least n rows, at most materializes rows rows
+    // We believe that topn sort approximately requires materializing the average of the two (n + rows) / 2
     material_cost = cost_material(topn, width);
     if (OB_FAIL(cost_topn_sort_inner(types, rows, topn, real_sort_cost))) {
       LOG_WARN("failed to calc cost", K(ret));
@@ -932,7 +930,7 @@ int ObOptEstCostModel::cost_local_order_sort(const ObSortCostInfo &cost_info,
 }
 
 /**
- * @brief        计算topn排序算子实际排序部分的代价
+ * @brief        Calculate the cost of the actual sorting part of the topn sort operator
  *
  *    cost = cost_cmp * rows * log(n)
  */
@@ -947,7 +945,7 @@ int ObOptEstCostModel::cost_topn_sort_inner(const ObIArray<ObRawExprResType> &ty
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid number of rows", K(rows), K(ret));
   } else if (n < 1.0) {
-    // LOG2(x) 在x小于1时为负数，这里需要特殊处理
+    // LOG2(x) is negative when x is less than 1, special handling is required here
     cost = 0.0;
   } else {
     double cost_cmp = 0.0;
@@ -1019,7 +1017,7 @@ int ObOptEstCostModel::cost_exchange_in(const ObExchInCostInfo &cost_info,
     LOG_TRACE("OPT: [COST EXCHANGE IN]", K(cost_info.rows_), K(cost_info.width_),
                               K(cost_info.dist_method_), K(cost_info.parallel_), K(cost));
     if (ObPQDistributeMethod::BROADCAST == cost_info.dist_method_) {
-      //每个线程都需要拷贝一份当前机器收到的数据
+      // Each thread needs to copy a copy of the data received by the current machine
       cost += ObOptEstCostModel::cost_material(per_dop_rows, cost_info.width_);
     }
     if (!cost_info.sort_keys_.empty() && per_dop_rows > 0) {
@@ -1073,17 +1071,17 @@ int ObOptEstCostModel::cost_exchange_out(const ObExchOutCostInfo &cost_info,
   return ret;
 }
 /**
- * @brief      估算Merge Group By算子代价的函数。
- * @note       我们假设group by比较时几乎都需要比较所有列
+ * @brief      Function to estimate the cost of the Merge Group By operator.
+ * @note       We assume that almost all columns need to be compared during group by
  *
- * @formula    cost = CPU_TUPLE_COST *rows
+ * @formula    cost = CPU_TUPLE_COST * rows
  *                    + qual_cost(CMP_DEFAULT * num_group_columns * rows)
  *                    + PER_AGGR_FUNC_COST * num_aggr_columns * rows
  *
- * @param[in]  rows            待排序的行数
- * @param[in]  group_columns   group by的列数
- * @param[in]  agg_col_count   聚合函数的个数
- * @return                     算子自身的代价
+ * @param[in]  rows            Number of rows to be sorted
+ * @param[in]  group_columns   Number of columns for group by
+ * @param[in]  agg_col_count   Number of aggregate functions
+ * @return                     Cost of the operator itself
  */
 double ObOptEstCostModel::cost_merge_group(double rows,
 																					double res_rows,
@@ -1103,17 +1101,17 @@ double ObOptEstCostModel::cost_merge_group(double rows,
 }
 
 /**
- * @brief      估算Hash Group By算子代价的函数。
+ * @brief      Function to estimate the cost of the Hash Group By operator.
  * @formula    cost = CPU_TUPLE_COST * rows
  *                    + BUILD_HASH_COST * res_rows
  *                    + PROBE_HASH_COST * rows
  *                    + hash_calculation_cost
  *                    + PER_AGGR_FUNC_COST * num_aggr_columns * rows
- * @param[in]  rows            输入行数
- * @param[in]  group_columns   group by的列
- * @param[in]  res_rows        输出行数
- * @param[in]  agg_col_count   聚合函数的个数
- * @return                     算子自身的代价
+ * @param[in]  rows            Input row count
+ * @param[in]  group_columns   Columns for group by
+ * @param[in]  res_rows        Output row count
+ * @param[in]  agg_col_count   Number of aggregate functions
+ * @return                     Cost of the operator itself
  */
 double ObOptEstCostModel::cost_hash_group(double rows,
 																					double res_rows,
@@ -1133,11 +1131,11 @@ double ObOptEstCostModel::cost_hash_group(double rows,
 }
 
 /**
- * @brief      估算Scalar Group By算子代价的函数。
+ * @brief      Function to estimate the cost of the Scalar Group By operator.
  * @formula    cost = PER_AGGR_FUNC_COST * num_aggr_columns * rows
- * @param[in]  rows            待排序的行数
- * @param[in]  agg_col_count   聚合函数的个数
- * @return                     算子自身的代价
+ * @param[in]  rows            Number of rows to be sorted
+ * @param[in]  agg_col_count   Number of aggregate functions
+ * @return                     Cost of the operator itself
  */
 double ObOptEstCostModel::cost_scalar_group(double rows, int64_t agg_col_count)
 {
@@ -1149,12 +1147,12 @@ double ObOptEstCostModel::cost_scalar_group(double rows, int64_t agg_col_count)
 }
 
 /**
- * @brief      估算Merge Distinct 算子代价的函数。
+ * @brief      Estimate the cost of the Merge Distinct operator.
  * @formula    cost = get_next_row_cost
  *                  + cost_quals
- * @param[in]  rows               输入行数
- * @param[in]  distinct_columns   distinct的列
- * @return                        算子自身的代价
+ * @param[in]  rows               Input row count
+ * @param[in]  distinct_columns   Distinct columns
+ * @return                        Cost of the operator itself
  */
 double ObOptEstCostModel::cost_merge_distinct(double rows,
 																							double res_rows,
@@ -1169,14 +1167,14 @@ double ObOptEstCostModel::cost_merge_distinct(double rows,
 }
 
 /**
- * @brief        估计Hash Distinct算子代价的函数。
+ * @brief        Function to estimate the cost of the Hash Distinct operator.
  * @formula      cost = get_next_row_cost
  *                    + HASH_BUILD_COST * res_rows
  *                    + HASH_PROBE_COST * rows
  *                    + hash_calculation_cost
- * @param[in]    rows               输入行数
- * @param[in]    res_rows           输出行数，也即distinct数
- * @param[in]    distinct_columns   distinct列
+ * @param[in]    rows               Input row count
+ * @param[in]    res_rows           Output row count, i.e., distinct count
+ * @param[in]    distinct_columns   Distinct columns
  */
 double ObOptEstCostModel::cost_hash_distinct(double rows,
 																						double res_rows,
@@ -1184,15 +1182,15 @@ double ObOptEstCostModel::cost_hash_distinct(double rows,
 																						const ObIArray<ObRawExpr *> &distinct_columns)
 {
   double cost = 0.0;
-  // get_next_row()的代价
+  // get_next_row() cost
   cost += cost_params_.get_cpu_tuple_cost(sys_stat_) * rows;
   //material cost
   cost += cost_material(res_rows, width);
-  // 构建hash table的代价
+  // The cost of building the hash table
   cost += cost_params_.get_build_hash_per_row_cost(sys_stat_) * res_rows;
-  // probe的代价
+  // probe cost
   cost += cost_params_.get_probe_hash_per_row_cost(sys_stat_) * rows;
-  // 计算hash值代价
+  // Calculate hash value cost
   cost += cost_hash(rows, distinct_columns);
 
   LOG_TRACE("OPT: [COST HASH DISTINCT]", K(cost), K(rows), K(res_rows));
@@ -1200,7 +1198,7 @@ double ObOptEstCostModel::cost_hash_distinct(double rows,
 }
 
 /**
- * @brief     估算 Select 下的 Sequence 算子的代价函数
+ * @brief     Estimate the cost function of the Sequence operator under Select
  */
 double ObOptEstCostModel::cost_sequence(double rows, double uniq_sequence_cnt)
 {
@@ -1208,9 +1206,9 @@ double ObOptEstCostModel::cost_sequence(double rows, double uniq_sequence_cnt)
           cost_params_.get_cpu_operator_cost(sys_stat_) * uniq_sequence_cnt;
 }
 /**
- * @brief      估算Limit算子代价的函数。
+ * @brief      Estimate the cost of the Limit operator function.
  * @formula    cost = rows * CPU_TUPLE_COST
- * @return     算子自身的代价
+ * @return     The cost of the operator itself
  */
 double ObOptEstCostModel::cost_get_rows(double rows)
 {
@@ -1218,7 +1216,7 @@ double ObOptEstCostModel::cost_get_rows(double rows)
 }
 
 /**
- * @brief      估算读取物化后的数据代价的函数。
+ * @brief      The function to estimate the cost of reading materialized data.
  */
 double ObOptEstCostModel::cost_read_materialized(double rows)
 {
@@ -1226,11 +1224,11 @@ double ObOptEstCostModel::cost_read_materialized(double rows)
 }
 
 /**
- * @brief      估算Material算子代价的函数。
+ * @brief      Function to estimate the cost of the Material operator.
  * @formula    cost = MATERIALZE_PER_BYTE_COST * average_row_size * rows
- * @param[in]  rows             需要物化的行数
- * @param[in]  average_row_size 每行的平均长度（字节）
- * @return     算子自身的代价
+ * @param[in]  rows             Number of rows to materialize
+ * @param[in]  average_row_size Average length of each row (in bytes)
+ * @return     Cost of the operator itself
  */
 double ObOptEstCostModel::cost_material(const double rows, const double average_row_size)
 {
@@ -1259,11 +1257,11 @@ void ObOptEstCostModel::cost_late_materialization_table_join(double left_card,
 {
   op_cost = 0.0;
   cost = 0.0;
-  // 再次扫描右表全表的代价。如果不使用物化，就是读取一次右表和本层get_next_row的代价；
-  // 如果物化，则为读取物化后的行的代价。
+  // The cost of rescanning the entire right table. If materialization is not used, it is the cost of reading the right table once and the cost of this layer's get_next_row;
+  // If materialized, then it is the cost of reading the materialized rows.
   double once_rescan_cost = right_cost + right_card * cost_params_.get_cpu_tuple_cost(sys_stat_);
   op_cost += left_card * once_rescan_cost + left_card * cost_params_.get_join_per_row_cost(sys_stat_);
-  // 读取左表和本层get_next_row的代价
+  // Read the cost of left table and get_next_row at this level
   cost += left_cost + cost_params_.get_cpu_tuple_cost(sys_stat_) * left_card;
   cost += op_cost;
 }
@@ -1349,12 +1347,12 @@ int ObOptEstCostModel::cost_px(int64_t parallel, double &px_cost)
 }
 
 // estimate cost for real table
-// 1. 计算filter选择率
-// 2. 判断使用哪种估行方式
-// 3. 遍历key ranges, 循环获取ObBatch
-// 4. 估算每一个ObBatch行数
-// 5. 计算每一个ObBatch代价
-// 6. 处理相关输出信息
+// 1. Calculate filter selection rate
+// 2. Determine which line estimation method to use
+// 3. Traverse key ranges, loop to get ObBatch
+// 4. Estimate the number of rows for each ObBatch
+// 5. Calculate the cost of each ObBatch
+// 6. Process related output information
 int ObOptEstCostModel::cost_basic_table(const ObCostTableScanInfo &est_cost_info,
                                         const double part_cnt_per_dop,
 																				double &cost)
@@ -1603,10 +1601,10 @@ int ObOptEstCostModel::cost_row_store_index_scan(const ObCostTableScanInfo &est_
     OPT_TRACE_COST_MODEL(KV(index_scan_cost), "+=", KV(spatial_cost));
     LOG_TRACE("OPT::[COST SPATIAL INDEX SCAN]", K(spatial_cost), K(ret));
   } else if (est_cost_info.index_meta_info_.is_fulltext_index_) {
-    // 全文索引一期：对于每一个 token，都需要:
-    // 1. 以 [token, token] 为 range 扫描 inv_index 两次，计算一个聚合函数；
-    // 2. 全表扫描 doc_id_rowkey_index, 计算一个聚合函数；
-    // 3. 用过滤后的 doc_id 对 doc_id_rowkey_index 做回表
+    // Full-text index phase one: For every token, we need to:
+    // 1. Scan inv_index twice with [token, token] as range to calculate an aggregate function;
+    // 2. Full table scan doc_id_rowkey_index, calculate an aggregate function;
+    // 3. Use the filtered doc_id to do a back-table lookup on doc_id_rowkey_index
     double inv_index_range_scan_cost = 0;
     double doc_id_full_scan_cost = 0;
     double doc_id_index_back_cost = 0;
@@ -1770,9 +1768,9 @@ int ObOptEstCostModel::cost_range_scan(const ObCostTableScanInfo &est_cost_info,
                                        double &range_scan_cost) 
 {
   int ret = OB_SUCCESS;
-  // 从memtable读取数据的代价，待提供
+  // The cost of reading data from memtable, to be provided
   double memtable_cost = 0;
-  // memtable数据和基线数据合并的代价，待提供
+  // memtable data and baseline data merge cost, to be provided
   double memtable_merge_cost = 0;
   double io_cost = 0.0;
   double cpu_cost = 0.0;
@@ -1809,9 +1807,9 @@ int ObOptEstCostModel::cost_range_get(const ObCostTableScanInfo &est_cost_info,
                                        double &range_get_cost) 
 {
   int ret = OB_SUCCESS;
-  // 从memtable读取数据的代价，待提供
+  // The cost of reading data from memtable, to be provided
   double memtable_cost = 0;
-  // memtable数据和基线数据合并的代价，待提供
+  // memtable data and baseline data merge cost, to be provided
   double memtable_merge_cost = 0;
   double io_cost = 0.0;
   double cpu_cost = 0.0;
@@ -1851,8 +1849,8 @@ int ObOptEstCostModel::range_get_io_cost(const ObCostTableScanInfo &est_cost_inf
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", K(ret));
   } else {
-    //索引总的微块数 = 总大小/微块大小
-    //计算涉及的微块数
+    // Total number of microblocks = Total size / Microblock size
+    // Calculate the number of involved microblocks
     double num_micro_blocks = 0;
     if (is_scan_index) {
       num_micro_blocks = index_meta_info.get_micro_block_numbers();
@@ -1869,7 +1867,7 @@ int ObOptEstCostModel::range_get_io_cost(const ObCostTableScanInfo &est_cost_inf
     } else {
       num_micro_blocks_read = num_micro_blocks;
     }
-    // IO代价，包括读取整个微块及反序列化的代价和每行定位微块的代价
+    // IO cost, including the cost of reading the entire micro-block and deserialization, and the cost of locating the micro-block for each row
     double first_block_cost = cost_params_.get_micro_block_rnd_cost(sys_stat_);
     if (est_cost_info.is_rescan_) {
       if (est_cost_info.is_batch_rescan_) {
@@ -1905,15 +1903,15 @@ int ObOptEstCostModel::range_scan_io_cost(const ObCostTableScanInfo &est_cost_in
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", K(ret), K(row_count), KP(table_meta_info));
   } else {
-    //索引总的微块数 = 总大小/微块大小
-    //计算涉及的微块数
+    // Total number of microblocks = Total size / Microblock size
+    // Calculate the number of involved microblocks
     double num_micro_blocks = 0;
     if (!is_scan_index) {
       num_micro_blocks = table_meta_info->get_micro_block_numbers();
     } else {
       num_micro_blocks = index_meta_info.get_micro_block_numbers();
     }
-    //读微块数 = 总微块数 * 读行比例
+    // Read microblock count = total microblock count * read row ratio
     double num_micro_blocks_read = 0;
     const double table_row_count = static_cast<double>(table_meta_info->table_row_count_);
     if (OB_LIKELY(table_row_count > 0 && row_count <= table_row_count)) {
@@ -1921,8 +1919,7 @@ int ObOptEstCostModel::range_scan_io_cost(const ObCostTableScanInfo &est_cost_in
     } else {
       num_micro_blocks_read = num_micro_blocks;
     }
-
-    // IO代价，主要包括读取微块、反序列化的代价的代价
+    // IO cost, mainly including the cost of reading micro-blocks and deserialization
     double first_block_cost = cost_params_.get_micro_block_rnd_cost(sys_stat_);
     if (est_cost_info.is_rescan_) {
       if (est_cost_info.is_batch_rescan_) {
@@ -1981,20 +1978,20 @@ int ObOptEstCostModel::range_scan_cpu_cost(const ObCostTableScanInfo &est_cost_i
   }
   if (OB_FAIL(ret)) {
   } else {
-    // 谓词代价，主要指filter的代价
+    // Predicate cost, mainly referring to the cost of filter
     double qual_cost = 0.0;
     if (!is_index_back) {
-      // 全表扫描
+      // Full table scan
       qual_cost += cost_quals(row_count, est_cost_info.postfix_filters_);
       qual_cost += cost_quals(row_count, est_cost_info.table_filters_);
     } else if (is_scan_index) {
-      // 索引扫描
+      // Index scan
       qual_cost += cost_quals(row_count, est_cost_info.postfix_filters_);
     } else {
-      // 回表扫描
+      // Table scan
       qual_cost += cost_quals(row_count, est_cost_info.table_filters_);
     }
-    // CPU代价，包括get_next_row调用的代价和谓词代价
+    // CPU cost, including the cost of get_next_row calls and predicate cost
     double range_cost = 0;
     double range_count = est_cost_info.total_range_cnt_;
     if (range_count > 1 && est_cost_info.at_most_one_range_) {
@@ -2071,11 +2068,11 @@ int ObOptEstCostModel::cost_window_function(double rows, double width, double wi
 }
 
 /**
- * @brief     计算filter的代价
+ * @brief     Calculate the cost of the filter
  * @formula   cost = rows * CPU_TUPLE_COST + cost_quals
- * @param[in] rows        输入行数
- * @param[in] filters filter数量
- * @return    算子代价
+ * @param[in] rows        Input row count
+ * @param[in] filters     Number of filters
+ * @return    Operator cost
  */
 double ObOptEstCostModel::cost_filter_rows(double rows, ObIArray<ObRawExpr*> &filters)
 {
@@ -2083,12 +2080,12 @@ double ObOptEstCostModel::cost_filter_rows(double rows, ObIArray<ObRawExpr*> &fi
 }
 
 /**
- *  @brief   估算SubplanFilter的代价
+ *  @brief   Estimate the cost of SubplanFilter
  *
- *  @formula 除最左的子节点以外，其它的节点都是一个filter，filter分成3种类型：
- *           1. onetime expr：这种类型的filter只需要计算一次，而且不需要物化
- *           2. initplan    : 这种类型的filter只需要计算一次，之后物化，从物化的数据中读取
- *           3. 其它         : 剩下的所有filter每次都要重新计算
+ *  @formula Except for the leftmost child node, all other nodes are filters, which are divided into 3 types:
+ *           1. onetime expr: This type of filter only needs to be calculated once and does not require materialization
+ *           2. initplan    : This type of filter only needs to be calculated once, then materialized, and read from the materialized data
+ *           3. others         : All remaining filters need to be recalculated each time
  */
 int ObOptEstCostModel::cost_subplan_filter(const ObSubplanFilterCostInfo &info,
                                            double &cost)
@@ -2101,19 +2098,19 @@ int ObOptEstCostModel::cost_subplan_filter(const ObSubplanFilterCostInfo &info,
   }
   for (int64_t i = 1; OB_SUCC(ret) && i < info.children_.count(); ++i) {
     const ObBasicCostInfo &child = info.children_.at(i);
-    //判断是否为onetime expr;
+    // Determine whether it is a onetime expr;
     if (info.onetime_idxs_.has_member(i)) { // onetime cost
-      // 这个子节点是一个onetime expr
-      // 则只需要进行一次右表计算，且不物化
+      // This subnode is a onetime expr
+      // Then only one right table calculation is needed, and no materialization
       onetime_cost += child.cost_;
     } else if (info.initplan_idxs_.has_member(i)) { // init plan cost
-      // 这个子节点是一个initplan
-      // 对右表进行物化，之后只需读取物化后的行
+      // This subnode is an initplan
+      // Materialize the right table, after which only the materialized rows need to be read
       onetime_cost += child.cost_ + child.rows_ * cost_params_.get_cpu_tuple_cost(sys_stat_)
           + cost_material(child.rows_, child.width_);
       cost += info.children_.at(0).rows_ * cost_read_materialized(child.rows_);
     } else { // other cost
-      // 一般情况，每一次都要扫描右表
+      // In general, each time a scan of the right table is required
       cost += info.children_.at(0).rows_ * (child.cost_ + child.rows_ * cost_params_.get_cpu_tuple_cost(sys_stat_));
       if (child.exchange_allocated_) {
         cost += cost_params_.get_px_rescan_per_row_cost(sys_stat_) * info.children_.at(0).rows_;
@@ -2140,10 +2137,10 @@ int ObOptEstCostModel::cost_union_all(const ObCostMergeSetInfo &info, double &co
 }
 
 /**
- * @brief 计算集合运算的代价（包括union / except / intersect）
- * @param[in]  info    估算集合运算代价所需要的一些参数
- * @param[out] cost 估算出的集合运算算子本身的代价
- * 对于merge set，可能出现set op展平的情况，所以需要考虑多个孩子节点
+ * @brief Calculate the cost of set operations (including union / except / intersect)
+ * @param[in]  info    Parameters needed to estimate the cost of set operations
+ * @param[out] cost Estimated cost of the set operation operator itself
+ * For merge set, there may be a situation where set op is flattened, so multiple child nodes need to be considered
  */
 int ObOptEstCostModel::cost_merge_set(const ObCostMergeSetInfo &info, double &cost)
 {
@@ -2164,10 +2161,10 @@ int ObOptEstCostModel::cost_merge_set(const ObCostMergeSetInfo &info, double &co
 }
 
 /**
- * @brief 计算集合运算的代价（包括union / except / intersect）
- * @param[in]  info    估算集合运算代价所需要的一些参数
- * @param[out] cost    估算出的集合运算算子本身的代价
- * 对于hash set，不会出现set op展平的情况，所以只需要考虑两个孩子节点
+ * @brief Calculate the cost of set operations (including union / except / intersect)
+ * @param[in]  info    Some parameters required to estimate the cost of set operations
+ * @param[out] cost    The estimated cost of the set operation operator itself
+ * For hash set, set op flattening will not occur, so only two child nodes need to be considered
  */
 int ObOptEstCostModel::cost_hash_set(const ObCostHashSetInfo &info, double &cost)
 {
@@ -2186,7 +2183,7 @@ int ObOptEstCostModel::cost_hash_set(const ObCostHashSetInfo &info, double &cost
   }
 
   cost = 0.0;
-  //get_next_row() 代价
+  //get_next_row() cost
   cost += cost_params_.get_cpu_tuple_cost(sys_stat_) * (info.left_rows_ + info.right_rows_);
   //material cost
   cost += cost_material(info.left_rows_, info.left_width_) +
@@ -2195,7 +2192,7 @@ int ObOptEstCostModel::cost_hash_set(const ObCostHashSetInfo &info, double &cost
   cost += cost_params_.get_build_hash_per_row_cost(sys_stat_) * build_rows;
   //probe hash table cost
   cost += cost_params_.get_probe_hash_per_row_cost(sys_stat_) * probe_rows;
-  //计算 hash 的代价
+  // Calculate the cost of hash
   cost += cost_hash(info.left_rows_ + info.right_rows_, info.hash_columns_);
 
   LOG_TRACE("OPT: [COST HASH SET]", K(cost));
@@ -2204,12 +2201,12 @@ int ObOptEstCostModel::cost_hash_set(const ObCostHashSetInfo &info, double &cost
 
 
 /**
- * @brief                 计算hash值的代价
- * @note(@ banliu.zyd)    这个函数用于估算hash计算的代价，为了使代码简洁不侵入，这个函数
- *                        直接以计算hash的代价为返回值，对于发现的某个谓词为空直接跳过，认为
- *                        在其它地方有对谓词是否存在错误的判断，检测的逻辑不应在这里
- * @param[in] rows        数据行数
- * @param[in] hash_exprs  hash列数组
+ * @brief                 Calculate the cost of hash value
+ * @note(@ banliu.zyd)    This function is used to estimate the cost of hash calculation, to keep the code concise and non-intrusive, this function
+ *                        directly returns the cost of hash calculation. For any discovered empty predicate, it skips directly, assuming that
+ *                        there are checks for the existence of predicates elsewhere, and the detection logic should not be here
+ * @param[in] rows        Number of data rows
+ * @param[in] hash_exprs  Array of hash columns
  *
  */
 double ObOptEstCostModel::cost_hash(double rows, const ObIArray<ObRawExpr *> &hash_exprs)
@@ -2373,15 +2370,17 @@ int ObOptEstCostModel::cost_full_table_scan_project(double rows,
 }
 
 /**
- * @brief              计算谓词部分的代价
- * @note(@ banliu.zyd) 这个函数用于估算谓词计算的代价，为了使代码简洁不侵入，这个函数
- *                     直接以谓词代价为返回值，对于发现的某个谓词为空直接跳过，认为
- *                     在其它地方有对谓词是否存在错误的判断，检测的逻辑不应在这里
- * @param[in] rows     数据行数
- * @param[in] quals    谓词数组
+ * @brief              Calculate the cost of the predicate part
+ * @note(@ banliu.zyd) This function is used to estimate the cost of predicate calculation,
+ *                     to keep the code simple and non-intrusive, this function directly
+ *                     returns the predicate cost as the return value. For any discovered
+ *                     empty predicate, it is skipped, assuming that there are checks for
+ *                     predicate existence errors elsewhere. The detection logic should not be here.
+ * @param[in] rows     Number of data rows
+ * @param[in] quals    Predicate array
  *
  */
-// 谓词代价 = 行数 * sum(不同谓词类型比较的代价)
+// Predicate cost = number of rows * sum(cost of comparison for different predicate types)
 double ObOptEstCostModel::cost_quals(double rows, const ObIArray<ObRawExpr *> &quals, bool need_scale)
 {
   double factor = 1.0;
@@ -2580,12 +2579,12 @@ int ObOptEstCostModel::calc_pred_cost_per_row(const ObRawExpr *expr,
 }
 
 // TODO sean.yyj: make mysqltest happy by now, refresh case result later
-// 计算谓词代价的时候会取 calc_type 当做比较类型，根据不同的比较类型设置对应的代价，原先的实现有几个问题
-// 1. 只有部分比较运算符有设置 calc_type：IN、NOT_IN、NOT、ROW_CMP、BOOL 这些表达式也能出现在谓词中，但 calc_type 都是 NULL
-// 2. 部分类型的 calc_type 设置得不准，calc_type 是根据 RELATIONAL_CMP_TYPE 矩阵设置的，有些点位是随便填的，
-//    例如 int 和 uint 的 calc_type 是 number
-// 3. 部分结构的表达式设置得不合理，NOT、OR 之类的可以递归地取参数的比较类型
-// 后续计划把 1&2 修掉，3中的NOT可以改，OR这种复杂谓词先不改
+// Calculate predicate cost by taking calc_type as the comparison type, set the corresponding cost according to different comparison types, the original implementation had several issues
+// 1. Only some comparison operators have calc_type set: IN, NOT_IN, NOT, ROW_CMP, BOOL These expressions can also appear in predicates, but calc_type is always NULL
+// 2. Some types of calc_type are set inaccurately, calc_type is set according to the RELATIONAL_CMP_TYPE matrix, some points are filled randomly,
+//    For example int and uint the calc_type is number
+// 3. The expression setup for some structures is unreasonable, NOT, OR, etc., can recursively take the comparison type of the parameters
+// Subsequent plan is to fix 1&2, NOT in 3 can be changed, complex predicates like OR will not be changed for now
 int ObOptEstCostModel::get_qual_cmp_tc(const ObRawExpr *qual, ObObjTypeClass &cmp_tc)
 {
   int ret = OB_SUCCESS;

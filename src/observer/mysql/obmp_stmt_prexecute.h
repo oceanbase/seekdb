@@ -145,11 +145,11 @@ private:
   common::ObString sql_;
   uint64_t sql_len_;
   /*
-   * iteration_count_ 的含义
-   *  1. DML 语句 + iteration_count_ > 1 表示当前是 arraybinding 模式
-   *  2. arraybinding 模式下， 此值代表了 array 的大小
-   *  3. exact_fetch + select 模式下， 此值代表了返回结果集的大小
-   *  4. 其余场景，此值 > 0 表示需要有结果集返回
+   * the meaning of iteration_count_
+   *  1. DML statement + iteration_count_ > 1 indicates that the current mode is arraybinding mode
+   *  2. in arraybinding mode, this value represents the size of the array
+   *  3. in exact_fetch + select mode, this value represents the size of the result set returned
+   *  4. in other scenarios, this value > 0 indicates that a result set needs to be returned
    **/ 
   int32_t iteration_count_;
   uint32_t exec_mode_;

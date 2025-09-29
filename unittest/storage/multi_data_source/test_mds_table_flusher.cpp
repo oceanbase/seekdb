@@ -127,15 +127,15 @@ TEST_F(TestMdsTableFlush, flusher_for_some_order) {
   for (int i = 0; i < FLUSH_FOR_SOME_SIZE; ++i) {
     ASSERT_EQ(some.high_priority_flusher_.high_priority_mds_tables_[i].rec_scn_, mock_scn(i + 1));
   }
-  some.record_mds_table({ObTabletID(999), mock_scn(999)});// 没影响，被扔了
+  some.record_mds_table({ObTabletID(999), mock_scn(999)});// No effect, it is discarded
   for (int i = 0; i < FLUSH_FOR_SOME_SIZE; ++i) {
     ASSERT_EQ(some.high_priority_flusher_.high_priority_mds_tables_[i].rec_scn_, mock_scn(i + 1));
   }
-  some.record_mds_table({ObTabletID(0), mock_scn(0)});// 变成第一个，其余的往后挤
+  some.record_mds_table({ObTabletID(0), mock_scn(0)});// become the first, the rest move back
   for (int i = 0; i < FLUSH_FOR_SOME_SIZE; ++i) {
     ASSERT_EQ(some.high_priority_flusher_.high_priority_mds_tables_[i].rec_scn_, mock_scn(i));
   }
-  some.record_mds_table({ObTabletID(999), mock_scn(FLUSH_FOR_SOME_SIZE - 2)});// 最后一个有两份
+  some.record_mds_table({ObTabletID(999), mock_scn(FLUSH_FOR_SOME_SIZE - 2)});// The last one has two copies
   for (int i = 0; i < FLUSH_FOR_SOME_SIZE - 1; ++i) {
     ASSERT_EQ(some.high_priority_flusher_.high_priority_mds_tables_[i].rec_scn_, mock_scn(i));
   }
@@ -152,7 +152,7 @@ TEST_F(TestMdsTableFlush, flusher_for_all_order_with_enough_memory) {
   ObMdsTableMgr mgr;
   vector<MdsTableHandle> v;
   ASSERT_EQ(mgr.init(&ls), OB_SUCCESS);
-  // 加入mgr的顺序是乱序的
+  // The order of adding mgr is random
   for (int i = 0; i < v_key.size(); ++i) {
     MdsTableHandle mds_table;
     ASSERT_EQ(OB_SUCCESS, mds_table.init<UnitTestMdsTable>(MdsAllocator::get_instance(),
@@ -187,7 +187,7 @@ TEST_F(TestMdsTableFlush, flusher_for_all_order_with_limitted_memory_reserve_fai
   ObMdsTableMgr mgr;
   vector<MdsTableHandle> v;
   ASSERT_EQ(mgr.init(&ls), OB_SUCCESS);
-  // 加入mgr的顺序是乱序的
+  // The order of adding mgr is random
   for (int i = 0; i < v_key.size(); ++i) {
     MdsTableHandle mds_table;
     ASSERT_EQ(OB_SUCCESS, mds_table.init<UnitTestMdsTable>(MdsAllocator::get_instance(),
@@ -201,7 +201,7 @@ TEST_F(TestMdsTableFlush, flusher_for_all_order_with_limitted_memory_reserve_fai
     v.push_back(mds_table);
   }
   ASSERT_EQ(OB_SUCCESS, mgr.flush(share::SCN::max_scn(), -1));
-  ASSERT_EQ(TEST_ALL_SIZE + FLUSH_FOR_ALL_SIZE, V_ActualDoFlushKey.size());// 只保证最前面的TEST_ALL_SIZE的tablet是有序的，并且rec scn最小
+  ASSERT_EQ(TEST_ALL_SIZE + FLUSH_FOR_ALL_SIZE, V_ActualDoFlushKey.size());// Only ensure that the first TEST_ALL_SIZE tablets are ordered, and the rec scn is minimum
   for (int i = 0; i < FLUSH_FOR_ALL_SIZE; ++i) {
     if (V_ActualDoFlushKey[i].rec_scn_ != mock_scn(100 + i)) {
       MDS_LOG(INFO, "DEBUG", K(V_ActualDoFlushKey[i].rec_scn_), K(i));
@@ -218,10 +218,9 @@ TEST_F(TestMdsTableFlush, flusher_for_one) {
   }
   ASSERT_EQ(one.min_key().rec_scn_, mock_scn(1));
 }
-
-// // release版本的逻辑重写不生效
+// // logic rewrite for release version does not take effect
 // TEST_F(TestMdsTableFlush, flusher_for_all_order_with_limitted_memory_reserve_success_but_push_back_fail) {
-//   NEED_ALLOC_FAIL_AFTER_RESERVE = true;// 只支持reserve的时候分配一次内存
+//   NEED_ALLOC_FAIL_AFTER_RESERVE = true;// Only supports memory allocation once during reserve
 //   const int64_t BIG_TEST_SIZE = 5 * TEST_ALL_SIZE;
 
 //   std::vector<FlushKey> v_key;
@@ -233,7 +232,7 @@ TEST_F(TestMdsTableFlush, flusher_for_one) {
 //   ObMdsTableMgr mgr;
 //   vector<MdsTableHandle> v;
 //   ASSERT_EQ(mgr.init(&ls), OB_SUCCESS);
-//   // 首先加入第一部分
+//   // First add the first part
 //   for (int i = 0; i < TEST_ALL_SIZE; ++i) {
 //     MdsTableHandle mds_table;
 //     ASSERT_EQ(OB_SUCCESS, mds_table.init<UnitTestMdsTable>(MdsAllocator::get_instance(),
@@ -249,8 +248,7 @@ TEST_F(TestMdsTableFlush, flusher_for_one) {
 
 //   ASSERT_EQ(OB_SUCCESS, PROMISE1.init());
 //   ASSERT_EQ(OB_SUCCESS, PROMISE2.init());
-
-//   // 开启一个新的线程做flush，模拟并发增加mds table的情况（以至于reverse的内存不够用了，过程中发生额外的内存分配，但失败的情况）
+//   // Start a new thread to do flush, simulate concurrent increase of mds table (so that the memory for reverse is not enough, extra memory allocation occurs during the process, but fails)
 //   std::thread t1([&](){
 //     ASSERT_EQ(OB_SUCCESS, mgr.flush(share::SCN::max_scn()));
 //   });
@@ -262,7 +260,7 @@ TEST_F(TestMdsTableFlush, flusher_for_one) {
 //   }
 
 //   {
-//     for (int i = TEST_ALL_SIZE; i < v_key.size(); ++i) {// 继续再注册99 * TEST_ALL_SIZE的新mds table
+//     for (int i = TEST_ALL_SIZE; i < v_key.size(); ++i) {// continue to register 99 * TEST_ALL_SIZE new mds table
 //       MdsTableHandle mds_table;
 //       ASSERT_EQ(OB_SUCCESS, mds_table.init<UnitTestMdsTable>(MdsAllocator::get_instance(),
 //                                                              v_key[i].tablet_id_,
@@ -278,9 +276,8 @@ TEST_F(TestMdsTableFlush, flusher_for_one) {
 //   }
 
 //   t1.join();
-
-//   ASSERT_EQ(BIG_TEST_SIZE + FLUSH_FOR_ALL_SIZE, V_ActualDoFlushKey.size());// 所有的mds table都经历了转储
-//   for (int i = 0; i < FLUSH_FOR_ALL_SIZE; ++i) {// 但只保证栈上记录的tablet是有序的，并且rec scn最小
+//   ASSERT_EQ(BIG_TEST_SIZE + FLUSH_FOR_ALL_SIZE, V_ActualDoFlushKey.size());// All mds tables have undergone a flush
+//   for (int i = 0; i < FLUSH_FOR_ALL_SIZE; ++i) {// but only guarantee that the tablet records on the stack are ordered, and rec scn is minimal}
 //     ASSERT_EQ(V_ActualDoFlushKey[i].rec_scn_, mock_scn(100 + i));
 //     ASSERT_EQ(V_ActualDoFlushKey[i].tablet_id_, ObTabletID(100 + i));
 //   }

@@ -55,8 +55,7 @@ const ObNumber &ObNumber::get_pi()
 }
 
 const ObString NUMBER_ERRMSG("ERROR NUM");//9 byte
-
-// ObNumber 序列化反序列化实现，完全参考了 ObObj 中的代码
+// ObNumber serialization deserialization implementation, completely referenced the code in ObObj
 DEFINE_SERIALIZE(ObNumber)
 {
   return serialization::encode_number_type(buf, buf_len, pos, d_, digits_);
@@ -171,10 +170,13 @@ int ObNumber::compare(const number::ObNumber::Desc &this_desc,
 }
 
 /*
-  对于整型数值，可以做如下的优化：
-  计算每一个进制位上的对应的数值（整型最多有两位），并根据整型参数填充Number的DESC（符号位、exp等）。
-  比如对于1000000001，进制位10^9，不断除以10^9，可以计算出两个进制位上的数值为(1，1)，即digit数组为
-  [1, 1]，并且可以知道指数值为1，符号位的值为1，digit的有效长度为2
+  For integer values, the following optimizations can be made:
+  Calculate the corresponding value for each digit position (an integer has at most two digits),
+  and fill the DESC of Number based on the integer parameter (sign bit, exp, etc.).
+  For example, for 1000000001, with a digit position of 10^9, continuously dividing by 10^9
+  can calculate the values of the two digit positions as (1, 1), i.e., the digit array is
+  [1, 1], and it can be known that the exponent value is 1, the sign bit value is 1,
+  and the effective length of digit is 2
 */
 template <class IntegerT>
 int ObNumber::from_integer_(const IntegerT value, IAllocator &allocator) {
@@ -188,7 +190,7 @@ int ObNumber::from_integer_(const IntegerT value, IAllocator &allocator) {
     Desc desc;
     uint64_t abs_val = 0;
 
-    if (std::is_signed<IntegerT>::value) { // 如果是符号整数，调用abs
+    if (std::is_signed<IntegerT>::value) { // If it is a signed integer, call abs
   #ifdef __clang__
   #pragma clang diagnostic push
   #pragma clang diagnostic ignored "-Wabsolute-value"
@@ -198,7 +200,7 @@ int ObNumber::from_integer_(const IntegerT value, IAllocator &allocator) {
   #pragma clang diagnostic pop
   #endif
 
-    } else { // 否则直接赋值
+    } else { // otherwise directly assign
       abs_val = value;
     }
     uint64_t exp = 0;
@@ -760,7 +762,7 @@ int ObNumber::from_v3_(const char *str, const int64_t length, IAllocator &alloca
 {
   int ret = OB_SUCCESS;
   UNUSED(fmt);
-  uint32_t digits[OB_CALC_BUFFER_SIZE] ={}; // 只保存最多 72 位有效数字，占位 9 个uint32，多余的数字四舍五入
+  uint32_t digits[OB_CALC_BUFFER_SIZE] ={}; // Only save up to 72 significant digits, occupying 9 uint32s, with extra digits rounded
   bool negative = false;
   int64_t start_idx = -1;
   int64_t floating_point = -1;
@@ -1211,8 +1213,7 @@ bool ObNumber::is_valid_int64(int64_t &int64) const
 
   return bret;
 }
-
-// 小数点儿后全部截断
+// Truncate everything after the decimal point
 int ObNumber::extract_valid_int64_with_trunc(int64_t &value) const
 {
   int ret = common::OB_SUCCESS;
@@ -1310,13 +1311,13 @@ int ObNumber::check_range(bool *is_valid_uint64, bool *is_valid_int64,
                            uint64_t &int_parts, uint64_t &decimal_parts) const
 {
   /*
-   * 为了注释能短点，这回就用中文写了。不是我英文水平不行啊。^_^
-   * 对于一个负数，它绝对不可能是一个合法的uint64
-   * -value < -x 等价于 value > x 因此，取绝对值来判断
-   * 对于一个正数，uint64的范围比int64范围大。
-   * 这几种情况，上限都不同，放到了THRESHOLD数组里。
-   * 正数、负数；uint64、int64；四种组合情况
-   * 其中负数与uint64这种情况直接枪毙，因此THRESHOLD只有三个upperbound。
+   * In order to make the comment shorter, I wrote it in Chinese this time. It's not that my English is bad. ^_^
+   * For a negative number, it can never be a valid uint64.
+   * -value < -x is equivalent to value > x, therefore, take the absolute value to judge.
+   * For a positive number, the range of uint64 is larger than that of int64.
+   * These cases have different upper limits, which are placed in the THRESHOLD array.
+   * Positive, negative; uint64, int64; four combinations of situations.
+   * Among them, the case of negative with uint64 is directly eliminated, so THRESHOLD only has three upper bounds.
    *
    *
    */
@@ -1769,12 +1770,14 @@ int ObNumber::round_scale_v3_(const int64_t scale, const bool using_floating_sca
       const int64_t decimal_prefix_zero_count = ((0 == integer_length) ? (0 - expr_value - 1 + DIGIT_LEN - digit_0_len) : 0);
       int64_t valid_precision = 0;
       if (for_oracle_to_char) {
-        // Todo: 当number小数部分包含前缀0时(e.g:0.00012345)，oracle to_char 转换有效数字需包含前缀0，
+        // Todo: When the decimal part of number contains a prefix 0 (e.g:0.00012345), oracle to_char conversion of significant digits needs to include the prefix 0,
         // e.g:
         //   select cast(0.00012345678901234567890123456789012345678901111 as varchar(100)) from dual;
         //   Oracle result: .000123456789012345678901234567890123457
-        // oracle在to_char计算时，长度大于40的number会进行科学计数法转换，前缀0会去除。OB暂时没有兼容Oracle行为(科学计数法与精度联动），
-        // 因此在number to char转换出现前缀0时（decimal_prefix_zero_count > 0），保持与修改前一致
+        // oracle in to_char calculation, numbers with length greater than 40 will be converted
+        // to scientific notation, prefix 0 will be removed. OB temporarily does not support
+        // Oracle behavior (scientific notation and precision linkage)
+        // Therefore, when prefix 0 appears in number to char conversion (decimal_prefix_zero_count > 0), keep consistent with before modification
         valid_precision = OB_MAX_NUMBER_PRECISION_INNER - is_negative()
                            - (has_decimal() ? (decimal_prefix_zero_count > 0 ? 2 : 1) : 0);
         if (decimal_prefix_zero_count >=2 && decimal_prefix_zero_count <= 4) {
@@ -2813,7 +2816,7 @@ int ObNumber::format_v1(char *buf, const int64_t buf_len, int64_t &pos, int16_t 
       if (nmb->is_negative()) {
         ret = databuff_printf(buf, buf_len, pos, "-");
       }
-      // oracle模式下小数的整数部分不补0，0.2345用.2345表示，-0.2345用-.2345表示
+      // In oracle mode, the integer part of a decimal is not padded with 0, 0.2345 is represented as .2345, -0.2345 is represented as -.2345
       if (OB_SUCCESS == ret && nmb->is_decimal() && !is_oracle_mode()) {
         ret = databuff_printf(buf, buf_len, pos, "0");
       }
@@ -3016,7 +3019,7 @@ int ObNumber::format_v2(
       if (is_negative()) {
         buf[pos++] = '-';
       }
-      // oracle模式下小数的整数部分不补0，0.2345用.2345表示，-0.2345用-.2345表示
+      // In oracle mode, the integer part of a decimal is not padded with 0, 0.2345 is represented as .2345, -0.2345 is represented as -.2345
       if (nmb->is_decimal() && !is_oracle_mode()) {
         buf[pos++] = '0';
       }
@@ -3362,9 +3365,8 @@ int ObNumber::get_npi_(int64_t n, ObNumber& out, ObIAllocator &alloc, const bool
   }
   return ret;
 }
-
-// 根据前一项的阶乘计算本项阶乘，每次只用乘两个数即可,不需要从头计算
-// 见sin/cos的泰勒展开式
+// Calculate the factorial of this item based on the factorial of the previous item, only need to multiply two numbers each time, no need to start from scratch
+// See the Taylor series expansion of sin/cos
 int ObNumber::simple_factorial_for_sincos_(int64_t start, ObIAllocator &allocator, ObNumber &result) const
 {
   int ret = OB_SUCCESS;
@@ -3439,7 +3441,7 @@ int ObNumber::taylor_series_sin_(const ObNumber &transformed_x, ObNumber &out, O
         } else if (OB_FAIL(iter_result.div_v3(divisor, iter_result, local_alloc_for_loop_1, ObNumber::OB_MAX_DECIMAL_DIGIT, false))) {
           LOG_WARN("iter_result.div_v3(divisor) failed", K(ret), K(iter_result));
         } else {
-          if (idx & 1) { // 奇数次
+          if (idx & 1) { // odd time
             if (OB_FAIL(tmp_out.sub_v3(iter_result, tmp_out, local_alloc_for_loop_1, true, false))) {
               LOG_WARN("tmp_out.sub_v3(iter_result) failed", K(ret), K(tmp_out));
             }
@@ -3465,10 +3467,9 @@ int ObNumber::taylor_series_sin_(const ObNumber &transformed_x, ObNumber &out, O
   }
   return ret;
 }
-
-// 1. 将输入转换到[0, 2π]
-// 2. 将输入转换到[0, π]
-// 3. 通过泰勒展开计算sin结果
+// 1. Convert input to [0, 2π]
+// 2. Convert input to [0, π]
+// 3. Calculate sin result through Taylor expansion
 int ObNumber::sin(ObNumber &out, ObIAllocator &allocator, const bool do_rounding) const
 {
   int ret = OB_SUCCESS;
@@ -3605,7 +3606,7 @@ int ObNumber::taylor_series_cos_(const ObNumber &transformed_x, ObNumber &out, O
         } else if (OB_FAIL(iter_result.div_v3(divisor, iter_result, local_alloc_for_loop_1, ObNumber::OB_MAX_DECIMAL_DIGIT, false))) {
           LOG_WARN("iter_result.div_v3(divisor) failed", K(ret), K(iter_result), K(divisor));
         } else {
-          if (idx & 1) { // 奇数次循环
+          if (idx & 1) { // odd number loop
             if (OB_FAIL(tmp_out.sub_v3(iter_result, tmp_out, local_alloc_for_loop_1, true, false))) {
               LOG_WARN("tmp_out.sub_v3(iter_result) failed", K(ret), K(tmp_out), K(iter_result));
             }
@@ -3631,12 +3632,11 @@ int ObNumber::taylor_series_cos_(const ObNumber &transformed_x, ObNumber &out, O
   }
   return ret;
 }
-
-// 1. 将输入转换到[-π/2, 3π/2]
-// 2. 将输入转换到[-π/2, π/2]
-// 3. 通过泰勒展开计算cos结果
-// 也可以通过cos(x) = sin(x+π/2)，或者cos(x) = sqrt(1 - sin(x)^2)来计算cos，
-// 这样速度更快，但是精度不如用泰勒展开
+// 1. Convert input to [-π/2, 3π/2]
+// 2. Convert input to [-π/2, π/2]
+// 3. Calculate cos result through Taylor expansion
+// You can also calculate cos using cos(x) = sin(x+π/2), or cos(x) = sqrt(1 - sin(x)^2),
+// This way is faster, but the accuracy is not as good as using Taylor expansion
 int ObNumber::cos(ObNumber &out, ObIAllocator &allocator, const bool do_rounding) const
 {
   int ret = OB_SUCCESS;
@@ -3663,7 +3663,7 @@ int ObNumber::cos(ObNumber &out, ObIAllocator &allocator, const bool do_rounding
     ObNumber transformed_x;
 
     if (x.is_negative()) {
-      // cos(x)是偶函数，不需要设置neg
+      // cos(x) is an even function, no need to set neg
       if (OB_FAIL(x.negate(x, local_alloc))) {
         LOG_WARN("x.negate failed", K(ret), K(x));
       }
@@ -3738,8 +3738,7 @@ int ObNumber::cos(ObNumber &out, ObIAllocator &allocator, const bool do_rounding
   }
   return ret;
 }
-
-// 直接使用sin/cos来计算tan
+// Directly use sin/cos to calculate tan
 int ObNumber::tan(ObNumber &out, ObIAllocator &allocator, const bool do_rounding) const
 {
   int ret = OB_SUCCESS;
@@ -5002,7 +5001,7 @@ int ObNumber::mul_v3(const ObNumber &other, ObNumber &value, ObIAllocator &alloc
     int64_t multiplicand_len = multiplicand_desc.len_;
     int64_t multiplier_len = multiplier_desc.len_;
 
-    /* 保证 for 循环先循环长度较小的 */
+    /* ensure the for loop iterates over the shorter length first */
     if (d_.len_ > other.d_.len_) {
       multiplicand_digits = other.digits_;
       multiplier_digits = digits_;

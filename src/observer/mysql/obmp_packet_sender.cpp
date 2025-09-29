@@ -433,13 +433,13 @@ int ObMPPacketSender::send_error_packet(int err,
     }
 
     if (ObServerConfig::get_instance().enable_rich_error_msg) {
-      // 测试过程中，如果通过proxy访问oceanbase集群，
-      // 往往不知道sql发给了哪个observer，
-      // 需要先查询proxy日志，仔细对照sql文本和错误码才能确认，十分低效。
-      // 增加本功能后，可以通过
-      //  1. ip:port直接定位到observer
-      //  2. 然后通过时间定为到日志文件
-      //  3. 最后通过trace id直接定位到日志
+      // During the test process, if accessing the OceanBase cluster through a proxy,
+      // Often it is unknown which observer the sql was sent to,
+      // Need to query the proxy logs first, carefully compare the SQL text and error codes to confirm, which is very inefficient.
+      // After adding this feature, it can be achieved through
+      //  1. ip:port directly locates to observer
+      //  2. Then time-stamp to the log file
+      //  3. Finally locate the log directly through the trace id
 
       int32_t msg_buf_size = 0;
       const ObAddr addr = ObCurTraceId::get_addr();
@@ -533,9 +533,8 @@ int ObMPPacketSender::send_error_packet(int err,
       }
     }
   }
-
-  // TODO: 应该把下面这部分逻辑从send_error_packet中剥离开，因为connect失败的时候，
-  // 也需要调用send_error_packet，而此时没有session
+  // TODO: Should separate the logic below from send_error_packet because connect fails,
+  // Also need to call send_error_packet, but there is no session at this time
   //
   // for obproxy or OCJ, followed by another OK packet
   if (conn_valid_) {

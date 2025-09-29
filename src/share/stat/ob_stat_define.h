@@ -113,9 +113,9 @@ enum StatTypeLocked
 
 // enum ObGranularityType
 // {
-//   TABLE_LEVEL,        // 全表
-//   PARTITION_LEVEL,     // 一级分区
-//   SUBPARTITION_LEVEL   // 二级分区
+//   TABLE_LEVEL,        // full table
+//   PARTITION_LEVEL,     //  first-level partition
+//   SUBPARTITION_LEVEL   // secondary partition
 // };
 
 enum ColumnUsageFlag

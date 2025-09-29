@@ -116,10 +116,9 @@ int ObBaseOrderMap::reorder_partition_as_base_order(int64_t pwj_group_id,
   }
   return ret;
 }
-
-// 物理分布策略：对于叶子节点，dfo 分布一般直接按照数据分布来
-// Note：如果 dfo 中有两个及以上的 scan，仅仅考虑第一个。并且，要求其余 scan
-//       的副本分布和第一个 scan 完全一致，否则报错。
+// Physical distribution strategy: For leaf nodes, dfo distribution is generally directly according to data distribution
+// Note: If there are two or more scans in dfo, only consider the first one. And, the remaining scans
+//       The copy distribution is exactly the same as the first scan, otherwise an error is reported.
 int ObPXServerAddrUtil::alloc_by_data_distribution(const ObIArray<ObTableLocation> *table_locations,
                                                    ObExecContext &ctx,
                                                    ObDfo &dfo)
@@ -429,12 +428,12 @@ int ObPXServerAddrUtil::alloc_by_data_distribution_inner(
   int ret = OB_SUCCESS;
   ObSEArray<const ObTableScanSpec *, 2> scan_ops;
   ObSEArray<const ObTableModifySpec *, 1> dml_ops;
-  // INSERT, REPLACE算子
+  // INSERT, REPLACE operator
   const ObTableModifySpec *dml_op = nullptr;
   const ObTableScanSpec *scan_op = nullptr;
   const ObOpSpec *root_op = NULL;
   dfo.get_root(root_op);
-  // PDML的逻辑中将会被去除
+  // The logic of PDML will be removed
   if (OB_ISNULL(root_op)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("NULL ptr or sqc is not empty", K(ret), K(dfo));
@@ -447,7 +446,7 @@ int ObPXServerAddrUtil::alloc_by_data_distribution_inner(
     LOG_WARN("fail find scan ops in dfo", K(dfo), K(ret));
   } else if (OB_FAIL(ObPXServerAddrUtil::find_dml_ops(dml_ops, *root_op))) {
     LOG_WARN("failed find insert op in dfo", K(ret), K(dfo));
-  } else if (1 < dml_ops.count()) { // 目前一个dfo中最多只有一个dml算子
+  } else if (1 < dml_ops.count()) { // Currently, there is at most one DML operator in one DFO
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("the count of insert ops is not right", K(ret), K(dml_ops.count()));
   } else if (0 == scan_ops.count() && 0 == dml_ops.count()) {
@@ -478,7 +477,7 @@ int ObPXServerAddrUtil::alloc_by_data_distribution_inner(
     if (OB_FAIL(ret)) {
       //do nothing
     } else if (dml_op && dml_op->is_table_location_uncertain()) {
-      // 需要获取FULL TABLE LOCATION. FIX ME YISHEN.
+      // Need to get FULL TABLE LOCATION. FIX ME YISHEN.
       CK(OB_NOT_NULL(ctx.get_my_session()));
       OZ(ObTableLocation::get_full_leader_table_loc(DAS_CTX(ctx).get_location_router(),
                                                     ctx.get_allocator(),
@@ -490,8 +489,8 @@ int ObPXServerAddrUtil::alloc_by_data_distribution_inner(
         dml_full_loc = table_loc;
       }
     } else {
-      // 通过TSC或者DML获得当前的DFO的partition对应的location信息
-      // 后续利用location信息构建对应的SQC meta
+      // Obtain the location information of the partition corresponding to the current DFO through TSC or DML
+      // Subsequently use location information to construct the corresponding SQC meta
       if (OB_ISNULL(table_loc = DAS_CTX(ctx).get_table_loc_by_id(table_location_key, ref_table_id))) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("fail to get table loc", K(ret), K(table_location_key), K(ref_table_id), K(DAS_CTX(ctx).get_table_loc_list()));
@@ -1044,7 +1043,7 @@ int ObPXServerAddrUtil::alloc_by_local_distribution(ObExecContext &exec_ctx,
 }
 
 /**
- *  hash-local的ppwj slave mapping计划又两种，第一种是：
+ *  hash-local's ppwj slave mapping plan has two types, the first one is:
  *                  |
  *               hash join (dfo3)
  *                  |
@@ -1053,10 +1052,10 @@ int ObPXServerAddrUtil::alloc_by_local_distribution(ObExecContext &exec_ctx,
  * |                                |
  * |                                |
  * TSC(dfo1:partition-hash)         TSC(dfo2:hash-local)
- * 在遇到这种类型的调度的树时，我们调度dfo1和dfo3的时候，dfo2还没背调度起来。
- * 在pkey的计划中，dfo2才是reference table，slave mapping的构建中，parent（也就是dfo3）的构建
- * 依赖于reference的端，所以在alloc parent的时候，我们提前将dfo2也alloc出来，然后parent按照
- * dfo2的sqc来进行构建。
+ * When encountering this type of scheduling tree, we schedule dfo1 and dfo3 before dfo2 has been scheduled.
+ * In the pkey plan, dfo2 is the reference table, and in the construction of slave mapping, the parent (which is dfo3) construction
+ * depends on the reference side, so when allocating the parent, we pre-allocate dfo2 as well, and then the parent is built
+ * according to dfo2's sqc.
  *
  */
 int ObPXServerAddrUtil::alloc_by_reference_child_distribution(
@@ -1141,7 +1140,7 @@ int ObPXServerAddrUtil::get_access_partition_order_recursively (
   if (OB_ISNULL(root) || OB_ISNULL(phy_op)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("the root or phy op is null", K(ret), K(root), K(phy_op));
-  } else if (root == phy_op) { // 没有GI的情况下，默认ASC访问
+  } else if (root == phy_op) { // No GI case, default ASC access
     asc_order = true;
     LOG_DEBUG("No GI in this dfo");
   } else if (PHY_GRANULE_ITERATOR == phy_op->get_type()) {
@@ -1169,7 +1168,7 @@ int ObPXServerAddrUtil::set_dfo_accessed_location(ObExecContext &ctx,
   if (OB_FAIL(base_order_map.init(max(1, scan_ops.count())))) {
     LOG_WARN("Failed to init base_order_map");
   }
-  // 处理insert op 对应的partition location信息
+  // process insert op corresponding partition location information
   if (OB_FAIL(ret) || OB_ISNULL(dml_op)) {
     // pass
   } else {
@@ -1187,8 +1186,8 @@ int ObPXServerAddrUtil::set_dfo_accessed_location(ObExecContext &ctx,
           table_loc = dml_loc;
         }
       } else {
-        // 通过TSC或者DML获得当前的DFO的partition对应的location信息
-        // 后续利用location信息构建对应的SQC meta
+        // Obtain the location information of the partition corresponding to the current DFO through TSC or DML
+        // Subsequently use location information to construct the corresponding SQC meta
         if (OB_ISNULL(table_loc = DAS_CTX(ctx).get_table_loc_by_id(table_location_key, ref_table_id))) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("fail to get table loc id", K(ret));
@@ -1208,13 +1207,13 @@ int ObPXServerAddrUtil::set_dfo_accessed_location(ObExecContext &ctx,
     dml_table_location_key = table_location_key;
     dml_ref_table_id = ref_table_id;
   }
-  // 处理tsc对应的partition location信息
+  // Process tsc corresponding partition location information
   for (int64_t i = 0; OB_SUCC(ret) && i < scan_ops.count(); ++i) {
     ObDASTableLoc *table_loc = nullptr;
     const ObTableScanSpec *scan_op = nullptr;
     uint64_t table_location_key = common::OB_INVALID_ID;
     uint64_t ref_table_id = common::OB_INVALID_ID;
-    // 物理表还是虚拟表?
+    // Physical table or virtual table?
     if (OB_ISNULL(scan_op = scan_ops.at(i))) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("scan op can't be null", K(ret));
@@ -1286,15 +1285,14 @@ int ObPXServerAddrUtil::set_sqcs_accessed_location(
     } else if (OB_FAIL(ObPXServerAddrUtil::reorder_all_partitions(table_location_key,
         table_loc->get_ref_table_id(), locations,
         temp_locations, asc_order, ctx, base_order_map, phy_op->get_id(), locations_order))) {
-      // 按照GI要求的访问顺序对当前SQC涉及到的分区进行排序
-      // 如果是partition wise join场景, 需要根据partition_wise_join要求结合GI要求做asc/desc排序
+      // Sort the partitions involved in the current SQC according to the access order required by GI
+      // If it is a partition wise join scenario, need to sort in asc/desc order according to partition_wise_join requirements combined with GI requirements
       LOG_WARN("fail to reorder all partitions", K(ret));
     } else {
       LOG_TRACE("sqc partition order is", K(asc_order), K(locations), K(temp_locations), KPC(table_loc->loc_meta_));
     }
   }
-
-  // 将一个表涉及到的所有partition按照server addr划分到对应的sqc中
+  // Distribute all partitions involved in a table to the corresponding sqc according to server addr
   ARRAY_FOREACH_X(sqcs, sqc_idx, sqc_cnt, OB_SUCC(ret)) {
     ObPxSqcMeta &sqc_meta = sqcs.at(sqc_idx);
     DASTabletLocIArray &sqc_locations = sqc_meta.get_access_table_locations_for_update();
@@ -1485,12 +1483,12 @@ int ObPXServerAddrUtil::reorder_all_partitions(
 }
 
 /**
- * 算法文档：
- * 大致思路：
- * n为总线程数，p为涉及总的partition数，ni为第i个sqc被计算分的线程数，pi为第i个sqc的partition数量。
- * a. 一个adjust函数，递归的调整sqc的线程数。求得ni ＝ n*pi/p的值，保证每个都是大于等于1。
- * b. 计算sqc执行时间，并按照其进行排序。
- * c. 剩下线程从执行时间长到时间短挨个加入到sqc中。
+ * Algorithm documentation:
+ * General idea:
+ * n is the total number of threads, p is the total number of partitions involved, ni is the number of threads allocated to the i-th sqc, pi is the number of partitions for the i-th sqc.
+ * a. An adjust function, recursively adjusts the number of threads for sqc. Calculate ni = n*pi/p to ensure each is greater than or equal to 1.
+ * b. Calculate the execution time of sqc and sort them accordingly.
+ * c. The remaining threads are added to the sqc from longest to shortest execution time.
  */
 int ObPXServerAddrUtil::split_parallel_into_task(const int64_t parallel,
                                                  const common::ObIArray<int64_t> &sqc_part_count,
@@ -1524,28 +1522,28 @@ int ObPXServerAddrUtil::split_parallel_into_task(const int64_t parallel,
     }
   }
   if (OB_SUCC(ret)) {
-    // 为什么需要调整，因为极端情况下可能有的sqc只能拿到不足一个线程；算法必须保证每个sqc至少
-    // 有一个线程。
+    // Why adjustment is needed, because in extreme cases some sqc might only get less than one thread; the algorithm must ensure that each sqc has at least
+    // There is a thread.
     if (OB_FAIL(adjust_sqc_task_count(sqc_task_metas, parallel, total_part_count))) {
       LOG_WARN("Failed to adjust sqc task count", K(ret));
     }
   }
   if (OB_SUCC(ret)) {
-    // 算出每个sqc的执行时间
+    // Calculate the execution time for each sqc
     for (int64_t i = 0; i < sqc_task_metas.count(); ++i) {
       ObPxSqcTaskCountMeta &meta = sqc_task_metas.at(i);
       total_thread_count += meta.thread_count_;
       meta.time_ = static_cast<double>(meta.partition_count_) / static_cast<double>(meta.thread_count_);
     }
-    // 排序，执行时间长的排在前面
+    // Sort, longer execution time tasks are placed first
     auto compare_fun_long_time_first = [](ObPxSqcTaskCountMeta a, ObPxSqcTaskCountMeta b) -> bool { return a.time_ > b.time_; };
     lib::ob_sort(sqc_task_metas.begin(),
               sqc_task_metas.end(),
               compare_fun_long_time_first);
-    /// 把剩下的线程安排出去
+    /// Assign the remaining threads
     thread_remain = parallel - total_thread_count;
     if (thread_remain <= 0) {
-      // 这种情况是正常的，parallel < sqc count的时候就会出现这种情况。
+      // This situation is normal, it will occur when parallel < sqc count.
     } else if (thread_remain > sqc_task_metas.count()) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("Thread remain is invalid", K(ret), K(thread_remain), K(sqc_task_metas.count()));
@@ -1558,7 +1556,7 @@ int ObPXServerAddrUtil::split_parallel_into_task(const int64_t parallel,
       }
     }
   }
-  // 将结果记录下来
+  // Record the result
   if (OB_SUCC(ret)) {
     int64_t idx = 0;
     for (int64_t i = 0; i < sqc_task_metas.count(); ++i) {
@@ -1567,7 +1565,7 @@ int ObPXServerAddrUtil::split_parallel_into_task(const int64_t parallel,
       results.at(idx) = meta.thread_count_;
     }
   }
-  // 检验，指定的并行度大于机器数，理论上分配不超过parallel个线程。
+  // Check, the specified parallelism is greater than the number of machines, theoretically no more than parallel threads are allocated.
   if (OB_SUCC(ret) && parallel > sqc_task_metas.count() && total_thread_count > parallel) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("Failed to allocate expected parallel", K(ret));
@@ -1583,14 +1581,14 @@ int ObPXServerAddrUtil::adjust_sqc_task_count(common::ObIArray<ObPxSqcTaskCountM
   int ret = OB_SUCCESS;
   int64_t thread_used = 0;
   int64_t partition_remain = partition;
-  // 存在partition总数为0 的情况，例如，在gi任务划分中，所有partition都没有宏块的情况。
+  // There exists a case where the total number of partitions is 0, for example, in gi task partitioning, where none of the partitions have macroblocks.
   int64_t real_partition = NON_ZERO_VALUE(partition);
   ARRAY_FOREACH(sqc_tasks, idx) {
     ObPxSqcTaskCountMeta &meta = sqc_tasks.at(idx);
     if (!meta.finish_) {
       meta.thread_count_ = meta.partition_count_ * parallel / real_partition;
       if (0 >= meta.thread_count_) {
-        // 出现小数个线程或者负数个线程，调整改线程为1，标记为finish，后续不再调整它。
+        // Occur a fractional number of threads or a negative number of threads, adjust this thread to 1, mark it as finish, no further adjustments will be made to it.
         thread_used++;
         partition_remain -= meta.partition_count_;
         meta.finish_ = true;
@@ -1877,9 +1875,8 @@ int ObPxTreeSerializer::deserialize_tree(const char *buf,
   }
   return ret;
 }
-
-// 用于全文索引回表和全局索引回表使用，场景为op内含有子计划。
-// 序列化反序列化的时候需要一同序列化/反序列化
+// Used for full-text index back-table lookup and global index back-table lookup, scenario is op contains sub-plans.
+// Serialization/deserialization should be done together during serialization/deserialization
 int ObPxTreeSerializer::deserialize_sub_plan(const char *buf,
                                              int64_t data_len,
                                              int64_t &pos,
@@ -1893,7 +1890,7 @@ int ObPxTreeSerializer::deserialize_sub_plan(const char *buf,
   UNUSED(phy_plan);
   int ret = OB_SUCCESS;
   if (PHY_TABLE_SCAN_WITH_DOMAIN_INDEX == op->get_type()) {
-    // FIXME: TODO: 完善TableScanWithIdexBack op
+    // FIXME: TODO: Improve TableScanWithIndexBack op
     // ObOpSpec *index_scan_tree = nullptr;
     // ObTableScanWithIndexBack *table_scan = static_cast<ObTableScanWithIndexBack*>(op);
     // if (OB_FAIL(deserialize_op(buf, data_len, pos, phy_plan, index_scan_tree))) {
@@ -1920,9 +1917,8 @@ int ObPxTreeSerializer::deserialize_tree(const char *buf,
   ret = deserialize_tree(buf, data_len, pos, phy_plan, root, tsc_ops);
   return ret;
 }
-
-// 用于全文索引回表和全局索引回表使用，场景为op内含有子计划。
-// 序列化反序列化的时候需要一同序列化/反序列化
+// Used for full-text index back-table lookup and global index back-table lookup, scenario is op contains sub-plans.
+// Serialization/deserialization should be done together during serialization/deserialization
 int64_t ObPxTreeSerializer::get_tree_serialize_size(const ObOpSpec &root, bool is_fulltree,
     ObPhyOpSeriCtx *seri_ctx)
 {
@@ -1941,8 +1937,8 @@ int64_t ObPxTreeSerializer::get_tree_serialize_size(const ObOpSpec &root, bool i
     const ObOpSpec *child_op = root.get_child(i);
     if (OB_ISNULL(child_op)) {
       // ignore ret
-      // 这里无法抛出错误，不过在serialize阶段会再次检测是否有null child。
-      // 所以是安全的
+      // Here no error can be thrown, however, there will be another check for null child during the serialize stage.
+      // So it is safe
       LOG_ERROR("null child op", K(i), K(root.get_child_cnt()), K(root.get_type()));
     } else {
       len += get_tree_serialize_size(*child_op, is_fulltree, seri_ctx);
@@ -1950,9 +1946,8 @@ int64_t ObPxTreeSerializer::get_tree_serialize_size(const ObOpSpec &root, bool i
   }
   return len;
 }
-
-// 用于全文索引回表和全局索引回表使用，场景为op内含有子计划。
-// 序列化反序列化的时候需要一同序列化/反序列化
+// Used for full-text index back-table lookup and global index back-table lookup, scenario is op contains sub-plans.
+// Serialization/deserialization should be done together during serialization/deserialization
 int ObPxTreeSerializer::serialize_sub_plan(char *buf,
                                            int64_t buf_len,
                                            int64_t &pos,
@@ -1979,9 +1974,8 @@ int64_t ObPxTreeSerializer::get_sub_plan_serialize_size(const ObOpSpec &root)
   }
   return len;
 }
-
-// 这里说明下，任务每个ObOpSpen序列化都是一样，所以这里没有采用递归处理
-// 而是采用扁平化处理，本质上是ok的，如果有特殊逻辑需要这里改下，如设置某些变量等
+// Here we explain that each ObOpSpen serialization of the task is the same, so recursion is not used here
+// but adopts a flattened approach, which is essentially fine, if there is special logic that needs to be changed here, such as setting certain variables etc
 int ObPxTreeSerializer::deserialize_op_input(
   const char *buf,
   int64_t data_len,
@@ -2172,7 +2166,7 @@ int ObPxTreeSerializer::serialize_op_input(
   int64_t input_start_pos = pos;
   int32_t real_input_count = 0;
   pos += serialization::encoded_length_i32(real_input_count);
-  // 这里不序列化input，后面通过copy方式进行，因为反序列化依赖的input没有，这里与老的方式不同
+  // Here we do not serialize input, later it will be done via copy, because the input required for deserialization is not available here, this is different from the old way
   if (OB_FAIL(serialize_op_input_tree(
       buf, buf_len, pos, op_spec, op_kit_store, false /* is_fulltree */, real_input_count))) {
     LOG_WARN("failed to serialize spec tree", K(ret));
@@ -2214,9 +2208,9 @@ int ObPxChannelUtil::unlink_ch_set(dtl::ObDtlChSet &ch_set, ObDtlFlowControl *df
       }
     }
   } else {
-    // 这里将channel从dtl service中移除和释放分开，主要是为了解决rpc processor和px worker会并发拿channel，进行不同处理问题
-    // 如果不移除，rpc processor会继续插入msg，这个时候对channel的清理操作完，还是会有msg来，这样channel就不是一个干净的msg，很多统计无法进行
-    // 所以先移除，后清理再释放，这样就不会有并发导致channel还会收msg问题
+    // Here we separate the removal and release of channel from dtl service, mainly to solve the problem that rpc processor and px worker may concurrently take the channel for different processing
+    // If not removed, rpc processor will continue to insert msg, at this time, after the cleanup operation on the channel is complete, there will still be msg coming in, thus the channel will not be a clean msg, making many statistics impossible to perform
+    // So first remove, then clean up and release, this way there won't be a concurrency issue causing the channel to still receive msg
     ObSEArray<ObDtlChannel*, 16> chans;
     ObDtlChannel *ch = nullptr;
     ObDtlChannel *first_ch = nullptr;
@@ -2238,7 +2232,7 @@ int ObPxChannelUtil::unlink_ch_set(dtl::ObDtlChSet &ch_set, ObDtlFlowControl *df
         LOG_WARN("channel is null", K(ci), K(ret));
       } else if (OB_SUCCESS != (tmp_ret = chans.push_back(ch))) {
         ret = tmp_ret;
-        // 如果push back失败了，只能一个一个channel来处理
+        // If push back failed, we can only handle one channel at a time
         if (OB_SUCCESS != (tmp_ret = DTL.get_dfc_server().unregister_dfc_channel(*dfc, ch))) {
           ret = tmp_ret;
           LOG_ERROR("failed to unregister dfc channel", K(ci), K(ret), K(ret));
@@ -2360,10 +2354,10 @@ int ObPxAffinityByRandom::do_random(bool use_partition_info, uint64_t tenant_id)
       workers_load.at(idx) = 0;
     }
     /**
-     * 为什么需要保持相同的worker里面设计的partition的序呢？
-     * 因为在global order的情况下，在qc端已经对parition进行
-     * 了排序，如果partition在单个worker里面的序乱了，则不符合
-     * global order的预期，也就是单个worker里面的数据无序了。
+     * Why is it necessary to maintain the same order of partitions designed within the same worker?
+     * Because in the case of global order, the partitions have already been sorted at the qc end.
+     * If the order of partitions within a single worker is scrambled, it does not meet the expectation of global order,
+     * meaning that the data within a single worker becomes unordered.
      */
     bool asc_order = true;
     if (tablet_hash_values_.count() > 1
@@ -2392,7 +2386,7 @@ int ObPxAffinityByRandom::do_random(bool use_partition_info, uint64_t tenant_id)
     }
 
     if (partition_random_affinitize_) {
-    // 先打乱所有的序
+    // First shuffle all the sequences
     auto compare_fun = [](TabletHashValue a, TabletHashValue b) -> bool { return a.hash_value_ > b.hash_value_; };
     lib::ob_sort(tablet_hash_values_.begin(),
               tablet_hash_values_.end(),
@@ -2401,8 +2395,7 @@ int ObPxAffinityByRandom::do_random(bool use_partition_info, uint64_t tenant_id)
     } else {
       // donoting
     }
-
-    // 如果没有partition的统计信息则将它们round放置
+    // If there is no partition statistics information then place them round robin
     if (!use_partition_info) {
       int64_t worker_id = 0;
       for (int64_t idx = 0; idx < tablet_hash_values_.count(); ++idx) {
@@ -2422,12 +2415,12 @@ int ObPxAffinityByRandom::do_random(bool use_partition_info, uint64_t tenant_id)
           }
         }
         tablet_hash_values_.at(idx).worker_id_ = min_load_index;
-        // +1的处理是为了预防所有分区统计数据都是0的情况
+        // +1 handling is to prevent all partition statistics being 0
         workers_load.at(min_load_index) += tablet_hash_values_.at(idx).partition_info_.physical_row_count_ + 1;
       }
       LOG_DEBUG("Workers load", K(workers_load));
     }
-    // 保持序
+    // Keep order
     if (asc_order) {
       auto compare_fun_order_by_part_asc = [](TabletHashValue a, TabletHashValue b) -> bool { return a.tablet_idx_ < b.tablet_idx_; };
       lib::ob_sort(tablet_hash_values_.begin(),
@@ -2600,8 +2593,8 @@ int ObPxEstimateSizeUtil::get_px_size(
   } else {
     if (factor.broadcast_exchange_) {
     } else {
-      // 这里目前无法根据实际线程数来分配，因为worker启动后就开始执行，QC还没有发送总共的worker数
-      // 这里假设都可以拿到
+      // Here it is currently not possible to allocate based on the actual number of threads, because the worker starts executing as soon as it is launched, and QC has not yet sent the total number of workers
+      // Here it is assumed that all can be obtained
       actual_worker = ObPxSqcUtil::get_actual_worker_count(exec_ctx);
       sqc_est_worker_ratio = ObPxSqcUtil::get_sqc_est_worker_ratio(exec_ctx);
       ret_size = total_size * sqc_est_worker_ratio / actual_worker;
@@ -2628,7 +2621,7 @@ int ObSlaveMapUtil::build_mn_channel(
   const uint64_t tenant_id)
 {
   int ret = OB_SUCCESS;
-  // 设置 [M, N, start_ch_id_, ch_count_, sqc_addrs_, prefix_sqc_task_counts_]
+  // Set [M, N, start_ch_id_, ch_count_, sqc_addrs_, prefix_sqc_task_counts_]
   if (OB_ISNULL(dfo_ch_total_infos)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("transmit or receive mn channel info is null", KP(dfo_ch_total_infos));
@@ -2661,7 +2654,7 @@ int ObSlaveMapUtil::build_mn_channel_per_sqcs(
   uint64_t tenant_id)
 {
   int ret = OB_SUCCESS;
-  // 设置 [M, N, start_ch_id_, ch_count_, sqc_addrs_, prefix_sqc_task_counts_]
+  // Set [M, N, start_ch_id_, ch_count_, sqc_addrs_, prefix_sqc_task_counts_]
   if (OB_ISNULL(dfo_ch_total_infos)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("transmit or receive mn channel info is null", KP(dfo_ch_total_infos));
@@ -2715,21 +2708,20 @@ int ObSlaveMapUtil::build_mn_channel_per_sqcs(
   LOG_DEBUG("build mn channel per sqcs", K(parent), K(child), KPC(dfo_ch_total_infos));
   return ret;
 }
-
-// 对应的Plan是
+// The corresponding Plan is
 // GI(Partition)
 //    Hash Join           Hash Join
 //      hash   ->>          Exchange(hash local)
 //      hash                Exchange(hash local)
-// Hash local指仅仅在server内部做hash hash，不会跨server进行shuffle
+// Hash local means hashing is done only within the server, without shuffling across servers
 int ObSlaveMapUtil::build_pwj_slave_map_mn_group(ObDfo &parent, ObDfo &child, uint64_t tenant_id)
 {
   int ret = OB_SUCCESS;
   ObPxChTotalInfos *dfo_ch_total_infos = &child.get_dfo_ch_total_infos();
   int64_t child_dfo_idx = -1;
   /**
-   * 根据slave mapping的设计，现在我们是按照一台机器内所有的线程为一个组。
-   * 这里我们会根据ch set的具体执行server来build组。
+   * According to the slave mapping design, we now group all threads within one machine as a group.
+   * Here we will build the group based on the specific server executing the ch set.
    */
   if (parent.get_sqcs_count() != child.get_sqcs_count()) {
     ret = OB_ERR_UNEXPECTED;
@@ -2791,11 +2783,11 @@ int ObSlaveMapUtil::build_affinitized_partition_map_by_sqcs(
     LOG_WARN("prefix task counts is not match sqcs count", K(sqcs.count()), K(ret));
   }
   for (int64_t i = 0; i < sqcs.count() && OB_SUCC(ret); i++) {
-    // 目标 sqc 上有 locations.count() 个分区
-    // 目标 sqc 上有 sqc_task_count 个线程来处理这些分区
-    // 可以采用 Round-Robin 混编这些分区到线程上
-    // 不过，由于使用map端做了一个假设同一个 part 的处理线程，一定是相邻的
-    // 这边比较容易做 hash 运算。
+    // Target sqc has locations.count() partitions
+    // Target sqc has sqc_task_count threads to process these partitions
+    // Can adopt Round-Robin to distribute these partitions across threads
+    // However, since it is assumed that the processing threads for the same part on the map side are always adjacent
+    // This side is relatively easy to do hash operation.
     //
     // [p0][p1][p2][p3][p4]
     // [t0][t1][t0][t1][t0]
@@ -2806,7 +2798,7 @@ int ObSlaveMapUtil::build_affinitized_partition_map_by_sqcs(
     // [p0][p1][p2][p3][p4]
     // [t0][t0][t1][t1][t2]
     //
-    // task_per_part: 每个分区有多少个线程服务
+    // task_per_part: number of threads serving each partition
     // double task_per_part = (double)sqc_task_count / locations.count();
     // for (int64_t idx = 0; idx < locations.count(); ++idx) {
     //  for (int j = 0; j < task_per_part; j++) {
@@ -2836,17 +2828,16 @@ int ObSlaveMapUtil::build_affinitized_partition_map_by_sqcs(
       LOG_WARN("the size of location is zero in one sqc", K(ret), K(sqc_task_count), K(sqc));
       break;
     }
-
-    // task_per_part: 每个分区有多少个线程服务，
-    // rest_task: 这些task每个再多负责一个分区，别浪费 cpu
-    // 例如：
-    // 13 个线程，3个分区， task_per_part = 4， rest_task = 1 去做第一个分区
-    // 3 个线程，5个分区，task_per_part = 0， rest_task = 3 去做1,2,3三个分区
+    // task_per_part: how many threads serve each partition,
+    // rest_task: these task each take on one more partition, don't waste cpu
+    // For example:
+    // 13 threads, 3 partitions, task_per_part = 4, rest_task = 1 to do the first partition
+    // 3 threads, 5 partitions, task_per_part = 0, rest_task = 3 to do partitions 1, 2, 3
     int64_t task_per_part = sqc_task_count / locations.count();
     int64_t rest_task = sqc_task_count % locations.count();
     if (task_per_part > 0) {
-      // 场景1： 线程数 > 分区数
-      // 要点：每个分区分配的线程数要连续
+      // Scenario 1: Number of threads > Number of partitions
+      // Key point: the number of threads allocated to each partition should be consecutive
       int64_t t = 0;
       for (int64_t p = 0; OB_SUCC(ret) && p < locations.count(); ++p) {
         int64_t tablet_id = locations.at(p)->tablet_id_.id();
@@ -2859,12 +2850,12 @@ int ObSlaveMapUtil::build_affinitized_partition_map_by_sqcs(
         }
       }
     } else {
-      // 场景2：线程数 < 分区数
-      // 要点：保证每个分区至少有一个线程处理
+      // Scenario 2: number of threads < number of partitions
+      // Key point: ensure each partition has at least one thread processing
       for (int64_t p = 0; OB_SUCC(ret) && p < locations.count(); ++p) {
         int64_t t = p % rest_task;
         int64_t tablet_id = locations.at(p)->tablet_id_.id();
-        // 具体含义，参考 ObPxPartChMapItem:
+        // Specific meaning, reference ObPxPartChMapItem:
         // first：tablet_id, second: prefix_task_count, third: sqc_task_idx
         OZ(map.push_back(ObPxPartChMapItem(tablet_id, prefix_task_count, t)));
         LOG_DEBUG("t<=p: push partition map", K(tablet_id), "sqc", i, "g_t", prefix_task_count + t, K(t));
@@ -2938,12 +2929,11 @@ int ObSlaveMapUtil::build_ppwj_slave_mn_map(ObDfo &parent, ObDfo &child, uint64_
   }
   return ret;
 }
-
-// 本函数用于 pdml 场景，支持：
-//  1. 将 pkey 映射到一个或多个线程上
-//  2. 将 多个 pkey 映射到一个线程上
-// 并且保证：pkey 最小化分布（在充分运用算力的前提下，让尽可能少的线程并发处理同一个分区）
-// pkey-hash, pkey-range 等都可以用这个 map
+// This function is used for pdml scenario, supports:
+//  1. Map pkey to one or more threads
+//  2. Map multiple pkey to one thread
+// And ensure: pkey minimized distribution (under full utilization of computing power, let as few threads as possible handle the same partition concurrently)
+// pkey-hash, pkey-range etc can all use this map
 int ObSlaveMapUtil::build_pkey_affinitized_ch_mn_map(ObDfo &parent,
                                                      ObDfo &child,
                                                      uint64_t tenant_id)
@@ -2961,8 +2951,8 @@ int ObSlaveMapUtil::build_pkey_affinitized_ch_mn_map(ObDfo &parent,
       //    PDML
       //      EX (pkey hash)
       //  .....
-      // 为child dfo建立其发送数据的channel map，在pkey random模型下，parent dfo的每一个SQC中的worker都可以
-      // 处理其对应SQC中所包含的所有partition，所以直接采用`build_ch_map_by_sqcs`
+      // Establish the channel map for child dfo to send data, in the pkey random model, each worker in every SQC of the parent dfo can
+      // process all partitions contained in its corresponding SQC, so directly use `build_ch_map_by_sqcs`
       ObPxPartChMapArray &map = child.get_part_ch_map();
       ObIArray<ObPxSqcMeta> &sqcs = parent.get_sqcs();
       ObPxChTotalInfos *dfo_ch_total_infos = &child.get_dfo_ch_total_infos();
@@ -3011,8 +3001,8 @@ int ObSlaveMapUtil::build_pkey_random_ch_mn_map(ObDfo &parent, ObDfo &child, uin
       //    PDML
       //      EX (pkey random)
       //  .....
-      // 为child dfo建立其发送数据的channel map，在pkey random模型下，parent dfo的每一个SQC中的worker都可以
-      // 处理其对应SQC中所包含的所有partition，所以直接采用`build_ch_map_by_sqcs`
+      // Establish the channel map for child dfo to send data, in the pkey random model, each worker in every SQC of the parent dfo can
+      // process all partitions contained in its corresponding SQC, so directly use `build_ch_map_by_sqcs`
       ObPxPartChMapArray &map = child.get_part_ch_map();
       ObIArray<ObPxSqcMeta> &sqcs = parent.get_sqcs();
       ObPxChTotalInfos *dfo_ch_total_infos = &child.get_dfo_ch_total_infos();
@@ -3046,15 +3036,14 @@ int ObSlaveMapUtil::build_pkey_random_ch_mn_map(ObDfo &parent, ObDfo &child, uin
 int ObSlaveMapUtil::build_ppwj_ch_mn_map(ObExecContext &ctx, ObDfo &parent, ObDfo &child, uint64_t tenant_id)
 {
   int ret = OB_SUCCESS;
-  // dfo 中可以取到所有 dfo 相关的 partition
-  // 从中可以计算出所有相关的 partition id
-  // 根据 partition id 用确定的 hash 算法计算 id 与 channel 的映射关系
-
-  // 1. 遍历 dfo 中所有 sqc，里面包含了 partition id
-  // 2. 将 partition id 做 hash，算出 task_id
-  // 3. 遍历 tasks，找到 i, 满足:
+  // dfo can get all dfo related partitions
+  // From which all related partition ids can be calculated
+  // According to partition id use a determined hash algorithm to calculate the mapping relationship between id and channel
+  // 1. Traverse all sqc in dfo, which includes partition id
+  // 2. Hash the partition id to calculate the task_id
+  // 3. Traverse tasks, find i, satisfying:
   //    tasks[i].server = sqc.server && tasks[i].task_id = hash(tablet_id)
-  // 4. 将 (tablet_id, i) 记录到 map 中
+  // 4. Record (tablet_id, i) to the map
   ObIArray<ObPxSqcMeta> &sqcs = parent.get_sqcs();
   ObPxPartChMapArray &map = child.get_part_ch_map();
   int64_t child_dfo_idx = -1;
@@ -3081,7 +3070,7 @@ int ObSlaveMapUtil::build_ppwj_ch_mn_map(ObExecContext &ctx, ObDfo &parent, ObDf
     }
     DASTabletLocArray locations;
     ARRAY_FOREACH_X(sqcs, idx, cnt, OB_SUCC(ret)) {
-      // 所有的affinitize计算都是SQC局部，不是全局的。
+      // All affinitize calculations are SQC local, not global.
       ObPxSqcMeta &sqc = sqcs.at(idx);
       ObPxAffinityByRandom affinitize_rule(sqc.sqc_order_gi_tasks(),
                                            sqc.partition_random_affinitize());
@@ -3283,7 +3272,7 @@ int ObDtlChannelUtil::get_mn_receive_dtl_channel_set(
       LOG_WARN("fail reserve memory for channels", K(ret),
                "channels", ch_total_info.transmit_exec_server_.total_task_cnt_);
     }
-    // 遍历transmit的所有server，逐个构建当前这个receive task和它们的channel
+    // Traverse all servers of transmit, and construct the channel between this receive task and each of them
     for (int64_t i = 0; i < prefix_task_counts.count() && OB_SUCC(ret); ++i) {
       int64_t prefix_task_count = 0;
       if (i + 1 == prefix_task_counts.count()) {
@@ -3293,8 +3282,8 @@ int ObDtlChannelUtil::get_mn_receive_dtl_channel_set(
       }
       ObAddr &dst_addr = ch_total_info.transmit_exec_server_.exec_addrs_.at(i);
       bool is_local = dst_addr == GCONF.self_addr_;
-      // [pre_prefix_task_count, prefix_task_count)表示transmit的第i个sqc中的transmit tasks，
-      // 在所有sqcs的transmit tasks中的编号
+      // [pre_prefix_task_count, prefix_task_count) represents the transmit tasks in the i-th sqc of transmit,
+      // The index number in all sqcs' transmit tasks
       for (int64_t j = pre_prefix_task_count; j < prefix_task_count && OB_SUCC(ret); ++j) {
         ObDtlChannelInfo ch_info;
         chid = base_chid + receive_task_cnt * j;

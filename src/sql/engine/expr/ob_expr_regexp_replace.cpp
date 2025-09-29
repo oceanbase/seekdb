@@ -81,7 +81,7 @@ int ObExprRegexpReplace::calc_result_typeN(ObExprResType &type,
         type.set_clob();
         type.set_length_semantics(text.is_varchar_or_char() ? text.get_length_semantics() : default_length_semantics);
       }
-      //建表列的最大长度
+      // The maximum length of table columns
       type.set_length(max_allowed_packet);
       if (OB_FAIL(ObExprRegexContext::check_binary_compatible(types, 3))) {
         LOG_WARN("types are not compatible with binary.", K(ret));

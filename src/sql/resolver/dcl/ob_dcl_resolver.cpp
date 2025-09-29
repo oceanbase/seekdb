@@ -352,7 +352,7 @@ int ObDCLResolver::resolve_user_list_node(ParseNode *user_node,
                                                       user_name, host_name, user_info))) {
       LOG_WARN("failed to get user info", K(ret), K(user_name));
       if (OB_USER_NOT_EXIST == ret) {
-        // 跳过, RS统一处理, 兼容MySQL行为
+        // Skip, RS handles uniformly, compatible with MySQL behavior
         ret = OB_SUCCESS;
         user_info = NULL;
       }

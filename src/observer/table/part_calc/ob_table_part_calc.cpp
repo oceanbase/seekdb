@@ -709,11 +709,9 @@ int ObTablePartCalculator::calc_generated_col(const ObSimpleTableSchemaV2 &simpl
   }
   return ret;
 }
-
-
-// 1. 构造 insert 执行计划
-// 2. 找到生成列在 new row 中的位置
-// 3. eval 生成列
+// 1. Construct insert execution plan
+// 2. Find the position of the generated column in the new row
+// 3. eval generate column
 int ObTablePartCalculator::calc_generated_col(const ObSimpleTableSchemaV2 &simple_schema,
                                               const ObNewRange &range,
                                               const ObTableColumnInfo &col_info,
@@ -743,11 +741,10 @@ int ObTablePartCalculator::calc_generated_col(const ObSimpleTableSchemaV2 &simpl
 
   return ret;
 }
-
-// 1. 分区键是普通列，直接从 range 中获取
-//   1.1 找到分区键在 range 中的位置，获取对应的 ObObj
-// 2. 分区键是生成列，需要找到 new row 中的生成列进行计算
-//   2.1 需要从 range 中取值刷生成列依赖的列
+// 1. Partition key is an ordinary column, directly obtain from range
+//   1.1 Find the position of the partition key in the range, and obtain the corresponding ObObj
+// 2. The partition key is a generated column, need to find the generated column in the new row for calculation
+//   2.1 Need to take values from the range to generate columns dependent on the column
 int ObTablePartCalculator::construct_part_range(const ObTableSchema &table_schema,
                                                 const ObNewRange &range,
                                                 const ObIArray<uint64_t> &col_ids,

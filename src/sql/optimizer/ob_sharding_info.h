@@ -103,8 +103,7 @@ public:
   {
     return NULL == phy_table_location_info_ ? 0 : phy_table_location_info_->get_partition_cnt();
   }
-
-  // 分区相关的getter
+  // Partition-related getter
   inline share::schema::ObPartitionLevel get_part_level() const { return part_level_;}
   inline share::schema::ObPartitionFuncType get_part_func_type() const { return part_func_type_; }
   inline share::schema::ObPartitionFuncType get_sub_part_func_type() const
@@ -117,7 +116,7 @@ public:
   const common::ObIArray<int64_t> &get_all_subpartition_indexes() const { return all_subpartition_indexes_; }
   inline bool is_partition_single() const { return is_partition_single_; }
   inline bool is_subpartition_single() const { return is_subpartition_sinlge_; }
-  // end 分区相关的getter
+  // end partition-related getter
 
   // for set-op and insert-op to check partition wise
   static int check_if_match_partition_wise(const EqualSets &equal_sets,
@@ -311,8 +310,8 @@ public:
     return is_distributed() && NULL == phy_table_location_info_ && !partition_keys_.empty();
   }
   /**
-   * 获取所有的分区键
-   * @param ignore_single_partition: 是否忽略掉只涉及一个分区的分区登记上的分区键
+   * Get all partition keys
+   * @param ignore_single_partition: Whether to ignore partition keys on partition registrations that involve only one partition
    */
   int get_all_partition_keys(common::ObIArray<ObRawExpr*> &out_part_keys,
                              bool ignore_single_partition = false) const;
@@ -372,37 +371,35 @@ private:
   static inline bool is_shuffled_addr(ObAddr addr) { return UINT32_MAX == addr.get_port(); }
 
 private:
-  // 分区级别
+  // Partition level
   share::schema::ObPartitionLevel part_level_;
-  // 一级分区类型
+  // First-level partition type
   share::schema::ObPartitionFuncType part_func_type_;
-  // 二级分区类型
+  // Secondary partition type
   share::schema::ObPartitionFuncType subpart_func_type_;
   ObTableLocationType location_type_;
-  // 一级分区数量
+  // First-level partition count
   int64_t part_num_;
-  //一级分区的分区键
+  // First-level partition key
   common::ObSEArray<ObRawExpr *, 4, common::ModulePageAllocator, true> partition_keys_;
-  //二级分区的分区键
+  // Secondary partition key
   common::ObSEArray<ObRawExpr *, 4, common::ModulePageAllocator, true> sub_partition_keys_;
-  //分区方法expr
+  // Partition method expr
   common::ObSEArray<ObRawExpr *, 4, common::ModulePageAllocator, true> part_func_exprs_;
   const ObCandiTableLoc *phy_table_location_info_;
-  // 一级分区array
+  // first-level partition array
   share::schema::ObPartition **partition_array_;
-  // phy_table_location_info_中所有的partition_id(物理分区id)
+  // All partition_id (physical partition id) in phy_table_location_info_
   common::ObSEArray<uint64_t, 8, common::ModulePageAllocator, true> all_tablet_ids_;
-  // phy_table_location_info_中每一个partition_id(物理分区id)的
-  // part_id(一级逻辑分区id)在part_array中的偏移
+  // part_id(logical partition id level 1) in part_array offset
   common::ObSEArray<int64_t, 8, common::ModulePageAllocator, true> all_partition_indexes_;
-  // phy_table_location_info_中每一个partition_id(物理分区id)的
-  // subpart_id(二级逻辑分区id)在subpart_array中的偏移
+  // subpart_id(sub-secondary logical partition id) in subpart_array offset
   common::ObSEArray<int64_t, 8, common::ModulePageAllocator, true> all_subpartition_indexes_;
-  // 二级分区表的phy_table_location_info_中，是否只涉及到一个一级分区
+  // Whether only one primary partition is involved in the phy_table_location_info_ of the secondary partition table
   bool is_partition_single_;
-  // 二级分区表的phy_table_location_info_中，是否每个一级分区都只涉及一个二级分区
+  // In the phy_table_location_info_ of the secondary partition table, does each primary partition involve only one secondary partition
   bool is_subpartition_sinlge_;
-  bool can_reselect_replica_; //能否重新选择partition的leader, 仅最下层的复制表允许, 继承后不再允许
+  bool can_reselect_replica_; // Can reselect partition's leader, only the lowest level replication table is allowed, not allowed after inheritance
   DISALLOW_COPY_AND_ASSIGN(ObShardingInfo);
 };
 }

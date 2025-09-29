@@ -23,7 +23,7 @@ namespace oceanbase
 {
 namespace sql
 {
-/*关于为什么使用模版而不用继承，请看ddl/ob_tenant_resolver.h的解释*/
+/*About why template is used instead of inheritance, please see the explanation in ddl/ob_tenant_resolver.h*/
 template <class T>
 class ObDatabaseResolver
 {
@@ -45,7 +45,7 @@ private:
   int resolve_zone_list(T *stmt, ParseNode *node) const;
 private:
   common::ObBitSet<> alter_option_bitset_;
-  // 一条create/alter database语句中可能出现多次charset/collate，用于标记是否已出现过的flag
+  // A create/alter database statement may contain multiple charset/collate, used to mark whether it has appeared before flag
   bool collation_already_set_;
 };
 
@@ -165,7 +165,7 @@ int ObDatabaseResolver<T>::resolve_database_option(T *stmt, ParseNode *node, ObS
             OB_LOG(WARN, "failed to check collation data version valid", K(ret));
           } else if (OB_UNLIKELY(collation_already_set_
                               && stmt->get_charset_type() != charset_type)) {
-            // mysql执行下面这条sql时会报错，为了行为与mysql一致，resolve时即检查collation/charset不一致的问题
+            // mysql executes the following sql statement and will report an error, to be consistent with mysql behavior, check for collation/charset inconsistency issues during resolve
             // create database db charset utf8 charset utf16; 
             ret = OB_ERR_CONFLICTING_DECLARATIONS;
             SQL_RESV_LOG(WARN, "charsets mismatch", K(stmt->get_charset_type()), K(charset_type));

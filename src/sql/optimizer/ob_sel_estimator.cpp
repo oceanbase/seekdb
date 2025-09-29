@@ -489,7 +489,7 @@ int ObInSelEstimator::get_in_sel(const OptTableMetas &table_metas,
           selectivity = std::max(hist_density, selectivity);
         } else if (distinct_sel > ((1.0 - null_sel) / 2.0)) {
           // ndv < 2
-          // TODO: @yibo 这个refine过程不太理解
+          // TODO: @yibo This refine process is not well understood
           selectivity = distinct_sel / 2.0;
         } else {
           selectivity -= null_sel;
@@ -1126,9 +1126,9 @@ int ObAggSelEstimator::get_agg_sel(const OptTableMetas &table_metas,
   // for aggregate function in having clause, only support
   // =  <=>  !=  >  >=  <  <=  [not] btw  [not] in
   if (-1.0 == origin_rows || -1.0 == grouped_rows) {
-    // 不是在group by层计算的having filter，使用默认选择率
+    // not calculated at the group by layer having filter, use default selectivity
     // e.g. select * from t7 group by c1 having count(*) > (select c1 from t8 limit 1);
-    //      该sql中having filter需要在subplan filter中计算
+    //      the sql having filter needs to be calculated in the subplan filter
   } else if ((type >= T_OP_EQ && type <= T_OP_NE) ||
              T_OP_IN == type || T_OP_NOT_IN == type ||
              T_OP_BTW == type || T_OP_NOT_BTW == type) {
@@ -1151,16 +1151,16 @@ int ObAggSelEstimator::get_agg_sel(const OptTableMetas &table_metas,
         selectivity = DEFAULT_AGG_RANGE * DEFAULT_AGG_RANGE;
       } else if (T_OP_NOT_BTW == type) {
         // agg(col) not btw const1 and const2  <=> agg(col) < const1 OR agg(col) > const2
-        // 计算方式参考OR
+        // Calculation method reference OR
         selectivity = DEFAULT_AGG_RANGE + DEFAULT_AGG_RANGE;
       } else if (T_OP_IN == type) {
         /**
-         *  对 max/min/count(col) in (const1, const2, const3, ...)的选择率估计
-         *  当const的数量小于等于5时，每增加一个const值，选择率增加 DEFAULT_AGG_EQ(0.01)
-         *  当const的数量大于5时，每增加一个const值，选择率增加
+         *  Estimate of selectivity for max/min/count(col) in (const1, const2, const3, ...)
+         *  When the number of consts is less than or equal to 5, the selectivity increases by DEFAULT_AGG_EQ(0.01) for each additional const value
+         *  When the number of consts is greater than 5, the selectivity increases by
          *      DEFAULT_AGG_EQ - 0.001 * (const_num - 5)
-         *  # 这里的选择率增加量采用线性下降其实并不是很精确，
-         *    在测试过程中测试了1-30列递增的情况，线性下降和指数下降区别不大。
+         *  # The use of linearly decreasing selectivity increment here is not very precise,
+         *    During testing, we tested the case of increasing from 1 to 30 columns, and the difference between linear and exponential decrease was not significant.
          */
         int64_t N;
         if(OB_ISNULL(const_expr1)) {
@@ -1223,7 +1223,7 @@ int ObAggSelEstimator::get_agg_sel_with_minmax(const OptTableMetas &table_metas,
     LOG_WARN("get unexpected null", K(ret), K(aggr_expr.get_param_expr(0)),
                                     K(params), K(stmt), K(const_expr1));
   } else if (!aggr_expr.get_param_expr(0)->is_column_ref_expr()) {
-    // 只处理sum(column)的形式，sum(column + 1)/sum(column1 + column2)都是用默认选择率
+    // Only process sum(column) form, sum(column + 1)/sum(column1 + column2) all use default selection rate
   } else if (OB_FAIL(ObOptSelectivity::get_column_basic_sel(table_metas, ctx, *aggr_expr.get_param_expr(0),
                                                             &distinct_sel, NULL))) {
     LOG_WARN("failed to get column basic sel", K(ret));
@@ -1237,7 +1237,7 @@ int ObAggSelEstimator::get_agg_sel_with_minmax(const OptTableMetas &table_metas,
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("expr should be row", K(ret), K(*const_expr1));
     } else {
-      // 如果row超过5列，则计算5列上的选择率，再按比例放大
+      // If row exceeds 5 columns, then calculate the selection rate on the 5th column, and then scale proportionally
       int64_t N = const_expr1->get_param_count() > 5 ? 5 :const_expr1->get_param_count();
       selectivity = T_OP_IN == type ? 0.0 : 1.0;
       for (int64_t i = 0; OB_SUCC(ret) && i < N; ++i) {
@@ -1309,8 +1309,7 @@ int ObAggSelEstimator::get_agg_sel_with_minmax(const OptTableMetas &table_metas,
   } else { /* do nothing */ }
   return ret;
 }
-
-// 计算sum/avg(col) =/<=>/!= const的选择率
+// Calculate sum/avg(col) =/<=>/!= const selection rate
 double ObAggSelEstimator::get_agg_eq_sel(const ObObj &maxobj,
                                          const ObObj &minobj,
                                          const ObObj &constobj,
@@ -1322,7 +1321,7 @@ double ObAggSelEstimator::get_agg_eq_sel(const ObObj &maxobj,
   int ret = OB_SUCCESS;
   double sel_ret = DEFAULT_AGG_EQ;
   if (constobj.is_null()) {
-    // sum/avg(col)的结果中不会存在null，即使是null safe equal选择率依然为0
+    // The result of sum/avg(col) will not contain null, even if null safe equal selectivity is still 0
     sel_ret = 0.0;
   } else if (minobj.is_integer_type() ||
              (minobj.is_number() && minobj.get_meta().get_obj_meta().get_scale() == 0) ||
@@ -1330,7 +1329,7 @@ double ObAggSelEstimator::get_agg_eq_sel(const ObObj &maxobj,
     double const_val;
     double min_val;
     double max_val;
-    // 如果转化的时候出错，就使用默认的选择率
+    // If an error occurs during conversion, use the default selection rate
     if (OB_FAIL(ObOptEstObjToScalar::convert_obj_to_double(&constobj, const_val)) ||
         OB_FAIL(ObOptEstObjToScalar::convert_obj_to_double(&minobj, min_val)) ||
         OB_FAIL(ObOptEstObjToScalar::convert_obj_to_double(&maxobj, max_val))) {
@@ -1354,14 +1353,13 @@ double ObAggSelEstimator::get_agg_eq_sel(const ObObj &maxobj,
       }
     }
   } else {
-    // 对于非整数的类型，认为sum/avg(col)后 ndv 不会发生显著变化，直接使用该列原有的ndv计算
+    // For non-integer types, it is assumed that ndv will not change significantly after sum/avg(col), directly use the original ndv of the column for calculation
     sel_ret = is_eq ? distinct_sel : 1.0 - distinct_sel;
   }
   sel_ret = ObOptSelectivity::revise_between_0_1(sel_ret);
   return sel_ret;
 }
-
-// 计算sum/avg(col) >/>=/</<= const的选择率
+// Calculate sum/avg(col) >/>=/</= const selection rate
 double ObAggSelEstimator::get_agg_range_sel(const ObObj &maxobj,
                                             const ObObj &minobj,
                                             const ObObj &constobj,
@@ -1372,13 +1370,13 @@ double ObAggSelEstimator::get_agg_range_sel(const ObObj &maxobj,
   int ret = OB_SUCCESS;
   double sel_ret = DEFAULT_AGG_RANGE;
   if (constobj.is_null()) {
-    // sum/avg(col)的结果中不会存在null，因此选择率为0
+    // sum/avg(col) result will not contain null, therefore the selection rate is 0
     sel_ret = 0.0;
   } else {
     double min_val;
     double max_val;
     double const_val;
-    // 如果转化的时候出错，就使用默认的选择率
+    // If an error occurs during conversion, use the default selection rate
     if (OB_FAIL(ObOptEstObjToScalar::convert_obj_to_double(&minobj, min_val))) {
       LOG_WARN("failed to convert obj to double", K(ret));
     } else if (OB_FAIL(ObOptEstObjToScalar::convert_obj_to_double(&maxobj, max_val))) {
@@ -1394,7 +1392,7 @@ double ObAggSelEstimator::get_agg_range_sel(const ObObj &maxobj,
       double length = max_val - min_val + 1.0;
       if (T_OP_GE == type || T_OP_GT == type) {
         if (T_OP_GT == type) {
-          // c1 > 1 <=> c1 >= 2, 对非int类型的列并不精确
+          // c1 > 1 <=> c1 >= 2, for non-int type columns it is not precise
           const_val += 1.0;
         }
         if (const_val <= min_val) {
@@ -1407,7 +1405,7 @@ double ObAggSelEstimator::get_agg_range_sel(const ObObj &maxobj,
         }
       } else if (T_OP_LE == type || T_OP_LT == type) {
         if (T_OP_LT == type) {
-          // c1 < 1 <=> c1 <= 0, 对非int类型的列并不精确
+          // c1 < 1 <=> c1 <= 0, for non-int type columns it is not precise
           const_val -= 1.0;
         }
         if (const_val >= max_val) {
@@ -1424,8 +1422,7 @@ double ObAggSelEstimator::get_agg_range_sel(const ObObj &maxobj,
   sel_ret = ObOptSelectivity::revise_between_0_1(sel_ret);
   return sel_ret;
 }
-
-// 计算sum/avg(col) [not] between const1 and const2的选择率
+// Calculate sum/avg(col) [not] between const1 and const2 selection rate
 double ObAggSelEstimator::get_agg_btw_sel(const ObObj &maxobj,
                                           const ObObj &minobj,
                                           const ObObj &constobj1,
@@ -1443,7 +1440,7 @@ double ObAggSelEstimator::get_agg_btw_sel(const ObObj &maxobj,
     double max_val;
     double const_val1;
     double const_val2;
-    // 如果转化的时候出错，就使用默认的选择率
+    // If an error occurs during conversion, use the default selection rate
     if (OB_FAIL(ObOptEstObjToScalar::convert_obj_to_double(&minobj, min_val))) {
       LOG_WARN("failed to convert obj to double", K(ret));
     } else if (OB_FAIL(ObOptEstObjToScalar::convert_obj_to_double(&maxobj, max_val))) {
@@ -2137,7 +2134,7 @@ int ObSimpleJoinSelEstimator::get_sel(const OptTableMetas &table_metas,
       LOG_PRINT_EXPR(TRACE, "get single equal expr selectivity", *join_conditions_.at(0), K(selectivity));
     }
   } else if (join_conditions_.count() > 1) {
-    // 存在多个连接条件，检查是否涉及联合主键
+    // There are multiple connection conditions, check if it involves a composite primary key
     if (OB_FAIL(get_multi_equal_sel(table_metas, ctx, join_conditions_, selectivity))) {
       LOG_WARN("failed to get equal sel");
     } else {
@@ -2351,9 +2348,9 @@ int ObSimpleJoinSelEstimator::get_cntcols_eq_cntcols_sel(const OptTableMetas &ta
   } else if (IS_SEMI_ANTI_JOIN(ctx.get_assumption_type())) {
     // do nothing
   } else if (left_contain_pk == right_contain_pk) {
-    // 两侧都不是主键或都是主键, 不做修正
+    // Neither side is a primary key or both are primary keys, no correction needed
   } else if (refine_right_ndv) {
-    // 一侧有主键时, 认为是主外键连接, 外键上最大的ndv为即为主键的原始ndv
+    // One side has a primary key, it is considered a primary-foreign key join, the largest ndv on the foreign key is the original ndv of the primary key
     right_ndv = std::min(right_ndv, left_origin_rows);
   } else if (refine_left_ndv) {
     left_ndv = std::min(left_ndv, right_origin_rows);
@@ -2367,7 +2364,7 @@ int ObSimpleJoinSelEstimator::get_cntcols_eq_cntcols_sel(const OptTableMetas &ta
   }
   if (OB_SUCC(ret)) {
     selectivity = ObOptSelectivity::calc_equal_join_sel(ctx, T_OP_EQ, left_ndv, right_ndv, left_nns, right_nns, left_base_ndv, right_base_ndv);
-    // 处理 null safe，这里假设多列上同时为null即小概率事件，只考虑特定列上为null的情况
+    // Handle null safe, here we assume that multiple columns being null at the same time is a low probability event, only consider the case where a specific column is null
     for (int64_t i = 0; i < null_safes.count(); ++i) {
       if (null_safes.at(i)) {
         double factor = 1.0;

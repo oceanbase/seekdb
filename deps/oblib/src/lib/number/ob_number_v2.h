@@ -104,7 +104,7 @@ struct ObNumberFmtModel
 {
   bool has_x_ = false;
   bool has_d_ = false;               //has D/d/. format element:decimal point
-  bool has_sign_ = false;            //has S/s format element：sign
+  bool has_sign_ = false;            //has S/s format element: sign
   bool has_currency_ = false;        //has currency element: only support dollar for now
   bool has_b_ = false;               //has B/b format element:Returns blanks for the integer part
                                      //of a fixed-point number when the integer part is zero
@@ -167,7 +167,7 @@ public:
   // 5 valid digits, another: 1 for round, 1 for negative end flag
   static const int64_t MAX_STORE_LEN = 9;
   static const int64_t MAX_APPEND_LEN = 3;// '+'/'-', '.', '\0'
-  // number存储需要消耗的空间，6个int32_t的digit空间，1个int32_t的Desc空间
+  // number stores the required space, 6 int32_t digit spaces, 1 int32_t Desc space
   static const int64_t MAX_BYTE_LEN = sizeof(uint32_t) * MAX_STORE_LEN + sizeof(Desc::desc_);
   static const ObScale FLOATING_SCALE = 72;  // 8 valid digits
   static const int64_t MAX_INTEGER_EXP = 14; // {9.999...999,count=38}e134 14*9-1=134
@@ -1331,27 +1331,27 @@ public:
 
 
   /*
-   * knuth algorithm 除法步骤：
-   * 给定非负整数(b进制) u[m+n-1 .. 0] 和 v[n-1 .. 0],其中 v[n-1]!=0 且 n>1
-   * 计算b进制的 商|_u/v_| = q[m..0] 和 余数u mod v = r[n-1 .. 0]
+   * knuth algorithm division steps:
+   * given non-negative integer (b-based) u[m+n-1 .. 0] and v[n-1 .. 0], where v[n-1]!=0 and n>1
+   * calculate b-based quotient |_u/v_| = q[m..0] and remainder u mod v = r[n-1 .. 0]
    *
-   * D1. [规格化]
-   *      对 u 和 v 同时乘以 d 满足 v[n-1]*d >= b/2,这里取 d = |_b / (v[n-1] + 1)_|
-   *      这样计算出来的 q 是不变的，余数 r 需要除以 d 才能得到
-   * D2. [初始化 j]
-   *      置 j = m
-   * D3. [计算 qq]
-   *      置 qq = |_(u[j+n] * b +u[j+n-1]) / v[n-1]_|, rr = (u[j+n] * b +u[j+n-1]) % v[n-1]
-   *      测试是否 qq == b 或者 qq*v[n-2] > b*rr+u[j+n-2]，如果是 则qq -= 1， r += v[n-1]
-   * D4 & D6. [乘和减 + 往回加]
+   * D1. [normalization]
+   *      multiply u and v by d such that v[n-1]*d >= b/2, here take d = |_b / (v[n-1] + 1)_|
+   *      the calculated q remains unchanged, the remainder r needs to be divided by d to obtain
+   * D2. [initialize j]
+   *      set j = m
+   * D3. [calculate qq]
+   *      set qq = |_(u[j+n] * b +u[j+n-1]) / v[n-1]_|, rr = (u[j+n] * b +u[j+n-1]) % v[n-1]
+   *      test whether qq == b or qq*v[n-2] > b*rr+u[j+n-2], if so then qq -= 1, r += v[n-1]
+   * D4 & D6. [multiply and subtract + add back]
    *      u[j+n .. j] = u[j+n .. j] - qq * v[n-1 .. 0]
-   *      如果 u 为负数，将当前位置加上 v 且置 qq -= 1
-   * D5. [测试余数]
+   *      if u is negative, add v at the current position and set qq -= 1
+   * D5. [test remainder]
    *      q[j] = q
-   * D7. [对 j 进行循环]
-   *      j -= 1, 如果 j >= 0 返回到 D3
-   * D8. [不规格化]
-   *      q[m .. 0] 就是所求商，所求余数为 u[n-1..0] / d
+   * D7. [loop on j]
+   *      j -= 1, if j >= 0 return to D3
+   * D8. [denormalization]
+   *      q[m .. 0] is the desired quotient, the desired remainder is u[n-1..0] / d
    */
   void knuth_div_v2(ObDivArray &a, ObDivArray &b, ObDivArray &q, ObDivArray &r) {
     int n = b.len_;
@@ -1403,7 +1403,7 @@ public:
 //      printf("\nround %d-%lld %lld %lld %lld %lld\n",j,  qq, rr, tmp_value, *aptr, *(aptr - 1));
 //      q.print();
       // Optimization.
-      // 如果当前余数为 0 并且后面被除数都是 0, 说明当前已经整除,剩余商都是 0
+      // If the current remainder is 0 and all subsequent divisors are 0, it indicates that the current division is exact, and the remaining quotient is all 0
 //      if (rr == 0 && j > 0 && (j + n - 2) <= zerotag) {
 //        --j;
 //        while (j >= 0) {
@@ -1903,7 +1903,7 @@ int ObNumber::abs_compare_sys(const uint64_t &other, int64_t exp) const
       }
       default : cmp = -1;
     }   */
-    //  首先判断值是否number值是否超过uint值域，不超过，则将uint转换为number，直接进行比较操作
+    //  First determine if the number value exceeds the uint range, if not, convert uint to number and perform direct comparison operation
     int64_t exp_u = (other >= BASE2) ? 2 : (other >= BASE) ? 1 : 0;
     if (exp != exp_u) {
       cmp = exp > exp_u ? 1 : -1;
@@ -1953,7 +1953,7 @@ int ObNumber::is_in_uint(int64_t exp, bool &is_uint, uint64_t &num) const
           if (len > 0) {
             num = num * BASE + digits_[i];
           } else {
-            num = num * BASE ;       //超过digits的长度，最后应该补零
+            num = num * BASE ;       //exceeds the length of digits, it should be padded with zeros at the end
           }
         }
       }
@@ -1975,7 +1975,7 @@ int ObNumber::compare(const int64_t &other) const
     cmp = (other < 0) ? 1 : ((0 == other) ? 0 : -1);
   } else {
     if (is_negative()) {
-      //这里处理int64_t最小值问题
+      // Here processing int64_t minimum value issue
       cmp = (other >= 0) ? -1 : - abs_compare_sys(static_cast<uint64_t>((other + 1)* (-1))
                                                   + static_cast<uint64_t>(1), EXP_ZERO - d_.exp_);
     } else {
@@ -3222,7 +3222,7 @@ OB_INLINE int64_t ObNumber::get_number_length(const ObNumber::Desc &desc)
 
 OB_INLINE void ObNumber::assign(const uint32_t desc, uint32_t *digits)
 {
-  //不用检查digits是否为null， 0就是null
+  //Do not check if digits is null, 0 represents null
   d_.desc_ = desc;
   digits_ = digits;
 }
@@ -3559,14 +3559,14 @@ OB_INLINE bool ObNumber::try_fast_minus(ObNumber &l_num, ObNumber &r_num,
 
 class ObNumberCalc
 {
-/* 用法说明：计算 res = (v0 + v1 - v2) * v3
+/* Usage instructions: calculate res = (v0 + v1 - v2) * v3
     ObNumber res;
     ObNumberCalc calc(v0, allocator);
     if (OB_FAIL(ctx.add(v1).sub(v2).mul(v3).get_result(res))) {
       LOG_WARN("fail calc value", K(ret));
     }
 
-  内存说明： 无论是否参与过运算，res 使用 allocator 分配的内存
+  Memory instructions: Regardless of whether it has participated in the calculation, res uses memory allocated by allocator
 */
 public:
   ObNumberCalc(const ObNumber &init_v, common::ObIAllocator &allocator)
@@ -3630,16 +3630,16 @@ public:
   int get_result(ObNumber &res)
   {
     if (common::OB_SUCCESS == last_ret_) {
-      res.shadow_copy(res_); // 浅拷贝，引用 allocator 中内存
+      res.shadow_copy(res_); // shallow copy, reference memory in allocator
     }
     return last_ret_;
   }
 private:
   int last_ret_;
   ObNumber res_;
-  // TODO: 这里内存还可以继续优化，最多只需要使用 2 个定长 buffer 就可以
-  // 完成所有串联运算，而不需要每次运算都从 allocator 新分配一个 buffer
-  // 考虑到一般场景下运算的操作数个数较少，暂不做这个优化
+  // TODO: Here memory can still be optimized, only 2 fixed-length buffers are needed at most
+  // Complete all concatenation operations without allocating a new buffer from the allocator each time
+  // Considering that the number of operands in general scenarios is relatively small, this optimization is not done for now
   common::ObIAllocator &allocator_;
 };
 

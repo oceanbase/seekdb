@@ -114,7 +114,7 @@ int ObAggrExprPushUpAnalyzer::analyze_aggr_param_expr(ObRawExpr *&param_expr,
     }
     while (OB_SUCC(ret) && T_REF_ALIAS_COLUMN == param_expr->get_expr_type()) {
       if (OB_ISNULL(param_expr = static_cast<ObAliasRefRawExpr*>(param_expr)->get_ref_expr())) {
-        //去掉alias expr
+        // Remove alias expr
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("alias ref expr is null", K(ret));
       }
@@ -130,11 +130,11 @@ int ObAggrExprPushUpAnalyzer::analyze_aggr_param_expr(ObRawExpr *&param_expr,
         !is_child_stmt &&
         param_expr->is_aggr_expr() &&
         !is_in_aggr_expr) {
-      //在聚集函数中含有同层级的聚集函数，这个对于mysql不允许的
+      // In aggregate functions containing same-level aggregate functions, this is not allowed for mysql
       //select count(select count(t1.c1) from t) from t1;
-      //在上面的例子中，count(t1.c1)推上去了，和最外层的count()处于同一级
-      //在分析子查询的聚集函数上推的时候不会报错
-      //在分析外层的聚集函数上推的时候报错发现了含有聚集函数中出现了同层嵌套，需要报错
+      // In the above example, count(t1.c1) was pushed up to the same level as the outermost count()
+      // When pushing aggregate functions of subqueries up, no error will be reported
+      // In analyzing the outer aggregate function push-up, an error was found indicating that there is same-level nesting within the aggregate function, which needs to be reported
       ret = OB_ERR_INVALID_GROUP_FUNC_USE;
       LOG_WARN("aggregate nested in the same level", K(*param_expr));
     }

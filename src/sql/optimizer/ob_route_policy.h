@@ -34,9 +34,9 @@ enum ObRoutePolicyType
   READONLY_ZONE_FIRST = 1,
   ONLY_READONLY_ZONE = 2,
   UNMERGE_ZONE_FIRST = 3,
-  // 仅在非读写分离场景中有效, server端的路由规则和非读写分离下普通弱读相同,
-  // 即使客户端将请求路由到partition主上, 也在本地执行，
-  // 区别在于返回给OCJ && ObProxy的反馈不同;
+  // Only valid in non-read-write separation scenarios, the routing rules on the server side are the same as regular weak reads in non-read-write separation,
+  // Even if the client routes the request to the partition leader, it is still executed locally,
+  // The difference lies in the feedback returned to OCJ && ObProxy;
   UNMERGE_FOLLOWER_FIRST = 4,
   COLUMN_STORE_ONLY = 5,
   FORCE_READONLY_ZONE = 6,
@@ -225,9 +225,9 @@ protected:
   int weak_sort_replicas(common::ObIArray<CandidateReplica>& candi_replicas, ObRoutePolicyCtx &ctx);
   inline ObRoutePolicyType get_calc_route_policy_type(const ObRoutePolicyCtx &ctx) const
   {
-    // 集群为读写zone时，忽略ob_route_policy系统变量的值，按照READONLY_ZONE_FIRST处理
-    // 集群为读写zone时, 且ob_route_policy为UNMERGE_FOLLOWER_FIRST时，同样按照READONLY_ZONE_FIRST处理, 但会增加反馈内容
-    // 集群为有只读zone时，且ob_route_policy为UNMERGE_FOLLOWER_FIRST时, 同样按照READONLY_ZONE_FIRST处理，此时不会增加反馈内容
+    // When the cluster is a read-write zone, ignore the value of the ob_route_policy system variable, and handle as READONLY_ZONE_FIRST
+    // When the cluster is a read-write zone, and ob_route_policy is UNMERGE_FOLLOWER_FIRST, it is also handled as READONLY_ZONE_FIRST, but with additional feedback content
+    // When the cluster has a read-only zone, and ob_route_policy is UNMERGE_FOLLOWER_FIRST, it is also handled as READONLY_ZONE_FIRST, at which point no additional feedback content will be added
     ObRoutePolicyType type = INVALID_POLICY;
     if (COLUMN_STORE_ONLY == ctx.policy_type_) {
       type = ctx.policy_type_;

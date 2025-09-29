@@ -145,8 +145,8 @@ int ObPhyTableLocation::assign_from_phy_table_loc_info(const ObCandiTableLoc &ot
  //     }
  //   }
  //   if (OB_SUCC(ret) && phy_part_loc_info_sorted_list.count() > 0) {
- //     //按照指定的direction顺序输出partition顺序.
- //     //目前依赖partition序代表range序.以后做分裂等复杂情况后，就需要依赖part_mgr(schema)来排序
+//     //output partition order according to the specified direction order.
+//     //Currently dependency on partition order represents range order. In the future, after operations like split, etc., we will need to rely on part_mgr(schema) for sorting
  //     if (is_ascending_direction(other.get_direction())) {
  //       lib::ob_sort(&phy_part_loc_info_sorted_list.at(0),
  //                 &phy_part_loc_info_sorted_list.at(0) + phy_part_loc_info_sorted_list.count(),

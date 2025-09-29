@@ -37,7 +37,7 @@ public:
 
   TO_STRING_KV(K_(part_id_index));
 private:
-  //定义 part id 伪列在输入行中的偏移地址，用于从 row 中取 part_id 值
+  // Define part id pseudo column offset in input line, used to get part_id value from row
   int64_t part_id_index_;
 };
 

@@ -139,7 +139,7 @@ ObApplyServiceQueueTask::~ObApplyServiceQueueTask()
 void ObApplyServiceQueueTask::reset()
 {
   if (!queue_.is_empty()) {
-    //防御性检查,默认apply status析构时队列一定为空
+    //Defensive check, default apply status destructor queue must be empty
     CLOG_LOG_RET(ERROR, OB_ERR_UNEXPECTED, "queue is not empty when reset task", KPC(apply_status_));
   }
   ObApplyServiceTask::reset();
@@ -402,7 +402,7 @@ int ObApplyStatus::push_append_cb(AppendCb *cb)
       CLOG_LOG(TRACE, "push_append_cb", K(thread_index), K(cb_lsn), K(cb_sign), K(cb_queues_[thread_index]), KPC(this));
       palf_committed_end_lsn.val_ = ATOMIC_LOAD(&palf_committed_end_lsn_.val_);
       if (cb_lsn < palf_committed_end_lsn) {
-        // 需要调用on_success的cb进入队列时需要主动触发推入线程池
+        // The cb that needs to call on_success should actively trigger the push into the thread pool when entering the queue
         if (OB_FAIL(submit_task_to_apply_service_(cb_queues_[thread_index]))) {
           CLOG_LOG(ERROR, "apply service push_task failed", K(thread_index), K(cb_lsn), K(cb_sign), KPC(this));
         } else {
@@ -472,7 +472,7 @@ int ObApplyStatus::try_handle_cb_queue(ObApplyServiceQueueTask *cb_queue,
         ret = OB_ERR_UNEXPECTED;
         CLOG_LOG(ERROR, "cb is NULL", KPC(cb_queue), KPC(this), K(ret));
       } else if ((lsn = cb->__get_lsn()).val_ < ATOMIC_LOAD(&palf_committed_end_lsn_.val_)) {
-        // 小于确认日志位点的cb可以回调on_success
+        // callbacks with log position less than the confirmed log position can callback on_success
         ObDIActionGuard(cb->get_cb_name());
         if (OB_FAIL(cb_queue->pop())) {
           CLOG_LOG(ERROR, "cb_queue pop failed", KPC(cb_queue), KPC(this), K(ret));
@@ -481,7 +481,7 @@ int ObApplyStatus::try_handle_cb_queue(ObApplyServiceQueueTask *cb_queue,
           get_cb_trace_(cb, append_start_time, append_finish_time, cb_first_handle_time, cb_start_time);
           CLOG_LOG(TRACE, "cb on_success", K(lsn), K(scn), KP(link->next_), KPC(cb_queue), KPC(this));
           if (OB_FAIL(cb->on_success())) {
-            // 不处理此类失败情况
+            // Do not handle this type of failure case
             CLOG_LOG(ERROR, "cb on_success failed", KP(cb), K(ret), KPC(this));
             ret = OB_SUCCESS;
           }
@@ -490,7 +490,7 @@ int ObApplyStatus::try_handle_cb_queue(ObApplyServiceQueueTask *cb_queue,
           cb_queue->inc_total_apply_cb_cnt();
         }
       } else if (FOLLOWER == role_) {
-        // 大于确认日志位点的cb在applystatus切为follower应该回调on_failure
+        // Callbacks greater than the confirmed log position should be called back with on_failure when applystatus switches to follower
         if (OB_FAIL(cb_queue->pop())) {
           CLOG_LOG(ERROR, "cb_queue pop failed", KPC(cb_queue), KPC(this), K(ret));
         } else {
@@ -508,7 +508,7 @@ int ObApplyStatus::try_handle_cb_queue(ObApplyServiceQueueTask *cb_queue,
       } else {
         cb->set_cb_first_handle_ts(ObTimeUtility::fast_current_time());
         CLOG_LOG(TRACE, "cb on_wait", K(lsn), K(cb->__get_scn()), KPC(cb_queue), KPC(this));
-        // 等待确认日志位点推进或者角色切换
+        // Wait for log position advancement or role switch
         ret = OB_EAGAIN;
       }
       if (OB_SUCC(ret) && !is_queue_empty) {
@@ -519,7 +519,7 @@ int ObApplyStatus::try_handle_cb_queue(ObApplyServiceQueueTask *cb_queue,
       }
     } while (OB_SUCC(ret) && (!is_queue_empty) && (!is_timeslice_run_out));
     if (OB_EAGAIN == ret) {
-      // end_lsn不够大时应该等待file_size_cb推此任务进线程池,所以对外需要屏蔽错误码
+      // wait for file_size_cb to push this task into the thread pool when end_lsn is not large enough, so errors need to be masked externally
       ret = OB_SUCCESS;
     }
   }
@@ -581,8 +581,7 @@ int ObApplyStatus::switch_to_follower()
   }
   return ret;
 }
-
-//需要锁保护
+//Needs lock protection
 int ObApplyStatus::switch_to_follower_()
 {
   int ret = OB_SUCCESS;
@@ -593,7 +592,7 @@ int ObApplyStatus::switch_to_follower_()
     CLOG_LOG(INFO, "apply status has already been follower", KPC(this), K(ret));
   } else {
     lib::ObMutexGuard guard(mutex_);
-    // truancate场景旧主的max_scn可能回退
+    // truncate scenario the old leader's max_scn may roll back
     last_check_scn_.reset();
     role_ = FOLLOWER;
     if (OB_FAIL(submit_task_to_apply_service_(submit_task_))) {
@@ -604,8 +603,7 @@ int ObApplyStatus::switch_to_follower_()
   }
   return ret;
 }
-
-//单线程调用
+//Single-threaded call
 int ObApplyStatus::update_palf_committed_end_lsn(const palf::LSN &end_lsn,
                                                  const SCN &end_scn,
                                                  const int64_t proposal_id)
@@ -633,12 +631,12 @@ int ObApplyStatus::update_palf_committed_end_lsn(const palf::LSN &end_lsn,
         }
       } else if ((proposal_id == curr_proposal_id && FOLLOWER == role_)
                  || proposal_id < curr_proposal_id) {
-        // apply切为follower之后, 同proposal_id的日志不应该还能滑出
+        // After apply switches to follower, logs with the same proposal_id should not be able to slide out
         ret = OB_ERR_UNEXPECTED;
         CLOG_LOG(ERROR, "invalid new end_lsn", KPC(this), K(proposal_id), K(end_lsn));
       } else {
         CLOG_LOG(TRACE, "update_palf_committed_end_lsn skip", KPC(this), K(proposal_id), K(end_lsn));
-        // palf已经切主,skip
+        // palf has already done a leader-follower switch, skip
       }
     }
     CLOG_LOG(TRACE, "update_palf_committed_end_lsn", KPC(this), K(proposal_id), K(end_lsn), KR(ret));
@@ -677,7 +675,7 @@ void ObApplyStatus::close_palf_handle()
 int ObApplyStatus::get_max_applied_scn(SCN &scn)
 {
   int ret = OB_SUCCESS;
-  //保证此接口不会被并发调用, 两把锁的顺序不能更改
+  //Ensure this interface is not called concurrently, the order of the two locks cannot be changed
   RLockGuard rguard(lock_);
   lib::ObMutexGuard guard(mutex_);
   const SCN last_check_scn = last_check_scn_;
@@ -685,7 +683,7 @@ int ObApplyStatus::get_max_applied_scn(SCN &scn)
     ret = OB_NOT_INIT;
     CLOG_LOG(ERROR, "apply status has not been inited", K(ret));
   } else if (OB_UNLIKELY(is_in_stop_state_)) {
-    // stop后不会再上任, 始终返回上轮作为leader时缓存的值
+    // After stopping, it will no longer take office, and will always return the cached value from the last round as leader
   } else if (FOLLOWER == role_) {
     //The max_applied_cb_scn_ undergoes asynchronous updating, and under circumstances where a
     //transiting to a follower role, there exists a possibility that its recorded value might underestimate the actual one.
@@ -700,9 +698,9 @@ int ObApplyStatus::get_max_applied_scn(SCN &scn)
     } else if (OB_FAIL(is_apply_done(is_done, apply_end_lsn))) {
       CLOG_LOG(WARN, "check is_apply_done failed", K(ret), KPC(this));
     } else if (!is_done) {
-      // follower期间cb未完全回调之前暂不做任何更新
-      // 始终返回上轮作为leader时缓存的值
-      // 所有cb回调完成后, 尝试推进一次最大连续回调位点
+      // During the follower period, do not make any updates until cb is fully called back
+      // Always return the value cached from the last round when it was the leader
+      // All cb callbacks completed, attempt to advance the maximum consecutive callback point once
     } else if (max_applied_cb_scn_ < cur_palf_committed_end_scn) {
       max_applied_cb_scn_ = cur_palf_committed_end_scn;
       CLOG_LOG(INFO, "update max_applied_cb_scn_", K(cur_palf_committed_end_scn), KPC(this));
@@ -714,7 +712,7 @@ int ObApplyStatus::get_max_applied_scn(SCN &scn)
       //do nothing
     }
   } else if (!max_applied_cb_scn_.is_valid() || last_check_scn > max_applied_cb_scn_) {
-    // 检查last_check_scn_是否都已经回调完成
+    // Check if last_check_scn_ has already been callback completed
     bool is_done = true;
     for (int64_t i = 0; OB_SUCC(ret) && is_done && i < APPLY_TASK_QUEUE_SIZE; ++i) {
       if (OB_FAIL(cb_queues_[i].is_snapshot_apply_done(is_done))) {
@@ -835,7 +833,7 @@ int ObApplyStatus::update_last_check_scn_()
   } else if (OB_FAIL(palf_handle_.get_role(palf_role, palf_proposal_id, is_pending_state))) {
     CLOG_LOG(WARN, "palf get_role failed", K(ret), K(ls_id_));
   } else if (max_applied_cb_scn_.is_valid() && palf_max_scn < max_applied_cb_scn_) {
-    //防御性检查, palf的max_scn不应该回退到已达成一致的max_applied_cb_scn_之前
+    //Defensive check, palf's max_scn should not regress to before the agreed max_applied_cb_scn_
     ret = OB_ERR_UNEXPECTED;
     CLOG_LOG(ERROR, "invalid palf_max_scn", K(ret), K(ls_id_), K(palf_max_scn), KPC(this));
   } else if ((palf_proposal_id != curr_proposal_id) || (FOLLOWER == palf_role)) {
@@ -843,7 +841,7 @@ int ObApplyStatus::update_last_check_scn_()
       ret = OB_ERR_UNEXPECTED;
       CLOG_LOG(ERROR, "invalid palf_proposal_id", K(ret), K(ls_id_), K(palf_proposal_id), KPC(this));
     } else {
-      // palf已经切主, max_scn可能包含其他新主的日志, do nothing
+      // palf has switched leader, max_scn may contain logs from the new leader, do nothing
       CLOG_LOG(TRACE, "skip update_last_check_scn", K(ret), K(ls_id_), K(palf_max_scn), K(palf_proposal_id), KPC(this));
     }
   } else if (OB_FAIL(ap_sv_->wait_append_sync(ls_id_))) {
@@ -1103,7 +1101,7 @@ void ObLogApplyService::stop()
 {
   CLOG_LOG(INFO, "ObLogApplyService stop begin");
   ATOMIC_STORE(&is_running_, false);
-  //保证handle_drop时不再会有新任务进入线程池
+  //Ensure that no new tasks will enter the thread pool when handle_drop is called
   TG_STOP(tg_id_);
   CLOG_LOG(INFO, "ObLogApplyService stop finish");
 }
@@ -1120,9 +1118,9 @@ void ObLogApplyService::wait()
     CLOG_LOG(WARN, "ObLogApplyService failed to get queue number");
   }
   TG_WAIT(tg_id_);
-  //此时可以保证不会有新的queue任务进入线程池,
-  //同时所有其他模块均调用了stop所以也不会有新的cb进入queue
-  //可以安全清理所有残留的cb
+  //At this point, it can be guaranteed that no new queue tasks will enter the thread pool,
+  //At the same time, all other modules have called stop, so no new cb will enter the queue
+  //It is safe to clean up all remaining cbs
   remove_all_ls_();
   CLOG_LOG(INFO, "ObLogApplyService wait finish");
 }
@@ -1298,7 +1296,7 @@ int ObLogApplyService::push_task(ObApplyServiceTask *task)
     CLOG_LOG(ERROR, "task is NULL", K(ret));
   } else {
     while (OB_FAIL(TG_PUSH_TASK(tg_id_, task)) && OB_EAGAIN == ret) {
-      //预期不会失败
+      //Expected not to fail
       ob_throttle_usleep(1000, ret); //1ms
       CLOG_LOG(ERROR, "failed to push", K(ret));
     }
@@ -1421,7 +1419,7 @@ int ObLogApplyService::wait_append_sync(const share::ObLSID &ls_id)
     CLOG_LOG(WARN, "ObLogApplyService not init", K(ret));
   } else if (OB_FAIL(ls_adapter_->wait_append_sync(ls_id))) {
     CLOG_LOG(WARN, "wait_append_sync failed", K(ret), K(ls_id));
-  // TODO:@keqing.llt 发版前移除
+  // TODO:@keqing.llt Remove before release
   } else {
     int64_t cost_time = ObTimeUtility::fast_current_time() - start_ts;
     if (cost_time > 10 * 1000) { //10ms
@@ -1495,8 +1493,7 @@ int ObLogApplyService::handle_submit_task_(ObApplyStatus *apply_status)
   }
   return ret;
 }
-
-//析构时调用,归还所有日志流的计数
+// Called during destruction, return the count of all log streams
 int ObLogApplyService::remove_all_ls_()
 {
   int ret = OB_SUCCESS;

@@ -75,7 +75,7 @@ public:
   int init();
   TO_STRING_KV(KP_(trans_ctx));
 public:
-  // 只在对应工作线程中调用, 串行执行
+  // Only called in the corresponding worker thread, serial execution
   int write(int32_t session_id, const table::ObTableLoadTabletObjRowArray &row_array);
   int px_write(common::ObIVector *tablet_id_vector,
                const storage::ObDirectLoadBatchRows &batch_rows);

@@ -69,7 +69,7 @@ int generate_oss_data(const common::ObString &uri,
 TEST(TestLogExternalStorageHandler, test_log_external_storage_handler)
 {
   ObLogExternalStorageHandler handler;
-  // 测试异常内存状态——没有init
+  // Test abnormal memory state——no init
   EXPECT_EQ(false, handler.is_inited_);
   EXPECT_EQ(OB_NOT_INIT, handler.start(10));
   const int64_t MB = 1*1024*1024;
@@ -86,39 +86,34 @@ TEST(TestLogExternalStorageHandler, test_log_external_storage_handler)
   palf::LogIOContext io_ctx;
   EXPECT_EQ(OB_NOT_INIT, handler.pread(uri, storage_info, storage_id, offset, read_buf, read_buf_size, real_read_size, io_ctx));
   EXPECT_EQ(OB_NOT_INIT, handler.resize(16, 0));
-
-  // 测试异常内存状态——没有start
+  // Test abnormal memory state--no start
   EXPECT_EQ(OB_SUCCESS, handler.init());
   EXPECT_EQ(true, handler.is_inited_);
   EXPECT_EQ(OB_NOT_RUNNING, handler.pread(uri, storage_info, storage_id, offset, read_buf, read_buf_size, real_read_size, io_ctx));
   EXPECT_EQ(OB_NOT_RUNNING, handler.resize(16, 100));
-
-
-  // 测试invalid argument
+  // Test invalid argument
   EXPECT_EQ(OB_INVALID_ARGUMENT, handler.start(-1));
-  // 当concurrency超过最大并发度时，以最大并发度为准
+  // When concurrency exceeds the maximum concurrency, use the maximum concurrency as the standard
   EXPECT_NE(OB_INVALID_ARGUMENT, handler.start(ObLogExternalStorageHandler::CONCURRENCY_LIMIT+1));
   EXPECT_EQ(ObLogExternalStorageHandler::CONCURRENCY_LIMIT, handler.concurrency_);
   EXPECT_EQ(ObLogExternalStorageHandler::CONCURRENCY_LIMIT*ObLogExternalStorageHandler::CAPACITY_COEFFICIENT,
             handler.capacity_);
   EXPECT_EQ(true, handler.is_running_);
-
-  // 重复start
+  // duplicate start
   const int64_t concurrency = 16;
   EXPECT_EQ(OB_SUCCESS, handler.start(concurrency));
 
   EXPECT_EQ(OB_SUCCESS, generate_oss_data(uri, storage_info, read_buf, palf::PALF_PHY_BLOCK_SIZE));
-
-  // 验证读取——invalid argument
+  // Validate read——invalid argument
   {
     ObString empty_uri;
     EXPECT_EQ(OB_INVALID_ARGUMENT, handler.pread(empty_uri, storage_info, storage_id, offset, read_buf, read_buf_size, real_read_size, io_ctx));
-    // NFS的storage info为empty
+    // NFS storage info is empty
     ObString empty_storage_info;
     EXPECT_EQ(OB_SUCCESS, handler.pread(uri, storage_info, storage_id, offset, read_buf, read_buf_size, real_read_size, io_ctx));
     int64_t invalid_offset = -1;
     EXPECT_EQ(OB_INVALID_ARGUMENT, handler.pread(uri, storage_info, storage_id, invalid_offset, read_buf, read_buf_size, real_read_size, io_ctx));
-    // 读偏移等于文件长度，返回成功，real_read_size=0
+    // Read offset equals file length, return success, real_read_size=0
     int64_t valid_offset = 64*1024*1024;
     EXPECT_NE(OB_INVALID_ARGUMENT, handler.pread(uri, storage_info, storage_id, valid_offset, read_buf, read_buf_size, real_read_size, io_ctx));
     EXPECT_EQ(0, real_read_size);
@@ -127,8 +122,7 @@ TEST(TestLogExternalStorageHandler, test_log_external_storage_handler)
     int64_t invalid_read_buf_size = 0;
     EXPECT_EQ(OB_INVALID_ARGUMENT, handler.pread(uri, storage_info, storage_id, offset, read_buf, invalid_read_buf_size, real_read_size, io_ctx));
   }
-
-  // 验证resize——invalid argument
+  // Validate resize——invalid argument
   {
     int64_t invalid_concurrency = -1;
     EXPECT_EQ(OB_INVALID_ARGUMENT, handler.resize(invalid_concurrency, 0));
@@ -136,28 +130,25 @@ TEST(TestLogExternalStorageHandler, test_log_external_storage_handler)
     EXPECT_EQ(OB_INVALID_ARGUMENT, handler.resize(concurrency, invalid_timeout_us));
 
   }
-
-  // 验证私有函数
+  // Validate private function
   {
     EXPECT_EQ(OB_SUCCESS, handler.resize_(16));
-    // 验证is_valid_concurrency_为false
+    // Validate is_valid_concurrency_ is false
     int64_t invalid_concurrency = -1;
     EXPECT_EQ(false, handler.is_valid_concurrency_(invalid_concurrency));
-
-    // 当并发度超过128时，会将concurrency_设置为128.
+    // When concurrency exceeds 128, concurrency_ will be set to 128.
     invalid_concurrency = ObLogExternalStorageHandler::CONCURRENCY_LIMIT + 1;
     EXPECT_EQ(true, handler.is_valid_concurrency_(invalid_concurrency));
-
-    // 验证get_async_task_count_
-    // 单个任务最小2M, 在concurrency足够的情况下，最多存在8个异步任务
+    // Validate get_async_task_count_
+    // Single task minimum 2M, in case of sufficient concurrency, up to 8 asynchronous tasks can exist
     int64_t total_size = 15 * MB;
     EXPECT_EQ(8, handler.get_async_task_count_(total_size));
-    // 最多存在51个异步任务，由于并发度问题，只能存在16个
+    // A maximum of 51 asynchronous tasks can exist, due to concurrency issues, only 16 can exist
     total_size = 101 * MB;
     EXPECT_EQ(16, handler.get_async_task_count_(total_size));
 
     ObLogExternalStorageCtx pread_ctx;
-    // 验证construct_async_tasks_and_push_them_into_thread_pool_
+    // Validate construct_async_tasks_and_push_them_into_thread_pool_
     real_read_size = 0;
     EXPECT_EQ(OB_SUCCESS, handler.construct_async_pread_tasks_
               (uri, storage_info, storage_id, offset, read_buf, read_buf_size, pread_ctx)); 
@@ -165,8 +156,7 @@ TEST(TestLogExternalStorageHandler, test_log_external_storage_handler)
     ASSERT_EQ(real_read_size, read_buf_size);
     CLOG_LOG(INFO, "after test private interface", K(real_read_size), K(read_buf_size));
   }
-
-  // 验证公有函数
+  // Validate public function
   {
     real_read_size = 0;
     int64_t invalid_offset = 100*1024*1024;
@@ -226,8 +216,7 @@ TEST(TestLogExternalStorageHandler, test_log_external_storage_handler)
     }
 
   }
-
-  // 并发场景验证
+  // Concurrency scenario validation
   {
     const int64_t pread_thread_count = 2;
     std::vector<std::thread> pread_thread;

@@ -52,11 +52,11 @@ private:
   int should_add_tenant_condition(bool &need, const uint64_t tenant_id) const;
 
 private:
-  // 切sys前被代理的普通租户ID
+  // ID of the regular tenant being proxied before switching sys
   uint64_t general_tenant_id_;
   // agent table Compat Mode
   lib::Worker::CompatMode mode_;
-  // 表明是否这张代理表只查系统租户下的数据
+  // Indicates whether this proxy table only queries data under the system tenant
   bool only_sys_data_;
   DISALLOW_COPY_AND_ASSIGN(ObAgentVirtualTable);
 };

@@ -54,54 +54,54 @@ public:
   static void update_null_bitmap(char *&bitmap, int64_t field_index);
 
   /**
-   * 将长度写入到buf里面，可能占1,3,4,9个字节。
+   * Write the length into buf, which may take 1, 3, 4, or 9 bytes.
    *
-   * @param [in] buf 要写入长度的buf
-   * @param [in] len buf的总字节数
-   * @param [in] length 需要写入的长度的值
-   * @param [in,out] pos buf已使用的字节数
+   * @param [in] buf The buf to write the length into
+   * @param [in] len Total number of bytes in buf
+   * @param [in] length The value of the length to be written
+   * @param [in,out] pos Number of bytes already used in buf
    *
    * @return oceanbase error code
    */
   static int store_length(char *buf, int64_t len, uint64_t length, int64_t &pos);
   /**
-   * 读取长度字段，配合 store_length() 使用
+   * Read the length field, used in conjunction with store_length()
    *
-   * @param [in,out] pos 读取长度的位置，读取后更新pos
-   * @param [out] length 长度
+   * @param [in,out] pos The position to read the length from, pos is updated after reading
+   * @param [out] length The length
    */
   static int get_length(const char *&pos, uint64_t &length);
   /**
-   * 读取长度字段，配合 store_length() 使用
+   * Read the length field, used in conjunction with store_length()
    *
-   * @param [in,out] pos 读取长度的位置，读取后更新pos
-   * @param [out] length 长度
-   * @param [out] pos_inc_len pos增加的长度
+   * @param [in,out] pos The position to read the length from, pos is updated after reading
+   * @param [out] length The length
+   * @param [out] pos_inc_len The length by which pos is incremented
    */
   static int get_length(const char *&pos, uint64_t &length, uint64_t &pos_inc_len);
   /**
-   * 以length coded string格式存储数字时，需要占用的长度
+   * The length required to store a number in length coded string format
    *
-   * @param [in] 数字
-   * @return 存储时需要字节数
+   * @param [in] number
+   * @return number of bytes required for storage
    */
   static uint64_t get_number_store_len(const uint64_t num);
   /**
-   * 存一个 NULL 标志。
+   * Store a NULL flag.
    *
-   * @param buf 写入的内存地址
-   * @param len buf的总字节数
-   * @param pos buf已写入的字节数
+   * @param buf Memory address to write to
+   * @param len Total number of bytes in buf
+   * @param pos Number of bytes already written to buf
    */
   static inline int store_null(char *buf, int64_t len, int64_t &pos);
   /**
    * @see store_str_v()
-   * 将一段以'\0'结尾的字符串str打包进入buf（length coded string格式）
+   * Pack a null-terminated string str into buf (length coded string format)
    *
-   * @param [in] buf 写入的内存地址
-   * @param [in] len buf的总字节数
-   * @param [in] str 需要打包的字符串
-   * @param [in,out] pos buf已使用的字节数
+   * @param [in] buf The memory address to write to
+   * @param [in] len Total number of bytes in buf
+   * @param [in] str The string to be packed
+   * @param [in,out] pos Number of bytes already used in buf
    *
    * @return OB_SUCCESS or oceanbase error code.
    *
@@ -109,13 +109,13 @@ public:
    */
   static int store_str(char *buf, int64_t len, const char *str, int64_t &pos);
   /**
-   * 将一段长度为length的字符串str打包进入buf（length coded string格式）
+   * Pack a string str of length length into buf (length coded string format)
    *
-   * @param [in] buf 写入的内存地址
-   * @param [in] len buf的总字节数
-   * @param [in] str 需要打包的字符串
-   * @param [in] length str的长度
-   * @param [in,out] pos buf已使用的字节数
+   * @param [in] buf The memory address to write to
+   * @param [in] len Total number of bytes in buf
+   * @param [in] str The string to be packed
+   * @param [in] length Length of str
+   * @param [in,out] pos Number of bytes already used in buf
    *
    * @return OB_SUCCESS or oceanbase error code.
    *
@@ -125,12 +125,12 @@ public:
   static int store_str_v(char *buf, int64_t len, const char *str,
                          const uint64_t length, int64_t &pos);
   /**
-   * 将ObString结构的字符串str打包进入buf（length coded string格式）
+   * Pack the string str of ObString structure into buf (in length coded string format)
    *
-   * @param [in] buf 写入的内存地址
-   * @param [in] len buf的总字节数
-   * @param [in] str ObString结构的字符串
-   * @param [in,out] pos buf已使用的字节数
+   * @param [in] buf The memory address to write to
+   * @param [in] len Total number of bytes in buf
+   * @param [in] str String of ObString structure
+   * @param [in,out] pos Number of bytes already used in buf
    *
    * @return OB_SUCCESS or oceanbase error code.
    *
@@ -141,35 +141,35 @@ public:
   static int store_obstr_with_pre_space(char *buf, int64_t len, ObString str, int64_t &pos);
   /**
    * @see store_str_vzt()
-   * 将一段以'\0'结尾的字符串str打包进入buf（zero terminated string格式）
+   * Pack a zero-terminated string str into buf (zero terminated string format)
    *
-   * @param [in] buf 写入的内存地址
-   * @param [in] len buf的总字节数
-   * @param [in] str 需要打包的字符串
-   * @param [in,out] pos buf已使用的字节数
+   * @param [in] buf The memory address to write to
+   * @param [in] len Total number of bytes in buf
+   * @param [in] str The string to be packed
+   * @param [in,out] pos Number of bytes already used in buf
    *
    * @return OB_SUCCESS or oceanbase error code.
    */
   /**
    * @see store_str_vzt()
-   * 将一段以'\0'结尾的字符串str打包进入buf（none-zero terminated string格式）
+   * Pack a null-terminated string str into buf (none-zero terminated string format)
    *
-   * @param [in] buf 写入的内存地址
-   * @param [in] len buf的总字节数
-   * @param [in] str 需要打包的字符串
-   * @param [in,out] pos buf已使用的字节数
+   * @param [in] buf The memory address to write to
+   * @param [in] len Total number of bytes in buf
+   * @param [in] str The string to be packed
+   * @param [in,out] pos Number of bytes already used in buf
    *
    * @return OB_SUCCESS or oceanbase error code.
    */
   /**
    * @see store_str_zt()
-   * 将一段长度为length的字符串str打包进入buf（zero terminated string格式）
+   * Pack a string str of length length into buf (zero terminated string format)
    *
-   * @param [in] buf 写入的内存地址
-    * @param [in] len buf的总字节数
-   * @param [in] str 需要打包的字符串
-   * @param [in] length str的长度（不包括'\0'）
-   * @param [in,out] pos buf已使用的字节数
+   * @param [in] buf Memory address to write to
+    * @param [in] len Total number of bytes in buf
+   * @param [in] str String to be packed
+   * @param [in] length Length of str (excluding '\0')
+   * @param [in,out] pos Number of bytes already used in buf
    *
    * @return OB_SUCCESS or oceanbase error code.
    */
@@ -177,13 +177,13 @@ public:
                            const uint64_t length, int64_t &pos);
   /**
    * @see store_str_zt()
-   * 将一段长度为length的字符串str打包进入buf（none-zero terminated string格式）
+   * Pack a string str of length length into buf (none-zero terminated string format)
    *
-   * @param [in] buf 写入的内存地址
-   * @param [in] len buf的总字节数
-   * @param [in] str 需要打包的字符串
-   * @param [in] length str的长度（不包括'\0'）
-   * @param [in,out] pos buf已使用的字节数
+   * @param [in] buf The memory address to write to
+   * @param [in] len Total number of bytes in buf
+   * @param [in] str The string to be packed
+   * @param [in] length Length of str (excluding '\0')
+   * @param [in,out] pos Number of bytes already used in buf
    *
    * @return OB_SUCCESS or oceanbase error code.
    */
@@ -191,23 +191,23 @@ public:
                             const char *str, int64_t length, int64_t &pos);
   /**
    * @see store_str_vzt()
-   * 将ObString结构的字符串str打包进入buf（zero terminated string格式）
+   * Pack the string str of ObString structure into buf (zero terminated string format)
    *
-   * @param [in] buf 写入的内存地址
-   * @param [in] len buf的总字节数
-   * @param [in] str ObString结构的字符串
-   * @param [in,out] pos buf已使用的字节数
+   * @param [in] buf The memory address to write to
+   * @param [in] len Total number of bytes of buf
+   * @param [in] str String of ObString structure
+   * @param [in,out] pos Number of bytes already used in buf
    *
    * @return OB_SUCCESS or oceanbase error code.
    */
   static int store_obstr_zt(char *buf, int64_t len, ObString str, int64_t &pos);
   /**
-   * 将ObString结构的字符串str打包进入buf（none-zero terminated raw string格式）
+   * Pack the string str of ObString structure into buf (none-zero terminated raw string format)
    *
-   * @param [in] buf 写入的内存地址
-   * @param [in] len buf的总字节数
-   * @param [in] str ObString结构的字符串
-   * @param [in,out] pos buf已使用的字节数
+   * @param [in] buf The memory address to write to
+   * @param [in] len Total number of bytes of buf
+   * @param [in] str String of ObString structure
+   * @param [in,out] pos Number of bytes already used in buf
    *
    * @return OB_SUCCESS or oceanbase error code.
    */
@@ -251,35 +251,35 @@ public:
 
 
   /**
-   * 在buf[0...offset)处添0，原来的org_char_size字节数据往后移动offset字节
+   * Add 0 at buf[0...offset), move the original org_char_size bytes of data backward by offset bytes
    */
   static void prepend_zeros(char *buf, const int64_t org_char_size, int64_t offset);
 
 
   /**
-   * 序列化一个null类型的cell到buf + pos的位置。
+   * Serialize a null type cell to the position of buf + pos.
    *
-   * @param [in] obj 需要序列化的cell
-   * @param [in] buf 输出的buf
-   * @param [in] len buf的大小
-   * @param [in,out] pos 写入buf的位置
+   * @param [in] obj The cell to be serialized
+   * @param [in] buf The output buffer
+   * @param [in] len The size of the buffer
+   * @param [in,out] pos The position to write to the buffer
    * @param [in] field index
    *
-   * @return 成功返回OB_SUCCESS， 失败返回oceanbase error code
+   * @return Returns OB_SUCCESS on success, returns oceanbase error code on failure
    */
   static int null_cell_str(char *buf, const int64_t len,
                            MYSQL_PROTOCOL_TYPE type, int64_t &pos,
                            int64_t cell_index, char *bitmap);
   /**
-   * 序列化一个整型的cell到buf + pos的位置。
+   * Serialize an integer cell to the position of buf + pos.
    * (ObBoolType, ObIntType)
    *
-   * @param [in] obj 需要序列化的cell
-   * @param [in] buf 输出的buf
-   * @param [in] len buf的大小
-   * @param [in,out] pos 写入buf的位置
+   * @param [in] obj The cell to be serialized
+   * @param [in] buf The output buffer
+   * @param [in] len The size of the buffer
+   * @param [in,out] pos The position to write to the buffer
    *
-   * @return 成功返回OB_SUCCESS， 失败返回oceanbase error code
+   * @return Returns OB_SUCCESS on success, returns oceanbase error code on failure
    */
   static int int_cell_str(char *buf, const int64_t len, int64_t val,
                           const ObObjType obj_type,
@@ -287,29 +287,29 @@ public:
                           MYSQL_PROTOCOL_TYPE type, int64_t &pos,
                           bool zerofill, int32_t zflength);
   /**
-   * 序列化一个定点数型的cell到buf + pos的位置。
+   * Serialize a fixed-point type cell to the position of buf + pos.
    * (ObDecimalType)
    *
-   * @param [in] obj 需要序列化的cell
-   * @param [in] buf 输出的buf
-   * @param [in] len buf的大小
-   * @param [in,out] pos 写入buf的位置
+   * @param [in] obj The cell to be serialized
+   * @param [in] buf The output buffer
+   * @param [in] len The size of the buffer
+   * @param [in,out] pos The position to write to the buffer
    *
-   * @return 成功返回OB_SUCCESS， 失败返回oceanbase error code
+   * @return Returns OB_SUCCESS on success, returns oceanbase error code on failure
    */
   static int number_cell_str(char *buf, const int64_t len,
                              const number::ObNumber &val, int64_t &pos, int16_t scale,
                              bool zerofill, int32_t zflength);
   /**
-   * 序列化一个datetime型的cell到buf + pos的位置。
+   * Serialize a datetime type cell to the position of buf + pos.
    * (ObDateTimeType, ObTimestampType)
    *
-   * @param [in] obj 需要序列化的cell
-   * @param [in] buf 输出的buf
-   * @param [in] len buf的大小
-   * @param [in,out] pos 写入buf的位置
+   * @param [in] obj The cell to be serialized
+   * @param [in] buf The output buffer
+   * @param [in] len The size of the buffer
+   * @param [in,out] pos The position to write to the buffer
    *
-   * @return 成功返回OB_SUCCESS， 失败返回oceanbase error code
+   * @return Returns OB_SUCCESS on success, returns oceanbase error code on failure
    */
   static int datetime_cell_str(char *buf, const int64_t len,
                                int64_t val, MYSQL_PROTOCOL_TYPE type, int64_t &pos,
@@ -319,27 +319,27 @@ public:
                                 const ObTimeZoneInfo *tz_info, int16_t scale);
 
   /**
-   * 序列化一个obstring型的cell到buf + pos的位置。
+   * Serialize an obstring type cell to the position of buf + pos.
    * (ObDateTimeType, ObTimestampType)
    *
-   * @param [in] obj 需要序列化的cell
-   * @param [in] buf 输出的buf
-   * @param [in] len buf的大小
-   * @param [in,out] pos 写入buf的位置
+   * @param [in] obj The cell to be serialized
+   * @param [in] buf The output buffer
+   * @param [in] len The size of buf
+   * @param [in,out] pos The position to write to buf
    *
-   * @return 成功返回OB_SUCCESS， 失败返回oceanbase error code
+   * @return Returns OB_SUCCESS on success, returns oceanbase error code on failure
    */
 
   /**
-   * 序列化一个otimestamp型的cell到buf + pos的位置。
+   * Serialize an otimestamp type cell to the position of buf + pos.
    * (ObDateTimeType, ObTimestampType)
    *
-   * @param [in] obj 需要序列化的cell
-   * @param [in] buf 输出的buf
-   * @param [in] len buf的大小
-   * @param [in,out] pos 写入buf的位置
+   * @param [in] obj The cell to be serialized
+   * @param [in] buf The output buffer
+   * @param [in] len The size of the buffer
+   * @param [in,out] pos The position to write to the buffer
    *
-   * @return 成功返回OB_SUCCESS， 失败返回oceanbase error code
+   * @return Returns OB_SUCCESS on success, returns oceanbase error code on failure
    */
   static int otimestamp_cell_str(char *buf, const int64_t len,
                                  const ObOTimestampData &ot_data, MYSQL_PROTOCOL_TYPE type, int64_t &pos,
@@ -348,69 +348,69 @@ public:
                                  const ObOTimestampData &ot_data, MYSQL_PROTOCOL_TYPE type, int64_t &pos,
                                  const ObDataTypeCastParams &dtc_params, const int16_t scale, const ObObjType obj_type);
   /**
-   * 序列化一个date型的cell到buf + pos的位置。
+   * Serialize a date-type cell to the position of buf + pos.
    * (ObDateType)
    *
-   * @param [in] obj 需要序列化的cell
-   * @param [in] buf 输出的buf
-   * @param [in] len buf的大小
-   * @param [in,out] pos 写入buf的位置
+   * @param [in] obj The cell to be serialized
+   * @param [in] buf The output buffer
+   * @param [in] len The size of the buffer
+   * @param [in,out] pos The position to write to the buffer
    *
-   * @return 成功返回OB_SUCCESS， 失败返回oceanbase error code
+   * @return Returns OB_SUCCESS on success, or an oceanbase error code on failure
    */
   static int date_cell_str(char *buf, const int64_t len,
                            int32_t val, MYSQL_PROTOCOL_TYPE type, int64_t &pos);
   static int mdate_cell_str(char *buf, const int64_t len,
                             ObMySQLDate val, MYSQL_PROTOCOL_TYPE type, int64_t &pos);
   /**
-   * 序列化一个time型的cell到buf + pos的位置。
+   * Serialize a time-type cell to the position of buf + pos.
    * (ObTimeType)
    *
-   * @param [in] obj 需要序列化的cell
-   * @param [in] buf 输出的buf
-   * @param [in] len buf的大小
-   * @param [in,out] pos 写入buf的位置
+   * @param [in] obj The cell to be serialized
+   * @param [in] buf The output buffer
+   * @param [in] len The size of the buffer
+   * @param [in,out] pos The position to write to the buffer
    *
-   * @return 成功返回OB_SUCCESS， 失败返回oceanbase error code
+   * @return Returns OB_SUCCESS on success, returns oceanbase error code on failure
    */
   static int time_cell_str(char *buf, const int64_t len,
                            int64_t val, MYSQL_PROTOCOL_TYPE type, int64_t &pos, int16_t scale);
   /**
-   * 序列化一个year型的cell到buf + pos的位置。
+   * Serialize a year-type cell to the position of buf + pos.
    * (ObYearType)
    *
-   * @param [in] obj 需要序列化的cell
-   * @param [in] buf 输出的buf
-   * @param [in] len buf的大小
-   * @param [in,out] pos 写入buf的位置
+   * @param [in] obj The cell to be serialized
+   * @param [in] buf The output buffer
+   * @param [in] len The size of the buffer
+   * @param [in,out] pos The position to write to the buffer
    *
-   * @return 成功返回OB_SUCCESS， 失败返回oceanbase error code
+   * @return Returns OB_SUCCESS on success, or an oceanbase error code on failure
    */
   static int year_cell_str(char *buf, const int64_t len,
                            uint8_t val, MYSQL_PROTOCOL_TYPE type, int64_t &pos);
   /**
-   * 序列化一个字符串类型的cell到buf + pos的位置。
+   * Serialize a string type cell to the position of buf + pos.
    * (ObVarcharType)
    *
-   * @param [in] obj 需要序列化的cell
-   * @param [in] buf 输出的buf
-   * @param [in] len buf的大小
-   * @param [in,out] pos 写入buf的位置
+   * @param [in] obj The cell to be serialized
+   * @param [in] buf The output buffer
+   * @param [in] len The size of the buffer
+   * @param [in,out] pos The position to write to the buffer
    *
-   * @return 成功返回OB_SUCCESS， 失败返回oceanbase error code
+   * @return Returns OB_SUCCESS on success, returns oceanbase error code on failure
    */
   static int varchar_cell_str(char *buf, int64_t len, const ObString &val,
                               const bool is_oracle_raw, int64_t &pos);
   /**
-   * 序列化一个浮点数型的cell到buf + pos的位置。
+   * Serialize a floating-point type cell to the position of buf + pos.
    * (ObFloatType, ObDoubleType)
    *
-   * @param [in] obj 需要序列化的cell
-   * @param [in] buf 输出的buf
-   * @param [in] len buf的大小
-   * @param [in,out] pos 写入buf的位置
+   * @param [in] obj The cell to be serialized
+   * @param [in] buf The output buffer
+   * @param [in] len The size of the buffer
+   * @param [in,out] pos The position to write to the buffer
    *
-   * @return 成功返回OB_SUCCESS， 失败返回oceanbase error code
+   * @return Returns OB_SUCCESS on success, returns oceanbase error code on failure
    */
   static int float_cell_str(char *buf, const int64_t len, float val,
                             MYSQL_PROTOCOL_TYPE type, int64_t &pos, int16_t scale,

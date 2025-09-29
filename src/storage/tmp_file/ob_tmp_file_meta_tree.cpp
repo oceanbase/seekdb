@@ -2746,8 +2746,7 @@ int ObSharedNothingTmpFileMetaTree::get_need_evict_page_num(
   }
   return ret;
 }
-
-//NOTE: 这个页被取出来时，并没有加锁，到时候可能需要为write_cache的读写单独弄一把锁
+//NOTE: This page was retrieved without locking, so it may be necessary to have a separate lock for read/write operations on write_cache
 int ObSharedNothingTmpFileMetaTree::get_page_(
     const ObSharedNothingTmpFileMetaItem &page_info,
     const int32_t level_page_index,
@@ -3056,8 +3055,7 @@ int ObSharedNothingTmpFileMetaTree::read_item_(
   }
   return ret;
 }
-
-// XXX 增加 page 物理范围校验；
+// XXX add page physical range validation;
 template<typename ItemType>
 int ObSharedNothingTmpFileMetaTree::read_item_(
     const char* page_buff,

@@ -60,9 +60,9 @@ public:
                K_(rowkey_expr),
                K_(rowkey_accuracys),
                K_(calc_exprs));
-  ObString constraint_name_;  // 冲突时打印表名用
-  ExprFixedArray rowkey_expr_; // 索引表的主键
-  ExprFixedArray calc_exprs_; // 计算逐渐信息依赖的表达式
+  ObString constraint_name_;  // Print table name when conflict
+  ExprFixedArray rowkey_expr_; // Primary key of the index table
+  ExprFixedArray calc_exprs_; // Calculate gradually information dependent expressions
   AccuracyFixedArray rowkey_accuracys_;
 };
 
@@ -82,8 +82,8 @@ struct ObConflictValue
       current_datum_row_(NULL),
       new_row_source_(ObNewRowSource::FROM_SCAN)
   {}
-  //在进行check_duplicate_rowkey时, 会将冲突的行去重(add_var_to_array_no_dup)
-  //需要使用该操作符
+  // When performing check_duplicate_rowkey, it will remove duplicate rows (add_var_to_array_no_dup)
+  // Need to use this operator
   bool operator==(const ObConflictValue &other) const;
   TO_STRING_KV(KPC_(baseline_datum_row), KPC_(current_datum_row), K_(new_row_source));
   const ObChunkDatumStore::StoredRow *baseline_datum_row_;
@@ -111,8 +111,8 @@ public:
 public:
   static const int64_t MAX_ROW_BATCH_SIZE = 1024 * 1024;
   ObConflictRowMap conflict_map_;
-  ObRowkey *rowkey_; // 临时的ObRowkey,用于map的compare，循环使用
-  common::ObIAllocator *allocator_; // allocator用来创建hash map
+  ObRowkey *rowkey_; // temporary ObRowkey, used for map compare, reused in loop
+  common::ObIAllocator *allocator_; // allocator used to create hash map
 };
 
 typedef common::ObFixedArray<ObRowkeyCstCtdef *, common::ObIAllocator> ObRowkeyCstCtdefArray;
@@ -137,17 +137,17 @@ public:
   TO_STRING_KV(K_(cst_ctdefs), K_(das_scan_ctdef), KPC_(calc_part_id_expr), K_(attach_spec));
   static const int64_t MIN_ROW_COUNT_USE_HASHSET_DO_DISTICT = 50;
   // must constraint_infos_.count() == conflict_map_array_.count()
-  // constraint_infos_ 用于生成ObConflictRowMap的key
+  // constraint_infos_ used to generate ObConflictRowMap key
   ObRowkeyCstCtdefArray cst_ctdefs_;
-  ObExpr *calc_part_id_expr_; // 非dist计划时是NULL
-  // calc_part_id_expr_计算所依赖的表达式，用于clear_eval_flag
+  ObExpr *calc_part_id_expr_; // Non-dist plan is NULL
+  // calc_part_id_expr_calculate the dependent expression, used for clear_eval_flag
   ExprFixedArray part_id_dep_exprs_;
-  // 回表查询，为了结构统一，主表也需要一次回表，第一次的insert都返回主表的主键
+  // Back-table query, to maintain structural consistency, the main table also needs a back-table operation, the first insert returns the primary key of the main table
   ObDASScanCtDef das_scan_ctdef_;
   int64_t partition_cnt_;
-  // 主表的主键, 用于构建回表时的scan_range
+  // Primary key of the main table, used for building scan_range when back-table scanning
   ExprFixedArray data_table_rowkey_expr_;
-  // 主表的all_columns
+  // Main table's all_columns
   ExprFixedArray table_column_exprs_;
   bool use_dist_das_;
   int64_t rowkey_count_;
@@ -207,28 +207,23 @@ public:
                     ObEvalCtx &eval_ctx,
                     const ObConflictCheckerCtdef &checker_ctdef);
   ~ObConflictChecker() {};
-
-  //初始conflict_checker
+  // Initial conflict_checker
   int init_conflict_checker(const ObExprFrameInfo *expr_frame_info,
                             ObDASTableLoc *table_loc,
                             bool use_partition_gts_opt);
   void set_local_tablet_loc(ObDASTabletLoc *tablet_loc) { local_tablet_loc_ = tablet_loc; }
-
-  //初始conflict_map
+  // Initial conflict_map
   int create_conflict_map(int64_t replace_row_cnt);
 
   int create_rowkey_check_hashset(int64_t replace_row_cnt);
-
-  // 检查当前的主键是否冲突
+  // Check if the current primary key conflicts
   int check_duplicate_rowkey(const ObChunkDatumStore::StoredRow *replace_row,
                              ObIArray<ObConflictValue> &constraint_values,
                              bool is_insert_up);
-
-  // 从hash map中删除冲突行
+  // Remove conflicting rows from hash map
   int delete_old_row(const ObChunkDatumStore::StoredRow *replace_row,
                      ObNewRowSource from);
-
-  // 插入新行到hash map中
+  // Insert new line into hash map
   int insert_new_row(const ObChunkDatumStore::StoredRow *new_row,
                      ObNewRowSource from);
 
@@ -239,33 +234,27 @@ public:
 
   int convert_exprs_to_stored_row(const ObExprPtrIArray &exprs,
                                   ObChunkDatumStore::StoredRow *&new_row);
-
-  // todo @kaizhan.dkz 这里可以把 char *buf 和int64_t buf_len 替换成ObString
+  // todo @kaizhan.dkz Here we can replace char *buf and int64_t buf_len with ObString
   int extract_rowkey_info(const ObRowkeyCstCtdef *constraint_info,
                           char *buf,
                           int64_t buf_len);
-
-  //这个函数类似于shuffle_final_data，只不过这里只是返回主表的hash map的指针，外层函数迭代map，将行分别插入对应的das task
+  // This function is similar to shuffle_final_data, only here it just returns a pointer to the hash map of the main table, the outer function iterates over the map, inserting rows into the corresponding das task
   int get_primary_table_map(ObConflictRowMap *&primary_map);
-
-  // 将回表拉回的数据来构建map
+  // Use the data pulled back from the table to build the map
   int build_base_conflict_map(
       int64_t replace_row_cnt,
       const ObChunkDatumStore::StoredRow *conflict_row);
-
-  // 向主表做回表，根据冲突行的主键，查询出所有对应主表的冲突行, 构建冲突map
+  // Back to the main table for lookup, query all corresponding conflict rows in the main table based on the primary key of the conflicting row, and build the conflict map
   int do_lookup_and_build_base_map(int64_t replace_row_cnt);
 
   int post_all_das_scan_tasks();
-
-  // todo @kaizhan.dkz 构建回表的das scan task
+  // todo @kaizhan.dkz build the das scan task for back-table lookup
   int build_primary_table_lookup_das_task();
 
   int add_lookup_range_no_dup(storage::ObTableScanParam &scan_param,
                               ObNewRange &lookup_range,
                               common::ObTabletID &tablet_id);
-
-  //会被算子的inner_close函数调用
+  // will be called by the operator's inner_close function
   int close();
 
   int reuse();
@@ -280,21 +269,17 @@ public:
 private:
   int to_expr(const ObChunkDatumStore::StoredRow *replace_row);
   int calc_lookup_tablet_loc(ObDASTabletLoc *&tablet_loc);
-
-  // get当前行对应的scan_op
+  // get current row corresponding scan_op
   int get_das_scan_op(ObDASTabletLoc *tablet_loc, ObDASScanOp *&das_scan_op);
-
-  // 构建回表的range信息
+  // Build the range information for back-table lookup
   int build_data_table_range(ObNewRange &lookup_range, ObRowkey &table_rowkey);
 
   // --------------------------
   int get_next_row_from_data_table(DASOpResultIter &result_iter,
                                    ObChunkDatumStore::StoredRow *&conflict_row);
-
-  // 构建ob_rowkey
+  // Build ob_rowkey
   int build_rowkey(ObRowkey *&rowkey, ObRowkeyCstCtdef *rowkey_cst_ctdef);
-
-  // 构建ob_rowkey
+  // Build ob_rowkey
   int build_tmp_rowkey(ObRowkey *rowkey, ObRowkeyCstCtdef *rowkey_info);
 
   int init_das_scan_rtdef();
@@ -305,13 +290,13 @@ private:
 public:
   static const int64_t MAX_ROWKEY_CHECKER_DISTINCT_BUCKET_NUM = 1 * 1024 * 1024;
   common::ObArrayWrap<ObConflictRowMapCtx> conflict_map_array_;
-  ObEvalCtx &eval_ctx_; // 用于表达式的计算
+  ObEvalCtx &eval_ctx_; // used for expression evaluation
   const ObConflictCheckerCtdef &checker_ctdef_;
   ObDASScanRtDef das_scan_rtdef_;
   ObDASAttachRtInfo *attach_rtinfo_;
-  // allocator用来创建hash map, 是ObExecContext内部的allocator 这个不能被reuse
+  // allocator is used to create hash map, this is the allocator inside ObExecContext and cannot be reused
   common::ObIAllocator &allocator_;
-  // das_scan回表用
+  // das_scan back table use
   // This das_ref must be careful with reuse and reset,
   // because its internal allocator is used in many places
   ObDASRef das_ref_;

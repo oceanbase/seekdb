@@ -329,7 +329,7 @@ void ObDASTaskResp::store_err_msg(const ObString &msg)
 {
   int ret = OB_SUCCESS;
   if (!msg.empty()) {
-    //这里使用databuff_printf的原因是databuff_printf在遇到buffer溢出时会保证buffer以'\0'结束，确保print的安全性
+    // Here the reason for using databuff_printf is that databuff_printf ensures the buffer ends with '\0' when a buffer overflow occurs, ensuring the safety of print
     if (OB_FAIL(databuff_printf(rcode_.msg_, OB_MAX_ERROR_MSG_LEN, "%.*s", msg.length(), msg.ptr()))) {
       SHARE_LOG(WARN, "store err msg failed", K(ret), K(msg));
       if (OB_SIZE_OVERFLOW == ret) {

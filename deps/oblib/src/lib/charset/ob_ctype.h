@@ -287,10 +287,10 @@ typedef struct ObCollationHandler
   bool (*init)(ObCharsetInfo *, ObCharsetLoader *);
   void (*uninit)(ObCharsetInfo *);
   /* Collation routines */
-  // 进行字符串比较的函数
+  // The function for string comparison
   int     (*strnncoll)(const struct ObCharsetInfo *,
                const unsigned char *, size_t, const unsigned char *, size_t, bool);
-  // 字符串比较时忽略尾部空格
+  // String comparison ignores trailing spaces
   int     (*strnncollsp)(const struct ObCharsetInfo *,
                          const unsigned char *, size_t, const unsigned char *, size_t,
                          bool diff_if_only_endspace_difference);
@@ -298,7 +298,7 @@ typedef struct ObCollationHandler
   size_t  (*strnxfrm)(const struct ObCharsetInfo *,
                       unsigned char *dst, size_t dstlen, unsigned int nweights,
                       const unsigned char *src, size_t srclen, unsigned int flags, bool *is_valid_unicode);
-  // 获取weight_string结果的长度
+  // Get the length of the weight_string result
   size_t (*strnxfrmlen)(const struct ObCharsetInfo *, size_t);
   // makes a sortkey suitable for memcmp() corresponding to the given variable length string
   size_t  (*strnxfrm_varlen)(const struct ObCharsetInfo*,
@@ -306,8 +306,7 @@ typedef struct ObCollationHandler
                              const unsigned char *src, size_t srclen,
                              bool is_memcmp, bool *is_valid_unicode);
   //size_t    (*strnxfrmlen)(const struct ObCharsetInfo *, size_t);
-
-  // creates a LIKE range, for optimizer，query range模块使用到了
+  // creates a LIKE range, for optimizer, query range module uses it
   // prifix_len should return **byte** length before the first '%'
   bool (*like_range)(const struct ObCharsetInfo *,
             const char *s, size_t s_length,

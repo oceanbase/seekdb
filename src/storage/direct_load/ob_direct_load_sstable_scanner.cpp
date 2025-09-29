@@ -238,7 +238,7 @@ int ObDirectLoadSSTableScanner::inner_open()
       curr_idx_ = start_idx - 1;
     }
     end_idx_ = end_idx - 1;
-    // 如果定位的下界为第一块, 属于特殊情况，则直接跳过数据块扫描
+    // If the lower bound of the location is the first block, which is a special case, then skip the data block scan directly
     if (end_idx_ < 0) {
       end_idx_ = 0;
       found_end_ = true;

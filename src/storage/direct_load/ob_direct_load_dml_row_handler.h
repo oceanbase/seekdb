@@ -46,11 +46,11 @@ public:
   virtual int handle_delete_row(const ObTabletID &tablet_id,
                                 const ObDirectLoadDatumRow &datum_row) = 0;
   // ObDatumRow with multi version cols
-  // 堆表导入insert非向量化接口使用
+  // Heap table import insert non-vectorized interface usage
   virtual int handle_insert_row(const ObTabletID &tablet_id,
                                 const blocksstable::ObDatumRow &datum_row) = 0;
   // ObBatchDatumRows with multi version cols
-  // 堆表导入insert向量化接口使用
+  // Heap table import insert vectorized interface usage
   virtual int handle_insert_batch(const ObTabletID &tablet_id,
                                   const blocksstable::ObBatchDatumRows &datum_rows) = 0;
 

@@ -91,9 +91,8 @@ void ObSessionValMap::reset()
   bucket_allocator_.reset();
   block_allocator_.reset();
 }
-
-// 成功则返回OB_SUCCESS
-// 其他返回码均表示不成功
+// Success then return OB_SUCCESS
+// Other return codes indicate failure
 int ObSessionValMap::set_refactored(const common::ObString &name, const ObSessionVariable &sess_var)
 {
   int ret = 0;

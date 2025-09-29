@@ -34,21 +34,20 @@ using namespace oceanbase::sql;
 using namespace oceanbase::share;
 using namespace oceanbase::sql::dtl;
 using namespace oceanbase::storage;
-
-// Note: 每个线程里的 Task 是对等的，唯一不同的是
-// 他们从 granule 中 "抢" 到的任务范围不同
+// Note: each Task within a thread is equal, the only difference is
+// They get different task ranges from the granule
 int ObPxSubCoord::pre_process()
 {
   int ret = OB_SUCCESS;
-  // 1. 注册中断
-  // 2. 构造 ObGranuleIterator 输入结构，由 Task 带出
-  // 3. 建立 SQC-QC 的通道
-  // 4. 获取工作线程，发送 Task. 向 QC 汇报工作线程数
-  // 5. 建立 SQC-Task 通道
-  // 6. SQC 获取 Task Channel Map 并分发给 Task
-  // 7. 等待 Task 执行完成
-  // 8. 汇报结果给 QC
-  // 9. 注销中断
+  // 1. Register interrupt
+  // 2. Construct ObGranuleIterator input structure, by Task carry out
+  // 3. Establish the SQC-QC channel
+  // 4. Get the worker thread, send Task. Report the number of worker threads to QC
+  // 5. Establish SQC-Task channel
+  // 6. SQC get Task Channel Map and distribute to Task
+  // 7. Wait for Task execution to complete
+  // 8. Report results to QC
+  // 9. Unregister interrupt
 
   LOG_TRACE("begin ObPxSubCoord process", K(ret));
   int64_t dfo_id = sqc_arg_.sqc_.get_dfo_id();
@@ -88,9 +87,9 @@ int ObPxSubCoord::pre_process()
   }
 
   if (OB_FAIL(ret)) {
-    // 通知 qc 中断事件
+    // Notify qc interrupt event
     if (IS_INTERRUPTED()) {
-      // 当前是被QC中断的，不再向QC发送中断
+      // The current process was interrupted by QC, no longer sending interrupts to QC
     } else {
       ObInterruptUtil::update_schema_error_code(sqc_arg_.exec_ctx_, ret);
       (void) ObInterruptUtil::interrupt_qc(sqc_arg_.sqc_, ret, sqc_arg_.exec_ctx_);
@@ -99,15 +98,14 @@ int ObPxSubCoord::pre_process()
 
   return ret;
 }
-
-// 当 SQC 收到来自 QC 的 DTL 消息时，根据消息类型来
-// 决定是否开始执行 task
-// 目前，收到 TRANSMIT CHANNEL、RECEIVE CHANNEL 消息时
-// 会触发 TASK 执行。
+// When SQC receives a DTL message from QC, process according to the message type
+// Decide whether to start executing task
+// Currently, when receiving TRANSMIT CHANNEL, RECEIVE CHANNEL messages
+// Will trigger TASK execution.
 //
-// 这里有一个隐寓：当 SQC 收到这一类消息时，说明 QC 已经
-// 确认这个 DFO 中所有 SQC 都有足够资源来执行这个 DFO
-// 不会因为任何 SQC worker 资源不足而终止 SQC 执行
+// Here is an implication: when SQC receives this kind of message, it means QC has already
+// Confirm that all SQCs in this DFO have sufficient resources to execute this DFO
+// Will not terminate SQC execution due to any SQC worker resource shortage
 int ObPxSubCoord::try_start_tasks(int64_t &dispatch_worker_count, bool is_fast_sqc)
 {
   int ret = OB_SUCCESS;
@@ -128,14 +126,14 @@ void ObPxSubCoord::notify_dispatched_task_exit(int64_t dispatched_worker_count)
     int tick = 1;
     ObPxTask &task = tasks.at(idx);
     while (false == task.is_task_state_set(SQC_TASK_EXIT)) {
-      // 每秒给当前 sqc 中未完成的 tasks 发送一次中断
-      // 首次发中断的时间为 100ms 时。定这个时间是为了
-      // cover px pool 调度 task 的延迟
+      // Send an interrupt to unfinished tasks in the current sqc once per second
+      // The time of the first interrupt is 100ms. Setting this time is to
+      // cover px pool scheduling task delay
       if (tick % 1000 == 100) {
         ObPxSqcMeta &sqc = sqc_arg_.sqc_;
         (void)ObInterruptUtil::interrupt_tasks(sqc, OB_GOT_SIGNAL_ABORTING);
       }
-      // 如果 10s 还没有退出，则打印一条日志。按照设计，不会出现这种情况
+      // If it has not exited after 10s, then print a log. According to the design, this situation should not occur
       if (tick++ % 10000 == 0) {
         LOG_INFO("waiting for task exit", K(idx), K(dispatched_worker_count), K(tick));
       }
@@ -277,7 +275,7 @@ int ObPxSubCoord::pre_setup_op_input(ObExecContext &ctx,
   }
   if (OB_SUCC(ret)) {
     if (IS_PX_RECEIVE(root.get_type())) {
-      // 遇到 receive 算子后，终止向下迭代
+      // Encountering the receive operator, terminate downward iteration
     } else {
       for (int32_t i = 0; i < root.get_child_num() && OB_SUCC(ret); ++i) {
         ObOpSpec *child = root.get_child(i);
@@ -582,7 +580,7 @@ int ObPxSubCoord::setup_op_input(ObExecContext &ctx,
 #endif
       } else {
 #if defined (OB_BUILD_JNI_ODPS)
-        // 对于同一个分区有多个task，这些task共用一个session
+        // For the same partition with multiple tasks, these tasks share one session
         ObOdpsJniUploaderMgr &odps_mgr =
             sqc_ctx.gi_pump_.get_odps_jni_uploader_mgr();
         if (OB_FAIL(odps_mgr.init_writer_params_in_px(
@@ -606,7 +604,7 @@ int ObPxSubCoord::setup_op_input(ObExecContext &ctx,
     }
   }
   if (IS_PX_RECEIVE(root.get_type())) {
-    // 遇到 receive 算子后，终止向下迭代
+    // Encounter receive operator, terminate downward iteration
   } else if (OB_SUCC(ret)) {
     for (int32_t i = 0; i < root.get_child_cnt() && OB_SUCC(ret); ++i) {
       ObOpSpec *child = root.get_child(i);
@@ -621,9 +619,8 @@ int ObPxSubCoord::setup_op_input(ObExecContext &ctx,
   }
   return ret;
 }
-
-// 实现方式: 通过 RPC 的方式为 task 分配线程，如果分配失败（50ms内未成功获得线程）
-//           则减少 task 个数
+// Implementation method: Through the RPC method to assign threads to the task, if the assignment fails (thread not obtained successfully within 50ms)
+//           then reduce the number of tasks
 int ObPxSubCoord::create_tasks(ObPxRpcInitSqcArgs &sqc_arg, ObSqcCtx &sqc_ctx, bool is_fast_sqc)
 {
   int ret = OB_SUCCESS;
@@ -635,7 +632,7 @@ int ObPxSubCoord::create_tasks(ObPxRpcInitSqcArgs &sqc_arg, ObSqcCtx &sqc_ctx, b
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("sqc args should not be NULL", K(ret));
   } else if (OB_FAIL(sqc_ctx.reserve_task_mem(sqc.get_task_count()))) {
-    // 为了确保 task 创建后能记录下来，先分配记录内存
+    // To ensure that the task can be recorded after creation, allocate record memory first
     LOG_WARN("fail pre alloc memory", K(sqc), K(ret));
   } else if (OB_UNLIKELY(NULL == (session = sqc_arg.exec_ctx_->get_my_session()))) {
     ret = OB_ERR_UNEXPECTED;
@@ -722,8 +719,8 @@ int ObPxSubCoord::dispatch_task_to_local_thread(ObPxRpcInitSqcArgs &sqc_arg,
     args.static_engine_root_ = sqc_arg.static_engine_root_;
     args.des_phy_plan_ = sqc_arg.des_phy_plan_;
     args.task_ = *task_ptr;
-    args.sqc_task_ptr_ = task_ptr; // 传内存地址给 task 执行线程，用于直接更新 task state
-    //记录开始调度task的时间
+    args.sqc_task_ptr_ = task_ptr; // pass memory address to task execution thread for directly updating task state
+    // Record the start time of scheduling the task
     args.sqc_handler_ = sqc_arg.sqc_handler_;
   }
 
@@ -766,8 +763,8 @@ int ObPxSubCoord::dispatch_task_to_thread_pool(ObPxRpcInitSqcArgs &sqc_arg,
       LOG_WARN("unexpected status: op root is null", K(ret));
     }
     args.task_ = *task_ptr;
-    args.sqc_task_ptr_ = task_ptr; // 传内存地址给 task 执行线程，用于直接更新 task state
-    //记录开始调度task的时间
+    args.sqc_task_ptr_ = task_ptr; // pass memory address to task execution thread for directly updating task state
+    // Record the start time of scheduling the task
     args.sqc_handler_ = sqc_arg.sqc_handler_;
   }
 
@@ -778,7 +775,7 @@ int ObPxSubCoord::dispatch_task_to_thread_pool(ObPxRpcInitSqcArgs &sqc_arg,
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("fail create new worker", K(ret));
   } else if (OB_FAIL(worker->run(args))) {
-    // DOP 未能满足，不再继续分配
+    // DOP could not be met, no longer continue allocation
     task_ptr->set_result(ret);
     LOG_ERROR("can't alloc task thread."
               "reservation logic behavior unexpected. reservation logic behavior unexpected",
@@ -802,8 +799,7 @@ int ObPxSubCoord::try_prealloc_data_channel(ObSqcCtx &sqc_ctx, ObPxSqcMeta &sqc)
   }
   return ret;
 }
-
-// 如果 QC 已经为 SQC 下面的 worker 分配了 transmit channel，则提前设置好
+// If QC has already assigned a transmit channel to the worker under SQC, set it up in advance
 int ObPxSubCoord::try_prealloc_transmit_channel(ObSqcCtx &sqc_ctx, ObPxSqcMeta &sqc)
 {
   int ret = OB_SUCCESS;
@@ -814,8 +810,7 @@ int ObPxSubCoord::try_prealloc_transmit_channel(ObSqcCtx &sqc_ctx, ObPxSqcMeta &
   }
   return ret;
 }
-
-// 如果 QC 已经为 SQC 下面的 worker 分配了 transmit channel，则提前设置好
+// If QC has already assigned a transmit channel to the worker under SQC, set it up in advance
 int ObPxSubCoord::try_prealloc_receive_channel(ObSqcCtx &sqc_ctx, ObPxSqcMeta &sqc)
 {
   int ret = OB_SUCCESS;
@@ -1080,13 +1075,13 @@ int ObPxSubCoord::rebuild_sqc_access_table_locations()
 void ObPxSubCoord::try_get_dml_op(ObOpSpec &root, ObTableModifySpec *&dml_op)
 {
   if (1 == root.get_child_num()) {
-      // 开启PX情况下，GI分配在insert/replace算子的上边，产生如下计划：
+      // Enable PX, GI allocation is above the insert/replace operator, generating the following plan:
       // ....
       //   GI
       //     INSERT/REPLACE
       //      ....
-      // 这种情况下INSERT/REPLACE算子对应的Table也需要参与到GI任务的划分
-      // 也存在GI算子下面是MONITOR算子, 目前只存在这两种情况.
+      // In this case, the Table corresponding to the INSERT/REPLACE operator also needs to participate in the GI task division
+      // Also exists GI operator below MONITOR operator, currently only these two cases exist.
     if (IS_DML(root.get_child(0)->get_type())) {
       dml_op = static_cast<ObTableModifySpec*>(root.get_child(0));
     } else if (PHY_MONITORING_DUMP == root.get_child(0)->get_type() ||

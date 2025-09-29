@@ -49,7 +49,7 @@ int ObTableLoadTransCtx::advance_trans_status(ObTableLoadTransStatusType trans_s
       ret = OB_CANCELED;
       LOG_WARN("trans is abort", KR(ret));
     }
-    // 正常运行阶段, 状态是一步步推进的
+    // Normal operation phase, the state progresses step by step
     else if (OB_UNLIKELY(static_cast<int64_t>(trans_status) !=
                          static_cast<int64_t>(trans_status_) + 1)) {
       ret = OB_STATE_NOT_MATCH;

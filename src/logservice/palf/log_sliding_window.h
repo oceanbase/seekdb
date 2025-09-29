@@ -480,10 +480,10 @@ private:
                            const bool is_fetch_log) const;
 public:
   typedef common::ObLinearHashMap<common::ObAddr, LsnTsInfo> SvrMatchOffsetMap;
-  static const int64_t TMP_HEADER_SER_BUF_LEN = 256; // log header序列化的临时buffer大小
-  static const int64_t APPEND_CNT_ARRAY_SIZE = 32;   // append次数统计数组的size
+  static const int64_t TMP_HEADER_SER_BUF_LEN = 256; // temporary buffer size for log header serialization
+  static const int64_t APPEND_CNT_ARRAY_SIZE = 32;   // size of the append count statistics array
   static const uint64_t APPEND_CNT_ARRAY_MASK = APPEND_CNT_ARRAY_SIZE - 1;
-  static const int64_t APPEND_CNT_LB_FOR_PERIOD_FREEZE = 140000;   // 切为PERIOD_FREEZE_MODE的append count下界
+  static const int64_t APPEND_CNT_LB_FOR_PERIOD_FREEZE = 140000;   // Lower bound of append count to switch to PERIOD_FREEZE_MODE
 private:
   struct LogTaskGuard
   {
@@ -554,19 +554,19 @@ private:
   // last_fetch_req_time_:
   //    record the request time of the last fetch operation.
   // last_fetch_end_lsn_:
-  //    记录本轮fetch的lsn终点，根据group_buffer容量算出
+  //    Record the LSN endpoint of this round's fetch, calculated based on the group_buffer capacity
   // last_fetch_max_log_id_:
-  //    记录本轮fetch的log_id终点，根据sw容量算出
-  // 一轮fetch的日志数量不定，达到上述任意一个条件就结束.
+  //    Record the log_id endpoint of this round fetch, calculated based on sw capacity
+  // The number of logs fetched in one round is uncertain, and it ends when any of the above conditions are met.
   //
   // last_fetch_committed_end_lsn_:
-  //    记录本轮fetch拉到所有日志后的committed_end_lsn, handle_next_submit_log_()时
-  //    检查如果处理到本轮fetch的最后一条日志(log_id与last_fetch_max_log_id_相等或者
-  //    log_end_lsn越过了last_fetch_end_lsn_), 则更新该值.
+  //    Record the committed_end_lsn after fetching all logs in this round, when handle_next_submit_log_() is called
+  //    Check if the last log of this round fetch is processed (log_id is equal to last_fetch_max_log_id_ or
+  //    update the value if log_end_lsn exceeds last_fetch_end_lsn_.
   //
-  // 流式fetch机制:
-  //    日志滑出时检查自己的end_lsn是否与last_fetch_committed_end_lsn_相等，是则触发下一轮fetch,
-  //    下一轮fetch的起点是(last_submit_log_id + 1).
+  // Streaming fetch mechanism:
+  //    Check if the end_lsn is equal to last_fetch_committed_end_lsn_ when the log slides out, trigger the next fetch if true,
+  //    The starting point for the next fetch is (last_submit_log_id + 1).
   //
   mutable common::ObSpinLock fetch_info_lock_;
   int64_t last_fetch_req_time_;

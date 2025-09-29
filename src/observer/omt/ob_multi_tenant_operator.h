@@ -29,14 +29,14 @@ public:
   virtual ~ObMultiTenantOperator();
 
   int init();
-  // 处理当前租户
+  // Process the current tenant
   virtual int process_curr_tenant(common::ObNewRow *&row) = 0;
-  // 释放上一个租户的资源
+  // Release the resources of the previous tenant
   virtual void release_last_tenant() = 0;
-  // 过滤租户
+  // Filter tenant
   virtual bool is_need_process(uint64_t tenant_id) { return true; }
-  // 释放资源, 注意继承ObMultiTenantOperator的子类在销毁时必须首先调用ObMultiTenantOperator::reset()
-  // 由ObMultiTenantOperator维护的租户状态释放子类上的租户对象
+  // Release resources, note that subclasses inheriting from ObMultiTenantOperator must first call ObMultiTenantOperator::reset() when destroyed
+  // Tenant object release on subclasses maintained by ObMultiTenantOperator
   void reset();
 
   int execute(common::ObNewRow *&row);

@@ -28,11 +28,10 @@ public:
   ~ObDirectLoadLobBuilder();
   int init(ObDirectLoadInsertTabletContext *insert_tablet_ctx,
            common::ObIAllocator *lob_allocator = nullptr);
-
-  // 包含多版本列的完整行
+  // Include the full row with multiple version columns
   int append_lob(blocksstable::ObDatumRow &datum_row);
   int append_lob(blocksstable::ObBatchDatumRows &datum_rows);
-  // 中间过程数据
+  // Intermediate process data
   int append_lob(ObDirectLoadDatumRow &datum_row,
                  const ObDirectLoadRowFlag &row_flag);
   int append_lob(const ObDirectLoadBatchRows &batch_rows,
@@ -67,7 +66,7 @@ private:
   ObDirectLoadInsertLobTabletContext *insert_lob_tablet_ctx_;
   common::ObIAllocator *lob_allocator_;
   common::ObArenaAllocator inner_lob_allocator_;
-  // 不包含多版本列, lob可能是主键列
+  // Does not include multi-version column, lob may be the primary key column
   const ObIArray<int64_t> *lob_column_idxs_;
   int64_t lob_column_cnt_;
   int64_t extra_rowkey_cnt_;

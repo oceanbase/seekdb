@@ -158,8 +158,7 @@ void ObPxReceiveOp::destroy()
   dfc_.destroy();
   ch_info_.reset();
 }
-
-// 必须在channel set_dfc之前init好dfc信息，否则channel使用的dfc信息是不完整的
+// Must initialize dfc information before channel set_dfc, otherwise the dfc information used by the channel is incomplete
 int ObPxReceiveOp::init_dfc(ObDtlDfoKey &key)
 {
   int ret = OB_SUCCESS;
@@ -378,9 +377,9 @@ int ObPxReceiveOp::inner_drain_exch()
     exch_drained_ = true;
     if (OB_ITER_END == ret) {
       /**
-       * active_all_receive_channel有拿行的操作，可能会产生OB_ITER_END，
-       * 所以这里错误码是OB_ITER_END，我们已经达到了drain的目的，将错误码
-       * 设置为成功即可。
+       * active_all_receive_channel has fetch operations, which may produce OB_ITER_END,
+       * so the error code here is OB_ITER_END. We have already achieved the drain purpose, setting the error code
+       * to success is sufficient.
        */
       ret = OB_SUCCESS;
     }
@@ -741,7 +740,7 @@ void ObPxReceiveOp::do_clear_datum_eval_flag()
 int ObPxFifoReceiveOp::fetch_rows(const int64_t row_cnt)
 {
   int ret = OB_SUCCESS;
-  // 从channel sets 读取数据，并向上迭代
+  // Read data from channel sets and iterate upwards
   const ObPxReceiveSpec &spec = static_cast<const ObPxReceiveSpec &>(get_spec());
   ObPhysicalPlanCtx *phy_plan_ctx = GET_PHY_PLAN_CTX(ctx_);
   if (OB_FAIL(try_link_channel())) {
@@ -802,7 +801,7 @@ int ObPxFifoReceiveOp::fetch_rows(const int64_t row_cnt)
 int ObPxFifoReceiveOp::try_link_channel()
 {
   int ret = OB_SUCCESS;
-  // 从channel sets 读取数据，并向上迭代
+  // Read data from channel sets and iterate upwards
   if (!channel_linked_) {
     ObPxReceiveOpInput *recv_input = reinterpret_cast<ObPxReceiveOpInput*>(input_);
     ret = init_channel(*recv_input, task_ch_set_, task_channels_,

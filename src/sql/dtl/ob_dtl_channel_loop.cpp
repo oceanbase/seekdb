@@ -159,7 +159,7 @@ int ObDtlChannelLoop::ObDtlChannelLoopProc::process(
       }
     }
   } else if (OB_FAIL(ObDtlLinkedBuffer::deserialize_msg_header(buffer, header))) {
-    // 这里可能是OB_ITER_END，不能打WARN日志.
+    // Here it might be OB_ITER_END, cannot log WARN.
     LOG_TRACE("failed to deserialize msg", K(ret), K(&buffer), K(lbt()));
   } else {
     last_msg_type_ = header.type_;
@@ -182,10 +182,10 @@ int ObDtlChannelLoop::process_base(ObIDltChannelLoopPred *pred, int64_t &hinted_
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("channel hasn't set", K(ret));
   } else {
-    // 处理思路：
-    // 1. 轮询所有 channel，如果能收到一个数据，则成功
-    // 2. 如果没有任何消息，则等待消息唤醒
-    // 3. 被唤醒后，再轮询所有 channel 是否有数据可处理，如果没有则返回 EAGAIN
+    // Processing approach:
+    // 1. Poll all channels, if data can be received, it is successful
+    // 2. If there are no messages, wait for a message to wake up
+    // 3. After being awakened, poll all channels to see if there is data to process, if not return EAGAIN
     //
     uint32_t wait_key = cond_.get_key();
     if (OB_UNLIKELY(nullptr != pred)) {
@@ -213,8 +213,8 @@ int ObDtlChannelLoop::process_base(ObIDltChannelLoopPred *pred, int64_t &hinted_
       // succ process one channel
     } else if (OB_DTL_WAIT_EAGAIN == ret) {
       begin_wait_time_counting();
-      // 通过TPCH 100G Q1测试发现，轮询时间间隔会导致性能有差异，轮询时间间隔较短
-      // 会占用大量CPU，导致CPU利用率不高，从而影响性能
+      // Through TPCH 100G Q1 test, it is found that the polling time interval will cause performance differences, a shorter polling time interval
+      // Will occupy a large amount of CPU, leading to low CPU utilization, thus affecting performance
       if (timeout > 0) {
         cond_.wait(wait_key, timeout);
       } else if (OB_UNLIKELY(INT64_MAX == timeout_)) {
@@ -286,7 +286,7 @@ int ObDtlChannelLoop::process_base(ObIDltChannelLoopPred *pred, int64_t &hinted_
     } else if (ignore_interrupt_) {
       // do nothing.
     } else if ((loop_times_ & (INTERRUPT_CHECK_TIMES - 1)) == 0 && OB_UNLIKELY(IS_INTERRUPTED())) {
-      // 中断错误处理
+      // Interrupt error handling
       // overwrite ret
       ObInterruptCode &code = GET_INTERRUPT_CODE();
       ret = code.code_;
@@ -295,13 +295,12 @@ int ObDtlChannelLoop::process_base(ObIDltChannelLoopPred *pred, int64_t &hinted_
   }
   return ret;
 }
-
-// 目前使用process处理数据主要可以分为3类
-// 1）fifo，纯拿数据，不计较数据顺序
-// 2）merge receive，优先拿排序列，没有，则任意数据，类似1）
-//   1)+2) -> 使用process_one
-// 3）merge sort coord，pred限制拿的数据，如要求是控制消息或者排序对应的channel数据
-//      3）-> 使用process_one_if
+// Currently using process to handle data can mainly be divided into 3 categories
+// 1）fifo, purely fetch data, do not care about data order
+// 2) merge receive, prioritize taking from the sorted list, if not available, then any data, similar to 1)
+//   1)+2) -> use process_one
+// 3) merge sort coord, pred limit the data retrieved, such as control messages or channel data corresponding to sorting
+//      3）-> using process_one_if
 int ObDtlChannelLoop::process_one(int64_t &hinted_channel, int64_t timeout)
 {
   int ret = OB_SUCCESS;
@@ -348,7 +347,7 @@ int ObDtlChannelLoop::process_channels(ObIDltChannelLoopPred *pred, int64_t &nth
           nth_channel = next_idx_;
           first_data_get_ = true;
           if (last_row_in_buffer) {
-            // 每次接收一个channel的所有buffer
+            // Each time receive all buffer of a channel
             ++next_idx_;
             if (next_idx_ >= chan_cnt) {
               next_idx_ %= chan_cnt;
@@ -368,7 +367,7 @@ int ObDtlChannelLoop::process_channels(ObIDltChannelLoopPred *pred, int64_t &nth
       }
     }
     if (first_data_get_) {
-      // 第一次命中后的miss计数
+      // First hit after miss count
       // ObSqlMonitorStatIds::DTL_LOOP_TOTAL_MISS_AFTER_DATA;
       // The statistics of otherstat_6_value_ will affect all statistics of other operators that use otherstat_6_value_. 
       // For now, comment out the DTL.

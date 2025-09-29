@@ -452,9 +452,9 @@ int ObPredicateDeduce::convert_pred(const ObRawExpr *pred,
 
 /**
  * @brief ObRawExprDeducer::deduce
- * @return 推导所有表达式之间两两可能的关系
- * 输入限制：不能带 const-const 条件
- *          不能带 c1 <-> c1 条件
+ * @return deduce all possible relationships between pairs of expressions
+ * input restrictions: cannot have const-const conditions
+ *                     cannot have c1 <-> c1 conditions
  */
 int ObPredicateDeduce::deduce(ObIArray<uint8_t> &graph)
 {
@@ -494,7 +494,7 @@ void ObPredicateDeduce::expand_graph(ObIArray<uint8_t> &graph, int64_t hub1, int
  * @param left_right
  * @param left_hub
  * @param hub_right
- * 给定 left -> hub, hub -> 推导 left -> right 的关系
+ * Given left -> hub, deduce the relationship left -> right
  */
 void ObPredicateDeduce::connect(uint8_t &left_right,
                                const uint8_t left_mid,

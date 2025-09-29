@@ -75,7 +75,7 @@ int ObTaskSpliter::find_scan_ops(ObIArray<const ObTableScanSpec*> &scan_ops, con
 template <bool NEW_ENG>
 int ObTaskSpliter::find_scan_ops_inner(ObIArray<const ENG_OP::TSC *> &scan_ops, const ENG_OP::Root &op)
 {
-  // 后序遍历，保证scan_ops.at(0)为最左下的叶子节点
+  // Post-order traversal, ensuring scan_ops.at(0) is the leftmost leaf node
   int ret = OB_SUCCESS;
   if (!IS_RECEIVE(op.get_type())) {
     for (int32_t i = 0; OB_SUCC(ret) && i < op.get_child_num(); ++i) {
@@ -91,7 +91,7 @@ int ObTaskSpliter::find_scan_ops_inner(ObIArray<const ENG_OP::TSC *> &scan_ops, 
   if (OB_FAIL(ret)) {
   } else if (op.is_table_scan() && op.get_type() != PHY_FAKE_CTE_TABLE) {
     if (static_cast<const ENG_OP::TSC &>(op).use_dist_das()) {
-      //do nothing,使用DAS执行TSC，DAS会处理DAS相关信息，不需要调度器感知TSC
+      //do nothing, use DAS to execute TSC, DAS will handle DAS-related information, no need for the scheduler to be aware of TSC
     } else if (OB_FAIL(scan_ops.push_back(static_cast<const ENG_OP::TSC *>(&op)))) {
       LOG_WARN("fail to push back table scan op", K(ret));
     }

@@ -82,7 +82,7 @@ int ObIndexInfoCache::get_query_range(const uint64_t table_id,
 }
 
 /*
- * 这个接口和ob_join_order.cpp 的 get_access_path_ordering一样，只是从cache里面拿到ordering info
+ * This interface is the same as get_access_path_ordering in ob_join_order.cpp, it just gets the ordering info from the cache
  * */
 int ObIndexInfoCache::get_access_path_ordering(const uint64_t table_id,
                                                const uint64_t index_id,

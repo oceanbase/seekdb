@@ -72,10 +72,10 @@ int ObLimitOp::inner_open()
     limit_ = 0;
   } else {
     is_percent_first_ = NULL != MY_SPEC.percent_expr_;
-    // 如果limit小于0, offset_也没有什么意义，这里一起判断
+    // If limit is less than 0, offset_ has no meaning either, so we check them together here
     //offset 2 rows fetch next -3 rows only --> is meaningless
     offset_ = offset_ < 0 ? 0 : offset_;
-    if (MY_SPEC.limit_expr_ != NULL) {//不能统一直接设置为0,因为需要支持仅仅只有offset情形
+    if (MY_SPEC.limit_expr_ != NULL) {//Cannot be uniformly set to 0, because it needs to support the scenario with only offset}
       limit_ = limit_ < 0 ? 0 : limit_;
     }
     pre_sort_columns_.reuse_ = true;
@@ -144,19 +144,20 @@ int ObLimitOp::inner_get_next_row()
     }
   } // end while
 
-  /*由于支持了oracle 12c的fetch功能，因此下面的执行流程比较复杂，这里简单解释一下：
-  * 1.is_percent_first_：代表的fetch是否指定的百分比取行数，比如：select * from t1 fetch next 50 percent rows only;
-  *   取总行数的50%出来，这个时候需要is_percent_first_来表明是否用的百分比，同时我们的下层block算子(sort、hash group by等)
-  *   都是在get_next_row时指定设置的，因此需要在第一次时去设置对应的limit数量，同时设置完后将is_percent_first_重新设置为false；
-  * 2.is_fetch_with_ties_：表示在拿到所需要的limit数量时，需要继续下探是否存在按照order by排序列值相等的情形，
-  *   比如表t1有3行数据 c1 c2 c3
+  /*Due to the support of the fetch feature in oracle 12c, the execution flow below is relatively complex, here is a simple explanation:
+  * 1.is_percent_first_: indicates whether the fetch specifies the percentage of rows to be taken, for example: select * from t1 fetch next 50 percent rows only;
+  *   takes out 50% of the total number of rows, at this time, is_percent_first_ needs to indicate whether the percentage is used, and our lower-level block operators (sort, hash group by, etc.)
+  *   are set at get_next_row, so the corresponding limit quantity needs to be set for the first time, and after setting, is_percent_first_ needs to be reset to false;
+  * 2.is_fetch_with_ties_: indicates that when the required limit quantity is obtained, it is necessary to continue probing whether there are cases where the values of the order by sort columns are equal,
+  *   for example, table t1 has 3 rows of data c1 c2 c3
   *                   1  2  3
   *                   1  2  4
   *                   2  2  3
-  *   这个时候假如按照表t1的c1列排序，同时设置了只输出一列，但是指定了with ties(sql为:select * from t1 order by c1 fetch next 1 rows with ties);
-  *   那么需要将每次从child op拿取rows同时保存拿到的最后一行数据，等拿到了指定的数量之后，继续按照保存好的最后一行数据
-  *   下探child op的rows,直到拿到按照order by排序列的值不相等或者拿完了child op的rows为止；比如上述例子中拿到行：1 2 3
-  *   会继续下探行：1 2 4，发现排序列c1值相等，会继续下探拿行：2 2 3，这个时候排序列c1值不等，整个get_next_row结束。
+  *   at this time, if sorted by column c1 of table t1, and only one column is output, but with ties is specified (sql: select * from t1 order by c1 fetch next 1 rows with ties);
+  *   then each row taken from the child op needs to be saved at the same time, and the last row of data obtained needs to be saved, after obtaining the specified quantity,
+  *   continue to probe the rows of the child op according to the saved last row of data, until the values of the order by sort columns are not equal or all rows of the child op are taken.
+  *   For example, in the above example, after obtaining the row: 1 2 3, it will continue to probe the row: 1 2 4, find that the value of the sort column c1 is equal, will continue to probe and take the row: 2 2 3,
+  *   at this point, the value of the sort column c1 is not equal, the entire get_next_row ends.
   *
    */
 
@@ -175,13 +176,13 @@ int ObLimitOp::inner_get_next_row()
       } else {
         ++output_cnt_;
         LOG_DEBUG("output row", "row", ROWEXPR2STR(eval_ctx_, MY_SPEC.output_));
-        //如果需要支持fetch with ties功能，需要拷贝limit拿出的最后一行保存下来供后续使用
+        // If need to support fetch with ties feature, need to copy the last row taken out by limit for subsequent use
         if (MY_SPEC.is_fetch_with_ties_ && output_cnt_ == limit_ &&
             OB_FAIL(pre_sort_columns_.save_store_row(MY_SPEC.sort_columns_, eval_ctx_))) {
           LOG_WARN("failed to deep copy limit last rows", K(ret));
         }
       }
-    //说明需要继续判断input rows能否按照order by items等值输出
+    // Explanation needs to continue judging if input rows can be output as equal values according to order by items
     } else if (limit_ > 0 && MY_SPEC.is_fetch_with_ties_) {
       bool is_equal = false;
       if (OB_FAIL(child_->get_next_row())) {
@@ -194,11 +195,11 @@ int ObLimitOp::inner_get_next_row()
       } else if (is_equal) {
         ++output_cnt_;
       } else {
-        //溢出的按照order by排序相等的row已经找完
+        // Overflow rows with equal order by sorting have already been found
         ret = OB_ITER_END;
       }
     } else {
-      // 结果条数已经满足
+      // Result count already satisfied
       ret = OB_ITER_END;
       if (MY_SPEC.calc_found_rows_) {
         while (OB_SUCC(child_->get_next_row())) {
@@ -481,8 +482,7 @@ int ObLimitOp::compare_value_in_batch(bool &keep_iterating,
   }
   return ret;
 }
-
-//针对percent需要这里根据总行数转换为对应的limit count
+// For percent, need to convert to corresponding limit count based on total number of rows here
 int ObLimitOp::convert_limit_percent()
 {
   int ret = OB_SUCCESS;
@@ -506,7 +506,7 @@ int ObLimitOp::convert_limit_percent()
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("get invalid child op row count", K(tot_count), K(ret));
     } else if (percent < 100) {
-      //兼容oracle,向上取整
+      // Compatible with oracle, round up
       int64_t percent_int64 = static_cast<int64_t>(percent);
       int64_t offset = (tot_count * percent / 100 - tot_count * percent_int64 / 100) > 0 ? 1 : 0;
       limit_ = tot_count * percent_int64 / 100 +  offset;

@@ -270,7 +270,7 @@ public:
   }
   int64_t calc_hash(const uint64_t tenant_id, const common::ObAddr &addr, const int64_t dst_cluster_id) const
   {
-    // server和cluster_id计算hash值与ObCascadMember::hash()一样
+    // server and cluster_id calculate hash value the same as ObCascadMember::hash()
     int64_t ret_hash = (addr.hash() | (dst_cluster_id << 32));
     ret_hash = common::murmurhash(&tenant_id, sizeof(tenant_id), ret_hash);
     return ret_hash;

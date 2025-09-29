@@ -74,7 +74,7 @@ static int varchar2varchar(const ObObj &src, ObObj &dst, ObIAllocator &)
     dst.set_null();
   } else {
     dst = src;
-    //对于oracle租户内部表,从表、列到字符串类型确保所有collation为CS_TYPE_UTF8MB4_BIN
+    //For oracle tenant internal tables, ensure all collation of tables, columns to string type is CS_TYPE_UTF8MB4_BIN
     dst.set_collation_type(ObCollationType::CS_TYPE_UTF8MB4_BIN);
   }
   return OB_SUCCESS;
@@ -267,12 +267,11 @@ int ObAgentVirtualTable::inner_get_next_row(common::ObNewRow *&row)
 
   return ret;
 }
-
-// 如果query range为 (tenant_id, cond1, cond2, ...) <= (v1, v2, v3, ...) and (tenant_id, cond1, cond2, ...) >= (v1', v2', v3', ...)
-// 那么如果在最后的条件加上 and tenant_id = v，也就是
+// If query range is (tenant_id, cond1, cond2, ...) <= (v1, v2, v3, ...) and (tenant_id, cond1, cond2, ...) >= (v1', v2', v3', ...)
+// then if the final condition is added as and tenant_id = v, that is to say
 // (tenant_id, cond1, cond2, ...) <= (v1, v2, v3, ...) and (tenant_id, cond1, cond2, ...) >= (v1', v2', v3', ...) and tenant_id = v
-// 优化器这时候抽不出来query range，只能得到 (tenant_id, min, min), (tenant_id, max, max)，
-// 对于某些只支持get操作的表(比如plan_cache_plan_explain)，结果集总为空，所以需要加上这个判断条件
+// The optimizer cannot extract the query range at this point, and can only obtain (tenant_id, min, min), (tenant_id, max, max),
+// For some tables that only support get operations (e.g., plan_cache_plan_explain), the result set is always empty, so this condition check is necessary
 int ObAgentVirtualTable::should_add_tenant_condition(bool &need, const uint64_t tenant_id) const
 {
   int ret = OB_SUCCESS;

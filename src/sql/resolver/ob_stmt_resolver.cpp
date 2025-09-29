@@ -90,12 +90,11 @@ int ObStmtResolver::resolve_table_relation_node(const ParseNode *node,
   }
   return ret;
 }
-
-// description: 解析关联表
+// description: parse association table
 //
-// @param [in] node         与关联表相关的节点
-// @param [out] table_name  向 arg 中填充的关联表名称
-// @param [out] db_name     向 arg 中填充的关联库名称
+// @param [in] node         The node related to the associated table
+// @param [out] table_name  The associated table name filled into arg
+// @param [out] db_name     The associated database name filled into arg
 
 // @return oceanbase error code defined in lib/ob_errno.def
 int ObStmtResolver::resolve_table_relation_node_v2(const ParseNode *node,
@@ -166,7 +165,7 @@ int ObStmtResolver::resolve_table_relation_node_v2(const ParseNode *node,
   } else {
     bool perserve_lettercase = (mode != OB_LOWERCASE_AND_INSENSITIVE);
     int tmp_ret = ObSQLUtils::check_and_convert_table_name(cs_type, perserve_lettercase, table_name);
-    //因索引表存在前缀,故第1次检查table_name超长时,需要继续获取db信息以判断是否索引表
+    // Because the index table has a prefix, so when checking if table_name is too long for the first time, we need to continue to obtain db information to determine if it is an index table
     if (OB_SUCCESS == tmp_ret || OB_ERR_TOO_LONG_IDENT == tmp_ret
         || ((session_info_->get_ddl_info().is_ddl() || session_info_->get_ddl_info().is_dummy_ddl_for_inner_visibility()) &&
             OB_WRONG_TABLE_NAME == tmp_ret)) {
@@ -205,7 +204,7 @@ int ObStmtResolver::resolve_table_relation_node_v2(const ParseNode *node,
         }
       }
       if (OB_SUCCESS == ret && (OB_ERR_TOO_LONG_IDENT == tmp_ret || OB_WRONG_TABLE_NAME == tmp_ret)) {
-         //直接查询索引表时,因索引前缀放宽表名长度限制
+         // Directly querying the index table, the table name length restriction is relaxed due to the index prefix
          stmt::StmtType stmt_type = (NULL == get_basic_stmt()) ? stmt::T_NONE : get_basic_stmt()->get_stmt_type();
          bool is_index_table = false;
          uint64_t tenant_id = session_info_->get_effective_tenant_id();
@@ -220,7 +219,7 @@ int ObStmtResolver::resolve_table_relation_node_v2(const ParseNode *node,
            LOG_WARN("fail to check and convert table name", K(table_name), K(stmt_type), K(is_index_table), K(ret));
          }
       } else if (OB_ERR_TOO_LONG_IDENT == tmp_ret) {
-        //为与mysql兼容,优先返回第1次检查表名的错误码
+        // For compatibility with MySQL, prioritize returning the error code from the first table name check
         ret = tmp_ret;
         LOG_WARN("fail to check and convert table name", K(table_name), K(ret));
       } else {  } // do  nothing
@@ -295,7 +294,7 @@ bool ObStmtResolver::is_catalog_supported_stmt_()
   stmt::StmtType stmt_type;
   if (OB_ISNULL(stmt_)) {
     // do nothing
-    // 比如 desc catalog.db.tbl，此时这里的 stmt_ 还没有被设置
+    // For example desc catalog.db.tbl, at this point stmt_ has not been set
   } else if (OB_FALSE_IT(stmt_type = stmt_->get_stmt_type())) {
   } else if (ObStmt::is_dml_stmt(stmt_type)) {
     is_supported = ObStmt::is_catalog_supported_dml_stmt(stmt_type);

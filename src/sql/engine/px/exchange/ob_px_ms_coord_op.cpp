@@ -33,17 +33,17 @@ OB_SERIALIZE_MEMBER((ObPxMSCoordSpec, ObPxCoordSpec),
 int ObPxMSCoordOp::ObPxMSCoordOpEventListener::on_root_data_channel_setup()
 {
   int ret = OB_SUCCESS;
-  // root dfo 的 receive channel sets 在本机使用，不需要通过  DTL 发送
-  // 直接注册到 msg_loop 中收取数据即可
+  // root dfo's receive channel sets are used locally, no need to send through DTL
+  // Directly register to msg_loop to receive datais sufficient
   int64_t cnt = px_coord_op_.task_ch_set_.count();
-  // FIXME:  msg_loop_ 不要 unregister_channel，避免这个 ...start_ 下标变动 ?
+  // FIXME:  msg_loop_ do not unregister_channel, avoid this ...start_ index change ?
   // dtl data channel register when create channel, so msg_loop_ contains data channels
   px_coord_op_.receive_order_.set_data_channel_idx_range(
       px_coord_op_.msg_loop_.get_channel_count() - cnt,
       px_coord_op_.msg_loop_.get_channel_count());
-  // 这里一定要在此处初始化row heap，因为row heap只有当获取到data channel后才能建立，
-  // 但是px coord inner_get_next_row逻辑必须开始走到，即必须收control msg等，
-  // 所以data channel是滞后一点的
+  // Here you must initialize row heap here, because row heap can only be established after obtaining the data channel,
+  // But px coord inner_get_next_row logic must start to run, i.e., must receive control msg etc.,
+  // So data channel is a bit lagging
   if (OB_FAIL(px_coord_op_.init_row_heap(cnt))) {
     LOG_WARN("failed to init row heap", K(ret), K(cnt));
   } else {
@@ -322,16 +322,16 @@ int ObPxMSCoordOp::inner_get_next_row()
   if (iter_end_) {
     ret = OB_ITER_END;
   } else if (OB_UNLIKELY(!first_row_fetched_)) {
-    // 驱动初始 DFO 的分发
+    // Drive initial DFO distribution
     if (OB_FAIL(msg_proc_.startup_msg_loop(ctx_))) {
       LOG_WARN("initial dfos NOT dispatched successfully", K(ret));
     }
-    first_row_fetched_ = true; // 控制不再主动调用 startup_msg_loop，后继 loop 都消息触发
+    first_row_fetched_ = true; // control no longer actively calling startup_msg_loop, subsequent loops are message triggered
   }
-  bool wait_next_msg = true; // 控制是否退出 while 循环，返回 row 给上层算子
+  bool wait_next_msg = true; // Control whether to exit the while loop, return row to the upper operator
   while (OB_SUCC(ret) && wait_next_msg) {
-    // loop 中注册了 SQC-QC 控制通道，以及 TASKs-QC 数据通道
-    // 为了实现 orderly receive， TASKs-QC 通道需要逐个加入到 loop 中
+    // loop registered the SQC-QC control channel, as well as TASKs-QC data channel
+    // To achieve orderly receive, TASKs-QC channel needs to be added one by one to the loop
     int64_t timeout_us = 0;
     int64_t nth_channel = OB_INVALID_INDEX_INT64;
     // Note:
@@ -430,7 +430,7 @@ int ObPxMSCoordOp::inner_get_next_row()
         case ObDtlMsgType::DH_SP_WINFUNC_PX_PIECE_MSG:
         case ObDtlMsgType::DH_RD_WINFUNC_PX_PIECE_MSG:
         case ObDtlMsgType::DH_JOIN_FILTER_COUNT_ROW_PIECE_MSG:
-          // 这几种消息都在 process 回调函数里处理了
+          // These messages are all handled in the process callback function
           break;
         default:
           ret = OB_ERR_UNEXPECTED;
@@ -467,19 +467,19 @@ int ObPxMSCoordOp::next_row(ObReceiveRowReader &reader, bool &wait_next_msg)
   if (OB_ITER_END == ret) {
     finish_ch_cnt_++;
     row_heap_.shrink();
-    // 收到一个 EOF 行，分两种情况处理：
-    //  - 不是最后一个 EOF，则丢弃并返回 SUCCESS，进入消息循环收取下一个消息
-    //  - 最后一个 EOF，则丢弃并返回 ITER_END，由 PX 清理执行环境后返回 ITER_END 给上层算子
+    // Received an EOF line, handle in two cases:
+    //  - Not the last EOF, then discard and return SUCCESS, enter the message loop to receive the next message
+    //  - last EOF, then discard and return ITER_END, by PX clean up execution environment and return ITER_END to upper operator
 
     if (OB_LIKELY(finish_ch_cnt_ < task_channels_.count())) {
       ret = OB_SUCCESS;
     } else if (get_batch_id() + 1 < get_rescan_param_count()) {
-       // 这个iterate_end需要吐给上层
+       // this iterate_end needs to be passed to the upper layer
       row_heap_.reuse_heap(task_channels_.count(), alloc_);
       last_pop_row_ = NULL;
     } else if (OB_UNLIKELY(finish_ch_cnt_ > task_channels_.count())) {
-      // 本分支是一个防御分支
-      // 所有 channel 上的数据都收取成功
+      // This branch is a defensive branch
+      // All data on all channels has been successfully received
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("All data received. SHOULD NOT see more rows comming",
                "finish_task_cnt", finish_ch_cnt_,
@@ -489,9 +489,9 @@ int ObPxMSCoordOp::next_row(ObReceiveRowReader &reader, bool &wait_next_msg)
       LOG_TRACE("All channel finish", "finish_ch_cnt", finish_ch_cnt_, K(ret));
       all_rows_finish_ = true;
       ret = OB_SUCCESS;
-      // 这里 ret = OB_ITER_END，代表全部 channel 都接收完毕，但还不要退出 msg_loop 循环
-      // 接下来需要等待 SQC 汇报各个 task 的执行情况，通知各个 SQC
-      // 释放资源，然后才能给上层算子返回 ITER_END
+      // Here ret = OB_ITER_END, represents all channels have received, but do not exit the msg_loop loop yet
+      // Next, we need to wait for SQC to report the execution status of each task, notify each SQC
+      // Release resources, then return ITER_END to the upper-level operator
     }
   } else if (OB_SUCCESS == ret) {
     if (nullptr != last_pop_row_) {
@@ -513,8 +513,7 @@ int ObPxMSCoordOp::next_row(ObReceiveRowReader &reader, bool &wait_next_msg)
   } else {
     LOG_WARN("fail get row from row store", K(ret));
   }
-
-  // (2) 从 heap 中弹出最大值
+  // (2) Pop the maximum value from the heap
   if (OB_SUCC(ret)) {
     if (0 == row_heap_.capacity()) {
       if (GCONF.enable_sql_audit) {

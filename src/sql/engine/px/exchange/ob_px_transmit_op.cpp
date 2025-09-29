@@ -170,11 +170,11 @@ void ObPxTransmitOp::destroy()
 int ObPxTransmitOp::inner_open()
 {
   int ret = OB_SUCCESS;
-  // 这里是一个特殊处理逻辑，本质上是先inner_open然后open最后面打上tag
-  // 但是现在transmit有个特殊地方在于inner_open会调用get_next_row，这样导致如果iter_end
-  // 就会走到drain_exec，这个会判断，如果没有open，会先open
-  // 所以如果inner_open里面嵌套了get_next_row，则opened_ flag就没有设置，这样在drain逻辑里面就会一直open
-  // 导致函数栈溢出core掉
+  // Here is a special processing logic, essentially it is inner_open then open and finally tag it
+  // But now transmit has a special place in that inner_open calls get_next_row, this leads to if iter_end
+  // would go to drain_exec, this will check, if not open, it will open first
+  // So if inner_open contains get_next_row, then the opened_ flag is not set, so in the drain logic it will keep opening
+  // Cause function stack overflow and core dump
   opened_ = true;
   ObPxTransmitOpInput *trans_input = static_cast<ObPxTransmitOpInput*>(input_);
   metric_.set_id(get_spec().id_);
@@ -518,8 +518,8 @@ int ObPxTransmitOp::inner_close()
   if (release_channel_ret != common::OB_SUCCESS) {
     LOG_WARN("release dtl channel failed", K(release_channel_ret));
   }
-  // 注意：不能再 inner_open 中调用 flush rows，因为它会阻塞 inner_open 执行完成
-  // 最好不要在inner_close中flush data，这会导致出错情况下，也send数据，应该send_rows中send_eof_row直接flush掉数据
+  // Note: Do not call flush rows in inner_open, because it will block inner_open from completing
+  // It's best not to flush data in inner_close, this will cause data to be sent even in case of an error, it should be flushed directly in send_rows by sending eof_row
   int tmp_ret = OB_SUCCESS;
   if (OB_SUCCESS != (tmp_ret = ObTransmitOp::inner_close())) {
     if (OB_SUCC(ret)) {
@@ -658,7 +658,7 @@ void ObPxTransmitOp::fill_batch_ptrs_fixed(ObSliceIdxCalc::SliceIdxFlattenArray 
           char *header = params_.fixed_payload_headers_[slice_idx];
           if (nullptr == header
               || params_.row_cnts_[slice_idx] >= params_.row_limit_) {
-            // 使用slice_idx_flatten_array本身进行覆盖，之后该值表示了需要fallback的行的slice_idx
+            // Use slice_idx_flatten_array itself for coverage; afterwards, this value indicates the slice_idx of the rows that require fallback
             slice_idx_flatten_array[params_.fallback_cnt_++] = slice_idx;
           } else {
             params_.fixed_rows_[params_.selector_cnt_] = header;
@@ -671,7 +671,7 @@ void ObPxTransmitOp::fill_batch_ptrs_fixed(ObSliceIdxCalc::SliceIdxFlattenArray 
       }
     }
     start_idx = end_idx;
-    // 使用fallback_array_来作为后面每行进行fallbacl时结尾的下标数组，和slice_idx_flatten_array一块进行fallback操作
+    // Use fallback_array_ as the ending index array for fallback operations on each subsequent line, and perform fallback operations together with slice_idx_flatten_array
     params_.fallback_array_[i] = params_.fallback_cnt_;
   }
   for (int64_t col_idx = 0; col_idx < get_spec().output_.count(); ++col_idx) {
@@ -842,7 +842,7 @@ void ObPxTransmitOp::fill_batch_ptrs(ObSliceIdxCalc::SliceIdxFlattenArray &slice
           if (nullptr == block
               || !params_.channel_unobstructeds_[slice_idx]
               || row_size > params_.tails_[slice_idx] - head_pos) {
-            // 使用slice_idx_flatten_array本身进行覆盖
+            // Use slice_idx_flatten_array itself for coverage
             slice_idx_flatten_array[params_.fallback_cnt_++] = slice_idx;
             params_.channel_unobstructeds_[slice_idx] = false;
           } else {
@@ -865,14 +865,14 @@ void ObPxTransmitOp::fill_batch_ptrs(ObSliceIdxCalc::SliceIdxFlattenArray &slice
         }
       }
     }
-    // 使用fallback_array_来作为后面每行进行fallbacl时结尾的下标数组，和slice_idx_flatten_array一块进行fallback操作
+    // Use fallback_array_ as the ending index array for fallback operations on each subsequent line, and perform fallback operations together with slice_idx_flatten_array
     params_.fallback_array_[i] = params_.fallback_cnt_;
   }
 }
 
 void ObPxTransmitOp::fill_broad_cast_ptrs(int64_t slice_idx)
 {
-  // 固定slice_idx，将所有行添加进来
+  // Fix slice_idx, add all rows to it
   int64_t &head_pos = params_.heads_[slice_idx];
   ObTempRowStore::DtlRowBlock *block = params_.blocks_[slice_idx];
   for (int64_t i = 0; i < brs_.size_; ++i) {
@@ -975,7 +975,7 @@ int ObPxTransmitOp::keep_order_send_batch(ObEvalCtx::BatchInfoScopeGuard &batch_
     LOG_WARN("failed to calc size", K(ret));
   } else {
     if (is_broad_cast_calc_type) {
-      // 对于broad_cast对每一channel都进行一次计算，将所有的行填充到该channel中去,可以直接复用selector_array_
+      // For broad_cast calculate once for each channel, fill all the rows into that channel, can directly reuse selector_array_
       for(int j = 0; OB_SUCC(ret) && j < slice_idx_flatten_array.count(); j++) {
         int64_t slice_idx = slice_idx_flatten_array[j];
         params_.selector_cnt_ = 0;
@@ -1090,7 +1090,7 @@ int ObPxTransmitOp::keep_order_send_batch_fixed(ObEvalCtx::BatchInfoScopeGuard &
   if (OB_FAIL(ret)) {
   } else {
     if (is_broad_cast_calc_type) {
-      // 对于broad_cast对每一channel都进行一次计算，将所有的行填充到该channel中去,可以直接复用selector_array_
+      // For broad_cast calculate once for each channel, fill all the rows into that channel, can directly reuse selector_array_
       for(int j = 0; OB_SUCC(ret) && j < slice_idx_flatten_array.count(); j++) {
         int64_t slice_idx = slice_idx_flatten_array[j];
         params_.selector_cnt_ = 0;

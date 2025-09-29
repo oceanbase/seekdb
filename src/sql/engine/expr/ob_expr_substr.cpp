@@ -30,8 +30,7 @@ ObExprSubstr::ObExprSubstr(ObIAllocator &alloc)
 ObExprSubstr::~ObExprSubstr()
 {
 }
-
-//计算substr结果的长度
+// Calculate the length of the substr result
 int ObExprSubstr::calc_result_length(ObExprResType *types_array,
                                      int64_t param_num,
                                      ObCollationType cs_type,
@@ -40,7 +39,7 @@ int ObExprSubstr::calc_result_length(ObExprResType *types_array,
   int ret = OB_SUCCESS;
   ObString str_text;
   int64_t start_pos = 1;
-  int64_t result_len = types_array[0].get_length(); //最大长度
+  int64_t result_len = types_array[0].get_length(); // maximum length
   int64_t substr_len = result_len;
   ObExprCtx expr_ctx;
   ObArenaAllocator allocator(common::ObModIds::OB_SQL_EXPR_CALC);
@@ -69,7 +68,7 @@ int ObExprSubstr::calc_result_length(ObExprResType *types_array,
       res_len = 0;
     } else {
       const ObObj &text_obj = types_array[0].get_param();
-      //根据参数0是否为常量区别计算
+      // According to whether parameter 0 is a constant to distinguish the calculation
       if (ob_is_string_type(text_obj.get_type()) && OB_SUCC(text_obj.get_string(str_text))) {
         int64_t mb_len = ObCharset::strlen_char(cs_type, str_text.ptr(), str_text.length());
         start_pos = (start_pos >= 0) ? start_pos - 1 : start_pos + mb_len;
@@ -180,8 +179,8 @@ int ObExprSubstr::cast_param_type_for_mysql(const ObObj& in,
   ObCastMode cast_mode = CM_NONE;
   EXPR_DEFINE_CAST_CTX(expr_ctx, cast_mode);
   LOG_DEBUG("ObExprSubstr cast_param_type_for_mysql in.get_type(): ", K(in.get_type()));
-  // select substr('abcd', '1.9')中，MySQL对'1.9'进行trunc操作
-  // select substr('abcd', 1.9)中，MySQL对1.9进行round操作
+  // select substr('abcd', '1.9') where MySQL performs trunc operation on '1.9'
+  // select substr('abcd', 1.9) where MySQL rounds 1.9
   if (ObVarcharType == in.get_type()) {
     int64_t tmp = 0;
     if (OB_FAIL(ObExprUtil::get_trunc_int64(in, expr_ctx, tmp))) {

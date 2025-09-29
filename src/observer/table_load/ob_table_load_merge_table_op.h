@@ -43,11 +43,11 @@ public:
   storage::ObDirectLoadTableStore *table_store_;
   storage::ObDirectLoadDMLRowHandler *dml_row_handler_;
   ObDirectLoadMergeMode::Type merge_mode_;
-  bool use_batch_mode_; // 全量 + 列存表
-  // 合并任务结束要做的事情
-  bool need_calc_range_; // rescan的前置
-  bool need_close_insert_tablet_ctx_; // 本次合并是否需要关闭insert_table_ctx
-  // 特殊合并任务标记
+  bool use_batch_mode_; // full + columnar table
+  // Things to do when the merge task is finished
+  bool need_calc_range_; // precondition for rescan
+  bool need_close_insert_tablet_ctx_; // Does this merge need to close insert_table_ctx
+  // special merge task marker
   bool is_del_lob_;
 };
 

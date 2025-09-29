@@ -96,14 +96,14 @@ void TestMdsRowAndMdsCtx::mds_row_set_element() {
   ASSERT_EQ(user_node->user_data_.data_.ptr(), p_data);
   MdsCtx ctx2(2);
   ExampleUserData2 data2(2);
-  ASSERT_EQ(OB_TRY_LOCK_ROW_CONFLICT, row_.set(data2, ctx2, 0));// 不设超时，报6005
-  ASSERT_EQ(OB_ERR_EXCLUSIVE_LOCK_CONFLICT, row_.set(data2, ctx2, 200_ms));// 设超时，报6003
+  ASSERT_EQ(OB_TRY_LOCK_ROW_CONFLICT, row_.set(data2, ctx2, 0));// No timeout, report 6005
+  ASSERT_EQ(OB_ERR_EXCLUSIVE_LOCK_CONFLICT, row_.set(data2, ctx2, 200_ms)); // Set timeout, report 6003
   ctx1.on_redo(mock_scn(1));
-  ASSERT_EQ(OB_TRY_LOCK_ROW_CONFLICT, row_.set(data2, ctx2, 0));// 不设超时，报6005
+  ASSERT_EQ(OB_TRY_LOCK_ROW_CONFLICT, row_.set(data2, ctx2, 0)); // Do not set timeout, report 6005
   ctx1.before_prepare();
-  ASSERT_EQ(OB_TRY_LOCK_ROW_CONFLICT, row_.set(data2, ctx2, 0));// 不设超时，报6005
+  ASSERT_EQ(OB_TRY_LOCK_ROW_CONFLICT, row_.set(data2, ctx2, 0));// No timeout, report 6005
   ctx1.on_prepare(mock_scn(2));
-  ASSERT_EQ(OB_TRY_LOCK_ROW_CONFLICT, row_.set(data2, ctx2, 0));// 不设超时，报6005
+  ASSERT_EQ(OB_TRY_LOCK_ROW_CONFLICT, row_.set(data2, ctx2, 0));// No timeout, report 6005
   ctx1.on_commit(mock_scn(3));
   ASSERT_EQ(OB_SUCCESS, row_.set(data2, ctx2, 0));
 }

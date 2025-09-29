@@ -53,9 +53,9 @@ public:
                K_(zero_init_size), K_(use_rich_format));
 
 public:
-  uint64_t expr_cnt_;       // 当前frame中expr个数
-  uint32_t frame_idx_;      // 当前frame在所有frame中下表
-  uint64_t frame_size_;     // 当前frame大小
+  uint64_t expr_cnt_;       // current number of expr in the frame
+  uint32_t frame_idx_;      // current frame index among all frames
+  uint64_t frame_size_;     // current frame size
   uint32_t zero_init_pos_;
   uint32_t zero_init_size_;
   bool use_rich_format_;
@@ -97,15 +97,13 @@ public:
   }
 
   virtual int assign(const ObExprFrameInfo &other, common::ObIAllocator &allocator);
-
-  // 预分配执行过程中需要的内存, 包括frame memory和expr_ctx memory
-  // @param exec_ctx 执行期context，初始化其成员：frames_, frame_cnt_, expr_ctx_arr_
+  // Pre-allocate memory needed during execution, including frame memory and expr_ctx memory
+  // @param exec_ctx execution context, initialize its members: frames_, frame_cnt_, expr_ctx_arr_
   int pre_alloc_exec_memory(ObExecContext &exec_ctx, ObIAllocator *allocator = NULL) const;
-
-  // 分配frame内存, 并将所有frame指针按每个frame idx的序存放到frames数组中
-  // @param [in] exec_allocator 执行期分配期
-  // @param [out] frame_cnt 所有frame的个数
-  // @param [out] frames 所有frame指针list
+  // Allocate frame memory, and store all frame pointers in the frames array in order of each frame idx
+  // @param [in] exec_allocator execution allocator
+  // @param [out] frame_cnt the number of all frames
+  // @param [out] frames list of all frame pointers
   int alloc_frame(common::ObIAllocator &exec_allocator,
                   const ObIArray<char *> &param_frame_ptrs,
                   uint64_t &frame_cnt,
@@ -129,19 +127,19 @@ private:
   common::ObArray<ObExpr> _rt_exprs_;
 
 public:
-  // 所有物理表达式中, 需要表达式级context的个数, exec_ctx分配具体的内存大小使用
+  // All physical expressions, the number of expression-level contexts needed, exec_ctx allocates specific memory size usage
   int64_t need_ctx_cnt_;
-  // 表达式cg生成的所有物理表达式
+  // Expression cg generates all physical expressions
   common::ObArray<ObExpr> &rt_exprs_;
-  // 所有const frame的指针
+  // All const frame pointers
   common::ObFixedArray<char *, common::ObIAllocator> const_frame_ptrs_;
-  // 所有const frame的信息
+  // All const frame information
   common::ObFixedArray<ObFrameInfo, common::ObIAllocator> const_frame_;
-  // 所有param frame的信息
+  // All param frame information
   common::ObFixedArray<ObFrameInfo, common::ObIAllocator> param_frame_;
-  // 所有dynamic frame的信息
+  // All dynamic frame information
   common::ObFixedArray<ObFrameInfo, common::ObIAllocator> dynamic_frame_;
-  // 所有datum frame的信息
+  // All datum frame information
   common::ObFixedArray<ObFrameInfo, common::ObIAllocator> datum_frame_;
 
   // mark need serialize exrps in mark serialization

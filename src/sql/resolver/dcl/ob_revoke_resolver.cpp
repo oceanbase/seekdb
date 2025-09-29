@@ -30,7 +30,7 @@ ObRevokeResolver::~ObRevokeResolver()
 {
 }
 
-/* 解析revoke role from ur */
+/* parse revoke role from ur */
 int ObRevokeResolver::resolve_revoke_role_inner(
     const ParseNode *revoke_role,
     ObRevokeStmt *revoke_stmt)
@@ -148,12 +148,12 @@ int ObRevokeResolver::resolve_revoke_role_inner(
   }
   // 5. set grant level
   if (OB_SUCC(ret)) {
-    // roles_: 必须大于等于0
+    // roles_: must be greater than or equal to 0
     if ((revoke_stmt->get_roles()).count() < 1) {
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("role argument is invalid", K(ret));
     } else {
-      // role当作user处理
+      // role as user processing
       revoke_stmt->set_grant_level(OB_PRIV_USER_LEVEL);
     }
   }

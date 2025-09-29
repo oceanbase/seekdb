@@ -395,8 +395,7 @@ int ObDFMUtil::parse_one_elem(ObDFMParseCtx &ctx, ObDFMElem &elem, const bool su
 
   return ret;
 }
-
-//用于dfm_ele的打印，应该不需要修改，新flag不需要改，直接打印即可，因为不需要考虑大小写。
+// Used for printing dfm_ele, should not need modification, new flags do not need to be changed, just print directly, because case does not need to be considered.
 int ObDFMUtil::special_mode_sprintf(char *buf, const int64_t buf_len, int64_t &pos,
                                     const ObTimeConstStr &str, const ObDFMElem::UpperCaseMode mode, int64_t padding) {
   int ret = OB_SUCCESS;
@@ -446,8 +445,7 @@ int ObDFMUtil::special_mode_sprintf(char *buf, const int64_t buf_len, int64_t &p
 
   return ret;
 }
-
-//检查语义，新flag不需要修改，无冲突
+// Check semantics, new flag does not need modification, no conflict
 int ObDFMUtil::check_semantic(const ObDFMElemArr &elements, ObFixedBitSet<OB_DEFAULT_BITSET_SIZE_FOR_DFM> &flag_bitmap, uint64_t mode)
 {
   int ret = OB_SUCCESS;
@@ -518,9 +516,7 @@ int ObDFMUtil::check_semantic(const ObDFMElemArr &elements, ObFixedBitSet<OB_DEF
   }
   return ret;
 }
-
-
-//需要适配新flag
+// Need to adapt to new flag
 ObString ObDFMElem::get_elem_name() const
 {
   ObString result;

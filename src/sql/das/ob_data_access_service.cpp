@@ -502,7 +502,7 @@ int ObDataAccessService::parallel_submit_das_task(ObDASRef &das_ref, ObDasAggreg
   int32_t das_group_id = group_id | das::OB_DAS_PARALLEL_POOL_MARK;
   LOG_TRACE("print group_id", K(group_id), K(das::OB_DAS_PARALLEL_POOL_MARK), K(das_group_id));
   if (agg_task.server_ == ctrl_addr_) {
-    // 并发提交 local das 任务
+    // Concurrently submit local das task
     ObDASParallelTask *task = nullptr;
     omt::ObMultiTenant *omt = GCTX.omt_;
     if (OB_FAIL(das_ref.get_das_ref_count_ctx().acquire_task_execution_resource(timeout_ts))) {

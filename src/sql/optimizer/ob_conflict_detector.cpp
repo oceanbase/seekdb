@@ -35,13 +35,13 @@ int ObConflictDetector::build_confict(ObIAllocator &allocator, ObConflictDetecto
 
 
 /**
- * 检查两个join运算是否满足结合律
- * 如果是left outer join assoc left outer join
- * 需要满足第二个连接的条件拒绝第二张表的空值
- * 如果是full outer join assoc left outer join
- * 需要满足第二个连接的条件拒绝第二张表的空值
- * 如果是full outer join assoc full outer join
- * 需要满足第二个连接的条件拒绝第二张表的空值
+ * Check if two join operations satisfy associativity
+ * If it is left outer join assoc left outer join
+ * It needs to meet the condition of the second join to reject nulls from the second table
+ * If it is full outer join assoc left outer join
+ * It needs to meet the condition of the second join to reject nulls from the second table
+ * If it is full outer join assoc full outer join
+ * It needs to meet the condition of the second join to reject nulls from the second table
  */
 int ObConflictDetector::satisfy_associativity_rule(const ObConflictDetector &left,
                                                    const ObConflictDetector &right,
@@ -54,7 +54,7 @@ int ObConflictDetector::satisfy_associativity_rule(const ObConflictDetector &lef
   } else if ((LEFT_OUTER_JOIN == left.join_info_.join_type_ ||
               FULL_OUTER_JOIN == left.join_info_.join_type_) &&
              LEFT_OUTER_JOIN == right.join_info_.join_type_) {
-    //需要满足p23 reject null on A(e2)
+    // Need to satisfy p23 reject null on A(e2)
     if (OB_FAIL(ObTransformUtils::is_null_reject_conditions(
                         right.join_info_.on_conditions_,
                         left.R_DS_.is_subset(right.L_DS_) ? left.R_DS_ : right.L_DS_,
@@ -63,7 +63,7 @@ int ObConflictDetector::satisfy_associativity_rule(const ObConflictDetector &lef
     }
   } else if (FULL_OUTER_JOIN == left.join_info_.join_type_ &&
              FULL_OUTER_JOIN == right.join_info_.join_type_) {
-    //需要满足p12、p23 reject null on A(e2)
+    // Need to satisfy p12, p23 reject null on A(e2)
     if (OB_FAIL(ObTransformUtils::is_null_reject_conditions(
                         left.join_info_.on_conditions_,
                         left.R_DS_.is_subset(right.L_DS_) ? left.R_DS_ : right.L_DS_,
@@ -85,9 +85,9 @@ int ObConflictDetector::satisfy_associativity_rule(const ObConflictDetector &lef
 }
 
 /**
- * 检查两个join运算是否满足左交换律
- * 对于left outer join、full outer join
- * 需要满足额外的空值拒绝条件
+ * Check if two join operations satisfy the left commutative law
+ * For left outer join, full outer join
+ * Additional null rejection conditions need to be met
  */
 int ObConflictDetector::satisfy_left_asscom_rule(const ObConflictDetector &left,
                                                  const ObConflictDetector &right,
@@ -99,7 +99,7 @@ int ObConflictDetector::satisfy_left_asscom_rule(const ObConflictDetector &left,
     is_satisfy = false;
   } else if (LEFT_OUTER_JOIN == left.join_info_.join_type_ &&
              FULL_OUTER_JOIN == right.join_info_.join_type_) {
-    //需要满足p12 reject null on A(e1)
+    // Need to satisfy p12 reject null on A(e1)
     if (OB_FAIL(ObTransformUtils::is_null_reject_conditions(
                                           left.join_info_.on_conditions_,
                                           left.L_DS_,
@@ -108,7 +108,7 @@ int ObConflictDetector::satisfy_left_asscom_rule(const ObConflictDetector &left,
     }
   } else if (FULL_OUTER_JOIN == left.join_info_.join_type_ &&
              LEFT_OUTER_JOIN == right.join_info_.join_type_) {
-    //需要满足p13 reject null on A(e1)
+    // Need to satisfy p13 reject null on A(e1)
     if (OB_FAIL(ObTransformUtils::is_null_reject_conditions(
                                           right.join_info_.on_conditions_,
                                           left.L_DS_,
@@ -117,7 +117,7 @@ int ObConflictDetector::satisfy_left_asscom_rule(const ObConflictDetector &left,
     }
   } else if (FULL_OUTER_JOIN == left.join_info_.join_type_ &&
              FULL_OUTER_JOIN == right.join_info_.join_type_) {
-    //需要满足p12、p13 reject null on A(e1)
+    // Need to satisfy p12, p13 reject null on A(e1)
     if (OB_FAIL(ObTransformUtils::is_null_reject_conditions(
                                           left.join_info_.on_conditions_,
                                           left.L_DS_,
@@ -139,9 +139,9 @@ int ObConflictDetector::satisfy_left_asscom_rule(const ObConflictDetector &left,
 }
 
 /**
- * 检查两个join运算是否满足右交换律
- * 对于left outer join、full outer join
- * 需要满足额外的空值拒绝条件
+ * Check if two join operations satisfy the right exchange law
+ * For left outer join, full outer join
+ * Additional null rejection conditions need to be met
  */
 int ObConflictDetector::satisfy_right_asscom_rule(const ObConflictDetector &left,
                                                   const ObConflictDetector &right,
@@ -153,7 +153,7 @@ int ObConflictDetector::satisfy_right_asscom_rule(const ObConflictDetector &left
     is_satisfy = false;
   } else if (FULL_OUTER_JOIN == left.join_info_.join_type_ &&
              FULL_OUTER_JOIN == right.join_info_.join_type_) {
-    //需要满足p12、p23 reject null on A(e3)
+    // Need to satisfy p12, p23 reject null on A(e3)
     if (OB_FAIL(ObTransformUtils::is_null_reject_conditions(
                                           left.join_info_.on_conditions_,
                                           right.R_DS_,
@@ -186,7 +186,7 @@ int ObConflictDetector::check_join_legal(const ObRelIds &left_set,
   legal = true;
   if (INNER_JOIN == join_info_.join_type_) {
     if (!join_info_.table_set_.is_subset(combined_set)) {
-      //对于inner join来说只需要检查SES是否包含于left_set u right_set
+      // For inner join, we only need to check if SES is contained within left_set u right_set
       legal = false;
     }
   } else {
@@ -208,7 +208,7 @@ int ObConflictDetector::check_join_legal(const ObRelIds &left_set,
       }
     }
   }
-  //如果连接谓词是退化谓词，例如t1 left join t2 on 1=t2.c1，需要额外的检查
+  // If the join predicate is a degenerate predicate, for example t1 left join t2 on 1=t2.c1, additional checks are needed
   if (OB_FAIL(ret) || !legal) {
     //do nothing
   } else if (is_degenerate_pred_) {
@@ -225,7 +225,7 @@ int ObConflictDetector::check_join_legal(const ObRelIds &left_set,
       legal = false;
     }
   }
-  //冲突规则检查
+  // Conflict rule check
   if (OB_FAIL(ret) || !legal) {
     //do nothing
   } else {
@@ -236,7 +236,7 @@ int ObConflictDetector::check_join_legal(const ObRelIds &left_set,
         legal = false;
       }
     }
-    //检查笛卡尔积的约束
+    // Check the constraints of the Cartesian product
     if (OB_SUCC(ret) && legal) {
       for (int64_t i = 0; OB_SUCC(ret) && legal && i < cross_product_rule_.count(); ++i) {
         const ObRelIds& T1 = cross_product_rule_.at(i).first;
@@ -248,7 +248,7 @@ int ObConflictDetector::check_join_legal(const ObRelIds &left_set,
         }
       }
     }
-    //如果需要延迟笛卡尔积，需要检查是否满足延迟条件
+    // If need to delay Cartesian product, need to check if it meets the delay condition
     if (OB_SUCC(ret) && delay_cross_product && legal) {
       for (int64_t i = 0; OB_SUCC(ret) && legal && i < delay_cross_product_rule_.count(); ++i) {
         const ObRelIds& T1 = delay_cross_product_rule_.at(i).first;
@@ -260,7 +260,7 @@ int ObConflictDetector::check_join_legal(const ObRelIds &left_set,
         }
       }
     }
-    //检查dependent function table的约束
+    // Check dependent function table constraints
     for (int64_t i = 0; OB_SUCC(ret) && legal && i < table_depend_infos.count(); ++i) {
       TableDependInfo &info = table_depend_infos.at(i);
       if (left_set.has_member(info.table_idx_)) {
@@ -274,10 +274,10 @@ int ObConflictDetector::check_join_legal(const ObRelIds &left_set,
 }
 
 /**
- * 为左右连接树选择合法的连接条件
+ * Select valid join conditions for left and right join trees
  * is_strict_order：
- * true：left join right是合法的，right join left是非法的
- * false：left join right是非法的，right join left是合法的
+ * true：left join right is legal, right join left is illegal
+ * false：left join right is illegal, right join left is legal
  */
 int ObConflictDetector::choose_detectors(ObRelIds &left_tables,
                                          ObRelIds &right_tables,
@@ -306,7 +306,7 @@ int ObConflictDetector::choose_detectors(ObRelIds &left_tables,
       LOG_WARN("conflict detector is null", K(ret));
     } else if (INNER_JOIN == detector->get_join_info().join_type_ &&
                detector->get_join_info().where_conditions_.empty()) {
-      // 笛卡尔积的冲突检测器可以重复使用
+      // Cartesian product conflict detector can be reused
     } else if (ObOptimizerUtil::find_item(left_used_detectors, detector)) {
       is_used = true;
     } else if (ObOptimizerUtil::find_item(right_used_detectors, detector)) {
@@ -322,13 +322,13 @@ int ObConflictDetector::choose_detectors(ObRelIds &left_tables,
                                                   is_legal))) {
       LOG_WARN("failed to check join legal", K(ret));
     } else if (!is_legal) {
-      //对于可交换的join如inner join，既left join right合法
-      //也right join left合法，但是我们只需要保存left inner join right
-      //因为在generate join path的时候会生成right inner join left的path
-      //并且不可能存在一种join，既有left join1 right合法，又有right join2 left合法
+      // For exchangeable joins like inner join, both left join and right join are valid
+      // Also right join left is legal, but we only need to save left inner join right
+      // because when generating join path, it will generate right inner join left path
+      // And it is impossible for a join to have both left join1 right valid and right join2 left valid
       LOG_TRACE("left tree join right tree is not legal", K(left_tables),
                 K(right_tables), K(*detector));
-      //尝试right tree join left tree
+      // Attempt right tree join left tree
       if (OB_FAIL(detector->check_join_legal(right_tables,
                                              left_tables,
                                              combined_relids,
@@ -357,10 +357,10 @@ int ObConflictDetector::choose_detectors(ObRelIds &left_tables,
 }
 
 /**
- * 只允许多个inner join叠加成一个join info
- * 例如：select * from A, B where A.c1 = B.c1 and A.c2 = B.c2
- * 或者单个OUTER JOIN加上多个inner join info，inner join info作为join qual
- * 例如：select * from A left join B on A.c1 = B.c1 where A.c2 = B.c2
+ * Only allow multiple inner joins to be stacked into one join info
+ * For example: select * from A, B where A.c1 = B.c1 and A.c2 = B.c2
+ * Or a single OUTER JOIN plus multiple inner join info, with inner join info as join qual
+ * For example: select * from A left join B on A.c1 = B.c1 where A.c2 = B.c2
  */
 int ObConflictDetector::check_join_info(const ObIArray<ObConflictDetector*> &valid_detectors,
                                         ObJoinType &join_type,
@@ -382,7 +382,7 @@ int ObConflictDetector::check_join_info(const ObIArray<ObConflictDetector*> &val
     } else if (INNER_JOIN == detector->get_join_info().join_type_) {
       //do nothing
     } else if (has_non_inner_join) {
-      //不允许出现多个非inner join的join info
+      // No multiple non-inner join join info allowed
       is_valid = false;
     } else {
       has_non_inner_join = true;
@@ -475,12 +475,12 @@ int ObConflictDetectorGenerator::generate_conflict_detectors(const ObDMLStmt *st
 }
 
 /**
- * 加入冲突规则left --> right
- * 简化规则：
+ * Add conflict rule left --> right
+ * Simplify rules:
  * A -> B, A -> C
- * 简化为：A -> (B,C)
+ * Simplified to: A -> (B,C)
  * A -> B, C -> B
- * 简化为：(A,C) -> B
+ * Simplified to: (A,C) -> B
  *
  */
 int ObConflictDetectorGenerator::add_conflict_rule(const ObRelIds &left,
@@ -708,7 +708,7 @@ int ObConflictDetectorGenerator::generate_semi_join_detectors(const ObDMLStmt *s
         detector->is_commutative_ = COMM_PROPERTY[detector->join_info_.join_type_];
       }
     }
-    // 4. 生成冲突规则
+    // 4. Generate conflict rules
     for (int64_t j = 0; OB_SUCC(ret) && j < inner_join_detectors.count(); ++j) {
       if (OB_FAIL(generate_conflict_rule(detector,
                                          inner_join_detectors.at(j),
@@ -757,7 +757,7 @@ int ObConflictDetectorGenerator::generate_inner_join_detectors(const ObDMLStmt *
   } else if (OB_FAIL(append(all_quals, redundant_quals))) {
     LOG_WARN("failed to append array", K(ret));
   }
-  //1. 生成单个table item内部的冲突规则
+  //1. Generate conflict rules inside a single table item
   for (int64_t i = 0; OB_SUCC(ret) && i < table_items.count(); ++i) {
     table_filters.reuse();
     table_ids.reuse();
@@ -767,7 +767,7 @@ int ObConflictDetectorGenerator::generate_inner_join_detectors(const ObDMLStmt *
     } else if (OB_FAIL(stmt->get_table_rel_ids(*table_items.at(i), table_ids))) {
       LOG_WARN("failed to get table ids", K(ret));
     }
-    //找到table item的过滤谓词
+    // Find the filter predicate for the table item
     for (int64_t j = 0; OB_SUCC(ret) && j < quals.count(); ++j) {
       ObRawExpr *expr = quals.at(j);
       if (OB_ISNULL(expr)) {
@@ -796,7 +796,7 @@ int ObConflictDetectorGenerator::generate_inner_join_detectors(const ObDMLStmt *
       }
     }
   }
-  //2. 生成from item之间的inner join的冲突检测器
+  //2. Generate inner join conflict detector between from items
   ObRawExpr *expr = NULL;
   ObConflictDetector *detector = NULL;
   ObSEArray<ObRawExpr*, 4> join_conditions;
@@ -831,7 +831,7 @@ int ObConflictDetectorGenerator::generate_inner_join_detectors(const ObDMLStmt *
       } else if (OB_FAIL(inner_join_detectors.push_back(detector))) {
         LOG_WARN("failed to push back detector", K(ret));
       } else {
-        //检查连接谓词是否是退化谓词
+        // Check if the connection predicate is a degenerate predicate
         if (detector->join_info_.table_set_.num_members() > 1) {
           detector->is_degenerate_pred_ = false;
         } else {
@@ -855,12 +855,12 @@ int ObConflictDetectorGenerator::generate_inner_join_detectors(const ObDMLStmt *
       LOG_WARN("failed to add members", K(ret));
     }
   }
-  //3. 生成inner join的冲突规则
+  //3. Generate inner join conflict rules
   for (int64_t i = 0; OB_SUCC(ret) && i < inner_join_detectors.count(); ++i) {
     ObConflictDetector *inner_detector = inner_join_detectors.at(i);
     const ObRelIds &table_set = inner_detector->join_info_.table_set_;
-    //对于inner join来说，满足交换律，所以不需要区分L_TES、R_TES
-    //为了方便之后统一applicable算法，L_TES、R_TES都等于SES
+    // For inner join, it satisfies the commutative law, so there is no need to distinguish between L_TES, R_TES
+    // For convenience of unifying the applicable algorithm later, L_TES, R_TES are both equal to SES
     if (OB_ISNULL(inner_detector)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpect null detector", K(ret));
@@ -880,8 +880,8 @@ int ObConflictDetectorGenerator::generate_inner_join_detectors(const ObDMLStmt *
         LOG_WARN("failed to generate R-TES", K(ret));
       }
     }
-    //对于inner join来说，满足交换律，所以不需要区分L_TES、R_TES
-    //为了方便之后统一applicable算法，L_TES、R_TES都等于SES
+    // For inner join, it satisfies the commutative law, so there is no need to distinguish between L_TES, R_TES
+    // For convenience of unifying the applicable algorithm later, L_TES, R_TES are both equal to SES
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(inner_detector->L_TES_.add_members(table_set))) {
       LOG_WARN("failed to generate L-TES", K(ret));
@@ -894,7 +894,7 @@ int ObConflictDetectorGenerator::generate_inner_join_detectors(const ObDMLStmt *
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpect null detector", K(ret));
       } else if (IS_INNER_JOIN(outer_detector->join_info_.join_type_)) {
-        //inner join与inner join之前没有冲突，do nothing
+        // inner join with inner join before has no conflict, do nothing
       } else if (OB_FAIL(generate_conflict_rule(inner_detector,
                                                 outer_detector,
                                                 true,
@@ -908,7 +908,7 @@ int ObConflictDetectorGenerator::generate_inner_join_detectors(const ObDMLStmt *
       }
     }
   }
-  //4. 生成可选的笛卡尔积
+  //4. Generate optional Cartesian product
   if (OB_SUCC(ret)) {
     if (OB_FAIL(append(inner_join_detectors, outer_join_detectors))) {
       LOG_WARN("failed to append detectors", K(ret));
@@ -934,12 +934,12 @@ int ObConflictDetectorGenerator::generate_outer_join_detectors(const ObDMLStmt *
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpect null table item", K(ret));
   } else if (!table_item->is_joined_table()) {
-    //如果是基表，直接把过程谓词分发到join order里
+    // If it is a base table, directly distribute the process predicate to join order
     if (OB_FAIL(distribute_quals(stmt, table_item, table_filter, baserel_filters))) {
       LOG_WARN("failed to distribute table filter", K(ret));
     }
   } else if (INNER_JOIN == joined_table->joined_type_) {
-    //抚平joined table内部的inner join
+    // Flatten the inner join within the joined table
     ObSEArray<TableItem *, 4> table_items;
     ObSEArray<ObConflictDetector*, 4> detectors;
     if (OB_FAIL(flatten_inner_join(table_item, table_filter, table_items))) {
@@ -1105,10 +1105,10 @@ int ObConflictDetectorGenerator::inner_generate_outer_join_detectors(const ObDML
   } else if (OB_FAIL(outer_join_detectors.push_back(detector))) {
     LOG_WARN("failed to push back detecotor", K(ret));
   } else {
-    //检查连接是否具备交换律
+    // Check if the connection is commutative
     detector->is_commutative_ = COMM_PROPERTY[joined_table->joined_type_];
     detector->join_info_.join_type_ = joined_table->joined_type_;
-    //检查连接谓词是否是退化谓词
+    // Check if the connection predicate is a degenerate predicate
     if (table_set.overlap(left_table_ids) &&
         table_set.overlap(right_table_ids)) {
       detector->is_degenerate_pred_ = false;
@@ -1353,8 +1353,8 @@ int ObConflictDetectorGenerator::generate_cross_product_detector(const ObDMLStmt
                                                                  ObIArray<ObConflictDetector*> &inner_join_detectors)
 {
   int ret = OB_SUCCESS;
-  //生成笛卡尔积的冲突检测器
-  //在OB中，笛卡尔积也是inner join
+  // Generate Cartesian product conflict detector
+  // In OB, Cartesian product is also inner join
   ObRelIds table_ids;
   ObConflictDetector *detector = NULL;
   if (OB_ISNULL(stmt)) {
@@ -1398,10 +1398,10 @@ int ObConflictDetectorGenerator::generate_cross_product_conflict_rule(const ObDM
     ObRelIds table_ids;
     bool have_new_connect_info = true;
     ObSEArray<ObRelIds, 8> base_table_ids;
-    //连通图信息
+    // Connected graph information
     ObSEArray<ObRelIds, 8> connect_infos;
-    //初始化base table，joined table看做整体
-    //笛卡尔积应该在所有的joined table枚举完再枚举
+    // Initialize base table, joined table treated as a whole
+    // Cartesian product should be enumerated after all joined tables are enumerated
     LOG_TRACE("start generate cross product conflict rule", K(table_items), K(join_conditions));
     for (int64_t i = 0; OB_SUCC(ret) && i < table_items.count(); ++i) {
       table_ids.reuse();
@@ -1417,23 +1417,23 @@ int ObConflictDetectorGenerator::generate_cross_product_conflict_rule(const ObDM
       }
     }
     /**
-     * 计算连通图信息，核心算法：
-     * 初始状态：每个base table为一个独立的图
-     * 连通原则：如果某一个join condition引用的表对于某个图而言
-     * 只增加了一张表A，那么我们认为这个图通过这个join condition
-     * 连通了表A，表A加入这张表。
-     * 如果某一个join condition连通了多个图，那么我们认为这些图之间是连通的，
-     * 需要合并这些图。
-     * 算法思想：由于每个join condition可能相互依赖，所以采用迭代算法，
-     * 只要连通图的状态发生变化，就需要遍历未使用的join condition，直到
-     * 连通图的状态稳定。
+     * Calculate connected graph information, core algorithm:
+     * Initial state: each base table is an independent graph
+     * Connectivity principle: if a certain join condition references tables that add only one table A
+     * to a certain graph, then we consider this graph connected to table A through this join condition,
+     * and table A is added to this graph.
+     * If a certain join condition connects multiple graphs, then we consider these graphs to be connected,
+     * and we need to merge these graphs.
+     * Algorithm idea: since each join condition may be interdependent, an iterative algorithm is adopted,
+     * and as long as the state of the connected graph changes, we need to traverse unused join conditions until
+     * the state of the connected graph stabilizes.
      */
     ObSqlBitSet<> used_join_conditions;
     ObSqlBitSet<> used_infos;
     ObSqlBitSet<> connect_tables;
     while (have_new_connect_info) {
       have_new_connect_info = false;
-      //遍历未使用的join condition，检查是否连通某个图
+      // Traverse unused join condition, check if it connects to some graph
       for (int64_t i = 0; OB_SUCC(ret) && i < join_conditions.count(); ++i) {
         ObRawExpr *expr = join_conditions.at(i);
         if (used_join_conditions.has_member(i)) {
@@ -1449,7 +1449,7 @@ int ObConflictDetectorGenerator::generate_cross_product_conflict_rule(const ObDM
           if (OB_FAIL(connect_tables.add_members(expr->get_relation_ids()))) {
             LOG_WARN("failed to add members", K(ret));
           }
-          //遍历所有的连通图，检查join condition是否连通某个图
+          // Traverse all connected graphs, check if join condition connects to any graph
           for (int64_t j = 0; OB_SUCC(ret) && j < connect_infos.count(); ++j) {
             bool is_connected = false;
             if (OB_FAIL(check_join_info(expr->get_relation_ids(),
@@ -1466,8 +1466,8 @@ int ObConflictDetectorGenerator::generate_cross_product_conflict_rule(const ObDM
             }
           }
           /**
-           * 合并连通图，实际上并没有删除冗余的图，
-           * 这个最后再统一删除，避免容器反复变更size引起数据拷贝
+           * Merge connected graphs, actually no redundant graphs are deleted,
+           * this will be uniformly deleted at the end to avoid repeated size changes of the container causing data copying
            */
           if (OB_SUCC(ret) && !used_infos.is_empty()) {
             have_new_connect_info = true;
@@ -1486,7 +1486,7 @@ int ObConflictDetectorGenerator::generate_cross_product_conflict_rule(const ObDM
         }
       }
     }
-    //去重
+    // Deduplicate
     ObSEArray<ObRelIds, 8> new_connect_infos;
     for (int64_t i = 0; OB_SUCC(ret) && i < connect_infos.count(); ++i) {
       bool find = false;
@@ -1499,7 +1499,7 @@ int ObConflictDetectorGenerator::generate_cross_product_conflict_rule(const ObDM
         ret = new_connect_infos.push_back(connect_infos.at(i));
       }
     }
-    //使用连通图信息生成冲突规则
+    // Use connectivity graph information to generate conflict rules
     for (int64_t i = 0; OB_SUCC(ret) && i < base_table_ids.count(); ++i) {
       if (base_table_ids.at(i).num_members() < 2) {
         //do nothing
@@ -1518,9 +1518,9 @@ int ObConflictDetectorGenerator::generate_cross_product_conflict_rule(const ObDM
         LOG_WARN("failed to add conflict rule", K(ret));
       }
     }
-    //为了能够延迟笛卡尔积，需要生成bushy tree info辅助join order枚举
-    //例如(A inner join B on xxx) inner join (C inner join D on xxx)
-    //需要生成bushy tree info(A,B,C,D)
+    // To be able to delay the Cartesian product, we need to generate bushy tree info to assist join order enumeration
+    // For example (A inner join B on xxx) inner join (C inner join D on xxx)
+    // Need to generate bushy tree info(A,B,C,D)
     for (int64_t i = 0; OB_SUCC(ret) && i < new_connect_infos.count(); ++i) {
       if (new_connect_infos.at(i).num_members() > 1) {
         for (int64_t j = i+1; OB_SUCC(ret) && j < new_connect_infos.count(); ++j) {
@@ -1539,7 +1539,7 @@ int ObConflictDetectorGenerator::generate_cross_product_conflict_rule(const ObDM
     }
     if (OB_SUCC(ret)) {
       if (new_connect_infos.count() == 1) {
-        //全连通图，意味着这个笛卡尔是冗余的，leading hint使用
+        // Fully connected graph, means this Cartesian is redundant, leading hint usage
         cross_product_detector->is_redundancy_ = true;
       }
     }

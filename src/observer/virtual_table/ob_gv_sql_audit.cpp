@@ -120,9 +120,9 @@ int ObGvSqlAudit::check_ip_and_port(bool &is_valid)
   int ret = OB_SUCCESS;
   is_valid = true;
 
-  // is_serving_tenant被改成 (svr_ip, svr_port) in (ip1, port1), (ip2, port2), ...
-  // 抽出来的query range为[(ip1, port1), (ip1, port1)], [(ip2, port2), (ip2, port2)], ...
-  // 需要遍历所有query range，判断本机的ip & port是否落在某一个query range中
+  // is_serving_tenant changed to (svr_ip, svr_port) in (ip1, port1), (ip2, port2), ...
+  // The extracted query range is [(ip1, port1), (ip1, port1)], [(ip2, port2), (ip2, port2)], ...
+  // Need to traverse all query ranges, and determine if the local ip & port falls within any one of the query ranges
   if (key_ranges_.count() >= 1) {
     is_valid = false;
     for (int64_t i = 0; OB_SUCC(ret) && !is_valid && i < key_ranges_.count(); i++) {
@@ -215,9 +215,9 @@ int ObGvSqlAudit::inner_get_next_row(common::ObNewRow *&row)
           } else {
             with_tenant_ctx_ = new(buff) ObTenantSpaceFetcher(t_id);
             if (OB_FAIL(with_tenant_ctx_->get_ret())) {
-              // 如果指定tenant id查询, 且当前机器没有该租户资源时, 获取
-              // tenant space会报OB_TENANT_NOT_IN_SERVER, 此时需要忽略该报
-              // 错, 返回该租户的sql audit记录为空
+              // If specified tenant id is queried, and the current machine does not have resources for this tenant, get
+              // tenant space will report OB_TENANT_NOT_IN_SERVER, at this time the report needs to be ignored
+              // Wrong, return the sql audit record of this tenant as empty
               if (OB_TENANT_NOT_IN_SERVER == ret) {
                 ret = OB_SUCCESS;
                 continue;

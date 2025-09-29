@@ -115,8 +115,7 @@ int ObStorageEstimator::storage_estimate_rowcount(const uint64_t tenant_id,
   LOG_TRACE("[OPT EST]:estimate partition scan batch rowcount", K(res), K(batch), K(ret));
   return ret;
 }
-
-//@shanyan.g 调整层按照parition级别来操作
+//@shanyan.g Adjustment layer operates at the partition level
 int ObStorageEstimator::storage_estimate_partition_batch_rowcount(
     const uint64_t tenant_id,
     const ObSimpleBatch &batch,

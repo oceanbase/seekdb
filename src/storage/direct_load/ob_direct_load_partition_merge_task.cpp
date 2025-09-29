@@ -112,7 +112,7 @@ int ObDirectLoadPartitionMergeTask::process()
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("ddl agent should not be null", K(ret));
     }
-    // 对于全量导入, 无论一个分区有没有数据, 都需要创建ddl对象来为该分区创建major sstable
+    // For full import, regardless of whether a partition has data or not, a ddl object needs to be created to create a major sstable for that partition
     else if (OB_FAIL(ObDDLUtil::init_macro_block_seq(parallel_idx_, block_start_seq))) {
       LOG_WARN("fail to set parallel degree", KR(ret), K(parallel_idx_));
     } else if (OB_FAIL(insert_tablet_ctx_->open_sstable_slice(block_start_seq, parallel_idx_/*slice_idx*/, slice_id, ddl_agent))) {
@@ -129,7 +129,7 @@ int ObDirectLoadPartitionMergeTask::process()
         ret = OB_CANCELED;
         LOG_WARN("merge task canceled", KR(ret));
       } else {
-        // batch mode不支持同时写insert和delete行
+        // batch mode does not support writing insert and delete lines simultaneously
         if (use_batch_mode) {
           if (OB_FAIL(fill_sstable_slice_batch(slice_id, row_iters))) {
             LOG_WARN("fail to fill sstable slice batch", KR(ret), K(slice_id));
@@ -913,7 +913,7 @@ int ObDirectLoadPartitionHeapTableMultipleAggregateMergeTask::construct_row_iter
 {
   int ret = OB_SUCCESS;
   row_iters.reset();
-  // 1. 构造origin iter
+  // 1. construct origin iter
   ObDirectLoadOriginTableScanner *origin_scanner = nullptr;
   if (OB_FAIL(origin_table_->scan(whole_range_, allocator, origin_scanner, false /*skip_read_lob*/))) {
     LOG_WARN("fail to scan origin table", KR(ret));
@@ -927,7 +927,7 @@ int ObDirectLoadPartitionHeapTableMultipleAggregateMergeTask::construct_row_iter
       origin_scanner = nullptr;
     }
   }
-  // 2. 构造multiple_heap_table iter
+  // 2. construct multiple_heap_table iter
   if (OB_SUCC(ret)) {
     RowIterator *row_iter = nullptr;
     if (OB_ISNULL(row_iter = OB_NEWx(RowIterator, &allocator))) {

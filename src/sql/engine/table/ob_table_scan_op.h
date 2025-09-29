@@ -359,10 +359,10 @@ public:
 
   //
   // for dynamic query range prune
-  // part_expr_和subpart_expr_为分区表达式,
-  // part_dep_cols_和subpart_dep_cols_为分区表达式依赖的cols,
-  // 在计算分区表达式前, 会将这些cols对应的datum设置上,数据来源于
-  // 该col对应在主键query range中的值; 具体的映射关系由part_range_pos_记录
+  // part_expr_ and subpart_expr_ are partition expressions,
+  // part_dep_cols_ and subpart_dep_cols_ are the cols dependent on the partition expression,
+  // Before calculating the partition expression, these cols corresponding datum will be set, data source from
+  // The value of this col corresponds to the value in the primary key query range; the specific mapping relationship is recorded by part_range_pos_
   share::schema::ObPartitionLevel part_level_;
   share::schema::ObPartitionFuncType part_type_;
   share::schema::ObPartitionFuncType subpart_type_;
@@ -706,17 +706,18 @@ protected:
   ObTableScanRtDef tsc_rtdef_;
   bool need_final_limit_;
   common::ObLimitParam limit_param_;
-  //这个allocator的周期是当table scan context被创建的时候生成，直到table scan被close被reset
-  //主要是由于在nested loop join中，table scan operator会被反复的rescan，这个过程中有些数据需要allocator
-  //但是用query级别的allocator来说，不合适，会导致这个allocator的内存膨胀厉害，中间结果得不到释放
-  //用行级allocator生命周期太短，满足不了需求
+  // The cycle of this allocator is generated when the table scan context is created, until the table scan is closed and reset
+  // mainly due to nested loop join, table scan operator will be repeatedly rescanned, during this process some data needs allocator
+
+  // But using a query-level allocator is inappropriate, it will lead to severe memory bloat for this allocator, and intermediate results will not be released
+  // Line-level allocator lifecycle is too short, cannot meet the requirement
   common::ObArenaAllocator *table_rescan_allocator_;
   // this is used for found rows, reset in rescan.
   int64_t input_row_cnt_;
   int64_t output_row_cnt_;
-  // 用于保证在没有数据的时候多次调用get_next_row都能返回OB_ITER_END
+  // Used to ensure that multiple calls to get_next_row return OB_ITER_END when there is no data
   bool iter_end_;
-  int64_t iterated_rows_;//记录已经迭代的行数
+  int64_t iterated_rows_;//record the number of rows already iterated
   bool got_feedback_;
 
   const uint64_t *cur_trace_id_;

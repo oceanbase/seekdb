@@ -508,8 +508,7 @@ int MockTenantModuleEnv::init_dir()
   } else if (OB_FAIL(mkdir(sstable_dir_.c_str(), 0777))) {
   } else if (OB_FAIL(mkdir(slog_dir_.c_str(), 0777))) {
   }
-
-  // 因为改变了工作目录，设置为绝对路径
+  // Because the working directory has changed, set to absolute path
   for (int i=0;i<MAX_FD_FILE;i++) {
     int len = strlen(OB_LOGGER.log_file_[i].filename_);
     if (len > 0) {
@@ -762,7 +761,7 @@ int MockTenantModuleEnv::init_before_start_mtl()
   } else {
     obrpc::ObRpcNetHandler::CLUSTER_ID = 1;
     oceanbase::palf::election::INIT_TS = 1;
-    // 忽略cgroup的报错
+    // Ignore cgroup error
     cgroup_ctrl_.init();
     ObTsMgr::get_instance_inner() = &ts_mgr_;
     GCTX.sql_proxy_ = &sql_proxy_;
@@ -948,13 +947,13 @@ void MockTenantModuleEnv::destroy()
   if (server_fd_ > 0) {
     close(server_fd_);
   }
-  // 没有解决模块退出顺序问题，直接强退
+  // No solution to the module exit order problem, force quit
   //int fail_cnt= ::testing::UnitTest::GetInstance()->failed_test_case_count();
   //_Exit(fail_cnt);
   if (destroyed_) {
     return;
   }
-  // 释放租户上下文
+  // Release tenant context
   guard_.release();
 
   startup_accel_handler_.destroy();

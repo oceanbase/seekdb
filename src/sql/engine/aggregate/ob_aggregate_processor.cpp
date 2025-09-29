@@ -1548,7 +1548,7 @@ void ObAggregateProcessor::destroy()
 void ObAggregateProcessor::reuse()
 {
   if (has_extra_) {
-    // 只有extra信息才需要清理，否则aggr_alloc_直接reset掉内存就释放掉
+    // Only extra information needs to be cleaned up, otherwise aggr_alloc_ directly resets the memory to release it
     for (int64_t i = 0; i < group_rows_.count(); ++i) {
       group_rows_.at(i)->destroy();
     }
@@ -4258,7 +4258,7 @@ int ObAggregateProcessor::extend_concat_str_buf(
     LOG_WARN("current concat buf len is 0", K(ret));
   } else if (tmp_max_len > cur_concat_buf_len_) {
     if (cur_concat_buf_len_ < concat_str_max_len_) {
-      // 从1024开始，然后每次double来扩,且不能小于当前pad后的总内存大小
+      // From 1024 start, then double each time to expand, and it cannot be less than the total memory size after current padding
       cur_concat_buf_len_ = cur_concat_buf_len_ * 2 < tmp_max_len ?
                             next_pow2(tmp_max_len) :
                             cur_concat_buf_len_ * 2;
@@ -4573,7 +4573,7 @@ int ObAggregateProcessor::collect_aggr_result(
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("first time concat buf len is not 0", K(cur_concat_buf_len_));
         } else {
-          // 从1024开始迭代
+          // Iterate from 1024
           cur_concat_buf_len_ = concat_str_max_len > 1024 ? 1024 : concat_str_max_len;
           if (OB_ISNULL(concat_str_buf_ = static_cast<char *>(aggr_alloc_.alloc(cur_concat_buf_len_)))) {
             ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -4623,7 +4623,7 @@ int ObAggregateProcessor::collect_aggr_result(
             sep_str = extra->get_separator_datum()->get_string();
           }
         } else {
-          // 默认为逗号
+          // Default is comma
           sep_str = ObCharsetUtils::get_const_str(aggr_info.expr_->datum_meta_.cs_type_, ',');
         }
       }
@@ -4641,7 +4641,7 @@ int ObAggregateProcessor::collect_aggr_result(
               && OB_SUCC(extra->get_next_row(storted_row))) {
           bool should_skip = false;
           for (int64_t i = 0; !should_skip && i < group_concat_param_count; ++i) {
-            // 只要有一个cell为null，那么整个item都跳过
+            // As long as one cell is null, the entire item is skipped
             should_skip = storted_row->cells()[i].is_null();
           }
 
@@ -4696,7 +4696,7 @@ int ObAggregateProcessor::collect_aggr_result(
           if (first_item_printed) {
             concat_result.set_string(concat_str_buf_, pos);
           } else {
-            concat_result.set_null(); //全部都跳过了，则设为null
+            concat_result.set_null(); // all were skipped, then set to null
           }
           OX(LOG_DEBUG("group concat finish ", K(group_concat_cur_row_num), K(pos),
               K(concat_result), KPC(extra)));
@@ -4708,7 +4708,7 @@ int ObAggregateProcessor::collect_aggr_result(
     case T_FUN_GROUP_RANK:
     case T_FUN_GROUP_DENSE_RANK:
     case T_FUN_GROUP_PERCENT_RANK:
-    case T_FUN_GROUP_CUME_DIST: {//复用了GroupConcatCtx，因为仅仅只是最后的计算方法不一样
+    case T_FUN_GROUP_CUME_DIST: {//Reused GroupConcatCtx, because the only difference is the final calculation method}
       GroupConcatExtraResult *extra = NULL;
       if (OB_ISNULL(extra = static_cast<GroupConcatExtraResult *>(aggr_cell.get_extra()))) {
         ret = OB_ERR_UNEXPECTED;
@@ -4736,7 +4736,7 @@ int ObAggregateProcessor::collect_aggr_result(
             ++ rank_num;
             bool find_target_rank = true;
             int comp_result = -2;
-            bool is_all_equal = T_FUN_GROUP_CUME_DIST == aggr_fun;//use to cume dist(累积分布)
+            bool is_all_equal = T_FUN_GROUP_CUME_DIST == aggr_fun;//use to cume dist(cumulative distribution)
             bool need_continue = true;
             for (int64_t i = 0;
                  OB_SUCC(ret) && need_continue && i < aggr_info.sort_collations_.count();
@@ -4779,7 +4779,7 @@ int ObAggregateProcessor::collect_aggr_result(
             if (OB_SUCC(ret)) {
               bool is_equal = false;
               if (need_check_order_equal) {
-                if (is_first) {//第一次
+                if (is_first) {//first time
                   if (OB_FAIL(prev_row.save_store_row(*storted_row))) {
                     LOG_WARN("failed to deep copy limit last rows", K(ret));
                   } else {
@@ -4802,7 +4802,7 @@ int ObAggregateProcessor::collect_aggr_result(
                     break;
                   }
                 }
-              //cume dist要求是<=的总数，因此相等需要继续寻找
+              // cume dist requirement is <= total, therefore equality needs to continue searching
               } else if (find_target_rank && !is_all_equal) {
                 break;
               }
@@ -4975,7 +4975,7 @@ int ObAggregateProcessor::collect_aggr_result(
         } else if (OB_UNLIKELY(extra->empty())) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("extra is empty", K(ret), KPC(extra));
-        //类似于group_concat的实现及计算,在rollup中我们可以rewind,这样更加高效
+        // Similar to the implementation and calculation of group_concat, in rollup we can rewind, which is more efficient
         } else if (extra->is_iterated() && OB_FAIL(extra->rewind())) {
           LOG_WARN("rewind failed", KPC(extra), K(ret));
         } else if (!extra->is_iterated() && OB_FAIL(extra->finish_add_row())) {
@@ -5036,7 +5036,7 @@ int ObAggregateProcessor::collect_aggr_result(
                   break;
                 }
               }
-            } else {//不相等，结束
+            } else {//not equal, end
               break;
             }
           }
@@ -5171,14 +5171,12 @@ int ObAggregateProcessor::collect_aggr_result(
   aggr_info.expr_->set_evaluated_projected(eval_ctx_);
   return ret;
 }
-
 //
-//查找dst_op, 过滤可能添加的sys cast,
+// Find dst_op, filter out any added sys cast,
 //
-
 //
-//填充linear_inter_expr输入参数并计算
-//计算res = factor * (right - left) + left
+//fill linear_inter_expr input parameters and calculate
+// Calculate res = factor * (right - left) + left
 //
 int ObAggregateProcessor::linear_inter_calc(const ObAggrInfo &aggr_info,
                                             const ObDatum &prev_datum,
@@ -5260,9 +5258,8 @@ int ObAggregateProcessor::linear_inter_calc(const ObAggrInfo &aggr_info,
   }
   return ret;
 }
-
 //
-//计算percentile_cont/percentile_disc输出行位置，若需要插值计算插值因数fator
+// Calculate percentile_cont/percentile_disc output row position, if interpolation is needed calculate interpolation factor fator
 //
 int ObAggregateProcessor::get_percentile_param(const ObAggrInfo &aggr_info,
                                                const ObDatum &param,
@@ -5281,22 +5278,22 @@ int ObAggregateProcessor::get_percentile_param(const ObAggrInfo &aggr_info,
   ObDataBuffer local_allocator(buf_alloc, ObNumber::MAX_CALC_BYTE_LEN * 5);
   const ObDatumMeta param_datum_meta = aggr_info.param_exprs_.at(0)->datum_meta_;
   ObNumber percentile;
-  if (!ob_is_number_tc(param_datum_meta.type_)) {//deduce type时已经转换为number
+  if (!ob_is_number_tc(param_datum_meta.type_)) {//type deduction has already been converted to number}
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("percentile value invalid", K(ret), K(param_datum_meta), K(param));
   } else if (OB_FAIL(percentile.from(ObNumber(param.get_number()), local_allocator))) {
     LOG_WARN("failed to create number percentile", K(ret));
   } else if (percentile.is_negative()
-             || 0 < percentile.compare(ObNumber::get_positive_one())) {//判断大于1或小于0
+             || 0 < percentile.compare(ObNumber::get_positive_one())) {//judge greater than 1 or less than 0}
     ret = OB_ERR_PERCENTILE_VALUE_INVALID;
     LOG_WARN("invalid percentile value", K(ret), K(percentile));
   } else if (T_FUN_GROUP_PERCENTILE_DISC == aggr_info.get_expr_type()) {
     //
-    //  PERCENTILE_DISC 计算过程
-    //  rows 按照 null first 方式排序，计算时忽略 null
+    //  PERCENTILE_DISC calculation process
+    //  rows sorted by null first, ignore null during calculation
     //  percentile value (P) and the number of rows (N)
     //  dest_loc = ceil(N * P) + not_null_start_loc - 1
-    //  特例：当 P = 0 时, 直接从 not_null_start_loc 开始读取
+    //  Special case: When P = 0, directly read from not_null_start_loc
     //
     ObNumber row_count, rn;
     if (percentile.is_zero()) {
@@ -5318,8 +5315,8 @@ int ObAggregateProcessor::get_percentile_param(const ObAggrInfo &aggr_info,
     }
   } else if (T_FUN_GROUP_PERCENTILE_CONT == aggr_info.get_expr_type()) {
     //
-    //  PERCENTILE_CONT 计算过程
-    //  rows 按照 null first 方式排序，计算时忽略 null
+    //  PERCENTILE_CONT calculation process
+    //  rows sorted by null first, ignore null during calculation
     //  percentile value (P) and the number of rows (N), row number RN = (1 + (P * (N - 1))
     //  CRN = CEILING(RN) and FRN = FLOOR(RN)
     //  If (CRN = FRN = RN) then the result is
@@ -5329,9 +5326,9 @@ int ObAggregateProcessor::get_percentile_param(const ObAggrInfo &aggr_info,
     //    (RN - FRN) * (value of expression for row at CRN)
     //    = (RN - FRN) * (row at CRN - row at FRN) + row at FRN
     //
-    //  程序中 factor = (RN - FRN)
-    //  FRN位置 dest_loc = not_null_start_loc + RN - 1
-    //  需要插值时calc_linear_inter函数中计算 factor * (obj2 - obj1) + obj1
+    //  The program sets factor = (RN - FRN)
+    //  FRN position dest_loc = not_null_start_loc + RN - 1
+    //  Need interpolation when calc_linear_inter function calculates factor * (obj2 - obj1) + obj1
     //
     ObNumber row_count, rn, frn, res;
     if (OB_FAIL(row_count.from(total_row_count - not_null_start_loc, local_allocator))) {
@@ -5931,7 +5928,7 @@ int ObAggregateProcessor::init_group_extra_aggr_info(
         } else if (OB_FAIL(aggr_info.separator_expr_->eval(eval_ctx_, separator_result))) {
           LOG_WARN("eval failed", K(ret));
         } else {
-          // prepare阶段解析分隔符，如果到collect阶段，则seperate_expr已经是下一组的值，导致结果错误
+          // prepare phase parsing separator, if it reaches the collect phase, then seperate_expr is already the value of the next group, leading to incorrect results
           int64_t pos = sizeof(ObDatum);
           int64_t len = pos + (separator_result->null_ ? 0 : separator_result->len_);
           char *buf = (char*)aggr_alloc_.alloc(len);
@@ -6817,7 +6814,7 @@ int ObAggregateProcessor::llc_add_value(const uint64_t value, char *llc_bitmap_b
   OB_ASSERT(ObExprEstimateNdv::llc_is_num_buckets_valid(llc_num_buckets));
   OB_ASSERT(llc_num_buckets > bucket_index);
   if (pmax > static_cast<uint8_t>(llc_bitmap_buf[bucket_index])) {
-    // 理论上pmax不会超过65.
+    // Theoretically, pmax will not exceed 65.
     llc_bitmap_buf[bucket_index] = static_cast<uint8_t>(pmax);
   }
   return ret;
@@ -7192,7 +7189,7 @@ int ObAggregateProcessor::get_wm_concat_result(const ObAggrInfo &aggr_info,
     ObArenaAllocator tmp_alloc(aggr_alloc_.get_label(), common::OB_MALLOC_NORMAL_BLOCK_SIZE,
                                GET_MY_SESSION(eval_ctx_.exec_ctx_)->get_effective_tenant_id(),
                                ObCtxIds::WORK_AREA);
-    // 默认为逗号
+    // Default is comma
     ObString sep_str = ObCharsetUtils::get_const_str(aggr_info.expr_->datum_meta_.cs_type_, ',');
     ObChunkDatumStore::LastStoredRow first_row(aggr_alloc_);
     const ObChunkDatumStore::StoredRow *storted_row = NULL;
@@ -7274,7 +7271,7 @@ int ObAggregateProcessor::get_wm_concat_result(const ObAggrInfo &aggr_info,
           text_result.set_result();
         }
       } else {
-        concat_result.set_null(); //全部都跳过了，则设为null
+        concat_result.set_null(); // all were skipped, then set to null
       }
     }
   }

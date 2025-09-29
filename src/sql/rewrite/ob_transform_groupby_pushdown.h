@@ -385,9 +385,8 @@ private:
     }
     return num;
   }
-
-  // TODO 这个函数在更新的版本中已经存在于ObTransformUtils里面了，但是这个版本还没有
-  // 所以先自己写一个，合并的时候再处理
+  // TODO This function already exists in ObTransformUtils in the updated version, but not in this version
+  // So first write one yourself, handle it when merging
   int create_aggr_expr(ObTransformerCtx *ctx, ObItemType type,
                        ObAggFunRawExpr *&agg_expr, ObRawExpr *child_expr);
 

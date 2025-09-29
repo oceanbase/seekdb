@@ -350,9 +350,8 @@ int ObTableInsertUpOp::set_heap_table_new_pk(const ObUpdCtDef &upd_ctdef,
   }
   return ret;
 }
-
-// 构建冲突的hash map的时候也使用的是column_ref， 回表也是使用的column_ref expr来读取scan的结果
-// 因为constarain_info中使用的column_ref expr，所以此处需要使用table_column_old_exprs (column_ref exprs)
+// Build the conflicting hash map using column_ref as well, the lookup also uses column_ref expr to read the scan results
+// Because constarain_info uses column_ref expr, so here we need to use table_column_old_exprs (column_ref exprs)
 int ObTableInsertUpOp::do_insert_up_cache()
 {
   int ret = OB_SUCCESS;
@@ -421,9 +420,9 @@ int ObTableInsertUpOp::do_insert_up_cache()
       }
     } else {
       // do update
-      // 对于update, update c1 = values(c1) + 1, 此时new_row中替换的column
-      // 依赖于insert_row_中的值, 并且需要重新计算, 所以这里需要
-      // clear_evaluated_flag, 并且将数据重新flush到insert_row中
+      // For update, update c1 = values(c1) + 1, at this time the replaced column in new_row
+      // depends on the value in insert_row_, and needs to be recalculated, so it is required here
+      // clear_evaluated_flag, and re-flush the data to insert_row
       ObChunkDatumStore::StoredRow *upd_new_row = NULL;
       const ObChunkDatumStore::StoredRow *upd_old_row = constraint_values.at(0).current_datum_row_;
       ObDMLModifyRowNode modify_row(this, &upd_ctdef, &upd_rtdef, ObDmlEventType::DE_UPDATING);
@@ -441,7 +440,7 @@ int ObTableInsertUpOp::do_insert_up_cache()
                                                               ins_ctdef.trig_ctdef_,
                                                               ins_rtdef.trig_rtdef_))) {
         LOG_WARN("init_param_new_row failed", K(ret));
-        // 冲突的行update这里也需要重新执行before insert row trigger
+        // Conflicting row update here also needs to re-execute before insert row trigger
       } else if (ins_ctdef.is_primary_index_
                  && OB_FAIL(TriggerHandle::do_handle_before_row(*this,
                                                                 ins_ctdef.das_base_ctdef_,
@@ -482,7 +481,7 @@ int ObTableInsertUpOp::do_insert_up_cache()
         // create table t1(c1 int primary key, c2 timestamp default CURRENT_TIMESTAMP on update CURRENT_TIMESTAMP);
         // insert into t1(c1) values(1);
         // insert into t1(c1) values(1) on duplicate key update c1=1;
-        // 当出现冲突时，做update，但是c2列不应该被更新
+        // When a conflict occurs, do update, but the c2 column should not be updated
         if (OB_FAIL(conflict_checker_.lock_row(upd_old_row))) {
           LOG_WARN("checker lock row failed", K(ret), KPC(upd_old_row));
         } else {
@@ -831,7 +830,7 @@ int ObTableInsertUpOp::calc_upd_old_row_tablet_loc(const ObUpdCtDef &upd_ctdef,
                                                    ObUpdRtDef &upd_rtdef,
                                                    ObDASTabletLoc *&tablet_loc)
 {
-  // 只有跨分区的更新时才会有delete task
+  // Only cross-partition updates will have delete task
   int ret = OB_SUCCESS;
   if (MY_SPEC.use_dist_das_) {
     if (upd_ctdef.multi_ctdef_ != nullptr) {
@@ -859,7 +858,7 @@ int ObTableInsertUpOp::calc_upd_new_row_tablet_loc(const ObUpdCtDef &upd_ctdef,
                                                    ObUpdRtDef &upd_rtdef,
                                                    ObDASTabletLoc *&tablet_loc)
 {
-  // 只有跨分区的更新时才会有delete task
+  // Only cross-partition updates will have a delete task
   int ret = OB_SUCCESS;
   if (MY_SPEC.use_dist_das_) {
     if (upd_ctdef.multi_ctdef_ != nullptr) {
@@ -991,10 +990,10 @@ int ObTableInsertUpOp::do_insert_up()
     } else if (OB_FAIL(fetch_conflict_rowkey(insert_up_row_store_.get_row_cnt()))) {
       LOG_WARN("fail to fetch conflict row", K(ret));
     } else if (OB_FAIL(reset_das_env())) {
-      // 这里需要reuse das 相关信息
+      // Here needs to reuse das related information
       LOG_WARN("fail to reset das env", K(ret));
     } else if (OB_FAIL(rollback_savepoint(savepoint_no))) {
-      // 本次插入存在冲突, 回滚到save_point
+      // This insertion has conflicts, rollback to save_point
       LOG_WARN("fail to rollback to save_point", K(ret));
     } else if (OB_FAIL(conflict_checker_.do_lookup_and_build_base_map(insert_up_row_store_.get_row_cnt()))) {
       LOG_WARN("fail to build conflict map", K(ret));
@@ -1009,8 +1008,8 @@ int ObTableInsertUpOp::do_insert_up()
     }
     GET_DIAGNOSTIC_INFO->get_ash_stat().in_duplicate_conflict_resolve_=false;
     if (OB_SUCC(ret) && !is_iter_end) {
-      // 只有还有下一个batch时才需要做reuse，如果没有下一个batch，close和destroy中会释放内存
-      // 前边逻辑执行成功，这一批batch成功完成replace, reuse环境, 准备下一个batch
+      // Only need to do reuse if there is a next batch, if there is no next batch, memory will be released in close and destroy
+      // The previous logic executed successfully, this batch successfully completed replace, reuse environment, prepare for the next batch
       if (OB_FAIL(reuse())) {
         LOG_WARN("fail to reuse insert_up op", K(ret));
       }
@@ -1163,8 +1162,8 @@ int ObTableInsertUpOp::get_next_conflict_rowkey(DASTaskIter &task_iter)
     ObDASInsertOp *ins_op = static_cast<ObDASInsertOp*>(*task_iter);
     ObDatumRowIterator *conflict_result = ins_op->get_duplicated_result();
     const ObDASInsCtDef *ins_ctdef = static_cast<const ObDASInsCtDef*>(ins_op->get_ctdef());
-    // 因为返回的都是主表的主键，主表的主键一定是在存储层有储存的，是不需要再收起来层再做运算的，
-    // 所以这里不需要clear eval flag
+    // Because all returned are the primary keys of the main table, the primary keys of the main table must be stored in the storage layer, and there is no need for the upper layer to do further calculations,
+    // So here there is no need to clear eval flag
     // clear_datum_eval_flag();
     if (OB_ISNULL(conflict_result)) {
       ret = OB_ERR_UNEXPECTED;
@@ -1211,7 +1210,7 @@ int ObTableInsertUpOp::fetch_conflict_rowkey(int64_t row_cnt)
   }
 
   while (OB_SUCC(ret) && !task_iter.is_end()) {
-    // 不需要clear rowkey表达式的eval_flag，因为主键使用的是column_ref表达式，不存在eval_fun
+    // Do not clear rowkey expression's eval_flag, because the primary key uses column_ref expression, there is no eval_fun
     if (OB_FAIL(get_next_conflict_rowkey(task_iter))) {
       if (OB_ITER_END != ret) {
         LOG_WARN("fail to get next conflict rowkey from das_result", K(ret));
@@ -1315,8 +1314,7 @@ int ObTableInsertUpOp::do_lock(const ObConflictValue &constraint_value)
       LOG_WARN("unexpected constraint_value", K(ret));
     }
   }
-
-  // lock 只锁主表
+  // lock only the main table
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(calc_upd_old_row_tablet_loc(*pri_upd_ctdef, pri_upd_rtdef, tablet_loc))) {
     LOG_WARN("fail to calc pkey for lock", K(ret), KPC(pri_upd_ctdef));
@@ -1332,17 +1330,17 @@ int ObTableInsertUpOp::do_update(const ObConflictValue &constraint_value)
   bool only_do_upd_ins = false;
   bool only_do_lock = false;
   if (constraint_value.new_row_source_ == ObNewRowSource::FROM_UPDATE) {
-    // current_datum_row_ 是update的new_row
+    // current_datum_row_ is the new_row for update
     if (NULL != constraint_value.baseline_datum_row_ &&
         NULL != constraint_value.current_datum_row_) {
-      // base_line 和 curr_row 都存在
+      // base_line and curr_row both exist
       OZ(constraint_value.baseline_datum_row_->to_expr(get_primary_table_upd_old_row(), eval_ctx_));
       OZ(delete_upd_old_row_to_das());
       OZ(constraint_value.current_datum_row_->to_expr(get_primary_table_upd_new_row(), eval_ctx_));
       OZ(insert_upd_new_row_to_das());
     } else if (NULL == constraint_value.baseline_datum_row_ &&
                NULL != constraint_value.current_datum_row_) {
-      // base_line不存在 但是 curr_row 存在，说明curr_row是从其他行update来的
+      // base_line does not exist but curr_row exists, which means curr_row is updated from other rows
       OZ(constraint_value.current_datum_row_->to_expr(get_primary_table_upd_new_row(), eval_ctx_));
       OZ(insert_upd_new_row_to_das());
     } else {
@@ -1387,7 +1385,7 @@ int ObTableInsertUpOp::do_insert(const ObConflictValue &constraint_value)
   int ret = OB_SUCCESS;
   bool has_insert = false;
   bool has_delete = false;
-  // curr_row来自于insert
+  // curr_row comes from insert
   if (NULL != constraint_value.baseline_datum_row_ &&
       NULL != constraint_value.current_datum_row_) {
     // delete + insert
@@ -1412,16 +1410,15 @@ int ObTableInsertUpOp::do_insert(const ObConflictValue &constraint_value)
 int ObTableInsertUpOp::reset_das_env()
 {
   int ret = OB_SUCCESS;
-  // 释放第一次try insert的das task
+  // Release the das task from the first try insert
   if (OB_FAIL(dml_rtctx_.das_ref_.close_all_task())) {
     LOG_WARN("close all das task failed", K(ret));
   } else {
     dml_rtctx_.das_ref_.reuse();
     dml_modify_rows_.clear();
   }
-
-  // 因为第二次插入不需要fetch conflict result了，如果有conflict
-  // 就直接报错
+  // Because the second insertion no longer needs to fetch conflict result, if there is a conflict
+  // Just throw an error
   for (int64_t i = 0; OB_SUCC(ret) && i < insert_up_rtdefs_.count(); ++i) {
     ObInsRtDef &ins_rtdef = insert_up_rtdefs_.at(i).ins_rtdef_;
     ins_rtdef.das_rtdef_.need_fetch_conflict_ = false;
@@ -1512,16 +1509,16 @@ int ObTableInsertUpOp::calc_auto_increment(const ObUpdCtDef &upd_ctdef)
 
       // !!!ATTENTION: OB_HIDDEN_PK_INCREMENT_COLUMN_ID is changed to tablet seq hidden pk,
       // you should be careful if you want to restore the following logic
-      // 对于 insert on duplicate 场景，不需要支持 MySQL 的行为。
-      // 假设我们支持 MySQL 的行为，那么意味着我们努力地尝试让表的自增值全局递增，
-      // 而不是仅仅分区内保持递增。对于全局递增的目标，我们理论上就达不到，也没有
-      // 去追求。
-      // 所以，决定放弃 insert on duplicate 场景下的兼容行为。
-      // 但是，依然保持 insert 一个确定值时，全局推高自增值的行为。因为这个有一定
-      // 的应用场景：例如，用户希望在某个时间点，全局推高所有分区的自增值到某个值
-      // 之后。
+      // For insert on duplicate scenario, do not need to support MySQL's behavior.
+      // Assume we support MySQL's behavior, then it means we strive to make the table's auto-increment value globally increasing,
+      // rather than just maintaining increment within the partition. For the goal of global increment, we theoretically cannot achieve it, and there is no
+      // Go for it.
+      // So, decide to abandon the compatibility behavior in the insert on duplicate scenario.
+      // However, still maintain the behavior of increasing the global auto-increment value when inserting a fixed value. Because this has some
+      // The application scenario: for example, the user wants to increase the auto-increment value of all partitions to a certain value at a certain point in time
+      // After.
       //
-      // 基于这个决策，删除下面所有代码。为了便于追溯，仅注释掉代码，保持一定时间。
+      // Based on this decision, delete all the code below. For traceability purposes, only comment out the code, keeping it for a certain period.
       //if (OB_SUCC(ret)) {
       //  // to be compatible with MySQL
       //  // some value for auto-increment column may come from update stmt; we should sync it
@@ -1532,9 +1529,9 @@ int ObTableInsertUpOp::calc_auto_increment(const ObUpdCtDef &upd_ctdef)
       //  //   insert into t1 values (1, 100, 100) on duplicate key update c2 = 10, c1=2;
       //  //   insert into t1 values (3, null, 100);
       //  // the last insert should generate 11 for c2
-      //  //如果自增列的值c1=10,不是通过insert语句差进去的，那么这个自增值10不会被sync出去。
-      //  //但是，如果这一行又被insert on
-      //  //duplicate,并且，更新的不是自增值的话，这个自增列的旧值10将被sync出去；
+      //  //If the auto-increment column value c1=10 is not inserted via an insert statement, then this auto-increment value 10 will not be synced out.
+      //  //but, if this line is also insert on
+      //  //duplicate, and, if the update is not to an auto-increment value, the old value 10 of this auto-increment column will be synced out;
       //  LOG_INFO("check autoincrement", K(is_auto_col_changed), K(is_row_changed));
       //  if (!is_auto_col_changed && is_row_changed) {
       //    ObPhysicalPlanCtx *plan_ctx = ctx.get_physical_plan_ctx();
@@ -1545,7 +1542,7 @@ int ObTableInsertUpOp::calc_auto_increment(const ObUpdCtDef &upd_ctdef)
       //      ObIArray<AutoincParam> &autoinc_params = plan_ctx->get_autoinc_params();
       //      for (int64_t z = 0; z < autoinc_params.count() && OB_SUCC(ret); ++z) {
       //        SQL_ENG_LOG(DEBUG, "print autoinc", K(autoinc_params.at(z)), K(z));
-      //        // 非隐藏列场景下，将 value sync 出去，使得所有 server 上的下一个值都大于 value
+      //        // Non-hidden column scenario, sync value out, so that the next value on all servers is greater than value
       //        if (OB_HIDDEN_PK_INCREMENT_COLUMN_ID != autoinc_params.at(z).autoinc_col_id_) {
       //          AutoincParam &autoinc_param = autoinc_params.at(z);
       //          const ObObj &val = scan_result_row.get_cell(autoinc_param.autoinc_old_value_index_);

@@ -2081,9 +2081,8 @@ public:
   };  // sizeof = 4
   ObObjValue v_;  // sizeof = 8
 };
-
-//为每个hash函数创建一个类，其中都包含static方法，方法名为hash，参数类型为const void*, uint64_t, uint64_t.
-//is_varchar_hash是为了兼容原来实现murmurhash处理varchar类型时，底层并不是使用murmurhash
+// Create a class for each hash function, all containing a static method named hash, with parameter types const void*, uint64_t, uint64_t.
+// is_varchar_hash is for compatibility with the original implementation of murmurhash,processing varchar type, where the underlying does not actually use murmurhash
 struct ObjHashBase
 {
   static const bool is_varchar_hash = true;
@@ -3227,7 +3226,7 @@ inline int ObObj::get_varchar(ObString &v) const
   //}
   //return ret;
   //
-  ////// todo  区分varchar和varbinary ;
+  ////// todo  distinguish varchar and varbinary ;
   return get_string(v);
 }
 
@@ -3382,8 +3381,7 @@ inline int ObObj::get_enumset_inner_value(ObEnumSetInnerValue &inner_value) cons
   }
   return ret;
 }
-
-//Obj中所有public的varchar hash方法，以及varchar类型的obj调用hash方法时，都调用了此方法
+// All public varchar hash methods in Obj, as well as hash method calls on varchar type obj, all invoke this method
 OB_INLINE static uint64_t varchar_hash_with_collation(const ObObj &obj,
                                                       const ObCollationType cs_type,
                                                       const uint64_t hash, hash_algo hash_al)
@@ -3454,17 +3452,17 @@ int ObObj::to_collation_free_obj(ObObj &dst, bool &is_valid_collation_free, Allo
   int ret = OB_SUCCESS;
   const int32_t len = get_string_len();
   const bool is_copy_all = true;
-  const int32_t buf_len = len * 2; // 对于变长类型的sortkey，最多会比原来的字符串占用2倍的空间
+  const int32_t buf_len = len * 2; // For variable-length type sortkey, it will occupy at most twice the space of the original string
   char *buf = NULL;
   is_valid_collation_free = true;
   if (!is_character_type()) {
     ret = OB_INVALID_ARGUMENT;
     COMMON_LOG(WARN, "invalid argument, only varchar or char can be transformed to collation free obj",
         K(ret), "obj type", get_type());
-  } else { // 对于字符串类型，目前仅考虑char或varchar作为rowkey的场景
+  } else { // For string type, currently only consider char or varchar as rowkey scenarios
     if (0 == len || NULL == get_string_ptr()) {
       copy_value_or_obj(dst, is_copy_all);
-      dst.set_collation_type(CS_TYPE_COLLATION_FREE); // TODO: 等九仞把是否比较空格的collation加进来之后，还需要修改
+      dst.set_collation_type(CS_TYPE_COLLATION_FREE); // TODO: Wait until Juren adds the collation that compares spaces, then further modification is needed
     } else {
       if (OB_ISNULL(buf = static_cast<char *>(allocator.alloc(buf_len)))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -3690,7 +3688,7 @@ struct ParamFlag
       uint8_t is_ref_cursor_type_ : 1; // in pl/sql context, this will be true if the local var is a ref cursor
       uint8_t is_pl_mock_default_param_ : 1; // TRUE if ObObjParam is pl default param
       uint8_t is_boolean_ : 1; // to distinguish T_BOOL and T_TINYINT
-      uint8_t is_batch_parameter_ : 1; // 表示是batch参数
+      uint8_t is_batch_parameter_ : 1; // indicates it is a batch parameter
     };
   };
 

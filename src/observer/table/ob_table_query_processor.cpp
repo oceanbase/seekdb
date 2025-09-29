@@ -235,7 +235,7 @@ int ObTableQueryP::old_try_process()
   int ret = OB_SUCCESS;
   ObTableApiSpec *spec = nullptr;
   ObTableApiExecutor *executor = nullptr;
-  observer::ObReqTimeGuard req_timeinfo_guard; // 引用cache资源必须加ObReqTimeGuard
+  observer::ObReqTimeGuard req_timeinfo_guard; // Reference cache resources must add ObReqTimeGuard
   ObTableApiCacheGuard cache_guard;
 
   // Tips: when table_name is tablegroup name

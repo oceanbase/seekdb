@@ -323,7 +323,7 @@ int ObColumnNamespaceChecker::check_column_exists(const TableItem &table_item, c
       }
     }
   } else if (table_item.is_fake_cte_table()) {
-    // cte table 按照generate的方式来检查列就好了
+    // cte table check columns according to the generate way
     if (OB_FAIL(params_.schema_checker_->check_column_exists(
         params_.session_info_->get_effective_tenant_id(), table_id, col_name, is_exist))) {
       LOG_WARN("check column exists failed", K(ret));

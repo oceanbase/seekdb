@@ -78,7 +78,7 @@ public:
   static int create_vector(VectorFormat format, VecValueTypeClass value_tc, bool is_nullable,
                            const int64_t max_batch_size, ObIAllocator &allocator,
                            ObDirectLoadVector *&vector);
-  // 定长类型:VEC_FIXED, 变长类型:VEC_DISCRETE
+  // Fixed length type:VEC_FIXED, variable length type:VEC_DISCRETE
   static int create_vector(const share::schema::ObColDesc &col_desc, bool is_nullable,
                            const int64_t max_batch_size, ObIAllocator &allocator,
                            ObDirectLoadVector *&vector);

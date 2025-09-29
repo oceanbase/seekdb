@@ -1284,8 +1284,8 @@ int ObFetchMicroBlockP::process()
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("get invalid args", K(ret), K_(arg));
     }
-    // The reason that apply 6M buffer：
-    // buffer struct：key_meta_array + data
+    // The reason that apply 6M buffer:
+    // buffer struct: key_meta_array + data
     // key_meta: key info + other cache info
     // other cache info: uint32(crc) + bool(in t1/t2), less than key info
     // data less than 2M, it comes from a cache block

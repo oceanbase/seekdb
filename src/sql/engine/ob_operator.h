@@ -78,20 +78,20 @@ public:
 public:
   common::ObObjType obj_type_;
   bool is_not_null_;
-  // 因为ObSortColumn是需要序列化的，但是ObSortColumn没有使用信息的序列化框架
-  // 在ObSortColumn里面加任何一个字段都会有兼容性问题
-  // 所以就把null first last的信息放在这里了
+  // Because ObSortColumn is serializable, but ObSortColumn does not use the serialization framework for information
+  // Adding any field inside ObSortColumn will have compatibility issues
+  // So we put the null first last information here
   ObOrderDirection order_type_;
 };
 
 enum OperatorOpenOrder
 {
-  OPEN_CHILDREN_FIRST = 0, //默认先open children
-  OPEN_SELF_FIRST = 1, //先open自己
-  OPEN_CHILDREN_LATER = 2, //再open children
+  OPEN_CHILDREN_FIRST = 0, // default open children first
+  OPEN_SELF_FIRST = 1, // first open yourself
+  OPEN_CHILDREN_LATER = 2, // open children later
   OPEN_SELF_LATER = 3,
-  OPEN_SELF_ONLY = 4, //不打开children，但是打开自己
-  OPEN_NONE = 5, //不打开自己，也不打开children, unused since 4.0
+  OPEN_SELF_ONLY = 4, // do not open children, but open self
+  OPEN_NONE = 5, // do not open itself, nor open children, unused since 4.0
   OPEN_EXIT = 6
 };
 
@@ -238,7 +238,7 @@ public:
   // for current DFO.
   int create_operator(ObExecContext &exec_ctx, ObOperator *&op) const;
   int create_op_input(ObExecContext &exec_ctx) const;
-  // 将算子注册到 datahub，用于并行计算场景
+  // Register the operator to datahub, used for parallel computing scenarios
   // 
   virtual int register_to_datahub(ObExecContext &exec_ctx) const
     { UNUSED(exec_ctx); return common::OB_SUCCESS; }

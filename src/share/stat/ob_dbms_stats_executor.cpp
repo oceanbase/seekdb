@@ -36,7 +36,7 @@ ERRSIM_POINT_DEF(ERRSIM_FAILED_ANALYZE_TIMEOUT);
 
 /**
  * @brief ObDbmsStatsUtils::gather_table_stats
- *  构造表级别统计信息的收集 SQL
+ *  Construct the SQL for collecting table-level statistics
  * @return
  */
 
@@ -744,7 +744,7 @@ int ObDbmsStatsExecutor::prepare_gather_stats(ObExecContext &ctx,
 }
 
 /*
- *  todo 统一 ObOptStatGatherParam GatherHelper ObTableStatParam 的用途
+ *  todo unify the usage of ObOptStatGatherParam, GatherHelper, and ObTableStatParam
  */
 int ObDbmsStatsExecutor::do_gather_stats_with_retry(ObExecContext &ctx,
                                                     ObMySQLTransaction &trans,
@@ -2058,10 +2058,10 @@ int ObDbmsStatsExecutor::try_use_prefix_index_refine_min_max(ObExecContext &ctx,
   return ret;
 }
 /**
- * 检查是否需要切换为单分区统计信息收集模式
- * @param partition_id_block_map 分区ID到块统计信息的映射表
- * @param param 表统计参数配置
- * @param need_single_part  输出标志位，true表示需要单分区模式
+ * Check if a switch to single-partition statistics collection mode is needed
+ * @param partition_id_block_map Mapping table from partition ID to block statistics
+ * @param param Table statistics parameter configuration
+ * @param need_single_part Output flag, true indicates need for single-partition mode
  * @return
  */
 int ObDbmsStatsExecutor::check_use_single_partition_gather(const PartitionIdBlockMap &partition_id_block_map,

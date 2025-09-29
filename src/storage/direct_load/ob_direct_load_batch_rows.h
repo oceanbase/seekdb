@@ -43,7 +43,7 @@ public:
            const int64_t max_batch_size,
            const ObDirectLoadRowFlag &row_flag);
 
-  // 深拷贝
+  // Deep copy
   int append_row(const ObDirectLoadDatumRow &datum_row);
   int append_row(const blocksstable::ObDatumRow &datum_row);
   int append_row(const blocksstable::ObStorageDatum *datums, const int64_t column_count);
@@ -60,7 +60,7 @@ public:
   int append_selective(const ObIArray<ObDatumVector> &datum_vectors, const uint16_t *selector,
                        int64_t size);
 
-  // 浅拷贝
+  // Shallow copy
 
   int get_datum_row(const int64_t batch_idx, ObDirectLoadDatumRow &datum_row) const;
 
@@ -93,7 +93,7 @@ private:
   int init_vectors(const common::ObIArray<ObColumnSchemaItem> &column_schemas, int64_t max_batch_size);
 
 private:
-  common::ObArenaAllocator allocator_; // 常驻内存分配器
+  common::ObArenaAllocator allocator_; // resident memory allocator
   ObArray<ObDirectLoadVector *> vectors_;
   int64_t max_batch_size_;
   ObDirectLoadRowFlag row_flag_;

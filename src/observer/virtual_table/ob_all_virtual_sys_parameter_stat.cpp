@@ -165,7 +165,7 @@ int ObAllVirtualSysParameterStat::inner_sys_get_next_row(ObNewRow *&row)
             break;
           }
         default : {
-            // TODO: 版本兼容性，多余的列不报错
+            // TODO: Version compatibility, extra columns do not cause errors
             // ret = OB_ERR_UNEXPECTED;
             // SERVER_LOG(WARN, "unexpected column id", K(col_id), K(i), K(ret));
 	    cells[i].set_null();
@@ -281,7 +281,7 @@ int ObAllVirtualSysParameterStat::inner_tenant_get_next_row(common::ObNewRow *&r
           break;
         }
         default : {
-            // 版本兼容性，多余列不报错
+            // Version compatibility, extra columns do not report an error
             // ret = OB_ERR_UNEXPECTED;
             // SERVER_LOG(WARN, "unexpected column id", K(col_id), K(i), K(ret));
 	    cells[i].set_null();

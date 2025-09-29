@@ -31,8 +31,8 @@ namespace oceanbase
 namespace sql
 {
 struct ObEvalCtx;
-// 由于调用了rpc的异步回调接口，该接口不调用参数的析构函数，
-// 因此下面的类都要做成不依赖调用析构函数来释放内存
+// Due to calling the rpc asynchronous callback interface, this interface does not call the destructor of the parameters,
+// Therefore the following classes should be designed not to rely on the destructor for memory release
 
 class ObTaskSmallResult
 {
@@ -223,9 +223,9 @@ public:
   TO_STRING_KV(K_(task_result), K_(extend_result));
 private:
   common::ObScanner task_result_;
-  //对于mini task,允许在执行主计划的时候，附带执行一个扩展计划，
-  //这个主要是用于当冲突检查的时候，获取unique index的冲突行主键的时候，
-  //可以将主键和local unique index的冲突rowkey的其它列信息也一并带回来，优化RPC次数
+  // For mini task, allow executing an extension plan along with the main plan,
+  // This mainly used when conflict checking, to get the unique index conflict row primary key when,
+  // You can also bring back the other column information of the conflicting rowkey for the primary key and local unique index, optimizing the number of RPC calls
   common::ObScanner extend_result_;
 };
 
@@ -240,7 +240,7 @@ public:
   {
   }
   ~ObMiniTaskEvent() {}
-  //用来释放task event占用的资源
+  // Used to release resources occupied by task event
   inline void close_event() { reset(); }
   void reset() { task_result_.reset(); }
   int init() { return task_result_.init(); }

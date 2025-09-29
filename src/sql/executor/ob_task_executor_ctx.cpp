@@ -79,7 +79,7 @@ ObTaskExecutorCtx::~ObTaskExecutorCtx()
 int ObTaskExecutorCtx::set_table_locations(const ObTablePartitionInfoArray &table_partition_infos)
 {
   int ret = OB_SUCCESS;
-  //table_locations_在这里必须先reset，确保table partition infos没有被重复添加
+  //table_locations_ must be reset here to ensure that table partition infos are not added repeatedly
   table_locations_.reset();
   ObPhyTableLocation phy_table_loc;
   int64_t N = table_partition_infos.count();
@@ -93,7 +93,7 @@ int ObTaskExecutorCtx::set_table_locations(const ObTablePartitionInfoArray &tabl
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected error. table partition info is null", K(ret), K(i));
     } else if (partition_info->get_table_location().use_das()) {
-      //do nothing,DAS的location由自己维护和计算
+      //do nothing, DAS's location is maintained and calculated by itself
     } else if (OB_FAIL(phy_table_loc.assign_from_phy_table_loc_info(partition_info->get_phy_tbl_location_info()))) {
       LOG_WARN("fail to assign_from_phy_table_loc_info", K(ret), K(i), K(partition_info->get_phy_tbl_location_info()), K(N));
     } else if (OB_FAIL(table_locations_.push_back(phy_table_loc))) {
@@ -203,9 +203,9 @@ int ObTaskExecutorCtx::reset_and_init_stream_handler()
     LOG_ERROR("unexpected error. exec ctx is not inited", K(ret));
   } else {
     if (NULL != task_resp_handler_) {
-      // 有可能是transaction_set_violation_and_retry引起的执行器层面的重试，
-      // ObTaskExecutorCtx析构之前多次调用本函数，
-      // 所以这里要先析构掉之前的内存
+      // It might be caused by transaction_set_violation_and_retry leading to a retry at the executor level,
+      // ObTaskExecutorCtx destructor is called multiple times before this function,
+      // So here we need to destruct the previous memory first
       task_resp_handler_->~RemoteExecuteStreamHandle();
       task_resp_handler_ = NULL;
     }

@@ -44,11 +44,11 @@ int ObExternalTablePartInfoArray::reserve(const int64_t capacity)
 int ObExternalTablePartInfoArray::serialize(char *buf, const int64_t buf_len, int64_t &pos) const 
 {
   int ret = OB_SUCCESS;
-  // 序列化数组大小
+  // Serialization array size
   if (OB_FAIL(serialization::encode_vi64(buf, buf_len, pos, part_infos_.count()))) {
     LOG_WARN("fail to encode count", K(ret));
   }
-  // 序列化每个pair
+  // Serialize each pair
   for (int64_t i = 0; OB_SUCC(ret) && i < part_infos_.count(); i++) {
     const ObExternalTablePartInfo &part_info = part_infos_.at(i);
     LST_DO_CODE(OB_UNIS_ENCODE, part_info.part_id_);
@@ -66,7 +66,7 @@ int ObExternalTablePartInfoArray::serialize(char *buf, const int64_t buf_len, in
 int ObExternalTablePartInfoArray::deserialize(const char *buf, const int64_t data_len, int64_t &pos)
 {
   int ret = OB_SUCCESS;
-  // 反序列化数组大小
+  // Deserialize array size
   int64_t count = 0;
   if (OB_FAIL(serialization::decode_vi64(buf, data_len, pos, &count))) {
     LOG_WARN("fail to decode count", K(ret));
@@ -74,12 +74,12 @@ int ObExternalTablePartInfoArray::deserialize(const char *buf, const int64_t dat
     LOG_WARN("invalid count", K(ret), K(count));
     ret = OB_INVALID_ARGUMENT;
   } else if (count == 0) {
-    // 如果count为0，则不进行反序列化
+    // If count is 0, then deserialization will not be performed
     return ret;
   } else if (OB_FAIL(part_infos_.allocate_array(allocator_, count))) {
     LOG_WARN("fail to alloc pairs array", K(ret), K(count));
   } else {
-    // 分配临时内存用于ObObj数组
+    // Allocate temporary memory for ObObj array
     ObArenaAllocator tmp_allocator("PartIdRowPair");
     void *tmp_buf = NULL;
     ObObj *obj_array = NULL;
@@ -92,7 +92,7 @@ int ObExternalTablePartInfoArray::deserialize(const char *buf, const int64_t dat
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("fail to new obj array", KR(ret));
     } else {
-      // 反序列化每个pair
+      // Deserialize each pair
       for (int64_t i = 0; OB_SUCC(ret) && i < count; i++) {
         ObExternalTablePartInfo part_info;
         ObNewRow row;

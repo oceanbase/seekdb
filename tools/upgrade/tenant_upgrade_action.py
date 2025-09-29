@@ -13,9 +13,9 @@ import actions
 
 def do_upgrade(conn, cur, timeout, user, pwd):
   # upgrade action
-#升级语句对应的action要写在下面的actions begin和actions end这两行之间，
-#因为基准版本更新的时候会调用reset_upgrade_scripts.py来清空actions begin和actions end
-#这两行之间的这些代码，如果不写在这两行之间的话会导致清空不掉相应的代码。
+#The action corresponding to the upgrade statement should be written between the lines actions begin and actions end,
+# Because the baseline version update will call reset_upgrade_scripts.py to clear actions begin and actions end
+# The code between these two lines, if not written between these two lines, will result in the corresponding code not being cleared.
   across_version = upgrade_across_version(cur)
   if across_version:
     run_upgrade_job(conn, cur, "UPGRADE_ALL", timeout)

@@ -206,23 +206,23 @@ struct ObExecTimestamp {
     MEMSET(this, 0, sizeof(*this));
   }
   ExecType exec_type_;
-  int64_t rpc_send_ts_; //发送rpc的时间戳
-  int64_t receive_ts_;  //接收请求的时间戳, 其后面是net wait时间
-  //***下面的时间戳在每次重试后需要更新***
-  int64_t enter_queue_ts_;//进入队列时间戳
-  int64_t run_ts_;      //开始run的时间戳, 其后面是decode时间
-  int64_t before_process_ts_;  //before process 开始的时间戳
-  int64_t single_process_ts_;  //单条sql do process的开始时间戳
-  int64_t process_executor_ts_; //plan开始执行的时间戳
-  int64_t executor_end_ts_; // plan执行结束的时间戳
-  //*** 下面时间戳是特殊场景所需要用的***
-  int64_t multistmt_start_ts_; // multistmt 场景下拆分后各个子 sql 开始执行时间戳
+  int64_t rpc_send_ts_; // send rpc timestamp
+  int64_t receive_ts_;  // receive request timestamp, followed by net wait time
+  //***The timestamp below needs to be updated after each retry***
+  int64_t enter_queue_ts_;//enter queue timestamp
+  int64_t run_ts_;      // start run timestamp, followed by decode time
+  int64_t before_process_ts_;  // before process start timestamp
+  int64_t single_process_ts_;  // Single SQL do process start timestamp
+  int64_t process_executor_ts_; // plan start execution timestamp
+  int64_t executor_end_ts_; // plan execution end timestamp
+  //*** The following timestamp is used for special scenarios ***
+  int64_t multistmt_start_ts_; // multistmt scenario split sub sql start execution timestamp
 
   int64_t elapsed_t_;
-  //**** 下面只记录在第一次执行过程中耗时**
+  //**** Below only records the time taken during the first execution process**
   int64_t net_t_;
   int64_t net_wait_t_;
-  //***** 下面记录的是累计耗时 ***
+  //***** Below records the cumulative time consumption ***
   int64_t queue_t_;
   int64_t decode_t_;
   int64_t get_plan_t_;
@@ -233,11 +233,10 @@ struct ObExecTimestamp {
                K(process_executor_ts_), K(executor_end_ts_), K(multistmt_start_ts_),
                K(elapsed_t_), K(net_t_), K(net_wait_t_), K(queue_t_),
                K(decode_t_), K(get_plan_t_), K(executor_t_));
-
-  //出现重试时时间累加
+  // Time accumulation occurs when retry happens
   void update_stage_time() {
-    // elapsed_t_ 重试不需要累加，其他重试需要累加，且在 multistmt 场景下计算方式更改
-    // multistmt 场景特殊处理，第二个及之后的 sql 的 queue_t_、decode_t_ 均为 0
+    // elapsed_t_ retry does not need to be accumulated, other retries need to be accumulated, and the calculation method changes in the multistmt scenario
+    // multistmt special handling, the queue_t_ and decode_t_ of the second and subsequent sqls are all 0
     if (multistmt_start_ts_ > 0) {
       queue_t_ = 0;
       decode_t_ = 0;
@@ -375,7 +374,7 @@ struct ObAuditRecordData {
   int64_t execution_id_;  //used to jion v$sql_plan_monitor
   uint64_t session_id_;
   uint64_t proxy_session_id_;
-  uint64_t qc_id_;  //px框架下id
+  uint64_t qc_id_;  //px framework id
   int64_t dfo_id_;
   int64_t sqc_id_;
   int64_t worker_id_;
@@ -389,26 +388,26 @@ struct ObAuditRecordData {
   int64_t user_id_;
   char *user_name_;
   int64_t user_name_len_;
-  int user_group_; // user 所属 cgroup id，仅主线程展示
+  int user_group_; // user belongs to cgroup id, only main thread displays
   uint64_t db_id_;
   char *db_name_;
   int64_t db_name_len_;
   char sql_id_[common::OB_MAX_SQL_ID_LENGTH + 1];
-  char *sql_; //该内存由allocate_分配, 在record被淘汰时释放；
+  char *sql_; // This memory is allocated by allocate_, and released when the record is eliminated;
   int64_t sql_len_;
   common::ObCollationType sql_cs_type_;
   int64_t plan_id_;
-  int64_t affected_rows_;//delete,update,insert影响的行数,及select选出的行数
+  int64_t affected_rows_;//delete, update, insert affected row count, as well as select selected row count
   int64_t return_rows_;
-  int64_t partition_cnt_;//该请求涉及的所以partition个数
-  int64_t expected_worker_cnt_; // px 预期分配线程数
-  int64_t used_worker_cnt_; // px 实际分配线程数
-  int64_t try_cnt_; //尝试执行次数
+  int64_t partition_cnt_;//the number of all partitions involved in this request
+  int64_t expected_worker_cnt_; // px expected number of allocated threads
+  int64_t used_worker_cnt_; // px actually allocated thread count
+  int64_t try_cnt_; // attempt execution count
   ObPhyPlanType plan_type_;
   bool is_executor_rpc_;
   bool is_inner_sql_;
   bool is_hit_plan_cache_;
-  bool is_multi_stmt_; //是否是multi sql
+  bool is_multi_stmt_; // whether it is multi sql
   bool table_scan_;
   common::ObConsistencyLevel consistency_level_;
   int64_t request_memory_used_;

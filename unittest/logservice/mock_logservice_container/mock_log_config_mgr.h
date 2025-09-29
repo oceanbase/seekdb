@@ -267,8 +267,7 @@ public:
     UNUSED(config_version);
     return ret;
   }
-
-  // follower接收到成员变更日志需要进行前向校验
+  // follower receives member change log and needs to perform forward validation
   int receive_config_log(const common::ObAddr &leader, const LogConfigMeta &meta)
   {
     int ret = OB_SUCCESS;

@@ -119,8 +119,8 @@ int ObHashUnionOp::inner_get_next_row()
     if (!has_got_part_) {
       ret = get_child_next_row();
     } else {
-      // TODO: longzhong.wlz 这里其实可以将storerow拿出来直接insert而不是先转成output再写入
-      //        后续可以再优化
+      // TODO: longzhong.wlz Here actually we can take storerow out and directly insert instead of converting it to output first and then writing it
+      //        subsequent optimization can be done
       ret = hp_infras_.get_left_next_row(store_row, MY_SPEC.set_exprs_);
     }
     if (OB_ITER_END == ret) {

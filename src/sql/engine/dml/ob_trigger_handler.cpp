@@ -105,8 +105,8 @@ int TriggerHandle::init_trigger_params(
   void *when_point_params_buf = NULL;
   void *row_point_params_buf = NULL;
   int64_t param_store_size = sizeof(ParamStore);
-  // TODO: 这个接口还可以进一步精细化，比如在没有when条件时，tg_when_point_params_相关逻辑都不需要执行的，
-  //       或者在insert/delete操作时，tg_init_point_params_也不需要执行的。
+  // TODO: This interface can be further refined, for example, when there is no when condition, the related logic of tg_when_point_params_ does not need to be executed,
+  //       or when performing insert/delete operations, tg_init_point_params_ also does not need to be executed.
   if (OB_ISNULL(when_point_params_buf = das_ctx.get_exec_ctx().get_allocator().alloc(param_store_size)) ||
       OB_ISNULL(row_point_params_buf = das_ctx.get_exec_ctx().get_allocator().alloc(param_store_size))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;

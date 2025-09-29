@@ -26,11 +26,11 @@ using namespace storage;
 
 /*
 PROCEDURE refresh_index(
-  IN       IDX_NAME            VARCHAR(65535),               ---- 索引名
-  IN       TABLE_NAME          VARCHAR(65535),               ---- 表名
-  IN       IDX_VECTOR_COL      VARCHAR(65535) DEFAULT NULL,  ---- 向量列名
-  IN       REFRESH_THRESHOLD   INT DEFAULT 10000,            ---- 3号表记录数达到阈值，触发增量刷新
-  IN       REFRESH_TYPE        VARCHAR(65535) DEFAULT NULL   ---- 预留: 目前默行为是增量刷新: FAST
+  IN       IDX_NAME            VARCHAR(65535),               ---- Index name
+  IN       TABLE_NAME          VARCHAR(65535),               ---- Table name
+  IN       IDX_VECTOR_COL      VARCHAR(65535) DEFAULT NULL,  ---- Vector column name
+  IN       REFRESH_THRESHOLD   INT DEFAULT 10000,            ---- Trigger incremental refresh when the number of records in table 3 reaches the threshold
+  IN       REFRESH_TYPE        VARCHAR(65535) DEFAULT NULL   ---- Reserved: Current default behavior is incremental refresh: FAST
 );
 */
 int ObDBMSVectorMySql::refresh_index(ObPLExecCtx &ctx, ParamStore &params, ObObj &result)
@@ -63,14 +63,14 @@ int ObDBMSVectorMySql::refresh_index(ObPLExecCtx &ctx, ParamStore &params, ObObj
 
 /*
 PROCEDURE rebuild_index (
-    IN      IDX_NAME                VARCHAR(65535),                      ---- 索引名
-    IN      TABLE_NAME              VARCHAR(65535),                      ---- 表名
-    IN      IDX_VECTOR_COL          VARCHAR(65535) DEFAULT NULL,         ---- 向量列名
-    IN      DELTA_RATE_THRESHOLD    FLOAT DEFAULT 0.2,                   ---- (3号表记录数+4号表记录数)/基表记录数达到阈值时，触发重建
-    IN      IDX_ORGANIZATION        VARCHAR(65535) DEFAULT NULL,         ---- 索引类型，本期不允许rebuild修改索引类型
-    IN      IDX_DISTANCE_METRICS    VARCHAR(65535) DEFAULT 'EUCLIDEAN',  ---- 距离类型，本期不允许修改
-    IN      IDX_PARAMETERS          LONGTEXT DEFAULT NULL,               ---- 索引参数，本期不允许修改
-    IN      IDX_PARALLEL_CREATION   INT DEFAULT 1                        ---- 并行构建索引的并行度，预留，仅语法支持
+    IN      IDX_NAME                VARCHAR(65535),                      ---- Index name
+    IN      TABLE_NAME              VARCHAR(65535),                      ---- Table name
+    IN      IDX_VECTOR_COL          VARCHAR(65535) DEFAULT NULL,         ---- Vector column name
+    IN      DELTA_RATE_THRESHOLD    FLOAT DEFAULT 0.2,                   ---- Trigger rebuild when (number of records in table 3 + number of records in table 4) / base table record count reaches the threshold
+    IN      IDX_ORGANIZATION        VARCHAR(65535) DEFAULT NULL,         ---- Index type, modification of index type is not allowed in this release
+    IN      IDX_DISTANCE_METRICS    VARCHAR(65535) DEFAULT 'EUCLIDEAN',  ---- Distance type, modification is not allowed in this release
+    IN      IDX_PARAMETERS          LONGTEXT DEFAULT NULL,               ---- Index parameters, modification is not allowed in this release
+    IN      IDX_PARALLEL_CREATION   INT DEFAULT 1                        ---- Parallelism degree for parallel index creation, reserved for future use, syntax support only
 );
 */
 int ObDBMSVectorMySql::rebuild_index(ObPLExecCtx &ctx, ParamStore &params, ObObj &result)

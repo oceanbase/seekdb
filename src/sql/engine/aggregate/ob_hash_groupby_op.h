@@ -193,8 +193,7 @@ OB_INLINE void ObGroupRowHashTable::prefetch(const ObBatchRows &brs, uint64_t *h
     }
   }
 }
-
-// 输入数据已经按照groupby列排序
+// Input data has already been sorted by the groupby column
 class ObHashGroupByOp : public ObGroupByOp
 {
 public:

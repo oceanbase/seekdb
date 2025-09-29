@@ -113,8 +113,7 @@ int ObScalarAggregateOp::inner_get_next_row()
     if (OB_FAIL(child_->get_next_row())) {
       if (OB_ITER_END != ret) {
         LOG_WARN("fail to get next row", K(ret));
-
-      //聚集的整个集合为空集，对外返回空集分组生成的行
+      // The entire aggregated collection is an empty set, return an empty set group generated row
       } else if (OB_FAIL(aggr_processor_.collect_for_empty_set())) {
         LOG_WARN("fail to prepare the aggr func", K(ret));
       }

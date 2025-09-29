@@ -162,9 +162,8 @@ enum ObTableIncAppendStage
   TABLE_INCR_APPEND_UPDATE = 1,
   TABLE_INCR_APPEND_INSERT = 2
 };
-
-// 1.用于存放整个process过程中需要的通用上下文信息
-// 2.在try_process()中进行初始化
+// 1. Used to store general context information needed throughout the entire process
+// 2. Initialization in try_process()
 class ObTableCtx
 {
 public:
@@ -342,12 +341,12 @@ public:
 
   virtual ~ObTableCtx()
   {
-    // async query 中可能提前析构session, 因此exec_ctx这里必须先解绑, 不然可能 use after free
+    // async query may destruct session prematurely, therefore exec_ctx must be unbound here first, otherwise it may cause use after free
     exec_ctx_.set_my_session(nullptr);
-    // session在其他线程回收, 也可能提前被回收,
-    // 但 exec_ctx_ 的生命周期一定比 session 短, 因此需要把session的exec_ctx_置空
-    // 上层需要保证使用时, 如果提前回收 session, 要把 tb_ctx 的绑定 session_guard 设置为空指针
-    // 此处只要判断sess_guard不为空, 我们可以认为上层还没有主动析构 session
+    // session may be recycled by other threads, or it may be recycled prematurely,
+    // But the lifecycle of exec_ctx_ is definitely shorter than that of session, therefore, we need to set session's exec_ctx_ to null
+    // The upper layer needs to ensure that if the session is recycled in advance, the bound session_guard of tb_ctx should be set to a null pointer
+    // Here we only need to check if sess_guard is not null, we can consider that the upper layer has not proactively destructed the session
     if (OB_NOT_NULL(get_sess_guard())) {
       typedef ObSQLSessionInfo::ExecCtxSessionRegister MyExecCtxSessionRegister;
       MyExecCtxSessionRegister ctx_unregister(get_session_info(), nullptr);
@@ -601,7 +600,7 @@ public:
   // for auto inc
   OB_INLINE bool need_auto_inc_expr()
   {
-    // delete/update/get/scan操作只需要生成列引用表达式
+    // delete/update/get/scan operation only needs to generate column reference expressions
     return has_auto_inc_
         && operation_type_ != ObTableOperationType::DEL
         && operation_type_ != ObTableOperationType::UPDATE
@@ -652,7 +651,7 @@ public:
     return ttl_definition_;
   }
 public:
-  // 基于 table name 初始化common部分(不包括expr_info_, exec_ctx_)
+  // Initialize common part based on table name (excluding expr_info_, exec_ctx_)
   int init_common(ObTableApiCredential &credential,
                   const common::ObTabletID &arg_tablet_id,
                   const int64_t &timeout_ts);
@@ -660,32 +659,32 @@ public:
                                 const ObTabletID &arg_tablet_id,
                                 const int64_t &timeout_ts);
   int check_tablet_id_valid();
-  // 初始化 insert 相关
+  // Initialize insert related
   int init_insert();
   // init put
   int init_put(bool allow_insup = false);
-  // 初始化scan相关(不包括表达分类)
+  // Initialize scan related (excluding expression classification)
   int init_scan(const ObTableQuery &query,
                 const bool &is_wead_read,
                 const uint64_t arg_table_id,
                 bool skip_get_ls = false);
-  // 初始化update相关
+  // Initialize update related
   int init_update();
-  // 初始化delete相关
+  // Initialize delete related
   int init_delete();
-  // 初始化replace相关
+  // Initialize replace related
   int init_replace();
-  // 初始化insert_up相关
+  // Initialize insert_up related
   int init_insert_up(bool is_client_set_put);
-  // 初始化get相关
+  // Initialize get related
   int init_get();
-  // 初始化increment相关
+  // Initialize increment related
   int init_increment(bool return_affected_entity, bool return_rowkey);
-  // 初始化append相关
+  // Initialize append related
   int init_append(bool return_affected_entity, bool return_rowkey);
-  // 分类扫描相关表达式
+  // Classification scan related expressions
   int classify_scan_exprs();
-  // 初始化exec_ctx_和exec_ctx_.das_ctx_
+  // Initialize exec_ctx_ and exec_ctx_.das_ctx_
   int init_exec_ctx(bool need_das_ctx = true);
   // init exec_ctx_.my_session_.tx_desc_
   int init_trans(transaction::ObTxDesc *trans_desc,
@@ -693,7 +692,7 @@ public:
   int init_das_context(ObDASCtx &das_ctx);
   int init_related_tablet_map(ObDASCtx &das_ctx);
   void init_physical_plan_ctx(int64_t timeout_ts, int64_t tenant_schema_version);
-  // 更新全局自增值
+  // Update global auto-increment value
   int update_auto_inc_value();
   // init table context for ttl operation
   bool is_ttl_table() const { return is_ttl_table_; }
@@ -718,9 +717,9 @@ public:
   // only use for fts scan cg stage
   int prepare_text_retrieval_scan();
 public:
-  // convert lob的allocator需要保证obj写入表达式后才能析构
+  // convert lob's allocator needs to ensure obj is written to the expression before it is destructed
   static int convert_lob(common::ObIAllocator &allocator, ObObj &obj);
-  // read lob的allocator需要保证obj序列化到rpc buffer后才能析构
+  // the allocator for reading lob must ensure that obj is serialized into the rpc buffer before it is destructed
   static int read_real_lob(common::ObIAllocator &allocator, ObObj &obj);
   int adjust_entity();
   int adjust_column_type(const ObTableColumnInfo &column_info, ObObj &ob);
@@ -770,7 +769,7 @@ private:
   int init_schema_info_from_cache();
   int adjust_rowkey();
   int adjust_properties();
-  // 获取索引表的tablet_id
+  // Get the tablet_id from the index table
   int get_related_tablet_id(const share::schema::ObTableSchema &index_schema,
                             common::ObTabletID &related_tablet_id);
   // for fulltext index
@@ -820,11 +819,11 @@ private:
   common::ObSEArray<sql::ObRawExpr*, 16> index_exprs_;
   common::ObSEArray<sql::ObRawExpr*, 8> filter_exprs_;
   common::ObSEArray<sql::ObAggFunRawExpr*, 8> pushdown_aggr_exprs_;
-  common::ObSEArray<uint64_t, 32> select_col_ids_; // 基于schema序的select column id
-  common::ObSEArray<uint64_t, 32> query_col_ids_; // 用户查询的select column id
-  common::ObSEArray<common::ObString, 32> query_col_names_; // 用户查询的select column name，引用的是schema上的列名
+  common::ObSEArray<uint64_t, 32> select_col_ids_; // select column id based on schema order
+  common::ObSEArray<uint64_t, 32> query_col_ids_; // user queried select column id
+  common::ObSEArray<common::ObString, 32> query_col_names_; // user queried select column name, referencing the column names on the schema
   common::ObSEArray<uint64_t, 16> index_col_ids_;
-  common::ObSEArray<ObTableIndexInfo, 4> table_index_info_; // 用于记录主表和全局索引表信息
+  common::ObSEArray<ObTableIndexInfo, 4> table_index_info_; // Used to record information about the main table and global index tables
   const share::schema::ObTableSchema *index_schema_;
   int64_t offset_;
   int64_t limit_;

@@ -74,7 +74,7 @@ int ObPLResolver::init(ObPLFunctionAST &func_ast)
           OZ (current_block_->get_namespace().get_cursors().push_back(
               current_block_->get_namespace().get_cursors().count()));
         }
-        if (OB_SUCC(ret) && type.is_composite_type()) { // 将参数中的复杂类型在本ns中展开, 避免参数类型在符号表中不全
+        if (OB_SUCC(ret) && type.is_composite_type()) { // Expand complex types in this ns from the parameters to avoid incomplete parameter types in the symbol table
           const ObUserDefinedType *user_type = NULL;
           if (STANDALONE_ANONYMOUS == func_ast.get_proc_type()) {
             OZ (ObPLDependencyUtil::add_dependency_objects(func_ast.get_dependency_table(),
@@ -220,8 +220,8 @@ int ObPLResolver::resolve(const ObStmtNodeTree *parse_tree, ObPLFunctionAST &fun
     ObPLLabelTable *pl_label = NULL;
     int64_t label_idx = OB_INVALID_INDEX;
     if (T_SP_LABELED_BLOCK == parse_tree->type_ || T_SP_LABELED_CONTROL == parse_tree->type_) {
-      // Oracle可以只有EndLabel,没有BeginLabel, 且EndLabel可以与BeginLabel不匹配
-      // 如下用例在Oracle下是合法的
+      // Oracle can have only EndLabel, without BeginLabel, and EndLabel can not match BeginLabel
+      // The following test case is legal in Oracle
       // example 1: <<label>> BEGIN NULL; END label1;
       // example 2: BEGIN NULL; END label;
       ParseNode *labels_node = parse_tree->children_[0];
@@ -258,7 +258,7 @@ int ObPLResolver::resolve(const ObStmtNodeTree *parse_tree, ObPLFunctionAST &fun
             LOG_USER_ERROR(OB_ERR_SP_LILABEL_MISMATCH, end_label.length(), end_label.ptr());
             LOG_WARN("begin label is not match with end label", K(label), K(end_label), K(ret));
           }
-        } else { // Oracle的EndLabel行为, 仅对Procedure和Function结尾的EndLabel做匹配检查
+        } else { // Oracle's EndLabel behavior, only match EndLabel at the end of Procedure and Function
           if (NULL != current_block_
               && NULL == current_block_->get_namespace().get_pre_ns()) {
             if (func.get_name().case_compare("__anonymous_block__") != 0
@@ -596,9 +596,8 @@ int ObPLResolver::resolve(const ObStmtNodeTree *parse_tree, ObPLFunctionAST &fun
         break;
       }
 #undef NOT_SUPPORT_IN_ROUTINE
-
-      // MySQL兼容: 对于对象不存在的错误，resolve阶段不报错,这里替换为一个single语句，在执行阶段报错
-      // 由于对象的创建可能在sp的创建之后，因此这里不将加了single语句的function放入cache
+      // MySQL compatibility: For errors where the object does not exist, do not report an error during the resolve phase; here it is replaced with a single statement, which will report an error during execution
+      // Since the object creation may occur after the sp is created, the function with the single statement is not placed in the cache here
       if ((OB_ERR_FUNCTION_UNKNOWN == ret
            || OB_ERR_SP_WRONG_ARG_NUM == ret
            || OB_ERR_SP_DOES_NOT_EXIST == ret
@@ -675,8 +674,8 @@ int ObPLResolver::resolve(const ObStmtNodeTree *parse_tree, ObPLFunctionAST &fun
         stmt->set_level(current_level_);
         stmt->set_location(parse_tree->stmt_loc_.first_line_, parse_tree->stmt_loc_.first_column_);
         int64_t lbls_cnt = labels.count();
-        // 这儿只能用label idx，而不是label_table的count(), 是因为这个函数resolve过程中会递归
-        // 所以可能子过程里面会push很多labels进去，递归退出到这儿的时候，label_idx和count()就对不上了。
+        // Here only label idx can be used, rather than label_table's count(), because this function resolve process will be recursive
+        // So there might be many labels pushed into the subprocess, when the recursion exits here, label_idx and count() will not match.
         if (OB_NOT_NULL(pl_label) && OB_INVALID_INDEX != label_idx) {
           for (int64_t i = 0; OB_SUCC(ret) && i < lbls_cnt; ++i) {
             CK (0 <= (label_idx - i));
@@ -1384,8 +1383,8 @@ int ObPLResolver::resolve_sp_scalar_type(ObIAllocator &allocator,
       }
     }
     if (OB_SUCC(ret)) {
-      // resolve_data_type会将scale设置在accuracy上,这里将meta_的scale设置下
-      if (scalar_data_type.get_meta_type().is_bit()) { // 对于bit类型, scale存储的是长度信息
+      // resolve_data_type will set scale on accuracy, here we set the scale for meta_
+      if (scalar_data_type.get_meta_type().is_bit()) { // For bit type, scale stores the length information
         scalar_data_type.meta_.set_scale(scalar_data_type.get_precision());
       } else {
         scalar_data_type.meta_.set_scale(scalar_data_type.get_scale());
@@ -1515,7 +1514,7 @@ int ObPLResolver::build_record_type_by_table_schema(ObSchemaGetterGuard &schema_
         ObDataType data_type;
         data_type.set_meta_type(column_schema.get_meta_type());
         data_type.set_accuracy(column_schema.get_accuracy());
-        if (data_type.get_meta_type().is_bit()) { // 对于bit类型, scale存储的是长度信息
+        if (data_type.get_meta_type().is_bit()) { // For bit type, scale stores the length information
           data_type.meta_.set_scale(data_type.get_precision());
         } else {
           data_type.meta_.set_scale(data_type.get_scale());
@@ -1735,9 +1734,9 @@ int ObPLResolver::resolve_extern_type_info(ObSchemaGetterGuard &guard,
     OX (extern_type_info->type_name_ = access_idxs.at(access_idxs.count() - 1).var_name_);
     OX (access_idxs.count() > 1 ?
       extern_type_info->type_subname_ = access_idxs.at(access_idxs.count() - 2).var_name_
-      // 这里处理特殊情况，当前ns为package，变量也是pacakge local var的情况下，ObParamExternType被强制修改为
-      // SP_EXTERN_PKG_VAR(ns.resolve_symbol)，但是access_idxs只有一个，因为没有使用.这种feild access，
-      // 因此也需要赋值pacakge name, type_owner_则会在函数底部赋值为当前的database_id.
+      // Here handles special cases, when the current ns is package, and the variable is also a package local var, ObParamExternType is forcibly modified to
+      // SP_EXTERN_PKG_VAR(ns.resolve_symbol), but access_idxs has only one, because . field access is not used,
+      // Therefore, the package name also needs to be assigned, and type_owner_ will be assigned the current database_id at the bottom of the function.
       : extern_type_info->type_subname_ = current_block_->get_namespace().get_package_name());
     if (OB_FAIL(ret)) {
     } else if (3 == access_idxs.count()) {
@@ -1749,7 +1748,7 @@ int ObPLResolver::resolve_extern_type_info(ObSchemaGetterGuard &guard,
       OX (package_id = access_idxs.at(1).var_index_);
       OX (type = access_idxs.at(1).access_type_);
     } else if (2 == access_idxs.count()) {
-      if (OB_SYS_TENANT_ID == get_tenant_id_by_object_id(access_idxs.at(0).var_index_)) { // 系统包中的Var
+      if (OB_SYS_TENANT_ID == get_tenant_id_by_object_id(access_idxs.at(0).var_index_)) { // Var in the system package
         extern_type_info->type_owner_ = OB_SYS_DATABASE_ID;
       } else {
         OZ(resolve_ctx_.session_info_.get_database_id(extern_type_info->type_owner_));
@@ -1981,7 +1980,7 @@ int ObPLResolver::resolve_sp_row_type(const ParseNode *sp_data_type_node,
                                                   obj_access_idents.at(i).access_name_.ptr());
         }
       }
-      // 创建package的时候可能依赖的外部类型还没有创建, 记录下外部类型的name信息, 执行的时候重新解析
+      // When creating the package, the external types it depends on may not have been created yet, record the name information of the external types, and re-parse them at execution time
       if (OB_NOT_NULL(extern_type_info)
           && is_object_not_exist_error(ret)
           && obj_access_idents.count() >= 1) {
@@ -2035,8 +2034,8 @@ int ObPLResolver::resolve_sp_row_type(const ParseNode *sp_data_type_node,
             CK (OB_NOT_NULL(table_schema));
             if (OB_FAIL(ret)) {
             } else if (with_rowid) {
-              // with_rowid的情况只可能是oracle模式下的trigger
-              // 将trigger package中routine的参数类型设置为 PL_TYPE_PACKAGE, 并加入到包头的type_table_中
+              // the with_rowid case can only be a trigger in oracle mode
+              // Set the parameter type of routine in trigger package to PL_TYPE_PACKAGE, and add it to the type_table_ in the package header
               ObSqlString record_name;
               ObString record_name_str;
               char* name_buf = NULL;
@@ -2148,8 +2147,7 @@ int ObPLResolver::resolve_sp_row_type(const ParseNode *sp_data_type_node,
   CANCLE_LOG_CHECK_MODE();
   return ret;
 }
-
-// 注意: 该函数参考ObResolverUtils::resolve_data_type进行实现, 调整类型精度信息到默认值
+// Note: This function is implemented based on ObResolverUtils::resolve_data_type, adjusting the type precision information to the default value
 int ObPLResolver::adjust_routine_param_type(ObPLDataType &type)
 {
   int ret = OB_SUCCESS;
@@ -2382,7 +2380,7 @@ int ObPLResolver::resolve_declare_var_comm(const ObStmtNodeTree *parse_tree,
                    K(ret), K(not_null), K(default_node));
         }
       }
-      if (OB_NOT_NULL(default_node)) { // 默认值的not null检查在执行期做, 这里仅解析默认值表达式
+      if (OB_NOT_NULL(default_node)) { // The not null check for the default value is done at runtime, here we only parse the default value expression
         CK (OB_LIKELY(T_SP_DECL_DEFAULT == default_node->type_));
         CK (OB_NOT_NULL(default_node->children_[0]));
 
@@ -2431,7 +2429,7 @@ int ObPLResolver::resolve_declare_var_comm(const ObStmtNodeTree *parse_tree,
           OZ (check_access_external_state(default_expr,
                                           has_access_external_state));
         }
-      } else if (OB_NOT_NULL(data_type.get_data_type())) { // 基础类型如果, 没有默认值, 设置为NULL
+      } else if (OB_NOT_NULL(data_type.get_data_type())) { // Basic type, if there is no default value, set to NULL
         common::ObIArray<common::ObString>* type_info = NULL;
         OZ (data_type.get_type_info(type_info));
         OZ (ObRawExprUtils::build_null_expr(expr_factory_, default_expr));
@@ -2664,7 +2662,7 @@ int ObPLResolver::resolve_assign(const ObStmtNodeTree *parse_tree, ObPLAssignStm
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("invalid assign stmt", K(parse_tree->children_[i]->type_), K(ret));
       } else {
-        //解析into expr
+        //parse into expr
         ObRawExpr *into_expr = NULL;
         const ObStmtNodeTree *into_node = parse_tree->children_[i]->children_[0];
         ObQualifiedName q_name;
@@ -2700,11 +2698,11 @@ int ObPLResolver::resolve_assign(const ObStmtNodeTree *parse_tree, ObPLAssignStm
         if (OB_SUCC(ret)) {
           if (T_OP_GET_SYS_VAR == into_expr->get_expr_type()
               || T_OP_GET_USER_VAR == into_expr->get_expr_type()) {
-            // 对于系统变量和用户变量的赋值, PL通过SPI构造SET @VAR = VALUE;语句, 然后交由SQL引擎执行
-            // 虽然系统变量的类型是确定的，但是这里也不应该将VALUE的结果强转为系统变量的类型
-            // 原因是系统变量支持类型SET AUTOCOMMIT=ON;这种写法，而AUTOCOMMIT的类型是BOOL
-            // ON显然不支持转为BOOL类型
-            // 对于用户变量的赋值，用户变量类型会随着赋值结果的类型而改变，因此这里也不能强转
+            // For system variables and user variables assignment, PL constructs the SET @VAR = VALUE; statement through SPI, then hands it over to the SQL engine for execution
+            // Although the type of the system variable is determined, the result of VALUE should not be forcibly cast to the type of the system variable here
+            // The reason is that system variables support the type SET AUTOCOMMIT=ON; this syntax, and the type of AUTOCOMMIT is BOOL
+            // ON obviously does not support conversion to BOOL type
+            // For the assignment of user variables, the type of the user variable will change according to the type of the assignment result, therefore, we cannot cast it here
             need_expect_type = false;
             if (T_OP_GET_SYS_VAR == into_expr->get_expr_type()) {
               ObString var_name(into_node->str_len_, into_node->str_value_);
@@ -2726,8 +2724,7 @@ int ObPLResolver::resolve_assign(const ObStmtNodeTree *parse_tree, ObPLAssignStm
           OZ (func.add_expr(into_expr), into_expr);
           OZ (stmt->add_into(func.get_expr_count() - 1));
         }
-
-        // 解析value expr
+        // parse value expr
         if (OB_SUCC(ret)) {
           ObRawExpr *value_expr = NULL;
           const ObStmtNodeTree *value_node = parse_tree->children_[i]->children_[1];
@@ -2821,7 +2818,7 @@ int ObPLResolver::resolve_if(const ObStmtNodeTree *parse_tree, ObPLIfStmt *stmt,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("parse_tree is NULL", K(parse_tree), K(stmt), K(ret));
   } else {
-    //解析expr then结构
+    //Parse expr then structure
     ObRawExpr *expr = NULL;
     ObPLStmtBlock *then_block = NULL;
     ObPLDataType data_type(ObTinyIntType);
@@ -2835,8 +2832,7 @@ int ObPLResolver::resolve_if(const ObStmtNodeTree *parse_tree, ObPLIfStmt *stmt,
       stmt->set_cond(func.get_expr_count() - 1);
       stmt->set_then(then_block);
     }
-
-    //解析else子句
+    //Parse else clause
     if (OB_SUCC(ret)) {
       const ObStmtNodeTree *else_node = parse_tree->children_[2];
       if (NULL == else_node) {
@@ -2869,7 +2865,7 @@ int ObPLResolver::resolve_case(const ObStmtNodeTree *parse_tree, ObPLCaseStmt *s
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("parse_tree is NULL", K(parse_tree), K(stmt), K(ret));
   } else {
-    //解析expr
+    //parse expr
     ObRawExpr *case_expr = NULL;
     const ObStmtNodeTree *expr_node = parse_tree->children_[0];
     set_item_type(T_SP_CASE);
@@ -2877,7 +2873,7 @@ int ObPLResolver::resolve_case(const ObStmtNodeTree *parse_tree, ObPLCaseStmt *s
     if (OB_FAIL(make_block(func, current_block, current_block_))) {
       LOG_WARN("failed to make block", K(ret));
     } else if (NULL == expr_node) {
-      //没有case表达式
+      //no case expression
     } else if (OB_FAIL(resolve_expr(expr_node, 
                                     func,
                                     case_expr,
@@ -2919,18 +2915,16 @@ int ObPLResolver::resolve_case(const ObStmtNodeTree *parse_tree, ObPLCaseStmt *s
         }
       }
     }
-
-    //解析when子句
+    //Parse when clause
     const ObStmtNodeTree *when_list = parse_tree->children_[1];
     OZ (resolve_when(when_list, case_var, stmt, func));
-
-    //解析else子句
+    //Parse else clause
     if (OB_SUCC(ret)) {
       const ObStmtNodeTree *else_node = parse_tree->children_[2];
       ObPLStmtBlock *else_block = NULL;
       if (NULL == else_node) {
         /*
-         * Mysql在运行态发现没有when子句能够匹配，并且没有else子句，会报错。所以这里为else分支生成一个Signal语句。
+         * MySQL at runtime reports an error if no WHEN clause matches and there is no ELSE clause. Therefore, we generate a Signal statement for the ELSE branch.
          * If no when_value or search_condition matches the value tested and the CASE statement contains no ELSE clause,
          * a Case not found for CASE statement error results.
          * */
@@ -2948,7 +2942,7 @@ int ObPLResolver::resolve_case(const ObStmtNodeTree *parse_tree, ObPLCaseStmt *s
             signal_stmt->set_cond_type(ERROR_CODE);
             signal_stmt->set_sql_state("20000");
             signal_stmt->set_str_len(5);
-            signal_stmt->set_error_code(ER_SP_CASE_NOT_FOUND); // MySQL模式使用Mysql错误码
+            signal_stmt->set_error_code(ER_SP_CASE_NOT_FOUND); // MySQL mode uses MySQL error codes
             signal_stmt->set_ob_error_code(OB_ER_SP_CASE_NOT_FOUND);
             if (OB_FAIL(else_block->add_stmt(signal_stmt))) {
               LOG_WARN("failed to add stmt", K(stmt), K(ret));
@@ -2973,8 +2967,7 @@ int ObPLResolver::resolve_case(const ObStmtNodeTree *parse_tree, ObPLCaseStmt *s
         stmt->set_else_clause(else_block);
       }
     }
-
-    //恢复current_block_
+    //restore current_block_
     if (OB_SUCC(ret)) {
       set_current(*current_block);
     }
@@ -3053,7 +3046,7 @@ int ObPLResolver::resolve_then(const ObStmtNodeTree *parse_tree,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("parse_tree is NULL", K(parse_tree), K(ret));
   } else {
-    //解析expr
+    //parse expr
     const ObStmtNodeTree *expr_node = parse_tree->children_[0];
     if (NULL == expr_node) {
       ret = OB_ERR_UNEXPECTED;
@@ -3063,8 +3056,7 @@ int ObPLResolver::resolve_then(const ObStmtNodeTree *parse_tree,
                                     false, data_type, false, is_add_bool_expr))) {
       LOG_WARN("failed to resolve expr", K(expr_node), K(ret));
     } else { /*do nothing*/ }
-
-    //解析then子句
+    //Parse the then clause
     if (OB_SUCC(ret)) {
       reset_item_type();
       const ObStmtNodeTree *then_node = parse_tree->children_[1];
@@ -3090,7 +3082,7 @@ int ObPLResolver::resolve_loop_control(const ObStmtNodeTree *parse_tree, ObPLLoo
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("parse_tree is NULL", K(parse_tree), K(stmt), K(current_block_), K(ret));
   } else if (NULL != parse_tree->children_[0]) {
-    //解析label
+    //parse label
     ObString name;
     int64_t label = OB_INVALID_INDEX;
     const ObStmtNodeTree *label_node = parse_tree->children_[0];
@@ -3110,7 +3102,7 @@ int ObPLResolver::resolve_loop_control(const ObStmtNodeTree *parse_tree, ObPLLoo
   }
 
   if (OB_SUCC(ret)) {
-    //解析condition
+    //parse condition
     const ObStmtNodeTree *cond_node = parse_tree->children_[1];
     if (NULL != cond_node) {
       ret = OB_ERR_UNEXPECTED;
@@ -3169,7 +3161,7 @@ int ObPLResolver::resolve_loop(const ObStmtNodeTree *parse_tree, ObPLLoopStmt *s
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("parse_tree is NULL", K(parse_tree), K(stmt), K(ret));
   } else {
-    //解析body
+    //Parse body
     if (OB_ISNULL(parse_tree->children_[0])) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("Invalid loop body", K(parse_tree->children_[0]->type_), K(ret));
@@ -3239,7 +3231,7 @@ int ObPLResolver::resolve_return(const ObStmtNodeTree *parse_tree, ObPLReturnStm
 int ObPLResolver::check_and_record_stmt_type(ObPLFunctionAST &func,
                                              sql::ObSPIService::ObSPIPrepareResult &prepare_result)
 {
-  // FUNCTION 中不允许含有的SQL语句包括 PS, DDL, SELECT WITHOUT INTO
+  // FUNCTION does not allow the following SQL statements: PS, DDL, SELECT WITHOUT INTO
   int ret = OB_SUCCESS;
   stmt::StmtType type = prepare_result.type_;
   bool in_tg = resolve_ctx_.session_info_.is_for_trigger_package();
@@ -3422,7 +3414,7 @@ int ObPLResolver::resolve_static_sql(const ObStmtNodeTree *parse_tree, ObPLSql &
       prepare_result.record_type_ = record_type;
       prepare_result.tg_timing_event_ = 
                             static_cast<TgTimingEvent>(resolve_ctx_.params_.tg_timing_event_);
-      question_mark_cnt_ = parse_tree->value_; // 更新解析到当前语句时question mark的数量(包含当前语句)
+      question_mark_cnt_ = parse_tree->value_; // Update the number of question marks parsed to the current statement (including the current statement)
       ObString new_sql;
       ObString old_sql(parse_tree->str_value_);
       OZ (replace_plsql_line(resolve_ctx_.allocator_, parse_tree, old_sql, new_sql));
@@ -3554,8 +3546,7 @@ int ObPLResolver::resolve_static_sql(const ObStmtNodeTree *parse_tree, ObPLSql &
           static_sql.set_skip_locked(prepare_result.is_skip_locked_);
         }
       }
-
-      //检查Bulk合法性
+      //Check Bulk validity
       if (OB_SUCC(ret) && !prepare_result.into_exprs_.empty()) {
         if (OB_ISNULL(prepare_result.into_exprs_.at(0))) {
           ret = OB_ERR_UNEXPECTED;
@@ -3699,7 +3690,7 @@ int ObPLResolver::resolve_execute_immediate(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("argument is NULL", K(parse_tree), K(stmt), K(ret));
   } else {
-    //解析sql
+    //parse sql
     ObRawExpr *sql = NULL;
     const ObStmtNodeTree *sql_node = parse_tree->children_[0];
     if (OB_ISNULL(sql_node)) {
@@ -3716,8 +3707,7 @@ int ObPLResolver::resolve_execute_immediate(
     } else {
       stmt->set_sql(func.get_expr_count() - 1);
     }
-
-    //解析into
+    //parse into
     if (OB_SUCC(ret)) {
       const ObStmtNodeTree *into_node = parse_tree->children_[1];
       if (NULL != into_node) {
@@ -3726,8 +3716,7 @@ int ObPLResolver::resolve_execute_immediate(
         }
       }
     }
-
-    //解析returning into, 语法保证了INTO子句和RETURNING INTO子句不能并存, 因此共用一个INTO结构
+    //Parse returning into, the syntax guarantees that the INTO clause and RETURNING INTO clause cannot coexist, therefore they share one INTO structure
     if (OB_SUCC(ret)) {
       const ObStmtNodeTree *returning_node = parse_tree->children_[3];
       if (NULL != returning_node) {
@@ -3735,8 +3724,7 @@ int ObPLResolver::resolve_execute_immediate(
         OX (stmt->set_is_returning(true));
       }
     }
-
-    //解析using
+    //parse using
     if (OB_SUCC(ret)) {
       const ObStmtNodeTree *using_node = parse_tree->children_[2];
       if (NULL != using_node) {
@@ -3932,13 +3920,13 @@ int ObPLResolver::resolve_interface_pragma(const ObStmtNodeTree *parse_tree, ObP
     for (int64_t i = 0;
          OB_SUCC(ret) && OB_INVALID_INDEX == idx && i < routine_table.get_count();
          ++i) {
-      //寻找Interface Pragma语句的上一个routine
+      //Find the previous routine of the Interface Pragma statement
       routine_ast = NULL;
       routine_info = NULL;
       OZ (routine_table.get_routine_info(i, routine_info));
       OZ (routine_table.get_routine_ast(i, routine_ast));
       if (NULL != routine_info && NULL == routine_ast) {
-        //本Interface Pragma修饰的routine一定是只有声明而没有定义的状态
+        //This Interface Pragma decorated routine must be in a declared but not defined state
         idx = i;
       }
     }
@@ -4035,7 +4023,7 @@ int ObPLResolver::resolve_declare_cond(const ObStmtNodeTree *parse_tree,
   } else if (OB_FAIL(check_declare_order(PL_COND))) {
     LOG_WARN("fail to check declare order", K(ret));
   } else {
-    //解析name
+    //Parse name
     const ObStmtNodeTree *name_node = (T_SP_DECL_COND == parse_tree->type_
       ? parse_tree->children_[0] : parse_tree->children_[0]->children_[0]);
     ObString name;
@@ -4045,8 +4033,7 @@ int ObPLResolver::resolve_declare_cond(const ObStmtNodeTree *parse_tree,
     } else if (OB_FAIL(resolve_ident(name_node, name))) {
       LOG_WARN("failed to resolve ident", K(name_node), K(ret));
     }
-
-    //解析condition
+    //parse condition
     ObPLConditionValue value;
     if (OB_SUCC(ret)) {
       if ((T_SP_DECL_COND == parse_tree->type_ && 2 == parse_tree->num_child_)
@@ -4071,7 +4058,7 @@ int ObPLResolver::resolve_declare_cond(const ObStmtNodeTree *parse_tree,
                                     is_sys_database_id(func.get_database_id())));
         OZ (current_block_->get_namespace().add_condition(
               name, value, false));
-      } else { // ORACLE模式下 UserDefinedException
+      } else { // ORACLE mode UserDefinedException
         OX (value.type_ = ERROR_CODE);
         // package public or private exception need to combind package id.
         if (OB_FAIL(ret)) {
@@ -4107,10 +4094,9 @@ int ObPLResolver::resolve_declare_handler(const ObStmtNodeTree *parse_tree, ObPL
       LOG_WARN("Invalid then node type", K(ret));
     } else {
       desc = new(desc)ObPLDeclareHandlerStmt::DeclareHandler::HandlerDesc(resolve_ctx_.allocator_);
-      //解析Action
+      //Parse Action
       desc->set_action(static_cast<ObPLDeclareHandlerStmt::DeclareHandler::Action>(parse_tree->value_));
-
-      //解析body：这里必须先解析body后解析condition value，是因为handler的body解析过程不应受本handler自己的in_warning和in_notfound影响
+      //Parse body: Here the body must be parsed before the condition value because the handler's body parsing process should not be affected by this handler's own in_warning and in_notfound
       if (OB_SUCC(ret)) {
         if (OB_ISNULL(parse_tree->children_[1])) {
           ret = OB_ERR_UNEXPECTED;
@@ -4147,8 +4133,7 @@ int ObPLResolver::resolve_declare_handler(const ObStmtNodeTree *parse_tree, ObPL
           }
         }
       }
-
-      //解析condition value
+      //parse condition value
       if (OB_SUCC(ret)) {
         const ObStmtNodeTree *handler_list = parse_tree->children_[0];
         if (NULL == handler_list) {
@@ -4204,7 +4189,7 @@ int ObPLResolver::resolve_declare_handler(const ObStmtNodeTree *parse_tree, ObPL
     }
     if (OB_SUCC(ret)) {
       if (desc->is_continue() || handler_analyzer_.in_continue()) {
-        //如果自己是continue或者已经在continue里，把自己压栈
+        // If self is continue or already in continue, push self onto the stack
         if (OB_FAIL(handler_analyzer_.set_handler(desc, current_level_))) {
           desc->ObPLDeclareHandlerStmt::DeclareHandler::HandlerDesc::~HandlerDesc();
           LOG_WARN("failed to set handler", K(ret));
@@ -4217,7 +4202,7 @@ int ObPLResolver::resolve_declare_handler(const ObStmtNodeTree *parse_tree, ObPL
     }
     if (OB_SUCC(ret)) {
       if (desc->is_continue() && !handler_analyzer_.in_continue()) {
-        //如果自己是top continue，需要追溯把自己平级的handler都压栈
+        // If self is top continue, need to trace back and push all peer level handlers onto the stack
         handler_analyzer_.set_continue();
         if (OB_FAIL(handler_analyzer_.set_handlers(stmt->get_handlers(), current_level_))) {
           LOG_WARN("failed to set handler", K(ret));
@@ -4281,7 +4266,7 @@ int ObPLResolver::resolve_signal(const ObStmtNodeTree *parse_tree, ObPLSignalStm
   CK (OB_NOT_NULL(stmt));
   CK (OB_NOT_NULL(current_block_));
   if (OB_SUCC(ret)) {
-    //解析 value
+    //parse value
     const ObStmtNodeTree *value_node = parse_tree->children_[0];
     if (OB_ISNULL(value_node)) {
       if (!stmt->is_resignal_stmt()) {
@@ -4303,7 +4288,7 @@ int ObPLResolver::resolve_signal(const ObStmtNodeTree *parse_tree, ObPLSignalStm
       }
       if (OB_SUCC(ret)) {
         /*
-         * Mysql不允许signal语句的condition是error code类型，只能是sqlstate类型，所以这里禁止掉。
+         * Mysql does not allow the condition in a signal statement to be of error code type, it can only be of sqlstate type, so it is prohibited here.
          * If SIGNAL refers to a named condition that is defined with a MySQL error number rather than an SQLSTATE value,
          * a SIGNAL/RESIGNAL can only use a CONDITION defined with SQLSTATE error occurs.
          * */
@@ -4585,12 +4570,12 @@ int ObPLResolver::resolve_inout_param(ObRawExpr *param_expr, ObPLRoutineParamMod
     CK (OB_NOT_NULL(call_expr->get_expr()));
     OX (param_expr = call_expr->get_expr());
   }
-  // ObjAccessExpr有几种情况: 本地复杂变量做出参; 本地复杂变量的某个域做出参; Package复杂变量的某个属性做出参;
+  // ObjAccessExpr has several cases: local complex variable as an out parameter; a field of a local complex variable as an out parameter; a property of a Package complex variable as an out parameter;
   if (OB_FAIL(ret)) {
   } else if (param_expr->is_obj_access_expr()) {
     ObObjAccessRawExpr *obj_expr = static_cast<ObObjAccessRawExpr *>(param_expr);
     ObIArray<pl::ObObjAccessIdx>& access_idxs = obj_expr->get_access_idxs();
-    //本地复杂变量本身做出参
+    //Local complex variable itself as output parameter
     if (ObObjAccessIdx::is_local_variable(access_idxs)
         && ObObjAccessIdx::get_local_variable_idx(access_idxs) == (access_idxs.count() - 1)) {
       CK (!obj_expr->get_var_indexs().empty());
@@ -4618,7 +4603,7 @@ int ObPLResolver::resolve_inout_param(ObRawExpr *param_expr, ObPLRoutineParamMod
     }
     OZ (obj_expr->formalize(&get_resolve_ctx().session_info_));
     OZ (set_write_property(obj_expr, expr_factory_, &resolve_ctx_.session_info_, &resolve_ctx_.schema_guard_, true));
-  } else if (param_expr->is_const_raw_expr()) { // 本地变量做出参
+  } else if (param_expr->is_const_raw_expr()) { // local variable as out parameter
     const ObConstRawExpr *const_expr = static_cast<const ObConstRawExpr*>(param_expr);
     const ObPLSymbolTable *table = current_block_->get_symbol_table();
     const ObPLVar *var = NULL;
@@ -4644,12 +4629,12 @@ int ObPLResolver::resolve_inout_param(ObRawExpr *param_expr, ObPLRoutineParamMod
     } else {
       out_idx = const_expr->get_value().get_unknown();
     }
-  } else if (T_OP_GET_USER_VAR == param_expr->get_expr_type() // 用户变量做出参
+  } else if (T_OP_GET_USER_VAR == param_expr->get_expr_type() // user variable as out parameter
              || T_OP_GET_SYS_VAR == param_expr->get_expr_type()) {
-    // 如果是用户变量和系统变量，是得不到out_index的，退出即可
+    // If it is a user variable and a system variable, out_index cannot be obtained, so we can exit.
   } else if (T_OP_GET_PACKAGE_VAR == param_expr->get_expr_type()
              || T_OP_GET_SUBPROGRAM_VAR == param_expr->get_expr_type()) {
-    // PACKAGE变量做出参, 得不到OutIDX, 仅检查变量是否可读写
+    // PACKAGE variable as output parameter, cannot get OutIDX, only check if the variable is readable and writable
     OZ (check_variable_accessible(param_expr, true));
   } else {
     ret = OB_ERR_EXP_NOT_ASSIGNABLE;
@@ -4927,7 +4912,7 @@ int ObPLResolver::resolve_cparams(ObIArray<ObRawExpr*> &exprs,
   // Step 4: process vacancy parameter, fill default expr otherwise report error.
   for (int64_t i = 0; OB_SUCC(ret) && i < params.count(); ++i) {
     ObIRoutineParam *formal_param = params_list.at(i);
-    if (OB_ISNULL(params.at(i))) { // 空缺参数
+    if (OB_ISNULL(params.at(i))) { // missing parameter
       if (OB_ISNULL(formal_param)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("routine param is null", K(ret), K(i));
@@ -5206,7 +5191,7 @@ int ObPLResolver::resolve_cursor_def(const ObString &cursor_name,
                                       ObPLDataType &cursor_type,
                                       const ObIArray<int64_t> &formal_params,
                                       ObPLCompileUnitAST &func,
-                                      int64_t &cursor_index) // CURSOR 在符号表中的下标
+                                      int64_t &cursor_index) // CURSOR index in the symbol table
 {
   int ret = OB_SUCCESS;
   ObRecordType *record_type = NULL;
@@ -5251,7 +5236,7 @@ int ObPLResolver::resolve_cursor_def(const ObString &cursor_name,
                                           func))) {
       LOG_WARN("failed to prepare stmt", K(ret));
     } else if (!prepare_result.into_exprs_.empty()
-               && lib::is_mysql_mode()) { // oracle不报错,会忽略掉INTO
+               && lib::is_mysql_mode()) { // oracle does not report an error, it will ignore INTO
       ret = OB_ER_SP_BAD_CURSOR_SELECT;
       LOG_USER_ERROR(OB_ER_SP_BAD_CURSOR_SELECT);
       LOG_WARN("Sql with into clause should not in Declare cursor", K(prepare_result.route_sql_), K(ret));
@@ -5376,12 +5361,12 @@ int ObPLResolver::resolve_cursor_def(const ObString &cursor_name,
           const_cast<ObPLVar *>(var)->set_type(type);
         }
         /*
-         * 检查Oracle模式游标是否有重定义：
-         * Oracle在游标重定义方面的表现很奇怪，如果同一个游标名被先声明后定义的原型不同（参数或者返回值类型不同），
-         * 甚至同一个游标名被定义了两次，只要这个游标没有被访问过，就不会报错。
-         * 所以如果我们在定义的时候找到以前declare或define过，那么要先检查是否是合法的define。
-         * 对于重复定义，或者声明和定义不一致，我们不能在这里报错，而必须在访问游标时才报错，所以在这里只设置游标状态，
-         * 而等待在resolve_cursor的时候检查出来在报错。
+         * Check if the Oracle schema cursor has been redefined:
+         * Oracle behaves strangely with cursor redefinition; if the same cursor name is declared and then defined with different prototypes (different parameters or return types),
+         * or even if the same cursor name is defined twice, as long as this cursor has not been accessed, no error will be reported.
+         * Therefore, if we find that it has been previously declared or defined when defining, we need to first check if it is a valid definition.
+         * For duplicate definitions, or inconsistencies between declaration and definition, we cannot report an error here but must do so when accessing the cursor, so here we only set the cursor status,
+         * and wait to check for errors during resolve_cursor.
          * */
         bool same_cursor_declare = false;
         if (ObPLCursor::DECLARED == cursor->get_state()
@@ -5390,13 +5375,13 @@ int ObPLResolver::resolve_cursor_def(const ObString &cursor_name,
         }
         if (OB_FAIL(ret)) {
         } else if (same_cursor_declare) {
-          // 声明在包头，定义在包体，sql中引用的cursor参数符号在包体中，此时需要替换成包头中的符号
+          // Declared in package header, defined in package body, cursor parameter symbols referenced in SQL are in the package body, at this time they need to be replaced with symbols in the package header
           OZ (replace_cursor_formal_params(formal_params,
                                            cursor->get_formal_params(),
                                            current_block_->get_namespace().get_package_id(),
                                            cursor->get_package_id(),
                                            prepare_result.exec_params_));
-          //仅当原型和声明完全一致时，才是合法
+          //Only when the prototype and declaration are completely consistent is it legal
           OZ (cursor->set(prepare_result.route_sql_,
                           expr_idxs,
                           prepare_result.ps_sql_,
@@ -5452,7 +5437,7 @@ int ObPLResolver::resolve_cursor_def(const ObString &cursor_name,
           // already defined, do not defined it agine.
           ret = OB_ERR_ATTR_FUNC_CONFLICT;
           LOG_USER_ERROR(OB_ERR_ATTR_FUNC_CONFLICT, cursor_name.length(), cursor_name.ptr());
-        } else { //不合法的定义不用去做define，直接设置cursor状态
+        } else { //Invalid definitions should not be defined, directly set the cursor state
           cursor->set_state(ObPLCursor::DUP_DECL);
         }
       }
@@ -5476,7 +5461,7 @@ int ObPLResolver::resolve_declare_cursor(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("parse_tree is NULL", K(parse_tree), K(current_block_), K(ret));
   } else {
-    //解析name
+    //Parse name
     const ObStmtNodeTree *name_node = parse_tree->children_[0];
     const ObStmtNodeTree *param_node = parse_tree->children_[1];
     const ObStmtNodeTree *type_node = parse_tree->children_[2];
@@ -5534,7 +5519,7 @@ int ObPLResolver::resolve_declare_cursor(
           LOG_WARN("Duplicate cursor", K(name),K(ret));
           LOG_USER_ERROR(OB_ERR_SP_DUP_CURSOR, name.length(), name.ptr());
         } else if (NULL == sql_node) { //only declare
-          if (OB_INVALID_INDEX == cursor_index) { //没有declare过，添加进符号表
+          if (OB_INVALID_INDEX == cursor_index) { //not declared, add to symbol table
             if (OB_FAIL(current_block_->get_namespace().add_cursor(name,
                                                                    ObPLDataType(PL_CURSOR_TYPE),
                                                                    ObString(),
@@ -5682,7 +5667,7 @@ int ObPLResolver::resolve_open(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("parse_tree is NULL", K(parse_tree), K(stmt), K(current_block_), K(ret));
   } else {
-    // 解析Cursor
+    // Parse Cursor
     const ObStmtNodeTree *name_node = parse_tree->children_[0];
     int64_t index = OB_INVALID_INDEX;
     OZ (resolve_cursor(name_node, current_block_->get_namespace(), index, func));
@@ -5692,12 +5677,12 @@ int ObPLResolver::resolve_open(
       if (OB_FAIL(stmt->get_var(var))) {
         LOG_WARN("failed to get var", K(ret));
       } else if (NULL == var) {
-        //非local cursor，一定不是只读的
+        //Non-local cursor, must not be read-only
       } else if (var->get_type().is_ref_cursor_type() && stmt->get_type() != PL_OPEN_FOR) {
         ret = OB_ERR_EXPRESSION_WRONG_TYPE;
         LOG_WARN("use open stmt with a ref cursor is not property.", K(ret), K(index));
       } else if (var->is_readonly()) {
-        /* 也有可能是子过程的parent cursor，不应是in的cursor
+        /* It could also be the parent cursor of a subprocedure, should not be an in cursor
          *create or replace procedure subproc is
           cur sys_refcursor;
           procedure subproc1 is
@@ -5714,7 +5699,7 @@ int ObPLResolver::resolve_open(
                        var->get_name().length(), var->get_name().ptr());
         LOG_WARN("PLS-00361: IN cursor cannot be OPEN'ed", K(ret), KPC(var));
       } else {
-        // 判断是否对外部cursor进行open，这儿会决定这个cursor的内存是否在session内存上
+        // Determine whether to open the external cursor, this will decide whether the memory of this cursor is on the session memory
         ObPLCursor *cursor = NULL;
         cursor = current_block_->get_namespace().get_cursor_table()->get_cursor(index);
         if (OB_SUCC(ret) && OB_NOT_NULL(cursor)) {
@@ -5738,8 +5723,7 @@ int ObPLResolver::resolve_open(
       }
     }
   }
-
-  //解析实参
+  //Parse actual arguments
   if (OB_SUCC(ret)) {
     const ObStmtNodeTree *param_node = parse_tree->children_[1];
     if (OB_FAIL(resolve_cursor_actual_params(param_node, stmt, func))) {
@@ -5871,7 +5855,7 @@ int ObPLResolver::resolve_fetch(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("parse_tree is NULL", K(parse_tree), K(stmt), K(current_block_), K(ret));
   } else {
-    //解析name
+    //Parse name
     const ObStmtNodeTree *name_node = parse_tree->children_[0];
     const ObPLCursor* cursor = NULL;
     int64_t index = OB_INVALID_INDEX;
@@ -5887,8 +5871,7 @@ int ObPLResolver::resolve_fetch(
         func.set_reads_sql_data();
       }
     }
-
-    //解析into
+    //parse into
     if (OB_SUCC(ret)) {
       const ObStmtNodeTree *into_node = parse_tree->children_[1];
       if (OB_ISNULL(into_node)) {
@@ -5898,8 +5881,7 @@ int ObPLResolver::resolve_fetch(
         LOG_WARN("resolve into node failed", K(parse_tree->children_), K(into_node), K(ret));
       } else { /*do nothing*/ }
     }
-
-    //解析limit
+    //parse limit
     if (OB_SUCC(ret) && 3 == parse_tree->num_child_) {
       const ObStmtNodeTree *limit_node = parse_tree->children_[2];
       if (!stmt->is_bulk()) {
@@ -5938,7 +5920,7 @@ int ObPLResolver::resolve_close(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("parse_tree is NULL", K(parse_tree), K(stmt), K(current_block_), K(ret));
   } else {
-    //解析name
+    //Parse name
     const ObStmtNodeTree *name_node = parse_tree->children_[0];
     int64_t index = OB_INVALID_INDEX;
     const ObPLCursor *cursor = NULL;
@@ -6123,7 +6105,7 @@ int ObPLResolver::add_pl_integer_checker_expr(ObRawExprFactory &expr_factory,
      expr->get_result_type().is_numeric_type()\
   )
   if (OB_SUCC(ret)) {
-    // 对于溢出的检查只关心双目运算符的计算
+    // For overflow checks, we only care about the calculation of binary operators
     if (2 == expr->get_param_count() && !IS_COMMON_COMPARISON_OP(expr->get_expr_type())
              && !LOGIC_EXPR(expr) && expr->get_expr_type() != T_FUN_SYS_POWER && CHECK_RES_TYPE(expr)) {
       const ObRawExpr *left = ObRawExprUtils::skip_implicit_cast(expr->get_param_expr(0));
@@ -6504,8 +6486,7 @@ int ObPLResolver::build_raw_expr(const ParseNode *node,
       LOG_WARN("implicit cast faild", K(ret));
     }
   }
-
-  // record 只能被定义在两个地方，local和package
+  // record can only be defined in two places, local and package
   if (OB_SUCC(ret) && !OB_ISNULL(expr) &&
       (T_OP_IS == expr->get_expr_type() || T_OP_IS_NOT == expr->get_expr_type())
       && columns.count() > 0) {
@@ -6924,8 +6905,8 @@ int ObPLResolver::resolve_expr(const ParseNode *node,
   OZ (check_composite_cast(current_block_->get_namespace(), expr));
 
   // Step 4: check complex cast legal
-  // 原来是step2，移动这里是因为result type需要deduce一把才能出来结果。
-  // 放在step是有问题，因为类似T_SP_CPARAM是没有对应的expr执行实体，需要展开. 没展开deduce就会出问题。
+  // Originally step2, moved here because result type needs to be deduced to produce the result.
+  // Placing it in step is problematic because similar to T_SP_CPARAM, there is no corresponding expr execution entity, and it needs to be expanded. If not expanded, deduce will cause issues.
   bool pl_sql_format_convert = false;
   if (OB_SUCC(ret) && OB_NOT_NULL(expected_type)) {
     if (T_OP_ROW == expr->get_expr_type()) {
@@ -7053,7 +7034,7 @@ int ObPLResolver::resolve_expr(const ParseNode *node,
 
   // Step 9: const folding opt.
   if (OB_SUCC(ret) && OB_FAIL(replace_to_const_expr_if_need(expr))) {
-    // 兼容MySQL,Oralce, 计算过程中如果出错不在此阶段报, 执行阶段报
+    // Compatible with MySQL, Oracle, if an error occurs during calculation, it will not be reported at this stage, but during execution
     ret = OB_SUCCESS;
   }
 
@@ -7365,8 +7346,8 @@ int ObPLResolver::check_expr_can_pre_calc(ObRawExpr *expr, bool &pre_calc)
 {
   int ret = OB_SUCCESS;
   CK (OB_NOT_NULL(expr));
-  // 在SQL下可以提前计算的表达式,在PL下则不一定能提前计算, 如ROW_COUNT, ROW%COUNT
-  // 暂时没有统一的规则计算可以在PL端提前计算的表达式,因此暂时仅放开部分表达式
+  // Expressions that can be pre-calculated under SQL may not necessarily be pre-calculated under PL, such as ROW_COUNT, ROW%COUNT
+  // There is no unified rule to calculate expressions that can be precomputed on the PL side, therefore, only a few expressions are currently allowed.
   if (!(
     (IS_CONST_TYPE(expr->get_expr_type()) && T_QUESTIONMARK != expr->get_expr_type())
     || T_FUN_SYS_STR_TO_DATE == expr->get_expr_type()
@@ -7436,7 +7417,7 @@ int ObPLResolver::resolve_columns(ObRawExpr *&expr, ObArray<ObQualifiedName> &co
         }
       }
     }
-    if (OB_SUCC(ret) && ref_expr->is_obj_access_expr()) { //ObObjAccessrawExpr需额外存储一份
+    if (OB_SUCC(ret) && ref_expr->is_obj_access_expr()) { //ObObjAccessrawExpr needs to store an extra copy
       OZ (unit_ast.add_obj_access_expr(ref_expr), q_name, ref_expr);
     }
   }
@@ -7585,10 +7566,9 @@ int ObPLResolver::resolve_raw_expr(const ParseNode &node,
         for(int64_t i = 0; OB_SUCC(ret) && i < columns.count(); ++i) {
           OZ (resolver.resolve_columns(expr, columns, static_cast<ObPLCompileUnitAST &>(func_ast)));
         }
-
-        // 该接口调用栈:
+        // The call stack for this interface:
         // resolve_into_variable_node -> resolve_external_expr -> resolve_raw_expr
-        // into variable 不支持udf， 这里报错处理
+        // into variable does not support udf, this is error handling
         if (OB_SUCC(ret) && udf_info.count() > 0) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("into variable is not support udf", K(ret));
@@ -8180,8 +8160,8 @@ int ObPLResolver::resolve_qualified_identifier(ObQualifiedName &q_name,
 {
   int ret = OB_SUCCESS;
   OZ (resolve_qualified_name(q_name, columns, real_exprs, unit_ast, expr));
-  //因为obj access的参数拉平处理，a(b,c)在columns会被存储为b,c,a，所以解释完一个ObQualifiedName，
-  //都要把他前面的ObQualifiedName拿过来尝试替换一遍参数
+  // Because of the parameter flattening handling for obj access, a(b,c) is stored as b,c,a in columns, so after explaining one ObQualifiedName,
+  //Take the ObQualifiedName before it and try replacing the parameters once
   for (int64_t i = 0; OB_SUCC(ret) && i < real_exprs.count(); ++i) {
     OZ (ObRawExprUtils::replace_ref_column(expr, columns.at(i).ref_expr_, real_exprs.at(i)));
   }
@@ -8198,7 +8178,7 @@ int ObPLResolver::resolve_sqlcode_or_sqlerrm(ObQualifiedName &q_name,
                                              ObPLCompileUnitAST &unit_ast,
                                              ObRawExpr *&expr)
 {
-  // 走到这里说明一定是无参的SQLCODE或者SQLERRM，带参数的SQLERRM已经在is_sysfunc处理过了
+  // This point is reached if it is definitely a parameterless SQLCODE or SQLERRM, parameterized SQLERRM has already been handled by is_sysfunc
   int ret = OB_SUCCESS;
   UNUSED(unit_ast);
   if (1 == q_name.access_idents_.count()
@@ -8522,7 +8502,7 @@ int ObPLResolver::replace_udf_param_expr(
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("udf expr is null", K(ret));
   } else {
-    //如果是UDF，要先把UDF INFO里的参数替换掉，否则重载匹配的时候会失败
+    //If it is a UDF, you need to replace the parameters in the UDF INFO first, otherwise the overload matching will fail
     for (int64_t i = 0; OB_SUCC(ret) && i < real_exprs.count(); ++i) {
       OZ (ObRawExprUtils::replace_ref_column(expr, columns.at(i).ref_expr_, real_exprs.at(i)));
       for (int64_t j = 0; OB_SUCC(ret) && j < udf_info.param_exprs_.count(); ++j) {
@@ -8612,7 +8592,7 @@ int ObPLResolver::resolve_qualified_name(ObQualifiedName &q_name,
             LOG_WARN("dblink name is not empty", K(ret));
           }
           CK (OB_NOT_NULL(expr));
-        } else { // 如果是udf return access，需要当做var解析
+        } else { // if it is udf return access, need to be parsed as var
           if (OB_FAIL(resolve_var(q_name, unit_ast, expr))) {
             LOG_WARN("failed to resolve var", K(q_name), K(ret));
           }
@@ -9014,7 +8994,7 @@ int ObPLResolver::check_local_variable_read_only(
                                                       K(ns.is_udt_routine()));
       LOG_USER_ERROR(OB_ERR_EXP_NOT_ASSIGNABLE, var->get_name().length(), var->get_name().ptr());
     } else if(var->is_readonly()) {
-      // 匿名块的参数是可以写的, 记录下当前匿名块的参数被写过
+      // The parameters of the anonymous block can be written, record that the parameters of the current anonymous block have been written
       if (var->get_name().prefix_match(ANONYMOUS_ARG)) {
         ObPLVar *shadow_var = const_cast<ObPLVar*>(var);
         shadow_var->set_readonly(false);
@@ -9932,7 +9912,7 @@ int ObPLResolver::build_obj_access_func_name(const ObIArray<ObObjAccessIdx> &acc
                                              ObString &result)
 {
   int ret = OB_SUCCESS;
-  //函数名称格式为get_attr_idx_a
+  //Function name format is get_attr_idx_a
   ObSqlString buf;
   OZ (buf.append_fmt("%s", "get_attr"));
   if (for_write /*&& ObObjAccessIdx::is_contain_object_type(access_idxs)*/) {
@@ -9947,7 +9927,7 @@ int ObPLResolver::build_obj_access_func_name(const ObIArray<ObObjAccessIdx> &acc
                           access_idxs.at(i).var_name_.ptr()),
                           i, access_idxs);
       if (OB_INVALID_INDEX != access_idxs.at(i).var_index_) {
-        //如果按名字编码需要把idx也编进去，防止出现同名的情况
+        //If encoding by name, the idx should also be encoded to prevent duplicate names.
         OZ (buf.append_fmt("_%ld", access_idxs.at(i).var_index_),
                            i, access_idxs);
       }
@@ -9971,7 +9951,7 @@ int ObPLResolver::build_obj_access_func_name(const ObIArray<ObObjAccessIdx> &acc
           OZ (buf.append_fmt("%.*s", static_cast<int32_t>(pos), expr_str_buf));
         }
         if (OB_SUCC(ret) && access_idxs.at(i).get_sysfunc_->is_udf_expr()) {
-          //如果是UDF需要把id也编进去，防止出现同名的情况
+          //If it is a UDF, the id should also be included to prevent naming conflicts
           ObUDFRawExpr* udf_expr = static_cast<ObUDFRawExpr*>(access_idxs.at(i).get_sysfunc_);
           OZ (buf.append_fmt("_%ld_%ld", udf_expr->get_pkg_id(), udf_expr->get_udf_id()),
               i, access_idxs);
@@ -10112,17 +10092,17 @@ int ObPLResolver::resolve_access_ident(const ObObjAccessIdent &access_ident,
   ObPLExternalNS::ExternalType type = static_cast<ObPLExternalNS::ExternalType>(access_ident.access_index_);
   ObPLDataType pl_data_type;
   int64_t cnt = access_idxs.count();
-  if (0 == cnt // 当前为根节点
-      || ObObjAccessIdx::IS_DB_NS == access_idxs.at(cnt - 1).access_type_ // 父节点是DB Name
-      || ObObjAccessIdx::IS_PKG_NS == access_idxs.at(cnt - 1).access_type_  // 父节点是Package Name
+  if (0 == cnt // current node is the root node
+      || ObObjAccessIdx::IS_DB_NS == access_idxs.at(cnt - 1).access_type_ // Parent node is DB Name
+      || ObObjAccessIdx::IS_PKG_NS == access_idxs.at(cnt - 1).access_type_  // Parent node is Package Name
       || ObObjAccessIdx::IS_TABLE_NS == access_idxs.at(cnt - 1).access_type_) {
     if (cnt != 0) {
       if (ObObjAccessIdx::IS_DB_NS == access_idxs.at(cnt - 1).access_type_) {
-        type = ObPLExternalNS::INVALID_VAR; // 父节点是DB Name, 子节点可能是Package Name或者Table Name
+        type = ObPLExternalNS::INVALID_VAR; // The parent node is DB Name, the child node may be Package Name or Table Name
       } else if (ObObjAccessIdx::IS_PKG_NS == access_idxs.at(cnt - 1).access_type_) {
-        type = ObPLExternalNS::PKG_VAR; // 父节点是PackageName, 子节点尝试���析为Package Var
+        type = ObPLExternalNS::PKG_VAR; // Parent node is PackageName, child node attempts to parse as Package Var
       } else if (ObObjAccessIdx::IS_TABLE_NS == access_idxs.at(cnt - 1).access_type_) {
-        type = ObPLExternalNS::TABLE_COL; // 父节点是TableName, 子节点尝试解析为ColumnName
+        type = ObPLExternalNS::TABLE_COL; // Parent node is TableName, child node attempts to parse as ColumnName
       }
       parent_id = access_idxs.at(cnt - 1).var_index_;
     }
@@ -10689,10 +10669,10 @@ int ObPLResolver::build_collection_index_expr(ObObjAccessIdent &access_ident,
   if (!access_ident.params_.empty()
       && user_type.is_associative_array_type()) {
     ObObjAccessIdx index_access_idx;
-    // associate array 会构造一个额外的表达式。所以调用build函数。例如aa('a');
-    // 这里使用一个tmp,而不是传access_idx的原因是，
-    // build会改变它的类型为IS_EXPR，这里预期需要的类型是IS_PROPERTY，
-    // 否则的话，objaccess表达式获取的就是expr计算结果，没有collection地址了。
+    // associate array will construct an additional expression. So call the build function. For example aa('a');
+    // Here a tmp is used instead of passing access_idx because,
+    // build will change its type to IS_EXPR, here the expected type is IS_PROPERTY,
+    // Otherwise, the objaccess expression will get the result of expr calculation, without the collection address.
     OZ (build_collection_attribute_access(expr_factory_,
                                           &resolve_ctx_.session_info_,
                                           ns,
@@ -10719,8 +10699,8 @@ int ObPLResolver::build_collection_index_expr(ObObjAccessIdent &access_ident,
       }
     }
   } else {
-    // 这里暂时不调用build，因为a(1)这种会被build优化掉，
-    // 没有param，get_attr的时候直接拿这个常量值，不符合next,prior的预期
+    // Here we do not call build for now, because a(1) this kind of expression will be optimized away by build,
+    // No param, get_attr directly uses this constant value, which does not meet the expectations of next, prior
     for (int64_t i = 0; OB_SUCC(ret) && i < access_idx.type_method_params_.count(); ++i) {
       uint64_t expr_idx = access_idx.type_method_params_.at(i);
       OV (expr_idx >= 0 && expr_idx < func.get_exprs().count(),
@@ -10844,11 +10824,11 @@ int ObPLResolver::resolve_sys_func_access(ObObjAccessIdent &access_ident,
 }
 
 
-int ObPLResolver::resolve_access_ident(ObObjAccessIdent &access_ident, // 当前正在resolve的ident
+int ObPLResolver::resolve_access_ident(ObObjAccessIdent &access_ident, // The ident currently being resolved
                                        const ObPLBlockNS &ns,
                                        ObRawExprFactory &expr_factory,
                                        const ObSQLSessionInfo *session_info,
-                                       ObIArray<ObObjAccessIdx> &access_idxs, // 已经resolve过的ident信息, 作为当前ident的父节点
+                                       ObIArray<ObObjAccessIdx> &access_idxs, // already resolved ident information, as the parent node of the current ident
                                        ObPLCompileUnitAST &func,
                                        bool is_routine,
                                        bool is_resolve_rowtype)
@@ -10877,11 +10857,11 @@ int ObPLResolver::resolve_access_ident(ObObjAccessIdent &access_ident, // 当前
     bool label_symbol = false;
     if (cnt != 0) {
       if (ObObjAccessIdx::IS_DB_NS == access_idxs.at(cnt - 1).access_type_) {
-        type = ObPLExternalNS::INVALID_VAR; // 父节点是DB Name, 子节点可能是Package Name或者Table Name
+        type = ObPLExternalNS::INVALID_VAR; // The parent node is DB Name, the child node may be Package Name or Table Name
       } else if (ObObjAccessIdx::IS_PKG_NS == access_idxs.at(cnt - 1).access_type_) {
-        type = ObPLExternalNS::PKG_VAR; // 父节点是PackageName, 子节点尝试解析为Package Var
+        type = ObPLExternalNS::PKG_VAR; // Parent node is PackageName, child node attempts to parse as Package Var
       } else if (ObObjAccessIdx::IS_TABLE_NS == access_idxs.at(cnt - 1).access_type_ && !is_routine) {
-        type = ObPLExternalNS::TABLE_COL; // 父节点是TableName, 子节点尝试解析为ColumnName
+        type = ObPLExternalNS::TABLE_COL; // Parent node is TableName, child node attempts to parse as ColumnName
       } else if (ObObjAccessIdx::IS_LABEL_NS == access_idxs.at(cnt - 1).access_type_) {
         label_symbol = true;
       }
@@ -11097,8 +11077,7 @@ int ObPLResolver::resolve_into(const ParseNode *into_node, ObPLInto &into, ObPLF
         OX (func.set_wps());
       }
     }
-
-    // 检查[bulk] into var的var合法性，var不能是collection
+    // Check the legality of [bulk] into var, var cannot be a collection
     OZ (into.check_into(func, current_block_->get_namespace(), 1 == into_node->value_));
   }
   return ret;
@@ -11996,7 +11975,7 @@ int ObPLResolver::resolve_package_cursor(
 int ObPLResolver::resolve_questionmark_cursor(
   const int64_t symbol_idx, ObPLBlockNS &ns, int64_t &cursor)
 {
-  // question mark 一定是当前 ns, 里的，所以不需要去别的 ns 找
+  // question mark must be within the current ns, so there is no need to look in other ns
   int ret = OB_SUCCESS;
   cursor = OB_INVALID_INDEX;
   const ObPLSymbolTable *symbol_table = ns.get_symbol_table();
@@ -12010,7 +11989,7 @@ int ObPLResolver::resolve_questionmark_cursor(
     CK (OB_NOT_NULL(cur));
     if (ns.get_package_id() != cur->get_package_id()
         || ns.get_routine_id() != cur->get_routine_id()) {
-      //外部cursor，跳过即可
+      //external cursor, skip it
     } else {
       CK (OB_NOT_NULL(var = symbol_table->get_symbol(cur->get_index())));
       if (OB_SUCC(ret) && symbol_idx == cur->get_index()) {
@@ -12175,7 +12154,7 @@ int ObPLResolver::resolve_cond_loop(const ObStmtNodeTree *expr_node, const ObStm
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("parse_tree is NULL", K(expr_node), K(body_node), K(stmt), K(ret));
   } else {
-    //解析expr
+    //parse expr
     ObRawExpr *expr = NULL;
     ObPLDataType data_type(ObTinyIntType);
     if (OB_FAIL(resolve_expr(expr_node, func, expr, combine_line_and_col(expr_node->stmt_loc_),
@@ -12184,8 +12163,7 @@ int ObPLResolver::resolve_cond_loop(const ObStmtNodeTree *expr_node, const ObStm
     } else {
       stmt->set_cond(func.get_expr_count() - 1);
     }
-
-    //解析body
+    //Parse body
     if (OB_SUCC(ret)) {
       if (T_SP_PROC_STMT_LIST != body_node->type_) {
         ret = OB_ERR_UNEXPECTED;
@@ -12559,7 +12537,7 @@ int ObPLResolver::resolve_routine_decl_param_list(const ParseNode *param_list,
         if (OB_ERR_SP_DUP_VAR == ret) {
           ret = OB_ERR_DUPLICATE_FILED;
         }
-        if (OB_SUCC(ret)  // mysql mode 没有param_node->children_[2]
+        if (OB_SUCC(ret)  // mysql mode does not have param_node->children_[2]
             && OB_NOT_NULL(param_node->children_[2])
             && (PL_PARAM_OUT == param_mode || PL_PARAM_INOUT == param_mode)) {
           ret = OB_ERR_OUT_PARAM_HAS_DEFAULT;
@@ -12675,8 +12653,8 @@ int ObPLResolver::check_params_legal_in_body_routine(ObPLFunctionAST &routine_as
                                                      const ObPLRoutineInfo *parent_routine_info,
                                                      const ObPLRoutineInfo *body_routine_info)
 {
-  // 包头中有默认值,包体中可以有默认值也可以没有
-  // 如果包体中有默认值, 必须与包头中的默认值一致
+  // The header has default values, the body can have default values or not
+  // If there is a default value in the package body, it must be consistent with the default value in the package header
   int ret = OB_SUCCESS;
   CK (OB_NOT_NULL(parent_routine_info));
   CK (OB_NOT_NULL(body_routine_info));
@@ -12927,20 +12905,20 @@ int ObPLResolver::resolve_routine_decl(const ObStmtNodeTree *parse_tree,
         int64_t idx = OB_INVALID_INDEX;
         OZ (exist->get_idx(idx));
         OZ (routine_table->get_routine_ast(idx, routine_ast));
-        if (OB_SUCC(ret) && OB_NOT_NULL(routine_ast)) { // 已经定义过函数体,不可以重复定义
+        if (OB_SUCC(ret) && OB_NOT_NULL(routine_ast)) { // The function body has already been defined, it cannot be redefined
           ret = OB_ERR_ATTR_FUNC_CONFLICT;
           LOG_USER_ERROR(OB_ERR_ATTR_FUNC_CONFLICT,
                          exist->get_name().length(), exist->get_name().ptr());
           LOG_WARN("already has same routine in package", K(ret));
         }
-      } else { // 已经声明过函数,不可以重复声明
+      } else { // The function has already been declared, it cannot be redeclared
         ret = OB_ERR_ATTR_FUNC_CONFLICT;
         LOG_WARN("already has same routine in package", K(ret));
         LOG_USER_ERROR(OB_ERR_ATTR_FUNC_CONFLICT,
                        exist->get_name().length(), exist->get_name().ptr());
       }
     }
-    if (OB_SUCC(ret) && NULL == exist) { // 如果已经声明过, 不需要重复加入TABLE
+    if (OB_SUCC(ret) && NULL == exist) { // If already declared, no need to add TABLE again
       const ObPLRoutineInfo *parent_routine_info = NULL;
       // NOTICE: only package or object body need search parent_routine_info
       if ((ObPLBlockNS::BlockType::BLOCK_PACKAGE_BODY
@@ -13020,7 +12998,7 @@ int ObPLResolver::resolve_routine_block(const ObStmtNodeTree *parse_tree,
                           &current_block_->get_namespace(), resolve_ctx_.is_prepare_protocol_,
                           false/*is_check_mode_ = false*/, false/*bool is_sql_scope_ = false*/,
                           resolve_ctx_.params_.param_list_);
-    // note: init函数中引用了resolver的external_ns_, 而resolver是一个栈变量，使用的时候需要小心
+    // note: init function references resolver's external_ns_, while resolver is a stack variable, use with caution
     if (OB_FAIL(resolver.init(routine_ast))) {
       LOG_WARN("routine init failed ", K(ret));
     } else if (OB_FAIL(resolver.init_default_exprs(routine_ast, routine_info.get_params()))) {
@@ -13176,7 +13154,7 @@ int ObPLResolver::resolve_routine_def(const ObStmtNodeTree *parse_tree,
       }
     }
     OX (routine_info->set_analyze_flag(routine_ast->get_analyze_flag()));
-    // 将routine param中的外部类型加入到当前namespace的type table中。
+    // Add the external types from routine param to the type table of the current namespace.
     for (int64_t i = 0; OB_SUCC(ret) && i < routine_info->get_param_count(); ++i) {
       ObPLRoutineParam *param = routine_info->get_params().at(i);
       CK (OB_NOT_NULL(param));

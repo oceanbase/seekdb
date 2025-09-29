@@ -251,8 +251,7 @@ int ObPartitionExecutorUtils::cast_list_expr_to_obj(
     LOG_WARN("get unexpected list values exprs count", K(ret), K(real_part_num),
         K(list_values_exprs.count()));
   }
-
-  // 检查default值的合法性
+  // Check the validity of the default value
   for (int64_t i = 0; OB_SUCC(ret) && i < list_values_exprs.count(); ++i) {
     if (OB_ISNULL(row_expr = list_values_exprs.at(i)) ||
         OB_UNLIKELY(T_OP_ROW != row_expr->get_expr_type())) {
@@ -353,9 +352,9 @@ int ObPartitionExecutorUtils::cast_list_expr_to_obj(
   }
   if (OB_SUCC(ret)) {
     const int64_t array_count = list_values_exprs.count();
-    // 这里排序是为了对list分区的顺序做规范化，保证属于同一个table group的list分区能够以相同的顺序迭代出来
-    // 不在这里排序一级list分区是因为对于非模板化二级分区，排序后会导致partition array与
-    // individual_subpart_values_exprs对应不上。
+    // Here sorting is to normalize the order of list partitions, ensuring that list partitions belonging to the same table group can be iterated in the same order
+    // Do not sort the first-level list partition here because for non-templated second-level partitions, sorting will lead to partition array mismatch with
+    // individual_subpart_values_exprs do not match.
     if (is_subpart) {
       lib::ob_sort(subpartition_array,
                 subpartition_array + array_count,
@@ -531,8 +530,7 @@ int ObPartitionExecutorUtils::calc_values_exprs(
   }
   return ret;
 }
-
-//FIXME:支持非模版化二级分区
+//FIXME:support non-template secondary partitioning
 int ObPartitionExecutorUtils::calc_values_exprs(
     ObExecContext &ctx,
     ObCreateTablegroupStmt &stmt,
@@ -676,8 +674,8 @@ int ObPartitionExecutorUtils::expr_cal_and_cast(
     LOG_WARN("Failed to wrap expr ctx", K(ret));
   } else {
     //CREATE TABLE t1 (a date) PARTITION BY RANGE (TO_DAYS(a)) (PARTITION p311 VALUES LESS THAN (TO_DAYS('abc')))
-    //TO_DAYS('abc')跟mysql兼容，不论session中设置的cast_mode是什么，这里都需要为WARN_ON_FAIL
-    //因为abc是无效参数，让to_days返回NULL
+    // TO_DAYS('abc') is compatible with MySQL, regardless of what cast_mode is set to in the session, WARN_ON_FAIL is required here
+    // Because abc is an invalid parameter, let to_days return NULL
     expr_ctx.cast_mode_ = CM_WARN_ON_FAIL; //always set to WARN_ON_FAIL to allow calculate
     EXPR_SET_CAST_CTX_MODE(expr_ctx);
     ObNewRow tmp_row;
@@ -699,7 +697,7 @@ int ObPartitionExecutorUtils::expr_cal_and_cast(
     } else {
       if (ob_is_uint_tc(fun_expr_type)) {
         //create table t1 (a bigint unsigned) partition by range (a) (partition p0 values less than (-1));
-        //如果range表达式是unsigned, 那么这里需要判断value的值是否是uint
+        // If range expression is unsigned, then here we need to check if value is uint
         if (ob_is_int_tc(temp_obj.get_type()) && temp_obj.get_int() < 0) {
           ret = OB_ERR_PARTITION_CONST_DOMAIN_ERROR;
           LOG_WARN("Partition constant is out of partition function domain", K(ret),
@@ -707,15 +705,15 @@ int ObPartitionExecutorUtils::expr_cal_and_cast(
         }
       }
     }
-    //将计算后的obj转换成partition 表达式的类型
+    // Convert the calculated obj to the type of partition expression
     if (OB_SUCC(ret)) {
       ObObjType expected_obj_type = fun_expr_type;
-      //对value表达式类型进行cast的时候，要进行提升
+      // When casting the value expression type, perform a promotion
       //create table t1 (c1 tinyint) partition by range(c1) (partitions p0 values less than (2500));
-      //虽然2500超过了tinyint的值域，但是mysql仍然允许建表成功
+      // Although 2500 exceeds the value range of tinyint, MySQL still allows the table creation to succeed
       if (ob_is_integer_type(fun_expr_type)) {
         if (ob_is_integer_type(temp_obj.get_type())) {
-          //提升为int64或uint64
+          // Promote to int64 or uint64
           expected_obj_type = ob_is_int_tc(fun_expr_type) ? ObIntType : ObUInt64Type;
         } else if (!temp_obj.is_null()) {
           ret = OB_ERR_UNEXPECTED;
@@ -772,8 +770,8 @@ int ObPartitionExecutorUtils::expr_cal_and_cast_with_check_varchar_len(
     LOG_WARN("get_default_cast_mode failed", K(ret));
   } else {
     //CREATE TABLE t1 (a date) PARTITION BY RANGE (TO_DAYS(a)) (PARTITION p311 VALUES LESS THAN (TO_DAYS('abc')))
-    //TO_DAYS('abc')跟mysql兼容，不论session中设置的cast_mode是什么，这里都需要为WARN_ON_FAIL
-    //因为abc是无效参数，让to_days返回NULL
+    // TO_DAYS('abc') compatible with mysql, regardless of what cast_mode is set in the session, WARN_ON_FAIL is required here
+    // Because abc is an invalid parameter, let to_days return NULL
     expr_ctx.cast_mode_ |= CM_WARN_ON_FAIL; //always set to WARN_ON_FAIL to allow calculate
     EXPR_SET_CAST_CTX_MODE(expr_ctx);
     ObNewRow tmp_row;
@@ -799,7 +797,7 @@ int ObPartitionExecutorUtils::expr_cal_and_cast_with_check_varchar_len(
     } else {
       if (ob_is_uint_tc(fun_expr_type)) {
         //create table t1 (a bigint unsigned) partition by range (a) (partition p0 values less than (-1));
-        //如果range表达式是unsigned, 那么这里需要判断value的值是否是uint
+        // If range expression is unsigned, then here we need to check if value is uint
         if (ob_is_int_tc(temp_obj.get_type()) && temp_obj.get_int() < 0) {
           ret = OB_ERR_PARTITION_CONST_DOMAIN_ERROR;
           LOG_WARN("Partition constant is out of partition function domain", K(ret),
@@ -807,15 +805,15 @@ int ObPartitionExecutorUtils::expr_cal_and_cast_with_check_varchar_len(
         }
       }
     }
-    //将计算后的obj转换成partition 表达式的类型
+    // Convert the calculated obj to the type of partition expression
     if (OB_SUCC(ret)) {
       ObObjType expected_obj_type = fun_expr_type;
-      //对value表达式类型进行cast的时候，要进行提升
+      // When casting the value expression type, perform a promotion
       //create table t1 (c1 tinyint) partition by range(c1) (partitions p0 values less than (2500));
-      //虽然2500超过了tinyint的值域，但是mysql仍然允许建表成功
+      // Although 2500 exceeds the value range of tinyint, MySQL still allows the table creation to succeed
       if (ob_is_integer_type(fun_expr_type)) {
         if (ob_is_integer_type(temp_obj.get_type())) {
-          //提升为int64或uint64
+          // Promote to int64 or uint64
           expected_obj_type = ob_is_int_tc(fun_expr_type) ? ObIntType : ObUInt64Type;
         } else if (!temp_obj.is_null()) {
           ret = OB_ERR_UNEXPECTED;
@@ -867,8 +865,7 @@ int ObPartitionExecutorUtils::expr_cal_and_cast_with_check_varchar_len(
   }
   return ret;
 }
-
-// FIXME: 支持非模版化二级分区
+// FIXME: support non-template secondary partitioning
 int ObPartitionExecutorUtils::cast_range_expr_to_obj(
     ObExecContext &ctx,
     ObCreateTablegroupStmt &stmt,
@@ -943,13 +940,13 @@ int ObPartitionExecutorUtils::cast_range_expr_to_obj(
       ObPartition *part_info = NULL;
       ObSubPartition *subpart_info = NULL;
       //calc range values and set high_bound_value rowkey
-      //记录各column第一个非maxvalue的column type
+      // Record each column's first non-maxvalue column type
       ObArray<ObObjType> fun_expr_type_array;
       for (int64_t i = 0; OB_SUCC(ret) && i < partition_num; i++) {
         for (int64_t j = 0;  OB_SUCC(ret) && j < fun_expr_num; j++) {
           expr = range_values_exprs.at(i * fun_expr_num + j);
           ObObjType fun_expr_type = expr->get_data_type();
-          // 对于tablegroup分区语法而言，由于缺乏column type信息，需要校验同列的value的类型是否一致
+          // For tablegroup partition syntax, due to the lack of column type information, it is necessary to verify whether the types of values in the same column are consistent
           if (fun_expr_type_array.count() < j + 1) {
             if (OB_FAIL(fun_expr_type_array.push_back(fun_expr_type))) {
               LOG_WARN("array push back fail", K(ret), K(j), "count", fun_expr_type_array.count());
@@ -1016,8 +1013,7 @@ int ObPartitionExecutorUtils::cast_range_expr_to_obj(
   }
   return ret;
 }
-
-//FIXME:支持非模版化二级分区
+//FIXME:support non-template secondary partitioning
 int ObPartitionExecutorUtils::cast_list_expr_to_obj(
     ObExecContext &ctx,
     ObCreateTablegroupStmt &stmt,
@@ -1167,7 +1163,7 @@ int ObPartitionExecutorUtils::cast_list_expr_to_obj(
   }
   if (OB_SUCC(ret)) {
     const int64_t array_count = list_values_exprs.count();
-    // TODO(yibo) tablegroup 支持二级分区异构后，一级分区的排序也要延迟处理
+    // TODO(yibo) tablegroup supports secondary partition heterogeneity after, the sorting of the first-level partition should also be delayed processing
     if (is_subpart) {
       lib::ob_sort(subpartition_array,
                 subpartition_array + array_count,

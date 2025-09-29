@@ -1332,13 +1332,12 @@ public:
   {
     return read_atomic(key, callback, preproc_);
   }
-
-  // 该原子操作在bucket上添加的写锁,
-  // 如果节点存在，调用 callback 进行修改，如果节点不存在，插入该节点
+  // This atomic operation adds a write lock on the bucket,
+  // If the node exists, call callback to modify it, if the node does not exist, insert the node
   //
-  // 返回值：
-  //   OB_SUCCESS 表示成功
-  //   其它 表示出错
+  // Return value:
+  //   OB_SUCCESS indicates success
+  //   other indicates an error
   template<class _callback>
   int set_or_update(const _key_type &key, const _value_type &value,
                     _callback &callback)
@@ -1631,9 +1630,8 @@ public:
     }
     return ret;
   }
-
-  // 不存在就插入，存在就调用 callback 修改
-  // 该原子操作在bucket上添加的写锁
+  // Not exist then insert, exist then call callback to modify
+  // This atomic operation adds a write lock on the bucket
   template<class _callback, class _preproc>
   int set_or_update(const _key_type &key, const _value_type &value,
                     _callback &callback, _preproc &preproc)

@@ -57,7 +57,7 @@ int ObOLAPAsyncJobResolver::resolve_submit_job_stmt(const ParseNode &parse_tree,
   int64_t session_query_time_out_ts = 0;
 
   const ParseNode* sql_stmt_node =  parse_tree.children_[0];
-  /* 解析的结构
+  /* The parsed structure
   parse_tree->T_OLAP_ASYNC_JOB_SUBMIT
   |--[0] T_SQL_STMT
     |--[0] [T_SELECT/T_INSERT/T_CREATE_TABLE] user_sql
@@ -220,10 +220,10 @@ int ObOLAPAsyncJobResolver::execute_submit_job(ObOLAPAsyncSubmitJobStmt &stmt)
       job_info.func_type_ = dbms_scheduler::ObDBMSSchedFuncType::OLAP_ASYNC_JOB;
 
       #ifdef ERRSIM
-      if (OB_SUCCESS != ERRSIM_SUBMIT_ERR_JOB_NAME) { //注入一个错误的JOB NAME
+      if (OB_SUCCESS != ERRSIM_SUBMIT_ERR_JOB_NAME) { // inject an error JOB NAME
         job_info.job_name_ = "ERRSIM_JOB";
       }
-      if (OB_SUCCESS != ERRSIM_SUBMIT_ERR_JOB_START_TIME) { //注入一个错误的开始时间
+      if (OB_SUCCESS != ERRSIM_SUBMIT_ERR_JOB_START_TIME) { // inject an error start time
         job_info.start_date_ = 64060560000000000;
       }
       #endif

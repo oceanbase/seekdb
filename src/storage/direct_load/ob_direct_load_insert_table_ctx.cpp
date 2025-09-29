@@ -189,9 +189,9 @@ int ObDirectLoadInsertTabletContext::get_row_info(ObDirectLoadInsertTableRowInfo
   } else {
     row_info.row_flag_.set_flag(
       is_delete ? ObDmlFlag::DF_DELETE : ObDmlFlag::DF_INSERT,
-      // 只有增量inc_replace模式下的主表insert行需要DF_TYPE_INSERT_DELETE
-      // * 目前这里没有细分增量inc和增量inc_replace
-      // * 增量inc_replace带索引或lob会退化成增量inc
+      // Only the main table insert rows in inc_replace mode need DF_TYPE_INSERT_DELETE
+      // * Currently there is no distinction between increment inc and increment inc_replace
+      // * Incremental inc_replace with index or lob will degrade to incremental inc
       (!param_->is_incremental_ || is_delete) ? DF_TYPE_NORMAL : DF_TYPE_INSERT_DELETE);
     row_info.mvcc_row_flag_.set_compacted_multi_version_row(true);
     row_info.mvcc_row_flag_.set_first_multi_version_row(true);
@@ -223,9 +223,9 @@ int ObDirectLoadInsertTabletContext::init_datum_row(ObDatumRow &datum_row, const
       datum_row.trans_id_ = param_->trans_param_.tx_id_;
       datum_row.row_flag_.set_flag(
         is_delete ? ObDmlFlag::DF_DELETE : ObDmlFlag::DF_INSERT,
-        // 只有增量inc_replace模式下的主表insert行需要DF_TYPE_INSERT_DELETE
-        // * 目前这里没有细分增量inc和增量inc_replace
-        // * 增量inc_replace带索引或lob会退化成增量inc
+        // Only the main table insert rows in inc_replace mode need DF_TYPE_INSERT_DELETE
+        // * Currently there is no distinction between increment inc and increment inc_replace
+        // * Incremental inc_replace with index or lob will degrade to incremental inc
         (!param_->is_incremental_ || is_delete) ? DF_TYPE_NORMAL : DF_TYPE_INSERT_DELETE);
       datum_row.mvcc_row_flag_.set_compacted_multi_version_row(true);
       datum_row.mvcc_row_flag_.set_first_multi_version_row(true);

@@ -61,7 +61,7 @@ int ObInsertResolver::resolve(const ParseNode &parse_tree)
   } else if (OB_ISNULL(parse_tree.children_[REPLACE_NODE])) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid node for is_replacement", K(parse_tree.children_[1]));
-  } else { // TODO:@webber.wb replace 情况oracle怎么处理trigger
+  } else { // TODO:@webber.wb replace how oracle handles trigger
     insert_stmt->set_replace(parse_tree.children_[REPLACE_NODE]->type_ == T_REPLACE);
     session_info_->set_ignore_stmt(NULL != parse_tree.children_[IGNORE_NODE] ? true : false);
     insert_stmt->set_ignore(NULL != parse_tree.children_[IGNORE_NODE] ? true : false);
@@ -281,10 +281,9 @@ int ObInsertResolver::add_column_conv_for_diagnosis(ObInsertStmt *insert_stmt,
   }
   return ret;
 }
-
-//该函数是用来实现values(c1)功能；
+// This function is used to implement values(c1) functionality;
 //insert into test values(1,2) on duplicate key update c2 = values(c1);
-//将values(c1)表达式替换成column_conv()的结果
+// Replace values(c1) expression with the result of column_conv()
 int ObInsertResolver::process_values_function(ObRawExpr *&expr)
 {
   int ret = OB_SUCCESS;
@@ -370,8 +369,8 @@ int ObInsertResolver::process_values_function(ObRawExpr *&expr)
 }
 
 //insert into test values(1, c1 + 2);
-//本函数用来解决c1的取值过程。先查找到C1对应的expr 1,然后将expr 1 变成column_conv(1) ；
-//将 c1+2==> column_conv(1) + 2;
+// This function is used to solve the value acquisition process of c1. First, find the expr 1 corresponding to C1, then convert expr 1 to column_conv(1);
+// Convert c1+2 ==> column_conv(1) + 2;
 int ObInsertResolver::replace_column_ref(ObArray<ObRawExpr*> *value_row,
                                          ObRawExpr *&expr,
                                          bool in_generated_column /*default false*/)
@@ -607,7 +606,7 @@ int ObInsertResolver::resolve_values(const ParseNode &value_node,
     //so select resolver current level equal to insert resolver
     sub_select_resolver_->set_current_level(current_level_);
     sub_select_resolver_->set_current_view_level(current_view_level_);
-    //select层不应该看到上层的insert stmt的属性，所以upper scope stmt应该为空
+    // select layer should not see the insert stmt's attributes from the upper layer, so upper scope stmt should be empty
     sub_select_resolver_->set_parent_namespace_resolver(NULL);
     //for values stmt: insert into table_name values row()...
     sub_select_resolver_->set_upper_insert_resolver(this);
@@ -1366,12 +1365,12 @@ int ObInsertResolver::check_view_insertable()
 
 /**
  *
- * 这里为什么做cast？
- * 这个地方的处理很像set操作（eg. union）的处理。
- * 主要原因是为了insert into select中select item的类型向insert的columns类型靠齐，主要是为了能够
- * 能够形成pdml的PK计划。类型不同是无法做PKEY的。
+ * Why do we do this cast?
+ * The handling here is similar to that of set operations (e.g., union).
+ * The main reason is to align the type of the select item in insert into select with the type of the columns in insert, mainly to be able to
+ * form a PK plan for pdml. Different types cannot be used for PKEY.
  *
- * 对旧计划的影响呢？老计划场景下，可能会产生一定的性能下降。
+ * What impact does it have on the old plan? In the old plan scenario, there may be some performance degradation.
  *
  */
 

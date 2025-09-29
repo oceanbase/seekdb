@@ -277,13 +277,13 @@ public:
   int transfer_to_inner_joined(const ParseNode &parse_node, JoinedTable *&joined_table);
   virtual int check_special_join_table(const TableItem &join_table, bool is_left_child, ObItemType join_type);
   /**
-   * 为一个 `JoinedTable` 分配内存
-   * @param joined_table 新的`JoinedTable`
+   * Allocate memory for a `JoinedTable`
+   * @param joined_table new `JoinedTable`
    */
   int alloc_joined_table_item(JoinedTable *&joined_table);
 
   /**
-   * 创建一个 joined table item
+   * Create a joined table item
    */
   int create_joined_table_item(const ObJoinType joined_type,
                                const TableItem *left_table,
@@ -997,10 +997,10 @@ protected:
       K_(table_item),
       K_(column_name)
     );
-    ObRawExpr* dependent_expr_; //生成列的真实表达式
-    ObDMLStmt* stmt_; //生成列所在的stmt
-    TableItem* table_item_; //生成列所属表
-    common::ObString column_name_;  //生成列的名称
+    ObRawExpr* dependent_expr_; // real expression of the generated column
+    ObDMLStmt* stmt_; // the stmt where the generated column resides
+    TableItem* table_item_; // generate columnbelongs to table
+    common::ObString column_name_;  // generate column name
   };
   int add_parent_gen_col_exprs(const ObArray<GenColumnExprInfo> &gen_col_exprs);
 
@@ -1038,12 +1038,12 @@ protected:
   bool has_oracle_join_;
 
   /*
-   * 在with clause的解析中，我们不能将解析的表添加到影响此plan是否需要进入trans_service
-   * 的global_dependency_table中去。
-   * 例如：
+   * In the parsing of the with clause, we cannot add the parsed table to the global_dependency_table
+   * that affects whether this plan needs to enter trans_service.
+   * For example:
    * with cte (select * from t1) select 1 from dual;
-   * 如果加入了，上面这句将会进入trans_service，而之后则会报错，因为其实它检测到相关table的
-   * partition location为空。
+   * If added, the above statement will enter trans_service, and an error will be reported later because it actually detects that the related table's
+   * partition location is empty.
    * */
   bool with_clause_without_record_;
   bool is_prepare_stage_;

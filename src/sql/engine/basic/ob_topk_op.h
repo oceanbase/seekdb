@@ -52,8 +52,8 @@ public:
   virtual void destroy() override { ObOperator::destroy(); }
 
 private:
-  // 根据child_以及limit/offset设置topk_final_count_
-  // 只会在rescan后或者第一次get_next_row()后被调用
+  // According to child_ and limit/offset set topk_final_count_
+  // Only will be called after rescan or after the first get_next_row()
   int get_topk_final_count();
 
   DISALLOW_COPY_AND_ASSIGN(ObTopKOp);

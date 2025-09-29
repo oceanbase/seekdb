@@ -202,7 +202,7 @@ struct ObSysVarInPC
         SQL_PC_LOG(WARN, "fail to encode obj", K(i), K(buf + pos), K(buf_len), K(pos), K(system_variables_.at(i)), K(ret));
       } else {
         pos += size;
-        if (i != sys_var_cnt - 1) { //输出间隔符
+        if (i != sys_var_cnt - 1) { // output separator
           if (buf_len - pos <= 0) {
             ret = common::OB_ERR_UNEXPECTED;
             SQL_PC_LOG(WARN, "fail to databuf print", K(buf), K(pos));
@@ -230,9 +230,9 @@ struct ObSysVarInPC
 
 struct ObPCMemPctConf
 {
-  int64_t limit_pct_; //plan cache可使用的租户内存百分比
-  int64_t high_pct_;  //淘汰高水位在plan cache内存上限的百分比
-  int64_t low_pct_; //淘汰低水位在plan cache内存上限的百分比
+  int64_t limit_pct_; // plan cache usable tenant memory percentage
+  int64_t high_pct_;  // eviction high water mark percentage of plan cache memory limit
+  int64_t low_pct_; // eviction low water level percentage of plan cache memory upper limit
 
   ObPCMemPctConf() : limit_pct_(common::OB_PLAN_CACHE_PERCENTAGE),
                      high_pct_(common::OB_PLAN_CACHE_EVICT_HIGH_PERCENTAGE),
@@ -360,25 +360,25 @@ struct ObOperatorStat
 {
   int64_t plan_id_;
   int64_t operation_id_;  //operator_id
-  int64_t execute_times_;        //执行次数
+  int64_t execute_times_;        // execution times
 
-  int64_t input_rows_; //累计input rows
-  int64_t rescan_times_; //rescan的次数
+  int64_t input_rows_; // accumulated input rows
+  int64_t rescan_times_; // rescan times
   int64_t output_rows_; //output rows total
-  //由于修改stat的时候没有加锁，所以记录的上一次执行的数据可能不属于一次执行的结果，
-  //不再记录last的执行结果
-  //int64_t last_input_rows_; //上次input rows
-  //int64_t last_rescan_times_; //rescan的次数
+  // Due to modifying stat without locking, the recorded data from the last execution may not belong to a single execution result,
+  // No longer record the execution result of last
+  //int64_t last_input_rows_; //last input rows
+  //int64_t last_rescan_times_; //rescan times
   //int64_t last_output_rows_; //output rows in last execution
-  //暂时不支持以下和oracle兼容的统计项
-  //int64_t last_cr_buffer_gets_; //上次执行逻辑读次数
-  //int64_t cr_buffer_gets_; //累计逻辑读次数
-  //int64_t last_disk_reads_; //上次物理读次数
-  //int64_t disk_reads_; //累计物理读次数
-  //int64_t last_disk_writes_; //上次物理写次数
-  //int64_t disk_writes_; //累计物理写次数
-  //int64_t last_elapsed_time_; //上次本op执行时间
-  //int64_t elapsed_time_; //累计执行时间
+  // Temporarily not supporting the following statistics items compatible with oracle
+  //int64_t last_cr_buffer_gets_; //last logical read execution count
+  //int64_t cr_buffer_gets_; //cumulative logical read count
+  //int64_t last_disk_reads_; //last physical read count
+  //int64_t disk_reads_; //cumulative physical read count
+  //int64_t last_disk_writes_; //last physical write count
+  //int64_t disk_writes_; //cumulative physical write count
+  //int64_t last_elapsed_time_; //last execution time of this op
+  //int64_t elapsed_time_; //cumulative execution time
   ObOperatorStat() : plan_id_(-1),
     operation_id_(-1),
     execute_times_(0),
@@ -584,37 +584,37 @@ struct ObPlanStat
   common::ObString stmt_;       //  sql stmt
   ObPhysicalPlan *plan_;          // used in explain
 
-  int64_t execute_times_;        //SUCC下执行次数
-  int64_t disk_reads_;           //物理读次数
-  int64_t direct_writes_;        //物理写次数
-  int64_t buffer_gets_;          //逻辑读次数
-  int64_t application_wait_time_; //application类等待事件的总等待时间，主要是lock
-  int64_t concurrency_wait_time_; //concurrency类等待事件的总等待时间，主要是latch
-  int64_t user_io_wait_time_;     //user io类等待事件的总等待时间，主要是block cache miss
-  int64_t rows_processed_;        //返回行数
-  int64_t elapsed_time_;          //执行时间rt
-  int64_t total_process_time_;    //总的process时间
-  int64_t cpu_time_;              //CPU时间，目前可以由执行时间减去所有等待事件总等待时间来获得
-  int64_t large_querys_;     //被判定为大查询的次数
+  int64_t execute_times_;        // Execution count under SUCC
+  int64_t disk_reads_;           // physical read count
+  int64_t direct_writes_;        // physical write count
+  int64_t buffer_gets_;          // logical read count
+  int64_t application_wait_time_; // application class wait event total wait time, mainly lock
+  int64_t concurrency_wait_time_; //concurrency class total wait time for wait events, mainly latch
+  int64_t user_io_wait_time_;     // user io class wait event total wait time, mainly block cache miss
+  int64_t rows_processed_;        // return row count
+  int64_t elapsed_time_;          // execution time rt
+  int64_t total_process_time_;    // Total process time
+  int64_t cpu_time_;              // CPU time, which can currently be obtained by subtracting the total wait time of all wait events from the execution time
+  int64_t large_querys_;     // Number of times judged as large queries
   int64_t delayed_large_querys_;
-  int64_t delayed_px_querys_;    // px query 被丢回队列重试的次数
-  int64_t expected_worker_count_;  // px 预期分配线程数
+  int64_t delayed_px_querys_;    // px query retries after being put back in the queue
+  int64_t expected_worker_count_;  // px expected worker count
   int64_t minimal_worker_count_;  // minimal threads required for query
   int64_t outline_version_;
   int64_t outline_id_;
   bool is_last_exec_succ_;        // record whether last execute success
-  common::ObString sp_info_str_; //记录非参数的常数的信息
-  common::ObString param_infos_;  //记录所有被参数化参数的数据类型
+  common::ObString sp_info_str_; // record non-parameter constant information
+  common::ObString param_infos_;  // record all parameterized parameter data types
   common::ObString sys_vars_str_;
   common::ObString config_str_;
-  common::ObString raw_sql_; //记录生成plan时的原始sql
+  common::ObString raw_sql_; // record the original sql when generating plan
   common::ObCollationType sql_cs_type_;
   common::ObString rule_name_;
   bool is_rewrite_sql_;
   int64_t rule_version_; // the rule version when query rewrite generates a plan
   bool enable_udr_;
   //******** for spm ******
-  //该计划是否正在演进过程中
+  // Is this plan currently evolving
   uint64_t  db_id_;
   common::ObString constructed_sql_;
   common::ObString sql_id_;
@@ -629,13 +629,13 @@ struct ObPlanStat
   ObTableScanStat table_scan_stat_[MAX_SCAN_STAT_SIZE];
   // ***** for acs end ****
 
-  int64_t timeout_count_; //超时次数
-  int64_t ps_stmt_id_;//prepare stmt id
+  int64_t timeout_count_; // Timeout count
+  int64_t ps_stmt_id_;// Prepare stmt id
 
-  /** 记录第一次计划执行时计划涉及的各个表的行数的数组，数组应该有access_table_num_个元素 */
+  /** Record the array of row counts for each table involved in the first plan execution, the array should have access_table_num_ elements */
   ObTableRowCount *table_row_count_first_exec_;
-  int64_t access_table_num_;         //plan访问的表的个数，目前只统计whole range扫描的表
-  ObPlanExpiredStat is_expired_; // 这个计划是否已经由于数据的表行数变化和执行时间变化而失效
+  int64_t access_table_num_;         // number of tables accessed by plan, currently only counts tables scanned with whole range
+  ObPlanExpiredStat is_expired_; // This plan is whether already expired due to changes in the number of rows in the data table and execution time changes
 
   // check whether plan has stable performance
   bool enable_plan_expiration_;
@@ -644,35 +644,32 @@ struct ObPlanStat
   int64_t sample_times_;
   int64_t sample_exec_row_count_;
   int64_t sample_exec_usec_;
-
-  // 临时表计划的sessid表示对应的会话id，非临时表sessid为0
+  // Temporary table plan's sessid indicates the corresponding session id, non-temporary table sessid is 0
   uint64_t sessid_;
-  // 临时表计划所包含的临时表名
+  // Temporary table names included in the temporary table plan
   char plan_tmp_tbl_name_str_[STMT_MAX_LEN];
   int32_t plan_tmp_tbl_name_str_len_;
-
-  // plan是否使用了jit编译表达式
+  // Does plan use jit compiled expression
   bool is_use_jit_;
-
-  // 以下的字段用于存储层cache访问策略的自使用选择
-  bool enable_bf_cache_; // 表示是否访问bloomfilter cache的开关
-  bool enable_fuse_row_cache_; // 表示是否访问fuse row cache的开关
-  bool enable_row_cache_; // 表示是否访问row cache的开关
-  bool enable_early_lock_release_; // 表示是否提前解行锁
-  int64_t bf_filter_cnt_; // 表示bloomfilter成功过滤的次数
-  int64_t bf_access_cnt_; // 表示bloomfilter访问的次数
-  int64_t fuse_row_cache_hit_cnt_; // 表示fuse row cache命中次数
-  int64_t fuse_row_cache_miss_cnt_; // 表示fuse row cache不命中次数
-  int64_t row_cache_hit_cnt_; // 表示row cache命中次数
-  int64_t row_cache_miss_cnt_; // 表示row cache不命中次数
-  int64_t cache_stat_update_times_; // 表示cache统计信息更新的次数，用于控制更新cache访问策略的频率
-  int64_t block_cache_hit_cnt_; // 表示block cache命中次数
-  int64_t block_cache_miss_cnt_; // 表示block cache不命中次数
-  int64_t in_row_cache_threshold_; // 表示row cache上限
+  // The following fields are used for storing the self-selection of layer cache access policy
+  bool enable_bf_cache_; // indicates whether the bloomfilter cache access is enabled
+  bool enable_fuse_row_cache_; // indicates whether the fuse row cache access is enabled
+  bool enable_row_cache_; // indicates whether the row cache access is enabled
+  bool enable_early_lock_release_; // indicates whether to release row locks early
+  int64_t bf_filter_cnt_; // indicates the number of times bloomfilter successfully filtered the request
+  int64_t bf_access_cnt_; // indicates the number of bloomfilter accesses
+  int64_t fuse_row_cache_hit_cnt_; // indicates the number of fuse row cache hits
+  int64_t fuse_row_cache_miss_cnt_; // indicates the number of fuse row cache misses
+  int64_t row_cache_hit_cnt_; // indicates the number of row cache hits
+  int64_t row_cache_miss_cnt_; // indicates the number of row cache misses
+  int64_t cache_stat_update_times_; // indicates the number of times cache statistics are updated, used to control the frequency of updating the cache access strategy
+  int64_t block_cache_hit_cnt_; // indicates the number of block cache hits
+  int64_t block_cache_miss_cnt_; // indicates the number of block cache misses
+  int64_t in_row_cache_threshold_; // indicates the upper limit of row cache
 
   // following fields will be used for plan set memory management
   PreCalcExprHandler* pre_cal_expr_handler_; //the handler that pre-calculable expression holds
-  AddrMap expected_worker_map_; // px 全局预期分配线程数
+  AddrMap expected_worker_map_; // px global expected number of allocated threads
   AddrMap minimal_worker_map_;  // global minial threads required for query
   uint64_t plan_hash_value_;
   common::ObString outline_data_;
@@ -880,8 +877,7 @@ struct ObPlanStat
    }
    return ret;
   }
-
-  //包含超时和SUCC的执行次数
+  // Include the execution count of timeout and SUCC
   int64_t get_execute_count()
   {
     return timeout_count_ + execute_times_;

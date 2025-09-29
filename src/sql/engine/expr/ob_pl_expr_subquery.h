@@ -44,9 +44,9 @@ public:
   template <typename RE>
   int from_raw_expr(RE &expr, const ObSQLSessionInfo *session, ObIAllocator &alloc);
 
-  ObPsStmtId id_; //prepare的语句id, 保留id，兼容老版本
+  ObPsStmtId id_; //prepare statement id, retain id, compatible with old version
   common::ObString ps_sql_;
-  stmt::StmtType type_; //prepare的语句类型
+  stmt::StmtType type_; // statement type for prepare
 
   common::ObString route_sql_;
   sql::ObExprResType result_type_;
@@ -108,9 +108,9 @@ private:
   static int fetch_row(void *result_ret, int64_t &row_count, ObNewRow &cur_row);
   static int get_result(void *result_set, ObObj &result, ObIAllocator &alloc);
 
-  ObPsStmtId id_; //prepare的语句id
+  ObPsStmtId id_; //prepared statement id
   common::ObString ps_sql_;
-  stmt::StmtType type_; //prepare的语句类型
+  stmt::StmtType type_; // statement type for prepare
 
   common::ObString route_sql_;
   ObExprResType result_type_;

@@ -67,7 +67,7 @@ public:
   int32_t header_size_;
   int32_t version_;
   int32_t magic_;
-  int32_t attr_;//TODO:用途
+  int32_t attr_;//TODO:purpose
   int32_t column_count_;
   int32_t row_index_offset_;
   int32_t row_count_;
@@ -92,13 +92,13 @@ public:
   int get_next_row(ObNewRow &row);
 private:
   ObTableLoadBackupRowReader_V_1_4 reader_;
-  const ObTableLoadBackupMicroBlockHeader_V_1_4 *header_; //微块头首地址
+  const ObTableLoadBackupMicroBlockHeader_V_1_4 *header_; // micro block header start address
   const ObIArray<int64_t> *column_ids_;
   const ObTableLoadBackupColumnMap_V_1_4 *column_map_;
   const char *data_begin_;
   const int32_t *index_begin_;
   int32_t cur_idx_;
-  // 避免调用ObObj的构造函数
+  // Avoid calling the ObObj constructor
   bool is_inited_;
 };
 

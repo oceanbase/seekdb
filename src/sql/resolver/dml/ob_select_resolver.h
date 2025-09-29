@@ -25,9 +25,9 @@ namespace oceanbase
 {
 namespace sql
 {
-//提供一个接口类，用于解析各种子查询，包括where子查询，union子查询，view子查询，generated table子查询
-//这样做的目的是屏蔽子查询解析的一些细节，不用将整个dml resolver的结构传递给子查询解析的函数
-//避免调用过程中看到过多的属性，降低耦合
+// Provide an interface class for parsing various subqueries, including where subqueries, union subqueries, view subqueries, generated table subqueries
+// The purpose of this is to hide some details of subquery parsing, without passing the entire dml resolver structure to the subquery parsing function
+// Avoid seeing too many properties during the call, reduce coupling
 class ObChildStmtResolver
 {
 public:
@@ -38,8 +38,8 @@ public:
   virtual ObSelectStmt *get_child_stmt() = 0;
   void set_parent_aggr_level(int64_t parent_aggr_level) { parent_aggr_level_ = parent_aggr_level; }
 protected:
-  //当这个level不会-1的时候说明该child stmt是一个位于aggregate function中的subquery
-  //注意这个时候，aggregate function还没有被上推,这个level不是aggregate function最终的level
+  // When this level does not decrement by 1, it means that the child stmt is a subquery located within an aggregate function
+  // Note that at this point, the aggregate function has not been pushed up, this level is not the final level of the aggregate function
   int64_t parent_aggr_level_;
 };
 
@@ -320,15 +320,15 @@ private:
 protected:
   // data members
   /*these member is only for with clause*/
-  //由于search以及cycle解析的特殊性，需要解析儿子stmt中定义的CTE_TABLE类型
+  // Due to the special nature of search and cycle parsing, it is necessary to parse the CTE_TABLE type defined in the child stmt
   TableItem* current_recursive_cte_table_item_;
   ObSelectStmt* current_cte_involed_stmt_;
 
   bool has_calc_found_rows_;
   bool has_top_limit_;
-  //用于标识当前的query是否是set query(UNION/INTERSECT/EXCEPT)的左右支
+  // Used to identify whether the current query is the left or right branch of a set query (UNION/INTERSECT/EXCEPT)
   bool in_set_query_;
-  //用于表示当前的query是否是sub query，用于sequence合法性检查等
+  // Used to indicate whether the current query is a sub query, used for sequence validity check etc.
   bool is_sub_stmt_;
   // query is subquery in exists
   bool in_exists_subquery_;
@@ -338,12 +338,12 @@ protected:
   // denote having exists ref columns that belongs to current stmt
   bool having_has_self_column_;
   bool has_grouping_;
-  //用于标识当前的query是否有group by子句
+  // Used to identify whether the current query has a group by clause
   bool has_group_by_clause_;
   bool has_nested_aggr_;
-  //当前query是否为最外层select, 仅用于star expansion
+  // Is the current query the outermost select, only used for star expansion
   bool is_top_stmt_;
-  //当前query的field list是否解析成功, 用于force view解析失败时的column schema持久化
+  // Whether the field list of the current query is parsed successfully, used for column schema persistence when force view parsing fails
   bool has_resolved_field_list_;
 private:
   // disallow copy

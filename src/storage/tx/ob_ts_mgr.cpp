@@ -91,8 +91,7 @@ ObTsSourceInfoGuard::~ObTsSourceInfoGuard()
     mgr_->revert_ts_source_info_(*this);
   }
 }
-
-////////////////////////ObTsMgr实现///////////////////////////////////
+////////////////////////ObTsMgr implementation///////////////////////////////////
 
 int ObTsMgr::init(const ObAddr &server,
                   share::schema::ObMultiVersionSchemaService &schema_service,
@@ -172,7 +171,7 @@ int ObTsMgr::start()
     TRANS_LOG(ERROR, "ObTsMgr is already running", KR(ret));
   } else if (OB_FAIL(gts_request_rpc_->start())) {
     TRANS_LOG(WARN, "gts request rpc start", KR(ret));
-    // 启动gts任务刷新线程
+    // Start gts task refresh thread
   } else if (OB_FAIL(share::ObThreadPool::start())) {
     TRANS_LOG(ERROR, "GTS local cache manager refresh worker thread start error", KR(ret));
   } else {
@@ -255,15 +254,14 @@ void ObTsMgr::destroy()
     gts_request_rpc_ = NULL;
   }
 }
-
-// 执行gts任务刷新，由一个专门的线程来负责
+// Execute gts task refresh, by a dedicated thread to be responsible
 void ObTsMgr::run1()
 {
   int ret = OB_SUCCESS;
   ObSEArray<uint64_t, 1> ids;
   ObGtsRefreshFunctor gts_refresh_funtor;
   GetObsoleteTenantFunctor get_obsolete_tenant_functor(TS_SOURCE_INFO_OBSOLETE_TIME, ids);
-  // cluster版本小于2.0不会更新gts
+  // cluster version less than 2.0 will not update gts
   lib::set_thread_name("TsMgr");
   while (!has_set_stop()) {
     // sleep 100 * 1000 us

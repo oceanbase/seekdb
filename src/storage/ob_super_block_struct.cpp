@@ -96,7 +96,7 @@ ServerSuperBlockBody::ServerSuperBlockBody()
 
 bool ServerSuperBlockBody::is_valid() const
 {
-  // TODO (fenggu.yh) 区分 shared-nothing和shared-storage
+  // TODO (fenggu.yh) distinguish shared-nothing and shared-storage
   return create_timestamp_ > 0 && modify_timestamp_ >= create_timestamp_ &&
     macro_block_size_ > 0 && total_macro_block_count_ > 0 &&
     total_file_size_ >= macro_block_size_ && replay_start_point_.is_valid() &&

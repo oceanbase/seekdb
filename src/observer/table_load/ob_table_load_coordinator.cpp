@@ -171,10 +171,10 @@ int ObTableLoadCoordinator::abort_peers_ctx(ObTableLoadTableCtx *ctx)
       for (int64_t i = 0; i < curr_round->count(); ++i) {
         StoreInfo *store_info = curr_round->at(i);
         const ObAddr &addr = store_info->addr_;
-        if (ObTableLoadUtils::is_local_addr(addr)) { // 本机
+        if (ObTableLoadUtils::is_local_addr(addr)) { // local address
           ObTableLoadStore::abort_ctx(ctx, arg.error_code_, res.is_stopped_);
           ret = OB_SUCCESS;
-        } else { // 远端, 发送rpc
+        } else { // remote, send rpc
           // use default timeout value, avoid timeout immediately
           const int64_t origin_timeout_ts = THIS_WORKER.get_timeout_ts();
           THIS_WORKER.set_timeout_ts(ObTimeUtil::current_time() + DEFAULT_TIMEOUT_US);
@@ -278,16 +278,14 @@ int ObTableLoadCoordinator::calc_session_count(
   bool include_coord_addr = false;
   int64_t total_partitions = 0;
   int64_t store_server_count = all_leader_info_array.count();
-
-  // 判断coordinator节点是否也作为store节点
+  // Determine if the coordinator node also serves as a store node
   for (int64_t i = 0; i < store_server_count; i++) {
     total_partitions += all_leader_info_array[i].partition_id_array_.count();
     if (coord_addr == all_leader_info_array[i].addr_) {
       include_coord_addr = true;
     }
   }
-
-  // 资源控制先确定线程，第一次遍历先按分区等比例分配线程
+  // Resource control first determines the thread, the first traversal allocates threads proportionally by partition
   for (int64_t i = 0; OB_SUCC(ret) && i < store_server_count; i++) {
     ObDirectLoadResourceUnit unit;
     unit.addr_ = all_leader_info_array[i].addr_;
@@ -302,8 +300,7 @@ int ObTableLoadCoordinator::calc_session_count(
       }
     }
   }
-
-  // 第一次遍历如果不能分配完所有的线程，继续给每个节点平均分配剩余的线程，直到所有的线程都被分配完
+  // The first traversal cannot allocate all threads, continue to average allocate the remaining threads to each node until all threads are allocated
   if (OB_SUCC(ret)) {
     bool need_break = false;
     while (remain_session_count > 0 && !need_break) {
@@ -320,8 +317,8 @@ int ObTableLoadCoordinator::calc_session_count(
   }
 
   /*
-  协调节点不存在数据分区时，需要申请线程资源，但不需要申请内存，放在申请资源数组的最后一个位置
-  coord_session_count表示coordinator节点可用线程数，min_session_count表示所有节点可用线程数的最小值
+  When the coordinator node does not have data partitions, thread resources need to be requested, but memory does not need to be requested, and it is placed at the last position of the resource request array
+  coord_session_count indicates the number of available threads on the coordinator node, min_session_count indicates the minimum value of available threads across all nodes
   */
   if (OB_SUCC(ret)) {
     if (!include_coord_addr) {
@@ -345,8 +342,8 @@ int ObTableLoadCoordinator::calc_session_count(
   }
 
   /*
-  确定write_session_count，表示发送数据阶段store节点可用的线程数
-  对于load data模式，如果 协调节点和数据节点都在同一个节点上，就分出一半的线程用于解析数据，一半的线程用于存储数据
+  Determine write_session_count, which represents the number of available threads on the store node during the data sending phase
+  For load data mode, if the coordinator node and data node are on the same node, half of the threads are allocated for data parsing and the other half for data storage
   */
   if (OB_SUCC(ret)) {
     if (include_coord_addr && ObDirectLoadMode::is_load_data(ctx_->param_.load_mode_)) {
@@ -371,35 +368,35 @@ int ObTableLoadCoordinator::calc_memory_size(
 {
   int ret = OB_SUCCESS;
   /*
-  先确定主表是否要走排序，对于堆表，sql指定need_sort=true时，如果内存满足不排序，就走不排序流程，只要有一个节点内存不足，整体都要走排序
-  如果主表要走排序，则整个任务按排序方式分配内存，否则再确定是否要做lob_id排序和索引排序，需要的话就按照MAX(主表不排序内存，索引排序内存)来分配内存，否则分配主表不排序需要的内存
+  First determine if the main table needs sorting. For heap tables, when SQL specifies need_sort=true, if memory is sufficient for no sorting, the no-sorting process is taken. As long as one node has insufficient memory, the entire process must follow the sorting path.
+  If the main table requires sorting, the entire task will allocate memory according to the sorting method. Otherwise, determine if LOB_ID sorting and index sorting are needed. If so, allocate memory based on MAX(main table no-sorting memory, index sorting memory). Otherwise, allocate memory required for the main table no-sorting process.
   */
   for (int64_t i = 0; !main_need_sort && i < store_server_count; i++) {
     ObDirectLoadResourceUnit &unit = apply_arg.apply_array_[i];
     int64_t min_sort_memory = unit.thread_count_ * ObDirectLoadExternalMultiPartitionRowChunk::MIN_MEMORY_LIMIT * 4;
     int64_t min_unsort_memory = 0;
     int64_t thread_count = write_session_count; 
-    // insert into 和 insert overwrite各个节点的并发在写入数据阶段是独立的
+    // The concurrency of insert into and insert overwrite at each node is independent during the data writing phase
     if (ObDirectLoadMode::is_insert_overwrite(ctx_->param_.load_mode_) || ObDirectLoadMode::is_insert_into(ctx_->param_.load_mode_)) {
       thread_count = unit.thread_count_; 
     }
     if (ctx_->schema_.is_table_without_pk_) {
       if (!ctx_->param_.need_sort_) {
-        // sql指定need_sort=false，强制不排序
+        // sql specifies need_sort=false, forces no sorting
       } else if (partitions[i] == 1) {
-        // 单分区排序与不排序需要的内存是一样的, 不走排序
+        // Single partition sorting and non-sorting require the same amount of memory, do not perform sorting
       } else {
-        // 直接写宏块需要的内存，对于非排序模式，每个分区各自写宏块，所以要乘分区数
+        // Directly write the memory needed for macroblocks, for non-sorting mode, each partition writes its own macroblocks, so it needs to be multiplied by the number of partitions
         min_unsort_memory = part_unsort_memory * partitions[i] * thread_count;
         if (min_unsort_memory > memory_limit) {
           main_need_sort = true;
         }
       }
     } else {
-      // 取写宏块或写临时文件需要内存的最小值，对于非排序模式，每个分区各自写临时文件，所以要乘分区数
+      // Get the minimum memory required for writing macro blocks or writing temporary files, for non-sorting mode, each partition writes its own temporary file, so it needs to be multiplied by the number of partitions
       min_unsort_memory = part_unsort_memory * partitions[i] * thread_count;
       if (ctx_->param_.need_sort_) {
-        // sql指定need_sort=true，强制走排序
+        // sql specifies need_sort=true, forces sorting to be used
         main_need_sort = true;
       } else {
         if (min_unsort_memory > memory_limit) {
@@ -426,25 +423,25 @@ int ObTableLoadCoordinator::calc_memory_size(
 
   for (int64_t i = 0; OB_SUCC(ret) && i < store_server_count; i++) {
     ObDirectLoadResourceUnit &unit = apply_arg.apply_array_[i];
-    int64_t min_memory = MIN(min_part_memory *  unit.thread_count_, memory_limit); // 至少需要分配的内存
-    int64_t min_sort_memory = MIN(unit.thread_count_ * ObDirectLoadExternalMultiPartitionRowChunk::MIN_MEMORY_LIMIT * 4, memory_limit); // 排序至少需要分配的内存
+    int64_t min_memory = MIN(min_part_memory *  unit.thread_count_, memory_limit); // Minimum memory that needs to be allocated
+    int64_t min_sort_memory = MIN(unit.thread_count_ * ObDirectLoadExternalMultiPartitionRowChunk::MIN_MEMORY_LIMIT * 4, memory_limit); // At least the memory that needs to be allocated for sorting
     int64_t min_unsort_memory = 0;
     int64_t thread_count = write_session_count; 
-    // insert into 和 insert overwrite各个节点的并发在写入数据阶段是独立的
+    // The concurrency of insert into and insert overwrite at each node is independent during the data writing phase
     if (ObDirectLoadMode::is_insert_overwrite(ctx_->param_.load_mode_) || ObDirectLoadMode::is_insert_into(ctx_->param_.load_mode_)) {
       thread_count = unit.thread_count_; 
     }
-    min_unsort_memory = MIN(part_unsort_memory * partitions[i] * thread_count, memory_limit); // 不排序最少需要分配的内存
+    min_unsort_memory = MIN(part_unsort_memory * partitions[i] * thread_count, memory_limit); // Minimum memory required to be allocated without sorting
     if (task_need_sort) {
       if (main_need_sort) {
-        // 都排序
+        // All sorted
         unit.memory_size_ = MAX(min_sort_memory, min_memory);
       } else {
-        // 部分排序部分不排序
+        // Partial sorting, partial not sorting
         unit.memory_size_ = MAX(MAX(min_unsort_memory, min_sort_memory), min_memory);
       }
     } else {
-      // 都不排序
+      // Do not sort
       unit.memory_size_ = MAX(min_memory, min_unsort_memory);
     }
   }
@@ -463,37 +460,37 @@ int ObTableLoadCoordinator::gen_apply_arg(ObDirectLoadResourceApplyArg &apply_ar
     apply_arg.task_key_ = ObTableLoadUniqueKey(ctx_->param_.table_id_, ctx_->ddl_param_.task_id_);
     int64_t retry_count = 0;
     ObAddr coordinator_addr = ObServer::get_instance().get_self();
-    int64_t part_unsort_memory = 0; // 一个分区写入阶段不排序需要的内存, 用于判断是否排序
-    int64_t min_part_memory = 0; // 一个分区在整个导入过程中至少需要的内存, 用于计算分配的内存大小
+    int64_t part_unsort_memory = 0; // Memory required for a partition write phase without sorting, used to determine whether to sort
+    int64_t min_part_memory = 0; // The minimum memory a partition needs throughout the entire import process, used for calculating the allocated memory size
     int64_t parallel_servers_target = 0;
     if (ctx_->schema_.is_table_without_pk_) {
-      // 直接写宏块需要的内存
+      // directly write the memory needed for macroblocks
       if (!ctx_->schema_.is_column_store() ||
           ObDirectLoadMethod::is_incremental(ctx_->param_.method_)) {
-        // 行存
-        part_unsort_memory = MACROBLOCK_BUFFER_SIZE; // DDL构造宏块的内存
-        min_part_memory = MACROBLOCK_BUFFER_SIZE; // DDL构造宏块的内存
+        // row storage
+        part_unsort_memory = MACROBLOCK_BUFFER_SIZE; // Memory for DDL to construct macroblocks
+        min_part_memory = MACROBLOCK_BUFFER_SIZE; // Memory for DDL to construct macroblocks
       } else {
-        // 列存
+        // Column store
         part_unsort_memory =
           ctx_->schema_.cg_cnt_ *
-          ObCGRowFilesGenerater::CG_ROW_FILE_MEMORY_LIMIT; // DDL多cg同时写临时文件的内存
+          ObCGRowFilesGenerater::CG_ROW_FILE_MEMORY_LIMIT; // Memory for DDL to write multiple CG temporary files simultaneously
         min_part_memory =
           MAX(ctx_->schema_.cg_cnt_ * ObCGRowFilesGenerater::CG_ROW_FILE_MEMORY_LIMIT,
-              MACROBLOCK_BUFFER_SIZE); // DDL多cg同时写临时文件的内存, rescan按cg构造宏块内存
+              MACROBLOCK_BUFFER_SIZE); // Memory for DDL to write multiple CG temporary files simultaneously, rescan constructs macro block memory by CG
       }
     } else {
       if (!ctx_->schema_.is_column_store() ||
           ObDirectLoadMethod::is_incremental(ctx_->param_.method_)) {
-        // 行存
-        part_unsort_memory = SSTABLE_BUFFER_SIZE; // 按行写临时文件的内存
-        min_part_memory = MACROBLOCK_BUFFER_SIZE; // DDL构造宏块的内存
+        // row storage
+        part_unsort_memory = SSTABLE_BUFFER_SIZE; // Memory for writing temporary files line by line
+        min_part_memory = MACROBLOCK_BUFFER_SIZE; // Memory for DDL to construct macroblocks
       } else {
-        // 列存
-        part_unsort_memory = SSTABLE_BUFFER_SIZE; // 按行写临时文件的内存
+        // Column store
+        part_unsort_memory = SSTABLE_BUFFER_SIZE; // Memory for writing temporary files by row
         min_part_memory =
           MAX(ctx_->schema_.cg_cnt_ * ObCGRowFilesGenerater::CG_ROW_FILE_MEMORY_LIMIT,
-              MACROBLOCK_BUFFER_SIZE); // DDL多cg同时写临时文件的内存, rescan按cg构造宏块内存
+              MACROBLOCK_BUFFER_SIZE); // Memory for DDL to write multiple CG temporary files simultaneously, rescan constructs macro block memory by CG
       }
     }
     while (OB_SUCC(ret)) {
@@ -517,8 +514,8 @@ int ObTableLoadCoordinator::gen_apply_arg(ObDirectLoadResourceApplyArg &apply_ar
         LOG_WARN("fail read tenant variable", KR(ret), K(tenant_id));
       } else {
         bool include_cur_addr = false;
-        bool task_need_sort = false;  // 表示整个导入任务是否会走排序的流程
-        bool main_need_sort = false;  // 表示主表是否会走排序
+        bool task_need_sort = false;  // Indicates whether the entire import task will go through the sorting process
+        bool main_need_sort = false;  // Indicates whether the main table will go through sorting
         int64_t total_partitions = 0;
         ObArray<int64_t> partitions;
         partitions.set_tenant_id(MTL_ID());
@@ -527,8 +524,8 @@ int ObTableLoadCoordinator::gen_apply_arg(ObDirectLoadResourceApplyArg &apply_ar
         int64_t write_session_count = 0;
         int64_t min_session_count = ctx_->param_.parallel_;
         int64_t max_session_count = 0;
-        int64_t limit_session_count = MIN(memory_limit / min_part_memory, ObMacroDataSeq::MAX_PARALLEL_IDX + 1);  // 节点内不能超过这个并行度
-        int64_t total_limit_session_count = MIN(limit_session_count * store_server_count, parallel_servers_target); // 所有节点加起来不能超过这个并行度
+        int64_t limit_session_count = MIN(memory_limit / min_part_memory, ObMacroDataSeq::MAX_PARALLEL_IDX + 1);  // The parallelism within the node cannot exceed this value
+        int64_t total_limit_session_count = MIN(limit_session_count * store_server_count, parallel_servers_target); // The total number of sessions across all nodes cannot exceed this level of parallelism
         int64_t total_session_count = MIN(ctx_->param_.parallel_, total_limit_session_count);
         ObDirectLoadResourceOpRes apply_res;
 
@@ -636,7 +633,7 @@ int ObTableLoadCoordinator::pre_begin_peers(ObDirectLoadResourceApplyArg &apply_
       const ObTableLoadPartitionLocation::LeaderInfo &leader_info = all_leader_info_array.at(i);
       const ObTableLoadPartitionLocation::LeaderInfo &target_leader_info =
         target_all_leader_info_array.at(i);
-      //目前源表和目标表的分区信息连同每个分区的地址都完全一样
+      //The partition information of the source table and the target table, along with the address of each partition, is completely the same
       if (OB_UNLIKELY(addr != leader_info.addr_ || addr != target_leader_info.addr_)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("addr must be same", K(addr),
@@ -653,7 +650,7 @@ int ObTableLoadCoordinator::pre_begin_peers(ObDirectLoadResourceApplyArg &apply_
       arg.target_partition_id_array_ = target_leader_info.partition_id_array_;
       if (OB_FAIL(ret)) {
 
-      } else if (ObTableLoadUtils::is_local_addr(addr)) { // 本机
+      } else if (ObTableLoadUtils::is_local_addr(addr)) { // local address
         ctx_->param_.session_count_ = arg.config_.parallel_;
         ctx_->param_.avail_memory_ = arg.avail_memory_;
         LOG_INFO("table load local pre begin", K(arg));
@@ -667,7 +664,7 @@ int ObTableLoadCoordinator::pre_begin_peers(ObDirectLoadResourceApplyArg &apply_
             LOG_WARN("fail to store pre begin", KR(ret));
           }
         }
-      } else { // 对端, 发送rpc
+      } else { // peer, send rpc
         TABLE_LOAD_CONTROL_RPC_CALL(pre_begin, addr, arg);
       }
       if (OB_SUCC(ret)) {
@@ -801,7 +798,7 @@ int ObTableLoadCoordinator::confirm_begin_peers()
     for (int64_t i = 0; OB_SUCC(ret) && i < coordinator_ctx_->store_infos_.count(); ++i) {
       ObTableLoadCoordinatorCtx::StoreInfo &store_info = coordinator_ctx_->store_infos_.at(i);
       const ObAddr &addr = store_info.addr_;
-      if (ObTableLoadUtils::is_local_addr(addr)) { // 本机
+      if (ObTableLoadUtils::is_local_addr(addr)) { // Local machine
         LOG_INFO("table load local confirm begin", K(arg));
         ObTableLoadStore store(ctx_);
         if (OB_FAIL(store.init())) {
@@ -809,7 +806,7 @@ int ObTableLoadCoordinator::confirm_begin_peers()
         } else if (OB_FAIL(store.confirm_begin())) {
           LOG_WARN("fail to store confirm begin", KR(ret));
         }
-      } else { // 对端, 发送rpc
+      } else { // peer, send rpc
         TABLE_LOAD_CONTROL_RPC_CALL(confirm_begin, addr, arg);
       }
     }
@@ -868,14 +865,14 @@ int ObTableLoadCoordinator::check_peers_begin_result(bool &is_finish)
     is_finish = true;
     for (int64_t i = 0; OB_SUCC(ret) && i < coordinator_ctx_->store_infos_.count(); ++i) {
       const ObAddr &addr = coordinator_ctx_->store_infos_.at(i).addr_;
-      if (ObTableLoadUtils::is_local_addr(addr)) { // 本机
+      if (ObTableLoadUtils::is_local_addr(addr)) { // local address
         ObTableLoadStore store(ctx_);
         if (OB_FAIL(store.init())) {
           LOG_WARN("fail to init store", KR(ret));
         } else if (OB_FAIL(store.get_status(res.status_, res.error_code_))) {
           LOG_WARN("fail to store get status", KR(ret));
         }
-      } else { // 远端, 发送rpc
+      } else { // remote, send rpc
         TABLE_LOAD_CONTROL_RPC_CALL(get_status, addr, arg, res);
       }
       if (OB_SUCC(ret)) {
@@ -920,11 +917,11 @@ public:
     }
     ObTableLoadIndexLongWait wait_obj(10 * 1000, WAIT_INTERVAL_US);
     while (OB_SUCC(ret)) {
-      // 确认状态
+      // Confirm status
       if (OB_FAIL(ctx_->coordinator_ctx_->check_status(ObTableLoadStatusType::INITED))) {
         LOG_WARN("fail to check coordinator status inited", KR(ret));
       }
-      // 查询合并状态
+      // Query merge status
       else if (OB_FAIL(coordinator.check_peers_begin_result(is_finish))) {
         LOG_WARN("fail to check peers begin result", KR(ret));
       } else if (!is_finish) {
@@ -976,19 +973,19 @@ int ObTableLoadCoordinator::add_check_begin_result_task()
     LOG_WARN("ObTableLoadCoordinator not init", KR(ret), KP(this));
   } else {
     ObTableLoadTask *task = nullptr;
-    // 1. 分配task
+    // 1. assign task
     if (OB_FAIL(ctx_->alloc_task(task))) {
       LOG_WARN("fail to alloc task", KR(ret));
     }
-    // 2. 设置processor
+    // 2. Set processor
     else if (OB_FAIL(task->set_processor<CheckBeginResultTaskProcessor>(ctx_))) {
       LOG_WARN("fail to set check begin result task processor", KR(ret));
     }
-    // 3. 设置callback
+    // 3. Set callback
     else if (OB_FAIL(task->set_callback<CheckBeginResultTaskCallback>(ctx_))) {
       LOG_WARN("fail to set check begin result task callback", KR(ret));
     }
-    // 4. 把task放入调度器
+    // 4. put task into scheduler
     else if (OB_FAIL(coordinator_ctx_->task_scheduler_->add_task(0, task))) {
       LOG_WARN("fail to add task", KR(ret), KPC(task));
     }
@@ -1025,7 +1022,7 @@ int ObTableLoadCoordinator::pre_merge_peers()
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < coordinator_ctx_->store_infos_.count(); ++i) {
       const ObAddr &addr = coordinator_ctx_->store_infos_.at(i).addr_;
-      if (ObTableLoadUtils::is_local_addr(addr)) { // 本机
+      if (ObTableLoadUtils::is_local_addr(addr)) { // Local machine
         LOG_INFO("table load local pre merge", K(arg));
         ObTableLoadStore store(ctx_);
         if (OB_FAIL(store.init())) {
@@ -1033,7 +1030,7 @@ int ObTableLoadCoordinator::pre_merge_peers()
         } else if (OB_FAIL(store.pre_merge(arg.committed_trans_id_array_))) {
           LOG_WARN("fail to store pre merge", KR(ret));
         }
-      } else { // 远端, 发送rpc
+      } else { // remote, send rpc
         TABLE_LOAD_CONTROL_RPC_CALL(pre_merge, addr, arg);
       }
     }
@@ -1051,7 +1048,7 @@ int ObTableLoadCoordinator::start_merge_peers()
     arg.task_id_ = ctx_->ddl_param_.task_id_;
     for (int64_t i = 0; OB_SUCC(ret) && i < coordinator_ctx_->store_infos_.count(); ++i) {
       const ObAddr &addr = coordinator_ctx_->store_infos_.at(i).addr_;
-      if (ObTableLoadUtils::is_local_addr(addr)) { // 本机
+      if (ObTableLoadUtils::is_local_addr(addr)) { // Local machine
         LOG_INFO("table load local start merge", K(arg));
         ObTableLoadStore store(ctx_);
         if (OB_FAIL(store.init())) {
@@ -1059,7 +1056,7 @@ int ObTableLoadCoordinator::start_merge_peers()
         } else if (OB_FAIL(store.start_merge())) {
           LOG_WARN("fail to store start merge", KR(ret));
         }
-      } else { // 远端, 发送rpc
+      } else { // remote, send rpc
         TABLE_LOAD_CONTROL_RPC_CALL(start_merge, addr, arg);
       }
     }
@@ -1078,18 +1075,18 @@ int ObTableLoadCoordinator::finish()
     ObMutexGuard guard(coordinator_ctx_->get_op_lock());
     bool active_trans_exist = false;
     bool committed_trans_eixst = false;
-    // 1. 冻结状态, 防止后续继续创建trans
+    // 1. Frozen state, prevent further creation of trans
     if (OB_FAIL(coordinator_ctx_->set_status_frozen())) {
       LOG_WARN("fail to set coordinator status frozen", KR(ret));
     }
-    // 2. 检查当前是否还有trans没有结束
+    // 2. Check if there are any trans that have not ended yet
     else if (OB_FAIL(coordinator_ctx_->check_exist_trans(active_trans_exist))) {
       LOG_WARN("fail to check exist trans", KR(ret));
     } else if (OB_UNLIKELY(active_trans_exist)) {
       ret = OB_ENTRY_EXIST;
       LOG_WARN("trans already exist", KR(ret));
     } else if (!ctx_->param_.px_mode_) {
-      // 3. 检查是否有数据
+      // 3. Check if there is data
       if (OB_FAIL(coordinator_ctx_->check_exist_committed_trans(committed_trans_eixst))) {
         LOG_WARN("fail to check exist committed trans", KR(ret));
       } else if (OB_UNLIKELY(!committed_trans_eixst)) {
@@ -1098,17 +1095,17 @@ int ObTableLoadCoordinator::finish()
       }
     }
     if (OB_SUCC(ret)) {
-      // 4. 触发数据节点发起合并
+      // 4. Trigger data node to initiate merge
       if (OB_FAIL(pre_merge_peers())) {
         LOG_WARN("fail to pre merge peers", KR(ret));
       } else if (OB_FAIL(start_merge_peers())) {
         LOG_WARN("fail to start merge peers", KR(ret));
       }
-      // 5. 设置当前状态为合并中
+      // 5. Set the current status to merging
       else if (OB_FAIL(coordinator_ctx_->set_status_merging())) {
         LOG_WARN("fail to set coordinator status merging", KR(ret));
       }
-      // 6. 添加定时任务检查合并结果
+      // 6. Add scheduled task to check merge results
       else if (OB_FAIL(add_check_merge_result_task())) {
         LOG_WARN("fail to add check merge result task", KR(ret));
       }
@@ -1133,14 +1130,14 @@ int ObTableLoadCoordinator::check_peers_merge_result(bool &is_finish)
     is_finish = true;
     for (int64_t i = 0; OB_SUCC(ret) && i < coordinator_ctx_->store_infos_.count(); ++i) {
       const ObAddr &addr = coordinator_ctx_->store_infos_.at(i).addr_;
-      if (ObTableLoadUtils::is_local_addr(addr)) { // 本机
+      if (ObTableLoadUtils::is_local_addr(addr)) { // local address
         ObTableLoadStore store(ctx_);
         if (OB_FAIL(store.init())) {
           LOG_WARN("fail to init store", KR(ret));
         } else if (OB_FAIL(store.get_status(res.status_, res.error_code_))) {
           LOG_WARN("fail to store get status", KR(ret));
         }
-      } else { // 远端, 发送rpc
+      } else { // remote, send rpc
         TABLE_LOAD_CONTROL_RPC_CALL(get_status, addr, arg, res);
       }
       if (OB_SUCC(ret)) {
@@ -1185,11 +1182,11 @@ public:
     }
     ObTableLoadIndexLongWait wait_obj(10 * 1000, WAIT_INTERVAL_US);
     while (OB_SUCC(ret)) {
-      // 确认状态
+      // Confirm status
       if (OB_FAIL(ctx_->coordinator_ctx_->check_status(ObTableLoadStatusType::MERGING))) {
         LOG_WARN("fail to check coordinator status merging", KR(ret));
       }
-      // 查询合并状态
+      // Query merge status
       else if (OB_FAIL(coordinator.check_peers_merge_result(is_merge_finish))) {
         LOG_WARN("fail to check peers merge result", KR(ret));
       } else if (!is_merge_finish) {
@@ -1241,19 +1238,19 @@ int ObTableLoadCoordinator::add_check_merge_result_task()
     LOG_WARN("ObTableLoadCoordinator not init", KR(ret), KP(this));
   } else {
     ObTableLoadTask *task = nullptr;
-    // 1. 分配task
+    // 1. assign task
     if (OB_FAIL(ctx_->alloc_task(task))) {
       LOG_WARN("fail to alloc task", KR(ret));
     }
-    // 2. 设置processor
+    // 2. Set processor
     else if (OB_FAIL(task->set_processor<CheckMergeResultTaskProcessor>(ctx_))) {
       LOG_WARN("fail to set check merge result task processor", KR(ret));
     }
-    // 3. 设置callback
+    // 3. Set callback
     else if (OB_FAIL(task->set_callback<CheckMergeResultTaskCallback>(ctx_))) {
       LOG_WARN("fail to set check merge result task callback", KR(ret));
     }
-    // 4. 把task放入调度器
+    // 4. put task into scheduler
     else if (OB_FAIL(coordinator_ctx_->task_scheduler_->add_task(0, task))) {
       LOG_WARN("fail to add task", KR(ret), KPC(task));
     }
@@ -1287,7 +1284,7 @@ int ObTableLoadCoordinator::commit_peers(ObTableLoadSqlStatistics &sql_statistic
     for (int64_t i = 0; OB_SUCC(ret) && i < coordinator_ctx_->store_infos_.count(); ++i) {
       ObTableLoadCoordinatorCtx::StoreInfo &store_info = coordinator_ctx_->store_infos_.at(i);
       const ObAddr &addr = store_info.addr_;
-      if (ObTableLoadUtils::is_local_addr(addr)) { // 本机
+      if (ObTableLoadUtils::is_local_addr(addr)) { // Local machine
         LOG_INFO("table load local commit begin", K(arg));
         ObTableLoadStore store(ctx_);
         if (OB_FAIL(store.init())) {
@@ -1298,7 +1295,7 @@ int ObTableLoadCoordinator::commit_peers(ObTableLoadSqlStatistics &sql_statistic
                                         res.trans_result_))) {
           LOG_WARN("fail to commit store", KR(ret));
         }
-      } else { // 远端, 发送rpc
+      } else { // remote, send rpc
         TABLE_LOAD_CONTROL_RPC_CALL(commit, addr, arg, res);
       }
       if (OB_SUCC(ret)) {
@@ -1498,14 +1495,14 @@ int ObTableLoadCoordinator::heart_beat_peer()
     arg.task_id_ = ctx_->ddl_param_.task_id_;
     for (int64_t i = 0; i < coordinator_ctx_->store_infos_.count(); ++i) {
       const ObAddr &addr = coordinator_ctx_->store_infos_.at(i).addr_;
-      if (ObTableLoadUtils::is_local_addr(addr)) { // 本机
+      if (ObTableLoadUtils::is_local_addr(addr)) { // local address
         ObTableLoadStore store(ctx_);
         if (OB_FAIL(store.init())) {
           LOG_WARN("fail to init store", KR(ret));
         } else if (OB_FAIL(store.heart_beat())) {
           LOG_WARN("fail to heart beat store", KR(ret));
         }
-      } else { // 远端, 发送rpc
+      } else { // remote, send rpc
         const int64_t origin_timeout_ts = THIS_WORKER.get_timeout_ts();
         THIS_WORKER.set_timeout_ts(ObTimeUtil::current_time() + HEART_BEAT_RPC_TIMEOUT_US);
         TABLE_LOAD_CONTROL_RPC_CALL(heart_beat, addr, arg);
@@ -1523,7 +1520,7 @@ int ObTableLoadCoordinator::heart_beat()
     ret = OB_NOT_INIT;
     LOG_WARN("ObTableLoadCoordinator not init", KR(ret), KP(this));
   } else {
-    // 心跳是为了让数据节点感知控制节点存活, 控制节点不依赖心跳感知数据节点状态, 忽略失败
+    // Heartbeat is to let data nodes perceive control node survival, control node does not rely on heartbeat to perceive data node status, ignore failure
     heart_beat_peer();
   }
   return ret;
@@ -1545,14 +1542,14 @@ int ObTableLoadCoordinator::pre_start_trans_peers(ObTableLoadCoordinatorTrans *t
     arg.trans_id_ = trans_id;
     for (int64_t i = 0; OB_SUCC(ret) && i < coordinator_ctx_->store_infos_.count(); ++i) {
       const ObAddr &addr = coordinator_ctx_->store_infos_.at(i).addr_;
-      if (ObTableLoadUtils::is_local_addr(addr)) { // 本机
+      if (ObTableLoadUtils::is_local_addr(addr)) { // local address
         ObTableLoadStore store(ctx_);
         if (OB_FAIL(store.init())) {
           LOG_WARN("fail to init store", KR(ret));
         } else if (OB_FAIL(store.pre_start_trans(trans_id))) {
           LOG_WARN("fail to store pre start trans", KR(ret), K(trans_id));
         }
-      } else { // 远端, 发送rpc
+      } else { // remote, send rpc
         TABLE_LOAD_CONTROL_RPC_CALL(pre_start_trans, addr, arg);
       }
     }
@@ -1572,14 +1569,14 @@ int ObTableLoadCoordinator::confirm_start_trans_peers(ObTableLoadCoordinatorTran
     arg.trans_id_ = trans_id;
     for (int64_t i = 0; OB_SUCC(ret) && i < coordinator_ctx_->store_infos_.count(); ++i) {
       const ObAddr &addr = coordinator_ctx_->store_infos_.at(i).addr_;
-      if (ObTableLoadUtils::is_local_addr(addr)) { // 本机
+      if (ObTableLoadUtils::is_local_addr(addr)) { // local address
         ObTableLoadStore store(ctx_);
         if (OB_FAIL(store.init())) {
           LOG_WARN("fail to init store", KR(ret));
         } else if (OB_FAIL(store.confirm_start_trans(trans_id))) {
           LOG_WARN("fail to store confirm start trans", KR(ret), K(trans_id));
         }
-      } else { // 远端, 发送rpc
+      } else { // remote, send rpc
         TABLE_LOAD_CONTROL_RPC_CALL(confirm_start_trans, addr, arg);
       }
     }
@@ -1610,13 +1607,13 @@ int ObTableLoadCoordinator::start_trans(const ObTableLoadSegmentID &segment_id,
               ret = OB_SUCCESS;
             }
           }
-          // 2. 同步到对端
+          // 2. Synchronize to the peer
           else if (OB_FAIL(pre_start_trans_peers(trans))) {
             LOG_WARN("fail to pre start trans peers", KR(ret));
           } else if (OB_FAIL(confirm_start_trans_peers(trans))) {
             LOG_WARN("fail to confirm start trans peers", KR(ret));
           }
-          // 3. 状态设置为running
+          // 3. Set status to running
           else if (OB_FAIL(trans->set_trans_status_running())) {
             LOG_WARN("fail to set trans status running", KR(ret));
           } else {
@@ -1652,14 +1649,14 @@ int ObTableLoadCoordinator::pre_finish_trans_peers(ObTableLoadCoordinatorTrans *
     arg.trans_id_ = trans_id;
     for (int64_t i = 0; OB_SUCC(ret) && i < coordinator_ctx_->store_infos_.count(); ++i) {
       const ObAddr &addr = coordinator_ctx_->store_infos_.at(i).addr_;
-      if (ObTableLoadUtils::is_local_addr(addr)) { // 本机
+      if (ObTableLoadUtils::is_local_addr(addr)) { // local address
         ObTableLoadStore store(ctx_);
         if (OB_FAIL(store.init())) {
           LOG_WARN("fail to init store", KR(ret));
         } else if (OB_FAIL(store.pre_finish_trans(trans_id))) {
           LOG_WARN("fail to store pre finish trans", KR(ret), K(trans_id));
         }
-      } else { // 远端, 发送rpc
+      } else { // remote, send rpc
         TABLE_LOAD_CONTROL_RPC_CALL(pre_finish_trans, addr, arg);
       }
     }
@@ -1679,14 +1676,14 @@ int ObTableLoadCoordinator::confirm_finish_trans_peers(ObTableLoadCoordinatorTra
     arg.trans_id_ = trans_id;
     for (int64_t i = 0; OB_SUCC(ret) && i < coordinator_ctx_->store_infos_.count(); ++i) {
       const ObAddr &addr = coordinator_ctx_->store_infos_.at(i).addr_;
-      if (ObTableLoadUtils::is_local_addr(addr)) { // 本机
+      if (ObTableLoadUtils::is_local_addr(addr)) { // local address
         ObTableLoadStore store(ctx_);
         if (OB_FAIL(store.init())) {
           LOG_WARN("fail to init store", KR(ret));
         } else if (OB_FAIL(store.confirm_finish_trans(trans_id))) {
           LOG_WARN("fail to store confirm finish trans", KR(ret), K(trans_id));
         }
-      } else { // 远端, 发送rpc
+      } else { // remote, send rpc
         TABLE_LOAD_CONTROL_RPC_CALL(confirm_finish_trans, addr, arg);
       }
     }
@@ -1733,7 +1730,7 @@ int ObTableLoadCoordinator::check_peers_trans_commit(ObTableLoadCoordinatorTrans
     is_commit = true;
     for (int64_t i = 0; OB_SUCC(ret) && i < coordinator_ctx_->store_infos_.count(); ++i) {
       const ObAddr &addr = coordinator_ctx_->store_infos_.at(i).addr_;
-      if (ObTableLoadUtils::is_local_addr(addr)) { // 本机
+      if (ObTableLoadUtils::is_local_addr(addr)) { // local address
         ObTableLoadStore store(ctx_);
         if (OB_FAIL(store.init())) {
           LOG_WARN("fail to init store", KR(ret));
@@ -1741,7 +1738,7 @@ int ObTableLoadCoordinator::check_peers_trans_commit(ObTableLoadCoordinatorTrans
                                                   res.error_code_))) {
           LOG_WARN("fail to store get trans status", KR(ret));
         }
-      } else { // 远端, 发送rpc
+      } else { // remote, send rpc
         TABLE_LOAD_CONTROL_RPC_CALL(get_trans_status, addr, arg, res);
       }
       if (OB_SUCC(ret)) {
@@ -1767,11 +1764,11 @@ int ObTableLoadCoordinator::check_trans_commit(ObTableLoadCoordinatorTrans *tran
   bool is_peers_commit = false;
   ObTableLoadIndexLongWait wait_obj(10 * 1000, WAIT_INTERVAL_US);
   while (OB_SUCC(ret)) {
-    // 确认trans状态为frozen
+    // Confirm trans status is frozen
     if (OB_FAIL(trans->check_trans_status(ObTableLoadTransStatusType::FROZEN))) {
       LOG_WARN("fail to check trans status frozen", KR(ret));
     }
-    // 向对端发送pre finish
+    // Send pre finish to the remote end
     else if (OB_FAIL(check_peers_trans_commit(trans, is_peers_commit))) {
       LOG_WARN("fail to check peers trans commit", KR(ret));
     } else if (!is_peers_commit) {
@@ -1840,14 +1837,14 @@ int ObTableLoadCoordinator::abandon_trans_peers(ObTableLoadCoordinatorTrans *tra
     arg.trans_id_ = trans_id;
     for (int64_t i = 0; OB_SUCC(ret) && i < coordinator_ctx_->store_infos_.count(); ++i) {
       const ObAddr &addr = coordinator_ctx_->store_infos_.at(i).addr_;
-      if (ObTableLoadUtils::is_local_addr(addr)) {  // 本机
+      if (ObTableLoadUtils::is_local_addr(addr)) {  // local address
         ObTableLoadStore store(ctx_);
         if (OB_FAIL(store.init())) {
           LOG_WARN("fail to init store", KR(ret));
         } else if (OB_FAIL(store.abandon_trans(trans_id))) {
           LOG_WARN("fail to store abandon trans", KR(ret), K(trans_id));
         }
-      } else {  // 远端, 发送rpc
+      } else {  // remote, send rpc
         TABLE_LOAD_CONTROL_RPC_CALL(abandon_trans, addr, arg);
       }
     }
@@ -1912,7 +1909,7 @@ public:
     for (int64_t i = 0; OB_SUCC(ret) && (i < obj_rows.count()); ++i) {
       const ObTableLoadObjRow &src_obj_row = obj_rows.at(i);
       ObTableLoadObjRow out_obj_row;
-      // 对于客户端导入场景, 需要处理多列或者少列
+      // For the client import scenario, need to handle multiple columns or fewer columns
       if (OB_UNLIKELY(src_obj_row.count_ != ctx_->param_.column_count_)) {
         ret = OB_ERR_COULUMN_VALUE_NOT_MATCH;
         LOG_WARN("column count doesn't match value count", KR(ret), K(src_obj_row),
@@ -1979,7 +1976,7 @@ public:
 private:
   ObTableLoadTableCtx * const ctx_;
   ObTableLoadCoordinatorTrans * const trans_;
-  ObTableLoadTransBucketWriter * const bucket_writer_; // 为了保证接收完本次写入结果之后再让bucket_writer的引用归零
+  ObTableLoadTransBucketWriter * const bucket_writer_; // To ensure that the reference to bucket_writer is reset only after receiving the result of this write operation
 };
 
 int ObTableLoadCoordinator::write(const ObTableLoadTransId &trans_id, int32_t session_id,
@@ -2000,7 +1997,7 @@ int ObTableLoadCoordinator::write(const ObTableLoadTransId &trans_id, int32_t se
       LOG_WARN("fail to get trans", KR(ret));
     } else if (session_id == 0 && FALSE_IT(session_id = trans->get_default_session_id())) {
     }
-    // 取出bucket_writer
+    // retrieve bucket_writer
     else if (OB_FAIL(trans->get_bucket_writer_for_write(bucket_writer))) {
       LOG_WARN("fail to get bucket writer", KR(ret));
     // } else if (OB_FAIL(bucket_writer->advance_sequence_no(session_id, sequence_no, guard))) {
@@ -2012,11 +2009,11 @@ int ObTableLoadCoordinator::write(const ObTableLoadTransId &trans_id, int32_t se
     } else {
       ObTableLoadTask *task = nullptr;
       WriteTaskProcessor *processor = nullptr;
-      // 1. 分配task
+      // 1. assign task
       if (OB_FAIL(ctx_->alloc_task(task))) {
         LOG_WARN("fail to alloc task", KR(ret));
       }
-      // 2. 设置processor
+      // 2. Set processor
       else if (OB_FAIL(task->set_processor<WriteTaskProcessor>(ctx_, trans, bucket_writer, session_id))) {
         LOG_WARN("fail to set write task processor", KR(ret));
       } else if (OB_ISNULL(processor = dynamic_cast<WriteTaskProcessor *>(task->get_processor()))) {
@@ -2025,11 +2022,11 @@ int ObTableLoadCoordinator::write(const ObTableLoadTransId &trans_id, int32_t se
       } else if (OB_FAIL(processor->set_objs(obj_rows, coordinator_ctx_->idx_array_))) {
         LOG_WARN("fail to set objs", KR(ret), K(coordinator_ctx_->idx_array_));
       }
-      // 3. 设置callback
+      // 3. Set callback
       else if (OB_FAIL(task->set_callback<WriteTaskCallback>(ctx_, trans, bucket_writer))) {
         LOG_WARN("fail to set write task callback", KR(ret));
       }
-      // 4. 把task放入调度器
+      // 4. Put task into scheduler
       else if (OB_FAIL(coordinator_ctx_->task_scheduler_->add_task(session_id - 1, task))) {
         LOG_WARN("fail to add task", KR(ret), K(session_id), KPC(task));
       }
@@ -2124,7 +2121,7 @@ public:
 private:
   ObTableLoadTableCtx * const ctx_;
   ObTableLoadCoordinatorTrans * const trans_;
-  ObTableLoadTransBucketWriter * const bucket_writer_; // 为了保证接收完本次写入结果之后再让bucket_writer的引用归零
+  ObTableLoadTransBucketWriter * const bucket_writer_; // To ensure that the reference to bucket_writer is reset only after receiving the result of this write operation
 };
 
 int ObTableLoadCoordinator::flush(ObTableLoadCoordinatorTrans *trans)
@@ -2136,7 +2133,7 @@ int ObTableLoadCoordinator::flush(ObTableLoadCoordinatorTrans *trans)
   } else {
     LOG_DEBUG("coordinator flush");
     ObTableLoadTransBucketWriter *bucket_writer = nullptr;
-    // 取出bucket_writer
+    // retrieve bucket_writer
     if (OB_FAIL(trans->get_bucket_writer_for_flush(bucket_writer))) {
       LOG_WARN("fail to get bucket writer", KR(ret));
     } else if (OB_FAIL(trans->set_trans_status_frozen())) {
@@ -2144,20 +2141,20 @@ int ObTableLoadCoordinator::flush(ObTableLoadCoordinatorTrans *trans)
     } else {
       for (int32_t session_id = 1; OB_SUCC(ret) && session_id <= param_.write_session_count_; ++session_id) {
         ObTableLoadTask *task = nullptr;
-        // 1. 分配task
+        // 1. assign task
         if (OB_FAIL(ctx_->alloc_task(task))) {
           LOG_WARN("fail to alloc task", KR(ret));
         }
-        // 2. 设置processor
+        // 2. Set processor
         else if (OB_FAIL(task->set_processor<FlushTaskProcessor>(ctx_, trans, bucket_writer,
                                                                  session_id))) {
           LOG_WARN("fail to set flush task processor", KR(ret));
         }
-        // 3. 设置callback
+        // 3. Set callback
         else if (OB_FAIL(task->set_callback<FlushTaskCallback>(ctx_, trans, bucket_writer))) {
           LOG_WARN("fail to set flush task callback", KR(ret));
         }
-        // 4. 把task放入调度器
+        // 4. put task into scheduler
         else if (OB_FAIL(coordinator_ctx_->task_scheduler_->add_task(session_id - 1, task))) {
           LOG_WARN("fail to add task", KR(ret), K(session_id), KPC(task));
         }
@@ -2190,14 +2187,14 @@ int ObTableLoadCoordinator::write_peer_leader(const ObTableLoadTransId &trans_id
     LOG_WARN("invalid args", KR(ret));
   } else {
     LOG_DEBUG("coordinator write peer leader", K(addr));
-    if (ObTableLoadUtils::is_local_addr(addr)) { // 本机
+    if (ObTableLoadUtils::is_local_addr(addr)) { // local address
       ObTableLoadStore store(ctx_);
       if (OB_FAIL(store.init())) {
         LOG_WARN("fail to init store", KR(ret));
       } else if (OB_FAIL(store.write(trans_id, session_id, sequence_no, tablet_obj_rows))) {
         LOG_WARN("fail to store write", KR(ret), K(trans_id));
       }
-    } else { // 远端, 发送rpc
+    } else { // remote, send rpc
       common::ObArenaAllocator allocator("TLD_Coord");
       allocator.set_tenant_id(MTL_ID());
       int64_t pos = 0;

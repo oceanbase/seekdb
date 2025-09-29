@@ -20,7 +20,7 @@
 
 namespace obsys {
 /**
-* @brief 生成string的hash值
+* @brief Generate the hash value of string
 */
     struct st_str_hash {
         size_t operator()(const std::string& str) const {
@@ -35,7 +35,7 @@ namespace obsys {
     #define OB_TBSYS_CONFIG obsys::ObSysConfig::getCConfig()
 
     /**
-     * @brief 解析配置文件,并将配置项以key-value的形式存储到内存中
+     * @brief Parse the configuration file, and store the configuration items as key-value pairs in memory
      */
     class ObSysConfig
     {

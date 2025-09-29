@@ -320,8 +320,8 @@ int ObField::get_field_mb_length(const ObObjType type,
       break;
     case ObTimeTC:
       /* KNOWN ISSUE:
-       * 800:11:11，这时候TIME Length = 10
-       * 11:11:11， 这时候TIME Length = 8
+       * 800:11:11, at this time TIME Length = 10
+       * 11:11:11, at this time TIME Length = 8
        */
       length = TIME_MIN_LENGTH + ((accuracy.get_scale() > 0) ? (1 + accuracy.get_scale()) : 0); /* 1 represents the decimal point in 12:12:12.3333 */
       break;

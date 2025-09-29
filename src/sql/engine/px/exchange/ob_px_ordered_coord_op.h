@@ -80,7 +80,7 @@ public:
     ObOrderedReceiveFilter()
         : data_ch_idx_start_(-1), data_ch_idx_end_(-1) {}
     ~ObOrderedReceiveFilter() = default;
-    // idx range 范围左闭右开: [start_idx, end_idx)
+    // idx range range left closed right open: [start_idx, end_idx)
     void set_data_channel_idx_range(int64_t start_idx, int64_t end_idx)
     {
       data_ch_idx_start_ = start_idx;
@@ -90,12 +90,12 @@ public:
     bool pred_process(int64_t ch_idx, dtl::ObDtlChannel *ch) override
     {
       UNUSED(ch);
-      // NOTE: 多个 DFO 的控制信息 channel 创建时间不同，某些可能晚于 ROOT DFO 被调度起来
-      //       所以 heap 的范围可能是中间的一段
-      return (-1 == data_ch_idx_start_) || /* 还没到接收 ROOT DFO 数据，只接受控制消息阶段 */
-          (ch_idx < data_ch_idx_start_) || /* 控制消息 */
-          (ch_idx >= data_ch_idx_end_)  || /* 控制消息 */
-          (curent_ch_idx_ + data_ch_idx_start_ == ch_idx); /* 预期数据消息 */
+      // NOTE: The control information channel creation time for multiple DFOs is different, some may be scheduled later than the ROOT DFO
+      //       so the range of heap might be a segment in the middle
+      return (-1 == data_ch_idx_start_) || /* Haven't received ROOT DFO data yet, only accepting control messages phase */
+          (ch_idx < data_ch_idx_start_) || /* control message */
+          (ch_idx >= data_ch_idx_end_)  || /* control message */
+          (curent_ch_idx_ + data_ch_idx_start_ == ch_idx); /* expected data message */
     }
     OB_INLINE int64_t get_data_channel_start_idx() { return data_ch_idx_start_; }
     void set_current_ch_idx(int64_t ch_idx) { curent_ch_idx_ = ch_idx; };
@@ -138,7 +138,7 @@ private:
   ObPxOrderedCoordOpEventListener listener_;
   ObSerialDfoScheduler serial_scheduler_;
   ObParallelDfoScheduler parallel_scheduler_;
-  ObPxMsgProc msg_proc_; // msg_loop 处理消息的回调函数
+  ObPxMsgProc msg_proc_; // msg_loop processing message callback function
   ObPxFinishSqcResultP sqc_finish_msg_proc_;
   ObPxInitSqcResultP sqc_init_msg_proc_;
   ObBarrierPieceMsgP barrier_piece_msg_proc_;

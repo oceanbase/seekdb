@@ -1092,7 +1092,7 @@ int ObIvfFlatBuildHelper::init_kmeans_ctx(const int64_t dim)
     ret = OB_INVALID_ARGUMENT;
     SHARE_LOG(WARN, "invalid argument", K(ret), K(dim), K(param_));
   } else if ((VIDA_IP == param_.dist_algorithm_ || VIDA_COS == param_.dist_algorithm_) && 
-              FALSE_IT(norm_info = &norm_info_)) { // IP和COS算法需要归一化
+              FALSE_IT(norm_info = &norm_info_)) { // IP and COS algorithms require normalization
   } else if (OB_ISNULL(ivf_build_mem_ctx_)) {
     ret = OB_NOT_INIT;
     SHARE_LOG(WARN, "ivf_build_mem_ctx_ is null", K(ret));

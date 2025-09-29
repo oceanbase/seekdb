@@ -149,7 +149,7 @@ int ObCreateIndexResolver::resolve_index_column_node(
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("fail to check node type", K(ret));
       } else {
-        //如果此node类型不是identifier,那么认为是函数索引.
+        // If this node type is not identifier, then it is considered a function index.
         if (col_node->children_[0]->type_ != T_IDENT) {
           sort_item.is_func_index_ = true;
           cnt_func_index = true;
@@ -198,7 +198,7 @@ int ObCreateIndexResolver::resolve_index_column_node(
           }
         }
       }
-      // 前缀索引的前缀长度
+      // Prefix index prefix length
       if (OB_FAIL(ret)) {
       } else if (NULL != col_node->children_[1]) {
         sort_item.prefix_len_ = static_cast<int32_t>(col_node->children_[1]->value_);
@@ -298,11 +298,10 @@ int ObCreateIndexResolver::resolve_index_column_node(
           LOG_WARN("fail to resolve spatial index constraint", K(ret), K(sort_item.column_name_));
         }
       }
-
-      // 索引排序方式
+      // Index sorting method
       if (OB_FAIL(ret)) {
       } else {
-        //兼容mysql5.7, 降序索引不生效且不报错
+        // Compatible with mysql5.7, descending index does not take effect and no error is reported
         sort_item.order_type_ = common::ObOrderType::ASC;
       }
 
@@ -390,7 +389,7 @@ int ObCreateIndexResolver::resolve_index_option_node(
 
     // index table dop
     if (OB_SUCC(ret)) {
-      // 如果没有指定dop，table_dop_的默认值为1
+      // If dop is not specified, the default value of table_dop_ is 1
       crt_idx_stmt->set_index_dop(table_dop_);
     }
 
@@ -477,8 +476,8 @@ int ObCreateIndexResolver::resolve_index_method_node(
 }
 
 /**
- * @brief 将session中的一些信息添入到arg中
- * @param session 当前session
+ * @brief Add some information from the session to arg
+ * @param session Current session
  * @param crt_idx_stmt stmt
  * @return ret
  */
@@ -540,8 +539,8 @@ int ObCreateIndexResolver::resolve(const ParseNode &parse_tree)
     stmt_ = crt_idx_stmt;
     if_not_exist_node = parse_tree.children_[7];
   }
-  // 将session中的信息添写到 stmt 的 arg 中
-  // 包括 nls_xx_format
+  // Write the information from session to stmt's arg
+  // includes nls_xx_format
   if (OB_SUCC(ret)) {
     if (OB_FAIL(fill_session_info_into_arg(session_info_, crt_idx_stmt))) {
       LOG_WARN("fill_session_info_into_arg failed", K(ret));
@@ -644,7 +643,7 @@ int ObCreateIndexResolver::resolve(const ParseNode &parse_tree)
     LOG_WARN("fail to generate index schema", K(ret));
   } else {
     if (NULL != parse_node.children_[5]) {
-      // 0: 普通分区node // 1: 垂直分区node, 不支持建全局索引时指定垂直分区
+      // 0: normal partition node // 1: vertical partition node, not support specifying vertical partition when building global index
       if (1 != parse_node.children_[5]->num_child_
           || T_PARTITION_OPTION != parse_node.children_[5]->type_) {
         ret = OB_NOT_SUPPORTED;
@@ -654,7 +653,7 @@ int ObCreateIndexResolver::resolve(const ParseNode &parse_tree)
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("node is null", K(ret));
       } else {
-        ParseNode *index_partition_node = parse_node.children_[5]->children_[0]; // 普通分区partition node
+        ParseNode *index_partition_node = parse_node.children_[5]->children_[0]; // ordinary partition node
         if (OB_FAIL(resolve_index_partition_node(index_partition_node, crt_idx_stmt))) {
           LOG_WARN("fail to resolve index partition node", K(ret));
         }
@@ -677,8 +676,8 @@ int ObCreateIndexResolver::resolve(const ParseNode &parse_tree)
 
     if (OB_SUCC(ret)) {
       crt_idx_stmt->set_if_not_exists(NULL != if_not_exist_node);
-      // 设置block size, 如果未指定block size，则使用主表block size
-      // 否则使用默认block_size
+      // Set block size, if block size is not specified, then use the main table block size
+      // Otherwise use default block_size
       if (!is_spec_block_size) {
         ObCreateIndexArg &index_arg = crt_idx_stmt->get_create_index_arg();
         index_arg.index_option_.block_size_ = tbl_schema->get_block_size();

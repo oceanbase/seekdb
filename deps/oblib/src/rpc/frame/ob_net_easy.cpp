@@ -412,8 +412,7 @@ void easy_request_addbuf(easy_request_t *r, easy_buf_t *b)
 {
     easy_message_session_t *ms = r->ms;
     b->session = NULL;
-
-    // 在超时的时间用到
+    // Used at the timeout time
     if ((ms->type == EASY_TYPE_SESSION) ||
             (ms->type == EASY_TYPE_KEEPALIVE_SESSION) ||
             (ms->type == EASY_TYPE_RL_SESSION)) {
@@ -429,8 +428,7 @@ void easy_request_addbuf(easy_request_t *r, easy_buf_t *b)
 
     easy_list_add_tail(&b->node, &ms->c->output);
 }
-
-// easy_pool_alloc_ex函数
+// easy_pool_alloc_ex function
 void *easy_pool_alloc_ex(easy_pool_t *pool, uint32_t size, int align)
 {
     uint8_t *m;
@@ -461,7 +459,7 @@ void *easy_pool_alloc_ex(easy_pool_t *pool, uint32_t size, int align)
     } while (p);
 
     easy_cur_mod_stat = pool->mod_stat;
-    // 重新分配一块出来
+    // Reallocate a block out
     if (p == NULL) {
         m = (uint8_t *)easy_pool_alloc_block(pool, size);
     }

@@ -26,7 +26,7 @@ int ObTableMoveResponseSender::get_replica(const uint64_t table_id,
 {
   int ret = OB_SUCCESS;
   bool is_cache_hit = false;
-  int64_t expire_renew_time = INT64_MAX; //对于get接口，需要传一个最大值，表示需要拿最新的location cache，并让老的失效掉
+  int64_t expire_renew_time = INT64_MAX; // For the get interface, a maximum value needs to be passed, indicating that the latest location cache should be retrieved and the old one invalidated
   share::ObLSID ls_id;
   share::ObLSLocation ls_loc;
   share::ObLSReplicaLocation replica_loc;

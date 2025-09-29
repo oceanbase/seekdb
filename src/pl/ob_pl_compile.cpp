@@ -165,7 +165,7 @@ int ObPLCompiler::init_anonymous_ast(
       }
       pl_type.reset();
       int64_t int_value = 0;
-      // 参数化整型常量按照会按照numbger来生成param
+      // Parameterized integer constants will be generated as numbger param
       if (!is_prepare_protocol
           && (ObNumberType == params->at(i).get_type() || ObUNumberType == params->at(i).get_type())
           && params->at(i).get_number().is_valid_int64(int_value)
@@ -195,8 +195,7 @@ int ObPLCompiler::compile(
   uint64_t block_hash = OB_INVALID_ID;
   int64_t resolve_end = 0;
   ObPLASHGuard plash_guard(ObPLASHGuard::ObPLASHStatus::IS_PLSQL_COMPILATION);
-
-  //Step 1：构造匿名块的ObPLFunctionAST
+  //Step 1: Construct the ObPLFunctionAST for the anonymous block
   HEAP_VAR(ObPLFunctionAST, func_ast, allocator_) {
 
     func_ast.set_db_name(session_info_.get_database_name());
@@ -298,7 +297,7 @@ int ObPLCompiler::compile(
           }
         }
         if (OB_SUCC(ret)) {
-          //anonymous + ps情况func也需要进plan cache，因此需要设置version
+          //anonymous + ps situation func also needs to enter plan cache, therefore version needs to be set
           int64_t tenant_id = session_info_.get_effective_tenant_id();
           int64_t tenant_schema_version = OB_INVALID_VERSION;
           int64_t sys_schema_version = OB_INVALID_VERSION;
@@ -631,8 +630,8 @@ int ObPLCompiler::update_schema_object_dep_info(ObIArray<ObSchemaObjVersion> &dp
           dep.set_dep_obj_owner_id(owner_id);
           dep.set_schema_version(schema_version);
           OZ (dep.insert_schema_object_dependency(trans));
-          // 理论上pl是单线程编译的，但是如果把这个相同的pl在多个observer上同时编译，这个依赖关系可能会多次重建。
-          // 发生这种情况下，简单的忽略错误码
+          // Theoretically, pl is single-threaded compiled, but if the same pl is compiled simultaneously on multiple observers, this dependency relationship may be rebuilt multiple times.
+          // In this case, simply ignore the error code
           if (OB_ERR_PRIMARY_KEY_DUPLICATE == ret) {
             ret = OB_SUCCESS;
           }
@@ -1026,7 +1025,7 @@ int ObPLCompiler::init_function(const share::schema::ObRoutineInfo *routine, ObP
       if (routine->is_invoker_right()) {
         func.set_invoker_right();
       }
-      // 对于function而言，输出参数也在params里面，这里不能简单的按照param_count进行遍历
+      // For function, output parameters are also in params, here we cannot simply iterate according to param_count
       for (int64_t i = 0; OB_SUCC(ret) && i < routine->get_routine_params().count(); ++i) {
         ObRoutineParam *param = routine->get_routine_params().at(i);
         int64_t param_pos = param->get_param_position();
@@ -1034,7 +1033,7 @@ int ObPLCompiler::init_function(const share::schema::ObRoutineInfo *routine, ObP
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("routine param is NULL", K(i), K(ret));
         } else if (param->is_ret_param()) {
-          // 对于返回值, 既不是in也不是out, 不做处理
+          // For the return value, if it is neither in nor out, do not process
         } else {
            if (param->is_inout_sp_param() || param->is_out_sp_param()) {
             if (OB_FAIL(func.add_out_arg(param_pos - 1))) {
@@ -1170,7 +1169,7 @@ int ObPLCompiler::generate_package_cursors(
         OZ (row_desc->deep_copy(package.get_allocator(), *(ast_cursor->get_row_desc()), false));
       }
       OZ (cursor_type.deep_copy(package.get_allocator(), ast_cursor->get_cursor_type()));
-      //Sql参数表达式,需要Copy下
+      //Sql parameter expression, need to Copy it
       ObSEArray<int64_t, 4> sql_params;
       for (int64_t i = 0; OB_SUCC(ret) && i < ast_cursor->get_sql_params().count(); ++i) {
         ObRawExpr *expr = NULL;
@@ -1179,14 +1178,14 @@ int ObPLCompiler::generate_package_cursors(
                                       package_ast.get_expr(ast_cursor->get_sql_params().at(i)),
                                       expr));
         CK (OB_NOT_NULL(expr));
-        //不再构造Exprs,直接将表达式存在int64的数组上
+        //No longer construct Exprs, directly store the expression in an int64 array
         OZ (sql_params.push_back(reinterpret_cast<int64_t>(expr)));
       }
       OZ (cursor_table.add_cursor(ast_cursor->get_package_id(),
                                   ast_cursor->get_routine_id(),
-                                  ast_cursor->get_index(),//代表在Package符号表中的位置
+                                  ast_cursor->get_index(),//represents the position in the Package symbol table
                                   sql,//Cursor Sql
-                                  sql_params,//Cursor参数表达式
+                                  sql_params,//Cursor parameter expression
                                   ps_sql,
                                   ast_cursor->get_stmt_type(),
                                   ast_cursor->is_for_update(),

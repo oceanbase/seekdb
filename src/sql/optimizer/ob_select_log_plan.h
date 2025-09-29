@@ -546,7 +546,7 @@ private:
      */
   int allocate_plan_top();
   /**
-   * 处理select子句里的子查询，生成SubPlan
+   * Process subqueries in the select clause, generate SubPlan
    * @param
    * @return
    */
@@ -836,7 +836,7 @@ int generate_window_functions_plan(WinFuncOpHelper &win_func_helper,
 
   /**
    * @brief set_default_sort_directions
-   * 确定窗口函数partition表达式的排序方向
+   * Determine the sort direction for the window function partition expression
    */
   int set_default_sort_directions(const ObIArray<ObWinFunRawExpr*> &winfunc_entries,
                                   const ObIArray<ObRawExpr *> &part_exprs,

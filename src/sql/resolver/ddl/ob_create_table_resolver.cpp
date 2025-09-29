@@ -87,8 +87,8 @@ int ObCreateTableResolver::add_primary_key_part(const ObString &column_name,
   } else if (OB_FAIL(primary_keys_.push_back(col->get_column_id()))) {
     SQL_RESV_LOG(WARN, "push primary key to array failed", K(ret));
   } else {
-    // mysql 模式下，建表时主键列被 set null 或被 set default value = null，都要报错
-    // oracle 模式下，建表时主键列被 set null 或被 set default value = null，都不会报错，所以跳过下面这个检查
+    // In mysql mode, when creating a table, if the primary key column is set null or set default value = null, an error should be reported
+    // oracle mode, when creating a table, if the primary key column is set null or set default value = null, no error will be reported, so skip the following check
     ObColumnResolveStat *stat = NULL;
     for (int64_t i = 0; NULL == stat && OB_SUCC(ret) && i < stats.count(); ++i) {
       if (stats.at(i).column_id_ == col->get_column_id()) {
@@ -174,8 +174,7 @@ int ObCreateTableResolver::add_hidden_external_table_pk_col()
   }
   return ret;
 }
-
-//为临时表做额外的信息设置
+// Set additional information for the temporary table
 int ObCreateTableResolver::set_temp_table_info(ObTableSchema &table_schema, ParseNode *commit_option_node)
 {
   int ret = OB_SUCCESS;
@@ -188,7 +187,7 @@ int ObCreateTableResolver::set_temp_table_info(ObTableSchema &table_schema, Pars
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "obproxy version is too old, create temporary table");
   } else {
     table_schema.set_table_type(TMP_TABLE);
-    table_schema.set_session_id(session_info_->get_sessid_for_table()); ////设置session_id和session创建时间, 用于清理时的判断, oracle功能不同不需要设置
+    table_schema.set_session_id(session_info_->get_sessid_for_table()); ////Set session_id and session creation time, used for judgment during cleanup, Oracle function is different and does not need to be set
 
     table_schema.set_sess_active_time(ObTimeUtility::current_time());
   }
@@ -273,7 +272,7 @@ int ObCreateTableResolver::resolve(const ParseNode &parse_tree)
       if (NULL != create_table_node->children_[0]) {
           switch (create_table_node->children_[0]->type_) {
             case T_TEMPORARY:
-              if (create_table_node->children_[5] != NULL) { //临时表不支持分区
+              if (create_table_node->children_[5] != NULL) { // Temporary table does not support partitioning
                 ret = OB_ERR_TEMPORARY_TABLE_WITH_PARTITION;
               } else if (lib::is_mysql_mode()) {
                 ret = OB_NOT_SUPPORTED;
@@ -365,15 +364,15 @@ int ObCreateTableResolver::resolve(const ParseNode &parse_tree)
           create_table_stmt->set_database_id(database_id);
         }
       } else {
-        //创建表时，resolver往RS层传递database_name，而不是database_id,
-        //后面产生临时的schema_checker，需要用到database_id,
-        //所以这里使用任意值设置database_id,
-        //resolve结束时，将database_id设置成OB_INVALID_ID
+        // When creating a table, resolver passes database_name to the RS layer instead of database_id,
+        // Generate temporary schema_checker, need to use database_id,
+        // So here we use an arbitrary value to set database_id,
+        // resolve ends, set database_id to OB_INVALID_ID
         create_table_stmt->set_database_id(generate_table_id());
       }
-      // string列长度及default value长度的判断逻辑依赖于列的字符集类型
-      // mysql的行为是若列指定了字符集则用指定的，反之用表的字符集
-      // 因此需要在resolve_table_elements之前resolve table charset&collation
+      // string column length and default value length judgment logic depends on the character set type of the column
+      // mysql's behavior is if a column specifies a character set then use the specified one, otherwise use the table's character set
+      // Therefore need to resolve table charset&collation before resolve_table_elements
       if (OB_SUCC(ret)) {
         if (OB_FAIL(resolve_table_charset_info(create_table_node->children_[4]))) {
           SQL_RESV_LOG(WARN, "fail to resolve charset and collation of table", K(ret));
@@ -452,7 +451,7 @@ int ObCreateTableResolver::resolve(const ParseNode &parse_tree)
           }
           if (OB_SUCC(ret)) {
             reset();
-            // 当用户建表未指定主键时，内部实现为新无主键表，暂不支持用户指定TableOrganizationFormat
+            // When the user creates a table without specifying a primary key, it is internally implemented as a new table without a primary key, TableOrganizationFormat specified by the user is currently not supported
             if (0 == get_primary_key_size() || is_organization_set_to_heap()) {
               // change default no pk to heap table
               table_mode_.table_organization_mode_ = is_organization_set_to_heap() ? TOM_HEAP_ORGANIZED : TOM_INDEX_ORGANIZED;
@@ -492,8 +491,8 @@ int ObCreateTableResolver::resolve(const ParseNode &parse_tree)
             } else {
               table_schema.set_collation_type(collation_type_);
               table_schema.set_charset_type(charset_type_);
-              //不再需要这个步骤。在resolve开始的时候，就直接先将表的collation/charset信息解析出来，等到resolve列的信息时，已经能够获取
-              //表的collation/charset信息
+              // No longer need this step. At the beginning of resolve, directly parse out the collation/charset information of the table, by the time column information is resolved, it can already be obtained
+              // Table's collation/charset information
               //if (OB_FAIL(table_schema.fill_column_collation_info())) {
               //  SQL_RESV_LOG(WARN, "fail to fill column collation info", K(ret), K(table_name_));
               //} else {
@@ -583,7 +582,7 @@ int ObCreateTableResolver::resolve(const ParseNode &parse_tree)
           } else {
             create_table_stmt->set_database_id(OB_INVALID_ID);
           }
-          //查询建表或创建临时表T时, 记录接受请求的obs地址obs#1, 用于obs后台job清理时, 限制T仅可由当初创建时的obs#1 drop
+          // Query table creation or temporary table T creation time, record the received request obs address obs#1, used for obs backend job cleanup, to restrict T can only be dropped by the original obs#1
           if (OB_SUCC(ret) && (is_temporary_table || is_create_as_sel)) {
             char create_host_str[OB_MAX_HOST_NAME_LENGTH];
             MYADDR.ip_port_to_string(create_host_str, OB_MAX_HOST_NAME_LENGTH);
@@ -593,8 +592,7 @@ int ObCreateTableResolver::resolve(const ParseNode &parse_tree)
             }
           }
         }
-
-        //放到临时表信息设置后解析, 因为涉及临时表不支持外键引用的报错检查
+        // put after parsing temporary table information settings, because it involves error checking for foreign key reference not supported by temporary tables
         if (OB_SUCC(ret)) {
           if (OB_FAIL(resolve_index(table_element_list_node, index_node_position_list))) {
             SQL_RESV_LOG(WARN, "resolve index failed", K(ret));
@@ -673,14 +671,10 @@ int ObCreateTableResolver::resolve(const ParseNode &parse_tree)
   }
   return ret;
 }
-
-// 生成主键列名字构成的 array
-
-// 生成有 index_arg_list 里 uk 的下标构成的 array
-
-// 检查建表时主键和唯一索是否建到完全相同（包括顺序）的列或列族上
-
-// 检查建表时唯一索引和唯一索引是否建到完全相同（包括顺序）的列或列族上
+// Generate array of primary key column names
+// Generate an array composed of the indices of uk in index_arg_list
+// Check if the primary key and unique index are built on exactly the same (including order) columns or column families
+// Check if the unique index and unique index are built on exactly the same (including order) columns or column families
 
 int ObCreateTableResolver::resolve_partition_option(
     ParseNode *node, ObTableSchema &table_schema, const bool is_partition_option_node_with_opt)
@@ -1101,8 +1095,8 @@ int ObCreateTableResolver::resolve_table_elements(const ParseNode *node,
                                                   ObArray<int> &index_node_position_list,
                                                   ObArray<int> &foreign_key_node_position_list,
                                                   ObArray<int> &table_level_constraint_list,
-                                                  const int resolve_rule) //查询建表会调用两次, 第一次仅解析列
-                                                                          //第二次解析非列
+                                                  const int resolve_rule) // Query table creation will call twice, first time only parse columns
+                                                                          // Second parsing non-column
 {
   int ret = OB_SUCCESS;
   bool is_oracle_mode = false;
@@ -1134,11 +1128,11 @@ int ObCreateTableResolver::resolve_table_elements(const ParseNode *node,
     table_schema.set_tenant_id(tenant_id);
     bool has_visible_col = false;
     bool primary_key_set_in_heap_table = false;
-    // 将经过 resolve_column_definition 后的 column schema 存放在 resolved_cols 中
-    // 为了支持生成列按照任意顺序定义，在生成全部 column_schema 之后，再按照统一存放到 table_schema 中
+    // Store the column schema after resolve_column_definition in resolved_cols
+    // To support generating columns in any order, all column_schema are generated first and then uniformly stored in table_schema
     ObSEArray<ObColumnSchemaV2, SEARRAY_INIT_NUM> resolved_cols;
-    //列需要根据租户id区分大小写,这里先把租户id设置进table_schema
-    //RESOLVE_NON_COL需要将查询中的列添加到stats中以便解析PK约束等信息
+    // The column needs to be case-sensitive based on tenant id, here we first set the tenant id into table_schema
+    //RESOLVE_NON_COL needs to add the columns in the query to stats in order to resolve PK constraint information etc.
     if (OB_FAIL(ret)) {
       //do nothing ...
     } else if (RESOLVE_NON_COL == resolve_rule) {
@@ -1148,9 +1142,8 @@ int ObCreateTableResolver::resolve_table_elements(const ParseNode *node,
     } else if (OB_FAIL(check_column_name_duplicate(node))) {
       LOG_WARN("check_column_name_duplicate fail", K(ret));
     }
-
-    // 为了实现以任意顺序定义生成列，需要遍历两次 node
-    // 第一次遍历，解析所有列的列名，生成 column_schema 并存储在 resolved_cols
+    // To implement defining generated columns in any order, we need to traverse the node twice
+    // First traversal, parse all column names, generate column_schema and store in resolved_cols
     for (int32_t i = 0; OB_SUCC(ret) && i < node->num_child_; ++i) {
       ParseNode *element = node->children_[i];
       CK (OB_NOT_NULL(element));
@@ -1185,8 +1178,8 @@ int ObCreateTableResolver::resolve_table_elements(const ParseNode *node,
     }
 
     int64_t resolved_cols_count = resolved_cols.count();
-    // 第二遍遍历，利用 resolved_cols 解析出全部 column schema 并保存到 table_schema 中
-    // 并解析 index 等
+    // Second pass traversal, use resolved_cols to parse out all column schema and save to table_schema
+    // And parse index etc
     for (int32_t i = 0, ele_pos = 0; OB_SUCC(ret) && i < node->num_child_; ++i) {
       ParseNode *element = node->children_[i];
       CK (OB_NOT_NULL(element));
@@ -1202,7 +1195,7 @@ int ObCreateTableResolver::resolve_table_elements(const ParseNode *node,
           ObColumnSchemaV2 &column = resolved_cols.at(ele_pos);
           ObColumnResolveStat stat;
           common::ObString pk_name;
-          // ele_pos + 1, 指向下一个 column_schema
+          // ele_pos + 1, points to the next column_schema
           ++ele_pos;
           ObString tmp_str[ObNLSFormatEnum::NLS_MAX];
           tmp_str[ObNLSFormatEnum::NLS_DATE] = session_info_->get_local_nls_date_format();
@@ -1296,11 +1289,11 @@ int ObCreateTableResolver::resolve_table_elements(const ParseNode *node,
                     SQL_RESV_LOG(WARN, "add primary key failed");
                   } else {
                     column.set_rowkey_position(get_primary_key_size());
-                    // 判断是否是 oracle 模式, oracle 模式下才需要给主键一个约束名
+                    // Determine if it is oracle mode, a constraint name needs to be given to the primary key only in oracle mode
                     if (session_info_->is_oracle_compatible()) {
                       ObCreateTableStmt *create_table_stmt = static_cast<ObCreateTableStmt*>(stmt_);
                       ObSEArray<ObConstraint, 4> &csts = create_table_stmt->get_create_table_arg().constraint_list_;
-                      // 加 pk 到 cst_list 里面
+                      // Add pk to cst_list inside
                       if (OB_FAIL(resolve_pk_constraint_node(*element, pk_name, csts))) {
                         SQL_RESV_LOG(WARN, "resolve constraint failed", K(ret));
                       }
@@ -1428,7 +1421,7 @@ int ObCreateTableResolver::resolve_table_elements(const ParseNode *node,
           SQL_RESV_LOG(WARN, "add index node failed", K(ret));
         } else { /*do nothing*/ }
       } else if (T_FOREIGN_KEY == element->type_) {
-        // FIXME: 外键最大数量限制和 index 数量一样
+        // FIXME: foreign key maximum quantity limit is the same as index quantity
         if (OB_MAX_INDEX_PER_TABLE == foreign_key_node_position_list.count()) {
           ret = OB_ERR_TOO_MANY_KEYS;
           LOG_USER_ERROR(OB_ERR_TOO_MANY_KEYS, OB_MAX_INDEX_PER_TABLE);
@@ -1480,9 +1473,9 @@ int ObCreateTableResolver::resolve_table_elements(const ParseNode *node,
         SQL_RESV_LOG(WARN, "each table can only have an identity column", K(ret));
       }
     }
-    // 一个表中至少有一个列为 visible 列
+    // A table must have at least one column as a visible column
     if (OB_SUCC(ret)) {
-      // RESOLVE_NON_COL == resolve_rule 时，只解析非列定义
+      // RESOLVE_NON_COL == resolve_rule when, only parse non-column definitions
       if (RESOLVE_NON_COL != resolve_rule && !has_visible_col) {
         ret = OB_ERR_ONLY_HAVE_INVISIBLE_COL_IN_TABLE;
         SQL_RESV_LOG(WARN, "table must have at least one column that is not invisible", K(ret));
@@ -1504,8 +1497,7 @@ int ObCreateTableResolver::resolve_table_elements(const ParseNode *node,
         LOG_USER_ERROR(OB_NOT_SUPPORTED, "normal columns");
       }
     }
-
-    // MySQL 模式下，一个表至少有一个非 hidden 列
+    // MySQL mode, a table must have at least one non-hidden column
     if (OB_SUCC(ret) && lib::is_mysql_mode()) {
       bool has_non_hidden_column = false;
       for (int64_t i = 0;
@@ -1548,7 +1540,7 @@ int ObCreateTableResolver::resolve_table_elements(const ParseNode *node,
         SQL_RESV_LOG(WARN, "multiple primary key defined");
       } else if (NULL == primary_node_in_heap_table) {
         // do nothing
-      // todo@lanyi 该函数放到单独文档
+      // todo@lanyi This function should be placed in a separate document
       } else if (OB_FAIL(resolve_primary_key_node_in_heap_table(primary_node_in_heap_table, stats, resolved_cols))) {
         SQL_RESV_LOG(WARN, "resolve_primary_key_node_in_heap_table failed", K(ret));
       }
@@ -1655,8 +1647,7 @@ int ObCreateTableResolver::resolve_insert_mode(const ParseNode *parse_tree)
   }
   return ret;
 }
-
-//解析column_list和查询, 然后根据建表语句中的opt_column_list(可能无)和查询, 设置新表的列名和数据类型
+// Parse column_list and query, then set the column names and data types of the new table based on opt_column_list (which may be absent) and the query
 int ObCreateTableResolver::resolve_table_elements_from_select(const ParseNode &parse_tree)
 {
   int ret = OB_SUCCESS;
@@ -1669,7 +1660,7 @@ int ObCreateTableResolver::resolve_table_elements_from_select(const ParseNode &p
   select_resolver.params_.is_specified_col_name_ = parse_tree.num_child_ > 3 &&
                                                    parse_tree.children_[3] != NULL &&
                                                    T_TABLE_ELEMENT_LIST == parse_tree.children_[3]->type_;
-  //select层不应该看到上层的insert stmt的属性，所以upper scope stmt应该为空
+  // select layer should not see the insert stmt's attributes from the upper layer, so the upper scope stmt should be empty
   select_resolver.set_parent_namespace_resolver(NULL);
   if (lib::is_mysql_mode()
         && OB_NOT_NULL(params_.query_ctx_)
@@ -1710,7 +1701,7 @@ int ObCreateTableResolver::resolve_table_elements_from_select(const ParseNode &p
       ObColumnSchemaV2 column;
       create_table_stmt->set_sub_select(select_stmt);
       const int64_t create_table_column_count = table_schema.get_column_count();
-      //检查查询项之间有无重名, 有则报错; 查询项和表定义中列名是可以重名的;
+      // Check for duplicate names among query items, if any, report an error; query item names can be the same as column names in the table definition;
       for (int64_t i = 0; OB_SUCC(ret) && i < select_items.count(); ++i) {
         const SelectItem &cur_item = select_items.at(i);
         const ObString *cur_name = NULL;
@@ -1801,7 +1792,7 @@ int ObCreateTableResolver::resolve_table_elements_from_select(const ParseNode &p
           }
           if (OB_FAIL(ret)) {
             // do nothing
-          } else if (expr->get_result_type().is_null()) { //bug16503918, NULL需要替换为binary(0)
+          } else if (expr->get_result_type().is_null()) { //bug16503918, NULL needs to be replaced with binary(0)
             const ObAccuracy binary_accuracy(0);
             ObObjMeta binary_meta;
             binary_meta.set_binary();
@@ -1839,7 +1830,7 @@ int ObCreateTableResolver::resolve_table_elements_from_select(const ParseNode &p
             if (OB_NOT_NULL(org_column)) {
               bool need_set_nullable = !ObOptimizerUtil::find_item(cols_with_nullable_specified_, 
                                                                    org_column->get_column_name_str());
-              //同名列存在, 为了和mysql保持一致, 需要调整原列的顺序
+              // Same column name exists, to keep consistent with mysql, the order of the original column needs to be adjusted
               ObColumnSchemaV2 new_column;
               if (OB_FAIL(new_column.assign(*org_column))) {
                 LOG_WARN("fail to assign column", KR(ret), KPC(org_column));
@@ -1850,7 +1841,7 @@ int ObCreateTableResolver::resolve_table_elements_from_select(const ParseNode &p
               }
               if (OB_FAIL(ret)) {
               } else if (1 == table_schema.get_column_count()) {
-                //do nothing, 只有一列就不用调整了
+                //do nothing, only one column so no adjustment needed
                 if (need_set_nullable && OB_FAIL(set_nullable_for_cta_column(select_stmt, 
                                                                              *org_column, 
                                                                              expr, 
@@ -1971,7 +1962,7 @@ int ObCreateTableResolver::generate_index_arg(const bool process_heap_table_prim
     SQL_RESV_LOG(WARN, "set storing column failed", K(ret));
   } else {
     ObIndexType type = INDEX_TYPE_IS_NOT;
-    //index默认是global的，如果不指定的话，但oracle临时表是内部转换的, 只能是局部的
+    //index default is global, if not specified, but oracle temporary table is internally converted, can only be local
     if (NOT_SPECIFIED == index_scope_) {
       // MySQL default index mode is local,
       // and Oracle default index mode is global
@@ -2029,7 +2020,7 @@ int ObCreateTableResolver::generate_index_arg(const bool process_heap_table_prim
           }
         } 
         if (OB_SUCC(ret)) {
-          type = INDEX_TYPE_VEC_DELTA_BUFFER_LOCAL; // 需要考虑ivf、hnsw、spiv这三种模式，其中ivf索引又分成ivfflat，ivfsq8，ivfpq三类
+          type = INDEX_TYPE_VEC_DELTA_BUFFER_LOCAL; // Need to consider ivf, hnsw, spiv these three modes, where ivf index is divided into ivfflat, ivfsq8, ivfpq three categories
         }
       } else if (FTS_KEY == index_keyname_) {
         if (tenant_data_version < DATA_VERSION_4_3_1_0) {
@@ -2533,7 +2524,7 @@ int ObCreateTableResolver::resolve_index_node(const ParseNode *node)
                 LOG_WARN("not support desc index now", K(ret));
                 LOG_USER_ERROR(OB_NOT_SUPPORTED, "desc index");
               } else {
-                //兼容mysql5.7, 降序索引不生效且不报错
+                // Compatible with mysql5.7, descending index does not take effect and does not report an error
                 sort_item.order_type_ = common::ObOrderType::ASC;
               }
               ObColumnNameHashWrapper column_key(column_name);

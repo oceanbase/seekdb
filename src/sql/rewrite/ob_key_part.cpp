@@ -344,7 +344,7 @@ int ObKeyPart::merge_two_in_keys(ObKeyPart *other, const SameValIdxMap &lr_idx)
 }
 
 /*
- * 整个链都可以表示成and，没有多余的东西
+ * The entire chain can be represented as and, with nothing extra
  *  (A or B) and C    general_or_next is null
  *  (A and C) or (B and C)    general_or_next is NULL or (B and C) ?
  *  (A and B) or C    general_or_next is C
@@ -635,8 +635,8 @@ OB_DEF_SERIALIZE(ObKeyPart)
 OB_DEF_DESERIALIZE(ObKeyPart)
 {
   int ret = OB_SUCCESS;
-  //要做到向前兼容，因为null_safe的范围比范围比not null safe的范围更大，对于老版本没有去filter的plan
-  //宁愿range变得更大，不能接受range被缩小，所以这里将null_safe_初始化为true
+  // To ensure forward compatibility, because the range of null_safe is larger than that of not null safe, for old versions without filtering the plan
+  // Prefer range to become larger, cannot accept range being reduced, so here null_safe_ is initialized to true
   null_safe_ = true;
   OB_UNIS_DECODE(id_);
   OB_UNIS_DECODE(pos_);

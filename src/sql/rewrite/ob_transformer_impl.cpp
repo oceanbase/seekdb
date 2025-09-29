@@ -274,7 +274,7 @@ int ObTransformerImpl::do_transform(ObDMLStmt *&stmt)
         LOG_WARN("failed to transform one rule set", K(ret));
       }
     } else {
-      //unlikely need_types 特殊处理, 把所有位置取出来重新排序。
+      //unlikely need_types special processing, put all positions out and re-sort.
       if (OB_FAIL(transform_random_order(stmt, query_ctx, need_types, iter_count))) {
         LOG_WARN("failed to transform random order", K(ret));
       }
@@ -546,7 +546,7 @@ int ObTransformerImpl::choose_rewrite_rules(ObDMLStmt *stmt, uint64_t &need_type
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("stmt is null", K(ret), K(stmt));
   } else if (sql_ctx->is_batch_params_execute()) {
-    need_types = 0; //如果是batch优化暂时不做改写
+    need_types = 0; // if it is batch optimization, do not rewrite for now
   } else if (OB_FAIL(check_stmt_functions(stmt, func))) {
     LOG_WARN("failed to check stmt functions", K(ret));
   } else if (OB_FAIL(check_temp_table_functions(stmt, func))) {

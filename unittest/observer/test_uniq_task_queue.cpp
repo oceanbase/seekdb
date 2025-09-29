@@ -174,7 +174,7 @@ TEST_F(TestUniqTaskQueue, test_concurrency_execute)
   ObPartitionKey sys_key(sys_table_id, partition_id, partition_cnt);
   ObPartitionKey user_key(user_table_id, partition_id, partition_cnt);
   ObPTUpdateTask task;
-  //同一个partition不同的key，作为不同的batch进行处理
+  // Same partition different keys, processed as different batches
   for (int64_t i = 1; i <= 3000; i++) {
     EXPECT_EQ(OB_SUCCESS, task.set_update_task(core_key, i));
     EXPECT_EQ(OB_SUCCESS, queue.add(task));
@@ -183,7 +183,7 @@ TEST_F(TestUniqTaskQueue, test_concurrency_execute)
     sleep(3);
   }
   EXPECT_EQ(updater.batch_count(), 3000);
-  //不同的partition， 可以作为一个batch 处理
+  // Different partitions can be processed as one batch
   int64_t data_version = 4;
   for (int64_t i = 0; i < 3000; i++) {
     ObPartitionKey sys_key(sys_table_id, i, 3000);

@@ -40,8 +40,7 @@ extern "C"
 using namespace oceanbase::common;
 using std::cout;
 using std::endl;
-
-// 必须实现以下4个函数
+// Must implement the following 4 functions
 void *parser_alloc_buffer(void *malloc_pool, const int64_t buff_size)
 {
   UNUSED(malloc_pool);
@@ -142,7 +141,7 @@ void test_fast_parser()
   memset(&parse_result, 0, sizeof(parse_result));
   parse_result.is_fp_ = true;
   parse_result.is_multi_query_ = false;
-  parse_result.malloc_pool_ = &tmp_ptr; // 为了parse_malloc内部的检查，malloc_pool在正常情况下绝对不能为空
+  parse_result.malloc_pool_ = &tmp_ptr; // For the internal check in parse_malloc, malloc_pool must absolutely not be empty under normal circumstances
   parse_result.is_ignore_hint_ = false;
   parse_result.need_parameterize_ = true;
   parse_result.pl_parse_info_.is_pl_parse_ = false;
@@ -212,7 +211,7 @@ void test_sql_parser()
   parse_result.sql_mode_ = DEFAULT_MYSQL_MODE;
   parse_result.is_fp_ = false;
   parse_result.is_multi_query_ = false;
-  parse_result.malloc_pool_ = &tmp_ptr;  // 为了parse_malloc内部的检查，malloc_pool在正常情况下绝对不能为空
+  parse_result.malloc_pool_ = &tmp_ptr;  // For the internal check in parse_malloc, malloc_pool must absolutely not be empty under normal circumstances
   parse_result.is_ignore_hint_ = false;
   parse_result.need_parameterize_ = true;
   parse_result.pl_parse_info_.is_pl_parse_ = false;
@@ -260,7 +259,7 @@ void setup_parse_result(ParseResult &parse_result, int &tmp_ptr)
   parse_result.sql_mode_ = DEFAULT_MYSQL_MODE;
   parse_result.is_fp_ = false;
   parse_result.is_multi_query_ = false;
-  parse_result.malloc_pool_ = &tmp_ptr;  // 为了parse_malloc内部的检查，malloc_pool在正常情况下绝对不能为空
+  parse_result.malloc_pool_ = &tmp_ptr;  // For the internal check in parse_malloc, malloc_pool must absolutely not be empty under normal circumstances
   parse_result.is_ignore_hint_ = false;
   parse_result.need_parameterize_ = true;
   parse_result.pl_parse_info_.is_pl_parse_ = false;

@@ -39,8 +39,8 @@ struct ObReqTimeInfo: public common::ObDLinkBase<ObReqTimeInfo>
   void update_start_time()
   {
     if (0 == reentrant_cnt_) {
-      // currrent_monotonic_time只保证时间不会退
-      // 并不能保证时间一定递增，所以这里检测逻辑用start_time_ > end_time_
+      // currrent_monotonic_time only guarantees that time will not go backwards
+      // Cannot guarantee that time is always increasing, so the detection logic here uses start_time_ > end_time_
       if (OB_UNLIKELY(start_time_ > end_time_)) {
         SERVER_LOG_RET(ERROR, OB_INVALID_ARGUMENT, "invalid start and end time", K(start_time_),
                    K(end_time_), K(this));
@@ -54,7 +54,7 @@ struct ObReqTimeInfo: public common::ObDLinkBase<ObReqTimeInfo>
   {
     --reentrant_cnt_;
     if (0 == reentrant_cnt_) {
-      // 原因同上
+      // Reason same as above
       if (OB_UNLIKELY(start_time_ < end_time_)) {
         SERVER_LOG_RET(ERROR, OB_INVALID_ARGUMENT, "invalid start and end time", K(start_time_),
                    K(end_time_), K(this));
@@ -113,11 +113,10 @@ public:
       } else {
         int64_t cur_start_time = cur->start_time_;
         int64_t cur_end_time = cur->end_time_;
-
-        // start_time == end_time 线程可能在执行、也可能已经结束，这种情况取start_time作为安全时间
-        // start_time > end_time 线程已经在执行，取start_time作为安全时间
-        // start_ime == end_time == 0, 线程都没有执行过，这时候取current_time作为安全时间
-        // start_time < end_time，线程已经结束，取current_time作为安全时间
+        // start_time == end_time the thread may be executing or may have already ended, in this case, use start_time as the safe time
+        // start_time > end_time thread is already running, take start_time as the safe time
+        // start_time == end_time == 0, threads have never been executed, at this time take current_time as the safe time
+        // start_time < end_time, the thread has already ended, take current_time as the safe time
         int64_t cur_safe_time = (cur_end_time > cur_start_time
                                 || (cur_end_time == cur_start_time
                                     && 0 == cur_start_time))

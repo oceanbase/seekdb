@@ -74,7 +74,7 @@ private:
 
 
 void* ObArenaAllocator_malloc_adapter(size_t size, ObArenaAllocator* allocator) {
-  // 调用 ObArenaAllocator 的 alloc 方法并转换 size
+  // Call the alloc method of ObArenaAllocator and convert size
   return allocator->alloc(static_cast<int64_t>(size));
 }
 

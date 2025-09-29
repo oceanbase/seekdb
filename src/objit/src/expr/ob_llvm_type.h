@@ -116,10 +116,9 @@ typedef ::llvm::DILocation ObDILocation;
 
   //return ret;
 /*}*/
-
-//在code gen过程中，如果使用ir struct传递Obj, 需要增加GEP操作,
-//ir代码会不好看，另一方面也会增加一定开销
-//该思路参考论文<Compiling Database Queries into Machine Code>3.2节
+// During the code gen process, if using ir struct to pass Obj, need to add GEP operation,
+// ir code will not look good, on the other hand it will also increase certain overhead
+// This idea references the paper <Compiling Database Queries into Machine Code> Section 3.2
 class ObIRObj {
 public:
   const static int OBJ_IDX_TYPE = 0;
@@ -136,9 +135,9 @@ public:
   {}
 
   void reset();
-  //在执行期, 接口type表示该column在schema中类型,
-  //row 中Obj类型可能与type不一样, 比如Obj可能为T_NULL,
-  //而column的type可能为其他类型, 因此在接口中显示给定type
+  // At execution time, the interface type indicates the type of this column in the schema,
+  // row Obj type may be different from type, for example, Obj may be T_NULL,
+  // while the type of column may be other types, therefore display the given type in the interface
 
   void set_type(ObLLVMContext &ctx,
                 const ::oceanbase::common::ObObjType type) {
@@ -168,7 +167,7 @@ public:
                                 value,
                                 is_sign));
   }
-  //从ObObj的ir对象中获取其成员
+  // Get its member from the ir object of ObObj
   static ObIRValuePtr get_ir_value_element(core::JitContext &jc,
                                            const ObIRValuePtr obj,
                                            int64_t idx);

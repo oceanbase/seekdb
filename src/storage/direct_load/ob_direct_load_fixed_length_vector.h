@@ -49,7 +49,7 @@ public:
 
   void reuse(const int64_t batch_size) override
   {
-    // shallow_copy可能会修改data_
+    // shallow_copy may modify data_
     if (data_ != vec_data_) {
       set_vector(vec_data_);
     } else {

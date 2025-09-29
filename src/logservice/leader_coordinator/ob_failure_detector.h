@@ -30,18 +30,17 @@ namespace coordinator
 class ObLeaderCoordinator;
 
 /**
- * @description: ObFailureDetector探测各模块的失败，记录并影响选举优先级
- * [FailureEvent的值语义]
- * FailureEvent由三个枚举字段和一个info_字段组成，info_字段的类型是ObStringHolder，它在堆上开辟内存空间，使用RAII管理所掌管的字符串的生命周期
- * 约定每个模块所注册的每个failure都是不同的，用户不应该多次重复注册同一个FailureEvent，ObFailureDetector将检查已注册的异常事件，
- * 并将拒绝用户注册一个已经存在的FailureEvent，用户需要在FailureEvent.info_字段的内容上作文章以区分同一个模块注册的两种不同的failure。
- * [Failure的不同等级]
- * 除非用户显示指定，FailureEvent具有默认的SERIOUS等级，该等级的Failure将触发切主。
- * 除此之外，可以显示指定NOTICE等级以及FATAL等级，前者不影响选举优先级仅作内部表展示，后者将比一般的Failure事件具备更高的切主优先级
- * [从异常中恢复]
- * 用户可以选择注册一个recover_detect_operation，该操作在后台以1次/s的频率探测失败是否恢复，
- * 约定recover_detect_operation返回true时表示异常恢复，用户应当保证recover_detect_operation的调用时间足够短（应在ms量级），以避免阻塞后台线程池
- * 用户也可以选择调用remove_failure_event(event)接口来主动取消异常事件，当event == failure的时候，取消对应failure的异常记录
+ * @description: ObFailureDetector detects failures in each module, records them, and affects the election priority
+ * [Value semantics of FailureEvent]
+ * FailureEvent consists of three enumeration fields and one info_ field. The type of the info_ field is ObStringHolder, which allocates memory space on the heap and uses RAII to manage the lifecycle of the string it holds.
+ * It is agreed that each failure registered by each module is different. Users should not register the same FailureEvent multiple times. ObFailureDetector will check the registered failure events and reject a user's attempt to register an already existing FailureEvent. Users need to make use of the content in the FailureEvent.info_ field to distinguish between two different failures registered by the same module.
+ * [Different levels of Failure]
+ * Unless specified by the user, FailureEvent has a default level of SERIOUS, which triggers a leader switch.
+ * In addition, users can specify NOTICE and FATAL levels explicitly. The former does not affect the election priority and is only displayed in internal tables, while the latter has a higher priority for leader switch compared to general Failure events.
+ * [Recovering from failures]
+ * Users can choose to register a recover_detect_operation, which probes in the background at a frequency of 1 time/s whether the failure has recovered.
+ * It is agreed that returning true from recover_detect_operation indicates that the anomaly has been restored. Users should ensure that the call time of recover_detect_operation is sufficiently short (in the ms range) to avoid blocking the background thread pool.
+ * Users can also choose to call the remove_failure_event(event) interface to proactively cancel the failure event. When event == failure, the corresponding failure record is canceled.
  * @Date: 2022-01-10 10:21:28
  */
 class ObFailureDetector
@@ -56,22 +55,22 @@ public:
   static void mtl_stop(ObFailureDetector *&p_failure_detector);
   static void mtl_wait(ObFailureDetector *&p_failure_detector);
   /**
-   * @description: 设置一个不可自动恢复的failure，需要由注册的模块手动调用remove_failure_event()接口恢复failure，否则将持续存在
-   * @param {FailureEvent} event failure事件，定义在failure_event.h中
+   * @description: Set an irrecoverable failure that needs to be manually restored by the registered module through the remove_failure_event() interface; otherwise, it will persist.
+   * @param {FailureEvent} event Failure event, defined in failure_event.h
    * @return {*}
    * @Date: 2021-12-29 11:13:25
    */
   int add_failure_event(const FailureEvent &event);
   /**
-   * @description: 由外部设置的failure事件，并设置相应的恢复检测逻辑
-   * @param {FailureEvent} event failure事件，定义在failure_event.h中
-   * @param {ObFunction<bool()>} recover_detect_operation 检测failure恢复的操作，会被周期性调用
+   * @description: The failure event set by external and the corresponding recovery detection logic
+   * @param {FailureEvent} event failure event, defined in failure_event.h
+   * @param {ObFunction<bool()>} recover_detect_operation The operation to detect failure recovery, which will be periodically called
    * @return {*}
    * @Date: 2021-12-29 10:27:54
    */
   /**
-   * @description: 用户选择注销一个曾经注册过的failure事件
-   * @param {FailureEvent} event 一个曾经注册过的failure事件
+   * @description: User selects to unregister a previously registered failure event
+   * @param {FailureEvent} event A previously registered failure event
    * @return {*}
    * @Date: 2022-01-09 15:08:22
    */
@@ -79,7 +78,7 @@ public:
   int get_specified_level_event(FailureLevel level, ObIArray<FailureEvent> &results);
 public:
   /**
-   * @description: 定期探测异常是否恢复的定时任务
+   * @description: Timed task for periodically detecting if anomalies have recovered
    * @param {*}
    * @return {*}
    * @Date: 2022-01-04 21:12:00

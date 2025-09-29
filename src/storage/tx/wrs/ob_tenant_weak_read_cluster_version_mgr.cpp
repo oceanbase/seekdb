@@ -235,7 +235,7 @@ SCN ObTenantWeakReadClusterVersionMgr::ServerInfo::get_version(bool &need_skip,
   if (0 == valid_part_count_
       || (cur_tstamp - generate_tstamp_) > MAX_SERVER_ALIVE_HEARTBEAT_INTERVAL) {
     need_skip = true;
-    // 判断是否是第一次need_skip
+    // Determine if it is the first need_skip
     if (! is_skipped_) {
       is_first_skipped = true;
     }

@@ -236,7 +236,7 @@ struct ObTableSingleQueryInfo : public ObTableInfoBase
   int64_t to_string(char *buf, const int64_t len) const {
     return OB_SUCCESS;
   }
-  // session guard 来自 ObTableQueryAsyncCtx
+  // session guard from ObTableQueryAsyncCtx
   table::ObTableCtx tb_ctx_;
   table::ObTableApiScanRowIterator row_iter_;
   table::ObTableQueryIterableResult result_;
@@ -305,7 +305,7 @@ public:
     if (OB_NOT_NULL(query_ctx_.sess_guard_)) {
       query_ctx_.sess_guard_->~ObTableApiSessGuard();
       query_ctx_.sess_guard_ = nullptr;
-      // multi_cf_infos_ 中tb_ctx的sess_guard就来自于query_ctx_
+      // The sess_guard of tb_ctx in multi_cf_infos_ comes from query_ctx_
       query_ctx_.multi_cf_infos_[0]->tb_ctx_.set_sess_guard(nullptr);
     }
     if (OB_NOT_NULL(result_iterator_)) {

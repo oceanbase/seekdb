@@ -448,7 +448,7 @@ void ObReplayRestartTest::restart_test()
     tx_data_table = tx_table->get_tx_data_table();
 
     {
-      // 场景一： keep alive日志没有被回放，min_start_scn为初始值状态，跳过计算upper_trans_version
+      // Scene one: keep alive log has not been replayed, min_start_scn is in initial value state, skip calculating upper_trans_version
       ASSERT_EQ(SCN::min_scn(), tx_table->ctx_min_start_scn_info_.min_start_scn_in_ctx_);
       upper_trans_version.set_min();
       FLOG_INFO("get upper trans version, situation 1:", K(SSTABLE_END_SCN));
@@ -457,7 +457,7 @@ void ObReplayRestartTest::restart_test()
     }
 
     {
-      // 场景2： keep alive日志被回放，min_start_scn小于end_scn，跳过计算upper_trans_version
+      // Scene 2: keep alive log is replayed, min_start_scn is less than end_scn, skip calculating upper_trans_version
       REPLAY_BARRIER = SCN::plus(KEEP_ALIVE_SCN, 1);
       int64_t retry_times = 100;
       while (--retry_times > 0) {
@@ -477,7 +477,7 @@ void ObReplayRestartTest::restart_test()
     }
 
     {
-      // 场景3： 所有日志回放结束，事务数据也发生冻结转储，上下文及事务数据表都已没有事务
+      // Scene 3: All log replays have ended, transaction data has also been frozen and dumped, and there are no transactions left in the context and transaction data table
       REPLAY_BARRIER = SCN::max_scn();
 
       // wait replaying again

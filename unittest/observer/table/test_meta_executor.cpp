@@ -12,8 +12,8 @@
 
 #include <gtest/gtest.h>
 #define USING_LOG_PREFIX SERVER
-#define private public  // 获取private成员
-#define protected public  // 获取protect成员
+#define private public  // get private member
+#define protected public  // get protected member
 #include "observer/table/ob_table_meta_handler.h"
 #include "observer/table/utils/ob_table_json_utils.h"
 
@@ -339,9 +339,9 @@ void TestObHTableRegionLocatorHandler::TearDown()
 }
 
 /*
-  N 张表，每张表有 M 个分区，每个分区有 K 个副本
-  副本的role 0 表示Leader，1 表示Follower
-  假设M个分区的副本都分布在K台服务器上，则每台服务器上都有M个副本
+  N tables, each table has M partitions, each partition has K replicas
+  Replica role 0 indicates Leader, 1 indicates Follower
+  Assuming the M partition replicas are distributed across K servers, then each server has M replicas
 */
 int TestObHTableRegionLocatorHandler::build_tablet_infos(ObIAllocator &allocator,
                                                           int table_count,
@@ -354,7 +354,7 @@ int TestObHTableRegionLocatorHandler::build_tablet_infos(ObIAllocator &allocator
     int64_t table_id = 1000 + table_idx;
     for (int part_idx = 0; part_idx < partition_per_table; ++part_idx) {
       int64_t tablet_id = table_id * 100 + part_idx;
-      // 构造 upperbound
+      // construct upperbound
       char ub_buf[32];
       snprintf(ub_buf, sizeof(ub_buf), "ub%d", part_idx);
       ObString upperbound;
@@ -427,7 +427,7 @@ void TestObHTableRegionLocatorHandler::check_try_compress_json(ObIAllocator &all
                              int replica_per_partition,
                              TestObHTableRegionLocatorHandler *self)
 {
-  // 解析 JSON
+  // Parse JSON
   Value *root = nullptr;
   ASSERT_EQ(OB_SUCCESS, ObTableJsonUtils::parse(allocator, resp.data_, root));
   ASSERT_NE(nullptr, root);

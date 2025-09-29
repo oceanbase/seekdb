@@ -51,7 +51,7 @@ private:
   int64_t avg_alloc_times();
 
 private:
-  //通过128个散列处理并发
+  // Through 128 hash processes concurrency
   static const int64_t HASH_CNT = 128;
   uint64_t tenant_id_;
   common::ObSEArray<ObDtlChannelMemManager*, HASH_CNT> mem_mgrs_;

@@ -41,7 +41,7 @@ void ObTableLoadTaskThreadPoolScheduler::MyThreadPool::run1()
   OB_ASSERT(OB_NOT_NULL(scheduler_));
   const int64_t thread_count = get_thread_count();
   // LOG_INFO("table load task thread start", KP(this), "pid", get_tid_cache(), "thread_idx", get_thread_idx());
-  // 启动成功的线程数+1
+  // The number of successfully started threads + 1
   if (thread_count == ATOMIC_AAF(&running_thread_count_, 1)) {
     scheduler_->before_running();
     ObThreadCondGuard guard(pool_cond_);
@@ -52,7 +52,7 @@ void ObTableLoadTaskThreadPoolScheduler::MyThreadPool::run1()
     (void) pool_cond_.wait(DEFAULT_TIMEOUT_MS);
   }
   while (!has_set_stop()) {
-    // 等待所有线程起来
+    // Wait for all threads to start
     if (!scheduler_->is_running()) {
       usleep(100);
     } else {
@@ -60,7 +60,7 @@ void ObTableLoadTaskThreadPoolScheduler::MyThreadPool::run1()
       break;
     }
   }
-  // 启动成功的线程数-1
+  // The number of successfully started threads minus 1
   if (0 == ATOMIC_AAF(&running_thread_count_, -1)) {
     scheduler_->after_running();
   }
@@ -186,12 +186,12 @@ void ObTableLoadTaskThreadPoolScheduler::stop()
     if (state_ == STATE_ZERO) {
       state_ = STATE_STOPPED_NO_WAIT;
     } else if (STATE_STARTING == state_) {
-      ret = OB_ERR_UNEXPECTED; //因为加锁了，这种情况不能出现
+      ret = OB_ERR_UNEXPECTED; // Because locking was performed, this situation should not occur
       LOG_WARN("state cann't be starting here", KR(ret));
     } else if (STATE_RUNNING == state_) {
       thread_pool_.stop();
       state_ = STATE_STOPPING;
-      // 唤醒所有线程
+      // Wake up all threads
       for (int64_t i = 0; i < thread_count_; ++i) {
         WorkerContext &worker_ctx = worker_ctx_array_[i];
         ObThreadCondGuard guard(worker_ctx.cond_);
@@ -200,8 +200,7 @@ void ObTableLoadTaskThreadPoolScheduler::stop()
     }
   }
 }
-
-//调用wait前，必须保证之前调用过stop
+//Before calling wait, it must be ensured that stop has been called previously
 void ObTableLoadTaskThreadPoolScheduler::wait()
 {
   int ret = OB_SUCCESS;
@@ -278,11 +277,9 @@ void ObTableLoadTaskThreadPoolScheduler::run(uint64_t thread_idx)
       }
     }
   }
-
-  // 为了保证在abort场景, clean_up_task能在工作线程执行
+  // To ensure that clean_up_task can be executed on the worker thread in an abort scenario
   execute_worker_tasks(worker_ctx);
-
-  // 线程非正常结束, 设置全局状态, 阻止其他线程继续执行
+  // Thread abnormal termination, set global status, prevent other threads from continuing execution
   if (STATE_RUNNING == state_) {
     state_ = STATE_STOPPING;
   }
@@ -316,7 +313,7 @@ int ObTableLoadTaskThreadPoolScheduler::add_task(int64_t thread_idx, ObTableLoad
           LOG_WARN("fail to push task into queue", KR(ret), KPC(task));
         }
       } else {
-        // 唤醒线程
+        // Wake up thread
         ObThreadCondGuard guard(worker_ctx.cond_);
         // LOG_WARN("table load add task end", KP(this), K(thread_idx), "size", worker_ctx.task_queue_.size(), "need_signal", worker_ctx.need_signal_);
         if (worker_ctx.need_signal_) {
@@ -338,7 +335,7 @@ int ObTableLoadTaskThreadPoolScheduler::execute_worker_tasks(WorkerContext &work
       if (OB_FAIL(worker_ctx.task_queue_.pop(tmp))) {
         LOG_WARN("fail to pop queue", KR(ret), K(worker_ctx.worker_id_));
       } else {
-        // 任务的运行结果不影响工作线程的运行
+        // The task's execution result does not affect the operation of the worker thread
         ObTableLoadTask *task = (ObTableLoadTask *)tmp;
         ObTraceIdGuard trace_id_guard(task->get_trace_id());
         int task_ret = task->do_work();
@@ -366,7 +363,7 @@ void ObTableLoadTaskThreadPoolScheduler::clear_all_task()
         if (OB_FAIL(worker_ctx.task_queue_.pop(tmp))) {
           LOG_WARN("fail to pop queue", KR(ret), K(i));
         } else {
-          // 触发task回调
+          // trigger task callback
           ObTableLoadTask *task = (ObTableLoadTask *)tmp;
           ObTraceIdGuard trace_id_guard(task->get_trace_id());
           task->callback(OB_CANCELED);

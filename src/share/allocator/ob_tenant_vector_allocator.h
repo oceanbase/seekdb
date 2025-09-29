@@ -34,9 +34,9 @@ public:
 private:
   // when check_cnt_ exceed CHECK_USAGE_INTERVAL, check memory usage
   uint32_t check_cnt_;
-  // 由父节点memory_context创建
+  // Created by parent node memory_context
   lib::MemoryContext memory_context_;
- // 引用内存统计工具
+// Reference memory statistics tool
   share::TxShareThrottleTool *throttle_tool_;
 };
 

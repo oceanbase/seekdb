@@ -58,41 +58,40 @@ struct PalfDiskOptions
 
 struct PalfAppendOptions
 {
-    // Palf的使用者在提交日志时，有两种不同的使用方式：
+    // The user of Palf has two different usage methods when submitting logs:
     //
-    // 1. 阻塞提交（类比于io系统调用的BLOCK语义）。这种使用方式在提交日志量超过Palf的处理能力时，
-    //    会占住线程，极端场景下可能会使调用线程"永远阻塞"；
+    // 1. Blocking commit (analogous to the BLOCK semantics of IO system calls). This usage is applicable when the volume of submitted logs exceeds Palf's processing capacity,
+    //    Will occupy the thread, in extreme scenarios it may cause the calling thread to "block forever";
     //
-    // 优点：使用简单，不需要处理超出处理能力时的报错；
+    // Advantages: easy to use, no need to handle errors when exceeding processing capacity;
     //
-    // 缺点：会占住调用线程；
+    // Disadvantage: It will occupy the calling thread;
     //
-    // 典型使用场景：提交事务的redo日志;
+    // Typical use case: redo log for transaction submission;
     //
-    // 2. 非阻塞提交（类比于io系统调用的NONBLOCK语义）。这种使用方式在提交日志量超过Palf的处理能力时，
-    //    append调用返回OB_EAGAIN错误码，不会占住调用线程；
+    // 2. Non-blocking submission (analogous to the NONBLOCK semantics of IO system calls). This usage mode is used when the volume of submitted logs exceeds Palf's processing capacity,
+    //    append call returns OB_EAGAIN error code, will not block the calling thread;
     //
-    // 优点：不会占住调用线程；
+    // Advantages: It does not occupy the calling thread;
     //
-    // 缺点：调用者需要处理OB_EAGAIN错误；
+    // Disadvantage: The caller needs to handle the OB_EAGAIN error;
     //
-    // 典型使用场景：提交事务的prepare/commit日志，返回OB_EAGAIN后由两阶段状态机推进状态；
+    // Typical use case: prepare/commit logs for transaction submission, state is advanced by the two-phase state machine after returning OB_EAGAIN;
     //
-    // 默认值为NONBLOCK
+    // Default value is NONBLOCK
     bool need_nonblock = true;
     bool need_check_proposal_id = true;
     int64_t proposal_id = 0;
     TO_STRING_KV(K(need_nonblock), K(need_check_proposal_id), K(proposal_id));
 };
-
-// Palf支持在三种模式中来回切换
+// Palf supports switching between three modes
 //
-// APPEND: 该模式下，PALF为待提交日志分配LSN和TS
+// APPEND: In this mode, PALF assigns LSN and TS to the logs to be committed
 //
-// RAW_WRITE: 该模式下, PALF不具备为待提交日志分配LSN和TS的能力
+// RAW_WRITE: In this mode, PALF does not have the capability to allocate LSN and TS for pending logs
 //
-// FLASHBACK: 该模式下, PALF不具备日志写入能力,且各副本间不响应拉日志请求
-// PREPARE_FLASHBACK: 该模式下，PALF不具备日志写入能力,各副本间可以互相同步日志
+// FLASHBACK: In this mode, PALF does not have log writing capability, and replicas do not respond to log pull requests
+// PREPARE_FLASHBACK: In this mode, PALF does not have log writing capability, and logs can be synchronized among replicas
 enum class AccessMode {
   INVALID_ACCESS_MODE = 0,
   APPEND = 1,

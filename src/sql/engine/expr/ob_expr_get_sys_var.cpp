@@ -59,9 +59,9 @@ int ObExprGetSysVar::calc_result_type2(ObExprResType &type,
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("sys var is NULL", K(var_name), K(ret));
         } else if (sys_var_ptr->is_enum_type()) {
-          // 用户在select enum类型的系统变量时，ObBasicSysVar将其记录为ObIntType
-          // 但是为了方便展示，最终都会以字符串的形式返回，这种行为也与MySQL兼容
-          // 所以这里显式设置返回类型为varchar
+          // User selects the system variable of enum type, ObBasicSysVar records it as ObIntType
+          // But for convenience of display, everything will eventually be returned in string form, this behavior is also compatible with MySQL
+          // So here we explicitly set the return type to varchar
           data_type = ObVarcharType;
         } else {
           data_type = sys_var_ptr->get_meta_type();
@@ -108,7 +108,7 @@ int ObExprGetSysVar::calc_(ObObj &result, const ObString &var_name, const int64_
 {
   int ret = OB_SUCCESS;
   ObBasicSysVar *sys_var_ptr = NULL;
-  // 先从session中取出(session中包含所有的系统变量，包括only global的)
+  // First retrieve from session (session contains all system variables, including only global ones)
   if (OB_ISNULL(session)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("session is NULL", K(ret));
@@ -118,7 +118,7 @@ int ObExprGetSysVar::calc_(ObObj &result, const ObString &var_name, const int64_
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("sys var is NULL", K(var_name), K(ret));
   } else if (ObSetVar::SET_SCOPE_NEXT_TRANS == static_cast<ObSetVar::SetScopeType>(var_scope)) {
-    // 如果没指定scope，如果是session变量，直接从session中拿，如果是only global的，则从内部表中拿
+    // If scope is not specified, if it's a session variable, directly get from session, if it's only global, then get from internal table
     if (sys_var_ptr->is_session_scope()) {
       // get session variable
       if (OB_FAIL(get_session_var(result, var_name, alloc, session, exec_ctx))) {
@@ -135,7 +135,7 @@ int ObExprGetSysVar::calc_(ObObj &result, const ObString &var_name, const int64_
     }
   } else if (ObSetVar::SET_SCOPE_GLOBAL == static_cast<ObSetVar::SetScopeType>(var_scope)) {
     if (!sys_var_ptr->is_global_scope()) {
-      // 不是global变量，也不是global and session变量，是only session变量
+      // not global variable, not global and session variable, is only session variable
       ret = OB_ERR_INCORRECT_GLOBAL_LOCAL_VAR;
       ObString scope_name("SESSION");
       LOG_USER_ERROR(OB_ERR_INCORRECT_GLOBAL_LOCAL_VAR, var_name.length(), var_name.ptr(), scope_name.length(), scope_name.ptr());
@@ -147,7 +147,7 @@ int ObExprGetSysVar::calc_(ObObj &result, const ObString &var_name, const int64_
     }
   } else if (ObSetVar::SET_SCOPE_SESSION == static_cast<ObSetVar::SetScopeType>(var_scope)) {
     if (!sys_var_ptr->is_session_scope()) {
-      // 不是session变量，也不是global and session变量，是only global变量
+      // not session variable, nor global and session variable, is only global variable
       ret = OB_ERR_INCORRECT_GLOBAL_LOCAL_VAR;
       ObString scope_name("GLOBAL");
       LOG_USER_ERROR(OB_ERR_INCORRECT_GLOBAL_LOCAL_VAR, var_name.length(), var_name.ptr(), scope_name.length(), scope_name.ptr());
@@ -317,8 +317,8 @@ int ObExprGetSysVar::calc_get_sys_val_expr(const ObExpr &expr, ObEvalCtx &ctx,
       const ObObjType &obj_type = result.get_type();
       const ObObjType &res_type = expr.datum_meta_.type_;
       if (!result.is_null() && OB_UNLIKELY(obj_type != res_type)) {
-        // 确保下编译期结果类型跟实际结果类型是一致的，否则从datum的内存空间可能会因为类型
-        // 不一致出现问题
+        // Ensure that the compile-time result type is consistent with the actual result type, otherwise the memory space of datum may be corrupted due to type
+        // Inconsistency causes issues
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("compile type and calc res type is different", K(ret), K(obj_type), K(res_type));
       } else if (ob_is_string_type(obj_type)) {

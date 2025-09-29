@@ -127,11 +127,11 @@ public:
   }
   inline int64_t get_ps_timeout_timestamp() const
   {
-    return ts_timeout_us_ - ESTIMATE_PS_RESERVE_TIME; // 考虑RPC时间+偏移时间
+    return ts_timeout_us_ - ESTIMATE_PS_RESERVE_TIME; // Consider RPC time + offset time
   }
   inline int64_t get_trans_timeout_timestamp() const
   {
-    return ts_timeout_us_ - ESTIMATE_TRANS_RESERVE_TIME; // 考虑RPC时间+偏移时间，要比ps大一点
+    return ts_timeout_us_ - ESTIMATE_TRANS_RESERVE_TIME; // Consider RPC time + offset time, should be a bit larger than ps
   }
   inline bool is_timeout(int64_t *remain_us = NULL) const
   {
@@ -411,9 +411,9 @@ public:
   }
 
   /*
-  ** 目前OB有语句级重试和语句内部重试，当我们遇到错误码OB_TRANSACTION_SET_VIOLATION,
-  ** 不会重新执行sql，而是重新执行计划，此时plan_ctx有些变量需要重置，目前梳理只有下面几种，
-  ** 当增加新的变量时需要考虑是否会影响计划重新执行
+  ** Currently OB has statement-level retry and intra-statement retry, when we encounter error code OB_TRANSACTION_SET_VIOLATION,
+  ** we will not re-execute the sql, but re-execute the plan, at this time some variables in plan_ctx need to be reset, currently we have identified only the following types,
+  ** when adding new variables, we need to consider whether it will affect the plan re-execution
   */
   inline void reset_for_quick_retry()
   {
@@ -432,8 +432,7 @@ public:
   void set_bind_array_idx(const int64_t idx) { bind_array_idx_ = idx; }
   int64_t get_bind_array_idx() const { return bind_array_idx_; }
   void inc_bind_array_idx() { bind_array_idx_++; }
-
-  // 为了兼容221及之前版本，新版本向老版本发送请求时，还需要带上worker_count
+  // To be compatible with versions 221 and earlier, when the new version sends a request to the old version, it also needs to include worker_count
   void set_worker_count(int64_t worker_count) { unsed_worker_count_since_222rel_ = worker_count; }
   inline void set_exec_ctx(const ObExecContext *exec_ctx) { exec_ctx_ = exec_ctx; }
   void set_error_ignored(bool ignored) { is_error_ignored_ = ignored; }
@@ -615,9 +614,9 @@ private:
   // CAUTION: this index only used in static typing engine's operators && expressions,
   // the old engine get it from ObExprCtx::cur_array_index_
   int64_t bind_array_idx_;
-  //为了区别普通租户系统表与用户表的tenant_schema_version，在赋值时，会对系统表做两层防御检查。
-  //在SQL层，如果涉及的表中含有系统表，则会将tenant_schema_version设置成OB_INVALID_VERSION，防止下层有误比较。
-  //在存储层，如果table_id是系统表，则会跳过对tenant_schema_version的检查，还是使用原来的办法获取table schema version（见ObRelativeTables::check_schema_version）
+  // To distinguish between the tenant_schema_version of ordinary tenant system tables and user tables, two layers of defensive checks will be performed on the system tables when assigning values.
+  // In the SQL layer, if the involved tables contain system tables, tenant_schema_version will be set to OB_INVALID_VERSION to prevent incorrect comparisons at lower layers.
+  // In the storage layer, if table_id is a system table, the check for tenant_schema_version will be skipped, and the original method will still be used to obtain the table schema version (see ObRelativeTables::check_schema_version)
   int64_t tenant_schema_version_;
   int64_t orig_question_mark_cnt_;
   common::ObCurTraceId::TraceId last_trace_id_;
@@ -659,15 +658,15 @@ private:
   bool is_select_into_;
   bool is_result_accurate_;
   bool foreign_key_checks_;
-  int64_t unsed_worker_count_since_222rel_; // 记录到各个 QC 算子上了
+  int64_t unsed_worker_count_since_222rel_; // Record to each QC operator
   const ObExecContext *exec_ctx_;
   ObTableScanStat table_scan_stat_;
   common::ObFixedArray<ObTableRowCount, common::ObIAllocator> table_row_count_list_; // (table_id, table_row_count) pairs
-  //batched_stmt_param_idxs_存储每个partition id对应的param index
+  // batched_stmt_param_idxs_ stores each partition id corresponding param index
   BatchParamIdxArray batched_stmt_param_idxs_;
-  //对于多条语句在同一个执行计划中执行的情况，physical plan ctx中的affected row等信息是一个总和信息
-  //需要记录下每一条语句执行的cursor info
-  //implicit cursor info array的下标即是语句的batch index
+  // For multiple statements executed within the same execution plan, the affected row information etc. in the physical plan ctx is a total sum information
+  // Need to record the cursor info for each statement executed
+  // implicit cursor info array's index is the statement's batch index
   //return to result set, don't need to serialize
   ImplicitCursorInfoArray implicit_cursor_infos_;
   //implicit cursor current stmt id
@@ -677,10 +676,9 @@ private:
   bool is_show_seed_;
 
   /*
-  ** 该变量用于multi_dml的性能优化，对于multi_dml计划，
-  ** 序列化占比很大，分析扁鹊图发现ParamStore结构占比最大（主要是insert），但对于
-  ** multi_dml，ParamStore是不需要序列化的，所以通过该变量控制ParamStore
-  ** 的序列化行为
+  ** This variable is used for performance optimization of multi_dml, for the multi_dml plan,
+  ** serialization accounts for a large proportion, analysis of the flame graph found that the ParamStore structure occupies the largest portion (mainly insert), but for
+  ** multi_dml, ParamStore does not need to be serialized, so this variable controls the serialization behavior of ParamStore
   */
   bool is_multi_dml_;
 

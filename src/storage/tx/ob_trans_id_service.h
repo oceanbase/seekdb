@@ -30,7 +30,7 @@ public:
   int init();
   static int mtl_init(ObTransIDService *&trans_id_service);
   void destroy() { reset(); }
-  static const int64_t TRANS_ID_PREALLOCATED_RANGE = 1000000; //TransID默认预分配大小
+  static const int64_t TRANS_ID_PREALLOCATED_RANGE = 1000000; // TransID default preallocated size
   int handle_request(const ObGtiRequest &request, obrpc::ObGtiRpcResult &result);
 };
 

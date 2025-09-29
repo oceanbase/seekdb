@@ -464,8 +464,7 @@ TEST_F(TestBalanceOperator, balance_execute)
     }
   }
 }
-
-//验证merge任务在transfer结束后再次设置part_list然后结束
+// Verify merge task sets part_list again after transfer ends and then finishes
 TEST_F(TestBalanceOperator, merge_task)
 {
   ObBalanceTask task;
@@ -487,7 +486,7 @@ TEST_F(TestBalanceOperator, merge_task)
   task_type = ObString("LS_MERGE");
   task_status = ObString("TRANSFER");
   ObString comment;
-  //防止后台线程结束这个任务
+  // Prevent the background thread from ending this task
   ASSERT_EQ(OB_SUCCESS, parent_list.push_back(task_id));
   ASSERT_EQ(OB_SUCCESS, task.init(
       tenant_id, job_id, task_id,
@@ -498,7 +497,7 @@ TEST_F(TestBalanceOperator, merge_task)
       parent_list, child_list, comment));
   common::ObMySQLProxy &sql_proxy = get_curr_simple_server().get_sql_proxy2();
   ASSERT_EQ(OB_SUCCESS, ObBalanceTaskTableOperator::insert_new_task(task, sql_proxy));
-  //设置part_list
+  // Set part_list
   ObTransferPartInfo part_info(50001, 50001);
   ASSERT_EQ(OB_SUCCESS, part_list.push_back(part_info));
   transfer_task_id = ObTransferTaskID(1);

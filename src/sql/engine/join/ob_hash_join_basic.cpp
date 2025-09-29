@@ -225,8 +225,7 @@ int ObHashJoinBatch::init_progressive_iterator()
   n_get_rows_ = 0;
   return ret;
 }
-
-// 可能会读多次，所以每次都应该set iterator，同时reset
+// Might read multiple times, so each time should set iterator, and reset
 int ObHashJoinBatch::set_iterator()
 {
   int ret = OB_SUCCESS;

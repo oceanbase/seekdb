@@ -77,26 +77,26 @@ public:
     }
   }
 public:
-  // 计算单个 entity 的 tablet id
+  // Calculate the tablet id for a single entity
   int calc(uint64_t table_id,
            const ObITableEntity &entity,
            common::ObTabletID &tablet_id);
-  // 计算单个 entity 的 tablet id
-  // 计算多个 entity 的 tablet id
+  // Calculate the tablet id for a single entity
+  // Calculate the tablet id for multiple entities
   int calc(uint64_t table_id,
            const common::ObIArray<ObITableEntity*> &entities,
            common::ObIArray<common::ObTabletID> &tablet_ids);
-  // 计算多个 entity 的 tablet id
-  // 计算单个 range 的 tablet id
+  // Calculate the tablet id for multiple entities
+  // Calculate the tablet id for a single range
   int calc(uint64_t table_id,
            const common::ObNewRange &range,
            common::ObIArray<common::ObTabletID> &tablet_ids);
-  // 计算单个 range 的 tablet id
-  // 计算多个 range 的 tablet id
+  // Calculate the tablet id for a single range
+  // Calculate the tablet id for multiple ranges
   int calc(uint64_t table_id,
            const common::ObIArray<ObNewRange> &ranges,
            common::ObIArray<common::ObTabletID> &tablet_ids);
-  // 计算多个 range 的 tablet id
+  // Calculate the tablet id for multiple ranges
   OB_INLINE void set_clip_type(ObTablePartClipType clip_type) { clip_type_ = clip_type; }
 private:
   void clear_evaluated_flag();

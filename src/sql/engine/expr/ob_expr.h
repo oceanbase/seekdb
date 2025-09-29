@@ -1149,10 +1149,10 @@ typedef ObToStringDatum DATUM2STR;
 // Can only be used in log message like this:
 //    LOG_WARN(....., "datum", EXPR2STR(eval_ctx_, *expr))
 //
-// 注意: 在ObExpr的eval_func_定义中不要使用该封装打印表达式值,
-// 因为实现的eval_func中, 打印日志时, 如果调用ObToStringExpr(ctx, expr),
-// 该函数又会调用eval_func计算, 不断循环调用, 且一直没走到设置evaluated_
-// 标记为true的逻辑, 最终会导致爆栈;
+// Note: Do not use this wrapper to print expression values in the eval_func_ definition of ObExpr,
+// Because the implemented eval_func, when printing logs, if calling ObToStringExpr(ctx, expr),
+// The function will also call eval_func to calculate, continuously looping the call, and never reaching the set evaluated_
+// Marked as true logic, will eventually lead to stack overflow;
 // bug:
 struct ObToStringExpr
 {

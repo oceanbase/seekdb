@@ -284,7 +284,7 @@ int ObTableCtx::get_assignment_by_column_id(uint64_t column_id, const ObTableAss
 */
 void ObTableCtx::init_physical_plan_ctx(int64_t timeout_ts, int64_t tenant_schema_version)
 {
-  phy_plan_ctx_.set_timeout_timestamp(timeout_ts); // ObConflictChecker::init_das_scan_rtdef 需要
+  phy_plan_ctx_.set_timeout_timestamp(timeout_ts); // ObConflictChecker::init_das_scan_rtdef requires
   phy_plan_ctx_.set_tenant_schema_version(tenant_schema_version);
   phy_plan_ctx_.set_cur_time(ObTimeUtility::fast_current_time());
   exec_ctx_.set_physical_plan_ctx(&phy_plan_ctx_);
@@ -879,7 +879,7 @@ int ObTableCtx::generate_key_range(const ObIArray<ObString> &scan_ranges_columns
       padding_num = columns_infos.count() - scan_ranges_columns_cnt;
     }
   } else if (is_index_scan_) {
-    // 索引扫描场景下用户可能没有填写rowkey的key_range，需要加上
+    // In the index scan scenario, the user may not have filled in the rowkey's key_range, which needs to be added
     padding_num = index_schema_->get_rowkey_column_num() - index_col_ids_.count();
   }
 
@@ -1590,7 +1590,7 @@ int ObTableCtx::init_get()
   } else if (OB_FAIL(entity_->get_properties_names(query_col_names_))) {
     LOG_WARN("fail to get entity properties names", K(ret));
   } else {
-    const bool need_get_all_column = query_col_names_.empty(); // 未设置get的列，默认返回全部列
+    const bool need_get_all_column = query_col_names_.empty(); // Columns to get are not set, default to return all columns
     // init select_col_ids, query_col_names_
     const ObIArray<ObTableColumnInfo *>& col_info_array = schema_cache_guard_->get_column_info_array();
     for (int64_t i = 0; OB_SUCC(ret) && i < col_info_array.count(); i++) {
@@ -2238,7 +2238,7 @@ int ObTableCtx::get_related_tablet_id(const share::schema::ObTableSchema &index_
     ObObjectID related_part_id = OB_INVALID_ID;
     ObObjectID related_first_level_part_id = OB_INVALID_ID;
     ObTabletID tmp_tablet_id;
-    // 先从主表获取part_idx和subpart_idx，索引表的part_idx和subpart_idx是和主表一致的
+    // First get part_idx and subpart_idx from the main table, the part_idx and subpart_idx in the index table are consistent with those in the main table
     if (OB_ISNULL(simple_table_schema_)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("table schema is null", K(ret));

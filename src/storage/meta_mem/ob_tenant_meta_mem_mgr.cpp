@@ -789,7 +789,7 @@ int ObTenantMetaMemMgr::push_tablet_into_gc_queue(ObTablet *tablet)
     LOG_ERROR("push invalid tablet into gc queue", K(ret), KPC(tablet));
   } else if (!tablet->is_valid()) {
     // If a tablet is invalid, it is not expensive to recycle it. Recycle it directly, to avoid asynchronous
-    // tablet gc queue backlog。
+    // tablet gc queue backlog.
     LOG_INFO("release an invalid tablet", KP(tablet));
     release_tablet(tablet, false/*return tablet buffer ptr after release*/);
   } else {

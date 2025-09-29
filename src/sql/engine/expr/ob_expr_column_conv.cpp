@@ -93,8 +93,8 @@ int ObFastColumnConvExpr::set_const_value(const ObObj &value)
   }
   return ret;
 }
-//由于在14x的版本中ObExprColumnConv使用的是父类ObExprOperator的序列化函数
-//为了保证兼容性，这里先序列化父类ObExprOperator的成员，再序列化自身的成员
+// Due to ObExprColumnConv using the serialization function of the parent class ObExprOperator in version 14x
+// To ensure compatibility, serialize the members of the parent class ObExprOperator first, then serialize its own members
 OB_SERIALIZE_MEMBER(ObExprColumnConv, row_dimension_, real_param_num_, result_type_, input_types_, id_, str_values_);
 
 ObExprColumnConv::ObExprColumnConv(ObIAllocator &alloc)
@@ -103,7 +103,7 @@ ObExprColumnConv::ObExprColumnConv(ObIAllocator &alloc)
                          INTERNAL_IN_MYSQL_MODE, INTERNAL_IN_ORACLE_MODE)
 {
   disable_operand_auto_cast();
-  //obexprcolumnconv有自己特殊处理，不走字符集自动转换框架
+  // obexprcolumnconv has its own special handling, does not go through the character set auto-conversion framework
   need_charset_convert_ = false;
 }
 
@@ -194,7 +194,7 @@ int ObExprColumnConv::convert_skip_null_check(ObObj &result,
   }
   if (OB_SUCC(ret)) {
     if (res_obj != &result) {
-      //res_obj没有指向result的地址，需要将res_obj的值拷贝到result中
+      // res_obj does not point to the address of result, need to copy the value of res_obj to result
       result = *res_obj;
     }
 //    if (is_not_null && (result.is_null())) {

@@ -66,7 +66,7 @@ public:
   ObIAllocator &get_alloc() { return allocator_; }
   TO_STRING_KV(K_(rcode));
 public:
-  obrpc::ObRpcResultCode rcode_; //返回的错误信息
+  obrpc::ObRpcResultCode rcode_; // the returned error message
   ObSEArray<ObString, 8> file_urls_;
   ObSEArray<int64_t, 8> file_sizes_;
 

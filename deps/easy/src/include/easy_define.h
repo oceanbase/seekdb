@@ -2,7 +2,7 @@
 #define EASY_DEFINE_H_
 
 /**
- * 定义一些编译参数
+ * Define some compile parameters
  */
 
 #ifdef __cplusplus

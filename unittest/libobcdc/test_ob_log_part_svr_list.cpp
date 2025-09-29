@@ -40,7 +40,7 @@ public :
 public:
   typedef PartSvrList::SvrItem SvrItem;
   typedef PartSvrList::LogIdRange LogIdRange;
-  // 验证svr_item字段的正确性
+  // Validate the correctness of the svr_item field
  void is_svr_item_correct(PartSvrList &svr_list,
                          const int64_t svr_item_index,
                          common::ObAddrWithSeq &expect_svr,
@@ -90,7 +90,7 @@ void TestObLogPartSvrList::is_svr_item_correct(PartSvrList &svr_list,
 // The main test is the insert_range_ function, which calls find_pos_and_merge to find the position, but no log range merge has occurred
 TEST_F(TestObLogPartSvrList, add_server_test1)
 {
- // 声明
+// declaration
  const int64_t svr_idx = 0;
  common::ObAddrWithSeq expect_svr = servers[svr_idx];
  int64_t expect_range_num = 0;
@@ -202,7 +202,7 @@ TEST_F(TestObLogPartSvrList, add_server_test2)
   //  Merge with 1st range only
   EXPECT_EQ(OB_SUCCESS, svr_list.add_server_or_update(expect_svr, 70, 90,
         is_located_in_meta_table, REGION_PRIORITY_LOW, REPLICA_PRIORITY_FULL, is_leader));
-  // 验证svr_item字段正确性
+  // Validate the correctness of svr_item field
   expect_log_ranges[0].reset(60, 90);
   is_svr_item_correct(svr_list, svr_idx, expect_svr, expect_range_num, expect_log_ranges);
 
@@ -299,8 +299,7 @@ TEST_F(TestObLogPartSvrList, next_server)
   EXPECT_EQ(2, svr_list.svr_items_.count());
   svr.reset();
   EXPECT_EQ(OB_SUCCESS, svr_list.next_server(next_log_id, black_list, svr));
-
-  // 请求650
+  // Request 650
   next_log_id = 650;
   EXPECT_EQ(OB_SUCCESS, svr_list.next_server(next_log_id, black_list, svr));
   svr_idx = 0;

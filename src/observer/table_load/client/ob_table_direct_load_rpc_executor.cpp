@@ -75,7 +75,7 @@ int ObTableDirectLoadBeginExecutor::process()
     ObTableLoadClientStatus client_status = ObTableLoadClientStatus::MAX_STATUS;
     int client_error_code = OB_SUCCESS;
     while (OB_SUCC(ret) && ObTableLoadClientStatus::RUNNING != client_status) {
-      client_task->heart_beat(); // 保持心跳
+      client_task->heart_beat(); // keep heartbeat
       if (OB_UNLIKELY(THIS_WORKER.is_timeout())) {
         ret = OB_TIMEOUT;
         LOG_WARN("worker timeout", KR(ret));
@@ -159,7 +159,7 @@ int ObTableDirectLoadCommitExecutor::process()
     if (OB_UNLIKELY(OB_ENTRY_NOT_EXIST != ret)) {
       LOG_WARN("fail to get client task", KR(ret), K(key));
     } else {
-      // 处理重试场景
+      // Handle retry scenario
       ret = OB_SUCCESS;
       if (OB_FAIL(ObTableLoadClientService::get_task_brief(key, client_task_brief))) {
         LOG_WARN("fail to get client task brief", KR(ret), K(key));

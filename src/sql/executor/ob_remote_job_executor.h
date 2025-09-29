@@ -25,11 +25,11 @@ class ObRemoteJobExecutor
 public:
   ObRemoteJobExecutor();
   virtual ~ObRemoteJobExecutor();
-  // 设置待调度Job
+  // Set the Job to be scheduled
   void set_job(ObJob &job) { job_ = &job; }
   void set_task_executor(ObTaskExecutor &executor) { executor_ = &executor; }
-  // 调度Job，将Job中的Task分发出去执行
-  // Job暴露出足够的状态接口，Execute就可以获得正确的待执行Task
+  // Schedule Job, distribute Tasks in Job for execution
+  // Job exposes sufficient status interfaces, Execute can obtain the correct Task to be executed
   int execute(ObExecContext &ctx);
   inline void reset () { job_ = NULL; executor_ = NULL; }
 private:

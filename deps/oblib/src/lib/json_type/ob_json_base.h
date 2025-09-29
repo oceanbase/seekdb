@@ -75,7 +75,7 @@ enum class ObJsonNodeType
 OB_INLINE ObObjType json_type_to_obj_type(const  ObJsonNodeType json_type)
 {
   const static ObObjType JSON_TYPE_TO_OBJ_TYPE[static_cast<int64_t>(ObJsonNodeType::J_MAX_TYPE) + 1] = {
-    ObNullType,                          // ObJsonNodeType::J_NULL 空类型
+    ObNullType,                          // ObJsonNodeType::J_NULL null type
     ObNumberType,                        // ObJsonNodeType::J_DECIMAL aka decimal/numeric
     ObIntType,                           // ObJsonNodeType::J_INT int64
     ObUInt64Type,                        // ObJsonNodeType::J_UINT uint64

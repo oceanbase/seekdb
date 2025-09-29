@@ -5401,10 +5401,10 @@ int ObDbmsWorkloadRepository::print_ash_report_header(
               for (let i = 1; i < rows.length; i++) { \
                 for (let j = 0; j < rows[i].cells.length; j++) { \
                   if (!mergeColumns.has(j)) continue; \
-                  /*跳过不需要合并的列*/ \
+                  /*skip columns that do not need to be merged*/ \
                   let currentCell = rows[i].cells[j]; \
                   let spanNum = calcSpanNum(i, j); \
-                  /*tbody 第一行的空单元格不要清除*/ \
+                  /*do not clear the empty cell in the first row of tbody*/ \
                   if (i > 1 && currentCell.innerText.trim() === '') { \
                     currentCell.className = 'blank-cell'; \
                     continue; \
@@ -5437,7 +5437,7 @@ int ObDbmsWorkloadRepository::print_ash_report_header(
           } \
           document.addEventListener('DOMContentLoaded', function () { \
             setSectionList(); \
-            mergeEmptyCells(); /*合并空单元格*/ \
+            mergeEmptyCells(); /*merge empty cells*/ \
             hideColumn(); \
           }); \
         </script> \
@@ -7136,12 +7136,11 @@ int ObDbmsWorkloadRepository::print_ash_top_io_event(const AshReportParams &ash_
 
             char event_ratio_char[64] = "";
             calc_ratio(event_count, num_samples, event_ratio_char);
-            
-            //ash采样到一个等待事件可以认为这个等待事件花费了1秒
-            //对于时长t > 1秒等待事件，ash采样n次就可以认为这个等待事件花费了n秒
-            //对于时长t < 1秒的等待事件，ash采样到这个事件的概率只有t，因此也可以认为采样一次这个事件花费了1秒
-            //IO等待事件大多数很短，对于p1,p2,p3它只记录了一次等待事件三个阶段消耗的时间，因此而忽略了采样到等待事件的概率远小于1
-            //因此这里计算p1,p2,p3相对于整个等待事件的比例，然后利用等待事件的时长估算p1,p2,p3的时长
+            //ash sampling to a wait event can be considered that this wait event took 1 second
+            //For duration t > 1 second wait events, ash samples n times can be considered that this wait event took n seconds
+            //For wait events with duration t < 1 second, the probability that ash samples this event is only t, therefore it can also be considered that sampling this event once takes 1 second
+            //IO wait events are mostly short, for p1, p2, p3 it only records the time consumed in three phases of a wait event, therefore the probability of sampling a wait event is much less than 1
+            //Therefore, here we calculate the proportion of p1, p2, p3 relative to the entire wait event, and then estimate the duration of p1, p2, p3 using the duration of the wait event
             char event_sum_p1_s_char[64] = "";
             calc_avg_active_sessions(event_sum_p1 * event_count, event_sum_time_waited, event_sum_p1_s_char);
 

@@ -118,7 +118,7 @@ int ObVirtualSqlPlanStatistics::inner_open()
           SERVER_LOG(WARN, "invalid tenant id range, can only search one tenant",
                      K(ret), K(start_tenant_id), K(end_tenant_id));
         } else if (OB_SYS_TENANT_ID == start_tenant_id) {
-          //查询租户为系统租户，可以查询所有的plan cache
+          //Query tenant as system tenant, can query all plan cache
           if (OB_FAIL(get_all_tenant_id())) {
             SERVER_LOG(WARN, "fail to get all tenant id", K(ret));
           }
@@ -143,7 +143,7 @@ int ObVirtualSqlPlanStatistics::get_all_tenant_id()
 int ObVirtualSqlPlanStatistics::get_row_from_specified_tenant(uint64_t tenant_id, bool &is_end)
 {
   int ret = OB_SUCCESS;
-  // !!! 引用plan cache资源之前必须加ObReqTimeGuard
+  // !!! Must add ObReqTimeGuard before referencing plan cache resources
   ObReqTimeGuard req_timeinfo_guard;
   is_end = false;
   sql::ObPlanCache *plan_cache = NULL;

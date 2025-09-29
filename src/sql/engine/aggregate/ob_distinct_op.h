@@ -38,7 +38,7 @@ public:
 };
 
 /**
- * Distinct对于Hash和Merge来说没有啥公用的，所以暂时不实现一个DistinctOp基类
+ * Distinct has nothing common for Hash and Merge, so a DistinctOp base class is not implemented for now
  **/
 
 } // end namespace sql

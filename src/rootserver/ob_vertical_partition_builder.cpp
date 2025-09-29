@@ -129,8 +129,8 @@ int ObVertialPartitionBuilder::set_aux_vp_table_columns(
         if (OB_FAIL(column_schema.assign(*data_column))) {
           LOG_WARN("fail to assign column schema", KR(ret), KPC(data_column));
         } else {
-          // 在处理主分区表时，将主表的垂直分区列原地标记为PRIMARY_VP_COLUMN_FLAG
-          // 将主表的rowkey copy进入副表时，应该将该标记清除
+          // When processing the main partition table, mark the original vertical partition column of the main table as PRIMARY_VP_COLUMN_FLAG
+          // When copying the rowkey from the main table to the secondary table, this flag should be cleared
           column_schema.del_column_flag(PRIMARY_VP_COLUMN_FLAG);
           column_schema.set_is_hidden(true);
           if (OB_FAIL(ObIndexBuilderUtil::add_column(&column_schema, false /*is_index_column*/, true /*is_rowkey*/,
@@ -151,7 +151,7 @@ int ObVertialPartitionBuilder::set_aux_vp_table_columns(
         if (OB_FAIL(column_schema.assign(*data_column))) {
           LOG_WARN("fail to assign column schema", KR(ret), KPC(data_column));
         } else if (column_schema.is_rowkey_column()) {
-          // 无需添加该列，因为第一步已经添加该列，但仍需要给该列打标
+          // Do not add this column, because the first step has already added this column, but it still needs to be labeled
           ObColumnSchemaV2 *rowkey_column = NULL;
           if (NULL == (rowkey_column = aux_vp_table_schema.get_column_schema(column_name))) {
             ret = OB_ERR_BAD_FIELD_ERROR;
@@ -161,7 +161,7 @@ int ObVertialPartitionBuilder::set_aux_vp_table_columns(
             rowkey_column->set_is_hidden(false);
           }
         } else if (FALSE_IT(column_schema.set_column_flags(AUX_VP_COLUMN_FLAG))) {
-          // 副表列上都标记AUX_VP_COLUMN_FLAG
+          // All columns in the auxiliary table are marked with AUX_VP_COLUMN_FLAG
         } else if (OB_FAIL(ObIndexBuilderUtil::add_column(
             &column_schema,
             false /*is_index_column*/,
@@ -188,7 +188,7 @@ int ObVertialPartitionBuilder::generate_vp_table_name(
     int64_t &pos)
 {
   int ret = OB_SUCCESS;
-  // ObString aux_vp_table_name构成：
+  // ObString aux_vp_table_name composition:
   // __AUX_VP_<table_id>_
   if (OB_ISNULL(buf) || buf_size <= 0 || pos < 0) {
     ret = OB_INVALID_ARGUMENT;

@@ -127,7 +127,7 @@ int ObAllVirtualLoadDataStat::inner_get_next_row(ObNewRow *&row)
           cells[i].set_int(job_status->load_mode_);
           break;
         }
-        case LOAD_TIME: {//当前导入数据已经花费的秒数
+        case LOAD_TIME: {//The number of seconds already spent importing data
           int64_t current_time = common::ObTimeUtility::current_time();
           cells[i].set_int((current_time - job_status->start_time_) / 1000000L);
           break;

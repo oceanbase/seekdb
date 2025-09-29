@@ -468,8 +468,7 @@ int ObSelectIntoOp::calc_url_and_set_access_info()
   }
   return ret;
 }
-
-// csv, odps支持batch和非batch接口; parquet, orc只支持batch接口; 非batch接口之后会取消
+// csv, odps supports batch and non-batch interfaces; parquet, orc only supports batch interface; non-batch interface will be discontinued later
 int ObSelectIntoOp::inner_get_next_row()
 {
   int ret = 0 == top_limit_cnt_ ? OB_ITER_END : OB_SUCCESS;
@@ -874,8 +873,7 @@ int ObSelectIntoOp::calc_next_file_path(ObExternalFileWriter &data_writer)
   }
   return ret;
 }
-
-// 根据传入的partition和basic_url_设置当前data_writer的url_, 每个分区只需要计算一次, 后续只要改split id
+// Set the current data_writer's url_ based on the incoming partition and basic_url_, each partition only needs to be calculated once, subsequent changes only need to modify the split id
 int ObSelectIntoOp::calc_file_path_with_partition(ObString partition, ObExternalFileWriter &data_writer)
 {
   int ret = OB_SUCCESS;
@@ -920,8 +918,8 @@ int ObSelectIntoOp::split_file(ObExternalFileWriter &data_writer)
     } else if (!use_shared_buf_ && OB_FAIL(csv_data_writer->flush_buf())) {
       LOG_WARN("failed to flush buffer", K(ret));
     } else if (has_lob_ && use_shared_buf_ && OB_FAIL(csv_data_writer->flush_shared_buf(shared_buf_))) {
-      // 要保证文件中每一行的完整性, 有lob的时候shared buffer里不一定是完整的一行
-      // 因此剩下的shared buffer里的内容也要刷到当前文件里, 这种情况下无法严格满足max_file_size的限制
+      // To ensure the integrity of each line in the file, when there is a lob, the shared buffer may not contain a complete line
+      // Therefore the remaining content in the shared buffer also needs to be flushed to the current file, in this case, the max_file_size limit cannot be strictly enforced
       LOG_WARN("failed to flush shared buffer", K(ret));
     }
   }
@@ -1283,12 +1281,11 @@ int ObSelectIntoOp::write_lob_to_file(const ObObj &obj,
   bool stop_when_truncated = false;
   OZ(lob_iter.init(0, NULL, &temp_allocator));
   OZ(get_buf(escape_printer_.buf_, escape_printer_.buf_len_, escape_printer_.pos_, data_writer));
-
-  // 当truncated_len == src_block_data.length()时
-  // 表明当前foreach_char处理的仅为lob末尾的无效的数据, 即上一轮的truncated data, 要避免死循环
+  // When truncated_len == src_block_data.length() when truncated length equals source block data length
+  // Indicates that the current foreach_char is processing only invalid data at the end of the lob, i.e., truncated data from the previous round, to avoid infinite loops
   while (OB_SUCC(ret)
          && (state = lob_iter.get_next_block(src_block_data)) == TEXTSTRING_ITER_NEXT) {
-    // outrow lob最后一次才有可能为false, inrow lob只迭代一次, 为false
+    // outrow lob will only be false on the last iteration, inrow lob iterates only once, and is false
     stop_when_truncated = (truncated_len != src_block_data.length()) && lob_iter.is_outrow_lob();
     if (!use_shared_buf_ && OB_FAIL(check_buf_sufficient(data_writer,
                                                          escape_printer_.buf_,
@@ -3331,7 +3328,7 @@ int ObSelectIntoOp::into_odps_jni_batch(const ObBatchRows &brs)
     } else {
       std::shared_ptr<arrow::RecordBatchBuilder> rbatch = rbatchRes.ValueOrDie();
       int act_cnt = 0;
-      // 向量化
+      // Vectorization
       for (int64_t col_idx = 0; OB_SUCC(ret) && col_idx < select_exprs.count(); ++col_idx) {
         ObDatumMeta &meta = select_exprs.at(col_idx)->datum_meta_;
         ObObjMeta &obj_meta = select_exprs.at(col_idx)->obj_meta_;
@@ -3593,7 +3590,7 @@ int ObSelectIntoOp::get_parquet_physical_type(parquet::Type::type &physical_type
 
 int ObSelectIntoOp::calc_parquet_decimal_length(int precision)
 {
-  // 放utils里?
+  // Put in utils?
   return std::ceil((1 + precision / std::log10(2)) / 8);
 }
 

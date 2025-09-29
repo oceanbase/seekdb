@@ -146,7 +146,7 @@ int ObVecIndexBuilderUtil::append_vec_hnsw_args(
       vec_common_aux_table_exist = true;
     }
   } else {
-    const int64_t num_vec_args = 3; // 如果一个主表中已经创建过向量索引，那么只需要新增 3 张非共享索引辅助表
+    const int64_t num_vec_args = 3; // If a main table has already created a vector index, then only 3 new non-shared index auxiliary tables need to be added
     if (OB_FAIL(append_vec_delta_buffer_arg(index_arg, allocator, session_info, index_arg_list))) {
       LOG_WARN("failed to append vec delta_buffer_table arg", K(ret));
     } else if (OB_FAIL(append_vec_index_id_arg(index_arg, allocator, index_arg_list))) {
@@ -1133,7 +1133,7 @@ int ObVecIndexBuilderUtil::set_vec_delta_buffer_table_columns(
   if (!data_schema.is_valid() ||
       (!share::schema::is_vec_delta_buffer_type(arg.index_type_)) ||
       arg.index_columns_.count() != 2 ||  /*vid, type column */
-      arg.store_columns_.count() != 1) {  /* vector column */ /* 不算伪列 ora_rowscn */
+      arg.store_columns_.count() != 1) {  /* vector column */ /* not a pseudo column ora_rowscn */
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(data_schema), K(arg.index_type_),
         K(arg.index_columns_.count()), K(arg.store_columns_.count()),
@@ -1452,9 +1452,9 @@ int ObVecIndexBuilderUtil::adjust_vec_args(
 }
 
 /* 
- * 1. 生成辅助表的列
-   2. 把辅助表的对应的列放入index_arg （主键放入index_column，非主键放入store_column）
-   3. 根据index_arg的index_id，生成对应表的虚拟生成列gen_columns
+ * 1. Generate the columns of the auxiliary table
+ * 2. Put the corresponding columns of the auxiliary table into index_arg (primary key into index_column, non-primary key into store_column)
+ * 3. Generate the virtual generated column gen_columns for the corresponding table based on the index_id in index_arg
 */
 int ObVecIndexBuilderUtil::adjust_vec_hnsw_args(
     obrpc::ObCreateIndexArg &index_arg,
@@ -2208,22 +2208,22 @@ int ObVecIndexBuilderUtil::get_ivf_column_cnt(
       share::schema::is_vec_ivfpq_centroid_index(index_type) ||
       share::schema::is_vec_ivfpq_pq_centroid_index(index_type) ||
       share::schema::is_vec_ivfsq8_meta_index(index_type)) {
-    total_column_cnt = 2;                           /* 没有冗余主表主键，共2列 */
-    index_column_cnt = 1;                           /* 只有1列索引列 */
+    total_column_cnt = 2;                           /* No redundant primary key in the main table, total 2 columns */
+    index_column_cnt = 1;                           /* Only 1 index column */
   } else if (share::schema::is_vec_ivfflat_cid_vector_index(index_type) ||
              share::schema::is_vec_ivfsq8_cid_vector_index(index_type)) {
-    total_column_cnt = main_table_rowkey_size + 2;  /* 除主表主键外，索引辅助表列数为2*/
-    index_column_cnt = total_column_cnt - 1;        /* 索引辅助表非主键列数量为1 */
+    total_column_cnt = main_table_rowkey_size + 2;  /* Except for the primary key of the main table, the number of columns indexed in the auxiliary table is 2 */
+    index_column_cnt = total_column_cnt - 1;        /* The number of non-primary key columns in the index auxiliary table is 1 */
   } else if (share::schema::is_vec_ivfflat_rowkey_cid_index(index_type) || 
              share::schema::is_vec_ivfsq8_rowkey_cid_index(index_type)) {
-    total_column_cnt = main_table_rowkey_size + 1;  /* 除主表主键外，索引辅助表列数为1 */
-    index_column_cnt = total_column_cnt - 1;        /* 索引辅助表非主键列数量为1 */
+    total_column_cnt = main_table_rowkey_size + 1;  /* Except for the primary key of the main table, the number of columns indexed in the auxiliary table is 1 */
+    index_column_cnt = total_column_cnt - 1;        /* The number of non-primary key columns in the index auxiliary table is 1 */
   } else if (share::schema::is_vec_ivfpq_rowkey_cid_index(index_type)) {
-    total_column_cnt = main_table_rowkey_size + 2;  /* 除主表主键外，索引辅助表列数为2 */
-    index_column_cnt = total_column_cnt - 2;        /* 索引辅助表非主键列数量为2 */
+    total_column_cnt = main_table_rowkey_size + 2;  /* Except for the primary key of the main table, the number of columns indexed in the auxiliary table is 2 */
+    index_column_cnt = total_column_cnt - 2;        /* The number of non-primary key columns in the index auxiliary table is 2 */
   } else if (share::schema::is_vec_ivfpq_code_index(index_type)) {
-    total_column_cnt = main_table_rowkey_size + 2;  /* 除主表主键外，索引辅助表列数为2 */
-    index_column_cnt = total_column_cnt - 1;        /* 索引辅助表非主键列数量为1 */
+    total_column_cnt = main_table_rowkey_size + 2;  /* Except for the primary key of the main table, the number of columns indexed in the auxiliary table is 2 */
+    index_column_cnt = total_column_cnt - 1;        /* The number of non-primary key columns in the index auxiliary table is 1 */
   } else {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected index type", K(ret), K(index_type));
@@ -2321,8 +2321,8 @@ int ObVecIndexBuilderUtil::adjust_vec_spiv_arg(
 }
 
 /*
-  设置index_arg的index_column（辅助表rowkey）和store_column（辅助表普通列）
-  外层调用该函数的时候，需要保证vec_cols数组元素push_back的顺序是先主键列（主表rowkey以及索引辅助表rowkey），后普通列
+  Set index_arg's index_column (auxiliary table rowkey) and store_column (auxiliary table regular column)
+  When the outer layer calls this function, it needs to ensure that the elements in the vec_cols array are pushed back in the order of primary key columns (main table rowkey and index auxiliary table rowkey), followed by regular columns
 */
 int ObVecIndexBuilderUtil::adjust_vec_ivf_arg(
     ObCreateIndexArg *index_arg,
@@ -2405,11 +2405,11 @@ int ObVecIndexBuilderUtil::adjust_vec_arg(
     const bool is_vec_index_id = share::schema::is_vec_index_id_type(index_arg->index_type_);
     const bool is_vec_index_snapshot_data = share::schema::is_vec_index_snapshot_data_type(index_arg->index_type_);
 
-    if ((is_vec_rowkey_vid && vec_cols.count() != 1) ||   /* rowkey_vid_table 的生成列数，由于不需要生成主表主键列，因此只有1列 */
-        (is_vec_vid_rowkey && vec_cols.count() != 1) ||   /* vid_rowkey_table 的生成列数，由于不需要生成主表主键列，因此只有1列*/
-        (is_vec_delta_buffer && vec_cols.count() != 3) || /* delta_buffer_table 的生成列数，不算伪列，共3列 */
-        (is_vec_index_id && vec_cols.count() != 4) ||     /* index_table_id 的生成列数，共4列 */
-        (is_vec_index_snapshot_data && vec_cols.count() != 4) ) { /* index_snapshot_data_table 的生成列数，共2列*/
+    if ((is_vec_rowkey_vid && vec_cols.count() != 1) ||   /* the number of generated columns for rowkey_vid_table, since the primary key column of the main table does not need to be generated, there is only 1 column */
+        (is_vec_vid_rowkey && vec_cols.count() != 1) ||   /* the number of generated columns in vid_rowkey_table, since the primary key column of the main table does not need to be generated, there is only 1 column */
+        (is_vec_delta_buffer && vec_cols.count() != 3) || /* the number of generated columns in delta_buffer_table, excluding pseudo-columns, totaling 3 columns */
+        (is_vec_index_id && vec_cols.count() != 4) ||     /* the number of generated columns for index_table_id, total 4 columns */
+        (is_vec_index_snapshot_data && vec_cols.count() != 4) ) { /* the number of generated columns in index_snapshot_data_table, total 2 columns */
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("vec cols count not expected", K(ret), K(index_type), K(vec_cols));
     } else {
@@ -2495,7 +2495,7 @@ int ObVecIndexBuilderUtil::adjust_vec_arg(
 int ObVecIndexBuilderUtil::inner_adjust_vec_arg(
     obrpc::ObCreateIndexArg *vec_arg,
     const ObIArray<const ObColumnSchemaV2 *> &vec_cols,
-    const int index_column_cnt,   // 辅助表的主键列数
+    const int index_column_cnt,   // The primary key column count of the auxiliary table
     ObIAllocator *allocator)
 {
   int ret = OB_SUCCESS;
@@ -2508,14 +2508,14 @@ int ObVecIndexBuilderUtil::inner_adjust_vec_arg(
     LOG_WARN("invalid argument", K(ret), KPC(vec_arg), KP(allocator));
   } else if ((share::schema::is_vec_delta_buffer_type(vec_arg->index_type_) ||
               share::schema::is_vec_index_id_type(vec_arg->index_type_)) && 
-              vec_cols.count() != index_column_cnt + 1) { // index_rowkey_column_cnt + common_col_cnt。 delta_buffer_table 和 index_id_table 的非主键列为1
+              vec_cols.count() != index_column_cnt + 1) { // index_rowkey_column_cnt + common_col_cnt. delta_buffer_table and index_id_table non-primary key columns are 1
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid argument", K(ret), K(vec_cols.count()), K(index_column_cnt));
   } else if (share::schema::is_vec_index_snapshot_data_type(vec_arg->index_type_) &&
-             vec_cols.count() != index_column_cnt + 3) {  // index_rowkey_column_cnt + common_col_cnt , snapshot_data 的非主键列为3
+             vec_cols.count() != index_column_cnt + 3) {  // index_rowkey_column_cnt + common_col_cnt , snapshot_data's non-primary key columns are 3
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid argument", K(ret), K(vec_cols.count()), K(index_column_cnt));
-  } else if (share::schema::is_vec_dim_docid_value_type(vec_arg->index_type_) && vec_cols.count() != index_column_cnt + 2) {  // index_rowkey_column_cnt + common_col_cnt, dim_docid_value的非主键列为2
+  } else if (share::schema::is_vec_dim_docid_value_type(vec_arg->index_type_) && vec_cols.count() != index_column_cnt + 2) {  // index_rowkey_column_cnt + common_col_cnt, non-primary key columns of dim_docid_value are 2
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid argument", K(ret), K(vec_cols.count()), K(index_column_cnt));
   } else {
@@ -2745,7 +2745,7 @@ int ObVecIndexBuilderUtil::generate_vec_ivf_column(
       if (OB_FAIL(construct_ivf_partial_column_info(vec_expr_def, col_type, def_pos, collection_type, obj_type, col_flag))) {
         LOG_WARN("fail to get ivf column def", K(ret), K(col_type));
       }
-      // 这里的 index_arg->index_columns_ 包含了向量索引列，目前仅支持单列
+      // Here index_arg->index_columns_ contains the vector index columns, currently only a single column is supported
       for (int64_t i = 0; OB_SUCC(ret) && i < index_arg->index_columns_.count(); ++i) {
         const ObString &column_name = index_arg->index_columns_.at(i).column_name_;
         ObColumnSchemaV2 *tmp_col_schema = nullptr;
@@ -2801,9 +2801,9 @@ int ObVecIndexBuilderUtil::generate_vec_ivf_column(
         } else {
           ObObj default_value;
           default_value.set_varchar(vec_expr_def, static_cast<int32_t>(def_pos));
-          column_schema.set_rowkey_position(0); //非主键列
-          column_schema.set_index_position(0); //非索引列
-          column_schema.set_tbl_part_key_pos(0); //非partition key
+          column_schema.set_rowkey_position(0); //non-primary key column
+          column_schema.set_index_position(0); //non-index column
+          column_schema.set_tbl_part_key_pos(0); // not partition key
           column_schema.set_tenant_id(data_schema.get_tenant_id());
           column_schema.set_table_id(data_schema.get_table_id());
           column_schema.set_column_id(col_id);
@@ -2880,9 +2880,9 @@ int ObVecIndexBuilderUtil::generate_vid_column(
         ObColumnSchemaV2 column_schema;
         ObObj default_value;
         default_value.set_varchar(vec_expr_def, static_cast<int32_t>(def_pos));
-        column_schema.set_rowkey_position(0); //非主键列
-        column_schema.set_index_position(0); //非索引列
-        column_schema.set_tbl_part_key_pos(0); //非partition key
+        column_schema.set_rowkey_position(0); //non-primary key column
+        column_schema.set_index_position(0); //non-index column
+        column_schema.set_tbl_part_key_pos(0); // not partition key
         column_schema.set_tenant_id(data_schema.get_tenant_id());
         column_schema.set_table_id(data_schema.get_table_id());
         column_schema.set_column_id(col_id);
@@ -2981,9 +2981,9 @@ int ObVecIndexBuilderUtil::generate_type_column(
         } else {
           ObObj default_value;
           default_value.set_varchar(vec_expr_def, static_cast<int32_t>(def_pos));
-          column_schema.set_rowkey_position(0); //非主键列
-          column_schema.set_index_position(0); //非索引列
-          column_schema.set_tbl_part_key_pos(0); //非partition key
+          column_schema.set_rowkey_position(0); //non-primary key column
+          column_schema.set_index_position(0); // non-index column
+          column_schema.set_tbl_part_key_pos(0); // not partition key
           column_schema.set_tenant_id(data_schema.get_tenant_id());
           column_schema.set_table_id(data_schema.get_table_id());
           column_schema.set_column_id(col_id);
@@ -3078,9 +3078,9 @@ int ObVecIndexBuilderUtil::generate_spiv_dim_column(
         } else {
           ObObj default_value;
           default_value.set_varchar(vec_expr_def, static_cast<int32_t>(def_pos));
-          column_schema.set_rowkey_position(0); //非主键列
-          column_schema.set_index_position(0); //非索引列
-          column_schema.set_tbl_part_key_pos(0); //非partition key
+          column_schema.set_rowkey_position(0); //non-primary key column
+          column_schema.set_index_position(0); // non-index column
+          column_schema.set_tbl_part_key_pos(0); // not partition key
           column_schema.set_tenant_id(data_schema.get_tenant_id());
           column_schema.set_table_id(data_schema.get_table_id());
           column_schema.set_column_id(col_id);
@@ -3172,9 +3172,9 @@ int ObVecIndexBuilderUtil::generate_spiv_value_column(
         } else {
           ObObj default_value;
           default_value.set_varchar(vec_expr_def, static_cast<int32_t>(def_pos));
-          column_schema.set_rowkey_position(0); //非主键列
-          column_schema.set_index_position(0); //非索引列
-          column_schema.set_tbl_part_key_pos(0); //非partition key
+          column_schema.set_rowkey_position(0); //non-primary key column
+          column_schema.set_index_position(0); //non-index column
+          column_schema.set_tbl_part_key_pos(0); // not partition key
           column_schema.set_tenant_id(data_schema.get_tenant_id());
           column_schema.set_table_id(data_schema.get_table_id());
           column_schema.set_column_id(col_id);
@@ -3240,7 +3240,7 @@ int ObVecIndexBuilderUtil::generate_vector_column(
                                          "VEC_VECTOR("))) {
         LOG_WARN("print generate expr definition prefix failed", K(ret));
       }
-      // 这里的 index_arg->index_columns_ 包含了向量索引列，目前仅支持单列
+      // Here index_arg->index_columns_ contains the vector index columns, currently only a single column is supported
       for (int64_t i = 0; OB_SUCC(ret) && i < index_arg->index_columns_.count(); ++i) {
         const ObString &column_name = index_arg->index_columns_.at(i).column_name_;
         ObColumnSchemaV2 *col_schema = nullptr;
@@ -3269,9 +3269,9 @@ int ObVecIndexBuilderUtil::generate_vector_column(
         } else {
           ObObj default_value;
           default_value.set_varchar(vec_expr_def, static_cast<int32_t>(def_pos));
-          column_schema.set_rowkey_position(0); //非主键列
-          column_schema.set_index_position(0); //非索引列
-          column_schema.set_tbl_part_key_pos(0); //非partition key
+          column_schema.set_rowkey_position(0); //non-primary key column
+          column_schema.set_index_position(0); //non-index column
+          column_schema.set_tbl_part_key_pos(0); // not partition key
           column_schema.set_tenant_id(data_schema.get_tenant_id());
           column_schema.set_table_id(data_schema.get_table_id());
           column_schema.set_column_id(col_id);
@@ -3342,7 +3342,7 @@ int ObVecIndexBuilderUtil::generate_scn_column(
                                          "VEC_SCN("))) {
         LOG_WARN("print generate expr definition prefix failed", K(ret));
       }
-      // 这里的 index_arg->index_columns_ 包含了向量索引列，目前仅支持单列
+      // Here index_arg->index_columns_ contains the vector index columns, currently only single column is supported
       for (int64_t i = 0; OB_SUCC(ret) && i < index_arg->index_columns_.count(); ++i) {
         const ObString &column_name = index_arg->index_columns_.at(i).column_name_;
         ObColumnSchemaV2 *col_schema = nullptr;
@@ -3369,9 +3369,9 @@ int ObVecIndexBuilderUtil::generate_scn_column(
         } else {
           ObObj default_value;
           default_value.set_varchar(vec_expr_def, static_cast<int32_t>(def_pos));
-          column_schema.set_rowkey_position(0); //非主键列
-          column_schema.set_index_position(0); //非索引列
-          column_schema.set_tbl_part_key_pos(0); //非partition key
+          column_schema.set_rowkey_position(0); //non-primary key column
+          column_schema.set_index_position(0); //non-index column
+          column_schema.set_tbl_part_key_pos(0); // not partition key
           column_schema.set_tenant_id(data_schema.get_tenant_id());
           column_schema.set_table_id(data_schema.get_table_id());
           column_schema.set_column_id(col_id);
@@ -3441,7 +3441,7 @@ int ObVecIndexBuilderUtil::generate_key_column(
                                          "VEC_KEY("))) {
         LOG_WARN("print generate expr definition prefix failed", K(ret));
       }
-      // 这里的 index_arg->index_columns_ 包含了向量索引列，目前仅支持单列
+      // Here index_arg->index_columns_ contains the vector index columns, currently only a single column is supported
       for (int64_t i = 0; OB_SUCC(ret) && i < index_arg->index_columns_.count(); ++i) {
         const ObString &column_name = index_arg->index_columns_.at(i).column_name_;
         ObColumnSchemaV2 *col_schema = nullptr;
@@ -3468,9 +3468,9 @@ int ObVecIndexBuilderUtil::generate_key_column(
         } else {
           ObObj default_value;
           default_value.set_varchar(vec_expr_def, static_cast<int32_t>(def_pos));
-          column_schema.set_rowkey_position(0); //非主键列
-          column_schema.set_index_position(0); //非索引列
-          column_schema.set_tbl_part_key_pos(0); //非partition key
+          column_schema.set_rowkey_position(0); //non-primary key column
+          column_schema.set_index_position(0); //non-index column
+          column_schema.set_tbl_part_key_pos(0); // not partition key
           column_schema.set_tenant_id(data_schema.get_tenant_id());
           column_schema.set_table_id(data_schema.get_table_id());
           column_schema.set_column_id(col_id);
@@ -3539,7 +3539,7 @@ int ObVecIndexBuilderUtil::generate_data_column(
                                          "VEC_DATA("))) {
         LOG_WARN("print generate expr definition prefix failed", K(ret));
       }
-      // 这里的 index_arg->index_columns_ 包含了向量索引列，目前仅支持单列
+      // Here index_arg->index_columns_ contains the vector index columns, currently only a single column is supported
       for (int64_t i = 0; OB_SUCC(ret) && i < index_arg->index_columns_.count(); ++i) {
         const ObString &column_name = index_arg->index_columns_.at(i).column_name_;
         ObColumnSchemaV2 *col_schema = nullptr;
@@ -3566,9 +3566,9 @@ int ObVecIndexBuilderUtil::generate_data_column(
         } else {
           ObObj default_value;
           default_value.set_varchar(vec_expr_def, static_cast<int32_t>(def_pos));
-          column_schema.set_rowkey_position(0); //非主键列
-          column_schema.set_index_position(0); //非索引列
-          column_schema.set_tbl_part_key_pos(0); //非partition key
+          column_schema.set_rowkey_position(0); //non-primary key column
+          column_schema.set_index_position(0); // non-index column
+          column_schema.set_tbl_part_key_pos(0); // not partition key
           column_schema.set_tenant_id(data_schema.get_tenant_id());
           column_schema.set_table_id(data_schema.get_table_id());
           column_schema.set_column_id(col_id);
@@ -3863,7 +3863,7 @@ int ObVecIndexBuilderUtil::construct_ivf_col_name(
     LOG_WARN("fail to generate ivf column name prefix", K(ret));
   } else {
     const ObColumnSchemaV2 *col_schema = NULL;
-    // 这里的index_arg->index_columns_表示的是向量索引列，构造辅助表列名时，需要加上索引列id
+    // Here index_arg->index_columns_ represents the vector index columns, when constructing auxiliary table column names, the index column id needs to be added
     for (int64_t i = 0; OB_SUCC(ret) && i < index_arg->index_columns_.count(); ++i) {
       const ObString &column_name = index_arg->index_columns_.at(i).column_name_;
       if (column_name.empty()) {
@@ -3899,7 +3899,7 @@ int ObVecIndexBuilderUtil::construct_ivf_col_name(
   } else if (OB_FAIL(generate_ivf_col_name_prefix(col_type, col_name_buf, buf_len, name_pos))) {
     LOG_WARN("fail to generate ivf column name prefix", K(ret));
   } else {
-    // 这里的cascaded_col_ids表示的是向量索引列id，构造辅助表列名时，需要加上索引列id
+    // Here the cascaded_col_ids represents the vector index column id, when constructing auxiliary table column names, the index column id needs to be added
     for (int64_t i = 0; OB_SUCC(ret) && i < cascaded_col_ids.count(); ++i) {
       if (OB_FAIL(databuff_printf(col_name_buf, buf_len, name_pos, "_%ld", cascaded_col_ids.at  (i)))) {
         LOG_WARN("print column id to buffer failed", K(ret), K(cascaded_col_ids.at(i)));
@@ -3959,7 +3959,7 @@ int ObVecIndexBuilderUtil::construct_type_col_name(
       LOG_WARN("print generate column prefix name failed", K(ret));
     }
     const ObColumnSchemaV2 *col_schema = NULL;
-    // 这里的index_arg->index_columns_表示的是向量索引列，构造辅助表列名时，需要加上索引列id
+    // Here index_arg->index_columns_ represents the vector index columns, when constructing the auxiliary table column names, the index column id needs to be added
     for (int64_t i = 0; OB_SUCC(ret) && i < index_arg->index_columns_.count(); ++i) {
       const ObString &column_name = index_arg->index_columns_.at(i).column_name_;
       if (column_name.empty()) {
@@ -4013,7 +4013,7 @@ int ObVecIndexBuilderUtil::construct_spiv_col_name(
     }
     
     const ObColumnSchemaV2 *col_schema = NULL;
-    // 这里的index_arg->index_columns_表示的是向量索引列，构造辅助表列名时，需要加上索引列id
+    // Here index_arg->index_columns_ represents the vector index columns, when constructing the auxiliary table column names, the index column id needs to be added
     for (int64_t i = 0; OB_SUCC(ret) && i < index_arg->index_columns_.count(); ++i) {
       const ObString &column_name = index_arg->index_columns_.at(i).column_name_;
       if (column_name.empty()) {
@@ -4059,7 +4059,7 @@ int ObVecIndexBuilderUtil::construct_vector_col_name(
       LOG_WARN("print generate column prefix name failed", K(ret));
     }
     const ObColumnSchemaV2 *col_schema = NULL;
-    // 这里的index_arg->index_columns_表示的是向量索引列，构造辅助表列名时，需要加上索引列id
+    // Here index_arg->index_columns_ represents the vector index columns, when constructing auxiliary table column names, the index column id needs to be added
     for (int64_t i = 0; OB_SUCC(ret) && i < index_arg->index_columns_.count(); ++i) {
       const ObString &column_name = index_arg->index_columns_.at(i).column_name_;
       if (column_name.empty()) {
@@ -4106,7 +4106,7 @@ int ObVecIndexBuilderUtil::construct_scn_col_name(
       LOG_WARN("print generate column prefix name failed", K(ret));
     }
     const ObColumnSchemaV2 *col_schema = NULL;
-    // 这里的index_arg->index_columns_表示的是向量索引列，构造辅助表列名时，需要加上索引列id
+    // Here index_arg->index_columns_ represents the vector index columns, when constructing the auxiliary table column names, the index column id needs to be added
     for (int64_t i = 0; OB_SUCC(ret) && i < index_arg->index_columns_.count(); ++i) {
       const ObString &column_name = index_arg->index_columns_.at(i).column_name_;
       if (column_name.empty()) {
@@ -4153,7 +4153,7 @@ int ObVecIndexBuilderUtil::construct_key_col_name(
       LOG_WARN("print generate column prefix name failed", K(ret));
     }
     const ObColumnSchemaV2 *col_schema = NULL;
-    // 这里的index_arg->index_columns_表示的是向量索引列，构造辅助表列名时，需要加上索引列id
+    // Here index_arg->index_columns_ represents the vector index columns, when constructing the auxiliary table column names, the index column id needs to be added
     for (int64_t i = 0; OB_SUCC(ret) && i < index_arg->index_columns_.count(); ++i) {
       const ObString &column_name = index_arg->index_columns_.at(i).column_name_;
       if (column_name.empty()) {
@@ -4200,7 +4200,7 @@ int ObVecIndexBuilderUtil::construct_data_col_name(
       LOG_WARN("print generate column prefix name failed", K(ret));
     }
     const ObColumnSchemaV2 *col_schema = NULL;
-    // 这里的index_arg->index_columns_表示的是向量索引列，构造辅助表列名时，需要加上索引列id
+    // Here index_arg->index_columns_ represents the vector index columns, when constructing auxiliary table column names, the index column id needs to be added
     for (int64_t i = 0; OB_SUCC(ret) && i < index_arg->index_columns_.count(); ++i) {
       const ObString &column_name = index_arg->index_columns_.at(i).column_name_;
       if (column_name.empty()) {
@@ -4279,7 +4279,7 @@ int ObVecIndexBuilderUtil::get_vec_spiv_col(
 }
 
 /*
-  检查在主表上是否已经创建了index_arg里索引的隐藏列
+  Check if the hidden column for the index specified in index_arg has already been created on the main table
 */
 int ObVecIndexBuilderUtil::get_vec_ivfflat_col(
     const ObTableSchema &data_schema,
@@ -4466,7 +4466,7 @@ int ObVecIndexBuilderUtil::get_vec_ivfpq_col(
 }
 
 /*
-  非共享的辅助表字段，一张表中只有唯一一个column
+  Non-shared auxiliary table field, there is only one column in a table
 */
 int ObVecIndexBuilderUtil::get_vec_vid_col(
     const ObTableSchema &data_schema,
@@ -4494,7 +4494,7 @@ int ObVecIndexBuilderUtil::get_vec_vid_col(
 }
 
 /*
-  非共享辅助表中的column，由于一张主表上可能存在多个索引，有多个隐藏列，因此需要遍历查找
+  column in non-shared auxiliary table, since there may be multiple indexes on a primary table, with multiple hidden columns, therefore traversal lookup is required
 */
 int ObVecIndexBuilderUtil::get_vec_type_col(
     const ObTableSchema &data_schema,
@@ -4779,7 +4779,7 @@ int ObVecIndexBuilderUtil::check_vec_gen_col(
 }
 
 /*
-  通过索引名和类型，获取3/4/5号表的table_schema
+  Get the table_schema of tables 3/4/5 by index name and type
 */
 int ObVecIndexBuilderUtil::get_vec_table_schema_by_name(
     share::schema::ObSchemaGetterGuard &schema_guard,

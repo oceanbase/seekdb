@@ -625,8 +625,7 @@ int ObDirectLoadIndexBlockReader::change_fragment(const ObDirectLoadTmpFileHandl
   }
   return ret;
 }
-
-// 读对应索引项块
+// Read corresponding index item block
 int ObDirectLoadIndexBlockReader::read_buffer(int64_t idx)
 {
   int ret = OB_SUCCESS;
@@ -639,8 +638,7 @@ int ObDirectLoadIndexBlockReader::read_buffer(int64_t idx)
   }
   return ret;
 }
-
-//读对应索引块下标的索引项
+// Read the index item of the corresponding index block subscript
 int ObDirectLoadIndexBlockReader::get_index_info(int64_t idx, ObDirectLoadIndexInfo &info)
 {
   int ret = OB_SUCCESS;

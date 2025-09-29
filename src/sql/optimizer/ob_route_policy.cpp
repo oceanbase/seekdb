@@ -70,7 +70,7 @@ int ObRoutePolicy::filter_replica(const ObAddr &local_server,
           || cur_replica.attr_.start_service_time_ == 0
           || cur_replica.attr_.server_stop_time_ != 0
           || (0 == cur_replica.get_property().get_memstore_percent()
-              && is_follower(cur_replica.get_role()))// 作为Follower的D副不能选择
+              && is_follower(cur_replica.get_role()))// As a Follower, the D role cannot be selected
           || !can_read) {
         cur_replica.is_filter_ = true;
       }
@@ -149,8 +149,7 @@ int ObRoutePolicy::calculate_replica_priority(const ObAddr &local_server,
   }
   return ret;
 }
-
-//local locality没有初始化情况无法判断pos type,因此统一设置为other
+// local locality has not been initialized, so it is impossible to determine the pos type, therefore, it is uniformly set to other
 int ObRoutePolicy::calc_position_type(const ObServerLocality &candi_locality,
                                       CandidateReplica &candi_replica)
 {
@@ -235,8 +234,8 @@ int ObRoutePolicy::get_server_locality(const ObAddr &addr,
     }
   }
   if (!is_found) {
-    //此处不报错。当locality找不到时，后面无法正确设置pos_type，每个replica均会变为other region
-    //这种情况相当于随机选择一个replica, weak读时应该尽可能保证可执行
+    // Here no error is reported. When locality is not found, pos_type cannot be correctly set later, and each replica will become other region
+    // This situation is equivalent to randomly selecting a replica, weak reads should try to ensure executability
     LOG_WARN("not found locality", K(addr), K(server_locality_array), K(ret));
   }
   return ret;
@@ -266,7 +265,7 @@ int ObRoutePolicy::select_replica_with_priority(const ObRoutePolicyCtx &route_po
   bool same_priority = true;
   ReplicaAttribute priority_attr;
   for (int64_t i = 0; OB_SUCC(ret) && same_priority && i < replica_array.count(); ++i) {
-    if (replica_array.at(i).is_usable()/*+满足max_read_stale_time事务延迟*/) {
+    if (replica_array.at(i).is_usable()/*+meet max_read_stale_time transaction delay*/) {
       if (has_found) {
         if (priority_attr == replica_array.at(i).attr_) {
           if (OB_FAIL(phy_part_loc_info.add_priority_replica_idx(i))) {
@@ -285,14 +284,13 @@ int ObRoutePolicy::select_replica_with_priority(const ObRoutePolicyCtx &route_po
       }
     }
   }
-
-  //极端情况下，replica_arry中的内容均变为不可读，则随机选一个
+  // In extreme cases, if all contents in replica_array become unreadable, then randomly select one
   if (OB_UNLIKELY(false == has_found)) {
     int64_t select_idx = rand() % replica_array.count();
     if (OB_FAIL(phy_part_loc_info.add_priority_replica_idx(select_idx))) {
       LOG_WARN("fail to select replica", K(select_idx), K(ret));
     }
-    if (REACH_TIME_INTERVAL(10 * 1000 * 1000)) {//10s打印一次
+    if (REACH_TIME_INTERVAL(10 * 1000 * 1000)) {// Print once every 10 seconds}
       LOG_WARN("all replica is not usable currently", K(replica_array), K(route_policy_ctx), K(select_idx));
     }
   }
@@ -315,15 +313,15 @@ int ObRoutePolicy::calc_intersect_repllica(const common::ObIArray<ObCandiTableLo
       for (int64_t j = 0; OB_SUCC(ret) && can_select_one_server && j < phy_part_loc_info_list.count(); ++j) {
         const ObCandiTabletLoc &phy_part_loc_info = phy_part_loc_info_list.at(j);
         const ObIArray<int64_t> &priority_replica_idxs = phy_part_loc_info.get_priority_replica_idxs();
-        if (0 == i && 0 == j) { // 第一个partition
-          if (phy_part_loc_info.has_selected_replica()) { // 已经选定了副本
+        if (0 == i && 0 == j) { // first partition
+          if (phy_part_loc_info.has_selected_replica()) { // replica has already been selected
             tmp_replica.reset();
             if (OB_FAIL(phy_part_loc_info.get_selected_replica(tmp_replica))) {
               LOG_WARN("fail to get selected replica", K(ret), K(phy_part_loc_info));
             } else if (OB_FAIL(intersect_server_list.push_back(tmp_replica))) {
               LOG_WARN("fail to push back candidate server", K(ret), K(tmp_replica));
             }
-          } else { // 还没选定副本
+          } else { // No replica has been selected yet
             for (int64_t k = 0; OB_SUCC(ret) && k < priority_replica_idxs.count(); ++k) {
               tmp_replica.reset();
               int64_t replica_idx = priority_replica_idxs.at(k);
@@ -334,19 +332,19 @@ int ObRoutePolicy::calc_intersect_repllica(const common::ObIArray<ObCandiTableLo
               }
             }
           }
-        } else {// 不是第一个partition
+        } else {// not the first partition
           ObList<ObRoutePolicy::CandidateReplica, ObArenaAllocator>::iterator intersect_server_list_iter = intersect_server_list.begin();
           for (; OB_SUCC(ret) && intersect_server_list_iter != intersect_server_list.end(); intersect_server_list_iter++) {
             const ObAddr &candidate_server = intersect_server_list_iter->get_server();
             bool has_replica = false;
-            if (phy_part_loc_info.has_selected_replica()) { // 已经选定了副本
+            if (phy_part_loc_info.has_selected_replica()) { // replica has already been selected
               tmp_replica.reset();
               if (OB_FAIL(phy_part_loc_info.get_selected_replica(tmp_replica))) {
                 LOG_WARN("fail to get selected replica", K(ret), K(phy_part_loc_info));
               } else if (tmp_replica.get_server() == candidate_server) {
                 has_replica = true;
               }
-            } else { // 还没选定副本
+            } else { // Copy not yet selected
               for (int64_t k = 0; OB_SUCC(ret) && !has_replica && k < priority_replica_idxs.count(); ++k) {
                 tmp_replica.reset();
                 int64_t replica_idx = priority_replica_idxs.at(k);
@@ -382,7 +380,7 @@ int ObRoutePolicy::select_intersect_replica(ObRoutePolicyCtx &route_policy_ctx,
   int ret = OB_SUCCESS;
   if (OB_FAIL(calc_intersect_repllica(phy_tbl_loc_info_list, intersect_server_list))) {
     LOG_WARN("fail to calc intersect replica", K(phy_tbl_loc_info_list), K(ret));
-  } else if (intersect_server_list.empty()) {//没有交集的情况，每个partition单独选择replica
+  } else if (intersect_server_list.empty()) {//No intersection case, each partition selects replica separately
     is_proxy_hit = true;
     for (int64_t i = 0; OB_SUCC(ret) && i < phy_tbl_loc_info_list.count(); ++i) {
       ObCandiTableLoc *phy_tbl_loc_info = phy_tbl_loc_info_list.at(i);
@@ -415,7 +413,7 @@ int ObRoutePolicy::select_intersect_replica(ObRoutePolicyCtx &route_policy_ctx,
           LOG_WARN("fail to replica iterator", K(replica_iter), K(ret));
         }
       } else if (replica_iter->attr_.pos_type_ == selected_replica.attr_.pos_type_) {
-        //将same priority server统计起来，用于后面随机选择
+        // Aggregate same priority servers for random selection later
         if (OB_FAIL(same_priority_servers.push_back(replica_iter->get_server()))) {
           LOG_WARN("fail to replica iterator", K(replica_iter), K(ret));
         }
@@ -466,15 +464,15 @@ bool ObRoutePolicy::is_same_idc(const share::ObServerLocality &locality1, const 
 {
   bool ret_bool = false;
   if (locality1.get_region().is_empty() || locality2.get_region().is_empty()) {
-    //如果没有为集群设置REGION，则无法判断是否在同一REGION
+    // If the REGION is not set for the cluster, it is impossible to determine if they are in the same REGION
     ret_bool = false;
     LOG_WARN_RET(OB_ERR_UNEXPECTED, "cluster region is not set", K(locality1), K(locality2));
   } else if (locality1.get_idc().is_empty() || locality2.get_idc().is_empty()) {
-    //如果没有为zone设置IDC，则无法判断是否在同一IDC
+    // If the IDC is not set for the zone, it is impossible to determine if they are in the same IDC
     ret_bool = false;
     LOG_TRACE("zone idc is not set", K(locality1), K(locality2));
   } else if (locality1.get_region() == locality2.get_region()) {
-    //先判断region是否相同，避免不同region中有相同name的idc
+    // First determine if the region is the same, to avoid having the same name idc in different regions
     if (locality1.get_idc() == locality2.get_idc()) {
       ret_bool = true;
     }
@@ -486,7 +484,7 @@ bool ObRoutePolicy::is_same_region(const share::ObServerLocality &locality1, con
 {
   bool ret_bool = false;
   if (locality1.get_region().is_empty() || locality2.get_region().is_empty()) {
-    //如果没有为集群设置REGION，则无法判断是否在同一REGION
+    // If the REGION is not set for the cluster, it is impossible to determine if they are in the same REGION
     ret_bool = false;
     LOG_WARN_RET(OB_ERR_UNEXPECTED, "cluster region is not set", K(locality1), K(locality2));
   } else if (locality1.get_region() == locality2.get_region()) {

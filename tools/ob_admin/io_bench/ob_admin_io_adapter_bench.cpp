@@ -219,7 +219,7 @@ int ObAdminIOAdapterBenchmarkExecutor::parse_cmd_(int argc, char *argv[])
         break;
       }
       //case 'a': {
-        // 必须在 ObDeviceManager::get_instance().init_devices_env() 之后执行 
+        // Must be executed after ObDeviceManager::get_instance().init_devices_env()
       //  cluster_enable_obdal_config = &ObClusterEnableObdalConfigBase::get_instance();
       //  break;
       //}

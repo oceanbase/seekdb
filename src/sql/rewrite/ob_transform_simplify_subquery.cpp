@@ -151,18 +151,18 @@ int ObTransformSimplifySubquery::try_trans_subquery_in_expr(ObDMLStmt *stmt,
              T_OP_EXISTS == expr->get_expr_type() ||
              T_OP_NOT_EXISTS == expr->get_expr_type() ||
              expr->is_alias_ref_expr()) {
-    // 如果 expr 的param 必须是 subquery，那么不去改写它包含的子查询
+    // If expr's param must be a subquery, then do not rewrite the subqueries it contains
     //do nothing
   } else if (expr->is_query_ref_expr() &&
              !static_cast<ObQueryRefRawExpr *>(expr)->is_multiset()) {
-    //如果是 query ref expr，那么尝试改写
+    // If it is a query ref expr, then try to rewrite
     if (OB_FAIL(do_trans_subquery_as_expr(stmt, expr, is_happened))) {
       LOG_WARN("failed to do_trans_subquery_as_expr", K(ret));
     } else if (is_happened) {
       trans_happened = true;
     }
   } else if (expr->has_flag(CNT_SUB_QUERY)) {
-    //如果是 non-terminal expr，那么继续遍历孩子节点
+    // If it is a non-terminal expr, then continue traversing the child nodes
     for (int64_t i = 0; OB_SUCC(ret) && i < expr->get_param_count(); ++i) {
       if (OB_FAIL(SMART_CALL(try_trans_subquery_in_expr(stmt, expr->get_param_expr(i),
                                                         is_happened)))) {
@@ -427,7 +427,7 @@ int ObTransformSimplifySubquery::try_remove_redundant_select(ObSelectStmt &stmt,
 /**
  * @brief check_subquery_valid
  * check subquery return equal one row, if empty do nothing
- * has limit 可能使结果为空不做改写;
+ * has limit may make result empty do not rewrite;
  * subquery should in format of:
  * 1. select ... from dual;  no where condition
  * 2. select aggr() ...;  <- no group by, no having
@@ -459,10 +459,7 @@ int ObTransformSimplifySubquery::check_subquery_valid(ObSelectStmt &stmt,
   }
   return ret;
 }
-
-
-
-//对于left join, 将仅含 right table column 且包含 subquery 的 on condition 下压到 right table
+// For left join, will push down the on condition containing only right table column and subquery to the right table
 int ObTransformSimplifySubquery::push_down_outer_join_condition(ObDMLStmt *stmt,
                                                                 bool &trans_happened)
 {
@@ -558,11 +555,10 @@ int ObTransformSimplifySubquery::get_push_down_conditions(ObDMLStmt *stmt,
   }
   return ret;
 }
-
-// 当 left join 右表为 basic/generate/join table 时
-// 对 on condition 中包含 subquery（要求ref_count = 1）仅包含本层右表列的条件进行下压:
-//  1. 由右表生成generate table;
-//  2. 下压满足条件 on condition.
+// When left join right table is basic/generate/join table
+// Press down conditions in on condition containing subquery (requirement ref_count = 1) that only include columns from the right table of this layer:
+//  1. Generate table from right table;
+//  2. Press down on condition.
 int ObTransformSimplifySubquery::try_push_down_outer_join_conds(ObDMLStmt *stmt,
                                                         JoinedTable *join_table,
                                                         bool &trans_happened)
@@ -871,7 +867,7 @@ int ObTransformSimplifySubquery::check_any_all_as_min_max(ObRawExpr *expr, bool 
                                                           &equal_sets, &const_exprs))) {
         LOG_WARN("failed to check is match index prefix", K(ret));
       } else if (!is_match) {
-        /*不能利用基表索引，不改写*/
+        /*Cannot utilize base table index, do not rewrite*/
       } else if (expr->has_flag(IS_WITH_ANY)) {
         is_valid = true;
       } else if (expr->has_flag(IS_WITH_ALL)) {
@@ -1205,19 +1201,18 @@ int ObTransformSimplifySubquery::recursive_eliminate_subquery(ObDMLStmt *stmt,
   } else { /*do nothing*/ }
   return ret;
 }
-
-//1. 如果是Exist/Not Exist
-//    1.1 判断是否可以消除subquery
-//    2.2 如果不能消除：
-//        a. 消除select list --> select 1
-//        b. 消除group by
-//        c. 消除order by
-//2. 如果是ANY/ALL
-//  2.1 消除group by
-//  2.2 非相关any子查询如果select item为const item，则添加limit 1
+//1. If is Exist/Not Exist
+//    1.1 Determine if the subquery can be eliminated
+//    2.2 If it cannot be eliminated:
+//        a. eliminate select list --> select 1
+//        b. eliminate group by
+//        c. eliminate order by
+//2. If it is ANY/ALL
+//  2.1 eliminate group by
+//  2.2 Non-related any subquery if select item is const item, then add limit 1
 //      eg: select * from t1 where c1 in (select 1 from t2);
 //          ==> select * from t1 where c1 in (select 1 from t2 limit 1);
-//  2.3 消除distinct
+//  2.3 Remove distinct
 int ObTransformSimplifySubquery::eliminate_subquery(ObDMLStmt *stmt,
                                               ObRawExpr *&expr,
                                               bool &trans_happened)
@@ -1411,10 +1406,10 @@ int ObTransformSimplifySubquery::groupby_can_be_eliminated_in_exists(const ObIte
 {
   int ret = OB_SUCCESS;
   can_be_eliminated = false;
-  // 当[not] exists(subq)满足以下所有条件时，可消除group by子句:
-  // 1. 当前stmt不是set stmt
-  // 2. 没有having子句
-  // 3. 没有limit子句
+  // When [not] exists(subq) satisfies all of the following conditions, the group by clause can be eliminated:
+  // 1. Current stmt is not a set stmt
+  // 2. No having clause
+  // 3. No limit clause
   if (OB_ISNULL(stmt)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("stmt is NULL", K(ret));
@@ -1434,13 +1429,12 @@ int ObTransformSimplifySubquery::groupby_can_be_eliminated_in_exists(const ObIte
   }
   return ret;
 }
-
-// 当Any/all/in(subq)满足以下所有条件时，可消除group by子句:
-// 1. 当前stmt不是set stmt
-// 2. 没有having子句
-// 3. 没有limit子句
-// 4. 无聚集函数（select item中）
-// 5. 非常量select item列，全部包含在group exprs中
+// When Any/all/in(subq) meets all of the following conditions, the group by clause can be eliminated:
+// 1. The current stmt is not a set stmt
+// 2. No having clause
+// 3. No limit clause
+// 4. No aggregate functions (in select item)
+// 5. Non-constant select item columns, all included in group exprs
 int ObTransformSimplifySubquery::eliminate_groupby_in_any_all(ObSelectStmt *stmt,
                                                               bool &trans_happened)
 {

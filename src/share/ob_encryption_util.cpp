@@ -126,11 +126,11 @@ void ObBlockCipher::create_key(const unsigned char *key, int key_length, char *r
 {
   const int key_size= get_key_length(opmode);
   char *rkey_end = NULL;
-  char *ptr = NULL;                                   /* 真正的key的起始位置 */
+  char *ptr = NULL;                                   /* the actual start position of the key */
   char *sptr = NULL;
   char *key_end= ((char *)key) + key_length;
   rkey_end= rkey + key_size;
-  memset(rkey, 0, key_size);          /* 初始化key */
+  memset(rkey, 0, key_size);          /* initialize key */
   for (ptr= rkey, sptr= (char *)key; sptr < key_end; ptr++, sptr++)
   {
     if (ptr == rkey_end)
@@ -393,8 +393,7 @@ bool ObBackupEncryptionMode::is_valid(const EncryptionMode &mode)
 {
   return mode >= NONE && mode < MAX_MODE;
 }
-
-//TODO(yaoying.yyy):暂时只支持tde，后续需要更新
+//TODO(yaoying.yyy): temporarily only supports tde, subsequent updates are needed
 bool ObBackupEncryptionMode::is_valid_for_log_archive(const EncryptionMode &mode)
 {
   return (NONE == mode || TRANSPARENT_ENCRYPTION == mode);

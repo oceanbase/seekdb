@@ -729,7 +729,7 @@ int ObWindowFunctionOp::NonAggrCellLeadOrLag::eval(RowsReader &row_reader,
           if (wf_info_.is_ignore_null_
               && tmp_result->is_null()) {
             //bug: 
-            //row_idx为null的时候，非ignore nulls下漏掉step++;
+            // row_idx is null when, non-ignore nulls skip step++;
             step = (j == row_idx) ? step+1 : step;
           } else if (step++ == offset) {
             found = true;
@@ -1788,7 +1788,7 @@ int ObWindowFunctionOp::compute(RowsReader &row_reader, WinFuncCell &wf_cell,
     LOG_WARN("get pos failed", K(ret));
   } else {
     Frame &last_valid_frame = wf_cell.last_valid_frame_;
-    // 这里的part_frame仅仅用于裁剪, 只有上边界是准确的
+    // Here part_frame is used only for cropping, only the top boundary is accurate
     Frame part_frame(wf_cell.part_first_row_idx_, get_part_end_idx());
 
     LOG_DEBUG("dump frame", K(part_frame), K(last_valid_frame), K(new_frame),
@@ -2858,7 +2858,7 @@ int ObWindowFunctionOp::get_pos(RowsReader &row_reader,
                                 const ObRADatumStore::StoredRow &row,
                                 const bool is_upper,
                                 int64_t &pos,
-                                bool &got_null_val) //上下限计算遇到了null值
+                                bool &got_null_val) // Lower and upper limit calculation encountered a null value
 {
   const bool is_rows = WINDOW_ROWS == wf_cell.wf_info_.win_type_;
   const bool is_preceding = (is_upper ? wf_cell.wf_info_.upper_.is_preceding_
@@ -2999,10 +2999,11 @@ int ObWindowFunctionOp::get_pos(RowsReader &row_reader,
       LOG_WARN("only need one sort_exprs", K(ret));
     } else {
       // range
-      /* 这个地方有点绕，举个例子，对于order by v range between x preceding and y following
-        语义上是(v +/- x) <= v <= (v +/- y)之间的所有行
-        +/-由preceding和序的方向共同决定, 同或-，异或+
-        编码上，我们就需要找出大于等于(v +/- x)的最小值的行和小于等于(v +/- y)的最大值的行
+      /* This place is a bit tricky, for example, for order by v range between x preceding and y following
+        semantically it is all rows between (v +/- x) <= v <= (v +/- y)
+        +/- is determined jointly by the direction of preceding and the sequence, same XOR -, different XOR +
+        In terms of coding, we need to find the row with the smallest value greater than or equal to (v +/- x)
+        and the row with the largest value less than or equal to (v +/- y)
       */
       const bool is_ascending_ = wf_cell.wf_info_.sort_collations_.at(0).is_ascending_;
       const int64_t cell_idx = wf_cell.wf_info_.sort_collations_.at(0).field_idx_;

@@ -281,8 +281,7 @@ int ObDirectLoadSSTableFragmentOperator::get_next_fragment(
   }
   return ret;
 }
-
-//索引项重新映射到对应文件的对应索引项
+// Index item remapped to the corresponding index item of the corresponding file
 int ObDirectLoadSSTableFragmentOperator::get_fragment_item_idx(int64_t idx,
                                                                      int64_t &locate_fragment_idx,
                                                                      int64_t &new_idx)

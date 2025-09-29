@@ -68,9 +68,8 @@ public:
   class LinkNode : public common::ObDLinkBase<LinkNode>
   {
   };
-
-  // 这里暂时以ObExpr的数组形式写入数据到DatumStore，主要是为了上层Operator在写入数据时，可以无脑调用ObExpr的插入
-  // 可以看下面参数为common::ObDatum **datums的函数进行对比
+  // Here temporarily write data to DatumStore in the form of an ObExpr array, mainly so that the upper layer Operator can blindly call the insert method of ObExpr when writing data
+  // can see below the function with parameter common::ObDatum **datums for comparison
   template<bool NEED_EVAL = true>
   static inline int row_copy_size(
     const common::ObIArray<ObExpr*> &exprs, ObEvalCtx &ctx, int64_t &size)

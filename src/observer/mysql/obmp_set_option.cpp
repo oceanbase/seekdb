@@ -110,7 +110,7 @@ int ObMPSetOption::process()
     if (need_disconnect && is_conn_valid()) {
       force_disconnect();
       LOG_WARN("disconnect connection when process query", K(ret));
-    } else  if (OB_FAIL(send_error_packet(ret, NULL))) { // 覆盖ret, 无需继续抛出
+    } else  if (OB_FAIL(send_error_packet(ret, NULL))) { // override ret, no need to throw further
       LOG_WARN("failed to send error packet", K(ret));
     }
   }

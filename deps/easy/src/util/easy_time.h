@@ -2,7 +2,7 @@
 #define EASY_TIME_H_
 
 /**
- * time的通用函数
+ * general functions for time
  */
 #include "easy_define.h"
 

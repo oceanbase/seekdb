@@ -67,8 +67,7 @@ static constexpr const char *const CPUACCT_USAGE_FILE = "cpuacct.usage";
 static constexpr const char *const CPU_STAT_FILE = "cpu.stat";
 static constexpr const char *const CGROUP_PROCS_FILE = "cgroup.procs";
 static constexpr const char *const CGROUP_CLONE_CHILDREN_FILE = "cgroup.clone_children";
-
-//集成IO参数
+//Integration IO parameters
 
 
 // init cgroup

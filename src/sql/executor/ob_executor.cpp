@@ -74,12 +74,11 @@ int ObExecutor::execute_plan(ObExecContext &ctx)
     LOG_WARN("create implicit cursor infos failed", K(ret), K(batched_stmt_cnt));
   } else {
     ObPhyPlanType execute_type = phy_plan_->get_plan_type();
-
-    // 特殊处理如下case：
+    // Special handling for the following cases:
     // MULTI PART INSERT (remote)
     //   SELECT (local)
-    // 这样的计划在优化器生成阶段，plan type是OB_PHY_PLAN_DISTRIBUTED，
-    // 但是需要使用local的方式进行执行调度
+    // Such a plan in the optimizer generation phase, plan type is OB_PHY_PLAN_DISTRIBUTED,
+    // But need to use local way for execution scheduling
     if (execute_type != OB_PHY_PLAN_LOCAL && phy_plan_->is_require_local_execution()) {
       execute_type = OB_PHY_PLAN_LOCAL;
       LOG_TRACE("change the plan execution type",
@@ -118,8 +117,8 @@ int ObExecutor::execute_plan(ObExecContext &ctx)
         } else {
           EVENT_INC(SQL_DISTRIBUTED_COUNT);
         }
-        // PX 特殊路径
-        // PX 模式下，调度工作由 ObPxCoord 算子负责
+        // PX special path
+        // PX mode, scheduling work is handled by the ObPxCoord operator
         ret = execute_static_cg_px_plan(ctx);
         break;
       default:
@@ -158,11 +157,11 @@ int ObExecutor::execute_static_cg_px_plan(ObExecContext &ctx)
 
 int ObExecutor::close(ObExecContext &ctx)
 {
-  // close函数要设计成不管什么时候调都可以，因此不管inited_的值
+  // close function should be designed to be callable at any time, therefore regardless of the value of inited_
   int ret = OB_SUCCESS;
   ObSQLSessionInfo *session_info = ctx.get_my_session();
   if (OB_LIKELY(NULL != session_info)) {
-    //将session中的cur_phy_plan_重置为NULL
+    // Reset cur_phy_plan_ in session to NULL
     session_info->reset_cur_phy_plan_to_null();
   }
   return ret;

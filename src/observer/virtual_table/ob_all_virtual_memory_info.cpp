@@ -98,7 +98,7 @@ int ObAllVirtualMemoryInfo::inner_get_next_row(ObNewRow *&row)
               break;
             }
           case MOD_ID: {
-              // MOD_ID废弃，为兼容工具而保留
+              // MOD_ID deprecated, retained for tool compatibility
               cells[i].set_int(0);
               break;
             }
@@ -143,7 +143,7 @@ int ObAllVirtualMemoryInfo::inner_get_next_row(ObNewRow *&row)
           }
         } // iter column end
         if (OB_SUCC(ret)) {
-          // scanner最大支持64M，因此暂不考虑溢出的情况
+          // scanner maximum supports 64M, therefore overflow is not considered for now
           if (OB_FAIL(scanner_.add_row(cur_row_))) {
             SERVER_LOG(WARN, "fail to add row", K(ret), K(cur_row_));
             if (OB_SIZE_OVERFLOW == ret) {

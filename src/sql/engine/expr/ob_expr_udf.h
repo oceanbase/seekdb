@@ -218,8 +218,8 @@ private:
   common::ObSEArray<ObUDFParamDesc, 5> params_desc_;
   common::ObSEArray<int64_t, 8> nocopy_params_;
   bool is_udt_udf_;
-  bool call_in_sql_; // 已经被弃用了，有兼容性问题不能删，现在改用基类里的 is_called_in_sql()。
-  uint64_t loc_; // 这个是col 和line number的组合，
+  bool call_in_sql_; // has been deprecated, there are compatibility issues and it cannot be deleted, now use is_called_in_sql() in the base class.
+  uint64_t loc_; // this is col and line number combination,
   bool is_udt_cons_;
 
 private:

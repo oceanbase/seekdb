@@ -69,11 +69,11 @@ public:
   virtual void reset();
   inline void set_addr(common::ObAddr &addr) { addr_ = addr; }
 private:
-  // 过滤得到需要处理的租户
+  // Filter to get the tenants that need processing
   virtual bool is_need_process(uint64_t tenant_id) override;
-  // 处理当前迭代的租户
+  // Process the tenant of the current iteration
   virtual int process_curr_tenant(common::ObNewRow *&row) override;
-  // 释放上一个租户的资源
+  // Release the resources of the previous tenant
   virtual void release_last_tenant() override;
 
   int get_next_tablet();

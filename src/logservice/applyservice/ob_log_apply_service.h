@@ -46,8 +46,7 @@ enum class ObApplyServiceTaskType
   SUBMIT_LOG_TASK = 1,
   APPLY_LOG_TASK = 2,
 };
-
-//虚拟表统计
+//Virtual table statistics
 struct LSApplyStat
 {
   int64_t ls_id_;
@@ -163,27 +162,27 @@ public:
   int stop();
   void inc_ref();
   int64_t dec_ref();
-  //任务相关
+  //task related
   int push_append_cb(AppendCb *cb);
   int try_submit_cb_queues();
   int try_handle_cb_queue(ObApplyServiceQueueTask *cb_queue, bool &is_timeslice_run_out);
   int is_apply_done(bool &is_done,
                     palf::LSN &end_lsn);
-  //主备切换相关
-  //int can_switch_to_follower(bool &can_revoke); //非最大保护模式不需要
+  //leader-follower switch related
+  //int can_switch_to_follower(bool &can_revoke); //Non-maximum protection mode does not require
   int switch_to_leader(const int64_t new_proposal_id);
   int switch_to_follower();
-  //palf相关
+  //palf related
   int update_palf_committed_end_lsn(const palf::LSN &end_lsn, const share::SCN &end_scn, const int64_t proposal_id);
   share::SCN get_palf_committed_end_scn() const;
   int unregister_file_size_cb();
   void close_palf_handle();
-  //最大连续回调位点
+  //maximum consecutive callback point
   int get_max_applied_scn(share::SCN &scn);
   int stat(LSApplyStat &stat) const;
   int handle_drop_cb();
   int diagnose(ApplyDiagnoseInfo &diagnose_info);
-  // offline相关
+  // offline related
   //
   // The constraint between palf and apply:
   //
@@ -220,7 +219,7 @@ private:
   int update_last_check_scn_();
   int handle_drop_cb_queue_(ObApplyServiceQueueTask &cb_queue);
   int switch_to_follower_();
-  //从cb中获取打点信息
+  //Get profiling information from cb
   void get_cb_trace_(AppendCb *cb,
                      int64_t &append_start_time,
                      int64_t &append_finish_time,
@@ -242,7 +241,7 @@ private:
   const int64_t WRLOCK_RETRY_INTERVAL_US = 20 * 1000;  // 20ms
 private:
   bool is_inited_;
-  bool is_in_stop_state_; //stop后不能上任, 残留的cb会继续处理
+  bool is_in_stop_state_; // after stop, it cannot take over, remaining cb will continue to be processed
   int64_t ref_cnt_; // guarantee the effectiveness of self memory
   share::ObLSID ls_id_;
   common::ObRole role_;
@@ -252,22 +251,22 @@ private:
   share::SCN palf_committed_end_scn_;
   //LSN standy_committed_end_lsn_;
   //palf::LSN min_committed_end_lsn_;
-  share::SCN last_check_scn_; //当前待确认的最大连续回调位点
-  share::SCN max_applied_cb_scn_; //该位点前的cb保证都已经回调完成
+  share::SCN last_check_scn_; //The maximum continuous callback point to be confirmed currently
+  share::SCN max_applied_cb_scn_; // The callbacks for cb before this point are guaranteed to be completed
   ObApplyServiceSubmitTask submit_task_;
   ObApplyServiceQueueTask cb_queues_[APPLY_TASK_QUEUE_SIZE];
   palf::PalfEnv *palf_env_;
   palf::PalfHandle palf_handle_;
   ObApplyFsCb fs_cb_;
-  mutable RWLock lock_; //保护role_, proposal_id_及is_in_stop_state_
-  mutable lib::ObMutex mutex_; //互斥获取最大连续位点不会被并发调用
+  mutable RWLock lock_; // protect role_, proposal_id_ and is_in_stop_state_
+  mutable lib::ObMutex mutex_; // Mutex for acquiring the maximum consecutive checkpoint will not be called concurrently
   mutable int64_t get_info_debug_time_;
   mutable int64_t try_wrlock_debug_time_;
-  ObMiniStat::ObStatItem cb_append_stat_; //获取lsn和ts的耗时
-  ObMiniStat::ObStatItem cb_wait_thread_stat_; //等待首次线程调度的耗时, 此次处理不一定会回调
-  ObMiniStat::ObStatItem cb_wait_commit_stat_; //从第一次被处理到真正回调之间的耗时
-  ObMiniStat::ObStatItem cb_execute_stat_; //cb执行on_success/on_failure的耗时
-  ObMiniStat::ObStatItem cb_stat_; //cb从产生到执行on_success的耗时
+  ObMiniStat::ObStatItem cb_append_stat_; //Get the time cost of obtaining lsn and ts
+  ObMiniStat::ObStatItem cb_wait_thread_stat_; //Waiting time for the first thread scheduling, this processing may not result in a callback
+  ObMiniStat::ObStatItem cb_wait_commit_stat_; //Time spent from the first processing to the actual callback
+  ObMiniStat::ObStatItem cb_execute_stat_; //cb execute on_success/on_failure time consumption
+  ObMiniStat::ObStatItem cb_stat_; // Time taken from cb generation to on_success execution
 };
 
 class ObLogApplyService : public lib::TGLinkTaskHandler
@@ -325,7 +324,7 @@ public:
   private:
     int ret_code_;
   };
-  //删除并清理所有cb
+  //Delete and clean up all cb
   class ResetApplyStatusFunctor
   {
   public:

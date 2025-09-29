@@ -313,7 +313,7 @@ TEST_F(TestLogSlidingWindow, test_submit_log)
     EXPECT_EQ(OB_SUCCESS, log_sw_.submit_log(buf, buf_len, ref_scn, lsn, scn));
   }
   PALF_LOG(INFO, "current lsn", K(lsn), K(buf_len));
-  // 8M已填充7M，无法继续submit 2M log
+  // 8M filled with 7M, unable to continue submit 2M log
   EXPECT_EQ(OB_EAGAIN, log_sw_.submit_log(buf, buf_len, ref_scn, lsn, scn));
 }
 
@@ -515,9 +515,9 @@ TEST_F(TestLogSlidingWindow, test_receive_log)
   EXPECT_EQ(OB_SUCCESS, log_sw_.receive_log(src_server, push_log_type, prev_lsn, prev_log_proposal_id, lsn, data_buf_, group_entry_size, true, truncate_log_info));
   // test <log_id, lsn> not match case
   PALF_LOG(INFO, "begin tese <log_id, lsn> not match case");
-  // 改大flush lsn
+  // Increase flush lsn
   log_sw_.max_flushed_end_lsn_.val_ += 100;
-  // 增大log_id，构造prev log空洞
+  // Increase log_id, construct prev log hole
   log_id += 100;
   uint64_t new_val = max_scn.get_val_for_logservice() - 10;
   max_scn.convert_for_logservice(new_val);

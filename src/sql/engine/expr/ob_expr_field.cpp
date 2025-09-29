@@ -112,7 +112,7 @@ int ObExprField::calc_result_typeN(ObExprResType &type,
       }
 
       type.set_int();
-      //调研mysql precision为3
+      // Research mysql precision is 3
       type.set_precision(3);
       //calc comparison collation,etc
       type.set_scale(DEFAULT_SCALE_FOR_INTEGER);

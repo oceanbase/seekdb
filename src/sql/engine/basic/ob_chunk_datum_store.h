@@ -90,8 +90,8 @@ public:
     return ret;
   }
   /*
-   * StoredRow内存编排
-   * 前面N个Datum + 中间是extend_size(可能为0) + 后面是真正的数据data
+   * StoredRow memory layout
+   * First N Datum + middle is extend_size (which may be 0) + then the actual data data
    * | datum1 | datum2 | ... | datumN | extend_size = 0 | data1 | data2 | ... | dataN |
    *     |__________________________________________________|^      ^              ^
    *              |_________________________________________________|              |
@@ -164,12 +164,12 @@ public:
   } __attribute__((packed));
 
   /**
-   * 考虑到很多场景都会临时保存下上一行数据，所以写一个class提供这种方式
-   * 如 Sort、MergeDisintct等
-   * 功能：
-   *    1）提供从ObIArray<ObExpr*> 到StoredRow的存储
-   *    2）提供reuse模式，内存可以反复利用
-   *    3）提供从StoredRow到ObIArray<ObExpr*>的转换
+   * Considering that many scenarios will temporarily save the previous row data, so write a class to provide this way
+   * Such as Sort, MergeDisintct etc
+   * Functions:
+   *    1) Provide storage from ObIArray<ObExpr*> to StoredRow
+   *    2) Provide reuse mode, memory can be reused repeatedly
+   *    3) Provide conversion from StoredRow to ObIArray<ObExpr*>
    */
   class LastStoredRow
   {
@@ -191,8 +191,8 @@ public:
       int64_t buffer_len = 0;
       StoredRow *new_row = NULL;
       if (OB_UNLIKELY(0 == exprs.count())) {
-        // 没有任何列
-        // 场景：如distinct 1，对于常量，不会有任何处理
+        // There are no columns
+        // Scenario: like distinct 1, for constants, there will be no processing
       } else if (OB_UNLIKELY(extra_size < 0 || extra_size > INT32_MAX)) {
         ret = OB_INVALID_ARGUMENT;
         SQL_ENG_LOG(ERROR, "invalid extra size", K(ret), K(extra_size));
@@ -497,8 +497,8 @@ public:
     int add_shadow_stored_row(const StoredRow &stored_row,
                                const uint32_t row_extend_size,
                                StoredRow **dst_sr);
-    // 将block payload 拷贝到unswizzling_payload, 并进行unswizzling,
-    // 不改变原始payload中内存
+    // Copy block payload to unswizzling_payload, and perform unswizzling,
+    // Do not change the memory in the original payload
     int gen_unswizzling_payload(char *unswizzling_payload, uint32 size);
     int unswizzling();
     int swizzling(int64_t *col_cnt);
@@ -786,7 +786,7 @@ public:
 
     int convert_to_row(const StoredRow *sr, const common::ObIArray<ObExpr*> &exprs, ObEvalCtx &ctx)
     { return row_it_.convert_to_row(sr, exprs, ctx); }
-    // 暂未使用
+    // Not yet used
     int convert_to_row(const StoredRow *sr, common::ObDatum **datums);
 
     void reset() { row_it_.reset(); reset_cursor(0); chunk_n_rows_ = 0; start_iter_ = false; }
@@ -1064,7 +1064,7 @@ public:
     io_event_observer_ = nullptr;
   }
   int dump(bool reuse, bool all_dump, int64_t dumped_size = INT64_MAX);
-  // 目前dir id 的策略是上层逻辑（一般是算子）统一申请，然后再set过来
+  // The current strategy for dir id is that the upper-level logic (usually an operator) applies for it uniformly, and then sets it over
   void set_dir_id(int64_t dir_id) { io_.dir_id_ = dir_id; }
   int alloc_dir_id();
   TO_STRING_KV(K_(tenant_id), K_(label), K_(ctx_id),  K_(mem_limit),
@@ -1091,9 +1091,8 @@ public:
     return io_event_observer_;
   }
   inline int64_t get_max_blk_size() const { return max_blk_size_; }
-
-  // 这里暂时以ObExpr的数组形式写入数据到DatumStore，主要是为了上层Operator在写入数据时，可以无脑调用ObExpr的插入
-  // 可以看下面参数为common::ObDatum **datums的函数进行对比
+  // Here temporarily write data to DatumStore in the form of an ObExpr array, mainly so that the upper layer Operator can blindly call the insert method of ObExpr when writing data
+  // can see below the function with parameter common::ObDatum **datums for comparison
   static inline int row_copy_size(const common::ObIArray<ObExpr *> &exprs, ObEvalCtx &ctx,
                                   int64_t &size);
 
@@ -1144,10 +1143,9 @@ private:
   inline void callback_free(int64_t size) { if (callback_ != nullptr) callback_->free(size); }
 
   int init_batch_ctx(const int64_t col_cnt, const int64_t max_batch_size);
-
-  // 提供给从chunk datum store获取后
-  // 由于整体是compact模式，所以采用指针形式指向第一个datum，后续以++或下标方式可以获取所有datum
-  // 暂时没有使用
+  // Provide for obtaining from chunk datum store after
+  // Since the overall mode is compact, a pointer form pointing to the first datum is used, subsequent data can be obtained using ++ or index method
+  // Temporarily not in use
   static inline int64_t row_copy_size(const common::ObDatum *datums, const int64_t cnt);
 private:
   bool inited_;

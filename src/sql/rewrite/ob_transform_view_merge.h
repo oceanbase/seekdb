@@ -125,11 +125,11 @@ private:
 
   /**
    * @brief wrap_case_when
-   * 如果当前视图是left outer join的右表或者right outer join的左表
-   * 需要对null rejuect的new column expr包裹一层case when
-   * 需要寻找视图的非空列，如果null_reject_columns不为空，
-   * 直接拿第一个使用，否则需要在stmt中查找非空列，
-   * 也可以是试图内基表的pk，但不能是outer join的补null侧
+   * If the current view is the right table of a left outer join or the left table of a right outer join
+   * need to wrap the new column expr for null reject with a case when
+   * need to find a non-null column in the view, if null_reject_columns is not empty,
+   * directly use the first one, otherwise need to find a non-null column in stmt,
+   * it can also be the pk of the base table within the view, but cannot be the null side of the outer join
    */
   int wrap_case_when(ObSelectStmt &child_stmt,
                     ObRawExpr *not_null_column,

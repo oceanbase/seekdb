@@ -83,9 +83,9 @@ class ObTestPlanCachePerformance : public test::TestOptimizerUtils
     virtual void TearDown();
     void TestBody() {}
   public:
-    int64_t test_times_; //执行test的次数
-    int64_t pc_time_;     //plan cache总时间
-    int64_t parse_time_;  //parse 总时间
+    int64_t test_times_; // the number of times to execute test
+    int64_t pc_time_;     // total time for plan cache
+    int64_t parse_time_;  // parse total time
     int64_t select_hit_count_;
     int64_t update_hit_count_;
     int64_t insert_hit_count_;

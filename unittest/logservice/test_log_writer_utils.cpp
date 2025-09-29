@@ -38,7 +38,7 @@ public:
     PALF_LOG(INFO, "on_success");
     return OB_SUCCESS;
   }
-  // 日志未形成多数派时会调用此函数，调用此函数后对象不再使用
+  // The function will be called when the log has not formed a majority, after which the object will no longer be used
   int on_failure() override {
     PALF_LOG(INFO, "on_failure");
     return OB_SUCCESS;

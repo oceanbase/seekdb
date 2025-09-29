@@ -145,7 +145,7 @@ public:
   static int finish(const ObTableLoadRedefTableFinishArg &arg, sql::ObSQLSessionInfo &session_info);
   static int abort(const ObTableLoadRedefTableAbortArg &arg, sql::ObSQLSessionInfo &session_info);
 private:
-  // 检查原表和隐藏表是否一致
+  // Check if the original table and the hidden table are consistent
   static int check_table_consistency(const uint64_t tenant_id,
                                      const uint64_t table_id,
                                      const uint64_t dest_table_id,

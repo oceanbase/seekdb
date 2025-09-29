@@ -133,8 +133,7 @@ enum ElementFlag : int64_t
   // Please also add in ELEMENTFLAG_MAX_LEN[ObDFMFlag::MAX_FLAG_NUMBER]
     MAX_FLAG_NUMBER
   };
-
-  //定义元素分组。有些相同语义的元素，他们属于同一个组，同组内的元素只能有一个，否则会报错
+  // Define element groups. Some elements with the same semantics belong to the same group, and only one element within the same group is allowed, otherwise an error will be reported
   enum ElementGroup : int64_t
   {
     RUNTIME_CONFLICT_SOLVE_GROUP = -2,
@@ -151,10 +150,9 @@ enum ElementFlag : int64_t
     ///<<< !!!add any flag before this line!!!
     MAX_CONFLICT_GROUP_NUMBER
   };
-
-  //每一个flag对应一个PATTERN, 匹配format时, 通过遍历pattern数组, 返回匹配到element的flag
+  // Every flag corresponds to a PATTERN, matching format by traversing the pattern array, returns the flag of the matched element
   static const ObTimeConstStr     PATTERN[MAX_FLAG_NUMBER];
-  //定义每个元素属于哪一组
+  // Define which group each element belongs to
   static constexpr int64_t        CONFLICT_GROUP_MAP[MAX_FLAG_NUMBER] =
   {
     /**AD*/         ERA_GROUP,
@@ -236,8 +234,7 @@ enum ElementFlag : int64_t
     /*SYYYY*/5, /*YYY*/3, /*YY*/2, /*Y*/1, /*DS*/10, /*DL*/MAX_WDAY_NAME_LENGTH_ORACLE + 2 + MAX_MON_NAME_LENGTH_ORACLE + 1 + 2 + 3,
     /*TZH*/3, /*TZM*/2, /*TZD*/OB_MAX_TZ_ABBR_LEN, /*TZR*/MIN(OB_MAX_TZ_NAME_LEN, 6), /*X*/1, /*J*/7, /*LITERAL*/46
   };
-
-  //定义组内冲突时，报什么错
+  //Define the error to report when conflicts occur within the group
   static constexpr int            CONFLICT_GROUP_ERR[MAX_CONFLICT_GROUP_NUMBER] =
   {
     /*NEVER_APPEAR_GROUP*/            OB_ERR_FORMAT_CODE_CANNOT_APPEAR,                 //OBE-01820: format code cannot appear in date input format
@@ -249,8 +246,7 @@ enum ElementFlag : int64_t
     /*MONTH_GROUP*/                   OB_ERR_MONTH_MAY_ONLY_BE_SPECIFIED_ONCE,          //OBE-01816: month may only be specified once
     /*DAY_OF_YEAR_GROUP*/             OB_ERR_JULIAN_DATE_PRECLUDES_USE_OF_DAY_OF_YEAR   //OBE-1811: Julian date precludes use of day of year
   };
-
-  //定义每个元素(数字类型)期望匹配长度，可以小于这个长度，不能超过
+  // Define the expected match length for each element (numeric type), which can be less than this length but cannot exceed
   static constexpr int64_t        EXPECTED_MATCHING_LENGTH[MAX_FLAG_NUMBER] =
   {
     /**AD*/         2,

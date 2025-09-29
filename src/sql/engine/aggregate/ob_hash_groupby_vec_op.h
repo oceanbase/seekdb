@@ -89,8 +89,7 @@ public:
   common::ObFixedArray<int64_t, common::ObIAllocator> dist_col_group_idxs_;
   ExprFixedArray distinct_exprs_; // the distinct arguments of aggregate function
 };
-
-// 输入数据已经按照groupby列排序
+// Input data has already been sorted by the groupby column
 class ObHashGroupByVecOp : public ObGroupByVecOp
 {
 using BaseClass = ObGroupByVecOp;

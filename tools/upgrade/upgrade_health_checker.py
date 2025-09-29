@@ -25,8 +25,7 @@ class MyError(Exception):
     self.value = value
   def __str__(self):
     return repr(self.value)
-
-#### --------------start : actions.py 只允许执行查询语句--------------
+#### --------------start : actions.py only allows query statements--------------
 class QueryCursor:
   __cursor = None
   def __init__(self, cursor):
@@ -138,9 +137,9 @@ Option('h', 'host', True, False),\
 Option('P', 'port', True, False),\
 Option('u', 'user', True, False),\
 Option('p', 'password', True, False, ''),\
-# 要跑哪个模块，默认全跑
+# Which module to run, default is all
 Option('m', 'module', True, False, 'all'),\
-# 日志文件路径，不同脚本的main函数中中会改成不同的默认值
+# Log file path, the default value will be changed to different values in the main function of different scripts
 Option('l', 'log-file', True, False),\
 Option('t', 'timeout', True, False, 0),\
 Option('z', 'zone', True, False, ''),\
@@ -210,7 +209,7 @@ def deal_with_local_opts():
     for opt in g_opts:
       if opt.is_local_opt() and opt.has_value():
         deal_with_local_opt(opt)
-        # 只处理一个
+        # Only process one
         return
 
 def get_opt_host():
@@ -266,14 +265,14 @@ def get_opt_zone():
 def config_logging_module(log_filenamme):
   logger = logging.getLogger('')
   logger.setLevel(logging.INFO)
-  # 定义日志打印格式
+  # Define log print format
   formatter = PasswordMaskingFormatter('[%(asctime)s] %(levelname)s %(filename)s:%(lineno)d %(message)s', '%Y-%m-%d %H:%M:%S')
   #######################################
-  # 定义一个Handler打印INFO及以上级别的日志到sys.stdout
+  # Define a Handler to print INFO and above level logs to sys.stdout
   stdout_handler = logging.StreamHandler(sys.stdout)
   stdout_handler.setLevel(logging.INFO)
   stdout_handler.setFormatter(formatter)
-  # 定义一个Handler处理文件输出
+  # Define a Handler to handle file output
   file_handler = logging.FileHandler(log_filenamme, mode='w')
   file_handler.setLevel(logging.INFO)
   file_handler.setFormatter(formatter)
@@ -320,7 +319,7 @@ def set_default_timeout_by_tenant(query_cur, timeout, timeout_per_tenant, min_ti
   return timeout
 
 #### START ####
-# 0. 检查server版本是否严格一致
+# 0. Check if the server version is strictly consistent
 def check_server_version_by_zone(query_cur, zone):
   if zone == '':
     logging.info("skip check server version by cluster")
@@ -331,26 +330,22 @@ def check_server_version_by_zone(query_cur, zone):
       raise MyError("servers build_version not match")
     else:
       logging.info("check server version success")
-
-# 1. 检查paxos副本是否同步, paxos副本是否缺失
+# 1. Check if paxos replicas are synchronized, if there are any missing paxos replicas
 def check_paxos_replica(query_cur, timeout):
-  # 1.1 检查paxos副本是否同步
+  # 1.1 Check if paxos replicas are synchronized
   sql = """select count(*) from oceanbase.GV$OB_LOG_STAT where in_sync = 'NO'"""
   wait_timeout = set_default_timeout_by_tenant(query_cur, timeout, 10, 600)
   check_until_timeout(query_cur, sql, 0, wait_timeout)
-
-  # 1.2 检查paxos副本是否有缺失 TODO
+  # 1.2 Check if there are any missing paxos replicas TODO
   logging.info('check paxos replica success')
-
-# 2. 检查observer是否可服务
+# 2. Check if observer is serviceable
 def check_observer_status(query_cur, zone, timeout):
   sql = """select count(*) from oceanbase.__all_server where (start_service_time <= 0 or status='inactive')"""
   if zone != '':
     sql += """ and zone = '{0}'""".format(zone)
   wait_timeout = set_default_timeout_by_tenant(query_cur, timeout, 10, 600)
   check_until_timeout(query_cur, sql, 0, wait_timeout)
-
-# 3. 检查schema是否刷新成功
+# 3. Check if schema refresh was successful
 def check_schema_status(query_cur, timeout):
   sql = """select if (a.cnt = b.cnt, 1, 0) as passed from (select count(*) as cnt from oceanbase.__all_virtual_server_schema_info where refreshed_schema_version > 1 and refreshed_schema_version % 8 = 0) as a join (select count(*) as cnt from oceanbase.__all_server join oceanbase.__all_tenant) as b"""
   wait_timeout = set_default_timeout_by_tenant(query_cur, timeout, 30, 600)
@@ -389,8 +384,7 @@ def check_until_timeout(query_cur, sql, value, timeout):
       logging.warn("""result not expected, sql: '{0}', expected: '{1}', current: '{2}'""".format(sql, value, results[0][0]))
       raise MyError("""result not expected, sql: '{0}', expected: '{1}', current: '{2}'""".format(sql, value, results[0][0]))
     time.sleep(10)
-
-# 开始健康检查
+# Start health check
 def do_check(my_host, my_port, my_user, my_passwd, upgrade_params, timeout, need_check_major_status, zone = ''):
   try:
     conn = mysql.connector.connect(user = my_user,
@@ -433,7 +427,7 @@ if __name__ == '__main__':
     check_db_client_opts()
     log_filename = get_opt_log_file()
     upgrade_params.log_filename = log_filename
-    # 日志配置放在这里是为了前面的操作不要覆盖掉日志文件
+    # Log configuration is placed here to prevent previous operations from overwriting the log file
     config_logging_module(upgrade_params.log_filename)
     try:
       host = get_opt_host()

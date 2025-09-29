@@ -157,21 +157,20 @@ public:
   DECLARE_VIRTUAL_TO_STRING;
     int init_px_batch_rescan_flags(int64_t count)
   { return enable_px_batch_rescans_.init(count); }
-
-  //在主表的每次迭代生成的行数据对于subquery来说都是驱动其进行数据迭代的参数
+  // In each iteration of the main table, the generated row data serves as the parameter driving the data iteration for the subquery
   common::ObFixedArray<ObDynamicParamSetter, common::ObIAllocator> rescan_params_;
-  //只计算一次subquery条件
+  // Only calculate the subquery condition once
   common::ObFixedArray<ObDynamicParamSetter, common::ObIAllocator> onetime_exprs_;
-  //InitPlan idxs，InitPlan只算一次，需要存储结果
+  // InitPlan idxs, InitPlan is counted only once, the result needs to be stored
   common::ObBitSet<common::OB_DEFAULT_BITSET_SIZE, common::ModulePageAllocator> init_plan_idxs_;
-  //One-Time idxs，One-Time只算一次，不用存储结果
+  //One-Time idxs，One-Time only counts once, no need to store the result
   common::ObBitSet<common::OB_DEFAULT_BITSET_SIZE, common::ModulePageAllocator> one_time_idxs_;
 
   // update set (, ,) = (subquery)
   ExprFixedArray update_set_;
   common::ObFixedArray<ObFixedArray<ObExpr *, common::ObIAllocator>, common::ObIAllocator> exec_param_array_;
   bool exec_param_idxs_inited_;
-  // 标记每个子查询是否可以做px batch rescan
+  // Mark each subquery whether it can do px batch rescan
   common::ObFixedArray<bool, common::ObIAllocator> enable_px_batch_rescans_;
   bool enable_das_group_rescan_;
   ExprFixedArray filter_exprs_;

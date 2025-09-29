@@ -178,8 +178,8 @@ int ObSimpleLogClusterTestBase::start()
     io_unit_config.min_iops_ = 10000000;
     io_unit_config.weight_ = 10000000;
     tio_manager_->update_basic_io_unit_config(io_unit_config);
-    // 如果需要新增arb server，将其作为memberlist最后一项
-    // TODO by runlin, 这个是暂时的解决方法，以后可以走加减成员的流程
+    // If you need to add a new arb server, add it as the last item in memberlist
+    // TODO by runlin, this is a temporary solution, it can follow the process of adding or removing members in the future
     const int64_t arb_idx = member_cnt_ - 1;
     int64_t node_id = node_idx_base_;
     for (int i = 0; OB_SUCC(ret) && i < node_cnt_; i++) {

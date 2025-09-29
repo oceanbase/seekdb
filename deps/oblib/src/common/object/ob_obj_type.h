@@ -23,12 +23,11 @@ class ObObjMeta;
 class ObAccuracy;
 template <class T>
 class ObIArray;
-
-// @note Obj类型只能增加，不能删除，顺序也不能变，见ob_obj_cast.h
-// @note 增加类型时需要同步修改ObObjTypeClass和ob_obj_type_class().
+// @note Obj type can only be added, not deleted, and the order cannot change, see ob_obj_cast.h
+// @note When adding a type, you need to synchronize the modification of ObObjTypeClass and ob_obj_type_class().
 enum ObObjType
 {
-  ObNullType        = 0,  // 空类型
+  ObNullType        = 0,  // null type
 
   ObTinyIntType     = 1,  // int8, aka mysql boolean type
   ObSmallIntType    = 2,  // int16
@@ -94,7 +93,7 @@ enum ObObjType
 enum ObObjOType
 {
   ObONotSupport       = 0,
-  ObONullType         = 1,   // 空类型
+  ObONullType         = 1,   // null type
   ObOSmallIntType     = 2,
   ObOIntType          = 3,
   ObONumberFloatType  = 4,  //float
@@ -150,7 +149,7 @@ enum class ObGeoType
 
 //for cast/cmp map
 static ObObjOType OBJ_TYPE_TO_O_TYPE[ObMaxType+1] = {
-  ObONullType,               // 空类型
+  ObONullType,               // null type
   ObOSmallIntType,           // int8, aka mysql boolean type
   ObOSmallIntType,           // int16
   ObONotSupport,             // int24
@@ -200,7 +199,7 @@ static ObObjOType OBJ_TYPE_TO_O_TYPE[ObMaxType+1] = {
   ObOCollectionSqlType,      //ObCollectionSQLType = 40,
   ObONotSupport,             //ObMySQLDateType = 41,
   ObONotSupport,             //ObMySQLDateTimeType = 42,
-  ObORoaringBitmapType,      //Roaring Bitmap Type = 43，
+  ObORoaringBitmapType,      //Roaring Bitmap Type = 43,
   ObONotSupport              //ObMaxType,
 };
 
@@ -346,7 +345,7 @@ const ObObjType OBJ_DEFAULT_TYPE[ObActualMaxTC] =
 static ObObjTypeClass OBJ_O_TYPE_TO_CLASS[ObOMaxType + 1] =
 {
   ObMaxTC,        //ObONotSupport = 1
-  ObNullTC,       // ObONullType = 2,   // 空类型
+  ObNullTC,       // ObONullType = 2,   // null type
   ObIntTC,        // ObOSmallIntType=3,
   ObIntTC,        // ObOIntType=4,
   ObNumberTC,     // ObOBinFloatType=5,          //float

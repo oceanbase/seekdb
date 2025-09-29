@@ -177,7 +177,7 @@ int ObDDLSqlGenerator::gen_create_user_sql(const ObAccountArg &account,
       }
     }
   }
-  // mysql mode 且密码不为空串
+  // mysql mode and password is not an empty string
   if (OB_SUCC(ret) && !lib::is_oracle_mode() && !password.empty()) {
     if (OB_FAIL(sql_string.append_fmt(" IDENTIFIED BY PASSWORD '%.*s'",
                                       password.length(),
@@ -186,7 +186,7 @@ int ObDDLSqlGenerator::gen_create_user_sql(const ObAccountArg &account,
     }
   } else if (OB_SUCC(ret) && lib::is_oracle_mode() 
              && !password.empty()) {
-    // oracle mode 且密码不为空串
+    // oracle mode and password is not an empty string
     if (OB_FAIL(sql_string.append_fmt(" IDENTIFIED BY VALUES \"%.*s\"",
                                       password.length(),
                                       password.ptr()))) {
@@ -194,7 +194,7 @@ int ObDDLSqlGenerator::gen_create_user_sql(const ObAccountArg &account,
     }
   } else if (OB_SUCC(ret) && lib::is_oracle_mode() 
              && password.empty()) {
-    // oracle mode 且密码为空串
+    // oracle mode and password is an empty string
     if (OB_FAIL(sql_string.append(" IDENTIFIED BY \"\""))) {
       LOG_WARN("append sql failed", K(ret), K(account));
     }

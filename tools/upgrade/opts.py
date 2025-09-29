@@ -115,9 +115,9 @@ Option('P', 'port', True, False),\
 Option('u', 'user', True, False),\
 Option('t', 'timeout', True, False, 0),\
 Option('p', 'password', True, False, ''),\
-# 要跑哪个模块，默认全跑
+# Which module to run, default is all
 Option('m', 'module', True, False, 'all'),\
-# 日志文件路径，不同脚本的main函数中中会改成不同的默认值
+# Log file path, the default value will be changed to different values in the main function of different scripts
 Option('l', 'log-file', True, False)
 ]\
 
@@ -191,7 +191,7 @@ def deal_with_local_opts(filename):
     for opt in g_opts:
       if opt.is_local_opt() and opt.has_value():
         deal_with_local_opt(opt, filename)
-        # 只处理一个
+        # Only process one
         return
 
 def get_opt_host():

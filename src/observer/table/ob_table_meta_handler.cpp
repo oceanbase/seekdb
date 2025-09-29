@@ -283,7 +283,7 @@ int ObHTableRegionLocatorHandler::try_compress(ObTableMetaResponse &response)
       ["127.0.0.3", 2883]
     ],
     "partitions": [
-      // 表1001的3个分区，每个分区3副本
+      // 3 partitions of table 1001, each partition with 3 replicas
       [0, 50001, "rowkey_1", 0, 1], // leader
       [0, 50001, "rowkey_1", 1, 0], // follower
       [0, 50001, "rowkey_1", 2, 0], // follower
@@ -294,7 +294,7 @@ int ObHTableRegionLocatorHandler::try_compress(ObTableMetaResponse &response)
       [0, 50003, "rowkey_3", 1, 0],
       [0, 50003, "rowkey_3", 2, 0],
 
-      // 表1002的3个分区，每个分区3副本
+      // 3 partitions of table 1002, each partition with 3 replicas
       [1, 50004, "rowkey_1", 0, 1],
       [1, 50004, "rowkey_1", 1, 0],
       [1, 50004, "rowkey_1", 2, 0],

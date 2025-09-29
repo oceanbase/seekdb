@@ -57,12 +57,12 @@ public:
   TO_STRING_KV(K_(create_outline_arg),
                K_(outline_stmt));
 private:
-  obrpc::ObCreateOutlineArg create_outline_arg_; //这个是需要在执行的过程中填充的，
-  common::ObString sql_id_; //给定sql_id的情况
-  common::ObString format_sql_id_; //给定sql_id的情况
-  common::ObString hint_; //给定的hint是什么
+  obrpc::ObCreateOutlineArg create_outline_arg_; // this is to be filled during execution,
+  common::ObString sql_id_; // given sql_idofcase
+  common::ObString format_sql_id_; // Given sql_id situation
+  common::ObString hint_; // What is the given hint
   int64_t max_concurrent_;
-  ObStmt *outline_stmt_;//the stmt for outline, 通过这个值是否为null来判断是那种情况
+  ObStmt *outline_stmt_;//the stmt for outline, determine the situation by whether this value is null or not
   DISALLOW_COPY_AND_ASSIGN(ObCreateOutlineStmt);
 };
 }//namespace sql

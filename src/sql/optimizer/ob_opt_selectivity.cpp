@@ -1583,13 +1583,13 @@ int ObOptSelectivity::update_table_meta_info(const OptTableMetas &base_table_met
           }
         }
         /**
-         * ndv的缩放分两步
-         * 第一步：
-         *   1. 如果存在某一列上的非复杂谓词，直接使用非复杂谓词计算该列第一步的ndv和rows
-         *   2. 如果某一列只有复杂谓词，则直接使用缩放公式计算该列第一步的ndv和rows
-         * 第二步：
-         *   使用第一步得到的ndv和rows作为column的原始ndv和rows，再基于所有过滤谓词过滤后的行数，
-         *   使用缩放公式缩放列的ndv。
+         * Scaling of ndv is done in two steps
+         * Step one:
+         *   1. If there is a non-complex predicate on a column, directly use the non-complex predicate to calculate the ndv and rows for that column in the first step
+         *   2. If a column has only complex predicates, directly use the scaling formula to calculate the ndv and rows for that column in the first step
+         * Step two:
+         *   Use the ndv and rows obtained from the first step as the original ndv and rows of the column, and then based on the number of rows filtered by all filter predicates,
+         *   use the scaling formula to scale the ndv of the column.
          */
         double origin_ndv = column_meta.get_ndv();
         double step1_ndv = column_meta.get_ndv();
@@ -1709,11 +1709,11 @@ int ObOptSelectivity::update_table_meta_info(const OptTableMetas &base_table_met
 }
 
 /**
- * 计算equal join condition的左右表选择率
+ * Calculate the selectivity of the equal join condition for the left and right tables
  * left_selectivity = right_ndv / left_ndv
  * right_selectivity = left_ndv / right_ndv
- * 如果left_rows > 0表示需要缩放左表的NDV
- * 如果right_rows > 0表示需要缩放右表的NDV
+ * If left_rows > 0 indicates that the NDV of the left table needs to be scaled
+ * If right_rows > 0 indicates that the NDV of the right table needs to be scaled
  */
 
 int ObOptSelectivity::get_column_range_sel(const OptTableMetas &table_metas,
@@ -2266,14 +2266,14 @@ int ObOptSelectivity::column_in_current_level_stmt(const ObDMLStmt *stmt,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("Stmt is NULL", K(stmt), K(ret));
   } else if (stmt->is_select_stmt() && static_cast<const ObSelectStmt*>(stmt)->is_set_stmt()) {
-    // TODO:@yibo 这里看起来没什么意义，后面检查一下
+    // TODO:@yibo Here it seems to have no meaning, check it later
     const ObSelectStmt *select_stmt = static_cast<const ObSelectStmt*>(stmt);
     const ObIArray<ObSelectStmt*> &child_query = select_stmt->get_set_query();
     for (int64_t i = 0; OB_SUCC(ret) && !is_in && i < child_query.count(); ++i) {
       ret = SMART_CALL(column_in_current_level_stmt(child_query.at(i), expr, is_in));
     }
   } else if (expr.is_column_ref_expr()) {
-    // TODO:@yibo 正常走到这里的时候，上层stmt的column都被抽成？了
+    // TODO:@yibo When reaching here normally, all columns of the upper-level stmt are abstracted to ?.
     const ObColumnRefRawExpr &b_expr = static_cast<const ObColumnRefRawExpr&>(expr);
     const TableItem *table_item = stmt->get_table_item_by_id(b_expr.get_table_id());
     if (NULL != table_item) {
@@ -2850,9 +2850,7 @@ int ObOptSelectivity::get_column_query_range(const OptSelectivityCtx &ctx,
   }
   return ret;
 }
-
-
-// 列上最常见的互斥谓词
+// Column-wise most common mutually exclusive predicates
 // c1 = 1 or c1 = 2
 // c1 = 1 or c1 is null
 int ObOptSelectivity::get_simple_mutex_column(const ObRawExpr *qual, const ObRawExpr *&column)
@@ -3039,8 +3037,8 @@ int ObOptSelectivity::calculate_distinct(const OptTableMetas &table_metas,
   ObSEArray<OptDistinctHelper, 2> helpers;
   ObSEArray<ObRawExpr *, 2> special_exprs;
   /**
-   * 1. 将 exprs 根据基表分组，sepcial exprs 中保存不在基表计算的表达式，例如 window function 等
-   * 2. 基表内计算 NDV 后（每张表的 NDV 最大值受基表行数限制），再根据当前行数计算联合 NDV
+   * 1. Group exprs by base table, special exprs stores expressions not calculated in the base table, such as window function etc
+   * 2. After calculating NDV within the base table (the maximum NDV of each table is limited by the number of rows in the base table), calculate the combined NDV based on the current row count
   */
   if (OB_FAIL(classify_exprs(ctx, exprs, helpers, special_exprs))) {
     LOG_WARN("failed to classify_exprs", K(ret));
@@ -3554,9 +3552,8 @@ int ObOptSelectivity::calculate_winfunc_ndv(const OptTableMetas &table_metas,
   special_ndv = revise_ndv(special_ndv);
   return ret;
 }
-
-// 仅保留一个 ndv 最小的 distinct expr, 加入到 filtered_exprs 中;
-// 再把不在 equal set 中的列加入到 filtered_exprs 中,
+// Only retain one distinct expr with the smallest ndv, add it to filtered_exprs;
+// Add columns not in the equal set to filtered_exprs,
 int ObOptSelectivity::filter_column_by_equal_set(const OptTableMetas &table_metas,
                                                  const OptSelectivityCtx &ctx,
                                                  DistinctEstType est_type,
@@ -3697,7 +3694,7 @@ int ObOptSelectivity::is_columns_contain_pkey(const OptTableMetas &table_metas,
   if (OB_ISNULL(table_meta)) {
     is_pkey = false;
   } else if (table_meta->get_pkey_ids().empty()) {
-    // 没有显式主键, 默认隐式主键不会作为选择条件
+    // No explicit primary key, default implicit primary key will not be used as a selection condition
     is_pkey = false;
   } else {
     const ObIArray<uint64_t> &pkey_ids = table_meta->get_pkey_ids();
@@ -4019,9 +4016,10 @@ int ObOptSelectivity::extract_equal_count(const ObRawExpr &qual, uint64_t &equal
 }
 
 /**
- * 此公式参考自 Join Selectivity by Jonathan Lewis.
- * 可以理解为 ndv 个值平均分布在原始的行(rows)中, 然后从中选取部分行(selected_rows),
- * 公式的结果为选中的行的 non-distinct value (new_ndv).
+ * This formula is referenced from Join Selectivity by Jonathan Lewis.
+ * It can be understood as ndv values evenly distributed across the original rows,
+ * then selecting some of those rows (selected_rows),
+ * the result of the formula is the non-distinct value (new_ndv) of the selected rows.
  */
 double ObOptSelectivity::scale_distinct(double selected_rows,
                                         double rows,
@@ -4032,9 +4030,9 @@ double ObOptSelectivity::scale_distinct(double selected_rows,
     // enlarge, ref:
     // - http://mysql.taobao.org/monthly/2016/05/09/
     // - Haas and Stokes in IBM Research Report RJ 10025
-    // 根据 partition 信息缩放
-    // 使用公式 n * d / (n - f1 + f1 * n/N)
-    // 其中, N(selected_rows) 需要放大到的行数; n(rows) 当前的行数; f1 则是只出现一次的值的数据. 如果假设平均分布, 那么 f1 = d * 2 - n; d 则是 ndv。
+    // Scale according to partition information
+    // Use formula n * d / (n - f1 + f1 * n/N)
+    // Where, N(selected_rows) is the number of rows to be scaled to; n(rows) is the current number of rows; f1 is the data of values that appear only once. If we assume an even distribution, then f1 = d * 2 - n; d is the ndv.
     //
     ndv = (ndv > rows ? rows : ndv); // revise ndv
     double f1 = ndv * 2 - rows;
@@ -4042,7 +4040,7 @@ double ObOptSelectivity::scale_distinct(double selected_rows,
       new_ndv = (rows * ndv) / (rows - f1 + f1 * rows / selected_rows);
     }
   } else if (selected_rows < rows) {
-    // 缩小, 参考 select_without_replacement
+    // Shrink, reference select_without_replacement
     if (ndv > OB_DOUBLE_EPSINON && rows > OB_DOUBLE_EPSINON) {
       new_ndv = ndv * (1 - std::pow(1 - selected_rows / rows, rows / ndv));
     }

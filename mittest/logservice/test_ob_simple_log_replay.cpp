@@ -59,7 +59,7 @@ public:
     if (NULL == rp_st_) {
       CLOG_LOG(ERROR, "rp_st_ is null");
     } else if (rand() % 2 && retry_count_ < RETRY_LIMIT) {
-      //随机模拟错误码和执行时间
+      // Randomly simulate error codes and execution time
       ret = OB_EAGAIN;
       retry_count_++;
       CLOG_LOG(INFO, "replay log retry", K(task_count_));
@@ -78,7 +78,7 @@ public:
         pre_barrier_scn_.atomic_set(replay_task->scn_);
       }
       if (replay_task->is_post_barrier_) {
-        //尽量让后向barrier回放慢,如果有没卡住的后向barrier之后的日志就会增大回放的概率
+        // Try to make the backward barrier replay slowly, if there are any unblocked backward barriers, the logs after them will increase the probability of replay
         usleep(1000);
       }
       ATOMIC_INC(&task_count_);
@@ -96,7 +96,7 @@ public:
       }
     }
   }
-  static const int64_t RETRY_LIMIT = 10000; //模拟随机重试限制
+  static const int64_t RETRY_LIMIT = 10000; // simulate random retry limit
   int64_t task_count_;
   int64_t retry_count_;
   share::SCN pre_barrier_scn_;
@@ -142,7 +142,7 @@ TEST_F(TestObSimpleLogReplayFunc, basic_replay)
   }
   LSN unused_lsn;
   int64_t unused_ts = 0;
-  //正向流程
+  // Forward process
   LSN last_log_lsn;
   share::SCN unused_scn;
   share::SCN last_scn;
@@ -162,7 +162,7 @@ TEST_F(TestObSimpleLogReplayFunc, basic_replay)
   EXPECT_EQ(0, rp_sv.get_pending_task_size());
   EXPECT_EQ(OB_SUCCESS, rp_sv.switch_to_leader(ls_id));
   EXPECT_EQ(OB_SUCCESS, rp_sv.switch_to_follower(ls_id, basic_lsn));
-  //验证reuse
+  // Validate reuse
   EXPECT_EQ(OB_SUCCESS, rp_sv.disable(ls_id));
   EXPECT_EQ(OB_SUCCESS, rp_sv.enable(ls_id, basic_lsn, share::SCN::min_scn()));
   is_done = false;
@@ -171,7 +171,7 @@ TEST_F(TestObSimpleLogReplayFunc, basic_replay)
     usleep(100);
     rp_sv.is_replay_done(ls_id, end_lsn, is_done);
   }
-  //测试受控回放
+  // Test controlled replay
   const int64_t id_shadow = ATOMIC_AAF(&palf_id_, 1);
   ObLSID ls_id_shadow(id_shadow);
   PalfHandleImplGuard leader_shadow;
@@ -189,11 +189,11 @@ TEST_F(TestObSimpleLogReplayFunc, basic_replay)
     ls_adapter.pre_barrier_scn_.set_min();
     ls_adapter.rp_st_ = rp_st;
   }
-  //只卡住最后一条日志的回放
+  // Only hold back the replay of the last log
   rp_sv.replayable_point_ = SCN::minus(last_scn, 1);
   EXPECT_EQ(OB_SUCCESS, rp_sv.enable(ls_id_shadow, basic_lsn, basic_scn));
   ls_adapter.wait_replay_done(task_count - 1);
-  //验证最大连续回放位点
+  // Validate maximum consecutive replay point
   SCN max_replayed_scn = SCN::min_scn();
   while (SCN::minus(last_scn, 1) != max_replayed_scn) {
     EXPECT_EQ(OB_SUCCESS, rp_sv.get_max_replayed_scn(ls_id_shadow, max_replayed_scn));
@@ -248,7 +248,7 @@ TEST_F(TestObSimpleLogReplayFunc, test_flashback_to_padding)
   }
   PalfBufferIterator &iterator = rp_st->submit_log_task_.iterator_;
   iterator.iterator_storage_.get_file_end_lsn_ = get_file_end_lsn;
-  // 停止拉日志
+  // Stop pulling logs
   rp_st->block_submit();
   EXPECT_EQ(OB_SUCCESS, submit_log(leader, 31, leader_idx, log_entry_size));
   EXPECT_EQ(OB_SUCCESS, wait_until_has_committed(leader, leader.get_palf_handle_impl()->get_max_lsn()));
@@ -274,18 +274,18 @@ TEST_F(TestObSimpleLogReplayFunc, test_flashback_to_padding)
     }
     is_done = false;
     CLOG_LOG(INFO, "runlin trace 3", K(iterator), KPC(rp_st));
-    // 预期replay的next_to_submit_lsn是padding_header
+    // Expected replay's next_to_submit_lsn is padding_header
     EXPECT_EQ(padding_header, rp_st->submit_log_task_.next_to_submit_lsn_);
     switch_flashback_to_append(leader, mode_version);
     iterator_end_lsn = LSN(100000000);
-    // 停止拉日志
+    // Stop pulling logs
     rp_st->block_submit();
     EXPECT_EQ(OB_SUCCESS, submit_log(leader, 1, leader_idx, log_entry_size));
     padding_tail_scn = leader.get_palf_handle_impl()->get_max_scn();
     LSN max_lsn = leader.get_palf_handle_impl()->get_max_lsn();
     EXPECT_EQ(OB_SUCCESS, wait_until_has_committed(leader, max_lsn));
   }
-  // Test2: flashback到padding头部, replay先执行flashback，再执行replay padding
+  // Test2: flashback to padding header, replay first executes flashback, then executes replay padding
   {
     int ret = OB_SUCCESS;
     CLOG_LOG(WARN, "flashback to padding header case2");
@@ -293,9 +293,9 @@ TEST_F(TestObSimpleLogReplayFunc, test_flashback_to_padding)
     SCN flashback_scn = padding_header_scn;
     switch_append_to_flashback(leader, mode_version);
     EXPECT_EQ(OB_SUCCESS, leader.get_palf_handle_impl()->flashback(mode_version, flashback_scn, abs_timeout_us));
-    // iterator看到的终点是padding日志头
+    // iterator sees the end as padding log header
     iterator_end_lsn = padding_header;
-    // replay看到的committed位点是padding尾
+    // replay sees the committed point as the tail of padding
     rp_st->unblock_submit();
     bool is_done = false;
     while (!is_done) {
@@ -303,48 +303,47 @@ TEST_F(TestObSimpleLogReplayFunc, test_flashback_to_padding)
       usleep(10*1000);
       CLOG_LOG(WARN, "not replay done", KPC(rp_st), K(padding_header));
     }
-    // 预期replay的next_to_submit_lsn是padding头
+    // Expected replay's next_to_submit_lsn is padding header
     EXPECT_EQ(iterator_end_lsn, rp_st->submit_log_task_.next_to_submit_lsn_);
-    // 修改iterator看到的终点为padding尾
+    // Modify the endpoint seen by iterator to the tail of padding
     iterator_end_lsn = LSN(PALF_BLOCK_SIZE);
-    // 触发拉日志
+    // Trigger pull log
     rp_st->trigger_fetch_log();
     sleep(1);
-    // 预期replay的next_to_submit_lsn是padding头
+    // Expected replay's next_to_submit_lsn is padding header
     EXPECT_EQ(padding_header, rp_st->submit_log_task_.next_to_submit_lsn_);
     switch_flashback_to_append(leader, mode_version);
-    // 停止拉日志
+    // Stop pulling logs
     rp_st->block_submit();
     EXPECT_EQ(OB_SUCCESS, submit_log(leader, 1, leader_idx, log_entry_size));
     padding_tail_scn = leader.get_palf_handle_impl()->get_max_scn();
     LSN max_lsn = leader.get_palf_handle_impl()->get_max_lsn();
     EXPECT_EQ(OB_SUCCESS, wait_until_has_committed(leader, max_lsn));
   }
-
-  // Test3: flashback到padding尾部, replay先执行flashback，再执行replay padding
+  // Test3: flashback to the end of padding, replay first executes flashback, then executes replay padding
   {
     int ret = OB_SUCCESS;
     CLOG_LOG(WARN, "flashback to padding tailer case1");
     int64_t abs_timeout_us = 4*1000*1000;
-    // flashback_scn为padding尾
+    // flashback_scn is the tail of padding
     SCN flashback_scn = SCN::minus(padding_tail_scn, 1);
     switch_append_to_flashback(leader, mode_version);
     EXPECT_EQ(OB_SUCCESS, leader.get_palf_handle_impl()->flashback(mode_version, flashback_scn, abs_timeout_us));
-    // iterator看到的终点是padding日志头
+    // iterator sees the end as padding log header
     iterator_end_lsn = padding_header;
-    // replay看到的committed位点是padding头
+    // replay sees the committed position as the padding header
     rp_st->unblock_submit();
     bool is_done = false;
-    // iterator由于文件长度，不会吐出padding日志，replay的next_to_submit_lsn到padding头部
+    // iterator due to file length, will not output padding log, replay's next_to_submit_lsn to padding head
     while (!is_done) {
       rp_sv.is_replay_done(ls_id, padding_header, is_done);
       usleep(10*1000);
       CLOG_LOG(WARN, "not replay done", KPC(rp_st), K(padding_header));
     }
     is_done = false;
-    // 预期replay的next_to_submit_lsn是padding头
+    // Expected replay's next_to_submit_lsn is padding header
     EXPECT_EQ(padding_header, rp_st->submit_log_task_.next_to_submit_lsn_);
-    // iterator能看到padding日志
+    // iterator can see padding log
     iterator_end_lsn = LSN(PALF_BLOCK_SIZE);
     rp_st->trigger_fetch_log();
     while (!is_done) {
@@ -408,7 +407,7 @@ TEST_F(TestObSimpleLogReplayFunc, test_wait_replay_done)
   EXPECT_EQ(LSN(PALF_BLOCK_SIZE), leader.get_palf_handle_impl()->get_max_lsn());
   EXPECT_EQ(OB_SUCCESS, wait_until_has_committed(leader, leader.get_palf_handle_impl()->get_max_lsn()));
   bool is_done = false;
-  // 无padding日志，committed位点是文件头
+  // No padding log, committed point is the file header
   while (!is_done) {
     rp_sv.is_replay_done(ls_id, LSN(PALF_BLOCK_SIZE), is_done);
   }
@@ -416,7 +415,7 @@ TEST_F(TestObSimpleLogReplayFunc, test_wait_replay_done)
   EXPECT_EQ(OB_SUCCESS, submit_log(leader, 31, leader_idx, log_entry_size));
   EXPECT_EQ(OB_SUCCESS, wait_until_has_committed(leader, leader.get_palf_handle_impl()->get_max_lsn()));
   EXPECT_EQ(OB_SUCCESS, submit_log(leader, 1, leader_idx, log_entry_size));
-  // 有padding日志，committed位点是文件头
+  // Padding log, committed point is the file header
   is_done =false;
   while (!is_done) {
     rp_sv.is_replay_done(ls_id, LSN(PALF_BLOCK_SIZE), is_done);

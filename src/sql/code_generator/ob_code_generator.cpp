@@ -40,11 +40,10 @@ int ObCodeGenerator::generate(const ObLogPlan &log_plan,
 
   return ret;
 }
-
-//1. 生成老的执行计划, 用于初始化所有表达式operator
-//   并初始化到ObExpr的op_中, 供新老表达式混跑使用, 后续不需要混跑会去掉
-//2. 获取执行期需要使用到的所有表达式
-//3. 生成所有物理表达式
+//1. Generate the old execution plan, used for initializing all expression operators
+//   and initialize to ObExpr's op_, for mixed running of new and old expressions, will be removed later
+//2. Get all expressions that will be used during execution
+//3. Generate all physical expressions
 int ObCodeGenerator::generate_exprs(const ObLogPlan &log_plan,
                                     ObPhysicalPlan &phy_plan,
                                     const uint64_t cur_cluster_version)

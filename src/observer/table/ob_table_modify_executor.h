@@ -21,7 +21,7 @@ namespace oceanbase
 {
 namespace table
 {
-// todo@dazhi: 编译需要，后续修改 dml_rtctx 中的 modify op 引用为指针之后会移除
+// todo@dazhi: Compilation required, will be removed after modifying the modify op reference to a pointer in dml_rtctx
 static sql::ObTableModifyOp& get_fake_modify_op()
 {
   static common::ObArenaAllocator alloc;
@@ -30,8 +30,8 @@ static sql::ObTableModifyOp& get_fake_modify_op()
   static sql::ObExecContext exec_ctx(alloc);
   static sql::ObSQLSessionInfo session;
   exec_ctx.set_my_session(&session);
-  static sql::ObTableInsertOpInput input(exec_ctx, op_spec); // ObDMLService::init_das_dml_rtdef 需要
-  static sql::ObPhysicalPlan phy_plan; // ObDMLService::init_das_dml_rtdef 需要
+  static sql::ObTableInsertOpInput input(exec_ctx, op_spec); // ObDMLService::init_das_dml_rtdef requires
+  static sql::ObPhysicalPlan phy_plan; // ObDMLService::init_das_dml_rtdef requires
   phy_plan.set_plan_type(OB_PHY_PLAN_LOCAL);
   op_spec.plan_ = &phy_plan;
   static sql::ObTableInsertOp ins_op(exec_ctx, op_spec, &input);

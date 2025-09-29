@@ -43,9 +43,9 @@ namespace sql
 
 inline int init_sql_factories()
 {
-  //**注意**,不要把这行日志删了, 该日志是为了初始化ObLog中线程局部
-  //变量LogBufferMgr, 避免其在jit malloc hook中进行该线程局部变量的
-  //new操作，导致malloc hook和日志模块的循环调用。
+  //**Note**, do not delete this line of log, the log is for initializing ObLog's thread-local
+  //variable LogBufferMgr, to avoid new operation on this thread-local variable in jit malloc hook,
+  //which leads to a circular call between malloc hook and log module.
   SQL_LOG(INFO, "init sql factories");
   int ret = common::OB_SUCCESS;
   ObExprOperatorFactory::register_expr_operators();

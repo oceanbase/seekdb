@@ -242,22 +242,22 @@ private:
     }
 
     const int32_t decimal_len = precision - scale;
-    // precision-scale>0时，整数部分的位数不能超过precision-scale
-    // precision-scale<=0时，整数部分必须为0，小数点后-(precision-scale)位也必须为0
+    // when precision-scale>0, the number of digits in the integer part cannot exceed precision-scale
+    // when precision-scale<=0, the integer part must be 0, and the -(precision-scale) digits after the decimal point must also be 0
     if ((decimal_len > 0 && integer_count <= decimal_len) ||
         (decimal_len <= 0 && n1 == 0 &&
          n2 / ROUND_POWS[(number::ObNumber::DIGIT_LEN + decimal_len)] == 0)) {
-      // scale>0时，精度限制在小数点后scale位
+      // when scale>0, precision is limited to scale decimal places
       if (scale > 0) {
         if (n2 > 0 && decimal_count > scale) {
           return OB_EAGAIN;
         }
-        // scale=0时，小数部分被舍去
+        // scale=0 when, the fractional part is discarded
       } else if (scale == 0) {
         if (n2 > 0) {
           return OB_EAGAIN;
         }
-        // scale<0时，小数部分被舍去且精度限制在小数点前-scale位
+        // when scale<0, the fractional part is discarded and precision is limited to -scale digits before the decimal point
       } else {
         if (n2 > 0 || -scale >= number::ObNumber::DIGIT_LEN || n1 % ROUND_POWS[-scale] == 0) {
           return OB_EAGAIN;

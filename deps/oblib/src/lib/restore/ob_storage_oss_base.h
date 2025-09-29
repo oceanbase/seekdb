@@ -137,7 +137,7 @@ public:
   char oss_id_[MAX_OSS_ID_LENGTH];
   char oss_key_[MAX_OSS_KEY_LENGTH];
   char *oss_sts_token_;
-  // "阿里云STS服务返回的安全令牌（STS Token）的长度不固定，强烈建议您不要假设安全令牌的最大长度。"
+  // "The length of the security token (STS Token) returned by the Alibaba Cloud STS service is not fixed, it is strongly recommended that you do not assume the maximum length of the security token."
   // therefore, use allocator to alloc mem for sts_token dynamically
   common::ObArenaAllocator allocator_;
   ObStorageDeleteMode delete_mode_;

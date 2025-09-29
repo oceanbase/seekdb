@@ -58,7 +58,7 @@ public:
   }
   inline int64_t hash() const
   {
-    //server地址一般都相同，这里计算server的hash值意义不大，在并发较大的情况下还白白浪费CPU
+    // server address is generally the same, here calculating the hash value of server makes little sense, and it wastes CPU unnecessarily in high concurrency situations
     return common::murmurhash(&execution_id_, sizeof(execution_id_), 0);
   }
   inline bool operator==(const ObExecutionID &id) const
@@ -75,7 +75,7 @@ public:
     server_.reset();
     execution_id_ = common::OB_INVALID_ID;
   }
-  //日志中输出hash value，便于排查问题的时候在日志中关联各个阶段的执行逻辑
+  // Log the hash value for easy association of execution logic at various stages when troubleshooting
   TO_STRING_KV(N_SERVER, server_,
                N_EXECUTION_ID, execution_id_,
                N_TASK_TYPE, task_type_,

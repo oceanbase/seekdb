@@ -31,7 +31,7 @@ __MemoryContext__ &__MemoryContext__::root()
       param.set_properties(ADD_CHILD_THREAD_SAFE | ALLOC_THREAD_SAFE)
         .set_parallel(4)
         .set_mem_attr(OB_SERVER_TENANT_ID, ObModIds::OB_ROOT_CONTEXT, ObCtxIds::DEFAULT_CTX_ID);
-      // root_context相对底层，被其他static对象依赖，而static对象之间析构顺序又是不确定的,
+      // root_context is at a lower level, being depended on by other static objects, while the destruction order of static objects is uncertain,
       // So here is modeled on ObMallocAllocator to design a non-destroy mode
       static StaticInfo static_info{__FILENAME__, __LINE__, __FUNCTION__};
       __MemoryContext__ *tmp = new (std::nothrow) __MemoryContext__(false, DynamicInfo(), nullptr, param, &static_info);

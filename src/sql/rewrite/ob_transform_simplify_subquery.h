@@ -61,19 +61,19 @@ private:
 
   /**
    * @brief transform_any_all
-   * 遍历stmt中不同部分中的表达式，并尝试对其改写
+   * Traverse expressions in different parts of stmt and attempt to rewrite them
    */
   int transform_any_all(ObDMLStmt *stmt, bool &trans_happened);
 
   /**
    * @brief try_trans_any_all
-   * 尝试对表达式 expr 本身或者它的参数表达式进行改写
+   * Try to rewrite the expression expr itself or its parameter expressions
    */
   int try_transform_any_all(ObDMLStmt *stmt, ObRawExpr *&expr, bool &trans_happened);
 
   /**
    * @brief do_trans_any_all
-   * 判断一个表达式是否可以进行改写，如果可以那么进行改写
+   * Determine if an expression can be rewritten, if so, perform the rewrite
    */
   int do_transform_any_all(ObDMLStmt *stmt, ObRawExpr *&expr, bool &trans_happened);
 
@@ -87,21 +87,21 @@ private:
 
   /**
    * @brief ObTransformAnyAll::eliminate_any_all_for_scalar_query
-   * 如果 subquery 返回的记录数量为0或者1，那么 any 可以消除
-   * 如果 subquery 返回记录数量为1，那么 all 可以消除
-   *   rel.c > all 空集  与 rel.c > 空集 语义不相同
+   * If subquery returns 0 or 1 record, then any can be eliminated
+   * If subquery returns 1 record, then all can be eliminated
+   *   rel.c > all empty set  is semantically different from rel.c > empty set
    */
   int eliminate_any_all_before_subquery(ObDMLStmt *stmt, ObRawExpr *&expr, bool &trans_happened);
 
   /**
    * @brief is_any_all_removeable
-   * 判断一个subquery compare 表达式的 any/all flag是否可以移除
+   * Determine if the any/all flag of a subquery compare expression can be removed
    */
   int check_any_all_removeable(ObRawExpr *expr, bool &can_be_removed);
 
   /**
    * @brief clear_any_all_flag
-   * 将一个 subquery compare 表达式 expr 替换为相应的 common compare 表达式
+   * Replace a subquery compare expression expr with the corresponding common compare expression
    */
   int clear_any_all_flag(ObDMLStmt *stmt, ObRawExpr *&expr, ObQueryRefRawExpr *query_ref);
 
@@ -127,10 +127,10 @@ private:
 
 
   /**
-   * 当[not] exists(subq)满足以下所有条件时，subquery可以被消除
-   * 1. 当前stmt不是set stmt
-   * 2. 当前stmt不包含having或group by
-   * 3. stmt包含聚集函数
+   * When [not] exists(subq) satisfies all of the following conditions, the subquery can be eliminated
+   * 1. The current stmt is not a set stmt
+   * 2. The current stmt does not contain having or group by
+   * 3. Stmt contains aggregate functions
    */
   static bool is_subquery_not_empty(const ObSelectStmt &stmt);
 
@@ -138,31 +138,31 @@ private:
                                            const ObSelectStmt *stmt,
                                            bool &can_be_eliminated) const;
   /**
-   * 当[not] exists(subq)满足以下所有条件时，select list可替换为1
-   * 1. 当前stmt不是set stmt
-   * 2. distinct和limit不同时存在
+   * When [not] exists(subq) satisfies all of the following conditions, the select list can be replaced with 1
+   * 1. The current stmt is not a set stmt
+   * 2. Distinct and limit do not exist simultaneously
    */
   int select_items_can_be_simplified(const ObItemType op_type,
                                     const ObSelectStmt *stmt,
                                     bool &can_be_simplified) const;
 
   /**
-   * 当[not] exists(subq)满足以下所有条件时，可消除group by子句:
-   * 1. 当前stmt不是set stmt
-   * 2. 没有having子句
-   * 3. 没有limit子句
+   * When [not] exists(subq) satisfies all of the following conditions, the group by clause can be eliminated:
+   * 1. The current stmt is not a set stmt
+   * 2. There is no having clause
+   * 3. There is no limit clause
    */
   int groupby_can_be_eliminated_in_exists(const ObItemType op_type,
                                           const ObSelectStmt *stmt,
                                           bool &can_be_eliminated) const;
 
   /**
-   * 当Any/all/in(subq)满足以下所有条件时，可消除group by子句:
-   * 1. 当前stmt不是set stmt
-   * 2. 没有having子句
-   * 3. 没有limit子句
-   * 4. 无聚集函数（select item中）
-   * 5. 非常量select item列，全部包含在group exprs中
+   * When Any/all/in(subq) meets all of the following conditions, the group by clause can be eliminated:
+   * 1. The current stmt is not a set stmt
+   * 2. There is no having clause
+   * 3. There is no limit clause
+   * 4. No aggregate functions (in select items)
+   * 5. Non-constant select item columns are all included in group exprs
    */
   int eliminate_groupby_in_any_all(ObSelectStmt *stmt, bool &trans_happened);
 

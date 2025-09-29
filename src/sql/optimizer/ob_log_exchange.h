@@ -226,9 +226,9 @@ private:
   // the 'partition key' expressions
   bool is_producer_;                                    /* true if the exchange the producer */
   bool is_rescanable_; /* true if this is exchange receive and can be rescan  */
-  int64_t dfo_id_; // 在 CG 之前就给 dfo 定下 id
-  int64_t px_id_; // 在 CG 之前就给多个 px 的 plan 定下每个 px 的 id
-  int64_t expected_worker_count_; // 仅供 QC 节点使用，其余 exchange 节点均为 0
+  int64_t dfo_id_; // Assign id to dfo before CG
+  int64_t px_id_; // Assign an id to each px's plan before CG
+  int64_t expected_worker_count_; // Only for QC node use, other exchange nodes are 0
 
   bool is_remote_; /* true if the exchange is remote single-server */
   bool is_task_order_; // true if the input data is task order
@@ -240,7 +240,7 @@ private:
   common::ObSEArray<int64_t, 4, common::ModulePageAllocator, true> wf_hybrid_pby_exprs_cnt_array_;
   common::ObSEArray<OrderItem, 4, common::ModulePageAllocator, true> sort_keys_;
 
-  int64_t slice_count_;//对于重分发之外的exchange, slice_count均为1
+  int64_t slice_count_;//For exchange other than redistribution, slice_count is always 1
   ObRepartitionType repartition_type_;
   int64_t repartition_ref_table_id_;
   int64_t repartition_table_id_;

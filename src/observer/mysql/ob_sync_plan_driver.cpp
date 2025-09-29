@@ -57,7 +57,7 @@ int ObSyncPlanDriver::response_result(ObMySQLResultSet &result)
     int cret = OB_SUCCESS;
     int cli_ret = OB_SUCCESS;
     // move result.close() below, after test_and_save_retry_state().
-    // open失败，决定是否需要重试
+    // open failed, decide whether to retry
     retry_ctrl_.test_and_save_retry_state(gctx_,
                                           ctx_,
                                           result,
@@ -65,7 +65,7 @@ int ObSyncPlanDriver::response_result(ObMySQLResultSet &result)
                                           cli_ret);
     if (OB_TRANSACTION_SET_VIOLATION != ret && OB_REPLICA_NOT_READABLE != ret) {
       if (OB_TRY_LOCK_ROW_CONFLICT == ret && retry_ctrl_.need_retry()) {
-        //锁冲突重试不打印日志，避免刷屏
+        //Lock conflict retry does not print logs to avoid screen flooding
       } else {
         LOG_WARN("result set open failed, check if need retry",
                  K(ret), K(cli_ret), K(retry_ctrl_.need_retry()));
@@ -82,7 +82,7 @@ int ObSyncPlanDriver::response_result(ObMySQLResultSet &result)
     }
     ret = cli_ret;
   } else if (result.is_with_rows()) {
-    // 是结果集，开始发送数据之后不再重试
+    // is the result set, no retries after starting to send data
     bool can_retry = false;
     if (OB_FAIL(response_query_result(result,
                                       result.is_ps_protocol(),
@@ -93,9 +93,9 @@ int ObSyncPlanDriver::response_result(ObMySQLResultSet &result)
       LOG_WARN("response query result fail", K(ret));
       // move result.close() below, after test_and_save_retry_state().
       if (can_retry) {
-        // 还能重试，在这里判断一下要不要重试
+        // Can retry, check here if we need to retry
         int cli_ret = OB_SUCCESS;
-        // response query result失败，决定是否需要重试
+        // response query result failed, decide whether to retry
         retry_ctrl_.test_and_save_retry_state(gctx_,
                                               ctx_,
                                               result,
@@ -158,8 +158,8 @@ int ObSyncPlanDriver::response_result(ObMySQLResultSet &result)
         // do nothing
       } else if ((is_prexecute_ && stmt::T_SELECT != result.get_stmt_type()) 
         || (!is_prexecute_ && sender_.need_send_extra_ok_packet() && !result.has_more_result())) {
-        // 二合一协议 select 语句的 OK 包全部放在协议层发送
-        // sync plan 此时需要为 二合一协议单独发送 OK 包 ， for obproxy， 
+        // Two-in-one protocol select statement's OK packet is entirely sent at the protocol layer
+        // sync plan At this time, a separate OK packet needs to be sent for the combined protocol, for obproxy,
         // in multi-stmt, send extra ok packet in the last stmt(has no more result)
         ObOKPParam ok_param;
         ok_param.affected_rows_ = result.get_affected_rows();
@@ -176,8 +176,8 @@ int ObSyncPlanDriver::response_result(ObMySQLResultSet &result)
           }
         }
       } else {
-        // 二合一协议 select 语句结果集后的 EOF 包都要在这里发送
-        // 非 二合一协议， 不需要额外 OK 包的 EOF 包需要在这里发送
+        // Two-in-one protocol select statement result set EOF packets should be sent here
+        // Not a combined protocol, the EOF packet without an additional OK packet needs to be sent here
         if (need_send_eof && OB_FAIL(sender_.response_packet(eofp, &result.get_session()))) {
           LOG_WARN("response packet fail", K(ret));
         }
@@ -249,7 +249,7 @@ int ObSyncPlanDriver::response_result(ObMySQLResultSet &result)
       !retry_ctrl_.need_retry() &&
       !admission_fail_and_need_retry
       && OB_BATCHED_MULTI_STMT_ROLLBACK != ret) {
-    //OB_BATCHED_MULTI_STMT_ROLLBACK如果是batch stmt rollback错误，不要返回给客户端，退回到mpquery上重试
+    //OB_BATCHED_MULTI_STMT_ROLLBACK if it is a batch stmt rollback error, do not return to the client, fall back to mpquery for retry
     if (ctx_.multi_stmt_item_.is_batched_multi_stmt()) {
       // The error of batch optimization execution does not need to send error packet here,
       // because the upper layer will force a fallback to a single line execution retry

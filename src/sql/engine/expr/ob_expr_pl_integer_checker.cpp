@@ -85,7 +85,7 @@ int ObExprPLIntegerChecker::calc_result_type1(ObExprResType &type,
 {
   int ret = OB_SUCCESS;
   UNUSED(type_ctx);
-  // ExprPLIntegerChecker用来check pl中integer数据类型的结果合法性, 不会改变结果的数据类型
+  // ExprPLIntegerChecker is used to check the validity of the result of integer data type in pl, without changing the data type of the result
   type.reset();
   if (OB_FAIL(type.assign(type1))) {
     LOG_WARN("fail to assign ObExprResType", K(type1), K(ret));
@@ -129,7 +129,7 @@ int ObExprPLIntegerChecker::check_range(const T &obj, const ObObjType type, int6
                         static_cast<int64_t>(min), static_cast<int64_t>(max));                  \
     default: {                                                                                  \
     }                                                                                           \
-  } // TODO:@xiaofeng.lby, 这里应该需要处理 decimal int 类型，PL 相关
+  } // TODO:@xiaofeng.lby, here should need to handle decimal int type, PL related
   ObPLIntegerRange pls_range(range);
   if (pls_range.valid()) {
     CHECK_OVERFLOW(pls_range.get_lower(), pls_range.get_upper());
@@ -147,7 +147,7 @@ int ObExprPLIntegerChecker::calc(ObObj &result,
 {
   int ret = OB_SUCCESS;
   switch (pls_type) {
-    // SimpleInteger的溢出行为有差别, 如果溢出需要圆整下, 其他的直接校验
+    // SimpleInteger's overflow behavior differs, if it overflows, it needs to be rounded, otherwise, just validate
     case PL_SIMPLE_INTEGER: {
       int64_t v = 0;
       if (obj.is_integer_type()) {

@@ -143,14 +143,14 @@ int ObGITaskSet::set_pw_affi_partition_order(bool asc, bool force_reverse)
 {
   int ret = OB_SUCCESS;
   if (gi_task_set_.count() <= 1) {
-    // 两种情况下不需要进行排序：
-    // 1. partition keys 是empty
-    // 增加empty的判断条件，aone：
-    // 由于在affinitize情况下，任务是按照partition的粒度划分，
-    // 如果parallel的值可能大于表的partition个数，就会出现task set为”空“，
-    // 如果task set是”空“就跳过`set_pw_affi_partition_order`过程
-    // 2. partition keys的count等于1
-    // partition keys的count等于1，也就表示仅有一个partition，所以不需要进行排序
+    // Two cases where sorting is not required:
+    // 1. partition keys is empty
+    // Add empty judgment condition, aone：
+    // Due to the fact that tasks are divided at the partition granularity in the affinitize case,
+    // If the value of parallel may be greater than the number of table partitions, it will result in the task set being "empty",
+    // If task set is "empty" skip the `set_pw_affi_partition_order` process
+    // 2. partition keys count equals 1
+    // partition keys count equals 1, which means there is only one partition, so sorting is not needed
 
     // do nothing
   } else {
@@ -533,8 +533,8 @@ int ObGranulePump::fetch_pw_granule_from_shared_pool(ObIArray<ObGranuleTaskInfo>
     ret = OB_ITER_END;
   } else {
     ObLockGuard<ObSpinLock> lock_guard(lock_);
-    // 表示取不到下一个GI task的op的个数；
-    // 理论上end_op_count只能等于0（表示gi任务还没有被消费完）或者等于`op_ids.count()`（表示gi任务全部被消费完）
+    // Indicates the number of ops that cannot get the next GI task;
+    // Theoretically, end_op_count can only be equal to 0 (indicating that the gi task has not been fully consumed) or equal to `op_ids.count()` (indicating that the gi task has been fully consumed)
     int64_t end_op_count = 0;
     if (OB_FAIL(get_fetch_task_ret())) {
       LOG_WARN("fetch task concurrently already failed", K(ret));
@@ -576,8 +576,7 @@ int ObGranulePump::fetch_pw_granule_from_shared_pool(ObIArray<ObGranuleTaskInfo>
         LOG_WARN("push back task info failed", K(ret));
       }
     }
-
-    // 防御性代码：检查full partition wise的情况下，每一个op对应的GI task是否被同时消费完毕
+    // Defensive code: check that every op's corresponding GI task is consumed simultaneously in full partition wise case
     if (OB_FAIL(ret)) {
       if (ret != OB_ITER_END) {
         set_fetch_task_ret(ret);
@@ -612,7 +611,7 @@ int ObGranulePump::check_pw_end(int64_t end_op_count, int64_t op_count, int64_t 
 }
 
 /**
- * 该函数比较特殊，在一个SQC中它可能被调用多次，类似于这样的计划
+ * This function is special, it may be called multiple times within an SQC, similar to such a plan
  *
  *             [Join]
  *               |
@@ -625,7 +624,7 @@ int ObGranulePump::check_pw_end(int64_t end_op_count, int64_t op_count, int64_t 
  *    EX(pkey)   GI
  *     |         |
  *   ....        TSC2
- * 在sqc的setup_op_input流程中，找到一个GI会调用一次这个接口。
+ * In the sqc's setup_op_input process, finding one GI will call this interface once.
  *
  */
 int ObGranulePump::add_new_gi_task(ObGranulePumpArgs &args, bool check_task_exist)
@@ -959,7 +958,7 @@ int ObGranuleSplitter::get_query_range(ObExecContext &ctx,
   ObQueryRangeArray skip_scan_ranges;
   ObPhysicalPlanCtx *plan_ctx = nullptr;
   bool has_extract_query_range = false;
-  // 如果tsc有对应的query range，就预先抽取对应的query range
+  // If tsc has the corresponding query range, pre-extract the corresponding query range
   LOG_DEBUG("set partition granule to whole range", K(table_id), K(op_id),
       K(partition_granule), K(with_param_down),
       K(tsc_pre_query_range.get_column_count()),
@@ -970,8 +969,8 @@ int ObGranuleSplitter::get_query_range(ObExecContext &ctx,
   } else if (partition_granule) {
     // For partition granule, we will prepare query range in table scan.
     ObNewRange whole_range;
-    // partition granule情况下，尽量提前抽取有效的query range，如果无法抽取有效的query range
-    // 就使用whole range
+    // In the partition granule case, try to extract the valid query range as early as possible, if a valid query range cannot be extracted
+    // Just use whole range
     if (0 == tsc_pre_query_range.get_column_count()) {
       whole_range.set_whole_range();
       has_extract_query_range = !tsc_pre_query_range.has_exec_param();
@@ -981,7 +980,7 @@ int ObGranuleSplitter::get_query_range(ObExecContext &ctx,
                                                     whole_range))) {
       LOG_WARN("Failed to make whole range", K(ret));
     } else if (!tsc_pre_query_range.has_exec_param()) {
-      // 没有动态参数才能够进行query range的提前抽取
+      // No dynamic parameters can be present to perform query range pre-extraction
       LOG_DEBUG("try to get scan range for partition granule");
       if (OB_FAIL(ObSQLUtils::extract_pre_query_range(
                     tsc_pre_query_range,
@@ -1001,7 +1000,7 @@ int ObGranuleSplitter::get_query_range(ObExecContext &ctx,
       }
     }
     if (OB_SUCC(ret)) {
-      // 没有抽取出来query range, 就使用whole range
+      // No query range extracted, use whole range
       if (scan_ranges.empty()) {
         LOG_DEBUG("the scan ranges is invalid, use the whole range", K(scan_ranges));
         if (OB_FAIL(ranges.push_back(whole_range))) {
@@ -1451,9 +1450,7 @@ int ObNormalAffinitizeGranuleSplitter::split_granule(ObGranulePumpArgs &args,
   LOG_TRACE("normal affinitize gi split_granule", K(ret), K(tablet_arrays), K(random_type));
   return ret;
 }
-
-
-// FULL PARTITION WISE 独有的split方法，可以处理INSERT/REPLACE的任务切分
+// FULL PARTITION WISE unique split method, can handle INSERT/REPLACE task splitting
 int ObPartitionWiseGranuleSplitter::split_granule(ObGranulePumpArgs &args,
                                       ObIArray<const ObTableScanSpec *> &scan_ops,
                                       const ObTableModifySpec * modify_op,
@@ -1471,21 +1468,21 @@ int ObPartitionWiseGranuleSplitter::split_granule(ObGranulePumpArgs &args,
 
 
   int expected_map_size = scan_ops.count();
-  // 如果GI需要切分INSERT/REPLACE任务，那么tablet_arrays中不仅包含了table_scans表对应的partition keys信息，还包含了
-  // insert/replace表对应的partition keys信息；例如这样的计划：
+  // If GI needs to split INSERT/REPLACE tasks, then tablet_arrays not only includes the partition keys information of the table_scans table, but also includes
+  // insert/replace table corresponding partition keys information; for example such a plan:
   // ....
   //     GI
   //      INSERT/REPLACE
   //         JOIN
   //          TSC1
   //          TSC2
-  // `tablet_arrays`的第一个元素对应的是INSERT/REPLACE表的partition keys，其他元素对应的是TSC的表的partition keys
+  // `tablet_arrays`'s first element corresponds to the partition keys of the INSERT/REPLACE table, other elements correspond to the partition keys of the TSC table
   int64_t task_begin_idx = gi_task_array_result.count();
   int tsc_begin_idx = 0;
   const common::ObIArray<DASTabletLocArray> &tablet_arrays = args.tablet_arrays_;
   if (OB_NOT_NULL(modify_op)) {
     expected_map_size++;
-    tsc_begin_idx = 1; // 目前最多只有一个INSERT/REPLACE算子
+    tsc_begin_idx = 1; // Currently there can be at most one INSERT/REPLACE operator
   }
   for (int64_t i = 0; i < expected_map_size && OB_SUCC(ret); i++) {
     GITaskArrayItem empty_task_array_item;
@@ -1501,12 +1498,12 @@ int ObPartitionWiseGranuleSplitter::split_granule(ObGranulePumpArgs &args,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid args", K(ret), K(tablet_arrays.count()));
   }
-  // 校验：校验REPLACE对应的分区与TSC对应的分区是否在逻辑上是相同的
+  // Validation: Validate whether the partition corresponding to REPLACE is logically the same as the partition corresponding to TSC
   if (OB_SUCC(ret)) {
     int tablet_count = tablet_arrays.at(0).count();
     DASTabletLocArray tablets = tablet_arrays.at(0);
     ARRAY_FOREACH(tablet_arrays, idx) {
-      // 校验每一个op对应的partition key的个数是相同的
+      // Validate that the number of partition keys for each op is the same
       DASTabletLocArray tablet_array = tablet_arrays.at(idx);
       if (OB_UNLIKELY(tablet_count != tablet_array.count())) {
         ret = OB_ERR_UNEXPECTED;
@@ -1514,7 +1511,7 @@ int ObPartitionWiseGranuleSplitter::split_granule(ObGranulePumpArgs &args,
       }
     }
   }
-  // 处理 insert/replace的任务划分
+  // Process insert/replace task division
   if (OB_SUCC(ret) && OB_NOT_NULL(modify_op)) {
     ObGITaskSet total_task_set;
     ObGITaskArray &taskset_array = gi_task_array_result.at(task_begin_idx).taskset_array_;
@@ -1524,7 +1521,7 @@ int ObPartitionWiseGranuleSplitter::split_granule(ObGranulePumpArgs &args,
       LOG_WARN("get single table loc id failed", K(ret));
     } else if (OB_FAIL(split_insert_gi_task(args,
                                     dml_ctdef->das_base_ctdef_.index_tid_,
-                                    dml_ctdef->das_base_ctdef_.rowkey_cnt_, // insert对应的row key count
+                                    dml_ctdef->das_base_ctdef_.rowkey_cnt_, // insert corresponding row key count
                                     tablet_arrays.at(0),
                                     partition_granule,
                                     total_task_set,
@@ -1533,12 +1530,12 @@ int ObPartitionWiseGranuleSplitter::split_granule(ObGranulePumpArgs &args,
     } else if (OB_FAIL(taskset_array.push_back(total_task_set))) {
       LOG_WARN("failed to push back task set", K(ret));
     } else {
-      // 获得对应的insert/replace op id
+      // Obtain the corresponding insert/replace op id
       LOG_TRACE("split modify gi task successfully", K(modify_op->get_id()));
       gi_task_array_result.at(task_begin_idx).tsc_op_id_ = modify_op->get_id();
     }
   }
-  // 处理 tsc的任务划分
+  // Process the task division of tsc
   if(OB_SUCC(ret)) {
     ObSEArray<DASTabletLocArray, 4> tsc_tablet_arrays;
     for (int i = tsc_begin_idx; i < tablet_arrays.count() && OB_SUCC(ret); i++) {
@@ -1571,9 +1568,9 @@ int ObPartitionWiseGranuleSplitter::split_insert_gi_task(ObGranulePumpArgs &args
                                             ObGITaskSet &task_set,
                                             ObGITaskSet::ObGIRandomType random_type)
 {
-  // 目前INSERT对应的GI一定是full partition wise类型，任务的划分粒度一定是按照partition进行划分
+  // Currently INSERT corresponding GI must be full partition wise type, task division granularity must be partition based
   int ret = OB_SUCCESS;
-  // insert的每一个partition对应的区间默认是[min_rowkey,max_rowkey]
+  // insert's every partition corresponding interval default is [min_rowkey,max_rowkey]
   ObNewRange each_partition_range;
   ObSEArray<ObNewRange, 4> ranges;
   ObSEArray<ObNewRange, 1> empty_ss_ranges;
@@ -1606,8 +1603,8 @@ int ObPartitionWiseGranuleSplitter::split_insert_gi_task(ObGranulePumpArgs &args
     LOG_WARN("failed to get insert granule task", K(ret), K(each_partition_range), K(tablets));
   } else if (OB_FAIL(task_set.construct_taskset(taskset_tablets, taskset_ranges,
                                                 empty_ss_ranges, taskset_idxs, random_type))) {
-    // INSERT的任务划分一定是 partition wise的，并且INSERT算子每次rescan仅仅需要每一个task对应的partition key，
-    // `ranges`,`idx`等任务参数是不需要
+    // INSERT's task division must be partition wise, and the INSERT operator only needs the corresponding partition key for each task during each rescan,
+    // `ranges`,`idx` etc. task parameters are not needed
     LOG_WARN("construct taskset failed", K(ret), K(taskset_tablets),
                                                  K(taskset_ranges),
                                                  K(taskset_idxs),

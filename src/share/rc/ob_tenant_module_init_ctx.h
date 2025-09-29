@@ -21,8 +21,7 @@ namespace oceanbase
 namespace share
 {
 class DagSchedulerConfig;
-
-// 租户模块初始化参数
+// Tenant module initialization parameters
 class ObTenantModuleInitCtx
 {
 public:

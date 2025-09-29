@@ -337,7 +337,7 @@ int TestPartitionMajorSSTableRangeSliter::check_ranges_result(const ObIArray<ObS
     // STORAGE_LOG(DEBUG, "ranges result", KR(ret), K(buf_), K(result));
     if (OB_SUCC(ret)) {
       if (length > 0) {
-        --length;  // 去掉末尾的','
+        --length;  // remove the trailing ','
       }
       buf_[length] = '\0';
       equal = (length == result.length() && ::memcmp(buf_, result.ptr(), length) == 0);

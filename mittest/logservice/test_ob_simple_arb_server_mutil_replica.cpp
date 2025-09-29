@@ -84,7 +84,7 @@ TEST_F(TestObSimpleMutilArbServer, create_mutil_tenant)
   ObSimpleLogServer *log_server = dynamic_cast<ObSimpleLogServer*>(iserver_log);
   ObSrvRpcProxy &rpc_proxy = log_server->srv_proxy_;
   ObAddr dst_addr = iserver_arb->get_addr();
-  // 验证建立arb replica副本
+  // Validate the establishment of arb replica copy
   obrpc::ObCreateArbArg arg;
   obrpc::ObCreateArbResult result;
   ObRpcNetHandler::CLUSTER_ID = 1;
@@ -97,8 +97,7 @@ TEST_F(TestObSimpleMutilArbServer, create_mutil_tenant)
         palflite::PalfEnvKey(cluster_id, 1001), palf_env_lite));
   EXPECT_EQ(OB_SUCCESS, palf_env_lite->get_palf_handle_impl(1, guard));
   guard.reset();
-
-  // 验证设置成员列表
+  // Validate member list settings
   obrpc::ObSetMemberListArgV2 memberlist_arg;
   obrpc::ObSetMemberListArgV2 memberlist_result;
   const ObMemberList member_list = get_arb_member_list();
@@ -139,7 +138,7 @@ TEST_F(TestObSimpleMutilArbServer, test_gc)
   ObSimpleLogServer *log_server = dynamic_cast<ObSimpleLogServer*>(iserver_log);
   ObSrvRpcProxy &rpc_proxy = log_server->srv_proxy_;
   ObAddr dst_addr = iserver_arb->get_addr();
-  // 验证GC
+  // Validate GC
   {
     palflite::PalfEnvLiteMgr *mgr = &arb_server->palf_env_mgr_;
     auto create_clusters = [&mgr, log_server](const std::vector<int64_t> &cluster_ids) -> int {
@@ -302,12 +301,12 @@ TEST_F(TestObSimpleMutilArbServer, test_gc)
     };
 
     arbserver::GCMsgEpoch epoch(100, 1000);
-    // 执行GC动作
+    // Execute GC action
     {
       uint64_t max_tenant_id = 1006;
-      // 只操作了1000 1002 cluster，预期1001 1003 cluster的日志流全部存在
-      // 预期1003租户会被直接删除完毕
-      // 预期1000 1001 1002 1004租户的1002 1007日志流会被删除
+      // Only operated on 1000 1002 cluster, expected all log streams of 1001 1003 cluster to exist
+      // Expected tenant 1003 to be directly deleted completely
+      // Expected tenant 1000 1001 1002 1004's 1002 1007 log streams to be deleted
       arbserver::TenantLSIDSArray array;
       EXPECT_EQ(OB_SUCCESS, create_tenant_ls_id_array(array));
       for (auto cluster_id : gc_cluster_ids) {
@@ -323,21 +322,20 @@ TEST_F(TestObSimpleMutilArbServer, test_gc)
 
     std::vector<uint64_t> not_exist_tenant_ids = {1003};
     std::vector<int64_t> no_gc_cluster_ids = {1001, 1003};
-    // 已经gc的cluster中，1003 租户不存在
+    // The tenant 1003 does not exist in the already gc cluster
     CLOG_LOG(INFO, "first check");
     EXPECT_EQ(false, check_tenant(gc_cluster_ids, not_exist_tenant_ids, epoch));
-    // 未gc的cluster中，1003 租户存在
+    // In the un-gced cluster, tenant 1003 exists
     CLOG_LOG(INFO, "second check");
     EXPECT_EQ(true, check_tenant(no_gc_cluster_ids, not_exist_tenant_ids, GCMsgEpoch(palf::INVALID_PROPOSAL_ID, -1)));
-    // 已经gc的cluster中，gc_tenant_ids中租户存在
+    // already gc'd cluster, tenant exists in gc_tenant_ids
     CLOG_LOG(INFO, "third check");
     EXPECT_EQ(true, check_tenant(gc_cluster_ids, gc_tenant_ids, epoch));
-
-    // 已经gc的cluster中，1002以及1007日志流不存在
+    // In the already gc'd cluster, log streams 1002 and 1007 do not exist
     std::vector<int64_t> not_exist_ls = {1002, 1007};
     CLOG_LOG(INFO, "fourth check");
     EXPECT_EQ(false, check_tenant_and_ls(gc_cluster_ids, gc_tenant_ids, not_exist_ls));
-    // 已经gc的cluster中，其他日志流存在
+    // In the cluster that has already been gc, other log streams exist
     CLOG_LOG(INFO, "five check");
     EXPECT_EQ(true, check_tenant_and_ls(gc_cluster_ids, gc_tenant_ids, gc_ls_ids));
 

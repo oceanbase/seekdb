@@ -22,7 +22,7 @@ namespace sql
 {
 
 /*
- * 是否需要回表的比较
+ * Whether a back-table comparison is needed
  * */
 int ObIndexBackDim::compare(const ObSkylineDim &other, CompareStat &status) const
 {
@@ -62,7 +62,7 @@ int ObInterestOrderDim::add_filter_column_ids(const common::ObIArray<uint64_t> &
   return ret;
 }
 /*
- * 比较interesting order
+ * Compare interesting order
  * */
 int ObInterestOrderDim::compare(const ObSkylineDim &other, CompareStat &status) const
 {
@@ -142,7 +142,7 @@ int ObInterestOrderDim::add_const_column_info(const common::ObIArray<bool> &cons
 }
 
 /*
- * 比较left 和right之间的关系, id按索引列的顺序排序
+ * Compare the relationship between left and right, id sorted by the order of index columns
  * [16] RIGHT_DOMINATED [16, 17]
  * [16, 17] LEFT_DOMINATED [17]
  * [16, 17] UNCOMPARABLE [17, 16]
@@ -218,7 +218,7 @@ int KeyPrefixComp::do_compare(const uint64_t *left, const int64_t left_cnt,
 }
 
 /*
- * 比较left 和right 之间的关系, 加进数组之前会先排序
+ * Compare left and right relationship, sort before adding to array
  * [16, 17] EQUAL [16, 17]
  * [16, 17, 18] LEFT_DOMINATED [16, 17] 
  * [16, 18] RIGHT_DOMINATED [16, 18 ,20]
@@ -403,9 +403,9 @@ int ObShardingInfoDim::compare(const ObSkylineDim &other, CompareStat &status) c
 }
 
 /*
- * 对三个维度进行比较
- * 有一个维度UNCOMPARABLE， 则不能比较
- * A LEFT_DOMINATED B, 则A至少存在某个维度上比B好, 其它维度必须EQUAL
+ * Compare three dimensions
+ * If one dimension is UNCOMPARABLE, then comparison is not possible
+ * A LEFT_DOMINATED B, then A must be better than B in at least one dimension, and other dimensions must be EQUAL
  * */
 int ObIndexSkylineDim::compare(const ObIndexSkylineDim &other, ObSkylineDim::CompareStat &status) const
 {
@@ -650,7 +650,7 @@ int ObSkylineDimRecorder::add_index_dim(const ObIndexSkylineDim &dim, bool &has_
     } else if (need_add) {
       //remove from back, idx id is in ascending order
       //if need to remove
-      //需要添加的情况下，把那些被dim dominated的索引剪掉
+      // Need to add, remove those indexes that are dominated by dim
       for (int64_t i = remove_idxs.count() - 1; OB_SUCC(ret) && i >= 0; --i) {
         if (OB_FAIL(index_dims_.remove(remove_idxs.at(i)))) {
           LOG_WARN("remove index dimension failed", K(ret));
@@ -688,10 +688,10 @@ int ObSkylineDimRecorder::get_dominated_idx_ids(ObIArray<uint64_t> &dominated_id
 }
 
 /*
- * 判断index_dims_是否有比dim好的索引
- * (1) 存在比dim好的索引A，则dim不用添加，可以剪掉
- * (2) dim比recorder的某些维度好，会记录索引id到 remove_idxs里面
- * need_add表示dim是否需要添加
+ * Determine if index_dims_ has a better index than dim
+ * (1) If there exists a better index A than dim, then dim does not need to be added and can be pruned
+ * (2) If dim is better than some dimensions of recorder, it will record the index id into remove_idxs
+ * need_add indicates whether dim needs to be added
  * */
 int ObSkylineDimRecorder::has_dominate_dim(const ObIndexSkylineDim &dim,
                                            ObIArray<int64_t> &remove_idxs,

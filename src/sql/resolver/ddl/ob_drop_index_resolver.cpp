@@ -85,7 +85,7 @@ int ObDropIndexResolver::resolve(const ParseNode &parse_tree)
       } else {
         int32_t len = static_cast<int32_t>(index_node->str_len_);
         ObString index_name(len, len, index_node->str_value_);
-        // 检查索引是否建立在外键列上，如果是的话，则不允许删除该索引
+        // Check if the index is created on a foreign key column, if so, then do not allow the index to be deleted
         const ObTableSchema *table_schema = NULL;
         if (OB_FAIL(schema_checker_->get_table_schema(session_info_->get_effective_tenant_id(),
             drop_index_stmt->get_database_name(),
@@ -150,7 +150,7 @@ int ObDropIndexResolver::resolve(const ParseNode &parse_tree)
             }
           }
         }
-        // 外键列对删除索引的影响至此检查结束
+        // Foreign key column deletion index impact check ends here
         if (OB_SUCC(ret)) {
           drop_index_stmt->set_index_name(index_name);
           obrpc::ObDropIndexArg &drop_index_arg = drop_index_stmt->get_drop_index_arg();

@@ -43,7 +43,7 @@ struct ObArchiveFileHeader
 
 public:
   static const int16_t ARCHIVE_FILE_HEADER_MAGIC = 0x4648; // FH means archive file header
-  static constexpr int64_t DEFAULT_ARCHIVE_UNIT_SIZE = 16 * 1024L;   // 归档压缩加密单元大小;
+  static constexpr int64_t DEFAULT_ARCHIVE_UNIT_SIZE = 16 * 1024L;   // archive compression encryption unit size;
 };
 
 class ObArchiveFileUtils

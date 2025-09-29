@@ -4463,7 +4463,7 @@ OB_SERIALIZE_MEMBER((ObAlterUserProfileArg, ObDDLArg),
 bool ObGrantArg::is_valid() const
 {
   return OB_INVALID_ID != tenant_id_
-         /* Oracle mode不一样的权限体系
+         /* Oracle mode different permission system
           * && priv_level_ > OB_PRIV_INVALID_LEVEL
          && priv_level_ < OB_PRIV_MAX_LEVEL
          && users_passwd_.count() > 0
@@ -5761,7 +5761,7 @@ int ObGetLSReplayedScnRes::init(
                   || !ls_id.is_valid()
                   || !cur_readable_scn.is_valid_and_not_min()
                   || !server.is_valid())) {
-                  //不用校验offline_scn，可能就是一个非法的
+                  //Do not validate offline_scn, it might be an illegal one
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), K(tenant_id), K(ls_id), K(cur_readable_scn), K(server));
   } else {

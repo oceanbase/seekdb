@@ -144,17 +144,17 @@ int ObSelectResolver::do_check_node_in_cte_recursive_union(const ParseNode* curr
 
 /*
  * test if a query node contains recursive nodes
- *  为什么需要交换左右支？
+ *  why is it necessary to swap the left and right branches?
  *  with cte(c1) as (select 1 from dual union all select c1+1 from cte where c1 < 100)
  *  select * from cte;
  *
  *  with cte(c1) as (select c1+1 from cte where c1 < 100 union all select 1 from dual)
  *  select * from cte;
  *
- *  oracle支持这两种写法。之前在cte的实现时是误判了，认为只能左边是anchor member。
- *  对于recursive cte的revolber解析来说，左右支解析是敏感的，右边的解析依赖于左边先被
- *  解析。为什么呢？因为假设在没有解析左边的时候就开始解析右边，我们完全不知道cte这张表
- *  的c1列是什么类型。所以这里先判断是否需要交换左右支。
+ *  oracle supports both of these writing styles. Previously, in the implementation of cte, it was misjudged that only the left side could be the anchor member.
+ *  For the revolver parsing of recursive cte, the parsing of the left and right branches is sensitive, the parsing of the right branch depends on the left branch being
+ *  parsed first. Why? Because if we start parsing the right branch without parsing the left branch, we have no idea what type the c1 column of the cte table is.
+ *  Therefore, we first determine whether it is necessary to swap the left and right branches.
  */
 int ObSelectResolver::check_query_is_recursive_union(const ParseNode &parse_tree,
                                                      bool &recursive_union)
@@ -182,9 +182,9 @@ int ObSelectResolver::check_query_is_recursive_union(const ParseNode &parse_tree
   return ret;
 }
 
-/* 1. recursive 只能使用 union all 语法
- * 2. recursive mysql mode, cte只能在最后一支UNION ALL的右支，左支只要不出现cte就行
- * 3. recursive oracle mode, cte可以出现在左右两支其中一支，不允许在子查询中出现, 而且左右两支都不允许是set, 。
+/* 1. recursive can only use union all syntax
+ * 2. recursive mysql mode, cte can only be on the right side of the last UNION ALL, the left side can be anything as long as it does not contain a cte
+ * 3. recursive oracle mode, cte can appear in either the left or right side, but not in subqueries, and neither the left nor right side can be a set.
 */
 int ObSelectResolver::do_resolve_set_query_in_recursive_cte(const ParseNode &parse_tree)
 {
@@ -286,7 +286,7 @@ int ObSelectResolver::do_resolve_set_query_in_recursive_cte(const ParseNode &par
     } else if (!is_set_recursive_union) {
       /* do nothing */
     } else if (select_stmt->is_set_distinct() || ObSelectStmt::UNION != select_stmt->get_set_op()) {
-      // 必须是union all
+      // Must be union all
       ret = OB_NOT_SUPPORTED;
       LOG_USER_ERROR(OB_NOT_SUPPORTED, "recursive WITH clause using operation not union all");
       LOG_USER_ERROR(OB_NOT_SUPPORTED, "recursive WITH clause using union (distinct) operation");
@@ -297,8 +297,8 @@ int ObSelectResolver::do_resolve_set_query_in_recursive_cte(const ParseNode &par
       LOG_WARN("use limit clause in the recursive cte is not allowed", K(ret));
     } else {
       /**
-      * 设置这个一个set query是否是with clause中的递归类型
-      * 这个带有set op 为union的stmt，被标记为递归union，在后续展开时，平常的union all算子将被R union算子取代
+      * Set whether this set query is a recursive type in the with clause
+      * This stmt with set op as union is marked as recursive union, during subsequent expansion, the regular union all operator will be replaced by R union operator
       */
       select_stmt->set_recursive_union(true);
     }
@@ -346,9 +346,9 @@ int ObSelectResolver::resolve_set_query_hint()
   return ret;
 }
 
-/* 1. 类型推导的过程 (A union B) union (C union D) 不等于 A union B union C union D
-      添加cast的过程 cast(cast(A, R1), R2) != cast(A, R2)
-      添加完cast之后，才可以展开包含括号的UNION
+/* 1. The process of type inference (A union B) union (C union D) is not equal to A union B union C union D
+      Adding the cast process cast(cast(A, R1), R2) != cast(A, R2)
+      After adding cast, the UNION containing parentheses can be expanded
  * 2. calc_found_rows
  * 3. is_serial_set_order_forced
  */
@@ -631,7 +631,7 @@ int ObSelectResolver::check_group_by()
   bool only_need_constraints = true;
   if (is_only_full_group_by_on(session_info_->get_sql_mode()) &&
     !select_stmt->get_query_ctx()->is_prepare_stmt()) {
-    //在解析过程中，standard group checker会记录需要检查的column和expr,在所有语句都解析完成后
+    // During the parsing process, standard group checker will record the columns and exprs that need to be checked, after all statements have been parsed completely
     if (OB_FAIL(standard_group_checker_.check_only_full_group_by())) {
       LOG_WARN("failed to check group by");
     }
@@ -650,9 +650,9 @@ int ObSelectResolver::check_group_by()
   }
 
   // replace with same group by columns.
-  // groupby之上的计算我们放在这里统一处理：
-  // 1. select item/having/order item中的表达式树(子树)需要每个都在group by列中找到
-  // 2. 递归查找是否在groupby列中，将在groupby的列的指针替换。
+  // Calculations above groupby are handled uniformly here:
+  // 1. the expression tree (subtree) in select item/having/order item needs each to be found in the group by columns
+  // 2. Recursively find if it is in the groupby column, and replace the pointer of the column in groupby.
   if (OB_SUCC(ret)) {
     if (OB_FAIL(ObTransformUtils::replace_stmt_expr_with_groupby_exprs(select_stmt, NULL))) {
       LOG_WARN("failed to replace stmt expr with groupby columns", K(ret));
@@ -950,7 +950,7 @@ int ObSelectResolver::resolve_normal_query(const ParseNode &parse_tree)
 
   /**
    * @muhang.zb
-   * 定义了一个cte，无论最终是否在主句使用，都必须要进行解析
+   * Define a cte, regardless of whether it is ultimately used in the main clause, it must be parsed
    */
   OZ( resolve_with_clause(parse_tree.children_[PARSE_SELECT_WITH]) );
 
@@ -1005,7 +1005,7 @@ int ObSelectResolver::resolve_normal_query(const ParseNode &parse_tree)
 
   if (OB_SUCC(ret)) {
     bool has_flashback_query = false;
-    //select for update要求stmt中任何一处都不能出现flashback query相关属性
+    //select for update requires that no flashback query related attributes appear anywhere in stmt
     if (select_stmt->has_for_update() &&
         OB_FAIL(check_stmt_has_flashback_query(select_stmt, true, has_flashback_query))) {
       LOG_WARN("failed to check stmt has flashback query", K(ret));
@@ -1021,9 +1021,9 @@ int ObSelectResolver::resolve_normal_query(const ParseNode &parse_tree)
   }
 
   //bug:
-  //由于支持mysql模式下的name window,需要提前解析name window保存下来，然后再解析引用的win expr的表达式,当前实现
-  //方式是保存在select stmt中,但是在全部解析完之后没有把那些name window的对应win_expr去除掉,导致生成的计划有问题
-  //因此，这里在全部解析完stmt各个部分之后需要根据之前记录的name winexpr个数去除stmt中无用的name win expr
+  // Due to support for name window in mysql mode, it is necessary to parse the name window in advance and save it, then parse the expression of the referenced win expr, current implementation
+  // The way is saved in select stmt, but after all parsing is done, those name window's corresponding win_expr are not removed, leading to issues with the generated plan
+  // Therefore, here after parsing all parts of stmt, we need to remove unused name win expr from stmt based on the previously recorded count of name winexpr
   if (OB_SUCC(ret) && count_name_win_expr > 0) {
     ObSEArray<ObWinFunRawExpr*, 4> new_win_func_exprs;
     for (int64_t i = count_name_win_expr;
@@ -1053,18 +1053,17 @@ int ObSelectResolver::resolve_normal_query(const ParseNode &parse_tree)
       LOG_WARN("failed to check and mark the expr order", K(ret));
     }
   }
-
-  //统一为本层的表达式进行only full group by验证，避免检查的逻辑过于分散
+  // Unify the only full group by validation for expressions at this layer to avoidscattered the logic of checks
   OZ( check_group_by() );
   OZ( check_order_by() );
   OZ( check_window_exprs() );
   OZ( check_sequence_exprs() );
   OZ( check_unsupported_operation_in_recursive_branch() );
   if (OB_SUCC(ret)) {
-    //for topk, 在这里需要标示select 语句是否符合使用近似计算的要求，有group by，有order by且有limit
-    //并且使用了topk的hint 且不是select for update 语句，且 from base table 且不需要calc found rows。
-    //查询语句中没有distinct 且 查询中不涉及子查询
-    //由于fetch clause利用limit设计，同时考虑到需要支持百分比及with ties功能，因此这里分配topn需要考虑这一情形
+    //for topk, here we need to indicate whether the select statement meets the requirements for using approximate computation, has group by, has order by and has limit
+    // and used the topk hint and is not a select for update statement, and from base table and does not need calc found rows.
+    // Query statement does not contain distinct and query does not involve subqueries
+    // Due to the fetch clause utilizing limit design, while considering the need to support percentage and with ties functionality, therefore here the allocation of topn needs to consider this scenario
     if (select_stmt->get_query_ctx()->get_global_hint().is_topk_specified()
         && (1 == select_stmt->get_from_item_size() && !select_stmt->get_from_item(0).is_joined_)
         && (!select_stmt->is_calc_found_rows())
@@ -1090,8 +1089,7 @@ int ObSelectResolver::resolve_normal_query(const ParseNode &parse_tree)
       }
     }
   }
-
-  // rowscn伪列不能再flashback query和view中使用
+  // rowscn pseudo-column cannot be used in flashback query and view
   if (OB_SUCC(ret)) {
     bool has_ora_rowscn = false;
     const common::ObIArray<SelectItem> &items = select_stmt->get_select_items();
@@ -1226,7 +1224,7 @@ int ObSelectResolver::resolve_query_options(const ParseNode *node)
     }
   }
   if (OB_SUCC(ret)) {
-    //默认为all
+    // Default to all
     if (is_all && is_distinct) {
       ret = OB_ERR_WRONG_USAGE;
       LOG_USER_ERROR(OB_ERR_WRONG_USAGE, "ALL and DISTINCT");
@@ -1536,7 +1534,7 @@ int ObSelectResolver::resolve_field_list(const ParseNode &node)
           is_bald_star = true;
         }
       }
-      //oracle不允许有同表名的基表时select item引用其列,比如:
+      //oracle does not allow select item to reference its columns when there are base tables with the same table name, for example:
       //select * from t1,t1 ==> NO
       //select 1 from t1,t1 ==> YES
       //select * from (select * from t1), (select * from t1) ==> YES
@@ -1564,7 +1562,7 @@ int ObSelectResolver::resolve_field_list(const ParseNode &node)
     }
     bool is_auto_gen = false;
     if (OB_SUCC(ret)) {
-      //处理alias
+      // processing alias
       ObCollationType cs_type = CS_TYPE_INVALID;
       if (OB_FAIL(session_info_->get_collation_connection(cs_type))) {
         LOG_WARN("fail to get collation_connection", K(ret));
@@ -1787,7 +1785,7 @@ int ObSelectResolver::resolve_field_list(const ParseNode &node)
               || (!session_info_->get_local_ob_enable_plan_cache()
                   && !session_info_->force_enable_plan_tracing())
               || 0 == node.children_[i]->is_val_paramed_item_idx_) {
-            // ps 不参数化列; plan cache关闭后不参数化列
+            // ps do not parameterize columns; plan cache disabled do not parameterize columns
             // do nothing
           } else if (OB_ISNULL(params_.select_item_param_infos_)
                      || node.children_[i]->value_ >= params_.select_item_param_infos_->count()) {
@@ -1815,16 +1813,15 @@ int ObSelectResolver::resolve_field_list(const ParseNode &node)
           is_auto_gen = true;
         }
       }
-
-      // 如果 select field list 表达式中包含了 sequence，则需要判断当前
-      // select 语句是否为子查询，或者是否为 set 语句
-      // **例外**：insert into select xxxx 的情景下，允许 sequence
+      // If select field list expression includes sequence, then need to determine current
+      // select statement is a subquery, or whether it is a set statement
+      // **Exception**: insert into select xxxxofcaseunder，allow sequence
       if (OB_SUCC(ret) && sel_expr->has_flag(CNT_SEQ_EXPR)) {
         if (in_set_query_ ||
             (params_.resolver_scope_stmt_type_ == ObItemType::T_INSERT  && current_level_ != 0) ||
             (params_.resolver_scope_stmt_type_ != ObItemType::T_INSERT  && (current_level_ > 1 || is_substmt()))) {
-          // 对于 from (select xxxx) a 的场景，a 这个子查询的 current_level_ 和上一级相同，
-          // 但设置了 parent namespace，故而还是可以加以区分
+          // For the scenario of from (select xxxx) a, the current_level_ of this subquery a is the same as the upper level,
+          // But set the parent namespace, hence it can still be distinguished
           ret = OB_ERR_SEQ_NOT_ALLOWED_HERE;
         }
       }
@@ -2152,11 +2149,11 @@ int ObSelectResolver::resolve_star_for_table_groups(ObStarExpansionInfo &star_ex
           if (OB_FAIL(select_stmt->add_select_item(target_list.at(i)))) {
             LOG_WARN("add select item to select stmt failed", K(ret));
           } else if (is_only_full_group_by_on(session_info_->get_sql_mode())) {
-            //如果是only full group by，所有target list中的列都必须检查是否满足group约束
+            // If it is only full group by, all columns in the target list must be checked to see if they satisfy the group constraint
             if (OB_FAIL(standard_group_checker_.add_unsettled_expr(target_list.at(i).expr_))) {
               LOG_WARN("add unsettled expr failed", K(ret));
             }
-            //同上
+            // Same as above
           }
         }
       }
@@ -2182,11 +2179,11 @@ int ObSelectResolver::resolve_star_for_table_groups(ObStarExpansionInfo &star_ex
             } else if (OB_FAIL(select_stmt->add_select_item(item))) {
               LOG_WARN("add_select_item failed", K(ret), K(item));
             } else if (is_only_full_group_by_on(session_info_->get_sql_mode())) {
-              //如果是only full group by，所有target list中的列都必须检查是否满足group约束
+              // If it is only full group by, all columns in the target list must be checked to see if they satisfy the group constraint
               if (OB_FAIL(standard_group_checker_.add_unsettled_expr(item.expr_))) {
                 LOG_WARN("add unsettled expr failed", K(ret));
               }
-              //对于select * from t1 group by c1, c2;这样的语句，*展开就是column，所以表达式以及表达式引用到的列都是自己
+              // For select * from t1 group by c1, c2; such statements, * expansion is column, so the expression and the columns referenced by the expression are all self
             }
           }
         }
@@ -2197,7 +2194,7 @@ int ObSelectResolver::resolve_star_for_table_groups(ObStarExpansionInfo &star_ex
           if (OB_FAIL(select_stmt->add_select_item(target_list.at(i)))) {
             LOG_WARN("add select item to select stmt failed", K(ret));
           } else if (is_only_full_group_by_on(session_info_->get_sql_mode())) {
-            //如果是only full group by，所有target list中的列都必须检查是否满足group约束
+            // If it is only full group by, all columns in the target list must be checked to satisfy the group constraint
             OZ( standard_group_checker_.add_unsettled_expr(target_list.at(i).expr_) );
           }
         }
@@ -2463,7 +2460,7 @@ int ObSelectResolver::resolve_star(const ParseNode *node)
                      && OB_FAIL(star_expansion_info.column_name_list_.push_back(target_list.at(j).expr_name_))) {
             LOG_WARN("failed to push back select item expr name", K(ret));
           } else if (is_only_full_group_by_on(session_info_->get_sql_mode())) {
-            //如果是only full group by，所有target list中的列都必须检查是否满足group约束
+            // If it is only full group by, all columns in the target list must be checked to satisfy the group constraint
             if (is_column_name_equal) {    // target column not equal with current column without judge
             } else if (OB_FAIL(standard_group_checker_.add_unsettled_expr(target_list.at(j).expr_))) {
               LOG_WARN("add unsettled expr to standard group checker failed", K(ret));
@@ -2659,11 +2656,11 @@ int ObSelectResolver::find_select_columns_for_join_group(
 
 /*               |-------------------------------------r_union_stmt--------------------------------|
  * with cte() as ( left_stmt union all right stmt  ) search by item + pseudo, cycle by item + pseudo
- * r_union_stmt这个stmt的解析过程中，是没有任何一个table item出现在这个层次的stmt的
- * 没有办法按照常规的表达式T_COLUMN_REF产生表达式，并作为column_item加到stmt中
- * 因为加入的时候会检查是否该列的表是否在stmt中。
- * search或者cycle的item在在left_stmt和right_stmt中代表的列不一样，所以无法直接使用左支或者右支的select item
- * 所以只能类似于generate table item中的column item产生的方式来产生
+ * During the parsing process of this r_union_stmt, no table item appears at this level of the stmt.
+ * It is not possible to generate an expression using the conventional T_COLUMN_REF expression and add it as a column_item to the stmt.
+ * This is because it checks whether the table of the column is in the stmt when adding.
+ * The item in search or cycle represents different columns in left_stmt and right_stmt, so the select item from the left branch or right branch cannot be used directly.
+ * Therefore, it can only be generated in a way similar to the generation of column items in generate table item.
  * */
 
 int ObSelectResolver::get_current_recursive_cte_table(ObSelectStmt *ref_stmt)
@@ -3278,8 +3275,8 @@ int ObSelectResolver::mock_to_named_windows(ObString &name,
     ObString win_str(win_node->str_len_, win_node->str_value_);
     ObSqlString sql_str;
     ObRawExpr *expr = NULL;
-    //bug18840807, 此时frame的常量已经参数化, 重新resolve会导致参数化信息丢失, cg时期望para实际常量;
-    //后续若计划重用执行阶段会取错常量值, 这里修改了parse_node的窗口指针使用已参数化的
+    //bug18840807, at this time the constants of frame have been parameterized, re-resolving will lead to loss of parameterization information, cg expects actual constants for para;
+    // Subsequent reuse of the execution phase would take the wrong constant value, here we modified the parse_node window pointer to use parameterized
     if (OB_FAIL(sql_str.append_fmt("COUNT(1) OVER %.*s",
                                    win_str.length(),
                                    win_str.ptr()))) {
@@ -3334,7 +3331,7 @@ int ObSelectResolver::resolve_named_windows_clause(const ParseNode *node)
     LOG_WARN("too many windows", K(ret));
   } else {
     current_scope_ = T_NAMED_WINDOWS_SCOPE;
-    int64_t ref_list_cnt = 0; // 引用关系链表
+    int64_t ref_list_cnt = 0; // reference relationship linked list
     int64_t ref_list[OB_MAX_NAMED_WINDOW_FUNCTION_NUM];
     bool resolved[OB_MAX_NAMED_WINDOW_FUNCTION_NUM] = { false };
     ObSEArray<ObString, 32> resolved_name_list;
@@ -3342,7 +3339,7 @@ int ObSelectResolver::resolve_named_windows_clause(const ParseNode *node)
       if (resolved[i]) {
         continue;
       }
-      // 按依赖关系依次解析，优先解析被引用的window
+      // Parse in order of dependency, prioritize parsing the referenced window
       ParseNode *name_node = NULL;
       ParseNode *win_node = NULL;
       ParseNode *named_win_node = NULL;
@@ -3363,9 +3360,9 @@ int ObSelectResolver::resolve_named_windows_clause(const ParseNode *node)
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("NULL ptr", K(ret));
         } else {
-          // 1. 未引用任何window
-          // 2. 引用已经解析好的window
-          // 这两种情况会直接解析当前window，否则转而解析被引用的window
+          // 1. No window referenced
+          // 2. reference the already parsed window
+          // These two cases will directly parse the current window, otherwise it will parse the referenced window
           bool resolve_expr = false;
           int64_t ref_idx = -1;
           ParseNode *ref_name_node = win_node->children_[0];
@@ -3831,9 +3828,9 @@ int ObSelectResolver::resolve_column_ref_in_all_namespace(
 {
   int ret = OB_SUCCESS;
   //first, find column in current namespace
-  //mysql5.6中alias name不能出现在where子句中，但是可以出现在group by、having、order by子句中
-  //如果普通列和alias name重复，那么在group by、having子句中优先使用基础列，并汇报WARNNING
-  //order by子句中，优先使用alias name
+  // mysql5.6 alias name cannot appear in the where clause, but can appear in group by, having, order by clauses
+  // If the ordinary column and alias name are duplicate, then prioritize the base column in the group by, having clause, and report WARNING
+  //order by clause, prioritize using alias name
   if (OB_UNLIKELY(T_ORDER_SCOPE == current_scope_)) {
     if (lib::is_mysql_mode() && params_.is_column_ref_) {
       // should raise an error
@@ -3908,7 +3905,7 @@ int ObSelectResolver::resolve_column_ref_expr(
   const ObQualifiedName &q_name, ObRawExpr *&real_ref_expr)
 {
   int ret = OB_SUCCESS;
-  //设置resolve的列是否存在本层的聚集函数中，如果存在聚集函数中，本层的列可以不需要进行only full group by约束
+  // Set whether the resolve column exists in the aggregate functions of this layer, if it exists in the aggregate functions, the columns of this layer do not need to be constrained by only full group by
   if (OB_ISNULL(session_info_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("session info is null");
@@ -4043,10 +4040,10 @@ int ObSelectResolver::resolve_alias_column_ref(
   if (OB_SUCC(ret) && T_GROUP_SCOPE == current_scope_) {
     if (real_ref_expr->has_flag(CNT_AGG)) {
       ret = OB_ILLEGAL_REFERENCE;
-      // 为了能给group by报错
-      // 兼容mysql报错,
-      // select count(c1) as c from t1 group by c和select count(c1)
-      // as c from t1 group by (select c)报错不同
+      // To be able to give an error for group by
+      // Compatible with MySQL error,
+      // select count(c1) as c from t1 group by c and select count(c1)
+      // as c from t1 group by (select c) error different
     }
   }
   // subquery cannot ref parent aggr/window function alias
@@ -4553,7 +4550,7 @@ int ObSelectResolver::add_aggr_expr(ObAggFunRawExpr *&final_aggr_expr)
   } else if (OB_UNLIKELY(select_stmt->is_set_stmt())) {
     ret = OB_ERR_AGGREGATE_ORDER_FOR_UNION;
     LOG_WARN("can't use aggregate function in union stmt");
-  } else if (OB_FAIL(select_stmt->check_and_get_same_aggr_item(final_aggr_expr, // 这里实际上判断是错误的
+  } else if (OB_FAIL(select_stmt->check_and_get_same_aggr_item(final_aggr_expr, // Here the judgment is actually wrong
                                                                same_aggr_expr))) {
     LOG_WARN("failed to check and get same aggr item.", K(ret));
   } else if (same_aggr_expr != NULL) {
@@ -4585,13 +4582,13 @@ int ObSelectResolver::add_unsettled_column(ObRawExpr *column_expr)
  * create table t1(a int, b int);
  * create table t2(c int);
  * SELECT a FROM t1 GROUP BY a HAVING a IN (SELECT c FROM t2 WHERE MAX(b)>20)
- * 在上面的查询中，b位于max()中，但是此时max()还在子查询中，我们不能确定b是否是上层中合法的列
- * 对于having子句，mysql认为having子句中的列必须出现在group exprs中或者出现在aggregate function
- * 以及field list中，列出现在aggregate function中的列可以来源于当前表中的任何列，不需要出现在group by中
- * 而在解析b的时候还无法判断b是否真正位于聚集函数中，因为聚集函数可能上推，也可能无法上推
- * 在resolve column的时候我们将在聚集函数中的列都视为存在aggregate function中，不需要被group by约束
- * 在聚集上推的过程中，确定了聚集函数最终的层次后，我们再将没有出现在aggregate function中的column推回到
- * 应有的层次上进行group by exprs的检查
+ * In the above query, b is located inside max(), but at this point, max() is still within the subquery, we cannot determine if b is a valid column in the upper level
+ * For the having clause, mysql considers that columns in the having clause must appear in group exprs or in aggregate functions
+ * as well as field list, columns appearing in aggregate functions can come from any column in the current table, do not need to appear in group by
+ * When resolving b, it is still undetermined whether b truly resides in an aggregate function, because the aggregate function may be pushed up, or it may not be pushed up
+ * During column resolution, we will consider all columns in aggregate functions as existing in aggregate functions, no need to be constrained by group by
+ * During the process of aggregate function push-up, after determining the final level of the aggregate function, we will then push back
+ * columns that do not appear in aggregate functions to their respective levels for group by exprs checking
  */
 int ObSelectResolver::check_column_ref_in_group_by_or_field_list(const ObRawExpr *column_ref) const
 {
@@ -4634,13 +4631,12 @@ int ObSelectResolver::check_column_ref_in_group_by_or_field_list(const ObRawExpr
   }
   return ret;
 }
-
-// use_sys_tenant 标记是否需要以系统租户的身份获取schema
+// use_sys_tenant flag indicates whether to obtain schema as a system tenant
 int ObSelectResolver::check_need_use_sys_tenant(bool &use_sys_tenant) const
 {
   int ret = OB_SUCCESS;
   if (params_.is_from_show_resolver_) {
-    // 若当前已经是系统租户, 则忽略
+    // If the current tenant is already the system tenant, then ignore
     if (OB_ISNULL(session_info_)) {
       ret = OB_NOT_INIT;
       LOG_WARN("session info is null");
@@ -4661,8 +4657,7 @@ int ObSelectResolver::check_in_sysview(bool &in_sysview) const
   in_sysview = params_.is_from_show_resolver_ || params_.is_in_sys_view_;
   return ret;
 }
-
-//同oracle一样, ntile(arg1) (partition by arg2...) 要求arg1 = arg2或者是基于arg2的运算, 如同group by 和 select的有效性检查
+// Same as oracle, ntile(arg1) (partition by arg2...) requires arg1 = arg2 or calculations based on arg2, like group by and select validity checks
 int ObSelectResolver::check_win_func_arg_valid(ObSelectStmt *select_stmt,
                                                const ObItemType func_type,
                                                common::ObIArray<ObRawExpr *> &arg_exp_arr,
@@ -4741,14 +4736,14 @@ int ObSelectResolver::check_window_exprs()
           LOG_WARN("assign func param failed", K(ret));
         }
       }
-      //检查分析函数参数 和 partition by是否符合要求
+      // Check analysis function parameters and partition by whether they meet the requirements
       if (OB_SUCC(ret) && OB_FAIL(check_win_func_arg_valid(select_stmt,
                                                            win_expr->get_func_type(),
                                                            arg_exprs,
                                                            const_cast<ObIArray<ObRawExpr *>&>(partition_exprs)))) {
         LOG_WARN("argument should be a function of expressions in PARTITION BY", K(ret));
       }
-      //检查frame是range时数据类型的有效性, 规则同oracle
+      // Check the validity of data type when frame is range, rules are the same as Oracle
       if (OB_SUCC(ret) && need_check_order_datatype) {
         if (1 != order_items.count()) {
           ret = OB_ERR_INVALID_WINDOW_FUNC_USE;
@@ -4775,7 +4770,7 @@ int ObSelectResolver::check_window_exprs()
                   LOG_WARN("invalid datatype in order by for range clause", K(ret), K(order_res_type));
                 }
               } else {
-                //to do: 支持interval后这里要处理interval的情况
+                //to do: support interval here we need to handle the interval case
                 ret = OB_ERR_INVALID_WINDOW_FUNC_USE;
                 LOG_WARN("invalid datatype in order by", K(i),
                          K(bound_expr_arr[i]->get_data_type()), K(ret), K(order_res_type));
@@ -4804,10 +4799,10 @@ int ObSelectResolver::check_window_exprs()
   return ret;
 }
 
-/* sequence 有如下禁忌用法：
- *  1. 不能同时与 having、order by、group by 等一起使用
- *  2. 不能出现在 subquery 中的任何地方 (insert into select 除外)
- *  3. 不能出现在 where 表达式里（resolve expr 处检查过了）
+/* sequence has the following prohibited usages:
+ *  1. cannot be used simultaneously with having, order by, group by, etc.
+ *  2. cannot appear anywhere in a subquery (except in insert into select)
+ *  3. cannot appear in the where expression (checked by resolve expr)
  **/
 int ObSelectResolver::check_sequence_exprs()
 {
@@ -5023,9 +5018,8 @@ int ObSelectResolver::check_ntile_validity(const ObSelectStmt *stmt,
 }
 
 /**
- * oracle在select item中如果有子查询，当且仅当
- * 子查询为exists、not exists的参数时，
- * 允许子查询返回多列，
+ * oracle allows subqueries to return multiple columns in select items
+ * when and only when the subquery is a parameter for exists or not exists.
  */
 int ObSelectResolver::check_subquery_return_one_column(const ObRawExpr &expr, bool is_exists_param)
 {

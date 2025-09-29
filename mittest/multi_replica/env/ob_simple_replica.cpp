@@ -161,9 +161,7 @@ int ObSimpleServerReplica::simple_init()
           "%ld, rs_list = %s\n",
           getpid(), zone_id_, rpc_port_, mysql_port_, zone_str.c_str(), server_info_list_.count(),
           rs_list_.c_str());
-
-
-  // 因为改变了工作目录，设置为绝对路径
+  // Because the working directory has changed, set to absolute path
   for (int i = 0; i < MAX_FD_FILE; i++) {
     int len = strlen(OB_LOGGER.log_file_[i].filename_);
     if (len > 0) {
@@ -330,7 +328,7 @@ int ObSimpleServerReplica::bootstrap()
     ret = -66666666;
     SERVER_LOG(INFO, "observice is nullptr");
   } else {
-    // observer内部有线程的检查, 这里在新建线程下调用会有问题
+    // there is thread check inside observer, calling here when creating a new thread will cause issues
     obrpc::ObServerInfo server_info;
     server_info.zone_ = "zone1";
     server_info.server_ = common::ObAddr(common::ObAddr::IPV4, local_ip_.c_str(), rpc_port_);

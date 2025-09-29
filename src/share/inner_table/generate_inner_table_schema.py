@@ -979,13 +979,12 @@ def copy_keywords(keywords):
     keywords["base_table_name2"] = ''
 
   print "copy_keywords in: table_id=", tid, ",  table_name=" + tname, ", base_table_name=" + base_tname, ", base_table_name1=" + base_tname1, ", base_table_name2=" + base_tname2
-
-  # 默认base_table_name等于其表名
-  # base_table_name[1,2] 记录了多层schema嵌套定义场景的原始基表名
-  # 例如：15118号表schema，它嵌套定义了两层基表:
-  # 真实表名：ALL_VIRTUAL_GLOBAL_TRANSACTION
-  # 第一层基表：__all_tenant_global_transaction
-  # 第二层基表: __all_virtual_global_transaction
+  # Default base_table_name equals its table name
+  # base_table_name[1,2] records the original base table name in the scenario of multi-layer schema nested definitions
+  # For example: schema of table number 15118, which nestedly defines two layers of base tables:
+  # Real table name: ALL_VIRTUAL_GLOBAL_TRANSACTION
+  # First layer base table: __all_tenant_global_transaction
+  # Second layer base table: __all_virtual_global_transaction
   if base_tname == '':
     base_tname = tname;
     keywords["base_table_name"] = tname;
@@ -997,8 +996,7 @@ def copy_keywords(keywords):
     keywords["base_table_name2"] = tname;
   elif base_tname1 != '' and base_tname2 != '' and tname != base_tname and tname != base_tname1 and tname != base_tname2:
     print "ERROR: should not be here. need design new base_table_name"
-
-  # 执行拷贝
+  # Execute copy
   new_keywords = copy.deepcopy(keywords)
 
   print "copy_keywords out: table_id=", tid, ",  table_name=" + tname, ", base_table_name=" + base_tname, ", base_table_name1=" + base_tname1, ", base_table_name2=" + base_tname2
@@ -2166,17 +2164,15 @@ def end_generate_cpp():
 """
   cpp_f.write(end)
   cpp_f.close()
-
-# 在生成constants.h的同时，生成table_id_to_name文件
+# While generating constants.h, generate the table_id_to_name file
 def generate_constants_h_content():
   global constants_h_f
   global id_to_name_f
   last_table_id = 0;
 
-  id_to_name_f.write("########## Table ID 到 Table Name 映射 ##########\n")
-  id_to_name_f.write("# 为了方便分析占位情况，同一个ID可能会映射多个Name\n\n")
-
-  ################# 生成xx_TID定义 ################
+  id_to_name_f.write("########## Table ID to Table Name mapping ##########\n")
+  id_to_name_f.write("# For easy analysis of occupancy, the same ID may map to multiple Names\n\n")
+  ################# Generate xx_TID definition ################
   table_id_line = 'const uint64_t OB_{0}_TID = {1}; // "{2}"\n'
   for (table_name, table_id) in table_name_postfix_ids:
     constants_h_f.write(table_id_line.format(table_name.replace('$', '_').upper().strip('_'), table_id, table_name))
@@ -2188,9 +2184,8 @@ def generate_constants_h_content():
 
   constants_h_f.write("\n")
   ###################################################
-
-  ################# 生成xx_TNAME定义 ################
-  # 同时生成table_id_to_name文件
+  ################# Generate xx_TNAME definition ################
+  # Generate table_id_to_name file simultaneously
   table_name_line = 'const char *const OB_{0}_TNAME = "{1}";\n'
   for (table_name_postfix, table_name) in table_name_postfix_table_names:
     constants_h_f.write(table_name_line.format(table_name_postfix.replace('$', '_').upper().strip('_'), table_name))
@@ -2200,10 +2195,10 @@ def generate_constants_h_content():
   base_table_id_to_name_line1 = '# {0}: {1}  # BASE_TABLE_NAME1\n'
   base_table_id_to_name_line2 = '# {0}: {1}  # BASE_TABLE_NAME2\n'
   for (table_name, table_id, base_table_name, base_table_name1, base_table_name2) in table_name_ids:
-    # lob表不记录在table_id_to_name文件中
+    # lob table is not recorded in the table_id_to_name file
     if not is_lob_table(table_id):
       id_to_name_f.write(table_id_to_name_line.format(table_id, table_name))
-      # 如果base_table_name不同，则输出base_table_name
+      # If base_table_name is different, then output base_table_name
       if base_table_name != table_name:
         id_to_name_f.write(base_table_id_to_name_line.format(table_id, base_table_name))
       if base_table_name1 != '' and base_table_name1 != table_name:
@@ -2235,9 +2230,7 @@ def generate_constants_h_content():
 
   constants_h_f.write("\n")
   ###################################################
-
-
-  ########### 生成all_privilege_init_data ###########
+  ########### Generate all_privilege_init_data ###########
   gen_all_privilege_init_data(constants_h_f);
   ###################################################
 

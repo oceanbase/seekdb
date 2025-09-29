@@ -268,7 +268,7 @@ void ObBaseLogWriter::flush_log()
   while (!has_stopped_) {
     IGNORE_RETURN lib::Thread::update_loop_ts(ObTimeUtility::fast_current_time());
     pthread_mutex_lock(&thread_mutex_);
-    // 每个线程执行16次再重新抢占, 对cpu cache hit有利
+    // Each thread executes 16 times before re-preempting, which is beneficial for CPU cache hit
     for (int64_t i = 0; i < 16; i++) {
       do_flush_log();
     }

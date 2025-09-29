@@ -291,9 +291,8 @@ int ObDropFTSIndexTask::check_switch_succ()
     } else if (!has_fts_index && !has_multivalue_index
       && (tmp_ret = data_table_schema->get_fulltext_column_ids(doc_id_col_id, ft_col_id)) != OB_SUCCESS) {
     }
-
-    // 主表存在，并且fts,multivalue索引不存在了，doc-id列从主表中移除
-    // 否则可能出现小概率的dml的时候，schema没有刷新，导致cg阶段多了doc-id列
+    // The main table exists, and the fts, multivalue index no longer exists, doc-id column is removed from the main table
+    // Otherwise, there may be a low probability of DML operations where the schema has not been refreshed, leading to an extra doc-id column in the CG phase
     if (tmp_ret == OB_SUCCESS 
         && OB_ISNULL(data_table_schema)
         && doc_id_col_id != OB_INVALID_ID) {

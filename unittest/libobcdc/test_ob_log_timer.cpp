@@ -83,7 +83,7 @@ public :
   static constexpr const int64_t TEST_TIME_LIMIT = 10 * _MIN_;
   // ObMapQueue mod_id
   static constexpr const char *MOD_ID = "1";
-  // ObMapQueueThread线程个数
+  // Number of ObMapQueueThread threads
   static const int THREAD_NUM = 6;
   // max task count
 	static const int64_t MAX_TASK_COUNT = 10 * 1000;

@@ -264,8 +264,7 @@ public:
 	static int compare(ObString left, ObString right, ObFilterType op, bool &res);
 	static int compare(bool left, bool right, ObFilterType op, bool &res);
 	static int init_print_ns(ObIAllocator *allocator, ObIMulModeBase *src, ObNsSortedVector& ns_vec, ObNsSortedVector*& vec_point);
-
-	// 调用的时候特殊处理OB_OP_NOT_ALLOW
+	// Call with special handling for OB_OP_NOT_ALLOW
 	//	calculate: + - * div %
 
 	// logic compare: and/or

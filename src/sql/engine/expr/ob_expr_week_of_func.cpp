@@ -233,8 +233,7 @@ int ObExprYearWeek::calc_result_typeN(ObExprResType& type,
   }
   return ret;
 }
-
-//参考 https://dev.mysql.com/doc/refman/8.0/en/date-and-time-functions.html 了解更多mode的含义
+// Refer to https://dev.mysql.com/doc/refman/8.0/en/date-and-time-functions.html for more information on mode
 template <typename T>
 static int ob_expr_calc_yearweek(const int64_t &mode_value,
                                  const ObTime &ot,
@@ -247,10 +246,10 @@ static int ob_expr_calc_yearweek(const int64_t &mode_value,
   int64_t year = 0;
   int32_t delta = 0;
   int64_t flag = 0;
-  //在mode为负值时，和mysql结果保持一致。
+  // When mode is negative, keep consistent with MySQL result.
   flag = (mode_value % 8 >= 0 ? mode_value % 8 : 8 + (mode_value % 8));
   switch (flag) {
-  case 0:       //每年的第一周以星期天开始，每周以星期天开始
+  case 0:       // The first week of each year starts on Sunday, and each week starts on Sunday
     week = ObTimeConverter::ob_time_to_week(
         ot, DT_WEEK_SUN_BEGIN + mode, delta);
     break;
@@ -258,7 +257,7 @@ static int ob_expr_calc_yearweek(const int64_t &mode_value,
     week = ObTimeConverter::ob_time_to_week(
         ot, DT_WEEK_SUN_BEGIN, delta);
     break;
-  case 1:       //每年的第一周需要该周大于三天，每周以星期一开始
+  case 1:       // The first week of each year needs to have more than three days, with each week starting on Monday
     week = ObTimeConverter::ob_time_to_week(
         ot, DT_WEEK_GE_4_BEGIN + mode, delta);
     break;
@@ -266,7 +265,7 @@ static int ob_expr_calc_yearweek(const int64_t &mode_value,
     week = ObTimeConverter::ob_time_to_week(
         ot, DT_WEEK_GE_4_BEGIN, delta);
     break;
-  case 4:       //每年的第一周需要该周大于三天，每周以星期天开始
+  case 4:       // The first week of each year needs to have more than three days, with each week starting on Sunday
     week = ObTimeConverter::ob_time_to_week(
         ot, DT_WEEK_GE_4_BEGIN + DT_WEEK_SUN_BEGIN + mode, delta);
     break;
@@ -274,7 +273,7 @@ static int ob_expr_calc_yearweek(const int64_t &mode_value,
     week = ObTimeConverter::ob_time_to_week(
         ot, DT_WEEK_GE_4_BEGIN + DT_WEEK_SUN_BEGIN, delta);
     break;
-  case 5:       //每年的第一周需要以星期一开始，每周以星期一开始
+  case 5:       // The first week of each year needs to start on Monday, and each week should start on Monday
     week = ObTimeConverter::ob_time_to_week(ot, mode, delta);
     break;
   case 7:
@@ -357,7 +356,7 @@ int ObExprYearWeek::calc_yearweek(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &e
   } else if (ot.parts_[DT_YEAR] <= 0) {
     expr_datum.set_null();
   } else {
-    // 短路计算
+    // Short-circuit evaluation
     if (2 == expr.arg_cnt_) {
       ObDatum *param_datum2 = NULL;
       if (OB_FAIL(expr.args_[1]->eval(ctx, param_datum2))) {
@@ -494,7 +493,7 @@ int ObExprWeek::calc_week(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datu
   } else if (ot.parts_[DT_YEAR] <= 0) {
     expr_datum.set_null();
   } else {
-    // 短路计算
+    // Short-circuit evaluation
     if (2 == expr.arg_cnt_) {
       ObDatum *param_datum2 = NULL;
       if (OB_FAIL(expr.args_[1]->eval(ctx, param_datum2))) {
@@ -668,25 +667,25 @@ OB_INLINE int ObExprWeek::get_week_mode_value(int64_t mode_value, ObDTMode &mode
   mode = DT_WEEK_ZERO_BEGIN;
   int64_t flag = (mode_value % 8 >= 0 ? mode_value % 8 : 8 + (mode_value % 8));
   switch (flag) {
-    case 0:      //每年的第一周以星期天开始，每周以星期天开始
+    case 0:      // The first week of each year starts on Sunday, and each week starts on Sunday
       mode += DT_WEEK_SUN_BEGIN;
       break;
     case 2:
       mode = DT_WEEK_SUN_BEGIN;
       break;
-    case 1:       //每年的第一周需要该周大于三天，每周以星期一开始
+    case 1:       // The first week of each year needs to have more than three days, with each week starting on Monday
       mode += DT_WEEK_GE_4_BEGIN;
       break;
     case 3:
       mode = DT_WEEK_GE_4_BEGIN;
       break;
-    case 4:       //每年的第一周需要该周大于三天，每周以星期天开始
+    case 4:       // The first week of each year needs to have more than three days, with each week starting on Sunday
       mode += DT_WEEK_GE_4_BEGIN + DT_WEEK_SUN_BEGIN;
       break;
     case 6:
       mode = DT_WEEK_GE_4_BEGIN + DT_WEEK_SUN_BEGIN;
       break;
-    case 5:       //每年的第一周需要以星期一开始，每周以星期一开始
+    case 5:       // The first week of each year needs to start on Monday, and each week should start on Monday
       // mode = mode_value;
       break;
     case 7:
@@ -832,7 +831,7 @@ int ObExprWeek::calc_week_vector(const ObExpr &expr, ObEvalCtx &ctx, const ObBit
     VectorFormat res_format = expr.get_format(ctx);
     ObObjTypeClass arg_tc = ob_obj_type_class(expr.args_[0]->datum_meta_.type_);
     VectorFormat mode_format;
-    if (2 == expr.arg_cnt_) { // 短路计算
+    if (2 == expr.arg_cnt_) { // Short-circuit evaluation
       mode_format = expr.args_[1]->get_format(ctx);
     }
     if (1 == expr.arg_cnt_) {

@@ -184,7 +184,8 @@ int ObSimpleServer::simple_init()
       }
     }
     if (admin_dir != NULL) {
-      system(("cp ../admin/* admin/"));
+      system(("cp ../admin```cpp
+/* admin/"));
     }
 
     std::string port_file_name = std::string("port.txt");
@@ -197,7 +198,7 @@ int ObSimpleServer::simple_init()
     fprintf(stdout, "rpc_port = %d mysql_port = %d\n", rpc_port_, rpc_port_+1);
   }
 
-  // 因为改变了工作目录，设置为绝对路径
+  // Because the working directory has changed, set to absolute path
   for (int i=0;i<MAX_FD_FILE;i++) {
     int len = strlen(OB_LOGGER.log_file_[i].filename_);
     if (len > 0) {
@@ -344,7 +345,7 @@ int ObSimpleServer::bootstrap()
     ret = -66666666;
     SERVER_LOG(INFO, "observice is nullptr");
   } else {
-    // observer内部有线程的检查, 这里在新建线程下调用会有问题
+    // observer internal has thread check, calling here in a new thread will cause issues
     obrpc::ObServerInfo server_info;
     server_info.zone_ = "zone1";
     server_info.server_ = common::ObAddr(common::ObAddr::IPV4, local_ip_.c_str(), rpc_port_);

@@ -171,7 +171,7 @@ int ObDirectLoadInsertTableRowIterator::inner_get_next_row(ObDatumRow *&result_r
           }
         }
         if (OB_SUCC(ret) && nullptr != dml_row_handler_) {
-          // 只有堆表insert阶段会走到这里
+          // Only the heap table insert stage will reach here
           if (OB_UNLIKELY(datum_row->is_delete_)) {
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("unexpected delete row", KR(ret), KPC(datum_row));

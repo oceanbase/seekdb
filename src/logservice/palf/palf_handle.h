@@ -49,11 +49,10 @@ public:
   // @brief move-assignment operator
   PalfHandle& operator=(PalfHandle &&rhs);
   bool operator==(const PalfHandle &rhs) const;
-
-  // 在创建日志流成功后，设置初始成员列表信息，只允许执行一次
+  // After successfully creating the log stream, set the initial member list information, only allowed to execute once
   //
-  // @param [in] member_list, 日志流的成员列表
-  // @param [in] paxos_replica_num, 日志流paxos成员组中的副本数
+  // @param [in] member_list, member list of the log stream
+  // @param [in] paxos_replica_num, the number of replicas in the log stream paxos member group
   //
   // @return :TODO
   // @brief set the initial member list of paxos group after creating
@@ -81,7 +80,7 @@ public:
                               const int64_t paxos_replica_num,
                               const common::GlobalLearnerList &learner_list);
 #endif
-  //================ 文件访问相关接口 =======================
+  //================ File access related interfaces =======================
   int append(const PalfAppendOptions &opts,
              const void *buffer,
              const int64_t nbytes,
@@ -121,17 +120,16 @@ public:
                const int64_t nbytes,
                int64_t &read_size,
                LogIOContext &io_ctx);
-
-  // iter->next返回的是append调用写入的值，不会在返回的buf中携带Palf增加的header信息
-  //           返回的值不包含未确认日志
+  // iter->next returns the value written by the append call, and will not carry the header information added by Palf in the returned buf
+  //           The returned value does not include unconfirmed logs
   //
-  // 在指定start_lsn构造Iterator时，iter会自动根据PalfHandle::accepted_end_lsn
-  // 确定迭代的结束位置，此结束位置会自动更新（即返回OB_ITER_END后再次
-  // 调用iter->next()有返回有效值的可能）
+  // When constructing Iterator at specified start_lsn, iter will automatically determine based on PalfHandle::accepted_end_lsn
+  // Determine the end position of the iteration, this end position will be automatically updated (i.e., after returning OB_ITER_END again
+  // There is a possibility that iter->next() returns a valid value)
   //
-  // PalfBufferIterator的生命周期由调用者管理
-  // 调用者需要确保在iter关联的PalfHandle close后不再访问
-  // 这个Iterator会在内部缓存一个大的Buffer
+  // The lifecycle of PalfBufferIterator is managed by the caller
+  // The caller needs to ensure that the iter associated PalfHandle is not accessed after it is closed
+  // This Iterator will internally cache a large Buffer
   int seek(const LSN &lsn, PalfBufferIterator &iter);
 
   int seek(const LSN &lsn, PalfGroupBufferIterator &iter);
@@ -178,19 +176,17 @@ public:
   // - OB_ERR_OUT_OF_LOWER_BOUND: lsn is too small, log files may have been recycled
   // - others: bug
   int locate_by_lsn_coarsely(const LSN &lsn, share::SCN &result_scn);
-
-  // 开启日志同步
+  // Enable log synchronization
   int enable_sync();
-  // 关闭日志同步
+  // Close log synchronization
   int disable_sync();
   bool is_sync_enabled() const;
-  // 推进文件的可回收点
+  // Advance the file's recyclable point
   int advance_base_lsn(const LSN &lsn);
-  // 迁移/rebuild场景推进base_lsn
+  // Migration/rebuild scenario advances base_lsn
   int advance_base_info(const palf::PalfBaseInfo &palf_base_info, const bool is_rebuild);
   int flashback(const int64_t mode_version, const share::SCN &flashback_scn, const int64_t timeout_us);
-
-  // 返回文件中可读的最早日志的位置信息
+  // Return the position information of the earliest readable log in the file
   int get_begin_lsn(LSN &lsn) const;
   int get_begin_scn(share::SCN &scn) const;
 
@@ -202,9 +198,8 @@ public:
   // @param[out] PalfBaseInfo&, palf_base_info
   int get_base_info(const LSN &lsn,
                     PalfBaseInfo &palf_base_info);
-
-  // 返回最后一条已确认日志的下一位置
-  // 在没有新的写入的场景下，返回的end_lsn不可读
+  // Return the position after the last confirmed log
+  // In the scenario without new writes, the returned end_lsn is not readable
   int get_end_lsn(LSN &lsn) const;
   int get_end_scn(share::SCN &scn) const;
   int get_max_lsn(LSN &lsn) const;
@@ -215,14 +210,12 @@ public:
   // -- OB_NOT_INIT           not_init
   // -- OB_SUCCESS
   int get_readable_end_lsn(LSN &lsn) const;
-
-  //================= 分布式相关接口 =========================
-
-  // 返回当前副本的角色，只存在Leader和Follower两种角色
- 	//
- 	// @param [out] role, 当前副本的角色
- 	// @param [out] leader_epoch，表示一轮leader任期, 保证在切主和重启场景下的单调递增性
- 	// @param [out] is_pending_state，表示当前副本是否处于pending状态
+  //================= Distributed related interfaces =========================
+  // Return the current replica's role, only Leader and Follower roles exist
+	//
+	// @param [out] role, current replica's role
+	// @param [out] leader_epoch, indicates a term of the leader, ensuring monotonic increase in scenarios of leader-follower switch and restart
+	// @param [out] is_pending_state, indicates whether the current replica is in a pending state
  	//
  	// @return :TODO
   int get_role(common::ObRole &role, int64_t &proposal_id, bool &is_pending_state) const;
@@ -520,8 +513,7 @@ public:
   // By default, paxos replica can reply ack.
   // @return:
   int enable_vote();
-
-	//================= 回调函数注册 ===========================
+	//================= Callback function registration ===========================
   // @brief: register a callback to PalfHandleImpl, and do something in
   // this callback when file size has changed.
   // NB: not thread safe
@@ -548,8 +540,7 @@ public:
   // @brief: unregister a callback from PalfHandleImpl
   // NB: not thread safe
   int unregister_rebuild_cb();
-
-	//================= 依赖功能注册 ===========================
+	//================= Dependency function registration ===========================
   int set_location_cache_cb(PalfLocationCacheCb *lc_cb);
   int reset_location_cache_cb();
   int set_election_priority(election::ElectionPriority *priority);

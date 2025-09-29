@@ -114,8 +114,8 @@ int ObLobManager::stop()
     LOG_WARN("ObLobManager is not initialized", K(ret));
   } else {
     // TODO
-    // 1. 触发LobOperator中内存数据的异步flush
-    // 2. 清理临时LOB
+    // 1. Trigger asynchronous flush of memory data in LobOperator
+    // 2. Clean up temporary LOB
   }
   return ret;
 }
@@ -124,7 +124,7 @@ void ObLobManager::wait()
 {
   STORAGE_LOG(INFO, "[LOB]wait");
   // TODO
-  // 1. 等待LobOperator中内存数据的异步flush完成
+  // 1. Wait for the asynchronous flush of memory data in LobOperator to complete
 }
 
 void ObLobManager::destroy()

@@ -421,8 +421,8 @@ protected:
       retry_alloc_->set_attr(attr);
     }
   }
-  //对于DASScanOp，本质上是对PartitionService的table_scan()接口的封装，
-  //参数为scan_param,结果为result iterator
+  // For DASScanOp, essentially it is a wrapper for the PartitionService's table_scan() interface,
+  // Parameter is scan_param, result is result iterator
   storage::ObTableScanParam scan_param_;
   const ObDASScanCtDef *scan_ctdef_;
   ObDASScanRtDef *scan_rtdef_;

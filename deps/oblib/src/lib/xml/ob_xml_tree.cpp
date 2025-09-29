@@ -613,7 +613,7 @@ int ObXmlElement::remove_element(ObXmlNode* xnode)
   return ret;
 }
 
-int ObXmlElement::compare(const ObString& key, int& res)  // 0， 1，-1
+int ObXmlElement::compare(const ObString& key, int& res)  // 0, 1, -1
 {
   INIT_SUCC(ret);
   res = key.compare(tag_info_);

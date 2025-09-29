@@ -78,10 +78,9 @@ public:
                        K_(partition_order_specified),
                        K_(need_set_affected_row),
                        K_(is_merge_sort));
-
-  // 是否要按指定的顺序拉取partition的数据
+  // Whether to pull partition data in the specified order
   bool partition_order_specified_;
-  // 是否需要设置plan ctx 中的affected_row元信息
+  // Whether to set the affected_row metadata in plan ctx
   bool need_set_affected_row_;
   bool is_merge_sort_;
 };

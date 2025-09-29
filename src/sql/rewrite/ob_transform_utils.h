@@ -316,13 +316,13 @@ public:
                             ObDMLStmt *&new_stmt);
 
   /**
-   * @brief joined_table需要维护一个基表的table id列表
-   * 对于它的左右子节点，如果是基表 或者generated table，直接使用其table id；
-   * 如果是joined_table,需要将它的single_table_ids全部搬过来
+   * @brief joined_table needs to maintain a list of table ids for the base table
+   * For its left and right child nodes, if they are base tables or generated tables, directly use their table ids;
+   * If it is a joined_table, all its single_table_ids need to be moved over
    *
-   * todo(@ banliu.zyd) 这部分逻辑本来在resolver层，逻辑差别太大不好复用，
-   * 而这部分逻辑还是有必要单独提出来以增强代码可读性和代码复用，加个todo在这，
-   * 是因为这个函数目前作用单一，从功能上来看更应该是JoinedTable的一个成员方法
+   * todo(@ banliu.zyd) This logic was originally in the resolver layer, the difference in logic is too great to reuse,
+   * And this part of the logic still needs to be extracted separately to enhance code readability and code reusability, adding a todo here,
+   * Is because this function currently has a single role, from a functional perspective, it should more likely be a member method of JoinedTable
    */
   static int add_joined_table_single_table_ids(JoinedTable &joined_table, TableItem &child_table);
 
@@ -390,26 +390,25 @@ public:
                              const uint64_t old_table_id,
                              const uint64_t new_table_id,
                              common::ObIArray<uint64_t> &new_ids);
-
-  //仅供window function相关改写使用
+  // For use only with window function related rewriting
 
   /**
    * @brief is_expr_query
-   * 如果一个子查询不引入新的relation，并且select item只有一项
-   * 那么它至多返回一个值，行为类似于一个表达式
+   * If a subquery does not introduce new relation, and the select item has only one item
+   * then it returns at most one value, behaving like an expression
    */
   static int is_expr_query(const ObSelectStmt *stmt, bool &is_expr_type);
   
   /**
    * @brief is_aggr_query
-   * 如果一个查询的select item只有一项聚合函数，并且没有 group 表达式，那么该查询至多返回一个值
-   * 如果该查询不引用上层block的表，那么该查询可以独立于上层查询执行
+   * If a query's select item has only one aggregate function and there is no group expression, then the query can return at most one value
+   * If the query does not reference tables from the upper block, then the query can be executed independently of the upper query
    */
   static int is_aggr_query(const ObSelectStmt *stmt, bool &is_aggr_type);
 
   /**
    * @brief add_is_not_null
-   * 增加对 child_expr 结果的 not null 判断
+   * Add not null check for child_expr result
    * @param child_expr
    * @return
    */
@@ -468,7 +467,7 @@ public:
 
   /**
    * @brief has_null_reject_condition
-   * 判断 conditions 中是否存在空值拒绝条件
+   * Determine if there are any null reject conditions in conditions
    */
   static int has_null_reject_condition(const ObIArray<ObRawExpr *> &conditions,
                                        const ObRawExpr *expr,
@@ -480,7 +479,7 @@ public:
 
   /**
    * @brief is_null_reject_conditions
-   * 检查conditions是否有拒绝指定表集上空值的谓词
+   * Check if conditions have predicates that reject nulls on the specified table set
    */
   static int is_null_reject_conditions(const ObIArray<ObRawExpr *> &conditions,
                                        const ObRelIds &target_table,
@@ -489,9 +488,9 @@ public:
   
   /**
    * @brief is_null_reject_condition
-   * 判断当前条件是否构成一个的空值拒绝条件，满足以下条件之一
-   * 1. targets 均为 null 时， condition = null;
-   * 2. targets 均为 null 时， condition = false
+   * Determine if the current condition constitutes a null value rejection condition, meeting any of the following conditions
+   * 1. targets are all null, condition = null;
+   * 2. targets are all null, condition = false
    */
   static int is_null_reject_condition(const ObRawExpr *condition,
                                       const ObIArray<const ObRawExpr *> &targets,
@@ -499,7 +498,7 @@ public:
 
   /**
    * @brief is_simple_null_reject
-   * 可能返回 false 的 null reject 条件
+   * Possible null reject conditions that may return false
    */
   static int is_simple_null_reject(const ObRawExpr *condition,
                                    const ObIArray<const ObRawExpr *> &targets,
@@ -511,10 +510,10 @@ public:
 
   /**
    * @brief is_null_propagate_expr
-   * 判断 expr 是否能够传递 target 产生的空值。
-   * 当 targets 均为 NULL 时，expr 输出必然为 NULL，检查以下条件是否成立：
-   * 1. targets 中的某个表达式 x_expr 存在于 expr 中
-   * 2. x_expr 所在的计算路径上，涉及的表达式如果输入为NULL，那么输出必然为NULL
+   * Determine if expr can propagate the NULL values produced by target.
+   * When all targets are NULL, the output of expr must be NULL, check if the following conditions hold:
+   * 1. Some expression x_expr in targets exists in expr
+   * 2. On the computation path involving x_expr, if the input is NULL, then the output must be NULL
    */
   static int is_null_propagate_expr(const ObRawExpr *expr,
                                     const ObIArray<const ObRawExpr *> &targets,
@@ -522,7 +521,7 @@ public:
 
   /**
    * @brief find_expr
-   * 检查 target 是否存在于 source 中
+   * Check if target exists in source
    */
   static int find_expr(const ObIArray<const ObRawExpr *> &source,
                        const ObRawExpr *target,
@@ -544,7 +543,7 @@ public:
                           int64_t &idx);
   /**
    * @brief is_null_propagate_type
-   * 简单空值传递表达式类型的列表
+   * List of simple null propagation expression types
    */
   static bool is_null_propagate_type(const ObItemType type);
 
@@ -662,13 +661,13 @@ public:
 
   /**
    * @brief check_foreign_primary_join
-   * 检查first_table和second_table之间的连接是否为主外键连接
+   * Check if the connection between first_table and second_table is a foreign primary key join
    *
-   * @param first_exprs             第一个表的连接列
-   * @param second_exprs            第二个表的连接列
-   * @param is_foreign_primary_join 是否为主外键连接
-   * @param is_first_table_parent   first_table是否为父表
-   * @param allow_partial_join      是否允许连接条件只匹配外键关系的非空子集（只用于判定连接无损）
+   * @param first_exprs             The join columns of the first table
+   * @param second_exprs            The join columns of the second table
+   * @param is_foreign_primary_join Whether it is a foreign primary key join
+   * @param is_first_table_parent   Whether first_table is the parent table
+   * @param allow_partial_join      Whether to allow the join condition to match only a non-empty subset of the foreign key relationship (used only for determining lossless join)
    */
   static int check_foreign_primary_join(const TableItem *first_table,
                                         const TableItem * second_table,
@@ -693,15 +692,15 @@ public:
 
   /**
    * @brief is_all_foreign_key_involved
-   * 检查child_exprs和parent_exprs是否包含了子表和父表主外键约束中一一对应的所有的键
+   * Check if child_exprs and parent_exprs contain all the corresponding keys in the foreign key constraints between the child table and the parent table
    *
-   * e.g. t2上存在两个外键约束foreign key (c1, c2) references t1(c1, c2)
-   *                        和foreign key (c3, c4) references t1(c1, c2)
-   *      则要求child_exprs = [c1, c2] 且 parent_exprs = [c1, c2]
-   *          或child_exprs = [c3, c4] 且 parent_exprs = [c1, c2]
+   * e.g. There are two foreign key constraints on t2: foreign key (c1, c2) references t1(c1, c2)
+   *                        and foreign key (c3, c4) references t1(c1, c2)
+   *      Then it requires child_exprs = [c1, c2] and parent_exprs = [c1, c2]
+   *          or child_exprs = [c3, c4] and parent_exprs = [c1, c2]
    *
-   * @param is_all_involved       是否包含了主外键约束中一一对应的所有的键
-   * @param allow_partial_join    是否允许只包含主外键约束中的部分键
+   * @param is_all_involved       Whether all corresponding keys in the foreign key constraints are included
+   * @param allow_partial_join    Whether partial keys of the foreign key constraints are allowed to be included
    */
   static int is_all_foreign_key_involved(const ObIArray<const ObRawExpr *> &child_exprs,
                                          const ObIArray<const ObRawExpr *> &parent_exprs,
@@ -716,8 +715,8 @@ public:
 
   /**
    * @brief is_foreign_key_rely
-   * 判定主外键是否可靠，在MYSQL模式下检查全局变量foreign_key_check
-   * 在ORACLE模式下检查foreign key info里面的enable_flag
+   * Determine if the foreign key is reliable, check the global variable foreign_key_check in MYSQL mode
+   * Check the enable_flag in foreign key info in ORACLE mode
    */
   static int is_foreign_key_rely (ObSQLSessionInfo* session_info,
                                   const share::schema::ObForeignKeyInfo *foreign_key_info,
@@ -725,12 +724,12 @@ public:
 
   /**
    * @brief check_exprs_unique
-   * 检查 exprs 在 table 上是否有唯一性
+   * Check if exprs are unique on table
    * @param stmt
    * @param table
-   * @param exprs 需要检查唯一性的表达式集
-   * @param conditions 提供 null reject 检测谓词
-   * @param is_unique 是否有唯一性
+   * @param exprs Expressions to check for uniqueness
+   * @param conditions Provide null reject detection predicates
+   * @param is_unique Whether it is unique
    */
   static int check_exprs_unique(const ObDMLStmt &stmt,
                                 TableItem *table,
@@ -742,11 +741,11 @@ public:
 
   /**
    * @brief check_exprs_unique
-   * 检查 exprs 在 table 上是否有唯一性
+   * Check if exprs are unique on table
    * @param stmt
    * @param table
-   * @param exprs 需要检查唯一性的表达式集, 不考虑空值
-   * @param is_unique 是否有唯一性
+   * @param exprs Expressions to check for uniqueness, ignoring null values
+   * @param is_unique Whether it is unique
    */
   static int check_exprs_unique(const ObDMLStmt &stmt,
                                 TableItem *table,
@@ -757,13 +756,13 @@ public:
 
   /**
    * @brief check_exprs_unique_on_table_items
-   * 检查 table_items 经过 conditions 连接后，exprs 是否有唯一性
+   * Check if exprs are unique after table_items are joined by conditions
    * @param stmt
-   * @param table_items 表集
-   * @param exprs 需要检查唯一性的表达式集
-   * @param conditions from items的连接条件
-   * @param is_strict 是否考虑空值
-   * @param is_unique 是否有唯一性
+   * @param table_items Table set
+   * @param exprs Set of expressions to check for uniqueness
+   * @param conditions Join conditions for from items
+   * @param is_strict Whether to consider null values
+   * @param is_unique Whether there is uniqueness
    */
   static int check_exprs_unique_on_table_items(const ObDMLStmt *stmt,
                                                ObSQLSessionInfo *session_info,
@@ -785,10 +784,10 @@ public:
 
   /**
    * @brief check_stmt_unique
-   * 检查 stmt 的 select 输出是否有唯一性
+   * Check if the select output of stmt has uniqueness
    * @param stmt
-   * @param is_strict 是否考虑空值
-   * @param is_unique 是否有唯一性
+   * @param is_strict whether to consider null values
+   * @param is_unique whether there is uniqueness
    */
   static int check_stmt_unique(const ObSelectStmt *stmt,
                                ObSQLSessionInfo *session_info,
@@ -798,12 +797,12 @@ public:
 
   /**
    * @brief check_stmt_unique
-   * 检查 exprs 在 stmt 中是否有唯一性
+   * Check if exprs are unique in stmt
    * @param stmt
-   * @param exprs 需要检查唯一性的表达式集
-   * @param is_strict 是否考虑空值
-   * @param is_unique 是否有唯一性
-   * @param extra_flag 是否忽略 distinct/group 等对唯一性影响
+   * @param exprs Expressions set to be checked for uniqueness
+   * @param is_strict Whether to consider null values
+   * @param is_unique Whether there is uniqueness
+   * @param extra_flag Whether to ignore the impact of distinct/group etc. on uniqueness
    */
   static int check_stmt_unique(const ObSelectStmt *stmt,
                                ObSQLSessionInfo *session_info,
@@ -815,10 +814,10 @@ public:
 
   /**
    * @brief compute_stmt_property
-   * 计算 stmt 输出的 fd_sets/equal_sets/const_expr 等信息
+   * compute stmt output fd_sets/equal_sets/const_expr etc. information
    * @param stmt
-   * @param res_info 计算结果
-   * @param extra_flag 是否忽略 distinct/group 等对信息影响
+   * @param res_info computation result
+   * @param extra_flag whether to ignore the impact of distinct/group etc. on information
    */
   static int compute_stmt_property(const ObSelectStmt *stmt,
                                    UniqueCheckHelper &check_helper,
@@ -962,9 +961,9 @@ public:
   /**
    * @brief is_equal_correlation
    * expr(outer.c) = expr(inner.c)
-   * 1. 等值过滤条件
-   * 2. 一侧有且仅有上层的列
-   * 3. 一侧有且仅有本层的列
+   * 1. equality filter condition
+   * 2. one side has and only has columns from the upper level
+   * 3. one side has and only has columns from this level
    * @return
    */
   static int is_equal_correlation(const ObIArray<ObExecParamRawExpr *> &exec_params,
@@ -976,10 +975,10 @@ public:
 
   /**
    * @brief trans_column_items
-   * 如果col0 \in source, col1 \in target，且两者指向相同的列；
-   * 那么删除col1，并将所有表达式中指向col1的指针改为指向col0。
+   * If col0 \in source, col1 \in target, and both point to the same column;
+   * then delete col1, and change all pointers pointing to col1 in expressions to point to col0.
    *
-   * 如果col仅在target中使用，那么将col中的表信息改为source的信息
+   * If col is only used in target, then change the table information in col to the information in source.
    * @param stmt
    * @param table_id
    * @return
@@ -1026,13 +1025,13 @@ public:
 
   /**
    * @brief check_relations_containment
-   * 检查两个关系集合的包含关系
+   * Check the containment relationship between two sets of relations
    * @param stmt
-   * @param source_rels 第一个关系集合
-   * @param target_rels 第二个关系集合
-   * @param stmt_map_infos 如果关系中有generated_table，stmt_map_info记录generated_table stmt各个stmt的映射关系
-   * @param rel_map_info 关系集合的映射
-   * @param is_contain 返回第二个关系集合是否包含第一个关系集合
+   * @param source_rels First set of relations
+   * @param target_rels Second set of relations
+   * @param stmt_map_infos If there are generated_table in the relations, stmt_map_info records the mapping relationship of generated_table stmt for each stmt
+   * @param rel_map_info Mapping of relation sets
+   * @param is_contain Returns whether the second set of relations contains the first set of relations
    */
 
   static int check_table_item_containment(ObDMLStmt *stmt,
@@ -1244,10 +1243,10 @@ public:
 
   /**
    * @brief convert_select_expr_to_column_expr
-   * 将视图的select expr转换为outer stmt对应的column expr
-   * @param select_exprs 视图的select exprs
-   * @param table_id 视图在outer stmt的table id
-   * @param column_exprs outer stmt对应的column exprs
+   * Convert view's select expr to column expr corresponding to outer stmt
+   * @param select_exprs view's select exprs
+   * @param table_id view's table id in outer stmt
+   * @param column_exprs column exprs corresponding to outer stmt
    */
   static int convert_select_expr_to_column_expr(const common::ObIArray<ObRawExpr*> &select_exprs,
                                                 const ObSelectStmt &inner_stmt,

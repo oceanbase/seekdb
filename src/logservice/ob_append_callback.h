@@ -71,9 +71,9 @@ public:
   int64_t get_cb_first_handle_ts() const { return cb_first_handle_ts_; }
   virtual const char *get_cb_name() const = 0;
 public:
-  int64_t append_start_ts_; //提交到palf的起始时刻
-  int64_t append_finish_ts_; //palf提交完成时刻,即提交到apply service起始时刻
-  int64_t cb_first_handle_ts_; //cb第一次被处理的时刻,不一定调用on_success
+  int64_t append_start_ts_; // start timestamp for submission to palf
+  int64_t append_finish_ts_; // palf submission completion timestamp, i.e., the start time of submission to apply service
+  int64_t cb_first_handle_ts_; // the moment cb is first handled, not necessarily calling on_success
 };
 
 } // end namespace logservice

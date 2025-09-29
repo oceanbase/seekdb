@@ -27,7 +27,7 @@ struct ObTableLoadBackupColumnIndexItem_V_1_4
 {
   OB_INLINE const common::ObObjMeta &get_obj_meta() const { return request_column_type_; }
   TO_STRING_KV(K(request_column_type_), K(store_index_), K(is_column_type_matched_));
-  common::ObObjMeta request_column_type_; //请求列的类型
+  common::ObObjMeta request_column_type_; //The type of the request column
   int16_t store_index_; //request_index-->store_index
   bool    is_column_type_matched_;
 };
@@ -59,12 +59,12 @@ public:
   TO_STRING_KV(K(request_count_), K(store_count_), K(rowkey_store_count_), K(seq_read_column_count_), 
                K(ObArrayWrap<ObTableLoadBackupColumnIndexItem_V_1_4>(column_indexs_, request_count_)), K(read_full_rowkey_));
 private:
-  int64_t request_count_; //请求列数
-  int64_t store_count_; //存储列数
-  int64_t rowkey_store_count_; //rowkey列数
-  int64_t seq_read_column_count_; //请求的列类型与顺序与存储列类型与顺序相同的列数
+  int64_t request_count_; //request count
+  int64_t store_count_; // number of storage columns
+  int64_t rowkey_store_count_; // number of rowkey columns
+  int64_t seq_read_column_count_; //The number of columns with the same type and order as the requested columns and the stored columns
   ObTableLoadBackupColumnIndexItem_V_1_4 *column_indexs_;
-  // 避免调用ObColumnIndexItem的构造函数
+  // Avoid calling the constructor of ObColumnIndexItem
   char column_indexs_buf_[sizeof(ObTableLoadBackupColumnIndexItem_V_1_4) * OB_TABLE_LOAD_PRE_ROW_MAX_COLUMNS_COUNT];
   bool read_full_rowkey_;
   bool is_inited_;

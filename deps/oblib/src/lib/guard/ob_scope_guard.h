@@ -19,23 +19,23 @@ namespace oceanbase
 {
 namespace common
 {
-// ScopeGuard是一个模版类，其中包含了被保护的资源类型，以及析构该资源的可调用函数类型
+// ScopeGuard is a template class that includes the type of the protected resource, as well as the type of the callable function to destruct the resource
 template <typename Resource, typename Deleter>
 class ScopeGuard
 {
 public:
   template <typename T>
-  ScopeGuard(Resource &p, T &&deleter) : p_(&p), deleter_(std::forward<Deleter>(deleter)) {}// ScopeGuard会在栈上开辟一个指针，指向被保护的资源
-  ScopeGuard(const ScopeGuard &g) = delete;// ScopeGuard是禁止拷贝的
-  ScopeGuard(ScopeGuard &&g) : p_(g.p_), deleter_(std::move(g.deleter_)) { g.p_ = nullptr; }// 但是允许移动
-  ~ScopeGuard() { if (p_) { deleter_(*p_); p_ = nullptr; } }// 当ScopeGuard析构时，若其指向的资源仍然是有效的，则会调用析构操作
-  Resource &resource() { return *p_; }// 通过resource()方法访问被保护的资源
-  Resource &fetch_resource() {// 通过fetch_resource()取出被保护的资源
+  ScopeGuard(Resource &p, T &&deleter) : p_(&p), deleter_(std::forward<Deleter>(deleter)) {}// ScopeGuard will allocate a pointer on the stack, pointing to the protected resource
+  ScopeGuard(const ScopeGuard &g) = delete;// ScopeGuard is prohibited from being copied
+  ScopeGuard(ScopeGuard &&g) : p_(g.p_), deleter_(std::move(g.deleter_)) { g.p_ = nullptr; }// but allows move
+  ~ScopeGuard() { if (p_) { deleter_(*p_); p_ = nullptr; } }// When ScopeGuard is destructed, if the resource it points to is still valid, the destructor operation will be called
+  Resource &resource() { return *p_; }// Access the protected resource through the resource() method
+  Resource &fetch_resource() { // Retrieve the protected resource through fetch_resource()
     Resource *p = p_;
     p_ = nullptr;
     return *p;
   }
-  // 以下两个函数使用了SFINAE技法，只有当保护的资源是指针类型时编译器才会生成下面的两个函数
+  // The following two functions use the SFINAE technique, and the compiler will generate the following two functions only when the protected resource is a pointer type
   template <typename T = Resource, typename std::enable_if<std::is_pointer<T>::value, bool>::type = true>
   typename std::add_lvalue_reference<typename std::remove_pointer<T>::type>::type operator*() { return **p_; }
   template <typename T = Resource, typename std::enable_if<std::is_pointer<T>::value, bool>::type = true>
@@ -44,7 +44,7 @@ private:
   Resource *p_;
   Deleter deleter_;
 };
-// MAKE_SCOPE宏用于去掉使用ScopeGuard时的语法噪音
+// MAKE_SCOPE macro is used to remove syntax noise when using ScopeGuard
 #define MAKE_SCOPE(resource, lambda) \
 ({\
 auto deleter = lambda;\

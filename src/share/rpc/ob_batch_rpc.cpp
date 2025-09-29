@@ -36,7 +36,7 @@ int build_batch_packet(const ObAddr &sender, const uint32_t batch_type, const ui
   uint32_t flag = 0;
   // with trace id
   flag = 1;
-  // 优先从线程局部分配内存, 如果分配的内存不够大, 则动态分配内存
+  // Prioritize memory allocation from thread-local storage, if the allocated memory is not large enough, then dynamically allocate memory
   while (true) {
     bool need_retry = false;
     // rewrite ret
@@ -49,7 +49,7 @@ int build_batch_packet(const ObAddr &sender, const uint32_t batch_type, const ui
     } else {
       is_dynamic_alloc = false;
       if (req.get_estimate_size() > (limit * 4 / 5) || is_retry) {
-        // 多分配1024字节用于填充其他字段
+        // Allocate an additional 1024 bytes for padding other fields
         limit = req.get_req_size() + header_end_pos + 1024;
         if (OB_ISNULL(pkt = (ObBatchPacket *)ob_malloc(limit, SET_USE_500("RPC_BATCH_BUF")))) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -153,7 +153,7 @@ int build_batch_packet(const ObAddr &sender, const uint32_t batch_type, const in
   uint32_t flag = 0;
   // with trace id
   flag = 1;
-  // 优先从线程局部分配内存, 如果分配的内存不够大, 则动态分配内存
+  // Prioritize memory allocation from thread-local storage, if the allocated memory is not large enough, then dynamically allocate memory
   while (true) {
     bool need_retry = false;
     // rewrite ret
@@ -166,7 +166,7 @@ int build_batch_packet(const ObAddr &sender, const uint32_t batch_type, const in
     } else {
       is_dynamic_alloc = false;
       if (req.get_estimate_size() > (limit * 4 / 5) || is_retry) {
-        // 多分配1024字节用于填充其他字段
+        // Allocate an additional 1024 bytes for padding other fields
         limit = req.get_req_size() + header_end_pos + 1024;
         if (OB_ISNULL(pkt = (ObBatchPacket *)ob_malloc(limit, SET_USE_500("RPC_BATCH_BUF")))) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -299,7 +299,7 @@ void ObBatchRpcBase::do_work()
           (void) del_cluster_id_list.push_back(iter->get_dst_cluster_id());
         }
       }
-      // 执行GC
+      // Execute GC
       for (int64_t i = 0; i < del_list.count(); ++i) {
         ObAddr cur_server = del_list.at(i);
         const uint64_t tenant_id = tenant_list.at(i);
@@ -367,7 +367,7 @@ int ObBatchRpcBase::get_dst_svr_list(common::ObIArray<share::ObCascadMember> &ds
           if (addr == dst_list.at(i).get_server()) {
             if (dst_cluster_id == dst_list.at(i).get_cluster_id()
                 || common::OB_INVALID_CLUSTER_ID == dst_cluster_id) {
-              // 过滤cluster_id相同或者无效的场景
+              // Filter scenarios where cluster_id is the same or invalid
               is_need_add = false;
               break;
             }

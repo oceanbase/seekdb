@@ -123,9 +123,9 @@ public:
                      ObIArray<ObOptTableStatHandle> &handles);
 
   /**
-   *  @brief  外部获取列统计信息的接口，以引用的形式返回一个包含统计信息对象指针的handle，通过这个指针
-   *          可以获取统计信息。这样的方式是由ObKVCache的底层实现决定的。如果返回的handle的指针非空，
-   *          那么handle对象保证在自身析构前其统计信息指针总是有效的。
+   *  @brief  The interface for external acquisition of column statistics, which returns a handle containing a reference to a pointer of the statistics object. Through this pointer,
+   *          statistics can be obtained. This approach is determined by the underlying implementation of ObKVCache. If the pointer of the returned handle is not null,
+   *          the handle object guarantees that its statistics pointer remains valid until its own destruction.
    */
   virtual int get_column_stat(const uint64_t tenant_id,
                               const ObOptColumnStat::Key &key,
@@ -172,7 +172,7 @@ public:
                   const bool is_index_stat,
                   const ObObjPrintParams &print_params);
 
-  /**  @brief  外部获取行统计信息的接口 */
+  /**  @brief  External interface for obtaining row statistics information */
   virtual int get_table_stat(const uint64_t tenant_id,
                              const ObOptTableStat::Key &key,
                              ObOptTableStat &tstat);

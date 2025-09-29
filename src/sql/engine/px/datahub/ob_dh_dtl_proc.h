@@ -37,8 +37,8 @@ public:
   virtual ~ObPieceMsgP() = default;
   int process(const PieceMsg &pkt) override
   {
-    // FIXME on_piece_msg理论上可以模板化处理.
-    // 暂时通过重载绕过.
+    // FIXME on_piece_msg theoretically can be template processed.
+    // Temporarily bypass by overloading.
     return msg_proc_.on_piece_msg(ctx_, pkt);
   }
 private:

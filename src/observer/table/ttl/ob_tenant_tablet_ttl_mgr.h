@@ -494,7 +494,7 @@ private:
   template <typename T>
   int alloc_and_init_tablet_scheduler(storage::ObLS *ls);
 private:
-  // 新增加成员 ObALLTabletTTLScheduler
+  // New added member ObALLTabletTTLScheduler
   ObArenaAllocator allocator_; // use to alloc ObTTLTaskScheduler
   bool is_inited_;
   uint64_t tenant_id_;

@@ -100,7 +100,7 @@ public:
   int get_next_row(ObString &block_data);
 
   // interface for partial update
-  // partial update 包含部分读
+  // partial update includes partial read
   int get_next_row(ObLobMetaScanResult &result);
 
   uint64_t get_cur_pos() { return cur_pos_; }

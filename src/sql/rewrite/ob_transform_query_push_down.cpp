@@ -21,7 +21,7 @@ namespace sql
 {
 
 /**
- * @brief ObTransformQueryPushDown::transform_one_stmt 将部分可以下压的算子下压，同时去掉外层subplan
+ * @brief ObTransformQueryPushDown::transform_one_stmt pushes down some operators that can be pushed down, while removing the outer subplan
  * 1.where condition
  * select * from (select * from t1 order by c3) where c2 > 2;
  * ==>
@@ -220,16 +220,16 @@ int ObTransformQueryPushDown::check_hint_allowed_query_push_down(const ObDMLStmt
 }
 
 /**
- * @brief check_transform_validity 检查改写是否满足相关条件:
- * 1.判断是否有cte等(外层含有sequence,内层必须为spj)
- * 2.判断set-op能否被下压 -->放在最先判断因为不支持外层set-op往里压
- * 4.判断select item能否被下压
- * 5.判断where condition能否被下压 -->可能被下压为having expr
- * 6.判断group by、aggr、having condition能否被下压
- * 7.判断window function能否被下压
- * 8.判断distinct 能否被下压
- * 9.判断order by能否被下压
- * 10.判断limit能否被下压
+ * @brief check_transform_validity Check if the rewrite meets the relevant conditions:
+ * 1.Determine if there are cte etc. (the outer layer contains sequence, the inner layer must be spj)
+ * 2.Determine if set-op can be pushed down --> placed at the first judgment because outer-layer set-op pushing inward is not supported
+ * 4.Determine if select item can be pushed down
+ * 5.Determine if where condition can be pushed down --> may be pushed down as having expr
+ * 6.Determine if group by, aggr, having condition can be pushed down
+ * 7.Determine if window function can be pushed down
+ * 8.Determine if distinct can be pushed down
+ * 9.Determine if order by can be pushed down
+ * 10.Determine if limit can be pushed down
  */
 int ObTransformQueryPushDown::check_transform_validity(ObSelectStmt *select_stmt,
                                                        ObSelectStmt *view_stmt,
@@ -252,7 +252,7 @@ int ObTransformQueryPushDown::check_transform_validity(ObSelectStmt *select_stmt
              (view_stmt->is_recursive_union() && !select_stmt->is_spj()) ||
              select_stmt->is_set_stmt() ||
              (select_stmt->has_sequence() && !view_stmt->is_spj()) ||
-             view_stmt->has_ora_rowscn()) {//判断1, 2
+             view_stmt->has_ora_rowscn()) {//judgment 1, 2
     can_transform = false;
     OPT_TRACE("stmt is not spj");
   } else if (select_stmt->get_query_ctx()->optimizer_features_enable_version_ < COMPAT_VERSION_4_3_2 &&
@@ -263,7 +263,7 @@ int ObTransformQueryPushDown::check_transform_validity(ObSelectStmt *select_stmt
                                                  view_stmt,
                                                  select_offset,
                                                  const_select_items,
-                                                 check_status))) {//判断4
+                                                 check_status))) {//judge 4
     LOG_WARN("check select item push down failed");
   } else if (!check_status) {
     can_transform = false;
@@ -272,31 +272,31 @@ int ObTransformQueryPushDown::check_transform_validity(ObSelectStmt *select_stmt
              OB_FAIL(check_where_condition_push_down(select_stmt,
                                                      view_stmt,
                                                      transform_having,
-                                                     check_status))) {//判断5
+                                                     check_status))) {//judge 5
     LOG_WARN("check where condition push down failed", K(check_status), K(ret));
   } else if (!check_status) {
     can_transform = false;
     OPT_TRACE("can not pushdown where condition");
   } else if ((select_stmt->has_group_by() || select_stmt->has_rollup())
-             && !view_stmt->is_spj()) {//判断6
+             && !view_stmt->is_spj()) {//judgment 6
     can_transform = false;
     OPT_TRACE("stmt has group by, but view is not spj");
   } else if (select_stmt->has_window_function() &&
-             OB_FAIL(check_window_function_push_down(view_stmt, check_status))) {//判断7
+             OB_FAIL(check_window_function_push_down(view_stmt, check_status))) {//judge 7
     LOG_WARN("check window function push down failed", K(check_status), K(ret));
   } else if (!check_status) {
     can_transform = false;
     OPT_TRACE("can not pushdown windown function");
   } else if (select_stmt->has_distinct() &&
-             OB_FAIL(check_distinct_push_down(view_stmt, need_distinct, check_status))) {//判断8
+             OB_FAIL(check_distinct_push_down(view_stmt, need_distinct, check_status))) {//judge 8
     LOG_WARN("check distinct push down failed", K(check_status), K(ret));
   } else if (!check_status) {
     can_transform = false;
     OPT_TRACE("can not pushdown distinct");
-  } else if (select_stmt->has_order_by() && view_stmt->has_limit()) {//判断9
+  } else if (select_stmt->has_order_by() && view_stmt->has_limit()) {//judgment 9
     can_transform = false;
     OPT_TRACE("stmt has order by, but view has limit ,can not pushdown");
-  } else if (select_stmt->has_limit()) {//判断10
+  } else if (select_stmt->has_limit()) {//check limit 10
     can_transform = (!select_stmt->is_calc_found_rows()
                      && !view_stmt->is_contains_assignment()
                      && can_limit_merge(*select_stmt, *view_stmt));
@@ -305,10 +305,9 @@ int ObTransformQueryPushDown::check_transform_validity(ObSelectStmt *select_stmt
   }
   return ret;
 }
-
-//在 upper_stmt 与 view_stmt limit 在以下两种情况可以合并:
-// 1. view_stmt 无 limit, 直接使用上层 limit
-// 2. upper_stmt 与 view_stmt 均无 fetch with ties, limit_percent, 合并 limit 和 offset:
+// In upper_stmt and view_stmt limit can be merged in the following two cases:
+// 1. view_stmt no limit, directly use upper level limit
+// 2. upper_stmt and view_stmt both have no fetch with ties, limit_percent, merge limit and offset:
 //  select ... from (select ... limit a1 offset b1) limit a2 offset b2;
 //  select ... from ... limit min(a1 - b2, a2) offset b1 + b2;
 bool ObTransformQueryPushDown::can_limit_merge(ObSelectStmt &upper_stmt,
@@ -351,7 +350,7 @@ int ObTransformQueryPushDown::do_limit_merge(ObSelectStmt &upper_stmt,
                                                           limit_expr, offset_expr))) {
     LOG_WARN("failed to merge limit offset", K(ret));
   } else {
-    //这里 upper_stmt 无 percent expr / with ties, 直接舍弃了 upper stmt 的 has fetch 标识
+    // Here upper_stmt has no percent expr / with ties, directly discarded the has fetch flag of upper stmt
     view_stmt.set_limit_offset(limit_expr, offset_expr);
   }
   return ret;
@@ -502,13 +501,12 @@ int ObTransformQueryPushDown::check_set_op_expr_reference(ObSelectStmt *select_s
   return ret;
 }
 
-/*@brief check_select_item_push_down检查select item能否被下压
-* 1.首先判断内外select item是否相同，如果相同，证明select item肯定能被下压,而不同需要考虑以下情况:
-*   2.1 内层含有aggr, 这个时候虽然aggr先执行，但是aggr和select item相关, 如果直接把select item压下去，则有
-*       可能引起语义错误，如:eg: select 1 from (select sum(c1) from t1); 但是如果是含有group by时是没问题的
-*   2.2 内层含有distinct, 这个也是显然不行的，因为distinct后于select item执行, 直接压下去会有语义错误
-*   2.3 内层含有set-op, 这个就必须要求内外的select item相同
-*   2.4 内层含有用户变量赋值, 直接下压可能会消掉这个赋值. 
+/*@brief check_select_item_push_down checks if select item can be pushed down
+* 1.Firstly determine if the inner and outer select items are the same. If they are the same, it proves that the select item can definitely be pushed down; if different, the following situations need to be considered:
+*   2.1 The inner layer contains aggr, although aggr is executed first, aggr is related to the select item. If the select item is directly pushed down, it may cause semantic errors, e.g.: select 1 from (select sum(c1) from t1); However, there is no problem when it contains group by.
+*   2.2 The inner layer contains distinct, which is obviously not possible either, because distinct is executed after the select item. Directly pushing it down will result in semantic errors.
+*   2.3 The inner layer contains set-op, which requires the inner and outer select items to be the same.
+*   2.4 The inner layer contains user variable assignment, directly pushing it down may eliminate this assignment.
 *       e.g. select f1 from (select @a := c1 as f1, @b := @b +1 from t1);
 */
 int ObTransformQueryPushDown::check_select_item_push_down(ObSelectStmt *select_stmt,
@@ -556,7 +554,7 @@ int ObTransformQueryPushDown::check_select_item_push_down(ObSelectStmt *select_s
                                         select_offset,
                                         const_select_items))) {
     LOG_WARN("check select item same failed", K(ret));
-  } else if (check_status && !view_stmt->is_recursive_union()) {//is_recursive_union需要完全一致
+  } else if (check_status && !view_stmt->is_recursive_union()) {//is_recursive_union needs to be consistent
     can_be = true;
   } else if (view_stmt->is_scala_group_by() ||
              view_stmt->has_distinct() ||
@@ -650,10 +648,10 @@ int ObTransformQueryPushDown::check_select_item_subquery(ObSelectStmt &select_st
   return ret;
 }
 
-/*@brief check_where_condition_push_down 判断外层有condition条件时，能否下压到内层, 需要注意的是:
-* 如果内层为group by/aggr等时，where condition需要下压为having condition,但是需要注意的是有如果where
-* condition包含子查询时，继续下压到having condition中可能会造成性能回退，因此不能下含有子查询的where condition
-* 到having condition中
+/*@brief check_where_condition_push_down Determine if the outer condition can be pushed down to the inner layer when there is a condition in the outer layer, note that:
+* If the inner layer is group by/aggr, etc., the where condition needs to be pushed down to having condition, but note that if the where
+* condition contains subqueries, continuing to push it down to the having condition may cause performance degradation, therefore, where conditions
+* containing subqueries cannot be pushed down to the having condition
 */
 int ObTransformQueryPushDown::check_where_condition_push_down(ObSelectStmt *select_stmt,
                                                               ObSelectStmt *view_stmt,
@@ -701,8 +699,8 @@ int ObTransformQueryPushDown::check_where_condition_push_down(ObSelectStmt *sele
   return ret;
 }
 
-/*@brief check_window_function_push_down 判断外层有window function条件时，能否下压到内层
-* 内层含有窗口函数，如果直接下压也会存在问题,如:
+/*@brief check_window_function_push_down Determine if window function conditions in the outer layer can be pushed down to the inner layer
+* If the inner layer contains window functions, directly pushing them down will also cause issues, e.g.:
 * SELECT t.*, SUM(t.`rank`) OVER (ROWS UNBOUNDED PRECEDING) FROM
     (SELECT sex, id, date, ROW_NUMBER() OVER w AS row_no, RANK() OVER w AS `rank` FROM t1,t2
     WHERE t1.id=t2.user_id WINDOW w AS (PARTITION BY date ORDER BY id)) AS t;
@@ -728,7 +726,7 @@ int ObTransformQueryPushDown::check_window_function_push_down(ObSelectStmt *view
   return ret;
 }
 
-/*@brief check_distinct_push_down 判断外层有distinct条件时，能否下压到内层
+/*@brief check_distinct_push_down Determine if the distinct condition in the outer layer can be pushed down to the inner layer
  */
 int ObTransformQueryPushDown::check_distinct_push_down(ObSelectStmt *view_stmt,
                                                        bool &need_distinct,
@@ -831,7 +829,7 @@ int ObTransformQueryPushDown::push_down_stmt_exprs(ObSelectStmt *select_stmt,
                             select_stmt->get_qualify_filters()))) {
     LOG_WARN("append select_stmt window func filters to view stmt window func filters failed", K(ret));
   } else {
-    if (need_distinct && !view_stmt->is_set_distinct()) {//说明内层为set-op,且为union all
+    if (need_distinct && !view_stmt->is_set_distinct()) {//indicates inner is set-op, and is union all}
       view_stmt->assign_set_distinct();
     } else if (select_stmt->has_distinct() && !view_stmt->has_distinct()) {
       view_stmt->assign_distinct();
@@ -848,7 +846,7 @@ int ObTransformQueryPushDown::push_down_stmt_exprs(ObSelectStmt *select_stmt,
     if (OB_FAIL(ret)) {
     } else if (select_stmt->has_limit() && OB_FAIL(do_limit_merge(*select_stmt, *view_stmt))) {
       LOG_WARN("failed to merge limit", K(ret));
-    } else if (select_stmt->has_sequence() && //处理sequence
+    } else if (select_stmt->has_sequence() && // handle sequence
                OB_FAIL(append(view_stmt->get_nextval_sequence_ids(),
                               select_stmt->get_nextval_sequence_ids()))) {
       LOG_WARN("failed to append nextval sequence ids", K(ret));
@@ -888,8 +886,8 @@ int ObTransformQueryPushDown::push_down_stmt_exprs(ObSelectStmt *select_stmt,
                        select_stmt->get_subquery_exprs()))) {
       LOG_WARN("view stmt append subquery failed", K(ret));
     } else {
-      //bug20488629, 备库普通租户SHOW database语句执行超时，始终要求选择Leader副本
-      //view pull后需要继承原show db信息
+      //bug20488629, standby tenant SHOW database statement execution timeout, always require selecting Leader replica
+      // view pull after needs to inherit original show db information
       bool is_from_show_stmt = select_stmt->is_from_show_stmt();
       stmt::StmtType literal_stmt_type = select_stmt->get_query_ctx()->get_literal_stmt_type();
       view_stmt->get_query_ctx()->set_literal_stmt_type(literal_stmt_type);
@@ -955,7 +953,7 @@ int ObTransformQueryPushDown::recursive_adjust_select_item(ObSelectStmt *select_
     ObSEArray<SelectItem, 1> old_select_item;
     ObSEArray<SelectItem, 1> new_const_select_items;
     ObRawExprCopier copier(*ctx_->expr_factory_);
-    //copy一份select item进行处理
+    // copy a copy of select item for processing
     if (OB_FAIL(old_select_item.assign(select_stmt->get_select_items()))) {
       LOG_WARN("failed to assign a new select item", K(ret));
     } else if (OB_FAIL(deep_copy_stmt_objects(copier,

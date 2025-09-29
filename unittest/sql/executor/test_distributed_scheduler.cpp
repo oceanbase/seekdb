@@ -188,20 +188,19 @@ int ObDistributedSchedulerTest::create_plan_tree(ObExecContext &ctx)
   col2.column_name_ = ObString::make_string("b");
   //EXPECT_EQ(OB_SUCCESS, single_range_columns.push_back(col2));
   ref_col2.add_flag(IS_COLUMN);
-
-  // 构造 (a = ?)
+  // construct (a = ?)
   ObObj index1;
   index1.set_unknown(0);
   ObConstRawExpr const_col1(index1, T_QUESTIONMARK);
   const_col1.add_flag(IS_STATIC_PARAM);
-  ObOpRawExpr condition1(&ref_col1, &const_col1, T_OP_EQ); // a = ?构造完毕
-  // 构造 (b > ?)
+  ObOpRawExpr condition1(&ref_col1, &const_col1, T_OP_EQ); // a = ? construction completed
+  // construct (b > ?)
   ObObj index2;
   index2.set_unknown(1);
   ObConstRawExpr const_col2(index2, T_QUESTIONMARK);
   const_col2.add_flag(IS_STATIC_PARAM);
-  ObOpRawExpr condition2(&ref_col2, &const_col2, T_OP_GT); // b > ?构造完毕
-  ObOpRawExpr condition3(&condition1, &condition2, T_OP_AND); // a = ? and b > ?构造完毕
+  ObOpRawExpr condition2(&ref_col2, &const_col2, T_OP_GT); // b > ? construction completed
+  ObOpRawExpr condition3(&condition1, &condition2, T_OP_AND); // a = ? and b > ? construction completed
 
   ObArray<ColumnItem> scan_range_columns;
   EXPECT_EQ(OB_SUCCESS, scan_range_columns.push_back(col2));
@@ -321,8 +320,7 @@ int ObDistributedSchedulerTest::exception_test()
 TEST_F(ObDistributedSchedulerTest, basic_test)
 {
   int ret = OB_SUCCESS;
-
-  //启动模拟收包队列
+  // Start simulation packet receiving queue
   ObMockPacketQueueThread::get_instance()->start();
 
   int64_t remain_time_us = 1000 * 1000;

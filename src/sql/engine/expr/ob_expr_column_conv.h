@@ -41,10 +41,9 @@ protected:
   common::ObIAllocator &alloc_;
   common::ObFixedArray<common::ObString, common::ObIAllocator> str_values_;
 };
-
-//fast column convert是OExprColumnConvert后缀表达式去后缀计算的一种优化
-//fast colummn convert的取值只来自于param store的常量，或者current row中的某一列
-//而不能是一个表达式的计算结果
+// fast column convert is a type of optimization that removes postfix calculation from ObExprColumnConvert postfix expression
+// fast column convert's value only comes from the constants of param store, or a column in the current row
+// and cannot be the result of an expression calculation
 class ObFastColumnConvExpr : public ObBaseExprColumnConv, public ObFastExprOperator
 {
 public:
@@ -61,7 +60,7 @@ public:
   { return ob_write_string(alloc_, column_info, column_info_); }
   OB_INLINE bool has_column_info() const { return !column_info_.empty(); }
   OB_INLINE const ObString &get_column_info() const { return column_info_; }
-  /// 打印表达式
+  /// Print expression
   VIRTUAL_TO_STRING_KV(K_(column_type),
                        K_(value_item),
                        K_(column_info));

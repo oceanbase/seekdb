@@ -163,7 +163,7 @@ int ObConflictRowMapCtx::init_conflict_map(int64_t replace_row_cnt, int64_t rowk
     int64_t bucket_num = 0;
     int64_t real_row_buckets = replace_row_cnt * 10;
     bucket_num = real_row_buckets < MAX_ROW_BATCH_SIZE ? real_row_buckets : MAX_ROW_BATCH_SIZE;
-    // map 没创建的场景下才需要创建, 这里可能被重复调用
+    // map not created scenario requires creation, here it may be called repeatedly
     if (NULL == (rowkey_ = static_cast<ObRowkey*>(allocator_->alloc(sizeof(ObRowkey))))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("fail to alloc memory", K(ret));
@@ -222,8 +222,7 @@ int ObConflictChecker::create_rowkey_check_hashset(int64_t replace_row_cnt)
   }
   return ret;
 }
-
-//初始conflict_map
+// Initial conflict_map
 int ObConflictChecker::create_conflict_map(int64_t replace_row_cnt)
 {
   int ret = OB_SUCCESS;
@@ -231,15 +230,14 @@ int ObConflictChecker::create_conflict_map(int64_t replace_row_cnt)
   for (int64_t i = 0; OB_SUCC(ret) && i < constraint_cnt; ++i) {
     ObRowkeyCstCtdef *rowkey_cst_ctdef = checker_ctdef_.cst_ctdefs_.at(i);
     int64_t rowkey_cnt = rowkey_cst_ctdef->rowkey_expr_.count();
-    // 在init_conflict_map 函数内保证了map不会被重复created
+    // In the init_conflict_map function, it ensures that the map will not be created repeatedly
     if (OB_FAIL(conflict_map_array_.at(i).init_conflict_map(replace_row_cnt, rowkey_cnt, &allocator_))) {
       LOG_WARN("fail to init conflict_map", K(ret), K(rowkey_cnt));
     }
   }
   return ret;
 }
-
-//初始化map array， map创建hash_bucket将会在延后
+// Initialize map array, map creation of hash_bucket will be deferred
 int ObConflictChecker::init_conflict_checker(const ObExprFrameInfo *expr_frame_info,
                                              ObDASTableLoc *table_loc,
                                              bool use_partition_gts_opt)
@@ -254,7 +252,7 @@ int ObConflictChecker::init_conflict_checker(const ObExprFrameInfo *expr_frame_i
     mem_attr.tenant_id_ = session->get_effective_tenant_id();
     mem_attr.label_ = "SqlConflictCkr";
     das_ref_.set_expr_frame_info(expr_frame_info);
-    // 这里需要注意
+    // Here attention is needed
     das_ref_.set_execute_directly(!checker_ctdef_.use_dist_das_);
     das_ref_.set_mem_attr(mem_attr);
     das_ref_.set_do_gts_opt(use_partition_gts_opt);
@@ -324,8 +322,8 @@ int ObConflictChecker::build_rowkey(ObRowkey *&rowkey,
     } else if (OB_FAIL(expr->eval(eval_ctx_, datum))) {
       LOG_WARN("expr eval fail", K(ret), K(i), KPC(expr));
     }
-    // 这里对datum要做浅拷贝，因为此时的datum来自于从存储层table_scan出来的数据,
-    // 读后续行的时候会覆盖前边的数据，所以这里一定要做深拷贝
+    // Here a shallow copy of datum is made, because at this point the datum comes from the data scanned out of the storage layer table_scan,
+    // Read subsequent lines will overwrite the previous data, so a deep copy must be done here
     else if (OB_FAIL(datum->to_obj(tmp_obj, col_obj_meta))) {
       LOG_WARN("datum to obj fail", K(ret), K(i), KPC(expr), KPC(datum));
     } else if (col_accuracy != nullptr &&
@@ -402,8 +400,7 @@ int ObConflictChecker::build_tmp_rowkey(ObRowkey *rowkey, ObRowkeyCstCtdef *rowk
 
   return ret;
 }
-
-// 用回表拉回的数据来构建map
+// Use the data pulled back from the table to build the map
 int ObConflictChecker::build_base_conflict_map(
     int64_t replace_row_cnt,
     const ObChunkDatumStore::StoredRow *conflict_row)
@@ -432,16 +429,16 @@ int ObConflictChecker::build_base_conflict_map(
       constraint_value.new_row_source_ = ObNewRowSource::FROM_SCAN;
       if (OB_FAIL(conflict_map_array_.at(i).conflict_map_.set_refactored(*rowkey, constraint_value))) {
         if (OB_HASH_EXIST == ret && 0 == i) {
-          // 回表查出来的结果很可能有相同主表行
+          // The results queried back from the main table may have duplicate rows in the main table
           // create table t1 (c1 int primary key, c2 int unique) partition by hash(c1) ....;
           // insert into t1 values(1,1),(2,2),(3,3),(4,4);
           // replace into t1 values(1,1);
-          // 此时主表和索引表冲突的行都是主表中(1,1)行
-          // 所以这里跳过duplicated row
+          // At this point, the conflicting rows between the main table and the index table are all row (1,1) in the main table
+          // So here we skip duplicated row
           is_duplicated = true;
           ret = OB_SUCCESS;
         } else {
-          // 如果主键不相同，但是后边有唯一性索引相同，绝对的不符合预期
+          // If the primary key is different, but there is a unique index that is the same, it is absolutely not as expected
           LOG_WARN("set constraint key failed", K(ret), K(i));
         }
       }
@@ -452,8 +449,7 @@ int ObConflictChecker::build_base_conflict_map(
   }
   return ret;
 }
-
-// 检查当前的主键是否冲突
+// Check if the current primary key conflicts
 int ObConflictChecker::check_duplicate_rowkey(const ObChunkDatumStore::StoredRow *replace_row,
                                               ObIArray<ObConflictValue> &constraint_values,
                                               bool is_insert_up)
@@ -484,9 +480,8 @@ int ObConflictChecker::check_duplicate_rowkey(const ObChunkDatumStore::StoredRow
         ret = OB_SUCCESS;
       }
     }
-
-    // todo @kaizhan.dkz 这里需要检查是否需要update_incremental_row_检查，
-    // insert_up才需要，replace 暂时用不到
+    // todo @kaizhan.dkz Here needs to check whether update_incremental_row_check is needed,
+    // insert_up is needed, replace is not used for now
     if (OB_SUCC(ret) && constraint_value.current_datum_row_ != NULL) {
       if (OB_FAIL(add_var_to_array_no_dup(constraint_values, constraint_value))) {
         LOG_WARN("add constraint value no duplicate failed", K(ret));
@@ -505,8 +500,7 @@ int ObConflictChecker::check_duplicate_rowkey(const ObChunkDatumStore::StoredRow
 
   return ret;
 }
-
-// 从hash map中删除冲突base行
+// Remove conflicting base row from hash map
 int ObConflictChecker::delete_old_row(const ObChunkDatumStore::StoredRow *replace_row,
                                       ObNewRowSource from)
 {
@@ -542,8 +536,7 @@ int ObConflictChecker::delete_old_row(const ObChunkDatumStore::StoredRow *replac
   }
   return ret;
 }
-
-// 插入新行到hash map中
+// Insert new line into hash map
 int ObConflictChecker::insert_new_row(const ObChunkDatumStore::StoredRow *new_row,
                                       ObNewRowSource from)
 {
@@ -570,7 +563,7 @@ int ObConflictChecker::insert_new_row(const ObChunkDatumStore::StoredRow *new_ro
 
     } else if (constraint_value != NULL) {
       if (OB_NOT_NULL(constraint_value->current_datum_row_)) {
-        // insert up 在update之后的行仍然是存在唯一约束冲突，在这里模拟存储层报错
+        // insert up after the update, the row still exists with a unique constraint conflict, simulate storage layer error here
         ret = OB_ERR_PRIMARY_KEY_DUPLICATE;
         char rowkey_buffer[OB_TMP_BUF_SIZE_256];
         if (OB_SUCCESS != (extract_rowkey_info(rowkey_cst_ctdef,
@@ -583,14 +576,14 @@ int ObConflictChecker::insert_new_row(const ObChunkDatumStore::StoredRow *new_ro
                        constraint_name.length(), constraint_name.ptr());
         }
       } else {
-        // map中命中，说明base行被删除了，然后插入新行
+        // map hit, indicating that the base row was deleted, then a new row was inserted
         constraint_value->current_datum_row_ = new_row;
         constraint_value->new_row_source_ = from;
         LOG_DEBUG("add one row to hash map and current_datum_row_ is null",
                   K(i), KPC(constraint_key), KPC(constraint_value));
       }
     } else {
-      // 真实插入新行到map
+      // Real insert new line to map
       ObConflictValue new_constraint_value;
       new_constraint_value.current_datum_row_ = new_row;
       new_constraint_value.new_row_source_ = from;
@@ -679,7 +672,7 @@ int ObConflictChecker::convert_exprs_to_stored_row(const ObExprPtrIArray &exprs,
 int ObConflictChecker::close()
 {
   int ret = OB_SUCCESS;
-  // close回表的task
+  // close back-table task
   if (das_ref_.has_task()) {
     if (OB_FAIL(das_ref_.close_all_task())) {
       LOG_WARN("close all das task failed", K(ret));
@@ -718,7 +711,7 @@ int ObConflictChecker::reuse()
 int ObConflictChecker::destroy()
 {
   int ret = OB_SUCCESS;
-  // 在这里析构 conflict_map_array_和das_scan_rtdef_
+  // Here destruct conflict_map_array_ and das_scan_rtdef_
   for (int64_t i = 0; OB_SUCC(ret) && i < conflict_map_array_.count(); ++i) {
     if (OB_FAIL(conflict_map_array_.at(i).destroy())) {
       LOG_WARN("fail to destroy conflict_map", K(ret), K(i));
@@ -769,16 +762,14 @@ int ObConflictChecker::add_lookup_range_no_dup(storage::ObTableScanParam &scan_p
   }
   return ret;
 }
-
-// todo @kaizhan.dkz 向主表执行回表操作，返回主表中冲突的行
+// todo @kaizhan.dkz Perform a back-table operation on the main table, return the conflicting rows in the main table
 int ObConflictChecker::build_primary_table_lookup_das_task()
 {
   int ret = OB_SUCCESS;
   ObDASScanOp *das_scan_op = nullptr;
   ObDASTabletLoc *tablet_loc = nullptr;
   ObNewRange lookup_range;
-
-  // data_table_rowkey_expr_ 是column_ref expr
+  // data_table_rowkey_expr_ is column_ref expr
   if (OB_FAIL(calc_lookup_tablet_loc(tablet_loc))) {
     LOG_WARN("calc lookup pkey fail", K(ret));
   } else if (OB_FAIL(get_das_scan_op(tablet_loc, das_scan_op))) {
@@ -824,11 +815,11 @@ int ObConflictChecker::calc_lookup_tablet_loc(ObDASTabletLoc *&tablet_loc)
   ObObjectID partition_id = OB_INVALID_ID;
   tablet_loc = nullptr;
   if (checker_ctdef_.use_dist_das_) {
-    // data_table_rowkey_expr_ 是column_ref expr
+    // data_table_rowkey_expr_ is column_ref expr
     if (OB_ISNULL(part_id_expr = checker_ctdef_.calc_part_id_expr_)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("calc_part_id_expr_ is null", K(ret));
-    } // 清除回表使用的分区计算表达式的eval flag
+    } // Clear the eval flag used for partition calculation expression in back-table lookup
       else if (OB_FAIL(ObSQLUtils::clear_evaluated_flag(checker_ctdef_.part_id_dep_exprs_, eval_ctx_))) {
       LOG_WARN("fail to clear rowkey flag", K(ret), K(checker_ctdef_.part_id_dep_exprs_));
     } else if (OB_FAIL(ObExprCalcPartitionBase::calc_part_and_tablet_id(part_id_expr, eval_ctx_, partition_id, tablet_id))) {
@@ -841,8 +832,7 @@ int ObConflictChecker::calc_lookup_tablet_loc(ObDASTabletLoc *&tablet_loc)
   }
   return ret;
 }
-
-// get当前行对应的scan_op
+// get current row corresponding scan_op
 int ObConflictChecker::get_das_scan_op(ObDASTabletLoc *tablet_loc, ObDASScanOp *&das_scan_op)
 {
   int ret = OB_SUCCESS;
@@ -896,7 +886,7 @@ int ObConflictChecker::build_data_table_range(ObNewRange &lookup_range, ObRowkey
     } else if (OB_FAIL(col_datum->to_obj(tmp_obj, expr->obj_meta_, expr->obj_datum_map_))) {
       LOG_WARN("convert datum to obj failed", K(ret));
     }
-    // 这里需要做深拷贝
+    // Here a deep copy needs to be done
     else if (OB_FAIL(ob_write_obj(das_ref_.get_das_alloc(), tmp_obj, obj_ptr[i]))) {
       LOG_WARN("deep copy rowkey value failed", K(ret), K(tmp_obj));
     }
@@ -960,17 +950,15 @@ int ObConflictChecker::get_next_row_from_data_table(DASOpResultIter &result_iter
                "lookup one row", ROWEXPR2STR(eval_ctx_, storage_output));
     } else {
       got_row = true;
-      // 这里打印回表拿到的行信息
+      // Here print the row information obtained from the table
       LOG_DEBUG("success to get row from data_table", K(ret), K(storage_output),
                 "lookup one row", ROWEXPR2STR(eval_ctx_, storage_output));
     }
   }
   return ret;
 }
-
-
-// 主表的ObRowkeyCstCtdef就是主表主键的表达式
-// unique索引表的主键组成: unique column + shadow_pk
+// The ObRowkeyCstCtdef of the main table is the expression of the main table's primary key
+// unique index table's primary key composition: unique column + shadow_pk
 int ObConflictChecker::extract_rowkey_info(const ObRowkeyCstCtdef *constraint_info,
                                            char *buf,
                                            int64_t buf_len)
@@ -986,8 +974,8 @@ int ObConflictChecker::extract_rowkey_info(const ObRowkeyCstCtdef *constraint_in
   if (constraint_info == primary_cst_info) {
     unique_key_cnt = primary_rowkey_cnt;
   } else {
-    // unique索引表需要排除shadow_pk
-    // shadow_pk的位置顺序在主键最后边
+    // unique index table needs to exclude shadow_pk
+    // shadow_pk's position order is at the end of the primary key
     unique_key_cnt = constraint_info->rowkey_expr_.count() - primary_rowkey_cnt;
   }
 
@@ -1025,7 +1013,7 @@ int ObConflictChecker::extract_rowkey_info(const ObRowkeyCstCtdef *constraint_in
   }
   return ret;
 }
-//这个函数类似于shuffle_final_data，只不过这里只是返回主表的hash map的指针，外层函数迭代map，将行分别插入对应的das task
+// This function is similar to shuffle_final_data, only here it just returns a pointer to the hash map of the main table, the outer function iterates over the map, inserting rows into the corresponding das task
 int ObConflictChecker::get_primary_table_map(ObConflictRowMap *&primary_map)
 {
   int ret = OB_SUCCESS;

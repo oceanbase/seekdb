@@ -100,12 +100,12 @@ private:
 private:
   common::ObConcurrentFIFOAllocator allocator_;
   common::ObRaQueue slow_query_queue_;
-  common::ObTimer timer_; //定时器，启动定时任务淘汰旧数据；
+  common::ObTimer timer_; // timer, start timing task to evict old data;
   ObMonitorInfoEliminationTask elimination_task_;
-  common::ObLinearHashMap<PlanKey, int64_t> plan_execution_time_map_; //记录每个plan最近一次执行的时间戳
+  common::ObLinearHashMap<PlanKey, int64_t> plan_execution_time_map_; // record the timestamp of the most recent execution for each plan
   int64_t max_push_interval_;
   int64_t memory_limit_;
-  int64_t operator_info_size_; // ObPhyPlanMonitorInfo中operator_infos_的内存不在allocator中，单独统计
+  int64_t operator_info_size_; // ObPhyPlanMonitorInfo's operator_infos_ memory is not in allocator, counted separately
 };
 
 } //namespace sql

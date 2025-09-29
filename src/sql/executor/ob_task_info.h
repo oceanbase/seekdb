@@ -102,8 +102,7 @@ public:
   //just for print
   int64_t task_id_;
 };
-
-// 用于 NLJ 场景下对右侧分区表扫描做 partition pruning
+// Used for NLJ scenario to perform partition pruning on the right-side partition table scan
 class ObGIPruningInfo
 {
 public:
@@ -118,8 +117,8 @@ public:
     part_id_ = part_id;
   }
 private:
-  // 不裁剪的分区id，除此之外其它id全部裁剪
-  // NLJ 从左侧每读出一行都会更新一次本 part_id
+  // Non-cropped partition id, all other ids are cropped
+  // NLJ updates this part_id once for each row read from the left side
   int64_t part_id_;
 };
 
@@ -161,10 +160,10 @@ public:
                  KPC_(row_store),
                  KPC_(datum_store));
     common::ObSEArray<common::ObNewRange, 1> scan_ranges_; // scan query ranges
-    uint64_t part_key_ref_id_; //用来标识range location中的partition info属于plan中的哪个physical operator
+    uint64_t part_key_ref_id_; // used to identify which physical operator the partition info in range location belongs to in the plan
     uint64_t value_ref_id_;
     int64_t renew_time_;
-    ObRowStore *row_store_; //该partition对应的row缓存，用于dml语句
+    ObRowStore *row_store_; // the row cache corresponding to this partition, used for dml statements
     ObChunkDatumStore *datum_store_;
   };
   class ObRangeLocation
@@ -201,8 +200,8 @@ public:
     }
     int assign(const ObRangeLocation &location);
     TO_STRING_KV(K_(part_locs), K_(server));
-    // 因为一个 task 中可能包含多个 scan 算子，每个 scan 算子对应一个 ObPartLoc
-    // 所以 part_locs_ 是一个数组
+    // Because a task may contain multiple scan operators, each scan operator corresponds to one ObPartLoc
+    // So part_locs_ is an array
     common::ModulePageAllocator inner_alloc_;
     common::ObFixedArray<ObTaskInfo::ObPartLoc, common::ObIAllocator> part_locs_;
     common::ObAddr server_;
@@ -213,20 +212,20 @@ public:
   virtual ~ObTaskInfo();
   void set_root_spec(ObOpSpec *root_spec) { root_spec_ = root_spec; }
   ObOpSpec *get_root_spec() const { return root_spec_; }
-  // 在远端Task执行完成后给控制节点汇报执行状态
+  // Report execution status to the control node after the remote Task completes
   ObTaskState get_state() const { return state_; }
   void set_state(ObTaskState state) { state_ = state; }
-  // 最底层读数据的task
+  // Lowest level task for reading data
   inline int set_range_location(const ObTaskInfo::ObRangeLocation &range_loc);
   inline const ObTaskInfo::ObRangeLocation &get_range_location() const;
   inline ObTaskInfo::ObRangeLocation &get_range_location();
   inline void set_task_split_type(int64_t task_split_type) { task_split_type_ = task_split_type; }
   inline int64_t get_task_split_type() { return task_split_type_; }
-  // 中间结果处理的task
+  // Intermediate result processing task
   void set_task_location(const ObTaskLocation &task_loc) { task_location_ = task_loc; }
   const ObTaskLocation &get_task_location() const { return task_location_; }
   ObTaskLocation &get_task_location() { return task_location_; }
-  // 获取中间结果所需的数据结构
+  // Get the data structure required for obtaining the intermediate result
   inline void set_pull_slice_id(uint64_t pull_slice_id) { pull_slice_id_ = pull_slice_id; }
   inline uint64_t get_pull_slice_id() const { return pull_slice_id_; }
   inline void set_force_save_interm_result(bool force_save_interm_result)
@@ -234,7 +233,7 @@ public:
     force_save_interm_result_ = force_save_interm_result;
   }
   inline bool is_force_save_interm_result() const { return force_save_interm_result_; }
-  // 获取位置信息，在LocationList中得下标
+  // Get location information, index in LocationList
   inline void set_location_idx(uint64_t location_idx) { location_idx_ = location_idx; }
   inline uint64_t get_location_idx() const { return location_idx_; }
   inline int init_location_idx_array(int64_t loc_idx_cnt)
@@ -278,7 +277,7 @@ private:
   DISALLOW_COPY_AND_ASSIGN(ObTaskInfo);
 
 private:
-  /* TODO: 将下面的成员归结为三类INFO更易于理解：
+  /* TODO: Group the following members into three categories for better understanding of INFO:
    * 1. TaskInputInfo
    *    > ObRangeLocation range_location_;
    *    > uint64_t pull_slice_id_;
@@ -288,46 +287,42 @@ private:
    * 3. TaskOutputInfo
    *    > ObTaskLocation task_location_;
    *
-   * TaskInputInfo负责记录本Task要消费的数据从哪里来
-   * TaskActionInfo负责记录本Task要如何处理数据
-   * TsakOutputInfo负责记录Task处理数据的结果保存到了哪里
-   * 其中TaskOutputInfo存储的信息对于后继执行的Job很有用，可以作为他们的输入参数，
-   * 用于构造他们的TaskInfoInput(ObSliceID)
+   * TaskInputInfo is responsible for recording where the data that this Task consumes comes from
+   * TaskActionInfo is responsible for recording how this Task processes the data
+   * TaskOutputInfo is responsible for recording where the result of Task data processing is saved
+   * The information stored in TaskOutputInfo is very useful for subsequent executing Jobs, it can be used as their input parameters,
+   * to construct their TaskInfoInput(ObSliceID)
    */
 
-  /*** 扫描物理表Task必须的数据结构 ****/
-  // 记录本Task映射到哪些Partition，以及这些partition&query range对应的server
+  /*** Scan physical table Task required data structure ****/
+  // Record which Partitions this Task maps to, as well as the server corresponding to these partition & query range
   ObRangeLocation range_location_;
   int64_t task_split_type_;
-
-  // 记录本Task中的中间结果的位置（ObTaskLocation中的server同时也表示本task要发送到哪台机器上执行）
-  // 汇报后提供给上层Task读取
+  // Record the position of intermediate results in this Task (The server in ObTaskLocation also indicates which machine this task should be sent to for execution)
+  // Report and provide to upper layer Task for reading
   ObTaskLocation task_location_;
 
-  /*** 读取中间结果Task必须的数据结构 ***/
-  // 要拉取的slice id
+  /*** Read the necessary data structure for Task processing ***/
+  // The slice id to pull
   uint64_t pull_slice_id_;
-  // 中间结果所在的位置在ObReceiveInput::init函数中计算，因此此处不用保存
-
-  // 强制在远端保存中间结果，不在task event中带回来
+  // The location of the intermediate result is calculated in the ObReceiveInput::init function, therefore it does not need to be saved here
+  // Force saving intermediate results remotely, do not bring them back in task event
   bool force_save_interm_result_;
-  // task执行的汇报结果
+  // task execution report result
   common::ObSEArray<ObSliceEvent, 1> slice_events_;
-
-  // 获取位置信息，在LocationList中得下标
+  // Get location information, index in LocationList
   uint64_t location_idx_;
   ObFixedArray<uint64_t, common::ObIAllocator> location_idx_list_;
 
-  /*** 通用数据结构 ***/
+  /*** General data structure ***/
   ObPhyOperator *root_op_;
-  // 本Task的运行状态
+  // The running status of this Task
   ObTaskState state_;
 
   ObFixedArray<uint64_t, common::ObIAllocator> slice_count_pos_;
   // run task in background threads.
   bool background_;
-
-  // task 粒度重试，记录重试次数，避免无限重试
+  // task granularity retry, record retry count, avoid infinite retry
   int32_t retry_times_;
 private:
   int64_t ts_task_send_begin_;

@@ -181,8 +181,8 @@ int ObLogRestoreSourceServiceConfigParser::update_inner_config_table(common::ObI
     LOG_WARN("fail to gen restore source service config items", KPC(this));
   } else {
     /*
-    eg: 开源版本 "ip_list=127.0.0.1:1001;127.0.0.1:1002,USER=restore_user@primary_tenant,PASSWORD=xxxxxxx(密码),TENANT_ID=1002,CLUSTER_ID=10001,COMPATIBILITY_MODE=MYSQL,IS_ENCRYPTED=false"
-      非开源版本 "ip_list=127.0.0.1:1001;127.0.0.1:1002,USER=restore_user@primary_tenant,PASSWORD=xxxxxxx(加密后密码),TENANT_ID=1002,CLUSTER_ID=10001,COMPATIBILITY_MODE=MYSQL,IS_ENCRYPTED=true"
+    eg: open source version "ip_list=127.0.0.1:1001;127.0.0.1:1002,USER=restore_user@primary_tenant,PASSWORD=xxxxxxx(password),TENANT_ID=1002,CLUSTER_ID=10001,COMPATIBILITY_MODE=MYSQL,IS_ENCRYPTED=false"
+      non-open source version "ip_list=127.0.0.1:1001;127.0.0.1:1002,USER=restore_user@primary_tenant,PASSWORD=xxxxxxx(encrypted password),TENANT_ID=1002,CLUSTER_ID=10001,COMPATIBILITY_MODE=MYSQL,IS_ENCRYPTED=true"
     */
     char value_string[OB_MAX_BACKUP_DEST_LENGTH] = { 0 };
     

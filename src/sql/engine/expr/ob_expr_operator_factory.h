@@ -39,7 +39,7 @@ public:
   void destroy()
   {
     //nothing todo
-    //分配出来的expr_op的内存空间由alloc统一释放
+    // The memory space allocated for expr_op will be uniformly released by alloc
   }
   struct NameType
   {

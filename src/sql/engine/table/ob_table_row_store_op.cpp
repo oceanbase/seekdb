@@ -30,7 +30,7 @@ int ObTableRowStoreOpInput::init(ObTaskInfo &task_info)
   int ret = OB_SUCCESS;
   LOG_DEBUG("init table row store input", K(task_info), K(MY_SPEC.id_));
   allocator_ = &exec_ctx_.get_allocator();
-  //相同的计划可能有多个任务，所以这里需要清除掉之前的计划状态
+  // The same plan may have multiple tasks, so here we need to clear the previous plan status
   multi_row_store_.reset();
   ObIArray<ObTaskInfo::ObPartLoc> &part_locs = task_info.get_range_location().part_locs_;
   multi_row_store_.set_allocator(&exec_ctx_.get_allocator());
@@ -166,7 +166,7 @@ int ObTableRowStoreOp::inner_get_next_row()
     if (OB_UNLIKELY(OB_ITER_END != ret)) {
       LOG_WARN("fail to get next row", K(ret));
     } else if (row_store_idx_ < MY_INPUT.multi_row_store_.count() - 1) {
-      //迭代下一个row_store
+      // Iterate next row_store
       ++row_store_idx_;
       ObIArray<ObChunkDatumStore *> &multi_row_store = MY_INPUT.multi_row_store_;
       ObTableModifyOpInput *dml_input = static_cast<ObTableModifyOpInput*>(parent_->get_input());

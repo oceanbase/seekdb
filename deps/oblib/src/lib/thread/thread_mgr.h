@@ -1026,7 +1026,7 @@ public:
     ITG *tg = nullptr;
     auto func = create_funcs_[tg_def_id];
     if (!func) {
-      // 不做逻辑，但需要将id占掉
+      // No logic, but need to occupy the id
       alloc_tg_id(start_idx);
     } else if (FALSE_IT(tg_id = alloc_tg_id(start_idx))) {
     } else if (tg_id < 0) {
@@ -1057,7 +1057,7 @@ public:
     ITG *tg = nullptr;
     auto func = create_funcs_[tg_def_id];
     if (!func) {
-      // 不做逻辑，但需要将id占掉
+      // No logic, but need to occupy the id
       alloc_tg_id(TGDefIDs::END);
     } else if (FALSE_IT(tg_id = alloc_tg_id(TGDefIDs::END))) {
     } else if (tg_id < 0) {
@@ -1066,7 +1066,7 @@ public:
       ret = common::OB_INIT_FAIL;
     } else {
       TGHelper *tg_helper = get_tenant_tg_helper();
-      // 目前只打印日志
+      // Currently only prints log
       if (OB_ISNULL(tg_helper)) {
         // ignore ret
         OB_LOG(WARN, "create tg tenant but tenant tg helper is null", K(tg_def_id), K(tg_id), K(ret));

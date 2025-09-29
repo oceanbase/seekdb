@@ -212,12 +212,12 @@ public:
   uint32_t sessid_;
   uint32_t version_;
   uint64_t proxy_sessid_;
-  int64_t sess_create_time_; //proxy连接模式下, 记录client->proxy的sess连接时间
+  int64_t sess_create_time_; // proxy connection mode, record the session connection time from client to proxy
   uint64_t tenant_id_;
   uint64_t resource_group_id_;
   obmysql::ObProxyCapabilityFlags proxy_cap_flags_;
-  //在ObSMHandler::on_connect阶段会发生某些错误，这些错误信息需要返回给客户端；
-  //而在on_connect中无法给客户端返回准确错误信息，因此记录到这里，在ObMPConnect::Process中处理
+  // Errors may occur during the ObSMHandler::on_connect stage, and these error messages need to be returned to the client;
+  // And in on_connect, accurate error information cannot be returned to the client, therefore it is recorded here, and processed in ObMPConnect::Process
   int ret_;
   omt::ObTenant *tenant_;
   char tenant_name_buf_[OB_MAX_TENANT_NAME_LENGTH + 1];

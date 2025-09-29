@@ -147,7 +147,7 @@ private:
   bool is_running_;
   common::ObAddr server_;
   share::ObIAliveServerTracer *server_tracer_;
-  ObPxInfoMap px_info_map_; // 如果考虑删租户就要加锁
+  ObPxInfoMap px_info_map_; // If considering deleting tenant, need to add lock
   hash::ObHashSet<ObAddr> alive_server_set_;
   TimerTask timer_task_;
 };
@@ -169,7 +169,7 @@ public:
     } else if (OB_FAIL(px_res_info->get_target_monitor()->refresh_statistics(need_refresh_all_))) {
       COMMON_LOG(WARN, "target monitor refresh statistics failed", K(ret), K(px_tenant_info), KPC(px_res_info->get_target_monitor()));
     }
-    //外面需要遍历所有的租户，此处不能返回false
+    // Outside needs to traverse all tenants, here cannot return false
     return true;
   }
   

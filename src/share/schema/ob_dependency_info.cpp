@@ -208,7 +208,7 @@ int ObDependencyInfo::insert_schema_object_dependency(common::ObISQLClient &tran
   ObDependencyInfo& dep_info = *this;
   const uint64_t exec_tenant_id = ObSchemaUtils::get_exec_tenant_id(dep_info.get_tenant_id());
   ObDMLSqlSplicer dml;
-  //这块暂时注释掉，因为系统租户下的__all_package的虚拟表没有实现。
+  //This block is temporarily commented out because the virtual table __all_package under the system tenant has not been implemented.
   //int64_t ref_obj_create_time = -1;
   //ObString ref_obj_name;
   // OZ (get_object_create_time(trans, dep_info.get_ref_obj_type(),

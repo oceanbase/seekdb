@@ -135,12 +135,12 @@ int ObTransformSemiToInner::transform_one_stmt(
 
 /**
  * @brief transform_semi_to_inner
- * 基于代价将semi join改写为inner join
- * 规则：
- * 1、如果SEMI JOIN的右表输出唯一时，可以直接改写。
- * 2、如果SEMI JOIN的右表输出不唯一时，需要检查两种情况
- *    semi join左表是否可以生成有效的inner path（连接条件下推match index)
- *    semi join右表是否可以生成有效的inner path（连接条件下推match index)
+ * Transform SEMI JOIN to INNER JOIN based on cost
+ * Rules:
+ * 1. If the output of the right table in SEMI JOIN is unique, it can be directly rewritten.
+ * 2. If the output of the right table in SEMI JOIN is not unique, two situations need to be checked
+ *    whether the left table of the semi join can generate a valid inner path (pushdown match index under join condition)
+ *    whether the right table of the semi join can generate a valid inner path (pushdown match index under join condition)
  */
 int ObTransformSemiToInner::transform_semi_to_inner(ObDMLStmt *root_stmt,
                                                     ObDMLStmt *stmt,
@@ -175,10 +175,10 @@ int ObTransformSemiToInner::transform_semi_to_inner(ObDMLStmt *root_stmt,
                                           trans_param))) {
     LOG_WARN("failed to check basic validity", K(ret));
   } else if (!is_valid) {
-    //只有确定可以改写后才会去深拷贝stmt
+    // Only deep copy stmt after confirming it can be rewritten
   } else if (!need_check_cost &&
              OB_FALSE_IT(trans_stmt = stmt)) {
-    //如果右表不需要添加distinct算子，则基于规则改写，不会考虑代价，所以不需要深拷贝stmt
+    // If the right table does not need to add a distinct operator, then rewrite based on rules, without considering the cost, so deep copy of stmt is not needed
   } else if (need_check_cost && OB_FAIL(is_ignore_semi_info(pre_semi_info->semi_id_, ignore))) {
     LOG_WARN("failed to check is ignore semi info", K(ret));
   } else if (ignore) {
@@ -464,23 +464,23 @@ int ObTransformSemiToInner::split_join_condition(ObDMLStmt& stmt,
 
 /**
  * @brief check_basic_validity
- * semi join转inner join的条件
- * 1. 如果有left_expr = right_column形式的condition，并且
- *   right_column在semi右表的输出是唯一的，这种情况下我们直接转inner，
- *   并且不需要加distinct
- * 2. 如果右表输出不唯一，我们需要检查：
- *   a. 所有的semi condition是否都是left_expr = right_expr形式
- *      如果不是则不能改写。例如select * from l where exists (select 1 from r where l.a > r.b)
- *      不能改写，或者select * from l where exists (select 1 from r where l.a + r.b = r.c)
- *      我们也不能改写
- *   b. 所有的right_expr是否是加distinct类型安全的
- *      如果需要cast(left_expr)-->right_expr,则不能加distinct
- *      如果需要cast(right_expr)-->left_expr,则需要为右表的expr包裹cast后，才能加distinct
- *      如果左右expr的类型一致，直接加distinct
- *   c. semi condtion是否overlap左右表的索引
- *   如果上面的条件都满足，则改写为inner
- * 3.出现在嵌套子查询中的含有semi info信息的stmt，如果子查询的输出结果是否存在重复值不影响上层查询的输出结果，
- *   那么可以直接将semi join改为inner join，不需要添加distinct
+ * semi join to inner join conditions
+ * 1. If there is a condition in the form of left_expr = right_column, and
+ *   right_column is unique in the output of the semi join right table, we can directly convert it to inner join,
+ *   and no distinct is needed
+ * 2. If the output of the right table is not unique, we need to check:
+ *   a. Whether all semi join conditions are in the form of left_expr = right_expr
+ *      If not, it cannot be rewritten. For example, select * from l where exists (select 1 from r where l.a > r.b)
+ *      cannot be rewritten, or select * from l where exists (select 1 from r where l.a + r.b = r.c)
+ *      we also cannot rewrite it
+ *   b. Whether all right_expr are distinct type safe
+ *      If cast(left_expr)-->right_expr is needed, distinct cannot be added
+ *      If cast(right_expr)-->left_expr is needed, then the expr of the right table needs to be wrapped with cast before adding distinct
+ *      If the types of left and right expr are consistent, distinct can be added directly
+ *   c. Whether semi join conditions overlap with indexes on both tables
+ *   If all the above conditions are met, rewrite it as inner join
+ * 3. In nested subqueries containing semi join information, if the existence of duplicate values in the subquery output does not affect the output of the upper query,
+ *   then the semi join can be directly changed to inner join without adding distinct
  *   eg: select * from T1 where exists (select 1 from T2 where T2.c2 in (select T3.c2 from T3 where T1.c1 = T3.c1));
  */
 int ObTransformSemiToInner::check_basic_validity(ObDMLStmt *root_stmt,
@@ -773,11 +773,11 @@ int ObTransformSemiToInner::check_right_exprs_unique(ObDMLStmt &stmt,
 
 /**
  * @brief check_semi_join_condition
- * 检查semi condition，输出以下结果：
- * left_exprs: 所有EQ表达式的属于左表的expr
- * right_exprs: 所有EQ表达式的属于右表的expr
- * right_columns: 如果有lef_expr = right_column，保存column expr
- * is_all_euqal_cond:是否所有的表达式都是left_expr = right_expr形式
+ * Check semi condition, output the following results:
+ * left_exprs: All EQ expressions belonging to the left table
+ * right_exprs: All EQ expressions belonging to the right table
+ * right_columns: If there is left_expr = right_column, save the column expression
+ * is_all_equal_cond: Whether all expressions are in the form of left_expr = right_expr
  */
 int ObTransformSemiToInner::check_semi_join_condition(ObDMLStmt &stmt,
                                                       SemiInfo &semi_info,
@@ -967,8 +967,8 @@ bool ObTransformSemiToInner::is_less_or_greater_expr(ObItemType expr_type)
 }
 
 /**
- * 如果右表有limit 1或者unique_key = const表达式
- * 说明右边输出至多一行
+ * If the right table has a limit 1 or unique_key = const expression
+ * it means the right output is at most one row
  */
 int ObTransformSemiToInner::check_right_table_output_one_row(TableItem &right_table,
                                                              bool &is_one_row)

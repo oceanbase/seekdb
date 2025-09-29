@@ -53,9 +53,9 @@ public:
     TO_STRING_KV(K_(is_inited), KPC_(obj_pool_mgr));
     void runTimerTask(void);
   private:
-    // 回收已经淘汰的session
+    // Recycle the obsolete session
     int run_recycle_retired_sess_task();
-    // 淘汰长期未被使用的session
+    // Evict sessions that have not been used for a long time
     int run_retire_sess_task();
   public:
     bool is_inited_;

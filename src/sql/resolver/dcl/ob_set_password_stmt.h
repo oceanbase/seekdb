@@ -57,7 +57,7 @@ private:
   uint64_t tenant_id_;
   bool need_enc_;
   bool for_current_user_;
-  obrpc::ObSetPasswdArg set_password_arg_; // 用于返回exec_tenant_id_
+  obrpc::ObSetPasswdArg set_password_arg_; // used to return exec_tenant_id_
   bool modify_max_connections_;
   uint64_t max_connections_per_hour_;
   uint64_t max_user_connections_;

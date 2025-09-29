@@ -32,9 +32,9 @@ public:
 
   TO_STRING_KV(K_(addr),
                K_(interm_result_ids));
-  //数据所在server
+  // Server where data is located
   ObAddr addr_;
-  //数据集的key
+  // Dataset key
   ObSEArray<uint64_t, 2> interm_result_ids_;
 };
 
@@ -50,12 +50,11 @@ public:
   TO_STRING_KV(K_(interm_result_infos),
                K_(temp_table_id),
                K_(is_local_interm_result));
-
-  //结果集的分布信息：所在机器及KEY
+  // Distribution information of the result set: machine and KEY
   ObSEArray<ObTempTableResultInfo, 2> interm_result_infos_;
-  //结果集所属的temp table
+  // Result set belonging to the temp table
   uint64_t temp_table_id_;
-  //结果集是否在本地
+  // Is the result set local
   bool is_local_interm_result_;
 };
 

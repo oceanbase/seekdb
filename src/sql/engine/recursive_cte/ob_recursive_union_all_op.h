@@ -49,8 +49,8 @@ protected:
   // disallow copy
   DISALLOW_COPY_AND_ASSIGN(ObRecursiveUnionAllSpec);
 public:
-  //recursive uion all 算子的的输出中的T_OP_UNION表达式，inner data获取输出行以后拷贝到这些表达式的datum中
-  //inner data的输出行总不含search，cycle伪列，所以这里也不包含伪列表达式。
+  //recursive union all operator's output T_OP_UNION expression, inner data get output rows after copying to these expressions' datum
+  //inner data's output line never contains search, cycle pseudo column, so here it also does not contain the pseudo list expression.
   common::ObFixedArray<ObExpr *, common::ObIAllocator> output_union_exprs_;
 protected:
   static const int32_t CMP_DIRECTION_ASC = 1;

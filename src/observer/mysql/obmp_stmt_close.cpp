@@ -91,11 +91,11 @@ int ObMPStmtClose::process()
         }
       }
       if (OB_FAIL(session->close_ps_stmt(stmt_id_))) {
-        // overwrite ret, 优先级低，被覆盖
+        // overwrite ret, low priority, will be overridden
         LOG_WARN("fail to close ps stmt", K(ret), K_(stmt_id), K(session->get_server_sid()));
       }
       if (OB_SUCCESS != tmp_ret) {
-        // close_cursor 失败时错误码的优先级比 close_ps_stmt 高，此处进行覆盖
+        // close_cursor failure error code priority is higher than close_ps_stmt, here we override
         ret = tmp_ret;
       }
     }

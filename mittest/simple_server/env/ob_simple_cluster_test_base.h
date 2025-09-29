@@ -29,7 +29,7 @@ class ObSimpleClusterTestBase : public testing::Test
 {
 public:
   static const int64_t TRANS_TIMEOUT = 5 * 1000 * 1000;
-  // set_bootstrap_and_create_tenant_warn_log 默认bootstrap和创建租户使用WARN日志，加速启动
+  // set_bootstrap_and_create_tenant_warn_log default bootstrap and create tenant use WARN log, accelerate startup
   ObSimpleClusterTestBase(const std::string &env_prefix = "run_",
                           const char *log_disk_size = "10G",
                           const char *memory_limit = "16G",
@@ -64,7 +64,7 @@ protected:
   static void TearDownTestCase();
 
 protected:
-  // 因为ob_server.h 中ObServer的使用方式导致现在只能启动单台
+  // Because the usage of ObServer in ob_server.h now only allows starting a single server
   static std::shared_ptr<observer::ObSimpleServer> cluster_;
   static bool is_started_;
   static std::thread th_;

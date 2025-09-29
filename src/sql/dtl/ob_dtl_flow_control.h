@@ -143,9 +143,7 @@ public:
     ATOMIC_AAF(&accumulated_blocked_cnt_, cnt);
   }
   OB_INLINE void decrease_blocked_cnt(int64_t cnt) { ATOMIC_SAF(&block_ch_cnt_, cnt); }
-
-
-  // 支持多个channel公用一起block，如果block_ch_cnt_大于1，表示block为true
+  // Support multiple channels sharing the same block, if block_ch_cnt_ is greater than 1, it indicates that block is true
   OB_INLINE void set_block(int64_t idx);
   OB_INLINE void unblock(int64_t idx);
   OB_INLINE int64_t get_blocked_cnt() { return (ATOMIC_LOAD(&block_ch_cnt_)); }
@@ -225,7 +223,7 @@ private:
   static const int64_t MAX_BUFFER_FACTOR = 2;
   uint64_t tenant_id_;
   int64_t timeout_ts_;
-  // 标识是否是transmit、receive、qc等
+  // Identify whether it is transmit, receive, qc, etc.
   int communicate_flag_;
   common::ObCompressorType compressor_type_;
   bool is_init_;

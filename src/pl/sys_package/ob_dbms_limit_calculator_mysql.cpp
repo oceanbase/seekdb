@@ -212,9 +212,9 @@ int ObDBMSLimitCalculator::cal_tenant_logical_res_for_standby_(
 
     //calculate max logical resource for standby
     if (OB_SUCC(ret)) {
-      //如果备库的unit_num大于主库的unit_num，那最多备库的一台机器只需要承担主库一台机器的容量
-      //小于则向上取整。
-      //获取主库机器上最大server_num个数的资源
+      //If the unit_num of the backup database is greater than that of the primary database, then at most one machine in the backup database only needs to bear the capacity of one machine in the primary database
+      //Less than then round up.
+      //Get the maximum number of server_num resources on the master machine
       int64_t server_num = standby_unit_num >= servers.count() ? 1
         : ceil(double(servers.count()) / standby_unit_num);
       int64_t each_server_max_ls_cnt = 0;
@@ -222,10 +222,10 @@ int ObDBMSLimitCalculator::cal_tenant_logical_res_for_standby_(
       if (FAILEDx(get_max_ls_count_of_server_(tenant_id, each_server_max_ls_cnt))) {
         LOG_WARN("failed to get max ls count of server", KR(ret), K(tenant_id));
       } else {
-        //需要增加一个系统日志流的个数
+        //Need to increase the number of system log streams
         max_ls_cnt = each_server_max_ls_cnt * server_num + 1;
       }
-      //选取每一种逻辑资源的TOP n 相加
+      //Select the TOP n of each logical resource and sum them up
       for (int64_t i = 1; OB_SUCC(ret) && i < logical_resource_cnt; ++i) {
         int64_t max_value = 0;
         if (OB_FAIL(get_max_value_of_logical_res_(i, server_num, resources, max_value))) {
@@ -271,7 +271,7 @@ int ObDBMSLimitCalculator::get_max_value_of_logical_res_(
     }//end for j for get each logical resource of servers
     if (OB_SUCC(ret)) {
       lib::ob_sort(tmp_logical_resource.begin(), tmp_logical_resource.end());
-      int64_t index = 0;//下标
+      int64_t index = 0;//index
       while (OB_SUCC(ret) && index < server_cnt) {
         const int64_t logical_index = primary_server_cnt - 1 - index;
         if (0 > logical_index || logical_index >= tmp_logical_resource.count()) {
@@ -321,14 +321,14 @@ int ObDBMSLimitCalculator::get_tenant_resource_server_for_calc_(
           LOG_WARN("unit is deleting, can not calculate resource", KR(ret), K(unit));
           LOG_USER_ERROR(OB_OP_NOT_ALLOW, "Tenant is shrinking units. Operation is");
         } else if (unit.migrate_from_server_.is_valid()) {
-          //不用来计算，也不报错，后面会校验是否有足够的机器来校验
+          //Not used for calculation, nor does it throw an error; later, it will validate if there are enough machines to check
           LOG_WARN("unit is migrate, can not calculate resource", KR(ret), K(unit));
         } else if (OB_FAIL(GCTX.server_tracer_->is_alive(unit.server_, is_alive, trace_time))) {
           LOG_WARN("failed to check server is alive", KR(ret), K(unit));
         } else if (!is_alive) {
           LOG_WARN("server is not alive", KR(ret), K(unit));
         } else if (has_exist_in_array(server_unit_group_ids, unit.unit_group_id_)) {
-          //相同的unit_group_id不去检查了，只挑第一个可用的机器
+          //The same unit_group_id is not checked again, only the first available machine is selected
         } else if (OB_FAIL(server_unit_group_ids.push_back(unit.unit_group_id_))) {
           LOG_WARN("failed to push back unit group id", KR(ret), K(unit));
         } else if (OB_FAIL(servers.push_back(unit.server_))) {
@@ -432,7 +432,7 @@ int ObDBMSLimitCalculator::check_server_resource_(
         LOG_WARN("failed to get balance job", KR(ret), K(tenant_id));
       }
     } else {
-      //当前租户有分区均衡或者日志流均衡任务，计算结果存在不准确的可能性，所以只告警，但是不报错
+      //The current tenant has partition balance or log stream balance tasks, so there is a possibility of inaccurate calculation results, therefore only an alarm is triggered, but no error is reported
       ret = OB_OP_NOT_ALLOW;
       LOG_WARN("tenant has balance job", KR(ret), K(tenant_id), K(balance_job));
       LOG_USER_WARN(OB_OP_NOT_ALLOW, "Tenant is doing balance job. Operation is");
@@ -445,7 +445,7 @@ int ObDBMSLimitCalculator::check_server_resource_(
     if (OB_FAIL(ls_op.get_all_ls_status_by_order(tenant_id, ls_array, *GCTX.sql_proxy_))) {
       LOG_WARN("failed to get all ls status", KR(ret), K(tenant_id));
     } else {
-      //校验日志流个数是匹配的
+      // Verify that the number of log streams matches
       int64_t ls_count = 0;
       int64_t type = LOGIC_RESOURCE_LS;
       for (int64_t i = 0; OB_SUCC(ret) && i < res.count(); ++i) {
@@ -458,8 +458,8 @@ int ObDBMSLimitCalculator::check_server_resource_(
         }
       }//end for
       if (OB_SUCC(ret) && ls_array.count() > ls_count) {
-        //由于可能存在迁移，创建或者GC中的日志流，这里的内部表和实际的日志流个数
-        //都有概率匹配不上，只希望报错的是日志流缺副本的场景，但是没有办法区分
+        //Due to the possible existence of migration, creation, or GC log streams, the number of internal tables and actual log streams here
+        //There is a probability that it will not match, we only hope that the error reported is the scenario where the log stream lacks a replica, but there is no way to distinguish
         ret = OB_OP_NOT_ALLOW;
         LOG_WARN("ls replica not enough", KR(ret), K(ls_count), K(ls_array), K(res));
         LOG_USER_WARN(OB_OP_NOT_ALLOW, "Insufficient number of LS. Operation is");
@@ -467,7 +467,7 @@ int ObDBMSLimitCalculator::check_server_resource_(
     }
   }
   if (OB_OP_NOT_ALLOW == ret) {
-    //为了保证可用性，在计算不一定准确的时候，告警但是允许执行
+    //To ensure availability, issue an alarm but allow execution when the calculation is not accurate
     ret = OB_SUCCESS;
   }
   return ret;
@@ -491,21 +491,21 @@ int ObDBMSLimitCalculator::get_max_ls_count_of_server_(
     unit_group_num = unit_group_array.count();
   }
   if (OB_SUCC(ret)) {
-    //假如Unit个数为N，Primary Zone个数为P
-    //稳态用户日志流个数：U = N*P,
-    //考虑日志流膨胀场景，分区均衡过程中，每个日志流都会和其他所有日志流进行Transfer，需要生成新日志流.
-    //这个过程中需要考虑排除掉一个Unit上日志流之间Transfer的场景，因为一个Unit里面日志流之间Transfer不需要生成新的日志流。
-    //所以，额外膨胀的日志流个数是：
-    //1. 每一个日志流会和其他所有日志流（包括自己）生成一个新日志流，得出的结果是：U * U
-    //2. 第一步的计算结果是有冗余的：每个Unit内部有P个日志流，那么每个日志流在和P个日志流Transfer过程中不会生成新日志流，所以冗余的个数是：U * P
-    //另外，4.2.3上引入了广播日志流之间的Transfer功能，所以广播日志流也会膨胀。
-    //1. 广播日志流之间Transfer不需要生成新日志流
-    //2. 广播日志流Transfer到用户日志流，也不需要生成新日志流
-    //3. 用户日志流Transfer到广播日志流，需要生成一个新的广播日志流
-    //所以，广播日志流膨胀个数等于用户日志流的稳态个数 U
-    //不考虑系统日志流，一台机器上日志流的总数为
-    //U + 1 + 用户日志流膨胀个数 + 广播日志流膨胀个数 = U + 2 + U*U - U*P + U = U*U - U*(P-2) + 1
-    //由于广播日志流实际上是在每台机器上都存在的资源，所以最终每台机器上日志流的个数为
+    //If the number of Units is N, the number of Primary Zones is P
+    //Steady-state user log stream count: U = N*P,
+    //Consider the log stream expansion scenario, during the partition balancing process, each log stream will perform Transfer with all other log streams, requiring the generation of new log streams.
+    //During this process, it is necessary to exclude the scenario of Transfer between log streams on a single Unit, because Transfer between log streams within a single Unit does not require the generation of new log streams.
+    //So, the extra inflated number of log streams is:
+    //1. Every log stream will generate a new log stream with every other log stream (including itself), resulting in: U * U
+    //2. The calculation result of the first step is redundant: each Unit contains P log streams, so during the transfer process among P log streams, no new log streams will be generated, thus the number of redundancies is: U * P
+    //In addition, the Transfer function was introduced between broadcast log streams in 4.2.3, so broadcast log streams will also grow.
+    //1. Transfer between broadcast log streams does not need to generate a new log stream
+    //2. Broadcast log stream Transfer to user log stream, no need to generate a new log stream
+    //3. Transfer user log stream to broadcast log stream, need to generate a new broadcast log stream
+    //So, the number of broadcast log stream expansions equals the steady-state number of user log streams U
+    //Do not consider the system log stream, the total number of log streams on one machine is
+    //U + 1 + number of user log stream expansions + number of broadcast log stream expansions = U + 2 + U*U - U*P + U = U*U - U*(P-2) + 1
+    //Since the broadcast log stream actually exists as a resource on every machine, the final number of log streams on each machine is
     //NPP-PP+2P+1
     ls_count = (unit_group_num - 1) * primary_zone_num * primary_zone_num + 2 * primary_zone_num + 1;
   }

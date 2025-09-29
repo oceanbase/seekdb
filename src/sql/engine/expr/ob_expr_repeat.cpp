@@ -222,7 +222,7 @@ int ObExprRepeat::calc(ObObj &result,
     LOG_WARN("null allocator", K(ret), K(allocator));
   } else if (false == ob_is_string_type(res_type)) {
     ret = OB_INVALID_ARGUMENT;
-    // ObExprRepeat::calc_result_type2()方法中，规定返回结果的类型一定是属于某个string type
+    // ObExprRepeat::calc_result_type2() method specifies that the return result type must belong to some string type
     LOG_WARN("make sure res_type is string type", K(ret), K(res_type));
   } else if (!ob_is_text_tc(res_type)) {
     ret = repeat(output, is_null, text, count, *allocator, max_result_size);

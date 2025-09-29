@@ -158,8 +158,7 @@ public:
 private:
   ObITransCallback *cur_;
 };
-
-// 事务commit/abort的callback不允许出错，也没法返回错误，就算返回错误调用者也没法处理，所以callback都返回void
+// The callback for transaction commit/abort is not allowed to error, and cannot return an error either, even if an error is returned, the caller cannot handle it, so all callbacks return void
 class ObTransCallbackMgr
 {
 public:

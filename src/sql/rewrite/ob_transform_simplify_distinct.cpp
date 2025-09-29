@@ -155,8 +155,7 @@ int ObTransformSimplifyDistinct::remove_distinct_on_unique_exprs(ObSelectStmt *s
   }
   return ret;
 }
-
-//消除distinct set op left/right query中的distinct
+// Eliminate distinct in set op left/right query
 int ObTransformSimplifyDistinct::remove_child_stmt_distinct(ObSelectStmt *set_stmt,
                                                             bool &trans_happened)
 {
@@ -182,10 +181,9 @@ int ObTransformSimplifyDistinct::remove_child_stmt_distinct(ObSelectStmt *set_st
   }
   return ret;
 }
-
-//递归消除disticnt条件：
-//  1.stmt 为非 recursive 的 set op, 无 limit, 尝试向下递归删除
-//  2.stmt 非 set, 无 sequence/limit, 可消除distinct
+// Recursively eliminate distinct condition:
+//  1.stmt is a non-recursive set op, no limit, attempt to recursively delete downwards
+//  2.stmt not set, no sequence/limit, can eliminate distinct
 int ObTransformSimplifyDistinct::try_remove_child_stmt_distinct(ObSelectStmt *stmt,
                                                                 bool &trans_happened)
 {

@@ -145,15 +145,15 @@ int ObMPStmtFetch::do_process(ObSQLSessionInfo &session,
   if (OB_ISNULL(cursor)) {
     ret = OB_ERR_FETCH_OUT_SEQUENCE;
     LOG_WARN("cursor not found", K(cursor_id_), K(ret));
-    //如果发生fetch过程中找不到cursor的情况，无论什么原因立刻断连接，由应用程序进行容错
+    //If a cursor is not found during the fetch process for any reason, immediately disconnect and let the application handle the fault tolerance
     //disconnect();
   } else {
     ObWaitEventStat total_wait_desc;
     int64_t fetch_limit = OB_INVALID_COUNT == fetch_rows_ ? INT64_MAX : fetch_rows_;
     int64_t true_row_num = 0;
     {
-      //记录sql_audit的执行等待时间，需要依赖max_wait_guard和total_wait_guard生命周期结束，
-      //因此要让total_wait_guard的析构早于audit record的统计逻辑
+      //Record the execution wait time of sql_audit, which depends on the end of the lifecycle of max_wait_guard and total_wait_guard,
+      //Therefore, the destructor of total_wait_guard should be called before the audit record statistics logic
       int64_t execution_id = 0;
       ObMaxWaitGuard max_wait_guard(
           enable_perf_event ? &audit_record.exec_record_.max_wait_event_ : nullptr);
@@ -177,10 +177,10 @@ int ObMPStmtFetch::do_process(ObSQLSessionInfo &session,
         exec_start_timestamp_ = ObTimeUtility::current_time();
       }
       if (OB_SUCC(ret)) {
-        //监控项统计开始
+        //Monitoring item statistics start
         exec_start_timestamp_ = ObTimeUtility::current_time();
-        // 本分支内如果出错，全部会在response_result内部处理妥当
-        // 无需再额外处理回复错误包
+        // All errors within this branch will be handled properly inside response_result
+        // No need to handle the error response packet additionally
         session.set_current_execution_id(execution_id);
         OX(need_response_error = false);
         if (0 == fetch_limit && !cursor->is_streaming() && cursor->is_ps_cursor()
@@ -198,7 +198,7 @@ int ObMPStmtFetch::do_process(ObSQLSessionInfo &session,
         OX(need_response_error = true);
       }
     }
-    //监控项统计结束
+    //Monitoring item statistics end
     exec_end_timestamp_ = ObTimeUtility::current_time();
 
     // some statistics must be recorded for plan stat, even though sql audit disabled
@@ -256,10 +256,10 @@ int ObMPStmtFetch::do_process(ObSQLSessionInfo &session,
       }
     }
     session.partition_hit().freeze();
-    session.set_show_warnings_buf(ret); // TODO: 挪个地方性能会更好，减少部分wb拷贝
+    session.set_show_warnings_buf(ret); // TODO: Move this to a better place, reduce some wb copy
 
     clear_wb_content(session);
-    // 流式审计信息交给dbms_cursor来做
+    // Stream audit information is handled by dbms_cursor
     ObSQLUtils::handle_audit_record(false/*no need retry*/, EXECUTE_PS_FETCH, session);
   }
   return ret;
@@ -268,7 +268,7 @@ int ObMPStmtFetch::do_process(ObSQLSessionInfo &session,
 int ObMPStmtFetch::response_query_header(ObSQLSessionInfo &session, 
                                          const ColumnsFieldArray *fields)
 {
-  // TODO: 增加com类型的处理
+  // TODO: Add handling for com type
   int ret = OB_SUCCESS;
   bool ac = true;
   ObSqlCtx ctx;
@@ -290,11 +290,11 @@ int ObMPStmtFetch::response_query_header(ObSQLSessionInfo &session,
   return ret;
 }
 
-/* fetch协议返向客户端发送结果集
- * 协议上需要注意的： oracle协议每次返回结果集之前需要发送head packet, mysql不需要特殊处理
- * 内存使用上需要注意的： 获取fetch需要返回的row时注意要切换到 cursor 所在的 allocator
- * cursor的fetch通过dbms_cursor里的方法完成
- * offset功能实现：通过操作当前偏移量实现
+/* fetch protocol sends result set to the reverse client
+ * Protocol notes: Oracle protocol needs to send a head packet before returning each result set, MySQL does not require special handling
+ * Memory usage notes: When obtaining rows to be returned by fetch, note that you need to switch to the allocator where the cursor is located
+ * Cursor fetch is completed through methods in dbms_cursor
+ * Offset functionality implementation: achieved by manipulating the current offset
  */
 int ObMPStmtFetch::response_result(pl::ObPLCursorInfo &cursor,
                                    ObSQLSessionInfo &session,
@@ -340,16 +340,16 @@ int ObMPStmtFetch::response_result(pl::ObPLCursorInfo &cursor,
             fields = &static_cast<pl::ObDbmsCursorInfo&>(cursor).get_field_columns();
           }
           if (OB_SUCC(ret) && lib::is_oracle_mode()) {
-            // oracle 模式每次都需要返回head packet
-            // mysql模式 兼容 mysql 协议，不返回 headpacket
+            // oracle mode always needs to return head packet
+            // mysql mode compatible with mysql protocol, do not return headpacket
             OZ (response_query_header(session, fields));
           }
           if (OB_SUCC(ret)) {
-            // offset类型
-            // TODO: 流式只能前滚，所以只能兼容next，default，relative(偏移量大于0)，absolute(其实位置大于当前位置)
-            // 非流式用OB_RA_ROW_STORE实现，可以根据index访问任意行，兼容所有的offset类型
+            // offset type
+            // TODO: Streaming can only roll forward, so it can only be compatible with next, default, relative (offset greater than 0), absolute (actual position greater than current position)
+            // Non-streaming uses OB_RA_ROW_STORE to implement, can access any row according to index, compatible with all offset types
             if (cursor.is_streaming()) {
-              // 流式结果集需要用到exec_ctx，不能用临时结果代替
+              // Streaming result set requires exec_ctx, cannot be replaced by temporary result
               if (OB_NOT_NULL(cursor.get_cursor_handler()) &&
                   OB_NOT_NULL(cursor.get_cursor_handler()->get_result_set())){
                 exec_ctx = &cursor.get_cursor_handler()->get_result_set()->get_exec_context();
@@ -426,7 +426,7 @@ int ObMPStmtFetch::response_result(pl::ObPLCursorInfo &cursor,
                       break;
                     }
                     case OB_OCI_FETCH_PRIOR: {
-                      // prior协议，无论offset设置为多少，每次都向前滚1行，所以cur需要减1
+                      // prior protocol, regardless of the offset setting, it always rolls forward by 1 line each time, so cur needs to be decremented by 1
                       cur = cur - 1;
                       if (cur + fetch_limit > max_count) {
                         need_fetch = false;
@@ -450,14 +450,14 @@ int ObMPStmtFetch::response_result(pl::ObPLCursorInfo &cursor,
                   }
                 }
                 if (OB_SUCC(ret) && (cur >= max_count || cur < 0 || max_count <= 0)) {
-                  // fetch过程中，除了OB_ITER_END扫描到结果集末尾的报错被吞掉，其余报错会断开连接
-                  // oracle中如果扫描超出了范围，不会断开连接，会报OCI_NO_DATA的错误
-                  // 为了兼容这种表现，超出范围时设置OB_ITER_END错误码，不报错不返回数据，由驱动产生OCI_NO_DATA错误码
+                  // during the fetch process, except for the OB_ITER_END error indicating the end of the result set which is suppressed, all other errors will disconnect the connection
+                  // in oracle, if the scan exceeds the range, the connection will not be broken, and an OCI_NO_DATA error will be reported
+                  // To be compatible with this behavior, set the OB_ITER_END error code when out of range, do not report an error and do not return data, let the driver generate the OCI_NO_DATA error code
                   need_fetch = false;
                   ret = OB_ITER_END;
                 }
                 if (OB_SUCC(ret)) {
-                  // 只要设置了正确的偏移量，cursor里的指针就要跟着移动
+                  // As long as the correct offset is set, the pointer in cursor should move accordingly
                   OZ (cursor.set_current_position(cur));
                 }
               }
@@ -514,7 +514,7 @@ int ObMPStmtFetch::response_result(pl::ObPLCursorInfo &cursor,
           }
           if (OB_ITER_END == ret || OB_READ_NOTHING == ret) {
             ret = OB_SUCCESS;
-            // need_fetch 为 true 并且 得到了 OB_ITER_END 错误码，说明正常找到了最后一行，要设置last_row
+            // need_fetch is true and got the OB_ITER_END error code, which means the last row was found normally, need to set last_row
             if (need_fetch || !cursor.is_scrollable()) {
               last_row = true;
             }
@@ -616,7 +616,7 @@ int ObMPStmtFetch::process_fetch_stmt(ObSQLSessionInfo &session,
                                       bool &need_response_error)
 {
   int ret = OB_SUCCESS;
-  // 执行setup_wb后，所有WARNING都会写入到当前session的WARNING BUFFER中
+  // After executing setup_wb, all WARNINGS will be written to the WARNING BUFFER of the current session
   setup_wb(session);
   //set session log_level.Must use ObThreadLogLevelUtils::clear() in pair
   ObThreadLogLevelUtils::init(session.get_log_id_level_map());
@@ -626,7 +626,7 @@ int ObMPStmtFetch::process_fetch_stmt(ObSQLSessionInfo &session,
                                        session.get_effective_tenant_id()))) {
     LOG_WARN("failed to check_and_refresh_schema", K(ret));
   } else {
-    //每次执行不同sql都需要更新
+    //Each execution of different SQL requires an update
     if (OB_FAIL(update_transmission_checksum_flag(session))) {
       LOG_WARN("update transmisson checksum flag failed", K(ret));
     } else {
@@ -644,10 +644,10 @@ int ObMPStmtFetch::process_fetch_stmt(ObSQLSessionInfo &session,
       LOG_WARN("set thread local debug sync actions to session actions failed", K(tmp_ret));
     }
   }
-  //对于tracelog的处理，不影响正常逻辑，错误码无须赋值给ret
+  //For the handling of tracelog, it does not affect the normal logic, and the error code does not need to be assigned to ret
   {
     int tmp_ret = OB_SUCCESS;
-    //清空WARNING BUFFER
+    //Clear WARNING BUFFER
     tmp_ret = do_after_process(session, false/*no asyn response*/);
     UNUSED(tmp_ret);
   }

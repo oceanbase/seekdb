@@ -43,7 +43,7 @@ int ObDirectLoadMultipleHeapTableMap::init()
 int ObDirectLoadMultipleHeapTableMap::deep_copy_row(const RowType &row, RowType *&result_row)
 {
   int ret = OB_SUCCESS;
-  if (allocator_.used() >= mem_limit_) { //到达内存上限
+  if (allocator_.used() >= mem_limit_) { // reach memory limit
     ret = OB_BUF_NOT_ENOUGH;
   }
   if (OB_SUCC(ret)) {

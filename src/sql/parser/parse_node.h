@@ -85,12 +85,12 @@ enum GrantParseSysOffset
 enum ParseMode
 {
   STD_MODE = 0,
-  FP_MODE, /* fast parse,保留hint，且做参数化*/
+  FP_MODE, /* fast parse, retain hint, and do parameterization */
   MULTI_MODE ,/* multi query ultra-fast parse */
-  FP_PARAMERIZE_AND_FILTER_HINT_MODE,/*过滤掉hint，并且做参数化*/
-  FP_NO_PARAMERIZE_AND_FILTER_HINT_MODE,/*过滤掉hint，并且不做参数化*/
+  FP_PARAMERIZE_AND_FILTER_HINT_MODE,/*Filter out hint, and do parameterization*/
+  FP_NO_PARAMERIZE_AND_FILTER_HINT_MODE,/*Filter out hint, and do not parameterize*/
   TRIGGER_MODE, /* treat ':xxx' as identifier */
-  DYNAMIC_SQL_MODE, /*解析动态sql过程中，:idx和:identifier要根据语句类型确定是否检查placeholder的名字*/
+  DYNAMIC_SQL_MODE, /*Parse dynamic SQL, :idx and :identifier need to be determined whether to check the placeholder name based on the statement type*/
   DBMS_SQL_MODE,
   UDR_SQL_MODE,
   INS_MULTI_VALUES,
@@ -126,25 +126,25 @@ typedef struct _ParseNode
 {
   ObItemType type_;
   int32_t num_child_;   /* attributes for non-terninal node, which has children */
-  int16_t param_num_; //记录该node对应的原始text中常量的个数, 暂时仅T_CAST_ARGUMENT使用
+  int16_t param_num_; // record the number of constants in the original text corresponding to this node, temporarily only used by T_CAST_ARGUMENT
   union {
     uint32_t flag_;
     struct {
-      uint32_t is_neg_ : 1;// 记录常量节点的父节点是否为T_OP_NEG节点, 1表示是, 0 表示不是
-      uint32_t is_hidden_const_ : 1; //1 表示某常量正常parse能识别但fast parse不能识别, 0 表示都能识别。
-      uint32_t is_tree_not_param_ :1; //1 表示该节点及其子节点常量均不能参数化, 0表示没该限制
+      uint32_t is_neg_ : 1;// Record whether the parent node of the constant node is a T_OP_NEG node, 1 indicates yes, 0 indicates no
+      uint32_t is_hidden_const_ : 1; // 1 indicates that a certain constant can be recognized by normal parse but not by fast parse, 0 indicates that both can recognize it.
+      uint32_t is_tree_not_param_ :1; //1 indicates that the node and its sub-nodes cannot be parameterized, 0 indicates no such restriction
       uint32_t length_semantics_  :2; //2 for oracle [char|varbinary] (n b [bytes|char])
-      uint32_t is_val_paramed_item_idx_ :1; // T_PROJECT_STRING的values是否是select_item_param_infos数组的下标
-      uint32_t is_copy_raw_text_ : 1; // 是否回填常量节点的raw_text_，用于select item常量参数化
-      uint32_t is_column_varchar_ : 1; // 投影列是否是一个常量字符串，用于select item常量参数化
-      uint32_t is_trans_from_minus_: 1; // 负数常量节点是否是从减号操作转换而来，比如1 - 2，词法阶段会生成一个-2
-      uint32_t is_assigned_from_child_: 1; // 常量节点是否由子节点赋值得到，用于处理int64_min
+      uint32_t is_val_paramed_item_idx_ :1; // Are the values of T_PROJECT_STRING indices in the select_item_param_infos array?
+      uint32_t is_copy_raw_text_ : 1; // Whether to refill the raw_text_ of constant nodes, used for parameterization of constant parameters in select items
+      uint32_t is_column_varchar_ : 1; // Is the projection column a constant string, used for select item constant parameterization
+      uint32_t is_trans_from_minus_: 1; // Whether the negative constant node is transformed from a minus operation, e.g., 1 - 2, the lexical stage will generate a -2
+      uint32_t is_assigned_from_child_: 1; // Is the constant node assigned from a child node, used for handling int64_min
       uint32_t is_num_must_be_pos_: 1; //
-      uint32_t is_date_unit_ : 1; //1 表示是date unit常量，在反拼的时候需要反拼为字符串
+      uint32_t is_date_unit_ : 1; // 1 indicates it is a date unit constant, which needs to be reversed to a string during reverse parsing
       uint32_t is_literal_bool_ : 1; // indicate node is a literal TRUE/FALSE
-      uint32_t is_empty_ : 1; // 表示是否缺省该节点，1表示缺省，0表示没有缺省, opt_asc_desc节点中使用到
+      uint32_t is_empty_ : 1; // indicates whether the node is default, 1 means default, 0 means not default, used in opt_asc_desc node
       uint32_t is_multiset_ : 1; // for cast(multiset(...) as ...)
-      uint32_t is_forbid_anony_parameter_ : 1; // 1 表示禁止匿名块参数化
+      uint32_t is_forbid_anony_parameter_ : 1; // 1 indicates prohibiting anonymous block parameterization
       uint32_t is_input_quoted_ : 1; // indicate name_ob input whether with double quote
       uint32_t is_forbid_parameter_ : 1; //1 indicate forbid parameter
       uint32_t is_default_literal_expression_ : 1; // 1 indicate in default literal expression, "DEFAULT NOW()"
@@ -152,11 +152,11 @@ typedef struct _ParseNode
     };
   };
   /* attributes for terminal node, it is real value */
-  /* 数值类型的node将用到value_来存放其值，但是对于字符串和decimal类型，用str_value来存字符串指针，
-   * str_len_表示字符串的长度，不要用strlen(str_value_)来获取str_value_的值，因为str_value_不保证以'\0'结尾.
-   * 此外，为什么不将value_和str_len_作为union呢，这是因为在parse
-   * 一个数值类型的时候,不仅需要存储其value，还需要存储其原始字符串，举例：select
-   * 1111;这种语句，我们不仅要存int value的值，还得存'1111' 字符串*/
+  /* Numeric type nodes will use value_ to store their value, but for string and decimal types, str_value is used to store the string pointer,
+   * str_len_ indicates the length of the string, do not use strlen(str_value_) to get the value of str_value_, because str_value_ does not guarantee to be null-terminated.
+   * In addition, why not make value_ and str_len_ a union? This is because when parsing
+   * a numeric type, not only do we need to store its value, we also need to store its original string, for example: select
+   * 1111; in this statement, we not only have to store the int value, but also the '1111' string*/
   union {
     int64_t value_;
     int32_t int32_values_[2];
@@ -165,23 +165,23 @@ typedef struct _ParseNode
   const char *str_value_;
   int64_t str_len_;
   union {
-    int64_t pl_str_off_; // pl层, 记录str在原始字符串中的起始偏移
-    int64_t sql_str_off_; // sql层, 记录str在原始字符串中的起始偏移
+    int64_t pl_str_off_; // pl layer, record the start offset of str in the original string
+    int64_t sql_str_off_; // sql layer, record the start offset of str in the original string
   };
 
-  /* 用于存放在词法阶段被特殊处理后丢失的文本串 eg: NULL, Date '2010-10-11',
-   * 该文本串在fast parse参数化后，如果该参数作为plan cache中stmtkey的一部分，
-   * 则需要使用原始的文本串，而不是丢失文本串后的值，否则会导致plan cache误匹配
+  /* Used to store text strings lost after special processing in the lexical phase eg: NULL, Date '2010-10-11',
+   * this text string, after fast parse parameterization, if the parameter is part of the stmtkey in the plan cache,
+   * then the original text string needs to be used instead of the value after losing the text string, otherwise it will lead to plan cache mismatch
    * */
   const char *raw_text_;
   int64_t text_len_;
-  int64_t pos_; //记录?在带?的sql中的偏移
+  int64_t pos_; // record ? position in sql with ?
 
   struct _ParseNode **children_; /* attributes for non-terminal node, which has children */
-  ObStmtLoc stmt_loc_; //临时放在这里，后面要移到parse_stmt_node.h中去
+  ObStmtLoc stmt_loc_; // temporarily place here, to be moved to parse_stmt_node.h later
   union {
-    int64_t raw_param_idx_; // 常量节点在fp_result.raw_params_中的下标
-    int64_t raw_sql_offset_; // 常量节点在sql中的字符偏移
+    int64_t raw_param_idx_; // Constant node index in fp_result.raw_params_
+    int64_t raw_sql_offset_; // constant node character offset in sql
   };
 
 #ifdef SQL_PARSER_COMPILATION
@@ -197,40 +197,36 @@ typedef struct _ParamList
   ParseNode *node_;
   struct _ParamList *next_;
 } ParamList;
-
-//供parser使用的外部依赖对象类型
+// External dependency object type for parser use
 enum RefType
 {
   REF_REL = 0,
   REF_PROC,
   REF_FUNC,
 };
-
-//外部依赖对象链表
+// External dependency object linked list
 typedef struct _RefObjList
 {
   enum RefType type_;
   ParseNode *node_;
   struct _RefObjList *next_;
 } RefObjList;
-
-//解析PL中sql语句时需要使用的属性集合
+// Parse the attribute set needed when parsing SQL statements in PL
 typedef struct _PLParseInfo
 {
-  bool is_pl_parse_;//用于标识当前parser逻辑是否为PLParse调用
-  bool is_pl_parse_expr_; //用于标识当前parser逻辑是否在解析PLParser的expr
+  bool is_pl_parse_;//Used to indicate whether the current parser logic is a PLParse call
+  bool is_pl_parse_expr_; // used to indicate whether the current parser logic is parsing the expr of PLParser
   bool is_forbid_pl_fp_;
   bool is_inner_parse_;
-  int last_pl_symbol_pos_; //上一个pl变量的结束位置
+  int last_pl_symbol_pos_; // the end position of the last pl variable
   bool is_parse_dynamic_sql_;
   int plsql_line_;
   /*for mysql pl*/
   void *pl_ns_; //ObPLBlockNS
-  RefObjList *ref_object_nodes_; //依赖对象链表头
-  RefObjList *tail_ref_object_node_; //依赖对象链表尾
+  RefObjList *ref_object_nodes_; // dependency object list head
+  RefObjList *tail_ref_object_node_; // tail of dependency object list
 } PLParseInfo;
-
-//跟@如巅讨论，此处的定义后续会改成动态的，此处先定义128
+// Discuss with @Ruidian, the definition here will be changed to dynamic later, define 128 for now
 #define MAX_QUESTION_MARK 128
 
 typedef struct _ObQuestionMarkCtx
@@ -251,10 +247,10 @@ typedef struct _ObQuestionMarkCtx
 // after seeing '1', is_cur_numeric = true, then param node '-1' is returned
 typedef struct _ObMinusStatuCtx
 {
-  int pos_; // 负数在参数化后的sql中出现的位置
-  int raw_sql_offset_; // 负号在原始sql中出现的位置
-  bool has_minus_; // 保留一下负号的状态，在遇到数值类型的时候，词法返回一个负数节点
-  bool is_cur_numeric_; // 当前常量节点是否是数值节点
+  int pos_; // The position where negative numbers appear in the parameterized SQL
+  int raw_sql_offset_; // The position where the minus sign appears in the original sql
+  bool has_minus_; // retain the state of the minus sign, when encountering a numeric type, the lexer returns a negative number node
+  bool is_cur_numeric_; // Is the current constant node a numeric node
 } ObMinusStatusCtx;
 
 #ifdef SQL_PARSER_COMPILATION
@@ -265,8 +261,7 @@ typedef struct TokenPosInfo
   int token_len_;
 } TokenPosInfo;
 #endif
-
-//外部依赖对象链表
+// External dependency object linked list
 typedef struct _ParenthesesOffset
 {
   int left_parentheses_;
@@ -350,7 +345,7 @@ typedef struct
   PLParseInfo pl_parse_info_;
   /*for  q-quote*/
   ObMinusStatusCtx minus_ctx_; // for fast parser to parse negative value
-  int64_t last_escape_check_pos_;  //解析quoted string%parse-param时的一个临时变量，处理连接gbk字符集时遇到的转义字符问题
+  int64_t last_escape_check_pos_;  // A temporary variable when parsing quoted string%parse-param, to handle escape character issues encountered when connecting with the gbk character set
   int connection_collation_;//connection collation
   bool mysql_compatible_comment_; //whether the parser is parsing "/*! xxxx */"
   bool enable_compatible_comment_;
@@ -461,7 +456,7 @@ typedef enum ObNumberParseType
 
 #ifndef SQL_PARSER_COMPILATION
 bool check_stack_overflow_c();
-//查找外部pl变量的接口，获取变量在外部符号表中的下标，定义在ob_pl_stmt.cpp中
+// Find the interface for external pl variables, get the index of the variable in the external symbol table, defined in ob_pl_stmt.cpp
 int lookup_pl_symbol(const void *pl_ns, const char *symbol, size_t len, int64_t *find_idx);
 #endif
 

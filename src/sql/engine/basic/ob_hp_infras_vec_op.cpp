@@ -431,8 +431,7 @@ int ObIHashPartInfrastructure::end_round()
   }
   return ret;
 }
-
-// 暂时没有需求，不实现
+// Temporarily no requirement, not implemented
 // for material
 int ObIHashPartInfrastructure::direct_insert_row(
   const common::ObIArray<ObExpr*> &exprs, bool &exists, bool &inserted)
@@ -442,8 +441,7 @@ int ObIHashPartInfrastructure::direct_insert_row(
   UNUSED(inserted);
   return OB_NOT_SUPPORTED;
 }
-
-// 暂时没有需求，不实现
+// Temporarily no requirement, not implemented
 // for hash join
 
 // support M: max_memory_sie
@@ -940,8 +938,7 @@ int ObIHashPartInfrastructure::open_hash_table_part()
   }
   return ret;
 }
-
-// close仅仅关闭iterator不会清理数据
+// close only closes the iterator without cleaning up the data
 
 int ObIHashPartInfrastructure::open_cur_part(InputSide input_side)
 {
@@ -1059,14 +1056,13 @@ int ObIHashPartInfrastructure::get_next_partition(InputSide input_side)
   }
   return ret;
 }
-
-// 按照input_side获取下一组的partition pair<left, right>
+// Get the next group of partition pair<left, right> according to input_side
 int ObIHashPartInfrastructure::get_next_pair_partition(
   InputSide input_side)
 {
   int ret = OB_SUCCESS;
-  // 这里暂时按照input_side去拿分区，其实如果需要拿最近添加的partition，应该拿left和right中最近加入的分区
-  // 即可以取list中两者最后一个分区进行对比，哪个最近加入，获取哪个
+  // Here temporarily get the partition according to input_side, actually if we need to get the most recently added partition, we should get the most recently added partition from left and right
+  // i.e., you can take the last partition of the two in the list for comparison, and get the one that was added most recently
   if (OB_FAIL(get_next_partition(input_side))) {
     if (OB_ITER_END == ret) {
       ret = OB_SUCCESS;

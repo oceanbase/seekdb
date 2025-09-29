@@ -710,7 +710,7 @@ int ObSqlCollectionInfo::parse_element_info(std::string type_info, ObCollectionT
     uint8_t idx = 0;
     while (OB_SUCC(ret) && std::regex_search(type_info, matches, pattern)) {
       std::string type_name = matches[0];
-      type_info = matches.suffix().str(); // 更新 text 为剩余未匹配的部分
+      type_info = matches.suffix().str(); // update text to the remaining unmatched part
       if (is_root && isNumber(type_name)) {
         // vector element is float
         basic_meta_info->basic_meta_.meta_.set_float();

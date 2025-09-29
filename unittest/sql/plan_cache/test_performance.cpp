@@ -295,7 +295,7 @@ void test_plan_cache(obsys::CThread *thread, int thread_num, std::ostream &of)
     }
   }
   // alter version
-  //schema version 和 table version变化后，总循环次数变为0，用于最终校验hit次数。
+  // schema version and table version changes after, the total loop count becomes 0, used for final validation of hit count.
   int loop_count = ++loop_counts[thread_num];
   if (WITH_SCHEMA_ALTER && loop_count % SCHEMA_ALTER_LOOP_FREQUENCY == 0) {
     SQL_PC_LOG(INFO, "schema alter", "thread_num", thread_num, "tenant_id", tenant_id);
@@ -355,7 +355,7 @@ public:
     std::ofstream fout(tmp_file);
 
     int64_t count = LOOP_PER_CASE;
-    //记录当前线程的线程序号；
+    // Record the current thread's thread number;
     int thread_num = runing_thread_count++;
     while (count--) {
       test_plan_cache(thread, thread_num, fout);

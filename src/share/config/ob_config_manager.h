@@ -17,8 +17,7 @@
 #include "share/config/ob_server_config.h"
 #include "share/config/ob_system_config.h"
 #include "share/config/ob_reload_config.h"
-
-// 去掉代码改动较大, 先保留
+// Remove code changes are significant, keep for now
 
 namespace oceanbase
 {

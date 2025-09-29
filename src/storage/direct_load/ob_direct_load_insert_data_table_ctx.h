@@ -133,12 +133,12 @@ private:
   //////////////////////// sql stats interface ////////////////////////
 public:
   int get_sql_statistics(table::ObTableLoadSqlStatistics *&sql_statistics) override;
-  // 带多版本列的完整行
+  // The complete row with multiple version columns
   int update_sql_statistics(table::ObTableLoadSqlStatistics &sql_statistics,
                             const blocksstable::ObDatumRow &datum_row) override;
   int update_sql_statistics(table::ObTableLoadSqlStatistics &sql_statistics,
                             const blocksstable::ObBatchDatumRows &datum_rows) override;
-  // 中间过程数据
+  // Intermediate process data
   int update_sql_statistics(table::ObTableLoadSqlStatistics &sql_statistics,
                             const ObDirectLoadDatumRow &datum_row,
                             const ObDirectLoadRowFlag &row_flag) override;

@@ -136,15 +136,14 @@ int ObPxTransmitChProvider::inner_get_part_ch_map(ObPxPartChInfo &map)
     ObPxPartChMapItem tmp_part_ch_item;
     tmp_part_ch_item.assign(part_ch_item);
     if (INT64_MAX == tmp_part_ch_item.third_) {
-      // slave mapping、以及PDML random场景等
-
-      // 本次循环中要处理的 sqc。get_part_affinity_map() 里包含了所有 sqc
+      // slave mapping, as well as PDML random scenario etc.
+      // The sqc to be processed in this loop. get_part_affinity_map() contains all sqc
       int64_t sqc_id = part_ch_item.second_;
-      // prefix_task_counts_[sqc_id] + task_id就是sqc_id 这个sqc的某个task对应的全局task_id
+      // prefix_task_counts_[sqc_id] + task_id is the global task_id corresponding to a certain task of this sqc with sqc_id
       ObIArray<int64_t> &receive_prefix_task_counts =
                 msg_.get_ch_total_info().receive_exec_server_.prefix_task_counts_;
-      // 由于partition id已经保存了与sqc之间的映射，
-      // 所以这里只需要将partition和和sqc所有worker idx映射即可
+      // Since the partition id has already saved the mapping with sqc,
+      // So here we only need to map all worker idx of partition and sqc
       int64_t sqc_task_count = 0;
       int64_t pre_sqc_task_count = receive_prefix_task_counts.at(sqc_id);
       if (sqc_id == receive_prefix_task_counts.count() - 1) {
@@ -162,8 +161,8 @@ int ObPxTransmitChProvider::inner_get_part_ch_map(ObPxPartChInfo &map)
       }
       LOG_DEBUG("debug get partition map", K(map.part_ch_array_));
     } else {
-      // PK场景 map & PDML场景 map:
-      // [tablet_id, prefiex_task_count + sqc_task_id(即sqc_worker_id)]
+      // PK scene map & PDML scene map:
+      // [tablet_id, prefiex_task_count + sqc_task_id(i.e., sqc_worker_id)]
       tmp_part_ch_item.second_ = tmp_part_ch_item.second_ + tmp_part_ch_item.third_;
       if (OB_FAIL(map.part_ch_array_.push_back(tmp_part_ch_item))) {
         LOG_WARN("failed to push back part ch item", K(ret));
@@ -191,7 +190,7 @@ int ObPxTransmitChProvider::wait_msg(int64_t timeout_ts)
         LOG_TRACE("wait for data channel ready", K(wait_count), K(lbt()));
       }
       if (OB_UNLIKELY(IS_INTERRUPTED())) {
-        // 中断错误处理
+        // Interrupt error handling
         // overwrite ret
         ObInterruptCode code = GET_INTERRUPT_CODE();
         ret = code.code_;
@@ -239,9 +238,9 @@ int ObPxReceiveChProvider::init()
 int ObPxReceiveChProvider::reserve_msg_set_array_size(int64_t size)
 {
   int ret = OB_SUCCESS;
-  // 由于receive provider需要child_dfo_id作为索引来判断是否写入控制消息
-  // 由于child_dfo的数量以及id是未知的.通过array来索引会比较高效
-  // 根据child_dfo_id值动态reserve array大小
+  // Since receive provider needs child_dfo_id as an index to determine whether to write control messages
+  // Since the number and id of child_dfo are unknown, indexing with an array will be more efficient
+  // Dynamically reserve array size based on child_dfo_id value
   int64_t pre_count = msg_set_.count();
   if (OB_FAIL(msg_set_.prepare_allocate(size))) {
     LOG_WARN("fail to reserve array size", K(ret), K(size));
@@ -282,7 +281,7 @@ int ObPxReceiveChProvider::get_data_ch_nonblock(
           LOG_WARN("fail to copy channel info",
                     K(child_dfo_id), K(idx), K(cnt), K(ret));
         } else if (OB_NOT_NULL(ch_info)) {
-          // 这里做深拷，因为push_back会改变地址
+          // Here we do a deep copy, because push_back will change the address
           *ch_info = msg.get_ch_total_info();
         }
       }
@@ -321,7 +320,7 @@ int ObPxReceiveChProvider::get_data_ch(
             LOG_WARN("fail to copy channel info",
                      K(child_dfo_id), K(idx), K(cnt), K(ret));
           } else if (OB_NOT_NULL(ch_info)) {
-            // 这里做深拷，因为push_back会改变地址
+            // Here we do a deep copy, because push_back will change the address
             *ch_info = msg.get_ch_total_info();
           }
         }
@@ -387,7 +386,7 @@ int ObPxReceiveChProvider::wait_msg(int64_t child_dfo_id, int64_t timeout_ts)
                     K(child_dfo_id), K(wait_count),K(lbt()));
         }
         if (OB_UNLIKELY(IS_INTERRUPTED())) {
-          // 中断错误处理
+          // Interrupt error handling
           // overwrite ret
           ObInterruptCode code = GET_INTERRUPT_CODE();
           ret = code.code_;
@@ -416,7 +415,7 @@ int ObPxChProviderUtil::check_status(int64_t timeout_ts, const ObAddr &qc_addr,
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(IS_INTERRUPTED())) {
-    // 中断错误处理
+    // Interrupt error handling
     // overwrite ret
     ObInterruptCode code = GET_INTERRUPT_CODE();
     ret = code.code_;

@@ -81,9 +81,8 @@ int ObFlashBackTableFromRecyclebinResolver::resolve(const ParseNode &parser_tree
         }
       }
     }
-
-    // 现在支持了用原表名 flashback 回收站中的表
-    // 复用一个以前 unused 的 origin_db_name, 指定需要 flashback 的表是从哪个库删除的
+    // Now supports using the original table name to recover tables from the flashback recycle bin
+    // Reuse a previously unused origin_db_name, specify which database the table to be flashed back was deleted from
     if (OB_SUCC(ret)) {
       if (origin_db_name.empty()) {
         if (OB_ISNULL(session_info_)) {
@@ -182,8 +181,8 @@ int ObFlashBackTableToScnResolver::resolve(const ParseNode &parse_tree)
         if (OB_SUCC(ret)) {
           int64_t start_time = session_info_->get_query_start_time();
           int64_t query_timeout = 0;
-          // get_query_timeout里面肯定返回OB_SUCCESS，所以后面代码不需要在判断
-          // 返回值了
+          // get_query_timeout will definitely return OB_SUCCESS, so the following code does not need to check again
+          // return value
           OZ(session_info_->get_query_timeout(query_timeout));
           stmt->set_query_end_time(start_time + query_timeout);
         }
@@ -275,9 +274,9 @@ int ObFlashBackDatabaseResolver::resolve(const ParseNode &parser_tree)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("session_info is null", K(ret));
   } else if (OB_UNLIKELY(is_external_catalog_id(session_info_->get_current_default_catalog()))) {
-    // 这里之所以需要额外拦截，是因为 flashback database 没有走 resolve ParseNode 逻辑，直接赋值了
-    // 所以在 resolve 处的拦截无效
-    // 如果将来需要支持 flashback database catalog.db 这种语法，那就需要走 resolve ParseNode 逻辑，那么此时这里的拦截可以删除
+    // Here we need to intercept additionally because flashback database did not go through the resolve ParseNode logic, it was directly assigned
+    // So the interception at resolve is invalid
+    // If we need to support flashback database catalog.db this syntax in the future, then we need to follow the resolve ParseNode logic, so the interception here can be removed
     ret = OB_NOT_SUPPORTED;
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "flashback database in catalog is");
   } else if (T_FLASHBACK_DATABASE != parser_tree.type_) {

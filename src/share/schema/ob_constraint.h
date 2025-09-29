@@ -39,8 +39,8 @@ public:
   //operators
   ObConstraint &operator=(const ObConstraint &src_schema) = delete;
   int assign(const ObConstraint &src_schema);
-  // 不提供比较运算符，这个 schema 对象的成员变量数量越来越多，类型越来越复杂，比较运算很容易错
-  // 有比较 schema 对象的需求时建议根据需求定制比较函数
+  // Do not provide comparison operators, the number of member variables in this schema object is increasing, and the types are becoming more complex, making comparisons prone to errors
+  // When there is a need to compare schema objects, it is recommended to customize the comparison function according to the requirements
   bool operator==(const ObConstraint &r) const = delete;
   bool operator!=(const ObConstraint &r) const = delete;
 

@@ -27,20 +27,19 @@ public:
   void reuse();
   int init(const common::ObIArray<share::schema::ObColDesc> &px_col_descs,
            const common::ObIArray<common::ObAccuracy> &px_col_accuracys,
-           const common::ObIArray<int64_t> &px_column_project_idxs, // px列对应哪个store列
+           const common::ObIArray<int64_t> &px_column_project_idxs, // px column corresponds to which store column
            const common::ObIArray<share::schema::ObColDesc> &col_descs,
            const sql::ObBitVector *col_nullables, const ObDirectLoadRowFlag &row_flag,
            const int64_t max_batch_size,
-           // 为了老路径farm能过
+           // For old path farm to pass
            const bool need_reshape);
 
-  // 深拷贝
+  // Deep copy
   int append_selective(const IVectorPtrs &vectors, const uint16_t *selector, int64_t size);
   int append_selective(const ObIArray<ObDatumVector> &datum_vectors, const uint16_t *selector,
                        int64_t size);
   int append_row(const ObDirectLoadDatumRow &datum_row);
-
-  // 浅拷贝
+  // Shallow copy
   int shallow_copy(const IVectorPtrs &vectors, const int64_t batch_size);
   int shallow_copy(const ObIArray<ObDatumVector> &datum_vectors, const int64_t batch_size);
 

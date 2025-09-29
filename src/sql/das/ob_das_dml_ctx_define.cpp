@@ -472,7 +472,7 @@ int ObDASWriteBuffer::add_row(const common::ObIArray<ObExpr*> &exprs,
   }
   return ret;
 }
-// 以后das的add_row接口只许成功，不许失败
+// After this, the das add_row interface must succeed and must not fail
 int ObDASWriteBuffer::add_row(const DmlShadowRow &sr, DmlRow **stored_row)
 {
   int ret = OB_SUCCESS;

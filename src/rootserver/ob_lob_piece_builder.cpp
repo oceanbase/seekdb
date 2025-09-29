@@ -173,7 +173,7 @@ int ObLobPieceBuilder::generate_lob_piece_table_name(
     int64_t &pos)
 {
   int ret = OB_SUCCESS;
-  // ObString aux_lob_piece_table_name构成：
+  // ObString aux_lob_piece_table_name composition:
   // __AUX_LOB_PIECE_<table_id>_
   if (OB_ISNULL(buf) || buf_size <= 0 || pos < 0) {
     ret = OB_INVALID_ARGUMENT;

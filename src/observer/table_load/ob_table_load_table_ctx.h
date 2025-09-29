@@ -88,18 +88,18 @@ public:
   ObTableLoadParam param_;
   ObTableLoadDDLParam ddl_param_;
   ObTableLoadSchema schema_; // origin table load schema
-  ObTableLoadCoordinatorCtx *coordinator_ctx_; // 只在控制节点构造
-  ObTableLoadStoreCtx *store_ctx_; // 只在数据节点构造
+  ObTableLoadCoordinatorCtx *coordinator_ctx_; // Only constructed on the control node
+  ObTableLoadStoreCtx *store_ctx_; // Only constructed on data nodes
   sql::ObLoadDataGID gid_;
   sql::ObLoadDataStat *job_stat_;
   sql::ObSQLSessionInfo *session_info_;
   sql::ObExecContext *exec_ctx_;
   sql::ObFreeSessionCtx free_session_ctx_;
 private:
-  // 只在初始化的时候使用, 线程不安全
+  // Only used during initialization, thread unsafe
   common::ObArenaAllocator allocator_;
-  ObTableLoadObjectAllocator<ObTableLoadTask> task_allocator_; // 多线程安全
-  ObTableLoadObjectAllocator<ObTableLoadTransCtx> trans_ctx_allocator_; // 多线程安全
+  ObTableLoadObjectAllocator<ObTableLoadTask> task_allocator_; // thread-safe
+  ObTableLoadObjectAllocator<ObTableLoadTransCtx> trans_ctx_allocator_; // thread-safe
   int64_t ref_count_ CACHE_ALIGNED;
   volatile bool is_in_map_;
   bool is_assigned_resource_;

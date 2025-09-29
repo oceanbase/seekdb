@@ -70,12 +70,11 @@ public:
   int get_key(ObString& key);
 
   int insert_prev(ObLibTreeNodeBase* new_node);
-  
-  // 返回节点具体类型
-  // 例如：json返回jsonInt，jsonDouble
-  // xml 返回xmlElment, XmlAttribute
+  // Return the specific type of the node
+  // For example: json returns jsonInt, jsonDouble
+  // xml returns xmlElment, XmlAttribute
   virtual int node_type() { return type_; }
-  // 数据修改接口, 修改的是孩子
+  // Data modification interface, modifying the child
   virtual int append(ObLibTreeNodeBase* node) = 0;
   virtual int insert(int64_t pos, ObLibTreeNodeBase* node) = 0;
   virtual int remove(int64_t pos) = 0;
@@ -95,7 +94,7 @@ protected:
   ObNodeDataType type_;
   int32_t flags_;
   int32_t pos_;
-  /* 父节点，公共 */
+  /* parent node, common */
   ObLibTreeNodeBase* parent_;
 };
 
@@ -142,8 +141,7 @@ public:
 
   virtual int64_t size() const;
   virtual int64_t count() const;
-
-  // 数据修改接口, 修改的是孩子
+  // Data modification interface, modifying the child
   int append(ObLibTreeNodeBase* node) override;
   int insert(int64_t pos, ObLibTreeNodeBase* node) override;
   int remove(int64_t pos) override;

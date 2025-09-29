@@ -28,8 +28,8 @@ int ObPhyOperatorStats::init(ObIAllocator *alloc, int64_t op_count)
     LOG_WARN("invalid argument", K(ret),K(alloc), K(op_count));
   } else {
     array_size_ = op_count * StatId::MAX_STAT * COPY_COUNT;
-    //2是为了保存plan_id 和operation_id
-    //没有必须要存operation id , 可以通过下标计算出来
+    //2 is to save plan_id and operation_id
+    // There is no need to store operation id, it can be calculated through the index
     if (OB_ISNULL(ptr = alloc->alloc(sizeof(int64_t) * array_size_))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_ERROR("fail to alloc memory for aray", K(ret), K_(array_size));

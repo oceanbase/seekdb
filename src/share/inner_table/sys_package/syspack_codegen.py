@@ -1,25 +1,24 @@
 #/usr/bin/env python
 # -*- coding: utf-8 -*-
-
 """
 syspack_codegen.py
 ~~~~~~~~~~~~~~~~~~
-这个脚本是系统包的配置中心, 作用如下:
-1. 调用wrap程序将指定的系统包源码文件从明文转换为密文, 密文文件的后缀名为`.plw`
-2. 将指定的系统包源码文件的内容以字符串的形式嵌入到`syspack_source.cpp`中, 该文件后续被编译链接到observer中
-3. 将指定的系统包拷贝到编译目录的syspack_release文件夹下, 用于后续RPM打包和部署
+This script is the configuration center for system packages, with the following functions:
+1. Calls the wrap program to convert specified system package source code files from plaintext to ciphertext, with the ciphertext file extension being `.plw`
+2. Embeds the content of specified system package source code files as strings into `syspack_source.cpp`, which is subsequently compiled and linked into observer
+3. Copies the specified system package to the `syspack_release` folder in the compilation directory for subsequent RPM packaging and deployment
 NOTE:
-1. 这个脚本会在编译期(make阶段)自动调用, 并完成上述三个步骤, 一般不需要手动调用. 也可以使用`python2 syspack_codegen.py [option]`手动调用.
-2. RD需要修改的只有`syspack_config`变量, 该变量是一个列表, 每个元素是一个`SysPackConfig`对象, 该对象包含了一个系统包的所有信息.
-    目前`SysPackConfig`对象的构造参数格式为:
+1. This script will be automatically called during the compilation phase (make stage) and complete the above three steps, generally no manual invocation is required. It can also be manually invoked using `python2 syspack_codegen.py [option]`.
+2. RD only needs to modify the `syspack_config` variable, which is a list where each element is a `SysPackConfig` object containing all information about a system package.
+    The current format of the `SysPackConfig` object constructor parameters is:
         `SysPackConfig(group, name, header_file, body_file, wrap_type, orc_build_req)`
-    其中:
-        - group: 系统包的分组, 可选值为`SysPackGroup`枚举类型
-        - name: 系统包的名称, 用于在`syspack_source.cpp`中标识系统包
-        - header_file: 系统包的头文件, 必须是`.sql`文件
-        - body_file: 系统包的实现文件, 可选(可以用None填充), 必须是`.sql`文件
-        - wrap_type: 系统包的混淆方式, 可选值为`WrapType`枚举类型, 控制系统包的header和body是否需要进行加密混淆, 默认为`WrapType.NONE`, 即不混淆
-        - orc_build_req: 系统包是否需要在`OB_BUILD_ORACLE_PL`环境下编译, 默认为False
+    Where:
+        - group: The grouping of the system package, optional values are `SysPackGroup` enumeration type
+        - name: The name of the system package, used to identify the system package in `syspack_source.cpp`
+        - header_file: The header file of the system package, must be a `.sql` file
+        - body_file: The implementation file of the system package, optional (can be filled with None), must be a `.sql` file
+        - wrap_type: The obfuscation method of the system package, optional values are `WrapType` enumeration type, controlling whether the header and body of the system package need to be encrypted and obfuscated, default is `WrapType.NONE`, i.e., no obfuscation
+        - orc_build_req: Whether the system package needs to be compiled in the `OB_BUILD_ORACLE_PL` environment, default is False
 """
 
 import os

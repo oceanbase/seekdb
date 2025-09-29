@@ -74,22 +74,21 @@ public:
 
   TO_STRING_KV(K_(peer_target_used), K_(local_target_used), K_(report_target_used));
 private:
-  // 理解重点：
-  // 各个 follower 都会向 leader 汇报本机对各个机器的 target 消耗，这个消耗都是本机局部视角。leader
-  // 会把这些本机视角的 target 消耗汇总起来，得到一个全局视角的 target 消耗，记作 peer_target_used_
+  // Understanding key points:
+  // Each follower will report to the leader the local target consumption of each machine from its own perspective. leader
+  // Will aggregate these target consumptions from the local perspective to get a global perspective of target consumption, denoted as peer_target_used_
   //
-  // 各个 follower 向 leader 汇报本机的消耗也有讲究：它汇报的是本地汇报与上次汇报之间的差值：“增量”
-  // leader 通过把各个 follower 的“增量”加起来得到全局视角。
+  // Each follower reports to the leader the difference between the local report and the last report: "increment"
+  // leader by adding up the "increment" of each follower gets a global view.
   //
-  // 思考：各个 follower 能不能直接汇报本机保存的 local_target_used_ 呢？理论上是可以的，但是 leader 端
-  // 汇总起来比较麻烦，它需要遍历所有 follower 的值并求和。汇报“增量”则可以避免这个求和操作。
+  // Consideration: Can each follower directly report the local_target_used_ saved on its own machine? Theoretically, it is possible, but on the leader side
+  // Summing up is troublesome, it requires traversing all follower's values and summing them. Reporting "increment" can avoid this summation operation.
   //
-  int64_t peer_target_used_;     // leader 视角的数据：各个 follower 汇报上来的 target 使用量汇总成 peer_target_used_
-  int64_t local_target_used_;    // follower 视角数据：本地记录的资源消耗数量，这个量里面可能有部分尚未汇报给 leader
-  int64_t report_target_used_;   // follower 视角数据：已经上报给 leader 的数量，使得 leader 汇总后能有一个尽量精确的全局视图
-
-  // 注意：本地记录的资源消耗(local_target_used_)来源与 ObPxSubAdmission 中申请的任何内容无关，仅被下面的过程改变：
-  //  - Query 通过 ObPxAdmission 申请、释放
+  int64_t peer_target_used_;     // leader's perspective data: the aggregated target usage reported by followers is summarized as peer_target_used_
+  int64_t local_target_used_;    // follower perspective data: locally recorded resource consumption quantity, this amount may include part that has not yet been reported to leader
+  int64_t report_target_used_;   // follower perspective data: the number already reported to leader, so that leader can have an as accurate as possible global view after aggregation
+  // Note: The source of the resource consumption recorded locally (local_target_used_) is unrelated to any content applied for in ObPxSubAdmission, and is only changed by the following process:
+  //  - Query through ObPxAdmission apply, release
 };
 
 class ObPxTargetCond

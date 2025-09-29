@@ -516,7 +516,7 @@ int ObAllVirtualSqlPlan::dump_tenant_plans(int64_t tenant_id)
     DumpAllPlan dump_plan;
     dump_plan.tenant_id_ = tenant_id;
     dump_plan.plan_ids_ = &plan_ids_;
-    // !!!引用plan cache资源之前必须加ObReqTimeGuard
+    // !!!Before referencing plan cache resources, ObReqTimeGuard must be added
     ObReqTimeGuard req_timeinfo_guard;
     ObPlanCache *plan_cache = NULL;
     MTL_SWITCH(tenant_id) {
@@ -555,7 +555,7 @@ int ObAllVirtualSqlPlan::prepare_next_plan()
     //next plan
     ++plan_idx_;
     ObPhysicalPlan *plan = NULL;
-    // !!!引用plan cache资源之前必须加ObReqTimeGuard
+    // !!!Before referencing plan cache resources, ObReqTimeGuard must be added
     ObReqTimeGuard req_timeinfo_guard;
     ObPlanCache *plan_cache = NULL;
     ObCacheObjGuard guard(PC_DIAG_HANDLE);

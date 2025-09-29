@@ -379,7 +379,7 @@ int ObTransformViewMerge::check_semi_right_table_can_be_merged(ObDMLStmt *stmt,
   return ret;
 }
 
-/*@brief transform_basic_table处理普通generated table
+/*@brief transform_basic_table processes normal generated table
  */
 int ObTransformViewMerge::transform_generated_table(ObDMLStmt *parent_stmt,
                                                     TableItem *table_item,
@@ -422,7 +422,7 @@ int ObTransformViewMerge::transform_generated_table(ObDMLStmt *parent_stmt,
   return ret;
 }
 
-/*@brief transform_basic_table处理joined table中的generated table
+/*@brief transform_basic_table processes the generated table in the joined table
  */
 int ObTransformViewMerge::transform_generated_table(ObDMLStmt *parent_stmt,
                                                     JoinedTable *parent_table,
@@ -532,8 +532,8 @@ int ObTransformViewMerge::check_basic_validity(ObDMLStmt *parent_stmt,
   } else if (!is_select_expr_valid) {
     can_be = false;
   } else if (0 == child_stmt->get_from_item_size()) {
-    // 当 view 为 select ... from dual, 若上层非层次查询
-    // 且上层是单表查询, 或者上层不是 JOIN, 则可以合并
+    // When view is select ... from dual, if the upper level is not a hierarchical query
+    // And the upper layer is a single table query, or the upper layer is not JOIN, then it can be merged
     can_be = (parent_stmt->is_single_table_stmt() || !in_joined_table);
   } else if (OB_FAIL(child_stmt->has_ref_assign_user_var(has_ref_assign_user_var))) {
     LOG_WARN("failed to check stmt has assignment ref user var", K(ret));
@@ -585,7 +585,7 @@ int ObTransformViewMerge::check_can_be_merged(ObDMLStmt *parent_stmt,
   } else if (can_be) {
     has_rollup = parent_stmt->is_select_stmt() && 
                  static_cast<ObSelectStmt *>(parent_stmt)->has_rollup();
-    //select expr不能包含subquery
+    //select expr cannot contain subquery
     for (int64_t i = 0; OB_SUCC(ret) && can_be && i < child_stmt->get_select_item_size(); i++) {
       ObRawExpr *expr = child_stmt->get_select_item(i).expr_;
       if (OB_ISNULL(expr)) {
@@ -633,7 +633,7 @@ int ObTransformViewMerge::check_can_be_merged(ObDMLStmt *parent_stmt,
       OPT_TRACE("lateral inline view ref outer table, can not merge");
     }
   }
-  //检查where condition是否存在子查询
+  // Check if where condition contains subquery
   if (OB_SUCC(ret) && can_be && need_check_subquery){
     if (child_stmt->get_semi_infos().count() > 0) {
       can_be =false;
@@ -664,7 +664,7 @@ int ObTransformViewMerge::check_can_be_merged(ObDMLStmt *parent_stmt,
       }
     }
   }
-  //检查视图是否有空值拒绝表达式
+  // Check if the view has null values reject expression
   if (OB_SUCC(ret) && can_be && helper.need_check_null_propagate){
     ObSEArray<ObRawExpr *, 4> columns;
     ObSqlBitSet<> from_tables;
@@ -676,7 +676,7 @@ int ObTransformViewMerge::check_can_be_merged(ObDMLStmt *parent_stmt,
     } else if (OB_FAIL(ObTransformUtils::extract_table_exprs(*child_stmt, columns, from_tables, column_exprs))) {
       LOG_WARN("failed to extract table exprs", K(ret));
     } else {
-      //检查是否有空值拒绝表达式
+      // Check for null values in the rejection expression
       bool find = false;
       for (int64_t i = 0; OB_SUCC(ret) && !find && i < child_stmt->get_select_item_size(); i++) {
         ObRawExpr *expr = child_stmt->get_select_item(i).expr_;
@@ -798,7 +798,7 @@ int ObTransformViewMerge::find_not_null_column_with_condition(
     bool find = false;
     for (int64_t i = 0; OB_SUCC(ret) && !find && i < old_column_exprs.count(); ++i) {
       bool has_null_reject = false;
-      //首先找到null reject的select expr
+      //First find the null reject select expr
       if (FULL_OUTER_JOIN != helper.parent_table->joined_type_ &&
           OB_FAIL(ObTransformUtils::has_null_reject_condition(join_conditions,
                                                               old_column_exprs.at(i),
@@ -812,7 +812,7 @@ int ObTransformViewMerge::find_not_null_column_with_condition(
                                                     find))) {
         LOG_WARN("failed to find null propagate column", K(ret));
       } else {
-        //在对应的select expr中找到了null propagate的column expr
+        // Found null propagate column expr in the corresponding select expr
         //do nothing
       }
     }
@@ -870,7 +870,7 @@ int ObTransformViewMerge::transform_joined_table(ObDMLStmt *stmt,
     ret = OB_SIZE_OVERFLOW;
     LOG_WARN("too deep recursive", K(ret));
   } else {
-    //处理左表
+    // Process left table
     bool can_push_where = true;
     bool need_check_where_condi = false;
     if (!parent_can_push_where ||
@@ -906,7 +906,7 @@ int ObTransformViewMerge::transform_joined_table(ObDMLStmt *stmt,
     } else {
       trans_happened |= is_happened;
     }
-    //处理右表
+    // Process right table
     if (OB_SUCC(ret)) {
       can_push_where = true;
       need_check_where_condi = false;
@@ -943,7 +943,7 @@ int ObTransformViewMerge::transform_joined_table(ObDMLStmt *stmt,
         trans_happened |= is_happened;
       }
     }
-    //处理joined table single table ids
+    // processing joined table single table ids
     if (OB_SUCC(ret)) {
       joined_table->single_table_ids_.reset();
       if (OB_ISNULL(joined_table->left_table_) ||
@@ -1016,7 +1016,7 @@ int ObTransformViewMerge::do_view_merge(ObDMLStmt *parent_stmt,
                                                                                      *parent_stmt,
                                                                                      *table_item))) {
     LOG_WARN("failed to replace name for single table view", K(ret));
-  } else if (OB_NOT_NULL(joined_table)) {//调整joined table中generated table需要单独处理的部分
+  } else if (OB_NOT_NULL(joined_table)) {// adjust the parts of generated table in joined table that need to be handled separately
     if (OB_FAIL(ObOptimizerUtil::remove_item(joined_table->single_table_ids_,
                                             table_item->table_id_))) {
       LOG_WARN("failed to remove table id", K(ret));
@@ -1027,14 +1027,14 @@ int ObTransformViewMerge::do_view_merge(ObDMLStmt *parent_stmt,
                OB_FAIL(create_joined_table_for_view(child_stmt, joined_table->right_table_))) {
       LOG_WARN("failed to create joined table for view", K(ret));
     } else {/*do nothing*/}
-  } else {//调整普通generated table需要单独处理的部分
+  } else {//adjust the separately handled parts of the ordinary generated table
     if (OB_FAIL(append(parent_stmt->get_from_items(), child_stmt->get_from_items()))) {
       LOG_WARN("failed to append from items", K(ret));
     } else if (OB_FAIL(append(parent_stmt->get_joined_tables(), child_stmt->get_joined_tables()))) {
       LOG_WARN("failed to append joined tables", K(ret));
     }
   }
-  if (OB_SUCC(ret)) {//调整公共部分
+  if (OB_SUCC(ret)) {//adjust common part
     if (OB_FAIL(replace_stmt_exprs(parent_stmt,
                                    child_stmt,
                                    table_item,
@@ -1060,7 +1060,7 @@ int ObTransformViewMerge::do_view_merge(ObDMLStmt *parent_stmt,
     } else if (helper.can_push_where && OB_FAIL(append(parent_stmt->get_condition_exprs(),
                                                 child_stmt->get_condition_exprs()))) {
       LOG_WARN("failed to append condition exprs", K(ret));
-    //joined table中的generated table的where不能直接下压到外层where里面的，只能下压到连接条件（on）里面
+    // Generated table's where in joined table cannot be directly pushed down to the outer where, it can only be pushed down to the join condition (on)
     } else if (!helper.can_push_where && OB_FAIL(append(joined_table->get_join_conditions(),
                                                  child_stmt->get_condition_exprs()))) {
       LOG_WARN("failed to append condition exprs", K(ret));

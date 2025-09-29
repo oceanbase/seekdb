@@ -180,7 +180,7 @@ int ObDirectLoadMultipleSSTableDataWithOriginQuery::init(const ObDirectLoadDataW
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("Invalid argument", K(ret), K(param), K(range));
   } else {
-    // scan_merge只会处理冲突行, 先复用param.dml_row_handler_
+    // scan_merge will only handle conflict lines, first reuse param.dml_row_handler_
     ObDirectLoadMultipleSSTableScanMergeParam scan_merge_param;
     scan_merge_param.table_data_desc_ = param.table_data_desc_;
     scan_merge_param.datum_utils_ = param.datum_utils_;

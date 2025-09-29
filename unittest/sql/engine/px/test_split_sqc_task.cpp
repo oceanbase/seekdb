@@ -146,7 +146,7 @@ TEST_F(ObSplitSqcTaskTest, split_task_test) {
   }
 
   {
-    // 出现partition极端倾斜的时候，少partition的sqc是否能分到线程。
+    // When partition skew is extreme, can the sqc with fewer partitions be assigned to threads.
     int64_t parallel = 15;
     ObArray<int64_t> sqc_part_count;
     ObArray<int64_t> results;
@@ -169,7 +169,7 @@ TEST_F(ObSplitSqcTaskTest, split_task_test) {
   }
 
   {
-    // 出现partition极端倾斜的时候，少partition的sqc是否能分到线程。
+    // When partition skew is extreme, can the sqc with fewer partitions be assigned to threads.
     int64_t parallel = 203;
     ObArray<int64_t> sqc_part_count;
     ObArray<int64_t> results;
@@ -192,7 +192,7 @@ TEST_F(ObSplitSqcTaskTest, split_task_test) {
   }
 
   {
-    // 出现partition极端倾斜的时候，少partition的sqc是否能分到线程。
+    // When partition skew is extreme, can the sqc with fewer partitions be assigned to threads.
     int64_t parallel = 4;
     ObArray<int64_t> sqc_part_count;
     ObArray<int64_t> results;
@@ -215,7 +215,7 @@ TEST_F(ObSplitSqcTaskTest, split_task_test) {
   }
 
   {
-    // 出现partition极端倾斜的时候，少partition的sqc是否能分到线程。
+    // When partition skew is extreme, can the sqc with fewer partitions be assigned to threads.
     int64_t parallel = 4;
     ObArray<int64_t> sqc_part_count;
     ObArray<int64_t> results;
@@ -238,7 +238,7 @@ TEST_F(ObSplitSqcTaskTest, split_task_test) {
   }
 
   {
-    // parallel < sqc_count的时候，能否做到一个sqc一个线程。
+    // when parallel < sqc_count, can it be one thread per sqc.
     int64_t parallel = 1;
     ObArray<int64_t> sqc_part_count;
     ObArray<int64_t> results;
@@ -259,7 +259,7 @@ TEST_F(ObSplitSqcTaskTest, split_task_test) {
   }
 
   {
-    // 看看非法输入是否如预期一样报错
+    // See if illegal input throws an error as expected
     int64_t parallel = 1;
     ObArray<int64_t> sqc_part_count;
     ObArray<int64_t> results;
@@ -271,7 +271,7 @@ TEST_F(ObSplitSqcTaskTest, split_task_test) {
   }
 
   {
-    // 看看非法输入是否如预期一样报错
+    // See if illegal input throws an error as expected
     int64_t parallel = 0;
     ObArray<int64_t> sqc_part_count;
     ObArray<int64_t> results;

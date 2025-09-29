@@ -118,8 +118,7 @@ struct ObLSVTInfo
                K_(mv_safe_scn),
                K_(required_data_disk_size));
 };
-
-// 诊断虚表统计信息
+// Diagnose vtable statistics information
 struct DiagnoseInfo
 {
   DiagnoseInfo() { reset(); }

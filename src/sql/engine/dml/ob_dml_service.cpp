@@ -395,9 +395,9 @@ int ObDMLService::create_rowkey_check_hashset(int64_t estimate_row,
       int64_t match_rows = estimate_row > ObDMLBaseCtDef::MIN_ROWKEY_DISTINCT_BUCKET_NUM ?
                             estimate_row : ObDMLBaseCtDef::MIN_ROWKEY_DISTINCT_BUCKET_NUM;
       // 
-      // match_rows是优化器估行的结果，如果这个值很大，
-      // 直接创建有这么多bucket的hashmap会申请
-      // 不到内存，这里做了限制为64k，防止报内存不足的错误
+      // match_rows is the result of the optimizer's row estimation, if this value is very large,
+      // Directly creating a hashmap with so many buckets will allocate
+      // Not enough memory, here the limit is set to 64k to prevent out of memory errors
       const int64_t max_bucket_num = match_rows > ObDMLBaseCtDef::MAX_ROWKEY_DISTINCT_BUCKET_NUM ?
                               ObDMLBaseCtDef::MAX_ROWKEY_DISTINCT_BUCKET_NUM : match_rows;
       if (OB_FAIL(rowkey_dist_ctx->create(max_bucket_num,
@@ -2206,7 +2206,7 @@ int ObDMLService::parallel_submit_das_task(ObDMLRtCtx &dml_rtctx, ObDasAggregate
               K(dml_rtctx.get_das_task_memory_size()), K(dml_rtctx.get_das_parallel_task_size()));
     }
   } else if (dml_rtctx.das_ref_.get_parallel_type() == DAS_BLOCKING_PARALLEL) {
-    // 阻塞性提交，暂时不真正提交，但是会等到足够并行度的task数量才会真正全量提交
+    // Blocking submission, temporarily not committing, but will wait until there are enough parallel task numbers to truly submit all at once
     if (dml_rtctx.das_ref_.get_submitted_task_count() >= dml_rtctx.das_ref_.get_das_dop()) {
       LOG_INFO("submitted tasks reach dop", "submitted_cnt", dml_rtctx.das_ref_.get_submitted_task_count(),
           "das_dop", dml_rtctx.das_ref_.get_das_dop());
@@ -3003,8 +3003,7 @@ int ObDMLService::log_user_error_inner(
   }
   return ret;
 }
-
-// 找第一个发起fk cascading的祖先exec context。
+// Find the first ancestor exec context that initiates fk cascading.
 // The exec_ctx can be used to create hash set to perform duplicate rowkey check,
 // which is used to avoid delete or update same row mutiple times
 int ObDMLService::get_root_exec_ctx_for_fk_cascading(ObExecContext *ctx, ObExecContext* &needed_ctx)

@@ -176,8 +176,8 @@ int ObSMUtils::cell_str(
       case ObRawTC:
       case ObTextTC: // TODO@hanhui texttc share the stringtc temporarily
       case ObStringTC:
-      // lob locator也会按varchar方式进行encode, 客户端往server端传输数据时,
-      // 也是将lob locator按varchar传输, 先编码LobLocator length, 然后再编码整个lob Locator
+      // lob locator will also be encoded in a varchar manner, client sends data to the server,
+      // Also transmit the lob locator as varchar, first encode the LobLocator length, then encode the entire lob Locator
       case ObLobTC:
       case ObRoaringBitmapTC: {
         ret = ObMySQLUtil::varchar_cell_str(buf, len, obj.get_string(), is_oracle_raw, pos);

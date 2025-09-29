@@ -90,8 +90,7 @@ bool PalfTransportCompressOptions::is_valid() const
 {
   return !enable_transport_compress_ || (ObCompressorType::INVALID_COMPRESSOR != transport_compress_func_);
 }
-
-//为了使用时可以无锁,需要考虑修改顺序
+//To use without locking, the order of modification needs to be considered
 PalfTransportCompressOptions &PalfTransportCompressOptions::operator=(const PalfTransportCompressOptions &other)
 {
   if (!other.enable_transport_compress_) {

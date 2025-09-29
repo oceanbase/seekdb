@@ -213,7 +213,7 @@ public:
   }
 
 private:
-  //基础信息
+  //Basic information
   ObProcType proc_type_;
   uint64_t routine_id_;
   uint64_t package_id_;
@@ -224,7 +224,7 @@ private:
   uint64_t priv_user_;
   int64_t gmt_create_;
   ObPLDataType ret_type_;
-  int64_t arg_count_; //参数一定在符号表的最前面
+  int64_t arg_count_; //Parameters must be at the very front of the symbol table
   ObPLFlag flag_;
 
   DISALLOW_COPY_AND_ASSIGN(ObPLFunctionBase);
@@ -533,8 +533,8 @@ public:
                K_(stack_size));
 
 private:
-  //符号表信息
-  common::ObFixedArray<ObPLDataType, common::ObIAllocator> variables_; //根据ObPLSymbolTable的全局符号表生成，所有输入输出参数和PL体内使用的所有变量
+  //symbol table information
+  common::ObFixedArray<ObPLDataType, common::ObIAllocator> variables_; //Generated from the global symbol table of ObPLSymbolTable, all input and output parameters and all variables used within the PL body
   common::ObFixedArray<ObPLVarDebugInfo*, common::ObIAllocator> variables_debuginfo_;
   common::ObFixedArray<int64_t, common::ObIAllocator> default_idxs_;
   common::ObFixedArray<ObPLSqlInfo, common::ObIAllocator> sql_infos_;
@@ -621,10 +621,10 @@ public:
   void reset_obj_range_to_end(int64_t index);
   common::ObIArray<ObObj>& get_objects() { return objects_; }
 private:
-  // 用于收集在PL执行过程中使用到的Allocator,
-  // 有些数据的生命周期是整个执行期的, 所以不能在PL执行完成后马上释放, 如OUT参数
-  // 这里的Allocator需要保证由ObExecContext->allocator分配,
-  // 这样才能保证释放这里的allocator时指针是有效的
+  // Used to collect Allocators used during PL execution,
+  // Some data has a lifecycle for the entire execution period, so it cannot be released immediately after PL execution is complete, such as OUT parameters
+  // The Allocator here needs to ensure allocation by ObExecContext->allocator,
+  // This is to ensure that the pointer is valid when the allocator here is released
   ObSEArray<ObObj, 32> objects_;
 };
 
@@ -677,14 +677,14 @@ struct ObPLExecCtx : public ObPLINS
 
   common::ObIAllocator *allocator_;
   sql::ObExecContext *exec_ctx_;
-  ParamStore *params_; // param stroe, 对应PL Function的符号表
+  ParamStore *params_; // param store, corresponding to the symbol table of PL Function
   common::ObObj *result_;
-  int *status_; //PL里面的sql发生错误会直接抛出异常，走不到函数正常结束的返回值返回错误码，所以要在这里记录错误码
-  ObPLFunction *func_; // 对应该执行上下文的func_
-  bool in_function_; //记录当前是否在function中
+  int *status_; // SQL errors in PL will directly throw exceptions and will not reach the normal return value of the function to return an error code, so the error code needs to be recorded here
+  ObPLFunction *func_; // corresponds to the func_ of the context to be executed
+  bool in_function_; // Record whether the current state is inside a function
   ObPLContext *pl_ctx_; // for error stack
-  const common::ObIArray<int64_t> *nocopy_params_; //用于描述nocopy参数
-  ObPLPackageGuard *guard_; //对应该次执行的package_guard
+  const common::ObIArray<int64_t> *nocopy_params_; // used to describe nocopy parameters
+  ObPLPackageGuard *guard_; //corresponding package_guard for this execution
   ObArenaAllocator expr_alloc_;
 };
 
@@ -832,7 +832,7 @@ public:
 private:
 private:
   ObPLFunction &func_;
-  sql::ObPhysicalPlanCtx phy_plan_ctx_; //运行态的param值放在这里面，跟ObPLFunction里的variables_一一对应，初始化的时候需要设置default值
+  sql::ObPhysicalPlanCtx phy_plan_ctx_; //The runtime param values are stored here, corresponding one-to-one with variables_ in ObPLFunction, default values need to be set during initialization
   sql::ObEvalCtx eval_ctx_;
   common::ObObj &result_;
   ObPLExecCtx ctx_;
@@ -1070,16 +1070,16 @@ struct PlTransformTreeCtx
 {
   ObIAllocator *allocator_;
   ParamStore *params_;
-  char *buf_; // 反拼后的参数化字符串
+  char *buf_; // parameterized string after reverse concatenation
   int64_t buf_len_;
   int64_t buf_size_;
-  ObString raw_sql_; // 原始匿名块字符串
-  int64_t raw_anonymous_off_; // 原始匿名块相对于用户输入首字符的偏移, 解决单个分隔符内存在多个sql场景
-  ObString raw_sql_or_expr_; // 匿名块内部单个expr或者sql原始字符串
-  ObString no_param_sql_; // 匿名块内部单个expr或者sql对应的fast parser后字符串
+  ObString raw_sql_; // original anonymous block string
+  int64_t raw_anonymous_off_; // The offset of the original anonymous block relative to the first character of user input, solving the scenario where multiple SQL statements exist within a single delimiter
+  ObString raw_sql_or_expr_; // Raw string of a single expr or sql inside an anonymous block
+  ObString no_param_sql_; // fast parser string corresponding to a single expr or sql inside the anonymous block
   int64_t copied_idx_;
-  ParamList *p_list_; // 存储匿名块内部所有expr和sql语句fast parser后得到的raw param node
-  int64_t raw_param_num_; // 匿名块内部单个expr或者sql fast parser后raw param node的个数, 每个expr和sql fast parser后, 会将param num存储在node节点中
+  ParamList *p_list_; // Store all expr and sql statement raw param nodes obtained after fast parsing inside the anonymous block
+  int64_t raw_param_num_; // The number of raw param nodes for a single expr or SQL after fast parsing within an anonymous block, the param num will be stored in the node after each expr and SQL fast parsing
   bool is_ps_mode_;
   int64_t total_param_nums_;
   ObPlanCacheCtx *ps_pc_ctx_;

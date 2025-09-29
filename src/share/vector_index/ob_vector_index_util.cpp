@@ -31,7 +31,7 @@ using namespace common;
 namespace share
 {
 /*
-  预期 index_param_str 是大写的字串
+  Expect index_param_str to be an uppercase string
 */
 int ObVectorIndexUtil::parser_params_from_string(
     const ObString &index_param_str, ObVectorIndexType index_type, ObVectorIndexParam &param, const bool set_default)
@@ -1118,7 +1118,7 @@ int ObVectorIndexUtil::get_extra_info_column_id(
 }
 
 /*
-  目前只支持单列向量索引。
+  Currently only supports single column vector indexing.
  */
 int ObVectorIndexUtil::get_vector_dim_from_extend_type_info(const ObIArray<ObString> &extend_type_info, int64_t &dim)
 {
@@ -1149,7 +1149,7 @@ int ObVectorIndexUtil::get_vector_dim_from_extend_type_info(const ObIArray<ObStr
 }
 
 /*
-  目前只支持单列向量索引。
+  Currently only supports single column vector indexing.
  */
  int ObVectorIndexUtil::is_sparse_vec_col(const ObIArray<ObString> &extend_type_info, bool &is_sparse_vec_col)
  {
@@ -3791,9 +3791,9 @@ int ObVectorIndexUtil::check_vector_index_by_column_name(
 }
 
 /*
-  1. hnsw索引的vector列是持久化列，可以从该colum_schema获取cascaded column，从而获取到索引列名字
-  2. ivf索引的centroid列是持久化列，可以从该column_schema中获取cascaded column，从而获取到索引列名字
-  3. 目前只支持单列向量索引,返回的col_names.count=1
+  1. The vector column of the hnsw index is a persistent column, and the cascaded column can be obtained from this column_schema to get the index column name
+  2. The centroid column of the ivf index is a persistent column, and the cascaded column can be obtained from this column_schema to get the index column name
+  3. Currently, only single-column vector indexing is supported, so col_names.count=1
 */
 int ObVectorIndexUtil::get_vector_index_column_name(
     const ObTableSchema &data_table_schema, const ObTableSchema &index_table_schema, ObIArray<ObString> &col_names)
@@ -3978,12 +3978,12 @@ int ObVectorIndexUtil::get_dropping_vec_index_invisiable_table_schema(
             LOG_WARN("fail to push vec vid rowkey table schema", K(ret), KPC(vid_rowkey_schema));
           }
         } else if (share::schema::is_vec_index_id_type(info.index_type_)) {
-          // 通过索引名获取4号表
+          // Get table 4 by index name
           if (!check_is_match_index_type(index_table_schema.get_index_type(), info.index_type_)) { // skip getting diff index type 
           } else if (already_get_index_id_table) {
-          // 主表可能存在多个4号表，但这里只取满足index_name字串的4号表, 
-          // 如果不判断已经拿到了，那么循环时会从主表上拿多次同样的index_schema，不符合预期，这里需要skip。
-          // 下面对其他表的获取类似
+          // The main table may contain multiple table 4s, but here we only take the table 4 that satisfies the index_name string,
+          // If we do not check if it has already been obtained, then during the loop, it will fetch the same index_schema from the main table multiple times, which does not meet the expectation. Here, we need to skip.
+          // The acquisition of other tables is similar below
           } else if (OB_FAIL(ObVecIndexBuilderUtil::get_vec_table_schema_by_name(schema_guard,
                                                                                  tenant_id,
                                                                                  database_id,
@@ -4001,7 +4001,7 @@ int ObVectorIndexUtil::get_dropping_vec_index_invisiable_table_schema(
             already_get_index_id_table = true;
           }
         } else if (share::schema::is_vec_index_snapshot_data_type(info.index_type_)) {
-          // 通过索引名获取5号表
+          // Get table 5 by index name
           if (!check_is_match_index_type(index_table_schema.get_index_type(), info.index_type_)) { // skip getting diff index type 
           } else if (already_get_snapshot_data_table) {   // skip
           } else if (OB_FAIL(ObVecIndexBuilderUtil::get_vec_table_schema_by_name(schema_guard,

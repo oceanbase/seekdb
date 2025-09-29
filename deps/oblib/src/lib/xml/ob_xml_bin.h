@@ -220,8 +220,7 @@ struct ObXmlDocBinHeader {
       uint16_t reserved_ : 9;
     };
   };
-
-  // 如果is_prefix, is_standalone_, is_encoding_是0, 则不会序列化相应的成员
+  // If is_prefix, is_standalone_, is_encoding_ is 0, then the corresponding members will not be serialized
   uint8_t version_len_;
   uint8_t encode_len_;
   uint16_t standalone_;

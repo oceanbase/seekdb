@@ -39,8 +39,7 @@ public:
   static int deep_copy_str(common::ObIAllocator &allocator,
                            const common::ObString &src,
                            common::ObString &dst);
-  
-  // 获取某个ObPsStmtItem/ObPsStmtInfo对象占用内存
+  // Get the memory occupied by a certain ObPsStmtItem/ObPsStmtInfo object
   template<typename T>
   static int get_var_mem_total(const T &t, int64_t &size);
 };

@@ -1011,7 +1011,7 @@ int64_t ObObjectManager::get_max_macro_block_count(int64_t reserved_size) const
   if (!is_shared_storage_) {
     block_count = OB_SERVER_BLOCK_MGR.get_max_macro_block_count(reserved_size);
   } else {
-    block_count = 1000000; // TODO(fenggu.yh  临时代码
+    block_count = 1000000; // TODO(fenggu.yh  temporary code
   }
   return block_count;
 }
@@ -1022,7 +1022,7 @@ int64_t ObObjectManager::get_used_macro_block_count() const
   if (!is_shared_storage_) {
     block_count = OB_SERVER_BLOCK_MGR.get_used_macro_block_count();
   } else {
-    block_count = 1000; // TODO(fenggu.yh) 临时代码
+    block_count = 1000; // TODO(fenggu.yh) temporary code
   }
   return block_count;
 }
@@ -1033,7 +1033,7 @@ int64_t ObObjectManager::get_free_macro_block_count() const
   if (!is_shared_storage_) {
     block_count = OB_SERVER_BLOCK_MGR.get_free_macro_block_count();
   } else {
-    block_count = 1000000; // TODO(fenggu.yh) 临时代码
+    block_count = 1000000; // TODO(fenggu.yh) temporary code
   }
   return block_count;
 }

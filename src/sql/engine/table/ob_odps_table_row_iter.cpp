@@ -211,8 +211,8 @@ int ObODPSTableRowIterator::init(const storage::ObTableScanParam *scan_param)
       }
     }
   }
-  // 如果成功的话revert析构
-  // 如果失败的话析构函数析构
+  // If successful revert destruction
+  // If failed, the destructor will destruct
   return ret;
 }
 
@@ -1149,7 +1149,7 @@ int ObODPSTableRowIterator::decode_odps_array(std::shared_ptr<apsara::odps::sdk:
           LOG_WARN("get unexpected null", KP(helper.child_helper_));
         } else if (OB_FAIL(decode_odps_array(odps_child_array, *helper.child_helper_))) {
           LOG_WARN("failed to print child array info");
-        // 这个init函数需要在child_array中的元素已经填充完毕后调用，即在child_decoder->decode之后调用。否则无法正确初始化类成员。
+        // This init function needs to be called after the elements in child_array have been filled, i.e., after child_decoder->decode. Otherwise, the class members cannot be initialized correctly.
         } else if (OB_FAIL(helper.child_helper_->array_->init())) {
           LOG_WARN("failed to init child array");
         } else if (OB_FAIL(nested_array->push_back(*helper.child_helper_->array_))) {
@@ -1795,7 +1795,7 @@ int ObODPSTableRowIterator::get_next_row()
       } while (OB_SUCC(ret) && OB_SUCC(THIS_WORKER.check_status()) && need_retry);
     }
   }
-  // 这里不能隐含假设：返回OB_ITER_END的时候不返回数据
+  // Here we cannot implicitly assume: when returning OB_ITER_END no data is returned
   OZ(calc_exprs_for_rowid(1));
   return ret;
 }
@@ -2752,7 +2752,7 @@ int ObOdpsPartitionDownloaderMgr::commit_upload()
         uploader->record_writer_->Close();
         blocks.push_back(block_id);
         block_id++;
-        // 所有线程都成功才commit
+        // All threads must succeed before commit
         if (block_id == task_count && true == ATOMIC_LOAD(&need_commit_)) {
           uploader->upload_->Commit(blocks);
         }

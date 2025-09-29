@@ -150,7 +150,7 @@ int ObValuesTableAccessOp::get_real_src_obj_type(const int64_t row_idx,
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("invalid param idx", K(ret), K(param_idx));
     } else if (plan_ctx->get_param_store().at(param_idx).is_ext_sql_array()) {
-      // 如果是is_ext_sql_array的参数
+      // If the parameter is is_ext_sql_array
       if (OB_ISNULL(array_obj = reinterpret_cast<const ObSqlArrayObj*>(
                                             plan_ctx->get_param_store().at(param_idx).get_ext()))) {
         ret = OB_ERR_UNEXPECTED;

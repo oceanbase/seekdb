@@ -712,8 +712,7 @@ int ObSql::fill_select_result_set(ObResultSet &result_set, ObSqlCtx *context, co
           LOG_WARN("get length failed", K(ret), KPC(expr));
         }
       }
-
-      // SELECT ITEM的alias name和expr name规则举例：
+      // SELECT ITEM's alias name and expr name rule examples:
       // SELECT field1+field2 AS f1, field1+3, "thanks", field2 AS f2, field3, "hello" as f4, field1+4 as f5 FROM t1
       // "is_alias":true,  "alias_name":"f1", "expr_name":"f1"
       // "is_alias":false, "alias_name":"", "expr_name":"field1+3"
@@ -843,7 +842,7 @@ int ObSql::fill_select_result_set(ObResultSet &result_set, ObSqlCtx *context, co
             field.paramed_ctx_->neg_param_idxs_ = select_item.neg_param_idx_;
             field.paramed_ctx_->esc_str_flag_ = select_item.esc_str_flag_;
             field.paramed_ctx_->need_check_dup_name_ = select_item.need_check_dup_name_;
-            // 如果投影列是一个column
+            // If the projection column is a column
             field.paramed_ctx_->is_column_field_ = (T_REF_COLUMN == expr->get_expr_type());
             field.is_paramed_select_item_ = true;
           }
@@ -966,7 +965,7 @@ int ObSql::do_add_ps_cache(const PsCacheInfoCtx &info_ctx,
       if (NULL != ps_stmt_item) {
         if (NULL != ref_stmt_info) {
           ObPsStmtId inner_stmt_id = ps_stmt_item->get_ps_stmt_id();
-          ps_cache->deref_stmt_info(inner_stmt_id); //需要决定是否摘除
+          ps_cache->deref_stmt_info(inner_stmt_id); // need to decide whether to remove
         }
         ps_stmt_item->dec_ref_count();
       }
@@ -1202,10 +1201,10 @@ int ObSql::do_real_prepare(const ObString &sql,
     } else {
       param_cnt = result.get_param_fields()->count();
       stmt_type = basic_stmt->get_stmt_type();
-      //如果是内部sql, 比如pl内部sql, 需要使用格式化后的文本串,
-      //因为需要将pl中sql的变量替换为标准的ps文本进行硬解析
-      //而外部请求的ps文本不能格式化, 因为在解析ps execute包时需要进行checksum校验,
-      //需要确保prepare的文本与客户端发过来的一致
+      // If it is internal sql, such as pl internal sql, need to use the formatted text string,
+      // Because need to replace the variables in sql of pl with standard ps text for hard parsing
+      // and the ps text of external requests cannot be formatted, because checksum verification is required when parsing the ps execute package,
+      // Need to ensure the prepare text is consistent with what the client sends
       if (is_inner_sql) {
         // pl
         info_ctx.normalized_sql_ = basic_stmt->get_query_ctx()->get_sql_stmt();
@@ -1287,9 +1286,9 @@ int ObSql::set_timeout_for_pl(ObSQLSessionInfo &session_info, int64_t &abs_timeo
 }
 
 /*
- * sql: pl 中的 sql 语句
- * PLPrepareCtx: prepare 用到的相关信息
- * PLPrepareResult: prepare 后的输出结果
+ * sql: sql statement in pl
+ * PLPrepareCtx: relevant information used for prepare
+ * PLPrepareResult: output result after prepare
  */
 
 int ObSql::handle_pl_prepare(const ObString &sql,
@@ -1544,9 +1543,9 @@ int ObSql::handle_sql_execute(const ObString &sql,
 }
 
 /*!
- * sql: 需要被执行的sql语句
- * params: 当前sql语句的参数列表
- * res: 直接结果集
+ * sql: The SQL statement to be executed
+ * params: The parameter list for the current SQL statement
+ * res: Direct result set
  */
 // TODO remove is_prepare_protocol and is_dynamic_sql
 int ObSql::handle_pl_execute(const ObString &sql,
@@ -1622,7 +1621,7 @@ int ObSql::handle_pl_execute(const ObString &sql,
   if (OB_FAIL(ret) && OB_SUCCESS == result.get_errcode()) {
     result.set_errcode(ret);
   }
-  //todo:@hr351303下面的逻辑后续挪到spi层
+  //todo:@hr351303 the logic below will be moved to the spi layer later
   if (OB_SUCC(ret)) {
     if (OB_ISNULL(context.schema_guard_)) {
       ret = OB_ERR_UNEXPECTED;
@@ -1656,7 +1655,7 @@ int ObSql::handle_ps_prepare(const ObString &stmt,
 #define NEED_CHECK_SESS_MAX_PS_HANDLE_LIMIT(v) (0 == v ? false : true)
   int ret = OB_SUCCESS;
   ObString cur_query;
-  // trimed_stmt仅用于query empty检查, prepare语句需要用原始语句, 避免checksum不一致
+  // trimmed_stmt is only used for query empty check, prepare statement needs to use the original statement, avoid checksum inconsistency
   ObString trimed_stmt = const_cast<ObString &>(stmt).trim();
   if (trimed_stmt.empty()) {
     ret = OB_ERR_EMPTY_QUERY;
@@ -1722,7 +1721,7 @@ int ObSql::handle_ps_prepare(const ObString &stmt,
         LOG_WARN("exceeds the maximum number of ps handles allowed to open on the session",
         K(ret), K(cur_ps_handle_size), K(open_cursors_limit));
       } else if (NULL != context.secondary_namespace_ || result.is_simple_ps_protocol()) {
-        // pl发起的sql解析, 由于每次需要计算依赖对象等额外参数, 因此需要做do_real_prepare
+        // pl initiated sql parsing, since each time it needs to calculate dependent objects and other extra parameters, therefore do_real_prepare needs to be done
         need_do_real_prepare = true;
         if (REACH_TIME_INTERVAL(1000000)) {
           LOG_INFO("need do real prepare",
@@ -1783,7 +1782,7 @@ int ObSql::handle_ps_prepare(const ObString &stmt,
                                                 is_inner_sql))) {
         LOG_WARN("add ps session info failed", K(ret), K(inner_stmt_id), K(client_stmt_id));
       } else if (OB_FAIL(fill_result_set(client_stmt_id, *stmt_info, result))) {
-        //prepare ps stmt已成功，失败此处需close
+        // prepare ps stmt succeeded, failure here requires close
         IGNORE_RETURN session.close_ps_stmt(client_stmt_id);
         LOG_WARN("fill result set failed", K(ret), K(client_stmt_id));
       }
@@ -1795,7 +1794,7 @@ int ObSql::handle_ps_prepare(const ObString &stmt,
           stmt_item->dec_ref_count();
         }
         if (NULL != stmt_info) {
-          ps_cache->deref_stmt_info(inner_stmt_id); //需要决定是否摘除
+          ps_cache->deref_stmt_info(inner_stmt_id); // need to decide whether to remove
         }
       }
       if (OB_SUCC(ret) && need_do_real_prepare) {
@@ -1809,9 +1808,9 @@ int ObSql::handle_ps_prepare(const ObString &stmt,
         if (false == need_do_real_prepare) {
           ps_cache->inc_access_and_hit_count();
         } else {
-          // 没有命中ps cache的情况下，只增加access count
-          // 这里的判断逻辑会导致pl每次prepare都只是增加access count，不增加hit_count
-          // 所以从ps相关虚拟表中看到的ps cache命中率会比较低
+          // Without hitting ps cache, only increase access count
+          // The judgment logic here will cause pl to only increase the access count, not the hit_count, every prepare
+          // So the ps cache hit rate seen from the ps related virtual tables will be relatively low
           ps_cache->inc_access_count();
         }
       }
@@ -2332,7 +2331,7 @@ int ObSql::handle_ps_execute(const ObPsStmtId client_stmt_id,
             false /*is_begin_commit_stmt*/, PC_PS_MODE))) {
           LOG_WARN("generate physical plan failed", K(ret),
                    "sql", context.is_sensitive_ ? ObString(OB_MASKED_STR) : sql, K(stmt_type));
-        } // TODO 生成物理计划的路径可x需q区分
+        } // TODO Generate the path for physical plan distinction
       }
     }
   }
@@ -2391,9 +2390,9 @@ int ObSql::handle_remote_query(const ObRemoteSqlInfo &remote_sql_info,
                                          tenant_id);
     pc_ctx->is_remote_executor_ = true;
     if (remote_sql_info.use_ps_) {
-      //由于现在ps模式和普通的文本协议的执行计划不能复用，因此这里需要区分，避免在查询plan的时候引起一些问题
-      //由于普通的文本协议key_id是OB_INVALID_ID,因此这里使用key_id=0+name=参数化SQL的方式来区分
-      //@todo: shengle 普通的ps协议和文本协议的计划共享也存在同样的问题，这里需要统一解决一下
+      // Since the execution plan for ps mode and the ordinary text protocol cannot be reused, it is necessary to distinguish between them here to avoid some issues when querying the plan
+      // Since the key_id of the ordinary text protocol is OB_INVALID_ID, therefore, here we use key_id=0+name=parameterized SQL to distinguish
+      //@todo: shengle The ordinary ps protocol and text protocol plan sharing also have the same issue, here we need to solve it uniformly
       context.is_prepare_protocol_ = remote_sql_info.use_ps_;
       context.bl_key_.db_id_ = session->get_database_id();
       pc_ctx->fp_result_.pc_key_.key_id_ = 0;
@@ -2407,8 +2406,8 @@ int ObSql::handle_remote_query(const ObRemoteSqlInfo &remote_sql_info,
         LOG_WARN("construct parameterized params failed", K(ret));
       }
     } else if (remote_sql_info.is_batched_stmt_) {
-      //这里保持跟控制端一致，如果是batched stmt,需要先做一次parser的切分
-      //切割出来的query最后走batched multi stmt的逻辑去查询plan cache和生成计划
+      // Here keep consistent with the control end, if it is batched stmt, need to do a parser split first
+      // The cut-out query will eventually go through the batched multi-stmt logic to query the plan cache and generate the plan
       ObParser parser(allocator,
                       session->get_sql_mode(),
                       session->get_charsets4parser(),
@@ -2444,20 +2443,20 @@ int ObSql::handle_remote_query(const ObRemoteSqlInfo &remote_sql_info,
           tmp_guard.init(pc_ctx->handle_id_);
           guard.swap(tmp_guard);
         } else {
-          //如果从plan cache中选择出来的plan不是local执行计划，说明不是remote sql想要的plan
-          //需要丢弃重新生成新的local plan
+          // If the plan selected from the plan cache is not a local execution plan, it means it is not the plan wanted by the remote SQL
+          // Need to discard and regenerate a new local plan
           is_from_plan_cache = false;
         }
       }
     }
   }
 
-  if (OB_SUCC(ret) && !is_from_plan_cache) { //没有从plan cache中拿到plan, 走长路径生成plan
-    //只需要plan，不需要其它信息，因此构造一个临时的result set
+  if (OB_SUCC(ret) && !is_from_plan_cache) { // did not get plan from plan cache, take the long path to generate plan
+    // Only need plan, no other information required, therefore construct a temporary result set
     SMART_VAR(ObResultSet, tmp_result, *session, allocator) {
       tmp_result.set_exec_context(exec_ctx);
-      //经过plan cache的计算后，param_store里的值可能会增加，因为plan cache中会执行pre calculation
-      //这里要再进行计划生成，需要把plan cache中pre calculation加入的param清除掉
+      // After calculation by plan cache, the value in param_store may increase because pre calculation will be executed in plan cache
+      // Here we need to regenerate the plan, requiring the param added by pre calculation in the plan cache to be cleared
       int64_t initial_param_count = pc_ctx->fp_result_.parameterized_params_.count();
       for (int64_t i = remote_sql_info.ps_params_->count(); i > initial_param_count; --i) {
         remote_sql_info.ps_params_->pop_back();
@@ -2493,7 +2492,7 @@ int ObSql::handle_remote_query(const ObRemoteSqlInfo &remote_sql_info,
     plan = static_cast<ObPhysicalPlan*>(guard.get_cache_obj());
     if (OB_ISNULL(plan)) {
     } else if (OB_UNLIKELY(!plan->is_local_plan())) {
-      //不是本地计划，控制端发送错误，返回错误码进行重试
+      // Not a local plan, control end sends an error, return error code for retry
       ret = OB_LOCATION_NOT_EXIST;
       LOG_WARN("plan type is invalid", K(remote_sql_info), KPC(plan));
     } else if (OB_FAIL(after_get_plan(*pc_ctx,
@@ -2506,8 +2505,8 @@ int ObSql::handle_remote_query(const ObRemoteSqlInfo &remote_sql_info,
     }
   }
   LOG_DEBUG("get remote plan", K(ret), K(is_from_plan_cache), KPC(plan));
-  //清空掉warning buffer，因为生成执行计划的warning buffer都在控制端记录下来，这里不需要再记录
-  //不然会导致warning消息重复
+  // Clear the warning buffer, because the warning buffer for generating the execution plan is recorded on the control side, so there is no need to record it here
+  // Otherwise it will cause duplicate warning messages
   ob_reset_tsi_warning_buffer();
   if (NULL != pc_ctx) {
     pc_ctx->~ObPlanCacheCtx();
@@ -2529,7 +2528,7 @@ OB_INLINE int ObSql::handle_text_query(const ObString &stmt, ObSqlCtx &context, 
     ret = OB_ERR_EMPTY_QUERY;
     LOG_WARN("query is empty", K(ret));
     LOG_USER_ERROR(OB_ERR_EMPTY_QUERY);
-    // 空请求，可以归类到parser的已知错误，不需要断连接
+    // Empty request, can be categorized as a known error of parser, no need to disconnect
     result.get_exec_context().set_need_disconnect(false);
     //FIXME qianfu NG_TRACE_EXT(set_need_disconnect, OB_ID(need_disconnect), false);
   }
@@ -2572,7 +2571,7 @@ OB_INLINE int ObSql::handle_text_query(const ObString &stmt, ObSqlCtx &context, 
                                          ectx,
                                          tenant_id);
     if (trimed_stmt.length() == 6) {
-      //是否为COMMIT语句
+      // Whether it is a COMMIT statement
       is_begin_commit_stmt = (0 == STRNCASECMP(trimed_stmt.ptr(), "commit", 6)
                               && !context.is_batch_params_execute());
     } else if (trimed_stmt.length() == 5) {
@@ -2580,7 +2579,7 @@ OB_INLINE int ObSql::handle_text_query(const ObString &stmt, ObSqlCtx &context, 
                               && !context.is_batch_params_execute());
     }
     if (is_begin_commit_stmt) {
-      //记录当前语句是begin/commit 语句，用于性能优化
+      // Record current statement is begin/commit statement, used for performance optimization
       pc_ctx->set_begin_commit_stmt();
     }
     uint64_t database_id = OB_INVALID_ID;
@@ -2597,7 +2596,7 @@ OB_INLINE int ObSql::handle_text_query(const ObString &stmt, ObSqlCtx &context, 
         ret = OB_BATCHED_MULTI_STMT_ROLLBACK;
         LOG_WARN("batched multi_stmt needs rollback");
       }
-      // 如果是begin/commit语句，不再从plan cache中获取plan
+      // If it is a begin/commit statement, do not get the plan from the plan cache
     } else if (!is_begin_commit_stmt
         && OB_FAIL(pc_get_plan_and_fill_result(*pc_ctx, result, get_plan_err,
                                                ectx.get_need_disconnect_for_update()))) {
@@ -2614,7 +2613,7 @@ OB_INLINE int ObSql::handle_text_query(const ObString &stmt, ObSqlCtx &context, 
                                     ectx))) {
     //do nothing
   }
-  if (OB_SUCC(ret) && !result.get_is_from_plan_cache()) { //没有从plan cache中拿到plan, 走长路径生成plan
+  if (OB_SUCC(ret) && !result.get_is_from_plan_cache()) { // did not get plan from plan cache, take the long path to generate plan
     if (OB_FAIL(handle_physical_plan(trimed_stmt, context, result, *pc_ctx, get_plan_err))) {
       if (OB_ERR_PROXY_REROUTE == ret) {
         LOG_DEBUG("fail to handle physical plan", K(ret));
@@ -2666,7 +2665,7 @@ OB_NOINLINE int ObSql::handle_large_query(int tmp_ret,
     int64_t total_process_time = 0;
     int64_t exec_times = 0;
     ObPhysicalPlan *plan = NULL;
-    //用来自plan cache的plan预判是否为大请求
+    // Use plan from plan cache to predict if it's a large request
     if (result.get_is_from_plan_cache()) {
       if (OB_ISNULL(plan = result.get_physical_plan())) {
         ret = OB_INVALID_ARGUMENT;
@@ -2682,7 +2681,7 @@ OB_NOINLINE int ObSql::handle_large_query(int tmp_ret,
         }
       }
     }
-    //实际编译时间判断是否为大请求
+    // Actual compilation time judgment whether it is a large request
     if (OB_SUCC(ret) && is_large_query == false) {
       if (0 != lqt && elapsed_time > lqt) {
         is_large_query = true;
@@ -2730,7 +2729,7 @@ int ObSql::generate_stmt(ParseResult &parse_result,
     if (result.get_session().get_session_type() != ObSQLSessionInfo::INNER_SESSION) {
       session_id = result.get_session().get_sessid_for_table();
     } else {
-      session_id = OB_INVALID_ID; //内部session, 不受table_schema->session_id的可见性影响, 能看到查询建表过程中的表
+      session_id = OB_INVALID_ID; // internal session, not affected by table_schema->session_id visibility, can see tables during query and table creation process
     }
     schema_checker = OB_NEWx(ObSchemaChecker, (&allocator));
     if (OB_UNLIKELY(NULL == schema_checker)) {
@@ -2810,7 +2809,7 @@ int ObSql::generate_stmt(ParseResult &parse_result,
 
   if (OB_FAIL(ret)) {
   } else if (stmt::T_ANONYMOUS_BLOCK == context.stmt_type_ && context.is_prepare_protocol_ && !context.is_prepare_stage_) {
-    //anonymous + ps在execute阶段不会做parser, 因此不应该检查parser_result
+    // anonymous + ps will not do parser in execute stage, therefore should not check parser_result
     //do nothing...
   } else if (OB_ISNULL(parse_result.result_tree_)
         || OB_ISNULL(parse_result.result_tree_->children_)
@@ -2906,8 +2905,8 @@ int ObSql::generate_stmt(ParseResult &parse_result,
         // process stmt
         if (NULL != stmt && NULL != resolver_ctx.query_ctx_) {
           SQL_LOG(DEBUG, "SET STMT PARAM COUNT", K(resolver.get_params().prepare_param_count_), K(&resolver_ctx));
-          //secondary_namespace_不为空，说明是PL里sql的prepare阶段
-          //带有returning子句的动态sql也需要rebuild,用来去除into子句
+          // secondary_namespace_ is not empty, indicating that it is the prepare stage of sql in PL
+          // Dynamic SQL with a returning clause also needs to be rebuilt, used to remove the into clause
           //pl context not null indicate PL dynamic sql, only need rebuild PL dynamic sql
           bool in_pl = NULL != resolver_ctx.secondary_namespace_
             || (resolver_ctx.is_dynamic_sql_ && OB_NOT_NULL(result.get_session().get_pl_context()))
@@ -2940,7 +2939,7 @@ int ObSql::generate_stmt(ParseResult &parse_result,
                 int64_t return_into_num = static_cast<ObDelUpdStmt&>(*stmt).get_returning_into_exprs().count();
                 resolver_ctx.query_ctx_->set_prepare_param_count(parse_result.question_mark_ctx_.count_- return_into_num);
               } else {
-                // 对于oracle模式下pl内部的sql语句，到resolver完成后才能确定具体的prepare_param_count_
+                // For SQL statements within PL in Oracle mode, the specific prepare_param_count_ can only be determined after resolver completion
                 resolver_ctx.query_ctx_->set_prepare_param_count(resolver.get_params().prepare_param_count_);
               }
             }
@@ -3024,7 +3023,7 @@ int ObSql::generate_physical_plan(ParseResult &parse_result,
   } else if (OB_ISNULL(basic_stmt)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("Generate stmt success, but stmt is NULL", K(ret));
-    // begin/commit 语句不需要检查privilege
+    // begin/commit statement does not need to check privilege
   } else if (!is_begin_commit_stmt
           && OB_FAIL(ObPrivilegeCheck::check_privilege_new(sql_ctx,
                                                            basic_stmt,
@@ -3161,12 +3160,11 @@ int ObSql::generate_plan(ParseResult &parse_result,
 
     ObLogPlan *logical_plan = NULL;
     ObPhysicalPlan *phy_plan = NULL;
-
-    // 内部session切租户时资源处理分离不彻底
-    // 当用户请求发送到一个没有对应租户资源的server上时，plan 内存算在了普通租户上，
-    // 但是计划挂在了sys租户的plan cache下面，导致plan_cache_stat表数据统计异常，
-    // 出现疑似内存泄漏实际上却没有泄漏的情况。这里处理为直接从plan cache
-    // 中取tenant id，这样计划分配的资源就算在了plan cache所对应的租户上
+    // Internal session tenant switch resource handling separation is not thorough
+    // When the user request is sent to a server without corresponding tenant resources, the plan memory is counted on the regular tenant,
+    // But the plan was hung under the sys tenant's plan cache, leading to abnormal data statistics in the plan_cache_stat table,
+    // Occurs when there appears to be a memory leak but there actually isn't. Here we handle it by directly fetching from plan cache
+    // Get tenant id, so that the resources allocated by the plan are counted under the corresponding tenant of the plan cache
     if (OB_NOT_NULL(result.get_session().get_plan_cache())) {
       effective_tid = result.get_session().get_plan_cache()->get_tenant_id();
     }
@@ -3438,10 +3436,8 @@ int ObSql::prepare_outline_for_phy_plan(ObLogPlan *logical_plan,
   }
   return ret;
 }
-
-// stmt 全量 const folding.
-
-// 为了改写层 const folding 抽出来的函数
+// stmt full const folding.
+// To rewrite layer const folding extracted function
 int ObSql::calc_pre_calculable_exprs(
     ObIArray<ObHiddenColumnItem> &calculable_exprs,
     ObExecContext &exec_ctx,
@@ -3656,7 +3652,7 @@ int ObSql::code_generate(
     if (OB_FAIL(code_generator.generate(*logical_plan, *phy_plan))) {
       LOG_WARN("Failed to generate physical plan", KPC(logical_plan), K(ret));
     } else {
-      //session上的ignore_stmt状态给CG使用，在CG结束后需要清空掉
+      // session's ignore_stmt status for CG use, needs to be cleared after CG ends
       sql_ctx.session_info_->set_ignore_stmt(false);
       LOG_DEBUG("phy plan", K(*phy_plan));
       phy_plan->stat_.is_use_jit_ = use_jit;
@@ -3941,23 +3937,23 @@ int ObSql::pc_get_plan(ObPlanCacheCtx &pc_ctx,
           ret = OB_SUCCESS;
         }
       } else {
-        ret = OB_SUCCESS; //get plan出错, 覆盖错误码, 确保因plan cache的错误不影响正常执行路径
+        ret = OB_SUCCESS; // get plan error, cover error code, ensure that errors from plan cache do not affect the normal execution path
       }
     }
-  } else { //get plan 成功
+  } else { // get plan successfully
     plan_cache->inc_hit_and_access_cnt();
     ObPhysicalPlan* plan = static_cast<ObPhysicalPlan*>(guard.get_cache_obj());
     if (OB_ISNULL(plan)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("fail to get plan cache");
     } else {
-      // 命中了plan cache，则不可能是commit或rollback语句，默认不断连接
+      // Hit the plan cache, then it cannot be a commit or rollback statement, default to keep connecting
       need_disconnect = false;
       //FIXME qianfu NG_TRACE_EXT(set_need_disconnect, OB_ID(need_disconnect), false);
       pc_ctx.sql_ctx_.plan_cache_hit_ = true;
-      //极限性能场景下(perf_event=true)，不再校验权限信息
+      // In extreme performance scenarios (perf_event=true), permission information is no longer validated
       if (OB_SUCC(ret) && !pc_ctx.sql_ctx_.is_remote_sql_ && GCONF.enable_perf_event) {
-        //如果是remote sql第二次重入plan cache，不需要再做权限检查，因为在第一次进入plan cache已经检查过了
+        // If it is the second entry of remote SQL into plan cache, no need to do permission check again, because it has already been checked during the first entry into plan cache
         if (OB_FAIL(ObPrivilegeCheck::check_read_only(pc_ctx.sql_ctx_, plan->get_stmt_type(), false,
                                                       plan->get_stmt_need_privs()))) {
           LOG_WARN("database or table is read only, cannot execute this stmt");
@@ -3987,7 +3983,7 @@ int ObSql::pc_get_plan(ObPlanCacheCtx &pc_ctx,
   FLT_SET_TAG(hit_plan, pc_ctx.sql_ctx_.plan_cache_hit_);
   if (OB_ERR_PROXY_REROUTE == ret || OB_REACH_MAX_CONCURRENT_NUM == ret || OB_REACH_MAX_CCL_CONCURRENT_NUM == ret
       || OB_NEED_SWITCH_CONSUMER_GROUP == ret) {
-    // 如果sql需要二次路由，不应该断连接
+    // If sql needs secondary routing, the connection should not be closed
     need_disconnect = false;
   }
   return ret;
@@ -4191,7 +4187,7 @@ int ObSql::parser_and_check(const ObString &outlined_stmt,
     }
     pc_ctx.sql_ctx_.is_sensitive_ |= parse_result.contain_sensitive_data_;
     if (OB_SUCC(ret)) {
-      // parser返回成功
+      // parser returns success
       if (OB_ISNULL(parse_result.result_tree_)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_ERROR("parse result tree is NULL", K(ret));
@@ -4206,9 +4202,9 @@ int ObSql::parser_and_check(const ObString &outlined_stmt,
       } else {
         ObItemType parse_stmt_type = parse_result.result_tree_->children_[0]->type_;
         if (T_COMMIT == parse_stmt_type || T_ROLLBACK == parse_stmt_type) {
-          // 是commit或者rollback语句，默认断连接
+          // Is commit or rollback statement, default disconnect
         } else {
-          // 不是commit或者rollback语句，默认不断连接
+          // Not a commit or rollback statement, default to keep connecting
           exec_ctx.set_need_disconnect(false);
           //FIXME qianfu NG_TRACE_EXT(set_need_disconnect, OB_ID(need_disconnect), false);
         }
@@ -4216,7 +4212,7 @@ int ObSql::parser_and_check(const ObString &outlined_stmt,
     } else if (!ObSQLUtils::check_need_disconnect_parser_err(ret)) {
       exec_ctx.set_need_disconnect(false);
     } else {
-      // parser返回未知的错误码，需要断掉与客户端的连接
+      // parser returns an unknown error code, need to disconnect from the client
       LOG_WARN("parser error number is unexpected, need disconnect", K(ret));
     }
     if (OB_SUCC(ret)) {
@@ -4234,11 +4230,11 @@ int ObSql::parser_and_check(const ObString &outlined_stmt,
         if (OB_ISNULL(children_node)) {
           ret = OB_INVALID_ARGUMENT;
           LOG_WARN("invalid args", K(ret), KP(children_node));
-        //除了普通的dml stmt,explain stmt中存在?也需要这里一起判断
+        // In addition to ordinary dml stmt, ? in explain stmt also needs to be judged here
         } else if (!(PC_PS_MODE == pc_ctx.mode_ || PC_PL_MODE == pc_ctx.mode_)
                    && (children_node->type_ == T_EXPLAIN || IS_DML_STMT(children_node->type_))
                    && (children_node->value_ > 0)) {
-          ret = OB_ERR_PARSE_SQL;//children_node->value_ > 0，说明具有question_mark
+          ret = OB_ERR_PARSE_SQL;//children_node->value_ > 0, indicates that it has a question_mark
           const char *err_msg = "?";
           int32_t str_len = static_cast<int32_t>(strlen(err_msg));
           int32_t line_no = 1;
@@ -4248,7 +4244,7 @@ int ObSql::parser_and_check(const ObString &outlined_stmt,
           LOG_WARN("failed to resolve stmt type", K(ret));
         } else {
           ObItemType type = children_node->type_;
-          //如果是非DML语句, 则不进入plan cache
+          // If it is not a DML statement, then do not enter plan cache
           ObPlanCache *plan_cache = NULL;
           if (T_SHOW_VARIABLES == type) {
             is_show_variables = true;
@@ -4285,11 +4281,11 @@ int ObSql::parser_and_check(const ObString &outlined_stmt,
   }
 
   if (OB_SUCC(ret)) {
-    //租户级别的read only检查
+    // Tenant-level read only check
     if ((session->is_inner() && !session->is_user_session()) || pc_ctx.is_begin_commit_stmt()) {
       // FIXME:
-      // schema拆分后，为了避免建租户时获取不到租户read only属性导致建租户失败，对于inner sql
-      // 暂时跳过read only检查。实际上，对于tenant space系统表，不应该检查read only属性。
+      // After schema split, to avoid failing to create a tenant due to inability to obtain the tenant's read-only attribute when creating a tenant, for inner sql
+      // Temporarily skip read only check. Actually, for tenant space system tables, the read only attribute should not be checked.
     } else if (OB_ISNULL(pc_ctx.sql_ctx_.schema_guard_)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("invalid argument", K(pc_ctx.sql_ctx_.schema_guard_));
@@ -4313,8 +4309,8 @@ int ObSql::parser_and_check(const ObString &outlined_stmt,
       LOG_WARN("failed to deep copy string", K(pc_ctx.raw_sql_), K(ret));
     }
   } else {
-    //对于create outline限流语句，可能会带有问题。我们需要对?做特殊处理,
-    //所以也需要经过transform_systax_tree
+    // For create outline rate limiting statement, there may be issues. We need to do special handling for ?,
+    // So also needs to go through transform_systax_tree
     bool flag = false;
     if ((add_plan_to_pc && !is_show_variables) ||
         is_explain_parameterize ||
@@ -4357,8 +4353,8 @@ int ObSql::parser_and_check(const ObString &outlined_stmt,
         } else if (is_transform_outline) {
           LOG_WARN("fail to parameterize syntax tree", K(ret));
         } else {
-          //如果是因为参数化出错, 则需要重新进行parser, 生成新的parser tree, 之前的parser tree可能部分已参数化,
-          //并标记该查询不进plan cache，且下次不需要进行参数化, 从而确保参数化时出错不影响正常执行。
+          // If it is due to parameterization error, then a new parser needs to be performed, generating a new parser tree, the previous parser tree may have been partially parameterized,
+          // and mark this query not to go into plan cache, and no need for parameterization next time, thus ensuring that errors during parameterization do not affect normal execution.
           pctx->reset_datum_param_store();
           is_enable_transform_tree = false;
           if (OB_FAIL(SMART_CALL(parser_and_check(outlined_stmt,
@@ -4430,12 +4426,12 @@ int ObSql::pc_add_plan(ObPlanCacheCtx &pc_ctx,
     if (PC_PS_MODE == pc_ctx.mode_ || PC_PL_MODE == pc_ctx.mode_) {
       // pc_key_ may be modified elsewhere, so reset it before adding plan
       pc_ctx.fp_result_.pc_key_.key_id_ = pc_ctx.sql_ctx_.statement_id_;
-      //远程SQL第二次进入plan，将raw_sql作为pc_key存入plan cache中，
-      //然后使用ps接口直接用参数化后的sql作为key来查plan cache，可以节省一次对SQL fast parse的代价
+      // Remote SQL second entry into plan, store raw_sql as pc_key in plan cache,
+      // Then use the ps interface to directly use the parameterized SQL as the key to look up the plan cache, which can save the cost of one SQL fast parse
       if (pc_ctx.sql_ctx_.is_remote_sql_) {
-        //由于现在ps模式和普通的文本协议的执行计划不能复用，因此这里需要区分，避免在查询plan的时候引起一些问题
-        //由于普通的文本协议key_id是OB_INVALID_ID,因此这里使用key_id=0+name=参数化SQL的方式来区分
-        //@todo: shengle 普通的ps协议和文本协议的计划共享也存在同样的问题，这里需要统一解决一下
+        // Since the execution plan for ps mode and the ordinary text protocol cannot be reused, it is necessary to distinguish between them here to avoid some issues when querying the plan
+        // Since the key_id of the ordinary text protocol is OB_INVALID_ID, therefore, here we use key_id=0+name=parameterized SQL to distinguish
+        //@todo: shengle The ordinary ps protocol and text protocol plan sharing also have the same issue, here we need to solve it uniformly
         pc_ctx.fp_result_.pc_key_.key_id_ = 0;
         pc_ctx.fp_result_.pc_key_.name_ = pc_ctx.raw_sql_;
       }
@@ -4467,7 +4463,7 @@ int ObSql::pc_add_plan(ObPlanCacheCtx &pc_ctx,
       ret = OB_SUCCESS;
       LOG_DEBUG("this plan has been added by others, need not add again", K(phy_plan));
     } else if (OB_REACH_MEMORY_LIMIT == ret || OB_SQL_PC_PLAN_SIZE_LIMIT == ret) {
-      if (REACH_TIME_INTERVAL(1000000)) { //1s, 当内存达到上限时, 该日志打印会比较频繁, 所以以1s为间隔打印
+      if (REACH_TIME_INTERVAL(1000000)) { //1s, when memory reaches its limit, this log print will be relatively frequent, so it prints at an interval of 1s
         ObTruncatedString trunc_sql(pc_ctx.raw_sql_);
         LOG_INFO("can't add plan to plan cache",
                  K(ret), K(phy_plan->get_mem_size()), K(trunc_sql),
@@ -4481,8 +4477,8 @@ int ObSql::pc_add_plan(ObPlanCacheCtx &pc_ctx,
       if (OB_SUCCESS != tmp_ret) {
 
       } else {
-        if (OB_REACH_MAX_CONCURRENT_NUM != ret) { //如果是达到限流上限, 则将错误码抛出去
-          ret = OB_SUCCESS; //add plan出错, 覆盖错误码, 确保因plan cache失败不影响正常执行路径
+        if (OB_REACH_MAX_CONCURRENT_NUM != ret) { // If it reaches the rate limit upper limit, then throw out the error code
+          ret = OB_SUCCESS; // add plan error, overwrite error code, ensure that failure of plan cache does not affect normal execution path
           LOG_WARN("Failed to add plan to ObPlanCache", K(ret));
         }
       }
@@ -4494,13 +4490,12 @@ int ObSql::pc_add_plan(ObPlanCacheCtx &pc_ctx,
 
   return ret;
 }
-
-//检查经过参数化的模板SQL能否被prepare
-//目前有一些SQL如果走文本协议，plan cache参数化后的模板SQL并不能直接用来在远端prepare
-//会报语法错误，例如:select * from t1 where a=_utf8'binary';
-//模板化后的SQL为:select * from t1 where a=_utf8?;这条SQL在parser中会报语法错误
-//而对于大多数参数化后的模板SQL可以直接用来在远端prepare，避免再对文本进行一次fast parser
-//因此这里对模板SQL进行一次parser，增加对模板SQL的检查，用来判该模板SQL是否可以在远端被prepare
+// Check if the parameterized template SQL can be prepared
+// Currently some SQL if using text protocol, plan cache parameterized template SQL cannot be directly used for prepare on the remote end
+// Will report syntax error, for example: select * from t1 where a=_utf8'binary';
+// Template-based SQL is: select * from t1 where a=_utf8?; This SQL will report a syntax error in the parser
+// And for most parameterized templates SQL can be directly used to prepare on the remote end, avoiding another fast parser on the text
+// Therefore here we perform a parser on the template SQL, add a check for the template SQL, to determine if this template SQL can be prepared remotely
 void ObSql::check_template_sql_can_be_prepare(ObPlanCacheCtx &pc_ctx, ObPhysicalPlan &plan)
 {
   int ret = OB_SUCCESS;
@@ -4508,7 +4503,7 @@ void ObSql::check_template_sql_can_be_prepare(ObPlanCacheCtx &pc_ctx, ObPhysical
   ObSQLSessionInfo *session = pc_ctx.sql_ctx_.session_info_;
   if (plan.is_remote_plan() && !temp_sql.empty() && session != nullptr
       && pc_ctx.select_item_param_infos_.empty()) {
-    // select * from (select 1, 2, 3 from dual);这样的SQL也不能在远端被prepare，因为select子句会被参数化
+    // select * from (select 1, 2, 3 from dual); such SQL cannot be prepared on the remote end because the select clause would be parameterized
     ParseResult parse_result;
     ObParser parser(pc_ctx.allocator_,
                     session->get_sql_mode(),
@@ -4593,20 +4588,20 @@ int ObSql::after_get_plan(ObPlanCacheCtx &pc_ctx,
           && !phy_plan->contains_temp_table()
           && !enable_send_plan) {
         pctx->get_remote_sql_info().sql_from_pl_ = PC_PL_MODE == pc_ctx.mode_;
-        //处理远程plan转发SQL的情况
+        // Handle the situation of forwarding SQL for remote plan
         ParamStore &param_store = pctx->get_param_store_for_update();
         if (OB_NOT_NULL(ps_params)) {
-          //本地是ps协议，远端依然走ps接口
+          // Local is ps protocol, remote still uses ps interface
           int64_t initial_param_count = ps_params->count();
-          //对于ps协议为什么不使用用户传递下来的ps_params?因为对于Oracle模式下''等价于NULL
-          //这里需要做一次转换，而param store里的param是转换后的，因此不需要再去转换
+          // For ps protocol why not use the user passed down ps_params? Because for Oracle mode '' is equivalent to NULL
+          // Here needs to be a conversion, while the param in param store is already converted, therefore no need to convert again
           for (int64_t i = param_store.count(); i > initial_param_count; --i) {
-            //丢掉计算产生的多余参数，只保留最初的参数，避免第二次生成计划的时候重复计算引起参数位置错误
+            // Discard extra parameters generated by the calculation, retain only the initial parameters, to avoid duplicate calculations during the second plan generation causing parameter position errors
             param_store.pop_back();
           }
           pctx->get_remote_sql_info().use_ps_ = true;
           pctx->get_remote_sql_info().is_original_ps_mode_ = true;
-          //从ps sql info中取出要执行的sql
+          // Retrieve the SQL to be executed from ps sql info
           pctx->get_remote_sql_info().remote_sql_ = pc_ctx.sql_ctx_.cur_sql_;
           pctx->get_remote_sql_info().ps_params_ = &param_store;
           pctx->get_remote_sql_info().ps_param_cnt_ = static_cast<int32_t>(param_store.count());
@@ -4614,13 +4609,13 @@ int ObSql::after_get_plan(ObPlanCacheCtx &pc_ctx,
             && pc_ctx.neg_param_index_.is_empty()
             && !pc_ctx.sql_ctx_.is_batch_params_execute()
             && !pc_ctx.exec_ctx_.has_dynamic_values_table()) {
-          //本地是文本协议的SQL，并且缓存在plan中，走ps协议
-          //@TODO:yuchen.wyc 文本协议中如果出现不能参数化的参数，由于param store里的值可能不是参数化对应的值
-          //例如select a, b-1 from t1; 这里会参数化成select a, b-? from t1;但param store里对应的是-1
-          //这里应该使用raw_params中的信息去解析并将param store中的-1替换成1
-          //但是处理太麻烦，暂时先不让这类SQL走远端的ps接口
-          //如果是batched_multi_stmt,也直接走文本协议，
-          //因为batched update stmt的参数在param store中是一个array,比较特殊
+          // Local is text protocol SQL, and it is cached in plan, using ps protocol
+          //@TODO:yuchen.wyc If there are parameters in the text protocol that cannot be parameterized, due to the value in param store may not be the corresponding value for parameterization
+          // For example select a, b-1 from t1; Here it will be parameterized as select a, b-? from t1; but param store corresponds to -1
+          // Here should use raw_params information to parse and replace -1 with 1 in param store
+          // But handling is too complicated, temporarily do not allow this type of SQL to go through the remote ps interface
+          // If it is batched_multi_stmt, also directly use the text protocol,
+          // Because batched update stmt's parameters in param store is an array, it is special
           LOG_DEBUG("after get plan",
                     K(pc_ctx.fp_result_.raw_params_.count()),
                     K(pc_ctx.not_param_info_.count()),
@@ -4628,7 +4623,7 @@ int ObSql::after_get_plan(ObPlanCacheCtx &pc_ctx,
           int64_t initial_param_count = pc_ctx.fp_result_.raw_params_.count() -
               pc_ctx.not_param_index_.num_members();
           for (int64_t i = param_store.count(); i > initial_param_count; --i) {
-            //丢掉计算产生的多余参数，只保留最初的参数，避免第二次生成计划的时候重复计算引起参数位置错误
+            // Discard extra parameters generated by the calculation, retain only the initial parameters, to avoid duplicate calculations during the second plan generation causing parameter position errors
             param_store.pop_back();
           }
           pctx->get_remote_sql_info().use_ps_ = true;
@@ -4636,7 +4631,7 @@ int ObSql::after_get_plan(ObPlanCacheCtx &pc_ctx,
           pctx->get_remote_sql_info().ps_params_ = &param_store;
           pctx->get_remote_sql_info().ps_param_cnt_ = static_cast<int32_t>(param_store.count());
         } else {
-          //没有进plan cache，并且是文本协议，在远端再走一次文本解析
+          // Not in plan cache, and is text protocol, parse the text again on the remote end
           pctx->get_remote_sql_info().use_ps_ = false;
           pctx->get_remote_sql_info().is_batched_stmt_ =
               pc_ctx.sql_ctx_.multi_stmt_item_.is_batched_multi_stmt();
@@ -4860,7 +4855,7 @@ OB_NOINLINE int ObSql::handle_physical_plan(const ObString &trimed_stmt,
   // record whether needs to do parameterization at this time,
   // if exact mode is on, not do parameterizaiton
   bool is_enable_transform_tree = !session.get_enable_exact_mode();
-  //重新解析前将这两个标记reset掉，避免前面查plan cache的操作导致这两个参数在重新生成plan后会出现不幂等的问题
+  // Reset these two flags before reparsing to avoid issues with non-idempotency of these parameters after regenerating the plan due to previous plan cache lookup operations
   pc_ctx.not_param_index_.reset();
   pc_ctx.neg_param_index_.reset();
   bool plan_added = false;
@@ -4934,7 +4929,7 @@ OB_NOINLINE int ObSql::handle_physical_plan(const ObString &trimed_stmt,
   } else if (OB_FAIL(need_add_plan(pc_ctx,
                                    result,
                                    use_plan_cache,
-                                   add_plan_to_pc))) { //加入多表分布式计划的判断，判断是否还需需要add plan
+                                   add_plan_to_pc))) { // Add multi-table distributed plan judgment, determine if add plan is still needed
     LOG_WARN("get need_add_plan failed", K(ret));
   } else if (!add_plan_to_pc) {
     // do nothing
@@ -5619,13 +5614,13 @@ int ObSql::get_reconstructed_batch_stmt(ObPlanCacheCtx &pc_ctx, ObString& stmt_s
 //   // record whether needs to do parameterization at this time,
 //   // if exact mode is on, not do parameterizaiton
 //   bool is_enable_transform_tree = !session.get_enable_exact_mode();
-//   //重新解析前将这两个标记reset掉，避免前面查plan cache的操作导致这两个参数在重新生成plan后会出现不幂等的问题
+//   // Reset these two flags before reparsing to avoid issues with non-idempotency of these parameters after regenerating the plan due to previous plan cache lookup operations
 //   pc_ctx.not_param_index_.reset();
 //   pc_ctx.neg_param_index_.reset();
 //   LOG_DEBUG("gen plan info", K(pc_ctx.bl_key_), K(get_plan_err));
 
 //   // note
-//   // sql_id 不需要重新生成了
+//   // sql_id does not need to be regenerated
 
 
 //   // for batched multi stmt, we only parse and optimize the first statement
@@ -5666,7 +5661,7 @@ int ObSql::get_reconstructed_batch_stmt(ObPlanCacheCtx &pc_ctx, ObString& stmt_s
 //         LOG_WARN("Failed to generate plan", K(ret), K(result.get_exec_context().need_disconnect()));
 //       }
 //     } else if (!add_plan_to_pc) { // no need to check need_add_plan() again
-//       // 这个outline生成的计划不能加入到pc, 需要将状态设置成false
+//       // This outline generated plan cannot be added to pc, need to set the status to false
 //     }
 //   }
 //   return ret;

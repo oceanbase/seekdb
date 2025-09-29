@@ -348,7 +348,7 @@ int ObSPIResultSet::check_nested_stmt_legal(ObExecContext &exec_ctx, const ObStr
        * CREATE FUNCTION func() RETURNS VARCHAR(128)
        *   BEGIN
        *     INSERT INTO t1 VALUES (4);
-       *     return '隐式提交';
+       *     return 'implicit commit';
        * END
        *
        * select func() from dual;
@@ -445,12 +445,12 @@ int ObSPIResultSet::start_nested_stmt_if_need(ObPLExecCtx *pl_ctx, const ObStrin
   CK (OB_NOT_NULL(pl_ctx));
   CK (OB_NOT_NULL(pl_ctx->exec_ctx_));
   CK (OB_NOT_NULL(session = pl_ctx->exec_ctx_->get_my_session()));
-  // 如果未发生嵌套, 这里不限制执行语句的类型, 只有在嵌套的情况下才做判断
+  // If no nesting occurs, there is no restriction on the type of execution statement here; judgment is only made in the case of nesting
   if (OB_FAIL(ret)) {
     // do nothing ...
   } else if (OB_NOT_NULL(pl_ctx->exec_ctx_->get_pl_stack_ctx())
              && pl_ctx->exec_ctx_->get_pl_stack_ctx()->in_nested_sql_ctrl()) {
-    // 嵌套的顶层语句一定是一个DML语句, 并且开启了事务, 此时走fast_select流程
+    // The top-level nested statement must be a DML statement, and a transaction has been started, at this point the fast_select process is taken
     OZ (check_nested_stmt_legal(*pl_ctx->exec_ctx_, sql, stmt_type, for_update));
     OZ (begin_nested_session(*session));
     OX (session->set_query_start_time(ObTimeUtility::current_time()));
@@ -511,12 +511,12 @@ int ObSPIService::calc_obj_access_expr(ObPLExecCtx *ctx,
   if (OB_SUCC(ret)) {
     const ObExprObjAccess *obj_access = NULL;
     ObEvalCtx eval_ctx(*ctx->exec_ctx_, expr_alloc);
-    if (1 == expr.get_expr_items().count()) { // 没有入参, 直接计算
+    if (1 == expr.get_expr_items().count()) { // No input parameters, calculate directly
       CK (OB_NOT_NULL(obj_access =
           static_cast<const ObExprObjAccess *>(get_first_expr_item(expr).get_expr_operator())));
       OZ(obj_access->calc_result(result, *expr_alloc, NULL, 0, *(ctx->params_), &eval_ctx));
     } else if (2 == expr.get_expr_items().count()
-               && T_OBJ_ACCESS_REF == expr.get_expr_items().at(1).get_item_type()) { // 有一个入参, 且入参是ObjAccessExpr
+               && T_OBJ_ACCESS_REF == expr.get_expr_items().at(1).get_item_type()) { // There is one argument, and the argument is ObjAccessExpr
       ObObj first_result;
       CK (OB_NOT_NULL(obj_access =
           static_cast<const ObExprObjAccess *>(expr.get_expr_items().at(1).get_expr_operator())));
@@ -524,7 +524,7 @@ int ObSPIService::calc_obj_access_expr(ObPLExecCtx *ctx,
       CK (OB_NOT_NULL(obj_access =
           static_cast<const ObExprObjAccess *>(get_first_expr_item(expr).get_expr_operator())));
       OZ(obj_access->calc_result(result, *expr_alloc, &first_result, 1, *(ctx->params_), &eval_ctx));
-    } else {  // 其他情况
+    } else {  // Other cases
       LOG_DEBUG("calc_obj_access_expr without row", K(expr));
       OZ (ObSQLUtils::calc_sql_expression_without_row(*ctx->exec_ctx_, expr, result, expr_alloc));
     }
@@ -935,9 +935,9 @@ int ObSPIService::spi_calc_expr(ObPLExecCtx *ctx,
 
         OZ (get_result_type(*ctx, *expr, result_type));
         OX (result->set_param_meta(result_type));
-        /* 如果本层是udf, 本次计算的表达式中含有udf;
-          如果内层udf失败，由udf内部来回滚, 如果内层udf成功, 发生了强转失败等问题, 此处不回滚,
-          由本层udf的destory接口来保证回滚, 兼容mysql */
+        /* If this layer is udf, the expression being calculated in this session contains udf;
+          If the inner udf fails, it will be rolled back by the internal mechanism of the udf; if the inner udf succeeds, but issues such as strong conversion failure occur, no rollback will be performed here,
+          The rollback will be ensured by the destroy interface of this layer's udf, compatible with mysql */
         if (lib::is_mysql_mode() && !pl_ctx->is_function_or_trigger()) {
           if (OB_SUCCESS != ret && ctx->exec_ctx_->get_my_session()->is_in_transaction()) {
             int tmp_ret = OB_SUCCESS;
@@ -955,7 +955,7 @@ int ObSPIService::spi_calc_expr(ObPLExecCtx *ctx,
               int tmp_ret = OB_SUCCESS;
               if (OB_SUCCESS == ret) {
                 if (OB_SUCCESS != (tmp_ret = ObPLContext::implicit_end_trans(*ctx->exec_ctx_->get_my_session(), *ctx->exec_ctx_, false, true))) {
-                  // 不覆盖原来的错误码
+                  // Do not overwrite the original error code
                   LOG_WARN("failed to explicit end trans", K(ret), K(tmp_ret));
                 }
               }
@@ -999,7 +999,7 @@ int ObSPIService::spi_calc_expr(ObPLExecCtx *ctx,
       result->v_.int64_ = 0;
     }
     if (OB_INVALID_INDEX != result_idx) {
-      // local baisc var 需要用执行栈allocator深拷一次
+      // local basic var need to be deep copied once using stack allocator
       ObObjParam &param = ctx->params_->at(result_idx);
       bool is_ref_cursor = param.is_ref_cursor_type();
       ObAccuracy invalid_accuracy;
@@ -1497,15 +1497,15 @@ int ObSPIService::recreate_implicit_savapoint_if_need(sql::ObExecContext &ctx, i
 {
   int ret = OB_SUCCESS;
   CK (OB_NOT_NULL(ctx.get_my_session()));
-  if (OB_SUCC(ret) // 存在隐式的savepoint才做检查
+  if (OB_SUCC(ret) // Perform check only if there is an implicit savepoint
       && OB_NOT_NULL(ctx.get_my_session()->get_pl_context())
       && ctx.get_my_session()->has_pl_implicit_savepoint()) {
     ObSQLSessionInfo *session_info = ctx.get_my_session();
-    if (!session_info->is_in_transaction()) { // 事务已经结束, 清除隐式savepoint标记
+    if (!session_info->is_in_transaction()) { // Transaction has ended, clear implicit savepoint marker
       OX (session_info->clear_pl_implicit_savepoint());
     } else if (!session_info->get_tx_desc()
                ->contain_savepoint(PL_IMPLICIT_SAVEPOINT)) {
-      // PL内部的rollback to savepoint语句回滚到了外层的检查点，将PL的隐式检查点冲掉了，此时需要重建检查点
+      // PL internal rollback to savepoint statement rolled back to the outer checkpoint, overwriting PL's implicit checkpoint, at this point a new checkpoint needs to be rebuilt
       OZ (ObSqlTransControl::create_savepoint(ctx, PL_IMPLICIT_SAVEPOINT));
     }
   }
@@ -1533,13 +1533,13 @@ int ObSPIService::spi_end_trans(ObPLExecCtx *ctx, const char *sql, bool is_rollb
           ret = OB_NOT_SUPPORTED;
           LOG_WARN("not support ObDbmsXA", K(ret));
         } else {
-          // PL内部的提交使用同步提交
+          // Internal submissions in PL use synchronous submission
           OZ (sql::ObSqlTransControl::end_trans(ctx->exec_ctx_->get_my_session(),
                                                 ctx->exec_ctx_->get_need_disconnect_for_update(),
                                                 ctx->exec_ctx_->get_trans_state(),
                                                 is_rollback,
                                                 true));
-          // 如果发生过提交禁止PL整体重试
+          // If a submission ban has occurred, do not retry PL as a whole
           if (!is_rollback) {
             OX (ctx->exec_ctx_->get_my_session()->set_pl_can_retry(false));
           }
@@ -1748,7 +1748,7 @@ int ObSPIService::spi_inner_execute(ObPLExecCtx *ctx,
           }
           spi_result.destruct_exec_params(*session);
 
-        } while (RETRY_TYPE_NONE != retry_ctrl.get_retry_type()); //SPI只做LOCAL重试
+        } while (RETRY_TYPE_NONE != retry_ctrl.get_retry_type()); // SPI only does LOCAL retry
       }
 
       if (OB_SUCC(ret)
@@ -1768,8 +1768,7 @@ int ObSPIService::spi_inner_execute(ObPLExecCtx *ctx,
           recreate_implicit_savapoint_if_need(ctx, ret);
         }
       }
-
-      // 记录第一条SQL执行PartitionHit信息, 并对PartitionHit进行Freeze, 防止后续的SQL冲掉
+      // Record the PartitionHit information of the first SQL execution, and Freeze PartitionHit to prevent subsequent SQLs from overwriting
       // Nested sql won't freeze `partition_hit_`, because need set `partition_hit_` when the top sql close.
       if (OB_SUCC(ret) && ph_guard.can_freeze_) {
         if (OB_NOT_NULL(spi_result.get_result_set()->get_physical_plan())) {
@@ -2104,14 +2103,14 @@ int ObSPIService::spi_parse_prepare(common::ObIAllocator &allocator,
                                           expr_factory,
                                           *secondary_namespace,
                                           prepare_result,
-                                          allocator))) { //resolve PL exec变量
+                                          allocator))) { // resolve PL exec variable
             LOG_WARN("failed to resolve_exec_params", K(ret));
           } else if (OB_FAIL(resolve_into_params(parse_result,
                                                 session,
                                                 schema_guard,
                                                 expr_factory,
                                                 *secondary_namespace,
-                                                prepare_result))) { //resolve PL into变量
+                                                prepare_result))) { // resolve PL into variable
             LOG_WARN("failed to resolve_into_params", K(ret));
           } else if (OB_FAIL(resolve_ref_objects(parse_result,
                                                 session,
@@ -2353,9 +2352,9 @@ int ObSPIService::prepare_dynamic(ObPLExecCtx *ctx,
                     K(pl_prepare_result.result_set_->is_returning()), K(into_cnt));
         } else {
           /*!
-            * 1、select语句的INTO子句在动态语句里直接丢掉，所以select语句参数个数按传进来的入参个数检查
-            * 2、dml语句如果有RETURNING INTO子句，需要去掉动态语句里RETURNING INTO的参数，
-            * 但是如果EXECUTE IMMEDIATE本身有RETURNING子句的话就不用去了
+            * 1、select statement's INTO clause is directly discarded in dynamic statements, so the number of select statement parameters is checked according to the number of incoming parameters
+            * 2、if a dml statement has a RETURNING INTO clause, the parameters of RETURNING INTO need to be removed from the dynamic statement,
+            * but if the EXECUTE IMMEDIATE itself has a RETURNING clause, they do not need to be removed
             */
           int64_t need_exec_param_cnt = exec_param_cnt;
           if (ObStmt::is_dml_write_stmt(stmt_type)) {
@@ -2400,8 +2399,8 @@ int ObSPIService::prepare_dynamic(ObPLExecCtx *ctx,
           }
         } else if (stmt::T_SELECT == stmt_type || pl_prepare_result.result_set_->is_returning()) {
           /*
-            * 动态语句如果是select into，INTO子句会被忽略掉，INTO子句里面占位符的也不需要绑定实参
-            * 例如：
+            * Dynamic statement if it is select into, the INTO clause will be ignored, and placeholders in the INTO clause do not need to bind actual parameters
+            * For example:
             * SQL> DECLARE
             * x int;
             * y int :=1;
@@ -2488,8 +2487,8 @@ int ObSPIService::check_dynamic_sql_legal(ObPLExecCtx *ctx,
                 K(ret), K(into_count), K(param_count), K(is_returning));
     } else if (ObStmt::is_dml_write_stmt(stmt_type) && inner_into_cnt > 0 && 0 == into_count) {
       /*
-      * 处理
-      * 仅当dml语句含returning变量，并且外部没有INTO变量时才允许使用USING OUT接收参数
+      * processing
+      * only allowed to use USING OUT to receive parameters when the dml statement contains a returning variable and there is no INTO variable externally
       */
       CK (param_count >= inner_into_cnt);
       OX (exec_param_cnt = param_count - inner_into_cnt);
@@ -2676,7 +2675,7 @@ int ObSPIService::spi_execute_immediate(ObPLExecCtx *ctx,
   bool for_update = false;
   bool hidden_rowid = false;
   bool skip_locked = false;
-  int64_t inner_into_cnt = 0; //动态语句里into子句的变量个数
+  int64_t inner_into_cnt = 0; // number of variables in the into clause of dynamic statements
   ObArray<ObObjParam*> out_using_params;
   int64_t exec_param_cnt = param_count;
   ParamStore param_store((ObWrapperAllocator(allocator)));
@@ -2875,7 +2874,7 @@ int ObSPIService::cursor_open_check(ObPLExecCtx *ctx,
       if (cursor->isopen()) {
         CK (0 < ref_cnt);
       } else {
-        // 这儿为啥这么干， 见下面的例子
+        // Here's why it's done this way, see the example below
         /*
         * declare
           c1 sys_refcursor;
@@ -2888,49 +2887,49 @@ int ObSPIService::cursor_open_check(ObPLExecCtx *ctx,
           open c1 for select 6 from dual;
           c2 := c1;
           c3 := c1;
-          c4 := c1;  -- c1, c2, c3, c4的ref count是4
+          c4 := c1;  -- ref count of c1, c2, c3, c4 is 4
           fetch c1 into a;
           dbms_output.put_line(a);
           a := 0;
           fetch c1 into a;
           dbms_output.put_line(a);
           a := 0;
-          close c2; -- 虽然close，但是对于的cursor info的ref count还是4
+          close c2; -- although closed, the ref count of the corresponding cursor info is still 4
           open c2 for select 8 from dual;
           fetch c4 into a;
           dbms_output.put_line(a);
           a := 0;
-          open c5 for select 9 from dual; --c5 ref count 1
+          open c5 for select 9 from dual; -- ref count of c5 is 1
           fetch c5 into a;
           dbms_output.put_line(a);
           a := 0;
-          c4 := c5;  -- c4的ref count是4， 所以赋值之后，c4原来指向的cursor ref count为3,
-          fetch c4 into a; --c4, c5 的ref count是2
+          c4 := c5;  -- ref count of c4 is 4, so after assignment, the ref count of the cursor originally pointed to by c4 is 3,
+          fetch c4 into a; -- ref count of c4, c5 is 2
           dbms_output.put_line(a);
           a := 0;
-          fetch c2 into a; -- ref count是3， 分别是c1, c2, c3
+          fetch c2 into a; -- ref count is 3, respectively c1, c2, c3
           dbms_output.put_line(a);
           a := 0;
           close c4;
           end;
-          * 所以只要ref count不是1， 关闭的时候要保持这个ref count，重新open，这个ref count需要恢复
+          * so as long as the ref count is not 1, when closing, this ref count needs to be maintained, re-opened, and this ref count needs to be restored
         */
         ref_cnt = (ref_cnt == 0) ? 1 : ref_cnt;
       }
       if (OB_SUCC(ret)) {
-        // 理论上reopen的时候， cg openfor 的时候，已经close了，保险起见，这儿再close一次
+        // Theoretically, when reopen and cg openfor, it has already been closed, just to be safe, we close it again here
         // OZ (cursor_close_impl(ctx, cursor, true, OB_INVALID_ID, OB_INVALID_ID, true));
-        /* OB cursor close 逻辑
-         *  1. 释放数据部分（spi_result/spi_cursor）， 其余部分做 reset
-         *  2. 尽管 cursor 做了 close， obj.get_ext 的结果仍然是原来 cursor 的地址
-         * OB cursor reopen 逻辑 （不包含 ps cursor）
-         *  1. spi_open_cursor 时，会判断一下 obj.get_ext 的结果是不是空
-         *    a. 为空，说明第一次 open , 直接分配内存即可
-         *    b. 不为空，说明是 reopen，一般不需要重新分配内存
-         *  2. reopen 时需要重新设置 session_cursor， session_cursor 内存分配位置有别于 local_cursor, 所以这个标记需要设置
-         *    a. 此时不需要重新 make_cursor , 内存已经分配过了， cursor_close_impl 里的 close 并没有把 cursor 从 session 上摘掉
-         *    b. 这个值以前没有设置成功为什么也没有出问题？ 因为 spi 中 server cursor 的判断都是使用 cursor_id 做判断
-         *       server cursor 的 close 全部都使用 reuse， cursor_id 不会被 清空， 所以暂时没有出现问题
+        /* OB cursor close logic
+         *  1. Release data part (spi_result/spi_cursor), reset the rest
+         *  2. Although cursor is closed, obj.get_ext result is still the original cursor's address
+         * OB cursor reopen logic (excluding ps cursor)
+         *  1. When spi_open_cursor, it will check if the result of obj.get_ext is empty
+         *    a. If empty, it means first open, just allocate memory
+         *    b. If not empty, it means reopen, generally no need to reallocate memory
+         *  2. When reopening, session_cursor needs to be reset, session_cursor memory allocation position is different from local_cursor, so this flag needs to be set
+         *    a. At this time, there is no need to re make_cursor, memory has already been allocated, cursor_close_impl's close does not remove the cursor from session
+         *    b. Why was there no problem before this value was not set successfully? Because in spi, server cursor judgment all uses cursor_id for judgment
+         *       Server cursor close all use reuse, cursor_id will not be cleared, so there has been no problem temporarily
         */ 
         if (cursor->is_session_cursor()) {
           OX (session->inc_session_cursor());
@@ -2962,9 +2961,9 @@ int ObSPIService::cursor_open_check(ObPLExecCtx *ctx,
       OX (cursor->set_ref_by_refcursor());
       OX (cursor->set_ref_count(1));
       // update subprogram local cursor var
-      // 这个的更新是因为subprogram的cursor变量保存在它自己的栈中，这儿需要去更新这个值，使他指向新开的cursor内存
-      // local变量，直接拷贝一份新的内存值。
-      // package变量不需要，因为package中不会定义ref cursor。
+      // This update is because the subprogram's cursor variable is stored in its own stack, here we need to update this value to point to the newly allocated cursor memory
+      // local variable, directly copy a new memory value.
+      // package variable is not needed, because ref cursor is not defined in package.
       if (DECL_SUBPROG == loc) {
         OZ (spi_set_subprogram_cursor_var(ctx, package_id, routine_id, cursor_index, obj));
       } else if (DECL_LOCAL == loc) {
@@ -3030,7 +3029,7 @@ int ObSPIService::spi_get_package_cursor_info(ObPLExecCtx *ctx,
     if (param.is_ref_cursor_type()) {
       // do nothing, cursor may null;
     } else {
-      // 存在null的可能，主要是exception导致的执行流变化，在exception中fetch或者close就会取到null
+      // There is a possibility of null, mainly due to execution flow changes caused by exceptions, where fetch or close within an exception will result in null
       // CK (OB_NOT_NULL(cursor));
     }
   }
@@ -3062,7 +3061,7 @@ int ObSPIService::spi_get_subprogram_cursor_info(ObPLExecCtx *ctx,
     // may be null if is ref cursor
     // do nothing
   } else {
-    // 存在null的可能，主要是exception导致的执行流变化，在exception中fetch或者close就会取到null
+    // There is a possibility of null, mainly due to execution flow changes caused by exceptions, where fetch or close within an exception will result in null
     // CK (OB_NOT_NULL(cursor));
   }
   return ret;
@@ -3126,8 +3125,8 @@ int ObSPIService::spi_get_cursor_info(ObPLExecCtx *ctx, int64_t index,
     LOG_WARN("invalid cursor index", K(ret), K(index), K(ctx->params_->count()));
   }
   OX (obj = &(ctx->params_->at(index)));
-  // 如果cursor没有init，它就是null type, 例如exception导致执行流的转变，或者goto导致的执行流变化
-  // 导致没有open，直接去fetch或者close
+  // If cursor has not been init, it is null type, for example, exception causing a change in the execution flow, or goto causing an execution flow change
+  // Cause no open, directly go to fetch or close
   CK (obj->is_ext() || obj->is_null());
   OX (param = *obj);
   OX (cursor = obj->is_ext() ? reinterpret_cast<ObPLCursorInfo *>(obj->get_ext())
@@ -3410,7 +3409,7 @@ int ObSPIService::streaming_cursor_open(ObPLExecCtx *ctx,
           }
         }
         if (OB_SUCC(ret) && OB_INVALID_ID != cursor.get_id()) {
-          //如果是客户端游标，设置结果集为二进制模式
+          // If it is a client cursor, set the result set to binary mode
           OX (spi_result->get_result_set()->set_ps_protocol());
         }
         OX (cursor.open(spi_result));
@@ -3773,7 +3772,7 @@ int ObSPIService::do_cursor_fetch(ObPLExecCtx *ctx,
   CK (OB_NOT_NULL(cursor));
 
   if (OB_FAIL(ret)) {
-  } else if (!is_bulk && INT64_MAX != limit) { //limit子句必须和Bulk Collect合用
+  } else if (!is_bulk && INT64_MAX != limit) { // limit clause must be used with Bulk Collect
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("Limit must be used with Bulk Collect Into Clause", K(is_bulk), K(limit), K(ret));
   } else if (limit != INT64_MAX && limit <= 0) {
@@ -3792,8 +3791,8 @@ int ObSPIService::do_cursor_fetch(ObPLExecCtx *ctx,
     OZ (adjust_out_params(ctx, into_exprs, into_count, spi_result->get_out_params()));
   } else if (OB_NOT_NULL(cursor->get_spi_cursor())
               && cursor->get_spi_cursor()->row_store_.get_row_cnt() > 0
-              && cursor->get_current_row().is_invalid()) { //有数据才需要做，避免重复做
-    //仅缓存在ObRowStore的Cursor需要初始化ObNewRow结构
+              && cursor->get_current_row().is_invalid()) { // Data is needed to be processed, avoid duplicate processing
+    // Only cursors cached in ObRowStore need to initialize the ObNewRow structure
     CK (OB_NOT_NULL(cursor->get_spi_cursor()));
     int64_t column_count = cursor->get_spi_cursor()->row_desc_.count();
     ObIAllocator *spi_allocator = NULL;
@@ -3895,8 +3894,7 @@ int ObSPIService::do_cursor_fetch(ObPLExecCtx *ctx,
       spi_result->end_cursor_stmt(ctx, ret);
       cursor->set_last_execute_time(ObTimeUtility::current_time());
     }
-
-    // Oracle模式的Cursor会吞掉READ_NOTHING的错误, 为了避免无效日志过多, 只在Mysql模式下打印WARN
+    // Oracle mode's Cursor will swallow READ_NOTHING errors, to avoid too many invalid logs, only print WARN in Mysql mode
     if (OB_SUCC(ret)) {
       cursor->set_fetched();
       cursor->set_fetched_with_row(ret != OB_READ_NOTHING);
@@ -3987,7 +3985,7 @@ int ObSPIService::spi_cursor_fetch(ObPLExecCtx *ctx,
   }
 
   if (lib::is_mysql_mode() || OB_READ_NOTHING != ret) {
-    //Oracle模式的cursor发生NOT FOUND错误的时候不对外报错，而是把错误信息记录在CURSOR上，PL的CG会吞掉这个错误
+    // Oracle mode cursor throws NOT FOUND error, but does not report it externally; instead, it logs the error information on the CURSOR, and PL's CG will swallow this error
     SET_SPI_STATUS;
   }
   return ret;
@@ -4088,9 +4086,9 @@ int ObSPIService::spi_cursor_close(ObPLExecCtx *ctx,
 int ObSPIService::dbms_cursor_close(ObExecContext &exec_ctx, ObPLCursorInfo &cursor)
 {
   int ret = OB_SUCCESS;
-  // dbms cursor与pl cursor不同：
-  // 1. 执行过dbms_sql.open_cursor接口后，就可以执行dbms_sql.close_cursor接口。
-  // 2. 但只有执行过dbms_sql.execute接口后，cursor.is_open()才返回true。
+  // dbms cursor and pl cursor are different:
+  // 1. After executing the dbms_sql.open_cursor interface, you can execute the dbms_sql.close_cursor interface.
+  // 2. But only after executing the dbms_sql.execute interface does cursor.is_open() return true.
   if (cursor.isopen()) {
     OV (OB_NOT_NULL(exec_ctx.get_my_session()));
     OZ (cursor.close(*exec_ctx.get_my_session(),
@@ -4573,7 +4571,7 @@ int ObSPIService::spi_add_ref_cursor_refcount(ObPLExecCtx *ctx, ObObj *cursor, i
       }
     }
   } else {
-    // do nothing; 例如，这种case，在return之前，会对cur进行操作，但cur是null
+    // do nothing; for example, in this case, cur will be manipulated before return, but cur is null
     /*
     * create or replace function return_null return sys_refcursor is
       cur sys_refcursor;
@@ -4666,8 +4664,8 @@ int ObSPIService::spi_convert_anonymous_array(pl::ObPLExecCtx *ctx,
 } 
 
 /*
- * 因为有可能调用者调用本函数是为了copy一个collection里的一项，此时传入的必须是collection的allocator，所以这个参数必要。
- * 如果能保证此函数不会用来copy普通数据类型那么可以不要。
+ * Because it is possible that the caller calls this function to copy an item from a collection, at which point the passed-in parameter must be the allocator of the collection, so this parameter is necessary.
+ * If it can be guaranteed that this function will not be used to copy ordinary data types, then it can be omitted.
  * */
 int ObSPIService::spi_copy_datum(ObPLExecCtx *ctx,
                                  ObIAllocator *allocator,
@@ -4826,7 +4824,7 @@ int ObSPIService::spi_interface_impl(pl::ObPLExecCtx *ctx, const char *interface
               if (exec_params.at(i).is_pl_extend() &&
                 pl::PL_REF_CURSOR_TYPE != exec_params.at(i).get_meta().get_extend_type()) {
                 ObIAllocator *alloc = ctx->allocator_;
-                //这里复杂数据类型的壳子一定是执行interface之前就有(init param), 不会是在interface c接口中构造的
+                // Here the shell of complex data types must exist before executing the interface (init param), not constructed within the interface c interface
                 OZ (ObUserDefinedType::deep_copy_obj(*alloc, exec_params.at(i), ctx->params_->at(i)));
                 if (exec_params.at(i).get_ext() != ctx->params_->at(i).get_ext()) {
                   ObUserDefinedType::destruct_obj(exec_params.at(i), ctx->exec_ctx_->get_my_session());
@@ -4875,9 +4873,9 @@ int ObSPIService::adjust_out_params(
   if (OB_NOT_NULL(inner_result)
       && OB_NOT_NULL(plan = inner_result->result_set().get_physical_plan())) {
     // TODO:
-    // 检查下依赖对象中是否有Function或者Package, 这两种依赖对象的调用可能会有Out参数;
-    // 暂时不检查是否确实有Out参数, 暂时统一认为存在Out参数;
-    // 后续再做的更细些;
+    // Check if there are Function or Package in the dependent objects, as calls to these two types of dependent objects may have Out parameters;
+    // Do not check if there are indeed Out parameters for now, temporarily assume that there are Out parameters;
+    // Make it more detailed later;
     bool has_out_param = false;
     const ObIArray<ObSchemaObjVersion> &ref_objects = plan->get_dependency_table();
     for (int64_t i = 0; i < ref_objects.count(); ++i) {
@@ -4952,11 +4950,10 @@ int ObSPIService::check_exist_in_into_exprs(ObPLExecCtx *ctx,
   }
   return ret;
 }
-
-// out_params用于标记可能的通过function计算的输出参数
-// ObExtendType代表地址, ObIntType代表在paramstore中的位置, ObNullType代表该参数不需要处理
+// out_params is used to mark possible output parameters calculated by the function
+// ObExtendType represents address, ObIntType represents the position in paramstore, ObNullType represents that this parameter does not need to be processed
 int ObSPIService::construct_exec_params(ObPLExecCtx *ctx,
-                                        ObIAllocator &param_allocator, //用于拷贝执行期参数
+                                        ObIAllocator &param_allocator, // used to copy runtime parameters
                                         const ObSqlExpression **param_exprs,
                                         int64_t param_count,
                                         const ObSqlExpression **into_exprs,
@@ -5025,9 +5022,9 @@ int ObSPIService::construct_exec_params(ObPLExecCtx *ctx,
           OZ (out_params.push_back(null_obj));
         }
       }
-      if (OB_SUCC(ret)) { //执行期参数必须从PL的内存空间拷贝到SQL自己的内存空间，以防止在SQL执行过程中参数被改掉
+      if (OB_SUCC(ret)) { // Execution period parameters must be copied from PL's memory space to SQL's own memory space to prevent parameters from being modified during SQL execution }
         ObObjParam new_param = result;
-        if (!is_forall) { // forall场景, 不做拷贝, 上层代码transform_pl_ext_type会进行paramstore整体拷贝
+        if (!is_forall) { // forall scenario, do not copy, the upper code transform_pl_ext_type will perform a whole copy of paramstore
           if (result.is_pl_extend()) {
             if (result.get_meta().get_extend_type() != PL_REF_CURSOR_TYPE) {
               new_param.set_int_value(0);
@@ -5112,7 +5109,7 @@ int ObSPIService::store_params_string(
 }
 
 int ObSPIService::prepare_static_sql_params(ObPLExecCtx *ctx,
-                                            ObIAllocator &param_allocator, //用于拷贝执行期参数
+                                            ObIAllocator &param_allocator, // used to copy runtime parameters
                                             const ObString &sql,
                                             const ObString &ps_sql,
                                             int64_t type,
@@ -5521,17 +5518,17 @@ int ObSPIService::store_into_result(ObPLExecCtx *ctx,
   CK (is_null_row ? true : (actual_column_count <= cur_row.get_count()));
   OX (is_strict = is_strict_mode(exec_ctx->get_my_session()->get_sql_mode()));
 
-  /* 如果into variable只有一个:
-      1.是基础类型变量
-      2.create or replace type定义的udt变量
-      3.type定义的record
-      2和3都是record类型
-     如果into variable有多个，为上述1和2的组合。
-     对于record变量，目前的行为是展开后获取内部的元素值，然后依次赋值而非深拷后整体赋值
-     如果record内部元素是object, object的赋值动作需要深拷吗
-     对于顶层record，基础类型属性，需要考虑强转,
-     复杂数据类型属性在resolve阶段严格限制，执行期不做强转逻辑，只考虑赋值
-     按照这个逻辑，复杂数据类型没有expand的必要，也无需传递到执行期做类型转换
+  /* If into variable has only one:
+      1. is a basic type variable
+      2. a UDT variable defined by create or replace type
+      3. a record defined by type
+      2 and 3 are both record types
+     If into variable has multiple, it is a combination of the above 1 and 2.
+     For record variables, the current behavior is to expand and obtain the values of internal elements, then assign them sequentially rather than deep copy and assign as a whole
+     If the internal elements of a record are objects, does the assignment action for the object need deep copy
+     For top-level records, basic type attributes need to consider casting,
+     Complex data type attributes are strictly restricted during the resolve phase, no casting logic is performed at runtime, only assignment is considered
+     According to this logic, complex data types do not need expansion, nor is there a need to pass them to runtime for type conversion
   */
   if (into_count > 1) {
     ObSEArray<ObObj, 1> tmp_result;
@@ -5539,7 +5536,7 @@ int ObSPIService::store_into_result(ObPLExecCtx *ctx,
     CK (into_count == actual_column_count);
     CK(return_types != nullptr ? return_type_count == into_count : true);
     for (int64_t i = 0; OB_SUCC(ret) && i < actual_column_count; ++i) {
-      //循环处理多个into变量的赋值，每个变量赋值需要检测是否需要强转，然后用强转后的obj赋值
+      // Loop through multiple into variables assignment, each variable assignment needs to check if casting is required, then assign with the casted obj
       tmp_result.reuse();
       tmp_desc.reuse();
       if (is_null_row) {
@@ -5556,10 +5553,10 @@ int ObSPIService::store_into_result(ObPLExecCtx *ctx,
                       return_types != nullptr ? 1 : 0));
     }
   } else if (is_type_record) {
-    /* into后面的是type record(作为一个整体)，对应into前面的多个column value
-        多个obj存到record中，实现上需要依次为对应属性赋值，需要考虑cast
-      into record是展开一层的，因此column_types == return_type_count == actual_column_count
-       将所有column value收集起来，传递到store result中进行cast校验&赋值
+    /* The following is type record (as a whole) after into, corresponding to multiple column values before into
+        Multiple obj are stored in record, implementation needs to assign values to corresponding attributes in sequence, cast needs to be considered
+      into record is expanded by one layer, so column_types == return_type_count == actual_column_count
+       Collect all column values and pass them to store result for cast validation & assignment
     */
     ObSEArray<ObObj, OB_DEFAULT_SE_ARRAY_COUNT> tmp_result;
     for (int64_t i = 0; OB_SUCC(ret) && i < actual_column_count; ++i) {
@@ -5576,9 +5573,9 @@ int ObSPIService::store_into_result(ObPLExecCtx *ctx,
                      true));
   } else {
     /*
-      into后面是udt record, 视为单个variable个体，对应into前面单个column value
-        本身是一个obj存到record中，当前的实现时，将record对应的obj拆开成多个obj，然后存到record中,
-        代码逻辑上可以复用场景1. 理论上应该可以直接找到into record的地址，深拷赋值，不需要强转
+      After into is udt record, considered as a single variable entity, corresponding to a single column value before into
+        It is an obj stored in record. In the current implementation, the obj corresponding to record is disassembled into multiple obj, then stored in record,
+        The code logic can reuse scenario 1. Theoretically, we should be able to directly find the address of into record, deep copy assignment, no need for strong conversion
     */
     CK (1 == actual_column_count);
     if (OB_SUCC(ret)) {
@@ -5629,30 +5626,30 @@ int ObSPIService::get_package_var_info_by_expr(const ObSqlExpression *expr,
 }
 
 /***************************************************************************************/
-/* 注意：以下是内存排列有关的代码，修改这里一定要十分理解各种数据类型在LLVM端和SQL端的内存排列和生命周期。
- * SQL端的隐式赋值（Into/Bulk Collect Into）相对于显式赋值（Assign）较为简单，因为需要存储的源数据一定是从查询语句获得的
- * 基础数据类型，不存在源端是ADT的情况。
- * 如有问题请联系如颠ryan.ly
+/* Note: The following code is related to memory arrangement. Any modification here must be done with a thorough understanding of the memory arrangement and lifecycle of various data types on the LLVM side and the SQL side.
+ * Implicit assignment (Into/Bulk Collect Into) on the SQL side is relatively simpler than explicit assignment (Assign) because the source data to be stored must be basic data types obtained from query statements,
+ * there is no situation where the source is an ADT.
+ * For any issues, please contact Ruyan ryan.ly
  ***************************************************************************************/
 int ObSPIService::get_result(ObPLExecCtx *ctx,
-                             void *result_set, // 存储结果集的结构, 可能是ObSPICursor和ObInnerSQLResult
-                             bool is_streaming, //false表示结果是ObSPICursor，否则是ObInnerSQLResult
-                             const ObSqlExpression **into_exprs, //ObSqlExpression*数组，指示了该result存放的位置：如果是Question Mark，表示是在params里的下标，如果是ObjAccess，其表达式结果表示是一个内存地址
-                             int64_t into_count, // 代表into_exprs的数量
+                             void *result_set, // Store the result set structure, possibly ObSPICursor and ObInnerSQLResult
+                             bool is_streaming, // false indicates that the result is ObSPICursor, otherwise it is ObInnerSQLResult
+                             const ObSqlExpression **into_exprs, // An array of ObSqlExpression*, indicating where this result is stored: if it is a Question Mark, it indicates the index in params; if it is ObjAccess, its expression result indicates a memory address
+                             int64_t into_count, // represents the number of into_exprs
                              const ObDataType *column_types,
                              int64_t type_count,
                              const bool *exprs_not_null,
                              const int64_t *pl_integer_ranges,
-                             ObIArray<ObObjParam*> *out_using_params, //动态DML的returing通过USING OUT传参
+                             ObIArray<ObObjParam*> *out_using_params, // dynamic DML's returning passing parameters through USING OUT
                              int64_t &row_count,
-                             ObNewRow &current_row, //返回最后一行
+                             ObNewRow &current_row, // return the last row
                              bool &can_retry,
-                             bool has_hidden_rowid, //如果最后一列是隐藏的rowid，需要跳过
+                             bool has_hidden_rowid, // If the last column is a hidden rowid, it needs to be skipped
                              bool is_bulk,
                              bool is_dynamic_sql,
-                             bool for_cursor, //是否检查单行和notfound
+                             bool for_cursor, // whether to check single line and not found
                              bool is_forall,
-                             int64_t limit, //INT64_MAX:无limit
+                             int64_t limit, //INT64_MAX:no limit
                              const ObDataType *return_types,
                              int64_t return_type_count,
                              bool is_type_record)
@@ -5663,7 +5660,7 @@ int ObSPIService::get_result(ObPLExecCtx *ctx,
   ObExecContext *exec_ctx = ctx->exec_ctx_;
   ObPLCursorInfo *implicit_cursor = NULL;
   int64_t hidden_column_count = has_hidden_rowid ? 1 : 0;
-  bool for_dbms_sql = for_cursor && 0 == into_count; //DBMS_SQL包允许没有into子句的情况下获取数据
+  bool for_dbms_sql = for_cursor && 0 == into_count; // DBMS_SQL package allows data retrieval without an INTO clause
   ObIAllocator *current_expr_allocator = nullptr;
   OX (current_expr_allocator = ctx->get_top_expr_allocator());
   CK (OB_NOT_NULL(allocator), OB_NOT_NULL(exec_ctx), OB_NOT_NULL(exec_ctx->get_my_session()));
@@ -5672,22 +5669,22 @@ int ObSPIService::get_result(ObPLExecCtx *ctx,
   }
   if (OB_FAIL(ret)) {
   } else if (into_count > 0 || NULL != out_using_params || for_dbms_sql) {
-    // INTO, BULK COLLECT INTO, FETCH INTO, FETCH BULK COLLECT INTO以及动态DML语句USING OUT
+    // INTO, BULK COLLECT INTO, FETCH INTO, FETCH BULK COLLECT INTO and dynamic DML statements USING OUT
     if (OB_ISNULL(result_set)
         || ((NULL == column_types || type_count <= 0) && into_count > 0)
         || (NULL == into_exprs && into_count > 0)
-        || (into_count > 0 && NULL != out_using_params) //如果有USING OUT一定不能同时出现INTO子句
-        || (!for_cursor && INT64_MAX != limit) //limit子句仅可能出现在Fetch语句
-        || (!is_bulk && INT64_MAX != limit) //limit子句必须和Bulk Collect合用
-        || (!is_streaming && !for_cursor)) { //如果不是流式，那么一定是cursor
+        || (into_count > 0 && NULL != out_using_params) // If there is USING OUT, INTO clause must not appear at the same time
+        || (!for_cursor && INT64_MAX != limit) // limit clause can only possibly appear in Fetch statement
+        || (!is_bulk && INT64_MAX != limit) // limit clause must be used with Bulk Collect
+        || (!is_streaming && !for_cursor)) { // If not streaming, then it must be cursor
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("Argument passed in is NULL",
                K(result_set), K(into_exprs), K(into_count), K(column_types),
                K(type_count), K(for_cursor), K(is_bulk), K(limit), K(out_using_params), K(ret));
     } else if (!is_streaming
                && 0 == static_cast<ObSPICursor*>(result_set)->row_store_.get_row_cnt()) {
-      //Oracle里找不到数据的话，BULK不报错、Returning不报错、Cursor(Fetch)不报错；只有SELECT INTO一种报错
-      if (is_bulk) { // BULK模式如果没有数据也需要初始化数组
+      //In Oracle, if data is not found, BULK does not report an error, Returning does not report an error, Cursor(Fetch) does not report an error; only SELECT INTO reports an error
+      if (is_bulk) { // BULK mode needs to initialize the array even if there is no data
         const ObSqlExpression *result_expr = NULL;
         ObPlCompiteWrite *composite_write = nullptr;
         ObObjParam result_address;
@@ -5706,7 +5703,7 @@ int ObSPIService::get_result(ObPLExecCtx *ctx,
                   || for_cursor
                   || (NULL != implicit_cursor && !implicit_cursor->get_in_forall())
                   || (NULL != implicit_cursor && 0 == implicit_cursor->get_bulk_rowcount_count()))) {
-            //FORALL的BULK是追加模式，仅在非追加模式或追加模式的第一次需要spi_reset_collection
+            //FORALL's BULK is append mode, only needed spi_reset_collection in non-append mode or the first time in append mode
             OZ (spi_set_collection(ctx->exec_ctx_->get_my_session()->get_effective_tenant_id(),
                                      ctx, *table, 0));
           }
@@ -5717,15 +5714,15 @@ int ObSPIService::get_result(ObPLExecCtx *ctx,
       bool not_found = false;
       int64_t column_count = 0;
       int64_t actual_column_count = 0;
-      // Step1: 获取结果集行描述
+      // Step1: Get result set row description
       ObArray<ObDataType> row_desc;
       if (OB_FAIL(row_desc.reserve(OB_DEFAULT_SE_ARRAY_COUNT))) {
         LOG_WARN("fail to reserve row_desc", K(ret));
-      } else if (!is_streaming) { //Mysql模式的Cursor或者可更新游标或者游标表达式会缓存数据
+      } else if (!is_streaming) { // MySQL mode Cursor or updatable cursor or cursor expression will cache data
         column_count = static_cast<ObSPICursor*>(result_set)->row_desc_.count();
         actual_column_count = column_count - hidden_column_count;
-        // TODO: 原来的 column_count 是通过 row_store_ 拿到的， OB_RA_ROW_STORE 不提供 row_col_cnt
-        // 这个判断暂时没有意义，先注掉
+        // TODO: The original column_count was obtained from row_store_, OB_RA_ROW_STORE does not provide row_col_cnt
+        // This judgment currently has no meaning, comment it out first
         // OV (column_count == static_cast<ObSPICursor*>(result_set)->row_desc_.count(),
         //     OB_INVALID_ARGUMENT,
         //     K(actual_column_count),
@@ -5767,10 +5764,10 @@ int ObSPIService::get_result(ObPLExecCtx *ctx,
           }
         }
       }
-      // Step2: 检查类型匹配
+      // Step2: Check type match
       if (OB_SUCC(ret)) {
         if (for_dbms_sql) {
-          //DBMS_SQL包的FETCH不需要检查
+          // DBMS_SQL package FETCH does not need to be checked
         } else if (NULL == out_using_params) {
           if (actual_column_count != type_count
               && actual_column_count != into_count) {
@@ -5796,8 +5793,7 @@ int ObSPIService::get_result(ObPLExecCtx *ctx,
           }
         }
       }
-
-      // Step3: 获取collationtype和castmode
+      // Step3: Get collationtype and castmode
       ObCollationType cast_coll_type = CS_TYPE_INVALID;
       ObCastMode cast_mode = CM_NONE;
       const ObDataTypeCastParams dtc_params =
@@ -5808,20 +5804,20 @@ int ObSPIService::get_result(ObPLExecCtx *ctx,
         OX (is_strict = is_strict_mode(exec_ctx->get_my_session()->get_sql_mode()));
         OZ (ObSQLUtils::get_default_cast_mode(stmt::T_NONE, exec_ctx->get_my_session(), cast_mode));
       }
-      // Step4: 获取结果并存储到变量
+      // Step4: Get the result and store it in the variable
       ObSEArray<std::pair<uint64_t, uint64_t>, OB_DEFAULT_SE_ARRAY_COUNT> package_vars_info;
       lib::ObMemAttr attr(MTL_ID());
       OX (package_vars_info.set_attr(attr));
       if (OB_SUCC(ret) && !is_bulk) { // [FETCH] INTO x, y, z OR [FETCH] INTO record
         /*
-         * 若非多个variables，便是单个record。不可能是多个record或者record和variables混在一起。（详见oracle语法）
-         * 1、如果是多个into，into的数目必须和select item数目一致（一定是多个variables的情况）；
-         * 2、如果into的数目比select item少，那么into的数目必须是1（一定是单个record的情况）；
-         * 3、如果into的数目和select item一样多，并且是1，那么是单个record还是单个变量不确定，但是同样是合法的；
-         * 还有一种特殊情况，是动态DML语句带RETURNING通过USING OUT传递参数的情况，详见：
+         * If not multiple variables, then it is a single record. It cannot be multiple records or a mix of records and variables (see Oracle syntax).
+         * 1、If there are multiple into clauses, the number of into clauses must match the number of select items (this is definitely the case of multiple variables);
+         * 2、If the number of into clauses is less than the number of select items, then the number of into clauses must be 1 (this is definitely the case of a single record);
+         * 3、If the number of into clauses matches the number of select items and both are 1, then it is uncertain whether it is a single record or a single variable, but it is still valid;
+         * There is another special case where dynamic DML statements with RETURNING use USING OUT to pass parameters, see:
          *  
-         *  这种情况仅支持SQL基础类型。
-         *  另外，DBMS_SQL没有输出参数，只需要返回current_row即可
+         *  This situation only supports SQL base types.
+         *  Additionally, DBMS_SQL does not have output parameters, only current_row needs to be returned
          */
         if (!((into_count < actual_column_count && 1 == into_count)
             || into_count == actual_column_count
@@ -5844,7 +5840,7 @@ int ObSPIService::get_result(ObPLExecCtx *ctx,
             LOG_WARN("read result error", K(ret), K(row_count), K(for_cursor));
           }
         } else {
-          if (OB_SUCC(ret) && !for_cursor) { //如果不是cursor，into只能返回一行，需要检查返回多行报错
+          if (OB_SUCC(ret) && !for_cursor) { //if not cursor, into can only return one row, need to check error for returning multiple rows
             ObNewRow tmp_row;
             int64_t cnt = row_count;
             if (OB_FAIL(ob_write_row(tmp_allocator, current_row, tmp_row))) {
@@ -5871,7 +5867,7 @@ int ObSPIService::get_result(ObPLExecCtx *ctx,
           if (OB_FAIL(ret)) {
             // do nothing
           } else if (for_dbms_sql) {
-            //DBMS_SQL包的FETCH不需要检查
+            // DBMS_SQL package FETCH does not need to be checked
           } else if (NULL != out_using_params) {
             ObCastCtx cast_ctx(current_expr_allocator, &dtc_params, cast_mode, cast_coll_type);
             CK (actual_column_count == row_desc.count());
@@ -5958,7 +5954,7 @@ int ObSPIService::get_result(ObPLExecCtx *ctx,
                 || for_cursor
                 || (NULL != implicit_cursor && !implicit_cursor->get_in_forall())
                 || (NULL != implicit_cursor && 0 == implicit_cursor->get_bulk_rowcount_count()))) {
-            //FORALL的BULK是追加模式，仅在非追加模式或追加模式的第一次需要spi_reset_collection
+            //FORALL's BULK is append mode, only spi_reset_collection is needed in non-append mode or the first time in append mode
             OZ (spi_set_collection(ctx->exec_ctx_->get_my_session()->get_effective_tenant_id(),
                                      ctx, *table, 0));
           }
@@ -5977,7 +5973,7 @@ int ObSPIService::get_result(ObPLExecCtx *ctx,
                                                 cast_coll_type)));
             }
           } else {
-            // 对于collection内部是非record场景而言, 每个table只需要一个castctx
+            // For the scenario where the internal of collection is not record, each table only needs one castctx
             OZ (cast_ctxs.push_back(ObCastCtx(&tmp_allocator,
                                                 &dtc_params,
                                                 cast_mode,
@@ -5996,7 +5992,7 @@ int ObSPIService::get_result(ObPLExecCtx *ctx,
         }
         if (OB_FAIL(ret)) {
           if (OB_ITER_END == ret) {
-            // CURSOR BULK COLLECT INTO的NOTFOUND行为与SQL不同, 只要遇到ITER_END就设置为TRUE
+            // CURSOR BULK COLLECT INTO's NOTFOUND behavior is different from SQL, it is set to TRUE as soon as ITER_END is encountered
             not_found = 0 == row_count || for_cursor ? true : false;
             ret = OB_SUCCESS;
           } else {
@@ -6009,8 +6005,8 @@ int ObSPIService::get_result(ObPLExecCtx *ctx,
             }
           }
         }
-        // fetch row阶段可能会触发udf/trigger, udf/trigger内部触发package var的内存变化了, 导致bulk table记录的table地址异常
-        // 因此这里重新计算一次package var table地址
+        // fetch row stage may trigger udf/trigger, udf/trigger internal trigger package var memory change, leading to bulk table record table address anomaly
+        // Therefore here we recalculate the package var table address
         for (int64_t i = 0; OB_SUCC(ret) && i < bulk_tables.count(); ++i) {
           ObPLCollection *table = nullptr;
           if (OB_NOT_NULL(into_exprs[i]) &&
@@ -6047,7 +6043,7 @@ int ObSPIService::get_result(ObPLExecCtx *ctx,
             }
           }
         }
-        if (OB_SUCC(ret) && row_count > 0) { // 累积存储在pl table里
+        if (OB_SUCC(ret) && row_count > 0) { // accumulate storage in pl table
           OZ (store_result(ctx, bulk_tables, row_count, type_count, tmp_result,
                           NULL == implicit_cursor ? false : implicit_cursor->get_in_forall(), is_type_record));
         }
@@ -6059,7 +6055,7 @@ int ObSPIService::get_result(ObPLExecCtx *ctx,
           ret = OB_SUCCESS == ret ? tmp : ret;
         }
         if (!for_cursor && OB_NOT_NULL(implicit_cursor)) {
-          OX (implicit_cursor->set_rowcount(row_count)); // 设置隐式游标
+          OX (implicit_cursor->set_rowcount(row_count)); // Set implicit cursor
         }
       }
       // update package info
@@ -6069,16 +6065,16 @@ int ObSPIService::get_result(ObPLExecCtx *ctx,
 
       if (OB_SUCC(ret) && not_found) {
         /*
-         * Mysql模式：
-         * 无论静态SQL还是cursor都会抛出异常，但是静态SQL的NOT FOUND异常如果最后没有被捕捉会吞掉该异常，并报一个WARNING信息出来；
-         * 如果是cursor的NOT FOUND异常如果最后没有被捕捉则会抛出这个错误。
+         * Mysql mode:
+         * Both static SQL and cursor will throw exceptions, but if the NOT FOUND exception of static SQL is not caught at the end, it will suppress the exception and report a WARNING message;
+         * If the NOT FOUND exception of cursor is not caught at the end, it will throw this error.
          */
         ret = OB_READ_NOTHING;
       }
     }
-  } else if (!for_cursor) { //虽然不需要存储结果，但是也需要把get_next调一遍
+  } else if (!for_cursor) { // Although the result does not need to be stored, get_next still needs to be called once
     ObResultSet *ob_result_set = static_cast<ObResultSet*>(result_set);
-    if (ob_result_set->is_with_rows()) { // SELECT或DML RETURNING
+    if (ob_result_set->is_with_rows()) { // SELECT or DML RETURNING
       ObPLASHGuard guard(ObPLASHGuard::ObPLASHStatus::IS_SQL_EXECUTION);
       // MYSQL Mode: send query result to client.
       ObSQLSessionInfo *session_info = NULL;
@@ -6093,7 +6089,7 @@ int ObSPIService::get_result(ObPLExecCtx *ctx,
       }
       OX(implicit_cursor->set_rowcount(into_count > 0 ? 1 : 0));
     } else if (stmt::T_ANONYMOUS_BLOCK != ob_result_set->get_stmt_type()) {
-      // 不带Returing的INSERT，DELETE，UPDATE
+      // INSERT, DELETE, UPDATE without Returning
       if (stmt::T_UPDATE == ob_result_set->get_stmt_type()) {
         ObPhysicalPlanCtx *phy_ctx
           = GET_PHY_PLAN_CTX(ob_result_set->get_exec_context());
@@ -6164,10 +6160,10 @@ int ObSPIService::collect_cells(pl::ObPLExecCtx &ctx,
         OZ (ObUserDefinedType::deep_copy_obj(*alloc, obj, tmp_obj, true));
       } else if (obj.get_meta() == result_types[i].get_meta_type()
           && (row_desc.at(i).get_accuracy() == result_types[i].get_accuracy()
-              || (result_types[i].get_meta_type().is_number() // NUMBER目标类型精度未知直接做赋值
+              || (result_types[i].get_meta_type().is_number() // NUMBER target type precision unknown directly do assignment
                   && PRECISION_UNKNOWN_YET == result_types[i].get_accuracy().get_precision()
                   && ORA_NUMBER_SCALE_UNKNOWN_YET == result_types[i].get_accuracy().get_scale())
-              || (result_types[i].get_meta_type().is_character_type() // CHAR/VARCHAR长度未知直接赋值
+              || (result_types[i].get_meta_type().is_character_type() // CHAR/VARCHAR length unknown directly assign
                   && (-1) == result_types[i].get_accuracy().get_length()))) {
         if (OB_FAIL(deep_copy_obj(*cast_ctxs.at(i).allocator_v2_, obj, tmp_obj))) {
           LOG_WARN("deep copy error", K(obj), K(ret));
@@ -6231,14 +6227,14 @@ int ObSPIService::convert_obj(ObPLExecCtx *ctx,
               K(current_type.at(i)), K(result_types[i].get_accuracy()));
     if (obj.is_pl_extend()/* && pl::PL_RECORD_TYPE == obj.get_meta().get_extend_type()*/
         && result_types[i].get_meta_type().is_ext()) {
-      //record嵌object场景，object属性在resolver阶段要求强一致，无需强转
+      // record embedded object scenario, object properties require strong consistency in the resolver phase, no need for casting
       OZ (calc_array.push_back(obj));
     } else if (obj.get_meta() == result_types[i].get_meta_type()
         && (current_type.at(i).get_accuracy() == result_types[i].get_accuracy()
-            || (result_types[i].get_meta_type().is_number() // NUMBER目标类型精度未知直接做赋值
+            || (result_types[i].get_meta_type().is_number() // NUMBER target type precision unknown directly do assignment
                 && PRECISION_UNKNOWN_YET == result_types[i].get_accuracy().get_precision()
                 && ORA_NUMBER_SCALE_UNKNOWN_YET == result_types[i].get_accuracy().get_scale())
-            || (result_types[i].get_meta_type().is_character_type() // CHAR/VARCHAR长度未知,直接赋值
+            || (result_types[i].get_meta_type().is_character_type() // CHAR/VARCHAR length unknown, directly assign
                 && -1 == result_types[i].get_accuracy().get_length()))) {
       ObObj tmp_obj;
       if (obj.is_pl_extend()) {
@@ -6424,7 +6420,7 @@ int ObSPIService::store_result(ObPLExecCtx *ctx,
             || row_desc.count() != obj_array.count())) {
       need_convert_type = false;
     }
-    //  检查not null修饰符是否生效
+    //  Check if the not null modifier is effective
     for (int64_t i = 0; OB_SUCC(ret) && i < type_count; ++i) {
       if (not_null_flags[i] && obj_array.at(i).is_null()) {
         ret = OB_ERR_NUMERIC_OR_VALUE_ERROR;
@@ -6436,8 +6432,7 @@ int ObSPIService::store_result(ObPLExecCtx *ctx,
                 K(ret));
       }
     }
-
-    // 做类型转换
+    // Do type conversion
     if (OB_FAIL(ret)) {
     } else if (return_types != nullptr && row_desc.count() == obj_array.count()) {
       OZ(convert_obj(ctx, cast_ctx, is_strict, result_expr, row_desc,
@@ -6497,11 +6492,11 @@ int ObSPIService::store_result(ObPLExecCtx *ctx,
       }
     }
   }
-  // 向变量赋值
+  // Assign value to variable
   if (OB_SUCC(ret)) {
     ParamStore *params = ctx->params_;
     ObObjParam result_address;
-    if (is_obj_access_expression(*result_expr)) { //通过ObjAccess访问得到的基础变量或record
+    if (is_obj_access_expression(*result_expr)) { // Accessing the base variable or record through ObjAccess
       ObIAllocator *pkg_allocator = NULL;
       ObIAllocator *composite_allocator = nullptr;
       ObPlCompiteWrite *composite_write = nullptr;
@@ -6541,7 +6536,7 @@ int ObSPIService::store_result(ObPLExecCtx *ctx,
         }
 
         CK (OB_NOT_NULL(alloc));
-        // udt会在store datums深拷
+        // udt will deep copy store datums
         if (OB_SUCC(ret) && !is_schema_object && !is_sql_type_into_pl(result_address, *calc_array)) {
           int64_t i = 0;
           for (; OB_SUCC(ret) && i < calc_array->count(); ++i) {
@@ -6568,7 +6563,7 @@ int ObSPIService::store_result(ObPLExecCtx *ctx,
         }
         OZ (store_datums(result_address, *calc_array, alloc, ctx->exec_ctx_->get_my_session(), is_schema_object));
       }
-    } else if (is_question_mark_expression(*result_expr)) { //通过question mark访问得到的基础变量
+    } else if (is_question_mark_expression(*result_expr)) { // Base variable accessed via question mark
       int64_t param_idx = get_const_value(*result_expr).get_unknown();
       ObAccuracy accuracy;
       accuracy.set_accuracy(result_types[0].accuracy_);
@@ -6658,7 +6653,7 @@ int ObSPIService::store_result(ObPLExecCtx *ctx,
       }
     } else if (is_get_var_func_expression(*result_expr)
               || is_get_package_or_subprogram_var_expression(*result_expr)) {
-      //通过系统函数访问的基础变量(user var/sys var) 或 访问的package/subprogram 变量
+      // Accessing basic variables (user var/sys var) or variables accessed from the package/subprogram
       ObObjParam value;
       OX (value = calc_array->at(0));
 
@@ -6754,10 +6749,10 @@ int ObSPIService::store_result(ObPLExecCtx *ctx,
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("table or allocator is NULL", K(table), K(ret));
       } else if (is_type_record) {
-        // collection内部是record场景, bulk_tables.count() 只可能是1
+        // collection internal is record scenario, bulk_tables.count() can only be 1
         start_idx = 0;
       } else {
-        //对于object而言, get_column_count是record的列数, 这里会整体拷贝object, 因此不能用get_column_count作为跳数
+        // For object, get_column_count is the number of columns in record, here the entire object will be copied, therefore get_column_count cannot be used as the step count
         start_idx += 0 == i ? 0 : 1;
       }
       if (OB_FAIL(ret)) {
@@ -6776,8 +6771,7 @@ int ObSPIService::store_result(ObPLExecCtx *ctx,
           table->set_count(append_mode ? old_count + row_count : row_count);
           table->set_data(reinterpret_cast<ObObj*>(bulk_addr), table->get_count());
         }
-
-        //初始化所有的ObObj
+        // Initialize all ObObj
         if (OB_SUCC(ret) && append_mode && old_count > 0) {
           MEMCPY(bulk_addr, old_data, old_count * sizeof(ObObj));
         }
@@ -6819,7 +6813,7 @@ int ObSPIService::store_result(ObPLExecCtx *ctx,
               }
               OZ (table->set_row(row, append_mode ? old_count + j : j));
             }
-          } else { //如果table里是非record数据，直接按顺序存储数据即可
+          } else { // If table contains non-record data, store data in order directly
             int64_t current_datum = append_mode ?
                 reinterpret_cast<int64_t>(bulk_addr) + old_count * sizeof(ObObj)
                 : reinterpret_cast<int64_t>(bulk_addr);
@@ -6893,8 +6887,8 @@ int ObSPIService::store_datums(ObObj &dest_addr, ObIArray<ObObj> &obj_array,
   } else if (is_schema_object || is_sql_type_into_pl(dest_addr, obj_array)) {
     ObObj src;
     CK (dest_addr.is_pl_extend());
-    /* schema record只能作为单独的into variable存在
-          拷贝时，要求src id和dest id必须一致. */
+    /* schema record can only exist as a separate into variable
+          when copying, src id and dest id must be consistent. */
     CK (1 == obj_array.count());
     OX (src = obj_array.at(0));
     OV (src.is_pl_extend(), OB_ERR_EXPRESSION_WRONG_TYPE);
@@ -7095,7 +7089,7 @@ int ObSPIService::fetch_row(void *result_set,
     ret = OB_E(EventTable::EN_SPI_GET_NEXT_ROW) OB_SUCCESS;
 #endif
     if (FAILEDx(ob_result_set->get_next_row(row))) {
-      //上层判断返回值，这里不打印信息
+      // Upper layer checks return value, here no information is printed
     } else {
       cur_row = *row;
       ++row_count;
@@ -7261,7 +7255,7 @@ int ObSPIService::resolve_exec_params(const ParseResult &parse_result,
     } else if (OB_ISNULL(expr)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("null expr", K(ret));
-    // prepare协议不支持执行参数是ENUM SET的情况，这里将ENUM SET转换为VARCHAR
+    // prepare protocol does not support execution parameters being ENUM SET, here we convert ENUM SET to VARCHAR
     } else if (ob_is_enum_or_set_type(expr->get_result_type().get_type())) {
       ObSysFunRawExpr *out_expr = NULL;
       if (OB_FAIL(ObRawExprUtils::create_type_to_str_expr(expr_factory,
@@ -7399,13 +7393,13 @@ int ObSPIService::resolve_ref_objects(const ParseResult &parse_result,
                                                          false,
                                                          table_schema))) {
           if (OB_TABLE_NOT_EXIST == ret) {
-            //找不到对象是正常的，do nothing
+            // Object not found is normal, do nothing
             ret = OB_SUCCESS;
           } else {
             LOG_WARN("relation in pl not exists", K(db_name), K(rel_name), K(ret));
           }
         } else if (NULL ==table_schema) {
-          //找不到对象是正常的，do nothing
+          // Object not found is normal, do nothing
         } else {
           ObSchemaObjVersion obj_version(table_schema->get_table_id(), table_schema->get_schema_version(), DEPENDENCY_TABLE);
           if (OB_FAIL(prepare_result.ref_objects_.push_back(obj_version))) {
@@ -7415,7 +7409,7 @@ int ObSPIService::resolve_ref_objects(const ParseResult &parse_result,
       }
         break;
       case REF_PROC: {
-        //procedure 不会出现在DML语句中
+        // procedure will not appear in DML statements
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("should never be here", K(ret));
       }
@@ -7462,14 +7456,14 @@ int ObSPIService::resolve_ref_objects(const ParseResult &parse_result,
                                                   udf_info.udf_name_,
                                                   func_info))) {
                 if (ret == OB_ERR_SP_DOES_NOT_EXIST) {
-                  //找不到对象是正常的，do nothing
+                  // Object not found is normal, do nothing
                   ret = OB_SUCCESS;
                 } else {
                   LOG_WARN("fail to get standalone function info",
                             K(ret), K(udf_info));
                 }
               } else if (OB_ISNULL(func_info)) {
-                //找不到对象是正常的，do nothing
+                // Object not found is normal, do nothing
               } else {
                 ObSchemaObjVersion obj_version(func_info->get_routine_id(),
                                                  func_info->get_schema_version(),
@@ -7526,7 +7520,7 @@ int ObSPIService::spi_process_nocopy_params(pl::ObPLExecCtx *ctx, int64_t local_
 int ObSPIService::spi_update_package_change_info(
   pl::ObPLExecCtx *ctx, uint64_t package_id, uint64_t var_idx)
 {
-  /*! 调用该函数前一定已经将PackageState存储在Session上, 此处直接在Session上获取PackageState */
+  /*! Before calling this function, PackageState must have already been stored in the Session, here we directly retrieve PackageState from the Session */
   int ret = OB_SUCCESS;
   ObSQLSessionInfo *session_info = NULL;
   ObPLPackageState *package_state = NULL;
@@ -7695,7 +7689,7 @@ ObPLSubPLSqlTimeGuard::~ObPLSubPLSqlTimeGuard()
   int64_t sql_exec_time = ObTimeUtility::current_time() - execute_start_;
   if (OB_NOT_NULL(state_)) {
     if (state_->get_sub_plsql_exec_time() > 0) {
-      //此时纯SQL时间已经在 add_pl_exec_time 被加到了上层
+      // At this point, the pure SQL time has already been added to the upper layer by add_pl_exec_time
       LOG_DEBUG("<<< sql exec time ", K(sql_exec_time), K(state_->get_sub_plsql_exec_time()), 
         K(sql_exec_time-state_->get_sub_plsql_exec_time()), K(state_->get_pure_sql_exec_time()),
         K(old_sub_plsql_exec_time_), K(old_pure_sql_exec_time_));

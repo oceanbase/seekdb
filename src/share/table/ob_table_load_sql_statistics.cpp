@@ -185,8 +185,8 @@ int ObTableLoadSqlStatistics::merge(const ObTableLoadSqlStatistics &other)
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected col stat is null", KR(ret), K(i), K(other.col_stat_array_));
       }
-      // ObOptOSGColumnStat的序列化结果只序列化里面的ObOptColumnStat,
-      // 需要调用ObOptColumnStat的merge函数
+      // The serialization result of ObOptOSGColumnStat only serializes the ObOptColumnStat inside,
+      // Need to call the merge function of ObOptColumnStat
       else if (OB_FAIL(
                  col_stat_array_.at(i)->col_stat_->merge_column_stat(*osg_col_stat->col_stat_))) {
         LOG_WARN("fail to merge col stat", KR(ret));

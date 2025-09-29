@@ -74,7 +74,7 @@ int ObExprIfNull::calc_result_type2(ObExprResType &type,
         int signed_type_diff = static_cast<int>(signed_type) - static_cast<int>(ObTinyIntType);
         int unsigned_type_diff = static_cast<int>(unsigned_type) - static_cast<int>(ObUTinyIntType);
         int res_type_diff = (unsigned_type_diff >= signed_type_diff) ? (unsigned_type_diff + 1) : signed_type_diff;
-        //对于 int 和uint64的混合类型，需要提升类型至decimal
+        // For int and uint64 mixed types, need to promote type to decimal
         if (res_type_diff > (static_cast<int>(ObIntType) - static_cast<int>(ObTinyIntType))) {
           type.set_type(ObNumberType);
           type.set_accuracy(ObAccuracy::DDL_DEFAULT_ACCURACY[ObIntType].get_accuracy());
@@ -118,7 +118,7 @@ int ObExprIfNull::calc_ifnull_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &
   // ifnull(arg0, arg1);
   ObDatum *arg0 = NULL;
   ObDatum *arg1 = NULL;
-  // MySQL ifnull是短路的
+  // MySQL ifnull is short-circuiting
   if (OB_FAIL(expr.args_[0]->eval(ctx, arg0))) {
     LOG_WARN("eval arg0 failed", K(ret));
   } else if (!arg0->is_null()) {

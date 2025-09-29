@@ -110,18 +110,18 @@ public:
   int64_t mem_chunk_size_;
   int64_t heap_table_mem_chunk_size_;
 
-  int64_t total_thread_cnt_; // 总的线程数目
-  int64_t dump_thread_cnt_; // dump线程数目
-  int64_t load_thread_cnt_; // load线程数目, 在pre_sort中没有实际意义, 只用做sample线程退出标志
+  int64_t total_thread_cnt_; // total number of threads
+  int64_t dump_thread_cnt_; // number of dump threads
+  int64_t load_thread_cnt_; // number of load threads, has no actual meaning in pre_sort, only used as a sample thread exit flag
 
-  int64_t finish_load_thread_cnt_; // 已经结束的load线程数目
-  int64_t running_dump_task_cnt_; // 还在运行的dump任务数目
-  int64_t fly_mem_chunk_count_; // 当前存在的chunk数目, 包含还在写的和已经close的chunk
+  int64_t finish_load_thread_cnt_; // the number of load threads that have finished
+  int64_t running_dump_task_cnt_; // Number of dump tasks still running
+  int64_t fly_mem_chunk_count_; // the current number of chunks, including those still being written and already closed chunks
 
-  ObDirectLoadEasyQueue<int64_t> pre_sort_chunk_queue_; // presort任务队列
-  ObDirectLoadEasyQueue<ObDirectLoadMemWorker *> mem_loader_queue_; // loader任务队列
-  ObMemDumpQueue mem_dump_queue_; // dump任务队列
-  ObDirectLoadEasyQueue<storage::ObDirectLoadExternalMultiPartitionRowChunk *> mem_chunk_queue_; // 已经close的chunk队列
+  ObDirectLoadEasyQueue<int64_t> pre_sort_chunk_queue_; // presort task queue
+  ObDirectLoadEasyQueue<ObDirectLoadMemWorker *> mem_loader_queue_; // loader task queue
+  ObMemDumpQueue mem_dump_queue_; // dump task queue
+  ObDirectLoadEasyQueue<storage::ObDirectLoadExternalMultiPartitionRowChunk *> mem_chunk_queue_; // closed chunk queue
 
   // save result
   lib::ObMutex mutex_;

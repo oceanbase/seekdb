@@ -122,7 +122,7 @@ int ObPlanMonitorNodeList::submit_node(ObMonitorNode &node)
     deep_cp_node->covert_to_static_node();
     int64_t req_id = 0;
     if (OB_FAIL(queue_.push(deep_cp_node, req_id))) {
-      //sql audit槽位已满时会push失败, 依赖后台线程进行淘汰获得可用槽位
+      //sql audit slot will push failed when full, relying on background thread to evict and obtain available slots
       if (REACH_TIME_INTERVAL(2 * 1000 * 1000)) {
         SERVER_LOG(WARN, "push into queue failed", K(get_size_used()), K(get_size()), K(ret));
       }

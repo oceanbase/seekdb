@@ -166,12 +166,12 @@ public:
                K_(is_default_expr_access_external_state));
 private:
   common::ObString name_;
-  ObPLDataType type_; //主要用来表示类型，同时要存储变量的初始值或default值，运行状态的值不存储在这里
-  int64_t default_; //-1:代表没有default值, 其他:default值在表达式表中的下标
-  // const sql::ObRawExpr *default_; //是否有default值
-  bool is_readonly_; //该变量是否只读
-  bool is_not_null_; //该变量不允许为NULL
-  bool is_default_construct_; //默认值是否是该变量的构造函数
+  ObPLDataType type_; // mainly used to represent the type, while also storing the initial value or default value of the variable, the runtime state value is not stored here
+  int64_t default_; //-1: represents no default value, others: index of the default value in the expression table
+  // const sql::ObRawExpr *default_; // is there a default value
+  bool is_readonly_; //Is this variable read-only
+  bool is_not_null_; // This variable is not allowed to be NULL
+  bool is_default_construct_; //Is the default value the constructor of this variable?
   bool is_formal_param_; // this is formal param of a routine
   bool is_dup_declare_;
   bool is_referenced_;
@@ -216,7 +216,7 @@ public:
   TO_STRING_KV(K_(variables), K_(self_param_idx));
 
 private:
-  //所有输入输出参数，和PL体内使用的所有变量（包括游标，但是不包括condition，也不包括函数返回值和隐藏的ctx参数）,和ObPLFunction里的符号表一一对应
+  //All input and output parameters, and all variables used within the PL body (including cursors, but not including condition, nor function return values and hidden ctx parameters), correspond one-to-one with the symbol table in ObPLFunction
   ObPLSEArray<ObPLVar> variables_;
   int64_t self_param_idx_; // index of self_param
 };
@@ -256,8 +256,8 @@ public:
   TO_STRING_KV(K_(variable_debuginfos));
 
 private:
-  // 所有输入输出参数, 和PL体内使用的所有变量 (包括游标), 和ObPLFunction中的符号表一一对应
-  // 主要用于记录每个符号的作用范围, 以及该符号如果是复杂类型的话是Collection还是Record
+  // All input and output parameters, and all variables used within the PL body (including cursors), correspond one-to-one with the symbol table in ObPLFunction
+  // Mainly used to record the scope of each symbol, and if the symbol is a complex type, whether it is a Collection or Record
   ObPLSEArray<ObPLVarDebugInfo> variable_debuginfos_;
 };
 
@@ -303,14 +303,14 @@ public:
 
 private:
   int64_t count_;
-  //所有声明的标签（block的标签和普通语句一样，放在父block里）,和ObPLFunction里的标签表一一对应
+  // All declared labels (block labels and regular statements are the same, placed inside the parent block), and correspond one-to-one with the label table in ObPLFunction
   typedef struct ObPLLabel
   {
     ObPLLabel() : label_(), type_(LABEL_INVALID), next_stmt_(NULL), is_goto_dst_(false), is_end_(false) {}
     TO_STRING_KV(K_(label), K_(type), K_(next_stmt), K_(is_goto_dst), K_(is_end));
     common::ObString label_;
     ObPLLabelType type_;
-    // 和label关联的stmt
+    // and label associated stmt
     ObPLStmt *next_stmt_;
     bool is_goto_dst_;
     bool is_end_;
@@ -343,7 +343,7 @@ private:
 };
 
 
-enum ObPLConditionType //按照优先级顺序从高到低
+enum ObPLConditionType //priority order from high to low
 {
   INVALID_TYPE = -1,
   ERROR_CODE = 0,
@@ -381,8 +381,7 @@ public:
       stmt_id_(OB_INVALID_INDEX),
       signal_(false),
       duplicate_(false) {}
-
-  //不实现析构函数，省得LLVM映射麻烦
+  //Do not implement the destructor to avoid LLVM mapping trouble
 
   static uint32_t type_offset_bits() { return offsetof(ObPLConditionValue, type_) * 8; }
   static uint32_t error_code_offset_bits() { return offsetof(ObPLConditionValue, error_code_) * 8; }
@@ -395,15 +394,15 @@ public:
   int64_t error_code_;
   const char *sql_state_;
   int64_t str_len_;
-  int64_t stmt_id_; //FOR DEBUG，主流程不需要：作为landingpad的clause时，代表level；当作为抛出的异常时，代表stmt id
-  bool signal_; //FOR DEBUG，主流程不需要：作为landingpad的clause时，无意义；当作为抛出的异常时，代表是否由signal语句抛出
-  bool duplicate_; // 代表是否重复声明
+  int64_t stmt_id_; // FOR DEBUG, main flow does not need: as the clause of landingpad, it represents level; when as the thrown exception, it represents stmt id
+  bool signal_; // FOR DEBUG, main flow does not need: meaningless when used as a landingpad clause; when used as a thrown exception, it represents whether it was thrown by a signal statement
+  bool duplicate_; // represents whether it is a duplicate declaration
 
   TO_STRING_KV(
     K_(type), K_(error_code), K_(sql_state), K_(str_len), K_(stmt_id), K_(signal), K_(duplicate));
 };
 
-class ObPLCondition //用于Declare Condition定义
+class ObPLCondition // used for Declare Condition definition
 {
 public:
   ObPLCondition() : name_(), value_() {}
@@ -605,7 +604,7 @@ public:
 protected:
   uint64_t pkg_id_;
   uint64_t routine_id_;
-  int64_t idx_; //指向ObPLSymbolTable的下标
+  int64_t idx_; // index pointing to ObPLSymbolTable
   ObPLSql value_;
   ObPLDataType cursor_type_;
   ObPLSEArray<int64_t> formal_params_;
@@ -1126,29 +1125,29 @@ public:
   enum ExternalType
   {
     INVALID_VAR = -1,
-    LOCAL_VAR = 0,      // 本地变量
-    DB_NS,              // 数据库名字 如test.t中的test
-    PKG_NS,             // package名字 如dbms_output.put_line中的dbms_output
-    PKG_VAR,            // package中的变量 如dbms_output.var中var
-    USER_VAR,           // 用户变量(mysql mode)
-    SESSION_VAR,        // session变量(mysql mode)
-    GLOBAL_VAR,         // 全局变量(mysql mode)
-    TABLE_NS,           // 表名字
-    TABLE_COL,          // 表中的列
+    LOCAL_VAR = 0,      // local variable
+    DB_NS,              // database name such as test in test.t
+    PKG_NS,             // package name such as dbms_output in dbms_output.put_line
+    PKG_VAR,            // variable in the package such as var in dbms_output.var
+    USER_VAR,           // user variable (mysql mode)
+    SESSION_VAR,        // session variable (mysql mode)
+    GLOBAL_VAR,         // global variable (mysql mode)
+    TABLE_NS,           // table name
+    TABLE_COL,          // column in the table
     LABEL_NS,           // Label
-    SUBPROGRAM_VAR,     // 子过程中的变量
+    SUBPROGRAM_VAR,     // variable in the subprogram
     EXPR_VAR,           //for table type access index
-    CONST_VAR,          //常量 special case for is_expr
-    PROPERTY_TYPE,      //固有属性，如count
-    INTERNAL_PROC,      //Package中的Procedure
-    EXTERNAL_PROC,      //Standalone的Procedure
+    CONST_VAR,          // constant special case for is_expr
+    PROPERTY_TYPE,      //intrinsic property, such as count
+    INTERNAL_PROC,      //Procedure in the Package
+    EXTERNAL_PROC,      //Standalone procedure
     NESTED_PROC,
-    TYPE_METHOD_TYPE,   //自定义类型的方法
-    SYSTEM_PROC,        //系统中已经预定义的Procedure(如: RAISE_APPLICATION_ERROR)
+    TYPE_METHOD_TYPE,   //custom type method
+    SYSTEM_PROC,        //System predefined Procedure (e.g.: RAISE_APPLICATION_ERROR)
     UDT_NS,
     UDF_NS,
-    LOCAL_TYPE,         // 本地的自定义类型
-    PKG_TYPE,           // 包中的自定义类型
+    LOCAL_TYPE,         // local custom type
+    PKG_TYPE,           // custom type in the package
     SELF_ATTRIBUTE,
     DBLINK_PKG_NS,      // dblink package
     UDT_MEMBER_ROUTINE, //
@@ -1478,25 +1477,25 @@ private:
   uint64_t package_version_;
   uint64_t routine_id_;
   common::ObString routine_name_;
-  bool stop_search_label_; //handler的body首层block置为true，因为handler的body看不到外层的label
-  bool explicit_block_; //用户通过BEGIN END显示声明的BLOCK, 对应Parser的T_SP_BLOCK_CONTENT
-  bool function_block_; //是否是Function的Block
-  bool udt_routine_; // function 是否udt里面的function，这种函数需要特殊处理，因为它能访问udt的属性
-  ObPLSEArray<int64_t> types_; //类型表里的下标
-  ObPLSEArray<int64_t> symbols_; //符号表里的下标
-  ObPLSEArray<int64_t> labels_; //标签表里的下标
-  ObPLSEArray<int64_t> conditions_; //异常表里的下标
-  ObPLSEArray<int64_t> cursors_; //游标表里的下标
-  ObPLSEArray<int64_t> routines_; //子过程在过程表里的下标
-  ObPLUserTypeTable *type_table_; //全局用户自定义数据类型表，所有的block都指向ObPLFunctionAST里的
-  ObPLSymbolTable *symbol_table_; //全局符号表，所有的block都指向ObPLFunctionAST里的
-  ObPLLabelTable *label_table_; //全局标签表，所有的block都指向ObPLFunctionAST里的
-  ObPLConditionTable *condition_table_; //全局异常表，所有的block都指向ObPLFunctionAST里的
-  ObPLCursorTable *cursor_table_; //全局游标表，所有的block都指向ObPLFunctionAST里的
+  bool stop_search_label_; // set the top-level block of handler's body to true, because handler's body cannot see outer labels
+  bool explicit_block_; //User explicitly declared BLOCK through BEGIN END, corresponding to Parser's T_SP_BLOCK_CONTENT
+  bool function_block_; //whether it is a Function's Block
+  bool udt_routine_; // function whether the function is inside udt, this function requires special handling because it can access udt's attributes
+  ObPLSEArray<int64_t> types_; // index in the type table
+  ObPLSEArray<int64_t> symbols_; //index in the symbol table
+  ObPLSEArray<int64_t> labels_; // index in the label table
+  ObPLSEArray<int64_t> conditions_; //Index in the exception table
+  ObPLSEArray<int64_t> cursors_; // index in the cursor table
+  ObPLSEArray<int64_t> routines_; //Index of subroutines in the procedure table
+  ObPLUserTypeTable *type_table_; // global user-defined data type table, all blocks point to the one in ObPLFunctionAST
+  ObPLSymbolTable *symbol_table_; //global symbol table, all blocks point to the one in ObPLFunctionAST
+  ObPLLabelTable *label_table_; //global label table, all blocks point to the one in ObPLFunctionAST
+  ObPLConditionTable *condition_table_; //global exception table, all blocks point to the one in ObPLFunctionAST
+  ObPLCursorTable *cursor_table_; //global cursor table, all blocks point to the ObPLFunctionAST inside
   ObPLRoutineTable *routine_table_;
-  common::ObIArray<sql::ObRawExpr*> *exprs_; //使用的表达式，所有的block都指向ObPLFunctionAST里的
-  common::ObIArray<sql::ObRawExpr*> *obj_access_exprs_; //所有Block都指向ObPLFunctionAST里的
-  ObPLExternalNS *external_ns_; //外部名称空间，用于解释PL所解释不了外部变量：包变量、用户变量、系统变量
+  common::ObIArray<sql::ObRawExpr*> *exprs_; // the expressions used, all blocks point to those in ObPLFunctionAST
+  common::ObIArray<sql::ObRawExpr*> *obj_access_exprs_; // All blocks point to those in ObPLFunctionAST
+  ObPLExternalNS *external_ns_; // External namespace, used to interpret external variables that PL cannot interpret: package variables, user variables, system variables
   ObPLCompileFlag compile_flag_;
 };
 
@@ -1661,10 +1660,10 @@ private:
 protected:
   UnitType type_;
   ObPLStmtBlock *body_;
-  ObPLSEArray<sql::ObRawExpr*> obj_access_exprs_; //使用的ObjAccessRawExpr
-  ObPLSEArray<sql::ObRawExpr*> exprs_; //使用的表达式，在AST里是ObRawExpr，在ObPLFunction里是ObISqlExpression
+  ObPLSEArray<sql::ObRawExpr*> obj_access_exprs_; // Used ObjAccessRawExpr
+  ObPLSEArray<sql::ObRawExpr*> exprs_; // the expressions used, in AST it is ObRawExpr, in ObPLFunction it is ObISqlExpression
   ObPLSEArray<ObPLStmtBlock*> continue_handler_desc_bodys_;
-  ObBitSet<> simple_calc_bitset_; //可以使用LLVM进行计算的表达式下标
+  ObBitSet<> simple_calc_bitset_; //Indices of expressions that can be calculated using LLVM
   ObPLSEArray<ObPLSqlStmt*> sql_stmts_;
   sql::ObRawExprFactory expr_factory_;
   ObPLSymbolTable symbol_table_;
@@ -1762,7 +1761,7 @@ private:
   common::ObString name_;
   uint64_t id_;
   uint64_t subprogram_id_;
-  ObPLSEArray<int64_t> subprogram_path_; // subprogram的寻址路径
+  ObPLSEArray<int64_t> subprogram_path_; // addressing path of subprogram
   bool is_all_sql_stmt_;
   bool is_pipelined_;
   bool has_return_;
@@ -2222,7 +2221,7 @@ protected:
   ObPLSEArray<ObPLDataType> into_data_type_;
   ObPLSEArray<common::ObString> into_name_;
   bool bulk_;
-  bool is_type_record_; // 表示into后面是否只有一个type定义的record类型(非object定义)
+  bool is_type_record_; // indicates whether there is only one type-defined record type (not object-defined) after into
 };
 
 class ObPLLoopControl : public ObPLStmt
@@ -2386,7 +2385,7 @@ struct InOutParam
 
   int64_t param_;
   ObPLRoutineParamMode mode_;
-  int64_t out_idx_; //OB_INVALID_INDEX：非输出参数，其他：输出（包括OUT和INOUT）参数在全局符号表里的下标
+  int64_t out_idx_; // OB_INVALID_INDEX: not an output parameter, others: index of the output (including OUT and INOUT) parameters in the global symbol table
 
   TO_STRING_KV(K_(param), K_(mode), K_(out_idx));
 };
@@ -2526,7 +2525,7 @@ public:
     TO_STRING_KV(K_(level), K_(desc));
 
   private:
-    int64_t level_; //OB_INVALID_INDEX代表是本级原生Handler，否则代表是从上层降下来的Handler
+    int64_t level_; // OB_INVALID_INDEX represents the native Handler of this level, otherwise it represents a Handler that has been passed down from the upper level
     HandlerDesc *desc_;
   };
 
@@ -2625,7 +2624,7 @@ private:
   ObPLConditionValue value_;
   hash::ObHashMap<int64_t, int64_t> item_to_expr_idx_;
   int ob_error_code_;
-  bool is_signal_null_; // Oracle模式下RAISE;语句, 不指定异常名, 此时需要抛出当前异常
+  bool is_signal_null_; // In Oracle mode, RAISE; statement without specifying an exception name, in this case, the current exception needs to be thrown
   bool is_resignal_stmt_;
 };
 
@@ -2740,7 +2739,7 @@ public:
   TO_STRING_KV(K_(type), K_(label), K_(cur_idx));
 
 private:
-  int64_t cur_idx_; // cursor表里的下标
+  int64_t cur_idx_; // index in the cursor table
 };
 
 class ObPLOpenStmt : public ObPLStmt
@@ -2779,7 +2778,7 @@ public:
   }
   inline int get_var(const ObPLVar *&var) const
   {
-    //只有local cursor才能在本地符号表找到对应变量
+    //Only local cursor can find the corresponding variable in the local symbol table
     return get_namespace()->get_cursor_var(get_package_id(),
                                            get_routine_id(),
                                            get_index(), var);
@@ -2792,7 +2791,7 @@ public:
   TO_STRING_KV(K_(type), K_(label), K_(cur_idx), K_(params));
 
 protected:
-  int64_t cur_idx_; //cursor表里的下标
+  int64_t cur_idx_; //index in the cursor table
   ObPLSEArray<int64_t> params_;
 };
 
@@ -2842,9 +2841,9 @@ public:
 private:
   uint64_t pkg_id_;
   uint64_t routine_id_;
-  int64_t idx_; //symbol表里的下标
-  int64_t limit_; //INT64_MAX:是bulk fetch但是没有limit子句
-  const ObUserDefinedType *user_type_; // CURSOR返回值类型
+  int64_t idx_; //index in the symbol table
+  int64_t limit_; //INT64_MAX: is bulk fetch but there is no limit clause
+  const ObUserDefinedType *user_type_; // CURSOR return value type
 };
 
 class ObPLCloseStmt : public ObPLStmt
@@ -2875,7 +2874,7 @@ public:
 private:
   uint64_t pkg_id_;
   uint64_t routine_id_;
-  int64_t idx_; //symbol表里的下标
+  int64_t idx_; //index in the symbol table
 };
 
 class ObPLNullStmt : public ObPLStmt
@@ -2909,7 +2908,7 @@ public:
 
 private:
   ObProcType type_;
-  int64_t idx_; //routine表里的下标
+  int64_t idx_; //index in the routine table
 };
 
 class ObPLRoutineDeclStmt : public ObPLStmt
@@ -2929,7 +2928,7 @@ public:
 
 private:
   ObProcType type_;
-  int64_t idx_; //routine表里的下标
+  int64_t idx_; //index in the routine table
 };
 
 class ObPLInterfaceStmt : public ObPLStmt

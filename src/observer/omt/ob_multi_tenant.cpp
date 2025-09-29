@@ -809,8 +809,7 @@ int ObMultiTenant::create_tenant(const ObTenantMeta &meta, bool write_slog, cons
     SpinRLockGuard guard(lock_);
     tenant_active_ = true;
   }
-
-  // TODO: @lingyang 预期不能失败
+  // TODO: @lingyang Expected not to fail
   if (OB_TMP_FAIL(update_tenant_config(tenant_id))) {
     LOG_WARN("update tenant config fail", K(tenant_id), K(tmp_ret));
   }
@@ -1522,8 +1521,8 @@ int ObMultiTenant::mark_del_tenant(const uint64_t tenant_id)
 }
 
 ERRSIM_POINT_DEF(ERRSIM_REMOVE_TENANT_LOCK_ERROR);
-// 确保remove_tenant函数可以重复调用, 因为在删除租户时失败会不断重试,
-// 这里只是删除内存结构，持久化的数据还在。
+// Ensure the remove_tenant function can be called repeatedly, because deleting a tenant may fail and require multiple retries,
+// Here we only delete the memory structure, the persisted data is still there.
 void ObMultiTenant::remove_tenant()
 {
   int ret = OB_SUCCESS;

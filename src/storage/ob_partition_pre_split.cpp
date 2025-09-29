@@ -350,8 +350,8 @@ int ObPartitionPreSplit::get_global_index_pre_split_schema_if_need(
 }
 
 /*
-  1. 在预分裂创建全局索引的场景，外层ddl_type可以不传，其他场景需要传
-  2. 在预分裂主表或者已存在的全局索引表时，外层传入的data_table_schema可以是主表和全局索引表的的new_table_schema
+  1. In the scenario of creating a global index during pre-split, the outer ddl_type can be omitted; otherwise, it needs to be passed.
+  2. When pre-splitting the main table or an existing global index table, the outer data_table_schema can be the new_table_schema of the main table and global index table.
 */
 int ObPartitionPreSplit::do_table_pre_split_if_need(
     const ObString &db_name,
@@ -878,8 +878,8 @@ int ObPartitionPreSplit::get_and_set_part_column_info(
 }
 
 /*
-  预分裂后，因为会分裂为多个分区，new_table_schema 一定要填分区键
-  如果分区键是double/float等类型，需要把分区类型改成 range column
+  After pre-split, because it will split into multiple partitions, new_table_schema must fill in the partition key
+  If the partition key is of type double/float, etc., you need to change the partition type to range column
 */
 int ObPartitionPreSplit::build_new_table_schema(
     const ObTableSchema &ori_table_schema,
@@ -944,7 +944,7 @@ int ObPartitionPreSplit::build_new_table_schema(
 }
 
 /*
-  如果分区键包含double等类型，需要把分区类型改成range column
+  If the partition key contains types like double, the partition type needs to be changed to range column
 */
 int ObPartitionPreSplit::modify_partition_func_type_if_need(ObTableSchema &new_table_schema) 
 {
@@ -986,8 +986,8 @@ int ObPartitionPreSplit::modify_partition_func_type_if_need(ObTableSchema &new_t
 }
 
 /*
-  目前只有创建全局索引表，need_generate_part_name才会为true
-  如果是重建全局索引表，need_generate_part_name为false
+  Currently only when creating a global index table, need_generate_part_name will be true
+  If it is rebuilding a global index table, need_generate_part_name is false
 */
 int ObPartitionPreSplit::build_split_tablet_partition_schema(
     const int64_t tenant_id,
@@ -1103,8 +1103,8 @@ int ObPartitionPreSplit::build_global_index_pre_split_ranges(
 }
 
 /*
-  需要按照table_schema的分区范围，指定每个column的范围（table_schema的分区键可能有多列，
-  并且最后一个分区的范围可能是[maxvalue, 100] 或者 [100, maxvalue]这种形式，需要考虑到。
+  Need to specify the range of each column according to the partition range of table_schema (the partition key of table_schema may consist of multiple columns,
+  and the range of the last partition may be in the form of [maxvalue, 100] or [100, maxvalue], this needs to be considered.
 */
 int ObPartitionPreSplit::get_partition_columns_range(
     const ObTableSchema &table_schema,
@@ -1229,7 +1229,7 @@ int ObPartitionPreSplit::get_partition_columns_name(
 }
 
 /*
-  获取分区表的特定tablet的边界，需要保证预分裂时原表的分区规则没发生变更的情况下，才需要走这个函数。
+  Get the boundary of a specific tablet in the partition table, which is required only when the partition rules of the original table have not changed during pre-splitting.
 */
 int ObPartitionPreSplit::get_partition_table_tablet_bounder(
     const ObTableSchema &table_schema, 
@@ -1332,8 +1332,8 @@ int ObPartitionPreSplit::check_is_modify_partition_rule(
   Atention!!!!
     1. split range should be left close right open, like: [1, 10)
     2. as to auto split none partition table, range_builder.query_ranges should sample according to table primary key
-    3. 采样时，如果此时new table schema 的分区键比 old table schema的分区键多，那么多出来的分区键的range，使用min_rowkey和max_rowkey填充，采样时会根据新分区键range范围采样过滤。
-    4. part_columns 和 part_columns_range 一一对应，采样会根据range过滤，如果不想采样过滤则填min和max
+    3. when sampling, if the new table schema's partition key has more columns than the old table schema's partition key, the additional partition key ranges should be filled with min_rowkey and max_rowkey. Sampling will filter based on the new partition key ranges.
+    4. part_columns and part_columns_range correspond one-to-one. Sampling will filter based on the range. If no sampling filter is desired, fill with min and max
 */
 int ObPartitionPreSplit::build_tablet_pre_split_ranges(
     const int64_t tenant_id,
@@ -1398,7 +1398,7 @@ int ObPartitionPreSplit::build_tablet_pre_split_ranges(
 }
 
 /*
-  获取表的分区上下限，如果表是分区表，则获取min和max，如果不是分区表，则按预分裂的分区键数量构造min和max。
+  Get the partition upper and lower bounds of the table, if the table is a partitioned table, then get min and max, if not, construct min and max according to the number of pre-split partition keys.
 */
 int ObPartitionPreSplit::get_table_partition_bounder(
   const ObTableSchema &table_schema,
@@ -1435,8 +1435,8 @@ int ObPartitionPreSplit::get_table_partition_bounder(
 }
 
 /*
-  1. 需要考虑每个ranges之间除了首尾之外没有交集
-  2. 需要确认每个range是否只有一个high bound val，如果这种场景则需要保证tmp_split_ranges的range是有序递增的。
+  1. Need to consider that there is no intersection between each ranges except for the start and end.
+  2. Need to confirm whether each range has only one high bound val. If this is the case, then need to ensure that the ranges in tmp_split_ranges are ordered and increasing.
 */
 int ObPartitionPreSplit::check_and_get_split_range(
     const ObRowkey &src_l_bound_val, 

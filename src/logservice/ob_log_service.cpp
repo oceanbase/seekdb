@@ -70,7 +70,7 @@ int ObLogService::mtl_init(ObLogService* &logservice)
   const ObAddr &self = GCTX.self_addr();
   const int64_t tenant_id = MTL_ID();
   observer::ObSrvNetworkFrame *net_frame = GCTX.net_frame_;
-  //log_disk_usage_limit_size无法主动从配置项获取, 需要在mtl初始化时作为入参传入
+  //log_disk_usage_limit_size cannot be actively obtained from the configuration item, and needs to be passed as a parameter during mtl initialization
   const palf::PalfOptions &palf_options = MTL_INIT_CTX()->palf_options_;
   const char *tenant_clog_dir = MTL_INIT_CTX()->tenant_clog_dir_;
   const char *clog_dir = OB_FILE_SYSTEM_ROUTER.get_clog_dir();
@@ -568,7 +568,7 @@ int ObLogService::update_palf_options_except_disk_usage_limit_size()
     if (OB_FAIL(common::ObCompressorPool::get_instance().get_compressor_type(
                 tenant_config->log_transport_compress_func, compressor_type))) {
       CLOG_LOG(ERROR, "log_transport_compress_func invalid.", K(ret));
-      //需要获取log_disk_usage_limit_size
+      //Need to get log_disk_usage_limit_size
     } else if (OB_FAIL(palf_env_->get_options(palf_opts))) {
       CLOG_LOG(WARN, "palf get_options failed", K(ret));
     } else {
@@ -590,8 +590,7 @@ int ObLogService::update_palf_options_except_disk_usage_limit_size()
   }
   return ret;
 }
-
-//log_disk_usage_limit_size无法主动感知,只能通过上层触发时传入
+//log_disk_usage_limit_size cannot be proactively detected, it can only be passed in when triggered by the upper layer
 int ObLogService::update_log_disk_usage_limit_size(const int64_t log_disk_usage_limit_size)
 {
   int ret = OB_SUCCESS;

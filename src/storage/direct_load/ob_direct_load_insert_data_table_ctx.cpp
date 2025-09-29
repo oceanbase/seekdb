@@ -83,7 +83,7 @@ int ObDirectLoadInsertDataTabletContext::init(ObDirectLoadInsertDataTableContext
     ls_id_ = ls_id;
     origin_tablet_id_ = origin_tablet_id;
     tablet_id_ = tablet_id;
-    pk_tablet_id_ = origin_tablet_id_; // 从原表取, ddl会帮忙同步到隐藏表
+    pk_tablet_id_ = origin_tablet_id_; // Get from original table, DDL will help sync to hidden table
     if (param_->enable_dag_) {
       slice_idx_ = param_->reserved_parallel_;
     }

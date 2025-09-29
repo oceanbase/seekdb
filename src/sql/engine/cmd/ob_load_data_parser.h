@@ -39,9 +39,9 @@ struct ObODPSGeneralFormatParam {
 
 enum ColumnIndexType
 {
-  NAME = 0,      // 按列名索引
-  POSITION = 1,  // 按列顺序（位置）索引
-  ID = 2         // 按列id索引
+  NAME = 0,      // Index by column name
+  POSITION = 1,  // index by column order (position)
+  ID = 2         // index by column id
 };
 
 struct ObODPSGeneralFormat {

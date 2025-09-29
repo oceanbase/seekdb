@@ -80,17 +80,17 @@ public:
   ls_id_(ls_id), self_addr_(self_addr), timer_(timer), need_report_(true) {}
   void set_need_report(const bool need_report) { need_report_ = need_report; }
   // proposer event
-  int report_decentralized_to_be_leader_event(const MemberListWithStates &member_list_with_states);// 当选Leader
-  int report_leader_lease_expired_event(const MemberListWithStates &member_list_with_states);// Leader续约失败卸任
-  int report_directly_change_leader_event(const ObAddr &dest_svr, const ObStringHolder &reason);// Leader直接切主，不走RCS流程
-  int report_prepare_change_leader_event(const ObAddr &dest_svr, const ObStringHolder &reason);// 旧Leader准备切主
-  int report_change_leader_to_revoke_event(const ObAddr &dest_svr);// 旧Leader卸任
-  int report_change_leader_to_takeover_event(const ObAddr &addr);// 新Leader上任
-  int report_member_list_changed_event(const MemberList &old_list, const MemberList &new_list);// 修改成员列表
+  int report_decentralized_to_be_leader_event(const MemberListWithStates &member_list_with_states);// Elected as Leader
+  int report_leader_lease_expired_event(const MemberListWithStates &member_list_with_states);// Leader lease renewal failed, resigning
+  int report_directly_change_leader_event(const ObAddr &dest_svr, const ObStringHolder &reason);// Leader directly switch to leader without going through the RCS process
+  int report_prepare_change_leader_event(const ObAddr &dest_svr, const ObStringHolder &reason);// Old Leader prepares for leader-follower switch
+  int report_change_leader_to_revoke_event(const ObAddr &dest_svr);// Old Leader resigns
+  int report_change_leader_to_takeover_event(const ObAddr &addr);// New Leader takes over
+  int report_member_list_changed_event(const MemberList &old_list, const MemberList &new_list);// Modify member list
   // acceptor event
-  int report_vote_event(const ObAddr &dest_svr, const ObStringHolder &reason);// 一呼百应prepare阶段投票
-  int report_acceptor_lease_expired_event(const Lease &lease);// Lease到期
-  int report_acceptor_witness_change_leader_event(const ObAddr &old_leader, const ObAddr &new_leader);// 见证切主事件
+  int report_vote_event(const ObAddr &dest_svr, const ObStringHolder &reason);// one-to-all prepare phase voting
+  int report_acceptor_lease_expired_event(const Lease &lease);// Lease expired
+  int report_acceptor_witness_change_leader_event(const ObAddr &old_leader, const ObAddr &new_leader);// witness leader switch event
   int64_t to_string(char *buf, const int64_t len) const;
 private:
   int report_event_(ElectionEventType type, const common::ObString &info);

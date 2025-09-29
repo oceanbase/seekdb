@@ -65,9 +65,9 @@ struct SqlInfo: public ParameterizationHashValue
   int64_t total_;
   common::ObBitSet<> not_param_index_;
   common::ObBitSet<> neg_param_index_;
-  common::ObBitSet<> fixed_param_index_;//记录限流语句中可参数化的位置不为?的位置
+  common::ObBitSet<> fixed_param_index_;//record the positions in the rate-limiting statement that are parameterizable and not '?'
   common::ObBitSet<> trans_from_minus_index_;
-  common::ObBitSet<> must_be_positive_index_; // 记录那些常量必须是正数
+  common::ObBitSet<> must_be_positive_index_; // record which constants must be positive
   common::ObBitSet<> fmt_int_or_ch_decint_idx_;
   common::ObSEArray<common::ObCharsetType, 16> param_charset_type_;
   ObSqlTraits sql_traits_;
@@ -113,9 +113,9 @@ class ObSqlParameterization
 {
 public:
   static const int64_t SQL_PARAMETERIZATION_BUCKET_NUM = 1L << 20;
-  static const int64_t NO_VALUES = -1;        //表示没有values()
-  static const int64_t VALUE_LIST_LEVEL = 0;  //表示在parse的T_VALUE_LIST层
-  static const int64_t VALUE_VECTOR_LEVEL = 1;//表示在parse的T_VALUE_VECTOR层
+  static const int64_t NO_VALUES = -1;        // indicates no values()
+  static const int64_t VALUE_LIST_LEVEL = 0;  // indicates the T_VALUE_LIST level in parse
+  static const int64_t VALUE_VECTOR_LEVEL = 1;//indicates the T_VALUE_VECTOR level in parse
   static const int64_t ASSIGN_LIST_LEVEL = 0;
   static const int64_t ASSIGN_ITEM_LEVEL = 1;
 

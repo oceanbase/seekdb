@@ -50,7 +50,7 @@ int ObExprCot::calc_cot_expr(const ObExpr &expr, ObEvalCtx &ctx,
   } else if (ObDoubleType == expr.args_[0]->datum_meta_.type_) {
     const double arg = radian->get_double();
     double tan_out = tan(arg);
-    // 检查 tan(arg)是否趋近于0，当太小时，就认为是0
+    // Check if tan(arg) is approaching 0, when it is too small, consider it as 0
     if (0.0 == tan_out) {
       ret = OB_DOUBLE_OVERFLOW;
       LOG_WARN("tan(x) is zero", K(ret));

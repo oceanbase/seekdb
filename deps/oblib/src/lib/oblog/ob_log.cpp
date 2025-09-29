@@ -463,7 +463,7 @@ void ObLogger::print_trace_buffer(const char* mod_name,
                              pos += len;
                              return OB_SUCCESS;
     };
-    // invoke log_it isn't workable，that will recycle infinitely
+    // invoke log_it isn't workable, that will recycle infinitely
     do_log_message(is_async_log_used(), mod_name, nullptr, level, file, line, function,
                    false, 0, log_data_func);
     tb->reset();//reset, than reuse the TraceBuffer

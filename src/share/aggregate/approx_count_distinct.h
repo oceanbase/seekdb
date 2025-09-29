@@ -484,7 +484,7 @@ private:
     OB_ASSERT(ObExprEstimateNdv::llc_is_num_buckets_valid(llc_num_buckets));
     OB_ASSERT(llc_num_buckets > bucket_index);
     if (pmax > static_cast<uint8_t>(llc_bitmap_buf[bucket_index])) {
-      // 理论上pmax不会超过65.
+      // Theoretically, pmax will not exceed 65.
       llc_bitmap_buf[bucket_index] = static_cast<uint8_t>(pmax);
     }
     return ret;

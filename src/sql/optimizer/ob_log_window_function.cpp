@@ -526,9 +526,9 @@ int ObLogWindowFunction::compute_sharding_info()
 bool ObLogWindowFunction::is_block_op() const
 {
   bool is_block_op = false;
-  // 对于window function算子, 在没有partition by以及完整窗口情况下,
-  // 所有数据作为一个窗口, 认为是block算子
-  // 在其他情况下, 认为是非block算子
+  // For window function operator, in the absence of partition by and with a complete window,
+  // All data as a window, considered as block operator
+  // In other cases, consider it as a non-block operator
   ObWinFunRawExpr *win_expr = NULL;
   for (int64_t i = 0; i < win_exprs_.count(); ++i) {
     if (OB_ISNULL(win_expr = win_exprs_.at(i))) {

@@ -155,7 +155,7 @@ int ObMySQLField::serialize_pro41(char *buf, const int64_t len, int64_t &pos) co
       }
     }
   }
-  /* 针对COM_FIELD_LIST命令,必须将相关的default_values序列化进去，表明这是一个来自于COM_FIELD_LIST的回包
+  /* For the COM_FIELD_LIST command, the related default_values must be serialized in to indicate that this is a response packet from COM_FIELD_LIST
    */
   if (OB_SUCC(ret)
       && MYSQL_TYPE_NOT_DEFINED != default_value_

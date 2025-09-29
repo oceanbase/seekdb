@@ -524,7 +524,7 @@ ObParser::State ObParser::transform_normal(
 bool ObParser::is_single_stmt(const ObString &stmt)
 {
   int64_t count = 0;
-  // 去除尾部多余空格，否则 ‘select 1 from dual;   ’ 这种会出错
+  // Remove trailing extra spaces, otherwise 'select 1 from dual;   ' this will cause an error
   int64_t end_trim_offset = stmt.length();
   while (end_trim_offset > 0 && ISSPACE(stmt[end_trim_offset - 1])) {
     end_trim_offset--;
@@ -547,22 +547,21 @@ int ObParser::split_start_with_pl(const ObString &stmt,
   ParseResult parse_result;
   ParseMode parse_mode = MULTI_MODE;
   parse_stat.reset();
-  // 绕过parser对空查询处理不友好的方法：自己把末尾空格去掉
+  // Bypass parser's unfriendly handling of empty queries: remove trailing spaces ourselves
   while (remain > 0 && ISSPACE(stmt[remain - 1])) {
     --remain;
   }
-  //去除末尾一个‘\0’, 为与mysql兼容
+  // Remove the last '\0', for compatibility with mysql
   if (remain > 0 && '\0' == stmt[remain - 1]) {
     --remain;
   }
-  //再删除末尾空格
+  // Remove trailing spaces
   while (remain > 0 && (ISSPACE(stmt[remain - 1]))) {
     --remain;
   }
-
-  // 对于空语句的特殊处理
+  // For special handling of empty statements
   if (OB_UNLIKELY(0 >= remain)) {
-    ObString part; // 空串
+    ObString part; // empty string
     ret = queries.push_back(part);
   }
 
@@ -636,7 +635,7 @@ int ObParser::split_multiple_stmt(const ObString &stmt,
                                   bool is_prepare)
 {
   int ret = OB_SUCCESS;
-  //对于单条sql的场景，先判断is_single_stmt，然后再判断is_pl_stmt，避免is_pl_stmt字符串比较的开销
+  // For single SQL statement scenarios, first check is_single_stmt, then check is_pl_stmt, to avoid the overhead of string comparison for is_pl_stmt
   if (is_single_stmt(stmt)) {
     ObString query(stmt.length(), stmt.ptr());
     ret = queries.push_back(query);
@@ -655,15 +654,15 @@ int ObParser::split_multiple_stmt(const ObString &stmt,
     int64_t semicolon_offset = INT64_MIN;
 
     parse_stat.reset();
-    // 绕过parser对空查询处理不友好的方法：自己把末尾空格去掉
+    // Bypass parser's unfriendly handling of empty queries: remove trailing spaces ourselves
     while (remain > 0 && ISSPACE(stmt[remain - 1])) {
       --remain;
     }
-    //去除末尾一个‘\0’, 为与mysql兼容
+    // Remove the last '\0', for compatibility with mysql
     if (remain > 0 && '\0' == stmt[remain - 1]) {
       --remain;
     }
-    //再删除末尾空格和分号
+    // Remove trailing spaces and semicolons
     while (remain > 0 && ((ISSPACE(stmt[remain - 1])) ||
            (lib::is_mysql_mode() && stmt[remain - 1] == ';'))) {
       if (stmt[remain - 1] == ';') {
@@ -671,11 +670,11 @@ int ObParser::split_multiple_stmt(const ObString &stmt,
       }
       --remain;
     }
-    //留下最多一个分号
+    // Leave at most one semicolon
     remain = max(remain, semicolon_offset + 1);
-    // 对于空语句的特殊处理
+    // For special handling of empty statements
     if (OB_UNLIKELY(0 >= remain)) {
-      ObString part; // 空串
+      ObString part; // empty string
       ret = queries.push_back(part);
     }
 
@@ -752,7 +751,7 @@ int ObParser::check_is_insert(common::ObIArray<common::ObString> &queries, bool 
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("queries is unexpected", K(ret));
   } else if (queries.count() > 1) {
-    // query个数大于1，multi query 不做优化
+    // query count greater than 1, multi query no optimization
   } else {
     ObString &sql_str = queries.at(0);
     is_ins = (sql_str.length() > 6 && 0 == STRNCASECMP(sql_str.ptr(), "insert", 6));
@@ -958,20 +957,19 @@ int ObParser::parse(const ObString &query,
                     const bool is_parse_dynamic_sql)
 {
   int ret = OB_SUCCESS;
-
-  // 删除SQL语句末尾的空格
+  // Delete spaces at the end of the SQL statement
   int64_t len = query.length();
   while (len > 0 && ISSPACE(query[len - 1])) {
     --len;
   }
-  //为与mysql兼容, 在去除query sql结尾空字符后, 最后一个字符为'\0'的可以被去除，且仅去除一个'\0'。
-  //如果是MULTI_MODE, 则已经做过一次去结尾符'\0'操作
+  // For compatibility with mysql, after removing trailing spaces from the query sql, the last character can be removed if it is '\0', and only one '\0' can be removed.
+  // If it is MULTI_MODE, then the operation to remove the trailing '\0' has already been done
   if (MULTI_MODE != parse_mode) {
-    //去除末尾一个‘\0’
+    // Remove the last '\0'
     if (len > 0 && '\0' == query[len - 1]) {
       --len;
     }
-    //再删除末尾空格
+    // Remove trailing spaces
     while (len > 0 && ISSPACE(query[len - 1])) {
       --len;
     }
@@ -1063,8 +1061,8 @@ int ObParser::parse(const ObString &query,
   if (OB_SUCC(ret)) {
     bool is_create_func = false;
     bool is_call_procedure = false;
-    // 判断语句的前6个字符是否为select，如果是，直接走parse_sql的逻辑，尽可能消除is_pl_stmt字符解析的开销，
-    //  即使这里parser失败，后面还有pl parser的兜底逻辑
+    // Determine if the first 6 characters of the statement are 'select', if so, directly follow the parse_sql logic, try to eliminate the overhead of parsing the is_pl_stmt character,
+    //  Even if the parser fails here, there is still a fallback logic with pl parser
     bool is_contain_select = (stmt.length() > 6 && 0 == STRNCASECMP(stmt.ptr(), "select", 6));
 
     // check wether the stmt start with "/*!", if so, stmt should first go through pl parser.
@@ -1115,13 +1113,11 @@ int ObParser::parse(const ObString &query,
   }
   return ret;
 }
-
-//通过parser进行prepare的接口，供mysql模式下spi_prepare调用
+// Through parser for prepare interface, for spi_prepare call in mysql mode
 int ObParser::prepare_parse(const ObString &query, void *ns, ParseResult &parse_result)
 {
   int ret = OB_SUCCESS;
-
-  // 删除SQL语句末尾的空格
+  // Delete spaces at the end of the SQL statement
   int64_t len = query.length();
   while (len > 0 && ISSPACE(query[len - 1])) {
     --len;
@@ -1129,7 +1125,7 @@ int ObParser::prepare_parse(const ObString &query, void *ns, ParseResult &parse_
   if (len > 0 && '\0' == query[len - 1]) {
     --len;
   }
-  //再删除末尾空格
+  // Remove trailing spaces
   while (len > 0 && ISSPACE(query[len - 1])) {
     --len;
   }
@@ -1143,7 +1139,7 @@ int ObParser::prepare_parse(const ObString &query, void *ns, ParseResult &parse_
   parse_result.pl_parse_info_.is_pl_parse_ = true;
   parse_result.pl_parse_info_.is_pl_parse_expr_ = false;
   parse_result.enable_compatible_comment_ = true;
-  char *buf = (char *)parse_malloc(stmt.length() * 2, parse_result.malloc_pool_); //因为要把pl变量替换成:num的形式，需要扩大内存
+  char *buf = (char *)parse_malloc(stmt.length() * 2, parse_result.malloc_pool_); // because we need to replace the pl variable with the :num form, we need to expand the memory
   if (OB_UNLIKELY(NULL == buf)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("no memory for parser");
@@ -1207,8 +1203,7 @@ int ObParser::prepare_parse(const ObString &query, void *ns, ParseResult &parse_
   }
   return ret;
 }
-
-// 解析行首注释中trace_id
+// Parse trace_id from the comment at the beginning of the line
 int ObParser::pre_parse(const common::ObString &stmt,
                         PreParseResult &res)
 {
@@ -1220,7 +1215,7 @@ int ObParser::pre_parse(const common::ObString &stmt,
   } else {
     int32_t pos = 0;
     const char *ptr = stmt.ptr();
-    //去掉空格
+    // Remove spaces
     while (pos < len && is_space(ptr[pos])) { pos++; };
     if (pos+2 < len
         && ptr[pos++] == '/'
@@ -1228,7 +1223,7 @@ int ObParser::pre_parse(const common::ObString &stmt,
       char expect_char = 't';
       bool find_trace = false;
       while (!find_trace && pos < len) {
-        //找到注释结束点
+        // Find the end of the comment
         if (pos < len && ptr[pos] == '*') {
           expect_char = 't';
           if (++pos < len && ptr[pos] == '/') {
@@ -1280,10 +1275,10 @@ int ObParser::scan_trace_id(const char *ptr,
   trace_id.reset();
   int32_t start = pos;
   int32_t end = pos;
-  //找到trace_id结束点
+  // Find the trace_id endpoint
   while (pos < len && !is_trace_id_end(ptr[pos])) { pos++; }
   end = pos;
-  //找到注释结束点
+  // Find the end of the comment
   if (start < end) {
     while (pos < len) {
       if (pos < len && ptr[pos] == '*') {

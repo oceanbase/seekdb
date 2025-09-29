@@ -53,7 +53,7 @@ public:
   TO_STRING_KV(N_SERVER, server_,
                N_OB_TASK_ID, ob_task_id_);
 private:
-  common::ObAddr server_;//中间结果所在的server
+  common::ObAddr server_;//server where the intermediate result is located
   ObTaskID ob_task_id_;
 };
 }

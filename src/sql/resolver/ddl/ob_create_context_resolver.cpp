@@ -93,8 +93,7 @@ int ObCreateContextResolver::resolve(const ParseNode &parse_tree)
                || OB_FAIL(ctx_schema.set_schema_name(schema_name))) {
       LOG_WARN("failed to set context info", K(ret));
     }
-
-    // 权限添加需要拿到完整stmt信息，慎重调整本段代码位置
+    // Permission addition requires complete stmt information, adjust the position of this code segment with caution
     /*if (OB_SUCC(ret) && !(is_sync_ddl_user && session_info_->is_inner())
         && OB_FAIL(check_privilege_needed(*stmt, *select_stmt, is_force_view))) {
       LOG_WARN("fail to check privilege needed", K(ret));

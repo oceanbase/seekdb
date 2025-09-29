@@ -102,10 +102,10 @@ public:
 public:
   int64_t total_task_cnt_;
   common::ObSEArray<common::ObAddr, 8> exec_addrs_;
-  // 表示每个sqc前置的task总数
+  // Indicates the total number of tasks preceding each sqc
   // eg:sqc workers:      [0-2], [3-5], [6,7]
   //    prefix taskcount: [0], [3], [6]
-  // 即prefix_task_counts_[idx] + task_id就是这个sqc的某个task对应的全局task_id
+  // That is, prefix_task_counts_[idx] + task_id is the global task_id corresponding to some task of this sqc
   common::ObSEArray<int64_t, 8> prefix_task_counts_;
 };
 
@@ -141,7 +141,7 @@ public:
   int64_t start_channel_id_;
   ObDtlExecServer transmit_exec_server_;
   ObDtlExecServer receive_exec_server_;
-  int64_t channel_count_;   // 理论上要等于 tranmit_total_task_cnt_ * receive_total_task_cnt_
+  int64_t channel_count_;   // theoretically should equal tranmit_total_task_cnt_ * receive_total_task_cnt_
   uint64_t tenant_id_;
   bool is_local_shuffle_;
 };

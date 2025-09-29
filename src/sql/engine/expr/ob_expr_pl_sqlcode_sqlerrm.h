@@ -38,7 +38,7 @@ public:
   DECLARE_SET_LOCAL_SESSION_VARS;
 
 private:
-  bool is_sqlcode_; // TRUE代表获取SQLCODE, FALSE代表获取SQLERRM
+  bool is_sqlcode_; // TRUE represents getting SQLCODE, FALSE represents getting SQLERRM
   DISALLOW_COPY_AND_ASSIGN(ObExprPLSQLCodeSQLErrm);
 };
 

@@ -31,7 +31,7 @@ class ObBarrierPieceMsgListener;
 class ObBarrierPieceMsgCtx;
 class ObPxCoordInfo;
 
-/* 各种 datahub 子类消息定义如下 */
+/* Various datahub subclass message definitions are as follows */
 class ObBarrierPieceMsg
   : public ObDatahubPieceMsg<dtl::ObDtlMsgType::DH_BARRIER_PIECE_MSG>
 
@@ -74,7 +74,7 @@ public:
     ready_state_ = 0;
   }
   VIRTUAL_TO_STRING_KV(K_(ready_state));
-  int ready_state_; // 占位符，并不真用到
+  int ready_state_; // placeholder, not actually used
 };
 
 class ObBarrierPieceMsgCtx : public ObPieceMsgCtx
@@ -91,7 +91,7 @@ public:
                                  int64_t task_cnt,
                                  ObPieceMsgCtx *&msg_ctx);
   INHERIT_TO_STRING_KV("meta", ObPieceMsgCtx, K_(received));
-  int received_; // 已经收到的 piece 数量
+  int received_; // number of pieces already received
 private:
   DISALLOW_COPY_AND_ASSIGN(ObBarrierPieceMsgCtx);
 };

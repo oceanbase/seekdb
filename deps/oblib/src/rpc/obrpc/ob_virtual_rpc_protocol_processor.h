@@ -75,9 +75,9 @@ protected:
                      int64_t &compressed_size);
 
   /*
-   *@param [in] preceding_data_len: cmd_packet锁占的内存大小,
-   ms->input->pos + preceding_data_len 即为压缩后的packet的起始位置
-   *@param [in] decode_data_len: 压缩后数据的总大小
+   *@param [in] preceding_data_len: memory size occupied by cmd_packet lock,
+   ms->input->pos + preceding_data_len is the starting position of the compressed packet
+   *@param [in] decode_data_len: total size of the compressed data
    * */
   int decode_compressed_packet_data(common::ObTimeGuard &timeguard,
                                     easy_message_t *ms,
@@ -86,8 +86,8 @@ protected:
                                     ObRpcPacket *&pkt);
   /*
    * this func is to decode data after decompressed as a net rpc packet
-   *@param [in] data: 开始的sizeof(ObRpcPacket)个字节用于分配ObRpcPacket, 接下来的数据是一个完整的net packet
-   *@param [in] data_len: data的长度
+   *@param [in] data: the first sizeof(ObRpcPacket) bytes are used to allocate ObRpcPacket, the following data is a complete net packet
+   *@param [in] data_len: length of data
    */
   int decode_net_rpc_packet(common::ObTimeGuard &timeguard,
                             char *data, int64_t data_len, ObRpcPacket *&pkt);

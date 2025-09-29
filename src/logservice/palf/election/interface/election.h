@@ -36,11 +36,11 @@ typedef common::ObSpinLockGuard LockGuard;
 
 enum class RoleChangeReason
 {
-  DevoteToBeLeader = 1, // 无主选举从Follower成为Leader
-  ChangeLeaderToBeLeader = 2, // 切主流程新主从Follower成为Leader
-  LeaseExpiredToRevoke = 3, // 有主连任失败，Lease超时，从Leader变为Follower
-  ChangeLeaderToRevoke = 4, // 切主流程旧主从Leader变为Follower
-  StopToRevoke = 5,// 选举leader调用stop接口后leader卸任
+  DevoteToBeLeader = 1, // Leader election from Follower to Leader
+  ChangeLeaderToBeLeader = 2, // leader-follower switch new Follower becomes Leader
+  LeaseExpiredToRevoke = 3, // Leader re-election failed, Lease expired, switch from Leader to Follower
+  ChangeLeaderToRevoke = 4, // leader-follower switch old Leader becomes Follower
+  StopToRevoke = 5,// After the leader calls the stop interface during an election, the leader steps down
 };
 
 class ElectionPrepareRequestMsg;
@@ -59,24 +59,24 @@ public:
   virtual ~Election() {}
   virtual void stop() = 0;
   virtual int can_set_memberlist(const palf::LogConfigVersion &new_config_version) const = 0;
-  // 设置成员列表
+  // Set member list
   virtual int set_memberlist(const MemberList &new_member_list) = 0;
-  // 获取选举当前的角色
+  // Get the current role of the election
   virtual int get_role(common::ObRole &role, int64_t &epoch) const = 0;
-  // 如果自己是leader，那么拿到的就是准确的leader，如果自己不是leader，那么拿到lease的owner
+  // If oneself is the leader, then the accurate leader is obtained; if oneself is not the leader, then the owner of the lease is obtained
   virtual int get_current_leader_likely(common::ObAddr &addr,
                                         int64_t &cur_leader_epoch) const = 0;
-  // 供role change service使用
+  // for role change service use
   virtual int change_leader_to(const common::ObAddr &dest_addr) = 0;
   virtual int temporarily_downgrade_protocol_priority(const int64_t time_us, const char *reason) = 0;
-  // 拿本机地址
+  // Get local address
   virtual const common::ObAddr &get_self_addr() const = 0;
-  // 打印日志
+  // print log
   virtual int64_t to_string(char *buf, const int64_t buf_len) const = 0;
-  // 设置选举优先级
+  // Set election priority
   virtual int set_priority(ElectionPriority *priority) = 0;
   virtual int reset_priority() = 0;
-  // 处理消息
+  // Process message
   virtual int handle_message(const ElectionPrepareRequestMsg &msg) = 0;
   virtual int handle_message(const ElectionAcceptRequestMsg &msg) = 0;
   virtual int handle_message(const ElectionPrepareResponseMsg &msg) = 0;

@@ -31,8 +31,7 @@ namespace logservice
 {
 namespace coordinator
 {
-
-// 该结构存储的信息是周期性刷新的, 非本机的优先级信息缓存在该结构里
+// This structure stores information that is periodically refreshed, and non-local priority information is cached in this structure.
 typedef common::ObTuple<int64_t/*0. ls_id*/,
                         int64_t/*1. self zone priority*/,
                         bool/*2. is_manual_leader*/,
@@ -59,7 +58,7 @@ public:
   static void mtl_wait(ObLeaderCoordinator *&p_coordinator);
   static void mtl_destroy(ObLeaderCoordinator *&p_coordinator);
   /**
-   * @description: 当内部表更新的时候，可以通过该接口主动触发LeaderCoordinator的刷新流程，以便切主动作可以尽快完成
+   * @description: When the internal table is updated, this interface can be used to proactively trigger the refresh process of LeaderCoordinator so that the role switch can be completed as soon as possible
    * @param {*}
    * @return {*}
    * @Date: 2021-12-27 20:30:39

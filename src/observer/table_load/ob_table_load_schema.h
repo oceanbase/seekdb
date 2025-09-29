@@ -36,11 +36,11 @@ public:
                               uint64_t database_id,
                               const common::ObString &table_name,
                               const share::schema::ObTableSchema *&table_schema);
-  // 获取最新schema_guard和table_schema
+  // Get the latest schema_guard and table_schema
   static int get_table_schema(uint64_t tenant_id, uint64_t table_id,
                               share::schema::ObSchemaGetterGuard &schema_guard,
                               const share::schema::ObTableSchema *&table_schema);
-  // 指定schema_guard获取table_schema
+  // Specify schema_guard to obtain table_schema
   static int get_table_schema(share::schema::ObSchemaGetterGuard &schema_guard,
                               uint64_t tenant_id, uint64_t table_id,
                               const share::schema::ObTableSchema *&table_schema);

@@ -140,7 +140,7 @@ int TimeWheelBase::schedule_(ObTimeWheelTask *task, const int64_t run_ticket)
       TaskBucket *bucket = &(buckets_[idx]);
       task->lock();
       bucket->lock();
-      // scan_ticket_还没有跨过即将插入的桶，不需要重试
+      // scan_ticket_ has not crossed the bucket to be inserted, no need to retry
       if (ATOMIC_LOAD(&scan_ticket_) < tmp_run_ticket) {
         need_retry = false;
         if (OB_SUCCESS != (ret = task->schedule(idx, tmp_run_ticket))) {
@@ -279,7 +279,7 @@ int TimeWheelBase::scan()
           const int64_t start = ObTimeUtility::current_time();
           task->runTask();
           const int64_t end = ObTimeUtility::current_time();
-          //task执行完之后，ctx内存可能已经释放，此时不能再打印task对象信息；
+          // After task execution, ctx memory may have already been released, at this point, task object information should no longer be printed;
           if (end - start >= WARN_RUNTIME_US) {
             TRANS_LOG_RET(WARN, OB_ERR_TOO_MUCH_TIME, "timer task use too much time", K(end), K(start), "delta", end - start);
           }

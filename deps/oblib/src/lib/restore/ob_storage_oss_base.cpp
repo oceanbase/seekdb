@@ -685,7 +685,7 @@ int ObOssAccount::parse_oss_arg(const common::ObString &storage_info)
           OB_LOG(WARN, "failed to set oss_key_", K(ret));
         }
       } else if (0 == strncmp(STS_TOKEN_KEY, token, strlen(STS_TOKEN_KEY))) {
-        // "阿里云STS服务返回的安全令牌（STS Token）的长度不固定，强烈建议您不要假设安全令牌的最大长度。"
+        // "The length of the security token (STS Token) returned by the Alibaba Cloud STS service is not fixed, it is strongly recommended that you do not assume the maximum length of the security token."
         // therefore, use allocator to alloc mem for sts_token dynamically
         const int64_t sts_token_len = strlen(token) - strlen(STS_TOKEN_KEY);
         if (OB_ISNULL(oss_sts_token_ = reinterpret_cast<char*>(allocator_.alloc(sts_token_len + 1)))) {

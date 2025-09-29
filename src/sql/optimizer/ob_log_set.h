@@ -49,11 +49,11 @@ public:
   inline void set_recursive_union(bool is_recursive_union) { is_recursive_union_ = is_recursive_union; }
   inline bool is_recursive_union() { return is_recursive_union_; }
   inline bool is_set_distinct() const { return is_distinct_; }
-  // 目前仅union支持先读完left然后读right，但merge_union的distinct不支持
-  // 增加hash intersect 和hash except算子1by1的能力
+  // Currently only union supports reading left first and then right, but merge_union's distinct does not support
+  // Add hash intersect and hash except operator 1by1 capability
   virtual bool is_consume_child_1by1() const
   { return (HASH_SET == set_algo_ || !is_distinct_); }
-  //hash set 全部都是从left 建立hash表，0号孩子是block input
+  // hash set all are built from left, 0 child is block input
   virtual bool is_block_input(const int64_t child_idx) const override 
   {
     return HASH_SET == set_algo_ && 0 == child_idx && ObSelectStmt::UNION != get_set_op();

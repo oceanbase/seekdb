@@ -471,13 +471,12 @@ int ObHashJoinVecOp::inner_rescan()
   LOG_TRACE("hash join rescan", K(ret), K(spec_.id_));
   return ret;
 }
-
-// 这里有几个逻辑需要理下：
-// 1）当返回一行时，如果left对应bucket没有元素，即cur_tuple为nullpr，会继续get_right_row，所以不需要save
-// 2）如果不会拿下一个right，则需要restore上次保存的right，继续看是否匹配left其他行
-//      这里有两种情况：
-//        a）如果没有dump，恢复output
-//        b）如果dump，则仅恢复right_read_row_，至于是否放入到right output，看下一次是否返回避免多余copy
+// Here are a few logic points to figure out:
+// 1) When returning one row, if the left corresponding bucket has no elements, i.e., cur_tuple is nullptr, it will continue to get_right_row, so there is no need to save
+// 2) If it cannot acquire the next right, then it needs to restore the previously saved right and continue to check if other lines of left match
+//      There are two cases here:
+//        a）If there is no dump, restore output
+//        b）if dump, then only restore right_read_row_, as to whether it is put into right output, see if it returns next time to avoid unnecessary copy
 
 //
 //  begin  INIT->PROCESS_PARTITION->LOAD_NEXT_PARTITION--> iter_end
@@ -629,7 +628,7 @@ int ObHashJoinVecOp::process_partition()
         break;
       }
       case JS_READ_RIGHT: {
-        // 右边获取行后, 创建hash表
+        // Right after getting the row, create hash table
         ret = read_right_operate();
         if (OB_SUCC(ret)) {
           state_ = (0 == output_info_.selector_cnt_) ? JS_READ_RIGHT : JS_PROBE_RESULT;
@@ -695,7 +694,7 @@ int ObHashJoinVecOp::process_left(bool &need_not_read_right)
          && RIGHT_ANTI_JOIN != MY_SPEC.join_type_
          && RIGHT_OUTER_JOIN != MY_SPEC.join_type_
          && FULL_OUTER_JOIN != MY_SPEC.join_type_) || read_null_in_naaj_)) {
-     // 由于左表为空，不需要再读右表，模拟右表已经读完的状态
+     // Since the left table is empty, there is no need to read the right table, simulate the state where the right table has been fully read
      need_not_read_right = true;
      if (HJProcessor::NEST_LOOP == hj_processor_) {
        nest_loop_state_ = HJLoopState::LOOP_END;
@@ -866,7 +865,7 @@ int ObHashJoinVecOp::load_next()
 {
   int ret = OB_SUCCESS;
   ++nth_nest_loop_;
-  // 目前通过设置一定读固定大小方式来读取内容，后续会改掉
+  // Currently reading content by setting a fixed size read method, this will be changed later
   if (1 == nth_nest_loop_ && OB_FAIL(left_part_->begin_iterator())) {
     LOG_WARN("failed to set iterator", K(ret), K(nth_nest_loop_));
   } else if (1 == nth_nest_loop_ && OB_FAIL(prepare_hash_table())) {
@@ -1186,17 +1185,17 @@ int ObHashJoinVecOp::get_processor_type()
       static const int64_t WRITE_COST = 2 * UNIT_COST;
       static const int64_t DUMP_RATIO = 70;
       // 2 read and 1 write for left and right
-      // 这里假设dump的数据是内存部分与left dump部分的比例，即right也可以过滤成比例的数据
+      // Here it is assumed that the dumped data is the ratio of the memory part to the left dump part, i.e., right can also be filtered into proportional data
       recursive_cost = READ_COST * (l_size + r_size)
                         + (READ_COST + WRITE_COST) * (1 - 0.9 * remain_data_memory_size_ / l_size)
                         * (l_size + r_size);
       nest_loop_count = l_size / (remain_data_memory_size_ - 1) + 1;
       nest_loop_cost = (l_size + nest_loop_count * r_size) * READ_COST;
       pre_total_size = left_part_->get_pre_total_size();
-      // 认为skew场景
-      // 1. 占比超过总数的70%
-      // 2. 第二轮开始按照了真实size进行partitioning，理论上第三轮one pass会结束
-      //      所以在分区个数不是max_partition_count情况下，认为到了level比较高，认为可能有skew
+      // Consider skew scenario
+      // 1. The proportion exceeds 70% of the total
+      // 2. The second round started partitioning according to the real size, theoretically, the third round one pass will end
+      //      So in the case where the number of partitions is not max_partition_count, it is considered to be at a higher level, assuming there might be skew
       is_skew = (pre_total_size * DUMP_RATIO / 100 < l_size)
               || (3 <= part_level_ && MAX_PART_COUNT_PER_LEVEL != left_part_->get_pre_part_count()
                   && pre_total_size * 30 / 100 < l_size);
@@ -1516,7 +1515,7 @@ int ObHashJoinVecOp::asyn_dump_partition(
         if (OB_FAIL(dump_part->dump(tmp_dump_all, 1))) {
           LOG_WARN("failed to dump partition", K(part_level_), K(i));
         } else if (dump_part->is_dumped() && !tmp_part_dump) {
-          // 设置一个limit，后续自动dump
+          // Set a limit, subsequent automatic dump
           dump_part->set_memory_limit(1);
           sql_mem_processor_.set_number_pass(part_level_ + 1);
           // recalculate available memory bound after dump one partition
@@ -2575,7 +2574,7 @@ int ObHashJoinVecOp::finish_dump(bool for_left, bool need_dump, bool force /* fa
     }
     for (int64_t i = 0; i < part_count_ && OB_SUCC(ret); i ++) {
       if (force) {
-        // finish dump在之前没有dump情况下，不会强制dump，所以这里需要先dump
+        // finish dump if there was no previous dump, it will not force a dump, so we need to dump first
         if (OB_FAIL(part_array[i]->dump(true, INT64_MAX))) {
           LOG_WARN("failed to dump", K(ret));
         } else if (cur_dumped_partition_ >= i) {
@@ -2584,7 +2583,7 @@ int ObHashJoinVecOp::finish_dump(bool for_left, bool need_dump, bool force /* fa
       }
       if (part_array[i]->is_dumped()) {
         if (OB_SUCC(ret)) {
-          // 认为要么全部dump，要么全部in-memory
+          // Consider either all dump or all in-memory
           if (OB_FAIL(part_array[i]->finish_dump(true))) {
             LOG_WARN("finish dump failed", K(i), K(for_left));
           } else if (for_left) {
@@ -2615,7 +2614,7 @@ int ObHashJoinVecOp::dump_right_partition_for_recursive()
 {
   int ret = OB_SUCCESS;
   if (RECURSIVE == hj_processor_) {
-    // 保证left被dump过，则对应的right一定会被dump
+    // Ensure left has been dumped, then the corresponding right will definitely be dumped
     if (OB_FAIL(asyn_dump_partition(INT64_MAX, false, true, cur_dumped_partition_ + 1, nullptr))) {
       LOG_WARN("failed to asyn dump partition", K(ret));
     } else if (OB_FAIL(update_dumped_partition_statistics(false))) {

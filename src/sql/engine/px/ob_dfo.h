@@ -61,9 +61,8 @@ class ObPxSqcHandler;
 class ObJoinFilter;
 class ObPxCoordInfo;
 class ObDfo;
-
-// 在 PX 端描述每个 SQC 的 task
-// 通过 exec_addr 区分 SQC
+// Describe each SQC's task on the PX side
+// Through exec_addr distinguish SQC
 class ObPxTaskMeta
 {
 public:
@@ -81,9 +80,9 @@ public:
   TO_STRING_KV(K_(exec_addr), K_(sqc_id), K_(task_id));
 private:
   common::ObAddr exec_addr_;
-  // 考虑到容错重试，同一个 addr 上可能有多个 sqc 存在，通过 sqc_id_ 来区分 task 归属为哪个 sqc
+  // Considering fault tolerance retries, there may be multiple sqcs on the same addr, distinguished by sqc_id_ to determine which sqc the task belongs to
   int64_t sqc_id_;
-  // 记录 Task 是 SQC 中的第几个任务，用于 partial partition wise join 场景
+  // Record Task is the nth task in SQC, used for partial partition wise join scenario
   // ref: 
   int64_t task_id_;
   // slave map group id
@@ -170,8 +169,7 @@ public:
   int64_t qc_tid_;
   TO_STRING_KV(K_(cur_sql), K_(qc_tid));
 };
-
-// PX 端描述每个 SQC 的数据结构
+// PX end describes the data structure of each SQC
 class ObPxSqcMeta
 {
   OB_UNIS_VERSION(1);
@@ -225,12 +223,11 @@ public:
   {}
   ~ObPxSqcMeta() = default;
   int assign(const ObPxSqcMeta &other);
-
-  // 输入、输出函数
-  /* 获取 qc 端的通信端口，由 qc 端读取并 link */
+  // Input, output functions
+  /* Get the communication port of the qc end, read by the qc end and link */
   dtl::ObDtlChannelInfo &get_qc_channel_info() { return qc_ch_info_; }
   const dtl::ObDtlChannelInfo &get_qc_channel_info_const() const { return qc_ch_info_; }
-  /* 获取 sqc 端的通信端口，由 sqc 端读取并 link */
+  /* Get the communication port of the sqc end, read by the sqc end and link */
   dtl::ObDtlChannelInfo &get_sqc_channel_info() { return sqc_ch_info_; }
   const dtl::ObDtlChannelInfo &get_sqc_channel_info_const() const { return sqc_ch_info_; }
   ObIArray<ObSqcTableLocationKey> &get_access_table_location_keys() { return access_table_location_keys_; }
@@ -312,8 +309,8 @@ public:
     allocator_.reset();
     monitoring_info_.reset();
   }
-  // SQC 端收到 InitSQC 消息后通过 data_channel 信息是否为空
-  // 来判断 data channel 是否已经预分配好，是否要走轻量调度
+  // SQC end receives InitSQC message and checks if data_channel information is empty
+  // To determine if the data channel has already been pre-allocated, whether to use lightweight scheduling
   bool is_prealloc_transmit_channel() const
   {
     return transmit_channel_.has_filled_channel();
@@ -380,15 +377,15 @@ private:
   // Mainly used for pdml merge into now, which may modify global indexes on other servers.
   DASTabletLocSEArray extra_access_table_locations_;
 
-  ObPxTransmitDataChannelMsg transmit_channel_; // 用于快速建立 QC-Task 通道模式
-  ObPxReceiveDataChannelMsg receive_channel_; // 用于快速建立 QC-Task 通道模式
+  ObPxTransmitDataChannelMsg transmit_channel_; // Used for quickly establishing QC-Task channel mode
+  ObPxReceiveDataChannelMsg receive_channel_; // Used for quickly establishing QC-Task channel mode
   dtl::ObDtlChannelInfo qc_ch_info_;
   dtl::ObDtlChannelInfo sqc_ch_info_;
-  dtl::ObDtlChannel *qc_channel_; /* 用于 qc 给 sqc 发送数据 */
-  dtl::ObDtlChannel *sqc_channel_; /* 用于 sqc 给 qc 发送数据 */
-  common::ObAddr exec_addr_; /* SQC 的运行地址 */
-  common::ObAddr qc_addr_; /* 记录 QC 的地址，用于 SQC-QC 通信 */
-  int64_t task_count_; /* 每个 DFO 会被拆分成 task-count 个 SQC 并发执行 */
+  dtl::ObDtlChannel *qc_channel_; /* Used by qc to send data to sqc */
+  dtl::ObDtlChannel *sqc_channel_; /* Used by sqc to send data to qc */
+  common::ObAddr exec_addr_; /* The running address of SQC */
+  common::ObAddr qc_addr_; /* Record the QC's address, used for SQC-QC communication */
+  int64_t task_count_; /* Each DFO will be split into task-count SQCs for concurrent execution */
   int64_t max_task_count_;
   int64_t min_task_count_;
   int64_t total_task_count_;
@@ -404,19 +401,19 @@ private:
   uint64_t qc_server_id_;
   int64_t parent_dfo_id_;
   uint64_t px_sequence_id_;
-  // 以下两个变量在单层调度dfo场景中会使用
-  // 标记sqc在执行transmit/recieve算子时是否从中间结收/发数据
+  // The following two variables will be used in the single-layer scheduling dfo scenario
+  // Mark whether sqc transmits/receives data from the middle node when executing transmit/receive operators
   bool transmit_use_interm_result_;
   bool recieve_use_interm_result_;
-  // 新增receive_channels, sqc meta中捎带channel
-  // 在串行调度依赖此数组获取receive_channels.
+  // Add receive_channels, carry channel in sqc meta
+  // In serial scheduling, this array is used to obtain receive_channels.
   common::ObSEArray<ObPxReceiveDataChannelMsg, 1>serial_receive_channels_;
-  // 在NLJ分布式batch rescan场景下使用
-  // 用于存放NLJ条件下推的参数
+  // In the NLJ distributed batch rescan scenario use
+  // Used to store parameters for NLJ condition pushdown
   ObBatchRescanParams rescan_batch_params_;
   // for partition pruning
   common::ObSEArray<ObTableLocation, 2> partition_pruning_table_locations_;
-  // sqc中需要中间结果文件写的数据块id的数组
+  // sqc needs an array of data block IDs to be written to the intermediate result file
   ObSEArray<ObSqlTempTableCtx, 2> temp_table_ctx_;
   // all child is virtual table, need ignore error.
   bool ignore_vtable_error_;
@@ -525,8 +522,8 @@ public:
   inline bool is_single() const { return is_single_; }
   inline void set_root_dfo(bool is_root) {is_root_dfo_ = is_root;}
   inline bool is_root_dfo() const {return is_root_dfo_;}
-  // 注意：一个 dfo 可能有多个 receive 算子，和多个 child dfo 通信
-  // 这里仅用于标记和第一个 child dfo 通信的 receive 算子通道分配状态
+  // Note: a dfo may have multiple receive operators, and communicate with multiple child dfo
+  // Here is only used to mark the receive operator channel allocation status for communication with the first child dfo
   inline void set_prealloc_receive_channel(const bool v) {prealloced_receive_channel_ = v;}
   inline bool is_prealloc_receive_channel() const {return prealloced_receive_channel_;}
   inline void set_prealloc_transmit_channel(const bool v) {prealloced_transmit_channel_ = v;}
@@ -560,19 +557,18 @@ public:
   inline bool is_out_slave_mapping() { return SlaveMappingType::SM_NONE != out_slave_mapping_type_; }
 
   ObPxPartChMapArray &get_part_ch_map() { return part_ch_map_; }
-
-  // DFO 分布，DFO 在各个 server 上的任务状态
+  // DFO distribution, DFO task status on each server
   int add_sqc(const ObPxSqcMeta &sqc);
   int get_sqc(int64_t idx, ObPxSqcMeta *&sqc);
   common::ObIArray<ObPxSqcMeta>  &get_sqcs() { return sqcs_; }
   const common::ObIArray<ObPxSqcMeta>  &get_sqcs() const { return sqcs_; }
   int64_t get_sqcs_count() { return sqcs_.count(); }
-  /* 获取 qc 端的 channel 端口 */
+  /* get qc end's channel port */
 
 
-  /* DFO 关系图
+  /* DFO relationship diagram
 
-   假设先调度 dfo3，则 dfo2 称作 dfo3 的 depend sibling，如下图：
+   Assume dfo3 is scheduled first, then dfo2 is called dfo3's depend sibling, as shown in the following figure:
 
                                   dfo1
                                 /      \
@@ -586,8 +582,8 @@ public:
   inline int64_t get_child_count() const { return child_dfos_.count(); }
   ObIArray<ObDfo*> &get_child_dfos() { return child_dfos_; }
   inline bool has_child_dfo() const { return get_child_count() > 0; }
-  // 本 DFO 即使优先调度，但可能依赖于另外的 DFO 调度才能推进本 DFO
-  // 使用 depend_sibling 记录依赖的 DFO
+  // This DFO may be prioritized, but it may depend on the scheduling of another DFO to advance this DFO
+  // Use depend_sibling to record the dependent DFO
   void set_depend_sibling(ObDfo *sibling) { depend_sibling_ = sibling; }
   void set_has_depend_sibling(bool has_depend_sibling) { has_depend_sibling_ = has_depend_sibling; }
   bool has_depend_sibling() const { return has_depend_sibling_; }
@@ -595,8 +591,8 @@ public:
   void set_parent(ObDfo *parent) { parent_ = parent; }
   bool has_parent() const { return NULL != parent_; }
   ObDfo *parent() const { return parent_; }
-  // 下面两个函数用于3层DFO 调度，使得HASH JOIN上面无需接MATERIAL算子，
-  // 流式输出结果集，被标记为 earlier_sched_ 的 dfo 被提前调度，直接消费JOIN结果
+  // The following two functions are used for 3-layer DFO scheduling, so that the HASH JOIN does not need to be followed by a MATERIAL operator,
+  // Stream output result set, the dfo marked as earlier_sched_ is scheduled earlier, directly consuming JOIN result
   void set_earlier_sched(bool earlier) { earlier_sched_ = earlier; }
   bool is_earlier_sched() const { return earlier_sched_; }
   void set_dfo_id(int64_t dfo_id) { dfo_id_ = dfo_id; }
@@ -614,8 +610,7 @@ public:
 
   void set_temp_table_id(uint64_t temp_table_id) { temp_table_id_ = temp_table_id; }
   uint64_t get_temp_table_id() const { return temp_table_id_; }
-
-  // TODO: 以下四个状态需要重新梳理，太乱了
+  // TODO: The following four states need to be reorganized, it's too messy
   void set_active() { is_active_ = true; }
   bool is_active() const { return is_active_; }
   void set_scheduled() { is_scheduled_ = true; }
@@ -722,50 +717,50 @@ private:
   uint64_t qc_id_;
   int64_t dfo_id_;
   ObPxInterruptID px_int_id_;
-  // dop 是用户/优化器建议的并发度，为所有 server 上预期分配的 worker 数之和
-  // used_worker_cnt 用于统计当前 dfo 一共消耗了多少个 px worker 才完成
-  // 三者的关系：
-  // 1. 当 dop 较小，且访问的 partition 分布在较多 server 上时，
-  // 为了保证每个 server 至少有一个 px worker 去服务，
-  // used_worker_cnt 比实际 dop 大
-  // 2. 当 server 上线程不足，实际创建的 worker 数可能比预期少（DOP 降级）
-  // userd_worker_cnt 可能比 dop 小
-  // 3. assigned_worker_cnt 是根据 admission 许可的线程数计算出的每个 dfo 可以取得的线程数
+  // dop is the concurrency degree suggested by the user/optimizer, which is the sum of the expected number of workers allocated across all servers
+  // used_worker_cnt used to count how many px workers were consumed in total to complete the current dfo
+  // The relationship among the three:
+  // 1. When dop is small, and the accessed partitions are distributed across many servers,
+  // To ensure each server has at least one px worker to serve,
+  // used_worker_cnt is greater than actual dop
+  // 2. When the server threads are insufficient, the actual number of workers created may be less than expected (DOP downgrade)
+  // userd_worker_cnt may be smaller than dop
+  // 3. assigned_worker_cnt is the number of threads each dfo can obtain calculated based on the admission thread count
   int64_t dop_;
   int64_t assigned_worker_cnt_;
   int64_t used_worker_cnt_;
-  // is_single 用于标记此dfo用一个线程去调度, 既可能在本地, 也可能在远程.
-  // 如果此dfo包含table scan算子, 调度时将跟随table scan location调度
-  // 如果此dfo不包含table scan算子, 调度时理论上可以在任意server去调度,
-  // 但在当前的实现上, 不包含table scan算子时, 会在本地调度
+  // is_single is used to mark that this dfo is scheduled by one thread, which may be local or remote.
+  // If this dfo contains a table scan operator, it will be scheduled to follow the table scan location during scheduling
+  // If this dfo does not contain a table scan operator, it can theoretically be scheduled on any server during scheduling,
+  // But in the current implementation, when the table scan operator is not included, it will be scheduled locally
   bool is_single_;
   bool is_root_dfo_;
-  /* 数据通道不等 sqc 返回建立了多少个 worker 就预分配好了 */
-  bool prealloced_receive_channel_; // 第一个 receive 算子的通道已经分配好
+  /* Data channel not equal sqc returns how many workers were pre-allocated */
+  bool prealloced_receive_channel_; // The channel for the first receive operator has been allocated
   bool prealloced_transmit_channel_;
   const ObPhysicalPlan *phy_plan_;
   const ObOpSpec *root_op_spec_;
   common::ObSEArray<ObDfo *, 4> child_dfos_;
-  bool has_scan_; // DFO 中包含至少一个 scan 算子，或者仅仅包含一个dml
-  bool has_das_;  // DFO 中包含至少一个 das 算子
-  bool has_dml_op_; // DFO中可能包含一个dml
-  bool has_need_branch_id_op_; // DFO 中有算子需要分配branch_id
+  bool has_scan_; // DFO contains at least one scan operator, or only contains one dml
+  bool has_das_;  // DFO contains at least one das operator
+  bool has_dml_op_; // DFO may contain a dml
+  bool has_need_branch_id_op_; // DFO has operators that need to be assigned a branch_id
   bool has_temp_scan_;
   bool is_active_;
   bool is_scheduled_;
   bool thread_inited_;
   bool thread_finish_;
-  ObDfo *depend_sibling_; // 依赖其它边的调度才能执行完成，目前只支持记录一个依赖
+  ObDfo *depend_sibling_; // dependent on the scheduling of other edges to complete execution, currently only supports recording one dependency
   bool has_depend_sibling_;
-  ObDfo *parent_; // 依赖其它边的调度才能执行完成，目前只支持记录一个依赖
+  ObDfo *parent_; // depends on the scheduling of other edges to complete, currently only supports recording one dependency
   ObPxTaskChSets transmit_ch_sets_;
   common::ObArray<ObPxTaskChSets *>receive_ch_sets_map_;
   ObPxChTotalInfos dfo_ch_infos_;
-  common::ObArray<ObPxSqcMeta> sqcs_; // 所有 server 都分配好后初始化
-  common::ObArray<ObPxTaskMeta> tasks_; // 所有 SQC 都 setup 完成后根据 SQC 记录的实际分配线程数初始化
+  common::ObArray<ObPxSqcMeta> sqcs_; // All servers are allocated and then initialized
+  common::ObArray<ObPxTaskMeta> tasks_; // All SQCs are setup complete after initializing based on the actual number of threads allocated by the SQCs
   bool is_fulltree_;
   bool is_rpc_worker_;
-  bool earlier_sched_; // 标记本 dfo 是否是因为 3 DFO 调度策略而被提前调度起来了
+  bool earlier_sched_; // Mark whether this dfo was scheduled earlier due to the 3 DFO scheduling strategy
   uint64_t qc_server_id_;
   int64_t parent_dfo_id_;
   uint64_t px_sequence_id_;
@@ -920,7 +915,7 @@ public:
       execution_id_(0),
       task_channel_(NULL),
       sqc_channel_(NULL),
-      rc_(TASK_DEFAULT_RET_VALUE), // 小于等于 0 表示设置了 rc 值
+      rc_(TASK_DEFAULT_RET_VALUE), // less than or equal to 0 indicates that the rc value is set
       das_retry_rc_(common::OB_SUCCESS),
       state_(0),
       task_co_id_(0),
@@ -1058,7 +1053,7 @@ public:
   void set_px_execute_start_schema_version(int64_t schema_version) { px_worker_execute_start_schema_version_ = schema_version; }
   int64_t get_px_execute_start_schema_version() const { return px_worker_execute_start_schema_version_; }
 public:
-  // 小于等于0表示设置了rc 值, task default ret值为1
+  // Less than or equal to 0 indicates that the rc value is set, task default ret value is 1
   static const int64_t TASK_DEFAULT_RET_VALUE = 1;
 public:
   uint64_t qc_id_;
@@ -1071,19 +1066,19 @@ public:
   dtl::ObDtlChannelInfo task_ch_info_;
   dtl::ObDtlChannel *task_channel_;
   dtl::ObDtlChannel *sqc_channel_;
-  common::ObAddr sqc_addr_; /* 记录 SQC 的地址，用于 SQC-Task 通信 */
-  common::ObAddr exec_addr_; /* Task 的运行地址 */
-  common::ObAddr qc_addr_;  /*记录 QC 的地址，用于中断*/
+  common::ObAddr sqc_addr_; /* Record the address of SQC, used for SQC-Task communication */
+  common::ObAddr exec_addr_; /* Task's running address */
+  common::ObAddr qc_addr_;  /*Record QC's address, used for interrupt*/
   int rc_;
   int das_retry_rc_;
-  volatile int32_t state_; // 被 task 线程设置
-  volatile uint64_t task_co_id_; /* task 的协程 id */
+  volatile int32_t state_; // set by task thread
+  volatile uint64_t task_co_id_; /* task's coroutine id */
   ObPxInterruptID px_int_id_;
-  bool is_fulltree_; // 标记序列化时这个 task 的 op tree 是否包含会被ex 算子截断
-  int64_t affected_rows_; // pdml情况下，每个task涉及到的行
-  ObPxDmlRowInfo dml_row_info_; // DML情况下, 需要统计行相关信息
+  bool is_fulltree_; // Mark whether the op tree of this task contains ops that would be truncated by the ex operator
+  int64_t affected_rows_; // pdml case, each task involved rows
+  ObPxDmlRowInfo dml_row_info_; // In DML cases, need to statistics row related information
   uint64_t temp_table_id_;
-  common::ObSEArray<uint64_t, 8> interm_result_ids_;  //返回每个task生成的结果集
+  common::ObSEArray<uint64_t, 8> interm_result_ids_;  // return the result set generated by each task
   transaction::ObTxDesc *tx_desc_; // transcation information
   transaction::ObTxExecResult tx_result_;
   bool is_use_local_thread_;
@@ -1130,8 +1125,8 @@ public:
                       common::ObIAllocator &alloc);
 
   void destroy() {
-    // worker 执行完成后，立即释放当前 worker 持有的 physical plan、 exec ctx 等资源
-    // 内含各种算子的上下文内存等
+    // worker completes execution, immediately release the physical plan, exec ctx, etc. resources held by the current worker
+    // Contains various operator contexts and memory etc
     if (nullptr != inner_phy_plan_) {
       inner_phy_plan_->~ObPhysicalPlan();
       inner_phy_plan_ = NULL;
@@ -1185,9 +1180,9 @@ public:
   ObOpSpec *inner_op_spec_root_;
   const ObOpSpec *op_spec_root_;
   ObOperator *static_engine_root_;
-  ObPxTask *sqc_task_ptr_; // 指针指向 SQC Ctx task 数组中对应的 task
+  ObPxTask *sqc_task_ptr_; // pointer to the corresponding task in the SQC Ctx task array
   ObIAllocator *des_allocator_;
-  ObPxSqcHandler *sqc_handler_; // 指向 SQC Handler 内存
+  ObPxSqcHandler *sqc_handler_; // point to SQC Handler memory
 };
 
 struct ObPxRpcInitTaskResponse

@@ -98,9 +98,9 @@ struct SelectItem
   common::ObSEArray<int64_t, OB_DEFAULT_SE_ARRAY_COUNT> questions_pos_;
   common::ObSEArray<int64_t, OB_DEFAULT_SE_ARRAY_COUNT> params_idx_;
   common::ObBitSet<> neg_param_idx_;
-  // 投影列是常量字符串时，需要标记转义标记，用于select item常量参数化
+  // Projection column is a constant string, it needs to mark the escape flag, used for select item constant parameterization
   bool esc_str_flag_;
-  // 标记是否需要检查raw_param，用于select item常量参数化
+  // Mark whether to check raw_param, used for select item constant parameterization
   bool need_check_dup_name_;
   // select item is implicit filled in updatable view, to pass base table's column to top view.
   bool implicit_filled_;
@@ -328,7 +328,7 @@ public:
       show_seed_ = other.show_seed_;
     }
 
-    bool      is_from_show_stmt_; //是否是从show语句转换过来的
+    bool      is_from_show_stmt_; // whether it is converted from a show statement
     bool      global_scope_;
     uint64_t  tenant_id_;
     uint64_t  show_database_id_;
@@ -588,7 +588,7 @@ private:
   bool is_recursive_cte_;
   /* These fields are only used by normal select */
   bool is_distinct_;
-  //用于cte递归句式中的search by子句指定的排序列
+  // Used for the sort column specified in the search by clause of the cte recursive statement
   common::ObSEArray<SelectItem, 16, common::ModulePageAllocator, true> select_items_;
   common::ObSEArray<ObRawExpr*, 8, common::ModulePageAllocator, true> group_exprs_;
   common::ObSEArray<ObRawExpr*, 8, common::ModulePageAllocator, true> rollup_exprs_;
@@ -597,7 +597,7 @@ private:
   common::ObSEArray<ObWinFunRawExpr*, 8, common::ModulePageAllocator, true> win_func_exprs_;
   //a child set of the filters in the parent stmts, only used for partition topn sort
   common::ObSEArray<ObRawExpr*, 8, common::ModulePageAllocator, true> qualify_filters_;
-  //这个结构仅仅是在mysql模式下的rollup语句中才有意义。比如下面这条语句
+  // This structure is only meaningful in the rollup statement under mysql mode. For example, the following statement
   //select a,b,sum(d) from t group by a desc, b asc with rollup.
   common::ObSEArray<ObOrderDirection, 8, common::ModulePageAllocator, true> rollup_directions_;
 

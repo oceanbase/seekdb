@@ -240,14 +240,13 @@ int ObTableApiInsertUpExecutor::try_update_row()
 int ObTableApiInsertUpExecutor::reset_das_env()
 {
   int ret = OB_SUCCESS;
-  // 释放第一次try insert的das task
+  // release the das task from the first try insert
   if (OB_FAIL(dml_rtctx_.das_ref_.close_all_task())) {
     LOG_WARN("fail to close all das task", K(ret));
   } else {
     dml_rtctx_.das_ref_.reuse();
   }
-
-  // 因为第二次插入不需要fetch conflict result了
+  // Because the second insertion does not need to fetch conflict result anymore
   for (int64_t i = 0; OB_SUCC(ret) && i < insert_up_rtdefs_.count(); i++) {
     ObTableInsRtDef &ins_rtdef = insert_up_rtdefs_.at(i).ins_rtdef_;
     ins_rtdef.das_rtdef_.need_fetch_conflict_ = false;
@@ -272,15 +271,14 @@ int ObTableApiInsertUpExecutor::cache_insert_row()
 
   return ret;
 }
-
-// 通过主键在conflict_checker_中找到冲突旧行，执行更新
-// 注意，这里更新后还可能出现二级索引冲突，eg:
+// Find the conflicting row in conflict_checker_ by primary key and perform an update
+// Note, secondary index conflicts may still occur after this update, eg:
 // create table t (C1 int, C2 varchar(10), primary key(C1), UNIQUE KEY idx_c2 (C2));
 // insert into t values (1, 1);
 // insert into t values (2, 2);
 // client.insert_up('C1','C2').VALUES(1,2);
-// 1. 首先执行insert，冲突，返回冲突行(1,1)
-// 2. 然后执行到这个函数，执行update，
+// 1. First execute insert, conflict, return conflicting row (1,1)
+// 2. Then execute this function, execute update,
 int ObTableApiInsertUpExecutor::do_insert_up_cache()
 {
   int ret = OB_SUCCESS;
@@ -420,10 +418,10 @@ int ObTableApiInsertUpExecutor::do_update(const ObConflictValue &constraint_valu
   int ret = OB_SUCCESS;
 
   if (constraint_value.new_row_source_ == ObNewRowSource::FROM_UPDATE) {
-    // current_datum_row_ 是update的new_row
+    // current_datum_row_ is the new_row for update
     if (NULL != constraint_value.baseline_datum_row_ &&
         NULL != constraint_value.current_datum_row_) {
-      // base_line 和 curr_row 都存在
+      // base_line and curr_row both exist
       if (OB_FAIL(stored_row_to_exprs(*constraint_value.baseline_datum_row_,
                                       get_primary_table_upd_old_row(),
                                       eval_ctx_))) {
@@ -441,7 +439,7 @@ int ObTableApiInsertUpExecutor::do_update(const ObConflictValue &constraint_valu
         }
       }
     } else if (NULL == constraint_value.baseline_datum_row_ &&
-               NULL != constraint_value.current_datum_row_) { // 单单是唯一索引冲突的时候，会走这个分支
+               NULL != constraint_value.current_datum_row_) { // This branch is taken only when there is a unique index conflict
       OZ(to_expr_skip_old(*constraint_value.current_datum_row_,
                           insert_up_spec_.get_ctdefs().at(0)->upd_ctdef_));
       OZ(insert_upd_new_row_to_das());
@@ -505,10 +503,10 @@ int ObTableApiInsertUpExecutor::get_next_row()
   } else if (OB_FAIL(fetch_conflict_rowkey(conflict_checker_))) {
     LOG_WARN("fail to fetch conflict row", K(ret));
   } else if (OB_FAIL(reset_das_env())) {
-    // 这里需要reuse das 相关信息
+    // Here we need to reuse das related information
     LOG_WARN("fail to reset das env", K(ret));
   } else if (OB_FAIL(ObSqlTransControl::rollback_savepoint(exec_ctx_, savepoint_no))) {
-    // 本次插入存在冲突, 回滚到save_point
+    // This insertion has conflicts, rollback to save_point
     LOG_WARN("fail to rollback to save_point", K(ret));
   } else if (OB_FAIL(try_update_row())) {
     LOG_WARN("fail to try update row", K(ret));
@@ -516,7 +514,7 @@ int ObTableApiInsertUpExecutor::get_next_row()
 
   if (OB_SUCC(ret)) {
     affected_rows_ += insert_rows_ + insert_up_rtdefs_.at(0).upd_rtdef_.found_rows_;
-    // auto inc 操作中, 同步全局自增值value
+    // auto inc operation, synchronize global auto increment value
     if (tb_ctx_.has_auto_inc() && OB_FAIL(tb_ctx_.update_auto_inc_value())) {
       LOG_WARN("fail to update auto inc value", K(ret));
     }

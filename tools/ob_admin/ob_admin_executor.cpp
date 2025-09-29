@@ -31,7 +31,7 @@ ObAdminExecutor::ObAdminExecutor()
       reload_config_(ObServerConfig::get_instance(), GCTX),
       config_mgr_(ObServerConfig::get_instance(), reload_config_)
 {
-  // 设置MTL上下文
+  // Set MTL context
   IGNORE_RETURN ObTimerService::get_instance().start();
   mock_server_tenant_.set(&ObTimerService::get_instance());
   share::ObTenantEnv::set_tenant(&mock_server_tenant_);

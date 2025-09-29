@@ -79,12 +79,12 @@ int ObDirectLoadRangeSplitUtils::construct_rowkey_iter(
     LOG_WARN("invalid args", KR(ret), KPC(sstable));
   } else {
     if (ObDirectLoadSampleMode::is_sample_enabled(table_data_desc.sample_mode_)) {
-      // 采样模式, 直接从rowkey文件读
+      // Sampling mode, directly read from rowkey file
       if (OB_FAIL(sstable->scan_whole_rowkey(table_data_desc, allocator, rowkey_iter))) {
         LOG_WARN("fail to scan whole rowkey", KR(ret));
       }
     } else {
-      // 非采样模式, 读每个索引块的endkey
+      // Non-sampling mode, read the endkey of each index block
       if (OB_FAIL(sstable->scan_whole_index_block_endkey(table_data_desc, allocator, rowkey_iter))) {
         LOG_WARN("fail to scan whole index block endkey", KR(ret));
       }
@@ -105,12 +105,12 @@ int ObDirectLoadRangeSplitUtils::construct_multiple_rowkey_iter(
     LOG_WARN("invalid args", KR(ret), KPC(sstable));
   } else {
     if (ObDirectLoadSampleMode::is_sample_enabled(table_data_desc.sample_mode_)) {
-      // 采样模式, 直接从rowkey文件读
+      // Sampling mode, directly read from rowkey file
       if (OB_FAIL(sstable->scan_whole_rowkey(table_data_desc, allocator, rowkey_iter))) {
         LOG_WARN("fail to scan whole rowkey", KR(ret));
       }
     } else {
-      // 非采样模式, 读每个索引块的endkey
+      // Non-sampling mode, read the endkey of each index block
       if (OB_FAIL(sstable->scan_whole_index_block_endkey(table_data_desc, allocator, rowkey_iter))) {
         LOG_WARN("fail to scan whole index block endkey", KR(ret));
       }
@@ -324,7 +324,7 @@ int ObDirectLoadRangeSplitUtils::rowkey_adaptive_sample(
       }
     } else if (++count >= step) {
       if (cur_rowkey_array->count() >= sample_num) {
-        // 将所有rowkey两两合并
+        // Merge all rowkeys in pairs
         for (int64_t i = 0; OB_SUCC(ret) && i < cur_rowkey_array->count() / 2; ++i) {
           const ObDatumRowkey &tmp_rowkey = cur_rowkey_array->at(i * 2 + 1);
           if (OB_FAIL(tmp_rowkey.deep_copy(copied_rowkey, *next_allocator))) {
@@ -351,7 +351,7 @@ int ObDirectLoadRangeSplitUtils::rowkey_adaptive_sample(
       }
     }
   }
-  // 拷贝结果
+  // Copy result
   if (OB_SUCC(ret)) {
     ObDatumRowkey copied_rowkey;
     for (int64_t i = 0; OB_SUCC(ret) && i < cur_rowkey_array->count(); ++i) {
@@ -395,7 +395,7 @@ int ObDirectLoadRangeSplitUtils::rowkey_reservoir_sample(
           LOG_WARN("fail to push back", KR(ret));
         }
       } else {
-        // TODO: 存在内存膨胀问题
+        // TODO: There is a memory bloat issue
         idx = ObRandom::rand(1, i);
         if (idx <= sample_num) {
           if (OB_FAIL(rowkey->deep_copy(copied_rowkey, allocator))) {
@@ -407,7 +407,7 @@ int ObDirectLoadRangeSplitUtils::rowkey_reservoir_sample(
       }
     }
   }
-  // 对采样结果进行排序
+  // Sort the sampling results
   if (OB_SUCC(ret)) {
     ObDirectLoadDatumRowkeyCompare compare;
     if (OB_FAIL(compare.init(*datum_utils))) {
@@ -508,15 +508,15 @@ int ObDirectLoadSampleInfo::get_sstable_info(
     }
     if (OB_FAIL(ret)) {
     } else if (ObDirectLoadSampleMode::is_row_sample(table_data_desc.sample_mode_)) {
-      // 行采样
+      // Line sampling
       sstable_sample_num_ = total_rowkey_count;
       sstable_rows_per_sample_ = total_rowkey_count > 0 ? table_data_desc.num_per_sample_ : 0;
     } else if (ObDirectLoadSampleMode::is_data_block_sample(table_data_desc.sample_mode_)) {
-      // 数据块采样
+      // data block sampling
       sstable_sample_num_ = total_rowkey_count;
       sstable_rows_per_sample_ = total_rowkey_count > 0 ? total_row_count / total_rowkey_count : 0;
     } else {
-      // 不采样
+      // No sampling
       sstable_sample_num_ = total_index_block_count;
       sstable_rows_per_sample_ =
         total_index_block_count > 0 ? total_row_count / total_index_block_count : 0;
@@ -533,7 +533,7 @@ int ObDirectLoadSampleInfo::calc_sample_info(const int64_t parallel, bool based_
     origin_step_ = 1;
     sstable_step_ = 1;
   }
-  // 配平采样大小
+  // Balance sampling size
   else if (based_on_origin || origin_rows_per_sample_ > sstable_rows_per_sample_) {
     origin_step_ = origin_sample_num_ <= max_num ? 1 : ((origin_sample_num_ + max_num - 1) / max_num);
     sstable_step_ = origin_rows_per_sample_ * origin_step_ / sstable_rows_per_sample_;
@@ -866,13 +866,13 @@ int ObDirectLoadMultipleMergeRangeSplitter::get_rowkeys_by_sstable(
       LOG_WARN("fail to do rowkey fixed sample", KR(ret));
     }
   } else if (enable_reservoir_sample_) {
-    // 蓄水池采样
+    // Reservoir sampling
     if (OB_FAIL(ObDirectLoadRangeSplitUtils::rowkey_reservoir_sample(
           tablet_rowkey_iter_, reservoir_sample_num_, datum_utils_, rowkey_array, allocator))) {
       LOG_WARN("fail to do rowkey reservoir sample", KR(ret));
     }
   } else {
-    // 自适应采样
+    // adaptive sampling
     if (OB_FAIL(ObDirectLoadRangeSplitUtils::rowkey_adaptive_sample(
           tablet_rowkey_iter_, max_range_count * adaptive_sample_factor_, rowkey_array,
           allocator))) {
@@ -1088,7 +1088,7 @@ int ObDirectLoadMultipleMergeRangeSplitter::TabletRowkeyIter::get_next_rowkey(
       LOG_WARN("unexpected tablet id invalid", KR(ret));
     } else {
       const int cmp_ret = last_multiple_rowkey_->tablet_id_.compare(tablet_id_);
-      // 必须按tablet_id顺序迭代
+      // Must iterate in tablet_id order
       if (OB_UNLIKELY(cmp_ret < 0)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected tablet id", KR(ret), KPC(last_multiple_rowkey_), K(tablet_id_));

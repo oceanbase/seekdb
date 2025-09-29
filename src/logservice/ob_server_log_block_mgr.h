@@ -257,14 +257,12 @@ private:
   int remove_resizing_tmp_dir_(const char *dir_path, const palf::FileDesc &in_dir_fd);
   int do_resize_(const LogPoolMeta &old_log_pool_meta, const int64_t resize_block_cnt,
                  LogPoolMeta &new_log_pool_meta);
-
-  // 原子性的保证:
-  // 1. 临时的扩容目录
-  // 2. 移动失败会重试
+  // Atomic guarantee:
+  // 1. temporary expansion directory
+  // 2. Movement failure will retry
   int do_expand_(const LogPoolMeta &new_log_meta, const int64_t resize_block_cnt);
-
-  // 原子性的保证:
-  // 1. 删除操作失败会重试
+  // Atomic guarantee:
+  // 1. Deletion operation failure will retry
   int do_shrink_(const LogPoolMeta &new_log_meta, const int64_t resize_block_cnt);
   int allocate_blocks_at_tmp_dir_(const palf::FileDesc &dir_fd,
                                   const palf::block_id_t start_block_id,

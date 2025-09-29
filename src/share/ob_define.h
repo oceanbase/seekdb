@@ -84,7 +84,7 @@ using std::isnan;
 
 /*
 
-  参考文档：
+  Reference documentation:
 
   This better be the last macro we ever need to define in the
   O-series, hence 'Z'.
@@ -121,7 +121,7 @@ using std::isnan;
   } while(0)
 
 /*
-  OZ的扩展，增加一个retcode，当返回值为retcode时，用log info代替log warn，减少不必要的刷屏
+  Extension of OZ, add a retcode, when the return value is retcode, use log info instead of log warn to reduce unnecessary screen flooding
   eg:
   OZX1( f(a1, a2, a3), OB_ERR_NO_PRIVILEGE);          // print ret in case of failure
   OZX1( f(a1, a2, a3), OB_ERR_NO_PRIVILEGE, a3 );      // print ret, a3 in case of failure
@@ -146,7 +146,7 @@ using std::isnan;
   } while(0)
 
 /*
-  OZ的扩展，增加一个retcode，当返回值为retcode时，用log info代替log warn，减少不必要的刷屏
+  Extension of OZ, add a retcode, when the return value is retcode, use log info instead of log warn to reduce unnecessary screen flooding
   OZX2( f(a1, a2, a3), OB_ERR_NO_PRIVILEGE, OB_ERR_EMPTY_QUERY); // print ret in case of failure
   OZX2( f(a1, a2, a3), OB_ERR_NO_PRIVILEGE, OB_ERR_EMPTY_QUERY, a3 );
   OZX2( f(a1, a2, a3), OB_ERR_NO_PRIVILEGE, OB_ERR_EMPTY_QUERY, a2, a3 );
@@ -512,10 +512,10 @@ const char *const OB_MYSQL_ENCRYPTION_NONE_MODE = "none";
 const int64_t OB_MAX_ENCRYPTION_MODE_LENGTH = 64;
 
 /**
- *  整理发现内部表, 内部视图的定义中有很多位置使用了OB_MAX_TABLE_NAME_LENGTH来限制字段长度为128字节,
- *  但是对应字段的语意并不是table_name。
- *  由于需要调整OB_MAX_TABLE_NAME_LENGTH长度为256, 为保证使用了OB_MAX_TABLE_NAME_LENGTH的内部表, 视图定义不变,
- *  新增以下定义替代原有的OB_MAX_TABLE_NAME_LENGTH
+ * Review found that in the definitions of internal tables and internal views, OB_MAX_TABLE_NAME_LENGTH is used in many places to limit the field length to 128 bytes,
+ * but the semantics of the corresponding fields are not table_name.
+ * Since it is necessary to adjust the length of OB_MAX_TABLE_NAME_LENGTH to 256, to ensure that the definitions of internal tables and views using OB_MAX_TABLE_NAME_LENGTH remain unchanged,
+ * the following definitions are added to replace the original OB_MAX_TABLE_NAME_LENGTH
  */
 const int64_t OB_MAX_CORE_TALBE_NAME_LENGTH = 128;
 const int64_t OB_MAX_OUTLINE_NAME_LENGTH = 128;

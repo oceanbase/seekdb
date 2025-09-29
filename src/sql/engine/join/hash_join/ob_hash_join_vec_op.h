@@ -287,11 +287,10 @@ public:
   {
     return &build_rows_output_;
   }
-
-  // all_exprs组成:(all_left_exprs keys, all_right_exprs keys)
-  // 前面的all_xxx_exprs keys没有去重
-  // 同理hash_funcs也保存了left和right的join key对应hash function
-  // 为什么保存left和right分别保存，因为可能存在类型不一致情况，如sint = usint
+  // all_exprs composition: (all_left_exprs keys, all_right_exprs keys)
+  // The previous all_xxx_exprs keys were not deduplicated
+  // Similarly, hash_funcs also stores the hash function corresponding to the join key of left and right
+  // Why save left and right separately, because there may be type inconsistency cases, such as sint = usint
   ExprFixedArray join_conds_;
   ExprFixedArray build_keys_;
   ExprFixedArray probe_keys_;
@@ -520,7 +519,7 @@ private:
   {
     nth_nest_loop_ = 0;
   }
-  // 这里可能会放大，暂时这样
+  // Here it may be amplified, temporarily like this
   int64_t get_extra_memory_size() const
   {
     int64_t bucket_cnt = profile_.get_bucket_size();
@@ -568,7 +567,7 @@ public:
   static constexpr int64_t MIN_ROW_COUNT = 10000;
   static constexpr int64_t INIT_LTB_SIZE = 64;
   static constexpr int64_t MAX_PART_COUNT_PER_LEVEL = INIT_LTB_SIZE << 1;
-  // 目前最大层次为4，通过高位4个字节作为recursive处理，超过partition level采用nest loop方式处理
+  // Currently the maximum level is 4, using the high 4 bytes for recursive processing, and using nest loop method for levels exceeding partition level
   static constexpr int64_t MIN_PART_COUNT = 8;
   static constexpr int64_t MAX_PART_LEVEL = 4;
   static constexpr int64_t PRICE_PER_ROW = 48;

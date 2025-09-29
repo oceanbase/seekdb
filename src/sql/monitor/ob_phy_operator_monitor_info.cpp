@@ -229,7 +229,7 @@ OB_DEF_DESERIALIZE(ObPhyOperatorMonitorInfo)
       LOG_WARN("fail to decode value", K(ret), K(pos));
     } else {
       if (index >= OB_MAX_INFORMATION_COUNT) {
-        //nothing to do, 也许收到一个新版本的统计信息
+        //nothing to do, maybe received a new version of statistics information
       } else if (index < 0) {
         ret = OB_ERR_UNEXPECTED;
         LOG_ERROR("invalid index", K(index), K(i), K(value), K(ret));

@@ -191,7 +191,7 @@ inline uint64_t hex_to_uint64(const ObString &str)
   uint64_t value = 0;
   if (OB_LIKELY(NULL != p)) {
     for (int32_t i = 0; i < N; ++i, ++p) {
-      // 经过实验，mysql不做溢出检查
+      // After testing, MySQL does not perform overflow checks
       value = value * 256 + *p;
     }
   }

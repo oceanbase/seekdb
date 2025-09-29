@@ -2,7 +2,7 @@
 #define EASY_ARRAY_H_
 
 /**
- * 固定长度数组分配
+ * Fixed length array allocation
  */
 #include "util/easy_pool.h"
 #include "easy_list.h"

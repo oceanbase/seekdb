@@ -666,12 +666,12 @@ public:
       drop_only_in_restore_(false) {}
   virtual ~ObDropTenantArg() {}
   /*
-   * drop tenant force最高优先级
-   * 此时delay_to_drop_=false;
-   * 其余情况delay_to_drop_=true;
-   * open_recyclebin_根据回收站是否打开决定;
-   * open_recyclebin_打开为true，进入回收站
-   * open_recyclebin_关闭为false，延迟删除
+   * drop tenant force highest priority
+   * at this time delay_to_drop_=false;
+   * in other cases delay_to_drop_=true;
+   * open_recyclebin_ is determined by whether the recycle bin is open;
+   * open_recyclebin_ open is true, enter recycle bin
+   * open_recyclebin_ closed is false, delayed deletion
   */
   bool is_valid() const;
   virtual bool is_allow_when_upgrade() const { return true; }
@@ -6390,7 +6390,7 @@ public:
   common::ObString kms_info_;  //Encryption use
   common::ObString passwd_array_; // Password verification
   common::ObSArray<ObTableItem> table_items_;
-  common::ObString multi_uri_; // 备份拆分用
+  common::ObString multi_uri_; // backup split use
   common::ObString description_;
   bool with_restore_scn_;
   common::ObString encrypt_key_;
@@ -7552,8 +7552,8 @@ public:
       K(is_alter_compile_))
   ;
 public:
-  common::ObString trigger_database_;           // 废弃
-  share::schema::ObTriggerInfo trigger_info_;   // 废弃
+  common::ObString trigger_database_;           // deprecated
+  share::schema::ObTriggerInfo trigger_info_;   // deprecated
   common::ObSArray<share::schema::ObTriggerInfo> trigger_infos_;
   bool is_set_status_;
   bool is_alter_compile_;

@@ -39,14 +39,14 @@ public:
            ObPxCoordInfo &px_coord_info);
   ObDfo *get_root_dfo() { return root_dfo_; }
   
-  virtual int get_ready_dfo(ObDfo *&dfo) const; // 仅用于单层dfo调度
-  // 可以入选即将调度队列的 DFO
+  virtual int get_ready_dfo(ObDfo *&dfo) const; // Only used for single-layer dfo scheduling
+  // Can be selected for the upcoming scheduling queue DFO
   virtual int get_ready_dfos(common::ObIArray<ObDfo *> &dfos) const;
-  // 已经入选即将调度队列的 DFO
+  // Already selected DFO to be scheduled in the queue
   virtual int get_active_dfos(common::ObIArray<ObDfo *> &dfos) const;
-  // 已经调度的 DFO
+  // Already scheduled DFO
   virtual int get_scheduled_dfos(ObIArray<ObDfo*> &dfos) const;
-  // 已经调度，且没有执行完成的 DFO
+  // Already scheduled, but not yet completed DFO
   virtual int get_running_dfos(ObIArray<ObDfo*> &dfos) const;
 
   int add_dfo_edge(ObDfo *edge);

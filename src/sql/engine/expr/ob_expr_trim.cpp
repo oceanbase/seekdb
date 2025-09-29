@@ -311,10 +311,8 @@ int ObExprTrim::ltrim2(const ObString src,
     int32_t i = 0;
     start = 0;
     int32_t src_len = src.length();
-
-
-    //对于pattern中的每个字符，首先检查src_len - start是否有足够的长度，如果有则，在src左端进行MEMCMP，match后
-    //start+=char_len进入下一轮，遍历pattern无法满足则ret
+    // For each character in pattern, first check if src_len - start has enough length, if so, perform MEMCMP on the left end of src, match after
+    // start+=char_len enter the next round, traverse pattern cannot be satisfied then ret
     bool is_match = false;
     do {
       is_match = false;
@@ -322,7 +320,7 @@ int ObExprTrim::ltrim2(const ObString src,
         int32_t char_len = pattern_byte_num[i];
         int32_t pattern_offset = pattern_byte_offset[i];
         if (src_len - start < char_len) {
-        //src字符串当前长度不到一个字符，不进行此次匹配，与下一个pattern字符进行比较，下个字符字节长度可能满足需求
+        // src string current length is less than one character, do not perform this match, compare with the next pattern character, the next character byte length may meet the requirement
         } else if (0 == MEMCMP(src.ptr() + start, pattern.ptr() + pattern_offset, char_len)) {
           start += char_len;
           is_match = true;
@@ -351,9 +349,8 @@ int ObExprTrim::rtrim2(const ObString src,
     int32_t i = 0;
     int32_t src_len = src.length();
     end = src_len;
-
-    //对于pattern中的每个字符，首先检查end是否有足够的长度，如果有则在src右端进行MEMCMP，match后
-    //end-=char_len进入下轮，遍历pattern无法满足则ret
+    // For each character in pattern, first check if end has sufficient length, if so, perform MEMCMP at the right end of src, match after
+    //end-=char_len enter next round, traverse pattern cannot be satisfied then ret
     bool is_match = false;
     do {
       is_match = false;
@@ -361,7 +358,7 @@ int ObExprTrim::rtrim2(const ObString src,
         int32_t char_len = pattern_byte_num[i];
         int32_t pattern_offset = pattern_byte_offset[i];
         if (end  < char_len) {
-        //src字符串当前长度不到一个字符，不进行此次匹配，与下一个pattern字符进行比较，下个字符字节长度可能满足需求
+        // src string current length is less than one character, do not perform this match, compare with the next pattern character, the next character byte length may meet the requirement
         } else if (0 ==
                    MEMCMP(src.ptr() + end - char_len, pattern.ptr() + pattern_offset, char_len)) {
           end -= char_len;

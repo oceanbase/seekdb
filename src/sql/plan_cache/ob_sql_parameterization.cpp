@@ -44,14 +44,14 @@ struct TransformTreeCtx
   int64_t question_num_;
   ParamStore *params_;
   ObMaxConcurrentParam::FixParamStore *fixed_param_store_;
-  bool not_param_; //表示该节点及其子节点是常量时也不能参数化
-  bool is_fast_parse_const_; //表示当前node是否为fp可识别的常量
-  bool enable_contain_param_;//表示该节点及其子节点中常量是否为fp可识别的参数。
+  bool not_param_; // indicates that this node and its child nodes cannot be parameterized even when they are constants
+  bool is_fast_parse_const_; // indicates whether the current node is a constant recognizable by fp
+  bool enable_contain_param_;//Indicates whether the constants in this node and its sub-nodes are fp-recognizable parameters.
   SqlInfo *sql_info_;
-  int64_t paramlized_questionmask_count_;//表示该查询中可以被参数化的?个数，用于sql限流
-  bool is_transform_outline_;//是否在resolve outline, 用于sql限流
+  int64_t paramlized_questionmask_count_;//indicates the number of ? that can be parameterized in this query, used for sql rate limiting
+  bool is_transform_outline_;//whether in resolve outline, used for sql rate limiting
   ObLengthSemantics default_length_semantics_;
-  ObSEArray<void*, 16> project_list_; // 记录下所有T_PROJECT_STRING节点
+  ObSEArray<void*, 16> project_list_; // record all T_PROJECT_STRING nodes
   const ObIArray<ObPCParam *> *raw_params_;
   SQL_EXECUTION_MODE mode_;
   bool is_project_list_scope_;
@@ -171,8 +171,8 @@ int ObSqlParameterization::transform_syntax_tree(ObIAllocator &allocator,
     ctx.is_fast_parse_const_ = false;
     ctx.enable_contain_param_ = true;
     ctx.sql_info_ = &sql_info;
-    ctx.paramlized_questionmask_count_ = 0;//used for outline sql限流，
-    ctx.is_transform_outline_ = is_transform_outline;//used for outline sql限流
+    ctx.paramlized_questionmask_count_ = 0;//used for outline sql rate limiting,
+    ctx.is_transform_outline_ = is_transform_outline;//used for outline sql rate limiting
     ctx.raw_params_ = raw_params;
     ctx.udr_fixed_params_ = udr_fixed_params;
     ctx.is_project_list_scope_ = false;
@@ -224,29 +224,28 @@ int ObSqlParameterization::transform_syntax_tree(ObIAllocator &allocator,
   }
   return ret;
 }
-
-//判断是否是fast parse能识别的常量(只考虑本node)
+// Determine if it is a constant recognizable by fast parse (only consider this node)
 //
 //T_CAST_ARGUMENT,T_FUN_SYS_CUR_TIMESTAMP, T_SFU_INT
-//该类型node在快速参数化时是常数(eg:cast ( 10 AS CHAR(20)中20, now(10))；
-//但正常parse时node结点类型为不在常数范围,
-//该node不需要参数化，但为了保证正常parse和fast parse常量个数匹配，所以加入特殊判断;
-//该参数在正常parse时处理方式和order by中参数相同;
+// This type node is a constant during fast parameterization (eg: cast ( 10 AS CHAR(20) ) where 20, now(10));
+// But normal parse when node type is not within the constant range,
+// This node does not need to be parameterized, but to ensure that the number of constants matches for normal parse and fast parse, a special judgment is added;
+// This parameter is processed in the same way as parameters in order by during normal parse;
 //
-//T_SFU_INT 和T_FUN_SYS_UTC_TIME时判段为0 或-1，
-//是因为now()和FOR UPDATE没有参数，但语法会给默认值,加判断是为了让正常parse不认为该值为常量。
+//T_SFU_INT and T_FUN_SYS_UTC_TIME when judged as 0 or -1,
+// because now() and FOR UPDATE have no parameters, but the syntax provides default values, adding a judgment is to prevent normal parse from considering this value as a constant.
 int ObSqlParameterization::is_fast_parse_const(TransformTreeCtx &ctx)
 {
   int ret = OB_SUCCESS;
-  if (NULL == ctx.tree_) { //parse tree中存在node为NULL
+  if (NULL == ctx.tree_) { // parse tree contains a node that is NULL
     ctx.is_fast_parse_const_ = false;
   } else {
-    //如果其节点为T_HINT_OPTION_LIST则该节点及其子节点中常量都不是fp可识别的参数参数。
+    // If its node is T_HINT_OPTION_LIST then the constants in this node and its sub-nodes are not parameters recognizable by fp.
     if (T_HINT_OPTION_LIST == ctx.tree_->type_) {
       ctx.enable_contain_param_ = false;
     }
     if (ctx.enable_contain_param_) {
-      //当该node为T_NULL/T_VARCHAR类型且is_hidden_const_为true时表示该node在fast parse中不能识别为常量
+      // When the node is of type T_NULL/T_VARCHAR and is_hidden_const_ is true, it indicates that the node cannot be recognized as a constant in fast parse
       if ((T_NULL == ctx.tree_->type_ && true == ctx.tree_->is_hidden_const_)
           || (T_VARCHAR == ctx.tree_->type_ && true == ctx.tree_->is_hidden_const_)
           || (T_INT == ctx.tree_->type_ && true == ctx.tree_->is_hidden_const_)
@@ -291,8 +290,7 @@ bool ObSqlParameterization::is_udr_not_param(TransformTreeCtx &ctx)
   }
   return b_ret;
 }
-
-//判断该node是否为不能参数化的node
+// Determine whether this node is a non-parameterizable node
 bool ObSqlParameterization::is_node_not_param(TransformTreeCtx &ctx)
 {
   bool not_param = false;
@@ -300,15 +298,14 @@ bool ObSqlParameterization::is_node_not_param(TransformTreeCtx &ctx)
     not_param = true;
   } else if (!ctx.is_fast_parse_const_) {
     not_param = true;
-  } else if (ctx.not_param_) { //如果其本身或其祖先已经判定了所有子节点为not param, 则为not param
+  } else if (ctx.not_param_) { // If itself or its ancestor has already determined all child nodes as not param, then it is not param
     not_param = true;
   } else {
     not_param = false;
   }
   return not_param;
 }
-
-//判断该节点及其子节点是常量时也不能参数化。
+// Determine that the node and its child nodes cannot be parameterized when they are constants.
 bool ObSqlParameterization::is_tree_not_param(const ParseNode *tree)
 {
   bool ret_bool = false;
@@ -317,7 +314,7 @@ bool ObSqlParameterization::is_tree_not_param(const ParseNode *tree)
   } else if (true == tree->is_tree_not_param_) {
     ret_bool = true;
   } else if (lib::is_mysql_mode() && T_GROUPBY_CLAUSE == tree->type_) {
-    // oracle模式下，select a from t group by 1这种语法被禁止，所以可以开放group by的参数化
+    // In oracle mode, the syntax like select a from t group by 1 is prohibited, so the group by parameterization can be enabled
     ret_bool = true;
   } else if (T_SORT_LIST == tree->type_) {
     // vector index query always use order by vec_func() approx limit, we should open Parameterization for this situation
@@ -363,7 +360,7 @@ bool ObSqlParameterization::is_tree_not_param(const ParseNode *tree)
     ret_bool = true;
   } else if (T_CHAR_CHARSET == tree->type_) {
     ret_bool = true;
-  } else if (T_WIN_NAMED_WINDOWS == tree->type_) {//name window无法参数化，因为无法保证其参数化顺序
+  } else if (T_WIN_NAMED_WINDOWS == tree->type_) {//name window cannot be parameterized because the order of parameterization cannot be guaranteed
     ret_bool = true;
   } else if (T_VEC_INDEX_PARAMS == tree->type_) {
     ret_bool = true;
@@ -442,41 +439,41 @@ bool ObSqlParameterization::is_ignore_scale_check(TransformTreeCtx &ctx, const P
 }
 
 // helper method of transform_syntax_tree
-//正常parse和fast parse识别常量不一致的问题
+// Normal parse and fast parse recognize constants inconsistently problem
 /*
-* 1.replace/insert的列带括号为空时导致正常parse和fast parse识别常量不一致
+* 1.replace/insert's column with parentheses empty causes inconsistency between normal parse and fast parse constant recognition
 *   eg:replace into t2() values(40, 1, 'good')
-*   原因：主要是因为opt_insert_columns，含括号，但为空时，会默认生成T_NULL节点，导致正常parse和fast parse识别常量不一致。
-*   解法：将T_NULL类型改成T_EMPTY类型即可，在resolver阶段并没有对该类型识别，而是使用这种判断进行处理if （T_COLUMN_LIST ==）else {//处理为空的情况}
-*2.default()导致的正常parse和fast parse常量不一致
+*   reason: mainly because opt_insert_columns, with parentheses, but empty, will default to generate a T_NULL node, causing inconsistency between normal parse and fast parse constant recognition.
+*   solution: change the T_NULL type to T_EMPTY type, at the resolver stage, this type is not recognized, but handled with this judgment if (T_COLUMN_LIST ==) else {//handle empty case}
+*2.default() causes inconsistency between normal parse and fast parse constants
 *   eg :select * from type_t where int_c = default(int_c)
-*   原因：default()在语法阶段生成4个T_NULL类型的null_node，在resolve阶段会填充具体的内容，导致不一致。
-*   解法：将生成的null_node中is_hidden_const_字段置1， 在transform tree阶段，判断node为T_NULL类型且is_hidden_const_为true时表示该node在fast parse中不能识别为常量，从而不参数化，保证正常parse和fast parse识别常量一致。
-*3.using charset_name导致的正常parse和fast parse识别常量不一致
+*   reason: default() generates 4 T_NULL type null_node at the syntax stage, filled with specific content at the resolve stage, causing inconsistency.
+*   solution: set the is_hidden_const_ field of the generated null_node to 1, at the transform tree stage, if the node is T_NULL type and is_hidden_const_ is true, it indicates that the node cannot be recognized as a constant in fast parse, thus not parameterized, ensuring consistency between normal parse and fast parse constant recognition.
+*3.using charset_name causes inconsistency between normal parse and fast parse constant recognition
 *  eg:select convert('1234' using 'utf8’);
 *  eg:select convert('1234' using utf8);
-*  原因：using ‘utf8’ 和using utf8均会生成都会生成一个T_VARCHAR类型的节点，对于using utf8, fast parse不能识别出常量，因此导致正常parse和fast parse识别不一致。
-*  解法：将using utf8生成的T_VARCHAR节点中is_hidden_const_字段置1，在transform tree阶段，判断node为T_VARCHAR类型且is_hidden_const_为true时表示该node在fast parse中不能识别为常量，从而不参数化，保证正常parse和fast parse识别常量一致。
-*4.month等date_unit导致的正常parse和fast parse识别常量个数不一致
+*  reason: using ‘utf8’ and using utf8 both generate a T_VARCHAR type node, for using utf8, fast parse cannot recognize the constant, thus causing inconsistency between normal parse and fast parse.
+*  solution: set the is_hidden_const_ field of the T_VARCHAR node generated by using utf8 to 1, at the transform tree stage, if the node is T_VARCHAR type and is_hidden_const_ is true, it indicates that the node cannot be recognized as a constant in fast parse, thus not parameterized, ensuring consistency between normal parse and fast parse constant recognition.
+*4.month etc. date_unit causes inconsistency in the number of constants recognized by normal parse and fast parse
 *  eg:SELECT month(NULL);
 *  select * from type_t where date_c = date_add('2015-01-01', interval 5 month)
-*  问题：在语法阶段，mouth，day等date_unit是解析为T_INT类型的节点，导致正常parse与fast parse识别不一致。之前的方案是将mouth等date_unit在词法阶段识别出来，并生成对应的 T_INT类型节点解决该问题。但这导致mouth()作为函数或当sql中存在以month等date_unit命名的table或unit时会导致正常parse与fast parse识别常量不一致的问题。
-*  解法：将month,day等date_unit生成的T_INT节点中is_hidden_const_字段置1，在transform tree阶段，判断node为T_INT类型且is_hidden_const_为true时表示该node在fast parse中不能识别为常量，从而不参数化，保证正常parse和fast parse识别常量一致。
-*5.as STRING_VALUE导致的正常parse和fast parse识别常量不一致
+*  issue: at the syntax stage, mouth, day etc. date_unit are parsed as T_INT type nodes, leading to inconsistency between normal parse and fast parse. The previous solution was to identify mouth etc. date_unit at the lexical stage and generate corresponding T_INT type nodes to solve this problem. However, this led to issues where mouth() is used as a function or when there are tables or units named month etc. in the sql, causing inconsistency between normal parse and fast parse constant recognition.
+*  solution: set the is_hidden_const_ field of the T_INT node generated by month, day etc. date_unit to 1, at the transform tree stage, if the node is T_INT type and is_hidden_const_ is true, it indicates that the node cannot be recognized as a constant in fast parse, thus not parameterized, ensuring consistency between normal parse and fast parse constant recognition.
+*5.as STRING_VALUE causes inconsistency between normal parse and fast parse constant recognition
 *  eg: select 'abc' as a;
 *      select 'abc' as ‘a’;
-*  问题：as a 和 as ‘a’ 在语法阶段会生成T_ALIAS节点，导致对于as ‘a’在fast parse能识别一个常量，而正常parse不能识别出常量。
-*  解法：在T_ALIAS节点中记录对应的fast parse能够识别的常量个数（0个或1个），在transform时，如果是T_ALIAS节点，则将其判断为不能参数化的常量，并将对应的常量个数记下，从而保证下次fast parse时能够识别的常量的个数一致。
+*  issue: as a and as ‘a’ generate T_ALIAS nodes at the syntax stage, leading to fast parse recognizing one constant while normal parse does not recognize the constant.
+*  solution: record the number of constants recognizable by fast parse (0 or 1) in the T_ALIAS node, during transform, if it is a T_ALIAS node, treat it as a non-parameterizable constant and record the corresponding constant count, thus ensuring consistent constant count recognizable by fast parse next time.
 *
-*6. 问题: 当函数中存在格式字符串时, 格式字符串不需要参数化, eg:STR_TO_DATE, FROM_UNIXTIME, DATE_FORMAT
-*  解法: 在参数化过程中，遍历parse tree，识别到T_FUN_SYS节点后，识别第一个children（函数名）,然后遍历所有child，并对含格式串的函数中格式化参数节点及其子节点(该格式串可能由函数生成)均做不需要参数化标记。
+*6. issue: when functions contain format strings, format strings do not need to be parameterized, eg:STR_TO_DATE, FROM_UNIXTIME, DATE_FORMAT
+*  solution: during parameterization, traverse the parse tree, identify T_FUN_SYS node after, identify the first child (function name), then traverse all children, and mark the formatting parameter nodes and their sub-nodes (the format string may be generated by the function) as non-parameterizable.
 *
-* 7. 问题: weight_string函数在包含level参数时，level可以是变长的、结构化的数据，此时normal_parser会将level的常数进行扁平化处理（只有一个T_INT类型的ParseNode），但是fast_parser会识别到所有的数字，导致两者常量数量不一致
+* 7. issue: when the weight_string function includes a level parameter, level can be variable-length, structured data, at this time normal_parser will flatten the constants of level (only one T_INT type ParseNode), but fast_parser will recognize all numbers, leading to inconsistent constant counts
 *    eg:
 *       select weight_string("AAA" as char(1) level 1-2 );
 *       select weight_string("AAA" as char(1) level 1,2,3,4,5,6,7,8,9,10,11 );
 *       select weight_string("AAA" as char(1) level 1 desc,2 asc ,3 desc ,4 reverse,5,6,7,8,9 reverse,10,11 );
-*    解法：创建一个新的item_type(T_WEIGHT_STRING_LEVEL_PARAM) ，根据不同的语法来设置不同的param_num_,这样normal_parser就可以和faster_parser相等了，等到具体处理T_WEIGHT_STRING_LEVEL_PARAM的时候,把它转换为T_INT进行后续的处理。
+*    solution: create a new item_type(T_WEIGHT_STRING_LEVEL_PARAM), set different param_num_ according to different syntax, so normal_parser can equal faster_parser, when handling T_WEIGHT_STRING_LEVEL_PARAM specifically, convert it to T_INT for subsequent processing.
 */
 int ObSqlParameterization::transform_tree(TransformTreeCtx &ctx,
                                           const ObSQLSessionInfo &session_info)
@@ -538,9 +535,9 @@ int ObSqlParameterization::transform_tree(TransformTreeCtx &ctx,
       ObObjParam value;
       ObAccuracy tmp_accuracy;
       bool is_fixed = true;
-      if (ctx.is_fast_parse_const_) { //这里面需要获取fast parse识别为常量的所有信息
-        if (!is_node_not_param(ctx)) { //判定是否为可以参数化的常量
-          //for sql 限流
+      if (ctx.is_fast_parse_const_) { // Here we need to obtain all information identified as constants by fast parse
+        if (!is_node_not_param(ctx)) { // determine whether it is a constant that can be parameterized
+          // for sql rate limiting
           ParseNode* node = NULL;
           if (OB_NOT_NULL(ctx.raw_params_) &&
               ctx.tree_->value_ < ctx.raw_params_->count() &&
@@ -591,9 +588,9 @@ int ObSqlParameterization::transform_tree(TransformTreeCtx &ctx,
                               fmt_int_or_ch_decint))) {
             SQL_PC_LOG(WARN, "fail to resolve const", K(ret));
           } else {
-            //对于字符串值，其T_VARCHAR型的parse node有一个T_VARCHAR类型的子node，该子node描述字符串的charset等信息。
-            //因此对于可参数化的参数，当该节点的父节点为T_VALUE_VECTOR, 且类型为T_VARCHAR或没有子node时，认为是单值(不属于复杂表达式中参数);
-            //此时将value中单值参数标记为不需要在plan cache中强匹配类型的参数
+            // For string values, its T_VARCHAR type parse node has a T_VARCHAR type sub-node, which describes information such as the charset of the string.
+            // Therefore for parameterizable parameters, when the parent node of this node is T_VALUE_VECTOR, and the type is T_VARCHAR or there are no child nodes, it is considered a single value (not a parameter in a complex expression);
+            // At this time, mark the single value parameters in value as parameters that do not need to be strongly matched in the plan cache
             if ((VALUE_VECTOR_LEVEL == ctx.value_father_level_
                 || ASSIGN_ITEM_LEVEL == ctx.assign_father_level_)
                 && (0 == ctx.tree_->num_child_
@@ -619,7 +616,7 @@ int ObSqlParameterization::transform_tree(TransformTreeCtx &ctx,
                 value.set_ignore_scale_check(true);
               }
             }
-            //用于sql限流，记录哪些参数需要严格比对
+            // Used for SQL rate limiting, record which parameters need strict comparison
             if (OB_SUCC(ret) && is_fixed) {
               ObFixedParam fix_param;
               fix_param.offset_ = ctx.params_->count();
@@ -716,9 +713,8 @@ int ObSqlParameterization::transform_tree(TransformTreeCtx &ctx,
         ctx.sql_info_->ps_need_parameterized_ = false;
       }
     }
-
-    //判断insert中values()在tree中的哪一层，当某结点value_father_level_处于VALUE_VECTOR_LEVEL时,
-    //便可通过判断该节点的num_child_数是否为0,来判断values中的项是否为复杂表达式；
+    // Determine which level of the tree the values() in insert are at, when a node's value_father_level_ is at VALUE_VECTOR_LEVEL,
+    // can be determined by checking if the node's num_child_ count is 0, to determine if the items in values are complex expressions;
     if (OB_SUCC(ret)) {
       if (T_VALUE_LIST == ctx.tree_->type_) {
         value_level = VALUE_LIST_LEVEL;
@@ -775,10 +771,10 @@ int ObSqlParameterization::transform_tree(TransformTreeCtx &ctx,
 
     bool enable_contain_param = ctx.enable_contain_param_;
     ParseNode *root = ctx.tree_;
-    //当type为T_QUESTIONMARK时不需要再考虑子节点的参数化,
-    //对于select '1'的T_VARCHAR和T_CHAR(oracle模式下) node有数据一样的T_VARCHAR子节点，
-    //由于select中投影列不需要参数化，所以会导致正常parse识别有两个常量，
-    //而fast parse只识别一个常量,所以在此加T_VARCHAR的判断, 使得两种parse均只能识别一个常量。
+    // When type is T_QUESTIONMARK there is no need to consider parameterization of child nodes,
+    // For select '1' the T_VARCHAR and T_CHAR (oracle mode) node has the same T_VARCHAR child node,
+    // Since the projection columns in select do not need to be parameterized, it will lead to the normal parse recognizing two constants,
+    // And fast parse only recognizes one constant, so add a T_VARCHAR check here, making both parses recognize only one constant.
     bool not_param = ctx.not_param_;
     ObItemType parent_type = ctx.parent_type_;
     ctx.parent_type_ = root->type_;
@@ -794,17 +790,17 @@ int ObSqlParameterization::transform_tree(TransformTreeCtx &ctx,
          OB_SUCC(ret) && i < root->num_child_ && root->type_ != T_QUESTIONMARK
          && root->type_ != T_VARCHAR && root->type_ != T_CHAR && root->type_ != T_NCHAR;
          ++i) {
-      //如果not_param本来就是true则不需要再判断；因为某结点判断为true，则该结点子树均为true；
+      // If not_param is already true, then there is no need to check further; because if a node is determined to be true, then the entire subtree of that node is true;
       if (OB_ISNULL(root->children_)) {
         ret = OB_INVALID_ARGUMENT;
         SQL_PC_LOG(WARN, "invalid argument", K(ctx.tree_->children_), K(ret));
       } else {
-        if (!ctx.not_param_) { //如果该节点及其子节点的常量均不为参数, 则不需要进行替换
-          //对T_OP_NEG节点进行改写,解决正负数不匹配问题
-          //如果是T_OP_NEG->T_INT节点，则改成T_INT节点且值乘-1;
-          //如果是T_OP_NEG->T_DOUBLE或T_NUMBER, 则改成T_DOUBLE或T_NUMBER节点的str前加－
+        if (!ctx.not_param_) { // If the constants of this node and its sub-nodes are not parameters, then replacement is not needed
+          // Rewrite the T_OP_NEG node to solve the positive and negative number mismatch problem
+          // If it is a T_OP_NEG->T_INT node, then change it to a T_INT node and multiply the value by -1;
+          // If it is T_OP_NEG->T_DOUBLE or T_NUMBER, then change to add - before the str of T_DOUBLE or T_NUMBER node
           if (OB_ISNULL(root->children_[i])
-              || root->children_[i]->is_tree_not_param_) { //如果该children在mark tree时已标记为not_param, 则不需要处理neg
+              || root->children_[i]->is_tree_not_param_) { // if this children was marked as not_param during mark tree, then neg does not need to be processed }
             //do nothing
           } else if (T_OP_NEG == root->children_[i]->type_ && 1 == root->children_[i]->num_child_) {
             if (OB_ISNULL(root->children_[i]->children_) || OB_ISNULL(root->children_[i]->children_[0])) {
@@ -815,13 +811,13 @@ int ObSqlParameterization::transform_tree(TransformTreeCtx &ctx,
                        && T_FLOAT != root->children_[i]->children_[0]->type_
                        && T_VARCHAR != root->children_[i]->children_[0]->type_) {
               //do nothing
-            } else if (T_VARCHAR == root->children_[i]->children_[0]->type_) { //T_VARCHAR不需要insert neg
+            } else if (T_VARCHAR == root->children_[i]->children_[0]->type_) { // T_VARCHAR does not need insert neg
               root->children_[i]->children_[0]->is_neg_ = 1;
             } else if ((INT64_MIN == root->children_[i]->children_[0]->value_
                        && T_INT == root->children_[i]->children_[0]->type_)
                          || root->children_[i]->children_[0]->is_assigned_from_child_) {
               // select --9223372036854775808 from dual;
-              // 9223372036854775809 之前的T_OP_NEG在语法阶段就被移除，这里在转换语法树的时候不需要再插入负号
+              // 9223372036854775809 before T_OP_NEG is removed during the syntax phase, here we do not need to insert the negative sign when converting the syntax tree
               // do nothing
             } else if (OB_FAIL(insert_neg_sign(*(ctx.allocator_), root->children_[i]->children_[0]))) {
               SQL_PC_LOG(WARN, "fail to insert neg sign", K(ret));
@@ -836,7 +832,7 @@ int ObSqlParameterization::transform_tree(TransformTreeCtx &ctx,
           if (T_STMT_LIST == root->type_) {
             ctx.top_node_ = root->children_[i];
           }
-          if (T_WHERE_CLAUSE == root->type_) { //目前只处理where clause
+          if (T_WHERE_CLAUSE == root->type_) { // Currently only processing where clause
             ctx.expr_scope_ = T_WHERE_SCOPE;
           }
           ctx.tree_ = root->children_[i];
@@ -848,7 +844,7 @@ int ObSqlParameterization::transform_tree(TransformTreeCtx &ctx,
               ret = OB_INVALID_ARGUMENT;
               LOG_WARN("invalid child for T_PROJECT_STRING", K(ret), K(ctx.tree_));
             } else if (T_VARCHAR == ctx.tree_->type_) {
-              // 标记这一个投影列是一个常量字符串，以便后续转义字符串
+              // Mark this projection column as a constant string for subsequent string escaping
               ctx.tree_->is_column_varchar_ = 1;
             } else {
               // do nothing
@@ -862,14 +858,14 @@ int ObSqlParameterization::transform_tree(TransformTreeCtx &ctx,
           }
 
           if (OB_SUCC(ret)) {
-            //如果not_param本来就是true则不需要再判断；因为某结点判断为true，则该结点子树均为true;
+            // If not_param is already true then there is no need to check further; because if a node is determined to be true, then its entire subtree is true;
             if (!ctx.not_param_) {
               ctx.not_param_ = is_tree_not_param(ctx.tree_);
             }
           }
 
           if (OB_SUCC(ret)) {
-            //判断该节点是否为fast_parse 认为的常量节点
+            // Determine whether this node is a constant node as recognized by fast_parse
             ctx.enable_contain_param_ = enable_contain_param;
             if (OB_FAIL(is_fast_parse_const(ctx))) {
               SQL_PC_LOG(WARN, "judge is fast parse const failed", K(ret));
@@ -896,9 +892,9 @@ int ObSqlParameterization::transform_tree(TransformTreeCtx &ctx,
               ctx.sql_info_->ps_need_parameterized_ = false;
             }
             if (T_ALIAS == root->type_ && 0 == i) {
-              // alias node的param_num_处理必须等到其第一个子节点转换完之后
-              // select a + 1 as 'a'，'a'不能被参数化，但是它在raw_params数组内的下标必须是计算了1的下标之后才能得到
-              // alias node只有一个或者0个参数
+              // alias node's param_num_ processing must wait until its first child node conversion is complete
+              // select a + 1 as 'a', 'a' cannot be parameterized, but its index in the raw_params array must be obtained after calculating the index plus 1
+              // alias node has one or zero parameters
               for (int64_t param_cnt = 0; OB_SUCC(ret) && param_cnt < root->param_num_; param_cnt++) {
                 if (OB_FAIL(ctx.sql_info_->not_param_index_.add_member(ctx.sql_info_->total_++))) {
                   SQL_PC_LOG(WARN, "failed to add member", K(ctx.sql_info_->total_), K(ret));
@@ -961,7 +957,7 @@ int ObSqlParameterization::check_and_generate_param_info(const ObIArray<ObPCPara
   } else {
     ObPCParam *pc_param = NULL;
     for (int32_t i = 0; OB_SUCC(ret) && i < raw_params.count(); i ++) {
-      //not param 和neg param不可能是同一个param, 在transform_tree时已保证
+      // not param and neg param cannot be the same param, it has been guaranteed during transform_tree
       pc_param = raw_params.at(i);
       if (OB_ISNULL(pc_param)) {
         ret = OB_INVALID_ARGUMENT;
@@ -975,7 +971,7 @@ int ObSqlParameterization::check_and_generate_param_info(const ObIArray<ObPCPara
           SQL_PC_LOG(WARN, "fail to push item to array", K(ret));
         }
       } else if (sql_info.neg_param_index_.has_member(i)) {//neg param
-        //如果是T_VARCHAR则不需要记录为负数, ?sql也不需要合并-?
+        // If it is T_VARCHAR then there is no need to record as a negative number, ?sql also does not need to be merged-?
         if (T_VARCHAR == pc_param->node_->type_) {
           //do nothing
         } else {
@@ -1017,8 +1013,7 @@ int ObSqlParameterization::check_and_generate_param_info(const ObIArray<ObPCPara
 
   return ret;
 }
-
-//长路径sql参数化
+// Long path SQL parameterization
 int ObSqlParameterization::parameterize_syntax_tree(common::ObIAllocator &allocator,
                                                     bool is_transform_outline,
                                                     ObPlanCacheCtx &pc_ctx,
@@ -1161,8 +1156,7 @@ int ObSqlParameterization::parameterize_syntax_tree(common::ObIAllocator &alloca
   }
   return ret;
 }
-
- //生成not param info信息及index信息
+// Generate not param info information and index information
 int ObSqlParameterization::gen_special_param_info(SqlInfo &sql_info, ObPlanCacheCtx &pc_ctx)
 {
   int ret = OB_SUCCESS;
@@ -1403,14 +1397,14 @@ int ObSqlParameterization::construct_sql(const ObString &no_param_sql,
                                          ObIArray<ObPCParam *> &pc_params,
                                          char *buf,
                                          int32_t buf_len,
-                                         int32_t &pos) //已存的长度
+                                         int32_t &pos) // stored length
 {
   int ret = OB_SUCCESS;
-  int32_t idx = 0; //原始带?sql的偏移位置
+  int32_t idx = 0; // original offset position with ?sql
   ObPCParam *pc_param = NULL;
   for (int64_t i = 0; OB_SUCC(ret) && i < pc_params.count(); i ++) {
     pc_param = pc_params.at(i);
-    int32_t len = 0; //需要copy的text的长度
+    int32_t len = 0; // length of the text to be copied
     if (OB_ISNULL(pc_param)) {
       ret = OB_INVALID_ARGUMENT;
       SQL_PC_LOG(WARN, "invalid argument", K(ret));
@@ -1588,14 +1582,14 @@ int ObSqlParameterization::construct_sql_for_pl(const ObString &no_param_sql,
                                                 ObIArray<ObPCParam *> &pc_params,
                                                 char *buf,
                                                 int32_t buf_len,
-                                                int32_t &pos) //已存的长度
+                                                int32_t &pos) // stored length
 {
   int ret = OB_SUCCESS;
-  int32_t idx = 0; //原始带?sql的偏移位置
+  int32_t idx = 0; // original offset position with ?sql
   ObPCParam *pc_param = NULL;
   for (int64_t i = 0; OB_SUCC(ret) && i < pc_params.count(); i ++) {
     pc_param = pc_params.at(i);
-    int32_t len = 0; //需要copy的text的长度
+    int32_t len = 0; // length of the text to be copied
     if (OB_ISNULL(pc_param)) {
       ret = OB_INVALID_ARGUMENT;
       SQL_PC_LOG(WARN, "invalid argument", K(ret));
@@ -1826,7 +1820,7 @@ int ObSqlParameterization::fast_parser(ObIAllocator &allocator,
             SQL_PC_LOG(WARN, "fail to alloc memory for pc param", K(ret), K(ptr));
           }
           for (int64_t i = 0;
-              OB_SUCC(ret) && i < param_num && NULL != p_list;//当p_list = NULL,表示链表结束
+              OB_SUCC(ret) && i < param_num && NULL != p_list;//When p_list = NULL, it indicates the end of the list
               i++) {
             pc_param = new(ptr)ObPCParam();
             ptr += sizeof(ObPCParam);
@@ -1870,7 +1864,7 @@ int ObSqlParameterization::raw_fast_parameterize_sql(ObIAllocator &allocator,
   if (OB_SUCC(ret)) {
     ParamList *param = parse_result.param_nodes_;
     for (int32_t i = 0;
-         OB_SUCC(ret) && i < parse_result.param_node_num_ && NULL != param;//当param = NULL,表示链表结束
+         OB_SUCC(ret) && i < parse_result.param_node_num_ && NULL != param;//When param = NULL, it indicates the end of the list
          i ++) {
       void *ptr = allocator.alloc(sizeof(ObPCParam));
       if (OB_ISNULL(ptr)) {
@@ -1959,7 +1953,7 @@ int ObSqlParameterization::add_not_param_flag(const ParseNode *node, SqlInfo &sq
     } else if (OB_FAIL(sql_info.not_param_index_.add_member(node->value_))) {
       SQL_PC_LOG(WARN, "failed to add member", K(node->value_));
     }
-  } else if (T_CAST_ARGUMENT == node->type_        //如果是cast类型，则需要添加N个cast节点对应的常数, 因为正常parse不识别为常量, 但fast parse时会识别为常量
+  } else if (T_CAST_ARGUMENT == node->type_        // If it is a cast type, then N cast nodes corresponding constants need to be added, because normal parse does not recognize them as constants, but fast parse will recognize them as constants
              || T_COLLATION == node->type_
              || T_NULLX_CLAUSE == node->type_ // deal null clause on json expr
              || T_WEIGHT_STRING_LEVEL_PARAM == node->type_) { 
@@ -2012,9 +2006,8 @@ int ObSqlParameterization::add_not_param_flag(const ParseNode *node, SqlInfo &sq
 
   return ret;
 }
-
-//T_FUN_SYS类型函数
-//根据mark_arr将func中参数节点标记为该节点及其子节点不能参数化
+// T_FUN_SYS type function
+// According to mark_arr mark the parameter nodes in func as this node and its sub-nodes cannot be parameterized
 int ObSqlParameterization::mark_args(ParseNode *arg_tree,
                                      const bool *mark_arr,
                                      int64_t arg_num,
@@ -2044,8 +2037,7 @@ int ObSqlParameterization::mark_args(ParseNode *arg_tree,
   }
   return ret;
 }
-
-// 对于不能参数化需要特殊标记的节点进行标记, 一般是不能直接通过节点类型判别的节点可在该函数中进行标记
+// For nodes that cannot be parameterized and need special marking, mark them, generally nodes that cannot be directly identified by node type can be marked in this function
 
 // Mark those special nodes that cannot be parameterized.
 // After mark this node, it has following mechanism:
@@ -2059,7 +2051,7 @@ int ObSqlParameterization::mark_tree(ParseNode *tree ,SqlInfo &sql_info)
   } else if (T_FUN_SYS == tree->type_) {
     ParseNode **node = tree->children_;//node[0] : func name, node[1]: arg list
     if (2 != tree->num_child_) {
-      //do nothing  如果不是fun_name和arg_list则不在需要标记的考虑内
+      //do nothing  if it is not fun_name and arg_list then it is not within the scope of what needs to be marked
     } else if (OB_ISNULL(node) || OB_ISNULL(node[0]) || OB_ISNULL(node[1])) {
       ret = OB_INVALID_ARGUMENT;
       SQL_PC_LOG(WARN, "invalid argument", K(ret), K(node));
@@ -2068,30 +2060,30 @@ int ObSqlParameterization::mark_tree(ParseNode *tree ,SqlInfo &sql_info)
       if ((0 == func_name.case_compare("USERENV")
            || 0 == func_name.case_compare("UNIX_TIMESTAMP"))
           && (1 == node[1]->num_child_)) {
-        // USERENV函数的返回类型是由参数的具体值来决定，如果参数化后，无法拿到具体值，所以暂时不进行参数化
-        // UNIX_TIMESTAMP(param_str)，结果的精度和param_str有关，不能参数化
+        // The return type of the USERENV function is determined by the specific value of the parameters, so if parameterized, we cannot obtain the specific values, hence parameterization is not done for now
+        // UNIX_TIMESTAMP(param_str), the precision of the result is related to param_str, cannot be parameterized
         const int64_t ARGS_NUMBER_ONE = 1;
-        bool mark_arr[ARGS_NUMBER_ONE] = {1}; //0表示参数化, 1 表示不参数化
+        bool mark_arr[ARGS_NUMBER_ONE] = {1}; //0 indicates parameterization, 1 indicates no parameterization
         if (OB_FAIL(mark_args(node[1], mark_arr, ARGS_NUMBER_ONE, sql_info))) {
           SQL_PC_LOG(WARN, "fail to mark arg", K(ret));
         }
       } else if (0 == func_name.case_compare("substr") && (3 == node[1]->num_child_)) {
         const int64_t ARGS_NUMBER_THREE = 3;
-        bool mark_arr[ARGS_NUMBER_THREE] = {0, 1, 1}; //0表示参数化, 1 表示不参数化
+        bool mark_arr[ARGS_NUMBER_THREE] = {0, 1, 1}; // 0 indicates parameterized, 1 indicates non-parameterized
         if (OB_FAIL(mark_args(node[1], mark_arr, ARGS_NUMBER_THREE, sql_info))) {
           SQL_PC_LOG(WARN, "fail to mark substr arg", K(ret));
         }
       } else if (0 == func_name.case_compare("xmlserialize")
             && (10 == node[1]->num_child_)) {
         const int64_t ARGS_NUMBER_TEN = 10;
-        bool mark_arr[ARGS_NUMBER_TEN] = {1, 0, 1, 1, 1, 1, 1, 1, 1, 1}; //0表示参数化, 1 表示不参数化
+        bool mark_arr[ARGS_NUMBER_TEN] = {1, 0, 1, 1, 1, 1, 1, 1, 1, 1}; //0 indicates parameterized, 1 indicates not parameterized
         if (OB_FAIL(mark_args(node[1], mark_arr, ARGS_NUMBER_TEN, sql_info))) {
           SQL_PC_LOG(WARN, "fail to mark weight_string arg", K(ret));
         }
       }else if (0 == func_name.case_compare("weight_string")
           && (5 == node[1]->num_child_)) {
         const int64_t ARGS_NUMBER_FIVE = 5;
-        bool mark_arr[ARGS_NUMBER_FIVE] = {0, 1, 1, 1, 1}; //0表示参数化, 1 表示不参数化
+        bool mark_arr[ARGS_NUMBER_FIVE] = {0, 1, 1, 1, 1}; //0 indicates parameterized, 1 indicates non-parameterized
         if (OB_FAIL(mark_args(node[1], mark_arr, ARGS_NUMBER_FIVE, sql_info))) {
           SQL_PC_LOG(WARN, "fail to mark weight_string arg", K(ret));
         }
@@ -2110,7 +2102,7 @@ int ObSqlParameterization::mark_tree(ParseNode *tree ,SqlInfo &sql_info)
                   || 0 == func_name.case_compare("left") // the length of result should be set with the value of the second param
                   || 0 == func_name.case_compare("substr")
                   || 0 == func_name.case_compare("dbms_lob_convert_clob_charset")
-                  || 0 == func_name.case_compare("truncate")) // truncate结果的精度需要根据第二个参数进行推导，所以不能参数化
+                  || 0 == func_name.case_compare("truncate")) // The precision of the truncate result needs to be derived based on the second parameter, so it cannot be parameterized
                  && (2 == node[1]->num_child_)) {
         const int64_t ARGS_NUMBER_TWO = 2;
         bool mark_arr[ARGS_NUMBER_TWO] = {0, 1};
@@ -2142,7 +2134,7 @@ int ObSqlParameterization::mark_tree(ParseNode *tree ,SqlInfo &sql_info)
         sql_info.ps_need_parameterized_ = false;
         if (2 == tree->num_child_) {
           const int64_t ARGS_NUMBER_TWO = 2;
-          bool mark_arr[ARGS_NUMBER_TWO] = {0, 1}; //0表示参数化, 1 表示不参数化
+          bool mark_arr[ARGS_NUMBER_TWO] = {0, 1}; // 0 indicates parameterized, 1 indicates non-parameterized
           if (OB_FAIL(mark_args(tree, mark_arr, ARGS_NUMBER_TWO, sql_info))) {
             SQL_PC_LOG(WARN, "fail to mark substr arg", K(ret));
           }
@@ -2175,7 +2167,7 @@ int ObSqlParameterization::mark_tree(ParseNode *tree ,SqlInfo &sql_info)
   } else if (T_OP_LIKE == tree->type_) {
     if (3 == tree->num_child_) {   // child[0] like child[1] escape child[2]
       const int64_t ARGS_NUMBER_THREE = 3;
-      bool mark_arr[ARGS_NUMBER_THREE] = {0, 1, 1}; //0表示参数化, 1 表示不参数化
+      bool mark_arr[ARGS_NUMBER_THREE] = {0, 1, 1}; //0 indicates parameterized, 1 indicates non-parameterized
       if (OB_FAIL(mark_args(tree, mark_arr, ARGS_NUMBER_THREE, sql_info))) {
         SQL_PC_LOG(WARN, "fail to mark substr arg", K(ret));
       }
@@ -2397,14 +2389,14 @@ int ObSqlParameterization::get_select_item_param_info(const common::ObIArray<ObP
                               buf_len,
                               expr_pos,
                               param_info);
-    // 模拟函数递归操作，遍历子树
-    // 栈上每一个元素为 {cur_node, next_child_idx}
-    // 出栈操作：
-    // 如cur_node是的is_val_paramed_item_idx_为true，说明这是一个T_PROJECT_STRING，并且已经被遍历
-    // 或者T_QUESTION_MARK，或子节点都已经遍历完，出栈
+    // Simulate function recursive operation, traverse subtree
+    // Stack each element is {cur_node, next_child_idx}
+    // Pop operation:
+    // If cur_node's is_val_paramed_item_idx_ is true, it means this is a T_PROJECT_STRING and has already been traversed
+    // or T_QUESTION_MARK, or all child nodes have been traversed, pop from stack
     //
-    // 入栈操作：
-    // 选取cur_node的第一个不为空的子节点push到堆栈中，并更新当前堆栈的next_child_idx_
+    // Push operation:
+    // Select the first non-empty child node of cur_node and push it onto the stack, and update the current stack's next_child_idx_
     for (; OB_SUCC(ret) && stack_frames.count() > 0; ) {
       int64_t frame_idx = stack_frames.count() - 1;
       ctx.tree_ = stack_frames.at(frame_idx).cur_node_;
@@ -2416,7 +2408,7 @@ int ObSqlParameterization::get_select_item_param_info(const common::ObIArray<ObP
                  || stack_frames.at(frame_idx).next_child_idx_ >= ctx.tree_->num_child_) {
         if (T_QUESTIONMARK == ctx.tree_->type_) {
           if (ctx.param_info_.name_len_ >= ctx.buf_len_) {
-            // column长度已经满了，不需要再继续构造模板，直接跳出
+            // column length is already full, no need to continue constructing the template, directly break out
             break;
           } else if (OB_FAIL(resolve_paramed_const(ctx))) {
             LOG_WARN("failed to resolve paramed const", K(ret));
@@ -2456,7 +2448,7 @@ int ObSqlParameterization::get_select_item_param_info(const common::ObIArray<ObP
     } // for end
 
     if (OB_SUCC(ret)) {
-      // 如果常量之后还有字符串
+      // If there is a string after the constant
       int64_t res_start_pos = expr_pos - tree->raw_sql_offset_;
       int64_t tmp_len = std::min(org_field_name.length() - res_start_pos, buf_len - param_info.name_len_);
       if (tmp_len > 0) {
@@ -2540,7 +2532,7 @@ int ObSqlParameterization::resolve_paramed_const(SelectItemTraverseCtx &ctx)
       SQL_PC_LOG(WARN, "failed to push back element", K(ret));
     } else {
       if (ctx.param_info_.name_len_ < ctx.buf_len_) {
-        ctx.param_info_.paramed_field_name_[ctx.param_info_.name_len_++] = '?'; // 替换常量为'?'
+        ctx.param_info_.paramed_field_name_[ctx.param_info_.name_len_++] = '?'; // Replace constant with '?'
       }
       if (ctx.tree_->is_neg_ && OB_FAIL(ctx.param_info_.neg_params_idx_.add_member(idx))) {
         SQL_PC_LOG(WARN, "failed to add member", K(ret), K(idx));
@@ -2568,7 +2560,7 @@ int ObSqlParameterization::transform_minus_op(ObIAllocator &alloc, ParseNode *tr
   } else if (1 == tree->children_[1]->is_assigned_from_child_) {
     // select 1 - (2) from dual;
     // select 1 - (2/3/4) from dual;
-    // 对于常量节点2，都不能转换成-2
+    // For constant node 2, it cannot be converted to -2
     // do nothing
   } else if (ob_is_number_or_decimal_int_tc(ITEM_TO_OBJ_TYPE(tree->children_[1]->type_))
              || ((ob_is_integer_type(ITEM_TO_OBJ_TYPE(tree->children_[1]->type_))
@@ -2621,8 +2613,8 @@ int ObSqlParameterization::transform_minus_op(ObIAllocator &alloc, ParseNode *tr
     /*  so, we need to find the leftest leave node and change its value and str */
     /*  same for '%','*', mod */
     /*  */
-    /*  在oracle模式下只有mod函数，比如select 1 - mod(mod(3, 4), 2) from dual; */
-    /*  语法树为： */
+    /*  In oracle mode there is only the mod function, for example select 1 - mod(mod(3, 4), 2) from dual; */
+    /*  Syntax tree is: */
     /*       - */
     /*     /  \ */
     /*    1   mod */
@@ -2630,14 +2622,14 @@ int ObSqlParameterization::transform_minus_op(ObIAllocator &alloc, ParseNode *tr
     /*     mod    2 */
     /*    /  \ */
     /*   3    4 */
-    /*   这个语法树和mysql模式下的select 1 - 3%4%2 from dual是一样的，但是-和3在oracle模式下不能结合在一起 */
-    /*   否则快速参数化和硬解析得到的常量不一样（3和-3)，所以oracle模式下T_OP_MOD不能转换减号 */
+    /*   This syntax tree is the same as the select 1 - 3%4%2 from dual in mysql mode, but - and 3 cannot be combined together in oracle mode */
+    /*   Otherwise quick parameterization and hard parsing get different constants (3 and -3), so T_OP_MOD cannot be converted to minus sign in Oracle mode */
     ParseNode *const_node = NULL;
     ParseNode *op_node = tree->children_[1];
     if (OB_FAIL(find_leftest_const_node(*op_node, const_node))) {
       LOG_WARN("failed to find leftest const node", K(ret));
     } else if (OB_ISNULL(const_node)) {
-      // 1 - (2)/3, -和2也是不能结合的
+      // 1 - (2)/3, - and 2 are also not combinable
       // do nothing
     } else {
       tree->type_ = T_OP_ADD;
@@ -2685,7 +2677,7 @@ int ObSqlParameterization::find_leftest_const_node(ParseNode &cur_node, ParseNod
     // do nothing
   } else if (T_OP_MUL == cur_node.type_ || T_OP_DIV == cur_node.type_
     || T_OP_INT_DIV == cur_node.type_ || T_OP_MOD == cur_node.type_) {
-    /*   对于1 - (2-3)/4，语法树为 */
+    /*   For 1 - (2-3)/4, syntax tree is */
     /*      - */
     /*     / \ */
     /*    1  div */
@@ -2693,10 +2685,10 @@ int ObSqlParameterization::find_leftest_const_node(ParseNode &cur_node, ParseNod
     /*     -    4 */
     /*    / \ */
     /*   2   3 */
-    /*  这时候-是不能和2结合的，也就是不能转换语树 */
-    /*  对于一元操作符（一元操作符优先级大于减操作),比如负号 */
+    /*  At this point - it cannot be combined with 2, that is, it cannot convert the syntax tree */
+    /*  For unary operators (unary operator precedence greater than subtraction), such as the negative sign */
     /*  1 - (-2)/4 */
-    /*  语法树为： */
+    /*  Syntax tree is: */
     /*     - */
     /*    / \ */
     /*   1  div */
@@ -2704,8 +2696,8 @@ int ObSqlParameterization::find_leftest_const_node(ParseNode &cur_node, ParseNod
     /*    neg  4 */
     /*     | */
     /*     2 */
-    /*  这种情况下，-也不能2结合 */
-    /*  所以只有T_OP_MUL、T_OP_DIV和T_OP_MOD走到这条路径上 */
+    /*  In this case, - cannot be combined with 2 */
+    /*  So only T_OP_MUL, T_OP_DIV and T_OP_MOD go down this path */
     if (OB_ISNULL(cur_node.children_) || 2 != cur_node.num_child_
         || OB_ISNULL(cur_node.children_[0]) || OB_ISNULL(cur_node.children_[1])) {
       ret = OB_INVALID_ARGUMENT;

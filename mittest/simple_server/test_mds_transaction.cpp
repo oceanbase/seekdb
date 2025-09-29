@@ -74,7 +74,7 @@ TestRunCtx RunCtx;
 class TestMdsTransactionTest : public ObSimpleClusterTestBase
 {
 public:
-  // 指定case运行目录前缀 test_ob_simple_cluster_
+  // Specify the case run directory prefix test_ob_simple_cluster_
   TestMdsTransactionTest() : ObSimpleClusterTestBase("test_mds_transaction_") {}
   virtual void SetUp() override {
     ObSimpleClusterTestBase::SetUp();
@@ -106,12 +106,12 @@ TEST_F(TestMdsTransactionTest, simple_test)
 TEST_F(TestMdsTransactionTest, add_tenant)
 {
   while(!GCTX.root_service_->is_full_service());
-  // 创建普通租户tt1
+  // Create normal tenant tt1
   ASSERT_EQ(OB_SUCCESS, create_tenant());
-  // 获取租户tt1的tenant_id
+  // Get the tenant_id of tenant tt1
   ASSERT_EQ(OB_SUCCESS, get_tenant_id(RunCtx.tenant_id_));
   ASSERT_NE(0, RunCtx.tenant_id_);
-  // 初始化普通租户tt1的sql proxy
+  // Initialize the sql proxy for normal tenant tt1
   ASSERT_EQ(OB_SUCCESS, get_curr_simple_server().init_sql_proxy2());
 }
 
@@ -154,16 +154,16 @@ TEST_F(TestMdsTransactionTest, test_for_each_kv_in_unit_in_tablet)
   MTL_SWITCH(OB_SYS_TENANT_ID)
   {
     int64_t _;
-    // 1. 新建一个tablet
+    // 1. Create a new tablet
     ASSERT_EQ(OB_SUCCESS, GCTX.ddl_sql_proxy_->write(OB_SYS_TENANT_ID, "create table test_mds_table(a int)", _));
-    // 2. 从表名拿到它的tablet_id
+    // 2. Get the tablet_id from the table name
     ObTabletID tablet_id;
     ASSERT_EQ(OB_SUCCESS, ObTableAccessHelper::read_single_row(OB_SYS_TENANT_ID,
                                                               {"tablet_id"},
                                                               OB_ALL_TABLE_TNAME,
                                                               "where table_name = 'test_mds_table'",
                                                               tablet_id));
-    // 3. 从tablet_id拿到它的ls_id
+    // 3. Get its ls_id from tablet_id
     ObLSID ls_id;
     char where_condition[512] = { 0 };
     databuff_printf(where_condition, 512, "where tablet_id = %ld", tablet_id.id());
@@ -172,18 +172,18 @@ TEST_F(TestMdsTransactionTest, test_for_each_kv_in_unit_in_tablet)
                                                               OB_ALL_TABLET_TO_LS_TNAME,
                                                               where_condition,
                                                               ls_id));
-    // 4. 从ls_id找到ls
+    // 4. Find ls from ls_id
     storage::ObLSHandle ls_handle;
     ASSERT_EQ(OB_SUCCESS, MTL(storage::ObLSService *)->get_ls(ls_id, ls_handle, ObLSGetMod::TRANS_MOD));
-    // 5. 从LS找到tablet结构
+    // 5. Find the tablet structure from LS
     storage::ObTabletHandle tablet_handle;
     ASSERT_EQ(OB_SUCCESS, ls_handle.get_ls()->get_tablet(tablet_id, tablet_handle));
-    // 6. 调用tablet接口第一次写入多源数据，提交
+    // 6. Call the tablet interface to write multi-source data for the first time, submit
     MdsCtx ctx1(mds::MdsWriter(ObTransID(1)));
     ASSERT_EQ(OB_SUCCESS, tablet_handle.get_obj()->set(ObMediumCompactionInfoKey(1), data_1_ref, ctx1));
     ASSERT_EQ(OB_SUCCESS, tablet_handle.get_obj()->set(ObMediumCompactionInfoKey(3), data_3, ctx1));
     ctx1.single_log_commit(mock_scn(10), mock_scn(10));
-    // 7. 调用tablet接口第二次写入多源数据，不提交
+    // 7. Call the tablet interface to write multi-source data for the second time without committing
     MdsCtx ctx2(mds::MdsWriter(ObTransID(2)));
     ASSERT_EQ(OB_SUCCESS, tablet_handle.get_obj()->set(ObMediumCompactionInfoKey(1), data_11, ctx2));
     ASSERT_EQ(OB_SUCCESS, tablet_handle.get_obj()->set(ObMediumCompactionInfoKey(2), data_2, ctx2));
@@ -204,15 +204,15 @@ TEST_F(TestMdsTransactionTest, test_mds_table_gc_and_recycle)
   MTL_SWITCH(OB_SYS_TENANT_ID)
   {
     int64_t _;
-    // 1. 新建一个tablet
+    // 1. Create a new tablet
     ASSERT_EQ(OB_SUCCESS, GCTX.ddl_sql_proxy_->write(OB_SYS_TENANT_ID, "create table test_mds_table2(a int)", _));
-    // 2. 从表名拿到它的tablet_id
+    // 2. Get the tablet_id from the table name
     ASSERT_EQ(OB_SUCCESS, ObTableAccessHelper::read_single_row(OB_SYS_TENANT_ID,
                                                               {"tablet_id"},
                                                               OB_ALL_TABLE_TNAME,
                                                               "where table_name = 'test_mds_table2'",
                                                               tablet_id));
-    // 3. 从tablet_id拿到它的ls_id
+    // 3. Get its ls_id from tablet_id
     ObLSID ls_id;
     char where_condition[512] = { 0 };
     databuff_printf(where_condition, 512, "where tablet_id = %ld", tablet_id.id());
@@ -221,13 +221,13 @@ TEST_F(TestMdsTransactionTest, test_mds_table_gc_and_recycle)
                                                               OB_ALL_TABLET_TO_LS_TNAME,
                                                               where_condition,
                                                               ls_id));
-    // 4. 从ls_id找到ls
+    // 4. Find ls from ls_id
     storage::ObLSHandle ls_handle;
     ASSERT_EQ(OB_SUCCESS, MTL(storage::ObLSService *)->get_ls(ls_id, ls_handle, ObLSGetMod::TRANS_MOD));
-    // 5. 从LS找到tablet结构1
+    // 5. Find tablet structure 1 from LS
     storage::ObTabletHandle tablet_handle;
     ASSERT_EQ(OB_SUCCESS, ls_handle.get_ls()->get_tablet(tablet_id, tablet_handle));
-    // 6. 调用tablet接口写入多源数据，提交
+    // 6. Call tablet interface to write multi-source data, submit
     MdsCtx ctx1(mds::MdsWriter(ObTransID(1)));
     share::SCN rec_scn;
     ASSERT_EQ(OB_SUCCESS, tablet_handle.get_obj()->set(data_to_write, ctx1));
@@ -242,7 +242,7 @@ TEST_F(TestMdsTransactionTest, test_mds_table_gc_and_recycle)
     ASSERT_EQ(OB_SUCCESS, ls_handle.get_ls()->get_max_decided_scn(max_decided_scn));
     ASSERT_EQ(OB_SUCCESS, tablet_handle.get_obj()->mds_table_flush(max_decided_scn));
     MDS_LOG(INFO, "print tablet id", K(tablet_id));
-    // 7. 检查mds table的存在情况
+    // 7. Check the existence of mds table
     do {
       std::this_thread::sleep_for(std::chrono::seconds(5));
       ASSERT_EQ(true, dynamic_cast<ObTabletPointer*>(tablet_handle.get_obj()->pointer_hdl_.get_resource_ptr())->mds_table_handler_.mds_table_handle_.is_valid());
@@ -254,7 +254,7 @@ TEST_F(TestMdsTransactionTest, test_mds_table_gc_and_recycle)
       std::this_thread::sleep_for(std::chrono::seconds(5));
       MDS_LOG(INFO, "mds table handle not destroy yet", K(tablet_id));
     } while (false != dynamic_cast<ObTabletPointer*>(tablet_handle.get_obj()->pointer_hdl_.get_resource_ptr())->mds_table_handler_.mds_table_handle_.is_valid());
-    ASSERT_EQ(OB_SUCCESS, ls_handle.get_ls()->get_tablet(tablet_id, tablet_handle));// 重新获取一下tablet handle
+    ASSERT_EQ(OB_SUCCESS, ls_handle.get_ls()->get_tablet(tablet_id, tablet_handle)); // re-obtain the tablet handle
     ASSERT_EQ(OB_SUCCESS, (tablet_handle.get_obj()->get_mds_data_from_tablet<mds::DummyKey, ObTabletBindingMdsUserData>(mds::DummyKey(), share::SCN::max_scn(), 1_s,
       [&data_to_write](const ObTabletBindingMdsUserData &data_to_read) -> int {
         OB_ASSERT(data_to_write.schema_version_ == data_to_read.schema_version_);
@@ -278,15 +278,15 @@ TEST_F(TestMdsTransactionTest, test_mds_table_gc_and_recycle)
 //   MTL_SWITCH(OB_SYS_TENANT_ID)
 //   {
 //     int64_t _;
-//     // 1. 新建一个tablet
+//     // 1. Create a new tablet
 //     ASSERT_EQ(OB_SUCCESS, GCTX.ddl_sql_proxy_->write(OB_SYS_TENANT_ID, "create table test_mds_table3(a int)", _));
-//     // 2. 从表名拿到它的tablet_id
+//     // 2. Get the tablet_id from the table name
 //     ASSERT_EQ(OB_SUCCESS, ObTableAccessHelper::read_single_row(OB_SYS_TENANT_ID,
 //                                                               {"tablet_id"},
 //                                                               OB_ALL_TABLE_TNAME,
 //                                                               "where table_name = 'test_mds_table3'",
 //                                                               tablet_id));
-//     // 3. 从tablet_id拿到它的ls_id
+//     // 3. Get its ls_id from tablet_id
 //     ObLSID ls_id;
 //     char where_condition[512] = { 0 };
 //     databuff_printf(where_condition, 512, "where tablet_id = %ld", tablet_id.id());
@@ -295,29 +295,29 @@ TEST_F(TestMdsTransactionTest, test_mds_table_gc_and_recycle)
 //                                                               OB_ALL_TABLET_TO_LS_TNAME,
 //                                                               where_condition,
 //                                                               ls_id));
-//     // 4. 从ls_id找到ls
+//     // 4. Find ls from ls_id
 //     storage::ObLSHandle ls_handle;
 //     ASSERT_EQ(OB_SUCCESS, MTL(storage::ObLSService *)->get_ls(ls_id, ls_handle, ObLSGetMod::TRANS_MOD));
-//     // 5. 从LS找到tablet结构
+//     // 5. Find the tablet structure from LS
 //     storage::ObTabletHandle tablet_handle;
 //     ASSERT_EQ(OB_SUCCESS, ls_handle.get_ls()->get_tablet(tablet_id, tablet_handle));
-//     // 6. 调用tablet接口写入多源数据，提交
+//     // 6. Call tablet interface to write multi-source data, submit
 //     share::SCN max_decided_scn;
 //     ASSERT_EQ(OB_SUCCESS, ls_handle.get_ls()->get_max_decided_scn(max_decided_scn));
 //     MdsCtx ctx1(mds::MdsWriter(ObTransID(1)));
 //     share::SCN rec_scn;
-//     ASSERT_EQ(OB_STATE_NOT_MATCH, tablet_handle.get_obj()->check_transfer_in_redo_written(written));// 这个时候因为tablet status不是TRANSFER IN所以查不出来
+//     ASSERT_EQ(OB_STATE_NOT_MATCH, tablet_handle.get_obj()->check_transfer_in_redo_written(written)); // At this time, because the tablet status is not TRANSFER IN, it cannot be found
 //     ASSERT_EQ(OB_SUCCESS, tablet_handle.get_obj()->set(data_to_write, ctx1));
-//     ASSERT_EQ(OB_SUCCESS, tablet_handle.get_obj()->check_transfer_in_redo_written(written));// 这个时候tablet status是TRANSFER IN, 但事务还没写日志，所以可以查出结果，但结果是false
+//     ASSERT_EQ(OB_SUCCESS, tablet_handle.get_obj()->check_transfer_in_redo_written(written)); // At this time, the tablet status is TRANSFER IN, but the transaction has not written the log, so the result can be queried, but the result is false
 //     ASSERT_EQ(false, written);
 //     ctx1.single_log_commit(max_decided_scn, max_decided_scn);
-//     ASSERT_EQ(OB_SUCCESS, tablet_handle.get_obj()->check_transfer_in_redo_written(written));// 这个时候tablet status是TRANSFER IN, 并且事务已经提交，所以可以查出结果，并且结果是true
+//     ASSERT_EQ(OB_SUCCESS, tablet_handle.get_obj()->check_transfer_in_redo_written(written)); // At this time, the tablet status is TRANSFER IN, and the transaction has been committed, so the result can be queried, and the result is true
 //     ASSERT_EQ(true, written);
 //     ASSERT_EQ(true, dynamic_cast<ObTabletPointer*>(tablet_handle.get_obj()->pointer_hdl_.get_resource_ptr())->mds_table_handler_.mds_table_handle_.is_valid());
 //     std::this_thread::sleep_for(std::chrono::seconds(5));
 //     ASSERT_EQ(OB_SUCCESS, tablet_handle.get_obj()->mds_table_flush(max_decided_scn));
 //     MDS_LOG(INFO, "print tablet id", K(tablet_id));
-//     // 7. 检查mds table的存在情况
+//     // 7. Check the existence of mds table
 //     do {
 //       std::this_thread::sleep_for(std::chrono::seconds(5));
 //       ASSERT_EQ(true, dynamic_cast<ObTabletPointer*>(tablet_handle.get_obj()->pointer_hdl_.get_resource_ptr())->mds_table_handler_.mds_table_handle_.is_valid());
@@ -330,8 +330,8 @@ TEST_F(TestMdsTransactionTest, test_mds_table_gc_and_recycle)
 //       std::this_thread::sleep_for(std::chrono::seconds(5));
 //       MDS_LOG(INFO, "mds table handle not destroy yet", K(tablet_id));
 //     } while (false != dynamic_cast<ObTabletPointer*>(tablet_handle.get_obj()->pointer_hdl_.get_resource_ptr())->mds_table_handler_.mds_table_handle_.is_valid());
-//     ASSERT_EQ(OB_SUCCESS, ls_handle.get_ls()->get_tablet(tablet_id, tablet_handle));// 重新获取一下tablet handle
-//     ASSERT_EQ(OB_SUCCESS, tablet_handle.get_obj()->check_transfer_in_redo_written(written));// 这个时候tablet status是TRANSFER IN, 并且事务已经提交，所以可以查出结果，并且结果是true
+//     ASSERT_EQ(OB_SUCCESS, ls_handle.get_ls()->get_tablet(tablet_id, tablet_handle)); // re-obtain the tablet handle
+//     ASSERT_EQ(OB_SUCCESS, tablet_handle.get_obj()->check_transfer_in_redo_written(written)); // At this time, the tablet status is TRANSFER IN, and the transaction has been committed, so the result can be queried, and the result is true
 //     ASSERT_EQ(true, written);
 //     mock_tablet_oldest_scn = unittest::mock_scn(1000);
 //   }

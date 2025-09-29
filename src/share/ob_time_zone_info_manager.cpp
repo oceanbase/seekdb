@@ -160,7 +160,7 @@ int ObTimeZoneInfoManager::fetch_time_zone_info()
         LOG_WARN("fail to get result", K(result), K(ret));
       } else if (OB_FAIL(result->next())) {
         if (OB_ITER_END == ret) {
-          // all_sys_stat中没有timezone_version，说明处于升级过程中
+          // timezone_version is not in all_sys_stat, indicating that the upgrade process is ongoing
           ret = OB_SUCCESS;
         } else {
           LOG_WARN("ObMySQLResult next failed", K(ret));
@@ -185,8 +185,7 @@ int ObTimeZoneInfoManager::fetch_time_zone_info()
 
   return ret;
 }
-
-// 使用sql
+// use sql
 int ObTimeZoneInfoManager::fetch_time_zone_info_from_tenant_table(const int64_t current_tz_version)
 {
   int ret = OB_SUCCESS;

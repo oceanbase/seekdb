@@ -1237,7 +1237,7 @@ public:
   int64_t access_index_;
   ObUDFInfo udf_info_;
   ObRawExpr *sys_func_expr_;
-  //a.f(x,y)(m,n)里的x、y、m、n都是f的参数，但是x、y的param_level_是0，m、n是1
+  //a.f(x,y)(m,n)inofx、y、m、n are all parameters of f, but x、y's param_level_ is 0, m、n is 1
   common::ObSEArray<std::pair<ObRawExpr*, int64_t>, 4, common::ModulePageAllocator, true> params_;
   bool has_brackets_; // may has empty (), record it.
 };
@@ -1309,7 +1309,7 @@ public:
   {
     bool bret = !access_idents_.empty()
         && access_idents_.at(access_idents_.count() - 1).is_pl_udf();
-    //如果最后的UDF有多层参数，那么说明不是UDF
+    // If the last UDF has multiple layers of parameters, then it means it is not a UDF
     for (int64_t i = 0;
         bret && i < access_idents_.at(access_idents_.count() - 1).params_.count();
         ++i) {
@@ -1327,7 +1327,7 @@ public:
   {
     bool bret = !access_idents_.empty()
         && access_idents_.at(access_idents_.count() - 1).is_pl_udf();
-    //如果最后的UDF有多层参数，那么说明是对UDF返回值的访问
+    // If the last UDF has multiple layers of parameters, then it indicates access to the UDF return value
     bool multi_level = false;
     for (int64_t i = 0;
         bret && !multi_level && i < access_idents_.at(access_idents_.count() - 1).params_.count();
@@ -1375,18 +1375,18 @@ public:
 public:
   common::ObString catalog_name_;
   common::ObString database_name_;
-  common::ObString tbl_name_; //当用于UDF的时候，表示package name
-  common::ObString col_name_; //当用于UDF的时候，表示function name
+  common::ObString tbl_name_; // When used for UDF, indicates package name
+  common::ObString col_name_; // When used for UDF, indicates function name
   common::ObString dblink_name_;
   bool is_star_;
   ObColumnRefRawExpr *ref_expr_;
   ObExprInfo parents_expr_info_;
   int64_t parent_aggr_level_;
-  //通过'.'的方式访问的序列都存在这里，如a.f(x,y).c里的a、f、c
+  // Sequences accessed via '.' are stored here, such as a, f, c in a.f(x,y).c
   common::ObSEArray<ObObjAccessIdent, 4, common::ModulePageAllocator, true> access_idents_;
   // the depth of resolve level
   int64_t current_resolve_level_;
-  bool is_access_root_; //a(b(c))会被递归解析出c、b(c)、a(b(c))三个ObQualifiedName，只有a(b(c))是root
+  bool is_access_root_; //a(b(c)) will be recursively resolved into three ObQualifiedNames: c, b(c), a(b(c)), only a(b(c)) is root
 };
 
 // bug 6349933: for most of the cases, 8 tables should be more than enough
@@ -1394,13 +1394,13 @@ typedef ObSqlBitSet<8, int64_t, true> ObRelIds;
 
 /**
  * @brief The ExprCopyPolicy enum
- * Share 表达式：column, query, aggregation, window function, 伪列以及被打上 IS_SHARED_REF 的表达式
- * COPY_REF_DEFAULT: 共享表达式采用浅拷贝，其他表达式采用深拷贝
- * COPY_REF_SHARE: 共享表达式也采用深拷贝。
+ * Share expression: column, query, aggregation, window function, pseudo-column, and expressions marked with IS_SHARED_REF
+ * COPY_REF_DEFAULT: Shared expressions use shallow copy, other expressions use deep copy
+ * COPY_REF_SHARE: Shared expressions also use deep copy.
  * e.g. min(c1),
- *   default mode: 直接返回指针
- *   share mode: 深拷 min，浅拷贝 c1，返回深拷贝的指针。
- * 每个 share 表达式只能深拷贝自己。不能触发其他 share 表达式的深拷
+ *   default mode: directly return pointer
+ *   share mode: deep copy min, shallow copy c1, return pointer to deep copy.
+ * Each share expression can only deep copy itself. It cannot trigger deep copy of other share expressions
  */
 enum ExprCopyPolicy {
   COPY_REF_DEFAULT    = 0,
@@ -1603,13 +1603,13 @@ struct ObExprParamCheckContext : ObExprEqualCheckContext
   virtual bool compare_column(const ObColumnRefRawExpr &left,
                               const ObColumnRefRawExpr &right)override;
   /**
-   * 比较两个常量表达式：
-   * 如果两个表达式都没有参数化，比较实际值
-   * 如果两个表达式都参数化了，并且是预计算表达式，需要进一步
-   * 获取预计算表达式比较；
-   * 比较参数idx是否一致，如果一致，返回相等
-   * 否则在all_equal_param_constraints_中查找是否存在等值约束，
-   * 如果存在则返回相等，否则返回不相等
+   * Compare two constant expressions:
+   * If both expressions are not parameterized, compare actual values
+   * If both expressions are parameterized and are precomputed expressions, further
+   * retrieval of precomputed expression comparison is required;
+   * Compare whether parameter idx is consistent, if consistent, return equal
+   * Otherwise look up in all_equal_param_constraints_ for existence of equality constraint,
+   * If exists then return equal, otherwise return not equal
    */
   bool compare_const(const ObConstRawExpr &left, const ObConstRawExpr &right) override;
 
@@ -1726,8 +1726,8 @@ struct ObResolveContext
   common::ObCollationType dest_collation_;
   const common::ObTimeZoneInfo *tz_info_;
   common::ObNameCaseMode case_mode_;
-  //标记该表达式的上层表达式的一些属性，
-  //比如count(c1), c1的上层是count()，所以c1的parents_expr_info 含有IS_AGG
+  // Mark some attributes of the parent expression of this expression,
+  // For example, count(c1), the parent of c1 is count(), so c1's parents_expr_info contains IS_AGG
   ObExprInfo parents_expr_info_;
   common::ObIArray<ObQualifiedName> *columns_;
   common::ObIArray<ObVarInfo> *sys_vars_;
@@ -1738,12 +1738,12 @@ struct ObResolveContext
   common::ObIArray<ObOpRawExpr*> *op_exprs_;
   common::ObIArray<ObUserVarIdentRawExpr*> *user_var_exprs_;
   common::ObIArray<ObInListInfo> *inlist_infos_;
-  //由于单测expr resolver中包含一些带？的表达式case，
-  //所以为expr resolver ctx增添一个配置变量isextract_param_type
-  //如果配置该参数为true，那么遇到？将为其填上真实的参数类型，
-  //如果没有对应的参数将报错，如果配置该参数为false的时候，
-  //参数列表指定了也将为其填上真实的参数类型，
-  //如果没有指定参数列表，那么expr resolver将忽略参数类型的填充
+  // Due to some expr resolver test cases containing expressions with ?,
+  // So add a configuration variable isextract_param_type to expr resolver ctx
+  // If you configure this parameter to true, then it will fill in the real parameter type for ?,
+  // If there is no corresponding parameter, an error will be reported, if this parameter is configured as false,
+  // Parameter list specifies that real parameter types will also be filled in,
+  // If no parameter list is specified, then the expr resolver will ignore the filling of parameter types
   bool is_extract_param_type_;
   const ParamStore *param_list_;
   int64_t prepare_param_count_;
@@ -2323,19 +2323,18 @@ protected:
   common::ObIAllocator *inner_alloc_;
   ObRawExprFactory *expr_factory_;
   common::ObString alias_column_name_;
-  //在mysql中表达式都有自己的自己名字，例如，cast('1' as unsigned)，这个
-  //表达式解析出来这一整串会作为这个表达式的名字。
-  //在udf中，需要将udf_func(expr1, expr2)中expr1和expr2的名字作为参数传递
-  //给user defined function。
+  // In mysql expressions all have their own name, for example, cast('1' as unsigned), this
+  // The expression parsed out this entire string will be used as the name of this expression.
+  // In udf, need to pass the names of expr1 and expr2 in udf_func(expr1, expr2) as parameters
+  // Give user defined function.
   common::ObString expr_name_;
   // for column expr, agg expr, window function expr and query ref exprs
   sql::ObExpr *rt_expr_;
-
-  // 每个raw expr有自己的解释
+  // Each raw expr has its own explanation
   ObRawExprExtraInfo extra_;
   bool is_shared_reference_;
-  bool is_called_in_sql_; // 用于区分是被 pl 还是 sql 调用
-  bool is_calculated_; // 用于在新引擎 cg 中检查 raw expr 是否被重复计算
+  bool is_called_in_sql_; // Used to distinguish if it is called by pl or sql
+  bool is_calculated_; // Used to check if raw expr is recalculated in new engine cg
   bool is_deterministic_; //expr is deterministic, given the same inputs, returns the same result
   union {
     int64_t local_session_var_id_;
@@ -2725,7 +2724,7 @@ public:
 protected:
   common::ObObj value_;
 private:
-  common::ObString literal_prefix_; //仅在编译期使用, 执行期无关
+  common::ObString literal_prefix_; // only used at compile time, irrelevant at runtime
   common::ObObjMeta obj_meta_;
   common::ObObj param_;
   bool is_date_unit_;
@@ -2818,8 +2817,8 @@ public:
   DECLARE_VIRTUAL_TO_STRING;
 
 private:
-  bool is_contain_assign_; // 用户变量在整个query中是否存在赋值操作
-  bool query_has_udf_;    // 整个query中是否包含UDF
+  bool is_contain_assign_; // Does the user variable have an assignment operation throughout the query
+  bool query_has_udf_;    // whether the entire query contains UDF
 private:
   DISALLOW_COPY_AND_ASSIGN(ObUserVarIdentRawExpr);
 };
@@ -2905,7 +2904,7 @@ public:
       has_nl_param_(false),
       is_multiset_(false)
   {
-    //匿名union对象的初始化只能放到函数体里面，不然会报多次初始化同一个对象的编译错误
+    // Anonymous union object initialization can only be placed inside a function body, otherwise it will cause a compilation error of multiple initializations of the same object
     ref_stmt_ = NULL;
     set_expr_class(EXPR_QUERY_REF);
   }
@@ -2919,7 +2918,7 @@ public:
       has_nl_param_(false),
       is_multiset_(false)
   {
-    //匿名union对象的初始化只能放到函数体里面，不然会报多次初始化同一个对象的编译错误
+    // The initialization of an anonymous union object can only be placed inside a function body, otherwise it will cause a compilation error of multiple initializations of the same object
     ref_stmt_ = NULL;
     set_expr_class(EXPR_QUERY_REF);
   }
@@ -2932,7 +2931,7 @@ public:
       has_nl_param_(false),
       is_multiset_(false)
   {
-    //匿名union对象的初始化只能放到函数体里面，不然会报多次初始化同一个对象的编译错误
+    // Anonymous union object initialization can only be placed inside a function body, otherwise it will cause a compilation error of multiple initializations of the same object
     ref_stmt_ = NULL;
     set_expr_class(EXPR_QUERY_REF);
   }
@@ -3002,8 +3001,8 @@ public:
                                             K_(expr_hash));
 private:
   DISALLOW_COPY_AND_ASSIGN(ObQueryRefRawExpr);
-  //ObUnaryRefExpr是表示对一个stmt或者logical plan的引用，
-  //引用都是指针，对显示不够友好，所以加一个ref_id，用来展示给人看
+  // ObUnaryRefExpr represents a reference to a stmt or logical plan,
+  // References are pointers, which are not friendly for display, so we add a ref_id for display purposes
   int64_t ref_id_;
   ObSelectStmt *ref_stmt_;
   int64_t output_column_;
@@ -3014,7 +3013,7 @@ private:
   // it may be a nlparam of a nest loop join
   bool has_nl_param_;
   bool is_multiset_;
-  //子查询的输出列类型
+  // Subquery output column type
   common::ObSEArray<ObRawExprResType, 64, common::ModulePageAllocator, true> column_types_;
   common::ObSEArray<ObExecParamRawExpr *, 4, common::ModulePageAllocator, true> exec_params_;
 };
@@ -3353,7 +3352,7 @@ public:
                        K_(expr_hash));
 private:
   DISALLOW_COPY_AND_ASSIGN(ObSetOpRawExpr);
-  int64_t idx_; // set op expr 对应 child stmt select expr 的 index
+  int64_t idx_; // set op expr corresponding to child stmt select expr's index
 };
 
 ////////////////////////////////////////////////////////////////
@@ -3493,8 +3492,7 @@ public:
   virtual bool inner_same_as(const ObRawExpr &expr,
                              ObExprEqualCheckContext *check_context) const override;
   virtual void inner_calc_hash() override;
-
-  //如果操作符中后面跟随的是一个带关键字的子查询，需要记录下该关键字
+  // If the operator is followed by a subquery with a keyword, the keyword needs to be recorded
   void set_subquery_key(ObSubQueryKey &key) { extra_.subquery_key_ = key; }
   ObSubQueryKey get_subquery_key() { return extra_.subquery_key_; }
 
@@ -3888,7 +3886,7 @@ public:
   virtual int do_visit(ObRawExprVisitor &visitor) override;
   inline ObRawExpr *get_separator_param_expr() const { return separator_param_expr_; }
   inline const common::ObIArray<OrderItem> &get_order_items() const { return order_items_; }
-  //可能在外面修改order_items_，慎用
+  // May be modified outside, use with caution
   inline common::ObIArray<OrderItem> &get_order_items_for_update() { return order_items_; }
   inline bool is_need_deserialize_row() const { return is_need_deserialize_row_; }
   void set_is_need_deserialize_row(bool is_need) { is_need_deserialize_row_ = is_need; }
@@ -4120,7 +4118,7 @@ private:
   common::ObString database_name_; // sequence database name
   common::ObString name_; // sequence object name
   common::ObString action_; // NEXTVAL or CURRVAL
-  uint64_t sequence_id_; // 这个值也包装成 expr 放到 ObSysFunRawExpr 的 param 中了
+  uint64_t sequence_id_; // this value is also wrapped as expr and put into the param of ObSysFunRawExpr
   common::ObString dblink_name_;
   uint64_t dblink_id_;
 };
@@ -4213,10 +4211,10 @@ public:
                                             K_(expr_hash));
 private:
   pl::ObPLType type_; // PL_NESTED_TABLE_TYPE|PL_ASSOCIATIVE_ARRAY_TYPE|PL_VARRAY_TYPE
-  pl::ObPLDataType elem_type_; // 记录复杂数据类型的元素类型
-  int64_t capacity_; //记录VArray的容量，对于NestedTable为-1
-  uint64_t udt_id_; // 记录复杂类型的ID
-  // 用于打印构造函数的名字
+  pl::ObPLDataType elem_type_; // record the element type of complex data types
+  int64_t capacity_; // record the capacity of VArray, for NestedTable it is -1
+  uint64_t udt_id_; // record the ID of complex type
+  // Used to print the name of the constructor
   common::ObSEArray<common::ObString, 4, common::ModulePageAllocator, true> access_names_;
   int64_t database_id_;
   int64_t coll_schema_version_;
@@ -4305,9 +4303,9 @@ public:
 private:
   int64_t rowsize_;
   uint64_t udt_id_;
-  // 记录Object每个元素的类型
+  // Record the type of each element in Object
   common::ObSEArray<ObRawExprResType, 5, common::ModulePageAllocator, true> elem_types_;
-  // 用于打印构造函数的名字
+  // Used to print the name of the constructor
   common::ObSEArray<common::ObString, 4, common::ModulePageAllocator, true> access_names_;
   int64_t database_id_;
   int64_t object_schema_version_;
@@ -4588,7 +4586,7 @@ private:
   common::ObSEArray<int64_t, 8, common::ModulePageAllocator, true> subprogram_path_;
   int64_t udf_schema_version_;
   int64_t pkg_schema_version_;
-  pl::ObPLIntegerType pls_type_; // 当返回PLS类型时, 该字段记录返回的PLS类型
+  pl::ObPLIntegerType pls_type_; // When returning PLS type, this field records the returned PLS type
   common::ObSEArray<ObRawExprResType, 5, common::ModulePageAllocator, true> params_type_;
   common::ObString database_name_;
   common::ObString package_name_;
@@ -4599,7 +4597,7 @@ private:
   bool is_aggregate_udf_;
   bool is_aggr_udf_distinct_;
   common::ObSEArray<int64_t, 8, common::ModulePageAllocator, true> nocopy_params_;
-  uint64_t loc_; // line 和 column 组合，主要是为call_stack准备
+  uint64_t loc_; // line and column combination, mainly for call_stack preparation
   bool is_udt_cons_;
   common::ObSEArray<common::ObString, 5, common::ModulePageAllocator, true> params_name_;
   common::ObSEArray<ObUDFParamDesc, 5, common::ModulePageAllocator, true> params_desc_v2_;
@@ -4844,7 +4842,7 @@ public:
   int32_t get_extend_size() const { return extend_size_; }
 private:
   DISALLOW_COPY_AND_ASSIGN(ObObjAccessRawExpr);
-  uint64_t get_attr_func_; //获取用户自定义类型数据的函数指针
+  uint64_t get_attr_func_; // Get the function pointer for retrieving user-defined type data
   common::ObString func_name_;
   common::ObSEArray<pl::ObObjAccessIdx, 4, common::ModulePageAllocator, true> access_indexs_;
   common::ObSEArray<int64_t, 4, common::ModulePageAllocator, true> var_indexs_;
@@ -4919,25 +4917,25 @@ private:
 
 ////////////////////////////////////////////////////////////////
 // eg :
-//  partition by class order by score rows between 5 preceding and 5 following : 学生成绩排名前5后5
-//  partition by class order by score range between 5 preceding and 5 following : 学生成绩上下相差5分
+//  partition by class order by score rows between 5 preceding and 5 following : student scores ranking top 5 and bottom 5
+//  partition by class order by score range between 5 preceding and 5 following : student scores within 5 points difference
 // new
 enum WindowType
 {
-  // 物理偏移, eg: rows between 1 preceding and 1 following, 按上下偏移1行得到窗口
+  // Physical offset, eg: rows between 1 preceding and 1 following, get window by offsetting 1 row up and down
   WINDOW_ROWS,
-  // 逻辑偏移, eg: range between 1 preceding and 1 following, 按value - 1, value + 1得到窗口
+  // Logical offset, eg: range between 1 preceding and 1 following, get window by value - 1, value + 1
   WINDOW_RANGE,
-  // 标识未定义状态
+  // Identify undefined state
   WINDOW_MAX,
 };
 enum BoundType
 {
-  // 按partition界作为窗口界
+  // Use partition boundary as window boundary
   BOUND_UNBOUNDED,
-  // 对于rows表示按当前行作为窗口界, 对于range表示按当前行的value作为窗口界
+  // For rows it indicates using the current row as the window boundary, for range it indicates using the current row's value as the window boundary
   BOUND_CURRENT_ROW,
-  // 偏移值
+  // offset value
   BOUND_INTERVAL,
 };
 
@@ -5375,9 +5373,9 @@ public:
   {
   }
   ~ObRawExprFactory() {
-    // 对于非工作线程, 需要调用其析构函数,
-    // 避免因未调用析构函数而导致raw_expr中
-    // ObSEArray的内存泄漏
+    // For non-working threads, need to call their destructor,
+    // Avoid raw_expr from being left uninitialized due to destructor not being called
+    // ObSEArray memory leak
     if (!THIS_WORKER.has_req_flag() && OB_ISNULL(proxy_)) {
       destory();
     }
@@ -5583,8 +5581,8 @@ public:
 private:
   DISALLOW_COPY_AND_ASSIGN(ObPlQueryRefRawExpr);
 
-  common::ObString ps_sql_; //prepare后的参数化sql
-  stmt::StmtType type_; //prepare的语句类型
+  common::ObString ps_sql_; //parameterized sql after prepare
+  stmt::StmtType type_; // statement type for prepare
 
   common::ObString route_sql_;
   sql::ObRawExprResType subquery_result_type_;
@@ -5700,10 +5698,10 @@ public:
                                             K_(expr_hash));
 private:
   uint64_t udt_id_;
-  // 记录Object每个元素的类型
+  // Record the type of each element in Object
   uint64_t root_udt_id_;
   uint64_t attr_pos_;
-  // 用于打印构造函数的名字
+  // Used to print the name of the constructor
   common::ObSEArray<common::ObString, 4, common::ModulePageAllocator, true> access_names_;
   int64_t database_id_;
   int64_t object_schema_version_;

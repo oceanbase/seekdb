@@ -41,7 +41,7 @@ int ObPLCodeGenerateVisitor::visit(const ObPLStmtBlock &s)
 {
   int ret = OB_SUCCESS;
   if (NULL == generator_.get_current().get_v()) {
-    //控制流已断，后面的语句不再处理
+    //Control flow is broken, subsequent statements will not be processed
   } else if (OB_FAIL(generator_.get_helper().set_insert_point(generator_.get_current()))) {
     LOG_WARN("failed to set insert point", K(ret));
   } else if (OB_FAIL(generator_.generate_goto_label(s))) {
@@ -71,13 +71,13 @@ int ObPLCodeGenerateVisitor::visit(const ObPLStmtBlock &s)
       } else { /*do nothing*/ }
     }
     if (OB_SUCC(ret)) {
-      if (s.has_eh()) { //如果有eh，跳到eh的exit分支
+      if (s.has_eh()) { //if there is an eh, jump to the exit branch of eh
         if (NULL != generator_.get_current_exception()->exit_.get_v()) {
           if (OB_FAIL(generator_.finish_current(generator_.get_current_exception()->exit_))) {
             LOG_WARN("failed to finish current", K(s.get_stmts()), K(ret));
           } else if (NULL != exit.get_v()) {
             if (generator_.get_current_exception()->exit_.get_v() == generator_.get_exit().get_v()) {
-              //exit是终点，不再跳转
+              //exit is the endpoint, no further jumps
             } else if (OB_FAIL(generator_.get_helper().set_insert_point(generator_.get_current_exception()->exit_))) {
               LOG_WARN("failed to set insert point", K(ret));
             } else if (OB_FAIL(generator_.get_helper().create_br(exit))) {
@@ -95,7 +95,7 @@ int ObPLCodeGenerateVisitor::visit(const ObPLStmtBlock &s)
             LOG_WARN("failed to reset exception", K(ret));
           }
         }
-      } else if (NULL != exit.get_v()) { //如果没有eh，调到BLOCK自己的exit分支
+      } else if (NULL != exit.get_v()) { // If there is no eh, jump to the exit branch of BLOCK itself
         if (NULL == generator_.get_current().get_v()) {
           // do nothing...
         } else if (OB_FAIL(generator_.get_helper().create_br(exit))) {
@@ -113,8 +113,7 @@ int ObPLCodeGenerateVisitor::visit(const ObPLStmtBlock &s)
         }
       }
     }
-
-    //释放内存
+    //release memory
     if (OB_SUCC(ret) && NULL != generator_.get_current().get_v()) {
       // close cursor
       for (int64_t i = 0; OB_SUCC(ret) && i < s.get_namespace().get_cursors().count(); ++i) {
@@ -130,7 +129,7 @@ int ObPLCodeGenerateVisitor::visit(const ObPLDeclareUserTypeStmt &s)
 {
   int ret = OB_SUCCESS;
   if (NULL == generator_.get_current().get_v()) {
-      //控制流已断，后面的语句不再处理
+      //Control flow is broken, subsequent statements will not be processed
   } else if (OB_FAIL(generator_.get_helper().set_insert_point(generator_.get_current()))) {
     LOG_WARN("failed to set insert point", K(ret));
   } else {
@@ -149,7 +148,7 @@ int ObPLCodeGenerateVisitor::visit(const ObPLDeclareVarStmt &s)
 {
   int ret = OB_SUCCESS;
   if (NULL == generator_.get_current().get_v()) {
-    //控制流已断，后面的语句不再处理
+    //Control flow is broken, subsequent statements will not be processed
   } else {
     OZ (generator_.get_helper().set_insert_point(generator_.get_current()));
     OZ (generator_.generate_spi_pl_profiler_before_record(s));
@@ -166,7 +165,7 @@ int ObPLCodeGenerateVisitor::visit(const ObPLDeclareVarStmt &s)
       if (OB_SUCC(ret)) {
         if (var->get_type().is_obj_type()) {
           // do nothing
-        } else { // Record和Collection的内存不在栈上申请, 统一在Allocator中申请, 执行结束后统一释放
+        } else { // Record and Collection memory is not allocated on the stack, it is uniformly allocated in Allocator and released after execution ends
           ObSEArray<ObLLVMValue, 3> args;
           ObLLVMValue var_idx, init_value, var_value, extend_value;
           ObLLVMValue ret_err;
@@ -174,7 +173,7 @@ int ObPLCodeGenerateVisitor::visit(const ObPLDeclareVarStmt &s)
           ObLLVMValue null_int;
           int64_t init_size = 0;
           is_complex_type_var = true;
-          // Step 1: 初始化内存
+          // Step 1: Initialize memory
           CK (OB_NOT_NULL(s.get_namespace()));
           OZ (args.push_back(generator_.get_vars().at(generator_.CTX_IDX)));
           OZ (generator_.get_helper().get_int8(var->get_type().get_type(), var_type));
@@ -196,7 +195,7 @@ int ObPLCodeGenerateVisitor::visit(const ObPLDeclareVarStmt &s)
           OZ (generator_.check_success(ret_err, s.get_stmt_id(),
                                        s.get_block()->in_notfound(),
                                        s.get_block()->in_warning()));
-          // Step 2: 初始化类型内容, 如Collection的rowsize,element type等
+          // Step 2: Initialize type content, such as Collection's rowsize, element type, etc.
           if (OB_SUCC(ret) && !var->get_type().is_opaque_type()) {
             OZ (generator_.extract_objparam_from_context(
                 generator_.get_vars().at(generator_.CTX_IDX),
@@ -215,7 +214,7 @@ int ObPLCodeGenerateVisitor::visit(const ObPLDeclareVarStmt &s)
             }
 #endif
           }
-          // Step 3: 默认值是构造函数,调用构造函数的初始化
+          // Step 3: The default value is the constructor, calling the constructor for initialization
           if (OB_SUCC(ret)
               && var->get_type().is_collection_type()
               && PL_CONSTRUCT_COLLECTION == s.get_default()) {
@@ -231,7 +230,7 @@ int ObPLCodeGenerateVisitor::visit(const ObPLDeclareVarStmt &s)
         }
       }
     }
-    // 处理变量默认值
+    // Handle variable default values
     if (OB_SUCC(ret)
         && OB_INVALID_INDEX != s.get_default()
         && PL_CONSTRUCT_COLLECTION != s.get_default()) {
@@ -245,8 +244,7 @@ int ObPLCodeGenerateVisitor::visit(const ObPLDeclareVarStmt &s)
                                    is_complex_type_var ? OB_INVALID_ID : s.get_index(0),
                                    p_result_obj));
       CK (OB_NOT_NULL(s.get_default_expr()));
-
-      // 检查notnull约束
+      // check notnull constraint
       CK (OB_NOT_NULL(s.get_var(0)));
       OZ (generator_.generate_check_not_null(s, s.get_var(0)->is_not_null(), p_result_obj));
 
@@ -258,7 +256,7 @@ int ObPLCodeGenerateVisitor::visit(const ObPLDeclareVarStmt &s)
           for (int64_t i = 0; OB_SUCC(ret) && i < s.get_index().count(); ++i) {
             const ObPLVar *var = s.get_var(i);
             CK (OB_NOT_NULL(var));
-            // 将默认值存储到paramstore, 第0个变量已经在generate_expr处理过了
+            // Store the default value to paramstore, the 0th variable has already been processed in generate_expr
             if (OB_SUCC(ret) && (is_complex_type_var || 0 != i)) {
               ObLLVMValue into_meta_p, ori_meta_p, ori_meta;
               ObLLVMValue into_accuracy_p, ori_accuracy_p, ori_accuracy;
@@ -301,9 +299,9 @@ int ObPLCodeGenerateVisitor::visit(const ObPLDeclareVarStmt &s)
                     NULL != s.get_symbol_table()->get_symbol(const_expr->get_value().get_unknown())->get_pl_data_type().get_data_type() &&
                     ObNullType == s.get_symbol_table()->get_symbol(const_expr->get_value().get_unknown())->get_pl_data_type().get_data_type()->get_obj_type())) {
                   /*
-                   * allocator可以是null，因为这儿只是修改原复杂类型的属性信息
-                   * 对于record来说把内部的元素初始化成一个null，
-                   * 对于collection来说把count改为-1标记为未初始化状态
+                   * allocator can be null, because here we are only modifying the property information of the original complex type
+                   * For record, initialize the internal elements to null,
+                   * For collection, change count to -1 to mark it as uninitialized state
                    */
                   OZ (generator_.extract_extend_from_objparam(into_obj,
                                                               var->get_type(),
@@ -381,14 +379,14 @@ int ObPLCodeGenerateVisitor::visit(const ObPLDeclareVarStmt &s)
 }
 
 /***************************************************************************************/
-/* 注意：以下是内存排列有关的代码，修改这里一定要十分理解各种数据类型在LLVM端和SQL端的内存排列和生命周期。
- * 如有问题请联系如颠ryan.ly
+/* Note: The following code is related to memory layout, any modifications here must be done with a thorough understanding of the memory layout and lifecycle of various data types on the LLVM side and SQL side.
+ * For any issues, please contact Ruyan ly
  ***************************************************************************************/
 int ObPLCodeGenerateVisitor::visit(const ObPLAssignStmt &s)
 {
   int ret = OB_SUCCESS;
   if (NULL == generator_.get_current().get_v()) {
-    //控制流已断，后面的语句不再处理
+    //Control flow is broken, subsequent statements will not be processed
   } else if (OB_FAIL(generator_.get_helper().set_insert_point(generator_.get_current()))) {
     LOG_WARN("failed to set insert point", K(ret));
   } else if (s.get_into().count() != s.get_value().count()) {
@@ -471,24 +469,24 @@ int ObPLCodeGenerateVisitor::visit(const ObPLAssignStmt &s)
                      || (ObObjAccessIdx::IS_PKG != alloc_scop)) {
             alloc_scop = ObObjAccessIdx::IS_LOCAL;
           }
-          if (OB_SUCC(ret) && ObObjAccessIdx::IS_PKG == alloc_scop) { // 如果是Package变量, 记录下PackageId
+          if (OB_SUCC(ret) && ObObjAccessIdx::IS_PKG == alloc_scop) { // If it is a Package variable, record the PackageId
             OZ (ObObjAccessIdx::get_package_id(into_expr, package_id, &var_idx));
           }
           if (OB_SUCC(ret)) {
-            //如果是LOCAL，使用运行时语句级allocator
+            //If it is LOCAL, use the runtime statement-level allocator
             if (ObObjAccessIdx::IS_LOCAL == alloc_scop) {
             /*
-             * 如果不是Collection，原则上应该进一步向上找到母体Collection的allocator，这样太复杂了，我们放弃这么做，直接用生命周期更长的运行时语句级allocator
-             * 这样的后果是：Collection里的string和number类型数据有的是在NestedTable自己的allocator里，有的不是。
-             * 这其实没有问题，基础数据类型不会占用过多内存，而且语句级内存最终会释放，不会泄漏。
+             * If it is not a Collection, in principle, we should further find the allocator of the parent Collection, but this is too complicated, so we abandon this approach and directly use the longer-lived runtime statement-level allocator.
+             * The consequence of this is that string and number type data within the Collection may be allocated in NestedTable's own allocator, and some may not.
+             * This is actually fine, as basic data types do not consume a lot of memory, and statement-level memory will eventually be released and will not leak.
              */
               if (OB_FAIL(generator_.extract_allocator_from_context(generator_.get_vars().at(generator_.CTX_IDX), allocator))) {
                 LOG_WARN("Failed to extract_allocator_from_nestedtable", K(*into_expr), K(ret));
               }
             } else {
-              //如果不是LOCAL，那么一定是PKG或者是INVALID，传入NULL allocator;
-              //对于PKG, 由SPI根据package_id从Session上获取对应PackageState上的Allocator;
-              if (OB_FAIL(generator_.generate_null(ObIntType, allocator))) { //初始化一个空的allocator
+              //If not LOCAL, then it must be PKG or INVALID, pass in NULL allocator;
+              //For PKG, by SPI get the corresponding Allocator from PackageState on Session based on package_id;
+              if (OB_FAIL(generator_.generate_null(ObIntType, allocator))) { // initialize an empty allocator
                 LOG_WARN("Failed to extract_allocator_from_nestedtable", K(*into_expr), K(ret));
               }
             }
@@ -496,19 +494,19 @@ int ObPLCodeGenerateVisitor::visit(const ObPLAssignStmt &s)
 
           if (OB_SUCC(ret)) {
             /**
-             * 分三种情况讨论：
-             * 1、Local变量
-             *   a、原生基本数据类型（不在母结构中的基本数据类型，通过Question Mark访问）：直接找到该变量调用create store，同时需要修改param_store里的值（对于string和number也是如此，指针指向同一份内存）
-             *   b、结构中的基本数据类型（在Record或Collection里中的基本数据类型，通过ObjAccess访问）：直接找到该变量的地址调用create store或者调用COPY，不必修改param_store里的值（对于string和number也是如此，指针指向同一份内存）
-             *      注意： 为什么不全部直接调用COPY函数？————其实全部直接调COPY函数代码更简洁，考虑到大多数情况下不需要内存深拷贝，直接create store性能更好。
-             *           这样会造成一种可能性：NestedTable里的string和number类型数据有的是在Collection自己的allocator里，有的不是。————这其实不一定有问题，只要目的端数据的内存生命周期比源端长就可以。
-             *   c、集合数据类型（通过ObjAccess访问）：调用该类型的COPY函数，其COPY函数递归进行子域的COPY，不必修改param_store里的值
-             *      注意： NestedTable的数据域的结构内存是自身的allocator_分配的，同时String/Number指针指向的内存也是。
-             *           copy之后的Collection同样也是这样。如果有母子关系，Collection的allocator_也相互独立，没有任何所属关系。
-             * 2、PKG变量
-             *   PKG变量只能通过通过ObjAccess访问访问，同1.b和1.c
-             * 3、USER/SYS变量
-             *   通过SPI直接赋值。
+             * Discuss in three cases:
+             * 1、Local variable
+             *   a、Native basic data type (basic data types not in the parent structure, accessed via Question Mark): Directly find this variable and call create store, at the same time, modify the value in param_store (this is also true for string and number, as pointers point to the same memory)
+             *   b、Basic data type in structure (basic data types in Record or Collection, accessed via ObjAccess): Directly find the address of this variable and call create store or call COPY, no need to modify the value in param_store (this is also true for string and number, as pointers point to the same memory)
+             *      Note: Why not directly call the COPY function for all? ———— Actually, directly calling the COPY function for all would make the code simpler, considering that deep copying of memory is not needed in most cases, directly calling create store performs better.
+             *           This could lead to a possibility: String and number type data in NestedTable may be in Collection's own allocator, or not. ———— This is not necessarily a problem, as long as the memory lifecycle of the destination data is longer than the source.
+             *   c、Collection data type (accessed via ObjAccess): Call the COPY function of this type, its COPY function recursively copies sub-domains, no need to modify the value in param_store
+             *      Note: The structure memory of NestedTable's data domain is allocated by its own allocator_, and the memory pointed to by String/Number pointers is also.
+             *           The copied Collection is the same. If there is a parent-child relationship, Collection's allocator_ are independent of each other, with no ownership relationship.
+             * 2、PKG variable
+             *   PKG variables can only be accessed via ObjAccess, same as 1.b and 1.c
+             * 3、USER/SYS variable
+             *   Directly assign values via SPI.
              * */
             if (into_expr->is_const_raw_expr()) { //Local Basic Variables
               const ObConstRawExpr *const_expr = static_cast<const ObConstRawExpr*>(into_expr);
@@ -554,7 +552,7 @@ int ObPLCodeGenerateVisitor::visit(const ObPLAssignStmt &s)
                                                 package_id));
                   }
                 }
-                // 处理Nocopy参数
+                // Handle Nocopy parameter
                 if (OB_SUCC(ret) && generator_.get_param_size() > 0) {
                   ObSEArray<ObLLVMValue, 2> args;
                   ObLLVMValue ret_err;
@@ -617,7 +615,7 @@ int ObPLCodeGenerateVisitor::visit(const ObPLAssignStmt &s)
                                               s.get_block()->in_warning(),
                                               package_id));
               } else {
-                // 设置复杂类型的ID
+                // Set the ID of complex type
                 ObLLVMValue dest;
                 ObLLVMValue src;
                 OZ (generator_.extract_accuracy_ptr_from_objparam(into_address, dest));
@@ -625,7 +623,7 @@ int ObPLCodeGenerateVisitor::visit(const ObPLAssignStmt &s)
                 OZ (generator_.get_helper().create_store(src, dest));
 
                 if (OB_FAIL(ret)) {
-                } else if (PL_CONSTRUCT_COLLECTION == s.get_value_index(i)){//右值是个数组的构造函数走SPI初始化函数
+                } else if (PL_CONSTRUCT_COLLECTION == s.get_value_index(i)){//The right value is a constructor of an array, go through the SPI initialization function}
                   ObSEArray<ObLLVMValue, 2> args;
                   ObLLVMValue ret_err;
                   ObLLVMValue v_package_id;
@@ -646,9 +644,9 @@ int ObPLCodeGenerateVisitor::visit(const ObPLAssignStmt &s)
                                                               final_type,
                                                               dest_datum));
                   CK (OB_NOT_NULL(value_expr));
-                  // 这儿的dest_datum不一定是一个复杂类型，它可能是一个null
-                  // 如 rec := null这样的赋值，这个时候如果extract_extend，结果的类型其实是错误的。
-                  // 所以这儿需要区分一下。
+                  // Here, dest_datum may not be a complex type; it could be a null
+                  // Like rec := null such assignment, at this time if extract_extend, the type of the result is actually incorrect.
+                  // So here we need to distinguish between them.
                   if (OB_FAIL(ret)) {
                   } else if (T_NULL == value_expr->get_expr_type()) {
                     OZ (final_type.generate_assign_with_null(generator_,
@@ -714,7 +712,7 @@ int ObPLCodeGenerateVisitor::visit(const ObPLIfStmt &s)
 {
   int ret = OB_SUCCESS;
   if (NULL == generator_.get_current().get_v()) {
-      //控制流已断，后面的语句不再处理
+      //Control flow is broken, subsequent statements will not be processed
   } else if (OB_FAIL(generator_.get_helper().set_insert_point(generator_.get_current()))) {
     LOG_WARN("failed to set insert point", K(ret));
   } else if (OB_FAIL(generator_.generate_goto_label(s))) {
@@ -815,7 +813,7 @@ int ObPLCodeGenerateVisitor::visit(const ObPLWhileStmt &s)
 {
   int ret = OB_SUCCESS;
   if (NULL == generator_.get_current().get_v()) {
-      //控制流已断，后面的语句不再处理
+      //Control flow is broken, subsequent statements will not be processed
   } else if (OB_FAIL(generator_.get_helper().set_insert_point(generator_.get_current()))) {
     LOG_WARN("failed to set insert point", K(ret));
   } else if (OB_FAIL(generator_.generate_goto_label(s))) {
@@ -918,7 +916,7 @@ int ObPLCodeGenerateVisitor::visit(const ObPLRepeatStmt &s)
 {
   int ret = OB_SUCCESS;
   if (NULL == generator_.get_current().get_v()) {
-      //控制流已断，后面的语句不再处理
+      //Control flow is broken, subsequent statements will not be processed
   } else if (OB_FAIL(generator_.get_helper().set_insert_point(generator_.get_current()))) {
     LOG_WARN("failed to set insert point", K(ret));
   } else if (OB_FAIL(generator_.generate_goto_label(s))) {
@@ -997,7 +995,7 @@ int ObPLCodeGenerateVisitor::visit(const ObPLLoopStmt &s)
 {
   int ret = OB_SUCCESS;
   if (NULL == generator_.get_current().get_v()) {
-      //控制流已断，后面的语句不再处理
+      //Control flow is broken, subsequent statements will not be processed
   } else if (OB_FAIL(generator_.get_helper().set_insert_point(generator_.get_current()))) {
     LOG_WARN("failed to set insert point", K(ret));
   } else if (OB_FAIL(generator_.generate_goto_label(s))) {
@@ -1062,7 +1060,7 @@ int ObPLCodeGenerateVisitor::visit(const ObPLReturnStmt &s)
 {
   int ret = OB_SUCCESS;
   if (NULL == generator_.get_current().get_v()) {
-      //控制流已断，后面的语句不再处理
+      //Control flow is broken, subsequent statements will not be processed
   } else if (OB_FAIL(generator_.get_helper().set_insert_point(generator_.get_current()))) {
     LOG_WARN("failed to set insert point", K(ret));
   } else if (OB_FAIL(generator_.generate_goto_label(s))) {
@@ -1150,7 +1148,7 @@ int ObPLCodeGenerateVisitor::visit(const ObPLReturnStmt &s)
         int64_t init_size = 0;
         if (OB_FAIL(ret)) {
         } else if (generator_.get_ast().get_ret_type().is_composite_type()) {
-          // Step 1: 初始化内存
+          // Step 1: Initialize memory
           CK (OB_NOT_NULL(s.get_namespace()));
           OZ (generator_.extract_allocator_from_context(generator_.get_vars().at(generator_.CTX_IDX), allocator));
           OZ (args.push_back(generator_.get_vars().at(generator_.CTX_IDX)));
@@ -1180,7 +1178,7 @@ int ObPLCodeGenerateVisitor::visit(const ObPLReturnStmt &s)
           OZ (generator_.generate_set_extend(p_obj, var_type, init_value, extend_value));
           OZ (generator_.extract_obobj_from_objparam(p_result_obj, result));
           OZ (generator_.get_helper().create_store(result, p_result));
-            // Step 2: 初始化类型内容, 如Collection的rowsize,element type等
+            // Step 2: Initialize type content, such as Collection's rowsize, element type, etc.
           OZ (generator_.get_llvm_type(*user_type, ir_type));
           OZ (ir_type.get_pointer_to(ir_ptr_type));
           OZ (generator_.get_helper().create_int_to_ptr(ObString("cast_extend_to_ptr"), extend_value, ir_ptr_type, composite_ptr));
@@ -1208,9 +1206,9 @@ int ObPLCodeGenerateVisitor::visit(const ObPLReturnStmt &s)
         OZ (args.push_back(generator_.get_vars()[generator_.CTX_IDX]));
         OZ (args.push_back(p_result));
         OZ (args.push_back(addend));
-        // 这儿为啥需要对ref count +1, 因为一个被return的ref cursor，在函数block结束的时候，会被dec ref
-        // 那么这个时候可能会减到0， 从而导致这个被return的ref cursor被close了。
-        // 这个+1，在ob_expr_udf那儿会对这个ref cursor -1进行平衡操作。
+        // Why is ref count +1 needed here, because a returned ref cursor will be dec ref when the function block ends
+        // Then it might be reduced to 0, thus causing the ref cursor being returned to be closed.
+        // This +1 will be balanced by a -1 operation on this ref cursor at ob_expr_udf.
         OZ (generator_.get_helper().create_call(ObString("spi_add_ref_cursor_refcount"),
                                                 generator_.get_spi_service().spi_add_ref_cursor_refcount_,
                                                 args,
@@ -1245,7 +1243,7 @@ int ObPLCodeGenerateVisitor::visit(const ObPLSqlStmt &s)
 {
   int ret = OB_SUCCESS;
   if (NULL == generator_.get_current().get_v()) {
-    // 控制流已断，后面的语句不再处理
+    // Control flow is broken, subsequent statements will not be processed
   } else if (OB_FAIL(generator_.generate_goto_label(s))) {
     LOG_WARN("failed to generate goto label", K(ret));
   } else {
@@ -1262,7 +1260,7 @@ int ObPLCodeGenerateVisitor::visit(const ObPLExecuteStmt &s)
 {
   int ret = OB_SUCCESS;
   if (NULL == generator_.get_current().get_v()) {
-    //控制流已断，后面的语句不再处理
+    //Control flow is broken, subsequent statements will not be processed
   } else {
     ObLLVMType int_type;
     ObLLVMValue null_pointer;
@@ -1290,11 +1288,11 @@ int ObPLCodeGenerateVisitor::visit(const ObPLExecuteStmt &s)
     OZ (generator_.get_helper().get_llvm_type(ObIntType, int_type));
     OZ (generator_.generate_null_pointer(ObIntType, null_pointer));
 
-    OZ (args.push_back(generator_.get_vars().at(generator_.CTX_IDX))); //PL的执行环境
+    OZ (args.push_back(generator_.get_vars().at(generator_.CTX_IDX))); // Execution environment of PL
     /*
-     * 为什么sql和using同样都是表达式，sql直接传rawexpr，而using调用generate_expr传入obobjparam？？？
-     * 这是因为直接传rawexpr，由spi_execute_immediate进行计算会省掉一次spi交互。
-     * 而using不仅是传入参数，还可以做传出参数，所以必须用obobjparam向外传递结果。
+     * Why are sql and using both expressions, but sql directly passes rawexpr, while using calls generate_expr to pass obobjparam???
+     * This is because directly passing rawexpr and having spi_execute_immediate perform the calculation saves one spi interaction.
+     * However, using not only passes parameters but can also be used for output parameters, so obobjparam must be used to pass the result outward.
      */
     OZ (generator_.get_helper().get_int64(s.get_sql(), sql_idx));
     OZ (args.push_back(sql_idx));
@@ -1420,7 +1418,7 @@ int ObPLCodeGenerateVisitor::visit(const ObPLExecuteStmt &s)
             OZ (generator_.add_out_params(p_result_obj));
             OZ (generator_.extract_obobj_ptr_from_objparam(p_result_obj, dest_datum));
             OZ (generator_.extract_obobj_ptr_from_objparam(address, src_datum));
-            // 这里用blcok级别的allocator
+            // Here we use block-level allocator
             OZ (final_type.generate_copy(generator_,
                                          *s.get_namespace(),
                                          allocator,
@@ -1509,7 +1507,7 @@ int ObPLCodeGenerateVisitor::visit(const ObPLDeclareHandlerStmt &s)
 {
   int ret = OB_SUCCESS;
   if (NULL == generator_.get_current().get_v()) {
-      //控制流已断，后面的语句不再处理
+      //Control flow is broken, subsequent statements will not be processed
   } else if (OB_FAIL(generator_.get_helper().set_insert_point(generator_.get_current()))) {
     LOG_WARN("failed to set insert point", K(ret));
   } else if (OB_FAIL(generator_.generate_goto_label(s))) {
@@ -1733,7 +1731,7 @@ int ObPLCodeGenerateVisitor::visit(const ObPLDeclareHandlerStmt &s)
           } else { /*do nothing*/ }
 
           if (OB_SUCC(ret)) {
-            //定义resume出口和exit出口
+            //Define resume exit and exit exit
             ObLLVMBasicBlock resume_handler;
             ObLLVMBasicBlock exit_handler;
 
@@ -1763,16 +1761,16 @@ int ObPLCodeGenerateVisitor::visit(const ObPLDeclareHandlerStmt &s)
                     }
 
                     /*
-                     * 如果捕捉到了该exception，处理完body后，视handler的ACTION和level决定下一个目的地：
-                     * EXIT：跳出当前block
-                     * CONTINUE：跳到抛出exception的语句的下一句
-                     * 我们对Handler做了改写，所以这里的逻辑是：
-                     * 原生EXIT：跳出当前block
-                     * 下降的CONTINUE：跳出当前block
-                     * 下降的EXIT：继续向上抛
+                     * If this exception is caught, after processing the body, determine the next destination based on the handler's ACTION and level:
+                     * EXIT: exit the current block
+                     * CONTINUE: jump to the statement following the one that threw the exception
+                     * We have rewritten the Handler, so the logic here is:
+                     * Native EXIT: exit the current block
+                     * Descending CONTINUE: exit the current block
+                     * Descending EXIT: continue to throw upwards
                      */
                     if (OB_SUCC(ret)) {
-                      if (NULL == s.get_handler(i).get_desc()->get_body() || (s.get_handler(i).get_desc()->is_exit() && !s.get_handler(i).is_original())) { //下降的EXIT，不执行body
+                      if (NULL == s.get_handler(i).get_desc()->get_body() || (s.get_handler(i).get_desc()->is_exit() && !s.get_handler(i).is_original())) { // descending EXIT, do not execute body
                         if (OB_FAIL(generator_.get_helper().set_insert_point(case_branch))) {
                           LOG_WARN("failed to set_insert_point", K(ret));
                         } else if (OB_FAIL(generator_.get_helper().create_br(s.get_handler(i).get_desc()->is_exit() && !s.get_handler(i).is_original() ? resume_handler : exit_handler))) {
@@ -1800,8 +1798,7 @@ int ObPLCodeGenerateVisitor::visit(const ObPLDeclareHandlerStmt &s)
                         OZ (generator_.extract_status_from_context(generator_.get_vars().at(generator_.CTX_IDX), p_status));
                         OZ (generator_.get_helper().create_load(ObString("load status"), p_status, status));
                         OZ (generator_.get_helper().create_store(int_value, p_status));
-
-                        // 记录下当前捕获到的ObError, 用于设置再次抛出该异常时设置status
+                        // Record the current captured ObError, used for setting the status when rethrowing this exception
                         OX (old_ob_error = generator_.get_saved_ob_error());
                         OX (generator_.get_saved_ob_error() = status);
 
@@ -1812,12 +1809,10 @@ int ObPLCodeGenerateVisitor::visit(const ObPLDeclareHandlerStmt &s)
                         OZ (generator_.get_helper().create_call(ObString("spi_get_pl_exception_code"), generator_.get_spi_service().spi_get_pl_exception_code_, args, result));
                         OZ (generator_.check_success(result, s.get_stmt_id(), s.get_block()->in_notfound(), s.get_block()->in_warning()));
                         OZ (generator_.get_helper().create_load(ObString("old_sqlcode"), p_old_sqlcode, old_code));
-
-                        // 记录下当前捕获到的Exception, 用于SIGNAL语句抛出当前异常
+                        // Record the current captured Exception for throwing the current exception with a SIGNAL statement
                         OX (old_exception = generator_.get_saved_exception());
                         OX (generator_.get_saved_exception() = unwindException);
-
-                        // 设置当前ExceptionCode到SQLCODE
+                        // Set current ExceptionCode to SQLCODE
                         OX (args.reset());
                         // OZ (generator_.get_helper().get_llvm_type(ObIntType, int_type));
                         // OZ (generator_.get_helper().create_alloca(ObString("level"), int_type, p_level));
@@ -1831,7 +1826,7 @@ int ObPLCodeGenerateVisitor::visit(const ObPLDeclareHandlerStmt &s)
                         OZ (generator_.check_success(result, s.get_stmt_id(), s.get_block()->in_notfound(), s.get_block()->in_warning()));
 
 /*
-                        // Check当前是否是嵌套事务的ExceptionHandler, 失效掉嵌套事务内部的Exception Handler
+                        // Check if the current is the ExceptionHandler of a nested transaction, invalidate the Exception Handler inside the nested transaction
                         OX (args.reset());
                         OZ (args.push_back(generator_.get_vars().at(generator_.CTX_IDX)));
                         OZ (args.push_back(code));
@@ -1846,15 +1841,12 @@ int ObPLCodeGenerateVisitor::visit(const ObPLDeclareHandlerStmt &s)
                               s.get_block()->in_notfound(),
                               s.get_block()->in_warning()));
 */
-
-                        // Codegen当前Handler的Body
+                        // Codegen current Handler's Body
                         OZ (SMART_CALL(generate(*s.get_handler(i).get_desc()->get_body())));
-
-                        // 恢复原来的Exception
+                        // Restore the original Exception
                         OX (generator_.get_saved_exception() = old_exception);
                         OX (generator_.get_saved_ob_error() = old_ob_error);
-
-                        // 恢复原来的SQLCODE
+                        // Restore the original SQLCODE
                         if (OB_SUCC(ret)
                             && OB_NOT_NULL(generator_.get_current().get_v())) {
                           if (OB_ISNULL(old_exception.get_v())) {
@@ -1881,7 +1873,7 @@ int ObPLCodeGenerateVisitor::visit(const ObPLDeclareHandlerStmt &s)
                           OZ (generator_.get_helper().create_call(ObString("spi_set_pl_exception_code"), generator_.get_spi_service().spi_set_pl_exception_code_, args, result));
                           OZ (generator_.check_success(result, s.get_stmt_id(), s.get_block()->in_notfound(), s.get_block()->in_warning()));
                         }
-                        OZ (generator_.finish_current(s.get_handler(i).get_desc()->is_exit() && !s.get_handler(i).is_original() ? resume_handler : exit_handler)); //下降的EXIT才抛出
+                        OZ (generator_.finish_current(s.get_handler(i).get_desc()->is_exit() && !s.get_handler(i).is_original() ? resume_handler : exit_handler)); // Throw only for EXIT that is descending
                         OZ (generator_.set_current(current));
                       }
                     }
@@ -1893,7 +1885,7 @@ int ObPLCodeGenerateVisitor::visit(const ObPLDeclareHandlerStmt &s)
                   ObLLVMType unwind_exception_pointer_type;
                   if (OB_FAIL(generator_.set_exception(exception,
                                                        exit_handler,
-                                                       s.get_level()))) { //这里才可以压栈exception
+                                                       s.get_level()))) { //Here stack exception is allowed
                     LOG_WARN("failed to set_exception", K(ret));
                   } else if (OB_FAIL(generator_.get_helper().set_insert_point(resume_handler))) {
                     LOG_WARN("failed to set_insert_point", K(ret));
@@ -1940,7 +1932,7 @@ int ObPLCodeGenerateVisitor::visit(const ObPLSignalStmt &s)
 {
   int ret = OB_SUCCESS;
   if (NULL == generator_.get_current().get_v()) {
-      //控制流已断，后面的语句不再处理
+      //Control flow is broken, subsequent statements will not be processed
   } else {
     OZ (generator_.get_helper().set_insert_point(generator_.get_current()));
     OZ (generator_.generate_goto_label(s));
@@ -2053,7 +2045,7 @@ int ObPLCodeGenerateVisitor::visit(const ObPLSignalStmt &s)
       OZ (generator_.get_helper().create_block(ObString("normal"), generator_.get_func(), normal));
       OZ (generator_.generate_global_string(ObString(s.get_str_len(), s.get_sql_state()), sql_state, str_len));
       OZ (generator_.get_helper().get_int64(s.get_stmt_id(), stmt_id));
-      // 暂时先用stmtid， 这个id就是col和line的组合
+      // Temporarily use stmtid, this id is the combination of col and line
       OZ (generator_.get_helper().get_int64(s.get_stmt_id(), loc));
       OZ (generator_.generate_destruct_out_params());
       OZ (generator_.generate_exception(type, ob_err_code, err_code, sql_state, str_len, stmt_id,
@@ -2069,7 +2061,7 @@ int ObPLCodeGenerateVisitor::visit(const ObPLCallStmt &s)
 {
   int ret = OB_SUCCESS;
   if (NULL == generator_.get_current().get_v()) {
-    //控制流已断，后面的语句不再处理
+    //Control flow is broken, subsequent statements will not be processed
   } else if (OB_FAIL(generator_.get_helper().set_insert_point(generator_.get_current()))) {
     LOG_WARN("failed to set insert point", K(ret));
   } else if (OB_FAIL(generator_.generate_goto_label(s))) {
@@ -2087,7 +2079,7 @@ int ObPLCodeGenerateVisitor::visit(const ObPLCallStmt &s)
       LOG_WARN("failed to get_argv_array_buffer", K(ret));
     } else {
       for (int64_t i = 0; OB_SUCC(ret) && i < s.get_params().count(); ++i) {
-        // 传递入参
+        // pass in parameters
         ObLLVMValue p_result_obj;
         if (s.is_pure_out(i)) {
           const ObPLVar *var =
@@ -2109,7 +2101,7 @@ int ObPLCodeGenerateVisitor::visit(const ObPLCallStmt &s)
           if (OB_SUCC(ret)
               && OB_NOT_NULL(pl_type)
               && pl_type->is_composite_type()
-              && !pl_type->is_opaque_type()) { // 普通类型构造空的ObjParam即可,复杂类型需要构造对应的指针
+              && !pl_type->is_opaque_type()) { // Ordinary type can construct an empty ObjParam, complex types need to construct the corresponding pointer
             ObLLVMType ir_type, ir_ptr_type;
             ObLLVMValue var_idx, init_value, extend_ptr, extend_value, composite_ptr, p_obj;
             ObLLVMValue ret_err;
@@ -2297,24 +2289,24 @@ int ObPLCodeGenerateVisitor::visit(const ObPLCallStmt &s)
         ObLLVMValue array_value;
         ObLLVMValue nocopy_array_value;
         uint64_t package_id = s.get_package_id();
-        if (OB_FAIL(args.push_back(generator_.get_vars().at(generator_.CTX_IDX)))) { //PL的执行环境
+        if (OB_FAIL(args.push_back(generator_.get_vars().at(generator_.CTX_IDX)))) { // Execution environment of PL
           LOG_WARN("push_back error", K(ret));
         } else if (OB_FAIL(generator_.get_helper().get_int64(package_id, int_value))) {
           LOG_WARN("failed to get int64", K(ret));
-        } else if (OB_FAIL(args.push_back(int_value))) { //PL的package id
+        } else if (OB_FAIL(args.push_back(int_value))) { // PL's package id
           LOG_WARN("push_back error", K(ret));
         }else if (OB_FAIL(generator_.get_helper().get_int64(s.get_proc_id(), int_value))) {
           LOG_WARN("failed to get int64", K(ret));
-        } else if (OB_FAIL(args.push_back(int_value))) { //PL的proc id
+        } else if (OB_FAIL(args.push_back(int_value))) { // PL's proc id
           LOG_WARN("push_back error", K(ret));
         }else if (OB_FAIL(generator_.generate_int64_array(s.get_subprogram_path(), array_value))) {
           LOG_WARN("failed to get int64", K(ret));
-        } else if (OB_FAIL(args.push_back(array_value))) { //PL的subprogram path
+        } else if (OB_FAIL(args.push_back(array_value))) { // PL's subprogram path
           LOG_WARN("push_back error", K(ret));
         } else if (OB_FAIL(generator_.get_helper().get_int64(s.get_subprogram_path().count(),
                                                              int_value))) {
           LOG_WARN("failed to get int64", K(ret));
-        } else if (OB_FAIL(args.push_back(int_value))) { //subprogram path长度
+        } else if (OB_FAIL(args.push_back(int_value))) { // subprogram path length
           LOG_WARN("push_back error", K(ret));
         } else if (OB_FAIL(generator_.get_helper().get_int64(static_cast<uint64_t>(s.get_stmt_id()), int_value))) {
           LOG_WARN("failed to get int64", K(ret));
@@ -2335,7 +2327,7 @@ int ObPLCodeGenerateVisitor::visit(const ObPLCallStmt &s)
           LOG_WARN("failed to push back", K(ret));
         } else if (OB_FAIL(generator_.get_helper().get_int64(OB_INVALID_ID, int_value))) {
           LOG_WARN("failed to get int64", K(ret));
-        } else if (OB_FAIL(args.push_back(int_value))) { //PL的dblink id
+        } else if (OB_FAIL(args.push_back(int_value))) { // PL's dblink id
           LOG_WARN("push_back error", K(ret));
         } else {
           ObLLVMValue result;
@@ -2400,7 +2392,7 @@ int ObPLCodeGenerateVisitor::visit(const ObPLFetchStmt &s)
   int ret = OB_SUCCESS;
   ObLLVMValue ret_err;
   if (NULL == generator_.get_current().get_v()) {
-    //控制流已断，后面的语句不再处理
+    //Control flow is broken, subsequent statements will not be processed
   } else {
     OZ (generator_.generate_update_location(s));
     OZ (generator_.generate_goto_label(s));
@@ -2417,10 +2409,10 @@ int ObPLCodeGenerateVisitor::visit(const ObPLFetchStmt &s)
                                                 s.get_user_type(),
                                                 ret_err))) {
       LOG_WARN("failed to generate fetch", K(ret));
-    } else if (lib::is_mysql_mode()) { //Mysql模式直接检查抛出异常
+    } else if (lib::is_mysql_mode()) { //MySQL mode directly check and throw exception
       OZ (generator_.check_success(
         ret_err, s.get_stmt_id(), s.get_block()->in_notfound(), s.get_block()->in_warning(), true));
-    } else { //Oracle模式如果是OB_READ_NOTHING错误，吞掉异常不抛出
+    } else { // Oracle mode if it is an OB_READ_NOTHING error, swallow the exception and do not throw it
       ObLLVMValue is_not_found;
       ObLLVMBasicBlock fetch_end;
       ObLLVMBasicBlock fetch_check_success;
@@ -2477,7 +2469,7 @@ int ObPLCodeGenerateVisitor::visit(const ObPLNullStmt &s)
 {
   int ret = OB_SUCCESS;
   if (NULL == generator_.get_current().get_v()) {
-    //控制流已断，后面的语句不再处理
+    //Control flow is broken, subsequent statements will not be processed
   } else if (OB_FAIL(generator_.generate_goto_label(s))) {
     LOG_WARN("failed to generate goto label", K(ret));
   } else if (OB_FAIL(generator_.generate_spi_pl_profiler_before_record(s))) {
@@ -2516,7 +2508,7 @@ int ObPLCodeGenerateVisitor::visit(const ObPLDoStmt &s)
 {
   int ret = OB_SUCCESS;
   if (NULL == generator_.get_current().get_v()) {
-    //控制流已断，后面的语句不再处理
+    //Control flow is broken, subsequent statements will not be processed
   } else if (OB_FAIL(generator_.get_helper().set_insert_point(generator_.get_current()))) {
     LOG_WARN("failed to set insert point", K(ret));
   } else if (OB_FAIL(generator_.generate_goto_label(s))) {
@@ -2542,7 +2534,7 @@ int ObPLCodeGenerateVisitor::visit(const ObPLCaseStmt &s)
 {
   int ret = OB_SUCCESS;
   if (NULL == generator_.get_current().get_v()) {
-    //控制流已断，后面的语句不再处理
+    //Control flow is broken, subsequent statements will not be processed
   } else if (OB_FAIL(generator_.get_helper().set_insert_point(generator_.get_current()))) {
     LOG_WARN("failed to set insert point", K(ret));
   } else if (OB_FAIL(generator_.generate_goto_label(s))) {
@@ -2858,7 +2850,7 @@ int ObPLCodeGenerator::init()
     } else { /*do nothing*/ }
 
     if (OB_SUCC(ret)) {
-      if (OB_FAIL(arg_types.push_back(pl_exec_context_pointer_type))) { //函数第一个参数必须是基础环境信息隐藏参数
+      if (OB_FAIL(arg_types.push_back(pl_exec_context_pointer_type))) { // The first argument of the function must be a hidden parameter of the basic environment information
         LOG_WARN("push_back error", K(ret));
       } else if (OB_FAIL(arg_types.push_back(int64_type))) { //uint64_t package id
         LOG_WARN("push_back error", K(ret));
@@ -2888,7 +2880,7 @@ int ObPLCodeGenerator::init()
     //declare user type var addr
     if (OB_SUCC(ret)) {
       arg_types.reset();
-      if (OB_FAIL(arg_types.push_back(pl_exec_context_pointer_type))) { //函数第一个参数必须是基础环境信息隐藏参数
+      if (OB_FAIL(arg_types.push_back(pl_exec_context_pointer_type))) { //The first argument of the function must be a hidden parameter of the basic environment information
         LOG_WARN("push_back error", K(ret));
       } else if (OB_FAIL(arg_types.push_back(int64_type))) { //int64_t var_index
         LOG_WARN("push_back error", K(ret));
@@ -2905,7 +2897,7 @@ int ObPLCodeGenerator::init()
     // declare set_implicit_in_forall
     if (OB_SUCC(ret)) {
       arg_types.reset();
-      if (OB_FAIL(arg_types.push_back(pl_exec_context_pointer_type))) { //函数第一个参数必须是基础环境信息隐藏参数
+      if (OB_FAIL(arg_types.push_back(pl_exec_context_pointer_type))) { // The first argument of the function must be a hidden parameter of the basic environment information
         LOG_WARN("push_back error", K(ret));
       } else if (OB_FAIL(arg_types.push_back(bool_type))) {
         LOG_WARN("push_back error", K(ret));
@@ -2982,7 +2974,7 @@ int ObPLCodeGenerator::init_spi_service()
 
   if (OB_SUCC(ret)) {
     arg_types.reset();
-    if (OB_FAIL(arg_types.push_back(pl_exec_context_pointer_type))) { //函数第一个参数必须是基础环境信息隐藏参数
+    if (OB_FAIL(arg_types.push_back(pl_exec_context_pointer_type))) { // The first argument of the function must be a hidden parameter of the basic environment information
       LOG_WARN("push_back error", K(ret));
     } else if (OB_FAIL(arg_types.push_back(int64_type))) {
       LOG_WARN("push_back error", K(ret));
@@ -2999,7 +2991,7 @@ int ObPLCodeGenerator::init_spi_service()
 
   if (OB_SUCC(ret)) {
     arg_types.reset();
-    if (OB_FAIL(arg_types.push_back(pl_exec_context_pointer_type))) { //函数第一个参数必须是基础环境信息隐藏参数
+    if (OB_FAIL(arg_types.push_back(pl_exec_context_pointer_type))) { // The first argument of the function must be a hidden parameter of the basic environment information
       LOG_WARN("push_back error", K(ret));
     } else if (OB_FAIL(arg_types.push_back(int64_type))) {
       LOG_WARN("push_back error", K(ret));
@@ -3027,7 +3019,7 @@ int ObPLCodeGenerator::init_spi_service()
 
   if (OB_SUCC(ret)) {
     arg_types.reset();
-    if (OB_FAIL(arg_types.push_back(pl_exec_context_pointer_type))) { //函数第一个参数必须是基础环境信息隐藏参数
+    if (OB_FAIL(arg_types.push_back(pl_exec_context_pointer_type))) { // The first argument of the function must be a hidden parameter of the basic environment information
       LOG_WARN("push_back error", K(ret));
     } else if (OB_FAIL(arg_types.push_back(int64_type))) {
       LOG_WARN("push_back error", K(ret));
@@ -3044,7 +3036,7 @@ int ObPLCodeGenerator::init_spi_service()
 
   if (OB_SUCC(ret)) {
     arg_types.reset();
-    if (OB_FAIL(arg_types.push_back(pl_exec_context_pointer_type))) { //函数第一个参数必须是基础环境信息隐藏参数
+    if (OB_FAIL(arg_types.push_back(pl_exec_context_pointer_type))) { // The first argument of the function must be a hidden parameter of the basic environment information
       LOG_WARN("push_back error", K(ret));
     } else if (OB_FAIL(arg_types.push_back(char_type))) {
       LOG_WARN("push_back error", K(ret));
@@ -3094,7 +3086,7 @@ int ObPLCodeGenerator::init_spi_service()
 
   if (OB_SUCC(ret)) {
     arg_types.reset();
-    if (OB_FAIL(arg_types.push_back(pl_exec_context_pointer_type))) { //函数第一个参数必须是基础环境信息隐藏参数
+    if (OB_FAIL(arg_types.push_back(pl_exec_context_pointer_type))) { // The first argument of the function must be a hidden parameter of the basic environment information
       LOG_WARN("push_back error", K(ret));
     } else if (OB_FAIL(arg_types.push_back(char_type))) {
       LOG_WARN("push_back error", K(ret));
@@ -3133,7 +3125,7 @@ int ObPLCodeGenerator::init_spi_service()
 
   if (OB_SUCC(ret)) {
     arg_types.reset();
-    if (OB_FAIL(arg_types.push_back(pl_exec_context_pointer_type))) { //函数第一个参数必须是基础环境信息隐藏参数
+    if (OB_FAIL(arg_types.push_back(pl_exec_context_pointer_type))) { // The first argument of the function must be a hidden parameter of the basic environment information
       LOG_WARN("push_back error", K(ret));
     } else if (OB_FAIL(arg_types.push_back(int64_type))) {
       LOG_WARN("push_back error", K(ret));
@@ -3212,7 +3204,7 @@ int ObPLCodeGenerator::init_spi_service()
 
   if (OB_SUCC(ret)) {
     arg_types.reset();
-    OZ (arg_types.push_back(pl_exec_context_pointer_type)); //函数第一个参数必须是基础环境信息隐藏参数
+    OZ (arg_types.push_back(pl_exec_context_pointer_type)); // The first argument of the function must be a hidden parameter containing basic environment information
     OZ (arg_types.push_back(char_type)); //sql
     OZ (arg_types.push_back(char_type));//id
     OZ (arg_types.push_back(int64_type));//type
@@ -3233,7 +3225,7 @@ int ObPLCodeGenerator::init_spi_service()
 
   if (OB_SUCC(ret)) {
     arg_types.reset();
-    OZ (arg_types.push_back(pl_exec_context_pointer_type)); //函数第一个参数必须是基础环境信息隐藏参数
+    OZ (arg_types.push_back(pl_exec_context_pointer_type)); // The first argument of the function must be a hidden parameter containing basic environment information
     OZ (arg_types.push_back(int64_type)); //sql_expr
     OZ (arg_types.push_back(int_pointer_type));//sql_param_exprs
     OZ (arg_types.push_back(int64_type));//sql_param_count
@@ -3246,7 +3238,7 @@ int ObPLCodeGenerator::init_spi_service()
 
   if (OB_SUCC(ret)) {
     arg_types.reset();
-    OZ (arg_types.push_back(pl_exec_context_pointer_type)); //函数第一个参数必须是基础环境信息隐藏参数
+    OZ (arg_types.push_back(pl_exec_context_pointer_type)); // The first argument of the function must be a hidden parameter containing basic environment information
     OZ (arg_types.push_back(int64_type));//package_id
     OZ (arg_types.push_back(int64_type));//routine_id
     OZ (arg_types.push_back(int64_type));//cursor_index
@@ -3267,7 +3259,7 @@ int ObPLCodeGenerator::init_spi_service()
 
   if (OB_SUCC(ret)) {
     arg_types.reset();
-    OZ (arg_types.push_back(pl_exec_context_pointer_type)); //函数第一个参数必须是基础环境信息隐藏参数
+    OZ (arg_types.push_back(pl_exec_context_pointer_type)); // The first argument of the function must be a hidden parameter containing basic environment information
     OZ (arg_types.push_back(int64_type));//package_id
     OZ (arg_types.push_back(int64_type));//routine_id
     OZ (arg_types.push_back(int64_type));//cursor_index
@@ -3278,7 +3270,7 @@ int ObPLCodeGenerator::init_spi_service()
 
   if (OB_SUCC(ret)) {
     arg_types.reset();
-    if (OB_FAIL(arg_types.push_back(pl_exec_context_pointer_type))) { //函数第一个参数必须是基础环境信息隐藏参数
+    if (OB_FAIL(arg_types.push_back(pl_exec_context_pointer_type))) { // The first argument of the function must be a hidden parameter of the basic environment information
       LOG_WARN("push_back error", K(ret));
     } else if (OB_FAIL(arg_types.push_back(int64_type))) {
       LOG_WARN("push_back error", K(ret));
@@ -3306,7 +3298,7 @@ int ObPLCodeGenerator::init_spi_service()
 
   if (OB_SUCC(ret)) {
     arg_types.reset();
-    if (OB_FAIL(arg_types.push_back(pl_exec_context_pointer_type))) { // 函数第一个参数必须是基础环境信息隐藏参数
+    if (OB_FAIL(arg_types.push_back(pl_exec_context_pointer_type))) { // The first argument of the function must be a hidden parameter of the basic environment information
       LOG_WARN("push_back error", K(ret));
     } else if (OB_FAIL(arg_types.push_back(int64_type))) { //src expr index
       LOG_WARN("push_back error", K(ret));
@@ -3327,7 +3319,7 @@ int ObPLCodeGenerator::init_spi_service()
 
   if (OB_SUCC(ret)) {
     arg_types.reset();
-    OZ (arg_types.push_back(pl_exec_context_pointer_type)); //函数第一个参数必须是基础环境信息隐藏参数
+    OZ (arg_types.push_back(pl_exec_context_pointer_type)); // The first argument of the function must be a hidden parameter containing basic environment information
     OZ (arg_types.push_back(int64_type)); //allocator
     OZ (arg_types.push_back(obj_pointer_type)); //src
     OZ (arg_types.push_back(obj_pointer_type)); //dest
@@ -3339,7 +3331,7 @@ int ObPLCodeGenerator::init_spi_service()
   }
   if (OB_SUCC(ret)) {
     arg_types.reset();
-    OZ (arg_types.push_back(pl_exec_context_pointer_type)); //函数第一个参数必须是基础环境信息隐藏参数
+    OZ (arg_types.push_back(pl_exec_context_pointer_type)); // The first argument of the function must be a hidden parameter containing basic environment information
     OZ (arg_types.push_back(int64_type)); // type info id
     OZ (arg_types.push_back(obj_pointer_type)); //src
     OZ (arg_types.push_back(obj_pointer_type)); //dest
@@ -3348,7 +3340,7 @@ int ObPLCodeGenerator::init_spi_service()
   }
   if (OB_SUCC(ret)) {
     arg_types.reset();
-    OZ (arg_types.push_back(pl_exec_context_pointer_type)); //函数第一个参数必须是基础环境信息隐藏参数
+    OZ (arg_types.push_back(pl_exec_context_pointer_type)); // The first argument of the function must be a hidden parameter containing basic environment information
     OZ (arg_types.push_back(obj_pointer_type)); //src
     OZ (ObLLVMFunctionType::get(int32_type, arg_types, ft));
     OZ (helper_.create_function(ObString("spi_destruct_obj"), ft, spi_service_.spi_destruct_obj_));
@@ -3356,7 +3348,7 @@ int ObPLCodeGenerator::init_spi_service()
 
   if (OB_SUCC(ret)) {
     arg_types.reset();
-    if (OB_FAIL(arg_types.push_back(pl_exec_context_pointer_type))) { //函数第一个参数必须是基础环境信息隐藏参数
+    if (OB_FAIL(arg_types.push_back(pl_exec_context_pointer_type))) { // The first argument of the function must be a hidden parameter of the basic environment information
       LOG_WARN("push_back error", K(ret));
     } else if (OB_FAIL(arg_types.push_back(int64_type))) { // error code
       LOG_WARN("push_back error", K(ret));
@@ -3420,7 +3412,7 @@ int ObPLCodeGenerator::init_spi_service()
 
   if (OB_SUCC(ret)) {
     arg_types.reset();
-    OZ (arg_types.push_back(pl_exec_context_pointer_type)); //函数第一个参数必须是基础环境信息隐藏参数
+    OZ (arg_types.push_back(pl_exec_context_pointer_type)); // The first argument of the function must be a hidden parameter containing basic environment information
     OZ (arg_types.push_back(obj_pointer_type)); // ref cursor
     OZ (arg_types.push_back(int64_type));
     OZ (ObLLVMFunctionType::get(int32_type, arg_types, ft));
@@ -3428,7 +3420,7 @@ int ObPLCodeGenerator::init_spi_service()
   }
   if (OB_SUCC(ret)) {
     arg_types.reset();
-    OZ (arg_types.push_back(pl_exec_context_pointer_type)); //函数第一个参数必须是基础环境信息隐藏参数
+    OZ (arg_types.push_back(pl_exec_context_pointer_type)); // The first argument of the function must be a hidden parameter containing basic environment information
     OZ (arg_types.push_back(int64_type)); //package id
     OZ (arg_types.push_back(int64_type)); //routine id
     OZ (arg_types.push_back(int64_type)); //cursor index
@@ -3481,7 +3473,7 @@ int ObPLCodeGenerator::init_spi_service()
 
   if (OB_SUCC(ret)) {
     arg_types.reset();
-    OZ (arg_types.push_back(pl_exec_context_pointer_type));  // 函数第一个参数必须是基础环境信息隐藏参数
+    OZ (arg_types.push_back(pl_exec_context_pointer_type));  // The first parameter of the function must be a hidden parameter containing basic environment information
     OZ (arg_types.push_back(int64_type));                    // line
     OZ (arg_types.push_back(int64_type));                    // level
     OZ (ObLLVMFunctionType::get(int32_type, arg_types, ft));
@@ -3513,7 +3505,7 @@ int ObPLCodeGenerator::init_spi_service()
 
   if (OB_SUCC(ret)) {
     arg_types.reset();
-    OZ (arg_types.push_back(pl_exec_context_pointer_type));  // 函数第一个参数必须是基础环境信息隐藏参数
+    OZ (arg_types.push_back(pl_exec_context_pointer_type));  // The first argument of the function must be a hidden parameter of the base environment information
     OZ (arg_types.push_back(int64_type));                    // line
     OZ (arg_types.push_back(int64_type));                    // level
     OZ (ObLLVMFunctionType::get(int32_type, arg_types, ft));
@@ -3793,7 +3785,7 @@ int ObPLCodeGenerator::generate_get_collection_attr(ObLLVMValue &param_array,
 {
   int ret = OB_SUCCESS;
   ObLLVMValue ret_value;
-  // 对于数组类型的访问, 需要确保其已经通过构造函数进行了初始化
+  // For array type access, it is necessary to ensure that it has been initialized via the constructor
   ObLLVMValue is_inited, not_init_value, not_init;
   ObLLVMBasicBlock after_init_block, not_init_block;
   OZ (helper_.create_block(ObString("after_init_block"), func_, after_init_block));
@@ -3811,20 +3803,20 @@ int ObPLCodeGenerator::generate_get_collection_attr(ObLLVMValue &param_array,
 
   ObLLVMValue data_value;
   if (!current_access.is_property()) {
-    // 取出集合中元素的值ObCollection->data_
-    // 当时获取Collection的固有属性时, 不需要这么做, 固有属性都存储在Collection本身上
+    // Retrieve the value of elements in the collection ObCollection->data_
+    // When obtaining the inherent properties of a Collection, this is not necessary, as inherent properties are stored on the Collection itself
     OZ (extract_data_from_collection(current_value, data_value));
   }
-  // 获取下标或者固有属性在Collection中的位置信息
+  // Get the index or intrinsic attribute position information in the Collection
   if (OB_SUCC(ret)) {
     ObLLVMValue element_idx;
-    // 常量, 直接Codegen掉
+    // constant, directly Codegen it
     if (current_access.is_property()) {
       //do nothing
     } else if (current_access.is_const()) {
       OZ (helper_.get_int64(current_access.var_index_ - 1, element_idx));
     } else {
-      // 非常量，那么首先用obj access中的var_index获取到变量的值，然后再获取element
+      // non-constant, then first use var_index from obj access to get the value of the variable, and then get the element
       ObLLVMValue element_idx_ptr;
       OZ (helper_.create_gep(ObString("param_value"),
                              param_array,
@@ -3834,7 +3826,7 @@ int ObPLCodeGenerator::generate_get_collection_attr(ObLLVMValue &param_array,
       OZ (helper_.create_dec(element_idx, element_idx));
     }
     if (OB_SUCC(ret)) {
-      // 如果不是固有属性, 需要check下标的合法性, 避免访问越界
+      // If it is not an inherent property, need to check the legality of the index to avoid out-of-bounds access
       if (!current_access.is_property()) {
         ObLLVMValue low, high_ptr, high, is_true;
         ObLLVMBasicBlock check_block, after_block, error_block;
@@ -4004,10 +3996,10 @@ int ObPLCodeGenerator::generate_get_record_attr(const ObObjAccessIdx &current_ac
 int ObPLCodeGenerator::generate_get_attr(ObLLVMValue &param_array,
                                          const ObIArray<ObObjAccessIdx> &obj_access,
                                          bool for_write,
-                                         ObLLVMValue &value_ptr,     // 读取的值
-                                         ObLLVMValue &allocator_ptr,     // 读取的allator
-                                         ObLLVMValue &ret_value_ptr, // 标识是否越界
-                                         ObLLVMBasicBlock& exit,     // 越界后需要跳转的BLOCK
+                                         ObLLVMValue &value_ptr,     // read value
+                                         ObLLVMValue &allocator_ptr,     // read the allocator
+                                         ObLLVMValue &ret_value_ptr, // Indicates whether out of bounds
+                                         ObLLVMBasicBlock& exit,     // BLOCK to jump to after out-of-bounds
                                          const sql::ObRawExprResType &res_type)
 {
   int ret = OB_SUCCESS;
@@ -4021,10 +4013,9 @@ int ObPLCodeGenerator::generate_get_attr(ObLLVMValue &param_array,
   CK (!obj_access.empty());
   CK (obj_access.at(0).var_type_.is_composite_type()
       || obj_access.at(0).var_type_.is_cursor_type());
-
-  // 获取数据类型
+  // Get data type
   OZ (helper_.get_llvm_type(ObIntType, int64_type));
-  // 获取变量首地址
+  // Get the starting address of the variable
   OZ (helper_.get_int32(OB_SUCCESS, ret_value));
   OZ (helper_.create_store(ret_value, ret_value_ptr));
   OZ (helper_.create_gep(ObString("param_value"),
@@ -4032,7 +4023,7 @@ int ObPLCodeGenerator::generate_get_attr(ObLLVMValue &param_array,
                          obj_access.at(0).var_index_,
                          composite_addr));
   OZ (helper_.create_load(ObString("element_idx"), composite_addr, composite_addr));
-  // 逐级解析复杂数据类型
+  // Gradually parse complex data types
   for (int64_t i = 1; OB_SUCC(ret) && i < obj_access.count(); ++i) {
     const ObPLDataType &parent_type = obj_access.at(i - 1).var_type_;
     OZ (user_type_map_.get_refactored(parent_type.get_user_type_id(), user_type),
@@ -4043,7 +4034,7 @@ int ObPLCodeGenerator::generate_get_attr(ObLLVMValue &param_array,
     OX (value.set_t(user_type));
     CK (!obj_access.at(i).is_invalid());
     if (OB_SUCC(ret)) {
-      if (parent_type.is_collection_type()) { //数组类型
+      if (parent_type.is_collection_type()) { //array type
         OZ (generate_get_collection_attr(param_array,
                                          obj_access.at(i),
                                          i,
@@ -4054,7 +4045,7 @@ int ObPLCodeGenerator::generate_get_attr(ObLLVMValue &param_array,
                                          ret_value_ptr,
                                          exit,
                                          res_type));
-      } else if (parent_type.is_record_type()) { //record类型
+      } else if (parent_type.is_record_type()) { // record type
         OZ (generate_get_record_attr(obj_access.at(i),
                                      parent_type.get_user_type_id(),
                                      for_write,
@@ -4107,12 +4098,12 @@ int ObPLCodeGenerator::generate_declare_cursor(const ObPLStmt &s, const int64_t 
 {
   int ret = OB_SUCCESS;
   if (NULL == get_current().get_v()) {
-    // 控制流已断，后面的语句不再处理
+    // Control flow is broken, subsequent statements will not be processed
   } else {
     const ObPLCursor *cursor = s.get_cursor(cursor_index);
     CK (OB_NOT_NULL(cursor));
     CK (ObPLCursor::INVALID != cursor->get_state());
-    if (OB_SUCC(ret) && ObPLCursor::DUP_DECL != cursor->get_state()) { //如果是无效的cursor跳过即可
+    if (OB_SUCC(ret) && ObPLCursor::DUP_DECL != cursor->get_state()) { // If it is an invalid cursor, skip it.
       ObLLVMValue cursor_index_value;
       ObLLVMValue cursor_value;
       ObLLVMValue ret_err;
@@ -4134,7 +4125,7 @@ int ObPLCodeGenerator::generate_open(
 {
   int ret = OB_SUCCESS;
   if (NULL == get_current().get_v()) {
-    //控制流已断，后面的语句不再处理
+    //Control flow is broken, subsequent statements will not be processed
   } else if (OB_FAIL(get_helper().set_insert_point(get_current()))) {
     LOG_WARN("failed to set insert point", K(ret));
   } else {
@@ -4203,7 +4194,7 @@ int ObPLCodeGenerator::generate_fetch(const ObPLStmt &s,
 {
   int ret = OB_SUCCESS;
   if (NULL == get_current().get_v()) {
-    //控制流已断，后面的语句不再处理
+    //Control flow is broken, subsequent statements will not be processed
   } else if (OB_FAIL(get_helper().set_insert_point(get_current()))) {
     LOG_WARN("failed to set insert point", K(ret));
   } else {
@@ -4307,7 +4298,7 @@ int ObPLCodeGenerator::generate_fetch(const ObPLStmt &s,
         if (OB_SUCC(ret)) {
           if (pl_data_type->is_obj_type()) {
             OZ (store_data_type(*(pl_data_type->get_data_type()), type_value));
-          } else { // 构造函数场景
+          } else { // constructor scenario
             ObDataType ext_type;
             ObObjMeta meta;
             meta.set_type(ObExtendType);
@@ -4346,7 +4337,7 @@ int ObPLCodeGenerator::generate_close(const ObPLStmt &s,
 {
   int ret = OB_SUCCESS;
   if (NULL == get_current().get_v()) {
-      //控制流已断，后面的语句不再处理
+      //Control flow is broken, subsequent statements will not be processed
   } else if (OB_FAIL(get_helper().set_insert_point(get_current()))) {
     LOG_WARN("failed to set insert point", K(ret));
   } else {
@@ -4425,7 +4416,7 @@ int ObPLCodeGenerator::generate_update_location(const ObPLStmt &s)
 {
   int ret = OB_SUCCESS;
   if (NULL == get_current().get_v()) {
-      //控制流已断，后面的语句不再处理
+      //Control flow is broken, subsequent statements will not be processed
   } else {
     ObSEArray<ObLLVMValue, 2> args;
     ObLLVMValue location;
@@ -4444,7 +4435,7 @@ int ObPLCodeGenerator::generate_sql(const ObPLSqlStmt &s, ObLLVMValue &ret_err)
 {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(get_current().get_v())) {
-    // 控制流已断，后面的语句不再处理
+    // Control flow is broken, subsequent statements will not be processed
   } else {
     OZ (get_helper().set_insert_point(get_current()));
     OZ (generate_update_location(s));
@@ -4521,7 +4512,7 @@ int ObPLCodeGenerator::generate_sql(const ObPLSqlStmt &s, ObLLVMValue &ret_err)
         OZ (args.push_back(is_type_record));
         OZ (args.push_back(for_update));
         OZ (get_helper().create_call(ObString("spi_query_into_expr_idx"), get_spi_service().spi_query_into_expr_idx_, args, ret_err));
-      } else { //有外部变量，走prepare/execute接口
+      } else { //There are external variables, use the prepare/execute interface
         ObLLVMValue is_forall;
         OZ (get_helper().get_int8(static_cast<int64_t>(s.is_forall_sql()), is_forall));
         OZ (args.push_back(is_forall));
@@ -4539,7 +4530,7 @@ int ObPLCodeGenerator::generate_after_sql(const ObPLSqlStmt &s, ObLLVMValue &ret
 {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(get_current().get_v())) {
-    // 控制流已断, 后面的语句不再处理
+    // Control flow is broken, subsequent statements will not be processed
   } else {
     OZ (check_success(ret_err, s.get_stmt_id(), s.get_block()->in_notfound(), s.get_block()->in_warning()));
     OZ (generate_into_restore(s.get_into(), s.get_exprs(), s.get_symbol_table()));
@@ -5031,13 +5022,13 @@ int ObPLCodeGenerator::generate_spi_calc(int64_t expr_idx,
 
       if (OB_FAIL(ret)) {
         // do nothing
-      } else if (OB_FAIL(args.push_back(vars_.at(CTX_IDX)))) { //PL的执行环境
+      } else if (OB_FAIL(args.push_back(vars_.at(CTX_IDX)))) { // Execution environment of PL
         LOG_WARN("push_back error", K(ret));
-      } else if (OB_FAIL(args.push_back(expr_idx_val))) { //表达式的下标
+      } else if (OB_FAIL(args.push_back(expr_idx_val))) { // index of the expression
         LOG_WARN("push_back error", K(ret));
       } else if (OB_FAIL(helper_.get_int64(result_idx, int_value))) {
         LOG_WARN("failed to get int64", K(ret));
-      } else if (OB_FAIL(args.push_back(int_value))) { //结果在ObArray里的位置
+      } else if (OB_FAIL(args.push_back(int_value))) { // The position of the result in ObArray
         LOG_WARN("push_back error", K(ret));
       } else if (OB_FAIL(args.push_back(p_result_obj))) {
         LOG_WARN("push_back error", K(ret));
@@ -5155,7 +5146,7 @@ int ObPLCodeGenerator::generate_compare_calc(ObLLVMValue &left,
       LOG_WARN("failed to create block", K(ret));
     } else if (OB_FAIL(helper_.create_block(ObString("end_branch"), get_func(), end_branch))) {
       LOG_WARN("failed to create block", K(ret));
-    } else if (OB_FAIL(helper_.create_icmp(left, right, compare_type, is_true))) { //这里的is_true是int1(1 bit)，需要转成int8(8 bit)
+    } else if (OB_FAIL(helper_.create_icmp(left, right, compare_type, is_true))) { // here is_true is int1(1 bit), needs to be converted to int8(8 bit)
       LOG_WARN("failed to create_icmp_eq", K(ret));
     } else if (OB_FAIL(helper_.create_cond_br(is_true, true_branch, false_branch))) {
       LOG_WARN("failed to create_cond_br", K(ret));
@@ -5219,7 +5210,7 @@ int ObPLCodeGenerator::generate_arith_calc(ObLLVMValue &left,
     LOG_WARN("Not supported yet", K(type), K(ret));
   }
 
-  if (OB_SUCC(ret)) { //检查值域
+  if (OB_SUCC(ret)) { // check value range
     ObLLVMBasicBlock succ_block;
     ObLLVMBasicBlock error_block;
     ObLLVMBasicBlock check_block;
@@ -5272,7 +5263,7 @@ int ObPLCodeGenerator::generate_arith_calc(ObLLVMValue &left,
 
   if (OB_SUCC(ret)) {
     ObObjParam objparam;
-    objparam.set_type(result_type.get_type()); //计算之后的结果放在int32里
+    objparam.set_type(result_type.get_type()); //The result after calculation is stored in int32
     objparam.set_param_meta();
     if (OB_FAIL(store_objparam(objparam, p_result_obj))) {
       LOG_WARN("Not supported yet", K(type), K(ret));
@@ -5331,9 +5322,9 @@ int ObPLCodeGenerator::generate_early_exit(ObLLVMValue &count,
   OZ (generate_debug(ObString("print count value"), count_value));
 #endif
   /*!
-   * need_check和first_check不等说明需要check, 相等则不需要check
-   * 因为need_check和firstcheck不可能同时为true; 当同时为false时说明两个条件都没满足; 只有一个true时则说明满足一个条件;
-   * 引入first_check是为了避免类似下面的匿名块形成的死循环无法退出;
+   * need_check and first_check are not equal means check is needed, equal means no check is needed
+   * because need_check and first_check cannot be true at the same time; when both are false it means neither condition is met; only one being true means one condition is met;
+   * first_check is introduced to avoid infinite loops formed by anonymous blocks like the following;
    * BEGIN
    *   <<outer_loop>>
    *   FOR idx IN 1..10 LOOP
@@ -5341,20 +5332,18 @@ int ObPLCodeGenerator::generate_early_exit(ObLLVMValue &count,
    *   END LOOP;
    * END;
    */
-  OZ (helper_.create_icmp(count_value, EARLY_EXIT_CHECK_CNT, ObLLVMHelper::ICMP_SGE, need_check)); // 到达check次数
-  OZ (helper_.create_icmp(count_value, 1, ObLLVMHelper::ICMP_EQ, first_check)); // 该值为1说明是循环的第一次check
+  OZ (helper_.create_icmp(count_value, EARLY_EXIT_CHECK_CNT, ObLLVMHelper::ICMP_SGE, need_check)); // Reach check count
+  OZ (helper_.create_icmp(count_value, 1, ObLLVMHelper::ICMP_EQ, first_check)); // This value is 1 indicating it is the first check in the loop
   OZ (helper_.create_icmp(need_check, first_check, ObLLVMHelper::ICMP_NE, is_true));
   OZ (helper_.create_cond_br(is_true, early_exit, after_check));
-
-  //处理check early exit
+  //Handle check early exit
   OZ (set_current(early_exit));
   OZ (helper_.create_istore(1, count));
   OZ (args.push_back(get_vars().at(CTX_IDX)));
   OZ (helper_.create_call(ObString("check_early_exit"), get_spi_service().spi_check_early_exit_, args, result));
   OZ (check_success(result, stmt_id, in_notfound, in_warning));
   OZ (helper_.create_br(after_check));
-
-  //处理正常流程
+  //Handle normal process
   OZ (set_current(after_check));
 
   return ret;
@@ -5437,7 +5426,7 @@ int ObPLCodeGenerator::generate_loop_control(const ObPLLoopControl &control)
 {
   int ret = OB_SUCCESS;
   if (NULL == get_current().get_v()) {
-      //控制流已断，后面的语句不再处理
+      //Control flow is broken, subsequent statements will not be processed
   } else if (OB_FAIL(helper_.set_insert_point(get_current()))) {
     LOG_WARN("failed to set insert point", K(ret));
   } else if (OB_FAIL(generate_goto_label(control))) {
@@ -5459,7 +5448,7 @@ int ObPLCodeGenerator::generate_loop_control(const ObPLLoopControl &control)
       } else if (OB_FAIL(helper_.create_br(next))) {
         LOG_WARN("failed to create br", K(ret));
       } else {
-        if (OB_FAIL(set_current(after_control))) { //设置CURRENT, 调整INSERT POINT点
+        if (OB_FAIL(set_current(after_control))) { // set CURRENT, adjust INSERT POINT point
           LOG_WARN("failed to set current", K(ret));
         }
       }
@@ -5483,7 +5472,7 @@ int ObPLCodeGenerator::generate_loop_control(const ObPLLoopControl &control)
           LOG_WARN("failed to generate spi adjust error trace", K(ret));
         } else if (OB_FAIL(helper_.create_br(next))) {
           LOG_WARN("failed to create br", K(ret));
-        } else if (OB_FAIL(set_current(after_control))) { //设置CURRENT, 调整INSERT POINT点
+        } else if (OB_FAIL(set_current(after_control))) { // set CURRENT, adjust INSERT POINT point
           LOG_WARN("failed to set current", K(ret));
         }
       }
@@ -5629,7 +5618,7 @@ int ObPLCodeGenerator::generate_set_variable(int64_t expr,
   ObLLVMValue expr_idx;
   ObLLVMValue is_default_value;
   ObLLVMValue result;
-  if (OB_FAIL(args.push_back(get_vars().at(CTX_IDX)))) { //PL的执行环境
+  if (OB_FAIL(args.push_back(get_vars().at(CTX_IDX)))) { //PL execution environment
     LOG_WARN("push_back error", K(ret));
   } else if (OB_FAIL(helper_.get_int64(expr, expr_idx))) {
     LOG_WARN("failed to generate a pointer", K(ret));
@@ -5793,14 +5782,14 @@ int ObPLCodeGenerator::raise_exception(ObLLVMValue &exception,
 {
   int ret = OB_SUCCESS;
   /*
-   * MySQL模式下：
-   * 如果到了顶层handler，都没有捕捉到了该exception，视exception的类型决定下一个目的地：
-   * SQLEXCEPTION：继续抛出异常
-   * SQLWARNING：跳到抛出exception的语句的下一句
-   * NOT FOUND：如果显式（raised by SIGNAL or RESIGNAL）抛出，继续抛出异常；如果是隐式抛出（raised normally），跳到抛出exception的语句的下一句
+   * MySQL mode:
+   * If the exception is not caught by the top-level handler, the next destination is determined by the exception type:
+   * SQLEXCEPTION: continue to throw the exception
+   * SQLWARNING: jump to the statement following the one that threw the exception
+   * NOT FOUND: if explicitly raised (by SIGNAL or RESIGNAL), continue to throw the exception; if implicitly raised (raised normally), jump to the statement following the one that threw the exception
    *
-   * Oracle模式下：
-   * 遇到错误都抛出
+   * Oracle mode:
+   * All errors are thrown
    */
   ObLLVMBasicBlock current = get_current();
   ObLLVMBasicBlock raise_exception;
@@ -5971,7 +5960,7 @@ int ObPLCodeGenerator::check_success(jit::ObLLVMValue &ret_err, int64_t stmt_id,
           ObLLVMValue str_len;
           ObLLVMValue stmt_id_value;
           ObLLVMValue line_number_value;
-          // stmt id目前是col和line的组合，暂时先用这个
+          // stmt id is currently a combination of col and line, temporarily use this
           if (OB_FAIL(helper_.create_load(ObString("line_number"), stmt_id_, line_number_value))) {
             LOG_WARN("failed to get_line_number", K(ret));
           } else if (OB_FAIL(helper_.create_load(ObString("stmt_id"), stmt_id_, stmt_id_value))) {
@@ -6006,9 +5995,9 @@ int ObPLCodeGenerator::finish_current(const ObLLVMBasicBlock &next)
 {
   int ret = OB_SUCCESS;
   if (NULL == get_current().get_v()) {
-    //如果current为NULL，说明控制流已经被显式切走了（例如Iterate、Leave语句）
+    // If current is NULL, it means the control flow has been explicitly switched away (e.g., Iterate, Leave statements)
   } else if (get_current().get_v() == get_exit().get_v()) {
-    //如果current是exit，说明控制流已经显式结束（如return）
+    // If current is exit, it means the control flow has explicitly ended (e.g., return)
   } else if (OB_FAIL(helper_.set_insert_point(get_current()))) {
     LOG_WARN("failed to set insert point", K(ret));
   } else if (OB_FAIL(helper_.create_br(next))) {
@@ -6038,13 +6027,13 @@ int ObPLCodeGenerator::generate_prototype()
 
   if (OB_SUCC(ret)) {
     ObLLVMType int64_type;
-    if (OB_FAIL(arg_types.push_back(pl_exec_context_pointer_type))) { //函数第一个参数必须是基础环境信息隐藏参数ObPLExecCtx*
+    if (OB_FAIL(arg_types.push_back(pl_exec_context_pointer_type))) { //The first argument of the function must be a hidden parameter of the basic environment information ObPLExecCtx*
       LOG_WARN("push_back error", K(ret));
     } else if (OB_FAIL(helper_.get_llvm_type(ObIntType, int64_type))) {
       LOG_WARN("failed to get_llvm_type", K(ret));
-    } else if (OB_FAIL(arg_types.push_back(int64_type))) { //第二个参数是int64_t ArgC
+    } else if (OB_FAIL(arg_types.push_back(int64_type))) { // the second parameter is int64_t ArgC
       LOG_WARN("push_back error", K(ret));
-    } else if (OB_FAIL(arg_types.push_back(argv_pointer_type))) { //第三个参数是int64_t[] ArgV
+    } else if (OB_FAIL(arg_types.push_back(argv_pointer_type))) { // the third parameter is int64_t[] ArgV
       LOG_WARN("push_back error", K(ret));
     } else { /*do nothing*/ }
   }
@@ -6067,10 +6056,9 @@ int ObPLCodeGenerator::generate_prototype()
       } else { /*do nothing*/ }
     }
   }
-
-  //生成参数
+  //Generate parameters
   if (OB_SUCC(ret)) {
-    //获取数据类型属性
+    //Get data type attributes
     int64_t size = 0;
     if (OB_FAIL(func_.get_argument_size(size))) {
       LOG_WARN("failed to get argument size", K(ret));
@@ -6223,24 +6211,24 @@ int ObPLCodeGenerator::generate_obj_access_expr()
 }
 
 /*
- * 把ObObjAccessRawExpr翻译成一个函数，其中的每个ObObjAccessIdx可能是：
- * 1、const，即常量，只能出现在表的下标位置，如a(1)里的1;
- * 2、property,即固有属性，只能出现在表的属性位置，如a.count里的count；
- * 3、local,即PL内部变量，可能出现在
- *    1）、初始内存位置，如a(1)里的a；
- *    2）、表的下标位置，如a(i)里的i；
- *    3）、record的属性位置，如a.b里的b；
- * 4、external（包括IS_PKG、IS_USER、IS_SESSION、IS_GLOBAL），可能出现在
- *    1）、初始内存位置，如a(1)里的a；
- *    2）、表的下标位置，如a(i)里的i；
- *    3）、record的属性位置，如a.b里的b；
- * 5、ns不可能出现，在resolver阶段已经被剥掉了。
- * 对于以上几种情况：
- * 1、直接用作解析复杂变量；
- * 2、直接用作解析复杂变量；
- * 3、因为把变量在param store里的下标放在var_indexs_里，所以根据var_indexs_从param store里取出值使用；
- * 4、因为把计算的结果作为ObObjAccessRawExpr的child传给了表达式计算，所以直接取obj_stack的值使用。
- * 函数签名:
+ * Translate ObObjAccessRawExpr into a function, where each ObObjAccessIdx might be:
+ * 1、const, i.e., constant, can only appear in the index position of the table, such as the 1 in a(1);
+ * 2、property, i.e., inherent property, can only appear in the property position of the table, such as the count in a.count;
+ * 3、local, i.e., internal variable in PL, may appear in
+ *    1）、initial memory position, such as the a in a(1);
+ *    2）、index position of the table, such as the i in a(i);
+ *    3）、property position of the record, such as the b in a.b;
+ * 4、external (including IS_PKG, IS_USER, IS_SESSION, IS_GLOBAL), may appear in
+ *    1）、initial memory position, such as the a in a(1);
+ *    2）、index position of the table, such as the i in a(i);
+ *    3）、property position of the record, such as the b in a.b;
+ * 5、ns will not appear, it has been stripped off during the resolver stage.
+ * For the above cases:
+ * 1、used directly for parsing complex variables;
+ * 2、used directly for parsing complex variables;
+ * 3、since the index of the variable in the param store is placed in var_indexs_, the value is retrieved from the param store using var_indexs_;
+ * 4、since the result of the calculation is passed as a child to the expression calculation as an ObObjAccessRawExpr, the value is directly taken from obj_stack.
+ * Function signature:
  *  int32_t get_func(int64_t param_cnt, int64_t* params, int64_t* element_val, int64_t *allocator);
  * */
 int ObPLCodeGenerator::generate_get_attr_func(const ObIArray<ObObjAccessIdx> &idents,
@@ -6276,7 +6264,7 @@ int ObPLCodeGenerator::generate_get_attr_func(const ObIArray<ObObjAccessIdx> &id
   OZ (set_current(entry_));
 
   if (OB_SUCC(ret)) {
-    //获取数据类型属性
+    //Get data type attributes
     ObLLVMValue param_cnt;
     ObLLVMValue params_ptr;
     ObLLVMValue element_value;
@@ -6390,9 +6378,9 @@ int ObPLCodeGenerator::generate_goto_label(const ObPLStmt &stmt)
   if (stmt.get_is_goto_dst()) {
     
     if (NULL == get_current().get_v()) {
-        //控制流已断，后面的语句不再处理
+        //Control flow is broken, subsequent statements will not be processed
     } else {
-      // 去看一下对应的goto是否已经cg了，没有的话就记录一下这个label地址。
+      // Check if the corresponding goto has already been cg'd, if not, record this label address.
       hash::HashMapPair<ObPLCodeGenerator::goto_label_flag, std::pair<ObLLVMBasicBlock, ObLLVMBasicBlock>> pair;
       int tmp_ret = get_goto_label_map().get_refactored(stmt.get_stmt_id(), pair);
       if (OB_HASH_NOT_EXIST == tmp_ret) {
@@ -6483,7 +6471,7 @@ int ObPLCodeGenerator::generate_out_param(
   ObLLVMValue p_arg;
   OZ (get_adt_service().get_objparam(obj_param_type));
   OZ (obj_param_type.get_pointer_to(obj_param_type_pointer));
-  // 获取输出结果
+  // Get the output result
   OZ (extract_arg_from_argv(params, i, pp_arg));
   OZ (get_helper().create_load("load_out_arg_pointer", pp_arg, p_arg));
   OZ (get_helper().create_int_to_ptr(
@@ -6493,16 +6481,16 @@ int ObPLCodeGenerator::generate_out_param(
 #define GET_USING_EXPR(idx) (get_ast().get_expr(static_cast<const ObPLExecuteStmt *>(&s)->get_using_index(idx)))
 
   if (OB_FAIL(ret)) {
-  } else if (OB_INVALID_INDEX != param_desc.at(i).out_idx_) { // 处理本地变量
-    //存储进全局符号表和param store
+  } else if (OB_INVALID_INDEX != param_desc.at(i).out_idx_) { // handle local variable
+    //Store in global symbol table and param store
     ObLLVMValue result;
     ObLLVMValue p_param;
     ObPLDataType pl_type = s.get_variable(param_desc.at(i).out_idx_)->get_type();
     if (pl_type.is_composite_type()) {
       if (param_desc.at(i).is_out()) {
         uint64_t udt_id = pl_type.get_user_type_id();
-        // 对于INOUT参数, execute immediate复杂类型传递的是指针, 什么都不需要做; inner call场景, inout参数会入参会深拷，这里需要重新拷回
-        // 对于OUT参数, 复杂类型构造了新的ObjParam, 这里进行COPY;
+        // For INOUT parameters, execute immediate complex type passing is done via pointers, nothing needs to be done; in the inner call scenario, INOUT parameters are deeply copied on entry, here we need to copy them back
+        // For OUT parameters, new ObjParam is constructed for complex types, here we perform COPY;
         if (PL_CALL == s.get_type() &&
             static_cast<const ObPLCallStmt *>(&s)->get_nocopy_params().count() > i &&
             OB_INVALID_INDEX != static_cast<const ObPLCallStmt *>(&s)->get_nocopy_params().at(i) &&
@@ -6603,7 +6591,7 @@ int ObPLCodeGenerator::generate_out_param(
       OZ (extract_obobj_ptr_from_objparam(into_address, dest_datum));
       OZ (extract_obobj_from_objparam(p_arg, src_datum));
       OZ (get_helper().create_store(src_datum, dest_datum));
-    } else { //处理基础类型和refcursor的出参
+    } else { // handle basic types and refcursor out parameters
       ObSEArray<ObLLVMValue, 4> args;
       ObLLVMValue result_idx;
       ObLLVMValue ret_err;
@@ -6628,7 +6616,7 @@ int ObPLCodeGenerator::generate_out_param(
       OZ (check_success(
         ret_err, s.get_stmt_id(), s.get_block()->in_notfound(), s.get_block()->in_warning()));
     }
-  } else { // 处理外部变量(Sys Var/User Var or PKG Basic Variables or Subprogram Basic Variables)
+  } else { // handle external variables (Sys Var/User Var or PKG Basic Variables or Subprogram Basic Variables)
     const ObRawExpr *expr = NULL;
     CK (OB_NOT_NULL(expr = s.get_expr(param_desc.at(i).param_)));
     if (OB_FAIL(ret)) {
@@ -6719,7 +6707,7 @@ int ObPLCodeGenerator::generate_out_param(
           if (call_stmt->get_nocopy_params().count() > i &&
               OB_INVALID_INDEX != call_stmt->get_nocopy_params().at(i) &&
               !param_desc.at(i).is_pure_out()) {
-            // inner call nocopy的inout参数传递是指针, 无需释放
+            // inner call nocopy's inout parameter passing is by pointer, no need to release
           } else {
             OZ (generate_destruct_obj(s, src_datum));
           }
@@ -6751,7 +6739,7 @@ int ObPLCodeGenerator::generate_out_params(
     OZ (nocopy_params.assign(call_stmt->get_nocopy_params()));
     CK (nocopy_params.count() == 0 || nocopy_params.count() == param_desc.count());
   }
-  // 先处理NoCopy的参数
+  // First process the NoCopy parameters
   for (int64_t i = 0; OB_SUCC(ret) && i < nocopy_params.count(); ++i) {
     if (nocopy_params.at(i) != OB_INVALID_INDEX && param_desc.at(i).is_out()) {
       OZ (generate_out_param(s, param_desc, params, i));
@@ -6759,7 +6747,7 @@ int ObPLCodeGenerator::generate_out_params(
   }
 
   for (int64_t i = 0; OB_SUCC(ret) && i < param_desc.count(); ++i) {
-    // 处理输出参数的情况, NoCopy参数已经处理过了, 处理非NoCopy的参数
+    // Handle the case of output parameters, NoCopy parameter has already been processed, handle non-NoCopy parameters
     if (nocopy_params.count() > 0 && nocopy_params.at(i) != OB_INVALID_INDEX) {
       // do nothing...
     } else if (param_desc.at(i).is_out()) {
@@ -6853,8 +6841,7 @@ int ObPLCodeGenerator::generate_normal(ObPLFunction &pl_func)
   ObLLVMType p_uint64_type;
   ObLLVMType data_type;
   ObLLVMType p_data_type;
-
-  // 初始化符号表
+  // Initialize symbol table
   for (int64_t i = 0;
       OB_SUCC(ret) && i < USER_ARG_OFFSET + 1;
       ++i) {
@@ -6988,7 +6975,7 @@ int ObPLCodeGenerator::generate_normal(ObPLFunction &pl_func)
             || get_ast().get_ret_type().get_data_type()->get_meta_type().is_invalid())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("return type is invalid", K(func_), K(ret));
-    } else if (!current_.is_terminated()) { //如果当前block没有终止符，强制跳转
+    } else if (!current_.is_terminated()) { // If the current block does not have a terminator, force jump
       if (OB_FAIL(finish_current(exit_))) {
         LOG_WARN("failed to finish_current", K(ret));
       }
@@ -7936,10 +7923,10 @@ int ObPLCodeGenerator::generate_handle_ref_cursor(const ObPLCursor *cursor, cons
 {
   int ret = OB_SUCCESS;
   CK (OB_NOT_NULL(cursor));
-  // 以下一些情况不要关闭cursor:
-  // function (cur out sys_refcursor), out类型参数
-  // dup cursor 没有被init，所以不需要关闭，见generate_declare_cursor
-  // 直接使用subprog 外部的cursor(不是ref cursor)，也不要关闭，例如
+  // The following situations should not close the cursor:
+  // function (cur out sys_refcursor), out type parameter
+  // dup cursor has not been init, so it does not need to be closed, see generate_declare_cursor
+  // Directly use the cursor outside of subprog (not ref cursor), do not close it, for example
   /*
   * DECLARE
     CURSOR c (job VARCHAR2, max_sal NUMBER) IS
@@ -7950,7 +7937,7 @@ int ObPLCodeGenerator::generate_handle_ref_cursor(const ObPLCursor *cursor, cons
       overpayment_ emp4.salary%TYPE;
     BEGIN
       LOOP
-        FETCH c INTO employee_name_, overpayment_; //这儿直接使用了外部cursor
+        FETCH c INTO employee_name_, overpayment_; //Here the external cursor is used directly
         EXIT WHEN c%NOTFOUND;
         DBMS_OUTPUT.PUT_LINE(employee_name_ || ' (by ' || overpayment_ || ')');
         INSERT INTO test2 VALUES(employee_name_, TO_CHAR(overpayment_));
@@ -7959,8 +7946,8 @@ int ObPLCodeGenerator::generate_handle_ref_cursor(const ObPLCursor *cursor, cons
   */
   bool is_pkg_cursor = false;
   if (OB_SUCC(ret)) {
-    // 定义在package spec中的才是package id，这种cursor的routine id是无效的
-    // 有些定义在package函数中的cursor，它的package id也是有效的，routine id也是有效的。
+    // The package id is defined in the package spec, this cursor's routine id is invalid
+    // Some cursors defined in the package function have a valid package id and a valid routine id.
     is_pkg_cursor = OB_INVALID_ID != cursor->get_package_id()
                  && OB_INVALID_ID == cursor->get_routine_id();
   }

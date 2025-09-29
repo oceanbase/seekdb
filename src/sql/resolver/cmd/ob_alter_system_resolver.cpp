@@ -114,7 +114,7 @@ int ObAlterSystemResolverUtil::resolve_replica_type(const ParseNode *parse_tree,
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(NULL == parse_tree)) {
-    replica_type = REPLICA_TYPE_FULL; // 为了兼容早期命令，不指定replica_type时默认为FULL类型
+    replica_type = REPLICA_TYPE_FULL; // For compatibility with early commands, default to FULL type when replica_type is not specified
     LOG_INFO("resolve_replica_type without any value. default to FULL.");
   } else if (OB_UNLIKELY(T_VARCHAR != parse_tree->type_)) {
     ret = OB_ERR_UNEXPECTED;
@@ -723,8 +723,8 @@ int ObFlushCacheResolver::resolve(const ParseNode &parse_tree)
   int ret = OB_SUCCESS;
   ObFlushCacheStmt *stmt = NULL;
   ObSQLSessionInfo* sess = params_.session_info_;
-  /* 无论设置租户级配置项，还是系统参数，都需要alter system权限。
-       对租户级配置项的修改，算是一种扩展，借用alter system权限进行控制 */
+  /* Whether setting tenant-level configuration items or system parameters, alter system permission is required.
+       Modifications to tenant-level configuration items are considered an extension, and control is exercised using alter system permission */
   if (OB_ISNULL(sess)) {
     ret = OB_ERR_UNEXPECTED;
     SERVER_LOG(WARN, "invalid session");
@@ -4263,7 +4263,7 @@ int ObClearBalanceTaskResolver::resolve(const ParseNode &parse_tree)
     }
   }
   ObSchemaGetterGuard schema_guard;
-  if (OB_SUCC(ret) && NULL != tenants_node) {//以租户为单位
+  if (OB_SUCC(ret) && NULL != tenants_node) {//by tenant}
     if (T_TENANT_LIST != tenants_node->type_) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("get invalid tenant_name node", K(ret));
@@ -4303,7 +4303,7 @@ int ObClearBalanceTaskResolver::resolve(const ParseNode &parse_tree)
     }
   } //end if (NULL != tenants_node)
 
-  if (OB_SUCC(ret) && NULL != zone_node) {//以zone为单位
+  if (OB_SUCC(ret) && NULL != zone_node) {//by zone}
     if (T_ZONE_LIST != zone_node->type_) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("get invalid zone_name node", K(ret));

@@ -1488,7 +1488,7 @@ int ObDDLService::get_index_cst_id_for_self_ref(const ObIArray<ObTableSchema> &t
 
   bool is_match = false;
 
-  /* 1.检查自引用primary key的前缀 */
+  /* 1.Check the prefix of self-referencing primary key */
   if (table_schemas.count() < 1) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("the parameters passed to get_index_cst_id_for_self_ref is wrong.", K(ret), K(table_schemas));
@@ -1525,7 +1525,7 @@ int ObDDLService::get_index_cst_id_for_self_ref(const ObIArray<ObTableSchema> &t
     }
   }
 
-  /* 2.检查自引用unique key的前缀 */
+  /* 2.Check the prefix of the self-referencing unique key */
   for (int64_t i = 1; OB_SUCC(ret) && !is_match && i < table_schemas.count(); ++i) {
     const ObTableSchema &index_table_schema = table_schemas.at(i);
     const ObColumnSchemaV2 *index_col = NULL;
@@ -2409,7 +2409,7 @@ int ObDDLService::create_tables_in_trans(const bool if_not_exist,
                                                                           schema_guard,
                                                                           *old_view_schema,
                                                                           false))) {
-              // 兼容oracle,create or replace view时drop trigger, 且不进回收站
+              // Compatible with Oracle, drop trigger when create or replace view, and do not move to recycle bin
               LOG_WARN("failed to drop trigger", KR(ret), K(old_view_schema->get_table_id()));
             } else if (OB_FAIL(ddl_operator.drop_table(*old_view_schema, trans))) {
               LOG_WARN("failed to drop old view schema", KR(ret));
@@ -23897,8 +23897,8 @@ int ObDDLService::restore_the_table_to_split_completed_state(obrpc::ObAlterTable
   } else if (OB_FAIL(ObDDLTaskRecordOperator::get_partition_split_task_ids(trans, tenant_id, table_ids, task_ids))) {
     LOG_WARN("failed to get partition split task ids", K(ret), K(tenant_id), K(table_ids));
   } else {
-    //1、设置当前table的处于DDL_PARTITION_SPLIT状态的task任务状态设置为WAIT_PARTITION_SPLIT_RECOVERY_TASK_FINISH, 等待新表完成补数据任务
-    //2、依次根据task_id获取task_record, 根据record在ObPartitionSplitTask中初始化, 解除相应ddl锁, 并且替换掉表级锁
+    //1、Set the status of the task in DDL_PARTITION_SPLIT state for the current table to WAIT_PARTITION_SPLIT_RECOVERY_TASK_FINISH, waiting for the new table to complete the data recovery task
+    //2、Sequentially obtain task_record according to task_id, initialize in ObPartitionSplitTask based on the record, release the corresponding DDL lock, and replace the table-level lock
     common::ObArenaAllocator allocator;
     ObTableLockOwnerID old_owner_id;
     ObDDLTaskStatus new_status = WAIT_PARTITION_SPLIT_RECOVERY_TASK_FINISH;
@@ -27893,7 +27893,7 @@ int ObDDLService::drop_table(const ObDropTableArg &drop_table_arg, const obrpc::
         } else if (OB_TABLE_NOT_EXIST == ret || OB_ERR_BAD_DATABASE == ret) {
           if (MATERIALIZED_VIEW == drop_table_arg.table_type_) {
             if (!drop_table_arg.if_exist_) {
-              // OB_ERR_MVIEW_NOT_EXIST只能打印一个mview, 遇到第一个不存在的mview就报错退出循环
+              // OB_ERR_MVIEW_NOT_EXIST can only print one mview, report an error and exit the loop when encountering the first non-existent mview
               ret = OB_ERR_MVIEW_NOT_EXIST;
               LOG_USER_ERROR(OB_ERR_MVIEW_NOT_EXIST, to_cstring(table_item.database_name_), to_cstring(table_item.table_name_));
             } else {

@@ -10,7 +10,7 @@
 #include <openssl/crypto.h>
 
 /**
- * IO结构定义
+ * IO structure definition
  */
 
 EASY_CPP_START
@@ -213,9 +213,7 @@ struct easy_io_handler_pt {
     //otherthan create ssl connection_t after connect succ
 
 };
-
-
-// 处理IO的线程
+// Thread for handling IO
 struct easy_io_thread_t {
     EASY_BASETH_DEFINE
 
@@ -242,8 +240,7 @@ struct easy_io_thread_t {
     easy_atomic32_t         tx_conn_count;
     easy_atomic32_t         rx_conn_count;
 };
-
-// 处理任务的线程
+// The thread processing the task
 struct easy_request_thread_t {
     EASY_BASETH_DEFINE
 
@@ -255,8 +252,7 @@ struct easy_request_thread_t {
     easy_request_process_pt *process;
     void                    *args;
 };
-
-// 保存client
+// save client
 struct easy_client_t {
     easy_addr_t             addr;
     easy_connection_t       *c;
@@ -332,8 +328,7 @@ struct easy_ratelimitor_t {
     void                      *update_s2r_map_cb_args;
     easy_region_ratelimitor_t region_rlmtrs[RL_MAX_REGION_COUNT];
 };
-
-// 对应一个SOCKET连接
+// Corresponds to a SOCKET connection
 struct easy_connection_t {
 #ifdef EASY_DEBUG_MAGIC
     uint64_t                magic;
@@ -415,7 +410,7 @@ struct easy_connection_t {
 };
 
 // Todo: add response size, ratelimit and bg/fg flags.
-// ipacket放进来的包, opacket及出去的包
+// ipacket incoming packet, opacket outgoing packet
 struct easy_request_t {
 #ifdef EASY_DEBUG_DOING
     uint64_t                uuid;
@@ -485,8 +480,7 @@ struct easy_message_session_t {
 #endif
     EASY_MESSAGE_SESSION_HEADER(list_node);
 };
-
-// 用于接收, 一个或多个easy_request_t
+// Used to receive, one or more easy_request_t
 struct easy_message_t {
 #ifdef EASY_DEBUG_MAGIC
     uint64_t                magic;
@@ -503,8 +497,7 @@ struct easy_message_t {
     void                    *user_data;
     int                     enable_trace;
 };
-
-//用于统计流量rt信息
+// Used for statistics of traffic rt information
 struct easy_summary_t {
     int                     max_fd;
     ev_tstamp               time;
@@ -520,8 +513,7 @@ struct easy_summary_node_t {
     uint64_t                in_byte, out_byte;
     ev_tstamp               rt_total;
 };
-
-// 用于发送, 只带一个easy_request_t
+// Used for sending, only with one easy_request_t
 struct easy_session_t {
 #ifdef EASY_DEBUG_MAGIC
     uint64_t                magic;
@@ -565,8 +557,7 @@ struct easy_tx_session_pool_t {
     easy_atomic_t           session_total_count;
     easy_atomic_t           session_avail;
 };
-
-// 监听列表
+// listen list
 #define EASY_LISTEN_HEADER                  \
     int                     fd;             \
     int8_t                  cur, old;       \
@@ -593,8 +584,7 @@ struct easy_listen_t {
     easy_listen_t           *next;
     ev_io                   read_watcher[0];
 };
-
-// 用于统计处理速度
+// Used for statistics processing speed
 struct easy_io_stat_t {
     int64_t                 last_cnt;
     ev_tstamp               last_time;
@@ -603,8 +593,7 @@ struct easy_io_stat_t {
     easy_io_stat_process_pt *process;
     easy_io_t               *eio;
 };
-
-// easy_io对象
+// easy_io object
 struct easy_io_t {
     easy_pool_t             *pool;
     easy_list_t             eio_list_node;

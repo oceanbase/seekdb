@@ -118,7 +118,7 @@ OB_INLINE ObObjTypeStoreClass *get_store_class_map()
     ObLobSC,    //ObLobTC
     ObJsonSC,   //ObJsonTC
     ObGeometrySC, //ObGeometryTC
-    ObStringSC, // ObUserDefinedSQLTC， UDT null_bitmaps
+    ObStringSC, // ObUserDefinedSQLTC, UDT null_bitmaps
     ObDecimalIntSC, // ObDecimalIntTC
     ObTextSC, // ObCollectionSQLTC
     ObIntSC,  // ObMySQLDateTC

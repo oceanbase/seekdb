@@ -160,10 +160,9 @@ protected:
   common::ObSEArray<ObQueryRefRawExpr *, 8, common::ModulePageAllocator, true> subquery_exprs_;
   common::ObSEArray<ObExecParamRawExpr *, 8, common::ModulePageAllocator, true> exec_params_;
   common::ObSEArray<ObExecParamRawExpr *, 8, common::ModulePageAllocator, true> onetime_exprs_;
-
-  //InitPlan idxs，InitPlan只算一次，需要存储结果
+  // InitPlan idxs, InitPlan only counts once, need to store the result
   common::ObBitSet<> init_plan_idxs_;
-  //One-Time idxs，One-Time只算一次，不用存储结果
+  //One-Time idxs，One-Time only counts once, no need to store the result
   common::ObBitSet<> one_time_idxs_;
   bool update_set_;
   common::ObSEArray<bool , 8, common::ModulePageAllocator, true> enable_px_batch_rescans_;

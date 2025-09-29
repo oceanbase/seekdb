@@ -42,7 +42,7 @@ TEST(TestLogGroupEntryHeader, test_group_entry_header_wrap_checksum)
   int64_t total_header_size = group_entry_header_size + log_entry_header_size;
   char buf[BUFSIZE];
   char ptr[BUFSIZE] = "helloworld";
-  // 数据部分
+  // Data section
   memcpy(buf + total_header_size, ptr, strlen(ptr));
 
   bool is_padding_log = false;
@@ -134,7 +134,7 @@ TEST(TestLogGroupEntryHeader, test_log_group_entry_header)
   int64_t header_size = log_group_entry_header_size + log_entry_header_size;
   char buf[BUFSIZE];
   char ptr[BUFSIZE] = "helloworld";
-  // 数据部分
+  // Data section
   memcpy(buf + header_size, ptr, strlen(ptr));
 
   LogType log_type = palf::LOG_PADDING;
@@ -254,7 +254,7 @@ TEST(TestPaddingLogEntry, test_padding_log_entry)
                                           logservice::ObReplayBarrierType::NO_NEED_BARRIER);
   int64_t serialize_pos = 0;
   EXPECT_EQ(OB_SUCCESS, base_header.serialize(base_header_data, 1024, serialize_pos));
-  // 生成padding log entry的有效数据
+  // Generate valid data for padding log entry
   EXPECT_EQ(OB_SUCCESS, padding_log_entry_header.generate_padding_header_(
       base_header_data, base_header.get_serialize_size(),
       padding_data_len-LogEntryHeader::HEADER_SER_SIZE, padding_group_scn));
@@ -270,11 +270,11 @@ TEST(TestPaddingLogEntry, test_padding_log_entry)
   ASSERT_NE(nullptr, padding_buffer);
   memset(padding_buffer, PADDING_LOG_CONTENT_CHAR, padding_buffer_len);
   {
-    // 将base_data的数据拷贝到对应位置
+    // Copy the data from base_data to the corresponding position
     memcpy(padding_buffer+padding_group_entry_header.get_serialize_size() + LogEntryHeader::HEADER_SER_SIZE, base_header_data, 1024);
     padding_log_entry.header_ = padding_log_entry_header;
     padding_log_entry.buf_ = padding_buffer+padding_group_entry_header.get_serialize_size() + LogEntryHeader::HEADER_SER_SIZE;
-    // 构造有效的padding_log_entry，用于后续的序列化操作
+    // Construct a valid padding_log_entry for subsequent serialization operations
     EXPECT_EQ(true, padding_log_entry.check_integrity());
     EXPECT_EQ(true, padding_log_entry.header_.is_padding_log_());
   }
@@ -294,7 +294,7 @@ TEST(TestPaddingLogEntry, test_padding_log_entry)
   }
 
   serialize_pos = padding_group_entry_header.get_serialize_size();
-  // 拷贝LogEntry到padding_buffer指定位置
+  // Copy LogEntry to specified position in padding_buffer
   EXPECT_EQ(OB_SUCCESS, padding_log_entry.serialize(padding_buffer, padding_buffer_len, serialize_pos));
 
   LogWriteBuf write_buf;
@@ -309,7 +309,7 @@ TEST(TestPaddingLogEntry, test_padding_log_entry)
   padding_group_entry.buf_ = padding_buffer + padding_group_entry_header.get_serialize_size();
   EXPECT_EQ(true, padding_group_entry.check_integrity());
   EXPECT_EQ(true, padding_group_entry.header_.is_padding_log());
-  // 验证反序列化LogEntry
+  // Validate deserialization of LogEntry
   {
     int64_t pos = 0;
     LogEntry tmp_padding_log_entry;
@@ -327,7 +327,7 @@ TEST(TestPaddingLogEntry, test_padding_log_entry)
   ASSERT_NE(nullptr, serialize_buffer);
   memset(serialize_buffer, PADDING_LOG_CONTENT_CHAR, padding_buffer_len);
   serialize_pos = 0;
-  // 验证序列化的数据是否符合预期
+  // Verify that the serialized data meets expectations
   EXPECT_EQ(OB_SUCCESS, padding_group_entry.serialize(serialize_buffer, padding_buffer_len, serialize_pos));
   EXPECT_EQ(serialize_pos, padding_data_len+padding_group_entry_header.get_serialize_size());
 
@@ -337,8 +337,7 @@ TEST(TestPaddingLogEntry, test_padding_log_entry)
   EXPECT_EQ(true, deserialize_group_entry.check_integrity());
   EXPECT_EQ(true, deserialize_group_entry.header_.is_padding_log());
   EXPECT_EQ(padding_group_entry.header_, deserialize_group_entry.header_);
-  
-  // 验证反序列化LogEntry
+  // Validate deserialization of LogEntry
   {
     int64_t pos = 0;
     LogEntry tmp_padding_log_entry;
@@ -362,8 +361,8 @@ TEST(TestPaddingLogEntry, test_padding_log_entry)
   EXPECT_EQ(OB_SUCCESS, group_buffer.init(start_lsn));
 
   const int64_t padding_valid_data_len = deserialize_group_entry.get_header().get_serialize_size() + padding_log_entry_header.get_serialize_size() + base_header.get_serialize_size();
-  // 填充有效的padding日志到group buffer，验证数据是否相等
-  // padding_buffer包括LogGruopEntryHeader, LogEntryHeader, ObLogBaseHeader, padding log body(is filled with '\0')
+  // Fill valid padding log to group buffer, verify if data is equal
+  // padding_buffer includes LogGruopEntryHeader, LogEntryHeader, ObLogBaseHeader, padding log body(is filled with '\0')
   EXPECT_EQ(OB_SUCCESS, group_buffer.fill_padding_body(start_lsn, serialize_buffer, padding_valid_data_len, padding_buffer_len));
   EXPECT_EQ(0, memcmp(group_buffer.data_buf_, serialize_buffer, deserialize_group_entry.get_serialize_size()));
   PALF_LOG(INFO, "runlin trace", K(group_buffer.data_buf_), K(serialize_buffer), K(padding_buffer_len), KP(group_buffer.data_buf_), KP(padding_buffer));
@@ -437,7 +436,7 @@ TEST(TestUpgraedCompatibility, test_log_entry_header)
   {
     PALF_LOG(INFO, "case1. test_log_entry");
     {
-      // 新版本解析旧版本数据
+      // New version parsing old version data
       LogEntryHeader ori_header;
       constexpr int64_t data_len = 100;
       char log_data[data_len] = "helloworld";
@@ -459,8 +458,7 @@ TEST(TestUpgraedCompatibility, test_log_entry_header)
       EXPECT_EQ(new_header.flag_, ori_header.flag_);
       EXPECT_EQ(new_header.data_checksum_, ori_header.data_checksum_);
       EXPECT_EQ(new_header.version_, ori_header.version_);
-
-      // 验证padding日志
+      // Validate padding log
       ori_header.version_ = LogEntryHeader::LOG_ENTRY_HEADER_VERSION2;
       ori_header.flag_ &= ~LogEntryHeader::CRC16_MASK;
       ori_header.flag_ |= LogEntryHeader::PADDING_TYPE_MASK_VERSION2;
@@ -495,7 +493,7 @@ TEST(TestUpgraedCompatibility, test_log_entry_header)
     }
     PALF_LOG(INFO, "case2. test_log_group_entry");
     {
-      // 构造三条LogEntry，其version分别为2 1 2
+      // Construct three LogEntry, their version are respectively 2 1 2
       // | GroupHeader version x | EntryHeader version 2 | EntryHeader version1 | EntryHeader version2 |
       constexpr int64_t log_group_buf_len = 4096;
       char log_group_buf[log_group_buf_len] = {0};
@@ -585,8 +583,7 @@ TEST(TestUpgraedCompatibility, test_log_entry_header)
         EXPECT_EQ(LogGroupEntryHeader::PADDING_TYPE_MASK_VERSION2, tmp_header.get_padding_mask_());
         PALF_LOG(INFO, "runlin print tmp_header", K(tmp_header));
         EXPECT_EQ(LogGroupEntryHeader::RAW_WRITE_MASK_VERSION2, tmp_header.get_raw_write_mask_());
-
-        // 构造旧版本的LogGroupEntryHeader中
+        // Construct the LogGroupEntryHeader of the old version
         tmp_header.version_ = LogGroupEntryHeader::LOG_GROUP_ENTRY_HEADER_VERSION;
         tmp_header.flag_ &= ~LogGroupEntryHeader::CRC16_MASK;
         tmp_header.update_write_mode(elem.first);
@@ -602,7 +599,7 @@ TEST(TestUpgraedCompatibility, test_log_entry_header)
         EXPECT_EQ(LogGroupEntryHeader::RAW_WRITE_MASK, tmp_header.get_raw_write_mask_());
 
         PALF_LOG(INFO, "test new binary parse old binary", K(tmp_header), K(elem.first), K(elem.second));
-        // 新版本解析旧版本数据
+        // New version parsing old version data
         LogGroupEntryHeader new_group_header;
         pos = 0;
         EXPECT_EQ(OB_SUCCESS, new_group_header.deserialize(log_group_serialize_buf, log_group_buf_len, pos));
@@ -610,7 +607,7 @@ TEST(TestUpgraedCompatibility, test_log_entry_header)
         EXPECT_EQ(true, new_group_header.check_integrity(log_group_buf+sizeof(LogGroupEntryHeader), serialize_buf_len));
         EXPECT_EQ(elem.first, new_group_header.is_raw_write());
         EXPECT_EQ(elem.second, new_group_header.is_padding_log());
-        // 解析得到旧版本数据
+        // Parse the old version data
         EXPECT_EQ(LogGroupEntryHeader::PADDING_TYPE_MASK, new_group_header.get_padding_mask_());
         EXPECT_EQ(LogGroupEntryHeader::RAW_WRITE_MASK, new_group_header.get_raw_write_mask_());
       }
@@ -621,7 +618,7 @@ TEST(TestUpgraedCompatibility, test_log_entry_header)
 
 void bit_flip(uint8_t *ptr, int len, int bit_count)
 {
-  // 保证magic和version不翻转
+  // Ensure magic and version are not flipped
   const int arr_count = len * 8 - 32;
   std::vector<int> numbers(0, arr_count);
   numbers.resize(arr_count);
@@ -630,7 +627,7 @@ void bit_flip(uint8_t *ptr, int len, int bit_count)
   }
   std::random_device rd;
   auto rng = std::default_random_engine { rd() };
-  std::shuffle(numbers.begin(), numbers.end(), rng);  // 打乱顺序
+  std::shuffle(numbers.begin(), numbers.end(), rng);  // shuffle the order
   
   for (int i = 0; i < bit_count; ++i) {
     int pos = numbers[i];

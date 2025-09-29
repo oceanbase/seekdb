@@ -271,7 +271,7 @@ int ForeignKeyHandle::check_exist_inner_sql(ObTableModifyOp &op,
           }
           if (OB_SUCC(ret)) {
             if (is_zero != expect_zero) {
-              // 如果是自引用外键 新行引用了新行
+              // If it is a self-referencing foreign key new row references new row
               bool is_self_ref = false;
               // oracle for update does not support aggregate functions, so when is_zero is false
               // judge whether only one row is affected by whether the second record can be obtained
@@ -971,7 +971,7 @@ int ObTableModifyOp::get_gi_task()
     } else {
       LOG_DEBUG("no prepared task info, set table modify to end",
         K(MY_SPEC.get_id()), K(this), K(lbt()));
-      // 当前DML算子无法从 GI中获得 task，表示当前DML算子iter end
+      // Current DML operator cannot obtain task from GI, indicating current DML operator iter end
       iter_end_ = true;
       ret = OB_SUCCESS;
     }
@@ -1151,17 +1151,17 @@ OperatorOpenOrder ObTableModifyOp::get_operator_open_order() const
 {
   OperatorOpenOrder open_order = OPEN_CHILDREN_FIRST;
   if (spec_.plan_->is_use_px()) {
-    // 如果在dml中开启了PX，有两种情况：
-    // 1. PDML：在pdml中，pdml-op完全不需要其对应的input来提供 运行时的参数，所以会直接返回
+    // If PX is enabled in DML, there are two scenarios:
+    // 1. PDML: in pdml, pdml-op completely does not need its corresponding input to provide runtime parameters, so it will directly return
     // open_order = OPEN_CHILDREN_FIRST
-    // 2. DML+PX: 在这种情况下，dml运行是的参数完全是由其头上的GI算子塞过来的，例如这样的计划 ：
+    // 2. DML+PX: In this case, the parameters of the dml run are completely fed by the GI operator above it, for example, such a plan:
     //   PX COORD
     //    PX TRANSMIT
     //      GI (FULL PARTITION WISE)
     //       DELETE
     //        TSC
-    //  这样的计划，需要GI来驱动删除，GI每次迭代一个新的Task，就rescan delete，
-    //  将对应的Task的信息塞给delete算子。
+    //  Such a plan requires GI to drive the deletion, GI rescan delete each time a new Task is iterated,
+    //  Pass the information of the corresponding Task to the delete operator.
     open_order = OPEN_CHILDREN_FIRST;
   }
   return open_order;

@@ -751,8 +751,7 @@ int ObArchiveHandler::start_archive_(ObTenantArchiveRoundAttr &round_attr)
   // 2. If round has been switched, previous round end and current round start information need to be persisted to backup media.
   // 3. Update archive state to BEGINNING.
   // 4. Notify logstreams under the tenant to start archive.
-
-  // TODO: 故障注入
+  // TODO: fault injection
   ObTenantArchiveRoundAttr new_round;
   ObArchiveStore store;
   ObBackupDest dest;

@@ -147,7 +147,7 @@ public:
     return ret;
     #undef PRINT_WRAPPER
   }
-  // 获取单行信息
+  // Get single line information
   template <int N, typename ...T>
   static int read_single_row(const uint64_t tenant_id,
                              const char* (&columns)[N],
@@ -194,7 +194,7 @@ public:
     return ret;
     #undef PRINT_WRAPPER
   }
-  // 获取多行的信息
+  // Get multi-line information
   template <int N, typename ...T>
   static int read_multi_row(const uint64_t tenant_id,
                             const char* (&columns)[N],
@@ -666,7 +666,7 @@ private:
     }
     return ret;
   }
-  // 可变参数模版展开的递归基
+  // Recursive base for variadic template expansion
   template <int FLOOR>
   static int get_values_from_row_(common::sqlclient::ObMySQLResult *row, const char **columns)
   {
@@ -674,7 +674,7 @@ private:
     UNUSED(columns);
     return OB_SUCCESS;
   }
-  // 可变参数模版展开，从行中获取每一个入参
+  // Variable parameter template expansion, get each argument from the line
   template <int FLOOR, typename V, typename ...T>
   static int get_values_from_row_(common::sqlclient::ObMySQLResult *row,
                                   const char **columns,
@@ -694,11 +694,11 @@ private:
   }
   template <int FLOOR, typename ...T>
   friend class AccessHelper;
-  // 便特化必须靠类定义来协助
+  // Specialization must rely on class definitions to assist
   template <int FLOOR, typename ...T>
   struct AccessHelper
   {
-    // 从行中获取元组中的每一个元素
+    // Get each element from the tuple in the line
     static int get_values_to_tuple_from_row(common::sqlclient::ObMySQLResult *row,
                                             const char **columns,
                                             ObTuple<T...> &tuple)
@@ -714,11 +714,11 @@ private:
       return ret;
     }
   };
-  // 模版偏特化递归基
+  // template partial specialization base case
   template <typename ...T>
   struct AccessHelper<0, T...>
   {
-    // 从行中获取元组中的每一个元素的递归基
+    // Get the base case of each element in the tuple from the line
     static int get_values_to_tuple_from_row(common::sqlclient::ObMySQLResult *row,
                                             const char **columns,
                                             ObTuple<T...> &tuple)

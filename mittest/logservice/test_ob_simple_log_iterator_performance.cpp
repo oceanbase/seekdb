@@ -24,8 +24,7 @@
 #include "log/ob_shared_log_utils.h"
 #endif
 #include "share/resource_manager/ob_resource_manager.h"       // ObResourceManager
-
-// 测试OSS需要设置如下几个环境变量
+// Testing OSS requires setting the following environment variables
 //export BUCKET=xxxx
 //export ENDPOINT=xxxx
 //export ACCESS_ID=xxxx
@@ -355,7 +354,7 @@ TEST_F(TestObSimpleLogSharedStorage, iterator_performance)
     EXPECT_EQ(OB_SUCCESS, create_paxos_group(id, create_scn, leader_idx, leader));
     const block_id_t start_block_id = 0;
     const block_id_t end_block_id = g_end_block_id;
-    // 上传g_end_block_id个文件到oss
+    // Upload g_end_block_id files to oss
     if (0 == strcmp(need_upload_blocks, "TRUE")) {
       EXPECT_EQ(OB_SUCCESS, upload_blocks(dst_tenant_id, dst_palf_id, log_dir, start_block_id, end_block_id));
     }
@@ -382,7 +381,7 @@ TEST_F(TestObSimpleLogSharedStorage, iterator_performance)
 //    EXPECT_EQ(OB_SUCCESS, create_paxos_group(id, create_scn, leader_idx, leader));
 //    const block_id_t start_block_id = 0;
 //    const block_id_t end_block_id = g_end_block_id;
-//    // 上传400个文件到oss
+//    // Upload 400 files to oss
 //    if (0 == strcmp(need_upload_blocks, "TRUE")) {
 //      EXPECT_EQ(OB_SUCCESS, upload_blocks(dst_tenant_id, dst_palf_id, src_dir_bmsql_array, start_block_id, end_block_id));
 //    }

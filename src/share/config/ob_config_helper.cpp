@@ -710,7 +710,7 @@ bool ObLogDiskUsagePercentageChecker::check(const ObConfigItem &t) const
   bool is_valid = false;
   int64_t value = ObConfigIntParser::get(t.str(), is_valid);
   if (is_valid) {
-    // TODO by runlun: 租户级配置项检查
+    // TODO by runlun: tenant-level configuration item check
     const int64_t log_disk_utilization_threshold = 100;
     if (value < log_disk_utilization_threshold) {
       is_valid = false;

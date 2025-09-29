@@ -92,7 +92,7 @@ int ObMPStmtSendLongData::process()
   int ret = OB_SUCCESS;
   ObSQLSessionInfo *sess = NULL;
   bool need_response_error = true;
-  bool async_resp_used = false; // 由事务提交线程异步回复客户端
+  bool async_resp_used = false; // Asynchronously reply to the client by the transaction commit thread
   int64_t query_timeout = 0;
   ObSMConnection *conn = get_conn();
 
@@ -216,10 +216,9 @@ int ObMPStmtSendLongData::process_send_long_data_stmt(ObSQLSessionInfo &session)
   ObThreadLogLevelUtils::init(session.get_log_id_level_map());
   ret = do_process(session);
   ObThreadLogLevelUtils::clear();
-
-  //对于tracelog的处理，不影响正常逻辑，错误码无须赋值给ret
+  //For the handling of tracelog, it does not affect the normal logic, and the error code does not need to be assigned to ret
   int tmp_ret = OB_SUCCESS;
-  //清空WARNING BUFFER
+  //Clear WARNING BUFFER
   tmp_ret = do_after_process(session, false);
   UNUSED(tmp_ret);
   return ret;
@@ -261,12 +260,11 @@ int ObMPStmtSendLongData::do_process(ObSQLSessionInfo &session)
     } else if (OB_FAIL(store_piece(session))) {
       exec_start_timestamp_ = ObTimeUtility::current_time();
     } else {
-      //监控项统计开始
+      //Monitoring item statistics start
       exec_start_timestamp_ = ObTimeUtility::current_time();
 
       session.set_current_execution_id(execution_id);
-
-      //监控项统计结束
+      //Monitoring item statistics end
       exec_end_timestamp_ = ObTimeUtility::current_time();
 
       // some statistics must be recorded for plan stat, even though sql audit disabled
@@ -294,7 +292,7 @@ int ObMPStmtSendLongData::do_process(ObSQLSessionInfo &session)
     // if diagnostic stmt execute successfully, it dosen't clear the warning message
     session.update_show_warnings_buf();
   } else {
-    session.set_show_warnings_buf(ret); // TODO: 挪个地方性能会更好，减少部分wb拷贝
+    session.set_show_warnings_buf(ret); // TODO: Move this to a better place, reduce some wb copy
   }
 
   if (enable_sql_audit) {

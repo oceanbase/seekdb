@@ -290,7 +290,7 @@ int ObGVTxLockStat::process_curr_tenant(ObNewRow *&row)
         // proxy_session_id
         if (tx_lock_stat.get_proxy_session_id() > 0) {
           ObAddr client_server;
-          //解析出来client server的信息
+          //Parse out the client server information
           (void)get_addr_by_proxy_sessid(tx_lock_stat.get_proxy_session_id(), client_server);
           if (client_server.is_valid()) {
             client_server.to_string(proxy_session_id_buffer_, OB_MIN_BUFFER_SIZE);

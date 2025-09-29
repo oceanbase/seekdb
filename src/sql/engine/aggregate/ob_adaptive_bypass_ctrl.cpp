@@ -62,7 +62,7 @@ void ObAdaptiveByPassCtrl::gby_process_state(int64_t probe_cnt,
     if (static_cast<double> (exists_cnt) / probe_cnt >=
                       std::max(ratio, 1 - (1 / static_cast<double> (cut_ratio_)))) {
       // very good distinct rate, can expend hash map to l3 cache
-      // 命中率>95%,升级到L3cache
+      // Hit rate > 95%, upgrade to L3cache
       rebuild_times_ = 0;
       if (scaled_llc_est_ndv_) {
         state_ = STATE_PROCESS_HT;

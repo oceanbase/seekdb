@@ -1022,9 +1022,11 @@
     } \
   }
 
-/** EXTRACT_NEW_DEFAULT_VALUE_FIELD_MYSQL用于获取__all_column中的默认值，后面做了修改，默认值可能
-    从cur_default_value或者new_default_value获取，这里做了兼容处理，用default_value_v2_version做这两种情况的区分
-*/
+/**
+ * EXTRACT_NEW_DEFAULT_VALUE_FIELD_MYSQL is used to obtain the default value from __all_column, later modifications were made,
+ * and the default value may be obtained from either cur_default_value or new_default_value. Here, compatibility handling is done,
+ * using default_value_v2_version to distinguish between these two scenarios
+ */
 #define EXTRACT_DEFAULT_VALUE_FIELD_MYSQL(result, column_name, data_type, class_obj,is_cur_default_value, default_value_v2_version, tenant_id) \
   [&]() { /*+ The original macro use too much stack space, wrap to lambda to avoid it. */ \
   if (OB_SUCC(ret)) \

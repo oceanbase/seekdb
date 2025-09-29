@@ -56,7 +56,7 @@ public:
            ObExecContext *exec_ctx,
            ObJob &job,
            common::ObIAllocator &allocator);
-  // 没有更多task则返回OB_ITER_END
+  // No more task then return OB_ITER_END
   virtual int get_next_task(ObTaskInfo *&task) = 0;
   virtual TaskSplitType get_type() const = 0;
   VIRTUAL_TO_STRING_KV(K_(server));

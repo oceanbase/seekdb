@@ -189,8 +189,8 @@ int ObSQLMockSchemaUtils::try_mock_partid(const share::schema::ObTableSchema *or
   } else if (!sql::ObSQLMockSchemaUtils::is_mock_table(org_table->get_table_id())) {
     // do nothing
   } else {
-    // mock schema请求一定在工作线程上执行，后台线程不会有is_mock_table一定是false
-    // 所以可以拿到上下文allocator
+    // mock schema request must be executed on the worker thread, background threads will always have is_mock_table as false
+    // So can get the context allocator
     ObIAllocator &allocator = THIS_WORKER.get_sql_arena_allocator();
     ObTableSchema *tmp_table = NULL;
     if (OB_FAIL(ObSchemaUtils::alloc_schema(allocator, *org_table, tmp_table))) {

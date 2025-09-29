@@ -38,7 +38,7 @@ TestRunCtx RunCtx;
 class ObSimpleClusterExampleTest : public ObSimpleClusterTestBase
 {
 public:
-  // 指定case运行目录前缀 test_ob_simple_cluster_
+  // Specify the case run directory prefix test_ob_simple_cluster_
   ObSimpleClusterExampleTest() : ObSimpleClusterTestBase("test_ob_simple_cluster_") {}
 };
 
@@ -46,16 +46,15 @@ TEST_F(ObSimpleClusterExampleTest, observer_start)
 {
   SERVER_LOG(INFO, "observer_start succ");
 }
-
-// 创建租户并不轻量，看场景必要性使用
+// Creating a tenant is not lightweight, consider necessity of use based on the scenario
 TEST_F(ObSimpleClusterExampleTest, add_tenant)
 {
-  // 创建普通租户tt1
+  // Create normal tenant tt1
   ASSERT_EQ(OB_SUCCESS, create_tenant());
-  // 获取租户tt1的tenant_id
+  // Get the tenant_id of tenant tt1
   ASSERT_EQ(OB_SUCCESS, get_tenant_id(RunCtx.tenant_id_));
   ASSERT_NE(0, RunCtx.tenant_id_);
-  // 初始化普通租户tt1的sql proxy
+  // Initialize the SQL proxy for the normal tenant tt1
   ASSERT_EQ(OB_SUCCESS, get_curr_simple_server().init_sql_proxy2());
 }
 
@@ -63,9 +62,9 @@ TEST_F(ObSimpleClusterExampleTest, add_tenant)
 TEST_F(ObSimpleClusterExampleTest, create_table)
 {
   int ret = OB_SUCCESS;
-  // 使用普通租户tt1
+  // use normal tenant tt1
   common::ObMySQLProxy &sql_proxy = get_curr_simple_server().get_sql_proxy2();
-  // 创建表
+  // create table
   {
     OB_LOG(INFO, "create_table start");
     ObSqlString sql;
@@ -85,7 +84,7 @@ TEST_F(ObSimpleClusterExampleTest, create_table)
       int64_t affected_rows = 0;
       ASSERT_EQ(OB_SUCCESS, sql_proxy.write(sql.ptr(), affected_rows));
     }
-    //check row count
+    // check row count
     OB_LOG(INFO, "check row count");
     {
       int64_t row_cnt = 0;

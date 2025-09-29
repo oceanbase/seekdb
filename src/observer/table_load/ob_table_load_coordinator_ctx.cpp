@@ -285,12 +285,12 @@ int ObTableLoadCoordinatorCtx::alloc_trans_ctx(const ObTableLoadTransId &trans_i
 {
   int ret = OB_SUCCESS;
   trans_ctx = nullptr;
-  // 分配trans_ctx
+  // allocate trans_ctx
   if (OB_ISNULL(trans_ctx = ctx_->alloc_trans_ctx(trans_id))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("fail to alloc trans ctx", KR(ret), K(trans_id));
   }
-  // 把trans_ctx插入map
+  // Insert trans_ctx into map
   else if (OB_FAIL(trans_ctx_map_.set_refactored(trans_ctx->trans_id_, trans_ctx))) {
     LOG_WARN("fail to set trans ctx", KR(ret), K(trans_ctx->trans_id_));
   }
@@ -313,11 +313,11 @@ int ObTableLoadCoordinatorCtx::alloc_trans(const ObTableLoadSegmentID &segment_i
     (ATOMIC_FAA(&next_session_id_, 1) % ctx_->param_.write_session_count_) + 1;
   ObTableLoadTransId trans_id(segment_id, trans_gid);
   ObTableLoadTransCtx *trans_ctx = nullptr;
-  // 分配trans_ctx
+  // allocate trans_ctx
   if (OB_FAIL(alloc_trans_ctx(trans_id, trans_ctx))) {
     LOG_WARN("fail to alloc trans ctx", KR(ret), K(trans_id));
   }
-  // 构造trans
+  // construct trans
   else if (OB_ISNULL(trans = trans_allocator_.alloc(trans_ctx, default_session_id))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("fail to alloc ObTableLoadCoordinatorTrans", KR(ret));
@@ -344,7 +344,7 @@ int ObTableLoadCoordinatorCtx::init_column_idxs(const ObIArray<uint64_t> &column
     const ObColDesc &col_desc = column_descs.at(i);
     bool found_column = (ctx_->schema_.is_table_with_hidden_pk_column_ && i == 0); // skip hidden pk in heap table
     // todo@lanyi find the pk column using column id
-    // 在源数据的列数组中找到对应的列
+    // Find the corresponding column in the source data's column array
     for (int64_t j = 0; OB_SUCC(ret) && OB_LIKELY(!found_column) && j < column_ids.count(); ++j) {
       const uint64_t column_id = column_ids.at(j);
       if (col_desc.col_id_ == column_id) {
@@ -381,7 +381,7 @@ int ObTableLoadCoordinatorCtx::generate_autoinc_params(AutoincParam &autoinc_par
     ret = OB_TABLE_NOT_EXIST;
     LOG_WARN("table not exist", KR(ret), K(ctx_->param_.tenant_id_), K(ctx_->param_.table_id_));
   } else {
-    //ddl对于auto increment是最后进行自增值同步，对于autoinc_param参数初始化得使用原表table id的table schema
+    //ddl for auto increment synchronizes the auto-increment value last, and the initialization of the autoinc_param parameter should use the table schema of the original table's table id
     ObColumnSchemaV2 *autoinc_column_schema = nullptr;
     uint64_t column_id = 0;
     for (ObTableSchema::const_column_iterator iter = table_schema->column_begin();
@@ -443,7 +443,7 @@ int ObTableLoadCoordinatorCtx::init_sequence()
                                                   target_table_schema))) {
     LOG_WARN("fail to get table schema", KR(ret), K(tenant_id), K(table_id));
   } else {
-    //ddl对于identity是建表的时候进行自增值同步，对于sequence参数初始化得用隐藏表table id的table schema
+    //ddl for identity is to synchronize the auto-increment value when creating a table, for sequence parameter initialization must use the hidden table id's table schema
     for (ObTableSchema::const_column_iterator iter = target_table_schema->column_begin();
           OB_SUCC(ret) && iter != target_table_schema->column_end(); ++iter) {
       ObColumnSchemaV2 *column_schema = *iter;

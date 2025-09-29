@@ -595,7 +595,7 @@ int ObTableLoadInstance::start_direct_load(const ObTableLoadParam &param,
     table_ctx_ = table_ctx;
   }
   if (OB_FAIL(ret)) {
-    // table_ctx没有初始化成功不能赋值给table_ctx_
+    // table_ctx was not initialized successfully and cannot be assigned to table_ctx_
     if (nullptr != table_ctx) {
       ObTableLoadService::put_ctx(table_ctx);
       table_ctx = nullptr;
@@ -861,7 +861,7 @@ int ObTableLoadInstance::write_trans(TransCtx &trans_ctx, int32_t session_id,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", KR(ret), K(session_id), K(obj_rows.count()));
   } else {
-    // TODO(suzhi.yt): java客户端调用的时候, 对于相同session_id可能会并发
+    // TODO(suzhi.yt): java client call when, for the same session_id may be concurrent
     uint64_t &next_sequence_no = trans_ctx.next_sequence_no_array_[session_id - 1];
     ObTableLoadCoordinator coordinator(table_ctx_);
     if (OB_FAIL(coordinator.init())) {

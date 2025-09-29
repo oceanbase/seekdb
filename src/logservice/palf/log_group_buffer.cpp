@@ -96,10 +96,10 @@ void LogGroupBuffer::destroy()
 int LogGroupBuffer::get_buffer_pos_(const LSN &lsn,
                                     int64_t &start_pos) const
 {
-  // 根据lsn获取buffer中对应的位置
-  // 转换方法依赖buffer start_lsn之后的文件size不变
-  // 如果文件size发生了变化，buffer append到切文件位置时需要做barrier处理
-  // 等前一个文件都pop出去后整体reuse为下一个文件
+  // Get the corresponding position in the buffer according to lsn
+  // The conversion method relies on the file size not changing after buffer start_lsn
+  // If the file size has changed, a barrier needs to be handled when buffer appends to the cut file position
+  // Wait until the previous file is all popped out before reusing it for the next file
   int ret = OB_SUCCESS;
   LSN start_lsn;
   get_buffer_start_lsn_(start_lsn);
@@ -159,8 +159,7 @@ bool LogGroupBuffer::can_handle_new_log(const LSN &lsn,
   }
   return bool_ret;
 }
-
-// 获取完整的log buffer(含log_group_entry_header)
+// Get the complete log buffer (including log_group_entry_header)
 int LogGroupBuffer::get_log_buf(const LSN &lsn, const int64_t total_len, LogWriteBuf &log_buf)
 {
   int ret = OB_SUCCESS;
@@ -214,11 +213,11 @@ int LogGroupBuffer::fill(const LSN &lsn,
     ret = OB_ERR_UNEXPECTED;
     PALF_LOG(WARN, "lsn is less than start_lsn", K(ret), K(lsn), K(end_lsn), K(start_lsn), K(reuse_lsn));
   } else if (end_lsn <= reuse_lsn) {
-    // 要填充的终点预期应该比buffer复用的起点大
+    // The expected end point to be filled should be greater than the start point of buffer reuse
     ret = OB_ERR_UNEXPECTED;
     PALF_LOG(WARN, "end_lsn is less than reuse_lsn", K(ret), K(lsn), K(end_lsn), K(start_lsn), K(reuse_lsn));
   } else if (end_lsn > reuse_lsn + available_buf_size) {
-    // double check: 要填充的终点超过了buffer可复用的范围
+    // double check: the endpoint to be filled exceeds the reusable range of the buffer
     ret = OB_EAGAIN;
     PALF_LOG(WARN, "end_lsn is greater than reuse end pos", K(ret), K(lsn), K(end_lsn), K(reuse_lsn), K(available_buf_size));
   } else if (OB_FAIL(get_buffer_pos_(lsn, start_pos))) {
@@ -257,12 +256,12 @@ int LogGroupBuffer::fill_padding_body(const LSN &lsn,
     ret = OB_ERR_UNEXPECTED;
     PALF_LOG(WARN, "lsn is less than start_lsn", K(ret), K(lsn), K_(start_lsn));
   } else if (end_lsn <= reuse_lsn) {
-    // 要填充的终点预期应该比buffer复用的起点大
+    // The expected endpoint to be filled should be greater than the start point of buffer reuse
     ret = OB_ERR_UNEXPECTED;
     PALF_LOG(WARN, "end_lsn is less than reuse_lsn", K(ret), K(lsn), K(end_lsn), K(reuse_lsn));
   } else if (end_lsn > reuse_lsn + available_buf_size) {
-    // double check: 要填充的终点超过了buffer可复用的范围
-    // 因为wait()成功后调用fill()之前buffer的start_lsn_可能发生更新
+    // double check: the endpoint to be filled exceeds the reusable range of the buffer
+    // Because start_lsn_ of the buffer may be updated between a successful wait() and the call to fill()
     ret = OB_EAGAIN;
     PALF_LOG(WARN, "end_lsn is greater than reuse end pos", K(ret), K(lsn), K(end_lsn), K(reuse_lsn), K(available_buf_size));
   } else if (OB_FAIL(get_buffer_pos_(lsn, start_pos))) {
@@ -337,8 +336,7 @@ int LogGroupBuffer::check_log_buf_wrapped(const LSN &lsn, const int64_t log_len,
   }
   return ret;
 }
-
-// 依赖palf_handle_impl的写锁确保调用本接口期间无并发更新group_buffer操作
+// Depend on the write lock of palf_handle_impl to ensure no concurrent updates to group_buffer during the call to this interface
 int LogGroupBuffer::to_leader()
 {
   int ret = OB_SUCCESS;
@@ -355,8 +353,7 @@ int LogGroupBuffer::to_leader()
   PALF_LOG(INFO, "to_leader finished", K(ret), K_(available_buffer_size), K_(reserved_buffer_size));
   return ret;
 }
-
-// 依赖palf_handle_impl的写锁确保调用本接口期间无并发更新group_buffer操作
+// Depend on the write lock of palf_handle_impl to ensure no concurrent updates to group_buffer during the call to this interface
 int LogGroupBuffer::to_follower()
 {
   int ret = OB_SUCCESS;

@@ -52,8 +52,8 @@ public:
       common::ObDatumCmpFuncType ns_cmp_func_;
       sql::serializable_function ser_eval_func_;
     };
-    //表示equal condition 左右子表达式是否分别来自join算子左节点和右节点,
-    //如果是, 则is_opposite_ = false, 如果不是, 则is_opposite_ = true;
+    // indicates equal condition whether left and right sub-expressions are respectively from the left and right nodes of the join operator,
+    // If it is, then is_opposite_ = false, if not, then is_opposite_ = true;
     bool is_opposite_;
   };
 

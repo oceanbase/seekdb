@@ -61,7 +61,7 @@ public:
   ObExecStatDispatch() : stat_str_(), pos_(0){};
   ~ObExecStatDispatch() {};
   int set_extend_info(const common::ObString &str);
-  //负责将字符串解析成正常数据结构；
+  // Responsible for parsing the string into a normal data structure;
   int dispatch(bool need_add_monitor,
                ObPhyPlanMonitorInfo *monitor_info,
                bool need_update_plan,
@@ -82,7 +82,7 @@ class ObExecStatUtils
 public:
   template <class T>
       OB_INLINE static void record_exec_timestamp(const T &process,
-                                        bool is_first,  //是否是第一次执行时记录，而不是retry
+                                        bool is_first,  // whether it is recorded during the first execution, not retry
                                         ObExecTimestamp &exec_timestamp)
       {
         exec_timestamp.rpc_send_ts_ = process.get_send_timestamp();
@@ -95,9 +95,9 @@ public:
         exec_timestamp.executor_end_ts_ = process.get_exec_end_timestamp();
 
         if (is_first) {
-          /* packet 遇见的事件顺序：
+          /* packet encountered event sequence:
            * send -> receive -> enter_queue -> run -> before_process -> single_process -> executor_start -> executor_end
-           * multistmt 场景特殊处理，第二个及之后的 sql 的 net_t、net_wait_ 均为 0
+           * multistmt special handling, net_t, net_wait_ of the second and subsequent sqls are all 0
            */
           if (OB_UNLIKELY(exec_timestamp.multistmt_start_ts_ > 0)) {
             exec_timestamp.net_t_ = 0;

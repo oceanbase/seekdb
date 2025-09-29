@@ -150,7 +150,7 @@ DEFINE_DESERIALIZE(ObRecordHeader)
   } else if (OB_FAIL(serialization::decode_i64(buf, data_len, pos, &data_checksum_))) {
     COMMON_LOG(WARN, "encode data failed..", KP(buf), K_(data_checksum), K(ret));
   }
-  // 后续新增成员时，应该使用header_length_作为反序列化长度的限制，以保证升级兼容
+  // Subsequent new members should use header_length_ as the limit for deserialization length to ensure upgrade compatibility
 
   return ret;
 }

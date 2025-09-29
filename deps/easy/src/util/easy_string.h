@@ -2,7 +2,7 @@
 #define EASY_STRING_H_
 
 /**
- * inet的通用函数
+ * general functions for inet
  */
 #include <stdarg.h>
 #include "easy_define.h"

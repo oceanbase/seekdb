@@ -30,16 +30,15 @@ namespace sql
 {
 struct ObDASTabletLoc;
 class ObExecContext;
-
-// 单个分区的新引擎数据缓存器
+// Single partition new engine data cache
 class ObPDMLOpRowIterator
 {
 public:
     friend class ObPDMLOpBatchRowCache;
     ObPDMLOpRowIterator() : eval_ctx_(nullptr) {}
     virtual ~ObPDMLOpRowIterator() = default;
-    // 获得row_store_it_中的下一行数据
-    // 返回的数据是对应存储数据的exprs
+    // Get the next row of data from row_store_it_
+    // The returned data corresponds to the exprs of the stored data
     int get_next_row(const ObExprPtrIArray &row);
     void close() { row_store_it_.reset(); }
 private:
@@ -50,10 +49,8 @@ private:
   ObEvalCtx *eval_ctx_;
   DISALLOW_COPY_AND_ASSIGN(ObPDMLOpRowIterator);
 };
-
-
-// PDML缓存
-// 缓存多个partition的数据
+// PDML cache
+// Cache data for multiple partitions
 class ObPDMLOpBatchRowCache final
 {
 public:
@@ -61,28 +58,25 @@ public:
   ~ObPDMLOpBatchRowCache();
 public:
   int init(uint64_t tenant_id, int64_t part_cnt, bool with_barrier, const ObTableModifySpec &spec);
-  // ObBatachRowCache 不需要支持落盘，一旦内存不足 add_row 失败，调用者会
-  // 负责将缓存的所有数据插入到存储层，并释放缓存的内存。
-  // @desc part_id 表示行所在分区在 location 结构中的偏移
-  // @return 如果缓存满，则返回 OB_SIZE_OVERFLOW；如果缓存成功则返回OB_SUCCESS；否则返回其他类型错误
+  // ObBatchRowCache does not need to support disk persistence, once memory is insufficient, add_row will fail, the caller will
+  // Responsible for inserting all cached data into the storage layer and releasing the memory of the cache.
+  // @desc part_id indicates the offset of the partition where the row is located in the location structure
+  // @return If the cache is full, return OB_SIZE_OVERFLOW; if the cache is successful, return OB_SUCCESS; otherwise, return other types of errors
   int add_row(const ObExprPtrIArray &row, common::ObTabletID tablet_id);
-
-  // @desc 获取当前缓存中所有 part_id
+  // @desc get all part_id from current cache
   int get_part_id_array(ObTabletIDArray &arr);
-
-  // @desc 通过part_id获得对应分区的所有数据
+  // @desc Obtain all data for the corresponding partition through part_id
   int get_row_iterator(common::ObTabletID tablet_id, ObPDMLOpRowIterator *&iterator);
-
-  // @desc 释放 part_id 对应分区的数据和内存
-  // TODO: jiangting.lk 在整个cache框架中，其实不需要一个清理单partition数据的接口
-  // 只需要一个清理整个缓存状态的接口，比如reuse。每次重新填充数据的之前，调用reuse方法，
-  // 清理整个cache的状态即可。
+  // @desc Release the data and memory of the partition corresponding to part_id
+  // TODO: jiangting.lk In the entire cache framework, actually there is no need for an interface to clean up data of a single partition
+  // Only need an interface to clean up the entire cache state, such as reuse. Each time before refilling the data, call the reuse method,
+  // Clean up the entire cache state.
   // int free_rows(int64_t part_id);
   // @desc no row cached
   bool empty() const;
-  // @desc 重置 cache状态，不会释放内存空间，方便后期对cache的重用
+  // @desc Reset cache state, will not release memory space, convenient for reuse of cache later
   int reuse_after_rows_processed();
-  // @desc 释放 ObBatchRowCache 内部结构（如hashmap）占用的所有内存
+  // @desc Release all memory occupied by internal structures (such as hashmap) of ObBatchRowCache
   void destroy();
 private:
   int init_row_store(ObChunkDatumStore *&chunk_row_store);
@@ -96,13 +90,13 @@ private:
                                   common::hash::NoPthreadDefendMode> PartitionStoreMap;
   // HashMap: part_id => chunk_datum_store_ ptr
   // dynamic add row store to map, when meet a new partition
-  common::ObArenaAllocator row_allocator_; // 用于给 cache 里的 store 分配内存
+  common::ObArenaAllocator row_allocator_; // used for allocating memory to store in cache
   ObEvalCtx *eval_ctx_;
   PartitionStoreMap pstore_map_;
-  ObPDMLOpRowIterator iterator_; // 用于构造对应的iter
-  int64_t cached_rows_num_; // 表示当前cache的row的行数
+  ObPDMLOpRowIterator iterator_; // used to construct the corresponding iter
+  int64_t cached_rows_num_; // indicates the number of rows currently in the cache
   int64_t cached_rows_size_; // bytes cached. used to control max memory used by batchRowCache
-  int64_t cached_in_mem_rows_num_; // 表示当前cache的in memory row的行数，不包含已 dump 的行
+  int64_t cached_in_mem_rows_num_; // indicates the number of in-memory rows currently cached, excluding dumped rows
   uint64_t tenant_id_;
   bool with_barrier_;
 
@@ -117,9 +111,9 @@ private:
 class ObDMLOpDataReader
 {
 public:
-  // 从 DML 算子中读入一行数据，一般是来自 child op
-  // 同时，负责计算出这一行数据所属的分区。
-  // 一般来说，分区id存储在行中的一个伪列里
+  // Read a row of data from the DML operator, generally from child op
+  // At the same time, responsible for calculating which partition this row of data belongs to.
+  // Generally, the partition id is stored in a pseudo column in the row
   virtual int read_row(ObExecContext &ctx,
                        const ObExprPtrIArray *&row,
                        common::ObTabletID &tablet_id,
@@ -129,7 +123,7 @@ public:
 class ObDMLOpDataWriter
 {
 public:
-  // 将数据批量写入到存储层
+  // Write data in bulk to the storage layer
   virtual int write_rows(ObExecContext &ctx,
                          const ObDASTabletLoc *tablet_loc,
                          ObPDMLOpRowIterator &iterator) = 0;

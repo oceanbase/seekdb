@@ -602,9 +602,9 @@ double ObOptEstCost::get_estimate_width_from_type(const ObRawExprResType &type)
     width += 4;
   } else if (type.get_accuracy().get_length() > 0) {
     // ObStringTC
-    // 我们使用字符串定义的最大长度的一半估算字符串的字节，这样估计是不太准确的
-    // 实际场景下字符串通常比实际定义的最大长度要小的多，这里我们调整其大小使它
-    // 不超过MAX_STRING_WIDTH
+    // We use half of the maximum length defined by the string to estimate the bytes of the string, this estimation is not very accurate
+    // In actual scenarios, strings are usually much shorter than the maximum length defined, here we adjust its size to make it
+    // Not exceeding MAX_STRING_WIDTH
     int64_t string_width = type.get_accuracy().get_length() / 2;
     width += static_cast<double>(std::min(string_width, ObOptEstCostModel::DEFAULT_MAX_STRING_WIDTH));
   } else if (type.get_accuracy().get_precision() > 0) {

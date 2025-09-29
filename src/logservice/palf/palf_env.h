@@ -78,24 +78,20 @@ public:
 public:
   PalfEnv();
   ~PalfEnv();
-
-  // 迁移场景目的端副本创建接口
-  // @param [in] id，待创建日志流的标识符
+  // Migration scenario destination end replica creation interface
+  // @param [in] id, the identifier of the log stream to be created
   // @param [in] access_mode，palf access mode
-  // @param [in] palf_base_info，palf的日志起点信息
-  // @param [out] handle，创建成功后生成的palf_handle对象
+  // @param [in] palf_base_info, the log start information of palf
+  // @param [out] handle, the generated palf_handle object after successful creation
   int create(const int64_t id,
              const AccessMode &access_mode,
              const PalfBaseInfo &palf_base_info,
              PalfHandle &handle);
-
-  // 打开一个id对应的Paxos Replica，返回文件句柄
+  // Open a Paxos Replica corresponding to an id, and return the file handle
   int open(int64_t id, PalfHandle &handle);
-
-  // 关闭一个句柄
+  // Close a handle
   void close(PalfHandle &handle);
-
-  // 删除id对应的Paxos Replica，会同时删除物理文件；
+  // Delete the Paxos Replica corresponding to the id, which will also delete the physical file;
   int remove(int64_t id);
 
   // @brief get palf disk usage

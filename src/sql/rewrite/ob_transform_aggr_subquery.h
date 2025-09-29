@@ -22,14 +22,14 @@ namespace sql
 {
 class ObUpdateStmt;
 /**
- * ObTransformAggrSubquery实现JA类型的子查询的改写
- * 改写的实现方式主要参考了如下一些论文：
+ * ObTransformAggrSubquery implements the rewrite of JA type subqueries
+ * The implementation method mainly refers to the following papers:
  * [Kim82]          W.Kim, "On Optimizing an SQL-like Nested Query"
  * [Ganski87]       Richard A. Ganski and Harry K. T. Long, "Optimization of
  *                  nested SQL queries Revisited"
  * [Murlikrishna92] M.Murlikrishna, "Improved Unnesting Algorithms for Join
  *                  Aggregate SQL queries"
- * 改写的示例可以参看论文和mysqltest测试用例
+ * Examples of the rewrite can be found in the papers and mysqltest test cases
  */
 class ObTransformAggrSubquery : public ObTransformRule
 {

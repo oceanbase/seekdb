@@ -145,7 +145,7 @@ class ObPlanCacheValue :public common::ObDLinkBase<ObPlanCacheValue>
 public:
   static const int64_t MAX_SQL_LENGTH = 2048;
   static const int32_t MAX_PLAN_PER_SQL = 8;
-  //存放影响plan的系统变量中需要deep_copy的obj的内存最大值
+  // Store the maximum memory value of obj that needs deep_copy among system variables affecting plan
   const static int64_t OB_INFLUENCE_PLAN_SYS_VAR_LEN = 512;
 
 public:
@@ -156,13 +156,12 @@ public:
   // alloc and free
   void reset();
   int32_t get_type() { return 0; }
-
-  //通过匹配不同的sys_vars, db_id, not_params选择对应的plan cache value
-  //检查是否包含临时表
+  // Through matching different sys_vars, db_id, not_params select the corresponding plan cache value
+  // Check if it contains a temporary table
   int match(ObPlanCacheCtx &pc_ctx,
             const common::ObIArray<PCVSchemaObj> &schema_array,
             bool &is_same);
-  //将fast parser参数化的参数转化为ObObjParam
+  // Convert parameterized parameters of fast parser to ObObjParam
   static int resolver_params(ObPlanCacheCtx &pc_ctx,
                              stmt::StmtType stmt_type,
                              const ObIArray<ObCharsetType> &param_charset_type,
@@ -343,14 +342,12 @@ private:
   int match_dep_schema(const ObPlanCacheCtx &pc_ctx,
                        const common::ObIArray<PCVSchemaObj> &schema_array,
                        bool &is_same);
-
-  // 检查pcv对象是否过期
+  // Check if the pcv object is expired
   int check_value_version(bool need_check_schema,
                           const share::schema::ObSchemaObjVersion &outline_version,
                           const ObIArray<PCVSchemaObj> &schema_array,
                           bool &is_old_version);
-
-  // 是否需要check version信息
+  // Whether to check version information
   int need_check_schema_version(ObPlanCacheCtx &pc_ctx,
                                 int64_t &new_schema_version,
                                 bool &need_check);
@@ -367,7 +364,7 @@ private:
   friend class ::test::TestPlanCacheValue_basic_Test;
 private:
   //***********  for match **************
-  //记录不需要参数化的常量信息及常量为负数的信息
+  // Record non-parameterized constant information and information where constants are negative
   common::ObSEArray<NotParamInfo, 4> not_param_info_;
   common::ObBitSet<> not_param_index_;
   // two param index are recorded in neg_param_index_;
@@ -375,25 +372,25 @@ private:
   // 2. const param that transformed from minus op, like select 1 - 2 from dual, index of '- 2' is recorded here
   common::ObBitSet<> neg_param_index_;
 
-  //ps mode match will use variables below
+  // ps mode match will use variables below
   common::ObSEArray<PsNotParamInfo, 4> not_param_var_;
 
   common::ObSEArray<ObCharsetType, 4> param_charset_type_;
   ObSqlTraits sql_traits_;
   //*************************
-  //not param回填后的sql序列化结果, 主要是用于outline 的signature
+  // not param refill after sql serialization result, mainly used for outline signature
   common::ObString outline_signature_;
   common::ObString outline_format_signature_;
   common::ObString constructed_sql_;
   ObPCVSet *pcv_set_;
   common::ObIAllocator *pc_alloc_;
   common::ObIAllocator *pc_malloc_;
-  //plan id
+  // plan id
   int64_t last_plan_id_;
   // a list of plan sets with different param types combination
   common::ObDList<ObPlanSet> plan_sets_;
-  //if there is no virtual table in ObPhysicalPlan, set true(default), or set false
-  //bool use_global_location_cache_;
+  // if there is no virtual table in ObPhysicalPlan, set true(default), or set false
+  // bool use_global_location_cache_;
   int64_t tenant_schema_version_;
   int64_t sys_schema_version_;
   ObOutlineState outline_state_;
@@ -405,18 +402,18 @@ private:
   uint64_t sessid_;
   // sess_create_time_ for temporary table
   uint64_t sess_create_time_;
-  // wether this pcv's plans contains sys table (oracle mode)
+  // whether this pcv's plans contains sys table (oracle mode)
   bool contain_sys_name_table_;
 
   bool need_param_;
-  //at present, if a SQL is in nested sql, it is forced to use DAS plan
-  //if a non-DAS plan with the same text is used,
-  //it may cause correctness problems.
-  //Therefore, it is necessary to distinguish whether it is nested SQL or not.
+  // at present, if a SQL is in nested sql, it is forced to use DAS plan
+  // if a non-DAS plan with the same text is used,
+  // it may cause correctness problems.
+  // Therefore, it is necessary to distinguish whether it is nested SQL or not.
   bool is_nested_sql_;
   bool is_batch_execute_;
   bool has_dynamic_values_table_;
-  // only when not need to param, this feild will be used.
+  // only when not need to param, this field will be used.
   common::ObString raw_sql_;
   common::ObFixedArray<PCVSchemaObj *, common::ObIAllocator> stored_schema_objs_;
   common::ObBitSet<> must_be_positive_idx_;
@@ -441,11 +438,11 @@ private:
    * tpl_sql_const_cons_ : {{idx:1, raw_text:"1"}, {idx:1, raw_text:"2"}}
    *
    * So the constant constraint matching rules are as follows:
-   * 1、First match tpl_sql_const_cons_constraint list
-   *   2、If it hits, use the hit rule to compare it with not_param_info_, if it is the same
-   *     the match succeeds, otherwise it fails
-   *   3、If there is no hit, match not_param_info_. if the match is successful
-   *     the result is successful, otherwise it fails
+   * 1. First match tpl_sql_const_cons_constraint list
+   *    2. If it hits, use the hit rule to compare it with not_param_info_, if it is the same
+   *       the match succeeds, otherwise it fails
+   *    3. If there is no hit, match not_param_info_. if the match is successful
+   *       the result is successful, otherwise it fails
    */
   TplSqlConstCons tpl_sql_const_cons_;
   //***********  end user-defined rules **************

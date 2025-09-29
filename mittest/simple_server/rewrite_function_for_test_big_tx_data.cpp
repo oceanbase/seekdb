@@ -58,7 +58,7 @@ int ObTxTable::check_with_tx_data(ObReadTxDataArg &read_tx_data_arg, ObITxDataCh
     return ret;
   }
   /**************************************************************************************************/
-  // 跳过读缓存
+  // skip read cache
   /**************************************************************************************************/
 
   // step 3 : read tx data in tx_ctx table and tx_data table
@@ -96,8 +96,8 @@ int ObTxData::add_undo_action(ObTxTable *tx_table,
     STORAGE_LOG(WARN, "tx data table in tx table is nullptr.", KR(ret));
   } else {
 /**************************************************************************************************/
-    // 在测试big tx data的时候，连续挂很多无效的undo action上去，并且disable掉merge的逻辑
-    // 可以节省测试时间，否则构建big tx data的耗时太长，没办法加到farm里
+    // When testing big tx data, continuously attach many invalid undo actions and disable the merge logic
+    // Can save test time, otherwise building big tx data takes too long, can't be added to farm
     int loop_times = 10000;
     while (OB_SUCC(ret) && --loop_times) {
       ObUndoStatusNode *new_node = nullptr;

@@ -118,12 +118,11 @@ static DtlWriterType msg_writer_map[] =
 };
 
 static_assert(ARRAYSIZEOF(msg_writer_map) == ObDtlMsgType::MAX, "invalid ms_writer_map size");
-
-// 添加Encoder接口，方便broadcast的dtl channel agent和dtl channel采用该接口统一write msg逻辑
-// 3种Encoder
-// 1) 控制消息
-// 2) ObRow消息
-// 3) Array<ObExprs> 新引擎消息
+// Add Encoder interface, convenient for broadcast's dtl channel agent and dtl channel to use this interface to unify write msg logic
+// 3 types of Encoder
+// 1) control message
+// 2) ObRow message
+// 3) Array<ObExprs> new engine message
 class ObDtlChannelEncoder
 {
 public:
@@ -225,7 +224,7 @@ OB_INLINE int ObDtlRowMsgWriter::write(
       SQL_DTL_LOG(WARN, "failed to serialize", K(ret));
     }
     write_buffer_->is_eof() = is_eof;
-    // 这里特殊处理，如果没有数据行，只有头部字节，也必须发送，但对于数据部分如果没有行，则不发送
+    // Here special processing, if there is no data row, only header bytes, it must be sent, but for the data part if there is no row, then do not send
     write_buffer_->pos() = used();
   }
   return ret;
@@ -301,7 +300,7 @@ OB_INLINE int ObDtlDatumMsgWriter::write(
     write_buffer_->pos() = used();
   } else {
     write_buffer_->is_eof() = is_eof;
-    // 这里特殊处理，如果没有数据行，只有头部字节，也必须发送，但对于数据部分如果没有行，则不发送
+    // Here special processing, if there is no data row, only header bytes, it must be sent, but for the data part if there is no row, then do not send
     write_buffer_->pos() = used();
   }
   return ret;
@@ -517,7 +516,7 @@ OB_INLINE int ObDtlVectorMsgWriter::write(
     write_buffer_->pos() = used();
   } else {
     write_buffer_->is_eof() = is_eof;
-    // 这里特殊处理，如果没有数据行，只有头部字节，也必须发送，但对于数据部分如果没有行，则不发送
+    // Here special processing, if there is no data row, only header bytes, it must be sent, but for the data part if there is no row, then do not send
     write_buffer_->pos() = used();
   }
   return ret;
@@ -603,7 +602,7 @@ OB_INLINE int ObDtlVectorFixedMsgWriter::write(
       SQL_DTL_LOG(WARN, "failed to init buffer", K(ret));
     } else {
       write_buffer_->is_eof() = is_eof;
-      // 这里特殊处理，如果没有数据行，只有头部字节，也必须发送，但对于数据部分如果没有行，则不发送
+      // Here special processing, if there is no data row, only header bytes, it must be sent, but for the data part if there is no row, then do not send
       write_buffer_->pos() = used();
     }
   }

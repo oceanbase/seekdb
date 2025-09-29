@@ -6076,7 +6076,7 @@ public:
   static int create_sys_var(ObIAllocator &allocator_, ObSysVarClassType sys_var_id, ObBasicSysVar *&sys_var_ptr);
   static int calc_sys_var_store_idx(ObSysVarClassType sys_var_id, int64_t &store_idx);
   static bool is_valid_sys_var_store_idx(int64_t store_idx);
-  static ObSysVarClassType find_sys_var_id_by_name(const common::ObString &sys_var_name, bool is_from_sys_table = false); //二分查找
+  static ObSysVarClassType find_sys_var_id_by_name(const common::ObString &sys_var_name, bool is_from_sys_table = false); // binary search
   static int get_sys_var_name_by_id(ObSysVarClassType sys_var_id, common::ObString &sys_var_name);
   static const common::ObString get_sys_var_name_by_id(ObSysVarClassType sys_var_id);
 private:
@@ -6089,8 +6089,8 @@ public:
   const static int64_t INVALID_MAX_READ_STALE_TIME = -1;
 
   const static int16_t OB_SPECIFIC_SYS_VAR_ID_OFFSET = 10000;
-  // 表示当前OB能够使用的sys var id的最大值，正常情况下，不需要申请大于OB_MAX_SYS_VAR_ID的sys var id，
-  // 如果需要申请大于OB_MAX_SYS_VAR_ID的sys var id，需要先调整ob_max_sys_var_id的值
+  // Indicates the maximum sys var id that the current OB can use. Normally, it is not necessary to apply for a sys var id greater than OB_MAX_SYS_VAR_ID,
+  // If you need to apply for a sys var id greater than OB_MAX_SYS_VAR_ID, you need to adjust the value of ob_max_sys_var_id first
   const static int32_t OB_MAX_SYS_VAR_ID = 20000;
 
 private:

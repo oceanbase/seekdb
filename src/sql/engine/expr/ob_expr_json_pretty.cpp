@@ -39,7 +39,7 @@ int ObExprJsonPretty::calc_result_type1(ObExprResType &type,
                                         ObExprResType &type1,
                                         common::ObExprTypeCtx &type_ctx) const
 {
-  UNUSED(type_ctx); // type_ctx session, collation, raw expr, oracle模式下可能需要从type_ctx来判断字符集
+  UNUSED(type_ctx); // type_ctx session, collation, raw expr, Oracle mode may need to determine the character set from type_ctx
   INIT_SUCC(ret);
 
   type.set_type(ObLongTextType);

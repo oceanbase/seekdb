@@ -343,8 +343,7 @@ void ObTxDataTableTest::check_minor_merge()
   HEAP_VAR(ObMySQLProxy::MySQLResult, res)
   {
     int64_t retry_times = 10;
-
-    // 确认MINI MERGE 并行转储正确
+    // Confirm MINI MERGE parallel dump is correct
     int64_t cnt = 0;
     while (--retry_times >= 0) {
       ASSERT_EQ(OB_SUCCESS,
@@ -363,9 +362,7 @@ void ObTxDataTableTest::check_minor_merge()
       }
     }
     // ASSERT_GT(cnt, 0);
-
-
-    // 确认没有未能转储的memtable
+    // Confirm there are no undumped memtables
     retry_times = 10;
     while (--retry_times >= 0) {
       ASSERT_EQ(OB_SUCCESS,

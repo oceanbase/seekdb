@@ -30,8 +30,7 @@ public:
   virtual void SetUp() {}
   virtual void TearDown() {}
 };
-
-// 序列化和反序列化的功能
+// Serialization and deserialization functionality
 TEST_F(TestUserBinaryKey, serialization) {
   UserBinaryKey key1;
   key1.set_user_key(ObDeadLockTestIntKey(1));

@@ -144,7 +144,7 @@ int ObRawExprPrinter::print(ObRawExpr *expr)
       && !expr->is_column_ref_expr()
       && !expr->is_aggr_expr()
       && !expr->is_pseudo_column_expr()
-     // quertionmark 是一个const expr，如果是prepare，需要打印成:0这样的东西，不能用alias来代替
+     // questionmark is a const expr, if it is prepare, it needs to be printed as :0 this kind of thing, cannot use alias to replace
       && T_QUESTIONMARK != expr->get_expr_type()
       && scope_ != T_DBLINK_SCOPE
       && scope_ != T_FIELD_LIST_SCOPE
@@ -525,7 +525,7 @@ int ObRawExprPrinter::print(ObOpRawExpr *expr)
       }
     case T_OP_OR: {
       SET_SYMBOL_IF_EMPTY("or");
-      // 这里孩子不一定为2, 比如a or (b or c) 会被改写为一个or含三个孩子
+      // Here the child is not necessarily 2, for example a or (b or c) would be rewritten as an or with three children
       if (expr->get_param_count() < 2) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("expr param count should be greater than or equal 2", K(ret), K(expr->get_param_count()));
@@ -3299,9 +3299,9 @@ int ObRawExprPrinter::print(ObSysFunRawExpr *expr)
         break;
       }
       case T_FUN_SYS_ORA_DECODE: {
-        //同一个函数 在Oracle下名为decode， 在MySQL下名为ora_decode
+        // The same function named decode in Oracle, named ora_decode in MySQL
         // for 
-        // 保证SQL反拼不会出错
+        // Ensure that SQL reverse parsing does not result in an error
         DATA_PRINTF("ora_decode");
         OZ(inner_print_fun_params(*expr));
         break;

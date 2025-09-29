@@ -717,8 +717,8 @@ int ObOptEstObjToScalar::convert_objs_to_scalars(
       }
     }
     if (start->is_null() && !end->is_null()) {
-      start_out->set_min_value();//TODO 暂且把这个设置为min value但是这样并不是太好,
-      //后面需要更强的区分能力，可以区分是否包含NULL,计算NULL sel不同
+      start_out->set_min_value();//TODO temporarily set this to min value but this is not quite right,
+      // behind needs stronger distinction capability, can distinguish whether it contains NULL, calculate NULL sel differently
     }
   }
   return ret;

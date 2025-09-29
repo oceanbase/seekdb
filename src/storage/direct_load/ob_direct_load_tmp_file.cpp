@@ -242,7 +242,7 @@ int ObDirectLoadTmpFileIOHandle::write(char *buf, int64_t size)
       if (OB_FAIL(check_status())) {
         LOG_WARN("fail to check status", KR(ret));
       }
-      // TODO(suzhi.yt): 先保留原来的调用, aio_write提交成功就相当于写成功了
+      // TODO(suzhi.yt): Keep the original call for now, aio_write submission success is equivalent to write success
       else if (OB_FAIL(FILE_MANAGER_INSTANCE_WITH_MTL_SWITCH.aio_write(MTL_ID(), io_info_, file_io_handle_))) {
         LOG_WARN("fail to do aio write to tmp file", KR(ret), K_(io_info));
         if (OB_LIKELY(is_retry_err(ret))) {

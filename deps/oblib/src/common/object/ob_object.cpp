@@ -1330,7 +1330,7 @@ int ObObj::check_collation_free_and_compare(const ObObj &other, int &cmp) const
     LOG_ERROR("unexpected error, invalid argument", K(*this), K(other));
     ret = OB_ERR_UNEXPECTED;
   } else {
-    // 只用于sortkey转换后的Obj比较
+    // Only used for Obj comparison after sortkey conversion
     const int32_t lhs_len = get_val_len();
     const int32_t rhs_len = other.get_val_len();
     const int32_t cmp_len = std::min(lhs_len, rhs_len);
@@ -1339,16 +1339,16 @@ int ObObj::check_collation_free_and_compare(const ObObj &other, int &cmp) const
     cmp = memcmp(get_string_ptr(), other.get_string_ptr(), cmp_len);
     if (is_oracle) {
       if (0 == cmp) {
-        // 如果两个字符串只有尾部空格不同，在oracle varchar模式下，认为字符串是不同的
+        // If two strings differ only by trailing spaces, they are considered different in Oracle varchar mode
         if (!is_varying_len_char_type()) {
-          // 如果两个字符串只有尾部空格不同，在oracle char模式下，认为字符串是相同的
+          // If two strings differ only by trailing spaces, they are considered the same in Oracle char mode
           need_skip_tail_space = true;
         } else if (lhs_len != cmp_len || rhs_len != cmp_len) {
           cmp = lhs_len > cmp_len ? 1 : -1;
         }
       }
     } else if (0 == cmp && (lhs_len != cmp_len || rhs_len != cmp_len)) {
-      // m如果两个字符串只有尾部空格不同，在mysql模式下，认为字符串是相同的
+      // If two strings differ only at the end with spaces, they are considered the same in MySQL mode
       need_skip_tail_space = true;
     }
     if (need_skip_tail_space) {
@@ -1358,7 +1358,7 @@ int ObObj::check_collation_free_and_compare(const ObObj &other, int &cmp) const
       const unsigned char *uptr = reinterpret_cast<const unsigned char *>(ptr);
       int32_t i = 0;
       uptr += cmp_len;
-      // varchar或char有长度限制，不可能超过int32_t
+      // varchar or char has length limit, it is impossible to exceed int32_t
       for (; i < left_len; ++i) {
         if (*(uptr + i) != ' ') {
           has_non_space = true;
@@ -1366,7 +1366,7 @@ int ObObj::check_collation_free_and_compare(const ObObj &other, int &cmp) const
         }
       }
       if (has_non_space) {
-        // mysql特殊行为：a\1 < a，但ab > a
+        // mysql special behavior: a\1 < a, but ab > a
         if (*(uptr + i) < ' ') {
           cmp = lhs_len > cmp_len ? -1 : 1;
         } else {
@@ -1394,7 +1394,7 @@ int ObObj::check_collation_free_and_compare(const ObObj &other) const
     LOG_ERROR_RET(common::OB_ERR_UNEXPECTED, "unexpected error, invalid argument", K(*this), K(other));
     right_to_die_or_duty_to_live();
   } else {
-    // 只用于sortkey转换后的Obj比较
+    // Only used for Obj comparison after sortkey conversion
     const int32_t lhs_len = get_val_len();
     const int32_t rhs_len = other.get_val_len();
     const int32_t cmp_len = std::min(lhs_len, rhs_len);
@@ -1403,16 +1403,16 @@ int ObObj::check_collation_free_and_compare(const ObObj &other) const
     cmp = memcmp(get_string_ptr(), other.get_string_ptr(), cmp_len);
     if (is_oracle) {
       if (0 == cmp) {
-        // 如果两个字符串只有尾部空格不同，在oracle varchar模式下，认为字符串是不同的
+        // If two strings differ only by trailing spaces, in Oracle varchar mode, the strings are considered different
         if (!is_varying_len_char_type()) {
-          // 如果两个字符串只有尾部空格不同，在oracle char模式下，认为字符串是相同的
+          // If two strings differ only by trailing spaces, they are considered the same in Oracle char mode
           need_skip_tail_space = true;
         } else if (lhs_len != cmp_len || rhs_len != cmp_len) {
           cmp = lhs_len > cmp_len ? 1 : -1;
         }
       }
     } else if (0 == cmp && (lhs_len != cmp_len || rhs_len != cmp_len)) {
-      // m如果两个字符串只有尾部空格不同，在mysql模式下，认为字符串是相同的
+      // If two strings differ only at the trailing spaces, they are considered the same in MySQL mode
       need_skip_tail_space = true;
     }
     if (need_skip_tail_space) {
@@ -1422,7 +1422,7 @@ int ObObj::check_collation_free_and_compare(const ObObj &other) const
       const unsigned char *uptr = reinterpret_cast<const unsigned char *>(ptr);
       int32_t i = 0;
       uptr += cmp_len;
-      // varchar或char有长度限制，不可能超过int32_t
+      // varchar or char has length limit, it is impossible to exceed int32_t
       for (; i < left_len; ++i) {
         if (*(uptr + i) != ' ') {
           has_non_space = true;
@@ -1430,7 +1430,7 @@ int ObObj::check_collation_free_and_compare(const ObObj &other) const
         }
       }
       if (has_non_space) {
-        // mysql特殊行为：a\1 < a，但ab > a
+        // mysql special behavior: a\1 < a, but ab > a
         if (*(uptr + i) < ' ') {
           cmp = lhs_len > cmp_len ? -1 : 1;
         } else {
@@ -1993,10 +1993,9 @@ int ObObj::get_set_str_val(ObSqlString &str_val, const ObIArray<ObString> &type_
   }
   return ret;
 }
-
-// 当租户模式为 mysql 时，返回 char 的字符长度
-// 当租户模式为 oracle 时，如果 char 的 len 类型为 char，返回 char 的字符长度
-// 当租户模式为 oracle 时，如果 char 的 len 类型为 byte，返回 char 的字节长度
+// When the tenant mode is mysql, return the character length of char
+// When the tenant mode is oracle, if the len type of char is char, return the character length of char
+// When the tenant mode is oracle, if the len type of char is byte, return the byte length of char
 int ObObj::get_char_length(const ObAccuracy accuracy, int32_t &char_len, bool is_oracle_mode) const
 {
   int ret = OB_SUCCESS;
@@ -2228,7 +2227,7 @@ DEF_TO_STRING(ObHexEscapeSqlStr)
     if (do_oracle_mode_escape_) {
       for (const char *cur = str_.ptr(); cur < end && buf_pos < buf_len; ++cur) {
         if ('\'' == *cur) {
-          //在oracle模式中,只处理单引号转义
+          // In oracle mode, only handle single quote escape
           buf[buf_pos++] = '\'';
           if (buf_pos < buf_len) {
             buf[buf_pos++] = *cur;
@@ -2261,7 +2260,7 @@ DEF_TO_STRING(ObHexEscapeSqlStr)
           }
           case '\'':
           case '\"': {
-            //字符串中出现了'或者"，需要进行转义
+            // A ' or " appeared in the string, it needs to be escaped
             buf[buf_pos++] = '\\';
             if (buf_pos < buf_len) {
               buf[buf_pos++] = *cur;

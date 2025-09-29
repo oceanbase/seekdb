@@ -198,7 +198,7 @@ int ObTableLSExecuteP::LSExecuteIter::init_batch_ctx(uint64_t table_id,
                           batch_ctx.tb_ctx_))) {
     LOG_WARN("fail to init table context", K(ret));
   }  else {
-    // 构造batch_service需要的入参
+    // Construct the parameters required for batch_service
     batch_ctx.trans_param_ = &outer_exectute_process_.trans_param_;
     batch_ctx.consistency_level_ = outer_exectute_process_.arg_.consistency_level_;
     batch_ctx.table_id_ = table_id;
@@ -1047,7 +1047,7 @@ int ObTableLSExecuteP::old_try_process()
   bool need_all_prop = ls_op.need_all_prop_bitmap();
   table_id_ = table_id;  // init move response need
   ObTableLSOpResult *cb_result = nullptr;
-  observer::ObReqTimeGuard req_timeinfo_guard; // 引用cache资源必须加ObReqTimeGuard
+  observer::ObReqTimeGuard req_timeinfo_guard; // Reference cache resources must add ObReqTimeGuard
   bool is_hkv = ObTableEntityType::ET_HKV == arg_.entity_type_; 
   if (OB_FAIL(create_cb_result())) {
     LOG_WARN("fail to create cb result", K(ret));

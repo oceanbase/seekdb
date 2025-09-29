@@ -1624,8 +1624,8 @@ int64_t ObDeviceCredentialMgr::on_write_data_(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), KP(ptr), K(size), K(nmemb), KP(user_data));
   } else {
-    // "阿里云STS服务返回的安全令牌（STS
-    // Token）的长度不固定，强烈建议您不要假设安全令牌的最大长度。" there exists sts_token in the
+    // "Alibaba Cloud STS service returns the security token (STS"
+    // Token length is not fixed, it is strongly recommended that you do not assume the maximum length of the security token. " there exists sts_token in the
     // response of curl. therefore, use allocator to alloc mem dynamically
     ResponseAndAllocator *res_and_allocator = static_cast<ResponseAndAllocator *>(user_data);
     char *&response = res_and_allocator->response_;

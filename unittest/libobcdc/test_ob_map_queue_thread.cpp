@@ -122,7 +122,7 @@ public:
 	// Record the number of data that has been processed by the thread
 	int64_t end_handle_count_ CACHE_ALIGNED;
 public:
-	// 实Overload run, test the correctness of ObMapQueueThread execution
+	// Overload run, test the correctness of ObMapQueueThread execution
 	virtual void run(const int64_t thread_index);
 private:
   static const int64_t IDLE_WAIT_TIME = 10 * 1000;

@@ -183,8 +183,7 @@ int ObExpandAggregateUtils::expand_window_aggr_expr(ObDMLStmt *stmt, bool &trans
   }
   return ret;
 }
-
-//前提:(expr1, expr2) 两个expr都不为NULL
+// Precondition: (expr1, expr2) both expr are not NULL
 //T_FUN_COVAR_POP == node->type_: (SUM(expr1 * expr2) - SUM(expr2) * SUM(expr1) / count(expr1 * expr2)) / count(expr1 * expr2)
 //T_FUN_COVAR_SAMP== node->type_: (SUM(expr1 * expr2) - SUM(expr1) * SUM(expr2) / count(expr1 * expr2)) / (count(expr1 * expr2)-1)
 int ObExpandAggregateUtils::expand_covar_expr(ObAggFunRawExpr *aggr_expr,
@@ -343,8 +342,7 @@ int ObExpandAggregateUtils::expand_covar_expr(ObAggFunRawExpr *aggr_expr,
   }
   return ret;
 }
-
-//前提:(expr1, expr2) 两个expr都不为NULL
+// Precondition: (expr1, expr2) both expr are not NULL
 //COVAR_POP(expr1, expr2) / (STDDEV_POP(expr1) * STDDEV_POP(expr2))
 int ObExpandAggregateUtils::expand_corr_expr(ObAggFunRawExpr *aggr_expr,
                                              ObRawExpr *&replace_expr,
@@ -592,7 +590,7 @@ int ObExpandAggregateUtils::expand_var_expr(ObAggFunRawExpr *aggr_expr,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(ret), K(aggr_expr));
   } else if (lib::is_mysql_mode() && aggr_expr->get_expr_type() == T_FUN_VAR_POP) {
-  //mysql模式下的VAR_POP() 同 VARIANCE() 实现是一样的
+  // In mysql mode, VAR_POP() has the same implementation as VARIANCE()
     if (OB_FAIL(expand_mysql_variance_expr(aggr_expr,
                                            replace_expr,
                                            new_aggr_items))) {
@@ -609,7 +607,7 @@ int ObExpandAggregateUtils::expand_var_expr(ObAggFunRawExpr *aggr_expr,
     ObRawExpr *div_expr = NULL;
     ObRawExpr *minus_expr = NULL;
     ObRawExpr *div_minus_expr = NULL;
-    //由于目前 mysql模式下的除法实现有点问题，存在部分精度不一致，因此这里暂时先添加cast显示转换为最大精度
+    // Due to the current issue with division implementation in mysql mode, there are some inconsistencies in precision, so we temporarily add cast to explicitly convert to maximum precision
     ObRawExprResType dst_type;
     dst_type.set_number();
     dst_type.set_scale(ObAccuracy::MAX_ACCURACY2[MYSQL_MODE][ObNumberType].get_scale());
@@ -782,8 +780,7 @@ int ObExpandAggregateUtils::expand_regr_expr(ObAggFunRawExpr *aggr_expr,
   } else {/*do nothing*/}
   return ret;
 }
-
-//前提:(expr1, expr2) 两个expr都不为NULL
+// Precondition: (expr1, expr2) both expr are not NULL
 //REGR_SLOPE(expr1, expr2) = COVAR_POP(expr1, expr2) / VAR_POP(expr2)
 int ObExpandAggregateUtils::expand_regr_slope_expr(ObAggFunRawExpr *aggr_expr,
                                                    ObRawExpr *&replace_expr,
@@ -866,8 +863,7 @@ int ObExpandAggregateUtils::expand_regr_slope_expr(ObAggFunRawExpr *aggr_expr,
   }
   return ret;
 }
-
-//前提:(expr1, expr2) 两个expr都不为NULL
+// Precondition: (expr1, expr2) both expr are not NULL
 //REGR_INTERCEPT(expr1, expr2) = AVG(expr1) - REGR_SLOPE(expr1, expr2) * AVG(expr2)
 int ObExpandAggregateUtils::expand_regr_intercept_expr(ObAggFunRawExpr *aggr_expr,
                                                        ObRawExpr *&replace_expr,
@@ -980,8 +976,7 @@ int ObExpandAggregateUtils::expand_regr_intercept_expr(ObAggFunRawExpr *aggr_exp
   }
   return ret;
 }
-
-//前提:(expr1, expr2) 两个expr都不为NULL
+// Precondition: (expr1, expr2) both expr are not NULL
 //REGR_COUNT(expr1, expr2) = COUNT(case expr1 is not null and c2 is not null then expr1 else null end);
 int ObExpandAggregateUtils::expand_regr_count_expr(ObAggFunRawExpr *aggr_expr,
                                                    ObRawExpr *&replace_expr,
@@ -1021,8 +1016,7 @@ int ObExpandAggregateUtils::expand_regr_count_expr(ObAggFunRawExpr *aggr_expr,
   }
   return ret;
 }
-
-//前提:(expr1, expr2) 两个expr都不为NULL
+// Precondition: (expr1, expr2) both expr are not NULL
 //REGR_R2(expr1, expr2) = if VAR_POP(expr2)  = 0 ==> NULL
 //                        if VAR_POP(expr1)  = 0 and VAR_POP(expr2) != 0 ==> 1
 //                        if VAR_POP(expr1)  > 0 and  VAR_POP(expr2) != 0 ==> POWER(CORR(expr1,expr),2)
@@ -1142,8 +1136,7 @@ int ObExpandAggregateUtils::expand_regr_r2_expr(ObAggFunRawExpr *aggr_expr,
   }
   return ret;
 }
-
-//前提:(expr1, expr2) 两个expr都不为NULL
+// Precondition: (expr1, expr2) both expr are not NULL
 //REGR_AVGX(expr1, expr2) = AVG(expr2);
 //REGR_AVGY(expr1, expr2) = AVG(expr1);
 int ObExpandAggregateUtils::expand_regr_avg_expr(ObAggFunRawExpr *aggr_expr,
@@ -1202,8 +1195,7 @@ int ObExpandAggregateUtils::expand_regr_avg_expr(ObAggFunRawExpr *aggr_expr,
   }
   return ret;
 }
-
-//前提:(expr1, expr2) 两个expr都不为NULL
+// Precondition: (expr1, expr2) both expr are not NULL
 //REGR_SXX(expr1, expr2) = REGR_COUNT(expr1, expr2) * VAR_POP(expr2)
 //REGR_SYY(expr1, expr2) = REGR_COUNT(expr1, expr2) * VAR_POP(expr1)
 //REGR_SXY(expr1, expr2) = REGR_COUNT(expr1, expr2) * COVAR_POP(expr1, expr2)
@@ -1468,8 +1460,7 @@ int ObExpandAggregateUtils::expand_keep_avg_expr(ObAggFunRawExpr *aggr_expr,
   }
   return ret;
 }
-
-//方差(variance):
+// Variance(variance):
 //D(x) <==> if count(x) = 1 ==> (SUM(x*x) - SUM(x)* SUM(x)/ COUNT(x)) / (1) = 0
 //        if count(x) > 1 ==> var_samp(x) ==> (SUM(x*x) - SUM(x)* SUM(x)/ COUNT(x)) / (COUNT(x) - 1)
 int ObExpandAggregateUtils::expand_keep_variance_expr(ObAggFunRawExpr *aggr_expr,
@@ -1742,8 +1733,7 @@ int ObExpandAggregateUtils::expand_avg_expr(ObAggFunRawExpr *aggr_expr,
   }
   return ret;
 }
-
-//mysql模式的方差计算公式为(variance): avg(expr1*expr1) - avg(expr1)*avg(expr1)
+// mysql mode variance calculation formula: avg(expr1*expr1) - avg(expr1)*avg(expr1)
 int ObExpandAggregateUtils::expand_mysql_variance_expr(ObAggFunRawExpr *aggr_expr,
                                                        ObRawExpr *&replace_expr,
                                                        ObIArray<ObAggFunRawExpr*> &new_aggr_items)
@@ -1771,7 +1761,7 @@ int ObExpandAggregateUtils::expand_mysql_variance_expr(ObAggFunRawExpr *aggr_exp
     ObRawExpr *div_expr = NULL;
     ObRawExpr *div_multi_expr = NULL;
     ObRawExpr *cast_minus_expr = NULL;
-    //由于目前 mysql模式下的除法实现有点问题，存在部分精度不一致，因此这里暂时先添加cast显示转换规避
+    // Due to the current issue with division implementation in mysql mode, there are some inconsistencies in precision, so we temporarily add cast for explicit conversion to avoid it
     ObRawExprResType dst_type;
     dst_type.set_number();
     dst_type.set_scale(ObAccuracy::MAX_ACCURACY2[MYSQL_MODE][ObNumberType].get_scale());

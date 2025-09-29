@@ -146,10 +146,10 @@ int ObCreateTenantResolver::resolve(const ParseNode &parse_tree)
     }
   }
 
-  /* 对于tenant的charset和collation属性，是依赖于模式的，所以需要确定好模式后再处理
-   * MySQL依赖于charset和collation属性，这里都会设置
-   * 对于Oracle租户，创建租户时只允许设置charset属性，因为Oracle其实没有collation概念，Oracle的
-   * 比较行为依赖于nls_comp和nls_sort两个参数，这两个默认行为是BINARY比较
+  /* For the tenant's charset and collation attributes, they are dependent on the schema, so the schema needs to be determined before processing
+   * MySQL depends on the charset and collation attributes, both of which will be set here
+   * For Oracle tenants, only the charset attribute can be set when creating a tenant, because Oracle actually does not have the concept of collation. Oracle's
+   * comparison behavior depends on the nls_comp and nls_sort parameters, and their default behavior is BINARY comparison
    */
   if (OB_SUCC(ret)) {
     ObCollationType collation_type = mystmt->get_create_tenant_arg().tenant_schema_.get_collation_type();
@@ -166,7 +166,7 @@ int ObCreateTenantResolver::resolve(const ParseNode &parse_tree)
       } else if (CHARSET_INVALID == charset_type) {
         charset_type = ObCharset::charset_type_by_coll(collation_type);
       } else {
-        //这里需要考虑到charset_type已经是一个有效的字符集时，需要重新设置对应的collation_type
+        // Here need to consider that charset_type is already a valid character set, need to reset the corresponding collation_type
         //bug:
         collation_type = ObCharset::get_default_collation_oracle(charset_type);
       }
@@ -196,7 +196,7 @@ int ObCreateTenantResolver::resolve(const ParseNode &parse_tree)
         SQL_LOG(WARN, "fail to check charset collation", K(ret));
       }
     }
-    // 这里需要检查对应的字符集和collation是否是匹配并且有效的，如果不匹配直接在resolver阶段抛出错误
+    // Here we need to check if the corresponding character set and collation are matching and valid, if not, throw an error directly at the resolver stage
     if (!ObCharset::is_valid_collation(charset_type, collation_type)) {
       ret = OB_ERR_COLLATION_MISMATCH;
       LOG_WARN("invalid collation info", K(charset_type), K(collation_type));

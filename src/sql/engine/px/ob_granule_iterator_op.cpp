@@ -462,14 +462,13 @@ int ObGranuleIteratorOp::try_pruning_repart_partition(
   }
   return ret;
 }
-
-// 逻辑说明：
-// 对于 NLJ rescan 右表场景，它分为两步：
-// 1. 开始扫描之前，is_rescan_ = false， 会反复调用 try_fetch_task
-//    把所有分区都填到 rescan_tasks_pos_ 里， 然后会设置 is_rescan_ = true
-// 2. 开始扫描后，对于左边来的每一行，都会反复从 rescan_tasks_pos_ 选择合适的 task 来做
-//    扫描。之所以引入 partition pruning 是为了处理 NLJ 右表是分区表场景
-//    下，避免扫描无效分区。
+// Logic explanation:
+// For the NLJ rescan right table scenario, it is divided into two steps:
+// 1. Before starting the scan, is_rescan_ = false, will repeatedly call try_fetch_task
+//    Put all partitions into rescan_tasks_pos_, then it will set is_rescan_ = true
+// 2. Start scanning, for each row coming from the left, it will repeatedly select a suitable task from rescan_tasks_pos_ to do
+//    Scan. The introduction of partition pruning is to handle the scenario where the right table of NLJ is a partitioned table
+//    below, avoid scanning invalid partitions.
 int ObGranuleIteratorOp::try_fetch_task(ObGranuleTaskInfo &info, bool round_robin)
 {
   int ret = OB_SUCCESS;
@@ -701,8 +700,8 @@ int ObGranuleIteratorOp::inner_open()
       if (OB_FAIL(get_gi_task_consumer_node(this, real_child))) {
         LOG_WARN("Failed to get real child", K(ret));
       } else {
-        // 如果是 partition wise的情况，就不需要 tsc op io
-        // 因为 partition wise的情况下，获得GI task array是直接通过 `pw_dml_tsc_ids_` 数组类实现的
+        // If it is a partition wise situation, then tsc op io is not needed
+        // Because in partition wise case, obtaining the GI task array is directly achieved through the `pw_dml_tsc_ids_` array class
         tsc_op_id_ = real_child->get_spec().id_;
         real_child_ = real_child;
       }
@@ -1094,10 +1093,10 @@ int ObGranuleIteratorOp::do_get_next_granule_task(bool &partition_pruning, bool 
   int ret = OB_SUCCESS;
   ObSEArray<ObGranuleTaskInfo, 4> gi_task_infos;
   partition_pruning = false;
-  // gi_prepare_map: 通过 GIPrepareTaskMap 跨越算子来传递 gi_task_info
-  // 需要考虑到：当前 GI 下面可能存在多个 TSC 算子，GI 需要为他们每个人准备好 ObGranuleTaskInfo
-  //             然后保存到 TaskMap 映射中： table_id => ObGranuleTaskInfo
-  //             所以，下面的代码都是围绕着构建 GIPrepareTaskMap 来的
+  // gi_prepare_map: pass gi_task_info across operators through GIPrepareTaskMap
+  // Need to consider: there may be multiple TSC operators under the current GI, GI needs to prepare ObGranuleTaskInfo for each of them
+  //             then save to TaskMap mapping: table_id => ObGranuleTaskInfo
+  //             So, the following code is all about building the GIPrepareTaskMap
   GIPrepareTaskMap *gi_prepare_map = nullptr;
   if (OB_FAIL(ctx_.get_gi_task_map(gi_prepare_map))) {
     LOG_WARN("Failed to get gi task map", K(ret));
@@ -1133,7 +1132,7 @@ int ObGranuleIteratorOp::do_get_next_granule_task(bool &partition_pruning, bool 
       }
     } else {
       if (OB_NOT_NULL(gi_prepare_map->get(tsc_op_id_))) {
-        // GI在向Map中塞任务的时候，需要尝试清理上一次塞入的任务
+        // GI needs to try cleaning up the tasks inserted last time when inserting tasks into the Map
         if (OB_FAIL(gi_prepare_map->erase_refactored(tsc_op_id_))) {
           if (OB_HASH_NOT_EXIST != ret) {
             LOG_WARN("failed to erase task", K(ret));
@@ -1163,8 +1162,8 @@ int ObGranuleIteratorOp::do_get_next_granule_task(bool &partition_pruning, bool 
     }
   } else {
     /* partition wise join */
-    // 获得gi tasks:
-    // 每一个`op_id`都会对应一个`gi_task_info`
+    // obtain gi tasks:
+    // Every `op_id` will correspond to a `gi_task_info`
     if (OB_FAIL(ret)) {
     } else if (OB_UNLIKELY(MY_SPEC.pw_dml_tsc_ids_.empty())) {
       ret = OB_ERR_UNEXPECTED;
@@ -1182,8 +1181,7 @@ int ObGranuleIteratorOp::do_get_next_granule_task(bool &partition_pruning, bool 
         }
       }
     }
-
-    // 动态分区裁剪
+    // Dynamic partition pruning
     if (OB_SUCC(ret)) {
       if (OB_FAIL(do_dynamic_partition_pruning(gi_task_infos, partition_pruning))) {
         LOG_WARN("fail to do partition pruning", K(ret));
@@ -1550,7 +1548,7 @@ int ObGranuleIteratorOp::fetch_rescan_pw_task_infos(const common::ObIArray<int64
       }
     }
     ARRAY_FOREACH_X(op_ids, idx, cnt, OB_SUCC(ret)) {
-      // GI在向Map中塞任务的时候，需要尝试清理上一次塞入的任务
+      // GI needs to try cleaning up the tasks inserted last time when inserting tasks into the Map
       if (OB_NOT_NULL(gi_prepare_map->get(op_ids.at(idx)))) {
         if (OB_FAIL(gi_prepare_map->erase_refactored(op_ids.at(idx)))) {
           LOG_WARN("failed to erase task", K(ret));
@@ -1613,7 +1611,7 @@ int ObGranuleIteratorOp::fetch_normal_pw_task_infos(const common::ObIArray<int64
       }
     }
     ARRAY_FOREACH_X(op_ids, idx, cnt, OB_SUCC(ret)) {
-      // GI在向Map中塞任务的时候，需要尝试清理上一次塞入的任务
+      // GI needs to try cleaning up the tasks inserted last time when inserting tasks into the Map
       if (OB_NOT_NULL(gi_prepare_map->get(op_ids.at(idx)))) {
         if (OB_FAIL(gi_prepare_map->erase_refactored(op_ids.at(idx)))) {
           LOG_WARN("failed to erase task", K(ret));

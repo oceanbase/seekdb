@@ -123,7 +123,7 @@ int ObAlterRoleExecutor::execute(ObExecContext &ctx, ObAlterRoleStmt &stmt)
     const ObString &pwd = stmt.get_password();
     ObString pwd_enc;
     if (pwd.length() > 0 && stmt.get_need_enc()) {
-      // 采用OB统一的加密方式
+      // Adopt OB unified encryption method
       if (OB_FAIL(ObCreateUserExecutor::encrypt_passwd(pwd, pwd_enc, enc_buf, ENC_BUF_LEN))) {
         LOG_WARN("Encrypt password failed", K(ret));
       }

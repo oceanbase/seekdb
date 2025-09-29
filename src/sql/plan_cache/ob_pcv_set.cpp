@@ -94,10 +94,9 @@ void ObPCVSet::destroy()
     expired_time_ = 0;
   }
 }
-
-//1.检查fast parser识别常量个数是否与正常parser识别常量个数一致
-//2.通过match 每个pcv中db_id, sys_vars, not params找到对应的pcv
-//3.在pcv中get plan
+//1.Check if the number of constants recognized by fast parser is consistent with that recognized by normal parser
+//2.by match each pcv's db_id, sys_vars, not params find the corresponding pcv
+//3.get plan in pcv
 int ObPCVSet::inner_get_cache_obj(ObILibCacheCtx &ctx,
                                   ObILibCacheKey *key,
                                   ObILibCacheObject *&cache_obj)
@@ -130,7 +129,7 @@ int ObPCVSet::inner_get_cache_obj(ObILibCacheCtx &ctx,
   } else if (min_cluster_version_ != pc_ctx.exec_ctx_.get_min_cluster_version()) {
     ret = OB_OLD_SCHEMA_VERSION;
   } else if (need_check_gen_tbl_col_) {
-    // 检查是否有generated table投影列同名的可能
+    // Check for the possibility of generated table projection column name conflicts
     bool contain_dup_col = false;
     if (OB_FAIL(check_raw_param_for_dup_col(pc_ctx, contain_dup_col))) {
       LOG_WARN("failed to check raw param for dup col", K(ret));
@@ -146,9 +145,9 @@ int ObPCVSet::inner_get_cache_obj(ObILibCacheCtx &ctx,
              K(ret), K(pc_ctx.sql_ctx_.schema_guard_), K(pc_ctx.sql_ctx_.session_info_));
   } else {
     ObSEArray<PCVSchemaObj, 4> schema_array;
-    //plan cache匹配临时表应该始终使用用户创建的session才能保证语义的正确性
-    //远端执行的时候会创建临时的session对象，其session_id也是临时的，
-    //所以这里必须使用get_sessid_for_table()规则去判断
+    // plan cache matching temporary tables should always use the user-created session to ensure the correctness of semantics
+    // When executed remotely, a temporary session object will be created, and its session_id is also temporary,
+    // So here the get_sessid_for_table() rule must be used to determine
     pc_ctx.sql_ctx_.schema_guard_->set_session_id(
         pc_ctx.sql_ctx_.session_info_->get_sessid_for_table());
     ObPlanCacheValue *matched_pcv = NULL;
@@ -180,9 +179,9 @@ int ObPCVSet::inner_get_cache_obj(ObILibCacheCtx &ctx,
         break;
       }
     } //end foreach
-    // 如果tenant schema变化了, 但table schema没有过期, 则更新tenant schema
-    // plan必须不为NULL，因为下层可能会有覆盖错误码的行为，即使计划没有匹配上，
-    // ret仍然为success，此时tenant schema version又会被推高，可能有正确性问题
+    // If tenant schema changes, but table schema has not expired, then update tenant schema
+    // plan must not be NULL, because the lower layer may have the behavior of overriding error codes, even if the plan does not match,
+    // ret is still success, at this point tenant schema version will be increased again, which may cause correctness issues
     // bug link：
     if (OB_SUCC(ret) && NULL != matched_pcv && NULL != plan) {
       if (OB_FAIL(matched_pcv->lift_tenant_schema_version(new_tenant_schema_version))) {
@@ -202,9 +201,8 @@ int ObPCVSet::inner_get_cache_obj(ObILibCacheCtx &ctx,
   }
   return ret;
 }
-
-//1.通过match 每个pcv中db_id, sys_vars, not params找到对应的pcv
-//2.如果匹配的pcv则在pcv中add plan， 否则重新生成pcv并add plan
+//1.by match each pcv's db_id, sys_vars, not params find the corresponding pcv
+//2.If matching pcv then add plan in pcv, otherwise regenerate pcv and add plan
 int ObPCVSet::inner_add_cache_obj(ObILibCacheCtx &ctx,
                                   ObILibCacheKey *key,
                                   ObILibCacheObject *cache_obj)
@@ -273,8 +271,7 @@ int ObPCVSet::inner_add_cache_obj(ObILibCacheCtx &ctx,
       // do nothing
     }
   }
-
-  //在add plan时维护一个最小的merged version, 用于后台在淘汰时进行检查;
+  // Maintain a minimum merged version when adding a plan, used by the background for checking during eviction;
   if (OB_SUCC(ret)) {
     if (OB_FAIL(set_raw_param_info_if_needed(plan))) {
       LOG_WARN("failed to set raw param info", K(ret));
@@ -285,8 +282,7 @@ int ObPCVSet::inner_add_cache_obj(ObILibCacheCtx &ctx,
   }
   return ret;
 }
-
-//生成pcv并add plan
+// Generate pcv and add plan
 int ObPCVSet::create_pcv_and_add_plan(ObPlanCacheObject *cache_obj,
                                       ObPlanCacheCtx &pc_ctx,
                                       const ObIArray<PCVSchemaObj> &schema_array,

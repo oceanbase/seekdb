@@ -123,8 +123,8 @@ public:
 
   // false for 1.4.2 -> 1.4.3
   // true for 1.3.4 -> 1.4.2
-  // 大版本升级期间关闭冻结合并、迁移复制等系统功能
-  // 小版本支持灰度升级，不关闭这些功能，且需要支持升级回滚
+  // During major version upgrade, disable freeze merge, migration replication, and other system functions
+  // Minor version supports gray-scale upgrade, does not disable these features, and requires support for rollback
   bool is_major_version_upgrade() const { return false; }
   bool in_major_version_upgrade_mode() const { return in_upgrade_mode() && is_major_version_upgrade(); }
   bool enable_new_major() const {  return true; }

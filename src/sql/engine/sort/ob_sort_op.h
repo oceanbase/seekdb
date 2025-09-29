@@ -45,10 +45,10 @@ public:
   ObExpr *topk_limit_expr_;
   ObExpr *topk_offset_expr_;
   // sort exprs + output_exprs
-  // 理论上这里应该是包含上层Operator需要的所有行
-  // 因为如果不包含，则上层就无法得到对应列的正确值
-  // 其实是所有算子都应该这样，只要有自产生数据逻辑，本质上必须包含上层operator所有Expr
-  // 否则拿到的可能就跨Operator了，则数据可能就完全乱掉了
+  // Theoretically, this should include all the lines needed by the upper-level Operator
+  // Because if it is not included, the upper layer will not be able to get the correct value of the corresponding column
+  // Actually all operators should be this way, as long as there is self-generated data logic, it essentially must include all Expr of the upper operator
+  // Otherwise the obtained data might span across Operators, then the data might be completely messed up
   ExprFixedArray all_exprs_;
   ObSortCollations sort_collations_;
   ObSortFuncs sort_cmp_funs_;

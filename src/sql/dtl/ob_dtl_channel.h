@@ -266,16 +266,16 @@ protected:
   ObDtlFlowControl *dfc_;
   bool first_recv_msg_;
   bool channel_is_eof_;
-  //为了验证每个query信息一致，添加申请和释放需要一致
+  // To verify that each query information is consistent, add that allocation and release need to be consistent
   int64_t alloc_buffer_cnt_;
   int64_t free_buffer_cnt_;
 
   ObOpMetric metric_;
 
   uint64_t state_;
-  // 标记此channel是否从中间结果管理器获取数据.
-  // 目前在px单层dfo调度会使用.
-  // 两层调度dfo时实时收发时, 不会使用此变量.
+  // Mark this channel whether it gets data from the intermediate result manager.
+  // Currently in px single-layer dfo scheduling will be used.
+  // Two-layer scheduling dfo when real-time sending and receiving, this variable will not be used.
   bool use_interm_result_;
   int64_t batch_id_;
   bool is_px_channel_;
@@ -333,9 +333,9 @@ OB_INLINE uint64_t ObDtlChannel::generate_id(uint64_t ch_cnt)
   //       channel ID
   // |    <16>     |      <28>     |     20
   //    server_id       timestamp     sequence
-  // id重复的情况：
-  // 单秒TPS直接超过2^20，可能出现重复.
-  // 相同server id的机器在2^28时间以后才重启起来.
+  // id duplicate situation:
+  // Single second TPS directly exceeds 2^20, duplicates may occur.
+  // Machines with the same server id will not restart until 2^28 time.
   //
   int64_t start_id = (common::ObTimeUtility::current_time() / 1000000) << 20;
   static volatile uint64_t sequence = start_id;

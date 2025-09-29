@@ -32,9 +32,9 @@ namespace sql
 
 enum ObEndTransCallbackType
 {
-  SYNC_CALLBACK_TYPE = 0, /* 同步等待，如DDL语句 */
-  ASYNC_CALLBACK_TYPE, /* 异步执行事务提交后的操作，如DML语句，COMMINT/ROLLBACK语句对客户端发送执行结果 */
-  // NO_CALLBACK_TYPE, /* 用户中途主动断开链接时会rollback事务, 这种情况也采取SYNC模式较为方便 */
+  SYNC_CALLBACK_TYPE = 0, /* Synchronous wait, such as DDL statements */
+  ASYNC_CALLBACK_TYPE, /* Asynchronously execute operations after transaction commit, such as DML statements, COMMIT/ROLLBACK statements sending execution results to the client */
+  // NO_CALLBACK_TYPE, /* When the user actively disconnects the link mid-process, the transaction will be rolled back, and this situation is also more convenient to handle with SYNC mode */
   NULL_CALLBACK_TYPE,
   //SQL_CALLBACK_TYPE,
   WRITE_FROZEN_STAT_CALLBACK_TYPE,
@@ -43,20 +43,20 @@ enum ObEndTransCallbackType
 };
 
 
-/* ObIEndTransCallback的生命周期：
- * 思路1.  在StartTrans的时候创建，在EndTrans调用结束后终止
- *   - disconnect模式下，采取同步等待。这个动作在StartTrans的时候无法预知
- * 思路2.  在调用EndTrans之前创建，在调用EndTrans之后终止
- *   - 需要知道当前操作类型(ac=0/1, commit/rollback, dml, disconnect)
+/* ObIEndTransCallback lifecycle:
+ * Approach 1. Create at StartTrans, terminate after EndTrans call ends
+ *   - In disconnect mode, use synchronous waiting. This action cannot be predicted at StartTrans
+ * Approach 2. Create before calling EndTrans, terminate after calling EndTrans
+ *   - Need to know the current operation type (ac=0/1, commit/rollback, dml, disconnect)
  *
- * explicit_end_trans (commit/rollback), on_plan_end (ac=1 dml)两种情况需要从外部传入ObIEndTransCallback，
- * 其余情况都使用sync模式，内部构造和释放ObIEndTransCallback
+ * explicit_end_trans (commit/rollback), on_plan_end (ac=1 dml) cases require ObIEndTransCallback to be passed from outside,
+ * other cases use sync mode, internally constructing and releasing ObIEndTransCallback
  *
- * 调用end_trans后，回调发生前，是否还可以做【可能会产生错误】的操作？
- *  - 所谓【可能会产生错误】的操作，是指调用了函数，并获得一个错误码，影响SQL错误输出。
- *  - 假设做了这样的操作，产生了错误码，那么这个错误码必须被保存，否则就被吞掉了。
- *    只能保存到Callback中。但这存在多线程问题：保存错误码的时候Callback已经调用了怎么办？
- *  - 比较简单的方式：end_trans后什么都不做，其余操作全部都放到回调中执行。
+ * After calling end_trans but before callback occurs, can operations that [may cause errors] still be performed?
+ *  - Operations that [may cause errors] refer to calling a function and obtaining an error code that affects SQL error output.
+ *  - If such an operation is performed and an error code is generated, this error code must be saved, otherwise it will be dropped.
+ *    It can only be saved in the Callback. However, this poses a multithreading issue: what if the Callback has already been called when saving the error code?
+ *  - A relatively simple approach: do nothing after end_trans, and perform all other operations inside the callback.
  *
  */
 class ObIEndTransCallback : public transaction::ObITxCallback
@@ -65,33 +65,33 @@ public:
   ObIEndTransCallback() { reset(); }
   virtual ~ObIEndTransCallback() {};
   /*
-   * 部分场景下（如cmd触发隐式提交）需要同步等待callback调用成功后
-   * 才能继续后面的操作，所以引入wait()操作
+   * In some scenarios (such as cmd triggering implicit commit) it is necessary to synchronously wait for the callback to be successfully called before
+   * continuing with subsequent operations, so the wait() operation is introduced
    */
   virtual int wait() { return common::OB_NOT_IMPLEMENT; }
   /*
-   * 由事务完成后调用，具体动作由对象本身定义
-   * 如：唤醒wait(); 向客户端回包; 向RPC调用者回包等
+   * Called after the transaction is completed, specific actions are defined by the object itself
+   * e.g.: wake up wait(); respond to the client; respond to the RPC caller, etc.
    */
   virtual void callback(int cb_param) = 0;
   virtual void callback(int cb_param, const transaction::ObTransID &trans_id) = 0;
   virtual const char *get_type() const = 0;
   virtual ObEndTransCallbackType get_callback_type() const = 0;
-  // 表示是否可能同一时间同一个callback对象被多个end trans函数共享，可能并发地调用同一callback对象的callback函数
+  // Indicates whether it is possible for the same callback object to be shared by multiple end trans functions, which may concurrently call the callback function of the same callback object
   virtual bool is_shared() const = 0;
 
   /*
-   * 设置外部错误码，事务完成后回调时参考callback(cb_param)中cb_param
-   * 指定的错误码，以及本外部错误码，返回首现错误码
+   * Set external error code, refer to the error code specified by cb_param in the callback(callback(cb_param))
+   * after the transaction is completed, along with this external error code, return the first occurring error code
    */
   void set_last_error(int last_err) { last_err_ = last_err; }
 
   /*
-   * 调用ps->end_trans成功后调用
+   * Call after successfully calling ps->end_trans
    */
   inline void handout() { ATOMIC_INC(&call_counter_); }
   /*
-   * 事务层触发cb.callback()后立即在callback中调用
+   * Transaction layer triggers cb.callback() and immediately calls the callback in the callback
    */
   inline void handin() { ATOMIC_INC(&callback_counter_);}
   inline void reset()
@@ -105,7 +105,7 @@ public:
     return callback_counter_ == call_counter_;
   }
 protected:
-  // 为了检查是否存在重复调用callback，或漏调callback的问题
+  // To check for duplicate callback calls, or missed callback calls
   inline void CHECK_BALANCE(const char *type) const
   {
     if (OB_UNLIKELY(callback_counter_ != call_counter_)) {
@@ -115,8 +115,8 @@ protected:
   }
 protected:
   int last_err_;
-  volatile uint64_t call_counter_; // 调用ps->end_trans成功的次数
-  volatile uint64_t callback_counter_; // 调用callback的次数
+  volatile uint64_t call_counter_; // Number of successful calls to ps->end_trans
+  volatile uint64_t callback_counter_; // Number of times the callback is called
 };
 
 } /*ns*/

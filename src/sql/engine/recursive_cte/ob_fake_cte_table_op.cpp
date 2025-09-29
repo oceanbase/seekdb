@@ -173,8 +173,8 @@ int ObFakeCTETableOp::add_single_row(ObChunkDatumStore::StoredRow *row)
 {
   int ret = OB_SUCCESS;
   /**
-   * R union 返回的数据是按照fake cte table的所有基准列来返回的
-   * fake cte table的基准列不一定是全部被使用了的，所以要把StoredRow被使用的cell拷贝到new StoredRow中
+   * R union returns the data according to all base columns of the fake cte table
+   * The base columns of the fake cte table are not necessarily all used, so the used cells of StoredRow need to be copied to a new StoredRow
    */
   const ObChunkDatumStore::StoredRow *new_row = nullptr;
   ObChunkDatumStore::StoredRow *old_row = nullptr;

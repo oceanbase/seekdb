@@ -437,7 +437,7 @@ int ObMvccRow::unlink_trans_node(const ObMvccTransNode &node)
   ObMvccTransNode *tmp = ATOMIC_LOAD(prev);
 
   if (!is_server_serving) {
-    //处于宕机重启阶段，为了优化热点行的快速回滚的性能，直接操作node的prev和next node
+    // During the shutdown restart phase, to optimize the performance of quick rollback for hot lines, directly manipulate the node's prev and next node
     if (&node == ATOMIC_LOAD(&list_head_)) {
       prev = &list_head_;
     } else if (NULL == node.next_ || NULL == list_head_) {
@@ -448,13 +448,13 @@ int ObMvccRow::unlink_trans_node(const ObMvccTransNode &node)
       prev = &(node.next_->prev_);
     }
   } else {
-    //本机已经正常提供服务，摘链表的操作依然从list_head开始，方便做异常校验
+    //The local machine is already providing service normally, the operation of detaching from the list still starts from list_head, which is convenient for anomaly verification
     while (OB_SUCCESS == ret && NULL != tmp && (&node) != tmp) {
       if (NDT_COMPACT == tmp->type_) {
         ret = OB_ERR_UNEXPECTED;
         TRANS_LOG(ERROR, "meet compact node when unlink trans node",
                   K(ret), K(*this), K(*tmp), K(node));
-        //T2->T1,如果T2提前解锁，是可能被设置上barrier的，后续T1先回滚，可能触发这里的防御
+        //T2->T1, if T2 is unlocked early, it may be set with a barrier, and subsequent rollback of T1 may trigger the defense here
       } else {
         if (!tmp->is_elr() && tmp->is_safe_read_barrier()) {
           // ignore ret
@@ -484,7 +484,7 @@ int ObMvccRow::unlink_trans_node(const ObMvccTransNode &node)
       ATOMIC_STORE(&(node.prev_->next_), ATOMIC_LOAD(&(node.next_)));
     }
     if (NULL != index_) {
-      //修改凡是执行该node的index node位置
+      // Modify the index node position for any execution of this node
       for (int64_t i = 0; i < common::REPLAY_TASK_QUEUE_SIZE; ++i) {
         if (&node == index_->get_index_node(i)) {
           index_->set_index_node(i, ATOMIC_LOAD(&(node.prev_)));
@@ -495,7 +495,7 @@ int ObMvccRow::unlink_trans_node(const ObMvccTransNode &node)
       }
     }
     if (OB_SUCC(ret)) {
-      //减少当前行上trans_node的总数量
+      // Reduce the total number of trans_node on the current line
       total_trans_node_cnt_--;
     }
   }
@@ -514,10 +514,9 @@ bool ObMvccRow::need_compact(const bool for_read, const bool for_replay, const b
   const int32_t compact_trigger = (for_read || for_replay)
       ? ObServerConfig::get_instance().row_compaction_update_limit * 3
       : ObServerConfig::get_instance().row_compaction_update_limit;
-
-  //备机热点行row compact频率需要降低
+  // Standby hotspot row compact frequency needs to be reduced
   if (NULL != index_ && for_replay) {
-    // 热点行场景
+    // Hotline scenario
     if (updates >= max(2048, ObServerConfig::get_instance().row_compaction_update_limit * 10)) {
       bool_ret = ATOMIC_BCAS(&update_since_compact_, updates, 0);
     }

@@ -40,9 +40,8 @@ int ObBarrierPieceMsgListener::on_message(
     ctx.received_++;
     LOG_DEBUG("got a barrier picece msg", "all_got", ctx.received_, "expected", ctx.task_cnt_);
   }
-
-  // 已经收到所有 piece，发送 sqc  个 whole
-  // 各个 sqc 广播给各自 task
+  // Already received all pieces, send sqc whole
+  // Each sqc broadcasts to its respective task
   if (OB_SUCC(ret) && ctx.received_ == ctx.task_cnt_) {
     if (OB_FAIL(ctx.send_whole_msg(sqcs))) {
       LOG_WARN("fail to send whole msg", K(ret));

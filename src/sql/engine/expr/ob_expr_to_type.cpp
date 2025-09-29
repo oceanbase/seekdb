@@ -196,8 +196,8 @@ int ObExprToType::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr,
   UNUSED(expr_cg_ctx);
   UNUSED(raw_expr);
   UNUSED(rt_expr);
-  // 预计算时，如果发现表达式参数类型与calc_type不一致，会增加to_type表达式
-  // 但是新框架下，都会增加cast表达式，应该不会出现类型不一致的情况
+  // Pre-calculation, if the expression parameter type is inconsistent with calc_type, it will add a to_type expression
+  // But in the new framework, cast expressions will be added, so type inconsistency should not occur
   int ret = OB_ERR_UNEXPECTED;
   LOG_WARN("unexpected, new engine should not use to_type expr", K(ret));
   return  ret;

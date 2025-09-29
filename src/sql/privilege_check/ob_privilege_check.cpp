@@ -89,7 +89,7 @@ int no_priv_needed(
   return OB_SUCCESS;
 }
 
-/* 判断expr是否含指定表的列，表的表级由expr level 和rel ids标记 */
+/* Determine if expr contains columns from the specified table, the table level is marked by expr level and rel ids */
 int expr_has_col_in_tab(
     const ObRawExpr *expr,
     const ObRelIds &rel_ids,
@@ -323,7 +323,7 @@ int get_dml_stmt_need_privs(
         const ObSelectStmt *select_stmt = static_cast<const ObSelectStmt*>(basic_stmt);
         if (select_stmt->is_from_show_stmt()) {
           //do not check priv for show stmt.
-          //现在大部分show 语句都是在执行时过滤掉无权限看到的信息
+          // Now most show statements filter out information that the user does not have permission to see
           break;
         }
       }//fall through for non-show select
@@ -2473,9 +2473,9 @@ int ObPrivilegeCheck::check_read_only(const ObSqlCtx &ctx,
   return ret;
 }
 
-/* 新的检查权限总入口。
-  mysql mode, 或者 oracle mode的_enable_priv_check = false，沿用老的权限check逻辑，
-  oracle mode并且_enable_priv_check = true，用新的权限check逻辑 */
+/* New entry point for permission checking.
+  mysql mode, or oracle mode _enable_priv_check = false, use the old permission check logic,
+  oracle mode and _enable_priv_check = true, use the new permission check logic */
 int ObPrivilegeCheck::check_privilege_new(
     const ObSqlCtx &ctx,
     const ObStmt *basic_stmt,
@@ -2494,7 +2494,7 @@ int ObPrivilegeCheck::check_privilege(
   int ret = OB_SUCCESS;
   if (ctx.disable_privilege_check_ == PRIV_CHECK_FLAG_DISABLE || ctx.is_remote_sql_) {
     //do not check privilege
-    //远端SQL生成执行计划不需要check权限，权限检查都在控制端完成，统一流程
+    // Remote SQL generation and execution plan do not need to check permissions, permission checks are all completed on the control end, unified process
   } else {
     if (OB_ISNULL(basic_stmt)
         || OB_ISNULL(ctx.session_info_)
@@ -2679,7 +2679,7 @@ int ObPrivilegeCheck::can_do_operation_on_db(
       if ((0 == db_name.case_compare(OB_RECYCLEBIN_SCHEMA_NAME))
           && ((0 == session_priv.user_name_.compare(OB_RESTORE_USER_NAME))
               || (0 == session_priv.user_name_.compare(OB_DRC_USER_NAME)))) {
-        // do nothing，仅仅允许sync ddl user用户来operate recyclebin
+        // do nothing, only allow sync ddl user to operate recyclebin
       } else {
 				ret = OB_ERR_NO_DB_PRIVILEGE;
 				LOG_USER_ERROR(OB_ERR_NO_DB_PRIVILEGE, session_priv.user_name_.length(), session_priv.user_name_.ptr(),

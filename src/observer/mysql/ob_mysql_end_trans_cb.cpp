@@ -38,7 +38,7 @@ int ObSqlEndTransCb::set_packet_param(const sql::ObEndTransCbPacketParam &pkt_pa
     ret = OB_ERR_UNEXPECTED;
     SERVER_LOG(ERROR, "invalid copy", K(ret));
   } else {
-    pkt_param_ = pkt_param; //! 拷贝语义
+    pkt_param_ = pkt_param; //! Copy semantics
   }
   return ret;
 }
@@ -74,11 +74,11 @@ void ObSqlEndTransCb::callback(int cb_param)
     sql::ObSqlTransControl::reset_session_tx_state(session_info, reuse_tx);
     sessid = session_info->get_server_sid();
     proxy_sessid = session_info->get_proxy_sessid();
-    // 临界区内检查这些变量，预防并发callback造成的不良影响
+    // Check these variables within the critical section to prevent adverse effects caused by concurrent callbacks
     if (OB_UNLIKELY(!pkt_param_.is_valid())) {
       ret = OB_ERR_UNEXPECTED;
       SERVER_LOG(ERROR, "pkt_param_ is invalid", K(ret), K(pkt_param_));
-    } else if (FALSE_IT(ObCurTraceId::set(pkt_param_.get_trace_id()))) { // 尽早设置trace_id
+    } else if (FALSE_IT(ObCurTraceId::set(pkt_param_.get_trace_id()))) { // set trace_id as early as possible
       //do nothing
     } else if (!packet_sender_.is_conn_valid()) {
       //network problem, callback will still be called
@@ -152,7 +152,7 @@ void ObSqlEndTransCb::callback(int cb_param)
 
 
     ob_setup_tsi_warning_buffer(NULL);
-    pkt_param_.reset(); // 过期作废，再次调callback的时候必须重新设置参数
+    pkt_param_.reset(); // expired and invalid, parameters must be reset again when callback is called
     need_disconnect_ = false;
     sess_info_ = NULL;
     packet_sender_.reset();

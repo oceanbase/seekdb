@@ -54,8 +54,8 @@ int ObJobControl::create_job(ObIAllocator &allocator,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("fail to new ObJob", K(ret), K(ob_execution_id));
   } else {
-    // job_id之所以全局递增，是因为execution_id是从ObIDMap的assign函数中获取的，
-    // 有可能会重复，所以job_id在本进程内必须不能重复。
+    // job_id is globally incremented because execution_id is obtained from the assign function of ObIDMap,
+    // There might be duplicates, so job_id must not be duplicated within this process.
     ObJobID ob_job_id;
     uint64_t job_id = ATOMIC_FAA(&global_job_id_, 1);
     ob_job_id.set_ob_execution_id(ob_execution_id);
@@ -138,8 +138,7 @@ int ObJobControl::init_job_finish_queue(ObExecContext &ctx)
 //  }
 //  return ret;
 //}
-
-// 如果超过buf_len则会被截断
+// If it exceeds buf_len it will be truncated
 int ObJobControl::print_status(char *buf, int64_t buf_len,
                                bool ignore_normal_state/* = false*/) const
 {

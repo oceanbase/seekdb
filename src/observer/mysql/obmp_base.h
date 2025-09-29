@@ -117,7 +117,7 @@ protected:
   int build_encode_param_(obmysql::ObProtoEncodeParam &param,
                           obmysql::ObMySQLPacket *pkt, const bool is_last);
   void set_request_expect_group_id(sql::ObSQLSessionInfo *session);
-  // 计算并设置当前用户所属 cgroup，用于资源隔离。如未设置，默认 cgroup id 为 0
+  // Calculate and set the current user's cgroup for resource isolation. If not set, the default cgroup id is 0
   int response_row(sql::ObSQLSessionInfo &session,
                    common::ObNewRow &row,
                    const ColumnsFieldIArray *fields,
@@ -138,14 +138,14 @@ protected:
 private:
   DISALLOW_COPY_AND_ASSIGN(ObMPBase);
   int64_t process_timestamp_;
-  uint64_t proxy_version_; // 控制prepare statement返回stmt id的策略
+  uint64_t proxy_version_; // Control the strategy for prepare statement to return stmt id
 }; // end of class ObMPBase
 
 inline void ObMPBase::setup_wb(sql::ObSQLSessionInfo &session)
 {
   // just in case, not really need to call this
   session.reset_warnings_buf();
-  // 将当前session的wb设置到线程局部，以便于代码中随处可以写warning进wb
+  // Set the current session's wb to thread-local so that warning can be written to wb anywhere in the code
   ob_setup_tsi_warning_buffer(&session.get_warnings_buffer());
 }
 

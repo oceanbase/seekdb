@@ -51,11 +51,11 @@ public:
   common::ObTabletID tablet_id_;
   int64_t rowkey_column_count_;
   int64_t column_count_;
-  int64_t index_block_size_; // 索引块大小
-  int64_t data_block_size_; // 数据块大小
-  int64_t index_item_count_; //索引项个数
-  int64_t index_block_count_; //索引块个数
-  int64_t row_count_; // row的个数
+  int64_t index_block_size_; // index block size
+  int64_t data_block_size_; // data block size
+  int64_t index_item_count_; // number of index items
+  int64_t index_block_count_; // number of index blocks
+  int64_t row_count_; // the number of rows
 };
 
 class ObDirectLoadSSTableFragmentMeta
@@ -67,10 +67,10 @@ public:
   bool is_valid() const;
   TO_STRING_KV(K_(index_item_count), K_(index_block_count), K_(row_count), K_(occupy_size));
 public:
-  int64_t index_item_count_; //索引项个数
-  int64_t index_block_count_; //索引块个数
-  int64_t row_count_; //行的个数
-  int64_t occupy_size_; //文件的大小
+  int64_t index_item_count_; // number of index items
+  int64_t index_block_count_; // number of index blocks
+  int64_t row_count_; // number of rows
+  int64_t occupy_size_; // the size of the file
 };
 
 class ObDirectLoadSSTableFragment
@@ -123,12 +123,12 @@ public:
 public:
   common::ObTabletID tablet_id_;
   int64_t rowkey_column_count_;
-  int64_t column_count_; // 写到sstable的列数目
-  int64_t index_block_size_; // 索引块大小
-  int64_t data_block_size_; // 数据块大小
-  int64_t index_item_count_; // 索引项个数
-  int64_t index_block_count_; //索引块个数
-  int64_t row_count_; // row的行数
+  int64_t column_count_; // number of columns written to sstable
+  int64_t index_block_size_; // index block size
+  int64_t data_block_size_; // data block size
+  int64_t index_item_count_; // number of index items
+  int64_t index_block_count_; // number of index blocks
+  int64_t row_count_; // the number of rows
   blocksstable::ObDatumRowkey start_key_;
   blocksstable::ObDatumRowkey end_key_;
   common::ObArray<ObDirectLoadSSTableFragment> fragments_;

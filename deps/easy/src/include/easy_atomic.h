@@ -6,7 +6,7 @@
 #include <sched.h>
 
 /**
- * 原子操作
+ * atomic operation
  */
 
 EASY_CPP_START

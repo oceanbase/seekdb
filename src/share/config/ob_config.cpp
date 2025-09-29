@@ -25,7 +25,7 @@ const char *log_archive_config_keywords[] =
   "MANDATORY",
   "OPTIONAL",
   "COMPRESSION",
-  //TODO(yaoying.yyy):暂时不开放归档加密
+  //TODO(yaoying.yyy): temporarily do not open archive encryption
   //"ENCRYPTION_MODE",
 //  "ENCRYPTION_ALGORITHM",
 };

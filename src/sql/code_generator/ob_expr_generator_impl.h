@@ -102,7 +102,7 @@ private:
 private:
   // disallow copy
   DISALLOW_COPY_AND_ASSIGN(ObExprGeneratorImpl);
-  // 重新标记已经生成的子表达式的root
+  // Re-mark the root of already generated sub-expressions
   int visit_simple_op(ObNonTerminalRawExpr &expr);
   inline int visit_regex_expr(ObOpRawExpr &expr, ObExprRegexp *&regexp_op);
   inline int visit_in_expr(ObOpRawExpr &expr, ObExprInOrNotIn *&in_op);

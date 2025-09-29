@@ -40,7 +40,7 @@ void ObRetryPolicy::try_packet_retry(ObRetryParam &v) const
     // in batch optimization, can't do packet retry
     v.retry_type_ = RETRY_TYPE_LOCAL;
   } else if (multi_stmt_item.is_part_of_multi_stmt() && multi_stmt_item.get_seq_num() > 0) {
-    // muti stmt，并且不是第一句，不能扔回队列重试，因为前面的无法回滚
+    // multi stmt, and not the first statement, cannot be put back in the queue for retry, because the previous ones cannot be rolled back
     v.retry_type_ = RETRY_TYPE_LOCAL;
   } else if (!THIS_WORKER.can_retry()) {
     // false == THIS_WORKER.can_retry() means throw back to queue disabled by SOME logic
@@ -242,8 +242,8 @@ public:
                K(THIS_WORKER.get_timeout_ts()), K(v.result_.get_stmt_type()),
                K(v.session_.get_retry_info().get_last_query_retry_err()));
       if (v.session_.get_retry_info().is_rpc_timeout() || is_transaction_rpc_timeout_err(v.err_)) {
-        // rpc超时了，可能是location cache不对，异步刷新location cache
-        v.result_.force_refresh_location_cache(true, v.err_); // 非阻塞
+        // rpc timeout, possibly due to incorrect location cache, asynchronously refresh location cache
+        v.result_.force_refresh_location_cache(true, v.err_); // non-blocking
         LOG_WARN("sql rpc timeout, or trans rpc timeout, maybe location is changed, "
                  "refresh location cache non blockly", K(v),
                  K(v.session_.get_retry_info().is_rpc_timeout()));
@@ -330,7 +330,7 @@ public:
   virtual void test(ObRetryParam &v) const override
   {
     int ret = OB_SUCCESS;
-    // 设计讨论参考：
+    // Design discussion reference:
     if (NULL == GCTX.schema_service_) {
       v.client_ret_ = OB_INVALID_ARGUMENT;
       v.retry_type_ = RETRY_TYPE_NONE;
@@ -342,7 +342,7 @@ public:
       int64_t local_sys_version_latest = 0;
       if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(
                   v.session_.get_effective_tenant_id(), schema_guard))) {
-        // 不需要重试了，同时让它返回get_schema_guard出错的错误码，因为是由它引起不重试的
+        // No need to retry, and let it return the error code from get_schema_guard because it is the cause of not retrying
         LOG_WARN("get schema guard failed", K(v), K(ret));
         v.client_ret_ = ret;
         v.retry_type_ = RETRY_TYPE_NONE;
@@ -366,15 +366,15 @@ public:
         int64_t global_tenant_version_start = v.curr_query_tenant_global_schema_version_;
         int64_t local_sys_version_start = v.curr_query_sys_local_schema_version_;
         int64_t global_sys_version_start = v.curr_query_sys_global_schema_version_;
-        // (c1) 需要考虑远端机器的Schema比本地落后，远端机器抛出Schema错误的情景
-        //      当远端抛出Schema错误的时候，强行将所有Schema错误转化成OB_ERR_WAIT_REMOTE_SCHEMA_REFRESH
-        //      权限不足也会触发该重试规则，因为远端schema刷新不及时可能误报权限不足，此时是需要重试的
-        // (c4) 弱一致性读场景，会校验schema版本是否大于等于数据的schema版本，
-        //      如果schema版本旧，则要求重试；
-        //      目的是保证：始终采用新schema解析老数据
-        // (c5) 梳理了OB_SCHEMA_EAGAIN使用的地方，主路径上出现了该错误码的地方需要触发SQL重试
-        // (c2) 表存在或不存在/数据库存在或不存在/用户存在或不存在，并且local和global版本不等时重试
-        // (c3) 其它任何sql开始执行时local version比当前local version小导致schema错误的情况
+        // (c1) Need to consider the scenario where the remote machine's Schema is behind the local one, and the remote machine throws a Schema error
+        //      When the remote throws a Schema error, forcibly convert all Schema errors into OB_ERR_WAIT_REMOTE_SCHEMA_REFRESH
+        //      Insufficient permissions will also trigger this retry rule, because the remote schema refresh may be delayed and incorrectly report insufficient permissions, in which case a retry is needed
+        // (c4) Weak consistency read scenario, it will verify if the schema version is greater than or equal to the data's schema version,
+        //      If the schema version is old, a retry is required;
+        //      The purpose is to ensure: always use the new schema to parse old data
+        // (c5) Reviewed the usage of OB_SCHEMA_EAGAIN, this error code should trigger SQL retry where it appears on the main path
+        // (c2) table exists or not/database exists or not/user exists or not, and retry when local and global versions are not equal
+        // (c3) Any other SQL starts execution with a local version smaller than the current local version causing schema errors
         // (c6) For local server, related tenant's schema maybe not refreshed yet when observer restarts or create tenant.
         // (c7) For remote server, related tenant's schema maybe not refreshed yet when observer restarts or create tenant.
         if ((OB_ERR_WAIT_REMOTE_SCHEMA_REFRESH == v.err_) || // (c1)
@@ -393,14 +393,14 @@ public:
             try_packet_retry(v);
           }
           if (RETRY_TYPE_LOCAL == v.retry_type_) {
-            // 线性重试响应更快
+            // Linear retry response is faster
             sleep_before_local_retry(v,
                                      RETRY_SLEEP_TYPE_LINEAR,
                                      WAIT_RETRY_SHORT_US,
                                      THIS_WORKER.get_timeout_ts());
           }
         } else {
-          // 这里的client_ret不好决定，让它依然返回err
+          // Here the client_ret is hard to decide, let it still return err
           v.client_ret_ = v.err_;
           v.retry_type_ = RETRY_TYPE_NONE;
           v.no_more_test_ = true;
@@ -466,8 +466,8 @@ public:
       ObPhyPlanType plan_type = v.result_.get_physical_plan()->get_plan_type();
       bool in_transaction = v.session_.is_in_transaction();
       if (ObSqlTransUtil::is_remote_trans(autocommit, in_transaction, plan_type)) {
-        // 当前observer内部无法进行重试
-        // err是OB_RPC_CONNECT_ERROR
+        // The current observer cannot retry internally
+        // err is OB_RPC_CONNECT_ERROR
         v.client_ret_ = v.err_;
         v.retry_type_ = RETRY_TYPE_NONE;
         v.no_more_test_ = true;
@@ -799,10 +799,10 @@ void ObQueryRetryCtrl::nonblock_location_error_proc(ObRetryParam &v)
 
 void ObQueryRetryCtrl::location_error_nothing_readable_proc(ObRetryParam &v)
 {
-  // 强一致性读的情况，主不可读了，有可能是invalid servers将主过滤掉了。
-  // 弱一致性读的情况，没有副本可以选择了，有可能是invalid servers将所有副本都过滤掉了。
-  // 为了更好地处理主短暂地断网的情况，将retry info清空（主要是invalid servers清空，
-  // 但是还是要保持inited的状态以便通过防御性检查，所以不能调reset，而是要调clear），然后再重试。
+  // Strong consistency read scenario, the leader is not readable, it might be that invalid servers have filtered out the leader.
+  // The case of weak consistency read, where no replicas are available to choose from, possibly because invalid servers have filtered out all replicas.
+  // To better handle the situation where the leader is briefly offline, clear the retry info (mainly clearing invalid servers,
+  // But we still need to keep the inited state for defensive checks, so we cannot call reset, but should call clear), and then retry.
   v.session_.get_retry_info_for_update().clear();
   location_error_proc(v);
   if (can_start_retry_wait_event(v.retry_type_)) {
@@ -849,8 +849,8 @@ void ObQueryRetryCtrl::snapshot_discard_proc(ObRetryParam &v)
     v.retry_type_ = RETRY_TYPE_NONE;
     LOG_WARN_RET(v.client_ret_, "snapshot discarded in serializable isolation should not retry", K(v));
   } else {
-    // 读到落后太多的备机或者正在回放日志的副本了
-    // 副本不可读类型的错误最多在本线程重试1次。
+    // Read a follower that is too far behind or a replica that is replaying logs
+    // The error of unreadable replica will be retried at most once in this thread.
     const int64_t MAX_DATA_NOT_READABLE_ERROR_LOCAL_RETRY_TIMES = 1;
     if (v.stmt_retry_times_ < MAX_DATA_NOT_READABLE_ERROR_LOCAL_RETRY_TIMES) {
       v.retry_type_ = RETRY_TYPE_LOCAL;
@@ -934,8 +934,8 @@ void ObQueryRetryCtrl::inner_try_lock_row_conflict_proc(ObRetryParam &v)
 
 void ObQueryRetryCtrl::inner_table_location_error_proc(ObRetryParam &v)
 {
-  // 这种情况一般是内部sql执行的时候获取不到location，可能是宕机，
-  // 这里涉及到的是内部表，刷新本sql查询的表的location cache没有意义，因此不刷新。
+  // This situation usually occurs when the internal SQL execution cannot obtain the location, possibly due to a shutdown,
+  // Here involves internal tables, refreshing the location cache of the table queried by this SQL is not meaningful, therefore it is not refreshed.
   ObRetryObject retry_obj(v);
   ObCommonRetryIndexLongWaitPolicy retry_long_wait;
   retry_obj.test(retry_long_wait);
@@ -974,10 +974,10 @@ void ObQueryRetryCtrl::inner_location_error_proc(ObRetryParam &v)
 
 void ObQueryRetryCtrl::inner_location_error_nothing_readable_proc(ObRetryParam &v)
 {
-  // 强一致性读的情况，主不可读了，有可能是invalid servers将主过滤掉了。
-  // 弱一致性读的情况，没有副本可以选择了，有可能是invalid servers将所有副本都过滤掉了。
-  // 为了更好地处理主短暂地断网的情况，将retry info清空（主要是invalid servers清空，
-  // 但是还是要保持inited的状态以便通过防御性检查，所以不能调reset，而是要调clear），然后再重试。
+  // Strong consistency read scenario, the leader is not readable, it might be that invalid servers have filtered out the leader.
+  // Weak consistency read scenario, no replicas are available to choose from, possibly because invalid servers filtered out all replicas.
+  // To better handle the situation where the leader is briefly offline, clear the retry info (mainly clearing invalid servers,
+  // But we still need to keep the inited state for defensive checks, so we cannot call reset, but should call clear), and then retry.
   v.session_.get_retry_info_for_update().clear();
   inner_location_error_proc(v);
   if (can_start_retry_wait_event(v.retry_type_)) {
@@ -1023,8 +1023,8 @@ void ObQueryRetryCtrl::inner_peer_server_status_uncertain_proc(ObRetryParam &v)
 
 void ObQueryRetryCtrl::empty_proc(ObRetryParam &v)
 {
-  // 根据"给用户返回导致不重试的最后一个错误码"的原则，
-  // 这里是err不在重试错误码列表中的情况，需要将client_ret设置为相应的值
+  // According to the principle of "returning the last error code that causes no retry to the user",
+  // This is the case where err is not in the retry error code list, and client_ret needs to be set to the corresponding value
   v.client_ret_ = v.err_;
   v.retry_type_ = RETRY_TYPE_NONE;
   if (OB_ERR_PROXY_REROUTE != v.client_ret_) {
@@ -1057,9 +1057,9 @@ void ObQueryRetryCtrl::after_func(ObRetryParam &v)
   if (OB_TRY_LOCK_ROW_CONFLICT == v.client_ret_
         || OB_ERR_PROXY_REROUTE == v.client_ret_
         || (v.is_from_pl_ && OB_READ_NOTHING == v.client_ret_)) {
-    //锁冲突不打印了，避免日志刷屏
-    // 二次路由不打印
-    // PL 里面的 OB_READ_NOTHING 不打印日志
+    //Lock conflict will not be printed to avoid log flooding
+    // Secondary routing does not print
+    // PL inside the OB_READ_NOTHING does not print logs
   } else {
     LOG_WARN_RET(v.client_ret_, "[RETRY] check if need retry", K(v), "need_retry", RETRY_TYPE_NONE != v.retry_type_);
   }

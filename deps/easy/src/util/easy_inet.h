@@ -2,7 +2,7 @@
 #define EASY_INET_H_
 
 /**
- * inet的通用函数
+ * general functions for inet
  */
 #include "easy_define.h"
 #include <sys/un.h>

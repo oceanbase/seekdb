@@ -45,7 +45,7 @@ int ExampleUserHelperFunction1::on_register(const char* buf,
 
 int ExampleUserHelperFunction1::on_replay(const char* buf,
                                         const int64_t len,
-                                        const share::SCN &scn, // 日志scn
+                                        const share::SCN &scn, // log scn
                                         storage::mds::BufferCtx &ctx)
 {
   UNUSED(scn);
@@ -99,7 +99,7 @@ int ExampleUserHelperFunction2::on_register(const char* buf,
 
 int ExampleUserHelperFunction2::on_replay(const char* buf,
                                         const int64_t len,
-                                        const share::SCN &scn, // 日志scn
+                                        const share::SCN &scn, // log scn
                                         storage::mds::BufferCtx &ctx)
 {
   UNUSED(scn);
@@ -123,7 +123,7 @@ int ExampleUserHelperFunction3::on_register(const char* buf,
 
 int ExampleUserHelperFunction3::on_replay(const char* buf,
                                         const int64_t len,
-                                        const share::SCN &scn, // 日志scn
+                                        const share::SCN &scn, // log scn
                                         storage::mds::BufferCtx &ctx)
 {
   UNUSED(scn);

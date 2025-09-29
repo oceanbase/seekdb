@@ -275,7 +275,7 @@ int ObHybridHistEstimator::add_no_sample_hybrid_hist_stat_items(ObIArray<const O
 
 /**
  * @brief ObDbmsStatsUtils::try_build_hybrid_hist
- * 计算频率直方图的时候会额外收集一些 bucket，如果 bucket 数量超过 ndv，那么可以直接构造混合直方图
+ * When calculating the frequency histogram, some additional buckets are collected. If the number of buckets exceeds ndv, a hybrid histogram can be directly constructed.
  * @param col_stat
  * @return
  */

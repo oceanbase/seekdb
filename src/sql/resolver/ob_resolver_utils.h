@@ -105,10 +105,10 @@ struct ObResolverUtils
     PARTITION_NAME_NODE = 0,
     PARTITION_ELEMENT_NODE = 1
   };
-  // 用于判断是否需要检查 生成列 或 函数索引 中的的系统函数或伪列。
-  // 如果需要检查，那么所有 non pure 的系统函数和伪列都会被检测出来并报错，
-  // 并且根据被检测对象是生成列还是函数索引返回不同的错误码
-  // 默认不需要检测，为 DISABLE_CHECK
+  // Used to determine whether to check system functions or pseudo-columns in generated columns or function indexes.
+  // If need to check, then all non pure system functions and pseudo columns will be detected and reported,
+  // and return different error codes according to whether the detected object is a generated column or a function index
+  // Default does not need detection, set to DISABLE_CHECK
   enum PureFunctionCheckStatus
   {
     DISABLE_CHECK = 0,
@@ -329,9 +329,9 @@ public:
                                         ObRawExpr *expr);
 
    /**
-   * @brief  从parser结果中解析出语句type
-   * @param [in] result      - parse结果
-   * @param [out] type  - 语句类型
+   * @brief  Parse statement type from parser result
+   * @param [in] result      - parse result
+   * @param [out] type  -  statement type
    * @retval OB_SUCCESS execute success
    * @retval OB_SOME_ERROR special errno need to handle
    *

@@ -134,8 +134,7 @@ TEST_F(TestObSimpleLogApplyFunc, apply)
   EXPECT_EQ(OB_SUCCESS, ap_sv.switch_to_leader(ls_id, 1));
   const int64_t idx_1 = (leader_idx + 1) % get_node_cnt();
   const int64_t idx_2 = (leader_idx + 2) % get_node_cnt();
-
-  //旧主少数派写日志
+  // Old master minority writes log
   block_net(leader_idx, idx_1);
   block_net(leader_idx, idx_2);
   do {
@@ -169,23 +168,21 @@ TEST_F(TestObSimpleLogApplyFunc, apply)
   share::SCN min_scn;
   EXPECT_EQ(OB_SUCCESS, ap_sv.get_max_applied_scn(ls_id, min_scn));
   EXPECT_EQ(OB_SUCCESS, ap_sv.switch_to_follower(ls_id));
-
-  //切主, truncate旧主日志,预期所有cb都调用on_failure
+  // Switch master, truncate old master log, expect all cb to call on_failure
   sleep(15);
   while (!is_apply_done)
   {
     ap_sv.is_apply_done(ls_id, is_apply_done, unused_apply_end_lsn);
     usleep(100);
   }
-
-  //切回旧主写日志,预期所有cb都调用on_success
+  // Switch back to the old main writer log, expect all cb to call on_success
   unblock_net(leader_idx, idx_1);
   unblock_net(leader_idx, idx_2);
   int64_t new_leader_idx = 0;
   PalfHandleImplGuard new_leader;
   EXPECT_EQ(OB_SUCCESS, get_leader(id, new_leader, new_leader_idx));
   EXPECT_NE(new_leader_idx, leader_idx);
-  //等待membership同步
+  // Wait for membership synchronization
   sleep(2);
   leader.reset();
   CLOG_LOG(INFO, "new leader", K(new_leader_idx), K(leader_idx));

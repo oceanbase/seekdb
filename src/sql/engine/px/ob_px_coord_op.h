@@ -135,7 +135,7 @@ protected:
   common::ObArenaAllocator allocator_;
   common::ObArenaAllocator row_allocator_;
   ObPxCoordInfo coord_info_;
-  ObDfo *root_dfo_; // 指向 QC
+  ObDfo *root_dfo_; // point to QC
   ObPxRootReceiveChProvider root_receive_ch_provider_;
   bool first_row_fetched_;
   bool first_row_sent_;
@@ -143,10 +143,10 @@ protected:
   bool register_interrupted_;
   /*
     *   px_sequnce_id  explaination
-    *   在中断功能和dtl buffer中均对key的唯一性有要求
-    *   执行嵌套px的计划按照此前的设计将存在key的id不唯一的缺陷.
-    *   引入px_sequence_id, 该id可以保证在该server下的每一个px都是唯一递增的.
-    *   配合server_id使用即可全集群唯一.
+    *   There is a requirement for the uniqueness of the key in both interrupt functions and dtl buffer.
+    *   Executing nested px plans according to the previous design will have the defect of non-unique key ids.
+    *   Introducing px_sequence_id, this id can ensure that every px under this server is uniquely and incrementally increasing.
+    *   Using it in conjunction with server_id will make it unique across the entire cluster.
     * */
   uint64_t px_sequence_id_;
   ObInterruptibleTaskID interrupt_id_;
@@ -186,12 +186,12 @@ public:
   }
   TableLocationFixedArray &get_table_locations()
   { return table_locations_; }
-  int64_t px_expected_worker_count_; // 当前 px 可以分到的线程数上限，用于multi-px 限流场景
+  int64_t px_expected_worker_count_; // The upper limit of threads that px can be allocated, used for multi-px rate limiting scenarios
   int64_t qc_id_;
-  // px在支持分布式batch rescan时需要感知做rescan的算子id以及算子类型
-  // 是1对1的对应关系
+  // px needs to be aware of the operator id and operator type performing the rescan when supporting distributed batch rescan
+  // is 1 to 1 correspondence
   ObPxCoordOp::ObPxBatchOpInfo batch_op_info_;
-  // 对于有条件下推的table_location, 需要序列化
+  // For table_location with conditional pushdown, serialization is required
   TableLocationFixedArray table_locations_;
 };
 

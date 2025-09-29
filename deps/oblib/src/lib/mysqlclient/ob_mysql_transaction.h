@@ -92,7 +92,7 @@ protected:
 protected:
   int64_t start_time_;
   bool in_trans_;
-  // inner sql now not support multi query，enable_query_stash now just enable for batch insert values
+  // inner sql now not support multi query, enable_query_stash now just enable for batch insert values
   bool enable_query_stash_;
   hash::ObHashMap<const char*, ObSqlTransQueryStashDesc*> query_stash_desc_;
 };

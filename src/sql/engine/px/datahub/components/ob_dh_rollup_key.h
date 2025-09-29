@@ -53,7 +53,7 @@ public:
   int64_t max_keys_;
 };
 
-/* 各种 datahub 子类消息定义如下 */
+/* Various datahub subclass message definitions are as follows */
 class ObRollupKeyPieceMsg
   : public ObDatahubPieceMsg<dtl::ObDtlMsgType::DH_ROLLUP_KEY_PIECE_MSG>
 {
@@ -111,7 +111,7 @@ public:
 
   static const int64_t FAR_GREATER_THAN_RATIO = 16;
 public:
-  int64_t received_; // 已经收到的 piece 数量
+  int64_t received_; // number of pieces already received
   int64_t tenant_id_;
   ObRollupKeyWholeMsg whole_msg_;
   ObSEArray<ObRollupKeyPieceMsg, 4> received_msgs_;
