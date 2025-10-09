@@ -3120,7 +3120,7 @@ int ObPartitionExchange::get_and_check_aux_tablet_id(
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("part with the same offset not equal, maybe not the right index", KR(ret), KPC(data_part), KPC(part));
     } else if (is_subpart) {
-      const schema::ObPartitionOption &pt_subpart_option = aux_table_schema.get_sub_part_option();
+      const schema::ObSubPartitionOption &pt_subpart_option = aux_table_schema.get_sub_part_option();
       schema::ObPartitionFuncType pt_subpart_func_type = pt_subpart_option.get_sub_part_func_type();
       is_matched = false;
       if (OB_FAIL(part->get_normal_subpartition_by_subpartition_index(data_subpart_idx, subpart))) {

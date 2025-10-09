@@ -402,7 +402,7 @@ void ObUniqTaskQueue<Task, Process>::run1()
       if (OB_SUCC(tasks.reserve(batch_exec_cnt))) {
         group = NULL;
         common::ObThreadCondGuard guard(cond_);
-        if (task_count_ > 0) {
+        if (task_count() > 0) {
           if (OB_FAIL(get_next_group(group))) {
             SERVER_LOG(WARN, "get_next_next failed", K(ret));
           } else if (NULL == group || group->list_.get_size() <= 0) {

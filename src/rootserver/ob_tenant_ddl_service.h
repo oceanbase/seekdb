@@ -243,10 +243,6 @@ private:
 
 private:
   int check_inner_stat();
-  int create_sys_table_schemas(
-      ObDDLOperator &ddl_operator,
-      ObMySQLTransaction &trans,
-      common::ObIArray<share::schema::ObTableSchema> &tables);
   int load_sys_table_schemas(
       const ObTenantSchema &tenant_schema,
       common::ObIArray<share::schema::ObTableSchema> &tables);

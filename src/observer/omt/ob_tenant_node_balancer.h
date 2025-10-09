@@ -71,7 +71,7 @@ public:
 
   bool is_inited() { return is_inited_; }
 
-  int64_t get_refresh_interval() { return refresh_interval_; }
+  int64_t get_refresh_interval();
 
 private:
   static const int64_t RECYCLE_LATENCY = 180L * 1000L * 1000L;
@@ -90,6 +90,7 @@ private:
   DISALLOW_COPY_AND_ASSIGN(ObTenantNodeBalancer);
 
 private:
+  const int64_t BOOTSTRAP_REFRESH_INTERVAL = 100L * 1000L;
   ObMultiTenant *omt_;
   common::ObAddr myaddr_;
   bool is_inited_;

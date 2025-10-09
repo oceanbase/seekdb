@@ -504,7 +504,7 @@ private:
   static bool is_subpartition_valid_in_mysql(const ObTableSchema &table_schema)
   {
     const ObPartitionOption &part_opt = table_schema.get_part_option();
-    const ObPartitionOption &sub_part_opt = table_schema.get_sub_part_option();
+    const ObSubPartitionOption &sub_part_opt = table_schema.get_sub_part_option();
     ObPartitionFuncType type = part_opt.get_part_func_type();
     ObPartitionFuncType sub_type = sub_part_opt.get_part_func_type();
     return is_hash_like_part(sub_type) && !is_hash_like_part(type);

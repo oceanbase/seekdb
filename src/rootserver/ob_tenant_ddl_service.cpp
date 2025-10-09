@@ -1781,11 +1781,7 @@ int ObTenantDDLService::init_tenant_schema(
       if (OB_ISNULL(schema_service_impl)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("pointer is null", KR(ret), KP(schema_service_impl));
-      } else if (!GCONF._enable_parallel_tenant_creation &&
-          CLICK_FAIL(create_sys_table_schemas(ddl_operator, trans, tables))) {
-        LOG_WARN("fail to create sys tables", KR(ret), K(tenant_id));
-      } else if (GCONF._enable_parallel_tenant_creation &&
-          CLICK_FAIL(load_sys_table_schemas(tenant_schema, tables))) {
+      } else if (CLICK_FAIL(load_sys_table_schemas(tenant_schema, tables))) {
         LOG_WARN("fail to load sys tables", KR(ret), K(tenant_id));
       } else if (OB_FAIL(schema_service_impl->gen_new_schema_version(
               tenant_id, init_schema_version, new_schema_version))) {
@@ -1797,8 +1793,7 @@ int ObTenantDDLService::init_tenant_schema(
         LOG_WARN("fail to replace sys variable", KR(ret), K(sys_variable));
       } else if (CLICK_FAIL(ddl_operator.init_tenant_schemas(tenant_schema, sys_variable, trans))) {
         LOG_WARN("init tenant env failed", KR(ret), K(tenant_schema), K(sys_variable));
-      } else if (GCONF._enable_parallel_tenant_creation &&
-          CLICK_FAIL(ObLoadInnerTableSchemaExecutor::load_core_schema_version(tenant_id, trans,
+      } else if (CLICK_FAIL(ObLoadInnerTableSchemaExecutor::load_core_schema_version(tenant_id, trans,
           ObSchemaUtils::get_inner_table_core_schema_version(tables)))) {
         LOG_WARN("failed to load core schema version", KR(ret), K(tenant_id));
       }
@@ -1849,42 +1844,6 @@ int ObTenantDDLService::load_sys_table_schemas(
   }
   FLOG_INFO("[CREATE_TENANT] finish load all schemas", KR(ret), K(configs),
       "cost", ObTimeUtility::current_time() - begin_time);
-  return ret;
-}
-
-int ObTenantDDLService::create_sys_table_schemas(
-    ObDDLOperator &ddl_operator,
-    ObMySQLTransaction &trans,
-    common::ObIArray<ObTableSchema> &tables)
-{
-  int ret = OB_SUCCESS;
-  uint64_t start_time = ObTimeUtility::current_time();
-  if (OB_FAIL(check_inner_stat())) {
-    LOG_WARN("variable is not init", KR(ret));
-  } else if (OB_ISNULL(sql_proxy_)
-             || OB_ISNULL(schema_service_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("ptr is null", KR(ret), KP_(sql_proxy), KP_(schema_service));
-  } else {
-    // persist __all_core_table's schema in inner table, which is only used for sys views.
-    for (int64_t i = 0; OB_SUCC(ret) && i < tables.count(); i++) {
-      ObTableSchema &table = tables.at(i);
-      const int64_t table_id = table.get_table_id();
-      const ObString &table_name = table.get_table_name();
-      const ObString *ddl_stmt = NULL;
-      bool need_sync_schema_version = !(ObSysTableChecker::is_sys_table_index_tid(table_id) ||
-                                        is_sys_lob_table(table_id));
-      if (FAILEDx(ddl_operator.create_table(table, trans, ddl_stmt,
-                                            need_sync_schema_version,
-                                            false /*is_truncate_table*/))) {
-        LOG_WARN("add table schema failed", KR(ret), K(table_id), K(table_name));
-      } else {
-        LOG_INFO("add table schema succeed", K(i), K(table_id), K(table_name));
-      }
-    }
-  }
-  FLOG_INFO("[CREATE_TENANT] finish create sys table schemas", KR(ret), "table count", tables.count(),
-      "cost", ObTimeUtility::current_time() - start_time);
   return ret;
 }
 

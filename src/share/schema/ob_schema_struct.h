@@ -2397,6 +2397,21 @@ private:
   int64_t auto_part_size_;// Automatic partition size
 };
 
+class ObSubPartitionOption : public ObPartitionOption
+{
+  OB_UNIS_VERSION(1);
+
+public:
+  ObSubPartitionOption();
+  explicit ObSubPartitionOption(common::ObIAllocator *allocator);
+  virtual ~ObSubPartitionOption();
+  ObSubPartitionOption(const ObSubPartitionOption &expr);
+  ObSubPartitionOption &operator=(const ObSubPartitionOption &expr);
+  bool operator==(const ObSubPartitionOption &expr) const;
+  virtual void reset() override;
+  void reuse();
+};
+
 // For any questions about the role of this structure, please contact @jiage
 class ObSchemaAllocator : public common::ObIAllocator
 {
@@ -2907,8 +2922,8 @@ public:
                                                          part_option_.is_valid_auto_part_size(); }
   inline const ObPartitionOption &get_part_option() const { return part_option_; }
   inline ObPartitionOption &get_part_option() { return part_option_; }
-  inline const ObPartitionOption &get_sub_part_option() const { return sub_part_option_; }
-  inline ObPartitionOption &get_sub_part_option() { return sub_part_option_; }
+  inline const ObSubPartitionOption &get_sub_part_option() const { return sub_part_option_; }
+  inline ObSubPartitionOption &get_sub_part_option() { return sub_part_option_; }
   inline int64_t get_auto_part_size() const { return part_option_.get_auto_part_size(); }
 
   // deal with partition schema from ddl resolver
@@ -3114,7 +3129,7 @@ protected:
   ObPartitionLevel part_level_;
   ObPartitionOption part_option_;
   // The part_num_ is only valid when has_sub_part_template_def()
-  ObPartitionOption sub_part_option_;
+  ObSubPartitionOption sub_part_option_;
   ObPartition **partition_array_;
   int64_t partition_array_capacity_; // The array size of partition_array is not necessarily equal to partition_num;
   // Equal to part_num; historical reasons cause the two values to have the same meaning;

@@ -1250,7 +1250,7 @@ int ObServer::check_if_multi_tenant_synced()
   while (OB_SUCC(ret) && !stop_ && !synced) {
     synced = multi_tenant_.has_synced();
     if (!synced) {
-      SLEEP(1);
+      ob_usleep(10 * 1000);
     }
   }
   FLOG_INFO("check if multi tenant synced", KR(ret), K(stop_), K(synced));
@@ -1306,7 +1306,7 @@ int ObServer::check_if_timezone_usable()
   while (OB_SUCC(ret) && !stop_ && !timezone_usable) {
     timezone_usable = tenant_timezone_mgr_.is_usable();
     if (!timezone_usable) {
-      SLEEP(1);
+      ob_usleep(10 * 1000);
     }
   }
   FLOG_INFO("check if timezone usable", KR(ret), K(stop_), K(timezone_usable));
@@ -3319,7 +3319,7 @@ void ObServer::check_log_replay_over(const ObIArray<uint64_t> &tenant_ids, const
       weak_read_service_.check_tenant_can_start_service(tenant_id, can_start_service, min_version);
         // check wait and retry
       if (!can_start_service) {
-        ob_usleep(1000 * 1000);
+        ob_usleep(10 * 1000);
         // check success
       } else if (i == tenant_ids.count() -1) {
         FLOG_INFO("[OBSERVER_NOTICE] all tenant replay log finished, start to service ", K(tenant_ids));

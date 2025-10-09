@@ -510,7 +510,7 @@ int ObAddPartInfoHelper::add_part_info_dml_column(const uint64_t exec_tenant_id,
      LOG_WARN("table is null", K(ret));
    } else {
      const ObPartitionOption &part_option = table->get_part_option();
-     const ObPartitionOption &subpart_option = table->get_sub_part_option();
+     const ObSubPartitionOption &subpart_option = table->get_sub_part_option();
      if (OB_FAIL(dml.add_pk_column("tenant_id", ObSchemaUtils::get_extract_tenant_id(
                                                 exec_tenant_id, table->get_tenant_id())))
        || OB_FAIL(dml.add_pk_column("table_id", ObSchemaUtils::get_extract_schema_id(

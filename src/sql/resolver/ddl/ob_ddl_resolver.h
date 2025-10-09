@@ -44,7 +44,7 @@ struct PartitionInfo
 {
   share::schema::ObPartitionLevel part_level_;
   share::schema::ObPartitionOption part_option_;
-  share::schema::ObPartitionOption subpart_option_;
+  share::schema::ObSubPartitionOption subpart_option_;
   common::ObSEArray<share::schema::ObPartition, 4> parts_;
   common::ObSEArray<share::schema::ObSubPartition, 2> subparts_;
   common::ObSEArray<common::ObString, 8> part_keys_;
