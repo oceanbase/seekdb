@@ -67,7 +67,6 @@ public:
 
   ObServerConfig &get_config(void);
 
-  int config_backup();
   int update_local(int64_t expected_version);
   virtual int got_version(int64_t version, const bool remove_repeat = false);
 

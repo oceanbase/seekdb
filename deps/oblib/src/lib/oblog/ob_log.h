@@ -404,17 +404,11 @@ public:
                           const char* function);
 
   int64_t get_write_size() const { return log_file_[FD_SVR_FILE].write_size_; }
-  int64_t get_rs_write_size() const { return log_file_[FD_RS_FILE].write_size_; }
-  int64_t get_elec_write_size() const { return log_file_[FD_ELEC_FILE].write_size_; }
   int64_t get_trace_write_size() const { return log_file_[FD_TRACE_FILE].write_size_; }
   int64_t get_alert_write_size() const { return log_file_[FD_ALERT_FILE].write_size_; }
   int64_t get_total_write_count() const { return log_file_[FD_SVR_FILE].write_count_; }
-  int64_t get_rs_total_write_count() const { return log_file_[FD_RS_FILE].write_count_; }
-  int64_t get_elec_total_write_count() const { return log_file_[FD_ELEC_FILE].write_count_; }
   int64_t get_trace_total_write_count() const { return log_file_[FD_TRACE_FILE].write_count_; }
   int64_t get_alert_total_write_count() const { return log_file_[FD_ALERT_FILE].write_count_; }
-
-  ObPLogFileStruct &get_elec_log() { return *(log_file_ + FD_ELEC_FILE); }
 
   void insert_warning_buffer(const UserMsgLevel user_msg_level,
                              const int errcode,
@@ -581,13 +575,9 @@ public:
   //@param[in] flag Whether redirect the stdout and stderr to the descriptor of the log-file.
   //FALSE:redirect TRUE:no redirect.
   //@param[in] open_wf whether create warning log-file to store warning buffer.
-  //@param[in] finename of rootservice log-file's name.
-  //@param[in] finename of election log-file's name.
   void set_file_name(const char *filename,
                      const bool no_redirect_flag = false,
                      const bool open_wf = false,
-                     const char *rs_filename = NULL,
-                     const char *elec_filename = NULL,
                      const char *trace_filename = NULL,
                      const char *alert_filename = NULL);
 

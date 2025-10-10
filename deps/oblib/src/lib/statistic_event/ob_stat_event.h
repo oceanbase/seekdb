@@ -437,8 +437,6 @@ STAT_EVENT_ADD_DEF(CLOG_EXTLOG_FETCH_RPC_COUNT, "external log service fetch rpc 
 
 // CLOG.PROXY
 
-// ELECTION
-
 //OBSERVER
 
 // rootservice
@@ -878,11 +876,7 @@ STAT_EVENT_SET_DEF(HIDDEN_SYS_DATA_DISK_SIZE, "hidden sys data disk size", ObSta
 
 // DEBUG
 STAT_EVENT_SET_DEF(OBLOGGER_WRITE_SIZE, "oblogger log bytes", ObStatClassIds::DEBUG, 160001, false, true, true)
-STAT_EVENT_SET_DEF(ELECTION_WRITE_SIZE, "election log bytes", ObStatClassIds::DEBUG, 160002, false, true, true)
-STAT_EVENT_SET_DEF(ROOTSERVICE_WRITE_SIZE, "rootservice log bytes", ObStatClassIds::DEBUG, 160003, false, true, true)
 STAT_EVENT_SET_DEF(OBLOGGER_TOTAL_WRITE_COUNT, "oblogger total log count", ObStatClassIds::DEBUG, 160004, false, true, true)
-STAT_EVENT_SET_DEF(ELECTION_TOTAL_WRITE_COUNT, "election total log count", ObStatClassIds::DEBUG, 160005, false, true, true)
-STAT_EVENT_SET_DEF(ROOTSERVICE_TOTAL_WRITE_COUNT, "rootservice total log count", ObStatClassIds::DEBUG, 160006, false, true, true)
 STAT_EVENT_SET_DEF(ASYNC_ERROR_LOG_DROPPED_COUNT, "async error log dropped count", ObStatClassIds::DEBUG, 160019, false, true, true)
 STAT_EVENT_SET_DEF(ASYNC_WARN_LOG_DROPPED_COUNT, "async warn log dropped count", ObStatClassIds::DEBUG, 160020, false, true, true)
 STAT_EVENT_SET_DEF(ASYNC_INFO_LOG_DROPPED_COUNT, "async info log dropped count", ObStatClassIds::DEBUG, 160021, false, true, true)

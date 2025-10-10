@@ -50,12 +50,7 @@ ObSpecialSysVarValues::ObSpecialSysVarValues()
   } else if (OB_FAIL(databuff_printf(ObSpecialSysVarValues::version_comment_,
                                      ObSpecialSysVarValues::VERSION_COMMENT_MAX_LEN,
                                      pos,
-#ifdef OB_BUILD_CLOSE_MODULES
-                                     "OceanBase %s (r%s) (Built %s %s)",
-#else
-                                     "OceanBase_CE %s (r%s) (Built %s %s)",
-
-#endif
+                                     "OceanBase_Lite %s (r%s) (Built %s %s)",
                                      PACKAGE_VERSION, build_version(),
                                      build_date(), build_time()))) {
     LOG_ERROR("fail to print version_comment to buff", K(ret));
@@ -66,12 +61,8 @@ ObSpecialSysVarValues::ObSpecialSysVarValues()
   } else if (FALSE_IT(pos = 0)) {
   } else if (OB_FAIL(databuff_printf(ObSpecialSysVarValues::version_,
                                      ObSpecialSysVarValues::VERSION_MAX_LEN,
-#ifdef OB_BUILD_CLOSE_MODULES
-                                     pos, "5.7.25-OceanBase-v%s", PACKAGE_VERSION))) {
-#else
-                                     pos, "5.7.25-OceanBase_CE-v%s", PACKAGE_VERSION))) {
+                                     pos, "5.7.25-OceanBase_Lite-v%s", PACKAGE_VERSION))) {
 
-#endif
     LOG_ERROR("fail to print version to buff", K(ret));
   }
 
@@ -3216,6 +3207,21 @@ int ObCharsetSysVarPair::get_collation_var_by_charset_var(const ObString &cs_var
   return ret;
 }
 
+int ObPreProcessSysVars::change_base_values(const ObIArray<std::pair<ObString, ObString>> &sys_vars)
+{
+  int ret = OB_SUCCESS;
+  for (int64_t i = 0; OB_SUCC(ret) && i < sys_vars.count(); ++i) {
+    const std::pair<ObString, ObString> &sys_var = sys_vars.at(i);
+    if (OB_FAIL(ObSysVariables::set_value(sys_var.first, sys_var.second))) {
+      LOG_WARN("fail to change initial value", K(ret), K(sys_var.first), K(sys_var.second));
+      ret = OB_SUCCESS; // ignore errors
+    } else {
+      LOG_INFO("succ to change initial value", K(sys_var.first), K(sys_var.second));
+    }
+  }
+  return ret;
+}
+
 int ObPreProcessSysVars::init_config_sys_vars()
 {
   int ret = OB_SUCCESS;
@@ -3264,6 +3270,15 @@ int ObPreProcessSysVars::init_config_sys_vars()
                                 cur_work_path,
                                 "run/sql.sock"))) {
       LOG_ERROR("fail to print system_pid_file to buff", K(ret));
+    }
+  }
+
+  // OB_SV_DATADIR
+  if (OB_SUCC(ret)) {
+    if (OB_FAIL(ObSysVariables::set_value(OB_SV_DATADIR, GCONF.data_dir))) {
+      LOG_WARN("fail to set datadir", K(ret));
+    } else if (OB_FAIL(ObSysVariables::set_base_value(OB_SV_DATADIR, GCONF.data_dir))) {
+      LOG_WARN("fail to set datadir base value", K(ret));
     }
   }
   return ret;
@@ -3413,10 +3428,15 @@ int ObPreProcessSysVars::change_initial_value()
   }
   return ret;
 }
-int ObPreProcessSysVars::init_sys_var()
+int ObPreProcessSysVars::init_sys_var(const ObIArray<std::pair<ObString, ObString>> &sys_vars)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(ObPreProcessSysVars::init_config_sys_vars())) {
+  if (OB_FAIL(change_base_values(sys_vars))) {
+    // sys_vars were passed from command line.
+    // we need to change the base values first and if there are some special variables,
+    // such as timezone, version_comment, we will change them to right value later.
+    LOG_WARN("fail to change base values", K(ret));
+  } else if (OB_FAIL(ObPreProcessSysVars::init_config_sys_vars())) {
     LOG_ERROR("fail to initial config sys var", K(ret));
   } else if (OB_FAIL(ObPreProcessSysVars::change_initial_value())) {
     LOG_ERROR("fail to change initial value", K(ret));

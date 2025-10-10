@@ -59,7 +59,6 @@
 #include "sql/resolver/tcl/ob_start_trans_stmt.h"
 #include "sql/resolver/tcl/ob_end_trans_stmt.h"
 #include "sql/resolver/tcl/ob_savepoint_stmt.h"
-#include "sql/resolver/cmd/ob_bootstrap_stmt.h"
 #include "sql/resolver/cmd/ob_kill_stmt.h"
 #include "sql/resolver/cmd/ob_empty_query_stmt.h"
 #include "sql/resolver/cmd/ob_resource_stmt.h"
@@ -527,10 +526,6 @@ int ObCmdExecutor::execute(ObExecContext &ctx, ObICmd &cmd)
       case stmt::T_CHANGE_OBI:
       case stmt::T_SWITCH_MASTER:
       case stmt::T_SERVER_ACTION: {
-        break;
-      }
-      case stmt::T_BOOTSTRAP: {
-        DEFINE_EXECUTE_CMD(ObBootstrapStmt, ObBootstrapExecutor);
         break;
       }
       case stmt::T_ADMIN_ZONE: {

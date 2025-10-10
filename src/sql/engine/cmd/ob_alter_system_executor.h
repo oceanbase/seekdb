@@ -26,7 +26,6 @@ class ObExecContext;
 class ObAdminServerStmt;
 class ObAdminZoneStmt;
 class ObAdminStorageStmt;
-class ObBootstrapStmt;
 
 #define DEF_SIMPLE_EXECUTOR(name)                          \
   class name##Executor                                     \
@@ -140,7 +139,6 @@ DEF_SIMPLE_EXECUTOR(ObTableTTL);
 DEF_SIMPLE_EXECUTOR(ObSetRegionBandwidth);
 
 DEF_SIMPLE_EXECUTOR(ObCheckpointSlog);
-DEF_SIMPLE_EXECUTOR(ObBootstrap);
 DEF_SIMPLE_EXECUTOR(ObResetConfig);
 
 DEF_SIMPLE_EXECUTOR(ObCancelClone);

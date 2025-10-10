@@ -81,7 +81,8 @@ public:
   virtual ~ObService();
 
   int init(common::ObMySQLProxy &sql_proxy,
-           share::ObIAliveServerTracer &server_tracer);
+           share::ObIAliveServerTracer &server_tracer,
+           bool need_bootstrap);
   int start();
   void set_stop();
   void stop();
@@ -211,8 +212,7 @@ public:
   int get_partition_count(obrpc::ObGetPartitionCountResult &result);
 
   ////////////////////////////////////////////////////////////////
-  // ObRpcBootstrapP @RS bootstrap
-  int bootstrap(const obrpc::ObBootstrapArg &arg);
+
   // ObRpcPrepareServerForAddingServerP @RS add server
   int prepare_server_for_adding_server(
       const obrpc::ObPrepareServerForAddingServerArg &arg,
@@ -286,6 +286,7 @@ public:
   int change_external_storage_dest(obrpc::ObAdminSetConfigArg &arg);
 
 private:
+  int bootstrap();
   int inner_fill_tablet_info_(
       const int64_t tenant_id,
       const ObTabletID &tablet_id,
@@ -326,6 +327,8 @@ private:
   // report
   ObLSTableUpdater ls_table_updater_;
   ObServerMetaTableChecker meta_table_checker_;
+
+  bool need_bootstrap_;
 };
 
 }//end namespace observer

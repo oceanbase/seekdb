@@ -306,8 +306,6 @@ int main(int argc, char **argv)
   system("rm -rf test_register_mds.log*");
   ObLogger &logger = ObLogger::get_logger();
   logger.set_file_name("test_register_mds.log", true, false,
-                       "test_register_mds.log",  // rs
-                       "test_register_mds.log",  // election
                        "test_register_mds.log"); // audit
   logger.set_log_level(OB_LOG_LEVEL_DEBUG);
   ::testing::InitGoogleTest(&argc, argv);

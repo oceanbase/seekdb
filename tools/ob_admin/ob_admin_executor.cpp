@@ -115,7 +115,7 @@ int ObAdminExecutor::prepare_io()
     LOG_WARN("add device channel failed", K(ret));
   } else if (OB_FAIL(ObIOManager::get_instance().start())) {
     LOG_WARN("fail to start io manager", K(ret));
-  } else if (OB_FAIL(OB_FILE_SYSTEM_ROUTER.get_instance().init(data_dir_))) {
+  } else if (OB_FAIL(OB_FILE_SYSTEM_ROUTER.get_instance().init(data_dir_, clog_dir_))) {
     LOG_WARN("fail to init file system router", K(ret));
   } else if (OB_FAIL(SERVER_STORAGE_META_SERVICE.init(false/*is_shared_storage*/))) {
     LOG_WARN("fail to init storage meta service", K(ret));

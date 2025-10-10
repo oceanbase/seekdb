@@ -137,7 +137,7 @@ TEST_F(TestLogArchiveSource, insert_source)
 
 int main(int argc, char **argv)
 {
-  OB_LOGGER.set_file_name("test_log_archive_source.log", true, false, "test_log_archive_source_rs.log", "test_archive_election.log");
+  OB_LOGGER.set_file_name("test_log_archive_source.log", true, false);
   OB_LOGGER.set_log_level("INFO");
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();

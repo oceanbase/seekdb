@@ -25,7 +25,6 @@ namespace oceanbase
 namespace obrpc
 {
 
-int64_t ObRpcNetHandler::CLUSTER_ID = common::INVALID_CLUSTER_ID;
 uint64_t ObRpcNetHandler::CLUSTER_NAME_HASH = 0;
 
 

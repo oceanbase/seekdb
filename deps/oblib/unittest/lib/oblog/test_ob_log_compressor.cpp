@@ -309,15 +309,11 @@ TEST(ObLogCompressor, syslog_compressor_thread_test)
   const char *pattern_uncompressed[OB_SYSLOG_COMPRESS_TYPE_COUNT] =
   {
     "^observer\\.log\\.[0-9]+$",
-    "^rootservice\\.log\\.[0-9]+$",
-    "^election\\.log\\.[0-9]+$",
     "^trace\\.log\\.[0-9]+$",
   };
   const char *pattern_compressed[OB_SYSLOG_COMPRESS_TYPE_COUNT] =
   {
     "^observer\\.log\\.[0-9]+\\.[a-z]+$",
-    "^rootservice\\.log\\.[0-9]+\\.[a-z]+$",
-    "^election\\.log\\.[0-9]+\\.[a-z]+$",
     "^trace\\.log\\.[0-9]+\\.[a-z]+$",
   };
 

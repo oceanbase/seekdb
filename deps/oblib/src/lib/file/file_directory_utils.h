@@ -30,6 +30,7 @@ class FileDirectoryUtils
 public:
   static const int MAX_PATH = 512;
   static int is_exists(const char *file_path, bool &result);
+  static int is_writable(const char *file_path, bool &result);
   static int is_accessible(const char *file_path, bool &result);
   static int is_directory(const char *directory_path, bool &result);
   static int is_link(const char *link_path, bool &result);
@@ -49,6 +50,9 @@ public:
   static int delete_directory_rec(const char *path);
   static int delete_tmp_file_or_directory_at(const char *path);
   static int fsync_dir(const char *dir_path);
+
+private:
+  static int check_directory_mode(const char *file_path, int mode, bool &result);
 };
 
 typedef FileDirectoryUtils FSU;

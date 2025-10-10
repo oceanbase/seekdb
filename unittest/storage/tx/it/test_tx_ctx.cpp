@@ -193,8 +193,6 @@ int main(int argc, char **argv)
   system("rm -rf test_tx_ctx*.log*");
   ObLogger &logger = ObLogger::get_logger();
   logger.set_file_name("test_tx_ctx.log", true, false,
-                       "test_tx_ctx_rs.log",       // rs
-                       "test_tx_ctx_election.log", // election
                        "test_tx_ctx_audit.log");   // audit
   logger.set_log_level(OB_LOG_LEVEL_DEBUG);
   ::testing::InitGoogleTest(&argc, argv);

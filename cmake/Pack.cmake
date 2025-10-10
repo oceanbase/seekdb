@@ -4,11 +4,11 @@ set(CPACK_PACKAGE_VENDOR "OceanBase Inc.")
 set(CPACK_PACKAGE_DESCRIPTION "OceanBase is a distributed relational database")
 set(CPACK_COMPONENTS_ALL server sql-parser)
 
-set(CPACK_PACKAGE_NAME "oceanbase-ce")
-set(CPACK_PACKAGE_VERSION "${OceanBase_CE_VERSION}")
-set(CPACK_PACKAGE_VERSION_MAJOR "${OceanBase_CE_VERSION_MAJOR}")
-set(CPACK_PACKAGE_VERSION_MINOR "${OceanBase_CE_VERSION_MINOR}")
-set(CPACK_PACKAGE_VERSION_PATCH "${OceanBase_CE_VERSION_PATCH}")
+set(CPACK_PACKAGE_NAME "oceanbase-lite")
+set(CPACK_PACKAGE_VERSION "${OceanBase_VERSION}")
+set(CPACK_PACKAGE_VERSION_MAJOR "${OceanBase_VERSION_MAJOR}")
+set(CPACK_PACKAGE_VERSION_MINOR "${OceanBase_VERSION_MINOR}")
+set(CPACK_PACKAGE_VERSION_PATCH "${OceanBase_VERSION_PATCH}")
 
 ## TIPS
 #
@@ -16,16 +16,13 @@ set(CPACK_PACKAGE_VERSION_PATCH "${OceanBase_CE_VERSION_PATCH}")
 
 set(BITCODE_TO_ELF_LIST "")
 
-# systemd define on package
-configure_file(${CMAKE_CURRENT_SOURCE_DIR}/tools/systemd/profile/oceanbase-service.sh.template
-${CMAKE_CURRENT_SOURCE_DIR}/tools/systemd/profile/oceanbase-service.sh
-@ONLY)
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/tools/systemd/profile/telemetry.sh.template
 ${CMAKE_CURRENT_SOURCE_DIR}/tools/systemd/profile/telemetry.sh
 @ONLY)
-configure_file(${CMAKE_CURRENT_SOURCE_DIR}/tools/systemd/profile/oceanbase.service.template
-${CMAKE_CURRENT_SOURCE_DIR}/tools/systemd/profile/oceanbase.service
-@ONLY)
+
+set(CPACK_RPM_EXCLUDE_FROM_AUTO_FILELIST_ADDITION
+    "/usr" "/usr/lib" "/usr/lib/systemd" "/usr/lib/systemd/system" "/usr/libexec" "/etc"
+)
 
 ## server - Install to proper directory structure
 
@@ -57,17 +54,9 @@ install(PROGRAMS
   COMPONENT server)
 
 install(PROGRAMS
-  tools/systemd/profile/oceanbase-service.sh
+  tools/systemd/profile/oceanbase_systemd_pre
+  tools/systemd/profile/oceanbase_systemd_start
   tools/systemd/profile/telemetry.sh
-  DESTINATION usr/libexec/oceanbase/scripts
-  COMPONENT server)
-
-# Install post/pre install scripts
-install(PROGRAMS
-  tools/systemd/profile/post_install.sh
-  tools/systemd/profile/post_uninstall.sh
-  tools/systemd/profile/pre_install.sh
-  tools/systemd/profile/pre_uninstall.sh
   DESTINATION usr/libexec/oceanbase/scripts
   COMPONENT server)
 
@@ -85,7 +74,6 @@ install(FILES
   tools/upgrade/deps_compat.yml
   ${CMAKE_BINARY_DIR}/src/share/ob_system_variable_init.json
   ${INSTALL_EXTRA_FILES}
-  ${CMAKE_BINARY_DIR}/ob_all_available_parameters.json
   tools/systemd/profile/oceanbase.cnf
   tools/systemd/profile/oceanbase-pre.json
   tools/systemd/profile/telemetry-pre.json
@@ -165,16 +153,6 @@ install(FILES
   src/sql/parser/parse_node.h
   DESTINATION usr/include
   COMPONENT sql-parser)
-
-  ## oceanbase-libs
-list(APPEND CPACK_COMPONENTS_ALL libs)
-install(PROGRAMS
-  deps/3rd/usr/local/oceanbase/deps/devel/lib/libaio.so.1
-  deps/3rd/usr/local/oceanbase/deps/devel/lib/libaio.so.1.0.1
-  deps/3rd/usr/local/oceanbase/deps/devel/lib/libaio.so
-  DESTINATION usr/libexec/oceanbase/lib
-  COMPONENT libs
-)
 
 if(OB_BUILD_OBADMIN)
   ## oceanbase-utils

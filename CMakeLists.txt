@@ -3,12 +3,12 @@ cmake_minimum_required(VERSION 3.20)
 include(cmake/Utils.cmake)
 include(cmake/Env.cmake)
 
-project("OceanBase_CE"
+project("OceanBase"
   VERSION 4.3.5.3
-  DESCRIPTION "OceanBase distributed database system"
-  HOMEPAGE_URL "https://open.oceanbase.com/"
+  DESCRIPTION "OceanBase Lite database system"
+  HOMEPAGE_URL "https://open.oceanbase.com"
   LANGUAGES CXX C ASM)
-message(STATUS "open source build enabled")
+
 
 if(ENABLE_COMPILE_DLL_MODE)
   set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DCOMPILE_DLL_MODE")

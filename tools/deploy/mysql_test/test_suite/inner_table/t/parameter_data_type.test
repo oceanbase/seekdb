@@ -18,7 +18,6 @@
 # | STRING    | default_row_format       | plsql_code_type              |           #
 # | CAPACITY  | log_disk_size            | range_optimizer_max_mem_size |           #
 # | TIME      | rpc_timeout              | merger_check_interval        |           #
-# | STR_LIST  | config_additional_dir    | --                           |           #
 # | MOMENT    | --                       | major_freeze_duty_time       |           #
 # | VERSION   | --                       | compatible                   |           #
 # | MODE      | _obkv_feature_mode       | --                           |           #
@@ -43,8 +42,6 @@ let $para_name = default_row_format;                                       # STR
 let $para_name = log_disk_size;                                            # CAPACITY
 --source mysql_test/include/parameter_data_type/set_cluster_parameter.inc
 let $para_name = rpc_timeout;                                              # TIME
---source mysql_test/include/parameter_data_type/set_cluster_parameter.inc
-let $para_name = config_additional_dir;                                    # STR_LIST
 --source mysql_test/include/parameter_data_type/set_cluster_parameter.inc
 let $para_name = _obkv_feature_mode;                                       # MODE
 --source mysql_test/include/parameter_data_type/set_cluster_parameter.inc
@@ -79,8 +76,6 @@ let $para_name = default_row_format;
 let $para_name = log_disk_size;
 --source mysql_test/include/parameter_data_type/check_cluster_parameter_has_set.inc
 let $para_name = rpc_timeout;
---source mysql_test/include/parameter_data_type/check_cluster_parameter_has_set.inc
-let $para_name = config_additional_dir;
 --source mysql_test/include/parameter_data_type/check_cluster_parameter_has_set.inc
 let $para_name = _obkv_feature_mode;
 --source mysql_test/include/parameter_data_type/check_cluster_parameter_has_set.inc
@@ -122,7 +117,6 @@ select name, data_type from __all_sys_parameter where name = 'location_cache_cpu
 select name, data_type from __all_sys_parameter where name = 'default_row_format';        # STRING
 select name, data_type from __all_sys_parameter where name = 'log_disk_size';             # CAPACITY
 select name, data_type from __all_sys_parameter where name = 'rpc_timeout';               # TIME
-select name, data_type from __all_sys_parameter where name = 'config_additional_dir';     # STR_LIST
 select name, data_type from __all_sys_parameter where name = '_obkv_feature_mode';        # MODE
 
 # [step 3] check data_type for __tenant_parameter
@@ -145,7 +139,6 @@ select name, data_type from __all_virtual_sys_parameter_stat where svr_ip = host
 select name, data_type from __all_virtual_sys_parameter_stat where svr_ip = host_ip() and svr_port = rpc_port() and name = 'default_row_format';        # STRING
 select name, data_type from __all_virtual_sys_parameter_stat where svr_ip = host_ip() and svr_port = rpc_port() and name = 'log_disk_size';             # CAPACITY
 select name, data_type from __all_virtual_sys_parameter_stat where svr_ip = host_ip() and svr_port = rpc_port() and name = 'rpc_timeout';               # TIME
-select name, data_type from __all_virtual_sys_parameter_stat where svr_ip = host_ip() and svr_port = rpc_port() and name = 'config_additional_dir';     # STR_LIST
 select name, data_type from __all_virtual_sys_parameter_stat where svr_ip = host_ip() and svr_port = rpc_port() and name = '_obkv_feature_mode';        # MODE
 # [step 4.2] check tenant-level parameters
 select name, data_type from __all_virtual_sys_parameter_stat where svr_ip = host_ip() and svr_port = rpc_port() and name = 'plsql_debug';                   # BOOL
@@ -166,7 +159,6 @@ select name, data_type from __all_virtual_tenant_parameter_stat where svr_ip = h
 select name, data_type from __all_virtual_tenant_parameter_stat where svr_ip = host_ip() and svr_port = rpc_port() and name = 'default_row_format';        # STRING
 select name, data_type from __all_virtual_tenant_parameter_stat where svr_ip = host_ip() and svr_port = rpc_port() and name = 'log_disk_size';             # CAPACITY
 select name, data_type from __all_virtual_tenant_parameter_stat where svr_ip = host_ip() and svr_port = rpc_port() and name = 'rpc_timeout';               # TIME
-select name, data_type from __all_virtual_tenant_parameter_stat where svr_ip = host_ip() and svr_port = rpc_port() and name = 'config_additional_dir';     # STR_LIST
 select name, data_type from __all_virtual_tenant_parameter_stat where svr_ip = host_ip() and svr_port = rpc_port() and name = '_obkv_feature_mode';        # MODE
 # [step 5.2] check tenant-level parameters
 select name, data_type from __all_virtual_tenant_parameter_stat where svr_ip = host_ip() and svr_port = rpc_port() and tenant_id = 1 and name = 'plsql_debug';                   # BOOL
@@ -209,7 +201,6 @@ select name, data_type from GV$OB_PARAMETERS where svr_ip = host_ip() and svr_po
 select name, data_type from GV$OB_PARAMETERS where svr_ip = host_ip() and svr_port = rpc_port() and name = 'default_row_format';        # STRING
 select name, data_type from GV$OB_PARAMETERS where svr_ip = host_ip() and svr_port = rpc_port() and name = 'log_disk_size';             # CAPACITY
 select name, data_type from GV$OB_PARAMETERS where svr_ip = host_ip() and svr_port = rpc_port() and name = 'rpc_timeout';               # TIME
-select name, data_type from GV$OB_PARAMETERS where svr_ip = host_ip() and svr_port = rpc_port() and name = 'config_additional_dir';     # STR_LIST
 select name, data_type from GV$OB_PARAMETERS where svr_ip = host_ip() and svr_port = rpc_port() and name = '_obkv_feature_mode';        # MODE
 # [step 8.2] check tenant-level parameters
 select name, data_type from GV$OB_PARAMETERS where svr_ip = host_ip() and svr_port = rpc_port() and tenant_id = 1 and name = 'plsql_debug';                   # BOOL
@@ -230,7 +221,6 @@ select name, data_type from V$OB_PARAMETERS where name = 'location_cache_cpu_quo
 select name, data_type from V$OB_PARAMETERS where name = 'default_row_format';        # STRING
 select name, data_type from V$OB_PARAMETERS where name = 'log_disk_size';             # CAPACITY
 select name, data_type from V$OB_PARAMETERS where name = 'rpc_timeout';               # TIME
-select name, data_type from V$OB_PARAMETERS where name = 'config_additional_dir';     # STR_LIST
 select name, data_type from V$OB_PARAMETERS where name = '_obkv_feature_mode';        # MODE
 # [step 9.2] check tenant-level parameters
 select name, data_type from V$OB_PARAMETERS where tenant_id = 1 and name = 'plsql_debug';                   # BOOL
@@ -257,8 +247,6 @@ show parameters where svr_ip = host_ip() and svr_port = rpc_port() and name = 'd
 show parameters where svr_ip = host_ip() and svr_port = rpc_port() and name = 'log_disk_size';             # CAPACITY
 --replace_column 1 zone1 3 server_ip 4 server_port 7 value 8 info 14 1
 show parameters where svr_ip = host_ip() and svr_port = rpc_port() and name = 'rpc_timeout';               # TIME
---replace_column 1 zone1 3 server_ip 4 server_port 7 value 8 info 14 1
-show parameters where svr_ip = host_ip() and svr_port = rpc_port() and name = 'config_additional_dir';     # STR_LIST
 # cannot query hidden parameters by show parameters                                                        # MODE
 # [step 10.2] check tenant-level parameters
 --replace_column 1 zone1 3 server_ip 4 server_port 7 value 8 info 14 1
@@ -301,7 +289,6 @@ select name, data_type from __all_virtual_tenant_parameter_stat where svr_ip = h
 select name, data_type from __all_virtual_tenant_parameter_stat where svr_ip = host_ip() and svr_port = rpc_port() and name = 'default_row_format';        # STRING
 select name, data_type from __all_virtual_tenant_parameter_stat where svr_ip = host_ip() and svr_port = rpc_port() and name = 'log_disk_size';             # CAPACITY
 select name, data_type from __all_virtual_tenant_parameter_stat where svr_ip = host_ip() and svr_port = rpc_port() and name = 'rpc_timeout';               # TIME
-select name, data_type from __all_virtual_tenant_parameter_stat where svr_ip = host_ip() and svr_port = rpc_port() and name = 'config_additional_dir';     # STR_LIST
 select name, data_type from __all_virtual_tenant_parameter_stat where svr_ip = host_ip() and svr_port = rpc_port() and name = '_obkv_feature_mode';        # MODE
 # [step 2.2] check tenant-level parameters
 select name, data_type from __all_virtual_tenant_parameter_stat where svr_ip = host_ip() and svr_port = rpc_port() and name = 'plsql_debug';                   # BOOL
@@ -333,7 +320,6 @@ select name, data_type from GV$OB_PARAMETERS where svr_ip = host_ip() and svr_po
 select name, data_type from GV$OB_PARAMETERS where svr_ip = host_ip() and svr_port = rpc_port() and name = 'default_row_format';        # STRING
 select name, data_type from GV$OB_PARAMETERS where svr_ip = host_ip() and svr_port = rpc_port() and name = 'log_disk_size';             # CAPACITY
 select name, data_type from GV$OB_PARAMETERS where svr_ip = host_ip() and svr_port = rpc_port() and name = 'rpc_timeout';               # TIME
-select name, data_type from GV$OB_PARAMETERS where svr_ip = host_ip() and svr_port = rpc_port() and name = 'config_additional_dir';     # STR_LIST
 select name, data_type from GV$OB_PARAMETERS where svr_ip = host_ip() and svr_port = rpc_port() and name = '_obkv_feature_mode';        # MODE
 # [step 4.2] check tenant-level parameters
 select name, data_type from GV$OB_PARAMETERS where svr_ip = host_ip() and svr_port = rpc_port() and name = 'plsql_debug';                   # BOOL
@@ -354,7 +340,6 @@ select name, data_type from V$OB_PARAMETERS where name = 'location_cache_cpu_quo
 select name, data_type from V$OB_PARAMETERS where name = 'default_row_format';        # STRING
 select name, data_type from V$OB_PARAMETERS where name = 'log_disk_size';             # CAPACITY
 select name, data_type from V$OB_PARAMETERS where name = 'rpc_timeout';               # TIME
-select name, data_type from V$OB_PARAMETERS where name = 'config_additional_dir';     # STR_LIST
 select name, data_type from V$OB_PARAMETERS where name = '_obkv_feature_mode';        # MODE
 # [step 5.2] check tenant-level parameters
 select name, data_type from V$OB_PARAMETERS where name = 'plsql_debug';                   # BOOL
@@ -381,8 +366,6 @@ show parameters where svr_ip = host_ip() and svr_port = rpc_port() and name = 'd
 show parameters where svr_ip = host_ip() and svr_port = rpc_port() and name = 'log_disk_size';             # CAPACITY
 --replace_column 1 zone1 3 server_ip 4 server_port 7 value 8 info 14 1
 show parameters where svr_ip = host_ip() and svr_port = rpc_port() and name = 'rpc_timeout';               # TIME
---replace_column 1 zone1 3 server_ip 4 server_port 7 value 8 info 14 1
-show parameters where svr_ip = host_ip() and svr_port = rpc_port() and name = 'config_additional_dir';     # STR_LIST
 # cannot query hidden parameters by show parameters                                                        # MODE
 # [step 6.2] check tenant-level parameters
 --replace_column 1 zone1 3 server_ip 4 server_port 7 value 8 info 14 1

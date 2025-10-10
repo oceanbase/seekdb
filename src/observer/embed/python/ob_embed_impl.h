@@ -70,13 +70,6 @@ public:
   static std::shared_ptr<ObLiteEmbedConn> connect(const char* db_name, const bool autocommit);
 private:
   static int do_open_(const char* db_dir);
-  static int bootstrap_();
-  static void notify_bootstrap_();
-private:
-  static std::string rs_list_;
-  static std::string opts_;
-  static std::string data_abs_dir_;
-  static std::thread th_;
 };
 
 class ObLiteEmbedUtil

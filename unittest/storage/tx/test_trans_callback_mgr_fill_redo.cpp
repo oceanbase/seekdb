@@ -745,8 +745,6 @@ int main(int argc, char **argv)
   system("rm -rf test_trans_callback_mgr_fill_redo.log*");
   ObLogger &logger = ObLogger::get_logger();
   logger.set_file_name(log_name, true, false,
-                       log_name,
-                       log_name,
                        log_name);
   logger.set_log_level(OB_LOG_LEVEL_DEBUG);
   ::testing::InitGoogleTest(&argc, argv);

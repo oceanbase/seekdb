@@ -1,0 +1,35 @@
+#!/bin/bash
+
+#!/bin/bash
+
+# OceanBase start script
+# This script reads configuration from /etc/oceanbase/oceanbase.cnf and starts observer
+
+CONFIG_FILE="/etc/oceanbase/oceanbase.cnf"
+BASE_DIR="/var/lib/oceanbase"
+
+# Check if config file exists
+if [ ! -f "$CONFIG_FILE" ]; then
+    echo "Error: Configuration file $CONFIG_FILE not found"
+    exit 1
+fi
+
+# Read base-dir from configuration file
+BASE_DIR_FROM_CONFIG=$(grep -E '^[[:space:]]*base-dir[[:space:]]*=' "$CONFIG_FILE" | head -1 | sed 's/^[[:space:]]*base-dir[[:space:]]*=[[:space:]]*//' | sed 's/[[:space:]]*$//')
+
+# Use base-dir from config if found, otherwise use default
+if [ -n "$BASE_DIR_FROM_CONFIG" ]; then
+    BASE_DIR="$BASE_DIR_FROM_CONFIG"
+    echo "Using base-dir from config: $BASE_DIR"
+else
+    echo "Using default base-dir: $BASE_DIR"
+fi
+
+# Initialize command
+CMD="/usr/bin/observer --base-dir=$BASE_DIR"
+
+echo "Starting OceanBase with command: $CMD"
+echo "Configuration loaded from: $CONFIG_FILE"
+
+# Execute the command
+exec $CMD

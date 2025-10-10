@@ -89,11 +89,11 @@ int CpuFlagSet::init_from_os(uint64_t& flags)
 {
   int ret = OB_SUCCESS;
   flags = 0;
-  const char* const CPU_FLAG_CMDS[(int)CpuFlag::MAX] = {"grep -E ' sse4_2( |$)' /proc/cpuinfo",
-      "grep -E ' avx( |$)' /proc/cpuinfo",
-      "grep -E ' avx2( |$)' /proc/cpuinfo",
-      "grep -E ' avx512bw( |$)' /proc/cpuinfo",
-      "grep -E ' asimd( |$)' /proc/cpuinfo"};
+  const char* const CPU_FLAG_CMDS[(int)CpuFlag::MAX] = {"grep -E ' sse4_2( |$)' /proc/cpuinfo > /dev/null 2>&1",
+      "grep -E ' avx( |$)' /proc/cpuinfo > /dev/null 2>&1",
+      "grep -E ' avx2( |$)' /proc/cpuinfo > /dev/null 2>&1",
+      "grep -E ' avx512bw( |$)' /proc/cpuinfo > /dev/null 2>&1",
+      "grep -E ' asimd( |$)' /proc/cpuinfo > /dev/null 2>&1"};
   for (int i = 0; i < (int)CpuFlag::MAX; ++i) {
     int system_ret = system(CPU_FLAG_CMDS[i]);
     if (system_ret != 0) {

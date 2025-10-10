@@ -202,12 +202,7 @@ int ObServerReloadConfig::operator()()
   lib::AChunkMgr::instance().set_max_chunk_cache_size(cache_size, use_large_chunk_cache);
 
   if (!is_arbitration_mode) {
-    // Refresh cluster_id, cluster_name_hash for non arbitration mode
-    if (GCONF.cluster_id.get_value() > 0) {
-      obrpc::ObRpcNetHandler::CLUSTER_ID = GCONF.cluster_id.get_value();
-      LOG_INFO("set CLUSTER_ID for rpc", "cluster_id", GCONF.cluster_id.get_value());
-    }
-
+    // Refresh cluster_name_hash for non arbitration mode
     if (FAILEDx(set_cluster_name_hash(GCONF.cluster.str()))) {
       LOG_WARN("failed to set_cluster_name_hash", KR(ret), "cluster_name", GCONF.cluster.str(),
                                                 "cluster_name_len", strlen(GCONF.cluster.str()));

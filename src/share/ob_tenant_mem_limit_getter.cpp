@@ -91,7 +91,10 @@ int ObTenantMemLimitGetter::get_tenant_mem_limit(
     MTL_SWITCH(tenant_id) {
       storage::ObTenantFreezer *freezer = nullptr;
       freezer = MTL(storage::ObTenantFreezer *);
-      if (OB_FAIL(freezer->get_tenant_mem_limit(lower_limit,
+      if (OB_ISNULL(freezer)) {
+        LOG_WARN("freezer is null", K(tenant_id));
+        ret = OB_ERR_UNEXPECTED;
+      } else if (OB_FAIL(freezer->get_tenant_mem_limit(lower_limit,
                                                 upper_limit))) {
         LOG_WARN("get tenant mem limit failed.", K(ret), K(tenant_id));
       }

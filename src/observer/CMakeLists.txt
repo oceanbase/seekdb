@@ -661,7 +661,7 @@ if (NOT OB_USE_ASAN)
   set(link_malloc_hook malloc_hook)
 endif()
 
-add_library(ob_main OBJECT main.cpp)
+add_library(ob_main OBJECT main.cpp ob_command_line_parser.cpp)
 config_ccls_flag(ob_main)
 target_link_libraries(ob_main PUBLIC ob_base)
 add_executable(observer_without_bolt)
@@ -717,11 +717,5 @@ else()
 endif()
 
 configure_file(../share/ob_version.cpp.in ob_version.cpp)
-
-message(STATUS "dump config item")
-add_custom_command(TARGET observer POST_BUILD
-COMMAND ${CMAKE_BINARY_DIR}/src/observer/observer -C
-WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
-)
 
 add_subdirectory(embed)

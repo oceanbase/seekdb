@@ -96,6 +96,9 @@ class ObAliveServerTracer;
 }
 namespace observer
 {
+
+class ObServerOptions;
+
 // This the class definition of ObAddr which responds the server
 // itself. It's designed as a singleton in program. This class is
 // structure aggregated but not logical processing. Please don't put
@@ -121,7 +124,7 @@ public:
 
   // Start OceanBase server, this function is blocked after invoking
   // until the server itself stops it.
-  int start();
+  int start(bool embed_mode);
   int wait();
   void prepare_stop();
   bool is_prepare_stopped();
@@ -262,11 +265,11 @@ private:
   ObServer();
   ~ObServer();
 
-  int init_config();
-  int init_opts_config(bool has_config_file); // init configs from command line
+  int init_config(const ObServerOptions &opts);
+  int init_opts_config(bool has_config_file, const ObServerOptions &opts, const char *optstr); // init configs from command line
   int init_local_ip_and_devname();
   int init_self_addr();
-  int init_config_module();
+  int init_config_module(const char *optstr);
   int init_tz_info_mgr();
   int init_pre_setting();
   int init_network();
@@ -283,7 +286,7 @@ private:
   int init_tablet_autoincrement_service();
   int init_global_kvcache();
   int init_global_session_info();
-  int init_ob_service();
+  int init_ob_service(bool need_bootstrap);
   int init_root_service();
   int init_sql();
   int init_sql_runner();
@@ -363,7 +366,6 @@ private:
   bool stop_;
   volatile bool has_stopped_;
   bool has_destroy_;
-  ObServerOptions opts_;
   // The network framework in OceanBase is all defined at ObServerNetworkFrame.
   ObSrvNetworkFrame net_frame_;
   obrpc::ObBatchRpc batch_rpc_;

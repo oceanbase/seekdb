@@ -111,16 +111,8 @@ int ObAllVirtualResMgrSysStat::update_all_stats_(const int64_t tenant_id, ObStat
 
     stat_events.get(ObStatEventIds::OBLOGGER_WRITE_SIZE - ObStatEventIds::STAT_EVENT_ADD_END -1)->stat_value_ =
         (OB_SYS_TENANT_ID == tenant_id) ? OB_LOGGER.get_write_size() : 0;
-    stat_events.get(ObStatEventIds::ELECTION_WRITE_SIZE - ObStatEventIds::STAT_EVENT_ADD_END -1)->stat_value_ =
-        (OB_SYS_TENANT_ID == tenant_id) ? OB_LOGGER.get_elec_write_size() : 0;
-    stat_events.get(ObStatEventIds::ROOTSERVICE_WRITE_SIZE - ObStatEventIds::STAT_EVENT_ADD_END -1)->stat_value_ =
-        (OB_SYS_TENANT_ID == tenant_id) ? OB_LOGGER.get_rs_write_size() : 0;
     stat_events.get(ObStatEventIds::OBLOGGER_TOTAL_WRITE_COUNT - ObStatEventIds::STAT_EVENT_ADD_END -1)->stat_value_ =
         (OB_SYS_TENANT_ID == tenant_id) ? OB_LOGGER.get_total_write_count() : 0;
-    stat_events.get(ObStatEventIds::ELECTION_TOTAL_WRITE_COUNT - ObStatEventIds::STAT_EVENT_ADD_END -1)->stat_value_ =
-        (OB_SYS_TENANT_ID == tenant_id) ? OB_LOGGER.get_elec_total_write_count() : 0;
-    stat_events.get(ObStatEventIds::ROOTSERVICE_TOTAL_WRITE_COUNT - ObStatEventIds::STAT_EVENT_ADD_END -1)->stat_value_ =
-        (OB_SYS_TENANT_ID == tenant_id) ? OB_LOGGER.get_rs_total_write_count() : 0;
     stat_events.get(ObStatEventIds::ASYNC_ERROR_LOG_DROPPED_COUNT - ObStatEventIds::STAT_EVENT_ADD_END -1)->stat_value_ =
         (OB_SYS_TENANT_ID == tenant_id) ? OB_LOGGER.get_dropped_error_log_count() : 0;
     stat_events.get(ObStatEventIds::ASYNC_WARN_LOG_DROPPED_COUNT - ObStatEventIds::STAT_EVENT_ADD_END -1)->stat_value_ =

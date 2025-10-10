@@ -50,4 +50,4 @@ systemctl {start|stop|restart|status} oceanbase
 ```
 
 ## Oceanbase configuration by systemd
-Systemd provide `/etc/oceanbase.cnf` to config OceanBase before startup.
+Systemd provide `/etc/oceanbase/oceanbase.cnf` to config OceanBase before startup.

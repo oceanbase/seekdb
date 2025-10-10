@@ -3713,8 +3713,6 @@ int main(int argc, char **argv)
 {
   system("rm -rf test_memtable.log*");
   OB_LOGGER.set_file_name("test_memtable.log", true, false,
-                          "test_memtable.log",
-                          "test_memtable.log",
                           "test_memtable.log");
   OB_LOGGER.set_log_level("INFO");
   STORAGE_LOG(INFO, "begin unittest: test simple memtable");

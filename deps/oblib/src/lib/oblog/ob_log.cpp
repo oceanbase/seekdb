@@ -66,16 +66,9 @@ static const int64_t POP_COMPENSATED_TIME[5] = {0, 1, 2, 3, 4};//for pop timeout
 ObPLogFDType get_fd_type(const char *mod_name)
 {
   ObPLogFDType type = FD_SVR_FILE;
-  static const size_t RS_MODULE_LEN = strlen("[RS");
-  static const size_t ELEC_MODULE_LEN = strlen("[ELECT");
   static const size_t FLT_MODULE_LEN = strlen("[FLT");
   if (0 == STRNCMP(mod_name, "[FLT", FLT_MODULE_LEN)) {
     type = FD_TRACE_FILE;
-  } else if (ObThreadFlags::is_rs_thread()
-             || 0 == STRNCMP(mod_name, "[RS", RS_MODULE_LEN)) {
-    type = FD_RS_FILE;
-  } else if (0 == STRNCMP(mod_name, "[ELECT", ELEC_MODULE_LEN)) {
-    type = FD_ELEC_FILE;
   }
   return type;
 }
@@ -593,8 +586,6 @@ void ObLogger::set_alert_log_level(const char *level, int64_t version)
 void ObLogger::set_file_name(const char *filename,
                              const bool no_redirect_flag,
                              const bool open_wf,
-                             const char *rs_filename,
-                             const char *elec_filename,
                              const char *trace_filename,
                              const char *alert_filename)
 {
@@ -606,12 +597,6 @@ void ObLogger::set_file_name(const char *filename,
   if (OB_FAIL(log_file_[FD_SVR_FILE].open(filename, open_wf, redirect_flag_))
       && OB_FAIL(log_new_file_info(log_file_[FD_SVR_FILE]))) {
     LOG_STDERR("fail to open log_file = %p, ret=%d\n", filename, ret);
-  } else if (NULL != rs_filename && OB_FAIL(log_file_[FD_RS_FILE].open(rs_filename, open_wf, false))
-             && OB_FAIL(log_new_file_info(log_file_[FD_RS_FILE]))) {
-    LOG_STDERR("fail to open log_file = %p, ret=%d\n", rs_filename, ret);
-  } else if (NULL != elec_filename && OB_FAIL(log_file_[FD_ELEC_FILE].open(elec_filename, open_wf, false))
-             && OB_FAIL(log_new_file_info(log_file_[FD_ELEC_FILE]))) {
-    LOG_STDERR("fail to open log_file = %p, ret=%d\n", elec_filename, ret);
   } else if (NULL != trace_filename && OB_FAIL(log_file_[FD_TRACE_FILE].open(trace_filename, false, false))) {
     LOG_STDERR("fail to open log_file = %p, ret=%d\n", trace_filename, ret);
   } else if (NULL != alert_filename && OB_FAIL(log_file_[FD_ALERT_FILE].open(alert_filename, false, false))) {
@@ -759,7 +744,7 @@ void ObLogger::rotate_log(const int64_t size, const bool redirect_flag,
       rotate_log(log_struct.filename_, fd_type, redirect_flag, log_struct.fd_,
                  log_struct.wf_fd_, file_list_, wf_file_list_);
       (void)ATOMIC_SET(&log_struct.file_size_, 0);
-      if (fd_type <= FD_ELEC_FILE) {
+      if (fd_type <= FD_SVR_FILE) {
         (void)log_new_file_info(log_struct);
       }
       (void)pthread_mutex_unlock(&file_size_mutex_);
@@ -863,8 +848,6 @@ void ObLogger::rotate_log(const char *filename,
 void ObLogger::check_file()
 {
   check_file(log_file_[FD_SVR_FILE], redirect_flag_, open_wf_flag_);
-  check_file(log_file_[FD_RS_FILE], false, open_wf_flag_);
-  check_file(log_file_[FD_ELEC_FILE], false, open_wf_flag_);
   check_file(log_file_[FD_TRACE_FILE], false, false);
   check_file(log_file_[FD_ALERT_FILE], false, false);
 }

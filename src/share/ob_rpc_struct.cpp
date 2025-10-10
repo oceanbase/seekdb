@@ -15,6 +15,7 @@
 #include "ob_rpc_struct.h"
 #include "storage/tx/ob_trans_service.h"
 #include "share/table/ob_table_ddl_struct.h"
+#include "src/share/ob_server_struct.h"
 
 namespace oceanbase
 {
@@ -5488,8 +5489,19 @@ OB_SERIALIZE_MEMBER((ObSequenceDDLArg, ObDDLArg),
 
 OB_SERIALIZE_MEMBER(ObBootstrapArg, server_list_, cluster_role_, shared_storage_info_);
 
-
-
+int ObBootstrapArg::init_default()
+{
+  int ret = OB_SUCCESS;
+  cluster_role_ = common::PRIMARY_CLUSTER;
+  obrpc::ObServerInfo server_info;
+  server_info.zone_.assign(GCONF.zone);
+  server_info.server_ = GCTX.self_addr();
+  server_info.region_ = DEFAULT_REGION_NAME;
+  if (OB_FAIL(server_list_.push_back(server_info))) {
+    LOG_WARN("failed to push back self addr", K(ret));
+  }
+  return ret;
+}
 
 DEF_TO_STRING(ObSplitPartitionBatchArg)
 {

@@ -1173,7 +1173,6 @@ ob_set_subtarget(ob_sql resolver_cmd
   resolver/cmd/ob_alter_system_stmt.cpp
   resolver/cmd/ob_anonymous_block_resolver.cpp
   resolver/cmd/ob_anonymous_block_stmt.cpp
-  resolver/cmd/ob_bootstrap_resolver.cpp
   resolver/cmd/ob_call_procedure_resolver.cpp
   resolver/cmd/ob_call_procedure_stmt.cpp
   resolver/cmd/ob_create_restore_point_resolver.cpp

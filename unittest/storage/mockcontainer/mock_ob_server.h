@@ -29,6 +29,7 @@
 #include "observer/omt/ob_multi_tenant.h"
 #include "observer/omt/ob_worker_processor.h"
 #include "observer/ob_srv_xlator.h"
+#include "observer/ob_server_options.h"
 
 #include "mock_ob_schema_service.h"
 #include "../../share/schema/mock_schema_service.h"

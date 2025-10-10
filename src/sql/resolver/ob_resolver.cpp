@@ -20,7 +20,6 @@
 #include "sql/resolver/prepare/ob_prepare_resolver.h"
 #include "sql/resolver/prepare/ob_execute_resolver.h"
 #include "sql/resolver/prepare/ob_deallocate_resolver.h"
-#include "sql/resolver/cmd/ob_bootstrap_resolver.h"
 #include "sql/resolver/ddl/ob_create_table_resolver.h"
 #include "sql/resolver/ddl/ob_create_func_resolver.h"
 #include "sql/resolver/ddl/ob_drop_func_resolver.h"
@@ -92,7 +91,6 @@
 #include "sql/resolver/cmd/ob_kill_resolver.h"
 #include "sql/resolver/cmd/ob_set_names_resolver.h"
 #include "sql/resolver/cmd/ob_set_transaction_resolver.h"
-#include "sql/resolver/cmd/ob_bootstrap_resolver.h"
 #include "sql/resolver/cmd/ob_empty_query_resolver.h"
 #include "sql/resolver/cmd/ob_anonymous_block_resolver.h"
 #include "sql/resolver/cmd/ob_call_procedure_resolver.h"
@@ -355,10 +353,6 @@ int ObResolver::resolve(IsPrepared if_prepared, const ParseNode &parse_tree, ObS
         //fall through
       case T_COMMIT: {
         REGISTER_STMT_RESOLVER(EndTrans);
-        break;
-      }
-      case T_BOOTSTRAP: {
-        REGISTER_STMT_RESOLVER(Bootstrap);
         break;
       }
       case T_FREEZE: {

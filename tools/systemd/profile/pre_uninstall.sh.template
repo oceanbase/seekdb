@@ -1,13 +1,17 @@
 #!/bin/bash
 echo "execute pre uninstall script"
-prefix=@CPACK_PACKAGING_INSTALL_PREFIX@
+cnf_file=/etc/oceanbase/oceanbase.cnf
 
-echo remove oceanbase service
 systemctl stop oceanbase
 systemctl disable oceanbase
-/bin/bash $prefix/profile/oceanbase-service.sh destroy
-rm -f /etc/systemd/system/oceanbase.service /etc/oceanbase.cnf
 systemctl daemon-reload
 
 # telemetry
-/bin/bash $prefix/profile/telemetry.sh $1 >/dev/null 2>&1
+/bin/bash /usr/libexec/oceanbase/scripts/telemetry.sh $1 >/dev/null 2>&1
+
+if [ -f "$cnf_file" ] && [ -s "$cnf_file" ]; then
+    redo_dir=$(cat "$cnf_file" | grep -o 'redo-dir=[^[:space:]]*' | sed 's/redo-dir=//')
+    echo "rm -rf $redo_dir" >> /var/lib/oceanbase/oceanbase_clean.sh
+    data_dir=$(cat "$cnf_file" | grep -o 'data-dir=[^[:space:]]*' | sed 's/data-dir=//')
+    echo "rm -rf $data_dir" >> /var/lib/oceanbase/oceanbase_clean.sh
+fi

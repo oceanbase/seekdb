@@ -111,7 +111,7 @@ TEST_F(MySimpleArchiveInstance, test_archive_mgr)
 
 int main(int argc, char **argv)
 {
-  OB_LOGGER.set_file_name("test_archive_mgr.log", true, false, "test_archive_mgr_rs.log", "test_archive_election.log");
+  OB_LOGGER.set_file_name("test_archive_mgr.log", true, false);
   OB_LOGGER.set_log_level("INFO");
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();

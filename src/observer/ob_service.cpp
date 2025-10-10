@@ -155,7 +155,8 @@ ObService::ObService(const ObGlobalContext &gctx)
     lease_state_mgr_(), heartbeat_process_(gctx, schema_updater_, lease_state_mgr_),
     gctx_(gctx), server_trace_task_(), schema_release_task_(),
     schema_status_task_(), remote_master_rs_update_task_(gctx), ls_table_updater_(),
-    meta_table_checker_()
+    meta_table_checker_(),
+    need_bootstrap_(false)
   {
   }
 
@@ -164,7 +165,8 @@ ObService::~ObService()
 }
 
 int ObService::init(common::ObMySQLProxy &sql_proxy,
-                    share::ObIAliveServerTracer &server_tracer)
+                    share::ObIAliveServerTracer &server_tracer,
+                    bool need_bootstrap)
 {
   int ret = OB_SUCCESS;
   FLOG_INFO("[OBSERVICE_NOTICE] init ob_service begin");
@@ -205,9 +207,10 @@ int ObService::init(common::ObMySQLProxy &sql_proxy,
       gctx_.schema_service_))) {
     FLOG_WARN("init meta table checker failed", KR(ret));
   } else {
+    need_bootstrap_ = need_bootstrap;
     inited_ = true;
   }
-  FLOG_INFO("[OBSERVICE_NOTICE] init ob_service finish", KR(ret), K_(inited));
+  FLOG_INFO("[OBSERVICE_NOTICE] init ob_service finish", KR(ret), K_(inited), K_(need_bootstrap));
   if (OB_FAIL(ret)) {
     LOG_DBA_ERROR(OB_ERR_OBSERVICE_START, "msg", "observice init() has failure", KR(ret));
   }
@@ -245,6 +248,13 @@ int ObService::start()
   if (!inited_) {
     ret = OB_NOT_INIT;
     FLOG_WARN("ob_service is not inited", KR(ret), K_(inited));
+  } else if (need_bootstrap_) {
+    if (OB_FAIL(bootstrap())) {
+      LOG_ERROR("bootstrap failed", KR(ret));
+    }
+    need_bootstrap_ = false;
+  }
+  if (OB_FAIL(ret)) {
   } else if (OB_FAIL(lease_state_mgr_.init(gctx_.rs_rpc_proxy_,
                                            gctx_.rs_mgr_,
                                            &heartbeat_process_,
@@ -1492,33 +1502,31 @@ int ObService::broadcast_consensus_version(
   return OB_SUCCESS;
 }
 
-int ObService::bootstrap(const obrpc::ObBootstrapArg &arg)
+int ObService::bootstrap()
 {
   int ret = OB_SUCCESS;
-  const int64_t timeout = 600 * 1000 * 1000LL; // 10 minutes
-  const obrpc::ObServerInfoList &rs_list = arg.server_list_;
-  const ObString &shared_storage_info = arg.shared_storage_info_;
-  LOG_INFO("bootstrap timeout", K(timeout), "worker_timeout_ts", THIS_WORKER.get_timeout_ts());
-  if (!inited_) {
+
+  obrpc::ObBootstrapArg bootstrap_arg;
+  if (OB_FAIL(ret)) {
+  } else if (!inited_) {
     ret = OB_NOT_INIT;
     BOOTSTRAP_LOG(WARN, "not init", K(ret));
-  } else if (rs_list.count() <= 0) {
+  } else if (!need_bootstrap_) {
+    ret = OB_ERR_UNEXPECTED;
+    BOOTSTRAP_LOG(INFO, "no need to bootstrap", K(ret));
+  } else if (OB_ISNULL(gctx_.root_service_)) {
     ret = OB_INVALID_ARGUMENT;
-    BOOTSTRAP_LOG(WARN, "rs_list is empty", K(rs_list), K(ret));
-  } else if (GCTX.is_shared_storage_mode() && shared_storage_info.empty()) {
-    ret = OB_MISS_ARGUMENT;
-    BOOTSTRAP_LOG(WARN, "cluster boostrap in shared_storage mode, but shared_storage_info is empty", KR(ret), K(arg));
-    LOG_USER_ERROR(OB_MISS_ARGUMENT, "SHARED_STORAGE_INFO");
-  } else if (!GCTX.is_shared_storage_mode() && !shared_storage_info.empty()) {
-    ret = OB_NOT_SUPPORTED;
-    BOOTSTRAP_LOG(WARN, "cluster boostrap in shared_nothing mode, but shared_storage_info is not empty", KR(ret), K(arg));
-    LOG_USER_ERROR(OB_NOT_SUPPORTED, "shared_storage_info in shared-nothing mode");
+    LOG_WARN("root service is null", K(ret));
+  } else if (OB_FAIL(bootstrap_arg.init_default())) {
+    LOG_WARN("failed to init bootstrap arg", K(ret));
   } else {
+    BOOTSTRAP_LOG(INFO, "begin bootstrap");
+    const obrpc::ObServerInfoList &rs_list = bootstrap_arg.server_list_;
     ObPreBootstrap pre_bootstrap(*gctx_.srv_rpc_proxy_,
                                  rs_list,
                                  *gctx_.lst_operator_,
                                  *gctx_.config_,
-                                 arg,
+                                 bootstrap_arg,
                                  *gctx_.rs_rpc_proxy_);
     ObAddr master_rs;
     bool server_empty = false;
@@ -1530,33 +1538,17 @@ int ObService::bootstrap(const obrpc::ObBootstrapArg &arg)
     } else if (OB_FAIL(pre_bootstrap.prepare_bootstrap(master_rs))) {
       BOOTSTRAP_LOG(ERROR, "failed to prepare boot strap", K(rs_list), K(ret));
     } else {
-      const ObCommonRpcProxy &rpc_proxy = *gctx_.rs_rpc_proxy_;
-      bool boot_done = false;
-      const int64_t MAX_RETRY_COUNT = 30;
-      for (int i = 0; !boot_done && i < MAX_RETRY_COUNT; i++) {
-        ret = OB_SUCCESS;
-        int64_t rpc_timeout = timeout;
-        if (INT64_MAX != THIS_WORKER.get_timeout_ts()) {
-          rpc_timeout = max(rpc_timeout, THIS_WORKER.get_timeout_remain());
-        }
-        if (OB_FAIL(rpc_proxy.to_addr(master_rs).timeout(rpc_timeout)
-                    .execute_bootstrap(arg))) {
-          if (OB_RS_NOT_MASTER == ret) {
-            BOOTSTRAP_LOG(INFO, "master root service not ready",
-                          K(master_rs), "retry_count", i, K(rpc_timeout), K(ret));
-            ob_throttle_usleep(20 * 1000, OB_RS_NOT_MASTER);
-          } else {
-            const ObAddr rpc_svr = rpc_proxy.get_server();
-            BOOTSTRAP_LOG(ERROR, "execute bootstrap fail", KR(ret), K(rpc_svr), K(master_rs), K(rpc_timeout));
-            break;
-          }
-        } else {
-          boot_done = true;
-        }
+      BOOTSTRAP_LOG(INFO, "waiting for root service to be in service");
+      while (OB_SUCC(ret) && !gctx_.root_service_->in_service()) {
+        ob_throttle_usleep(200 * 1000, OB_RS_NOT_MASTER);
       }
-      if (boot_done) {
-        BOOTSTRAP_LOG(INFO, "succeed to do_boot_strap", K(rs_list), K(master_rs));
-      }
+      BOOTSTRAP_LOG(INFO, "root service is in service");
+    }
+    if (OB_FAIL(ret)) {
+    } else if (OB_FAIL(gctx_.root_service_->execute_bootstrap(bootstrap_arg))) {
+      BOOTSTRAP_LOG(ERROR, "failed to execute bootstrap", K(rs_list), K(ret));
+    } else {
+      BOOTSTRAP_LOG(INFO, "succeed to do_boot_strap", K(rs_list), K(master_rs));
     }
   }
 

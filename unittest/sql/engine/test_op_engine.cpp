@@ -120,7 +120,7 @@ int TestOpEngine::prepare_io(const std::string & test_data_name_suffix)
     STORAGE_LOG(WARN, "failed to gen slog dir", K(ret));
   } else if (OB_FAIL(databuff_printf(clog_dir, OB_MAX_FILE_NAME_LENGTH, "%s/clog/", data_dir))) {
     STORAGE_LOG(WARN, "failed to gen clog dir", K(ret));
-  } else if (OB_FAIL(OB_FILE_SYSTEM_ROUTER.get_instance().init(data_dir))) {
+  } else if (OB_FAIL(OB_FILE_SYSTEM_ROUTER.get_instance().init(data_dir, clog_dir))) {
     STORAGE_LOG(WARN, "failed to init file system router", K(ret));
   } else if (OB_FAIL(ObDeviceManager::get_instance().init_devices_env())) {
     LOG_WARN("fail to init device manager", K(ret));

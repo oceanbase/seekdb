@@ -28,10 +28,8 @@ class MockLSAdapter;
 
 #define SET_CASE_LOG_FILE(TEST_NAME, CASE_NAME) \
   const std::string log_file_name = TEST_NAME + "/" + CASE_NAME + ".log";\
-  const std::string ele_log_file_name = TEST_NAME + "/" + CASE_NAME + ".election.log";\
   OB_LOGGER.set_file_name(log_file_name.c_str(),\
-                          true, false, NULL, \
-                          ele_log_file_name.c_str(), NULL);
+                          true, false, NULL);
 
 #define RUN_SIMPLE_LOG_CLUSTER_TEST(TEST_NAME) \
   void *ptr = malloc(SIG_STACK_SIZE); \
@@ -57,10 +55,7 @@ class MockLSAdapter;
   system(rm_log_cmd.c_str()); \
   system(mk_base_dir_cm.c_str()); \
   const std::string log_file_name = TEST_NAME+"/"+TEST_NAME + ".log"; \
-  const std::string ele_log_file_name = TEST_NAME+"/"+TEST_NAME + ".election.log"; \
-  const std::string rs_log_file_name = TEST_NAME+"/"+TEST_NAME + ".rs.log"; \
-  OB_LOGGER.set_file_name(log_file_name.c_str(), true, false, rs_log_file_name.c_str(), \
-      ele_log_file_name.c_str(), NULL); \
+  OB_LOGGER.set_file_name(log_file_name.c_str(), true, false); \
   OB_LOGGER.set_log_level("DEBUG"); \
   OB_LOGGER.set_enable_log_limit(false); \
   OB_LOGGER.set_enable_async_log(false); \

@@ -164,7 +164,7 @@ int TestDataFilePrepareUtil::init(
     STORAGE_LOG(WARN, "failed to gen slog dir", K(ret));
   } else if (OB_FAIL(databuff_printf(clog_dir_, OB_MAX_FILE_NAME_LENGTH, "%s/clog/", data_dir_))) {
     STORAGE_LOG(WARN, "failed to gen clog dir", K(ret));
-  } else if (OB_FAIL(OB_FILE_SYSTEM_ROUTER.get_instance().init(data_dir_))) {
+  } else if (OB_FAIL(OB_FILE_SYSTEM_ROUTER.get_instance().init(data_dir_, clog_dir_))) {
     STORAGE_LOG(WARN, "fail to init file system router", K(ret));
   } else {
     storage_env_.data_dir_ = data_dir_;

@@ -7949,6 +7949,9 @@ public:
   ObServerInfoList server_list_;
   common::ObClusterRole cluster_role_;
   ObString shared_storage_info_;
+
+public:
+  int init_default();
 };
 
 struct ObForceSetLSAsSingleReplicaArg

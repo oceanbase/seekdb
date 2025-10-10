@@ -67,7 +67,7 @@ void ObFileSystemRouter::reset()
   is_inited_ = false;
 }
 
-int ObFileSystemRouter::init(const char *data_dir)
+int ObFileSystemRouter::init(const char *data_dir, const char *redo_dir)
 {
   int ret = OB_SUCCESS;
 
@@ -77,8 +77,8 @@ int ObFileSystemRouter::init(const char *data_dir)
   } else if (OB_ISNULL(data_dir)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret));
-  } else if (OB_FAIL(init_local_dirs(data_dir))) {
-    LOG_WARN("init local dir fail", K(ret), K(data_dir));
+  } else if (OB_FAIL(init_local_dirs(data_dir, redo_dir))) {
+    LOG_WARN("init local dir fail", K(ret), KCSTRING(data_dir), KCSTRING(redo_dir));
   } else {
     clog_file_spec_.retry_write_policy_ = "normal";
     clog_file_spec_.log_create_policy_ = "normal";
@@ -112,7 +112,7 @@ int ObFileSystemRouter::get_tenant_clog_dir(
   return ret;
 }
 
-int ObFileSystemRouter::init_local_dirs(const char* data_dir)
+int ObFileSystemRouter::init_local_dirs(const char* data_dir, const char* redo_dir)
 {
   int ret = OB_SUCCESS;
   int pret = 0;
@@ -121,7 +121,7 @@ int ObFileSystemRouter::init_local_dirs(const char* data_dir)
     pret = snprintf(data_dir_, MAX_PATH_SIZE, "%s", data_dir);
     if (pret < 0 || pret >= MAX_PATH_SIZE) {
       ret = OB_BUF_NOT_ENOUGH;
-      LOG_ERROR("construct data dir fail", K(ret), K(data_dir));
+      LOG_ERROR("construct data dir fail", K(ret), KCSTRING(data_dir));
     }
   }
 
@@ -134,10 +134,10 @@ int ObFileSystemRouter::init_local_dirs(const char* data_dir)
   }
 
   if (OB_SUCC(ret)) {
-    pret = snprintf(clog_dir_, MAX_PATH_SIZE, "%s/clog", data_dir);
+    pret = snprintf(clog_dir_, MAX_PATH_SIZE, "%s", redo_dir);
     if (pret < 0 || pret >= MAX_PATH_SIZE) {
       ret = OB_BUF_NOT_ENOUGH;
-      LOG_ERROR("construct clog path fail", K(ret));
+      LOG_ERROR("construct clog path fail", K(ret), KCSTRING(redo_dir));
     }
   }
 
@@ -151,7 +151,7 @@ int ObFileSystemRouter::init_local_dirs(const char* data_dir)
 
   if (OB_SUCC(ret)) {
     LOG_INFO("succeed to construct local dir",
-      K(data_dir_), K(slog_dir_), K(clog_dir_), K(sstable_dir_));
+      KCSTRING(data_dir_), KCSTRING(slog_dir_), KCSTRING(clog_dir_), KCSTRING(sstable_dir_));
   }
 
   return ret;

@@ -715,7 +715,7 @@ int MockTenantModuleEnv::init_before_start_mtl()
     STORAGE_LOG(WARN, "fail to init env", K(ret));
   } else if (OB_FAIL(TMA_MGR_INSTANCE.init())) {
     STORAGE_LOG(WARN, "fail to init env", K(ret));
-  } else if (OB_FAIL(OB_FILE_SYSTEM_ROUTER.get_instance().init(env_dir_.c_str()))) {
+  } else if (OB_FAIL(OB_FILE_SYSTEM_ROUTER.get_instance().init(env_dir_.c_str(), clog_dir_.c_str()))) {
     STORAGE_LOG(WARN, "fail to init env", K(ret));
 #ifdef OB_BUILD_SHARED_STORAGE
   } else if (GCTX.is_shared_storage_mode() && OB_FAIL(init_device_config())) {
@@ -759,7 +759,6 @@ int MockTenantModuleEnv::init_before_start_mtl()
   } else if (OB_FAIL(LOG_IO_DEVICE_WRAPPER.init(clog_dir_.c_str(), 8, 128, &OB_IO_MANAGER, &ObDeviceManager::get_instance()))) {
     STORAGE_LOG(ERROR, "init log_io_device_wrapper fail", KR(ret));
   } else {
-    obrpc::ObRpcNetHandler::CLUSTER_ID = 1;
     oceanbase::palf::election::INIT_TS = 1;
     // Ignore cgroup error
     cgroup_ctrl_.init();

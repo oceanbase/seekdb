@@ -37,9 +37,6 @@ log_disk_size	CAPACITY
 select name, data_type from __all_sys_parameter where name = 'rpc_timeout';
 name	data_type
 rpc_timeout	TIME
-select name, data_type from __all_sys_parameter where name = 'config_additional_dir';
-name	data_type
-config_additional_dir	STR_LIST
 select name, data_type from __all_sys_parameter where name = '_obkv_feature_mode';
 name	data_type
 _obkv_feature_mode	MODE
@@ -87,9 +84,6 @@ log_disk_size	CAPACITY
 select name, data_type from __all_virtual_sys_parameter_stat where svr_ip = host_ip() and svr_port = rpc_port() and name = 'rpc_timeout';
 name	data_type
 rpc_timeout	TIME
-select name, data_type from __all_virtual_sys_parameter_stat where svr_ip = host_ip() and svr_port = rpc_port() and name = 'config_additional_dir';
-name	data_type
-config_additional_dir	STR_LIST
 select name, data_type from __all_virtual_sys_parameter_stat where svr_ip = host_ip() and svr_port = rpc_port() and name = '_obkv_feature_mode';
 name	data_type
 _obkv_feature_mode	MODE
@@ -136,9 +130,6 @@ log_disk_size	CAPACITY
 select name, data_type from __all_virtual_tenant_parameter_stat where svr_ip = host_ip() and svr_port = rpc_port() and name = 'rpc_timeout';
 name	data_type
 rpc_timeout	TIME
-select name, data_type from __all_virtual_tenant_parameter_stat where svr_ip = host_ip() and svr_port = rpc_port() and name = 'config_additional_dir';
-name	data_type
-config_additional_dir	STR_LIST
 select name, data_type from __all_virtual_tenant_parameter_stat where svr_ip = host_ip() and svr_port = rpc_port() and name = '_obkv_feature_mode';
 name	data_type
 _obkv_feature_mode	MODE
@@ -227,9 +218,6 @@ log_disk_size	CAPACITY
 select name, data_type from GV$OB_PARAMETERS where svr_ip = host_ip() and svr_port = rpc_port() and name = 'rpc_timeout';
 name	data_type
 rpc_timeout	TIME
-select name, data_type from GV$OB_PARAMETERS where svr_ip = host_ip() and svr_port = rpc_port() and name = 'config_additional_dir';
-name	data_type
-config_additional_dir	STR_LIST
 select name, data_type from GV$OB_PARAMETERS where svr_ip = host_ip() and svr_port = rpc_port() and name = '_obkv_feature_mode';
 name	data_type
 _obkv_feature_mode	MODE
@@ -276,9 +264,6 @@ log_disk_size	CAPACITY
 select name, data_type from V$OB_PARAMETERS where name = 'rpc_timeout';
 name	data_type
 rpc_timeout	TIME
-select name, data_type from V$OB_PARAMETERS where name = 'config_additional_dir';
-name	data_type
-config_additional_dir	STR_LIST
 select name, data_type from V$OB_PARAMETERS where name = '_obkv_feature_mode';
 name	data_type
 _obkv_feature_mode	MODE
@@ -321,13 +306,10 @@ zone	svr_type	svr_ip	svr_port	name	data_type	value	info	section	scope	source	edi
 zone1	observer	server_ip	server_port	default_row_format	STRING	value	info	OBSERVER	CLUSTER	DEFAULT	DYNAMIC_EFFECTIVE	dynamic	1
 show parameters where svr_ip = host_ip() and svr_port = rpc_port() and name = 'log_disk_size';
 zone	svr_type	svr_ip	svr_port	name	data_type	value	info	section	scope	source	edit_level	default_value	isdefault
-zone1	observer	server_ip	server_port	log_disk_size	CAPACITY	value	info	LOGSERVICE	CLUSTER	DEFAULT	DYNAMIC_EFFECTIVE	0M	1
+zone1	observer	server_ip	server_port	log_disk_size	CAPACITY	value	info	LOGSERVICE	CLUSTER	DEFAULT	DYNAMIC_EFFECTIVE	10G	1
 show parameters where svr_ip = host_ip() and svr_port = rpc_port() and name = 'rpc_timeout';
 zone	svr_type	svr_ip	svr_port	name	data_type	value	info	section	scope	source	edit_level	default_value	isdefault
 zone1	observer	server_ip	server_port	rpc_timeout	TIME	value	info	RPC	CLUSTER	DEFAULT	DYNAMIC_EFFECTIVE	2s	1
-show parameters where svr_ip = host_ip() and svr_port = rpc_port() and name = 'config_additional_dir';
-zone	svr_type	svr_ip	svr_port	name	data_type	value	info	section	scope	source	edit_level	default_value	isdefault
-zone1	observer	server_ip	server_port	config_additional_dir	STR_LIST	value	info	OBSERVER	CLUSTER	DEFAULT	DYNAMIC_EFFECTIVE	etc2;etc3	1
 show parameters where svr_ip = host_ip() and svr_port = rpc_port() and name = 'plsql_debug' tenant = sys;
 zone	svr_type	svr_ip	svr_port	name	data_type	value	info	section	scope	source	edit_level	default_value	isdefault
 zone1	observer	server_ip	server_port	plsql_debug	BOOL	value	info	OBSERVER	TENANT	DEFAULT	DYNAMIC_EFFECTIVE	False	1
@@ -380,9 +362,6 @@ log_disk_size	CAPACITY
 select name, data_type from __all_virtual_tenant_parameter_stat where svr_ip = host_ip() and svr_port = rpc_port() and name = 'rpc_timeout';
 name	data_type
 rpc_timeout	TIME
-select name, data_type from __all_virtual_tenant_parameter_stat where svr_ip = host_ip() and svr_port = rpc_port() and name = 'config_additional_dir';
-name	data_type
-config_additional_dir	STR_LIST
 select name, data_type from __all_virtual_tenant_parameter_stat where svr_ip = host_ip() and svr_port = rpc_port() and name = '_obkv_feature_mode';
 name	data_type
 _obkv_feature_mode	MODE
@@ -446,9 +425,6 @@ log_disk_size	CAPACITY
 select name, data_type from GV$OB_PARAMETERS where svr_ip = host_ip() and svr_port = rpc_port() and name = 'rpc_timeout';
 name	data_type
 rpc_timeout	TIME
-select name, data_type from GV$OB_PARAMETERS where svr_ip = host_ip() and svr_port = rpc_port() and name = 'config_additional_dir';
-name	data_type
-config_additional_dir	STR_LIST
 select name, data_type from GV$OB_PARAMETERS where svr_ip = host_ip() and svr_port = rpc_port() and name = '_obkv_feature_mode';
 name	data_type
 _obkv_feature_mode	MODE
@@ -495,9 +471,6 @@ log_disk_size	CAPACITY
 select name, data_type from V$OB_PARAMETERS where name = 'rpc_timeout';
 name	data_type
 rpc_timeout	TIME
-select name, data_type from V$OB_PARAMETERS where name = 'config_additional_dir';
-name	data_type
-config_additional_dir	STR_LIST
 select name, data_type from V$OB_PARAMETERS where name = '_obkv_feature_mode';
 name	data_type
 _obkv_feature_mode	MODE
@@ -540,13 +513,10 @@ zone	svr_type	svr_ip	svr_port	name	data_type	value	info	section	scope	source	edi
 zone1	observer	server_ip	server_port	default_row_format	STRING	value	info	OBSERVER	CLUSTER	DEFAULT	DYNAMIC_EFFECTIVE	dynamic	1
 show parameters where svr_ip = host_ip() and svr_port = rpc_port() and name = 'log_disk_size';
 zone	svr_type	svr_ip	svr_port	name	data_type	value	info	section	scope	source	edit_level	default_value	isdefault
-zone1	observer	server_ip	server_port	log_disk_size	CAPACITY	value	info	LOGSERVICE	CLUSTER	DEFAULT	DYNAMIC_EFFECTIVE	0M	1
+zone1	observer	server_ip	server_port	log_disk_size	CAPACITY	value	info	LOGSERVICE	CLUSTER	DEFAULT	DYNAMIC_EFFECTIVE	10G	1
 show parameters where svr_ip = host_ip() and svr_port = rpc_port() and name = 'rpc_timeout';
 zone	svr_type	svr_ip	svr_port	name	data_type	value	info	section	scope	source	edit_level	default_value	isdefault
 zone1	observer	server_ip	server_port	rpc_timeout	TIME	value	info	RPC	CLUSTER	DEFAULT	DYNAMIC_EFFECTIVE	2s	1
-show parameters where svr_ip = host_ip() and svr_port = rpc_port() and name = 'config_additional_dir';
-zone	svr_type	svr_ip	svr_port	name	data_type	value	info	section	scope	source	edit_level	default_value	isdefault
-zone1	observer	server_ip	server_port	config_additional_dir	STR_LIST	value	info	OBSERVER	CLUSTER	DEFAULT	DYNAMIC_EFFECTIVE	etc2;etc3	1
 show parameters where svr_ip = host_ip() and svr_port = rpc_port() and name = 'plsql_debug';
 zone	svr_type	svr_ip	svr_port	name	data_type	value	info	section	scope	source	edit_level	default_value	isdefault
 zone1	observer	server_ip	server_port	plsql_debug	BOOL	value	info	OBSERVER	TENANT	DEFAULT	DYNAMIC_EFFECTIVE	False	1

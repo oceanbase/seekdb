@@ -28,7 +28,7 @@ class ObRpcNetHandler
 {
 public:
 public:
-  static int64_t CLUSTER_ID;
+  static constexpr const int64_t CLUSTER_ID = 1;
   static uint64_t CLUSTER_NAME_HASH;
   static bool is_self_cluster(int64_t cluster_id)
   {

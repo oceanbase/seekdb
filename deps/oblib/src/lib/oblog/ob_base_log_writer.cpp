@@ -78,7 +78,7 @@ int ObBaseLogWriter::init(
     thread_name_ = thread_name;
     if (OB_SUCC(ret)) {
       is_inited_ = true;
-      LOG_STDOUT("successfully init ObBaseLogWriter\n");
+      LOG_STDOUT("successfully init log writer\n");
     }
   }
 

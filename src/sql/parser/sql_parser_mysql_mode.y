@@ -272,7 +272,7 @@ END_P SET_VAR DELIMITER
         AVG AVG_ROW_LENGTH ACTIVATE AVAILABILITY ARCHIVELOG ASYNCHRONOUS AUDIT ADMIN AUTO_REFRESH API_MODE APPROX APPROXIMATE ARRAY_AGG ARRAY_FILTER ARRAY_FIRST ARRAY_MAP ARRAY_SORTBY 
 
         BACKUP BACKUP_COPIES BALANCE BANDWIDTH BASE BASELINE BASELINE_ID BASIC BEGI BINDING SHARDING BINARY_FORMAT BINLOG BIT BIT_AND
-        BIT_OR BIT_XOR BLOCK BLOCK_INDEX BLOCK_SIZE BLOOM_FILTER BOOL BOOLEAN BOOTSTRAP BTREE BYTE
+        BIT_OR BIT_XOR BLOCK BLOCK_INDEX BLOCK_SIZE BLOOM_FILTER BOOL BOOLEAN BTREE BYTE
         BREADTH BUCKETS BISON_LIST BACKUPSET BACKED BACKUPPIECE BACKUP_BACKUP_DEST BACKUPROUND
         BADFILE BOUNDARY_COLUMN BOUNDARY_COLUMN_UNIT BUFFER_SIZE BIGINT_PRECISION
 
@@ -349,7 +349,7 @@ END_P SET_VAR DELIMITER
 
         SAMPLE SAVEPOINT SCALARS SCHEDULE SCHEMA_NAME SCN SCOPE SECOND SECURITY SEED SEMISTRUCT_ENCODING_TYPE SEQUENCES SERIAL SERIALIZABLE SERVER
         SERVER_IP SERVER_PORT SERVER_TYPE SERVICE SESSION SESSION_USER SET_MASTER_CLUSTER SET_SLAVE_CLUSTER
-        SET_TP SHARE SHARED_STORAGE_DEST SHARED_STORAGE_INFO SHUTDOWN SIGNED SIMPLE SINGLE SKIP_INDEX SLAVE SLOW SLOT_IDX SNAPSHOT SOCKET SOME SONAME SOUNDS
+        SET_TP SHARE SHUTDOWN SIGNED SIMPLE SINGLE SKIP_INDEX SLAVE SLOW SLOT_IDX SNAPSHOT SOCKET SOME SONAME SOUNDS
         SOURCE SPFILE SPLIT SQL_AFTER_GTIDS SQL_AFTER_MTS_GAPS SQL_BEFORE_GTIDS SQL_BUFFER_RESULT
         SQL_CACHE SQL_NO_CACHE SQL_ID SCHEMA_ID SQL_THREAD SQL_TSI_DAY SQL_TSI_HOUR SQL_TSI_MINUTE SQL_TSI_MONTH
         SQL_TSI_QUARTER SQL_TSI_SECOND SQL_TSI_WEEK SQL_TSI_YEAR SRID STANDBY _ST_ASMVT STAT START STARTS STATS_AUTO_RECALC
@@ -470,7 +470,7 @@ END_P SET_VAR DELIMITER
 %type <node> tablegroup_option_list tablegroup_option alter_tablegroup_actions alter_tablegroup_action tablegroup_option_list_space_seperated
 %type <node> opt_tg_partition_option tg_hash_partition_option tg_key_partition_option tg_range_partition_option tg_subpartition_option tg_list_partition_option
 %type <node> alter_column_behavior opt_set opt_position_column
-%type <node> alter_system_stmt alter_system_set_parameter_actions alter_system_settp_actions settp_option alter_system_set_parameter_action server_info_list server_info opt_shared_storage_info shared_storage_info alter_system_reset_parameter_actions alter_system_reset_parameter_action
+%type <node> alter_system_stmt alter_system_set_parameter_actions alter_system_settp_actions settp_option alter_system_set_parameter_action alter_system_reset_parameter_actions alter_system_reset_parameter_action
 %type <node> opt_comment opt_as
 %type <node> column_name relation_name relation_name_list opt_relation_name function_name column_label var_name relation_name_or_string row_format_option compression_name merge_engine_types
 %type <node> opt_hint_list hint_option select_with_opt_hint update_with_opt_hint delete_with_opt_hint hint_list_with_end global_hint transform_hint optimize_hint
@@ -541,7 +541,7 @@ END_P SET_VAR DELIMITER
 %type <node> recover_tenant_stmt recover_point_clause
 %type <node> external_file_format_list external_file_format external_properties_list external_properties external_table_partition_option opt_pattern opt_as_alias pattern_expr format_expr url_expr url_table_function_expr location_expr
 %type <node> storage_cache_policy_attribute_list storage_cache_time_policy_attribute_list storage_cache_time_policy_attribute retention_time_unit
-%type <node> opt_path_info opt_access_info opt_storage_use_for opt_attribute opt_scope_type
+%type <node> opt_path_info opt_access_info opt_attribute
 %type <node> dynamic_sampling_hint add_external_table_partition_actions add_external_table_partition_action
 %type <node> external_table_partitions external_table_partition
 %type <node> skip_index_type opt_skip_index_type_list
@@ -19406,14 +19406,6 @@ DUMP MEMORY LEAK
  *
  *****************************************************************************/
 alter_system_stmt:
-alter_with_opt_hint SYSTEM BOOTSTRAP server_info_list opt_shared_storage_info
-{
-  (void)($1);
-  ParseNode *server_list = NULL;
-  merge_nodes(server_list, result, T_SERVER_INFO_LIST, $4);
-  malloc_non_terminal_node($$, result->malloc_pool_, T_BOOTSTRAP, 2, server_list, $5);
-}
-|
 alter_with_opt_hint SYSTEM FLUSH cache_type CACHE opt_namespace opt_sql_id_or_schema_id opt_databases opt_tenant_list flush_scope
 {
   (void)($1);
@@ -19611,35 +19603,6 @@ alter_with_opt_hint SYSTEM alter_or_change_or_modify ZONE relation_name_or_strin
   merge_nodes(zone_options, result, T_LINK_NODE, $7);
   zone_action->value_ = 5;      /* 1:add,2:delete,3:start,4:stop,5:modify,6:force stop */
   malloc_non_terminal_node($$, result->malloc_pool_, T_ADMIN_ZONE, 3, zone_action, $5, zone_options);
-}
-|
-alter_with_opt_hint SYSTEM ADD SHARED_STORAGE_DEST opt_path_info opt_access_info opt_attribute opt_storage_use_for opt_scope_type
-{
-  (void)($1);
-  ParseNode *storage_action = NULL;
-  malloc_terminal_node(storage_action, result->malloc_pool_, T_INT);
-  storage_action->value_ = 1;    /* 1:add,2:drop,3:modify */
-  malloc_non_terminal_node($$, result->malloc_pool_, T_ADMIN_STORAGE, 6, storage_action, $5, $6, $7, $8, $9);
-}
-|
-alter_with_opt_hint SYSTEM DROP SHARED_STORAGE_DEST opt_path_info opt_storage_use_for opt_scope_type
-{
-  (void)($1);
-  ParseNode *storage_action = NULL;
-  malloc_terminal_node(storage_action, result->malloc_pool_, T_INT);
-  storage_action->value_ = 2;    /* 1:add,2:drop,3:modify */
-  malloc_non_terminal_node($$, result->malloc_pool_, T_ADMIN_STORAGE, 6, storage_action, $5, NULL, NULL, $6, $7);
-}
-|
-alter_with_opt_hint SYSTEM alter_or_change_or_modify SHARED_STORAGE_DEST opt_path_info opt_set opt_access_info opt_attribute
-{
-  (void)($1);
-  (void)($3);
-  (void)($6);
-  ParseNode *storage_action = NULL;
-  malloc_terminal_node(storage_action, result->malloc_pool_, T_INT);
-  storage_action->value_ = 3;    /* 1:add,2:drop,3:modify */
-  malloc_non_terminal_node($$, result->malloc_pool_, T_ADMIN_STORAGE, 6, storage_action, $5, $7, $8, NULL, NULL);
 }
 |
 alter_with_opt_hint SYSTEM REFRESH SCHEMA opt_server_or_zone
@@ -20949,52 +20912,6 @@ ZONE COMP_EQ zone_list
 }
 | /*empty*/ {$$ = NULL;}
 
-server_info_list:
-server_info
-{
-  $$ = $1;
-}
-| server_info_list ',' server_info
-{
-  malloc_non_terminal_node($$, result->malloc_pool_, T_LINK_NODE, 2, $1, $3);
-}
-;
-
-server_info:
-REGION opt_equal_mark relation_name_or_string ZONE opt_equal_mark relation_name_or_string SERVER opt_equal_mark STRING_VALUE
-{
-  (void)($2);
-  (void)($5);
-  (void)($8);
-  malloc_non_terminal_node($$, result->malloc_pool_, T_SERVER_INFO, 3, $3, $6, $9);
-}
-| ZONE opt_equal_mark relation_name_or_string SERVER opt_equal_mark STRING_VALUE
-{
-  (void)($2);
-  (void)($5);
-  malloc_non_terminal_node($$, result->malloc_pool_, T_SERVER_INFO, 3, NULL, $3, $6);
-}
-;
-
-shared_storage_info:
-',' SHARED_STORAGE_INFO opt_equal_mark STRING_VALUE
-{
-  (void)($3);
-  result->contain_sensitive_data_ = true;
-  $$ = $4;
-  $$->type_ = T_SHARED_STORAGE_INFO;
-}
-
-opt_shared_storage_info:
-shared_storage_info
-{
-  $$ = $1;
-}
-| /*EMPTY*/
-{
-  $$ = NULL;
-}
-
 server_action:
 ADD
 {
@@ -21570,27 +21487,6 @@ ATTRIBUTE opt_equal_mark STRING_VALUE
   $$ = NULL;
 }
 ;
-
-opt_storage_use_for:
-FOR relation_name_or_string
-{
-  $$ = $2;
-}
-;
-
-opt_scope_type:
-ZONE opt_equal_mark STRING_VALUE
-{
-  (void)($2);
-  $$ = $3;
-  $$->type_ = T_ZONE;
-}
-| REGION opt_equal_mark STRING_VALUE
-{
-  (void)($2);
-  $$ = $3;
-  $$->type_ = T_REGION;
-}
 
 ls:
 LS opt_equal_mark INTNUM
@@ -24843,7 +24739,6 @@ ACCESS_INFO
 |       BLOOM_FILTER
 |       BOOL
 |       BOOLEAN
-|       BOOTSTRAP
 |       BOUNDARY_COLUMN
 |       BOUNDARY_COLUMN_UNIT
 |       BTREE
@@ -25421,8 +25316,6 @@ ACCESS_INFO
 |       SET_TP
 |       SHARDING
 |       SHARE
-|       SHARED_STORAGE_DEST
-|       SHARED_STORAGE_INFO
 |       SIGNED
 |       SIZE %prec LOWER_PARENS
 |       SIMPLE

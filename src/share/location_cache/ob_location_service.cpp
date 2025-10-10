@@ -104,7 +104,7 @@ int ObLocationService::get_leader_with_retry_until_timeout(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", KR(ret));
+    LOG_WARN("not init", KR(ret), KCSTRING(lbt()));
   } else if (OB_FAIL(ls_location_service_.get_leader_with_retry_until_timeout(
       cluster_id,
       tenant_id,

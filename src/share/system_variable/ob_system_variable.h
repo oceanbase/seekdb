@@ -1122,11 +1122,13 @@ public:
   ObPreProcessSysVars() {}
   virtual ~ObPreProcessSysVars() {}
 public:
-  static int init_sys_var();
+  static int init_sys_var() { return init_sys_var(common::ObArray<std::pair<common::ObString, common::ObString>>()); }
+  static int init_sys_var(const common::ObIArray<std::pair<common::ObString, common::ObString>> &sys_vars);
 
 private:
   static int init_config_sys_vars(); //require observer deploy to determine value
   static int change_initial_value();
+  static int change_base_values(const common::ObIArray<std::pair<common::ObString, common::ObString>> &sys_vars);
 private:
   DISALLOW_COPY_AND_ASSIGN(ObPreProcessSysVars);
 };

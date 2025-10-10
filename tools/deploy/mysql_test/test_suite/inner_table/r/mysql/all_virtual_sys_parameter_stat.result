@@ -50,7 +50,6 @@ compaction_low_thread_score
 compaction_mid_thread_score
 compaction_schedule_tablet_batch_cnt
 compatible
-config_additional_dir
 connection_control_failed_connections_threshold
 connection_control_max_connection_delay
 connection_control_min_connection_delay
@@ -223,6 +222,7 @@ range_optimizer_max_mem_size
 recover_table_concurrency
 recover_table_dop
 recyclebin_object_expire_time
+redo_dir
 redundancy_level
 replica_parallel_migration_mode
 resource_hard_limit

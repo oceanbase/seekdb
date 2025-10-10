@@ -25,6 +25,8 @@
 // "ofs://0.0.0.0,1.1.1.1,2.2.2.2/dir" means use ofs dir
 DEF_STR(data_dir, OB_CLUSTER_PARAMETER, "store", "the directory for the data file",
         ObParameterAttr(Section::SSTABLE, Source::DEFAULT, EditLevel::READONLY));
+DEF_STR(redo_dir, OB_CLUSTER_PARAMETER, "redo", "the directory for the redo/clog file",
+        ObParameterAttr(Section::SSTABLE, Source::DEFAULT, EditLevel::READONLY));
 DEF_STR(redundancy_level, OB_CLUSTER_PARAMETER, "NORMAL",
         "EXTERNAL: use extrernal redundancy"
         "NORMAL: tolerate one disk failure"
@@ -33,9 +35,9 @@ DEF_STR(redundancy_level, OB_CLUSTER_PARAMETER, "NORMAL",
         "EXTERNAL, NORMAL, HIGH");
 // background information about disk space configuration
 // ObServerUtils::get_data_disk_info_in_config()
-DEF_CAP(datafile_size, OB_CLUSTER_PARAMETER, "0M", "[0M,)", "size of the data file. Range: [0, +∞)",
+DEF_CAP(datafile_size, OB_CLUSTER_PARAMETER, "2G", "[0M,)", "size of the data file. Range: [0, +∞)",
         ObParameterAttr(Section::SSTABLE, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
-DEF_CAP(datafile_next, OB_CLUSTER_PARAMETER, "0", "[0M,)", "the auto extend step. Range: [0, +∞)",
+DEF_CAP(datafile_next, OB_CLUSTER_PARAMETER, "2G", "[0M,)", "the auto extend step. Range: [0, +∞)",
         ObParameterAttr(Section::SSTABLE, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 DEF_CAP(datafile_maxsize, OB_CLUSTER_PARAMETER, "0", "[0M,)", "the auto extend max size. Range: [0, +∞)",
         ObParameterAttr(Section::SSTABLE, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
@@ -59,8 +61,6 @@ DEF_CAP(memory_reserved, OB_CLUSTER_PARAMETER, "500M", "[10M,)",
         "Range: [10M, total size of memory]",
         ObParameterAttr(Section::SSTABLE, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 //// observer config
-DEF_STR_LIST(config_additional_dir, OB_CLUSTER_PARAMETER, "etc2;etc3", "additional directories of configure file",
-             ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 DEF_STR(leak_mod_to_check, OB_CLUSTER_PARAMETER, "NONE", "the name of the module under memory leak checks",
         ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 DEF_INT(rpc_port, OB_CLUSTER_PARAMETER, "2882", "(1024,65536)",
@@ -71,9 +71,9 @@ DEF_INT(mysql_port, OB_CLUSTER_PARAMETER, "2881", "(1024,65536)",
         ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 DEF_STR(devname, OB_CLUSTER_PARAMETER, "bond0", "name of network adapter",
         ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::READONLY));
-DEF_STR(zone, OB_CLUSTER_PARAMETER, "", "specifies the zone name",
+DEF_STR(zone, OB_CLUSTER_PARAMETER, "z1", "specifies the zone name",
         ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
-DEF_STR(ob_startup_mode, OB_CLUSTER_PARAMETER, "NORMAL", "specifies the observer startup mode",
+DEF_STR(ob_startup_mode, OB_CLUSTER_PARAMETER, "NORMAL", "specifies the observer startup mode. Values: normal, physical_flashback, physical_flashback_verify",
         ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::READONLY));
 DEF_TIME(internal_sql_execute_timeout, OB_CLUSTER_PARAMETER, "30s", "[1000us, 1h]",
          "the number of microseconds an internal DML request is permitted to "
@@ -202,7 +202,7 @@ DEF_STR(cluster, OB_CLUSTER_PARAMETER, "obcluster", "Name of the cluster",
 // 因此这里的系统配置项中的cluster_id的范围为[1, 0xffff0000 - 1],也就是[1,4294901759]。
 // cluser_id的默认值为0,不在它的值域[1,4294901759]之内,也就是说,
 // 在检查ObServerConfig对象的合法性之前必须要为cluster_id赋一个[1,4294901759]范围内的值。
-DEF_INT(cluster_id, OB_CLUSTER_PARAMETER, "0", "[1,4294901759]", "ID of the cluster",
+DEF_INT(cluster_id, OB_CLUSTER_PARAMETER, "1", "[1,4294901759]", "ID of the cluster",
         ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 DEF_STR(obconfig_url, OB_CLUSTER_PARAMETER, "", "URL for OBConfig service",
         ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
@@ -682,7 +682,7 @@ DEF_MODE_WITH_PARSER(_parallel_ddl_control, OB_TENANT_PARAMETER, "",
         ObParameterAttr(Section::ROOT_SERVICE, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 // ========================= LogService Config Begin =====================
 
-DEF_CAP(log_disk_size, OB_CLUSTER_PARAMETER, "0M", "[0M,)",
+DEF_CAP(log_disk_size, OB_CLUSTER_PARAMETER, "10G", "[0M,)",
         "the size of disk space used by the log files. Range: [0, +∞)",
         ObParameterAttr(Section::LOGSERVICE, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 

@@ -20,6 +20,7 @@
 #include "lib/task/ob_timer_service.h" // ObTimerService
 #include "observer/ob_server_utils.h"
 #include "observer/ob_rpc_extra_payload.h"
+#include "observer/ob_server_options.h"
 #include "observer/omt/ob_tenant_timezone_mgr.h"
 #include "observer/table/ob_table_rpc_processor.h"
 #include "share/allocator/ob_tenant_mutil_allocator_mgr.h"
@@ -173,58 +174,16 @@ ObServer::~ObServer()
   destroy();
 }
 
-int ObServer::parse_mode()
-{
-  int ret = OB_SUCCESS;
-  const char *mode_str = GCONF.ob_startup_mode;
-
-  if (mode_str && strlen(mode_str) > 0) {
-    if (0 == STRCASECMP(mode_str, NORMAL_MODE_STR)) {
-      gctx_.startup_mode_ = NORMAL_MODE;
-      LOG_INFO("set normal mode");
-#ifdef OB_BUILD_ARBITRATION
-    } else if (0 == STRCASECMP(mode_str, ARBITRATION_MODE_STR)) {
-      gctx_.startup_mode_ = ARBITRATION_MODE;
-      LOG_INFO("set arbitration mode");
-#endif
-#ifdef OB_BUILD_SHARED_STORAGE
-    } else if (0 == STRCASECMP(mode_str, SHARED_STORAGE_MODE_STR)) {
-      gctx_.startup_mode_ = SHARED_STORAGE_MODE;
-      LOG_INFO("set shared_storage mode");
-#endif
-    } else if (0 == STRCASECMP(mode_str, FLASHBACK_MODE_STR)) {
-      gctx_.startup_mode_ = PHY_FLASHBACK_MODE;
-      LOG_INFO("set physical_flashback mode");
-    } else if (0 == STRCASECMP(mode_str, FLASHBACK_VERIFY_MODE_STR)) {
-      gctx_.startup_mode_ = PHY_FLASHBACK_VERIFY_MODE;
-      LOG_INFO("set physical_flashback_verify mode");
-    } else if (0 == STRCASECMP(mode_str, DISABLED_CLUSTER_MODE_STR)) {
-      gctx_.startup_mode_ = DISABLED_CLUSTER_MODE;
-      LOG_INFO("set disabled_cluster mode");
-    } else if (0 == STRCASECMP(mode_str, DISABLED_WITH_READONLY_CLUSTER_MODE_STR)) {
-      gctx_.startup_mode_ = DISABLED_WITH_READONLY_CLUSTER_MODE;
-      LOG_INFO("set disabled_with_readonly_cluster mode");
-    } else {
-      LOG_INFO("invalid mode value", "startup_mode_", mode_str);
-    }
-  } else {
-    gctx_.startup_mode_ = NORMAL_MODE;
-    LOG_INFO("set normal mode");
-  }
-  return ret;
-}
-
 int ObServer::init(const ObServerOptions &opts, const ObPLogWriterCfg &log_cfg)
 {
   FLOG_INFO("[OBSERVER_NOTICE] start to init observer");
   DBA_STEP_RESET(server_start);
   int ret = OB_SUCCESS;
-  opts_ = opts;
   init_arches();
   scramble_rand_.init(static_cast<uint64_t>(start_time_), static_cast<uint64_t>(start_time_ / 2));
 
   // server parameters be inited here.
-  if (OB_FAIL(init_config())) {
+  if (OB_SUCC(ret) && OB_FAIL(init_config(opts))) {
     LOG_ERROR("init config failed", KR(ret));
   }
   // set alert log level earlier
@@ -296,7 +255,7 @@ int ObServer::init(const ObServerOptions &opts, const ObPLogWriterCfg &log_cfg)
         LOG_ERROR("init sql executor singletons !", KR(ret));
       } else if (OB_FAIL(sql::init_sql_expr_static_var())) {
         LOG_ERROR("init sql expr static var !", KR(ret));
-      } else if (OB_FAIL(ObPreProcessSysVars::init_sys_var())) {
+      } else if (OB_FAIL(ObPreProcessSysVars::init_sys_var(opts.variables_))) {
         LOG_ERROR("init PreProcessing system variable failed !", KR(ret));
       } else if (OB_FAIL(ObBasicSessionInfo::init_sys_vars_cache_base_values())) {
         LOG_ERROR("init session base values failed", KR(ret));
@@ -358,7 +317,7 @@ int ObServer::init(const ObServerOptions &opts, const ObPLogWriterCfg &log_cfg)
       LOG_ERROR("init rs_mgr_ failed", KR(ret));
     } else if (OB_FAIL(server_tracer_.init(rs_rpc_proxy_, sql_proxy_))) {
       LOG_ERROR("init server tracer failed", KR(ret));
-    } else if (OB_FAIL(init_ob_service())) {
+    } else if (OB_FAIL(init_ob_service(opts.initialize_))) {
       LOG_ERROR("init ob service failed", KR(ret));
     } else if (OB_FAIL(init_root_service())) {
       LOG_ERROR("init root service failed", KR(ret));
@@ -532,7 +491,6 @@ int ObServer::init(const ObServerOptions &opts, const ObPLogWriterCfg &log_cfg)
                         DBA_STEP_INC_INFO(server_start),
                         "observer init fail. "
                         "you may find solutions in previous error logs or seek help from official technicians.");
-    raise(SIGKILL);
     set_stop();
     destroy();
   } else {
@@ -872,7 +830,7 @@ void ObServer::destroy()
   }
 }
 
-int ObServer::start()
+int ObServer::start(bool embed_mode)
 {
   int ret = OB_SUCCESS;
   gctx_.status_ = SS_STARTING;
@@ -916,7 +874,7 @@ int ObServer::start()
       FLOG_INFO("success to start ts mgr");
     }
 
-    if (opts_.embed_mode_) {
+    if (embed_mode) {
     } else if (FAILEDx(net_frame_.start())) {
       LOG_ERROR("fail to start net frame", KR(ret));
     } else {
@@ -1198,7 +1156,7 @@ int ObServer::start()
                         DBA_STEP_INC_INFO(server_start),
                         "observer start fail, the stop status is ", stop_, ". "
                         "you may find solutions in previous error logs or seek help from official technicians.");
-    raise(SIGKILL);
+
     set_stop();
     wait();
   } else if (!stop_) {
@@ -1894,7 +1852,7 @@ int ObServer::init_tz_info_mgr()
   return ret;
 }
 
-int ObServer::init_config()
+int ObServer::init_config(const ObServerOptions &opts)
 {
   int ret = OB_SUCCESS;
   bool has_config_file = true;
@@ -1915,8 +1873,18 @@ int ObServer::init_config()
     }
   }
 
+  ObSqlString optstr;
+  for (int64_t i = 0; OB_SUCC(ret) &&i < opts.parameters_.count(); ++i) {
+    const char *format = i == 0 ? "%.*s=%.*s" : ",%.*s=%.*s";
+    if (OB_FAIL(optstr.append_fmt(format,
+        opts.parameters_.at(i).first.length(), opts.parameters_.at(i).first.ptr(),
+        opts.parameters_.at(i).second.length(), opts.parameters_.at(i).second.ptr()))) {
+      LOG_ERROR("append optstr fmt failed", KR(ret));
+    }
+  }
+
   if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(init_opts_config(has_config_file))) {
+  } else if (OB_FAIL(init_opts_config(has_config_file, opts, optstr.ptr()))) {
     LOG_ERROR("init opts config failed", KR(ret));
   } else {
     config_.print();
@@ -1940,7 +1908,7 @@ int ObServer::init_config()
     } else {
       LOG_INFO("config_mgr_ dump2file success", KR(ret));
     }
-  } else if (OB_FAIL(init_config_module())) {
+  } else if (OB_FAIL(init_config_module(optstr.ptr()))) {
     LOG_ERROR("init config module failed", KR(ret));
   } else {
     lib::g_runtime_enabled = true;
@@ -1949,27 +1917,17 @@ int ObServer::init_config()
   return ret;
 }
 
-int ObServer::init_opts_config(bool has_config_file)
+int ObServer::init_opts_config(bool has_config_file, const ObServerOptions &opts, const char *optstr)
 {
   int ret = OB_SUCCESS;
 
-  if (opts_.rpc_port_) {
-    config_.rpc_port = opts_.rpc_port_;
-    config_.rpc_port.set_version(start_time_);
-  }
-
-  if (opts_.mysql_port_) {
-    config_.mysql_port = opts_.mysql_port_;
+  if (opts.port_ != 0) {
+    config_.mysql_port = opts.port_;
     config_.mysql_port.set_version(start_time_);
   }
 
-  if (opts_.local_ip_ && strlen(opts_.local_ip_) > 0) {
-    config_.local_ip.set_value(opts_.local_ip_);
-    config_.local_ip.set_version(start_time_);
-  }
-
-  if (opts_.devname_ && strlen(opts_.devname_) > 0) {
-    config_.devname.set_value(opts_.devname_);
+  if (nullptr != opts.devname_) {
+    config_.devname.set_value(opts.devname_);
     config_.devname.set_version(start_time_);
   } else {
     if (!has_config_file) {
@@ -1984,56 +1942,23 @@ int ObServer::init_opts_config(bool has_config_file)
     }
   }
 
-  if (opts_.zone_ && strlen(opts_.zone_) > 0) {
-    config_.zone.set_value(opts_.zone_);
-    config_.zone.set_version(start_time_);
-  }
-
-  if (opts_.rs_list_ && strlen(opts_.rs_list_) > 0) {
-    config_.rootservice_list.set_value(opts_.rs_list_);
-    config_.rootservice_list.set_version(start_time_);
-  }
-
-  if (opts_.startup_mode_) {
-    config_.ob_startup_mode.set_value(opts_.startup_mode_);
-    config_.ob_startup_mode.set_version(start_time_);
-    LOG_INFO("mode is not null", "mode", opts_.startup_mode_);
-  }
-  // update gctx_.startup_mode_
-  if (FAILEDx(parse_mode())) {
-    LOG_ERROR("parse_mode failed", KR(ret));
-  }
-
+  gctx_.startup_mode_ = NORMAL_MODE;
   config_.syslog_level.set_value(OB_LOGGER.get_level_str());
 
-  if (opts_.optstr_ && strlen(opts_.optstr_) > 0) {
-    if (FAILEDx(config_.add_extra_config(opts_.optstr_, start_time_))) {
-      LOG_ERROR("invalid config from cmdline options", K(opts_.optstr_), KR(ret));
+  if (nullptr != optstr) {
+    if (FAILEDx(config_.add_extra_config(optstr, start_time_))) {
+      LOG_ERROR("invalid config from cmdline options", KCSTRING(optstr), KR(ret));
     }
   }
 
-  if (opts_.appname_ && strlen(opts_.appname_) > 0) {
-    config_.cluster.set_value(opts_.appname_);
-    config_.cluster.set_version(start_time_);
-    if (FAILEDx(set_cluster_name_hash(ObString::make_string(opts_.appname_)))) {
-      LOG_WARN("failed to set_cluster_name_hash", KR(ret), "cluster_name", opts_.appname_,
-                                                  "cluster_name_len", strlen(opts_.appname_));
-    }
-  }
-
-  if (opts_.cluster_id_ >= 0) {
-    // Strictly here, everything that is less than zero is ignored, not when it is equal to -1.
-    config_.cluster_id = opts_.cluster_id_;
-    config_.cluster_id.set_version(start_time_);
-  }
-  if (config_.cluster_id.get_value() > 0) {
-    obrpc::ObRpcNetHandler::CLUSTER_ID = config_.cluster_id.get_value();
-    LOG_INFO("set CLUSTER_ID for rpc", "cluster_id", config_.cluster_id.get_value());
-  }
-
-  if (opts_.data_dir_ && strlen(opts_.data_dir_) > 0) {
-    config_.data_dir.set_value(opts_.data_dir_);
+  if (!opts.data_dir_.empty()) {
+    config_.data_dir.set_value(opts.data_dir_.ptr());
     config_.data_dir.set_version(start_time_);
+  }
+
+  if (!opts.redo_dir_.empty()) {
+    config_.redo_dir.set_value(opts.redo_dir_.ptr());
+    config_.redo_dir.set_version(start_time_);
   }
 
 #ifdef OB_BUILD_SHARED_STORAGE
@@ -2047,14 +1972,9 @@ int ObServer::init_opts_config(bool has_config_file)
 #endif
 
   // The command line is specified, subject to the command line
-  if (opts_.use_ipv6_) {
-    config_.use_ipv6 = opts_.use_ipv6_;
+  if (opts.use_ipv6_) {
+    config_.use_ipv6 = opts.use_ipv6_;
     config_.use_ipv6.set_version(start_time_);
-  }
-
-  if (opts_.plugins_load_) {
-    config_.plugins_load.set_value(opts_.plugins_load_);
-    config_.plugins_load.set_version(start_time_);
   }
 
   return ret;
@@ -2161,7 +2081,7 @@ int ObServer::init_self_addr()
   return ret;
 }
 
-int ObServer::init_config_module()
+int ObServer::init_config_module(const char *optstr)
 {
   int ret = OB_SUCCESS;
 
@@ -2196,7 +2116,7 @@ int ObServer::init_config_module()
   } else if (OB_FAIL(tenant_config_mgr_.init(sql_proxy_, self_addr_,
                       &config_mgr_, update_tenant_config_cb))) {
     LOG_ERROR("tenant_config_mgr_ init failed", K_(self_addr), KR(ret));
-  } else if (OB_FAIL(tenant_config_mgr_.add_config_to_existing_tenant(opts_.optstr_))) {
+  } else if (OB_FAIL(tenant_config_mgr_.add_config_to_existing_tenant(optstr))) {
     LOG_ERROR("tenant_config_mgr_ add_config_to_existing_tenant failed", KR(ret));
   }
 
@@ -2340,7 +2260,7 @@ int ObServer::init_io()
 {
   int ret = OB_SUCCESS;
 
-  if (OB_FAIL(OB_FILE_SYSTEM_ROUTER.init(GCONF.data_dir))) {
+  if (OB_FAIL(OB_FILE_SYSTEM_ROUTER.init(GCONF.data_dir, GCONF.redo_dir))) {
     LOG_ERROR("init OB_FILE_SYSTEM_ROUTER fail", KR(ret));
   }
 
@@ -2692,10 +2612,10 @@ int ObServer::init_global_kvcache()
   return ret;
 }
 
-int ObServer::init_ob_service()
+int ObServer::init_ob_service(bool need_bootstrap)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(ob_service_.init(sql_proxy_, server_tracer_))) {
+  if (OB_FAIL(ob_service_.init(sql_proxy_, server_tracer_, need_bootstrap))) {
     LOG_ERROR("oceanbase service init failed", KR(ret));
   }
   return ret;
@@ -2883,21 +2803,12 @@ int ObServer::init_global_context()
   gctx_.wr_service_ = &wr_service_;
   gctx_.startup_accel_handler_ = &startup_accel_handler_;
 
-  gctx_.flashback_scn_ = opts_.flashback_scn_;
   (void) gctx_.set_server_id(config_.observer_id);
   if (is_valid_server_id(gctx_.get_server_id())) {
     LOG_INFO("this observer has had a valid server_id", K(gctx_.get_server_id()));
   }
   gctx_.in_bootstrap_ = false;
-  if ((PHY_FLASHBACK_MODE == gctx_.startup_mode_ || PHY_FLASHBACK_VERIFY_MODE == gctx_.startup_mode_)
-      && 0 >= gctx_.flashback_scn_) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_ERROR("invalid flashback scn in flashback mode", KR(ret),
-              "server_mode", gctx_.startup_mode_,
-              "flashback_scn", gctx_.flashback_scn_);
-  } else {
-    gctx_.inited_ = true;
-  }
+  gctx_.inited_ = true;
 
   return ret;
 }
@@ -4191,11 +4102,7 @@ int ObServer::destroy_server_in_arb_mode()
 
 bool ObServer::is_arbitration_mode() const
 {
-#ifdef OB_BUILD_ARBITRATION
-  return (ARBITRATION_MODE == gctx_.startup_mode_) ? true : false;
-#else
   return false;
-#endif
 }
 
 

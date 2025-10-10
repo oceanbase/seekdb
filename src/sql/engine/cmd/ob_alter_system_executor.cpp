@@ -14,7 +14,6 @@
 
 #include "sql/engine/cmd/ob_alter_system_executor.h"
 #include "observer/ob_server.h"
-#include "sql/resolver/cmd/ob_bootstrap_stmt.h"
 #ifdef OB_BUILD_ARBITRATION
 #include "share/arbitration_service/ob_arbitration_service_utils.h" //ObArbitrationServiceUtils
 #endif
@@ -1518,33 +1517,6 @@ int ObStopUpgradeJobExecutor::execute(
     LOG_WARN("run job rpc failed", K(ret), "rpc_arg", stmt.get_rpc_arg());
   }
   return ret;
-}
-
-int ObBootstrapExecutor::execute(ObExecContext &ctx, ObBootstrapStmt &stmt)
-{
-  int ret = OB_SUCCESS;
-	const int64_t BS_TIMEOUT = 600 * 1000 * 1000;  // 10 minutes
-	ObTaskExecutorCtx *task_exec_ctx = NULL;
-  obrpc::ObSrvRpcProxy *srv_rpc_proxy = NULL;
-  obrpc::ObBootstrapArg &bootstarp_arg = stmt.bootstrap_arg_;
-  int64_t rpc_timeout = BS_TIMEOUT;
-  if (INT64_MAX != THIS_WORKER.get_timeout_ts()) {
-    rpc_timeout = max(THIS_WORKER.get_timeout_remain(), BS_TIMEOUT);
-  }
-  LOG_INFO("bootstrap timeout", K(rpc_timeout));
-	if (OB_ISNULL(task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx))) {
-		ret = OB_NOT_INIT;
-		LOG_WARN("get task executor context failed");
-	} else if (OB_ISNULL(srv_rpc_proxy = task_exec_ctx->get_srv_rpc())) {
-		ret = OB_NOT_INIT;
-		LOG_WARN("get common rpc proxy failed");
-	} else if (OB_FAIL(srv_rpc_proxy->to(task_exec_ctx->get_self_addr()).timeout(rpc_timeout).bootstrap(bootstarp_arg))) {
-		LOG_WARN("rpc proxy bootstrap failed", K(ret), K(rpc_timeout));
-		BOOTSTRAP_LOG(WARN, "STEP_0.1:alter_system execute fail");
-	} else {
-		BOOTSTRAP_LOG(INFO, "STEP_0.1:alter_system execute success");
-	}
-	return ret;
 }
 
 int ObEnableSqlThrottleExecutor::execute(ObExecContext &ctx, ObEnableSqlThrottleStmt &stmt)

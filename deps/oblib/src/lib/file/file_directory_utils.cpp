@@ -40,8 +40,7 @@ int FileDirectoryUtils::is_exists(const char *file_path, bool &result)
   return ret;
 }
 
-//return true if file is accessible
-int FileDirectoryUtils::is_accessible(const char *file_path, bool &result)
+int FileDirectoryUtils::check_directory_mode(const char *file_path, int mode, bool &result)
 {
   int ret = OB_SUCCESS;
   result = false;
@@ -49,13 +48,23 @@ int FileDirectoryUtils::is_accessible(const char *file_path, bool &result)
     ret = OB_INVALID_ARGUMENT;
     LIB_LOG(WARN, "invalid arguments.", KCSTRING(file_path), K(ret));
   } else {
-    if (0 == access(file_path, R_OK)) {
+    if (0 == access(file_path, mode)) {
       result = true;
     } else {
       LIB_LOG(WARN, "access file failed", KERRMSG, K(file_path));
     }
   }
   return ret;
+}
+//return true if file is accessible
+int FileDirectoryUtils::is_accessible(const char *file_path, bool &result)
+{
+  return check_directory_mode(file_path, R_OK, result);
+}
+
+int FileDirectoryUtils::is_writable(const char *file_path, bool &result)
+{
+  return check_directory_mode(file_path, W_OK, result);
 }
 
 //return ture if dirname is a directory

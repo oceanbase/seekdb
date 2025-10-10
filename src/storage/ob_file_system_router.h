@@ -28,7 +28,7 @@ class ObFileSystemRouter final
 {
 public:
   static ObFileSystemRouter & get_instance();
-  int init(const char *data_dir);
+  int init(const char *data_dir, const char *redo_dir);
 
   OB_INLINE const char* get_data_dir() const { return data_dir_; }
   OB_INLINE const char* get_slog_dir() const { return slog_dir_; }
@@ -54,7 +54,7 @@ private:
 
   void reset();
   int init_shm_file_path();
-  int init_local_dirs(const char* data_dir);
+  int init_local_dirs(const char* data_dir, const char* redo_dir);
 
 private:
   char data_dir_[common::MAX_PATH_SIZE];

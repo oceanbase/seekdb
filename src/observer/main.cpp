@@ -24,9 +24,11 @@
 #include "lib/signal/ob_signal_struct.h"
 #include "lib/utility/ob_defer.h"
 #include "objit/ob_llvm_symbolizer.h"
+#include "observer/ob_command_line_parser.h"
 #include "observer/ob_server.h"
 #include "observer/ob_server_utils.h"
 #include "observer/ob_signal_handle.h"
+#include "observer/ob_server_options.h"
 #include "observer/omt/ob_tenant_config.h"
 #include "share/config/ob_server_config.h"
 #include "share/ob_tenant_mgr.h"
@@ -54,44 +56,9 @@ using namespace oceanbase::omt;
   MPRINT(format, ##__VA_ARGS__);                                               \
   exit(1)
 
-static void print_help()
-{
-  MPRINT("observer [OPTIONS]");
-  MPRINT("  -h,--help                print this help");
-  MPRINT("  -z,--zone ZONE           zone");
-  MPRINT("  -p,--mysql_port PORT     mysql port");
-  MPRINT("  -P,--rpc_port PORT       rpc port");
-  MPRINT("  -N,--nodaemon            don't run in daemon");
-  MPRINT("  -n,--appname APPNAME     application name");
-  MPRINT("  -c,--cluster_id ID       cluster id");
-  MPRINT("  -d,--data_dir DIR        OceanBase data directory");
-  MPRINT("  -i,--devname DEV         net dev interface");
-  MPRINT("  -I,--local_ip            ip of the current machine");
-  MPRINT("  -o,--optstr OPTSTR       extra options string");
-  MPRINT("  -r,--rs_list RS_LIST     root service list");
-  MPRINT("  -l,--log_level LOG_LEVEL server log level");
-  MPRINT("  -6,--ipv6 USE_IPV6       server use ipv6 address");
-  MPRINT("  -m,--mode MODE server mode");
-  MPRINT("  -f,--scn flashback_scn");
-  MPRINT("  -L,--plugins_load plugins to load");
-}
-
-static void print_version()
-{
-#ifndef ENABLE_SANITY
-  const char *extra_flags = "";
-#else
-  const char *extra_flags = "|Sanity";
-#endif
-  MPRINT("observer (%s)\n", PACKAGE_STRING);
-  MPRINT("REVISION: %s", build_version());
-  MPRINT("BUILD_BRANCH: %s", build_branch());
-  MPRINT("BUILD_TIME: %s %s", build_date(), build_time());
-  MPRINT("BUILD_FLAGS: %s%s", build_flags(), extra_flags);
-  MPRINT("BUILD_INFO: %s\n", build_info());
-  MPRINT("Copyright (c) 2011-present OceanBase Inc.");
-  MPRINT();
-}
+const char  LOG_DIR[]  = "log";
+const char  PID_DIR[]  = "run";
+const char  CONF_DIR[] = "etc";
 
 static int dump_config_to_json()
 {
@@ -138,219 +105,123 @@ static void print_args(int argc, char *argv[])
   fprintf(stderr, "%s\n", argv[argc - 1]);
 }
 
-static bool to_int64(const char *sval, int64_t &ival)
+/**
+ * 创建并检查目录为空，并且有写权限
+ * @param dir_path 目录路径
+ * @return 返回值
+ * @retval OB_SUCCESS 成功
+ * @retval OB_INVALID_ARGUMENT 参数错误
+ * @retval OB_ERR_UNEXPECTED 目录不存在或不可写
+ */
+static int create_and_check_dir_writable(const char *dir_path, bool check_is_empty = true)
 {
-  char *endp = NULL;
-  ival       = static_cast<int64_t>(strtol(sval, &endp, 10));
-  return NULL != endp && *endp == '\0';
-}
-
-static int to_port_x(const char *sval)
-{
-  int64_t port = 0;
-  if (!to_int64(sval, port)) {
-    MPRINTx("need port number: %s", sval);
-  } else if (port <= 1024 || port >= 65536) {
-    MPRINTx(
-        "port number should greater than 1024 and less than 65536: %ld", port);
-  }
-  return static_cast<int>(port);
-}
-
-static int64_t to_cluster_id_x(const char *sval)
-{
-  int64_t cluster_id = 0;
-  if (!to_int64(sval, cluster_id)) {
-    MPRINTx("need cluster id: %s", sval);
-  } else if (
-      cluster_id <= 0 ||
-      cluster_id >=
-          4294967296) { // cluster id given by command line must be in range [1,4294967295]
-    MPRINTx(
-        "cluster id in cmd option should be in range [1,4294967295], "
-        "but it is %ld",
-        cluster_id);
-  }
-  return cluster_id;
-}
-
-static void get_opts_setting(
-    struct option long_opts[], char short_opts[], const size_t size)
-{
-  static struct
-  {
-    const char *long_name_;
-    char        short_name_;
-    bool        has_arg_;
-  } ob_opts[] = {
-      {"help", 'h', 0},
-      {"home", 'H', 1},
-      {"mysql_port", 'p', 1},
-      {"rpc_port", 'P', 1},
-      {"nodaemon", 'N', 0},
-      {"appname", 'n', 1},
-      {"cluster_id", 'c', 1},
-      {"data_dir", 'd', 1},
-      {"log_level", 'l', 1},
-      {"zone", 'z', 1},
-      {"optstr", 'o', 1},
-      {"devname", 'i', 1},
-      {"rs_list", 'r', 1},
-      {"mode", 'm', 1},
-      {"scn", 'f', 1},
-      {"version", 'V', 0},
-      {"dump_config_to_json", 'C', 0},
-      {"ipv6", '6', 0},
-      {"local_ip", 'I', 1},
-      {"plugins_load", 'L', 1},
-  };
-
-  size_t opts_cnt = sizeof(ob_opts) / sizeof(ob_opts[0]);
-
-  if (opts_cnt >= size) {
-    MPRINTx("parse option fail: opts array is too small");
+  int ret = OB_SUCCESS;
+  bool is_writable = false;
+  bool is_empty = false;
+  bool is_exists = false;
+  if (OB_ISNULL(dir_path) || strlen(dir_path) == 0) {
+    ret = OB_INVALID_ARGUMENT;
+    MPRINT("[Internal Error] Invalid argument. dir path is null.");
   }
 
-  int short_idx = 0;
-
-  for (size_t i = 0; i < opts_cnt; ++i) {
-    long_opts[i].name    = ob_opts[i].long_name_;
-    long_opts[i].has_arg = ob_opts[i].has_arg_;
-    long_opts[i].flag    = NULL;
-    long_opts[i].val     = ob_opts[i].short_name_;
-
-    short_opts[short_idx++] = ob_opts[i].short_name_;
-    if (ob_opts[i].has_arg_) {
-      short_opts[short_idx++] = ':';
+  if (OB_FAIL(ret)) {
+  } else if (OB_FAIL(FileDirectoryUtils::is_exists(dir_path, is_exists))) {
+    MPRINT("Check directory exists failed. path='%s'. system error=%s", dir_path, strerror(errno));
+  } else if (is_exists && check_is_empty) {
+    if (OB_FAIL(FileDirectoryUtils::is_empty_directory(dir_path, is_empty))) {
+      MPRINT("Check directory empty failed. path='%s', system error=%s", dir_path, strerror(errno));
+    } else if (!is_empty) {
+      ret = OB_INVALID_ARGUMENT;
+      MPRINT("Directory is not empty. path=%s", dir_path);
     }
+  } else if (OB_FAIL(FileDirectoryUtils::create_full_path(dir_path))) {
+    MPRINT("Create directory failed. path='%s', system error=%s", dir_path, strerror(errno));
   }
+
+  if (FAILEDx(FileDirectoryUtils::is_writable(dir_path, is_writable))) {
+    MPRINT("Check directory writable failed. path=%s, system error=%s", dir_path, strerror(errno));
+  } else if (!is_writable) {
+    ret = OB_ERR_UNEXPECTED;
+    MPRINT("Directory is not writable. path='%s'", dir_path);
+  } else {
+    MPRINT("Directory is created and writable. path='%s'", dir_path);
+  }
+  return ret;
 }
 
-static void
-parse_short_opt(const int c, const char *value, ObServerOptions &opts)
+/**
+ * 初始化部署环境
+ * @details 初始化observer进程需要的目录，比如 base_dir、data_dir和redo_dir。
+ * @param opts 配置选项
+ * @return 返回值
+ * @retval OB_SUCCESS 成功
+ * @retval OB_INVALID_ARGUMENT 参数错误
+ * @retval OB_ERR_UNEXPECTED 目录不存在或不可写
+ */
+static int init_deploy_env(const ObServerOptions &opts)
 {
-  switch (c) {
-  case 'H':
-    MPRINT("home: %s", value);
-    opts.home_ = value;
-    // set home
-    break;
+  int ret = OB_SUCCESS;
 
-  case 'p':
-    MPRINT("mysql port: %s", value);
-    opts.mysql_port_ = to_port_x(value);
-    // set port
-    break;
+  const char *sstable_dir = "sstable";
+  const char *slog_dir = "slog";
 
-  case 'P':
-    MPRINT("rpc port: %s", value);
-    opts.rpc_port_ = to_port_x(value);
-    // set port
-    break;
-
-  case 'z':
-    MPRINT("zone: %s", value);
-    opts.zone_ = value;
-    break;
-
-  case 'o':
-    MPRINT("optstr: %s", value);
-    opts.optstr_ = value;
-    break;
-
-  case 'i':
-    MPRINT("devname: %s", value);
-    opts.devname_ = value;
-    break;
-
-  case 'r':
-    MPRINT("rs list: %s", value);
-    opts.rs_list_ = value;
-    break;
-
-  case 'N':
-    MPRINT("nodaemon");
-    opts.nodaemon_ = true;
-    // set nondaemon
-    break;
-
-  case 'n':
-    MPRINT("appname: %s", value);
-    opts.appname_ = value;
-    break;
-
-  case 'c':
-    MPRINT("cluster id: %s", value);
-    opts.cluster_id_ = to_cluster_id_x(value);
-    break;
-
-  case 'd':
-    MPRINT("data_dir: %s", value);
-    opts.data_dir_ = value;
-    break;
-
-  case 'l':
-    MPRINT("log level: %s", value);
-    if (OB_SUCCESS != OB_LOGGER.level_str2int(value, opts.log_level_)) {
-      MPRINT("malformed log level, candicates are: "
-             "    ERROR,USER_ERR,WARN,INFO,TRACE,DEBUG");
-      MPRINT("!! Back to INFO log level.");
-      opts.log_level_ = OB_LOG_LEVEL_WARN;
-    }
-    break;
-
-  case 'm':
-    // set mode
-    MPRINT("server startup mode: %s", value);
-    opts.startup_mode_ = value;
-    break;
-
-  case 'f':
-    MPRINT("flashback scn: %s", value);
-    to_int64(value, opts.flashback_scn_);
-    break;
-
-  case 'V':
-    print_version();
-    exit(0);
-    break;
-
-  case 'C':
-    if (OB_SUCCESS != dump_config_to_json()) {
-      MPRINT("dump config to json failed");
-    }
-    exit(0);
-    break;
-
-  case '6':
-    opts.use_ipv6_ = true;
-    break;
-
-  case 'I':
-    MPRINT("local_ip: %s", value);
-    opts.local_ip_ = value;
-    break;
-
-  case 'L':
-    MPRINT("plugins_load: %s", value);
-    opts.plugins_load_ = value;
-    break;
-
-  case 'h':
-  default:
-    print_help();
-    exit(1);
+  // 确保我们需要的几个目录是空的，其它目录可以保留。比如用户可以在base_dir下创建 plugin_dir、bin等目录。
+  ObSqlString log_dir;
+  ObSqlString run_dir;
+  ObSqlString etc_dir;
+  if (OB_FAIL(log_dir.assign_fmt("%s/%s", opts.base_dir_.ptr(), LOG_DIR))) {
+    MPRINT("[Maybe Memory Error] Failed to assign log dir.");
+  } else if (OB_FAIL(run_dir.assign_fmt("%s/%s", opts.base_dir_.ptr(), PID_DIR))) {
+    MPRINT("[Maybe Memory Error] Failed to assign run dir.");
+  } else if (OB_FAIL(etc_dir.assign_fmt("%s/%s", opts.base_dir_.ptr(), CONF_DIR))) {
+    MPRINT("[Maybe Memory Error] Failed to assign etc dir.");
+  } else if (OB_FAIL(create_and_check_dir_writable(log_dir.ptr(), false/*check_is_empty*/))) {
+    MPRINT("Failed to create and check log dir.");
+  } else if (OB_FAIL(create_and_check_dir_writable(run_dir.ptr(), false/*check_is_empty*/))) {
+    MPRINT("Failed to create and check run dir.");
+  } else if (OB_FAIL(create_and_check_dir_writable(etc_dir.ptr(), false/*check_is_empty*/))) {
+    MPRINT("Failed to create and check etc dir.");
   }
+
+  if (OB_FAIL(ret)) {
+  } else if (OB_FAIL(create_and_check_dir_writable(opts.redo_dir_.ptr()))) {
+    MPRINT("Failed to create and check redo dir.");
+  }
+
+  ObSqlString data_dir;
+  if (OB_FAIL(ret)) {
+  } else if (OB_FAIL(data_dir.assign_fmt("%s/%s", opts.data_dir_.ptr(), sstable_dir))) {
+    MPRINT("[Maybe Memory Error] Failed to assign base dir.");
+  } else if (OB_FAIL(create_and_check_dir_writable(data_dir.ptr()))) {
+    MPRINT("Failed to create and check sstable dir.");
+  } else if (OB_FAIL(data_dir.assign_fmt("%s/%s", opts.data_dir_.ptr(), slog_dir))) {
+    MPRINT("[Maybe Memory Error] Failed to create slog dir variable.");
+  } else if (OB_FAIL(create_and_check_dir_writable(data_dir.ptr()))) {
+    MPRINT("Failed to create and check slog dir.");
+  }
+
+  return ret;
 }
 
-// process long only option
-static void
-parse_long_opt(const char *name, const char *value, ObServerOptions &opts)
+/**
+ * 解析命令行参数
+ * @details 解析命令行参数，并初始化ObServerOptions。
+ * @param argc 命令行参数个数
+ * @param argv 命令行参数
+ * @param opts 配置选项
+ */
+static int parse_args(int argc, char *argv[], ObServerOptions &opts)
 {
-  MPRINT("long: %s %s", name, value);
-  UNUSED(name);
-  UNUSED(value);
-  UNUSED(opts);
+  int ret = OB_SUCCESS;
+
+  ObCommandLineParser parser;
+
+  // 解析参数，结果直接设置到opts中
+  if (OB_FAIL(parser.parse_args(argc, argv, opts))) {
+    MPRINT("Failed to parse command line arguments, ret=%d", ret);
+  }
+
+  return ret;
 }
 
 static int callback(struct dl_phdr_info *info, size_t size, void *data)
@@ -360,10 +231,10 @@ static int callback(struct dl_phdr_info *info, size_t size, void *data)
   if (OB_ISNULL(info)) {
     LOG_ERROR_RET(OB_INVALID_ARGUMENT, "invalid argument", K(info));
   } else {
-    MPRINT("name=%s (%d segments)", info->dlpi_name, info->dlpi_phnum);
+    _LOG_INFO("name=%s (%d segments)", info->dlpi_name, info->dlpi_phnum);
     for (int j = 0; j < info->dlpi_phnum; j++) {
       if (NULL != info->dlpi_phdr) {
-        MPRINT(
+        _LOG_INFO(
             "\t\t header %2d: address=%10p",
             j,
             (void *)(info->dlpi_addr + info->dlpi_phdr[j].p_vaddr));
@@ -371,30 +242,6 @@ static int callback(struct dl_phdr_info *info, size_t size, void *data)
     }
   }
   return 0;
-}
-
-static void parse_opts(int argc, char *argv[], ObServerOptions &opts)
-{
-  static const int     MAX_OPTS_CNT = 128;
-  static char          short_opts[MAX_OPTS_CNT * 2 + 1];
-  static struct option long_opts[MAX_OPTS_CNT];
-
-  get_opts_setting(long_opts, short_opts, MAX_OPTS_CNT);
-
-  int long_opts_idx = 0;
-
-  bool end = false;
-  while (!end) {
-    int c = getopt_long(argc, argv, short_opts, long_opts, &long_opts_idx);
-
-    if (-1 == c || long_opts_idx >= MAX_OPTS_CNT) { // end
-      end = true;
-    } else if (0 == c) {
-      parse_long_opt(long_opts[long_opts_idx].name, optarg, opts);
-    } else {
-      parse_short_opt(c, optarg, opts);
-    }
-  }
 }
 
 static void print_limit(const char *name, const int resource)
@@ -527,13 +374,8 @@ int inner_main(int argc, char *argv[])
 
   ObCurTraceId::SeqGenerator::seq_generator_  = ObTimeUtility::current_time();
   static const int  LOG_FILE_SIZE             = 256 * 1024 * 1024;
-  char              LOG_DIR[]                 = "log";
-  char              PID_DIR[]                 = "run";
-  char              CONF_DIR[]                = "etc";
   char              ALERT_DIR[]               = "log/alert";
   const char *const LOG_FILE_NAME             = "log/observer.log";
-  const char *const RS_LOG_FILE_NAME          = "log/rootservice.log";
-  const char *const ELECT_ASYNC_LOG_FILE_NAME = "log/election.log";
   const char *const TRACE_LOG_FILE_NAME       = "log/trace.log";
   const char *const ALERT_LOG_FILE_NAME       = "log/alert/alert.log";
   const char *const PID_FILE_NAME             = "run/observer.pid";
@@ -543,11 +385,15 @@ int inner_main(int argc, char *argv[])
   if (OB_FAIL(ObSignalHandle::change_signal_mask())) {
     MPRINT("change signal mask failed, ret=%d", ret);
   }
-  ObServerOptions opts;
 
-  int64_t pos = 0;
+  lib::ObMemAttr mem_attr(OB_SYS_TENANT_ID, "ObserverAlloc");
+  ObServerOptions *opts = nullptr;
+  if (OB_FAIL(ret)) {
+  } else if (OB_ISNULL(opts = OB_NEW(ObServerOptions, mem_attr))) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+    MPRINT("Failed to allocate memory for ObServerOptions.");
+  }
 
-  print_args(argc, argv);
   // no diagnostic info attach to main thread.
   ObDisableDiagnoseGuard disable_guard;
   setlocale(LC_ALL, "");
@@ -556,11 +402,32 @@ int inner_main(int argc, char *argv[])
   setlocale(LC_CTYPE, "C");
   setlocale(LC_TIME, "en_US.UTF-8");
   setlocale(LC_NUMERIC, "en_US.UTF-8");
-  // memset(&opts, 0, sizeof (opts));
-  opts.log_level_ = OB_LOG_LEVEL_WARN;
-  parse_opts(argc, argv, opts);
 
-  if (OB_SUCC(ret) && OB_FAIL(check_uid_before_start(CONF_DIR))) {
+  opts->log_level_ = OB_LOG_LEVEL_WARN;
+  if (FAILEDx(parse_args(argc, argv, *opts))) {
+  }
+
+  if (OB_FAIL(ret)) {
+  } else if (opts->initialize_) {
+    if (OB_FAIL(init_deploy_env(*opts))) {
+      MPRINT("Failed to initialize deploy environment.");
+    }
+  }
+
+  if (OB_FAIL(ret)) {
+  } else if (0 != chdir(opts->base_dir_.ptr())) {
+    ret = OB_ERR_UNEXPECTED;
+    MPRINT("Failed to change working directory to base dir. path='%s', system error='%s'",
+      opts->base_dir_.ptr(), strerror(errno));
+  } else {
+    MPRINT("Change working directory to base dir. path='%s'", opts->base_dir_.ptr());
+    if (opts->initialize_) {
+      MPRINT("Start to initialize observer, please wait...");
+    }
+  }
+
+  if (OB_FAIL(ret)) {
+  } else if (OB_FAIL(check_uid_before_start(CONF_DIR))) {
     MPRINT("Fail check_uid_before_start, please use the initial user to start observer!");
   } else if (OB_FAIL(FileDirectoryUtils::create_full_path(PID_DIR))) {
     MPRINT("create pid dir fail: ./run/");
@@ -572,27 +439,27 @@ int inner_main(int argc, char *argv[])
     MPRINT("create log dir fail: ./log/alert");
   } else if (OB_FAIL(ObEncryptionUtil::init_ssl_malloc())) {
     MPRINT("failed to init crypto malloc");
-  } else if (!opts.nodaemon_ && OB_FAIL(start_daemon(PID_FILE_NAME))) {
+  } else if (!opts->nodaemon_) {
+    MPRINT("Start observer server as a daemon.");
+    if (OB_FAIL(start_daemon(PID_FILE_NAME))) {
+      MPRINT("Start observer server as a daemon failed.");
+    }
+  }
+  if (OB_FAIL(ret)) {
   } else {
     ObCurTraceId::get_trace_id()->set("Y0-0000000000000001-0-0");
     CURLcode curl_code = curl_global_init(CURL_GLOBAL_ALL);
     OB_ASSERT(CURLE_OK == curl_code);
 
     const char *syslog_file_info = ObServerUtils::build_syslog_file_info(ObAddr());
-    OB_LOGGER.set_log_level(opts.log_level_);
+    OB_LOGGER.set_log_level(opts->log_level_);
     OB_LOGGER.set_max_file_size(LOG_FILE_SIZE);
     OB_LOGGER.set_new_file_info(syslog_file_info);
-    OB_LOGGER.set_file_name(LOG_FILE_NAME, false, true, RS_LOG_FILE_NAME, ELECT_ASYNC_LOG_FILE_NAME,
+    OB_LOGGER.set_file_name(LOG_FILE_NAME, opts->initialize_/*no_redirect_flag*/, true/*open_wf*/,
                             TRACE_LOG_FILE_NAME, ALERT_LOG_FILE_NAME);
     ObPLogWriterCfg log_cfg;
-    // if (OB_SUCCESS != (ret = ASYNC_LOG_INIT(ELECT_ASYNC_LOG_FILE_NAME, opts.log_level_, true))) {
-    //   LOG_ERROR("election async log init error.", K(ret));
-    //   ret = OB_ELECTION_ASYNC_LOG_WARN_INIT;
-    // }
     LOG_INFO("succ to init logger",
              "default file", LOG_FILE_NAME,
-             "rs file", RS_LOG_FILE_NAME,
-             "election file", ELECT_ASYNC_LOG_FILE_NAME,
              "trace file", TRACE_LOG_FILE_NAME,
              "alert file", ALERT_LOG_FILE_NAME,
              "max_log_file_size", LOG_FILE_SIZE,
@@ -605,7 +472,7 @@ int inner_main(int argc, char *argv[])
     // print in log file.
     LOG_INFO("Build basic information for each syslog file", "info", syslog_file_info);
     print_args(argc, argv);
-    print_version();
+    ObCommandLineParser::print_version();
     print_all_limits();
     dl_iterate_phdr(callback, NULL);
 
@@ -617,6 +484,8 @@ int inner_main(int argc, char *argv[])
     // records all WARN and ERROR logs in log directory.
     ObWarningBuffer::set_warn_log_on(true);
     if (OB_SUCC(ret)) {
+      const bool embed_mode = opts->embed_mode_;
+      const bool initialize = opts->initialize_;
       // Create worker to make this thread having a binding
       // worker. When ObThWorker is creating, it'd be aware of this
       // thread has already had a worker, which can prevent binding
@@ -628,14 +497,25 @@ int inner_main(int argc, char *argv[])
       // to speed up bootstrap phase, need set election INIT TS
       // to count election keep silence time as soon as possible after observer process started
       ATOMIC_STORE(&palf::election::INIT_TS, palf::election::get_monotonic_ts());
-      if (OB_FAIL(observer.init(opts, log_cfg))) {
+      if (OB_FAIL(observer.init(*opts, log_cfg))) {
         LOG_ERROR("observer init fail", K(ret));
-        raise(SIGKILL); // force stop when fail
-      } else if (OB_FAIL(observer.start())) {
+      }
+      OB_DELETE(ObServerOptions, mem_attr, opts);
+      if (OB_FAIL(ret)) {
+      } else if (OB_FAIL(observer.start(embed_mode))) {
         LOG_ERROR("observer start fail", K(ret));
-        raise(SIGKILL); // force stop when fail
+      } else if (initialize) {
+        MPRINT("observer initialized successfully, you can start observer server now");
+        _exit(0);
       } else if (OB_FAIL(observer.wait())) {
         LOG_ERROR("observer wait fail", K(ret));
+      }
+
+      if (OB_FAIL(ret)) {
+        if (initialize) {
+          MPRINT("observer start failed. Please check the log file for details.");
+        }
+        _exit(1);
       }
       print_all_thread("BEFORE_DESTROY", OB_SERVER_TENANT_ID);
       observer.destroy();

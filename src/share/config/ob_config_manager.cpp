@@ -302,33 +302,6 @@ int ObConfigManager::dump2file(const char* path) const
   return dump2file_unsafe(path);
 }
 
-int ObConfigManager::config_backup()
-{
-  int ret = OB_SUCCESS;
-  char path[MAX_PATH_SIZE] = {};
-  static const char *CONF_COPY_NAME = "/observer.conf.bin";
-
-  for (int64_t idx = 0; idx < server_config_.config_additional_dir.size(); ++idx) {
-    if (OB_SUCC(server_config_.config_additional_dir.get(idx, path, MAX_PATH_SIZE))) {
-      if (STRLEN(path) > 0) {
-        if (OB_FAIL(common::FileDirectoryUtils::create_full_path(path))) {
-          LOG_ERROR("create additional configure directory fail", K(path), K(ret));
-        } else if (STRLEN(path) + STRLEN(CONF_COPY_NAME) < static_cast<uint64_t>(MAX_PATH_SIZE)) {
-          strcat(path, CONF_COPY_NAME);
-          if (OB_FAIL(dump2file_unsafe(path))) {
-            LOG_WARN("make additional configure file copy fail", K(path), K(ret));
-            ret = OB_SUCCESS;  // ignore ret code.
-          }
-        } else {
-          LOG_ERROR("additional configure directory path is too long",
-                    K(path), "len", STRLEN(path));
-        }
-      }
-    }
-  } // for
-  return ret;
-}
-
 int ObConfigManager::update_local(int64_t expected_version)
 {
   int ret = OB_SUCCESS;
@@ -380,7 +353,6 @@ int ObConfigManager::update_local(int64_t expected_version)
       } else {
         GCONF.cluster.set_dumped_version(GCONF.cluster.version());
         LOG_INFO("Reload server config successfully!");
-        ret = config_backup();
       }
     }
     server_config_.print();

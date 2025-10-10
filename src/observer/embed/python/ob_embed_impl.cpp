@@ -16,7 +16,8 @@
 #include "observer/ob_server.h"
 #include "rpc/obrpc/ob_net_client.h"
 #include "observer/ob_inner_sql_result.h"
-
+#include "observer/ob_server_options.h"
+#include "lib/string/ob_string.h"
 
 PYBIND11_MODULE(oblite, m) {
     m.doc() = "oblite embed pybind";
@@ -51,6 +52,9 @@ namespace oceanbase
 namespace embed
 {
 
+using namespace oceanbase::common;
+using namespace oceanbase::observer;
+
 static pybind11::object decimal_module = pybind11::module::import("decimal");
 static pybind11::object decimal_class = decimal_module.attr("Decimal");
 static pybind11::object datetime_module = pybind11::module::import("datetime");
@@ -59,12 +63,23 @@ static pybind11::object fromtimestamp = datetime_class.attr("fromtimestamp");
 static pybind11::object date_class = datetime_module.attr("date");
 static pybind11::object timedelta_class = datetime_module.attr("timedelta");
 
-std::string ObLiteEmbed::rs_list_;
-std::string ObLiteEmbed::opts_;
-std::string ObLiteEmbed::data_abs_dir_;
-std::thread ObLiteEmbed::th_;
-
 #define MPRINT(format, ...) fprintf(stderr, format "\n", ##__VA_ARGS__)
+
+static int to_absolute_path(const char *cwd, ObSqlString &dir)
+{
+  int ret = OB_SUCCESS;
+  if (!dir.empty() && dir.ptr()[0] != '\0' && dir.ptr()[0] != '/') {
+    char abs_path[OB_MAX_FILE_NAME_LENGTH] = {0};
+    // realpath will fail if the directory does not exist, so construct absolute path manually
+    if (snprintf(abs_path, sizeof(abs_path), "%s/%s", cwd, dir.ptr()) >= static_cast<int>(sizeof(abs_path))) {
+        MPRINT("Absolute path is too long.");
+        ret = OB_SIZE_OVERFLOW;
+    } else if (OB_FAIL(dir.assign(abs_path))) {
+      MPRINT("[Maybe Memory Error] Failed to assign absolute path. Please try again.");
+    }
+  }
+  return ret;
+}
 
 void ObLiteEmbed::open(const char* db_dir)
 {
@@ -99,52 +114,81 @@ int ObLiteEmbed::do_open_(const char* db_dir)
   GCONF.internal_sql_execute_timeout.set_value("48h");
   // TODO defaut opts
   ObServerOptions opts;
-  opts.cluster_id_ = 1;
-  opts.rpc_port_ = 11001;
-  opts.mysql_port_ = 11002;
-  opts.zone_ = "zone1";
-  opts.appname_ = "test_ob";
-  rs_list_ = "127.0.0.1:" + std::to_string(opts.rpc_port_) + ":" + std::to_string(opts.mysql_port_);
-  opts.rs_list_ = rs_list_.c_str();
+  opts.port_ = 11002;
   const char* log_disk_size = "3G";
   const char* memory_limit = "5G";
   const char* datafile_size = "10G";
-  opts_ = "log_disk_size=" + std::string(log_disk_size) + ",memory_limit=" + std::string(memory_limit) + ",cache_wash_threshold=1G,net_thread_count=4,cpu_count=16,schema_history_expire_time=1d,workers_per_cpu_quota=10,datafile_disk_percentage=2,__min_full_resource_pool_memory=1073741824,system_memory=5G,trace_log_slow_query_watermark=100ms,datafile_size=" + std::string(datafile_size) +",stack_size=512K";
-  opts.optstr_ = opts_.c_str();
   opts.use_ipv6_ = false;
   opts.embed_mode_ = true;
 
-  bool clog_exist = false;
-  bool clog_empty = true;
-  bool need_bootstrap = false;
+  const std::pair<ObString, ObString> parameters[] = {
+    {"log_disk_size", ObString(log_disk_size)},
+    {"memory_limit", ObString(memory_limit)},
+    {"cache_wash_threshold", ObString("1G")},
+    {"net_thread_count", ObString("4")},
+    {"cpu_count", ObString("16")},
+    {"schema_history_expire_time", ObString("1d")},
+    {"workers_per_cpu_quota", ObString("10")},
+    {"datafile_disk_percentage", ObString("2")},
+    {"__min_full_resource_pool_memory", ObString("1073741824")},
+    {"system_memory", ObString("5G")},
+    {"trace_log_slow_query_watermark", ObString("100ms")},
+    {"datafile_size", ObString(datafile_size)},
+    {"stack_size", ObString("512K")},
+  };
+  for (size_t i = 0; OB_SUCC(ret) && i < sizeof(parameters) / sizeof(parameters[0]); i++) {
+    if (OB_FAIL(opts.parameters_.push_back(parameters[i]))) {
+      MPRINT("push back parameters failed %d", ret);
+    }
+  }
+
+  bool redo_exist = false;
+  bool redo_empty = true;
   char buffer[PATH_MAX];
-  std::string work_abs_dir;
-  std::string db_abs_dir;
+  ObSqlString work_abs_dir;
+  ObSqlString slog_dir;
+  ObSqlString sstable_dir;
 
   if (getcwd(buffer, sizeof(buffer)) == nullptr) {
-    MPRINT("getcwd failed %d %d", errno, strerror(errno));
-  } else if (FALSE_IT(work_abs_dir = std::string(buffer))) {
-  } else if (OB_FAIL(FileDirectoryUtils::is_exists((std::string(db_dir) + "/store/clog").c_str(), clog_exist))) {
+    MPRINT("getcwd failed %d %s", errno, strerror(errno));
+  } else if (FALSE_IT(work_abs_dir.assign(buffer))) {
+  } else if (OB_FAIL(opts.base_dir_.assign(db_dir))) {
+    MPRINT("assign base dir failed %d", ret);
+  } else if (OB_FAIL(opts.data_dir_.assign_fmt("%s/store", opts.base_dir_.ptr()))) {
+    MPRINT("assign data dir failed %d", ret);
+  } else if (OB_FAIL(opts.redo_dir_.assign_fmt("%s/store/redo", opts.data_dir_.ptr()))) {
+    MPRINT("assign redo dir failed %d", ret);
+  } else if (OB_FAIL(to_absolute_path(work_abs_dir.ptr(), opts.base_dir_))) {
+    MPRINT("get base dir absolute path failed %d", ret);
+  } else if (OB_FAIL(to_absolute_path(work_abs_dir.ptr(), opts.data_dir_))) {
+    MPRINT("get data dir absolute path failed %d", ret);
+  } else if (OB_FAIL(to_absolute_path(work_abs_dir.ptr(), opts.redo_dir_))) {
+    MPRINT("get redo dir absolute path failed %d", ret);
+  } else {
+    MPRINT("OceanBase use base-dir: %s, data-dir: %s, redo-dir: %s", opts.base_dir_.ptr(), opts.data_dir_.ptr(), opts.redo_dir_.ptr());
+  }
+
+  if (OB_FAIL(ret)) {
+  } else if (OB_FAIL(FileDirectoryUtils::create_full_path(opts.base_dir_.ptr()))) {
+    MPRINT("create base dir failed %d, directory: %s", ret, opts.base_dir_.ptr());
+  } else if (-1 == chdir(opts.base_dir_.ptr())) {
+    ret = OB_ERR_UNEXPECTED;
+    MPRINT("change dir failed %s, directory: %s", strerror(errno), opts.base_dir_.ptr());
+  } else if (OB_FAIL(FileDirectoryUtils::is_exists(opts.redo_dir_.ptr(), redo_exist))) {
     MPRINT("check dir failed %d", ret);
-  } else if (clog_exist && OB_FAIL(FileDirectoryUtils::is_empty_directory((std::string(db_dir) + "/store/clog").c_str(), clog_empty))) {
+  } else if (redo_exist && OB_FAIL(FileDirectoryUtils::is_empty_directory(opts.redo_dir_.ptr(), redo_empty))) {
     MPRINT("check dir failed %d", ret);
-  } else if (FALSE_IT(need_bootstrap = !clog_exist || clog_empty)) {
-  } else if (OB_FAIL(FileDirectoryUtils::create_full_path(db_dir))) {
+  } else if (FALSE_IT(opts.initialize_ = !redo_exist || redo_empty)) {
+  } else if (OB_FAIL(FileDirectoryUtils::create_full_path(opts.data_dir_.ptr()))) {
     MPRINT("create dir failed %d", ret);
-  } else if (OB_FAIL(chdir(db_dir))) {
-    MPRINT("change dir failed %d", ret);
-  } else if (getcwd(buffer, sizeof(buffer)) == nullptr) {
-    MPRINT("getcwd failed %d %d", errno, strerror(errno));
-  } else if (FALSE_IT(db_abs_dir = std::string(buffer))) {
-  } else if (FALSE_IT(data_abs_dir_ = db_abs_dir + "/store")) {
-  } else if (FALSE_IT(opts.data_dir_ = data_abs_dir_.c_str())) {
-  } else if (OB_FAIL(FileDirectoryUtils::create_full_path("./store"))) {
+  } else if (OB_FAIL(FileDirectoryUtils::create_full_path(opts.redo_dir_.ptr()))) {
     MPRINT("create dir failed %d", ret);
-  } else if (OB_FAIL(FileDirectoryUtils::create_full_path("./store/clog"))) {
+  } else if (OB_FAIL(slog_dir.assign_fmt("%s/slog", opts.data_dir_.ptr())) ||
+             OB_FAIL(sstable_dir.assign_fmt("%s/sstable", opts.data_dir_.ptr()))) {
+    MPRINT("calculate slog and sstable dir failed %d", ret);
+  } else if (OB_FAIL(FileDirectoryUtils::create_full_path(slog_dir.ptr()))) {
     MPRINT("create dir failed %d", ret);
-  } else if (OB_FAIL(FileDirectoryUtils::create_full_path("./store/slog"))) {
-    MPRINT("create dir failed %d", ret);
-  } else if (OB_FAIL(FileDirectoryUtils::create_full_path("./store/sstable"))) {
+  } else if (OB_FAIL(FileDirectoryUtils::create_full_path(sstable_dir.ptr()))) {
     MPRINT("create dir failed %d", ret);
   } else if (OB_FAIL(FileDirectoryUtils::create_full_path("./run"))) {
     MPRINT("create dir failed %d", ret);
@@ -154,21 +198,25 @@ int ObLiteEmbed::do_open_(const char* db_dir)
     MPRINT("create dir failed %d", ret);
   } else {
     OB_LOGGER.set_log_level("INFO");
-    std::string log_file = db_abs_dir + "/log/oblite.log";
-    OB_LOGGER.set_file_name(log_file.c_str(), true, false, log_file.c_str(), log_file.c_str(), log_file.c_str(), log_file.c_str());
+    ObSqlString log_file;
+    if (OB_FAIL(log_file.assign_fmt("%s/log/oblite.log", opts.base_dir_.ptr()))) {
+      MPRINT("calculate log file failed %d", ret);
+    } else {
+      OB_LOGGER.set_file_name(log_file.ptr(), true, false);
+    }
 
     int saved_stdout = dup(STDOUT_FILENO); // Save current stdout
     dup2(OB_LOGGER.get_elec_log().fd_, STDOUT_FILENO);
 
     ObPLogWriterCfg log_cfg;
-    if (OB_FAIL(OBSERVER.init(opts, log_cfg))) {
+    if (OB_FAIL(ret)) {
+    } else if (OB_FAIL(OBSERVER.init(opts, log_cfg))) {
       LOG_WARN("observer init failed", KR(ret));
-    } else if (need_bootstrap && OB_FAIL(bootstrap_())) {
-      LOG_WARN("bootstrap failed",KR(ret));
-    } else if (OB_FAIL(OBSERVER.start())) {
+    } else if (OB_FAIL(OBSERVER.start(opts.embed_mode_))) {
       LOG_WARN("observer start failed", KR(ret));
-    } else if (OB_FAIL(chdir(work_abs_dir.c_str()))) {
-      MPRINT("change dir failed %d", ret);
+    } else if (-1 == chdir(work_abs_dir.ptr())) {
+      ret = OB_ERR_UNEXPECTED;
+      MPRINT("change dir failed %s, directory: %s", strerror(errno), work_abs_dir.ptr());
     } else {
       LOG_INFO("observer start finish");
       while (true) {
@@ -183,40 +231,6 @@ int ObLiteEmbed::do_open_(const char* db_dir)
     dup2(saved_stdout, STDOUT_FILENO);
   }
   return ret;
-}
-
-// TODO remove bootstrap phase
-int ObLiteEmbed::bootstrap_()
-{
-  int ret = OB_SUCCESS;
-  std::thread th(notify_bootstrap_);
-  th_ = std::move(th);
-  return ret;
-}
-
-void ObLiteEmbed::notify_bootstrap_()
-{
-  int64_t start_time = ObTimeUtility::current_time();
-  int64_t curr_time =start_time;
-  ::usleep(500 * 1000);
-  while (curr_time - start_time < 3 * 60 * 1000 * 1000) {
-    int ret = OB_SUCCESS;
-    obrpc::ObServerInfo server_info;
-    server_info.zone_ = "zone1";
-    server_info.server_ = GCTX.self_addr();
-    server_info.region_ = "sys_region";
-    obrpc::ObBootstrapArg arg;
-    arg.cluster_role_ = common::PRIMARY_CLUSTER;
-    arg.server_list_.push_back(server_info);
-    if (OB_FAIL(GCTX.ob_service_->bootstrap(arg))) {
-      LOG_WARN("notify bootstrap failed", KR(ret));
-    } else {
-      break;
-    }
-    ::usleep(500 * 1000);
-    curr_time = ObTimeUtility::current_time();
-  }
-  LOG_INFO("notify bootstrap success");
 }
 
 void ObLiteEmbed::close()

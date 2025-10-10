@@ -32,8 +32,6 @@ namespace common
 {
 enum ObPLogFDType {
   FD_SVR_FILE = 0,
-  FD_RS_FILE,
-  FD_ELEC_FILE,
   FD_TRACE_FILE,
   FD_AUDIT_FILE,
   FD_ALERT_FILE,
@@ -76,7 +74,6 @@ public:
   }
   ObPLogFDType get_fd_type() const { return fd_type_; }
   void set_fd_type(const ObPLogFDType fd_type) { fd_type_ = fd_type;}
-  bool is_elec_file() const { return FD_ELEC_FILE == fd_type_; }
   bool is_trace_file() const { return FD_TRACE_FILE == fd_type_; }
   bool is_supported_file() const { return MAX_FD_FILE != fd_type_; }
   bool is_audit_file() const { return FD_AUDIT_FILE == fd_type_; }

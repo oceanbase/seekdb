@@ -52,12 +52,10 @@ static const char    OB_ARCHIVED_SYSLOG_FILE_PATTERN[] = "^[a-z]+\\.log\\.[0-9]+
 static const char   *OB_SYSLOG_FILE_PREFIX[OB_SYSLOG_COMPRESS_TYPE_COUNT] =
 {
   "observer.log",     // FD_SVR_FILE
-  "rootservice.log",  // FD_RS_FILE
-  "election.log",     // FD_ELEC_FILE
   "trace.log",        // FD_TRACE_FILE
   // no need to compress audit log and alert log
 };
-STATIC_ASSERT(MAX_FD_FILE == 6, "if you add a new log type, add it's prefix here !!!");
+STATIC_ASSERT(MAX_FD_FILE == 4, "if you add a new log type, add it's prefix here !!!");
 
 #define OB_LOG_COMPRESSOR ::oceanbase::common::ObLogCompressor::get_log_compressor()
 

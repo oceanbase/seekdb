@@ -427,8 +427,6 @@ int ObTenantConfigMgr::dump2file_unsafe()
   int ret = OB_SUCCESS;
   if (OB_FAIL(sys_config_mgr_->dump2file_unsafe())) {
     LOG_WARN("failed to dump2file", K(ret));
-  } else if (OB_FAIL(sys_config_mgr_->config_backup())) {
-    LOG_WARN("failed to dump2file backup", K(ret));
   }
   return ret;
 }

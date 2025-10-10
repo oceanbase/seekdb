@@ -27,7 +27,7 @@ if (OB_DISABLE_LSE)
   message(STATUS "CPACK_RPM_PACKAGE_RELEASE: ${CPACK_RPM_PACKAGE_RELEASE}")
 endif()
 
-set(CPACK_RPM_PACKAGE_URL "${OceanBase_CE_HOMEPAGE_URL}")
+set(CPACK_RPM_PACKAGE_URL "${OceanBase_HOMEPAGE_URL}")
 set(CPACK_RPM_PACKAGE_RELEASE_DIST ON)
 ## set relocation path install prefix for each component
 set(CPACK_RPM_DEVEL_PACKAGE_PREFIX /usr)
@@ -37,8 +37,6 @@ list(APPEND CPACK_RPM_EXCLUDE_FROM_AUTO_FILELIST_ADDITION "/usr")
 set(CPACK_RPM_PACKAGE_GROUP "Applications/Databases")
 set(CPACK_RPM_PACKAGE_DESCRIPTION ${CPACK_PACKAGE_DESCRIPTION})
 set(CPACK_RPM_PACKAGE_LICENSE "Mulan PubL v2.")
-set(CPACK_RPM_DEFAULT_USER "admin")
-set(CPACK_RPM_DEFAULT_GROUP "admin")
 if (NOT BUILD_CDC_ONLY OR OB_BUILD_STANDALONE)
   set(DEBUG_INSTALL_POST "mv $RPM_BUILD_ROOT/../server/usr/bin/obshell %{_builddir}/obshell; %{_rpmconfigdir}/find-debuginfo.sh %{?_find_debuginfo_opts} %{_builddir}/%{?buildsubdir}; mv %{_builddir}/obshell $RPM_BUILD_ROOT/../server/usr/bin/obshell; %{nil}")
 else()
@@ -52,13 +50,13 @@ set(CPACK_RPM_SPEC_MORE_DEFINE
 %undefine __brp_mangle_shebangs
 %global __requires_exclude ^\(/bin/bash\|/usr/bin/\.*\)$
 %define __debug_install_post ${DEBUG_INSTALL_POST}
-%if \\\"%name\\\" != \\\"oceanbase-ce-sql-parser\\\" && \\\"%name\\\" != \\\"oceanbase-sql-parser\\\"
+%if \\\"%name\\\" != \\\"oceanbase-lite-sql-parser\\\" && \\\"%name\\\" != \\\"oceanbase-sql-parser\\\"
 %debug_package
 %endif
 ")
 
 # systemd define on rpm
-set(CPACK_RPM_SERVER_PACKAGE_REQUIRES "oceanbase-ce-libs = ${CPACK_PACKAGE_VERSION}, systemd")
+set(CPACK_RPM_SERVER_PACKAGE_REQUIRES "libaio, systemd")
 
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/tools/systemd/profile/pre_install.sh.template
               ${CMAKE_CURRENT_SOURCE_DIR}/tools/systemd/profile/pre_install.sh
@@ -92,7 +90,7 @@ install(FILES
 if (BUILD_CDC_ONLY)
   message(STATUS "oceanbase build cdc only") 
   set(CPACK_COMPONENTS_ALL cdc)
-  set(CPACK_PACKAGE_NAME "oceanbase-ce-cdc")
+  set(CPACK_PACKAGE_NAME "oceanbase-lite-cdc")
 else()
   add_custom_target(bitcode_to_elf ALL
     DEPENDS ${BITCODE_TO_ELF_LIST})
