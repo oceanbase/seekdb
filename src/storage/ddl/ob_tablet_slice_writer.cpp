@@ -995,6 +995,12 @@ int ObCsSliceWriter::convert_to_storage_vector(ObIArray<ObIVector *> &vectors, O
         LOG_WARN("fail to reshape vector value", K(ret), K(column_schema_item), K(idx));
       }
     }
+    ObArray<ObArray<std::pair<char **, uint32_t *>>> column_lob_cells;
+    if (OB_SUCC(ret)) {
+      if (OB_FAIL(column_lob_cells.prepare_allocate(ddl_table_schema.lob_column_idxs_.count()))) {
+        LOG_WARN("reserve column lob cells failed", K(ret));
+      }
+    }
     for (int64_t i = 0; OB_SUCC(ret) && !ddl_table_schema.table_item_.is_skip_lob() && i < ddl_table_schema.lob_column_idxs_.count(); ++i) {
       const int64_t idx = ddl_table_schema.lob_column_idxs_.at(i);
       const ObColumnSchemaItem &column_schema_item = ddl_table_schema.column_items_.at(idx);
@@ -1004,12 +1010,60 @@ int ObCsSliceWriter::convert_to_storage_vector(ObIArray<ObIVector *> &vectors, O
       if (OB_FAIL(ObDDLUtil::handle_lob_column(tablet_id_,
                                                slice_idx_,
                                                writer_param_,
-                                               lob_writer_,
+                                               true, // need_all_cells
+                                               column_lob_cells.at(i),
                                                row_arena_,
                                                column_schema_item,
                                                selector,
                                                cur_vector))) {
         LOG_WARN("fail to write lob vector value", K(ret), K(column_schema_item), K(idx));
+      }
+    }
+    int64_t row_count = -1;
+    // check row count of each column
+    for (int64_t i = 0; OB_SUCC(ret) && i < column_lob_cells.count(); ++i) {
+      const ObArray<std::pair<char **, uint32_t *>> &cur_lob_cells = column_lob_cells.at(i);
+      if (0 == i) {
+        row_count = cur_lob_cells.count();
+      } else if (row_count != cur_lob_cells.count()) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("row count different", K(ret), K(tablet_id_), K(slice_idx_), K(i), K(row_count), K(cur_lob_cells.count()));
+      }
+    }
+    if (OB_SUCC(ret) && row_count > 0) {
+      if (OB_FAIL(ObDDLUtil::prepare_lob_writer(tablet_id_, slice_idx_, writer_param_, lob_writer_))) {
+        LOG_WARN("prepare lob writer failed", K(ret), K(tablet_id_), K(slice_idx_), K(writer_param_));
+      } else if (OB_ISNULL(lob_writer_)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("lob writer is null", K(ret), K(tablet_id_), K(slice_idx_), KP(lob_writer_));
+      }
+    }
+    // for idempotence, must write lob cells row by row
+    ObStorageDatum temp_datum;
+    for (int64_t i = 0; OB_SUCC(ret) && i < row_count; ++i) {
+      for (int64_t j = 0; OB_SUCC(ret) && j < column_lob_cells.count(); ++j) {
+        std::pair<char **, uint32_t *> &cur_cell = column_lob_cells.at(j).at(i);
+        if (OB_UNLIKELY(nullptr == cur_cell.first || nullptr == cur_cell.second)) {
+          if (nullptr == cur_cell.first && nullptr == cur_cell.second) {
+            // null for const vector, skip
+          } else {
+            ret = OB_ERR_UNEXPECTED;
+            LOG_WARN("current cell is null", K(ret), K(tablet_id_), K(slice_idx_), K(i), K(j), KP(cur_cell.first), K(cur_cell.second));
+          }
+        } else {
+          temp_datum.ptr_ = *cur_cell.first;
+          temp_datum.pack_ = *cur_cell.second;
+          const int64_t lob_column_idx = ddl_table_schema.lob_column_idxs_.at(j);
+          const ObColumnSchemaItem &column_schema = ddl_table_schema.column_items_.at(lob_column_idx);
+          if (temp_datum.is_null() || temp_datum.is_nop()) {
+            // skip
+          } else if (OB_FAIL(lob_writer_->write(column_schema, row_arena_, temp_datum))) {
+            LOG_WARN("write lob cell failed", K(ret), K(tablet_id_), K(slice_idx_), K(i), K(j), K(temp_datum));
+          } else {
+            *cur_cell.first = const_cast<char *>(temp_datum.ptr_);
+            *cur_cell.second = temp_datum.len_;
+          }
+        }
       }
     }
   }

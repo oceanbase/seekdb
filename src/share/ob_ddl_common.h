@@ -1531,7 +1531,8 @@ public:
       const ObTabletID &tablet_id,
       const int64_t slice_idx,
       ObWriteMacroParam &param,
-      ObLobMacroBlockWriter *&lob_writer,
+      const bool output_invalid_lob_cells, // output all lob cells, include null and nop
+      ObIArray<std::pair<char **, uint32_t *>> &lob_cells,
       ObArenaAllocator &allocator,
       const ObColumnSchemaItem &column_schema_item,
       share::ObBatchSelector &selector,

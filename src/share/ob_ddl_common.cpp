@@ -1970,17 +1970,22 @@ int ObDDLUtil::handle_lob_columns(
   return ret;
 }
 
+// the lob is processed by column here,
+// ddl routine require idempotence, so the lob cells must write by row. in order to build the row, invlaid lob cells (like null or nop) need output.
+// direct load routine does not require idempotence, so the invalid lob cells need not to output.
 int ObDDLUtil::handle_lob_column(
     const ObTabletID &tablet_id,
     const int64_t slice_idx,
     ObWriteMacroParam &param,
-    ObLobMacroBlockWriter *&lob_writer,
+    const bool output_invalid_lob_cells,
+    ObIArray<std::pair<char **, uint32_t *>> &lob_cells,
     ObArenaAllocator &allocator,
     const ObColumnSchemaItem &column_schema_item,
     ObBatchSelector &selector,
     ObIVector *&vector)
 {
   int ret = OB_SUCCESS;
+  lob_cells.reuse();
   if (OB_UNLIKELY(!tablet_id.is_valid() ||
                   slice_idx < 0 ||
                   !param.is_valid() ||
@@ -1989,7 +1994,7 @@ int ObDDLUtil::handle_lob_column(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(tablet_id), K(slice_idx), K(param), K(selector), KP(vector));
   } else {
-    ObStorageDatum temp_datum;
+    ObDatum temp_datum;
     const ObObjMeta &col_type = column_schema_item.col_type_;
     const VectorFormat format = vector->get_format();
     switch (format) {
@@ -2014,22 +2019,17 @@ int ObDDLUtil::handle_lob_column(
         while (OB_SUCC(ret) && OB_SUCC(selector.get_next(j))) {
           if (continuous_vec->is_null(j)) {
             discrete_vec->set_null(j);
+            temp_datum.set_null();
           } else {
+            temp_datum.reset();
             temp_datum.ptr_ = data + offsets[j];
             temp_datum.len_ = offsets[j + 1] - offsets[j];
-            if (!temp_datum.is_nop()) {
-              if (OB_FAIL(prepare_lob_writer(tablet_id, slice_idx, param, lob_writer))) {
-                LOG_WARN("prepare lob writer failed", K(ret), K(tablet_id), K(slice_idx), K(param));
-              } else if (OB_ISNULL(lob_writer)) {
-                ret = OB_ERR_UNEXPECTED;
-                LOG_WARN("lob writer is null", K(ret), KP(lob_writer));
-              } else if (OB_FAIL(lob_writer->write(column_schema_item, allocator, temp_datum))) {
-                LOG_WARN("fill lob into macro block failed", K(ret));
-              }
-            }
-            if (OB_SUCC(ret)) {
-              ptrs[j] = const_cast<char *>(temp_datum.ptr_);
-              lens[j] = temp_datum.len_;
+          }
+          if (output_invalid_lob_cells || (!temp_datum.is_null() && !temp_datum.is_nop())) {
+            ptrs[j] = const_cast<char *>(temp_datum.ptr_);
+            lens[j] = temp_datum.pack_;
+            if (OB_FAIL(lob_cells.push_back(std::make_pair(&ptrs[j], reinterpret_cast<uint32_t *>(&lens[j]))))) {
+              LOG_WARN("push back lob cells failed", K(ret));
             }
           }
         }
@@ -2048,22 +2048,18 @@ int ObDDLUtil::handle_lob_column(
         ObLength *lens =discrete_vec->get_lens();
         int64_t j = 0;
         while (OB_SUCC(ret) && OB_SUCC(selector.get_next(j))) {
-          if (!discrete_vec->is_null(j)) {
+          if (discrete_vec->is_null(j)) {
+            temp_datum.set_null();
+          } else {
+            temp_datum.reset();
             temp_datum.ptr_ = ptrs[j];
             temp_datum.len_ = lens[j];
-            if (!temp_datum.is_nop()) {
-              if (OB_FAIL(prepare_lob_writer(tablet_id, slice_idx, param, lob_writer))) {
-                LOG_WARN("prepare lob writer failed", K(ret), K(tablet_id), K(slice_idx), K(param));
-              } else if (OB_ISNULL(lob_writer)) {
-                ret = OB_ERR_UNEXPECTED;
-                LOG_WARN("lob writer is null", K(ret), KP(lob_writer));
-              } else if (OB_FAIL(lob_writer->write(column_schema_item, allocator, temp_datum))) {
-                LOG_WARN("fill lob into macro block failed", K(ret));
-              }
-            }
-            if (OB_SUCC(ret)) {
-              ptrs[j] = const_cast<char *>(temp_datum.ptr_);
-              lens[j] = temp_datum.len_;
+          }
+          if (output_invalid_lob_cells || (!temp_datum.is_null() && !temp_datum.is_nop())) {
+            ptrs[j] = const_cast<char *>(temp_datum.ptr_);
+            lens[j] = temp_datum.pack_;
+            if (OB_FAIL(lob_cells.push_back(std::make_pair(&ptrs[j], reinterpret_cast<uint32_t *>(&lens[j]))))) {
+              LOG_WARN("push back lob cells failed", K(ret));
             }
           }
         }
@@ -2073,29 +2069,55 @@ int ObDDLUtil::handle_lob_column(
         break;
       }
       case VEC_UNIFORM:
+      {
+        ObUniformBase *uniform_vec = static_cast<ObUniformBase *>(vector);
+        ObDatum *datums = uniform_vec->get_datums();
+        int64_t j = 0;
+        while (OB_SUCC(ret) && OB_SUCC(selector.get_next(j))) {
+          ObDatum &datum = datums[j];
+          if (output_invalid_lob_cells || (!datum.is_null() && !datum.is_nop())) {
+            if (OB_FAIL(lob_cells.push_back(std::make_pair(const_cast<char **>(&datum.ptr_), reinterpret_cast<uint32_t *>(&datum.pack_))))) {
+              LOG_WARN("push back lob cells failed", K(ret));
+            }
+          }
+        }
+        if (OB_ITER_END == ret) {
+          ret = OB_SUCCESS;
+        }
+        break;
+      }
       case VEC_UNIFORM_CONST:
       {
         ObUniformBase *uniform_vec = static_cast<ObUniformBase *>(vector);
         ObDatum *datums = uniform_vec->get_datums();
-        const bool is_const_value = (VEC_UNIFORM_CONST == format);
-        int64_t j = 0;
-        while (OB_SUCC(ret) && OB_SUCC(selector.get_next(j))) {
-          ObDatum &datum = is_const_value ? datums[0] : datums[j];
-          if (datum.is_null() || datum.is_nop()) {
-            // skip
+        ObDatum &datum = datums[0];
+        if (datum.is_null_or_nop() && output_invalid_lob_cells) {
+          int64_t j = 0;
+          while (OB_SUCC(ret) && OB_SUCC(selector.get_next(j))) {
+            if (OB_FAIL(lob_cells.push_back(std::make_pair(static_cast<char **>(nullptr), static_cast<uint32_t *>(nullptr))))) {
+              LOG_WARN("push back lob cells failed", K(ret));
+            }
+          }
+        } else if (!datum.is_null_or_nop()) {
+          ObDiscreteBase *discrete_vec = nullptr;
+          char **ptrs = nullptr;
+          ObLength *lens = nullptr;
+          VecValueTypeClass value_tc = get_vec_value_tc(col_type.get_type(),
+                                                        col_type.get_scale(),
+                                                        PRECISION_UNKNOWN_YET);
+          if (OB_FAIL(new_discrete_vector(value_tc, selector.size(), allocator, discrete_vec))) {
+            LOG_WARN("fail to new discrete vector", KR(ret));
           } else {
-            temp_datum.ptr_ = datum.ptr_;
-            temp_datum.len_ = datum.len_;
-            if (OB_FAIL(prepare_lob_writer(tablet_id, slice_idx, param, lob_writer))) {
-              LOG_WARN("prepare lob writer failed", K(ret), K(tablet_id), K(slice_idx), K(param));
-            } else if (OB_ISNULL(lob_writer)) {
-              ret = OB_ERR_UNEXPECTED;
-              LOG_WARN("lob writer is null", K(ret), KP(lob_writer));
-            } else if (OB_FAIL(lob_writer->write(column_schema_item, allocator, temp_datum))) {
-              LOG_WARN("fill lob into macro block failed", K(ret));
-            } else {
-              datum.ptr_ = temp_datum.ptr_;
-              datum.len_ = temp_datum.len_;
+            ptrs = discrete_vec->get_ptrs();
+            lens = discrete_vec->get_lens();
+            vector = discrete_vec;
+          }
+          int64_t j = 0;
+          while (OB_SUCC(ret) && OB_SUCC(selector.get_next(j))) {
+            ptrs[j] = const_cast<char *>(datum.ptr_);
+            lens[j] = datum.len_;
+            if (OB_FAIL(lob_cells.push_back(std::make_pair(&ptrs[j], reinterpret_cast<uint32_t *>(&lens[j]))))) {
+              LOG_WARN("push back lob cells failed", K(ret));
             }
           }
         }
@@ -2136,6 +2158,7 @@ int ObDDLUtil::handle_lob_columns(
     const int64_t row_count = batch_rows.row_count_;
     const int64_t lob_inrow_threshold = ddl_table_schema.table_item_.lob_inrow_threshold_;
     ObBatchSelector selector(0L, batch_rows.row_count_);
+    ObArray<std::pair<char **, uint32_t *>> lob_cells;
     for (int64_t i = 0; OB_SUCC(ret) && i < ddl_table_schema.lob_column_idxs_.count(); i++) {
       const int64_t idx = ddl_table_schema.lob_column_idxs_.at(i);
       if (OB_UNLIKELY(idx < 0 || idx >= batch_rows.vectors_.count())) {
@@ -2148,15 +2171,44 @@ int ObDDLUtil::handle_lob_columns(
         if (OB_FAIL(check_skip_handle_lob_column(vector, row_count, lob_inrow_threshold, can_skip))) {
           LOG_WARN("fail to check skip handle lob column", K(ret));
         } else if (!can_skip) {
+          const ObColumnSchemaItem &column_schema_item = ddl_table_schema.column_items_.at(idx);
           if (OB_FAIL(ObDDLUtil::handle_lob_column(tablet_id,
                                                    slice_idx,
                                                    param,
-                                                   lob_writer,
+                                                   false, // need_all_cells
+                                                   lob_cells,
                                                    allocator,
-                                                   ddl_table_schema.column_items_.at(idx),
+                                                   column_schema_item,
                                                    selector,
                                                    vector))) {
             LOG_WARN("fail to check skip handle lob column", K(ret));
+          } else if (lob_cells.count() > 0) {
+            if (OB_FAIL(prepare_lob_writer(tablet_id, slice_idx, param, lob_writer))) {
+              LOG_WARN("prepare lob writer failed", K(ret), K(tablet_id), K(slice_idx), K(param));
+            } else if (OB_ISNULL(lob_writer)) {
+              ret = OB_ERR_UNEXPECTED;
+              LOG_WARN("lob writer is null", K(ret), KP(lob_writer));
+            }
+            ObStorageDatum temp_datum;
+            for (int64_t i = 0; OB_SUCC(ret) && i < lob_cells.count(); ++i) {
+              std::pair<char **, uint32_t *> &cur_cell = lob_cells.at(i);
+              if (OB_UNLIKELY(nullptr == cur_cell.first || nullptr == cur_cell.second)) {
+                ret = OB_ERR_UNEXPECTED;
+                LOG_WARN("current cell is null", K(ret), K(i), K(cur_cell.first), K(cur_cell.second));
+              } else {
+                temp_datum.ptr_ = *cur_cell.first;
+                temp_datum.pack_ = *cur_cell.second;
+                if (OB_UNLIKELY(temp_datum.is_null() || temp_datum.is_nop())) {
+                  ret = OB_ERR_UNEXPECTED;
+                  LOG_WARN("temp datum should not be null or nop", K(ret));
+                } else if (OB_FAIL(lob_writer->write(column_schema_item, allocator, temp_datum))) {
+                  LOG_WARN("fill lob into macro block failed", K(ret));
+                } else {
+                  *cur_cell.first = const_cast<char *>(temp_datum.ptr_);
+                  *cur_cell.second = temp_datum.len_;
+                }
+              }
+            }
           }
         }
       }

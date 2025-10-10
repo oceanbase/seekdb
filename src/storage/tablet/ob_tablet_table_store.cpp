@@ -844,21 +844,13 @@ int ObTabletTableStore::calculate_ddl_read_tables(
             "ddl_major_sstable_version", first_ddl_sstable->get_data_version(), K(snapshot_version));
       }
       LOG_INFO("calc ddl read tables", K(ret), K(snapshot_version), K(ddl_major_sstables.count()), KPC(first_ddl_sstable));
-    } else {
-      SCN ddl_start_scn;
-      if (has_co_ddl_memtable) {
-        ddl_start_scn = ddl_mem_sstables_[0]->get_ddl_start_scn();
-      } else {
-        if (OB_FAIL(ddl_start_scn.convert_for_tx(SS_DDL_START_SCN_VAL))) {
-          LOG_WARN("convert scn failed", K(ret));
-        }
-      }
+    } else if (has_co_ddl_memtable) {
+      const SCN ddl_start_scn = ddl_mem_sstables_[0]->get_ddl_start_scn();
       ObTableHandleV2 ddl_tmp_handle;
       ObTabletDDLCompleteMdsUserData ddl_complete_data;
       ObStorageSchema *storage_schema = nullptr;
       ObTmpSSTable *ddl_tmp_sstable = nullptr;
-      if (OB_FAIL(ret)) {
-      } else if (OB_FAIL(tablet.get_ddl_complete(share::SCN::max_scn(), ddl_complete_data))) {
+      if (OB_FAIL(tablet.get_ddl_complete(share::SCN::max_scn(), ddl_complete_data))) {
         LOG_WARN("failed to get ddl complete mds user data", K(ret));
       } else if (ddl_complete_data.snapshot_version_ > snapshot_version) {
         // skip

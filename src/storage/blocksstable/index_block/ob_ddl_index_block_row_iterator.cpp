@@ -2483,7 +2483,7 @@ int ObUnitedSliceRowIterator::locate_slice_idx_by_key(const ObDatumRowkey &rowke
           ret = OB_SUCCESS;
         }
       } else if (slice_merge_iter.end_of_block()) {
-        ret = OB_ITER_END;
+        ret = OB_SUCCESS; // search next
       } else if (OB_FAIL(slice_merge_iter.get_next(idx_row_header, endkey, is_scan_left_border, is_scan_right_border, idx_minor_info, agg_row_buf, agg_buf_size, row_offset))) {
         if (OB_ITER_END != ret) {
           LOG_WARN("get next failed", K(ret), K(i));
