@@ -455,8 +455,10 @@ int ObTableLoadMacroBlockWriteTask::process()
     const ObTabletID tablet_id = row_iter->get_tablet_id();
     const int64_t slice_idx = row_iter->get_slice_idx();
     ObWriteMacroParam writer_param;
+    writer_param.is_sorted_table_load_ = true;
     if (OB_FAIL(ObDDLUtil::fill_writer_param(tablet_id, slice_idx, -1 /*cg_idx*/, dag_,
-                                             0 /*max_batch_size*/, writer_param))) {
+                                             ObTabletSliceBufferTempFileWriter::ObDDLRowBuffer::DEFAULT_MAX_BATCH_SIZE,
+                                             writer_param))) {
       LOG_WARN("fail to fill writer param", K(ret), K(tablet_id), K(slice_idx), K(dag_));
     } else if (OB_FAIL(ObDDLUtil::alloc_storage_macro_block_writer(writer_param, allocator,
                                                                    storage_writer))) {

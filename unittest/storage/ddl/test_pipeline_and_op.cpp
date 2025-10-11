@@ -697,7 +697,8 @@ TEST_F(TestCGMicroMacroWriteOp, test_cg_row_files_generater)
                                                     batch_size,
                                                     cg_row_file_memory_limit,
                                                     ddl_dag_.ddl_table_schema_.column_items_,
-                                                    false/*is_generation_sync_output*/));
+                                                    false/*is_generation_sync_output*/,
+                                                    false/*is_sorted_table_load_with_column_store_replica*/));
   for (int64_t i = 0; i < test_batch_count; ++i) {
     EXPECT_EQ(OB_SUCCESS, batch_rows_gen.get_batch_rows(batch_rows, batch_size));
     if (i + 1 == test_batch_count) {

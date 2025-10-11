@@ -254,7 +254,8 @@ int ObCGRowFilesGenerater::init(
     const int64_t max_batch_size,
     const int64_t cg_row_file_memory_limit,
     const ObIArray<ObColumnSchemaItem> &all_column_schema_its,
-    const bool is_generation_sync_output)
+    const bool is_generation_sync_output,
+    const bool is_sorted_table_load_with_column_store_replica)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(is_inited_)) {
@@ -277,6 +278,7 @@ int ObCGRowFilesGenerater::init(
     max_batch_size_ = max_batch_size;
     is_generation_sync_output_ = is_generation_sync_output;
     cg_row_file_memory_limit_ = cg_row_file_memory_limit;
+    is_sorted_table_load_with_column_store_replica_ = is_sorted_table_load_with_column_store_replica;
     const int64_t cg_count = storage_schema->get_column_group_count();
     if (OB_UNLIKELY(cg_count <= 0)) {
       ret = OB_ERR_UNEXPECTED;
@@ -407,7 +409,8 @@ int ObCGRowFilesGenerater::try_generate_output_chunk(
     for (int64_t cg_idx = 0; OB_SUCC(ret) && cg_idx < cg_row_file_arr_.count(); ++cg_idx) {
       ObCGRowFile *&cg_row_file = cg_row_file_arr_.at(cg_idx);
       if (nullptr != cg_row_file &&
-          (cg_row_file->get_mem_hold() > cg_row_file_memory_limit_ || is_slice_end)) {
+          ((cg_row_file->get_mem_hold() > cg_row_file_memory_limit_ &&
+            !is_sorted_table_load_with_column_store_replica_) || is_slice_end)) {
         if (OB_FAIL(cg_row_file->dump(true))) {
           LOG_WARN("fail to dump cg row file", K(ret), KPC(cg_row_file));
         } else if (OB_FAIL(cg_row_file->finish_append_batch(true/*need_dump*/))) {

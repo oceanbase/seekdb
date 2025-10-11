@@ -91,6 +91,7 @@ public:
   ObCGRowFilesGenerater() :
     is_inited_(false),
     is_generation_sync_output_(false),
+    is_sorted_table_load_with_column_store_replica_(false),
     tablet_id_(ObTabletID::INVALID_TABLET_ID),
     slice_idx_(-1),
     storage_schema_(nullptr),
@@ -114,7 +115,8 @@ public:
            const int64_t max_batch_size,
            const int64_t cg_row_file_memory_limit,
            const ObIArray<ObColumnSchemaItem> &all_column_schema_its,
-           const bool is_sync_generation);
+           const bool is_sync_generation,
+           const bool is_sorted_table_load_with_column_store_replica);
   int append_batch(const blocksstable::ObBatchDatumRows &bdrs,
                    const bool is_slice_end,
                    ObDDLChunk &output_chunk);
@@ -130,6 +132,7 @@ private:
 private:
   bool is_inited_;
   bool is_generation_sync_output_;
+  bool is_sorted_table_load_with_column_store_replica_;
   ObTabletID tablet_id_;
   int64_t slice_idx_;
   ObStorageSchema *storage_schema_;

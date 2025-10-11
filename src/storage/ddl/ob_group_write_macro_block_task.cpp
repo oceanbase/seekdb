@@ -221,9 +221,9 @@ void ObGroupWriteMacroBlockTask::task_debug_info_to_string(char *buf, const int6
 }
 
 ObGroupCGBlockFileWriteTask::ObGroupCGBlockFileWriteTask()
-  : ObITask(TASK_TYPE_DDL_CG_GROUP_WRITE_TASK), is_inited_(false), ddl_dag_(nullptr), slice_idx_(-1), cg_idx_(-1)
+  : ObITask(TASK_TYPE_DDL_CG_GROUP_WRITE_TASK), is_inited_(false), ddl_dag_(nullptr), slice_idx_(-1), cg_idx_(-1), block_files_()
 {
-
+  block_files_.set_attr(ObMemAttr(MTL_ID(), "GCGBlockFileArr"));
 }
 
 ObGroupCGBlockFileWriteTask::~ObGroupCGBlockFileWriteTask()

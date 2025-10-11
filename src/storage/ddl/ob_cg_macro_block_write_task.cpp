@@ -295,7 +295,8 @@ int ObCGRowFileWriterOp::init(const ObTabletID &tablet_id,
                                                       max_batch_size,
                                                       ObCGRowFilesGenerater::CG_ROW_FILE_MEMORY_LIMIT,
                                                       ddl_dag->get_ddl_table_schema().column_items_,
-                                                      true/*is_generation_sync_output*/))) {
+                                                      true/*is_generation_sync_output*/,
+                                                      false/*is_sorted_table_load_with_column_store_replica*/))) {
         LOG_WARN("fail to initialize cg row files generater",
             K(ret), K(tablet_id_), K(slice_idx_),KP(storage_schema), K(max_batch_size));
       } else {
