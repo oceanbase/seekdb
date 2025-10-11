@@ -131,7 +131,6 @@ function generate_config {
 
   port_num=$port_gen
   mysql_port=$port_num && port_num=$((port_num+1))
-  rpc_port=$port_num && port_num=$((port_num+1))
 
   base_template=$(cat obd/config.yaml.template)
 
@@ -150,7 +149,6 @@ function generate_config {
       ip: $IPADDRESS
   server1:
     mysql_port: $mysql_port
-    rpc_port: $rpc_port
     home_path: $DATA_PATH/observer1
     zone: zone1
     # The directory for data storage. The default value is home_path/store.
@@ -254,6 +252,7 @@ function deploy_cluster {
       echo "Use config file: " $config_yaml
       temp_config_yaml=$(mktemp /tmp/oceanbase-lite-config-XXXXXX.yaml)
       cp $config_yaml $temp_config_yaml
+      config_yaml=$temp_config_yaml
 
     else
       echo "Can't find config file, did you execute 'ob do prepare'?"
@@ -272,7 +271,7 @@ function deploy_cluster {
   then
     sed -i '/$_deploy_/d' $OBD_CLUSTER_PATH/$deploy_name/inner_config.yaml
   fi
-  yaml_config_args="--config $temp_config_yaml"
+  yaml_config_args="--config $config_yaml"
   obd cluster deploy "$deploy_name" --force --clean $yaml_config_args || exit 1
   if ! obd cluster start "$deploy_name" -f;
   then

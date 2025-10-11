@@ -115,14 +115,11 @@ int ObLiteEmbed::do_open_(const char* db_dir)
   // TODO defaut opts
   ObServerOptions opts;
   opts.port_ = 11002;
-  const char* log_disk_size = "3G";
   const char* memory_limit = "5G";
-  const char* datafile_size = "10G";
   opts.use_ipv6_ = false;
   opts.embed_mode_ = true;
 
   const std::pair<ObString, ObString> parameters[] = {
-    {"log_disk_size", ObString(log_disk_size)},
     {"memory_limit", ObString(memory_limit)},
     {"cache_wash_threshold", ObString("1G")},
     {"net_thread_count", ObString("4")},
@@ -133,7 +130,6 @@ int ObLiteEmbed::do_open_(const char* db_dir)
     {"__min_full_resource_pool_memory", ObString("1073741824")},
     {"system_memory", ObString("5G")},
     {"trace_log_slow_query_watermark", ObString("100ms")},
-    {"datafile_size", ObString(datafile_size)},
     {"stack_size", ObString("512K")},
   };
   for (size_t i = 0; OB_SUCC(ret) && i < sizeof(parameters) / sizeof(parameters[0]); i++) {
@@ -206,7 +202,7 @@ int ObLiteEmbed::do_open_(const char* db_dir)
     }
 
     int saved_stdout = dup(STDOUT_FILENO); // Save current stdout
-    dup2(OB_LOGGER.get_elec_log().fd_, STDOUT_FILENO);
+    dup2(OB_LOGGER.get_svr_log().fd_, STDOUT_FILENO);
 
     ObPLogWriterCfg log_cfg;
     if (OB_FAIL(ret)) {

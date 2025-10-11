@@ -410,6 +410,8 @@ public:
   int64_t get_trace_total_write_count() const { return log_file_[FD_TRACE_FILE].write_count_; }
   int64_t get_alert_total_write_count() const { return log_file_[FD_ALERT_FILE].write_count_; }
 
+  ObPLogFileStruct &get_svr_log() { return *(log_file_ + FD_SVR_FILE); }
+
   void insert_warning_buffer(const UserMsgLevel user_msg_level,
                              const int errcode,
                              const char *data,

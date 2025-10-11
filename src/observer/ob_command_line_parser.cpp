@@ -145,7 +145,14 @@ int ObCommandLineParser::handle_option(int option, const char* value, ObServerOp
         ret = OB_INVALID_ARGUMENT;
         MPRINT("Invalid argument, the value should not be empty of 'port'");
       } else {
-        int port = atoi(value);
+        // Instead of plain atoi, parse int with complete validation to ensure there are no trailing junk.
+        char *endptr = nullptr;
+        long port = strtol(value, &endptr, 10);
+        // check for conversion errors or trailing non-digit characters
+        if (nullptr == value || *value == '\0' || endptr == nullptr || *endptr != '\0') {
+          ret = OB_INVALID_ARGUMENT;
+          MPRINT("Invalid argument for port: '%s', the value must be an integer within [1, 65535]", value ? value : "(null)");
+        }
         if (port <= 0 || port > 65535) {
           ret = OB_INVALID_ARGUMENT;
           MPRINT("Invalid argument, port value out of range [1, 65535], but got %s", value);
@@ -294,10 +301,14 @@ int ObCommandLineParser::parse_args(int argc, char* argv[], ObServerOptions& opt
   } else if (OB_FAIL(to_absolute_path(opts.redo_dir_))) {
     // error already printed
   } else {
-    const char *data_dir_info = opts.data_dir_.empty() ? "(default)" : opts.data_dir_.ptr();
-    const char *redo_dir_info = opts.redo_dir_.empty() ? "(default)" : opts.redo_dir_.ptr();
-    MPRINT("Starting OceanBase with base-dir=%s, data-dir=%s, redo-dir=%s",
-        opts.base_dir_.ptr(), data_dir_info, redo_dir_info);
+    MPRINT("Starting OceanBase with:");
+    MPRINT("    base-dir=%s", opts.base_dir_.ptr());
+    if (!opts.data_dir_.empty()) {
+      MPRINT("    data-dir=%s", opts.data_dir_.ptr());
+    }
+    if (!opts.redo_dir_.empty()) {
+      MPRINT("    redo-dir=%s", opts.redo_dir_.ptr());
+    }
   }
 
   return ret;
