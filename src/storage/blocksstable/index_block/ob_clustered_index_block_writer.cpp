@@ -624,9 +624,9 @@ int ObClusteredIndexBlockWriter::make_clustered_index_micro_block_with_reuse(
       clustered_row_desc.macro_id_ = idx_row_header->get_macro_id();
       clustered_row_desc.row_offset_ = index_info.cs_row_range_.end_row_id_;
       clustered_row_desc.max_merged_trans_version_ =
-          idx_row_header->is_major_node() ? 0 : index_info.minor_meta_info_->max_merged_trans_version_;
+          nullptr == index_info.minor_meta_info_ ? 0 : index_info.minor_meta_info_->max_merged_trans_version_;
       clustered_row_desc.row_count_delta_ =
-          idx_row_header->is_major_node() ? 0 : index_info.minor_meta_info_->row_count_delta_;
+          nullptr == index_info.minor_meta_info_ ? 0 : index_info.minor_meta_info_->row_count_delta_;
       
       // Append clustered row to clustered writer.
       clustered_row_desc.set_for_clustered_index();

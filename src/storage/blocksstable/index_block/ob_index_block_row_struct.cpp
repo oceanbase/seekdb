@@ -590,14 +590,16 @@ int ObIndexBlockRowParser::init(const char *data_buf, const int64_t data_len)
         // Major node
         if (data_len > pos && OB_FAIL(serialization::decode_i64(data_buf, data_len, pos, &row_offset_))) {
           LOG_WARN("Fail to decode row offset column", K(ret), K(data_len), K(pos));
-        } else if (header_->is_pre_aggregated()) {
-          const ObAggRowHeader *agg_row_header = reinterpret_cast<const ObAggRowHeader *>(data_buf + pos);
-          if (OB_UNLIKELY(!agg_row_header->is_valid())) {
-            ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("Invalid pre aggregate row header", K(ret), KPC(agg_row_header), KPC(header_));
-          } else {
-            pre_agg_row_buf_ = data_buf + pos;
-          }
+        }
+      }
+      if (OB_FAIL(ret)) {
+      } else if (header_->is_pre_aggregated()) {
+        const ObAggRowHeader *agg_row_header = reinterpret_cast<const ObAggRowHeader *>(data_buf + pos);
+        if (OB_UNLIKELY(!agg_row_header->is_valid())) {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("Invalid pre aggregate row header", K(ret), KPC(agg_row_header), KPC(header_));
+        } else {
+          pre_agg_row_buf_ = data_buf + pos;
         }
       }
     }
