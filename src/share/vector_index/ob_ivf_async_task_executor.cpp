@@ -479,12 +479,17 @@ int ObIvfAsyncTaskExector::generate_aux_table_info_map(ObSchemaGetterGuard &sche
   return ret;
 }
 
-int ObIvfAsyncTaskExector::check_need_load_task(ObSchemaGetterGuard &schema_guard, bool &need_load_task)
+int ObIvfAsyncTaskExector::check_schema_version_changed(bool &schema_changed)
 {
   int ret = OB_SUCCESS;
-  need_load_task = false;
+  schema_changed = false;
   int64_t schema_version = 0;
-  if (OB_FAIL(schema_guard.get_schema_version(tenant_id_, schema_version))) {
+  ObSchemaGetterGuard schema_guard;
+
+  if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_tenant_schema_guard(
+          tenant_id_, schema_guard))) {
+    LOG_WARN("fail to get schema guard", KR(ret), K(tenant_id_));
+  } else if (OB_FAIL(schema_guard.get_schema_version(tenant_id_, schema_version))) {
     LOG_WARN("fail to get tenant schema version", K(ret), K_(tenant_id));
   } else if (!ObSchemaService::is_formal_version(schema_version)) {
     ret = OB_EAGAIN;
@@ -492,7 +497,7 @@ int ObIvfAsyncTaskExector::check_need_load_task(ObSchemaGetterGuard &schema_guar
   } else if (local_schema_version_ == OB_INVALID_VERSION || local_schema_version_ < schema_version) {
     LOG_INFO("schema changed", KR(ret), K_(local_schema_version), K(schema_version));
     local_schema_version_ = schema_version;
-    need_load_task = true;
+    schema_changed = true;
   }
   return ret;
 }
@@ -535,7 +540,6 @@ int ObIvfAsyncTaskExector::load_task(uint64_t &task_trace_base_num)
   int ret = OB_SUCCESS;
   ObPluginVectorIndexMgr *index_ls_mgr = nullptr;
   ObSchemaGetterGuard schema_guard;
-  bool need_load_task = false;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("vector async task not init", KR(ret));
@@ -548,11 +552,6 @@ int ObIvfAsyncTaskExector::load_task(uint64_t &task_trace_base_num)
   } else if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_tenant_schema_guard(
                  tenant_id_, schema_guard))) {
     LOG_WARN("fail to get schema guard", KR(ret), K(tenant_id_));
-  } else if (OB_FAIL(check_need_load_task(schema_guard, need_load_task))) {
-    // Only load task when schema_cersion changes.
-    LOG_WARN("fail to check need load task", KR(ret));
-  } else if (!need_load_task) {
-    LOG_TRACE("no need load task", KR(ret));
   } else {
     ObVecIndexTaskCtxArray task_status_array;
     LoadTaskCallback load_task_func(
