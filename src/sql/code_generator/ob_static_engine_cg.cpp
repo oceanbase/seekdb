@@ -346,7 +346,7 @@ int ObStaticEngineCG::postorder_generate_op(ObLogicalOperator &op,
       LOG_WARN("assign exprs failed", K(ret));
     }
   }
-  
+
   if (OB_SUCC(ret) && log_op_def::LOG_TABLE_SCAN == op.get_type()
       && static_cast<ObLogTableScan *>(&op)->get_table_type() == share::schema::EXTERNAL_TABLE) {
     ObDASScanCtDef &scan_ctdef = static_cast<ObTableScanSpec*>(spec)->tsc_ctdef_.scan_ctdef_;
@@ -2767,7 +2767,7 @@ int ObStaticEngineCG::generate_insert_with_das(ObLogInsert &op, ObTableInsertSpe
       LOG_WARN("generate ab stmt id expr failed", K(ret));
     }
   }
-  
+
   if (OB_SUCC(ret)) {
     if (OB_FAIL(spec.ins_ctdefs_.allocate_array(phy_plan_->get_allocator(), 1))) {
       LOG_WARN("allocate insert ctdef array failed", K(ret), K(1));
@@ -3162,10 +3162,10 @@ int ObStaticEngineCG::generate_update_with_das(ObLogUpdate &op, ObTableUpdateSpe
     for (int64_t i = 0; OB_SUCC(ret) && i < table_list.count(); ++i) {
       ObTableUpdateSpec::UpdCtDefArray &ctdefs = spec.upd_ctdefs_.at(i);
       ObUpdCtDef &upd_ctdef = *ctdefs.at(0);
-      upd_ctdef.need_check_table_cycle_ = is_dup; 
-    }  
+      upd_ctdef.need_check_table_cycle_ = is_dup;
+    }
   }
-  
+
   return ret;
 }
 
@@ -5291,8 +5291,14 @@ int ObStaticEngineCG::generate_normal_tsc(ObLogTableScan &op, ObTableScanSpec &s
           } else if (expr->get_expr_type() == T_FUN_SYS_JSON_QUERY && expr->is_multivalue_index_column_expr()) {
             // TODO: @yunyi, remove me later after support post-building multivalue index vectorization.
             spec.max_batch_size_ = 0;
-            spec.set_multivalue_ddl(true);
-
+            if (op.get_multivalue_type() != -1 && op.get_multivalue_col_idx() != static_cast<uint64_t>(-1)) {
+              spec.set_multivalue_ddl(true);
+            } else {
+              LOG_WARN("CG skip is_multivalue_ddl, multivalue meta missing", K(expr->get_expr_type()), K(op.get_multivalue_type()), K(op.get_multivalue_col_idx()));
+            }
+          } else if (expr->get_expr_type() == T_FUN_SYS_SPIV_DIM || expr->get_expr_type() == T_FUN_SYS_SPIV_VALUE) {
+            // TODO: @qiyu, remove me later after support post-building sparse vector index vectorization.
+            spec.max_batch_size_ = 0;
           }
         }
       } else if (OB_FAIL(generate_rt_expr(*expr, rt_expr))) {
@@ -5617,8 +5623,8 @@ int ObStaticEngineCG::generate_spec(ObLogJoin &op,
           CK(OB_NOT_NULL(null_first_cmp));
           CK(OB_NOT_NULL(null_last_cmp));
           if (OB_SUCC(ret)) {
-           equal_cond_info.ns_cmp_func_ = null_first_cmp;
-         } 
+            equal_cond_info.ns_cmp_func_ = null_first_cmp;
+          }
         }
         OZ(spec.equal_cond_infos_.push_back(equal_cond_info));
         int64_t l_idx = 0;
@@ -9493,7 +9499,7 @@ int ObStaticEngineCG::generate_spec(ObLogExpand &op, ObExpandVecSpec &spec, cons
   if (OB_ISNULL(phy_plan_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid null physical plan", K(ret));
-  } else if (OB_ISNULL(hash_rollup_info=op.get_hash_rollup_info()) || 
+  } else if (OB_ISNULL(hash_rollup_info=op.get_hash_rollup_info()) ||
              OB_ISNULL(hash_rollup_info->rollup_grouping_id_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid null hash rollup info", K(ret));

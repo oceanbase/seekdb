@@ -65,8 +65,13 @@ public:
   virtual void clear_evaluated_flag() override;
 
   virtual int get_diagnosis_info(ObDiagnosisManager* diagnosis_manager) override {
-    return result_->get_diagnosis_info(diagnosis_manager); 
+    return result_->get_diagnosis_info(diagnosis_manager);
   };
+  virtual int set_scan_rowkey(ObEvalCtx *eval_ctx,
+                              const ObIArray<ObExpr *> &rowkey_exprs,
+                              const ObDASScanCtDef *lookup_ctdef,
+                              ObIAllocator *alloc,
+                              int64_t group_id) override;
 protected:
   virtual int inner_init(ObDASIterParam &param) override;
   virtual int inner_reuse() override;

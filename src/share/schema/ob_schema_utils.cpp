@@ -116,7 +116,7 @@ int ObSchemaUtils::cascaded_generated_column(ObTableSchema &table_schema,
       } else if (T_FUN_SYS_VEC_IVF_CENTER_VECTOR == root_expr_type ||
                  T_FUN_SYS_VEC_IVF_PQ_CENTER_VECTOR == root_expr_type) {
         column.add_column_flag(GENERATED_VEC_IVF_CENTER_VECTOR_COLUMN_FLAG);
-      } else if (T_FUN_SYS_VEC_IVF_FLAT_DATA_VECTOR == root_expr_type || 
+      } else if (T_FUN_SYS_VEC_IVF_FLAT_DATA_VECTOR == root_expr_type ||
                  T_FUN_SYS_VEC_IVF_SQ8_DATA_VECTOR == root_expr_type) {
         column.add_column_flag(GENERATED_VEC_IVF_DATA_VECTOR_COLUMN_FLAG);
       } else if (T_FUN_SYS_VEC_IVF_META_ID == root_expr_type) {
@@ -635,7 +635,7 @@ int ObSchemaUtils::construct_inner_table_schemas(
         bool exist = false;
         if (OB_FAIL((*creator_ptr)(table_schema))) {
           LOG_WARN("fail to gen sys table schema", KR(ret));
-        } else if (!construct_all && is_sys_tenant(tenant_id) 
+        } else if (!construct_all && is_sys_tenant(tenant_id)
             && table_schema.get_table_id() == OB_ALL_CORE_TABLE_TID) {
           // sys tenant's __all_core_table's schema is built separately in bootstrap
         } else if (OB_FAIL(ObSchemaUtils::construct_tenant_space_full_table(
@@ -670,7 +670,7 @@ int ObSchemaUtils::construct_inner_table_schemas(
 // for virtual table with index, we should make index schema version less than virtual table schema version
 // otherwise, schema service cannot bind index schema to virtual table schema
 // system table index is no need to do this because system table indexes are hard code
-// see also: 
+// see also:
 // the algorithm:
 // 1. For the input array, construct a map from table_id to table pointer.
 // 2. Traverse the array in reverse order. For virtual table index, first insert the corresponding virtual table into the table_id array, then insert its own table_id; for other system tables, insert them directly into table_id array. Ensure that the virtual table appears in the array before its index. At this point, the schema_version in the table_id array that ranks higher is larger.
@@ -725,7 +725,7 @@ int ObSchemaUtils::generate_hard_code_schema_version(ObIArray<ObTableSchema> &ta
         current_schema_version -= ObSchemaVersionGenerator::SCHEMA_VERSION_INC_STEP;
       }
     }
-    if (OB_SUCC(ret) && current_schema_version != HARD_CODE_SCHEMA_VERSION_BEGIN * 
+    if (OB_SUCC(ret) && current_schema_version != HARD_CODE_SCHEMA_VERSION_BEGIN *
         ObSchemaVersionGenerator::SCHEMA_VERSION_INC_STEP) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("schema count not match", KR(ret), K(current_schema_version), K(HARD_CODE_SCHEMA_VERSION_BEGIN));
@@ -1479,6 +1479,20 @@ int ObSchemaUtils::is_drop_column_only(const AlterTableSchema &alter_table_schem
       is_drop_col_only = false;
     }
   }
+  return ret;
+}
+
+int ObSchemaUtils::check_build_old_version_column_group(const share::schema::ObTableSchema &table_schema, bool &build_old_version_cg)
+{
+  int ret = OB_SUCCESS;
+  build_old_version_cg = false;
+#ifdef ERRSIM
+  int tmp_ret = OB_SUCCESS;
+  tmp_ret = OB_E(EventTable::EN_DDL_CREATE_OLD_VERSION_COLUMN_GROUP) OB_SUCCESS;
+  if (OB_TMP_FAIL(tmp_ret)) {
+    build_old_version_cg = true;
+  }
+#endif
   return ret;
 }
 

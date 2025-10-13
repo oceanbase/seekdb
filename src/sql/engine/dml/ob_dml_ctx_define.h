@@ -489,6 +489,7 @@ public:
   bool is_table_without_pk_;
   bool has_instead_of_trigger_;
   ObExpr *trans_info_expr_;
+  bool is_vec_hnsw_index_vid_opt_;
 protected:
   ObDMLBaseCtDef(common::ObIAllocator &alloc,
                  ObDASDMLBaseCtDef &das_base_ctdef,
@@ -507,7 +508,8 @@ protected:
       is_primary_index_(false),
       is_table_without_pk_(false),
       has_instead_of_trigger_(false),
-      trans_info_expr_(nullptr)
+      trans_info_expr_(nullptr),
+      is_vec_hnsw_index_vid_opt_(false)
   { }
 };
 

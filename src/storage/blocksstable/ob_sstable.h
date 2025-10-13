@@ -34,6 +34,8 @@ namespace blocksstable
 {
 extern const char *DDL_EMPTY_SSTABLE_DUMMY_INDEX_DATA_BUF;
 extern const int64_t DDL_EMPTY_SSTABLE_DUMMY_INDEX_DATA_SIZE;
+class ObSSTableIndexScanParam;
+class ObSSTableIndexScanner;
 class ObSSTableSecMetaIterator;
 class ObIMacroBlockIterator;
 struct ObMacroBlocksWriteCtx;
@@ -127,7 +129,7 @@ public:
   virtual int64_t get_ref() const override;
 
   virtual int init(
-      const ObTabletCreateSSTableParam &param, 
+      const ObTabletCreateSSTableParam &param,
       common::ObArenaAllocator *allocator);
   static int copy_from_old_sstable(const ObSSTable &old_sstable, common::ObArenaAllocator &allocator, ObSSTable *&sstable);
   void reset();
@@ -170,6 +172,12 @@ public:
       blocksstable::ObSSTableSecMetaIterator *&meta_iter,
       const bool is_reverse_scan = false,
       const int64_t sample_step = 0) const;
+  int scan_index(
+      const ObDatumRange &scan_range,
+      const ObSSTableIndexScanParam &scan_param,
+      ObIAllocator &allocator,
+      ObSSTableIndexScanner *&idx_scanner);
+  int bf_may_contain_rowkey(const ObDatumRowkey &rowkey, bool &contain);
   int fill_column_ckm_array(ObIArray<int64_t> &column_checksums) const;
   // For transaction
   int check_row_locked(
@@ -351,7 +359,7 @@ protected:
   int add_used_size() const;
   int dec_used_size() const;
     int init_sstable_meta(
-        const ObTabletCreateSSTableParam &param, 
+        const ObTabletCreateSSTableParam &param,
         common::ObArenaAllocator *allocator);
   int get_last_rowkey(const ObDatumRowkey *&sstable_endkey);
   int serialize_fixed_struct(char *buf, const int64_t buf_len, int64_t &pos) const;

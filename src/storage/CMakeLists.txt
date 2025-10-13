@@ -161,6 +161,7 @@ ob_set_subtarget(ob_storage blocksstable_index_block
   blocksstable/index_block/ob_index_block_tree_cursor.cpp
   blocksstable/index_block/ob_index_block_util.cpp
   blocksstable/index_block/ob_skip_index_filter_executor.cpp
+  blocksstable/index_block/ob_sstable_index_scanner.cpp
   blocksstable/index_block/ob_sstable_meta_info.cpp
   blocksstable/index_block/ob_sstable_sec_meta_iterator.cpp
   blocksstable/index_block/ob_clustered_index_block_writer.cpp
@@ -1044,6 +1045,22 @@ ob_set_subtarget(ob_storage truncate_info
   truncate_info/ob_truncate_partition_filter.cpp
   truncate_info/ob_mds_info_distinct_mgr.cpp
   truncate_info/ob_truncate_info_kv_cache.cpp
+)
+
+ob_set_subtarget(ob_storage retrieval
+  retrieval/ob_block_max_iter.cpp
+  retrieval/ob_block_stat_collector.cpp
+  retrieval/ob_block_stat_iter.cpp
+  retrieval/ob_sparse_bmw_iter.cpp
+  retrieval/ob_sparse_daat_iter.cpp
+  retrieval/ob_sparse_taat_iter.cpp
+  retrieval/ob_sparse_utils.cpp
+  retrieval/ob_sparse_lookup_iter.cpp
+  retrieval/ob_text_retrieval_token_iter.cpp
+  retrieval/ob_text_daat_iter.cpp
+  retrieval/ob_text_taat_iter.cpp
+  retrieval/ob_spiv_daat_iter.cpp
+  retrieval/ob_spiv_dim_iter.cpp
 )
 
 ob_add_new_object_target(ob_storage ob_storage)

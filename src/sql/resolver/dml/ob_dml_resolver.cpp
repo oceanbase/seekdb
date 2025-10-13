@@ -17188,6 +17188,38 @@ int ObDMLResolver::fill_ivf_vec_expr_param(
 
 
 
+int ObDMLResolver::check_match_against_expr(ObIArray<ObMatchFunRawExpr*> &match_exprs, const ObStmtScope scope, bool &is_es_match)
+{
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(match_exprs.count() == 0)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected null", K(ret));
+  } else if (OB_ISNULL(match_exprs.at(0))) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected null", K(ret));
+  } else {
+    is_es_match = match_exprs.at(0)->is_es_match();
+    for (int64_t i = 1; OB_SUCC(ret) && i < match_exprs.count(); i++) {
+      if (OB_ISNULL(match_exprs.at(i))) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("unexpected null", K(ret));
+      } else if (match_exprs.at(i)->is_es_match() != is_es_match) {
+        ret = OB_NOT_SUPPORTED;
+        LOG_USER_ERROR(OB_NOT_SUPPORTED, "es match with match against together is");
+        LOG_WARN("match with match against together is not supported", K(ret));
+      }
+    }
+    if (OB_SUCC(ret) && is_es_match) {
+      if (!(scope == T_WHERE_SCOPE)) {
+        ret = OB_NOT_SUPPORTED;
+        LOG_USER_ERROR(OB_NOT_SUPPORTED, "es match not on where");
+        LOG_WARN("match fulltext search on where or having clause is not supported", K(ret));
+      }
+    }
+  }
+  return ret;
+}
+
 int ObDMLResolver::resolve_match_against_exprs(ObRawExpr *&expr,
                                                ObIArray<ObMatchFunRawExpr*> &match_exprs,
                                                const ObStmtScope scope)
@@ -17198,10 +17230,12 @@ int ObDMLResolver::resolve_match_against_exprs(ObRawExpr *&expr,
   ObExprEqualCheckContext equal_ctx;
   equal_ctx.override_const_compare_ = true;
   const ParamStore *param_store = params_.param_list_;
-  ObRawExprReplacer replacer;
+  bool is_es_match = false;
   if (OB_ISNULL(stmt) || OB_ISNULL(expr) || OB_ISNULL(params_.query_ctx_) || OB_ISNULL(param_store)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null", K(ret), K(stmt), K(expr));
+  } else if (OB_FAIL(check_match_against_expr(match_exprs, scope, is_es_match))) {
+    LOG_WARN("failed to check match against expr", K(ret));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < match_exprs.count(); i++) {
       uint64_t table_id = OB_INVALID_ID;
@@ -17223,7 +17257,7 @@ int ObDMLResolver::resolve_match_against_exprs(ObRawExpr *&expr,
           ObColumnRefRawExpr *match_col = NULL;
           if (OB_ISNULL(cur_match_expr->get_match_columns().at(j)) || !cur_match_expr->get_match_columns().at(j)->is_column_ref_expr()) {
             ret = OB_INVALID_ARGUMENT;
-            LOG_WARN("invalid argument", K(ret));
+            LOG_USER_ERROR(OB_INVALID_ARGUMENT, "match against column");
           } else if (OB_FALSE_IT(match_col = static_cast<ObColumnRefRawExpr*>(cur_match_expr->get_match_columns().at(j)))) {
           } else if (table_id != OB_INVALID_ID && table_id != match_col->get_table_id()) {
             ret = OB_INVALID_ARGUMENT;
@@ -17237,8 +17271,13 @@ int ObDMLResolver::resolve_match_against_exprs(ObRawExpr *&expr,
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(stmt->get_match_expr_on_table(table_id, match_exprs_on_table))) {
         LOG_WARN("failed to get fulltext search expr on table", K(ret), K(table_id));
-      } else if (OB_FAIL(resolve_match_against_expr(*cur_match_expr))) {
+      } else if (cur_match_expr->is_es_match() && OB_FAIL(resolve_es_match_expr(*cur_match_expr))) {
+        LOG_WARN("failed to resolve match expr", K(ret));
+      } else if (!cur_match_expr->is_es_match() && OB_FAIL(resolve_match_against_expr(*cur_match_expr))) {
         LOG_WARN("failed to resolve match index", K(ret));
+      } else if (cur_match_expr->get_mode_flag() == ObMatchAgainstMode::MATCH_PHRASE_MODE &&
+                 OB_FAIL(resolve_match_against_expr_with_match_phrase_mode(expr, cur_match_expr, scope))) {
+        LOG_WARN("failed to resolve match index with match phrase mode", K(ret));
       } else {
         bool shared = false;
         for (int64_t idx = 0; OB_SUCC(ret) && !shared && idx < match_exprs_on_table.count(); ++idx) {
@@ -17266,7 +17305,7 @@ int ObDMLResolver::resolve_match_against_exprs(ObRawExpr *&expr,
           }
         }
       }
-
+      ObRawExprReplacer replacer;
       if (OB_FAIL(ret)) {
       } else if (nullptr == match_expr_on_table) {
         // same expr not found in stmt
@@ -17289,6 +17328,160 @@ int ObDMLResolver::resolve_match_against_exprs(ObRawExpr *&expr,
         LOG_WARN("failed to append param info", K(ret));
       }
     }
+  }
+  return ret;
+}
+
+int ObDMLResolver::resolve_match_against_expr_with_match_phrase_mode(ObRawExpr *&expr, ObMatchFunRawExpr *&cur_match_expr, const ObStmtScope scope)
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(expr) || OB_ISNULL(cur_match_expr)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected null", K(ret), K(expr), K(cur_match_expr));
+  }
+  cur_match_expr->set_mode_flag(ObMatchAgainstMode::NATURAL_LANGUAGE_MODE);
+
+  ObRawExpr *result_op = nullptr;
+  ObRawExpr *and_op = nullptr;
+  ObRawExpr *new_match_expr = nullptr;
+  ObRawExpr *like_expr = nullptr;
+  ObRawExpr *need_replace_expr = nullptr;
+  ObSEArray<ObRawExpr*, 1> and_param_exprs;
+  ObSEArray<ObRawExpr*, 1> or_like_param_exprs;
+  bool result_is_bool = true;
+  ObRawExpr *search_key_expr = cur_match_expr->get_search_key();
+  ObRawExpr *match_parent_expr = nullptr;
+
+  ObOpRawExpr *concat_text_expr = nullptr;
+  ObConstRawExpr *const_str_expr = nullptr;
+  ObConstRawExpr *like_es_expr = NULL;
+  ObSEArray<ObRawExpr*, 1> substr_param_exprs;
+  const char *ptr_value = "%";
+  ObString const_str_value(1, ptr_value);
+  const char *es_ptr_value = "\\";
+  ObString like_escape(1, es_ptr_value);
+  if (OB_FAIL(ret)) {
+  } else if (OB_FAIL(ObRawExprUtils::build_const_string_expr(*params_.expr_factory_,
+                                                      ObVarcharType,
+                                                      const_str_value,
+                                                      search_key_expr->get_result_type().get_collation_type(),
+                                                      const_str_expr))) {
+    LOG_WARN("fail to build type expr", K(ret));
+  } else if (OB_FAIL(substr_param_exprs.push_back(const_str_expr))) {
+    LOG_WARN("fail to push back expr", K(ret));
+  } else if (OB_FAIL(substr_param_exprs.push_back(search_key_expr))) {
+    LOG_WARN("fail to push back expr", K(ret));
+  } else if (OB_FAIL(substr_param_exprs.push_back(const_str_expr))) {
+    LOG_WARN("fail to push back expr", K(ret));
+  } else if (OB_FAIL(ObRawExprUtils::create_concat_expr(*params_.expr_factory_,
+                                                        params_.session_info_,
+                                                        substr_param_exprs,
+                                                        concat_text_expr))) {
+    LOG_WARN("fail to build type expr", K(ret));
+  } else if (OB_FAIL(ObRawExprUtils::build_const_string_expr(*params_.expr_factory_,
+                                                              ObVarcharType,
+                                                              like_escape,
+                                                              search_key_expr->get_result_type().get_collation_type(),
+                                                              like_es_expr))) {
+    LOG_WARN("fail to create string raw expr", K(ret), K(like_escape));
+  } else {
+    ObIArray<ObRawExpr*> &column_list = cur_match_expr->get_match_columns();
+    for (int64_t j = 0; OB_SUCC(ret) && j < column_list.count(); ++j) {
+      ObColumnRefRawExpr *col_ref = nullptr;
+      ObOpRawExpr *like_op = nullptr;
+      if (OB_UNLIKELY(OB_ISNULL(column_list.at(j)) || !column_list.at(j)->is_column_ref_expr())) {
+        ret = OB_INVALID_ARGUMENT;
+        LOG_USER_ERROR(OB_INVALID_ARGUMENT, "match against column");
+      } else if (FALSE_IT(col_ref = static_cast<ObColumnRefRawExpr*>(column_list.at(j)))) {
+      } else if (OB_FAIL(ObRawExprUtils::build_like_expr(*params_.expr_factory_,
+                                                         params_.session_info_,
+                                                         col_ref,
+                                                         concat_text_expr,
+                                                         like_es_expr,
+                                                         like_op))) {
+        LOG_WARN("build like expr failed", K(ret));
+      } else if (OB_FAIL(or_like_param_exprs.push_back(like_op))) {
+        LOG_WARN("fail to push back expr", K(ret));
+      }
+    }
+  }
+  if (OB_FAIL(ret)) {
+  } else if (or_like_param_exprs.count() == 0) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("failed to get or_like_param_exprs", K(ret));
+  } else if (or_like_param_exprs.count() == 1) {
+    like_expr = or_like_param_exprs.at(0);
+  } else if (OB_FAIL(ObRawExprUtils::build_or_exprs(*params_.expr_factory_, or_like_param_exprs, like_expr))){
+    LOG_WARN("build or expr failed", K(ret));
+  } else if (OB_FAIL(like_expr->formalize(params_.session_info_))) {
+    LOG_WARN("fail to formalize expr", K(ret));
+  }
+
+  if (OB_FAIL(ret)) {
+  } else if ((scope == T_WHERE_SCOPE || scope == T_HAVING_SCOPE) && cur_match_expr == expr) {
+    // where/having + one match against
+    ObOpRawExpr *bool_expr = nullptr;
+    if (OB_FAIL(params_.expr_factory_->create_raw_expr(T_OP_BOOL, bool_expr))) {
+      LOG_WARN("build const bool expr failed", K(ret));
+    } else if (OB_ISNULL(bool_expr)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("bool expr is null", K(ret));
+    } else if (OB_FAIL(bool_expr->init_param_exprs(1))) {
+      LOG_WARN("init param exprs failed", K(ret));
+    } else if (OB_FAIL(bool_expr->add_param_expr(cur_match_expr))) {
+      LOG_WARN("add match againstl param expr to bool expr failed", K(ret));
+    } else if (OB_FAIL(bool_expr->add_flag(IS_INNER_ADDED_EXPR))) {
+      LOG_WARN("add flag to bool expr failed", K(ret));
+    } else if (OB_FAIL(bool_expr->formalize(params_.session_info_))) {
+      LOG_WARN("fail to formalize expr", K(ret));
+    } else {
+      new_match_expr = bool_expr;
+      need_replace_expr = cur_match_expr;
+    }
+  } else if (OB_FAIL(ObTransformUtils::find_parent_expr(expr, cur_match_expr, match_parent_expr))) {
+    LOG_WARN("failed to find parent expr", K(ret));
+  } else if (nullptr == match_parent_expr) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("failed to find parent expr", K(ret));
+  } else if (match_parent_expr->is_bool_expr() || match_parent_expr->get_expr_type() == T_OP_BOOL) {
+    // when case 'not match against()', the expr tree: not expr -> op_bool expr -> match expr
+    new_match_expr = match_parent_expr;
+    need_replace_expr = match_parent_expr;
+  } else {
+    // case when
+    result_is_bool = false;
+    ObConstRawExpr *const_double_expr = nullptr;
+    constexpr double out_put = 0;
+    if (OB_FAIL(ObRawExprUtils::build_const_double_expr(*params_.expr_factory_, ObDoubleType, out_put, const_double_expr))) {
+      LOG_WARN("create approx average token count failed", K(ret));
+    } else if (OB_FAIL(ObRawExprUtils::build_case_when_expr(*params_.expr_factory_, like_expr, cur_match_expr, const_double_expr, new_match_expr))) {
+      LOG_WARN("build case when expr failed", K(ret));
+    } else if (OB_FAIL(new_match_expr->formalize(params_.session_info_))) {
+      LOG_WARN("fail to formalize expr", K(ret));
+    } else {
+      need_replace_expr = cur_match_expr;
+    }
+  }
+  if (OB_FAIL(ret)) {
+  } else if (!result_is_bool) {
+    result_op = new_match_expr;
+  } else if (OB_FAIL(and_param_exprs.push_back(new_match_expr))) {
+    LOG_WARN("fail to push back expr", K(ret));
+  } else if (OB_FAIL(and_param_exprs.push_back(like_expr))) {
+    LOG_WARN("fail to push back expr", K(ret));
+  } else if (OB_FAIL(ObRawExprUtils::build_and_expr(*params_.expr_factory_, and_param_exprs, and_op))) {
+    LOG_WARN("build and expr failed", K(ret));
+  } else if (OB_FAIL(and_op->formalize(params_.session_info_))) {
+    LOG_WARN("fail to formalize expr", K(ret));
+  } else if (FALSE_IT(result_op = and_op)) {
+    LOG_WARN("fail to formalize expr", K(ret));
+  }
+  ObRawExprReplacer replacer;
+  if (OB_FAIL(ret)) {
+  } else if (OB_FAIL(replacer.add_replace_expr(need_replace_expr, result_op))) {
+    LOG_WARN("failed to add replace expr", K(ret));
+  } else if (OB_FAIL(replacer.replace(expr))) {
+    LOG_WARN("failed to replace expr", K(ret));
   }
   return ret;
 }
@@ -17349,6 +17542,72 @@ int ObDMLResolver::resolve_match_against_expr(ObMatchFunRawExpr &expr)
   return ret;
 }
 
+int ObDMLResolver::resolve_es_match_expr(ObMatchFunRawExpr &expr)
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(expr.get_param_expr(0)) || OB_ISNULL(schema_checker_) || OB_ISNULL(session_info_)
+      || OB_ISNULL(get_stmt())) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("column list is invalid", K(expr.get_param_expr(0)), K(get_stmt()));
+  } else {
+    const TableItem *table_item = NULL;
+    const ObTableSchema *table_schema = nullptr;
+    ObIArray<ObRawExpr*> &column_list = expr.get_match_columns();
+    uint64_t table_id = OB_INVALID_ID;
+    ColumnReferenceSet column_set;
+    const ObColumnSchemaV2 *column_schema = nullptr;
+    ObCollationType collation_type = CS_TYPE_MAX;
+
+    // get matched fulltext index
+    for (int64_t i = 0; OB_SUCC(ret) && i < column_list.count(); ++i) {
+      ObColumnRefRawExpr *col_ref = nullptr;
+      if (OB_UNLIKELY(OB_ISNULL(column_list.at(i)) || !column_list.at(i)->is_column_ref_expr())) {
+        ret = OB_INVALID_ARGUMENT;
+        LOG_USER_ERROR(OB_INVALID_ARGUMENT, "match against column");
+      } else if (FALSE_IT(col_ref = static_cast<ObColumnRefRawExpr*>(column_list.at(i)))) {
+      } else if (OB_FAIL(column_set.add_member(col_ref->get_column_id()))) {
+        LOG_WARN("add to column set failed", K(ret));
+      } else if (0 == i && FALSE_IT(table_id = col_ref->get_table_id())) {
+      } else if (OB_UNLIKELY(col_ref->get_table_id() != table_id)) {
+        //check all table id
+        ret = OB_INVALID_ARGUMENT;
+        LOG_USER_ERROR(OB_INVALID_ARGUMENT, "match against columns on different tables");
+      } else if (OB_ISNULL(table_item = get_stmt()->get_table_item_by_id(table_id))) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("table item don't exist", K(table_id));
+      } else if (!table_item->is_basic_table()) {
+        ret = OB_INVALID_ARGUMENT;
+        LOG_USER_ERROR(OB_INVALID_ARGUMENT, "match against column on non-base table");
+      } else if (OB_FAIL(schema_checker_->get_table_schema(session_info_->get_effective_tenant_id(),
+                                                           table_item->ref_id_,
+                                                           table_schema))) {
+        LOG_WARN("failed to get main table schema", K(ret));
+      } else if (OB_ISNULL(table_schema)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("unexpected nullptr to table schema", K(ret));
+      } else if (OB_FAIL(resolve_match_index(column_set, *table_schema, expr))) {
+        LOG_WARN("failed to resolve fulltext index access exprs", K(ret));
+      } else if (FALSE_IT(column_set.reset())) {
+      } else if (OB_FAIL(schema_checker_->get_column_schema(session_info_->get_effective_tenant_id(),
+                                                            table_item->ref_id_,
+                                                            col_ref->get_column_id(),
+                                                            column_schema))) {
+        LOG_WARN("failed to get column schema", K(ret));
+      } else if (0 == i && FALSE_IT(collation_type = column_schema->get_collation_type())) {
+      } else if (OB_UNLIKELY(column_schema->get_collation_type() != collation_type)) {
+        ret = OB_INVALID_ARGUMENT;
+        LOG_USER_ERROR(OB_INVALID_ARGUMENT, "MATCH: Columns have different collation types");
+      }
+    }
+    if (OB_FAIL(ret)) {
+      //do nothing
+    } else if (OB_FAIL(expr.formalize(session_info_))) {
+      LOG_WARN("failed to formalize expr", K(ret));
+    }
+  }
+  return ret;
+}
+
 int ObDMLResolver::resolve_match_index(
     const ColumnReferenceSet &match_column_set,
     const ObTableSchema &table_schema,
@@ -17364,10 +17623,18 @@ int ObDMLResolver::resolve_match_index(
   const ObTableSchema *doc_rowkey_schema = nullptr;
   const ObTableSchema *inv_idx_schema = nullptr;
   const ObTableSchema *fwd_idx_schema = nullptr;
-
-  if (OB_FAIL(table_schema.get_simple_index_infos(index_infos))) {
+  uint64_t docid_col_id = OB_INVALID_ID;
+  if (OB_FAIL(table_schema.get_docid_col_id(docid_col_id))) {
+    if (OB_ERR_INDEX_KEY_NOT_FOUND == ret) {
+      ret = OB_SUCCESS;
+    } else {
+      LOG_WARN("Failed to check docid in schema", K(ret));
+    }
+  }
+  if (OB_FAIL(ret)) {
+  } else if (OB_FAIL(table_schema.get_simple_index_infos(index_infos))) {
     LOG_WARN("failed to get index infos", K(ret));
-  } else {
+  } else if (OB_INVALID_ID != docid_col_id) {
     database_id = table_schema.get_database_id();
     for (int64_t i = 0; i < index_infos.count(); ++i) {
       if (share::schema::is_doc_rowkey_aux(index_infos.at(i).index_type_)) {

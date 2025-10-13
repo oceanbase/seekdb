@@ -378,6 +378,21 @@ public:
   static int fetch_new_trace_id(const uint64_t basic_num, ObIAllocator *allocator, TraceId &new_trace_id);
   static int in_active_time(const uint64_t tenant_id, bool& is_active_time);
   static int check_task_is_cancel(ObVecIndexAsyncTaskCtx *task, bool &is_cancel);
+  static int read_vec_tasks(
+      const uint64_t tenant_id,
+      const char* tname,
+      const bool for_update,
+      const ObVecIndexFieldArray& filters,
+      ObLS *ls,
+      common::ObISQLClient& proxy,
+      ObVecIndexTaskStatusArray& result_arr,
+      common::ObIAllocator *allocator);
+  static int construct_task_key(
+      const uint64_t tenant_id,
+      const uint64_t table_id,
+      const uint64_t tablet_id,
+      const int64_t task_id,
+      ObVecIndexFieldArray& task_key);
 
 private:
   static int construct_read_task_sql(

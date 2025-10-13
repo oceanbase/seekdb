@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2021 OceanBase
+	/**
+	 * Copyright (c) 2021 OceanBase
  * OceanBase CE is licensed under Mulan PubL v2.
  * You can use this software according to the terms and conditions of the Mulan PubL v2.
  * You may obtain a copy of Mulan PubL v2 at:
@@ -66,6 +66,7 @@ typedef enum ObItemType
   T_BIT = 31,
   T_ENUM = 32,
   T_SET = 33,
+
   T_JSON        = 36,
   T_GEOMETRY    = 37,
   T_UDT_SQL     = 38,
@@ -216,6 +217,7 @@ typedef enum ObItemType
   T_OP_OUTPUT_PACK = 186,
   T_FUN_GET_TEMP_TABLE_SESSID = 187,
   T_OP_PUSHDOWN_TOPN_FILTER = 188,
+  T_OP_LOCAL_DYNAMIC_FILTER = 189,
   ///< @note add new operator before this line
 
   // system functions
@@ -345,6 +347,7 @@ typedef enum ObItemType
   T_FUN_SYS_LEFT = 622,
   T_FUN_SYS_MAKE_SET = 623,
   T_FUN_SYS_RAND = 624,
+  T_FUN_SYS_ROWNUM = 625,
   T_FUN_SYS_ESTIMATE_NDV = 626,
   T_FUN_ENUM_TO_STR = 627,
   T_FUN_ENUM_TO_INNER_TYPE = 628,
@@ -497,6 +500,10 @@ typedef enum ObItemType
   T_FUN_SYS_CURRENT_USER_PRIV = 766,
   T_FUN_SYS_CURRENT_ROLE = 767,
   T_FUN_SYS_EXTRACT_CERT_EXPIRED_TIME = 768,
+  T_FUN_SYS_AUDIT_LOG_SET_FILTER = 769,
+  T_FUN_SYS_AUDIT_LOG_REMOVE_FILTER = 770,
+  T_FUN_SYS_AUDIT_LOG_SET_USER = 771,
+  T_FUN_SYS_AUDIT_LOG_REMOVE_USER = 772,
   T_FUN_SYS_PASSWORD = 773,
   T_FUN_SYS_IS_ENABLED_ROLE = 774,
   T_FUN_SYS_CAN_ACCESS_TRIGGER = 775,
@@ -908,6 +915,12 @@ typedef enum ObItemType
   T_FUN_SYS_MAP_KEYS = 1784,
   T_FUN_SYS_MAP_VALUES = 1785,
   T_FUN_SYS_L2_SQUARED = 1786,
+  T_FUN_SYS_SEMANTIC_DISTANCE = 1787,
+  T_FUN_SYS_SEMANTIC_VECTOR_DISTANCE = 1788,
+  T_FUN_SYS_VECTOR_SIMILARITY = 1789,
+  T_FUN_SYS_VECTOR_L2_SIMILARITY = 1790,
+  T_FUN_SYS_VECTOR_IP_SIMILARITY = 1791,
+  T_FUN_SYS_VECTOR_COS_SIMILARITY = 1792,
   ///< @note add new oracle only function type before this line
 
   T_FUN_SYS_TABLET_AUTOINC_NEXTVAL = 1801, // add only for heap table
@@ -951,6 +964,18 @@ typedef enum ObItemType
   T_FUN_SYS_CHECK_CATALOG_ACCESS = 1916,
   T_FUN_SYS_SPIV_DIM = 1917,  // sparse vector index
   T_FUN_SYS_SPIV_VALUE = 1918,
+  T_FUN_SYS_CHECK_LOCATION_ACCESS = 1919,
+  T_FUN_STARTUP_MODE = 1920,
+  T_FUN_SYS_HIDDEN_CLUSTERING_KEY = 1921,
+  T_FUN_SYS_TMP_FILE_OPEN = 1922,
+  T_FUN_SYS_TMP_FILE_CLOSE = 1923,
+  T_FUN_SYS_TMP_FILE_WRITE = 1924,
+  T_FUN_SYS_TMP_FILE_READ = 1925,
+  T_FUN_SYS_HYBRID_VEC_CHUNK = 1926, // hybrid vector index
+  T_FUN_SYS_FORMAT_PROFILE = 1927, // format query profile
+  T_FUN_SYS_EMBEDDED_VEC = 1928,
+  T_FUN_SYS_AI_PROMPT = 1929,
+  T_FUN_SYS_VEC_VISIBLE = 1930, // vector index table 5
 
   ///< @note add new sys function type before this line
   T_FUN_SYS_END = 2000,
@@ -1018,8 +1043,19 @@ typedef enum ObItemType
   T_FUN_SYS_RB_TO_ARRAY = 2071,
   T_FUN_SYS_RB_CONTAINS = 2072,
   T_FUN_INNER_PREFIX_MIN = 2073,
-  T_FUN_INNER_PREFIX_MAX = 2074,  
+  T_FUN_INNER_PREFIX_MAX = 2074,
   T_FUN_SYS_INNER_INFO_COLS_COLUMN_KEY_PRINTER = 2075,
+  T_FUN_ARG_MIN = 2076,
+  T_FUN_ARG_MAX = 2077,
+  T_FUN_TMP_FILE_OPEN = 2078,
+  T_FUN_TMP_FILE_CLOSE = 2079,
+  T_FUN_TMP_FILE_WRITE = 2080,
+  T_FUN_TMP_FILE_READ = 2081,
+  T_FUN_SYS_AI_COMPLETE = 2082,
+  T_FUN_SYS_AI_EMBED = 2083,
+  T_FUN_SYS_AI_RERANK = 2084,
+  T_FUN_MD5_CNN_WS = 2085,
+  T_FUN_SYS_BUCKET = 2086,
   T_MAX_OP = 3000,
 
   //pseudo column, to mark the group iterator id
@@ -2658,6 +2694,9 @@ typedef enum ObItemType
   T_TABLE = 4725,
   T_EXTERNAL_TABLE_PARTITION = 4726,
 
+  //Rebuild Tablet
+  T_REBUILD_TABLET = 4727,
+
   T_MICRO_INDEX_CLUSTERED = 4728,
 
   // Parquet related
@@ -2760,6 +2799,7 @@ typedef enum ObItemType
   // parser config: ik_mode
   T_IK_MODE = 4800,
   T_DML_PARALLEL = 4801,
+
   //pl dbms scheduler calendar
   T_SCHED_CALENDAR = 4802,
   T_SCHED_CALENDAR_LIST = 4803,
@@ -2821,11 +2861,36 @@ typedef enum ObItemType
   // logservice access point
   T_BOOTSTRAP_INFO = 4846,
   T_LOGSERVICE_ACCESS_POINT = 4847,
+  T_UNIT_LIST = 4848,
 
   T_SP_SYS_DISPATCH_CALL = 4849,
-  T_MV_NESTED_REFRESH_CLAUSE = 4868, //placeholder in master
-  T_ALTER_SUBPARTITION_EXCHANGE = 4869,
 
+  // location object
+  T_CREATE_LOCATION = 4850,
+  T_ALTER_LOCATION = 4851,
+  T_DROP_LOCATION = 4852,
+  T_LOCATION_OBJECT = 4853,
+  T_CREDENTIAL_OPTION_LIST = 4854,
+  T_CREDENTIAL_OPTION = 4855,
+  T_SHOW_LOCATIONS = 4856,
+  T_SHOW_CREATE_LOCATION = 4857,
+  T_LOCATION_UTILS_LIST = 4858,
+  T_LOCATION_UTILS = 4859,
+
+  T_LOG_ERROR=4860,
+  T_READ_ERROR_LOG=4861,
+
+  T_PLUGIN_PROPERTIES = 4862,
+  T_GENERAL_PROPERTY  = 4863,
+  T_PLUGIN_NAME       = 4864,
+
+
+  T_UDF_PROPERTY = 4865,
+  T_UDF_PROPERTY_LIST = 4866,
+
+  T_MICRO_BLOCK_FORMAT_VERSION = 4867,
+  T_MV_NESTED_REFRESH_CLAUSE = 4868, // placeholder for mview
+  T_ALTER_SUBPARTITION_EXCHANGE = 4869,
   T_CREATE_SENSITIVE_RULE       = 4870,
   T_DROP_SENSITIVE_RULE         = 4871,
   T_ALTER_SENSITIVE_RULE        = 4872,
@@ -2839,13 +2904,48 @@ typedef enum ObItemType
   T_SHOW_SENSITIVE_RULES_OPTION = 4880,
 
   // catalog
-  T_METASTORE_URI = 4881,
+  T_URI = 4881, // FARM COMPAT WHITELIST
   T_ACCESS_INFO = 4882,
   T_WAREHOUSE = 4883,
   T_SEQUENCE_NAME = 4884,
   T_STORAGE_CACHE_POLICY_IN_PART_LIST = 4885,
   T_COLUMN_INDEX_TYPE = 4886,
+  T_FREQ_THRESHOLD = 4887,
+  T_SEMISTRUCT_PROPERTIES = 4888,
+  T_CLUSTERING_KEY = 4889,
+  T_CLUSTERING_KEY_DROP = 4890,
 
+  // optimizer hint
+  T_INDEX_MERGE_HINT = 4891,
+  T_NO_INDEX_MERGE_HINT = 4892,
+
+  T_TABLE_FLASHBACK_PROCTIME = 4893,
+  // hint for disable rich format of operators
+  T_DISABLE_OP_RICH_FORMAT = 4894,
+
+  T_PRINCIPAL = 4895,
+  T_KEYTAB = 4896,
+  T_KRB5CONF = 4897,
+  T_MAX_CLIENT_POOL_SIZE = 4898,
+  T_SOCKET_TIMEOUT = 4899,
+  // erase ss local_cache
+  T_FLUSH_SS_LOCAL_CACHE = 4900,
+    // alter type
+  T_TYPE_ALTER = 4901,
+  T_TYPE_ALTER_CLAUSE = 4902,
+  T_TYPE_ALTER_COMPILE = 4903,
+  T_TYPE_ALTER_ATTR = 4904,
+  T_TYPE_ALTER_ATTR_LIST = 4905,
+  T_COMMON_IDENTIFIER_LIST = 4906,
+  T_ALTER_ATTRIBUTE_DEFINITION_LIST = 4907,
+  T_REPLACE_TENANT = 4908,
+  T_FORMAT_OBJECT_NAME_DISPLAY = 4909,
+  T_CACHE_REFRESH_INTERVAL_SEC = 4910,
+  T_BACKUP_VALIDATE = 4911,
+  T_TRANSITION = 4912,
+  T_FUN_ES_SCORE = 4913, // fulltext index for ES SQL
+  T_FUN_ES_MATCH = 4914, // fulltext index for ES SQL
+  T_HYBRID_SEARCH_EXPRESSION = 4915,
   T_MAX //Attention: add a new type before T_MAX
 } ObItemType;
 
@@ -2868,6 +2968,8 @@ typedef enum ObCacheType
   CACHE_TYPE_PL_OBJ,
   CACHE_TYPE_PS_OBJ,
   CACHE_TYPE_LIB_CACHE,
+  CACHE_TYPE_RESULT,
+  CACHE_TYPE_SEQUENCE,
   CACHE_TYPE_MAX //Attention: add a new type before CACHE_TYPE_MAX
 } ObCacheType;
 
@@ -2949,6 +3051,7 @@ typedef enum ObOutlineType
 #define IS_CONST_TYPE(op) ((op) > T_INVALID && (op) < T_MAX_CONST)
 #define IS_FUN_SYS_TYPE(op) (((op) >= T_FUN_SYS && (op) < T_FUN_SYS_END) \
                             || ((op) > T_MIN_OP && (op) <= T_OP_CONST_VAL) \
+                            || T_OP_CONNECT_BY_ROOT == (op) \
                             || (lib::is_oracle_mode() && (op) == T_OP_BIT_AND))
 
 #define IS_FUN_STYLE(op) (((op) >= T_FUN_SYS && (op) < T_FUN_SYS_END) \
@@ -2958,7 +3061,8 @@ typedef enum ObOutlineType
     || T_OP_POW == (op) \
     || T_OP_CONV == (op) \
     || T_OP_CNN == (op) \
-    || T_OP_SIGN == (op)
+    || T_OP_SIGN == (op) \
+    || T_OP_CONNECT_BY_ROOT == (op))
 
 #define ITEM_TO_OBJ_TYPE(op) (static_cast<ObObjType>(op))
 
@@ -2973,18 +3077,21 @@ typedef enum ObOutlineType
 // special statements
 #define IS_TRANSACTION_STMT(op) ((op) == T_BEGIN || (op) == T_COMMIT || (op) == T_ROLLBACK)
 #define IS_PREPARABLE_STMT(op)  \
-  ((op) == T_SELECT || (op) == T_DELETE || (op) == T_INSERT || (op) == T_UPDATE \
+  ((op) == T_SELECT || (op) == T_DELETE || (op) == T_INSERT || (op) == T_MERGE || (op) == T_UPDATE \
    || (op) == T_BEGIN || (op) == T_COMMIT || (op) == T_ROLLBACK)
 
 #define IS_DML_STMT(op)  \
-  ((op) == T_SELECT || (op) == T_DELETE || (op) == T_INSERT || (op) == T_UPDATE)
+  ((op) == T_SELECT || (op) == T_DELETE || (op) == T_INSERT || (op) == T_MERGE || (op) == T_UPDATE || (op) == T_MULTI_INSERT)
 #define IS_SHOW_STMT(op) (((op) >= T_SHOW_TABLES && (op) <= T_SHOW_GRANTS) || (op) == T_SHOW_TRIGGERS \
                            || (op) == T_SHOW_CREATE_USER || (op) == T_SHOW_CATALOGS \
                            || (op) == T_SHOW_CREATE_CATALOG || (op) == T_SHOW_PROFILE \
                            || (op) == T_SHOW_PROCEDURE_CODE || (op) == T_SHOW_FUNCTION_CODE \
                            || (op) == T_SHOW_ENGINE || (op) == T_SHOW_OPEN_TABLES \
                            || (op) == T_SHOW_PLUGINS || (op) == T_SHOW_CHECK_TABLE \
-                           || (op) == T_SHOW_OLAP_ASYNC_JOB_STATUS)
+                           || (op) == T_SHOW_OLAP_ASYNC_JOB_STATUS                \
+                           || (op) == T_SHOW_CREATE_LOCATION \
+                           || (op) == T_SHOW_LOCATIONS       \
+                           || (op) == T_LOCATION_UTILS_LIST)
 
 #define EXPR_OP_NUM (T_MAX_OP-T_MIN_OP-1)
 extern const char *get_type_name(int type);
@@ -3009,8 +3116,11 @@ extern const char *get_type_name(int type);
                          (op) == T_FUNC_SYS_ARRAY_AGG ||\
                          ((op) >= T_FUN_SYS_BIT_AND && (op) <= T_FUN_SYS_BIT_XOR) || \
                          (op) == T_FUN_INNER_PREFIX_MAX || \
-                         (op) == T_FUN_INNER_PREFIX_MIN)
+                         (op) == T_FUN_INNER_PREFIX_MIN || \
+                         ((op) >= T_FUN_ARG_MIN && (op) <= T_FUN_ARG_MAX))
 #define MAYBE_ROW_OP(op) ((op) >= T_OP_EQ && (op) <= T_OP_NE)
+#define IS_PSEUDO_COLUMN_TYPE(op) \
+  ((op) == T_LEVEL || (op) == T_CONNECT_BY_ISLEAF || (op) == T_CONNECT_BY_ISCYCLE || (op) == T_ORA_ROWSCN)
 
 #define IS_LABEL_SE_POLICY_FUNC(op) \
   (T_FUN_LABEL_SE_POLICY_CREATE <= (op) && (op) <= T_FUN_LABEL_SE_LABEL_DROP)

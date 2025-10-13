@@ -142,6 +142,8 @@ private:
   int resolve_udf_param_expr(const ParseNode *node,
                              common::ObIArray<ObRawExpr*> &param_exprs);
   int process_match_against(const ParseNode *node, ObRawExpr *&expr);
+  int process_match(const ParseNode *node, ObRawExpr *&expr);
+  int process_match_score(const ParseNode *node, ObRawExpr *&expr);
   int process_window_function_node(const ParseNode *node, ObRawExpr *&expr);
   int process_sort_list_node(const ParseNode *node, common::ObIArray<OrderItem> &order_items);
   int process_frame_node(const ParseNode *node,
@@ -179,9 +181,9 @@ private:
   int process_call_param_node(const ParseNode *node, ObRawExpr *&expr);
 
   int convert_keep_aggr_to_common_aggr(ObAggFunRawExpr *&agg_expr);
-  
+
   int expand_node(common::ObIAllocator &allocator, ParseNode *node, int p, ObVector<const ParseNode*> &arr);
-  static int not_int_check(const ObRawExpr *expr); 
+  static int not_int_check(const ObRawExpr *expr);
   static int not_row_check(const ObRawExpr *expr);
   static int param_not_row_check(const ObRawExpr *expr);
   int process_dml_event_node(const ParseNode *node, ObRawExpr *&expr);
@@ -195,6 +197,14 @@ private:
   int process_sql_udt_construct_node(const ParseNode *node, ObRawExpr *&expr);
   int process_last_refresh_scn_node(const ParseNode *expr_node, ObRawExpr *&expr);
   int process_array_contains_node(const ParseNode *node, ObRawExpr *&expr);
+  void get_special_func_ident_name(ObString &ident_name, ObItemType func_type);
+  int process_xml_element_node(const ParseNode *node, ObRawExpr *&expr);
+  int process_xml_attributes_values_node(const ParseNode *node, ObRawExpr *&expr);
+  int process_xml_attributes_node(const ParseNode *node, ObRawExpr *&expr);
+  int process_xmlparse_node(const ParseNode *node, ObRawExpr *&expr);
+  int process_xml_forest_node(const ParseNode *node, ObRawExpr *&expr);
+  int remove_format_json_opt_in_pl(ParseNode *node, int8_t expr_flag);
+  int remove_strict_opt_in_pl(ParseNode *node, int8_t expr_flag);
   int process_lambda_func_node(const ParseNode *node, ObRawExpr *&expr);
   int process_array_map_func_node(const ParseNode *node, ObRawExpr *&expr);
   int check_replace_lambda_params_node(const ParseNode *params_node, ParseNode *func_node);

@@ -95,6 +95,8 @@ struct ObUpdateTableStoreParam;
 struct ObMigrationTabletParam;
 class ObTableScanRange;
 class ObTabletCreateDeleteMdsUserData;
+class ObBlockStatScanParam;
+class ObBlockStatIterator;
 
 
 class ObLSTabletService : public logservice::ObIReplaySubHandler,
@@ -263,9 +265,14 @@ public:
   int ss_replay_create_tablet(const ObMetaDiskAddr &disk_addr, const ObTabletID &tablet_id);
   int write_tablet_id_set_to_pending_free();
   int ss_replay_create_tablet_for_trans_info_tmp(
-    const ObMetaDiskAddr &current_disk_addr, 
-    const ObLSHandle &ls_handle, 
+    const ObMetaDiskAddr &current_disk_addr,
+    const ObLSHandle &ls_handle,
     const ObTabletID &tablet_id);
+  int update_tablet_ss_change_version(
+     const share::SCN &reorg_scn,
+     const common::ObTabletID &tablet_id,
+     const share::SCN &ss_change_version,
+     const bool &fully_applied);
 #endif
   // Get tablet handle but ignore empty shell. Return OB_TABLET_NOT_EXIST if it is empty shell.
   int ha_get_tablet(
@@ -448,6 +455,10 @@ public:
       const common::ObIArray<uint64_t> &sample_count,
       common::ObIArray<double> &sortedness,
       common::ObIArray<uint64_t> &res_sample_counts);
+  int scan_block_stat(
+      const ObTabletHandle &tablet_handle,
+      ObBlockStatScanParam &scan_param,
+      ObBlockStatIterator &iter);
 
   // iterator
   int build_tablet_iter(ObLSTabletIterator &iter, const bool except_ls_inner_tablet = false);
@@ -966,7 +977,7 @@ private:
       blocksstable::ObDatumRow *new_datum_rows);
 
 private:
-  static int get_storage_row(const blocksstable::ObDatumRow &sql_row, 
+  static int get_storage_row(const blocksstable::ObDatumRow &sql_row,
                              const ObIArray<uint64_t> &column_ids,
                              const ObColDescIArray &column_descs,
                              ObRowGetter &row_getter,

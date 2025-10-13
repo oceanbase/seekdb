@@ -20,6 +20,7 @@
 #include "storage/access/ob_sstable_row_multi_getter.h"
 #include "storage/ob_all_micro_block_range_iterator.h"
 #include "storage/blocksstable/ob_shared_macro_block_manager.h"
+#include "storage/blocksstable/index_block/ob_sstable_index_scanner.h"
 #include "storage/ddl/ob_tablet_ddl_kv.h"
 
 namespace oceanbase
@@ -258,7 +259,7 @@ ObSSTable::~ObSSTable()
 }
 
 int ObSSTable::init(
-    const ObTabletCreateSSTableParam &param, 
+    const ObTabletCreateSSTableParam &param,
     common::ObArenaAllocator *allocator)
 {
   int ret = OB_SUCCESS;
@@ -699,6 +700,58 @@ int ObSSTable::scan_secondary_meta(
   return ret;
 }
 
+int ObSSTable::scan_index(
+    const ObDatumRange &range,
+    const ObSSTableIndexScanParam &scan_param,
+    ObIAllocator &allocator,
+    ObSSTableIndexScanner *&index_scanner)
+{
+  int ret = OB_SUCCESS;
+  void *buf = nullptr;
+  ObSSTableIndexScanner *iter = nullptr;
+  if (OB_UNLIKELY(!is_valid())) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("SSTable is not ready for accessing", K(ret), K_(valid_for_reading), K_(meta));
+  } else if (OB_ISNULL(buf = allocator.alloc(sizeof(ObSSTableIndexScanner)))) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_WARN("Fail to allocate memory for index scanner", K(ret));
+  } else if (OB_ISNULL(iter = new (buf) ObSSTableIndexScanner)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected nullptr on constructor", K(ret));
+  } else if (OB_FAIL(iter->init(range, scan_param, *this, allocator))) {
+    LOG_WARN("Fail to init index scanner", K(ret), K(range), K(scan_param), KPC(this));
+  } else {
+    index_scanner = iter;
+  }
+
+  if (OB_FAIL(ret)) {
+    if (OB_NOT_NULL(iter)) {
+      iter->~ObSSTableIndexScanner();
+    }
+    if (OB_NOT_NULL(buf)) {
+      allocator.free(buf);
+    }
+  }
+
+  return ret;
+}
+
+int ObSSTable::bf_may_contain_rowkey(const ObDatumRowkey &rowkey, bool &contain)
+{
+  int ret = OB_SUCCESS;
+
+  if (OB_UNLIKELY(!is_valid())) {
+    ret = OB_NOT_INIT;
+    STORAGE_LOG(WARN, "The ObSSTable has not been inited", K(ret));
+  } else if (OB_UNLIKELY(!rowkey.is_valid())) {
+    ret = OB_INVALID_ARGUMENT;
+    STORAGE_LOG(WARN, "Invalid argument to check bloomfilter", K(ret));
+  } else {
+    // pass sstable without bf macro
+    contain = true;
+  }
+  return ret;
+}
 
 int ObSSTable::check_rows_locked(
     const bool check_exist,
@@ -1733,7 +1786,7 @@ int ObSSTable::persist_linked_block_if_need(
     // linked block had been persisted
   } else if (is_small_sstable()) {
     // The small sstable needn't persist macro ids by linked block.
-  } else if (meta_->macro_info_.get_data_block_count() + meta_->macro_info_.get_other_block_count() 
+  } else if (meta_->macro_info_.get_data_block_count() + meta_->macro_info_.get_other_block_count()
               < block_cnt_threshold) {
     // need not persist linked_block
   } else if (OB_FAIL(link_write_info.init(ddl_redo_cb))) {

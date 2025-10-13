@@ -1344,7 +1344,8 @@ public:
                K_(max_batch_size),
                K_(pushdown_filters),
                K_(pd_storage_flag),
-               KPC_(trans_info_expr));
+               KPC_(trans_info_expr),
+               K_(ext_tbl_filter_pd_level));
 
   int set_calc_exprs(const ExprFixedArray &calc_exprs, int64_t max_batch_size)
   {
@@ -1370,6 +1371,7 @@ public:
   uint64_t auto_split_filter_type_;
   ObExpr *auto_split_expr_;
   ExprFixedArray auto_split_params_;
+  int64_t ext_tbl_filter_pd_level_;
 };
 // Push down expression execution dependent op ctx
 class ObPushdownOperator

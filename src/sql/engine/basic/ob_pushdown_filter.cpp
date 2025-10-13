@@ -471,7 +471,7 @@ int ObPushdownFilterConstructor::get_black_filter_monotonicity(
   } else if (1 == column_exprs.count()) {
     ObSEArray<ObRawExpr*, 2> tmp_exprs;
     PushdownFilterMonotonicity mono;
-    if (OB_FAIL(op_->get_filter_monotonicity(raw_expr, static_cast<ObColumnRefRawExpr *>(column_exprs.at(0)), 
+    if (OB_FAIL(op_->get_filter_monotonicity(raw_expr, static_cast<ObColumnRefRawExpr *>(column_exprs.at(0)),
                                              mono, tmp_exprs))) {
       LOG_WARN("Failed to get filter monotonicity", K(ret), KPC(raw_expr), K(column_exprs));
     } else if (OB_UNLIKELY(mono < MON_NON || mono > MON_EQ_DESC)) {
@@ -1261,7 +1261,7 @@ int ObPushdownFilterExecutor::init_filter_param(
     const bool need_padding)
 {
   int ret = OB_SUCCESS;
-  
+
   const ObIArray<uint64_t> &col_ids = get_col_ids();
   const int64_t col_count = col_ids.count();
   is_padding_mode_ = need_padding;
@@ -1977,9 +1977,9 @@ int ObWhiteFilterExecutor::init_evaluated_datums(bool &is_valid)
   return ret;
 }
 
-// In oracle mode, when the values in one column are all null, 
+// In oracle mode, when the values in one column are all null,
 // the result should be empty set even though the expr.eval() is not valid (e.g., c1 < 1/0).
-// We do not pushdown filter to the storage layer in this situation. 
+// We do not pushdown filter to the storage layer in this situation.
 int ObWhiteFilterExecutor::init_compare_eval_datums(bool &is_valid)
 {
   int ret = OB_SUCCESS;
@@ -2252,7 +2252,7 @@ int ObBlackFilterExecutor::judge_greater_or_less(
   sql::ObExpr *column_expr = nullptr;
   ObEvalCtx &eval_ctx = op_.get_eval_ctx();
   const common::ObIArray<ObExpr *> *column_exprs = get_cg_col_exprs();
-  if (OB_UNLIKELY(nullptr == column_exprs || column_exprs->count() != 1 || 
+  if (OB_UNLIKELY(nullptr == column_exprs || column_exprs->count() != 1 ||
                   filter_.assist_exprs_.count() != 2 ||
                   filter_.mono_ < MON_NON || filter_.mono_ > MON_EQ_DESC)) {
     ret = OB_ERR_UNEXPECTED;
@@ -2554,7 +2554,7 @@ int ObDynamicFilterExecutor::check_runtime_filter(ObPushdownFilterExecutor *pare
   }
   // If data has prepared, and need continuous update(such as topn runtime filter)
   // we check whether the data in runtime filter has a new version and then update it.
-  // If the data has not prepared, we check whether the runtime filter is ready and 
+  // If the data has not prepared, we check whether the runtime filter is ready and
   // get data from it.
   if (is_data_prepared() && is_data_version_updated() && OB_FAIL(try_updating_data())) {
     LOG_WARN("Failed to updating data");
@@ -2818,7 +2818,8 @@ ObPushdownExprSpec::ObPushdownExprSpec(ObIAllocator &alloc)
     trans_info_expr_(nullptr),
     auto_split_filter_type_(OB_INVALID_ID),
     auto_split_expr_(nullptr),
-    auto_split_params_(alloc)
+    auto_split_params_(alloc),
+    ext_tbl_filter_pd_level_(0)
 {
 }
 
@@ -2842,7 +2843,8 @@ OB_DEF_SERIALIZE(ObPushdownExprSpec)
               trans_info_expr_,
               auto_split_filter_type_,
               auto_split_expr_,
-              auto_split_params_);
+              auto_split_params_,
+              ext_tbl_filter_pd_level_);
   return ret;
 }
 
@@ -2866,7 +2868,8 @@ OB_DEF_DESERIALIZE(ObPushdownExprSpec)
               trans_info_expr_,
               auto_split_filter_type_,
               auto_split_expr_,
-              auto_split_params_);
+              auto_split_params_,
+              ext_tbl_filter_pd_level_);
   return ret;
 }
 
@@ -2890,7 +2893,8 @@ OB_DEF_SERIALIZE_SIZE(ObPushdownExprSpec)
               trans_info_expr_,
               auto_split_filter_type_,
               auto_split_expr_,
-              auto_split_params_);
+              auto_split_params_,
+              ext_tbl_filter_pd_level_);
   return len;
 }
 

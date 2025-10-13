@@ -139,7 +139,27 @@ enum ObMatchAgainstMode {
   NATURAL_LANGUAGE_MODE_WITH_QUERY_EXPANSION = 1,
   BOOLEAN_MODE = 2,
   WITH_QUERY_EXPANSION = 3,
-  MAX_MATCH_AGAINST_MODE = 4,
+  MATCH_PHRASE_MODE = 4,
+  MAX_MATCH_AGAINST_MODE = 5,
+};
+
+enum ObMatchOperator {
+  MATCH_OPERATOR_OR = 0,
+  MATCH_OPERATOR_AND = 1,
+  MAX_MATCH_OPERATOR = 2,
+};
+
+enum ObMatchScoreNorm {
+  SCORE_NORM_NONE = 0,
+  SCORE_NORM_MIN_MAX = 1,
+  MAX_SCORE_NORM_TYPE = 3,
+};
+
+enum ObMatchFiledsType {
+  MATCH_MOST_FIELDS = 0,
+  MATCH_BEST_FIELDS = 1,
+  MATCH_CROSS_FIELDS = 2,
+  MAX_MATCH_FIELDS_TYPE = 3,
 };
 
 #define IS_HASH_SLAVE_MAPPING(type)                                                                \
@@ -696,6 +716,7 @@ inline const ObString &ob_match_against_mode_str(const ObMatchAgainstMode mode)
     "NATURAL LANGUAGE MODE WITH QUERY EXPANSION",
     "BOOLEAN MODE",
     "WITH QUERY EXPANSION",
+    "MATCH_PHRASE_MODE",
     "UNKNOWN MATCH MODE"
   };
 

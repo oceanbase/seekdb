@@ -1101,6 +1101,7 @@ class SqlKeywords:
          PARTITIONS
          PASSWORD
          PHASE
+         PHRASE
          PLUGIN
          PLUGINS
          PLUGIN_DIR
@@ -1839,6 +1840,7 @@ class SqlKeywords:
          SCHEDULE
          SCHEMA_NAME
          SCOPE
+         SCORE
          SECOND
          SECURITY
          SERIAL

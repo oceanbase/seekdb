@@ -92,6 +92,8 @@ enum ObDASOpType
   DAS_OP_FUNC_LOOKUP,
   DAS_OP_INDEX_PROJ_LOOKUP,
   DAS_OP_DOMAIN_ID_MERGE,
+  DAS_OP_IR_ES_MATCH,
+  DAS_OP_IR_ES_SCORE,
   //append OpType before me
   DAS_OP_MAX
 };
@@ -447,7 +449,10 @@ enum ObTSCIRScanType : uint16_t
   OB_VEC_IVF_CID_VEC_SCAN,    // for pq is pq code table
   OB_VEC_IVF_ROWKEY_CID_SCAN, // for pq is pq ROWKEY_CID_TABLE
   OB_VEC_IVF_SPECIAL_AUX_SCAN,// for pq is pq id, for sq is sq meta
-  OB_VEC_SPIV_INDEX_SCAN, 
+  OB_VEC_SPIV_INDEX_SCAN,
+  OB_VEC_EMBEDDED_SCAN,
+  OB_IR_BLOCK_MAX_SCAN,
+  OB_VEC_SPIV_BLOCK_MAX_SCAN
   // OB_VEC_SPIV_INDEX_AGG,
 };
 

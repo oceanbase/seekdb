@@ -132,7 +132,7 @@ public:
   TO_STRING_KV(K_(last_major_snapshot_version), K_(major_table_cnt),
       K_(minor_table_cnt), K_(recycle_version), K_(last_major_column_count),
       K_(last_major_macro_block_cnt), K_(is_row_store), K_(is_tablet_referenced_by_collect_mv),
-      K_(last_major_compressor_type), K_(last_major_latest_row_store_type), 
+      K_(last_major_compressor_type), K_(last_major_latest_row_store_type),
       K_(last_major_store_type));
 
 public:
@@ -238,6 +238,7 @@ public:
       int64_t &start_macro_seq);
   bool get_gc_occupy_flag() { return gc_occupy_flag_; }
   void set_gc_occupy_flag_true() { gc_occupy_flag_ = true; }  // only allow from false to true
+  share::SCN get_min_ss_tablet_version() const { return tablet_meta_.min_ss_tablet_version_; }
 #endif
   bool is_external_tablet() const { return is_external_tablet_; }
   // transfer build new tablet
@@ -811,7 +812,7 @@ private:
       const int64_t snapshot_version,
       ObTabletTableIterator &iter,
       bool &succ_get_split_dst_tables);
-      
+
   int allow_to_read_();
 
   int check_medium_list() const;
@@ -897,7 +898,7 @@ private:
   int wait_release_memtables_();
   int mark_mds_table_switched_to_empty_shell_();
   int handle_transfer_replace_(const ObBatchUpdateTableStoreParam &param);
-  
+
   // DDL.
   int update_restore_status_for_split_(const ObTabletTableStore &table_store);
 

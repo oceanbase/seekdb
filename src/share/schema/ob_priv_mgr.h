@@ -290,11 +290,11 @@ public:
                               common::ObIArray<const ObSysPriv *> &sys_privs) const;
   int get_sys_priv_in_grantee(const uint64_t tenant_id,
                               const uint64_t grantee_id,
-                              ObSysPriv *& sys_priv) const;                                                        
+                              ObSysPriv *& sys_priv) const;
   static const char *get_first_priv_name(ObPrivSet priv_set);
   static const char *get_priv_name(int64_t priv_shift);
   int get_priv_schema_count(int64_t &priv_scheam_count) const;
-  int get_schema_statistics(const ObSchemaType schema_type, 
+  int get_schema_statistics(const ObSchemaType schema_type,
                             ObSchemaStatisticsInfo &schema_info) const;
 private:
   int get_db_priv_iter(const ObOriginalDBKey &db_key,

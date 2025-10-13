@@ -10,6 +10,7 @@
  * See the Mulan PubL v2 for more details.
  */
 
+#include "share/ob_fts_index_builder_util.h"
 #define USING_LOG_PREFIX SHARE_SCHEMA
 #include "ob_table_schema.h"
 #include "share/schema/ob_part_mgr_util.h"
@@ -4907,9 +4908,43 @@ int ObTableSchema::check_alter_column_in_index(const ObColumnSchemaV2 &src_colum
   const uint64_t column_id = src_column.get_column_id();
   const uint64_t tenant_id = get_tenant_id();
   ObSEArray<ObAuxTableMetaInfo, 16> simple_index_infos;
-  if (OB_FAIL(get_simple_index_infos(simple_index_infos))) {
+
+  // Vector index dependency validation: （start）
+  // The logical rule is that if a vector index exists on a column, no modifications to the column are allowed.
+  // To accommodate potential user operations where the data type remains consistent before and after the change,
+  // an additional conditional check has been implemented.
+  bool is_column_has_vector_index = false;
+  ObIndexType index_type = INDEX_TYPE_IS_NOT;
+  if (OB_FAIL(ObVectorIndexUtil::check_column_has_vector_index(
+        *this, schema_guard, column_id, is_column_has_vector_index, index_type))) {
+    LOG_WARN("check_column_has_vector_index failed", K(ret));
+  } else if (is_column_has_vector_index) {
+    // For vector-indexed columns, enforce strict data type consistency checks.
+    bool is_same_type = false;
+    if (src_column.is_collection() && dst_column.is_collection()) {
+      // Collection types (including vector types) require specialized comparison logic.
+      if (OB_FAIL(src_column.is_same_collection_column(dst_column, is_same_type))) {
+        LOG_WARN("failed to check collection column type", K(ret));
+      }
+    } else {
+      // For non-collection types, compare basic types and meta types.
+      is_same_type = (src_column.get_data_type() == dst_column.get_data_type() &&
+                     src_column.get_meta_type().get_type() == dst_column.get_meta_type().get_type());
+    }
+    if (OB_SUCC(ret) && !is_same_type) {
+      ret = OB_NOT_SUPPORTED;
+      LOG_USER_ERROR(OB_NOT_SUPPORTED, "For columns with vector indexes, altering the column type is");
+      LOG_WARN("column type modification is not supported because it is depended by vector index",
+               K(column_id), K(ret), K(src_column.get_data_type()), K(dst_column.get_data_type()));
+    }
+  }
+  // Vector index dependency validation (end)
+
+  if(OB_FAIL(ret)){
+  } else if (OB_FAIL(get_simple_index_infos(simple_index_infos))) {
     LOG_WARN("get simple_index_infos failed", K(ret));
   }
+
   for (int64_t i = 0; OB_SUCC(ret) && i < simple_index_infos.count(); ++i) {
     const ObTableSchema *index_table_schema = NULL;
     if (OB_FAIL(schema_guard.get_table_schema(tenant_id,
@@ -8938,6 +8973,28 @@ int ObTableSchema::get_fulltext_column_ids(uint64_t &doc_id_col_id, uint64_t &ft
   return ret;
 }
 
+int ObTableSchema::get_fulltext_typed_col_ids(uint64_t &doc_id_col_id, ObDocIDType &type, uint64_t &ft_col_id) const
+{
+  int ret = OB_SUCCESS;
+  for (int64_t i = 0; OB_SUCC(ret) && i < get_column_count(); ++i) {
+    const ObColumnSchemaV2 *column_schema = get_column_schema_by_idx(i);
+    uint64_t col_id = column_schema->get_column_id();
+    if (OB_ISNULL(column_schema)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("unexpected error, column schema is nullptr", K(ret), K(i), KPC(this));
+    } else if (column_schema->is_doc_id_column()) {
+      type = ObDocIDType::TABLET_SEQUENCE;
+      doc_id_col_id = col_id;
+    } else if (column_schema->is_hidden_pk_column_id(col_id)) {
+      type = ObDocIDType::HIDDEN_INC_PK;
+      doc_id_col_id = col_id;
+    } else if (column_schema->is_word_segment_column()) {
+      ft_col_id = column_schema->get_column_id();
+    }
+  }
+  return ret;
+}
+
 int ObTableSchema::get_vec_index_column_id(uint64_t &with_cascaded_info_column_id) const
 {
   int ret = OB_SUCCESS;
@@ -8997,6 +9054,7 @@ int ObTableSchema::get_vec_index_vid_col_id(uint64_t &vec_id_col_id, bool is_cid
   return ret;
 }
 
+// Get generated column's id which contains a doc_id flag
 int ObTableSchema::get_docid_col_id(uint64_t &docid_col_id) const
 {
   int ret = OB_SUCCESS;
@@ -9898,8 +9956,8 @@ int ObTableSchema::get_vec_id_rowkey_tid(uint64_t &vec_id_rowkey_tid) const
       break;
     }
   }
-  if (OB_INVALID_ID == vec_id_rowkey_tid) {
-    ret = OB_ERR_FT_COLUMN_NOT_INDEXED;
+  if (OB_SUCC(ret) && OB_INVALID_ID == vec_id_rowkey_tid) {
+    ret = OB_ERR_INDEX_KEY_NOT_FOUND;
   }
   return ret;
 }

@@ -194,6 +194,7 @@ public:
       ObIArray<obrpc::ObCreateIndexArg> &index_arg_list,
       ObIAllocator *allocator);
   static int append_multivalue_args(
+      const share::schema::ObTableSchema &data_schema,
       const ObPartitionResolveResult &resolve_result,
       const obrpc::ObCreateIndexArg &index_arg,
       bool &fts_common_aux_table_exist,

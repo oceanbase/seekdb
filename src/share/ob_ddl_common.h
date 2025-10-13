@@ -100,13 +100,14 @@ enum ObDDLType
   DDL_DROP_VEC_IVFPQ_INDEX = 23,
   DDL_DROP_VEC_SPIV_INDEX = 24,
   DDL_REPLACE_MLOG = 25,
+  DDL_CREATE_VEC_SPIV_INDEX = 26, // placeholder of spiv post build
 
   ///< @note tablet split.
   DDL_AUTO_SPLIT_BY_RANGE = 100,
   DDL_AUTO_SPLIT_NON_RANGE = 101,
   DDL_MANUAL_SPLIT_BY_RANGE = 102,
   DDL_MANUAL_SPLIT_NON_RANGE = 103,
-  ///< @note Drop schema, and refuse concurrent trans.  
+  ///< @note Drop schema, and refuse concurrent trans.
   DDL_DROP_SCHEMA_AVOID_CONCURRENT_TRANS = 500,
   DDL_DROP_DATABASE = 501,
   DDL_DROP_TABLE = 502,
@@ -119,7 +120,7 @@ enum ObDDLType
   DDL_RENAME_SUB_PARTITION = 509,
   DDL_ALTER_PARTITION_POLICY = 510,
   DDL_ALTER_SUBPARTITION_POLICY = 511,
-  ///< @note add new double table long running ddl type before this line  
+  ///< @note add new double table long running ddl type before this line
   DDL_DOUBLE_TABLE_OFFLINE = 1000,
   DDL_MODIFY_COLUMN = 1001, // only modify columns
   DDL_ADD_PRIMARY_KEY = 1002,
@@ -508,10 +509,10 @@ static inline bool is_direct_load_retry_err(const int ret)
 
 static inline bool is_supported_pre_split_ddl_type(const ObDDLType type)
 {
-  return DDL_MODIFY_COLUMN == type 
+  return DDL_MODIFY_COLUMN == type
       || DDL_ADD_PRIMARY_KEY == type
       || DDL_DROP_PRIMARY_KEY == type
-      || DDL_ALTER_PRIMARY_KEY == type 
+      || DDL_ALTER_PRIMARY_KEY == type
       || DDL_CONVERT_TO_CHARACTER == type
       || DDL_TABLE_REDEFINITION == type
       || DDL_ALTER_PARTITION_BY == type;
@@ -594,7 +595,7 @@ enum class RedefinitionState
 struct ScanMonitorNodeInfo final
 {
 public:
-  ScanMonitorNodeInfo(): 
+  ScanMonitorNodeInfo():
     tenant_id_(OB_INVALID_ID), task_id_(0), execution_id_(0), first_change_time_(0), last_change_time_(0), last_refresh_time_(0), output_rows_(0)
   {}
   ~ScanMonitorNodeInfo() = default;
@@ -617,8 +618,8 @@ public:
     output_rows_(0), row_sorted_(0), dump_size_(0), row_count_(0), sort_expected_round_count_(0), merge_sort_start_time_(0), compress_type_(0)
   {}
   ~SortMonitorNodeInfo() = default;
-  TO_STRING_KV(K(tenant_id_), K(task_id_), K(execution_id_), K(thread_id_), K(row_count_id_), 
-  K(first_change_time_), K(last_change_time_), K(output_rows_), K(row_sorted_), K(dump_size_), 
+  TO_STRING_KV(K(tenant_id_), K(task_id_), K(execution_id_), K(thread_id_), K(row_count_id_),
+  K(first_change_time_), K(last_change_time_), K(output_rows_), K(row_sorted_), K(dump_size_),
   K(row_count_), K(sort_expected_round_count_), K(merge_sort_start_time_), K(compress_type_));
 
 public:
@@ -642,11 +643,11 @@ struct InsertMonitorNodeInfo final
 {
 public:
   InsertMonitorNodeInfo():
-    tenant_id_(OB_INVALID_ID), task_id_(0), execution_id_(0), thread_id_(0), last_refresh_time_(0), cg_row_inserted_(0), sstable_row_inserted_(0), 
+    tenant_id_(OB_INVALID_ID), task_id_(0), execution_id_(0), thread_id_(0), last_refresh_time_(0), cg_row_inserted_(0), sstable_row_inserted_(0),
     vec_task_thread_pool_cnt_(0), vec_task_total_cnt_(0), vec_task_finish_cnt_(0)
   {}
   ~InsertMonitorNodeInfo() = default;
-  TO_STRING_KV(K(tenant_id_), K(task_id_), K(execution_id_), K(thread_id_), K(last_refresh_time_), K(cg_row_inserted_), K(sstable_row_inserted_), 
+  TO_STRING_KV(K(tenant_id_), K(task_id_), K(execution_id_), K(thread_id_), K(last_refresh_time_), K(cg_row_inserted_), K(sstable_row_inserted_),
   K(vec_task_thread_pool_cnt_), K(vec_task_total_cnt_), K(vec_task_finish_cnt_));
 
 public:
@@ -840,7 +841,7 @@ public:
   ~ObDDLDiagnoseInfo() = default;
   int init(const uint64_t tenant_id, const int64_t task_id, const ObDDLType ddl_type, const int64_t execution_id);
 
-  void inline reuse() 
+  void inline reuse()
   {
     scan_thread_num_ = 0;
     row_scanned_ = 0;
@@ -900,7 +901,7 @@ public:
 
   int diagnose(const ObSqlMonitorStats &sql_monitor_stats);
   int process_sql_monitor_and_generate_longops_message(const ObSqlMonitorStats &sql_monitor_stats, const int64_t target_cg_cnt, ObDDLTaskStatInfo &stat_info, int64_t &pos);
-  const inline char *get_diagnose_info() 
+  const inline char *get_diagnose_info()
   {
     return diagnose_message_;
   }
@@ -917,9 +918,9 @@ public:
 private:
   int calculate_sql_plan_monitor_node_info(const ObSqlMonitorStats &sql_monitor_stats);
   int calculate_scan_monitor_node_info(const ObSqlMonitorStats &sql_monitor_stats);
-  int calculate_sort_and_insert_info(const ObSqlMonitorStats &sql_monitor_stats); 
+  int calculate_sort_and_insert_info(const ObSqlMonitorStats &sql_monitor_stats);
   int calculate_inmem_sort_info(
-      const int64_t row_sorted, 
+      const int64_t row_sorted,
       const int64_t row_count,
       const int64_t first_change_time,
       const int64_t thread_id);
@@ -943,7 +944,7 @@ private:
   {
     return finish_ddl_ && is_empty_;
   }
-  bool inline is_data_skew() 
+  bool inline is_data_skew()
   {
     if (row_min_ > 0) {
       if (static_cast<double>(row_max_ - row_min_) / row_min_ > DATA_SKEW_RATE) {
@@ -952,7 +953,7 @@ private:
     }
     return false;
   }
-  bool inline is_thread_without_data() 
+  bool inline is_thread_without_data()
   {
     return real_parallelism_ < parallelism_;
   }
@@ -1031,8 +1032,8 @@ private:
   int64_t scan_end_time_;
   int64_t sort_end_time_;
   int64_t insert_end_time_;
-  uint64_t thread_index_; 
-  char diagnose_message_[common::OB_DIAGNOSE_INFO_LENGTH]; 
+  uint64_t thread_index_;
+  char diagnose_message_[common::OB_DIAGNOSE_INFO_LENGTH];
   int64_t pos_;
 };
 
@@ -1074,7 +1075,7 @@ public:
       const uint64_t tenant_id,
       const int64_t table_id,
       common::ObIArray<common::ObTabletID> &tablet_ids);
-  
+
   static int get_tablet_count(const uint64_t tenant_id,
                               const int64_t table_id,
                               int64_t &tablet_count);
@@ -1149,7 +1150,7 @@ public:
       const int64_t schema_version,
       const bool is_oracle_mode,
       ObSqlString &sql_string);
-  
+
   static int generate_mview_ddl_schema_hint_str(
       const uint64_t tenant_id,
       const uint64_t mview_table_id,
@@ -1158,6 +1159,8 @@ public:
       const bool is_oracle_mode,
       ObSqlString &sql_string);
 
+  static int generate_order_by_str_for_mview(const schema::ObTableSchema &container_table_schema,
+                                             ObSqlString &rowkey_column_sql_string);
 
   static int ddl_get_tablet(
       const storage::ObLSHandle &ls_handle,
@@ -1175,15 +1178,15 @@ public:
 
   static bool need_remote_write(const int ret_code);
 
-  static int check_can_convert_character(const ObObjMeta &obj_meta, const bool is_domain_index, const bool is_string_lob) 
+  static int check_can_convert_character(const ObObjMeta &obj_meta, const bool is_domain_index, const bool is_string_lob)
   {
-    return (obj_meta.is_string_type() || obj_meta.is_enum_or_set()) && 
+    return (obj_meta.is_string_type() || obj_meta.is_enum_or_set()) &&
             (is_string_lob || (CS_TYPE_BINARY != obj_meta.get_collation_type() && !is_domain_index));
   }
-  
+
   static int get_sys_ls_leader_addr(
-    const uint64_t cluster_id, 
-    const uint64_t tenant_id, 
+    const uint64_t cluster_id,
+    const uint64_t tenant_id,
     common::ObAddr &leader_addr);
 
   static int get_tablet_paxos_member_list(
@@ -1191,7 +1194,7 @@ public:
     const common::ObTabletID &tablet_id,
     common::ObIArray<common::ObAddr> &paxos_server_list,
     int64_t &paxos_member_count);
-    
+
   static int get_tablet_replica_location(
     const uint64_t tenant_id,
     const common::ObTabletID &tablet_id,
@@ -1277,7 +1280,7 @@ public:
 
   static int replace_user_tenant_id(
     const ObDDLType &ddl_type,
-    const uint64_t tenant_id, 
+    const uint64_t tenant_id,
     obrpc::ObAlterTableArg &alter_table_arg);
   static int replace_user_tenant_id(const uint64_t tenant_id, obrpc::ObDropDatabaseArg &drop_db_arg);
   static int replace_user_tenant_id(const uint64_t tenant_id, obrpc::ObDropTableArg &drop_table_arg);
@@ -1301,31 +1304,31 @@ public:
       const bool with_comma,
       ObSqlString &sql_string);
   static int reshape_ddl_column_obj(
-      common::ObDatum &datum, 
+      common::ObDatum &datum,
       const ObObjMeta &obj_meta);
-  static int64_t calc_inner_sql_execute_timeout() 
+  static int64_t calc_inner_sql_execute_timeout()
   {
     return max(OB_MAX_DDL_SINGLE_REPLICA_BUILD_TIMEOUT, GCONF._ob_ddl_timeout);
   }
-      
+
   /**
    * NOTICE: The interface is designed for Offline DDL operation only.
-   * The caller can not obtain the schema via the hold_buf_src_tenant_schema_guard whose 
+   * The caller can not obtain the schema via the hold_buf_src_tenant_schema_guard whose
    * validity is limited by whether src_tenant_id and dst_tenant_id are the same.
-   * 
+   *
    * 1. This interface will provide the same tenant schema guard when src_tenant_id = dst_tenant_id,
    *    to avoid using two different versions of the guard caused by the parallel ddl under the tenant.
    * 2. This interface will provide corresponding tenant schema guard when src_tenant_id != dst_tenant_id.
-   * 
+   *
    * @param [in] src_tenant_id
    * @param [in] dst_tenant_id
    * @param [in] hold_buf_src_tenant_schema_guard: hold buf, invalid when src_tenant_id = dst_tenant_id.
    * @param [in] hold_buf_dst_tenant_schema_guard: hold buf.
-   * @param [out] src_tenant_schema_guard: 
+   * @param [out] src_tenant_schema_guard:
    *    pointer to the hold_buf_dst_tenant_schema_guard if src_tenant_id = dst_tenant_id,
    *    pointer to the hold_buf_src_tenant_schema_guard if src_tenant_id != dst_tenant_id,
    *    is always not nullptr if the interface return OB_SUCC.
-   * @param [out] dst_tenant_schema_guard: 
+   * @param [out] dst_tenant_schema_guard:
    *    pointer to the hold_buf_dst_tenant_schema_guard,
    *    is always not nullptr if the interface return OB_SUCC.
   */
@@ -1362,7 +1365,7 @@ public:
   static int set_tablet_autoinc_seq(const ObLSID &ls_id, const ObTabletID &tablet_id, const int64_t seq_value);
   static int check_table_compaction_checksum_error(
       const uint64_t tenant_id,
-      const uint64_t table_id); 
+      const uint64_t table_id);
   static int get_temp_store_compress_type(const ObCompressorType schema_compr_type,
                                           const int64_t parallel,
                                           ObCompressorType &compr_type);
@@ -1373,24 +1376,24 @@ public:
   {
     bool res = false;
     switch (type) {
-      case DDL_MODIFY_COLUMN: 
-      case DDL_ADD_PRIMARY_KEY:  
-      case DDL_DROP_PRIMARY_KEY:  
-      case DDL_ALTER_PRIMARY_KEY:  
-      case DDL_ALTER_PARTITION_BY:  
-      case DDL_DROP_COLUMN:  
-      case DDL_CONVERT_TO_CHARACTER: 
-      case DDL_ADD_COLUMN_OFFLINE: 
-      case DDL_COLUMN_REDEFINITION: 
-      case DDL_TABLE_REDEFINITION: 
-      case DDL_DIRECT_LOAD: 
-      case DDL_DIRECT_LOAD_INSERT:  
-      case DDL_MVIEW_COMPLETE_REFRESH: 
-      case DDL_CREATE_MVIEW: 
-      case DDL_ALTER_COLUMN_GROUP: 
-      case DDL_CREATE_INDEX: 
-      case DDL_CREATE_MLOG: 
-      case DDL_CREATE_FTS_INDEX: 
+      case DDL_MODIFY_COLUMN:
+      case DDL_ADD_PRIMARY_KEY:
+      case DDL_DROP_PRIMARY_KEY:
+      case DDL_ALTER_PRIMARY_KEY:
+      case DDL_ALTER_PARTITION_BY:
+      case DDL_DROP_COLUMN:
+      case DDL_CONVERT_TO_CHARACTER:
+      case DDL_ADD_COLUMN_OFFLINE:
+      case DDL_COLUMN_REDEFINITION:
+      case DDL_TABLE_REDEFINITION:
+      case DDL_DIRECT_LOAD:
+      case DDL_DIRECT_LOAD_INSERT:
+      case DDL_MVIEW_COMPLETE_REFRESH:
+      case DDL_CREATE_MVIEW:
+      case DDL_ALTER_COLUMN_GROUP:
+      case DDL_CREATE_INDEX:
+      case DDL_CREATE_MLOG:
+      case DDL_CREATE_FTS_INDEX:
       case DDL_CREATE_VEC_INDEX:
       case DDL_CREATE_PARTITIONED_LOCAL_INDEX:
       case DDL_AUTO_SPLIT_BY_RANGE:
@@ -1403,9 +1406,9 @@ public:
         res = true;
         break;
       default:
-        res = false;   
+        res = false;
     }
-    return res; 
+    return res;
   }
   static int get_global_index_table_ids(const schema::ObTableSchema &table_schema, ObIArray<uint64_t> &global_index_table_ids, share::schema::ObSchemaGetterGuard &schema_guard);
   static bool use_idempotent_mode();
@@ -1415,8 +1418,8 @@ public:
   static int64_t get_parallel_idx(const blocksstable::ObMacroDataSeq &start_seq);
   static bool is_mview_not_retryable(const share::ObDDLType task_type);
   static int64_t get_real_parallelism(const int64_t parallelism, const bool is_mv_refresh);
-  static int obtain_snapshot( 
-      const share::ObDDLTaskStatus next_task_status, 
+  static int obtain_snapshot(
+      const share::ObDDLTaskStatus next_task_status,
       const uint64_t table_id,
       const uint64_t target_table_id,
       int64_t &snapshot_version,
@@ -1438,8 +1441,8 @@ public:
       bool &all_dag_exit);
   static int get_no_logging_param(const int64_t tenant_id, bool &is_no_logging);
   static int batch_check_tablet_checksum(
-      const uint64_t tenant_id, 
-      const int64_t start_idx, 
+      const uint64_t tenant_id,
+      const int64_t start_idx,
       const int64_t end_idx,
       const ObIArray<ObTabletID> &tablet_ids);
   static int hold_snapshot(
@@ -1460,24 +1463,36 @@ public:
       int64_t &snapshot,
       const uint64_t tenant_id,
       const int64_t ddl_task_id = 0,
-      const int64_t trans_end_snapshot = 0, 
+      const int64_t trans_end_snapshot = 0,
       const int64_t index_snapshot_version_diff = 0);
   static int construct_domain_index_arg(const ObTableSchema *table_schema,
     const ObTableSchema *index_schema,
     rootserver::ObDDLTask &task,
     obrpc::ObCreateIndexArg &create_index_arg,
     ObDDLType &ddl_type);
-  static int get_domain_index_share_table_snapshot(const ObTableSchema *table_schema,
+
+  static int get_domain_index_share_table_snapshot(
+    const ObTableSchema *table_schema,
     const ObTableSchema *index_schema,
-    uint64_t tenant_id,
+    const int64_t task_id,
+    const obrpc::ObCreateIndexArg &create_index_arg,
     int64_t &fts_snapshot_version);
+
   static int write_defensive_and_obtain_snapshot(
       common::ObMySQLTransaction &trans,
-      const uint64_t tenant_id, 
+      const uint64_t tenant_id,
       const ObTableSchema &data_table_schema,
       const ObTableSchema &index_table_schema,
       ObSchemaService *schema_service,
       int64_t &new_fetched_snapshot);
+
+  static int get_table_lob_col_idx(const ObTableSchema &table_schema, ObIArray<uint64_t> &lob_col_idxs);
+  static int load_ddl_task(
+      const int64_t tenant_id,
+      const int64_t task_id,
+      ObIAllocator &allocator,
+      rootserver::ObDDLTask &task);
+
   static bool need_reshape(const ObObjMeta &col_type);
   static int check_null_and_length(
       const bool is_index_table,
@@ -1581,7 +1596,6 @@ public:
       const int64_t batch_size,
       ObDirectLoadBatchRows &batch_rows);
   static bool is_vector_index_complement(const ObIndexType index_type);
-  static int get_table_lob_col_idx(const ObTableSchema &table_schema, ObIArray<uint64_t> &lob_col_idxs);
   static int64_t generate_idempotent_value(
       const int64_t slice_count,
       const int64_t slice_idx,
@@ -1610,6 +1624,7 @@ private:
       ObArenaAllocator &allocator,
       const ObIArray<ObColDesc> &column_descs,
       ObDDLTableSchema &ddl_table_schema);
+
   static int check_need_update_domain_index_share_table_snapshot(
     const ObTableSchema *table_schema,
     const ObTableSchema *index_schema,
@@ -1642,7 +1657,7 @@ private:
       const sql::ObOpSpec *spec,
       uint64_t &table_id);
 
-public: 
+public:
   const static int64_t MAX_BATCH_COUNT = 128;
 };
 
@@ -1701,7 +1716,13 @@ public:
       bool &tablet_checksum_status);
 
 private:
-  
+  static int check_all_tablet_sstable_status(
+      const uint64_t tenant_id,
+      const uint64_t index_table_id,
+      const int64_t snapshot_version,
+      const int64_t execution_id,
+      const uint64_t ddl_task_id,
+      bool &is_all_sstable_build_finished);
 
   static int check_task_inner_sql_session_status(
       const common::ObAddr &inner_sql_exec_addr,
@@ -1714,7 +1735,7 @@ private:
   static int do_check_tablets_merge_status(
       const uint64_t tenant_id,
       const int64_t snapshot_version,
-      const ObIArray<ObTabletID> &tablet_ids, 
+      const ObIArray<ObTabletID> &tablet_ids,
       const ObLSID &ls_id,
       hash::ObHashMap<ObAddr, ObArray<ObTabletID>> &ip_tablets_map,
       hash::ObHashMap<ObTabletID, int32_t> &tablets_commited_map,
@@ -1727,7 +1748,7 @@ private:
       bool &is_all_tablets_commited);
 
   static int update_replica_merge_status(
-      const ObTabletID &tablet_id, 
+      const ObTabletID &tablet_id,
       const bool merge_status,
       hash::ObHashMap<ObTabletID, int32_t> &tablets_commited_map);
 
@@ -1745,7 +1766,7 @@ private:
 
   static int construct_tablet_ip_map(
       const uint64_t tenant_id,
-      const ObTabletID &tablet_id, 
+      const ObTabletID &tablet_id,
       hash::ObHashMap<ObAddr, ObArray<ObTabletID>> &ip_tablets_map);
 };
 
@@ -1785,7 +1806,7 @@ private:
 };
 
 typedef common::ObCurTraceId::TraceId DDLTraceId;
-class ObDDLEventInfo final 
+class ObDDLEventInfo final
 {
 public:
   ObDDLEventInfo();

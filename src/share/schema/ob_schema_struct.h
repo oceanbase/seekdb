@@ -137,7 +137,7 @@ static const uint64_t OB_MIN_ID  = 0;//used for lower_bound
 #define MULTIVALUE_INDEX_GENERATED_COLUMN_FLAG (INT64_C(1) << 23) // for multivalue index
 #define MULTIVALUE_INDEX_GENERATED_ARRAY_COLUMN_FLAG (INT64_C(1) << 24) // for multivalue index
 #define GENERATED_FTS_WORD_SEGMENT_COLUMN_FLAG (INT64_C(1) << 25) // word segment column for full-text search flag
-#define GENERATED_VEC_VID_COLUMN_FLAG (INT64_C(1) << 26) 
+#define GENERATED_VEC_VID_COLUMN_FLAG (INT64_C(1) << 26)
 #define GENERATED_VEC_VECTOR_COLUMN_FLAG (INT64_C(1) << 27)
 #define GENERATED_VEC_IVF_CENTER_ID_COLUMN_FLAG (INT64_C(1) << 28)
 #define STRING_LOB_COLUMN_FLAG (INT64_C(1) << 29)
@@ -155,8 +155,8 @@ static const uint64_t OB_MIN_ID  = 0;//used for lower_bound
 #define GENERATED_FTS_DOC_LENGTH_COLUMN_FLAG (INT64_C(1) << 39) // doc length column for full-text search index
 /* vector index hidden column */
 #define GENERATED_VEC_TYPE_COLUMN_FLAG (INT64_C(1) << 40)
-#define GENERATED_VEC_SCN_COLUMN_FLAG (INT64_C(1) << 41) 
-#define GENERATED_VEC_KEY_COLUMN_FLAG (INT64_C(1) << 42) 
+#define GENERATED_VEC_SCN_COLUMN_FLAG (INT64_C(1) << 41)
+#define GENERATED_VEC_KEY_COLUMN_FLAG (INT64_C(1) << 42)
 #define GENERATED_VEC_DATA_COLUMN_FLAG (INT64_C(1) << 43)
 #define GENERATED_VEC_IVF_CENTER_VECTOR_COLUMN_FLAG (INT64_C(1) << 44)
 #define GENERATED_VEC_IVF_DATA_VECTOR_COLUMN_FLAG (INT64_C(1) << 45)
@@ -325,12 +325,12 @@ const int64_t OB_AUX_LOB_TABLE_CNT = 2; // aux lob meta + aux lob piece
 // The current index with max aux tables: vector index
 // They need to be changed at the same time, choosing OB_MAX_AUX_TABLE_PER_MAIN_TABLE is larger.
 
-// number of common aux tables for vec hnsw indexes in a table, vec ivf index has no shared index 
-const int64_t OB_MAX_SHARED_TABLE_CNT_PER_INDEX_TYPE = 2; 
+// number of common aux tables for vec hnsw indexes in a table, vec ivf index has no shared index
+const int64_t OB_MAX_SHARED_TABLE_CNT_PER_INDEX_TYPE = 2;
 // number of aux tables private per vec index, vec hnsw index max aux is 3, vec ivf index max aux is 4, here take 4 (max)
-const int64_t OB_MAX_TABLE_CNT_PER_INDEX = 4; 
+const int64_t OB_MAX_TABLE_CNT_PER_INDEX = 4;
 // The max count of aux tables with physical tablets per user data table.
-const int64_t OB_MAX_AUX_TABLE_PER_MAIN_TABLE = OB_MAX_INDEX_PER_TABLE * OB_MAX_TABLE_CNT_PER_INDEX + 
+const int64_t OB_MAX_AUX_TABLE_PER_MAIN_TABLE = OB_MAX_INDEX_PER_TABLE * OB_MAX_TABLE_CNT_PER_INDEX +
                                            OB_MAX_SHARED_TABLE_CNT_PER_INDEX_TYPE + OB_AUX_LOB_TABLE_CNT + OB_MLOG_TABLE_CNT; // 517
 // The max tablet count of a transfer is one data table tablet with max aux tablets bound together.
 const int64_t OB_MAX_TRANSFER_BINDING_TABLET_CNT = OB_MAX_AUX_TABLE_PER_MAIN_TABLE + 1; // 518
@@ -858,10 +858,10 @@ inline bool is_local_vec_ivf_centroid_index(const ObIndexType index_type)
       || index_type == INDEX_TYPE_VEC_IVFPQ_CENTROID_LOCAL;
 }
 
-inline bool is_local_vec_ivf_index(const ObIndexType index_type) 
+inline bool is_local_vec_ivf_index(const ObIndexType index_type)
 {
-  return is_local_vec_ivfflat_index(index_type) || 
-         is_local_vec_ivfsq8_index(index_type) || 
+  return is_local_vec_ivfflat_index(index_type) ||
+         is_local_vec_ivfsq8_index(index_type) ||
          is_local_vec_ivfpq_index(index_type);
 }
 
@@ -1053,10 +1053,10 @@ inline bool is_built_in_vec_index(const ObIndexType index_type)
 
 inline bool is_vec_domain_index(const ObIndexType index_type)
 {
-  return is_vec_delta_buffer_type(index_type) || 
+  return is_vec_delta_buffer_type(index_type) ||
          is_vec_ivfflat_centroid_index(index_type) ||
          is_vec_ivfsq8_centroid_index(index_type) ||
-         is_vec_ivfpq_centroid_index(index_type) || 
+         is_vec_ivfpq_centroid_index(index_type) ||
          is_vec_dim_docid_value_type(index_type);
 }
 
@@ -1126,7 +1126,7 @@ inline static bool is_local_unique_index_table(const ObIndexType index_type)
       || INDEX_TYPE_HEAP_ORGANIZED_TABLE_PRIMARY == index_type;
 }
 
-inline static bool is_heap_table_primary_key_column(const int64_t column_flags) 
+inline static bool is_heap_table_primary_key_column(const int64_t column_flags)
 {
   return column_flags & HEAP_TABLE_PRIMARY_KEY_FLAG;
 }
@@ -2631,7 +2631,7 @@ public:
   { return external_location_; }
   VIRTUAL_TO_STRING_KV(K_(tenant_id), K_(table_id), K_(part_id), K_(name), K_(low_bound_val),
                        K_(high_bound_val), K_(list_row_values), K_(part_idx),
-                       K_(is_empty_partition_name), K_(tablet_id), K_(external_location), 
+                       K_(is_empty_partition_name), K_(tablet_id), K_(external_location),
                        K_(split_source_tablet_id), K_(part_storage_cache_policy_type));
 protected:
   uint64_t tenant_id_;
@@ -5256,7 +5256,7 @@ struct ObColumnPrivIdKey
 
   ObColumnPrivIdKey(const uint64_t tenant_id, const uint64_t priv_id)
       : tenant_id_(tenant_id), priv_id_(priv_id) {}
-      
+
   TO_STRING_KV(K_(tenant_id), K_(priv_id));
 
   bool operator==(const ObColumnPrivIdKey &rhs) const
@@ -5285,7 +5285,7 @@ struct ObColumnPrivSortKey
     // If Oracle mode reach here, the result may be wrong!
     common::ObCollationType cs_type = common::CS_TYPE_UTF8MB4_GENERAL_CI;
     return (tenant_id_ == rhs.tenant_id_) && (user_id_ == rhs.user_id_)
-           && (db_ == rhs.db_) && (table_ == rhs.table_) && 
+           && (db_ == rhs.db_) && (table_ == rhs.table_) &&
            (0 == common::ObCharset::strcmp(cs_type, column_, rhs.column_));
   }
   bool operator!=(const ObColumnPrivSortKey &rhs) const
@@ -5627,7 +5627,7 @@ public:
   inline const char* get_column_name() const { return extract_str(column_); }
   inline const common::ObString& get_column_name_str() const { return column_; }
   inline uint64_t get_priv_id() const { return priv_id_; }
-  TO_STRING_KV(K_(tenant_id), K_(priv_id), K_(user_id), K_(db), K_(table), K_(column), 
+  TO_STRING_KV(K_(tenant_id), K_(priv_id), K_(user_id), K_(db), K_(table), K_(column),
                "privileges", ObPrintPrivSet(priv_set_));
   //other methods
   virtual bool is_valid() const;
@@ -5782,7 +5782,7 @@ struct ObNeedPriv
       is_for_update_(is_for_update), priv_check_type_(priv_check_type),
       columns_(), check_any_column_priv_(false), catalog_(catalog)
   { }
-  
+
   ObNeedPriv()
       : db_(), table_(), priv_level_(OB_PRIV_INVALID_LEVEL), priv_set_(0), is_sys_table_(false),
         obj_type_(share::schema::ObObjectType::INVALID), is_for_update_(false),
@@ -6368,7 +6368,7 @@ inline uint64_t ObOutlineNameHashWrapper::hash() const
 
 inline bool ObOutlineNameHashWrapper::operator ==(const ObOutlineNameHashWrapper &rv) const
 {
-  return (tenant_id_ == rv.tenant_id_) && (database_id_ == rv.database_id_) 
+  return (tenant_id_ == rv.tenant_id_) && (database_id_ == rv.database_id_)
             && (name_ == rv.name_) && (is_format_ == rv.is_format_);
 }
 
@@ -6896,7 +6896,7 @@ public:
   bool is_modify_rely_flag_;
   bool is_modify_fk_state_;
   // foreign key type (ref primary key/unique key/non-unique key)
-  ObForeignKeyRefType fk_ref_type_; // FARM COMPAT WHITELIST for ref_cst_type_ 
+  ObForeignKeyRefType fk_ref_type_; // FARM COMPAT WHITELIST for ref_cst_type_
   uint64_t ref_cst_id_; // the id of index referenced by foreign key
   bool is_modify_fk_name_flag_;
   bool is_parent_table_mock_;
@@ -7750,19 +7750,29 @@ public:
   inline void set_column_attr(uint64_t column_attr) { pack_ = column_attr; }
   inline void set_min_max() { min_max_ = 1; }
   inline void set_sum() { sum_ = 1; }
+  inline void set_loose_min_max() { loose_min_max_ =1; }
+  inline void set_bm25_token_freq_param() { bm25_token_freq_param_ = 1; }
+  inline void set_bm25_doc_len_param() { bm25_doc_len_param_ = 1; }
   inline bool has_skip_index() const { return OB_DEFAULT_SKIP_INDEX_COLUMN_ATTR != pack_; }
+  inline bool has_loose_skip_index() const { return has_loose_min_max(); }
   inline bool has_min_max() const { return 1 == min_max_; }
   inline bool has_sum() const { return 1 == sum_; }
+  inline bool has_loose_min_max() const { return 1 == loose_min_max_; }
+  inline bool has_bm25_token_freq_param() const { return 1 == bm25_token_freq_param_; }
+  inline bool has_bm25_doc_len_param() const { return 1 == bm25_doc_len_param_; }
   inline bool operator==(const ObSkipIndexColumnAttr &other) const { return pack_ == other.pack_; }
-  TO_STRING_KV(K_(pack), K_(min_max), K_(sum));
+  TO_STRING_KV(K_(pack), K_(min_max), K_(sum), K_(loose_min_max), K_(bm25_token_freq_param), K_(bm25_doc_len_param));
 
   union
   {
     struct
     {
-      uint64_t min_max_       :1;
-      uint64_t sum_           :1;
-      uint64_t reserved_      :62;
+      uint64_t min_max_                 :1;
+      uint64_t sum_                     :1;
+      uint64_t loose_min_max_           :1;
+      uint64_t bm25_token_freq_param_   :1;
+      uint64_t bm25_doc_len_param_      :1;
+      uint64_t reserved_                :59;
     };
     uint64_t pack_;
   };

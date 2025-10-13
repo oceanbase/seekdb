@@ -166,7 +166,7 @@ FROZEN_VERSION TOPK QUERY_TIMEOUT READ_CONSISTENCY LOG_LEVEL USE_PLAN_CACHE
 TRACE_LOG LOAD_BATCH_SIZE TRANS_PARAM OPT_PARAM OB_DDL_SCHEMA_VERSION FORCE_REFRESH_LOCATION_CACHE
 ENABLE_PARALLEL_DAS_DML DISABLE_PARALLEL_DAS_DML DISABLE_PARALLEL_DML ENABLE_PARALLEL_DML MONITOR NO_PARALLEL CURSOR_SHARING_EXACT
 MAX_CONCURRENT DOP TRACING NO_QUERY_TRANSFORMATION NO_COST_BASED_QUERY_TRANSFORMATION BLOCKING RESOURCE_GROUP
-PX_NODE_POLICY PX_NODE_ADDRS PX_NODE_COUNT DML_PARALLEL
+PX_NODE_POLICY PX_NODE_ADDRS PX_NODE_COUNT DML_PARALLEL DISABLE_OP_RICH_FORMAT
 // transform hint
 NO_REWRITE MERGE_HINT NO_MERGE_HINT NO_EXPAND USE_CONCAT NO_UNNEST
 PLACE_GROUP_BY NO_PLACE_GROUP_BY INLINE MATERIALIZE SEMI_TO_INNER NO_SEMI_TO_INNER
@@ -332,7 +332,7 @@ END_P SET_VAR DELIMITER
         OBJECT_ID
 
         PACK_KEYS PAGE PARALLEL PARAMETERS PARSER PARSER_PROPERTIES PARTIAL PARTITION_ID PARTITIONING PARTITIONS PASSWORD PATH PAUSE PAXOS_REPLICA_NUM PER PERCENTAGE
-        PERCENT_RANK PERCENTILE_CONT PHASE PLAN PHYSICAL PLANREGRESS PLUGIN PLUGIN_DIR PLUGINS POINT POLYGON PERFORMANCE
+        PERCENT_RANK PERCENTILE_CONT PHASE PHRASE PLAN PHYSICAL PLANREGRESS PLUGIN PLUGIN_DIR PLUGINS POINT POLYGON PERFORMANCE
         PROTECTION PROJECT_NAME PRIORITY PL POLICY POOL PORT POSITION PREPARE PRESERVE PRETTY PRETTY_COLOR PREV PRIMARY_ZONE PRIVILEGES PROCESS
         PROCESSLIST PROFILE PROFILES PROPERTIES PROXY PRECEDING PCTFREE P_ENTITY P_CHUNK
         PUBLIC PROGRESSIVE_MERGE_NUM PREVIEW PS PLUS PATTERN PARTITION_TYPE FILES PARTIAL_UPDATE PRECREATE_TIME ON_ERROR
@@ -347,7 +347,7 @@ END_P SET_VAR DELIMITER
         RECYCLEBIN ROTATE ROW_NUMBER RUDUNDANT RECURSIVE RANDOM REDO_TRANSPORT_OPTIONS REMOTE_OSS RT
         RANK READ_ONLY RECOVERY REJECT ROLE
 
-        SAMPLE SAVEPOINT SCALARS SCHEDULE SCHEMA_NAME SCN SCOPE SECOND SECURITY SEED SEMISTRUCT_ENCODING_TYPE SEQUENCES SERIAL SERIALIZABLE SERVER
+        SAMPLE SAVEPOINT SCALARS SCHEDULE SCHEMA_NAME SCN SCOPE SCORE SECOND SECURITY SEED SEMISTRUCT_ENCODING_TYPE SEQUENCES SERIAL SERIALIZABLE SERVER
         SERVER_IP SERVER_PORT SERVER_TYPE SERVICE SESSION SESSION_USER SET_MASTER_CLUSTER SET_SLAVE_CLUSTER
         SET_TP SHARE SHUTDOWN SIGNED SIMPLE SINGLE SKIP_INDEX SLAVE SLOW SLOT_IDX SNAPSHOT SOCKET SOME SONAME SOUNDS
         SOURCE SPFILE SPLIT SQL_AFTER_GTIDS SQL_AFTER_MTS_GAPS SQL_BEFORE_GTIDS SQL_BUFFER_RESULT
@@ -569,6 +569,9 @@ END_P SET_VAR DELIMITER
 %type <node> module_name info_type opt_infile
 %type <node_opt_parens> select_clause_set select_clause_set_body
 %type <node> dynamic_partition_option dynamic_partition_option_list sys_view_cast_opt
+%type <node> column_list_with_boost with_param_column_ref
+%type <node> es_sql_opt
+%type <node> operator_list
 
 %start sql_stmt
 %%
@@ -1902,6 +1905,16 @@ simple_expr collation %prec NEG
   malloc_non_terminal_node($$, result->malloc_pool_, T_FUN_MATCH_AGAINST, 2, column_list_node, $7);
   $$->value_ = $8[0];
 }
+| MATCH '(' column_list_with_boost ',' search_expr ',' es_sql_opt ')'
+{
+  ParseNode *column_list_node = NULL;
+  merge_nodes(column_list_node, result, T_MATCH_COLUMN_LIST, $3);
+  malloc_non_terminal_node($$, result->malloc_pool_, T_FUN_ES_MATCH, 3, column_list_node, $5, $7);
+}
+| SCORE'(' ')'
+{
+  malloc_terminal_node($$, result->malloc_pool_, T_FUN_ES_SCORE);
+}
 | case_expr
 {
   $$ = $1;
@@ -1986,6 +1999,15 @@ expr_const
   $$ = $1;
 };
 
+es_sql_opt:
+expr_const
+{
+  $$ = $1;
+}
+| func_expr
+{
+  $$ = $1;
+};
 
 opt_mode_flag:
 IN NATURAL LANGUAGE MODE
@@ -2003,6 +2025,10 @@ IN NATURAL LANGUAGE MODE
 | WITH QUERY EXPANSION
 {
   $$[0] = 3;
+}
+| IN MATCH PHRASE MODE
+{
+  $$[0] = 4;
 }
 | /*empty*/
 {
@@ -11149,6 +11175,27 @@ INSERT
 }
 ;
 
+/*TODO: support no_param_column_ref case*/
+column_list_with_boost:
+with_param_column_ref { $$ = $1}
+| column_list_with_boost ',' with_param_column_ref
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_LINK_NODE, 2, $1, $3);
+}
+;
+
+with_param_column_ref:
+no_param_column_ref '^' literal
+{
+  ParseNode *node = NULL;
+  malloc_non_terminal_node(node, result->malloc_pool_, T_COLUMN_REF, 3, NULL, NULL, $1);
+  dup_node_string($1, node, result->malloc_pool_);
+  ParseNode *list_node = NULL;
+  malloc_non_terminal_node(list_node, result->malloc_pool_, T_LINK_NODE, 2, node, $3);
+  merge_nodes($$, result, T_MATCH_COLUMN_LIST, list_node);
+}
+;
+
 column_list:
 no_param_column_ref { $$ = $1; }
 | column_list ',' no_param_column_ref
@@ -12305,6 +12352,23 @@ READ_CONSISTENCY '(' consistency_level ')'
 | PX_NODE_COUNT '(' INTNUM ')'
 {
   malloc_non_terminal_node($$, result->malloc_pool_, T_PX_NODE_COUNT, 1, $3);
+}
+| DISABLE_OP_RICH_FORMAT '(' operator_list ')'
+{
+  ParseNode *op_list = NULL;
+  merge_nodes(op_list, result, T_DISABLE_OP_RICH_FORMAT, $3);
+  $$=op_list;
+}
+;
+
+operator_list:
+STRING_VALUE
+{
+  $$ = $1;
+}
+| operator_list ',' STRING_VALUE
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_LINK_NODE, 2, $1, $3);
 }
 ;
 
@@ -25187,6 +25251,7 @@ ACCESS_INFO
 |       PER
 |       PERCENTAGE
 |       PHASE
+|       PHRASE
 |       PHYSICAL
 |       PL
 |       PLANREGRESS
@@ -25296,6 +25361,7 @@ ACCESS_INFO
 |       SCHEMA_NAME
 |       SCN
 |       SCOPE
+|       SCORE
 |       SECOND
 |       SECURITY
 |       SEED

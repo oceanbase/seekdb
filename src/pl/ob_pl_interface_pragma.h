@@ -31,6 +31,7 @@
 #include "pl/sys_package/ob_dbms_limit_calculator_mysql.h"
 #include "pl/sys_package/ob_dbms_external_table.h"
 #include "pl/sys_package/ob_dbms_vector_mysql.h"
+#include "pl/sys_package/ob_dbms_hybrid_vector_mysql.h"
 #include "pl/pl_recompile/ob_pl_recompile_task_helper.h"
 #include "pl/sys_package/ob_dbms_partition.h"
 
@@ -113,7 +114,7 @@
   INTERFACE_DEF(INTERFACE_DBMS_STATS_SET_SYSTEM_STATS, "SET_SYSTEM_STATS", (ObDbmsStats::set_system_stats))
   INTERFACE_DEF(INTERFACE_DBMS_STATS_ASYNC_GATHER_STATS_JOB_PROC, "ASYNC_GATHER_STATS_JOB_PROC", (ObDbmsStats::async_gather_stats_job_proc))
   //end of dbms_stat
-  
+
   //start of dbms xplan
   INTERFACE_DEF(INTERFACE_DBMS_XPLAN_ENABLE_OPT_TRACE, "ENABLE_OPT_TRACE", (ObDbmsXplan::enable_opt_trace))
   INTERFACE_DEF(INTERFACE_DBMS_XPLAN_DISABLE_OPT_TRACE, "DISABLE_OPT_TRACE", (ObDbmsXplan::disable_opt_trace))
@@ -228,6 +229,16 @@
   // start of dbms_partition
   INTERFACE_DEF(INTERFACE_DBMS_PARTITION_MANAGE_DYNAMIC_PARTITION, "DBMS_PARTITION_MANAGE_DYNAMIC_PARTITION", (ObDBMSPartition::manage_dynamic_partition))
   // end of dbms_partition
+
+  // start of dbms_hybrid_search
+#define DEFINE_DBMS_HYBRID_VECTOR_MYSQL_INTERFACE(symbol, func) \
+INTERFACE_DEF(INTERFACE_##symbol, #symbol, (func))
+
+DEFINE_DBMS_HYBRID_VECTOR_MYSQL_INTERFACE(DBMS_HYBRID_VECTOR_MYSQL_SEARCH, ObDBMSHybridVectorMySql::search)
+DEFINE_DBMS_HYBRID_VECTOR_MYSQL_INTERFACE(DBMS_HYBRID_VECTOR_MYSQL_GET_SQL, ObDBMSHybridVectorMySql::get_sql)
+
+#undef DEFINE_DBMS_HYBRID_VECTOR_MYSQL_INTERFACE
+  // end of dbms_hybrid_search
 
   INTERFACE_DEF(INTERFACE_END, "INVALID", (nullptr))
 #endif

@@ -225,7 +225,8 @@ public:
                                 IndexDMLInfo*& index_dml_info) const;
   int check_update_part_key(const ObTableSchema* index_schema,
                             IndexDMLInfo*& index_dml_info) const;
-  int check_update_primary_key(const ObTableSchema* index_schema,
+  int check_update_primary_key(ObSchemaGetterGuard &schema_guard,
+                               const ObTableSchema* index_schema,
                                IndexDMLInfo*& index_dml_info) const;
   bool use_pdml() const { return use_pdml_; }
   int compute_dml_parallel();

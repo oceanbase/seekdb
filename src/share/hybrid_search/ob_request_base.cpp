@@ -293,6 +293,14 @@ int ObReqOpExpr::translate_expr(ObObjPrintParams &print_params_, char *buf_, int
         if (current_prec > 0 && param_prec > 0) {
           if (current_prec > param_prec) {
             op_expr->need_parentheses_ = true;
+          } else if (current_prec < param_prec) {
+            op_expr->need_parentheses_ = false;
+          } else {
+            if (current_prec == PREC_MUL) {
+              op_expr->need_parentheses_ = (i == 1);
+            } else {
+              op_expr->need_parentheses_ = !is_left_associative(op_type_);
+            }
           }
         }
       }

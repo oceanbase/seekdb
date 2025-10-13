@@ -52,7 +52,7 @@ struct ObCollectionExprCell
   ObCollectionExprCell(int32_t row_idx, ObExpr *expr, ObEvalCtx *eval_ctx) :
     format_(0), row_idx_(row_idx), expr_(expr), eval_ctx_(eval_ctx)
   {}
-  uint32_t format_;  // 0: arr_vec_foramt(data in attrs_expr), > 0: arr_compact_foramt(lob) 
+  uint32_t format_;  // 0: arr_vec_foramt(data in attrs_expr), > 0: arr_compact_foramt(lob)
   int32_t row_idx_;
   ObExpr *expr_;
   ObEvalCtx *eval_ctx_;
@@ -133,7 +133,7 @@ public:
                                        const int64_t size, uint32_t row_size_arr[],
                                        const ObBatchRows *brs = nullptr);
   template <typename T1, typename T>
-  static int calc_array_sum_by_type(uint32_t data_len, uint32_t len, const char *data_ptr, 
+  static int calc_array_sum_by_type(uint32_t data_len, uint32_t len, const char *data_ptr,
                                     uint8_t *null_bitmaps, T &sum)
   {
     int ret = OB_SUCCESS;
@@ -143,7 +143,7 @@ public:
     } else {
       T1 *data = reinterpret_cast<T1 *>(const_cast<char *>(data_ptr));
       for (uint32_t i = 0; i < len; ++i) {
-        if (null_bitmaps != nullptr && null_bitmaps[i] > 0) { 
+        if (null_bitmaps != nullptr && null_bitmaps[i] > 0) {
           /* do nothing */
         } else if (OB_FAIL(raw_check_add<T>(sum + data[i], static_cast<T>(data[i]), sum))) {
           LOG_WARN("array_sum overflow", K(ret), K(sum), K(data[i]));
@@ -161,7 +161,7 @@ public:
                             uint32_t data_len, ObCollectionArrayType *arr_type, T &sum)
   {
     int ret = OB_SUCCESS;
-  
+
     ObCollectionBasicType *elem_type = NULL;
     if (OB_ISNULL(elem_type = static_cast<ObCollectionBasicType *>(arr_type->element_type_))) {
       ret = OB_ERR_UNEXPECTED;
@@ -220,13 +220,17 @@ public:
       }
       } // end switch
     }
-  
+
     return ret;
   }
-  
+
   static int get_array_data(ObString &data_str, ObCollectionArrayType *arr_type, uint32_t &len,
                             uint8_t *&null_bitmaps, const char *&data, uint32_t &data_len);
+  static int get_array_data(ObIVector *len_vec, ObIVector *nullbitmap_vec, ObIVector *data_vec,
+                            int64_t idx, ObCollectionArrayType *arr_type, uint32_t &len,
+                            uint8_t *&null_bitmaps, const char *&data, uint32_t &data_len);
 
+  static int convert_to_string(common::ObIAllocator &allocator, ObEvalCtx &ctx, const uint16_t subschema_id, const common::ObString &data, ObString &res_str);
   // for vector
   static int get_type_vector(const ObExpr &expr,
                              ObEvalCtx &ctx,
@@ -242,10 +246,10 @@ public:
   static int calc_cast_type2(const ObExprOperatorType &expr_type, ObExprResType &type1, ObExprResType &type2, common::ObExprTypeCtx &type_ctx, uint16_t &res_subschema_id,
                              const bool only_vector = false);
   static int collect_vector_cast_info(ObExprResType &type, ObExecContext &exec_ctx, ObVectorCastInfo &info);
-  static bool is_sparse_vector_supported(const ObExprOperatorType &type) { 
-    return type == T_FUN_SYS_INNER_PRODUCT || 
+  static bool is_sparse_vector_supported(const ObExprOperatorType &type) {
+    return type == T_FUN_SYS_INNER_PRODUCT ||
            type == T_FUN_SYS_NEGATIVE_INNER_PRODUCT ||
-           type == T_FUN_SYS_VECTOR_DIMS; 
+           type == T_FUN_SYS_VECTOR_DIMS;
   };
 
   // update inplace
@@ -269,7 +273,7 @@ private:
   static int get_collection_raw_data(ObIAllocator &allocator, const ObObjMeta &meta, const void *data, ObLength len, ObString &bin_str);
 };
 
-struct ObVectorArithFunc 
+struct ObVectorArithFunc
 {
   enum ArithType
   {
@@ -282,7 +286,7 @@ struct ObVectorArithFunc
 
 struct ObVectorVectorArithFunc : public ObVectorArithFunc
 {
-  
+
   int operator()(ObDatum &res, const ObDatum &l, const ObDatum &r, const ObExpr &expr, ObEvalCtx &ctx, ArithType type) const;
 };
 

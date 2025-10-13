@@ -2669,3 +2669,17 @@ DEF_INT_WITH_CHECKER(_hnsw_max_scan_vectors, OB_TENANT_PARAMETER, "20000",
 DEF_BOOL(_enable_sql_ccl_rule, OB_TENANT_PARAMETER, "True",
          "Enable or disable sql ccl rule.",
          ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
+DEF_INT(_orc_filter_pushdown_level, OB_TENANT_PARAMETER, "4", "[0, 4]",
+        "This parameter controls the filter pushdown level for ORC external tables, "
+        "where 0 disables filter pushdown, 1 pushes filters down to the file level, "
+        "2 pushes filters down to the stripe level, 3 pushes filters down to the row index level "
+        "and 4 pushes filters down to the encoding level. The default value is 4.",
+        ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE))
+
+DEF_INT(_parquet_filter_pushdown_level, OB_TENANT_PARAMETER, "4", "[0, 4]",
+        "This parameter is used to control the predicate push level of the PARQUET external table. "
+        "The optional value is 0, which means disabling filter condition pushdown, "
+        "1, which means pushdown to file level, 2, which means pushdown to RowGroup level, "
+        "3, which means pushdown to Page level and 4, which means pushdown to Encoding level. "
+        "The default value is 4.",
+        ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE))

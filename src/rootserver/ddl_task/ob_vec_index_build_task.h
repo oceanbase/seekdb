@@ -67,7 +67,7 @@ public:
       K(vid_rowkey_task_id_), K(delta_buffer_task_id_),
       K(index_id_task_id_), K(index_snapshot_task_id_), K(drop_index_task_id_), K(is_rebuild_index_),
       K(drop_index_task_submitted_), K(schema_version_), K(execution_id_), K(is_offline_rebuild_),
-      K(consumer_group_id_), K(trace_id_), K(parallelism_), K(create_index_arg_));
+      K(consumer_group_id_), K(trace_id_), K(parallelism_), K(create_index_arg_), K(use_vid_));
 
 public:
   static bool is_rebuild_dense_vec_index_task(const share::schema::ObTableSchema &index_schema);
@@ -107,6 +107,9 @@ private:
   int construct_index_id_arg(obrpc::ObCreateIndexArg &arg);
   int construct_index_snapshot_data_arg(obrpc::ObCreateIndexArg &arg);
 
+  int get_index_table_id(
+      const obrpc::ObCreateIndexArg *create_index_arg,
+      uint64_t &index_table_id);
   int prepare();
   int wait_aux_table_complement();
   int validate_checksum();
@@ -144,7 +147,7 @@ private:
   struct CheckTaskStatusFn final
   {
   public:
-    CheckTaskStatusFn(common::hash::ObHashMap<uint64_t, share::ObDomainDependTaskStatus> &dependent_task_result_map, 
+    CheckTaskStatusFn(common::hash::ObHashMap<uint64_t, share::ObDomainDependTaskStatus> &dependent_task_result_map,
                       int64_t &finished_task_cnt, bool &child_task_failed, bool &state_finished, const uint64_t tenant_id) :
       dependent_task_result_map_(dependent_task_result_map),
       finished_task_cnt_(finished_task_cnt),
@@ -199,6 +202,7 @@ private:
   ObDDLWaitTransEndCtx wait_trans_ctx_;
   obrpc::ObCreateIndexArg create_index_arg_;
   common::hash::ObHashMap<uint64_t, share::ObDomainDependTaskStatus> dependent_task_result_map_;
+  bool use_vid_;
 };
 
 } // end namespace rootserver

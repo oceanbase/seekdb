@@ -23,6 +23,7 @@
 #include "rootserver/ddl_task/ob_vec_index_build_task.h"
 #include "rootserver/ddl_task/ob_vec_ivf_index_build_task.h"
 #include "rootserver/ddl_task/ob_fts_index_build_task.h"
+#include "rootserver/ddl_task/ob_drop_fts_index_task.h"
 
 const bool OB_DDL_TASK_ENABLE_TRACING = false;
 
@@ -722,7 +723,7 @@ int ObFTSDDLChildTaskInfo::deep_copy_from_other(
   return ret;
 }
 
-OB_SERIALIZE_MEMBER(ObFTSDDLChildTaskInfo, index_name_, table_id_);
+OB_SERIALIZE_MEMBER(ObFTSDDLChildTaskInfo, index_name_, table_id_, task_id_);
 
 
 int ObVecIndexDDLChildTaskInfo::deep_copy_from_other(
@@ -770,6 +771,7 @@ int ObDDLTask::get_ddl_type_str(const int64_t ddl_type, const char *&ddl_type_st
     case DDL_CREATE_VEC_IVFFLAT_INDEX:
     case DDL_CREATE_VEC_IVFSQ8_INDEX:
     case DDL_CREATE_VEC_IVFPQ_INDEX:
+    case DDL_CREATE_VEC_SPIV_INDEX:
       ddl_type_str =  "create vec index";
       break;
     case DDL_REBUILD_INDEX:
@@ -1247,6 +1249,13 @@ int ObDDLTask::switch_status(const ObDDLTaskStatus new_status, const bool enable
       delay_schedule_time_ = 0; // when status changed, schedule immediately
       clear_old_status_context();
       LOG_INFO("ddl_scheduler switch status", K(ret), "ddl_event_info", ObDDLEventInfo(), K(task_status_));
+    }
+
+    if (old_status != real_new_status) {
+      if (OB_TMP_FAIL(inner_refresh_task_context(real_new_status))) {
+        LOG_WARN("fail to inner refresh task context", K(tmp_ret), K(ret), K(real_new_status));
+      }
+      ret = (OB_SUCCESS == ret) ? tmp_ret : ret;
     }
 
     if (OB_CANCELED == real_ret_code || ObDDLTaskStatus::FAIL == task_status_) {
@@ -3052,6 +3061,33 @@ int ObDDLTaskRecordOperator::update_parent_task_message(
       } else if (OB_FAIL(task.update_task_message(proxy))) {
         LOG_WARN("fail to update task message", K(ret), K(parent_task_id));
       }
+    } else if (DDL_CREATE_VEC_SPIV_INDEX == task_record.ddl_type_) {
+      SMART_VAR(ObFtsIndexBuildTask, task) {
+        if (OB_FAIL(task.init(task_record))) {
+          LOG_WARN("fail to init ObFtsIndexBuildTask", K(ret), K(task_record));
+        } else if (UPDATE_CREATE_INDEX_ID == update_type) {
+          if (index_schema.is_rowkey_doc_id()) {
+            task.set_rowkey_doc_aux_table_id(target_table_id);
+            task.set_rowkey_doc_aux_task_id(target_task_id);
+            task.set_rowkey_doc_task_submitted(true);
+          } else if (index_schema.is_doc_id_rowkey()) {
+            task.set_doc_rowkey_aux_table_id(target_table_id);
+            task.set_doc_rowkey_aux_task_id(target_task_id);
+            task.set_doc_rowkey_task_submitted(true);
+          } else if (index_schema.is_vec_spiv_index_aux()) {
+            task.set_fts_index_aux_table_id(target_table_id);
+            task.set_fts_index_aux_task_id(target_task_id);
+            task.set_fts_index_aux_task_submitted(true);
+          }
+        } else if (UPDATE_DROP_INDEX_TASK_ID == update_type) {
+          task.set_drop_index_task_id(target_task_id);
+          task.set_drop_index_task_submitted(true);
+        }
+      }
+      if (OB_FAIL(ret)) {
+      } else if (OB_FAIL(task.update_task_message(proxy))) {
+        LOG_WARN("fail to update task message", K(ret), K(parent_task_id));
+      }
     } else if (task_record.ddl_type_ == DDL_CREATE_VEC_IVFFLAT_INDEX ||
                task_record.ddl_type_ == DDL_CREATE_VEC_IVFSQ8_INDEX ||
                task_record.ddl_type_ == DDL_CREATE_VEC_IVFPQ_INDEX) {
@@ -3100,6 +3136,26 @@ int ObDDLTaskRecordOperator::update_parent_task_message(
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(task.update_task_message(proxy))) {
         LOG_WARN("fail to update task message", K(ret), K(parent_task_id));
+      }
+    } else if (task_record.ddl_type_ == DDL_DROP_FTS_INDEX) {
+      SMART_VAR(ObDropFTSIndexTask, task) {
+        if (OB_FAIL(task.init(task_record))) {
+          LOG_WARN("fail to initialize the drop fulltext index task", K(ret), K(task_record));
+        } else if (UPDATE_DROP_INDEX_TASK_ID == update_type) {
+          if (index_schema.is_fts_index_aux()) {
+            task.set_drop_domain_index_task_id(target_task_id);
+          } else if (index_schema.is_fts_doc_word_aux()) {
+            task.set_drop_doc_word_task_id(target_task_id);
+          } else if (index_schema.is_doc_id_rowkey()) {
+            task.set_drop_doc_rowkey_task_id(target_task_id);
+          } else if (index_schema.is_rowkey_doc_id()) {
+            task.set_drop_rowkey_doc_task_id(target_task_id);
+          }
+        }
+        if (OB_FAIL(ret)) {
+        } else if (OB_FAIL(task.update_task_message(proxy))) {
+          LOG_WARN("fail to update task message", K(ret), K(parent_task_id));
+        }
       }
     } else {
       // TODO: other ddl type need to be update parent task message, now skip.
@@ -4606,6 +4662,17 @@ int ObDDLTask::init_ddl_task_monitor_info(const uint64_t target_table_id)
     LOG_WARN("failed to get ddl type str", K(ret));
   } else if (OB_FAIL(stat_info_.init(ddl_type_str, target_table_id))) {
     LOG_WARN("failed to init stat info", K(ret));
+  }
+  return ret;
+}
+
+int ObDDLTask::inner_refresh_task_context(const share::ObDDLTaskStatus status)
+{
+  int ret = OB_SUCCESS;
+  // you can refresh the shared context of ddl task here
+  // inherit the refresh_task_comtext function to refresh the task specific context
+  if (OB_FAIL(refresh_task_context(status))) {
+    LOG_WARN("fail to refresh task context", K(ret));
   }
   return ret;
 }

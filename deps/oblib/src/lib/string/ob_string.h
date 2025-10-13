@@ -302,6 +302,35 @@ public:
     return OB_SUCCESS;
   }
 
+  inline bool case_compare_equal(const ObString &obstr) const
+  {
+    bool cmp = true;
+    if (NULL == ptr_) {
+      if (NULL != obstr.ptr_) {
+        cmp = false;
+      }
+    } else if (NULL == obstr.ptr_) {
+      cmp = false;
+    } else if (data_length_ != obstr.data_length_) {
+      cmp = false;
+    } else {
+      cmp = (0 == strncasecmp(ptr_, obstr.ptr_, data_length_));
+    }
+
+    return cmp;
+  }
+
+  inline bool case_compare_equal(const char *str) const
+  {
+    obstr_size_t len = 0;
+    if (NULL != str) {
+      len = static_cast<obstr_size_t>(strlen(str));
+    }
+    char *p = const_cast<char *>(str);
+    const ObString rv(0, len, p);
+    return case_compare_equal(rv);
+  }
+
   inline int case_compare(const ObString &obstr) const
   {
     int cmp = 0;
@@ -331,6 +360,31 @@ public:
     return case_compare(rv);
   }
 
+  inline bool compare_equal(const ObString &obstr) const
+  {
+    bool cmp = true;
+    if (ptr_ == obstr.ptr_) {
+      cmp = data_length_ == obstr.data_length_;
+    } else if (0 == data_length_ && 0 == obstr.data_length_) {
+      cmp = true;
+    } else if (data_length_ != obstr.data_length_) {
+      cmp = false;
+    } else {
+      cmp = (0 == MEMCMP(ptr_, obstr.ptr_, data_length_));
+    }
+    return cmp;
+  }
+
+  inline bool compare_equal(const char *str) const
+  {
+    obstr_size_t len = 0;
+    if (NULL != str) {
+      len = static_cast<obstr_size_t>(strlen(str));
+    }
+    char *p = const_cast<char *>(str);
+    const ObString rv(0, len, p);
+    return compare_equal(rv);
+  }
 
   inline int compare(const ObString &obstr) const
   {
@@ -434,7 +488,7 @@ public:
     char *p = const_cast<char *>(str);
     const ObString rv(0, len, p);
     return prefix_match_ci(rv);
-  } 
+  }
 
   inline obstr_size_t shrink()
   {

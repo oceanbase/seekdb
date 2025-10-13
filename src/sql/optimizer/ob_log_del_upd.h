@@ -45,7 +45,8 @@ public:
     new_rowid_expr_(NULL),
     trans_info_expr_(NULL),
     related_index_ids_(),
-    fk_lookup_part_id_expr_()
+    fk_lookup_part_id_expr_(),
+    is_vec_hnsw_index_vid_opt_(false)
   {
   }
   inline void reset()
@@ -76,6 +77,7 @@ public:
     trans_info_expr_ = NULL,
     related_index_ids_.reset();
     fk_lookup_part_id_expr_.reset();
+    is_vec_hnsw_index_vid_opt_ = false;
   }
   int64_t to_explain_string(char *buf, int64_t buf_len, ExplainType type) const;
   int init_assignment_info(const ObAssignments &assignments,
@@ -83,6 +85,7 @@ public:
 
   int assign_basic(const IndexDMLInfo &other);
   int assign(const ObDmlTableInfo& info);
+  int deep_copy(ObIRawExprCopier &expr_copier, const IndexDMLInfo &other);
 
 
   uint64_t hash(uint64_t seed) const
@@ -173,6 +176,8 @@ public:
 
   common::ObSEArray<ObRawExpr*, 4, common::ModulePageAllocator, true> fk_lookup_part_id_expr_;
 
+  bool is_vec_hnsw_index_vid_opt_;
+
   TO_STRING_KV(K_(table_id),
                K_(ref_table_id),
                K_(loc_table_id),
@@ -190,7 +195,8 @@ public:
                K_(is_update_part_key),
                K_(is_update_primary_key),
                K_(distinct_algo),
-               K_(related_index_ids));
+               K_(related_index_ids),
+               K_(is_vec_hnsw_index_vid_opt));
 };
 
 class ObDelUpdLogPlan;
@@ -374,14 +380,14 @@ protected:
   int generate_ddl_slice_id_expr();
 
   int print_table_infos(const ObString &prefix,
-                        char *buf, 
-                        int64_t &buf_len, 
-                        int64_t &pos, 
+                        char *buf,
+                        int64_t &buf_len,
+                        int64_t &pos,
                         ExplainType type);
   int print_assigns(const ObAssignments &assigns,
-                    char *buf, 
-                    int64_t &buf_len, 
-                    int64_t &pos, 
+                    char *buf,
+                    int64_t &buf_len,
+                    int64_t &pos,
                     ExplainType type);
 
   // The pseudo partition_id for PDML may be produced by repart exchange or TSC.
@@ -391,8 +397,8 @@ protected:
                                         const uint64_t ref_tid,
                                         ObLogExchange *&producer,
                                         ObLogTableScan *&src_tsc);
-                                
-  virtual int get_plan_item_info(PlanText &plan_text, 
+
+  virtual int get_plan_item_info(PlanText &plan_text,
                                 ObSqlPlanItem &plan_item) override;
 
   virtual int print_outline_data(PlanText &plan_text) override;

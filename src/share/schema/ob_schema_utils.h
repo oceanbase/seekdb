@@ -175,7 +175,7 @@ public:
                                          share::schema::ObTableSchema &dst_table_schema);
   static int alter_rowkey_column_group(share::schema::ObTableSchema &table_schema);
   static int alter_default_column_group(share::schema::ObTableSchema &new_table_schema);
-  
+
   static int mock_default_cg(
               const uint64_t tenant_id,
               share::schema::ObTableSchema &new_table_schema);
@@ -197,7 +197,7 @@ public:
       const common::ObIArray<ObObjectID> &table_ids,
       common::ObIArray<ObSimpleTableSchemaV2 *> &table_schemas);
 
-  // batch get table schemas by specified schema_version from cache or inner_table automatically 
+  // batch get table schemas by specified schema_version from cache or inner_table automatically
   //
   // @param[in] sql_client: ObISQLClient
   // @param[in] allocator:  allocator to manage memory of table schemas
@@ -268,6 +268,7 @@ public:
       bool &exist);
 
   static int is_drop_column_only(const schema::AlterTableSchema &alter_table_schema, bool &is_drop_col_only);
+  static int check_build_old_version_column_group(const share::schema::ObTableSchema &table_schema, bool &build_old_version_cg);
 
 private:
   static int get_tenant_variable(schema::ObSchemaGetterGuard &schema_guard,

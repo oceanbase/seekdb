@@ -233,7 +233,6 @@ psmall_test=[
 'map.map_values_mysql',
 'map.sparse_vector_dml_1_mysql',
 'map.sparse_vector_dml_2_mysql',
-'map.sparse_vector_index_dml_mysql',
 'map.sparse_vector_query_mysql',
 'materialized_view_log.alter_mlog_mysql',
 'materialized_view_log.create_mlog_mysql',
