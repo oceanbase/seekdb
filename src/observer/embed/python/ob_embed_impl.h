@@ -21,6 +21,7 @@ namespace oceanbase
 {
 namespace embed
 {
+extern char embed_version_str[oceanbase::common::OB_SERVER_VERSION_LENGTH];
 class ObLiteEmbedCursor;
 class ObLiteEmbedConn : public std::enable_shared_from_this<ObLiteEmbedConn>
 {
@@ -47,13 +48,15 @@ class ObLiteEmbedCursor
 {
 public:
   ObLiteEmbedCursor() : embed_conn_(), result_seq_(0) {}
-  ~ObLiteEmbedCursor() {
+  ~ObLiteEmbedCursor() { reset(); }
+  int execute(const char* sql);
+  pybind11::tuple fetchone();
+  std::vector<pybind11::tuple> fetchall();
+  void reset() {
     embed_conn_.reset();
     result_seq_ = 0;
   }
-  int execute(const char* sql);
-  std::vector<pybind11::object> fetchone();
-  std::vector<std::vector<pybind11::object>> fetchall();
+  void close() { reset(); }
   friend ObLiteEmbedCursor ObLiteEmbedConn::cursor();
 private:
   std::shared_ptr<ObLiteEmbedConn> embed_conn_;

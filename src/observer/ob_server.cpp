@@ -1864,12 +1864,21 @@ int ObServer::init_config(const ObServerOptions &opts)
   } else {
     // set dump path
     const char *dump_path = "etc/observer.config.bin";
-    config_mgr_.set_dump_path(dump_path);
-    if (OB_FILE_NOT_EXIST == (ret = config_mgr_.load_config())) {
-      has_config_file = false;
-      ret = OB_SUCCESS;
-    } else if (OB_FAIL(ret)) {
-      LOG_ERROR("load config from file failed", KR(ret));
+    char buffer[PATH_MAX];
+    ObSqlString abs_dump_path;
+    if (getcwd(buffer, sizeof(buffer)) == nullptr) {
+      ret = OB_ERR_SYS;
+      LOG_ERROR("failed to getcwd", K(ret), K(errno), K(strerror(errno)));
+    } else if (OB_FAIL(abs_dump_path.append_fmt("%s/%s", buffer, dump_path))) {
+      LOG_ERROR("failed to append", K(ret));
+    } else {
+      config_mgr_.set_dump_path(abs_dump_path.ptr());
+      if (OB_FILE_NOT_EXIST == (ret = config_mgr_.load_config())) {
+        has_config_file = false;
+        ret = OB_SUCCESS;
+      } else if (OB_FAIL(ret)) {
+        LOG_ERROR("load config from file failed", KR(ret));
+      }
     }
   }
 

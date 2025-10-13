@@ -21,7 +21,7 @@ namespace lib
 class ObMallocTimeMonitor
 {
 public:
-  static const int64_t WARN_THRESHOLD = 100000;
+  static const int64_t WARN_THRESHOLD = 10000000;
   ObMallocTimeMonitor()
   {
     MEMSET(this, 0, sizeof(*this));

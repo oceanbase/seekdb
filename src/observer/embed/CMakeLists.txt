@@ -1,6 +1,9 @@
 
 if(BUILD_EMBED_MODE)
-  find_package(Python3 COMPONENTS Interpreter Development REQUIRED)
+  set(PYTHON_VERSION "3.8")
+  find_package(Python3 ${PYTHON_VERSION} EXACT COMPONENTS Interpreter Development REQUIRED)
+  set(Python3_EXECUTABLE ${Python3_EXECUTABLE})
+  message(STATUS "Building embed module with Python ${PYTHON_VERSION}")
   execute_process(
       COMMAND "${Python3_EXECUTABLE}" -c 
               "import pybind11; print(pybind11.get_cmake_dir())"

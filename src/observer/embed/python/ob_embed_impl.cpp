@@ -18,9 +18,13 @@
 #include "observer/ob_inner_sql_result.h"
 #include "observer/ob_server_options.h"
 #include "lib/string/ob_string.h"
+#include "common/ob_version_def.h"
 
 PYBIND11_MODULE(oblite, m) {
     m.doc() = "oblite embed pybind";
+    char embed_version_str[oceanbase::common::OB_SERVER_VERSION_LENGTH];
+    oceanbase::common::VersionUtil::print_version_str(embed_version_str, sizeof(embed_version_str), DATA_CURRENT_VERSION);
+    m.attr("__version__") = embed_version_str;
 
     m.def("open", &oceanbase::embed::ObLiteEmbed::open, pybind11::arg("db_dir") = "./oblite.db",
                                                  "open db");
@@ -41,7 +45,8 @@ PYBIND11_MODULE(oblite, m) {
     pybind11::class_<oceanbase::embed::ObLiteEmbedCursor>(m, "ObLiteiEmbedCursor")
         .def("execute", &oceanbase::embed::ObLiteEmbedCursor::execute, pybind11::call_guard<pybind11::gil_scoped_release>())
         .def("fetchone", &oceanbase::embed::ObLiteEmbedCursor::fetchone)
-        .def("fetchall", &oceanbase::embed::ObLiteEmbedCursor::fetchall);
+        .def("fetchall", &oceanbase::embed::ObLiteEmbedCursor::fetchall)
+        .def("close", &oceanbase::embed::ObLiteEmbedCursor::close);
 
     pybind11::object atexit = pybind11::module::import("atexit");
     atexit.attr("register")(pybind11::cpp_function(oceanbase::embed::ObLiteEmbed::close));
@@ -101,7 +106,7 @@ void ObLiteEmbed::open(const char* db_dir)
     }
   }
   if (OB_FAIL(ret)) {
-    throw std::runtime_error("open oblite failed error code: " + std::to_string(ret));
+    throw std::runtime_error("open oblite failed " + std::to_string(ret) + " " + std::string(ob_errpkt_strerror(ret, false)));
   }
 }
 
@@ -160,8 +165,6 @@ int ObLiteEmbed::do_open_(const char* db_dir)
     MPRINT("get data dir absolute path failed %d", ret);
   } else if (OB_FAIL(to_absolute_path(work_abs_dir.ptr(), opts.redo_dir_))) {
     MPRINT("get redo dir absolute path failed %d", ret);
-  } else {
-    MPRINT("OceanBase use base-dir: %s, data-dir: %s, redo-dir: %s", opts.base_dir_.ptr(), opts.data_dir_.ptr(), opts.redo_dir_.ptr());
   }
 
   if (OB_FAIL(ret)) {
@@ -198,7 +201,7 @@ int ObLiteEmbed::do_open_(const char* db_dir)
     if (OB_FAIL(log_file.assign_fmt("%s/log/oblite.log", opts.base_dir_.ptr()))) {
       MPRINT("calculate log file failed %d", ret);
     } else {
-      OB_LOGGER.set_file_name(log_file.ptr(), true, false);
+      OB_LOGGER.set_file_name(log_file.ptr(), true, false, log_file.ptr(), log_file.ptr());
     }
 
     int saved_stdout = dup(STDOUT_FILENO); // Save current stdout
@@ -259,7 +262,7 @@ std::shared_ptr<ObLiteEmbedConn> ObLiteEmbed::connect(const char* db_name, const
     LOG_WARN("execute sql failed", KR(ret));
   }
   if (OB_FAIL(ret)) {
-    throw std::runtime_error("connect failed error code: " + std::to_string(ret));
+    throw std::runtime_error("connect failed " + std::to_string(ret) + " " + std::string(ob_errpkt_strerror(ret, false)));
   }
   return embed_conn;
 }
@@ -299,7 +302,7 @@ int ObLiteEmbedConn::execute(const char *sql, int64_t &affected_rows, int64_t &r
     LOG_WARN("alloc mem failed", KR(ret));
   } else if (FALSE_IT(new (result_) common::ObCommonSqlProxy::ReadResult())) {
   } else if (OB_FAIL(conn_->execute_read(OB_SYS_TENANT_ID, sql_string, *result_, true))) {
-    LOG_WARN("execute sql failed", KR(ret));
+    LOG_WARN("execute sql failed", KR(ret), K(sql));
   } else {
     observer::ObInnerSQLResult& res = static_cast<observer::ObInnerSQLResult&>(*result_->get_result());
     affected_rows = res.result_set().get_affected_rows();
@@ -320,23 +323,27 @@ int ObLiteEmbedCursor::execute(const char *sql)
   int ret = OB_SUCCESS;
   int64_t affected_rows = 0;
   int64_t result_seq = 0;
-  if (OB_FAIL(embed_conn_->execute(sql, affected_rows, result_seq))) {
+  if (!embed_conn_) {
+    ret = OB_CONNECT_ERROR;
+  } else if (OB_FAIL(embed_conn_->execute(sql, affected_rows, result_seq))) {
     LOG_WARN("execute sql failed", KR(ret), K(sql));
   } else {
     result_seq_ = result_seq;
   }
   if (OB_FAIL(ret)) {
-    throw std::runtime_error("execute sql error code: " + std::to_string(ret));
+    throw std::runtime_error("execute sql failed " + std::to_string(ret) + " " + std::string(ob_errpkt_strerror(ret, false)));
   }
   return affected_rows;
 }
 
-std::vector<std::vector<pybind11::object>> ObLiteEmbedCursor::fetchall()
+std::vector<pybind11::tuple> ObLiteEmbedCursor::fetchall()
 {
   int ret = OB_SUCCESS;
-  std::vector<std::vector<pybind11::object>> res;
+  std::vector<pybind11::tuple> res;
   sqlclient::ObMySQLResult* mysql_result = nullptr;
-  if (OB_ISNULL(embed_conn_->get_conn())) {
+  if (!embed_conn_) {
+    ret = OB_CONNECT_ERROR;
+  } else if (OB_ISNULL(embed_conn_->get_conn())) {
     ret = OB_CONNECT_ERROR;
   } else if (OB_ISNULL(embed_conn_->get_res())) {
     ret = OB_ERR_NULL_VALUE;
@@ -355,9 +362,9 @@ std::vector<std::vector<pybind11::object>> ObLiteEmbedCursor::fetchall()
         break;
       }
       int64_t column_count = mysql_result->get_column_count();
-      std::vector<pybind11::object> row;
+      pybind11::list row_data;
       if (column_count > 0) {
-        row.reserve(column_count);
+        row_data = pybind11::list();
       }
       for (int64_t i = 0; OB_SUCC(ret) && i < column_count; i++) {
         ObObjMeta obj_meta;
@@ -368,24 +375,26 @@ std::vector<std::vector<pybind11::object>> ObLiteEmbedCursor::fetchall()
           LOG_WARN("convert obobj to value failed ",KR(ret), K(obj_meta), K(obj_meta.get_type()));
         } else {
           //LOG_INFO("fetchall", K(i), K(obj_meta), K(obj_meta.get_type()));
-          row.push_back(value);
+          row_data.append(value);
         }
       }
-      res.push_back(std::move(row));
+      res.push_back(pybind11::tuple(row_data));
     }
   }
   if (OB_FAIL(ret)) {
-    throw std::runtime_error("fetchall failed error code: " + std::to_string(ret));
+    throw std::runtime_error("fetchall failed " + std::to_string(ret) + " " + std::string(ob_errpkt_strerror(ret, false)));
   }
   return res;
 }
 
-std::vector<pybind11::object> ObLiteEmbedCursor::fetchone()
+pybind11::tuple ObLiteEmbedCursor::fetchone()
 {
   int ret = OB_SUCCESS;
-  std::vector<pybind11::object> res;
+  pybind11::list row_data;
   sqlclient::ObMySQLResult* mysql_result = nullptr;
-  if (OB_ISNULL(embed_conn_->get_conn())) {
+  if (!embed_conn_) {
+    ret = OB_CONNECT_ERROR;
+  } else if (OB_ISNULL(embed_conn_->get_conn())) {
     ret = OB_CONNECT_ERROR;
   } else if (OB_ISNULL(embed_conn_->get_res())) {
     ret = OB_ERR_NULL_VALUE;
@@ -400,6 +409,8 @@ std::vector<pybind11::object> ObLiteEmbedCursor::fetchone()
     ret = mysql_result->next();
     if (OB_ITER_END == ret) {
       ret = OB_SUCCESS;
+      // 返回空tuple
+      return pybind11::tuple();
     } else {
       int64_t column_count = mysql_result->get_column_count();
       for (int64_t i = 0; OB_SUCC(ret) && i < column_count; i++) {
@@ -410,15 +421,15 @@ std::vector<pybind11::object> ObLiteEmbedCursor::fetchone()
         } else if (OB_FAIL(ObLiteEmbedUtil::convert_result_to_pyobj(i, *mysql_result, obj_meta, value))) {
           LOG_WARN("convert obobj to value failed ",KR(ret), K(obj_meta), K(obj_meta.get_type()));
         } else {
-          res.push_back(value);
+          row_data.append(value);
         }
       }
     }
   }
   if (OB_FAIL(ret)) {
-    throw std::runtime_error("fetchone failed error code: " + std::to_string(ret));
+    throw std::runtime_error("fetchone failed " + std::to_string(ret) + " " + std::string(ob_errpkt_strerror(ret, false)));
   }
-  return res;
+  return pybind11::tuple(row_data);
 }
 
 void ObLiteEmbedConn::begin()
@@ -430,7 +441,7 @@ void ObLiteEmbedConn::begin()
     LOG_WARN("start trans failed", KR(ret));
   }
   if (OB_FAIL(ret)) {
-    throw std::runtime_error("begin failed error code: " + std::to_string(ret));
+    throw std::runtime_error("begin failed " + std::to_string(ret) + " " + std::string(ob_errpkt_strerror(ret, false)));
   }
 }
 
@@ -444,7 +455,7 @@ void ObLiteEmbedConn::commit()
     LOG_WARN("commit trans failed", KR(ret));
   }
   if (OB_FAIL(ret)) {
-    throw std::runtime_error("commit failed error code: " + std::to_string(ret));
+    throw std::runtime_error("commit failed " + std::to_string(ret) + " " + std::string(ob_errpkt_strerror(ret, false)));
   }
 }
 
@@ -458,7 +469,7 @@ void ObLiteEmbedConn::rollback()
     LOG_WARN("rollback trans failed", KR(ret));
   }
   if (OB_FAIL(ret)) {
-    throw std::runtime_error("rollback failed error code: " + std::to_string(ret));
+    throw std::runtime_error("rollback failed " + std::to_string(ret) + " " + std::string(ob_errpkt_strerror(ret, false)));
   }
 }
 
