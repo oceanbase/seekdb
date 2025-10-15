@@ -2420,12 +2420,12 @@ int ObSetConfigResolver::resolve(const ParseNode &parse_tree)
                               LOG_WARN("fail to get compat mode", K(ret));
                             } else if (!valid) {
                               ret = OB_OP_NOT_ALLOW;
-                              LOG_WARN("can not set defdefault_table_organization", "item", item, K(ret), "tenant_id", item.exec_tenant_id_);
-                            } else if (lib::Worker::CompatMode::ORACLE == compat_mode || OB_SYS_TENANT_ID == tenant_id) {
-                              LOG_WARN("can not set default_table_organization in oracle and sys tenants",
+                              LOG_WARN("can not set default_table_organization", "item", item, K(ret), "tenant_id", item.exec_tenant_id_);
+                            } else if (lib::Worker::CompatMode::ORACLE == compat_mode) {
+                              LOG_WARN("can not set default_table_organization in oracle tenant",
                                        "item", item, K(i), K(tenant_id), K(compat_mode));
                               LOG_USER_NOTE(OB_NOT_SUPPORTED, 
-                                            "'ALTER SYSTEM SET DEFAULT_TABLE_ORGANIZATION' syntax in oracle or sys tenant is");
+                                            "'ALTER SYSTEM SET DEFAULT_TABLE_ORGANIZATION' syntax in oracle tenant is");
                             }
                           }
                         }
@@ -2447,11 +2447,6 @@ int ObSetConfigResolver::resolve(const ParseNode &parse_tree)
                   if (!valid) {
                     ret = OB_OP_NOT_ALLOW;
                     LOG_WARN("can not set default_table_organization", "item", item, K(ret));
-                  } else if (OB_SYS_TENANT_ID == item.exec_tenant_id_) {
-                    LOG_WARN("can not set default_table_organization in the sys tenant",
-                              "item", item,"tenant_id", item.exec_tenant_id_);
-                    LOG_USER_NOTE(OB_NOT_SUPPORTED, 
-                                  "'ALTER SYSTEM SET DEFAULT_TABLE_ORGANIZATION' syntax in the sys tenant is");
                   }
                 }
 
