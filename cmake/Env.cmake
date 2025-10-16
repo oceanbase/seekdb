@@ -155,6 +155,10 @@ else()
   endif()
 endif()
 
+if(BUILD_EMBED_MODE)
+  add_definitions(-DOB_BUILD_EMBED_MODE)
+endif()
+
 set(OB_OBJCOPY_BIN "${DEVTOOLS_DIR}/bin/objcopy")
 
 # NO RELERO: -Wl,-znorelro

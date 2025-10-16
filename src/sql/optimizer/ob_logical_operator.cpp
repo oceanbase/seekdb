@@ -3635,6 +3635,7 @@ int ObLogicalOperator::check_stmt_can_be_packed(const ObDMLStmt *stmt, bool &nee
 {
   int ret = OB_SUCCESS;
   need_pack = false;
+  #ifndef OB_BUILD_EMBED_MODE
   ObSQLSessionInfo *session_info = NULL;
   if (OB_ISNULL(stmt) || OB_ISNULL(get_plan()) ||
       OB_ISNULL(session_info = get_plan()->get_optimizer_context().get_session_info())) {
@@ -3646,6 +3647,7 @@ int ObLogicalOperator::check_stmt_can_be_packed(const ObDMLStmt *stmt, bool &nee
     need_pack = stmt->is_select_stmt() && (!session_info->is_inner()) && LOG_EXCHANGE == type_
                  && (ObPhyPlanType::OB_PHY_PLAN_DISTRIBUTED == get_phy_plan_type()) && !has_var_assign;
   }
+  #endif
   return ret;
 }
 

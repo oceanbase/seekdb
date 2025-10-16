@@ -241,6 +241,9 @@ std::shared_ptr<ObLiteEmbedConn> ObLiteEmbed::connect(const char* db_name)
      LOG_WARN("Failed to init tenant in session", K(ret));
   } else if (OB_FAIL(session->set_default_database(db_name))) {
     LOG_WARN("Failed to set default database", KR(ret));
+  } else if (FALSE_IT(session->set_user_session())) {
+  } else if (OB_FAIL(session->set_autocommit(false))) {
+    LOG_WARN("Faield to set autocommit", KR(ret));
   } else if (OB_FAIL(OBSERVER.get_inner_sql_conn_pool().acquire(session, inner_conn))) {
     LOG_WARN("acquire conn failed", KR(ret));
   } else if (FALSE_IT(embed_conn->get_conn() = static_cast<observer::ObInnerSQLConnection*>(inner_conn))) {
@@ -248,7 +251,7 @@ std::shared_ptr<ObLiteEmbedConn> ObLiteEmbed::connect(const char* db_name)
   if (OB_FAIL(ret)) {
     throw std::runtime_error("connect failed " + std::to_string(ob_errpkt_errno(ret, false)) + " " + std::string(ob_errpkt_strerror(ret, false)));
   }
-  LOG_INFO("connect", K(db_name), K(sid), KP(session));
+  LOG_INFO("connect", K(db_name), K(sid), KP(session), KPC(session));
   return embed_conn;
 }
 
