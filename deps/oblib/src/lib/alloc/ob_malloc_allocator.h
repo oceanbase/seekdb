@@ -114,8 +114,6 @@ public:
   ObTenantCtxAllocatorGuard get_tenant_ctx_allocator_unrecycled(uint64_t tenant_id,
                                                                 uint64_t ctx_id) const;
   // statistic relating
-  void set_urgent(int64_t bytes);
-  int64_t get_urgent() const;
   void set_reserved(int64_t bytes);
   int64_t get_reserved() const;
   int set_tenant_limit(uint64_t tenant_id, int64_t bytes);
@@ -156,7 +154,6 @@ private:
 private:
   ObTenantCtxAllocatorV2 *allocator_;
   int64_t reserved_;
-  int64_t urgent_;
   uint64_t max_used_tenant_id_;
   bool create_on_demand_;
 }; // end of class ObMallocAllocator

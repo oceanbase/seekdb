@@ -1089,7 +1089,6 @@ TEST_F(TestKVCache, compute_wash_size_when_min_wash_negative)
   CHUNK_MGR.set_limit(10L * 1024L * 1024L * 1024L);
   // CHUNK_MGR.hold_bytes_ = 10L * 1024L * 1024L * 1024L;
   CHUNK_MGR.total_hold_ = 10L * 1024L * 1024L * 1024L;
-  CHUNK_MGR.set_urgent(1L * 1024L * 1024L * 1024L);
 
   // compute
   ObKVGlobalCache::get_instance().store_.compute_tenant_wash_size();

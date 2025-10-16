@@ -126,21 +126,12 @@ void ob_set_reserved_memory(const int64_t bytes)
   }
 }
 
-void ob_set_urgent_memory(const int64_t bytes)
-{
-  ObMallocAllocator *allocator = ObMallocAllocator::get_instance();
-  if (!OB_ISNULL(allocator)) {
-    allocator->set_urgent(bytes);
-  }
-}
-
-int64_t ob_get_reserved_urgent_memory()
+int64_t ob_get_reserved_memory()
 {
   int64_t bytes = 0;
   ObMallocAllocator *allocator = ObMallocAllocator::get_instance();
   if (!OB_ISNULL(allocator)) {
-    bytes += allocator->get_urgent();
-    bytes += allocator->get_reserved();
+    bytes = allocator->get_reserved();
   }
   return bytes;
 }

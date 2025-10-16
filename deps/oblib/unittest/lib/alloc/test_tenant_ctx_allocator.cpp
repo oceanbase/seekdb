@@ -85,12 +85,6 @@ TEST(TestTenantAllocator, TenantLimit)
   EXPECT_FALSE(NULL != ta.alloc(1, attr));
 
   attr.prio_ = OB_HIGH_ALLOC;
-  EXPECT_FALSE(NULL != ta.alloc(1, attr));
-
-  ob_set_urgent_memory((2 << 20) - 1);
-  EXPECT_FALSE(NULL != ta.alloc(1, attr));
-
-  ob_set_urgent_memory(2 << 20);
   EXPECT_TRUE(NULL != ta.alloc(1, attr));
   EXPECT_TRUE(NULL != ta.alloc(1, attr));
 

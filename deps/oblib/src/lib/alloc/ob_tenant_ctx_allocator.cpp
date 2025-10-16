@@ -136,7 +136,7 @@ int ObTenantCtxAllocatorV2::iter_label(VisitFunc func) const
 void ObTenantCtxAllocatorV2::print_usage() const
 {
   int ret = OB_SUCCESS;
-  static const int64_t BUFLEN = 1 << 17;
+  static const int64_t BUFLEN = 1 << 18;  // 256k
   SMART_VAR(char[BUFLEN], buf) {
     int64_t pos = 0;
     int64_t ctx_hold_bytes = 0;

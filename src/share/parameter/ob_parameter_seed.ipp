@@ -56,10 +56,6 @@ DEF_INT(ss_cache_max_percentage, OB_CLUSTER_PARAMETER, "30", "(0,100]",
 DEF_CAP(ss_cache_maxsize_percpu, OB_CLUSTER_PARAMETER, "128G", "(0M,)",
         "the maximum allowed local cache disk size per CPU per server in shared storage mode. Range: (0, +∞)",
         ObParameterAttr(Section::SSTABLE, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
-DEF_CAP(memory_reserved, OB_CLUSTER_PARAMETER, "500M", "[10M,)",
-        "the size of the system memory reserved for emergency internal use. "
-        "Range: [10M, total size of memory]",
-        ObParameterAttr(Section::SSTABLE, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 //// observer config
 DEF_STR(leak_mod_to_check, OB_CLUSTER_PARAMETER, "NONE", "the name of the module under memory leak checks",
         ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
@@ -256,7 +252,7 @@ DEF_INT_WITH_CHECKER(syslog_file_uncompressed_count, OB_CLUSTER_PARAMETER, "0",
 DEF_INT(memory_limit_percentage, OB_CLUSTER_PARAMETER, "80", "[10, 95]",
         "the size of the memory reserved for internal use(for testing purpose). Range: [10, 95]",
         ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
-DEF_CAP(cache_wash_threshold, OB_CLUSTER_PARAMETER, "4GB", "[0B,]",
+DEF_CAP(cache_wash_threshold, OB_CLUSTER_PARAMETER, "64M", "[0B,]",
         "size of remaining memory at which cache eviction will be triggered. Range: [0,+∞)",
         ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 DEF_CAP(memory_chunk_cache_size, OB_CLUSTER_PARAMETER, "0M", "[0M,]", "the maximum size of memory cached by memory chunk cache. Range: [0M,], 0 stands for adaptive",

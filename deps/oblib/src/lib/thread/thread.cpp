@@ -71,7 +71,6 @@ int Thread::start()
   const int64_t count = ATOMIC_FAA(&total_thread_count_, 1);
   ObNumaNodeGuard numa_guard(numa_node_);
   if (count >= get_max_thread_num() - OB_RESERVED_THREAD_NUM) {
-    ATOMIC_FAA(&total_thread_count_, -1);
     ret = OB_SIZE_OVERFLOW;
     LOG_ERROR("thread count reach limit", K(ret), "current count", count);
   } else if (stack_size_ <= 0) {
@@ -108,7 +107,6 @@ int Thread::start()
       }
     }
     if (0 != pret) {
-      ATOMIC_FAA(&total_thread_count_, -1);
       ret = OB_ERR_SYS;
       stop_ = true;
     }
@@ -117,6 +115,7 @@ int Thread::start()
     }
   }
   if (OB_FAIL(ret)) {
+    ATOMIC_FAA(&total_thread_count_, -1);
     destroy();
   }
   return ret;

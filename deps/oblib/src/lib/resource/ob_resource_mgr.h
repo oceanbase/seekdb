@@ -58,10 +58,10 @@ public:
   int get_ctx_limit(const uint64_t ctx_id, int64_t &limit) const;
   int get_ctx_hold(const uint64_t ctx_id, int64_t &hold) const;
   bool update_hold(const int64_t size, const uint64_t ctx_id, const lib::ObLabel &label,
-      bool &reach_ctx_limit);
+      bool &reach_ctx_limit, bool high_prio = false);
 private:
   void update_cache_hold(const int64_t size);
-  bool update_ctx_hold(const uint64_t ctx_id, const int64_t size);
+  bool update_ctx_hold(const uint64_t ctx_id, const int64_t size, bool high_prio);
   AChunk *ptr2chunk(void *ptr);
   AChunk *alloc_chunk_(const int64_t size, const ObMemAttr &attr);
   void free_chunk_(AChunk *chunk, const ObMemAttr &attr);

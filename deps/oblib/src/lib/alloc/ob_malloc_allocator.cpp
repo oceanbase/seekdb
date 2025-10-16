@@ -42,7 +42,7 @@ namespace lib
 
 ObMallocAllocator::ObMallocAllocator()
   : allocator_(NULL),
-    reserved_(0), urgent_(0), max_used_tenant_id_(0), create_on_demand_(false)
+    reserved_(0), max_used_tenant_id_(0), create_on_demand_(false)
 {
   set_root_allocator();
   is_inited_ = true;
@@ -290,16 +290,6 @@ void ObMallocAllocator::print_tenant_memory_usage(uint64_t tenant_id) const
     return ret;
   });
   UNUSED(ret);
-}
-
-void ObMallocAllocator::set_urgent(int64_t bytes)
-{
-  CHUNK_MGR.set_urgent(bytes);
-}
-
-int64_t ObMallocAllocator::get_urgent() const
-{
-  return CHUNK_MGR.get_urgent();
 }
 
 void ObMallocAllocator::set_reserved(int64_t bytes)

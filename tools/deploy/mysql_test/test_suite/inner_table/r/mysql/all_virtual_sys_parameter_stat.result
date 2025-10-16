@@ -173,7 +173,6 @@ max_syslog_file_count
 memory_chunk_cache_size
 memory_limit
 memory_limit_percentage
-memory_reserved
 memstore_limit_percentage
 merger_check_interval
 micro_block_merge_verify_level
