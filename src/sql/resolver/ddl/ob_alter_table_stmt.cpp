@@ -155,7 +155,8 @@ int ObAlterTableStmt::set_lock_priority(sql::ObSQLSessionInfo *session)
 {
   int ret = OB_SUCCESS;
   const uint64_t tenant_id = session->get_effective_tenant_id();
-  omt::ObTenantConfigGuard tenant_config(OTC_MGR.get_tenant_config_with_lock(tenant_id));
+  const int64_t min_cluster_version = GET_MIN_CLUSTER_VERSION();
+  omt::ObTenantConfigGuard tenant_config(TENANT_CONF(tenant_id));
   if (!tenant_config.is_valid()) {
     ret = OB_ERR_UNEXPECTED;
     SQL_RESV_LOG(WARN, "tenant config invalid, can not do rename", K(ret), K(tenant_id));

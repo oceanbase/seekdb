@@ -96,10 +96,8 @@ public:
   static void SetUpTestCase()
   {
     LOG_INFO("SetUpTestCase");
-    ASSERT_EQ(OB_SUCCESS, omt::ObTenantConfigMgr::get_instance().add_tenant_config(MTL_ID()));
     uint64_t version = cal_version(4, 3, 0, 0);
     ASSERT_EQ(OB_SUCCESS, ObClusterVersion::get_instance().init(version));
-    ObClusterVersion::get_instance().tenant_config_mgr_ = &omt::ObTenantConfigMgr::get_instance();
 
     ASSERT_EQ(OB_SUCCESS, MockTenantModuleEnv::get_instance().init());
     SERVER_STORAGE_META_SERVICE.is_started_ = true;

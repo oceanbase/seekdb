@@ -60,7 +60,6 @@
 #include "observer/virtual_table/ob_all_virtual_tablet_info.h"
 #include "observer/virtual_table/ob_all_virtual_sys_parameter_stat.h"
 #include "observer/virtual_table/ob_all_virtual_tenant_parameter_stat.h"
-#include "observer/virtual_table/ob_all_virtual_tenant_parameter_info.h"
 #include "observer/virtual_table/ob_all_virtual_memstore_info.h"
 #include "observer/virtual_table/ob_all_virtual_minor_freeze_info.h"
 #include "observer/virtual_table/ob_gv_sql_audit.h"
@@ -706,14 +705,6 @@ int ObVTIterCreator::create_vt_iter(ObVTableScanParam &params,
               } else {
                 vt_iter = static_cast<ObAllVirtualTenantParameterStat *>(all_virtual_tenant_parameter_stat);
               }
-            }
-            break;
-          }
-          case OB_ALL_VIRTUAL_TENANT_PARAMETER_INFO_TID: {
-            ObAllVirtualTenantParameterInfo *all_virtual_tenant_parameter_info = nullptr;
-            if (OB_SUCC(NEW_VIRTUAL_TABLE(ObAllVirtualTenantParameterInfo,
-                                          all_virtual_tenant_parameter_info))) {
-              vt_iter = static_cast<ObAllVirtualTenantParameterInfo *>(all_virtual_tenant_parameter_info);
             }
             break;
           }

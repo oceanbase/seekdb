@@ -30,8 +30,7 @@ ObAllVirtualTenantParameterStat::ObAllVirtualTenantParameterStat() :
     tenant_iter_(),
     cur_tenant_idx_(-1),
     tenant_id_list_(),
-    tenant_config_(),
-    seed_config_()
+    tenant_config_()
 {
 }
 
@@ -50,8 +49,6 @@ int ObAllVirtualTenantParameterStat::init(const bool show_seed)
     ret = OB_ERR_UNEXPECTED;
     SERVER_LOG(WARN, "unexpected null of omt", KR(ret), K(GCTX.omt_));
   } else if (FALSE_IT(show_seed_ = show_seed)) {
-  } else if (show_seed_) {
-    ret = update_seed();
   } else {
     if (is_sys_tenant(effective_tenant_id_)) {
       // sys tenant show all local tenant parameter info
@@ -110,12 +107,8 @@ int ObAllVirtualTenantParameterStat::inner_get_next_row(ObNewRow *&row)
   if (OB_UNLIKELY(!inited_)) {
     ret = OB_NOT_INIT;
     SERVER_LOG(WARN, "not inited", K(inited_), KR(ret));
-  } else if (show_seed_) {
-    ret = inner_seed_get_next_row(row);
   } else {
     if (OB_SUCC(inner_sys_get_next_row(row))) {
-    } else if (OB_ITER_END == ret) {
-      ret = inner_tenant_get_next_row(row);
     }
   }
   return ret;
@@ -125,88 +118,6 @@ int ObAllVirtualTenantParameterStat::inner_sys_get_next_row(common::ObNewRow *&r
 {
   /*cluster parameter does not belong to any tenant*/
   return fill_row_(row, sys_iter_, GCONF.get_container(), NULL);
-}
-
-int ObAllVirtualTenantParameterStat::inner_tenant_get_next_row(common::ObNewRow *&row)
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(!inited_)) {
-    ret = OB_NOT_INIT;
-    SERVER_LOG(WARN, "not inited", K(inited_), KR(ret));
-  } else if (OB_UNLIKELY(nullptr == GCTX.omt_)) {
-    ret = OB_ERR_UNEXPECTED;
-    SERVER_LOG(WARN, "unexpected null of omt", K(ret));
-  } else if (cur_tenant_idx_ >= tenant_id_list_.count()) {
-    ret = OB_ITER_END;
-  } else {
-    if (cur_tenant_idx_ < 0 // first come-in
-        // current tenant is over
-        || (tenant_config_.is_valid() && tenant_iter_ == tenant_config_->get_container().end())) {
-      // find next valid tenant
-      while (OB_SUCC(ret) && ++cur_tenant_idx_ < tenant_id_list_.count()) {
-        uint64_t tenant_id = tenant_id_list_.at(cur_tenant_idx_);
-
-        // init tenant config
-        tenant_config_.set_config(TENANT_CONF(tenant_id));
-        if (tenant_config_.is_valid()) {
-          tenant_iter_ = tenant_config_->get_container().begin();
-          break;
-        } else {
-          // tenant config has not been loaded, just skip it
-          SERVER_LOG(WARN, "tenant config is not ready", K(tenant_id), K(cur_tenant_idx_));
-        }
-      }
-
-      if (cur_tenant_idx_ >= tenant_id_list_.count()) {
-        ret = OB_ITER_END;
-      }
-    }
-
-    if (OB_FAIL(ret)) {
-    } else if (cur_tenant_idx_ < 0
-        || !tenant_config_.is_valid()
-        || cur_tenant_idx_ >= tenant_id_list_.count()) {
-      ret = OB_ERR_UNEXPECTED;
-      SERVER_LOG(WARN, "cur_tenant_idx_ and tenant_config_ is not valid, unexpected", KR(ret),
-          K(cur_tenant_idx_), K(tenant_id_list_));
-    } else {
-      const uint64_t tenant_id = tenant_id_list_.at(cur_tenant_idx_);
-      if (OB_FAIL(fill_row_(row,
-          tenant_iter_,
-          tenant_config_->get_container(),
-          &tenant_id))) {
-        SERVER_LOG(WARN, "fill row fail", KR(ret), K(tenant_id), K(tenant_config_->get_tenant_id()),
-            K(cur_tenant_idx_), K(tenant_id_list_));
-      }
-    }
-  }
-  return ret;
-}
-
-int ObAllVirtualTenantParameterStat::update_seed()
-{
-  int ret = OB_SUCCESS;
-  const static char *from_seed = "select config_version, zone, svr_type, svr_ip, svr_port, name, "
-                     "data_type, value, info, section, scope, source, edit_level "
-                     "from __all_seed_parameter";
-  ObSQLClientRetryWeak sql_client_retry_weak(GCTX.sql_proxy_);
-  SMART_VAR(ObMySQLProxy::MySQLResult, result) {
-    if (OB_FAIL(seed_config_.init(&(OTC_MGR)))) {
-      SERVER_LOG(WARN, "seed config init failed", K(ret));
-    } else if (OB_FAIL(sql_client_retry_weak.read(result, OB_SYS_TENANT_ID, from_seed))) {
-      SERVER_LOG(WARN, "read config from __all_seed_parameter failed", K(from_seed), K(ret));
-    } else if (OB_FAIL(seed_config_.update_local(ObSystemConfig::INIT_VERSION, result, false))) {
-      SERVER_LOG(WARN, "update seed config failed", K(ret));
-    } else {
-      tenant_iter_ = seed_config_.get_container().begin();
-    }
-  }
-  return ret;
-}
-
-int ObAllVirtualTenantParameterStat::inner_seed_get_next_row(common::ObNewRow *&row)
-{
-  return fill_row_(row, tenant_iter_, seed_config_.get_container(), NULL);
 }
 
 int ObAllVirtualTenantParameterStat::fill_row_(common::ObNewRow *&row,
@@ -328,11 +239,7 @@ int ObAllVirtualTenantParameterStat::fill_row_(common::ObNewRow *&row,
             break;
           }
           case TENANT_ID: {
-            if (NULL == tenant_id_ptr) {
-              cells[i].set_null();
-            } else {
-              cells[i].set_int(*tenant_id_ptr);
-            }
+              cells[i].set_int(OB_SYS_TENANT_ID);
             break;
           }
           case DEFAULT_VALUE: {

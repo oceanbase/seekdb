@@ -15,6 +15,7 @@
 
 #include "share/ob_rpc_struct.h"
 #include "src/share/ls/ob_ls_table_operator.h"
+#include "share/config/ob_server_config.h"
 #include "rootserver/ob_rs_async_rpc_proxy.h"
 #include "rootserver/ob_unit_manager.h"
 #include "rootserver/ob_zone_manager.h"
@@ -25,6 +26,7 @@ namespace common
 {
 using ObAddrIArray = ObIArray<ObAddr>;
 using ObAddrArray = ObSEArray<ObAddr, 3>;
+class ObServerConfig;
 }
 namespace share
 {
@@ -215,8 +217,6 @@ private:
 
   int init_tenant_sys_stats_(const uint64_t tenant_id,
       common::ObMySQLTransaction &trans);
-
-  int broadcast_tenant_init_config_(const uint64_t tenant_id);
 
   int insert_restore_or_clone_tenant_job_(
       const uint64_t tenant_id,

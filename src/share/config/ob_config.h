@@ -23,10 +23,6 @@
 
 namespace oceanbase
 {
-namespace omt
-{
-  class ObTenantConfig;
-}
 
 namespace rootserver
 {
@@ -90,11 +86,11 @@ class ObCommonConfig;
 class ObSystemConfig;
 class ObConfigItem
 {
-  friend class oceanbase::omt::ObTenantConfig;
   friend class oceanbase::rootserver::ObAdminSetConfig;
   friend class ObBaseConfig;
   friend class ObCommonConfig;
   friend class ObSystemConfig;
+  friend class ObServerConfig;
 public:
   ObConfigItem();
   virtual ~ObConfigItem();

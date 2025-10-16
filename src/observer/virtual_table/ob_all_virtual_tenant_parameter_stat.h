@@ -43,9 +43,6 @@ private:
   typedef common::ObConfigContainer::const_iterator CfgIter;
 
   int inner_sys_get_next_row(common::ObNewRow *&row);
-  int inner_tenant_get_next_row(common::ObNewRow *&row);
-  int update_seed();
-  int inner_seed_get_next_row(common::ObNewRow *&row);
   int fill_row_(common::ObNewRow *&row,
       CfgIter &iter,
       const common::ObConfigContainer &cfg_container,
@@ -79,8 +76,6 @@ private:
   int64_t cur_tenant_idx_;        // current tenant index for tenant_id_list_
   common::ObSEArray<uint64_t, DEFAULT_TENANT_COUNT> tenant_id_list_;  // all tenant in observer
   omt::ObTenantConfigGuard tenant_config_;      // current tenant config
-
-  omt::ObTenantConfig seed_config_;   // seed config
 
 private:
   DISALLOW_COPY_AND_ASSIGN(ObAllVirtualTenantParameterStat);

@@ -453,8 +453,7 @@ TEST_F(ArchiveCheckpointerTest, in_prepare)
 }
 
 void ArchiveCheckpointerTest::SetUp()
-{ 
-  ASSERT_EQ(OB_SUCCESS, omt::ObTenantConfigMgr::get_instance().add_tenant_config(TENANT_ID));
+{
 }
 
 TEST_F(ArchiveCheckpointerTest, in_beginning_01)

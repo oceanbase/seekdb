@@ -708,7 +708,7 @@ int ObAdminSetConfig::verify_config(obrpc::ObAdminSetConfigArg &arg)
   int ret = OB_SUCCESS;
   void *ptr = nullptr, *cfg_ptr = nullptr;
   ObServerConfigChecker *cfg = nullptr;
-  ObTenantConfigChecker *tenant_cfg = nullptr;
+
   if (!ctx_.is_inited()) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", KR(ret));
@@ -716,6 +716,18 @@ int ObAdminSetConfig::verify_config(obrpc::ObAdminSetConfigArg &arg)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arg", K(arg), KR(ret));
   }
+
+  if (nullptr == cfg) {
+    if (OB_ISNULL(ptr = ob_malloc(sizeof(ObServerConfigChecker),
+                                ObModIds::OB_RS_PARTITION_TABLE_TEMP))) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("fail to alloc memory", KR(ret));
+    } else if (OB_ISNULL(cfg = new (ptr) ObServerConfigChecker)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("new cfg failed", KR(ret));
+    }
+  }
+
   FOREACH_X(item, arg.items_, OB_SUCCESS == ret) {
     if (item->name_.is_empty()) {
       ret = OB_INVALID_ARGUMENT;
@@ -727,19 +739,9 @@ int ObAdminSetConfig::verify_config(obrpc::ObAdminSetConfigArg &arg)
       if (OB_SYS_TENANT_ID != item->exec_tenant_id_ || item->tenant_name_.size() > 0) {
         // tenants(user or sys tenants) modify tenant level configuration
         item->want_to_set_tenant_config_ = true;
-        if (nullptr == tenant_cfg) {
-          if (OB_ISNULL(cfg_ptr = ob_malloc(sizeof(ObTenantConfigChecker),
-                        ObModIds::OB_RS_PARTITION_TABLE_TEMP))) {
-            ret = OB_ALLOCATE_MEMORY_FAILED;
-            LOG_WARN("fail to alloc memory", KR(ret));
-          } else if (OB_ISNULL(tenant_cfg = new (cfg_ptr) ObTenantConfigChecker())) {
-            ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("new tenant_cfg failed", KR(ret));
-          }
-        } // if
 
         if (OB_SUCC(ret)) {
-          ObConfigItem * const *ci_ptr = tenant_cfg->get_container().get(
+          ObConfigItem * const *ci_ptr = cfg->get_container().get(
                                           ObConfigStringKey(item->name_.ptr()));
           if (OB_ISNULL(ci_ptr)) {
             ret = OB_ERR_SYS_CONFIG_UNKNOWN;
@@ -823,41 +825,11 @@ int ObAdminSetConfig::verify_config(obrpc::ObAdminSetConfigArg &arg)
           } // else
         } // if
       } else {
-        // sys tenant try to modify configration(cluster level or sys tenant level)
-        if (nullptr == cfg) {
-          if (OB_ISNULL(ptr = ob_malloc(sizeof(ObServerConfigChecker),
-                                      ObModIds::OB_RS_PARTITION_TABLE_TEMP))) {
-            ret = OB_ALLOCATE_MEMORY_FAILED;
-            LOG_WARN("fail to alloc memory", KR(ret));
-          } else if (OB_ISNULL(cfg = new (ptr) ObServerConfigChecker)) {
-            ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("new cfg failed", KR(ret));
-          }
-        } // if
-        if (OB_SUCC(ret) && nullptr == tenant_cfg) {
-          if (OB_ISNULL(cfg_ptr = ob_malloc(sizeof(ObTenantConfigChecker),
-                        ObModIds::OB_RS_PARTITION_TABLE_TEMP))) {
-            ret = OB_ALLOCATE_MEMORY_FAILED;
-            LOG_WARN("fail to alloc memory", KR(ret));
-          } else if (OB_ISNULL(tenant_cfg = new (cfg_ptr) ObTenantConfigChecker())) {
-            ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("new tenant_cfg failed", KR(ret));
-          }
-        } // if
-
         if (OB_SUCC(ret)) {
           ObConfigItem * const *sys_ci_ptr = cfg->get_container().get(
                                              ObConfigStringKey(item->name_.ptr()));
-          ObConfigItem * const *tenant_ci_ptr = tenant_cfg->get_container().get(
-                                                ObConfigStringKey(item->name_.ptr()));
           if (OB_NOT_NULL(sys_ci_ptr)) {
             ci = *sys_ci_ptr;
-          } else if (OB_NOT_NULL(tenant_ci_ptr)) {
-            ci = *tenant_ci_ptr;
-            item->want_to_set_tenant_config_ = true;
-            if (OB_FAIL(item->tenant_ids_.push_back(OB_SYS_TENANT_ID))) {
-              LOG_WARN("add tenant_id failed", KR(ret));
-            }
           } else {
             ret = OB_ERR_SYS_CONFIG_UNKNOWN;
             LOG_WARN("can't found config item", KR(ret), "item", *item);
@@ -901,12 +873,7 @@ int ObAdminSetConfig::verify_config(obrpc::ObAdminSetConfigArg &arg)
     ob_free(ptr);
     ptr = nullptr;
   }
-  if (nullptr != tenant_cfg) {
-    tenant_cfg->~ObTenantConfigChecker();
-    ob_free(tenant_cfg);
-    tenant_cfg = nullptr;
-    cfg_ptr = nullptr;
-  } else if (nullptr != cfg_ptr) {
+  if (nullptr != cfg_ptr) {
     ob_free(cfg_ptr);
     cfg_ptr = nullptr;
   }
@@ -980,137 +947,12 @@ int ObAdminSetConfig::update_config(obrpc::ObAdminSetConfigArg &arg, int64_t new
         }
       }
       if (OB_FAIL(ret)) {
-      } else if (item.want_to_set_tenant_config_) {
-        // try update tenant config
-        if (OB_FAIL(update_tenant_config_(item, svr_ip, svr_port, new_version))) {
-          LOG_WARN("fail to update tenant config", KR(ret), K(item), K(svr_ip), K(svr_port), K(new_version));
-        }
-      } else {
-        // try update sys config
-        if (OB_FAIL(update_sys_config_(item, svr_ip, svr_port, new_version))) {
-          LOG_WARN("fail to update sys config", KR(ret), K(item), K(svr_ip), K(svr_port), K(new_version));
-        }
+      } else if (OB_FAIL(update_sys_config_(item, svr_ip, svr_port, new_version))) {
+        LOG_WARN("fail to update sys config", KR(ret), K(item), K(svr_ip), K(svr_port), K(new_version));
       }
     } // end for each item
   }
 
-  return ret;
-}
-
-int ObAdminSetConfig::update_tenant_config_(
-    const obrpc::ObAdminSetConfigItem &item,
-    const char *svr_ip,
-    const int64_t svr_port,
-    const int64_t new_version)
-{
-  int ret = OB_SUCCESS;
-  share::schema::ObSchemaGetterGuard schema_guard;
-  const share::schema::ObSimpleTenantSchema *tenant_schema = NULL;
-  if (OB_UNLIKELY(!item.want_to_set_tenant_config_)) {
-    ret = OB_STATE_NOT_MATCH;
-    LOG_WARN("not expected to update tenant config", KR(ret), K(item));
-  } else if (OB_ISNULL(svr_ip)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), KP(svr_ip));
-  } else if (OB_FAIL(GSCHEMASERVICE.get_tenant_schema_guard(
-                 OB_SYS_TENANT_ID, schema_guard))) {
-    LOG_WARN("fail to get sys tenant schema guard", KR(ret));
-  } else {
-    for (int64_t i = 0; OB_SUCC(ret) && i < item.tenant_ids_.count(); ++i) {
-      uint64_t tenant_id = item.tenant_ids_.at(i);
-      const char *table_name = (ObAdminSetConfig::OB_PARAMETER_SEED_ID == tenant_id ?
-                                OB_ALL_SEED_PARAMETER_TNAME : OB_TENANT_PARAMETER_TNAME);
-      tenant_id = (ObAdminSetConfig::OB_PARAMETER_SEED_ID == tenant_id ? OB_SYS_TENANT_ID : tenant_id);
-      uint64_t exec_tenant_id = gen_meta_tenant_id(tenant_id);
-      if (OB_FAIL(schema_guard.get_tenant_info(exec_tenant_id, tenant_schema))) {
-        LOG_WARN("failed to get tenant ids", KR(ret), K(exec_tenant_id));
-      } else if (OB_ISNULL(tenant_schema)) {
-        ret = OB_TENANT_NOT_EXIST;
-        LOG_WARN("tenant not exist", KR(ret), K(tenant_id));
-      } else if (!tenant_schema->is_normal()) {
-        //tenant not normal, maybe tenant not ready, cannot add tenant config
-        LOG_INFO("tenant is not normal in schema, just skip", K(tenant_id), KPC(tenant_schema));
-      } else if (OB_FAIL(inner_update_tenant_config_(
-                             item, tenant_id, table_name, svr_ip, svr_port, new_version))) {
-        LOG_WARN("fail to inner update tenant config", KR(ret), K(item), K(tenant_id),
-                 K(table_name), K(svr_ip), K(svr_port), K(new_version));
-      }
-      // set config_version to config_version_map and trigger parameter update
-      if (OB_FAIL(ret)) {
-      } else if (ObAdminSetConfig::OB_PARAMETER_SEED_ID == tenant_id) {
-      } else if (OB_FAIL(OTC_MGR.set_tenant_config_version(tenant_id,
-                                                           new_version))) {
-        LOG_WARN("failed to set tenant config version", K(tenant_id), KR(ret),
-                 K(item), K(new_version));
-      } else if (GCTX.omt_->has_tenant(tenant_id) &&
-                 OB_FAIL(OTC_MGR.got_version(tenant_id, new_version))) {
-        LOG_WARN("failed to got version", K(tenant_id), KR(ret), K(item));
-      } else {
-        LOG_INFO("got new tenant config version", K(new_version), K(tenant_id), K(item));
-      }
-    } // end for each tenant
-    // try to broadcast config is changed to all server
-    if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(construct_arg_and_broadcast_tenant_config_map())) {
-      LOG_WARN("fail to construct arg and broadcast tenant config map", KR(ret));
-    }
-  }
-  return ret;
-}
-
-int ObAdminSetConfig::inner_update_tenant_config_(
-    const obrpc::ObAdminSetConfigItem &item,
-    const uint64_t tenant_id,
-    const char *table_name,
-    const char *svr_ip,
-    const int64_t svr_port,
-    const int64_t new_version)
-{
-  int ret = OB_SUCCESS;
-  ObDMLSqlSplicer dml;
-  ObConfigItem *ci = nullptr;
-  // tenant not exist in RS, use SYS instead
-  omt::ObTenantConfigGuard tenant_config(TENANT_CONF(OB_SYS_TENANT_ID));
-  if (OB_UNLIKELY(!item.want_to_set_tenant_config_)) {
-    ret = OB_STATE_NOT_MATCH;
-    LOG_WARN("not expected to update tenant config", KR(ret), K(item));
-  } else if (OB_UNLIKELY(!is_valid_tenant_id(tenant_id))
-             || OB_UNLIKELY(0 != ObString(table_name).case_compare(OB_ALL_SEED_PARAMETER_TNAME)
-                            && 0 != ObString(table_name).case_compare(OB_TENANT_PARAMETER_TNAME))
-             || OB_ISNULL(svr_ip)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K(tenant_id), K(table_name), KP(svr_ip));
-  } else if (!tenant_config.is_valid()) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("failed to get tenant config", KR(ret), K(tenant_id));
-  } else if (OB_ISNULL(tenant_config->get_container().get(
-                          ObConfigStringKey(item.name_.ptr())))) {
-    ret = OB_ERR_SYS_CONFIG_UNKNOWN;
-    LOG_WARN("can't found config item", KR(ret), K(tenant_id), K(item));
-  } else {
-    ci = *(tenant_config->get_container().get(
-                          ObConfigStringKey(item.name_.ptr())));
-    const ObString compatible_cfg(COMPATIBLE);
-    if (OB_FAIL(build_dml_before_update_(tenant_id, item, *ci, svr_ip, svr_port,
-                    table_name, new_version, dml))) {
-      LOG_WARN("fail to build dml", KR(ret), K(tenant_id), K(item), K(svr_ip), K(svr_port),
-               K(table_name), K(new_version));
-    } else if (0 == compatible_cfg.case_compare(item.name_.ptr())) {
-      // update config named compatible
-      if (OB_FAIL(inner_update_tenant_config_for_compatible_(
-              tenant_id, &item, svr_ip, svr_port, table_name, dml, new_version))) {
-        LOG_WARN("fail to update compatible", KR(ret), K(tenant_id),
-                 K(svr_ip), K(svr_port), K(table_name), K(new_version));
-      }
-    } else {
-      // update config named not compatible
-      if (OB_FAIL(inner_update_tenant_config_for_others_(
-              tenant_id, svr_ip, svr_port, item, table_name, dml, new_version))) {
-        LOG_WARN("fail to update other configs", KR(ret), K(tenant_id),
-                 K(svr_ip), K(svr_port), K(table_name), K(new_version));
-      }
-    }
-  }
   return ret;
 }
 
@@ -1174,11 +1016,7 @@ int ObAdminSetConfig::update_sys_config_(
   ObConfigItem *const *ci_ptr = GCONF.get_container().get(
                                    ObConfigStringKey(item.name_.ptr()));
   ObMySQLTransaction trans;
-  if (OB_UNLIKELY(item.want_to_set_tenant_config_)
-      || OB_UNLIKELY(OB_SYS_TENANT_ID != item.exec_tenant_id_)) {
-    ret = OB_STATE_NOT_MATCH;
-    LOG_WARN("not expected to update tenant config", KR(ret), K(item));
-  } else if (OB_ISNULL(svr_ip)
+  if (OB_ISNULL(svr_ip)
              || OB_ISNULL(GCTX.sql_proxy_)
              || OB_ISNULL(ctx_.zone_mgr_)
              || OB_ISNULL(GCTX.config_mgr_)) {
@@ -1358,21 +1196,6 @@ int ObAdminSetConfig::check_with_lock_before_update_(
         }
       }
     }
-  }
-  return ret;
-}
-
-int ObAdminSetConfig::construct_arg_and_broadcast_tenant_config_map()
-{
-  int ret = OB_SUCCESS;
-  share::ObLeaseResponse tmp_lease_response;
-  ObBroadcastConfigVersionArg broadcast_arg;
-  if (OB_FAIL(OTC_MGR.get_lease_response(tmp_lease_response))) {
-    LOG_WARN("fail to get lease response", KR(ret));
-  } else if (OB_FAIL(broadcast_arg.init_by_tenant_config_version_map(tmp_lease_response.tenant_config_version_))) {
-    LOG_WARN("fail to construct boradcast arg by tenant config version map", KR(ret), K(tmp_lease_response));
-  } else if (OB_FAIL(broadcast_config_version_(broadcast_arg))) {
-    LOG_WARN("fail to broadcast config version to all servers", KR(ret), K(broadcast_arg));
   }
   return ret;
 }

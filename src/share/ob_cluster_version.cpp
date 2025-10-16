@@ -89,7 +89,7 @@ static int parse_version(const char *str, uint64_t *versions, const int64_t size
 
 ObClusterVersion::ObClusterVersion()
   : is_inited_(false), config_(NULL),
-    tenant_config_mgr_(NULL), cluster_version_(0), data_version_(0)
+    cluster_version_(0), data_version_(0)
 {
   cluster_version_ = cal_version(DEF_MAJOR_VERSION,
                                  DEF_MINOR_VERSION,
@@ -116,23 +116,20 @@ int ObClusterVersion::init(const uint64_t cluster_version)
   return ret;
 }
 
-int ObClusterVersion::init(
-    const ObServerConfig *config,
-    const omt::ObTenantConfigMgr *tenant_config_mgr)
+int ObClusterVersion::init(const ObServerConfig *config)
 {
   int ret = OB_SUCCESS;
 
   if (is_inited_) {
     ret = OB_INIT_TWICE;
     COMMON_LOG(ERROR, "cluster version init twice", KR(ret), KP(config));
-  } else if (OB_ISNULL(config) || OB_ISNULL(tenant_config_mgr)) {
+  } else if (OB_ISNULL(config)) {
     ret = OB_INVALID_ARGUMENT;
-    COMMON_LOG(WARN, "invalid argument", KR(ret), KP(config), KP(tenant_config_mgr));
+    COMMON_LOG(WARN, "invalid argument", KR(ret), KP(config));
   } else if (OB_FAIL(refresh_cluster_version(config->min_observer_version.str()))) {
     COMMON_LOG(WARN, "refresh cluster version error", KR(ret));
   } else {
     config_ = config;
-    tenant_config_mgr_ = tenant_config_mgr;
     COMMON_LOG(INFO, "cluster version inited success", K_(cluster_version));
     is_inited_ = true;
   }

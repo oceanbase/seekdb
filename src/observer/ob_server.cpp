@@ -125,7 +125,6 @@ ObServer::ObServer()
     executor_proxy_(), executor_rpc_(), dbms_job_rpc_proxy_(), dbms_sched_job_rpc_proxy_(), interrupt_proxy_(),
     config_(ObServerConfig::get_instance()),
     reload_config_(config_, gctx_), config_mgr_(config_, reload_config_),
-    tenant_config_mgr_(omt::ObTenantConfigMgr::get_instance()),
     tenant_timezone_mgr_(omt::ObTenantTimezoneMgr::get_instance()),
     device_config_mgr_(share::ObDeviceConfigMgr::get_instance()),
     schema_service_(share::schema::ObMultiVersionSchemaService::get_instance()),
@@ -2094,7 +2093,7 @@ int ObServer::init_config_module(const char *optstr)
 {
   int ret = OB_SUCCESS;
 
-  omt::UpdateTenantConfigCb update_tenant_config_cb =
+  UpdateTenantConfigCb update_tenant_config_cb =
     [&](uint64_t tenant_id)-> void
   {
     multi_tenant_.update_tenant_config(tenant_id);
@@ -2120,13 +2119,8 @@ int ObServer::init_config_module(const char *optstr)
     LOG_ERROR("fail to init ctas clean up timer", KR(ret));
   } else if (OB_FAIL(config_mgr_.base_init())) {
     LOG_ERROR("config_mgr_ base_init failed", KR(ret));
-  } else if (OB_FAIL(config_mgr_.init(sql_proxy_, self_addr_))) {
+  } else if (OB_FAIL(config_mgr_.init(sql_proxy_, self_addr_, update_tenant_config_cb))) {
     LOG_ERROR("config_mgr_ init failed", K_(self_addr), KR(ret));
-  } else if (OB_FAIL(tenant_config_mgr_.init(sql_proxy_, self_addr_,
-                      &config_mgr_, update_tenant_config_cb))) {
-    LOG_ERROR("tenant_config_mgr_ init failed", K_(self_addr), KR(ret));
-  } else if (OB_FAIL(tenant_config_mgr_.add_config_to_existing_tenant(optstr))) {
-    LOG_ERROR("tenant_config_mgr_ add_config_to_existing_tenant failed", KR(ret));
   }
 
   return ret;
@@ -2815,7 +2809,7 @@ int ObServer::init_global_context()
 
 int ObServer::init_version()
 {
-  return ObClusterVersion::get_instance().init(&config_, &tenant_config_mgr_);
+  return ObClusterVersion::get_instance().init(&config_);
 }
 
 int ObServer::init_ts_mgr()

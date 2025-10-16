@@ -18,10 +18,9 @@ namespace oceanbase
 {
 namespace omt
 {
-class ObTenantMeta; 
-class ObTenantConfig;
-  
+class ObTenantMeta;
 }
+
 namespace storage
 {
 class ObStorageLogger;

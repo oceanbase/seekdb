@@ -42,7 +42,6 @@ public:
   virtual int do_heartbeat_event(const share::ObLeaseResponse &lease_response);
 
   int update_lease_info();
-  int try_update_infos();
 private:
   class ObZoneLeaseInfoUpdateTask : public common::ObTimerTask
   {
@@ -68,7 +67,6 @@ private:
     bool is_need_retry_;
   };
 
-  int try_reload_config(const int64_t config_version);
   int try_reload_time_zone_info(const int64_t time_zone_info_version);
 private:
   void check_and_update_server_id_(const uint64_t server_id);

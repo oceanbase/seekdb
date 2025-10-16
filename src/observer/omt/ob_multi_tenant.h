@@ -40,7 +40,6 @@ class ObRequest;
 }
 namespace omt
 {
-class ObTenantConfig;
 
 struct ObCtxMemConfig
 {

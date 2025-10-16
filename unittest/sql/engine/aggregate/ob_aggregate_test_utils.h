@@ -55,7 +55,6 @@ public:
     physical_plan_.reset();
     OBSERVER.init_schema();
     OBSERVER.init_tz_info_mgr();
-    ASSERT_EQ(OB_SUCCESS, ObTenantConfigMgr::get_instance().add_tenant_config(1));
     ASSERT_EQ(OB_SUCCESS, my_session_.init_tenant(ObString::make_string("sys"), 1));
     ASSERT_EQ(OB_SUCCESS, ObPreProcessSysVars::init_sys_var());
     ASSERT_EQ(OB_SUCCESS, my_session_.load_default_sys_variable(false, true));
@@ -104,7 +103,7 @@ public:
     physical_plan_.reset();
     OBSERVER.init_schema();
     OBSERVER.init_tz_info_mgr();
-    ASSERT_EQ(OB_SUCCESS, ObTenantConfigMgr::get_instance().add_tenant_config(1));
+
     ASSERT_EQ(OB_SUCCESS, my_session_.init_tenant(ObString::make_string("sys"), 1));
     ASSERT_EQ(OB_SUCCESS, ObPreProcessSysVars::init_sys_var());
     ASSERT_EQ(OB_SUCCESS, my_session_.load_default_sys_variable(false, true));
@@ -146,7 +145,7 @@ public:
     physical_plan_.reset();
     OBSERVER.init_schema();
     OBSERVER.init_tz_info_mgr();
-    ASSERT_EQ(OB_SUCCESS, ObTenantConfigMgr::get_instance().add_tenant_config(1));
+
     ASSERT_EQ(OB_SUCCESS, my_session_.init_tenant(ObString::make_string("sys"), 1));
     ASSERT_EQ(OB_SUCCESS, ObPreProcessSysVars::init_sys_var());
     ASSERT_EQ(OB_SUCCESS, my_session_.load_default_sys_variable(false, true));

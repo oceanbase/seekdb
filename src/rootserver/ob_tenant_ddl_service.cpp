@@ -192,7 +192,7 @@ int ObTenantDDLService::init_tenant_config_(
     ObConfigItem *item = NULL;
     char svr_ip[OB_MAX_SERVER_ADDR_SIZE] = "ANY";
     int64_t svr_port = 0;
-    int64_t config_version = omt::ObTenantConfig::INITIAL_TENANT_CONF_VERSION + 1;
+    int64_t config_version = ObServerConfig::INITIAL_TENANT_CONF_VERSION + 1;
     FOREACH_X(config, tenant_config.get_configs(), OB_SUCC(ret)) {
       const ObConfigStringKey key(config->key_.ptr());
       if (OB_ISNULL(hard_code_config->get_container().get(key))
@@ -246,7 +246,7 @@ int ObTenantDDLService::init_tenant_config_from_seed_(
   ObSQLClientRetryWeak sql_client_retry_weak(sql_proxy_);
   SMART_VAR(ObMySQLProxy::MySQLResult, result) {
     int64_t expected_rows = 0;
-    int64_t config_version = omt::ObTenantConfig::INITIAL_TENANT_CONF_VERSION + 1;
+    int64_t config_version = ObServerConfig::INITIAL_TENANT_CONF_VERSION + 1;
     bool is_first = true;
     if (OB_FAIL(sql_client_retry_weak.read(result, OB_SYS_TENANT_ID, from_seed))) {
       LOG_WARN("read config from __all_seed_parameter failed", K(from_seed), K(ret));
@@ -605,13 +605,6 @@ int ObTenantDDLService::create_sys_tenant(
           ret = (OB_SUCC(ret)) ? temp_ret : ret;
           LOG_WARN("trans end failed", "is_commit", OB_SUCCESS == ret, K(temp_ret));
         }
-      }
-      if (OB_SUCC(ret) && OB_FAIL(broadcast_tenant_init_config_(OB_SYS_TENANT_ID))) {
-        // If tenant config version in RS is valid first and ddl trans doesn't commit,
-        // observer may read from empty __tenant_parameter successfully and raise its tenant config version,
-        // which makes some initial tenant configs are not actually updated before related observer restarts.
-        // To fix this problem, tenant config version in RS should be valid after ddl trans commits.
-        LOG_WARN("failed to set tenant config version", KR(ret), "tenant_id", OB_SYS_TENANT_ID);
       }
     }
   }
@@ -1156,35 +1149,6 @@ int ObTenantDDLService::notify_init_tenant_config(
   return ret;
 }
 
-int ObTenantDDLService::broadcast_tenant_init_config_(const uint64_t tenant_id)
-{
-  int ret = OB_SUCCESS;
-  if (!is_meta_tenant(tenant_id) && !is_sys_tenant(tenant_id)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("only meta tenant can braodcast tenant init config", KR(ret), K(tenant_id));
-  } else {
-    const int64_t config_version = omt::ObTenantConfig::INITIAL_TENANT_CONF_VERSION + 1;
-    const uint64_t user_tenant_id = gen_user_tenant_id(tenant_id);
-    if (OB_FAIL(OTC_MGR.set_tenant_config_version(tenant_id, config_version))) {
-      LOG_WARN("failed to set tenant config version", KR(ret), K(tenant_id));
-    } else if (OB_FAIL(OTC_MGR.got_version(tenant_id, config_version))) {
-      LOG_WARN("failed to got_version", KR(ret), K(tenant_id), K(config_version));
-    } else if (is_meta_tenant(tenant_id)) {
-      if (OB_FAIL(OTC_MGR.set_tenant_config_version(user_tenant_id,
-            config_version))) {
-      LOG_WARN("failed to set tenant config version", KR(ret), K(user_tenant_id));
-      } else if (OB_FAIL(OTC_MGR.got_version(user_tenant_id, config_version))) {
-        LOG_WARN("failed to got_version", KR(ret), K(user_tenant_id), K(config_version));
-      }
-    }
-    if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(ObAdminSetConfig::construct_arg_and_broadcast_tenant_config_map())) {
-      LOG_WARN("failed to broadcast tenant config", KR(ret));
-    }
-  }
-  return ret;
-}
-
 int ObTenantDDLService::get_tenant_schema_(
     const obrpc::ObParallelCreateNormalTenantArg &arg,
     ObTenantSchema &tenant_schema)
@@ -1320,14 +1284,6 @@ int ObTenantDDLService::init_tenant_env_after_schema_(
       ret = (OB_SUCC(ret)) ? tmp_ret : ret;
       LOG_WARN("trans end failed", K(commit), K(tmp_ret));
     }
-  }
-  if (OB_FAIL(ret)) {
-  } else if (is_meta_tenant(tenant_id) && OB_FAIL(broadcast_tenant_init_config_(tenant_id))) {
-    // If tenant config version in RS is valid first and ddl trans doesn't commit,
-    // observer may read from empty __tenant_parameter successfully and raise its tenant config version,
-    // which makes some initial tenant configs are not actually updated before related observer restarts.
-    // To fix this problem, tenant config version in RS should be valid after ddl trans commits.
-    LOG_WARN("failed to braodcast tenant init config", KR(ret), K(tenant_id));
   }
   FLOG_INFO("[CREATE_TENANT] STEP 2.6. finish init_tenant_env_after_schema_", K(tenant_id),
       "cost", ObTimeUtility::fast_current_time() - start_time);

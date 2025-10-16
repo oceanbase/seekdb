@@ -3455,7 +3455,7 @@ int ObService::init_tenant_config(
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < arg.get_tenant_configs().count(); i++) {
       const ObTenantConfigArg &config = arg.get_tenant_configs().at(i);
-      if (OB_FAIL(OTC_MGR.init_tenant_config(config)))  {
+      if (OB_FAIL(GCTX.config_mgr_->init_tenant_config(config)))  {
         LOG_WARN("fail to init tenant config", KR(ret), K(config));
       }
     } // end for

@@ -19,10 +19,6 @@
 
 namespace oceanbase
 {
-namespace omt
-{
-class ObTenantConfigMgr;
-}
 namespace common
 {
 class ObServerConfig;
@@ -37,8 +33,7 @@ public:
   void destroy();
   int64_t to_string(char *buf, const int64_t buf_len) const;
 
-  int init(const common::ObServerConfig *config,
-           const omt::ObTenantConfigMgr *tenant_config_mgr);
+  int init(const common::ObServerConfig *config);
 
   /* cluster version related */
   int init(const uint64_t cluster_version);
@@ -71,7 +66,6 @@ public:
 private:
   bool is_inited_;
   const common::ObServerConfig *config_;
-  const omt::ObTenantConfigMgr *tenant_config_mgr_;
   uint64_t cluster_version_;
   // ATTENTION!!! this member is only valid for unittest
   uint64_t data_version_;

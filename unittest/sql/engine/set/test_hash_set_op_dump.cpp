@@ -624,7 +624,6 @@ int ObHashSetDumpTest::init_tenant_mgr()
   EXPECT_EQ(cluster_version, common::ObClusterVersion::get_instance().get_cluster_version());
   int64_t tenant_id = OB_SYS_TENANT_ID;
   self.set_ip_addr("127.0.0.1", 8086);
-  ret = ObTenantConfigMgr::get_instance().add_tenant_config(tenant_id);
   EXPECT_EQ(OB_SUCCESS, ret);
   ret = tm.init(self, rpc_proxy, rs_rpc_proxy, rs_mgr, &req_transport, &ObServerConfig::get_instance());
   EXPECT_EQ(OB_SUCCESS, ret);

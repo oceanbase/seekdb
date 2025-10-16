@@ -131,12 +131,14 @@ public:
   bool in_upgrade_mode() const;
   bool is_valid() const { return  system_config_!= NULL; };
   int64_t get_current_version() { return system_config_->get_version(); }
-
+  int publish_special_config_after_dump();
   OB_UNIS_VERSION(1);
 
 public:
   int64_t disk_actual_space_;
   ObAddr self_addr_;
+  mutable common::DRWLock rwlock_;
+  static const int64_t INITIAL_TENANT_CONF_VERSION = 1;
 public:
 ///////////////////////////////////////////////////////////////////////////////
 // use MACRO 'OB_CLUSTER_PARAMETER' to define new cluster parameters

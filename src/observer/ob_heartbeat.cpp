@@ -103,7 +103,6 @@ int ObHeartBeatProcess::init_lease_request(ObLeaseRequest &lease_request)
     lease_request.zone_ = gctx_.config_->zone.str();
     lease_request.server_ = gctx_.self_addr();
     lease_request.sql_port_ = gctx_.config_->mysql_port;
-    OTC_MGR.get_lease_request(lease_request);
     lease_request.start_service_time_ = gctx_.start_service_time_;
     lease_request.ssl_key_expired_time_ = gctx_.ssl_key_expired_time_;
 #ifdef ERRSIM
@@ -243,10 +242,6 @@ int ObHeartBeatProcess::do_heartbeat_event(const ObLeaseResponse &lease_response
     } else if (OB_FAIL(TG_SCHEDULE(lib::TGDefIDs::ObHeartbeat, update_task_, delay, repeat))) {
       LOG_WARN("schedule update zone lease info task failed", K(delay), K(repeat), KR(ret));
     }
-    // generate the task for refreshing the Tenant-level configuration
-    if (OB_SUCCESS != (tmp_ret = OTC_MGR.got_versions(lease_response.tenant_config_version_))) {
-      LOG_WARN("tenant got versions failed", K(tmp_ret));
-    }
   }
   return ret;
 }
@@ -274,39 +269,6 @@ int ObHeartBeatProcess::update_lease_info()
   return ret;
 }
 
-int ObHeartBeatProcess::try_update_infos()
-{
-  int ret = OB_SUCCESS;
-  const int64_t config_version = zone_lease_info_.config_version_;
-
-  if (!inited_) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("not init", KR(ret));
-  } else if (OB_FAIL(try_reload_config(config_version))) {
-    LOG_WARN("try_reload_config failed", KR(ret), K(config_version));
-  }
-
-  return ret;
-}
-
-int ObHeartBeatProcess::try_reload_config(const int64_t config_version)
-{
-  int ret = OB_SUCCESS;
-  if (!inited_) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("not init", KR(ret));
-  } else if (config_version < 0) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid config_version", K(config_version), KR(ret));
-  } else {
-    ObConfigManager &config_mgr = *gctx_.config_mgr_;
-    if (OB_FAIL(config_mgr.got_version(config_version, true))) {
-      LOG_WARN("got_version failed", K(config_version), KR(ret));
-    }
-  }
-  return ret;
-}
-
 ObHeartBeatProcess::ObZoneLeaseInfoUpdateTask::ObZoneLeaseInfoUpdateTask(
     ObHeartBeatProcess &hb_process)
   : hb_process_(hb_process)
@@ -322,13 +284,6 @@ void ObHeartBeatProcess::ObZoneLeaseInfoUpdateTask::runTimerTask()
   int ret = OB_SUCCESS;
   if (OB_FAIL(hb_process_.update_lease_info())) {
     LOG_WARN("update_lease_info failed", KR(ret));
-  } else {
-    // while rootservice startup, lease_info_version may be set to 0.
-    if (OB_LIKELY(hb_process_.zone_lease_info_.lease_info_version_ > 0)) {
-      if (OB_FAIL(hb_process_.try_update_infos())) {
-        LOG_WARN("try_update_infos failed", KR(ret));
-      }
-    }
   }
 }
 

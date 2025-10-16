@@ -382,8 +382,8 @@ int ObRpcGetConfigP::process()
 int ObRpcSetTenantConfigP::process()
 {
   LOG_INFO("process set tenant config", K(arg_));
-  OTC_MGR.add_extra_config(arg_);
-  OTC_MGR.notify_tenant_config_changed(arg_.tenant_id_);
+  GCTX.config_mgr_->add_extra_config(arg_);
+  GCTX.config_mgr_->notify_tenant_config_changed(arg_.tenant_id_);
   return OB_SUCCESS;
 }
 
@@ -3893,10 +3893,6 @@ int ObRpcBroadcastConfigVersionP::process()
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), K_(arg), KP(GCTX.config_mgr_));
   // refresh tenant config version in local OMT
-  } else if (0 < arg_.get_tenant_config_version_map().count()
-             && OB_FAIL(OTC_MGR.got_versions(arg_.get_tenant_config_version_map()))) {
-    LOG_WARN("fail to refresh tenant config version map", KR(ret), K_(arg));
-  // refresh global config version in global config manager
   } else if (0 < arg_.get_global_config_version()
              && OB_FAIL(GCTX.config_mgr_->got_version(arg_.get_global_config_version()))) {
     LOG_WARN("fail to refresh global config version", KR(ret), K_(arg));

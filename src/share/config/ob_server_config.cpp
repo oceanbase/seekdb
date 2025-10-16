@@ -28,7 +28,7 @@ int64_t get_cpu_count()
 using namespace share;
 
 ObServerConfig::ObServerConfig()
-    : disk_actual_space_(0), self_addr_(), system_config_(NULL)
+    : disk_actual_space_(0), self_addr_(), rwlock_(ObLatchIds::CONFIG_LOCK), system_config_(NULL)
 {
 }
 
@@ -149,7 +149,7 @@ int ObServerConfig::add_extra_config(const char *config_str,
                                      const int64_t version /* = 0 */,
                                      const bool check_config /* = true */)
 {
-  DRWLock::WRLockGuard guard(OTC_MGR.rwlock_);
+  DRWLock::WRLockGuard guard(GCONF.rwlock_);
   return add_extra_config_unsafe(config_str, version, check_config);
 }
 
@@ -245,7 +245,6 @@ int ObServerConfig::serialize_(char *buf, const int64_t buf_len, int64_t &pos) c
 
   // data first
   if (OB_FAIL(ObCommonConfig::serialize(buf, buf_len, pos))) {
-  } else if (OB_FAIL(OTC_MGR.serialize(buf, buf_len, pos))) {
   } else {
     header.magic_ = OB_CONFIG_MAGIC;
     header.header_length_ = static_cast<int16_t>(header_len);
@@ -311,8 +310,49 @@ OB_DEF_DESERIALIZE(ObServerConfig)
       LOG_ERROR("check data checksum failed", K(ret));
     } else if (OB_FAIL(ObCommonConfig::deserialize(buf, data_len, pos))) {
       LOG_ERROR("deserialize cluster config failed", K(ret));
-    } else if (OB_FAIL(OTC_MGR.deserialize(buf, data_len, pos))){
-      LOG_ERROR("deserialize tenant config failed", K(ret));
+    }
+  }
+  return ret;
+}
+
+int ObServerConfig::publish_special_config_after_dump()
+{
+  int ret = OB_SUCCESS;
+  ObConfigItem *const *pp_item = NULL;
+  if (OB_ISNULL(pp_item = container_.get(ObConfigStringKey(COMPATIBLE)))) {
+    ret = OB_INVALID_CONFIG;
+    LOG_WARN("Invalid config string", K(ret));
+  } else if (!(*pp_item)->dump_value_updated()) {
+    LOG_INFO("config dump value is not set, no need read", K((*pp_item)->spfile_str()));
+  } else {
+    uint64_t new_data_version = 0;
+    uint64_t old_data_version = 0;
+    bool value_updated = (*pp_item)->value_updated();
+    if (OB_FAIL(ObClusterVersion::get_version((*pp_item)->spfile_str(), new_data_version))) {
+      LOG_ERROR("parse data_version failed", KR(ret), K((*pp_item)->spfile_str()));
+    } else if (OB_FAIL(ObClusterVersion::get_version((*pp_item)->str(), old_data_version))) {
+      LOG_ERROR("parse data_version failed", KR(ret), K((*pp_item)->str()));
+    } else if (!value_updated && old_data_version != DATA_CURRENT_VERSION) {
+      ret = OB_ERR_UNEXPECTED;
+      SHARE_LOG(ERROR, "unexpected data_version", KR(ret), K(old_data_version));
+    } else if (value_updated && new_data_version <= old_data_version) {
+      LOG_INFO("[COMPATIBLE] [DATA_VERSION] no need to update",
+               "old_data_version", DVP(old_data_version),
+               "new_data_version", DVP(new_data_version));
+      // do nothing
+    } else {
+      if (!(*pp_item)->set_value_unsafe((*pp_item)->spfile_str())) {
+        ret = OB_INVALID_CONFIG;
+        LOG_WARN("Invalid config value", K((*pp_item)->spfile_str()), K(ret));
+      } else {
+        FLOG_INFO("[COMPATIBLE] [DATA_VERSION] read data_version after dump",
+                  KR(ret), "version", (*pp_item)->version(),
+                  "value", (*pp_item)->str(), "value_updated",
+                  (*pp_item)->value_updated(), "dump_version",
+                  (*pp_item)->dumped_version(), "dump_value",
+                  (*pp_item)->spfile_str(), "dump_value_updated",
+                  (*pp_item)->dump_value_updated());
+      }
     }
   }
   return ret;
@@ -326,8 +366,7 @@ OB_DEF_SERIALIZE_SIZE(ObServerConfig)
   len += header.get_serialize_size();
   // 2) cluster config size
   len += ObCommonConfig::get_serialize_size();
-  // 3) tenant config size
-  len += OTC_MGR.get_serialize_size();
+
   return len;
 }
 

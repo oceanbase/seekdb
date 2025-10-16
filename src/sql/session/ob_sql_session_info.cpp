@@ -2556,8 +2556,6 @@ void ObSQLSessionInfo::ObCachedTenantConfigInfo::refresh()
       ATOMIC_STORE(&enable_sql_ccl_rule_, tenant_config->_enable_sql_ccl_rule);
     }
     ATOMIC_STORE(&last_check_ec_ts_, cur_ts);
-    session_->update_tenant_config_version(
-        (::oceanbase::omt::ObTenantConfigMgr::get_instance()).get_tenant_config_version(effective_tenant_id));
   }
   UNUSED(tmp_ret);
 }

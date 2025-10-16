@@ -398,7 +398,6 @@ private:
   common::ObServerConfig &config_;
   ObServerReloadConfig reload_config_;
   common::ObConfigManager config_mgr_;
-  omt::ObTenantConfigMgr &tenant_config_mgr_;
   omt::ObTenantTimezoneMgr &tenant_timezone_mgr_;
   share::ObDeviceConfigMgr &device_config_mgr_;
 

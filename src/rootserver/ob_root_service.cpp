@@ -800,7 +800,11 @@ int ObRootService::start_service()
     server_manager_.reset();
     zone_manager_.reset();
     zone_storage_manager_.reset_zone_storage_infos();
-    OTC_MGR.reset_version_has_refreshed();
+#ifndef OB_BUILD_LITE
+    if (OB_FAIL(hb_checker_.start())) {
+      FLOG_WARN("hb checker start failed", KR(ret));
+      } else
+#endif
     if (OB_FAIL(task_queue_.start())) {
       FLOG_WARN("inner queue start failed", KR(ret));
     } else if (OB_FAIL(inspect_task_queue_.start())) {
@@ -1919,7 +1923,6 @@ int ObRootService::renew_lease(const ObLeaseRequest &lease_request, ObLeaseRespo
       lease_response.server_id_ = server_id;
       lease_response.force_frozen_status_ = to_alive;
       lease_response.baseline_schema_version_ = baseline_schema_version_;
-      (void)OTC_MGR.get_lease_response(lease_response);
 
       // after split schema, the schema_version is not used, but for the legality detection, set schema_version to sys's schema_version
       if (OB_SUCCESS != (temp_ret = schema_service_->get_tenant_schema_version(OB_SYS_TENANT_ID, lease_response.schema_version_))) {

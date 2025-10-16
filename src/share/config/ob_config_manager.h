@@ -21,19 +21,20 @@
 
 namespace oceanbase
 {
-namespace omt
+
+namespace obrpc
 {
-  class ObTenantConfigMgr;
+  class ObTenantConfigArg;
 }
 
 namespace common
 {
 class ObMySQLProxy;
+using UpdateTenantConfigCb = common::ObFunction<void(uint64_t tenant_id)>;
 
 class ObConfigManager
 {
   friend class UpdateTask;
-  friend class oceanbase::omt::ObTenantConfigMgr;
 public:
   static const int64_t DEFAULT_VERSION = 1;
 
@@ -47,7 +48,8 @@ public:
 
   int base_init();
 
-  int init(ObMySQLProxy &sql_proxy, const ObAddr &server);
+  int init(ObMySQLProxy &sql_proxy, const ObAddr &server,
+           const UpdateTenantConfigCb &update_tenant_config_cb);
   void stop();
   void wait();
   void destroy();
@@ -69,7 +71,9 @@ public:
 
   int update_local(int64_t expected_version);
   virtual int got_version(int64_t version, const bool remove_repeat = false);
-
+  int add_extra_config(const obrpc::ObTenantConfigArg &arg);
+  void notify_tenant_config_changed(uint64_t tenant_id);
+  int init_tenant_config(const obrpc::ObTenantConfigArg &arg);
 private:
   class UpdateTask
     : public ObTimerTask
@@ -104,6 +108,7 @@ private:
   int64_t current_version_;
   char dump_path_[OB_MAX_FILE_NAME_LENGTH];
   ObReloadConfig &reload_config_func_;
+  UpdateTenantConfigCb update_tenant_config_cb_;
   DISALLOW_COPY_AND_ASSIGN(ObConfigManager);
 };
 

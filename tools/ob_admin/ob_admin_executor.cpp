@@ -35,7 +35,6 @@ ObAdminExecutor::ObAdminExecutor()
   IGNORE_RETURN ObTimerService::get_instance().start();
   mock_server_tenant_.set(&ObTimerService::get_instance());
   share::ObTenantEnv::set_tenant(&mock_server_tenant_);
-  omt::ObTenantConfigMgr::get_instance().add_tenant_config(OB_SYS_TENANT_ID);
   storage_env_.data_dir_ = data_dir_;
   storage_env_.sstable_dir_ = sstable_dir_;
   storage_env_.default_block_size_ = 2 * 1024 * 1024;

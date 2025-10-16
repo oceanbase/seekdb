@@ -32,7 +32,7 @@ public:
   virtual int inner_get_next_row(common::ObNewRow *&row);
 private:
   int inner_sys_get_next_row(common::ObNewRow *&row);
-  int inner_tenant_get_next_row(common::ObNewRow *&row);
+
   enum SYS_PARAMETER_STAT_COLUMN {
     ZONE = common::OB_APP_MIN_COLUMN_ID,
     SERVER_TYPE,
