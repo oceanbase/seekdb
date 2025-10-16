@@ -109,8 +109,6 @@ enable_rpc_authentication_bypass
 enable_sql_audit
 enable_sql_extension
 enable_sql_operator_dump
-enable_syslog_recycle
-enable_syslog_wf
 enable_sys_table_ddl
 enable_sys_unit_standalone
 enable_tcp_keepalive

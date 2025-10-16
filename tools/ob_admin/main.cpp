@@ -115,7 +115,7 @@ int main(int argc, char *argv[])
   if (OB_FAIL(get_log_base_directory(log_file_name, sizeof(log_file_name), log_file_rs_name, sizeof(log_file_rs_name)))) {
   } else {
     OB_LOGGER.set_log_level("INFO");
-    OB_LOGGER.set_file_name(log_file_name, true, false, log_file_rs_name);
+    OB_LOGGER.set_file_name(log_file_name, true);
   }
   const char *log_level = getenv("OB_ADMIN_LOG_LEVEL");
   if (NULL != log_level) {

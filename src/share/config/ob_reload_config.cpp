@@ -32,9 +32,8 @@ int ObReloadConfig::reload_ob_logger_set()
     } else if (OB_FAIL(OB_LOGGER.set_max_file_index(
         static_cast<int32_t>(conf_->max_syslog_file_count)))) {
       OB_LOG(ERROR, "fail to set_max_file_index", K(conf_->max_syslog_file_count.get()), K(ret));
-    } else if (OB_FAIL(OB_LOGGER.set_record_old_log_file(conf_->enable_syslog_recycle))) {
-      OB_LOG(ERROR, "fail to set_record_old_log_file",
-             K(conf_->enable_syslog_recycle.str()), K(ret));
+    } else if (OB_FAIL(OB_LOGGER.set_record_old_log_file())) {
+      OB_LOG(ERROR, "fail to set_record_old_log_file", K(ret));
     } else if (OB_FAIL(OB_LOG_COMPRESSOR.set_max_disk_size(conf_->syslog_disk_size))) {
       OB_LOG(ERROR, "fail to set_max_disk_size",
              K(conf_->syslog_disk_size.str()), KR(ret));
@@ -45,7 +44,6 @@ int ObReloadConfig::reload_ob_logger_set()
       OB_LOG(ERROR, "fail to set_min_uncompressed_count",
              K(conf_->syslog_file_uncompressed_count.str()), KR(ret));
     } else {
-      OB_LOGGER.set_log_warn(conf_->enable_syslog_wf);
       OB_LOGGER.set_enable_async_log(conf_->enable_async_syslog);
       ObKVGlobalCache::get_instance().reload_priority();
     }

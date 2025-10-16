@@ -141,10 +141,7 @@ int main(int argc, char **argv)
     oceanbase::test_time = atoi(argv[2]);
   }
   ObLogger &logger = ObLogger::get_logger();
-  logger.set_file_name("test_tx_perf.log", true, false,
-                       "test_tx_perf.log", // rs
-                       "test_tx_perf.log", // election
-                       "test_tx_perf.log"); // audit
+  logger.set_file_name("test_tx_perf.log", true);
   OB_LOGGER.set_log_level("ERROR");
   STORAGE_LOG(INFO, "begin unittest: test tx perf");
   ::testing::InitGoogleTest(&argc, argv);

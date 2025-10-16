@@ -436,7 +436,7 @@ TEST(TestConcurrentSlidingWindow, test_concurrent_sliding_window)
 int main(int argc, char **argv)
 {
   system("rm -f ./test_fixed_sliding_window.log");
-  OB_LOGGER.set_file_name("test_fixed_sliding_window.log", true, true, "test_fixed_sliding_window.rs.log");
+  OB_LOGGER.set_file_name("test_fixed_sliding_window.log", true);
   OB_LOGGER.set_log_level("TRACE");
   PALF_LOG(INFO, "begin unittest::test_fixed_sliding_window");
   ::testing::InitGoogleTest(&argc, argv);

@@ -677,8 +677,7 @@ int main(int argc, char **argv)
   const char *log_name = "test_redo_submitter.log";
   system("rm -rf test_redo_submitter.log*");
   ObLogger &logger = ObLogger::get_logger();
-  logger.set_file_name(log_name, true, false,
-                       log_name);
+  logger.set_file_name(log_name, true);
   logger.set_log_level(OB_LOG_LEVEL_DEBUG);
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();

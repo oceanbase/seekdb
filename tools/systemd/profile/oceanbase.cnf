@@ -9,7 +9,5 @@ cpu_count=4
 memory_limit=6G
 system_memory=1G
 log_disk_size=13G
-enable_syslog_wf=false
-enable_syslog_recycle=true
 max_syslog_file_count=4
 __min_full_resource_pool_memory=1073741824

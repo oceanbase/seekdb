@@ -210,13 +210,13 @@ DEF_STR_WITH_CHECKER(alert_log_level, OB_CLUSTER_PARAMETER, "INFO",
                      "specifies the current level of alert log. There are INFO, WARN, ERROR, three different log levels.",
                      ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE),
                      "INFO, WARN, ERROR");
-DEF_CAP(syslog_io_bandwidth_limit, OB_CLUSTER_PARAMETER, "30MB",
+DEF_CAP(syslog_io_bandwidth_limit, OB_CLUSTER_PARAMETER, "5MB",
         "Syslog IO bandwidth limitation, exceeding syslog would be truncated. Use 0 to disable ERROR log.",
         ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 DEF_INT(diag_syslog_per_error_limit, OB_CLUSTER_PARAMETER, "200", "[0,]",
         "DIAG syslog limitation for each error per second, exceeding syslog would be truncated",
         ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
-DEF_INT_WITH_CHECKER(max_syslog_file_count, OB_CLUSTER_PARAMETER, "0",
+DEF_INT_WITH_CHECKER(max_syslog_file_count, OB_CLUSTER_PARAMETER, "4",
                      common::ObConfigMaxSyslogFileCountChecker,
                      "specifies the maximum number of the log files "
                      "that can co-exist before the log file recycling kicks in. "
@@ -225,14 +225,6 @@ DEF_INT_WITH_CHECKER(max_syslog_file_count, OB_CLUSTER_PARAMETER, "0",
                      ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 DEF_BOOL(enable_async_syslog, OB_CLUSTER_PARAMETER, "True",
          "specifies whether use async log for observer.log, elec.log and rs.log",
-         ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
-DEF_BOOL(enable_syslog_wf, OB_CLUSTER_PARAMETER, "True",
-         "specifies whether any log message with a log level higher than \\'WARN\\' "
-         "would be printed into a separate file with a suffix of \\'wf\\'",
-         ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
-DEF_BOOL(enable_syslog_recycle, OB_CLUSTER_PARAMETER, "False",
-         "specifies whether log file recycling is turned on. "
-         "Value: True：turned on; False: turned off",
          ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 DEF_CAP(syslog_disk_size, OB_CLUSTER_PARAMETER, "0M", "[0M,)",
         "the size of disk space used by the syslog files. Range: [0, +∞)",

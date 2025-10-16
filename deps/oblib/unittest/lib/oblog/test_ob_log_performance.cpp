@@ -92,7 +92,7 @@ void ObLoggerTest::run_test()
 {
   int ret = 0;
   system("rm -rf s_log.log*");
-  OB_LOGGER.set_log_level("TRACE", "WARN");
+  OB_LOGGER.set_log_level("TRACE");
   OB_LOGGER.set_enable_async_log(false);
   //OB_LOGGER.set_max_file_size(BIG_LOG_FILE_SIZE);
   OB_LOGGER.set_file_name("s_log.log", false, true);
@@ -110,7 +110,7 @@ void ObLoggerTest::run_test_t()
 {
   int ret = 0;
   system("rm -rf t_log.log*");
-  OB_LOGGER.set_log_level("TRACE", "WARN");
+  OB_LOGGER.set_log_level("TRACE");
   OB_LOGGER.set_enable_async_log(false);
   //OB_LOGGER.set_max_file_size(BIG_LOG_FILE_SIZE);
   OB_LOGGER.set_file_name("t_log.log", false, true);
@@ -127,7 +127,7 @@ void ObLoggerTest::run_test_async()
 {
   int ret = 0;
   system("rm -rf async_log.log*");
-  OB_LOGGER.set_log_level("TRACE", "WARN");
+  OB_LOGGER.set_log_level("TRACE");
   //OB_LOGGER.set_max_file_size(BIG_LOG_FILE_SIZE);
   OB_LOGGER.set_file_name("async_log.log", true, true);
   OB_LOGGER.set_enable_async_log(true);
@@ -148,7 +148,7 @@ void ObLoggerTest::run_test_async_multi()
 {
   int ret = 0;
   system("rm -rf async_multi_log.log*");
-  OB_LOGGER.set_log_level("TRACE", "WARN");
+  OB_LOGGER.set_log_level("TRACE");
   //OB_LOGGER.set_max_file_size(BIG_LOG_FILE_SIZE);
   OB_LOGGER.set_file_name("async_multi_log.log", false, true);
   OB_LOGGER.set_enable_async_log(true);
@@ -170,7 +170,7 @@ void ObLoggerTest::run_test_t_async()
 {
   int ret = 0;
   system("rm -rf t_async_log.log*");
-  OB_LOGGER.set_log_level("TRACE", "WARN");
+  OB_LOGGER.set_log_level("TRACE");
   OB_LOGGER.set_enable_async_log(true);
   OB_LOGGER.set_use_multi_flush(false);
   //OB_LOGGER.set_max_file_size(BIG_LOG_FILE_SIZE);
@@ -188,7 +188,7 @@ void ObLoggerTest::run_test_t_async_multi()
 {
   int ret = 0;
   system("rm -rf t_async_multi_log.log*");
-  OB_LOGGER.set_log_level("TRACE", "WARN");
+  OB_LOGGER.set_log_level("TRACE");
   OB_LOGGER.set_enable_async_log(true);
   OB_LOGGER.set_use_multi_flush(true);
   //OB_LOGGER.set_max_file_size(BIG_LOG_FILE_SIZE);

@@ -99,9 +99,8 @@ class ObPLogFileStruct
 public:
   ObPLogFileStruct();
   virtual ~ObPLogFileStruct() { close_all(); }
-  int open(const char *log_file, const bool open_wf_flag, const bool redirect_flag);
+  int open(const char *log_file, const bool redirect_flag);
   int reopen(const bool redirect_flag);
-  int reopen_wf();
   int close_all();
   bool is_opened() { return fd_ > STDERR_FILENO; }
   int64_t get_write_size() const { return write_size_; }
@@ -111,12 +110,10 @@ public:
 
   char filename_[MAX_LOG_FILE_NAME_SIZE];
   int32_t fd_;//descriptor of log-file
-  int32_t wf_fd_;//descriptor of warning log-file
   uint32_t write_count_;
   int64_t write_size_;
   int64_t file_size_;
   struct stat stat_;
-  struct stat wf_stat_;
 };
 
 } // common

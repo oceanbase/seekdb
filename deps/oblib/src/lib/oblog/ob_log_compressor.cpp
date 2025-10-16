@@ -65,7 +65,6 @@ int ObLogCompressor::init()
     LOG_ERROR("failed to init ObThreadCond", K(ret));
   } else {
     strncpy(syslog_dir_, OB_SYSLOG_DIR, strlen(OB_SYSLOG_DIR));
-    strncpy(alert_log_dir_, OB_ALERT_LOG_DIR, strlen(OB_ALERT_LOG_DIR));
     stopped_ = false;
     if (OB_FAIL(TG_START(TGDefIDs::SYSLOG_COMPRESS))) {
       LOG_ERROR("failed to start log compression timer", K(ret));
@@ -215,7 +214,7 @@ bool ObLogCompressor::is_compressed_file(const char *file)
 void ObLogCompressor::run_timer_task()
 {
   int ret = OB_SUCCESS;
-  
+
 
   ObSyslogFile syslog_file;
   char compress_files[OB_SYSLOG_COMPRESS_TYPE_COUNT][OB_MAX_SYSLOG_FILE_NAME_SIZE] = {{0}};
@@ -287,38 +286,6 @@ void ObLogCompressor::run_timer_task()
                   log_min_time[log_type] = tmp_time;
                 }
               }
-            }
-          }
-        }
-      }
-      if (OB_NOT_NULL(dir)) {
-        closedir(dir);
-        dir = NULL;
-      }
-      if (OB_FAIL(ret)) {
-        // skip
-      } else if (OB_ISNULL(dir = opendir(alert_log_dir_))) {
-        ret = OB_ERR_SYS;
-        LOG_ERROR("failed to open alert log directory", K(ret), K(errno), K(alert_log_dir_));
-      } else {
-        while (OB_SUCC(ret) && OB_NOT_NULL(entry = readdir(dir))) {
-          if (strncmp(entry->d_name, ".", 1) == 0 || strncmp(entry->d_name, "..", 2) == 0) {
-            continue;
-          }
-          snprintf(syslog_file.file_name_, OB_MAX_SYSLOG_FILE_NAME_SIZE, "%s/%s", alert_log_dir_, entry->d_name);
-          if (stat(syslog_file.file_name_, &stat_info) == -1) {
-            ret = OB_FILE_NOT_EXIST;
-            LOG_WARN("failed to get file info", K(ret), K(errno), K(syslog_file.file_name_));
-            continue;
-          }
-          if (S_ISREG(stat_info.st_mode)) {
-            total_size += stat_info.st_size;
-            int64_t tmp_time = stat_info.st_mtim.tv_sec * 1000000000L + stat_info.st_mtim.tv_nsec;
-            syslog_file.mtime_ = tmp_time;
-            if (enable_delete_file
-                && regexec(&regex_archive_, entry->d_name, 0, NULL, 0) == 0
-                && OB_FAIL(oldest_files_.push(syslog_file))) {
-              LOG_ERROR("failed to put file into array", K(ret), K(syslog_file.file_name_), K(tmp_time));
             }
           }
         }

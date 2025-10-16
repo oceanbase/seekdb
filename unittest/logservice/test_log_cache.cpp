@@ -246,7 +246,7 @@ TEST_F(TestLogCache, test_flashback)
 int main(int argc, char **argv)
 {
   system("rm -f ./test_log_cache.log");
-  OB_LOGGER.set_file_name("test_log_cache.log", true, true, "test_log_cache.rs.log");
+  OB_LOGGER.set_file_name("test_log_cache.log", true);
   OB_LOGGER.set_log_level("TRACE");
   PALF_LOG(INFO, "begin unittest::test_log_cache");
   ::testing::InitGoogleTest(&argc, argv);

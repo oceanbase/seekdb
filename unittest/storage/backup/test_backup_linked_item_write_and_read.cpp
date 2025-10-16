@@ -42,7 +42,7 @@ public:
   static void SetUpTestCase()
   {
     ASSERT_EQ(OB_SUCCESS, ObTimerService::get_instance().start());
-  } 
+  }
   static void TearDownTestCase()
   {
     ObTimerService::get_instance().stop();
@@ -290,7 +290,7 @@ int sort_and_compare_block_list(
 }
 
 TestBackupLinkedReaderWriter::TestBackupLinkedReaderWriter()
-  : TestDataFilePrepare(&getter, "TestBackupIndexMerger", OB_DEFAULT_MACRO_BLOCK_SIZE, 800),
+  : TestDataFilePrepare(&getter, "TestBackupLinkedReaderWriter", OB_DEFAULT_MACRO_BLOCK_SIZE, 800),
     tenant_base_(500)
 {}
 
@@ -446,4 +446,3 @@ int main(int argc, char **argv)
   testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();
 }
-

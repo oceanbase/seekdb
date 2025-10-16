@@ -374,10 +374,7 @@ int inner_main(int argc, char *argv[])
 
   ObCurTraceId::SeqGenerator::seq_generator_  = ObTimeUtility::current_time();
   static const int  LOG_FILE_SIZE             = 256 * 1024 * 1024;
-  char              ALERT_DIR[]               = "log/alert";
   const char *const LOG_FILE_NAME             = "log/observer.log";
-  const char *const TRACE_LOG_FILE_NAME       = "log/trace.log";
-  const char *const ALERT_LOG_FILE_NAME       = "log/alert/alert.log";
   const char *const PID_FILE_NAME             = "run/observer.pid";
   int               ret                       = OB_SUCCESS;
 
@@ -435,8 +432,6 @@ int inner_main(int argc, char *argv[])
     MPRINT("create log dir fail: ./log/");
   } else if (OB_FAIL(FileDirectoryUtils::create_full_path(CONF_DIR))) {
     MPRINT("create log dir fail: ./etc/");
-  } else if (OB_FAIL(FileDirectoryUtils::create_full_path(ALERT_DIR))) {
-    MPRINT("create log dir fail: ./log/alert");
   } else if (OB_FAIL(ObEncryptionUtil::init_ssl_malloc())) {
     MPRINT("failed to init crypto malloc");
   } else if (!opts->nodaemon_) {
@@ -455,13 +450,10 @@ int inner_main(int argc, char *argv[])
     OB_LOGGER.set_log_level(opts->log_level_);
     OB_LOGGER.set_max_file_size(LOG_FILE_SIZE);
     OB_LOGGER.set_new_file_info(syslog_file_info);
-    OB_LOGGER.set_file_name(LOG_FILE_NAME, opts->initialize_/*no_redirect_flag*/, true/*open_wf*/,
-                            TRACE_LOG_FILE_NAME, ALERT_LOG_FILE_NAME);
+    OB_LOGGER.set_file_name(LOG_FILE_NAME, opts->initialize_/*no_redirect_flag*/);
     ObPLogWriterCfg log_cfg;
     LOG_INFO("succ to init logger",
              "default file", LOG_FILE_NAME,
-             "trace file", TRACE_LOG_FILE_NAME,
-             "alert file", ALERT_LOG_FILE_NAME,
              "max_log_file_size", LOG_FILE_SIZE,
              "enable_async_log", OB_LOGGER.enable_async_log());
     if (0 == memory_used) {

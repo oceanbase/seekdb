@@ -44,7 +44,6 @@ static const int64_t OB_SYSLOG_COMPRESS_RESERVE_SIZE = 4 * (1LL << 30);  // 4GB
 static const int64_t OB_SYSLOG_DELETE_RESERVE_SIZE = 2 * (1LL << 30);  // 2GB
 static const int64_t OB_SYSLOG_COMPRESS_LOOP_INTERVAL = 5000000;  // 5s
 static const char    OB_SYSLOG_DIR[] = "log";  // same as LOG_DIR in src/observer/main.cpp
-static const char    OB_ALERT_LOG_DIR[] = "log/alert";  // same as ALERT_DIR in src/observer/main.cpp
 static const char    OB_SYSLOG_COMPRESS_ZSTD_SUFFIX[] = ".zst";  // name suffix of file compressed by zstd
 static const char    OB_UNCOMPRESSED_SYSLOG_FILE_PATTERN[] = "^[a-z]+\\.log\\.[0-9]+$";  // only uncompressed files
 static const char    OB_COMPRESSED_SYSLOG_FILE_PATTERN[] = "^[a-z]+\\.log\\.[0-9]+\\.[a-z0-9]+$";  // only compressed files

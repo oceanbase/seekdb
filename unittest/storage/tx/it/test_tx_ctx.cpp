@@ -192,8 +192,7 @@ int main(int argc, char **argv)
   uint64_t h = murmurhash(&tx_id, sizeof(tx_id), 0);
   system("rm -rf test_tx_ctx*.log*");
   ObLogger &logger = ObLogger::get_logger();
-  logger.set_file_name("test_tx_ctx.log", true, false,
-                       "test_tx_ctx_audit.log");   // audit
+  logger.set_file_name("test_tx_ctx.log", true);   // audit
   logger.set_log_level(OB_LOG_LEVEL_DEBUG);
   ::testing::InitGoogleTest(&argc, argv);
   TRANS_LOG(INFO, "mmhash:", K(h));

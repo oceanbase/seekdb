@@ -576,20 +576,14 @@ public:
   //@param[in] filename The log-file's name.
   //@param[in] flag Whether redirect the stdout and stderr to the descriptor of the log-file.
   //FALSE:redirect TRUE:no redirect.
-  //@param[in] open_wf whether create warning log-file to store warning buffer.
   void set_file_name(const char *filename,
                      const bool no_redirect_flag = false,
-                     const bool open_wf = false,
-                     const char *trace_filename = NULL,
-                     const char *alert_filename = NULL);
-
-  //whether log warn/error log to log.wf
-  void set_log_warn(bool log_warn) { enable_wf_flag_ = log_warn; }
+                     const bool unused = false);
 
   //@brief Check the log-file's status.
   void check_file();
   //@brief Check the log-file's status.
-  void check_file(ObPLogFileStruct &log_struct, const bool redirect_flag, const bool open_wf_flag);
+  void check_file(ObPLogFileStruct &log_struct, const bool redirect_flag);
 
   //@brief Set whether checking the log-file at each message logging.
   //@param[in] v 1:with check, 0:without check
@@ -601,7 +595,7 @@ public:
   int set_max_file_index(int64_t max_file_index = 0x0F);
   //@brief Set whether record old log file. If this flag and max_file_index set,
   //will record log files in the directory for log file
-  int set_record_old_log_file(bool rec_old_file_flag = false);
+  int set_record_old_log_file();
   int set_log_compressor(ObLogCompressor *log_compressor);
   int64_t get_max_file_index() const { return max_file_index_; }
 
@@ -615,9 +609,8 @@ public:
 
   //@brief Set global log-file's level and warning log-file's level.
   //@param[in] level The log-file's level.
-  //@param[in] wf_level The warning log-file's level.
   //@param[in] version The time(us) change the log level.
-  void set_log_level(const char *level, const char *wf_level = NULL, int64_t version = 0);
+  void set_log_level(const char *level, int64_t version = 0);
   //@brief Set global level.
   void set_log_level(const int32_t level, int64_t version = 0)
   {set_log_level(static_cast<int8_t>(level), version);}
@@ -724,17 +717,14 @@ private:
 
   int setting_list_processing(ObLogIdLevelMap &id_level_map,
                               void *mod_setting_list/*ObList<ModSetting>* */);
-  //@brief record log files in the log directory. It's used when max_file_index and rec_old_file_flag_ set.
+  //@brief record log files in the log directory. It's used when max_file_index
   int record_old_log_file();
 
   int get_log_files_in_dir(const char *filename,
-                           void *files/*ObIArray<FileName> * */,
-                           void *wf_files/*ObIArray<FileName> * */);
+                           void *files/*ObIArray<FileName> * */);
 
   int add_files_to_list(void *files/*ObIArray<FileName> * */,
-                        void *wf_files/*ObIArray<FileName> * */,
-                        std::deque<std::string> &file_list,
-                        std::deque<std::string> &wf_file_list);
+                        std::deque<std::string> &file_list);
 
   void rotate_log(const int64_t size, const bool redirect_flag,
                   ObPLogFileStruct &log_struct, const ObPLogFDType fd_type);
@@ -743,16 +733,12 @@ private:
   //@param[in] fd_type.
   //@param[in] whether redirect, FALSE:redirect TRUE:no redirect
   //@param[out] after retated log, open new file_fd
-  //@param[out] after retated wf log, open new wf_file_fd
   //@param[out] add retated log file name to file list
-  //@param[out] add retated wf log file name to file list
   void rotate_log(const char *filename,
                   const ObPLogFDType fd_type,
                   const bool redirect_flag,
                   int32_t &fd,
-                  int32_t &wf_fd,
-                  std::deque<std::string> &file_list,
-                  std::deque<std::string> &wf_file_list);
+                  std::deque<std::string> &file_list);
 
   static void *async_flush_log_handler(void *arg);
   void flush_logs_to_file(ObPLogItem **log_item, const int64_t count);
@@ -824,7 +810,6 @@ private:
   //log level
   ObLogNameIdMap name_id_map_;
   ObLogIdLevelMap id_level_map_;//level of log-file
-  int8_t wf_level_;//level of warning log-file
   int8_t alert_log_level_;//level of alert log-file
   int64_t level_version_;//version of log level
 
@@ -836,9 +821,6 @@ private:
 
   bool force_check_;//whether check log-file at each message logging.
   bool redirect_flag_;//whether redirect, TRUE: redirect FALSE: no redirect.
-  bool open_wf_flag_;//whether open warning log-file.
-  bool enable_wf_flag_; //whether write waring log to wf log-file.
-  bool rec_old_file_flag_;//whether record old file.
   volatile bool can_print_;//when disk has no space, logger control
 
   bool enable_async_log_;//if false, use sync way logging
@@ -871,7 +853,6 @@ private:
   const char *new_file_info_;
   bool info_as_wdiag_;
   std::deque<std::string> file_list_;//to store the names of log-files
-  std::deque<std::string> wf_file_list_;//to store the names of warning log-files
 };
 
 inline ObLogger& ObLogger::get_logger()
@@ -1358,12 +1339,8 @@ void OB_PRINT_DBA(const char *mod_name, const char *mod_name_bracket,
 {
   if (OB_LIKELY(!OB_LOGGER.get_guard())) {
     OB_LOGGER.get_guard() = true;
-    OB_LOGGER.log_message_value(mod_name, dba_event, level, file, line, function, errcode, true,
+    OB_LOGGER.log_message_value(mod_name_bracket, nullptr, level, file, line, function, errcode, false,
                                 std::forward<const Args&&>(args)...);
-    if (print_rd_log) {
-      OB_LOGGER.log_message_value(mod_name_bracket, nullptr, level, file, line, function, errcode, false,
-                                std::forward<const Args&&>(args)...);
-    }
     OB_LOGGER.get_guard() = false;
   }
 }

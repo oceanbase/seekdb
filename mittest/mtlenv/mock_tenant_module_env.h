@@ -380,6 +380,7 @@ private:
   share::ObCgroupCtrl cgroup_ctrl_;
   obrpc::ObBatchRpc batch_rpc_;
   omt::ObMultiTenant multi_tenant_;
+  transaction::ObWeakReadService  weak_read_service_;
   MockObService ob_service_;
   share::ObLocationService location_service_;
   share::schema::ObMultiVersionSchemaService &schema_service_;
@@ -626,6 +627,7 @@ void MockTenantModuleEnv::init_gctx_gconf()
   GCTX.net_frame_ = &net_frame_;
   GCTX.ob_service_ = &ob_service_;
   GCTX.omt_ = &multi_tenant_;
+  GCTX.weak_read_service_ = &weak_read_service_;
   GCTX.sql_engine_ = &sql_engine_;
   GCTX.cgroup_ctrl_ = &cgroup_ctrl_;
   GCTX.session_mgr_ = &session_mgr_;
@@ -739,6 +741,10 @@ int MockTenantModuleEnv::init_before_start_mtl()
     STORAGE_LOG(ERROR, "init server checkpoint slog handler fail", K(ret));
   } else if (OB_FAIL(multi_tenant_.init(self_addr_, &sql_proxy_, false))) {
     STORAGE_LOG(WARN, "fail to init env", K(ret));
+  } else if (OB_FAIL(weak_read_service_.init(net_frame_.get_req_transport()))) {
+    STORAGE_LOG(WARN, "init weak_read_service failed", KR(ret));
+  } else if (FAILEDx(weak_read_service_.start())) {
+    STORAGE_LOG(WARN, "fail to start weak read service", KR(ret));
   } else if (OB_FAIL(ObTsMgr::get_instance().init(self_addr_,
                          schema_service_, location_service_, net_frame_.get_req_transport()))) {
     STORAGE_LOG(WARN, "fail to init env", K(ret));
@@ -960,6 +966,9 @@ void MockTenantModuleEnv::destroy()
   multi_tenant_.stop();
   multi_tenant_.wait();
   multi_tenant_.destroy();
+  weak_read_service_.stop();
+  weak_read_service_.wait();
+  weak_read_service_.destroy();
   ObKVGlobalCache::get_instance().destroy();
   SERVER_STORAGE_META_SERVICE.destroy();
 

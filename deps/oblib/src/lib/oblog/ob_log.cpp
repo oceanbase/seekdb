@@ -469,9 +469,9 @@ const char *const ObLogger::errstr_[] = {"ERROR", "WARN", "INFO", "EDIAG", "WDIA
 
 ObLogger::ObLogger()
   : ObBaseLogWriter(), log_file_(), max_file_size_(DEFAULT_MAX_FILE_SIZE), max_file_index_(0),
-    name_id_map_(), id_level_map_(), wf_level_(OB_LOG_LEVEL_DBA_WARN), alert_log_level_(OB_LOG_LEVEL_DBA_INFO), level_version_(0),
-    disable_thread_log_level_(false), force_check_(false), redirect_flag_(false), open_wf_flag_(false),
-    enable_wf_flag_(false), rec_old_file_flag_(false), can_print_(true),
+    name_id_map_(), id_level_map_(), alert_log_level_(OB_LOG_LEVEL_DBA_INFO), level_version_(0),
+    disable_thread_log_level_(false), force_check_(false), redirect_flag_(false),
+    can_print_(true),
     enable_async_log_(true), use_multi_flush_(false), stop_append_log_(false), enable_perf_mode_(false),
     last_async_flush_count_per_sec_(0), log_mem_limiter_(nullptr),
     allocator_(nullptr), error_allocator_(nullptr), log_compressor_(nullptr), enable_log_limit_(true),
@@ -539,7 +539,7 @@ void ObLogger::set_trace_mode(bool trace_mode)
   get_trace_buffer()->reset();
 }
 
-void ObLogger::set_log_level(const char *level, const char *wf_level, int64_t version)
+void ObLogger::set_log_level(const char *level, int64_t version)
 {
   int ret = OB_SUCCESS;
   if (check_and_set_level_version(version)) {
@@ -547,13 +547,6 @@ void ObLogger::set_log_level(const char *level, const char *wf_level, int64_t ve
       int8_t level_int = OB_LOG_LEVEL_INFO;
       if (OB_SUCC(level_str2int(level, level_int))) {
         set_log_level(level_int);
-      }
-    }
-
-    if (NULL != wf_level) {
-      int8_t level_int = OB_LOG_LEVEL_INFO;
-      if (OB_SUCC(level_str2int(wf_level, level_int))) {
-        wf_level_ = level_int;
       }
     }
   }
@@ -585,22 +578,13 @@ void ObLogger::set_alert_log_level(const char *level, int64_t version)
 
 void ObLogger::set_file_name(const char *filename,
                              const bool no_redirect_flag,
-                             const bool open_wf,
-                             const char *trace_filename,
-                             const char *alert_filename)
+                             const bool unused)
 {
   int ret = OB_SUCCESS;
   redirect_flag_ = !no_redirect_flag;
-  //open wf file
-  open_wf_flag_ = open_wf;
-  enable_wf_flag_ = open_wf;
-  if (OB_FAIL(log_file_[FD_SVR_FILE].open(filename, open_wf, redirect_flag_))
+  if (OB_FAIL(log_file_[FD_SVR_FILE].open(filename, redirect_flag_))
       && OB_FAIL(log_new_file_info(log_file_[FD_SVR_FILE]))) {
     LOG_STDERR("fail to open log_file = %p, ret=%d\n", filename, ret);
-  } else if (NULL != trace_filename && OB_FAIL(log_file_[FD_TRACE_FILE].open(trace_filename, false, false))) {
-    LOG_STDERR("fail to open log_file = %p, ret=%d\n", trace_filename, ret);
-  } else if (NULL != alert_filename && OB_FAIL(log_file_[FD_ALERT_FILE].open(alert_filename, false, false))) {
-    LOG_STDERR("fail to open log_file = %p, ret=%d\n", alert_filename, ret);
   }
 }
 
@@ -742,7 +726,7 @@ void ObLogger::rotate_log(const int64_t size, const bool redirect_flag,
   if (OB_LIKELY(size > 0) && max_file_size_ > 0 && log_struct.file_size_ >= max_file_size_) {
     if (OB_LIKELY(0 == pthread_mutex_trylock(&file_size_mutex_))) {
       rotate_log(log_struct.filename_, fd_type, redirect_flag, log_struct.fd_,
-                 log_struct.wf_fd_, file_list_, wf_file_list_);
+                 file_list_);
       (void)ATOMIC_SET(&log_struct.file_size_, 0);
       if (fd_type <= FD_SVR_FILE) {
         (void)log_new_file_info(log_struct);
@@ -756,21 +740,13 @@ void ObLogger::rotate_log(const char *filename,
                           const ObPLogFDType fd_type,
                           const bool redirect_flag,
                           int32_t &fd,
-                          int32_t &wf_fd,
-                          std::deque<std::string> &file_list,
-                          std::deque<std::string> &wf_file_list)
+                          std::deque<std::string> &file_list)
 {
   int ret = OB_SUCCESS;
   if (NULL != filename) {
-    char wf_filename[ObPLogFileStruct::MAX_LOG_FILE_NAME_SIZE];
-    memset(wf_filename, 0, sizeof(wf_filename));
-    //Need to think how to deal failure.
-    (void)snprintf(wf_filename, sizeof(wf_filename), "%s.wf", filename);
     if (access(filename, R_OK) == 0) {
       char old_log_file[ObPLogFileStruct::MAX_LOG_FILE_NAME_SIZE];
-      char old_wf_log_file[ObPLogFileStruct::MAX_LOG_FILE_NAME_SIZE];
       memset(old_log_file, 0, sizeof(old_log_file));
-      memset(old_wf_log_file, 0, sizeof(old_wf_log_file));
       struct timeval t;
       gettimeofday(&t, nullptr);
       struct tm tm;
@@ -778,17 +754,14 @@ void ObLogger::rotate_log(const char *filename,
       (void)snprintf(old_log_file, sizeof(old_log_file), "%s.%04d%02d%02d%02d%02d%02d%03d",
               filename, tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday,
               tm.tm_hour, tm.tm_min, tm.tm_sec, static_cast<int>(t.tv_usec/1000));
-      (void)snprintf(old_wf_log_file, sizeof(old_wf_log_file), "%s.%04d%02d%02d%02d%02d%02d%03d",
-               wf_filename, tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday,
-               tm.tm_hour, tm.tm_min, tm.tm_sec, static_cast<int>(t.tv_usec/1000));
       if (max_file_index_ > 0) {
         if (OB_LIKELY(0 == pthread_mutex_lock(&file_index_mutex_))) {
+          file_list.push_back(old_log_file);
           if (file_list.size() >= max_file_index_) {
             std::string oldFile = file_list.front();
             file_list.pop_front();
             unlink_if_need(oldFile.c_str());
           }
-          file_list.push_back(old_log_file);
           (void)pthread_mutex_unlock(&file_index_mutex_);
         }
       }
@@ -813,29 +786,6 @@ void ObLogger::rotate_log(const char *filename,
           }
         }
       }
-      if (open_wf_flag_ && enable_wf_flag_ && ObPLogFDType::FD_ALERT_FILE != fd_type) {
-        if (max_file_index_ > 0) {
-          if (OB_LIKELY(0 == pthread_mutex_lock(&file_index_mutex_))) {
-            if (wf_file_list.size() >= max_file_index_) {
-              std::string old_wf_file = wf_file_list.front();
-              wf_file_list.pop_front();
-              unlink(old_wf_file.c_str());
-            }
-            wf_file_list.push_back(old_wf_log_file);
-            (void)pthread_mutex_unlock(&file_index_mutex_);
-          }
-        }
-        ret = rename(wf_filename, old_wf_log_file); //If failed, TODO
-        tmp_fd = open(wf_filename, O_WRONLY | O_CREAT | O_APPEND | O_CLOEXEC, ObPLogFileStruct::LOG_FILE_MODE);
-        if (tmp_fd > 0) {
-          if (wf_fd > STDERR_FILENO) {
-            (void)dup2(tmp_fd, wf_fd);
-            (void)close(tmp_fd);
-          } else {
-            wf_fd = tmp_fd;
-          }
-        }
-      }
     }
     // awake log compressor when creating new log files
     if (OB_NOT_NULL(log_compressor_)) {
@@ -847,12 +797,12 @@ void ObLogger::rotate_log(const char *filename,
 
 void ObLogger::check_file()
 {
-  check_file(log_file_[FD_SVR_FILE], redirect_flag_, open_wf_flag_);
-  check_file(log_file_[FD_TRACE_FILE], false, false);
-  check_file(log_file_[FD_ALERT_FILE], false, false);
+  check_file(log_file_[FD_SVR_FILE], redirect_flag_);
+  check_file(log_file_[FD_TRACE_FILE], false);
+  check_file(log_file_[FD_ALERT_FILE], false);
 }
 
-void ObLogger::check_file(ObPLogFileStruct &log_struct, const bool redirect_flag, const bool open_wf_flag)
+void ObLogger::check_file(ObPLogFileStruct &log_struct, const bool redirect_flag)
 {
   if (log_struct.is_opened()) {
     struct stat st_file;
@@ -860,17 +810,6 @@ void ObLogger::check_file(ObPLogFileStruct &log_struct, const bool redirect_flag
     if ((err == -1 && errno == ENOENT)
         || (err == 0 && (st_file.st_dev != log_struct.stat_.st_dev || st_file.st_ino != log_struct.stat_.st_ino))) {
       log_struct.reopen(redirect_flag);
-    }
-
-    if (open_wf_flag) {
-      char wf_file_name[ObPLogFileStruct::MAX_LOG_FILE_NAME_SIZE];
-      memset(wf_file_name, 0, sizeof(wf_file_name));
-      (void)snprintf(wf_file_name, sizeof(wf_file_name), "%s.wf", log_struct.filename_);
-      err = stat(wf_file_name, &st_file);
-      if ((err == -1 && errno == ENOENT)
-          || (err == 0 && (st_file.st_dev != log_struct.wf_stat_.st_dev || st_file.st_ino != log_struct.wf_stat_.st_ino))) {
-        (void)log_struct.reopen_wf();
-      }
     }
   }
 }
@@ -905,7 +844,7 @@ int ObLogger::set_max_file_index(int64_t max_file_index)
     max_file_index = MAX_LOG_FILE_COUNT;// 10 * 1024
   }
   max_file_index_ = max_file_index;
-  if (max_file_index_ > 0 && rec_old_file_flag_) {
+  if (max_file_index_ > 0) {
     if (OB_FAIL(record_old_log_file())) {
       LOG_WARN("Record old log file error", K(ret));
     }
@@ -913,11 +852,10 @@ int ObLogger::set_max_file_index(int64_t max_file_index)
   return ret;
 }
 
-int ObLogger::set_record_old_log_file(bool rec_old_file_flag)
+int ObLogger::set_record_old_log_file()
 {
   int ret = OB_SUCCESS;
-  rec_old_file_flag_ = rec_old_file_flag;
-  if (rec_old_file_flag_ && max_file_index_ > 0) {
+  if (max_file_index_ > 0) {
     if (OB_FAIL(record_old_log_file())) {
       LOG_WARN("Record old log file error", K(ret));
     }
@@ -1260,35 +1198,34 @@ void ObLogger::log_user_error_line_column(const UserMsgLevel user_msg_level,
 int ObLogger::record_old_log_file()
 {
   int ret = OB_SUCCESS;
-  if (max_file_index_ <= 0 || !rec_old_file_flag_) {
+  if (max_file_index_ <= 0) {
   } else {
     int tmp_ret = OB_SUCCESS;
     ObSEArray<FileName, 4> files;
-    ObSEArray<FileName, 4> wf_files;
     for (int type = FD_SVR_FILE; type < FD_AUDIT_FILE; ++type) {
-      if (OB_TMP_FAIL(get_log_files_in_dir(log_file_[type].filename_, &files, &wf_files))) {
+      if (OB_TMP_FAIL(get_log_files_in_dir(log_file_[type].filename_, &files))) {
         OB_LOG(WARN, "Get log files in log dir error", K(ret));
       }
     }
-    if (OB_TMP_FAIL(get_log_files_in_dir(log_file_[FD_ALERT_FILE].filename_, &files, &wf_files))) {
+    if (OB_TMP_FAIL(get_log_files_in_dir(log_file_[FD_ALERT_FILE].filename_, &files))) {
       OB_LOG(WARN, "Get log files in log dir error", K(ret));
     }
-    if (OB_FAIL(add_files_to_list(&files, &wf_files, file_list_, wf_file_list_))) {
+    if (OB_FAIL(add_files_to_list(&files, file_list_))) {
         OB_LOG(WARN, "Add files to list error", K(ret));
     }
   }
   return ret;
 }
 
-int ObLogger::get_log_files_in_dir(const char *filename, void *files, void *wf_files)
+int ObLogger::get_log_files_in_dir(const char *filename, void *files)
 {
   int ret = OB_SUCCESS;
   char *dirc = NULL;
   char *basec = NULL;
   regex_t uncompressed_regex;
-  if (OB_ISNULL(files) || OB_ISNULL(wf_files)) {
+  if (OB_ISNULL(files)) {
     ret = OB_INVALID_ARGUMENT;
-    OB_LOG(WARN, "Input should not be NULL", K(files), K(wf_files), K(ret));
+    OB_LOG(WARN, "Input should not be NULL", K(files), K(ret));
   } else if (OB_ISNULL(filename)) {
     ret = OB_NOT_INIT;
     OB_LOG(WARN, "filename has not been set", KCSTRING(filename), K(ret));
@@ -1302,20 +1239,13 @@ int ObLogger::get_log_files_in_dir(const char *filename, void *files, void *wf_f
     OB_LOG(ERROR, "failed to compile regex pattern", K(ret));
   } else {
     ObIArray<FileName> *files_arr = static_cast<ObIArray<FileName> *>(files);
-    ObIArray<FileName> *wf_files_arr = static_cast<ObIArray<FileName> *>(wf_files);
     //get dir and base name
     char *dir_name = dirname(dirc);
     char *base_name = basename(basec);
-    //get file_prefix, wf_file_prefix, wf_file names
+    //get file_prefix
     char file_prefix[ObPLogFileStruct::MAX_LOG_FILE_NAME_SIZE];
-    char wf_file_prefix[ObPLogFileStruct::MAX_LOG_FILE_NAME_SIZE];
-    char wf_file[ObPLogFileStruct::MAX_LOG_FILE_NAME_SIZE];
     memset(file_prefix, 0, sizeof(file_prefix));
-    memset(wf_file_prefix, 0, sizeof(wf_file_prefix));
-    memset(wf_file, 0, sizeof(wf_file));
     (void)snprintf(file_prefix, sizeof(file_prefix), "%s.", base_name);
-    (void)snprintf(wf_file_prefix, sizeof(wf_file_prefix), "%s.wf.", base_name);
-    (void)snprintf(wf_file, sizeof(wf_file), "%s.wf", base_name);
     //open dir
     DIR *dir_pointer = opendir(dir_name);
     if (NULL == dir_pointer) {
@@ -1331,16 +1261,7 @@ int ObLogger::get_log_files_in_dir(const char *filename, void *files, void *wf_f
       }
       while (OB_SUCC(ret) && (dir_entry = readdir(dir_pointer)) != NULL) {
         if (DT_DIR != dir_entry->d_type) {
-          if (prefix_match(wf_file_prefix, dir_entry->d_name)) {
-            print_len = snprintf(tmp_file.file_name_, ObPLogFileStruct::MAX_LOG_FILE_NAME_SIZE, "%s/%s", dir_name, dir_entry->d_name);
-            if (OB_UNLIKELY(print_len <0) || OB_UNLIKELY(print_len >= ObPLogFileStruct::MAX_LOG_FILE_NAME_SIZE)) {
-              //do nothing
-            } else if (OB_FAIL(wf_files_arr->push_back(tmp_file))) {
-              LOG_WARN("Add file to wf files error", K(ret));
-            } else { }//do nothing
-          } else if (prefix_match(wf_file, dir_entry->d_name)) {
-            //.wf file, do nothing.
-          } else if (prefix_match(file_prefix, dir_entry->d_name)
+          if (prefix_match(file_prefix, dir_entry->d_name)
                      && (enable_delete_compressed_file || regexec(&uncompressed_regex, dir_entry->d_name, 0, NULL, 0) == 0)) {
             print_len = snprintf(tmp_file.file_name_, ObPLogFileStruct::MAX_LOG_FILE_NAME_SIZE, "%s/%s", dir_name, dir_entry->d_name);
             if (OB_UNLIKELY(print_len <0) || OB_UNLIKELY(print_len >= ObPLogFileStruct::MAX_LOG_FILE_NAME_SIZE)) {
@@ -1390,46 +1311,29 @@ int compare_log_filename_by_date_suffix(const void *v1, const void *v2)
 }
 
 int ObLogger::add_files_to_list(void *files,
-                                void *wf_files,
-                                std::deque<std::string> &file_list,
-                                std::deque<std::string> &wf_file_list)
+                                std::deque<std::string> &file_list)
 {
   int ret = OB_SUCCESS;
-  if (OB_ISNULL(files) || OB_ISNULL(wf_files)) {
+  if (OB_ISNULL(files)) {
     ret = OB_INVALID_ARGUMENT;
-    OB_LOG(WARN, "Input should not be NULL", K(files), K(wf_files), K(ret));
+    OB_LOG(WARN, "Input should not be NULL", K(files), K(ret));
   } else {
     ObIArray<FileName> *files_arr = static_cast<ObIArray<FileName> *>(files);
-    ObIArray<FileName> *wf_files_arr = static_cast<ObIArray<FileName> *>(wf_files);
     //sort files
     if (files_arr->count() > 0) {
       qsort(&files_arr->at(0), files_arr->count(), sizeof(FileName), compare_log_filename_by_date_suffix);
     }
-    if (wf_files_arr->count() > 0) {
-      qsort(&wf_files_arr->at(0), wf_files_arr->count(), sizeof(FileName), compare_log_filename_by_date_suffix);
-    }
-
     //Add to file_list
     if (OB_LIKELY(0 == pthread_mutex_lock(&file_index_mutex_))) {
       file_list.clear();
       std::string oldFile;
       for (int64_t i = 0; OB_SUCC(ret) && i < files_arr->count(); ++i) {
+        file_list.push_back(files_arr->at(i).file_name_);
         if (file_list.size() >= max_file_index_) {
           oldFile = file_list.front();
           file_list.pop_front();
           unlink_if_need(oldFile.c_str());
         }
-        file_list.push_back(files_arr->at(i).file_name_);
-      }
-      wf_file_list.clear();
-      std::string old_wf_file;
-      for (int64_t i = 0; OB_SUCC(ret) && i < wf_files_arr->count(); ++i) {
-        if (wf_file_list.size() >= max_file_index_) {
-          old_wf_file = wf_file_list.front();
-          wf_file_list.pop_front();
-          unlink(old_wf_file.c_str());
-        }
-        wf_file_list.push_back(wf_files_arr->at(i).file_name_);
       }
       (void)pthread_mutex_unlock(&file_index_mutex_);
     }
@@ -1557,7 +1461,7 @@ void ObLogger::flush_logs_to_file(ObPLogItem **log_item, const int64_t count)
       && OB_NOT_NULL(log_item[0])) {
     if (log_item[0]->get_timestamp() > (last_check_disk_ts + DISK_SAMPLE_TIME)) {
       last_check_disk_ts = log_item[0]->get_timestamp();
-      check_file(log_file_[FD_SVR_FILE], redirect_flag_, open_wf_flag_);
+      check_file(log_file_[FD_SVR_FILE], redirect_flag_);
       struct statfs disk_info;
       if (0 == statfs(log_file_[FD_SVR_FILE].filename_, &disk_info)) {
         can_print_ = ((disk_info.f_bfree * disk_info.f_bsize) > CAN_PRINT_DISK_SIZE);
@@ -1574,8 +1478,6 @@ void ObLogger::flush_logs_to_file(ObPLogItem **log_item, const int64_t count)
 
       struct iovec vec[MAX_FD_FILE][GROUP_COMMIT_MAX_ITEM_COUNT];
       int iovcnt[MAX_FD_FILE] = {0};
-      struct iovec wf_vec[MAX_FD_FILE][GROUP_COMMIT_MAX_ITEM_COUNT];
-      int wf_iovcnt[MAX_FD_FILE] = {0};
 
       ObPLogFDType fd_type = MAX_FD_FILE;
       for (int64_t i = 0; i < count; ++i) {
@@ -1589,11 +1491,6 @@ void ObLogger::flush_logs_to_file(ObPLogItem **log_item, const int64_t count)
           vec[fd_type][iovcnt[fd_type]].iov_base = log_item[i]->get_buf();
           vec[fd_type][iovcnt[fd_type]].iov_len = static_cast<size_t>(log_item[i]->get_data_len());
           iovcnt[fd_type] += 1;
-          if (enable_wf_flag_ && open_wf_flag_ && log_item[i]->get_log_level() <= wf_level_ && fd_type != FD_ALERT_FILE) {
-            wf_vec[fd_type][wf_iovcnt[fd_type]].iov_base = log_item[i]->get_buf();
-            wf_vec[fd_type][wf_iovcnt[fd_type]].iov_len = static_cast<size_t>(log_item[i]->get_data_len());
-            wf_iovcnt[fd_type] += 1;
-          }
           if (log_item[i]->get_tl_type() >= 0 && log_item[i]->get_tl_type() < MAX_TASK_LOG_TYPE) {
             (void)ATOMIC_AAF(written_count_ + log_item[i]->get_tl_type(), 1);
             (void)ATOMIC_AAF(current_written_count_ + log_item[i]->get_tl_type(), -1);
@@ -1618,9 +1515,6 @@ void ObLogger::flush_logs_to_file(ObPLogItem **log_item, const int64_t count)
           (void)ATOMIC_AAF(&log_file_[i].write_count_, iovcnt[i]);
           EVENT_ADD(ObStatEventIds::IO_WRITE_COUNT, iovcnt[i]);
           EVENT_ADD(ObStatEventIds::IO_WRITE_BYTES, size);
-        }
-        if (wf_iovcnt[i] > 0 && log_file_[i].wf_fd_ > 0) {
-          (void)::writev(log_file_[i].wf_fd_, wf_vec[i], wf_iovcnt[i]);
         }
       }
 
@@ -1847,7 +1741,7 @@ int ObLogger::log_new_file_info(const ObPLogFileStruct &log_file)
 {
   int ret = OB_SUCCESS;
   if (nullptr != new_file_info_
-      && (log_file.fd_ > 0 || log_file.wf_fd_ > 0)) {
+      && (log_file.fd_ > 0)) {
     static const int64_t max_buf_len = 512;
     char buf[max_buf_len];
     struct timeval tv;
@@ -1861,11 +1755,6 @@ int ObLogger::log_new_file_info(const ObPLogFileStruct &log_file)
     buf[max_buf_len - 1] = '\0';
     if (OB_SUCC(ret) && log_file.fd_ > STDOUT_FILENO) {
       if (-1 == ::write(log_file.fd_, buf, strlen(buf)) < 0) {
-        ret = OB_ERR_SYS;
-      }
-    }
-    if (OB_SUCC(ret) && log_file.wf_fd_ > STDERR_FILENO) {
-      if (-1 == ::write(log_file.wf_fd_, buf, strlen(buf)) < 0) {
         ret = OB_ERR_SYS;
       }
     }

@@ -9,7 +9,6 @@ grant all on *.* to 'admin' WITH GRANT OPTION;
 
 
 
-alter system set enable_syslog_wf=false;
 set @@session.ob_query_timeout = 200000000;
 
 source init_create_tenant_routines.sql;

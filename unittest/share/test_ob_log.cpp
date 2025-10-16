@@ -49,7 +49,7 @@ TEST(ObLoggerTest, logger_test)
 {
   OB_LOGGER.set_log_level("INFO", "WARN");
   const char *file_name = "ob_log_logger_test.log";
-  OB_LOGGER.set_file_name(file_name, true, true);
+  OB_LOGGER.set_file_name(file_name, true);
   int32_t valid_length = 0;
   int ret = 0;
   const char *buf_set_0 = "INFO";
@@ -515,7 +515,7 @@ TEST(ObLoggerTest, set_file_name)
   OB_LOGGER.set_max_file_index(2);
   OB_LOGGER.set_check(false);
   const char *file_name = "ob_log_set_file_name.log";
-  OB_LOGGER.set_file_name(file_name, true, true);
+  OB_LOGGER.set_file_name(file_name, true);
   OB_LOG(INFO, "before set rs log file, ObLoggerTest info test");
   OB_LOG(WARN, "before set rs log file, ObLoggerTest warn test");
   RS_LOG(INFO, "before set rs log file, ObLoggerTest info RS_LOG test");
@@ -524,8 +524,6 @@ TEST(ObLoggerTest, set_file_name)
   SQL_LOG(WARN, "before set rs log file, ObLoggerTest warn SQL_LOG test");
   OB_LOG(INFO, "before set rs log file, infostring format should be considered as string %s, %d", "should not cause core", "test");
   OB_LOG(WARN, "before set rs log file, infostring format should be considered as string %s, %d", "should not cause core", "test");
-  const char *rs_file_name = "ob_log_set_file_name_rs.log";
-  OB_LOGGER.set_file_name(file_name, true, true, rs_file_name);
   OB_LOG(INFO, "after set rs log file, ObLoggerTest info test");
   OB_LOG(WARN, "after set rs log file, ObLoggerTest warn test");
   RS_LOG(INFO, "after set rs log file, ObLoggerTest info RS_LOG test");
@@ -534,14 +532,14 @@ TEST(ObLoggerTest, set_file_name)
   SQL_LOG(WARN, "after set rs log file, ObLoggerTest warn SQL_LOG test");
   OB_LOG(INFO, "after set rs log file, infostring format should be considered as string %s, %d", "should not cause core", "test");
   OB_LOG(WARN, "after set rs log file, infostring format should be considered as string %s, %d", "should not cause core", "test");
-  OB_LOGGER.set_file_name(file_name, true, true, rs_file_name);
+  OB_LOGGER.set_file_name(file_name, true);
 }
 
 TEST(ObLoggerTest, backtrace)
 {
   OB_LOGGER.set_log_level("INFO", "WARN");
   OB_LOGGER.set_max_file_size(0);
-  OB_LOGGER.set_file_name("test_ob_log_backtrace.log", true, true, "test_ob_log_backtrace_rs.log");
+  OB_LOGGER.set_file_name("test_ob_log_backtrace.log", true);
   OB_LOG(INFO, "test info", "key", "value");
   OB_LOG(ERROR, "test error", "key", "value");
   _OB_LOG(ERROR, "test error, %s", "hello world");
@@ -550,9 +548,9 @@ TEST(ObLoggerTest, backtrace)
 
 TEST(ObLoggerTest, redirect_stdout_stderr)
 {
-  OB_LOGGER.set_file_name("ob_log_redirect_stdout_stderrt.log", false, true);
+  OB_LOGGER.set_file_name("ob_log_redirect_stdout_stderrt.log", false);
   OB_LOG(INFO, "redirect_stdout_stderr test");
-  OB_LOGGER.set_file_name("ob_log_redirect_stdout_stderr_new.log", true, true);
+  OB_LOGGER.set_file_name("ob_log_redirect_stdout_stderr_new.log", true);
 }
 
 int main(int argc, char **argv)
