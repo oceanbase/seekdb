@@ -271,31 +271,6 @@ private:
 };
 
 class ObTsMgr;
-class ObTsSourceInfoGuard
-{
-public:
-  ObTsSourceInfoGuard() : ts_source_info_(NULL), mgr_(NULL), need_revert_(true), tenant_id_(0) {}
-  ~ObTsSourceInfoGuard();
-  void set(ObTsSourceInfo *info, ObTsMgr *mgr, const bool need_revert, const uint64_t tenant_id)
-  {
-    ts_source_info_ = info;
-    mgr_ = mgr;
-    need_revert_ = need_revert;
-    tenant_id_ = tenant_id;
-  }
-  void set_ts_source_info(ObTsSourceInfo *ts_source_info) { ts_source_info_ = ts_source_info; }
-  void set_mgr(ObTsMgr *mgr) { mgr_ = mgr; }
-  void set_need_revert(const bool need_revert) { need_revert_ = need_revert; }
-  ObTsSourceInfo *get_ts_source_info() { return ts_source_info_; }
-  bool need_revert() const { return need_revert_; }
-  uint64_t get_tenant_id() const { return tenant_id_; }
-private:
-  ObTsSourceInfo *ts_source_info_;
-  ObTsMgr *mgr_;
-  bool need_revert_;
-  uint64_t tenant_id_;
-};
-
 typedef common::ObLinkHashMap<ObTsTenantInfo, ObTsSourceInfo, ObTsSourceInfoAlloc> ObTsSourceInfoMap;
 class ObTsMgr : public share::ObThreadPool, public ObITsMgr
 {
@@ -361,18 +336,12 @@ private:
   static const int64_t TS_SOURCE_INFO_OBSOLETE_TIME = 120 * 1000 * 1000;
   static const int64_t TS_SOURCE_INFO_CACHE_NUM = 4096;
 private:
-  int get_ts_source_info_opt_(const uint64_t tenant_id, ObTsSourceInfoGuard &guard,
-      const bool need_create_tenant, const bool need_update_access_ts);
-  int get_ts_source_info_(const uint64_t tenant_id, ObTsSourceInfoGuard &guard,
-      const bool need_create_tenant, const bool need_update_access_ts);
-  void revert_ts_source_info_(ObTsSourceInfoGuard &guard);
   int add_tenant_(const uint64_t tenant_id);
   int delete_tenant_(const uint64_t tenant_id);
   static ObTsMgr* &get_instance_inner();
 private:
   bool is_inited_;
   bool is_running_;
-  ObTsSourceInfoMap ts_source_info_map_;
   common::ObAddr server_;
   obrpc::ObGtsRpcProxy *gts_request_rpc_proxy_;
   ObGtsRequestRpc *gts_request_rpc_;
@@ -380,7 +349,7 @@ private:
   ObLocationAdapter location_adapter_def_;
   ObTsWorker ts_worker_;
   common::ObQSyncLock lock_;
-  ObTsSourceInfo *ts_source_infos_[TS_SOURCE_INFO_CACHE_NUM];
+  ObGtsSource ts_source_;
 };
 
 #define OB_TS_MGR (::oceanbase::transaction::ObTsMgr::get_instance())
