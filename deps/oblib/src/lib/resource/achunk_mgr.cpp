@@ -48,7 +48,7 @@ AChunkMgr &AChunkMgr::instance()
 }
 
 AChunkMgr::AChunkMgr()
-  : limit_(DEFAULT_LIMIT), urgent_(0), hold_(0),
+  : limit_(DEFAULT_LIMIT), hold_(0),
     total_hold_(0), cache_hold_(0), large_cache_hold_(0),
     max_chunk_cache_size_(limit_)
 {
@@ -311,7 +311,7 @@ void AChunkMgr::free_co_chunk(AChunk *chunk)
 bool AChunkMgr::update_hold(int64_t bytes, bool high_prio)
 {
   bool bret = true;
-  const int64_t limit = high_prio ? limit_ + urgent_ : limit_;
+  const int64_t limit = high_prio ? INT64_MAX : limit_;
   if (bytes <= 0) {
     IGNORE_RETURN ATOMIC_AAF(&hold_, bytes);
   } else if (hold_ + bytes <= limit) {

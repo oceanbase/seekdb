@@ -276,25 +276,12 @@ TEST_F(TestChunkMgr, BorderCase_advise_fail)
 
 TEST_F(TestChunkMgr, alloc_co_chunk)
 {
-  int LARGE_SIZE = INTACT_ACHUNK_SIZE + 100;
   int NORMAL_SIZE = OB_MALLOC_BIG_BLOCK_SIZE;
-  {
-    AChunk *chunk = alloc_chunk(NORMAL_SIZE);
-    free_chunk(chunk);
-    chunk = alloc_chunk(LARGE_SIZE);
-    free_chunk(chunk);
-  }
-  EXPECT_EQ(1, large_slot()->get_pushes());
-  EXPECT_EQ(0, large_slot()->get_pops());
-  EXPECT_EQ(1, normal_slot()->get_pushes());
-  EXPECT_EQ(0, normal_slot()->get_pops());
-  set_limit(hold_);
-  auto *chunk = alloc_co_chunk(NORMAL_SIZE);
+  set_limit(0);
+  auto *chunk = alloc_co_chunk(NORMAL_SIZE);  // high_prio alloc always succeed
   EXPECT_TRUE(chunk != NULL);
-  EXPECT_EQ(1, large_slot()->get_pops());
-  chunk = alloc_co_chunk(NORMAL_SIZE);
-  EXPECT_TRUE(chunk != NULL);
-  EXPECT_EQ(1, normal_slot()->get_pops());
+  free_chunk(chunk);
+  EXPECT_EQ(0, large_slot()->get_pushes());  // direct free
 }
 
 TEST_F(TestChunkMgr, FreeListBasic)

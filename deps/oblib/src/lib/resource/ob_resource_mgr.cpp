@@ -50,7 +50,7 @@ AChunk *ObTenantMemoryMgr::alloc_chunk(const int64_t size, const ObMemAttr &attr
   } else {
     const int64_t hold_size = static_cast<int64_t>(CHUNK_MGR.hold(static_cast<uint64_t>(size)));
     bool reach_ctx_limit = false;
-    if (update_hold(hold_size, attr.ctx_id_, attr.label_, reach_ctx_limit)) {
+    if (update_hold(hold_size, attr.ctx_id_, attr.label_, reach_ctx_limit, OB_HIGH_ALLOC == attr.prio_)) {
       chunk = alloc_chunk_(size, attr);
       if (NULL == chunk) {
         update_hold(-hold_size, attr.ctx_id_, attr.label_, reach_ctx_limit);
@@ -79,7 +79,7 @@ AChunk *ObTenantMemoryMgr::alloc_chunk(const int64_t size, const ObMemAttr &attr
           }
 
           if (update_hold(static_cast<int64_t>(hold_size), attr.ctx_id_, attr.label_,
-                          reach_ctx_limit)) {
+                          reach_ctx_limit, OB_HIGH_ALLOC == attr.prio_)) {
             chunk = alloc_chunk_(size, attr);
             if (NULL == chunk) {
               update_hold(-hold_size, attr.ctx_id_, attr.label_, reach_ctx_limit);
@@ -188,12 +188,13 @@ void ObTenantMemoryMgr::update_cache_hold(const int64_t size)
 }
 
 bool ObTenantMemoryMgr::update_hold(const int64_t size, const uint64_t ctx_id,
-                                    const lib::ObLabel &label, bool &reach_ctx_limit)
+                                    const lib::ObLabel &label, bool &reach_ctx_limit, bool high_prio)
 {
   bool updated = true;
   reach_ctx_limit = false;
+  const int64_t limit = high_prio ? INT64_MAX : limit_;
   const int64_t nvalue = ATOMIC_AAF(&sum_hold_, size); 
-  if (nvalue > limit_) {
+  if (nvalue > limit) {
     ATOMIC_AAF(&sum_hold_, -size);
     updated = false;
     auto &afc = g_alloc_failed_ctx();
@@ -203,7 +204,7 @@ bool ObTenantMemoryMgr::update_hold(const int64_t size, const uint64_t ctx_id,
     afc.tenant_hold_ = get_sum_hold();
     afc.tenant_limit_ = limit_;
   } else if (label != ObNewModIds::OB_KVSTORE_CACHE_MB) {
-    if (!update_ctx_hold(ctx_id, size)) {
+    if (!update_ctx_hold(ctx_id, size, high_prio)) {
       ATOMIC_AAF(&sum_hold_, -size);
       updated = false;
       reach_ctx_limit = true;
@@ -214,12 +215,12 @@ bool ObTenantMemoryMgr::update_hold(const int64_t size, const uint64_t ctx_id,
   return updated;
 }
 
-bool ObTenantMemoryMgr::update_ctx_hold(const uint64_t ctx_id, const int64_t size)
+bool ObTenantMemoryMgr::update_ctx_hold(const uint64_t ctx_id, const int64_t size, bool high_prio)
 {
   bool updated = false;
   if (ctx_id < ObCtxIds::MAX_CTX_ID) {
     volatile int64_t &hold = hold_bytes_[ctx_id];
-    volatile int64_t &limit = limit_bytes_[ctx_id];
+    const int64_t limit = high_prio ? INT64_MAX : limit_bytes_[ctx_id];
     if (size <= 0) {
       ATOMIC_AAF(&hold, size);
       updated = true;

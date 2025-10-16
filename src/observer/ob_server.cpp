@@ -2206,7 +2206,6 @@ int ObServer::init_pre_setting()
     const int64_t limit_memory = GMEMCONF.get_server_memory_limit();
     const int64_t reserved_memory = std::min(config_.cache_wash_threshold.get_value(),
         static_cast<int64_t>(static_cast<double>(limit_memory) * KVCACHE_FACTOR));
-    const int64_t reserved_urgent_memory = config_.memory_reserved;
     if (LEAST_MEMORY_SIZE > limit_memory) {
       ret = OB_INVALID_CONFIG;
       LOG_ERROR("memory limit for oceanbase isn't sufficient",
@@ -2214,15 +2213,12 @@ int ObServer::init_pre_setting()
                 "limit to", limit_memory,
                 "sys mem", get_phy_mem_size(),
                 K(reserved_memory),
-                K(reserved_urgent_memory),
                 KR(ret));
     } else {
       LOG_INFO("set limit memory", K(limit_memory));
       set_memory_limit(limit_memory);
       LOG_INFO("set reserved memory", K(reserved_memory));
       ob_set_reserved_memory(reserved_memory);
-      LOG_INFO("set urgent memory", K(reserved_urgent_memory));
-      ob_set_urgent_memory(reserved_urgent_memory);
     }
   }
   if (OB_SUCC(ret)) {

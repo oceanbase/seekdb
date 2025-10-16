@@ -145,13 +145,10 @@ int ObServerReloadConfig::operator()()
       LOG_WARN("ObReloadConfig operator() failed", K(tmp_ret));
     }
     const int64_t reserved_memory = GCONF.cache_wash_threshold;
-    const int64_t reserved_urgent_memory = GCONF.memory_reserved;
     LOG_INFO("set limit memory", K(limit_memory));
     set_memory_limit(limit_memory);
     LOG_INFO("set reserved memory", K(reserved_memory));
     ob_set_reserved_memory(reserved_memory);
-    LOG_INFO("set urgent memory", K(reserved_urgent_memory));
-    ob_set_urgent_memory(reserved_urgent_memory);
 #ifdef OB_USE_ASAN
     __MemoryContext__::set_enable_asan_allocator(GCONF.enable_asan_for_memory_context);
 #endif

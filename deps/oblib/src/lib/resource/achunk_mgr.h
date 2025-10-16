@@ -241,8 +241,6 @@ public:
 
   inline void set_limit(int64_t limit);
   inline int64_t get_limit() const;
-  inline void set_urgent(int64_t limit);
-  inline int64_t get_urgent() const;
   inline int64_t get_hold() const;
   inline int64_t get_total_hold() const { return ATOMIC_LOAD(&total_hold_); }
   inline int64_t get_used() const;
@@ -341,7 +339,6 @@ private:
   }
 protected:
   int64_t limit_;
-  int64_t urgent_;
   int64_t hold_; // Including the memory occupied by free_list, limited by memory_limit
   int64_t total_hold_; // Including virtual memory, just for statifics.
   int64_t cache_hold_;
@@ -373,16 +370,6 @@ inline void AChunkMgr::set_limit(int64_t limit)
 inline int64_t AChunkMgr::get_limit() const
 {
   return limit_;
-}
-
-inline void AChunkMgr::set_urgent(int64_t urgent)
-{
-  urgent_ = urgent;
-}
-
-inline int64_t AChunkMgr::get_urgent() const
-{
-  return urgent_;
 }
 
 inline int64_t AChunkMgr::get_hold() const

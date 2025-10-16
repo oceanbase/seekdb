@@ -42,8 +42,7 @@ int64_t get_tenant_memory_remain(uint64_t tenant_id);
 void get_tenant_label_memory(
   uint64_t tenant_id, ObLabel &label, common::ObLabelItem &item);
 void ob_set_reserved_memory(const int64_t bytes);
-void ob_set_urgent_memory(const int64_t bytes);
-int64_t ob_get_reserved_urgent_memory();
+int64_t ob_get_reserved_memory();
 
 // Set Work Area memory limit for specified tenant.
 // ms_pctg: percentage limitation of tenant memory can be used by MemStore
