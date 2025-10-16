@@ -151,20 +151,12 @@ if(BUILD_EMBED_MODE)
   
   pybind11_add_module(oblite NO_EXTRAS python/ob_embed_impl.cpp)
 
-  # Get Python version for output filename
-  execute_process(
-    COMMAND ${Python3_EXECUTABLE} -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')"
-    OUTPUT_VARIABLE PYTHON_VERSION_SHORT
-    OUTPUT_STRIP_TRAILING_WHITESPACE
-  )
-
   set_target_properties(oblite PROPERTIES
       PREFIX ""
       SUFFIX ".so"
-      OUTPUT_NAME "oblite_py${PYTHON_VERSION_SHORT}"
+      OUTPUT_NAME "oblite"
     )
 
-  message(STATUS "Output filename will be: oblite_py${PYTHON_VERSION_SHORT}.so")
   target_link_libraries(oblite PUBLIC
     oceanbase_static
     -static-libgcc

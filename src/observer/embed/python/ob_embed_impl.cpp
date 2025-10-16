@@ -66,6 +66,7 @@ static pybind11::object datetime_class = datetime_module.attr("datetime");
 static pybind11::object fromtimestamp = datetime_class.attr("fromtimestamp");
 static pybind11::object date_class = datetime_module.attr("date");
 static pybind11::object timedelta_class = datetime_module.attr("timedelta");
+static pybind11::module builtins = pybind11::module::import("builtins");
 
 #define MPRINT(format, ...) fprintf(stderr, format "\n", ##__VA_ARGS__)
 
@@ -178,7 +179,7 @@ int ObLiteEmbed::do_open_(const char* db_dir)
     if (OB_FAIL(log_file.assign_fmt("%s/log/oblite.log", opts.base_dir_.ptr()))) {
       MPRINT("calculate log file failed %d", ret);
     } else {
-      OB_LOGGER.set_file_name(log_file.ptr(), true, false, log_file.ptr(), log_file.ptr());
+      OB_LOGGER.set_file_name(log_file.ptr(), true, false);
     }
 
     int saved_stdout = dup(STDOUT_FILENO); // Save current stdout
@@ -391,7 +392,7 @@ std::vector<pybind11::tuple> ObLiteEmbedCursor::fetchall()
     }
   }
   if (OB_FAIL(ret)) {
-    throw std::runtime_error("fetchall failed " + std::to_string(ob_errpkt_errno(ret, false)) + std::string(ob_errpkt_strerror(ret, false)));
+    throw std::runtime_error("fetchall failed " + std::to_string(ob_errpkt_errno(ret, false)) + " " + std::string(ob_errpkt_strerror(ret, false)));
   }
   return res;
 }
@@ -530,7 +531,14 @@ int ObLiteEmbedUtil::convert_result_to_pyobj(const int64_t col_idx, common::sqlc
     case ObUFloatType: {
       float float_val = 0;
       if (OB_SUCC(result.get_float(col_idx, float_val))) {
-        val = pybind11::float_(float_val);
+        char buf[64];
+        int len = snprintf(buf, sizeof(buf), "%.6g", float_val);
+        if (len > 0 && len < sizeof(buf)) {
+          std::string formatted_str(buf, len);
+          val = builtins.attr("float")(formatted_str);
+        } else {
+          ret = OB_NOT_SUPPORTED;
+        }
       }
       break;
     }
@@ -539,6 +547,23 @@ int ObLiteEmbedUtil::convert_result_to_pyobj(const int64_t col_idx, common::sqlc
       double double_val = 0;
       if (OB_SUCC(result.get_double(col_idx, double_val))) {
         val = pybind11::float_(double_val);
+      }
+      break;
+    }
+    case ObNumberType:
+    case ObUNumberType: {
+      ObObj obj;
+      if (OB_FAIL(result.get_obj(col_idx, obj))) {
+        LOG_WARN("get obj failed", K(ret), K(col_idx));
+      } else {
+        number::ObNumber number = obj.get_number();
+        char buf[256];
+        int64_t length = 0;
+        if (OB_FAIL(number.format(buf, sizeof(buf), length, obj.get_scale()))) {
+          LOG_WARN("format number failed", K(ret), K(number));
+        } else {
+          val = decimal_class(pybind11::str(buf, length));
+        }
       }
       break;
     }
