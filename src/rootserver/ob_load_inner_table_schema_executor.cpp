@@ -215,7 +215,7 @@ int ObLoadInnerTableSchemaExecutor::init(ObIArray<ObTableSchema> &table_schemas,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("parallel count should be positive", KR(ret), K(max_cpu), KP(rpc_proxy));
   } else {
-    parallel_count_ = common::max(THREAD_PER_CPU * max_cpu / 2, 1);
+    parallel_count_ = common::max(THREAD_PER_CPU * max_cpu, 1);
     load_rpc_timeout_ = parallel_count_ * GCONF.internal_sql_execute_timeout;
     rpc_proxy_ = rpc_proxy;
   }
