@@ -1158,6 +1158,7 @@ static const NonReservedKeyword Mysql_none_reserved_keywords[] =
   {"api_mode", API_MODE},
   {"INCONSISTENT", INCONSISTENT},
   {"INDIVIDUAL", INDIVIDUAL},
+  {"hybrid_search", HYBRID_SEARCH},
 };
 
 /** https://dev.mysql.com/doc/refman/5.7/en/sql-syntax-prepared-statements.html

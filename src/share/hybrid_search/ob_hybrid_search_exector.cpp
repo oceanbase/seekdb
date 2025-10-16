@@ -10,11 +10,7 @@
  * See the Mulan PubL v2 for more details.
  */
 
-#include "src/share/hybrid_search/ob_hybrid_search_exector.h"
-#include "lib/oblog/ob_log_module.h"
-#include "pl/ob_pl.h"
-#include "share/ob_define.h"
-#include "storage/vector_index/cmd/ob_vector_refresh_index_executor.h"
+#include "ob_hybrid_search_exector.h"
 
 #define USING_LOG_PREFIX SHARE
 
@@ -22,7 +18,7 @@ namespace oceanbase {
 namespace share {
 
 ObHybridSearchExecutor::ObHybridSearchExecutor()
-    : pl_ctx_(NULL), ctx_(NULL), allocator_("HybridSearch") {}
+    : ctx_(NULL), allocator_("HybridSearch") {}
 
 ObHybridSearchExecutor::~ObHybridSearchExecutor() {}
 
@@ -46,15 +42,22 @@ int ObHybridSearchExecutor::init(const pl::ObPLExecCtx &ctx, const ObHybridSearc
   if (OB_ISNULL(ctx.exec_ctx_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("exec context is not initialized", K(ret));
-  } else if (OB_ISNULL(ctx.exec_ctx_->get_my_session())) {
+  } else if (OB_FAIL(init(ctx.exec_ctx_, arg))) {
+    LOG_WARN("fail to init", KR(ret));
+  }
+  return ret;
+}
+
+int ObHybridSearchExecutor::init(sql::ObExecContext *ctx, const ObHybridSearchArg &arg) {
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(ctx->get_my_session())) {
     ret = OB_NOT_INIT;
     LOG_WARN("session is not initialized", K(ret));
   } else if (init_search_arg(arg)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), K(arg));
   } else {
-    pl_ctx_ = &ctx;
-    ctx_ = ctx.exec_ctx_;
+    ctx_ = ctx;
     session_info_ = ctx_->get_my_session();
     tenant_id_ = session_info_->get_effective_tenant_id();
   }
@@ -118,15 +121,34 @@ int ObHybridSearchExecutor::do_get_sql(const ObString &search_params_str,
     ret = OB_NOT_INIT;
     LOG_WARN("exec context is not initialized", K(ret));
   } else {
-    char *buf = static_cast<char *>(ctx_->get_allocator().alloc(OB_MAX_SQL_LENGTH));
-    int64_t res_len = 0;
-
     if (OB_FAIL(parse_search_params(search_params_str, query_req, need_wrap_result))) {
       LOG_WARN("fail to parse search params", KR(ret));
-    } else if (OB_ISNULL(query_req) || OB_FAIL(query_req->translate(buf, OB_MAX_SQL_LENGTH, res_len))) {
-      LOG_WARN("fail to translate to sql", KR(ret));
+    } else if (OB_ISNULL(query_req)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("query request is null", KR(ret));
     } else {
-      sql_result.assign_ptr(buf, res_len);
+      char *buf = NULL;
+      int64_t res_len = 0;
+      bool is_complete = false;
+      ObIAllocator &alloc = ctx_->get_allocator();
+      for (int64_t i = 1; OB_SUCC(ret) && !is_complete && i <= 1024; i = i * 2) {
+        const int64_t length = OB_MAX_SQL_LENGTH * i;
+        res_len = 0;
+        if (OB_ISNULL(buf = static_cast<char*>(alloc.alloc(length)))) {
+          ret = OB_ALLOCATE_MEMORY_FAILED;
+          LOG_WARN("failed to alloc memory for sql", K(ret), K(length));
+        } else if (FALSE_IT(MEMSET(buf, 0, length))) {
+        } else if (OB_FAIL(query_req->translate(buf, length, res_len))) {
+          LOG_WARN("fail to translate to sql", KR(ret));
+        }
+        if (OB_SUCC(ret)) {
+          is_complete = true;
+          sql_result.assign_ptr(buf, res_len);
+        } else if (OB_SIZE_OVERFLOW == ret) {
+          // retry
+          ret = OB_SUCCESS;
+        }
+      }
     }
   }
   return ret;
