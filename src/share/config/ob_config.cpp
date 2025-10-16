@@ -100,13 +100,13 @@ ObConfigItem::~ObConfigItem()
 
 bool ObConfigItem::set_value_with_lock(const common::ObString &string)
 {
-  DRWLock::WRLockGuard guard(OTC_MGR.rwlock_);
+  DRWLock::WRLockGuard guard(GCONF.rwlock_);
   return set_value_unsafe(string);
 }
 
 bool ObConfigItem::set_value_with_lock(const char *str)
 {
-  DRWLock::WRLockGuard guard(OTC_MGR.rwlock_);
+  DRWLock::WRLockGuard guard(GCONF.rwlock_);
   return set_value_unsafe(str);
 }
 

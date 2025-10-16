@@ -16,7 +16,6 @@
 #include "ob_throttle_unit.h"
 
 #include "common/ob_clock_generator.h"
-#include "observer/omt/ob_tenant_config.h"
 #include "share/allocator/ob_memstore_allocator.h"
 #include "share/allocator/ob_tx_data_allocator.h"
 #include "share/allocator/ob_mds_allocator.h"

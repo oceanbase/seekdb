@@ -5085,9 +5085,6 @@ int ObUnitManager::try_notify_tenant_server_unit_resource_(
                     tenant_id, unit, compat_mode, unit_config_id, if_not_grant,
                     tenant_unit_server_config))) {
         LOG_WARN("fail to init tenant_unit_server_config", KR(ret), K(tenant_id), K(is_delete));
-      } else if (should_check_data_version
-                 && OB_FAIL(check_dest_data_version_is_loaded_(tenant_id, unit.server_))) {
-        LOG_WARN("fail to check dest data_version is loaded", KR(ret), K(tenant_id), "dst", unit.server_);
       }
     } else {
       if (OB_FAIL(tenant_unit_server_config.init_for_dropping(tenant_id, is_delete))) {
@@ -5108,84 +5105,6 @@ int ObUnitManager::try_notify_tenant_server_unit_resource_(
     }
   }
   return ret;
-}
-
-int ObUnitManager::check_dest_data_version_is_loaded_(
-    const uint64_t tenant_id, const ObAddr &addr)
-{
- int ret = OB_SUCCESS;
- ObTimeoutCtx ctx;
- const int64_t DEFTAULT_TIMEOUT_TS = 5 * GCONF.rpc_timeout;
- char ip_buf[OB_IP_STR_BUFF] = "";
- if (OB_FAIL(check_inner_stat_())) {
-   LOG_WARN("check_inner_stat failed", KR(ret), K(inited_), K(loaded_));
- } else if (OB_UNLIKELY(OB_INVALID_TENANT_ID == tenant_id
-            || !addr.is_valid())) {
-   ret = OB_INVALID_ARGUMENT;
-   LOG_WARN("invalid arg", KR(ret), K(tenant_id), K(addr));
- } else if (OB_FAIL(ObShareUtil::set_default_timeout_ctx(ctx, DEFTAULT_TIMEOUT_TS))) {
-   LOG_WARN("fail to set default timeout ctx", KR(ret));
- } else if (OB_UNLIKELY(!addr.ip_to_string(ip_buf, sizeof(ip_buf)))) {
-   ret = OB_ERR_UNEXPECTED;
-   LOG_WARN("fail to convert ip to string", KR(ret), K(tenant_id), K(addr));
- } else {
-   const int64_t start_timeout_ts = ObTimeUtility::current_time();
-   const int64_t CHECK_INTERVAL_TS = 500 * 1000L; // 500ms
-   const int64_t SLEEP_TS = 100 * 1000L; // 100ms
-   ObSqlString sql;
-   if (OB_FAIL(sql.assign_fmt("SELECT IF(value = '0.0.0.0', 0, 1) AS loaded "
-                              "FROM %s WHERE tenant_id = %lu AND name = 'compatible' "
-                              "AND svr_ip = '%s' AND svr_port = %d",
-                              OB_ALL_VIRTUAL_TENANT_PARAMETER_INFO_TNAME,
-                              tenant_id, ip_buf, addr.get_port()))) {
-     LOG_WARN("fail to assign fmt", KR(ret), K(tenant_id), K(addr));
-   }
-   while (OB_SUCC(ret)) {
-     if (OB_UNLIKELY(ctx.is_timeouted())) {
-       ret = OB_TIMEOUT;
-       LOG_WARN("check dest data version timeout", KR(ret),
-                K(start_timeout_ts), "abs_timeout", ctx.get_abs_timeout());
-     } else {
-       SMART_VAR(ObMySQLProxy::MySQLResult, res) {
-         sqlclient::ObMySQLResult *result = NULL;
-         if (OB_ISNULL(GCTX.sql_proxy_)) {
-           ret = OB_INVALID_ARGUMENT;
-           LOG_WARN("invalid argument", KR(ret), KP(GCTX.sql_proxy_));
-         } else if (OB_FAIL(GCTX.sql_proxy_->read(res, OB_SYS_TENANT_ID, sql.ptr()))) {
-           LOG_WARN("fail to read by sql", KR(ret), K(sql));
-         } else if (OB_ISNULL(result = res.get_result())) {
-           ret = OB_ERR_UNEXPECTED;
-           LOG_WARN("result is null", KR(ret));
-         } else if (OB_FAIL(result->next())) {
-           if (OB_ITER_END == ret) {
-             ret = OB_SUCCESS;
-             if (REACH_TIME_INTERVAL(CHECK_INTERVAL_TS)) {
-               LOG_WARN_RET(OB_EAGAIN, "check data_version is loaded, but result is empty, try later",
-                            K(tenant_id), K(addr));
-             }
-           } else {
-             LOG_WARN("fail to get next row", KR(ret));
-           }
-         } else {
-           int64_t loaded = 0;
-           EXTRACT_INT_FIELD_MYSQL(*result, "loaded", loaded, int64_t);
-           if (OB_SUCC(ret)) {
-             if (1 == loaded) {
-               break;
-             } else if (REACH_TIME_INTERVAL(CHECK_INTERVAL_TS))
-               LOG_WARN_RET(OB_EAGAIN, "check data_version is loaded, but it's not refreshed yet, try later",
-                            K(tenant_id), K(addr));
-           }
-         }
-       } // end SMART_VAR
-
-       if (OB_SUCC(ret)) {
-         ob_usleep(SLEEP_TS);
-       }
-     }
-   } // end while
- }
- return ret;
 }
 
 int ObUnitManager::build_notify_create_unit_resource_rpc_arg_(

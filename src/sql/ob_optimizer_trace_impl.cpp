@@ -1006,7 +1006,6 @@ int ObOptimizerTraceImpl::trace_parameters()
     if (tenant_config.is_valid()) {
       new_line();
       append("tenant config:");
-      tenant_config.trace_all_config();
     }
     new_line();
     append("system variables:");

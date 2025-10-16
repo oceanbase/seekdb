@@ -9561,32 +9561,7 @@ def_table_schema(
   vtable_route_policy = 'distributed',
 )
 
-def_table_schema(
-    owner = 'fyy280124',
-    table_name     = '__all_virtual_tenant_parameter_info',
-    table_id       = '11096',
-    table_type = 'VIRTUAL_TABLE',
-    gm_columns = [],
-    rowkey_columns = [
-        ('tenant_id', 'int'),
-        ('zone', 'varchar:MAX_ZONE_LENGTH'),
-        ('svr_type', 'varchar:SERVER_TYPE_LENGTH'),
-        ('svr_ip', 'varchar:MAX_IP_ADDR_LENGTH'),
-        ('svr_port', 'int'),
-        ('name', 'varchar:OB_MAX_CONFIG_NAME_LEN'),
-    ],
-  normal_columns = [
-      ('data_type', 'varchar:OB_MAX_CONFIG_TYPE_LENGTH', 'true'),
-      ('value', 'varchar:OB_MAX_CONFIG_VALUE_LEN'),
-      ('info', 'varchar:OB_MAX_CONFIG_INFO_LEN'),
-      ('section', 'varchar:OB_MAX_CONFIG_SECTION_LEN'),
-      ('scope', 'varchar:OB_MAX_CONFIG_SCOPE_LEN'),
-      ('source', 'varchar:OB_MAX_CONFIG_SOURCE_LEN'),
-      ('edit_level', 'varchar:OB_MAX_CONFIG_EDIT_LEVEL_LEN'),
-  ],
-  partition_columns = ['svr_ip', 'svr_port'],
-  vtable_route_policy = 'distributed',
-)
+# 11096 abandoned in lite version
 
 def_table_schema(
     owner = 'lixia.yq',

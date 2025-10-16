@@ -29,7 +29,6 @@ using namespace oceanbase::common;
 using namespace oceanbase::share;
 using namespace oceanbase::share::schema;
 using namespace oceanbase::transaction;
-using oceanbase::omt::ObTenantConfigMgr;
 
 namespace oceanbase
 {

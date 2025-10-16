@@ -31,11 +31,6 @@
 
 namespace oceanbase
 {
-namespace omt
-{
-  class ObTenantConfigMgr;
-  class ObTenantConfig;
-}
 
 namespace common
 {

@@ -135,7 +135,7 @@ void ObTmpFilePageCacheController::refresh_disk_usage_limit()
     ret = OB_NOT_INIT;
     LOG_WARN("tmp file page cache controller is not inited", KR(ret));
   } else {
-    omt::ObTenantConfigGuard config(TENANT_CONF_TIL(MTL_ID(), ACCESS_TENANT_CONFIG_TIMEOUT_US));
+    omt::ObTenantConfigGuard config(TENANT_CONF_TIL(MTL_ID()));
     if (!config.is_valid()) {
       // do nothing
     } else {

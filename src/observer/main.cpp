@@ -28,8 +28,6 @@
 #include "observer/ob_server.h"
 #include "observer/ob_server_utils.h"
 #include "observer/ob_signal_handle.h"
-#include "observer/ob_server_options.h"
-#include "observer/omt/ob_tenant_config.h"
 #include "share/config/ob_server_config.h"
 #include "share/ob_tenant_mgr.h"
 #include "share/ob_version.h"
@@ -65,17 +63,11 @@ static int dump_config_to_json()
   int ret = OB_SUCCESS;
   ObArenaAllocator allocator(g_config_mem_attr);
   ObJsonArray j_arr(&allocator);
-  omt::ObTenantConfig *tenant_config = OB_NEW(ObTenantConfig, SET_USE_UNEXPECTED_500("TenantConfig"), OB_SYS_TENANT_ID);
   ObJsonBuffer j_buf(&allocator);
   FILE *out_file = nullptr;
   const char *out_path = "./ob_all_available_parameters.json";
-  if (OB_ISNULL(tenant_config)) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-    MPRINT("new tenant config failed! ret=%d\n", ret);
-  } else if (OB_FAIL(ObServerConfig::get_instance().to_json_array(allocator, j_arr))) {
+  if (OB_FAIL(ObServerConfig::get_instance().to_json_array(allocator, j_arr))) {
     MPRINT("dump cluster config to json failed, ret=%d\n", ret);
-  } else if (OB_FAIL(tenant_config->to_json_array(allocator, j_arr))) {
-    MPRINT("dump tenant config to json failed, ret=%d\n", ret);
   } else if (OB_FAIL(j_arr.print(j_buf, false))) {
     MPRINT("print json array to buffer failed, ret=%d\n", ret);
   } else if (nullptr == j_buf.ptr()) {
@@ -88,9 +80,7 @@ static int dump_config_to_json()
     ret = OB_IO_ERROR;
     MPRINT("write json buffer to file failed, errno=%d, ret=%d\n", errno, ret);
   }
-  if (nullptr != tenant_config) {
-    OB_DELETE(ObTenantConfig, SET_USE_UNEXPECTED_500("TenantConfig"), tenant_config);
-  }
+
   if (nullptr != out_file) {
     fclose(out_file);
   }

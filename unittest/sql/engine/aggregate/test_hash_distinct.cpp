@@ -314,7 +314,7 @@ int TestHashDistinctTest::init_tenant_mgr()
   oceanbase::share::ObRsMgr rs_mgr;
   int64_t tenant_id = OB_SYS_TENANT_ID;
   self.set_ip_addr("127.0.0.1", 8086);
-  ret = ObTenantConfigMgr::get_instance().add_tenant_config(tenant_id);
+
   EXPECT_EQ(OB_SUCCESS, ret);
   GCONF.enable_sql_operator_dump.set_value("True");
   uint64_t cluster_version = CLUSTER_VERSION_1_0_0_0;

@@ -2092,7 +2092,7 @@ int ObMultiVersionSchemaService::add_schema(
       bool can_switch = false;
       int64_t max_schema_slot_num = OB_MAX_VERSION_COUNT;
       if (!ObSchemaService::g_liboblog_mode_) {
-        omt::ObTenantConfigGuard tenant_config(OTC_MGR.get_tenant_config_with_lock(tenant_id));
+        omt::ObTenantConfigGuard tenant_config(TENANT_CONF(tenant_id));
         if (tenant_config.is_valid()) {
           max_schema_slot_num = tenant_config->_max_schema_slot_num;
         }

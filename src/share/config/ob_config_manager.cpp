@@ -41,11 +41,13 @@ int ObConfigManager::base_init()
 }
 
 
-int ObConfigManager::init(ObMySQLProxy &sql_proxy, const ObAddr &server)
+int ObConfigManager::init(ObMySQLProxy &sql_proxy, const ObAddr &server,
+                          const UpdateTenantConfigCb &update_tenant_config_cb)
 {
   int ret = OB_SUCCESS;
   sql_proxy_ = &sql_proxy;
   self_ = server;
+  update_tenant_config_cb_ = update_tenant_config_cb;
   if (OB_FAIL(TG_START(lib::TGDefIDs::CONFIG_MGR))) {
     LOG_WARN("init timer failed", K(ret));
   } else {
@@ -298,7 +300,7 @@ int ObConfigManager::dump2file_unsafe(const char* path) const
 
 int ObConfigManager::dump2file(const char* path) const
 {
-  DRWLock::RDLockGuard guard(OTC_MGR.rwlock_);
+  DRWLock::RDLockGuard guard(GCONF.rwlock_);
   return dump2file_unsafe(path);
 }
 
@@ -318,7 +320,7 @@ int ObConfigManager::update_local(int64_t expected_version)
       if (OB_FAIL(sql_client_retry_weak.read(result, sqlstr))) {
         LOG_WARN("read config from __all_sys_parameter failed", K(sqlstr), K(ret));
       } else {
-        DRWLock::WRLockGuard guard(OTC_MGR.rwlock_);
+        DRWLock::WRLockGuard guard(GCONF.rwlock_);
         if (OB_FAIL(system_config_.update(result))) {
           LOG_WARN("failed to load system config", K(ret));
         }
@@ -347,7 +349,7 @@ int ObConfigManager::update_local(int64_t expected_version)
     } else if (OB_FAIL(reload_config())) {
       LOG_WARN("Reload configuration failed", K(ret));
     } else {
-      DRWLock::RDLockGuard guard(OTC_MGR.rwlock_); // need protect tenant config because it will also serialize tenant config
+      DRWLock::RDLockGuard guard(GCONF.rwlock_); // need protect tenant config because it will also serialize tenant config
       if (OB_FAIL(dump2file_unsafe())) {
         LOG_WARN("Dump to file failed", K_(dump_path), K(ret));
       } else {
@@ -479,6 +481,39 @@ void ObConfigManager::UpdateTask::runTimerTask()
     }
     ObCurTraceId::reset();
   }
+}
+
+int ObConfigManager::add_extra_config(const obrpc::ObTenantConfigArg &arg)
+{
+  int ret = OB_SUCCESS;
+  if (!arg.is_valid()) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_ERROR("invalid arg", K(ret), K(arg));
+  } else {
+    ret = server_config_.add_extra_config(arg.config_str_.ptr());
+  }
+  LOG_INFO("add tenant extra config", K(arg));
+  return ret;
+}
+
+void ObConfigManager::notify_tenant_config_changed(uint64_t tenant_id)
+{
+  update_tenant_config_cb_(tenant_id);
+}
+
+int ObConfigManager::init_tenant_config(const obrpc::ObTenantConfigArg &arg)
+{
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(add_extra_config(arg))) {
+    LOG_WARN("fail to add extra config", KR(ret), K(arg));
+  } else {
+    if (OB_FAIL(dump2file_unsafe())) {
+      LOG_WARN("failed to dump2file", K(ret));
+    } else if (OB_FAIL(server_config_.publish_special_config_after_dump())) {
+      LOG_WARN("publish special config after dump failed", K(ret));
+    }
+  }
+  return ret;
 }
 
 } // namespace common

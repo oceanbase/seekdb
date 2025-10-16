@@ -1644,28 +1644,6 @@ IF(count(*) >= 0, 1, 0)
 IF(count(*) >= 0, 1, 0)
 1
 select /*+QUERY_TIMEOUT(60000000)*/ * from oceanbase.__all_virtual_dump_tenant_info limit 1;
-desc oceanbase.__all_virtual_tenant_parameter_info;
-Field	Type	Null	Key	Default	Extra
-tenant_id	bigint(20)	NO	PRI	NULL	
-zone	varchar(128)	NO	PRI	NULL	
-svr_type	varchar(16)	NO	PRI	NULL	
-svr_ip	varchar(46)	NO	PRI	NULL	
-svr_port	bigint(20)	NO	PRI	NULL	
-name	varchar(128)	NO	PRI	NULL	
-data_type	varchar(128)	YES		NULL	
-value	varchar(65536)	NO		NULL	
-info	varchar(4096)	NO		NULL	
-section	varchar(128)	NO		NULL	
-scope	varchar(64)	NO		NULL	
-source	varchar(64)	NO		NULL	
-edit_level	varchar(128)	NO		NULL	
-select /*+QUERY_TIMEOUT(60000000)*/ IF(count(*) >= 0, 1, 0) from oceanbase.__all_virtual_tenant_parameter_info;
-IF(count(*) >= 0, 1, 0)
-1
-"oceanbase.__all_virtual_tenant_parameter_info runs in single server"
-IF(count(*) >= 0, 1, 0)
-1
-select /*+QUERY_TIMEOUT(60000000)*/ * from oceanbase.__all_virtual_tenant_parameter_info limit 1;
 desc oceanbase.__all_virtual_dag_warning_history;
 Field	Type	Null	Key	Default	Extra
 svr_ip	varchar(46)	NO		NULL	

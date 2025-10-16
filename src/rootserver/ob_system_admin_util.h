@@ -20,7 +20,6 @@
 #include "share/config/ob_server_config.h"
 #include "share/ob_rpc_struct.h"
 #include "share/schema/ob_schema_struct.h"
-#include "observer/omt/ob_tenant_config.h"
 
 // system admin command (alter system ...) execute
 
@@ -334,31 +333,14 @@ public:
 
   int execute(obrpc::ObAdminSetConfigArg &arg);
 
-  static int construct_arg_and_broadcast_tenant_config_map();
-
 private:
   class ObServerConfigChecker : public common::ObServerConfig
-  {
-  };
-  class ObTenantConfigChecker : public omt::ObTenantConfig
   {
   };
 
 private:
   int verify_config(obrpc::ObAdminSetConfigArg &arg);
   int update_config(obrpc::ObAdminSetConfigArg &arg, int64_t new_version);
-  int update_tenant_config_(
-      const obrpc::ObAdminSetConfigItem &item,
-      const char *svr_ip,
-      const int64_t svr_port,
-      const int64_t new_version);
-  int inner_update_tenant_config_(
-      const obrpc::ObAdminSetConfigItem &item,
-      const uint64_t tenant_id,
-      const char *table_name,
-      const char *svr_ip,
-      const int64_t svr_port,
-      const int64_t new_version);
   int inner_update_tenant_config_for_compatible_(
       const uint64_t tenant_id,
       const obrpc::ObAdminSetConfigItem *item,

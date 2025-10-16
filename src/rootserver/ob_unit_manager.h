@@ -850,8 +850,6 @@ private:
       const uint64_t unit_config_id,
       const bool if_not_grant,
       obrpc::TenantServerUnitConfig &rpc_arg) const;
-  int check_dest_data_version_is_loaded_(
-      const uint64_t tenant_id, const ObAddr &addr);
   int do_notify_unit_resource_(
     const common::ObAddr server,
     const obrpc::TenantServerUnitConfig &notify_arg,

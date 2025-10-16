@@ -207,7 +207,7 @@ int ObBaseConfig::load_from_file(const char *config_file,
       // end with '\0'
       config_file_buf[read_len] = '\0';
       {
-        DRWLock::WRLockGuard guard(OTC_MGR.rwlock_);
+        DRWLock::WRLockGuard guard(GCONF.rwlock_);
         ret = load_from_buffer(config_file_buf, read_len, version, check_name);
       }
       if (OB_FAIL(ret)) {
@@ -501,7 +501,7 @@ OB_DEF_DESERIALIZE(ObCommonConfig)
       MEMSET(copy_buf, '\0', data_len + 1);
       MEMCPY(copy_buf, buf + pos, data_len);
       {
-        DRWLock::WRLockGuard guard(OTC_MGR.rwlock_);
+        DRWLock::WRLockGuard guard(GCONF.rwlock_);
         if (OB_FAIL(ObCommonConfig::add_extra_config_unsafe(copy_buf, 0, false))) {
           LOG_ERROR("Read server config failed", K(ret));
         }

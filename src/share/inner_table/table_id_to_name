@@ -394,7 +394,6 @@
 # 11093: __all_virtual_server_schema_info
 # 11094: __all_virtual_memory_context_stat
 # 11095: __all_virtual_dump_tenant_info
-# 11096: __all_virtual_tenant_parameter_info
 # 11099: __all_virtual_dag_warning_history
 # 11102: __tenant_virtual_show_restore_preview
 # 11105: __all_virtual_dag

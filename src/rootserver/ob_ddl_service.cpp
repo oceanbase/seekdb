@@ -30104,8 +30104,7 @@ int ObDDLService::notify_refresh_schema(const ObAddrIArray &addrs)
 
     bool is_async = false;
     if (OB_INVALID_TENANT_ID != schema_info.get_tenant_id()) {
-      omt::ObTenantConfigGuard tenant_config(OTC_MGR.get_tenant_config_with_lock(
-                                             schema_info.get_tenant_id()));
+      omt::ObTenantConfigGuard tenant_config(TENANT_CONF(schema_info.get_tenant_id()));
       if (tenant_config.is_valid()) {
         is_async = (0 == tenant_config->_publish_schema_mode.case_compare(PUBLISH_SCHEMA_MODE_ASYNC));
       }

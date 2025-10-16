@@ -37,9 +37,6 @@ public:
 
   void init(ObExecContext &ctx, TestMergeDistinct &merge_distinct, int64_t col_count)
   {
-    ASSERT_EQ(OB_SUCCESS, ObTenantConfigMgr::get_instance()
-      .add_tenant_config(ctx.get_my_session()->get_effective_tenant_id()));
-
     merge_distinct.reset();
     merge_distinct.reuse();
     fake_table_.reset();

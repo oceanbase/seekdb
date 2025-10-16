@@ -352,7 +352,6 @@ select 0xffffffffff & table_id, table_name, table_type, database_id, part_num fr
 11093	__all_virtual_server_schema_info	2	201001	1
 11094	__all_virtual_memory_context_stat	2	201001	1
 11095	__all_virtual_dump_tenant_info	2	201001	1
-11096	__all_virtual_tenant_parameter_info	2	201001	1
 11099	__all_virtual_dag_warning_history	2	201001	1
 11102	__tenant_virtual_show_restore_preview	2	201001	1
 11105	__all_virtual_dag	2	201001	1

@@ -102,8 +102,8 @@ void ObTenantNodeBalancer::handle()
     ret = OB_NEED_RETRY;
   } else if (OB_FAIL(unit_getter_.get_tenants(tenants))) {
     LOG_WARN("get cluster tenants fail", K(ret));
-  } else if (OB_FAIL(OTC_MGR.refresh_tenants(tenants))) {
-    LOG_WARN("fail refresh tenant config", K(tenants), K(ret));
+  } else if (OB_FAIL(ODV_MGR.set(OB_SYS_TENANT_ID, GCONF.compatible))) {
+    LOG_WARN("set sys tenant data version failed", K(ret));
   }
   if (OB_SUCCESS != (tmp_ret = GCTX.log_block_mgr_->try_resize())) {
     LOG_WARN("ObServerLogBlockMgr try_resize failed", K(tmp_ret));

@@ -772,8 +772,6 @@ int ObMultiTenant::create_tenant(const ObTenantMeta &meta, bool write_slog, cons
   } else if (FALSE_IT(create_step = ObTenantCreateStep::STEP_TENANT_NEWED)) { //step5
   } else if (OB_FAIL(tenant_->init_ctx())) {
     LOG_WARN("init ctx fail", K(tenant_id), K(ret));
-  } else if (OB_FAIL(OTC_MGR.add_tenant_config(tenant_id))) {
-    LOG_ERROR("add tenant config fail", K(tenant_id), K(ret));
   } else {
     CREATE_WITH_TEMP_ENTITY(RESOURCE_OWNER, tenant_->id()) {
       WITH_ENTITY(&tenant_->ctx()) {
@@ -786,10 +784,6 @@ int ObMultiTenant::create_tenant(const ObTenantMeta &meta, bool write_slog, cons
 
   if (OB_FAIL(ret)) {
     // do nothing
-#ifdef OMT_UNITTEST
-   } else if (OB_FAIL(OTC_MGR.got_version(tenant_id, common::ObSystemConfig::INIT_VERSION))) {
-     LOG_ERROR("failed to got version", K(tenant_id), K(ret));
-#endif
   } else {
     ObTenantSwitchGuard guard(tenant_);
     if (OB_FAIL(MTL(ObTenantFreezer *)->set_tenant_mem_limit(meta.unit_.config_.memory_size(), allowed_mem_limit))) {

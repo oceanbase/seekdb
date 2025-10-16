@@ -61,7 +61,7 @@ bool ObNonPartitionedTableTabletCache::should_reload_cache_(
   bool bret = false;
   int64_t interval = INT64_MAX;
   {
-    omt::ObTenantConfigGuard tenant_config(OTC_MGR.get_tenant_config_with_lock(tenant_id_));
+    omt::ObTenantConfigGuard tenant_config(TENANT_CONF(tenant_id_));
     if (tenant_config.is_valid()) {
       interval = tenant_config->partition_balance_schedule_interval;
     }
