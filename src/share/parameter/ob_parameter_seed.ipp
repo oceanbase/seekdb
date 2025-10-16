@@ -2562,7 +2562,7 @@ DEF_BOOL(_enable_topn_runtime_filter, OB_TENANT_PARAMETER, "True",
          "Enable topn runtime filter.",
          ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 
-DEF_BOOL(_enable_async_load_sys_package, OB_CLUSTER_PARAMETER, "False",
+DEF_BOOL(_enable_async_load_sys_package, OB_CLUSTER_PARAMETER, "True",
          "Controls the ability to enable/disable async load sys package",
          ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
         
