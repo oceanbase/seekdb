@@ -26,22 +26,24 @@ class ObLiteEmbedCursor;
 class ObLiteEmbedConn : public std::enable_shared_from_this<ObLiteEmbedConn>
 {
 public:
-  ObLiteEmbedConn() : conn_(nullptr), result_seq_(0), result_(nullptr) {}
+  ObLiteEmbedConn() : conn_(nullptr), result_seq_(0), result_(nullptr), session_(nullptr) {}
   ~ObLiteEmbedConn() { reset(); }
   void begin();
   void commit();
   void rollback();
   ObLiteEmbedCursor cursor();
-  int execute(const char* sql, int64_t &affected_rows, int64_t &result_seq);
+  int execute(const char* sql, uint64_t &affected_rows, int64_t &result_seq);
   void reset();
   void reset_result();
   int64_t get_result_seq() { return result_seq_; }
   observer::ObInnerSQLConnection *&get_conn() { return conn_; }
+  sql::ObSQLSessionInfo *&get_session() { return session_; }
   common::ObCommonSqlProxy::ReadResult *get_res() { return result_; }
 private:
   observer::ObInnerSQLConnection *conn_;
   int64_t result_seq_;
   common::ObCommonSqlProxy::ReadResult *result_;
+  sql::ObSQLSessionInfo* session_;
 };
 
 class ObLiteEmbedCursor
@@ -49,13 +51,10 @@ class ObLiteEmbedCursor
 public:
   ObLiteEmbedCursor() : embed_conn_(), result_seq_(0) {}
   ~ObLiteEmbedCursor() { reset(); }
-  int execute(const char* sql);
+  uint64_t execute(const char* sql);
   pybind11::tuple fetchone();
   std::vector<pybind11::tuple> fetchall();
-  void reset() {
-    embed_conn_.reset();
-    result_seq_ = 0;
-  }
+  void reset();
   void close() { reset(); }
   friend ObLiteEmbedCursor ObLiteEmbedConn::cursor();
 private:
@@ -70,7 +69,7 @@ public:
   ~ObLiteEmbed() {}
   static void open(const char* db_dir);
   static void close();
-  static std::shared_ptr<ObLiteEmbedConn> connect(const char* db_name, const bool autocommit);
+  static std::shared_ptr<ObLiteEmbedConn> connect(const char* db_name);
 private:
   static int do_open_(const char* db_dir);
 };

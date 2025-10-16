@@ -471,6 +471,11 @@ target_link_directories(
 )
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fopenmp")
 
+if(BUILD_EMBED_MODE)
+    set(GOMP_LIB libgomp_embed_static.a)
+else()
+    set(GOMP_LIB libgomp_static.a)
+endif()
 if(CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
   target_link_libraries(oblib_lib
     PUBLIC
@@ -481,7 +486,7 @@ if(CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
     libopenblas.a
     libgfortran_static.a
     libquadmath_static.a
-    libgomp_static.a
+    ${GOMP_LIB}
     libroaring.a
     libantlr4-runtime.a
     libantlr4-autogen.a
@@ -495,7 +500,7 @@ elseif(CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64")
     libdiskann.a
     libopenblas.a
     libgfortran_static.a
-    libgomp_static.a
+    ${GOMP_LIB}
     libroaring.a
     libantlr4-runtime.a
     libantlr4-autogen.a
