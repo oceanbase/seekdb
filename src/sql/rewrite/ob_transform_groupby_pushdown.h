@@ -128,7 +128,7 @@ private:
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected null", K(ret));
     } else {
-      support_cross_join = stmt->get_query_ctx()->check_opt_compat_version(COMPAT_VERSION_4_3_5_BP2);
+      support_cross_join = true;
     }
     return ret;
   }

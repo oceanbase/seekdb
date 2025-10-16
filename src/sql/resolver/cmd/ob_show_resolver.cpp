@@ -26,19 +26,6 @@ namespace oceanbase
 namespace sql
 {
 
-inline static bool valid_default_parameter_version(int64_t tenant_id)
-{
-  int ret = OB_SUCCESS;
-  bool bret = false;
-  uint64_t data_version = 0;
-  if(OB_SUCC(GET_MIN_DATA_VERSION(tenant_id, data_version)))
-  {
-    bret = ((data_version >= DATA_VERSION_4_2_2_0 &&
-             data_version < DATA_VERSION_4_3_0_0) ||
-             data_version >= DATA_VERSION_4_3_1_0);
-  }
-  return bret;
-}
 ObShowResolver::ObShowResolver(ObResolverParams &params)
     : ObSelectResolver(params)
 {
@@ -245,18 +232,10 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
              */
             bool is_full = (1 == ((parse_tree.children_[2]->value_)&1));
             bool is_extended = (1 == (((parse_tree.children_[2]->value_)>>1)&1));
-            bool is_compat; // compatible mode for version lower than 4.2.2 which does not support SHOW EXTENDED
-            uint64_t min_data_version;
             if (OB_UNLIKELY(((parse_tree.children_[2]->value_)>>2) != 0)) {
               ret = OB_ERR_UNEXPECTED;
               LOG_WARN("node value unexpected", K(ret), K(parse_tree.children_[2]->value_));
               break;
-            } else if (OB_FAIL(GET_MIN_DATA_VERSION(real_tenant_id, min_data_version))) {
-              LOG_WARN("get min data version failed", K(ret), K(real_tenant_id));
-            } else if (OB_FALSE_IT(is_compat = !sql::ObSQLUtils::is_data_version_ge_422_or_431(min_data_version))) {
-            } else if (OB_UNLIKELY(is_compat && is_extended)) {
-              ret = OB_NOT_SUPPORTED;
-              LOG_WARN("version lower than 4.2.2 or 4.3.1 does not support show extended", K(ret));
             } else if (!is_full) {
               if (NULL != condition_node && T_LIKE_CLAUSE == condition_node->type_) {
                 if (OB_UNLIKELY(condition_node->num_child_ != 2
@@ -508,19 +487,9 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
                */
               bool is_full = (1 == ((parse_tree.children_[0]->value_)&1));
               bool is_extended = (1 == (((parse_tree.children_[0]->value_)>>1)&1));
-              bool is_compat; // compatible mode for version lower than 4.2.2 which does not support SHOW EXTENDED
-              uint64_t min_data_version;
               if (OB_UNLIKELY(((parse_tree.children_[0]->value_)>>2) != 0)) {
                 ret = OB_ERR_UNEXPECTED;
                 LOG_WARN("node value unexpected", K(ret), K(parse_tree.children_[0]->value_));
-              } else if (OB_FAIL(GET_MIN_DATA_VERSION(real_tenant_id, min_data_version))) {
-                LOG_WARN("get min data version failed", K(ret), K(real_tenant_id));
-              } else if (OB_FALSE_IT(is_compat = !sql::ObSQLUtils::is_data_version_ge_422_or_431(min_data_version))) {
-              } else if (OB_UNLIKELY(is_compat && is_extended)) {
-                ret = OB_NOT_SUPPORTED;
-                LOG_WARN("version lower than 4.2.2 or 4.3.1 does not support show extended", K(ret));
-              } else if (OB_FALSE_IT(is_extended |= is_compat)) {
-                // is_extended SQL is same as normal SQL in version lower than 4.2.2 or 4.3.1
               } else if (is_full) {
                 if (is_extended) {
                   GEN_SQL_STEP_1(ObShowSqlSet::SHOW_EXTENDED_FULL_COLUMNS);
@@ -803,19 +772,9 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
             ObObj show_table_id_obj;
             bool is_view;
             bool is_extended = (1 == parse_tree.children_[3]->value_);
-            bool is_compat; // compatible mode for version lower than 4.2.2 which does not support SHOW EXTENDED
-            uint64_t min_data_version;
             show_resv_ctx.condition_node_ = parse_tree.children_[2];
             show_resv_ctx.stmt_type_ = stmt::T_SHOW_INDEXES;
-            if (OB_FAIL(GET_MIN_DATA_VERSION(real_tenant_id, min_data_version))) {
-              LOG_WARN("get min data version failed", K(ret), K(real_tenant_id));
-            } else if (OB_FALSE_IT(is_compat = !sql::ObSQLUtils::is_data_version_ge_422_or_431(min_data_version))) {
-            } else if (OB_UNLIKELY(is_compat && is_extended)) {
-              ret = OB_NOT_SUPPORTED;
-              LOG_WARN("version lower than 4.2.2 does not support show extended", K(ret));
-            } else if (OB_FALSE_IT(is_extended |= is_compat)) {
-              // is_extended SQL is same as normal SQL in version lower than 4.2.2
-            } else if (OB_FAIL(resolve_show_from_table(parse_tree.children_[0], parse_tree.children_[1], database_name.empty(),
+            if (OB_FAIL(resolve_show_from_table(parse_tree.children_[0], parse_tree.children_[1], database_name.empty(),
                                                 T_SHOW_INDEXES, real_tenant_id, show_catalog_id, show_db_name, show_db_id,
                                                 show_table_name, show_table_id, is_view))) {
               LOG_WARN("fail to resolve show from table", K(ret));
@@ -1113,25 +1072,10 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
             } else {
               show_resv_ctx.stmt_type_ = stmt::T_SHOW_TABLE_STATUS;
               GEN_SQL_STEP_1(ObShowSqlSet::SHOW_TABLE_STATUS);
-              if ((GET_MIN_CLUSTER_VERSION() >=  MOCK_CLUSTER_VERSION_4_2_3_0 
-                    && GET_MIN_CLUSTER_VERSION() < CLUSTER_VERSION_4_3_0_0)
-                  || (GET_MIN_CLUSTER_VERSION() >= MOCK_CLUSTER_VERSION_4_2_1_6 
-                      && GET_MIN_CLUSTER_VERSION() < CLUSTER_VERSION_4_2_2_0)
-                  || GET_MIN_CLUSTER_VERSION() >= CLUSTER_VERSION_4_3_2_0) {
-                if (lib::is_mysql_mode()) {
-                  GEN_SQL_STEP_2(ObShowSqlSet::SHOW_TABLE_STATUS, NEW_TABLE_STATUS_SQL, show_db_id);
-                } else {
-                  GEN_SQL_STEP_2(ObShowSqlSet::SHOW_TABLE_STATUS, NEW_TABLE_STATUS_SQL_ORA, show_db_id);
-                }
+              if (lib::is_mysql_mode()) {
+                GEN_SQL_STEP_2(ObShowSqlSet::SHOW_TABLE_STATUS, NEW_TABLE_STATUS_SQL, show_db_id);
               } else {
-                const char *db_name = OB_SYS_DATABASE_NAME;
-                const char *vt_table_name = OB_TENANT_VIRTUAL_ALL_TABLE_TNAME;
-                char table_name[strlen(db_name) + strlen(vt_table_name) + 2];
-                strcpy(table_name, db_name);
-                table_name[strlen(db_name)] = '.';
-                strcpy(table_name + strlen(db_name) + 1, vt_table_name);
-                table_name[strlen(db_name) + strlen(vt_table_name) + 1] = '\0';
-                GEN_SQL_STEP_2(ObShowSqlSet::SHOW_TABLE_STATUS, table_name, show_db_id);
+                GEN_SQL_STEP_2(ObShowSqlSet::SHOW_TABLE_STATUS, NEW_TABLE_STATUS_SQL_ORA, show_db_id);
               }
             }
           }
@@ -1381,15 +1325,9 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
               GEN_SQL_STEP_2(ObShowSqlSet::SHOW_PARAMETERS_SEED, OB_SYS_DATABASE_NAME, OB_ALL_VIRTUAL_TENANT_PARAMETER_STAT_TNAME,
                              local_ip, GCONF.self_addr_.get_port());
             }
-          } else if (valid_default_parameter_version(show_tenant_id)) {
+          } else {
             GEN_SQL_STEP_1(ObShowSqlSet::SHOW_PARAMETERS_WITH_DEFAULT_VALUE);
             GEN_SQL_STEP_2(ObShowSqlSet::SHOW_PARAMETERS_WITH_DEFAULT_VALUE,
-                OB_SYS_DATABASE_NAME,
-                OB_ALL_VIRTUAL_TENANT_PARAMETER_STAT_TNAME,
-                show_tenant_id);
-          } else {
-            GEN_SQL_STEP_1(ObShowSqlSet::SHOW_PARAMETERS);
-            GEN_SQL_STEP_2(ObShowSqlSet::SHOW_PARAMETERS,
                 OB_SYS_DATABASE_NAME,
                 OB_ALL_VIRTUAL_TENANT_PARAMETER_STAT_TNAME,
                 show_tenant_id);
@@ -1409,35 +1347,18 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
             ObSqlStrGenerator sql_gen;
             show_resv_ctx.condition_node_ = parse_tree.children_[0];
             show_resv_ctx.stmt_type_ = stmt::T_SHOW_TABLEGROUPS;
-            uint64_t compat_version = OB_INVALID_VERSION;
 
-            if (OB_FAIL(GET_MIN_DATA_VERSION(real_tenant_id, compat_version))) {
-              LOG_WARN("get min data_version failed", K(ret), K(real_tenant_id));
-            } else if (compat_version < DATA_VERSION_4_2_0_0) {
-              GEN_SQL_STEP_1(ObShowSqlSet::SHOW_TABLEGROUPS);
-              GEN_SQL_STEP_2(ObShowSqlSet::SHOW_TABLEGROUPS,
-                            OB_SYS_DATABASE_NAME,
-                            OB_ALL_TABLEGROUP_TNAME,
-                            OB_SYS_DATABASE_NAME,
-                            table_name,
-                            sql_tenant_id,
-                            OB_SYS_DATABASE_NAME,
-                            OB_ALL_DATABASE_TNAME,
-                            sql_tenant_id,
-                            sql_tenant_id);
-            } else {
-              GEN_SQL_STEP_1(ObShowSqlSet::SHOW_TABLEGROUPS_V2);
-              GEN_SQL_STEP_2(ObShowSqlSet::SHOW_TABLEGROUPS_V2,
-                            OB_SYS_DATABASE_NAME,
-                            OB_ALL_TABLEGROUP_TNAME,
-                            OB_SYS_DATABASE_NAME,
-                            table_name,
-                            sql_tenant_id,
-                            OB_SYS_DATABASE_NAME,
-                            OB_ALL_DATABASE_TNAME,
-                            sql_tenant_id,
-                            sql_tenant_id);
-            }
+            GEN_SQL_STEP_1(ObShowSqlSet::SHOW_TABLEGROUPS_V2);
+            GEN_SQL_STEP_2(ObShowSqlSet::SHOW_TABLEGROUPS_V2,
+                          OB_SYS_DATABASE_NAME,
+                          OB_ALL_TABLEGROUP_TNAME,
+                          OB_SYS_DATABASE_NAME,
+                          table_name,
+                          sql_tenant_id,
+                          OB_SYS_DATABASE_NAME,
+                          OB_ALL_DATABASE_TNAME,
+                          sql_tenant_id,
+                          sql_tenant_id);
           }
         }();
         break;
@@ -1760,14 +1681,8 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
           const int LIMIT_LENGTH = 40;
           char where_job_name[WHERE_JOB_NAME_LENGTH] = {};
           char limit_count [LIMIT_LENGTH] = {};
-          uint64_t min_version = OB_INVALID_VERSION;
 
-          if (OB_FAIL(GET_MIN_DATA_VERSION(real_tenant_id, min_version))) {
-            LOG_WARN("get min data_version failed", K(ret), K(real_tenant_id));
-          } else if (min_version < DATA_VERSION_4_3_2_1) {
-            ret = OB_NOT_SUPPORTED;
-            LOG_WARN("not support show async job", K(ret), K(real_tenant_id));
-          } else if (parse_tree.num_child_ == 1 && OB_NOT_NULL(parse_tree.children_)) {
+          if (parse_tree.num_child_ == 1 && OB_NOT_NULL(parse_tree.children_)) {
             snprintf(where_job_name, WHERE_JOB_NAME_LENGTH, " AND JOB_NAME = '%.*s' ", (int)parse_tree.children_[0]->str_len_, parse_tree.children_[0]->str_value_);     
             snprintf(limit_count, LIMIT_LENGTH, "order by update_time desc limit 1");     
           } else if (parse_tree.num_child_ == 0) {
@@ -1837,14 +1752,7 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
         break;
       }
       case T_SHOW_CATALOGS: {
-        uint64_t min_version = OB_INVALID_VERSION;
-        if (OB_FAIL(GET_MIN_DATA_VERSION(real_tenant_id, min_version))) {
-            LOG_WARN("get min data_version failed", K(ret), K(real_tenant_id));
-        } else if (min_version < DATA_VERSION_4_3_5_2) {
-          ret = OB_NOT_SUPPORTED;
-          LOG_USER_ERROR(OB_NOT_SUPPORTED, "show catalogs");
-          LOG_WARN("not support to show catalogs", K(ret), K(real_tenant_id));
-        } else if (OB_UNLIKELY(parse_tree.num_child_ != 0)) {
+        if (OB_UNLIKELY(parse_tree.num_child_ != 0)) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("parse tree is wrong", K(ret), K(parse_tree.num_child_));
         } else {
@@ -1859,14 +1767,7 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
         break;
       }
       case T_SHOW_CREATE_CATALOG: {
-        uint64_t min_version = OB_INVALID_VERSION;
-        if (OB_FAIL(GET_MIN_DATA_VERSION(real_tenant_id, min_version))) {
-            LOG_WARN("get min data_version failed", K(ret), K(real_tenant_id));
-        } else if (min_version < DATA_VERSION_4_3_5_2) {
-          ret = OB_NOT_SUPPORTED;
-          LOG_USER_ERROR(OB_NOT_SUPPORTED, "show create catalog");
-          LOG_WARN("not support to show create catalog", K(ret), K(real_tenant_id));
-        } else if (OB_UNLIKELY(parse_tree.num_child_ != 1) || OB_ISNULL(parse_tree.children_[0])) {
+        if (OB_UNLIKELY(parse_tree.num_child_ != 1) || OB_ISNULL(parse_tree.children_[0])) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("parse tree is wrong", K(ret), K(parse_tree.num_child_));
         } else {

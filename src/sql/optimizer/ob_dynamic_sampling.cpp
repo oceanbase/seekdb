@@ -1385,8 +1385,7 @@ int ObDynamicSampling::add_table_clause(ObSqlString &table_str)
 }
 
 bool ObDynamicSampling::allow_cache_ds_result_to_sql_ctx() const {
-  return OB_NOT_NULL(ctx_) && OB_NOT_NULL(ctx_->get_query_ctx()) &&
-         ctx_->get_query_ctx()->check_opt_compat_version(COMPAT_VERSION_4_3_5_BP2);
+  return OB_NOT_NULL(ctx_) && OB_NOT_NULL(ctx_->get_query_ctx());
 }
 
 int ObDynamicSamplingUtils::get_valid_dynamic_sampling_level(const ObSQLSessionInfo *session_info,

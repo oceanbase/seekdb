@@ -726,11 +726,7 @@ int ObTransformRule::adjust_transformed_stmt(ObIArray<ObParentDMLStmt> &parent_s
 bool ObTransformRule::is_normal_disabled_transform(const ObDMLStmt &stmt)
 {
   bool bret = false;
-  if (stmt.is_values_table_query() && NULL != stmt.get_query_ctx() &&
-      !ObTransformUtils::is_enable_values_table_rewrite(stmt.get_query_ctx()->optimizer_features_enable_version_)) {
-    OPT_TRACE("values table can not transform");
-    bret = true;
-  } else if (stmt.has_instead_of_trigger()) {
+  if (stmt.has_instead_of_trigger()) {
     OPT_TRACE("stmt with instead of trigger can not transform");
     bret = true;
   }

@@ -130,7 +130,7 @@ int ObCodeGenerator::detect_batch_size(
                                                      log_plan.get_plan_root()));
     }
     if (OB_FAIL(ret)) {
-    } else if (GET_MIN_CLUSTER_VERSION() >= CLUSTER_VERSION_4_3_3_0 && !vectorize) {
+    } else if (!vectorize) {
       // set max_batch_size = 1
       // if all physical operator is not registered as vec op, disable vectorization
       if (rowsets_enabled && has_registered_vec_op) {

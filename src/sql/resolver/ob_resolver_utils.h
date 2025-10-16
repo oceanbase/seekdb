@@ -146,21 +146,18 @@ public:
 
   static int resolve_extended_type_info(const ParseNode &str_list_node,
                                         ObIArray<ObString>& type_info_array);
-  static int resolve_collection_type_info(const uint64_t tenant_data_version,
-                                          const ParseNode &type_node,
+  static int resolve_collection_type_info(const ParseNode &type_node,
                                           ObStringBuffer &buf,
                                           uint8_t &depth);
   static int resolve_basic_type_info(const ParseNode &type_node,
                                      ObStringBuffer &buf);
-  static int resolve_array_type_info(const uint64_t tenant_data_version,
-                                     const ParseNode &type_node,
+  static int resolve_array_type_info(const ParseNode &type_node,
                                      ObStringBuffer &buf,
                                      uint8_t &depth);
   static int resolve_vector_type_info(const ParseNode &type_node,
                                           ObStringBuffer &buf,
                                           uint8_t &depth);
-  static int resolve_map_type_info(const uint64_t tenant_data_version,
-                                   const ParseNode &type_node,
+  static int resolve_map_type_info(const ParseNode &type_node,
                                    ObStringBuffer &buf,
                                    uint8_t &depth);
   static int resolve_sparse_vector_type_info(const ParseNode &type_node,
@@ -866,8 +863,7 @@ public:
                             bool &is_param,
                             const bool enable_decimal_int);
   static int check_not_supported_tenant_name(const common::ObString &tenant_name);
-  static int check_allowed_alter_operations_for_mlog(const uint64_t tenant_id,
-                                                  const obrpc::ObAlterTableArg &arg,
+  static int check_allowed_alter_operations_for_mlog(const obrpc::ObAlterTableArg &arg,
                                                   const share::schema::ObTableSchema &table_schema);
   static int fast_get_param_type(const ParseNode &parse_node,
                                  const ParamStore *param_store,

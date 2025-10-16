@@ -3378,9 +3378,6 @@ int ObTransformGroupByPushdown::check_cut_ratio(ObLogicalOperator *op,
       OB_ISNULL(push_down_ctx)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null", K(ret));
-  } else if (!op->get_stmt()->get_query_ctx()->check_opt_compat_version(
-                          COMPAT_VERSION_4_2_5, COMPAT_VERSION_4_3_0, COMPAT_VERSION_4_3_5)) {
-    // do nothing
   } else if (OB_FAIL(invalid_stmts.prepare_allocate(push_down_ctx->new_stmt_ids_.count()))) {
     LOG_WARN("failed to prepare array", K(ret));
   } else if (OB_FAIL(check_all_cut_ratio(op, push_down_ctx, false, invalid_stmts))) {

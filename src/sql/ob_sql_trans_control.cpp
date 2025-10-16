@@ -731,10 +731,7 @@ int ObSqlTransControl::stmt_setup_snapshot_(ObSQLSessionInfo *session,
     }
     // per-opt: set read elr for DML stmt
     if (OB_SUCC(ret) && local_single_ls_plan && !plan->is_plain_select() && txs->get_tx_elr_util().is_can_tenant_elr()) {
-      if (tx_desc.get_cluster_version() >= CLUSTER_VERSION_4_3_5_1) {
-        // for compatible reason, support it when upgraded to 4.3.5.1
-        snapshot.try_set_read_elr();
-      }
+      snapshot.try_set_read_elr();
     }
     if (OB_SUCC(ret) && !local_single_ls_plan) {
       ret = txs->get_read_snapshot(tx_desc,
@@ -826,8 +823,7 @@ int ObSqlTransControl::can_do_plain_insert(ObSQLSessionInfo *session,
   } else if (plan->is_plain_insert()) {
     can_plain_insert = true;
   } else if (session->enable_insertup_replace_gts_opt() && plan->get_insertup_can_do_gts_opt()) {
-    if ((GET_MIN_CLUSTER_VERSION() >= CLUSTER_VERSION_4_3_5_0)
-        && session->is_user_session()) {
+    if (session->is_user_session()) {
       can_plain_insert = true;
     }
   }

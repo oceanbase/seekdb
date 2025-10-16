@@ -1286,8 +1286,7 @@ int ObOptSelectivity::calculate_join_selectivity(const OptTableMetas &table_meta
    * For complex inner/outer join (which has at least two kinds of quals or one complex join qual), 
    * we assume that each row of the small table matches at least one row of the large table.
   */
-  if (OB_SUCC(ret) && ctx.check_opt_compat_version(COMPAT_VERSION_4_2_5, COMPAT_VERSION_4_3_0,
-                                                   COMPAT_VERSION_4_3_5)) {
+  if (OB_SUCC(ret)) {
     is_complex_join &= sel_estimators.count() > 1 || cnt_complex_qual;
     if (is_complex_join) {
       if (LEFT_SEMI_JOIN == ctx.get_join_type()) {
@@ -1568,10 +1567,7 @@ int ObOptSelectivity::update_table_meta_info(const OptTableMetas &base_table_met
     table_meta->clear_base_table_info();
     if (filtered_rows >= origin_rows) {
       // only update table rows
-    } else if (OB_FAIL(!ctx.check_opt_compat_version(COMPAT_VERSION_4_2_4, COMPAT_VERSION_4_3_0,
-                                                     COMPAT_VERSION_4_3_3) ?
-                       classify_quals_deprecated(ctx, quals, all_predicate_sel, column_sel_infos) :
-                       classify_quals(base_table_metas, ctx, quals, all_predicate_sel, column_sel_infos))) {
+    } else if (OB_FAIL(classify_quals(base_table_metas, ctx, quals, all_predicate_sel, column_sel_infos))) {
       LOG_WARN("failed to classify quals", K(ret));
     } else {
       for (int64_t i = 0; OB_SUCC(ret) && i < table_meta->get_column_metas().count(); ++i) {
@@ -1621,42 +1617,29 @@ int ObOptSelectivity::update_table_meta_info(const OptTableMetas &base_table_met
         }
         // step 1
         if (OB_NOT_NULL(sel_info)) {
-          if (!ctx.check_opt_compat_version(COMPAT_VERSION_4_2_4, COMPAT_VERSION_4_3_0,
-                                            COMPAT_VERSION_4_3_3)) {
-            step1_row *= sel_info->selectivity_;
-            hist_scale = sel_info->selectivity_;
-            if (sel_info->equal_count_ > 0) {
-              step1_ndv = sel_info->equal_count_;
-            } else if (sel_info->has_range_exprs_) {
-              step1_ndv *= sel_info->range_selectivity_;
+          double step1_sel = sel_info->selectivity_;
+          double direct_ndv_sel = 1.0;
+          if (origin_rows * step1_sel < filtered_rows &&
+              origin_rows > OB_DOUBLE_EPSINON) {
+            step1_sel = filtered_rows / origin_rows;
+          }
+          if (null_reject) {
+            if (step1_sel <= nns && nns > OB_DOUBLE_EPSINON) {
+              direct_ndv_sel = step1_sel / nns;
             } else {
-              step1_ndv = scale_distinct(step1_row, origin_rows, column_meta.get_ndv());
+              direct_ndv_sel = 1.0;
             }
           } else {
-            double step1_sel = sel_info->selectivity_;
-            double direct_ndv_sel = 1.0;
-            if (origin_rows * step1_sel < filtered_rows &&
-                origin_rows > OB_DOUBLE_EPSINON) {
-              step1_sel = filtered_rows / origin_rows;
-            }
-            if (null_reject) {
-              if (step1_sel <= nns && nns > OB_DOUBLE_EPSINON) {
-                direct_ndv_sel = step1_sel / nns;
-              } else {
-                direct_ndv_sel = 1.0;
-              }
-            } else {
-              // complex quals, the selectivity might be default
-              // do not handle null
-              direct_ndv_sel = step1_sel;
-            }
-            step1_row *= step1_sel;
-            hist_scale = step1_sel;
-            if (sel_info->equal_count_ > 0) {
-              step1_ndv = sel_info->equal_count_;
-            } else {
-              step1_ndv *= direct_ndv_sel;
-            }
+            // complex quals, the selectivity might be default
+            // do not handle null
+            direct_ndv_sel = step1_sel;
+          }
+          step1_row *= step1_sel;
+          hist_scale = step1_sel;
+          if (sel_info->equal_count_ > 0) {
+            step1_ndv = sel_info->equal_count_;
+          } else {
+            step1_ndv *= direct_ndv_sel;
           }
         }
         // step 2
@@ -1799,10 +1782,7 @@ int ObOptSelectivity::get_column_range_sel(const OptTableMetas &table_metas,
     }
     LOG_TRACE("Get column range sel", K(selectivity), K(quals));
   }
-  if (OB_SUCC(ret) && need_out_of_bounds &&
-      ctx.check_opt_compat_version(COMPAT_VERSION_4_2_1_BP7, COMPAT_VERSION_4_2_2,
-                                   COMPAT_VERSION_4_2_4, COMPAT_VERSION_4_3_0,
-                                   COMPAT_VERSION_4_3_2)) {
+  if (OB_SUCC(ret) && need_out_of_bounds) {
     ObObj min_value;
     ObObj max_value;
     if (use_hist) {
@@ -1972,9 +1952,7 @@ int ObOptSelectivity::calc_column_range_selectivity(const OptTableMetas &table_m
     ObObj *new_start_obj = NULL;
     ObObj *new_end_obj = NULL;
     ObArenaAllocator tmp_alloc("ObOptSel");
-    bool convert2sortkey = ctx.check_opt_compat_version(COMPAT_VERSION_4_2_1_BP5, COMPAT_VERSION_4_2_2,
-                                                        COMPAT_VERSION_4_2_4, COMPAT_VERSION_4_3_0,
-                                                        COMPAT_VERSION_4_3_1);
+    bool convert2sortkey = true;
     if (OB_FAIL(ObDbmsStatsUtils::truncate_string_for_opt_stats(&start_obj, tmp_alloc, new_start_obj)) ||
         OB_FAIL(ObDbmsStatsUtils::truncate_string_for_opt_stats(&end_obj, tmp_alloc, new_end_obj))) {
       LOG_WARN("failed to convert valid obj for opt stats", K(ret), K(start_obj), K(end_obj),
@@ -2017,9 +1995,7 @@ int ObOptSelectivity::calc_column_range_selectivity(const OptTableMetas &table_m
       //startobj and endobj cannot be min/max in this branch, no need to defend
       ObObj startscalar;
       ObObj endscalar;
-      bool convert2sortkey = ctx.check_opt_compat_version(COMPAT_VERSION_4_2_1_BP5, COMPAT_VERSION_4_2_2,
-                                                          COMPAT_VERSION_4_2_4, COMPAT_VERSION_4_3_0,
-                                                          COMPAT_VERSION_4_3_1);
+      bool convert2sortkey = true;
       if (OB_FAIL(ObOptEstObjToScalar::convert_objs_to_scalars(NULL, NULL, &start_obj, &end_obj,
                                                                NULL, NULL, &startscalar, &endscalar,
                                                                convert2sortkey))) {
@@ -2425,9 +2401,7 @@ int ObOptSelectivity::get_column_basic_info(const OptTableMetas &table_metas,
         case DistinctEstType::CURRENT: {
           cur_rowcnt = ctx.get_current_rows();
           if (NULL != ctx.get_ambient_card() &&
-              !ctx.get_ambient_card()->empty() &&
-              ctx.check_opt_compat_version(COMPAT_VERSION_4_2_4, COMPAT_VERSION_4_3_0,
-                                           COMPAT_VERSION_4_3_3)) {
+              !ctx.get_ambient_card()->empty()) {
             ObSEArray<int64_t, 1> table_idx;
             if (OB_FAIL(expr.get_relation_ids().to_array(table_idx))) {
               LOG_WARN("failed to get table idx", K(ret), K(expr));
@@ -2733,9 +2707,7 @@ int ObOptSelectivity::get_less_pred_sel(const OptSelectivityCtx &ctx,
       ObObj minobj(histogram.get(idx).endpoint_value_);
       ObObj maxobj(histogram.get(idx+1).endpoint_value_);
       ObObj startobj(minobj), endobj(maxv);
-      bool convert2sortkey = ctx.check_opt_compat_version(COMPAT_VERSION_4_2_1_BP5, COMPAT_VERSION_4_2_2,
-                                                          COMPAT_VERSION_4_2_4, COMPAT_VERSION_4_3_0,
-                                                          COMPAT_VERSION_4_3_1);
+      bool convert2sortkey = true;
       if (OB_FAIL(ObOptEstObjToScalar::convert_objs_to_scalars(
                     &minobj, &maxobj, &startobj, &endobj,
                     &minscalar, &maxscalar, &startscalar, &endscalar,
@@ -2942,20 +2914,8 @@ int ObOptSelectivity::calculate_distinct_in_single_table(const OptTableMetas &ta
     LOG_WARN("failed filter column by equal set", K(ret));
   } else if (OB_FAIL(calculate_expr_ndv(filtered_exprs, expr_ndv, table_metas, ctx, ambient_card, est_type))) {
     LOG_WARN("fail to calculate expr ndv", K(ret));
-  } else if (ctx.check_opt_compat_version(COMPAT_VERSION_4_2_5_BP3, COMPAT_VERSION_4_3_0,
-                                          COMPAT_VERSION_4_3_5_BP2)) {
-    rows = ctx.get_correlation_model().combine_ndvs(ambient_card, expr_ndv);
-  } else if (ctx.check_opt_compat_version(COMPAT_VERSION_4_2_4, COMPAT_VERSION_4_3_0,
-                                          COMPAT_VERSION_4_3_3)) {
-    rows = combine_ndvs(ambient_card, expr_ndv);
   } else {
-    for (int64_t i = 0; OB_SUCC(ret) && i < expr_ndv.count(); ++i) {
-      if (0 == i) {
-        rows *= expr_ndv.at(i);
-      } else {
-        rows *= expr_ndv.at(i) / std::sqrt(2);
-      }
-    }
+    rows = ctx.get_correlation_model().combine_ndvs(ambient_card, expr_ndv);
   }
   LOG_TRACE("succeed to calculate distinct in single table", K(rel_id), K(ambient_card), K(rows), K(expr_ndv), K(exprs));
 
@@ -3059,25 +3019,7 @@ int ObOptSelectivity::calculate_distinct(const OptTableMetas &table_metas,
       LOG_WARN("failed to push back", K(ret));
     }
   }
-  if (ctx.check_opt_compat_version(COMPAT_VERSION_4_2_5_BP3, COMPAT_VERSION_4_3_0,
-                                   COMPAT_VERSION_4_3_5_BP2)) {
-    rows = ctx.get_correlation_model().combine_ndvs(need_refine ? origin_rows : -1, single_ndvs);
-  } else if (ctx.check_opt_compat_version(COMPAT_VERSION_4_2_4, COMPAT_VERSION_4_3_0,
-                                          COMPAT_VERSION_4_3_3)) {
-    rows = combine_ndvs(need_refine ? origin_rows : -1, single_ndvs);
-  } else {
-    for (int64_t i = 0; OB_SUCC(ret) && i < single_ndvs.count(); ++i) {
-      if (0 == i) {
-        rows *= single_ndvs.at(i);
-      } else {
-        rows *= single_ndvs.at(i) / std::sqrt(2);
-      }
-    }
-    //refine
-    if (OB_SUCC(ret) && need_refine && origin_rows >= 0.0) {
-      rows = std::min(rows, origin_rows);
-    }
-  }
+  rows = ctx.get_correlation_model().combine_ndvs(need_refine ? origin_rows : -1, single_ndvs);
   LOG_TRACE("succeed to calculate distinct", K(ctx), K(origin_rows), K(rows), K(single_ndvs), K(exprs));
   return ret;
 }
@@ -3255,9 +3197,6 @@ int ObOptSelectivity::check_is_special_distinct_expr(const OptSelectivityCtx &ct
     LOG_WARN("unexpected null pointer", K(expr), K(ret));
   } else if (expr->is_win_func_expr()) {
     is_special = true;
-  } else if (!ctx.check_opt_compat_version(COMPAT_VERSION_4_2_4, COMPAT_VERSION_4_3_0,
-                                           COMPAT_VERSION_4_3_3)) {
-    is_special = false;
   } else if (expr->is_const_expr()) {
     is_special = false;
   } else if (T_OP_MOD == expr->get_expr_type()) {
@@ -4793,8 +4732,7 @@ double ObOptSelectivity::calc_equal_filter_sel(const OptSelectivityCtx &ctx,
     } else if (T_OP_NE == op_type) {
       selectivity = 0.0;
     }
-  } else if (ctx.check_opt_compat_version(COMPAT_VERSION_4_2_4, COMPAT_VERSION_4_3_0,
-                                          COMPAT_VERSION_4_3_3)) {
+  } else {
     double combine_ndv = combine_two_ndvs(ctx.get_current_rows(), left_ndv, right_ndv);
     combine_ndv = std::max(1.0, combine_ndv);
     selectivity = std::min(left_ndv, right_ndv) / combine_ndv;
@@ -4805,18 +4743,8 @@ double ObOptSelectivity::calc_equal_filter_sel(const OptSelectivityCtx &ctx,
     } else if (T_OP_NE == op_type) {
       selectivity = std::max(1 - selectivity, 1 / combine_ndv / 2.0) * left_nns * right_nns ;
     }
-  } else {
-    // deprecated
-    if (T_OP_NSEQ == op_type) {
-      selectivity = left_nns * right_nns / std::max(left_ndv, right_ndv)
-          + (1 - left_nns) * (1 - right_nns);
-    } else if (T_OP_EQ == op_type) {
-      selectivity = left_nns * right_nns / std::max(left_ndv, right_ndv);
-    } else if (T_OP_NE == op_type) {
-      selectivity = left_nns * right_nns * (1 - 1/std::max(left_ndv, right_ndv));
-    }
   }
-  
+
   return selectivity;
 }
 
@@ -4848,8 +4776,7 @@ double ObOptSelectivity::calc_equal_join_sel(const OptSelectivityCtx &ctx,
     } else {
       selectivity = left_nns * std::max(1 - 1 / left_ndv, 1 / left_ndv);
     }
-  } else if (IS_ANTI_JOIN(ctx.get_join_type()) && ctx.check_opt_compat_version(COMPAT_VERSION_4_2_5, COMPAT_VERSION_4_3_0,
-                                                                               COMPAT_VERSION_4_3_5)) {
+  } else if (IS_ANTI_JOIN(ctx.get_join_type())) {
     // use base containment assumption only for anti join
     selectivity = (std::min(left_base_ndv, right_base_ndv) / left_base_ndv) * (right_ndv / right_base_ndv) * left_nns;
     if (T_OP_NSEQ == op_type && 1 - right_nns > 0) {
@@ -5090,8 +5017,6 @@ int ObHistEqualSelHelper::inner_get_sel(const OptSelectivityCtx &ctx,
     sel = 0.0;
     is_rare_value = true;
     if (!is_neq_ &&
-        ctx.check_opt_compat_version(COMPAT_VERSION_4_2_5_BP3, COMPAT_VERSION_4_3_0,
-                                     COMPAT_VERSION_4_3_5_BP2) &&
         OB_FAIL(refine_out_of_bounds_sel(ctx, *new_value, sel, is_rare_value))) {
       LOG_WARN("failed to refine out of bounds sel", K(ret));
     }

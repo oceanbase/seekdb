@@ -178,10 +178,6 @@ int ObGrantResolver::resolve_grant_role_to_ur(
     CK (role_list != NULL);
     CK (grantee_clause != NULL);
 
-    if (lib::is_mysql_mode()) {
-      OZ (ObSQLUtils::compatibility_check_for_mysql_role_and_column_priv(tenant_id));
-    }
-
     OZ (resolve_grantee_clause(grantee_clause, params_.session_info_,
                                user_name_array, host_name_array));
     if (OB_SUCC(ret)) {
@@ -396,7 +392,6 @@ int ObGrantResolver::resolve_mysql(const ParseNode &parse_tree)
         if (OB_SUCC(ret)) {
           const uint64_t tenant_id = params_.session_info_->get_effective_tenant_id();  
           ObPrivSet priv_set = 0;
-          uint64_t compat_version = 0;
           if (OB_ISNULL(allocator_)) {
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("unexpected error", K(ret));
@@ -404,46 +399,6 @@ int ObGrantResolver::resolve_mysql(const ParseNode &parse_tree)
                                                                                       params_.session_info_,
                                                                                       *allocator_))) {
             LOG_WARN("Resolve priv set error", K(ret));
-          } else if (OB_FAIL(GET_MIN_DATA_VERSION(tenant_id, compat_version))) {
-            LOG_WARN("fail to get data version", K(tenant_id));
-          } else if (!sql::ObSQLUtils::is_data_version_ge_422_or_431(compat_version)
-                     && ((priv_set & OB_PRIV_EXECUTE) != 0 ||
-                         (priv_set & OB_PRIV_ALTER_ROUTINE) != 0 ||
-                         (priv_set & OB_PRIV_CREATE_ROUTINE) != 0)) {
-            ret = OB_NOT_SUPPORTED;
-            LOG_WARN("grammar is not support when MIN_DATA_VERSION is below DATA_VERSION_4_3_1_0 or 4_2_2_0", K(ret));
-            LOG_USER_ERROR(OB_NOT_SUPPORTED, "grant execute/alter routine/create routine privilege");
-          } else if (!sql::ObSQLUtils::is_data_version_ge_423_or_432(compat_version)
-                     && ((priv_set & OB_PRIV_CREATE_TABLESPACE) != 0 ||
-                         (priv_set & OB_PRIV_SHUTDOWN) != 0 ||
-                         (priv_set & OB_PRIV_RELOAD) != 0)) {
-            ret = OB_NOT_SUPPORTED;
-            LOG_WARN("grammar is not support when MIN_DATA_VERSION is below DATA_VERSION_4_2_3_0 or 4_3_2_0", K(ret));
-            LOG_USER_ERROR(OB_NOT_SUPPORTED, "grant create tablespace/shutdown/reload privilege");
-          } else if (!sql::ObSQLUtils::is_data_version_ge_424_or_433(compat_version)
-                     && ((priv_set & OB_PRIV_REFERENCES) != 0 ||
-                         (priv_set & OB_PRIV_CREATE_ROLE) != 0 ||
-                         (priv_set & OB_PRIV_DROP_ROLE) != 0 ||
-                         (priv_set & OB_PRIV_TRIGGER) != 0)) {
-            ret = OB_NOT_SUPPORTED;
-            LOG_WARN("grammar is not support when MIN_DATA_VERSION is below DATA_VERSION_4_2_4_0 or 4_3_3_0", K(ret));
-            LOG_USER_ERROR(OB_NOT_SUPPORTED, "grant references/create role/drop role/trigger");
-          } else if (!((MOCK_DATA_VERSION_4_2_5_1 <= compat_version && compat_version < DATA_VERSION_4_3_0_0) || compat_version >= DATA_VERSION_4_3_5_1)
-                     && ((priv_set & OB_PRIV_ENCRYPT) != 0 || (priv_set & OB_PRIV_DECRYPT) != 0)) {
-            ret = OB_NOT_SUPPORTED;
-            LOG_WARN("grammar is not support when MIN_DATA_VERSION is below DATA_VERSION_4_2_5_1 or 4_3_5_1", K(ret));
-            LOG_USER_ERROR(OB_NOT_SUPPORTED, "grant encrypt/decrypt privilege");
-          } else if (!((MOCK_DATA_VERSION_4_2_5_2 <= compat_version && compat_version < DATA_VERSION_4_3_0_0) || compat_version >= DATA_VERSION_4_3_5_2)
-                     &&((priv_set & OB_PRIV_EVENT) != 0)) {
-            ret = OB_NOT_SUPPORTED;
-            LOG_WARN("grammar is not support when MIN_DATA_VERSION is below DATA_VERSION_4_2_5_2 or 4_3_5_2", K(ret));
-            LOG_USER_ERROR(OB_NOT_SUPPORTED, "grant event");
-          } else if (compat_version < DATA_VERSION_4_3_5_2
-                     && ((priv_set & OB_PRIV_CREATE_CATALOG) != 0 ||
-                         (priv_set & OB_PRIV_USE_CATALOG) != 0)) {
-            ret = OB_NOT_SUPPORTED;
-            LOG_WARN("grammar is not support when MIN_DATA_VERSION is below DATA_VERSION_4_3_5_2", K(ret));
-            LOG_USER_ERROR(OB_NOT_SUPPORTED, "grant create catalog/use catalog privilege");
           }
           if (OB_FAIL(ret)) {
           } else {
@@ -595,33 +550,20 @@ int ObGrantResolver::resolve_priv_level_with_object_type(const ObSQLSessionInfo 
                                                          ObPrivLevel &grant_level)
 {
   int ret = OB_SUCCESS;
-  uint64_t compat_version = 0;
   if (OB_ISNULL(session_info)) {
     ret = OB_NOT_INIT;
     LOG_WARN("session_info not inited", K(ret));
   } else if (OB_ISNULL(priv_object_node)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected parse node", K(ret));
-  } else if (OB_FAIL(GET_MIN_DATA_VERSION(session_info->get_effective_tenant_id(), compat_version))) {
-    LOG_WARN("fail to get data version", K(ret));
   }
   if (OB_SUCC(ret)) {
     if (priv_object_node->value_ == 1) {
       // do nothing, compat with mysql
     } else if (priv_object_node->value_ == 2 || priv_object_node->value_ == 3) {
-      if (!sql::ObSQLUtils::is_data_version_ge_422_or_431(compat_version)) {
-        ret = OB_NOT_SUPPORTED;
-        LOG_WARN("grammar is not support when MIN_DATA_VERSION is below DATA_VERSION_4_3_1_0 or 4_2_2_0", K(ret));
-      } else {
-        grant_level = OB_PRIV_ROUTINE_LEVEL;
-      }
+      grant_level = OB_PRIV_ROUTINE_LEVEL;
     } else if (priv_object_node->value_ == 4) {
-      if (compat_version < DATA_VERSION_4_3_5_2) {
-        ret = OB_NOT_SUPPORTED;
-        LOG_WARN("grant on catalog is not support below DATA_VERSION_4_3_5_2", K(ret));
-      } else {
-        grant_level = OB_PRIV_CATALOG_LEVEL;
-      }
+      grant_level = OB_PRIV_CATALOG_LEVEL;
     } else {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected obj type", K(ret), K(priv_object_node->value_));

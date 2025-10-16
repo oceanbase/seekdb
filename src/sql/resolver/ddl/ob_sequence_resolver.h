@@ -74,15 +74,7 @@ int ObSequenceResolver<T>::resolve_sequence_options(uint64_t tenant_id, T *stmt,
           SQL_LOG(WARN, "resolve sequence option failed", K(ret));
         }
       }
-      // Fields used for upgrade compatibility, not user input
-      uint64_t compat_version = 0;
-      if (FAILEDx(GET_MIN_DATA_VERSION(tenant_id, compat_version))) {
-        LOG_WARN("fail to get data version", KR(ret), K(tenant_id));
-      } else if ((compat_version >= MOCK_DATA_VERSION_4_2_3_0
-                  && compat_version < DATA_VERSION_4_3_0_0)
-                 || (compat_version >= DATA_VERSION_4_3_2_0)) {
-        stmt->option().set_cache_order_mode(share::NEW_ACTION);
-      }
+      stmt->option().set_cache_order_mode(share::NEW_ACTION);
 
       // conflict check
       if (OB_SUCC(ret)) {

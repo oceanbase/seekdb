@@ -255,10 +255,6 @@ int ObTransformQueryPushDown::check_transform_validity(ObSelectStmt *select_stmt
              view_stmt->has_ora_rowscn()) {//judgment 1, 2
     can_transform = false;
     OPT_TRACE("stmt is not spj");
-  } else if (select_stmt->get_query_ctx()->optimizer_features_enable_version_ < COMPAT_VERSION_4_3_2 &&
-             view_stmt->is_values_table_query()) {
-    can_transform = false;
-    OPT_TRACE("stmt is not spj");
   } else if (OB_FAIL(check_select_item_push_down(select_stmt,
                                                  view_stmt,
                                                  select_offset,

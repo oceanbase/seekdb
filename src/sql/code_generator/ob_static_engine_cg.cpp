@@ -357,10 +357,6 @@ int ObStaticEngineCG::postorder_generate_op(ObLogicalOperator &op,
     } else if (ObExternalFileFormat::CSV_FORMAT != format_type && !spec->use_rich_format_) {
       ret = OB_NOT_SUPPORTED;
       LOG_USER_ERROR(OB_NOT_SUPPORTED, "Using non-rich vector format in external tables");
-    } else if (ObExternalFileFormat::CSV_FORMAT == format_type && spec->use_rich_format_ &&
-          GET_MIN_CLUSTER_VERSION() < CLUSTER_VERSION_4_3_5_3) {
-      // csv is not support rich format for version < 4_3_5_3
-      spec->use_rich_format_ = false;
     }
   }
   partial_frame_gen.px_coord_cnt_ -= is_px_coord ? 1 : 0;
@@ -557,23 +553,10 @@ void ObStaticEngineCG::exprs_not_support_vectorize(const ObIArray<ObRawExpr *> &
                                                    const bool need_return_lob_locator,
                                                    bool &found)
 {
-  bool new_vector_support = is_column_store_tbl && IS_CLUSTER_VERSION_AFTER_4_3_1_0;
-  bool is_cluster_before_433 = GET_MIN_CLUSTER_VERSION() < CLUSTER_VERSION_4_3_3_0;
   FOREACH_CNT_X(e, exprs, !found) {
     if (T_ORA_ROWSCN != (*e)->get_expr_type()) {
       auto col = static_cast<ObColumnRefRawExpr *>(*e);
-      if (is_cluster_before_433) {
-        if ((!new_vector_support && col->get_result_type().is_json())
-            || (!new_vector_support && col->get_result_type().get_type() == ObLongTextType)
-            || (!new_vector_support && col->get_result_type().get_type() == ObMediumTextType)
-            || col->get_result_type().is_geometry()
-            || (IS_CLUSTER_VERSION_BEFORE_4_1_0_0
-                && ob_is_text_tc(col->get_result_type().get_type()))) {
-          // all lob types not support vectorize in 4.0
-          // tinytext and text support vectorize in 4.1
-          found = true;
-        }
-      } else if (col->get_result_type().is_geometry()) {
+      if (col->get_result_type().is_geometry()) {
         found = true;
       }
     }
@@ -1150,11 +1133,8 @@ int ObStaticEngineCG::generate_spec(
 void ObStaticEngineCG::set_murmur_hash_func(
      ObHashFunc &hash_func, const ObExprBasicFuncs *basic_funcs_)
 {
-  bool is_murmur_hash_v2_ = cur_cluster_version_ >= CLUSTER_VERSION_4_1_0_0;
-  hash_func.hash_func_ = is_murmur_hash_v2_ ?
-      basic_funcs_->murmur_hash_v2_ : basic_funcs_->murmur_hash_;
-  hash_func.batch_hash_func_ = is_murmur_hash_v2_ ?
-      basic_funcs_->murmur_hash_v2_batch_ : basic_funcs_->murmur_hash_batch_;
+  hash_func.hash_func_ = basic_funcs_->murmur_hash_v2_;
+  hash_func.batch_hash_func_ = basic_funcs_->murmur_hash_v2_batch_;
 }
 
 int ObStaticEngineCG::generate_spec(
@@ -1920,10 +1900,6 @@ int ObStaticEngineCG::generate_recursive_union_all_spec(ObLogSet &op, ObRecursiv
   ObOpSpec* cte_spec = nullptr;
   ObOpSpec *left = nullptr;
   ObOpSpec *right = nullptr;
-  uint64_t min_cluster_version = GET_MIN_CLUSTER_VERSION();
-  bool bulk_search = (min_cluster_version >= CLUSTER_VERSION_4_2_2_0
-                      && min_cluster_version < CLUSTER_VERSION_4_3_0_0)
-                     || (min_cluster_version >= CLUSTER_VERSION_4_3_1_0);
   if (OB_UNLIKELY(spec.get_child_cnt() != 2)
       || OB_ISNULL(left = spec.get_child(0))
       || OB_ISNULL(right = spec.get_child(1))
@@ -1939,13 +1915,9 @@ int ObStaticEngineCG::generate_recursive_union_all_spec(ObLogSet &op, ObRecursiv
     LOG_WARN("Last cte table spec cann't be null!", K(ret));
   } else {
     spec.set_fake_cte_table(static_cast<ObFakeCTETableSpec *>(cte_spec)->get_id());
-    if (bulk_search) {
-      static_cast<ObFakeCTETableSpec *>(cte_spec)->is_bulk_search_ = true;
-      spec.set_search_strategy(ObRecursiveInnerDataOp::SearchStrategyType::BREADTH_FIRST_BULK);
-    } else {
-      static_cast<ObFakeCTETableSpec *>(cte_spec)->is_bulk_search_ = false;
-      spec.set_search_strategy(ObRecursiveInnerDataOp::SearchStrategyType::BREADTH_FRIST);
-    }
+    static_cast<ObFakeCTETableSpec *>(cte_spec)->is_bulk_search_ = true;
+    spec.set_search_strategy(ObRecursiveInnerDataOp::SearchStrategyType::BREADTH_FIRST_BULK);
+
     //recursive union all's output of the first n items must be T_OP_UNION, corresponding one-to-one with the non-pseudo columns of the cte table
     ObSEArray<ObExpr *, 2> output_union_exprs;
     ObSEArray<uint64_t, 2> output_union_offsets;
@@ -3650,22 +3622,14 @@ int ObStaticEngineCG::generate_spec(ObLogJoinFilter &op, ObJoinFilterSpec &spec,
     spec.jf_material_control_info_ = op.get_jf_material_control_info();
   }
 
-  uint64_t min_ver = GET_MIN_CLUSTER_VERSION();
-  spec.use_ndv_runtime_bloom_filter_size_ = (min_ver >= CLUSTER_VERSION_4_3_5_1) && GCONF._ndv_runtime_bloom_filter_size;
-  if (min_ver >= CLUSTER_VERSION_4_3_0_1 || min_ver >= MOCK_CLUSTER_VERSION_4_2_3_0
-      || (min_ver > MOCK_CLUSTER_VERSION_4_2_1_4 && min_ver < CLUSTER_VERSION_4_2_2_0)) {
-    spec.bloom_filter_ratio_ = GCONF._bloom_filter_ratio;
-    spec.send_bloom_filter_size_ = GCONF._send_bloom_filter_size;
-    if (OB_ISNULL(opt_ctx_)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("opt_ctx_ is null", K(ret));
-    } else if (OB_FAIL(opt_ctx_->get_global_hint().opt_params_.get_integer_opt_param(ObOptParamHint::BLOOM_FILTER_RATIO, spec.bloom_filter_ratio_))) {
-      LOG_WARN("failed to get opt param bloom filter ratio", K(ret));
-    }
-  } else {
-    // for compatibility, if the cluseter is upgrading, set them as default value 0
-    spec.bloom_filter_ratio_ = 0;
-    spec.send_bloom_filter_size_ = 0;
+  spec.use_ndv_runtime_bloom_filter_size_ = GCONF._ndv_runtime_bloom_filter_size;
+  spec.bloom_filter_ratio_ = GCONF._bloom_filter_ratio;
+  spec.send_bloom_filter_size_ = GCONF._send_bloom_filter_size;
+  if (OB_ISNULL(opt_ctx_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("opt_ctx_ is null", K(ret));
+  } else if (OB_FAIL(opt_ctx_->get_global_hint().opt_params_.get_integer_opt_param(ObOptParamHint::BLOOM_FILTER_RATIO, spec.bloom_filter_ratio_))) {
+    LOG_WARN("failed to get opt param bloom filter ratio", K(ret));
   }
 
   if (spec.jf_material_control_info_.is_controller_) {
@@ -4154,8 +4118,7 @@ int ObStaticEngineCG::generate_basic_receive_spec(ObLogExchange &op, ObPxReceive
     // all receive op support rich_format, while some types of transmit not support rich format.
     // so make use_rich_format_ of receive same as use_rich_format_ of transmit.
     spec.use_rich_format_ &= (op.support_rich_format_vectorize());
-    if (OB_UNLIKELY(ERRSIM_EXCHANGE_VEC_DOP1 != OB_SUCCESS ||
-        GET_MIN_CLUSTER_VERSION() < CLUSTER_VERSION_4_3_5_0) &&
+    if (OB_UNLIKELY(ERRSIM_EXCHANGE_VEC_DOP1 != OB_SUCCESS) &&
         op.get_plan()->get_optimizer_context().get_max_parallel() == 1) {
       spec.use_rich_format_ = false;
     }
@@ -4555,9 +4518,6 @@ int ObStaticEngineCG::generate_spec(ObLogExchange &op, ObPxOrderedCoordSpec &spe
   int ret = OB_SUCCESS;
   if (OB_FAIL(generate_basic_receive_spec(op, spec, in_root_job))) {
     LOG_WARN("failed to generate basic transmit spec", K(ret));
-  } else if (OB_UNLIKELY(GET_MIN_CLUSTER_VERSION() < CLUSTER_VERSION_4_3_5_0)) {
-    spec.use_rich_format_ = false;
-    const_cast<ObOpSpec *> (spec.get_left())->use_rich_format_ = false;
   }
   return ret;
 }
@@ -4751,9 +4711,7 @@ int ObStaticEngineCG::generate_spec(ObLogGroupBy &op, ObScalarAggregateSpec &spe
 {
   UNUSED(in_root_job);
   int ret = OB_SUCCESS;
-  spec.enable_hash_base_distinct_ = (GET_MIN_CLUSTER_VERSION() >= MOCK_CLUSTER_VERSION_4_2_3_0
-                                     && GET_MIN_CLUSTER_VERSION() < CLUSTER_VERSION_4_3_0_0)
-                                    || GET_MIN_CLUSTER_VERSION() >= CLUSTER_VERSION_4_3_3_0;
+  spec.enable_hash_base_distinct_ = true;
   int tmp_ret = OB_E(EventTable::EN_DISABLE_HASH_BASE_DISTINCT) OB_SUCCESS;
   if (OB_SUCCESS != tmp_ret) {
     spec.enable_hash_base_distinct_ = false;
@@ -4804,9 +4762,7 @@ int ObStaticEngineCG::generate_spec(ObLogGroupBy &op, ObMergeGroupBySpec &spec,
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("wrong number of children", K(ret), K(op.get_num_of_child()));
   } else {
-    spec.enable_hash_base_distinct_ = (GET_MIN_CLUSTER_VERSION() >= MOCK_CLUSTER_VERSION_4_2_3_0
-                                     && GET_MIN_CLUSTER_VERSION() < CLUSTER_VERSION_4_3_0_0)
-                                    || GET_MIN_CLUSTER_VERSION() >= CLUSTER_VERSION_4_3_3_0;
+    spec.enable_hash_base_distinct_ = true;
     int tmp_ret = OB_E(EventTable::EN_DISABLE_HASH_BASE_DISTINCT) OB_SUCCESS;
     if (OB_SUCCESS != tmp_ret) {
       spec.enable_hash_base_distinct_ = false;
@@ -6217,11 +6173,8 @@ int ObStaticEngineCG::generate_join_spec(ObLogJoin &op, ObJoinSpec &spec)
           } else if (OB_FAIL(right_key_exprs.push_back(right_expr))) {
             LOG_WARN("failed to push back right expr", K(ret));
           } else {
-            bool is_murmur_hash_v2_ = cur_cluster_version_ >= CLUSTER_VERSION_4_1_0_0;
-            left_hash_func.hash_func_ = is_murmur_hash_v2_ ?
-                left_expr->basic_funcs_->murmur_hash_v2_ : left_expr->basic_funcs_->murmur_hash_;
-            right_hash_func.hash_func_ = is_murmur_hash_v2_ ?
-                right_expr->basic_funcs_->murmur_hash_v2_ : right_expr->basic_funcs_->murmur_hash_;
+            left_hash_func.hash_func_ = left_expr->basic_funcs_->murmur_hash_v2_;
+            right_hash_func.hash_func_ = right_expr->basic_funcs_->murmur_hash_v2_;
             if (OB_ISNULL(left_hash_func.hash_func_) || OB_ISNULL(right_hash_func.hash_func_)) {
               ret = OB_ERR_UNEXPECTED;
               LOG_WARN("hash func is null, check datatype is valid", K(ret));
@@ -7445,9 +7398,7 @@ int ObStaticEngineCG::generate_spec(ObLogWindowFunction &op, ObWindowFunctionSpe
   int ret = OB_SUCCESS;
   ObSEArray<ObExpr*, 16> rd_expr;
   ObSEArray<ObExpr*, 16> all_expr;
-  spec.enable_hash_base_distinct_ = (GET_MIN_CLUSTER_VERSION() >= MOCK_CLUSTER_VERSION_4_2_3_0
-                                     && GET_MIN_CLUSTER_VERSION() < CLUSTER_VERSION_4_3_0_0)
-                                    || GET_MIN_CLUSTER_VERSION() >= CLUSTER_VERSION_4_3_3_0;
+  spec.enable_hash_base_distinct_ = true;
   int tmp_ret = OB_E(EventTable::EN_DISABLE_HASH_BASE_DISTINCT) OB_SUCCESS;
   if (OB_SUCCESS != tmp_ret) {
     spec.enable_hash_base_distinct_ = false;
@@ -8133,7 +8084,6 @@ int ObStaticEngineCG::generate_spec(ObLogJsonTable &op, ObJsonTableSpec &spec,
       }
     }
 
-    bool need_set_lob_header = get_cur_cluster_version() >= CLUSTER_VERSION_4_1_0_0;
     for (int64_t i = 0; OB_SUCC(ret) && i < op.get_stmt()->get_column_size(); ++i) {
       ObExpr *rt_expr = nullptr;
       ObRawExpr* default_val = nullptr;
@@ -8145,7 +8095,7 @@ int ObStaticEngineCG::generate_spec(ObLogJsonTable &op, ObJsonTableSpec &spec,
           && col_item->expr_->is_explicited_reference()) {
         OZ (mark_expr_self_produced(col_item->expr_));
         OZ (generate_rt_expr(*col_item->expr_, rt_expr));
-        if (OB_SUCC(ret) && is_lob_storage(rt_expr->obj_meta_.get_type()) && need_set_lob_header) {
+        if (OB_SUCC(ret) && is_lob_storage(rt_expr->obj_meta_.get_type())) {
           rt_expr->obj_meta_.set_has_lob_header();
         }
         ObColumnDefault* col_def;
@@ -8168,7 +8118,7 @@ int ObStaticEngineCG::generate_spec(ObLogJsonTable &op, ObJsonTableSpec &spec,
             ObExpr *err_expr = nullptr;
             OZ (mark_expr_self_produced(default_val));
             OZ (generate_rt_expr(*default_val, err_expr));
-            if (OB_SUCC(ret) && is_lob_storage(err_expr->obj_meta_.get_type()) && need_set_lob_header) {
+            if (OB_SUCC(ret) && is_lob_storage(err_expr->obj_meta_.get_type())) {
               err_expr->obj_meta_.set_has_lob_header();
             }
             OX (col_info->error_expr_id_ = spec.err_default_exprs_.count());
@@ -8178,7 +8128,7 @@ int ObStaticEngineCG::generate_spec(ObLogJsonTable &op, ObJsonTableSpec &spec,
             ObExpr *emp_expr = nullptr;
             OZ (mark_expr_self_produced(default_val));
             OZ (generate_rt_expr(*default_val, emp_expr));
-            if (OB_SUCC(ret) && is_lob_storage(emp_expr->obj_meta_.get_type()) && need_set_lob_header) {
+            if (OB_SUCC(ret) && is_lob_storage(emp_expr->obj_meta_.get_type())) {
               emp_expr->obj_meta_.set_has_lob_header();
             }
             OX (col_info->empty_expr_id_ = spec.emp_default_exprs_.count());
@@ -8218,7 +8168,7 @@ int ObStaticEngineCG::generate_spec(ObLogStatCollector &op,
 int ObStaticEngineCG::set_properties_pre(const ObLogPlan &log_plan, ObPhysicalPlan &phy_plan)
 {
   int ret = OB_SUCCESS;
-  phy_plan.set_px_worker_share_plan_enabled(GCONF._px_worker_share_plan_enabled && GET_MIN_CLUSTER_VERSION() >= CLUSTER_VERSION_4_3_5_3);
+  phy_plan.set_px_worker_share_plan_enabled(GCONF._px_worker_share_plan_enabled);
   return ret;
 }
 
@@ -8289,7 +8239,6 @@ int ObStaticEngineCG::set_properties_post(const ObLogPlan &log_plan, ObPhysicalP
     phy_plan.set_need_consistent_snapshot(log_plan.need_consistent_read());
     phy_plan.set_is_inner_sql(my_session->is_inner());
     phy_plan.set_is_batch_params_execute(sql_ctx->is_batch_params_execute());
-    // only if all servers's version >= CLUSTER_VERSION_4_2_0_0
     if (OB_FAIL(phy_plan.set_expected_worker_map(log_plan.get_optimizer_context().get_expected_worker_map()))) {
       LOG_WARN("set expected worker map", K(ret));
     } else if (OB_FAIL(phy_plan.set_minimal_worker_map(log_plan.get_optimizer_context().get_minimal_worker_map()))) {
@@ -8632,8 +8581,7 @@ int ObStaticEngineCG::get_phy_op_type(ObLogicalOperator &log_op,
         int tmp_ret = OB_SUCCESS;
         tmp_ret = OB_E(EventTable::EN_DISABLE_VEC_SCALAR_GROUP_BY) OB_SUCCESS;
         bool use_vec2_merge_gby =
-          ((GET_MIN_CLUSTER_VERSION() >= CLUSTER_VERSION_4_3_3_0)
-           && (OB_SUCCESS == OB_E(EventTable::EN_DISABLE_VEC_MERGE_GBY) OB_SUCCESS));
+          ((OB_SUCCESS == OB_E(EventTable::EN_DISABLE_VEC_MERGE_GBY) OB_SUCCESS));
         if (op.is_pushdown_scalar_aggr() && OB_SUCC(tmp_ret) && use_rich_format
             && aggregate::Processor::all_supported_aggregate_functions(
               static_cast<ObLogGroupBy *>(&log_op)->get_aggr_funcs())) {
@@ -8725,7 +8673,7 @@ int ObStaticEngineCG::get_phy_op_type(ObLogicalOperator &log_op,
           type = PHY_NESTED_LOOP_JOIN;
           if (type == PHY_NESTED_LOOP_JOIN && use_rich_format &&
               op.get_plan()->get_optimizer_context().get_session_info()->is_nlj_spf_use_rich_format_enabled() &&
-              !op.enable_px_batch_rescan() && GET_MIN_CLUSTER_VERSION() >= CLUSTER_VERSION_4_3_5_0) {
+              !op.enable_px_batch_rescan()) {
             type = PHY_VEC_NESTED_LOOP_JOIN;
           }
           break;
@@ -8733,9 +8681,7 @@ int ObStaticEngineCG::get_phy_op_type(ObLogicalOperator &log_op,
         case MERGE_JOIN: {
           int tmp_ret = OB_SUCCESS;
           tmp_ret = OB_E(EventTable::EN_DISABLE_VEC_MERGE_JOIN) OB_SUCCESS;
-          bool use_vec2_merge_join = (GET_MIN_CLUSTER_VERSION() >= CLUSTER_VERSION_4_3_3_0);
-          if (OB_SUCCESS == tmp_ret && use_vec2_merge_join && use_rich_format
-             ) {
+          if (OB_SUCCESS == tmp_ret && use_rich_format) {
             type = PHY_VEC_MERGE_JOIN;
           } else {
             type = PHY_MERGE_JOIN;
@@ -8823,7 +8769,7 @@ int ObStaticEngineCG::get_phy_op_type(ObLogicalOperator &log_op,
         tmp_ret = OB_E(EventTable::EN_DISABLE_VEC_MERGE_DISTINCT) OB_SUCCESS;
         if (OB_SUCCESS != tmp_ret) {
           type = PHY_MERGE_DISTINCT;
-        } else if (use_rich_format && GET_MIN_CLUSTER_VERSION() >= CLUSTER_VERSION_4_3_2_0) {
+        } else if (use_rich_format) {
           type = PHY_VEC_MERGE_DISTINCT;
         } else {
           type = PHY_MERGE_DISTINCT;
@@ -8917,20 +8863,15 @@ int ObStaticEngineCG::get_phy_op_type(ObLogicalOperator &log_op,
     }
     case log_op_def::LOG_SET: {
       auto &op = static_cast<ObLogSet&>(log_op);
-      uint64_t min_cluster_version = GET_MIN_CLUSTER_VERSION();
       switch (op.get_set_op()) {
         case ObSelectStmt::UNION:
           if (op.is_recursive_union()) {
             type = PHY_RECURSIVE_UNION_ALL;
           } else {
-            if (use_rich_format && (min_cluster_version >= CLUSTER_VERSION_4_3_2_0)) {
+            if (use_rich_format) {
               bool use_vec = (EVENT_CALL(EventTable::EN_TEST_FOR_HASH_UNION) == OB_SUCCESS);
               if (use_vec) {
-                if (min_cluster_version >= CLUSTER_VERSION_4_3_5_0) {
-                  type = (MERGE_SET == op.get_algo() ? PHY_VEC_MERGE_UNION : PHY_VEC_HASH_UNION);
-                } else {
-                  type = (MERGE_SET == op.get_algo() ? PHY_MERGE_UNION : PHY_VEC_HASH_UNION);
-                }
+                type = (MERGE_SET == op.get_algo() ? PHY_VEC_MERGE_UNION : PHY_VEC_HASH_UNION);
               } else {
                 type = (MERGE_SET == op.get_algo() ? PHY_MERGE_UNION : PHY_HASH_UNION);
               }
@@ -8940,14 +8881,10 @@ int ObStaticEngineCG::get_phy_op_type(ObLogicalOperator &log_op,
           }
           break;
         case ObSelectStmt::INTERSECT:
-          if (use_rich_format && (min_cluster_version >= CLUSTER_VERSION_4_3_2_0)) {
+          if (use_rich_format) {
             bool use_vec = (EVENT_CALL(EventTable::EN_TEST_FOR_HASH_UNION) == OB_SUCCESS);
             if (use_vec) {
-              if (min_cluster_version >= CLUSTER_VERSION_4_3_5_0) {
-                type = (MERGE_SET == op.get_algo() ? PHY_VEC_MERGE_INTERSECT : PHY_VEC_HASH_INTERSECT);
-              } else {
-                type = (MERGE_SET == op.get_algo() ? PHY_MERGE_INTERSECT : PHY_VEC_HASH_INTERSECT);
-              }
+              type = (MERGE_SET == op.get_algo() ? PHY_VEC_MERGE_INTERSECT : PHY_VEC_HASH_INTERSECT);
             } else {
               type = (MERGE_SET == op.get_algo() ? PHY_MERGE_INTERSECT : PHY_HASH_INTERSECT);
             }
@@ -8956,14 +8893,10 @@ int ObStaticEngineCG::get_phy_op_type(ObLogicalOperator &log_op,
           }
           break;
         case ObSelectStmt::EXCEPT:
-          if (use_rich_format && (min_cluster_version >= CLUSTER_VERSION_4_3_2_0)) {
+          if (use_rich_format) {
             bool use_vec = (EVENT_CALL(EventTable::EN_TEST_FOR_HASH_UNION) == OB_SUCCESS);
             if (use_vec) {
-              if (min_cluster_version >= CLUSTER_VERSION_4_3_5_0) {
-                type = (MERGE_SET == op.get_algo() ? PHY_VEC_MERGE_EXCEPT : PHY_VEC_HASH_EXCEPT);
-              } else {
-                type = (MERGE_SET == op.get_algo() ? PHY_MERGE_EXCEPT : PHY_VEC_HASH_EXCEPT);
-              }
+              type = (MERGE_SET == op.get_algo() ? PHY_VEC_MERGE_EXCEPT : PHY_VEC_HASH_EXCEPT);
             } else {
               type = (MERGE_SET == op.get_algo() ? PHY_MERGE_EXCEPT : PHY_HASH_EXCEPT);
             }
@@ -8981,7 +8914,7 @@ int ObStaticEngineCG::get_phy_op_type(ObLogicalOperator &log_op,
       type = PHY_SUBPLAN_FILTER;
       if (!op.is_update_set() && use_rich_format &&
           op.get_plan()->get_optimizer_context().get_session_info()->is_nlj_spf_use_rich_format_enabled() &&
-          !op.is_px_batch_rescan_enabled() && GET_MIN_CLUSTER_VERSION() >= CLUSTER_VERSION_4_3_5_0) {
+          !op.is_px_batch_rescan_enabled()) {
         type = PHY_VEC_SUBPLAN_FILTER;
       } else {
         type = PHY_SUBPLAN_FILTER;
@@ -9003,9 +8936,8 @@ int ObStaticEngineCG::get_phy_op_type(ObLogicalOperator &log_op,
     case log_op_def::LOG_WINDOW_FUNCTION: {
       int tmp_ret = OB_SUCCESS;
       tmp_ret = OB_E(EventTable::EN_DISABLE_VEC_WINDOW_FUNCTION) OB_SUCCESS;
-      bool use_vec2_winfunc = (GET_MIN_CLUSTER_VERSION() >= CLUSTER_VERSION_4_3_2_0);
       if (OB_FAIL(ret)) {
-      } else if (use_rich_format && use_vec2_winfunc && tmp_ret == OB_SUCCESS
+      } else if (use_rich_format && tmp_ret == OB_SUCCESS
           && ObWindowFunctionVecOp::all_supported_winfuncs(
             static_cast<ObLogWindowFunction *>(&log_op)->get_window_exprs())) {
         type = PHY_VEC_WINDOW_FUNCTION;
@@ -9428,8 +9360,7 @@ int ObStaticEngineCG::check_op_vectorization(ObLogicalOperator *op, ObSqlSchemaG
     const uint64_t table_id = tsc->get_ref_table_id();
     const ObTableSchema *table_schema = nullptr;
     // support vectorization for sys table after 433
-    if ((GET_MIN_CLUSTER_VERSION() < CLUSTER_VERSION_4_3_3_0 && is_sys_table(table_id))
-        || is_virtual_table(table_id)) {
+    if (is_virtual_table(table_id)) {
       disable_vectorize = true;
     }
     bool is_col_store_tbl = false;

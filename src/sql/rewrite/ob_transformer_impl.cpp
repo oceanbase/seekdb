@@ -124,10 +124,6 @@ int ObTransformerImpl::set_transformation_parameters(ObQueryCtx *query_ctx)
   }
   if (OB_FAIL(ret)) {
     // do nothing
-  } else if (!query_ctx->check_opt_compat_version(COMPAT_VERSION_4_2_5, COMPAT_VERSION_4_3_0,
-                                                  COMPAT_VERSION_4_3_5) ||
-             query_ctx->get_query_hint().has_outline_data()) {
-    ctx_->cbqt_policy_ = TransPolicy::ENABLE_TRANS;
   } else if (OB_FAIL(session_info->get_optimizer_cost_based_transformation(opt_param_val))) {
     LOG_WARN("failed to get optimizer cost based transformation", K(ret));
   } else if (OB_FAIL(query_ctx->get_global_hint().opt_params_.get_integer_opt_param(

@@ -30233,9 +30233,7 @@ int ObDDLService::create_user(ObCreateUserArg &arg,
   if (OB_FAIL(ObCompatModeGetter::check_is_oracle_mode_with_tenant_id(arg.tenant_id_, is_oracle_mode))) {
     LOG_WARN("fail to check is oracle mode", K(ret));
   } else if (!is_oracle_mode && arg.is_create_role_) {
-    if (OB_FAIL(ObSQLUtils::compatibility_check_for_mysql_role_and_column_priv(arg.tenant_id_))) {
-      LOG_WARN("not support role while upgrading", K(ret));
-    } else if (OB_FAIL(create_mysql_roles_in_trans(arg.tenant_id_, arg.if_not_exist_, arg.user_infos_))) {
+    if (OB_FAIL(create_mysql_roles_in_trans(arg.tenant_id_, arg.if_not_exist_, arg.user_infos_))) {
       LOG_WARN("fail to create mysql roles", K(ret));
     }
   } else {
@@ -30348,9 +30346,7 @@ int ObDDLService::drop_user(const ObDropUserArg &arg,
     //mysql drop roles in one trans
     //either succeeds for all named roles or rolls back and has no effect if any error occurs
     bool has_any_role_not_exist = false;
-    if (OB_FAIL(ObSQLUtils::compatibility_check_for_mysql_role_and_column_priv(arg.tenant_id_))) {
-      LOG_WARN("not support role while upgrading", K(ret));
-    } else if (OB_FAIL(ddl_stmt_str.append("DROP ROLE "))) {
+    if (OB_FAIL(ddl_stmt_str.append("DROP ROLE "))) {
       LOG_WARN("fail to append str", K(ret));
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < arg.users_.count(); ++i) {
@@ -31141,9 +31137,6 @@ int ObDDLService::grant(const ObGrantArg &arg)
           // Resolve each role id and role info
           bool is_oracle_mode = lib::Worker::CompatMode::ORACLE == compat_mode;
           int64_t step = is_oracle_mode ? 1 : 2;
-          if (!is_oracle_mode) {
-            OZ (ObSQLUtils::compatibility_check_for_mysql_role_and_column_priv(tenant_id));
-          }
           for (int64_t i = GRANT_ROLE_MIN_ROLE_NUM - 1; OB_SUCC(ret) && i + step <= roles.count(); i+=step) {
             // Oracle currently does not support specifying hostname to create a role
             const ObString host_name = is_oracle_mode ? ObString(OB_DEFAULT_HOST_NAME) : roles.at(i+1);
@@ -31403,9 +31396,6 @@ int ObDDLService::revoke(const ObRevokeUserArg &arg)
     ObArray<uint64_t> role_ids;
     bool is_oracle_mode = false;
     OZ (ObCompatModeGetter::check_is_oracle_mode_with_tenant_id(tenant_id, is_oracle_mode));
-    if (OB_SUCC(ret) && !is_oracle_mode) {
-      OZ (ObSQLUtils::compatibility_check_for_mysql_role_and_column_priv(tenant_id));
-    }
     for (int64_t i = 0; OB_SUCC(ret) && i < arg.role_ids_.count(); ++i) {
       const uint64_t role_id = arg.role_ids_.at(i);
       const ObUserInfo *role_info = NULL;

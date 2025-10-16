@@ -2198,8 +2198,6 @@ int ObTransformPredicateMoveAround::pushdown_into_qualify_filter(ObIArray<ObRawE
   if (OB_ISNULL(ctx_) && OB_ISNULL(ctx_->session_info_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null", K(ret));
-  } else if (GET_MIN_CLUSTER_VERSION() < CLUSTER_VERSION_4_3_0_0) {
-    //do nothing
   } else if (!ctx_->session_info_->is_qualify_filter_enabled()) {
     //do nothing
   } else if (OB_FAIL(qualify_filters.assign(sel_stmt.get_qualify_filters()))) {
@@ -2263,7 +2261,7 @@ int ObTransformPredicateMoveAround::check_pushdown_through_groupby_validity(ObSe
   } else {
     is_valid = true;
   }
-  if (OB_SUCC(ret) && !is_valid && query_ctx->check_opt_compat_version(COMPAT_VERSION_4_3_5_BP3)) {
+  if (OB_SUCC(ret) && !is_valid) {
     block_by_groupby = false;
     block_by_rollup = false;
     if (OB_FAIL(ObOptimizerUtil::expr_calculable_by_exprs(having_expr, stmt.get_group_exprs(),

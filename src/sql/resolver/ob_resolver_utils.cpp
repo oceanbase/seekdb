@@ -312,7 +312,7 @@ inline bool ObResolverUtils::is_collection_support_type(const ObObjType type)
           type == ObVarcharType || type == ObCollectionSQLType);
 }
 
-int ObResolverUtils::resolve_collection_type_info(const uint64_t tenant_data_version, const ParseNode &type_node, ObStringBuffer &buf, uint8_t &depth)
+int ObResolverUtils::resolve_collection_type_info(const ParseNode &type_node, ObStringBuffer &buf, uint8_t &depth)
 {
   int ret = OB_SUCCESS;
   bool is_stack_overflow = false;
@@ -331,7 +331,7 @@ int ObResolverUtils::resolve_collection_type_info(const uint64_t tenant_data_ver
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "ARRAY DEPTH exceeds the maximum allowed(6)");
   } else if (type_node.int32_values_[0] == 0) {
     // array type
-    if (OB_FAIL(ObResolverUtils::resolve_array_type_info(tenant_data_version, type_node, buf, depth))) {
+    if (OB_FAIL(ObResolverUtils::resolve_array_type_info(type_node, buf, depth))) {
       LOG_WARN("failed to resolve array type info", K(ret));
     }
   } else if (type_node.int32_values_[0] == 1) {
@@ -341,20 +341,12 @@ int ObResolverUtils::resolve_collection_type_info(const uint64_t tenant_data_ver
     }
   } else if (type_node.int32_values_[0] == 2) {
     // map type
-    if (tenant_data_version < DATA_VERSION_4_3_5_2) {
-      ret = OB_NOT_SUPPORTED;
-      LOG_WARN("tenant data version is less than 4.3.5.2, map type not supported", K(ret), K(tenant_data_version));
-      LOG_USER_ERROR(OB_NOT_SUPPORTED, "tenant data version is less than 4.3.5.2, map type");
-    } else if (OB_FAIL(ObResolverUtils::resolve_map_type_info(tenant_data_version, type_node, buf, depth))) {
+    if (OB_FAIL(ObResolverUtils::resolve_map_type_info(type_node, buf, depth))) {
       LOG_WARN("failed to resolve map type info", K(ret));
     }
   } else if (type_node.int32_values_[0] == 3) {
     // sparse vector type
-    if (tenant_data_version < DATA_VERSION_4_3_5_2) {
-      ret = OB_NOT_SUPPORTED;
-      LOG_WARN("tenant data version is less than 4.3.5.2, sparse vector type not supported", K(ret), K(tenant_data_version));
-      LOG_USER_ERROR(OB_NOT_SUPPORTED, "tenant data version is less than 4.3.5.2, map type");
-    } else if (OB_FAIL(ObResolverUtils::resolve_sparse_vector_type_info(type_node, buf, depth))) {
+    if (OB_FAIL(ObResolverUtils::resolve_sparse_vector_type_info(type_node, buf, depth))) {
       LOG_WARN("failed to resolve sparse vector type info", K(ret));
     }
   } else {
@@ -406,7 +398,7 @@ int ObResolverUtils::resolve_basic_type_info(const ParseNode &type_node, ObStrin
   return ret;
 }
 
-int ObResolverUtils::resolve_array_type_info(const uint64_t tenant_data_version, const ParseNode &type_node, ObStringBuffer &buf, uint8_t &depth)
+int ObResolverUtils::resolve_array_type_info(const ParseNode &type_node, ObStringBuffer &buf, uint8_t &depth)
 {
   int ret = OB_SUCCESS;
   bool is_stack_overflow = false;
@@ -430,8 +422,8 @@ int ObResolverUtils::resolve_array_type_info(const uint64_t tenant_data_version,
     // currently not support nested map
     ret = OB_NOT_SUPPORTED;
     LOG_WARN("the map value cannot be collection type", K(ret));
-  } else if (type_node.children_[0]->type_ == T_COLLECTION 
-             && OB_FAIL(resolve_collection_type_info(tenant_data_version, *type_node.children_[0], buf, depth))) {
+  } else if (type_node.children_[0]->type_ == T_COLLECTION
+             && OB_FAIL(resolve_collection_type_info(*type_node.children_[0], buf, depth))) {
       LOG_WARN("failed to resolve collection type info", K(ret));
   } else if (type_node.children_[0]->type_ != T_COLLECTION
              && OB_FAIL(resolve_basic_type_info(*type_node.children_[0], buf))) {
@@ -481,7 +473,7 @@ int ObResolverUtils::resolve_vector_type_info(const ParseNode &type_node, ObStri
   return ret;
 }
 
-int ObResolverUtils::resolve_map_type_info(const uint64_t tenant_data_version, const ParseNode &type_node, ObStringBuffer &buf, uint8_t &depth)
+int ObResolverUtils::resolve_map_type_info(const ParseNode &type_node, ObStringBuffer &buf, uint8_t &depth)
 {
   int ret = OB_SUCCESS;
   bool is_stack_overflow = false;
@@ -513,8 +505,8 @@ int ObResolverUtils::resolve_map_type_info(const uint64_t tenant_data_version, c
     // currently not support nested map
     ret = OB_NOT_SUPPORTED;
     LOG_WARN("the map value cannot be collection type", K(ret), K(type_node.children_[1]->type_));
-  } else if (type_node.children_[1]->type_ == T_COLLECTION 
-             && OB_FAIL(resolve_collection_type_info(tenant_data_version, *type_node.children_[1], buf, depth))) {
+  } else if (type_node.children_[1]->type_ == T_COLLECTION
+             && OB_FAIL(resolve_collection_type_info(*type_node.children_[1], buf, depth))) {
       LOG_WARN("failed to resolve collection type info", K(ret));
   } else if (type_node.children_[1]->type_ != T_COLLECTION
              && OB_FAIL(resolve_basic_type_info(*type_node.children_[1], buf))) {
@@ -2993,7 +2985,6 @@ bool ObResolverUtils::is_valid_partition_column_type(const ObObjType type,
       ObMySQLDateTimeTC == type_class || ObMySQLDateTC == type_class) {
       bret = true;
     } else if (PARTITION_FUNC_TYPE_RANGE_COLUMNS == part_type &&
-                GET_MIN_CLUSTER_VERSION() >= CLUSTER_VERSION_4_3_0_1 &&
                 is_partition_range_column_type(type)) {
       /*
         if the cluster version is greater than 4_3_0_1, we then make
@@ -4722,12 +4713,7 @@ int ObResolverUtils::resolve_generated_column_expr(ObResolverParams &params,
         }
       }
       if (OB_SUCC(ret)) {
-        uint64_t tenant_data_version = 0;
-        if (OB_FAIL(GET_MIN_DATA_VERSION(session_info->get_effective_tenant_id(), tenant_data_version))) {
-          LOG_WARN("get tenant data version failed", K(ret));
-        } else if (tenant_data_version < DATA_VERSION_4_2_2_0) {
-          //do nothing
-        } else if (OB_ISNULL(expr_with_implicit_cast)) {
+        if (OB_ISNULL(expr_with_implicit_cast)) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("unexpected null", K(ret), KP(expr_with_implicit_cast));
         } else {
@@ -5687,14 +5673,6 @@ int ObResolverUtils::resolve_data_type(const ParseNode &type_node,
       }
       break;
     case ObJsonTC:
-      if (is_oracle_mode && !is_for_pl_type) {
-        if (OB_FAIL(GET_MIN_DATA_VERSION(tenant_id, data_version))) {
-          LOG_WARN("get tenant data version failed", K(ret));
-        } else if (data_version < DATA_VERSION_4_1_0_0) {
-          ret = OB_NOT_SUPPORTED;
-          LOG_USER_ERROR(OB_NOT_SUPPORTED, "create json column before cluster min version 4.1.");
-        }
-      }
       if (OB_SUCC(ret)) {
         data_type.set_length(length);
         data_type.set_scale(default_accuracy.get_scale());
@@ -5703,18 +5681,10 @@ int ObResolverUtils::resolve_data_type(const ParseNode &type_node,
       }
       break;
     case ObGeometryTC: {
-      uint64_t tenant_data_version = 0;
-      if (OB_FAIL(GET_MIN_DATA_VERSION(tenant_id, tenant_data_version))) {
-        LOG_WARN("get tenant data version failed", K(ret));
-      } else if (tenant_data_version < DATA_VERSION_4_1_0_0) {
-        ret = OB_NOT_SUPPORTED;
-        LOG_USER_ERROR(OB_NOT_SUPPORTED, "tenant version is less than 4.1, geometry type");
-      } else {
-        data_type.set_length(length);
-        data_type.set_scale(default_accuracy.get_scale());
-        data_type.set_charset_type(CHARSET_BINARY);
-        data_type.set_collation_type(CS_TYPE_BINARY);        
-      }
+      data_type.set_length(length);
+      data_type.set_scale(default_accuracy.get_scale());
+      data_type.set_charset_type(CHARSET_BINARY);
+      data_type.set_collation_type(CS_TYPE_BINARY);
       break;
     }
     case ObBitTC:
@@ -5744,12 +5714,7 @@ int ObResolverUtils::resolve_data_type(const ParseNode &type_node,
       //  data_type.set_obj_type(ObUserDefinedSQLType);
       //  data_type.set_subschema_id(ObXMLSqlType);
       //} else {
-        if (OB_FAIL(GET_MIN_DATA_VERSION(tenant_id, data_version))) {
-          LOG_WARN("get tenant data version failed", K(ret));
-        } else if (data_version < DATA_VERSION_4_2_0_0) {
-          ret = OB_NOT_SUPPORTED;
-          LOG_USER_ERROR(OB_NOT_SUPPORTED, "create extend column before cluster min version 4.2.");
-        } else if (is_oracle_mode) {
+        if (is_oracle_mode) {
           data_type.set_length(length);
           data_type.set_charset_type(CHARSET_BINARY);
           data_type.set_collation_type(CS_TYPE_INVALID);
@@ -5757,34 +5722,18 @@ int ObResolverUtils::resolve_data_type(const ParseNode &type_node,
       //}
       break;
     case ObCollectionSQLTC: {
-      uint64_t tenant_data_version = 0;
       length = 0;
-      if (OB_FAIL(GET_MIN_DATA_VERSION(tenant_id, tenant_data_version))) {
-        LOG_WARN("get tenant data version failed", K(ret));
-      } else if (tenant_data_version < DATA_VERSION_4_3_3_0) {
-        ret = OB_NOT_SUPPORTED;
-        LOG_USER_ERROR(OB_NOT_SUPPORTED, "tenant version is less than 4.3.3, array type");
-      } else {
-        data_type.set_length(length);
-        data_type.set_scale(default_accuracy.get_scale());
-        data_type.set_charset_type(CHARSET_BINARY);
-        data_type.set_collation_type(CS_TYPE_INVALID);     
-      }
+      data_type.set_length(length);
+      data_type.set_scale(default_accuracy.get_scale());
+      data_type.set_charset_type(CHARSET_BINARY);
+      data_type.set_collation_type(CS_TYPE_INVALID);
       break;
     }
     case ObRoaringBitmapTC: {
-      uint64_t tenant_data_version = 0;
-      if (OB_FAIL(GET_MIN_DATA_VERSION(tenant_id, tenant_data_version))) {
-        LOG_WARN("get tenant data version failed", K(ret));
-      } else if (tenant_data_version < DATA_VERSION_4_3_2_0) {
-        ret = OB_NOT_SUPPORTED;
-        LOG_USER_ERROR(OB_NOT_SUPPORTED, "tenant version is less than 4.3.2, roaringbitmap type");
-      } else {
-        data_type.set_length(length);
-        data_type.set_scale(default_accuracy.get_scale());
-        data_type.set_charset_type(CHARSET_BINARY);
-        data_type.set_collation_type(CS_TYPE_BINARY);        
-      }
+      data_type.set_length(length);
+      data_type.set_scale(default_accuracy.get_scale());
+      data_type.set_charset_type(CHARSET_BINARY);
+      data_type.set_collation_type(CS_TYPE_BINARY);
       break;
     }
     default:
@@ -6010,16 +5959,6 @@ int ObResolverUtils::foreign_key_column_match_index_column(const ObTableSchema &
   int ret = OB_SUCCESS;
   is_match = false;
   uint64_t tenant_version;
-  bool allow_non_unique = false;
-  if (OB_FAIL(GET_MIN_DATA_VERSION(parent_table_schema.get_tenant_id(), tenant_version))) {
-    LOG_WARN("get tenant data version failed", K(ret), K(parent_table_schema.get_tenant_id()));
-  } else {
-    // In versions [4253, 430) and [4351, ) and non-Oracle mode enable
-    allow_non_unique = !is_oracle_mode &&
-                       (tenant_version >= DATA_VERSION_4_3_5_1 ||
-                        (tenant_version >= MOCK_DATA_VERSION_4_2_5_3 &&
-                         tenant_version < DATA_VERSION_4_3_0_0));
-  }
   // Prioritize match pk, uk, if neither exists then match non-unique index.
   // match pk, uk if fk_ref_type will be PRIMARY_KEY or UNIQUE, match non-unique index if it is NON_UNIQUE.
   // Behavior: if there are multiple match non-unique indexes, choose the last one. If there are multiple match pk, uk, choose the first one.
@@ -6048,15 +5987,10 @@ int ObResolverUtils::foreign_key_column_match_index_column(const ObTableSchema &
     // Check if the foreign key column of the parent table matches the primary key column
     // check_match_columns: Only allow complete match. E.g. (a, b, c) matches (a, b, c)
     // check_partial_match_columns: allow matching a prefix, such as (a, b) matching (a, b, c)
-    if (!allow_non_unique) {
-      if (OB_FAIL(check_match_columns(parent_columns, pk_columns, tmp_is_match))) {
-        LOG_WARN("Failed to check_match_columns", K(ret));
-      }
-    } else {
-      if (OB_FAIL(check_partial_match_columns(parent_columns, pk_columns, tmp_is_match))) {
-        LOG_WARN("Failed to check_partial_match_columns", K(ret));
-      } 
+    if (OB_FAIL(check_partial_match_columns(parent_columns, pk_columns, tmp_is_match))) {
+      LOG_WARN("Failed to check_partial_match_columns", K(ret));
     }
+
     if (OB_FAIL(ret)) {
       // do nothing
     } else if (tmp_is_match) {
@@ -6100,15 +6034,6 @@ int ObResolverUtils::foreign_key_column_match_index_column(const ObTableSchema &
             }
 
             if (OB_FAIL(ret)) {
-            } else if (!allow_non_unique) {
-              if (index_arg.is_unique_primary_index()) {
-                if (OB_FAIL(check_match_columns(parent_columns, key_columns, is_pk_uk_match))) {
-                  LOG_WARN("Failed to check_match_columns", K(ret));
-                } else if (is_pk_uk_match) {
-                  is_match = true;
-                  fk_ref_type = FK_REF_TYPE_UNIQUE_KEY;
-                }
-              }
             } else {
               if (OB_FAIL(check_partial_match_columns(parent_columns, key_columns, tmp_is_match))) {
                 LOG_WARN("Failed to check_partial_match_columns", K(ret));
@@ -6142,8 +6067,6 @@ int ObResolverUtils::foreign_key_column_match_index_column(const ObTableSchema &
         } else if (OB_ISNULL(index_table_schema)) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("table schema should not be null", K(ret));
-        } else if (!allow_non_unique && !index_table_schema->is_unique_index()) {
-          // do nothing
         } else {
           const ObColumnSchemaV2 *index_col = NULL;
           const ObIndexInfo &index_info = index_table_schema->get_index_info();
@@ -6162,15 +6085,6 @@ int ObResolverUtils::foreign_key_column_match_index_column(const ObTableSchema &
 
           if (OB_FAIL(ret)) {
             // do nothing
-          } else if (!allow_non_unique) {
-            // Only allow matching all columns of a unique index
-            if (OB_FAIL(check_match_columns(parent_columns, key_columns, is_pk_uk_match))) {
-              LOG_WARN("Failed to check_match_columns", K(ret));
-            } else if (is_pk_uk_match) {
-              is_match = true;
-              fk_ref_type = FK_REF_TYPE_UNIQUE_KEY;
-            }
-            ref_cst_id = index_table_schema->get_table_id();
           } else {
             if (OB_FAIL(check_partial_match_columns(parent_columns, key_columns, tmp_is_match))) {
               LOG_WARN("Failed to check_partial_match_columns", K(ret));
@@ -8372,18 +8286,9 @@ int ObResolverUtils::resolve_file_format(const ParseNode *node, ObExternalFileFo
       }
       case ObItemType::T_TABLE_MODE:
       case ObItemType::T_SPLIT_ACTION: {
-        uint64_t data_version = 0;
-        uint64_t tenant_id = OB_INVALID_ID;
         if (OB_ISNULL(params.session_info_)) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("unexcepted null ptr", K(ret));
-        } else if (FALSE_IT(tenant_id = params.session_info_->get_effective_tenant_id())) {
-        } else if (OB_FAIL(GET_MIN_DATA_VERSION(tenant_id, data_version))) {
-          LOG_WARN("failed to get data version", K(ret));
-        } else if (data_version < DATA_VERSION_4_3_5_3 || GET_MIN_CLUSTER_VERSION() < CLUSTER_VERSION_4_3_5_3) {
-          ret = OB_NOT_SUPPORTED;
-          LOG_WARN("not support odps external table under CLUSTER_VERSION_4_3_5_3 or data version uner DATA_VERSION_4_3_5_3", K(ret));
-          LOG_USER_ERROR(OB_NOT_SUPPORTED, "odps external table");
         } else {
           if (node->type_ == T_TABLE_MODE) {
             ObString temp_table_mode = ObString(node->children_[0]->str_len_, node->children_[0]->str_value_).trim_space_only();
@@ -8519,46 +8424,30 @@ int ObResolverUtils::resolve_file_format(const ParseNode *node, ObExternalFileFo
         break;
       }
       case T_PARSE_HEADER: {
-        if (GET_MIN_CLUSTER_VERSION() < CLUSTER_VERSION_4_3_5_1) {
-          ret = OB_NOT_SUPPORTED;
-          LOG_USER_ERROR(OB_NOT_SUPPORTED, "cluster version is less than 4.3.5.1, parse_header");
+        if (format.csv_format_.skip_header_lines_ > 0) {
+          ret = OB_SKIP_PARSE_HEADER_CONFLICT;
+          LOG_USER_ERROR(OB_SKIP_PARSE_HEADER_CONFLICT);
+          LOG_WARN("failed. skip_header and parse_header cannot be used at the same time", K(ret));
         } else {
-          if (format.csv_format_.skip_header_lines_ > 0) {
-            ret = OB_SKIP_PARSE_HEADER_CONFLICT;
-            LOG_USER_ERROR(OB_SKIP_PARSE_HEADER_CONFLICT);
-            LOG_WARN("failed. skip_header and parse_header cannot be used at the same time", K(ret));
-          } else {
-            format.csv_format_.parse_header_ = node->children_[0]->value_;
-            if (format.csv_format_.parse_header_ && format.csv_format_.skip_header_lines_ == 0) {
-              format.csv_format_.skip_header_lines_ = 1;
-            }
+          format.csv_format_.parse_header_ = node->children_[0]->value_;
+          if (format.csv_format_.parse_header_ && format.csv_format_.skip_header_lines_ == 0) {
+            format.csv_format_.skip_header_lines_ = 1;
           }
         }
         break;
       }
       case T_BINARY_FORMAT: {
-        if (GET_MIN_CLUSTER_VERSION() < CLUSTER_VERSION_4_3_5_1) {
-          ret = OB_NOT_SUPPORTED;
-          LOG_USER_ERROR(OB_NOT_SUPPORTED, "cluster version is less than 4.3.5.1, binary_format");
-        } else if (OB_FAIL(ObResolverUtils::resolve_binary_format(node, format))) {
+        if (OB_FAIL(ObResolverUtils::resolve_binary_format(node, format))) {
           LOG_WARN("failed to resolve file binary format", K(ret));
         }
         break;
       }
       case T_IGNORE_LAST_EMPTY_COLUMN: {
-        if (GET_MIN_CLUSTER_VERSION() < CLUSTER_VERSION_4_3_5_2) {
-          ret = OB_NOT_SUPPORTED;
-          LOG_USER_ERROR(OB_NOT_SUPPORTED, "cluster version is less than 4.3.5.2, ignore_last_empty_column");
-        } else {
-          format.csv_format_.ignore_last_empty_col_ = node->children_[0]->value_;
-        }
+        format.csv_format_.ignore_last_empty_col_ = node->children_[0]->value_;
         break;
       }
       case T_COLUMN_INDEX_TYPE: {
-        if (GET_MIN_CLUSTER_VERSION() < CLUSTER_VERSION_4_3_5_3) {
-          ret = OB_NOT_SUPPORTED;
-          LOG_USER_ERROR(OB_NOT_SUPPORTED, "cluster version is less than 4.3.5.3, column_index_type");
-        } else if (OB_FAIL(ObResolverUtils::resolve_column_index_type(node, format))) {
+        if (OB_FAIL(ObResolverUtils::resolve_column_index_type(node, format))) {
           LOG_WARN("failed to resolve column index type", K(ret));
         }
         break;
@@ -8962,18 +8851,11 @@ int ObResolverUtils::fast_get_param_type(const ParseNode &node,
 }
 
 int ObResolverUtils::check_allowed_alter_operations_for_mlog(
-    const uint64_t tenant_id,
     const obrpc::ObAlterTableArg &arg,
     const share::schema::ObTableSchema &table_schema)
 {
   int ret = OB_SUCCESS;
-  uint64_t tenant_version = 0;
-  if (OB_FAIL(GET_MIN_DATA_VERSION(tenant_id, tenant_version))) {
-    SQL_RESV_LOG(WARN, "failed to get data version", K(ret));
-  } else if (tenant_version < DATA_VERSION_4_3_0_0) {
-    ret = OB_NOT_SUPPORTED;
-    LOG_USER_ERROR(OB_NOT_SUPPORTED, "mview before 4.3 is");
-  } else if (table_schema.is_mlog_table()) {
+  if (table_schema.is_mlog_table()) {
     ret = OB_NOT_SUPPORTED;
     LOG_WARN("alter materialized view log is not supported", KR(ret));
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "alter materialized view log is");

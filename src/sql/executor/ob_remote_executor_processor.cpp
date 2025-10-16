@@ -61,8 +61,7 @@ int ObRemoteBaseExecuteP<T>::base_before_process(int64_t tenant_schema_version,
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("schema service or sql engine is NULL", K(ret),
               K(gctx_.schema_service_), K(gctx_.sql_engine_));
-  } else if (GET_MIN_CLUSTER_VERSION() >= CLUSTER_VERSION_4_1_0_0 &&
-      (tenant_schema_version == OB_INVALID_VERSION || sys_schema_version == OB_INVALID_VERSION)) {
+  } else if (tenant_schema_version == OB_INVALID_VERSION || sys_schema_version == OB_INVALID_VERSION) {
     // For 4.1 and later versions, it is not allowed to pass schema_version as -1
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid tenant_schema_version and sys_schema_version", K(ret),
@@ -667,7 +666,6 @@ int ObRemoteBaseExecuteP<T>::execute_with_sql(ObRemoteTask &task)
     {
       ObMaxWaitGuard max_wait_guard(enable_perf_event ? &max_wait_desc : nullptr);
       ObTotalWaitGuard total_wait_guard(enable_perf_event ? &total_wait_desc : nullptr);
-      uint64_t min_data_version = 0;
       share::ObLSArray new_ls_list;
 
       if (enable_perf_event) {
@@ -687,9 +685,7 @@ int ObRemoteBaseExecuteP<T>::execute_with_sql(ObRemoteTask &task)
       } else if (OB_ISNULL(plan)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("plan is null", K(ret));
-      } else if (OB_FAIL(GET_MIN_DATA_VERSION(session->get_effective_tenant_id(), min_data_version))) {
-        LOG_WARN("GET_MIN_DATA_VERSION failed", K(ret));
-      } else if (OB_LIKELY(min_data_version >= DATA_VERSION_4_3_5_1)) {
+      } else {
         if (OB_FAIL(DAS_CTX(exec_ctx_).get_all_lsid(new_ls_list))) {
           LOG_WARN("get ls list failed", K(ret));
         } else if(!task.check_ls_list(new_ls_list)) {

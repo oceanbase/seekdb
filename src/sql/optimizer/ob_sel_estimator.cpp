@@ -1657,9 +1657,6 @@ int ObLikeSelEstimator::get_sel(const OptTableMetas &table_metas,
   } else if (is_lob_storage(variable_->get_data_type())) {
     // no statistics for lob type, use default selectivity
     selectivity = DEFAULT_LIKE_SEL;
-  } else if (!ctx.check_opt_compat_version(COMPAT_VERSION_4_2_4, COMPAT_VERSION_4_3_0,
-                                           COMPAT_VERSION_4_3_3)) {
-    selectivity = DEFAULT_INEQ_SEL;
   } else if (OB_FAIL(calculate_like_sel_by_substr(table_metas,
                                                   ctx,
                                                   selectivity))) {
@@ -3254,10 +3251,7 @@ int ObUniformRangeSelEstimator::create_estimator(ObSelEstimatorFactory &factory,
   const ObRawExpr *param_expr = NULL;
   SimpleRange range;
   bool is_not_op = false;
-  if (!ctx.check_opt_compat_version(COMPAT_VERSION_4_2_4, COMPAT_VERSION_4_3_0,
-                                    COMPAT_VERSION_4_3_3)) {
-    // do nothing
-  } else if (OB_FAIL(get_expr_range(ctx, expr, param_expr, range, is_not_op, is_valid))) {
+  if (OB_FAIL(get_expr_range(ctx, expr, param_expr, range, is_not_op, is_valid))) {
     LOG_WARN("failed to get the range form", K(ret), K(expr));
   } else if (!is_valid) {
     // do nothing

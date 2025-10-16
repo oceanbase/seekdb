@@ -157,21 +157,13 @@ int ObDtlBcastService::send_message(ObDtlLinkedBuffer *&bcast_buf, bool drain)
           LOG_WARN("start message process fail", K(ret));
         }
       }
-      bool send_by_tenant = GET_MIN_CLUSTER_VERSION() >= CLUSTER_VERSION_4_3_5_0;
       if (OB_SUCC(ret)) {
-        if (send_by_tenant
-            && OB_FAIL(DTL.get_rpc_proxy()
+        if (OB_FAIL(DTL.get_rpc_proxy()
                        .to(server_addr_)
                        .group_id(share::OBCG_DTL)
                        .by(tenant_id_)
                        .timeout(timeout_us)
                        .ap_send_bc_message(args, &cb))) {
-          LOG_WARN("failed to seed message", K(ret));
-        } else if (!send_by_tenant
-                   && OB_FAIL(DTL.get_rpc_proxy()
-                                 .to(server_addr_)
-                                 .timeout(timeout_us)
-                                 .ap_send_bc_message(args, &cb))) {
           LOG_WARN("failed to seed message", K(ret));
         } else {
           // all rpc channel in this service has send this msg. this buffer will be release in agent.

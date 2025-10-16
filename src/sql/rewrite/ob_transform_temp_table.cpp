@@ -160,18 +160,12 @@ int ObTransformTempTable::generate_with_clause(ObDMLStmt *&stmt, bool &trans_hap
   } else if (!ObOptimizerUtil::find_item(ctx_->temp_table_ignore_stmts_, stmt) &&
              OB_FAIL(ObTransformUtils::get_all_child_stmts(stmt, child_stmts, &parent_map, &ctx_->temp_table_ignore_stmts_))) {
     LOG_WARN("failed to get all child stmts", K(ret));
-  } else if (stmt->get_query_ctx()->check_opt_compat_version(COMPAT_VERSION_4_2_5, COMPAT_VERSION_4_3_0, COMPAT_VERSION_4_3_5)) {
+  } else {
     if (OB_FAIL(get_all_view_stmts(stmt, view_stmts))) {
       LOG_WARN("failed to get non correlated subquery", K(ret));
-    } else if (OB_FAIL(ObOptimizerUtil::intersect(child_stmts, view_stmts, child_stmts))) { 
+    } else if (OB_FAIL(ObOptimizerUtil::intersect(child_stmts, view_stmts, child_stmts))) {
       LOG_WARN("failed to intersect child stmts", K(ret));
-    } 
-  } else {
-    if (OB_FAIL(get_non_correlated_subquery(stmt, non_correlated_stmts))) {
-      LOG_WARN("failed to get non correlated subquery", K(ret));
-    } else if (OB_FAIL(ObOptimizerUtil::intersect(child_stmts, non_correlated_stmts, child_stmts))) { 
-      LOG_WARN("failed to intersect child stmts", K(ret));
-    } 
+    }
   }
 
   if (OB_FAIL(ret)) {
@@ -268,8 +262,7 @@ int ObTransformTempTable::try_inline_temp_table(ObDMLStmt *stmt,
     }
 
     if (OB_FAIL(ret)) {
-    } else if (stmt->get_query_ctx()->check_opt_compat_version(COMPAT_VERSION_4_2_5, COMPAT_VERSION_4_3_0, COMPAT_VERSION_4_3_5) &&
-               need_check_cost && 
+    } else if (need_check_cost &&
                OB_FAIL(check_inline_temp_table_by_cost(stmt, helper, need_inline))) {
       LOG_WARN("failed to check inline temp table by cost", K(ret));
     } else if (!need_inline) {
@@ -1262,17 +1255,7 @@ int ObTransformTempTable::create_temp_table(ObDMLStmt &root_stmt,
     trans_happened = false;
     common::ObSEArray<ObSelectStmt *, 2> accept_stmts;
     ObString temp_query_name;
-    bool use_new_accept_func = root_stmt.get_query_ctx()->check_opt_compat_version(
-                          COMPAT_VERSION_4_2_5, COMPAT_VERSION_4_3_0, COMPAT_VERSION_4_3_5);
-    if (!use_new_accept_func &&
-        OB_FAIL(accept_cte_transform(root_stmt, temp_table,
-                                    origin_stmts, trans_stmts,
-                                    accept_stmts, parent_map, 
-                                    !compare_info.hint_force_stmt_set_.empty(),
-                                    trans_happened))) {
-      LOG_WARN("failed to accept transform", K(ret));
-    } else if (use_new_accept_func &&
-               OB_FAIL(accept_cte_transform_v2(root_stmt, temp_table,
+    if (OB_FAIL(accept_cte_transform_v2(root_stmt, temp_table,
                                               origin_stmts, trans_stmts,
                                               accept_stmts, parent_map, 
                                               !compare_info.hint_force_stmt_set_.empty(),

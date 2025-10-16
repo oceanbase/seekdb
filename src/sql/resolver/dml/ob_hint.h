@@ -372,35 +372,10 @@ struct ObGlobalHint {
   int assign(const ObGlobalHint &other);
 
 // optimizer version define, move defines below to other file later
-#define COMPAT_VERSION_4_0        (oceanbase::common::cal_version(4, 0, 0, 0))
-#define COMPAT_VERSION_4_2_1      (oceanbase::common::cal_version(4, 2, 1, 0))
-//#define COMPAT_VERSION_4_2_1_BP3  (oceanbase::common::cal_version(4, 2, 1, 3))
-#define COMPAT_VERSION_4_2_1_BP4  (oceanbase::common::cal_version(4, 2, 1, 4))
-#define COMPAT_VERSION_4_2_1_BP5  (oceanbase::common::cal_version(4, 2, 1, 5))
-#define COMPAT_VERSION_4_2_1_BP7  (oceanbase::common::cal_version(4, 2, 1, 7))
-#define COMPAT_VERSION_4_2_1_BP8  (oceanbase::common::cal_version(4, 2, 1, 8))
-#define COMPAT_VERSION_4_2_1_BP9  (oceanbase::common::cal_version(4, 2, 1, 9))
-#define COMPAT_VERSION_4_2_1_BP10 (oceanbase::common::cal_version(4, 2, 1, 10))
-#define COMPAT_VERSION_4_2_2      (oceanbase::common::cal_version(4, 2, 2, 0))
-#define COMPAT_VERSION_4_2_1_BP10 (oceanbase::common::cal_version(4, 2, 1, 10))
-#define COMPAT_VERSION_4_2_3      (oceanbase::common::cal_version(4, 2, 3, 0))
-#define COMPAT_VERSION_4_2_4      (oceanbase::common::cal_version(4, 2, 4, 0))
-#define COMPAT_VERSION_4_2_5      (oceanbase::common::cal_version(4, 2, 5, 0))
-#define COMPAT_VERSION_4_2_5_BP1  (oceanbase::common::cal_version(4, 2, 5, 1))
-#define COMPAT_VERSION_4_2_5_BP3  (oceanbase::common::cal_version(4, 2, 5, 3))
-#define COMPAT_VERSION_4_2_5_BP4  (oceanbase::common::cal_version(4, 2, 5, 4))
-#define COMPAT_VERSION_4_3_0      (oceanbase::common::cal_version(4, 3, 0, 0))
-#define COMPAT_VERSION_4_3_1      (oceanbase::common::cal_version(4, 3, 1, 0))
-#define COMPAT_VERSION_4_3_2      (oceanbase::common::cal_version(4, 3, 2, 0))
-#define COMPAT_VERSION_4_3_3      (oceanbase::common::cal_version(4, 3, 3, 0))
-#define COMPAT_VERSION_4_3_4      (oceanbase::common::cal_version(4, 3, 4, 0))
-#define COMPAT_VERSION_4_3_5      (oceanbase::common::cal_version(4, 3, 5, 0))
-#define COMPAT_VERSION_4_3_5_BP1  (oceanbase::common::cal_version(4, 3, 5, 1))
-#define COMPAT_VERSION_4_3_5_BP2  (oceanbase::common::cal_version(4, 3, 5, 2))
-#define COMPAT_VERSION_4_3_5_BP3  (oceanbase::common::cal_version(4, 3, 5, 3))
-#define LASTED_COMPAT_VERSION     COMPAT_VERSION_4_3_5_BP3
+#define COMPAT_VERSION_1_0_0_0    (oceanbase::common::cal_version(1, 0, 0, 0))
+#define LASTED_COMPAT_VERSION     COMPAT_VERSION_1_0_0_0
   static bool is_valid_opt_features_version(uint64_t version)
-  { return COMPAT_VERSION_4_0 <= version && (LASTED_COMPAT_VERSION >= version || CLUSTER_CURRENT_VERSION >= version); }
+  { return version > 0 && (LASTED_COMPAT_VERSION >= version || CLUSTER_CURRENT_VERSION >= version); }
 
   static const common::ObConsistencyLevel UNSET_CONSISTENCY = common::INVALID_CONSISTENCY;
   static const int64_t UNSET_QUERY_TIMEOUT = -1;

@@ -1646,8 +1646,7 @@ int ObConflictDetectorGenerator::deduce_redundant_join_conds_with_equal_set(cons
   if (OB_ISNULL(session_info_) || OB_ISNULL(query_ctx_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(ret), K(session_info_), K(query_ctx_));
-  } else if (query_ctx_->check_opt_compat_version(COMPAT_VERSION_4_2_5_BP3, COMPAT_VERSION_4_3_0,
-                                                  COMPAT_VERSION_4_3_5_BP2)) {
+  } else {
     for (int64_t i = 0; OB_SUCC(ret) && !contain_const && i < equal_set.count(); i ++) {
       if (OB_ISNULL(equal_set.at(i))) {
         ret = OB_ERR_UNEXPECTED;
@@ -1655,7 +1654,7 @@ int ObConflictDetectorGenerator::deduce_redundant_join_conds_with_equal_set(cons
       } else if (equal_set.at(i)->is_const_expr()) {
         contain_const = true;
       }
-    }                                                                          
+    }
   }
   if (OB_SUCC(ret) && !contain_const) {
     for (int64_t m = 0; OB_SUCC(ret) && m < equal_set.count() - 1; ++m) {

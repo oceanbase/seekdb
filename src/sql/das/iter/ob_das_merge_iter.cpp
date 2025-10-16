@@ -186,9 +186,7 @@ int ObDASMergeIter::create_das_task(const ObDASTabletLoc *tablet_loc, ObDASScanO
 {
   int ret = OB_SUCCESS;
   ObIDASTaskOp *task_op = nullptr;
-  // when the cluster version is less than 4.3.1, a DAS_OP_TABLE_BATCH_SCAN task is sent on group rescan situtations
-  // for compatibility considerations.
-  ObDASOpType op_type = (nullptr != group_id_expr_ && GET_MIN_CLUSTER_VERSION() < CLUSTER_VERSION_4_3_1_0) ? DAS_OP_TABLE_BATCH_SCAN : DAS_OP_TABLE_SCAN;
+  ObDASOpType op_type = DAS_OP_TABLE_SCAN;
   reuse_op = false;
   if (OB_ISNULL(das_ref_)) {
     ret = OB_ERR_UNEXPECTED;

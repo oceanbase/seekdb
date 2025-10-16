@@ -2526,9 +2526,6 @@ int ObRawExprResolverImpl::process_char_charset_node(const ParseNode *node, ObRa
       ret = OB_ERR_UNKNOWN_CHARSET;
       LOG_WARN("invalid character set", K(charset_str), K(ret));
       LOG_USER_ERROR(OB_ERR_UNKNOWN_CHARSET, charset_str.length(), charset_str.ptr());
-    } else if (OB_FAIL(sql::ObSQLUtils::is_charset_data_version_valid(charset_type,
-                                                                      ctx_.session_info_->get_effective_tenant_id()))) {
-      LOG_WARN("failed to check charset data version valid", K(ret));
     } else {
       ObCollationType coll_type = ObCharset::get_system_collation();
       ObObj val;
@@ -5008,12 +5005,6 @@ int ObRawExprResolverImpl::process_collation_node(const ParseNode *node, ObRawEx
     if (CS_TYPE_INVALID == collation_type) {
       ret = OB_ERR_UNKNOWN_COLLATION;
       LOG_USER_ERROR(OB_ERR_UNKNOWN_COLLATION, (int)node->str_len_, node->str_value_);
-    } else if (OB_FAIL(sql::ObSQLUtils::is_charset_data_version_valid(common::ObCharset::charset_type_by_coll(collation_type),
-                                                                      ctx_.session_info_->get_effective_tenant_id()))) {
-      LOG_WARN("failed to check charset data version valid", K(ret));
-    } else if (OB_FAIL(sql::ObSQLUtils::is_collation_data_version_valid(collation_type,
-                                                                        ctx_.session_info_->get_effective_tenant_id()))) {
-      LOG_WARN("failed to check collation data version valid", K(ret));
     } else if (OB_FAIL(ctx_.expr_factory_.create_raw_expr(T_INT, c_expr))) {
       LOG_WARN("fail to create raw expr", K(ret));
     } else if (OB_ISNULL(c_expr)) {
@@ -5956,9 +5947,6 @@ int ObRawExprResolverImpl::process_json_value_node(const ParseNode *node, ObRawE
   int32_t num = 0;
   ObSysFunRawExpr *func_expr = NULL;
   if (OB_FAIL(ret)) {
-  } else if (GET_MIN_CLUSTER_VERSION() < CLUSTER_VERSION_4_2_2_0) {
-    ret = OB_NOT_SUPPORTED;
-    LOG_WARN("json value raw expr number has change in 4.2.2 version", K(ret)); // 12 -> 10
   } else {
     num = node->num_child_;
     OZ(ctx_.expr_factory_.create_raw_expr(T_FUN_SYS_JSON_VALUE, func_expr));

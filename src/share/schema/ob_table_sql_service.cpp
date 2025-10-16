@@ -3217,12 +3217,6 @@ int ObTableSqlService::gen_table_dml(
   int ret = OB_SUCCESS;
   if (OB_FAIL(check_ddl_allowed(table))) {
     LOG_WARN("check ddl allowd failed", K(ret), K(table));
-  } else if (OB_FAIL(sql::ObSQLUtils::is_charset_data_version_valid(table.get_charset_type(),
-                                                                    exec_tenant_id))) {
-    LOG_WARN("failed to check charset data version valid", K(table.get_charset_type()), K(ret));
-  } else if (OB_FAIL(sql::ObSQLUtils::is_collation_data_version_valid(table.get_collation_type(),
-                                                                      exec_tenant_id))) {
-    LOG_WARN("failed to check collation data version valid", K(table.get_collation_type()), K(ret));
   } else if (OB_FAIL(check_table_options(table))) {
     LOG_WARN("fail to check table option", K(ret), K(table));
   } else if (OB_FAIL(gen_table_dml_without_check(exec_tenant_id, table,
@@ -4265,12 +4259,6 @@ int ObTableSqlService::gen_column_dml(
   if (OB_FAIL(ObCompatModeGetter::get_table_compat_mode(
                column.get_tenant_id(), column.get_table_id(), compat_mode))) {
       LOG_WARN("fail to get tenant mode", K(ret), K(column));
-  } else if (OB_FAIL(sql::ObSQLUtils::is_charset_data_version_valid(column.get_charset_type(),
-                                                                    exec_tenant_id))) {
-    LOG_WARN("failed to check charset data version valid",  K(column.get_charset_type()), K(ret));
-  } else if (OB_FAIL(sql::ObSQLUtils::is_collation_data_version_valid(column.get_collation_type(),
-                                                                      exec_tenant_id))) {
-    LOG_WARN("failed to check collation data version valid",  K(column.get_collation_type()), K(ret));
   } else if (OB_FAIL(gen_column_dml_without_check(exec_tenant_id, column, compat_mode, dml))) {
     LOG_WARN("failed to gen_column_dml_without_check", KR(ret), K(compat_mode));
   }

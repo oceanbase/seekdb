@@ -373,14 +373,6 @@ OB_INLINE int ObDtlVectorRowMsgWriter::try_append_row(const common::ObIArray<ObE
   if (OB_ISNULL(meta_)) {
     ret = OB_ERR_UNEXPECTED;
     SQL_DTL_LOG(WARN, "failed to get meta", K(ret));
-  } else if (OB_UNLIKELY(write_buffer_->get_row_meta().col_cnt_ <= 0)) {
-    if (plan_min_cluster_version_ < CLUSTER_VERSION_4_3_5_3) {
-      if (OB_FAIL(write_buffer_->get_row_meta().assign(*meta_))) {
-        SQL_DTL_LOG(WARN, "failed init row meta", K(ret));
-      }
-    } else {
-      // don't try to assign meta_
-    }
   }
   ObCompactRow *new_row = nullptr;
   if (OB_FAIL(ret)) {
@@ -408,14 +400,6 @@ OB_INLINE int ObDtlVectorRowMsgWriter::try_append_batch(const common::ObIArray<O
   if (OB_ISNULL(meta_)) {
     ret = OB_ERR_UNEXPECTED;
     SQL_DTL_LOG(WARN, "failed to get meta", K(ret));
-  } else if (OB_UNLIKELY(write_buffer_->get_row_meta().col_cnt_ <= 0)) {
-    if (plan_min_cluster_version_ < CLUSTER_VERSION_4_3_5_3) {
-      if (OB_FAIL(write_buffer_->get_row_meta().assign(*meta_))) {
-        SQL_DTL_LOG(WARN, "failed init row meta", K(ret));
-      }
-    } else {
-      // don't try to assign meta_
-    }
   }
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(ObTempRowStore::RowBlock::calc_rows_size(vectors, *meta_,

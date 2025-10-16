@@ -851,9 +851,7 @@ int ObCmdExecutor::execute(ObExecContext &ctx, ObICmd &cmd)
         } else if (OB_FAIL(ObParallelDDLControlMode::is_parallel_ddl_enable(
                            ObParallelDDLControlMode::SET_COMMENT, tenant_id, is_parallel_ddl))) {
           LOG_WARN("fail to get whether is parallel set comment", KR(ret), K(tenant_id));
-        } else if (!(data_version >= DATA_VERSION_4_3_5_0
-                     || (data_version >= DATA_VERSION_4_2_2_0 && data_version <= DATA_VERSION_4_3_0_0))
-                   || !is_parallel_ddl) {
+        } else if (!is_parallel_ddl) {
           DEFINE_EXECUTE_CMD(ObAlterTableStmt, ObAlterTableExecutor);
         } else {
           DEFINE_EXECUTE_CMD(ObAlterTableStmt, ObCommentExecutor);

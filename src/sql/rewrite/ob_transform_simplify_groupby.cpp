@@ -50,9 +50,7 @@ int ObTransformSimplifyGroupby::transform_one_stmt(common::ObIArray<ObParentDMLS
     }
   }
   if (OB_SUCC(ret)) {
-    if (!stmt->get_query_ctx()->check_opt_compat_version(COMPAT_VERSION_4_3_5)) {
-      // do nothing
-    } else if (OB_FAIL(remove_redundant_aggr(stmt, is_happened))) {
+    if (OB_FAIL(remove_redundant_aggr(stmt, is_happened))) {
       LOG_WARN("failed to remove redundant by group by expr", K(ret));
     } else {
       trans_happened |= is_happened;

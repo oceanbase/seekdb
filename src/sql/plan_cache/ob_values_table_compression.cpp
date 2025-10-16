@@ -280,8 +280,7 @@ int ObValuesTableCompression::try_batch_exec_params(ObIAllocator &allocator,
       !GCONF._enable_values_table_folding) {
     /* do nothing */
   /* TODO NOTE@sean.yyj: remove following upgrade checking after next barrier version */
-  } else if (GET_MIN_CLUSTER_VERSION() < CLUSTER_VERSION_4_2_1_2 ||
-             !is_support_compress_values_table(pc_ctx.raw_sql_)) {
+  } else if (!is_support_compress_values_table(pc_ctx.raw_sql_)) {
     /* do nothing */
   } else if (OB_ISNULL(phy_ctx = pc_ctx.exec_ctx_.get_physical_plan_ctx())) {
     ret = OB_ERR_UNEXPECTED;

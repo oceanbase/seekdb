@@ -106,11 +106,6 @@ int ObTransformLateMaterialization::check_stmt_need_late_materialization(const O
       OB_ISNULL(ctx_) || OB_ISNULL(schema_guard = ctx_->sql_schema_guard_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(ret));
-  } else if (OB_UNLIKELY(COMPAT_VERSION_4_2_5 > stmt.get_query_ctx()->optimizer_features_enable_version_) ||
-             OB_UNLIKELY(COMPAT_VERSION_4_3_3 > stmt.get_query_ctx()->optimizer_features_enable_version_ &&
-                         COMPAT_VERSION_4_3_0 <= stmt.get_query_ctx()->optimizer_features_enable_version_)) {
-    /* need_transform = false; */
-    LOG_TRACE("not late materialization stmt, optimizer feature enable is lower than 4_2_5 or lower than 4_3_3");
   } else if (OB_FAIL(stmt.get_child_stmt_size(child_stmt_size))) {
     LOG_WARN("failed to get child stmt size", K(ret));
   } else if (stmt.has_group_by()||

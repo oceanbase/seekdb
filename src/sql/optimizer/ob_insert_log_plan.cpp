@@ -1718,8 +1718,6 @@ int ObInsertLogPlan::get_online_estimate_percent(double &percent)
       OB_ISNULL(get_optimizer_context().get_query_ctx())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(ret));
-  } else if (get_optimizer_context().get_query_ctx()->optimizer_features_enable_version_ < COMPAT_VERSION_4_3_2) {
-    // do nothing
   } else if (OB_FAIL(ObDbmsStatsUtils::get_sys_online_estimate_percent(*get_optimizer_context().get_exec_ctx(),
                                                                        session_info->get_effective_tenant_id(),
                                                                        get_stmt()->get_insert_table_info().ref_table_id_,

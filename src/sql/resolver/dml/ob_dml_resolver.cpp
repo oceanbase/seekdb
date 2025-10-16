@@ -4534,10 +4534,7 @@ int ObDMLResolver::resolve_table(const ParseNode &parse_tree,
       switch (table_node->type_) {
       case T_RELATION_FACTOR: {
         if (parse_tree.value_ == T_EXTERNAL_FILE_LOCATION) {
-          if (GET_MIN_CLUSTER_VERSION() < CLUSTER_VERSION_4_3_5_1) {
-            ret = OB_NOT_SUPPORTED;
-            LOG_WARN("url external table is not supported", K(ret));
-          } else if (OB_FAIL(resolve_mocked_table(table_node, table_item, alias_node))) {
+          if (OB_FAIL(resolve_mocked_table(table_node, table_item, alias_node))) {
             LOG_WARN("failed to resolve mocked table", K(ret));
           }
         } else if (OB_FAIL(resolve_basic_table(parse_tree, table_item))) {
@@ -4608,14 +4605,6 @@ int ObDMLResolver::resolve_table(const ParseNode &parse_tree,
         break;
       }
       case T_JSON_TABLE_EXPRESSION: {
-        if (OB_ISNULL(session_info_)) {
-          ret = OB_INVALID_ARGUMENT;
-          LOG_WARN("invalid argument", K(ret));
-        } else if (lib::is_mysql_mode() && T_JSON_TABLE_EXPRESSION == table_node->type_ 
-                   && GET_MIN_CLUSTER_VERSION() < DATA_VERSION_4_2_1_0) {
-          ret = OB_NOT_SUPPORTED;
-          LOG_WARN("json table in mysql mode not support before 4.2.1", K(ret), K(GET_MIN_CLUSTER_VERSION()));
-        }
         OZ (resolve_json_table_item(*table_node, table_item));
         break;
       }
@@ -4623,10 +4612,6 @@ int ObDMLResolver::resolve_table(const ParseNode &parse_tree,
         if (OB_ISNULL(session_info_)) {
           ret = OB_INVALID_ARGUMENT;
           LOG_WARN("invalid argument", K(ret));
-        } else if (lib::is_mysql_mode() && T_RB_ITERATE_EXPRESSION == table_node->type_ 
-                   && GET_MIN_CLUSTER_VERSION() < DATA_VERSION_4_3_4_0) {
-          ret = OB_NOT_SUPPORTED;
-          LOG_WARN("rb_iterate not support before 4.3.4", K(ret), K(GET_MIN_CLUSTER_VERSION()));
         } else if (OB_FAIL(resolve_rb_iterate_item(*table_node, table_item))) {
           LOG_WARN("failed to resolve rb iterate item", K(ret));
         }
@@ -4636,10 +4621,6 @@ int ObDMLResolver::resolve_table(const ParseNode &parse_tree,
         if (OB_ISNULL(session_info_)) {
           ret = OB_INVALID_ARGUMENT;
           LOG_WARN("invalid argument", K(ret));
-        } else if (lib::is_mysql_mode() && T_UNNEST_EXPRESSION == table_node->type_ 
-                   && GET_MIN_CLUSTER_VERSION() < DATA_VERSION_4_3_3_0) {
-          ret = OB_NOT_SUPPORTED;
-          LOG_WARN("unnest not support before 4.3.4", K(ret), K(GET_MIN_CLUSTER_VERSION()));
         } else if (OB_FAIL(resolve_unnest_item(*table_node, table_item))) {
           LOG_WARN("failed to resolve unnest item", K(ret));
         }
@@ -5327,11 +5308,6 @@ int ObDMLResolver::resolve_lateral_generated_table(const ParseNode &table_node,
   if (OB_ISNULL(stmt)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null", K(ret));
-  } else if (!(GET_MIN_CLUSTER_VERSION() >= CLUSTER_VERSION_4_3_1_0 ||
-               (GET_MIN_CLUSTER_VERSION() >= CLUSTER_VERSION_4_2_2_0 &&
-                GET_MIN_CLUSTER_VERSION() < CLUSTER_VERSION_4_3_0_0))) {
-    ret = OB_NOT_SUPPORTED;
-    LOG_USER_ERROR(OB_NOT_SUPPORTED, "lateral derived table cluster version");
   } else if (stmt->is_select_stmt() ||
              (is_mysql_mode() && (stmt->is_delete_stmt() || stmt->is_update_stmt()))) {
     //resolve with cte table
@@ -7902,10 +7878,6 @@ int ObDMLResolver::resolve_approx_clause(const ParseNode *approx_node)
   if (OB_ISNULL(stmt) || OB_ISNULL(session_info_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpect null pointer", KPC(stmt), KPC(session_info_), K(ret));
-  } else if (OB_FAIL(GET_MIN_DATA_VERSION(session_info_->get_effective_tenant_id(), data_version))) {
-    LOG_WARN("fail to get data_version", K(session_info_->get_effective_tenant_id()), K(data_version), K(ret));
-  } else if (data_version < DATA_VERSION_4_3_3_0) {
-    // do nothing
   } else if (OB_ISNULL(stmt)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpect null pointer", KPC(stmt), K(ret));
@@ -7990,17 +7962,10 @@ int ObDMLResolver::resolve_vector_index_params(const ParseNode *params_node)
 {
   int ret = OB_SUCCESS;
   ObDMLStmt *stmt = get_stmt();
-  uint64_t data_version = 0;
   if (OB_ISNULL(params_node)) { // no vector index parameters, so skip
   } else if (OB_ISNULL(stmt) || OB_ISNULL(session_info_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpect null pointer", KPC(stmt), KPC(session_info_), K(ret));
-  } else if (OB_FAIL(GET_MIN_DATA_VERSION(session_info_->get_effective_tenant_id(), data_version))) {
-    LOG_WARN("fail to get data_version", K(session_info_->get_effective_tenant_id()), K(data_version), K(ret));
-  } else if (data_version < DATA_VERSION_4_3_5_3) {
-    ret = OB_NOT_SUPPORTED;
-    LOG_WARN("in current version vector index query param is not support", K(ret));
-    LOG_USER_ERROR(OB_NOT_SUPPORTED, "in current version vector index query param is");
   } else if (OB_FAIL(ObVectorIndexUtil::resolve_query_param(params_node, stmt->get_vector_index_query_param()))){
     LOG_WARN("resolve_query_param fail", K(ret));
   }
@@ -8200,7 +8165,7 @@ int ObDMLResolver::do_resolve_subquery_info(const ObSubQueryInfo &subquery_info,
         const ObRawExprResType &column_type = target_expr->get_result_type();
         if (OB_FAIL(subquery_info.ref_expr_->add_column_type(column_type))) {
           LOG_WARN("add column type to subquery ref expr failed", K(ret));
-        } else if (column_type.is_lob_storage() && !IS_CLUSTER_VERSION_BEFORE_4_1_0_0) {
+        } else if (column_type.is_lob_storage()) {
           ObRawExprResType &last_item = subquery_info.ref_expr_->get_column_types().
                                      at(subquery_info.ref_expr_->get_column_types().count() - 1);
           last_item.set_has_lob_header();
@@ -12539,7 +12504,6 @@ int ObDMLResolver::resolve_pseudo_column(
       LOG_WARN("get pseudo column like exprs", K(ret));
     }
   } else if (GCONF._enable_pseudo_partition_id
-          && GET_MIN_CLUSTER_VERSION() >= CLUSTER_VERSION_4_3_5_2
           && ObResolverUtils::is_pseudo_partition_column_name(q_name.col_name_)) {
     if (OB_FAIL(resolve_part_id_ref_column(q_name, real_ref_expr))) {
       LOG_WARN("resolve partition pseudo column failed", K(ret), K(q_name));
@@ -16158,17 +16122,10 @@ int ObDMLResolver::resolve_values_table_item(const ParseNode &table_node, TableI
   TableItem *new_table_item = NULL;
   ParseNode *alias_node = NULL;
   ObString alias_name;
-  uint64_t data_version = 0;
   bool is_mock = (upper_insert_resolver_ != NULL && upper_insert_resolver_->is_mock_for_row_alias());
   if (OB_ISNULL(dml_stmt) ||  OB_ISNULL(allocator_) || OB_ISNULL(session_info_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null", K(ret));
-  } else if (OB_FAIL(GET_MIN_DATA_VERSION(session_info_->get_effective_tenant_id(), data_version))) {
-    LOG_WARN("get tenant data version failed", K(ret), K(session_info_->get_effective_tenant_id()));
-  } else if (data_version < DATA_VERSION_4_2_1_0) {
-    ret = OB_NOT_SUPPORTED;
-    LOG_WARN("VALUES STATEMENT is not supported", K(ret), K(data_version));
-    LOG_USER_ERROR(OB_NOT_SUPPORTED, "VALUES STATEMENT");
   } else if (OB_ISNULL(new_table_item = dml_stmt->create_table_item(*allocator_))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_ERROR("create table item failed");

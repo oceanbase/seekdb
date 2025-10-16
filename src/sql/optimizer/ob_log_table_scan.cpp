@@ -240,9 +240,7 @@ int ObLogTableScan::do_re_est_cost(EstimateCostInfo &param, double &card, double
     if (ObEnableOptRowGoal::OFF == get_plan()->get_optimizer_context().get_enable_opt_row_goal()) {
       param.need_row_count_ = -1;
       est_cost_info_->limit_rows_ = -1;
-    } else if (stmt->get_query_ctx()->check_opt_compat_version(COMPAT_VERSION_4_2_3, COMPAT_VERSION_4_3_0,
-                                                               COMPAT_VERSION_4_3_2) &&
-        range_conds_.empty() &&
+    } else if (range_conds_.empty() &&
         ObEnableOptRowGoal::AUTO == get_plan()->get_optimizer_context().get_enable_opt_row_goal() &&
         (!est_cost_info_->postfix_filters_.empty() ||
         !est_cost_info_->table_filters_.empty() ||
@@ -1243,7 +1241,6 @@ int ObLogTableScan::allocate_lookup_trans_info_expr()
     LOG_WARN("unexpected null", K(ret));
   } else if (index_back_ &&
       opt_ctx->is_strict_defensive_check() &&
-      GET_MIN_CLUSTER_VERSION() >= CLUSTER_VERSION_4_2_0_0 &&
       nullptr == trans_info_expr_) {
     if (OB_FAIL(ObOptimizerUtil::generate_pseudo_trans_info_expr(*opt_ctx,
                                                                  index_name_,
@@ -2585,9 +2582,6 @@ int ObLogTableScan::print_outline_data(PlanText &plan_text)
     if (OB_FAIL(temp_hint.print_hint(plan_text))) {
       LOG_WARN("failed to print table parallel hint", K(ret));
     }
-  }
-  if (OB_SUCC(ret)) {
-    use_desc_hint &= stmt->get_query_ctx()->check_opt_compat_version(COMPAT_VERSION_4_3_5);
   }
   if (OB_FAIL(ret)) {
   } else if (vc_info.is_vec_adaptive_iter_scan()) {
@@ -5064,8 +5058,6 @@ int ObLogTableScan::generate_filter_monotonicity()
       OB_ISNULL(param_store = get_plan()->get_optimizer_context().get_params())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("got unexpected NULL ptr", K(ret));
-  } else if (get_stmt()->get_query_ctx()->optimizer_features_enable_version_ < COMPAT_VERSION_4_3_2) {
-    filter_monotonicity_.reset();
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < get_filter_exprs().count(); ++i) {
       col_exprs.reuse();

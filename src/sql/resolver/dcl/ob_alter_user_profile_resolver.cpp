@@ -40,8 +40,6 @@ int ObAlterUserProfileResolver::resolve_set_role(const ParseNode &parse_tree)
   } else if (OB_ISNULL(params_.schema_checker_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("not init", K(ret));
-  } else if (lib::is_mysql_mode() && OB_FAIL(ObSQLUtils::compatibility_check_for_mysql_role_and_column_priv(MTL_ID()))) {
-    LOG_WARN("set role not supported while upgrading", K(ret));
   } else if (T_SET_ROLE != parse_tree.type_
              || 1 != parse_tree.num_child_) {
     ret = OB_INVALID_ARGUMENT;
@@ -267,8 +265,6 @@ int ObAlterUserProfileResolver::resolve_default_role(const ParseNode &parse_tree
   } else if (OB_ISNULL(params_.schema_checker_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("not init", K(ret));
-  } else if (lib::is_mysql_mode() && OB_FAIL(ObSQLUtils::compatibility_check_for_mysql_role_and_column_priv(MTL_ID()))) {
-    LOG_WARN("set default role not supported while upgrading", K(ret));
   } else if (T_ALTER_USER_DEFAULT_ROLE != parse_tree.type_
              || 2 != parse_tree.num_child_) {
     ret = OB_INVALID_ARGUMENT;

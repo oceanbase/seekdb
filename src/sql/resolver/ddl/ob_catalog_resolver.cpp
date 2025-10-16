@@ -42,18 +42,11 @@ int ObCatalogResolver::resolve(const ParseNode &parse_tree)
   int ret = OB_SUCCESS;
   ObCatalogStmt *stmt = NULL;
   stmt::StmtType stmt_type = stmt::T_NONE;
-  uint64_t data_version = 0;
   uint64_t tenant_id = OB_INVALID_ID; 
   if (OB_ISNULL(session_info_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(ret));
   } else if (FALSE_IT(tenant_id = session_info_->get_effective_tenant_id())) {
-  } else if (OB_FAIL(GET_MIN_DATA_VERSION(tenant_id, data_version))) {
-    LOG_WARN("failed to get data version", K(ret));
-  } else if (data_version < DATA_VERSION_4_3_5_2) {
-    ret = OB_NOT_SUPPORTED;
-    LOG_WARN("external catalog not supported", K(ret));
-    LOG_USER_ERROR(OB_NOT_SUPPORTED, "external catalog");
   } else if (OB_FAIL(ObLicenseUtils::check_olap_allowed(tenant_id))) {
     ret = OB_LICENSE_SCOPE_EXCEEDED;
     LOG_WARN("catalog is not allowed", KR(ret));

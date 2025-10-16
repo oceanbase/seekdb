@@ -500,8 +500,7 @@ public:
       use_rich_vector_format_ = false;
       force_rich_vector_format_ = ForceRichFormatStatus::FORCE_OFF;
     } else {
-      use_rich_vector_format_ = GET_MIN_CLUSTER_VERSION() >= CLUSTER_VERSION_4_3_0_0
-                                && sys_vars_cache_.get_enable_rich_vector_format();
+      use_rich_vector_format_ = sys_vars_cache_.get_enable_rich_vector_format();
       force_rich_vector_format_ = ForceRichFormatStatus::Disable;
     }
   }
@@ -529,11 +528,7 @@ public:
 
   void set_force_rich_format(ObBasicSessionInfo::ForceRichFormatStatus status)
   {
-    if (GET_MIN_CLUSTER_VERSION() >= CLUSTER_VERSION_4_3_0_0) {
-      force_rich_vector_format_ = status;
-    } else {
-      force_rich_vector_format_ = ForceRichFormatStatus::Disable;
-    }
+    force_rich_vector_format_ = status;
   }
   //getters
   const common::ObString get_tenant_name() const;

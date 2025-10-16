@@ -200,7 +200,7 @@ int ObRawExprDeduceType::visit(ObColumnRefRawExpr &expr)
   }
 
   if (OB_SUCC(ret)) {
-    if (expr.get_result_type().is_lob_storage() && !IS_CLUSTER_VERSION_BEFORE_4_1_0_0) {
+    if (expr.get_result_type().is_lob_storage()) {
       expr.set_has_lob_header();
     }
   }
@@ -552,9 +552,8 @@ int ObRawExprDeduceType::calc_result_type(ObNonTerminalRawExpr &expr,
       }
     }
 
-    if (!IS_CLUSTER_VERSION_BEFORE_4_1_0_0) {
-      result_type.set_has_lob_header();
-    }
+    result_type.set_has_lob_header();
+
     if (OB_FAIL(ret)) {
     } else if (ObExprOperator::NOT_ROW_DIMENSION != row_dimension) {
       ret = op->calc_result_typeN(result_type, GET_TYPE_ARRAY(types), types.count(), type_ctx);
@@ -2481,17 +2480,9 @@ int ObRawExprDeduceType::visit(ObWinFunRawExpr &expr)
       // @TODO : nijia.nj,subdivision various window_function
       if (T_WIN_FUN_CUME_DIST == expr.get_func_type() ||
           T_WIN_FUN_PERCENT_RANK == expr.get_func_type()) {
-        const uint64_t ob_version = GET_MIN_CLUSTER_VERSION();
-        if (!((ob_version >= CLUSTER_VERSION_2277 && ob_version < CLUSTER_VERSION_3000)
-              || (ob_version >= CLUSTER_VERSION_312 && ob_version < CLUSTER_VERSION_3200)
-              || ob_version >= CLUSTER_VERSION_3_2_3_0)) {
-          result_type.set_accuracy(ObAccuracy::MAX_ACCURACY2[ORACLE_MODE][ObNumberType]);
-          result_type.set_number();
-        } else {
-          result_type.set_accuracy(ObAccuracy::DML_DEFAULT_ACCURACY[ObDoubleType]);
-          result_type.set_double();
-          result_type.set_result_flag(NOT_NULL_FLAG);
-        }
+        result_type.set_accuracy(ObAccuracy::DML_DEFAULT_ACCURACY[ObDoubleType]);
+        result_type.set_double();
+        result_type.set_result_flag(NOT_NULL_FLAG);
       } else if (T_WIN_FUN_DENSE_RANK == expr.get_func_type() ||
                   T_WIN_FUN_RANK == expr.get_func_type() ||
                   T_WIN_FUN_ROW_NUMBER == expr.get_func_type()) {

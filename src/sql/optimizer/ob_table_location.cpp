@@ -2649,8 +2649,7 @@ int ObTableLocation::get_location_calc_node(const ObPartitionLevel part_level,
     }
   }
   if (OB_SUCC(ret) && !is_get &&
-      GET_MIN_CLUSTER_VERSION() >= CLUSTER_VERSION_4_3_5_0 &&
-      ((PARTITION_LEVEL_ONE == part_level && is_column_list_part(part_type_, is_col_part_expr_)) || 
+      ((PARTITION_LEVEL_ONE == part_level && is_column_list_part(part_type_, is_col_part_expr_)) ||
        (PARTITION_LEVEL_TWO == part_level && is_column_list_part(subpart_type_, is_col_subpart_expr_)))) {
     ObPartLocCalcNode *list_value_node = NULL;
     bool list_value_always_true = false;

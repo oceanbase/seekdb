@@ -73,9 +73,6 @@ int ObTransformDistinctAggregate::check_transform_validity(const ObDMLStmt *stmt
   if (OB_ISNULL(stmt) || OB_ISNULL(stmt->get_query_ctx())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(ret), K(stmt));
-  } else if (!stmt->get_query_ctx()->check_opt_compat_version(COMPAT_VERSION_4_3_5)) {
-    is_valid = false;
-    OPT_TRACE("can not do transform, optimizer feature version is lower than 4.3.5");
   } else if (!stmt->is_select_stmt()) {
     is_valid = false;
     OPT_TRACE("can not do transform, stmt is not a select stmt");

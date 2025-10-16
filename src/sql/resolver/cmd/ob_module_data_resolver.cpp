@@ -72,7 +72,6 @@ int ObModuleDataResolver::resolve_target_tenant_id(const ParseNode *node,
   ObSchemaGetterGuard schema_guard;
   ObString tenant_name_str;
   lib::Worker::CompatMode mode;
-  uint64_t compat_version = 0;
   if (login_tenant_id != OB_SYS_TENANT_ID) {
     ret = OB_NOT_SUPPORTED;
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "operation from regular user tenant");
@@ -97,14 +96,6 @@ int ObModuleDataResolver::resolve_target_tenant_id(const ParseNode *node,
     ret = OB_NOT_SUPPORTED;
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "operation from oracle tenant");
     LOG_WARN("operation from oracle tenant not allowed", K(ret), K(target_tenant_id), K(login_tenant_id));
-  } else if (OB_FAIL(GET_MIN_DATA_VERSION(target_tenant_id, compat_version))) {
-    LOG_WARN("fail to get data version", KR(ret), K(target_tenant_id));
-  } else if (compat_version < MOCK_DATA_VERSION_4_2_5_0 
-        || (DATA_VERSION_4_3_0_0 <= compat_version && compat_version < DATA_VERSION_4_3_5_1)) {
-    ret = OB_NOT_SUPPORTED;
-    LOG_USER_ERROR(OB_NOT_SUPPORTED, "target tenant versions lower than 4.2.5.0 or between 4.3.0.0 and 4.3.5.1");
-    LOG_WARN("target tenant versions lower than 4.2.5.0 or between 4.3.0.0 and 4.3.5.1 not supported", 
-      K(ret), K(target_tenant_id), K(compat_version));
   }
   return ret;
 }
@@ -154,14 +145,8 @@ int ObModuleDataResolver::resolve(const ParseNode &parse_tree)
   } else if (OB_ISNULL(session_info_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("session info should not be null", K(ret));
-  } else if (GET_MIN_CLUSTER_VERSION() < MOCK_CLUSTER_VERSION_4_2_5_0 
-      || (CLUSTER_VERSION_4_3_0_0 <= GET_MIN_CLUSTER_VERSION() && GET_MIN_CLUSTER_VERSION() < CLUSTER_VERSION_4_3_5_1)) {
-    ret = OB_NOT_SUPPORTED;
-    LOG_WARN("module_data is not supported under cluster version 4.2.5.0 or between 4.3.0.0 and 4.3.5.1", K(ret));
-    LOG_USER_ERROR(OB_NOT_SUPPORTED, "module_data in cluster under version 4.2.5.0 or between 4.3.0.0 and 4.3.5.1");
   } else {
     table::ObModuleDataArg &arg = stmt->get_arg();
-    uint64_t compat_version = 0;
     if (OB_FAIL(resolve_exec_type(parse_tree.children_[TYPE_IDX], arg.op_))) {
       LOG_WARN("fail to resolve exec type", K(ret));
     } else if (OB_FAIL(resolve_module(parse_tree.children_[MODULE_IDX], arg.module_))) {
@@ -171,13 +156,6 @@ int ObModuleDataResolver::resolve(const ParseNode &parse_tree)
       LOG_WARN("fail to resolve target tenant id", K(ret));
     } else if (OB_FAIL(resolve_file_path(parse_tree.children_[FILE_IDX], arg))) {
       LOG_WARN("fail to resolve file path", K(ret));
-    } else if (OB_FAIL(GET_MIN_DATA_VERSION(arg.target_tenant_id_, compat_version))) {
-      LOG_WARN("fail to get data version", KR(ret), K(arg));
-    } else if (compat_version < MOCK_DATA_VERSION_4_2_5_0 
-        || (DATA_VERSION_4_3_0_0 <= compat_version && compat_version < DATA_VERSION_4_3_5_1)) {
-      ret = OB_NOT_SUPPORTED;
-      LOG_WARN("module_data is not supported with tenant under version 4.2.5.0 or between 4.3.0.0 and 4.3.5.1", K(ret));
-      LOG_USER_ERROR(OB_NOT_SUPPORTED, "module_data with tenant under version 4.2.5.0 or between 4.3.0.0 and 4.3.5.1");
     } else if (!arg.file_path_.empty() && arg.module_ == ObModuleDataArg::REDIS) {
       ret = OB_PARTIAL_FAILED;
       LOG_USER_ERROR(OB_PARTIAL_FAILED, "loading redis module does not need to specify infile");

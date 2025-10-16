@@ -2790,15 +2790,6 @@ int ObAccessPathEstimation::get_index_dive_limit(ObOptimizerContext &ctx,
   if (OB_ISNULL(ctx.get_query_ctx())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null", K(ret));
-  } else if (!ctx.get_query_ctx()->check_opt_compat_version(COMPAT_VERSION_4_2_1_BP9, COMPAT_VERSION_4_2_2,
-                                                            COMPAT_VERSION_4_2_5, COMPAT_VERSION_4_3_0,
-                                                            COMPAT_VERSION_4_3_5)) {
-    if (NULL != range_index_dive_limit) {
-      *range_index_dive_limit = -1;
-    }
-    if (NULL != partition_index_dive_limit) {
-      *partition_index_dive_limit = -1;
-    }
   } else if (NULL != partition_index_dive_limit &&
              OB_FAIL(ctx.get_global_hint().opt_params_.get_sys_var(ObOptParamHint::PARTITION_INDEX_DIVE_LIMIT,
                                                                    ctx.get_session_info(),

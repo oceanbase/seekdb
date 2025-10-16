@@ -74,22 +74,6 @@ int ObSysDispatchCallResolver::check_sys_dispatch_call_priv(const ParseNode &nam
   return ret;
 }
 
-int ObSysDispatchCallResolver::check_supported_cluster_version() const
-{
-  int ret = OB_SUCCESS;
-  if ((GET_MIN_CLUSTER_VERSION() >= MOCK_CLUSTER_VERSION_4_2_5_4
-       && GET_MIN_CLUSTER_VERSION() < CLUSTER_VERSION_4_3_0_0)
-      || GET_MIN_CLUSTER_VERSION() >= CLUSTER_VERSION_4_3_5_3) {
-    // supported cluster version for sys dispatch call
-    // [4.2.5.4, 4.3.0.0) || [4.3.5.3, +∞)
-  } else {
-    ret = OB_NOT_SUPPORTED;
-    LOG_WARN("sys dispatch call is not supported for this cluster version",
-             "cluster_version", GET_MIN_CLUSTER_VERSION());
-  }
-  return ret;
-}
-
 int ObSysDispatchCallResolver::resolve(const ParseNode &parse_tree)
 {
   int ret = OB_SUCCESS;
@@ -104,8 +88,6 @@ int ObSysDispatchCallResolver::resolve(const ParseNode &parse_tree)
   if (OB_UNLIKELY(OB_ISNULL(schema_checker_) || OB_ISNULL(session_info_))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("argument is nullptr", K(schema_checker_), K(session_info_));
-  } else if (OB_FAIL(check_supported_cluster_version())) {
-    LOG_WARN("sys dispatch call is not supported");
   } else if (OB_SYS_TENANT_ID != session_info_->get_effective_tenant_id()) {
     // check tenant privilege for dispatch call, should be sys tenant
     ret = OB_NOT_SUPPORTED;

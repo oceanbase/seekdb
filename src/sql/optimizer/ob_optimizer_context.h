@@ -494,14 +494,11 @@ ObOptimizerContext(ObSQLSessionInfo *session_info,
     enable_spf_batch_rescan_ = enable_batch_nlj && enable_batch_spf;
     bool enable_425_opt_version = false;
     if (get_query_ctx() != nullptr) {
-      enable_425_opt_version = get_query_ctx()->check_opt_compat_version(
-        COMPAT_VERSION_4_2_5, COMPAT_VERSION_4_3_0, COMPAT_VERSION_4_3_5);
+      enable_425_opt_version = true;
     }
     enable_425_opt_batch_rescan_ = enable_425_opt_version;
-    enable_global_index_filter_ = opt_version > COMPAT_VERSION_4_2_1_BP8 &&
-      (batch_rescan_flag & (0x1L << BATCH_RESCAN_BIT_GLOBAL_INDEX_FILTER));
-    enable_spf_semi_anti_left_child_ = opt_version > COMPAT_VERSION_4_2_1_BP8 &&
-      (batch_rescan_flag & (0x1L << BATCH_RESCAN_BIT_SPF_SEMI_ANTI_LEFT_CHILD));
+    enable_global_index_filter_ = (batch_rescan_flag & (0x1L << BATCH_RESCAN_BIT_GLOBAL_INDEX_FILTER));
+    enable_spf_semi_anti_left_child_ = (batch_rescan_flag & (0x1L << BATCH_RESCAN_BIT_SPF_SEMI_ANTI_LEFT_CHILD));
     enable_spf_semi_anti_child_ = enable_425_opt_version &&
       (batch_rescan_flag & (0x1L << BATCH_RESCAN_BIT_SPF_SEMI_ANTI_CHILD));
     enable_semi_anti_join_ = enable_425_opt_version &&
@@ -567,7 +564,7 @@ ObOptimizerContext(ObSQLSessionInfo *session_info,
     if (0 > runtime_filter_type_) {
       get_runtime_filter_type();
     }
-    return 0 != runtime_filter_type_ && GET_MIN_CLUSTER_VERSION() >= CLUSTER_VERSION_4_2_0_0;
+    return 0 != runtime_filter_type_;
   }
   bool enable_bloom_filter() {
     if (0 > runtime_filter_type_) {

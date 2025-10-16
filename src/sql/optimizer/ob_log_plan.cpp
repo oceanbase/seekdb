@@ -508,8 +508,6 @@ int ObLogPlan::check_subq_need_push(ObRawExpr *expr,
   if (OB_ISNULL(expr) || OB_ISNULL(query_ctx = get_optimizer_context().get_query_ctx())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(ret), K(expr), K(query_ctx));
-  } else if (!query_ctx->check_opt_compat_version(COMPAT_VERSION_4_3_5_BP2)) {
-    // do nothing
   } else if (OB_FAIL(check_push_subq_expr_pattern(expr,
                                                   col_expr,
                                                   subq_expr,
@@ -3761,8 +3759,7 @@ void ObLogPlan::compute_null_distribution_info(const ObJoinType &join_type,
     right_exch_info.null_row_dist_method_ = ObNullDistributeMethod::NONE;
   } else {
     ObNullDistributeMethod::Type null_row_dist_method = ObNullDistributeMethod::NONE;
-    if (OB_NOT_NULL(get_optimizer_context().get_query_ctx()) &&
-        get_optimizer_context().get_query_ctx()->check_opt_compat_version(COMPAT_VERSION_4_3_5_BP2)) {
+    if (OB_NOT_NULL(get_optimizer_context().get_query_ctx())) {
       null_row_dist_method = ObNullDistributeMethod::RANDOM;
     }
     switch (join_type) {
@@ -5557,11 +5554,8 @@ int ObLogPlan::get_distribute_group_by_method(ObLogicalOperator *top,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(ret), K(top), K(query_ctx));
   } else {
-    if (query_ctx->check_opt_compat_version(COMPAT_VERSION_4_3_5_BP2)) {
-      group_dist_methods |= DistAlgo::DIST_HASH_HASH_LOCAL;
-    }
-    if (!get_optimizer_context().is_partition_wise_plan_enabled() &&
-        query_ctx->check_opt_compat_version(COMPAT_VERSION_4_3_2)) {
+    group_dist_methods |= DistAlgo::DIST_HASH_HASH_LOCAL;
+    if (!get_optimizer_context().is_partition_wise_plan_enabled()) {
       group_dist_methods &= ~DistAlgo::DIST_PARTITION_WISE;
       OPT_TRACE("ignore partition wise group operator by tenant config");
     }
@@ -5597,9 +5591,7 @@ int ObLogPlan::get_distribute_group_by_method(ObLogicalOperator *top,
     } else {
       group_dist_methods &= ~DistAlgo::DIST_PULL_TO_LOCAL;
     }
-    can_re_parallel = top->can_re_parallel()
-                      && (group_dist_methods & DistAlgo::DIST_HASH_HASH)
-                      && query_ctx->check_opt_compat_version(COMPAT_VERSION_4_3_5_BP2);
+    can_re_parallel = top->can_re_parallel() && (group_dist_methods & DistAlgo::DIST_HASH_HASH);
     if (!top->is_distributed()) {
       group_dist_methods &= ~DistAlgo::DIST_PARTITION_WISE;
       group_dist_methods &= ~DistAlgo::DIST_PULL_TO_LOCAL;
@@ -5646,8 +5638,7 @@ int ObLogPlan::get_distribute_group_by_method(ObLogicalOperator *top,
                                                                 is_partition_wise))) {
       LOG_WARN("failed to check if sharding compatible with distinct expr", K(ret));
     } else if (is_partition_wise) {
-      if (top->is_parallel_more_than_part_cnt() &&
-          query_ctx->check_opt_compat_version(COMPAT_VERSION_4_3_5)) {
+      if (top->is_parallel_more_than_part_cnt()) {
         OPT_TRACE("group operator will use partition wise method");
       } else {
         group_dist_methods = DistAlgo::DIST_PARTITION_WISE;
@@ -5902,8 +5893,6 @@ int ObLogPlan::init_groupby_helper(const ObIArray<ObRawExpr*> &group_exprs,
                groupby_helper.enable_hash_rollup_ =
                  (rowsets_enabled
                   && rollup_exprs.count() > 0
-                  && GET_MIN_CLUSTER_VERSION() >= CLUSTER_VERSION_4_3_5_0
-                  && groupby_helper.optimizer_features_enable_version_ >= COMPAT_VERSION_4_3_5
                   && enable_hash_rollup
                   && !get_optimizer_context().is_cost_evaluation()))) { // TODO: adjust expr replacement in ObLogExpand and remove this
   } else if (FALSE_IT(groupby_helper.force_hash_rollup_ = (groupby_helper.enable_hash_rollup_ && force_hash_rollup))) {
@@ -6166,8 +6155,6 @@ int ObLogPlan::check_candi_plan_need_calc_dop(bool &need_calc_dop) const
   if (OB_UNLIKELY(candidates_.candidate_plans_.empty()) || OB_ISNULL(opt_ctx.get_query_ctx())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected params", K(ret), K(candidates_.candidate_plans_), K(opt_ctx.get_query_ctx()));
-  } else if (!opt_ctx.get_query_ctx()->check_opt_compat_version(COMPAT_VERSION_4_3_5_BP1)) {
-    /* do nothing */
   } else {
     for (int64_t i = 0; !need_calc_dop && OB_SUCC(ret) && i < candidates_.candidate_plans_.count(); ++i) {
       if (OB_FAIL(check_op_need_calc_dop(candidates_.candidate_plans_.at(i).plan_tree_, need_calc_dop))) {
@@ -6352,11 +6339,11 @@ int ObLogPlan::check_three_stage_groupby_pushdown(const ObIArray<ObRawExpr *> &r
       // grouping_id can be safely pushdown
       can_push = false;
     } else if (aggr_expr->get_expr_type() == T_FUN_SYS_RB_BUILD_AGG &&
-              (! session->use_rich_format() || GET_MIN_CLUSTER_VERSION() < CLUSTER_VERSION_4_3_5_0)) {
+              (! session->use_rich_format())) {
       // if vector 2.0 is not enable  can not pushdown for rb_build_agg
       can_push = false;
     } else if ((aggr_expr->get_expr_type() == T_FUN_SYS_RB_AND_AGG || aggr_expr->get_expr_type() == T_FUN_SYS_RB_OR_AGG) &&
-               (! session->use_rich_format() || GET_MIN_CLUSTER_VERSION() < CLUSTER_VERSION_4_3_5_3)) {
+               (! session->use_rich_format())) {
       // if vector 2.0 is not enable  can not pushdown for rb_and_agg / rb_or_agg
       can_push = false;
     } else if (aggr_expr->is_param_distinct()) {
@@ -6436,11 +6423,11 @@ int ObLogPlan::check_basic_groupby_pushdown(const ObIArray<ObAggFunRawExpr*> &ag
                T_FUN_SYS_RB_AND_AGG != aggr_expr->get_expr_type()) {
       can_push = false;
     } else if (T_FUN_SYS_RB_BUILD_AGG == aggr_expr->get_expr_type() &&
-              (! enable_rich_vector_format || GET_MIN_CLUSTER_VERSION() < CLUSTER_VERSION_4_3_5_0)) {
+              (! enable_rich_vector_format)) {
       // if vector 2.0 is not enable  can not pushdown for rb_build_agg
       can_push = false;
     } else if ((T_FUN_SYS_RB_OR_AGG == aggr_expr->get_expr_type() || T_FUN_SYS_RB_AND_AGG == aggr_expr->get_expr_type()) &&
-               (! enable_rich_vector_format || GET_MIN_CLUSTER_VERSION() < CLUSTER_VERSION_4_3_5_2)) {
+               (! enable_rich_vector_format)) {
       // if vector 2.0 is not enable  can not pushdown for rb aggr exprs
       can_push = false;
     } else if (aggr_expr->is_param_distinct()) {
@@ -6588,8 +6575,6 @@ int ObLogPlan::check_storage_groupby_pushdown(const ObIArray<ObAggFunRawExpr *> 
                  !pushdown_groupby_columns.empty()) {
         can_push = false;
       }
-    } else if (GET_MIN_CLUSTER_VERSION() < CLUSTER_VERSION_4_3_0_0) {
-      can_push = false;
     } else if (group_exprs.count() != 1) {
       can_push = false;
     } else if (OB_LIKELY(!EN_FORCE_GBY_PUSHDOWN_STORAGE) && aggrs.count() > 5) {
@@ -9074,8 +9059,7 @@ int ObLogPlan::get_subplan_filter_distributed_method(ObLogicalOperator *&top,
     can_re_parallel = top->can_re_parallel()
                       && (distributed_methods & DistAlgo::DIST_HASH_ALL)
                       && is_child_ops_match_all
-                      && !params.empty()
-                      && query_ctx->check_opt_compat_version(COMPAT_VERSION_4_3_5_BP2);
+                      && !params.empty();
   }
 
   if (OB_SUCC(ret) && (distributed_methods & DistAlgo::DIST_BASIC_METHOD)) {
@@ -11602,8 +11586,7 @@ int ObLogPlan::adjust_final_plan_info(ObLogicalOperator *&op)
         LOG_WARN("failed to perform window function push down", K(ret));
       } else if (OB_FAIL(op->get_plan()->perform_adjust_onetime_expr(op))) {
         LOG_WARN("failed to perform adjust onetime expr", K(ret));
-      } else if (GET_MIN_CLUSTER_VERSION() >= CLUSTER_VERSION_4_2_0_0 &&
-                 get_optimizer_context().get_query_ctx()->get_global_hint().has_dbms_stats_hint() &&
+      } else if (get_optimizer_context().get_query_ctx()->get_global_hint().has_dbms_stats_hint() &&
                  OB_FAIL(op->get_plan()->perform_gather_stat_replace(op))) {
         LOG_WARN("failed to perform gather stat replace");
       } else if (OB_FAIL(op->reorder_filter_exprs())) {
@@ -14284,8 +14267,6 @@ int ObLogPlan::perform_gather_stat_replace(ObLogicalOperator *op)
     const ObTableSchema *table_schema = NULL;
     if (table_scan->get_pushdown_aggr_exprs().empty()) {
       // do nothing
-    } else if (GET_MIN_CLUSTER_VERSION() < CLUSTER_VERSION_4_3_5_2) {
-      // do nothing
     } else if (OB_ISNULL(schema_guard = get_optimizer_context().get_schema_guard())
                || OB_ISNULL(session = get_optimizer_context().get_session_info())) {
       ret = OB_ERR_UNEXPECTED;
@@ -14506,23 +14487,11 @@ int ObLogPlan::allocate_values_table_path(ValuesTablePath *values_table_path,
                                           ObLogicalOperator *&out_access_path_op)
 {
   int ret = OB_SUCCESS;
-
-  if ((GET_MIN_CLUSTER_VERSION() >= CLUSTER_VERSION_4_2_2_0 &&
-       GET_MIN_CLUSTER_VERSION() < CLUSTER_VERSION_4_3_0_0) ||
-      GET_MIN_CLUSTER_VERSION() >= CLUSTER_VERSION_4_3_2_0) {
-    ObLogValuesTableAccess *values_op = NULL;
-    if (OB_FAIL(do_alloc_values_table_path(values_table_path, values_op))) {
-      LOG_WARN("failed to allocate values table access op", K(ret));
-    } else {
-      out_access_path_op = values_op;
-    }
+  ObLogValuesTableAccess *values_op = NULL;
+  if (OB_FAIL(do_alloc_values_table_path(values_table_path, values_op))) {
+    LOG_WARN("failed to allocate values table access op", K(ret));
   } else {
-    ObLogExprValues *values_op = NULL;
-    if (OB_FAIL(do_alloc_values_table_path(values_table_path, values_op))) {
-      LOG_WARN("failed to allocate values table access op", K(ret));
-    } else {
-      out_access_path_op = values_op;
-    }
+    out_access_path_op = values_op;
   }
   return ret;
 }
@@ -14640,11 +14609,11 @@ int ObLogPlan::check_scalar_aggr_can_storage_pushdown(const uint64_t table_id,
                 && T_FUN_SYS_RB_BUILD_AGG != cur_aggr->get_expr_type()) {
       can_push = false;
             } else if (T_FUN_SYS_RB_BUILD_AGG == cur_aggr->get_expr_type() &&
-              (! enable_rich_vector_format || GET_MIN_CLUSTER_VERSION() < CLUSTER_VERSION_4_3_5_0)) {
+              (! enable_rich_vector_format)) {
       // if vector 2.0 is not enable  can not storage pushdown for rb_build_agg
       can_push = false;
     } else if ((T_FUN_SYS_RB_AND_AGG == cur_aggr->get_expr_type() || T_FUN_SYS_RB_AND_AGG == cur_aggr->get_expr_type()) &&
-                (! enable_rich_vector_format || GET_MIN_CLUSTER_VERSION() < CLUSTER_VERSION_4_3_5_3)) {
+                (! enable_rich_vector_format)) {
       // if vector 2.0 is not enable  can not storage pushdown for rb agg
       can_push = false;
     } else if (1 < cur_aggr->get_real_param_count()) {
@@ -15852,8 +15821,6 @@ int ObLogPlan::check_can_scala_storage_pushdown(ObSQLSessionInfo &session_info,
     LOG_WARN("get unexpected null", K(ret));
   } else if (stmt.is_scala_group_by()) {
     can_pushdown = true;
-  } else if (get_log_plan_hint().optimizer_features_enable_version_ < COMPAT_VERSION_4_3_5_BP1) {
-    // do nothing
   } else if (!query_ctx->get_global_hint().has_dbms_stats_hint()) {
     // do nothing
   } else if (stmt.get_group_exprs().count() != 1) {

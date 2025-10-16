@@ -110,8 +110,7 @@ int ObTransformSimplifyExpr::transform_one_stmt(common::ObIArray<ObParentDMLStmt
       LOG_TRACE("succeed to remove subquery when filter is false", K(is_happened));
     }
   }
-  if (OB_SUCC(ret) && 
-      stmt->get_query_ctx()->optimizer_features_enable_version_ >= COMPAT_VERSION_4_2_3) {
+  if (OB_SUCC(ret)) {
     if (OB_FAIL(convert_case_when_predicate(stmt, is_happened))) {
       LOG_WARN("failed to convert case when predicate", K(ret));
     } else {

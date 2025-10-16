@@ -56,8 +56,6 @@ int ObDropRoleResolver::resolve(const ParseNode &parse_tree)
     drop_role_stmt->set_tenant_id(params_.session_info_->get_effective_tenant_id());
     ParseNode *users_node = const_cast<ParseNode*>(parse_tree.children_[0]);
 
-    OZ (ObSQLUtils::compatibility_check_for_mysql_role_and_column_priv(params_.session_info_->get_effective_tenant_id()));
-
     if (OB_SUCC(ret) && NULL != parse_tree.children_[1]) {
       if (T_IF_EXISTS != parse_tree.children_[1]->type_) {
         ret = OB_INVALID_ARGUMENT;

@@ -470,9 +470,7 @@ int ObPrivSqlService::grant_column(
   const bool is_deleted = priv_set == 0;
   const uint64_t tenant_id = column_priv_key.tenant_id_;
   const uint64_t exec_tenant_id = ObSchemaUtils::get_exec_tenant_id(tenant_id);
-  if (OB_FAIL(ObSQLUtils::compatibility_check_for_mysql_role_and_column_priv(tenant_id))) {
-    LOG_WARN("grant/revoke column priv is not suppported", KR(ret));
-  } else if (!column_priv_key.is_valid()) {
+  if (!column_priv_key.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(column_priv_key), K(ret));
   } else if (OB_INVALID_ID == column_priv_id) {
@@ -543,22 +541,19 @@ int ObPrivSqlService::gen_column_priv_dml(
 {
   int ret = OB_SUCCESS;
   int64_t all_priv = 0;
-  if (OB_FAIL(ObSQLUtils::compatibility_check_for_mysql_role_and_column_priv(exec_tenant_id))) {
-    LOG_WARN("all column priv is not suppported", KR(ret));
-  } else {
-    if ((priv_set & OB_PRIV_SELECT) != 0) { all_priv |= 1; }
-    if ((priv_set & OB_PRIV_INSERT) != 0) { all_priv |= 2; } 
-    if ((priv_set & OB_PRIV_UPDATE) != 0) { all_priv |= 4; } 
-    if ((priv_set & OB_PRIV_REFERENCES) != 0) { all_priv |= 8; } 
-    if (OB_FAIL(dml.add_pk_column("tenant_id", 0))
-        || OB_FAIL(dml.add_pk_column("user_id", column_priv_key.user_id_))
-        || OB_FAIL(dml.add_pk_column("priv_id", priv_id))
-        || OB_FAIL(dml.add_column("database_name", column_priv_key.db_))
-        || OB_FAIL(dml.add_column("table_name", column_priv_key.table_))
-        || OB_FAIL(dml.add_column("column_name", column_priv_key.column_))
-        || OB_FAIL(dml.add_column("all_priv", all_priv))) {
-      LOG_WARN("add column failed", K(ret));
-    }
+
+  if ((priv_set & OB_PRIV_SELECT) != 0) { all_priv |= 1; }
+  if ((priv_set & OB_PRIV_INSERT) != 0) { all_priv |= 2; }
+  if ((priv_set & OB_PRIV_UPDATE) != 0) { all_priv |= 4; }
+  if ((priv_set & OB_PRIV_REFERENCES) != 0) { all_priv |= 8; }
+  if (OB_FAIL(dml.add_pk_column("tenant_id", 0))
+      || OB_FAIL(dml.add_pk_column("user_id", column_priv_key.user_id_))
+      || OB_FAIL(dml.add_pk_column("priv_id", priv_id))
+      || OB_FAIL(dml.add_column("database_name", column_priv_key.db_))
+      || OB_FAIL(dml.add_column("table_name", column_priv_key.table_))
+      || OB_FAIL(dml.add_column("column_name", column_priv_key.column_))
+      || OB_FAIL(dml.add_column("all_priv", all_priv))) {
+    LOG_WARN("add column failed", K(ret));
   }
   return ret;
 }
@@ -1257,10 +1252,6 @@ int ObPrivSqlService::grant_revoke_role(
 
   if (OB_FAIL(ObCompatModeGetter::check_is_oracle_mode_with_tenant_id(tenant_id, is_oracle_mode))) {
     LOG_WARN("fail to get is oracle mode", K(ret));
-  }
-
-  if (OB_SUCC(ret) && !is_oracle_mode) {
-    OZ (ObSQLUtils::compatibility_check_for_mysql_role_and_column_priv(tenant_id));
   }
 
   // __all_tenant_role_grantee_map

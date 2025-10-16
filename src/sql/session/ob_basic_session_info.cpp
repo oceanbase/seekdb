@@ -4901,7 +4901,7 @@ OB_DEF_DESERIALIZE(ObBasicSessionInfo)
   if (OB_SUCC(ret) && pos < data_len) {
     OB_UNIS_DECODE(exec_min_cluster_version_);
   } else {
-    exec_min_cluster_version_ = CLUSTER_VERSION_4_0_0_0;
+    exec_min_cluster_version_ = CLUSTER_VERSION_1_0_0_0;
   }
   if (OB_SUCC(ret) && pos < data_len) {
     LST_DO_CODE(OB_UNIS_DECODE, is_client_sessid_support_);
@@ -5548,8 +5548,8 @@ int ObBasicSessionInfo::get_auto_increment_cache_size(int64_t &auto_increment_ca
 int ObBasicSessionInfo::get_optimizer_features_enable_version(uint64_t &version) const
 {
   int ret = OB_SUCCESS;
-  // if OPTIMIZER_FEATURES_ENABLE is set as '', use COMPAT_VERSION_4_2_1 where this variable is introduced.
-  version = COMPAT_VERSION_4_2_1;
+  // if OPTIMIZER_FEATURES_ENABLE is set as ''
+  version = COMPAT_VERSION_1_0_0_0;
   ObString version_str;
   uint64_t tmp_version = 0;
   if (OB_FAIL(get_string_sys_var(SYS_VAR_OPTIMIZER_FEATURES_ENABLE, version_str))) {
@@ -5582,52 +5582,30 @@ int ObBasicSessionInfo::get_enable_parallel_ddl(bool &v) const
 
 int ObBasicSessionInfo::get_force_parallel_query_dop(uint64_t &v) const
 {
-  int ret = OB_SUCCESS;
-  if (exec_min_cluster_version_ >= CLUSTER_VERSION_3100) {
-    ret = get_uint64_sys_var(SYS_VAR__FORCE_PARALLEL_QUERY_DOP, v);
-  } else {
-    v = 1;
-  }
-  return ret;
+  return get_uint64_sys_var(SYS_VAR__FORCE_PARALLEL_QUERY_DOP, v);
 }
 
 int ObBasicSessionInfo::get_parallel_degree_policy_enable_auto_dop(bool &v) const
 {
   int ret = OB_SUCCESS;
   v = false;
-  if (exec_min_cluster_version_ >= CLUSTER_VERSION_4_2_0_0) {
-    int64_t value = 0;
-    if (OB_FAIL(get_int64_sys_var(SYS_VAR_PARALLEL_DEGREE_POLICY, value))) {
-      LOG_WARN("failed to update session_timeout", K(ret));
-    } else {
-      v = 1 == value;
-    }
+  int64_t value = 0;
+  if (OB_FAIL(get_int64_sys_var(SYS_VAR_PARALLEL_DEGREE_POLICY, value))) {
+    LOG_WARN("failed to update session_timeout", K(ret));
   } else {
-    v = false;
+    v = 1 == value;
   }
   return ret;
 }
 
 int ObBasicSessionInfo::get_force_parallel_dml_dop(uint64_t &v) const
 {
-  int ret = OB_SUCCESS;
-  if (exec_min_cluster_version_ >= CLUSTER_VERSION_3100) {
-    ret = get_uint64_sys_var(SYS_VAR__FORCE_PARALLEL_DML_DOP, v);
-  } else {
-    v = 1;
-  }
-  return ret;
+  return get_uint64_sys_var(SYS_VAR__FORCE_PARALLEL_DML_DOP, v);
 }
 
 int ObBasicSessionInfo::get_force_parallel_ddl_dop(uint64_t &v) const
 {
-  int ret = OB_SUCCESS;
-  if (exec_min_cluster_version_ >= CLUSTER_VERSION_3200) {
-    ret = get_uint64_sys_var(SYS_VAR__FORCE_PARALLEL_DDL_DOP, v);
-  } else {
-    v = 1;
-  }
-  return ret;
+  return get_uint64_sys_var(SYS_VAR__FORCE_PARALLEL_DDL_DOP, v);
 }
 
 int ObBasicSessionInfo::get_partial_rollup_pushdown(int64_t &partial_rollup) const
@@ -5691,13 +5669,7 @@ int ObBasicSessionInfo::get_activate_all_role_on_login(bool &v) const
 
 int ObBasicSessionInfo::get_mview_refresh_dop(uint64_t &v) const
 {
-  int ret = OB_SUCCESS;
-  if (exec_min_cluster_version_ >= CLUSTER_VERSION_4_3_5_1) {
-    ret = get_uint64_sys_var(SYS_VAR_MVIEW_REFRESH_DOP, v);
-  } else {
-    v = 0;
-  }
-  return ret;
+  return get_uint64_sys_var(SYS_VAR_MVIEW_REFRESH_DOP, v);
 }
 
 void ObBasicSessionInfo::reset_tx_variable(bool reset_next_scope)
@@ -6995,8 +6967,7 @@ bool ObBasicSessionInfo::has_active_autocommit_trans(transaction::ObTransID & tr
 bool ObBasicSessionInfo::get_enable_hyperscan_regexp_engine() const
 {
   // disable hyperscan during upgrading
-  return inf_pc_configs_.enable_hyperscan_regexp_engine_
-         && GET_MIN_CLUSTER_VERSION() >= CLUSTER_VERSION_4_3_3_0;
+  return inf_pc_configs_.enable_hyperscan_regexp_engine_;
 }
 
 int8_t ObBasicSessionInfo::get_min_const_integer_precision() const

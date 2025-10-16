@@ -57,7 +57,7 @@ const char *ObTimeZoneInfoManager::FETCH_TENANT_TZ_INFO_SQL =
     "  FULL(@\"SEL$0208448F\" \"t3\"@\"SEL$2\") "
     "  PRED_DEDUCE(@\"SEL$2\") "
     "  QUERY_TIMEOUT(100000000) "
-    "  OPTIMIZER_FEATURES_ENABLE('4.0.0.0') "
+    "  OPTIMIZER_FEATURES_ENABLE('1.0.0.0') "
     "  END_OUTLINE_DATA  */ * "
     "FROM ("
     "SELECT t1.time_zone_id, t1.inner_tz_id, t1.name, t3.transition_time, t2.offset, t2.is_dst, "

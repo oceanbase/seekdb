@@ -77,17 +77,6 @@ int ObDropTableResolver::resolve(const ParseNode &parse_tree)
       ret = OB_ERR_UNEXPECTED;
       SQL_RESV_LOG(WARN, "Unknown parse tree type", K_(parse_tree.type), K(ret));
     }
-    if (OB_SUCC(ret)) {
-      if (drop_table_arg.table_type_ == share::schema::MATERIALIZED_VIEW) {
-        uint64_t tenant_version = 0;
-        if (OB_FAIL(GET_MIN_DATA_VERSION(drop_table_arg.tenant_id_, tenant_version))) {
-          SQL_RESV_LOG(WARN, "failed to get data version", K(ret));
-        } else if (tenant_version < DATA_VERSION_4_3_0_0) {
-          ret = OB_NOT_SUPPORTED;
-          LOG_USER_ERROR(OB_NOT_SUPPORTED, "mview before 4.3 is");
-        }
-      }
-    }
 
     ObPlacementHashSet<ObTableItem> *tmp_ptr = NULL;
     ObPlacementHashSet<ObTableItem> *table_item_set = NULL;

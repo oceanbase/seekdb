@@ -39,7 +39,6 @@ int ObTransformMVRewritePrepare::need_do_prepare(const ObDMLStmt *stmt,
 {
   int ret = OB_SUCCESS;
   bool has_mv = false;
-  uint64_t data_version;
   need_prepare = false;
   if (OB_ISNULL(ctx_) || OB_ISNULL(ctx_->session_info_)
       || OB_ISNULL(stmt) || OB_ISNULL(stmt->get_query_ctx())) {
@@ -48,15 +47,6 @@ int ObTransformMVRewritePrepare::need_do_prepare(const ObDMLStmt *stmt,
   } else if (ctx_->session_info_->get_ddl_info().is_refreshing_mview()) {
     need_prepare = false;
     OPT_TRACE("not a user SQL, skip mv rewrite");
-  } else if (stmt->get_query_ctx()->optimizer_features_enable_version_ < COMPAT_VERSION_4_3_1) {
-    need_prepare = false;
-    OPT_TRACE("optimizer features enable version is lower than 4.3.1, skip mv rewrite");
-  } else if (OB_FAIL(GET_MIN_DATA_VERSION(ctx_->session_info_->get_effective_tenant_id(), data_version))) {
-    LOG_WARN("failed to get data version", K(ret), K(ctx_->session_info_->get_effective_tenant_id()));
-  } else if (OB_UNLIKELY(data_version < DATA_VERSION_4_3_1_0)) {
-    // data version lower than 4.3.1 does not have the inner table used to get mv list
-    need_prepare = false;
-    OPT_TRACE("min data version is lower than 4.3.1, skip mv rewrite");
   } else if (OB_FAIL(check_table_has_mv(stmt, has_mv))) {
     LOG_WARN("failed to check table has mv", K(ret));
   } else if (!has_mv) {

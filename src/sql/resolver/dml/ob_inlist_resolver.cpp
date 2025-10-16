@@ -202,7 +202,6 @@ int ObInListResolver::get_inlist_rewrite_info(const ParseNode &in_list,
 {
   int64_t ret = OB_SUCCESS;
   int64_t row_cnt = -1;
-  bool enable_hybrid_inlist = ObTransformUtils::is_enable_hybrid_inlist_rewrite(helper.optimizer_features_enable_version_);
   if (OB_ISNULL(in_list.children_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid arguments", K(ret));
@@ -267,9 +266,9 @@ int ObInListResolver::get_inlist_rewrite_info(const ParseNode &in_list,
         } else if (0 == i) {
           rewrite_info.param_types_.at(col_idx) = cur_param_type;
         } else if (rewrite_info.param_types_.at(col_idx) == cur_param_type) {
-        } else if (enable_hybrid_inlist && ObNullType == cur_param_type.obj_type_) {
+        } else if (ObNullType == cur_param_type.obj_type_) {
           // ignore null type
-        } else if (enable_hybrid_inlist && ObNullType == rewrite_info.param_types_.at(col_idx).obj_type_) {
+        } else if (ObNullType == rewrite_info.param_types_.at(col_idx).obj_type_) {
           rewrite_info.param_types_.at(col_idx) = cur_param_type;
         } else {
           rewrite_info.is_valid_as_values_table_ = false;
@@ -339,13 +338,9 @@ int ObInListResolver::check_inlist_rewrite_enable(const ParseNode &in_list,
       }
     }
     if (OB_SUCC(ret)) {
-      if (!ObTransformUtils::is_enable_values_table_rewrite(optimizer_features_enable_version)) {
-        LOG_TRACE("current optimizer version is less then COMPAT_VERSION_4_3_2");
-      } else if (in_list.num_child_ < threshold) {
+      if (in_list.num_child_ < threshold) {
         LOG_TRACE("check rewrite inlist threshold", K(threshold), K(in_list.num_child_));
-      } else if ((GET_MIN_CLUSTER_VERSION() >= CLUSTER_VERSION_4_2_2_0 &&
-                  GET_MIN_CLUSTER_VERSION() < CLUSTER_VERSION_4_3_0_0) ||
-                  GET_MIN_CLUSTER_VERSION() >= CLUSTER_VERSION_4_3_2_0) {
+      } else {
         is_enable = true;
       }
     }
@@ -878,10 +873,8 @@ int ObInListResolver::try_merge_inlists(ObExprResolveContext &resolve_ctx,
       } else { /*do nothing*/ }
     }
     if (OB_FAIL(ret)) {
-    } else if (optimizer_features_enable_version >= COMPAT_VERSION_4_3_5_BP2) {
-      is_enable = true;
     } else {
-      LOG_TRACE("current optimizer version is less then COMPAT_VERSION_4_3_5_BP2");
+      is_enable = true;
     }
   }
   if (OB_FAIL(ret) || !is_enable) {

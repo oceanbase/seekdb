@@ -76,8 +76,7 @@ int ObSQLUtils::check_enable_decimalint(const ObSQLSessionInfo *session, bool &e
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("session is null", K(ret));
   } else {
-    enable_decimalint = (const_cast<ObSQLSessionInfo *>(session)->is_enable_decimal_int_type()
-                         && GET_MIN_CLUSTER_VERSION() >= CLUSTER_VERSION_4_3_0_0);
+    enable_decimalint = (const_cast<ObSQLSessionInfo *>(session)->is_enable_decimal_int_type());
   }
   return ret;
 }
@@ -469,115 +468,6 @@ int ObSQLUtils::calc_const_expr(const ObRawExpr *expr,
   return ret;
 }
 
-int ObSQLUtils::is_charset_data_version_valid(ObCharsetType charset_type, const int64_t tenant_id)
-{
-  int ret = OB_SUCCESS;
-  uint64_t data_version = 0;
-  if (OB_FAIL(GET_MIN_DATA_VERSION(tenant_id, data_version))) {
-    SQL_LOG(WARN, "failed to GET_MIN_DATA_VERSION", K(ret));
-  } else if (CHARSET_LATIN1 == charset_type && data_version < DATA_VERSION_4_1_0_0 ) {
-    ret = OB_NOT_SUPPORTED;
-    SQL_LOG(WARN, "latin1 not supported when data_version < 4_1_0_0", K(ret));
-    LOG_USER_ERROR(OB_NOT_SUPPORTED, "tenant data version is less than 4.1, charset latin1 is");
-  } else if (CHARSET_GB18030_2022 == charset_type && data_version < DATA_VERSION_4_2_0_0 ) {
-    ret = OB_NOT_SUPPORTED;
-    SQL_LOG(WARN, "GB18030_2022 not supported when data_version < 4_2_0_0", K(ret));
-    LOG_USER_ERROR(OB_NOT_SUPPORTED, "tenant data version is less than 4.2, charset GB18030_2022 is");
-  } else if ((CHARSET_ASCII == charset_type || CHARSET_TIS620 == charset_type) &&
-             ((data_version < MOCK_DATA_VERSION_4_2_4_0) ||
-              (DATA_VERSION_4_3_0_0 <= data_version && data_version < DATA_VERSION_4_3_3_0))) {
-    ret = OB_NOT_SUPPORTED;
-    SQL_LOG(WARN, "charset not supported when data_version < 4_2_4_0 or between [430,433)",K(charset_type), K(ret));
-    LOG_USER_ERROR(OB_NOT_SUPPORTED, "tenant data version is less than 4.2.4 or between [430,433), charset is");
-  } else if ((CHARSET_SJIS == charset_type || CHARSET_HKSCS == charset_type || CHARSET_HKSCS31 == charset_type
-              || CHARSET_DEC8 == charset_type || CHARSET_BIG5 == charset_type || CHARSET_UTF16LE == charset_type)
-              && ((data_version < MOCK_DATA_VERSION_4_2_5_0) || (DATA_VERSION_4_3_0_0 <= data_version && data_version < DATA_VERSION_4_3_4_0))) {
-    ret = OB_NOT_SUPPORTED;
-    SQL_LOG(WARN, "charset not supported when data_version < 4_2_5_0 or between [430,434)",K(charset_type), K(ret));
-    LOG_USER_ERROR(OB_NOT_SUPPORTED, "tenant data version is less than 4.2.5 or between [430,434), charset is");
-  } else if ((CHARSET_GB2312 == charset_type || CHARSET_UJIS == charset_type || CHARSET_EUCKR == charset_type || CHARSET_EUCJPMS == charset_type || CHARSET_CP932 == charset_type
-              || CHARSET_CP850 == charset_type || CHARSET_HP8 == charset_type || CHARSET_MACROMAN == charset_type || CHARSET_SWE7 == charset_type)
-              && ((data_version < MOCK_DATA_VERSION_4_2_5_0) || (DATA_VERSION_4_3_0_0 <= data_version && data_version < DATA_VERSION_4_3_5_1)) ) {
-    ret = OB_NOT_SUPPORTED;
-    SQL_LOG(WARN, "charset not supported when data_version < 4_2_5_0 or between [430,435.1)",K(charset_type), K(ret));
-    LOG_USER_ERROR(OB_NOT_SUPPORTED, "tenant data version is less than 4.2.5 or between [430,435.1), charset is");
-  }
-  return ret;
-}
-
-int ObSQLUtils::is_collation_data_version_valid(ObCollationType collation_type, const int64_t tenant_id)
-{
-  int ret = OB_SUCCESS;
-   uint64_t data_version = 0;
-  if (OB_FAIL(GET_MIN_DATA_VERSION(tenant_id, data_version))) {
-    SQL_LOG(WARN, "failed to GET_MIN_DATA_VERSION", K(ret));
-  } else if ((data_version < MOCK_DATA_VERSION_4_2_4_0
-              || (data_version >= DATA_VERSION_4_3_0_0 && data_version < DATA_VERSION_4_3_3_0))
-             && (CS_TYPE_UTF8MB4_CROATIAN_UCA_CI == collation_type
-                 || CS_TYPE_UTF8MB4_UNICODE_520_CI == collation_type
-                 || CS_TYPE_UTF8MB4_CZECH_UCA_CI == collation_type
-                 || CS_TYPE_UTF8MB4_0900_AI_CI == collation_type)) {
-    ret = OB_NOT_SUPPORTED;
-    SQL_LOG(WARN, "Unicode collation not supported when data_version < 4_2_4_0 or between [430,433)", K(collation_type), K(ret));
-    LOG_USER_ERROR(OB_NOT_SUPPORTED, "Unicode collation not supported when data_version < 4_2_4_0 or between [430,433), unicode collation is");
-  } else if ((
-                data_version < MOCK_DATA_VERSION_4_2_5_0 || 
-                (data_version >= DATA_VERSION_4_3_0_0 && data_version < DATA_VERSION_4_3_4_0)
-              )
-              &&
-              (
-                 CS_TYPE_UTF8MB4_ZH_0900_AS_CS != collation_type &&
-                 CS_TYPE_UTF8MB4_CROATIAN_UCA_CI != collation_type &&
-                 CS_TYPE_UTF8MB4_UNICODE_520_CI != collation_type &&
-                 CS_TYPE_UTF8MB4_CZECH_UCA_CI != collation_type &&
-                 CS_TYPE_UTF8MB4_0900_AI_CI != collation_type &&
-                  ((CS_TYPE_UTF8MB4_0900_AI_CI <= collation_type && collation_type <= CS_TYPE_UTF8MB4_MN_CYRL_0900_AS_CS)
-                   || (CS_TYPE_UTF16_ICELANDIC_UCA_CI <= collation_type && collation_type <= CS_TYPE_UTF16_VIETNAMESE_CI)
-                   || (CS_TYPE_UTF8MB4_ICELANDIC_UCA_CI <= collation_type && collation_type <= CS_TYPE_UTF8MB4_VIETNAMESE_CI)
-                   || CS_TYPE_BIG5_BIN == collation_type 
-                   || CS_TYPE_BIG5_CHINESE_CI == collation_type
-                   || CS_TYPE_HKSCS31_BIN == collation_type
-                   || CS_TYPE_HKSCS_BIN == collation_type
-                   || CS_TYPE_DEC8_BIN == collation_type
-                   || CS_TYPE_DEC8_SWEDISH_CI == collation_type
-                  )
-              )) {
-    ret = OB_NOT_SUPPORTED;
-    SQL_LOG(WARN, "Unicode collation not supported when data_version < 4_2_5_0 or between [430,434)", K(collation_type), K(ret));
-    LOG_USER_ERROR(OB_NOT_SUPPORTED, "Unicode collation not supported when data_version < 4_2_5_0 or between [430,434), unicode collation is");
-  } else if ((
-               data_version < MOCK_DATA_VERSION_4_2_5_0 ||
-               (data_version >= DATA_VERSION_4_3_0_0 && data_version < DATA_VERSION_4_3_5_0)
-              )
-              &&
-              (
-                   CS_TYPE_LATIN1_GERMAN2_CI == collation_type
-                   || CS_TYPE_LATIN1_GERMAN1_CI == collation_type
-                   || CS_TYPE_LATIN1_DANISH_CI == collation_type
-                   || CS_TYPE_LATIN1_SPANISH_CI == collation_type
-                   || CS_TYPE_LATIN1_GENERAL_CI == collation_type
-                   || CS_TYPE_LATIN1_GENERAL_CS == collation_type
-              )
-            ) {
-    ret = OB_NOT_SUPPORTED;
-    SQL_LOG(WARN, "Unicode collation not supported when data_version < 4_2_5_0 or between [430,434)", K(collation_type), K(ret));
-    LOG_USER_ERROR(OB_NOT_SUPPORTED, "Unicode collation not supported when data_version < 4_2_5_0 or between [430,434), unicode collation is");
-  }
-#ifndef OB_BUILD_CLOSE_MODULES
-  if (OB_SUCC(ret)) {
-    if (data_version < DATA_VERSION_4_2_2_0 &&
-              (CS_TYPE_UTF16_UNICODE_CI == collation_type ||
-                CS_TYPE_UTF8MB4_UNICODE_CI == collation_type)) {
-      ret = OB_NOT_SUPPORTED;
-      SQL_LOG(WARN, "Unicode collation not supported when data_version < 4_2_2_0", K(collation_type), K(ret));
-      LOG_USER_ERROR(OB_NOT_SUPPORTED, "tenant data version is less than 4.2.2, unicode collation is");
-    }
-  }
-#endif
-  return ret;
-}
-// Parameter raw_expr contains the function addr_to_partition_id,
-// Then the obtained partition_id result cannot be mapped to the corresponding addr in the following part
 int ObSQLUtils::calc_calculable_expr(ObSQLSessionInfo *session,
                                      const ObRawExpr *expr,
                                      ObObj &result,
@@ -1365,26 +1255,13 @@ int ObSQLUtils::check_enable_mysql_compatible_dates(const sql::ObSQLSessionInfo 
 {
   int ret = OB_SUCCESS;
   enabled = false;
-  uint64_t data_version = 0;
   if (!lib::is_mysql_mode()) {
     // only support mysql dates in mysql mode now.
   } else if (OB_ISNULL(session)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("session is null", K(ret));
   } else if ((const_cast<sql::ObSQLSessionInfo *>(session))->is_enable_mysql_compatible_dates()) {
-    if (is_ddl_scenario) {
-      uint64_t data_version = 0;
-      if (OB_FAIL(GET_MIN_DATA_VERSION(session->get_effective_tenant_id(), data_version))) {
-        SQL_LOG(WARN, "fail to get data version", K(ret));
-      } else {
-        enabled = ((data_version >= MOCK_CLUSTER_VERSION_4_2_5_0 && data_version < CLUSTER_VERSION_4_3_0_0)
-           || data_version >= CLUSTER_VERSION_4_3_5_1);
-      }
-    } else {
-      enabled = ((GET_MIN_CLUSTER_VERSION() >= MOCK_CLUSTER_VERSION_4_2_5_0
-                  && GET_MIN_CLUSTER_VERSION() < CLUSTER_VERSION_4_3_0_0)
-                 || GET_MIN_CLUSTER_VERSION() >= CLUSTER_VERSION_4_3_5_1);
-    }
+    enabled = true;
   }
   return ret;
 }
@@ -4851,7 +4728,6 @@ int ObSQLUtils::async_recompile_view(const share::schema::ObTableSchema &old_vie
 {
   int ret = OB_SUCCESS;
   ObTableSchema new_view_schema(&alloc);
-  uint64_t data_version = 0;
   bool changed = false;
   if (reset_column_infos) {
     // failed to resolve view definition, do nothing
@@ -4862,10 +4738,6 @@ int ObSQLUtils::async_recompile_view(const share::schema::ObTableSchema &old_vie
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(new_view_schema.assign(old_view_schema))) {
     LOG_WARN("failed to assign table schema", K(ret));
-  } else if (OB_FAIL(GET_MIN_DATA_VERSION(old_view_schema.get_tenant_id(), data_version))) {
-    LOG_WARN("failed to get data version", K(ret));
-  } else if (data_version < DATA_VERSION_4_1_0_0) {
-    // do nothing
   } else if (OB_ISNULL(GCTX.sql_engine_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("failed to get sql engine", K(ret));
@@ -5055,42 +4927,6 @@ bool ObSQLUtils::check_json_expr(const ObRawExpr &expr)
     }
   }
   return res;
-}
-
-int ObSQLUtils::compatibility_check_for_mysql_role_and_column_priv(uint64_t tenant_id)
-{
-  int ret = OB_SUCCESS;
-  uint64_t data_version = 0;
-  OZ (GET_MIN_DATA_VERSION(tenant_id, data_version));
-  OV ((MOCK_DATA_VERSION_4_2_3_0 <= data_version && data_version < DATA_VERSION_4_3_0_0) || data_version >= DATA_VERSION_4_3_1_0 , OB_NOT_SUPPORTED, data_version);
-  return ret;
-}
-
-bool ObSQLUtils::is_data_version_ge_422_or_431(uint64_t data_version)
-{
-  return ((DATA_VERSION_4_2_2_0 <= data_version && data_version < DATA_VERSION_4_3_0_0) || data_version >= DATA_VERSION_4_3_1_0);
-}
-
-
-bool ObSQLUtils::is_data_version_ge_423_or_432(uint64_t data_version)
-{
-  return ((MOCK_DATA_VERSION_4_2_3_0 <= data_version && data_version < DATA_VERSION_4_3_0_0) || data_version >= DATA_VERSION_4_3_2_0);
-}
-
-bool ObSQLUtils::is_data_version_ge_424_or_433(uint64_t data_version)
-{
-  return ((MOCK_DATA_VERSION_4_2_4_0 <= data_version && data_version < DATA_VERSION_4_3_0_0) || data_version >= DATA_VERSION_4_3_3_0);
-}
-
-bool ObSQLUtils::is_min_cluster_version_ge_425_or_435()
-{
-  uint64_t version = GET_MIN_CLUSTER_VERSION();
-  return ((MOCK_CLUSTER_VERSION_4_2_5_0 <= version && version < CLUSTER_VERSION_4_3_0_0) || version >= CLUSTER_VERSION_4_3_5_0);
-}
-
-bool ObSQLUtils::is_opt_feature_version_ge_425_or_435(uint64_t opt_feature_version)
-{
-  return ((COMPAT_VERSION_4_2_5 <= opt_feature_version && opt_feature_version < COMPAT_VERSION_4_3_0) || opt_feature_version >= COMPAT_VERSION_4_3_5);
 }
 
 int ObSQLUtils::get_strong_partition_replica_addr(const ObCandiTabletLoc &phy_part_loc_info,

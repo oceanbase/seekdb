@@ -328,9 +328,7 @@ int ObStaticEngineExprCG::cg_expr_basic(const ObIArray<ObRawExpr *> &raw_exprs)
         rt_expr->datum_meta_.cs_type_ = static_cast<ObCollationType>(result_meta.get_subschema_id());
       }
       if (is_lob_storage(rt_expr->obj_meta_.get_type())) {
-        if (cur_cluster_version_ >= CLUSTER_VERSION_4_1_0_0) {
-          rt_expr->obj_meta_.set_has_lob_header();
-        }
+        rt_expr->obj_meta_.set_has_lob_header();
       }
       // For bit type, `length_semantics_` is used as width in datum mate, and `scale_` is used
       // as width in obj, so passing length meta to scale in obj_mate.

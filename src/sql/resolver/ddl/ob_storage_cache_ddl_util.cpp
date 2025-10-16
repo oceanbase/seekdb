@@ -148,23 +148,12 @@ int ObDDLResolver::resolve_storage_cache_attribute(const ParseNode *node, ObReso
 {
   int ret = OB_SUCCESS;
   const ObTableSchema *tbl_schema = nullptr;
-  uint64_t tenant_data_version = 0;
-  uint64_t tenant_id = OB_INVALID_ID;
   if (OB_ISNULL(node)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid parse node", K(ret));
   } else if (OB_ISNULL(session_info_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexcepted null ptr", K(ret));
-  } else if (FALSE_IT(tenant_id = session_info_->get_effective_tenant_id())) {
-  } else if (OB_FAIL(GET_MIN_DATA_VERSION(tenant_id, tenant_data_version))) {
-    LOG_WARN("get tenant data version failed", K(ret));
-  } else if (tenant_data_version < DATA_VERSION_4_3_5_2) {
-    ret = OB_NOT_SUPPORTED;
-    LOG_WARN("storage cache policy is not supported in data version less than 4.3.5.2", K(ret),
-        K(tenant_data_version));
-    LOG_USER_ERROR(
-        OB_NOT_SUPPORTED, "storage cache policy is not supported in data version less than 4.3.5.2");
   } else if (OB_NOT_NULL(storage_cache_policy_)) {
     ret = OB_NOT_SUPPORTED;
     LOG_WARN("storage cache policy can only be specified once", K(ret));
@@ -356,21 +345,16 @@ int ObDDLResolver::check_and_set_default_storage_cache_policy()
 int ObDDLResolver::check_create_stmt_storage_cache_policy(const ObString &storage_cache_policy_str, const ObTableSchema *table_schema)
 {
   int ret = OB_SUCCESS;
-  uint64_t tenant_version = 0;
   if (OB_ISNULL(table_schema)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("table schema is null", K(ret));
   } else if (stmt::T_CREATE_TABLE == stmt_->get_stmt_type() || stmt::T_CREATE_INDEX == stmt_->get_stmt_type()) {
-    if (OB_FAIL(GET_MIN_DATA_VERSION(MTL_ID(), tenant_version))) {
-      LOG_WARN("failed to get data version", K(ret));
-    } else if (tenant_version >= DATA_VERSION_4_3_5_2) {
-      if (!is_storage_cache_policy_default(storage_cache_policy_str)) {
-        ObStorageCachePolicy storage_cache_policy;
-        if (OB_FAIL(storage_cache_policy.load_from_string(storage_cache_policy_str))) {
-          LOG_WARN("failed to load storage cache policy", K(ret));
-        } else if (OB_FAIL(check_storage_cache_policy(storage_cache_policy, table_schema))) {
-          LOG_WARN("failed to check storage cache policy", K(ret));
-        }
+    if (!is_storage_cache_policy_default(storage_cache_policy_str)) {
+      ObStorageCachePolicy storage_cache_policy;
+      if (OB_FAIL(storage_cache_policy.load_from_string(storage_cache_policy_str))) {
+        LOG_WARN("failed to load storage cache policy", K(ret));
+      } else if (OB_FAIL(check_storage_cache_policy(storage_cache_policy, table_schema))) {
+        LOG_WARN("failed to check storage cache policy", K(ret));
       }
     }
   }
@@ -381,7 +365,6 @@ int ObDDLResolver::check_create_stmt_storage_cache_policy(const ObString &storag
 int ObDDLResolver::check_alter_stmt_storage_cache_policy(const ObTableSchema *ori_table_schema)
 {
   int ret = OB_SUCCESS;
-  uint64_t tenant_data_version = 0;
   ObAlterTableStmt *alter_table_stmt = static_cast<ObAlterTableStmt*>(stmt_);
   ObSArray<obrpc::ObCreateIndexArg*> &add_index_arg_list = alter_table_stmt->get_index_arg_list();
   const ObSArray<obrpc::ObIndexArg*> &alter_index_arg_list = alter_table_stmt->get_alter_index_arg_list();
@@ -392,9 +375,7 @@ int ObDDLResolver::check_alter_stmt_storage_cache_policy(const ObTableSchema *or
     } else if (OB_ISNULL(alter_table_stmt)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("alter table stmt is null", KR(ret));
-    } else if (OB_FAIL(GET_MIN_DATA_VERSION(MTL_ID(), tenant_data_version))) {
-      LOG_WARN("get data version failed", KR(ret), K(MTL_ID()));
-    } else if (tenant_data_version >= DATA_VERSION_4_3_5_2) {
+    } else {
       if (storage_cache_policy_.empty()) {
         // If the storage cache policy is not set, the default storage cache policy will be set.
         if (add_index_arg_list.count() > 0 && OB_FAIL(set_default_storage_cache_policy(true/*is_alter_add_index*/))) {
@@ -953,19 +934,13 @@ int ObStorageCacheUtil::check_alter_partiton_storage_cache_policy(const share::s
                                                              const obrpc::ObAlterTableArg &alter_table_arg)
 {
   int ret = OB_SUCCESS;
-  uint64_t tenant_data_version = 0;
   const ObPartitionLevel part_level = orig_table_schema.get_part_level();
   const AlterTableSchema &alter_table_schema = alter_table_arg.alter_table_schema_;
   const int64_t part_num = alter_table_schema.get_partition_num();
   ObPartition **part_array = alter_table_schema.get_part_array();
   ObPartition *inc_part = nullptr;
   ObCheckPartitionMode check_partition_mode = CHECK_PARTITION_MODE_NORMAL;
-  if (OB_FAIL(GET_MIN_DATA_VERSION(orig_table_schema.get_tenant_id(), tenant_data_version))) {
-    LOG_WARN("get data version failed", KR(ret), K(orig_table_schema.get_tenant_id()));
-  } else if (tenant_data_version < DATA_VERSION_4_3_5_2) {
-    ret = OB_NOT_SUPPORTED;
-    LOG_WARN("cluster version and feature mismatch", KR(ret));
-  } else if (!orig_table_schema.is_user_table()) {
+  if (!orig_table_schema.is_user_table()) {
     ret = OB_NOT_SUPPORTED;
     LOG_WARN("unsupport behavior on not user table", KR(ret), K(orig_table_schema));
   } else if (PARTITION_LEVEL_ZERO == part_level) {
@@ -998,17 +973,11 @@ int ObStorageCacheUtil::check_alter_subpartiton_storage_cache_policy(const share
                                                                 const obrpc::ObAlterTableArg &alter_table_arg)
 {
   int ret = OB_SUCCESS;
-  uint64_t tenant_data_version = 0;
   const ObPartitionLevel part_level = orig_table_schema.get_part_level();
   const AlterTableSchema &alter_table_schema = alter_table_arg.alter_table_schema_;
   ObCheckPartitionMode check_partition_mode = CHECK_PARTITION_MODE_NORMAL;
- 
-  if (OB_FAIL(GET_MIN_DATA_VERSION(orig_table_schema.get_tenant_id(), tenant_data_version))) {
-    LOG_WARN("get data version failed", KR(ret), K(orig_table_schema.get_tenant_id()));
-  } else if (tenant_data_version < DATA_VERSION_4_3_5_2) {
-    ret = OB_NOT_SUPPORTED;
-    LOG_WARN("cluster version and feature mismatch", KR(ret));
-  } else if (!orig_table_schema.is_user_table()) {
+
+  if (!orig_table_schema.is_user_table()) {
     ret = OB_NOT_SUPPORTED;
     LOG_WARN("unsupport behavior on not user table", KR(ret), K(orig_table_schema));
   } else if (PARTITION_LEVEL_ZERO == part_level || PARTITION_LEVEL_ONE == part_level) {

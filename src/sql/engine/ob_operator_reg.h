@@ -79,7 +79,7 @@ struct SUPPORT_RICH_FORMAT {};
     constexpr static bool vectorized_ =                                        \
         std::is_same<VECTORIZED_OP, vec_type>::value;                          \
     constexpr static uint64_t ob_version_ =                                    \
-        (ob_version == 0 ? CLUSTER_VERSION_4_3_5_3 : ob_version);              \
+        (ob_version == 0 ? CLUSTER_VERSION_1_0_0_0 : ob_version);              \
     constexpr static bool support_rich_format_ =                               \
         std::is_same<SUPPORT_RICH_FORMAT, rich_fmt>::value;                    \
     constexpr static const char *vec_op_name_ = support_rich_format_ ? vec_op_name : #type;\

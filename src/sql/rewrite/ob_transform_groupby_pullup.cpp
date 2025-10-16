@@ -237,11 +237,11 @@ int ObTransformGroupByPullup::check_groupby_pullup_validity(ObDMLStmt *stmt,
   if (OB_SUCC(ret)) {
     if (OB_FAIL(check_on_conditions(*stmt, ignore_tables))) {
       LOG_WARN("failed to check ignore views", K(ret));
-    } else if (stmt->get_query_ctx()->check_opt_compat_version(COMPAT_VERSION_4_3_5_BP2)) {
+    } else {
       if (OB_FAIL(check_where_conditions(*stmt, ignore_tables))) {
         LOG_WARN("failed to check ignore views", K(ret));
       } else { /* do nothing */ }
-    } else { /* do nothing */ }
+    }
   }
   // check view validity
   for (int64_t i = 0; OB_SUCC(ret) && is_valid && i < stmt->get_from_item_size(); ++i) {
@@ -753,8 +753,7 @@ int ObTransformGroupByPullup::check_table_items(ObDMLStmt *stmt,
   } else if (stmt->get_table_size() > 1 && child_stmt->get_table_size() > 1 &&
              stmt->get_table_size() + child_stmt->get_table_size() - 1 > 10) {
     is_valid = false;
-  } else if (stmt->get_query_ctx()->check_opt_compat_version(
-                          COMPAT_VERSION_4_2_5, COMPAT_VERSION_4_3_0, COMPAT_VERSION_4_3_5)) {
+  } else {
     const TableItem *table = NULL;
     int64_t non_basic_table_count = 0;
     for (int64_t i = 0; OB_SUCC(ret) && is_valid && i < stmt->get_table_size(); ++i) {
@@ -1231,9 +1230,7 @@ int ObTransformGroupByPullup::check_original_plan_validity(ObLogicalOperator* ro
   } else if (OB_FAIL(check_view_table_in_inner_path(parent_ops, *parent_stmt,
                                                     view_table_id, is_inner_path))) {
     LOG_WARN("failed to check view table in inner path", K(ret));
-  } else if (is_inner_path &&
-             child_stmt->get_query_ctx()->check_opt_compat_version(
-                          COMPAT_VERSION_4_2_5, COMPAT_VERSION_4_3_0, COMPAT_VERSION_4_3_5)) {
+  } else if (is_inner_path) {
     is_valid = false;
     OPT_TRACE("check original plan view table in inner path:", is_inner_path);
   } else if (OB_FAIL(extract_columns_in_join_conditions(parent_ops,

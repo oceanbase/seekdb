@@ -1392,11 +1392,6 @@ int ObLogPlanHint::init_normal_hints(const ObIArray<ObHint*> &normal_hints,
     if (OB_ISNULL(hint = normal_hints.at(i))) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected null", K(ret), K(i), K(normal_hints));
-    } else if (hint->get_hint_type() == T_USE_LATE_MATERIALIZATION &&
-               (query_ctx.optimizer_features_enable_version_ < COMPAT_VERSION_4_2_5 ||
-                (query_ctx.optimizer_features_enable_version_ >= COMPAT_VERSION_4_3_0 &&
-                 query_ctx.optimizer_features_enable_version_ < COMPAT_VERSION_4_3_3))) {
-      /* need_add = true */
     } else if (hint->is_transform_hint() || hint->is_join_order_hint()) {
       need_add = false;
     }
@@ -1713,8 +1708,6 @@ int ObLogPlanHint::get_aggregation_info(bool &force_use_hash,
   force_hash_local = false;
   const ObAggHint *agg_hint = static_cast<const ObAggHint*>(get_normal_hint(T_USE_HASH_AGGREGATE));
   const ObPQHint *pq_hint = static_cast<const ObPQHint*>(get_normal_hint(T_PQ_GBY_HINT));
-  const bool enable_pq_hint = COMPAT_VERSION_4_3_3 <= optimizer_features_enable_version_
-                              || COMPAT_VERSION_4_2_4 < optimizer_features_enable_version_;
   if (NULL != agg_hint) {
     force_use_hash = agg_hint->is_enable_hint();
     force_use_merge = agg_hint->is_disable_hint();
@@ -1727,7 +1720,7 @@ int ObLogPlanHint::get_aggregation_info(bool &force_use_hash,
     force_use_merge = true;
     force_normal_sort = true;
   }
-  if (OB_FAIL(ret) || !enable_pq_hint) {
+  if (OB_FAIL(ret)) {
   } else if (NULL != pq_hint) {
     force_basic = pq_hint->is_force_basic();
     force_partition_wise = pq_hint->is_force_partition_wise();
@@ -1771,15 +1764,13 @@ int ObLogPlanHint::get_distinct_info(bool &force_use_hash,
   force_hash_local = false;
   const ObHint *method_hint = static_cast<const ObAggHint*>(get_normal_hint(T_USE_HASH_DISTINCT));
   const ObPQHint *pq_hint = static_cast<const ObPQHint*>(get_normal_hint(T_PQ_DISTINCT_HINT));
-  const bool enable_pq_hint = COMPAT_VERSION_4_3_3 <= optimizer_features_enable_version_
-                              || COMPAT_VERSION_4_2_4 < optimizer_features_enable_version_;
   if (NULL != method_hint) {
     force_use_hash = method_hint->is_enable_hint();
     force_use_merge = method_hint->is_disable_hint();
   } else if (is_outline_data_) {
     force_use_merge = true;
   }
-  if (OB_FAIL(ret) || !enable_pq_hint) {
+  if (OB_FAIL(ret)) {
   } else if (NULL != pq_hint) {
     force_basic = pq_hint->is_force_basic();
     force_partition_wise = pq_hint->is_force_partition_wise();
@@ -1900,10 +1891,7 @@ int ObLogPlanHint::check_scan_direction(const ObQueryCtx &ctx,
   direction = ObOrderDirection::UNORDERED;
   const LogTableHint *log_table_hint = get_log_table_hint(table_id);
   int64_t pos = OB_INVALID_INDEX;
-  static const uint64_t index_desc_enable_version = COMPAT_VERSION_4_3_5;
-  if (!ctx.check_opt_compat_version(index_desc_enable_version)) {
-    direction = ObOrderDirection::UNORDERED;
-  } else if (NULL != log_table_hint &&
+  if (NULL != log_table_hint &&
              ObOptimizerUtil::find_item(log_table_hint->index_list_, index_id, &pos)) {
     const ObIndexHint *hint = NULL;
     if (OB_UNLIKELY(pos >= log_table_hint->index_hints_.count() || pos < 0)
@@ -2024,8 +2012,7 @@ int ObLogPlanHint::get_index_prefix(const uint64_t table_id,
 {
   int ret = OB_SUCCESS;
   const LogTableHint *log_table_hint = NULL;
-  if (optimizer_features_enable_version_ < COMPAT_VERSION_4_2_3
-      || OB_ISNULL(log_table_hint = get_index_hint(table_id))) {
+  if (OB_ISNULL(log_table_hint = get_index_hint(table_id))) {
     //do nothing
   } else if (!log_table_hint->is_use_index_hint()) {
     //do nothing

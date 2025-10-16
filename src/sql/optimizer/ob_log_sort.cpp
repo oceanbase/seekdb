@@ -385,8 +385,6 @@ int ObLogSort::do_re_est_cost(EstimateCostInfo &param, double &card, double &op_
       || OB_ISNULL(get_stmt()->get_query_ctx())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(ret));
-  } else if (get_stmt()->get_query_ctx()->optimizer_features_enable_version_ < COMPAT_VERSION_4_2_1_BP4) {
-    param.need_row_count_ = -1;
   } else if (!is_prefix_sort()) {
     param.need_row_count_ = -1;
   } else if (NULL != topn_expr_ &&
@@ -567,11 +565,8 @@ int ObLogSort::try_allocate_pushdown_topn_runtime_filter()
   bool tsc_has_exchange = false;
   bool tsc_has_px_coord = false;
   bool can_allocate = false;
-  uint64_t min_cluster_version = GET_MIN_CLUSTER_VERSION();
   int ecode = EventTable::EN_PX_DISABLE_PD_TOPN_FILTER;
-  if (min_cluster_version < DATA_VERSION_4_3_2_0) {
-    can_allocate = false;
-  } else if (OB_SUCCESS != ecode) {
+  if (OB_SUCCESS != ecode) {
     can_allocate = false;
     OPT_TRACE("[TopN Filter] disable push down topn filter by tracepoint");
   } else if (OB_ISNULL(get_plan())) {

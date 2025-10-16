@@ -736,14 +736,11 @@ int ObMVChecker::check_mjv_refresh_type(const ObSelectStmt &stmt, ObMVRefreshabl
   bool has_outer_join = false;
   bool is_valid = false;
   uint64_t tenant_id = MTL_ID();
-  uint64_t data_version = 0;
-  if (OB_FAIL(GET_MIN_DATA_VERSION(tenant_id, data_version))) {
-    LOG_WARN("fail to get tenant data version", KR(ret), K(data_version));
-  } else if (OB_FAIL(check_join_mv_fast_refresh_valid(stmt, false, is_valid, has_outer_join))) {
+  if (OB_FAIL(check_join_mv_fast_refresh_valid(stmt, false, is_valid, has_outer_join))) {
     LOG_WARN("failed to check join mv fast refresh valid", K(ret));
   } else if (!is_valid) {
     /* do nothing */
-  } else if (data_version >= DATA_VERSION_4_3_4_0 && !has_outer_join &&
+  } else if (!has_outer_join &&
              OB_FAIL(check_match_major_refresh_mv(stmt, match_major_refresh))) {
     LOG_WARN("failed to check match major refresh mv", KR(ret));
   } else if (match_major_refresh) {

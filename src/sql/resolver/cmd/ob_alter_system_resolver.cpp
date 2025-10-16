@@ -2513,11 +2513,7 @@ int ObChangeExternalStorageDestResolver::resolve(const ParseNode &parse_tree)
           // access info may be null
           if (OB_SUCC(ret) && OB_NOT_NULL(parse_tree.children_[1])) {
             const ObString access_info_value = parse_tree.children_[1]->str_value_;
-            if (GET_MIN_CLUSTER_VERSION() < CLUSTER_VERSION_4_3_5_2) {
-              ret = OB_NOT_SUPPORTED;
-              LOG_USER_ERROR(OB_NOT_SUPPORTED, "min cluster version is less than 4.3.5.2, changing ak&sk is");
-              LOG_WARN("min cluster version is less than 4.3.5.2, changing ak&sk is not supported", K(ret));
-            } else if (OB_FAIL(item.value_.assign(access_info_value))) {
+            if (OB_FAIL(item.value_.assign(access_info_value))) {
               LOG_WARN("failed to assign config value", K(ret));
             }
           }
@@ -2964,13 +2960,6 @@ int ObAlterSystemResolverUtil::check_compatibility_for_alter_ls_replica(
   } else if (OB_FAIL(GET_MIN_DATA_VERSION(cur_tenant_id, tenant_data_version))) {
     //The internal tables involved are under the tenant (meta) and do not involve sys tenants.
     LOG_WARN("get tenant data version failed", KR(ret), K(cur_tenant_id));
-  } else if (!((tenant_data_version >= DATA_VERSION_4_3_3_0)
-            || (tenant_data_version >= MOCK_DATA_VERSION_4_2_3_0 && tenant_data_version < DATA_VERSION_4_3_0_0)
-            || (tenant_data_version >= MOCK_DATA_VERSION_4_2_1_8 && tenant_data_version < DATA_VERSION_4_2_2_0))) {
-    ret = OB_NOT_SUPPORTED;
-    LOG_WARN("Tenant data version does not match, alter LS replica command is not allowed",
-              KR(ret), K(cur_tenant_id), K(tenant_data_version));
-    LOG_USER_ERROR(OB_NOT_SUPPORTED, "Tenant data version does not match, alter LS replica command is");
   }
   return ret;
 }
@@ -4888,10 +4877,6 @@ int ObCancelRestoreResolver::resolve(const ParseNode &parse_tree)
   } else if (OB_UNLIKELY(1 != parse_tree.num_child_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("children num not match", K(ret), "num_child", parse_tree.num_child_);
-  } else if (GET_MIN_CLUSTER_VERSION() < CLUSTER_VERSION_4_2_0_0) {
-    ret = OB_NOT_SUPPORTED;
-    LOG_WARN("cancel restore is not supported under cluster version 4_2_0_0", K(ret));
-    LOG_USER_ERROR(OB_NOT_SUPPORTED, "cancel restore is");
   } else {
     ObCancelRestoreStmt *stmt = NULL;
     if (OB_ISNULL(stmt = create_stmt<ObCancelRestoreStmt>())) {
@@ -5018,10 +5003,6 @@ int ObTableTTLResolver::resolve(const ParseNode& parse_tree)
   const uint64_t cur_tenant_id = session_info_->get_effective_tenant_id();
   if (OB_FAIL(GET_MIN_DATA_VERSION(cur_tenant_id, tenant_data_version))) {
     LOG_WARN("get tenant data version failed", K(ret));
-  } else if (tenant_data_version < DATA_VERSION_4_2_1_0) {
-    ret = OB_NOT_SUPPORTED;
-    LOG_WARN("TTL command is not supported in data version less than 4.2.1", K(ret), K(tenant_data_version));
-    LOG_USER_ERROR(OB_NOT_SUPPORTED, "TTL command is not supported in data version less than 4.2.1");
   } else if (!ObKVFeatureModeUitl::is_ttl_enable()) {
     ret = OB_NOT_SUPPORTED;
     LOG_WARN("ttl is disable", K(ret));

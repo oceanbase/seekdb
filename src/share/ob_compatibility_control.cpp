@@ -135,7 +135,7 @@ int ObCompatControl::check_compat_version(const uint64_t tenant_id, const uint64
   uint64_t min_data_version = 0;
   if (OB_UNLIKELY(compat_version > GET_MIN_CLUSTER_VERSION())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("compat version must less than min cluster version", K(ret), K(compat_version));
+    LOG_WARN("compat version must less than min cluster version", K(ret), K(compat_version), K(GET_MIN_CLUSTER_VERSION()));
   } else if (OB_FAIL(ObUpgradeChecker::get_data_version_by_cluster_version(compat_version,
                                                                            data_version))) {
     LOG_WARN("failed to get data version", K(ret));

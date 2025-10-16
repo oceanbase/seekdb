@@ -31,7 +31,6 @@ public:
 
 private:
   int check_sys_dispatch_call_priv(const ParseNode &name_node);
-  int check_supported_cluster_version() const;
 
   static const char *const WHITELIST[][2];
 };

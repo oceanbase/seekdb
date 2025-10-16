@@ -1527,9 +1527,8 @@ int ObTransformPreProcess::transform_expr(ObRawExprFactory &expr_factory,
     }
   }
   if (OB_SUCC(ret)) {
-    const uint64_t ob_version = GET_MIN_CLUSTER_VERSION();
     // The rewriting is done for the purpose of MySQL compatibility.
-    if ((ob_version >= CLUSTER_VERSION_4_2_1_0) && lib::is_mysql_mode()) {
+    if (lib::is_mysql_mode()) {
       if (OB_FAIL(replace_align_date4cmp_recursively(expr_factory, session, expr))) {
         LOG_WARN("replace align_date4cmp failed", K(ret), K(expr));
       }
@@ -2957,7 +2956,6 @@ bool ObTransformPreProcess::check_insertup_support_batch_opt(ObInsertStmt *inser
   int ret = OB_SUCCESS;
   int64_t child_size = 0;
   ObSQLSessionInfo *session_info = NULL;
-  uint64_t tenant_data_version = 0;
   if (OB_ISNULL(session_info = ctx_->session_info_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("session is null", K(ret));
@@ -2965,13 +2963,7 @@ bool ObTransformPreProcess::check_insertup_support_batch_opt(ObInsertStmt *inser
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null", K(ret));
   } else if (insert_stmt->is_insert_up() || insert_stmt->is_replace()) {
-    if (OB_FAIL(GET_MIN_DATA_VERSION(session_info->get_effective_tenant_id(), tenant_data_version))) {
-      LOG_WARN("get tenant data version failed", K(ret));
-    } else if ((DATA_VERSION_4_3_5_0 > tenant_data_version)) {
-      // ([4.3.5, ...)) support insertup/replace multi_query batch optimization
-      can_batch = false;
-      LOG_TRACE("insertup and replace can't supported batch_opt with this version", K(ret), K(tenant_data_version));
-    } else if (OB_FAIL(insert_stmt->get_child_stmt_size(child_size))) {
+    if (OB_FAIL(insert_stmt->get_child_stmt_size(child_size))) {
       LOG_WARN("fail to get child_stmt size", K(ret), KPC(insert_stmt));
     } else if (child_size != 0) {
       // with subquery for insertup/replace/insert can't support batch_optimization

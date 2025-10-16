@@ -602,9 +602,7 @@ int ObJoinOrder::compute_base_table_path_ordering(AccessPath *path)
     path->is_local_order_ = false;
   } else if (get_plan()->get_optimizer_context().is_online_ddl()) {
     path->is_local_order_ = true;
-  } else if (stmt->get_query_ctx()->check_opt_compat_version(COMPAT_VERSION_4_2_3, COMPAT_VERSION_4_3_0,
-                                                             COMPAT_VERSION_4_3_2) &&
-            path->table_partition_info_->get_phy_tbl_location_info().get_phy_part_loc_info_list().count() == 1 &&
+  } else if (path->table_partition_info_->get_phy_tbl_location_info().get_phy_part_loc_info_list().count() == 1 &&
             !is_virtual_table(path->ref_table_id_)) {
     path->is_range_order_ = true;
   } else if (OB_FAIL(path->table_partition_info_->get_not_insert_dml_part_sort_expr(*get_plan()->get_stmt(),
@@ -2129,11 +2127,7 @@ int ObJoinOrder::init_column_store_est_info_with_filter(const uint64_t table_id,
           cg_info.micro_block_count_ = col_opt_meta->get_cg_micro_blk_cnt();
           cg_info.column_id_ = col_expr->get_column_id();
           cg_info.skip_rate_ = col_opt_meta->get_cg_skip_rate();
-          if (OPT_CTX.get_query_ctx()->check_opt_compat_version(COMPAT_VERSION_4_3_5_BP2)) {
-            cg_info.skip_filter_sel_ = 1 - ((1-filter_compare.get_selectivity(filter)) * cg_info.skip_rate_);
-          } else {
-            cg_info.skip_filter_sel_ = 1;
-          }
+          cg_info.skip_filter_sel_ = 1 - ((1-filter_compare.get_selectivity(filter)) * cg_info.skip_rate_);
           if (OB_FAIL(cg_info.access_column_items_.push_back(*col_item))) {
             LOG_WARN("failed to push back filter", K(ret));
           } else if (OB_FAIL(column_group_infos.push_back(cg_info))) {
@@ -2680,8 +2674,7 @@ int ObJoinOrder::cal_dimension_info(const uint64_t table_id, //alias table id
                    OB_FAIL(index_dim.add_unique_range_dim(range_cnt,
                                                           *allocator_))) {
           LOG_WARN("add query range dimension failed", K(ret));
-        } else if (OPT_CTX.get_query_ctx()->check_opt_compat_version(COMPAT_VERSION_4_2_3)
-                  && OB_FAIL(index_dim.add_sharding_info_dim(index_info_entry->get_sharding_info(),
+        } else if (OB_FAIL(index_dim.add_sharding_info_dim(index_info_entry->get_sharding_info(),
                                                              is_get && 1 == range_cnt,
                                                              *allocator_))) {
           LOG_WARN("add partition num dimension failed");
@@ -3231,8 +3224,6 @@ int ObJoinOrder::create_index_merge_access_paths(const uint64_t table_id,
       OB_ISNULL(query_ctx = stmt->get_query_ctx())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(ret), K(get_plan()), K(stmt), K(query_ctx));
-  } else if (query_ctx->optimizer_features_enable_version_ < COMPAT_VERSION_4_3_5) {
-    OPT_TRACE("can not create index merge paths due to optimizer feature control");
   } else if (is_virtual_table(ref_table_id)) {
     OPT_TRACE("can not create index merge paths for virtual table");
   } else if (OB_FAIL(get_candi_index_merge_trees(table_id,
@@ -4509,12 +4500,9 @@ int ObJoinOrder::get_valid_index_ids(const uint64_t table_id,
   } else if (FALSE_IT(can_use_global_index = (table_item->access_all_part() && !has_match_expr_on_table && !stmt->has_vec_approx()))) {
   } else if (nullptr != select_stmt && FALSE_IT(has_aggr = select_stmt->get_aggr_item_size() > 0)) {
   } else if (stmt->has_vec_approx()
-            && (GET_MIN_CLUSTER_VERSION() < CLUSTER_VERSION_4_3_5_1
-            || (helper.filters_.count() == 0 && stmt->get_subquery_exprs().empty() && !has_match_expr_on_table && !helper.is_index_merge_))
+            && ((helper.filters_.count() == 0 && stmt->get_subquery_exprs().empty() && !has_match_expr_on_table && !helper.is_index_merge_))
             && OB_FALSE_IT(add_only_vec_index_id = true)) {
   } else if (add_only_vec_index_id) {
-    // for compatibility: versions prior to 435bp1 do not have a pre-filter.
-    // if GET_MIN_CLUSTER_VERSION() < CLUSTER_VERSION_4_3_5_1, only add vector index (post-filter)
     if (OB_FAIL(add_valid_vec_index_ids(*stmt, schema_guard, table_id, ref_table_id, has_aggr, valid_index_ids))) {
       LOG_WARN("failed to add valid vec index ids", K(ret));
     } else {
@@ -4552,13 +4540,8 @@ int ObJoinOrder::get_valid_index_ids(const uint64_t table_id,
     } else if (valid_hint_index_list.count() > 0
               && stmt->has_vec_approx()
               && helper.vec_index_type_ == ObVecIndexType::VEC_INDEX_INVALID) {
-      if (GET_MIN_CLUSTER_VERSION() < CLUSTER_VERSION_4_3_5_3) {
-        // hint choose vec index pre-filter
-        helper.vec_index_type_ = ObVecIndexType::VEC_INDEX_PRE;
-      } else {
-        helper.vec_index_type_ = ObVecIndexType::VEC_INDEX_ADAPTIVE_SCAN;
-        helper.vec_idx_try_path_ = ObVecIdxAdaTryPath::VEC_INDEX_PRE_FILTER;
-      }
+      helper.vec_index_type_ = ObVecIndexType::VEC_INDEX_ADAPTIVE_SCAN;
+      helper.vec_idx_try_path_ = ObVecIdxAdaTryPath::VEC_INDEX_PRE_FILTER;
     }
   }
 
@@ -5482,12 +5465,7 @@ int ObJoinOrder::check_enable_better_inlist(int64_t table_id,
   }
 
   if (OB_SUCC(ret) && enable) {
-    if (ObSQLUtils::is_opt_feature_version_ge_425_or_435(
-                get_plan()->get_stmt()->get_query_ctx()->optimizer_features_enable_version_)) {
-      enable_index_prefix_cost = true;
-    } else  {
-      enable_better_inlist = true;
-    }
+    enable_index_prefix_cost = true;
   }
   return ret;
 }
@@ -6047,24 +6025,6 @@ int ObJoinOrder::estimate_size_and_width_for_join(const ObJoinOrder* left_tree,
     LOG_WARN("get unexpected null", K(left_tree), K(right_tree), K(ret));
   } else if (OB_FAIL(est_join_width())) {
     LOG_WARN("failed to estimate join width", K(ret));
-  } else if (OPT_CTX.get_query_ctx()->check_opt_compat_version(COMPAT_VERSION_4_2_5, COMPAT_VERSION_4_3_0,
-                                                               COMPAT_VERSION_4_3_5)) {
-    // do nothing
-  } else if (OB_FAIL(append(equal_sets, left_tree->get_output_equal_sets())) ||
-             OB_FAIL(append(equal_sets, right_tree->get_output_equal_sets()))) {
-    LOG_WARN("failed to append equal sets", K(ret));
-  } else if (OB_FAIL(calc_join_output_rows(get_plan(),
-                                           left_tree->get_tables(),
-                                           right_tree->get_tables(),
-                                           left_tree->get_output_rows(),
-                                           right_tree->get_output_rows(),
-                                           *join_info_, new_rows,
-                                           sel, equal_sets))) {
-    LOG_WARN("failed to calc join output rows", K(ret));
-  } else {
-    set_output_rows(new_rows);
-    current_join_output_rows_ = new_rows;
-    LOG_TRACE("estimate rows for join path", K(output_rows_), K(get_plan()->get_update_table_metas()));
   }
   return ret;
 }
@@ -8771,17 +8731,13 @@ int JoinPath::compute_hash_hash_sharding_info()
         use_right = true;
         break;
       case LEFT_OUTER_JOIN:
-        if (opt_ctx.get_query_ctx()->check_opt_compat_version(COMPAT_VERSION_4_3_5_BP2)) {
-          is_weak_sharding = true;
-        }
+        is_weak_sharding = true;
       case LEFT_SEMI_JOIN:
       case LEFT_ANTI_JOIN:
         use_left = true;
         break;
       case RIGHT_OUTER_JOIN:
-        if (opt_ctx.get_query_ctx()->check_opt_compat_version(COMPAT_VERSION_4_3_5_BP2)) {
-          is_weak_sharding = true;
-        }
+        is_weak_sharding = true;
       case RIGHT_SEMI_JOIN:
       case RIGHT_ANTI_JOIN:
         use_right = true;
@@ -9015,7 +8971,7 @@ int JoinPath::compute_join_path_parallel_and_server_info(ObOptimizerContext *opt
       }
     } else if (DistAlgo::DIST_BROADCAST_NONE == join_dist_algo
                || DistAlgo::DIST_BC2HOST_NONE == join_dist_algo) {
-      parallel = (has_nl_param && !right_path->is_single() && opt_ctx->get_query_ctx()->check_opt_compat_version(COMPAT_VERSION_4_3_5_BP1))
+      parallel = (has_nl_param && !right_path->is_single())
                  ? left_path->parallel_ : right_path->parallel_;
       server_cnt = right_path->server_cnt_;
       available_parallel = right_path->available_parallel_;
@@ -9054,8 +9010,7 @@ int JoinPath::compute_join_path_parallel_and_server_info(ObOptimizerContext *opt
         available_parallel = right_path->available_parallel_;
       }
     } else if (DistAlgo::DIST_PARTITION_NONE == join_dist_algo) {
-      parallel = (has_nl_param && opt_ctx->get_query_ctx()->check_opt_compat_version(COMPAT_VERSION_4_3_5_BP1))
-                 ? left_path->parallel_ : right_path->parallel_;
+      parallel = (has_nl_param) ? left_path->parallel_ : right_path->parallel_;
       server_cnt = right_path->server_cnt_;
       available_parallel = right_path->available_parallel_;
       if (OB_FAIL(server_list.assign(right_path->server_list_))) {
@@ -9539,10 +9494,7 @@ int JoinPath::re_estimate_rows(ObIArray<JoinFilterInfo> &pushdown_join_filter_in
       OB_ISNULL(plan->get_optimizer_context().get_query_ctx())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(left_path_), K(right_path_), K(plan), K(ret));
-  } else if (!plan->get_optimizer_context().get_query_ctx()->
-                check_opt_compat_version(COMPAT_VERSION_4_2_4, COMPAT_VERSION_4_3_0, COMPAT_VERSION_4_3_3) ?
-             HASH_JOIN == join_algo_ && !join_filter_infos_.empty() :
-             HASH_JOIN == join_algo_ && pushdown_join_filter_infos.empty()) {
+  } else if (HASH_JOIN == join_algo_ && pushdown_join_filter_infos.empty()) {
     row_count = get_path_output_rows();
   } else if (right_path_->is_inner_path()) {
     if (left_tree->get_output_rows() > 0) {
@@ -12044,10 +11996,6 @@ int ObJoinOrder::check_can_push_join_pred(bool &can_push) const
   } else if (OPT_CTX.is_push_join_pred_into_view_enabled()
              || SUBQUERY != get_type()) {
     // do nothing
-  } else if (!OPT_CTX.get_query_ctx()->check_opt_compat_version(COMPAT_VERSION_4_2_5_BP3,
-                                                                COMPAT_VERSION_4_3_0,
-                                                                COMPAT_VERSION_4_3_5_BP2)) {
-    can_push = false;
   } else if (OB_ISNULL(parent_stmt = get_plan()->get_stmt())
              || OB_ISNULL(table_item = parent_stmt->get_table_item_by_id(table_id_))
              || OB_ISNULL(child_stmt = table_item->ref_query_)) {
@@ -12457,8 +12405,7 @@ int ObJoinOrder::get_distributed_join_method(Path &left_path,
     if (left_path.parallel_ <= 1 && right_path.parallel_ <= 1) {
       bool can_re_parallel = (left_path.available_parallel_ > 1 || right_path.available_parallel_ > 1)
                               && !(left_sharding->is_match_all() && right_sharding->is_match_all())
-                              && !(left_path.parent_->get_is_at_most_one_row() && right_path.parent_->get_is_at_most_one_row())
-                              && query_ctx->check_opt_compat_version(COMPAT_VERSION_4_3_5_BP2);
+                              && !(left_path.parent_->get_is_at_most_one_row() && right_path.parent_->get_is_at_most_one_row());
       if (can_re_parallel) {
         distributed_methods = DIST_HASH_HASH;
         OPT_TRACE("plan will use hash hash method due to re-parallel");
@@ -13464,9 +13411,6 @@ int ObJoinOrder::fill_join_filter_info(JoinFilterInfo &join_filter_info)
                                                           join_filter_info.row_count_,
                                                           join_filter_info.right_distinct_card_))) {
     LOG_WARN("failed to calc distinct", K(ret));
-  } else if (!OPT_CTX.get_query_ctx()->check_opt_compat_version(COMPAT_VERSION_4_2_4, COMPAT_VERSION_4_3_0,
-                                                                COMPAT_VERSION_4_3_3)) {
-    // do nothing
   } else if (OB_FAIL(ObOptSelectivity::is_columns_contain_pkey(get_plan()->get_basic_table_metas(),
                                                                join_filter_info.rexprs_,
                                                                join_filter_info.is_right_contain_pk_,
@@ -13820,15 +13764,11 @@ int ObJoinOrder::check_normal_join_filter_valid(const Path& left_path,
         threshold = 0.9;
       }
       info.join_filter_selectivity_ = join_filter_sel;
-      if (OPT_CTX.get_query_ctx()->check_opt_compat_version(COMPAT_VERSION_4_2_4, COMPAT_VERSION_4_3_0,
-                                                            COMPAT_VERSION_4_3_3) &&
-          0 <= misjudgment_rate && misjudgment_rate <= 1.0) {
+      if (0 <= misjudgment_rate && misjudgment_rate <= 1.0) {
         info.join_filter_selectivity_ += (1 - join_filter_sel) * misjudgment_rate;
       }
       if (NULL != info.force_filter_) {
         info.can_use_join_filter_ = true;
-      } else if (!OPT_CTX.get_query_ctx()->check_opt_compat_version(COMPAT_VERSION_4_3_5)) {
-        info.can_use_join_filter_ = rate >= threshold;
       } else {
         info.can_use_join_filter_ = left_path_contain_filter &&
                                     info.row_count_ >= 100000 &&
@@ -13860,8 +13800,7 @@ int ObJoinOrder::calc_join_filter_selectivity(const Path& left_path,
   double right_distinct_card = 1.0;
   join_filter_selectivity = 1.0;
   bool is_pk_join_fk = false;
-  bool est_enhance_enable = OPT_CTX.get_query_ctx()->check_opt_compat_version(COMPAT_VERSION_4_2_4, COMPAT_VERSION_4_3_0,
-                                                                              COMPAT_VERSION_4_3_3);
+  bool est_enhance_enable = true;
   if (OB_ISNULL(plan) || OB_ISNULL(left_path.parent_) ||
       OB_ISNULL(OPT_CTX.get_query_ctx())) {
     ret = OB_ERR_UNEXPECTED;
@@ -13869,8 +13808,7 @@ int ObJoinOrder::calc_join_filter_selectivity(const Path& left_path,
   } else if (FALSE_IT(get_plan()->get_selectivity_ctx().init_op_ctx(&left_path.parent_->get_output_equal_sets(),
                                                                     left_path.get_path_output_rows(),
                                                                     &left_path.parent_->get_ambient_card()))) {
-  } else if (est_enhance_enable &&
-             OB_FAIL(calc_join_filter_sel_for_pk_join_fk(left_path, info, join_filter_selectivity, is_pk_join_fk))) {
+  } else if (OB_FAIL(calc_join_filter_sel_for_pk_join_fk(left_path, info, join_filter_selectivity, is_pk_join_fk))) {
     LOG_WARN("failed to calc pk join fk join filter sel", K(ret));
   } else if (is_pk_join_fk) {
     // do nothing
@@ -14003,8 +13941,7 @@ int ObJoinOrder::check_partition_join_filter_valid(const DistAlgo join_dist_algo
     } else if (OB_ISNULL(info.sharding_)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected null sharding", K(ret));
-    } else if (OPT_CTX.get_query_ctx()->check_opt_compat_version(COMPAT_VERSION_4_3_5) &&
-               ((DIST_PARTITION_NONE != join_dist_algo && DIST_PARTITION_HASH_LOCAL != join_dist_algo) ||
+    } else if (((DIST_PARTITION_NONE != join_dist_algo && DIST_PARTITION_HASH_LOCAL != join_dist_algo) ||
                 right_path.get_strong_sharding() != info.sharding_ ) &&
                NULL == info.force_part_filter_ &&
                info.sharding_->get_part_cnt() < 1000) {
@@ -14676,8 +14613,7 @@ int ObJoinOrder::get_valid_path_info_from_hint(const ObRelIds &table_set,
     if (NULL != log_join_hint && NULL != log_join_hint->nl_material_) {
       path_info.force_mat_ = log_join_hint->nl_material_->is_enable_hint();
       path_info.force_no_mat_ = log_join_hint->nl_material_->is_disable_hint();
-      if (log_hint.is_outline_data_ && query_ctx->check_opt_compat_version(COMPAT_VERSION_4_2_5_BP4, COMPAT_VERSION_4_3_0,
-                                                                           COMPAT_VERSION_4_3_5_BP3)) {
+      if (log_hint.is_outline_data_) {
         path_info.force_normal_nlj_ = true;
       }
     } else if (log_hint.is_outline_data_) {
@@ -14748,11 +14684,9 @@ int ObJoinOrder::get_valid_path_info(const ObJoinOrder &left_tree,
                                        DIST_EXT_PARTITION_WISE | DIST_BASIC_METHOD |
                                        DIST_NONE_ALL | DIST_ALL_NONE |
                                        DIST_RANDOM_ALL;
-      if (OPT_CTX.get_query_ctx()->check_opt_compat_version(COMPAT_VERSION_4_3_5_BP2)) {
-        path_info.distributed_methods_ |= DIST_HASH_HASH_LOCAL | DIST_PARTITION_HASH_LOCAL |
-                                          DIST_HASH_LOCAL_PARTITION | DIST_BROADCAST_HASH_LOCAL |
-                                          DIST_HASH_LOCAL_BROADCAST;
-      }
+      path_info.distributed_methods_ |= DIST_HASH_HASH_LOCAL | DIST_PARTITION_HASH_LOCAL |
+                                       DIST_HASH_LOCAL_PARTITION | DIST_BROADCAST_HASH_LOCAL |
+                                       DIST_HASH_LOCAL_BROADCAST;
       if (!get_plan()->get_optimizer_context().is_partition_wise_plan_enabled()) {
         path_info.distributed_methods_ &= ~DIST_PARTITION_NONE;
         path_info.distributed_methods_ &= ~DIST_NONE_PARTITION;
@@ -15132,15 +15066,10 @@ int ObJoinOrder::fill_filters(const ObIArray<ObRawExpr*> &all_filters,
         LOG_WARN("failed to extract geo column id", K(ret));
       }
       int unprecise_opt_mode = 0;
-      if (query_ctx->check_opt_compat_version(COMPAT_VERSION_4_3_5_BP2) &&
-          query_range_provider->is_new_query_range() && !is_geo_index && !is_multival_index) {
+      if (query_range_provider->is_new_query_range() && !is_geo_index && !is_multival_index) {
         unprecise_opt_mode = 2;
-      } else if (query_ctx->check_opt_compat_version(COMPAT_VERSION_4_2_1_BP10, COMPAT_VERSION_4_2_2,
-                                                     COMPAT_VERSION_4_2_5_BP1,  COMPAT_VERSION_4_3_0,
-                                                     COMPAT_VERSION_4_3_5_BP2)) {
-        unprecise_opt_mode = 1;
       } else {
-        unprecise_opt_mode = 0;
+        unprecise_opt_mode = 1;
       }
       // replace cellid column id with geo column id, since filters only record geo column id.
       for (int64_t i = 0; OB_SUCC(ret) && i < index_column_descs.count(); i++) {
@@ -16595,9 +16524,6 @@ int ObJoinOrder::revise_cardinality(const ObJoinOrder *left_tree,
       OB_ISNULL(get_plan()) || OB_ISNULL(OPT_CTX.get_query_ctx())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(left_tree), K(right_tree), K(get_plan()), K(ret));
-  } else if (!OPT_CTX.get_query_ctx()->check_opt_compat_version(COMPAT_VERSION_4_2_4, COMPAT_VERSION_4_3_0,
-                                                                COMPAT_VERSION_4_3_3)) {
-    // do nothing
   } else if (OB_FAIL(append(equal_sets, left_tree->get_output_equal_sets())) ||
              OB_FAIL(append(equal_sets, right_tree->get_output_equal_sets()))) {
     LOG_WARN("failed to append equal sets", K(ret));
@@ -19038,8 +18964,7 @@ int ObJoinOrder::add_valid_vec_index_ids(const ObDMLStmt &stmt,
                                                     index_type))) {
       LOG_WARN("failed to get vector index tid", K(ret));
   } else if ((vec_index_tid != OB_INVALID_ID)) {
-    if (GET_MIN_CLUSTER_VERSION() >= CLUSTER_VERSION_4_3_5_3
-    && index_type >= ObIndexType::INDEX_TYPE_VEC_ROWKEY_VID_LOCAL
+    if (index_type >= ObIndexType::INDEX_TYPE_VEC_ROWKEY_VID_LOCAL
     && index_type <= INDEX_TYPE_VEC_INDEX_SNAPSHOT_DATA_LOCAL
     && helper.vec_index_type_ != ObVecIndexType::VEC_INDEX_ADAPTIVE_SCAN) {
       // if hnsw, do not add vec_index_tid, mark adaptive_scan
@@ -20176,7 +20101,7 @@ int ObJoinOrder::get_valid_hint_index_list(const ObDMLStmt &stmt,
       } else if (!is_valid || helper.is_index_merge_ || !helper.match_expr_infos_.empty()) {
       } else {
         ObVecIndexType vec_with_filter_index_type = ObVecIndexType::VEC_INDEX_INVALID;
-        if (GET_MIN_CLUSTER_VERSION() >= CLUSTER_VERSION_4_3_5_3 && index_hint_table_schema->is_vec_hnsw_index()) {
+        if (index_hint_table_schema->is_vec_hnsw_index()) {
           // hint choose vec index post-with-filter
           vec_with_filter_index_type = ObVecIndexType::VEC_INDEX_ADAPTIVE_SCAN;
         } else {

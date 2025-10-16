@@ -161,10 +161,8 @@ int ObDirectLoadOptimizerCtx::init_direct_load_ctx(
         enable_by_append_hint();
         load_mode_ = ObDirectLoadMode::INSERT_INTO;
       } else if (!session_info->is_inner()) {
-        if (stmt.get_query_ctx()->optimizer_features_enable_version_ >= COMPAT_VERSION_4_3_4) {
-          enable_by_config(exec_ctx);
-          load_mode_ = ObDirectLoadMode::INSERT_INTO;
-        }
+        enable_by_config(exec_ctx);
+        load_mode_ = ObDirectLoadMode::INSERT_INTO;
       }
       if (OB_FAIL(ret)) {
       } else if (load_method_ != ObDirectLoadMethod::INVALID_METHOD) {
@@ -192,7 +190,7 @@ int ObDirectLoadOptimizerCtx::init_direct_load_ctx(
           if (OB_FAIL(check_support_direct_load(exec_ctx))) {
             LOG_WARN("fail to check support direct load", K(ret));
             bool allow_fallback = false;
-            if (ret == OB_NOT_SUPPORTED && stmt.get_query_ctx()->optimizer_features_enable_version_ >= COMPAT_VERSION_4_3_4) {
+            if (ret == OB_NOT_SUPPORTED) {
               int tmp_ret = OB_SUCCESS;
               if (OB_TMP_FAIL(check_direct_load_allow_fallback(*this, exec_ctx, allow_fallback))) {
                 LOG_WARN("fail to check support direct load allow fallback", K(tmp_ret));

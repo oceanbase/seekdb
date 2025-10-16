@@ -241,10 +241,7 @@ int ObLogDistinct::inner_est_cost(const int64_t parallel, double child_card, dou
                                                 opt_ctx);
     }
 
-    if (opt_ctx.get_query_ctx()->check_opt_compat_version(COMPAT_VERSION_4_2_4, COMPAT_VERSION_4_3_0,
-                                                          COMPAT_VERSION_4_3_3)) {
-      child_ndv = std::min(child_card, per_dop_ndv * parallel);
-    }
+    child_ndv = std::min(child_card, per_dop_ndv * parallel);
   }
   return ret;
 }

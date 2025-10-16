@@ -3140,9 +3140,7 @@ bool ObOpRawExpr::is_white_runtime_filter_expr() const
   // FIXME: @zhouhaiyu.zhy
   // The in runtime filter is forbidden to push down as white filter because
   // the white pushdown filter with type WHITE_OP_IN is not available now
-  if (GET_MIN_CLUSTER_VERSION() < CLUSTER_VERSION_4_3_0_0) {
-    bool_ret = false;
-  } else if (with_null_equal_cond()) {
+  if (with_null_equal_cond()) {
     // <=> join is not allowed to pushdown as white filter
     bool_ret = false;
   } else if (RANGE == get_runtime_filter_type()) {
@@ -3161,7 +3159,7 @@ bool ObOpRawExpr::is_white_runtime_filter_expr() const
     // so disable white topn runtime filter
     // LOG_TRACE("[TopN Filter] push topn filter as white filter");
     bool_ret = false;
-  } else if (GET_MIN_CLUSTER_VERSION() >= CLUSTER_VERSION_4_3_3_0 && IN == get_runtime_filter_type()) {
+  } else if (IN == get_runtime_filter_type()) {
     if (exprs_.count() != 1) {
       bool_ret = false;
     } else if(T_REF_COLUMN != exprs_.at(0)->get_expr_type()) {

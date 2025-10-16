@@ -38,12 +38,6 @@ int ObDatabaseSqlService::insert_database(const ObDatabaseSchema &database_schem
   if (!database_schema.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("database schema is invalid", K(ret));
-  } else if (OB_FAIL(sql::ObSQLUtils::is_charset_data_version_valid(database_schema.get_charset_type(),
-                                                                    exec_tenant_id))) {
-    LOG_WARN("failed to check charset data version valid", K(database_schema.get_charset_type()), K(ret));
-  } else if (OB_FAIL(sql::ObSQLUtils::is_collation_data_version_valid(database_schema.get_collation_type(),
-                                                                      exec_tenant_id))) {
-    LOG_WARN("failed to check collation data version valid", K(database_schema.get_collation_type()), K(ret));
   } else {
     int64_t affected_rows = 0;
     ObDMLSqlSplicer dml;
@@ -119,12 +113,6 @@ int ObDatabaseSqlService::update_database(const ObDatabaseSchema &database_schem
   if (!database_schema.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("database scheam is invalid", K(ret));
-  } else if (OB_FAIL(sql::ObSQLUtils::is_charset_data_version_valid(database_schema.get_charset_type(),
-                                                                    exec_tenant_id))) {
-    LOG_WARN("failed to check charset data version valid", K(database_schema.get_charset_type()), K(ret));
-  } else if (OB_FAIL(sql::ObSQLUtils::is_collation_data_version_valid(database_schema.get_collation_type(),
-                                                                      exec_tenant_id))) {
-    LOG_WARN("failed to check collation data version valid", K(database_schema.get_charset_type()), K(ret));
   } else {
     int64_t affected_rows = 0;
     ObDMLSqlSplicer dml;

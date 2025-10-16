@@ -40,7 +40,6 @@ int ObDropCCLRuleResolver::resolve(const ParseNode &parse_tree)
   ParseNode *node = const_cast<ParseNode*>(&parse_tree);
   ObDropCCLRuleStmt *drop_ccl_rule_stmt = NULL;
   uint64_t tenant_id = OB_INVALID_ID;
-  uint64_t data_version = 0;
   if (OB_ISNULL(node)
       || OB_UNLIKELY(node->type_ != T_DROP_CCL_RULE)) {
     ret = OB_ERR_UNEXPECTED;
@@ -52,12 +51,6 @@ int ObDropCCLRuleResolver::resolve(const ParseNode &parse_tree)
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid node children", K(node), K(node->children_));
   } else if (FALSE_IT(tenant_id = session_info_->get_effective_tenant_id())) {
-  } else if (OB_FAIL(GET_MIN_DATA_VERSION(tenant_id, data_version))) {
-    LOG_WARN("failed to get data version", K(ret));
-  } else if (data_version < DATA_VERSION_4_3_5_3) {
-    ret = OB_NOT_SUPPORTED;
-    LOG_WARN("ccl not supported", K(ret));
-    LOG_USER_ERROR(OB_NOT_SUPPORTED, "ccl");
   } else if (OB_ISNULL(drop_ccl_rule_stmt = create_stmt<ObDropCCLRuleStmt>())) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_ERROR("failed to create create_database_stmt", K(ret));

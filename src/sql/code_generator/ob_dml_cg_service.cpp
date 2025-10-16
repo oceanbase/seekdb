@@ -1050,8 +1050,7 @@ int ObDmlCgService::generate_scan_ctdef(ObLogInsert &op,
     }
   }
   if (OB_SUCC(ret)) {
-    scan_ctdef.table_param_.get_enable_lob_locator_v2() 
-        = (cg_.get_cur_cluster_version() >= CLUSTER_VERSION_4_1_0_0);
+    scan_ctdef.table_param_.get_enable_lob_locator_v2() = true;
     if (OB_FAIL(scan_ctdef.table_param_.convert(*table_schema, scan_ctdef.access_column_ids_,
                                                 scan_ctdef.pd_expr_spec_.pd_storage_flag_))) {
       LOG_WARN("convert table param failed", K(ret));
@@ -1182,9 +1181,7 @@ int ObDmlCgService::convert_dml_column_info(ObTableID index_tid,
     column_type = column->get_meta_type();
     column_type.set_scale(column->get_accuracy().get_scale());
     if (is_lob_storage(column_type.get_type())) {
-      if (cg_.get_cur_cluster_version() >= CLUSTER_VERSION_4_1_0_0) {
-        column_type.set_has_lob_header();
-      }
+      column_type.set_has_lob_header();
     }
     if (OB_FAIL(das_dml_info.column_ids_.push_back(column->get_column_id()))) {
       LOG_WARN("store column id failed", K(ret));
@@ -1204,9 +1201,7 @@ int ObDmlCgService::convert_dml_column_info(ObTableID index_tid,
         column_type = column->get_meta_type();
         column_type.set_scale(column->get_accuracy().get_scale());
         if (is_lob_storage(column_type.get_type())) {
-          if (cg_.get_cur_cluster_version() >= CLUSTER_VERSION_4_1_0_0) {
-            column_type.set_has_lob_header();
-          }
+          column_type.set_has_lob_header();
         }
         if (OB_FAIL(das_dml_info.column_ids_.push_back(column->get_column_id()))) {
           LOG_WARN("store column id failed", K(ret));
@@ -3407,9 +3402,7 @@ int ObDmlCgService::generate_fk_arg(ObForeignKeyArg &fk_arg,
     } else {
       fk_column.obj_meta_ = column_schema->get_meta_type();
       if (fk_column.obj_meta_.is_lob_storage()) {
-        if (cg_.get_cur_cluster_version() >= CLUSTER_VERSION_4_1_0_0) {
-          fk_column.obj_meta_.set_has_lob_header();
-        }
+        fk_column.obj_meta_.set_has_lob_header();
       } else if (fk_column.obj_meta_.is_decimal_int()) {
         fk_column.obj_meta_.set_stored_precision(column_schema->get_accuracy().get_precision());
         fk_column.obj_meta_.set_scale(column_schema->get_accuracy().get_scale());
@@ -3604,8 +3597,7 @@ int ObDmlCgService::generate_fk_scan_ctdef(share::schema::ObSchemaGetterGuard &s
       TABLE_SCHEMA, tenant_id, index_tid, scan_ctdef.schema_version_))) {
     LOG_WARN("fail to get schema version", K(ret), K(tenant_id), K(index_tid));
   } else {
-    scan_ctdef.table_param_.get_enable_lob_locator_v2() 
-        = (cg_.get_cur_cluster_version() >= CLUSTER_VERSION_4_1_0_0);
+    scan_ctdef.table_param_.get_enable_lob_locator_v2() = true;
     if (OB_FAIL(scan_ctdef.table_param_.convert(*table_schema, scan_ctdef.access_column_ids_,
                                                 scan_ctdef.pd_expr_spec_.pd_storage_flag_))) {
       LOG_WARN("convert table param failed", K(ret));
@@ -3863,7 +3855,6 @@ int ObDmlCgService::generate_scan_with_domain_id_ctdef_if_need(
   ObArray<uint64_t> domain_tids;
   ObArray<ObExpr*> result_outputs;
   ObDASDomainIdMergeCtDef *domain_id_merge_ctdef = nullptr;
-  uint64_t tenant_data_version = 0;
   int64_t child_cnt = 0;
   if (OB_FAIL(check_need_domain_id_merge_iter(index_dml_info.column_exprs_, op, index_dml_info.ref_table_id_, domain_types, domain_tids))) {
     LOG_WARN("fail to check need domain id merge iter", K(ret));
@@ -3873,24 +3864,6 @@ int ObDmlCgService::generate_scan_with_domain_id_ctdef_if_need(
   } else if (OB_ISNULL(cg_.opt_ctx_->get_session_info())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("fail to get session info", K(ret));
-  } else if (OB_FAIL(GET_MIN_DATA_VERSION(cg_.opt_ctx_->get_session_info()->get_effective_tenant_id(), tenant_data_version))) {
-    LOG_WARN("get tenant data version failed", K(ret));
-  } else if (tenant_data_version < DATA_VERSION_4_3_5_1) {
-    // old version, we should produce doc id/vid ctdef
-    if (domain_types.count() != 1 ||
-        (domain_types.at(0) != ObDomainIdUtils::ObDomainIDType::DOC_ID && 
-         domain_types.at(0) != ObDomainIdUtils::ObDomainIDType::VID)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("fail to check old version domain id", K(ret), K(domain_types));
-    } else if (domain_types.at(0) == ObDomainIdUtils::ObDomainIDType::DOC_ID) { // DOC_ID
-      if (OB_FAIL(generate_scan_with_doc_id_ctdef(op, index_dml_info, domain_tids.at(0), scan_ctdef, attach_spec))) {
-        LOG_WARN("fail to generate doc id ctdef", K(ret));
-      }
-    } else { // VID
-      if (OB_FAIL(generate_scan_with_vec_vid_ctdef(op, index_dml_info, domain_tids.at(0), scan_ctdef, attach_spec))) {
-        LOG_WARN("fail to generate vec vid ctdef", K(ret));
-      }
-    }
   } else if (OB_FAIL(ObDASTaskFactory::alloc_das_ctdef(DAS_OP_DOMAIN_ID_MERGE, cg_.phy_plan_->get_allocator(),
           domain_id_merge_ctdef))) {
     LOG_WARN("fail to allocate to domain id merge ctdef", K(ret));
@@ -3977,8 +3950,7 @@ int ObDmlCgService::generate_rowkey_domain_ctdef(
     loc_meta->is_external_table_ = rowkey_domain_schema->is_external_table();
     loc_meta->is_external_files_on_disk_ =
         ObSQLUtils::is_external_files_on_local_disk(rowkey_domain_schema->get_external_file_location());
-    scan_ctdef->table_param_.get_enable_lob_locator_v2()
-        = (cg_.get_cur_cluster_version() >= CLUSTER_VERSION_4_1_0_0);
+    scan_ctdef->table_param_.get_enable_lob_locator_v2() = true;
     scan_ctdef->schema_version_ = rowkey_domain_schema->get_schema_version();
     ObSEArray<ObExpr *, 1> domain_id_expr;
     ObSEArray<uint64_t, 1> domain_id_col_ids;

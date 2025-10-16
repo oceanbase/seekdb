@@ -225,15 +225,6 @@ int ObDelUpdLogPlan::get_pdml_parallel_degree(const int64_t target_part_cnt,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected params", K(ret), K(get_optimizer_context().get_query_ctx()),
                                             K(use_pdml_), K(max_dml_parallel_), K(target_part_cnt));
-  } else if (get_optimizer_context().get_query_ctx()->check_opt_compat_version(COMPAT_VERSION_4_3_5_BP1)
-             || ObGlobalHint::DEFAULT_PARALLEL == max_dml_parallel_
-             || !get_optimizer_context().is_use_auto_dop()
-             || ObGlobalHint::DEFAULT_PARALLEL <= get_optimizer_context().get_global_hint().get_dml_parallel_degree()
-             || target_part_cnt >= max_dml_parallel_) {
-    dop = max_dml_parallel_;
-  } else if (OB_FAIL(OB_E(EventTable::EN_ENABLE_AUTO_DOP_FORCE_PARALLEL_PLAN) OB_SUCCESS)) {
-    ret = OB_SUCCESS;
-    dop = max_dml_parallel_;
   } else {
     OPT_TRACE("Decided PDML DOP by Auto DOP.");
     dop = std::min(max_dml_parallel_, target_part_cnt * PDML_DOP_LIMIT_PER_PARTITION);
@@ -1769,8 +1760,7 @@ int ObDelUpdLogPlan::prepare_table_dml_info_basic(const ObDmlTableInfo& table_in
         LOG_WARN("exec_cts is null", K(ret));
       } else if (exec_ctx->get_sql_ctx()->get_enable_strict_defensive_check() &&
           !(optimizer_context_.get_session_info()->is_inner()) &&
-          (stmt_->is_update_stmt() || stmt_->is_delete_stmt()) &&
-          GET_MIN_CLUSTER_VERSION() >= CLUSTER_VERSION_4_2_0_0) {
+          (stmt_->is_update_stmt() || stmt_->is_delete_stmt())) {
         // 1: Is strict defensive check mode
         // 2: Not inner_sql
         // 3: Now only support delete and update statement

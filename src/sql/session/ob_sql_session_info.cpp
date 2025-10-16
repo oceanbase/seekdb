@@ -206,7 +206,7 @@ int ObSQLSessionInfo::init(uint32_t sessid, uint64_t proxy_sessid,
     }
     set_client_create_time(client_create_time);
     const char *sup_proxy_min_version = "1.8.4";
-    const char *gc_min_sup_proxy_version = "4.3.2";
+    const char *gc_min_sup_proxy_version = "1.0.0.0";
     min_proxy_version_ps_ = 0;
     unit_gc_min_sup_proxy_version_ = 0;
     if (OB_FAIL(ObClusterVersion::get_version(sup_proxy_min_version, min_proxy_version_ps_))) {

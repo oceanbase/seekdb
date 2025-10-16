@@ -283,8 +283,7 @@ public:
     //   expr_idx++;
     // }
   }
-  static int is_charset_data_version_valid(ObCharsetType charset_type, const int64_t tenant_id);
-  static int is_collation_data_version_valid(ObCollationType collation_type, const int64_t tenant_id);
+
   static int calc_calculable_expr(ObSQLSessionInfo *session,
                                   const ObRawExpr *expr,
                                   common::ObObj &result,
@@ -718,13 +717,6 @@ public:
   static int extract_odps_part_spec(const ObString &all_part_spec, ObIArray<ObString> &part_spec_list);
   static int check_ident_name(const common::ObCollationType cs_type, common::ObString &name,
                               const bool check_for_path_char, const int64_t max_ident_len);
-
-  static int compatibility_check_for_mysql_role_and_column_priv(uint64_t tenant_id);
-  static bool is_data_version_ge_422_or_431(uint64_t data_version);
-  static bool is_data_version_ge_423_or_432(uint64_t data_version);
-  static bool is_data_version_ge_424_or_433(uint64_t data_version);
-  static bool is_min_cluster_version_ge_425_or_435();
-  static bool is_opt_feature_version_ge_425_or_435(uint64_t opt_feature_version);
 
   static int check_enable_mysql_compatible_dates(const sql::ObSQLSessionInfo *session,
                                                  const bool is_ddl_scenario,

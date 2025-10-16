@@ -1880,8 +1880,6 @@ public:
   static int check_contain_correlated_json_table(const ObDMLStmt *stmt, bool &is_contain);
   static int check_contain_lost_deterministic_expr(const ObIArray<ObRawExpr*> &exprs,
                                                    bool &is_contain);
-  static bool is_enable_values_table_rewrite(const uint64_t compat_version);
-  static bool is_enable_hybrid_inlist_rewrite(const uint64_t compat_version);
   // check whether the score calculated by match expr is actually utilized
   static int check_expr_eq_zero(ObExecContext *ctx,
                                 ObRawExpr *expr, 

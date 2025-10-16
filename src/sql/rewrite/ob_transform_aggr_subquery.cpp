@@ -508,14 +508,14 @@ int ObTransformAggrSubquery::check_aggr_first_validity(ObDMLStmt &stmt,
                                                                             limit_to_aggr,
                                                                             equal_param_info))) {
     LOG_WARN("failed to check select validity for limit 1", K(ret));
-  } else if (opt_version >= COMPAT_VERSION_4_3_2 && is_select_item_expr &&
+  } else if (is_select_item_expr &&
              OB_FAIL(check_can_trans_any_all_as_scalar_subquery(stmt,
                                                                 subquery, 
                                                                 &parent_expr, 
                                                                 root_expr,
                                                                 any_all_to_aggr))) {
     LOG_WARN("failed to check can trans any all as aggr subquery", K(ret));
-  } else if (opt_version >= COMPAT_VERSION_4_3_2 && is_select_item_expr &&
+  } else if (is_select_item_expr &&
              OB_FAIL(check_can_trans_exists_as_scalar_subquery(query_ref, 
                                                               parent_expr,
                                                               limit_value,
@@ -817,15 +817,8 @@ int ObTransformAggrSubquery::check_subquery_conditions(ObQueryRefRawExpr &query_
         OPT_TRACE("subquery`s condition has subquery");
       } else if (cond->is_const_expr()) {
         // filter of upper stmt
-        if (subquery.get_query_ctx()->check_opt_compat_version(COMPAT_VERSION_4_2_1_BP8, COMPAT_VERSION_4_2_2,
-                                                               COMPAT_VERSION_4_2_4, COMPAT_VERSION_4_3_0,
-                                                               COMPAT_VERSION_4_3_2)) {
-          if (OB_FAIL(upper_filters.push_back(cond))) {
-            LOG_WARN("failed to add upper filter", K(ret));
-          }
-        } else {
-          is_valid = false;
-          OPT_TRACE("subquery`s condition has pure upper filters");
+        if (OB_FAIL(upper_filters.push_back(cond))) {
+          LOG_WARN("failed to add upper filter", K(ret));
         }
       } else if (OB_FAIL(ObTransformUtils::is_equal_correlation(query_ref.get_exec_params(),
                                                                 cond,

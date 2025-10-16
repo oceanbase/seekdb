@@ -184,11 +184,6 @@ int ObRawExprTypeDemotion::init_query_ctx_flags(bool &disabled)
     // exec ctx and query ctx may be null, in which case the type demotion is disabled.
     disabled = true;
     LOG_TRACE("Type demotion is disabled because of null ctx", KP(exec_ctx), KP_(query_ctx));
-  } else if (exec_ctx->get_min_cluster_version() < CLUSTER_VERSION_4_3_5_1) {
-    // the feature only enabled in cluster version greater and equal than 4.3.5.1
-    disabled = true;
-    const uint64_t cluster_version = exec_ctx->get_min_cluster_version();
-    LOG_TRACE("Type demotion is disabled because of cluster version", KCV(cluster_version));
   } else if (query_ctx_->is_prepare_stmt_) {
     // the actual type of the question mark expr in prepare stage cannot be determined.
     disabled = true;

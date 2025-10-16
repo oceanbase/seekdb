@@ -395,10 +395,7 @@ int ObLoadDataResolver::resolve(const ParseNode &parse_tree)
     /*14. on_error */
     const ParseNode *child_node = node->children_[ENUM_OPT_ON_ERROR];
     if (OB_NOT_NULL(child_node)) {
-      if (GET_MIN_CLUSTER_VERSION() < CLUSTER_VERSION_4_3_5_2) {
-        ret = OB_NOT_SUPPORTED;
-        LOG_WARN("load data on error is not supported", K(ret));
-      } else if (T_LOG_ERROR_LIMIT == child_node->type_) {
+      if (T_LOG_ERROR_LIMIT == child_node->type_) {
         load_stmt->get_load_arguments().is_diagnosis_enabled_ = true;
         if (OB_UNLIKELY(child_node->num_child_ != 1)
                   || OB_ISNULL(child_node->children_[0])

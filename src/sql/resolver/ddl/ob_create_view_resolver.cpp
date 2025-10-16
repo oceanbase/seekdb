@@ -132,15 +132,8 @@ int ObCreateViewResolver::resolve(const ParseNode &parse_tree)
     uint64_t old_database_id = session_info_->get_database_id();
     bool resolve_succ = true;
     bool can_expand_star = true;
-    uint64_t tenant_data_version = 0;
     if (is_materialized_view) {
-      if (OB_FAIL(GET_MIN_DATA_VERSION(session_info_->get_effective_tenant_id(), tenant_data_version))) {
-        LOG_WARN("get tenant data version failed", KR(ret));
-      } else if (tenant_data_version < DATA_VERSION_4_3_0_0){
-        ret = OB_NOT_SUPPORTED;
-        LOG_WARN("tenant version is less than 4.3, materialized view is not supported", KR(ret), K(tenant_data_version));
-        LOG_USER_ERROR(OB_NOT_SUPPORTED, "version is less than 4.3, materialized view is not supported");
-      } else if (OB_FAIL(ObLicenseUtils::check_olap_allowed(session_info_->get_effective_tenant_id()))) {
+      if (OB_FAIL(ObLicenseUtils::check_olap_allowed(session_info_->get_effective_tenant_id()))) {
         ret = OB_LICENSE_SCOPE_EXCEEDED;
         LOG_WARN("materialized view is not allowed", KR(ret));
         LOG_USER_ERROR(OB_LICENSE_SCOPE_EXCEEDED,
@@ -397,8 +390,6 @@ int ObCreateViewResolver::resolve(const ParseNode &parse_tree)
         int64_t refresh_parallelism = 0;
         if (OB_FAIL(resolve_hints(parse_tree.children_[HINT_NODE], *stmt, mv_ainfo->container_table_schema_))) {
           LOG_WARN("resolve hints failed", K(ret));
-        } else if (tenant_data_version < DATA_VERSION_4_3_5_1) {
-          mv_ainfo->mv_refresh_info_.parallel_ = stmt->get_parallelism();
         } else if (OB_FAIL(storage::ObMViewRefresher::calc_mv_refresh_parallelism(
                        mv_ainfo->mv_refresh_info_.refresh_dop_, session_info_, refresh_parallelism))) {
           LOG_WARN("fail to calculate refresh parallelism", KR(ret), "explicit_parallelism",
@@ -410,10 +401,7 @@ int ObCreateViewResolver::resolve(const ParseNode &parse_tree)
     }
 
     if (OB_SUCC(ret)) {
-      uint64_t compat_version = OB_INVALID_VERSION;
-      if (OB_FAIL(GET_MIN_DATA_VERSION(session_info_->get_effective_tenant_id(), compat_version))) {
-        LOG_WARN("get min data_version failed", K(ret), K(session_info_->get_effective_tenant_id()));
-      } else if (!is_force_view && !is_sync_ddl_user) {
+      if (!is_force_view && !is_sync_ddl_user) {
         // The view definition was directly set using the SQL for creating the view in table_schema.set_view_definition
         // Baseline backup when creating view must all use the view definition inside show create view
         // create force view use origin view_define
@@ -1160,17 +1148,15 @@ int ObCreateViewResolver::resolve_mv_refresh_info(ParseNode *refresh_info_node,
                                               ObMVRefreshInfo &refresh_info)
 {
   int ret = OB_SUCCESS;
-  uint64_t data_version = 0;
   if (allocator_ == nullptr) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("allocator_ is null", KR(ret));
-  } 
+  }
   char buf[OB_MAX_PROC_ENV_LENGTH];
   int64_t pos = 0;
   OZ (ObExecEnv::gen_exec_env(*session_info_, buf, OB_MAX_PROC_ENV_LENGTH, pos));
   OX (refresh_info.exec_env_.assign(buf, pos));
   OZ (ob_write_string(*allocator_, refresh_info.exec_env_, refresh_info.exec_env_));
-  OZ (OB_FAIL(GET_MIN_DATA_VERSION(session_info_->get_effective_tenant_id(), data_version)));
   if (OB_SUCC(ret) && refresh_info_node != nullptr) {
     if (refresh_info_node->int32_values_[0] == 1) { //never refresh
       refresh_info.refresh_method_ = ObMVRefreshMethod::NEVER;
@@ -1221,20 +1207,16 @@ int ObCreateViewResolver::resolve_mv_refresh_info(ParseNode *refresh_info_node,
       if (OB_FAIL(ret)) {
       } else if (OB_NOT_NULL(nested_refresh_node)) {
         ParseNode *nested_refresh_mode_node = nested_refresh_node->children_[0];
-        if (data_version < DATA_VERSION_4_3_5_3 ) {
-          ret = OB_NOT_SUPPORTED;
-          LOG_WARN("data version below 4.3.5.3, not support nested refresh type", K(ret));
-          LOG_USER_ERROR(OB_NOT_SUPPORTED, "data version below 4.3.5.3, set nested refresh type");
-        } else if (OB_ISNULL(nested_refresh_mode_node) ||
+        if (OB_ISNULL(nested_refresh_mode_node) ||
                    OB_UNLIKELY(T_MV_NESTED_REFRESH_CLAUSE != nested_refresh_node->type_)) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("invalid nested refresh node", K(ret), K(nested_refresh_node->type_),
                    KP(nested_refresh_mode_node));
-        } else if (data_version >= DATA_VERSION_4_3_5_3) {
+        } else {
           switch (nested_refresh_mode_node->value_) {
             case 0:
               refresh_info.nested_refresh_mode_ = ObMVNestedRefreshMode::INDIVIDUAL;
-              break; 
+              break;
             case 1:
               refresh_info.nested_refresh_mode_ = ObMVNestedRefreshMode::INCONSISTENT;
               break;
@@ -1376,32 +1358,16 @@ int ObCreateViewResolver::collect_dependency_infos(ObQueryCtx *query_ctx,
                                                    ObCreateTableArg &create_arg)
 {
   int ret = OB_SUCCESS;
-  uint64_t data_version = 0;
   int64_t max_ref_obj_schema_version = -1;
   CK (OB_NOT_NULL(query_ctx));
   if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(GET_MIN_DATA_VERSION(create_arg.schema_.get_tenant_id(), data_version))) {
-    LOG_WARN("failed to get data version", K(ret));
-  } else if (data_version >= DATA_VERSION_4_1_0_0) {
+  } else {
     OZ (ObDependencyInfo::collect_dep_infos(query_ctx->reference_obj_tables_,
                                             create_arg.dep_infos_,
                                             ObObjectType::VIEW,
                                             OB_INVALID_ID,
                                             max_ref_obj_schema_version));
     OX (create_arg.schema_.set_max_dependency_version(max_ref_obj_schema_version));
-  } else {
-    ObReferenceObjTable::ObDependencyObjItem *dep_obj_item = nullptr;
-    ObString dummy;
-    if (query_ctx->reference_obj_tables_.is_inited()) {
-      OZ (query_ctx->reference_obj_tables_.get_dep_obj_item(
-        OB_INVALID_ID, OB_INVALID_ID, ObObjectType::VIEW, dep_obj_item));
-      CK (OB_NOT_NULL(dep_obj_item));
-      OZ (ObDependencyInfo::collect_dep_infos(dep_obj_item->get_ref_obj_versions(),
-                                              create_arg.dep_infos_,
-                                              ObObjectType::VIEW,
-                                               0, dummy, dummy, false/* is_pl */));
-      OX (create_arg.schema_.set_max_dependency_version(dep_obj_item->max_ref_obj_schema_version_));
-    }
   }
 
   CK (OB_NOT_NULL(schema_checker_));
@@ -1487,13 +1453,10 @@ int ObCreateViewResolver::add_column_infos(const uint64_t tenant_id,
   ObIArray<SelectItem> &select_items = select_stmt.get_select_items();
   ObColumnSchemaV2 column;
   int64_t cur_column_id = OB_APP_MIN_COLUMN_ID;
-  uint64_t data_version = 0;
   share::schema::ObSchemaGetterGuard schema_guard;
   if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(tenant_id, schema_guard))) {
     LOG_WARN("fail to get schema guard", K(ret));
-  } else if (OB_FAIL(GET_MIN_DATA_VERSION(tenant_id, data_version))) {
-    LOG_WARN("failed to get data version", K(ret));
-  } else if (data_version >= DATA_VERSION_4_1_0_0) {
+  } else {
     if ((!column_list.empty() && OB_UNLIKELY(column_list.count() != select_items.count()))
         || (!comment_list.empty() && OB_UNLIKELY(comment_list.count() != select_items.count()))) {
       ret = OB_ERR_VIEW_INVALID;
@@ -1615,12 +1578,7 @@ int ObCreateViewResolver::load_mview_dep_session_vars(ObSQLSessionInfo &session_
                                                       ObLocalSessionVar &dep_vars)
 {
   int ret = OB_SUCCESS;
-  uint64_t data_version = 0;
-  if (OB_FAIL(GET_MIN_DATA_VERSION(session_info.get_effective_tenant_id(), data_version))) {
-    LOG_WARN("failed to get min data version", K(ret));
-  } else if (data_version < DATA_VERSION_4_3_3_0) {
-    //  when use data version before DATA_VERSION_4_3_3_0, do not extract local var
-  } else if (OB_FAIL(dep_vars.reserve_max_local_vars_capacity())) {
+  if (OB_FAIL(dep_vars.reserve_max_local_vars_capacity())) {
     LOG_WARN("fail to reserve max local vars capacity", K(ret));
   } else if (OB_FAIL(get_dep_session_vars_from_stmt(session_info, stmt, dep_vars))) {
     LOG_WARN("fail to get dep session vars from stmt", K(ret));

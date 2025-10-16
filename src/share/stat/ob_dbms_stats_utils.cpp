@@ -1388,10 +1388,6 @@ int ObDbmsStatsUtils::implicit_commit_before_gather_stats(sql::ObExecContext &ct
     LOG_WARN("get unexpected null", K(ret), K(ctx.get_my_session()));
   } else if (OB_FAIL(ctx.get_my_session()->get_optimizer_features_enable_version(optimizer_features_enable_version))) {
     LOG_WARN("failed to get_optimizer_features_enable_version", K(ret));
-  } else if (optimizer_features_enable_version < COMPAT_VERSION_4_2_4 ||
-             (optimizer_features_enable_version >= COMPAT_VERSION_4_3_0 &&
-              optimizer_features_enable_version < COMPAT_VERSION_4_3_3)) {
-    //do nothing
   } else if (OB_FAIL(ObResultSet::implicit_commit_before_cmd_execute(*ctx.get_my_session(), ctx, stmt::T_ANALYZE))) {
     LOG_WARN("failed to implicit commit before cmd execute", K(ret));
   } else {/*do nothing*/}

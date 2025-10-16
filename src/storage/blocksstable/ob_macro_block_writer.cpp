@@ -1931,8 +1931,7 @@ int ObMacroBlockWriter::prewarm_and_cluster_micro_blocks(const ObMacroBlock &mac
         LOG_WARN("fail to get pre_warm state of current micro block", K(ret));
       } else {
         const bool need_fill_logic_id = !data_store_desc_->is_for_index_or_meta() &&
-                                    data_store_desc_->is_major_merge_type() &&
-                                    data_store_desc_->get_major_working_cluster_version() >= DATA_VERSION_4_3_3_0;
+                                    data_store_desc_->is_major_merge_type();
         if (need_fill_logic_id) {
           ObLogicMacroBlockId cur_logic_id;
           gen_logic_macro_id(cur_logic_id);

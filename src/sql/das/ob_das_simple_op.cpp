@@ -296,7 +296,7 @@ int ObDASSimpleUtils::split_multi_ranges(ObExecContext &exec_ctx,
     LOG_WARN("prepare das split_multi_ranges task failed", K(ret));
   } else {
     split_ranges_op = static_cast<ObDASSplitRangesOp*>(task_op);
-    split_ranges_op->set_can_part_retry(GET_MIN_CLUSTER_VERSION() >= CLUSTER_VERSION_4_2_1_0);
+    split_ranges_op->set_can_part_retry(true);
     ObPhysicalPlanCtx *plan_ctx = nullptr;
     if (OB_ISNULL(plan_ctx = exec_ctx.get_physical_plan_ctx())) {
       ret = OB_ERR_UNEXPECTED;
@@ -352,7 +352,7 @@ int ObDASSimpleUtils::get_multi_ranges_cost(ObExecContext &exec_ctx,
     LOG_WARN("prepare das get_multi_ranges_cost task failed", K(ret));
   } else {
     ranges_cost_op = static_cast<ObDASRangesCostOp*>(task_op);
-    ranges_cost_op->set_can_part_retry(GET_MIN_CLUSTER_VERSION() >= CLUSTER_VERSION_4_2_1_0);
+    ranges_cost_op->set_can_part_retry(true);
     ObPhysicalPlanCtx *plan_ctx = nullptr;
     if (OB_ISNULL(plan_ctx = exec_ctx.get_physical_plan_ctx())) {
       ret = OB_ERR_UNEXPECTED;

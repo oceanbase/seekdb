@@ -354,7 +354,7 @@ int ObDASRef::retry_all_fail_tasks(common::ObIArray<ObIDASTaskOp *> &failed_task
 int ObDASRef::execute_all_task(DasAggregatedTaskList &agg_task_list)
 {
   int ret = OB_SUCCESS;
-  const bool async = GET_MIN_CLUSTER_VERSION() >= CLUSTER_VERSION_4_1_0_0;
+  const bool async = true;
   uint32_t finished_cnt = 0;
   while (finished_cnt < agg_task_list.get_size() && OB_SUCC(ret)) {
     finished_cnt = 0;

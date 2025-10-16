@@ -41,15 +41,6 @@ int ObAlterTablegroupResolver::resolve(const ParseNode &parser_tree)
       T_ALTER_TABLEGROUP != node->type_ || OB_ISNULL(node->children_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("session_info_ is null or parser error", K(ret));
-  } else {
-    uint64_t compat_version = OB_INVALID_VERSION;
-    uint64_t tenant_id = session_info_->get_effective_tenant_id();
-    if (OB_FAIL(GET_MIN_DATA_VERSION(tenant_id, compat_version))) {
-      LOG_WARN("get min data_version failed", K(ret), K(tenant_id));
-    } else if (compat_version < DATA_VERSION_4_2_0_0) {
-      ret = OB_NOT_SUPPORTED;
-      LOG_WARN("can not alter tablegroup while observer is upgrading", KR(ret), K(tenant_id));
-    }
   }
   ObAlterTablegroupStmt *alter_tablegroup_stmt = NULL;
   if (OB_SUCC(ret)) {

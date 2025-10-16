@@ -555,8 +555,7 @@ int ObTscCgService::generate_table_param(const ObLogTableScan &op,
   }
 
   if (OB_FAIL(ret)) {
-  } else if (FALSE_IT(scan_ctdef.table_param_.get_enable_lob_locator_v2()
-                          = (cg_.get_cur_cluster_version() >= CLUSTER_VERSION_4_1_0_0))) {
+  } else if (FALSE_IT(scan_ctdef.table_param_.get_enable_lob_locator_v2() = true)) {
   } else if (OB_FAIL(scan_ctdef.table_param_.convert(*table_schema,
                                                      scan_ctdef.access_column_ids_,
                                                      scan_ctdef.pd_expr_spec_.pd_storage_flag_,
@@ -798,11 +797,6 @@ int ObTscCgService::generate_pd_storage_flag(const ObLogPlan *log_plan,
             || T_PSEUDO_OLD_NEW_COL == (*e)->get_expr_type()) {
           pd_blockscan = false;
           pd_filter = false;
-        } else if ((*e)->is_column_ref_expr()) {
-          auto col = static_cast<ObColumnRefRawExpr *>(*e);
-          if (col->is_lob_column() && cg_.cur_cluster_version_ < CLUSTER_VERSION_4_1_0_0) {
-            pd_filter = false;
-          }
         }
       }
     }
@@ -4363,7 +4357,6 @@ int ObTscCgService::generate_das_scan_ctdef_with_domain_id(
   const common::ObIArray<int64_t>& with_domain_types = op.get_rowkey_domain_types();
   const common::ObIArray<uint64_t>& domain_table_ids = op.get_rowkey_domain_tids();
   ObDASDomainIdMergeCtDef *tmp_domain_id_merge_ctdef = nullptr;
-  uint64_t tenant_data_version = 0;
   int64_t child_cnt = with_domain_types.count() + 1;
   if (OB_ISNULL(scan_ctdef)) {
     ret = OB_INVALID_ARGUMENT;
@@ -4374,24 +4367,6 @@ int ObTscCgService::generate_das_scan_ctdef_with_domain_id(
   } else if (OB_ISNULL(cg_.opt_ctx_->get_session_info())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("fail to get session info", K(ret));
-  } else if (OB_FAIL(GET_MIN_DATA_VERSION(cg_.opt_ctx_->get_session_info()->get_effective_tenant_id(), tenant_data_version))) {
-    LOG_WARN("get tenant data version failed", K(ret));
-  } else if (tenant_data_version < DATA_VERSION_4_3_5_1) {
-    // old version
-    if (with_domain_types.count() != 1 ||
-        (with_domain_types.at(0) != ObDomainIdUtils::ObDomainIDType::DOC_ID &&
-         with_domain_types.at(0) != ObDomainIdUtils::ObDomainIDType::VID)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get invalid domain type for old version", K(ret), K(with_domain_types));
-    } else if (with_domain_types.at(0) == ObDomainIdUtils::ObDomainIDType::DOC_ID) { // doc id
-      if (OB_FAIL(generate_das_scan_ctdef_with_doc_id(op, tsc_ctdef, scan_ctdef, domain_id_merge_ctdef))) {
-        LOG_WARN("fail to generate doc id ctdef", K(ret));
-      }
-    } else { // vid
-      if (OB_FAIL(generate_das_scan_ctdef_with_vec_vid(op, tsc_ctdef, scan_ctdef, domain_id_merge_ctdef))) {
-        LOG_WARN("fail to generate vec vid ctdef", K(ret));
-      }
-    }
   } else if (OB_FAIL(ObDASTaskFactory::alloc_das_ctdef(DAS_OP_DOMAIN_ID_MERGE, cg_.phy_plan_->get_allocator(),
           tmp_domain_id_merge_ctdef))) {
     LOG_WARN("fail to allocate to domain id merge ctdef", K(ret));
@@ -4680,13 +4655,10 @@ int ObTscCgService::generate_table_lookup_ctdef(const ObLogTableScan &op,
   if (OB_SUCC(ret)) {
     ObDASOpType lookup_type = ObDASOpType::DAS_OP_INVALID;
     bool need_proj_relevance_score = false;
-    uint64_t data_version = 0;
 
     if (OB_FAIL(check_lookup_iter_type(scan_ctdef, need_proj_relevance_score))) {
       LOG_WARN("check lookup iter type failed", K(ret));
-    } else if (need_proj_relevance_score && OB_FAIL(GET_MIN_DATA_VERSION(MTL_ID(), data_version))) {
-      LOG_WARN("get tenant data version failed", K(ret), K(data_version), K(MTL_ID()));
-    } else if (FALSE_IT(lookup_type = (need_proj_relevance_score && (data_version >= DATA_VERSION_4_3_5_1)) ?
+    } else if (FALSE_IT(lookup_type = (need_proj_relevance_score) ?
                                           ObDASOpType::DAS_OP_INDEX_PROJ_LOOKUP :
                                           ObDASOpType::DAS_OP_TABLE_LOOKUP)) {
     } else if (OB_FAIL(ObDASTaskFactory::alloc_das_ctdef(lookup_type, allocator, lookup_ctdef))) {

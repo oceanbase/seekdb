@@ -6099,20 +6099,8 @@ int ObRootService::grant(const ObGrantArg &arg)
   } else if (!arg.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arg", K(arg), K(ret));
-  } else {
-    lib::Worker::CompatMode compat_mode = lib::Worker::CompatMode::INVALID;
-    if (OB_FAIL(ObCompatModeGetter::get_tenant_mode(arg.tenant_id_, compat_mode))) {
-      LOG_WARN("failed to get compat mode", K(ret), K(arg.tenant_id_));
-    } else if (lib::Worker::CompatMode::ORACLE == compat_mode) {
-      //do nothing
-    } else if (arg.column_names_priv_.count() != 0
-               && OB_FAIL(ObSQLUtils::compatibility_check_for_mysql_role_and_column_priv(arg.tenant_id_))) {
-      LOG_WARN("grant or revoke column priv is not suppported", KR(ret));
-    }
-    if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(ddl_service_.grant(arg))) {
-      LOG_WARN("Grant user failed", K(arg), K(ret));
-    }
+  } else if (OB_FAIL(ddl_service_.grant(arg))) {
+    LOG_WARN("Grant user failed", K(arg), K(ret));
   }
   return ret;
 }
@@ -6245,10 +6233,7 @@ int ObRootService::revoke_table(const ObRevokeTableArg &arg)
                                   arg.obj_priv_array_,
                                   arg.revoke_all_ora_));
   } else if (lib::Worker::CompatMode::MYSQL == mode) {
-    if (arg.column_names_priv_.count() != 0
-        && OB_FAIL(ObSQLUtils::compatibility_check_for_mysql_role_and_column_priv(arg.tenant_id_))) {
-      LOG_WARN("grant or revoke column priv is not suppported", KR(ret));
-    } else if (OB_FAIL(ddl_service_.revoke_table_and_column_mysql(arg))) {
+    if (OB_FAIL(ddl_service_.revoke_table_and_column_mysql(arg))) {
       LOG_WARN("revoke table and col failed", K(ret));
     }
   } else {
@@ -8512,10 +8497,8 @@ int ObRootService::table_allow_ddl_operation(const obrpc::ObAlterTableArg &arg)
     }
   } else if ((schema->required_by_mview_refresh() || schema->is_mlog_table()) &&
              !arg.is_alter_mlog_attributes_) {
-    if (OB_FAIL(ObResolverUtils::check_allowed_alter_operations_for_mlog(
-        tenant_id, arg, *schema))) {
-      LOG_WARN("failed to check allowed alter operation for mlog",
-          KR(ret), K(tenant_id), K(arg));
+    if (OB_FAIL(ObResolverUtils::check_allowed_alter_operations_for_mlog(arg, *schema))) {
+      LOG_WARN("failed to check allowed alter operation for mlog", KR(ret), K(arg));
     }
   }
   return ret;

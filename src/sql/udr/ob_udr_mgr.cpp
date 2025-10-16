@@ -77,12 +77,7 @@ ObIAllocator* UDRTmpAllocatorGuard::get_allocator()
 void ObUDRRefreshTask::runTimerTask()
 {
   int ret = OB_SUCCESS;
-  uint64_t data_version = 0;
-  if (OB_FAIL(GET_MIN_DATA_VERSION(rule_mgr_->tenant_id_, data_version))) {
-    LOG_WARN("failed to get min data version", K(ret), K(rule_mgr_->tenant_id_));
-  } else if (data_version < DATA_VERSION_4_1_0_0) {
-    // do nothing
-  } else if (OB_NOT_NULL(rule_mgr_) && rule_mgr_->inited_) {
+  if (OB_NOT_NULL(rule_mgr_) && rule_mgr_->inited_) {
     LOG_INFO("run rewrite rule refresh task", K(rule_mgr_->tenant_id_));
     if (OB_FAIL(rule_mgr_->sync_rule_from_inner_table())) {
       LOG_WARN("failed to sync rule from inner table", K(ret));

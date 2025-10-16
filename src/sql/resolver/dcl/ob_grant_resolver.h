@@ -193,9 +193,7 @@ int ObGrantResolver::resolve_priv_set(
             SQL_RESV_LOG(WARN, "Grant/Revoke privilege than can not be used",
                       "priv_type", ObPrintPrivSet(priv_type), K(ret));
           } else if (privs_node->children_[i]->num_child_ == 1) {
-            if (OB_FAIL(ObSQLUtils::compatibility_check_for_mysql_role_and_column_priv(tenant_id))) {
-              SQL_RESV_LOG(WARN, "grant or revoke column priv is not suppported", KR(ret));
-            } else if (OB_FAIL(resolve_col_names_mysql(grant_stmt, priv_type, 
+            if (OB_FAIL(resolve_col_names_mysql(grant_stmt, priv_type,
                                                 privs_node->children_[i]->children_[0],
                                                 schema_checker, session_info, allocator))) {
               SQL_RESV_LOG(WARN, "resolve col names failed", K(ret));

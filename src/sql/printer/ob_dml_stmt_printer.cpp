@@ -2258,7 +2258,7 @@ bool ObDMLStmtPrinter::need_print_catalog_name(const ObString& catalog_name)
   bool need_print = false;
   if (!ObCatalogUtils::is_internal_catalog_name(catalog_name)) {
     need_print = true;
-  } else if (print_params_.not_print_internal_catalog_ || GET_MIN_CLUSTER_VERSION() <= CLUSTER_VERSION_4_3_5_2) {
+  } else if (print_params_.not_print_internal_catalog_) {
   } else {
     need_print = true;
   }
