@@ -84,6 +84,7 @@ enum ObVectorIndexAlgorithmType : uint16_t
   VIAT_HNSW_BQ,
   VIAT_HGRAPH,
   VIAT_SPIV,
+  VIAT_IPIVF,
   VIAT_MAX
 };
 
@@ -123,7 +124,8 @@ enum ObVecIdxAdaTryPath : uint8_t //FARM COMPAT WHITELIST
   VEC_INDEX_PRE_FILTER = 1,
   VEC_INDEX_ITERATIVE_FILTER = 2,
   VEC_INDEX_IN_FILTER = 3,
-  VEC_PATH_MAX = 4
+  VEC_INDEX_POST_FILTER=4,
+  VEC_PATH_MAX = 5
 };
 
 struct ObIvfConstant {
@@ -147,12 +149,14 @@ struct ObVectorIndexParam
 {
   static constexpr float DEFAULT_REFINE_K = 4.0;
   static constexpr int DEFAULT_BQ_BITS_QUERY = 32;
+  static constexpr int DEFAULT_WINDOW_SIZE = 100000;
 
   ObVectorIndexParam() :
     type_(VIAT_MAX), lib_(VIAL_MAX), dim_(0), m_(0), ef_construction_(0), ef_search_(0),
     nlist_(0), sample_per_nlist_(0), extra_info_max_size_(0), extra_info_actual_size_(0),
     refine_type_(0), bq_bits_query_(DEFAULT_BQ_BITS_QUERY),
-    refine_k_(DEFAULT_REFINE_K), bq_use_fht_(false), nbits_(0)
+    refine_k_(DEFAULT_REFINE_K), bq_use_fht_(false), nbits_(0), prune_(false), refine_(false), ob_sparse_drop_ratio_build_(0), window_size_(DEFAULT_WINDOW_SIZE),
+    ob_sparse_drop_ratio_search_(0)
   {}
   void reset() {
     type_ = VIAT_MAX;
@@ -171,6 +175,11 @@ struct ObVectorIndexParam
     refine_k_= DEFAULT_REFINE_K;
     bq_use_fht_ = false;
     nbits_ = 0;
+    prune_ = false;
+    refine_ = false;
+    ob_sparse_drop_ratio_build_ = 0;
+    window_size_ = DEFAULT_WINDOW_SIZE;
+    ob_sparse_drop_ratio_search_ = 0;
   };
   int assign(const ObVectorIndexParam &other) {
     int ret = OB_SUCCESS;
@@ -190,6 +199,11 @@ struct ObVectorIndexParam
     refine_k_ = other.refine_k_;
     bq_use_fht_ = other.bq_use_fht_;
     nbits_ = other.nbits_;
+    prune_ = other.prune_;
+    refine_ = other.refine_;
+    ob_sparse_drop_ratio_build_ = other.ob_sparse_drop_ratio_build_;
+    window_size_ = other.window_size_;
+    ob_sparse_drop_ratio_search_ = other.ob_sparse_drop_ratio_search_;
     return ret;
   };
   ObVectorIndexAlgorithmType type_;
@@ -210,11 +224,17 @@ struct ObVectorIndexParam
   float refine_k_;
   bool bq_use_fht_;
   int64_t nbits_;
+  // param for sparse vector
+  bool prune_;
+  bool refine_;
+  float ob_sparse_drop_ratio_build_;
+  int window_size_;
+  float ob_sparse_drop_ratio_search_;
   OB_UNIS_VERSION(1);
 public:
   TO_STRING_KV(K_(type), K_(lib), K_(dist_algorithm), K_(dim), K_(m), K_(ef_construction), K_(ef_search),
     K_(nlist), K_(sample_per_nlist), K_(extra_info_max_size), K_(extra_info_actual_size),
-    K_(refine_type), K_(bq_bits_query), K_(refine_k), K_(bq_use_fht), K_(nbits));
+    K_(refine_type), K_(bq_bits_query), K_(refine_k), K_(bq_use_fht), K_(nbits), K_(prune), K_(refine), K_(ob_sparse_drop_ratio_build),K_(window_size), K_(ob_sparse_drop_ratio_search));
 
 public:
   static int build_search_param(const ObVectorIndexParam &index_param,
@@ -227,6 +247,7 @@ struct ObVecIdxExtraInfo
 static constexpr double DEFAULT_SELECTIVITY_RATE = 0.3;
 static constexpr double DEFAULT_PRE_RATE_FILTER_WITH_ROWKEY = 0.35;
 static constexpr double DEFAULT_PRE_RATE_FILTER_WITH_IDX = 0.15;
+static constexpr double DEFAULT_SINDI_SELECTIVITY_RATE = 0.1;
 static const uint64_t MAX_HNSW_BRUTE_FORCE_SIZE = 20000;
 static const uint64_t MAX_HNSW_PRE_ROW_CNT_WITH_ROWKEY = 1000000;
 static const uint64_t MAX_HNSW_PRE_ROW_CNT_WITH_IDX = 300000;
@@ -249,6 +270,7 @@ static constexpr double DEFAULT_IVFPQ_SELECTIVITY_RATE = 0.9;
   inline void set_row_count(int64_t row_count) { row_count_ = row_count;}
   inline void set_can_use_vec_pri_opt(bool can_use_vec_pri_opt) {can_use_vec_pri_opt_ = can_use_vec_pri_opt;}
   bool can_use_vec_pri_opt() const { return can_use_vec_pri_opt_; }
+  // TODO(ningxin.ning): add ipivf here?
   inline bool is_hnsw_vec_scan() const
   {
     return vector_index_param_.type_ == ObVectorIndexAlgorithmType::VIAT_HNSW ||
@@ -676,6 +698,11 @@ public:
       uint64_t &est_mem,
       bool is_build = false
   );
+  static int estimate_sparse_memory(
+      uint64_t num_vectors,
+      const ObVectorIndexParam &param,
+      uint64_t &est_mem
+  );
   static int estimate_ivf_memory(uint64_t num_vectors,
                                  const ObVectorIndexParam &param,
                                  uint64_t &construct_mem,
@@ -722,7 +749,8 @@ public:
                                     double &selectivity,
                                     sql::ObRawExpr *&vector_expr,
                                     const sql::ObDMLStmt *&stmt);
-  static int set_adaptive_try_path(ObVecIdxExtraInfo& vc_info, const bool is_primary_idx);
+  static int set_adaptive_try_path(ObVecIdxExtraInfo& vc_info, const bool is_primary_idx, bool is_ipivf=false);
+  static bool is_sindi_index(const ObTableSchema *vec_index_schema);
 private:
   static void save_column_schema(
       const ObColumnSchemaV2 *&old_column,

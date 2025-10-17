@@ -1232,6 +1232,8 @@ int ObVecIndexAsyncTask::optimize_vector_index(ObPluginVectorIndexAdaptor &adapt
   common::ObNewRowIterator *data_iter = nullptr;
   ObAccessService *tsc_service = MTL(ObAccessService *);
   const uint32_t VEC_INDEX_HNSWSQ_BUILD_COUNT_THRESHOLD = 10000;
+  // (dim: 128 + vals: 128) * 4 = 1024
+  const uint32_t VEC_INDEX_IPIVF_BUILD_COUNT_THRESHOLD = 10000 * 1024;
   uint32_t current_count = 0;
   transaction::ObTxDesc *tx_desc = nullptr;
   oceanbase::transaction::ObTxReadSnapshot snapshot;
@@ -1239,13 +1241,24 @@ int ObVecIndexAsyncTask::optimize_vector_index(ObPluginVectorIndexAdaptor &adapt
   oceanbase::transaction::ObTransService *txs = MTL(transaction::ObTransService *);
   const uint64_t timeout_us = ObTimeUtility::current_time() + ObInsertLobColumnHelper::LOB_TX_TIMEOUT;
   int64_t loop_cnt = 0; // check task is cancel
+  uint32_t *sparse_byte_lens = nullptr;
   SMART_VARS_2((storage::ObTableScanParam, vid_id_scan_param),
                (storage::ObTableScanParam, data_scan_param)) {
     if (OB_FAIL(adaptor.get_dim(dim))) {
       LOG_WARN("get dim failed", K(ret));
+    } else if (adaptor.is_sparse_vector_index_type()) {
+      if (OB_ISNULL(sparse_byte_lens = static_cast<uint32_t *>(allocator_.alloc(sizeof(uint32_t) * VEC_INDEX_IPIVF_BUILD_COUNT_THRESHOLD)))) {
+        ret = OB_ALLOCATE_MEMORY_FAILED;
+        LOG_WARN("failed to alloc sparse_byte_lens", K(ret));
+      } else if (OB_ISNULL(vectors = static_cast<float *>(allocator_.alloc(sizeof(char) * VEC_INDEX_IPIVF_BUILD_COUNT_THRESHOLD)))) {
+        ret = OB_ALLOCATE_MEMORY_FAILED;
+        LOG_WARN("failed to alloc vectors for sparse", K(ret));
+      }
     } else if (OB_ISNULL(vectors = static_cast<float *>(allocator_.alloc(sizeof(float) * dim * VEC_INDEX_HNSWSQ_BUILD_COUNT_THRESHOLD)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("failed to alloc new mem.", K(ret));
+    }
+    if (OB_FAIL(ret)) {
     } else if (OB_ISNULL(vids = static_cast<int64_t *>(allocator_.alloc(sizeof(int64_t) * VEC_INDEX_HNSWSQ_BUILD_COUNT_THRESHOLD)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("failed to alloc new mem.", K(ret));
@@ -1307,6 +1320,8 @@ int ObVecIndexAsyncTask::optimize_vector_index(ObPluginVectorIndexAdaptor &adapt
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("get null table scan iter", K(ret));
       }
+      char *curr_vector_ptr = (char *)vectors;
+      uint32_t curr_total_length = 0;
       while (OB_SUCC(ret)) {
         blocksstable::ObDatumRow *datum_vid = nullptr;
         blocksstable::ObDatumRow *datum_row = nullptr;
@@ -1371,15 +1386,24 @@ int ObVecIndexAsyncTask::optimize_vector_index(ObPluginVectorIndexAdaptor &adapt
           } else if (datum_row->storage_datums_[vec_col_idx].is_null() || datum_row->storage_datums_[vec_col_idx].is_nop()) { // skip null row
           } else if (FALSE_IT(vector_str = datum_row->storage_datums_[vec_col_idx].get_string())) {
           } else if (vector_str.length() == 0) {  // skip null row
-          } else if (vector_str.length() != dim * sizeof(float)) {
+          } else if (!adaptor.is_sparse_vector_index_type() && vector_str.length() != dim * sizeof(float)) {
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("get invalid string.", K(ret), K(vector_str), K(dim));
           } else if (OB_ISNULL(vector_ptr = reinterpret_cast<float *>(vector_str.ptr()))) {
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("failed to get float vector.", K(ret));
           } else {
-            for (int j = 0; OB_SUCC(ret) && j < dim; j++) {
-              vectors[current_count * dim + j] = vector_ptr[j];
+            if (adaptor.is_sparse_vector_index_type()) {
+              curr_total_length += vector_str.length();
+              if(curr_total_length <= VEC_INDEX_IPIVF_BUILD_COUNT_THRESHOLD) {
+                sparse_byte_lens[current_count] = vector_str.length();
+                MEMCPY(curr_vector_ptr, vector_str.ptr(), vector_str.length());
+                curr_vector_ptr += vector_str.length();
+              }
+            } else {
+              for (int j = 0; OB_SUCC(ret) && j < dim; j++) {
+                vectors[current_count * dim + j] = vector_ptr[j];
+              }
             }
 
             int64_t vid = 0;
@@ -1393,11 +1417,28 @@ int ObVecIndexAsyncTask::optimize_vector_index(ObPluginVectorIndexAdaptor &adapt
             vids[current_count] = vid;
             vid_bound.set_vid(vid);
             current_count += 1;
-            if (current_count >= VEC_INDEX_HNSWSQ_BUILD_COUNT_THRESHOLD) {
-              if (OB_FAIL(adaptor.add_snap_index(vectors, vids, out_extra_obj, extra_column_count, current_count))) {
-                LOG_WARN("failed to add snap index", K(ret), K(vectors), K(vids), K(current_count));
-              } else {
-                current_count = 0;
+            if (adaptor.is_sparse_vector_index_type()) {
+              if (curr_total_length >= VEC_INDEX_IPIVF_BUILD_COUNT_THRESHOLD) {
+                if (OB_FAIL(adaptor.add_snap_index(
+                        vectors, vids, out_extra_obj, extra_column_count, current_count, sparse_byte_lens))) {
+                  LOG_WARN("failed to add sparse snap index", K(ret), K(vectors), K(vids), K(current_count));
+                } else {
+                  current_count = 0;
+                  curr_vector_ptr = (char *)vectors;
+                  curr_total_length = 0;
+                  // copy next data
+                  sparse_byte_lens[current_count] = vector_str.length();
+                  MEMCPY(curr_vector_ptr, vector_str.ptr(), vector_str.length());
+                  curr_vector_ptr += vector_str.length();
+                }
+              }
+            } else {
+              if (current_count >= VEC_INDEX_HNSWSQ_BUILD_COUNT_THRESHOLD) {
+                if (OB_FAIL(adaptor.add_snap_index(vectors, vids, out_extra_obj, extra_column_count, current_count))) {
+                  LOG_WARN("failed to add snap index", K(ret), K(vectors), K(vids), K(current_count));
+                } else {
+                  current_count = 0;
+                }
               }
             }
           }
@@ -1428,9 +1469,16 @@ int ObVecIndexAsyncTask::optimize_vector_index(ObPluginVectorIndexAdaptor &adapt
     }
     data_iter = nullptr;
   }
-  if (OB_FAIL(ret)) {
-  } else if (current_count > 0 && OB_FAIL(adaptor.add_snap_index(vectors, vids, out_extra_obj, extra_column_count, current_count))) {
-    LOG_WARN("failed to build snap index", K(ret), K(vectors), K(vids));
+  if (OB_SUCC(ret) && current_count > 0) {
+    if (adaptor.is_sparse_vector_index_type()) {
+      if (OB_FAIL(adaptor.add_snap_index(vectors, vids, out_extra_obj, extra_column_count, current_count, sparse_byte_lens))) {
+        LOG_WARN("failed to build sparse snap index", K(ret), K(vectors), K(vids));
+      }
+    } else {
+      if (OB_FAIL(adaptor.add_snap_index(vectors, vids, out_extra_obj, extra_column_count, current_count))) {
+        LOG_WARN("failed to build snap index", K(ret), K(vectors), K(vids));
+      }
+    }
   }
 
   // refresh snapshot table data.
@@ -1668,6 +1716,8 @@ int ObVecIndexAsyncTask::refresh_snapshot_index_data(ObPluginVectorIndexAdaptor 
                 LOG_WARN("fail to build sq vec snapshot key str", K(ret), K(index_type));
               } else if (index_type == VIAT_HNSW_BQ && OB_FAIL(databuff_printf(key_str, ObVectorIndexSliceStore::OB_VEC_IDX_SNAPSHOT_KEY_LENGTH, key_pos, "%lu_%lu_hnsw_bq_data_part%05ld", adaptor.get_snap_tablet_id().id(), ctx_->task_status_.target_scn_.get_val_for_inner_table_field(), row_id))) {
                 LOG_WARN("fail to build bq vec snapshot key str", K(ret), K(index_type));
+              } else if (index_type == VIAT_IPIVF && OB_FAIL(databuff_printf(key_str, ObVectorIndexSliceStore::OB_VEC_IDX_SNAPSHOT_KEY_LENGTH, key_pos, "%lu_%lu_ipivf_data_part%05ld", adaptor.get_snap_tablet_id().id(), ctx_->task_status_.target_scn_.get_val_for_inner_table_field(), row_id))) {
+                LOG_WARN("fail to build ipivf vec snapshot key str", K(ret), K(index_type));
               } else if (OB_ISNULL(key_str)) {
                 ret = OB_ERR_UNEXPECTED;
                 LOG_WARN("unexpected nullptr key_str", K(ret), KP(key_str));

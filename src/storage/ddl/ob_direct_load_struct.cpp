@@ -4114,10 +4114,10 @@ int ObVectorIndexSliceStore::append_row(const blocksstable::ObDatumRow &datum_ro
             }
           }
         }
-
+        uint32_t vec_length = vec_str.length();
         if (OB_FAIL(ret)) {
         } else if (OB_FAIL(adaptor_guard.get_adatper()->add_snap_index(reinterpret_cast<float *>(vec_str.ptr()),
-                                                                       &vec_vid, extra_obj, extra_column_count, 1))) {
+                                                                       &vec_vid, extra_obj, extra_column_count, 1, &vec_length))) {
           LOG_WARN("fail to build index to adaptor", K(ret), KPC(this));
         } else {
           LOG_DEBUG("[vec index debug] add into snap index success", K(tablet_id_), K(vec_vid), K(vec_str));
@@ -4261,6 +4261,8 @@ int ObVectorIndexSliceStore::get_next_vector_data_row(
       LOG_WARN("fail to build sq vec snapshot key str", K(ret), K(index_type));
     } else if (index_type == VIAT_HNSW_BQ && OB_FAIL(databuff_printf(key_str, OB_VEC_IDX_SNAPSHOT_KEY_LENGTH, key_pos, "%lu_%ld_hnsw_bq_data_part%05ld", tablet_id_.id(), snapshot_version, cur_row_pos_))) {
       LOG_WARN("fail to build bq vec snapshot key str", K(ret), K(index_type));
+    } else if (index_type == VIAT_IPIVF && OB_FAIL(databuff_printf(key_str, OB_VEC_IDX_SNAPSHOT_KEY_LENGTH, key_pos, "%lu_%ld_ipivf_data_part%05ld", tablet_id_.id(), snapshot_version, cur_row_pos_))) {
+      LOG_WARN("fail to build ipivf vec snapshot key str", K(ret), K(index_type));
     } else {
       current_row_.storage_datums_[vector_key_col_idx_].set_string(key_str, key_pos);
     }
