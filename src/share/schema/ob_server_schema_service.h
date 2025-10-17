@@ -35,6 +35,7 @@
 #include "share/schema/ob_mock_fk_parent_table_mgr.h"
 #include "share/schema/ob_catalog_mgr.h"
 #include "share/schema/ob_ccl_rule_mgr.h"
+#include "share/schema/ob_ai_model_mgr.h"
 
 namespace oceanbase
 {
@@ -88,6 +89,7 @@ struct SchemaKey
     uint64_t column_priv_id_;
     uint64_t catalog_id_;
     uint64_t ccl_rule_id_;
+    uint64_t ai_model_id_;
   };
   union {
     common::ObString table_name_;
@@ -97,6 +99,7 @@ struct SchemaKey
     common::ObString context_namespace_;
     common::ObString mock_fk_parent_table_namespace_;
     common::ObString catalog_name_;
+    common::ObString ai_model_name_;
   };
   int64_t schema_version_;
   uint64_t col_id_;
@@ -131,7 +134,8 @@ struct SchemaKey
                K_(column_priv_id),
                K_(catalog_id),
                K_(catalog_name),
-               K_(ccl_rule_id));
+               K_(ccl_rule_id),
+               K_(ai_model_id));
 
   SchemaKey()
     : tenant_id_(common::OB_INVALID_ID),
@@ -249,6 +253,10 @@ struct SchemaKey
   ObTenantCCLRuleId get_ccl_rule_key() const
   {
     return ObTenantCCLRuleId(tenant_id_, ccl_rule_id_);
+  }
+  ObTenantAiModelId get_ai_model_key() const
+  {
+    return ObTenantAiModelId(tenant_id_, ai_model_id_);
   }
 };
 
@@ -383,6 +391,7 @@ public:
   SCHEMA_KEY_FUNC(directory);
   SCHEMA_KEY_FUNC(catalog);
   SCHEMA_KEY_FUNC(ccl_rule);
+  SCHEMA_KEY_FUNC(ai_model);
   #undef SCHEMA_KEY_FUNC
 
   struct udf_key_hash_func {
@@ -684,6 +693,7 @@ public:
   SCHEMA_KEYS_DEF(catalog, CatalogKeys);
   SCHEMA_KEYS_DEF(catalog_priv, CatalogPrivKeys);
   SCHEMA_KEYS_DEF(ccl_rule, CCLRuleKeys);
+  SCHEMA_KEYS_DEF(ai_model, AiModelKeys);
   #undef SCHEMA_KEYS_DEF
   typedef common::hash::ObHashSet<SchemaKey, common::hash::NoPthreadDefendMode,
       db_priv_hash_func, db_priv_equal_to> DBPrivKeys;
@@ -788,6 +798,10 @@ public:
     CCLRuleKeys new_ccl_rule_keys_;
     CCLRuleKeys del_ccl_rule_keys_;
 
+    // ai model
+    AiModelKeys new_ai_model_keys_;
+    AiModelKeys del_ai_model_keys_;
+
     int create(int64_t bucket_size);
 
     bool need_fetch_schemas_for_data_dict() const {
@@ -826,6 +840,7 @@ public:
     common::ObArray<ObCatalogSchema> simple_catalog_schemas_;
     common::ObArray<ObSimpleCCLRuleSchema> simple_ccl_rule_schemas_;
     common::ObArray<ObTableSchema *> non_sys_tables_;
+    common::ObArray<ObAiModelSchema> simple_ai_model_schemas_;
     common::ObArenaAllocator allocator_;
   };
 
@@ -982,6 +997,7 @@ private:
   GET_INCREMENT_SCHEMA_KEY_FUNC_DECLARE(mock_fk_parent_table);
   GET_INCREMENT_SCHEMA_KEY_FUNC_DECLARE(catalog);
   GET_INCREMENT_SCHEMA_KEY_FUNC_DECLARE(ccl_rule);
+  GET_INCREMENT_SCHEMA_KEY_FUNC_DECLARE(ai_model);
 #undef GET_INCREMENT_SCHEMA_KEY_FUNC_DECLARE
 
 
@@ -1015,6 +1031,7 @@ private:
   APPLY_SCHEMA_TO_CACHE(mock_fk_parent_table, ObMockFKParentTableMgr);
   APPLY_SCHEMA_TO_CACHE(catalog, ObSchemaMgr);
   APPLY_SCHEMA_TO_CACHE(ccl_rule, ObSchemaMgr);
+  APPLY_SCHEMA_TO_CACHE(ai_model, ObSchemaMgr);
 #undef APPLY_SCHEMA_TO_CACHE
 
   // replay log

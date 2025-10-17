@@ -30,6 +30,7 @@ ob_set_subtarget(ob_sql common
 ob_set_subtarget(ob_sql common_mixed
   dblink/ob_tm_service.cpp
   privilege_check/ob_privilege_check.cpp
+  privilege_check/ob_ai_model_priv_util.cpp
   resolver/mv/ob_mv_checker.cpp
   resolver/mv/ob_mv_provider.cpp
   resolver/mv/ob_mv_printer.cpp
@@ -541,6 +542,7 @@ ob_set_subtarget(ob_sql engine_expr
   engine/expr/ob_expr_json_utils.cpp
   engine/expr/ob_expr_array.cpp
   engine/expr/ob_expr_vector.cpp
+  engine/expr/ob_expr_vector_similarity.cpp
   engine/expr/ob_array_expr_utils.cpp
   engine/expr/ob_array_cast.cpp
   engine/expr/ob_expr_vec_ivf_center_id.cpp
@@ -558,6 +560,8 @@ ob_set_subtarget(ob_sql engine_expr
   engine/expr/ob_expr_vec_scn.cpp
   engine/expr/ob_expr_vec_key.cpp
   engine/expr/ob_expr_vec_data.cpp
+  engine/expr/ob_expr_vec_chunk.cpp
+  engine/expr/ob_expr_embedded_vec.cpp
   engine/expr/ob_expr_topn_filter.cpp
   engine/expr/ob_expr_priv_st_makeenvelope.cpp
   engine/expr/ob_expr_priv_st_clipbybox2d.cpp
@@ -800,6 +804,14 @@ ob_set_subtarget(ob_sql engine_expr
   engine/expr/ob_expr_spiv_value.cpp
   engine/expr/ob_expr_rb_to_array.cpp
   engine/expr/ob_expr_rb_contains.cpp
+  engine/expr/ob_expr_semantic_distance.cpp
+  engine/expr/ob_expr_ai/ob_ai_func.cpp
+  engine/expr/ob_expr_ai/ob_ai_func_client.cpp
+  engine/expr/ob_expr_ai/ob_ai_func_utils.cpp
+  engine/expr/ob_expr_ai/ob_expr_ai_complete.cpp
+  engine/expr/ob_expr_ai/ob_expr_ai_embed.cpp
+  engine/expr/ob_expr_ai/ob_expr_ai_rerank.cpp
+  engine/expr/ob_expr_ai/ob_expr_ai_prompt.cpp
 )
 
 ob_set_subtarget(ob_sql_extra ALONE

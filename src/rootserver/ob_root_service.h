@@ -641,6 +641,11 @@ public:
   int create_ccl_rule_ddl(const obrpc::ObCreateCCLRuleArg &arg);
   int drop_ccl_rule_ddl(const obrpc::ObDropCCLRuleArg &arg);
 
+  //----Functions for managing ai model----
+  int create_ai_model(const obrpc::ObCreateAiModelArg &arg);
+  int drop_ai_model(const obrpc::ObDropAiModelArg &arg);
+  //----End of functions for managing ai model----
+
   // server related
   int load_server_manager();
   ObStatusChangeCallback &get_status_change_cb() { return status_change_cb_; }

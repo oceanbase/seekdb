@@ -42,6 +42,7 @@ public:
   virtual void reset();
   int add_row(blocksstable::ObDatumRow &row);
   int add_row(blocksstable::ObDatumRow &row,  const ObIArray<int32_t> &projector);
+  void rescan() { cur_idx_ = 0; }
 private:
   bool is_inited_;
   common::ObArenaAllocator allocator_;

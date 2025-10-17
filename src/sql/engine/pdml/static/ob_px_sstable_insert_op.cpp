@@ -250,7 +250,8 @@ int ObPxMultiPartSSTableInsertOp::get_next_row_from_child(ObInsertMonitor *inser
     FLOG_INFO("all partition iterate finished", KP(this));
   }
   if (share::schema::is_vec_delta_buffer_type(ddl_dag_->get_ddl_table_schema().table_item_.index_type_)
-      || share::schema::is_vec_index_id_type(ddl_dag_->get_ddl_table_schema().table_item_.index_type_)) {
+      || share::schema::is_vec_index_id_type(ddl_dag_->get_ddl_table_schema().table_item_.index_type_)
+      || share::schema::is_hybrid_vec_index_log_type(ddl_dag_->get_ddl_table_schema().table_item_.index_type_)) {
     is_all_partition_finished_ = true;
     ret = OB_ITER_END;
     FLOG_INFO("all partition iterate finished for vec index type", KP(this));
@@ -273,7 +274,8 @@ int ObPxMultiPartSSTableInsertOp::get_next_batch_from_child(const int64_t max_ba
     FLOG_INFO("all partition iterate finished", KP(this));
   }
   if (share::schema::is_vec_delta_buffer_type(ddl_dag_->get_ddl_table_schema().table_item_.index_type_)
-      || share::schema::is_vec_index_id_type(ddl_dag_->get_ddl_table_schema().table_item_.index_type_)) {
+      || share::schema::is_vec_index_id_type(ddl_dag_->get_ddl_table_schema().table_item_.index_type_)
+      || share::schema::is_hybrid_vec_index_log_type(ddl_dag_->get_ddl_table_schema().table_item_.index_type_)) {
     is_all_partition_finished_ = true;
     ret = OB_ITER_END;
     FLOG_INFO("all partition iterate finished for vec index type", KP(this));

@@ -24,6 +24,7 @@
 #include "share/schema/ob_catalog_schema_struct.h"
 #include "share/schema/ob_ccl_schema_struct.h"
 #include "share/schema/ob_ccl_rule_mgr.h"
+#include "share/schema/ob_ai_model_mgr.h"
 
 namespace oceanbase
 {
@@ -883,7 +884,14 @@ public:
   int get_ccl_rule_infos(const uint64_t tenant_id, CclRuleContainsInfo,
                          ObCCLRuleMgr::CCLRuleInfos *&ccl_rule_infos);
   int get_ccl_rule_count(const uint64_t tenant_id, uint64_t & count);
+  // ai function
+  int get_ai_model_schema(const uint64_t tenant_id,
+                          const uint64_t ai_model_id,
+                          const ObAiModelSchema *&ai_model_schema);
 
+  int get_ai_model_schema(const uint64_t tenant_id,
+                          const ObString &ai_model_name,
+                          const ObAiModelSchema *&ai_model_schema);
 private:
   int check_ssl_access(const ObUserInfo &user_info,
                        SSL *ssl_st);

@@ -281,6 +281,7 @@ public:
   // @param [in] old_key  The old key name.
   // @param [in] new_key  The new key name.
   // @return Returns OB_SUCCESS on success, error code otherwise.
+  int rename_key(const common::ObString &old_key, const common::ObString &new_key);
 
   // Merges all elements on the other to the end of the current object
   //

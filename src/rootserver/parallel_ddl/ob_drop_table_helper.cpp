@@ -1,13 +1,13 @@
 /**
  * Copyright (c) 2021 OceanBase
  * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan
- * PubL v2. You may obtain a copy of Mulan PubL v2 at:
+ * You can use this software according to the terms and conditions of the Mulan PubL v2.
+ * You may obtain a copy of Mulan PubL v2 at:
  *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
- * KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
- * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE. See the
- * Mulan PubL v2 for more details.
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PubL v2 for more details.
  */
 
 #define USING_LOG_PREFIX RS
@@ -1456,7 +1456,8 @@ int ObDropTableHelper::drop_table_(const ObTableSchema &table_schema, const ObSt
     }
 
     if (OB_SUCC(ret)) {
-      if (table_schema.is_vec_delta_buffer_type() && OB_FAIL(ObVectorIndexUtil::remove_dbms_vector_jobs(get_trans_(), tenant_id_, table_schema.get_table_id()))) {
+      if ((table_schema.is_vec_delta_buffer_type() || table_schema.is_hybrid_vec_index_log_type()) &&
+          OB_FAIL(ObVectorIndexUtil::remove_dbms_vector_jobs(get_trans_(), tenant_id_, table_schema.get_table_id()))) {
         LOG_WARN("failed to remove dbms vector jobs", KR(ret), K_(tenant_id), K(table_schema.get_table_id()));
       }
     }

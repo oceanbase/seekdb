@@ -298,6 +298,8 @@
 #include "ob_expr_vec_vid.h"
 #include "ob_expr_vec_data.h"
 #include "ob_expr_vec_type.h"
+#include "ob_expr_vec_chunk.h"
+#include "ob_expr_embedded_vec.h"
 #include "ob_expr_spiv_dim.h"
 #include "ob_expr_spiv_value.h"
 #include "ob_expr_vector.h"
@@ -379,6 +381,12 @@
 #include "ob_expr_current_catalog.h"
 #include "ob_expr_check_catalog_access.h"
 #include "ob_expr_oracle_to_char.h"
+#include "ob_expr_semantic_distance.h"
+#include "sql/engine/expr/ob_expr_ai/ob_expr_ai_complete.h"
+#include "sql/engine/expr/ob_expr_ai/ob_expr_ai_embed.h"
+#include "sql/engine/expr/ob_expr_ai/ob_expr_ai_rerank.h"
+#include "sql/engine/expr/ob_expr_ai/ob_expr_ai_prompt.h"
+#include "ob_expr_vector_similarity.h"
 
 namespace oceanbase
 {
@@ -1322,6 +1330,18 @@ static ObExpr::EvalFunc g_expr_eval_functions[] = {
   NULL, // ObExprUDF::eval_external_udf,                               /* 850 */
   NULL, // ObExprStartUpMode::eval_startup_mode,                       /* 851 */ 
   ObExprVectorL2Squared::calc_l2_squared,                              /* 852 */
+  ObExprVecChunk::generate_vec_chunk,                                  /* 853 */
+  ObExprEmbeddedVec::generate_embedded_vec,                            /* 854 */
+  ObExprSemanticDistance::calc_semantic_distance,                      /* 855 */
+  ObExprSemanticVectorDistance::calc_semantic_vector_distance,         /* 856 */
+  ObExprAIComplete::eval_ai_complete,                                  /* 857 */
+  ObExprAIEmbed::eval_ai_embed,                                        /* 858 */
+  ObExprAIRerank::eval_ai_rerank,                                      /* 859 */
+  ObExprAIPrompt::eval_ai_prompt,                                      /* 870 */
+  ObExprVectorL2Similarity::calc_l2_similarity,                        /* 871 */
+  ObExprVectorCosineSimilarity::calc_cosine_similarity,                /* 872 */
+  ObExprVectorIPSimilarity::calc_ip_similarity,                        /* 873 */
+  ObExprVectorSimilarity::calc_similarity,                             /* 874 */
 };
 
 static ObExpr::EvalBatchFunc g_expr_eval_batch_functions[] = {
@@ -1745,6 +1765,9 @@ static ObExpr::EvalVectorFunc g_expr_eval_vector_functions[] = {
   NULL, // ObExprOracleInstr::calc_oracle_instr_expr_vector,             /* 224 */
   NULL, // ObLocationExprOperator::calc_location_expr_vector,            /* 225 */
   ObExprConvertTZ::calc_convert_tz_vector,                               /* 226 */
+  ObExprAIComplete::eval_ai_complete_vector,                             /* 227 */
+  ObExprAIEmbed::eval_ai_embed_vector,                                   /* 228 */
+  NULL, // ObExprAIRerank::eval_ai_rerank_vector,                        /* 229 */
 };
 
 REG_SER_FUNC_ARRAY(OB_SFA_SQL_EXPR_EVAL,

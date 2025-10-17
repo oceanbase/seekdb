@@ -20,6 +20,7 @@
 #include "share/ob_schema_status_proxy.h"
 #include "sql/session/ob_sql_session_info.h"
 #include "share/catalog/ob_catalog_utils.h"
+#include "ob_ai_model_schema_getter_guard.ipp"
 namespace oceanbase
 {
 using namespace common;

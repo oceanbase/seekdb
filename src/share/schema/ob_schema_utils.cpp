@@ -133,6 +133,8 @@ int ObSchemaUtils::cascaded_generated_column(ObTableSchema &table_schema,
         column.add_column_flag(GENERATED_VEC_TYPE_COLUMN_FLAG);
       } else if (T_FUN_SYS_VEC_VECTOR == root_expr_type) {
         column.add_column_flag(GENERATED_VEC_VECTOR_COLUMN_FLAG);
+      } else if (T_FUN_SYS_EMBEDDED_VEC == root_expr_type) {
+        column.add_column_flag(GENERATED_VEC_VECTOR_COLUMN_FLAG);
       } else if (T_FUN_SYS_VEC_SCN == root_expr_type) {
         column.add_column_flag(GENERATED_VEC_SCN_COLUMN_FLAG);
       } else if (T_FUN_SYS_VEC_KEY == root_expr_type) {
@@ -149,6 +151,8 @@ int ObSchemaUtils::cascaded_generated_column(ObTableSchema &table_schema,
         column.add_column_flag(GENERATED_FTS_WORD_COUNT_COLUMN_FLAG);
       } else if (T_FUN_SYS_DOC_LENGTH == root_expr_type) {
         column.add_column_flag(GENERATED_FTS_DOC_LENGTH_COLUMN_FLAG);
+      } else if (T_FUN_SYS_HYBRID_VEC_CHUNK == root_expr_type) {
+        column.add_column_flag(GENERATED_HYBRID_VEC_CHUNK_COLUMN_FLAG);
       } else if (T_FUN_SYS_SPATIAL_CELLID == root_expr_type || T_FUN_SYS_SPATIAL_MBR == root_expr_type) {
         column.add_column_flag(SPATIAL_INDEX_GENERATED_COLUMN_FLAG);
       } else if (T_FUN_SYS_JSON_QUERY == root_expr_type) {
@@ -258,7 +262,8 @@ bool ObSchemaUtils::is_vec_index_column(const uint64_t flag)
       || is_vec_ivf_meta_id_column(flag)
       || is_vec_ivf_meta_vector_column(flag)
       || is_vec_spiv_dim_column(flag)
-      || is_vec_spiv_value_column(flag);
+      || is_vec_spiv_value_column(flag)
+      || is_hybrid_vec_index_chunk_column(flag);
 }
 
 bool ObSchemaUtils::is_vec_spiv_dim_column(const uint64_t flag)
@@ -339,6 +344,11 @@ bool ObSchemaUtils::is_vec_hnsw_key_column(const uint64_t flag)
 bool ObSchemaUtils::is_vec_hnsw_data_column(const uint64_t flag)
 {
   return flag & GENERATED_VEC_DATA_COLUMN_FLAG;
+}
+
+bool ObSchemaUtils::is_hybrid_vec_index_chunk_column(const uint64_t flag)
+{
+  return flag & GENERATED_HYBRID_VEC_CHUNK_COLUMN_FLAG;
 }
 
 bool ObSchemaUtils::is_fulltext_column(const uint64_t flag)

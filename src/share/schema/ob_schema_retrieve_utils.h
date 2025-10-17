@@ -444,6 +444,8 @@ public:
   RETRIEVE_SCHEMA_FUNC_DECLARE(mock_fk_parent_table);
   RETRIEVE_SCHEMA_FUNC_DECLARE(catalog);
   RETRIEVE_SCHEMA_FUNC_DECLARE(ccl_rule);
+  RETRIEVE_SCHEMA_FUNC_DECLARE(ai_model);
+
   template<typename T>
   static int retrieve_object_list(const uint64_t tenant_id, T &result, common::ObIArray<uint64_t> &trigger_list);
   template<typename T>
@@ -516,6 +518,7 @@ public:
   FILL_SCHEMA_FUNC_DECLARE(link_table, ObTableSchema);
   FILL_SCHEMA_FUNC_DECLARE(link_column, ObColumnSchemaV2);
   FILL_SCHEMA_FUNC_DECLARE(ccl_rule, ObCCLRuleSchema);
+  FILL_SCHEMA_FUNC_DECLARE(ai_model, ObAiModelSchema);
   template<typename T>
   static int fill_mock_fk_parent_table_column_info(
       const uint64_t tenant_id, T &result, uint64_t &parent_column_id, ObString &parent_column_name,

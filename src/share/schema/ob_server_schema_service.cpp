@@ -395,6 +395,10 @@ int ObServerSchemaService::AllSchemaKeys::create(int64_t bucket_size)
     LOG_WARN("failed to create new_ccl_rule_keys hashset", K(bucket_size), K(ret));
   } else if (OB_FAIL(del_ccl_rule_keys_.create(bucket_size))) {
     LOG_WARN("failed to create del_ccl_rule_keys hashset", K(bucket_size), K(ret));
+  } else if (OB_FAIL(new_ai_model_keys_.create(bucket_size))) {
+    LOG_WARN("failed to create new_ai_model_keys hashset", K(bucket_size), K(ret));
+  } else if (OB_FAIL(del_ai_model_keys_.create(bucket_size))) {
+    LOG_WARN("failed to create del_ai_model_keys hashset", K(bucket_size), K(ret));
   }
   return ret;
 }
@@ -484,6 +488,9 @@ int ObServerSchemaService::del_tenant_operation(
   } else if (OB_FAIL(del_operation(tenant_id,
              new_flag ? schema_keys.new_ccl_rule_keys_ : schema_keys.del_ccl_rule_keys_))) {
     LOG_WARN("fail to del ccl_rule operation", KR(ret), K(tenant_id));
+  } else if (OB_FAIL(del_operation(tenant_id,
+             new_flag ? schema_keys.new_ai_model_keys_ : schema_keys.del_ai_model_keys_))) {
+    LOG_WARN("fail to del ai_model operation", KR(ret), K(tenant_id));
   }
   return ret;
 }
@@ -2849,6 +2856,90 @@ int ObServerSchemaService::get_increment_ccl_rule_keys_reversely(
   return ret;
 }
 
+int ObServerSchemaService::get_increment_ai_model_keys(
+    const ObSchemaMgr &schema_mgr,
+    const ObSchemaOperation &schema_operation,
+    AllSchemaKeys &schema_keys)
+{
+  int ret = OB_SUCCESS;
+  if (!(schema_operation.op_type_ > OB_DDL_AI_MODEL_OPERATION_BEGIN &&
+        schema_operation.op_type_ < OB_DDL_AI_MODEL_OPERATION_END)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("invalid argument", K(schema_operation.op_type_), KR(ret));
+  } else {
+    uint64_t tenant_id = schema_operation.tenant_id_;
+    uint64_t ai_model_id = schema_operation.ai_model_id_;
+    int64_t schema_version = schema_operation.schema_version_;
+    int hash_ret = OB_SUCCESS;
+    SchemaKey schema_key;
+    schema_key.tenant_id_ = tenant_id;
+    schema_key.ai_model_id_ = ai_model_id;
+    schema_key.schema_version_ = schema_version;
+
+    if (OB_DDL_DROP_AI_MODEL == schema_operation.op_type_) {
+      hash_ret = schema_keys.new_ai_model_keys_.erase_refactored(schema_key);
+      if (OB_SUCCESS != hash_ret && OB_HASH_NOT_EXIST != hash_ret) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("failed to del schema key from new_ai_model_keys_", K(ret), K(schema_key));
+      } else {
+        const ObAiModelSchema *schema = nullptr;
+        if (OB_FAIL(schema_mgr.ai_model_mgr_.get_ai_model_schema(ai_model_id, schema))) {
+          LOG_WARN("failed to get ai_model schema", K(ai_model_id), K(ret));
+        } else if (OB_NOT_NULL(schema)) {
+          hash_ret = schema_keys.del_ai_model_keys_.set_refactored_1(schema_key, 1);
+          if (OB_SUCCESS != hash_ret) {
+            ret = OB_ERR_UNEXPECTED;
+            LOG_WARN("failed to add del ai_model id", K(hash_ret), K(ret));
+          }
+        }
+      }
+    } else {
+      hash_ret = schema_keys.new_ai_model_keys_.set_refactored_1(schema_key, 1);
+      if (OB_SUCCESS != hash_ret) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("failed to add new ai_model id", K(hash_ret), K(ret));
+      }
+    }
+  }
+  return ret;
+}
+
+int ObServerSchemaService::get_increment_ai_model_keys_reversely(
+    const ObSchemaMgr &schema_mgr,
+    const ObSchemaOperation &schema_operation,
+    AllSchemaKeys &schema_keys)
+{
+  int ret = OB_SUCCESS;
+  if (!(schema_operation.op_type_ > OB_DDL_AI_MODEL_OPERATION_BEGIN &&
+        schema_operation.op_type_ < OB_DDL_AI_MODEL_OPERATION_END)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("invalid argument", K(schema_operation.op_type_), KR(ret));
+  } else {
+    uint64_t tenant_id = schema_operation.tenant_id_;
+    uint64_t ai_model_id = schema_operation.ai_model_id_;
+    int64_t schema_version = schema_operation.schema_version_;
+    SchemaKey schema_key;
+    schema_key.tenant_id_ = tenant_id;
+    schema_key.ai_model_id_ = ai_model_id;
+    schema_key.schema_version_ = schema_version;
+    bool is_delete = (OB_DDL_CREATE_AI_MODEL == schema_operation.op_type_);
+    bool is_exist = false;
+    const ObAiModelSchema *schema = nullptr;
+    if (OB_FAIL(schema_mgr.ai_model_mgr_.get_ai_model_schema(ai_model_id, schema))) {
+      LOG_WARN("failed to get ai_model schema", K(ai_model_id), K(ret));
+    } else if (OB_NOT_NULL(schema)) {
+      is_exist = true;
+    }
+    if (OB_SUCC(ret)) {
+      if (OB_FAIL(REPLAY_OP(schema_key, schema_keys.del_ai_model_keys_,
+          schema_keys.new_ai_model_keys_, is_delete, is_exist))) {
+        LOG_WARN("replay operation failed", KR(ret));
+      }
+    }
+  }
+  return ret;
+}
+
 // Currently only the full tenant schema of the system tenant is cached
 int ObServerSchemaService::add_tenant_schemas_to_cache(const TenantKeys &tenant_keys,
                                                        ObISQLClient &sql_client)
@@ -3008,6 +3099,7 @@ int ObServerSchemaService::fetch_increment_schemas(
   GET_BATCH_SCHEMAS(mock_fk_parent_table, ObSimpleMockFKParentTableSchema, MockFKParentTableKeys);
   GET_BATCH_SCHEMAS(catalog, ObCatalogSchema, CatalogKeys);
   GET_BATCH_SCHEMAS(ccl_rule, ObSimpleCCLRuleSchema, CCLRuleKeys);
+  GET_BATCH_SCHEMAS(ai_model, ObAiModelSchema, AiModelKeys);
 
   // After the schema is split, ordinary tenants do not refresh the tenant schema and system table schema
   const uint64_t tenant_id = schema_status.tenant_id_;
@@ -3122,8 +3214,12 @@ int ObServerSchemaService::apply_increment_schema_to_cache(
     LOG_WARN("fail to apply catalog schema to cache", KR(ret), K(tenant_id));
   } else if (OB_FAIL(apply_ccl_rule_schema_to_cache(
              tenant_id, all_keys, simple_incre_schemas, schema_mgr))) {
-    LOG_WARN("fail to apply rls_context schema to cache", KR(ret), K(tenant_id));
+    LOG_WARN("fail to apply location schema to cache", KR(ret), K(tenant_id));
+  } else if (OB_FAIL(apply_ai_model_schema_to_cache(
+             tenant_id, all_keys, simple_incre_schemas, schema_mgr))) {
+    LOG_WARN("fail to apply ai_model schema to cache", KR(ret), K(tenant_id));
   }
+
   return ret;
 }
 
@@ -3266,6 +3362,7 @@ APPLY_SCHEMA_TO_CACHE_IMPL(ObContextMgr, context, ObContextSchema, ContextKeys);
 APPLY_SCHEMA_TO_CACHE_IMPL(ObMockFKParentTableMgr, mock_fk_parent_table, ObSimpleMockFKParentTableSchema, MockFKParentTableKeys);
 APPLY_SCHEMA_TO_CACHE_IMPL(ObSchemaMgr, catalog, ObCatalogSchema, CatalogKeys);
 APPLY_SCHEMA_TO_CACHE_IMPL(ObSchemaMgr, ccl_rule, ObSimpleCCLRuleSchema, CCLRuleKeys);
+APPLY_SCHEMA_TO_CACHE_IMPL(ObSchemaMgr, ai_model, ObAiModelSchema, AiModelKeys);
 
 int ObServerSchemaService::update_schema_mgr(ObISQLClient &sql_client,
                                              const ObRefreshSchemaStatus &schema_status,
@@ -3637,6 +3734,11 @@ int ObServerSchemaService::replay_log(
           if (OB_FAIL(get_increment_ccl_rule_keys(schema_mgr, schema_operation, schema_keys))) {
             LOG_WARN("fail to get increment ccl rule id", K(ret));
           }
+        } else if (schema_operation.op_type_ > OB_DDL_AI_MODEL_OPERATION_BEGIN &&
+            schema_operation.op_type_ < OB_DDL_AI_MODEL_OPERATION_END) {
+          if (OB_FAIL(get_increment_ai_model_keys(schema_mgr, schema_operation, schema_keys))) {
+            LOG_WARN("fail to get increment ai_model id", K(ret));
+          }
         }
       }
     }
@@ -3789,6 +3891,11 @@ int ObServerSchemaService::replay_log_reversely(
                  schema_operation.op_type_ < OB_DDL_CCL_RULE_OPERATION_END) {
         if (OB_FAIL(get_increment_ccl_rule_keys_reversely(schema_mgr, schema_operation, schema_keys))) {
           LOG_WARN("fail to get increment ccl rule keys reversely", KR(ret));
+        }
+      } else if (schema_operation.op_type_ > OB_DDL_AI_MODEL_OPERATION_BEGIN &&
+                 schema_operation.op_type_ < OB_DDL_AI_MODEL_OPERATION_END) {
+        if (OB_FAIL(get_increment_ai_model_keys_reversely(schema_mgr, schema_operation, schema_keys))) {
+          LOG_WARN("fail to get increment ai_model keys reversely", KR(ret));
         }
       } else {
         // ingore other operaton.
@@ -5091,6 +5198,7 @@ int ObServerSchemaService::refresh_tenant_full_normal_schema(
       INIT_ARRAY(ObSimpleMockFKParentTableSchema, simple_mock_fk_parent_tables);
       INIT_ARRAY(ObCatalogSchema, simple_catalogs);
       INIT_ARRAY(ObSimpleCCLRuleSchema, simple_ccl_rules);
+      INIT_ARRAY(ObAiModelSchema, simple_ai_models);
       #undef INIT_ARRAY
       ObSimpleSysVariableSchema simple_sys_variable;
 
@@ -5210,6 +5318,18 @@ int ObServerSchemaService::refresh_tenant_full_normal_schema(
         }
       }
 
+      if (OB_SUCC(ret)) {
+        const ObSimpleTableSchemaV2 *tmp_table = NULL;
+        if (OB_FAIL(schema_mgr_for_cache->get_table_schema(tenant_id, OB_ALL_AI_MODEL_HISTORY_TID, tmp_table))) {
+          LOG_WARN("fail to get table schema", KR(ret), K(tenant_id));
+        } else if (OB_ISNULL(tmp_table)) {
+          // for compatibility
+        } else if (OB_FAIL(schema_service_->get_all_ai_models(
+          sql_client, schema_status, schema_version, tenant_id, simple_ai_models))) {
+          LOG_WARN("get all ai_models failed", K(ret), K(schema_version), K(tenant_id));
+        }
+      }
+
       const bool refresh_full_schema = true;
       // add simple schema for cache
       if (OB_FAIL(ret)) {
@@ -5261,6 +5381,8 @@ int ObServerSchemaService::refresh_tenant_full_normal_schema(
         LOG_WARN("add catalogs failed", K(ret));
       } else if (OB_FAIL(schema_mgr_for_cache->add_ccl_rules(simple_ccl_rules))) {
         LOG_WARN("add ccl rules failed", K(ret));
+      } else if (OB_FAIL(schema_mgr_for_cache->add_ai_models(simple_ai_models))) {
+        LOG_WARN("add ai_models failed", K(ret));
       }
 
       LOG_INFO("add schemas for tenant finish",

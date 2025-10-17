@@ -33,6 +33,7 @@
 #include "share/schema/ob_mock_fk_parent_table_mgr.h"
 #include "share/schema/ob_catalog_mgr.h"
 #include "share/schema/ob_ccl_rule_mgr.h"
+#include "share/schema/ob_ai_model_mgr.h"
 
 namespace oceanbase
 {
@@ -638,6 +639,17 @@ public:
       const uint64_t schema_id,
       const ObDirectorySchema *&schema) const;
 
+  // ai model
+  int get_ai_model_schema(
+      const uint64_t &tenant_id,
+      const uint64_t &ai_model_id,
+      const ObAiModelSchema *&ai_model_schema) const;
+  int get_ai_model_schema(
+      const uint64_t &tenant_id,
+      const ObString &ai_model_name,
+      const common::ObNameCaseMode &case_mode,
+      const ObAiModelSchema *&ai_model_schema) const;
+
   // other
   int get_tenant_schemas(common::ObIArray<const ObSimpleTenantSchema *> &tenant_schemas) const;
    int get_tenant_ids(common::ObIArray<uint64_t> &tenant_ids) const;
@@ -807,6 +819,10 @@ private:
   int add_ccl_rules(const common::ObIArray<ObSimpleCCLRuleSchema> &ccl_schemas);
   int add_ccl_rule(const ObSimpleCCLRuleSchema &ccl_schema);
   int del_ccl_rule(const ObTenantCCLRuleId &id);
+  // ai model
+  int add_ai_models(const common::ObIArray<ObAiModelSchema> &ai_model_schemas);
+  int add_ai_model(const ObAiModelSchema &ai_model_schema);
+  int del_ai_model(const ObTenantAiModelId &tenant_ai_model_id);
 private:
   common::ObArenaAllocator local_allocator_;
   common::ObIAllocator &allocator_;
@@ -854,6 +870,7 @@ private:
   int64_t timestamp_in_slot_; // when schema mgr put in slot, we will set the timestamp
   int64_t allocator_idx_;
   TableInfos mlog_infos_;
+  ObAiModelMgr ai_model_mgr_;
 };
 
 }//end of namespace schema

@@ -551,6 +551,8 @@ ob_set_subtarget(ob_share schema
   schema/ob_ccl_rule_mgr.cpp
   schema/ob_ccl_rule_sql_service.cpp
   
+  schema/ob_ai_model_mgr.cpp
+  schema/ob_ai_model_sql_service.cpp
 )
 
 ob_set_subtarget(ob_share stat
@@ -696,6 +698,9 @@ ob_set_subtarget(ob_share vector_index
   vector_index/ob_ivf_async_task_executor.cpp
   vector_index/ob_vector_index_i_task_executor.cpp
   vector_index/ob_vector_index_ivf_cache_util.cpp
+  vector_index/ob_vector_embedding_handler.cpp
+  vector_index/ob_json_helper.cpp
+  vector_index/ob_hybrid_vector_refresh_task.cpp
 )
 
 ob_set_subtarget(ob_share vector_type
@@ -708,6 +713,9 @@ ob_set_subtarget(ob_share vector_type
   vector_type/ob_vector_norm.cpp
   vector_type/ob_vector_common_util.cpp
   vector_type/ob_sparse_vector_ip_distance.cpp
+  vector_type/ob_vector_l2_similarity.cpp
+  vector_type/ob_vector_cosine_similarity.cpp
+  vector_type/ob_vector_ip_similarity.cpp
 )
 
 ob_set_subtarget(ob_share hybrid_search
@@ -730,6 +738,12 @@ if (NOT OB_BUILD_STANDALONE)
     ob_dummy_license_utils.cpp
   )
 endif()
+
+ob_set_subtarget(ob_share ai_service
+  ai_service/ob_ai_service_struct.cpp
+  ai_service/ob_ai_service_proxy.cpp
+  ai_service/ob_ai_service_executor.cpp
+)
 
 ob_add_new_object_target(ob_share ob_share)
 ob_add_new_object_target(ob_share_extra ob_share_extra)

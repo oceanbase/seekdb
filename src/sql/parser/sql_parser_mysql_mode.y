@@ -129,6 +129,7 @@ extern void obsql_oracle_parse_fatal_error(int32_t errcode, yyscan_t yyscanner, 
 %left '*' '/' '%' MOD DIV POW
 %left '^'
 %left VECTOR_DISTANCE
+%left VECTOR_SIMILARITY
 %nonassoc LOWER_THAN_NEG SAMPLE/* for simple_expr conflict*/
 %left CNNOP
 %left NEG '~'
@@ -266,7 +267,7 @@ END_P SET_VAR DELIMITER
 //-----------------------------reserved keyword end-------------------------------------------------
 %token <non_reserved_keyword>
 //-----------------------------non_reserved keyword begin-------------------------------------------
-        ACCESS ACCESS_INFO ACCESSID ACCESSKEY ACCESSTYPE ACCOUNT ACTION ACTIVE ADDDATE AFTER AGAINST AGGREGATE ALGORITHM ALL_META ALL_USER ALWAYS ALLOW ANALYSE ANY
+        ACCESS ACCESS_INFO ACCESSID ACCESSKEY ACCESSTYPE ACCOUNT ACTION ACTIVE ADDDATE AFTER AGAINST AGGREGATE AI ALGORITHM ALL_META ALL_USER ALWAYS ALLOW ANALYSE ANY
         APPROX_COUNT_DISTINCT APPROX_COUNT_DISTINCT_SYNOPSIS APPROX_COUNT_DISTINCT_SYNOPSIS_MERGE
         ARBITRATION ARRAY ASCII ASIS AT ATTRIBUTE AUTHORS AUTO AUTOEXTEND_SIZE AUTO_INCREMENT AUTO_INCREMENT_MODE AUTO_INCREMENT_CACHE_SIZE
         AVG AVG_ROW_LENGTH ACTIVATE AVAILABILITY ARCHIVELOG ASYNCHRONOUS AUDIT ADMIN AUTO_REFRESH API_MODE APPROX APPROXIMATE ARRAY_AGG ARRAY_FILTER ARRAY_FIRST ARRAY_MAP ARRAY_SORTBY 
@@ -319,7 +320,7 @@ END_P SET_VAR DELIMITER
         MASTER_SSL_CRL MASTER_SSL_CRLPATH MASTER_SSL_KEY MASTER_USER MAX MAX_CONNECTIONS_PER_HOUR MAX_CPU MAX_CONCURRENCY
         MAX_FILE_SIZE MAX_TOKEN_SIZE MAX_NGRAM_SIZE LOG_DISK_SIZE MAX_NET_BANDWIDTH MAX_IOPS MEMORY_SIZE MAX_QUERIES_PER_HOUR MAX_ROWS MAX_SIZE
         MAX_UPDATES_PER_HOUR MAX_USER_CONNECTIONS MEDIUM MEMORY MEMTABLE MESSAGE_TEXT META MICROSECOND
-        MIGRATE MIN MIN_CPU MIN_IOPS MIN_MAX MIN_NGRAM_SIZE MIN_TOKEN_SIZE MINOR MIN_ROWS MINUS MINUTE MISMATCH MODE MODIFY MODULE MONTH MOVE
+        MIGRATE MIN MIN_CPU MIN_IOPS MIN_MAX MIN_NGRAM_SIZE MIN_TOKEN_SIZE MINOR MIN_ROWS MINUS MINUTE MISMATCH MODE MODIFY MODULE MONTH MOVE MODEL
         MULTILINESTRING MULTIPOINT MULTIPOLYGON MULTIVALUE MUTEX MYSQL_ERRNO MIGRATION MAX_USED_PART_ID MAXIMIZE
         MATERIALIZED MEMBER MEMSTORE_PERCENT MINVALUE MY_NAME MERGE_ENGINE
 
@@ -369,7 +370,7 @@ END_P SET_VAR DELIMITER
         UNUSUAL UPGRADE USE_BLOOM_FILTER UNKNOWN USE_FRM USER USER_RESOURCES UNBOUNDED UP UNLIMITED USER_SPECIFIED
 
         VALID VALUE VARIANCE VARIABLES VERBOSE VERIFY VIEW VISIBLE VIRTUAL_COLUMN_ID VALIDATE VAR_POP
-        VAR_SAMP VALIDATION VECTOR VECTOR_DISTANCE MICRO_INDEX_CLUSTERED
+        VAR_SAMP VALIDATION VECTOR VECTOR_DISTANCE MICRO_INDEX_CLUSTERED VECTOR_SIMILARITY
 
         WAIT WARNINGS WASH WEEK WEIGHT_STRING WHENEVER WORK WRAPPER WINDOW WEAK WITH_COLUMN_GROUP WITHOUT
 
@@ -574,6 +575,7 @@ END_P SET_VAR DELIMITER
 %type <node> operator_list
 %type <node> hybrid_search_expr hybrid_search_param
 
+%type <node> vector_similarity_expr vector_similarity_metric
 %start sql_stmt
 %%
 ////////////////////////////////////////////////////////////////
@@ -3528,6 +3530,10 @@ MOD '(' expr ',' expr ')'
 {
   $$ = $1;
 }
+| vector_similarity_expr
+{
+  $$ = $1;
+}
 | MAP '(' expr_list ')'
 {
   malloc_non_terminal_node($$, result->malloc_pool_, T_FUN_SYS_MAP, 1, $3);
@@ -3618,6 +3624,45 @@ VECTOR_DISTANCE '(' expr ',' expr ',' vector_distance_metric ')'
 ;
 
 vector_distance_metric:
+COSINE
+{
+  malloc_terminal_node($$, result->malloc_pool_, T_INT);
+  $$->is_hidden_const_ = 1;
+  $$->value_ = 0;
+}
+| DOT
+{
+  malloc_terminal_node($$, result->malloc_pool_, T_INT);
+  $$->is_hidden_const_ = 1;
+  $$->value_ = 1;
+}
+| EUCLIDEAN
+{
+  malloc_terminal_node($$, result->malloc_pool_, T_INT);
+  $$->is_hidden_const_ = 1;
+  $$->value_ = 2;
+}
+| MANHATTAN
+{
+  malloc_terminal_node($$, result->malloc_pool_, T_INT);
+  $$->is_hidden_const_ = 1;
+  $$->value_ = 3;
+}
+;
+
+vector_similarity_expr:
+VECTOR_SIMILARITY '(' expr ',' expr ')'
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_FUN_SYS_VECTOR_SIMILARITY, 2, $3, $5);
+}
+|
+VECTOR_SIMILARITY '(' expr ',' expr ',' vector_similarity_metric ')'
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_FUN_SYS_VECTOR_SIMILARITY, 3, $3, $5, $7);
+}
+;
+
+vector_similarity_metric:
 COSINE
 {
   malloc_terminal_node($$, result->malloc_pool_, T_INT);
@@ -17920,6 +17965,26 @@ role_with_host
   malloc_terminal_node($$, result->malloc_pool_, T_PRIV_TYPE);
   $$->value_ = OB_PRIV_USE_CATALOG;
 }
+| CREATE AI MODEL
+{
+  malloc_terminal_node($$, result->malloc_pool_, T_PRIV_TYPE);
+  $$->value_ = OB_PRIV_CREATE_AI_MODEL;
+}
+| ALTER AI MODEL
+{
+  malloc_terminal_node($$, result->malloc_pool_, T_PRIV_TYPE);
+  $$->value_ = OB_PRIV_ALTER_AI_MODEL;
+}
+| DROP AI MODEL
+{
+  malloc_terminal_node($$, result->malloc_pool_, T_PRIV_TYPE);
+  $$->value_ = OB_PRIV_DROP_AI_MODEL;
+}
+| ACCESS AI MODEL
+{
+  malloc_terminal_node($$, result->malloc_pool_, T_PRIV_TYPE);
+  $$->value_ = OB_PRIV_ACCESS_AI_MODEL;
+}
 ;
 
 opt_privilege:
@@ -23547,6 +23612,14 @@ NAME_OB
 {
   make_name_node($$, result->malloc_pool_, "decrypt");
 }
+| AI
+{
+  make_name_node($$, result->malloc_pool_, "ai");
+}
+| MODEL
+{
+  make_name_node($$, result->malloc_pool_, "model");
+}
 ;
 
 column_label:
@@ -24772,6 +24845,7 @@ ACCESS_INFO
 |       ADDDATE
 |       ADMIN
 |       AFTER
+|       AI
 |       AGAINST
 |       AGGREGATE
 |       ALGORITHM
@@ -25195,6 +25269,7 @@ ACCESS_INFO
 |       MINUS
 |       MISMATCH
 |       MODE
+|       MODEL
 |       MODIFY
 |       MODULE
 |       MONTH
@@ -25576,6 +25651,7 @@ ACCESS_INFO
 |       VERBOSE
 |       VECTOR
 |       VECTOR_DISTANCE
+|       VECTOR_SIMILARITY
 |       VIRTUAL_COLUMN_ID
 |       MATERIALIZED
 |       VIEW

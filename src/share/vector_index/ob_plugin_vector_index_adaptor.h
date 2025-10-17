@@ -27,6 +27,7 @@
 #include "share/vector_index/ob_plugin_vector_index_serialize.h"
 #include "share/allocator/ob_tenant_vector_allocator.h"
 #include "ob_vector_index_util.h"
+#include "sql/engine/expr/ob_expr_vector.h"
 
 
 namespace oceanbase
@@ -46,9 +47,9 @@ public:
   static const int64_t OB_VECTOR_INDEX_SYNC_INFO_SIZE = 1024;
   TO_STRING_KV(K_(ls_id),
                K_(rowkey_vid_table_id), K_(vid_rowkey_table_id), K_(inc_index_table_id),
-               K_(vbitmap_table_id), K_(snapshot_index_table_id), K_(data_table_id),
+               K_(vbitmap_table_id), K_(snapshot_index_table_id), K_(data_table_id), K_(embedded_table_id),
                K_(rowkey_vid_tablet_id), K_(vid_rowkey_tablet_id), K_(inc_index_tablet_id),
-               K_(vbitmap_tablet_id), K_(snapshot_index_tablet_id), K_(data_tablet_id),
+               K_(vbitmap_tablet_id), K_(snapshot_index_tablet_id), K_(data_tablet_id), K_(embedded_tablet_id),
                K_(statistics), K_(sync_info));
 public:
   int64_t ls_id_;
@@ -59,6 +60,7 @@ public:
   int64_t vbitmap_table_id_;
   int64_t snapshot_index_table_id_;
   int64_t data_table_id_;
+  int64_t embedded_table_id_;
   // tablet_id
   int64_t rowkey_vid_tablet_id_;
   int64_t vid_rowkey_tablet_id_;
@@ -66,6 +68,7 @@ public:
   int64_t vbitmap_tablet_id_;
   int64_t snapshot_index_tablet_id_;
   int64_t data_tablet_id_;
+  int64_t embedded_tablet_id_;
   char statistics_[OB_VECTOR_INDEX_STATISTICS_SIZE];
   char sync_info_[OB_VECTOR_INDEX_SYNC_INFO_SIZE];
 };
@@ -79,6 +82,7 @@ enum ObVectorIndexRecordType
   VIRT_BITMAP,
   VIRT_SNAP, // snapshot index
   VIRT_DATA, // data tablet/table
+  VIRT_EMBEDDED, // embedded table
   VIRT_MAX
 };
 
@@ -89,6 +93,7 @@ enum ObAdapterCreateType
   CreateTypeSnap,
   CreateTypeFullPartial,
   CreateTypeComplete,
+  CreateTypeEmbedded,
   CreateTypeMax
 };
 
@@ -345,7 +350,8 @@ public:
       rel_count_(0),
       rel_map_ptr_(nullptr),
       ob_sparse_drop_ratio_search_(0),
-      n_candidate_(0) {};
+      n_candidate_(0),
+      distance_threshold_(FLT_MAX) {}
   ~ObVectorQueryConditions() { query_vector_.reset(); }
   bool is_inited() { return query_vector_.length() > 0 && ef_search_ > 0; }
   void reset() {
@@ -373,6 +379,7 @@ public:
   common::hash::ObHashMap<int64_t, double*> *rel_map_ptr_;
   float ob_sparse_drop_ratio_search_;
   int64_t n_candidate_;
+  float distance_threshold_;
 };
 
 struct ObVidBound {
@@ -532,10 +539,11 @@ struct ObVectorIndexAcquireCtx
 {
   ObTabletID inc_tablet_id_;
   ObTabletID vbitmap_tablet_id_;
-  ObTabletID snapshot_tablet_id_; 
+  ObTabletID snapshot_tablet_id_;
   ObTabletID data_tablet_id_;
+  ObTabletID embedded_tablet_id_;
 
-  TO_STRING_KV(K_(inc_tablet_id), K_(vbitmap_tablet_id), K_(snapshot_tablet_id), K_(data_tablet_id));
+  TO_STRING_KV(K_(inc_tablet_id), K_(vbitmap_tablet_id), K_(snapshot_tablet_id), K_(data_tablet_id), K_(embedded_tablet_id));
 };
 
 class ObPluginVectorIndexAdaptor
@@ -559,6 +567,7 @@ public:
   bool is_inc_tablet_valid() { return inc_tablet_id_.is_valid(); }
   bool is_vbitmap_tablet_valid() { return vbitmap_tablet_id_.is_valid(); }
   bool is_data_tablet_valid() { return data_tablet_id_.is_valid(); }
+  bool is_embedded_tablet_valid() { return embedded_tablet_id_.is_valid(); }
   bool is_vid_rowkey_info_valid() { return rowkey_vid_table_id_ != OB_INVALID_ID && rowkey_vid_tablet_id_.is_valid(); }
   bool is_need_async_optimal() { return need_be_optimized_; }
 
@@ -566,6 +575,7 @@ public:
   ObTabletID& get_vbitmap_tablet_id() { return vbitmap_tablet_id_; }
   ObTabletID& get_snap_tablet_id() { return snapshot_tablet_id_; }
   ObTabletID& get_data_tablet_id() { return data_tablet_id_; }
+  ObTabletID& get_embedded_tablet_id() { return embedded_tablet_id_; }
   ObTabletID& get_rowkey_vid_tablet_id() { return rowkey_vid_tablet_id_; }
   ObTabletID& get_vid_rowkey_tablet_id() { return vid_rowkey_tablet_id_; }
 
@@ -577,6 +587,7 @@ public:
   uint64_t get_vbitmap_table_id() { return vbitmap_table_id_; }
   uint64_t get_snapshot_table_id() { return snapshot_table_id_; }
   uint64_t get_data_table_id() { return data_table_id_; }
+  uint64_t get_embedded_table_id() { return embedded_table_id_; }
   uint64_t get_rowkey_vid_table_id() { return rowkey_vid_table_id_; }
   uint64_t get_vid_rowkey_table_id() { return vid_rowkey_table_id_; }
   void close_snap_data_rb_flag() {
@@ -638,6 +649,17 @@ public:
                   const int64_t vector_idx,
                   const ObIArray<ObExtraIdxType>& extra_info_ids,
                   const int64_t row_count);
+  // handle del type
+  int handle_insert_incr_table_rows(blocksstable::ObDatumRow *rows,
+                                    const int64_t vid_idx,
+                                    const int64_t type_idx,
+                                    int64_t row_count);
+  // handle insert type and VSAG ADD
+  int handle_insert_embedded_table_rows(blocksstable::ObDatumRow *rows,
+                                        const int64_t vid_idx,
+                                        const int64_t vector_idx,
+                                        const ObIArray<ObExtraIdxType>& extra_info_id_types,
+                                        int64_t row_count);
   int add_extra_valid_vid(ObVectorQueryAdaptorResultContext *ctx, int64_t vid);
   int add_extra_valid_vid_without_malloc_guard(ObVectorQueryAdaptorResultContext *ctx, int64_t vid);
   int add_snap_index(float *vectors, int64_t *vids, ObVecExtraInfoObj *extra_objs, int64_t extra_column_count, int num, uint32_t *lens = nullptr);
@@ -740,6 +762,12 @@ public:
     need_be_optimized_ = false;   // single thread modify need_be_optimized_
   }
 
+  void vector_embedding_task_finish()
+  {
+    common::ObSpinLockGuard ctx_guard(opt_task_lock_);
+    is_in_opt_task_ = false;  // multiple thread modify is_in_opt_task_
+  }
+
   ObString &get_snapshot_key_prefix() { return snapshot_key_prefix_; }
   int set_snapshot_key_prefix(const ObString &key_prefix);
   int set_snapshot_key_prefix(uint64_t tablet_id, uint64_t scn, uint64_t max_length);
@@ -751,7 +779,17 @@ public:
   int get_snap_index_row_cnt(int64_t &count);
   common::RWLock& get_query_lock() { return query_lock_; }
   common::ObSpinLock& get_reload_lock() { return reload_lock_; }
-
+  bool is_hybrid_index();
+  ObString get_endpoint()
+  {
+    ObString result;
+    ObVectorIndexParam *param = static_cast<ObVectorIndexParam*>(algo_data_);
+    if (OB_NOT_NULL(param)) {
+      result =  ObString(strlen(param->endpoint_), param->endpoint_);
+    }
+    return result;
+  }
+  bool check_need_embedding();
   int get_vid_bound(ObVidBound &bound);
   inline bool is_sparse_vector_index_type()
   {
@@ -768,10 +806,11 @@ public:
     uint32_t **dims, float **vals);
 
   bool validate_tablet_ids(const ObVectorIndexAcquireCtx& ctx) {
-    return inc_tablet_id_ == ctx.inc_tablet_id_
-           && vbitmap_tablet_id_ == ctx.vbitmap_tablet_id_
-           && snapshot_tablet_id_ == ctx.snapshot_tablet_id_
-           && data_tablet_id_ == ctx.data_tablet_id_;
+    bool is_valid = (inc_tablet_id_ == ctx.inc_tablet_id_
+                    && vbitmap_tablet_id_ == ctx.vbitmap_tablet_id_
+                    && snapshot_tablet_id_ == ctx.snapshot_tablet_id_
+                    && data_tablet_id_ == ctx.data_tablet_id_);
+    return is_hybrid_index() ? is_valid && (embedded_tablet_id_ == ctx.embedded_tablet_id_) : is_valid;
   }
   OB_INLINE bool get_is_need_vid()
   {
@@ -784,9 +823,9 @@ public:
   TO_STRING_KV(K_(create_type), K_(type), KP_(algo_data),
               KP_(incr_data), KP_(snap_data), KP_(vbitmap_data), K_(tenant_id),
               K_(data_tablet_id),K_(rowkey_vid_tablet_id), K_(vid_rowkey_tablet_id),
-              K_(inc_tablet_id), K_(vbitmap_tablet_id), K_(snapshot_tablet_id), 
+              K_(inc_tablet_id), K_(vbitmap_tablet_id), K_(snapshot_tablet_id), K_(embedded_tablet_id),
               K_(data_table_id), K_(rowkey_vid_table_id), K_(vid_rowkey_table_id),
-              K_(inc_table_id),  K_(vbitmap_table_id), K_(snapshot_table_id), 
+              K_(inc_table_id),  K_(vbitmap_table_id), K_(snapshot_table_id), K_(embedded_table_id),
               K_(ref_cnt), K_(idle_cnt), KP_(allocator),
               K_(index_identity), K_(follower_sync_statistics), 
               K_(mem_check_cnt), K_(is_mem_limited), K_(is_need_vid));
@@ -828,6 +867,9 @@ private:
   int get_current_scn(share::SCN &current_scn);
 
   int init_sparse_vector_type();
+
+  bool is_sync_index();
+
 private:
   const double_t VEC_INDEX_OPTIMIZE_RATIO = 0.2;
   ObAdapterCreateType create_type_;
@@ -845,11 +887,13 @@ private:
   ObTabletID data_tablet_id_;
   ObTabletID rowkey_vid_tablet_id_;
   ObTabletID vid_rowkey_tablet_id_;
+  ObTabletID embedded_tablet_id_;
 
   uint64_t inc_table_id_;
   uint64_t vbitmap_table_id_;
   uint64_t snapshot_table_id_;
   uint64_t data_table_id_;
+  uint64_t embedded_table_id_;
   uint64_t rowkey_vid_table_id_;
   uint64_t vid_rowkey_table_id_;
 
@@ -876,6 +920,7 @@ private:
 
   // for vid opt
   bool is_need_vid_;
+  int64_t last_embedding_time_;
 
   constexpr static uint32_t VEC_INDEX_INCR_DATA_SYNC_THRESHOLD = 100;
   constexpr static uint32_t VEC_INDEX_VBITMAP_SYNC_THRESHOLD = 100;

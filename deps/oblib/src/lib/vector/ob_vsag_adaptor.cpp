@@ -123,7 +123,7 @@ public:
                  const int64_t *&ids, int64_t &result_size, float valid_ratio,
                  int index_type, FilterInterface *bitmap, bool reverse_filter,
                  bool need_extra_info, const char *&extra_infos,
-                 void *allocator);
+                 void *allocator, float distance_threshold = FLT_MAX);
   int knn_search(const vsag::DatasetPtr &query, int64_t topk,
                  const std::string &parameters, const float *&dist,
                  const int64_t *&ids, int64_t &result_size, float valid_ratio,
@@ -307,7 +307,8 @@ int HnswIndexHandler::knn_search(const vsag::DatasetPtr &query, int64_t topk,
                                  int64_t &result_size, float valid_ratio,
                                  int index_type, FilterInterface *bitmap,
                                  bool reverse_filter, bool need_extra_info,
-                                 const char *&extra_infos, void *allocator)
+                                 const char *&extra_infos, void *allocator,
+                                 float distance_threshold)
 {
   int ret = OB_SUCCESS;
   std::function<bool(int64_t)> vid_filter = [bitmap, reverse_filter](int64_t id) -> bool {
@@ -1087,7 +1088,8 @@ int knn_search(VectorIndexPtr &index_handler, float *query_vector,
                int dim, int64_t topk, const float *&dist, const int64_t *&ids,
                int64_t &result_size, int ef_search, bool need_extra_info,
                const char *&extra_infos, void *invalid, bool reverse_filter,
-               bool use_extra_info_filter, void *allocator, float valid_ratio)
+               bool use_extra_info_filter, void *allocator, float valid_ratio,
+               float distance_threshold)
 {
   int ret = OB_SUCCESS;
   if (index_handler == nullptr || query_vector == nullptr) {
@@ -1105,8 +1107,8 @@ int knn_search(VectorIndexPtr &index_handler, float *query_vector,
       DatasetPtr query = vsag::Dataset::Make();
       query->NumElements(1)->Dim(dim)->Float32Vectors(query_vector)->Owner(false);
       if (OB_FAIL(hnsw->knn_search(query, topk, input_json_string, dist, ids,
-                          result_size, valid_ratio, index_type, bitmap,
-                          reverse_filter, need_extra_info, extra_infos, allocator))) {
+                                   result_size, valid_ratio, index_type, bitmap,
+                                   reverse_filter, need_extra_info, extra_infos, allocator, distance_threshold))) {
         LOG_WARN("[OBVSAG] knn search error happend", K(ret), K(index_type), KCSTRING(result_param_str));
       }
     }

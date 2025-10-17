@@ -532,6 +532,7 @@ public:
   ObArray<ObColumnSchemaItem> column_items_;
   ObArray<int64_t> reshape_column_idxs_;
   ObArray<int64_t> lob_column_idxs_;
+  ObArray<share::schema::ObColDesc> column_descs_;
 };
 
 // transaction info for inc direct load

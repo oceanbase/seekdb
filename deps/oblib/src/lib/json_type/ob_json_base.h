@@ -196,6 +196,7 @@ public:
   ~JsonObjectIterator() {}
 
   bool end() const;
+  int get_elem(ObJsonObjPair &elem);
   int get_key(ObString &key);
   int get_value(ObIJsonBase *&value);
   int get_value(ObString &key, ObIJsonBase *&value);

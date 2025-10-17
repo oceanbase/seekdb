@@ -207,6 +207,7 @@ syspack_config = [
     SysPackConfig(SysPackGroup.MYSQL, "dbms_hybrid_search", "dbms_hybrid_vector_mysql.sql", "dbms_hybrid_vector_body_mysql.sql"),
     SysPackConfig(SysPackGroup.MYSQL, "dbms_space", "dbms_space_mysql.sql", "dbms_space_body_mysql.sql"),
     SysPackConfig(SysPackGroup.MYSQL, "dbms_partition", "dbms_partition_mysql.sql", "dbms_partition_body_mysql.sql"),
+    SysPackConfig(SysPackGroup.MYSQL, "dbms_ai_service", "dbms_ai_service_mysql.sql", "dbms_ai_service_body_mysql.sql"),
     # MySQL Special
     SysPackConfig(SysPackGroup.MYSQL_SPECIAL, "__dbms_upgrade", "__dbms_upgrade_mysql.sql", "__dbms_upgrade_body_mysql.sql"),
 ]

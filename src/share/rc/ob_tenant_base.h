@@ -39,6 +39,7 @@ namespace omt {
  class ObTenant;
  class ObSharedTimer;
  class ObTenantSrs;
+ class ObTenantAiService;
 }
 namespace obmysql {
   class ObMySQLRequestManager;
@@ -427,7 +428,8 @@ using ObTableScanIteratorObjPool = common::ObServerObjectPool<oceanbase::storage
       table::ObHTableRowkeyMgr*,                     \
       rootserver::ObDDLServiceLauncher*,             \
       rootserver::ObDDLScheduler*,                   \
-      sql::ObSQLCCLRuleManager*                      \
+      sql::ObSQLCCLRuleManager*              ,       \
+      omt::ObTenantAiService*                        \
   )
 // Get tenant ID
 #define MTL_ID() share::ObTenantEnv::get_tenant_local()->id()

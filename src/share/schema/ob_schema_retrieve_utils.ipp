@@ -1945,6 +1945,10 @@ int ObSchemaRetrieveUtils::fill_user_schema(
     user_info.set_priv((priv_others & OB_PRIV_OTHERS_EVENT) != 0 ? OB_PRIV_EVENT : 0);
     user_info.set_priv((priv_others & OB_PRIV_OTHERS_CREATE_CATALOG) != 0 ? OB_PRIV_CREATE_CATALOG : 0);
     user_info.set_priv((priv_others & OB_PRIV_OTHERS_USE_CATALOG) != 0 ? OB_PRIV_USE_CATALOG : 0);
+    user_info.set_priv((priv_others & OB_PRIV_OTHERS_CREATE_AI_MODEL) != 0 ? OB_PRIV_CREATE_AI_MODEL : 0);
+    user_info.set_priv((priv_others & OB_PRIV_OTHERS_ALTER_AI_MODEL) != 0 ? OB_PRIV_ALTER_AI_MODEL : 0);
+    user_info.set_priv((priv_others & OB_PRIV_OTHERS_DROP_AI_MODEL) != 0 ? OB_PRIV_DROP_AI_MODEL : 0);
+    user_info.set_priv((priv_others & OB_PRIV_OTHERS_ACCESS_AI_MODEL) != 0 ? OB_PRIV_ACCESS_AI_MODEL : 0);
   }
   return ret;
 }
@@ -4845,6 +4849,37 @@ int ObSchemaRetrieveUtils::retrieve_table_latest_schema_versions(
   } else {
     SHARE_SCHEMA_LOG(WARN, "fail to get all table latest schema version", KR(ret));
   }
+  return ret;
+}
+
+RETRIEVE_SCHEMA_FUNC_DEFINE(ai_model);
+template<typename T>
+int ObSchemaRetrieveUtils::fill_ai_model_schema(const uint64_t tenant_id,
+                                                T &result,
+                                                ObAiModelSchema &schema,
+                                                bool &is_deleted)
+{
+  int ret = OB_SUCCESS;
+
+  schema.reset();
+
+  schema.set_tenant_id(tenant_id);
+  int64_t type = 0;
+
+  EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_TENANT_ID(result, model_id, schema, tenant_id);
+  EXTRACT_INT_FIELD_MYSQL(result, "is_deleted", is_deleted, bool);
+
+  if (OB_SUCC(ret) && !is_deleted) {
+    EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, schema_version, schema, int64_t);
+    EXTRACT_INT_FIELD_MYSQL(result, "type", type, int64_t);
+    EXTRACT_VARCHAR_FIELD_TO_CLASS_MYSQL(result, name, schema);
+    EXTRACT_VARCHAR_FIELD_TO_CLASS_MYSQL(result, model_name, schema);
+  }
+
+  if (OB_SUCC(ret)) {
+    schema.set_type(EndpointType::convert_type_from_int(type));
+  }
+
   return ret;
 }
 

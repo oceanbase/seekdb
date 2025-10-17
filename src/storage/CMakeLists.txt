@@ -669,6 +669,7 @@ ob_set_subtarget(ob_storage ddl
   ddl/ob_inc_ddl_merge_helper.cpp
   ddl/ob_group_write_macro_block_task.cpp
   ddl/ob_ddl_merge_schedule.cpp
+  ddl/ob_hnsw_embedmgr.cpp
 )
 
 ob_set_subtarget(ob_storage common

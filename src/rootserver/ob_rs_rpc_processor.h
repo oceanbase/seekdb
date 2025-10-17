@@ -683,6 +683,10 @@ DEFINE_DDL_SYS_TNT_RPC_PROCESSOR(obrpc::OB_PARALLEL_HTABLE_DDL, ObRpcParallelHTa
 // for ob_admin
 DEFINE_DDL_RS_RPC_PROCESSOR(obrpc::OB_FORCE_DROP_LONELY_LOB_AUX_TABLE, ObForceDropLonelyLobAuxTableP, force_drop_lonely_lob_aux_table(arg_));
 
+// ai endpoint ddl
+DEFINE_DDL_RS_RPC_PROCESSOR(obrpc::OB_CREATE_AI_MODEL, ObRpcCreateAiModelP, create_ai_model(arg_));
+DEFINE_DDL_RS_RPC_PROCESSOR(obrpc::OB_DROP_AI_MODEL, ObRpcDropAiModelP, drop_ai_model(arg_));
+
 #undef DEFINE_RS_RPC_PROCESSOR_
 #undef DEFINE_RS_RPC_PROCESSOR
 #undef DEFINE_LIMITED_RS_RPC_PROCESSOR

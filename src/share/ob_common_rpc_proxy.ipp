@@ -264,3 +264,8 @@
   RPC_S(PRD drop_ccl_rule, obrpc::OB_DROP_CCL_RULE, (ObDropCCLRuleArg));
 
   RPC_S(PRD force_drop_lonely_lob_aux_table, OB_FORCE_DROP_LONELY_LOB_AUX_TABLE, (obrpc::ObForceDropLonelyLobAuxTableArg));
+
+  //----Functions for managing ai model----
+  RPC_S(PRD create_ai_model, obrpc::OB_CREATE_AI_MODEL, (ObCreateAiModelArg));
+  RPC_S(PRD drop_ai_model, obrpc::OB_DROP_AI_MODEL, (ObDropAiModelArg));
+  //----End of functions for managing ai model----

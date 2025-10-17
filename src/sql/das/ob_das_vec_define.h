@@ -72,7 +72,8 @@ public:
       can_extract_range_(false),
       block_max_spec_(alloc),
       relevance_col_cnt_(0),
-      is_hybrid_(false) {}
+      is_hybrid_(false),
+      use_rowkey_vid_tbl_(false) {}
 
   inline bool is_pre_filter() const { return ObVecIndexType::VEC_INDEX_PRE == vec_type_;  }
   inline bool is_vec_adaptive_scan() const { return ObVecIndexType::VEC_INDEX_ADAPTIVE_SCAN == vec_type_ && ObVecIdxAdaTryPath::VEC_PATH_UNCHOSEN != adaptive_try_path_; }
@@ -93,6 +94,7 @@ public:
   int64_t get_snapshot_tbl_idx() const { return ObVecAuxTableIdx::THIRD_VEC_AUX_TBL_IDX; }
   int64_t get_com_aux_tbl_idx() const { return ObVecAuxTableIdx::FOURTH_VEC_AUX_TBL_IDX; }
   int64_t get_rowkey_vid_tbl_idx() const { return ObVecAuxTableIdx::FIFTH_VEC_AUX_TBL_IDX; }
+  int64_t get_embedded_tbl_idx() const { return use_rowkey_vid_tbl_ ? ObVecAuxTableIdx::SIXTH_VEC_AUX_TBL_IDX : ObVecAuxTableIdx::FIFTH_VEC_AUX_TBL_IDX; }
   const ObVectorIndexParam& get_vec_index_param() const { return vector_index_param_; }
   int64_t get_functial_lookup_idx() const { return children_cnt_ - 1; }
 
@@ -153,7 +155,7 @@ public:
   INHERIT_TO_STRING_KV("ObDASBaseCtDef", ObDASBaseCtDef,
                        KPC_(inv_scan_vec_id_col), K_(vec_index_param), K_(dim),
                        K_(vec_type), K_(algorithm_type), K_(selectivity), K_(row_count),
-                       K_(extra_column_count), K_(vector_index_param), K_(vec_query_param), K_(adaptive_try_path), K_(can_extract_range));
+                       K_(extra_column_count), K_(vector_index_param), K_(vec_query_param), K_(adaptive_try_path), K_(can_extract_range), K_(is_hybrid));
 
   ObExpr *inv_scan_vec_id_col_;
   ObString vec_index_param_;
@@ -176,6 +178,7 @@ public:
   ObSPIVBlockMaxSpec block_max_spec_;
   int64_t relevance_col_cnt_;
   bool is_hybrid_;
+  bool use_rowkey_vid_tbl_;
 };
 
 struct ObDASVecAuxScanRtDef : ObDASAttachRtDef

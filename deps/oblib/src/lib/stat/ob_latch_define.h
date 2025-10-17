@@ -387,8 +387,9 @@ LATCH_DEF(STORAGE_CACHE_POLICY_MGR_LOCK, 353, "storage cache policy lock", LATCH
 LATCH_DEF(STORAGE_CACHE_POLICY_TASK_LOCK, 354, "storage cache policy task lock", LATCH_READ_PREFER, 2000, 0, true)
 LATCH_DEF(UNIQUE_CHECKING_CONTEXT_LOCK, 355, "unique checking context lock", LATCH_FIFO, 2000, 0, true)
 LATCH_DEF(TABLET_SPLIT_CONTEXT_LOCK, 356, "tablet split context lock", LATCH_FIFO, 2000, 0, true)
+LATCH_DEF(HYBRID_VECTOR_LOCK, 357, "hybrid vector lock", LATCH_FIFO, 2000, 0, true)// only use in hybrid vector
 
-LATCH_DEF(LATCH_END, 357, "latch end", LATCH_FIFO, 2000, 0, true)
+LATCH_DEF(LATCH_END, 358, "latch end", LATCH_FIFO, 2000, 0, true)
 
 #endif
 

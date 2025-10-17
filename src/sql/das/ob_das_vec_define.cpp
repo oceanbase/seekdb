@@ -52,8 +52,10 @@ OB_SERIALIZE_MEMBER((ObDASVecAuxScanCtDef, ObDASAttachCtDef),
                     adaptive_try_path_, // FARM COMPAT WHITELIST
                     is_multi_value_index_, // FARM COMPAT WHITELIST
                     is_spatial_index_, // FARM COMPAT WHITELIST
-                    can_extract_range_// FARM COMPAT WHITELIST
-                    );
+                    can_extract_range_, // FARM COMPAT WHITELIST
+                    relevance_col_cnt_, // FARM COMPAT WHITELIST
+                    is_hybrid_ // FARM COMPAT WHITELIST
+                    , use_rowkey_vid_tbl_);
 OB_SERIALIZE_MEMBER(ObDASVecAuxScanRtDef);
 
 } // sql

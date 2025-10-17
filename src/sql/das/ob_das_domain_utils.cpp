@@ -633,6 +633,28 @@ int ObDomainDMLIterator::create_domain_dml_iterator(
                                                                                   param.main_ctdef_);
         domain_iter = static_cast<ObDomainDMLIterator *>(iter);
       }
+    } else if (share::schema::is_hybrid_vec_index_log_type(param.das_ctdef_->table_param_.get_data_table().get_index_type())) {
+      void *buf = nullptr;
+      if (OB_ISNULL(buf = param.allocator_.alloc(sizeof(ObHybridVecLogDMLIterator)))) {
+        ret = OB_ALLOCATE_MEMORY_FAILED;
+        LOG_WARN("fail to allocate hybrid vec log dml iterator memory", K(ret), KP(buf));
+      } else {
+        ObHybridVecLogDMLIterator *iter = new (buf) ObHybridVecLogDMLIterator(param.allocator_, param.row_projector_,
+                                                                              param.write_iter_, param.das_ctdef_,
+                                                                              param.main_ctdef_);
+        domain_iter = static_cast<ObDomainDMLIterator *>(iter);
+      }
+    } else if (share::schema::is_hybrid_vec_index_embedded_type(param.das_ctdef_->table_param_.get_data_table().get_index_type())) {
+      void *buf = nullptr;
+      if (OB_ISNULL(buf = param.allocator_.alloc(sizeof(ObEmbeddedVecDMLIterator)))) {
+        ret = OB_ALLOCATE_MEMORY_FAILED;
+        LOG_WARN("fail to allocate embedded vec dml iterator memory", K(ret), KP(buf));
+      } else {
+        ObEmbeddedVecDMLIterator *iter = new (buf) ObEmbeddedVecDMLIterator(param.allocator_, param.row_projector_,
+                                                                            param.write_iter_, param.das_ctdef_,
+                                                                            param.main_ctdef_);
+        domain_iter = static_cast<ObDomainDMLIterator *>(iter);
+      }
     } else {
       void *buf = nullptr;
       if (OB_ISNULL(buf = param.allocator_.alloc(sizeof(ObVecIndexDMLIterator)))) {

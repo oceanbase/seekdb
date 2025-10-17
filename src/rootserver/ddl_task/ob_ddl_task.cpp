@@ -199,7 +199,7 @@ ObCreateDDLTaskParam::ObCreateDDLTaskParam()
     aux_rowkey_doc_schema_(nullptr), aux_doc_rowkey_schema_(nullptr), fts_index_aux_schema_(nullptr), aux_doc_word_schema_(nullptr),
     vec_rowkey_vid_schema_(nullptr), vec_vid_rowkey_schema_(nullptr), vec_domain_index_schema_(nullptr), vec_index_id_schema_(nullptr), vec_snapshot_data_schema_(nullptr),
     vec_centroid_schema_(nullptr), vec_cid_vector_schema_(nullptr), vec_rowkey_cid_schema_(nullptr), vec_sq_meta_schema_(nullptr), vec_pq_centroid_schema_(nullptr), vec_pq_code_schema_(nullptr), 
-    tenant_data_version_(0), ddl_need_retry_at_executor_(false), is_pre_split_(false)
+    hybrid_vec_embedded_schema_(nullptr), tenant_data_version_(0), ddl_need_retry_at_executor_(false), is_pre_split_(false)
 {
 }
 
@@ -222,7 +222,7 @@ ObCreateDDLTaskParam::ObCreateDDLTaskParam(const uint64_t tenant_id,
     fts_index_aux_schema_(nullptr), aux_doc_word_schema_(nullptr), 
     vec_rowkey_vid_schema_(nullptr), vec_vid_rowkey_schema_(nullptr), vec_domain_index_schema_(nullptr), vec_index_id_schema_(nullptr), vec_snapshot_data_schema_(nullptr), 
     vec_centroid_schema_(nullptr), vec_cid_vector_schema_(nullptr), vec_rowkey_cid_schema_(nullptr), vec_sq_meta_schema_(nullptr), vec_pq_centroid_schema_(nullptr), vec_pq_code_schema_(nullptr), 
-    tenant_data_version_(0),
+    hybrid_vec_embedded_schema_(nullptr), tenant_data_version_(0),
     ddl_need_retry_at_executor_(ddl_need_retry_at_executor), is_pre_split_(false), new_snapshot_version_(0)
 {
 }
@@ -2978,6 +2978,14 @@ int ObDDLTaskRecordOperator::update_parent_task_message(
             task.set_index_snapshot_data_table_id(target_table_id);
             task.set_index_snapshot_task_id(target_task_id);
             task.set_index_snapshot_data_task_submitted(true);
+          } else if (index_schema.is_hybrid_vec_index_log_type()) {
+            task.set_delta_buffer_table_id(target_table_id);
+            task.set_delta_buffer_task_id(target_task_id);
+            task.set_delta_buffer_task_submitted(true);
+          } else if (index_schema.is_hybrid_vec_index_embedded_type()) {
+            task.set_hybrid_vector_embedded_vec_table_id(target_table_id);
+            task.set_hybrid_vector_embedded_vec_task_id(target_task_id);
+            task.set_hybrid_vector_embedded_vec_task_submitted(true);
           }
         } else if (UPDATE_DROP_INDEX_TASK_ID == update_type) {
           task.set_drop_index_task_id(target_task_id);

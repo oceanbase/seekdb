@@ -45,6 +45,7 @@ class ObUDF;
 class ObRoutineInfo;
 class ObPackageInfo;
 class ObTriggerInfo;
+class ObAiModelSchema;
 
 enum ObSchemaOperationCategory
 {
@@ -362,6 +363,11 @@ enum ObSchemaOperationCategory
   ACT(OB_DDL_CREATE_CCL_RULE, = 2102)                            \
   ACT(OB_DDL_DROP_CCL_RULE, = 2103)                              \
   ACT(OB_DDL_CCL_RULE_OPERATION_END, = 2110)                     \
+  ACT(OB_DDL_AI_MODEL_OPERATION_BEGIN, = 2111)                   \
+  ACT(OB_DDL_CREATE_AI_MODEL, )                                  \
+  ACT(OB_DDL_ALTER_AI_MODEL, )                                   \
+  ACT(OB_DDL_DROP_AI_MODEL, )                                    \
+  ACT(OB_DDL_AI_MODEL_OPERATION_END, = 2120)                     \
   ACT(OB_DDL_MAX_OP,)
 
 DECLARE_ENUM(ObSchemaOperationType, op_type, OP_TYPE_DEF);
@@ -399,6 +405,7 @@ IS_DDL_TYPE(CONTEXT, context)
 IS_DDL_TYPE(MOCK_FK_PARENT_TABLE, mock_fk_parent_table)
 IS_DDL_TYPE(CATALOG, catalog)
 IS_DDL_TYPE(CCL_RULE, ccl_rule)
+IS_DDL_TYPE(AI_MODEL, ai_model)
 
 struct ObSchemaOperation
 {
@@ -434,6 +441,7 @@ public:
     uint64_t column_priv_id_;
     uint64_t catalog_id_;
     uint64_t ccl_rule_id_;
+    uint64_t ai_model_id_;
   };
   union {
     common::ObString table_name_;
@@ -443,6 +451,7 @@ public:
     common::ObString mock_fk_parent_table_name_;
     common::ObString routine_name_;
     common::ObString catalog_name_;
+    common::ObString ai_model_name_;
   };
   ObSchemaOperationType op_type_;
   common::ObString ddl_stmt_str_;
@@ -709,6 +718,7 @@ class ObServerSchemaService;
 class ObContextSqlService;
 class ObCatalogSqlService;
 class ObCCLRuleSqlService;
+class ObAiModelSqlService;
 class ObSchemaService
 {
 public:
@@ -758,7 +768,7 @@ public:
   DECLARE_GET_DDL_SQL_SERVICE_FUNC(Catalog, catalog);
   //DECLARE_GET_DDL_SQL_SERVICE_FUNC(sys_priv, priv);
   DECLARE_GET_DDL_SQL_SERVICE_FUNC(CCLRule, ccl_rule);
-
+  DECLARE_GET_DDL_SQL_SERVICE_FUNC(AiModel, ai_model);
 
   /* sequence_id related */
   virtual int init_sequence_id_by_rs_epoch(const int64_t rootservice_epoch) = 0; // for compatible use
@@ -879,6 +889,7 @@ public:
   GET_ALL_SCHEMA_FUNC_DECLARE_PURE_VIRTUAL(mock_fk_parent_table, ObSimpleMockFKParentTableSchema);
   GET_ALL_SCHEMA_FUNC_DECLARE_PURE_VIRTUAL(catalog, ObCatalogSchema);
   GET_ALL_SCHEMA_FUNC_DECLARE_PURE_VIRTUAL(ccl_rule, ObSimpleCCLRuleSchema);
+  GET_ALL_SCHEMA_FUNC_DECLARE_PURE_VIRTUAL(ai_model, ObAiModelSchema);
 
   //get tenant increment schema operation between (base_version, new_schema_version]
   virtual int get_increment_schema_operations(const ObRefreshSchemaStatus &schema_status,
@@ -942,6 +953,7 @@ public:
   virtual int fetch_new_priv_id(const uint64_t tenant_id, uint64_t &new_priv_id) = 0;
   virtual int fetch_new_catalog_id(const uint64_t tenant_id, uint64_t &new_catalog_id) = 0;
   virtual int fetch_new_ccl_rule_id(const uint64_t tenant_id, uint64_t &new_ccl_rule_id) = 0;
+  virtual int fetch_new_ai_model_id(const uint64_t tenant_id, uint64_t &new_ai_model_id) = 0;
 
 //------------------For managing privileges-----------------------------//
   #define GET_BATCH_SCHEMAS_WITH_ALLOCATOR_FUNC_DECLARE_PURE_VIRTUAL(SCHEMA, SCHEMA_TYPE)  \
@@ -984,6 +996,7 @@ public:
   GET_BATCH_SCHEMAS_FUNC_DECLARE_PURE_VIRTUAL(mock_fk_parent_table, ObSimpleMockFKParentTableSchema);
   GET_BATCH_SCHEMAS_FUNC_DECLARE_PURE_VIRTUAL(catalog, ObCatalogSchema);
   GET_BATCH_SCHEMAS_FUNC_DECLARE_PURE_VIRTUAL(ccl_rule, ObSimpleCCLRuleSchema);
+  GET_BATCH_SCHEMAS_FUNC_DECLARE_PURE_VIRTUAL(ai_model, ObAiModelSchema);
 
 
   //--------------For manaing recyclebin -----//

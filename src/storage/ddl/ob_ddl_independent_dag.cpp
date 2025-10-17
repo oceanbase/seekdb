@@ -352,6 +352,11 @@ int ObDDLIndependentDag::add_vector_index_append_pipeline(const ObIndexType &ind
     if (OB_FAIL(add_pipeline(tablet_context, ddl_slice, pipeline))) {
       LOG_WARN("init hnsw index failed", K(ret));
     }
+  } else if (schema::is_hybrid_vec_index_embedded_type(index_type)) {
+    ObHNSWEmbeddingAppendAndWritePipeline *pipeline = nullptr;
+    if (OB_FAIL(add_pipeline(tablet_context, ddl_slice, pipeline))) {
+      LOG_WARN("init hnsw index failed", K(ret));
+    }
   }
   return ret;
 }

@@ -284,6 +284,9 @@ select 0xffffffffff & table_id, table_name, table_type, database_id, part_num fr
 546	__all_vector_index_task_history	0	201001	1
 547	__all_ccl_rule	0	201001	1
 548	__all_ccl_rule_history	0	201001	1
+550	__all_ai_model	0	201001	1
+551	__all_ai_model_history	0	201001	1
+552	__all_ai_model_endpoint	0	201001	1
 10001	__tenant_virtual_all_table	2	201001	1
 10002	__tenant_virtual_table_column	2	201001	1
 10003	__tenant_virtual_table_index	2	201001	1
@@ -732,6 +735,9 @@ select 0xffffffffff & table_id, table_name, table_type, database_id, part_num fr
 12536	__all_virtual_dynamic_partition_table	2	201001	1
 12549	__all_virtual_ccl_rule_history	2	201001	1
 12550	__all_virtual_tenant_vector_mem_info	2	201001	1
+12551	__all_virtual_ai_model	2	201001	1
+12552	__all_virtual_ai_model_history	2	201001	1
+12553	__all_virtual_ai_model_endpoint	2	201001	1
 20001	GV$OB_PLAN_CACHE_STAT	1	201001	1
 20002	GV$OB_PLAN_CACHE_PLAN_STAT	1	201001	1
 20003	SCHEMATA	1	201002	1
@@ -1272,6 +1278,10 @@ select 0xffffffffff & table_id, table_name, table_type, database_id, part_num fr
 21657	V$OB_DYNAMIC_PARTITION_TABLES	1	201001	1
 21661	GV$OB_VECTOR_MEMORY	1	201001	1
 21662	V$OB_VECTOR_MEMORY	1	201001	1
+21663	DBA_OB_AI_MODELS	1	201001	1
+21664	DBA_OB_AI_MODEL_ENDPOINTS	1	201001	1
+21665	CDB_OB_AI_MODELS	1	201001	1
+21666	CDB_OB_AI_MODEL_ENDPOINTS	1	201001	1
 check sys table count and table_id range success
 check count and table_id range for virtual table success
 select * from  information_schema.CHARACTER_SETS limit 1;

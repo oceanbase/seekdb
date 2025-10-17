@@ -7142,6 +7142,16 @@ bool JsonObjectIterator::end() const
   return curr_element_ >= element_count_;
 }
 
+int JsonObjectIterator::get_elem(ObJsonObjPair &elem)
+{
+  INIT_SUCC(ret);
+  if (OB_FAIL(json_object_->get_key(curr_element_, elem.first))) {
+    LOG_WARN("failed to get key", K(ret), K(curr_element_));
+  } else if (OB_FAIL(json_object_->get_object_value(curr_element_, elem.second))) {
+    LOG_WARN("fail to get this json obj element", K(ret), K(curr_element_));
+  }
+  return ret;
+}
 
 int JsonObjectIterator::get_key(ObString &key)
 {

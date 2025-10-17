@@ -34,6 +34,7 @@
 #include "pl/sys_package/ob_dbms_hybrid_vector_mysql.h"
 #include "pl/pl_recompile/ob_pl_recompile_task_helper.h"
 #include "pl/sys_package/ob_dbms_partition.h"
+#include "pl/sys_package/ob_dbms_ai_service.h"
 
 #ifdef INTERFACE_DEF
   INTERFACE_DEF(INTERFACE_START, "TEST", (ObPLInterfaceImpl::call))
@@ -229,6 +230,14 @@
   // start of dbms_partition
   INTERFACE_DEF(INTERFACE_DBMS_PARTITION_MANAGE_DYNAMIC_PARTITION, "DBMS_PARTITION_MANAGE_DYNAMIC_PARTITION", (ObDBMSPartition::manage_dynamic_partition))
   // end of dbms_partition
+
+  // start of dbms_ai_service
+  INTERFACE_DEF(INTERFACE_DBMS_AI_SERVICE_CREATE_AI_MODEL_MYSQL, "DBMS_AI_SERVICE_CREATE_AI_MODEL_MYSQL", (ObDBMSAiService::create_ai_model))
+  INTERFACE_DEF(INTERFACE_DBMS_AI_SERVICE_DROP_AI_MODEL_MYSQL, "DBMS_AI_SERVICE_DROP_AI_MODEL_MYSQL", (ObDBMSAiService::drop_ai_model))
+  INTERFACE_DEF(INTERFACE_DBMS_AI_SERVICE_CREATE_AI_MODEL_ENDPOINT_MYSQL, "DBMS_AI_SERVICE_CREATE_AI_MODEL_ENDPOINT_MYSQL", (ObDBMSAiService::create_ai_model_endpoint))
+  INTERFACE_DEF(INTERFACE_DBMS_AI_SERVICE_ALTER_AI_MODEL_ENDPOINT_MYSQL, "DBMS_AI_SERVICE_ALTER_AI_MODEL_ENDPOINT_MYSQL", (ObDBMSAiService::alter_ai_model_endpoint))
+  INTERFACE_DEF(INTERFACE_DBMS_AI_SERVICE_DROP_AI_MODEL_ENDPOINT_MYSQL, "DBMS_AI_SERVICE_DROP_AI_MODEL_ENDPOINT_MYSQL", (ObDBMSAiService::drop_ai_model_endpoint))
+  // end of dbms_ai_service
 
   // start of dbms_hybrid_search
 #define DEFINE_DBMS_HYBRID_VECTOR_MYSQL_INTERFACE(symbol, func) \

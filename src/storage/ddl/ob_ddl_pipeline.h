@@ -19,6 +19,9 @@
 #include "common/ob_tablet_id.h"
 #include "share/vector_index/ob_vector_index_util.h"
 #include "share/vector_index/ob_vector_kmeans_ctx.h"
+#include "share/vector_index/ob_vector_embedding_handler.h"
+#include "storage/ddl/ob_hnsw_embedmgr.h"
+#include "lib/lock/ob_spin_lock.h"
 
 namespace oceanbase
 {
@@ -26,10 +29,20 @@ namespace oceanbase
 namespace share
 {
 class ObPluginVectorIndexAdapterGuard;
+class ObPluginVectorIndexAdaptor;
+class ObEmbeddingTask;
+class ObEmbeddingTaskHandler;
+}
+
+namespace common
+{
+class ObIVector;
 }
 
 namespace storage
 {
+
+class ObTabletSliceWriter;
 
 template<typename HelperType>
 int get_spec_ivf_helper(ObIvfBuildHelper *ihelper, HelperType *&helper)
@@ -113,6 +126,7 @@ private:
   int init_ivf_center_index(const ObDDLTableSchema &ddl_table_schema);
   int init_ivf_sq8_meta_index(const ObDDLTableSchema &ddl_table_schema);
   int init_ivf_pq_center_index(const ObDDLTableSchema &ddl_table_schema);
+  int init_hnsw_embedding_index(const ObDDLTableSchema &ddl_table_schema);
   int create_ivf_build_helper(
       const ObIndexType index_type,
       ObString &vec_index_param);
@@ -129,6 +143,7 @@ public:
   int32_t vector_col_idx_;
   int32_t vector_key_col_idx_;
   int32_t vector_data_col_idx_;
+  int32_t vector_chunk_col_idx_;
   int32_t center_id_col_idx_;
   int32_t center_vector_col_idx_;
   int32_t meta_id_col_idx_;
@@ -691,6 +706,170 @@ typedef ObVectorIndexBuildAndWritePipeline<ObHNSWIndexBuildOperator, ObHNSWIndex
 typedef ObVectorIndexBuildAndWritePipeline<ObIVFCenterIndexBuildOperator, ObIVFCenterWriteMacroOperator> ObIVFCenterBuildAndWritePipeline;
 typedef ObVectorIndexBuildAndWritePipeline<ObIVFSq8MetaIndexBuildOperator, ObIVFSq8MetaWriteMacroOperator> ObIVFSq8MetaBuildAndWritePipeline;
 typedef ObVectorIndexBuildAndWritePipeline<ObIVFPqIndexBuildOperator, ObIVFPqWriteMacroOperator> ObIVFPqBuildAndWritePipeline;
+
+// ==================== Vector Embedding ====================
+class ObEmbeddingTaskMgr;
+
+class ObHNSWEmbeddingOperator : public ObVectorIndexBaseOperator
+{
+public:
+  explicit ObHNSWEmbeddingOperator(ObPipeline *pipeline)
+    : ObVectorIndexBaseOperator(pipeline), embedmgr_(nullptr), vec_dim_(-1), rowkey_cnt_(-1),
+      vid_col_idx_(-1), text_col_idx_(-1), is_inited_(false), error_ret_code_(OB_SUCCESS),
+      batch_size_(0), current_batch_(nullptr), http_timeout_us_(20 * 1000 * 1000) /* 20s */
+  {}
+  ~ObHNSWEmbeddingOperator();
+  int init(const ObTabletID &tablet_id);
+  virtual int execute(const ObChunk &input_chunk,
+                     ResultState &result_state,
+                     ObChunk &output_chunk) override;
+  virtual int try_execute_finish(const ObChunk &input_chunk,
+                                ResultState &result_state,
+                                ObChunk &output_chunk) override;
+
+private:
+  int get_ready_results(ObChunk &output_chunk, ResultState &result_state);
+  int process_input_chunk(const ObChunk &input_chunk);
+  int get_next_row_from_tmp_files(common::ObArray<ObCGRowFile *> *cg_row_file_arr,
+                                  int64_t &vid,
+                                  common::ObString &text,
+                                  common::ObArray<blocksstable::ObStorageDatum> &rowkeys,
+                                  bool &has_row);
+  int get_next_batch_from_tmp_files(ObCGRowFile *&row_file);
+  int parse_row(const blocksstable::ObDatumRow &current_row,
+                int64_t &vid,
+                common::ObString &text,
+                common::ObArray<blocksstable::ObStorageDatum> &rowkeys);
+  int flush_current_batch();
+  bool is_chunk_exhausted() const { return chunk_exhausted_; }
+  void reset_chunk_exhausted() { chunk_exhausted_ = false; }
+  void reset_scan_state() { cur_file_idx_ = 0; cur_datum_rows_ = nullptr; cur_row_in_batch_ = 0; }
+
+private:
+  ObEmbeddingTaskMgr *embedmgr_;
+  common::ObString model_id_;
+  int64_t vec_dim_;
+  int64_t rowkey_cnt_;
+  int64_t vid_col_idx_;
+  int64_t text_col_idx_;
+  bool is_inited_;
+  int error_ret_code_;
+  // batch submit
+  int64_t batch_size_;
+  ObTaskBatchInfo *current_batch_;  // Current batching
+
+  // resumable scan state for CG_ROW_TMP_FILES
+  int64_t cur_file_idx_;
+  blocksstable::ObBatchDatumRows *cur_datum_rows_;
+  int64_t cur_row_in_batch_;
+  bool chunk_exhausted_;
+  int64_t http_timeout_us_;
+  DISALLOW_COPY_AND_ASSIGN(ObHNSWEmbeddingOperator);
+};
+
+class ObHNSWEmbeddingRowIterator : public ObVectorIndexRowIterator
+{
+public:
+  ObHNSWEmbeddingRowIterator() : rowkey_cnt_(0), column_cnt_(0), snapshot_version_(0),
+                            vid_col_idx_(-1), vector_col_idx_(-1),
+                            batch_info_(nullptr), cur_result_pos_(0)
+  {}
+
+  ~ObHNSWEmbeddingRowIterator() = default;
+
+  virtual int init(ObVectorIndexTabletContext &context) override;
+  int init(ObVectorIndexTabletContext &context, ObTaskBatchInfo *batch_info);
+  virtual int get_next_row(blocksstable::ObDatumRow *&datum_row) override;
+  void reuse() {
+    is_inited_ = false;
+    rowkey_cnt_ = 0;
+    column_cnt_ = 0;
+    snapshot_version_ = 0;
+    vid_col_idx_ = -1;
+    vector_col_idx_ = -1;
+    batch_info_ = nullptr;
+    cur_result_pos_ = 0;
+  }
+private:
+  bool is_embedding_col_invalid(const int64_t column_cnt) const {
+    return vid_col_idx_ < 0 || vid_col_idx_ >= column_cnt ||
+           vector_col_idx_ < 0 || vector_col_idx_ >= column_cnt;
+  }
+private:
+  int64_t rowkey_cnt_;
+  int64_t column_cnt_;
+  int64_t snapshot_version_;
+  int32_t vid_col_idx_;
+  int32_t vector_col_idx_;
+  ObTaskBatchInfo *batch_info_;  // Not owned, just a reference
+  int64_t cur_result_pos_;
+};
+
+class ObHNSWEmbeddingWriteMacroOperator : public ObVectorIndexWriteMacroBaseOperator
+{
+public:
+  explicit ObHNSWEmbeddingWriteMacroOperator(ObPipeline *pipeline)
+    : ObVectorIndexWriteMacroBaseOperator(pipeline), iter_(), slice_writer_(nullptr)
+  {}
+  ~ObHNSWEmbeddingWriteMacroOperator();
+
+  int init(const ObTabletID &tablet_id, const int64_t slice_idx);
+  virtual int execute(const ObChunk &input_chunk,
+                     ResultState &result_state,
+                     ObChunk &output_chunk) override;
+
+  TO_STRING_KV(K_(tablet_id), K_(slice_idx));
+
+private:
+  ObHNSWEmbeddingRowIterator iter_;
+  // persistent writer across multiple input chunks for the same slice
+  ObTabletSliceWriter *slice_writer_;
+  DISALLOW_COPY_AND_ASSIGN(ObHNSWEmbeddingWriteMacroOperator);
+};
+
+class ObHNSWEmbeddingAppendAndWritePipeline : public ObDDLWriteMacroBlockBasePipeline
+{
+public:
+  ObHNSWEmbeddingAppendAndWritePipeline()
+    : ObDDLWriteMacroBlockBasePipeline(TASK_TYPE_DDL_VECTOR_INDEX_APPEND_PIPELINE),
+      embedding_buffer_op_(this), embedding_write_op_(this)
+  {}
+  virtual ~ObHNSWEmbeddingAppendAndWritePipeline() = default;
+
+  int init(ObDDLSlice *ddl_slice)
+  {
+    int ret = OB_SUCCESS;
+    if (OB_UNLIKELY(nullptr == ddl_slice || !ddl_slice->is_inited())) {
+      ret = OB_INVALID_ARGUMENT;
+      STORAGE_LOG(WARN, "invalid arguments", K(ret), KPC(ddl_slice));
+    } else {
+      ddl_slice_ = ddl_slice;
+      if (OB_FAIL(embedding_buffer_op_.init(ddl_slice->get_tablet_id()))) {
+        STORAGE_LOG(WARN, "init embedding buffer operator failed", K(ret));
+      } else if (OB_FAIL(embedding_write_op_.init(ddl_slice->get_tablet_id(), ddl_slice->get_slice_idx()))) {
+        STORAGE_LOG(WARN, "init embedding write operator failed", K(ret));
+      } else if (OB_FAIL(add_op(&embedding_buffer_op_))) {
+        STORAGE_LOG(WARN, "add embedding buffer op failed", K(ret));
+      } else if (OB_FAIL(add_op(&embedding_write_op_))) {
+        STORAGE_LOG(WARN, "add embedding write op failed", K(ret));
+      }
+    }
+    return ret;
+  }
+
+  virtual int set_remain_block() override {
+    if (OB_ISNULL(ddl_slice_)) {
+      return OB_NOT_INIT;
+    } else {
+      ddl_slice_->set_block_flushed(0);
+      return OB_SUCCESS;
+    }
+  }
+
+private:
+  ObHNSWEmbeddingOperator embedding_buffer_op_;
+  ObHNSWEmbeddingWriteMacroOperator embedding_write_op_;
+};
 
 }  // end namespace storage
 }  // end namespace oceanbase

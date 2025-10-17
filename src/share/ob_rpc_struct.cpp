@@ -9953,5 +9953,45 @@ OB_SERIALIZE_MEMBER((ObHTableDDLRes, ObParallelDDLRes),);
 OB_SERIALIZE_MEMBER((ObCreateTableGroupRes, ObParallelDDLRes), tablegroup_id_);
 
 
+
+OB_SERIALIZE_MEMBER((ObCreateAiModelArg, ObDDLArg), model_info_);
+OB_SERIALIZE_MEMBER((ObDropAiModelArg, ObDDLArg), ai_model_name_);
+
+int ObCreateAiModelArg::check_valid() const
+{
+  int ret = OB_SUCCESS;
+  if (exec_tenant_id_ == OB_INVALID_TENANT_ID) {
+    return OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid tenant id", K(exec_tenant_id_));
+  } else if (OB_FAIL(model_info_.check_valid())) {
+    LOG_WARN("invalid model info", K(ret), K(model_info_));
+  }
+  return ret;
+}
+
+int ObCreateAiModelArg::assign(const ObCreateAiModelArg &other)
+{
+  int ret = OB_SUCCESS;
+  if (this == &other) {
+  } else if (OB_FAIL(ObDDLArg::assign(other))) {
+    LOG_WARN("fail to assign ddl arg", KR(ret), K(other));
+  } else {
+    model_info_ = other.model_info_;
+  }
+  return ret;
+}
+
+int ObDropAiModelArg::assign(const ObDropAiModelArg &other)
+{
+  int ret = OB_SUCCESS;
+  if (this == &other) {
+  } else if (OB_FAIL(ObDDLArg::assign(other))) {
+    LOG_WARN("fail to assign ddl arg", KR(ret), K(other));
+  } else {
+    ai_model_name_ = other.ai_model_name_;
+  }
+  return ret;
+}
+
 }//end namespace obrpc
 }//end namespace oceanbase

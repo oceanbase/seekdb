@@ -821,6 +821,10 @@ int ObUserSqlService::gen_user_dml(
     if ((user.get_priv_set() & OB_PRIV_EVENT) != 0) { priv_others |= OB_PRIV_OTHERS_EVENT; }
     if ((user.get_priv_set() & OB_PRIV_CREATE_CATALOG) != 0) { priv_others |= OB_PRIV_OTHERS_CREATE_CATALOG; }
     if ((user.get_priv_set() & OB_PRIV_USE_CATALOG) != 0) { priv_others |= OB_PRIV_OTHERS_USE_CATALOG; }
+    if ((user.get_priv_set() & OB_PRIV_CREATE_AI_MODEL) != 0) { priv_others |= OB_PRIV_OTHERS_CREATE_AI_MODEL; }
+    if ((user.get_priv_set() & OB_PRIV_ALTER_AI_MODEL) != 0) { priv_others |= OB_PRIV_OTHERS_ALTER_AI_MODEL; }
+    if ((user.get_priv_set() & OB_PRIV_DROP_AI_MODEL) != 0) { priv_others |= OB_PRIV_OTHERS_DROP_AI_MODEL; }
+    if ((user.get_priv_set() & OB_PRIV_ACCESS_AI_MODEL) != 0) { priv_others |= OB_PRIV_OTHERS_ACCESS_AI_MODEL; }
   }
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(dml.add_column("PRIV_OTHERS", priv_others))) {

@@ -1,5 +1,5 @@
-########## Table ID 到 Table Name 映射 ##########
-# 为了方便分析占位情况，同一个ID可能会映射多个Name
+########## Table ID to Table Name mapping ##########
+# For easy analysis of occupancy, the same ID may map to multiple Names
 
 # 1: __all_core_table
 # 3: __all_table
@@ -324,6 +324,10 @@
 # 547: __all_ccl_rule
 # 548: __all_ccl_rule_history
 # 548: __all_ccl_rule  # BASE_TABLE_NAME
+# 550: __all_ai_model
+# 551: __all_ai_model_history
+# 551: __all_ai_model  # BASE_TABLE_NAME
+# 552: __all_ai_model_endpoint
 # 10001: __tenant_virtual_all_table
 # 10002: __tenant_virtual_table_column
 # 10003: __tenant_virtual_table_index
@@ -1053,6 +1057,13 @@
 # 12549: __all_ccl_rule  # BASE_TABLE_NAME
 # 12549: __all_ccl_rule_history  # BASE_TABLE_NAME1
 # 12550: __all_virtual_tenant_vector_mem_info
+# 12551: __all_virtual_ai_model
+# 12551: __all_ai_model  # BASE_TABLE_NAME
+# 12552: __all_virtual_ai_model_history
+# 12552: __all_ai_model  # BASE_TABLE_NAME
+# 12552: __all_ai_model_history  # BASE_TABLE_NAME1
+# 12553: __all_virtual_ai_model_endpoint
+# 12553: __all_ai_model_endpoint  # BASE_TABLE_NAME
 # 20001: GV$OB_PLAN_CACHE_STAT
 # 20002: GV$OB_PLAN_CACHE_PLAN_STAT
 # 20003: SCHEMATA
@@ -1593,6 +1604,10 @@
 # 21657: V$OB_DYNAMIC_PARTITION_TABLES
 # 21661: GV$OB_VECTOR_MEMORY
 # 21662: V$OB_VECTOR_MEMORY
+# 21663: DBA_OB_AI_MODELS
+# 21664: DBA_OB_AI_MODEL_ENDPOINTS
+# 21665: CDB_OB_AI_MODELS
+# 21666: CDB_OB_AI_MODEL_ENDPOINTS
 # 14999: __idx_11003_all_virtual_plan_cache_stat_i1
 # 14999: all_virtual_plan_cache_stat_i1  # INDEX_NAME
 # 14999: __all_virtual_plan_cache_stat  # DATA_BASE_TABLE_NAME
@@ -1896,6 +1911,12 @@
 # 101115: __idx_547_idx_ccl_rule_id
 # 101115: idx_ccl_rule_id  # INDEX_NAME
 # 101115: __all_ccl_rule  # DATA_BASE_TABLE_NAME
+# 101116: __idx_552_idx_endpoint_name
+# 101116: idx_endpoint_name  # INDEX_NAME
+# 101116: __all_ai_model_endpoint  # DATA_BASE_TABLE_NAME
+# 101117: __idx_552_idx_ai_model_name
+# 101117: idx_ai_model_name  # INDEX_NAME
+# 101117: __all_ai_model_endpoint  # DATA_BASE_TABLE_NAME
 # 101104: __idx_482_idx_tablet_his_table_id_dest
 # 101104: idx_tablet_his_table_id_dest  # INDEX_NAME
 # 101104: __all_tablet_reorganize_history  # DATA_BASE_TABLE_NAME

@@ -187,7 +187,7 @@ int ObShowGrants::inner_get_next_row(common::ObNewRow *&row)
         ObArray<const ObColumnPriv *> column_priv_array;
         ObArray<const ObObjPriv *>obj_priv_array;
         PRIV_MAP priv_map;
-        const int64_t PRIV_BUF_LENGTH = 512;
+        const int64_t PRIV_BUF_LENGTH = 1024;
         char buf[PRIV_BUF_LENGTH] = {};
         int64_t pos = 0;
         ObString user_name;
@@ -694,6 +694,18 @@ int ObShowGrants::print_privs_to_buff(
       }
       if ((priv_set & OB_PRIV_USE_CATALOG) && OB_SUCCESS == ret) {
         ret = BUF_PRINTF(" USE CATALOG,");
+      }
+      if ((priv_set & OB_PRIV_CREATE_AI_MODEL) && OB_SUCCESS == ret) {
+        ret = BUF_PRINTF(" CREATE AI MODEL,");
+      }
+      if ((priv_set & OB_PRIV_ALTER_AI_MODEL) && OB_SUCCESS == ret) {
+        ret = BUF_PRINTF(" ALTER AI MODEL,");
+      }
+      if ((priv_set & OB_PRIV_DROP_AI_MODEL) && OB_SUCCESS == ret) {
+        ret = BUF_PRINTF(" DROP AI MODEL,");
+      }
+      if ((priv_set & OB_PRIV_ACCESS_AI_MODEL) && OB_SUCCESS == ret) {
+        ret = BUF_PRINTF(" ACCESS AI MODEL,");
       }
       if (OB_SUCCESS == ret && pos > 0) {
         pos--; //Delete last ','

@@ -10986,7 +10986,8 @@ const char *OB_OBJECT_TYPE_STR[] =
   "SYS_PACKAGE",
   "SYS_PACKAGE_ONLY_OBJ_PRIV",
   "CONTEXT",
-  "CATALOG"
+  "CATALOG",
+  "AI_MODEL"
 };
 static_assert(ARRAYSIZEOF(OB_OBJECT_TYPE_STR) == static_cast<int64_t>(ObObjectType::MAX_TYPE),
               "array size mismatch");

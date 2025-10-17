@@ -38,10 +38,11 @@ class ObPluginVectorIndexMgr;
 #define CHECK_TASK_CANCELLED_IN_PROCESS(ret, loop_cnt, ctx_)  \
   if (OB_FAIL(ret)) { \
   } else if (++loop_cnt > 20) { \
+    ObPluginVectorIndexService *vector_index_service = MTL(ObPluginVectorIndexService *); \
     bool is_cancel = false; \
     if (OB_FAIL(ObVecIndexAsyncTaskUtil::check_task_is_cancel(ctx_, is_cancel))) { \
       LOG_WARN("fail to check task is cancel", KPC(ctx_));  \
-    } else if (is_cancel) { \
+    } else if (is_cancel || (OB_NOT_NULL(vec_idx_mgr_) && vec_idx_mgr_->get_async_task_opt().is_stop())) { \
       ret = OB_CANCELED;  \
       LOG_INFO("async task is cancel", KPC(ctx_));  \
     } else {  \
@@ -70,6 +71,7 @@ enum ObVecIndexAsyncTaskType { //FARM COMPAT WHITELIST
   OB_VECTOR_ASYNC_INDEX_OPTINAL = 1,
   OB_VECTOR_ASYNC_INDEX_IVF_LOAD = 2,
   OB_VECTOR_ASYNC_INDEX_IVF_CLEAN = 3,
+  OB_VECTOR_ASYNC_HYBRID_VECTOR_EMBEDDING = 4,
   OB_VECTOR_ASYNC_TASK_TYPE_INVALID
 };
 
@@ -89,6 +91,7 @@ struct ObVecIndexTaskStatus
   int64_t ret_code_;
   // ObString trace_id_str_;
   TraceId trace_id_;
+  bool all_finished_;
 
   ObVecIndexTaskStatus() :  gmt_create_(0),
                             gmt_modified_(0),
@@ -101,11 +104,12 @@ struct ObVecIndexTaskStatus
                             status_(ObVecIndexAsyncTaskStatus::OB_VECTOR_ASYNC_TASK_INVALID),
                             target_scn_(),
                             ret_code_(VEC_ASYNC_TASK_DEFAULT_ERR_CODE),
-                            trace_id_() {}
+                            trace_id_(),
+                            all_finished_(false) {}
 
   TO_STRING_KV(K_(gmt_create), K_(gmt_modified), K_(tenant_id), K_(table_id),
                 K_(tablet_id), K_(task_type), K_(trigger_type), K_(task_id),
-                K_(status), K_(target_scn), K_(trace_id), K_(ret_code));
+                K_(status), K_(target_scn), K_(trace_id), K_(ret_code), K_(all_finished));
 };
 
 struct ObVecIndexTaskKey
@@ -163,7 +167,7 @@ public:
         allocator_(ObMemAttr(MTL_ID(), "VecIdxTaskCtx")), // set after init
         extra_data_()
   {}
-  ~ObVecIndexAsyncTaskCtx();
+  virtual ~ObVecIndexAsyncTaskCtx();
 
   TO_STRING_KV(K_(tenant_id), K_(retry_time), KP_(ls), K_(task_status), K_(sys_task_id), K_(in_thread_pool), KP_(extra_data));
 
@@ -181,13 +185,24 @@ public:
 typedef common::hash::ObHashMap<common::ObTabletID, ObVecIndexAsyncTaskCtx *> VecIndexAsyncTaskMap;
 typedef common::ObArray<ObVecIndexAsyncTaskCtx*> ObVecIndexTaskCtxArray;
 
+class ObAsyncTaskMapFunc
+{
+public:
+  ObAsyncTaskMapFunc(ObVecIndexTaskCtxArray &array) :array_(array) {}
+  ~ObAsyncTaskMapFunc() {}
+  int operator()(const hash::HashMapPair<common::ObTabletID, ObVecIndexAsyncTaskCtx*> &entry);
+private:
+  ObVecIndexTaskCtxArray &array_;
+};
+
 class ObVecIndexAsyncTaskOption
 {
 public:
   ObVecIndexAsyncTaskOption(uint64_t tenant_id) : 
     mem_attr_(tenant_id, "VecIdxATaskCtx"),
     allocator_(mem_attr_), 
-    ls_task_cnt_(0)
+    ls_task_cnt_(0),
+    stop_(false)
   {
   }
 
@@ -201,6 +216,8 @@ public:
   void inc_ls_task_cnt() { ATOMIC_INC(&ls_task_cnt_); }
   void dec_ls_task_cnt() { ATOMIC_DEC(&ls_task_cnt_); }
   int64_t get_ls_processing_task_cnt() const { return ATOMIC_LOAD(&ls_task_cnt_); }
+  void set_stop() { stop_ = true; }
+  bool is_stop() { return stop_; }
   VecIndexAsyncTaskMap &get_async_task_map() { return task_ctx_map_; }
   ObIAllocator *get_allocator() { return &allocator_; }
   TO_STRING_KV(K(mem_attr_));
@@ -210,6 +227,7 @@ private:
   VecIndexAsyncTaskMap task_ctx_map_;
   ObArenaAllocator allocator_;
   volatile int64_t ls_task_cnt_;
+  bool stop_;
 };
 
 // QUEUE_THREAD
@@ -230,6 +248,8 @@ public:
   void dec_async_task_ref() { ATOMIC_DEC(&async_task_ref_cnt_); }
   int64_t get_async_task_ref() const { return ATOMIC_LOAD(&async_task_ref_cnt_); }
   void handle_ls_process_task_cnt(const ObLSID &ls_id, const bool is_inc);
+  bool is_stopped() { return stopped_; }
+  void set_stop() { stopped_ = true; }
 
   virtual void handle(void *task) override;
   virtual void handle_drop(void *task) override;
@@ -244,6 +264,7 @@ private:
   bool is_inited_;
   int tg_id_;
   volatile int64_t async_task_ref_cnt_;
+  bool stopped_;
 };
 
 class ObPluginVectorIndexAdaptor;
@@ -259,7 +280,8 @@ public:
         vec_idx_mgr_(nullptr),
         old_adapter_(nullptr),
         mem_attr_(mem_attr),
-        allocator_(mem_attr)
+        allocator_(ObMemAttr(MTL_ID(), "VecIdxASyTask")),
+        vid_obj_()
   {}
   virtual ~ObVecIndexIAsyncTask() {}
   int init(const uint64_t tenant_id, const ObLSID &ls_id, const int task_type,
@@ -268,6 +290,7 @@ public:
   ObLSID &get_ls_id() { return ls_id_; }
   ObVecIndexAsyncTaskCtx *get_task_ctx() { return ctx_; }
   void set_old_adapter(ObPluginVectorIndexAdaptor* adapter) { old_adapter_ = adapter; }
+  virtual void check_task_free() {}
   virtual int do_work() = 0;
 
   VIRTUAL_TO_STRING_KV(K_(is_inited), K_(task_type), K_(tenant_id), K_(ls_id), KPC(ctx_));
@@ -282,13 +305,15 @@ protected:
   ObPluginVectorIndexAdaptor* old_adapter_;
   ObMemAttr mem_attr_;
   common::ObArenaAllocator allocator_;
+  ObObj vid_obj_;
   DISALLOW_COPY_AND_ASSIGN(ObVecIndexIAsyncTask);
 };
 
 class ObVecIndexAsyncTask : public ObVecIndexIAsyncTask
 {
 public:
-  ObVecIndexAsyncTask() : ObVecIndexIAsyncTask(ObMemAttr(MTL_ID(), "VecIdxASyTask"))
+  ObVecIndexAsyncTask()
+      : ObVecIndexIAsyncTask(ObMemAttr(MTL_ID(), "VecIdxASyTask"))
   {
   }
   virtual ~ObVecIndexAsyncTask() {}
@@ -297,7 +322,8 @@ public:
 private:
   static const int BATCH_CNT = 2000; // 8M / 4(sizeof(float)) / 1000(dim)
   int build_inc_index(ObPluginVectorIndexAdaptor &adaptor);
-  int optimize_vector_index( ObPluginVectorIndexAdaptor &adaptor);
+  int process_data_for_index(ObPluginVectorIndexAdaptor &adaptor);
+  int optimize_vector_index(ObPluginVectorIndexAdaptor &adaptor);
   int refresh_snapshot_index_data(ObPluginVectorIndexAdaptor &adaptor, transaction::ObTxDesc *tx_desc, transaction::ObTxReadSnapshot &snapshot);
   int get_old_snapshot_data(
       ObPluginVectorIndexAdaptor &adaptor, 
@@ -317,7 +343,8 @@ private:
       storage::ObDMLBaseParam &dml_param, 
       transaction::ObTxDesc *tx_desc,
       storage::ObTableScanIterator *table_scan_iter,
-      ObSEArray<uint64_t, 4> &dml_column_ids);
+      ObSEArray<uint64_t, 4> &dml_column_ids,
+      bool check_null_chunk = false);
   int delete_incr_table_data(ObPluginVectorIndexAdaptor &adaptor, storage::ObDMLBaseParam &dml_param, transaction::ObTxDesc *tx_desc);
   bool check_task_satisfied_memory_limited(ObPluginVectorIndexAdaptor &adaptor);
 private:
@@ -393,8 +420,7 @@ public:
       const uint64_t tablet_id,
       const int64_t task_id,
       ObVecIndexFieldArray& task_key);
-
-private:
+  static int insert_new_task(uint64_t tenant_id, ObVecIndexTaskCtxArray &task_ctx_array);
   static int construct_read_task_sql(
       const uint64_t tenant_id,
       const char *tname,

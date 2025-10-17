@@ -5057,7 +5057,8 @@ bool ObDDLUtil::is_vector_index_complement(const ObIndexType index_type)
   return is_vec_index_snapshot_data_type(index_type)
       || is_local_vec_ivf_centroid_index(index_type)
       || is_vec_ivfsq8_meta_index(index_type)
-      || is_vec_ivfpq_pq_centroid_index(index_type);
+      || is_vec_ivfpq_pq_centroid_index(index_type)
+      || is_hybrid_vec_index_embedded_type(index_type);
 }
 
 int64_t ObDDLUtil::generate_idempotent_value(

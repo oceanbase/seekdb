@@ -1183,6 +1183,7 @@ int ObDASScanOp::get_vec_ir_tablet_ids(ObDASRelatedTabletID &related_tablet_ids)
                                        related_tablet_ids.delta_buf_tablet_id_,
                                        related_tablet_ids.index_id_tablet_id_,
                                        related_tablet_ids.snapshot_tablet_id_,
+                                       related_tablet_ids.embedded_tablet_id_,
                                        related_tablet_ids.lookup_tablet_id_,
                                        related_tablet_ids.rowkey_vid_tablet_id_,
                                        related_tablet_ids.vid_rowkey_tablet_id_))) {
@@ -1258,6 +1259,7 @@ int ObDASScanOp::get_hnsw_ir_tablet_ids(
     common::ObTabletID &delta_buf_tid,
     common::ObTabletID &index_id_tid,
     common::ObTabletID &snapshot_tid,
+    common::ObTabletID &embedded_tid,
     common::ObTabletID &com_aux_vec_tid,
     common::ObTabletID &rowkey_vid_tid,
     common::ObTabletID &vid_rowkey_tid)
@@ -1267,6 +1269,7 @@ int ObDASScanOp::get_hnsw_ir_tablet_ids(
   delta_buf_tid.reset();
   index_id_tid.reset();
   snapshot_tid.reset();
+  embedded_tid.reset();
   com_aux_vec_tid.reset();
   rowkey_vid_tid.reset();
   if (OB_UNLIKELY(related_ctdefs_.count() != related_tablet_ids_.count())) {
@@ -1294,6 +1297,10 @@ int ObDASScanOp::get_hnsw_ir_tablet_ids(
       }
       case ObTSCIRScanType::OB_VEC_SNAPSHOT_SCAN: {
         snapshot_tid = related_tablet_ids_.at(i);
+        break;
+      }
+      case ObTSCIRScanType::OB_VEC_EMBEDDED_SCAN: {
+        embedded_tid = related_tablet_ids_.at(i);
         break;
       }
       case ObTSCIRScanType::OB_VEC_COM_AUX_SCAN: {

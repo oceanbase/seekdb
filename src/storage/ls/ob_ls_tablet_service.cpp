@@ -47,6 +47,7 @@
 #include "storage/tablet/ob_tablet_mds_table_mini_merger.h"
 #include "storage/ddl/ob_tablet_ddl_kv.h"
 #include "share/vector_index/ob_plugin_vector_index_service.h"
+#include "share/vector_index/ob_vector_index_util.h"
 #include "storage/meta_mem/ob_tablet_pointer.h"
 #include "storage/truncate_info/ob_truncate_partition_filter.h"
 #include "storage/meta_store/ob_tenant_storage_meta_service.h"
@@ -4956,6 +4957,103 @@ int ObLSTabletService::insert_vector_index_rows(
           rows[k].storage_datums_[vector_idx].set_null();
         }
         adaptor_guard.get_adatper()->update_can_skip(NOT_SKIP);
+      }
+    }
+  } else if (table_param.is_hybrid_vector_index_log()) {
+    const blocksstable::ObDmlFlag dml_flag = run_ctx.dml_flag_;
+    if (dml_flag == ObDmlFlag::DF_DELETE) {
+      ObString vec_idx_param = run_ctx.dml_param_.table_param_->get_data_table().get_vec_index_param();
+      int64_t vec_dim = run_ctx.dml_param_.table_param_->get_data_table().get_vec_dim();
+      const uint64_t vec_id_col_id = run_ctx.dml_param_.table_param_->get_data_table().get_vec_id_col_id();
+      const uint64_t vec_vector_col_id = run_ctx.dml_param_.table_param_->get_data_table().get_vec_vector_col_id();
+      // get vector col idx
+      int64_t vec_id_idx = OB_INVALID_INDEX;
+      int64_t vector_idx = OB_INVALID_INDEX;
+      for (int64_t i = 0; OB_SUCC(ret) && i < run_ctx.dml_param_.table_param_->get_col_descs().count(); i++) {
+        uint64_t col_id = run_ctx.dml_param_.table_param_->get_col_descs().at(i).col_id_;
+        if (col_id == vec_id_col_id) {
+          vec_id_idx = i;
+        } else if (col_id == vec_vector_col_id) {
+          vector_idx = i;
+        }
+      }
+      if (vec_id_idx == OB_INVALID_INDEX || vector_idx == OB_INVALID_INDEX) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("fail to get vec index column idxs", K(ret), K(vec_id_col_id), K(vec_vector_col_id),
+            K(vec_id_idx), K(vector_idx));
+      } else {
+        ObPluginVectorIndexService *vec_index_service = MTL(ObPluginVectorIndexService *);
+        ObPluginVectorIndexAdapterGuard adaptor_guard;
+        if (OB_FAIL(vec_index_service->acquire_adapter_guard(run_ctx.store_ctx_.ls_id_,
+                                                            run_ctx.relative_table_.get_tablet_id(),
+                                                            ObIndexType::INDEX_TYPE_HYBRID_INDEX_LOG_LOCAL,
+                                                            adaptor_guard,
+                                                            &vec_idx_param,
+                                                            vec_dim))) {
+          LOG_WARN("fail to get ObPluginVectorIndexAdapter", K(ret), K(run_ctx.store_ctx_), K(run_ctx.relative_table_));
+        } else if (OB_FAIL(adaptor_guard.get_adatper()->handle_insert_incr_table_rows(rows, vec_id_idx, vector_idx, row_count))) {
+          LOG_WARN("fail to handle delete hybrid vec index log table rows", K(ret), KP(rows), K(row_count));
+        }
+      }
+    }
+  } else if (table_param.is_hybrid_vector_index_embedded()) {
+    ObString vec_idx_param = run_ctx.dml_param_.table_param_->get_data_table().get_vec_index_param();
+    int64_t vec_dim = run_ctx.dml_param_.table_param_->get_data_table().get_vec_dim();
+    const uint64_t vec_id_col_id = run_ctx.dml_param_.table_param_->get_data_table().get_vec_id_col_id();
+    const uint64_t vec_vector_col_id = run_ctx.dml_param_.table_param_->get_data_table().get_embedded_vec_col_id();
+    // get vector col idx
+    int64_t vec_id_idx = OB_INVALID_INDEX;
+    int64_t embedded_vec_idx = OB_INVALID_INDEX;
+    int64_t extra_info_actual_size = 0;
+    for (int64_t i = 0; OB_SUCC(ret) && i < run_ctx.dml_param_.table_param_->get_col_descs().count(); i++) {
+      uint64_t col_id = run_ctx.dml_param_.table_param_->get_col_descs().at(i).col_id_;
+      if (col_id == vec_id_col_id) {
+        vec_id_idx = i;
+      } else if (col_id == vec_vector_col_id) {
+        embedded_vec_idx = i;
+      }
+    }
+    if (vec_id_idx == OB_INVALID_INDEX || embedded_vec_idx == OB_INVALID_INDEX) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("fail to get vec index column idxs", K(ret), K(vec_id_col_id), K(vec_vector_col_id),
+          K(vec_id_idx), K(embedded_vec_idx));
+    } else {
+      // get extra info col idx
+      // hybrid vec embedded table columns def is: <vid, embedded_vector>
+      ObPluginVectorIndexService *vec_index_service = MTL(ObPluginVectorIndexService *);
+      ObPluginVectorIndexAdapterGuard adaptor_guard;
+      if (OB_FAIL(vec_index_service->acquire_adapter_guard(run_ctx.store_ctx_.ls_id_,
+                                                          run_ctx.relative_table_.get_tablet_id(),
+                                                          ObIndexType::INDEX_TYPE_HYBRID_INDEX_EMBEDDED_LOCAL,
+                                                          adaptor_guard,
+                                                          &vec_idx_param,
+                                                          vec_dim))) {
+        LOG_WARN("fail to get ObPluginVectorIndexAdapter", K(ret), K(run_ctx.store_ctx_), K(run_ctx.relative_table_));
+      } else {
+        if (OB_FAIL(adaptor_guard.get_adatper()->get_extra_info_actual_size(extra_info_actual_size))) {
+          LOG_WARN("fail to get extra info actual size", K(ret), K(extra_info_actual_size));
+        } else {
+          ObArray<share::ObExtraIdxType> extra_info_id_types;
+          if (extra_info_actual_size > 0) {
+            for (int64_t i = 0; OB_SUCC(ret) && i < run_ctx.dml_param_.table_param_->get_col_descs().count(); i++) {
+              uint64_t col_id = run_ctx.dml_param_.table_param_->get_col_descs().at(i).col_id_;
+              if (col_id != vec_id_col_id && col_id != vec_vector_col_id) {
+                // has extra_info
+                ObExtraIdxType extra_idx_type;
+                extra_idx_type.idx_ = i;
+                extra_idx_type.type_= run_ctx.dml_param_.table_param_->get_col_descs().at(i).col_type_;
+                if (OB_FAIL(extra_info_id_types.push_back(extra_idx_type))) {
+                  LOG_WARN("fail to push back extra info idx", K(ret), K(extra_info_id_types), K(col_id));
+                }
+              }
+            }
+          }
+          if (OB_SUCC(ret)) {
+            if (OB_FAIL(adaptor_guard.get_adatper()->handle_insert_embedded_table_rows(rows, vec_id_idx, embedded_vec_idx, extra_info_id_types, row_count))) {
+              LOG_WARN("fail to handle insert embedded table rows", K(ret), KP(rows), K(row_count));
+            }
+          }
+        }
       }
     }
   } else if (table_param.is_ivf_vector_index()) { // check outrow

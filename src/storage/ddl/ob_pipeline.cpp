@@ -12,6 +12,7 @@
 
 #include "storage/ddl/ob_pipeline.h"
 #include "storage/ddl/ob_ddl_struct.h"
+#include "storage/ddl/ob_ddl_pipeline.h"
 
 #define USING_LOG_PREFIX STORAGE
 
@@ -64,6 +65,7 @@ bool ObChunk::is_valid() const
       case ChunkType::CG_ROW_TMP_FILES:
       case ChunkType::BATCH_DATUM_ROWS:
       case ChunkType::DIRECT_LOAD_ROW_ARRAY:
+      case ChunkType::TASK_BATCH_INFO:
         bret = nullptr != data_ptr_;
         break;
       default:

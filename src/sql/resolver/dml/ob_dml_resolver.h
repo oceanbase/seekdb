@@ -489,6 +489,13 @@ protected:
     bool need_dist_algo_expr,
     ObRawExpr *&expr,
     ObDMLStmt *stmt = NULL);
+  int fill_embedded_vec_expr_param(
+    const uint64_t table_id,
+    const uint64_t index_tid,
+    const uint64_t column_id,
+    const ObTableSchema *table_schema,
+    ObRawExpr *&vec_id_expr,
+    ObDMLStmt *stmt = NULL);
   virtual int resolve_subquery_info(const common::ObIArray<ObSubQueryInfo> &subquery_info);
   virtual int resolve_inlist_info(common::ObIArray<ObInListInfo> &inlist_infos);
   virtual int resolve_aggr_exprs(ObRawExpr *&expr, common::ObIArray<ObAggFunRawExpr*> &aggr_exprs,
@@ -1022,6 +1029,10 @@ protected:
       const ObDMLStmt &stmt, 
       bool &is_ddl,
       ObIndexType &index_type);
+  int check_need_fill_embedded_vec_expr_param(const ObDMLStmt &stmt,
+                                              const ObColumnSchemaV2 &column_schema,
+                                              bool &need_fill);
+
 protected:
   ObStmtScope current_scope_;
   int32_t current_level_;

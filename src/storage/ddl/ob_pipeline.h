@@ -28,9 +28,15 @@ namespace blocksstable
 class ObBatchDatumRows;
 struct ObDatumRow;
 }
+
+namespace common
+{
+class ObIVector;
+}
+
 namespace storage
 {
-
+class ObTaskBatchInfo;
 class ObDDLTabletContext;
 class ObDDLSlice;
 class ObPipeline;
@@ -49,6 +55,7 @@ public:
     CG_ROW_TMP_FILES,
     BATCH_DATUM_ROWS,
     DIRECT_LOAD_ROW_ARRAY,
+    TASK_BATCH_INFO,
     MAX_TYPE
   };
 public:
@@ -65,6 +72,7 @@ public:
   OB_INLINE bool is_cg_row_tmp_files_type() const { return ChunkType::CG_ROW_TMP_FILES == type_; }
   OB_INLINE bool is_datum_row_type() const { return ChunkType::DATUM_ROW == type_; }
   OB_INLINE bool is_direct_load_row_array_type() const { return ChunkType::DIRECT_LOAD_ROW_ARRAY == type_; }
+  OB_INLINE bool is_task_batch_info_type() const { return ChunkType::TASK_BATCH_INFO == type_; }
   TO_STRING_KV(K_(type), KP_(data_ptr));
 public:
   ChunkType type_;
@@ -76,6 +84,7 @@ public:
     ObArray<ObCGRowFile *> *cg_row_file_arr_;
     blocksstable::ObBatchDatumRows *bdrs_;
     table::ObTableLoadTabletObjRowArray *row_array_;
+    storage::ObTaskBatchInfo *batch_info_;
   };
 };
 

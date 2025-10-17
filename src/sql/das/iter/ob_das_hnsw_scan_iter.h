@@ -59,6 +59,7 @@ public:
       snapshot_iter_(nullptr),
       vid_rowkey_iter_(nullptr),
       com_aux_vec_iter_(nullptr),
+      embedded_table_iter_(nullptr),
       rowkey_vid_iter_(nullptr),
       data_filter_iter_(nullptr),
       func_lookup_iter_(nullptr),
@@ -125,6 +126,7 @@ public:
   ObDASScanIter *snapshot_iter_;
   ObDASScanIter *vid_rowkey_iter_;
   ObDASScanIter *com_aux_vec_iter_;
+  ObDASScanIter *embedded_table_iter_;
   ObDASScanIter *rowkey_vid_iter_;
   ObDASScanIter *data_filter_iter_;
   ObDASIter *func_lookup_iter_;
@@ -245,6 +247,7 @@ public:
       delta_buf_tablet_id_(ObTabletID::INVALID_TABLET_ID),
       index_id_tablet_id_(ObTabletID::INVALID_TABLET_ID),
       snapshot_tablet_id_(ObTabletID::INVALID_TABLET_ID),
+      embedded_tablet_id_(ObTabletID::INVALID_TABLET_ID),
       vid_rowkey_tablet_id_(ObTabletID::INVALID_TABLET_ID),
       com_aux_vec_tablet_id_(ObTabletID::INVALID_TABLET_ID),
       rowkey_vid_tablet_id_(ObTabletID::INVALID_TABLET_ID),
@@ -255,6 +258,7 @@ public:
       snapshot_scan_param_(),
       vid_rowkey_scan_param_(),
       com_aux_vec_scan_param_(),
+      embedded_table_scan_param_(),
       rowkey_vid_scan_param_(),
       func_filter_scan_param_(),
       delta_buf_iter_first_scan_(true),
@@ -262,6 +266,7 @@ public:
       snapshot_iter_first_scan_(true),
       vid_rowkey_iter_first_scan_(true),
       com_aux_vec_iter_first_scan_(true),
+      embedded_table_iter_first_scan_(true),
       rowkey_vid_iter_first_scan_(true),
       data_filter_iter_first_scan_(true),
       func_lookup_first_scan_(true),
@@ -283,6 +288,7 @@ public:
       query_cond_(),
       dim_(0),
       search_vec_(nullptr),
+      hybrid_search_vec_(),
       distance_calc_(nullptr),
       is_primary_pre_with_rowkey_with_filter_(false),
       go_brute_force_(false),
@@ -295,7 +301,9 @@ public:
       can_retry_(false),
       idx_iter_first_scan_(true),
       rel_map_(),
-      use_vid_(false) {
+      use_vid_(false),
+      is_hybrid_(false),
+      distance_threshold_(FLT_MAX) {
         extra_in_rowkey_idxs_.set_attr(ObMemAttr(MTL_ID(), "ExtraIdx"));
       }
   
@@ -314,6 +322,7 @@ public:
     delta_buf_tablet_id_ = related_tablet_ids.delta_buf_tablet_id_;
     index_id_tablet_id_ = related_tablet_ids.index_id_tablet_id_;
     snapshot_tablet_id_ = related_tablet_ids.snapshot_tablet_id_;
+    embedded_tablet_id_ = related_tablet_ids.embedded_tablet_id_;
     vid_rowkey_tablet_id_ = related_tablet_ids.vid_rowkey_tablet_id_;
     com_aux_vec_tablet_id_ = related_tablet_ids.lookup_tablet_id_;
     rowkey_vid_tablet_id_ = related_tablet_ids.rowkey_vid_tablet_id_;
@@ -325,8 +334,9 @@ public:
   bool enable_using_simplified_scan() { return need_save_distance_result(); }
   inline bool has_func_lookup() {return OB_NOT_NULL(func_lookup_iter_) && OB_NOT_NULL(func_lookup_ctdef_) && OB_NOT_NULL(func_lookup_rtdef_);}
 protected:
-  int save_distance_expr_result(const ObObj& dist_obj);
+  int save_distance_expr_result(ObNewRow *row);
   int save_distance_expr_result(ObNewRow *row, int64_t size);
+  int calc_dis_by_vid(const ObObj& vid_obj, double &dis_value);
   
   virtual int inner_init(ObDASIterParam &param) override;
   virtual int inner_reuse() override;
@@ -341,7 +351,7 @@ private:
   bool is_hnsw_bq() const { return OB_NOT_NULL(vec_aux_ctdef_) && vec_aux_ctdef_->algorithm_type_ == ObVectorIndexAlgorithmType::VIAT_HNSW_BQ;}
   bool is_ipivf() const { return OB_NOT_NULL(vec_aux_ctdef_) && vec_aux_ctdef_->algorithm_type_ == ObVectorIndexAlgorithmType::VIAT_IPIVF;}
   bool need_save_distance_result() { 
-    return distance_calc_ != nullptr && ! is_hnsw_bq();
+    return is_hybrid_ ? distance_calc_ != nullptr : (distance_calc_ != nullptr && !is_hnsw_bq());
   }
   int process_adaptor_state(bool is_vectorized);
   int inner_process_adaptor_state(bool is_vectorized);
@@ -388,11 +398,13 @@ private:
   int get_rowkey_from_vid_rowkey_table(ObIAllocator &allocator, ObRowkey& vid, ObRowkey *&rowkey);
   int get_vector_from_com_aux_vec_table(ObIAllocator &allocator, ObRowkey *rowkey, ObString &vector);
   int get_vector_from_com_aux_vec_table(ObIAllocator &allocator, ObString &vector);
+  int get_vector_from_embedded_table(ObIAllocator &allocator, ObRowkey *rowkey, ObRowkey *vid, ObString &vector);
 
   int do_delta_buf_table_scan();
   int do_index_id_table_scan();
   int do_snapshot_table_scan();
   int do_com_aux_vec_table_scan();
+  int do_embedded_table_scan();
   int do_vid_rowkey_table_scan();
   int do_rowkey_vid_table_scan();
   
@@ -407,6 +419,7 @@ private:
   int reuse_vid_rowkey_iter() { return ObDasVecScanUtils::reuse_iter(ls_id_, vid_rowkey_iter_, vid_rowkey_scan_param_, vid_rowkey_tablet_id_); };
   int reuse_rowkey_vid_iter() { return ObDasVecScanUtils::reuse_iter(ls_id_, rowkey_vid_iter_, rowkey_vid_scan_param_, rowkey_vid_tablet_id_); };
   int reuse_com_aux_vec_iter() { return ObDasVecScanUtils::reuse_iter(ls_id_, com_aux_vec_iter_, com_aux_vec_scan_param_, com_aux_vec_tablet_id_); };
+  int reuse_embedded_table_iter() { return ObDasVecScanUtils::reuse_iter(ls_id_, embedded_table_iter_, embedded_table_scan_param_, embedded_tablet_id_); };
   int reuse_filter_data_table_iter() { return ObDasVecScanUtils::reuse_iter(ls_id_, data_filter_iter_, data_filter_scan_param_, com_aux_vec_tablet_id_); };
   int reuse_func_lookup_iter();
 
@@ -416,6 +429,8 @@ private:
   int get_one_relevance(ObIAllocator &allocator, double* &rel_array);
   int add_one_relevance(int64_t vid, double* &rel_array);
   int get_from_vid_rowkey(ObIAllocator &allocator, ObRowkey *&rowkey);
+  int get_from_embedded_table(ObIAllocator &allocator, ObString &vector);
+  int build_embedded_table_rowkey(ObIAllocator &allocator, const ObRowkey *main_rowkey, const ObRowkey *vid, ObRowkey &embedded_rowkey);
 
   int init_sort(const ObDASVecAuxScanCtDef *ir_ctdef, ObDASVecAuxScanRtDef *ir_rtdef);
   int set_vec_index_param(ObString vec_index_param) { return ob_write_string(vec_op_alloc_, vec_index_param, vec_index_param_); }
@@ -497,6 +512,7 @@ private:
   ObDASScanIter *snapshot_iter_;
   ObDASScanIter *vid_rowkey_iter_;
   ObDASScanIter *com_aux_vec_iter_;
+  ObDASScanIter *embedded_table_iter_;
   ObDASScanIter *rowkey_vid_iter_;
   ObDASScanIter *data_filter_iter_;
   ObDASIter *func_lookup_iter_;
@@ -505,6 +521,7 @@ private:
   ObTabletID delta_buf_tablet_id_;
   ObTabletID index_id_tablet_id_;
   ObTabletID snapshot_tablet_id_;
+  ObTabletID embedded_tablet_id_;
   ObTabletID vid_rowkey_tablet_id_;
   ObTabletID com_aux_vec_tablet_id_;
   ObTabletID rowkey_vid_tablet_id_;
@@ -516,6 +533,7 @@ private:
   ObTableScanParam snapshot_scan_param_;
   ObTableScanParam vid_rowkey_scan_param_;
   ObTableScanParam com_aux_vec_scan_param_; 
+  ObTableScanParam embedded_table_scan_param_;
   ObTableScanParam rowkey_vid_scan_param_;
   ObTableScanParam data_filter_scan_param_; 
   ObTableScanParam func_filter_scan_param_;
@@ -525,6 +543,7 @@ private:
   bool snapshot_iter_first_scan_;
   bool vid_rowkey_iter_first_scan_;
   bool com_aux_vec_iter_first_scan_;
+  bool embedded_table_iter_first_scan_;
   bool rowkey_vid_iter_first_scan_;
   bool data_filter_iter_first_scan_;
   bool func_lookup_first_scan_;
@@ -550,6 +569,7 @@ private:
   ObVectorQueryConditions query_cond_;
   int64_t dim_;
   ObExpr* search_vec_;
+  ObString hybrid_search_vec_;
   ObExpr* distance_calc_;
   bool is_primary_pre_with_rowkey_with_filter_;
   bool go_brute_force_;
@@ -566,15 +586,16 @@ private:
   bool idx_iter_first_scan_;
   common::hash::ObHashMap<int64_t, double*> rel_map_;
   bool use_vid_;
+  bool is_hybrid_;
+  float distance_threshold_;
 
 private:
 
   struct BruteForceContext {
     ObString search_vec;
     uint64_t limit;
-    ObExprVectorDistance::ObVecDisType dis_type;
 
-    BruteForceContext() : limit(0), dis_type(ObExprVectorDistance::ObVecDisType::MAX_TYPE) {}
+    BruteForceContext() : limit(0) {}
   };
 
   struct DistanceResult {

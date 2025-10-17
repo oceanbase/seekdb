@@ -720,6 +720,8 @@ const char *const OB_VEC_KEY_COLUMN_NAME_PREFIX = "__key";
 const char *const OB_VEC_DATA_COLUMN_NAME_PREFIX = "__data";
 const char *const OB_VEC_SPIV_DIM_COLUMN_NAME_PREFIX = "__spiv_dim";
 const char *const OB_VEC_SPIV_VALUE_COLUMN_NAME_PREFIX = "__spiv_value";
+const char *const OB_HYBRID_VEC_CHUNK_VALUE_COLUMN_NAME_PREFIX = "__chunk";
+const char *const OB_HYBRID_VEC_EMBEDDED_VECTOR_COLUMN_NAME_PREFIX = "__embedded_vector";
 
 const char *const OB_VEC_IVF_CENTER_ID_COLUMN_NAME_PREFIX = "__ivf_center_id";
 const char *const OB_VEC_IVF_CENTER_VECTOR_COLUMN_NAME_PREFIX = "__ivf_center_vector";

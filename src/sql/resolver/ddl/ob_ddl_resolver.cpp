@@ -26,6 +26,7 @@
 #include "sql/resolver/ddl/ob_fts_parser_resolver.h"
 #include "share/ob_dynamic_partition_manager.h"
 #include "share/ob_license_utils.h"
+#include "share/vector_index/ob_plugin_vector_index_service.h"
 
 namespace oceanbase
 {
@@ -6714,15 +6715,18 @@ int ObDDLResolver::resolve_vec_index_constraint(
   } else {
     uint64_t tenant_id = column_schema.get_tenant_id();
     bool is_sparse_vec_col = false;
+    omt::ObTenantConfigGuard tenant_config(TENANT_CONF(MTL_ID()));
 
     bool is_collection_column = ob_is_collection_sql_type(column_schema.get_data_type());
-    if (!is_collection_column) {
+    // TODO(shancai): later support text and string type
+    bool is_text_column = ob_is_varchar_type(column_schema.get_data_type(), column_schema.get_collation_type());
+    if (!is_collection_column && !is_text_column) {
       ret = OB_ERR_BAD_VEC_INDEX_COLUMN;
       LOG_USER_ERROR(OB_ERR_BAD_VEC_INDEX_COLUMN,
           column_schema.get_column_name_str().length(),
           column_schema.get_column_name_str().ptr());
-      LOG_WARN("vector index can only be built on vector column", K(ret), K(column_schema));
-    } else if (OB_FAIL(ObVectorIndexUtil::is_sparse_vec_col(column_schema.get_extended_type_info(), is_sparse_vec_col))) {
+      LOG_WARN("vector index can only be built on vector column", K(ret), K(column_schema), K(ob_obj_type_class(column_schema.get_data_type())));
+    } else if (!is_text_column && OB_FAIL(ObVectorIndexUtil::is_sparse_vec_col(column_schema.get_extended_type_info(), is_sparse_vec_col))) {
       LOG_WARN("fail to check is sparse vec col", K(ret));
     } else if (!is_sparse_vec_col && !is_user_tenant(tenant_id)) {
 #ifndef OB_BUILD_SYS_VEC_IDX
@@ -6733,12 +6737,11 @@ int ObDDLResolver::resolve_vec_index_constraint(
     }
 
     if (OB_SUCC(ret)) {
-      const int64_t MAX_DIM_LIMITED = 4096;
       int64_t dim = 0;
 
-      if (!is_sparse_vec_col && OB_FAIL(ObVectorIndexUtil::get_vector_dim_from_extend_type_info(column_schema.get_extended_type_info(), dim))) {
+      if (!is_text_column && !is_sparse_vec_col && OB_FAIL(ObVectorIndexUtil::get_vector_dim_from_extend_type_info(column_schema.get_extended_type_info(), dim))) {
         LOG_WARN("fail to get vector dim", K(ret), K(column_schema));
-      } else if (!is_sparse_vec_col && dim > MAX_DIM_LIMITED) {
+      } else if (!is_text_column && !is_sparse_vec_col && dim > MAX_DIM_LIMITED) {
         ret = OB_NOT_SUPPORTED;
         LOG_WARN("vector index dim larger than 4096 is not supported", K(ret));
         LOG_USER_ERROR(OB_NOT_SUPPORTED, "vec index dim larger than 4096 is");

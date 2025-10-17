@@ -5387,7 +5387,8 @@ int ObStaticEngineCG::generate_normal_tsc(ObLogTableScan &op, ObTableScanSpec &s
         const bool is_vec_data_complement = (ddl_table_schema->is_vec_index_snapshot_data_type() ||
                                              ddl_table_schema->is_vec_ivfflat_index() ||
                                              ddl_table_schema->is_vec_ivfsq8_index() ||
-                                             ddl_table_schema->is_vec_ivfpq_index());
+                                             ddl_table_schema->is_vec_ivfpq_index() ||
+                                             ddl_table_schema->is_hybrid_vec_index_embedded_type());
         if (!is_vec_data_complement) {
           spec.need_check_outrow_lob_ = true;
           spec.lob_inrow_threshold_ = ddl_table_schema->get_lob_inrow_threshold();

@@ -103,12 +103,13 @@ struct ObRawFilterMonotonicity
 };
 enum ObVectorAuxTableIdx //FARM COMPAT WHITELIST
 {
-  VEC_FIRST_AUX_TBL_IDX = 0,  // HNSW_DELTA_BUF_TABLE  or  IVF_CENTROID_TABLE
+  VEC_FIRST_AUX_TBL_IDX = 0,  // HNSW_DELTA_BUF_TABLE  or  IVF_CENTROID_TABLE or HNSW_HYBRID_LOG_TABLE
   VEC_SECOND_AUX_TBL_IDX = 1, // HNSW_INDEX_ID_TABLE   or  IVF_CID_VEC_TABLE   or  IVF_PQ_CODE_TABLE
   VEC_THIRD_AUX_TBL_IDX = 2,  // HNSW_SNAPSHOT_DATA_TABLE  or  IVF_ROWKEY_CID_TABLE  or  IVF_PQ_ROWKEY_CID_TABLE
   VEC_FOURTH_AUX_TBL_IDX = 3, // HNSW_ROWKEY_VID_TABLE     or  IVF_SQ_META_TABLE     or  IVF_PQ_ID_TABLE
   VEC_FIFTH_AUX_TBL_IDX = 4,  // HNSW_VID_ROWKEY_TABLE
-  VEC_MAX_AUX_TBL_IDX = 5
+  VEC_SIXTH_AUX_TBL_IDX = 5,  // HNSW_HYBRID_EMBEDDED_TABLE
+  VEC_MAX_AUX_TBL_IDX = 6
 };
 
 enum ObVectorSPIVColumnIdx
@@ -120,19 +121,27 @@ enum ObVectorSPIVColumnIdx
   SPIV_MAX_COL_CNT = 3
 };
 
+/*
+ * hybrid log table reuse delta table col's enum
+ * hybrid embedded table has vid and vector col
+ */
+static const int HNSW_HYBRID_COL_CNT = 2;
+
 enum ObVectorHNSWColumnIdx
 {
   // for HNSW
   HNSW_DELTA_VID_COL = 0,
   HNSW_DELTA_TYPE_COL = 1,
-  HNSW_DELTA_VECTOR_COL = 2,
+  HNSW_DELTA_VECTOR_COL = 2, // chunk col when is hybrid index
   HNSW_INDEX_ID_VID_COL = 3,
   HNSW_INDEX_ID_TYPE_COL = 4,
   HNSW_INDEX_ID_VECTOR_COL = 5,
   HNSW_INDEX_ID_SCN_COL = 6,
   HNSW_SNAPSHOT_KEY_COL = 7,
   HNSW_SNAPSHOT_DATA_COL = 8,
-  HNSW_MAX_COL_CNT = 9,
+  HNSW_HYBRID_EMDEDDED_VID_COL = 9, //FARM COMPAT WHITELIST
+  HNSW_HYBRID_EMDEDDED_VECTOR_COL = 10, //FARM COMPAT WHITELIST
+  HNSW_MAX_COL_CNT = 11,
 };
 
 enum ObVectorIVFFlatColumnIdx
@@ -232,7 +241,8 @@ struct ObVecIndexInfo
     is_multi_value_index_(false),
     is_spatial_index_(false),
     can_extract_range_(false),
-    vec_index_name_()
+    vec_index_name_(),
+    is_hybrid_index(false)
   { }
   ~ObVecIndexInfo() {}
 
@@ -292,8 +302,8 @@ struct ObVecIndexInfo
   ObColumnRefRawExpr *target_vec_column_;
   ObColumnRefRawExpr *vec_id_column_;
   // add all aux tid into array
-  common::ObSEArray<uint64_t, 5, common::ModulePageAllocator, true> aux_table_id_;
-  common::ObSEArray<ObColumnRefRawExpr*, 10, common::ModulePageAllocator, true> aux_table_column_;
+  common::ObSEArray<uint64_t, 6, common::ModulePageAllocator, true> aux_table_id_;
+  common::ObSEArray<ObColumnRefRawExpr*, 12, common::ModulePageAllocator, true> aux_table_column_;
   common::ObSEArray<ObColumnRefRawExpr*, 4, common::ModulePageAllocator, true> extra_info_columns_;
 
   uint64_t main_table_tid_;
@@ -308,6 +318,7 @@ struct ObVecIndexInfo
   bool is_spatial_index_;
   bool can_extract_range_;
   ObString vec_index_name_;
+  bool is_hybrid_index;
 };
 
 class ObLogTableScan : public ObLogicalOperator
@@ -938,6 +949,12 @@ public:
                                             TableItem *table_item,
                                             ObColumnRefRawExpr *&snapshot_key_column,
                                             ObColumnRefRawExpr *&snapshot_data_column);
+  int prepare_hnsw_embedded_tbl_access_exprs(const ObTableSchema *embedded_table,
+                                             const ObTableSchema *table_schema,
+                                             ObRawExprFactory *expr_factory,
+                                             TableItem *table_item,
+                                             ObColumnRefRawExpr *&embedded_vid_column,
+                                             ObColumnRefRawExpr *&embedded_vector_column);
   int prepare_hnsw_index_id_col();
   inline bool need_doc_id_index_back() const
   {

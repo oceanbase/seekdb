@@ -121,6 +121,7 @@ int ObPLParser::fast_parse(const ObString &query,
         parse_result.param_node_num_ = parse_ctx.param_node_num_;
         parse_result.param_nodes_ = parse_ctx.param_nodes_;
         parse_result.tail_param_node_ = parse_ctx.tail_param_node_;
+        parse_result.contain_sensitive_data_ = parse_ctx.contain_sensitive_data_;
       }
     }
   }
@@ -135,6 +136,7 @@ int ObPLParser::parse(const ObString &stmt_block,
   ACTIVE_SESSION_FLAG_SETTER_GUARD(in_pl_parse);
   int ret = OB_SUCCESS;
   bool is_include_old_new_in_trigger = false;
+  bool contain_sensitive_data = false;
   ObQuestionMarkCtx question_mark_ctx;
   if (OB_FAIL(parse_procedure(stmt_block,
                               orig_stmt_block,
@@ -143,7 +145,8 @@ int ObPLParser::parse(const ObString &stmt_block,
                               parse_result.is_for_trigger_,
                               parse_result.is_dynamic_sql_,
                               is_inner_parse,
-                              is_include_old_new_in_trigger))) {
+                              is_include_old_new_in_trigger,
+                              contain_sensitive_data))) {
     if (OB_SIZE_OVERFLOW != ret) {
       LOG_WARN("parse stmt block failed", K(ret), K(ObString(MIN(MAX_PRINT_LEN, stmt_block.length()) ,stmt_block.ptr())),
                                                   K(ObString(MIN(MAX_PRINT_LEN, orig_stmt_block.length()) ,orig_stmt_block.ptr())));
@@ -161,6 +164,7 @@ int ObPLParser::parse(const ObString &stmt_block,
     parse_result.no_param_sql_len_ = stmt_block.length();
     parse_result.end_col_ = stmt_block.length();
     parse_result.is_include_old_new_in_trigger_ = is_include_old_new_in_trigger;
+    parse_result.contain_sensitive_data_ = contain_sensitive_data;
   }
   return ret;
 }
@@ -172,7 +176,8 @@ int ObPLParser::parse_procedure(const ObString &stmt_block,
                                 bool is_for_trigger,
                                 bool is_dynamic,
                                 bool is_inner_parse,
-                                bool &is_include_old_new_in_trigger)
+                                bool &is_include_old_new_in_trigger,
+                                bool &contain_sensitive_data)
 {
   int ret = OB_SUCCESS;
   ObParseCtx parse_ctx;
@@ -243,6 +248,7 @@ int ObPLParser::parse_procedure(const ObString &stmt_block,
   } else {
     question_mark_ctx = parse_ctx.question_mark_ctx_;
     is_include_old_new_in_trigger = parse_ctx.is_include_old_new_in_trigger_;
+    contain_sensitive_data = parse_ctx.contain_sensitive_data_;
   }
   return ret;
 }
@@ -336,6 +342,33 @@ int ObPLParser::parse_stmt_block(ObParseCtx &parse_ctx, ObStmtNodeTree *&multi_s
     ret = OB_ERR_PARSER_INIT;
     LOG_WARN("failed to initialized parser", K(ret));
   } else if (OB_FAIL(obpl_parser_parse(&parse_ctx))) {
+    if (OB_ERR_PARSE_SQL == ret && parse_ctx.is_for_preprocess_) {
+      LOG_INFO("meet condition syntax, try preparse for condition compile",
+               K(ret), K(parse_ctx.is_for_preprocess_));
+      ObParseCtx pre_parse_ctx;
+      memset(&pre_parse_ctx, 0, sizeof(ObParseCtx));
+      pre_parse_ctx.global_errno_ = OB_SUCCESS;
+      pre_parse_ctx.mem_pool_ = parse_ctx.mem_pool_;
+      pre_parse_ctx.stmt_str_ = parse_ctx.stmt_str_;
+      pre_parse_ctx.stmt_len_ = parse_ctx.stmt_len_;
+      pre_parse_ctx.orig_stmt_str_ = parse_ctx.stmt_str_;
+      pre_parse_ctx.orig_stmt_len_ = parse_ctx.stmt_len_;
+      pre_parse_ctx.comp_mode_ = parse_ctx.comp_mode_;
+      pre_parse_ctx.is_inner_parse_ = parse_ctx.is_inner_parse_;
+      pre_parse_ctx.is_for_trigger_ = parse_ctx.is_for_trigger_;
+      pre_parse_ctx.is_for_preprocess_ = true;
+      pre_parse_ctx.connection_collation_ = parse_ctx.connection_collation_;
+      pre_parse_ctx.scanner_ctx_.sql_mode_ = parse_ctx.scanner_ctx_.sql_mode_;
+      pre_parse_ctx.contain_sensitive_data_ = parse_ctx.contain_sensitive_data_;
+      if (0 != obpl_parser_init(&pre_parse_ctx)) {
+        ret = OB_ERR_PARSER_INIT;
+        LOG_WARN("failed to initialized parser", K(ret));
+      } else if (OB_FAIL(obpl_parser_parse(&pre_parse_ctx))) {
+        LOG_WARN("failed to preparse", K(ret));
+      } else {
+        OX (multi_stmt = pre_parse_ctx.stmt_tree_);
+      }
+    }
     if (OB_FAIL(ret)) {
       if (OB_SIZE_OVERFLOW != ret) {
         LOG_WARN("failed to parse the statement",

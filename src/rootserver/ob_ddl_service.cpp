@@ -385,6 +385,9 @@ int ObDDLService::create_inner_expr_index(ObMySQLTransaction &trans,
   }
   if (OB_SUCC(ret)) {
     ObDDLOperator ddl_operator(*schema_service_, *sql_proxy_);
+    bool is_add_hybrid_embedded_vec_column = false;
+    const bool has_lob_in_origin_table = new_table_schema.has_lob_column(true/*ignore_unused_column*/) && new_table_schema.has_lob_aux_table();
+    bool is_add_lob = false;
     for (int64_t i = 0; OB_SUCC(ret) && i < new_columns.count(); ++i) {
       ObColumnSchemaV2 *new_column_schema = new_columns.at(i);
       if (OB_ISNULL(new_column_schema)) {
@@ -393,6 +396,15 @@ int ObDDLService::create_inner_expr_index(ObMySQLTransaction &trans,
       } else if (OB_FAIL(ddl_operator.insert_single_column(
               trans, new_table_schema, *new_column_schema))) {
         LOG_WARN("failed to create table schema, ", K(ret));
+      } else if (new_column_schema->is_hybrid_embedded_vec_column()) {
+        is_add_hybrid_embedded_vec_column = true;
+      }
+    }
+    if (OB_SUCC(ret)) {
+      if (!has_lob_in_origin_table && is_add_hybrid_embedded_vec_column &&
+          OB_FAIL(ObDDLService::create_aux_lob_table_if_need(new_table_schema, schema_guard, ddl_operator, trans,
+                                               true/*need_sync_schema_version*/, is_add_lob, is_add_hybrid_embedded_vec_column))) {
+          LOG_WARN("fail to create_aux_lob_table_if_need", K(ret), K(new_table_schema));
       }
     }
     if (OB_SUCC(ret)) {
@@ -7159,6 +7171,32 @@ int ObDDLService::generate_aux_index_schema_(
       index_schema.set_in_offline_ddl_white_list(true);
       nonconst_data_schema.set_in_offline_ddl_white_list(true);
     }
+
+    // for post-create hybrid vector index
+    if (OB_FAIL(ret)) {
+    } else if (gen_columns.empty()) {
+      // do nothing, skip
+    } else {
+      ObDDLOperator ddl_operator(*schema_service_, *sql_proxy_);
+      bool is_add_hybrid_embedded_vec_column = false;
+      const bool has_lob_in_origin_table = data_schema->has_lob_column(true/*ignore_unused_column*/) && data_schema->has_lob_aux_table();
+      bool is_add_lob = false;
+      for (int64_t i = 0; OB_SUCC(ret) && i < gen_columns.count(); ++i) {
+        ObColumnSchemaV2 *new_column_schema = gen_columns.at(i);
+        if (OB_ISNULL(new_column_schema)) {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("new column schema is null");
+        } else if (new_column_schema->is_hybrid_embedded_vec_column()) {
+          is_add_hybrid_embedded_vec_column = true;
+        }
+      }
+      if (!has_lob_in_origin_table && is_add_hybrid_embedded_vec_column &&
+          OB_FAIL(create_aux_lob_table_if_need(nonconst_data_schema, schema_guard, ddl_operator, trans,
+                                               true/*need_sync_schema_version*/, is_add_lob, is_add_hybrid_embedded_vec_column))) {
+          LOG_WARN("fail to create_aux_lob_table_if_need", K(ret), K(nonconst_data_schema));
+      }
+    }
+
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(nonconst_data_schema.check_create_index_on_hidden_primary_key(index_schema))) {
       LOG_WARN("failed to check create index on table", K(ret), K(index_schema));
@@ -12032,7 +12070,8 @@ int ObDDLService::create_aux_lob_table_if_need(ObTableSchema &data_table_schema,
                                                ObDDLOperator &ddl_operator,
                                                common::ObMySQLTransaction &trans,
                                                const bool need_sync_schema_version,
-                                               bool &is_add_lob)
+                                               bool &is_add_lob,
+                                               const bool is_hybrid_vector_column)
 {
   int ret = OB_SUCCESS;
   is_add_lob = false;
@@ -12044,7 +12083,7 @@ int ObDDLService::create_aux_lob_table_if_need(ObTableSchema &data_table_schema,
 
   if (OB_FAIL(ObMajorFreezeHelper::get_frozen_scn(tenant_id, frozen_scn))) {
     LOG_WARN("failed to get frozen status for create tablet", KR(ret), K(tenant_id));
-  } else if (OB_FAIL(build_aux_lob_table_schema_if_need(data_table_schema, aux_table_schemas))) {
+  } else if (OB_FAIL(build_aux_lob_table_schema_if_need(data_table_schema, aux_table_schemas, is_hybrid_vector_column))) {
     LOG_WARN("fail to build_aux_lob_table_schema_if_need", K(ret), K(data_table_schema));
   } else if (aux_table_schemas.count() == 0) {
     // no need create aux lob table, do nothing
@@ -20595,13 +20634,14 @@ int ObDDLService::create_user_hidden_table(const ObTableSchema &orig_table_schem
 
 int ObDDLService::build_aux_lob_table_schema_if_need(
       ObTableSchema &data_table_schema,
-      ObIArray<ObTableSchema> &table_schemas)
+      ObIArray<ObTableSchema> &table_schemas,
+      const bool force_generate_lob)
 {
   int ret = OB_SUCCESS;
   ObLobMetaBuilder lob_meta_builder(*this);
   ObLobPieceBuilder lob_piece_builder(*this);
   const uint64_t new_table_id = OB_INVALID_ID;
-  if (data_table_schema.has_lob_column(true/*ignore_unused_column*/)) {
+  if (force_generate_lob || data_table_schema.has_lob_column(true/*ignore_unused_column*/)) {
     HEAP_VARS_2((ObTableSchema, lob_meta_schema), (ObTableSchema, lob_piece_schema)) {
       if (OB_FAIL(lob_meta_builder.generate_aux_lob_meta_schema(
         schema_service_->get_schema_service(), data_table_schema, new_table_id, lob_meta_schema, true))) {
@@ -31795,8 +31835,20 @@ int ObDDLService::grant_revoke_user(
   } else {
     ObDDLSQLTransaction trans(schema_service_);
     int64_t refreshed_schema_version = 0;
+    uint64_t compat_version = 0;
     if (OB_FAIL(schema_guard.get_schema_version(tenant_id, refreshed_schema_version))) {
       LOG_WARN("failed to get tenant schema version", KR(ret), K(tenant_id));
+    } else if (OB_FAIL(GET_MIN_DATA_VERSION(tenant_id, compat_version))) {
+      LOG_WARN("fail to get data version", K(ret), K(tenant_id));
+    } else if (compat_version < DATA_VERSION_1_0_0_0
+               && !is_ora_mode
+               && (0 != (priv_set & OB_PRIV_CREATE_AI_MODEL) ||
+                   0 != (priv_set & OB_PRIV_ALTER_AI_MODEL) ||
+                   0 != (priv_set & OB_PRIV_DROP_AI_MODEL) ||
+                   0 != (priv_set & OB_PRIV_ACCESS_AI_MODEL))) {
+      ret = OB_NOT_SUPPORTED;
+      LOG_WARN("some column of user info is not empty when MIN_DATA_VERSION is below DATA_VERSION_1_0_0_0", K(ret), K(priv_set));
+      LOG_USER_ERROR(OB_NOT_SUPPORTED, "grant or revoke create/alter/drop/access ai model privilege");
     } else if (OB_FAIL(trans.start(sql_proxy_, tenant_id, refreshed_schema_version))) {
       LOG_WARN("Start transaction failed", KR(ret), K(tenant_id), K(refreshed_schema_version));
     } else {
@@ -36529,5 +36581,6 @@ int ObDDLService::submit_drop_lob_task_(ObMySQLTransaction &trans,
   }
   return ret;
 }
+
 } // end namespace rootserver
 } // end namespace oceanbase

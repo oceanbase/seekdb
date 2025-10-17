@@ -1056,7 +1056,8 @@ int ObTscCgService::extract_das_access_exprs(const ObLogTableScan &op,
               (static_cast<ObColumnRefRawExpr *>(expr)->is_doc_id_column() && !op.is_tsc_with_doc_id()))
           && !static_cast<ObColumnRefRawExpr *>(expr)->is_vec_hnsw_vid_column()
           && !static_cast<ObColumnRefRawExpr *>(expr)->is_vec_cid_column()
-          && !static_cast<ObColumnRefRawExpr *>(expr)->is_vec_pq_cids_column()) {
+          && !static_cast<ObColumnRefRawExpr *>(expr)->is_vec_pq_cids_column()
+          && !static_cast<ObColumnRefRawExpr *>(expr)->is_hybrid_embedded_vec_column()) {
         // do nothing.
       } else if (!cg_.opt_ctx_->is_online_ddl() && expr->is_column_ref_expr() && (static_cast<ObColumnRefRawExpr *>(expr)->is_vec_cid_column() || static_cast<ObColumnRefRawExpr *>(expr)->is_vec_pq_cids_column())) {
         share::schema::ObSchemaGetterGuard *schema_guard = cg_.opt_ctx_->get_schema_guard();
@@ -1931,6 +1932,7 @@ int ObTscCgService::generate_vec_aux_idx_tbl_ctdef(const ObLogTableScan &op,
                                                   ObDASScanCtDef *&second_aux_ctdef,
                                                   ObDASScanCtDef *&third_aux_ctdef,
                                                   ObDASScanCtDef *&forth_aux_ctdef,
+                                                  ObDASScanCtDef *&fifth_aux_ctdef,
                                                   ObStoragePushdownFlag& pushdown_flag)
 {
   int ret = OB_SUCCESS;
@@ -1945,6 +1947,9 @@ int ObTscCgService::generate_vec_aux_idx_tbl_ctdef(const ObLogTableScan &op,
     ObTSCIRScanType second_ir_scan_type = vc_info.is_hnsw_vec_scan() ? OB_VEC_IDX_ID_SCAN : OB_VEC_IVF_CID_VEC_SCAN;
     ObTSCIRScanType third_ir_scan_type = vc_info.is_hnsw_vec_scan() ? OB_VEC_SNAPSHOT_SCAN : OB_VEC_IVF_ROWKEY_CID_SCAN;
     ObTSCIRScanType forth_ir_scan_type = vc_info.is_hnsw_vec_scan() ? OB_VEC_ROWKEY_VID_SCAN : OB_VEC_IVF_SPECIAL_AUX_SCAN;
+    bool need_fifth_table = vc_info.is_hnsw_vec_scan() && vc_info.is_hybrid_index;
+    ObTSCIRScanType fifth_ir_scan_type = OB_VEC_EMBEDDED_SCAN;
+    ObVectorAuxTableIdx hybrid_embedded_tbl_idx = op.need_skip_rowkey_vid() ? VEC_FOURTH_AUX_TBL_IDX : VEC_SIXTH_AUX_TBL_IDX;
     if (OB_FAIL(generate_vec_aux_table_ctdef(op, first_ir_scan_type, vc_info.get_aux_table_id(ObVectorAuxTableIdx::VEC_FIRST_AUX_TBL_IDX), first_aux_ctdef,
                                             pushdown_flag, true))) {
       LOG_WARN("failed to generate vec aux idx tbl ctdef", K(ret), K(first_ir_scan_type));
@@ -1959,6 +1964,9 @@ int ObTscCgService::generate_vec_aux_idx_tbl_ctdef(const ObLogTableScan &op,
                OB_FAIL(generate_vec_aux_table_ctdef(op, forth_ir_scan_type, vc_info.get_aux_table_id(ObVectorAuxTableIdx::VEC_FOURTH_AUX_TBL_IDX), forth_aux_ctdef,
                                                                                   pushdown_flag, vc_info.is_hnsw_vec_scan()))) {
       LOG_WARN("failed to generate vec aux idx tbl ctdef", K(ret), K(forth_ir_scan_type));
+    } else if (need_fifth_table && OB_FAIL(generate_vec_aux_table_ctdef(op, fifth_ir_scan_type, vc_info.get_aux_table_id(hybrid_embedded_tbl_idx), fifth_aux_ctdef,
+                                                    pushdown_flag, true))) {
+      LOG_WARN("failed to generate vec aux idx tbl ctdef", K(ret), K(fifth_ir_scan_type));
     }
   }
 
@@ -2005,12 +2013,15 @@ int ObTscCgService::generate_vec_idx_ctdef(const ObLogTableScan &op,
   ObSqlSchemaGuard *schema_guard = cg_.opt_ctx_->get_sql_schema_guard();
   ObDASVecAuxScanCtDef *vec_scan_ctdef = nullptr;
   const ObTableSchema *main_index_table_schema = nullptr;
+  const ObTableSchema *hybrid_embedded_table_schema = nullptr;
   const ObTableSchema *data_table_schema = nullptr;
   ObDASSortCtDef *sort_ctdef = nullptr;
   int64_t dim = 0;
   bool is_aux_table_all_inited = false;
   const ObVecIndexInfo &vc_info = op.get_vector_index_info();
+  bool is_hybrid = vc_info.is_hybrid_index;
   ObVectorAuxTableIdx main_index_tid = ObVectorAuxTableIdx::VEC_FIRST_AUX_TBL_IDX;
+  ObVectorAuxTableIdx hybrid_embedded_tid = op.need_skip_rowkey_vid() ? VEC_FOURTH_AUX_TBL_IDX : VEC_SIXTH_AUX_TBL_IDX;
   const ObDMLStmt *stmt = nullptr;
   const ObVectorIndexQueryParam& query_param = vc_info.get_query_param();
 
@@ -2039,19 +2050,31 @@ int ObTscCgService::generate_vec_idx_ctdef(const ObLogTableScan &op,
   } else if (OB_ISNULL(main_index_table_schema)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("fail to get table schema", K(ret));
-  } else if (OB_FAIL(ObVectorIndexUtil::get_vector_index_column_dim(*main_index_table_schema, *data_table_schema, dim))) {
+  } else if (!is_hybrid && OB_FAIL(ObVectorIndexUtil::get_vector_index_column_dim(*main_index_table_schema, *data_table_schema, dim))) {
     LOG_WARN("fail to get vector_index_column dim", K(ret));
-  } else {
+  } else if (is_hybrid) {
+    if (schema_guard->get_table_schema(op.get_vector_index_info().get_aux_table_id(hybrid_embedded_tid), hybrid_embedded_table_schema)) {
+      LOG_WARN("get table schema failed", K(ret), K(op.get_vector_index_info().get_aux_table_id(hybrid_embedded_tid)));
+    } else if (OB_ISNULL(hybrid_embedded_table_schema)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("fail to get table schema", K(ret));
+    } else if (OB_FAIL(ObVectorIndexUtil::get_vector_index_column_dim(*hybrid_embedded_table_schema, dim))) {
+      LOG_WARN("fail to get vector_index_column dim", K(ret));
+    }
+  }
+
+  if (OB_SUCC(ret)) {
     ObDASBaseCtDef *inv_idx_scan_ctdef = root_ctdef; // for pre filter, its local index ctdef, for post filter, its delta_buf_scan_ctdef (vec index table ctdef)
     ObDASScanCtDef *first_aux_ctdef = nullptr;  // HNSW_DELTA_BUF_TABLE     | IVF_CENTROID_TABLE                              | SPIV_SCAN
     ObDASScanCtDef *second_aux_ctdef = nullptr; // HNSW_INDEX_ID_TABLE      | IVF_CID_VEC_TABLE or IVF_PQ_CODE_TABLE          | SPIV_ROWKEY_DOCID
     ObDASScanCtDef *third_aux_ctdef = nullptr;  // HNSW_SNAPSHOT_DATA_TABLE | IVF_ROWKEY_CID_TABLE or IVF_PQ_ROWKEY_CID_TABLE | SPIV_MAIN_TABLE
     ObDASScanCtDef *fourth_aux_ctdef = nullptr; // HNSW_ROWKEY_VID_TABLE    | null or IVF_SQ_META_TABLE or IVF_PQ_ID_TABLE | BLOCK_MAX_SCAN
+    ObDASScanCtDef *fifth_aux_ctdef = nullptr;  // HNSW_HYBRID_EMBEDDED_TABLE
     ObDASScanCtDef *com_aux_ctdef = nullptr;    // main table
     ObDASBaseCtDef *func_lookup_ctdef = nullptr;// functional lookup
     ObStoragePushdownFlag pushdown_flag = tsc_ctdef.scan_ctdef_.pd_expr_spec_.pd_storage_flag_;
     bool need_com_aux_ctdef = vc_info.is_hnsw_vec_scan() || vc_info.is_ivf_vec_scan();
-    if (OB_FAIL(generate_vec_aux_idx_tbl_ctdef(op, first_aux_ctdef, second_aux_ctdef, third_aux_ctdef, fourth_aux_ctdef, pushdown_flag))) {
+    if (OB_FAIL(generate_vec_aux_idx_tbl_ctdef(op, first_aux_ctdef, second_aux_ctdef, third_aux_ctdef, fourth_aux_ctdef, fifth_aux_ctdef, pushdown_flag))) {
       LOG_WARN("fail to generate_vec_aux_idx_tbl_ctdef", K(ret));
     } else if (OB_FAIL(need_com_aux_ctdef
     && generate_vec_aux_table_ctdef(op, ObTSCIRScanType::OB_VEC_COM_AUX_SCAN, vc_info.main_table_tid_, com_aux_ctdef, pushdown_flag, need_com_aux_ctdef))) {
@@ -2112,6 +2135,8 @@ int ObTscCgService::generate_vec_idx_ctdef(const ObLogTableScan &op,
       } else {
         vec_child_task_cnt = IVF_OTHERS;
       }
+      vec_scan_ctdef->is_hybrid_ = vc_info.is_hybrid_index;
+      vec_scan_ctdef->use_rowkey_vid_tbl_ = !op.need_skip_rowkey_vid();
 
       if (OB_ISNULL(vec_scan_ctdef->children_ = OB_NEW_ARRAY(ObDASBaseCtDef*, &ctdef_alloc, vec_child_task_cnt))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -2161,6 +2186,9 @@ int ObTscCgService::generate_vec_idx_ctdef(const ObLogTableScan &op,
           }
           if (vc_info.is_ivf_pq_scan() || vc_info.is_ivf_sq_scan()) {
             vec_scan_ctdef->children_[5] = com_aux_ctdef;
+          }
+          if (is_hybrid) {
+            vec_scan_ctdef->children_[6] = fifth_aux_ctdef;
           }
         }
         vec_scan_ctdef->dim_ = dim;
@@ -2748,6 +2776,7 @@ int ObTscCgService::extract_vec_ir_access_columns(
         }
         break;
       }
+      case ObTSCIRScanType::OB_VEC_EMBEDDED_SCAN:
       case ObTSCIRScanType::OB_VEC_COM_AUX_SCAN: {
         if (OB_FAIL(add_var_to_array_no_dup(access_exprs, static_cast<ObRawExpr*>(vec_info.target_vec_column_)))) {
           LOG_WARN("failed to push document id column to access exprs", K(ret));
@@ -3312,6 +3341,7 @@ int ObTscCgService::extract_vector_das_output_column_ids(const ObTableSchema &in
         }
         break;
       }
+      case ObTSCIRScanType::OB_VEC_EMBEDDED_SCAN:
       case ObTSCIRScanType::OB_VEC_COM_AUX_SCAN: {
         if (OB_FAIL(output_cids.push_back(
             static_cast<ObColumnRefRawExpr *>(vec_info.target_vec_column_)->get_column_id()))) {

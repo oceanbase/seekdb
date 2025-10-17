@@ -83,6 +83,7 @@ public:
   static int query_need_refresh_memdata(ObPluginVectorIndexAdaptor *adapter, ObLSID &ls_id);
 
   static int add_key_ranges(uint64_t table_id, ObRowkey& rowkey, storage::ObTableScanParam &scan_param);
+  static int add_key_ranges(uint64_t table_id, ObRowkey& start_key, ObRowkey& end_key, storage::ObTableScanParam &scan_param);
   static int iter_table_rescan(storage::ObTableScanParam &scan_param, common::ObNewRowIterator *iter);
 
   static int read_object_from_vid_rowkey_table_iter(ObObj *input_obj, 
@@ -104,7 +105,18 @@ public:
                                               int64_t extra_info_count,
                                               ObVecExtraInfoObj *output_extra_objs,
                                               bool &get_data);
+  static int read_object_from_embedded_table_iter(ObObj *&input_obj,
+                                                  int32_t data_table_rowkey_count,
+                                                  uint64_t table_id,
+                                                  storage::ObTableScanParam &scan_param,
+                                                  common::ObNewRowIterator *iter,
+                                                  ObIAllocator &allocator,
+                                                  ObObj &output_vec_obj,
+                                                  int64_t extra_column_count,
+                                                  ObVecExtraInfoObj *output_extra_info_objs,
+                                                  bool &get_data);
   static int64_t get_extra_column_count(const schema::ObTableParam &table_param, schema::ObIndexType type);
+  static int get_extra_column_count(ObPluginVectorIndexAdaptor &adapter, int &column_count);
   static int get_data_table_out_column_id(ObSEArray<uint64_t, 4> &vector_column_ids,
                                           uint64_t incr_index_table_id,
                                           uint64_t data_table_id,
@@ -114,7 +126,8 @@ public:
                                  ObIAllocator &allocator,
                                  int64_t extra_info_count,
                                  blocksstable::ObDatumRow *datum_row,
-                                 ObVecExtraInfoObj *out_extra_info_objs);
+                                 ObVecExtraInfoObj *out_extra_info_objs,
+                                 int offset = 1);
   static int read_vector_info(ObPluginVectorIndexAdaptor *adapter,
                               ObIAllocator &allocator,
                               ObLSID &ls_id,
@@ -130,7 +143,8 @@ public:
                                ObTableParam &table_param,
                                common::ObNewRowIterator *&scan_iter,
                                ObIArray<uint64_t> *out_column_ids = nullptr,
-                               const bool need_all_columns = false);
+                               const bool need_all_columns = false,
+                               const bool need_ora_scn = false);
 
   static int erase_ivf_build_helper(ObLSID ls_id, const ObIvfHelperKey &key);
   static int get_mem_context_detail_info(ObPluginVectorIndexService *service,
@@ -140,6 +154,7 @@ public:
                                          char *buf, int64_t buf_len, int64_t &pos);
 
 private:
+  static const int EMBEDDED_TABLE_BASE_COLUMN_CNT = 2;
   static int init_common_scan_param(storage::ObTableScanParam& scan_param,
                                     ObPluginVectorIndexAdaptor *adapter,
                                     SCN target_scn,
@@ -154,7 +169,9 @@ private:
                               schema::ObIndexType type,
                               ObPluginVectorIndexAdaptor *adapter,
                               ObIArray<uint64_t> *out_column_ids = nullptr,
-                              const bool need_all_columns = false);
+                              const bool need_all_columns = false,
+                              const bool need_ora_scn = false);
+  static int get_non_shared_index_aux_table_colum_count(schema::ObIndexType type, uint32 &col_cnt);
   static int get_non_shared_index_aux_table_rowkey_colum_count(schema::ObIndexType type, uint32 &col_cnt);
   static int get_special_index_aux_table_column_count(schema::ObIndexType type,
                                                       uint64_t tenant_id,

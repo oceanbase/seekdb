@@ -59,28 +59,60 @@ public:
   ObVectorIndexAdapterCandiate()
     : is_init_(true),
       is_valid_(true),
+      is_hybrid_(false),
       inc_adatper_guard_(),
       bitmp_adatper_guard_(),
-      sn_adatper_guard_()
+      sn_adatper_guard_(),
+      embedded_adatper_guard_()
   {}
 
   ~ObVectorIndexAdapterCandiate() {
     is_init_ = false;
     is_valid_ = false;
+    is_hybrid_ = false;
   }
 
-  TO_STRING_KV(K_(is_init), K_(is_valid), K_(inc_adatper_guard), K_(bitmp_adatper_guard), K_(sn_adatper_guard));
+  TO_STRING_KV(K_(is_init), K_(is_valid), K_(inc_adatper_guard), K_(bitmp_adatper_guard), K_(sn_adatper_guard), K_(embedded_adatper_guard));
 
 public:
   bool is_init_;
   bool is_valid_;
+  bool is_hybrid_;
   bool is_complete()
   {
-    return inc_adatper_guard_.is_valid() && bitmp_adatper_guard_.is_valid() && sn_adatper_guard_.is_valid();
+    return inc_adatper_guard_.is_valid() && bitmp_adatper_guard_.is_valid() && sn_adatper_guard_.is_valid() && (!is_hybrid_ || embedded_adatper_guard_.is_valid());
   }
   ObPluginVectorIndexAdapterGuard inc_adatper_guard_;
   ObPluginVectorIndexAdapterGuard bitmp_adatper_guard_;
   ObPluginVectorIndexAdapterGuard sn_adatper_guard_;
+  ObPluginVectorIndexAdapterGuard embedded_adatper_guard_;
+};
+
+struct ObAdapterMapKeyValue
+{
+public:
+  ObAdapterMapKeyValue(ObTabletID tablet_id, ObPluginVectorIndexAdaptor *adapter)
+      : tablet_id_(tablet_id),
+        adapter_(adapter)
+  {}
+  ObAdapterMapKeyValue()
+      : tablet_id_(),
+        adapter_(nullptr)
+  {}
+  TO_STRING_KV(K_(tablet_id), K_(adapter));
+
+  ObTabletID tablet_id_;
+  ObPluginVectorIndexAdaptor *adapter_;
+};
+
+class ObAdapterMapFunc
+{
+public:
+  ObAdapterMapFunc(ObIArray<ObAdapterMapKeyValue> &array) :array_(array) {}
+  ~ObAdapterMapFunc() {}
+  int operator()(const hash::HashMapPair<common::ObTabletID, ObPluginVectorIndexAdaptor*> &entry);
+private:
+  ObIArray<ObAdapterMapKeyValue> &array_;
 };
 
 typedef common::hash::ObHashMap<ObIvfHelperKey, ObIvfBuildHelper*> IvfVectorIndexHelperMap;
@@ -301,8 +333,9 @@ public:
     memory_context_(NULL),
     all_vsag_use_mem_(NULL),
     tenant_vec_async_task_sched_(nullptr),
-    is_vec_async_task_started_(false)
-
+    is_vec_async_task_started_(false),
+    kmeans_tg_id_(OB_INVALID_TG_ID),
+    embedding_tg_id_(OB_INVALID_TG_ID)
   {}
   virtual ~ObPluginVectorIndexService();
   int init(const uint64_t tenant_id,
@@ -344,8 +377,11 @@ public:
   ObFIFOAllocator &get_allocator() { return allocator_; }
 
   // feature interfaces
+  int get_kmeans_tg_id() { return kmeans_tg_id_; }
+  int get_embedding_tg_id() { return embedding_tg_id_; }
   ObVecIndexAsyncTaskHandler &get_vec_async_task_handle() { return vec_async_task_handle_; }
   ObKmeansBuildTaskHandler& get_kmeans_build_handler() { return kmeans_build_task_handler_; };
+  int get_embedding_task_handler(ObEmbeddingTaskHandler *&handler);
   LSIndexMgrMap &get_ls_index_mgr_map() { return index_ls_mgr_map_; };
   int get_adapter_inst_guard(ObLSID ls_id, ObTabletID tablet_id, ObPluginVectorIndexAdapterGuard &adapter_guard);
   int get_build_helper_inst_guard(ObLSID ls_id, const ObIvfHelperKey &key, ObIvfBuildHelperGuard &helper_guard);
@@ -414,6 +450,7 @@ public:
   lib::MemoryContext &get_memory_context() { return memory_context_; }
   uint64_t *get_all_vsag_use_mem() { return all_vsag_use_mem_; }
 
+  int start_kmeans_tg();
   TO_STRING_KV(K_(is_inited), K_(has_start), K_(tenant_id),
                K_(is_ls_or_tablet_changed), KP_(schema_service), KP_(ls_service));
 private:
@@ -446,6 +483,10 @@ private:
   bool is_vec_async_task_started_;
   ObVecIndexAsyncTaskHandler vec_async_task_handle_;
   ObKmeansBuildTaskHandler kmeans_build_task_handler_;
+  ObEmbeddingTaskHandler embedding_task_handler_;
+  // TODO(haohan): shared_tg_id for kmeans and embedding thread pool
+  int kmeans_tg_id_;
+  int embedding_tg_id_;
 
 public:
   volatile bool stop_flag_;

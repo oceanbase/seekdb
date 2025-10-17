@@ -95,6 +95,7 @@ enum ObKmeansAlgoType
 };
 const static double VEC_ESTIMATE_MEMORY_FACTOR = 2.0;
 constexpr static uint32_t VEC_INDEX_MIN_METRIC = 8;
+constexpr static int64_t MAX_DIM_LIMITED = 4096;
 constexpr const static char* const VEC_INDEX_ALGTH[ObVectorIndexDistAlgorithm::VIDA_MAX] = {
   "l2",
   "ip",
@@ -128,6 +129,16 @@ enum ObVecIdxAdaTryPath : uint8_t //FARM COMPAT WHITELIST
   VEC_PATH_MAX = 5
 };
 
+enum ObVectorIndexSyncIntervalType
+{
+  VSIT_IMMEDIATE = 0,  // 'immediate'
+  VSIT_MANUAL = 1,     // 'manual'
+  VSIT_NUMERIC = 2,    // numeric value (seconds)
+  VSIT_MAX
+};
+
+static const int64_t OB_MAX_ENDPOINT_LENGTH = 512;
+
 struct ObIvfConstant {
   static const int SQ8_META_STEP_SIZE = 255;
   static const int SQ8_META_ROW_COUNT = 3; // max, min, step
@@ -155,9 +166,12 @@ struct ObVectorIndexParam
     type_(VIAT_MAX), lib_(VIAL_MAX), dim_(0), m_(0), ef_construction_(0), ef_search_(0),
     nlist_(0), sample_per_nlist_(0), extra_info_max_size_(0), extra_info_actual_size_(0),
     refine_type_(0), bq_bits_query_(DEFAULT_BQ_BITS_QUERY),
-    refine_k_(DEFAULT_REFINE_K), bq_use_fht_(false), nbits_(0), prune_(false), refine_(false), ob_sparse_drop_ratio_build_(0), window_size_(DEFAULT_WINDOW_SIZE),
-    ob_sparse_drop_ratio_search_(0)
-  {}
+    refine_k_(DEFAULT_REFINE_K), bq_use_fht_(false), sync_interval_type_(VSIT_MAX), sync_interval_value_(0),
+    nbits_(0), prune_(false), refine_(false), ob_sparse_drop_ratio_build_(0), window_size_(DEFAULT_WINDOW_SIZE),
+    ob_sparse_drop_ratio_search_(0), similarity_threshold_(0)
+  {
+    MEMSET(endpoint_, 0, sizeof(endpoint_));
+  }
   void reset() {
     type_ = VIAT_MAX;
     lib_ = VIAL_MAX;
@@ -174,12 +188,16 @@ struct ObVectorIndexParam
     bq_bits_query_ = DEFAULT_BQ_BITS_QUERY;
     refine_k_= DEFAULT_REFINE_K;
     bq_use_fht_ = false;
-    nbits_ = 0;
+    sync_interval_type_ = VSIT_MAX;
+    sync_interval_value_ = 0;
     prune_ = false;
     refine_ = false;
     ob_sparse_drop_ratio_build_ = 0;
     window_size_ = DEFAULT_WINDOW_SIZE;
     ob_sparse_drop_ratio_search_ = 0;
+    MEMSET(endpoint_, 0, sizeof(endpoint_));
+    nbits_ = 0;
+    similarity_threshold_ = 0;
   };
   int assign(const ObVectorIndexParam &other) {
     int ret = OB_SUCCESS;
@@ -199,11 +217,15 @@ struct ObVectorIndexParam
     refine_k_ = other.refine_k_;
     bq_use_fht_ = other.bq_use_fht_;
     nbits_ = other.nbits_;
+    sync_interval_type_ = other.sync_interval_type_;
+    sync_interval_value_ = other.sync_interval_value_;
     prune_ = other.prune_;
     refine_ = other.refine_;
     ob_sparse_drop_ratio_build_ = other.ob_sparse_drop_ratio_build_;
     window_size_ = other.window_size_;
     ob_sparse_drop_ratio_search_ = other.ob_sparse_drop_ratio_search_;
+    similarity_threshold_ = other.similarity_threshold_;
+    MEMCPY(endpoint_, other.endpoint_, sizeof(endpoint_));
     return ret;
   };
   ObVectorIndexAlgorithmType type_;
@@ -223,6 +245,9 @@ struct ObVectorIndexParam
   int16_t bq_bits_query_;
   float refine_k_;
   bool bq_use_fht_;
+  ObVectorIndexSyncIntervalType sync_interval_type_;
+  int64_t sync_interval_value_;  // used when sync_interval_type_ is VSIT_NUMERIC
+  char endpoint_[OB_MAX_ENDPOINT_LENGTH];
   int64_t nbits_;
   // param for sparse vector
   bool prune_;
@@ -230,11 +255,14 @@ struct ObVectorIndexParam
   float ob_sparse_drop_ratio_build_;
   int window_size_;
   float ob_sparse_drop_ratio_search_;
+  float similarity_threshold_;
   OB_UNIS_VERSION(1);
 public:
   TO_STRING_KV(K_(type), K_(lib), K_(dist_algorithm), K_(dim), K_(m), K_(ef_construction), K_(ef_search),
     K_(nlist), K_(sample_per_nlist), K_(extra_info_max_size), K_(extra_info_actual_size),
-    K_(refine_type), K_(bq_bits_query), K_(refine_k), K_(bq_use_fht), K_(nbits), K_(prune), K_(refine), K_(ob_sparse_drop_ratio_build),K_(window_size), K_(ob_sparse_drop_ratio_search));
+    K_(refine_type), K_(bq_bits_query), K_(refine_k), K_(bq_use_fht), K_(sync_interval_type), K_(sync_interval_value),
+    K_(endpoint), K_(nbits), K_(prune), K_(refine), K_(ob_sparse_drop_ratio_build),K_(window_size), K_(ob_sparse_drop_ratio_search),
+    K_(similarity_threshold));
 
 public:
   static int build_search_param(const ObVectorIndexParam &index_param,
@@ -279,6 +307,8 @@ static constexpr double DEFAULT_IVFPQ_SELECTIVITY_RATE = 0.9;
            vector_index_param_.type_ == ObVectorIndexAlgorithmType::VIAT_HNSW_BQ;
   }
   inline bool is_hnsw_bq_scan() const { return vector_index_param_.type_ == ObVectorIndexAlgorithmType::VIAT_HNSW_BQ; }
+  inline bool is_hybrid_index() const { return strlen(vector_index_param_.endpoint_) > 0; }
+
   int64_t get_row_count() { return row_count_; }
   bool is_pre_filter() const { return vec_idx_type_ == ObVecIndexType::VEC_INDEX_PRE; }
   bool is_post_filter() const { return vec_idx_type_ == ObVecIndexType::VEC_INDEX_POST_WITHOUT_FILTER || vec_idx_type_ == ObVecIndexType::VEC_INDEX_POST_ITERATIVE_FILTER; }
@@ -414,9 +444,20 @@ public:
       ObVectorIndexType vector_index_type,
       ObVectorIndexParam &param,
       const bool set_default=true);
+  static int parse_time_string_to_seconds(const ObString &time_str, int64_t &seconds);
   static int resolve_query_param(
       const ParseNode *option_node,
       ObVectorIndexQueryParam& query_param);
+  static int get_vector_from_text_by_embedding(
+      ObIAllocator &allocator,
+      const ObString &query_text,
+      const ObString &param_str,
+      ObString &output_vec);
+  static int get_vector_from_vector_array_string(
+      ObIAllocator &allocator,
+      const ObString &vector_array_str,
+      const ObString &param_str,
+      ObString &output_vec);
   static int filter_index_param(
     const ObString &index_param_str,
     const char *to_filter,
@@ -499,6 +540,17 @@ public:
       const uint64_t column_id,
       uint64_t &tid,
       const bool allow_unavailable = false);
+  static int check_hybrid_embedded_vec_table_readable(
+      share::schema::ObSchemaGetterGuard *schema_guard,
+      const ObTableSchema &data_table_schema,
+      uint64_t &tid,
+      const bool allow_unavailable = false);
+  static int check_hybrid_embedded_vec_cid_table_readable(
+      share::schema::ObSchemaGetterGuard *schema_guard,
+      const ObTableSchema &data_table_schema,
+      const uint64_t column_id,
+      uint64_t &tid,
+      const bool allow_unavailable = false);
   static int get_right_index_tid_in_rebuild(
       share::schema::ObSchemaGetterGuard *schema_guard,
       const ObTableSchema &data_table_schema,
@@ -524,7 +576,9 @@ public:
     const int64_t col_id,
     uint64_t &inc_tid,
     uint64_t &vbitmap_tid,
-    uint64_t &snapshot_tid);
+    uint64_t &snapshot_tid,
+    uint64_t &emdedded_tid,
+    bool is_hybrid);
   static int get_vector_index_tid_with_index_prefix(
     share::schema::ObSchemaGetterGuard *schema_guard,
     const ObTableSchema &data_table_schema,
@@ -538,6 +592,18 @@ public:
       const ObIndexType index_type,
       const int64_t vec_cid_col_id,
       uint64_t &tid);
+  static int get_hybrid_embedded_vector_tid_check_valid(
+      sql::ObSqlSchemaGuard *schema_guard,
+      const ObTableSchema &data_table_schema,
+      const ObIndexType index_type,
+      const int64_t embedded_col_id,
+      uint64_t &tid);
+  static int check_index_table_has_hybrid_vec_column(
+      const ObTableSchema &index_table_schema,
+      bool &res);
+  static int get_vec_dis_type_from_dis_algorithm(
+      ObVectorIndexDistAlgorithm dis_Algorithm,
+      int64_t &vec_dis_type);
   static int get_vector_index_param(
       share::schema::ObSchemaGetterGuard *schema_guard,
       const ObTableSchema &data_table_schema,
@@ -633,10 +699,10 @@ public:
       const int64_t schema_count,
       int64_t &rowkey_vid_ith, int64_t &vid_rowkey_ith,
       int64_t &domain_index_ith, int64_t &index_id_ith,
-      int64_t &snapshot_data_ith, int64_t &centroid_ith,
-      int64_t &cid_vector_ith, int64_t &rowkey_cid_ith,
-      int64_t &sq_meta_ith, int64_t &pq_centroid_ith,
-      int64_t &pq_code_ith);
+      int64_t &snapshot_data_ith, int64_t &embedded_vec_ith,
+      int64_t &centroid_ith, int64_t &cid_vector_ith,
+      int64_t &rowkey_cid_ith, int64_t &sq_meta_ith,
+      int64_t &pq_centroid_ith, int64_t &pq_code_ith);
 
   static int add_dbms_vector_jobs(common::ObISQLClient &sql_client, const uint64_t tenant_id,
                                   const uint64_t vidx_table_id,
@@ -751,6 +817,10 @@ public:
                                     const sql::ObDMLStmt *&stmt);
   static int set_adaptive_try_path(ObVecIdxExtraInfo& vc_info, const bool is_primary_idx, bool is_ipivf=false);
   static bool is_sindi_index(const ObTableSchema *vec_index_schema);
+  static int check_need_embedding_when_rebuild(const ObString &old_idx_params,
+                                               const ObString &new_idx_params,
+                                               const ObTableSchema &index_table_schema,
+                                               bool &need_embedding_when_rebuild);
 private:
   static void save_column_schema(
       const ObColumnSchemaV2 *&old_column,
@@ -761,6 +831,7 @@ private:
       common::ObIAllocator &allocator,
       const int64_t vector_dim,
       const bool is_sparse_vec,
+      const bool is_text_col,
       ObString &index_params,
       ObIndexType &out_index_type,
       const ObTableSchema &tbl_schema,
@@ -799,6 +870,11 @@ private:
   static bool check_is_match_index_type(
       const ObIndexType type1, const ObIndexType type2);
   static int is_int_val(const ObString &str, bool &is_int);
+  static int cast_vector_array_str_to_float_array_binary(
+      ObIAllocator &allocator,
+      const ObString &vector_array_str,
+      int64_t dim,
+      ObString &output_vec);
 };
 
 // For vector index snapshot write data
