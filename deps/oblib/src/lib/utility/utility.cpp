@@ -1182,7 +1182,7 @@ static int use_daemon()
   return ret;
 }
 
-int start_daemon(const char *pidfile)
+int start_daemon(const char *pidfile, bool skip_daemon)
 {
   int ret = OB_SUCCESS;
 
@@ -1195,7 +1195,7 @@ int start_daemon(const char *pidfile)
   }
 
   // start daemon
-  if (OB_SUCC(ret) && OB_FAIL(use_daemon())) {
+  if (OB_SUCC(ret) && !skip_daemon && OB_FAIL(use_daemon())) {
     LOG_ERROR("create daemon process fail", K(ret));
   }
 

@@ -70,6 +70,9 @@ static pybind11::module builtins = pybind11::module::import("builtins");
 
 #define MPRINT(format, ...) fprintf(stderr, format "\n", ##__VA_ARGS__)
 
+ObSqlString pid_file_name;
+bool pid_locked = false;
+
 static int to_absolute_path(const char *cwd, ObSqlString &dir)
 {
   int ret = OB_SUCCESS;
@@ -115,7 +118,6 @@ void ObLiteEmbed::open(const char* db_dir)
 int ObLiteEmbed::do_open_(const char* db_dir)
 {
   int ret = OB_SUCCESS;
-  GCONF._enable_async_load_sys_package = true;
   ObServerOptions opts;
   opts.port_ = 11002;
   opts.use_ipv6_ = false;
@@ -127,6 +129,7 @@ int ObLiteEmbed::do_open_(const char* db_dir)
   ObSqlString work_abs_dir;
   ObSqlString slog_dir;
   ObSqlString sstable_dir;
+  int64_t start_time = ObTimeUtility::current_time();
 
   if (getcwd(buffer, sizeof(buffer)) == nullptr) {
     MPRINT("getcwd failed %d %s", errno, strerror(errno));
@@ -143,6 +146,8 @@ int ObLiteEmbed::do_open_(const char* db_dir)
     MPRINT("get data dir absolute path failed %d", ret);
   } else if (OB_FAIL(to_absolute_path(work_abs_dir.ptr(), opts.redo_dir_))) {
     MPRINT("get redo dir absolute path failed %d", ret);
+  } else if (OB_FAIL(pid_file_name.assign_fmt("%s/run/oblite.pid", opts.base_dir_.ptr()))) {
+    MPRINT("get pidfile absolute path failed %d", ret);
   }
 
   if (OB_FAIL(ret)) {
@@ -173,6 +178,9 @@ int ObLiteEmbed::do_open_(const char* db_dir)
     MPRINT("create dir failed %d", ret);
   } else if (OB_FAIL(FileDirectoryUtils::create_full_path("./log"))) {
     MPRINT("create dir failed %d", ret);
+  } else if (OB_FAIL(start_daemon(pid_file_name.ptr(), true))) {
+    MPRINT("db %s opened by other process", db_dir);
+  } else if (FALSE_IT(pid_locked = true)) {
   } else {
     OB_LOGGER.set_log_level("INFO");
     ObSqlString log_file;
@@ -195,7 +203,7 @@ int ObLiteEmbed::do_open_(const char* db_dir)
       ret = OB_ERR_UNEXPECTED;
       MPRINT("change dir failed %s, directory: %s", strerror(errno), work_abs_dir.ptr());
     } else {
-      LOG_INFO("observer start finish");
+      FLOG_INFO("observer start finish wait service ", "cost", ObTimeUtility::current_time() - start_time);
       while (true) {
         if (GCTX.root_service_->is_full_service()) {
           break;
@@ -203,7 +211,7 @@ int ObLiteEmbed::do_open_(const char* db_dir)
           ob_usleep(100 * 1000);
         }
       }
-      LOG_INFO("oblite start success");
+      FLOG_INFO("oblite start success ", "cost", ObTimeUtility::current_time()-start_time);
     }
     dup2(saved_stdout, STDOUT_FILENO);
   }
@@ -214,6 +222,10 @@ void ObLiteEmbed::close()
 {
   //OBSERVER.set_stop();
   //th_.join();
+  if (pid_locked) {
+    unlink(pid_file_name.ptr());
+  }
+  FLOG_INFO("oblite close");
   _Exit(0);
 }
 
@@ -224,6 +236,10 @@ std::shared_ptr<ObLiteEmbedConn> ObLiteEmbed::connect(const char* db_name)
   common::sqlclient::ObISQLConnection *inner_conn = nullptr;
   uint32_t sid = sql::ObSQLSessionInfo::INVALID_SESSID;
   sql::ObSQLSessionInfo *session = NULL;
+  const ObUserInfo* user_info = NULL;
+  ObSchemaGetterGuard schema_guard;
+  ObPrivSet db_priv_set = OB_PRIV_SET_EMPTY;
+  int64_t start_time = ObTimeUtility::current_time();
   if (OB_ISNULL(GCTX.sql_proxy_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("db not init", KR(ret));
@@ -234,25 +250,44 @@ std::shared_ptr<ObLiteEmbedConn> ObLiteEmbed::connect(const char* db_name)
     session = nullptr;
     LOG_WARN("Failed to create session", KR(ret), K(sid));
   } else if (FALSE_IT(embed_conn->get_session() = session)) {
-  } else if (OB_FAIL(session->load_default_sys_variable(false, false))) {
-    LOG_WARN("Failed to load default sys variable", KR(ret));
-  } else if (OB_FAIL(session->load_default_configs_in_pc())) {
-    LOG_WARN("Failed to load default configs in pc", KR(ret));
-  } else if (OB_FAIL(session->init_tenant(OB_SYS_TENANT_NAME, OB_SYS_TENANT_ID))) {
-     LOG_WARN("Failed to init tenant in session", K(ret));
-  } else if (OB_FAIL(session->set_default_database(db_name))) {
-    LOG_WARN("Failed to set default database", KR(ret));
-  } else if (FALSE_IT(session->set_user_session())) {
-  } else if (OB_FAIL(session->set_autocommit(false))) {
-    LOG_WARN("Faield to set autocommit", KR(ret));
-  } else if (OB_FAIL(OBSERVER.get_inner_sql_conn_pool().acquire(session, inner_conn))) {
+  } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(OB_SYS_TENANT_ID, schema_guard))) {
+    LOG_WARN("failed to get schema guard", KR(ret));
+  } else if (OB_FAIL(schema_guard.get_user_info(OB_SYS_TENANT_ID, OB_SYS_USER_ID, user_info))) {
+    LOG_WARN("failed to get user info", KR(ret));
+  } else if (OB_ISNULL(user_info)) {
+    ret = OB_SCHEMA_ERROR;
+    LOG_WARN("schema user info is null", KR(ret));
+  }
+  if (OB_SUCC(ret)) {
+    OZ (session->load_default_sys_variable(false, true));
+    OZ (session->load_default_configs_in_pc());
+    OZ (session->init_tenant(OB_SYS_TENANT_NAME, OB_SYS_TENANT_ID));
+    OZ (session->load_all_sys_vars(schema_guard));
+    OZ (session->set_default_database(db_name));
+    OX (session->set_user_session());
+    OZ (session->set_autocommit(false));
+    OZ (session->set_user(
+      user_info->get_user_name(), user_info->get_host_name_str(), user_info->get_user_id()));
+    OX (session->set_priv_user_id(user_info->get_user_id()));
+    OX (session->set_user_priv_set(user_info->get_priv_set()));
+    OX (session->init_use_rich_format());
+    OZ (schema_guard.get_db_priv_set(OB_SYS_TENANT_ID, user_info->get_user_id(), db_name, db_priv_set));
+    OX (session->set_db_priv_set(db_priv_set));
+    OX (session->get_enable_role_array().reuse());
+    for (int i = 0; OB_SUCC(ret) && i < user_info->get_role_id_array().count(); ++i) {
+      if (user_info->get_disable_option(user_info->get_role_id_option_array().at(i)) == 0) {
+        OZ (session->get_enable_role_array().push_back(user_info->get_role_id_array().at(i)));
+      }
+    }
+  }
+  if (FAILEDx(OBSERVER.get_inner_sql_conn_pool().acquire(session, inner_conn))) {
     LOG_WARN("acquire conn failed", KR(ret));
   } else if (FALSE_IT(embed_conn->get_conn() = static_cast<observer::ObInnerSQLConnection*>(inner_conn))) {
   }
   if (OB_FAIL(ret)) {
     throw std::runtime_error("connect failed " + std::to_string(ob_errpkt_errno(ret, false)) + " " + std::string(ob_errpkt_strerror(ret, false)));
   }
-  LOG_INFO("connect", K(db_name), K(sid), KP(session), KPC(session));
+  FLOG_INFO("connect", K(db_name), K(sid), KP(session), KPC(session), "cost", ObTimeUtility::current_time()-start_time);
   return embed_conn;
 }
 
@@ -288,6 +323,7 @@ int ObLiteEmbedConn::execute(const char *sql, uint64_t &affected_rows, int64_t &
   lib::ObMemAttr mem_attr(OB_SYS_TENANT_ID, "EmbedAlloc");
   result_seq = ATOMIC_AAF(&result_seq_, 1);
   ObCurTraceId::init(GCTX.self_addr());
+  int64_t start_time = ObTimeUtility::current_time();
   reset_result();
   if (OB_ISNULL(conn_)) {
     ret = OB_ERR_UNEXPECTED;
@@ -305,7 +341,9 @@ int ObLiteEmbedConn::execute(const char *sql, uint64_t &affected_rows, int64_t &
     } else {
       affected_rows = res.result_set().get_affected_rows();
     }
-    LOG_INFO("execute", K(sql), K(conn_->is_in_trans()), K(session_->is_in_transaction()), K(affected_rows), K(res.result_set().get_stmt_type()));
+    int64_t end_time = ObTimeUtility::current_time();
+    FLOG_INFO("execute", K(sql), K(conn_->is_in_trans()), K(session_->is_in_transaction()), K(affected_rows), K(res.result_set().get_stmt_type()),
+        "cost", end_time-start_time);
   }
   return ret;
 }

@@ -112,12 +112,11 @@ void ObDDLTransController::run1()
           ObCurTraceId::init(GCONF.self_addr_);
           ObDIActionGuard(ObDIActionGuard::NS_ACTION, "control tenant[T_%ld]", tenant_id);
 
-          if (OB_ISNULL(GCTX.root_service_)) {
-            ret = OB_INVALID_ARGUMENT;
-            LOG_WARN("invalid argument", KR(ret), KP(GCTX.root_service_));
-          } else if (OB_FAIL(ut_operator.get_alive_servers_by_tenant(tenant_id, server_list))) {
+          if (OB_FAIL(ut_operator.get_alive_servers_by_tenant(tenant_id, server_list))) {
             LOG_WARN("get alive server failed", KR(ret), K(tenant_id));
-          } else if (OB_FAIL(GCTX.root_service_->get_ddl_service().publish_schema_and_get_schema_version(tenant_id, server_list, &schema_version))) {
+          }
+          // overwrite ret to continue
+          if (OB_FAIL(GCTX.root_service_->get_ddl_service().publish_schema_and_get_schema_version(tenant_id, server_list, &schema_version))) {
             LOG_WARN("fail to publish_schema", KR(ret), K(tenant_id));
           } else if (OB_FAIL(broadcast_consensus_version(tenant_id, schema_version, server_list))) {
             LOG_WARN("fail to broadcast consensus version", KR(ret), K(tenant_id), K(schema_version));
@@ -157,6 +156,8 @@ int ObDDLTransController::broadcast_consensus_version(const int64_t tenant_id,
   } else if (OB_INVALID_VERSION == schema_version) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid schema_version", KR(ret), K(schema_version));
+  } else if (OB_FAIL(schema_service_->set_tenant_broadcast_consensus_version(tenant_id, schema_version))) {
+    LOG_WARN("fail to set tenant broadcast consensus_version", KR(ret), K(tenant_id));
   } else {
     arg.set_tenant_id(tenant_id);
     arg.set_consensus_version(schema_version);
