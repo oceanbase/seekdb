@@ -2123,13 +2123,17 @@ int ObTscCgService::generate_vec_idx_ctdef(const ObLogTableScan &op,
       const int64_t SPIV_NORMAL = 5;
       const int64_t IVF_FLAT = 5;
       const int64_t IVF_OTHERS = 6;
-      const int64_t HNSW_VID_OPT =  has_tr_info ? 6 : 5;
-      const int64_t HNSW_NORMAL =  has_tr_info ? 7 : 6;
+      int64_t hnsw_vid_opt =  has_tr_info ? 6 : 5;
+      int64_t hnsw_normal =  has_tr_info ? 7 : 6;
+      if (is_hybrid) {
+        hnsw_vid_opt++;
+        hnsw_normal++;
+      }
       int64_t vec_child_task_cnt = 0;
       if (vc_info.is_spiv_scan()) {
         vec_child_task_cnt = op.need_skip_rowkey_doc() ? SPIV_DOCID_OPT : SPIV_NORMAL;
       } else if (vc_info.is_hnsw_vec_scan()) {
-        vec_child_task_cnt = op.need_skip_rowkey_vid() ? HNSW_VID_OPT : HNSW_NORMAL;
+        vec_child_task_cnt = op.need_skip_rowkey_vid() ? hnsw_vid_opt : hnsw_normal;
       } else if (vc_info.is_ivf_flat_scan()) {
         vec_child_task_cnt = IVF_FLAT;
       } else {
@@ -2159,6 +2163,10 @@ int ObTscCgService::generate_vec_idx_ctdef(const ObLogTableScan &op,
             vec_scan_ctdef->children_[last_hnsw_child_idx] = fourth_aux_ctdef;  // rowkey vid table
             ++last_hnsw_child_idx;
           }
+          if (is_hybrid) {
+            vec_scan_ctdef->children_[last_hnsw_child_idx] = fifth_aux_ctdef; // embedded table
+            ++last_hnsw_child_idx;
+          }
           if (func_lookup_ctdef != nullptr) {
             vec_scan_ctdef->children_[last_hnsw_child_idx] = func_lookup_ctdef;
           }
@@ -2186,9 +2194,6 @@ int ObTscCgService::generate_vec_idx_ctdef(const ObLogTableScan &op,
           }
           if (vc_info.is_ivf_pq_scan() || vc_info.is_ivf_sq_scan()) {
             vec_scan_ctdef->children_[5] = com_aux_ctdef;
-          }
-          if (is_hybrid) {
-            vec_scan_ctdef->children_[6] = fifth_aux_ctdef;
           }
         }
         vec_scan_ctdef->dim_ = dim;

@@ -1378,18 +1378,15 @@ int ObVecIndexAsyncTask::process_data_for_index(ObPluginVectorIndexAdaptor &adap
       ObTableScanIterator *vid_scan_iter = nullptr;
       ObTableScanIterator *table_scan_iter = static_cast<ObTableScanIterator *>(data_iter);
       int32_t data_table_rowkey_count = is_hybrid_index? data_table_param.get_output_projector().count() - 2: vid_table_param.get_output_projector().count() - 1;
-      int32_t vid_column_pos = data_table_rowkey_count;
       int64_t current_incr_count = 0;
       int64_t current_snapshot_count = 0;
       if (adaptor.get_is_need_vid()) {
         vid_scan_iter = static_cast<ObTableScanIterator *>(vid_id_iter);
-        data_table_rowkey_count = vid_table_param.get_output_projector().count() - 1;
       } else {
         data_table_rowkey_count = 1;  // pk_increrment
       }
-
-      if ((adaptor.get_is_need_vid() && OB_ISNULL(vid_scan_iter)) ||
-           OB_ISNULL(table_scan_iter)) {
+      int32_t vid_column_pos = is_hybrid_index && !adaptor.get_is_need_vid()? 0: data_table_rowkey_count;
+      if (OB_ISNULL(table_scan_iter)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("get null table scan iter", K(ret));
       }
