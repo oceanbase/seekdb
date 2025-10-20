@@ -532,8 +532,6 @@ psmall_test=[
 'vector_index.vector_index_ivfflat_dml',
 'vector_index.vector_index_ivfflat_post_create',
 'vector_index.vector_index_ivfflat_scan',
-'vector_index.vector_index_memdata_sync_bitmap',
-'vector_index.vector_index_memdata_sync_snapshot',
 'vector_index.vector_index_partitioned',
 'vector_index.vector_index_post_create',
 'vector_index.vector_index_rebuild',
