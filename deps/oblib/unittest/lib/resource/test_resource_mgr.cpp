@@ -28,6 +28,7 @@ TEST(TestTenantMemoryMgr, basic)
   ObTenantMemoryMgr memory_mgr(1);
   const int64_t limit = 1 * 1024 * 1024 * 1024;
   memory_mgr.set_limit(limit);
+  memory_mgr.set_hard_limit(limit);
   ASSERT_TRUE(NULL ==  memory_mgr.alloc_chunk(-1, ObMemAttr()));
   ObMemAttr attr;
   attr.tenant_id_ = 2;
@@ -194,6 +195,7 @@ TEST(TestTenantMemoryMgr, sync_wash)
   chunks.reserve(512);
   const int64_t tenant_limit = 2 * limit;
   memory_mgr.set_limit(tenant_limit);
+  memory_mgr.set_hard_limit(tenant_limit);
   int64_t mb_count = 0;
   while (OB_SUCC(washer.alloc_mb(memory_mgr))) {
     ++mb_count;

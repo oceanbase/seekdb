@@ -67,12 +67,15 @@ TEST(TestTenantAllocator, SysLimit)
   cout << "current hold: " << hold << endl;
 
   set_memory_limit(hold);
+  set_memory_hard_limit(hold);
   EXPECT_EQ(NULL, ta.alloc(1, attr));
 
   set_memory_limit(hold + (1<<20));
+  set_memory_hard_limit(hold + (1<<20));
   EXPECT_EQ(NULL, ta.alloc(1, attr));
 
   set_memory_limit(hold + (3<<20));
+  set_memory_hard_limit(hold + (3<<20));
   EXPECT_TRUE(NULL != ta.alloc(1, attr));
 }
 
@@ -86,6 +89,7 @@ TEST(TestTenantAllocator, TenantLimit)
   cout << "current hold: " << hold << endl;
 
   set_memory_limit(hold);  // now, we can't allocate new memory from system
+  set_memory_hard_limit(hold);
   EXPECT_FALSE(NULL != ta.alloc(1, attr));
 
   attr.prio_ = OB_HIGH_ALLOC;
@@ -120,6 +124,7 @@ TEST(TestTenantAllocator, ctx_limit)
   const int64_t limit = 30 * size;
   int64_t alloced = 0;
   ctx_ta.set_limit(limit);
+  ctx_ta.set_hard_limit(limit);
   while (true) {
     if (NULL == ctx_ta.alloc(size, attr)) {
       break;

@@ -238,11 +238,12 @@ public:
     }
   }
   inline static AChunk *ptr2chunk(const void *ptr);
-  bool update_hold(int64_t bytes, bool high_prio);
+  void dec_hold(int64_t bytes);
   virtual int madvise(void *addr, size_t length, int advice);
   void munmap(void *addr, size_t length);
   int64_t to_string(char *buf, const int64_t buf_len) const;
 
+  inline void set_hard_limit(int64_t hard_limit);
   inline void set_limit(int64_t limit);
   inline int64_t get_limit() const;
   inline int64_t get_hold() const;
@@ -254,6 +255,9 @@ public:
 
 
 private:
+  bool try_inc_hold(int64_t bytes, int64_t limit, bool high_prio);
+  bool try_inc_hold_hard(int64_t bytes, bool high_prio);
+  bool try_inc_hold_soft(int64_t bytes);
   void *direct_alloc(const uint64_t size, const bool can_use_huge_page, bool &huge_page_used, const bool alloc_shadow);
   void direct_free(const void *ptr, const uint64_t size);
   // wrap for mmap
@@ -343,6 +347,7 @@ private:
   }
 protected:
   int64_t limit_;
+  int64_t hard_limit_;
   int64_t hold_; // Including the memory occupied by free_list, limited by memory_limit
   int64_t total_hold_; // Including virtual memory, just for statifics.
   int64_t cache_hold_;
@@ -364,6 +369,11 @@ OB_INLINE uint64_t AChunkMgr::aligned(const uint64_t size)
 OB_INLINE uint64_t AChunkMgr::hold(const uint64_t size)
 {
   return AChunk::calc_hold(size);
+}
+
+inline void AChunkMgr::set_hard_limit(int64_t hard_limit)
+{
+  hard_limit_ = hard_limit;
 }
 
 inline void AChunkMgr::set_limit(int64_t limit)

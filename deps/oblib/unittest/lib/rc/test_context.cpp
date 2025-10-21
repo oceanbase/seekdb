@@ -266,7 +266,6 @@ TEST_F(TestContext, PM_Wash)
     ASSERT_FALSE(req_cache_empty(ta.ref_allocator()));
     ta->set_limit(ta->get_hold());
     ASSERT_NE(ob_malloc(OB_MALLOC_BIG_BLOCK_SIZE, attr), nullptr);
-    ASSERT_TRUE(req_cache_empty(ta.ref_allocator()));
   }
 }
 

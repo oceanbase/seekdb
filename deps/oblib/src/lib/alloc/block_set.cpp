@@ -386,7 +386,7 @@ int64_t BlockSet::sync_wash(int64_t wash_size)
   if (washed_size > 0) {
     UNUSED(ATOMIC_FAA(&total_hold_, -washed_size));
     UNUSED(ATOMIC_FAA(&total_payload_, -washed_size));
-    tallocator_->update_hold(-washed_size);
+    tallocator_->dec_hold(washed_size);
     tallocator_->update_wash_stat(related_chunks, washed_blks, washed_size);
   }
 #if MEMCHK_LEVEL >= 1

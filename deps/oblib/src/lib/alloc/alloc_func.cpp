@@ -28,6 +28,11 @@ namespace oceanbase
 namespace lib
 {
 
+void set_memory_hard_limit(int64_t bytes)
+{
+  CHUNK_MGR.set_hard_limit(bytes);
+}
+
 void set_memory_limit(int64_t bytes)
 {
   CHUNK_MGR.set_limit(bytes);

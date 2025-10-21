@@ -28,12 +28,13 @@ namespace lib
 {
 ObTenantMemoryMgr::ObTenantMemoryMgr(const uint64_t tenant_id)
   : cache_washer_(NULL), tenant_id_(tenant_id),
-    limit_(INT64_MAX), sum_hold_(0),
+    limit_(INT64_MAX), hard_limit_(INT64_MAX), sum_hold_(0),
     cache_hold_(0), cache_item_count_(0)
 {
   for (uint64_t i = 0; i < common::ObCtxIds::MAX_CTX_ID; i++) {
     ATOMIC_STORE(&(hold_bytes_[i]), 0);
     ATOMIC_STORE(&(limit_bytes_[i]), INT64_MAX);
+    ATOMIC_STORE(&(hard_limit_bytes_[i]), INT64_MAX);
   }
 }
 void ObTenantMemoryMgr::set_cache_washer(ObICacheWasher &cache_washer)
@@ -144,6 +145,18 @@ void ObTenantMemoryMgr::free_cache_mb(void *ptr)
   }
 }
 
+int ObTenantMemoryMgr::set_ctx_hard_limit(const uint64_t ctx_id, const int64_t hard_limit)
+{
+  int ret = OB_SUCCESS;
+  if (ctx_id >= ObCtxIds::MAX_CTX_ID || hard_limit <= 0) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid arguemnt", K(ret), K(ctx_id), K(hard_limit));
+  } else {
+    hard_limit_bytes_[ctx_id] = hard_limit;
+  }
+  return ret;
+}
+
 int ObTenantMemoryMgr::set_ctx_limit(const uint64_t ctx_id, const int64_t limit)
 {
   int ret = OB_SUCCESS;
@@ -196,7 +209,7 @@ bool ObTenantMemoryMgr::update_hold(const int64_t size, const uint64_t ctx_id,
 {
   bool updated = true;
   reach_ctx_limit = false;
-  const int64_t limit = high_prio ? INT64_MAX : limit_;
+  const int64_t limit = high_prio ? INT64_MAX : hard_limit_;
   const int64_t nvalue = ATOMIC_AAF(&sum_hold_, size); 
   if (nvalue > limit) {
     ATOMIC_AAF(&sum_hold_, -size);
@@ -206,7 +219,7 @@ bool ObTenantMemoryMgr::update_hold(const int64_t size, const uint64_t ctx_id,
     afc.alloc_size_ = size;
     afc.tenant_id_ = tenant_id_;
     afc.tenant_hold_ = get_sum_hold();
-    afc.tenant_limit_ = limit_;
+    afc.tenant_limit_ = hard_limit_;
   } else if (label != ObNewModIds::OB_KVSTORE_CACHE_MB) {
     if (!update_ctx_hold(ctx_id, size, high_prio)) {
       ATOMIC_AAF(&sum_hold_, -size);
@@ -224,7 +237,7 @@ bool ObTenantMemoryMgr::update_ctx_hold(const uint64_t ctx_id, const int64_t siz
   bool updated = false;
   if (ctx_id < ObCtxIds::MAX_CTX_ID) {
     volatile int64_t &hold = hold_bytes_[ctx_id];
-    const int64_t limit = high_prio ? INT64_MAX : limit_bytes_[ctx_id];
+    const int64_t limit = high_prio ? INT64_MAX : hard_limit_bytes_[ctx_id];
     if (size <= 0) {
       ATOMIC_AAF(&hold, size);
       updated = true;

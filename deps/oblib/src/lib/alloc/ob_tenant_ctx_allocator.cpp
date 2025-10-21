@@ -257,32 +257,21 @@ void ObTenantCtxAllocator::free_chunk(AChunk *chunk, const ObMemAttr &attr)
     ctx_allocator_.free_chunk(chunk, attr);
   }
 }
-bool ObTenantCtxAllocator::update_hold(const int64_t size)
+
+// bytes need to be positive
+void ObTenantCtxAllocator::dec_hold(const int64_t size)
 {
-  return ctx_allocator_.update_hold(size);
+  ctx_allocator_.dec_hold(size);
 }
-bool ObTenantCtxAllocatorV2::update_hold(const int64_t size)
+void ObTenantCtxAllocatorV2::dec_hold(const int64_t size)
 {
-  bool update = false;
   if (!resource_handle_.is_valid()) {
     LIB_LOG_RET(ERROR, OB_INVALID_ARGUMENT, "resource_handle is invalid", K_(tenant_id), K_(ctx_id));
   } else {
     bool reach_ctx_limit = false;
-    if (size <=0) {
-      resource_handle_.get_memory_mgr()->update_hold(size, ctx_id_, ObLabel(), reach_ctx_limit);
-      AChunkMgr::instance().update_hold(size, false);
-      update = true;
-    } else {
-      if (!resource_handle_.get_memory_mgr()->update_hold(size, ctx_id_, ObLabel(), reach_ctx_limit)) {
-        // do-nothing
-      } else if (!AChunkMgr::instance().update_hold(size, false)) {
-	resource_handle_.get_memory_mgr()->update_hold(-size, ctx_id_, ObLabel(), reach_ctx_limit);
-      } else {
-	update = true;
-      }
-    }
+    resource_handle_.get_memory_mgr()->update_hold(-size, ctx_id_, ObLabel(), reach_ctx_limit);
+    AChunkMgr::instance().dec_hold(size);
   }
-  return update;
 }
 
 int ObTenantCtxAllocator::set_idle(const int64_t set_size, const bool reserve/*=false*/)

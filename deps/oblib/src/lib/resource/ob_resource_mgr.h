@@ -48,6 +48,7 @@ public:
   void free_cache_mb(void *ptr);
 
   uint64_t get_tenant_id() const { return tenant_id_; }
+  void set_hard_limit(const int64_t hard_limit) { hard_limit_ = hard_limit; }
   void set_limit(const int64_t limit) { limit_ = limit; }
   int64_t get_limit() const { return limit_; }
   int64_t get_sum_hold() const { return sum_hold_; }
@@ -58,6 +59,7 @@ public:
   {
     return static_cast<int64_t>(CHUNK_MGR.aligned(static_cast<uint64_t>(size)));
   }
+  int set_ctx_hard_limit(const uint64_t ctx_id, const int64_t hard_limit);
   int set_ctx_limit(const uint64_t ctx_id, const int64_t limit);
   int get_ctx_limit(const uint64_t ctx_id, int64_t &limit) const;
   int get_ctx_hold(const uint64_t ctx_id, int64_t &hold) const;
@@ -72,11 +74,13 @@ private:
   ObICacheWasher *cache_washer_;
   uint64_t tenant_id_;
   int64_t limit_;
+  int64_t hard_limit_;
   int64_t sum_hold_;
   int64_t cache_hold_;
   int64_t cache_item_count_;
   volatile int64_t hold_bytes_[common::ObCtxIds::MAX_CTX_ID];
   volatile int64_t limit_bytes_[common::ObCtxIds::MAX_CTX_ID];
+  volatile int64_t hard_limit_bytes_[common::ObCtxIds::MAX_CTX_ID];
 };
 
 struct ObTenantResourceMgr : public common::ObLink
