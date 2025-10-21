@@ -36,7 +36,7 @@ list(APPEND CPACK_RPM_EXCLUDE_FROM_AUTO_FILELIST_ADDITION "/usr")
 
 set(CPACK_RPM_PACKAGE_GROUP "Applications/Databases")
 set(CPACK_RPM_PACKAGE_DESCRIPTION ${CPACK_PACKAGE_DESCRIPTION})
-set(CPACK_RPM_PACKAGE_LICENSE "Mulan PubL v2.")
+set(CPACK_RPM_PACKAGE_LICENSE "Apache 2.0")
 if (NOT BUILD_CDC_ONLY OR OB_BUILD_STANDALONE)
   set(DEBUG_INSTALL_POST "mv $RPM_BUILD_ROOT/../server/usr/bin/obshell %{_builddir}/obshell; %{_rpmconfigdir}/find-debuginfo.sh %{?_find_debuginfo_opts} %{_builddir}/%{?buildsubdir}; mv %{_builddir}/obshell $RPM_BUILD_ROOT/../server/usr/bin/obshell; %{nil}")
 else()
