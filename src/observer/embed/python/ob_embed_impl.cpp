@@ -19,6 +19,7 @@
 #include "observer/ob_server_options.h"
 #include "lib/string/ob_string.h"
 #include "common/ob_version_def.h"
+#include "lib/oblog/ob_warning_buffer.h"
 
 PYBIND11_MODULE(oblite, m) {
     m.doc() = "oblite embed pybind";
@@ -131,6 +132,7 @@ int ObLiteEmbed::do_open_(const char* db_dir)
   ObSqlString sstable_dir;
   int64_t start_time = ObTimeUtility::current_time();
 
+  ObWarningBuffer::set_warn_log_on(true);
   if (getcwd(buffer, sizeof(buffer)) == nullptr) {
     MPRINT("getcwd failed %d %s", errno, strerror(errno));
   } else if (FALSE_IT(work_abs_dir.assign(buffer))) {
@@ -266,8 +268,8 @@ std::shared_ptr<ObLiteEmbedConn> ObLiteEmbed::connect(const char* db_name)
     OZ (session->set_default_database(db_name));
     OX (session->set_user_session());
     OZ (session->set_autocommit(false));
-    OZ (session->set_user(
-      user_info->get_user_name(), user_info->get_host_name_str(), user_info->get_user_id()));
+    OZ (session->set_user(user_info->get_user_name_str(), user_info->get_host_name_str(), user_info->get_user_id()));
+    OZ (session->set_real_client_ip_and_port("127.0.0.1", 0));
     OX (session->set_priv_user_id(user_info->get_user_id()));
     OX (session->set_user_priv_set(user_info->get_priv_set()));
     OX (session->init_use_rich_format());
@@ -287,7 +289,7 @@ std::shared_ptr<ObLiteEmbedConn> ObLiteEmbed::connect(const char* db_name)
   if (OB_FAIL(ret)) {
     throw std::runtime_error("connect failed " + std::to_string(ob_errpkt_errno(ret, false)) + " " + std::string(ob_errpkt_strerror(ret, false)));
   }
-  FLOG_INFO("connect", K(db_name), K(sid), KP(session), KPC(session), "cost", ObTimeUtility::current_time()-start_time);
+  FLOG_INFO("connect", K(db_name), K(sid), KP(session), KPC(session), KPC(user_info), "cost", ObTimeUtility::current_time()-start_time);
   return embed_conn;
 }
 
@@ -316,7 +318,7 @@ void ObLiteEmbedConn::reset()
   }
 }
 
-int ObLiteEmbedConn::execute(const char *sql, uint64_t &affected_rows, int64_t &result_seq)
+int ObLiteEmbedConn::execute(const char *sql, uint64_t &affected_rows, int64_t &result_seq, std::string &errmsg)
 {
   int ret = OB_SUCCESS;
   ObString sql_string(sql);
@@ -325,6 +327,9 @@ int ObLiteEmbedConn::execute(const char *sql, uint64_t &affected_rows, int64_t &
   ObCurTraceId::init(GCTX.self_addr());
   int64_t start_time = ObTimeUtility::current_time();
   reset_result();
+  if (OB_NOT_NULL(session_)) {
+    common::ob_setup_tsi_warning_buffer(&session_->get_warnings_buffer());
+  }
   if (OB_ISNULL(conn_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("conn is empty", KR(ret));
@@ -345,6 +350,20 @@ int ObLiteEmbedConn::execute(const char *sql, uint64_t &affected_rows, int64_t &
     FLOG_INFO("execute", K(sql), K(conn_->is_in_trans()), K(session_->is_in_transaction()), K(affected_rows), K(res.result_set().get_stmt_type()),
         "cost", end_time-start_time);
   }
+  if (OB_FAIL(ret)) {
+    const common::ObWarningBuffer *wb = common::ob_get_tsi_warning_buffer();
+    if (nullptr != wb) {
+      if (wb->get_err_code() == ret ||
+          (ret >= OB_MIN_RAISE_APPLICATION_ERROR && ret <= OB_MAX_RAISE_APPLICATION_ERROR)) {
+        if (wb->get_err_msg() != nullptr && wb->get_err_msg()[0] != '\0') {
+          errmsg = std::string(wb->get_err_msg());
+        }
+      }
+    }
+  }
+  if (OB_NOT_NULL(session_)) {
+    session_->reset_warnings_buf();
+  }
   return ret;
 }
 
@@ -361,15 +380,19 @@ uint64_t ObLiteEmbedCursor::execute(const char *sql)
   int ret = OB_SUCCESS;
   uint64_t affected_rows = 0;
   int64_t result_seq = 0;
+  std::string errmsg;
   if (!embed_conn_) {
     ret = OB_CONNECT_ERROR;
-  } else if (OB_FAIL(embed_conn_->execute(sql, affected_rows, result_seq))) {
+  } else if (OB_FAIL(embed_conn_->execute(sql, affected_rows, result_seq, errmsg))) {
     LOG_WARN("execute sql failed", KR(ret), K(sql));
   } else {
     result_seq_ = result_seq;
   }
   if (OB_FAIL(ret)) {
-    throw std::runtime_error("execute sql failed " + std::to_string(ob_errpkt_errno(ret, false)) + " " + std::string(ob_errpkt_strerror(ret, false)));
+    if (errmsg.empty()) {
+      errmsg = std::string(ob_errpkt_strerror(ret, false));
+    }
+    throw std::runtime_error("execute sql failed " + std::to_string(ob_errpkt_errno(ret, false)) + " " + errmsg);
   }
   return affected_rows;
 }

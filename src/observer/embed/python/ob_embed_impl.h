@@ -32,7 +32,7 @@ public:
   void commit();
   void rollback();
   ObLiteEmbedCursor cursor();
-  int execute(const char* sql, uint64_t &affected_rows, int64_t &result_seq);
+  int execute(const char* sql, uint64_t &affected_rows, int64_t &result_seq, std::string &errmsg);
   void reset();
   void reset_result();
   int64_t get_result_seq() { return result_seq_; }
