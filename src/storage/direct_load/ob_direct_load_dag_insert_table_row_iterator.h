@@ -30,6 +30,7 @@ namespace storage
 class ObDirectLoadInsertTabletContext;
 class ObDirectLoadIStoreRowIterator;
 class ObDirectLoadDMLRowHandler;
+class ObDirectLoadPartitionMergeTask;
 
 class ObDirectLoadDagTabletSliceRowIterator : public ObITabletSliceRowIterator
 {
@@ -39,7 +40,7 @@ protected:
 public:
   virtual ~ObDirectLoadDagTabletSliceRowIterator();
   int init(ObDirectLoadInsertTabletContext *insert_tablet_ctx, const int64_t slice_idx,
-           const ObIArray<ObDirectLoadIStoreRowIterator *> &row_iters,
+           ObDirectLoadPartitionMergeTask *merge_task,
            ObDirectLoadDMLRowHandler *dml_row_handler, bool is_delete_full_row);
   ObTabletID get_tablet_id() const override { return tablet_id_; }
   int64_t get_slice_idx() const override { return slice_idx_; }
@@ -50,10 +51,11 @@ protected:
   int close();
 
 protected:
+  ObArenaAllocator allocator_;
   ObTabletID tablet_id_;
   ObDirectLoadInsertTabletContext *insert_tablet_ctx_;
   int64_t slice_idx_;
-  const ObIArray<ObDirectLoadIStoreRowIterator *> *row_iters_;
+  ObArray<ObDirectLoadIStoreRowIterator *> row_iters_;
   ObDirectLoadDMLRowHandler *dml_row_handler_;
   ObDirectLoadDagInsertTableRowHandler row_handler_;
   int64_t pos_;

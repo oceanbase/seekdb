@@ -51,25 +51,12 @@ ObDirectLoadPartitionMergeTask::ObDirectLoadPartitionMergeTask()
     affected_rows_(0),
     need_handle_dml_row_(false),
     is_stop_(false),
-    allocator_("TLD_MergeExec"),
     is_inited_(false)
 {
-  allocator_.set_tenant_id(MTL_ID());
-  row_iters_.set_block_allocator(ModulePageAllocator(allocator_));
 }
 
 ObDirectLoadPartitionMergeTask::~ObDirectLoadPartitionMergeTask()
 {
-  for (int64_t i = 0; i < row_iters_.count(); ++i) {
-    ObDirectLoadIStoreRowIterator *row_iter = row_iters_.at(i);
-    if (row_iter != nullptr) {
-      row_iter->~ObDirectLoadIStoreRowIterator();
-      allocator_.free(row_iter);
-      row_iter = nullptr;
-    }
-  }
-  row_iters_.reset();
-  allocator_.reset();
 }
 
 int ObDirectLoadPartitionMergeTask::inner_init(ObDirectLoadTabletMergeCtx *merge_ctx,
@@ -233,15 +220,10 @@ int ObDirectLoadPartitionMergeTask::init_iterator(ObITabletSliceRowIterator *&ro
     row_iterator = nullptr;
     ObDirectLoadDagInsertTableRowIterator *iter = nullptr;
     ObMemAttr attr(MTL_ID(), "TLD_SliceIter");
-    if (OB_UNLIKELY(!row_iters_.empty())) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected row iters not empty", KR(ret));
-    } else if (OB_FAIL(construct_row_iters(row_iters_, allocator_))) {
-      LOG_WARN("fail to construct row iters", KR(ret));
-    } else if (OB_ISNULL(iter = OB_NEW(ObDirectLoadDagInsertTableRowIterator, attr))) {
+    if (OB_ISNULL(iter = OB_NEW(ObDirectLoadDagInsertTableRowIterator, attr))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("fail to alloc memory", KR(ret));
-    } else if (OB_FAIL(iter->init(insert_tablet_ctx_, parallel_idx_ /*slice_idx*/, row_iters_,
+    } else if (OB_FAIL(iter->init(insert_tablet_ctx_, parallel_idx_ /*slice_idx*/, this,
                                   need_handle_dml_row_ ? merge_param_->dml_row_handler_ : nullptr,
                                   ObDirectLoadMergeMode::NORMAL == merge_param_->merge_mode_))) {
       LOG_WARN("fail to init insert table row iter", KR(ret));

@@ -21,6 +21,7 @@
 #include "storage/direct_load/ob_direct_load_datum_row.h"
 #include "storage/direct_load/ob_direct_load_dml_row_handler.h"
 #include "storage/direct_load/ob_direct_load_insert_table_ctx.h"
+#include "storage/direct_load/ob_direct_load_partition_merge_task.h"
 #include "storage/direct_load/ob_direct_load_row_iterator.h"
 #include "storage/direct_load/ob_direct_load_vector_utils.h"
 
@@ -38,44 +39,61 @@ using namespace sql;
  */
 
 ObDirectLoadDagTabletSliceRowIterator::ObDirectLoadDagTabletSliceRowIterator()
-  : insert_tablet_ctx_(nullptr),
+  : allocator_("TLD_RowIter"),
+    insert_tablet_ctx_(nullptr),
     slice_idx_(-1),
-    row_iters_(nullptr),
+    row_iters_(),
     dml_row_handler_(nullptr),
     pos_(0),
     row_count_(0),
     is_delete_full_row_(false),
     is_inited_(false)
 {
+  allocator_.set_tenant_id(MTL_ID());
+  row_iters_.set_block_allocator(ModulePageAllocator(allocator_));
 }
 
-ObDirectLoadDagTabletSliceRowIterator::~ObDirectLoadDagTabletSliceRowIterator() {}
+ObDirectLoadDagTabletSliceRowIterator::~ObDirectLoadDagTabletSliceRowIterator()
+{
+  for (int64_t i = 0; i < row_iters_.count(); ++i) {
+    ObDirectLoadIStoreRowIterator *row_iter = row_iters_.at(i);
+    if (row_iter != nullptr) {
+      row_iter->~ObDirectLoadIStoreRowIterator();
+      allocator_.free(row_iter);
+      row_iter = nullptr;
+    }
+  }
+  row_iters_.reset();
+  allocator_.reset();
+}
 
 int ObDirectLoadDagTabletSliceRowIterator::init(
   ObDirectLoadInsertTabletContext *insert_tablet_ctx, const int64_t slice_idx,
-  const ObIArray<ObDirectLoadIStoreRowIterator *> &row_iters,
+  ObDirectLoadPartitionMergeTask *merge_task,
   ObDirectLoadDMLRowHandler *dml_row_handler, bool is_delete_full_row)
 {
   int ret = OB_SUCCESS;
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
     LOG_WARN("ObDirectLoadDagTabletSliceRowIterator init twice", KR(ret), KP(this));
-  } else if (OB_UNLIKELY(nullptr == insert_tablet_ctx || slice_idx < 0)) {
+  } else if (OB_UNLIKELY(nullptr == insert_tablet_ctx || slice_idx < 0 || nullptr == merge_task)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", KR(ret), KP(insert_tablet_ctx), K(slice_idx));
+    LOG_WARN("invalid args", KR(ret), KP(insert_tablet_ctx), K(slice_idx), KP(merge_task));
   } else {
     tablet_id_ = insert_tablet_ctx->get_tablet_id();
     insert_tablet_ctx_ = insert_tablet_ctx;
     slice_idx_ = slice_idx;
-    row_iters_ = &row_iters;
     dml_row_handler_ = dml_row_handler;
     is_delete_full_row_ = is_delete_full_row;
+    if (OB_FAIL(merge_task->construct_row_iters(row_iters_, allocator_))) {
+      LOG_WARN("fail to construct row iters", KR(ret));
+    }
     // check row iters
-    for (int64_t i = 0; OB_SUCC(ret) && i < row_iters.count(); ++i) {
-      ObDirectLoadIStoreRowIterator *row_iter = row_iters.at(i);
+    for (int64_t i = 0; OB_SUCC(ret) && i < row_iters_.count(); ++i) {
+      ObDirectLoadIStoreRowIterator *row_iter = row_iters_.at(i);
       if (OB_ISNULL(row_iter)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected row iter is null", KR(ret), K(i), K(row_iters));
+        LOG_WARN("unexpected row iter is null", KR(ret), K(i), K(row_iters_));
       } else if (OB_UNLIKELY(!row_iter->is_valid() || row_iter->get_row_flag().get_column_count(
                                                         row_iter->get_column_count()) !=
                                                         insert_tablet_ctx_->get_column_count())) {
@@ -139,10 +157,10 @@ int ObDirectLoadDagInsertTableRowIterator::inner_get_next_row(ObDatumRow *&resul
   result_row = nullptr;
   const ObDirectLoadDatumRow *datum_row = nullptr;
   while (OB_SUCC(ret) && nullptr == result_row) {
-    if (pos_ >= row_iters_->count()) {
+    if (pos_ >= row_iters_.count()) {
       ret = OB_ITER_END;
     } else {
-      ObDirectLoadIStoreRowIterator *row_iter = row_iters_->at(pos_);
+      ObDirectLoadIStoreRowIterator *row_iter = row_iters_.at(pos_);
       if (OB_FAIL(row_iter->get_next_row(datum_row))) {
         if (OB_UNLIKELY(OB_ITER_END != ret)) {
           LOG_WARN("fail to get next row", KR(ret));
@@ -274,10 +292,10 @@ int ObDirectLoadDagInsertTableBatchRowIterator::inner_get_next_batch(ObBatchDatu
   datum_rows = nullptr;
   batch_rows_.reuse();
   while (OB_SUCC(ret) && !batch_rows_.full()) {
-    if (pos_ >= row_iters_->count()) {
+    if (pos_ >= row_iters_.count()) {
       break;
     } else {
-      ObDirectLoadIStoreRowIterator *row_iter = row_iters_->at(pos_);
+      ObDirectLoadIStoreRowIterator *row_iter = row_iters_.at(pos_);
       const ObDirectLoadRowFlag &row_flag = row_iter->get_row_flag();
       ObTabletCacheInterval *hide_pk_interval = row_iter->get_hide_pk_interval();
       int64_t start_pos = batch_rows_.size();

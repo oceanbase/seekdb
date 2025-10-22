@@ -43,6 +43,7 @@ class ObDirectLoadMgrAgent;
 class ObDirectLoadPartitionMergeTask : public ObDirectLoadIMergeTask
 {
 public:
+  friend class ObDirectLoadDagTabletSliceRowIterator;
   ObDirectLoadPartitionMergeTask();
   virtual ~ObDirectLoadPartitionMergeTask();
   int process() override;
@@ -76,8 +77,6 @@ protected:
   // Need to collect when inserting at the end
   bool need_handle_dml_row_;
   bool is_stop_;
-  ObArray<ObDirectLoadIStoreRowIterator *> row_iters_;
-  ObArenaAllocator allocator_;
   bool is_inited_;
 };
 
