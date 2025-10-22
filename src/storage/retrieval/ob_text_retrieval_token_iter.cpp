@@ -261,8 +261,12 @@ int ObTextRetrievalTokenIter::do_token_cnt_agg(const ObDocIdExt &doc_id)
   } else if (OB_FAIL(fwd_idx_agg_iter_->get_next_row())) {
     LOG_WARN("failed to get next row from forward index iterator", K(ret));
   } else {
-    const ObDatum &word_cnt_datum = fwd_idx_agg_expr_->locate_expr_datum(*eval_ctx_);
-    token_count = word_cnt_datum.get_int();
+    if (fwd_idx_agg_expr_->enable_rich_format()
+        && is_valid_format(fwd_idx_agg_expr_->get_format(*eval_ctx_))) {
+      token_count = fwd_idx_agg_expr_->get_vector(*eval_ctx_)->get_int(0);
+    } else {
+      token_count = fwd_idx_agg_expr_->locate_expr_datum(*eval_ctx_).get_int();
+    }
     LOG_DEBUG("retrieval iterator get token cnt for doc", K(ret), K(doc_id), K(token_count));
   }
   return ret;
@@ -620,7 +624,13 @@ int ObTextRetrievalTokenIter::estimate_token_doc_cnt()
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected null total doc cnt expr", K(ret));
     } else {
-      const int64_t total_doc_cnt = total_doc_cnt_param_expr->locate_expr_datum(*eval_ctx_, 0).get_int();
+      int64_t total_doc_cnt = 0;
+      if (total_doc_cnt_param_expr->enable_rich_format()
+          && is_valid_format(total_doc_cnt_param_expr->get_format(*eval_ctx_))) {
+        total_doc_cnt = total_doc_cnt_param_expr->get_vector(*eval_ctx_)->get_int(0);
+      } else {
+        total_doc_cnt = total_doc_cnt_param_expr->locate_expr_datum(*eval_ctx_, 0).get_int();
+      }
       max_token_relevance_ = sql::ObExprBM25::query_token_weight(token_doc_cnt_, total_doc_cnt);
     }
   }
@@ -1091,7 +1101,7 @@ int ObTextRetrievalBlockMaxIter::calc_dim_max_score(
   return ret;
 }
 
-int ObTextRetrievalBlockMaxIter::init_block_max_iter()
+int ObTextRetrievalBlockMaxIter::init_block_max_iter(const int64_t total_doc_cnt, const double avg_doc_token_cnt)
 {
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
@@ -1100,6 +1110,8 @@ int ObTextRetrievalBlockMaxIter::init_block_max_iter()
   } else if (OB_UNLIKELY(block_max_inited_)) {
     ret = OB_INIT_TWICE;
     LOG_WARN("block max iter already initalized", K(ret));
+  } else if (FALSE_IT(ranking_param_.total_doc_cnt_ = total_doc_cnt)) {
+  } else if (FALSE_IT(ranking_param_.avg_doc_token_cnt_ = avg_doc_token_cnt)) {
   } else if (OB_FAIL(token_iter_.get_token_doc_cnt(ranking_param_.doc_freq_))) {
     LOG_WARN("failed to get token doc cnt", K(ret));
   } else if (OB_FAIL(calc_dim_max_score(*block_max_iter_param_, ranking_param_, *block_max_scan_param_))) {
