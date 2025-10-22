@@ -398,7 +398,7 @@ int ObTableLoadPKMemSortLoadTask::process()
       int tmp_ret = OB_SUCCESS;
       if (OB_TMP_FAIL(mem_sorter_->push_loader(loader))) {
         LOG_WARN("fail to push loader", KR(tmp_ret));
-        COVER_SUCC(tmp_ret);
+        ret = COVER_SUCC(tmp_ret);
       } else {
         loader = nullptr;
       }
