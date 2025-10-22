@@ -4,8 +4,24 @@ GREEN='\033[32m'
 NC="\033[0m"
 
 if [ $1 -eq 0 ]; then
-    echo "rm -rf /var/lib/oceanbase" >> /var/lib/oceanbase/oceanbase_clean.sh
-    echo "echo OK" >>  /var/lib/oceanbase/oceanbase_clean.sh
+    clean_script="/var/lib/oceanbase/oceanbase_clean.sh"
+
+    # Ensure the directory exists
+    mkdir -p /var/lib/oceanbase
+
+    # Create the clean script file if it doesn't exist
+    if [ ! -f "$clean_script" ]; then
+        echo "#!/bin/bash" > "$clean_script"
+        echo "# OceanBase cleanup script" >> "$clean_script"
+        echo "# This script will clean all OceanBase configuration and data files" >> "$clean_script"
+    fi
+
+    echo "rm -rf /usr/libexec/oceanbase/scripts/cluster_id" >> "$clean_script"
+    echo "rm -rf /var/lib/oceanbase" >> "$clean_script"
+    echo "echo OK" >> "$clean_script"
+
+    # Make the script executable
+    chmod +x "$clean_script"
 
     echo "Clean oceanbase script can clean ob all configuration files and all data files."
     echo -e "${GREEN}To clean OceanBase${NC} : bash /var/lib/oceanbase/oceanbase_clean.sh"

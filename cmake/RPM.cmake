@@ -50,7 +50,7 @@ set(CPACK_RPM_SPEC_MORE_DEFINE
 %undefine __brp_mangle_shebangs
 %global __requires_exclude ^\(/bin/bash\|/usr/bin/\.*\)$
 %define __debug_install_post ${DEBUG_INSTALL_POST}
-%if \\\"%name\\\" != \\\"oceanbase-lite-sql-parser\\\" && \\\"%name\\\" != \\\"oceanbase-sql-parser\\\"
+%if \\\"%name\\\" != \\\"oceanbase-seekdb-sql-parser\\\" && \\\"%name\\\" != \\\"oceanbase-sql-parser\\\"
 %debug_package
 %endif
 ")
@@ -90,7 +90,7 @@ install(FILES
 if (BUILD_CDC_ONLY)
   message(STATUS "oceanbase build cdc only") 
   set(CPACK_COMPONENTS_ALL cdc)
-  set(CPACK_PACKAGE_NAME "oceanbase-lite-cdc")
+  set(CPACK_PACKAGE_NAME "oceanbase-seekdb-cdc")
 else()
   add_custom_target(bitcode_to_elf ALL
     DEPENDS ${BITCODE_TO_ELF_LIST})

@@ -1,4 +1,5 @@
 #!/bin/bash
+CURRENT_DIR=$(dirname "$0")
 
 url="https://openwebapi.oceanbase.com/api/web/oceanbase/report"
 type=@CPACK_PACKAGE_NAME@
@@ -44,6 +45,21 @@ function add_observer_config {
 }
 
 function update_json {
+    # Get script directory
+    CLUSTER_ID_FILE="$CURRENT_DIR/cluster_id"
+
+    # Check if cluster_id file exists
+    if [ -f "$CLUSTER_ID_FILE" ]; then
+        # If file exists, read clusterId from file cluster_id
+        clusterId=$(cat "$CLUSTER_ID_FILE")
+    else
+        time_now=$(date +%s)
+        rounded_time=$(printf "%.0f" $time_now)
+        clusterId=$((rounded_time % 4294901759))
+
+        echo $clusterId > "$CLUSTER_ID_FILE"
+    fi
+
     sed -i "s|#reporter#|${reporter}|g" $json_file
     sed -i "s|#type#|${type}|g" $json_file
     sed -i "s|#step#|${step}|g" $json_file
@@ -52,13 +68,14 @@ function update_json {
     sed -i "s|#hostHash#|${hostHash}|g" $json_file
     sed -i "s|#osName#|${osName}|g" $json_file
     sed -i "s|#osRelease#|${osRelease}|g" $json_file
+    sed -i "s|#clusterId#|${clusterId}|g" $json_file
 }
 
 # Function Name: do_telemetry
 # Purpose: prepare the telemetry json data
 # Arguments: arg1 - 0 means rpm uninstall, 1 means rpm install, 2 means rpm upgrade, 3 means systemd deploy
-# Arguments: arg2 - systemd step: 10 means only start, 11 means start successfully with bootstrap,
-# 12 means start successfully without bootstrap
+# Arguments: arg2 - systemd step: 10 means observer only start, 11 means observer start successfully with bootstrap,
+# 12 means observer start successfully without bootstrap, 20 means seekdb start successfully
 # Return Value: None
 function do_telemetry {
     # arg1 0 means rpm uninstall, 1 means rpm install, 2 means rpm upgrade, 3 means systemd deploy

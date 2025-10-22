@@ -3,12 +3,11 @@ Description=oceanbase
 
 [Service]
 User=root
-Type=forking
-ExecStartPre=/usr/libexec/oceanbase/scripts/oceanbase_systemd_pre
+Type=notify
 ExecStart=/usr/libexec/oceanbase/scripts/oceanbase_systemd_start
-TimeoutSec=2000
-TimeoutStopSec=300
-SuccessExitStatus=SIGKILL
+PIDFile=/var/lib/oceanbase/run/observer.pid
+Restart=on-failure
+RestartSec=3
 LimitNOFILE=infinity
 LimitNPROC=infinity
 LimitCORE=infinity

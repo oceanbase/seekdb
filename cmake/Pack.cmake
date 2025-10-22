@@ -4,7 +4,7 @@ set(CPACK_PACKAGE_VENDOR "OceanBase Inc.")
 set(CPACK_PACKAGE_DESCRIPTION "OceanBase is a distributed relational database")
 set(CPACK_COMPONENTS_ALL server sql-parser)
 
-set(CPACK_PACKAGE_NAME "oceanbase-lite")
+set(CPACK_PACKAGE_NAME "oceanbase-seekdb")
 set(CPACK_PACKAGE_VERSION "${OceanBase_VERSION}")
 set(CPACK_PACKAGE_VERSION_MAJOR "${OceanBase_VERSION_MAJOR}")
 set(CPACK_PACKAGE_VERSION_MINOR "${OceanBase_VERSION_MINOR}")
@@ -54,7 +54,6 @@ install(PROGRAMS
   COMPONENT server)
 
 install(PROGRAMS
-  tools/systemd/profile/oceanbase_systemd_pre
   tools/systemd/profile/oceanbase_systemd_start
   tools/systemd/profile/telemetry.sh
   DESTINATION usr/libexec/oceanbase/scripts

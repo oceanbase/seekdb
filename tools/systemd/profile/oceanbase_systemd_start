@@ -7,6 +7,9 @@
 
 CONFIG_FILE="/etc/oceanbase/oceanbase.cnf"
 BASE_DIR="/var/lib/oceanbase"
+DATA_DIR="/var/lib/oceanbase/store"
+CURRENT_DIR=$(dirname "$0")
+report=3
 
 # Check if config file exists
 if [ ! -f "$CONFIG_FILE" ]; then
@@ -14,22 +17,97 @@ if [ ! -f "$CONFIG_FILE" ]; then
     exit 1
 fi
 
-# Read base-dir from configuration file
-BASE_DIR_FROM_CONFIG=$(grep -E '^[[:space:]]*base-dir[[:space:]]*=' "$CONFIG_FILE" | head -1 | sed 's/^[[:space:]]*base-dir[[:space:]]*=[[:space:]]*//' | sed 's/[[:space:]]*$//')
+# Variables to store data-dir path
+DATA_DIR="/var/lib/oceanbase/store"
 
-# Use base-dir from config if found, otherwise use default
-if [ -n "$BASE_DIR_FROM_CONFIG" ]; then
-    BASE_DIR="$BASE_DIR_FROM_CONFIG"
-    echo "Using base-dir from config: $BASE_DIR"
+# Initialize additional parameters
+ADDITIONAL_PARAMS=""
+
+# Function to read configuration file and build command line arguments
+read_config() {
+    while IFS= read -r line; do
+        # Skip empty lines and comments
+        [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]] && continue
+
+        key="${line%%=*}"
+        value="${line#*=}"
+
+        # Trim whitespace
+        key="$(echo "$key" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+        value="$(echo "$value" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+
+        case "$key" in
+            "port")
+                ADDITIONAL_PARAMS="$ADDITIONAL_PARAMS --port=$value"
+                ;;
+            "data-dir")
+                ADDITIONAL_PARAMS="$ADDITIONAL_PARAMS --data-dir=$value"
+                DATA_DIR="$value"
+                ;;
+            "redo-dir")
+                ADDITIONAL_PARAMS="$ADDITIONAL_PARAMS --redo-dir=$value"
+                ;;
+            *)
+                ADDITIONAL_PARAMS="$ADDITIONAL_PARAMS --parameter $key=$value"
+                ;;
+        esac
+    done < "$CONFIG_FILE"
+}
+
+# Check if data-dir is specified and not empty
+if [ -n "$DATA_DIR" ]; then
+    echo "Checking data directory: $DATA_DIR"
+
+    # Check if data-dir exists and is not empty
+    if [ -d "$DATA_DIR" ] && [ "$(ls -A "$DATA_DIR" 2>/dev/null)" ]; then
+        echo "Warning: Data directory $DATA_DIR is not empty. Skipping initialization."
+        echo "OceanBase will not be initialized as the data directory contains existing data."
+    else
+        echo "Data directory $DATA_DIR is empty or does not exist. Proceeding with initialization."
+        # Read configuration only when data directory is empty or does not exist
+        read_config
+    fi
 else
-    echo "Using default base-dir: $BASE_DIR"
+    echo "Warning: No data-dir specified in configuration. Proceeding with initialization."
+    # Read configuration when no data-dir is specified
+    read_config
 fi
 
-# Initialize command
-CMD="/usr/bin/observer --base-dir=$BASE_DIR"
+# Build final command
+CMD="/usr/bin/observer --base-dir=$BASE_DIR $ADDITIONAL_PARAMS"
 
 echo "Starting OceanBase with command: $CMD"
 echo "Configuration loaded from: $CONFIG_FILE"
 
 # Execute the command
-exec $CMD
+$CMD &
+CMD_PID=$!
+
+# Wait for the command to complete and check its exit status
+wait $CMD_PID
+CMD_EXIT_CODE=$?
+
+# Check if command executed successfully
+if [ $CMD_EXIT_CODE -eq 0 ]; then
+    systemd-notify --ready
+    echo "OceanBase started successfully, sending telemetry..."
+    /bin/bash $CURRENT_DIR/telemetry.sh $report "20" >/dev/null 2>&1
+
+    # Start obshell agent
+    echo "Starting obshell agent..."
+    if [ -f "/usr/bin/obshell" ]; then
+        sleep 1
+        /usr/bin/obshell agent start --seekdb --base-dir=$BASE_DIR
+        if [ $? -eq 0 ]; then
+            echo "obshell agent started successfully"
+        else
+            echo "Failed to start obshell agent"
+        fi
+    else
+        echo "Warning: /usr/bin/obshell not found, skipping obshell agent start"
+    fi
+else
+    echo "OceanBase failed to start with exit code: $CMD_EXIT_CODE"
+fi
+
+exit $CMD_EXIT_CODE

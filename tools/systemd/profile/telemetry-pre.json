@@ -1,5 +1,5 @@
 {
-    "component": "ocs",
+    "component": "systemd",
     "content": {
         "reporter": "#reporter#",
         "type": "#type#",
@@ -9,6 +9,7 @@
         "hostHash": "#hostHash#",
         "osName": "#osName#",
         "osRelease": "#osRelease#",
+        "clusterId": "#clusterId#",
         "observerConfig": {}
     }
 }

@@ -10,8 +10,25 @@ systemctl daemon-reload
 /bin/bash /usr/libexec/oceanbase/scripts/telemetry.sh $1 >/dev/null 2>&1
 
 if [ -f "$cnf_file" ] && [ -s "$cnf_file" ]; then
+    # Ensure the directory exists
+    mkdir -p /var/lib/oceanbase
+
+    # Create the clean script file
+    clean_script="/var/lib/oceanbase/oceanbase_clean.sh"
+    echo "#!/bin/bash" > "$clean_script"
+    echo "# OceanBase cleanup script" >> "$clean_script"
+    echo "# This script will be executed after package removal" >> "$clean_script"
+
     redo_dir=$(cat "$cnf_file" | grep -o 'redo-dir=[^[:space:]]*' | sed 's/redo-dir=//')
-    echo "rm -rf $redo_dir" >> /var/lib/oceanbase/oceanbase_clean.sh
+    if [ -n "$redo_dir" ]; then
+        echo "rm -rf $redo_dir" >> "$clean_script"
+    fi
+
     data_dir=$(cat "$cnf_file" | grep -o 'data-dir=[^[:space:]]*' | sed 's/data-dir=//')
-    echo "rm -rf $data_dir" >> /var/lib/oceanbase/oceanbase_clean.sh
+    if [ -n "$data_dir" ]; then
+        echo "rm -rf $data_dir" >> "$clean_script"
+    fi
+
+    # Make the script executable
+    chmod +x "$clean_script"
 fi
