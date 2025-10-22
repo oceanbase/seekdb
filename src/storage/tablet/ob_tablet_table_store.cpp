@@ -851,10 +851,11 @@ int ObTabletTableStore::calculate_ddl_read_tables(
     } else if (has_co_ddl_memtable) {
       const SCN ddl_start_scn = ddl_mem_sstables_[0]->get_ddl_start_scn();
       ObTableHandleV2 ddl_tmp_handle;
+      ObArenaAllocator arena(ObMemAttr(MTL_ID(), "Ddl_Com_Store"));
       ObTabletDDLCompleteMdsUserData ddl_complete_data;
       ObStorageSchema *storage_schema = nullptr;
       ObTmpSSTable *ddl_tmp_sstable = nullptr;
-      if (OB_FAIL(tablet.get_ddl_complete(share::SCN::max_scn(), ddl_complete_data))) {
+      if (OB_FAIL(tablet.get_ddl_complete(share::SCN::max_scn(), arena, ddl_complete_data))) {
         LOG_WARN("failed to get ddl complete mds user data", K(ret));
       } else if (ddl_complete_data.snapshot_version_ > snapshot_version) {
         // skip
@@ -1805,8 +1806,9 @@ OB_INLINE int ObTabletTableStore::check_major_sstable_empty(const share::SCN &dd
 OB_INLINE int ObTabletTableStore::check_ddl_complete(const ObTablet &tablet, bool &is_empty) const
 {
   int ret = OB_SUCCESS;
+  ObArenaAllocator arena(ObMemAttr(MTL_ID(), "DdlCom_Sto"));
   ObTabletDDLCompleteMdsUserData data;
-  if (OB_FAIL(tablet.get_ddl_complete(share::SCN::max_scn(), data))) {
+  if (OB_FAIL(tablet.get_ddl_complete(share::SCN::max_scn(), arena, data))) {
     if (OB_EMPTY_RESULT == ret) {
       ret = OB_SUCCESS;
       is_empty = true;

@@ -954,7 +954,6 @@ int ObDDLKV::create_ddl_memtable(ObTablet &tablet, const ObITable::TableKey &tab
     bool need_free_storage_schema = false;
     ObStorageSchema *storage_schema = nullptr;
     ObArenaAllocator arena("init_ddl_memt", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID());
-    ObTabletDDLCompleteMdsUserData user_data;
     if (is_inc_major_ddl_kv()) {
       ret = OB_NOT_SUPPORTED;
     } else {

@@ -226,13 +226,14 @@ int ObTabletDDLCompleteMdsHelper::process(const char* buf, const int64_t len, co
     ObLSHandle ls_handle;
     ObLSService *ls_service = MTL(ObLSService*);
     ObTabletDDLCompleteMdsUserData data;
+    common::ObArenaAllocator allocator(ObMemAttr(MTL_ID(), "Ddl_Com_MdsH"));
     /* set flag */
     if (OB_ISNULL(ls_service)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("ls_service is null", K(ret));
     } else if (OB_FAIL(ls_service->get_ls(arg.ls_id_, ls_handle, ObLSGetMod::MDS_TABLE_MOD))) {
       LOG_WARN("failed to get ls", K(ret), K(arg));
-    } else if (OB_FAIL(data.set_with_merge_arg(arg))) {
+    } else if (OB_FAIL(data.set_with_merge_arg(arg, allocator))) {
       LOG_WARN("failed to set with merge arg", K(ret));
     } else {
       if (OB_FAIL(process_ddl(ctx, ls_handle, arg.tablet_id_, data, scn, for_replay))) {
