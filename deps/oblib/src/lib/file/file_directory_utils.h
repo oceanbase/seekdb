@@ -25,6 +25,8 @@ namespace oceanbase
 {
 namespace common
 {
+class ObSqlString;
+
 #ifndef S_IRWXUGO
 # define S_IRWXUGO (S_IRWXU | S_IRWXG | S_IRWXO)
 #endif
@@ -54,6 +56,12 @@ public:
   static int delete_directory_rec(const char *path);
   static int delete_tmp_file_or_directory_at(const char *path);
   static int fsync_dir(const char *dir_path);
+
+  /**
+  * convert relative path to absolute path
+  * @note ensure the path exists
+  */
+  static int to_absolute_path(ObSqlString &path);
 
 private:
   static int check_directory_mode(const char *file_path, int mode, bool &result);

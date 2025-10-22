@@ -54,7 +54,7 @@ enum ObCommandOption {
 
 // 定义长选项
 static struct option long_options[] = {
-  {"initialize", no_argument,       0, COMMAND_OPTION_INITIALIZE},
+  {"initialize", no_argument,       0, COMMAND_OPTION_INITIALIZE}, // TODO wangyunlai.wyl remove me before 2025-12-01
   {"variable",   required_argument, 0, COMMAND_OPTION_VARIABLE},
   {"port",       required_argument, 0, 'P'},
   {"nodaemon",   no_argument,       0, COMMAND_OPTION_NODAEMON},
@@ -137,6 +137,7 @@ int ObCommandLineParser::handle_option(int option, const char* value, ObServerOp
 
   switch (option) {
     case COMMAND_OPTION_INITIALIZE: { // initialize
+      MPRINT("Initialize option is deprecated, please start observer directly.");
       opts.initialize_ = true;
       break;
     }
@@ -175,7 +176,7 @@ int ObCommandLineParser::handle_option(int option, const char* value, ObServerOp
       break;
     }
     case COMMAND_OPTION_DEVNAME: { // devname
-      opts.devname_ = value;
+      MPRINT("devname is deprecated, igored."); // TODO wangyunlai.wyl remove me before 2025-12-01
       break;
     }
     case COMMAND_OPTION_BASE_DIR: { // base-dir
@@ -265,54 +266,6 @@ int ObCommandLineParser::parse_args(int argc, char* argv[], ObServerOptions& opt
   // 设置默认值
   if (OB_FAIL(ret)) {
   } else if (opts.base_dir_.empty() && OB_FAIL(opts.base_dir_.assign("."))) {
-  } else if (!opts.initialize_ && !opts.variables_.empty()) {
-    opts.variables_.reset();
-    MPRINT("Variable is only available in initialize mode, reset it.");
-  }
-
-  // 设置nodaemon逻辑：初始化模式下，默认不以daemon方式运行
-  if (OB_FAIL(ret)) {
-  } else if (opts.initialize_ && !opts.nodaemon_) {
-    opts.nodaemon_ = true;
-    MPRINT("Initialize mode, execute not as a daemon.");
-  }
-
-  // 初始化时，如果没有指定data_dir和redo_dir，需要设置默认值
-  if (OB_FAIL(ret) || !opts.initialize_) {
-  } else if (opts.data_dir_.empty() &&
-        OB_FAIL(opts.data_dir_.append_fmt("%s/store", opts.base_dir_.ptr()))) {
-        MPRINT("[Maybe Memory Error] Failed to assign data dir. Please try again.");
-  } else if (opts.redo_dir_.empty() &&
-      OB_FAIL(opts.redo_dir_.append_fmt("%s/redo", opts.data_dir_.ptr()))) {
-        MPRINT("[Maybe Memory Error] Failed to assign redo dir. Please try again.");
-  }
-
-  // 创建base-dir, data-dir, redo-dir
-  if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(FileDirectoryUtils::create_full_path(opts.base_dir_.ptr()))) {
-    MPRINT("Failed to create base-dir: %s. error: %s", opts.base_dir_.ptr(), strerror(errno));
-  } else if (!opts.data_dir_.empty() && OB_FAIL(FileDirectoryUtils::create_full_path(opts.data_dir_.ptr()))) {
-    MPRINT("Failed to create data-dir: %s. error: %s", opts.data_dir_.ptr(), strerror(errno));
-  } else if (!opts.redo_dir_.empty() && OB_FAIL(FileDirectoryUtils::create_full_path(opts.redo_dir_.ptr()))) {
-    MPRINT("Failed to create redo-dir: %s. error: %s", opts.redo_dir_.ptr(), strerror(errno));
-  }
-
-  // 如果data_dir_和redo_dir_不是空并且不是绝对路径，需要切换成绝对路径
-  if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(to_absolute_path(opts.base_dir_))) {
-  } else if (OB_FAIL(to_absolute_path(opts.data_dir_))) {
-    // error already printed
-  } else if (OB_FAIL(to_absolute_path(opts.redo_dir_))) {
-    // error already printed
-  } else {
-    MPRINT("Starting OceanBase with:");
-    MPRINT("    base-dir=%s", opts.base_dir_.ptr());
-    if (!opts.data_dir_.empty()) {
-      MPRINT("    data-dir=%s", opts.data_dir_.ptr());
-    }
-    if (!opts.redo_dir_.empty()) {
-      MPRINT("    redo-dir=%s", opts.redo_dir_.ptr());
-    }
   }
 
   return ret;
@@ -324,13 +277,11 @@ void ObCommandLineParser::print_help() const
   MPRINT();
   MPRINT("Usage: observer [OPTIONS]\n");
   MPRINT("Options:");
-  MPRINT("  --initialize                    whether to perform initialization");
-  MPRINT("  --variable <key=value>          system variables, format: key=value. Note: Only available in initialize mode. Can be specified multiple times.");
+  MPRINT("  --variable <key=value>          system variables, format: key=value. Note: This takes effect only during the initial startup. Can be specified multiple times.");
   MPRINT("  --port, -P <port>               the port, default is 2881");
   MPRINT("  --nodaemon                      whether to not run as a daemon");
   MPRINT("  --use-ipv6, -6                  whether to use ipv6");
-  MPRINT("  --devname <name>                The name of network adapter");
-  MPRINT("  --base-dir <dir>                The base directory which oceanbase process will run in. (default: current directory)");
+  MPRINT("  --base-dir <dir>                The base/work directory which oceanbase process will run in. (default: current directory)");
   MPRINT("  --data-dir <dir>                The data directory which oceanbase will store data in. Default is ${base-dir}/store in initialize mode.");
   MPRINT("  --redo-dir <dir>                The redo log directory which oceanbase will store redo log in. Default is ${data-dir}/redo in initialize mode.");
   MPRINT("  --log-level <level>             The server log level");
@@ -342,14 +293,12 @@ void ObCommandLineParser::print_help() const
 
 void ObCommandLineParser::print_version()
 {
-  // 这里应该调用原有的print_version函数
-  // 为了简化，我们直接输出版本信息
 #ifndef ENABLE_SANITY
   const char *extra_flags = "";
 #else
   const char *extra_flags = "|Sanity";
 #endif
-  MPRINT("observer (%s %s)\n", "OceanBase_Lite", PACKAGE_VERSION);
+  MPRINT("observer (%s %s)\n", OB_PRODUCTION_NAME, PACKAGE_VERSION);
   MPRINT("REVISION: %s", build_version());
   MPRINT("BUILD_BRANCH: %s", build_branch());
   MPRINT("BUILD_TIME: %s %s", build_date(), build_time());

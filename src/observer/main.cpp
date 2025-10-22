@@ -100,104 +100,6 @@ static void print_args(int argc, char *argv[])
 }
 
 /**
- * 创建并检查目录为空，并且有写权限
- * @param dir_path 目录路径
- * @return 返回值
- * @retval OB_SUCCESS 成功
- * @retval OB_INVALID_ARGUMENT 参数错误
- * @retval OB_ERR_UNEXPECTED 目录不存在或不可写
- */
-static int create_and_check_dir_writable(const char *dir_path, bool check_is_empty = true)
-{
-  int ret = OB_SUCCESS;
-  bool is_writable = false;
-  bool is_empty = false;
-  bool is_exists = false;
-  if (OB_ISNULL(dir_path) || strlen(dir_path) == 0) {
-    ret = OB_INVALID_ARGUMENT;
-    MPRINT("[Internal Error] Invalid argument. dir path is null.");
-  }
-
-  if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(FileDirectoryUtils::is_exists(dir_path, is_exists))) {
-    MPRINT("Check directory exists failed. path='%s'. system error=%s", dir_path, strerror(errno));
-  } else if (is_exists && check_is_empty) {
-    if (OB_FAIL(FileDirectoryUtils::is_empty_directory(dir_path, is_empty))) {
-      MPRINT("Check directory empty failed. path='%s', system error=%s", dir_path, strerror(errno));
-    } else if (!is_empty) {
-      ret = OB_INVALID_ARGUMENT;
-      MPRINT("Directory is not empty. path=%s", dir_path);
-    }
-  } else if (OB_FAIL(FileDirectoryUtils::create_full_path(dir_path))) {
-    MPRINT("Create directory failed. path='%s', system error=%s", dir_path, strerror(errno));
-  }
-
-  if (FAILEDx(FileDirectoryUtils::is_writable(dir_path, is_writable))) {
-    MPRINT("Check directory writable failed. path=%s, system error=%s", dir_path, strerror(errno));
-  } else if (!is_writable) {
-    ret = OB_ERR_UNEXPECTED;
-    MPRINT("Directory is not writable. path='%s'", dir_path);
-  } else {
-    MPRINT("Directory is created and writable. path='%s'", dir_path);
-  }
-  return ret;
-}
-
-/**
- * 初始化部署环境
- * @details 初始化observer进程需要的目录，比如 base_dir、data_dir和redo_dir。
- * @param opts 配置选项
- * @return 返回值
- * @retval OB_SUCCESS 成功
- * @retval OB_INVALID_ARGUMENT 参数错误
- * @retval OB_ERR_UNEXPECTED 目录不存在或不可写
- */
-static int init_deploy_env(const ObServerOptions &opts)
-{
-  int ret = OB_SUCCESS;
-
-  const char *sstable_dir = "sstable";
-  const char *slog_dir = "slog";
-
-  // 确保我们需要的几个目录是空的，其它目录可以保留。比如用户可以在base_dir下创建 plugin_dir、bin等目录。
-  ObSqlString log_dir;
-  ObSqlString run_dir;
-  ObSqlString etc_dir;
-  if (OB_FAIL(log_dir.assign_fmt("%s/%s", opts.base_dir_.ptr(), LOG_DIR))) {
-    MPRINT("[Maybe Memory Error] Failed to assign log dir.");
-  } else if (OB_FAIL(run_dir.assign_fmt("%s/%s", opts.base_dir_.ptr(), PID_DIR))) {
-    MPRINT("[Maybe Memory Error] Failed to assign run dir.");
-  } else if (OB_FAIL(etc_dir.assign_fmt("%s/%s", opts.base_dir_.ptr(), CONF_DIR))) {
-    MPRINT("[Maybe Memory Error] Failed to assign etc dir.");
-  } else if (OB_FAIL(create_and_check_dir_writable(log_dir.ptr(), false/*check_is_empty*/))) {
-    MPRINT("Failed to create and check log dir.");
-  } else if (OB_FAIL(create_and_check_dir_writable(run_dir.ptr(), false/*check_is_empty*/))) {
-    MPRINT("Failed to create and check run dir.");
-  } else if (OB_FAIL(create_and_check_dir_writable(etc_dir.ptr(), false/*check_is_empty*/))) {
-    MPRINT("Failed to create and check etc dir.");
-  }
-
-  if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(create_and_check_dir_writable(opts.redo_dir_.ptr()))) {
-    MPRINT("Failed to create and check redo dir.");
-  }
-
-  ObSqlString data_dir;
-  if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(data_dir.assign_fmt("%s/%s", opts.data_dir_.ptr(), sstable_dir))) {
-    MPRINT("[Maybe Memory Error] Failed to assign base dir.");
-  } else if (OB_FAIL(create_and_check_dir_writable(data_dir.ptr()))) {
-    MPRINT("Failed to create and check sstable dir.");
-  } else if (OB_FAIL(data_dir.assign_fmt("%s/%s", opts.data_dir_.ptr(), slog_dir))) {
-    MPRINT("[Maybe Memory Error] Failed to create slog dir variable.");
-  } else if (OB_FAIL(create_and_check_dir_writable(data_dir.ptr()))) {
-    MPRINT("Failed to create and check slog dir.");
-  }
-
-  return ret;
-}
-
-/**
  * 解析命令行参数
  * @details 解析命令行参数，并初始化ObServerOptions。
  * @param argc 命令行参数个数
@@ -209,10 +111,14 @@ static int parse_args(int argc, char *argv[], ObServerOptions &opts)
   int ret = OB_SUCCESS;
 
   ObCommandLineParser parser;
+  bool config_file_exists = false;
 
   // 解析参数，结果直接设置到opts中
   if (OB_FAIL(parser.parse_args(argc, argv, opts))) {
     MPRINT("Failed to parse command line arguments, ret=%d", ret);
+  } else if (OB_FAIL(FileDirectoryUtils::create_full_path(opts.base_dir_.ptr()))) {
+    MPRINT("Failed to create base dir. path='%s', system error=%s", opts.base_dir_.ptr(), strerror(errno));
+  } else if (OB_FAIL(FileDirectoryUtils::to_absolute_path(opts.base_dir_))) {
   }
 
   return ret;
@@ -399,22 +305,12 @@ int inner_main(int argc, char *argv[])
   }
 
   if (OB_FAIL(ret)) {
-  } else if (opts->initialize_) {
-    if (OB_FAIL(init_deploy_env(*opts))) {
-      MPRINT("Failed to initialize deploy environment.");
-    }
-  }
-
-  if (OB_FAIL(ret)) {
   } else if (0 != chdir(opts->base_dir_.ptr())) {
     ret = OB_ERR_UNEXPECTED;
     MPRINT("Failed to change working directory to base dir. path='%s', system error='%s'",
       opts->base_dir_.ptr(), strerror(errno));
   } else {
     MPRINT("Change working directory to base dir. path='%s'", opts->base_dir_.ptr());
-    if (opts->initialize_) {
-      MPRINT("Start to initialize observer, please wait...");
-    }
   }
 
   if (OB_FAIL(ret)) {
@@ -428,12 +324,13 @@ int inner_main(int argc, char *argv[])
     MPRINT("create log dir fail: ./etc/");
   } else if (OB_FAIL(ObEncryptionUtil::init_ssl_malloc())) {
     MPRINT("failed to init crypto malloc");
-  } else if (!opts->nodaemon_) {
-    MPRINT("Start observer server as a daemon.");
+  } else if (!opts->nodaemon_ && !opts->initialize_) {
+    MPRINT("Will start observer as a daemon process. You can check the server status by client later.");
     if (OB_FAIL(start_daemon(PID_FILE_NAME))) {
-      MPRINT("Start observer server as a daemon failed.");
+      MPRINT("Start observer as a daemon failed.");
     }
   }
+
   if (OB_FAIL(ret)) {
   } else {
     ObCurTraceId::get_trace_id()->set("Y0-0000000000000001-0-0");
@@ -444,7 +341,7 @@ int inner_main(int argc, char *argv[])
     OB_LOGGER.set_log_level(opts->log_level_);
     OB_LOGGER.set_max_file_size(LOG_FILE_SIZE);
     OB_LOGGER.set_new_file_info(syslog_file_info);
-    OB_LOGGER.set_file_name(LOG_FILE_NAME, opts->initialize_/*no_redirect_flag*/);
+    OB_LOGGER.set_file_name(LOG_FILE_NAME, true/*no_redirect_flag*/);
     ObPLogWriterCfg log_cfg;
     LOG_INFO("succ to init logger",
              "default file", LOG_FILE_NAME,
@@ -490,17 +387,17 @@ int inner_main(int argc, char *argv[])
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(observer.start(embed_mode))) {
         LOG_ERROR("observer start fail", K(ret));
-      } else if (initialize) {
-        MPRINT("observer initialized successfully, you can start observer server now");
-        _exit(0);
+      }
+      if (initialize) {
+        LOG_INFO("observer starts in initialize mode, exit now", K(initialize));
+        _exit(OB_SUCC(ret) ? 0 : 1);
+      }
+      if (OB_FAIL(ret)) {
       } else if (OB_FAIL(observer.wait())) {
         LOG_ERROR("observer wait fail", K(ret));
       }
 
       if (OB_FAIL(ret)) {
-        if (initialize) {
-          MPRINT("observer start failed. Please check the log file for details.");
-        }
         _exit(1);
       }
       print_all_thread("BEFORE_DESTROY", OB_SERVER_TENANT_ID);

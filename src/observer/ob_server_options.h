@@ -42,8 +42,8 @@ public:
   int8_t  log_level_   = 0;
   bool    nodaemon_    = false;
   bool    use_ipv6_    = false;
-  bool    initialize_  = false;
   bool    embed_mode_  = false;
+  bool    initialize_  = false; // TODO wangyunlai.wyl remove me before 2025-12-01
 
   common::ObSqlString base_dir_;
   common::ObSqlString data_dir_;

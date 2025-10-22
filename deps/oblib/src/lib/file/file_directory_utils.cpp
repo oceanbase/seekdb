@@ -18,6 +18,7 @@
 
 #include "common/ob_smart_call.h"
 #include "lib/utility/ob_hang_fatal_error.h"
+#include "lib/string/ob_sql_string.h"
 
 #include <dirent.h>
 #include <sys/statvfs.h>
@@ -515,5 +516,19 @@ int FileDirectoryUtils::fsync_dir(const char *dir_path)
   return ret;
 }
 
+int FileDirectoryUtils::to_absolute_path(ObSqlString &dir)
+{
+  int ret = OB_SUCCESS;
+  if (!dir.empty() && dir.ptr()[0] != '\0' && dir.ptr()[0] != '/') {
+    char real_path[OB_MAX_FILE_NAME_LENGTH] = {0};
+    if (NULL == realpath(dir.ptr(), real_path)) {
+      LIB_LOG(WARN, "Failed to get absolute path", K(dir), KCSTRING(strerror(errno)));
+      ret = OB_ERR_UNEXPECTED;
+    } else if (OB_FAIL(dir.assign(real_path))) {
+      LIB_LOG(WARN, "Failed to assign absolute path.", K(dir));
+    }
+  }
+  return ret;
+}
 }//end namespace common
 }//end namespace oceanbase

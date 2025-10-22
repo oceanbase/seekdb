@@ -128,8 +128,6 @@ int ObLiteEmbed::do_open_(const char* db_dir)
   opts.use_ipv6_ = false;
   opts.embed_mode_ = true;
 
-  bool redo_exist = false;
-  bool redo_empty = true;
   char buffer[PATH_MAX];
   ObSqlString work_abs_dir;
   ObSqlString slog_dir;
@@ -162,11 +160,6 @@ int ObLiteEmbed::do_open_(const char* db_dir)
   } else if (-1 == chdir(opts.base_dir_.ptr())) {
     ret = OB_ERR_UNEXPECTED;
     MPRINT("change dir failed %s, directory: %s", strerror(errno), opts.base_dir_.ptr());
-  } else if (OB_FAIL(FileDirectoryUtils::is_exists(opts.redo_dir_.ptr(), redo_exist))) {
-    MPRINT("check dir failed %d", ret);
-  } else if (redo_exist && OB_FAIL(FileDirectoryUtils::is_empty_directory(opts.redo_dir_.ptr(), redo_empty))) {
-    MPRINT("check dir failed %d", ret);
-  } else if (FALSE_IT(opts.initialize_ = !redo_exist || redo_empty)) {
   } else if (OB_FAIL(FileDirectoryUtils::create_full_path(opts.data_dir_.ptr()))) {
     MPRINT("create dir failed %d", ret);
   } else if (OB_FAIL(FileDirectoryUtils::create_full_path(opts.redo_dir_.ptr()))) {

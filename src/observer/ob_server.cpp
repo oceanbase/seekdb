@@ -80,6 +80,7 @@
 #include "share/ob_license_utils.h"
 #include "rpc/obrpc/ob_rpc_net_handler.h"
 #include "share/ob_service_epoch_proxy.h"
+#include "storage/blocksstable/ob_block_sstable_struct.h"
 
 using namespace oceanbase::lib;
 using namespace oceanbase::common;
@@ -119,6 +120,38 @@ namespace oceanbase
 {
 namespace observer
 {
+
+static int check_need_initialize(const char *base_dir, const char *data_dir, const char *redo_dir, bool &need_initialize)
+{
+  int ret = OB_SUCCESS;
+  need_initialize = false;
+  bool data_file_exists = false;
+  bool redo_empty = true;
+  ObSqlString data_file_path;
+  ObSqlString redo_file_path;
+  if (OB_FAIL(data_file_path.assign_fmt("%s/%s/%s", data_dir, BLOCK_SSTBALE_DIR_NAME, BLOCK_SSTBALE_FILE_NAME))) {
+    LOG_WARN("Failed to assign data file path.");
+  }
+  if (OB_FAIL(FileDirectoryUtils::is_exists(data_file_path.ptr(), data_file_exists))) {
+    LOG_WARN("Failed to check data file exists.", K(data_file_path));
+  } else if (OB_FAIL(FileDirectoryUtils::create_full_path(redo_dir))) {
+    LOG_WARN("Failed to create redo path", KCSTRING(redo_dir), KCSTRING(strerror(errno)));
+  } else if (OB_FAIL(ObServerLogBlockMgr::check_clog_directory_is_empty(redo_dir, redo_empty))) {
+    LOG_WARN("Failed to check redo file exists.", K(redo_file_path));
+  } else if (!data_file_exists && redo_empty) {
+    need_initialize = true;
+  } else if (data_file_exists && !redo_empty) {
+    need_initialize = false;
+  } else {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("The status of deployment environment is not consistent. Please clear the directories and restart.");
+    LOG_WARN("    base-dir", KCSTRING(base_dir));
+    LOG_WARN("    data-dir", KCSTRING(data_dir));
+    LOG_WARN("    redo-dir", KCSTRING(redo_dir));
+  }
+  return ret;
+}
+
 ObServer::ObServer()
   : need_ctas_cleanup_(true),
     gctx_(GCTX),
@@ -189,6 +222,17 @@ int ObServer::init(const ObServerOptions &opts, const ObPLogWriterCfg &log_cfg)
   if (OB_SUCC(ret) && OB_FAIL(init_config(opts))) {
     LOG_ERROR("init config failed", KR(ret));
   }
+  bool need_initialize = false;
+  if (OB_FAIL(ret)) {
+  } else if (OB_FAIL(check_need_initialize(opts.base_dir_.ptr(),
+                                           config_.data_dir.get_value(),
+                                           config_.redo_dir.get_value(),
+                                           need_initialize))) {
+    LOG_ERROR("check need initialize failed", KR(ret));
+  }
+  if (OB_SUCC(ret) && need_initialize) {
+    LOG_INFO("Need to initialize", K(need_initialize));
+  }
   // set alert log level earlier
   OB_LOGGER.set_alert_log_level(config_.alert_log_level);
   LOG_DBA_INFO_V2(OB_SERVER_INIT_BEGIN,
@@ -258,7 +302,7 @@ int ObServer::init(const ObServerOptions &opts, const ObPLogWriterCfg &log_cfg)
         LOG_ERROR("init sql executor singletons !", KR(ret));
       } else if (OB_FAIL(sql::init_sql_expr_static_var())) {
         LOG_ERROR("init sql expr static var !", KR(ret));
-      } else if (OB_FAIL(ObPreProcessSysVars::init_sys_var(opts.variables_))) {
+      } else if (OB_FAIL(ObPreProcessSysVars::init_sys_var(!need_initialize ? ObServerOptions::KeyValueArray() : opts.variables_))) {
         LOG_ERROR("init PreProcessing system variable failed !", KR(ret));
       } else if (OB_FAIL(ObBasicSessionInfo::init_sys_vars_cache_base_values())) {
         LOG_ERROR("init session base values failed", KR(ret));
@@ -320,7 +364,7 @@ int ObServer::init(const ObServerOptions &opts, const ObPLogWriterCfg &log_cfg)
       LOG_ERROR("init rs_mgr_ failed", KR(ret));
     } else if (OB_FAIL(server_tracer_.init(rs_rpc_proxy_, sql_proxy_))) {
       LOG_ERROR("init server tracer failed", KR(ret));
-    } else if (OB_FAIL(init_ob_service(opts.initialize_))) {
+    } else if (OB_FAIL(init_ob_service(need_initialize))) {
       LOG_ERROR("init ob service failed", KR(ret));
     } else if (OB_FAIL(init_root_service())) {
       LOG_ERROR("init root service failed", KR(ret));
@@ -1963,14 +2007,51 @@ int ObServer::init_opts_config(bool has_config_file, const ObServerOptions &opts
     }
   }
 
+  ObSqlString data_dir;
+  ObSqlString redo_dir;
   if (!opts.data_dir_.empty()) {
-    config_.data_dir.set_value(opts.data_dir_.ptr());
-    config_.data_dir.set_version(start_time_);
+    if (OB_FAIL(data_dir.assign(opts.data_dir_))) {
+      LOG_ERROR("failed to assign data dir", K(ret));
+    }
+  } else if (nullptr == config_.data_dir.get_value() || 0 == strlen(config_.data_dir.get_value())) {
+    if (OB_FAIL(data_dir.append_fmt("%s/store", opts.base_dir_.ptr()))) {
+      LOG_ERROR("failed to append data dir", K(ret));
+    }
   }
 
   if (!opts.redo_dir_.empty()) {
-    config_.redo_dir.set_value(opts.redo_dir_.ptr());
-    config_.redo_dir.set_version(start_time_);
+    if (OB_FAIL(redo_dir.assign(opts.redo_dir_))) {
+      LOG_ERROR("failed to assign redo dir", K(ret));
+    }
+  } else if (nullptr == config_.redo_dir.get_value() || 0 == strlen(config_.redo_dir.get_value())) {
+    if (OB_FAIL(redo_dir.append_fmt("%s/redo", config_.data_dir.get_value()))) {
+      LOG_ERROR("failed to append redo dir", K(ret));
+    }
+  }
+
+  if (OB_FAIL(ret)) {
+  } else if (!data_dir.empty()) {
+    if (OB_FAIL(FileDirectoryUtils::create_full_path(data_dir.ptr()))) {
+      LOG_ERROR("failed to create data dir", K(ret));
+    } else if (OB_FAIL(FileDirectoryUtils::to_absolute_path(data_dir))) {
+      LOG_ERROR("failed to convert data dir to absolute path", K(ret));
+    } else {
+      config_.data_dir.set_value(data_dir.ptr());
+      config_.data_dir.set_version(start_time_);
+      LOG_INFO("set data dir", K(config_.data_dir));
+    }
+  }
+  if (OB_FAIL(ret)) {
+  } else if (!redo_dir.empty()) {
+    if (OB_FAIL(FileDirectoryUtils::create_full_path(redo_dir.ptr()))) {
+      LOG_ERROR("failed to create redo dir", K(ret));
+    } else if (OB_FAIL(FileDirectoryUtils::to_absolute_path(redo_dir))) {
+      LOG_ERROR("failed to convert redo dir to absolute path", K(ret));
+    } else {
+      config_.redo_dir.set_value(redo_dir.ptr());
+      config_.redo_dir.set_version(start_time_);
+      LOG_INFO("set redo dir", K(config_.redo_dir));
+    }
   }
 
 #ifdef OB_BUILD_SHARED_STORAGE

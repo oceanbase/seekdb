@@ -25,7 +25,7 @@
 // "ofs://0.0.0.0,1.1.1.1,2.2.2.2/dir" means use ofs dir
 DEF_STR(data_dir, OB_CLUSTER_PARAMETER, "store", "the directory for the data file",
         ObParameterAttr(Section::SSTABLE, Source::DEFAULT, EditLevel::READONLY));
-DEF_STR(redo_dir, OB_CLUSTER_PARAMETER, "redo", "the directory for the redo/clog file",
+DEF_STR(redo_dir, OB_CLUSTER_PARAMETER, "", "the directory for the redo/clog file",
         ObParameterAttr(Section::SSTABLE, Source::DEFAULT, EditLevel::READONLY));
 DEF_STR(redundancy_level, OB_CLUSTER_PARAMETER, "NORMAL",
         "EXTERNAL: use extrernal redundancy"

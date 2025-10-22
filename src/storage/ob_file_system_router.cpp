@@ -121,35 +121,60 @@ int ObFileSystemRouter::init_local_dirs(const char* data_dir, const char* redo_d
   int ret = OB_SUCCESS;
   int pret = 0;
 
+  ObSqlString tmp_dir;
   if (OB_SUCC(ret)) {
-    pret = snprintf(data_dir_, MAX_PATH_SIZE, "%s", data_dir);
-    if (pret < 0 || pret >= MAX_PATH_SIZE) {
-      ret = OB_BUF_NOT_ENOUGH;
-      LOG_ERROR("construct data dir fail", K(ret), KCSTRING(data_dir));
+    if (OB_FAIL(tmp_dir.assign(data_dir))) {
+      LOG_ERROR("assign data dir failed", K(ret), KCSTRING(data_dir));
+    } else if (OB_FAIL(FileDirectoryUtils::create_full_path(tmp_dir.ptr()))) {
+      LOG_ERROR("create full path failed", K(ret), K(tmp_dir));
+    } else if (OB_FAIL(FileDirectoryUtils::to_absolute_path(tmp_dir))) {
+      LOG_ERROR("convert data dir to absolute path failed", K(ret), K(tmp_dir));
+    } else {
+      pret = snprintf(data_dir_, MAX_PATH_SIZE, "%s", tmp_dir.ptr());
+      if (pret < 0 || pret >= MAX_PATH_SIZE) {
+        ret = OB_BUF_NOT_ENOUGH;
+        LOG_ERROR("construct data dir fail", K(ret), K(tmp_dir));
+      }
     }
   }
 
   if (OB_SUCC(ret)) {
-    pret = snprintf(slog_dir_, MAX_PATH_SIZE, "%s/slog", data_dir);
+    pret = snprintf(slog_dir_, MAX_PATH_SIZE, "%s/slog", data_dir_);
     if (pret < 0 || pret >= MAX_PATH_SIZE) {
       ret = OB_BUF_NOT_ENOUGH;
       LOG_ERROR("construct slog path fail", K(ret));
     }
-  }
-
-  if (OB_SUCC(ret)) {
-    pret = snprintf(clog_dir_, MAX_PATH_SIZE, "%s", redo_dir);
-    if (pret < 0 || pret >= MAX_PATH_SIZE) {
-      ret = OB_BUF_NOT_ENOUGH;
-      LOG_ERROR("construct clog path fail", K(ret), KCSTRING(redo_dir));
+    if (OB_FAIL(ret)) {
+    } else if (OB_FAIL(FileDirectoryUtils::create_full_path(slog_dir_))) {
+      LOG_ERROR("create full path failed", K(ret), KCSTRING(slog_dir_));
     }
   }
 
   if (OB_SUCC(ret)) {
-    pret = snprintf(sstable_dir_, MAX_PATH_SIZE, "%s/sstable", data_dir);
+    if (OB_FAIL(tmp_dir.assign(redo_dir))) {
+      LOG_ERROR("assign clog/redo dir failed", K(ret), KCSTRING(redo_dir));
+    } else if (OB_FAIL(FileDirectoryUtils::create_full_path(tmp_dir.ptr()))) {
+      LOG_ERROR("create full path failed", K(ret), K(tmp_dir));
+    } else if (OB_FAIL(FileDirectoryUtils::to_absolute_path(tmp_dir))) {
+      LOG_ERROR("convert clog/redo dir to absolute path failed", K(ret), K(tmp_dir));
+    } else {
+      pret = snprintf(clog_dir_, MAX_PATH_SIZE, "%s", tmp_dir.ptr());
+      if (pret < 0 || pret >= MAX_PATH_SIZE) {
+        ret = OB_BUF_NOT_ENOUGH;
+        LOG_ERROR("construct clog/redo dir fail", K(ret), K(tmp_dir));
+      }
+    }
+  }
+
+  if (OB_SUCC(ret)) {
+    pret = snprintf(sstable_dir_, MAX_PATH_SIZE, "%s/sstable", data_dir_);
     if (pret < 0 || pret >= MAX_PATH_SIZE) {
       ret = OB_BUF_NOT_ENOUGH;
       LOG_ERROR("construct sstable path fail", K(ret));
+    }
+    if (OB_FAIL(ret)) {
+    } else if (OB_FAIL(FileDirectoryUtils::create_full_path(sstable_dir_))) {
+      LOG_ERROR("create full path failed", K(ret), KCSTRING(sstable_dir_));
     }
   }
 
