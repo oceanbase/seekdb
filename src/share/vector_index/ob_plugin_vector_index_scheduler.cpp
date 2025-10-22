@@ -236,9 +236,8 @@ int ObPluginVectorIndexLoadScheduler::check_schema_version()
 int ObPluginVectorIndexLoadScheduler::check_index_adpter_exist(ObPluginVectorIndexMgr *mgr)
 {
   int ret = OB_SUCCESS;
-  if (!mgr->get_partial_adapter_map().empty() || !mgr->get_complete_adapter_map().empty()) {
+  if (!mgr->get_partial_adapter_map().empty()) {
     // partial map not empty, exist adapter create by dml/ddl data complement/query
-    // complete adapter not empty, also need check for transfer
     mark_tenant_need_check();
   }
   return ret;
