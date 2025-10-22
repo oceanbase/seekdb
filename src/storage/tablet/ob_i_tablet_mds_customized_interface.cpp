@@ -125,6 +125,7 @@ int ObITabletMdsCustomizedInterface::get_latest_autoinc_seq(
 }
 
 int ObITabletMdsCustomizedInterface::get_ddl_complete(const share::SCN &snapshot,
+                                                      ObIAllocator &allocator,
                                                       ObTabletDDLCompleteMdsUserData &data,
                                                       const int64_t timeout) const
 {
@@ -133,7 +134,7 @@ int ObITabletMdsCustomizedInterface::get_ddl_complete(const share::SCN &snapshot
   int ret = OB_SUCCESS;
   if (CLICK_FAIL((get_snapshot<mds::DummyKey, ObTabletDDLCompleteMdsUserData>(
       mds::DummyKey(),
-      ReadDDLCompleteOp(data),
+      ReadDDLCompleteOp(allocator, data),
       snapshot,
       timeout)))) {
     if (OB_EMPTY_RESULT != ret) {

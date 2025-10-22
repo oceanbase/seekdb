@@ -451,13 +451,13 @@ int ObLSDDLLogHandler::flush(SCN &rec_scn)
           }
           (void)tenant_direct_load_mgr->gc_tablet_direct_load();
         } else {
-          ObTabletCreateDeleteMdsUserData user_data;
+          ObArenaAllocator arena(ObMemAttr(MTL_ID(), "DdlCom_LsHan"));
           ObTabletDDLCompleteMdsUserData  ddl_complete;
           if (OB_FAIL(ls_->get_tablet(ddl_kv_mgr_handle.get_obj()->get_tablet_id(),
                                            tablet_handle, ObTabletCommon::DEFAULT_GET_TABLET_DURATION_US,
                                            ObMDSGetTabletMode::READ_WITHOUT_CHECK))) {
             LOG_WARN("failed to get tablet handle", K(ret), K(ls_->get_ls_id()), K(ddl_kv_mgr_handle.get_obj()->get_tablet_id()));
-          } else if (OB_FAIL(tablet_handle.get_obj()->get_ddl_complete(share::SCN::max_scn(), ddl_complete))) {
+          } else if (OB_FAIL(tablet_handle.get_obj()->get_ddl_complete(share::SCN::max_scn(), arena, ddl_complete))) {
             if (OB_EMPTY_RESULT == ret) {
               ret = OB_SUCCESS;
               LOG_INFO("no ddl complete", K(ret), K(ls_->get_ls_id()), K(ddl_kv_mgr_handle.get_obj()->get_tablet_id()));
