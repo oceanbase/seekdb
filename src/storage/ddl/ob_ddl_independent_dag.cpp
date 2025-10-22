@@ -298,7 +298,7 @@ int ObDDLIndependentDag::push_chunk(ObDDLSlice *ddl_slice, ObChunk *&chunk_data)
     while (OB_SUCC(ret)) {
       if (OB_UNLIKELY(is_final_status())) {
         ret = get_dag_ret();
-        COVER_SUCC(OB_CANCELED);
+        ret = COVER_SUCC(OB_CANCELED);
         LOG_WARN("dag is stoped", K(ret));
       } else if (OB_FAIL(ddl_slice->push_chunk(chunk_data))) {
         if (OB_UNLIKELY(OB_EAGAIN != ret)) {

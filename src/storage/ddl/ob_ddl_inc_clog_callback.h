@@ -38,6 +38,7 @@
    inline bool is_success() const { return status_.is_success(); }
    inline bool is_failed() const { return status_.is_failed(); }
    inline bool is_finished() const { return status_.is_finished(); }
+   share::SCN get_scn() const { return __get_scn(); }
    int get_ret_code() const { return status_.get_ret_code(); }
  protected:
    ObDDLClogCbStatus status_;
@@ -52,14 +53,12 @@
    virtual int on_success() override;
    virtual int on_failure() override;
    virtual void try_release() override;
-   share::SCN get_scn() const { return scn_; }
    const char *get_cb_name() const override { return "DDLIncStartClogCb"; }
-   TO_STRING_KV(K(is_inited_), K(ls_id_), K(log_basic_), K(scn_));
+   INHERIT_TO_STRING_KV("ObDDLIncClogCb", ObDDLIncClogCb, K(is_inited_), K(ls_id_), K(log_basic_));
  private:
    bool is_inited_;
    share::ObLSID ls_id_;
    ObDDLIncLogBasic log_basic_;
-   share::SCN scn_;
  };
 
  class ObDDLIncRedoClogCb : public ObDDLIncClogCb
@@ -94,14 +93,12 @@
    virtual int on_success() override;
    virtual int on_failure() override;
    virtual void try_release() override;
-   share::SCN get_scn() const { return scn_; }
    const char *get_cb_name() const override { return "DDLIncCommitClogCb"; }
-   TO_STRING_KV(K(is_inited_), K(ls_id_), K(log_basic_), K(scn_));
+   INHERIT_TO_STRING_KV("ObDDLIncClogCb", ObDDLIncClogCb, K(is_inited_), K(ls_id_), K(log_basic_));
  private:
    bool is_inited_;
    share::ObLSID ls_id_;
    ObDDLIncLogBasic log_basic_;
-   share::SCN scn_;
  };
 
  } // namespace storage

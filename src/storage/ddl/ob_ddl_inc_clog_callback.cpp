@@ -29,7 +29,7 @@
  using namespace common;
 
  ObDDLIncStartClogCb::ObDDLIncStartClogCb()
-   : is_inited_(false), ls_id_(), log_basic_(), scn_(SCN::min_scn())
+   : is_inited_(false), ls_id_(), log_basic_()
  {
  }
 
@@ -55,10 +55,10 @@
  {
    int ret = OB_SUCCESS;
    common::ObTimeGuard timeguard("ObDDLIncStartClogCb::on_success", 1 * 1000 * 1000); // 1s
-   scn_ = __get_scn();
    status_.set_ret_code(ret);
    status_.set_state(STATE_SUCCESS);
-   FLOG_INFO("write ddl inc start log success", K(ls_id_), K(scn_), K(log_basic_));
+   SCN scn = __get_scn();
+   FLOG_INFO("write ddl inc start log success", K(ls_id_), K(scn), K(log_basic_));
    try_release();
    return OB_SUCCESS;
  }
@@ -185,7 +185,7 @@
  }
 
  ObDDLIncCommitClogCb::ObDDLIncCommitClogCb()
-   : is_inited_(false), ls_id_(), log_basic_(), scn_(SCN::min_scn())
+   : is_inited_(false), ls_id_(), log_basic_()
  {
  }
 
@@ -232,7 +232,8 @@
                                false, /*need_rewrite_meta*/
                                ObFreezeSourceFlag::DIRECT_INC_START);
      }
-     FLOG_INFO("write ddl inc commit log success", K(ls_id_), K(scn_), K(log_basic_));
+     SCN scn = __get_scn();
+     FLOG_INFO("write ddl inc commit log success", K(ls_id_), K(scn), K(log_basic_));
    }
 
    status_.set_ret_code(ret);

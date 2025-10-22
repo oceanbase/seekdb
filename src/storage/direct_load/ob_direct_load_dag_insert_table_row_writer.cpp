@@ -213,10 +213,6 @@ int ObDirectLoadDagInsertTableBatchRowDirectWriter::switch_slice(const bool is_f
   } else {
     OB_DELETEx(ObITabletSliceWriter, &allocator_, slice_writer_);
     allocator_.reuse();
-    if (row_count_ > 0) {
-      insert_tablet_ctx_->inc_row_count(row_count_);
-      row_count_ = 0;
-    }
   }
   // open slice
   if (OB_FAIL(ret)) {
@@ -306,6 +302,9 @@ int ObDirectLoadDagInsertTableBatchRowDirectWriter::close()
     } else if (OB_FAIL(row_handler_.close())) {
       LOG_WARN("fail to close", KR(ret));
     } else {
+      if (row_count_ > 0) {
+        insert_tablet_ctx_->inc_row_count(row_count_);
+      }
       FLOG_INFO("direct add sstable slice", K(tablet_id_), K(row_count_));
     }
   }
