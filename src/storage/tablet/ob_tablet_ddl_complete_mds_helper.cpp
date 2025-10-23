@@ -225,8 +225,8 @@ int ObTabletDDLCompleteMdsHelper::process(const char* buf, const int64_t len, co
   } else {
     ObLSHandle ls_handle;
     ObLSService *ls_service = MTL(ObLSService*);
-    ObTabletDDLCompleteMdsUserData data;
     common::ObArenaAllocator allocator(ObMemAttr(MTL_ID(), "Ddl_Com_MdsH"));
+    ObTabletDDLCompleteMdsUserData data;
     /* set flag */
     if (OB_ISNULL(ls_service)) {
       ret = OB_ERR_UNEXPECTED;
