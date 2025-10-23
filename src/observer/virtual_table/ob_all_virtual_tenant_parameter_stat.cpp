@@ -30,11 +30,7 @@ namespace observer
 ObAllVirtualTenantParameterStat::ObAllVirtualTenantParameterStat() :
     inited_(false),
     show_seed_(false),
-    sys_iter_(),
-    tenant_iter_(),
-    cur_tenant_idx_(-1),
-    tenant_id_list_(),
-    tenant_config_()
+    sys_iter_()
 {
 }
 
@@ -54,32 +50,7 @@ int ObAllVirtualTenantParameterStat::init(const bool show_seed)
     SERVER_LOG(WARN, "unexpected null of omt", KR(ret), K(GCTX.omt_));
   } else if (FALSE_IT(show_seed_ = show_seed)) {
   } else {
-    if (is_sys_tenant(effective_tenant_id_)) {
-      // sys tenant show all local tenant parameter info
-      if (OB_FAIL(GCTX.omt_->get_mtl_tenant_ids(tenant_id_list_))) {
-        SERVER_LOG(WARN, "get_mtl_tenant_ids fail", KR(ret), K(effective_tenant_id_));
-      } else {
-        SERVER_LOG(INFO, "sys tenant show all local tenant parameter", K(effective_tenant_id_),
-            K(tenant_id_list_));
-      }
-    } else if (GCTX.omt_->has_tenant(effective_tenant_id_)) {
-      if (OB_FAIL(tenant_id_list_.push_back(effective_tenant_id_))) {
-        SERVER_LOG(WARN, "push back tenant id list fail", KR(ret), K(effective_tenant_id_),
-            K(tenant_id_list_));
-      } else {
-        SERVER_LOG(INFO, "user tenant only show self tenant parameter", K(effective_tenant_id_),
-            K(tenant_id_list_));
-      }
-    }
-
-    if (OB_FAIL(ret)) {
-    } else {
-      sys_iter_ = GCONF.get_container().begin();
-
-      // -1 means: no tenant has been handled
-      cur_tenant_idx_ = -1;
-      tenant_config_.set_config(NULL);
-    }
+    sys_iter_ = GCONF.get_container().begin();
   }
 
   if (OB_SUCC(ret)) {
@@ -99,10 +70,7 @@ void ObAllVirtualTenantParameterStat::reset()
   ObVirtualTableIterator::reset();
   inited_ = false;
   show_seed_ = false;
-  tenant_id_list_.reset();
-  cur_tenant_idx_ = -1;
   sys_iter_ = GCONF.get_container().begin();
-  tenant_config_.set_config(NULL);
 }
 
 int ObAllVirtualTenantParameterStat::inner_get_next_row(ObNewRow *&row)
@@ -184,7 +152,7 @@ int ObAllVirtualTenantParameterStat::fill_row_(common::ObNewRow *&row,
           }
           case VALUE: {
             if (0 == ObString("compatible").case_compare(iter->first.str())) {
-              const uint64_t tenant_id = tenant_id_list_.at(cur_tenant_idx_);
+              const uint64_t tenant_id = OB_SYS_TENANT_ID;
               uint64_t data_version = 0;
               char *dv_buf = NULL;
               if (GET_MIN_DATA_VERSION(tenant_id, data_version) != OB_SUCCESS) {

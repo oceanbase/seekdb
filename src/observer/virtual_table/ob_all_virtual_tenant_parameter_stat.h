@@ -76,11 +76,6 @@ private:
   bool show_seed_;                // whether to show seed config
 
   CfgIter sys_iter_;              // iterator for cluster config
-  CfgIter tenant_iter_;           // iterator for every tenant
-  int64_t cur_tenant_idx_;        // current tenant index for tenant_id_list_
-  common::ObSEArray<uint64_t, DEFAULT_TENANT_COUNT> tenant_id_list_;  // all tenant in observer
-  omt::ObTenantConfigGuard tenant_config_;      // current tenant config
-
 private:
   DISALLOW_COPY_AND_ASSIGN(ObAllVirtualTenantParameterStat);
 };
