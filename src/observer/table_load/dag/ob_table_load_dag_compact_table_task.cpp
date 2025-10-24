@@ -319,6 +319,7 @@ int ObTableLoadSSTableMergeRangeTask::process()
           LOG_WARN("unexpected range idx", KR(ret), K(curr_thread_idx_));
         } else {
           compact_ctx_->range_sstables_.at(curr_thread_idx_) = sstable_handle;
+          compact_ctx_->range_sstable_count_++;
         }
       }
     }
@@ -471,7 +472,8 @@ int ObTableLoadSSTableCompactTask::apply_merged_sstable(
                          compact_ctx_->range_count_ <= 0 ||
                          compact_ctx_->range_count_ != compact_ctx_->range_sstable_count_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected tablet ctx", KR(ret), KPC(this));
+    LOG_WARN("unexpected tablet ctx", KR(ret), KPC(this), K(compact_ctx_->merge_sstable_count_),
+             K(compact_ctx_->range_count_), K(compact_ctx_->range_sstable_count_));
   } else {
     ObDirectLoadTableHandleArray result_sstables;
     LOG_INFO("parallel merge apply merged", K(compact_ctx_->merge_sstable_count_),
