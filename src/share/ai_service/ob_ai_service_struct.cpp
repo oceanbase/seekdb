@@ -17,6 +17,8 @@
 #include "share/ai_service/ob_ai_service_struct.h"
 #include "lib/json/ob_json.h"
 #include "share/rc/ob_tenant_base.h"
+#include "observer/omt/ob_tenant_ai_service.h"
+
 
 #define USING_LOG_PREFIX SHARE
 
@@ -92,6 +94,10 @@ int ObAiModelEndpointInfo::check_valid() const
     ret = OB_AI_FUNC_PARAM_EMPTY;
     LOG_USER_ERROR(OB_AI_FUNC_PARAM_EMPTY, strlen("ai_model_name"), "ai_model_name");
     LOG_WARN("ai_model_name is empty", K(ret), K(*this));
+  } else if (!is_valid_ai_model_name(ai_model_name_)) {
+    ret = OB_AI_FUNC_PARAM_VALUE_INVALID;
+    LOG_USER_ERROR(OB_AI_FUNC_PARAM_VALUE_INVALID, strlen("ai_model_name"), "ai_model_name");
+    LOG_WARN("ai_model_name is invalid", K(ret), K(*this));
   } else if (url_.empty()) {
     ret = OB_AI_FUNC_PARAM_EMPTY;
     LOG_USER_ERROR(OB_AI_FUNC_PARAM_EMPTY, strlen("url"), "url");
@@ -132,6 +138,27 @@ bool ObAiModelEndpointInfo::is_valid_provider(const ObString &provider)
       is_valid = true;
       break;
     }
+  }
+  return is_valid;
+}
+
+bool ObAiModelEndpointInfo::is_valid_ai_model_name(const ObString &ai_model_name)
+{
+  bool is_valid = false;
+  int ret = OB_SUCCESS;
+  schema::ObMultiVersionSchemaService *schema_service = GCTX.schema_service_;
+  schema::ObSchemaGetterGuard guard;
+  uint64_t tenant_id = MTL_ID();
+  const ObAiModelSchema *ai_model_schema = nullptr;
+  if (OB_ISNULL(schema_service)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("schema service is null", KR(ret));
+  } else if (OB_FAIL(schema_service->get_tenant_schema_guard(tenant_id, guard))) {
+    LOG_WARN("fail to get schema guard", KR(ret), K(tenant_id));
+  } else if (OB_FAIL(guard.get_ai_model_schema(tenant_id, ai_model_name, ai_model_schema))) {
+    LOG_WARN("fail to get ai model schema", KR(ret), K(tenant_id), K(ai_model_name));
+  } else if (OB_NOT_NULL(ai_model_schema)) {
+    is_valid = true;
   }
   return is_valid;
 }

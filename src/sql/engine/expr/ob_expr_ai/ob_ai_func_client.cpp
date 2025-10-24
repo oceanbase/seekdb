@@ -22,6 +22,7 @@ namespace oceanbase
 namespace common
 {
 
+const int64_t ObAIFuncClient::CURL_MAX_TIMEOUT_SEC = INT_MAX/1000;
 ObAIFuncClient::ObAIFuncClient()
     : allocator_(nullptr), url_(nullptr), header_list_(nullptr),
       curlm_(nullptr), curl_(nullptr), curl_handles_(), response_buffers_()
@@ -77,7 +78,7 @@ int ObAIFuncClient::init(common::ObIAllocator &allocator, common::ObString &url,
 {
   int ret = OB_SUCCESS;
   int64_t remain_timeout_us = THIS_WORKER.is_timeout_ts_valid() ? THIS_WORKER.get_timeout_remain() : timeout_sec_ * 1000000;
-  LOG_INFO("init ai func client", K(remain_timeout_us));
+  LOG_DEBUG("init ai func client", K(remain_timeout_us));
   if (OB_ISNULL(url) || headers.empty()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument for init", K(ret));
@@ -89,7 +90,7 @@ int ObAIFuncClient::init(common::ObIAllocator &allocator, common::ObString &url,
     } else {
       url_ = url_str.ptr();
     }
-    timeout_sec_ = std::max(1L, remain_timeout_us / 1000000);
+    timeout_sec_ = std::min(std::max(1L, remain_timeout_us / 1000000), CURL_MAX_TIMEOUT_SEC);
     abs_timeout_ts_ = remain_timeout_us + ObTimeUtility::current_time();
     if (OB_SUCC(ret)){
       const uint32_t num_headers = headers.count();
