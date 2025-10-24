@@ -754,7 +754,8 @@ int ObLiteEmbedUtil::convert_result_to_pyobj(const int64_t col_idx, common::sqlc
       break;
     }
     case ObGeometryType:
-    case ObRoaringBitmapType: {
+    case ObRoaringBitmapType:
+    case ObCollectionSQLType: {
       ObString obj_str;
       if (OB_FAIL(result.get_varchar(col_idx, obj_str))) {
         LOG_WARN("failed to get binary data", K(ret), K(col_idx));

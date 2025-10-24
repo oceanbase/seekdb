@@ -279,7 +279,7 @@ void ObInnerSQLConnection::unref()
         LOG_WARN("revert connection failed", K(ret));
       }
     } else {
-      // see 
+      // see
       // extern_session_ = NULL;
     }
   }
@@ -2407,7 +2407,9 @@ ObInnerSqlWaitGuard::~ObInnerSqlWaitGuard()
         ObLocalDiagnosticInfo::setup_diagnostic_info(prev_di_);
       } else {
         ObLocalDiagnosticInfo::reset_diagnostic_info();
-        LOG_WARN_RET(OB_ERR_UNEXPECTED, "prev di ptr is nullptr", K(prev_di_));
+        if (REACH_TIME_INTERVAL(5L * 1000L * 1000L)) {
+          LOG_WARN_RET(OB_ERR_UNEXPECTED, "prev di ptr is nullptr", K(prev_di_));
+        }
       }
     }
 
