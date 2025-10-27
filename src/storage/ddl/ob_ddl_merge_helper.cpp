@@ -420,7 +420,6 @@ int ObSNDDLMergeHelperV2::merge_cg_slice(ObIDag *dag,
   ObArray<ObDDLBlockMeta> sorted_metas;
   ObArray<ObDDLBlockMeta> tmp_metas;
   ObArray<ObStorageMetaHandle> meta_handles;
-  ObTabletDDLCompleteMdsUserData ddl_data;
   ObDDLWriteStat write_stat;
 
   ObLSID ls_id;
@@ -431,6 +430,7 @@ int ObSNDDLMergeHelperV2::merge_cg_slice(ObIDag *dag,
   ObTabletDDLParam ddl_param;
 
   ObArenaAllocator arena(ObMemAttr(MTL_ID(), "merge_cg_slice"));
+  ObTabletDDLCompleteMdsUserData ddl_data;
 
   if (OB_ISNULL(dag) || cg_idx < 0 || start_slice_idx < 0 || end_slice_idx < 0) {
     ret = OB_INVALID_ARGUMENT;
