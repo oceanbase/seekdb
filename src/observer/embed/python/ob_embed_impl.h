@@ -43,6 +43,7 @@ public:
   observer::ObInnerSQLConnection *&get_conn() { return conn_; }
   sql::ObSQLSessionInfo *&get_session() { return session_; }
   common::ObCommonSqlProxy::ReadResult *get_res() { return result_; }
+  bool need_autocommit();
 private:
   observer::ObInnerSQLConnection *conn_;
   int64_t result_seq_;
@@ -56,7 +57,7 @@ public:
   ObLiteEmbedCursor() : embed_conn_(), result_seq_(0) {}
   ~ObLiteEmbedCursor() { reset(); }
   uint64_t execute(const char* sql);
-  pybind11::tuple fetchone();
+  pybind11::object fetchone();
   std::vector<pybind11::tuple> fetchall();
   void reset();
   void close() { reset(); }
@@ -73,7 +74,7 @@ public:
   ~ObLiteEmbed() {}
   static void open(const char* db_dir);
   static void close();
-  static std::shared_ptr<ObLiteEmbedConn> connect(const char* db_name);
+  static std::shared_ptr<ObLiteEmbedConn> connect(const char* db_name, const bool autocommit);
 private:
   static int do_open_(const char* db_dir);
 };

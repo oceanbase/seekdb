@@ -35,6 +35,7 @@ PYBIND11_MODULE(oblite, m) {
                                                  "open db");
 
     m.def("connect", &oceanbase::embed::ObLiteEmbed::connect, pybind11::arg("db_name") = "test",
+                                                        pybind11::arg("autocommit") = false,
                                                        "connect db");
 
     pybind11::class_<oceanbase::embed::ObLiteEmbedConn,
@@ -228,7 +229,27 @@ void ObLiteEmbed::close()
   _Exit(0);
 }
 
-std::shared_ptr<ObLiteEmbedConn> ObLiteEmbed::connect(const char* db_name)
+std::string handle_err_msg(int ret)
+{
+  std::string errmsg;
+  if (OB_FAIL(ret)) {
+    const common::ObWarningBuffer *wb = common::ob_get_tsi_warning_buffer();
+    if (nullptr != wb) {
+      if (wb->get_err_code() == ret ||
+          (ret >= OB_MIN_RAISE_APPLICATION_ERROR && ret <= OB_MAX_RAISE_APPLICATION_ERROR)) {
+        if (wb->get_err_msg() != nullptr && wb->get_err_msg()[0] != '\0') {
+          errmsg = std::string(wb->get_err_msg());
+        }
+      }
+    }
+    if (errmsg.empty()) {
+      errmsg = std::string(ob_errpkt_strerror(ret, false));
+    }
+  }
+  return errmsg;
+}
+
+std::shared_ptr<ObLiteEmbedConn> ObLiteEmbed::connect(const char* db_name, const bool autocommit)
 {
   int ret = OB_SUCCESS;
   std::shared_ptr<ObLiteEmbedConn> embed_conn = std::make_shared<ObLiteEmbedConn>();
@@ -239,6 +260,7 @@ std::shared_ptr<ObLiteEmbedConn> ObLiteEmbed::connect(const char* db_name)
   ObSchemaGetterGuard schema_guard;
   ObPrivSet db_priv_set = OB_PRIV_SET_EMPTY;
   int64_t start_time = ObTimeUtility::current_time();
+  const ObDatabaseSchema *database_schema = nullptr;
   if (OB_ISNULL(GCTX.sql_proxy_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("db not init", KR(ret));
@@ -248,6 +270,7 @@ std::shared_ptr<ObLiteEmbedConn> ObLiteEmbed::connect(const char* db_name)
     GCTX.session_mgr_->mark_sessid_unused(sid);
     session = nullptr;
     LOG_WARN("Failed to create session", KR(ret), K(sid));
+  } else if (FALSE_IT(common::ob_setup_tsi_warning_buffer(&session->get_warnings_buffer()))) {
   } else if (FALSE_IT(embed_conn->get_session() = session)) {
   } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(OB_SYS_TENANT_ID, schema_guard))) {
     LOG_WARN("failed to get schema guard", KR(ret));
@@ -256,6 +279,12 @@ std::shared_ptr<ObLiteEmbedConn> ObLiteEmbed::connect(const char* db_name)
   } else if (OB_ISNULL(user_info)) {
     ret = OB_SCHEMA_ERROR;
     LOG_WARN("schema user info is null", KR(ret));
+  } else if (OB_FAIL(schema_guard.get_database_schema(OB_SYS_TENANT_ID, ObString(db_name), database_schema))) {
+    LOG_WARN("failed to get database", KR(ret), K(db_name));
+  } else if (OB_ISNULL(database_schema)) {
+    ret = OB_ERR_BAD_DATABASE;
+    LOG_WARN("database is null", KR(ret), K(db_name));
+    LOG_USER_ERROR(OB_ERR_BAD_DATABASE, STRLEN(db_name), db_name);
   }
   if (OB_SUCC(ret)) {
     OZ (session->load_default_sys_variable(false, true));
@@ -264,7 +293,7 @@ std::shared_ptr<ObLiteEmbedConn> ObLiteEmbed::connect(const char* db_name)
     OZ (session->load_all_sys_vars(schema_guard));
     OZ (session->set_default_database(db_name));
     OX (session->set_user_session());
-    OZ (session->set_autocommit(false));
+    OZ (session->set_autocommit(autocommit));
     OZ (session->set_user(user_info->get_user_name_str(), user_info->get_host_name_str(), user_info->get_user_id()));
     OZ (session->set_real_client_ip_and_port("127.0.0.1", 0));
     OX (session->set_priv_user_id(user_info->get_user_id()));
@@ -284,8 +313,9 @@ std::shared_ptr<ObLiteEmbedConn> ObLiteEmbed::connect(const char* db_name)
   } else if (FALSE_IT(embed_conn->get_conn() = static_cast<observer::ObInnerSQLConnection*>(inner_conn))) {
   }
   if (OB_FAIL(ret)) {
-    throw std::runtime_error("connect failed " + std::to_string(ob_errpkt_errno(ret, false)) + " " + std::string(ob_errpkt_strerror(ret, false)));
+    throw std::runtime_error("connect failed " + std::to_string(ob_errpkt_errno(ret, false)) + " " + handle_err_msg(ret));
   }
+  common::ob_setup_tsi_warning_buffer(NULL);
   FLOG_INFO("connect", K(db_name), K(sid), KP(session), KPC(session), KPC(user_info), "cost", ObTimeUtility::current_time()-start_time);
   return embed_conn;
 }
@@ -315,6 +345,17 @@ void ObLiteEmbedConn::reset()
   }
 }
 
+bool ObLiteEmbedConn::need_autocommit()
+{
+  bool need_ac = false;
+  if (OB_NOT_NULL(session_)) {
+    bool ac = false;
+    session_->get_autocommit(ac);
+    need_ac = session_->is_in_transaction() && ac;
+  }
+  return need_ac;
+}
+
 int ObLiteEmbedConn::execute(const char *sql, uint64_t &affected_rows, int64_t &result_seq, std::string &errmsg)
 {
   int ret = OB_SUCCESS;
@@ -327,15 +368,15 @@ int ObLiteEmbedConn::execute(const char *sql, uint64_t &affected_rows, int64_t &
   if (OB_NOT_NULL(session_)) {
     common::ob_setup_tsi_warning_buffer(&session_->get_warnings_buffer());
   }
-  if (OB_ISNULL(conn_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("conn is empty", KR(ret));
+  if (OB_ISNULL(conn_) || OB_ISNULL(session_)) {
+    ret = OB_CONNECT_ERROR;
+    LOG_WARN("conn is empty", KR(ret), KP(conn_), KP(session_));
   } else if (OB_ISNULL(result_ = (common::ObCommonSqlProxy::ReadResult*)ob_malloc(sizeof(common::ObCommonSqlProxy::ReadResult), mem_attr))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("alloc mem failed", KR(ret));
   } else if (FALSE_IT(new (result_) common::ObCommonSqlProxy::ReadResult())) {
   } else if (OB_FAIL(conn_->execute_read(OB_SYS_TENANT_ID, sql_string, *result_, true))) {
-    LOG_WARN("execute sql failed", KR(ret), K(sql));
+    LOG_WARN("execute sql failed", KR(ret), K(sql), K(session_->is_in_transaction()));
   } else {
     observer::ObInnerSQLResult& res = static_cast<observer::ObInnerSQLResult&>(*result_->get_result());
     if (res.result_set().get_stmt_type() == sql::stmt::T_SELECT) {
@@ -347,22 +388,14 @@ int ObLiteEmbedConn::execute(const char *sql, uint64_t &affected_rows, int64_t &
     FLOG_INFO("execute", K(sql), K(conn_->is_in_trans()), K(session_->is_in_transaction()), K(affected_rows), K(res.result_set().get_stmt_type()),
         "cost", end_time-start_time);
   }
-  if (OB_FAIL(ret)) {
-    const common::ObWarningBuffer *wb = common::ob_get_tsi_warning_buffer();
-    if (nullptr != wb) {
-      if (wb->get_err_code() == ret ||
-          (ret >= OB_MIN_RAISE_APPLICATION_ERROR && ret <= OB_MAX_RAISE_APPLICATION_ERROR)) {
-        if (wb->get_err_msg() != nullptr && wb->get_err_msg()[0] != '\0') {
-          errmsg = std::string(wb->get_err_msg());
-        }
-      }
-    }
-  }
+  errmsg = handle_err_msg(ret);
   if (OB_NOT_NULL(session_)) {
     session_->reset_warnings_buf();
   }
+  common::ob_setup_tsi_warning_buffer(NULL);
   return ret;
 }
+
 
 ObLiteEmbedCursor ObLiteEmbedConn::cursor()
 {
@@ -386,10 +419,10 @@ uint64_t ObLiteEmbedCursor::execute(const char *sql)
     result_seq_ = result_seq;
   }
   if (OB_FAIL(ret)) {
-    if (errmsg.empty()) {
-      errmsg = std::string(ob_errpkt_strerror(ret, false));
-    }
     throw std::runtime_error("execute sql failed " + std::to_string(ob_errpkt_errno(ret, false)) + " " + errmsg);
+  }
+  if (embed_conn_->need_autocommit()) {
+    embed_conn_->commit();
   }
   return affected_rows;
 }
@@ -455,7 +488,7 @@ std::vector<pybind11::tuple> ObLiteEmbedCursor::fetchall()
   return res;
 }
 
-pybind11::tuple ObLiteEmbedCursor::fetchone()
+pybind11::object ObLiteEmbedCursor::fetchone()
 {
   int ret = OB_SUCCESS;
   pybind11::list row_data;
@@ -477,8 +510,7 @@ pybind11::tuple ObLiteEmbedCursor::fetchone()
     ret = mysql_result->next();
     if (OB_ITER_END == ret) {
       ret = OB_SUCCESS;
-      // 返回空tuple
-      return pybind11::tuple();
+      return pybind11::none();
     } else {
       int64_t column_count = mysql_result->get_column_count();
       for (int64_t i = 0; OB_SUCC(ret) && i < column_count; i++) {
