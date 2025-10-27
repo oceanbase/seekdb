@@ -155,9 +155,17 @@ int ObLiteEmbed::do_open_(const char* db_dir)
     MPRINT("get pidfile absolute path failed %d", ret);
   }
 
+  struct statfs fs_info;
+  const long TMPFS_MAGIC = 0x01021994;
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(FileDirectoryUtils::create_full_path(opts.base_dir_.ptr()))) {
     MPRINT("create base dir failed %d, directory: %s", ret, opts.base_dir_.ptr());
+  } else if (statfs(opts.base_dir_.ptr(), &fs_info) != 0) {
+    ret = OB_ERR_UNEXPECTED;
+    MPRINT("stat base dir failed %s, directory: %s", strerror(errno), opts.base_dir_.ptr());
+  } else if (fs_info.f_type == TMPFS_MAGIC) {
+    ret = OB_NOT_SUPPORTED;
+    MPRINT("not support tmpfs directory: %s", opts.base_dir_.ptr());
   } else if (-1 == chdir(opts.base_dir_.ptr())) {
     ret = OB_ERR_UNEXPECTED;
     MPRINT("change dir failed %s, directory: %s", strerror(errno), opts.base_dir_.ptr());
