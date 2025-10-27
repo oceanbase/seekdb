@@ -197,6 +197,7 @@ int LogEngine::load(const int64_t palf_id,
                     LogIOWorker *log_io_worker,
                     LogSharedQueueTh *log_shared_queue_th,
                     LogPlugins *plugins,
+                    LSN &last_group_entry_header_lsn,
                     LogGroupEntryHeader &entry_header,
                     const int64_t palf_epoch,
                     const int64_t log_storage_block_size,
@@ -225,7 +226,6 @@ int LogEngine::load(const int64_t palf_id,
     }
     return ret;
   };
-  LSN last_group_entry_header_lsn;
   LSN last_meta_entry_start_lsn;
   LogMetaEntryHeader unused_meta_entry_header;
   if (IS_INIT) {

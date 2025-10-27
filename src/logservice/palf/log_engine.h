@@ -128,6 +128,7 @@ public:
            LogIOWorker *log_io_worker,
            LogSharedQueueTh *log_shared_queue_th,
            LogPlugins *plugins,
+           LSN &last_group_entry_header_lsn,
            LogGroupEntryHeader &entry_header,
            const int64_t palf_epoch,
            const int64_t log_storage_size,
