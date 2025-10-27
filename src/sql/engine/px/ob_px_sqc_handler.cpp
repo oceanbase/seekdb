@@ -106,8 +106,7 @@ int ObPxSqcHandler::pre_acquire_px_worker(int64_t &reserved_thread_count)
   int64_t max_thread_count = sqc_init_args_->sqc_.get_max_task_count();
   int64_t min_thread_count = sqc_init_args_->sqc_.get_min_task_count();
     // Pre-reserve thread count in the tenant for px worker execution
-  ObPxSubAdmission::acquire(max_thread_count, min_thread_count, reserved_px_thread_count_);
-  reserved_px_thread_count_ = reserved_px_thread_count_ < min_thread_count ? 0 : reserved_px_thread_count_;
+  reserved_px_thread_count_ = max_thread_count;
   if (OB_FAIL(notifier_->set_expect_worker_count(reserved_px_thread_count_))) {
     LOG_WARN("failed to set expect worker count", K(ret), K(reserved_px_thread_count_));
   } else {

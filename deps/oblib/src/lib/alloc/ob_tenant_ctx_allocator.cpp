@@ -140,32 +140,16 @@ int ObTenantCtxAllocatorV2::iter_label(VisitFunc func) const
 void ObTenantCtxAllocatorV2::print_usage() const
 {
   int ret = OB_SUCCESS;
-  static const int64_t BUFLEN = 1 << 18;  // 256k
+  static const int64_t BUFLEN = 1 << 16;  // 64K
   SMART_VAR(char[BUFLEN], buf) {
     int64_t pos = 0;
     int64_t ctx_hold_bytes = 0;
     LabelItem sum_item;
     ret = iter_label([&](ObLabel &label, LabelItem *l_item)
     {
-      int ret = OB_SUCCESS;
-      if (l_item->count_ != 0) {
-        ret = databuff_printf(
-            buf, BUFLEN, pos,
-            "[MEMORY] hold=% '15ld used=% '15ld count=% '8d avg_used=% '15ld block_cnt=% '8d chunk_cnt=% '8d mod=%s\n",
-            l_item->hold_, l_item->used_, l_item->count_, l_item->used_ / l_item->count_, l_item->block_cnt_, l_item->chunk_cnt_,
-            label.str_);
-      }
       sum_item += *l_item;
-      return ret;
+      return OB_SUCCESS;
     });
-    if (OB_SUCC(ret) && sum_item.count_ > 0) {
-      ret = databuff_printf(
-          buf, BUFLEN, pos,
-          "[MEMORY] hold=% '15ld used=% '15ld count=% '8d avg_used=% '15ld mod=%s\n",
-          sum_item.hold_, sum_item.used_, sum_item.count_,
-          sum_item.used_ / sum_item.count_,
-          "SUMMARY");
-    }
     if (OB_SUCC(ret)) {
       ctx_hold_bytes = get_hold();
     }
@@ -177,11 +161,11 @@ void ObTenantCtxAllocatorV2::print_usage() const
       req_chunk_cnt += allocator_->req_chunk_mgr_.n_chunks();
       idle_size += allocator_->idle_size_;
       free_size += allocator_->chunk_cnt_ * INTACT_ACHUNK_SIZE;
-      allow_next_syslog();
-      _LOG_INFO("\n[MEMORY] tenant_id=%5ld ctx_id=%25s hold=% '15ld used=% '15ld limit=% '15ld"
-                "\n[MEMORY] idle_size=% '10ld free_size=% '10ld"
-                "\n[MEMORY] wash_related_chunks=% '10ld washed_blocks=% '10ld washed_size=% '10ld"
-                "\n[MEMORY] request_cached_chunk_cnt=% '5ld\n%s",
+      ret = databuff_printf(buf, BUFLEN, pos,
+          "\n[MEMORY] tenant_id=%5ld ctx_id=%25s hold=% '15ld used=% '15ld limit=% '15ld"
+          "\n[MEMORY] idle_size=% '10ld free_size=% '10ld"
+          "\n[MEMORY] wash_related_chunks=% '10ld washed_blocks=% '10ld washed_size=% '10ld"
+          "\n[MEMORY] request_cached_chunk_cnt=% '5ld",
           tenant_id_,
           get_global_ctx_info().get_ctx_name(ctx_id_),
           ctx_hold_bytes,
@@ -192,8 +176,41 @@ void ObTenantCtxAllocatorV2::print_usage() const
           ATOMIC_LOAD(&wash_related_chunks_),
           ATOMIC_LOAD(&washed_blocks_),
           ATOMIC_LOAD(&washed_size_),
-          req_chunk_cnt,
-          buf);
+          req_chunk_cnt);
+    }
+
+    if (OB_SUCC(ret) && sum_item.count_ > 0) {
+      ret = iter_label([&](ObLabel &label, LabelItem *l_item)
+      {
+        int ret = OB_SUCCESS;
+        if (l_item->count_ != 0) {
+          ret = databuff_printf(
+              buf, BUFLEN, pos,
+              "\n[MEMORY] hold=% '15ld used=% '15ld count=% '8d avg_used=% '15ld block_cnt=% '8d chunk_cnt=% '8d mod=%s",
+              l_item->hold_, l_item->used_, l_item->count_, l_item->used_ / l_item->count_, l_item->block_cnt_, l_item->chunk_cnt_,
+              label.str_);
+          if (pos > BUFLEN / 2) {
+            allow_next_syslog();
+            _LOG_INFO("%s", buf);
+            pos = 0;
+          }
+        }
+        return ret;
+      });
+
+      if (OB_SUCC(ret)) {
+        ret = databuff_printf(
+            buf, BUFLEN, pos,
+            "\n[MEMORY] hold=% '15ld used=% '15ld count=% '8d avg_used=% '15ld mod=%s",
+            sum_item.hold_, sum_item.used_, sum_item.count_,
+            sum_item.used_ / sum_item.count_,
+            "SUMMARY");
+      }
+    }
+
+    if (OB_SUCC(ret) && pos > 0) {
+      allow_next_syslog();
+      _LOG_INFO("%s", buf);
     }
   }
 }

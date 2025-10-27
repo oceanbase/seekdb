@@ -72,7 +72,6 @@ public:
   OB_INLINE int64_t queue_cnt() { return free_queue_.size(); }
 
 private:
-  bool out_of_memory();
   int64_t get_used_memory_size();
   int64_t get_max_dtl_memory_size();
   int64_t get_max_tenant_memory_limit_size();
@@ -117,17 +116,6 @@ OB_INLINE int64_t ObDtlChannelMemManager::get_max_tenant_memory_limit_size()
   }
   int64_t percent_execpt_memstore = 100 - memstore_limit_percent_;
   return lib::get_tenant_memory_limit(tenant_id_) * percent_execpt_memstore / 100;
-}
-
-OB_INLINE bool ObDtlChannelMemManager::out_of_memory()
-{
-  bool oom = false;
-  int64_t used = get_used_memory_size();
-  int64_t max_dtl_memory_size = get_max_dtl_memory_size();
-  if (used > max_dtl_memory_size) {
-    oom = true;
-  }
-  return oom;
 }
 
 OB_INLINE void ObDtlChannelMemManager::update_max_memory_percent()

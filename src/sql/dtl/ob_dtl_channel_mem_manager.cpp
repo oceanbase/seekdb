@@ -121,11 +121,6 @@ ObDtlLinkedBuffer *ObDtlChannelMemManager::alloc(int64_t chid, int64_t size)
     }
   }
   if (nullptr != allocated_buf) {
-  } else if (out_of_memory()) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("the memory of dtl reach the maxinum memory limit", K(ret), K(get_used_memory_size()),
-      K(get_max_tenant_memory_limit_size()), K(get_max_dtl_memory_size()),
-      K(max_mem_percent_), K_(memstore_limit_percent), K(allocated_buf), K(size));
   } else {
     const int64_t alloc_size = sizeof (ObDtlLinkedBuffer)
         + std::max(size, size_per_buffer);
