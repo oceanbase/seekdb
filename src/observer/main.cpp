@@ -63,6 +63,25 @@ const char  LOG_DIR[]  = "log";
 const char  PID_DIR[]  = "run";
 const char  CONF_DIR[] = "etc";
 
+static int create_observer_softlink()
+{
+  int ret = OB_SUCCESS;
+  char softlink_path[PATH_MAX] = {0};
+  snprintf(softlink_path, PATH_MAX, "%s/observer", PID_DIR);
+  char target_path[PATH_MAX] = {0};
+  ssize_t read_len = readlink("/proc/self/exe", target_path, PATH_MAX - 1);
+  if (read_len < 0) {
+    ret = OB_IO_ERROR;
+    MPRINT("failed to readlink /proc/self/exe, errno=%s", strerror(errno));
+  }
+  if (OB_FAIL(ret)) {
+  } else if (FALSE_IT(FileDirectoryUtils::unlink_symlink(softlink_path))) {
+  } else if (OB_FAIL(FileDirectoryUtils::symlink(target_path, softlink_path))) {
+    ret = OB_IO_ERROR;
+    MPRINT("create observer softlink failed, errno=%s", strerror(errno));
+  }
+  return ret;
+}
 static int dump_config_to_json()
 {
   int ret = OB_SUCCESS;
@@ -355,6 +374,7 @@ int inner_main(int argc, char *argv[])
     MPRINT("create log dir fail: ./log/");
   } else if (OB_FAIL(FileDirectoryUtils::create_full_path(CONF_DIR))) {
     MPRINT("create log dir fail: ./etc/");
+  } else if (FALSE_IT(create_observer_softlink())) {
   } else if (OB_FAIL(ObEncryptionUtil::init_ssl_malloc())) {
     MPRINT("failed to init crypto malloc");
   } else if (!opts->nodaemon_ && !opts->initialize_) {
