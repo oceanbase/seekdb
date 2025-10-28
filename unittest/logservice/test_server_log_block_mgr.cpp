@@ -30,9 +30,8 @@ using namespace common;
 using namespace palf;
 namespace unittest
 {
-static const int64_t DEFAULT_LS_COUNT = 10;
-static int ls_id_array_[DEFAULT_LS_COUNT] = {1,    1001, 1002, 1003, 1004,
-                                             1005, 1006, 1007, 1008, 1009};
+static int ls_id_array_[] = {1};
+static const int64_t DEFAULT_LS_COUNT = sizeof(ls_id_array_) / sizeof(ls_id_array_[0]);
 static const char *log_or_meta_[2] = {"log", "meta"};
 class TestServerLogBlockMgr : public ::testing::Test
 {
@@ -173,7 +172,7 @@ public:
 };
 
 const char *TestServerLogBlockMgr::log_pool_base_path_ = "clog_disk/clog";
-const char *TestServerLogBlockMgr::tenant_string_ = "clog_disk/clog/tenant_1";
+const char *TestServerLogBlockMgr::tenant_string_ = "clog_disk/clog/sys";
 std::map<int64_t, int> TestServerLogBlockMgr::tenant_ls_fd_map_;
 std::vector<int> TestServerLogBlockMgr::tenant_1_ls_fd_;
 
@@ -300,12 +299,9 @@ TEST_F(TestServerLogBlockMgr, restart_for_empty_log_disk)
 
 TEST_F(TestServerLogBlockMgr, allocate_blocks_in_tenant)
 {
-  const int64_t ls_id = 1001;
+  const int64_t ls_id = 1;
   EXPECT_EQ(OB_SUCCESS, create_new_blocks_at(ls_id, tenant_ls_fd_map_[ls_id], 0, 10));
-  EXPECT_EQ(OB_SUCCESS,
-            create_new_blocks_at(ls_id + 1, tenant_ls_fd_map_[ls_id + 1], 0, 5));
   EXPECT_EQ(OB_SUCCESS, delete_blocks_at(ls_id, tenant_ls_fd_map_[ls_id], 0, 3));
-  EXPECT_EQ(OB_SUCCESS, delete_blocks_at(ls_id + 1, tenant_ls_fd_map_[ls_id + 1], 0, 3));
 }
 
 TEST_F(TestServerLogBlockMgr, restart_for_non_empty_log_disk)
@@ -317,9 +313,8 @@ TEST_F(TestServerLogBlockMgr, restart_for_non_empty_log_disk)
   EXPECT_EQ(aligned_reserved_size, log_block_mgr_.log_pool_meta_.curr_total_size_);
   EXPECT_EQ(aligned_reserved_size, log_block_mgr_.log_pool_meta_.next_total_size_);
   EXPECT_EQ(0, log_block_mgr_.log_pool_meta_.status_);
-  const int64_t ls_id = 1001;
+  const int64_t ls_id = 1;
   EXPECT_EQ(OB_SUCCESS, delete_blocks_at(ls_id, tenant_ls_fd_map_[ls_id], 3, 7));
-  EXPECT_EQ(OB_SUCCESS, delete_blocks_at(ls_id + 1, tenant_ls_fd_map_[ls_id + 1], 3, 2));
 }
 
 TEST_F(TestServerLogBlockMgr, concurrent_create_delete_resize)
@@ -376,13 +371,13 @@ TEST_F(TestServerLogBlockMgr, dirty_ls_dir_and_log_pool_file)
   system("touch clog_disk/clog/tenant_0111/log/0");
   system("touch clog_disk/clog/tenant_0111/log/1");
   system("touch clog_disk/clog/log_pool/0.tmp");
-  system("touch clog_disk/clog/tenant_1/1/meta/10000.tmp");
-  system("fallocate -l 67108863 clog_disk/clog/tenant_1/1/meta/10000.tmp ");
+  system("touch clog_disk/clog/sys/1/meta/10000.tmp");
+  system("fallocate -l 67108863 clog_disk/clog/sys/1/meta/10000.tmp ");
   system("mkdir clog_disk/clog/log_pool/1.tmp");
   log_block_mgr_.destroy();
   bool result = false;
   EXPECT_EQ(OB_ERR_UNEXPECTED, log_block_mgr_.init(log_pool_base_path_));
-  EXPECT_EQ(OB_SUCCESS, FileDirectoryUtils::is_exists("clog_disk/clog/tenant_1/1/meta/10000.tmp",result));
+  EXPECT_EQ(OB_SUCCESS, FileDirectoryUtils::is_exists("clog_disk/clog/sys/1/meta/10000.tmp",result));
   EXPECT_EQ(false, result);
   system("rm -rf clog_disk/clog/tenant_0111");
   EXPECT_EQ(OB_SUCCESS, log_block_mgr_.init(log_pool_base_path_));

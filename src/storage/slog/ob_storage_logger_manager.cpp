@@ -319,9 +319,11 @@ int ObStorageLoggerManager::get_tenant_slog_dir(
   if (is_server_tenant(tenant_id)) {
     pret = snprintf(tenant_slog_dir, MAX_PATH_SIZE, "%s/server",
                     log_dir_);
+  } else if (OB_SYS_TENANT_ID == tenant_id) {
+    pret = snprintf(tenant_slog_dir, MAX_PATH_SIZE, "%s/sys", log_dir_);
   } else {
-    pret = snprintf(tenant_slog_dir, MAX_PATH_SIZE, "%s/tenant_%" PRIu64,
-                    log_dir_, tenant_id);
+    ret = OB_ERR_UNEXPECTED;
+    STORAGE_REDO_LOG(ERROR, "unexpected tenant id", K(ret), K(tenant_id));
   }
   if (pret < 0 || pret >= MAX_PATH_SIZE) {
     ret = OB_BUF_NOT_ENOUGH;

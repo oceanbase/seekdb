@@ -80,11 +80,16 @@ static const char* short_options = "P:Vh6";
 static int split_key_value(const ObString &str, ObString &key, ObString &value)
 {
   int ret = OB_SUCCESS;
-  value = str;
-  key = value.split_on('=');
-  if (key.empty()) {
+  if (str.prefix_match("-")) {
     ret = OB_INVALID_ARGUMENT;
-    MPRINT("Invalid variable. Variable should be in the format of key=value, but got: '%.*s'", str.length(), str.ptr());
+    MPRINT("Expected one argument, but got '%.*s'", str.length(), str.ptr());
+  } else  {
+    value = str;
+    key = value.split_on('=');
+    if (key.empty()) {
+      ret = OB_INVALID_ARGUMENT;
+      MPRINT("Invalid argument. Argument should be in the format of key=value, but got: '%.*s'", str.length(), str.ptr());
+    }
   }
   return ret;
 }
@@ -101,31 +106,32 @@ static int append_key_value(const char *value, ObServerOptions::KeyValueArray &a
     tmp_value = value_str;
     tmp_key = tmp_value.split_on('=');
     if (OB_FAIL(split_key_value(value_str, tmp_key, tmp_value))) {
-      MPRINT("[Maybe Memory Error] split_key_value failed, ret=%d", ret);
+      MPRINT("split_key_value failed, ret=%d", ret);
     } else if (tmp_key.empty()) {
       ret = OB_INVALID_ARGUMENT;
-      MPRINT("[Maybe Memory Error] Invalid argument, should be in the format of key=value, but got '%s'", value);
+      MPRINT("Invalid argument, should be in the format of key=value, but got '%s'", value);
     } else if (OB_FAIL(array.push_back(std::make_pair(tmp_key, tmp_value)))) {
-      MPRINT("[Maybe Memory Error] push_back to parameters_ failed, ret=%d", ret);
+      MPRINT("push_back to parameters_ failed, ret=%d", ret);
     }
   }
   return ret;
 }
 
-/**
- * 将相对路径转换为绝对路径
- * @note 需要确保路径存在
- */
-static int to_absolute_path(ObSqlString &dir)
+static int handle_tilde(ObSqlString &dir)
 {
   int ret = OB_SUCCESS;
-  if (!dir.empty() && dir.ptr()[0] != '\0' && dir.ptr()[0] != '/') {
-    char real_path[OB_MAX_FILE_NAME_LENGTH] = {0};
-    if (NULL == realpath(dir.ptr(), real_path)) {
-      MPRINT("Failed to get absolute path for %.*s, system error=%s", dir.length(), dir.ptr(), strerror(errno));
-      ret = OB_ERR_UNEXPECTED;
-    } else if (OB_FAIL(dir.assign(real_path))) {
-      MPRINT("[Maybe Memory Error] Failed to assign absolute path. Please try again.");
+  if ((dir.length() == 1 && dir.ptr()[0] == '~') || (dir.string().prefix_match("~/"))) {
+    char *home_dir = getenv("HOME");
+    if (nullptr == home_dir) {
+      ret = OB_INVALID_ARGUMENT;
+      MPRINT("Failed to get home directory, ret=%d", ret);
+    } else {
+      ObSqlString tmp_dir;
+      if (OB_FAIL(tmp_dir.assign_fmt("%s/%s", home_dir, dir.ptr() + 1))) {
+        MPRINT("Failed to assign tilde directory, ret=%d", ret);
+      } else if (OB_FAIL(dir.assign(tmp_dir))) {
+        MPRINT("Failed to assign tilde directory, ret=%d", ret);
+      }
     }
   }
   return ret;
@@ -268,6 +274,57 @@ int ObCommandLineParser::parse_args(int argc, char* argv[], ObServerOptions& opt
   } else if (opts.base_dir_.empty() && OB_FAIL(opts.base_dir_.assign("."))) {
   }
 
+  // handle '~'
+  if (OB_FAIL(ret)) {
+  } else if (OB_FAIL(handle_tilde(opts.base_dir_))) {
+    MPRINT("Failed to handle tilde in base directory, ret=%d", ret);
+  } else if (OB_FAIL(handle_tilde(opts.data_dir_))) {
+    MPRINT("Failed to handle tilde in data directory, ret=%d", ret);
+  } else if (OB_FAIL(handle_tilde(opts.redo_dir_))) {
+    MPRINT("Failed to handle tilde in redo directory, ret=%d", ret);
+  }
+
+  // handle absolute path
+  if (OB_FAIL(ret)) {
+  } else if (OB_FAIL(FileDirectoryUtils::create_full_path(opts.base_dir_.ptr()))) {
+    MPRINT("Failed to create base dir. path='%s', system error=%s", opts.base_dir_.ptr(), strerror(errno));
+  } else if (OB_FAIL(FileDirectoryUtils::to_absolute_path(opts.base_dir_))) {
+    MPRINT("Failed to convert base dir to absolute path. path='%s', system error=%s", opts.base_dir_.ptr(), strerror(errno));
+  } else if (opts.base_dir_.ptr()[opts.base_dir_.length() - 1] != '/' && OB_FAIL(opts.base_dir_.append("/"))) {
+    MPRINT("Failed to append '/' to base dir. path='%s'", opts.base_dir_.ptr());
+  }
+
+  if (OB_FAIL(ret) || opts.data_dir_.empty()) {
+  } else if (OB_FAIL(FileDirectoryUtils::create_full_path(opts.data_dir_.ptr()))) {
+    MPRINT("Failed to create data dir. path='%s', system error=%s", opts.data_dir_.ptr(), strerror(errno));
+  } else if (OB_FAIL(FileDirectoryUtils::to_absolute_path(opts.data_dir_))) {
+    MPRINT("Failed to convert data dir to absolute path. path='%s', system error=%s", opts.data_dir_.ptr(), strerror(errno));
+  }
+  if (OB_FAIL(ret) || opts.redo_dir_.empty()) {
+  } else if (OB_FAIL(FileDirectoryUtils::create_full_path(opts.redo_dir_.ptr()))) {
+    MPRINT("Failed to create redo dir. path='%s', system error=%s", opts.redo_dir_.ptr(), strerror(errno));
+  } else if (OB_FAIL(FileDirectoryUtils::to_absolute_path(opts.redo_dir_))) {
+    MPRINT("Failed to convert redo dir to absolute path. path='%s', system error=%s", opts.redo_dir_.ptr(), strerror(errno));
+  }
+  if (OB_FAIL(ret)) {
+  } else if (!opts.data_dir_.empty() && opts.base_dir_.string() == opts.data_dir_.string()) {
+    ret = OB_INVALID_ARGUMENT;
+    MPRINT("Data directory cannot be the same as base directory. base_dir='%s', data_dir='%s'",
+      opts.base_dir_.ptr(), opts.data_dir_.ptr());
+  }
+  if (OB_FAIL(ret)) {
+  } else if (!opts.redo_dir_.empty() && opts.base_dir_.string() == opts.redo_dir_.string()) {
+    ret = OB_INVALID_ARGUMENT;
+    MPRINT("Redo directory cannot be the same as base directory. base_dir='%s', redo_dir='%s'",
+      opts.base_dir_.ptr(), opts.redo_dir_.ptr());
+  }
+  if (OB_FAIL(ret)) {
+  } else if (!opts.redo_dir_.empty() && !opts.data_dir_.empty() && opts.data_dir_.string() == opts.redo_dir_.string()) {
+    ret = OB_INVALID_ARGUMENT;
+    MPRINT("Redo directory cannot be the same as data directory. data_dir='%s', redo_dir='%s'",
+      opts.data_dir_.ptr(), opts.redo_dir_.ptr());
+  }
+
   return ret;
 }
 
@@ -277,17 +334,25 @@ void ObCommandLineParser::print_help() const
   MPRINT();
   MPRINT("Usage: observer [OPTIONS]\n");
   MPRINT("Options:");
-  MPRINT("  --variable <key=value>          system variables, format: key=value. Note: This takes effect only during the initial startup. Can be specified multiple times.");
-  MPRINT("  --port, -P <port>               the port, default is 2881");
   MPRINT("  --nodaemon                      whether to not run as a daemon");
+  MPRINT("  --port, -P <port>               the port, default is 2881");
   MPRINT("  --use-ipv6, -6                  whether to use ipv6");
-  MPRINT("  --base-dir <dir>                The base/work directory which oceanbase process will run in. (default: current directory)");
-  MPRINT("  --data-dir <dir>                The data directory which oceanbase will store data in. Default is ${base-dir}/store in initialize mode.");
-  MPRINT("  --redo-dir <dir>                The redo log directory which oceanbase will store redo log in. Default is ${data-dir}/redo in initialize mode.");
+  MPRINT("  --base-dir <dir>                The base/work directory which seekdb process will run in(default: current directory). ");
+  MPRINT("                                      NOTE: You must specify this option if you will start observer at other directory.");
+  MPRINT("  --data-dir <dir>                The data directory which seekdb will store data in. Default is ${base-dir}/store in initialize mode.");
+  MPRINT("  --redo-dir <dir>                The redo log directory which seekdb will store redo log in. Default is ${data-dir}/redo in initialize mode.");
   MPRINT("  --log-level <level>             The server log level");
+  MPRINT("  --variable <key=value>          system variables, format: key=value. Note: This takes effect only during the initial startup. Can be specified multiple times.");
   MPRINT("  --parameter <key=value>         system parameters, format: key=value. Can be specified multiple times.");
   MPRINT("  --version, -V                   show version message and exit");
   MPRINT("  --help, -h                      show this message and exit");
+  MPRINT();
+  MPRINT();
+  MPRINT("Below are some parameters that you may be interesed in:");
+  MPRINT("  --parameter datafile_size=<size>          data file initial size (e.g. 20G)");
+  MPRINT("  --parameter datafile_maxsize=<size>       data file maximum size (e.g. 50G), can be expanded when needed");
+  MPRINT("  --parameter log_disk_size=<size>          log/redo/clog disk size (e.g. 10G)");
+  MPRINT("      The default unit is byte. You can use suffixes: K, M, G, T (e.g. 1024M, 20G)");
   MPRINT();
 }
 

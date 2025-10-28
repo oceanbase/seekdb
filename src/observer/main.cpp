@@ -214,48 +214,6 @@ static int check_uid_before_start(const char *dir_path)
   return ret;
 }
 
-void print_all_thread(const char* desc, uint64_t tenant_id)
-{
-  MPRINT("============= [%s] begin to show unstopped thread =============", desc);
-  DIR *dir = opendir("/proc/self/task");
-  if (dir == NULL) {
-    MPRINT("fail to print all thread");
-  } else {
-    struct dirent *entry;
-    while ((entry = readdir(dir)) != NULL) {
-      char *tid = entry->d_name;
-      if (tid[0] != '.') { // pass . and ..
-        char path[256];
-        sprintf(path, "/proc/self/task/%s/comm", tid);
-        FILE *file = fopen(path, "r");
-        if (file == NULL) {
-          MPRINT("fail to print thread tid: %s", tid);
-        } else {
-          char thread_name[256];
-          if (fgets(thread_name, sizeof(thread_name), file) != nullptr) {
-            size_t len = strlen(thread_name);
-            if (len > 0 && thread_name[len - 1] == '\n') {
-              thread_name[len - 1] = '\0';
-            }
-            if (!is_server_tenant(tenant_id)) {
-              char tenant_id_str[20];
-              snprintf(tenant_id_str, sizeof(tenant_id_str), "T%lu_", tenant_id);
-              if (0 == strncmp(thread_name, tenant_id_str, strlen(tenant_id_str))) {
-                MPRINT("[CHECK_KILL_GRACEFULLY][T%lu][%s] detect unstopped thread, tid: %s, name: %s", tenant_id, desc, tid, thread_name);
-              }
-            } else {
-              MPRINT("[CHECK_KILL_GRACEFULLY][%s] detect unstopped thread, tid: %s, name: %s", desc, tid, thread_name);
-            }
-          }
-          fclose(file);
-        }
-      }
-    }
-  }
-  closedir(dir);
-  MPRINT("============= [%s] finish to show unstopped thread =============", desc);
-}
-
 // systemd dynamic loading
 static int safe_sd_notify(int unset_environment, const char *state)
 {
@@ -379,8 +337,10 @@ int inner_main(int argc, char *argv[])
     MPRINT("failed to init crypto malloc");
   } else if (!opts->nodaemon_ && !opts->initialize_) {
     MPRINT("Will start observer as a daemon process. You can check the server status by client later.");
+    MPRINT("    The log file is in the directory: %s/log/", opts->base_dir_.ptr());
+    MPRINT("    Start observer with --nodaemon if you don't want to start as a daemon process.");
     if (OB_FAIL(start_daemon(PID_FILE_NAME))) {
-      MPRINT("Start observer as a daemon failed.");
+      MPRINT("Start observer as a daemon failed. Did you started observer already?");
     }
   }
 
@@ -456,7 +416,6 @@ int inner_main(int argc, char *argv[])
       if (OB_FAIL(ret)) {
         _exit(1);
       }
-      print_all_thread("BEFORE_DESTROY", OB_SERVER_TENANT_ID);
       observer.destroy();
     }
     curl_global_cleanup();
@@ -464,7 +423,6 @@ int inner_main(int argc, char *argv[])
   }
 
   LOG_INFO("observer exits", "observer_version", PACKAGE_STRING);
-  print_all_thread("AFTER_DESTROY", OB_SERVER_TENANT_ID);
   return ret;
 }
 

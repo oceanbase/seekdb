@@ -107,11 +107,15 @@ int ObFileSystemRouter::get_tenant_clog_dir(
 {
   int ret = OB_SUCCESS;
   int pret = 0;
-  pret = snprintf(tenant_clog_dir, MAX_PATH_SIZE, "%s/tenant_%" PRIu64,
-                  clog_dir_, tenant_id);
-  if (pret < 0 || pret >= MAX_PATH_SIZE) {
-    ret = OB_BUF_NOT_ENOUGH;
-    LOG_ERROR("construct tenant clog path fail", K(ret), K(tenant_id));
+  if (OB_SYS_TENANT_ID != tenant_id) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("not support tenant clog dir of system tenant", K(ret), K(tenant_id));
+  } else {
+    pret = snprintf(tenant_clog_dir, MAX_PATH_SIZE, "%s/sys", clog_dir_);
+    if (pret < 0 || pret >= MAX_PATH_SIZE) {
+      ret = OB_BUF_NOT_ENOUGH;
+      LOG_ERROR("construct tenant clog path fail", K(ret), K(tenant_id));
+    }
   }
   return ret;
 }
@@ -121,6 +125,12 @@ int ObFileSystemRouter::init_local_dirs(const char* data_dir, const char* redo_d
   int ret = OB_SUCCESS;
   int pret = 0;
 
+  char work_directory[MAX_PATH_SIZE] = {0};
+  if (nullptr == getcwd(work_directory, MAX_PATH_SIZE)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get work directory failed", K(ret), KCSTRING(strerror(errno)));
+  }
+
   ObSqlString tmp_dir;
   if (OB_SUCC(ret)) {
     if (OB_FAIL(tmp_dir.assign(data_dir))) {
@@ -129,6 +139,9 @@ int ObFileSystemRouter::init_local_dirs(const char* data_dir, const char* redo_d
       LOG_ERROR("create full path failed", K(ret), K(tmp_dir));
     } else if (OB_FAIL(FileDirectoryUtils::to_absolute_path(tmp_dir))) {
       LOG_ERROR("convert data dir to absolute path failed", K(ret), K(tmp_dir));
+    } else if (0 == strcmp(work_directory, tmp_dir.ptr())) {
+      ret = OB_INVALID_ARGUMENT;
+      LOG_ERROR("data dir is same as work directory", K(ret), K(tmp_dir), KCSTRING(work_directory));
     } else {
       pret = snprintf(data_dir_, MAX_PATH_SIZE, "%s", tmp_dir.ptr());
       if (pret < 0 || pret >= MAX_PATH_SIZE) {
@@ -157,6 +170,12 @@ int ObFileSystemRouter::init_local_dirs(const char* data_dir, const char* redo_d
       LOG_ERROR("create full path failed", K(ret), K(tmp_dir));
     } else if (OB_FAIL(FileDirectoryUtils::to_absolute_path(tmp_dir))) {
       LOG_ERROR("convert clog/redo dir to absolute path failed", K(ret), K(tmp_dir));
+    } else if (0 == strcmp(work_directory, tmp_dir.ptr())) {
+      ret = OB_INVALID_ARGUMENT;
+      LOG_ERROR("clog/redo dir is same as work directory", K(ret), K(tmp_dir), KCSTRING(work_directory));
+    } else if (0 == strcmp(tmp_dir.ptr(), data_dir_)) {
+      ret = OB_INVALID_ARGUMENT;
+      LOG_ERROR("clog/redo dir is same as data dir", K(ret), K(tmp_dir), KCSTRING(data_dir_));
     } else {
       pret = snprintf(clog_dir_, MAX_PATH_SIZE, "%s", tmp_dir.ptr());
       if (pret < 0 || pret >= MAX_PATH_SIZE) {

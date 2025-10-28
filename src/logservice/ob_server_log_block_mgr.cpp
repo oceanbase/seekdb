@@ -1243,7 +1243,7 @@ int ObServerLogBlockMgr::get_has_allocated_blocks_cnt_in_(
   int ret = OB_SUCCESS;
   DIR *dir = NULL;
   struct dirent *entry = NULL;
-  std::regex pattern_tenant(".*/tenant_[1-9]\\d*");
+  std::regex pattern_tenant(".*/sys");
   std::regex pattern_log_pool(".*/log_pool/*");
   if (NULL == (dir = opendir(log_disk_path))) {
     ret = OB_ERR_SYS;
@@ -1294,7 +1294,7 @@ int ObServerLogBlockMgr::remove_tmp_file_or_directory_for_tenant_(const char *lo
 {
   int ret = OB_SUCCESS;
   DIR *dir = NULL;
-  std::regex pattern_tenant(".*/tenant_[1-9]\\d*");
+  std::regex pattern_tenant(".*/sys");
   struct dirent *entry = NULL;
   if (NULL == (dir = opendir(log_disk_path))) {
     ret = OB_ERR_SYS;
@@ -1608,8 +1608,8 @@ int ObServerLogBlockMgr::scan_tenant_dir_(const char *tenant_dir,
 {
   int ret = OB_SUCCESS;
   DIR *dir = NULL;
-  std::regex pattern_log_stream(".*/tenant_[1-9]\\d*/[1-9]\\d*");
-  std::regex pattern_tmp_dir(".*/tenant_[1-9]\\d*/tmp_dir");
+  std::regex pattern_log_stream(".*/sys/[1-9]\\d*");
+  std::regex pattern_tmp_dir(".*/sys/tmp_dir");
   struct dirent *entry = NULL;
   if (NULL == (dir = opendir(tenant_dir))) {
     ret = OB_ERR_SYS;
@@ -1657,8 +1657,8 @@ int ObServerLogBlockMgr::scan_ls_dir_(const char *ls_dir,
 {
   int ret = OB_SUCCESS;
   DIR *dir = NULL;
-  std::regex pattern_log(".*/tenant_[1-9]\\d*/[1-9]\\d*/log");
-  std::regex pattern_meta(".*/tenant_[1-9]\\d*/[1-9]\\d*/meta");
+  std::regex pattern_log(".*/sys/[1-9]\\d*/log");
+  std::regex pattern_meta(".*/sys/[1-9]\\d*/meta");
   struct dirent *entry = NULL;
   if (NULL == (dir = opendir(ls_dir))) {
     ret = OB_ERR_SYS;

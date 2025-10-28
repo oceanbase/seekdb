@@ -39,7 +39,7 @@ DEF_CAP(datafile_size, OB_CLUSTER_PARAMETER, "2G", "[0M,)", "size of the data fi
         ObParameterAttr(Section::SSTABLE, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 DEF_CAP(datafile_next, OB_CLUSTER_PARAMETER, "2G", "[0M,)", "the auto extend step. Range: [0, +∞)",
         ObParameterAttr(Section::SSTABLE, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
-DEF_CAP(datafile_maxsize, OB_CLUSTER_PARAMETER, "0", "[0M,)", "the auto extend max size. Range: [0, +∞)",
+DEF_CAP(datafile_maxsize, OB_CLUSTER_PARAMETER, "1T", "[0M,)", "the auto extend max size. Range: [0, +∞)",
         ObParameterAttr(Section::SSTABLE, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 DEF_INT(datafile_disk_percentage, OB_CLUSTER_PARAMETER, "0", "[0,99]",
         "the percentage of disk space used by the data files. Range: [0,99] in integer",

@@ -58,6 +58,9 @@ int ObStorageLogger::init(ObStorageLoggerManager &slogger_manager, const uint64_
     } else if (is_virtual_tenant_id(tenant_id)) {
       ret = OB_ERR_UNEXPECTED;
       STORAGE_REDO_LOG(WARN, "Virtual tenant shouldn't create slogger.", K(ret), K(tenant_id));
+    } else if (OB_SYS_TENANT_ID == tenant_id) {
+      log_writer_ = &tenant_log_writer_;
+      pret = snprintf(tnt_slog_dir_, MAX_PATH_SIZE, "%s/sys", slogger_manager.get_root_dir());
     } else {
       log_writer_ = &tenant_log_writer_;
       pret = snprintf(tnt_slog_dir_, MAX_PATH_SIZE, "%s/tenant_%" PRIu64,

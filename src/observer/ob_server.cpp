@@ -137,7 +137,7 @@ static int check_need_initialize(const char *base_dir, const char *data_dir, con
   } else if (OB_FAIL(FileDirectoryUtils::create_full_path(redo_dir))) {
     LOG_WARN("Failed to create redo path", KCSTRING(redo_dir), KCSTRING(strerror(errno)));
   } else if (OB_FAIL(ObServerLogBlockMgr::check_clog_directory_is_empty(redo_dir, redo_empty))) {
-    LOG_WARN("Failed to check redo file exists.", K(redo_file_path));
+    LOG_WARN("Failed to check redo file exists.", KCSTRING(redo_dir), K(ret));
   } else if (!data_file_exists && redo_empty) {
     need_initialize = true;
   } else if (data_file_exists && !redo_empty) {
@@ -233,8 +233,6 @@ int ObServer::init(const ObServerOptions &opts, const ObPLogWriterCfg &log_cfg)
   if (OB_SUCC(ret) && need_initialize) {
     LOG_INFO("Need to initialize", K(need_initialize));
   }
-  // set alert log level earlier
-  OB_LOGGER.set_alert_log_level(config_.alert_log_level);
   LOG_DBA_INFO_V2(OB_SERVER_INIT_BEGIN,
                   DBA_STEP_INC_INFO(server_start),
                   "observer init begin.");
@@ -2007,51 +2005,9 @@ int ObServer::init_opts_config(bool has_config_file, const ObServerOptions &opts
     }
   }
 
-  ObSqlString data_dir;
-  ObSqlString redo_dir;
-  if (!opts.data_dir_.empty()) {
-    if (OB_FAIL(data_dir.assign(opts.data_dir_))) {
-      LOG_ERROR("failed to assign data dir", K(ret));
-    }
-  } else if (nullptr == config_.data_dir.get_value() || 0 == strlen(config_.data_dir.get_value())) {
-    if (OB_FAIL(data_dir.append_fmt("%s/store", opts.base_dir_.ptr()))) {
-      LOG_ERROR("failed to append data dir", K(ret));
-    }
-  }
-
-  if (!opts.redo_dir_.empty()) {
-    if (OB_FAIL(redo_dir.assign(opts.redo_dir_))) {
-      LOG_ERROR("failed to assign redo dir", K(ret));
-    }
-  } else if (nullptr == config_.redo_dir.get_value() || 0 == strlen(config_.redo_dir.get_value())) {
-    if (OB_FAIL(redo_dir.append_fmt("%s/redo", config_.data_dir.get_value()))) {
-      LOG_ERROR("failed to append redo dir", K(ret));
-    }
-  }
-
   if (OB_FAIL(ret)) {
-  } else if (!data_dir.empty()) {
-    if (OB_FAIL(FileDirectoryUtils::create_full_path(data_dir.ptr()))) {
-      LOG_ERROR("failed to create data dir", K(ret));
-    } else if (OB_FAIL(FileDirectoryUtils::to_absolute_path(data_dir))) {
-      LOG_ERROR("failed to convert data dir to absolute path", K(ret));
-    } else {
-      config_.data_dir.set_value(data_dir.ptr());
-      config_.data_dir.set_version(start_time_);
-      LOG_INFO("set data dir", K(config_.data_dir));
-    }
-  }
-  if (OB_FAIL(ret)) {
-  } else if (!redo_dir.empty()) {
-    if (OB_FAIL(FileDirectoryUtils::create_full_path(redo_dir.ptr()))) {
-      LOG_ERROR("failed to create redo dir", K(ret));
-    } else if (OB_FAIL(FileDirectoryUtils::to_absolute_path(redo_dir))) {
-      LOG_ERROR("failed to convert redo dir to absolute path", K(ret));
-    } else {
-      config_.redo_dir.set_value(redo_dir.ptr());
-      config_.redo_dir.set_version(start_time_);
-      LOG_INFO("set redo dir", K(config_.redo_dir));
-    }
+  } else if (OB_FAIL(init_data_dir_and_redo_dir(opts))) {
+    LOG_ERROR("init data dir and redo dir failed", KR(ret));
   }
 
 #ifdef OB_BUILD_SHARED_STORAGE
@@ -2070,6 +2026,90 @@ int ObServer::init_opts_config(bool has_config_file, const ObServerOptions &opts
     config_.use_ipv6.set_version(start_time_);
   }
 
+  return ret;
+}
+
+int ObServer::init_data_dir_and_redo_dir(const ObServerOptions &opts)
+{
+  int ret = OB_SUCCESS;
+
+  // remove current_directory prefix of data_dir and redo_dir if exists
+  char current_dir[PATH_MAX] = {0};
+  if (nullptr == getcwd(current_dir, sizeof(current_dir))) {
+    LOG_ERROR("failed to get current directory", K(ret), KCSTRING(strerror(errno)));
+  } else if (current_dir[strlen(current_dir) - 1] == '/') {
+  } else if (strlen(current_dir) + 2 >= PATH_MAX) {
+    ret = OB_BUF_NOT_ENOUGH;
+    LOG_ERROR("current directory is too long", K(ret), KCSTRING(current_dir));
+  } else {
+    current_dir[strlen(current_dir)] = '/';
+    current_dir[strlen(current_dir) + 1] = '\0';
+  }
+
+  ObSqlString data_dir;
+  ObSqlString redo_dir;
+  if (!opts.data_dir_.empty()) {
+    if (OB_FAIL(data_dir.assign(opts.data_dir_))) {
+      LOG_ERROR("failed to assign data dir", K(ret));
+    }
+  } else if (nullptr == config_.data_dir.get_value() || 0 == strlen(config_.data_dir.get_value())) {
+    if (OB_FAIL(data_dir.assign("store"))) {
+      LOG_ERROR("failed to append data dir", K(ret));
+    }
+  }
+
+  if (OB_FAIL(ret)) {
+  } else if (!data_dir.empty()) {
+    if (OB_FAIL(FileDirectoryUtils::create_full_path(data_dir.ptr()))) {
+      LOG_ERROR("failed to create data dir", K(ret));
+    } else if (OB_FAIL(FileDirectoryUtils::to_absolute_path(data_dir))) {
+      LOG_ERROR("failed to convert data dir to absolute path", K(ret));
+    } else {
+      ObString tmp_data_dir(data_dir.length(), data_dir.ptr());
+      if (tmp_data_dir.prefix_match(current_dir)) {
+        tmp_data_dir.assign(tmp_data_dir.ptr() + strlen(current_dir), tmp_data_dir.length() - (int64_t)strlen(current_dir));
+        while (tmp_data_dir.prefix_match("/")) {
+          tmp_data_dir.assign(tmp_data_dir.ptr() + 1, tmp_data_dir.length() - 1);
+        }
+      }
+      config_.data_dir.set_value(tmp_data_dir.ptr());
+      config_.data_dir.set_version(start_time_);
+      LOG_INFO("set data dir", K(config_.data_dir));
+    }
+  }
+
+  if (!opts.redo_dir_.empty()) {
+    if (OB_FAIL(redo_dir.assign(opts.redo_dir_))) {
+      LOG_ERROR("failed to assign redo dir", K(ret));
+    }
+  } else if (nullptr == config_.redo_dir.get_value() || 0 == strlen(config_.redo_dir.get_value())) {
+    ObString tmp_data_dir(data_dir.length(), data_dir.ptr());
+    if (tmp_data_dir.empty()) {
+      tmp_data_dir.assign_ptr(config_.data_dir.get_value(), strlen(config_.data_dir.get_value()));
+    }
+    if (OB_FAIL(redo_dir.assign_fmt("%.*s/redo", tmp_data_dir.length(), tmp_data_dir.ptr()))) {
+      LOG_ERROR("failed to append redo dir", K(ret));
+    }
+  }
+  if (OB_FAIL(ret)) {
+  } else if (!redo_dir.empty()) {
+    if (OB_FAIL(FileDirectoryUtils::create_full_path(redo_dir.ptr()))) {
+      LOG_ERROR("failed to create redo dir", K(ret));
+    } else if (OB_FAIL(FileDirectoryUtils::to_absolute_path(redo_dir))) {
+      LOG_ERROR("failed to convert redo dir to absolute path", K(ret));
+    } else {
+      ObString tmp_redo_dir(redo_dir.length(), redo_dir.ptr());
+      if (tmp_redo_dir.prefix_match(current_dir)) {
+        tmp_redo_dir.assign_ptr(tmp_redo_dir.ptr() + strlen(current_dir), tmp_redo_dir.length() - strlen(current_dir));
+        while (tmp_redo_dir.prefix_match("/")) {
+          tmp_redo_dir.assign_ptr(tmp_redo_dir.ptr() + 1, tmp_redo_dir.length() - 1);
+        }
+      }
+      config_.redo_dir.set_value(tmp_redo_dir.ptr());
+      config_.redo_dir.set_version(start_time_);
+      LOG_INFO("set redo dir", K(config_.redo_dir));
+    }
+  }
   return ret;
 }
 
