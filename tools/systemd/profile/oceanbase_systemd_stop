@@ -1,0 +1,5 @@
+#!/bin/bash
+
+pid=$(cat /var/lib/oceanbase/run/observer.pid)
+kill -9 "$pid"
+systemd-notify "STATUS=observer is down"

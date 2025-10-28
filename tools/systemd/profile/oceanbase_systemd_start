@@ -1,7 +1,4 @@
 #!/bin/bash
-
-#!/bin/bash
-
 # OceanBase start script
 # This script reads configuration from /etc/oceanbase/oceanbase.cnf and starts observer
 
@@ -86,10 +83,11 @@ CMD_PID=$!
 # Wait for the command to complete and check its exit status
 wait $CMD_PID
 CMD_EXIT_CODE=$?
+# pid=$(cat /var/lib/oceanbase/run/observer.pid)
+# systemd-notify "MAINPID=$pid"
 
 # Check if command executed successfully
 if [ $CMD_EXIT_CODE -eq 0 ]; then
-    systemd-notify --ready
     echo "OceanBase started successfully, sending telemetry..."
     /bin/bash $CURRENT_DIR/telemetry.sh $report "20" >/dev/null 2>&1
 

@@ -55,6 +55,7 @@ install(PROGRAMS
 
 install(PROGRAMS
   tools/systemd/profile/oceanbase_systemd_start
+  tools/systemd/profile/oceanbase_systemd_stop
   tools/systemd/profile/telemetry.sh
   DESTINATION usr/libexec/oceanbase/scripts
   COMPONENT server)

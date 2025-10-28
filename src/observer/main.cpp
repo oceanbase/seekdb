@@ -43,6 +43,7 @@
 #include <sys/resource.h>
 // easy complains in compiling if put the right position.
 #include <link.h>
+#include <dlfcn.h>
 
 using namespace oceanbase::obsys;
 using namespace oceanbase;
@@ -236,6 +237,38 @@ void print_all_thread(const char* desc, uint64_t tenant_id)
   MPRINT("============= [%s] finish to show unstopped thread =============", desc);
 }
 
+// systemd dynamic loading
+static int safe_sd_notify(int unset_environment, const char *state)
+{
+  typedef int (*sd_notify_func_t)(int unset_environment, const char *state);
+  sd_notify_func_t sd_notify_func = nullptr;
+  void *systemd_handle = nullptr;
+  int ret = OB_SUCCESS;
+  systemd_handle = dlopen("libsystemd.so.0", RTLD_LAZY);
+  if (nullptr == systemd_handle) {
+    systemd_handle = dlopen("libsystemd.so", RTLD_LAZY);
+  }
+  if (nullptr == systemd_handle) {
+      LOG_INFO("systemd library not available, sd_notify will be disabled");
+  } else {
+    sd_notify_func = (sd_notify_func_t)dlsym(systemd_handle, "sd_notify");
+    if (nullptr == sd_notify_func) {
+      LOG_WARN("failed to get sd_notify symbol from systemd library");
+    } else {
+      LOG_INFO("systemd notify initialized successfully");
+      // Call sd_notify if available
+      sd_notify_func(unset_environment, state);
+    }
+  }
+
+  // close systemd handle
+  if (nullptr != systemd_handle) {
+    dlclose(systemd_handle);
+    systemd_handle = nullptr;
+  }
+  return ret;
+}
+
 int inner_main(int argc, char *argv[])
 {
   // temporarily unlimited memory before init config
@@ -387,6 +420,9 @@ int inner_main(int argc, char *argv[])
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(observer.start(embed_mode))) {
         LOG_ERROR("observer start fail", K(ret));
+      } else {
+        safe_sd_notify(0, "READY=1\n"
+                       "STATUS=observer is ready and running\n");
       }
       if (initialize) {
         LOG_INFO("observer starts in initialize mode, exit now", K(initialize));

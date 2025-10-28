@@ -1,37 +1,35 @@
-# Installing OceanBase Database via yum/apt
-If you want to deploy OceanBase on a Linux RPM platform, you can use yum/apt for single-node installation and simple management with systemd.
+# Installing OceanBase SeekDB via yum/apt
+If you want to deploy OceanBase SeekDB on a Linux RPM platform, you can use yum/apt for single-node installation and simple management with systemd.
 
 **WARNING**
 
 - The installation method is just used for study or test;
 - You should not deploy it with important data as it is not used in production environment.
 
-## Installing OceanBase via yum
-Config yum repo then install OceanBase, it will automatically install the required dependencies.
+## Installing OceanBase SeekDB via yum
+Config yum repo then install OceanBase SeekDB, it will automatically install the required dependencies.
 ```bash
 yum install -y yum-utils
 yum-config-manager --add-repo https://mirrors.aliyun.com/oceanbase/OceanBase.repo
-yum install -y oceanbase-ce
+yum install -y oceanbase-seekdb
 ```
 
-## Installing OceanBase via apt
-Config apt repo then install OceanBase, it will automatically install the required dependencies.
+## Installing OceanBase SeekDB via apt
+Config apt repo then install OceanBase SeekDB, it will automatically install the required dependencies.
 ```bash
 apt update
 apt install -y lsb-release wget gnupg2 mysql-client curl
 wget http://mirrors.oceanbase.com/oceanbase/oceanbase_deb.pub && apt-key add oceanbase_deb.pub
 echo "deb http://mirrors.oceanbase.com/oceanbase/community/stable/$(lsb_release -is | awk '{print tolower($0)}')/$(lsb_release -cs)/$(dpkg --print-architecture)/ ./" | tee -a /etc/apt/sources.list.d/oceanbase.list
 apt update
-apt install -y oceanbase-ce
+apt install -y oceanbase-seekdb
 ```
 
 ## Dependencies list：
 | dependency | version |
 |-------|-------|
-| oceanbase-ce-libs | same version with oceanbase-ce |
-| jq | / |
-| oniguruma | / |
-| curl | / |
+| libaio | / |
+| systemd | / |
 
 # Startup Method
 You can install and run OceanBase service using the following command:
