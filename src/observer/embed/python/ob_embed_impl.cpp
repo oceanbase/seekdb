@@ -25,6 +25,7 @@
 #include "common/ob_version_def.h"
 #include "lib/oblog/ob_warning_buffer.h"
 #include "sql/engine/expr/ob_expr_sql_udt_utils.h"
+#include "sql/engine/expr/ob_expr_lob_utils.h"
 
 PYBIND11_MODULE(oblite, m) {
     m.doc() = "oblite embed pybind";
@@ -596,6 +597,7 @@ int ObLiteEmbedUtil::convert_result_to_pyobj(const int64_t col_idx, common::sqlc
 {
   int ret = OB_SUCCESS;
   lib::ObMemAttr mem_attr(OB_SYS_TENANT_ID, "EmbedAlloc");
+  ObArenaAllocator allocator(mem_attr);
   ObInnerSQLResult &inner_result = reinterpret_cast<ObInnerSQLResult&>(result);
   ObObjType type = obj_meta.get_type();
   switch (type) {
@@ -759,11 +761,7 @@ int ObLiteEmbedUtil::convert_result_to_pyobj(const int64_t col_idx, common::sqlc
     case ObEnumType:
     case ObSetType:
     case ObVarcharType:
-    case ObCharType:
-    case ObTinyTextType:
-    case ObTextType:
-    case ObMediumTextType:
-    case ObLongTextType: {
+    case ObCharType: {
       ObString obj_str;
       if (OB_FAIL(result.get_varchar(col_idx, obj_str))) {
         LOG_WARN("get varchar failed", K(ret), K(col_idx));
@@ -774,36 +772,63 @@ int ObLiteEmbedUtil::convert_result_to_pyobj(const int64_t col_idx, common::sqlc
       }
       break;
     }
-    case ObJsonType: {
-      ObString obj_str;
-      if (OB_FAIL(result.get_varchar(col_idx, obj_str))) {
-      } else if (obj_str.length() == 0) {
-        val = pybind11::none();
-      } else {
-        ObArenaAllocator allocator(mem_attr);
-        ObJsonBin j_bin(obj_str.ptr(), obj_str.length(), &allocator);
-        ObIJsonBase *j_base = &j_bin;
-        ObJsonBuffer jbuf(&allocator);
-        static_cast<ObJsonBin*>(j_base)->set_seek_flag(true);
-        if (OB_FAIL(j_bin.reset_iter())) {
-          OB_LOG(WARN, "fail to reset json bin iter", K(ret), K(obj_str));
-        } else if (OB_FAIL(j_base->print(jbuf, true, obj_str.length()))) {
-          OB_LOG(WARN, "json binary to string failed in mysql mode", K(ret), K(obj_str), K(*j_base));
+    case ObTinyTextType:
+    case ObTextType:
+    case ObMediumTextType:
+    case ObLongTextType: {
+      MTL_SWITCH(OB_SYS_TENANT_ID) {
+        ObObj obj;
+        ObString real_data;
+        if (OB_FAIL(result.get_obj(col_idx, obj))) {
+          LOG_WARN("get obj failed", K(ret), K(col_idx));
+        } else if (OB_FAIL(sql::ObTextStringHelper::read_real_string_data(&allocator, obj, real_data))) {
+          LOG_WARN("failed to read real string data", K(ret), K(obj));
         } else {
-          val = pybind11::str(jbuf.ptr(), jbuf.length());
+          val = pybind11::str(real_data.ptr(), real_data.length());
+        }
+      }
+      break;
+    }
+    case ObJsonType: {
+      MTL_SWITCH(OB_SYS_TENANT_ID) {
+        ObObj obj;
+        ObString obj_str;
+        if (OB_FAIL(result.get_obj(col_idx, obj))) {
+          LOG_WARN("get obj failed", K(ret), K(col_idx));
+        } else if (OB_FAIL(sql::ObTextStringHelper::read_real_string_data(&allocator, obj, obj_str))) {
+          LOG_WARN("failed to read real string data", K(ret), K(obj));
+        } else if (obj_str.length() == 0) {
+          val = pybind11::none();
+        } else {
+          ObJsonBin j_bin(obj_str.ptr(), obj_str.length(), &allocator);
+          ObIJsonBase *j_base = &j_bin;
+          ObJsonBuffer jbuf(&allocator);
+          static_cast<ObJsonBin*>(j_base)->set_seek_flag(true);
+          if (OB_FAIL(j_bin.reset_iter())) {
+            OB_LOG(WARN, "fail to reset json bin iter", K(ret), K(obj_str));
+          } else if (OB_FAIL(j_base->print(jbuf, true, obj_str.length()))) {
+            OB_LOG(WARN, "json binary to string failed in mysql mode", K(ret), K(obj_str), K(*j_base));
+          } else {
+            val = pybind11::str(jbuf.ptr(), jbuf.length());
+          }
         }
       }
       break;
     }
     case ObGeometryType:
     case ObRoaringBitmapType: {
-      ObString obj_str;
-      if (OB_FAIL(result.get_varchar(col_idx, obj_str))) {
-        LOG_WARN("failed to get binary data", K(ret), K(col_idx));
-      } else if (obj_str.length() == 0) {
-        val = pybind11::bytes("");
-      } else {
-        val = pybind11::bytes(obj_str.ptr(), obj_str.length());
+      MTL_SWITCH(OB_SYS_TENANT_ID) {
+        ObObj obj;
+        ObString obj_str;
+        if (OB_FAIL(result.get_obj(col_idx, obj))) {
+          LOG_WARN("get obj failed", K(ret), K(col_idx));
+        } else if (OB_FAIL(sql::ObTextStringHelper::read_real_string_data(&allocator, obj, obj_str))) {
+          LOG_WARN("failed to read real string data", K(ret), K(obj));
+        } else if (obj_str.length() == 0) {
+          val = pybind11::bytes("");
+        } else {
+          val = pybind11::bytes(obj_str.ptr(), obj_str.length());
+        }
       }
       break;
     }
