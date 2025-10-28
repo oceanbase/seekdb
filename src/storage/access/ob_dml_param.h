@@ -189,7 +189,8 @@ public:
         in_row_cache_threshold_(common::DEFAULT_MAX_MULTI_GET_CACHE_AWARE_ROW_NUM),
         scan_resume_point_(nullptr),
         mds_collector_(nullptr),
-        row_scan_cnt_(NULL)
+        row_scan_cnt_(NULL),
+        enable_new_false_range_(false)
   {}
   virtual ~ObTableScanParam() {}
 public:
@@ -229,6 +230,7 @@ public:
   ScanResumePoint *scan_resume_point_; // for scan pause
   ObMdsReadInfoCollector *mds_collector_; // used for collect mds info when query mds sstable
   uint64_t *row_scan_cnt_;
+  bool enable_new_false_range_;
 
   DECLARE_VIRTUAL_TO_STRING;
 private:
