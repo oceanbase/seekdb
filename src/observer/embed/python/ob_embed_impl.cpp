@@ -24,6 +24,7 @@
 #include "lib/string/ob_string.h"
 #include "common/ob_version_def.h"
 #include "lib/oblog/ob_warning_buffer.h"
+#include "sql/engine/expr/ob_expr_sql_udt_utils.h"
 
 PYBIND11_MODULE(oblite, m) {
     m.doc() = "oblite embed pybind";
@@ -595,6 +596,7 @@ int ObLiteEmbedUtil::convert_result_to_pyobj(const int64_t col_idx, common::sqlc
 {
   int ret = OB_SUCCESS;
   lib::ObMemAttr mem_attr(OB_SYS_TENANT_ID, "EmbedAlloc");
+  ObInnerSQLResult &inner_result = reinterpret_cast<ObInnerSQLResult&>(result);
   ObObjType type = obj_meta.get_type();
   switch (type) {
     case ObNullType: {
@@ -794,8 +796,7 @@ int ObLiteEmbedUtil::convert_result_to_pyobj(const int64_t col_idx, common::sqlc
       break;
     }
     case ObGeometryType:
-    case ObRoaringBitmapType:
-    case ObCollectionSQLType: {
+    case ObRoaringBitmapType: {
       ObString obj_str;
       if (OB_FAIL(result.get_varchar(col_idx, obj_str))) {
         LOG_WARN("failed to get binary data", K(ret), K(col_idx));
@@ -803,6 +804,23 @@ int ObLiteEmbedUtil::convert_result_to_pyobj(const int64_t col_idx, common::sqlc
         val = pybind11::bytes("");
       } else {
         val = pybind11::bytes(obj_str.ptr(), obj_str.length());
+      }
+      break;
+    }
+    case ObCollectionSQLType: {
+      ObObj obj;
+      ObArenaAllocator allocator(mem_attr);
+      ObString res_str;
+      if (OB_FAIL(result.get_obj(col_idx, obj))) {
+        LOG_WARN("get obj failed", K(ret), K(col_idx));
+      } else if (OB_FAIL(convert_collection_to_string(obj, obj_meta, inner_result, allocator, res_str))) {
+        LOG_WARN("convert collection failed", KR(ret), K(obj), K(obj_meta));
+        if (ret == OB_NOT_SUPPORTED) {
+          val = pybind11::bytes(obj.get_string_ptr(), obj.get_string_len());
+          ret = OB_SUCCESS;
+        }
+      } else {
+        val = pybind11::str(res_str.ptr(), res_str.length());
       }
       break;
     }
@@ -821,6 +839,25 @@ int ObLiteEmbedUtil::convert_result_to_pyobj(const int64_t col_idx, common::sqlc
       ret = OB_NOT_SUPPORTED;
       break;
     }
+  }
+  return ret;
+}
+
+int ObLiteEmbedUtil::convert_collection_to_string(ObObj &obj, ObObjMeta &obj_meta, observer::ObInnerSQLResult &inner_result,
+    ObIAllocator &allocator, ObString &res_str)
+{
+  int ret = OB_SUCCESS;
+  const uint16_t subschema_id = obj.get_meta().get_subschema_id();
+  ObSubSchemaValue sub_meta;
+  if (OB_FAIL(inner_result.result_set().get_exec_context().get_sqludt_meta_by_subschema_id(subschema_id, sub_meta))) {
+    LOG_WARN("failed to get udt meta", K(ret), K(subschema_id));
+  } else if (sub_meta.type_ == ObSubSchemaType::OB_SUBSCHEMA_COLLECTION_TYPE) {
+    ObSqlCollectionInfo *coll_meta = reinterpret_cast<ObSqlCollectionInfo *>(sub_meta.value_);
+    if (OB_FAIL(sql::ObSqlUdtUtils::convert_collection_to_string(obj, *coll_meta, &allocator, res_str))) {
+      FLOG_WARN("failed to convert udt to string", K(ret), K(subschema_id));
+    }
+  } else {
+    ret = OB_NOT_SUPPORTED;
   }
   return ret;
 }
