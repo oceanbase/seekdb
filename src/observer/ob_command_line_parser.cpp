@@ -298,7 +298,7 @@ void ObCommandLineParser::print_version()
 #else
   const char *extra_flags = "|Sanity";
 #endif
-  MPRINT("observer (%s %s)\n", OB_PRODUCTION_NAME, PACKAGE_VERSION);
+  MPRINT("observer (%s %s %s)\n", OB_OCEANBASE_NAME, OB_SEEKDB_NAME, PACKAGE_VERSION);
   MPRINT("REVISION: %s", build_version());
   MPRINT("BUILD_BRANCH: %s", build_branch());
   MPRINT("BUILD_TIME: %s %s", build_date(), build_time());

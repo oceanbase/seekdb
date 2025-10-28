@@ -54,9 +54,9 @@ ObSpecialSysVarValues::ObSpecialSysVarValues()
   } else if (OB_FAIL(databuff_printf(ObSpecialSysVarValues::version_comment_,
                                      ObSpecialSysVarValues::VERSION_COMMENT_MAX_LEN,
                                      pos,
-                                     "%s %s (r%s) (Built %s %s)",
-                                     OB_PRODUCTION_NAME, PACKAGE_VERSION, build_version(),
-                                     build_date(), build_time()))) {
+                                     "%s %s %s (r%s) (Built %s %s)",
+                                     OB_OCEANBASE_NAME, OB_COMPATIBILITY_VERSION, OB_SEEKDB_NAME, PACKAGE_VERSION,
+                                     build_version(), build_date(), build_time()))) {
     LOG_ERROR("fail to print version_comment to buff", K(ret));
   }
 
@@ -65,7 +65,7 @@ ObSpecialSysVarValues::ObSpecialSysVarValues()
   } else if (FALSE_IT(pos = 0)) {
   } else if (OB_FAIL(databuff_printf(ObSpecialSysVarValues::version_,
                                      ObSpecialSysVarValues::VERSION_MAX_LEN,
-                                     pos, "5.7.25-%s-v%s", OB_PRODUCTION_NAME, PACKAGE_VERSION))) {
+                                     pos, "5.7.25-%s %s-v%s", OB_OCEANBASE_NAME, OB_SEEKDB_NAME, PACKAGE_VERSION))) {
 
     LOG_ERROR("fail to print version to buff", K(ret));
   }

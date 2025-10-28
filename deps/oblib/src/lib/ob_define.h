@@ -191,7 +191,9 @@ const uint64_t OB_INVALID_GROUP_ID = UINT64_MAX;
 const uint64_t OB_INTERNAL_CATALOG_ID = 0;
 const char *const OB_INTERNAL_CATALOG_NAME = "internal";
 const char *const OB_INTERNAL_CATALOG_NAME_UPPER = "INTERNAL";
-const char *const OB_PRODUCTION_NAME = "OceanBase SeekDB";
+const char *const OB_OCEANBASE_NAME = "OceanBase";
+const char *const OB_SEEKDB_NAME = "SeekDB";
+const char *const OB_COMPATIBILITY_VERSION = "4.3.5.3";
 
 OB_INLINE bool is_valid_group(const uint64_t group_id)
 {

@@ -1767,7 +1767,7 @@ int ObSelectResolver::resolve_field_list(const ParseNode &node)
               LOG_WARN("failed to ob write string", K(ret));
             }
           } else if (T_FUN_SYS_OB_VERSION == name_expr->get_expr_type()) {
-            if (OB_FAIL(ob_write_string(*allocator_, common::ObString(PACKAGE_VERSION), select_item.alias_name_))) {
+            if (OB_FAIL(ob_write_string(*allocator_, common::ObString(OB_COMPATIBILITY_VERSION), select_item.alias_name_))) {
               LOG_WARN("failed to ob write string", K(ret));
             }
           } else if (T_FUN_SYS_ICU_VERSION == name_expr->get_expr_type()) {
