@@ -136,6 +136,7 @@ public:
       const ObTableSchema &index_schema,
       ObString &prefix);
   static int generate_vec_index_aux_columns(
+      ObSchemaGetterGuard &schema_guard,
       const ObTableSchema &orig_table_schema,
       const ObTableSchema &index_table_schema,
       ObTableSchema &new_table_schema,

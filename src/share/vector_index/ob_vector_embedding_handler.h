@@ -199,6 +199,7 @@ class ObEmbeddingTask
   int wake_up();
   void disable_callback();
   void set_callback_done();
+  bool need_callback() { return cb_handle_ != nullptr ? true : false; }
 
 public:
   static const ObString MODEL_URL_NAME;

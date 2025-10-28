@@ -732,8 +732,11 @@ int ObEmbeddedVecDMLIterator::generate_embedded_vec_row(const ObChunkDatumStore:
           } else if (OB_FAIL(get_chunk_data(store_row, embedded_vec_idx, chunk))) {
             LOG_WARN("failed to project chunk columns for embedding", K(ret));
           } else if (!is_old_row_ && chunk.empty()) {
-            ret = OB_INVALID_ARGUMENT;
-            LOG_WARN("empty chunk found for embedding", K(ret));
+            obj_arr[vid_idx].set_int(vid);
+            obj_arr[embedded_vec_idx].set_null();
+            if (OB_FAIL(rows_.push_back(row))) {
+              LOG_WARN("fail to push back row", K(ret));
+            }
           } else {
             obj_arr[vid_idx].set_int(vid);
             ObString embedded_vector;

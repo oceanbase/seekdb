@@ -267,7 +267,6 @@ int ObHybridVectorRefreshTask::prepare_for_task()
     LOG_INFO("adapter not complete, need wait", K(ret), KP(task_ctx->adp_guard_.get_adatper()));
   } else if (FALSE_IT(task_ctx->task_started_ = true)) {
   } else {
-    task_ctx->task_status_.target_scn_.convert_from_ts(ObTimeUtility::current_time());
     task_ctx->status_ = ObHybridVectorRefreshTaskStatus::PREPARE_EMBEDDING;
   }
   return ret;
@@ -1028,7 +1027,6 @@ int ObHybridVectorRefreshTask::after_embedding(ObPluginVectorIndexAdaptor &adapt
   }
 
   embedded_iter.reset();
-  task_ctx->delete_vids_.reuse();
   int tmp_ret = OB_SUCCESS;
   timeout_us = ObTimeUtility::current_time() + ObInsertLobColumnHelper::LOB_TX_TIMEOUT;
   if (OB_NOT_NULL(tx_desc) && trans_start && OB_SUCCESS != (tmp_ret = ObInsertLobColumnHelper::end_trans(tx_desc, ret != OB_SUCCESS, timeout_us))) {
@@ -1038,6 +1036,7 @@ int ObHybridVectorRefreshTask::after_embedding(ObPluginVectorIndexAdaptor &adapt
   if (OB_FAIL(ret) || !embedding_finish) {
     // do nothing.
   } else {
+    task_ctx->delete_vids_.reuse();
     task_ctx->status_ = ObHybridVectorRefreshTaskStatus::PREPARE_EMBEDDING;
   }
   return ret;
@@ -1061,6 +1060,7 @@ void ObHybridVectorRefreshTaskCtx::set_task_finish()
   int ret = OB_SUCCESS;
   task_status_.all_finished_ = true;
   status_ = ObHybridVectorRefreshTaskStatus::TASK_FINISH;
+  delta_delete_iter_.reset();
   ObAccessService *oas = MTL(ObAccessService *);
   if (OB_NOT_NULL(oas) && OB_NOT_NULL(scan_iter_)) {
     ret = oas->revert_scan_iter(scan_iter_);

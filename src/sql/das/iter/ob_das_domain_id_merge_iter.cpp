@@ -957,16 +957,22 @@ int ObDASDomainIdMergeIter::get_domain_id(
         LOG_WARN("unexpected error, domain id expr is nullptr", K(ret), K(rowkey_cnt), K(ctdef->result_output_));
       } else {
         ObDatum &datum = expr->locate_expr_datum(*rtdef->eval_ctx_);
-        void *buf = allocator.alloc(datum.get_string().length());
-        if (OB_ISNULL(buf)) {
-          ret = OB_ALLOCATE_MEMORY_FAILED;
-          LOG_WARN("fail to allocate memory", K(ret), KP(buf), K(domain_type), K(ctdef->ref_table_id_), K(datum.get_string().length()));
-        } else {
-          memcpy(buf, datum.get_string().ptr(), datum.get_string().length());
-          ObString tmp_domain_id;
-          tmp_domain_id.assign_ptr(reinterpret_cast<char*>(buf), datum.get_string().length());
-          if (OB_FAIL(domain_id.push_back(tmp_domain_id))) {
+        if (datum.get_string().length() == 0) {
+          if (OB_FAIL(domain_id.push_back(ObString()))) {
             LOG_WARN("failed to push back domain id", K(ret));
+          }
+        } else {
+          void *buf = allocator.alloc(datum.get_string().length());
+          if (OB_ISNULL(buf)) {
+            ret = OB_ALLOCATE_MEMORY_FAILED;
+            LOG_WARN("fail to allocate memory", K(ret), KP(buf), K(domain_type), K(ctdef->ref_table_id_), K(datum.get_string().length()));
+          } else {
+            memcpy(buf, datum.get_string().ptr(), datum.get_string().length());
+            ObString tmp_domain_id;
+            tmp_domain_id.assign_ptr(reinterpret_cast<char*>(buf), datum.get_string().length());
+            if (OB_FAIL(domain_id.push_back(tmp_domain_id))) {
+              LOG_WARN("failed to push back domain id", K(ret));
+            }
           }
         }
       }

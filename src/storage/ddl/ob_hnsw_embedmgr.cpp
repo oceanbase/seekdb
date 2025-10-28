@@ -69,6 +69,7 @@ void ObEmbeddingResult::reset()
   vector_dim_ = 0;
   text_.reset();
   rowkey_.reset();
+  status_ = NEED_EMBEDDING;
 }
 
 // -------------------------------- ObEmbeddingIOCallback --------------------------------
@@ -112,23 +113,34 @@ int ObEmbeddingIOCallback::process()
     if (OB_FAIL(task_->get_async_result(vectors))) {
       LOG_WARN("get async result failed", K(ret), K(slot_idx_), "vec_cnt", vectors.count());
     } else if (vectors.count() <= 0) {
-      LOG_INFO("embedding cb empty vectors", K(ret), K(slot_idx_), "vec_cnt", vectors.count(), "batch_count", batch_info_->get_count());
-      // do nothing
-    } else if (batch_info_->get_count() != vectors.count()) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("count mismatch", K(ret), "batch_count", batch_info_->get_count(), K(vectors.count()), K(slot_idx_));
+      LOG_WARN("empty vectors", K(ret), K(slot_idx_), "vec_cnt", vectors.count());
     } else {
-      // Fill vectors into batch_info results
+      int64_t embedding_count = batch_info_->get_need_embedding_count();
       const common::ObArray<ObEmbeddingResult*> &results = batch_info_->get_results();
-      for (int64_t i = 0; OB_SUCC(ret) && i < batch_info_->get_count(); ++i) {
-        ObEmbeddingResult *r = results.at(i);
-        if (OB_ISNULL(r)) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("null result slot in batch", K(ret), K(i), K(slot_idx_));
-        } else {
-          //deep copy
-          const int64_t bytes = dim_ * static_cast<int64_t>(sizeof(float));
-          MEMCPY(r->get_vector(), vectors.at(i), bytes);
+      if (vectors.count() != embedding_count) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("count mismatch", K(ret), K(embedding_count), K(vectors.count()), K(slot_idx_));
+      } else {
+        int64_t vec_idx = 0;
+        for (int64_t i = 0; OB_SUCC(ret) && i < batch_info_->get_count(); ++i) {
+          ObEmbeddingResult *r = results.at(i);
+          if (OB_ISNULL(r)) {
+            ret = OB_ERR_UNEXPECTED;
+            LOG_WARN("null result slot in batch", K(ret), K(i), K(slot_idx_));
+          } else if (r->need_embedding()) {
+            if (vec_idx >= vectors.count()) {
+              ret = OB_ERR_UNEXPECTED;
+              LOG_WARN("vector index out of bounds", K(ret), K(vec_idx), K(vectors.count()));
+            } else {
+              //deep copy
+              const int64_t bytes = dim_ * static_cast<int64_t>(sizeof(float));
+              MEMCPY(r->get_vector(), vectors.at(vec_idx), bytes);
+              vec_idx++;
+            }
+          } else {
+            //do nothing
+          }
         }
       }
     }
@@ -205,7 +217,8 @@ int ObTaskBatchInfo::init(const int64_t batch_size, const int64_t vec_dim)
 
 int ObTaskBatchInfo::add_item(const int64_t vid,
                               const common::ObString &text,
-                              const common::ObArray<blocksstable::ObStorageDatum> &rowkey)
+                              const common::ObArray<blocksstable::ObStorageDatum> &rowkey,
+                              const ObEmbeddingResult::EmbeddingStatus status)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(current_count_ >= batch_size_)) {
@@ -214,6 +227,10 @@ int ObTaskBatchInfo::add_item(const int64_t vid,
   } else {
     ObEmbeddingResult *result = results_.at(current_count_);
     result->set_vid(vid);
+    result->set_status(status);
+    if (status == ObEmbeddingResult::NEED_EMBEDDING) {
+      need_embedding_count_++;
+    }
 
     //deep copy
     if (text.length() > 0) {
@@ -263,6 +280,7 @@ void ObTaskBatchInfo::reset()
   batch_size_ = 0;
   current_count_ = 0;
   vec_dim_ = 0;
+  need_embedding_count_ = 0;
 }
 
 // -------------------------------- Slot --------------------------------
@@ -605,19 +623,21 @@ int ObEmbeddingTaskMgr::submit_batch_info(ObTaskBatchInfo *&batch_info)
       common::ObArray<ObString> texts;
       const common::ObArray<ObEmbeddingResult*> &results = batch_info->get_results();
       const int64_t count = batch_info->get_count();
-
-      if (OB_FAIL(texts.reserve(count))) {
-        LOG_WARN("reserve texts failed", K(ret), K(count));
+      int64_t embedding_count = batch_info->get_need_embedding_count();
+      if (OB_FAIL(texts.reserve(embedding_count))) {
+        LOG_WARN("reserve texts failed", K(ret), K(embedding_count));
       } else {
         for (int64_t i = 0; OB_SUCC(ret) && i < count; ++i) {
-          if (OB_FAIL(texts.push_back(results.at(i)->get_text()))) {
-            LOG_WARN("push text failed", K(ret), K(i));
+          if (OB_NOT_NULL(results.at(i)) && results.at(i)->need_embedding()) {
+            if (OB_FAIL(texts.push_back(results.at(i)->get_text()))) {
+              LOG_WARN("push text failed", K(ret), K(i));
+            }
           }
         }
       }
 
-      if (OB_SUCC(ret)) {
-        // Create callback and task
+      if (OB_SUCC(ret) && embedding_count > 0) {
+        // Only create embedding task if there are items to embed
         void *cb_buf = ob_malloc(sizeof(ObEmbeddingIOCallback), ObMemAttr(MTL_ID(), "EmbedCb"));
         if (OB_ISNULL(cb_buf)) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -670,6 +690,14 @@ int ObEmbeddingTaskMgr::submit_batch_info(ObTaskBatchInfo *&batch_info)
               ob_free(cb);
             }
           }
+        }
+      } else if (OB_SUCC(ret) && embedding_count == 0) {
+        // Just mark this slot as ready immediately without embedding
+        if (OB_FAIL(mark_task_ready(slot_idx, OB_SUCCESS))) {
+          LOG_WARN("mark task ready failed", K(ret), K(slot_idx));
+        } else {
+          slot_ring_.set_batch_info(slot_idx, batch_info); // Take ownership
+          batch_info = nullptr;
         }
       }
     }

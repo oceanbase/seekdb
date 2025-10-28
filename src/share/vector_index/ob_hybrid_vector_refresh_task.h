@@ -124,6 +124,13 @@ public:
     }
     return status;
   }
+
+  void reset_status() {
+    ObHybridVectorRefreshTaskCtx *ctx = static_cast<ObHybridVectorRefreshTaskCtx *>(get_task_ctx());
+    if (OB_NOT_NULL(ctx)) {
+      ctx->status_ = ObHybridVectorRefreshTaskStatus::TASK_PREPARE;
+    }
+  }
   DISALLOW_COPY_AND_ASSIGN(ObHybridVectorRefreshTask);
 private:
   static const int BATCH_CNT = 2000;

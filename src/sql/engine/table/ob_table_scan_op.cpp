@@ -3100,7 +3100,7 @@ int ObTableScanOp::add_ddl_column_checksum()
       // } else if (OB_FAIL(corrupt_obj(store_datum))) {
       //   LOG_WARN("failed to corrupt obj", K(ret));
 #endif
-      } else if (col_need_reshape_[i] && OB_FAIL(ObDDLUtil::reshape_ddl_column_obj(store_datum, e->obj_meta_))) {
+      } else if (col_need_reshape_[i] && e->type_ != T_FUN_SYS_EMBEDDED_VEC && OB_FAIL(ObDDLUtil::reshape_ddl_column_obj(store_datum, e->obj_meta_))) {
         LOG_WARN("reshape ddl column obj failed", K(ret));
       } else {
         column_checksum_[i] += store_datum.checksum(0);
@@ -3146,7 +3146,7 @@ int ObTableScanOp::add_ddl_column_checksum_batch(const int64_t row_count)
           // } else if (OB_FAIL(corrupt_obj(store_datum))) {
           //   LOG_WARN("failed to corrupt obj", K(ret));
 #endif
-          } else if (col_need_reshape_[i] && OB_FAIL(ObDDLUtil::reshape_ddl_column_obj(store_datum, e->obj_meta_))) {
+          } else if (col_need_reshape_[i] && e->type_ != T_FUN_SYS_EMBEDDED_VEC && OB_FAIL(ObDDLUtil::reshape_ddl_column_obj(store_datum, e->obj_meta_))) {
             LOG_WARN("reshape ddl column obj failed", K(ret));
           } else {
             column_checksum_[i] += store_datum.checksum(0);

@@ -5853,6 +5853,7 @@ int ObVecIndexBuilderUtil::get_vec_table_schema_by_name(
 
 
 int ObVecIndexBuilderUtil::generate_vec_index_aux_columns(
+    ObSchemaGetterGuard &schema_guard,
     const ObTableSchema &orig_table_schema,
     const ObTableSchema &index_table_schema,
     ObTableSchema &new_table_schema,
@@ -5882,6 +5883,12 @@ int ObVecIndexBuilderUtil::generate_vec_index_aux_columns(
         }
         ObArray<ObColumnSchemaV2 *> gen_columns;
         HEAP_VAR(ObTableSchema, tmp_table_schema) {
+          if (OB_SUCC(ret) && index_table_schema.is_vec_hnsw_index()) {
+            if (OB_FAIL(ObVecIndexBuilderUtil::vec_set_index_arg_index_schema(index_arg, schema_guard, orig_table_schema, index_table_schema))) {
+              LOG_WARN("failed to set vec index schema for create index arg", K(ret), K(index_arg), K(index_table_schema));
+            }
+          }
+
           if (OB_FAIL(ret)) {
           } else if (OB_FAIL(tmp_table_schema.assign(new_table_schema))) {
             LOG_WARN("fail to assign schema", K(ret));

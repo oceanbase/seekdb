@@ -1305,11 +1305,12 @@ void ObEmbeddingTaskHandler::handle(void *task)
     LOG_WARN("invalid argument", KR(ret));
   } else {
     embedding_task = static_cast<ObEmbeddingTask *>(task);
+    bool need_callback = embedding_task->need_callback();
     LOG_INFO("handling embedding task", K_(task_ref_cnt), KPC(embedding_task));
 
     if (OB_FAIL(embedding_task->do_work(this))) {
       LOG_WARN("failed to do work for embedding task", K(ret), KPC(embedding_task));
-    } else if (embedding_task->is_completed()) {
+    } else if (need_callback && embedding_task->is_completed()) {
       if (OB_FAIL(embedding_task->maybe_callback())) {
         LOG_WARN("failed to maybe callback", K(ret));
       } else if (OB_FAIL(embedding_task->wake_up())) {

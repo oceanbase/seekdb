@@ -5907,7 +5907,7 @@ int ObVectorIndexUtil::alter_vec_aux_column_schema(const ObTableSchema &aux_tabl
                                                    ObColumnSchemaV2 &new_aux_column_schema)
 {
   int ret = OB_SUCCESS;
-  if (aux_table_schema.is_vec_index_snapshot_data_type() || aux_table_schema.is_vec_ivfpq_pq_centroid_index()) {
+  if (aux_table_schema.is_vec_index_snapshot_data_type() || aux_table_schema.is_vec_ivfpq_pq_centroid_index() || aux_table_schema.is_hybrid_vec_index_embedded_type()) {
     // extra_info column in snapshot table is null
     if (new_column_schema.get_rowkey_position() > 0 || new_column_schema.get_tbl_part_key_pos() > 0) {
       new_aux_column_schema.set_nullable(true);

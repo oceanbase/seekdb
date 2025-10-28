@@ -1838,8 +1838,11 @@ int ObHNSWEmbeddingOperator::process_input_chunk(const ObChunk &input_chunk)
           LOG_WARN("get_next_row_from_tmp_files failed", K(ret));
         } else if (!has_row) {
           chunk_exhausted_ = true;
-        } else if (OB_FAIL(current_batch_->add_item(vid, text, rowkey))) {
-          LOG_WARN("add item to batch failed", K(ret), K(vid));
+        } else {
+          ObEmbeddingResult::EmbeddingStatus status = text.length() > 0 ? ObEmbeddingResult::NEED_EMBEDDING : ObEmbeddingResult::SKIP_EMBEDDING;
+          if (OB_FAIL(current_batch_->add_item(vid, text, rowkey, status))) {
+            LOG_WARN("add item to batch failed", K(ret), K(vid), K(text.length()));
+          }
         }
       }
     }
@@ -1888,12 +1891,9 @@ int ObHNSWEmbeddingOperator::get_next_row_from_tmp_files(ObArray<ObCGRowFile *> 
                 STORAGE_LOG(WARN, "to_datum_row failed", K(ret), K(cur_row_in_batch_));
               } else if (OB_FAIL(parse_row(current_row, vid, text, rowkeys))) {
                 LOG_WARN("parse row failed", K(ret));
-              } else if (text.length() > 0) {
+              } else {
                 cur_row_in_batch_++;
                 has_row = true;
-              } else {
-                // empty text row, advance to next
-                cur_row_in_batch_++;
               }
             }
             if (OB_SUCC(ret) && !has_row) {
@@ -1938,26 +1938,23 @@ int ObHNSWEmbeddingOperator::parse_row(const blocksstable::ObDatumRow &current_r
                                        common::ObArray<blocksstable::ObStorageDatum> &rowkeys)
 {
   int ret = OB_SUCCESS;
+  vid = -1;
+  rowkeys.reset();
+  text.reset();
   if (OB_UNLIKELY(current_row.get_column_count() <= vid_col_idx_ || current_row.get_column_count() <= text_col_idx_)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid datum row", K(ret), K(current_row), K(vid_col_idx_), K(text_col_idx_));
   } else {
     const blocksstable::ObStorageDatum &vid_cell = current_row.storage_datums_[vid_col_idx_];
     const blocksstable::ObStorageDatum &chunk_cell = current_row.storage_datums_[text_col_idx_];
-    if (chunk_cell.get_string().length() == 0) {
-      //do nothing
+    vid = vid_cell.get_int();
+    text = chunk_cell.get_string();
+    if (OB_FAIL(rowkeys.reserve(rowkey_cnt_))) {
+      LOG_WARN("reserve rowkeys failed", K(ret), K(rowkey_cnt_));
     } else {
-      // No deep copy needed - add_item will do it
-      vid = vid_cell.get_int();
-      text = chunk_cell.get_string();
-      rowkeys.reset();
-      if (OB_FAIL(rowkeys.reserve(rowkey_cnt_))) {
-        LOG_WARN("reserve rowkeys failed", K(ret), K(rowkey_cnt_));
-      } else {
-        for (int64_t i = 0; OB_SUCC(ret) && i < rowkey_cnt_; ++i) {
-          if (OB_FAIL(rowkeys.push_back(current_row.storage_datums_[i]))) {
-            LOG_WARN("push rowkey datum failed", K(ret), K(i));
-          }
+      for (int64_t i = 0; OB_SUCC(ret) && i < rowkey_cnt_; ++i) {
+        if (OB_FAIL(rowkeys.push_back(current_row.storage_datums_[i]))) {
+          LOG_WARN("push rowkey datum failed", K(ret), K(i));
         }
       }
     }
@@ -2072,17 +2069,21 @@ int ObHNSWEmbeddingRowIterator::get_next_row(blocksstable::ObDatumRow *&datum_ro
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("null embedding result", K(ret), K(cur_result_pos_));
     } else {
-      if (OB_NOT_NULL(result->get_vector()) && result->get_vector_dim() > 0) {
-        data_str.assign(reinterpret_cast<char *>(result->get_vector()), static_cast<int32_t>(sizeof(float) * result->get_vector_dim()));
-        if (OB_FAIL(sql::ObArrayExprUtils::set_array_res(nullptr, data_str.length(), row_allocator_, vec_res, data_str.ptr()))) {
-          LOG_WARN("failed to set array res", K(ret));
-        } else {
-          current_row_.storage_datums_[vector_col_idx_].set_string(vec_res);
-        }
-      } else {
+      if (!result->need_embedding()) {
         current_row_.storage_datums_[vector_col_idx_].set_null();
+      } else {
+        if (OB_ISNULL(result->get_vector()) || result->get_vector_dim() <= 0) {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("unexpected error, vector is null or dim is 0", K(ret), K(result->get_vector()), K(result->get_vector_dim()));
+        } else {
+          data_str.assign(reinterpret_cast<char *>(result->get_vector()), static_cast<int32_t>(sizeof(float) * result->get_vector_dim()));
+          if (OB_FAIL(sql::ObArrayExprUtils::set_array_res(nullptr, data_str.length(), row_allocator_, vec_res, data_str.ptr()))) {
+            LOG_WARN("failed to set array res", K(ret));
+          } else {
+            current_row_.storage_datums_[vector_col_idx_].set_string(vec_res);
+          }
+        }
       }
-
       if (OB_SUCC(ret)) {
         current_row_.storage_datums_[vid_col_idx_].set_int(result->get_vid());
         const common::ObArray<blocksstable::ObStorageDatum> &rowkey = result->get_rowkey();

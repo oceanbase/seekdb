@@ -390,7 +390,7 @@ int ObDDLService::create_inner_expr_index(ObMySQLTransaction &trans,
   if (OB_SUCC(ret)) {
     ObDDLOperator ddl_operator(*schema_service_, *sql_proxy_);
     bool is_add_hybrid_embedded_vec_column = false;
-    const bool has_lob_in_origin_table = new_table_schema.has_lob_column(true/*ignore_unused_column*/) && new_table_schema.has_lob_aux_table();
+    const bool has_lob_in_origin_table = new_table_schema.has_lob_aux_table();
     bool is_add_lob = false;
     for (int64_t i = 0; OB_SUCC(ret) && i < new_columns.count(); ++i) {
       ObColumnSchemaV2 *new_column_schema = new_columns.at(i);
@@ -7196,7 +7196,7 @@ int ObDDLService::generate_aux_index_schema_(
     } else {
       ObDDLOperator ddl_operator(*schema_service_, *sql_proxy_);
       bool is_add_hybrid_embedded_vec_column = false;
-      const bool has_lob_in_origin_table = data_schema->has_lob_column(true/*ignore_unused_column*/) && data_schema->has_lob_aux_table();
+      const bool has_lob_in_origin_table = data_schema->has_lob_aux_table();
       bool is_add_lob = false;
       for (int64_t i = 0; OB_SUCC(ret) && i < gen_columns.count(); ++i) {
         ObColumnSchemaV2 *new_column_schema = gen_columns.at(i);
@@ -20663,11 +20663,13 @@ int ObDDLService::build_aux_lob_table_schema_if_need(
       if (OB_FAIL(lob_meta_builder.generate_aux_lob_meta_schema(
         schema_service_->get_schema_service(), data_table_schema, new_table_id, lob_meta_schema, true))) {
         LOG_WARN("generate_schema for lob meta table failed", KR(ret), K(data_table_schema));
+      } else if (FALSE_IT(lob_meta_schema.set_in_offline_ddl_white_list(data_table_schema.get_in_offline_ddl_white_list()))) {
       } else if (OB_FAIL(table_schemas.push_back(lob_meta_schema))) {
         LOG_WARN("push_back lob meta table failed", K(ret));
       } else if (OB_FAIL(lob_piece_builder.generate_aux_lob_piece_schema(
         schema_service_->get_schema_service(), data_table_schema, new_table_id, lob_piece_schema, true))) {
         LOG_WARN("generate_schema for lob data table failed", KR(ret), K(data_table_schema));
+      } else if (FALSE_IT(lob_piece_schema.set_in_offline_ddl_white_list(data_table_schema.get_in_offline_ddl_white_list()))) {
       } else if (OB_FAIL(table_schemas.push_back(lob_piece_schema))) {
         LOG_WARN("push_back lob data table failed", KR(ret));
       } else {
@@ -21417,11 +21419,22 @@ int ObDDLService::reconstruct_index_schema(obrpc::ObAlterTableArg &alter_table_a
 
           if (OB_FAIL(ret)) {
           } else if ((new_index_schema.is_vec_index() && !new_index_schema.is_vec_spiv_index()) && OB_FAIL(ObVecIndexBuilderUtil::generate_vec_index_aux_columns(
-              orig_table_schema, *index_table_schema, new_table_schema, new_index_schema, allocator, ddl_operator, trans, domain_index_columns, domain_store_columns))) {
+            schema_guard, orig_table_schema, *index_table_schema, new_table_schema, new_index_schema, allocator, ddl_operator, trans, domain_index_columns, domain_store_columns))) {
             LOG_WARN("failed to generate vec index aux columns", K(ret));
           } else if ((new_index_schema.is_fts_index() || new_index_schema.is_multivalue_index()) && OB_FAIL(ObFtsIndexBuilderUtil::generate_fts_mtv_index_aux_columns(
               orig_table_schema, *index_table_schema, new_table_schema, new_index_schema, allocator, ddl_operator, trans, domain_index_columns, domain_store_columns))) {
             LOG_WARN("failed to generate fulltext/multivalue index aux columns", K(ret));
+          }
+          if (OB_SUCC(ret) && new_index_schema.is_hybrid_vec_index()) {
+            const bool has_lob_in_origin_table = new_table_schema.has_lob_aux_table();
+            bool is_add_lob = false;
+            if (!has_lob_in_origin_table) {
+              new_table_schema.set_in_offline_ddl_white_list(true);
+              if (OB_FAIL(create_aux_lob_table_if_need(new_table_schema, schema_guard, ddl_operator, trans,
+                  true/*need_sync_schema_version*/, is_add_lob, true))) {
+                LOG_WARN("fail to create_aux_lob_table_if_need", K(ret), K(new_table_schema));
+              }
+            }
           }
 
           if (OB_FAIL(ret)) {

@@ -227,7 +227,7 @@ int ObDASHNSWScanIter::inner_init(ObDASIterParam &param)
       } else if (!is_hybrid_ && OB_FAIL(ObDasVecScanUtils::init_sort(
                      vec_aux_ctdef_, vec_aux_rtdef_, sort_ctdef_, sort_rtdef_, limit_param_, search_vec_, distance_calc_))) {
         LOG_WARN("failed to init sort", K(ret), KPC(vec_aux_ctdef_), KPC(vec_aux_rtdef_));
-      } else if (is_hybrid_ && OB_FAIL(ObDasVecScanUtils::init_sort_of_hybrid_index(vec_op_alloc_, vec_aux_ctdef_, sort_ctdef_, sort_rtdef_, hybrid_search_vec_, distance_calc_))) {
+      } else if (is_hybrid_ && OB_FAIL(ObDasVecScanUtils::init_sort_of_hybrid_index(hnsw_iter_alloc_, vec_aux_ctdef_, sort_ctdef_, sort_rtdef_, hybrid_search_vec_, distance_calc_))) {
         LOG_WARN("failed to init sort", K(ret), KPC(vec_aux_ctdef_), KPC(sort_ctdef_), KPC(sort_rtdef_));
       } else if (OB_FAIL(set_vec_index_param(vec_aux_ctdef_->vec_index_param_))) {
         LOG_WARN("failed to set vec index param", K(ret));
@@ -498,6 +498,7 @@ int ObDASHNSWScanIter::inner_release()
   }
   extra_in_rowkey_idxs_.reset();
   vec_op_alloc_.reset();
+  hnsw_iter_alloc_.reset();
   adaptive_ctx_.reset();
   rel_map_.destroy();
   return ret;
@@ -2433,7 +2434,7 @@ int ObDASHNSWScanIter::process_adaptor_state_post_filter(
   while (OB_SUCC(ret) && !end_search) {
     ++adaptive_ctx_.iter_times_;
     if (first_search && OB_FAIL(process_adaptor_state_post_filter_once(ada_ctx, adaptor))) {
-      LOG_WARN("failed to process adaptor state post filter once.", K(ret), K(vec_index_type_), K(vec_idx_try_path_), K(query_cond_));
+      LOG_WARN("failed to process adaptor state post filter once.", K(ret), K(vec_index_type_), K(vec_idx_try_path_));
     } else if (!first_search && OB_FAIL(adaptor->query_next_result(ada_ctx, &query_cond_, tmp_adaptor_vid_iter_))) {
     } else if (first_search && OB_FALSE_IT(first_search = false)) {
     } else if (!is_iter_filter() && !is_ipivf()) {

@@ -737,7 +737,7 @@ int ObVecIndexAsyncTaskUtil::extract_one_task_sql_result(
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected nullptr", K(ret));
   } else {
-    int64_t target_scn = task.target_scn_.convert_to_ts();
+    int64_t target_scn = 0;
     EXTRACT_INT_FIELD_MYSQL(*result, "tenant_id", task.tenant_id_, uint64_t);
     EXTRACT_INT_FIELD_MYSQL(*result, "table_id", task.table_id_, uint64_t);
     EXTRACT_INT_FIELD_MYSQL(*result, "tablet_id", task.tablet_id_, uint64_t);
@@ -747,7 +747,7 @@ int ObVecIndexAsyncTaskUtil::extract_one_task_sql_result(
     EXTRACT_INT_FIELD_MYSQL(*result, "status", task.status_, int64_t);
     EXTRACT_INT_FIELD_MYSQL(*result, "target_scn", target_scn, int64_t);
     EXTRACT_INT_FIELD_MYSQL(*result, "ret_code", task.ret_code_, int64_t);
-    task.target_scn_.convert_from_ts(target_scn);
+    task.target_scn_.convert_for_sql(target_scn);
     if (OB_SUCC(ret)) {
       int64_t real_length = 0;
       char trace_id_buf[OB_MAX_TRACE_ID_BUFFER_SIZE] = {'\0'};
@@ -968,7 +968,9 @@ int ObVecIndexAsyncTaskHandler::push_task(
       task = nullptr;
     }
     if (OB_FAIL(ret)) {
-    } else if (OB_NOT_NULL(task) && task->current_status() == ObHybridVectorRefreshTaskStatus::TASK_PREPARE) {
+    } else if (OB_NOT_NULL(task) &&
+        (task->current_status() == ObHybridVectorRefreshTaskStatus::TASK_PREPARE || task->current_status() == ObHybridVectorRefreshTaskStatus::TASK_FINISH)) {
+      task->reset_status();
       handle_ls_process_task_cnt(task->get_ls_id(), true);
       inc_async_task_ref();
     }

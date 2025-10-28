@@ -235,6 +235,7 @@ public:
     : ObDASIter(ObDASIterType::DAS_ITER_HNSW_SCAN),
       mem_context_(nullptr),
       vec_op_alloc_("HNSW", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID()),
+      hnsw_iter_alloc_("HNSWITER", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID()),
       ls_id_(),
       tx_desc_(nullptr),
       snapshot_(nullptr),
@@ -506,6 +507,7 @@ private:
 private:
   lib::MemoryContext mem_context_;
   ObArenaAllocator vec_op_alloc_;
+  ObArenaAllocator hnsw_iter_alloc_; //  lifetime is same with hnsw iter
   share::ObLSID ls_id_;
   transaction::ObTxDesc *tx_desc_;
   transaction::ObTxReadSnapshot *snapshot_;

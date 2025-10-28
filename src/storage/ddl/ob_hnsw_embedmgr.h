@@ -58,8 +58,14 @@ public:
 class ObEmbeddingResult
 {
 public:
+  // Embedding status enum
+  enum EmbeddingStatus {
+    NEED_EMBEDDING = 0,
+    SKIP_EMBEDDING = 1       // Empty/Null text case
+  };
+
   ObEmbeddingResult()
-    : vid_(0), rowkey_(), vector_(nullptr), vector_dim_(0), text_() {}
+    : vid_(0), rowkey_(), vector_(nullptr), vector_dim_(0), text_(), status_(NEED_EMBEDDING) {}
 
   ~ObEmbeddingResult() {
     reset();
@@ -77,9 +83,13 @@ public:
   int64_t get_vector_dim() const { return vector_dim_; }
   void set_vector(float *vector, const int64_t vector_dim) { vector_ = vector; vector_dim_ = vector_dim; }
 
+  // Status management
+  void set_status(EmbeddingStatus status) { status_ = status; }
+  bool need_embedding() const { return status_ == NEED_EMBEDDING; }
+
   void reset();
 
-  TO_STRING_KV(K_(vid), K_(rowkey), K_(vector_dim), K_(text));
+  TO_STRING_KV(K_(vid), K_(rowkey), K_(vector_dim), K_(text), K_(status));
 
 private:
   int64_t vid_;
@@ -87,6 +97,7 @@ private:
   float* vector_;
   int64_t vector_dim_;
   common::ObString text_;
+  EmbeddingStatus status_;
 };
 
 // ==================== Task Batch Info ====================
@@ -98,7 +109,8 @@ public:
       results_(),
       batch_size_(0),
       current_count_(0),
-      vec_dim_(0)
+      vec_dim_(0),
+      need_embedding_count_(0)
   {}
 
   ~ObTaskBatchInfo() {
@@ -110,13 +122,15 @@ public:
   // Add an item during batching phase (deep copy to allocator)
   int add_item(const int64_t vid,
                const common::ObString &text,
-               const common::ObArray<blocksstable::ObStorageDatum> &rowkey);
+               const common::ObArray<blocksstable::ObStorageDatum> &rowkey,
+               const ObEmbeddingResult::EmbeddingStatus status);
   int64_t get_count() const { return current_count_; }
+  int64_t get_need_embedding_count() const { return need_embedding_count_; }
   bool is_full() const { return current_count_ >= batch_size_; }
   common::ObArray<ObEmbeddingResult*>& get_results() { return results_; }
   void reset();
 
-  TO_STRING_KV(K_(batch_size), K_(current_count), K_(vec_dim), "results_count", results_.count());
+  TO_STRING_KV(K_(batch_size), K_(current_count), K_(need_embedding_count), K_(vec_dim), "results_count", results_.count());
 
 private:
   ObArenaAllocator allocator_;
@@ -124,6 +138,7 @@ private:
   int64_t batch_size_;
   int64_t current_count_;
   int64_t vec_dim_;
+  int64_t need_embedding_count_;
 
   DISALLOW_COPY_AND_ASSIGN(ObTaskBatchInfo);
 };
