@@ -121,7 +121,7 @@ private:
   ObRefreshAndCheckTask refresh_and_check_task_;
 	static const int64_t MAX_MISS_COUNT = 3;
 	static const int64_t REFRESH_AND_CHECK_TASK_FIRST_TIME_INTERVAL = 1LL * 1000LL * 1000LL; // 1s
-	static const int64_t REFRESH_AND_CHECK_TASK_INTERVAL = 30LL * 1000LL * 1000LL; // 30s
+	static const int64_t REFRESH_AND_CHECK_TASK_INTERVAL = 3LL * 1000LL * 1000LL; // 3s
 	ResourceCtxMap resource_pool_;
 	ResourceAssignedMap assigned_tasks_;
   mutable lib::ObMutex mutex_;
