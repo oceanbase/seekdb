@@ -443,6 +443,7 @@ int ObDirectLoadOriginTableScanner::open(const ObDatumRange &query_range)
     LOG_WARN("Invalid argument", KR(ret), K(query_range));
   } else {
     scan_merge_.reuse();
+    allocator_.reuse();
     if (OB_FAIL(scan_merge_.open(query_range))) {
       LOG_WARN("fail to open scan merge", KR(ret), K(query_range));
     }
@@ -504,6 +505,7 @@ int ObDirectLoadOriginTableGetter::open(const ObDatumRowkey &key)
     LOG_WARN("Invalid argument", KR(ret), K(key));
   } else {
     single_merge_.reuse();
+    allocator_.reuse();
     if (OB_FAIL(single_merge_.open(key))) {
       LOG_WARN("fail to open multi merge", KR(ret), K(key));
     }

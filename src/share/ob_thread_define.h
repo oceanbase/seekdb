@@ -227,4 +227,5 @@ TG_DEF(MultiVersionGarbageCollector, MultiVersionGC, TIMER)
 TG_DEF(TenantFreezer, FrzTrigger, TIMER)
 TG_DEF(CommonLSService, COMMONLSSe, TIMER)
 TG_DEF(PxTargetMgr, PxTargetMgr, TIMER)
+TG_DEF(TLD_HTimer, TLD_HTimer, TIMER)
 #endif
