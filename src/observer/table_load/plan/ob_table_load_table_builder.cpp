@@ -156,7 +156,7 @@ int ObTableLoadTableBuilderMgr::acquire_table_builder(ObTableLoadTableBuilder *&
   } else {
     table_builder = new_builder;
   }
-  if (OB_FAIL(ret) && OB_NOT_NULL(table_builder)) {
+  if (OB_FAIL(ret) && OB_NOT_NULL(new_builder)) {
     new_builder->~ObTableLoadTableBuilder();
     safe_allocator_.free(new_builder);
     new_builder = nullptr;
