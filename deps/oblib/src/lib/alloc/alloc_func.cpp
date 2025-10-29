@@ -28,13 +28,34 @@ namespace oceanbase
 namespace lib
 {
 
-void set_memory_hard_limit(int64_t bytes)
+void set_hard_memory_limit(int64_t bytes)
 {
+  const uint64_t tenant_id = OB_SYS_TENANT_ID;
+  // set resource manager hard memory limit
+  ObMallocAllocator *allocator = ObMallocAllocator::get_instance();
+  if (!OB_ISNULL(allocator)) {
+    allocator->set_tenant_hard_limit(tenant_id, bytes);
+  }
+
+  // set chunk manager hard memory limit
   CHUNK_MGR.set_hard_limit(bytes);
+}
+
+int64_t get_hard_memory_limit()
+{
+  return CHUNK_MGR.get_hard_limit();
 }
 
 void set_memory_limit(int64_t bytes)
 {
+  const uint64_t tenant_id = OB_SYS_TENANT_ID;
+  // set resource manager memory limit
+  ObMallocAllocator *allocator = ObMallocAllocator::get_instance();
+  if (!OB_ISNULL(allocator)) {
+    allocator->set_tenant_limit(tenant_id, bytes);
+  }
+
+  // set chunk manager memory limit
   CHUNK_MGR.set_limit(bytes);
 }
 
@@ -58,13 +79,22 @@ int64_t get_memory_avail()
   return get_memory_limit() - get_memory_used();
 }
 
+int64_t get_hard_memory_remain()
+{
+  return get_hard_memory_limit() - get_memory_used();
+}
+
 void set_tenant_memory_limit(uint64_t tenant_id, int64_t bytes)
 {
+  // set resource manager memory limit
   if (OB_SYS_TENANT_ID != tenant_id) return;
   ObMallocAllocator *allocator = ObMallocAllocator::get_instance();
   if (!OB_ISNULL(allocator)) {
     allocator->set_tenant_limit(tenant_id, bytes);
   }
+
+  // set chunk manager memory limit
+  CHUNK_MGR.set_limit(bytes);
 }
 
 int64_t get_tenant_memory_limit(uint64_t tenant_id)

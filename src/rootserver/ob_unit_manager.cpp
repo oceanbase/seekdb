@@ -943,16 +943,9 @@ int ObUnitManager::inner_create_resource_pool_(
     ret = OB_SUCCESS;
     common::ObMySQLTransaction trans;
     share::ObResourcePool *new_pool = NULL;
-    const int64_t min_full_resource_pool_memory = GCONF.__min_full_resource_pool_memory;
     if (NULL == (new_pool = pool_allocator_.alloc())) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_ERROR("alloc memory failed", K(ret));
-    } else if (REPLICA_TYPE_FULL == resource_pool.replica_type_
-        && config->memory_size() < min_full_resource_pool_memory) {
-      ret = OB_NOT_SUPPORTED;
-      LOG_WARN("full resource pool min memory illegal", KR(ret), K(config->memory_size()),
-          K(min_full_resource_pool_memory));
-      LOG_USER_ERROR(OB_NOT_SUPPORTED, "unit MEMORY_SIZE less than __min_full_resource_pool_memory");
     } else {
       if (OB_FAIL(trans.start(proxy_, OB_SYS_TENANT_ID))) {
         LOG_WARN("start transaction failed", K(ret));

@@ -107,7 +107,7 @@ public:
   int get_tenant_metas_for_ckpt(common::ObIArray<ObTenantMeta> &metas);
   int mark_del_tenant(const uint64_t tenant_id);
   int convert_real_to_hidden_sys_tenant();
-  int update_tenant_memory(const uint64_t tenant_id, const int64_t mem_limit, int64_t &allowed_mem_limit);
+  int update_tenant_memory(const uint64_t tenant_id, const int64_t mem_limit);
   int update_tenant_memory(const share::ObUnitInfoGetter::ObTenantConfig &unit);
   int update_tenant_log_disk_size(const uint64_t tenant_id,
                                   const int64_t old_log_disk_size,

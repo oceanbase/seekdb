@@ -31,12 +31,14 @@ namespace lib
 // statistic relating
 struct ObLabel;
 struct ObMemAttr;
-void set_memory_hard_limit(int64_t bytes);
+void set_hard_memory_limit(int64_t bytes);
+int64_t get_hard_memory_limit();
 void set_memory_limit(int64_t bytes);
 int64_t get_memory_limit();
 int64_t get_memory_hold();
 int64_t get_memory_used();
 int64_t get_memory_avail();
+int64_t get_hard_memory_remain();
 
 void set_tenant_memory_limit(uint64_t tenant_id, int64_t bytes);
 int64_t get_tenant_memory_limit(uint64_t tenant_id);

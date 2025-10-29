@@ -130,7 +130,6 @@ bool ObUnitResource::is_valid_for_unit() const
   return is_max_cpu_valid_for_unit()
       && is_min_cpu_valid_for_unit()
       && max_cpu_ >= min_cpu_
-      && is_memory_size_valid_for_unit()
       && is_log_disk_size_valid_for_unit()
       // Default value of data_disk_size was -1 in version 4.3.0.1.
       // So SKIP checking validity of data_disk_size in SN mode to avoid compatibility problem.
@@ -252,12 +251,6 @@ int ObUnitResource::init_and_check_mem_(const ObUnitResource &user_spec)
     ret = OB_MISS_ARGUMENT;
     LOG_WARN("missing 'memory_size' argument", KR(ret), K(user_spec));
     LOG_USER_ERROR(OB_MISS_ARGUMENT, "MEMORY_SIZE");
-  } else if (user_spec.memory_size() < unit_min_memory) {
-    ret = OB_RESOURCE_UNIT_VALUE_BELOW_LIMIT;
-    LOG_WARN("memory_size is below limit", KR(ret), K(user_spec), K(unit_min_memory));
-    ObCStringHelper helper;
-    LOG_USER_ERROR(OB_RESOURCE_UNIT_VALUE_BELOW_LIMIT, "MEMORY_SIZE",
-        helper.convert(unit_min_memory));
   } else {
     // memory_size valid
     memory_size_ = user_spec.memory_size();

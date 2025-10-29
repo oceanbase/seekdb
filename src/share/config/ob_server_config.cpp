@@ -194,7 +194,7 @@ double ObServerConfig::get_sys_tenant_default_max_cpu()
 }
 
 ObServerMemoryConfig::ObServerMemoryConfig()
-  : memory_limit_(0)
+  : memory_limit_(0), hard_memory_limit_(INT64_MAX)
 {}
 
 ObServerMemoryConfig &ObServerMemoryConfig::get_instance()
@@ -210,11 +210,10 @@ int ObServerMemoryConfig::reload_config(const ObServerConfig& server_config)
   int64_t phy_mem_size = get_phy_mem_size();
   if (0 == memory_limit) {
     memory_limit = phy_mem_size * server_config.memory_limit_percentage / 100;
-  } else if (memory_limit >= phy_mem_size) {
-    OB_LOG_RET(ERROR, OB_ERR_UNEXPECTED, "memory_limit is larger than phy_mem_size", K(memory_limit), K(phy_mem_size));
   }
-  memory_limit_ = memory_limit;
-  LOG_INFO("update observer memory config", K_(memory_limit));
+  hard_memory_limit_ = phy_mem_size * MAX_PHY_MEM_PERCENTAGE / 100;
+  memory_limit_ = MIN(memory_limit, hard_memory_limit_);
+  LOG_INFO("update observer memory config", K_(memory_limit), K_(hard_memory_limit));
   return ret;
 }
 

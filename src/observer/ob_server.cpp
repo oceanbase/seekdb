@@ -2257,10 +2257,7 @@ int ObServer::set_running_mode()
   const int64_t memory_limit = GMEMCONF.get_server_memory_limit();
   const int64_t cnt = GCONF.cpu_count;
   const int64_t cpu_cnt = cnt > 0 ? cnt : common::get_cpu_num();
-  if (memory_limit < lib::ObRunningModeConfig::MINI_MEM_LOWER) {
-    ret = OB_MACHINE_RESOURCE_NOT_ENOUGH;
-    LOG_ERROR("memory limit too small", KR(ret), K(memory_limit));
-  } else if (memory_limit < lib::ObRunningModeConfig::MINI_MEM_UPPER) {
+  if (memory_limit < lib::ObRunningModeConfig::MINI_MEM_UPPER) {
     ObTaskController::get().allow_next_syslog();
     LOG_INFO("observer start with mini_mode", K(memory_limit));
     lib::update_mini_mode(memory_limit, cpu_cnt);
@@ -2318,22 +2315,13 @@ int ObServer::init_pre_setting()
   // total memory limit
   if (OB_SUCC(ret)) {
     const int64_t limit_memory = GMEMCONF.get_server_memory_limit();
+    const int64_t hard_limit_memory = GMEMCONF.get_server_hard_memory_limit();
     const int64_t reserved_memory = std::min(config_.cache_wash_threshold.get_value(),
         static_cast<int64_t>(static_cast<double>(limit_memory) * KVCACHE_FACTOR));
-    if (LEAST_MEMORY_SIZE > limit_memory) {
-      ret = OB_INVALID_CONFIG;
-      LOG_ERROR("memory limit for oceanbase isn't sufficient",
-                K(LEAST_MEMORY_SIZE),
-                "limit to", limit_memory,
-                "sys mem", get_phy_mem_size(),
-                K(reserved_memory),
-                KR(ret));
-    } else {
-      LOG_INFO("set limit memory", K(limit_memory));
-      set_memory_limit(limit_memory);
-      LOG_INFO("set reserved memory", K(reserved_memory));
-      ob_set_reserved_memory(reserved_memory);
-    }
+    LOG_INFO("set memory config", K(hard_limit_memory), K(limit_memory), K(reserved_memory));
+    set_hard_memory_limit(hard_limit_memory);
+    set_memory_limit(limit_memory);
+    ob_set_reserved_memory(reserved_memory);
   }
   if (OB_SUCC(ret)) {
     const int64_t stack_size = std::max(1L << 19, static_cast<int64_t>(GCONF.stack_size));

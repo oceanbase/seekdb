@@ -58,11 +58,7 @@ select * from DBA_OB_UNIT_CONFIGS where name = 'box_for_unit_config_test';
 UNIT_CONFIG_ID	NAME	CREATE_TIME	MODIFY_TIME	MAX_CPU	MIN_CPU	MEMORY_SIZE	LOG_DISK_SIZE	DATA_DISK_SIZE	MAX_IOPS	MIN_IOPS	IOPS_WEIGHT	MAX_NET_BANDWIDTH	NET_BANDWIDTH_WEIGHT
 ID	NAME	CREATE_TIME	MODIFY_TIME	1.9	1.1	1073741824	3221225472	NULL	9223372036854775807	9223372036854775807	1	9223372036854775807	1
 drop resource unit box_for_unit_config_test;
-======== 3.3 MEMORY: 最小值 '1G', 1073741824, 容量字符串强制带单位，不支持number类型
-create resource unit box_for_unit_config_test MAX_CPU=1, MEMORY_SIZE='999M';
-ERROR HY000: invalid MEMORY_SIZE value, min value is 1073741824
-create resource unit box_for_unit_config_test MAX_CPU=1, MEMORY_SIZE=1073741823;
-ERROR HY000: invalid MEMORY_SIZE value, min value is 1073741824
+======== 3.3 MEMORY: 容量字符串强制带单位，不支持number类型
 create resource unit box_for_unit_config_test MAX_CPU=1, MEMORY_SIZE='1024';
 ERROR 42000: Parse error
 create resource unit box_for_unit_config_test MAX_CPU=1, MEMORY_SIZE=1073741824.0;

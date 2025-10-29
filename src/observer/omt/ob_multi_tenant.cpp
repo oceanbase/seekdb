@@ -677,7 +677,6 @@ int ObMultiTenant::create_tenant(const ObTenantMeta &meta, bool write_slog, cons
   const double max_cpu = static_cast<double>(meta.unit_.config_.max_cpu());
   const uint64_t tenant_id = meta.unit_.tenant_id_;
   ObTenant *tenant = nullptr;
-  int64_t allowed_mem_limit = 0;
   ObMallocAllocator *malloc_allocator = ObMallocAllocator::get_instance();
   ObTenantCreateStep create_step = ObTenantCreateStep::STEP_BEGIN;  // step0
   bool lock_succ = false;
@@ -711,6 +710,8 @@ int ObMultiTenant::create_tenant(const ObTenantMeta &meta, bool write_slog, cons
 
 
   bool tenant_allocator_created = false;
+  int64_t memory_size = GMEMCONF.get_server_memory_limit();
+  int64_t hard_memory_size = GMEMCONF.get_server_hard_memory_limit();
   if (OB_SUCC(ret)) {
     if (OB_FAIL(malloc_allocator->create_and_add_tenant_allocator(tenant_id))) {
       LOG_ERROR("create and add tenant allocator failed", K(ret), K(tenant_id));
@@ -718,15 +719,15 @@ int ObMultiTenant::create_tenant(const ObTenantMeta &meta, bool write_slog, cons
       tenant_allocator_created = true;
     }
     if (OB_SUCC(ret)) {
-      int64_t memory_size = GMEMCONF.get_server_memory_limit();
-      if (OB_FAIL(update_tenant_memory(tenant_id, memory_size, allowed_mem_limit))) {
+      lib::set_memory_limit(memory_size);
+      if (OB_FAIL(update_tenant_memory(tenant_id, hard_memory_size))) {
         LOG_WARN("fail to update tenant memory", K(ret), K(tenant_id));
       }
     }
   }
   if (OB_SUCC(ret)) {
     ObSEArray<ObCtxMemConfig, ObCtxIds::MAX_CTX_ID> configs;
-    if (OB_FAIL(mcg_->get(tenant_id, allowed_mem_limit, configs))) {
+    if (OB_FAIL(mcg_->get(tenant_id, memory_size, configs))) {
       LOG_ERROR("get ctx mem config failed", K(ret));
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < configs.count(); i++) {
@@ -792,7 +793,7 @@ int ObMultiTenant::create_tenant(const ObTenantMeta &meta, bool write_slog, cons
     // do nothing
   } else {
     ObTenantSwitchGuard guard(tenant_);
-    if (OB_FAIL(MTL(ObTenantFreezer *)->set_tenant_mem_limit(meta.unit_.config_.memory_size(), allowed_mem_limit))) {
+    if (OB_FAIL(MTL(ObTenantFreezer *)->set_tenant_mem_limit(meta.unit_.config_.memory_size(), memory_size))) {
       LOG_WARN("fail to set_tenant_mem_limit", K(ret), K(tenant_id));
     }
   }
@@ -946,8 +947,8 @@ int ObMultiTenant::update_tenant_memory(const ObUnitInfoGetter::ObTenantConfig &
   int ret = OB_SUCCESS;
   ObTenant *tenant = nullptr;
   const uint64_t tenant_id = unit.tenant_id_;
-  int64_t allowed_mem_limit = 0;
   int64_t memory_size = GMEMCONF.get_server_memory_limit();
+  int64_t hard_memory_size = GMEMCONF.get_server_hard_memory_limit();
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
@@ -956,15 +957,17 @@ int ObMultiTenant::update_tenant_memory(const ObUnitInfoGetter::ObTenantConfig &
   } else if (OB_ISNULL(tenant)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("tenant is nullptr", K(tenant_id));
-  } else if (OB_FAIL(update_tenant_memory(tenant_id, memory_size, allowed_mem_limit))) {
+  } else if (FALSE_IT(lib::set_memory_limit(memory_size))) {
+    // unreachable
+  } else if (OB_FAIL(update_tenant_memory(tenant_id, hard_memory_size))) {
     LOG_WARN("fail to update tenant memory", K(ret), K(tenant_id));
-  } else if (OB_FAIL(update_tenant_freezer_mem_limit(tenant_id, memory_size, allowed_mem_limit))) {
+  } else if (OB_FAIL(update_tenant_freezer_mem_limit(tenant_id, memory_size, memory_size))) {
     LOG_WARN("fail to update_tenant_freezer_mem_limit", K(ret), K(tenant_id));
   } else if (OB_FAIL(update_tenant_decode_resource(tenant_id))) {
     LOG_WARN("fail to update_tenant_decode_resource", K(ret), K(tenant_id));
   } else if (OB_FAIL(update_throttle_config_(tenant_id))) {
     LOG_WARN("update throttle config failed", K(ret), K(tenant_id));
-  } else if (FALSE_IT(tenant->set_unit_memory_size(allowed_mem_limit))) {
+  } else if (FALSE_IT(tenant->set_unit_memory_size(memory_size))) {
     // unreachable
   }
   return ret;
@@ -1028,13 +1031,14 @@ int ObMultiTenant::update_tenant_unit(const ObUnitInfoGetter::ObTenantConfig &un
   return ret;
 }
 
-int ObMultiTenant::update_tenant_memory(const uint64_t tenant_id, const int64_t mem_limit, int64_t &allowed_mem_limit)
+// hard memory limit need be safely scaled down
+int ObMultiTenant::update_tenant_memory(const uint64_t tenant_id, const int64_t mem_limit)
 {
   int ret = OB_SUCCESS;
   ObMallocAllocator *malloc_allocator = ObMallocAllocator::get_instance();
 
-  allowed_mem_limit = mem_limit;
-  const int64_t pre_mem_limit = malloc_allocator->get_tenant_limit(tenant_id);
+  int64_t allowed_mem_limit = mem_limit;
+  const int64_t pre_mem_limit = malloc_allocator->get_tenant_hard_limit(tenant_id);
   const int64_t mem_hold = malloc_allocator->get_tenant_hold(tenant_id);
   const int64_t target_mem_limit = mem_limit;
 
@@ -1059,20 +1063,7 @@ int ObMultiTenant::update_tenant_memory(const uint64_t tenant_id, const int64_t 
     }
 
     if (allowed_mem_limit != pre_mem_limit) {
-      int64_t max_memory = INT64_MAX;
-      int64_t min_memory = 0;
-      if (is_meta_tenant(tenant_id)) {
-        const int64_t min_memory_upper = 4LL<<30;
-        const int64_t min_memory_lower = 512LL<<20;
-        min_memory = 0.5 * mem_limit;
-        min_memory = MIN(min_memory_upper, min_memory);
-        min_memory = MAX(min_memory_lower, min_memory);
-      } else if (is_user_tenant(tenant_id)) {
-        // do-nothing
-      } else {
-        max_memory = allowed_mem_limit;
-      }
-      malloc_allocator->set_tenant_limit(tenant_id, allowed_mem_limit);
+      lib::set_hard_memory_limit(allowed_mem_limit);
     }
   }
 
