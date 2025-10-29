@@ -38,7 +38,6 @@ ObDirectLoadDagInsertTableBatchRowDirectWriter::ObDirectLoadDagInsertTableBatchR
     dml_row_handler_(nullptr),
     allocator_(ObMemAttr(MTL_ID(), "storage_writer")),
     slice_writer_(nullptr),
-    remain_size_(0),
     row_count_(0),
     is_inited_(false)
 {
@@ -69,10 +68,7 @@ int ObDirectLoadDagInsertTableBatchRowDirectWriter::init(
       LOG_WARN("fail to init row handler", KR(ret));
     } else if (OB_FAIL(init_batch_rows())) {
       LOG_WARN("fail to init batch rows", KR(ret));
-    } else if (OB_FAIL(switch_slice())) {
-      LOG_WARN("fail to switch slice", KR(ret));
     } else {
-      remain_size_ = MIN(write_ctx_.pk_interval_.remain_count(), batch_rows_.remain_size());
       is_inited_ = true;
     }
   }
@@ -146,12 +142,8 @@ int ObDirectLoadDagInsertTableBatchRowDirectWriter::append_batch(
       direct_datum_rows_.vectors_.at(i + multi_version_col_cnt) = vectors.at(i)->get_vector();
     }
     direct_datum_rows_.row_count_ = batch_rows.size();
-    if (write_ctx_.pk_interval_.remain_count() < batch_rows.size() && OB_FAIL(switch_slice())) {
-      LOG_WARN("fail to switch slice", KR(ret));
-    } else if (OB_FAIL(flush_batch(direct_datum_rows_))) {
+    if (OB_FAIL(flush_batch(direct_datum_rows_))) {
       LOG_WARN("fail to flush batch", KR(ret));
-    } else {
-      remain_size_ = MIN(write_ctx_.pk_interval_.remain_count(), batch_rows_.remain_size());
     }
   }
   return ret;
@@ -170,14 +162,13 @@ int ObDirectLoadDagInsertTableBatchRowDirectWriter::append_selective(
   } else {
     int64_t remaining = size;
     while (OB_SUCC(ret) && remaining > 0) {
-      const int64_t append_size = MIN(remaining, remain_size_);
+      const int64_t append_size = MIN(remaining, batch_rows_.remain_size());
       if (OB_FAIL(batch_rows_.append_selective(batch_rows, selector, append_size))) {
         LOG_WARN("fail to append selective", KR(ret));
       } else {
         remaining -= append_size;
         selector += append_size;
-        remain_size_ -= append_size;
-        if (OB_FAIL(flush_buffer_if_need())) {
+        if (batch_rows_.full() && OB_FAIL(flush_buffer())) {
           LOG_WARN("fail to flush buffer", KR(ret));
         }
       }
@@ -196,8 +187,7 @@ int ObDirectLoadDagInsertTableBatchRowDirectWriter::append_row(
   } else {
     if (OB_FAIL(batch_rows_.append_row(datum_row))) {
       LOG_WARN("fail to append row", KR(ret));
-    } else if (FALSE_IT(remain_size_ -= 1)) {
-    } else if (OB_FAIL(flush_buffer_if_need())) {
+    } else if (batch_rows_.full() && OB_FAIL(flush_buffer())) {
       LOG_WARN("fail to flush buffer", KR(ret));
     }
   }
@@ -241,23 +231,6 @@ int ObDirectLoadDagInsertTableBatchRowDirectWriter::switch_slice(const bool is_f
   return ret;
 }
 
-int ObDirectLoadDagInsertTableBatchRowDirectWriter::flush_buffer_if_need()
-{
-  int ret = OB_SUCCESS;
-  if (remain_size_ > 0) {
-  } else {
-    const bool is_slice_end = (write_ctx_.pk_interval_.remain_count() == batch_rows_.size());
-    if (OB_FAIL(flush_buffer())) {
-      LOG_WARN("fail to flush buffer", KR(ret));
-    } else if (is_slice_end && OB_FAIL(switch_slice())) {
-      LOG_WARN("fail to switch slice", KR(ret));
-    } else {
-      remain_size_ = MIN(write_ctx_.pk_interval_.remain_count(), batch_rows_.remain_size());
-    }
-  }
-  return ret;
-}
-
 int ObDirectLoadDagInsertTableBatchRowDirectWriter::flush_buffer()
 {
   int ret = OB_SUCCESS;
@@ -273,8 +246,13 @@ int ObDirectLoadDagInsertTableBatchRowDirectWriter::flush_buffer()
 int ObDirectLoadDagInsertTableBatchRowDirectWriter::flush_batch(ObBatchDatumRows &datum_rows)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(ObDirectLoadVectorUtils::batch_fill_hidden_pk(
-        datum_rows.vectors_.at(0), 0 /*start*/, datum_rows.row_count_, write_ctx_.pk_interval_))) {
+  const bool need_switch_slice =
+    nullptr == slice_writer_ || write_ctx_.pk_interval_.remain_count() < datum_rows.row_count_;
+  if (need_switch_slice && OB_FAIL(switch_slice())) {
+    LOG_WARN("fail to switch slice", KR(ret));
+  } else if (OB_FAIL(ObDirectLoadVectorUtils::batch_fill_hidden_pk(
+               datum_rows.vectors_.at(0), 0 /*start*/, datum_rows.row_count_,
+               write_ctx_.pk_interval_))) {
     LOG_WARN("fail to batch fill hidden pk", KR(ret));
   } else if (OB_FAIL(row_handler_.handle_batch(datum_rows))) {
     LOG_WARN("fail to handle batch", KR(ret));

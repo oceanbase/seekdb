@@ -43,12 +43,11 @@ public:
   int close();
 
   TO_STRING_KV(K_(tablet_id), KP_(insert_tablet_ctx), KP_(dml_row_handler), K_(write_param),
-               KP_(slice_writer), K_(write_ctx), K_(remain_size), K_(row_count));
+               KP_(slice_writer), K_(write_ctx), K_(row_count));
 
 private:
   int init_batch_rows();
   int switch_slice(const bool is_final = false);
-  int flush_buffer_if_need();
   int flush_buffer();
   int flush_batch(blocksstable::ObBatchDatumRows &datum_rows);
 
@@ -64,7 +63,6 @@ private:
   ObArenaAllocator allocator_;
   ObITabletSliceWriter *slice_writer_;
   ObDirectLoadInsertTabletWriteCtx write_ctx_;
-  int64_t remain_size_;
   int64_t row_count_;
   bool is_inited_;
 };
