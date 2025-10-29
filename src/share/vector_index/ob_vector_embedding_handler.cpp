@@ -782,6 +782,7 @@ int ObEmbeddingTask::check_http_progress()
                   // Map HTTP error to internal error code
                   internal_error_code_ = map_http_error_to_internal_error(response_code);
                   internal_error_message_ = ObString("HTTP request failed");
+                  ret = internal_error_code_;
                   LOG_WARN("HTTP request failed, no retry", K(response_code), K_(internal_error_code), K_(http_error_message), K(*this));
                 }
               }
@@ -1313,8 +1314,11 @@ void ObEmbeddingTaskHandler::handle(void *task)
     } else if (need_callback && embedding_task->is_completed()) {
       if (OB_FAIL(embedding_task->maybe_callback())) {
         LOG_WARN("failed to maybe callback", K(ret));
-      } else if (OB_FAIL(embedding_task->wake_up())) {
-        LOG_WARN("failed to wake up", K(ret));
+      }
+      // wake up task regardless of callback result
+      int tmp_ret = OB_SUCCESS;
+      if (OB_TMP_FAIL(embedding_task->wake_up())) {
+        LOG_WARN("failed to wake up", K(tmp_ret));
       }
     }
   }
@@ -1402,6 +1406,12 @@ bool ObEmbeddingTask::should_retry_http_request(int64_t http_error_code) const
     // TODO: implement this
     // case 500: // Internal Server Error
     //   return http_retry_count_ < MAX_HTTP_RETRY_CNT;
+    case 429:
+    case 500:
+    case 502:
+    case 503:
+    case 504:
+      return http_retry_count_ < MAX_HTTP_RETRY_CNT;
     default:
       return false;
   }
@@ -1550,9 +1560,7 @@ int ObEmbeddingTask::maybe_callback()
       }
     }
     // Set callback_done flag after callback finished
-    if (OB_SUCC(ret)) {
-      set_callback_done();
-    }
+    set_callback_done();
   }
   return ret;
 }
