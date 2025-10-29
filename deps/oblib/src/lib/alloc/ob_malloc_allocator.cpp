@@ -174,6 +174,26 @@ int ObMallocAllocator::with_resource_handle_invoke(uint64_t tenant_id, InvokeFun
   }
   return ret;
 }
+
+int ObMallocAllocator::set_tenant_hard_limit(uint64_t tenant_id, int64_t bytes)
+{
+  if (OB_SYS_TENANT_ID != tenant_id) return OB_SUCCESS;
+  return with_resource_handle_invoke(tenant_id, [bytes](ObTenantMemoryMgr *mgr) {
+      mgr->set_hard_limit(bytes);
+      return OB_SUCCESS;
+    });
+}
+
+int64_t ObMallocAllocator::get_tenant_hard_limit(uint64_t tenant_id)
+{
+  int64_t limit = 0;
+  with_resource_handle_invoke(tenant_id, [&limit](ObTenantMemoryMgr *mgr) {
+      limit = mgr->get_hard_limit();
+      return OB_SUCCESS;
+    });
+  return limit;
+}
+
 int ObMallocAllocator::set_tenant_limit(uint64_t tenant_id, int64_t bytes)
 {
   if (OB_SYS_TENANT_ID != tenant_id) return OB_SUCCESS;

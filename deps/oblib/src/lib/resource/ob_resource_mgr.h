@@ -49,6 +49,7 @@ public:
 
   uint64_t get_tenant_id() const { return tenant_id_; }
   void set_hard_limit(const int64_t hard_limit) { hard_limit_ = hard_limit; }
+  int64_t get_hard_limit() const { return hard_limit_; }
   void set_limit(const int64_t limit) { limit_ = limit; }
   int64_t get_limit() const { return limit_; }
   int64_t get_sum_hold() const { return sum_hold_; }

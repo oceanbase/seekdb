@@ -67,15 +67,15 @@ TEST(TestTenantAllocator, SysLimit)
   cout << "current hold: " << hold << endl;
 
   set_memory_limit(hold);
-  set_memory_hard_limit(hold);
+  set_hard_memory_limit(hold);
   EXPECT_EQ(NULL, ta.alloc(1, attr));
 
   set_memory_limit(hold + (1<<20));
-  set_memory_hard_limit(hold + (1<<20));
+  set_hard_memory_limit(hold + (1<<20));
   EXPECT_EQ(NULL, ta.alloc(1, attr));
 
   set_memory_limit(hold + (3<<20));
-  set_memory_hard_limit(hold + (3<<20));
+  set_hard_memory_limit(hold + (3<<20));
   EXPECT_TRUE(NULL != ta.alloc(1, attr));
 }
 
@@ -89,7 +89,7 @@ TEST(TestTenantAllocator, TenantLimit)
   cout << "current hold: " << hold << endl;
 
   set_memory_limit(hold);  // now, we can't allocate new memory from system
-  set_memory_hard_limit(hold);
+  set_hard_memory_limit(hold);
   EXPECT_FALSE(NULL != ta.alloc(1, attr));
 
   attr.prio_ = OB_HIGH_ALLOC;
@@ -340,6 +340,7 @@ TEST(TestTenantAllocator, MERGE_RESERVE_CTX)
   const uint64_t tenant_id = OB_SYS_TENANT_ID;
   ObMallocAllocator* malloc_allocator = ObMallocAllocator::get_instance();
   ASSERT_EQ(OB_SUCCESS, malloc_allocator->create_and_add_tenant_allocator(tenant_id));
+  set_hard_memory_limit(1L * 1024L * 1024L * 1024L);
   void *ptr_0 = ob_malloc(100L<<10, ObMemAttr(tenant_id, "Test", 0));
   void *ptr_1 = ob_malloc(100L<<10, ObMemAttr(tenant_id, "Test", ObCtxIds::MERGE_RESERVE_CTX_ID));
   malloc_allocator->sync_wash(tenant_id, 0, INT64_MAX);

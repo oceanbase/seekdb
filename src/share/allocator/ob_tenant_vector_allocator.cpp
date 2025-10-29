@@ -63,8 +63,7 @@ int64_t ObTenantVectorAllocator::get_vector_mem_limit_percentage(omt::ObTenantCo
 void ObTenantVectorAllocator::get_vector_mem_config(int64_t &resource_limit, int64_t &max_duration)
 {
   const int64_t VECTOR_THROTTLE_MAX_DURATION = 2LL * 60LL * 60LL * 1000LL * 1000LL;  // 2 hours
-  const int64_t tenant_memory = lib::get_tenant_memory_limit(MTL_ID());
-  int64_t tenant_memstore_limit_percent = 0;
+  const int64_t hard_memory_limit = lib::get_hard_memory_limit();
   int64_t percent = 0;
   omt::ObTenantConfigGuard tenant_config(TENANT_CONF(MTL_ID()));
   if (tenant_config.is_valid()) {
@@ -74,7 +73,7 @@ void ObTenantVectorAllocator::get_vector_mem_config(int64_t &resource_limit, int
     max_duration = VECTOR_THROTTLE_MAX_DURATION;
   }
   percent = get_vector_mem_limit_percentage(tenant_config);
-  resource_limit = tenant_memory * percent / 100;
+  resource_limit = hard_memory_limit * percent / 100;
 }
 
 

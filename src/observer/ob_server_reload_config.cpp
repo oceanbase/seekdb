@@ -142,15 +142,12 @@ int ObServerReloadConfig::operator()()
 #endif
     enable_malloc_v2(GCONF._enable_malloc_v2);
     GMEMCONF.reload_config(GCONF);
-    const int64_t limit_memory = GMEMCONF.get_server_memory_limit();
     OB_LOGGER.set_info_as_wdiag(false);
     // reload log config again after get MIN_CLUSTER_VERSION
     if (OB_TMP_FAIL(ObReloadConfig::operator()())) {
       LOG_WARN("ObReloadConfig operator() failed", K(tmp_ret));
     }
     const int64_t reserved_memory = GCONF.cache_wash_threshold;
-    LOG_INFO("set limit memory", K(limit_memory));
-    set_memory_limit(limit_memory);
     LOG_INFO("set reserved memory", K(reserved_memory));
     ob_set_reserved_memory(reserved_memory);
 #ifdef OB_USE_ASAN

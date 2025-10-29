@@ -87,7 +87,7 @@ void FakeAllocatorForTxShare::adaptive_update_limit(const int64_t tenant_id,
   if (OB_UNLIKELY(old_ts - cur_ts > (1LL * 1000LL * 1000LL /* 1 second */))) {
     SHARE_LOG_RET(WARN, OB_ERR_UNEXPECTED, "invalid timestamp", K(cur_ts), K(old_ts));
   } else if ((cur_ts - old_ts > UPDATE_LIMIT_INTERVAL) && ATOMIC_BCAS(&last_update_limit_ts, old_ts, cur_ts)) {
-    int64_t remain_memory = lib::get_tenant_memory_remain(tenant_id);
+    int64_t remain_memory = lib::get_hard_memory_remain();
     int64_t usable_remain_memory = remain_memory / 100 * USABLE_REMAIN_MEMORY_PERCETAGE;
     if (remain_memory > MAX_UNUSABLE_MEMORY) {
       usable_remain_memory = std::max(usable_remain_memory, remain_memory - MAX_UNUSABLE_MEMORY);

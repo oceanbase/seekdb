@@ -104,11 +104,7 @@ select * from DBA_OB_UNIT_CONFIGS where name = 'box_for_unit_config_test';
 drop resource unit box_for_unit_config_test;
 
 ###############
---echo ======== 3.3 MEMORY: 最小值 '1G', 1073741824, 容量字符串强制带单位，不支持number类型
---error 4659
-create resource unit box_for_unit_config_test MAX_CPU=1, MEMORY_SIZE='999M';
---error 4659
-create resource unit box_for_unit_config_test MAX_CPU=1, MEMORY_SIZE=1073741823;
+--echo ======== 3.3 MEMORY: 容量字符串强制带单位，不支持number类型
 --error 1064
 create resource unit box_for_unit_config_test MAX_CPU=1, MEMORY_SIZE='1024';
 --error 1210

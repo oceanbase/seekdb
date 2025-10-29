@@ -244,6 +244,7 @@ public:
   int64_t to_string(char *buf, const int64_t buf_len) const;
 
   inline void set_hard_limit(int64_t hard_limit);
+  inline int64_t get_hard_limit() const;
   inline void set_limit(int64_t limit);
   inline int64_t get_limit() const;
   inline int64_t get_hold() const;
@@ -374,6 +375,11 @@ OB_INLINE uint64_t AChunkMgr::hold(const uint64_t size)
 inline void AChunkMgr::set_hard_limit(int64_t hard_limit)
 {
   hard_limit_ = hard_limit;
+}
+
+inline int64_t AChunkMgr::get_hard_limit() const
+{
+  return hard_limit_;
 }
 
 inline void AChunkMgr::set_limit(int64_t limit)

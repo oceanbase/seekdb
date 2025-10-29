@@ -173,11 +173,13 @@ public:
   static ObServerMemoryConfig &get_instance();
   int reload_config(const ObServerConfig& server_config);
   int64_t get_server_memory_limit() { return memory_limit_; }
+  int64_t get_server_hard_memory_limit() { return hard_memory_limit_; }
   int64_t get_reserved_server_memory() { return 1LL<<30; }
   int64_t get_server_memory_avail() { return memory_limit_; }
   void check_limit(bool ignore_error);
 private:
   int64_t memory_limit_;
+  int64_t hard_memory_limit_;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObServerMemoryConfig);
 };

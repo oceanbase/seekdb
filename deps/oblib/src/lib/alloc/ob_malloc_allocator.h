@@ -120,6 +120,8 @@ public:
   // statistic relating
   void set_reserved(int64_t bytes);
   int64_t get_reserved() const;
+  int set_tenant_hard_limit(uint64_t tenant_id, int64_t bytes);
+  int64_t get_tenant_hard_limit(uint64_t tenant_id);
   int set_tenant_limit(uint64_t tenant_id, int64_t bytes);
   int64_t get_tenant_limit(uint64_t tenant_id);
   int64_t get_tenant_hold(uint64_t tenant_id);
