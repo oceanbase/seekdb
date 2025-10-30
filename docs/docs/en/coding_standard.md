@@ -4,30 +4,30 @@ title: Coding Standard
 
 | Number | Document Version | Revised Chapter | Reason for Revision | Revision Date   |
 | -------| ---------------- | --------------- | ------------------- | -------------   |
-| 1      | 1.0              |                 | New                 | June 15th, 2023 |
+| 1      | 1.0              |                 | New                 | Nov 7th, 2025 |
 
 # 1 Introduction
-This coding standard is applicable to the OceanBase project of Ant Group. It provides some coding constraints and defines coding styles. In the OceanBase project, the kernel code must comply with the coding style of this document, the test code is recommended to comply with the coding constraints of this document, and other codes must also comply with the coding constraints and coding style of this document.
+This coding standard is applicable to the OceanBase SeekDB project of Ant Group. It provides some coding constraints and defines coding styles. In the OceanBase SeekDB project, the kernel code must comply with the coding style of this document, the test code is recommended to comply with the coding constraints of this document, and other codes must also comply with the coding constraints and coding style of this document.
 
 This coding standard is committed to writing C/C++ code that is easy to understand, reduces traps, and has a unified format. Therefore:
 
 - The most common and understandable way is used to write the code;
 - Avoid using any obscure ways, such as "foo(int x = 1)";
 - Avoid very technical ways, such as "a += b; b = a-b; a -= b;" or "a ^= b; b ^= a; a ^= b;" to exchange the values of variables a and b.
-  
+
 Finally, this document summarizes the coding constraints for quick reference.
 This coding standard will be continuously supplemented and improved as needed.
 
 # 2 Directory and Files
 ## 2.1 Directory Structure
 
-The subdirectories of the OceanBase system are as follows:
+The subdirectories of the seekdb system are as follows:
 - src: contains source code, including header files and implementation files
 - unittest: contains unit test code and small-scale integration test code written by developers
 - tools: contains external tools
 - docs: contains documentation
 - rpm: contains RPM spec files
-- script: contains operation and maintenance scripts for OceanBase.
+- script: contains operation and maintenance scripts for seekdb.
 
 Implementation files for C code are named ".c", header files are named ".h", implementation files for C++ code are named ".cpp", and header files are named ".h". In principle, header files and implementation files must correspond one-to-one, and directories under "src" and "unittest" must correspond one-to-one. All file names are written in lowercase English letters, with words separated by underscores ('_').
 
@@ -37,22 +37,24 @@ Of course, developers may also perform module-level or multi-module integration 
 
 ## 2.2 Copyright Information
 
-Currently (as of May 2023), all source code files in Observer must include the following copyright information in the file header:
+Currently (as of Nov. 2025), all source code files in Observer must include the following copyright information in the file header:
 
 ```cpp
-Copyright (c) 2025 OceanBase.
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 ```
 
 ## 2.3 Header File Code
@@ -112,16 +114,16 @@ For example, the include order of "ob_schema.cpp" is as follows:
 
 ```cpp
 #include "common/ob_schema.h"
- 
+
 #include <string.h>
 #include <stdlib.h>
 #include <assert.h>
- 
+
 #include <algorithm>
- 
+
 #include "config.h"
 #include "tblog.h"
- 
+
 #include "common/utility.h"
 #include "common/ob_obj_type.h"
 #include "common/ob_schema_helper.h"
@@ -143,8 +145,8 @@ Proper use of inline functions can improve execution efficiency.
 
 The include paths for files within a project should use relative paths, and the include order should be: the header file corresponding to the current file, system C header files, system C++ header files, other library header files (Libeasy, tbsys), and other internal header files of OceanBase.
 
-# 3 Scope 
-## 3.1 Namespace 
+# 3 Scope
+## 3.1 Namespace
 All variables, functions, and classes in the OceanBase source code are distinguished by namespaces, with namespaces corresponding to the directories where the code is located. For example, the namespace corresponding to "ob_schema.h" in the "src/common" directory is "oceanbase::common".
 
 ```cpp
@@ -162,7 +164,7 @@ public:
 };
 } // namespace common
 } // namespace oceanbase
- 
+
 // .cpp file
 namespace oceanbase
 {
@@ -173,7 +175,7 @@ int ObSchemaManager::func()
 {
   ...
 }
- 
+
 } // namespace common
 } // namespace oceanbase
 ```
@@ -189,16 +191,16 @@ namespace common
 {
 class ObConfigManager; // Forward declaration of the class common::ObConfigManager
 }
- 
+
 namespace chunkserver
 {
- 
+
 class ObChunkServer
 {
 public:
   int func();
 };
- 
+
 } // namespace chunkserver
 } // namespace oceanbase
 ```
@@ -209,30 +211,30 @@ C++ allows the use of using, which can be divided into two categories:
 
 2. Using declaration: For example, using `common::ObSchemaManager`, which makes `ObSchemaManager` equivalent to `common::ObSchemaManager` from now on.
 
-Because using directive is likely to pollute the scope, **it is prohibited to use it in header files**, but using declaration is allowed. In .cpp files, using directive is allowed, for example, when implementing `ObChunkServer`, it may need to use classes from the common namespace. However, it is important to note that only other namespaces can be introduced using directives in .cpp files. The code in the .cpp file itself still needs to be put in its own namespace. For example: 
+Because using directive is likely to pollute the scope, **it is prohibited to use it in header files**, but using declaration is allowed. In .cpp files, using directive is allowed, for example, when implementing `ObChunkServer`, it may need to use classes from the common namespace. However, it is important to note that only other namespaces can be introduced using directives in .cpp files. The code in the .cpp file itself still needs to be put in its own namespace. For example:
 
 ```cpp
 // incorrect ways of using
-// The implementation code should be put in the chunkserver namespace 
+// The implementation code should be put in the chunkserver namespace
 // instead of using the using namespace chunkserver directive.
 namespace oceanbase
 {
 using namespace common;
 using namespace chunkserver;
- 
+
 // using symbols from the common namespace
 int ObChunkServer::func()
 {
   ...
 }
- 
+
 } // namespace oceanbase
- 
+
 // The correct way is to put the implementation code in the chunkserver namespace.
 namespace oceanbase
 {
 using namespace common;
- 
+
 namespace chunkserver
 {
 // Using symbols from the common namespace
@@ -240,18 +242,18 @@ int ObChunkServer::func()
 {
   ...
 }
- 
+
 } // namespace chunkserver
 } // namespace oceanbase
 ```
-## 3.2 Nested Classes 
+## 3.2 Nested Classes
 If a class is a member of another class, it can be defined as a nested class. Nested classes are also known as member classes.
 
 ```cpp
 class ObFoo
 {
 private:
-  // ObBar is a nested class/member class inside ObFoo, 
+  // ObBar is a nested class/member class inside ObFoo,
   // and ObFoo is referred to as the host class/outer class."
   class ObBar
   {
@@ -260,12 +262,12 @@ private:
 };
 ```
 
-When a nested class is only used by the outer class, it is recommended to place it within the scope of the outer class to avoid polluting other scopes with the same class name. It is also recommended to forward declare the nested class in the outer class's .h file, and define the nested class's implementation in the .cpp file, to improve readability by avoiding the inclusion of the nested class's implementation in the outer class's .h file. 
+When a nested class is only used by the outer class, it is recommended to place it within the scope of the outer class to avoid polluting other scopes with the same class name. It is also recommended to forward declare the nested class in the outer class's .h file, and define the nested class's implementation in the .cpp file, to improve readability by avoiding the inclusion of the nested class's implementation in the outer class's .h file.
 
 Additionally, it is generally advised to avoid defining nested classes as `public`, unless they are part of the external interface.
 
 ## 3.3 Global Variables and Functions
-The use of global variables or functions should be strictly limited. New global variables and functions should not be added, except for those that already exist. 
+The use of global variables or functions should be strictly limited. New global variables and functions should not be added, except for those that already exist.
 
 If it is necessary to violate this guideline, please discuss and obtain approval beforehand, and provide detailed comments explaining the reason.
 
@@ -334,7 +336,7 @@ b.cpp &bbb=0x400798
 
 Simple variable declarations should be initialized when declared.
 
-OceanBase believes that declaring variables at the beginning of each statement block leads to more readable code. Additionally, OceanBase allows for code such as `for (int i = 0; i < 10; ++i)` where the variable 'i' is declared at the beginning of the loop statement block. If the declaration and use of a variable are far apart, it indicates that the statement block contains too much code, which often means that the code needs to be refactored.
+OceanBase SeekDB believes that declaring variables at the beginning of each statement block leads to more readable code. Additionally, OceanBase SeekDB allows for code such as `for (int i = 0; i < 10; ++i)` where the variable 'i' is declared at the beginning of the loop statement block. If the declaration and use of a variable are far apart, it indicates that the statement block contains too much code, which often means that the code needs to be refactored.
 
 Declaring variables inside a loop body can be inefficient, as the constructor and destructor of an object will be called each time the loop iterates, and the variable will need to be pushed and popped from the stack each time. Therefore, it is recommended to extract such variables from the loop body to improve efficiency. **It is prohibited to declare complex variables** (e.g. class variables) inside a loop body, but if it is necessary to do so, approval from the team leader must be obtained, and a detailed comment explaining the reason must be provided. For the sake of code readability, declaring references inside a loop body is allowed.
 
@@ -344,7 +346,7 @@ for (int i = 0; i < 100000; ++i) {
   ObFoo f;  // The constructor and destructor are called every time the loop is entered
   f.do_something();
 }
- 
+
 // Efficient implementation
 ObFoo f;
 for (int i = 0; i < 100000; ++i) {
@@ -360,19 +362,19 @@ for(int i = 0; i < N; ++i) {
 }
 ```
 
-In addition, OceanBase sets limits on the size of local variables and does not recommend defining excessively large local variables.
+In addition, OceanBase SeekDB sets limits on the size of local variables and does not recommend defining excessively large local variables.
 1. The function stack should not exceed 32K.
 2. A single local variable should not exceed 8K.
 
 ## 3.5 Static Variables
 **Defining static variables in header files is prohibited**
-Initializing static variables (whether const or not) is not allowed in .h header files, except for the following one exception. Otherwise, such static variables will produce a static stored variable in each compilation unit (.o file) and result in multiple instances of static variables after linking. If it is a const variable, it will cause the binary program file to bloat. If it is not a const variable, it may cause severe bugs. 
+Initializing static variables (whether const or not) is not allowed in .h header files, except for the following one exception. Otherwise, such static variables will produce a static stored variable in each compilation unit (.o file) and result in multiple instances of static variables after linking. If it is a const variable, it will cause the binary program file to bloat. If it is not a const variable, it may cause severe bugs.
 
 Note that defining (define) is prohibited, not declaring (declare).
 
 **[Exception] Static const/constexpr static member variables**
 
-Static member variables such as const int (including `int32_t`, `int64_t`, `uint32_t`, `uint64_t`, etc.), `static constexpr double`, etc. are often used to define hardcode array lengths. They do not occupy storage, do not have addresses (can be regarded as `#define` macro constants), and are allowed to be initialized in header files. 
+Static member variables such as const int (including `int32_t`, `int64_t`, `uint32_t`, `uint64_t`, etc.), `static constexpr double`, etc. are often used to define hardcode array lengths. They do not occupy storage, do not have addresses (can be regarded as `#define` macro constants), and are allowed to be initialized in header files.
 
 Does that mean the following form (pseudocode) is allowed.
 
@@ -424,7 +426,7 @@ Before C\+\+11, the C\+\+98 standard only allowed static const variables of inte
 
 **Case 1**
 
-According to the current code style of OceanBase, we will define static variables (such as `ob_define.h`) in the header file, so that each cpp file will generate a declaration and definition of this variable when including this header file. In particular, some large objects (latch, wait event, etc.) generate a static definition in the header file, resulting in the generation of binary and memory expansion.
+According to the current code style of OceanBase SeekDB, we will define static variables (such as `ob_define.h`) in the header file, so that each cpp file will generate a declaration and definition of this variable when including this header file. In particular, some large objects (latch, wait event, etc.) generate a static definition in the header file, resulting in the generation of binary and memory expansion.
 
 Simply move the definition of several static variables from the header file to the cpp file, and change the header file to extern definition, the effect is quite obvious:
 binary size: 2.6G->2.4G, reduce 200M.
@@ -543,7 +545,7 @@ if (NULL != ptr) {
 In the above example, the outermost `if` branch only judges the failure of resource application, and the `else` branch handles the business logic. Therefore, the code for resource release can also be placed at the end of the outermost `else` branch.
 
 ```cpp
-// Another correct way of writing requires the if branch 
+// Another correct way of writing requires the if branch
 // to simply handle resource application failures
 void *ptr = ob_malloc(100, ObModIds::OB_COMMON_ARRAY);
 if (NULL == ptr) {
@@ -570,7 +572,7 @@ int serialize(char *buf, const int64_t buf_len, int64_t &pos)
 {
   int ret = OB_SUCCESS;
   const int64_t ori_pos = pos;
- 
+
   if (OB_SUCCESS != (ret = serialize_one(buf, buf_len, pos)) {
     pos = ori_pos;
     ...
@@ -592,7 +594,7 @@ int serialize(char *buf, const int64_t buf_len, int64_t &pos)
 {
   int ret = OB_SUCCESS;
   const int64_t ori_pos = pos;
- 
+
   if (OB_SUCCESS != (ret = serialize_one(buf, buf_len, pos)) {
     ...
   } else if (OB_SUCCESS != (ret = serialize_two(buf, buf_len, pos)) {
@@ -600,7 +602,7 @@ int serialize(char *buf, const int64_t buf_len, int64_t &pos)
   } else {
     ...
   }
- 
+
   if (OB_SUCCESS != ret) {
     pos = ori_pos;
   }
@@ -639,13 +641,13 @@ Usually, a constructor with only one parameter can be used for conversion. For e
 #define DISALLOW_COPY_AND_ASSIGN(type_name) \
   type_name(const type_name&)               \
   void operator=(const type_name&)
- 
+
 class ObFoo
 {
 public:
   ObFoo();
   ~ObFoo();
- 
+
 private:
   DISALLOW_COPY_AND_ASSIGN(ObFoo);
 };
@@ -686,15 +688,15 @@ public:
   int  init(init_param_list);
   bool is_inited();
   void destroy();
- 
+
   void reset();
   void reuse();
-  
+
   int deep_copy(const ObFoo &src);
   int shallow_copy(const ObFoo &src);
- 
+
   bool is_valid();
- 
+
   int64_t to_string(char *buf, const int64_t buf_len) const;
 
   NEED_SERIALIZE_AND_DESERIALIZE;
@@ -757,13 +759,13 @@ Here are some commonly used macros:
 3. `OB_ISNULL`
 
    It is usually used to judge whether the pointer is empty, which is equivalent to nullptr ==, for example, the following writing method.
-   
+
    ```cpp
    if (OB_ISNULL(ptr)) {
       // do something
    }
    ```
-   
+
 4. `OB_NOT_NULL`
 
    It is usually used to judge whether the pointer is not empty, which is equivalent to nullptr !=, for example, the following writing method
@@ -772,7 +774,7 @@ Here are some commonly used macros:
      // do something
    }
    ```
-   
+
 5. `IS_INIT`
 
    It is usually used to judge whether the class has been initialized, which is equivalent to `is_inited_`. Note that the member `is_inited_` needs to exist in the class, for example, the following writing method.
@@ -841,7 +843,7 @@ All inheritance must be `public`, and inheritance must be used with care: use in
 
 When a subclass inherits from a parent class, the subclass contains all the data and operation definitions of the parent class. In C++ practice, inheritance is mainly used in two scenarios: implementation inheritance, where the subclass inherits the implementation code of the parent class; interface inheritance, where the subclass inherits the method name of the parent class. For implementation inheritance, because the code that implements the subclass is extended between the parent class and the subclass, it becomes more difficult to understand its implementation, and it should be used with caution.
 
-Multiple inheritance is also used in OceanBase. The scenario is rare, and requires at most one base class to contain implementation, and other base classes are pure interface classes.
+Multiple inheritance is also used in OceanBase SeekDB. The scenario is rare, and requires at most one base class to contain implementation, and other base classes are pure interface classes.
 
 ## 4.10 Operator Overloading
 **Except for container classes, custom data types (`ObString`, `ObNumber`, etc.) and a few global basic classes such as `ObRowkey`, `ObObj`, `ObRange`, etc., do not overload operators (except simple structure assignment operations)**. If it must be violated, please discuss and approve it in advance, and explain the reasons in detail.
@@ -904,7 +906,7 @@ bool operator()(const RowRun &r1, const RowRun &r2) const
   int err = do_something();
   return ret;
 }
- 
+
 // correct
 bool operator()(const RowRun &r1, const RowRun &r2) const
 {
@@ -920,7 +922,7 @@ If some error codes need to be temporarily saved during function execution, try 
 int func()
 {
   int ret = OB_SUCCESS;
- 
+
   ret = do_something();
   if (OB_SUCCESS != ret) {
     int alloc_ret = clear_some_resource ();
@@ -941,12 +943,12 @@ This makes sequential code tedious due to the need to judge errors during functi
 ```cpp
 // verbose code
 int ret = OB_SUCCESS;
- 
+
 ret = do_something1();
 if (OB_SUCCESS != ret) {
   // print error log
 }
- 
+
 if (OB_SUCCESS == ret) {
   ret = do_something2();
   if (OB_SUCCESS != ret) {
@@ -962,7 +964,7 @@ If each step in the sequence statement requires only one line of code, it is rec
 ```cpp
 // Use shorthand when there is only one line of code per step in sequential logic
 int ret = OB_SUCCESS;
- 
+
 if (OB_FAIL(do_something1())) {
   // print error log
 } else if (OB_FAIL(do_something2())) {
@@ -975,10 +977,10 @@ if (OB_FAIL(do_something1())) {
 If some steps of the sequence statement take more than one line of code, then some changes are required:
 
 ```cpp
-// When some steps in the sequential logic exceed one line of code, 
+// When some steps in the sequential logic exceed one line of code,
 // use simplified writing and make certain changes
 int ret = OB_SUCCESS;
- 
+
 if (OB_SUCCESS != (ret = do_something1())) {
   // print error log
 } else if (OB_SUCCESS != (ret = do_something2())) {
@@ -991,7 +993,7 @@ if (OB_SUCCESS != (ret = do_something1())) {
     // print error log
 } else { }
 }
- 
+
 if (OB_SUCCESS == ret) {  // start a new logic
   if (OB_SUCCESS != (ret = do_something4())) {
     // print error log
@@ -1001,7 +1003,7 @@ if (OB_SUCCESS == ret) {  // start a new logic
 }
 ```
 
-In the actual coding process, when should concise writing be used? OceanBase believes that when each step of a sequential statement has only one line of statement, and these steps are logically coupled tightly, the concise writing method should be used as much as possible. However, if it logically belongs to multiple sections, each of which does a different thing, then brevity should only be used within each section, not brevity for the sake of brevity.
+In the actual coding process, when should concise writing be used? OceanBase SeekDB believes that when each step of a sequential statement has only one line of statement, and these steps are logically coupled tightly, the concise writing method should be used as much as possible. However, if it logically belongs to multiple sections, each of which does a different thing, then brevity should only be used within each section, not brevity for the sake of brevity.
 It should be noted that if the sequential statement is followed by a conditional statement. If sequential statements are reduced to conditional statements, then they cannot be combined into one large conditional statement, but should be separated in code structure. For example:
 
 ```cpp
@@ -1015,7 +1017,7 @@ if (OB_SUCCESS != (ret = do_something1())) {
 } else {
    // do something if !cond
 }
- 
+
 // The first correct way
 if (OB_SUCCESS != (ret = do_something1())) {
   // print error log
@@ -1028,14 +1030,14 @@ if (OB_SUCCESS != (ret = do_something1())) {
     // do something if !cond
   }
 }
- 
+
 // The second correct way
 if (OB_SUCCESS != (ret = do_something1())) {
   // print error log
 } else if (OB_SUCCESS != (ret = do_something2())) {
   // print error log
 } else { }
- 
+
 if (OB_SUCCESS == ret) {
   if (cond) {
     // do something if cond
@@ -1082,11 +1084,11 @@ Some bad programming style, such as:
 if (OB_SUCCESS != ret && x > 0) {
    // do something
 }
- 
+
 if (OB_SUCCESS == ret && x < 0 ) {
    // do something
 }
- 
+
 if (OB_SUCCESS == ret && x == 0) {
    // do something
 }
@@ -1125,7 +1127,7 @@ if (cond1) {
     // do something
   }
 }
- 
+
 // The second way of writing the two judgment conditions (wrong)
 if (cond1 && cond2) {
    // do something
@@ -1138,14 +1140,14 @@ if (cond1 && cond2) {
 }
 ```
 
-The first writing method is divided into two layers, and the second writing method is divided into one layer. OceanBase only allows the first writing method. Of course, `cond1` and `cond2` here are from the perspective of business logic, referring to two independent business logics, rather than saying that `cond1` and `cond2` cannot contain `&&` or `||` operators. For example:
+The first writing method is divided into two layers, and the second writing method is divided into one layer. OceanBase SeekDB only allows the first writing method. Of course, `cond1` and `cond2` here are from the perspective of business logic, referring to two independent business logics, rather than saying that `cond1` and `cond2` cannot contain `&&` or `||` operators. For example:
 
 ```cpp
 // Whether app_name is empty, including ||
 if (NULL == app_name || app_name[0] == '\0') {
    ...
 }
- 
+
 // Judging whether table_name or column_name is empty, it is considered a business logic
 if (NULL != table_name || NULL != column_name) {
    ...
@@ -1159,9 +1161,9 @@ Declare function parameters that do not change as const. In addition, if the fun
 Declaring parameters as const can avoid some unnecessary errors, such as constant parameters being changed due to code errors. For simple data type value transfer, many people have disputes about whether to declare const, because in this case, declaring const has no effect.
 Considering that most of the existing code in OceanBase has been declared as const, and it is easier to operate this way, as long as the function parameters do not change, they are uniformly declared as const.
 ## 5.7 Function Parameters
-The number of function parameters should not exceed 7. The recommended order is: input parameters first, output parameters last. If some parameters are both input parameters and output parameters, they will be treated as input parameters and placed at the front like other input parameters. Add a new The parameters also need to follow this principle. 
+The number of function parameters should not exceed 7. The recommended order is: input parameters first, output parameters last. If some parameters are both input parameters and output parameters, they will be treated as input parameters and placed at the front like other input parameters. Add a new The parameters also need to follow this principle.
 
-**The principle of coding: don't trust anyone in the code! Every function (whether `public` or `private`, except `inline` functions) must check the legality of each input parameter, and it is strongly recommended that inline functions also perform these checks (unless there are serious performance problems)**. All functions (whether `public` or `private`) must check the legality of values obtained from class member variables or through function calls (such as get return values or output parameters), even if the return value is successful, the legality of output parameters must still be checked . Variable (parameter) check, only needs to be checked once in a function (if the value obtained by calling one or several functions multiple times, then check each time). 
+**The principle of coding: don't trust anyone in the code! Every function (whether `public` or `private`, except `inline` functions) must check the legality of each input parameter, and it is strongly recommended that inline functions also perform these checks (unless there are serious performance problems)**. All functions (whether `public` or `private`) must check the legality of values obtained from class member variables or through function calls (such as get return values or output parameters), even if the return value is successful, the legality of output parameters must still be checked . Variable (parameter) check, only needs to be checked once in a function (if the value obtained by calling one or several functions multiple times, then check each time).
 These checks include but are not limited to:
 
 1. Whether the pointer is `NULL`, and whether the string is empty
@@ -1171,7 +1173,7 @@ These checks include but are not limited to:
 If an implicit check has been made within the function, for example by a check function, it should be stated where the variable is assigned. For example:
 
 ```cpp
-// Variables that have been implicitly checked should be explained 
+// Variables that have been implicitly checked should be explained
 // where the variable is assigned:
 if (!param.is_valid() || !context.is_valid()) {
      ret = OB_INVALID_ARGUMENT;
@@ -1191,7 +1193,7 @@ Examples are as follows:
 int _func(void *ptr)
 {
   int ret = OB_SUCCESS;
- 
+
   if (NULL == ptr) {
     // print error log
     ret = OB_INVALID_ARGUMENT;
@@ -1211,7 +1213,7 @@ For example:
 ```cpp
 // wrong
 int ret = do_something(param1, 100, NULL);
- 
+
 // Correct
 ObCallback *null_callback = NULL;
 int ret = do_something(param1, NUM_TIMES, null_callback);
@@ -1220,7 +1222,7 @@ int ret = do_something(param1, NUM_TIMES, null_callback);
 ## 5.9 Pointer or Reference
 Function parameters can choose pointers or references. Use more references while respecting idioms.
 
-Pointer parameters and reference parameters can often achieve the same effect. Considering that the OceanBase coding specification has strict requirements for error judgment, more references are used to reduce some redundant error judgment codes. Provided, of course, that idioms are followed, such as:
+Pointer parameters and reference parameters can often achieve the same effect. Considering that the OceanBase SeekDB coding specification has strict requirements for error judgment, more references are used to reduce some redundant error judgment codes. Provided, of course, that idioms are followed, such as:
 
 1. The method of applying for an object often returns a pointer, and the corresponding release method also passes in a pointer.
 2. If the member of the object is a pointer, the corresponding `set_xxx` input is also a pointer.
@@ -1228,7 +1230,7 @@ Pointer parameters and reference parameters can often achieve the same effect. C
 ## 5.10 Function Length
 It is mandatory that a single function does not exceed 120 lines. If it must be violated, please obtain the consent of the group leader in advance, and explain the reasons in detail.
 
-Most open source projects limit the number of lines of a single function. Generally speaking, functions with more than 80 lines are often inappropriate. Considering that OceanBase has a lot of redundant error judgment codes, a single function is limited to no more than 120 lines. If the function is too long, consider splitting it into several smaller and more manageable functions, or re-examine the design and modify the structure of the class.
+Most open source projects limit the number of lines of a single function. Generally speaking, functions with more than 80 lines are often inappropriate. Considering that OceanBase SeekDB has a lot of redundant error judgment codes, a single function is limited to no more than 120 lines. If the function is too long, consider splitting it into several smaller and more manageable functions, or re-examine the design and modify the structure of the class.
 
 ## 5.11 Summary
 1. **Strictly abide by the single-entry single-exit function. If it must be violated, please obtain the consent of the project leader and project architect in advance, and explain the reasons in detail.**
@@ -1244,26 +1246,26 @@ Most open source projects limit the number of lines of a single function. Genera
 11. It is mandatory that a single function does not exceed 120 lines. If it must be violated, please obtain the consent of the group leader in advance, and explain the reasons in detail.
 
 # 6 C&C++ Features
-The advantage of C++ is flexibility, and the disadvantage is also flexibility. For many functions of C++, OceanBase is conservative, and this section describes some of them. There are two principles for choosing these features:
+The advantage of C++ is flexibility, and the disadvantage is also flexibility. For many functions of C++, OceanBase SeekDB is conservative, and this section describes some of them. There are two principles for choosing these features:
 1. Principle of caution: This feature is relatively "safe", even for beginners, there are not too many "pitfalls"
-2. Necessity: It has "sufficient" benefits to improve the coding quality of OceanBase
+2. Necessity: It has "sufficient" benefits to improve the coding quality of OceanBase SeekDB
 
 ## 6.1 Smart Pointers and Resource Guard
 
 Smart pointers are not allowed, allowing automatic release of resources through the Guard class.
-The boost library supports smart pointers, including `scoped_ptr`, `shared_ptr`, and `auto_ptr`. Many people think that smart pointers can be used safely, especially `scoped_ptr`. However, most of OceanBase's existing code releases resources manually, and smart pointers are prone to side effects if they are not used well. Therefore, smart pointers are not allowed.
+The boost library supports smart pointers, including `scoped_ptr`, `shared_ptr`, and `auto_ptr`. Many people think that smart pointers can be used safely, especially `scoped_ptr`. However, most of OceanBase SeekDB's existing code releases resources manually, and smart pointers are prone to side effects if they are not used well. Therefore, smart pointers are not allowed.
 Users are allowed to write some Guard classes by hand. The methods of these classes will apply for some resources, and these resources will be released automatically when the class is destroyed, such as LockGuard and SessionGuard.
 
 ## 6.2 Memory Allocation and Release
 It is required to use the memory allocator to allocate memory, and immediately set the pointer to NULL after the memory is released.
 
-The methods OceanBase can use for memory allocation include `ob_malloc` and various memory allocators. It is required to use the memory allocator to allocate memory, and specify the module it belongs to when allocating. The advantage of this is that it is convenient for the system to manage memory. If there is a memory leak, it is easy to see which module it is. In addition, it is necessary to prevent reference to the memory space that has been released, and it is required to set the pointer to `NULL` immediately after free.
+The methods OceanBase SeekDB can use for memory allocation include `ob_malloc` and various memory allocators. It is required to use the memory allocator to allocate memory, and specify the module it belongs to when allocating. The advantage of this is that it is convenient for the system to manage memory. If there is a memory leak, it is easy to see which module it is. In addition, it is necessary to prevent reference to the memory space that has been released, and it is required to set the pointer to `NULL` immediately after free.
 
 ```cpp
 void *ptr = ob_malloc(100, ObModIds::OB_COMMON_ARRAY);
- 
+
 // do something
- 
+
 if (NULL != ptr) {
   // Release resources
   ob_free(ptr, ObModIds::OB_COMMON_ARRAY);
@@ -1274,7 +1276,7 @@ if (NULL != ptr) {
 ## 6.3 String
 The `std::string` class is prohibited, and `ObString` is used instead. In addition, when manipulating C strings, it is required to use length-limited string functions.
 
-C++'s `std::string` class is very convenient to use. The problem is that it is impossible to figure out its internal behavior, such as copying and implicit conversion. OceanBase requires the use of `ObString` as much as possible, and the memory used in it needs to be manually managed by developers.
+C++'s `std::string` class is very convenient to use. The problem is that it is impossible to figure out its internal behavior, such as copying and implicit conversion. OceanBase SeekDB requires the use of `ObString` as much as possible, and the memory used in it needs to be manually managed by developers.
 
 Sometimes C strings are used. Be careful not to use string manipulation functions with unlimited length, including `strcpy/strcat/strdup/sprintf/strncpy`, but use the corresponding string manipulation functions with limited length `strncat/strndup/snprintf/memcpy`. You can use strlen to get the length of a string. The reason why `strncpy` is not used is that if the incoming buffer is not enough, it will not automatically '\0', and there are performance problems, so it needs to be replaced by `memcpy/snprintf`.
 
@@ -1356,7 +1358,7 @@ It should be noted that instead of using sizeof to calculate the length of a str
 ```cpp
 char *p = "abcdefg";
 // sizeof(p) indicates the pointer size, which is equal to 8 on a 64-bit machine
-int64_t nsize = sizeof(p); 
+int64_t nsize = sizeof(p);
 ```
 
 ## 6.12 0 and nullptr
@@ -1370,7 +1372,7 @@ The principle of judgment is: in addition to output and serialization, as long a
 ## 6.14 Boost and STL
 **In STL, only algorithm functions defined in the <algorithm> header file are allowed, such as std_sort, and other STL or boost functions are prohibited. If it must be violated, please obtain the consent of the project leader and project architect in advance, and explain the reasons in detail.**
 
-OceanBase has a conservative attitude towards libraries like boost and STL, and we believe that writing code correctly is far more important than writing code conveniently. Except for the algorithm class functions defined by STL <algorithm>, other functions should not be used.
+OceanBase SeekDB has a conservative attitude towards libraries like boost and STL, and we believe that writing code correctly is far more important than writing code conveniently. Except for the algorithm class functions defined by STL <algorithm>, other functions should not be used.
 
 ## 6.15 auto
 **What is**
@@ -1399,7 +1401,7 @@ for(const auto& kvp : map) {
 ```
 **Is it allowed**
 **Prohibited.**
-This feature is just a syntactic sugar. The `FOREACH` macro defined by ourselves has been widely used in the previous OceanBase code, which can achieve similar effects.
+This feature is just a syntactic sugar. The `FOREACH` macro defined by ourselves has been widely used in the previous OceanBase SeekDB code, which can achieve similar effects.
 
 ## 6.17 Override and Final
 **What is**
@@ -1428,7 +1430,7 @@ public:
 **Is it allowed**
 **Allow.** `override` and `final` are not only allowed, but strongly recommended, and should be added wherever they can be used.
 
-According to previous experience, the overloading of the virtual function in the OceanBase missed the `const`, resulting in endless errors of overloading errors. It is required that in the new code, all overloads must be added with override to avoid this wrong overload situation.
+According to previous experience, the overloading of the virtual function in the OceanBase SeekDB missed the `const`, resulting in endless errors of overloading errors. It is required that in the new code, all overloads must be added with override to avoid this wrong overload situation.
 
 In addition to being used for virtual functions, when a class is added with the final keyword, it means that it cannot be further derived, which is conducive to compiler optimization. When such a class has no parent class, the destructor does not need to add virtual.
 
@@ -1477,7 +1479,7 @@ std::for_each(std::begin(arr), std::end(arr), [](int n) {std::cout << n << std::
 ```
 
 **Is it allowed**
-**Prohibited**. This feature is mainly to make STL easier to use, but OceanBase prohibits the use of STL containers.
+**Prohibited**. This feature is mainly to make STL easier to use, but OceanBase SeekDB prohibits the use of STL containers.
 
 ## 6.21 static_assert and Type Traits
 **What is**
@@ -1510,9 +1512,9 @@ Buffer(Buffer&& temp):
 ```
 **Is it allowed**
 **Prohibited**. Banning it may bring some controversy. Mainly based on the following considerations:
-1. OceanBase does not use STL containers, so the optimization of the standard library using move semantics does not bring us benefits.
+1. OceanBase SeekDB does not use STL containers, so the optimization of the standard library using move semantics does not bring us benefits.
 2. The semantics of move semantic and rvalue are more complicated, and it is easy to introduce pitfalls
-3. Using it to transform some existing containers of OceanBase can indeed improve performance. However, the memory management method of OceanBase has made the use of move semantics smaller. In many cases, we have optimized it during implementation, and only store pointers in the container, not large objects.
+3. Using it to transform some existing containers of OceanBase SeekDB can indeed improve performance. However, the memory management method of OceanBase SeekDB has made the use of move semantics smaller. In many cases, we have optimized it during implementation, and only store pointers in the container, not large objects.
 
 It is recommended to consider other C++11 features after a period of familiarity, when the coding standard is revised next time.
 
@@ -1543,7 +1545,7 @@ X* p = new X{1,2};
 ```
 
 **Is it allowed**
-**Prohibited**. Syntactically more uniform, but again without any significant benefit. At the same time, it will significantly affect the style of OceanBase code and affect readability.
+**Prohibited**. Syntactically more uniform, but again without any significant benefit. At the same time, it will significantly affect the style of OceanBase SeekDB code and affect readability.
 ## 6.24 Right Angle Brackets
 **What is**
 Fix a common syntax problem in original C. It turns out that when the templates of C-defined templates are nested, the ending >> must be separated by spaces, which is no longer needed.
@@ -1569,7 +1571,7 @@ void func(const Arg1& arg1, const Args&... args)
 }
 ```
 **Is it allowed**
-**Allow**. This is a key feature for template programming. Because there is no variable-length template parameter, some basic libraries of OceanBase, such as `to_string`, `to_yson`, RPC framework, log library, etc., need to be implemented with some tricks and macros. And more type safe.
+**Allow**. This is a key feature for template programming. Because there is no variable-length template parameter, some basic libraries of OceanBase SeekDB, such as `to_string`, `to_yson`, RPC framework, log library, etc., need to be implemented with some tricks and macros. And more type safe.
 
 ## 6.26 Unrestricted Unions
 **What is**
@@ -1591,7 +1593,7 @@ union_{
 };
 ```
 **Is it allowed**
-**Allow**. There are many places in the OceanBase code that have to define redundant domains because of this limitation, or use tricky methods to bypass (define char array placeholders). See `sql::ObPostExprItem` for a miserable example.
+**Allow**. There are many places in the OceanBase SeekDB code that have to define redundant domains because of this limitation, or use tricky methods to bypass (define char array placeholders). See `sql::ObPostExprItem` for a miserable example.
 
 ## 6.27 Explicitly Defaulted and Deleted Special Member Functions
 **What is**
@@ -1610,7 +1612,7 @@ struct NoInt {
 ```
 
 **Is it allowed**
-**Allowed**. This feature is like tailor-made for OceanBase; the function of disabling a certain function is also very useful.
+**Allowed**. This feature is like tailor-made for OceanBase SeekDB; the function of disabling a certain function is also very useful.
 ## 6.28 Type Alias (Alias Declaration)
 **What is**
 Use the new alias declaration syntax to define an alias of a type, similar to the previous typedef; moreover, you can also define an alias template.
@@ -1671,22 +1673,22 @@ Use self-describing well-formed words. In order to distinguish it from variables
 ```cpp
 // class and structs
 class ObArenaAllocator
-{ 
+{
   ...
 };
 struct ObUpsInfo
-{ 
+{
   ...
 };
- 
+
 // typedefs
 typedef ObStringBufT<> ObStringBuf;
- 
+
 // enums
 enum ObPacketCode
 {
 };
- 
+
 // inner class
 class ObOuterClass
 {
@@ -1701,7 +1703,7 @@ The interface class needs to be preceded by an "I" modifier, and other classes s
 
 ```cpp
 class ObIAllocator
-{ 
+{
   ...
 };
 ```
@@ -1715,7 +1717,7 @@ class ObArenaAllocator
 private:
    ModuleArena arena_;
 };
- 
+
 struct ObUpsInfo
 {
    common::ObServer addr_;
@@ -1788,23 +1790,23 @@ None of the following code should have blank lines:
 void function()
 {
   int ret = OB_SUCCESS;
- 
+
 }
- 
+
 // Do not have blank lines at the beginning and end of the code block
 while (cond) {
   // do_something();
- 
+
 }
 if (cond) {
- 
+
    // do_something()
 }
 ```
 Empty lines below are reasonable.
 
 ```cpp
-// Function initialization and business logic are two parts, 
+// Function initialization and business logic are two parts,
 // with a blank line in between
 void function(const char *buf, const int64_t buf_len, int64_t &pos)
 {
@@ -1816,7 +1818,7 @@ void function(const char *buf, const int64_t buf_len, int64_t &pos)
    } else {
      ori_pos = pos;
    }
- 
+
    // Execute business logic
    return ret;
 }
@@ -1894,7 +1896,7 @@ Some parameters are not used, and these parameter names are annotated when the f
 int ObCircle::rotate(double /*radians*/)
 {
 }
- 
+
 // wrong
 int ObCircle::rotate(double)
 {
@@ -1954,13 +1956,13 @@ For the comparison statement, if it is `=`, `!=`, then the constant needs to be 
 if (NULL == p) {
   ...
 }
- 
+
 // wrong
 if (p == NULL) {
   ...
 }
 ```
- 
+
 ## 8.7 Expressions
 There is a space between the expression operator and the preceding and following variables, as follows:
 ```cpp
@@ -1990,7 +1992,7 @@ if ((a && b) || (c && d)) {
 } else {
   ...
 }
- 
+
 // wrong
 word = high << 8 | low;
 if (a && b || c && d) {
@@ -2004,12 +2006,12 @@ The ternary operator should be written in one line as much as possible. If it ex
 ```cpp
 // The ternary operator is written in one line
 int64_t length = (0 == digit_idx_) ? digit_pos_ : (digit_pos_ + 1);
- 
+
 // The ternary operator is written in three lines
 int64_t length = (0 == digit_idx_)
     ? (ObNumber::MAX_CALC_LEN - digit_pos_ - 1) // 4 spaces
     : (ObNumber::MAX_CALC_LEN - digit_pos_);
- 
+
 // Error: Breaking into two lines is not allowed
 int64_t length = (0 == digit_idx_) ? (ObNumber::MAX_CALC_LEN – digit_pos_ - 1)
      : (ObNumber::MAX_CALC_LEN – digit_pos_);
@@ -2038,11 +2040,11 @@ An empty loop body needs to write an empty comment instead of a simple semicolon
 while (cond) {
   //empty
 }
- 
+
 for (int64_t i = 0; i < num; ++i) {
   //empty
 }
- 
+
 // wrong way
 while (cond) ;
 for (int64_t i = 0; i < num; ++i) ;
@@ -2054,21 +2056,21 @@ Only one variable is declared per line, and the variable must be initialized whe
 // correct way
 int64_t *ptr1 = NULL;
 int64_t *ptr2 = NULL;
- 
+
 // wrong way
- 
+
 int64_t *ptr1 = NULL, ptr2 = NULL; // error, declare only one variable per line
 int64_t *ptr3; // Error, variable must be initialized when declared
 int64_t* ptr = NULL; // error, * is next to the variable name, not next to the data type
- 
+
 char* get_buf(); // error, * is next to the variable name, not next to the data type
 char *get_buf(); // correct
- 
+
 int set_buf(char* ptr); // error, * is next to the variable name, not next to the data type
 int set_buf(char *ptr); // correct
 ```
- 
- 
+
+
 ## 8.10 Variable References
 For references and pointers, you need to pay attention: there should be no spaces before and after periods `(.)` or arrows `(->)`. There can be no spaces after the pointer `(*)` and the address operator `(&)`, and the address operator is next to the variable name.
 ```cpp
@@ -2101,22 +2103,22 @@ public: // top grid
   ObMyClass(); // Indent 2 spaces relative to public
   ~ObMyClass();
   explicit ObMyClass(int var);
- 
+
   int some_function1(); // first class function function
   int some_function2();
- 
+
   inline void set_some_var(int64_t var) {some_var_ = var;} // the second type of function
   inline int64_t get_some_var() const {return some_var_;}
- 
+
   inline int some_inline_func(); // The third type of function
- 
+
 private:
   int some_internal_function(); // function defined first
- 
+
   int64_t some_var_; // variables are defined after
   DISALLOW_COPY_AND_ASSIGN(ObMyClass);
 };
- 
+
 int ObMyClass::some_inline_func()
 {
   ...
@@ -2132,7 +2134,7 @@ ObMyClass::ObMyClass(int var) : some_var_(var), other_var_(var+1)
 {
   ...
 }
- 
+
 // The initialization list is placed on multiple lines, indented by 4 spaces
 ObMyClass::ObMyClass(int var)
     : some_var_(var),
@@ -2181,16 +2183,16 @@ For key algorithms and business logic, it should be clearly described here, and 
 Each class definition must be accompanied by a comment describing the function and usage of the class. For example:
 ```cpp
 // memtable iterator: the following four requirements all use MemTableGetIter iteration
-// 1. [General get/scan] need to construct RNE cell, and construct mtime/ctime cell 
+// 1. [General get/scan] need to construct RNE cell, and construct mtime/ctime cell
 // according to create_time, if there is column filtering, it will also construct NOP cell
-// 2. [dump2text of QueryEngine] There is no column filtering and transaction id 
+// 2. [dump2text of QueryEngine] There is no column filtering and transaction id
 // filtering, no NOP will be constructed, but RNE/mtime/ctime will be constructed
-// 3. [Dump] Without column filtering and transaction id filtering, empty rows will be 
-// skipped in QueryEngine, RNE and NOP will not be constructed, but mtime/ctime 
+// 3. [Dump] Without column filtering and transaction id filtering, empty rows will be
+// skipped in QueryEngine, RNE and NOP will not be constructed, but mtime/ctime
 // will be constructed
-// 4. [Single-line merge] Before merging, it is necessary to determine whether there 
-// is still data after the transaction id is filtered. If not, the GetIter 
-// iteration is not called to prevent the RNE from being constructed and written 
+// 4. [Single-line merge] Before merging, it is necessary to determine whether there
+// is still data after the transaction id is filtered. If not, the GetIter
+// iteration is not called to prevent the RNE from being constructed and written
 // back to the memtable; in addition, RowCompaction is required to ensure that the
 // order is not adjusted to prevent the mtime representing the transaction ID from
 // being adjusted to the common column.
@@ -2251,7 +2253,7 @@ private:
   // Keeps track of the total number of entries in the table.
   // -1 means that we don't yet know how many entries the table has.
   int num_total_entries_;
- 
+
   // Comments appear to the right of the variable
   static const int NUM_TEST_CASES = 6; // the total number of test cases.
 ```
@@ -2279,7 +2281,7 @@ For functions that have not been implemented or are not perfectly implemented, s
 2. In order to ensure that a thread will not be busy waiting in an infinite loop when exiting, the loop generally needs to judge the stop flag.
 ## 10.2 pthread_key
 1. There are only 1024 `pthread_key` at most, and this limit cannot be increased, so special attention should be paid when using it.
-2. If you want to use a large number of thread-local variables, it is recommended to use the thread number as an array subscript to obtain a thread-private variable. An `itid()` function is encapsulated in the OceanBase to obtain continuously increasing thread numbers.
+2. If you want to use a large number of thread-local variables, it is recommended to use the thread number as an array subscript to obtain a thread-private variable. An `itid()` function is encapsulated in the OceanBase SeekDB to obtain continuously increasing thread numbers.
 
 ```cpp
 void *get_thread_local_variable()

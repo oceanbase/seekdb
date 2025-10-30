@@ -4,12 +4,12 @@ title: Debug
 
 # Abstract
 
-This document describes some methods to debug OceanBase. We have many ways to debug OceanBase, such as gdb, logging, etc.
+This document describes some methods to debug OceanBase SeekDB. We have many ways to debug SeekDB, such as gdb, logging, etc.
 
-We suggest you build OceanBase with debug mode as it is easy to debug.
+We suggest you build SeekDB with debug mode as it is easy to debug.
 
 # GDB
-GDB is a powerful debugging tool, but it is difficult to debug OceanBase by gdb and the scenarios are limited.
+GDB is a powerful debugging tool, but it is difficult to debug SeekDB by gdb and the scenarios are limited.
 
 If you want to debug a single oceanbase process and single thread, you can use gdb, otherwise it is more recommended to use logging.
 
@@ -37,7 +37,7 @@ Then you can set breakpoint, print variable, etc. Please refer to [gdb manual](h
 ## Debug oceanbase with debug-info package
 If you want to debug oceanbase or check the coredump file deployed with oceanbase rpm, you should install or load the debug-info package first. Loading is more recommended although installation is more convenient as there will be many debug-info packages in the system and it is not easy to cleanup.
 
-First, obtain the debug-info package from the website, and then load the package into gdb. Afterward, you will be able to debug OceanBase with ease.
+First, obtain the debug-info package from the website, and then load the package into gdb. Afterward, you will be able to debug SeekDB with ease.
 
 Below are some tips.
 
@@ -48,11 +48,11 @@ You can get the package revision by the command below.
 # in the observer runtime path
 clusters/local/bin [83] $ ./observer -V
 ./observer -V
-observer (OceanBase_CE 4.1.0.1)
+observer (OceanBase SeekDB 1.0.0.0)
 
 REVISION: 102000042023061314-43bca414d5065272a730c92a645c3e25768c1d05
 BUILD_BRANCH: HEAD
-BUILD_TIME: Jun 13 2023 14:26:23
+BUILD_TIME: Nov 1 2025 14:26:23
 BUILD_FLAGS: RelWithDebInfo
 BUILD_INFO:
 
@@ -69,11 +69,11 @@ You can run command below to get the revision
 ```bash
 clusters/local/bin [83] $ LD_LIBRARY_PATH=../lib:$LD_LIBRARY_PATH ./observer -V
 ./observer -V
-observer (OceanBase_CE 4.1.0.1)
+observer (OceanBase SeekDB 1.0.0.0)
 
 REVISION: 102000042023061314-43bca414d5065272a730c92a645c3e25768c1d05
 BUILD_BRANCH: HEAD
-BUILD_TIME: Jun 13 2023 14:26:23
+BUILD_TIME: Nov 1 2025 14:26:23
 BUILD_FLAGS: RelWithDebInfo
 BUILD_INFO:
 
@@ -93,16 +93,16 @@ Then we search `102000042023061314` on the oceanbase rpm website like below.
 ![download debug info package](images/download-debug-info-package.png)
 
 Here is a rpm website list.
-- [x86_64 for el7](http://mirrors.aliyun.com/oceanbase/community/stable/el/7/x86_64/)
-- [x86_64 for el8](https://mirrors.aliyun.com/oceanbase/community/stable/el/8/x86_64/)
-- [aarch64(arm) for el7](https://mirrors.aliyun.com/oceanbase/community/stable/el/7/aarch64/)
-- [aarch64(arm) for el8](https://mirrors.aliyun.com/oceanbase/community/stable/el/8/aarch64/)
+- [x86_64 for el7](http://mirrors.oceanbase.com/oceanbase/community/stable/el/7/x86_64/)
+- [x86_64 for el8](https://mirrors.oceanbase.com/oceanbase/community/stable/el/8/x86_64/)
+- [aarch64(arm) for el7](https://mirrors.oceanbase.com/oceanbase/community/stable/el/7/aarch64/)
+- [aarch64(arm) for el8](https://mirrors.oceanbase.com/oceanbase/community/stable/el/8/aarch64/)
 
 **Extract debug-info package from rpm**
 
 Extract debug-info package from rpm, for example.
 ```bash
-rpm2cpio oceanbase-ce-debuginfo-4.1.0.1-102000042023061314.el7.x86_64.rpm | cpio -div
+rpm2cpio oceanbase-seekdb-debuginfo-1.0.0.0-102000042023061314.el7.x86_64.rpm | cpio -div
 ```
 
 Then you can get this.
@@ -190,11 +190,11 @@ Let's run the debug command again and we can get detailed information.
 ```
 
 # Logging
-Logging is the most common way to debug OceanBase, and it is easy to use and can be used in most scenarios.
+Logging is the most common way to debug SeekDB, and it is easy to use and can be used in most scenarios.
 In common scenarios, we can add logs in the code and print the variable, then rebuild and redeploy the oceanbase.
 
 ## How to add logs
-You can prefer the logging code in the source code, such as 
+You can prefer the logging code in the source code, such as
 ```cpp
 LOG_DEBUG("insert sql generated", K(insert_sql));
 ```
@@ -317,9 +317,9 @@ obclient> show trace;
 
 # Debug Sync
 
-If you use gdb to debug OceanBase, it maybe cannot work normally because gdb will hang the process and OceanBase depends on the heartbeat to work normally. So we provide a debug sync mechanism to solve this problem.
+If you use gdb to debug SeekDB, it maybe cannot work normally because gdb will hang the process and SeekDB depends on the heartbeat to work normally. So we provide a debug sync mechanism to solve this problem.
 
-The specific thread of OceanBase process will hang on the point if you add a debug sync point in the code, and then you can do something to debug the process, such as attach the process by gdb, or execute some SQL commands to get some information.
+The specific thread of SeekDB process will hang on the point if you add a debug sync point in the code, and then you can do something to debug the process, such as attach the process by gdb, or execute some SQL commands to get some information.
 
 > Debug Sync can work on release mode, so it is enabled on production environment.
 

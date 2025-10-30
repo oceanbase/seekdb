@@ -4,18 +4,18 @@ title: 调试
 
 # 背景
 
-这里介绍一些调试 OceanBase 的方法。我们有很多种调试方法，比如 gdb，日志等。
+这里介绍一些调试 OceanBase SeekDB 的方法。我们有很多种调试方法，比如 gdb，日志等。
 
-建议编译 OceanBase 时使用 debug 模式，这样更容易调试。
+建议编译 SeekDB 时使用 debug 模式，这样更容易调试。
 
 # GDB
-GDB 是一个强大的调试工具，但是使用 gdb 调试 OceanBase 是比较困难的，而且场景比较有限。
+GDB 是一个强大的调试工具，但是使用 gdb 调试 SeekDB 是比较困难的，而且场景比较有限。
 
 如果要调试单进程并且只有某一个线程，可以使用 gdb，否则建议使用日志。
 
 假设已经部署了源码编译的 oceanbase。
 
-调试 OceanBase 与调试其他 C++ 程序类似，你可以使用 gdb，如下：
+调试 SeekDB 与调试其他 C++ 程序类似，你可以使用 gdb，如下：
 
 1. 找到进程 id
 ```bash
@@ -34,11 +34,11 @@ gdb observer <pid>
 
 接着就可以设置断点，打印变量等。更多信息请参考 [gdb 手册](https://sourceware.org/gdb/current/onlinedocs/gdb.html/)。
 
-## 使用 debug-info 包调试 OceanBase
+## 使用 debug-info 包调试 SeekDB
 
-要调试RPM部署的OceanBase，或者查看 coredump 文件，需要先安装或者加载 debug-info 包。推荐使用加载的模式，因为系统中会有很多 debug-info 包，而且很难清理。
+要调试RPM部署的SeekDB，或者查看 coredump 文件，需要先安装或者加载 debug-info 包。推荐使用加载的模式，因为系统中会有很多 debug-info 包，而且很难清理。
 
-首先，从网上下载 debug-info 包，然后加载到gdb。之后，你就可以很容易地调试 OceanBase 了。
+首先，从网上下载 debug-info 包，然后加载到gdb。之后，你就可以很容易地调试 SeekDB 了。
 
 下面是一些提示。
 
@@ -49,11 +49,11 @@ gdb observer <pid>
 # in the observer runtime path
 clusters/local/bin [83] $ ./observer -V
 ./observer -V
-observer (OceanBase_CE 4.1.0.1)
+observer (OceanBase SeekDB 1.0.0.0)
 
 REVISION: 102000042023061314-43bca414d5065272a730c92a645c3e25768c1d05
 BUILD_BRANCH: HEAD
-BUILD_TIME: Jun 13 2023 14:26:23
+BUILD_TIME: Nov 1 2025 14:26:23
 BUILD_FLAGS: RelWithDebInfo
 BUILD_INFO:
 
@@ -70,11 +70,11 @@ Copyright (c) 2011-2022 OceanBase Inc.
 ```bash
 clusters/local/bin [83] $ LD_LIBRARY_PATH=../lib:$LD_LIBRARY_PATH ./observer -V
 ./observer -V
-observer (OceanBase_CE 4.1.0.1)
+observer (OceanBase SeekDB 1.0.0.0)
 
 REVISION: 102000042023061314-43bca414d5065272a730c92a645c3e25768c1d05
 BUILD_BRANCH: HEAD
-BUILD_TIME: Jun 13 2023 14:26:23
+BUILD_TIME: Nov 1 2025 14:26:23
 BUILD_FLAGS: RelWithDebInfo
 BUILD_INFO:
 
@@ -94,16 +94,16 @@ REVISION: 102000042023061314-43bca414d5065272a730c92a645c3e25768c1d05
 ![download debug info package](images/download-debug-info-package.png)
 
 RPM网站列表：
-- [x86_64 for el7](http://mirrors.aliyun.com/oceanbase/community/stable/el/7/x86_64/)
-- [x86_64 for el8](https://mirrors.aliyun.com/oceanbase/community/stable/el/8/x86_64/)
-- [aarch64(arm) for el7](https://mirrors.aliyun.com/oceanbase/community/stable/el/7/aarch64/)
-- [aarch64(arm) for el8](https://mirrors.aliyun.com/oceanbase/community/stable/el/8/aarch64/)
+- [x86_64 for el7](http://mirrors.oceanbase.com/oceanbase/community/stable/el/7/x86_64/)
+- [x86_64 for el8](https://mirrors.oceanbase.com/oceanbase/community/stable/el/8/x86_64/)
+- [aarch64(arm) for el7](https://mirrors.oceanbase.com/oceanbase/community/stable/el/7/aarch64/)
+- [aarch64(arm) for el8](https://mirrors.oceanbase.com/oceanbase/community/stable/el/8/aarch64/)
 
 **从RPM中提取 debug-info package**
 
 从RPM中提取 debug-info 包，例如
 ```bash
-rpm2cpio oceanbase-ce-debuginfo-4.1.0.1-102000042023061314.el7.x86_64.rpm | cpio -div
+rpm2cpio oceanbase-seekdb-debuginfo-1.0.0.0-102000042023061314.el7.x86_64.rpm | cpio -div
 ```
 
 解开后是这样的
@@ -127,7 +127,7 @@ rpm2cpio oceanbase-ce-debuginfo-4.1.0.1-102000042023061314.el7.x86_64.rpm | cpio
 
 `observer.debug` 是我们要的 debug-info 包，`f87ee72d228069aab083d8e6d2fa2fcb5c03f2.debug` 是一个软链接。
 
-**使用 debug-info 包调试 OceanBase**
+**使用 debug-info 包调试 SeekDB**
 
 使用gdb命令 attch 到一个进程或者打开coredump文件。
 
@@ -194,7 +194,7 @@ Reading symbols from usr/lib/debug/home/admin/oceanbase/bin/observer.debug...
 
 # 日志
 
-日志是调试 OceanBase 最常用的方法，易于使用，适用于大多数场景。
+日志是调试 SeekDB 最常用的方法，易于使用，适用于大多数场景。
 在常见的场景中，可以在代码中添加日志并打印变量，然后重新编译和部署 oceanbase。
 
 ## 如何加日志
@@ -210,7 +210,7 @@ LOG_DEBUG("insert sql generated", K(insert_sql));
 
 ## 如何搜索日志
 
-日志文件在 OceanBase 运行目录的 `log` 目录下。你可以使用 `grep` 命令搜索日志。
+日志文件在 SeekDB 运行目录的 `log` 目录下。你可以使用 `grep` 命令搜索日志。
 
 一个日志的例子。
 ```
@@ -326,7 +326,7 @@ obclient> show trace;
 
 # Debug Sync
 
-在使用 gdb 调试 OceanBase 的时候，可能会出现问题，因为 gdb 会挂起进程，而 OceanBase 依赖心跳来正常工作。所以我们提供了一个 debug sync 机制来解决这个问题。
+在使用 gdb 调试 SeekDB 的时候，可能会出现问题，因为 gdb 会挂起进程，而 SeekDB 依赖心跳来正常工作。所以我们提供了一个 debug sync 机制来解决这个问题。
 
 在代码中增加一个 debug sync 点，特定的线程会在这个点挂起，然后你可以做一些事情来调试这个进程，比如使用 gdb attach 进程，或者执行一些 SQL 命令来获取一些信息。
 

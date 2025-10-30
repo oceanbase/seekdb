@@ -9,12 +9,12 @@
 把代码clone到本地：
 
 ```shell
-git clone https://github.com/oceanbase/oceanbase.git
+git clone https://github.com/oceanbase/oceanbase-seekdb.git
 ```
 
 ## 构建
 
-构建debug或release版本的OceanBase源码：
+构建debug或release版本的OceanBase SeekDB源码：
 
 ### Debug 模式
 
@@ -30,24 +30,24 @@ bash build.sh release --init --make
 
 ## 运行
 
-`observer` 二进制文件已经编译出来了，可以使用 `obd.sh` 工具部署一个 OceanBase 实例：
+`observer` 二进制文件已经编译出来了，可以使用 `obd.sh` 工具部署一个 SeekDB 实例：
 
 ```shell
 ./tools/deploy/obd.sh prepare -p /tmp/obtest
 ./tools/deploy/obd.sh deploy -c ./tools/deploy/single.yaml
 ```
 
-你可以通过查看 `./tools/deploy/single.yaml` 文件中的`mysql_port`来查看监听端口，通常情况下，如果你用root用户部署，那么OceanBase 服务程序会监听 10000 端口，下文中的示例也是基于这个端口。
+你可以通过查看 `./tools/deploy/single.yaml` 文件中的`mysql_port`来查看监听端口，通常情况下，如果你用root用户部署，那么 SeekDB 服务程序会监听 10000 端口，下文中的示例也是基于这个端口。
 
 ## 连接
 
-可以使用官方的 MySQL 客户端连接 OceanBase：
+可以使用官方的 MySQL 客户端连接 SeekDB：
 
 ```shell
 mysql -uroot -h127.0.0.1 -P10000
 ```
 
-也可以使用 `obclient` 连接 OceanBase：
+也可以使用 `obclient` 连接 SeekDB：
 
 ```shell
 ./deps/3rd/u01/obclient/bin/obclient -h127.0.0.1 -P10000 -uroot -Doceanbase -A

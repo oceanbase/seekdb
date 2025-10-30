@@ -321,6 +321,7 @@ int inner_main(int argc, char *argv[])
       opts->base_dir_.ptr(), strerror(errno));
   } else {
     MPRINT("Change working directory to base dir. path='%s'", opts->base_dir_.ptr());
+    MPRINT("The log file is in the directory: %s/log/", opts->base_dir_.ptr());
   }
 
   if (OB_FAIL(ret)) {
@@ -335,12 +336,17 @@ int inner_main(int argc, char *argv[])
   } else if (FALSE_IT(create_observer_softlink())) {
   } else if (OB_FAIL(ObEncryptionUtil::init_ssl_malloc())) {
     MPRINT("failed to init crypto malloc");
+  }
+  if (OB_FAIL(ret)) {
   } else if (!opts->nodaemon_ && !opts->initialize_) {
     MPRINT("Will start observer as a daemon process. You can check the server status by client later.");
-    MPRINT("    The log file is in the directory: %s/log/", opts->base_dir_.ptr());
     MPRINT("    Start observer with --nodaemon if you don't want to start as a daemon process.");
     if (OB_FAIL(start_daemon(PID_FILE_NAME))) {
       MPRINT("Start observer as a daemon failed. Did you started observer already?");
+    }
+  } else if (opts->nodaemon_) {
+    if (OB_FAIL(start_daemon(PID_FILE_NAME, true/*skip_daemon*/))) {
+      MPRINT("Start observer failed. Did you started observer already?");
     }
   }
 

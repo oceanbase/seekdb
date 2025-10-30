@@ -4,11 +4,11 @@ title: Set up an IDE
 
 # Abstract
 
-In order to easily read the code of OceanBase, we suggest using one IDE which is easily index the symbols of OceanBase. In Windows, we recommend `Souce Insight` can be used, and in Mac or Linux, we recommend that `VSCode + ccls` can be used to read the oceanbase code. Due to it is very easy to use `Source Ingisht`, so this document skip introduction how to use `Souce Insight`.
+In order to easily read the code of SeekDB, we suggest using one IDE which is easily index the symbols of OceanBase SeekDB. In Windows, we recommend `Souce Insight` can be used, and in Mac or Linux, we recommend that `VSCode + ccls` can be used to read the oceanbase code. Due to it is very easy to use `Source Ingisht`, so this document skip introduction how to use `Souce Insight`.
 
-This document introduce how to setup `VSCode + ccls`, which is very convenient to read the code of OceanBase. [ccls](https://github.com/MaskRay/ccls) is based on [cquery](https://github.com/jacobdufault/cquery), which is one of C/C++/Objective-C [LSP](https://en.wikipedia.org/wiki/Language_Server_Protocol)s (In one word, LSP is used to provide programming language-specific features like code completion, syntax highlighting and marking of warnings and errors, as well as refactoring routines).
+This document introduce how to setup `VSCode + ccls`, which is very convenient to read the code of SeekDB. [ccls](https://github.com/MaskRay/ccls) is based on [cquery](https://github.com/jacobdufault/cquery), which is one of C/C++/Objective-C [LSP](https://en.wikipedia.org/wiki/Language_Server_Protocol)s (In one word, LSP is used to provide programming language-specific features like code completion, syntax highlighting and marking of warnings and errors, as well as refactoring routines).
 
-The number of OceanBase code is pretty huge and OceanBase can't be compiled under Mac or Windows, so we recommend that download the code on the remote server, and start VSCode to access the code under the remote server.
+The number of SeekDB code is pretty huge and SeekDB can't be compiled under Mac or Windows, so we recommend that download the code on the remote server, and start VSCode to access the code under the remote server.
 
 # Config ccls on Remote Server
 
@@ -20,7 +20,7 @@ The following `/path/to` just means the path example, please replace it with you
 In the C/C++ LSP domain, the famous tools are clangd and ccls. Here we recommend ccls, because:
 
 1. The speed of building index of ccls is slower than that of clangd, but after building, the speed of accessing index of ccls is faster than that of clangd.
-2. Unity building doesn't be supported by clangd, but OceanBase is being built by unity, failed to build index through compile_commands.json by clangd.
+2. Unity building doesn't be supported by clangd, but SeekDB is being built by unity, failed to build index through compile_commands.json by clangd.
 
 # ccls Installation
 
@@ -105,12 +105,12 @@ Password need to be input everytime. If you want to skip this action, please con
 
 ## C/C++ Plugin
 
-We do **not** recommend using C/C++ plugins as they do not provide good indexing capabilities for OceanBase, and they are not compatible with the ccls plugin.
+We do **not** recommend using C/C++ plugins as they do not provide good indexing capabilities for SeekDB, and they are not compatible with the ccls plugin.
 
 C/C++ plugin can be download and installed in VSCode extension store in the case of simple scenarios:
 
 ![cpp plugins](images/ide-settings-cpp-plugins.png)
-C/C++ plugin can automatically code completion and syntax highlighting, but this plugin failed to build index for OceanBase, it is hard to jump the symbol of OceanBase.
+C/C++ plugin can automatically code completion and syntax highlighting, but this plugin failed to build index for SeekDB, it is hard to jump the symbol of SeekDB.
 
 ## ccls Plugin
 

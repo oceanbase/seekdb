@@ -203,9 +203,7 @@ int ObCommandLineParser::handle_option(int option, const char* value, ObServerOp
         MPRINT("Invalid argument, the value should not be empty");
       } else {
         if (OB_FAIL(OB_LOGGER.level_str2int(value, opts.log_level_))) {
-          MPRINT("malformed log level, candicates are: "
-            "    ERROR,USER_ERR,WARN,INFO,TRACE,DEBUG");
-          MPRINT("!! Back to INFO log level.");
+          MPRINT("Invalid log level. Back to INFO log level.");
           ret = OB_SUCCESS;
           opts.log_level_ = OB_LOG_LEVEL_WARN;
         }
@@ -341,7 +339,7 @@ void ObCommandLineParser::print_help() const
   MPRINT("                                      NOTE: You must specify this option if you will start observer at other directory.");
   MPRINT("  --data-dir <dir>                The data directory which seekdb will store data in. Default is ${base-dir}/store in initialize mode.");
   MPRINT("  --redo-dir <dir>                The redo log directory which seekdb will store redo log in. Default is ${data-dir}/redo in initialize mode.");
-  MPRINT("  --log-level <level>             The server log level");
+  MPRINT("  --log-level <level>             The server log level. Can be one of [ERROR, WARN, INFO, EDIAG, WDIAG, TRACE, DEBUG]");
   MPRINT("  --variable <key=value>          system variables, format: key=value. Note: This takes effect only during the initial startup. Can be specified multiple times.");
   MPRINT("  --parameter <key=value>         system parameters, format: key=value. Can be specified multiple times.");
   MPRINT("  --version, -V                   show version message and exit");

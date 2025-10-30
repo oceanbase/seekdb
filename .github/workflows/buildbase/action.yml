@@ -30,5 +30,6 @@ runs:
       shell: bash
       run: |
         bash build.sh debug -DOB_USE_CCACHE=ON
+        ccache -z
         cd build_debug && make -j4
         ccache -s

@@ -1,35 +1,16 @@
 # 使用 obd.sh 运行 mysqltest
 
-要使用 obd.sh 运行 mysqltest 测试，需要通过 obd.sh 部署 OceanBase 数据库。本文从编译源代码开始，使用示例介绍如何使用 obd.sh 部署 OceanBase 数据库并运行 mysqltest 测试。
+要使用 obd.sh 运行 mysqltest 测试，需要通过 obd.sh 部署 OceanBase SeekDB 数据库。本文从编译源代码开始，使用示例介绍如何使用 obd.sh 部署 SeekDB 数据库并运行 mysqltest 测试。
 
 ## 背景
 
-为了简化开发者的操作步骤，降低其理解成本，我们将一些 OBD 命令封装到 obd.sh 脚本中，并将脚本存放在 OceanBase 源代码的 oceanbase/tools/deploy 目录下。本文通过在 OBD 中调用 [obd test mysqltest](https://www.oceanbase.com/docs/community-obd-cn-10000000002048173) 命令，运行 mysqltest 测试。
+为了简化开发者的操作步骤，降低其理解成本，我们将一些 OBD 命令封装到 obd.sh 脚本中，并将脚本存放在 SeekDB 源代码的 oceanbase/tools/deploy 目录下。本文通过在 OBD 中调用 [obd test mysqltest](https://www.oceanbase.com/docs/community-obd-cn-10000000002048173) 命令，运行 mysqltest 测试。
 
 ## 相关概念
 
-mysqltest 是OceanBase数据库中的一种准入测试，简单来说，它以编写的 case 文件为输入，将数据库的输出与预期输出进行比较。OceanBase数据库中 mysqltest 测试的 case 都位于 `tools/deploy/mysql_test` 目录下。
+mysqltest 是SeekDB数据库中的一种准入测试，简单来说，它以编写的 case 文件为输入，将数据库的输出与预期输出进行比较。SeekDB数据库中 mysqltest 测试的 case 都位于 `tools/deploy/mysql_test` 目录下。
 
 `case` 是 mysqltest 的最小执行单元，一个 `case` 至少包含一个 test 文件和一个 result 文件。对 case 进行分类形成 `suite`，`suite` 是 case 的集合。
-
-mysqltest 有多种运行模式，取决于选择的节点，常见的 mysqltest 模式如下。
-
-* c 模式：连接到 Primary Zone 所在的服务器运行 mysqltest。例如，使用配置文件 distributed.yaml 部署集群，然后连接到 server1 运行测试。
-
-  ```shell
-  ./obd.sh mysqltest -n <name> --suite acs --test-server=server1
-  ```
-* Slave 模式：连接到 Primary Zone 以外的服务器运行 mysqltest。例如，使用配置文件 distributed.yaml 部署集群，然后连接到 server2 运行测试。
-
-  ```shell
-  ./obd.sh mysqltest -n <name> --suite acs --test-server=server2
-  ```
-
-* Proxy 模式：通过 ODP 连接到集群进行 mysqltest 测试。例如，使用配置文件 distributed-with-proxy.yaml 部署集群，然后运行测试。
-
-  ```shell
-  ./obd.sh mysqltest -n <name> --all
-  ```
 
 ## 执行步骤
 
@@ -69,8 +50,6 @@ mysqltest 有多种运行模式，取决于选择的节点，常见的 mysqltest
 | 参数名称 | 是否必须 | 类型 | 默认值 | 说明 |
 |--------|---------|----------|-------|------|
 | -n     | Y  | 字符串 | null | 集群名称 |
-| --component | N  | 字符串 | null | T要测试的组件名称。可选值：obproxy、obproxy-ce、oceanbase和oceanbase-ce。如果是空，按照 obproxy、obproxy-ce、oceanbase、oceanbase-ce的顺序检查。如果检测到某个组件存在，就会停止遍历，然后执行相应的测试。 |
-| --test-server | N  | 字符串 | 默认为指定组件下的服务器中的第一个节点 | 要测试的机器，可以设置为 yaml 文件中 servers 下指定组件下的 name 值对应的服务器。如果 servers 下没有配置 name 值，将使用 ip 值，必须是指定组件下的某个节点的 name 值。 |
 | --user | N  | 字符串 | admin | 执行测试的用户名，一般不需要修改。 |
 | --password | N | 字符串 | admin | 密码 |
 | --database | N  | 字符串 | test | database |
