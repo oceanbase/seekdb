@@ -4761,10 +4761,9 @@ int ObVectorIndexUtil::check_vector_index_by_column_name(
           LOG_WARN("Failed to check skip rowkey doc mapping", K(ret));
         } else if (vid_type == ObDocIDType::TABLET_SEQUENCE) {
           is_valid = rowkey_vid_table_is_valid && vid_rowkey_table_is_valid &&
-
             (delta_buffer_table_is_valid || (hybrid_log_table_is_valid && hybrid_embedded_table_is_valid)) && index_id_table_is_valid && snapshot_table_is_valid;
         } else if (vid_type == ObDocIDType::HIDDEN_INC_PK) {
-          is_valid = delta_buffer_table_is_valid && index_id_table_is_valid && snapshot_table_is_valid;
+          is_valid = (delta_buffer_table_is_valid || (hybrid_log_table_is_valid && hybrid_embedded_table_is_valid)) && index_id_table_is_valid && snapshot_table_is_valid;
         }
         if (!is_valid) {
           LOG_WARN("vector index is not all valid",
