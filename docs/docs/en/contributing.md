@@ -8,20 +8,20 @@ If you are interested in contributing code to OceanBase, please read the followi
 
 ## Start off with the right issue
 
-As a new contributor, you can start off by looking through our [good first issues](https://github.com/oceanbase/oceanbase/issues?q=is%3Aopen+is%3Aissue+label%3A%22good+first+issue%22). If none of them feels right for you, you can create a new issue when you find one. If you find an issue for you, please assign this issue to yourself in the issue topic and add the _developing_ label to indicate that this issue is being developed.
+As a new contributor, you can start off by looking through our [good first issues](https://github.com/oceanbase/oceanbase-seekdb/issues?q=is%3Aopen+is%3Aissue+label%3A%22good+first+issue%22). If none of them feels right for you, you can create a new issue when you find one. If you find an issue for you, please assign this issue to yourself in the issue topic and add the _developing_ label to indicate that this issue is being developed.
 
 ## Contribute code changes
 
 1. Fork the OceanBase repository.
-   
-   1. Visit the [OceanBase GitHub repository](https://github.com/oceanbase/oceanbase).
+
+   1. Visit the [OceanBase GitHub repository](https://github.com/oceanbase/oceanbase-seekdb).
    2. Click the **Fork** button in the upper-right corner to fork one branch.
 
 2. Configure the local environment.
 
 ```bash
-working_dir=$HOME/{your_workspace} # Define the working directory of your choice. 
-user={github_account} # Make sure the user name is the same as your GitHub account. 
+working_dir=$HOME/{your_workspace} # Define the working directory of your choice.
+user={github_account} # Make sure the user name is the same as your GitHub account.
 ```
 
 3. Git clone the code.
@@ -29,12 +29,12 @@ user={github_account} # Make sure the user name is the same as your GitHub accou
 ```bash
 mkdir -p $working_dir
 cd $working_dir
-git clone git@github.com:$user/oceanbase.git
+git clone git@github.com:$user/oceanbase-seekdb.git
 
 # Add the upstream branch.
-cd $working_dir/oceanbase
-git remote add upstream git@github.com:oceanbase/oceanbase.git
-# Or choose: git remote add upstream https://github.com/oceanbase/oceanbase
+cd $working_dir/oceanbase-seekdb
+git remote add upstream git@github.com:oceanbase/oceanbase-seekdb.git
+# Or choose: git remote add upstream https://github.com/oceanbase/oceanbase-seekdb
 
 # Set no_push for the upstream branch.
 git remote set-url --push upstream no_push
@@ -47,7 +47,7 @@ git remote -v
 
 ```bash
 # Check out the local master.
-new_branch_name={issue_id} # Define the branch name. It is recommended that you use {issue+id} for the branch name. 
+new_branch_name={issue_id} # Define the branch name. It is recommended that you use {issue+id} for the branch name.
 cd $working_dir/oceanbase
 git fetch upstream
 git checkout master
@@ -64,9 +64,9 @@ git status
 
 # Add files for submission.
 # Directly add all changes using `git add .`
-git add <file> ... 
-# In order to relate the pull request automatically to the issue, 
-# it is recommended that the commit message contain "fixed #{issue_id}". 
+git add <file> ...
+# In order to relate the pull request automatically to the issue,
+# it is recommended that the commit message contain "fixed #{issue_id}".
 git commit -m "fixed #{issue_id}: {your_commit_message}"
 
 # Sync upstream before push.
@@ -78,8 +78,8 @@ git push -u origin $new_branch_name
 7. Create a pull request.
    1. Visit your fork repository.
    2. Click the **Compare & pull request** button next to the {new_branch_name} to create a pull request.
-8. Sign the [Contributor License Agreement (CLA)](https://cla-assistant.io/oceanbase/oceanbase) aggreement. The workflow can continue only after you sign the CLA aggreement.
+8. Sign the [Contributor License Agreement (CLA)](https://cla-assistant.io/oceanbase) aggreement. The workflow can continue only after you sign the CLA aggreement.
 
 ![CLA](https://user-images.githubusercontent.com/5435903/204097095-6a19d2d1-ee0c-4fb6-be2d-77f7577d75d2.png#crop=0&crop=0&crop=1&crop=1&from=url&id=Mmj8a&margin=%5Bobject%20Object%5D&originHeight=271&originWidth=919&originalType=binary&ratio=1&rotation=0&showTitle=false&status=done&style=none&title=)
 
-After you submit your updates, OceanBase will review and comment if needed. Once we approve your updates, the system will automatically run CI testing and stress testing. If no issues are found in the tests, your updates will be merged. Now you have successfully completed your contribution task and become one of our contributors.
+After you submit your updates, OceanBase SeekDB will review and comment if needed. Once we approve your updates, the system will automatically run CI testing and stress testing. If no issues are found in the tests, your updates will be merged. Now you have successfully completed your contribution task and become one of our contributors.

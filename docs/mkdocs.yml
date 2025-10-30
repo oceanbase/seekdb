@@ -1,7 +1,7 @@
-site_name: OceanBase Developer Guide
-site_url: https://oceanbase.github.io/oceanbase
-repo_url: https://github.com/oceanbase/oceanbase
-repo_name: oceanbase/oceanbase
+site_name: OceanBase SeekDB Developer Guide
+site_url: https://oceanbase.github.io/oceanbase-seekdb
+repo_url: https://github.com/oceanbase/oceanbase-seekdb
+repo_name: oceanbase/oceanbase-seekdb
 plugins:
   - search
   #- material-relative-language-selector

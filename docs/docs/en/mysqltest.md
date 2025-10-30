@@ -1,42 +1,23 @@
 # Running mysqltest by obd.sh
 
-When using obd.sh to run the mysqltest test, you need to use the OceanBase database deployed through obd.sh. This article uses examples to introduce how to use obd.sh to deploy the OceanBase database and run the mysqltest test starting from compiling the source code.
+When using obd.sh to run the mysqltest test, you need to use the OceanBase SeekDB database deployed through obd.sh. This article uses examples to introduce how to use obd.sh to deploy the SeekDB database and run the mysqltest test starting from compiling the source code.
 
 ## Background
 
-In order to simplify the operating steps for developers and reduce their understanding costs, we encapsulate some OBD commands into the obd.sh script and store the script in the oceanbase/tools/deploy directory of the OceanBase source code. This article runs the mysqltest test by calling the [obd test mysqltest](https://www.oceanbase.com/docs/community-obd-cn-10000000002048173) commands in OBD.
+In order to simplify the operating steps for developers and reduce their understanding costs, we encapsulate some OBD commands into the obd.sh script and store the script in the oceanbase/tools/deploy directory of the SeekDB source code. This article runs the mysqltest test by calling the [obd test mysqltest](https://www.oceanbase.com/docs/community-obd-cn-10000000002048173) commands in OBD.
 
 ## Concepts
 
-mysqltest is a test in the OceanBase database access test. Simply put, it takes the written case file as input and compares the output of the database with the expected output. The cases tested by mysqltest in the OceanBase database are all located in the `tools/deploy/mysql_test` directory of the OceanBase source code.
+mysqltest is a test in the SeekDB database access test. Simply put, it takes the written case file as input and compares the output of the database with the expected output. The cases tested by mysqltest in the SeekDB database are all located in the `tools/deploy/mysqltest` directory of the SeekDB source code.
 
 `case` is the smallest execution unit of mysqltest. A `case` contains at least one test file and one result file. Classifying cases forms a `suite`, and a `suite` is a collection of cases.
 
-When running the mysqltest test, it is divided into different modes according to the selected nodes. The common mysqltest modes are as follows.
-
-* c mode: Connect to the server where the Primary Zone is located to run mysqltest. For example, use the configuration file distributed.yaml to deploy the cluster and then connect to server1 to run the test.
-  
-  ```shell
-  ./obd.sh mysqltest -n <name> --suite acs --test-server=server1
-  ```
-
-* Slave mode: Connect to a server other than the Primary Zone to run mysqltest. For example, use the configuration file distributed.yaml to deploy the cluster and then connect to server2 to run the test.
-
-  ```shell
-  ./obd.sh mysqltest -n <name> --suite acs --test-server=server2
-  ```
-
-* Proxy mode: Connect to the cluster through ODP for mysqltest testing. For example, use the configuration file distributed-with-proxy.yaml to deploy the cluster and run the test.
-
-  ```shell
-  ./obd.sh mysqltest -n <name> --all
-  ```
 
 ## Steps
 
-### Step 1: Compile OceanBase database from source code
+### Step 1: Compile OceanBase SeekDB database from source code
 
-Please refer to [build-and-run](./build-and-run.md) to compile the OceanBase database from source code.
+Please refer to [build-and-run](./build-and-run.md) to compile the SeekDB database from source code.
 
 ### Step 2: Run mysqltest test
 
@@ -70,8 +51,6 @@ When executing the mysqltest test, you can configure some parameters according t
 | Parameter Name | Required | Type | Default | Note |
 |--------|---------|----------|-------|------|
 | -n     | Y  | string | null | The cluster name. |
-| --component | N  | string | null | The name of the component to be tested. Candidates are obproxy, obproxy-ce, oceanbase, and oceanbase-ce. When empty, checks are performed in the order obproxy, obproxy-ce, oceanbase, oceanbase-ce. If it is detected that the component exists, it will no longer be traversed, and the hit component will be used for subsequent testing. |
-| --test-server | N  | string | The default is the first node in the server under the specified component | The machine to be tested can be set to the name value corresponding to the servers in the yaml file. If the name value is not configured after servers, the ip value will be used, which must be under the specified component. A certain node name. |
 | --user | N  | string | admin | The username for executing the test, generally does not need to be modified.。 |
 | --password | N | string | admin | Password |
 | --database | N  | string | test | database |
