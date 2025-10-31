@@ -298,25 +298,24 @@ do
     while read -r line
     do
         [[ "$line" == "" ]] && continue
-	pkg=${line%%\ *}
-	target_name="default"
+        pkg=${line%%\ *}
+        target_name="default"
         temp=$(echo "$line" | grep -Eo "target=(\S*)")
         [[ "$temp" != "" ]] && target_name=${temp#*=}
        
        	# 适配 ob 制品源下载地址
-	if [[ "${AL3_RELEASE}x" == "1x" && ( "${target_name}x" == "defaultx" || "${target_name}x" == "testx" ) ]]; then
-	    pkg_version=${pkg%.al8.${OS_ARCH}.rpm}
-	    pkg_name=$(echo "$pkg_version" | sed 's/\(.*\)-.*-.*/\1/')
-	    pkg_path=${pkg_name}/${pkg}
-	else
-      pkg_path=${pkg}
-	fi
+        pkg_path=${pkg}
+        repo=${targets["$target_name"]}
+        if [[ "${AL3_RELEASE}" == "1" && ("${target_name}" == "default" || "${target_name}" == "test") && "$repo" != *"mirror"* ]]; then
+            pkg_version=${pkg%.al8.${OS_ARCH}.rpm}
+            pkg_name=$(echo "$pkg_version" | sed 's/\(.*\)-.*-.*/\1/')
+            pkg_path=${pkg_name}/${pkg}
+        fi
 
-	if [[ -f "${TARGET_DIR_3RD}/pkg/${pkg}" ]]; then
+	      if [[ -f "${TARGET_DIR_3RD}/pkg/${pkg}" ]]; then
             echo_log "find package <${pkg}> in cache"
         else
             echo_log "downloading package <${pkg}>"
-            repo=${targets["$target_name"]}
             TEMP=$(mktemp -p "/" -u ".${pkg}.XXXX")
             wget "$repo/${pkg_path}" -O "${TARGET_DIR_3RD}/pkg/${TEMP}" &> ${TARGET_DIR_3RD}/pkg/error.log
             if (( $? == 0 )); then
