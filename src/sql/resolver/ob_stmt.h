@@ -384,6 +384,10 @@ public:
             // ccl
             || stmt_type == stmt::T_CREATE_CCL_RULE
             || stmt_type == stmt::T_DROP_CCL_RULE
+            // location
+            || stmt_type == stmt::T_CREATE_LOCATION
+            || stmt_type == stmt::T_ALTER_LOCATION
+            || stmt_type == stmt::T_DROP_LOCATION
             );
   }
 

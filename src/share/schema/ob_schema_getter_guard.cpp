@@ -1859,6 +1859,12 @@ int ObSchemaGetterGuard::verify_read_only(const uint64_t tenant_id,
           }
           break;
         }
+        case OB_PRIV_OBJECT_LEVEL: {
+          if (OB_FAIL(verify_db_read_only(tenant_id, need_priv))) {
+            LOG_WARN("db is read only, can't not execute this statement", KR(ret));
+          }
+          break;
+        }
         default:{
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("unknown privilege level", K(need_priv), KR(ret));
@@ -3653,6 +3659,7 @@ GET_SCHEMAS_WITH_MGR_IN_TENANT_FUNC_DEFINE(routine_mgr_, routine, ObRoutineInfo,
 GET_SCHEMAS_WITH_MGR_IN_TENANT_FUNC_DEFINE(package_mgr_, package, ObPackageInfo, ObSimplePackageSchema, PACKAGE_SCHEMA);
 GET_SCHEMAS_WITH_MGR_IN_TENANT_FUNC_DEFINE(trigger_mgr_, trigger, ObTriggerInfo, ObSimpleTriggerSchema, TRIGGER_SCHEMA);
 GET_SCHEMAS_WITH_MGR_IN_TENANT_FUNC_DEFINE(directory_mgr_, directory, ObDirectorySchema, ObDirectorySchema, DIRECTORY_SCHEMA);
+GET_SCHEMAS_WITH_MGR_IN_TENANT_FUNC_DEFINE(location_mgr_, location, ObLocationSchema, ObLocationSchema, LOCATION_SCHEMA);
 #undef GET_SCHEMAS_WITH_MGR_IN_TENANT_FUNC_DEFINE
 
 int ObSchemaGetterGuard::get_outline_infos_in_tenant(const uint64_t tenant_id,

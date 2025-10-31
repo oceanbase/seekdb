@@ -102,6 +102,11 @@ ob_set_subtarget(ob_rootserver common
   ob_ccl_ddl_operator.cpp
   ob_ai_model_ddl_operator.cpp
   ob_ai_model_ddl_service.cpp
+  ob_location_ddl_operator.cpp
+  ob_location_ddl_service.cpp
+  ob_objpriv_mysql_ddl_operator.cpp
+  ob_objpriv_mysql_ddl_service.cpp
+  ob_objpriv_mysql_schema_history_recycler.cpp
 )
 
 ob_set_subtarget(ob_rootserver balance

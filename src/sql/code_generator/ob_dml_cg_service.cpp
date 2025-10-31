@@ -22,6 +22,7 @@
 #include "sql/optimizer/ob_log_insert.h"
 #include "sql/optimizer/ob_log_update.h"
 #include "share/domain_id/ob_domain_id.h"
+#include "share/external_table/ob_external_table_utils.h"
 
 namespace oceanbase
 {
@@ -3245,8 +3246,9 @@ int ObDmlCgService::generate_table_loc_meta(const IndexDMLInfo &index_dml_info,
     loc_meta.unuse_related_pruning_ = (OB_PHY_PLAN_DISTRIBUTED == cg_.opt_ctx_->get_phy_plan_type()
                                        && !cg_.opt_ctx_->get_root_stmt()->is_insert_stmt());
     loc_meta.is_external_table_ = table_schema->is_external_table();
-    loc_meta.is_external_files_on_disk_ =
-        ObSQLUtils::is_external_files_on_local_disk(table_schema->get_external_file_location());
+    ObString file_location;
+    OZ(ObExternalTableUtils::get_external_file_location(*table_schema, *schema_guard, cg_.phy_plan_->get_allocator(), file_location));
+    loc_meta.is_external_files_on_disk_ = ObSQLUtils::is_external_files_on_local_disk(file_location);
   }
   if (OB_SUCC(ret) && index_dml_info.is_primary_index_) {
     TableLocRelInfo *rel_info = nullptr;
@@ -3952,8 +3954,9 @@ int ObDmlCgService::generate_rowkey_domain_ctdef(
     loc_meta->unuse_related_pruning_ = (OB_PHY_PLAN_DISTRIBUTED == cg_.opt_ctx_->get_phy_plan_type()
                                        && !cg_.opt_ctx_->get_root_stmt()->is_insert_stmt());
     loc_meta->is_external_table_ = rowkey_domain_schema->is_external_table();
-    loc_meta->is_external_files_on_disk_ =
-        ObSQLUtils::is_external_files_on_local_disk(rowkey_domain_schema->get_external_file_location());
+    ObString file_location;
+    OZ(ObExternalTableUtils::get_external_file_location(*rowkey_domain_schema, *schema_guard->get_schema_guard(), cg_.phy_plan_->get_allocator(), file_location));
+    loc_meta->is_external_files_on_disk_ = ObSQLUtils::is_external_files_on_local_disk(file_location);
     scan_ctdef->table_param_.get_enable_lob_locator_v2() = true;
     scan_ctdef->schema_version_ = rowkey_domain_schema->get_schema_version();
     ObSEArray<ObExpr *, 1> domain_id_expr;

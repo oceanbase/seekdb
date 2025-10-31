@@ -29,6 +29,8 @@
 #include "share/schema/ob_ccl_schema_struct.h"
 #include "share/schema/ob_ccl_rule_mgr.h"
 #include "share/schema/ob_ai_model_mgr.h"
+#include "share/schema/ob_location_schema_struct.h"
+#include "share/schema/ob_objpriv_mysql_schema_struct.h"
 
 namespace oceanbase
 {
@@ -567,6 +569,10 @@ public:
   int get_obj_privs(
       const ObObjPrivSortKey &obj_priv_key,
       ObPackedObjPriv &obj_privs);
+  int get_obj_mysql_priv_set(const ObObjMysqlPrivSortKey &obj_mysql_priv_key, ObPrivSet &priv_set);
+  int get_obj_mysql_priv_with_user_id(const uint64_t tenant_id,
+                                      const uint64_t user_id,
+                                      ObIArray<const ObObjMysqlPriv *> &obj_mysql_privs);
   //TODO@xiyu: ObDDLOperator::drop_tablegroup
   int check_database_exists_in_tablegroup(
       const uint64_t tenant_id,
@@ -792,6 +798,26 @@ public:
                                       common::ObIArray<const ObDirectorySchema *> &directory_schemas);
   // directory function end
 
+  // location function begin
+  int get_location_schema_by_name(const uint64_t tenant_id,
+                                  const common::ObString &name,
+                                  const ObLocationSchema *&schema);
+  int get_location_schema_by_id(const uint64_t tenant_id,
+                                const uint64_t location_id,
+                                const ObLocationSchema *&schema);
+  int get_location_schemas_in_tenant(const uint64_t tenant_id,
+                                     common::ObIArray<const ObLocationSchema *> &location_schemas);
+  int check_location_access(const ObSessionPrivInfo &session_priv,
+                            const common::ObIArray<uint64_t> &enable_role_id_array,
+                            const ObString &location_name,
+                            bool is_write = false);
+  int check_location_show(const ObSessionPrivInfo &session_priv,
+                          const common::ObIArray<uint64_t> &enable_role_id_array,
+                          const common::ObString &location_name,
+                          bool &allow_show);
+  // location function end
+
+
   // catalog function begin
   int get_catalog_schema_by_name(const uint64_t tenant_id,
                                  const common::ObString &name,
@@ -876,6 +902,14 @@ public:
                          const ObNeedPriv &routine_need_priv);
 
   int check_routine_definer_existed(uint64_t tenant_id, const ObString &user_name, bool &existed);
+  int check_obj_mysql_priv(const ObSessionPrivInfo &session_priv,
+                           const common::ObIArray<uint64_t> &enable_role_id_array,
+                           const ObNeedPriv &obj_mysql_need_priv);
+  int get_obj_mysql_priv_with_obj_name(const uint64_t tenant_id,
+                                       const ObString &obj_name,
+                                       const uint64_t obj_type,
+                                       ObIArray<const ObObjMysqlPriv *> &obj_privs,
+                                       bool reset_flag);
 
   int get_ccl_rule_with_name(const uint64_t tenant_id,
                              const common::ObString &name,

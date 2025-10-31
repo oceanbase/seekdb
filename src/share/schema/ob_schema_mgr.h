@@ -38,6 +38,7 @@
 #include "share/schema/ob_catalog_mgr.h"
 #include "share/schema/ob_ccl_rule_mgr.h"
 #include "share/schema/ob_ai_model_mgr.h"
+#include "share/schema/ob_location_mgr.h"
 
 namespace oceanbase
 {
@@ -653,6 +654,15 @@ public:
       const ObString &ai_model_name,
       const common::ObNameCaseMode &case_mode,
       const ObAiModelSchema *&ai_model_schema) const;
+  int get_location_schema(
+      const uint64_t tenant_id,
+      const uint64_t schema_id,
+      const ObLocationSchema *&schema) const;
+  // location
+  int add_locations(const common::ObIArray<ObLocationSchema> &location_schemas);
+  int add_location(const ObLocationSchema &location_schema);
+  int del_location(const ObTenantLocationId &id);
+
 
   // other
   int get_tenant_schemas(common::ObIArray<const ObSimpleTenantSchema *> &tenant_schemas) const;
@@ -875,6 +885,7 @@ private:
   int64_t allocator_idx_;
   TableInfos mlog_infos_;
   ObAiModelMgr ai_model_mgr_;
+  ObLocationMgr location_mgr_;
 };
 
 }//end of namespace schema

@@ -257,4 +257,11 @@ void oceanbase::observer::init_srv_xlator_for_rootserver(ObSrvRpcXlator *xlator)
     RPC_PROCESSOR(rootserver::ObForceDropLonelyLobAuxTableP, *gctx_.root_service_);
     RPC_PROCESSOR(rootserver::ObRpcCreateAiModelP, *gctx_.root_service_);
     RPC_PROCESSOR(rootserver::ObRpcDropAiModelP, *gctx_.root_service_);
+
+    // for location
+    RPC_PROCESSOR(rootserver::ObRpcCreateLocationP, *gctx_.root_service_);
+    RPC_PROCESSOR(rootserver::ObRpcDropLocationP, *gctx_.root_service_);
+
+    // mysql obj priv
+    RPC_PROCESSOR(rootserver::ObRpcRevokeObjP, *gctx_.root_service_);
 }

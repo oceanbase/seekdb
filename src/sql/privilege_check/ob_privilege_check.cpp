@@ -52,6 +52,7 @@
 #include "sql/resolver/dcl/ob_alter_user_profile_stmt.h"
 #include "sql/optimizer/ob_optimizer_util.h"
 #include "sql/resolver/cmd/ob_event_stmt.h"
+#include "sql/resolver/cmd/ob_location_utils_stmt.h"
 
 namespace oceanbase {
 using namespace share;
@@ -437,6 +438,38 @@ int get_dml_stmt_need_privs(
               }
             }
             
+            if (OB_SUCC(ret)
+               && ObTableType::EXTERNAL_TABLE == table_item->table_type_
+               && common::OB_INVALID_ID != table_item->external_location_id_) {
+              ObSchemaGetterGuard schema_guard;
+              CK(GCTX.schema_service_ != NULL);
+              OZ(GCTX.schema_service_->get_tenant_schema_guard(session_priv.tenant_id_, schema_guard));
+              // const ObTableSchema *table_schema = NULL;
+              // LOG_INFO("table id", K(table_item->table_id_), K(table_item->ref_id_), K(table_item->database_name_), K(table_item->table_name_));
+              // if (OB_FAIL(schema_guard.get_table_schema(session_priv.tenant_id_, table_item->ref_id_, table_schema))) {
+              //   LOG_WARN("failed to get table schema", K(ret));
+              // } else if (OB_ISNULL(table_schema)) {
+              //   ret = OB_ERR_UNEXPECTED;
+              //   LOG_WARN("table schema is null", K(ret));
+              // } else if (OB_INVALID_ID != table_schema->get_external_location_id()) {
+                const ObLocationSchema *location_schema = NULL;
+                if (OB_FAIL(schema_guard.get_location_schema_by_id(session_priv.tenant_id_, table_item->external_location_id_, location_schema))) {
+                  LOG_WARN("failed to get location schema", K(ret));
+                } else if (OB_ISNULL(location_schema)) {
+                  ret = OB_ERR_UNEXPECTED;
+                  LOG_WARN("location schema is null", K(ret));
+                } else {
+                  ObNeedPriv tmp_need_priv;
+                  tmp_need_priv.db_ = table_item->database_name_;
+                  tmp_need_priv.table_ = location_schema->get_location_name();
+                  tmp_need_priv.priv_level_ = OB_PRIV_OBJECT_LEVEL;
+                  tmp_need_priv.priv_set_ = OB_PRIV_READ;
+                  tmp_need_priv.obj_type_ = ObObjectType::LOCATION;
+                  ADD_NEED_PRIV(tmp_need_priv);
+                }
+              // }
+            }
+
             if (OB_SUCC(ret)) {
               if (lib::is_mysql_mode()) {
                 if (OB_FAIL(add_col_priv_to_need_priv(basic_stmt, *table_item, need_privs))) {
@@ -684,6 +717,31 @@ int get_create_table_stmt_need_privs(
             need_priv.priv_set_ = OB_PRIV_REFERENCES;
             ADD_NEED_PRIV(need_priv);
           }
+        }
+      }
+
+      // check location object
+      if (OB_SUCC(ret) && ObTableType::EXTERNAL_TABLE == stmt->get_table_type()
+          && OB_INVALID_ID != stmt->get_external_location_id()) {
+        ObSchemaGetterGuard schema_guard;
+        const ObLocationSchema *location_schema = NULL;
+        CK(GCTX.schema_service_ != NULL);
+        OZ(GCTX.schema_service_->get_tenant_schema_guard(session_priv.tenant_id_, schema_guard));
+        if (OB_FAIL(schema_guard.get_location_schema_by_id(session_priv.tenant_id_,
+                                                           stmt->get_external_location_id(),
+                                                           location_schema))) {
+          LOG_WARN("failed to get location schema");
+        } else if (OB_ISNULL(location_schema)) {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("location schema is null");
+        } else {
+          ObNeedPriv tmp_need_priv;
+          tmp_need_priv.db_ = stmt->get_database_name();
+          tmp_need_priv.table_ = location_schema->get_location_name();
+          tmp_need_priv.priv_level_ = OB_PRIV_OBJECT_LEVEL;
+          tmp_need_priv.priv_set_ = OB_PRIV_READ;
+          tmp_need_priv.obj_type_ = ObObjectType::LOCATION;
+          ADD_NEED_PRIV(tmp_need_priv);
         }
       }
     }
@@ -1414,6 +1472,71 @@ int get_catalog_privs(
         need_priv.priv_set_ = OB_PRIV_CREATE_CATALOG;
         need_priv.priv_level_ = OB_PRIV_USER_LEVEL;
         ADD_NEED_PRIV(need_priv);
+        break;
+      }
+      default: {
+        ret = OB_INVALID_ARGUMENT;
+        LOG_WARN("Stmt type not in types dealt in this function", K(ret), K(stmt_type));
+        break;
+      }
+    }
+  }
+  return ret;
+}
+
+int get_location_privs(const ObSessionPrivInfo &session_priv,
+                       const ObStmt *basic_stmt,
+                       ObIArray<ObNeedPriv> &need_privs)
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(basic_stmt)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("Basic stmt should be not be NULL", K(ret));
+  } else if (lib::is_oracle_mode()) {
+    ret = no_priv_needed(session_priv, basic_stmt, need_privs);
+  } else {
+    ObNeedPriv need_priv;
+    stmt::StmtType stmt_type = basic_stmt->get_stmt_type();
+    switch (stmt_type) {
+      case stmt::T_CREATE_LOCATION:
+      case stmt::T_DROP_LOCATION: {
+        need_priv.priv_set_ = OB_PRIV_CREATE_LOCATION;
+        need_priv.priv_level_ = OB_PRIV_USER_LEVEL;
+        ADD_NEED_PRIV(need_priv);
+        break;
+      }
+      default: {
+        ret = OB_INVALID_ARGUMENT;
+        LOG_WARN("Stmt type not in types dealt in this function", K(ret), K(stmt_type));
+        break;
+      }
+    }
+  }
+  return ret;
+}
+
+int get_location_util_privs(const ObSessionPrivInfo &session_priv,
+                            const ObStmt *basic_stmt,
+                            ObIArray<ObNeedPriv> &need_privs)
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(basic_stmt)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("Basic stmt should be not be NULL", K(ret));
+  } else if (lib::is_oracle_mode()) {
+    ret = no_priv_needed(session_priv, basic_stmt, need_privs);
+  } else {
+    ObNeedPriv need_priv;
+    stmt::StmtType stmt_type = basic_stmt->get_stmt_type();
+    const ObLocationUtilsStmt *stmt = static_cast<const ObLocationUtilsStmt*>(basic_stmt);
+    switch (stmt_type) {
+      case stmt::T_LOCATION_UTILS: {
+        ObNeedPriv tmp_need_priv;
+        tmp_need_priv.table_ = stmt->get_location_name();
+        tmp_need_priv.priv_level_ = OB_PRIV_OBJECT_LEVEL;
+        tmp_need_priv.priv_set_ = OB_PRIV_WRITE;
+        tmp_need_priv.obj_type_ = ObObjectType::LOCATION;
+        ADD_NEED_PRIV(tmp_need_priv);
         break;
       }
       default: {

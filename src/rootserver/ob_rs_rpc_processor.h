@@ -691,6 +691,12 @@ DEFINE_DDL_RS_RPC_PROCESSOR(obrpc::OB_FORCE_DROP_LONELY_LOB_AUX_TABLE, ObForceDr
 DEFINE_DDL_RS_RPC_PROCESSOR(obrpc::OB_CREATE_AI_MODEL, ObRpcCreateAiModelP, create_ai_model(arg_));
 DEFINE_DDL_RS_RPC_PROCESSOR(obrpc::OB_DROP_AI_MODEL, ObRpcDropAiModelP, drop_ai_model(arg_));
 
+// location object
+DEFINE_DDL_RS_RPC_PROCESSOR(obrpc::OB_CREATE_LOCATION, ObRpcCreateLocationP, create_location(arg_));
+DEFINE_DDL_RS_RPC_PROCESSOR(obrpc::OB_DROP_LOCATION, ObRpcDropLocationP, drop_location(arg_));
+
+DEFINE_DDL_RS_RPC_PROCESSOR(obrpc::OB_REVOKE_OBJECT, ObRpcRevokeObjP, revoke_object(arg_));
+
 #undef DEFINE_RS_RPC_PROCESSOR_
 #undef DEFINE_RS_RPC_PROCESSOR
 #undef DEFINE_LIMITED_RS_RPC_PROCESSOR

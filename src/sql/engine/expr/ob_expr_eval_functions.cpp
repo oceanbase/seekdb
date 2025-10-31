@@ -391,6 +391,7 @@
 #include "sql/engine/expr/ob_expr_ai/ob_expr_ai_rerank.h"
 #include "sql/engine/expr/ob_expr_ai/ob_expr_ai_prompt.h"
 #include "ob_expr_vector_similarity.h"
+#include "ob_expr_check_location_access.h"
 
 namespace oceanbase
 {
@@ -1330,7 +1331,7 @@ static ObExpr::EvalFunc g_expr_eval_functions[] = {
   ObExprMapValues::eval_map_values,                                    /* 846 */
   ObExprSpivDim::generate_spiv_dim,                                    /* 847 */
   ObExprInnerInfoColsColumnKeyPrinter::eval_column_column_key,         /* 848 */
-  NULL, // ObExprCheckLocationAccess::eval_check_location_access,      /* 849 */
+  ObExprCheckLocationAccess::eval_check_location_access,               /* 849 */
   NULL, // ObExprUDF::eval_external_udf,                               /* 850 */
   NULL, // ObExprStartUpMode::eval_startup_mode,                       /* 851 */ 
   ObExprVectorL2Squared::calc_l2_squared,                              /* 852 */

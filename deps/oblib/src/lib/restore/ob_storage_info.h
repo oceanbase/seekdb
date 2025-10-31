@@ -75,6 +75,7 @@ const char *const REGION = "s3_region=";
 const char *const MAX_IOPS = "max_iops=";
 const char *const MAX_BANDWIDTH = "max_bandwidth=";
 const char *const ENABLE_WORM = "enable_worm=";
+const char* const SEPERATE_SYMBOL = "&";
 
 const char *const ADDRESSING_MODEL = "addressing_model=";
 const char *const ADDRESSING_MODEL_VIRTUAL_HOSTED_STYLE = "virtual_hosted_style";

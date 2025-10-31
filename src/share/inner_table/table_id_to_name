@@ -328,6 +328,12 @@
 # 551: __all_ai_model_history
 # 551: __all_ai_model  # BASE_TABLE_NAME
 # 552: __all_ai_model_endpoint
+# 553: __all_tenant_location
+# 554: __all_tenant_location_history
+# 554: __all_tenant_location  # BASE_TABLE_NAME
+# 555: __all_tenant_objauth_mysql
+# 556: __all_tenant_objauth_mysql_history
+# 556: __all_tenant_objauth_mysql  # BASE_TABLE_NAME
 # 10001: __tenant_virtual_all_table
 # 10002: __tenant_virtual_table_column
 # 10003: __tenant_virtual_table_index
@@ -1064,6 +1070,18 @@
 # 12552: __all_ai_model_history  # BASE_TABLE_NAME1
 # 12553: __all_virtual_ai_model_endpoint
 # 12553: __all_ai_model_endpoint  # BASE_TABLE_NAME
+# 12554: __all_virtual_tenant_location
+# 12554: __all_tenant_location  # BASE_TABLE_NAME
+# 12555: __all_virtual_tenant_location_history
+# 12555: __all_tenant_location  # BASE_TABLE_NAME
+# 12555: __all_tenant_location_history  # BASE_TABLE_NAME1
+# 12556: __all_virtual_objauth_mysql
+# 12556: __all_tenant_objauth_mysql  # BASE_TABLE_NAME
+# 12557: __all_virtual_objauth_mysql_history
+# 12557: __all_tenant_objauth_mysql  # BASE_TABLE_NAME
+# 12557: __all_tenant_objauth_mysql_history  # BASE_TABLE_NAME1
+# 12558: __tenant_virtual_show_create_location
+# 12559: __tenant_virtual_list_file
 # 20001: GV$OB_PLAN_CACHE_STAT
 # 20002: GV$OB_PLAN_CACHE_PLAN_STAT
 # 20003: SCHEMATA
@@ -1917,6 +1935,15 @@
 # 101117: __idx_552_idx_ai_model_name
 # 101117: idx_ai_model_name  # INDEX_NAME
 # 101117: __all_ai_model_endpoint  # DATA_BASE_TABLE_NAME
+# 101118: __idx_553_idx_location_name
+# 101118: idx_location_name  # INDEX_NAME
+# 101118: __all_tenant_location  # DATA_BASE_TABLE_NAME
+# 101119: __idx_555_idx_objauth_mysql_user_id
+# 101119: idx_objauth_mysql_user_id  # INDEX_NAME
+# 101119: __all_tenant_objauth_mysql  # DATA_BASE_TABLE_NAME
+# 101120: __idx_555_idx_objauth_mysql_obj_name
+# 101120: idx_objauth_mysql_obj_name  # INDEX_NAME
+# 101120: __all_tenant_objauth_mysql  # DATA_BASE_TABLE_NAME
 # 101104: __idx_482_idx_tablet_his_table_id_dest
 # 101104: idx_tablet_his_table_id_dest  # INDEX_NAME
 # 101104: __all_tablet_reorganize_history  # DATA_BASE_TABLE_NAME

@@ -1987,6 +1987,10 @@ constexpr int OB_CCL_RULE_EXIST = -11085;
 constexpr int OB_CCL_RULE_NOT_EXIST = -11086;
 constexpr int OB_REACH_MAX_CCL_CONCURRENT_NUM = -11087;
 constexpr int OB_REACH_DIAGNOSIS_ERROR_LIMIT = -11088;
+constexpr int OB_LOCATION_IN_USE = -11089;
+constexpr int OB_ERR_LOCATION_ACCESS_DENIED = -11090;
+constexpr int OB_LOCATION_OBJ_EXIST = -11091;
+constexpr int OB_LOCATION_OBJ_NOT_EXIST = -11092;
 constexpr int OB_AI_FUNC_ENDPOINT_NOT_FOUND = -11112;
 constexpr int OB_AI_FUNC_ENDPOINT_EXISTS = -11113;
 constexpr int OB_AI_FUNC_PARAM_EMPTY = -11114;
@@ -4427,6 +4431,10 @@ constexpr int OB_ERR_DATA_TOO_LONG_MSG_FMT_V2 = -5167;
 #define OB_CCL_RULE_NOT_EXIST__USER_ERROR_MSG "CCL rule '%.*s' doesn\'t exist"
 #define OB_REACH_MAX_CCL_CONCURRENT_NUM__USER_ERROR_MSG "SQL reach max ccl rule %s, concurrent num %ld"
 #define OB_REACH_DIAGNOSIS_ERROR_LIMIT__USER_ERROR_MSG "reject limit %ld reached"
+#define OB_LOCATION_IN_USE__USER_ERROR_MSG "Location is still in use"
+#define OB_ERR_LOCATION_ACCESS_DENIED__USER_ERROR_MSG "Location access denied"
+#define OB_LOCATION_OBJ_EXIST__USER_ERROR_MSG "Can't create location '%.*s'; location exists"
+#define OB_LOCATION_OBJ_NOT_EXIST__USER_ERROR_MSG "location '%.*s' doesn\'t exist"
 #define OB_AI_FUNC_ENDPOINT_NOT_FOUND__USER_ERROR_MSG "This ai model endpoint \'%.*s\' not found in the tenant"
 #define OB_AI_FUNC_ENDPOINT_EXISTS__USER_ERROR_MSG "This ai model endpoint \'%.*s\' is already exists"
 #define OB_AI_FUNC_PARAM_EMPTY__USER_ERROR_MSG "The param \'%.*s\' is empty or null"
@@ -9288,6 +9296,14 @@ constexpr int OB_ERR_DATA_TOO_LONG_MSG_FMT_V2 = -5167;
 #define OB_REACH_MAX_CCL_CONCURRENT_NUM__OBE_USER_ERROR_MSG "OBE-00600: internal error code, arguments: -11087, SQL reach max ccl rule %s, concurrent num %ld"
 #define OB_REACH_DIAGNOSIS_ERROR_LIMIT__ORA_USER_ERROR_MSG "ORA-00600: internal error code, arguments: -11088, reject limit %ld reached"
 #define OB_REACH_DIAGNOSIS_ERROR_LIMIT__OBE_USER_ERROR_MSG "OBE-00600: internal error code, arguments: -11088, reject limit %ld reached"
+#define OB_LOCATION_IN_USE__ORA_USER_ERROR_MSG "ORA-00600: internal error code, arguments: -11089, Location is still in use"
+#define OB_LOCATION_IN_USE__OBE_USER_ERROR_MSG "OBE-00600: internal error code, arguments: -11089, Location is still in use"
+#define OB_ERR_LOCATION_ACCESS_DENIED__ORA_USER_ERROR_MSG "ORA-00600: internal error code, arguments: -11090, Location access denied"
+#define OB_ERR_LOCATION_ACCESS_DENIED__OBE_USER_ERROR_MSG "OBE-00600: internal error code, arguments: -11090, Location access denied"
+#define OB_LOCATION_OBJ_EXIST__ORA_USER_ERROR_MSG "ORA-00600: internal error code, arguments: -11091, Can't create location '%.*s'; location exists"
+#define OB_LOCATION_OBJ_EXIST__OBE_USER_ERROR_MSG "OBE-00600: internal error code, arguments: -11091, Can't create location '%.*s'; location exists"
+#define OB_LOCATION_OBJ_NOT_EXIST__ORA_USER_ERROR_MSG "ORA-00600: internal error code, arguments: -11092, location '%.*s' doesn\'t exist"
+#define OB_LOCATION_OBJ_NOT_EXIST__OBE_USER_ERROR_MSG "OBE-00600: internal error code, arguments: -11092, location '%.*s' doesn\'t exist"
 #define OB_AI_FUNC_ENDPOINT_NOT_FOUND__ORA_USER_ERROR_MSG "ORA-00600: internal error code, arguments: -11112, This ai model endpoint \'%.*s\' not found in the tenant"
 #define OB_AI_FUNC_ENDPOINT_NOT_FOUND__OBE_USER_ERROR_MSG "OBE-00600: internal error code, arguments: -11112, This ai model endpoint \'%.*s\' not found in the tenant"
 #define OB_AI_FUNC_ENDPOINT_EXISTS__ORA_USER_ERROR_MSG "ORA-00600: internal error code, arguments: -11113, This ai model endpoint \'%.*s\' is already exists"
@@ -9323,7 +9339,7 @@ constexpr int OB_ERR_DATA_TOO_LONG_MSG_FMT_V2 = -5167;
 #define OB_ERR_DATA_TOO_LONG_MSG_FMT_V2__ORA_USER_ERROR_MSG "ORA-12899: value too large for column %.*s (actual: %ld, maximum: %ld)"
 #define OB_ERR_DATA_TOO_LONG_MSG_FMT_V2__OBE_USER_ERROR_MSG "OBE-12899: value too large for column %.*s (actual: %ld, maximum: %ld)"
 
-extern int g_all_ob_errnos[2477];
+extern int g_all_ob_errnos[2440];
 
   const char *ob_error_name(const int oberr);
   const char* ob_error_cause(const int oberr);

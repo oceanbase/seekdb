@@ -653,6 +653,13 @@ int ObCreateTableResolver::resolve(const ParseNode &parse_tree)
       }
     }
 
+    if (OB_SUCC(ret) && create_table_stmt->get_create_table_arg().schema_.is_external_table()) {
+      ObTableSchema &table_schema = create_table_stmt->get_create_table_arg().schema_;
+      if (OB_FAIL(ObSQLUtils::check_location_constraint(table_schema))) {
+        LOG_WARN("fail to check location constraint", K(ret), K(table_schema));
+      }
+    }
+
     if (OB_SUCC(ret)) {
       ObTableSchema &table_schema = create_table_stmt->get_create_table_arg().schema_;
       if (!table_schema.get_kv_attributes().empty() &&

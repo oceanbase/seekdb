@@ -59,6 +59,8 @@
 #include "rootserver/ob_load_sys_package_task.h"
 #include "rootserver/ob_catalog_ddl_service.h"
 #include "rootserver/ob_ccl_ddl_service.h"
+#include "rootserver/ob_location_ddl_service.h"
+#include "rootserver/ob_objpriv_mysql_ddl_service.h"
 
 namespace oceanbase
 {
@@ -570,6 +572,7 @@ public:
   int revoke_table(const obrpc::ObRevokeTableArg &arg);
   int revoke_routine(const obrpc::ObRevokeRoutineArg &arg);
   int alter_role(const obrpc::ObAlterRoleArg &arg);
+  int revoke_object(const obrpc::ObRevokeObjMysqlArg &arg);
   //----End of functions for managing privileges----
 
   //----Functions for managing outlines----
@@ -649,6 +652,11 @@ public:
   int create_ai_model(const obrpc::ObCreateAiModelArg &arg);
   int drop_ai_model(const obrpc::ObDropAiModelArg &arg);
   //----End of functions for managing ai model----
+
+  //----Functions for location object----
+  int create_location(const obrpc::ObCreateLocationArg &arg);
+  int drop_location(const obrpc::ObDropLocationArg &arg);
+  //----End of functions for location object----
 
   // server related
   int load_server_manager();

@@ -553,6 +553,14 @@ ob_set_subtarget(ob_share schema
   
   schema/ob_ai_model_mgr.cpp
   schema/ob_ai_model_sql_service.cpp
+  schema/ob_location_mgr.cpp
+  schema/ob_location_schema_struct.cpp
+  schema/ob_location_sql_service.cpp
+  schema/ob_objpriv_mysql_schema_struct.cpp
+  schema/ob_schema_getter_guard_location.cpp
+  schema/ob_schema_getter_guard_objpriv_mysql.cpp
+  schema/ob_location_schema_struct.cpp
+  schema/ob_schema_getter_guard_location.cpp
 )
 
 ob_set_subtarget(ob_share stat

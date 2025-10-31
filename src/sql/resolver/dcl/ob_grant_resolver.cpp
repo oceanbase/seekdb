@@ -568,6 +568,8 @@ int ObGrantResolver::resolve_priv_level_with_object_type(const ObSQLSessionInfo 
       grant_level = OB_PRIV_ROUTINE_LEVEL;
     } else if (priv_object_node->value_ == 4) {
       grant_level = OB_PRIV_CATALOG_LEVEL;
+    } else if (priv_object_node->value_ == 5) {
+        grant_level = OB_PRIV_OBJECT_LEVEL;
     } else {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected obj type", K(ret), K(priv_object_node->value_));
@@ -592,6 +594,7 @@ int ObGrantResolver::resolve_priv_level(
 {
   int ret = OB_SUCCESS;
   bool is_grant_routine = (grant_level == OB_PRIV_ROUTINE_LEVEL);
+  bool is_grant_object = (grant_level == OB_PRIV_OBJECT_LEVEL);
   if (OB_ISNULL(node)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("Invalid argument", K(node), K(ret));
@@ -666,7 +669,7 @@ int ObGrantResolver::resolve_priv_level(
         //do nothing
       }
     }
-    if (OB_SUCC(ret) && is_grant_routine) {
+    if (OB_SUCC(ret) && (is_grant_routine || is_grant_object)) {
       if (grant_level != OB_PRIV_TABLE_LEVEL) {
         // tmp_grant_level == OB_PRIV_TABLE_LEVEL means sql is like:
         // grant priv on [object type] ident to user
@@ -675,7 +678,7 @@ int ObGrantResolver::resolve_priv_level(
         ret = OB_ILLEGAL_GRANT_FOR_TABLE;
         LOG_WARN("illegal grant", K(ret));
       } else {
-        grant_level = OB_PRIV_ROUTINE_LEVEL;
+        grant_level = is_grant_routine ? OB_PRIV_ROUTINE_LEVEL : OB_PRIV_OBJECT_LEVEL;
       }
     }
   }

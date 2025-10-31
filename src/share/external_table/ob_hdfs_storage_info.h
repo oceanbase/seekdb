@@ -35,6 +35,7 @@ const char *const PRINCIPAL = "principal=";
 const char *const KEYTAB = "keytab=";
 const char *const TICKET_CACHE_PATH = "ticiket_cache_path=";
 const char *const HDFS_CONFIGS = "configs=";
+const char *const HADOOP_USERNAME = "username=";
 
 class ObHDFSStorageInfo : public common::ObObjectStorageInfo
 {

@@ -829,6 +829,7 @@ int ObUserSqlService::gen_user_dml(
     if ((user.get_priv_set() & OB_PRIV_ALTER_AI_MODEL) != 0) { priv_others |= OB_PRIV_OTHERS_ALTER_AI_MODEL; }
     if ((user.get_priv_set() & OB_PRIV_DROP_AI_MODEL) != 0) { priv_others |= OB_PRIV_OTHERS_DROP_AI_MODEL; }
     if ((user.get_priv_set() & OB_PRIV_ACCESS_AI_MODEL) != 0) { priv_others |= OB_PRIV_OTHERS_ACCESS_AI_MODEL; }
+    if ((user.get_priv_set() & OB_PRIV_CREATE_LOCATION) != 0) {priv_others |= OB_PRIV_OTHERS_CREATE_LOCATION; }
   }
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(dml.add_column("PRIV_OTHERS", priv_others))) {

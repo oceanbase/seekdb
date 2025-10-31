@@ -320,25 +320,22 @@ int ObObjectStorageInfo::set(const common::ObStorageType device_type, const char
   if (is_valid()) {
     ret = OB_INIT_TWICE;
     LOG_WARN("storage info init twice", K(ret));
-  } else if (OB_ISNULL(storage_info) || strlen(storage_info) >= OB_MAX_BACKUP_STORAGE_INFO_LENGTH) {
+  } else if (FALSE_IT(device_type_ = device_type)){
+  } else if (OB_ISNULL(storage_info) || strlen(storage_info) == 0) {
+    // when device_type is file or hdfs, storage_info can be empty
+    if (OB_STORAGE_FILE != device_type_ && OB_STORAGE_HDFS != device_type_) {
+      ret = OB_INVALID_BACKUP_DEST;
+      LOG_WARN("storage info is invalid", K(ret), KP(storage_info));
+    }
+  } else if (strlen(storage_info) >= OB_MAX_BACKUP_STORAGE_INFO_LENGTH) {
     ret = OB_INVALID_BACKUP_DEST;
     LOG_WARN("storage info is invalid", K(ret), KP(storage_info));
-  } else if (device_type == OB_STORAGE_AZBLOB) {
+  } else if (device_type_ == OB_STORAGE_AZBLOB) {
     if (OB_ISNULL(cluster_version_mgr_)) {
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("cluster_version_mgr is null", K(ret), KP(cluster_version_mgr_));
     } else if (OB_FAIL(cluster_version_mgr_->is_supported_azblob_version())) {
       LOG_WARN("azblob version is not supported", K(ret), K(device_type));
-    }
-  }
-
-  if (OB_FAIL(ret)) {
-  } else if (FALSE_IT(device_type_ = device_type)) {
-  } else if (0 == strlen(storage_info)) {
-    // Only file/hdfs storage could be with empty storage_info.
-    if (OB_STORAGE_FILE != device_type_ && OB_STORAGE_HDFS != device_type_) {
-      ret = OB_INVALID_BACKUP_DEST;
-      LOG_WARN("storage info is empty", K(ret), K_(device_type));
     }
   } else if (OB_FAIL(parse_storage_info_(storage_info, has_needed_extension))) {
     LOG_WARN("parse storage info failed", K(ret), KP(storage_info), K_(device_type));

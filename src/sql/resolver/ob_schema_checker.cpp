@@ -1526,6 +1526,26 @@ int ObSchemaChecker::get_directory_id(const uint64_t tenant_id,
   return ret;
 }
 
+int ObSchemaChecker::get_location_id(const uint64_t tenant_id,
+                                     const common::ObString &location_name,
+                                     uint64_t &location_id)
+{
+  int ret = OB_SUCCESS;
+  const ObLocationSchema *schema = NULL;
+  if (IS_NOT_INIT) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("schema checker is not inited", K_(is_inited));
+  } else if (OB_FAIL(schema_mgr_->get_location_schema_by_name(tenant_id, location_name, schema))) {
+    LOG_WARN("get location schema failed", K(ret));
+  } else if (OB_ISNULL(schema)) {
+    ret = OB_LOCATION_OBJ_NOT_EXIST;
+    LOG_WARN("location is not exists", K(location_name));
+  } else {
+    location_id = schema->get_location_id();
+  }
+  return ret;
+}
+
 int ObSchemaChecker::get_table_schema_inner(const uint64_t tenant_id, uint64_t table_id,
                                             const ObTableSchema *&table_schema) const
 {

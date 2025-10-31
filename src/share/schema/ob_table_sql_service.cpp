@@ -20,6 +20,7 @@
 #include "share/schema/ob_partition_sql_helper.h"
 #include "observer/omt/ob_tenant_timezone_mgr.h"
 #include "src/share/vector_index/ob_vector_index_util.h"
+#include "share/external_table/ob_external_table_utils.h"
 #include "share/storage_cache_policy/ob_storage_cache_partition_sql_helper.h"
 
 namespace oceanbase
@@ -3205,6 +3206,8 @@ int ObTableSqlService::gen_table_dml_without_check(
       || (OB_FAIL(dml.add_column("semistruct_encoding_type", table.get_semistruct_encoding_flags())))
       || (OB_FAIL(dml.add_column("dynamic_partition_policy", ObHexEscapeSqlStr(dynamic_partition_policy))))
       || (OB_FAIL(dml.add_column("merge_engine_type", table.get_merge_engine_type())))
+      || (OB_FAIL(dml.add_column("external_location_id", table.get_external_location_id())))
+      || (OB_FAIL(dml.add_column("external_sub_path", ObHexEscapeSqlStr(table.get_external_sub_path()))))
       ) {
         LOG_WARN("add column failed", K(ret));
       }

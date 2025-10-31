@@ -31,6 +31,7 @@
 #include "sql/resolver/ob_resolver_utils.h"
 #include "share/ob_fts_index_builder_util.h"
 #include "share/ob_license_utils.h"
+#include "rootserver/ob_location_ddl_service.h"
 
 using namespace oceanbase::lib;
 using namespace oceanbase::common;
@@ -893,6 +894,12 @@ int ObCreateTableHelper::generate_table_schema_()
       LOG_WARN("fail to check dynamic partition is supported", KR(ret), K(new_table));
     } else if (OB_FAIL(ObDynamicPartitionManager::check_is_valid(new_table))) {
       LOG_WARN("fail to check dynamic partition is valid", KR(ret), K(new_table));
+    }
+  }
+
+  if (OB_SUCC(ret) && new_table.is_external_table()) {
+    if (OB_FAIL(ObLocationDDLService::check_location_constraint(new_table))) {
+      LOG_WARN("fail to check location ", KR(ret), K(new_table));
     }
   }
 

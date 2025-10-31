@@ -345,6 +345,10 @@ public:
                        uint64_t &directory_id);
 
   int remove_tmp_cte_schemas(const ObString& cte_table_name);
+  // location
+  int get_location_id(const uint64_t tenant_id,
+                      const common::ObString &location_name,
+                      uint64_t &location_id);
 private:
 
   int get_table_schema_inner(const uint64_t tenant_id, uint64_t table_id,

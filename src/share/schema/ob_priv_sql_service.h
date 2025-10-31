@@ -178,6 +178,35 @@ public:
       const ObObjPriv &obj_priv,
       const int64_t new_schema_version,
       ObISQLClient &sql_client);
+  virtual int grant_object(
+        const ObObjMysqlPrivSortKey &obj_mysql_priv_key,
+        const ObPrivSet priv_set,
+        const int64_t new_schema_version,
+        const ObString *ddl_stmt_str,
+        ObISQLClient &sql_client,
+        const uint64_t option,
+        const bool is_grant,
+        const common::ObString &grantor,
+        const common::ObString &grantor_host);
+  virtual int gen_obj_mysql_priv_dml(
+        const uint64_t exec_tenant_id,
+        const ObObjMysqlPrivSortKey &obj_mysql_priv_key,
+        const ObPrivSet &priv_set,
+        ObDMLSqlSplicer &dml,
+        const common::ObString &grantor,
+        const common::ObString &grantor_host);
+  virtual int revoke_object(
+        const ObObjMysqlPrivSortKey &object_priv_key,
+        const ObPrivSet priv_set,
+        const int64_t new_schema_version,
+        const ObString *ddl_stmt_str,
+        ObISQLClient &sql_client,
+        const common::ObString &grantor,
+        const common::ObString &grantor_host);
+  virtual int delete_obj_mysql_priv(
+        const ObObjMysqlPriv &obj_priv,
+        const int64_t new_schema_version,
+        ObISQLClient &sql_client);
 
 private:
   int log_obj_priv_operation(
@@ -253,6 +282,13 @@ private:
     const uint64_t exec_tenant_id,
     const ObRoutinePrivSortKey &routine_priv_key,
     ObDMLSqlSplicer &dml);
+  int add_obj_mysql_priv_history(
+        const ObObjMysqlPrivSortKey &obj_mysql_priv_key,
+        const ObPrivSet &priv_set,
+        const int64_t schema_version,
+        common::ObISQLClient &sql_client,
+        const common::ObString &grantor,
+        const common::ObString &grantor_host);
 
 private:
   DISALLOW_COPY_AND_ASSIGN(ObPrivSqlService);

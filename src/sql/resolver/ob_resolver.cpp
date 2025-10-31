@@ -131,6 +131,10 @@
 #include "sql/resolver/ddl/ob_create_ccl_rule_resolver.h"
 #include "sql/resolver/ddl/ob_drop_ccl_rule_resolver.h"
 #include "sql/resolver/ddl/ob_catalog_resolver.h"
+#include "sql/resolver/ddl/ob_create_location_resolver.h"
+#include "sql/resolver/ddl/ob_alter_location_resolver.h"
+#include "sql/resolver/ddl/ob_drop_location_resolver.h"
+#include "sql/resolver/cmd/ob_location_utils_resolver.h"
 #ifdef OB_BUILD_SHARED_STORAGE
 #include "sql/resolver/cmd/ob_trigger_storage_cache_resolver.h"
 #endif
@@ -742,7 +746,10 @@ int ObResolver::resolve(IsPrepared if_prepared, const ParseNode &parse_tree, ObS
       case T_SHOW_CHECK_TABLE:
       case T_SHOW_CREATE_USER:
       case T_SHOW_CATALOGS:
-      case T_SHOW_CREATE_CATALOG: {
+      case T_SHOW_CREATE_CATALOG:
+      case T_SHOW_LOCATIONS:
+      case T_SHOW_CREATE_LOCATION:
+      case T_LOCATION_UTILS_LIST: {
         REGISTER_STMT_RESOLVER(Show);
         break;
       }
@@ -1221,6 +1228,22 @@ int ObResolver::resolve(IsPrepared if_prepared, const ParseNode &parse_tree, ObS
       }
       case T_DROP_CCL_RULE: {
         REGISTER_STMT_RESOLVER(DropCCLRule);
+        break;
+      }
+      case T_CREATE_LOCATION: {
+        REGISTER_STMT_RESOLVER(CreateLocation);
+        break;
+      }
+      case T_ALTER_LOCATION: {
+        REGISTER_STMT_RESOLVER(AlterLocation);
+        break;
+      }
+      case T_DROP_LOCATION: {
+        REGISTER_STMT_RESOLVER(DropLocation);
+        break;
+      }
+      case T_LOCATION_UTILS: {
+        REGISTER_STMT_RESOLVER(LocationUtils);
         break;
       }
       default: {

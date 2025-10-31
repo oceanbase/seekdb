@@ -825,5 +825,6 @@ int ObUpgradeForAllVersionProcessor::flush_ncomp_dll_job()
   return ret;
 }
 
+
 } // end share
 } // end oceanbase

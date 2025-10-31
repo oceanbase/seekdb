@@ -287,6 +287,10 @@ select 0xffffffffff & table_id, table_name, table_type, database_id, part_num fr
 550	__all_ai_model	0	201001	1
 551	__all_ai_model_history	0	201001	1
 552	__all_ai_model_endpoint	0	201001	1
+553	__all_tenant_location	0	201001	1
+554	__all_tenant_location_history	0	201001	1
+555	__all_tenant_objauth_mysql	0	201001	1
+556	__all_tenant_objauth_mysql_history	0	201001	1
 10001	__tenant_virtual_all_table	2	201001	1
 10002	__tenant_virtual_table_column	2	201001	1
 10003	__tenant_virtual_table_index	2	201001	1
@@ -738,6 +742,12 @@ select 0xffffffffff & table_id, table_name, table_type, database_id, part_num fr
 12551	__all_virtual_ai_model	2	201001	1
 12552	__all_virtual_ai_model_history	2	201001	1
 12553	__all_virtual_ai_model_endpoint	2	201001	1
+12554	__all_virtual_tenant_location	2	201001	1
+12555	__all_virtual_tenant_location_history	2	201001	1
+12556	__all_virtual_objauth_mysql	2	201001	1
+12557	__all_virtual_objauth_mysql_history	2	201001	1
+12558	__tenant_virtual_show_create_location	2	201001	1
+12559	__tenant_virtual_list_file	2	201001	1
 20001	GV$OB_PLAN_CACHE_STAT	1	201001	1
 20002	GV$OB_PLAN_CACHE_PLAN_STAT	1	201001	1
 20003	SCHEMATA	1	201002	1

@@ -30,6 +30,8 @@
 #include "share/schema/ob_routine_info.h"
 #include "share/schema/ob_catalog_schema_struct.h"
 #include "share/schema/ob_ccl_schema_struct.h"
+#include "share/schema/ob_location_schema_struct.h"
+#include "share/schema/ob_objpriv_mysql_schema_struct.h"
 
 namespace oceanbase
 {
@@ -372,6 +374,15 @@ enum ObSchemaOperationCategory
   ACT(OB_DDL_ALTER_AI_MODEL, )                                   \
   ACT(OB_DDL_DROP_AI_MODEL, )                                    \
   ACT(OB_DDL_AI_MODEL_OPERATION_END, = 2120)                     \
+  ACT(OB_DDL_LOCATION_OPERATION_BEGIN, = 2121)                   \
+  ACT(OB_DDL_CREATE_LOCATION, )                                  \
+  ACT(OB_DDL_ALTER_LOCATION, )                                   \
+  ACT(OB_DDL_DROP_LOCATION, )                                    \
+  ACT(OB_DDL_LOCATION_OPERATION_END, = 2130)                     \
+  ACT(OB_DDL_OBJ_MYSQL_PRIV_OPERATION_BEGIN, = 2131)             \
+  ACT(OB_DDL_GRANT_OBJ_MYSQL_PRIV, )                             \
+  ACT(OB_DDL_DEL_OBJ_MYSQL_PRIV, )                               \
+  ACT(OB_DDL_OBJ_MYSQL_PRIV_OPERATION_END, = 2140)               \
   ACT(OB_DDL_MAX_OP,)
 
 DECLARE_ENUM(ObSchemaOperationType, op_type, OP_TYPE_DEF);
@@ -405,6 +416,7 @@ IS_DDL_TYPE(TRIGGER, trigger)
 IS_DDL_TYPE(SYS_PRIV, sys_priv)
 IS_DDL_TYPE(OBJ_PRIV, obj_priv)
 IS_DDL_TYPE(DIRECTORY, directory)
+IS_DDL_TYPE(LOCATION, location)
 IS_DDL_TYPE(CONTEXT, context)
 IS_DDL_TYPE(MOCK_FK_PARENT_TABLE, mock_fk_parent_table)
 IS_DDL_TYPE(CATALOG, catalog)
@@ -446,6 +458,8 @@ public:
     uint64_t catalog_id_;
     uint64_t ccl_rule_id_;
     uint64_t ai_model_id_;
+    uint64_t location_id_;
+    uint64_t obj_type_;
   };
   union {
     common::ObString table_name_;
@@ -456,6 +470,7 @@ public:
     common::ObString routine_name_;
     common::ObString catalog_name_;
     common::ObString ai_model_name_;
+    common::ObString obj_name_;
   };
   ObSchemaOperationType op_type_;
   common::ObString ddl_stmt_str_;
@@ -697,6 +712,7 @@ class ObSimpleTriggerSchema;
 class ObSimpleUDFSchema;
 class ObSimpleSysVariableSchema;
 class ObDirectorySchema;
+class ObLocationSchema;
 class ObSimpleMockFKParentTableSchema;
 class ObCatalogSchema;
 
@@ -717,6 +733,7 @@ class ObSequenceSqlService;
 class ObSysVariableSqlService;
 class ObErrorSqlService;
 class ObDirectorySqlService;
+class ObLocationSqlService;
 //table schema service interface layer
 class ObServerSchemaService;
 class ObContextSqlService;
@@ -768,6 +785,7 @@ public:
   DECLARE_GET_DDL_SQL_SERVICE_FUNC(Sequence, sequence);
   DECLARE_GET_DDL_SQL_SERVICE_FUNC(SysVariable, sys_variable);
   DECLARE_GET_DDL_SQL_SERVICE_FUNC(Directory, directory);
+  DECLARE_GET_DDL_SQL_SERVICE_FUNC(Location, location);
   DECLARE_GET_DDL_SQL_SERVICE_FUNC(Context, context);
   DECLARE_GET_DDL_SQL_SERVICE_FUNC(Catalog, catalog);
   //DECLARE_GET_DDL_SQL_SERVICE_FUNC(sys_priv, priv);
@@ -880,6 +898,7 @@ public:
   GET_ALL_SCHEMA_FUNC_DECLARE_PURE_VIRTUAL(table_priv, ObTablePriv);
   GET_ALL_SCHEMA_FUNC_DECLARE_PURE_VIRTUAL(routine_priv, ObRoutinePriv);
   GET_ALL_SCHEMA_FUNC_DECLARE_PURE_VIRTUAL(column_priv, ObColumnPriv);
+  GET_ALL_SCHEMA_FUNC_DECLARE_PURE_VIRTUAL(obj_mysql_priv, ObObjMysqlPriv);
   GET_ALL_SCHEMA_FUNC_DECLARE_PURE_VIRTUAL(outline, ObSimpleOutlineSchema);
   GET_ALL_SCHEMA_FUNC_DECLARE_PURE_VIRTUAL(routine, ObSimpleRoutineSchema);
   GET_ALL_SCHEMA_FUNC_DECLARE_PURE_VIRTUAL(package, ObSimplePackageSchema);
@@ -889,6 +908,7 @@ public:
   GET_ALL_SCHEMA_FUNC_DECLARE_PURE_VIRTUAL(sys_priv, ObSysPriv);
   GET_ALL_SCHEMA_FUNC_DECLARE_PURE_VIRTUAL(obj_priv, ObObjPriv);
   GET_ALL_SCHEMA_FUNC_DECLARE_PURE_VIRTUAL(directory, ObDirectorySchema);
+  GET_ALL_SCHEMA_FUNC_DECLARE_PURE_VIRTUAL(location, ObLocationSchema);
   GET_ALL_SCHEMA_FUNC_DECLARE_PURE_VIRTUAL(context, ObContextSchema);
   GET_ALL_SCHEMA_FUNC_DECLARE_PURE_VIRTUAL(mock_fk_parent_table, ObSimpleMockFKParentTableSchema);
   GET_ALL_SCHEMA_FUNC_DECLARE_PURE_VIRTUAL(catalog, ObCatalogSchema);
@@ -953,6 +973,7 @@ public:
   virtual int fetch_new_trigger_id(const uint64_t tenant_id, uint64_t &new_trigger_id) = 0;
 
   virtual int fetch_new_directory_id(const uint64_t tenant_id, uint64_t &new_directory_id) = 0;
+  virtual int fetch_new_location_id(const uint64_t tenant_id, uint64_t &new_location_id) = 0;
   virtual int fetch_new_context_id(const uint64_t tenant_id, uint64_t &new_context_id) = 0;
   virtual int fetch_new_priv_id(const uint64_t tenant_id, uint64_t &new_priv_id) = 0;
   virtual int fetch_new_catalog_id(const uint64_t tenant_id, uint64_t &new_catalog_id) = 0;
@@ -995,7 +1016,9 @@ public:
   GET_BATCH_SCHEMAS_FUNC_DECLARE_PURE_VIRTUAL(sys_variable, ObSimpleSysVariableSchema);
   GET_BATCH_SCHEMAS_FUNC_DECLARE_PURE_VIRTUAL(sys_priv, ObSysPriv);
   GET_BATCH_SCHEMAS_FUNC_DECLARE_PURE_VIRTUAL(obj_priv, ObObjPriv);
+  GET_BATCH_SCHEMAS_FUNC_DECLARE_PURE_VIRTUAL(obj_mysql_priv, ObObjMysqlPriv);
   GET_BATCH_SCHEMAS_FUNC_DECLARE_PURE_VIRTUAL(directory, ObDirectorySchema);
+  GET_BATCH_SCHEMAS_FUNC_DECLARE_PURE_VIRTUAL(location, ObLocationSchema);
   GET_BATCH_SCHEMAS_FUNC_DECLARE_PURE_VIRTUAL(context, ObContextSchema);
   GET_BATCH_SCHEMAS_FUNC_DECLARE_PURE_VIRTUAL(mock_fk_parent_table, ObSimpleMockFKParentTableSchema);
   GET_BATCH_SCHEMAS_FUNC_DECLARE_PURE_VIRTUAL(catalog, ObCatalogSchema);

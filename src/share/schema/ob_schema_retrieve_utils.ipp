@@ -1540,6 +1540,10 @@ int ObSchemaRetrieveUtils::fill_table_schema(
         int64_t, true/*skip null error*/, ignore_column_error, 0);
     EXTRACT_VARCHAR_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(
       result, dynamic_partition_policy, table_schema, true/*skip_null_error*/, true/*skip_column_error*/, "");
+    EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(result, external_location_id, table_schema,
+                                                        uint64_t, true, true, common::OB_INVALID_ID);
+    EXTRACT_VARCHAR_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(
+      result, external_sub_path, table_schema, true/*skip null*/, true/*ignore column error*/, empty_str);
     if (OB_SUCC(ret)) {
       bool with_dynamic_partition_policy = !table_schema.get_dynamic_partition_policy().empty();
       table_schema.set_with_dynamic_partition_policy(with_dynamic_partition_policy);
@@ -1953,6 +1957,7 @@ int ObSchemaRetrieveUtils::fill_user_schema(
     user_info.set_priv((priv_others & OB_PRIV_OTHERS_ALTER_AI_MODEL) != 0 ? OB_PRIV_ALTER_AI_MODEL : 0);
     user_info.set_priv((priv_others & OB_PRIV_OTHERS_DROP_AI_MODEL) != 0 ? OB_PRIV_DROP_AI_MODEL : 0);
     user_info.set_priv((priv_others & OB_PRIV_OTHERS_ACCESS_AI_MODEL) != 0 ? OB_PRIV_ACCESS_AI_MODEL : 0);
+    user_info.set_priv((priv_others & OB_PRIV_OTHERS_CREATE_LOCATION) != 0 ? OB_PRIV_CREATE_LOCATION : 0);
   }
   return ret;
 }
@@ -2277,6 +2282,33 @@ int ObSchemaRetrieveUtils::fill_obj_priv_schema(
   EXTRACT_INT_FIELD_MYSQL_SKIP_RET(result, "priv_option", option, uint64_t);
   EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, schema_version, obj_priv, int64_t);
 
+  return ret;
+}
+
+template<typename T>
+int ObSchemaRetrieveUtils::fill_obj_mysql_priv_schema (
+                            const uint64_t tenant_id,
+                            T &result,
+                            ObObjMysqlPriv &obj_mysql_priv,
+                            bool &is_deleted)
+{
+  int ret = common::OB_SUCCESS;
+  obj_mysql_priv.reset();
+  is_deleted = false;
+
+  obj_mysql_priv.set_tenant_id(tenant_id);
+  EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_TENANT_ID(result, user_id, obj_mysql_priv, tenant_id);
+  EXTRACT_VARCHAR_FIELD_TO_CLASS_MYSQL(result, obj_name, obj_mysql_priv);
+  EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, obj_type, obj_mysql_priv, uint64_t);
+  EXTRACT_INT_FIELD_MYSQL(result, "is_deleted", is_deleted, bool);
+  if (!is_deleted) {
+    int64_t all_priv = 0;
+    EXTRACT_INT_FIELD_MYSQL_WITH_DEFAULT_VALUE(result, "all_priv", all_priv, int64_t, true, false, 0);
+    if ((all_priv & 1) != 0) { obj_mysql_priv.set_priv(OB_PRIV_READ); }
+    if ((all_priv & 2) != 0) { obj_mysql_priv.set_priv(OB_PRIV_WRITE); }
+    if ((all_priv & 4) != 0) { obj_mysql_priv.set_priv(OB_PRIV_GRANT); }
+    EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, schema_version, obj_mysql_priv, int64_t);
+  }
   return ret;
 }
 
@@ -3462,6 +3494,46 @@ int ObSchemaRetrieveUtils::push_prev_obj_privs_if_has(
   return ret;
 }
 
+template<typename T, typename S>
+int ObSchemaRetrieveUtils::retrieve_obj_mysql_priv_schema(
+    const uint64_t tenant_id,
+    T &result,
+    ObIArray<S> &obj_mysql_priv_array)
+{
+  int ret = common::OB_SUCCESS;
+  ObArenaAllocator allocator(ObModIds::OB_TEMP_VARIABLES);
+  ObArenaAllocator tmp_allocator(ObModIds::OB_TEMP_VARIABLES);
+  S obj_mysql_priv(&allocator);
+  ObObjMysqlPrivSortKey pre_obj_mysql_sort_key;
+  while (OB_SUCCESS == ret && common::OB_SUCCESS == (ret = result.next())) {
+    obj_mysql_priv.reset();
+    allocator.reuse();
+    bool is_deleted = false;
+    if (OB_FAIL(fill_obj_mysql_priv_schema(tenant_id, result, obj_mysql_priv, is_deleted))) {
+      LOG_WARN("Fail to fill obj_mysql_priv", K(ret));
+    } else if (obj_mysql_priv.get_sort_key() == pre_obj_mysql_sort_key) {
+      // ignore it
+      ret = common::OB_SUCCESS;
+    } else if (is_deleted) {
+      LOG_TRACE("obj_mysql_priv is is_deleted", K(obj_mysql_priv));
+    } else if (OB_FAIL(obj_mysql_priv_array.push_back(obj_mysql_priv))) {
+      LOG_WARN("Failed to push back", K(ret));
+    }
+    if (OB_SUCC(ret)) {
+      tmp_allocator.reuse();
+      if (OB_FAIL(pre_obj_mysql_sort_key.deep_copy(obj_mysql_priv.get_sort_key(), tmp_allocator))) {
+        LOG_WARN("alloc_obj_mysql_schema failed", KR(ret));
+      }
+    }
+  }
+  if (ret != common::OB_ITER_END) {
+    LOG_WARN("Fail to get obj mysql privileges. iter quit", K(ret));
+  } else {
+    ret = common::OB_SUCCESS;
+  }
+  return ret;
+}
+
 //for simple schemas
 
 template<typename T>
@@ -4635,6 +4707,66 @@ int ObSchemaRetrieveUtils::fill_directory_schema(
   }
   return ret;
 }
+
+template<typename T, typename S>
+int ObSchemaRetrieveUtils::retrieve_location_schema(
+    const uint64_t tenant_id,
+    T &result,
+    ObIArray<S> &schema_array)
+{
+  int ret = common::OB_SUCCESS;
+  uint64_t prev_id = common::OB_INVALID_ID;
+  ObArenaAllocator allocator(ObModIds::OB_TEMP_VARIABLES);
+  S schema(&allocator);
+  while (OB_SUCCESS == ret && common::OB_SUCCESS == (ret = result.next())) {
+    schema.reset();
+    allocator.reuse();
+    bool is_deleted = false;
+    if (OB_FAIL(fill_location_schema(tenant_id, result, schema, is_deleted))) {
+      SHARE_SCHEMA_LOG(WARN, "fail to fill location schema ", K(ret));
+    } else if (schema.get_location_id() == prev_id) {
+      SHARE_SCHEMA_LOG(DEBUG, "hualong debug ignore", "id", schema.get_location_id(), "version", schema.get_schema_version());
+    } else if (is_deleted) {
+      SHARE_SCHEMA_LOG(INFO, "location is is_deleted, don't add",
+               "location_id", schema.get_location_id());
+    } else if (OB_FAIL(schema_array.push_back(schema))) {
+      SHARE_SCHEMA_LOG(WARN, "failed to push back", K(ret));
+    } else {
+      SHARE_SCHEMA_LOG(INFO, "retrieve location schema succeed", K(schema));
+    }
+    prev_id = schema.get_location_id();
+  }
+  if (ret != common::OB_ITER_END) {
+    SHARE_SCHEMA_LOG(WARN, "fail to get all location schema. iter quit. ", K(ret));
+  } else {
+    ret = common::OB_SUCCESS;
+    SHARE_SCHEMA_LOG(INFO, "retrieve location schemas succeed", K(tenant_id));
+  }
+  return ret;
+}
+
+template<typename T>
+int ObSchemaRetrieveUtils::fill_location_schema(
+    const uint64_t tenant_id,
+    T &result,
+    ObLocationSchema &location_schema,
+    bool &is_deleted)
+{
+  location_schema.reset();
+  is_deleted = false;
+  int ret = common::OB_SUCCESS;
+  location_schema.set_tenant_id(tenant_id);
+  EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_TENANT_ID(result, location_id, location_schema, tenant_id);
+  EXTRACT_INT_FIELD_MYSQL(result, "is_deleted", is_deleted, bool);
+  if (!is_deleted) {
+    EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, schema_version, location_schema, int64_t);
+    EXTRACT_VARCHAR_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(result, location_name, location_schema, true, false, "");
+    EXTRACT_VARCHAR_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(result, location_url, location_schema, true, false, "");
+    EXTRACT_VARCHAR_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(result, location_access_info, location_schema, true, false, "");
+  }
+  return ret;
+}
+
 
 template<typename T>
 int ObSchemaRetrieveUtils::fill_context_schema(

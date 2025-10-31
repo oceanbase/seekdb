@@ -225,6 +225,16 @@ int ObGrantResolver::resolve_priv_set(
           } else {
             priv_set |= priv_type;
           }
+        } else if (OB_PRIV_OBJECT_LEVEL == grant_level) {
+          if (OB_PRIV_ALL == priv_type) {
+            priv_set |= OB_PRIV_OBJECT_ACC;
+          } else if (priv_type & (~(OB_PRIV_OBJECT_ACC | OB_PRIV_GRANT))) {
+            ret = OB_ILLEGAL_GRANT_FOR_TABLE;
+            SQL_RESV_LOG(WARN, "Grant/Revoke privilege than can not be used",
+                      "priv_type", ObPrintPrivSet(priv_type), K(ret));
+          } else {
+            priv_set |= priv_type;
+          }
         } else {
           //do nothing
         }
@@ -293,6 +303,11 @@ int ObGrantResolver::resolve_priv_object(const ParseNode *priv_object_node,
         LOG_WARN("failed to get catalog id", K(ret));
       } else {
         grant_stmt->set_catalog_name(catalog);
+      }
+    } else if (priv_object_node->value_ == 5) {
+      object_type = ObObjectType::LOCATION;
+      if (OB_FAIL(schema_checker->get_location_id(tenant_id, table, object_id))) {
+        LOG_WARN("failed to get location id", K(ret));
       }
     }
   } else {

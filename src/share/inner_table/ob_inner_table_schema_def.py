@@ -328,6 +328,8 @@ all_table_def = dict(
       ('merge_engine_type', 'int', 'false', '0'),
       ('semistruct_encoding_type', 'int', 'false', '0'),
       ('dynamic_partition_policy', 'varchar:OB_MAX_DYNAMIC_PARTITION_POLICY_LENGTH', 'false', ''),
+      ('external_location_id', 'int', 'false', 'OB_INVALID_ID'),
+      ('external_sub_path', 'varbinary:OB_MAX_VARCHAR_LENGTH', 'true'),
     ],
 )
 
@@ -7444,6 +7446,49 @@ all_ai_model_endpoint_def = dict(
     ]
 )
 def_table_schema(**all_ai_model_endpoint_def)
+
+all_tenant_location_def = dict(
+    owner = 'cjl476581',
+    table_name     = '__all_tenant_location',
+    table_id       = '553',
+    table_type     = 'SYSTEM_TABLE',
+    gm_columns     = ['gmt_create', 'gmt_modified'],
+    rowkey_columns = [
+        ('tenant_id', 'int'),
+        ('location_id', 'int'),
+    ],
+    normal_columns = [
+        ('location_name', 'varchar:OB_MAX_LOCATION_NAME_LENGTH', 'false', ''),
+        ('location_url', 'varchar:OB_MAX_LOCATION_URL_LENGTH', 'false', ''),
+        ('location_access_info', 'varchar:OB_MAX_LOCATION_ACCESS_INFO_LENGTH', 'false', ''),
+    ],
+    in_tenant_space = True,
+)
+def_table_schema(**all_tenant_location_def)
+def_table_schema(**gen_history_table_def(554, all_tenant_location_def))
+
+all_objauth_mysql_def = dict(
+    owner = 'cjl476581',
+    table_name     = '__all_tenant_objauth_mysql',
+    table_id       = '555',
+    table_type = 'SYSTEM_TABLE',
+    gm_columns = ['gmt_create', 'gmt_modified'],
+    in_tenant_space = True,
+    rowkey_columns = [
+        ('tenant_id', 'int'),
+        ('user_id', 'int'),
+        ('obj_name', 'varchar:OB_MAX_CORE_TALBE_NAME_LENGTH'),
+        ('obj_type', 'int')
+    ],
+    normal_columns = [
+      ('all_priv', 'int', 'false', 0),
+      ('grantor', 'varchar:OB_MAX_USER_NAME_LENGTH_STORE', 'false', ''),
+      ('grantor_host', 'varchar:OB_MAX_HOST_NAME_LENGTH', 'false', ''),
+  ],
+)
+def_table_schema(**all_objauth_mysql_def)
+def_table_schema(**gen_history_table_def(556, all_objauth_mysql_def))
+
 
 # Reserved position (placeholder before this line)
 # Placeholder suggestion for this section: Use actual table names for placeholders
@@ -15058,6 +15103,55 @@ def_table_schema(**gen_iterate_private_virtual_table_def(
   table_name = '__all_virtual_ai_model_endpoint',
   keywords = all_def_keywords['__all_ai_model_endpoint'],
   in_tenant_space=True))
+
+def_table_schema(**gen_iterate_virtual_table_def(
+  table_id = '12554',
+  table_name = '__all_virtual_tenant_location',
+  keywords = all_def_keywords['__all_tenant_location']))
+def_table_schema(**gen_iterate_virtual_table_def(
+  table_id = '12555',
+  table_name = '__all_virtual_tenant_location_history',
+  keywords = all_def_keywords['__all_tenant_location_history']))
+def_table_schema(**gen_iterate_virtual_table_def(
+  table_id = '12556',
+  table_name = '__all_virtual_objauth_mysql',
+  keywords = all_def_keywords['__all_tenant_objauth_mysql']))
+def_table_schema(**gen_iterate_virtual_table_def(
+  table_id = '12557',
+  table_name = '__all_virtual_objauth_mysql_history',
+  keywords = all_def_keywords['__all_tenant_objauth_mysql_history']))
+def_table_schema(
+  owner = 'cjl476581',
+  table_name     = '__tenant_virtual_show_create_location',
+  table_id       = '12558',
+  table_type = 'VIRTUAL_TABLE',
+  gm_columns = [],
+  rowkey_columns = [
+  ('location_id', 'int'),
+  ],
+  in_tenant_space = True,
+  normal_columns = [
+  ('location_name', 'varchar:OB_MAX_LOCATION_NAME_LENGTH'),
+  ('create_location', 'varchar:LOCATION_DEFINE_LENGTH'),
+  ],
+)
+def_table_schema(
+  owner = 'cjl476581',
+  table_name     = '__tenant_virtual_list_file',
+  table_id       = '12559',
+  table_type = 'VIRTUAL_TABLE',
+  gm_columns = [],
+  rowkey_columns = [
+  ('location_id', 'int'),
+  ('location_sub_path', 'varchar:OB_MAX_LOCATION_NAME_LENGTH'),
+  ('pattern', 'varchar:OB_MAX_LOCATION_NAME_LENGTH'),
+  ],
+  in_tenant_space = True,
+  normal_columns = [
+  ('file_name', 'varchar:16384'),
+  ('file_size', 'int')
+  ],
+)
 
 # Reserved position (placeholder before this line)
 # Placeholder suggestion for this section: Use actual table names for placeholders
@@ -30339,14 +30433,16 @@ def_table_schema(
                      AND (U.PRIV_OTHERS & (1 << 14) != 0) THEN 'CREATE CATALOG'
                 WHEN V1.C1 = 51
                      AND (U.PRIV_OTHERS & (1 << 15) != 0) THEN 'USE CATALOG'
+                WHEN V1.C1 = 52
+                     AND (U.PRIV_OTHERS & (1 << 20) != 0) THEN 'CREATE LOCATION'
                 WHEN V1.C1 = 55
-                     AND (U.PRIV_OTHERS & (1 << 19) != 0) THEN 'CREATE AI MODEL'
+                     AND (U.PRIV_OTHERS & (1 << 16) != 0) THEN 'CREATE AI MODEL'
                 WHEN V1.C1 = 56
-                     AND (U.PRIV_OTHERS & (1 << 20) != 0) THEN 'ALTER AI MODEL'
+                     AND (U.PRIV_OTHERS & (1 << 17) != 0) THEN 'ALTER AI MODEL'
                 WHEN V1.C1 = 57
-                     AND (U.PRIV_OTHERS & (1 << 21) != 0) THEN 'DROP AI MODEL'
+                     AND (U.PRIV_OTHERS & (1 << 18) != 0) THEN 'DROP AI MODEL'
                 WHEN V1.C1 = 58
-                     AND (U.PRIV_OTHERS & (1 << 22) != 0) THEN 'ACCESS AI MODEL'
+                     AND (U.PRIV_OTHERS & (1 << 19) != 0) THEN 'ACCESS AI MODEL'
                 WHEN V1.C1 = 0
                      AND U.PRIV_ALTER = 0
                      AND U.PRIV_CREATE = 0
@@ -30445,6 +30541,7 @@ def_table_schema(
         UNION ALL SELECT 49 AS C1
         UNION ALL SELECT 50 AS C1
         UNION ALL SELECT 51 AS C1
+        UNION ALL SELECT 52 AS C1
         UNION ALL SELECT 55 AS C1
         UNION ALL SELECT 56 AS C1
         UNION ALL SELECT 57 AS C1
@@ -41071,6 +41168,29 @@ def_sys_index_table(
   index_using_type = 'USING_BTREE',
   index_type = 'INDEX_TYPE_NORMAL_LOCAL',
   keywords = all_def_keywords['__all_ai_model_endpoint'])
+
+def_sys_index_table(
+  index_name = 'idx_location_name',
+  index_table_id = 101118,
+  index_columns = ['location_name'],
+  index_using_type = 'USING_BTREE',
+  index_type = 'INDEX_TYPE_NORMAL_LOCAL',
+  keywords = all_def_keywords['__all_tenant_location'])
+def_sys_index_table(
+  index_name = 'idx_objauth_mysql_user_id',
+  index_table_id = 101119,
+  index_columns = ['user_id'],
+  index_using_type = 'USING_BTREE',
+  index_type = 'INDEX_TYPE_NORMAL_LOCAL',
+  keywords = all_def_keywords['__all_tenant_objauth_mysql'])
+def_sys_index_table(
+  index_name = 'idx_objauth_mysql_obj_name',
+  index_table_id = 101120,
+  index_columns = ['obj_name'],
+  index_using_type = 'USING_BTREE',
+  index_type = 'INDEX_TYPE_NORMAL_LOCAL',
+  keywords = all_def_keywords['__all_tenant_objauth_mysql'])
+
 
 # Reserved position (placeholder before this line)
 # Index table placeholder suggestion: based on the base table (data table) name for placeholder, other methods include: index name (index_name), index table name

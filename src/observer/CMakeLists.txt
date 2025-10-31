@@ -504,6 +504,7 @@ ob_set_subtarget(ob_server virtual_table
   virtual_table/ob_gv_sql.cpp
   virtual_table/ob_gv_sql_audit.cpp
   virtual_table/ob_all_virtual_tenant_memstore_info.cpp
+  virtual_table/ob_all_virtual_external_location_list_file.cpp
   virtual_table/ob_information_check_constraints_table.cpp
   virtual_table/ob_information_columns_table.cpp
   virtual_table/ob_information_global_status_table.cpp
@@ -531,6 +532,7 @@ ob_set_subtarget(ob_server virtual_table
   virtual_table/ob_session_variables.cpp
   virtual_table/ob_show_create_catalog.cpp
   virtual_table/ob_show_create_database.cpp
+  virtual_table/ob_show_create_location.cpp
   virtual_table/ob_show_create_procedure.cpp
   virtual_table/ob_show_create_table.cpp
   virtual_table/ob_show_create_tablegroup.cpp

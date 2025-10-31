@@ -25,6 +25,7 @@
 #include "share/table/ob_ttl_util.h"
 #include "rootserver/ob_partition_exchange.h"
 #include "share/vector_index/ob_vector_index_util.h"
+#include "share/external_table/ob_external_table_utils.h"
 
 namespace oceanbase
 {
@@ -211,6 +212,8 @@ int ObAlterTableResolver::resolve(const ParseNode &parse_tree)
         OZ (alter_schema.set_external_file_location(table_schema_->get_external_file_location()));
         OZ (alter_schema.set_external_file_location_access_info(table_schema_->get_external_file_location_access_info()));
         OZ (alter_schema.set_external_file_pattern(table_schema_->get_external_file_pattern()));
+        alter_schema.set_external_location_id(table_schema_->get_external_location_id());
+        OZ (alter_schema.set_external_sub_path(table_schema_->get_external_sub_path()));
         if (OB_SUCC(ret) && table_schema_->is_user_specified_partition_for_external_table()) {
           alter_schema.set_user_specified_partition_for_external_table();
         }
@@ -345,6 +348,13 @@ int ObAlterTableResolver::resolve(const ParseNode &parse_tree)
     if (OB_SUCC(ret)){
       if (OB_FAIL(deep_copy_string_in_part_expr(get_alter_table_stmt()))) {
         LOG_WARN("failed to deep copy string in part expr");
+      }
+    }
+
+    if (OB_SUCC(ret) && alter_table_stmt->get_alter_table_arg().alter_table_schema_.is_external_table()) {
+      ObTableSchema &table_schema = alter_table_stmt->get_alter_table_arg().alter_table_schema_;
+      if (OB_FAIL(ObSQLUtils::check_location_constraint(table_schema))) {
+        LOG_WARN("fail to check location constraint", K(ret), K(table_schema));
       }
     }
 
@@ -662,7 +672,11 @@ int ObAlterTableResolver::resolve_add_external_partition(const ParseNode &part_e
       ObString tmp_str = ObString(location_element.str_len_, location_element.str_value_);
       OZ (ob_write_string(*allocator_, tmp_str, external_location));
       ObSqlString full_path;
-      OZ (full_path.append(table_schema_->get_external_file_location()));
+      ObSchemaGetterGuard *schema_guard = schema_checker_->get_schema_guard();
+      ObString file_location;
+      CK (OB_NOT_NULL(schema_guard));
+      OZ (ObExternalTableUtils::get_external_file_location(*table_schema_, *schema_guard, *allocator_, file_location));
+      OZ (full_path.append(file_location));
       if (OB_SUCC(ret)) {
         if (full_path.length() == 0) {
           ret = OB_INVALID_ARGUMENT;
@@ -672,7 +686,7 @@ int ObAlterTableResolver::resolve_add_external_partition(const ParseNode &part_e
         }
       }
       OZ (full_path.append(external_location));
-      OZ (alter_table_stmt->get_alter_table_arg().alter_table_schema_.set_external_file_location(full_path.string()));
+      OZ (alter_table_stmt->get_alter_table_arg().alter_table_schema_.set_external_file_location(table_schema_->get_external_file_location()));
       alter_table_stmt->get_alter_table_arg().alter_table_schema_.set_table_type(EXTERNAL_TABLE);
       partition.set_external_location(external_location);
       partition.set_is_empty_partition_name(true);
@@ -767,6 +781,8 @@ int ObAlterTableResolver::resolve_external_partition_options(const ParseNode &no
     alter_table_stmt->get_alter_table_arg().alter_table_schema_.set_part_level(table_schema_->get_part_level());
     OZ (alter_table_stmt->get_alter_table_arg().alter_table_schema_.set_external_file_location_access_info(table_schema_->get_external_file_location_access_info()));
     OZ (alter_table_stmt->get_alter_table_arg().alter_table_schema_.set_external_file_pattern(table_schema_->get_external_file_pattern()));
+    alter_table_stmt->get_alter_table_arg().alter_table_schema_.set_external_location_id(table_schema_->get_external_location_id());
+    OZ (alter_table_stmt->get_alter_table_arg().alter_table_schema_.set_external_sub_path(table_schema_->get_external_sub_path()));
     CK (OB_LIKELY(node.type_ == T_ALTER_EXTERNAL_PARTITION_OPTION));
     if (T_ALTER_EXTERNAL_PARTITION_ADD == node.children_[0]->type_) {
       CK (OB_LIKELY(node.num_child_ == 2));

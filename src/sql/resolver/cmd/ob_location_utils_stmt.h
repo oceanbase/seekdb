@@ -1,0 +1,52 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef _OB_LOCATION_UTILS_STMT_H
+#define _OB_LOCATION_UTILS_STMT_H
+#include "lib/string/ob_string.h"
+#include "sql/resolver/cmd/ob_cmd_stmt.h"
+namespace oceanbase
+{
+namespace sql
+{
+class ObLocationUtilsStmt: public ObCMDStmt
+{
+public:
+  ObLocationUtilsStmt()
+      :ObCMDStmt(stmt::T_LOCATION_UTILS), op_type_(OB_INVALID_ID), location_name_(), sub_path_(), pattern_()
+  {}
+  virtual ~ObLocationUtilsStmt() {}
+  uint64_t get_op_type() const { return this->op_type_; }
+  const common::ObString& get_location_name() const { return this->location_name_; }
+  const common::ObString& get_sub_path() const { return this->sub_path_; }
+  const common::ObString& get_pattern() const { return this->pattern_; }
+  void set_op_type(uint64_t op_type) { this->op_type_ = op_type; }
+  void set_location_name(const common::ObString &location_name) { this->location_name_ = location_name; }
+  void set_sub_path(const common::ObString &sub_path) { this->sub_path_ = sub_path; }
+  void set_pattern(const common::ObString &pattern) { this->pattern_ = pattern; }
+  TO_STRING_KV(N_STMT_TYPE, ((int)stmt_type_), K_(op_type), K_(location_name), K_(sub_path), K_(pattern));
+private:
+  uint64_t op_type_;
+  common::ObString location_name_;
+  common::ObString sub_path_;
+  common::ObString pattern_;
+  DISALLOW_COPY_AND_ASSIGN(ObLocationUtilsStmt);
+};
+
+} // end namespace sql
+} // end namespace oceanbase
+
+#endif // _OB_LOCATION_UTILS_STMT_H

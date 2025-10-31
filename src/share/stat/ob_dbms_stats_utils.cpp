@@ -305,7 +305,9 @@ bool ObDbmsStatsUtils::is_no_stat_virtual_table(const int64_t table_id)
          table_id == share::OB_TENANT_VIRTUAL_SHOW_RESTORE_PREVIEW_TID ||
          table_id == share::OB_ALL_VIRTUAL_MDS_NODE_STAT_TID ||
          table_id == share::OB_ALL_VIRTUAL_CHECKPOINT_DIAGNOSE_MEMTABLE_INFO_TID ||
-         table_id == share::OB_ALL_VIRTUAL_CHECKPOINT_DIAGNOSE_CHECKPOINT_UNIT_INFO_TID;
+         table_id == share::OB_ALL_VIRTUAL_CHECKPOINT_DIAGNOSE_CHECKPOINT_UNIT_INFO_TID ||
+         table_id == share::OB_TENANT_VIRTUAL_SHOW_CREATE_LOCATION_TID ||
+         table_id == share::OB_TENANT_VIRTUAL_LIST_FILE_TID;
 }
 
 bool ObDbmsStatsUtils::is_virtual_index_table(const int64_t table_id)

@@ -269,6 +269,8 @@ ob_set_subtarget(ob_sql engine_cmd
   engine/cmd/ob_load_data_rpc.cpp
   engine/cmd/ob_load_data_storage_info.cpp
   engine/cmd/ob_load_data_utils.cpp
+  engine/cmd/ob_location_executor.cpp
+  engine/cmd/ob_location_utils_executor.cpp
   engine/cmd/ob_lock_table_executor.cpp
   engine/cmd/ob_outline_executor.cpp
   engine/cmd/ob_package_executor.cpp
@@ -362,6 +364,7 @@ ob_set_subtarget(ob_sql engine_expr
   engine/expr/ob_expr_char.cpp
   engine/expr/ob_expr_char_length.cpp
   engine/expr/ob_expr_check_catalog_access.cpp
+  engine/expr/ob_expr_check_location_access.cpp
   engine/expr/ob_expr_cast.cpp
   engine/expr/ob_expr_coalesce.cpp
   engine/expr/ob_expr_coll_pred.cpp
@@ -1200,6 +1203,7 @@ ob_set_subtarget(ob_sql resolver_cmd
   resolver/cmd/ob_mock_resolver.cpp
   resolver/cmd/ob_load_data_resolver.cpp
   resolver/cmd/ob_load_data_stmt.cpp
+  resolver/cmd/ob_location_utils_resolver.cpp
   resolver/cmd/ob_resource_resolver.cpp
   resolver/cmd/ob_set_names_resolver.cpp
   resolver/cmd/ob_set_transaction_resolver.cpp
@@ -1249,6 +1253,7 @@ ob_set_subtarget(ob_sql resolver_dcl
 ob_set_subtarget(ob_sql resolver_ddl
   resolver/ddl/ob_alter_database_resolver.cpp
   resolver/ddl/ob_alter_database_stmt.cpp
+  resolver/ddl/ob_alter_location_resolver.cpp
   resolver/ddl/ob_alter_outline_resolver.cpp
   resolver/ddl/ob_alter_package_resolver.cpp
   resolver/ddl/ob_alter_routine_resolver.cpp
@@ -1267,6 +1272,8 @@ ob_set_subtarget(ob_sql resolver_ddl
   resolver/ddl/ob_create_func_resolver.cpp
   resolver/ddl/ob_create_index_resolver.cpp
   resolver/ddl/ob_create_index_stmt.cpp
+  resolver/ddl/ob_create_location_resolver.cpp
+  resolver/ddl/ob_create_location_stmt.cpp
   resolver/ddl/ob_create_mlog_resolver.cpp
   resolver/ddl/ob_create_mlog_stmt.cpp
   resolver/ddl/ob_create_outline_resolver.cpp
@@ -1292,6 +1299,8 @@ ob_set_subtarget(ob_sql resolver_ddl
   resolver/ddl/ob_drop_func_resolver.cpp
   resolver/ddl/ob_drop_index_resolver.cpp
   resolver/ddl/ob_drop_index_stmt.cpp
+  resolver/ddl/ob_drop_location_resolver.cpp
+  resolver/ddl/ob_drop_location_stmt.cpp
   resolver/ddl/ob_drop_mlog_resolver.cpp
   resolver/ddl/ob_drop_mlog_stmt.cpp
   resolver/ddl/ob_drop_outline_resolver.cpp
@@ -1305,6 +1314,7 @@ ob_set_subtarget(ob_sql resolver_ddl
   resolver/ddl/ob_drop_tenant_stmt.cpp
   resolver/ddl/ob_explain_resolver.cpp
   resolver/ddl/ob_explain_stmt.cpp
+  resolver/ddl/ob_external_file_ddl_resolver.cpp
   resolver/ddl/ob_flashback_resolver.cpp
   resolver/ddl/ob_lock_table_resolver.cpp
   resolver/ddl/ob_lock_table_stmt.cpp
