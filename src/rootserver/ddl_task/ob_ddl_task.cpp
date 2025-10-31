@@ -3233,11 +3233,12 @@ int ObDDLTaskRecordOperator::update_consensus_schema_version(
   }
   return ret;
 }
-int ObDDLTaskRecordOperator::get_schedule_info_for_update(
+int ObDDLTaskRecordOperator::get_schedule_info(
     common::ObISQLClient &proxy,
     const uint64_t tenant_id,
     const int64_t task_id,
     ObIAllocator &allocator,
+    const bool is_for_update,
     ObDDLSliceInfo &ddl_slice_info,
     bool &is_idempotence_mode)
 {
@@ -3254,9 +3255,19 @@ int ObDDLTaskRecordOperator::get_schedule_info_for_update(
     ObSqlString sql_string;
     SMART_VAR(ObMySQLProxy::MySQLResult, res) {
       sqlclient::ObMySQLResult *result = NULL;
-      if (OB_FAIL(sql_string.assign_fmt("SELECT UNHEX(message) as message_unhex, UNHEX(schedule_info) as schedule_info_unhex FROM %s WHERE task_id = %lu FOR UPDATE",
-              OB_ALL_DDL_TASK_STATUS_TNAME, task_id))) {
-        LOG_WARN("assign sql string failed", K(ret), K(task_id));
+      if (is_for_update) {
+        if (OB_FAIL(sql_string.assign_fmt("SELECT UNHEX(message) as message_unhex, UNHEX(schedule_info) as schedule_info_unhex FROM %s WHERE task_id = %lu FOR UPDATE",
+                OB_ALL_DDL_TASK_STATUS_TNAME, task_id))) {
+          LOG_WARN("fail to assign sql string", K(ret), K(task_id), K(is_for_update));
+        }
+      } else if (OB_FAIL(sql_string.assign_fmt("SELECT UNHEX(message) as message_unhex, UNHEX(schedule_info) as schedule_info_unhex FROM %s WHERE task_id = %lu",
+                     OB_ALL_DDL_TASK_STATUS_TNAME, task_id))) {
+        LOG_WARN("fail to assign sql string", K(ret), K(task_id), K(is_for_update));
+      }
+      if (OB_FAIL(ret)) {
+      } else if (OB_UNLIKELY(!sql_string.is_valid())) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("the sql string is not valid", K(ret), K(sql_string));
       } else if (OB_FAIL(proxy.read(res, tenant_id, sql_string.ptr()))) {
         LOG_WARN("update status of ddl task record failed", K(ret), K(tenant_id), K(sql_string));
       } else if (OB_ISNULL(result = res.get_result())) {
@@ -3355,7 +3366,7 @@ int ObDDLTaskRecordOperator::get_or_insert_schedule_info(
     LOG_WARN("invalid argument", K(ret), K(tenant_id), K(task_id), K(ddl_slice_info));
   } else if (OB_FAIL(trans.start(GCTX.sql_proxy_, tenant_id))) {
     LOG_WARN("start transaction failed", K(ret), K(tenant_id), K(task_id));
-  } else if (OB_FAIL(get_schedule_info_for_update(trans, tenant_id, task_id, arena, persistent_slice_info, is_idempotent_mode))) {
+  } else if (OB_FAIL(get_schedule_info(trans, tenant_id, task_id, arena, true/*is_for_update*/, persistent_slice_info, is_idempotent_mode))) {
     LOG_WARN("get schedule info failed", K(ret), K(tenant_id), K(task_id));
   }
   if (OB_SUCC(ret) && is_idempotent_mode) {
@@ -3553,7 +3564,7 @@ int ObDDLTaskRecordOperator::get_or_insert_tablet_schedule_info(
     LOG_WARN("invalid argument", K(ret), K(tenant_id), K(task_id), K(tablet_id), K(store_ranges.count()));
   } else if (OB_FAIL(trans.start(GCTX.sql_proxy_, tenant_id))) {
     LOG_WARN("start transaction failed", K(ret), K(tenant_id), K(task_id), K(tablet_id));
-  } else if (OB_FAIL(get_schedule_info_for_update(trans, tenant_id, task_id, arena, persistent_slice_info, is_idempotent_mode))) {
+  } else if (OB_FAIL(get_schedule_info(trans, tenant_id, task_id, arena, true/*is_for_update*/, persistent_slice_info, is_idempotent_mode))) {
     LOG_WARN("get schedule info failed", K(ret), K(tenant_id), K(task_id));
   } else if (!is_idempotent_mode) {
     ret = OB_ERR_UNEXPECTED;

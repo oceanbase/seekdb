@@ -2043,7 +2043,7 @@ int ObDDLUtil::handle_lob_column(
         VecValueTypeClass value_tc = get_vec_value_tc(col_type.get_type(),
                                                       col_type.get_scale(),
                                                       PRECISION_UNKNOWN_YET);
-        if (OB_FAIL(new_discrete_vector(value_tc, selector.size(), allocator, discrete_vec))) {
+        if (OB_FAIL(new_discrete_vector(value_tc, selector.get_max(), allocator, discrete_vec))) {
           LOG_WARN("fail to new discrete vector", KR(ret));
         } else {
           ptrs = discrete_vec->get_ptrs();
@@ -2139,7 +2139,7 @@ int ObDDLUtil::handle_lob_column(
           VecValueTypeClass value_tc = get_vec_value_tc(col_type.get_type(),
                                                         col_type.get_scale(),
                                                         PRECISION_UNKNOWN_YET);
-          if (OB_FAIL(new_discrete_vector(value_tc, selector.size(), allocator, discrete_vec))) {
+          if (OB_FAIL(new_discrete_vector(value_tc, selector.get_max(), allocator, discrete_vec))) {
             LOG_WARN("fail to new discrete vector", KR(ret));
           } else {
             ptrs = discrete_vec->get_ptrs();
@@ -4201,8 +4201,8 @@ int ObDDLUtil::get_task_tablet_slice_count(const int64_t tenant_id,  const int64
   if (OB_ISNULL(sql_proxy)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("sql proxy is null", K(ret));
-  } else if (OB_FAIL(rootserver::ObDDLTaskRecordOperator::get_schedule_info_for_update(
-                    *sql_proxy, tenant_id, ddl_task_id, arena, ddl_slice_info, use_idem_mode))) {
+  } else if (OB_FAIL(rootserver::ObDDLTaskRecordOperator::get_schedule_info(
+                    *sql_proxy, tenant_id, ddl_task_id, arena, true/*is_for_update*/, ddl_slice_info, use_idem_mode))) {
     LOG_WARN("fail to get schedule info", K(ret), K(tenant_id), K(ddl_task_id));
   } else {
     for (int64_t i = 0; i < ddl_slice_info.part_ranges_.count() && OB_SUCC(ret); i++) {

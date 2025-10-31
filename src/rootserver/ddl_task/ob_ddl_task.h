@@ -366,11 +366,12 @@ public:
       ObIAllocator &allocator,
       common::ObISQLClient &proxy);
 
-  static int get_schedule_info_for_update(
+  static int get_schedule_info(
       common::ObISQLClient &proxy,
       const uint64_t tenant_id,
       const int64_t task_id,
       ObIAllocator &allocator,
+      const bool is_for_update,
       ObDDLSliceInfo &ddl_slice_info,
       bool &is_idempotence_mode);
 

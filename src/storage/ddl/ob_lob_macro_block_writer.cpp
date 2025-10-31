@@ -276,7 +276,7 @@ int ObLobMacroBlockWriter::switch_lob_id_cache()
       ObTabletAutoincrementService &auto_inc = ObTabletAutoincrementService::get_instance();
       lob_id_cache_.cache_size_ = AUTO_INC_CACHE_INTERVAL;
       if (OB_FAIL(auto_inc.get_tablet_cache_interval(MTL_ID(), lob_id_cache_))) {
-        LOG_WARN("autoinc service get tablet cache failed", K(ret), K(MTL_ID()), KPC(this));
+        LOG_WARN("autoinc service get tablet cache failed", K(ret), K(MTL_ID()));
       }
     }
     FLOG_INFO("switch lob id cache", K(ret), K(tablet_id_), K(slice_idx_), "is_idem", lob_id_generator_.is_inited(), K(old_value), K(total_lob_cell_count_), K(inrow_lob_cell_count_), "new_cache", lob_id_cache_);

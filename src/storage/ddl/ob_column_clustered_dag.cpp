@@ -103,8 +103,8 @@ int ObColumnClusteredDag::update_tablet_range_count()
       if (OB_ISNULL(sql_proxy)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("sql proxy is null", K(ret));
-      } else if (OB_FAIL(rootserver::ObDDLTaskRecordOperator::get_schedule_info_for_update(
-                     *sql_proxy, MTL_ID(), ddl_task_param_.ddl_task_id_, arena, ddl_slice_info, use_idempotent_mode))) {
+      } else if (OB_FAIL(rootserver::ObDDLTaskRecordOperator::get_schedule_info(
+                     *sql_proxy, MTL_ID(), ddl_task_param_.ddl_task_id_, arena, false/*is_for_update*/, ddl_slice_info, use_idempotent_mode))) {
         LOG_WARN("fail to get schedule info", K(ret), K(MTL_ID()), K(ddl_task_param_));
       } else if (!use_idempotent_mode) {
         ret = OB_ERR_UNEXPECTED;
