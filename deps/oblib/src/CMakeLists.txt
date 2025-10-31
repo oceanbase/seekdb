@@ -158,6 +158,33 @@ set(LGPL_DEPS "-L${DEP_DIR}/lib/mariadb -lmariadb")
 if (OB_STATIC_LINK_LGPL_DEPS)
   set(LGPL_DEPS "-L${DEP_DIR}/lib/mariadb -l:libmariadbclient.a")
 endif()
+
+# Check if system is Ubuntu >= 24 for dynamic linking libaio.so.1t64
+set(LIBAIO_LINK_OPTION "-laio")
+if(OB_AIO AND OB_AIO STREQUAL "libaio1t64")
+  set(AIO_SEARCH_PATHS)
+  if(ARCHITECTURE STREQUAL "x86_64")
+    list(APPEND AIO_SEARCH_PATHS /usr/lib/x86_64-linux-gnu)
+  elseif(ARCHITECTURE STREQUAL "aarch64")
+    list(APPEND AIO_SEARCH_PATHS /usr/lib/aarch64-linux-gnu)
+  endif()
+  list(APPEND AIO_SEARCH_PATHS /usr/lib)
+  find_library(AIO_LIBRARY
+    NAMES libaio.so.1t64
+    PATHS ${AIO_SEARCH_PATHS}
+    NO_DEFAULT_PATH
+  )
+  if(AIO_LIBRARY)
+    set(LIBAIO_LINK_OPTION "${AIO_LIBRARY}")
+    message(STATUS "Ubuntu ${DEBIAN_VERSION} detected, using ${OB_AIO} package and linking to ${AIO_LIBRARY}")
+  else()
+    # Fallback to lib: format if library not found at expected paths
+    # This lets the linker search for libaio.so.1t64 in system library paths
+    set(LIBAIO_LINK_OPTION "lib:libaio.so.1t64")
+    message(STATUS "Ubuntu ${DEBIAN_VERSION} detected, using ${OB_AIO} package and lib:libaio.so.1t64")
+  endif()
+endif()
+
 target_link_libraries(oblib_base_without_pass
   INTERFACE
   -L${DEP_DIR}/lib
@@ -188,7 +215,7 @@ target_link_libraries(oblib_base_without_pass
   -L${DEP_DIR}/var/usr/lib
   -L${DEP_3RD_DIR}/usr/lib
   -L${DEP_3RD_DIR}/usr/lib64
-  -laio -lpthread -ldl -lrt
+  ${LIBAIO_LINK_OPTION} -lpthread -ldl -lrt
   ${ARCH_LDFLAGS}
   ${DEP_DIR}/lib/libisal.a
  )
