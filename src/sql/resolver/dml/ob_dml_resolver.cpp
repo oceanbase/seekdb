@@ -8966,6 +8966,34 @@ int ObDMLResolver::resolve_external_table_generated_column(
   return ret;
 }
 
+int ObDMLResolver::get_ddl_schema_in_insert_into_select_clause(const ObTableSchema *&ddl_table_schema)
+{
+  int ret = OB_SUCCESS;
+  ddl_table_schema = nullptr;
+
+  ObDMLStmt *stmt = get_stmt();
+  if (OB_ISNULL(stmt)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get unexpected null", K(ret));
+  } else if (stmt->is_insert_stmt()) {
+    const ObInsertStmt *insert_stmt = reinterpret_cast<ObInsertStmt *>(stmt);
+    if (OB_NOT_NULL(session_info_) && OB_NOT_NULL(schema_checker_) && session_info_->get_ddl_info().is_ddl()) {
+      if (OB_ISNULL(insert_stmt) || OB_UNLIKELY(insert_stmt->get_table_items().count() <= 0)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("unexpected error, insert stmt is nullptr or hasn't table item", K(ret), KPC(insert_stmt));
+      } else if (OB_FAIL(schema_checker_->get_table_schema(session_info_->get_effective_tenant_id(),
+                                                           insert_stmt->get_table_item(0)->ddl_table_id_,
+                                                           ddl_table_schema))) {
+        LOG_WARN("fail to get ddl table schema", K(ret), K(insert_stmt->get_table_item(0)->ddl_table_id_));
+      } else if (OB_ISNULL(ddl_table_schema)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("ddl table schema is nullptr", K(ret), K(insert_stmt->get_table_item(0)->ddl_table_id_));
+      }
+    }
+  }
+  return ret;
+}
+
 int ObDMLResolver::resolve_generated_column_expr(const ObString &expr_str,
     const TableItem &table_item, const ObColumnSchemaV2 *column_schema,
     const ObColumnRefRawExpr &column, ObRawExpr *&ref_expr,
@@ -8976,6 +9004,7 @@ int ObDMLResolver::resolve_generated_column_expr(const ObString &expr_str,
   ObRawExprFactory *expr_factory = NULL;
   ObSQLSessionInfo *session_info = NULL;
   const ObTableSchema *table_schema = NULL;
+  const ObTableSchema *ddl_table_schema = nullptr;
   const bool allow_sequence = !used_for_generated_column;
   bool include_hidden = false;
   ObSQLMode sql_mode = 0;
@@ -9014,12 +9043,26 @@ int ObDMLResolver::resolve_generated_column_expr(const ObString &expr_str,
                                                                  this,
                                                                  schema_checker_))) {
     LOG_WARN("build generated column expr failed", K(ret));
-  } else if (OB_NOT_NULL(column_schema) && column_schema->is_doc_id_column()
-      && OB_FAIL(fill_doc_id_expr_param(table_item.table_id_, table_item.ref_id_, table_schema, ref_expr, stmt))) {
-    LOG_WARN("fail to fill doc id expr param", K(ret), K(table_item), KP(table_schema), KP(ref_expr));
-  } else if (OB_NOT_NULL(column_schema) && column_schema->is_vec_hnsw_vid_column()
-      && OB_FAIL(fill_vec_id_expr_param(table_item.table_id_, table_item.ref_id_, table_schema, ref_expr, stmt))) {
-    LOG_WARN("fail to fill vec vid expr param", K(ret), K(table_item), KP(table_schema), KP(ref_expr));
+  } else if (OB_NOT_NULL(column_schema) && column_schema->is_doc_id_column()) {
+    bool need_fill = true;
+    if (OB_FAIL(get_ddl_schema_in_insert_into_select_clause(ddl_table_schema))) {
+      LOG_WARN("fail to get ddl schema in insert into select clause", K(ret));
+    } else if (OB_NOT_NULL(ddl_table_schema) && !ddl_table_schema->is_fts_or_multivalue_index()) {
+      need_fill = false;
+    }
+    if (OB_SUCC(ret) && need_fill && OB_FAIL(fill_doc_id_expr_param(table_item.table_id_, table_item.ref_id_, table_schema, ref_expr, stmt))) {
+      LOG_WARN("fail to fill doc id expr param", K(ret), K(table_item), KP(table_schema), KP(ref_expr));
+    }
+  } else if (OB_NOT_NULL(column_schema) && column_schema->is_vec_hnsw_vid_column()) {
+    bool need_fill = true;
+    if (OB_FAIL(get_ddl_schema_in_insert_into_select_clause(ddl_table_schema))) {
+      LOG_WARN("fail to get ddl schema in insert into select clause", K(ret));
+    } else if (OB_NOT_NULL(ddl_table_schema) && !ddl_table_schema->is_vec_hnsw_index()) {
+      need_fill = false;
+    }
+    if (OB_SUCC(ret) && need_fill && OB_FAIL(fill_vec_id_expr_param(table_item.table_id_, table_item.ref_id_, table_schema, ref_expr, stmt))) {
+      LOG_WARN("fail to fill vec vid expr param", K(ret), K(table_item), KP(table_schema), KP(ref_expr));
+    }
   }
 
   bool is_default_udt_constructor = false;

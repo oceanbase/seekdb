@@ -907,6 +907,7 @@ private:
                               ObWindowDistHint::WinDistOption &dist_option,
                               bool &is_valid);
   int resolve_table_dynamic_sampling_hint(const ParseNode &hint_node, ObOptHint *&opt_hint);
+  int get_ddl_schema_in_insert_into_select_clause(const ObTableSchema *&ddl_table_schema);
 public:
   static int resolve_direct_load_hint(const ParseNode &hint_node, ObDirectLoadHint &hint);
   //////////end of functions for sql hint/////////////
