@@ -1116,7 +1116,12 @@ int ObComplementWriteTask::get_next_chunk(ObChunk *&next_chunk)
   int ret = OB_SUCCESS;
   next_chunk = nullptr;
   const blocksstable::ObDatumRow *row = nullptr;
-  if (OB_ISNULL(scan_)) {
+  if (OB_ISNULL(context_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("complement context is null", K(ret), KP(context_));
+  } else if (context_->is_major_sstable_exist_) {
+    ret = OB_ITER_END;
+  } else if (OB_ISNULL(scan_)) {
     ret = OB_ERR_SYS;
     LOG_WARN("table scan has not been inited", K(ret));
   } else if (OB_FAIL(slice_row_iter_.get_next_row(row))) {
@@ -1223,7 +1228,7 @@ int ObComplementWriteTask::preprocess()
     LOG_WARN("remote scan for recover restore table ddl failed", K(ret));
   }
 
-  if (OB_FAIL(ret)) {
+  if (OB_FAIL(ret) || context_->is_major_sstable_exist_) {
   } else if (OB_FAIL(row_iter_.init(scan_))) {
     LOG_WARN("init row iterator failed", K(ret));
   } else if (OB_FAIL(slice_row_iter_.init(param_->dest_tablet_id_, task_id_, write_param_, row_iter_))) {

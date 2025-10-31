@@ -640,7 +640,8 @@ int ObSSTableArray::get_table(
       LOG_WARN("unexpected null sstable pointer", K(ret), KPC(this));
     } else if (table_key.is_cg_sstable()) { // should get cg table from co sstable
       ObCOSSTableV2 *co_sstable = nullptr;
-      if (table_key.get_snapshot_version() != cur_table->get_snapshot_version()) {
+      if (table_key.scn_range_ != cur_table->get_key().scn_range_
+          || table_key.slice_range_ != cur_table->get_key().slice_range_) {
         // do nothing
       } else if (OB_UNLIKELY(!cur_table->is_co_sstable())) {
         ret = OB_ERR_UNEXPECTED;

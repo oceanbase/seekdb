@@ -1080,6 +1080,9 @@ int ObTabletTableStore::get_sstable(const ObITable::TableKey &table_key, ObSSTab
     } else if (OB_ISNULL(wrapper.get_sstable())) {
       ret = OB_ENTRY_NOT_EXIST;
       LOG_WARN("table not found", K(ret), K(table_key));
+    } else if (OB_UNLIKELY(wrapper.get_sstable()->get_key() != table_key)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("table key not match", K(ret), K(table_key), K(wrapper.get_sstable()->get_key()));
     }
   }
   return ret;

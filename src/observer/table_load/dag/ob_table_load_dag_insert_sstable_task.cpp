@@ -368,7 +368,6 @@ void ObTableLoadMemoryFriendWriteMacroBlockPipeline::postprocess(int &ret)
     if (OB_FAIL(set_remain_block())) {
       LOG_WARN("fail to set remain block", K(ret));
     } else {
-      ddl_slice_ = nullptr;
       LOG_INFO("the ObTableLoadMemoryFriendWriteMacroBlockPipeline has ret code iter end", K(ret));
     }
   }

@@ -140,6 +140,7 @@ public:
     SliceRange() : start_slice_idx_(0), end_slice_idx_(0) {}
     void reset() { start_slice_idx_ = 0; end_slice_idx_ = 0; }
     bool operator ==(const SliceRange &other) const { return start_slice_idx_ == other.start_slice_idx_ && end_slice_idx_ == other.end_slice_idx_; }
+    bool operator !=(const SliceRange &other) const { return !this->operator==(other); }
     bool is_merge_slice() const { return 0 == start_slice_idx_ && end_slice_idx_ > 0; }
     TO_STRING_KV(K_(start_slice_idx), K_(end_slice_idx));
   public:
