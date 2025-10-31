@@ -1983,17 +1983,6 @@ int ObServer::init_opts_config(bool has_config_file, const ObServerOptions &opts
   if (nullptr != opts.devname_) {
     config_.devname.set_value(opts.devname_);
     config_.devname.set_version(start_time_);
-  } else {
-    if (!has_config_file) {
-      const char *devname = get_default_if();
-      if (devname && '\0' != devname[0]) {
-        LOG_INFO("guess interface name", K(devname));
-        config_.devname.set_value(devname);
-        config_.devname.set_version(start_time_);
-      } else {
-        LOG_INFO("can't guess interface name, use default bond0");
-      }
-    }
   }
 
   gctx_.startup_mode_ = NORMAL_MODE;

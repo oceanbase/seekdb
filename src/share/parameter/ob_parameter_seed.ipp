@@ -65,7 +65,7 @@ DEF_INT(rpc_port, OB_CLUSTER_PARAMETER, "2882", "(1024,65536)",
 DEF_INT(mysql_port, OB_CLUSTER_PARAMETER, "2881", "(1024,65536)",
         "port number for mysql connection. Range: (1024, 65536) in integer",
         ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
-DEF_STR(devname, OB_CLUSTER_PARAMETER, "bond0", "name of network adapter",
+DEF_STR(devname, OB_CLUSTER_PARAMETER, "lo", "name of network adapter",
         ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::READONLY));
 DEF_STR(zone, OB_CLUSTER_PARAMETER, "z1", "specifies the zone name",
         ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));

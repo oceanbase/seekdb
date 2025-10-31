@@ -321,7 +321,12 @@ int inner_main(int argc, char *argv[])
       opts->base_dir_.ptr(), strerror(errno));
   } else {
     MPRINT("Change working directory to base dir. path='%s'", opts->base_dir_.ptr());
-    MPRINT("The log file is in the directory: %s/log/", opts->base_dir_.ptr());
+    fprintf(stderr, "The log file is in the directory: ");
+    fprintf(stderr, opts->base_dir_.ptr());
+    if (opts->base_dir_.ptr()[opts->base_dir_.length() - 1] != '/') {
+      fprintf(stderr, "/");
+    }
+    fprintf(stderr, "log/\n");
   }
 
   if (OB_FAIL(ret)) {
@@ -339,7 +344,7 @@ int inner_main(int argc, char *argv[])
   }
   if (OB_FAIL(ret)) {
   } else if (!opts->nodaemon_ && !opts->initialize_) {
-    MPRINT("Will start observer as a daemon process. You can check the server status by client later.");
+    MPRINT("The observer will be started as a daemon process. You can check the server status by client later.");
     MPRINT("    Start observer with --nodaemon if you don't want to start as a daemon process.");
     if (OB_FAIL(start_daemon(PID_FILE_NAME))) {
       MPRINT("Start observer as a daemon failed. Did you started observer already?");
