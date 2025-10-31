@@ -41,8 +41,11 @@ set(CPACK_DEBIAN_PACKAGE_SECTION "database")
 set(CPACK_DEBIAN_PACKAGE_PRIORITY "Optional")
 
 # systemd define on deb
-set(CPACK_DEBIAN_SERVER_PACKAGE_DEPENDS "oceanbase-ce-libs (= ${CPACK_PACKAGE_VERSION}-${CPACK_DEBIAN_PACKAGE_RELEASE})")
-set(CPACK_DEBIAN_SERVER_PACKAGE_DEPENDS "${CPACK_DEBIAN_SERVER_PACKAGE_DEPENDS}, systemd")
+set(LIBAIO_DEPENDENCY "libaio1")
+if(OB_AIO AND OB_AIO STREQUAL "libaio1t64")
+  set(LIBAIO_DEPENDENCY "${OB_AIO}")
+endif()
+set(CPACK_DEBIAN_SERVER_PACKAGE_DEPENDS "${LIBAIO_DEPENDENCY}, systemd")
 
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/tools/systemd/profile/pre_install.sh.template
               ${CMAKE_CURRENT_SOURCE_DIR}/tools/systemd/profile/preinst

@@ -272,4 +272,34 @@ else()
     set(OCI_DEVEL_INC "${DEP_3RD_DIR}/usr/include/oracle/19.10/client64")
 endif()
 
+# AIO library detection for Ubuntu >= 24
+# Set OB_AIO_LINK_OPTION for linking and OB_AIO_PACKAGE_DEPENDENCY for package dependencies
+set(OB_AIO "libaio")
+find_program(LSB_RELEASE_EXEC lsb_release)
+if(LSB_RELEASE_EXEC)
+  execute_process(
+    COMMAND ${LSB_RELEASE_EXEC} -is
+    OUTPUT_VARIABLE DEBIAN_NAME
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    ERROR_QUIET
+  )
+  if(DEBIAN_NAME)
+    string(TOLOWER "${DEBIAN_NAME}" DEBIAN_NAME)
+    execute_process(
+      COMMAND ${LSB_RELEASE_EXEC} -rs
+      OUTPUT_VARIABLE DEBIAN_VERSION
+      OUTPUT_STRIP_TRAILING_WHITESPACE
+      ERROR_QUIET
+    )
+    if(DEBIAN_NAME STREQUAL "ubuntu" AND DEBIAN_VERSION)
+      # Compare version: Ubuntu 24.04 and higher
+      if(DEBIAN_VERSION VERSION_GREATER_EQUAL "24.04")
+        # Set package dependency
+        set(OB_AIO "libaio1t64")
+        message(STATUS "Ubuntu ${DEBIAN_VERSION} detected, using ${OB_AIO}")
+      endif()
+    endif()
+  endif()
+endif()
+
 EXECUTE_PROCESS(COMMAND grep -Po "release [0-9]{1}" /etc/redhat-release COMMAND awk "{print $2}" COMMAND tr -d '\n' OUTPUT_VARIABLE KERNEL_RELEASE ERROR_QUIET)

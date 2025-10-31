@@ -3,7 +3,7 @@ echo "execute post uninstall script"
 GREEN='\033[32m'
 NC="\033[0m"
 
-if [ $1 -eq 0 ]; then
+if [ "$1" -eq 0 ] 2>/dev/null || [ "$1" = "remove" ] || [ "$1" = "purge" ]; then
     clean_script="/var/lib/oceanbase/oceanbase_clean.sh"
 
     # Ensure the directory exists
