@@ -61,6 +61,10 @@ int ObAllVirtualThread::inner_get_next_row(common::ObNewRow *&row)
     if (OB_FAIL(FileDirectoryUtils::is_exists(cgroup_path, is_config_cgroup_))) {
       SERVER_LOG(WARN, "fail check file exist", K(cgroup_path), K(ret));
     }
+    #ifdef OB_BUILD_EMBED_MODE
+    ret = OB_NOT_SUPPORTED;
+    return ret;
+    #endif
     const int64_t col_count = output_column_ids_.count();
     pid_t pid = getpid();
     StackMgr::Guard guard(g_stack_mgr);

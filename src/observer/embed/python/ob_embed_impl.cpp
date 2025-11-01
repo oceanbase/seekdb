@@ -33,7 +33,9 @@ PYBIND11_MODULE(oblite, m) {
     oceanbase::common::VersionUtil::print_version_str(embed_version_str, sizeof(embed_version_str), DATA_CURRENT_VERSION);
     m.attr("__version__") = embed_version_str;
 
-    m.def("open", &oceanbase::embed::ObLiteEmbed::open, pybind11::arg("db_dir") = "./oblite.db",
+    m.def("open", &oceanbase::embed::ObLiteEmbed::open, pybind11::arg("db_dir") = "./oblite.db", "open db");
+    m.def("_open_with_service", &oceanbase::embed::ObLiteEmbed::open_with_service, pybind11::arg("db_dir") = "./oblite.db",
+                                                  pybind11::arg("port") = 2881,
                                                  "open db");
 
     m.def("connect", &oceanbase::embed::ObLiteEmbed::connect, pybind11::arg("db_name") = "test",
@@ -99,6 +101,16 @@ static int to_absolute_path(const char *cwd, ObSqlString &dir)
 
 void ObLiteEmbed::open(const char* db_dir)
 {
+  open_inner(db_dir, 0);
+}
+
+void ObLiteEmbed::open_with_service(const char* db_dir, const int64_t port)
+{
+  open_inner(db_dir, port);
+}
+
+void ObLiteEmbed::open_inner(const char* db_dir, const int64_t port)
+{
   int ret = OB_SUCCESS;
   if (GCTX.is_inited()) {
     MPRINT("db has opened");
@@ -110,7 +122,7 @@ void ObLiteEmbed::open(const char* db_dir)
       ret = OB_ERR_UNEXPECTED;
       MPRINT("mmap failed");
     } else {
-      ret = CALL_WITH_NEW_STACK(do_open_(db_dir), stack_addr, stack_size);
+      ret = CALL_WITH_NEW_STACK(do_open_(db_dir, port), stack_addr, stack_size);
       if (-1 == ::munmap(stack_addr, stack_size)) {
         ret = OB_ERR_UNEXPECTED;
       }
@@ -123,13 +135,17 @@ void ObLiteEmbed::open(const char* db_dir)
   omt::ObTenantNodeBalancer::get_instance().handle();
 }
 
-int ObLiteEmbed::do_open_(const char* db_dir)
+int ObLiteEmbed::do_open_(const char* db_dir, int64_t port)
 {
   int ret = OB_SUCCESS;
   ObServerOptions opts;
-  opts.port_ = 11002;
-  opts.use_ipv6_ = false;
   opts.embed_mode_ = true;
+  opts.port_ = 2881;
+  if (port > 0) {
+    opts.port_ = port;
+    opts.embed_mode_ = false;
+  }
+  opts.use_ipv6_ = false;
 
   char buffer[PATH_MAX];
   ObSqlString work_abs_dir;
@@ -289,19 +305,23 @@ std::shared_ptr<ObLiteEmbedConn> ObLiteEmbed::connect(const char* db_name, const
   } else if (OB_ISNULL(user_info)) {
     ret = OB_SCHEMA_ERROR;
     LOG_WARN("schema user info is null", KR(ret));
-  } else if (OB_FAIL(schema_guard.get_database_schema(OB_SYS_TENANT_ID, ObString(db_name), database_schema))) {
-    LOG_WARN("failed to get database", KR(ret), K(db_name));
-  } else if (OB_ISNULL(database_schema)) {
-    ret = OB_ERR_BAD_DATABASE;
-    LOG_WARN("database is null", KR(ret), K(db_name));
-    LOG_USER_ERROR(OB_ERR_BAD_DATABASE, STRLEN(db_name), db_name);
+  } else if (OB_NOT_NULL(db_name) && STRLEN(db_name) > 0) {
+    if (OB_FAIL(schema_guard.get_database_schema(OB_SYS_TENANT_ID, ObString(db_name), database_schema))) {
+      LOG_WARN("failed to get database", KR(ret), K(db_name));
+    } else if (OB_ISNULL(database_schema)) {
+      ret = OB_ERR_BAD_DATABASE;
+      LOG_WARN("database is null", KR(ret), K(db_name));
+      LOG_USER_ERROR(OB_ERR_BAD_DATABASE, STRLEN(db_name), db_name);
+    }
   }
   if (OB_SUCC(ret)) {
     OZ (session->load_default_sys_variable(false, true));
     OZ (session->load_default_configs_in_pc());
     OZ (session->init_tenant(OB_SYS_TENANT_NAME, OB_SYS_TENANT_ID));
     OZ (session->load_all_sys_vars(schema_guard));
-    OZ (session->set_default_database(db_name));
+    if (OB_NOT_NULL(db_name) && STRLEN(db_name) > 0) {
+      OZ (session->set_default_database(db_name));
+    }
     OX (session->set_user_session());
     OZ (session->set_autocommit(autocommit));
     OZ (session->set_user(user_info->get_user_name_str(), user_info->get_host_name_str(), user_info->get_user_id()));
@@ -309,8 +329,10 @@ std::shared_ptr<ObLiteEmbedConn> ObLiteEmbed::connect(const char* db_name, const
     OX (session->set_priv_user_id(user_info->get_user_id()));
     OX (session->set_user_priv_set(user_info->get_priv_set()));
     OX (session->init_use_rich_format());
-    OZ (schema_guard.get_db_priv_set(OB_SYS_TENANT_ID, user_info->get_user_id(), db_name, db_priv_set));
-    OX (session->set_db_priv_set(db_priv_set));
+    if (OB_NOT_NULL(db_name) && STRLEN(db_name) > 0) {
+      OZ (schema_guard.get_db_priv_set(OB_SYS_TENANT_ID, user_info->get_user_id(), db_name, db_priv_set));
+      OX (session->set_db_priv_set(db_priv_set));
+    }
     OX (session->get_enable_role_array().reuse());
     for (int i = 0; OB_SUCC(ret) && i < user_info->get_role_id_array().count(); ++i) {
       if (user_info->get_disable_option(user_info->get_role_id_option_array().at(i)) == 0) {

@@ -73,10 +73,12 @@ public:
   ObLiteEmbed() {}
   ~ObLiteEmbed() {}
   static void open(const char* db_dir);
+  static void open_with_service(const char* db_dir, const int64_t port = 0);
+  static void open_inner(const char* db_dir, const int64_t port = 0);
   static void close();
   static std::shared_ptr<ObLiteEmbedConn> connect(const char* db_name, const bool autocommit);
 private:
-  static int do_open_(const char* db_dir);
+  static int do_open_(const char* db_dir, int64_t port);
 };
 
 class ObLiteEmbedUtil
