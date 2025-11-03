@@ -6,6 +6,7 @@
 set @@session.explicit_defaults_for_timestamp=off;
 --enable_query_log
 
+--source mysql_test/include/wait_daily_merge.inc
 connect (conn0,$OBMYSQL_MS0,admin,$OBMYSQL_PWD,oceanbase,$OBMYSQL_PORT);
 
 let $__timeout_def__ = 60 * 1000 * 1000;
