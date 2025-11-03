@@ -1945,8 +1945,6 @@ int ObServer::init_config(const ObServerOptions &opts)
   }
 
   if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(init_local_ip_and_devname())) {
-    LOG_ERROR("init local_ip and devname failed", KR(ret));
   } else if (!is_arbitration_mode() && OB_FAIL(config_.strict_check_special())) {
     LOG_ERROR("some config setting is not valid", KR(ret));
   } else if (OB_FAIL(GMEMCONF.reload_config(config_))) {
@@ -2102,95 +2100,21 @@ int ObServer::init_data_dir_and_redo_dir(const ObServerOptions &opts)
   return ret;
 }
 
-int ObServer::init_local_ip_and_devname()
-{
-  int ret = OB_SUCCESS;
-
-  // local_ip is a critical parameter, if it is set, then verify it; otherwise, set it via devname.
-  if (OB_FAIL(ret)) {
-  } else if (strlen(config_.local_ip) > 0) {
-    char if_name[MAX_IFNAME_LENGTH] = { '\0' };
-    bool has_found = false;
-    if (OB_SUCCESS != obsys::ObNetUtil::get_ifname_by_addr(config_.local_ip, if_name, sizeof(if_name), has_found)) {
-      // if it is incorrect, then ObServer start but log a error.
-      LOG_DBA_WARN_V2(OB_SERVER_GET_IFNAME_FAIL, OB_ERR_OBSERVER_START,
-                        "get ifname by local_ip failed. ",
-                        "local_ip is ", config_.local_ip.get_value(),
-                        ". [suggestion] Verify if your local IP address is a virtual one.");
-    } else if (false == has_found) {
-      LOG_DBA_ERROR_V2(OB_SERVER_SET_LOCAL_IP_FAIL, OB_ERR_OBSERVER_START,
-                        "local_ip set failed, please check your local_ip. ",
-                        "local_ip is ", config_.local_ip.get_value(),
-                        ". [suggestion] Verify if your local IP is right. ");
-    } else if (0 != strcmp(config_.devname, if_name)) {
-      config_.devname.set_value(if_name);
-      config_.devname.set_version(start_time_);
-      // this is done to ensure the consistency of local_ip and devname.
-      LOG_DBA_WARN_V2(OB_SERVER_DEVICE_NAME_MISMATCH, OB_ITEM_NOT_MATCH,
-          "the devname has been rewritten, and the new value comes from local_ip, old value: ",
-          config_.devname.get_value(), " new value: ", if_name, " local_ip: ", config_.local_ip.get_value());
-    }
-  } else {
-    if (config_.use_ipv6) {
-      char ipv6[MAX_IP_ADDR_LENGTH] = { '\0' };
-      if (OB_FAIL(obsys::ObNetUtil::get_local_addr_ipv6(config_.devname, ipv6, sizeof(ipv6)))) {
-        LOG_ERROR("get ipv6 address by devname failed", "devname",
-            config_.devname.get_value(), KR(ret));
-      } else {
-        config_.local_ip.set_value(ipv6);
-        config_.local_ip.set_version(start_time_);
-        _LOG_INFO("set local_ip via devname, local_ip:%s, devname:%s.", ipv6, config_.devname.get_value());
-      }
-    } else {
-      uint32_t ipv4_net = 0;
-      char ipv4[INET_ADDRSTRLEN] = { '\0' };
-      if (OB_FAIL(obsys::ObNetUtil::get_local_addr_ipv4(config_.devname, ipv4_net))) {
-        LOG_ERROR("get ipv4 address by devname failed", "devname",
-            config_.devname.get_value(), KR(ret));
-      } else if (nullptr == inet_ntop(AF_INET, (void *)&ipv4_net, ipv4, sizeof(ipv4))) {
-        ret = OB_ERR_SYS;
-        LOG_ERROR("call inet_ntop failed", K(ipv4_net), K(errno), KERRMSG, KR(ret));
-      } else {
-        config_.local_ip.set_value(ipv4);
-        config_.local_ip.set_version(start_time_);
-        _LOG_INFO("set local_ip via devname, local_ip:%s, devname:%s.", ipv4, config_.devname.get_value());
-      }
-    }
-  }
-
-  return ret;
-}
-
 int ObServer::init_self_addr()
 {
   int ret = OB_SUCCESS;
 
+  const char *ip = nullptr;
   int32_t local_port = static_cast<int32_t>(config_.rpc_port);
-  if (strlen(config_.local_ip) > 0) {
-    self_addr_.set_ip_addr(config_.local_ip, local_port);
+  if (config_.use_ipv6) {
+    ip = "::1";
   } else {
-    if (config_.use_ipv6) {
-      char ipv6[MAX_IP_ADDR_LENGTH] = { '\0' };
-      if (OB_FAIL(obsys::ObNetUtil::get_local_addr_ipv6(config_.devname, ipv6, sizeof(ipv6)))) {
-        LOG_ERROR("get ipv6 address by devname failed", "devname",
-            config_.devname.get_value(), KR(ret));
-      } else {
-        self_addr_.set_ip_addr(ipv6, local_port);
-      }
-    } else {
-      uint32_t ipv4_net = 0;
-      if (OB_FAIL(obsys::ObNetUtil::get_local_addr_ipv4(config_.devname, ipv4_net))) {
-        LOG_ERROR("get ipv4 address by devname failed", "devname",
-            config_.devname.get_value(), KR(ret));
-      } else {
-        int32_t ipv4 = ntohl(ipv4_net);
-        self_addr_.set_ipv4_addr(ipv4, local_port);
-      }
-    }
+    ip = "127.0.0.1";
   }
+  self_addr_.set_ip_addr(ip, local_port);
 
   if (OB_SUCC(ret)) {
-    const char *syslog_file_info = ObServerUtils::build_syslog_file_info(self_addr_);
+    const char *syslog_file_info = ObServerUtils::build_syslog_file_info();
     OB_LOGGER.set_new_file_info(syslog_file_info);
     LOG_INFO("Build basic information for each syslog file", "info", syslog_file_info);
 
