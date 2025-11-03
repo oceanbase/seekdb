@@ -2435,7 +2435,7 @@ int ObDASHNSWScanIter::process_adaptor_state_post_filter(
     ++adaptive_ctx_.iter_times_;
     if (first_search && OB_FAIL(process_adaptor_state_post_filter_once(ada_ctx, adaptor))) {
       LOG_WARN("failed to process adaptor state post filter once.", K(ret), K(vec_index_type_), K(vec_idx_try_path_));
-    } else if (!first_search && OB_FAIL(adaptor->query_next_result(ada_ctx, &query_cond_, tmp_adaptor_vid_iter_))) {
+    } else if (!first_search && !is_ipivf() && OB_FAIL(adaptor->query_next_result(ada_ctx, &query_cond_, tmp_adaptor_vid_iter_))) {
     } else if (first_search && OB_FALSE_IT(first_search = false)) {
     } else if (!is_iter_filter() && !is_ipivf()) {
       end_search = true;
@@ -2864,6 +2864,9 @@ int ObDASHNSWScanIter::post_query_vid_with_filter(
         // res is already less than limit, no need to find again
         query_cond_.query_limit_ = 0;
         LOG_TRACE("iteractive filter log:", K(tmp_adaptor_vid_iter_->get_total()), K(query_cond_.query_limit_), K(total_before_add), K(adaptor_vid_iter_->get_total()));
+      } else if (is_ipivf()) {
+        // for sparse vector index, iter filter is not supported
+        query_cond_.query_limit_ = 0;
       } else {
         int64_t need_cnt_next = adaptor_vid_iter_->get_alloc_size() - adaptor_vid_iter_->get_total();
         int total_after_add = adaptor_vid_iter_->get_total();

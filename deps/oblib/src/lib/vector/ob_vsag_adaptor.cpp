@@ -1169,6 +1169,8 @@ int knn_search(obvsag::VectorIndexPtr &index_handler, uint32_t len, uint32_t *di
     char result_param_str[1024]= {0};
     if (OB_FAIL(construct_vsag_sindi_search_param(query_prune_ratio, n_candidate, result_param_str))) {
       LOG_WARN("[OBVSAG] construct_vsag_search_param fail", K(ret), K(index_type), K(n_candidate));
+    } else if (len == 0) {
+      result_size = 0;
     } else {
       const std::string input_json_string(result_param_str);
       vsag::SparseVector sparse;

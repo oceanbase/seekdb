@@ -283,7 +283,7 @@ int ObVectorIndexUtil::parser_params_from_string(
           if (err != 0 || (new_param_value.ptr() + new_param_value.length()) != endptr) {
             ret = OB_DATA_OUT_OF_RANGE;
             LOG_WARN("fail to cast string to double", K(ret), K(new_param_value), K(err), KP(endptr));
-          } else if (out_val < 0.0 || out_val > 0.5) {
+          } else if (out_val < 0.0 || out_val > 0.9) {
             ret = OB_NOT_SUPPORTED;
             LOG_WARN("not support vector index drop_ratio_build value", K(ret), K(out_val), K(new_param_value));
           } else {
@@ -296,7 +296,7 @@ int ObVectorIndexUtil::parser_params_from_string(
           if (err != 0 || (new_param_value.ptr() + new_param_value.length()) != endptr) {
             ret = OB_DATA_OUT_OF_RANGE;
             LOG_WARN("fail to cast string to double", K(ret), K(new_param_value), K(err), KP(endptr));
-          } else if (out_val < 0.0 || out_val > 0.5) {
+          } else if (out_val < 0.0 || out_val > 0.9) {
             ret = OB_NOT_SUPPORTED;
             LOG_WARN("not support vector index drop_ratio_search value", K(ret), K(out_val), K(new_param_value));
           } else {
@@ -748,7 +748,7 @@ int ObVectorIndexUtil::resolve_query_param(
         } else if (err != 0 || (value_str.ptr() + value_str.length()) != endptr) {
           ret = OB_DATA_OUT_OF_RANGE;
           LOG_WARN("fail to cast string to double", K(ret), K(value_str), K(err), KP(endptr));
-        } else if (out_val < 0 || out_val > 0.5) {
+        } else if (out_val < 0 || out_val > 0.9) {
           ret = OB_INVALID_ARGUMENT;
           LOG_WARN("invalid vector index drop_ratio_search value", K(ret), K(out_val), K(value_str));
           LOG_USER_ERROR(OB_INVALID_ARGUMENT, "vector index drop_ratio_search value");
@@ -3290,7 +3290,7 @@ int ObVectorIndexUtil::check_index_param(
           if (err != 0 || (new_parser_name.ptr() + new_parser_name.length()) != endptr) {
             ret = OB_DATA_OUT_OF_RANGE;
             LOG_WARN("fail to cast string to double", K(ret), K(new_parser_name), K(err), KP(endptr));
-          } else if (out_val < 0 || out_val > 0.5 ) {
+          } else if (out_val < 0 || out_val > 0.9 ) {
             ret = OB_NOT_SUPPORTED;
             LOG_WARN("not support vector index drop_ratio_build value", K(ret), K(out_val));
             LOG_USER_ERROR(OB_NOT_SUPPORTED, "this value of vector index drop_ratio_build is");
@@ -3305,7 +3305,7 @@ int ObVectorIndexUtil::check_index_param(
           if (err != 0 || (new_parser_name.ptr() + new_parser_name.length()) != endptr) {
             ret = OB_DATA_OUT_OF_RANGE;
             LOG_WARN("fail to cast string to double", K(ret), K(new_parser_name), K(err), KP(endptr));
-          } else if (out_val < 0 || out_val > 0.5 ) {
+          } else if (out_val < 0 || out_val > 0.9 ) {
             ret = OB_NOT_SUPPORTED;
             LOG_WARN("not support vector index drop_ratio_search value", K(ret), K(out_val));
             LOG_USER_ERROR(OB_NOT_SUPPORTED, "this value of vector index drop_ratio_search is");
@@ -5771,7 +5771,7 @@ int ObVectorIndexUtil::estimate_vector_memory_used(
   estimate_memory = 0;
 
   const char* const DATATYPE_FLOAT32 = "float32";
-  const char* const DATATYPE_SPARSE = "SPARSE";
+  const char* const DATATYPE_SPARSE = "sparse";
   obvsag::VectorIndexPtr index_handler = nullptr;
   ObVectorIndexParam param;
   int64_t dim = 0;
