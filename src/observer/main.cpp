@@ -361,7 +361,7 @@ int inner_main(int argc, char *argv[])
     CURLcode curl_code = curl_global_init(CURL_GLOBAL_ALL);
     OB_ASSERT(CURLE_OK == curl_code);
 
-    const char *syslog_file_info = ObServerUtils::build_syslog_file_info(ObAddr());
+    const char *syslog_file_info = ObServerUtils::build_syslog_file_info();
     OB_LOGGER.set_log_level(opts->log_level_);
     OB_LOGGER.set_max_file_size(LOG_FILE_SIZE);
     OB_LOGGER.set_new_file_info(syslog_file_info);

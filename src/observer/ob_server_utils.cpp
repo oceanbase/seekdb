@@ -157,7 +157,7 @@ int ObServerUtils::cal_all_part_disk_size(const int64_t suggested_data_disk_size
   return ret;
 }
 
-const char *ObServerUtils::build_syslog_file_info(const common::ObAddr &addr)
+const char *ObServerUtils::build_syslog_file_info()
 {
   int ret = OB_SUCCESS;
   const static int64_t max_info_len = 512;
@@ -168,17 +168,6 @@ const char *ObServerUtils::build_syslog_file_info(const common::ObAddr &addr)
   if (0 != ::uname(&uts)) {
     ret = OB_ERR_SYS;
     LOG_WARN("call uname failed");
-  }
-
-  // self address
-  char self_addr[OB_IP_PORT_STR_BUFF] = {'\0'};
-  if (OB_SUCC(ret)) {
-    if (addr.is_valid()) {
-      int64_t pos = 0;
-      if (OB_FAIL(databuff_printf(self_addr, sizeof(self_addr), pos, addr))) {
-        LOG_WARN("print addr to databuff failed", K(ret), K(addr), K(pos));
-      }
-    }
   }
 
   // time zone info
@@ -198,9 +187,9 @@ const char *ObServerUtils::build_syslog_file_info(const common::ObAddr &addr)
 
   if (OB_SUCC(ret)) {
     int n = snprintf(info, max_info_len,
-                     "address: %s, observer version: %s, revision: %s, "
+                     "observer version: %s, revision: %s, "
                      "sysname: %s, os release: %s, machine: %s, tz GMT offset: %02d:%02d",
-                     self_addr, PACKAGE_STRING, build_version(),
+                     PACKAGE_STRING, build_version(),
                      uts.sysname, uts.release, uts.machine, gmtoff_hour, gmtoff_minute);
     if (n <= 0) {
       ret = OB_ERR_SYS;

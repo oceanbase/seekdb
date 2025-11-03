@@ -272,7 +272,6 @@ private:
   int init_config(const ObServerOptions &opts);
   int init_opts_config(bool has_config_file, const ObServerOptions &opts, const char *optstr); // init configs from command line
   int init_data_dir_and_redo_dir(const ObServerOptions &opts);
-  int init_local_ip_and_devname();
   int init_self_addr();
   int init_config_module(const char *optstr);
   int init_tz_info_mgr();
