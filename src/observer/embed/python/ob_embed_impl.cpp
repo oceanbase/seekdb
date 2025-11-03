@@ -27,23 +27,24 @@
 #include "sql/engine/expr/ob_expr_sql_udt_utils.h"
 #include "sql/engine/expr/ob_expr_lob_utils.h"
 
-PYBIND11_MODULE(oblite, m) {
-    m.doc() = "oblite embed pybind";
+PYBIND11_MODULE(pyseekdb, m) {
+    m.doc() = "OceanBase SeekDB";
     char embed_version_str[oceanbase::common::OB_SERVER_VERSION_LENGTH];
     oceanbase::common::VersionUtil::print_version_str(embed_version_str, sizeof(embed_version_str), DATA_CURRENT_VERSION);
     m.attr("__version__") = embed_version_str;
 
-    m.def("open", &oceanbase::embed::ObLiteEmbed::open, pybind11::arg("db_dir") = "./oblite.db", "open db");
-    m.def("_open_with_service", &oceanbase::embed::ObLiteEmbed::open_with_service, pybind11::arg("db_dir") = "./oblite.db",
+    const char *default_service_path = "./seekdb";
+    m.def("open", &oceanbase::embed::ObLiteEmbed::open, pybind11::arg("db_dir") = default_service_path, "open db");
+    m.def("_open_with_service", &oceanbase::embed::ObLiteEmbed::open_with_service, pybind11::arg("db_dir") = default_service_path,
                                                   pybind11::arg("port") = 2881,
                                                  "open db");
 
     m.def("connect", &oceanbase::embed::ObLiteEmbed::connect, pybind11::arg("db_name") = "test",
                                                         pybind11::arg("autocommit") = false,
-                                                       "connect db");
+                                                       "connect seekdb");
 
     pybind11::class_<oceanbase::embed::ObLiteEmbedConn,
-                     std::shared_ptr<oceanbase::embed::ObLiteEmbedConn>>(m, "ObLiteiEmbedConn")
+                     std::shared_ptr<oceanbase::embed::ObLiteEmbedConn>>(m, "Connection")
         .def(pybind11::init<>())
         .def("cursor", &oceanbase::embed::ObLiteEmbedConn::cursor)
         .def("close", &oceanbase::embed::ObLiteEmbedConn::reset)
@@ -51,7 +52,7 @@ PYBIND11_MODULE(oblite, m) {
         .def("commit", &oceanbase::embed::ObLiteEmbedConn::commit, pybind11::call_guard<pybind11::gil_scoped_release>())
         .def("rollback", &oceanbase::embed::ObLiteEmbedConn::rollback, pybind11::call_guard<pybind11::gil_scoped_release>());
 
-    pybind11::class_<oceanbase::embed::ObLiteEmbedCursor>(m, "ObLiteiEmbedCursor")
+    pybind11::class_<oceanbase::embed::ObLiteEmbedCursor>(m, "Cursor")
         .def("execute", &oceanbase::embed::ObLiteEmbedCursor::execute, pybind11::call_guard<pybind11::gil_scoped_release>())
         .def("fetchone", &oceanbase::embed::ObLiteEmbedCursor::fetchone)
         .def("fetchall", &oceanbase::embed::ObLiteEmbedCursor::fetchall)
@@ -78,7 +79,7 @@ static pybind11::object date_class = datetime_module.attr("date");
 static pybind11::object timedelta_class = datetime_module.attr("timedelta");
 static pybind11::module builtins = pybind11::module::import("builtins");
 
-#define MPRINT(format, ...) fprintf(stderr, format "\n", ##__VA_ARGS__)
+#define MPRINT(format, ...) fprintf(stderr, "[seekdb] " format "\n", ##__VA_ARGS__)
 
 ObSqlString pid_file_name;
 bool pid_locked = false;
@@ -113,7 +114,7 @@ void ObLiteEmbed::open_inner(const char* db_dir, const int64_t port)
 {
   int ret = OB_SUCCESS;
   if (GCTX.is_inited()) {
-    MPRINT("db has opened");
+    MPRINT("seekdb has opened");
     ret = OB_INIT_TWICE;
   } else {
     size_t stack_size = 1LL<<20;
@@ -129,7 +130,7 @@ void ObLiteEmbed::open_inner(const char* db_dir, const int64_t port)
     }
   }
   if (OB_FAIL(ret)) {
-    throw std::runtime_error("open oblite failed " + std::to_string(ob_errpkt_errno(ret, false)) + " " + std::string(ob_errpkt_strerror(ret, false)));
+    throw std::runtime_error("open seekdb failed " + std::to_string(ob_errpkt_errno(ret, false)) + " " + std::string(ob_errpkt_strerror(ret, false)));
   }
   // TODO promise service ready
   omt::ObTenantNodeBalancer::get_instance().handle();
@@ -169,7 +170,7 @@ int ObLiteEmbed::do_open_(const char* db_dir, int64_t port)
     MPRINT("get data dir absolute path failed %d", ret);
   } else if (OB_FAIL(to_absolute_path(work_abs_dir.ptr(), opts.redo_dir_))) {
     MPRINT("get redo dir absolute path failed %d", ret);
-  } else if (OB_FAIL(pid_file_name.assign_fmt("%s/run/oblite.pid", opts.base_dir_.ptr()))) {
+  } else if (OB_FAIL(pid_file_name.assign_fmt("%s/run/seekdb.pid", opts.base_dir_.ptr()))) {
     MPRINT("get pidfile absolute path failed %d", ret);
   }
 
@@ -210,7 +211,7 @@ int ObLiteEmbed::do_open_(const char* db_dir, int64_t port)
   } else {
     OB_LOGGER.set_log_level("INFO");
     ObSqlString log_file;
-    if (OB_FAIL(log_file.assign_fmt("%s/log/oblite.log", opts.base_dir_.ptr()))) {
+    if (OB_FAIL(log_file.assign_fmt("%s/log/seekdb.log", opts.base_dir_.ptr()))) {
       MPRINT("calculate log file failed %d", ret);
     } else {
       OB_LOGGER.set_file_name(log_file.ptr(), true, false);
@@ -237,7 +238,7 @@ int ObLiteEmbed::do_open_(const char* db_dir, int64_t port)
           ob_usleep(100 * 1000);
         }
       }
-      FLOG_INFO("oblite start success ", "cost", ObTimeUtility::current_time()-start_time);
+      FLOG_INFO("seekdb start success ", "cost", ObTimeUtility::current_time()-start_time);
     }
     dup2(saved_stdout, STDOUT_FILENO);
   }
@@ -251,7 +252,7 @@ void ObLiteEmbed::close()
   if (pid_locked) {
     unlink(pid_file_name.ptr());
   }
-  FLOG_INFO("oblite close");
+  FLOG_INFO("seekdb close");
   _Exit(0);
 }
 

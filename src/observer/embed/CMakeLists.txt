@@ -10,7 +10,7 @@ if(BUILD_EMBED_MODE)
 
   # First try to find the specified Python version from system
   message(STATUS "Searching for Python ${PYTHON_VERSION} in system first...")
-  find_package(Python3 ${PYTHON_VERSION} EXACT COMPONENTS Interpreter Development QUIET)
+  find_package(Python3 ${PYTHON_VERSION} EXACT COMPONENTS Interpreter Development.Module QUIET)
   if(Python3_FOUND)
     message(STATUS "Found system Python ${PYTHON_VERSION}, using it for embed module")
   endif()
@@ -149,20 +149,20 @@ if(BUILD_EMBED_MODE)
   find_package(pybind11 CONFIG REQUIRED)
   message(STATUS "pybind11 version: ${pybind11_VERSION}")
   
-  pybind11_add_module(oblite NO_EXTRAS python/ob_embed_impl.cpp)
+  pybind11_add_module(pyseekdb NO_EXTRAS python/ob_embed_impl.cpp)
 
-  set_target_properties(oblite PROPERTIES
-      PREFIX ""
-      SUFFIX ".so"
-      OUTPUT_NAME "oblite"
-    )
+  set_target_properties(pyseekdb PROPERTIES
+    PREFIX ""
+    SUFFIX ".so"
+    OUTPUT_NAME "pyseekdb"
+  )
 
-  target_link_libraries(oblite PUBLIC
+  target_link_libraries(pyseekdb PUBLIC
     oceanbase_static
     -static-libgcc
     -static-libstdc++
   )
   if (OB_USE_LLD)
-    target_link_options(oblite PRIVATE -fuse-ld=${DEVTOOLS_DIR}/bin/ld.lld)
+    target_link_options(pyseekdb PRIVATE -fuse-ld=${DEVTOOLS_DIR}/bin/ld.lld)
   endif()
 endif()
