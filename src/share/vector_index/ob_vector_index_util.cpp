@@ -3458,13 +3458,8 @@ int ObVectorIndexUtil::check_index_param(
         }
       }
       if (OB_FAIL(ret)) {
-      } else if (sync_mode_is_set && !async_is_set && sync_interval_is_set) {
-        ret = OB_NOT_SUPPORTED;
-        LOG_WARN("hybrid vector index sync_mode is not async but set sync_interval",
-          K(ret), K(sync_mode_is_set), K(async_is_set), K(sync_interval_is_set));
-        LOG_USER_ERROR(OB_NOT_SUPPORTED, "hybrid vector index sync_mode is not async but set sync_interval is");
       } else if (type_hybrid_vec_is_set) {
-        sync_interval_value = sync_interval_is_set ? sync_interval_value : 10;
+        sync_interval_value = (sync_interval_is_set && async_is_set) ? sync_interval_value : 10;
       }
       if (OB_SUCC(ret)) {
         char not_set_params_str[OB_MAX_TABLE_NAME_LENGTH];
