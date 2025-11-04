@@ -14,7 +14,8 @@
  * limitations under the License.
  */
 
-#include "ob_hybrid_search_exector.h"
+#include "ob_hybrid_search_executor.h"
+#include "storage/vector_index/cmd/ob_vector_refresh_index_executor.h"
 
 #define USING_LOG_PREFIX SHARE
 

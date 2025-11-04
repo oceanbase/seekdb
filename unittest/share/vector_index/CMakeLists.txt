@@ -1,2 +1,3 @@
 ob_unittest(test_vector_index_serialize)
+ob_unittest(test_hybrid_search)
 ob_unittest(test_vsag_adaptor)
