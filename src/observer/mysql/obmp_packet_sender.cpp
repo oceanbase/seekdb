@@ -446,25 +446,20 @@ int ObMPPacketSender::send_error_packet(int err,
       //  3. Finally locate the log directly through the trace id
 
       int32_t msg_buf_size = 0;
-      const ObAddr addr = ObCurTraceId::get_addr();
 
       struct timeval tv;
       struct tm tm;
-      char addr_buf[MAX_IP_PORT_LENGTH];
       (void)gettimeofday(&tv, NULL);
       ::localtime_r((const time_t *)&tv.tv_sec, &tm);
-      addr.ip_port_to_string(addr_buf, sizeof(addr_buf));
 
       char tmp_msg_buf[MAX_MSG_BUF_SIZE];
       strncpy(tmp_msg_buf, message.ptr(), message.length()); // msg_buf is overwriten
       char trace_id_buf[OB_MAX_TRACE_ID_BUFFER_SIZE] = {'\0'};
       msg_buf_size = snprintf(msg_buf, MAX_MSG_BUF_SIZE,
                            "%.*s\n"
-                           "[%s] "
                            "[%04d-%02d-%02d %02d:%02d:%02d.%06ld] "
                            "[%s]",
                            message.length(), tmp_msg_buf,
-                           addr_buf,
                            tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday,
                            tm.tm_hour, tm.tm_min, tm.tm_sec, tv.tv_usec,
                               ObCurTraceId::get_trace_id_str(trace_id_buf, sizeof(trace_id_buf)));

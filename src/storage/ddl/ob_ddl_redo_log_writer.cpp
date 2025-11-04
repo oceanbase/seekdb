@@ -17,7 +17,6 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "ob_ddl_redo_log_writer.h"
-#include "close_modules/observer_lite/logservice/archiveservice/ob_archive_service.h"
 #include "logservice/ob_log_service.h"
 #include "storage/tx/ob_ts_mgr.h"
 #include "storage/ddl/ob_ddl_merge_task.h"
