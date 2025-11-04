@@ -30,6 +30,7 @@ struct ObDDLChunk;
 struct ObDDLTabletContext;
 class ObDDLSlice;
 class ObTabletDDLKvMgr;
+class ObIDDLMergeHelper;
 
 struct ObDDLIndependentDagInitParam : public share::ObIDagInitParam
 {
@@ -132,6 +133,8 @@ protected:
   int64_t pipeline_count_;
   int ret_code_;
   bool is_inc_major_log_;
+  ObFIFOAllocator fifo_allocator_;
+  ObArray<ObIDDLMergeHelper*> merge_helper_array_;
 };
 
 }// namespace storage
