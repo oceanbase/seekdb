@@ -288,8 +288,6 @@ int ObTableLockDetectFuncList::get_owner_id_list_from_table_(ObIAllocator &alloc
 
   if (OB_FAIL(get_owner_id_list_from_table_(allocator, true, owner_ids))) {
     LOG_WARN("get owner_ids from new table failed", K(ret));
-  } else if (!ObTableLockDetector::old_detect_table_is_empty() && OB_FAIL(get_owner_id_list_from_table_(allocator, false, owner_ids))) {
-    LOG_WARN("get owner_ids from old table failed", K(ret));
   }
   return ret;
 }
@@ -544,7 +542,6 @@ int ObTableLockDetector::do_detect_and_clear()
     LOG_WARN("do session_alive detect failed", K(ret));
   }
   remove_expired_lock_id();
-  check_and_set_old_detect_table_is_empty();
 
   return ret;
 }
@@ -563,7 +560,6 @@ int ObTableLockDetector::remove_expired_lock_id()
 {
   int ret =OB_SUCCESS;
   char dbms_lock_table_name[OB_MAX_TABLE_NAME_BUF_LENGTH] = {0};
-  char old_table_name[OB_MAX_TABLE_NAME_BUF_LENGTH] = {0};
   char new_table_name[OB_MAX_TABLE_NAME_BUF_LENGTH] = {0};
   ObSqlString where_cond;
   ObSqlString detect_table_cond;
@@ -575,7 +571,6 @@ int ObTableLockDetector::remove_expired_lock_id()
 
   OZ (databuff_printf(dbms_lock_table_name, OB_MAX_TABLE_NAME_BUF_LENGTH,
                       "%s.%s", OB_SYS_DATABASE_NAME, OB_ALL_DBMS_LOCK_ALLOCATED_TNAME));
-  OZ (get_table_name(false, old_table_name));
   OZ (get_table_name(true, new_table_name));
   OZ (obj_type_cond.assign_fmt(" WHERE obj_type = %d or obj_type = %d",
                                static_cast<int>(ObLockOBJType::OBJ_TYPE_MYSQL_LOCK_FUNC),
@@ -583,11 +578,6 @@ int ObTableLockDetector::remove_expired_lock_id()
 
   OZ (detect_table_cond.assign_fmt("SELECT obj_id FROM %s", new_table_name));
   OZ (detect_table_cond.append(obj_type_cond.ptr(), obj_type_cond.length()));
-  if (!old_detect_table_is_empty()) {
-    OZ (detect_table_cond.append_fmt(" UNION SELECT obj_id FROM %s", old_table_name));
-    OZ (detect_table_cond.append(obj_type_cond.ptr(), obj_type_cond.length()));
-  }
-
   OZ (where_cond.assign_fmt("expiration <= usec_to_time(%" PRId64 ")"
                             "AND lockid NOT IN"
                             "( %s )"
@@ -596,31 +586,6 @@ int ObTableLockDetector::remove_expired_lock_id()
                             detect_table_cond.ptr(),
                             delete_limit));
   OZ (ObTableAccessHelper::delete_row(MTL_ID(), dbms_lock_table_name, where_cond.string()));
-  return ret;
-}
-
-int ObTableLockDetector::check_and_set_old_detect_table_is_empty()
-{
-  int ret = OB_SUCCESS;
-  bool exist_row = false;
-  char table_name[OB_MAX_TABLE_NAME_BUF_LENGTH] = {0};
-  char where_cond[16] = {"LIMIT 1"};
-  ObTableLockService *lock_service = MTL(ObTableLockService *);
-
-  if (!old_detect_table_is_empty()) {
-    OZ (get_table_name(false, table_name));
-    OZ (ObTableAccessHelper::read_single_row(MTL_ID(), {"1"}, table_name, where_cond, exist_row));
-    if (OB_EMPTY_RESULT == ret) {
-      ret = OB_SUCCESS;
-      if (OB_ISNULL(lock_service)) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_ERROR("ObTableLockService is null!", K(ret));
-      } else {
-        lock_service->set_old_detect_table_is_empty();
-        FLOG_INFO("old detect_lock_info table is empty, no need to visit again");
-      }
-    }
-  }
   return ret;
 }
 
@@ -834,19 +799,6 @@ int ObTableLockDetector::get_unlock_request_list(sql::ObSQLSessionInfo *session,
   return ret;
 }
 
-bool ObTableLockDetector::old_detect_table_is_empty()
-{
-  bool old_is_empty = false;
-  ObTableLockService *lock_service = MTL(ObTableLockService *);
-  if (OB_NOT_NULL(lock_service)) {
-    old_is_empty = lock_service->old_detect_table_is_empty();
-  } else {
-    LOG_ERROR_RET(OB_ERR_UNEXPECTED, "ObTableLockService is null!");
-  }
-  return old_is_empty;
-}
-
-
 int ObTableLockDetector::check_lock_exist_(observer::ObInnerSQLConnection *inner_conn,
                                            const ObSqlString &where_cond,
                                            const ObTableLockOwnerID &lock_owner,
@@ -854,11 +806,8 @@ int ObTableLockDetector::check_lock_exist_(observer::ObInnerSQLConnection *inner
 {
   int ret = OB_SUCCESS;
 
-  // If the lock is not existed (didn't check before or there's no lock in V2 table),
-  // we will try to check the V1 table.
-  if (!exist && !old_detect_table_is_empty()) {
-    OZ (check_lock_exist_in_table_(inner_conn, where_cond, lock_owner, false, exist));
-  }
+  OZ (check_lock_exist_in_table_(inner_conn, where_cond, lock_owner, true, exist));
+
   return ret;
 }
 
@@ -873,13 +822,6 @@ int ObTableLockDetector::check_lock_exist_(observer::ObInnerSQLConnection *inner
   OZ (get_table_name(true, table_name));
   OZ (check_lock_exist_in_table_(inner_conn, table_name, where_cond, exist));
 
-  // If the lock is not existed (didn't check before or there's no lock in V2 table),
-  // we will try to check the V1 table.
-  if (!exist && !old_detect_table_is_empty()) {
-    memset(table_name, 0, sizeof(table_name));
-    OZ (get_table_name(false, table_name));
-    OZ (check_lock_exist_in_table_(inner_conn, table_name, where_cond, exist));
-  }
   return ret;
 }
 
@@ -1152,17 +1094,8 @@ int ObTableLockDetector::get_cnt_of_lock_(observer::ObInnerSQLConnection *conn,
     }
   }
 
-  if (OB_FAIL(ret)) {
-  } else if (cnt == 0 && !old_detect_table_is_empty()) {
-    if (OB_FAIL(get_lock_cnt_in_table_(conn, false /*is_new_table*/, task_type, lock_req, cnt))) {
-      LOG_WARN("get lock_cnt in old table failed", K(ret), K(task_type), K(lock_req));
-    } else if (cnt > 0) {
-      is_from_old_table = true;
-    }
-  }
   LOG_DEBUG("lock_live_detector debug: get_cnt_of_lock_",
             K(ret),
-            K(old_detect_table_is_empty()),
             K(lock_req),
             K(only_check_old_table),
             K(cnt),
@@ -1182,9 +1115,7 @@ int ObTableLockDetector::get_cnt_of_lock_(observer::ObInnerSQLConnection *conn,
   cnt_in_new_table = 0;
   cnt_in_old_table = 0;
 
-  if (OB_FAIL(ret)) {
-  } else if (!old_detect_table_is_empty()
-             && OB_FAIL(get_lock_cnt_in_table_(conn, false /*is_new_table*/, task_type, lock_req, cnt_in_old_table))) {
+  if (OB_FAIL(get_lock_cnt_in_table_(conn, true /*is_new_table*/, task_type, lock_req, cnt_in_new_table))) {
     LOG_WARN("get lock_cnt in old table failed", K(ret), K(task_type), K(lock_req));
   }
 
@@ -1193,8 +1124,7 @@ int ObTableLockDetector::get_cnt_of_lock_(observer::ObInnerSQLConnection *conn,
             K(task_type),
             K(lock_req),
             K(cnt_in_new_table),
-            K(cnt_in_old_table),
-            K(old_detect_table_is_empty()));
+            K(cnt_in_old_table));
   return ret;
 }
 
@@ -1364,11 +1294,6 @@ int ObTableLockDetector::generate_get_unlock_request_sql_(const ObTableLockOwner
   OZ (sql.assign_fmt("%s %s", select_sql.ptr(), new_table_name));
   OZ (sql.append_fmt("%s", where_cond.ptr()));
   OZ (sql.append_fmt(" owner_id = %" PRId64 " AND owner_type = %d", owner_id.id(), static_cast<int>(owner_id.type())));
-  if (!old_detect_table_is_empty()) {
-    OZ (get_table_name(false, old_table_name));
-    OZ (sql.append_fmt(" UNION %s %s %s", select_sql.ptr(), old_table_name, where_cond.ptr()));
-    OZ (sql.append_fmt(" owner_id = %" PRId64, old_owner_id.raw_value()));
-  }
 
   LOG_DEBUG("lock_live_detector debug: generate_get_unlock_request_sql_", K(ret), K(owner_id), K(task_type), K(sql));
 
