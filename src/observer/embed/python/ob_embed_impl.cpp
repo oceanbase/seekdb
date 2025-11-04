@@ -26,6 +26,7 @@
 #include "lib/oblog/ob_warning_buffer.h"
 #include "sql/engine/expr/ob_expr_sql_udt_utils.h"
 #include "sql/engine/expr/ob_expr_lob_utils.h"
+#include "lib/timezone/ob_time_convert.h"
 
 PYBIND11_MODULE(pyseekdb, m) {
     m.doc() = "OceanBase SeekDB";
@@ -75,8 +76,9 @@ static pybind11::object decimal_class = decimal_module.attr("Decimal");
 static pybind11::object datetime_module = pybind11::module::import("datetime");
 static pybind11::object datetime_class = datetime_module.attr("datetime");
 static pybind11::object fromtimestamp = datetime_class.attr("fromtimestamp");
-static pybind11::object date_class = datetime_module.attr("date");
+static pybind11::object utcfromtimestamp = datetime_class.attr("utcfromtimestamp");
 static pybind11::object timedelta_class = datetime_module.attr("timedelta");
+static pybind11::object date_class = datetime_module.attr("date");
 static pybind11::module builtins = pybind11::module::import("builtins");
 
 #define MPRINT(format, ...) fprintf(stderr, "[seekdb] " format "\n", ##__VA_ARGS__)
@@ -147,6 +149,7 @@ int ObLiteEmbed::do_open_(const char* db_dir, int64_t port)
     opts.embed_mode_ = false;
   }
   opts.use_ipv6_ = false;
+  opts.parameters_.push_back(std::make_pair(common::ObString("memory_limit"), common::ObString("1G")));
 
   char buffer[PATH_MAX];
   ObSqlString work_abs_dir;
@@ -475,6 +478,7 @@ std::vector<pybind11::tuple> ObLiteEmbedCursor::fetchall()
   int ret = OB_SUCCESS;
   std::vector<pybind11::tuple> res;
   sqlclient::ObMySQLResult* mysql_result = nullptr;
+  ObInnerSQLResult *inner_result = nullptr;
   if (!embed_conn_) {
     ret = OB_CONNECT_ERROR;
   } else if (OB_ISNULL(embed_conn_->get_conn())) {
@@ -487,8 +491,12 @@ std::vector<pybind11::tuple> ObLiteEmbedCursor::fetchall()
     LOG_WARN("mysql result empty", KR(ret));
   } else if (result_seq_ == 0 || embed_conn_->get_result_seq() != result_seq_) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("result err", KR(ret), K(result_seq_), K(embed_conn_->get_result_seq()));
+  } else if (FALSE_IT(mysql_result = embed_conn_->get_res()->get_result())) {
+  } else if (FALSE_IT(inner_result = reinterpret_cast<ObInnerSQLResult*>(mysql_result))) {
+  } else if (OB_NOT_NULL(inner_result->result_set().get_cmd())) {
+    // cmd no result
   } else {
-    mysql_result = embed_conn_->get_res()->get_result();
     while (OB_SUCC(ret)) {
       ret = mysql_result->next();
       if (OB_ITER_END == ret) {
@@ -508,7 +516,7 @@ std::vector<pybind11::tuple> ObLiteEmbedCursor::fetchall()
         } else if (OB_FAIL(ObLiteEmbedUtil::convert_result_to_pyobj(i, *mysql_result, obj_meta, value))) {
           LOG_WARN("convert obobj to value failed ",KR(ret), K(obj_meta), K(obj_meta.get_type()));
         } else {
-          //LOG_INFO("fetchall", K(i), K(obj_meta), K(obj_meta.get_type()));
+          //FLOG_INFO("fetchall", K(i), K(obj_meta), K(obj_meta.get_type()));
           row_data.append(value);
         }
       }
@@ -526,6 +534,7 @@ pybind11::object ObLiteEmbedCursor::fetchone()
   int ret = OB_SUCCESS;
   pybind11::list row_data;
   sqlclient::ObMySQLResult* mysql_result = nullptr;
+  ObInnerSQLResult *inner_result = nullptr;
   if (!embed_conn_) {
     ret = OB_CONNECT_ERROR;
   } else if (OB_ISNULL(embed_conn_->get_conn())) {
@@ -538,8 +547,12 @@ pybind11::object ObLiteEmbedCursor::fetchone()
     LOG_WARN("mysql result empty", KR(ret));
   } else if (result_seq_ == 0 || embed_conn_->get_result_seq() != result_seq_) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("result err", KR(ret), K(result_seq_), K(embed_conn_->get_result_seq()));
+  } else if (FALSE_IT(mysql_result = embed_conn_->get_res()->get_result())) {
+  } else if (FALSE_IT(inner_result = reinterpret_cast<ObInnerSQLResult*>(mysql_result))) {
+  } else if (OB_NOT_NULL(inner_result->result_set().get_cmd())) {
+    // cmd no result
   } else {
-    mysql_result = embed_conn_->get_res()->get_result();
     ret = mysql_result->next();
     if (OB_ITER_END == ret) {
       ret = OB_SUCCESS;
@@ -754,23 +767,59 @@ int ObLiteEmbedUtil::convert_result_to_pyobj(const int64_t col_idx, common::sqlc
         LOG_WARN("get obj failed", K(ret), K(col_idx));
       } else {
         ObMySQLDateTime mysql_dt = obj.get_mysql_datetime();
-        val = datetime_class(
-          pybind11::int_(mysql_dt.year()),
-          pybind11::int_(mysql_dt.month()),
-          pybind11::int_(mysql_dt.day_),
-          pybind11::int_(mysql_dt.hour_),
-          pybind11::int_(mysql_dt.minute_),
-          pybind11::int_(mysql_dt.second_),
-          pybind11::int_(mysql_dt.microseconds_)
-        );
+        ObSQLSessionInfo &session = inner_result.result_set().get_session();
+        const ObTimeZoneInfo *tz_info = session.get_timezone_info();
+        if (OB_ISNULL(tz_info)) {
+          val = datetime_class(
+            pybind11::int_(mysql_dt.year()),
+            pybind11::int_(mysql_dt.month()),
+            pybind11::int_(mysql_dt.day_),
+            pybind11::int_(mysql_dt.hour_),
+            pybind11::int_(mysql_dt.minute_),
+            pybind11::int_(mysql_dt.second_),
+            pybind11::int_(mysql_dt.microseconds_)
+          );
+        } else {
+          int64_t timestamp_us = 0;
+          if (OB_FAIL(ObTimeConverter::mdatetime_to_timestamp(mysql_dt, tz_info, timestamp_us))) {
+            LOG_WARN("failed to convert mysql datetime to timestamp, use mysql datetime directly", KR(ret));
+          } else {
+            ObMySQLDateTime local_mdt;
+            if (OB_FAIL(ObTimeConverter::timestamp_to_mdatetime(timestamp_us, tz_info, local_mdt))) {
+              LOG_WARN("failed to convert timestamp to mysql datetime, use original", KR(ret));
+            } else {
+              val = datetime_class(
+                pybind11::int_(local_mdt.year()),
+                pybind11::int_(local_mdt.month()),
+                pybind11::int_(local_mdt.day_),
+                pybind11::int_(local_mdt.hour_),
+                pybind11::int_(local_mdt.minute_),
+                pybind11::int_(local_mdt.second_),
+                pybind11::int_(local_mdt.microseconds_)
+              );
+            }
+          }
+        }
       }
       break;
     }
     case ObTimestampType: {
       int64_t v = 0;
-      if (OB_SUCC(result.get_timestamp(col_idx,nullptr, v))) {
-        double seconds = static_cast<double>(v) / 1000000.0;
-        val = fromtimestamp(seconds);
+      if (OB_SUCC(result.get_timestamp(col_idx, nullptr, v))) {
+        ObSQLSessionInfo &session = inner_result.result_set().get_session();
+        const ObTimeZoneInfo *tz_info = session.get_timezone_info();
+        if (OB_ISNULL(tz_info)) {
+          double seconds = static_cast<double>(v) / 1000000.0;
+          val = fromtimestamp(seconds);
+        } else {
+          int64_t local_datetime_us = 0;
+          if (OB_FAIL(ObTimeConverter::timestamp_to_datetime(v, tz_info, local_datetime_us))) {
+            LOG_WARN("failed to convert timestamp to datetime, use UTC timestamp", KR(ret));
+          } else {
+            double local_seconds = static_cast<double>(local_datetime_us) / 1000000.0;
+            val = utcfromtimestamp(local_seconds);
+          }
+        }
       }
       break;
     }
