@@ -4,7 +4,7 @@ set(CPACK_PACKAGE_VENDOR "OceanBase Inc.")
 set(CPACK_PACKAGE_DESCRIPTION "OceanBase is a distributed relational database")
 set(CPACK_COMPONENTS_ALL server sql-parser)
 
-set(CPACK_PACKAGE_NAME "oceanbase-seekdb")
+set(CPACK_PACKAGE_NAME "seekdb")
 set(CPACK_PACKAGE_VERSION "${OceanBase_VERSION}")
 set(CPACK_PACKAGE_VERSION_MAJOR "${OceanBase_VERSION_MAJOR}")
 set(CPACK_PACKAGE_VERSION_MINOR "${OceanBase_VERSION_MINOR}")
