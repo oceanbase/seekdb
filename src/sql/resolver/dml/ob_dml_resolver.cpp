@@ -49,7 +49,7 @@
 #include "sql/ob_sql_mock_schema_utils.h"
 #include "share/catalog/ob_catalog_utils.h"
 #include "share/ob_license_utils.h"
-#include "src/share/hybrid_search/ob_hybrid_search_exector.h"
+#include "src/share/hybrid_search/ob_hybrid_search_executor.h"
 
 namespace oceanbase
 {
