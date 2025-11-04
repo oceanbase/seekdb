@@ -349,14 +349,14 @@ int ObVecIndexAsyncTaskUtil::batch_insert_vec_task(
     ObVecIndexTaskCtxArray tmp_array;
     for (int64_t i = 0; OB_SUCC(ret) && i < task.size(); ++i) {
       // copy task to new array
-      if ((i == task.size() - 1) || (i % batch_size == 0 && i != 0)) {
+      if (OB_FAIL(tmp_array.push_back(task.at(i)))) {
+        LOG_WARN("fail to push back", K(ret), K(i));
+      } else if (tmp_array.count() % batch_size == 0 || i == task.size() - 1) {
         if (OB_FAIL(insert_vec_tasks(tenant_id, tname, tmp_array.size(), proxy, tmp_array))) {
           LOG_WARN("fail to insert vec tasks", K(ret), K(tmp_array.size()));
         } else {
           tmp_array.reuse();
         }
-      } else if (OB_FAIL(tmp_array.push_back(task.at(i)))) {
-        LOG_WARN("fail to push back", K(ret), K(i));
       }
     }
   }
