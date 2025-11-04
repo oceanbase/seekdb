@@ -42,7 +42,7 @@ endif()
 
 # Install systemd service to /usr/lib/systemd/system
 install(FILES
-  tools/systemd/profile/oceanbase.service
+  tools/systemd/profile/seekdb.service
   DESTINATION usr/lib/systemd/system
   COMPONENT server)
 
@@ -54,8 +54,8 @@ install(PROGRAMS
   COMPONENT server)
 
 install(PROGRAMS
-  tools/systemd/profile/oceanbase_systemd_start
-  tools/systemd/profile/oceanbase_systemd_stop
+  tools/systemd/profile/seekdb_systemd_start
+  tools/systemd/profile/seekdb_systemd_stop
   tools/systemd/profile/telemetry.sh
   DESTINATION usr/libexec/oceanbase/scripts
   COMPONENT server)
@@ -74,7 +74,7 @@ install(FILES
   tools/upgrade/deps_compat.yml
   ${CMAKE_BINARY_DIR}/src/share/ob_system_variable_init.json
   ${INSTALL_EXTRA_FILES}
-  tools/systemd/profile/oceanbase.cnf
+  tools/systemd/profile/seekdb.cnf
   tools/systemd/profile/oceanbase-pre.json
   tools/systemd/profile/telemetry-pre.json
   DESTINATION etc/oceanbase

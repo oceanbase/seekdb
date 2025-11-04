@@ -34,18 +34,18 @@ apt install -y oceanbase-seekdb
 # Startup Method
 You can install and run OceanBase service using the following command:
 ```bash
-systemctl start oceanbase
+systemctl start seekdb
 ```
 You can set the OceanBase service to start automatically on boot using the following command:
 ```bash
-systemctl enable oceanbase
+systemctl enable seekdb
 ```
 
 ## Overview of systemd
 Systemd provides automatic OceanBase startup and shutdown. It also enables manual server management using the systemctl command. For example:
 ```bash
-systemctl {start|stop|restart|status} oceanbase
+systemctl {start|stop|restart|status} seekdb
 ```
 
 ## Oceanbase configuration by systemd
-Systemd provide `/etc/oceanbase/oceanbase.cnf` to config OceanBase before startup.
+Systemd provide `/etc/oceanbase/seekdb.cnf` to config OceanBase before startup.

@@ -9,7 +9,7 @@ systemctl daemon-reload
 
 GREEN='\033[32m'
 NC="\033[0m"
-echo -e "${GREEN}To configure OceanBase${NC} : edit /etc/oceanbase/oceanbase.cnf"
-echo -e "${GREEN}To start OceanBase${NC}     : systemctl start oceanbase"
-echo -e "${GREEN}To enable OceanBase auto reboot ${NC} : systemctl enable oceanbase"
+echo -e "${GREEN}To configure OceanBase${NC} : edit /etc/oceanbase/seekdb.cnf"
+echo -e "${GREEN}To start OceanBase${NC}     : systemctl start seekdb"
+echo -e "${GREEN}To enable OceanBase auto reboot ${NC} : systemctl enable seekdb"
 echo -e "${GREEN}To get more infomation${NC} : https://www.oceanbase.com/docs/common-oceanbase-database-cn-1000000000640297"

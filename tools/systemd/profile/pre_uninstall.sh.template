@@ -1,9 +1,9 @@
 #!/bin/bash
 echo "execute pre uninstall script"
-cnf_file=/etc/oceanbase/oceanbase.cnf
+cnf_file=/etc/oceanbase/seekdb.cnf
 
-systemctl stop oceanbase
-systemctl disable oceanbase
+systemctl stop seekdb
+systemctl disable seekdb
 systemctl daemon-reload
 
 # telemetry

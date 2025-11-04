@@ -1,11 +1,11 @@
 [Unit]
-Description=oceanbase
+Description=seekdb
 
 [Service]
 User=root
 Type=notify
-ExecStart=/usr/libexec/oceanbase/scripts/oceanbase_systemd_start
-ExecStop=/usr/libexec/oceanbase/scripts/oceanbase_systemd_stop
+ExecStart=/usr/libexec/oceanbase/scripts/seekdb_systemd_start
+ExecStop=/usr/libexec/oceanbase/scripts/seekdb_systemd_stop
 PIDFile=/var/lib/oceanbase/run/observer.pid
 NotifyAccess=all
 Restart=on-failure

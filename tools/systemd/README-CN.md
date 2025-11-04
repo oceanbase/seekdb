@@ -34,19 +34,19 @@ apt install -y oceanbase-seekdb
 # 启动方法
 可以通过以下指令进行启动：
 ```bash
-systemctl start oceanbase
+systemctl start seekdb
 ```
 
 可以通过以下指令将oceanbase服务设置为开机自启动：
 ```bash
-systemctl enable oceanbase
+systemctl enable seekdb
 ```
 
 ## systemd介绍
 Systemd提供了自动化管理oceanbase的启动和停止，可以通过systemctl指令对oceanbase进行管理控制，例如：
 ```bash
-systemctl {start|stop|restart|status} oceanbase
+systemctl {start|stop|restart|status} seekdb
 ```
 
 ## 通过systemd配置OceanBase
-systemd提供了配置文件`/etc/oceanbase/oceanbase.cnf`,可以在启动前修改配置进行带参启动
+systemd提供了配置文件`/etc/oceanbase/seekdb.cnf`,可以在启动前修改配置进行带参启动
