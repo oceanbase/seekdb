@@ -89,13 +89,13 @@ TEST_F(TestObParallelDDLControl, testObParallelDDLControlMode)
   ASSERT_EQ(OB_SUCCESS, ddl_mode.is_parallel_ddl(ObParallelDDLControlMode::TRUNCATE_TABLE, is_parallel));
   ASSERT_EQ(true, is_parallel);
   ASSERT_EQ(OB_SUCCESS, ddl_mode.is_parallel_ddl(ObParallelDDLControlMode::SET_COMMENT, is_parallel));
-  ASSERT_EQ(false, is_parallel);
+  ASSERT_EQ(true, is_parallel);
   ASSERT_EQ(OB_SUCCESS, ddl_mode.is_parallel_ddl(ObParallelDDLControlMode::CREATE_INDEX, is_parallel));
-  ASSERT_EQ(false, is_parallel);
+  ASSERT_EQ(true, is_parallel);
 
   ASSERT_EQ(OB_INVALID_ARGUMENT, ddl_mode.is_parallel_ddl(ObParallelDDLControlMode::MAX_TYPE, is_parallel));
 
-  ASSERT_EQ(true, _parallel_ddl_control.set_value("truncate_table:on"));
+  ASSERT_EQ(true, _parallel_ddl_control.set_value("truncate_table:on, set_comment:off, create_index:off"));
   _parallel_ddl_control.init_mode(ddl_mode);
   ASSERT_EQ(OB_SUCCESS, ddl_mode.is_parallel_ddl(ObParallelDDLControlMode::TRUNCATE_TABLE, is_parallel));
   ASSERT_EQ(true, is_parallel);
@@ -104,7 +104,7 @@ TEST_F(TestObParallelDDLControl, testObParallelDDLControlMode)
   ASSERT_EQ(OB_SUCCESS, ddl_mode.is_parallel_ddl(ObParallelDDLControlMode::CREATE_INDEX, is_parallel));
   ASSERT_EQ(false, is_parallel);
 
-  ASSERT_EQ(true, _parallel_ddl_control.set_value("set_comment:on"));
+  ASSERT_EQ(true, _parallel_ddl_control.set_value("set_comment:on, create_index:off"));
   _parallel_ddl_control.init_mode(ddl_mode);
   ASSERT_EQ(OB_SUCCESS, ddl_mode.is_parallel_ddl(ObParallelDDLControlMode::TRUNCATE_TABLE, is_parallel));
   ASSERT_EQ(true, is_parallel);

@@ -1593,11 +1593,7 @@ int ObParallelDDLControlMode::is_parallel_ddl(const ObParallelDDLType type, bool
     } else if (value == ObParallelDDLControlParser::MODE_ON) {
       is_parallel = true;
     } else if (value == ObParallelDDLControlParser::MODE_DEFAULT) {
-      if (TRUNCATE_TABLE == type) {
-        is_parallel = true;
-      } else {
-        is_parallel = false;
-      }
+      is_parallel = true;
     } else {
       ret = OB_ERR_UNEXPECTED;
       OB_LOG(WARN, "invalid value unexpected", KR(ret), K(value));

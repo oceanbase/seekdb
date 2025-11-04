@@ -429,7 +429,7 @@ DEF_BOOL(_nested_loop_join_enabled, OB_CLUSTER_PARAMETER, "True",
   "enable/disable nested loop join",
   ObParameterAttr(Section::TENANT, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 //
-DEF_BOOL(_enable_mysql_compatible_dates, OB_CLUSTER_PARAMETER, "False",
+DEF_BOOL(_enable_mysql_compatible_dates, OB_CLUSTER_PARAMETER, "True",
   "Specifies whether to use MySQL-compatible date format that allows for invalid dates.",
   ObParameterAttr(Section::TENANT, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 //
@@ -1689,7 +1689,7 @@ ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::STATIC_EFFECTIVE)
 DEF_BOOL(_enable_parallel_das_dml, OB_CLUSTER_PARAMETER, "False",
          "By default, the das service is allowed to use multiple threads to submit das tasks",
          ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
-DEF_BOOL(_ob_immediate_row_conflict_check, OB_CLUSTER_PARAMETER, "True",
+DEF_BOOL(_ob_immediate_row_conflict_check, OB_CLUSTER_PARAMETER, "False",
          "By default, OB's MySQL mode will check unique conflicts row by row after the update."
          "When the switch is turned off, "
          "it will only check whether the final state of a batch of data after the update satisfies the unique constraint.",
@@ -2414,10 +2414,6 @@ DEF_STR_WITH_CHECKER(ob_storage_s3_url_encode_type, OB_CLUSTER_PARAMETER, "defau
 DEF_BOOL(_enable_drop_and_add_index, OB_CLUSTER_PARAMETER, "False",
          "it specifies that whether we can drop and add index in single statement",
          ObParameterAttr(Section::TENANT, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
-DEF_BOOL(_system_trig_enabled, OB_CLUSTER_PARAMETER, "True",
-         "Enable or disable system trigger feature.",
-         ObParameterAttr(Section::TENANT, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
-
 DEF_INT(_dop_of_collect_external_table_statistics, OB_CLUSTER_PARAMETER, "0", "[0,)",
         "parallelism of pull statistics of external table",
         ObParameterAttr(Section::TENANT, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
