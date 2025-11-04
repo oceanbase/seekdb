@@ -1846,8 +1846,6 @@ int ObTenantDDLService::add_extra_tenant_init_config_(
   ObString config_value_mysql_compatible_dates("true");
   ObString config_name_immediate_check_unique("_ob_immediate_row_conflict_check");
   ObString config_value_immediate_check("False");
-  ObString config_name_system_trig_enabled("_system_trig_enabled");
-  ObString config_value_system_trig_enabled("false");
   // TODO(fanfangzhou.ffz): temporarily disable config adjustment for ddl thread isolation
   ObString config_name_ddl_thread_isolution("_enable_ddl_worker_isolation");
   ObString config_value_ddl_thread_isolution("false");
@@ -1865,8 +1863,6 @@ int ObTenantDDLService::add_extra_tenant_init_config_(
         LOG_WARN("fail to add config", KR(ret), K(config_name_mysql_compatible_dates), K(config_value_mysql_compatible_dates));
       } else if (OB_FAIL(tenant_init_config.add_config(config_name_immediate_check_unique, config_value_immediate_check))) {
         LOG_WARN("fail to add config", KR(ret), K(config_name_immediate_check_unique), K(config_value_immediate_check));
-      } else if (OB_FAIL(tenant_init_config.add_config(config_name_system_trig_enabled, config_value_system_trig_enabled))) {
-        LOG_WARN("fail to add config", KR(ret), K(config_name_system_trig_enabled), K(config_value_system_trig_enabled));
       } else if (OB_FAIL(tenant_init_config.add_config(config_name_ddl_thread_isolution, config_value_ddl_thread_isolution))) {
         LOG_WARN("fail to add config", KR(ret), K(config_name_ddl_thread_isolution), K(config_value_ddl_thread_isolution));
       }
@@ -5396,7 +5392,7 @@ int ObTenantDDLService::create_tenant_end(const uint64_t tenant_id)
       int64_t new_schema_version = OB_INVALID_VERSION;
       ObSchemaService *schema_service_impl = schema_service_->get_schema_service();
       // Ensure that the schema_version monotonically increases among tenants' cross-tenant transactions
-      // 
+      //
       if (OB_ISNULL(schema_service_impl)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("schema_service_impl is null", K(ret));
