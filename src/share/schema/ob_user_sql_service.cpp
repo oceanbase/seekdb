@@ -131,7 +131,7 @@ int ObUserSqlService::drop_user_delete_role_grantee_map(
   const uint64_t user_id = user->get_user_id();
   const ObUserInfo *tmp_user = NULL;
   int64_t affected_rows = 0;
-  common::ObSEArray<uint64_t, 8> schema_id_array = is_role
+  const common::ObSEArray<uint64_t, 8> &schema_id_array = is_role
       ? user->get_grantee_id_array()
       : user->get_role_id_array();
   const bool is_need_update = schema_id_array.count() > 0;
