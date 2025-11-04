@@ -206,7 +206,9 @@ ObExecContext::ObExecContext(ObIAllocator &allocator)
     lob_access_ctx_(nullptr),
     auto_dop_map_(),
     force_local_plan_(false),
-    diagnosis_manager_()
+    diagnosis_manager_(),
+    deterministic_udf_cache_allocator_("UDFCACHE", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID()),
+    current_granule_type_(OB_GRANULE_UNINITIALIZED)
 {
 }
 

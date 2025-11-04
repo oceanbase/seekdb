@@ -28,6 +28,7 @@
 #include "sql/ob_sql_trans_control.h"
 #include "sql/engine/user_defined_function/ob_udf_ctx_mgr.h"
 #include "sql/engine/px/ob_px_dtl_msg.h"
+#include "sql/engine/px/ob_granule_util.h"
 #include "sql/optimizer/ob_pwj_comparer.h"
 #include "sql/das/ob_das_context.h"
 #include "sql/engine/cmd/ob_table_direct_insert_ctx.h"
@@ -597,6 +598,9 @@ public:
   
   ObDiagnosisManager& get_diagnosis_manager() { return diagnosis_manager_; }
 
+  void set_granule_type(ObGranuleType granule_type) { current_granule_type_ = granule_type; }
+  bool is_block_granule_type() { return current_granule_type_ == OB_BLOCK_RANGE_GRANULE; }
+
 private:
   int build_temp_expr_ctx(const ObTempExpr &temp_expr, ObTempExprCtx *&temp_expr_ctx);
   int check_extra_status();
@@ -604,6 +608,7 @@ private:
   //set the parent execute context in nested sql
   void set_parent_ctx(ObExecContext *parent_ctx) { parent_ctx_ = parent_ctx; }
   void set_nested_level(int64_t nested_level) { nested_level_ = nested_level; }
+
 protected:
   /**
    * @brief the memory of exec context.
@@ -784,6 +789,11 @@ protected:
   AutoDopHashMap auto_dop_map_;
   bool force_local_plan_;
   ObDiagnosisManager diagnosis_manager_;
+  common::ObArenaAllocator deterministic_udf_cache_allocator_;
+
+  // Granule type for current GI task
+  ObGranuleType current_granule_type_;
+
 private:
   DISALLOW_COPY_AND_ASSIGN(ObExecContext);
 };
