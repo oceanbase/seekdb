@@ -6354,72 +6354,41 @@ int ObTablet::inner_pre_process_cs_replica(
     K(direct_load_type), K(table_key), K(replay_normal_in_cs_replica), K_(tablet_meta));
   return ret;
 }
-
-int ObTablet::start_direct_load_task_if_need()
+int ObTablet::start_direct_load_task_for_idem(ObLSHandle &ls_handle)
 {
   int ret = OB_SUCCESS;
   ObTabletMemberWrapper<ObTabletTableStore> table_store_wrapper;
-  ObTenantDirectLoadMgr *tenant_direct_load_mgr = MTL(ObTenantDirectLoadMgr *);
-  ObTabletDirectLoadMgrHandle direct_load_mgr_handle;
-  share::SCN ss_ddl_start_scn;
-  if (is_empty_shell()) {
-    LOG_DEBUG("this tablet is empty shell, skip", K(ret), K(tablet_meta_));
-  } else if (OB_ISNULL(tenant_direct_load_mgr)) {
-    ret = OB_ERR_SYS;
-    LOG_WARN("error sys", K(ret), K(MTL_ID()));
-  } else if (OB_FAIL(ss_ddl_start_scn.convert_for_tx(SS_DDL_START_SCN_VAL))) {
-    LOG_WARN("failed to convert scn from ss ddl start scn", K(ret), K(SS_DDL_START_SCN_VAL));
-  } else if (!tablet_meta_.ddl_start_scn_.is_valid_and_not_min()) {
-    LOG_DEBUG("no need to reload tablet direct load task", K(ret), K(tablet_meta_));
-    int tmp_ret = OB_SUCCESS;
-    ObTabletDirectLoadMgrKey direct_load_mgr_key(tablet_meta_.tablet_id_, ObDirectLoadType::DIRECT_LOAD_DDL);
-    ObSEArray<ObTabletID, 1> tablet_ids;
-    ObLSHandle ls_handle;
-    if (OB_TMP_FAIL(tenant_direct_load_mgr->remove_tablet_direct_load(direct_load_mgr_key))) {
-      if (OB_ENTRY_NOT_EXIST != tmp_ret) {
-        LOG_WARN("get tablet mgr failed", K(tmp_ret), K(tablet_meta_));
-      }
-    } else if (OB_TMP_FAIL(MTL(ObLSService *)->get_ls(tablet_meta_.ls_id_, ls_handle, ObLSGetMod::DDL_MOD))) {
-      LOG_WARN("failed to get ls", K(tmp_ret), "ls_id", tablet_meta_.ls_id_);
-    } else if (OB_ISNULL(ls_handle.get_ls()->get_ddl_log_handler())) {
-      tmp_ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("ddl log handler is null", K(tmp_ret), K(tablet_meta_));
-    } else if (OB_TMP_FAIL(tablet_ids.push_back(tablet_meta_.tablet_id_))) {
-      LOG_WARN("push back tablet id failed", K(tmp_ret), K(tablet_meta_));
-    } else if (OB_TMP_FAIL(ls_handle.get_ls()->get_ddl_log_handler()->del_tablets(tablet_ids))) {
-      LOG_WARN("delete tablet from ddl log handler failed", K(tmp_ret), K(tablet_meta_));
-    }
+  ObDDLKvMgrHandle ddl_kv_mgr_handle;
+  if (!ls_handle.is_valid()) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("ls handle is not valid", K(ret));
   } else if (OB_FAIL(fetch_table_store(table_store_wrapper))) {
     LOG_WARN("fail to fetch table store", K(ret));
   } else if (nullptr != table_store_wrapper.get_member()->get_major_sstables().get_boundary_table(false/*first*/)) {
     // the major sstable has already existed.
     LOG_DEBUG("no need to reload tablet direct load task", K(ret), K(tablet_meta_));
-  } else if (tablet_meta_.ddl_start_scn_ == ss_ddl_start_scn) {
-    LOG_INFO("skip create direct load mgr for share storage", K(ret), K(tablet_meta_.tablet_id_));
-  } else {
-    const int64_t unused_context_id = -1;
-    ObTabletDirectLoadInsertParam direct_load_param;
-    direct_load_param.is_replay_ = true;
-    direct_load_param.common_param_.ls_id_ = tablet_meta_.ls_id_;
-    direct_load_param.common_param_.tablet_id_ = tablet_meta_.tablet_id_;
-    direct_load_param.common_param_.data_format_version_ = tablet_meta_.ddl_data_format_version_;
-    direct_load_param.common_param_.direct_load_type_ = ObDirectLoadType::DIRECT_LOAD_DDL;
-    direct_load_param.common_param_.read_snapshot_ = tablet_meta_.ddl_snapshot_version_;
+  } else if (OB_FAIL(get_ddl_kv_mgr(ddl_kv_mgr_handle, true /* try create */))) {
+    LOG_WARN("failed to get ddl kv mgr", K(ret), K(tablet_meta_));
+  } else if (OB_FAIL(ls_handle.get_ls()->get_ddl_log_handler()->add_tablet(tablet_meta_.tablet_id_))) {
+    LOG_WARN("add tablet id failed", K(ret), K(tablet_meta_.tablet_id_));
+  }
+  return ret;
+}
 
-    if (OB_FAIL(tenant_direct_load_mgr->replay_create_tablet_direct_load(
-        this, tablet_meta_.ddl_execution_id_, direct_load_param))) {
-      LOG_WARN("create tablet manager failed", K(ret));
-    } else if (OB_FAIL(tenant_direct_load_mgr->get_tablet_mgr(
-        ObTabletDirectLoadMgrKey(tablet_meta_.tablet_id_, ObDirectLoadType::DIRECT_LOAD_DDL), direct_load_mgr_handle))) {
-      LOG_WARN("get tablet mgr failed", K(ret), K(tablet_meta_));
-    } else if (OB_FAIL(direct_load_mgr_handle.get_full_obj()->update(
-            nullptr/*lob_direct_load_mgr*/, // replay is independent for data and lob meta tablet, force null here
-            direct_load_param))) {
-      LOG_WARN("update direct load mgr failed", K(ret));
-    } else if (OB_FAIL(direct_load_mgr_handle.get_full_obj()->start_with_checkpoint(
-            *this, tablet_meta_.ddl_start_scn_, tablet_meta_.ddl_data_format_version_,
-            tablet_meta_.ddl_execution_id_, tablet_meta_.ddl_checkpoint_scn_))) {
-      LOG_WARN("direct load start failed", K(ret));
+int ObTablet::start_direct_load_task_if_need()
+{
+  int ret = OB_SUCCESS;
+  ObLSHandle ls_handle;
+  if (is_empty_shell()) {
+    LOG_DEBUG("this tablet is empty shell, skip", K(ret), K(tablet_meta_));
+  } else if (OB_FAIL(MTL(ObLSService *)->get_ls(tablet_meta_.ls_id_, ls_handle, ObLSGetMod::DDL_MOD))) {
+    LOG_WARN("failed to get ls", K(ret), "ls_id", tablet_meta_.ls_id_);
+  } else {
+    /* process for data format version > idem type */
+    if (DDL_IDEM_DATA_FORMAT_VERSION <= tablet_meta_.ddl_data_format_version_) {
+      if (OB_FAIL(start_direct_load_task_for_idem(ls_handle))) {
+        LOG_WARN("failed to start direct load task for idem", K(ret), K(tablet_meta_));
+      }
     }
   }
   return ret;
