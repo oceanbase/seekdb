@@ -384,7 +384,7 @@ void ObLiteEmbedConn::reset()
 bool ObLiteEmbedConn::need_autocommit()
 {
   bool need_ac = false;
-  if (OB_NOT_NULL(session_)) {
+  if (OB_NOT_NULL(session_) && !session_->has_explicit_start_trans()) {
     bool ac = false;
     session_->get_autocommit(ac);
     need_ac = session_->is_in_transaction() && ac;
