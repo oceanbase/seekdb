@@ -62,8 +62,6 @@ CMD_PID=$!
 # Wait for the command to complete and check its exit status
 wait $CMD_PID
 CMD_EXIT_CODE=$?
-# pid=$(cat /var/lib/oceanbase/run/observer.pid)
-# systemd-notify "MAINPID=$pid"
 
 # Check if command executed successfully
 if [ $CMD_EXIT_CODE -eq 0 ]; then

@@ -413,7 +413,7 @@ int inner_main(int argc, char *argv[])
         LOG_ERROR("observer start fail", K(ret));
       } else {
         safe_sd_notify(0, "READY=1\n"
-                       "STATUS=observer is ready and running\n");
+                       "STATUS=seekdb is ready and running\n");
       }
       if (initialize) {
         LOG_INFO("observer starts in initialize mode, exit now", K(initialize));

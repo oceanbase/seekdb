@@ -10,6 +10,7 @@ PIDFile=/var/lib/oceanbase/run/observer.pid
 NotifyAccess=all
 Restart=on-failure
 RestartSec=3
+KillMode=process
 LimitNOFILE=infinity
 LimitNPROC=infinity
 LimitCORE=infinity
