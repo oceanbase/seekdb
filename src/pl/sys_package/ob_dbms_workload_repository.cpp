@@ -4882,11 +4882,6 @@ int ObDbmsWorkloadRepository::print_top_plsql(const AshReportParams &ash_report_
                                                "FROM %s db, %s p "
                                                "WHERE p.database_id = db.database_id "
                                                "UNION ALL "
-                                               "SELECT db.database_name AS owner, t.type_name AS "
-                                               "object_name, t.type_id AS object_id "
-                                               "FROM %s db, %s t "
-                                               "WHERE t.database_id = db.database_id "
-                                               "UNION ALL "
                                                "SELECT db.database_name AS owner, trg.trigger_name "
                                                "AS object_name, trg.trigger_id AS object_id "
                                                "FROM %s db, %s trg "
@@ -4901,10 +4896,6 @@ int ObDbmsWorkloadRepository::print_top_plsql(const AshReportParams &ash_report_
                                            : "oceanbase.__all_database",
                      lib::is_oracle_mode() ? "SYS.ALL_VIRTUAL_PACKAGE_REAL_AGENT"
                                            : "oceanbase.__all_package",  // FROM %s db, %s p
-                     lib::is_oracle_mode() ? "SYS.ALL_VIRTUAL_DATABASE_REAL_AGENT"
-                                           : "oceanbase.__all_database",
-                     lib::is_oracle_mode() ? "SYS.ALL_VIRTUAL_TYPE_REAL_AGENT"
-                                           : "oceanbase.__all_type",  // FROM %s db, %s t
                      lib::is_oracle_mode() ? "SYS.ALL_VIRTUAL_DATABASE_REAL_AGENT"
                                            : "oceanbase.__all_database",
                      lib::is_oracle_mode()
