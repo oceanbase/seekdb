@@ -112,6 +112,9 @@ private:
                             ObIvfAuxTableInfo &aux_table_info);
   int get_tablet_ids_by_ls(const ObTableSchema &index_table_schema,
                            common::ObIArray<ObTabletID> &tablet_id_array);
+  int check_need_load_task(ObSchemaGetterGuard &schema_guard, bool &need_load_task);
+private:
+  int64_t local_schema_version_;
 };
 
 }  // namespace share
