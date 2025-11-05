@@ -74,7 +74,7 @@ ObAIFuncClient::~ObAIFuncClient()
   }
 }
 
-int ObAIFuncClient::init(common::ObIAllocator &allocator, common::ObString &url, ObArray<ObString> &headers)
+int ObAIFuncClient::init(common::ObIAllocator &allocator, const common::ObString &url, ObArray<ObString> &headers)
 {
   int ret = OB_SUCCESS;
   int64_t remain_timeout_us = THIS_WORKER.is_timeout_ts_valid() ? THIS_WORKER.get_timeout_remain() : timeout_sec_ * 1000000;
@@ -199,7 +199,7 @@ int ObAIFuncClient::send_post(ObJsonObject *data, ObJsonObject *&response)
 }
 
 int ObAIFuncClient::send_post(common::ObIAllocator &allocator,
-                              common::ObString &url,
+                              const common::ObString &url,
                               ObArray<ObString> &headers,
                               ObJsonObject *data,
                               ObJsonObject *&response)
@@ -288,7 +288,7 @@ int ObAIFuncClient::send_post_batch(ObArray<ObJsonObject *> &data_array, ObArray
 }
 
 int ObAIFuncClient::send_post_batch(common::ObIAllocator &allocator,
-                                    common::ObString &url,
+                                    const common::ObString &url,
                                     ObArray<ObString> &headers,
                                     ObArray<ObJsonObject *> &data_array,
                                     ObArray<ObJsonObject *> &responses)

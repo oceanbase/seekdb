@@ -632,7 +632,7 @@ int ObHybridVectorRefreshTask::prepare_for_embedding(ObPluginVectorIndexAdaptor 
         } else {
           ObString access_key;
           ObString url;
-          ObAiModelEndpointInfo *endpoint = task_ctx->endpoint_; // endpoint should not be null after init.
+          const ObAiModelEndpointInfo *endpoint = task_ctx->endpoint_; // endpoint should not be null after init.
           task_ctx->embedding_task_ = new(task_buf)ObEmbeddingTask(task_ctx->allocator_);
           ObPluginVectorIndexService *service = MTL(ObPluginVectorIndexService *);
           if (OB_ISNULL(service)) {
