@@ -737,18 +737,28 @@ int ObEmbeddingTaskMgr::get_ai_config(const common::ObString &model_id)
     LOG_WARN("model_id is empty", K(ret), K(model_id));
   } else {
     ObAIFuncExprInfo *info = nullptr;
+    const share::ObAiModelEndpointInfo *endpoint_info = nullptr;
+    omt::ObAiServiceGuard ai_service_guard;
+    omt::ObTenantAiService *ai_service = MTL(omt::ObTenantAiService*);
     if (OB_FAIL(ObAIFuncUtils::get_ai_func_info(allocator_, const_cast<common::ObString&>(model_id), info))) {
       LOG_WARN("failed to get ai func info", K(ret), K(model_id));
     } else if (OB_ISNULL(info)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("ai func info is null", K(ret));
-    } else if (OB_FAIL(ob_write_string(allocator_, info->url_, cfg_.model_url_))) {
+    } else if (OB_ISNULL(ai_service)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("ai service is null", K(ret));
+    } else if (OB_FAIL(ai_service->get_ai_service_guard(ai_service_guard))) {
+      LOG_WARN("failed to get ai service guard", K(ret));
+    } else if (OB_FAIL(ai_service_guard.get_ai_endpoint_by_ai_model_name(model_id, endpoint_info))) {
+      LOG_WARN("failed to get endpoint info", K(ret), K(model_id));
+    } else if (OB_FAIL(ob_write_string(allocator_, endpoint_info->get_url(), cfg_.model_url_))) {
       LOG_WARN("failed to copy model_url", K(ret));
     } else if (OB_FAIL(ob_write_string(allocator_, info->model_, cfg_.model_name_))) {
       LOG_WARN("failed to copy model_name", K(ret));
-    } else if (OB_FAIL(ob_write_string(allocator_, info->api_key_, cfg_.user_key_))) {
+    } else if (OB_FAIL(endpoint_info->get_unencrypted_access_key(allocator_, cfg_.user_key_))) {
       LOG_WARN("failed to copy user_key", K(ret));
-    } else if (OB_FAIL(ob_write_string(allocator_, info->provider_, cfg_.provider_))) {
+    } else if (OB_FAIL(ob_write_string(allocator_, endpoint_info->get_provider(), cfg_.provider_))) {
       LOG_WARN("failed to copy provider", K(ret));
     }
   }

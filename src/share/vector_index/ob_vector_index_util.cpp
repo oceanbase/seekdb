@@ -580,13 +580,23 @@ int ObVectorIndexUtil::get_vector_from_text_by_embedding(ObIAllocator &allocator
   } else {
     ObString endpoint_str(param.endpoint_);
     ObAIFuncExprInfo *ai_fun_info = nullptr;
+    omt::ObAiServiceGuard ai_service_guard;
+    omt::ObTenantAiService *ai_service = MTL(omt::ObTenantAiService*);
+    const share::ObAiModelEndpointInfo *endpoint_info = nullptr;
     if (OB_FAIL(ObAIFuncUtils::get_ai_func_info(allocator, endpoint_str, ai_fun_info))) {
       LOG_WARN("failed to get ai fun info", K(ret), K(param_str));
+    } else if (OB_ISNULL(ai_service)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("ai service is null", K(ret));
+    } else if (OB_FAIL(ai_service->get_ai_service_guard(ai_service_guard))) {
+      LOG_WARN("failed to get ai service guard", K(ret));
+    } else if (OB_FAIL(ai_service_guard.get_ai_endpoint_by_ai_model_name(endpoint_str, endpoint_info))) {
+      LOG_WARN("failed to get endpoint info", K(ret), K(endpoint_str));
     } else {
       int64_t dim = param.dim_;
       ObJsonInt *dim_json = nullptr;
       ObJsonObject *config = nullptr;
-      ObAIFuncModel model(allocator, *ai_fun_info);
+      ObAIFuncModel model(allocator, *ai_fun_info, *endpoint_info);
       ObString query_text_copy = query_text;  // Create a non-const copy
       if (OB_FAIL(ObAIFuncJsonUtils::get_json_object(allocator, config))) {
         LOG_WARN("fail to get json object", K(ret));

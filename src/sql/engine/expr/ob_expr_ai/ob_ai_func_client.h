@@ -30,18 +30,18 @@ class ObAIFuncClient: public ObAIFuncHandle
 public:
   ObAIFuncClient();
   virtual ~ObAIFuncClient();
-  int init(common::ObIAllocator &allocator, ObString &url, ObArray<ObString> &headers);
+  int init(common::ObIAllocator &allocator, const ObString &url, ObArray<ObString> &headers);
   void clean_up();
   void reset();
   void set_timeout_sec(int64_t timeout_sec) { timeout_sec_ = timeout_sec; }
   // ai function interface
   virtual int send_post(common::ObIAllocator &allocator,
-                        ObString &url,
+                        const ObString &url,
                         ObArray<ObString> &headers,
                         ObJsonObject *data,
                         ObJsonObject *&response) override;
   virtual int send_post_batch(common::ObIAllocator &allocator,
-                              ObString &url,
+                              const ObString &url,
                               ObArray<ObString> &headers,
                               ObArray<ObJsonObject *> &data_array,
                               ObArray<ObJsonObject *> &responses) override;
