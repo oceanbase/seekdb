@@ -146,7 +146,7 @@ protected:
   ObLength *lens_;
   char **ptrs_;
   ObArenaAllocator allocator_;
-  char zero_data_[0]; // 长度为0的指针
+  char zero_data_[0]; // pointer of length 0
 };
 
 } // namespace storage

@@ -397,7 +397,7 @@ ObExprMonth::~ObExprMonth() {}
 
 int ObExprMonth::calc_month(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
 {
-  // 对于MONTH('2020-00-00')场景，为了完全兼容mysql，也需要容忍月和日为0
+  // For the MONTH('2020-00-00') scenario, to fully compatible with mysql, we also need to tolerate month and day being 0
   return ObExprTimeBase::calc(expr, ctx, expr_datum, DT_MON, true, true);
 }
 

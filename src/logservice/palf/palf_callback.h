@@ -30,7 +30,7 @@ namespace palf
 class PalfFSCb
 {
 public:
-  // end_lsn返回的是最后一条已确认日志的下一位置
+  // end_lsn returns the position of the next log after the last confirmed log
   virtual int update_end_lsn(int64_t id, const LSN &end_lsn, const share::SCN &end_scn, const int64_t proposal_id) = 0;
 };
 
@@ -44,7 +44,7 @@ public:
 class PalfRebuildCb
 {
 public:
-  // lsn 表示触发rebuild时源端的基线lsn位点
+  // lsn indicates the baseline lsn point at the source end when rebuild is triggered
   virtual int on_rebuild(const int64_t id, const LSN &lsn) = 0;
   virtual bool is_rebuilding(const int64_t id) const = 0;
 };

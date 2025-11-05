@@ -38,7 +38,7 @@ std::string LOGGER_FILE_NAME=TEST_FILE_NAME + "/role_change_service.log";
 class RoleChangeService : public ObSimpleClusterTestBase
 {
 public:
-  // 指定case运行目录前缀 test_ob_simple_cluster_
+  // Specify the case run directory prefix test_ob_simple_cluster_
   RoleChangeService () : ObSimpleClusterTestBase(TEST_FILE_NAME) {}
 };
 
@@ -65,13 +65,13 @@ TEST_F(RoleChangeService, unique_set)
   EXPECT_EQ(OB_ENTRY_EXIST, set.insert(event));
   RoleChangeEvent event1(RoleChangeEventType::ROLE_CHANGE_CB_EVENT_TYPE, ObLSID(base_ls_id+1000000));
   EXPECT_EQ(OB_SIZE_OVERFLOW, set.insert(event1));
-  // 第一个slot将会被清空
+  // The first slot will be cleared
   EXPECT_EQ(OB_SUCCESS, rc_service->on_role_change(base_ls_id));
   RoleChangeEvent event2(RoleChangeEventType::ROLE_CHANGE_CB_EVENT_TYPE, ObLSID(base_ls_id+1));
   EXPECT_EQ(OB_ENTRY_EXIST, set.insert(event2));
   sleep(1);
   {
-    // 清空第一个slot
+    // Clear the first slot
     rc_service->rc_set_.events_[0].reset();
     CLOG_LOG(ERROR, "runlin trace1");
     ObAddr dest_addr(ObAddr::VER::IPV4, "127.0.0.1", 1234);
@@ -101,7 +101,7 @@ TEST_F(RoleChangeService, basic_func)
   uint64_t tenant_id = 0;
   EXPECT_EQ(OB_SUCCESS, get_tenant_id(tenant_id, tenant_name));
   MAKE_TENANT_SWITCH_SCOPE_GUARD(guard);
-  // 上下文切换为runlin租户
+  // Context switch to runlin tenant
   ASSERT_EQ(OB_SUCCESS, guard.switch_to(tenant_id));
   ObLogService *log_service = MTL(ObLogService*);
   ASSERT_NE(nullptr, log_service);
@@ -112,7 +112,7 @@ TEST_F(RoleChangeService, basic_func)
   {
     ObLSHandle ls;
     EXPECT_EQ(OB_SUCCESS, ls_service->get_ls(ObLSID(1001), ls, ObLSGetMod::LOG_MOD));
-    // 停止回放
+    // Stop playback
     EXPECT_EQ(OB_SUCCESS, ls.get_ls()->disable_replay());
     ObLogHandler *log_handler = &ls.get_ls()->log_handler_;
     EXPECT_EQ(LEADER, log_handler->role_);
@@ -143,8 +143,8 @@ TEST_F(RoleChangeService, test_offline)
   ObApplyStatusGuard guard;
   ObLSID id(1);
   EXPECT_EQ(OB_SUCCESS, apply_service->get_apply_status(id, guard));
-  // 开启事务，提交日志
-  // offline是否卡卡住
+  // Start transaction, commit log
+  // is offline stuck
   common::ObMySQLProxy &sql_proxy = get_curr_simple_server().get_sql_proxy_with_short_wait();
   ObSqlString sql;
   {
@@ -173,7 +173,7 @@ TEST_F(RoleChangeService, test_offline)
   ASSERT_EQ(OB_SUCCESS, sql.assign_fmt("insert into t1 values(%d, %d)", 1, 9));
   sql_proxy.write(sql.ptr(), affected_rows);
   ASSERT_EQ(OB_SUCCESS, sql.assign_fmt("commit"));
-  // commit 会卡住
+  // commit will hang
   CLOG_LOG(INFO, "runlin trace before commit");
   sql_proxy.write(sql.ptr(), affected_rows);
   

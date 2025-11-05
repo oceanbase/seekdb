@@ -860,7 +860,7 @@ OB_DEF_DESERIALIZE(ObUDTTypeInfo)
   }
   if (OB_SUCC(ret)) {
     if (pos == data_len) {
-      // 这是老版本的数据，不需要处理。
+      // This is the old version of the data, no need to process.
     } else {
       LST_DO_CODE(OB_UNIS_DECODE, obj_type_cnt);
     }

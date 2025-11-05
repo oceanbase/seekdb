@@ -30,9 +30,9 @@ class ObExprResultTypeUtil
 {
 public:
 
-  /* mysql计算表达式的方式是：先通过列类型计算出一个目标类型，
-   * 然后比较阶段先讲数值转换到改类型上，然后做比较.
-   * 所以需要get_relational_cmp_type函数用于计算目标类型
+  /* mysql calculates the expression as follows: first, determine a target type based on the column type,
+   * then during the comparison phase, convert the values to this type, and then perform the comparison.
+   * Therefore, the get_relational_cmp_type function is used to calculate the target type
    **/
 
   static int get_relational_cmp_type(common::ObObjType &type,

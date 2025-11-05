@@ -35,7 +35,7 @@ public:
   virtual int est_cost() override;
 private:
   uint64_t flags_;
-  // 这里的id只是的算子的line id，也就是explain看到的line编号
+  // Here the id is just the operator's line id, which is the line number seen in explain
   uint64_t dst_op_line_id_;
   DISALLOW_COPY_AND_ASSIGN(ObLogMonitoringDump);
 };

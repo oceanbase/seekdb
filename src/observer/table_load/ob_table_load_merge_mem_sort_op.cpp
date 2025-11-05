@@ -69,7 +69,7 @@ int ObTableLoadMergeMemSortOp::switch_next_op(bool is_parent_called)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected table store", KR(ret), KPC(merge_table_ctx_->table_store_));
   } else if (merge_table_ctx_->table_store_->get_table_data_desc()
-               .row_flag_.uncontain_hidden_pk_) { // 不带主键
+               .row_flag_.uncontain_hidden_pk_) { // without primary key
     if (OB_ISNULL(multiple_heap_table_compactor_ =
                     OB_NEWx(ObTableLoadMultipleHeapTableCompactor, allocator_))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;

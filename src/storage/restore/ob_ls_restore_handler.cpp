@@ -283,7 +283,7 @@ int ObLSRestoreHandler::process()
       LOG_WARN("fail to deal failed restore", K(ret), KPC(ls_));
     }
   } else if (result_mgr_.is_met_retry_time_interval()) {
-    // Some retrieable errors may be frequent in a short time，such as :
+    // Some retrieable errors may be frequent in a short time, such as :
     // it tasks a period of time for the ls leader is ready after the shutdown and restart of observer usually,
     // and an ls leader not exist error will be returned before leader is ready.
     // so in order to improve availability, we need control the retry frequency and the default retry time interval is 10s.

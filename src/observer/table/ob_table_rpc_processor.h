@@ -183,7 +183,7 @@ protected:
   share::schema::ObSchemaGetterGuard schema_guard_;
   const share::schema::ObSimpleTableSchemaV2 *simple_table_schema_;
   const share::schema::ObTableSchema *table_schema_;
-  observer::ObReqTimeGuard req_timeinfo_guard_; // 引用cache资源必须加ObReqTimeGuard
+  observer::ObReqTimeGuard req_timeinfo_guard_; // Reference cache resources must add ObReqTimeGuard
   table::ObKvSchemaCacheGuard schema_cache_guard_;
   int32_t stat_process_type_;
   bool enable_query_response_time_stats_;

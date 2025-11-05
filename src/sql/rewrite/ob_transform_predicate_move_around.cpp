@@ -23,11 +23,11 @@ using namespace oceanbase::common;
  *
  * FUTURE WORK
  * 1. deduce new join conditions
- * 2. cross 集合类 STMT 的推导
- * 3. 根据一个谓词推导新的谓词 (T1.C = 1 AND T2.C = 2) OR (T1.C = 2 AND T2.C = 3)，
- *    实际上是给定一个涉及多表的谓词，找出隐含的单表谓词
- * 4. PULLUP 是在推到 SELECT EXPR 之间的大小关系；目前我们只推导了
- *    column, aggr, winfunc 之间的大小关系，并向外层传递。未来可以尝试向上层传递更多的大小关系
+ * 2. cross collection class STMT derivation
+ * 3. derive new predicates from one predicate (T1.C = 1 AND T2.C = 2) OR (T1.C = 2 AND T2.C = 3),
+ *    actually, given a predicate involving multiple tables, find implied single-table predicates
+ * 4. PULLUP is about deriving size relationships between SELECT EXPRs; currently we only derive
+ *    size relationships between column, aggr, winfunc, and propagate them outward. In the future, we can try to propagate more size relationships upward
  */
 
 /**
@@ -727,7 +727,7 @@ int ObTransformPredicateMoveAround::pullup_predicates_from_set(ObSelectStmt *stm
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("stmt is not a set stmt", K(ret));
   } else if (stmt->is_recursive_union()) {
-    //recursive cte不能上拉谓词到外层
+    //recursive cte cannot pull predicates to outer layer
     ObArray<int64_t> dummy_sels;
     ObArray<ObRawExpr *> dummy_preds;
     OPT_TRACE("try to pullup predicate from recurisve union stmt");
@@ -742,7 +742,7 @@ int ObTransformPredicateMoveAround::pullup_predicates_from_set(ObSelectStmt *stm
     ObSEArray<ObRawExpr *, 16> left_output_preds;
     ObSEArray<ObRawExpr *, 16> right_output_preds;
     ObSEArray<ObRawExpr *, 16> pullup_output_preds;
-    //对于set stmt需要上拉所有select item相关的谓词
+    // For set stmt need to pull up all select item related predicates
     ObArray<int64_t> all_sels;
     for (int64_t i = 0; OB_SUCC(ret) && i < stmt->get_select_item_size(); ++i) {
       if (OB_FAIL(all_sels.push_back(i))) {
@@ -796,7 +796,7 @@ int ObTransformPredicateMoveAround::check_pullup_predicates(ObSelectStmt *stmt,
     LOG_WARN("stmt is not a set stmt", K(ret));
   } else if (OB_FALSE_IT(context.init(&stmt->get_query_ctx()->calculable_items_))) {
   } else if (stmt->get_set_op() == ObSelectStmt::UNION && !stmt->is_recursive_union()) {
-    //找出同构谓词
+    // Find isomorphic predicates
     for (int64_t i = 0; OB_SUCC(ret) && i < left_pullup_preds.count(); ++i) {
       bool find = false;
       for (int64_t j = 0; OB_SUCC(ret) && !find && j < right_pullup_preds.count(); ++j) {
@@ -815,7 +815,7 @@ int ObTransformPredicateMoveAround::check_pullup_predicates(ObSelectStmt *stmt,
       LOG_WARN("append equal param info failed", K(ret));
     } else {/*do nothing*/}
   } else if (stmt->get_set_op() == ObSelectStmt::INTERSECT) {
-    //合并谓词
+    // Merge predicates
     for (int64_t i = 0; OB_SUCC(ret) && i < left_pullup_preds.count(); ++i) {
       bool find = false;
       for (int64_t j = 0; OB_SUCC(ret) && !find && j < output_pullup_preds.count(); ++j) {
@@ -1198,19 +1198,19 @@ int ObTransformPredicateMoveAround::rename_pullup_predicates(
  * @param pushdown_preds
  * the push down preds are execute upon the output of the stmt
  * -  push down predicates
- * -  limit                 不能下推过 limit
- * -  order by              可以下推过 order by
- * -  sequence              不能下推过 sequence
- * -  distinct              可以下推过 distinct
- * -  window function       当谓词关联的列是 partition by 列的子集，可以下推
- * -  groupby/having        当谓词关联的列是 group by 列的子集，可以下推 (有rollup时不检查rollup列，谓词关联的列为 group by 列的子集时下推)
- * -  where                 下推谓词加入到 where conditions
- * -  from-join             where 谓词强化 joined-on 条件，并尝试下推到 VIEW 中
+ * -  limit                 cannot be pushed down past limit
+ * -  order by              can be pushed down past order by
+ * -  sequence              cannot be pushed down past sequence
+ * -  distinct              can be pushed down past distinct
+ * -  window function       can be pushed down if the predicate-related columns are a subset of the partition by columns
+ * -  groupby/having        can be pushed down if the predicate-related columns are a subset of the group by columns (rollup columns are not checked when there is rollup, push down if the predicate-related columns are a subset of the group by columns)
+ * -  where                 add the pushed down predicates to the where conditions
+ * -  from-join             strengthen the joined-on conditions with where predicates and attempt to push them into the VIEW
  * -  table-access          do nothing
  *
  * we would like to push down predicates as far as possible
  *
- * 有 limit, sequence, user variable assignment 的时候，谓词可能无法下推，这种情况下，要加回到上层
+ * when there is limit, sequence, or user variable assignment, predicates may not be able to be pushed down, in which case they need to be added back to the upper level
  * @return
  */
 int ObTransformPredicateMoveAround::pushdown_predicates(
@@ -1647,7 +1647,7 @@ int ObTransformPredicateMoveAround::check_pushdown_predicates(ObSelectStmt *stmt
   } else if (stmt->is_recursive_union()) {
     /*do nothing*/
   } else if (stmt->get_set_op() == ObSelectStmt::UNION) {
-    //对于未成功下推的谓词，需要合并加回上层
+    // For predicates that were not successfully pushed down, they need to be merged back into the upper layer
     for (int64_t i = 0; OB_SUCC(ret) && i < right_pushdown_preds.count(); ++i) {
       if (ObPredicateDeduce::find_equal_expr(left_pushdown_preds, right_pushdown_preds.at(i))) {
         /*do nothing*/
@@ -1659,7 +1659,7 @@ int ObTransformPredicateMoveAround::check_pushdown_predicates(ObSelectStmt *stmt
       LOG_WARN("assign predicated failed", K(ret));
     } else {/*do nothing*/}
   } else if (stmt->get_set_op() == ObSelectStmt::INTERSECT) {
-    //对于左右两侧均未成功下推的谓词，需要加回上层
+    // For predicates that failed to be pushed down on both sides, need to add back to the upper layer
     output_pushdown_preds.reset();
     for (int64_t i = 0; OB_SUCC(ret) && i < right_pushdown_preds.count(); ++i) {
       if (!ObPredicateDeduce::find_equal_expr(left_pushdown_preds, right_pushdown_preds.at(i))) {
@@ -1669,7 +1669,7 @@ int ObTransformPredicateMoveAround::check_pushdown_predicates(ObSelectStmt *stmt
       } else {/*do nothing*/}
     }
   } else if (stmt->get_set_op() == ObSelectStmt::EXCEPT) {
-    //对于左侧未成功下推的谓词，需要加回上层
+    // For the predicates on the left that were not successfully pushed down, they need to be added back to the upper layer
     if (OB_FAIL(output_pushdown_preds.assign(left_pushdown_preds))) {
       LOG_WARN("assign predicated failed", K(ret));
     } else {/*do nothing*/}
@@ -1724,9 +1724,9 @@ int ObTransformPredicateMoveAround::pushdown_into_set_stmt(ObSelectStmt *stmt,
     LOG_WARN("param has null", K(stmt), K(parent_stmt), K(ret));
   } else {
     ObSEArray<ObRawExpr*, 16> subquery_preds;
-    ObSEArray<ObRawExpr*, 16> valid_preds;  //存储能够下推的谓词
-    ObSEArray<ObRawExpr*, 16> rename_preds; //存储重命名为当前stmt的select expr的谓词
-    ObSEArray<ObRawExpr*, 16> candi_preds;  //返回未成功下推的谓词
+    ObSEArray<ObRawExpr*, 16> valid_preds;  // store predicates that can be pushed down
+    ObSEArray<ObRawExpr*, 16> rename_preds; // store predicates of select expr renamed to current stmt
+    ObSEArray<ObRawExpr*, 16> candi_preds;  // return predicates that were not successfully pushed down
     ObSEArray<ObRawExpr*, 16> equal_const_preds;
     ObSEArray<ObRawExpr*, 16> invalid_pushdown_preds;
     ObSEArray<ObRawExpr*, 16> invalid_pullup_preds;
@@ -1747,13 +1747,13 @@ int ObTransformPredicateMoveAround::pushdown_into_set_stmt(ObSelectStmt *stmt,
     } else if (OB_FAIL(append(candi_preds, equal_const_preds))) {
       LOG_WARN("failed to add back equal const preds to candi array", K(ret));
     } else {
-      ObSEArray<ObRawExpr*, 16> output_preds;  //返回未成功下推的原始谓词
-      //把未下推的谓词转换为原始谓词返回
+      ObSEArray<ObRawExpr*, 16> output_preds;  // return unpushed raw predicates
+      // Convert unpushed predicates to original predicates and return
       for (int64_t i = 0; OB_SUCC(ret) && i < rename_preds.count(); ++i) {
         if (!ObPredicateDeduce::find_equal_expr(candi_preds, rename_preds.at(i))) {
-          /*成功下推的谓词，不需要返回*/
+          /*Successfully pushed predicates, no need to return*/
         } else if (!ObPredicateDeduce::find_equal_expr(pushdown_preds, valid_preds.at(i))) {
-          /*pullup的谓词没有成功下推，不需要返回*/
+          /*The predicate of pullup was not successfully pushed down, no need to return*/
         } else if (OB_FAIL(output_preds.push_back(valid_preds.at(i)))) {
           LOG_WARN("push back predicate failed", K(ret));
         } else {/*do nothing*/}
@@ -2128,7 +2128,7 @@ int ObTransformPredicateMoveAround::pushdown_into_where(ObDMLStmt &stmt,
 
 /**
  * @brief ObTransformPredicateMoveAround::check_pushdown_validity_against_winfunc
- * 检查一个谓词能够压过 window function
+ * Check if a predicate can be pushed down over the window function
  * @return
  */
 int ObTransformPredicateMoveAround::pushdown_through_winfunc(
@@ -2326,7 +2326,7 @@ int ObTransformPredicateMoveAround::check_pushdown_through_rollup_validity(ObRaw
 
 /**
  * @brief ObTransformPredicateMoveAround::check_pushdown_validity
- * 检查一个谓词能否压过 group by
+ * Check if a predicate can be pushed down over group by
  * @return
  */
 int ObTransformPredicateMoveAround::pushdown_through_groupby(
@@ -2382,8 +2382,8 @@ int ObTransformPredicateMoveAround::pushdown_through_groupby(
     }
     if (OB_SUCC(ret) && !pushed) {
       if (T_OP_OR == pred->get_expr_type() && !ObOptimizerUtil::find_equal_expr(ctx_->push_down_filters_, pred)) {
-        //对于having c1 > 1 or (c1 < 0 and count(*) > 1)
-        //可以拆分出c1 > 1 or c1 < 0下推过group by
+        // For having c1 > 1 or (c1 < 0 and count(*) > 1)
+        //can be split into c1 > 1 or c1 < 0 pushed down through group by
         ObRawExpr *new_pred = NULL;
         if (OB_FAIL(split_or_having_expr(stmt, *static_cast<ObOpRawExpr*>(pred), new_pred))) {
           LOG_WARN("failed to split or having expr", K(ret));
@@ -2414,8 +2414,7 @@ int ObTransformPredicateMoveAround::pushdown_through_groupby(
     }
   }
   return ret;
-
-// reminder: 测试一下 win func 谓词的下推过程。理论上是不能从上层 stmt 下推下来的
+// reminder: test the pushdown process of win func predicate. theoretically, it cannot be pushed down from the upper stmt
 }
 
 /**
@@ -2524,7 +2523,7 @@ int ObTransformPredicateMoveAround::check_having_expr(ObSelectStmt &stmt,
         LOG_WARN("failed to push back predicate", K(ret));
       }
     }
-    // and expr 中要求至少有一个子expr只涉及到该表的列
+    // and expr requires at least one subexpr involving only columns of this table
     for (int64_t j = 0; OB_SUCC(ret) && j < param_preds.count(); ++j) {
       ObRawExpr *cur_and_expr = param_preds.at(j);
       generalized_columns.reuse();
@@ -2774,7 +2773,7 @@ int ObTransformPredicateMoveAround::pushdown_into_joined_table(
                                            right_conditions)))) {
       LOG_WARN("failed to push down predicates", K(ret));
     } else {
-      //删除下推的谓词
+      // Delete the pushed predicate
       if (joined_table->is_left_join()) {
         if (OB_FAIL(pushdown_preds.assign(left_down))) {
           LOG_WARN("failed to assign preds", K(ret));
@@ -2793,7 +2792,7 @@ int ObTransformPredicateMoveAround::pushdown_into_joined_table(
         for (int64_t i = 0; OB_SUCC(ret) && i < pushdown_preds.count(); ++i) {
           if (!ObPredicateDeduce::find_equal_expr(left_down, pushdown_preds.at(i)) ||
               !ObPredicateDeduce::find_equal_expr(right_down, pushdown_preds.at(i))) {
-            //成功下推到左侧或右侧
+            // Successfully pushed to the left or right
           } else if (OB_FAIL(new_pushdown_preds.push_back(pushdown_preds.at(i)))) {
             LOG_WARN("failed to push back pred", K(ret));
           }
@@ -2801,7 +2800,7 @@ int ObTransformPredicateMoveAround::pushdown_into_joined_table(
         for (int64_t i = 0; OB_SUCC(ret) && i < joined_table->join_conditions_.count(); ++i) {
           if (!ObPredicateDeduce::find_equal_expr(left_down, joined_table->join_conditions_.at(i)) ||
               !ObPredicateDeduce::find_equal_expr(right_down, joined_table->join_conditions_.at(i))) {
-            //成功下推到左侧或右侧
+            // Successfully pushed to the left or right
           } else if (OB_FAIL(new_join_conditions.push_back(joined_table->join_conditions_.at(i)))) {
             LOG_WARN("failed to push back pred", K(ret));
           }
@@ -3288,9 +3287,9 @@ int ObTransformPredicateMoveAround::rename_pushdown_predicates(ObDMLStmt &stmt,
 
 /**
  * @brief ObTransformPredicateMoveAround::transform_predicates
- * 将 input_preds 转换成一个等价的 output_preds，这里两个谓词集合语义上必须是等价的，
- * 给定 p \in input_preds, p 一定可以由 output_preds 推导得到
- * 给定 p \in output_preds, p 一定也可以由 input_presd 推导得到
+ * Convert input_preds into an equivalent output_preds, where the two sets of predicates must be semantically equivalent,
+ * given p \in input_preds, p can definitely be derived from output_preds
+ * given p \in output_preds, p can also definitely be derived from input_presd
  * @return
  */
 int ObTransformPredicateMoveAround::transform_predicates(
@@ -4174,7 +4173,7 @@ int ObTransformPredicateMoveAround::push_down_cte_filter(ObIArray<ObSqlTempTable
     }
     if (OB_SUCC(ret) && have_common_filter) {
       OPT_TRACE("try to pushdown filter into temp table:", info->table_query_);
-      //当所有的引用表都有可以相同的下推的谓词时才下推谓词
+      // When all the referenced tables have the same predicates that can be pushed down, then push down the predicates
       ObDMLStmt *orig_stmt = info->table_query_;
       if (OB_FAIL(inner_push_down_cte_filter(*info, common_filters))) {
         LOG_WARN("failed to pushdown preds into temp table", K(ret));

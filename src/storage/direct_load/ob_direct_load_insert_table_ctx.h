@@ -91,7 +91,7 @@ public:
                K_(online_sample_percent), K_(is_no_logging), K_(max_batch_size), K_(enable_dag), KP_(dag));
 
 public:
-  uint64_t table_id_; // 目标表的table_id, 目前用于填充统计信息收集结果
+  uint64_t table_id_; // target table's table_id, currently used for filling the statistics collection results
   int64_t schema_version_;
   int64_t snapshot_version_;
   int64_t ddl_task_id_;
@@ -99,7 +99,7 @@ public:
   int64_t parallel_;
   int64_t reserved_parallel_;
   int64_t rowkey_column_count_;
-  int64_t column_count_; // 不包含多版本列
+  int64_t column_count_; // does not include multi-version columns
   int64_t lob_inrow_threshold_;
   bool is_partitioned_table_;
   bool is_table_without_pk_;
@@ -114,7 +114,7 @@ public:
   const common::ObIArray<share::schema::ObColDesc> *col_descs_;
   const blocksstable::ObStoreCmpFuncs *cmp_funcs_;
   sql::ObBitVector *col_nullables_;
-  const common::ObIArray<int64_t> *lob_column_idxs_; // 不包含多版本列
+  const common::ObIArray<int64_t> *lob_column_idxs_; // does not include multiversion columns
   double online_sample_percent_;
   bool is_no_logging_;
   int64_t max_batch_size_;
@@ -245,7 +245,7 @@ protected:
   share::ObLSID ls_id_;
   common::ObTabletID origin_tablet_id_;
   common::ObTabletID tablet_id_;
-  common::ObTabletID pk_tablet_id_; // 从哪个tablet_id获取自增pk
+  common::ObTabletID pk_tablet_id_; // get auto-increment pk from which tablet_id
   ObDirectLoadInsertLobTabletContext *lob_tablet_ctx_;
   lib::ObMutex mutex_;
   int64_t slice_idx_;
@@ -279,7 +279,7 @@ public:
   {
     return OB_ERR_UNEXPECTED;
   }
-  // 带多版本列的完整行
+  // The complete row with multiple version columns
   virtual int update_sql_statistics(table::ObTableLoadSqlStatistics &sql_statistics,
                                     const blocksstable::ObDatumRow &datum_row)
   {
@@ -290,7 +290,7 @@ public:
   {
     return OB_ERR_UNEXPECTED;
   }
-  // 中间过程数据
+  // Intermediate process data
   virtual int update_sql_statistics(table::ObTableLoadSqlStatistics &sql_statistics,
                                     const ObDirectLoadDatumRow &datum_row,
                                     const ObDirectLoadRowFlag &row_flag)

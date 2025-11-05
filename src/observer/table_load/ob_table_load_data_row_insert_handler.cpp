@@ -65,7 +65,7 @@ int ObTableLoadDataRowInsertHandler::handle_insert_row(const ObTabletID &tablet_
     LOG_WARN("ObTableLoadDataRowInsertHandler not init", KR(ret), KP(this));
   } else {
     if (ObDirectLoadMethod::is_incremental(store_ctx_->ctx_->param_.method_)) {
-      // 构造索引数据
+      // Construct index data
       for (int64_t i = 0; OB_SUCC(ret) && i < store_ctx_->index_store_table_ctxs_.count(); ++i) {
         ObTableLoadStoreIndexTableCtx *index_table_ctx = store_ctx_->index_store_table_ctxs_.at(i);
         ObTableLoadIndexTableBuilder *index_builder = nullptr;
@@ -90,7 +90,7 @@ int ObTableLoadDataRowInsertHandler::handle_insert_row(const ObTabletID &tablet_
     LOG_WARN("ObTableLoadDataRowInsertHandler not init", KR(ret), KP(this));
   } else {
     if (ObDirectLoadMethod::is_incremental(store_ctx_->ctx_->param_.method_)) {
-      // 构造索引数据
+      // Construct index data
       for (int64_t i = 0; OB_SUCC(ret) && i < store_ctx_->index_store_table_ctxs_.count(); ++i) {
         ObTableLoadStoreIndexTableCtx *index_table_ctx = store_ctx_->index_store_table_ctxs_.at(i);
         ObTableLoadIndexTableBuilder *index_builder = nullptr;
@@ -117,7 +117,7 @@ int ObTableLoadDataRowInsertHandler::handle_insert_batch(const ObTabletID &table
     // do nothing
   } else {
     if (ObDirectLoadMethod::is_incremental(store_ctx_->ctx_->param_.method_)) {
-      // 构造索引数据
+      // Construct index data
       for (int64_t i = 0; OB_SUCC(ret) && i < store_ctx_->index_store_table_ctxs_.count(); ++i) {
         ObTableLoadStoreIndexTableCtx *index_table_ctx = store_ctx_->index_store_table_ctxs_.at(i);
         ObTableLoadIndexTableBuilder *index_builder = nullptr;
@@ -279,9 +279,9 @@ int ObTableLoadDataRowInsertHandler::handle_update_row(const ObTabletID &tablet_
       LOG_WARN("unexpected dup action", KR(ret), K_(dup_action));
     }
     if (OB_SUCC(ret) && result_row == &new_row) {
-      // 发生replace
+      // replace occurs
       if (ObDirectLoadMethod::is_incremental(store_ctx_->ctx_->param_.method_)) {
-        // 删除旧行的lob
+        // Delete the lob of the old row
         if (nullptr != store_ctx_->data_store_table_ctx_->lob_table_ctx_) {
           ObTableLoadStoreLobTableCtx *lob_table_ctx =
             store_ctx_->data_store_table_ctx_->lob_table_ctx_;
@@ -292,7 +292,7 @@ int ObTableLoadDataRowInsertHandler::handle_update_row(const ObTabletID &tablet_
             LOG_WARN("fail to append delete row", KR(ret), K(tablet_id), K(old_row));
           }
         }
-        // 删除旧行的索引, 插入新行的索引
+        // Delete the index of the old row, insert the index of the new row
         for (int64_t i = 0; OB_SUCC(ret) && i < store_ctx_->index_store_table_ctxs_.count(); ++i) {
           ObTableLoadStoreIndexTableCtx *index_table_ctx =
             store_ctx_->index_store_table_ctxs_.at(i);

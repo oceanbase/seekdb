@@ -116,7 +116,7 @@ struct ObSPICursor
   int release_complex_obj(ObObj &complex_obj);
 
   ObRARowStore row_store_;
-  ObArray<ObDataType> row_desc_; //ObRowStore里数据自带的Meta可能是T_NULL，所以这里自备一份
+  ObArray<ObDataType> row_desc_; // The Meta data in ObRowStore might be T_NULL, so we prepare our own copy here
   ObIAllocator* allocator_;
   int64_t cur_;
   common::ColumnsFieldArray fields_;
@@ -151,7 +151,7 @@ struct ObSPIOutParams
 
 private:
   bool has_out_param_;
-  ObSEArray<ObObj, OB_DEFAULT_SE_ARRAY_COUNT> out_params_; // 用于记录function的返回值
+  ObSEArray<ObObj, OB_DEFAULT_SE_ARRAY_COUNT> out_params_; // used to record function's return values
 };
 
 class ObSPIResultSet
@@ -278,7 +278,7 @@ private:
   sql::ObSQLSessionInfo::StmtSavedValue *orign_session_value_;
   sql::ObSQLSessionInfo::StmtSavedValue *cursor_session_value_;
   sql::ObSQLSessionInfo::StmtSavedValue *nested_session_value_;
-  ObSPIOutParams out_params_; // 用于记录function的返回值
+  ObSPIOutParams out_params_; // used to record the return value of the function
   ObString exec_params_str_;
 };
 
@@ -304,17 +304,17 @@ public:
     has_link_table_(false),
     is_skip_locked_(false)
     {}
-    stmt::StmtType type_; //prepare的语句类型
+    stmt::StmtType type_; // statement type for prepare
     bool for_update_;
     bool has_hidden_rowid_;
-    ObArray<ObRawExpr *> exec_params_; //prepare语句的执行参数
-    ObArray<ObRawExpr *> into_exprs_; //prepare语句的into子句变量（如果有）
-    ObArray<share::schema::ObSchemaObjVersion> ref_objects_; //prepare语句涉及的关联对象
-    ObString route_sql_; //从prepare语句解析出的路由字符串
+    ObArray<ObRawExpr *> exec_params_; // prepare statement execution parameters
+    ObArray<ObRawExpr *> into_exprs_; // prepare statement's INTO clause variables (if any)
+    ObArray<share::schema::ObSchemaObjVersion> ref_objects_; // prepare statement involved associated objects
+    ObString route_sql_; // routing string parsed from prepare statement
     pl::ObRecordType *record_type_;
     TgTimingEvent tg_timing_event_;
     uint64_t rowid_table_id_;
-    ObString ps_sql_; // sql prepare过后的参数化sql
+    ObString ps_sql_; // sql prepared parameterized sql
     bool is_bulk_;
     bool has_dup_column_name_;
     bool has_link_table_;
@@ -337,14 +337,14 @@ public:
       is_parser_dynamic_sql_(is_parser_dynamic_sql)
     {
     }
-    ObSQLSessionInfo &sess_info_;    // pl执行用到的session
-    pl::ObPLBlockNS *secondary_ns_;  // sql resolve过程中用来查找是否是pl变量的名称空间
+    ObSQLSessionInfo &sess_info_;    // session used for pl execution
+    pl::ObPLBlockNS *secondary_ns_;  // sql resolve process used to look up if it is a pl variable namespace
     union {
       uint16_t flag_;
       struct {
-        uint16_t is_dynamic_sql_ : 1; // 标记当前执行的sql是否是动态sql
-        uint16_t is_dbms_sql_ : 1;    // 标记当前执行的sql是否是dbms_sql
-        uint16_t is_cursor_ : 1;      // 标记当前执行的sql是否是cursor
+        uint16_t is_dynamic_sql_ : 1; // Mark whether the currently executed SQL is dynamic SQL
+        uint16_t is_dbms_sql_ : 1;    // Mark whether the currently executed sql is dbms_sql
+        uint16_t is_cursor_ : 1;      // Mark whether the currently executed sql is a cursor
         uint16_t is_parser_dynamic_sql_ : 1;
         uint16_t reserved_ : 12;
       };
@@ -584,7 +584,7 @@ public:
   static int convert_ext_null_params(ParamStore &params, ObSQLSessionInfo *session);
   
   static int inner_open(pl::ObPLExecCtx *ctx,
-                        ObIAllocator &param_allocator, //用于拷贝执行期参数
+                        ObIAllocator &param_allocator, // used to copy runtime parameters
                         const ObString &sql,
                         const ObString &ps_sql,
                         int64_t type,
@@ -919,23 +919,23 @@ private:
                           bool is_default = false);
 
   /**
-   * @brief  只走parser不走resolver的prepare接口，供mysql模式使用
-   * @param [in] allocator      - 内存分配器
-   * @param [in] session  - session信息
+   * @brief  Only use parser without using resolver's prepare interface, for MySQL mode usage
+   * @param [in] allocator      - memory allocator
+   * @param [in] session  - session information
    * @param [in] sql_proxy      - ObMySQLProxy
    * @param [in] schema_guard      - ObSchemaGetterGuard
-   * @param [in] expr_factory      - 表达式工厂
-   * @param [in] sql      - 待prepare的sql
-   * @param [in] secondary_namespace      - 传递给sql引擎的PL名字空间
-   * @param [out] prepare_result      - prepare的结果
+   * @param [in] expr_factory      - expression factory
+   * @param [in] sql      - SQL to be prepared
+   * @param [in] secondary_namespace      - PL namespace passed to the SQL engine
+   * @param [out] prepare_result      - result of prepare
    * @retval OB_SUCCESS execute success
    * @retval OB_SOME_ERROR special errno need to handle
    *
-   * 是对spi_resolve_prepare的改写，和spi_resolve_prepare相比不同之处在于：
-   * spi_resolve_prepare是通过传入PL名称空间给SQL引擎的resolver，由sql resolver进行变量解析，
-   * 而本函数不调用sql resolver，自己对parser的结果进行名称解析.
-   * 其主要流程是调用prepare_parse接口，获取parse的结果。其结果中包含了pl变量节点链表、依赖
-   * 外部对象链表，通过resolve_local_var解析出这些变量。如果有into子句会解析出into表达式。
+   * This is a rewrite of spi_resolve_prepare, and the difference from spi_resolve_prepare is:
+   * spi_resolve_prepare passes the PL namespace to the SQL engine's resolver, letting the SQL resolver perform variable resolution,
+   * while this function does not call the SQL resolver, instead performing name resolution on the results of the parser.
+   * Its main process is to call the prepare_parse interface to obtain the parse results. The results include a pl variable node list and a list of external object dependencies,
+   * through which resolve_local_var resolves these variables. If there is an into clause, it will resolve the into expression.
    */
   static int spi_parse_prepare(common::ObIAllocator &allocator,
                                ObSQLSessionInfo &session,
@@ -989,7 +989,7 @@ private:
                                        bool &exist);
 
   static int construct_exec_params(pl::ObPLExecCtx *ctx,
-                                   ObIAllocator &param_allocator, //用于拷贝执行期参数
+                                   ObIAllocator &param_allocator, // used to copy runtime parameters
                                    const ObSqlExpression **param_exprs,
                                    int64_t param_count,
                                    const ObSqlExpression **into_exprs,

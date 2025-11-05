@@ -108,8 +108,7 @@ private:
   common::ObSEArray<ObRawExpr *, 16> field_exprs_;
   int64_t sql_mode_;
 };
-
-//存储row_cnt行序列化的数据，每行的序列化数据是一个SEArray
+// Store row_cnt rows of serialized data, where each row's serialized data is an SEArray
 struct ObDataFrag : common::ObLink
 {
   ObDataFrag() = delete;
@@ -198,7 +197,7 @@ public:
 
 private:
   /**
-   * @brief 返回frag中第row_num行的起始位置
+   * @brief Return the starting position of the row_num row in frag
    */
   int rowoffset2pos(ObDataFrag *frag, int64_t row_num, int64_t &pos);
 
@@ -279,7 +278,7 @@ struct ObPartBufMgrHashInfo
 };
 
 //========================
-/*解决table location计算使用的内存无法释放问题*/
+/*Solve the memory release issue for table location calculation*/
 class ObAllocatorSwitch : public common::ObIAllocator
 {
 public:
@@ -570,7 +569,7 @@ OB_INLINE void ObCSVParser::handle_one_field(char *field_end_pos, bool has_escap
           && ((str_len == 1 && *cur_field_begin_pos_ == 'N' && has_escaped && cur_pos_ - cur_field_begin_pos_ == 2)
               || (formats_.enclose_char_ != INT64_MAX && !has_escaped
                   && str_len == 4 && 0 == MEMCMP(cur_field_begin_pos_, "NULL", 4)))) { 
-        //用一个特殊的flag表示;
+        // Use a special flag to indicate;
         values_in_line_.at(field_id_).assign_ptr(&ObLoadDataUtils::NULL_VALUE_FLAG, 1);
       } else {
         values_in_line_.at(field_id_).assign_ptr(cur_field_begin_pos_, str_len);

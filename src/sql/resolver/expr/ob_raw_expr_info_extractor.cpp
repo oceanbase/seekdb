@@ -340,9 +340,9 @@ int ObRawExprInfoExtractor::visit_subquery_node(ObOpRawExpr &expr)
   int ret = OB_SUCCESS;
   if (expr.has_flag(CNT_SUB_QUERY)) {
     if (IS_COMPARISON_OP(expr.get_expr_type())) {
-      //二元操作符，需要探测右边操作符的T_ALL/T_ANY等节点，并变换
-      //T_ALL/T_ANY是为了方便resolve增加的无用的ObOpRawExpr节点，
-      //在后面其实直接可以用IS_WITH_ALL, IS_WITH_ANY flag来表示其信息，所以在这里将这两种节点去掉
+      // Binary operator, need to probe the T_ALL/T_ANY etc. nodes of the right operand and transform
+      // T_ALL/T_ANY are dummy ObOpRawExpr nodes added for convenience of resolve,
+      // In fact, we can directly use the IS_WITH_ALL, IS_WITH_ANY flag to represent this information, so we remove these two types of nodes here
       ObRawExpr *left_expr = NULL;
       ObRawExpr *right_expr = NULL;
       if (OB_UNLIKELY(expr.get_param_count() != 2)) {
@@ -355,7 +355,7 @@ int ObRawExprInfoExtractor::visit_subquery_node(ObOpRawExpr &expr)
       } else if (right_expr->get_expr_type() == T_ALL || right_expr->get_expr_type() == T_ANY) {
         ObSubQueryKey key_flag = (right_expr->get_expr_type() == T_ALL) ? T_WITH_ALL : T_WITH_ANY;
         expr.set_subquery_key(key_flag);
-        //去除T_ALL or T_ANY的无用ObOpRawExpr节点
+        // Remove unnecessary ObOpRawExpr nodes for T_ALL or T_ANY
         if (OB_FAIL(expr.replace_param_expr(1, right_expr->get_param_expr(0)))) {
           LOG_WARN("replace right expr failed", K(ret));
         } else {
@@ -369,16 +369,16 @@ int ObRawExprInfoExtractor::visit_subquery_node(ObOpRawExpr &expr)
           LOG_WARN("left expr is set");
         } else if (left_ref->get_output_column() > 1 &&
                    IS_COMMON_COMPARISON_OP(expr.get_expr_type())) {
-          //左边子查询结果只可能是标量或者向量，如果是标量，不需要做operator转换，普通的比较表达式也能够处理子查询的情况
+          // The result of the left subquery can only be a scalar or a vector, if it is a scalar, no operator conversion is needed, ordinary comparison expressions can also handle the subquery case
           expr.set_expr_type(get_subquery_comparison_type(expr.get_expr_type()));
         }
       }
       if (OB_SUCCESS == ret && right_expr->has_flag(IS_SUB_QUERY)) {
-        //操作符也需要添加上ALL/ANY等flag，方便判断
+        // Operator also needs to add flags like ALL/ANY, convenient for judgment
         ObQueryRefRawExpr *right_ref = static_cast<ObQueryRefRawExpr*>(right_expr);
         if ((right_ref->get_output_column() > 1 || right_ref->is_set()) &&
             IS_COMMON_COMPARISON_OP(expr.get_expr_type())) {
-          //子查询的结果是向量或者集合，那么必须将比较操作符转换为对应的subquery expr operator
+          // The result of the subquery is a vector or set, then the comparison operator must be converted to the corresponding subquery expr operator
           expr.set_expr_type(get_subquery_comparison_type(expr.get_expr_type()));
         }
         if (!IS_SUBQUERY_COMPARISON_OP(expr.get_expr_type())) {
@@ -561,7 +561,7 @@ int ObRawExprInfoExtractor::visit(ObSysFunRawExpr &expr)
           || T_FUN_SYS_SYSTIMESTAMP == expr.get_expr_type()
           || (T_FUN_SYS_UNIX_TIMESTAMP == expr.get_expr_type()
               && 0 == expr.get_param_exprs().count())) { // check if has argument
-        if (OB_FAIL(expr.add_flag(IS_CUR_TIME))) { //需要在plan执行前取系统当前时间
+        if (OB_FAIL(expr.add_flag(IS_CUR_TIME))) { // need to get the system current time before plan execution
           LOG_WARN("failed to add flag IS_CUR_TIME", K(ret));
         }
       } else if (T_FUN_SYS_DEFAULT == expr.get_expr_type()) {

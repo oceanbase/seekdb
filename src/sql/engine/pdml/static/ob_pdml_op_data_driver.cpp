@@ -23,10 +23,9 @@ using namespace oceanbase::sql;
 ObPDMLOpDataDriver::~ObPDMLOpDataDriver()
 {
 }
-
-// data_service 拆分为 DMLDataReader、DMLDataWriter 两个接口，
-// 从概念上彻底解耦读数据、写数据
-// 初始化pdml data driver中的cache结构
+// data_service split into DMLDataReader, DMLDataWriter two interfaces,
+// Completely decouple reading data, writing data conceptually
+// Initialize the cache structure in pdml data driver
 int ObPDMLOpDataDriver::init(const ObTableModifySpec &spec,
                              ObIAllocator &allocator,
                              ObDMLBaseRtDef &dml_rtdef,
@@ -37,7 +36,7 @@ int ObPDMLOpDataDriver::init(const ObTableModifySpec &spec,
 {
   UNUSED(allocator);
   int ret = OB_SUCCESS;
-  last_row_.reuse_ = true; // 不需要每次暂存行都重新分配内存，重用上一行的内存
+  last_row_.reuse_ = true; // Do not reallocate memory for each row storage, reuse the memory of the previous row
   op_monitor_info_.otherstat_1_value_ = 0;
   op_monitor_info_.otherstat_1_id_ = ObSqlMonitorStatIds::PDML_PARTITION_FLUSH_TIME;
   op_monitor_info_.otherstat_2_value_ = 0;
@@ -60,13 +59,13 @@ int ObPDMLOpDataDriver::init(const ObTableModifySpec &spec,
     is_heap_table_insert_ = is_heap_table_insert;
     with_barrier_ = with_barrier;
   }
-  // 初始化cache对象
+  // Initialize cache object
   if (OB_SUCC(ret)) {
-    // 初始化cache的时候，需要考虑上barrier
-    // 1. 无barrier情况下不dump
-    // 2. 有barier情况下需要进行dump
-    // TODO: 当前算子实际处理的分区数先填写为1，决定 hashmap bucket数
-    //       需要 CG 实际计算好传进来
+    // Initialize cache when, need to consider the barrier
+    // 1. No barrier situation does not dump
+    // 2. Need to perform dump in case of barrier
+    // TODO: The actual number of partitions processed by the current operator is temporarily set to 1, determine the number of hashmap buckets
+    //       Need CG to actually calculate and pass in
     if (OB_FAIL(cache_.init(MTL_ID(), 1, with_barrier_, spec))) {
       LOG_WARN("failed to init batch row cache", K(ret));
     } else {
@@ -114,14 +113,14 @@ int ObPDMLOpDataDriver::get_next_row(ObExecContext &ctx, const ObExprPtrIArray &
   int ret = OB_SUCCESS;
   bool found = false;
   do {
-    // STEP1. 每次 get_next_row 时都尝试驱动取下一批数据，并将其刷入存储层
+    // STEP1. Each time get_next_row is called, attempt to drive fetching the next batch of data and flush it into the storage layer
     if (FILL_CACHE == state_) {
-      if (OB_FAIL(cache_.reuse_after_rows_processed())) { // reuse cache，只会清理状态；不会释放内存，方便内存重用
+      if (OB_FAIL(cache_.reuse_after_rows_processed())) { // reuse cache, will only clean up the state; will not release memory, convenient for memory reuse
         LOG_WARN("fail reuse cache", K(ret));
-      } else if (OB_FAIL(fill_cache_unitl_cache_full_or_child_iter_end(ctx))) { // 填充cache
+      } else if (OB_FAIL(fill_cache_unitl_cache_full_or_child_iter_end(ctx))) { // fill cache
         LOG_WARN("failed to fill the cache", K(ret));
       } else if (!cache_.empty()) {
-        if (OB_FAIL(write_partitions(ctx))) { // 将cache中的数据进行dml操作
+        if (OB_FAIL(write_partitions(ctx))) { // Perform DML operations on data in cache
           LOG_WARN("fail write partitions", K(ret));
         } else if (OB_FAIL(switch_to_returning_state(ctx))) {
           LOG_WARN("fail init returning state, fail transfer state to ROW_RETURNING", K(ret));
@@ -129,12 +128,11 @@ int ObPDMLOpDataDriver::get_next_row(ObExecContext &ctx, const ObExprPtrIArray &
           state_ = ROW_RETURNING;
         }
       } else {
-        // 填充数据后，cache中仍然没有数据，表示没有数据
+        // After filling data, there is still no data in cache, indicating no data
         state_ = ROW_RETURNING;
         ret = OB_ITER_END;
       }
-
-      // 没有数据，或者数据都已经写入存储层，则 barrier 等待全局完成写入
+      // No data, or all data has been written to the storage layer, then barrier waits for global write completion
       if (with_barrier_ && (OB_ITER_END == ret || OB_SUCCESS == ret)) {
         int tmp_ret = barrier(ctx);
         if (OB_SUCCESS != tmp_ret) {
@@ -143,18 +141,17 @@ int ObPDMLOpDataDriver::get_next_row(ObExecContext &ctx, const ObExprPtrIArray &
         }
       }
     }
-
-    // STEP2. get_next_row 从 cache 中返回数据
+    // STEP2. get_next_row return data from cache
     if (OB_SUCC(ret) && ROW_RETURNING == state_) {
       if (OB_FAIL(next_row_from_cache_for_returning(row))) {
         if (OB_ITER_END == ret) {
           if (!with_barrier_) {
-            // 表示cache中的数据已经读取完毕，需要重新填充
+            // Indicates that the data in the cache has been read, and needs to be refilled
             ret = OB_SUCCESS;
             state_ = FILL_CACHE;
           }
         } else {
-          // 出现异常错误
+          // An exception error occurred
           LOG_WARN("failed to next row from cache", K(ret));
         }
       } else {
@@ -180,7 +177,7 @@ int ObPDMLOpDataDriver::fill_cache_unitl_cache_full_or_child_iter_end(ObExecCont
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null physical plan (ctx)", KR(ret), KP(plan_ctx));
   } else if (OB_FALSE_IT(is_direct_load = plan_ctx->get_is_direct_insert_plan())) {
-    // 尝试追加上一次从child中读取出来，但是没有添加到cache中的row数据
+    // Try to append the row data read from child last time, but not added to cache
   } else if (OB_FAIL(try_write_last_pending_row())) {
     LOG_WARN("fail write last pending row into cache", K(ret));
   } else {
@@ -190,7 +187,7 @@ int ObPDMLOpDataDriver::fill_cache_unitl_cache_full_or_child_iter_end(ObExecCont
       bool is_skipped = false;
       if (OB_FAIL(reader_->read_row(ctx, row, tablet_id, is_skipped))) {
         if (OB_ITER_END == ret) {
-          // 当前reader的数据已经读取结束
+          // Current reader's data has been read to the end
           // do nothing
         } else {
           LOG_WARN("failed to read row from reader", K(ret));
@@ -202,12 +199,12 @@ int ObPDMLOpDataDriver::fill_cache_unitl_cache_full_or_child_iter_end(ObExecCont
         LOG_WARN("fail to set heap table hidden pk", K(ret), K(*row), K(tablet_id), K(is_direct_load));
       } else if (OB_FAIL(cache_.add_row(*row, tablet_id))) {
         if (!with_barrier_ && OB_EXCEED_MEM_LIMIT == ret) {
-          // 目前暂时不支持缓存最后一行数据
-          // 如果出现了最后一行数据无法push到内存中，就直接报错返回
+          // Currently does not support caching the last row of data
+          // If the last row of data cannot be pushed into memory, report an error and return directly
           LOG_TRACE("the cache is overflow, the current row will be cached in the last row",
                     K(ret), KPC(row), K(tablet_id));
-          // 暂时保留当前行到last_row中，等待下一轮填充cache的时候，
-          // 通过`try_write_last_pending_row`函数将last row的数据写入到cache中
+          // Temporarily retain the current row in last_row, waiting for the next round to fill the cache when,
+          // Through the `try_write_last_pending_row` function write the last row data into the cache
           if (OB_FAIL(last_row_.save_store_row(*row, *eval_ctx_))) {
             LOG_WARN("fail cache last row", K(*row), K(ret));
           } else {
@@ -222,19 +219,16 @@ int ObPDMLOpDataDriver::fill_cache_unitl_cache_full_or_child_iter_end(ObExecCont
         LOG_DEBUG("add row to cache successfully", "row", ROWEXPR2STR(*eval_ctx_, *row), K(tablet_id));
       }
     } while (OB_SUCCESS == ret);
-
-    // reader已经读取完毕的错误，可以处理
+    // reader has finished reading error, can be processed
     if (OB_ITER_END == ret) {
       ret = OB_SUCCESS;
     }
   }
   return ret;
 }
-
-
-// 将 cache 中缓存的所有 partition 数据都写入到存储层
-// 注意：数据写入完成后不能从 cache 中释放，因为这些数据还需要
-// return 到 DML 上面的算子继续使用
+// Write all partition data cached in cache to the storage layer
+// Note: Data cannot be released from cache after writing is complete, because this data is still needed
+// return to the operator above DML continue using
 int ObPDMLOpDataDriver::write_partitions(ObExecContext &ctx)
 {
   int ret = OB_SUCCESS;
@@ -246,9 +240,9 @@ int ObPDMLOpDataDriver::write_partitions(ObExecContext &ctx)
   } else if (OB_FAIL(cache_.get_part_id_array(tablet_id_array))) {
     LOG_WARN("fail get part index iterator", K(ret));
   } else {
-    // 消耗在存储层的总时间
+    // Total time consumed in the storage layer
     TimingGuard g(op_monitor_info_.otherstat_1_value_);
-    // 按照分区逐个写入存储层
+    // Write to storage layer by partition
     FOREACH_X(it, tablet_id_array, OB_SUCC(ret)) {
       ObTabletID tablet_id = *it;
       ObDASTabletLoc *tablet_loc = nullptr;
@@ -268,10 +262,9 @@ int ObPDMLOpDataDriver::write_partitions(ObExecContext &ctx)
   }
   return ret;
 }
-
-// 上次从 data_service 读出的行尝试写入 cache 时遭遇 cache
-// 报 size overflow，这一行被记录为 last_row_，待 cache
-// 数据写到存储层后再次将 last_row_ 写入 cache
+// Last row read from data_service encountered a cache error when attempting to write to cache
+// Report size overflow, this line is recorded as last_row_, to be cached
+// Data written to storage layer, then write last_row_ to cache
 inline int ObPDMLOpDataDriver::try_write_last_pending_row()
 {
   int ret = OB_SUCCESS;
@@ -285,16 +278,15 @@ inline int ObPDMLOpDataDriver::try_write_last_pending_row()
     } else if (OB_FAIL(cache_.add_row(*last_row_expr_, last_row_tablet_id_))) {
       LOG_WARN("fail add cached last row", K(ret), K(last_row_tablet_id_));
     } else {
-      // 将上一次遗留下来的一行添加到cache中后，清理last row指针与last row part id的值
-      // 但是，为了内存重用，last_row_ 的内存不清理
+      // After adding the leftover row from last time to the cache, clean up the last row pointer and last row part id values
+      // However, for memory reuse, the memory of last_row_ is not cleaned up
       last_row_tablet_id_.reset();
       last_row_expr_ = nullptr;
     }
   }
   return ret;
 }
-
-// 每次 fill cache 结束后，将状态转换到 ROW_RETURNING 态
+// Each time fill cache ends, change the state to ROW_RETURNING state
 int ObPDMLOpDataDriver::switch_to_returning_state(ObExecContext &ctx)
 {
   UNUSED(ctx);
@@ -308,7 +300,7 @@ int ObPDMLOpDataDriver::switch_to_returning_state(ObExecContext &ctx)
   if (OB_SUCC(ret)) {
     if (OB_FAIL(cache_.get_part_id_array(returning_ctx_.tablet_id_array_))) {
       LOG_WARN("failed to get part id array for init returning state", K(ret));
-    } else if (0 == returning_ctx_.tablet_id_array_.count()) { // TODO: 冗余判断
+    } else if (0 == returning_ctx_.tablet_id_array_.count()) { // TODO: redundant check
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("part id array is empty for init returning state", K(ret));
     }
@@ -355,7 +347,7 @@ int ObPDMLOpDataDriver::next_row_from_cache_for_returning(const ObExprPtrIArray 
       // do nothing
     } else if (OB_FAIL(returning_ctx_.row_iter_->get_next_row(row))) {
       if (OB_ITER_END == ret) {
-        // 当前partition的row iter数据迭代完，需要切换下一个partition
+        // Current partition's row iter data iteration is complete, need to switch to the next partition
         ret = OB_SUCCESS;
         LOG_TRACE("current partition row iter has been iterated to end",
           K(returning_ctx_.next_idx_));
@@ -366,10 +358,10 @@ int ObPDMLOpDataDriver::next_row_from_cache_for_returning(const ObExprPtrIArray 
       found = true;
     }
     if (OB_SUCC(ret) && !found) {
-      // 切换下一个partition
+      // Switch to the next partition
       if (OB_FAIL(switch_row_iter_to_next_partition())) {
         if (OB_ITER_END == ret) {
-          // 表示没有下一个partition，返回OB_ITER_END
+          // Indicates there is no next partition, return OB_ITER_END
           LOG_TRACE("no next partition row iter can be switched to", K(ret));
         } else {
           LOG_WARN("failed to switch next partition row iter", K(ret));
@@ -389,8 +381,8 @@ int ObPDMLOpDataDriver::switch_row_iter_to_next_partition()
   if (returning_ctx_.row_iter_) {
     returning_ctx_.row_iter_->close();
   }
-  // 当前仅仅cache一行数据
-  // next idx仅仅等于0，如果next idx等于1，表示没有数据
+  // Current cache only one line of data
+  // next idx is only equal to 0, if next idx equals 1, it indicates no data
   if (OB_SUCC(ret) && returning_ctx_.next_idx_ >= returning_ctx_.tablet_id_array_.count()) {
     ret = OB_ITER_END;
   } else if (OB_FAIL(cache_.get_row_iterator(

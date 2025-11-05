@@ -162,11 +162,11 @@ int ObJob::print_status(char *buf, int64_t buf_len, int64_t &pos,
         }
         if (OB_FAIL(ret)) {
         } else if (ignore_normal_state && is_normal_state) {
-          // 正常状态的task，忽略，不打印
+          // Normal state task, ignore, do not print
         } else if (print_count > 0 && OB_FAIL(J_COMMA())) {
           LOG_WARN("fail to print comma", K(ret), K(i), K(*task_info));
         } else {
-          // ObTaskInfo默认的to_string函数打出来的字符串太长，这里简化一下
+          // The string output by the default to_string function of ObTaskInfo is too long, here we simplify it
           const ObTaskLocation &task_loc = task_info->get_task_location();
           BUF_PRINTF("task_info:{");
           J_KV("loc", task_loc.get_server());

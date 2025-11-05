@@ -172,8 +172,8 @@ public:
   int get_user_info(const uint64_t tenant_id,
                     const uint64_t user_id,
                     const share::schema::ObUserInfo *&user_info);
-  // 先尝试获取tbl_name的schema，不存在则将tbl_name看作synonym name,获取同义词
-  // 代表的表的schema
+  // First try to get the schema of tbl_name, if it does not exist, treat tbl_name as a synonym name, and get the synonym
+  // The schema of the represented table
   int get_table_schema_with_synonym(const uint64_t tenant_id,
                                     const common::ObString &tbl_db_name,
                                     const common::ObString &tbl_name,
@@ -356,10 +356,10 @@ private:
   bool is_inited_;
   share::schema::ObSchemaGetterGuard *schema_mgr_;
   ObSqlSchemaGuard *sql_schema_mgr_;
-  // cte tmp schema，用于递归的cte服务，生命周期仅在本次查询有效
+  // cte tmp schema, used for recursive cte service, lifecycle is only valid for this query
   common::ObArray<share::schema::ObTableSchema*,
                   common::ModulePageAllocator, true> tmp_cte_schemas_;
-  // 记录checker的额外信息，例如安全员的操作等
+  // Record additional information of checker, such as the operator's actions etc.
   int flag_;
   // disallow copy
   DISALLOW_COPY_AND_ASSIGN(ObSchemaChecker);

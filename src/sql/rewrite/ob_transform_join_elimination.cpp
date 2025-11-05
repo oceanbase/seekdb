@@ -336,7 +336,7 @@ int ObTransformJoinElimination::eliminate_join_in_joined_table(ObDMLStmt *stmt,
       }
     }
     if (OB_SUCC(ret) && trans_happened) {
-      //更新stmt的joined table list
+      // Update stmt's joined table list
       if (OB_FAIL(stmt->get_joined_tables().assign(joined_tables))) {
         LOG_WARN("failed to reset joined table container", K(ret));
       } else if (OB_FAIL(stmt->rebuild_tables_hash())) {
@@ -385,7 +385,7 @@ int ObTransformJoinElimination::eliminate_join_in_joined_table(ObDMLStmt *stmt,
     } else if (OB_FAIL(stmt->add_condition_exprs(trans_conditions))) {
       LOG_WARN("add trans conditions to where conditions failed", K(ret));
     } else {
-      //更新joined table结构
+      // Update joined table structure
       trans_happened = true;
       from_item.is_joined_ = joined_table->is_joined_table();
       from_item.table_id_ = joined_table->table_id_;
@@ -1363,7 +1363,7 @@ int ObTransformJoinElimination::get_eliminable_tables(const ObDMLStmt *stmt,
           target_be_eliminated = true;
         }
         if (ObOptimizerUtil::find_item(helper.parent_table_items_, parent_table)) {
-          // 已经有其它表可以消除parent table了
+          // There is already another table that can eliminate the parent table
         } else if (OB_FAIL(helper.push_back(child_table, parent_table, foreign_key_info))) {
           LOG_WARN("failed to push back table item or foreign key info", K(ret));
         }
@@ -1376,7 +1376,7 @@ int ObTransformJoinElimination::get_eliminable_tables(const ObDMLStmt *stmt,
                                                       foreign_key_info))) {
         LOG_WARN("failed to check whether transformation is possible", K(ret));
       } else if (!can_be_eliminated || is_first_table_parent) {
-        // 仅允许消除 candi_tables
+        // Only allow elimination of candi_tables
       } else if (OB_FAIL(helper.push_back(source_table, target_table, foreign_key_info))) {
         LOG_WARN("failed to push back table item or foreign key info", K(ret));
       } else {
@@ -1430,19 +1430,19 @@ int ObTransformJoinElimination::check_transform_validity_foreign_key(const ObDML
       /* do nothing */
       OPT_TRACE("is not foreign primary join");
     } else if (is_first_table_parent && OB_UNLIKELY(!source_table->access_all_part())) {
-      /*父表有partition hint，不可消除*/
-      /*TODO zhenling.zzg 之后可以完善对于父表、子表均有partition hint的情况*/
+      /*Parent table has partition hint, cannot be eliminated*/
+      /*TODO zhenling.zzg Afterward, we can improve the handling of cases where both parent and child tables have partition hints*/
       OPT_TRACE("primary key table has partition hint");
     } else if (!is_first_table_parent && OB_UNLIKELY(!target_table->access_all_part())) {
-      /*父表有partition hint，不可消除*/
-      /*TODO zhenling.zzg 之后可以完善对于父表、子表均有partition hint的情况*/
+      /*Parent table has partition hint, cannot be eliminated*/
+      /*TODO zhenling.zzg After can improve for the situation where both parent table and child table have partition hint*/
       OPT_TRACE("primary key table has partition hint");
     } else if (OB_FAIL(ObTransformUtils::is_foreign_key_rely(ctx_->session_info_,
                                                             foreign_key_info,
                                                             is_rely_foreign_key))) {
       LOG_WARN("check foreign key is rely failed", K(ret));
     } else if (!is_rely_foreign_key) {
-      /*非可靠主外键关系，不能消除，do nothing*/
+      /*Non-reliable foreign key relationship, cannot be removed, do nothing*/
       OPT_TRACE("foreign key is not rely");
     } else if (is_first_table_parent
                 && OB_FAIL(check_all_column_primary_key(stmt,
@@ -1529,7 +1529,7 @@ int ObTransformJoinElimination::trans_column_items_foreign_key(ObDMLStmt *stmt,
       const ColumnItem &item = origin_column_items.at(i);
       if (parent_table_id == item.table_id_) {
         uint64_t child_column_id;
-        // 从ObForeignKeyInfo中，获取parent_column_id对应的child_column_id
+        // From ObForeignKeyInfo, get the child_column_id corresponding to parent_column_id
         if(OB_FAIL(get_child_column_id_by_parent_column_id(foreign_key_info,
                                                            item.column_id_,
                                                            child_column_id))) {
@@ -2579,7 +2579,7 @@ int ObTransformJoinElimination::check_semi_join_condition(ObDMLStmt *stmt,
                                     col1->get_column_id(), col2->get_column_id(),
                                     is_equal))) {
           LOG_WARN("check column ref table id is equal failed", K(ret));
-        } else if (!is_equal) { /*非相同列的等式*/
+        } else if (!is_equal) { /*Equations of non-identical columns*/
           is_simple_join_condition = false;
         } else  if (OB_FAIL(source_exprs.push_back(col1))) {
           LOG_WARN("push back column expr failed", K(ret));
@@ -2926,7 +2926,7 @@ int ObTransformJoinElimination::trans_semi_condition_exprs(ObDMLStmt *stmt,
         LOG_WARN("push back new expr to conditions failed", K(ret));
       }
     }
-    /*将所有改写的condition转成NOT(join_cond1) OR NOT(join_cond2) OR ...
+    /*Convert all rewritten conditions to NOT(join_cond1) OR NOT(join_cond2) OR ...
       OR LNNVL(expr1) OR LNNVL(expr2) OR ...*/
     if (OB_SUCC(ret) ) {
       ObRawExpr *filter_expr = NULL;
@@ -3198,15 +3198,15 @@ int ObTransformJoinElimination::check_transform_validity_foreign_key(const ObDML
     /* do nothing */
     OPT_TRACE("is not foreign primary join");
   } else if (OB_UNLIKELY(!target_table->access_all_part())) {
-    /*父表有partition hint，不可消除*/
-    /*TODO zhenling.zzg 之后可以完善对于父表、子表均有partition hint的情况*/
+    /*Parent table has partition hint, cannot be eliminated*/
+    /*TODO zhenling.zzg After can improve for the situation where both parent table and child table have partition hint*/
     OPT_TRACE("target table has partition hint");
   } else if (OB_FAIL(ObTransformUtils::is_foreign_key_rely(ctx_->session_info_,
                                                            foreign_key_info,
                                                            is_rely_foreign_key))) {
     LOG_WARN("check foreign key is rely failed", K(ret));
   } else if (!is_rely_foreign_key) {
-    /*非可靠主外键关系，不能消除，do nothing*/
+    /*Non-reliable foreign key relationship, cannot be removed, do nothing*/
     OPT_TRACE("foreign key is not reliable");
   } else if (OB_FAIL(check_all_column_primary_key(target_stmt, target_table->table_id_,
                                                   foreign_key_info, all_primary_key))) {
@@ -3465,9 +3465,9 @@ int ObTransformJoinElimination::eliminate_join_in_joined_table(ObDMLStmt *stmt,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null", K(ret), K(joined_table), K(left_table), K(right_table));
   } else if (joined_table->is_full_join()) {
-    // full outer join 内部暂不进行消除, 连接消除后可能传出 trans_conditions
-    // to do: full outer join 内部不会传递出 trans_conditions 时可以消除
-    ret = extract_candi_table(joined_table, child_candi_tables);//允许使用 child table 消除外部表
+    // full outer join internal elimination is not performed for now, trans_conditions may be passed out after join elimination
+    // to do: full outer join internal will not pass out trans_conditions when it can be eliminated
+    ret = extract_candi_table(joined_table, child_candi_tables);//allow using child table to eliminate external table
   } else if (IS_OUTER_JOIN(joined_table->joined_type_)) {
     bool left_happened = false;
     bool right_happened = false;
@@ -3520,7 +3520,7 @@ int ObTransformJoinElimination::eliminate_join_in_joined_table(ObDMLStmt *stmt,
                                       other_tables, inner_join_conds))) {
       LOG_WARN("failed to classify joined table", K(ret), K(*joined_table));
     }
-    for (int64_t i = 0; OB_SUCC(ret) && i < outer_join_tables.count(); i++) {// 消除子表
+    for (int64_t i = 0; OB_SUCC(ret) && i < outer_join_tables.count(); i++) {// eliminate sub-table
       tmp_child_candi_tables.reuse();
       tmp_trans_conditions.reuse();
       if (OB_FAIL(SMART_CALL(eliminate_join_in_joined_table(stmt, outer_join_tables.at(i),
@@ -3864,7 +3864,7 @@ int ObTransformJoinElimination::recursive_trans_equal_join_condition(ObDMLStmt *
     ret = OB_SIZE_OVERFLOW;
     LOG_WARN("too deep recursive", K(ret), K(is_stack_overflow));
   } else if (T_OP_OR == expr->get_expr_type() ||
-            T_OP_AND == expr->get_expr_type()) {//递归改写OR表达式的每一个包含COLUMN的参数表达式
+            T_OP_AND == expr->get_expr_type()) {//Recursively rewrite each parameter expression containing COLUMN in the OR expression}
     ObOpRawExpr *op = static_cast<ObOpRawExpr *>(expr);
     for (int64_t i = 0; OB_SUCC(ret) && i < op->get_param_count(); ++i) {
       if (OB_ISNULL(op->get_param_expr(i))) {
@@ -3873,20 +3873,20 @@ int ObTransformJoinElimination::recursive_trans_equal_join_condition(ObDMLStmt *
       } else if (op->get_param_expr(i)->has_flag(CNT_COLUMN)) {
         bool has_trans = false;
         ObRawExpr* new_expr = NULL;
-        //对于每一个参数表达式，尝试改写表达式
+        // For every parameter expression, try to rewrite the expression
         if (OB_FAIL(do_trans_equal_join_condition(stmt,
                                                   op->get_param_expr(i), 
                                                   has_trans,
                                                   new_expr))) {
           LOG_WARN("do trans equal join condition failed", K(ret));
-        } else if (has_trans && !(OB_ISNULL(new_expr))) {//改写成功了
-          //将新的表达式替换掉原来的参数
+        } else if (has_trans && !(OB_ISNULL(new_expr))) {//rewrite succeeded}
+          // Replace the new expression with the original parameter
           if (OB_FAIL(op->replace_param_expr(i, new_expr))) {
             LOG_WARN("replace param expr failed", K(ret), K(op), K(i));
           } else {
             LOG_TRACE("trans param expr succ", K(op), K(i));
           }
-        } else if (OB_FAIL(SMART_CALL(recursive_trans_equal_join_condition(stmt, //改写失败后递归判断是否其子表达式可以改写
+        } else if (OB_FAIL(SMART_CALL(recursive_trans_equal_join_condition(stmt, // rewrite failed, recursively check if its sub-expressions can be rewritten
                                                                   op->get_param_expr(i))))) {
           LOG_WARN("recursive trans equal join condition failed", K(ret));
         } else {/*do nothing*/}

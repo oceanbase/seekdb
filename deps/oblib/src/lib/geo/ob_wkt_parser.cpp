@@ -464,7 +464,7 @@ int ObWktParser::try_parse_zdim_token(ObWktTokenVal &z_val)
       LOG_WARN("fail to set dimension type", K(ret));
     }
 
-    if (OB_SUCC(ret)) { // if dim is 3，move the ptr to next token
+    if (OB_SUCC(ret)) { // if dim is 3, move the ptr to next token
       if (dim_type_ == ObGeoDimType::IS_3D && OB_FAIL(check_next_token(ObWktTokenType::W_NUMBER))) {
         LOG_WARN("fail to move to the next token", K(ret));
       }

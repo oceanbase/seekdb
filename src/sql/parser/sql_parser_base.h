@@ -36,7 +36,7 @@
 #define INT16NUM_OVERFLOW INT16_MAX
 #define OUT_OF_STR_LEN -2
 #define DEFAULT_STR_LENGTH -1
-#define BINARY_COLLATION 63     /* 需要重构，改为c++ parser避免重复定义 */
+#define BINARY_COLLATION 63     /* Need refactoring, change to c++ parser to avoid duplicate definitions */
 #define OB_STRXFRM_NLEVELS 6
 #define OB_STRXFRM_DESC_SHIFT 8
 #define OB_STRXFRM_REVERSE_SHIFT 16
@@ -243,8 +243,7 @@ do {                                                                            
     node->sql_str_off_ = off;                                                          \
     setup_token_pos_info(node, off,  node->str_len_);                                  \
   } while (0)
-
-//oracle下生成非保留关键字结点请使用该宏,区别于mysql的是做了大写的转换
+//oracle under generate non-reserved keyword node please use this macro, distinguish from mysql is done uppercase conversion
 #define get_oracle_non_reserved_node(node, malloc_pool, expr_start, expr_end) \
   do {                                                                 \
     malloc_terminal_node(node, malloc_pool, T_IDENT);                   \
@@ -340,8 +339,8 @@ do {                                                                            
       YYABORT_UNEXPECTED;                                        \
     } else {                                                     \
       node->value_ = result->question_mark_ctx_.count_;                \
-      /* 为了处理ps + anonymous 取消对question_mark_size 置0*/          \
-      /* 以前置为0，是052中为了处理multi stmt*/                         \
+      /* To handle ps + anonymous cancel setting question_mark_size to 0*/          \
+      /* with prefix as 0, is for handling multi stmt in 052 */                         \
       /*      result->question_mark_size_ = 0;                   */     \
     }                                                            \
  } while (0)
@@ -352,15 +351,14 @@ do {                                                                            
       yyerror(NULL, result, "node or result is NULL\n");           \
       YYABORT_UNEXPECTED;                                        \
     } else if (OB_UNLIKELY(!result->pl_parse_info_.is_pl_parse_ && 0 != result->question_mark_ctx_.count_)) {  \
-       /* 如果是PL过来的sql语句，不要检查：*/ \
+       /* If the SQL statement is from PL, do not check: */ \
       yyerror(NULL, result, "Unknown column '?'\n");               \
       YYABORT_PARSE_SQL_ERROR;                                        \
     } else {                                                     \
       node->value_ = result->question_mark_ctx_.count_;                \
     }                                                            \
   } while (0)
-
-//把一个PL的变量存储在链表里
+// Store a PL variable in the linked list
 #define store_pl_symbol(node, head, tail) \
     do { \
       ParamList *param = (ParamList *)parse_malloc(sizeof(ParamList), result->malloc_pool_); \
@@ -380,11 +378,11 @@ do {                                                                            
     } while (0)
 
 /*
- * copy当前sql语句到当前QUESTIONMARK的位置，并把该QUESTIONMARK替换成:idx的QUESTIONMARK形式
- * 对PL整体进行parser时，parser到其中的一条sql时会走到这里，所以要判断is_pl_parse_和NULL == pl_ns_
- * 对oracle模式的动态sql进行prepare的时候也可能走到这里
- * Oracle模式的匿名块在sql里出现的？需要在PL里整体进行编号，所以需要做这个动作，mysql不需要
- * 替换的过程中可能会Buffer空间不足,如果发生空间不足则扩展Buffer
+ * copy current sql statement to the current QUESTIONMARK position, and replace that QUESTIONMARK with :idx QUESTIONMARK form
+ * When parsing the entire PL, when parsing one of the sql statements, it will go through here, so need to judge is_pl_parse_ and NULL == pl_ns_
+ * It may also go through here when preparing dynamic sql for Oracle mode
+ * The ? appearing in the sql of anonymous blocks in Oracle mode needs to be numbered as a whole in the PL, so this action is required, mysql does not need it
+ * During the replacement process, there may be insufficient Buffer space, if space is insufficient then expand the Buffer
  */
 #define copy_and_replace_questionmark(result, start, end, idx) \
     do { \
@@ -430,8 +428,7 @@ do {                                                                            
       } \
     } \
   } while (0)
-
-//copy当前sql语句到当前symbol的位置，并跳过该变量
+// copy current SQL statement to current symbol position, and skip this variable
 #define copy_and_skip_symbol(result, start, end) \
     do { \
       if (NULL == result) { \
@@ -445,8 +442,7 @@ do {                                                                            
         result->pl_parse_info_.last_pl_symbol_pos_ = end; \
       } \
     } while (0)
-
-//查找pl变量，并把该变量替换成:int形式
+// Find the pl variable, and replace that variable with :int form
 #define lookup_pl_exec_symbol(node, result, start, end, is_trigger_new, is_add_alas_name, is_report_error) \
     do { \
       if (OB_UNLIKELY((NULL == node || NULL == result || NULL == node->str_value_))) { \
@@ -498,8 +494,7 @@ do {                                                                            
         } else { /*do nothing*/ } \
       } \
     } while (0)
-
-//存储依赖对象到依赖对象链表中
+// Store dependency object to dependency object list
 #define store_pl_ref_object_symbol(node, result, type) \
     do { \
       if (OB_UNLIKELY((NULL == node || NULL == result))) { \
@@ -687,7 +682,7 @@ do {                                                                            
 do {                                                                                            \
   ParseResult *p = (ParseResult *)yyextra;                                                      \
   char **tmp_literal = &(p->tmp_literal_);                                                      \
-  /*str node中遇到特殊字符，需要做转义，需要创建临时buffer，并且将之前存储的文本拷到buffer中*/             \
+  /*str node encountered special characters, need to do escaping, need to create a temporary buffer, and copy the previously stored text to the buffer*/             \
   if (NULL == *tmp_literal) {                                                                   \
     *tmp_literal = (char*) parse_malloc(p->input_sql_len_ + 1, p->malloc_pool_);                \
     check_malloc(*tmp_literal);                                                                 \
@@ -701,7 +696,7 @@ do {                                                                            
 #define STORE_STR_CONTENT(str_node)                                                             \
 do {                                                                                            \
   ParseResult *p = (ParseResult *)yyextra;                                                      \
-  /*如果是fast parser第一次存储str node的值不需要深拷贝，直接用指针指向sql文本即可，到下次遇到特殊字符再深拷贝*/       \
+  /*If it's the first time fast parser stores the value of str node, deep copy is not needed, a pointer to the sql text can be used directly, deep copy will be done next time a special character is encountered*/       \
   if (str_node->str_len_ <= 0 && IS_FAST_PARAMETERIZE && IS_NEED_PARAMETERIZE) {                \
     str_node->str_value_ = p->input_sql_ + yylloc->first_column - 1;                            \
     str_node->str_len_ = yyleng;                                                                \
@@ -799,10 +794,10 @@ do {                                                                            
 } while(0);
 
 /*
- * 当转义符是假转义符时，'\'实际是前面一个字符的一部分，需要添加到literal，
- * 调用yyless，将'\'后面的字符需要回滚到input stream中重新进行匹配，
- * 因为多解析了一个字符，因此需要把yycolumn_减一，
- * 保证 YY_USER_ACTION 能根据yycolumn_计算出正确的column位置
+ * When the escape character is a false escape, '\' is actually part of the previous character, it needs to be added to literal,
+ * call yyless, roll back the characters after '\' to the input stream for re-matching,
+ * because one extra character was parsed, yycolumn_ needs to be decremented by one,
+ * to ensure that YY_USER_ACTION can calculate the correct column position based on yycolumn_
  */
 
 #define HANDLE_FALSE_ESCAPE(presult)                                              \
@@ -813,8 +808,8 @@ do {                                                                            
 } while(0);
 
 /*
- * 有escape_with_backslash_is_dangerous标记的字符集，如big5, cp932, gbk, sjis
- * 转义字符（0x5C）有可能是某个多字节字符的一部分，需要特殊判断
+ * Character sets with the escape_with_backslash_is_dangerous flag, such as big5, cp932, gbk, sjis
+ * The escape character (0x5C) may be part of a multibyte character, requiring special judgment
  */
 
 #define CHECK_REAL_ESCAPE(is_real_escape)                                         \

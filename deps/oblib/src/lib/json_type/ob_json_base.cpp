@@ -166,7 +166,7 @@ int ObIJsonBase::add_if_missing(ObJsonSortedResult &dup, ObJsonSeekResult &res, 
   ObIJsonBase* cur_json = const_cast<ObIJsonBase*>(this);
   ObJsonBin* json_bin = NULL;
 
-  // Reduce array allocation size ： 2
+  // Reduce array allocation size : 2
   // binary need clone new node
   if (is_bin()) {
     if (res.size() == 0) {
@@ -292,8 +292,8 @@ int ObIJsonBase::seek(ObIAllocator* allocator, const ObJsonPath &path,
                       bool is_lax, ObJsonSeekResult &res, PassingMap* sql_var) const
 {
   INIT_SUCC(ret);
-  // 对于$后的path节点而言，其parent_info.parent_path为begin()
-  // 对于@后的path节点而言，其parent_info为上一层节点(可能为$后 或 上一个@后的末尾节点)
+  // For the path node after $, its parent_info.parent_path is begin()
+  // For the path node after @, its parent_info is the upper-level node (which could be after $ or the end node of the previous @)
   if (lib::is_oracle_mode() || is_lax) {
     ObSeekParentInfo parent_info;
     parent_info.parent_jb_ = const_cast<ObIJsonBase*> (this);
@@ -332,7 +332,7 @@ int ObIJsonBase::find_member(ObIAllocator* allocator, ObSeekParentInfo &parent_i
     ObString key_name(path_node->get_object().len_, path_node->get_object().object_name_);
     ret = get_object_value(key_name, jb_ptr);
     if (OB_SUCC(ret)) {
-      // 寻找成功，向下递归
+      // Find success, recursive downward
       if (is_lax && !is_auto_wrap) is_auto_wrap = true;
       if (OB_FAIL(jb_ptr->find_child(allocator, parent_info, cur_node + 1, last_node, 
                                     is_auto_wrap, only_need_one, is_lax, dup, res, sql_var))) {
@@ -344,7 +344,7 @@ int ObIJsonBase::find_member(ObIAllocator* allocator, ObSeekParentInfo &parent_i
     } else {
       LOG_WARN("fail to get object value", K(ret), K(key_name));
     }
-  // 宽松模式，对数组里面的每一个节点查找
+  // Loose mode, find each node in the array
   } else if (is_lax && is_auto_wrap && json_type() == ObJsonNodeType::J_ARRAY) {
     bool is_done = false;
     for (uint32_t i = 0; OB_SUCC(ret) && i < element_count() && !is_done; ++i) {
@@ -361,7 +361,7 @@ int ObIJsonBase::find_member(ObIAllocator* allocator, ObSeekParentInfo &parent_i
         is_done = is_seek_done(res, only_need_one);
       }
     }
-  } // 既不是宽松模式下的数组，又不是ObJsonNodeType::J_OBJECT，没有找到任何数据，是正常的
+  } // It is neither an array in lax mode nor ObJsonNodeType::J_OBJECT, no data was found, which is normal
   
   return ret;
 }
@@ -396,7 +396,7 @@ int ObIJsonBase::find_member_wildcard(ObIAllocator* allocator, ObSeekParentInfo 
         is_done = is_seek_done(res, only_need_one);
       }
     }
-  // 宽松模式，对数组里面的每一个节点查找
+  // Loose mode, find each node in the array
   } else if (is_lax && is_auto_wrap && json_type() == ObJsonNodeType::J_ARRAY) {
     is_done = false;
     for (uint32_t i = 0; OB_SUCC(ret) && i < element_count() && !is_done; ++i) {
@@ -413,7 +413,7 @@ int ObIJsonBase::find_member_wildcard(ObIAllocator* allocator, ObSeekParentInfo 
         is_done = is_seek_done(res, only_need_one);
       }
     }
-  } // 既不是宽松模式下的数组，又不是ObJsonNodeType::J_OBJECT，没有找到任何数据，是正常的
+  } // It is neither an array in lax mode nor ObJsonNodeType::J_OBJECT, no data was found, which is normal
   
   return ret;
 }
@@ -1218,9 +1218,9 @@ int ObIJsonBase::find_boolean_method(ObIAllocator* allocator, ObSeekParentInfo &
     case ObJsonNodeType::J_OTIMESTAMPTZ:  // timestamptz string
     case ObJsonNodeType::J_ODAYSECOND:  // daySecondInterval string
     case ObJsonNodeType::J_OYEARMONTH: {
-      // 对于boolean(), 如果是bool值则返回bool值。
-      // 如果是string, 若其内容为"true"(忽略大小写，则转为相应bool，否则就返回本身
-      // 对于booleanOnly(), 当且仅当为bool值时返回结果(即本身)
+      // For boolean(), if it is a bool value then return the bool value.
+      // if is string, if its content is "true" (case insensitive, then convert to corresponding bool, otherwise return itself
+      // For booleanOnly(), return the result if and only if it is a bool value (i.e., itself)
       if (path_node->get_node_type() == JPN_BOOLEAN) {
         ObString str(get_data_length(), get_data());
         bool is_true = false;
@@ -1264,7 +1264,7 @@ int ObIJsonBase::find_boolean_method(ObIAllocator* allocator, ObSeekParentInfo &
       }
       break;
     }
-    // boolean()对于NULL会返回本身
+    // boolean() will return itself for NULL
     case ObJsonNodeType::J_NULL:{
       if (path_node->get_node_type() == JPN_BOOLEAN) {
         if ((OB_FAIL(find_child(allocator, parent_info, cur_node + 1, 
@@ -1276,7 +1276,7 @@ int ObIJsonBase::find_boolean_method(ObIAllocator* allocator, ObSeekParentInfo &
       break;
     }
     default :{
-      // 对于数字和非标量返回null 
+      // For numbers and non-scalar return null
       if (path_node->get_node_type() == JPN_BOOLEAN && is_json_number(json_type()) 
           && !parent_info.is_subpath_) {
         if ((OB_FAIL(find_child(allocator, parent_info, cur_node + 1, 
@@ -1801,9 +1801,9 @@ int ObIJsonBase::find_func_child(ObIAllocator* allocator, ObSeekParentInfo &pare
     ret = ret = OB_INVALID_ARGUMENT;
     LOG_WARN("function item must be the last path_node", K(ret));
   } else {
-  // 虽然文档说明每个函数只处理特定类型（如abs，floor只处理数字）
-  // 但实际上如果不是特定类型也并不会报错
-  // 只是返回空（使用ObJsonNull代表该情况，其中is_null_ = false，与Null节点区分)
+  // Although the documentation states that each function handles only specific types (such as abs, floor only handle numbers)
+  //  but actually it won't throw an error if it's not a specific type
+  // Just return empty (use ObJsonNull to represent this case, where is_null_ = false, and it is distinguished from the Null node)
     switch (path_node->get_node_type()) {
       case JPN_ABS: 
       case JPN_CEILING:
@@ -1955,22 +1955,21 @@ int ObIJsonBase::cmp_based_on_node_type(ObJsonPathNodeType node_type, int res, b
   }
   return ret;
 }
-
-// 字符串转number类型，两种情况下用到：
-// 1. sub_path的类型为number时，oracle会将字符串自动转换成number处理(有双引号)
-// 2. path中的标量首先存成字符串，然后根据比较的内容转换成相应的数字(无双引号)
-// PS: 对于情况1，首先需要去除双引号。
-//     同时，如果查找到的json_base_node的内容为123时，当且仅当字符串为"123"时可以比较," 123" 和 "123 "均不行
-//     因此，若内容不是合法的数字，并不能成功转换为数字类型
+// String to number type, two cases are used:
+// 1. When the type of sub_path is number, oracle will automatically convert the string to a number for processing (with double quotes)
+// 2. scalars in path are first stored as strings, then converted to the corresponding numbers (without quotes)
+// PS: For case 1, you first need to remove the double quotes.
+//     At the same time, if the content of the found json_base_node is 123, comparison can only be made when the string is "123", " 123" and "123 " are not allowed
+//     Therefore, if the content is not a valid number, it cannot be successfully converted to a numeric type
 /*
     1. SELECT 1 from dual 
           WHERE json_exists(
             '["a", 2, 3, 4, 5, {"resolution" : {"x": 1920, "y": 1080}}]',
-            '$[5]?(exists(@.resolution?(@.x < " 1921")))');                   // 返回null
+            '$[5]?(exists(@.resolution?(@.x < " 1921")))');                   // return null
     2. SELECT 1 from dual 
           WHERE json_exists(
             '["a", 2, 3, 4, 5, {"resolution" : {"x": 1920, "y": 1080}}]',
-            '$[5]?(exists(@.resolution?(@.x < "1921")))');                    // 返回1
+            '$[5]?(exists(@.resolution?(@.x < "1921")))');                    // return 1
 */
 int ObIJsonBase::trans_to_json_number(ObIAllocator* allocator, ObString str, ObIJsonBase* &origin) const
 {
@@ -1983,8 +1982,7 @@ int ObIJsonBase::trans_to_json_number(ObIAllocator* allocator, ObString str, ObI
   } else {
     num_str = ObString(str.length(), str.ptr());
   }
-
-  // 处理好之后直接解析当前字符串，得到number
+  // Process well and then parse the current string to get number
   if (OB_FAIL(ObJsonBaseFactory::get_json_base(allocator, num_str,
         ObJsonInType::JSON_TREE, ObJsonInType::JSON_TREE, jb_ptr)) 
         || OB_ISNULL(jb_ptr)
@@ -1997,9 +1995,8 @@ int ObIJsonBase::trans_to_json_number(ObIAllocator* allocator, ObString str, ObI
   }
   return ret;
 }
-
-// 日期类型和字符串类型本身没有差别
-// 直接将该字符串解析成json_tree会存储为字符串，需要自定义目标类型
+// Date type and string type itself have no difference
+// Directly parsing this string into json_tree will store it as a string, need to define target type
 int ObIJsonBase::trans_to_date_timestamp(ObIAllocator* allocator, 
                                         ObString str, 
                                         ObIJsonBase* &origin, 
@@ -2062,9 +2059,8 @@ int ObIJsonBase::trans_to_date_timestamp(ObIAllocator* allocator,
   }
   return ret;
 }
-
-// 日期类型和字符串类型本身没有差别
-// 直接将该字符串解析成json_tree会存储为字符串，需要自定义目标类型
+// Date type and string type itself have no difference
+// Directly parsing this string into json_tree will store it as a string, need to define target type
 int ObIJsonBase::trans_to_mdate(ObIAllocator* allocator, 
                                         ObString str, 
                                         ObIJsonBase* &origin) const
@@ -2240,8 +2236,8 @@ int ObIJsonBase::trans_json_node(ObIAllocator* allocator, ObIJsonBase* &scalar, 
 }
 
 // for compare ——> (subpath, scalar/sql_var)
-// 左边调用compare，左边遇到数组自动解包
-// 只要有一个结果为true则返回true，找不到或结果为false均返回false
+// Left side calls compare, left side automatically unpacks array when encountered
+// As long as one result is true, return true, return false if none found or all results are false
 int ObIJsonBase::cmp_to_right_recursively(ObIAllocator* allocator, ObJsonSeekResult& hit, 
                                           const ObJsonPathNodeType node_type, 
                                           ObIJsonBase* right_arg, bool& filter_result) const
@@ -2270,7 +2266,7 @@ int ObIJsonBase::cmp_to_right_recursively(ObIAllocator* allocator, ObJsonSeekRes
           jb_ptr = &st_json; // reset jb_ptr to stack var
           ret = hit[i]->get_array_element(array_i, jb_ptr);
           int cmp_res = -3;
-          // 类型相同可以直接用compare函数比较
+          // Types are the same, you can directly use the compare function to compare
           if(OB_FAIL(ret) || OB_ISNULL(jb_ptr)) {
             ret = OB_ERR_NULL_VALUE;
             LOG_WARN("compare value is null.", K(ret));
@@ -2279,11 +2275,11 @@ int ObIJsonBase::cmp_to_right_recursively(ObIAllocator* allocator, ObJsonSeekRes
               cmp_based_on_node_type(node_type, cmp_res, cmp_result);
             }
           } else {
-          // 不相同的类型，oracle会将string类型转换为对应类型再进行比较
-          // 转换或比较失败也正常，并不报错
-          // 例如: [*].a == 123
-          // 里面可能有多个元素无法转换成数字或无法和数字比较甚至找不到.a
-          // 但只要有一个找到，且为123或"123"则为true
+          // Different types, oracle will convert the string type to the corresponding type before comparison
+          // Conversion or comparison failure is also normal, and no error is reported
+          // For example: [*].a == 123
+          // There may be multiple elements that cannot be converted to a number or cannot be compared with a number or even cannot be found.a
+          // but as long as one is found, and it is 123 or "123" then it is true
             ObIJsonBase* left = jb_ptr;
             ObIJsonBase* right = right_arg;
             if (OB_FAIL(trans_json_node(allocator, right, left))) {
@@ -2306,7 +2302,7 @@ int ObIJsonBase::cmp_to_right_recursively(ObIAllocator* allocator, ObJsonSeekRes
             cmp_based_on_node_type(node_type, cmp_res, cmp_result);
           }
         } else {
-        // 不相同的类型，同上
+        // Different types, same as above
           ObIJsonBase* left = hit[i];
           ObIJsonBase* right = right_arg;
           if (OB_FAIL(trans_json_node(allocator, right, left))) {
@@ -2330,7 +2326,7 @@ int ObIJsonBase::cmp_to_right_recursively(ObIAllocator* allocator, ObJsonSeekRes
 }
 
 // for compare ——> ( scalar/sql_var, subpath)
-// 只要有一个结果为true则返回true，找不到或结果为false均返回false
+// As long as one result is true then return true, if not found or result is false then return false
 int ObIJsonBase::cmp_to_left_recursively(ObIAllocator* allocator, ObJsonSeekResult& hit,
                                           const ObJsonPathNodeType node_type, 
                                           ObIJsonBase* left_arg, bool& filter_result) const
@@ -2359,7 +2355,7 @@ int ObIJsonBase::cmp_to_left_recursively(ObIAllocator* allocator, ObJsonSeekResu
           jb_ptr = &st_json; // reset jb_ptr to stack var
           ret = hit[i]->get_array_element(array_i, jb_ptr);
           int cmp_res = -3;
-          // 类型相同可以直接用compare函数比较
+          // Types are the same, you can directly use the compare function to compare
           if(OB_FAIL(ret) || OB_ISNULL(jb_ptr)) {
             ret = OB_ERR_NULL_VALUE;
             LOG_WARN("compare value is null.", K(ret));
@@ -2368,11 +2364,11 @@ int ObIJsonBase::cmp_to_left_recursively(ObIAllocator* allocator, ObJsonSeekResu
               cmp_based_on_node_type(node_type, cmp_res, cmp_result);
             }
           } else {
-          // 不相同的类型，oracle会将string类型转换为对应类型再进行比较
-          // 转换或比较失败也正常，并不报错
-          // 例如: [*].a == 123
-          // 里面可能有多个元素无法转换成数字或无法和数字比较甚至找不到.a
-          // 但只要有一个找到，且为123或"123"则为true
+          // Different types, oracle will convert the string type to the corresponding type before comparison
+          // Conversion or comparison failure is also normal, and no error is reported
+          // For example: [*].a == 123
+          // There may be multiple elements that cannot be converted to a number or cannot be compared with a number or even cannot be found.a
+          // but as long as one is found, and it is 123 or "123" then it is true
             ObIJsonBase* left = left_arg;
             ObIJsonBase* right = jb_ptr;
             if (OB_FAIL(trans_json_node(allocator, left, right))) {
@@ -2395,7 +2391,7 @@ int ObIJsonBase::cmp_to_left_recursively(ObIAllocator* allocator, ObJsonSeekResu
             cmp_based_on_node_type(node_type, cmp_res, cmp_result);
           }
         } else {
-        // 不相同的类型，同上
+        // Different types, same as above
           ObIJsonBase* left = left_arg;
           ObIJsonBase* right = hit[i];
           if (OB_FAIL(trans_json_node(allocator, left, right))) {
@@ -2421,18 +2417,18 @@ int ObIJsonBase::cmp_to_left_recursively(ObIAllocator* allocator, ObJsonSeekResu
 }
 
 // for compare ——> (subpath, scalar/sql_var)
-// 用于subpath的最后一个节点是item_function时
-// 此时如果两边的比较类型不匹配(无论另一边是scalar还是sql_var)会报错
-// 如果最后一个path_node不是item_function时，不匹配(如："abc" == 1)不会报错，只是无结果
-// 如果最后一个path_node是item_function，但hit有多个结果时，类型不匹配也只是无结果，且只要有一个结果true就返回true
-// 不能直接比较json_type()是否相等:
-//  1. 因为item_function的返回类型不唯一，但能够比较的类型限制更严格
-//     如：length()可能返回 J_NULL 或 json_number
-//         但与其比较的类型只能是json_number, 否则oracle会报错
-//  2. 左边调用item_fucntion的结果可以不合法：
-//     如：'$?(@[0].date() == "2020-02-02")
-//         @[0]的内容可以为数字，数组，对象或无法转换为日期的字符串，不会报错
-//         但如果等号右边与之相比的并非为日期/时间戳格式的字符串时，会报错提示无法比较
+// Used when the last node of subpath is item_function
+// At this time, if the comparison types on both sides do not match (regardless of whether the other side is scalar or sql_var), an error will be reported
+// If the last path_node is not item_function, mismatch (e.g., "abc" == 1) will not cause an error, just no result
+// If the last path_node is item_function, but hit has multiple results, type mismatch is just no result, and as long as one result is true, return true
+// Cannot directly compare json_type() whether they are equal:
+//  1. Because the return type of item_function is not unique, but the types that can be compared are more strictly limited
+//     e.g.: length() may return J_NULL or json_number
+//         but the type it is compared to can only be json_number, otherwise oracle will report an error
+//  2. The result of the left call to item_function can be invalid:
+//     e.g.: '$?(@[0].date() == "2020-02-02")'
+//         @[0] content can be numbers, arrays, objects or strings that cannot be converted to dates, no error will be reported
+//         but if the string on the right side of the equal sign is not in date/timestamp format, an error will be prompted indicating that comparison is not possible
 int ObIJsonBase::cmp_to_right_strictly(ObIAllocator* allocator, ObIJsonBase* hit, 
                                         const ObJsonPathNodeType node_type, 
                                         const ObJsonPathNodeType last_sub_path_node_type, 
@@ -2462,7 +2458,7 @@ int ObIJsonBase::cmp_to_right_strictly(ObIAllocator* allocator, ObIJsonBase* hit
       case JPN_NUM_ONLY:
       case JPN_SIZE:
       case JPN_DOUBLE: {
-        // 比较出错不报错，只要求类型是number，否则报错
+        // Compare error without throwing an error, just require the type to be number, otherwise throw an error
         if (is_json_number(right_type)) { 
           int cmp_res = -3;
           if (OB_SUCC(hit->compare((*right_arg), cmp_res, true))) {
@@ -2476,7 +2472,7 @@ int ObIJsonBase::cmp_to_right_strictly(ObIAllocator* allocator, ObIJsonBase* hit
       }
       case JPN_BOOLEAN: 
       case JPN_BOOL_ONLY: { 
-      // 对于path.boolean(), 当且仅当右边为布尔值，或是内容为true/false(不区分大小写)的字符串时合法
+      // For path.boolean(), it is valid only when the right side is a boolean value, or a string with content true/false (case insensitive)
         if (right_type == ObJsonNodeType::J_BOOLEAN) {// compare
           int cmp_res = -3;
           if (OB_SUCC(hit->compare((*right_arg), cmp_res, true))) {
@@ -2552,11 +2548,10 @@ int ObIJsonBase::cmp_to_right_strictly(ObIAllocator* allocator, ObIJsonBase* hit
   }
   return ret;
 }
-
-// 这次右边是sub_path找到的结果，左边是标量/变量
-// 复用left会影响比较的左右
-// 这次需要左边的参数转换类型，并调用compare, 而后根据node_type(>, >=...)确定比较结果
-// 而之前的是右边的参数转换类型，左边的参数调用compare
+// This time the right side is the result found by sub_path, the left side is scalar/variable
+// Reusing left will affect the comparison of left and right
+// This time the parameters on the left need to be converted in type, and then call compare, and determine the comparison result based on node_type(>, >=...)
+// And the previous one was the right parameter conversion type, left parameter calling compare
 int ObIJsonBase::cmp_to_left_strictly(ObIAllocator* allocator, ObIJsonBase* hit, 
                                       const ObJsonPathNodeType node_type, 
                                       const ObJsonPathNodeType last_sub_path_node_type,
@@ -2586,7 +2581,7 @@ int ObIJsonBase::cmp_to_left_strictly(ObIAllocator* allocator, ObIJsonBase* hit,
       case JPN_NUM_ONLY:
       case JPN_SIZE:
       case JPN_DOUBLE: {
-        // 比较出错不报错，只要求类型是number，否则报错
+        // Compare error without throwing an error, just require the type to be number, otherwise throw an error
         if (is_json_number(left_type)) { 
           int cmp_res = -3;
           if (OB_SUCC(left_arg->compare((*hit), cmp_res, true))) {
@@ -2600,7 +2595,7 @@ int ObIJsonBase::cmp_to_left_strictly(ObIAllocator* allocator, ObIJsonBase* hit,
       }
       case JPN_BOOLEAN: 
       case JPN_BOOL_ONLY: { 
-      // 对于path.boolean(), 当且仅当右边为布尔值，或是内容为true/false(不区分大小写)的字符串时合法
+      // For path.boolean(), it is valid only when the right side is a boolean value, or a string containing true/false (case insensitive)
         if (left_type == ObJsonNodeType::J_BOOLEAN) {// compare
           int cmp_res = -3;
           if (OB_SUCC(left_arg->compare((*hit), cmp_res, true))) {
@@ -2694,18 +2689,18 @@ int ObIJsonBase::get_sign_result_left_subpath(ObIAllocator* allocator, ObSeekPar
       // get left arg
       if (OB_FAIL(SMART_CALL(parent_info.parent_jb_->seek(allocator, (*sub_path), 
                 sub_path->path_node_cnt(), true, false, true, hit, sql_var)))) {
-        // 查找失败则直接将结果视为false
+        // If the search fails, directly consider the result as false
         filter_result = false;
       } else {
       // cmp to right arg
-        // 没有找到结果 或 结果为object则返回false
-        // 因为sub_path 和 sub_path 比较不合法，所以不存在可以和object比较的类型
+        // No result found or result is an object then return false
+        // Because sub_path and sub_path comparison is illegal, so there is no type that can be compared with object
         if (hit.size() == 0  || (hit.size() == 1 && hit[0]->json_type() == ObJsonNodeType::J_OBJECT)) {
           filter_result = false;
         } else {
           ObJsonPathNodeType last_path_node_type = sub_path->get_last_node_type();
           if (last_path_node_type > JPN_BEGIN_FUNC_FLAG && last_path_node_type < JPN_END_FUNC_FLAG) {
-            // subpath最后一个节点是item_function, 对比较类型的检查会有更严格的要求
+            // the last node of subpath is item_function, the check for comparison types will have stricter requirements
             for (uint32_t i = 0; i < hit.size() && (!OB_ISNULL(hit[i])) 
                                 && !filter_result && OB_SUCC(ret); ++i) {
               if (OB_FAIL(cmp_to_right_strictly(allocator, hit[i], path_node->get_node_type(), 
@@ -2743,19 +2738,19 @@ int ObIJsonBase::get_sign_result_right_subpath(ObIAllocator* allocator, ObSeekPa
       // get right arg
       if (OB_FAIL(SMART_CALL(parent_info.parent_jb_->seek(allocator, (*sub_path), 
                 sub_path->path_node_cnt(), true, false, true, hit, sql_var)))) {
-        // 查找失败则直接将结果视为false
+        // If the search fails, directly consider the result as false
         filter_result = false;
       } else {
       // cmp to left arg
-        // 没有找到结果 或 结果为object则返回false
-        // 因为sub_path 和 sub_path 比较不合法，所以不存在可以和object比较的类型
+        // No result found or result is an object then return false
+        // Because sub_path and sub_path comparison is illegal, so there is no type that can be compared with object
         if (hit.size() == 0  || (hit.size() == 1 && hit[0]->json_type() == ObJsonNodeType::J_OBJECT)) {
           filter_result = false;
         } else {
           ObJsonPathNodeType last_path_node_type = sub_path->get_last_node_type();
           if (last_path_node_type > JPN_BEGIN_FUNC_FLAG && last_path_node_type < JPN_END_FUNC_FLAG) 
           {
-            // subpath最后一个节点是item_function, 对比较类型的检查会有更严格的要求
+            // the last node of subpath is item_function, the check for comparison types will have stricter requirements
             for (uint32_t i = 0; i < hit.size() && (!OB_ISNULL(hit[i])) && !filter_result && OB_SUCC(ret); ++i) {
               if (OB_FAIL(cmp_to_left_strictly(allocator, hit[i], path_node->get_node_type(), 
                           last_path_node_type, left_arg, filter_result))) {
@@ -2832,10 +2827,9 @@ int ObIJsonBase::get_scalar(ObIAllocator* allocator, const ObJsonPathNodeType ty
   }
   return ret;
 }
-
-// scalar对比不会自动转换类型，如: 123 == "123"会报错(type incompatibility for comparison)
-// 但 1.sub_path查找到的内容和scalar/sql对比时会自动转换类型
-//    2.对于bool类型，如果是字符串会自动转换类型对比，其他均不会
+// scalar comparison will not automatically convert types, e.g.: 123 == "123" will error (type incompatibility for comparison)
+// but 1.sub_path finds the content and compares it with scalar/sql, it will automatically convert the type
+//    2.For bool type, if it is a string it will be automatically converted for comparison, others will not
 // @return Less than returns -1, greater than 1, equal returns 0.
 int ObIJsonBase::compare_scalar(ObIAllocator* allocator, const ObJsonPathFilterNode *path_node, 
                                 bool& filter_result) const
@@ -2943,7 +2937,7 @@ int ObIJsonBase::get_sign_comp_result(ObIAllocator* allocator, ObSeekParentInfo 
 
   // left is subpath, right could be scalar/sql_var
   if (comp_content.left_type_ == ObJsonPathNodeType::JPN_SUB_PATH) {
-  // 如果右边是scalar则直接将其转变为ObIJsonBase
+  // If the right side is scalar then directly transform it into ObIJsonBase
     if (ObJsonPathUtil::is_scalar(comp_content.right_type_)) {
       ObIJsonBase* scalar = NULL;
       if (OB_FAIL(get_scalar(allocator, comp_content.right_type_, 
@@ -2958,7 +2952,7 @@ int ObIJsonBase::get_sign_comp_result(ObIAllocator* allocator, ObSeekParentInfo 
         }
       }
     } else if (comp_content.right_type_ == ObJsonPathNodeType::JPN_SQL_VAR) {
-    // 右边是sql_var，根据var_name得到sql
+    // Right side is sql_var, get sql according to var_name
       if (OB_ISNULL(sql_var) ) {
         ret = OB_INVALID_ARGUMENT;
         LOG_WARN("sql_var is nullptr.", K(ret)); 
@@ -2979,9 +2973,9 @@ int ObIJsonBase::get_sign_comp_result(ObIAllocator* allocator, ObSeekParentInfo 
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("wrong node type.", K(ret));
     }
-  // (scalar, subpath) 或 (sql_var, subpath)
+  // (scalar, subpath) or (sql_var, subpath)
   } else if (comp_content.right_type_ == ObJsonPathNodeType::JPN_SUB_PATH) {
-    // 左边是scalar
+    // Left side is scalar
     if (ObJsonPathUtil::is_scalar(comp_content.left_type_)) {
       ObIJsonBase* scalar = NULL;
       if (OB_FAIL(get_scalar(allocator, comp_content.left_type_, 
@@ -2996,7 +2990,7 @@ int ObIJsonBase::get_sign_comp_result(ObIAllocator* allocator, ObSeekParentInfo 
         }
       }
     } else if (comp_content.left_type_ == ObJsonPathNodeType::JPN_SQL_VAR) {
-    // 左边是sql_var, 根据变量名得到对应ObIJsonBase
+    // The left side is sql_var, get the corresponding ObIJsonBase according to the variable name
       if (OB_ISNULL(sql_var) ) {
         ret = OB_INVALID_ARGUMENT;
         LOG_WARN("sql_var is nullptr.", K(ret)); 
@@ -3019,9 +3013,9 @@ int ObIJsonBase::get_sign_comp_result(ObIAllocator* allocator, ObSeekParentInfo 
     }
   } else if (ObJsonPathUtil::is_scalar(comp_content.left_type_)
             && ObJsonPathUtil::is_scalar(comp_content.right_type_)) {
-    // null 只能和 null 比
-    // bool 可以和字符串 bool 比
-    // string 和 string 比
+    // null can only be compared with null
+    // bool can be compared with string bool
+    // string and string compare
     if (OB_FAIL(compare_scalar(allocator, path_node, filter_result))) {
       LOG_WARN("fail to compare scalar.", K(ret));
     }
@@ -3058,7 +3052,7 @@ int ObIJsonBase::str_comp_predicate(const ObString& left, const ObString& right,
 {
   INIT_SUCC(ret);
   ObJsonPathNodeType pnode_type = path_node->get_node_type();
-  // 处理空字符串
+  // Handle empty string
   if (left.length() == 0 && right.length() == 0) {
     filter_result = true;
   } else if (left.length() == 0) {
@@ -3116,7 +3110,7 @@ int ObIJsonBase::str_cmp_autowrap(ObIAllocator* allocator, const ObString& right
         if (OB_ISNULL(jb_ptr)) {
           ret = OB_ERR_NULL_VALUE;
           LOG_WARN("fail to get array child dom", K(ret), K(i));
-        // 数组只对第一层展开查询
+        // Array only queries the first level of expansion
         } else if (OB_FAIL(jb_ptr->str_cmp_autowrap(allocator, right_str, 
                                                     path_node, false, filter_result))) {
           LOG_WARN("fail to cmp recursively", K(ret), K(i), K(filter_result));
@@ -3151,12 +3145,12 @@ int ObIJsonBase::get_str_comp_result(ObIAllocator* allocator, ObSeekParentInfo &
   INIT_SUCC(ret);
   ObPathComparison comp_content = path_node->node_content_.comp_;
   bool end_comp = false;
-  // could be:(sub_path，string), (sub_path, var) ,(string, string)
+  // could be:(sub_path, string), (sub_path, var), (string, string)
   // get right_str, right arg could be scalar/var
   ObString right_str;
   if (comp_content.right_type_  == ObJsonPathNodeType::JPN_SCALAR) {
     ObString tmp(comp_content.comp_right_.path_scalar_.s_length_, comp_content.comp_right_.path_scalar_.scalar_);
-    // 确定是字符串类型
+    // Determine if it is a string type
     if (tmp.length() < 2 || tmp[0] != '\"' || tmp[tmp.length()-1] != '\"') {
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("right scalar must be string.", K(ret));
@@ -3164,7 +3158,7 @@ int ObIJsonBase::get_str_comp_result(ObIAllocator* allocator, ObSeekParentInfo &
       right_str = ObString(tmp.length() - 2, tmp.ptr() + 1);
     }
   } else if (comp_content.right_type_ == ObJsonPathNodeType::JPN_SQL_VAR) {
-    // 左边是sql_var, 根据变量名得到对应ObIJsonBase
+    // The left side is sql_var, get the corresponding ObIJsonBase according to the variable name
     if (OB_ISNULL(sql_var) ) {
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("sql_var is nullptr.", K(ret)); 
@@ -3196,7 +3190,7 @@ int ObIJsonBase::get_str_comp_result(ObIAllocator* allocator, ObSeekParentInfo &
     SMART_VAR (ObJsonSeekResult, hit) {
       ObJsonPath* sub_path = comp_content.comp_left_.filter_path_;
       if (sub_path->path_not_str()) {
-        // 如果最后一个节点的类型是item function，且返回值一定不为string，如number/abs/length...会报错
+        // If the type of the last node is item function, and the return value is definitely not a string, such as number/abs/length..., it will throw an error
         ret = OB_OP_NOT_ALLOW;
         LOG_WARN("wrong argument data type for function call.",
                   K(ret), K(sub_path->get_last_node_type()));
@@ -3216,7 +3210,7 @@ int ObIJsonBase::get_str_comp_result(ObIAllocator* allocator, ObSeekParentInfo &
     } // samrt var
   } else if (comp_content.left_type_  == ObJsonPathNodeType::JPN_SCALAR) {
     ObString tmp(comp_content.comp_left_.path_scalar_.s_length_, comp_content.comp_left_.path_scalar_.scalar_);
-    // 确定是字符串类型
+    // Determine if it is a string type
     if (tmp.length() < 2 || tmp[0] != '\"' || tmp[tmp.length()-1] != '\"') {
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("right scalar must be string.", K(ret));
@@ -3265,40 +3259,40 @@ int ObIJsonBase::find_comp_result(ObIAllocator* allocator, ObSeekParentInfo &par
       SMART_VAR (ObJsonSeekResult, hit) {
         if (OB_FAIL(SMART_CALL(parent_info.parent_jb_->seek(allocator, (*sub_path), 
                     sub_path->path_node_cnt(), true, true, true, hit, sql_var)))) {
-        // 查找失败则直接将结果视为false
+        // If the search fails, directly consider the result as false
             filter_result = false;
         } else {
-          // exist 要求参数一定是含有过滤表达式的sub_path, 过滤表达式后面再有其他path_node没问题
-          // 并且从过滤表达式所找到的jb_tree后往下继续按照path查找
-          // 但特殊的是，如果过滤表达式的结果为false或没有找到，过滤表达式后面的path_node都不再继续执行
+          // exist requires the parameter to be a sub_path containing a filter expression, other path_nodes after the filter expression are fine
+          // and continue to search downwards from the jb_tree found by the filter expression according to the path
+          // But specially, if the result of the filter expression is false or not found, the path_node after the filter expression will no longer continue to execute
           /*
           1. SELECT json_value( 
                 '["abc", 2, 3, 4, 5, {"z" : "2020-02-02"},7,8,"9"]', 
-                '$[5]?(1 == 0).z.date()' RETURNING DATE ) FROM dual;            // 输出null
+                '$[5]?(1 == 0).z.date()' RETURNING DATE ) FROM dual;            // output null
 
           2. SELECT json_value( 
                           '["abc", 2, 3, 4, 5, {"z" : "2020-02-02"},7,8,"9"]', 
-                          '$[5]?(1 == 1).z.date()' RETURNING DATE ) FROM dual;  // 输出正确日期
+                          '$[5]?(1 == 1).z.date()' RETURNING DATE ) FROM dual;  // output correct date
 
           3. SELECT json_value( 
                 '["abc", 2, 3, 4, 5, {"z" : "2020-02-02"},7,8,"9"]', 
-                '$[5]?(@.z.a == "2020-02-02").z.date()' RETURNING DATE ) FROM dual; // 输出null
+                '$[5]?(@.z.a == "2020-02-02").z.date()' RETURNING DATE ) FROM dual; // output null
           4. SELECT json_value( 
                 '["abc", 2, 3, 4, 5, {"z" : "2020-02-02"},7,8,"9"]', 
-                '$[5]?(@.z == "2020-02-02").z.date()' RETURNING DATE ) FROM dual; // 输出正确日期
+                '$[5]?(@.z == "2020-02-02").z.date()' RETURNING DATE ) FROM dual; // output correct date
                 
           5. SELECT 1 from dual 
                 WHERE json_exists(
                   '["a", 2, 3, 4, 5, {"resolution" : {"x": 1920, "y": 1080}}, 7, 8, 9]',
-                  '$[5]?(1 == 1).resolution.z');                                  // 输出空
+                  '$[5]?(1 == 1).resolution.z');                                  // output empty
           6. SELECT 1 from dual 
                 WHERE json_exists(
                   '["a", 2, 3, 4, 5, {"resolution" : {"x": 1920, "y": 1080}}, 7, 8, 9]',
-                  '$[5]?(1 == 1).resolution.x');                                 // 输出1
+                  '$[5]?(1 == 1).resolution.x');                                 // output 1
           */
-          // 所以猜测oracle在seek()过程中，会根据过滤表达式的结果(找不到或不匹配均为false)确定是否继续向下执行。
-          // 且根据用例5 & 6猜测，Oracle查找完过滤表达式节点后并不会将结果(true/false)插入res，否则5的结果不会为空
-          // 而是 根据过滤表达式的结果决定是否往下继续查询
+          // So I guess oracle will determine whether to continue executing based on the result of the filter expression during the seek() process (false if not found or does not match).
+          // And according to case 5 & 6, Oracle does not insert the result (true/false) into res after searching the filter expression node, otherwise the result of 5 would not be empty
+          // but decide whether to continue querying based on the result of the filter expression
           filter_result = (hit.size() > 0);
         }
       } // smart var hit
@@ -3397,9 +3391,8 @@ int ObIJsonBase::find_filter_child(ObIAllocator* allocator, ObSeekParentInfo &pa
   bool filter_result = false;
   ObJsonPathNodeType pnode_type = path_node->get_node_type();
   if (is_lax && !is_auto_wrap) is_auto_wrap = true;
-
-  // 对于过滤表达式，需要重新设置parent_info
-  // 当前json节点为新的parent节点，过滤表达式内的sub_path都以该节点为根节点查找
+  // For the filter expression, need to reset parent_info
+  // The current json node is the new parent node, filter expressions within sub_path are all searched with this node as the root node
   parent_info.parent_jb_ = const_cast<ObIJsonBase*> (this);
   parent_info.parent_path_ = cur_node;
   parent_info.is_subpath_ = true;
@@ -3426,13 +3419,13 @@ int ObIJsonBase::find_filter_child(ObIAllocator* allocator, ObSeekParentInfo &pa
 
   if (OB_SUCC(ret)) {
     if (filter_result == true) { 
-    // 结果为true但还没有结束，则从当前节点继续往下执行
+    // The result is true but it has not ended yet, then continue executing from the current node
       if (OB_FAIL(SMART_CALL(find_child(allocator, parent_info, cur_node + 1, last_node, 
                             is_auto_wrap, only_need_one, is_lax, dup, res, sql_var)))) {
         LOG_WARN("fail to seek recursively", K(ret));
       } 
     } else {
-      // 结果为false，不再继续往下查找，直接返回空的hit数组
+      // The result is false, no longer continue to search downwards, directly return an empty hit array
       // do nothing
     }
   }

@@ -179,8 +179,8 @@ int MemberListWithStates::record_accept_ok(const ElectionAcceptResponseMsg &acce
     if (ok_count < (p_impl_->member_list_.get_replica_num() / 2 + 1)) {
       ret = OB_ELECTION_BELOW_MAJORITY;
     }
-    // 这里不能返回OVER_MAJORITY，因为在续约阶段，所有的accept_ok_promise_not_vote_before_local_ts_都是
-    // 有效的，并且这里不判断OVER_MAJORITY的另一个好处是，每一次返回accept ok都可能把leader lease向后推进
+    // Here we cannot return OVER_MAJORITY, because during the renewal phase, all accept_ok_promise_not_vote_before_local_ts_ are
+    // valid, and another benefit here is that every return of accept ok may advance the leader lease
   }
   return ret;
 }
@@ -337,7 +337,7 @@ void Lease::get_owner_and_ballot(ObAddr &owner, int64_t &ballot) const
 }
 
 bool Lease::is_expired() const
-{ // is_expired()只支持在本地判断
+{ // is_expired() only supports local judgment
   TCRLockGuard guard(lock_);
   return get_monotonic_ts() > lease_end_ts_;
 }
@@ -355,7 +355,7 @@ void Lease::reset()
 }
 
 bool Lease::is_empty() const
-{ // is_empty()支持在任意机器上判断
+{ // is_empty() supports checking on any machine
   TCRLockGuard guard(lock_);
   return !owner_.is_valid() && lease_end_ts_ == -1;
 }

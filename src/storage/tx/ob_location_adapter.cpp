@@ -137,7 +137,7 @@ int ObLocationAdapter::get_leader_(const int64_t cluster_id,
     if (OB_FAIL(location_service_->nonblock_get_leader(cluster_id, tenant_id, ls_id, leader))) {
       TRANS_LOG(DEBUG, "nonblock get leader from locatition cache error", K(ret), K(ls_id));
       int tmp_ret = OB_SUCCESS;
-      //异步获取leader失败，暂时不清除location的cache；
+      // Asynchronous get leader failed, temporarily do not clear the cache of location;
       if (OB_SUCCESS != (tmp_ret = location_service_->nonblock_renew(cluster_id, tenant_id, ls_id))) {
         TRANS_LOG(WARN, "nonblock renew from location cache error", "ret", tmp_ret, K(ls_id));
       }

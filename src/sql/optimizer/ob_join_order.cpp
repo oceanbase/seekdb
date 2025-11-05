@@ -1104,8 +1104,8 @@ int ObJoinOrder::get_query_range_info(const uint64_t table_id,
     } else if (OB_FAIL(check_has_exec_param(*query_range_provider, has_exec_param))) {
       LOG_WARN("failed to check has exec param", K(ret));
     } else if (!has_exec_param) {
-      //没有exec param就使用真实query range计算equal prefix count
-      //有exec param就使用query range的形状计算equal prefix count
+      // No exec param then use real query range to calculate equal prefix count
+      // If there is exec param then use the shape of query range to calculate equal prefix count
       range_info.set_equal_prefix_count(equal_prefix_count);
       range_info.set_range_prefix_count(range_prefix_count);
       range_info.set_contain_always_false(contain_always_false);
@@ -2228,8 +2228,8 @@ int ObJoinOrder::get_access_path_ordering(const uint64_t table_id,
 }
 
 /**
- * 获取索引扫描的序
- * 首先检查window function中的order by, 然后在检查stmt中的order by
+ * Get the order for index scan
+ * First check the order by in window function, then check the order by in stmt
  */
 int ObJoinOrder::get_index_scan_direction(const ObIArray<ObRawExpr *> &keys,
                                           const ObDMLStmt *stmt,
@@ -2310,13 +2310,13 @@ int ObJoinOrder::get_direction_in_order_by(const ObIArray<OrderItem> &order_by,
   int64_t order_offset = order_by.count();
   int64_t index_offset = index_start_offset;
   bool is_const = true;
-  //找到第一个非const的order项
+  // Find the first non-const order item
   for (int64_t i = 0; OB_SUCC(ret) && is_const && i < order_by.count(); ++i) {
     if (OB_FAIL(ObOptimizerUtil::is_const_expr(order_by.at(i).expr_, equal_sets,
                                                const_exprs, is_const))) {
       LOG_WARN("failed to check is_const_expr", K(ret));
     } else if (!is_const) {
-      // mysql只有nulls_first_asc和nulls_last_desc,都可以用到索引上的序
+      // mysql only has nulls_first_asc and nulls_last_desc, both can use the index order
       if (is_ascending_direction(order_by.at(i).order_type_)) {
         direction = default_asc_direction();
       } else {
@@ -2325,7 +2325,7 @@ int ObJoinOrder::get_direction_in_order_by(const ObIArray<OrderItem> &order_by,
       order_offset = i;
     }
   }
-  //计算index和order项的最大匹配，跳过const表达式
+  // Calculate the maximum match for index and order items, skip const expressions
   ObRawExpr *index_expr = NULL;
   ObRawExpr *order_expr = NULL;
   int64_t order_start = order_offset;
@@ -2528,12 +2528,12 @@ int ObJoinOrder::check_and_extract_query_range(const uint64_t table_id,
 }
 
 /*
- * 计算维度信息
- * @table_id 从table_item获取的table_id
- * @data_table_id 真实table_id
- * @index_table_id 索引的table_id
+ * Calculate dimension information
+ * @table_id table_id obtained from table_item
+ * @data_table_id actual table_id
+ * @index_table_id table_id of the index
  * @stmt
- * @index_dim 记录了三种维度的信息
+ * @index_dim records information of three dimensions
  * */
 int ObJoinOrder::cal_dimension_info(const uint64_t table_id, //alias table id
                                     const uint64_t data_table_id, //real table id
@@ -2597,8 +2597,8 @@ int ObJoinOrder::cal_dimension_info(const uint64_t table_id, //alias table id
       }
       if (OB_SUCC(ret)) {
         /*
-         * 添加四种维度的信息
-         * (1) 是否回表
+         * Add four dimensions of information
+         * (1) Whether to go back to the table
          * (2) interesting_order
          * (3) query range
          *     a. for unique index, we compare the range rows
@@ -2662,14 +2662,14 @@ int ObJoinOrder::is_vector_inv_index_tid(const uint64_t index_table_id, bool& is
 }
 
 /*
- * 裁剪索引
- * @table_id 从table_item里面获取的table_id
- * @base_table_id 真实的table_id
+ * Trim index
+ * @table_id table_id obtained from table_item
+ * @base_table_id actual table_id
  * @stmt
- * @do_prunning 标记是否做skyline的分支裁剪
- * @index_info_cache 索引的query range缓存
- * @valid_index_ids 可用的索引id
- * @skyline_index_ids 裁剪完的索引id
+ * @do_prunning flag to mark whether to do skyline branch pruning
+ * @index_info_cache cache of index query range
+ * @valid_index_ids available index ids
+ * @skyline_index_ids trimmed index ids
  * */
 int ObJoinOrder::skyline_prunning_index(const uint64_t table_id,
                                         const uint64_t base_table_id,
@@ -2695,7 +2695,7 @@ int ObJoinOrder::skyline_prunning_index(const uint64_t table_id,
     OPT_TRACE("candidate valid index ids", candidate_index_ids);
     LOG_TRACE("succeed to get valid index ids",
         K(candidate_index_ids), K(use_unique_index));
-    //维度统计信息
+    // Dimension statistics information
     ObSkylineDimRecorder recorder;
     bool has_add = false;
     for (int64_t i = 0; OB_SUCC(ret) && i < candidate_index_ids.count(); ++i) {
@@ -2708,7 +2708,7 @@ int ObJoinOrder::skyline_prunning_index(const uint64_t table_id,
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("index dimension should not be null", K(ret));
       } else if (FALSE_IT(index_dim->set_index_id(tid))) {
-      //计算维度信息, 封装在 ObSkylineIndexDim 里面
+      // Calculate dimension information, encapsulated in ObSkylineIndexDim
       } else if (OB_FAIL(cal_dimension_info(table_id,
                                             base_table_id,
                                             tid, stmt,
@@ -2735,7 +2735,7 @@ int ObJoinOrder::skyline_prunning_index(const uint64_t table_id,
     }
     if (OB_SUCC(ret)) {
       skyline_index_ids.reset();
-      //获取裁剪完的索引id
+      // Get the cropped index id
       if (OB_FAIL(recorder.get_dominated_idx_ids(skyline_index_ids))) {
         LOG_WARN("get dominated idx ids failed", K(ret));
       } else {
@@ -4400,8 +4400,8 @@ int ObJoinOrder::compute_table_rowcount_info()
 {
   int ret = OB_SUCCESS;
   /*
-   * 计算完所有的信息再计算选择率. 为了统计信息的准确,
-   * 我们需要先将行数置为全表的行数.
+   * Calculate the selection rate after computing all the information. To ensure the accuracy of the statistics,
+   * we need to set the number of rows to the total number of rows in the table first.
    */
   if (OB_SUCC(ret)) {
     double selectivity = 0.0;
@@ -4740,8 +4740,8 @@ int ObJoinOrder::revise_output_rows_after_creating_path(PathHelper &helper,
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("plan and stmt should not be null", K(ret));
     } else if (get_plan()->get_stmt()->has_limit()) {
-      // 这部分代码主要处理有limit时re_est_cost()的时候行数估计的问题
-      // 仅在含有limit的时候才调整选择率
+      // This part of the code mainly handles the row count estimation issue when re_est_cost() is called with a limit
+      // Only adjust selection rate when limit is present
       for (int64_t i = 0; OB_SUCC(ret) && i < interesting_paths_.count(); ++i) {
         if (OB_ISNULL(interesting_paths_.at(i))) {
           ret = OB_ERR_UNEXPECTED;
@@ -4873,12 +4873,12 @@ int ObJoinOrder::fill_opt_info_index_name(const uint64_t table_id,
 }
 
 /*
- * 检查interesting order
- * @keys 索引列
+ * Check interesting order
+ * @keys index columns
  * @stmt
- * @interest_column_ids 匹配索引前缀的列id
- * @const_column_info   interest_column_ids对应的每一个column是否为const
- * 具体的匹配规则可以看
+ * @interest_column_ids column ids matching the index prefix
+ * @const_column_info whether each column corresponding to interest_column_ids is const
+ * specific matching rules can be seen
  * 
  * */
 int ObJoinOrder::check_all_interesting_order(const ObIArray<OrderItem> &ordering,
@@ -4894,7 +4894,7 @@ int ObJoinOrder::check_all_interesting_order(const ObIArray<OrderItem> &ordering
   } else {
     int64_t prefix_count = 0;
     bool join_match = false;
-    //连接条件上是否匹配, 外连接和内连接
+    // Whether the connection conditions match, outer join and inner join
     if (OB_FAIL(is_join_match(ordering, prefix_count, join_match))) {
       LOG_WARN("check_join_match failed", K(ret));
     } else if (join_match) {
@@ -4902,7 +4902,7 @@ int ObJoinOrder::check_all_interesting_order(const ObIArray<OrderItem> &ordering
       interesting_order_info |= OrderingFlag::JOIN_MATCH;
       LOG_TRACE("check is_join_match debug", K(join_match), K(max_prefix_count), K(prefix_count));
     }
-    //检查是否有GroupBy/OrderBy/Distinct可用
+    // Check if GroupBy/OrderBy/Distinct is available
     if (OB_SUCC(ret)) {
       int64_t check_scope = OrderingCheckScope::CHECK_ALL;
       prefix_count = 0;
@@ -5113,7 +5113,7 @@ int ObJoinOrder::check_expr_overlap_index(const ObRawExpr* qual,
   return ret;
 }
 
-/* 拿到quals中涉及的 column的列的id 这个函数在抽取不出query range和 interesting order的情况下调用 */
+/* Get the column IDs involved in quals This function is called when query range and interesting order cannot be extracted */
 int ObJoinOrder::extract_filter_column_ids(const ObIArray<ObRawExpr*> &quals,
                                            const bool is_data_table,
                                            const ObTableSchema &index_schema,
@@ -6585,25 +6585,25 @@ double oceanbase::sql::Path::get_path_output_rows() const
 }
 
 /*
-目前ObJoinOrder在添加path的时候，会分成下面两种情况
+Currently ObJoinOrder when adding path, it will be divided into the following two cases
 
-1 当查询没有limit子句的时候，那么在add path的时候我们会定义如下的dominate关系：一条路径p1 dominate 另外一条路径 p2 如果
+1 When the query does not have a limit clause, then when adding path we will define the following dominate relationship: a path p1 dominates another path p2 if
 
-    1.1 p1的代价比p2的代价小
+    1.1 the cost of p1 is smaller than the cost of p2
 
-    1.2 p1的interesting order是p2的interesting order的superset
+    1.2 the interesting order of p1 is a superset of the interesting order of p2
 
-最终所有没有被dominate的path会保留下来
+In the end, all paths that are not dominated will be retained
 
-2 当查询有limit子句，我们把dominate关系修正为如下: 一条路径p1 dominate 另外一条路径 p1 如果
+2 When the query has a limit clause, we correct the dominate relationship as follows: a path p1 dominates another path p2 if
 
-    2.1 p1的代价比p2的代价小
+    2.1 the cost of p1 is smaller than the cost of p2
 
-    2.2 p1的interesting order是p2的interesting order的superset
+    2.2 the interesting order of p1 is a superset of the interesting order of p2
 
-    2.3 p1的连接类型跟p2的连接类型是一样的，或者p2的连接类型是merge join，并且两边都需要排序
+    2.3 the join type of p1 is the same as the join type of p2, or the join type of p2 is merge join, and both sides need sorting
 
-最终所有没有被dominate的path会保留下来, 虽然这种策略可能会导致选择的计划并不是最优的，但是个人认为概率比较小，相当于我们为每种join类型都会保留一些路径
+In the end, all paths that are not dominated will be retained, although this strategy may lead to the selected plan not being optimal, but I believe the probability is relatively small, which is equivalent to us retaining some paths for each join type
 */
 int ObJoinOrder::add_path(Path* path)
 {
@@ -6623,10 +6623,10 @@ int ObJoinOrder::add_path(Path* path)
     } 
     
     /**
-     * fake cte会生成两条path，一条local、一条match all
-     * match fake cte路径只用来生成remote的计划
-     * 如果当前match all fake cte与其他表join之后sharding变成local了
-     * 说明这条路径非预期，只用local的fake cte路径即可
+     * fake cte will generate two paths, one local, one match all
+     * match fake cte path is only used to generate remote plans
+     * if the current match all fake cte becomes local after joining with other tables
+     * it indicates that this path is not as expected, and only the local fake cte path is needed
      */
     if (!path->is_cte_path() &&
         path->contain_match_all_fake_cte() &&
@@ -8602,7 +8602,7 @@ int JoinPath::compute_join_path_ordering()
     LOG_WARN("get unexpected null", K(left_path_), K(right_path_), K(parent_), K(ret));
   } else if (JoinAlgo::MERGE_JOIN == join_algo_) {
     if (FULL_OUTER_JOIN != join_type_ && RIGHT_OUTER_JOIN != join_type_) {
-      // 目前 ObMergeJoin 的实现只能继承左支的序
+      // Currently the implementation of ObMergeJoin can only inherit the order from the left branch
       if (!is_left_need_sort() && !is_left_need_exchange()) {
         set_interesting_order_info(left_path_->get_interesting_order_info());
         if(OB_FAIL(append(ordering_, left_path_->ordering_))) {
@@ -11174,7 +11174,7 @@ int ObJoinOrder::init_join_order(const ObJoinOrder *left_tree,
     LOG_WARN("NULL pointer error", K(left_tree), K(right_tree),
         K(allocator_), K(ret));
   } else {
-    //设置table_set_为左右的集合
+    // Set table_set_ to the union of left and right
     if (OB_FAIL(get_tables().add_members(left_tree->get_tables()))) {
       LOG_WARN("fail to add left tree's tables", K(ret));
     } else if (OB_FAIL(get_tables().add_members(right_tree->get_tables()))) {
@@ -11200,8 +11200,7 @@ int ObJoinOrder::init_join_order(const ObJoinOrder *left_tree,
     } else {
       set_output_rows(-1.0);
     }
-
-    //设置join info
+    // Set join info
     if (OB_SUCC(ret)) {
       JoinInfo* temp_join_info = NULL;
       if (OB_ISNULL(temp_join_info = static_cast<JoinInfo*>(
@@ -11225,7 +11224,7 @@ int ObJoinOrder::init_join_order(const ObJoinOrder *left_tree,
     }
 
     if (OB_SUCC(ret)) {
-      //outer join的join qual暂存于restrict info，用于equal set、const expr计算
+      // outer join's join qual is stored in restrict info, used for equal set, const expr calculation
       if (IS_NOT_INNER_JOIN(join_info->join_type_)) {
         if (OB_FAIL(append(get_restrict_infos(), join_info->where_conditions_))) {
           LOG_WARN("failed to append restrict info", K(ret));
@@ -13168,10 +13167,10 @@ int ObJoinOrder::set_nl_filters(JoinPath *join_path,
       LOG_WARN("failed to append conditions", K(ret));
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < on_conditions.count(); ++i) {
-      if (right_path->is_inner_path() && //如果是条件下降的NL
+      if (right_path->is_inner_path() && //if it is a conditional descending NL
           ObOptimizerUtil::find_item(right_path->pushdown_filters_, on_conditions.at(i))) {
          /*do nothing*/
-      } else if (OB_FAIL(join_path->other_join_conditions_.push_back(on_conditions.at(i)))) { //未下降的nl条件
+      } else if (OB_FAIL(join_path->other_join_conditions_.push_back(on_conditions.at(i)))) { // non-descended nl conditions
         LOG_WARN("failed to push back conditions", K(ret));
       }
     }
@@ -13180,14 +13179,14 @@ int ObJoinOrder::set_nl_filters(JoinPath *join_path,
       LOG_WARN("failed to append conditions", K(ret));
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < where_conditions.count(); ++i) {
-      //只有能在本级处理的qual才能放在join条件里，处理AB时，遇到a+b=c条件是不能放在本级join条件里的
+      // Only qual that can be processed at this level can be placed in the join condition, when processing AB, the a+b=c condition cannot be placed in the join condition at this level
       if (OB_ISNULL(where_conditions.at(i))) {
         ret = OB_ERR_NULL_VALUE;
         LOG_WARN("raw expr is null", K(ret));
-      } else if (right_path->is_inner_path() && //如果是条件下降的NL
+      } else if (right_path->is_inner_path() && // if it is a conditional descending NL
                  ObOptimizerUtil::find_item(right_path->pushdown_filters_, where_conditions.at(i))) {
           /*do nothing*/
-      } else if (OB_FAIL(join_path->other_join_conditions_.push_back(where_conditions.at(i)))) { //未下降的nl条件
+      } else if (OB_FAIL(join_path->other_join_conditions_.push_back(where_conditions.at(i)))) { // non-descended nl conditions
         LOG_WARN("failed to push back conditions", K(ret));
       }
     }
@@ -13301,13 +13300,13 @@ int ObJoinOrder::generate_join_filter_infos(const Path &left_path,
                                                                          right_path.parallel_,
                                                                          join_dist_algo);
   /*
-  *  1. 检查并行度是否大于1, 检查是否使用新引擎.
-  *  2. 检查Join类型.
-  *  3. 检查计划形态.
-  *     - 满足右侧基表或者跨exchange基表
-  *     - 满足不跨exchange非基表
-  *  4. 检查代价是否可以生成.
-  *  5. 检查hint是否可以生成.
+  *  1. Check if parallelism is greater than 1, check if new engine is used.
+  *  2. Check Join type.
+  *  3. Check plan shape.
+  *     - Satisfies right-side base table or cross-exchange base table
+  *     - Satisfies non-cross-exchange non-base table
+  *  4. Check if cost can be generated.
+  *  5. Check if hint can be generated.
   */
   if (ObGlobalHint::DEFAULT_PARALLEL >= join_parallel) {
     OPT_TRACE("hash join parallel <= 1, plan will not use join filter");
@@ -14323,8 +14322,8 @@ int ObJoinOrder::extract_mergejoin_conditions(const ObIArray<ObRawExpr*> &join_q
   ObRawExpr* right_expr = NULL;
   for (int64_t i = 0; OB_SUCC(ret) && i < join_quals.count(); ++i) {
     cur_expr = join_quals.at(i);
-    //我们相信joininfo里的join_quals是经过处理的，left=A，right=B，a=c是不可能出现在这里的，
-    //所以大胆的利用IS_JOIN_COND进行判断即可
+    // We believe that the join_quals in joininfo are processed, left=A, right=B, a=c is impossible to appear here,
+    // So boldly use IS_JOIN_COND for judgment just
     if (OB_ISNULL(cur_expr)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("get unexpected null", K(cur_expr), K(ret));
@@ -14343,13 +14342,13 @@ int ObJoinOrder::extract_mergejoin_conditions(const ObIArray<ObRawExpr*> &join_q
                        && right_expr->get_relation_ids().is_subset(left_tables)))) {
       ret = equal_join_conditions.push_back(cur_expr);
     } else if (cur_expr->get_relation_ids().is_subset(get_tables())) {
-      //如果条件仅涉及左右分支，可以拿出来作为join filter
+      // If the condition involves only the left and right branches, it can be extracted as a join filter
       if (OB_FAIL(other_join_conditions.push_back(cur_expr))) {
         LOG_WARN("fail to push back", K(cur_expr), K(ret));
       }
     } else {
-      //其余条件是涉及本级表，但是不能在不本级处理的条件，例如：left=A，right=B，条件为a+b=c.
-      //这样的条件会在下一次生成ABC的连接的过程中，处理joininfo的时候被处理
+      // The remaining conditions involve the current level table, but cannot be processed without handling at the current level, for example: left=A, right=B, condition is a+b=c.
+      // Such conditions will be processed when handling joininfo during the next generation of ABC connection process
       LOG_TRACE("A qual references this join, but we can not resolve it in this level");
     }
   }
@@ -15021,8 +15020,8 @@ int ObJoinOrder::get_simple_index_info(const uint64_t table_id,
 }
 
 /**
-  * prefix_filters: 影响query_range range范围的filter
-  * pushdown prefix filters: push down filters that can contribute query range
+  * prefix_filters: influence query_range range of filter
+  * pushdown prefix filters: push down filters that can contribute to query range
   * postfix_filters: filters that can be evaluated on index
   * table_filters: filters that can be evaluated after index back
   */
@@ -15038,7 +15037,7 @@ int ObJoinOrder::fill_filters(const ObIArray<ObRawExpr*> &all_filters,
   int ret = OB_SUCCESS;
   is_nl_with_extended_range = false;
   if (NULL == query_range_provider) {
-    //如果没有抽出query range，那么所有的filter都是table filter
+    // If the query range is not extracted, then all filters are table filters
     ret = est_cost_info.table_filters_.assign(all_filters);
   } else {
     ObSqlSchemaGuard *schema_guard = NULL;
@@ -15135,15 +15134,14 @@ int ObJoinOrder::fill_filters(const ObIArray<ObRawExpr*> &all_filters,
           LOG_WARN("failed to append exprs", K(ret));
         }
       }
-
-      //prefix filter中可能存在条件下推的subquery
-      //这种filter在存储层无法估行
-      //例如：index(c1,c2,c3),filter：c1 = 1 and c2 = ? and c3 = 3 and c1 = ? and c2 = 1
-      //真正的prefix filter是c1 = 1 and c2 = 1 and c3 = 3，
-      //c1 = ? and c2 = ? 需要放到pushdown prefix filter中
+      //prefix filter may contain subquery with condition pushdown
+      // This filter cannot estimate rows at the storage layer
+      // For example: index(c1,c2,c3), filter: c1 = 1 and c2 = ? and c3 = 3 and c1 = ? and c2 = 1
+      // The true prefix filter is c1 = 1 and c2 = 1 and c3 = 3,
+      //c1 = ? and c2 = ? need to be put into pushdown prefix filter
       ObSEArray<ObRawExpr*, 4> new_prefix_filters;
       ObSEArray<uint64_t, 4> column_ids;
-      //首先找到所有条件下推的表达式包含的index column ids
+      // First find all index column ids included in the pushed expressions under all conditions
       for (int64_t i = 0; OB_SUCC(ret) && i < est_cost_info.prefix_filters_.count(); ++i) {
         ObRawExpr *expr = est_cost_info.prefix_filters_.at(i);
         if (OB_ISNULL(expr)) {
@@ -15161,7 +15159,7 @@ int ObJoinOrder::fill_filters(const ObIArray<ObRawExpr*> &all_filters,
       }
 
       int64_t first_param_column_idx = -1;
-      //把range_columns分成有query range的column ids与没有query range的column ids
+      // Split range_columns into column ids with query range and column ids without query range
       for (int64_t i = 0; OB_SUCC(ret) && first_param_column_idx == -1 &&
                           i < est_cost_info.range_columns_.count(); ++i) {
         ColumnItem &column = est_cost_info.range_columns_.at(i);
@@ -15186,8 +15184,7 @@ int ObJoinOrder::fill_filters(const ObIArray<ObRawExpr*> &all_filters,
         }
         ret = add_var_to_array_no_dup(ex_prefix_column_ids, column_id);
       }
-
-      //如果filter不在prefix filter中，但是是索引列的filter，那么应该在回表前计算
+      // If filter is not in prefix filter, but is a filter on an indexed column, then it should be calculated before the table lookup
       for (int64_t i = 0; OB_SUCC(ret) && i < all_filters.count(); i++) {
         expr_column_ids.reset();
         ObRawExpr *filter = NULL;
@@ -15242,7 +15239,7 @@ int ObJoinOrder::fill_filters(const ObIArray<ObRawExpr*> &all_filters,
           if (!use_skip_scan || !ObOptimizerUtil::find_item(est_cost_info.ss_postfix_range_filters_, filter)) {
             ret = est_cost_info.postfix_filters_.push_back(filter);
           }
-          // 对于空间索引，空间谓词一定要回表计算
+          // For spatial indexes, spatial predicates must be calculated by accessing the table
           if (OB_SUCC(ret) &&
               est_cost_info.index_meta_info_.is_domain_index()) {
             ret = est_cost_info.table_filters_.push_back(filter);
@@ -15255,10 +15252,10 @@ int ObJoinOrder::fill_filters(const ObIArray<ObRawExpr*> &all_filters,
       }
 
       if (est_cost_info.pushdown_prefix_filters_.empty()) {
-        //没有EXEC_PARAM, do nothing
+        // No EXEC_PARAM, do nothing
       } else if (!column_ids.empty()) {
         est_cost_info.prefix_filters_.reset();
-        //没有query range的prefix_filters需要放到pushdown prefix filter中
+        // Prefix filters without query range need to be put into pushdown prefix filter
         for (int64_t i = 0; OB_SUCC(ret) && i < new_prefix_filters.count(); ++i) {
           expr_column_ids.reset();
           ObRawExpr *filter = new_prefix_filters.at(i);
@@ -17187,9 +17184,9 @@ int ObJoinOrder::compute_fd_item_set_for_join(const ObJoinOrder *left_tree,
 }
 
 /**
- * 1. 根据连接条件将 candi fd item 提升为 fd item
- * 2. 确定连接是否为 n to 1 连接
- * 3. 根据连接性质确定连接结果的 fd item
+ * 1. Promote candi fd item to fd item based on connection conditions
+ * 2. Determine if the connection is an n to 1 connection
+ * 3. Determine the fd item of the connection result based on the nature of the connection
  * join_info == NULL means Cartesian join
  */
 int ObJoinOrder::compute_fd_item_set_for_inner_join(const ObJoinOrder *left_tree,
@@ -17301,9 +17298,9 @@ int ObJoinOrder::compute_fd_item_set_for_semi_anti_join(const ObJoinOrder *left_
       LOG_WARN("failed to assign exprs", K(ret));
     } else if (IS_SEMI_JOIN(join_type) && OB_FAIL(append(input_quals, join_info->on_conditions_))) {
       LOG_WARN("failed to append semi join conditions", K(ret));
-      // anti join 的 filter 不能用来加强减少左表的空值列。
+      // anti join's filter cannot be used to strengthen reducing null value columns in the left table.
       // SELECT * from A where A.c1 > all (SELECT c1 from B);
-      // 当 B 表为空时，A.c1 = NULL 的行依然可以输出
+      // When B table is empty, rows with A.c1 = NULL can still be output
     } else if (OB_FAIL(ObOptimizerUtil::enhance_fd_item_set(input_quals,
                                                             candi_fd_item_set_,
                                                             fd_item_set_,
@@ -17376,9 +17373,9 @@ int ObJoinOrder::compute_fd_item_set_for_outer_join(const ObJoinOrder *left_tree
                                                       fd_item_set_,
                                                       candi_fd_item_set_))) {
       /**
-      * left tree fd item set 的继承处理与inner join相同
-      * right tree fd item set 的继承暂时不处理，如果把right tree的fd item set移到candi fd item set后,
-      * 后续要消除candi属性只要求right tree中任意一列上有控制拒绝条件即可.
+      * inheritance processing of left tree fd item set is the same as inner join
+      * inheritance processing of right tree fd item set is temporarily not handled, if the right tree's fd item set is moved to candi fd item set,
+      * subsequent elimination of candi attributes only requires a control rejection condition on any column in the right tree.
       */
       LOG_WARN("failed to add left fd_item_set for left outer join", K(ret));
     } else if (OB_FAIL(deduce_const_exprs_and_ft_item_set())) {
@@ -19515,7 +19512,7 @@ int ObJoinOrder::get_range_of_query_tokens(ObIArray<ObConstRawExpr*> &query_toke
                                            ObIArray<ColumnItem> &range_columns,
                                            ObQueryRangeProvider *&query_range)
 {
-  // jinmao TODO: 改成直接构造 query range，不要生成 IN 表达式间接去抽
+  // jinmao TODO: change to directly construct query range, do not generate IN expression indirectly to extract
   int ret = OB_SUCCESS;
   ObColumnRefRawExpr *word_col = NULL;
   ObOpRawExpr *in_expr = NULL;

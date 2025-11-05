@@ -59,7 +59,7 @@ int ObCreateDatabaseExecutor::execute(ObExecContext &ctx, ObCreateDatabaseStmt &
     ret = OB_ERR_UNEXPECTED;
     SQL_ENG_LOG(WARN, "fail to get physical plan ctx", K(ret), K(ctx), K(common_rpc_proxy));
   } else {
-    //为什么create database的协议需要返回database_id，暂时没有用上。
+    // Why does the create database protocol need to return database_id, it's not being used for now.
     if (OB_FAIL(common_rpc_proxy->create_database(create_database_arg, database_id))) {
       SQL_ENG_LOG(WARN, "rpc proxy create table failed", K(ret));
     } else {

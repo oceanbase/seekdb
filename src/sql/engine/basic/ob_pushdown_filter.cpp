@@ -178,7 +178,7 @@ int ObPushdownBlackFilterNode::postprocess()
 {
   int ret = OB_SUCCESS;
   if (0 == filter_exprs_.count()) {
-    // 没有merge
+    // No merge
     OZ(filter_exprs_.init(1));
     OZ(filter_exprs_.push_back(tmp_expr_));
   }
@@ -450,7 +450,7 @@ int ObPushdownFilterConstructor::create_black_filter_node(
       }
     }
   } else {
-    // 常量表达式
+    // constant expression
   }
   if (OB_SUCC(ret)) {
     black_filter_node->tmp_expr_ = expr;
@@ -1802,8 +1802,7 @@ int ObPushdownFilterExecutor::prepare_skip_filter(bool disable_bypass)
 
   return ret;
 }
-
-// 初始化需要被清理的标记
+// Initialize the markers that need to be cleaned
 int ObAndFilterExecutor::init_evaluated_datums(bool &is_valid)
 {
   int ret = OB_SUCCESS;
@@ -1859,10 +1858,9 @@ int ObPhysicalFilterExecutor::filter(blocksstable::ObStorageDatum *datums, int64
   }
   return ret;
 }
-
-// 根据calc expr来设置每个列（空集）对应的清理Datum
-// 这里将clear的datum放在filter node是为了更精准处理，其实只有涉及到的表达式清理即可，其他不需要清理
-// 还有类似空集需要清理
+// According to calc expr to set each column (empty set) corresponding cleanup Datum
+// Here placing the clear datum in the filter node is for more precise processing, actually only the involved expressions need to be cleared, others do not need to be cleared
+// There are similar empty sets that need to be cleaned
 int ObPhysicalFilterExecutor::init_evaluated_datums(bool &is_valid)
 {
   int ret = OB_SUCCESS;

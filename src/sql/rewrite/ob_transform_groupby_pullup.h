@@ -60,13 +60,13 @@ private:
     uint64_t table_id_;
     uint64_t not_null_column_table_id_;
     uint64_t not_null_column_id_;
-    //如果是在outer join的右侧或者full join的两侧，需要找到一个not_null_column备用；
+    // If it is on the right side of an outer join or both sides of a full join, a not_null_column needs to be found as a backup;
     bool need_check_null_propagate_;
-    //如果是outer join的右表或者是full join的child table
-    //不能有having condition
+    // If it is the right table of an outer join or the child table of a full join
+    // No having condition
     bool need_check_having_;
-    //是否是否有merge hint，强制group by pull up
-    //不考虑代价
+    // Whether there is a merge hint, force group by pull up
+    // Do not consider the cost
     bool need_merge_;
     TO_STRING_KV(K_(parent_table),
                  K_(table_id),
@@ -147,11 +147,11 @@ private:
                                   ObIArray<ObRawExpr *> &exprs);
   /**
    * @brief wrap_case_when
-   * 如果当前视图是left outer join的右表或者right outer join的左表
-   * 需要对null reject的new column expr包裹一层case when
-   * 需要寻找视图的非空列，如果null_reject_columns不为空，
-   * 直接拿第一个使用，否则需要在stmt中查找非空列，
-   * 也可以是试图内基表的pk，但不能是outer join的补null侧
+   * If the current view is the right table of a left outer join or the left table of a right outer join
+   * need to wrap the new column expr for null reject with a case when
+   * need to find a non-null column in the view, if null_reject_columns is not empty,
+   * directly use the first one, otherwise need to find a non-null column in stmt,
+   * it can also be the pk of the base table within the view, but cannot be the null-complementing side of the outer join
    */
   int wrap_case_when(ObSelectStmt &child_stmt,
                     ObRawExpr *not_null_column,

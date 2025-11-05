@@ -594,7 +594,7 @@ int ObPLPackageManager::get_package_var(const ObPLResolveCtx &resolve_ctx, uint6
         } else if (OB_ISNULL(var)) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("package var not found", K(package_id), K(var_idx), K(ret));
-        } else if (!var->is_readonly() && OB_ISNULL(package_body)) {// 对于非constant值, 需要保证body的合法性
+        } else if (!var->is_readonly() && OB_ISNULL(package_body)) {// For non-constant values, need to ensure the validity of the body
           OZ (get_cached_package(resolve_ctx, package_id, package_spec, package_body, false));
         }
       }
@@ -895,7 +895,7 @@ int ObPLPackageManager::get_package_routine(const ObPLResolveCtx &ctx,
     } else {
       ObPLPackageState *dummy_state = NULL;
       if (OB_SUCC(ret) && OB_NOT_NULL(package_body->get_init_routine())) {
-        // call一个pacakge 函数的时候，去执行package的init 函数
+        // call a package function when executing the package's init function
         OZ (get_package_state(ctx, exec_ctx, package_id, dummy_state));
       }
     }
@@ -1511,7 +1511,7 @@ int ObPLPackageManager::get_package_item_state(const ObPLResolveCtx &resolve_ctx
         if (OB_SUCC(ret) && package.get_expr_op_size() > 0)  {
           OZ (exec_ctx.init_expr_op(package.get_expr_op_size()));
         }
-        // 要先加到SESSION上然后在初始化, 反之会造成死循环
+        // You need to add it to the SESSION first and then initialize, otherwise it will cause a deadlock
         OZ (resolve_ctx.session_info_.add_package_state(package_id, package_state));
         OX (need_destruct_package_state = false);
         if (OB_SUCC(ret)) {
@@ -1523,14 +1523,14 @@ int ObPLPackageManager::get_package_item_state(const ObPLResolveCtx &resolve_ctx
         if (OB_FAIL(ret)) {
         } else if (OB_FAIL(package.instantiate_package_state(resolve_ctx, exec_ctx, *package_state, spec, body))) {
           if (OB_SUCCESS != (tmp_ret = resolve_ctx.session_info_.del_package_state(package_id))) {
-            // 删除失败, 为了避免一个未知的状态, 重新初始化这段内存, 使之是无效状态
+            // Deletion failed, to avoid an unknown state, reinitialize this memory to be in an invalid state
             package_state->reset(&(resolve_ctx.session_info_));
             package_state->~ObPLPackageState();
             new (package_state)
               ObPLPackageState(package_id, state_version, package.get_serially_reusable());
             LOG_WARN("failed to del package state", K(ret), K(package_id), K(tmp_ret));
           } else {
-            // 删除成功将内存释放
+            // Deletion successful will release memory
             package_state->reset(&(resolve_ctx.session_info_));
             package_state->~ObPLPackageState();
             session_allocator.free(package_state);
@@ -1655,15 +1655,15 @@ int ObPLPackageManager::add_package_to_plan_cache(const ObPLResolveCtx &resolve_
           LOG_INFO("package has been added by others, need not add again", K(package_id), K(ret));
           ret = OB_SUCCESS;
         } else if (OB_REACH_MEMORY_LIMIT == ret || OB_SQL_PC_PLAN_SIZE_LIMIT == ret) {
-          if (REACH_TIME_INTERVAL(1000000)) { //1s, 当内存达到上限时, 该日志打印会比较频繁, 所以以1s为间隔打印
+          if (REACH_TIME_INTERVAL(1000000)) { //1s, When memory reaches its limit, this log print will be relatively frequent, so it is printed at an interval of 1s
             LOG_INFO("can't add plan to plan cache",
                      K(package_id), K(package->get_mem_size()), K(plan_cache->get_mem_used()), K(ret));
           }
           ret = OB_SUCCESS;
-        } else if (OB_REACH_MAX_CONCURRENT_NUM != ret) { //如果是达到限流上限, 则将错误码抛出去
+        } else if (OB_REACH_MAX_CONCURRENT_NUM != ret) { // If it reaches the rate limit upper limit, then throw out the error code
           LOG_WARN("add package to ObPlanCache failed",
                     K(package_id), K(ret), K(package->get_dependency_table()));
-          ret = OB_SUCCESS; //add package出错, 覆盖错误码, 确保因plan cache失败不影响正常执行路径
+          ret = OB_SUCCESS; // add package error, overwrite error code, ensure that plan cache failure does not affect the normal execution path
         }
       } else {
         LOG_INFO("add pl package to plan cache success",

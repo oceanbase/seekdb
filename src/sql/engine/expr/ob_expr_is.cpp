@@ -40,7 +40,7 @@ int ObExprIsBase::calc_result_type2(ObExprResType &type,
   } else {
     // always allow NULL value
     type.set_result_flag(NOT_NULL_FLAG);
-    //is operator第二个参数必须保持原来的NULL或者FALSE, TRUE
+    //is operator second parameter must keep the original NULL or FALSE, TRUE
     type2.set_calc_type(type2.get_type());
 
     ObRawExpr *param2 = op_expr->get_param_expr(1);

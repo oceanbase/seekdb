@@ -222,7 +222,7 @@ ObTableLoadMemCompactor::~ObTableLoadMemCompactor() { reset(); }
 void ObTableLoadMemCompactor::reset()
 {
   is_inited_ = false;
-  // 先把sample线程停了
+  // First stop the sample thread
   mem_ctx_.has_error_ = true;
   if (nullptr != task_scheduler_) {
     task_scheduler_->stop();
@@ -236,7 +236,7 @@ void ObTableLoadMemCompactor::reset()
   op_ = nullptr;
   mem_ctx_.reset();
   finish_thread_cnt_ = 0;
-  // 分配器最后reset
+  // dispatcher final reset
   allocator_.reset();
 }
 
@@ -255,7 +255,7 @@ int ObTableLoadMemCompactor::init(ObTableLoadMergeMemSortOp *op)
     op_ = op;
 
     if (OB_UNLIKELY(store_ctx_->thread_cnt_ < 2)) {
-      // 排序至少需要两个线程
+      // Sorting requires at least two threads
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("invalid args", KR(ret), K(store_ctx_->thread_cnt_));
     } else {
@@ -274,7 +274,7 @@ int ObTableLoadMemCompactor::init(ObTableLoadMergeMemSortOp *op)
 
       mem_ctx_.total_thread_cnt_ = store_ctx_->thread_cnt_;
       mem_ctx_.dump_thread_cnt_ =
-        MAX(mem_ctx_.total_thread_cnt_ / 3, 1); //暂时先写成1/3，后续再优化
+        MAX(mem_ctx_.total_thread_cnt_ / 3, 1); // temporarily write as 1/3, optimize later
       mem_ctx_.load_thread_cnt_ = mem_ctx_.total_thread_cnt_ - mem_ctx_.dump_thread_cnt_;
     }
 
@@ -300,7 +300,7 @@ int ObTableLoadMemCompactor::init(ObTableLoadMergeMemSortOp *op)
 int ObTableLoadMemCompactor::init_scheduler()
 {
   int ret = OB_SUCCESS;
-  // 初始化task_scheduler_
+  // Initialize task_scheduler_
   if (OB_ISNULL(task_scheduler_ = OB_NEWx(ObTableLoadTaskThreadPoolScheduler, (&allocator_),
                                           1 /*thread_count*/, store_ctx_->ctx_->param_.table_id_,
                                           "MemSample", store_ctx_->ctx_->session_info_))) {
@@ -338,7 +338,7 @@ int ObTableLoadMemCompactor::construct_compactors()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected not external table", KR(ret), KPC(table_store));
   } else {
-    // 根据table_store构造任务
+    // Construct task according to table_store
     FOREACH_X(it, *table_store, OB_SUCC(ret))
     {
       ObDirectLoadTableHandleArray *table_handle_array = it->second;
@@ -349,7 +349,7 @@ int ObTableLoadMemCompactor::construct_compactors()
       }
     }
     if (OB_SUCC(ret)) {
-      // 清空table_store, 以便在排序过程中能释放磁盘空间
+      // Clear table_store to release disk space during sorting process
       table_store->clear();
     }
   }
@@ -390,19 +390,19 @@ int ObTableLoadMemCompactor::start_load()
   ObTableLoadTableCtx *ctx = store_ctx_->ctx_;
   for (int64_t i = 0; OB_SUCC(ret) && i < mem_ctx_.load_thread_cnt_; ++i) {
     ObTableLoadTask *task = nullptr;
-    // 1. 分配task
+    // 1. assign task
     if (OB_FAIL(ctx->alloc_task(task))) {
       LOG_WARN("fail to alloc task", KR(ret));
     }
-    // 2. 设置processor
+    // 2. Set processor
     else if (OB_FAIL(task->set_processor<LoadTaskProcessor>(ctx, &mem_ctx_))) {
       LOG_WARN("fail to set load task processor", KR(ret));
     }
-    // 3. 设置callback
+    // 3. Set callback
     else if (OB_FAIL(task->set_callback<CompactTaskCallback>(ctx, this))) {
       LOG_WARN("fail to set compact task callback", KR(ret));
     }
-    // 4. 把task放入调度器
+    // 4. put task into scheduler
     else if (OB_FAIL(store_ctx_->task_scheduler_->add_task(i, task))) {
       LOG_WARN("fail to add task", KR(ret), KPC(task));
     }
@@ -422,19 +422,19 @@ int ObTableLoadMemCompactor::start_dump()
   const int64_t dump_thread_start_idx = mem_ctx_.load_thread_cnt_;
   for (int64_t i = 0; OB_SUCC(ret) && i < mem_ctx_.dump_thread_cnt_; ++i) {
     ObTableLoadTask *task = nullptr;
-    // 1. 分配task
+    // 1. assign task
     if (OB_FAIL(ctx->alloc_task(task))) {
       LOG_WARN("fail to alloc task", KR(ret));
     }
-    // 2. 设置processor
+    // 2. Set processor
     else if (OB_FAIL(task->set_processor<DumpTaskProcessor>(ctx, &mem_ctx_))) {
       LOG_WARN("fail to set dump task processor", KR(ret));
     }
-    // 3. 设置callback
+    // 3. Set callback
     else if (OB_FAIL(task->set_callback<CompactTaskCallback>(ctx, this))) {
       LOG_WARN("fail to set compactor task callback", KR(ret));
     }
-    // 4. 把task放入调度器
+    // 4. put task into scheduler
     else if (OB_FAIL(store_ctx_->task_scheduler_->add_task(dump_thread_start_idx + i, task))) {
       LOG_WARN("fail to add task", KR(ret), KPC(task));
     }
@@ -452,19 +452,19 @@ int ObTableLoadMemCompactor::start_sample()
   int ret = OB_SUCCESS;
   ObTableLoadTableCtx *ctx = store_ctx_->ctx_;
   ObTableLoadTask *task = nullptr;
-  // 1. 分配task
+  // 1. assign task
   if (OB_FAIL(ctx->alloc_task(task))) {
     LOG_WARN("fail to alloc task", KR(ret));
   }
-  // 2. 设置processor
+  // 2. Set processor
   else if (OB_FAIL(task->set_processor<SampleTaskProcessor>(ctx, &mem_ctx_))) {
     LOG_WARN("fail to set sample task processor", KR(ret));
   }
-  // 3. 设置callback
+  // 3. Set callback
   else if (OB_FAIL(task->set_callback<CompactTaskCallback>(ctx, this))) {
     LOG_WARN("fail to set compactor task callback", KR(ret));
   }
-  // 4. 把task放入调度器
+  // 4. Put task into scheduler
   else if (OB_FAIL(task_scheduler_->add_task(0, task))) {
     LOG_WARN("fail to add task", KR(ret), KPC(task));
   }
@@ -481,19 +481,19 @@ int ObTableLoadMemCompactor::start_finish()
   int ret = OB_SUCCESS;
   ObTableLoadTableCtx *ctx = store_ctx_->ctx_;
   ObTableLoadTask *task = nullptr;
-  // 1. 分配task
+  // 1. assign task
   if (OB_FAIL(ctx->alloc_task(task))) {
     LOG_WARN("fail to alloc task", KR(ret));
   }
-  // 2. 设置processor
+  // 2. Set processor
   else if (OB_FAIL(task->set_processor<FinishTaskProcessor>(ctx, this))) {
     LOG_WARN("fail to set finish task processor", KR(ret));
   }
-  // 3. 设置callback
+  // 3. Set callback
   else if (OB_FAIL(task->set_callback<FinishTaskCallback>(ctx))) {
     LOG_WARN("fail to set finish task callback", KR(ret));
   }
-  // 4. 把task放入调度器
+  // 4. Put task into scheduler
   else if (OB_FAIL(store_ctx_->task_scheduler_->add_task(0, task))) {
     LOG_WARN("fail to add task", KR(ret), KPC(task));
   }
@@ -523,7 +523,7 @@ int ObTableLoadMemCompactor::start_compact()
 
 void ObTableLoadMemCompactor::stop()
 {
-  set_has_error(); //先设置为error，因为stop的场景就是error
+  set_has_error(); //Set to error first, because the stop scenario is an error
   if (nullptr != task_scheduler_) {
     task_scheduler_->stop();
   }

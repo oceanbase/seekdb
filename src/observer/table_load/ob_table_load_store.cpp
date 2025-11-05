@@ -262,18 +262,18 @@ int ObTableLoadStore::pre_merge(
     bool trans_exist = false;
     ObTableLoadArray<ObTableLoadTransId> store_committed_trans_id_array;
     allocator.set_tenant_id(MTL_ID());
-    // 1. 冻结状态, 防止后续继续创建trans
+    // 1. Frozen state, prevent further creation of trans
     if (OB_FAIL(store_ctx_->set_status_frozen())) {
       LOG_WARN("fail to set store status frozen", KR(ret));
     }
-    // 2. 检查当前是否还有trans没有结束
+    // 2. Check if there are any trans that have not ended yet
     else if (OB_FAIL(store_ctx_->check_exist_trans(trans_exist))) {
       LOG_WARN("fail to check exist trans", KR(ret));
     } else if (OB_UNLIKELY(trans_exist)) {
       ret = OB_ENTRY_EXIST;
       LOG_WARN("trans already exist", KR(ret));
     } else if (!ctx_->param_.px_mode_) {
-      // 3. 检查数据一致性
+      // 3. Check data consistency
       if (OB_FAIL(
                 store_ctx_->get_committed_trans_ids(store_committed_trans_id_array, allocator))) {
         LOG_WARN("fail to get committed trans ids", KR(ret));
@@ -320,19 +320,19 @@ int ObTableLoadStore::start_merge()
       }
     } else {
       ObTableLoadTask *task = nullptr;
-      // 1. 分配task
+      // 1. assign task
       if (OB_FAIL(ctx_->alloc_task(task))) {
         LOG_WARN("fail to alloc task", KR(ret));
       }
-      // 2. 设置processor
+      // 2. Set processor
       else if (OB_FAIL(task->set_processor<MergeTaskProcessor>(ctx_))) {
         LOG_WARN("fail to set merge task processor", KR(ret));
       }
-      // 3. 设置callback
+      // 3. Set callback
       else if (OB_FAIL(task->set_callback<MergeTaskCallback>(ctx_))) {
         LOG_WARN("fail to set merge task callback", KR(ret));
       }
-      // 4. 把task放入调度器
+      // 4. put task into scheduler
       else if (OB_FAIL(store_ctx_->task_scheduler_->add_task(0, task))) {
         LOG_WARN("fail to add task", KR(ret), KPC(task));
       }
@@ -374,8 +374,8 @@ int ObTableLoadStore::commit(ObTableLoadResultInfo &result_info,
     } else if (OB_FAIL(sql_statistics.merge(store_ctx_->sql_stats_))) {
       LOG_WARN("fail to merge sql stats", KR(ret));
     }
-    // 全量旁路导入的dml_stat在执行节点更新
-    // 增量旁路导入的dml_stat收集到协调节点在事务中更新
+    // Full bypass import dml_stat is updated at the execution node
+    // Incremental bypass import's dml_stat collected on the coordinator node is updated in the transaction
     else if (ObDirectLoadMethod::is_full(param_.method_) &&
              OB_FAIL(ObOptStatMonitorManager::update_dml_stat_info_from_direct_load(dml_stats.dml_stat_array_))) {
       LOG_WARN("fail to update dml stat info", KR(ret));
@@ -604,27 +604,27 @@ int ObTableLoadStore::clean_up_trans(ObTableLoadStoreTrans *trans)
   int ret = OB_SUCCESS;
   LOG_DEBUG("store clean up trans");
   ObTableLoadTransStoreWriter *store_writer = nullptr;
-  // 取出当前store_writer
+  // Retrieve the current store_writer
   if (OB_FAIL(trans->get_store_writer(store_writer))) {
     LOG_WARN("fail to get store writer", KR(ret));
   } else {
     for (int32_t session_id = 1; OB_SUCC(ret) && session_id <= param_.write_session_count_;
          ++session_id) {
       ObTableLoadTask *task = nullptr;
-      // 1. 分配task
+      // 1. assign task
       if (OB_FAIL(ctx_->alloc_task(task))) {
         LOG_WARN("fail to alloc task", KR(ret));
       }
-      // 2. 设置processor
+      // 2. Set processor
       else if (OB_FAIL(task->set_processor<CleanUpTaskProcessor>(ctx_, trans, store_writer,
                                                                  session_id))) {
         LOG_WARN("fail to set clean up task processor", KR(ret));
       }
-      // 3. 设置callback
+      // 3. Set callback
       else if (OB_FAIL(task->set_callback<CleanUpTaskCallback>(ctx_))) {
         LOG_WARN("fail to set clean up task callback", KR(ret));
       }
-      // 4. 把task放入调度器
+      // 4. Put task into the scheduler
       else if (OB_FAIL(store_ctx_->task_scheduler_->add_task(session_id - 1, task))) {
         LOG_WARN("fail to add task", KR(ret), K(session_id), KPC(task));
       }
@@ -747,7 +747,7 @@ public:
 private:
   ObTableLoadTableCtx * const ctx_;
   ObTableLoadStoreTrans * const trans_;
-  ObTableLoadTransStoreWriter * const store_writer_; // 为了保证接收完本次写入结果之后再让store的引用归零
+  ObTableLoadTransStoreWriter * const store_writer_; // To ensure that the store's reference is reset only after receiving the result of this write operation
 };
 
 int ObTableLoadStore::write(const ObTableLoadTransId &trans_id, int32_t session_id,
@@ -762,14 +762,14 @@ int ObTableLoadStore::write(const ObTableLoadTransId &trans_id, int32_t session_
     ObTableLoadStoreTrans *trans = nullptr;
     ObTableLoadTransStoreWriter *store_writer = nullptr;
     ObTableLoadMutexGuard guard;
-    // 取出当前trans
+    // Retrieve the current trans
     if (OB_FAIL(store_ctx_->get_trans(trans_id, trans))) {
       LOG_WARN("fail to get trans", KR(ret));
     }
     else if (OB_FAIL(trans->check_trans_status(ObTableLoadTransStatusType::RUNNING))) {
       LOG_WARN("fail to check trans status", KR(ret));
     }
-    // 取出store_writer
+    // retrieve store_writer
     else if (OB_FAIL(trans->get_store_writer(store_writer))) {
       LOG_WARN("fail to get store writer", KR(ret));
     //} else if (OB_FAIL(store_writer->advance_sequence_no(session_id, partition_id, sequence_no, guard))) {
@@ -794,11 +794,11 @@ int ObTableLoadStore::write(const ObTableLoadTransId &trans_id, int32_t session_
     } else {
       ObTableLoadTask *task = nullptr;
       WriteTaskProcessor *processor = nullptr;
-      // 1. 分配task
+      // 1. assign task
       if (OB_FAIL(ctx_->alloc_task(task))) {
         LOG_WARN("fail to alloc task", KR(ret));
       }
-      // 2. 设置processor
+      // 2. Set processor
       else if (OB_FAIL(task->set_processor<WriteTaskProcessor>(ctx_, trans, store_writer,
                                                               session_id))) {
         LOG_WARN("fail to set write task processor", KR(ret));
@@ -808,11 +808,11 @@ int ObTableLoadStore::write(const ObTableLoadTransId &trans_id, int32_t session_
       } else if (OB_FAIL(processor->set_row_array(row_array))) {
         LOG_WARN("fail to set objs", KR(ret));
       }
-      // 3. 设置callback
+      // 3. Set callback
       else if (OB_FAIL(task->set_callback<WriteTaskCallback>(ctx_, trans, store_writer))) {
         LOG_WARN("fail to set write task callback", KR(ret));
       }
-      // 4. 把task放入调度器
+      // 4. put task into scheduler
       else if (OB_FAIL(store_ctx_->task_scheduler_->add_task(session_id - 1, task))) {
         LOG_WARN("fail to add task", KR(ret), K(session_id), KPC(task));
       }
@@ -906,7 +906,7 @@ public:
 private:
   ObTableLoadTableCtx * const ctx_;
   ObTableLoadStoreTrans * const trans_;
-  ObTableLoadTransStoreWriter * const store_writer_; // 为了保证接收完本次写入结果之后再让store的引用归零
+  ObTableLoadTransStoreWriter * const store_writer_; // To ensure that the reference to store is reset only after receiving the result of this write operation
 };
 
 int ObTableLoadStore::flush(ObTableLoadStoreTrans *trans)
@@ -918,7 +918,7 @@ int ObTableLoadStore::flush(ObTableLoadStoreTrans *trans)
   } else {
     LOG_DEBUG("store flush");
     ObTableLoadTransStoreWriter *store_writer = nullptr;
-    // 取出当前store_writer
+    // Retrieve the current store_writer
     if (OB_FAIL(trans->get_store_writer(store_writer))) {
       LOG_WARN("fail to get store writer", KR(ret));
     }
@@ -930,20 +930,20 @@ int ObTableLoadStore::flush(ObTableLoadStoreTrans *trans)
     } else {
       for (int32_t session_id = 1; OB_SUCC(ret) && session_id <= param_.write_session_count_; ++session_id) {
         ObTableLoadTask *task = nullptr;
-        // 1. 分配task
+        // 1. assign task
         if (OB_FAIL(ctx_->alloc_task(task))) {
           LOG_WARN("fail to alloc task", KR(ret));
         }
-        // 2. 设置processor
+        // 2. Set processor
         else if (OB_FAIL(task->set_processor<FlushTaskProcessor>(
                   ctx_, trans, store_writer, session_id))) {
           LOG_WARN("fail to set flush task processor", KR(ret));
         }
-        // 3. 设置callback
+        // 3. Set callback
         else if (OB_FAIL(task->set_callback<FlushTaskCallback>(ctx_, trans, store_writer))) {
           LOG_WARN("fail to set flush task callback", KR(ret));
         }
-        // 4. 把task放入调度器
+        // 4. put task into scheduler
         else if (OB_FAIL(store_ctx_->task_scheduler_->add_task(session_id - 1, task))) {
           LOG_WARN("fail to add task", KR(ret), K(session_id), KPC(task));
         }

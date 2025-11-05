@@ -290,7 +290,7 @@ int ObExprPLGetCursorAttr::calc_pl_get_cursor_attr(
           ObString rowid;
           if (OB_FAIL(cursor->get_rowid(rowid))) {
             LOG_WARN("fail to get rowcount attr", K(ret));
-            // is_for_update && !has_hidden_rowid,说明是多表join且没有指定唯一for update 表
+            // is_for_update && !has_hidden_rowid, indicates that it is a multi-table join without specifying a unique for update table
             if (OB_INVALID_ROWID == ret && cursor->is_for_update() && !cursor->has_hidden_rowid()) {
               ret = OB_SUCCESS;
               expr_datum.set_null();

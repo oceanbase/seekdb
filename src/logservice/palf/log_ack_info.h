@@ -65,9 +65,9 @@ struct LogMemberAckInfo
         last_flushed_end_lsn_(last_flushed_end_lsn)
   { }
   common::ObMember member_;
-  // 降级时 double check
+  // Downgrade when double check
   int64_t last_ack_time_us_;
-  // 升级时double check
+  // Upgrade time double check
   LSN last_flushed_end_lsn_;
 
   void operator=(const LogMemberAckInfo &ack_info)

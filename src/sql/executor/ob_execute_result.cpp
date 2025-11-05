@@ -183,7 +183,7 @@ int ObAsyncExecuteResult::open(ObExecContext &ctx)
   } else if (OB_FAIL(session->replace_user_variables(ctx, scanner_->get_session_var_map()))) {
     LOG_WARN("replace user variables failed", K(ret));
   } else if (field_count_ <= 0) {
-    //远端没有数据返回，因此不需要创建row buffer
+    // Remote did not return data, therefore no need to create row buffer
   } else if (OB_FAIL(ob_create_row(ctx.get_allocator(), field_count_, cur_row_))) {
     LOG_WARN("create current row failed", K(ret), K(field_count_));
   } else {

@@ -166,12 +166,12 @@ int ObTableLoadBackupPartScanner_V_1_4::locate_subpart_macro_block(int64_t subpa
   if (total_macro_block_count > 0) {
     int64_t valid_subpart_count = subpart_count;
     if (total_macro_block_count < subpart_count * MIN_SUBPART_MACRO_BLOCK_COUNT) {
-      // 宏块数目太少, 分不出subpart_count份, 重新计算能分出几份
+      // The number of macroblocks is too small, cannot be divided into subpart_count parts, recalculate how many parts can be divided
       valid_subpart_count =  MAX(total_macro_block_count / MIN_SUBPART_MACRO_BLOCK_COUNT, 1);
     }
     const int64_t count_per_subpart = total_macro_block_count / valid_subpart_count;
     const int64_t remain_count = total_macro_block_count - count_per_subpart * valid_subpart_count;
-    // 比如16个宏块分成5份: 4 3 3 3 3
+    // For example, 16 macroblocks divided into 5 parts: 4 3 3 3 3
     // count_per_subpart = 3
     // remain_count = 1
     // [0, 4) [4, 7) [7, 10) [10, 13) [13, 16)

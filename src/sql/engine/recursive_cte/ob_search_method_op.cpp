@@ -99,7 +99,7 @@ int ObBreadthFirstSearchOp::init_new_nodes(ObBFSTreeNode *last_bstnode, int64_t 
 {
   int ret = OB_SUCCESS;
   void* childs_ptr = nullptr;
-  // 初始化树节点的内存
+  // Initialize tree node memory
   if (OB_UNLIKELY(0 == child_num)) {
     //do nothing
   } else if (OB_ISNULL(last_bstnode)) {
@@ -127,11 +127,11 @@ int ObBreadthFirstSearchOp::is_breadth_cycle_node(ObTreeNode &node)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("The last_bstnode and row an not be null", K(ret), KPC(row));
   } else {
-    // bst_root_ 的row_为空
+    // bst_root_ 's row_ is empty
     while(OB_SUCC(ret) && OB_NOT_NULL(tmp) && OB_NOT_NULL(tmp->stored_row_)) {
       ObChunkDatumStore::StoredRow* row_1st = row;
       ObChunkDatumStore::StoredRow* row_2nd = tmp->stored_row_;
-      // 从扁鹊看，对cycle的检测占了层次查询绝大多数时间，特别慢。
+      // From Bianque's perspective, the detection of cycle takes up most of the time in hierarchical queries, and it is particularly slow.
       if (OB_FAIL(is_same_row(*row_1st, *row_2nd, node.is_cycle_))) {
         LOG_WARN("Failed to compare the two row", K(ret), KPC(row_1st), KPC(row_2nd));
       } else if (node.is_cycle_) {

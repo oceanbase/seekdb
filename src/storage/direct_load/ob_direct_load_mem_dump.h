@@ -50,7 +50,7 @@ public:
     ObArenaAllocator allocator_; // just for safe_allocator_
   public:
     ObSafeArenaAllocator safe_allocator_;
-    //注意，如果这个tables_会被多线程操作，必须加锁
+    // Note, if this tables_ is to be operated by multiple threads, it must be locked
     ObDirectLoadMultiMap<common::ObTabletID, std::pair<int64_t, ObDirectLoadTableHandle>>
       tables_;
     common::ObArray<ChunkType *> mem_chunk_array_;

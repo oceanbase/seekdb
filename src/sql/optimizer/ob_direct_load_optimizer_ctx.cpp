@@ -99,7 +99,7 @@ int ObDirectLoadOptimizerCtx::init_direct_load_ctx(ObExecContext *exec_ctx, ObLo
           LOG_WARN("fail to check support direct load", K(ret));
         } else {
           dup_action_ = insert_mode_ == ObDirectLoadInsertMode::INC_REPLACE ?
-              ObLoadDupActionType::LOAD_REPLACE : stmt.get_load_arguments().dupl_action_;   //改写成replace语义
+              ObLoadDupActionType::LOAD_REPLACE : stmt.get_load_arguments().dupl_action_;   // rewrite to replace semantics
           can_use_direct_load_ = true;
         }
         if (ret == OB_NOT_SUPPORTED) {
@@ -347,7 +347,7 @@ int ObDirectLoadOptimizerCtx::check_support_direct_load(ObExecContext *exec_ctx)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("fail to get schema guard", K(ret), KP(sql_ctx));
   } else {
-    // insert overwrite和insert into select全量和增量不支持autocommit=false和session在事务内
+    // insert overwrite and insert into select full and incremental do not support autocommit=false and session within transaction
     if (is_insert_overwrite() || is_insert_into()) {
       bool auto_commit = false;
       ObSQLSessionInfo *session_info = nullptr;

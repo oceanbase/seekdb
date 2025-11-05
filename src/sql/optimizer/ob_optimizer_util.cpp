@@ -240,9 +240,7 @@ int ObOptimizerUtil::is_const_or_equivalent_expr(const ObIArray<OrderItem> &orde
   }
   return ret;
 }
-
-
-//要求exprs是不含常量表达式的表达式集合
+// Require exprs is a collection of expressions without constant expressions
 int ObOptimizerUtil::prefix_subset_exprs(const ObIArray<ObRawExpr *> &exprs,
                                          const ObIArray<ObRawExpr *> &ordering,
                                          const EqualSets &equal_sets,
@@ -255,12 +253,12 @@ int ObOptimizerUtil::prefix_subset_exprs(const ObIArray<ObRawExpr *> &exprs,
   bool is_break = false;
   int64_t covered_count = 0;
   ObBitSet<64> expr_idxs;
-  int64_t key_covered_count = 0; //标记索引能匹配多少列
+  int64_t key_covered_count = 0; // Mark how many columns the index can match
   for (int64_t i = 0; OB_SUCC(ret) && !is_break && i < ordering.count(); ++i) {
     bool is_found = false;
     for (int64_t j = 0; OB_SUCC(ret) && !is_found && j < exprs.count(); ++j) {
       if (expr_idxs.has_member(j)) {
-        //已经和其它序的表达式对应了，不再参与比较
+        // Already matched with expressions from other sequences, no longer participate in comparison
       } else if (is_expr_equivalent(ordering.at(i), exprs.at(j), equal_sets)) {
         is_found = true;
         if (OB_FAIL(expr_idxs.add_member(j))) {
@@ -270,10 +268,10 @@ int ObOptimizerUtil::prefix_subset_exprs(const ObIArray<ObRawExpr *> &exprs,
     }
     if (OB_SUCC(ret) && is_found) {
       ++covered_count;
-      key_covered_count = i + 1;//得到最长匹配索引的前缀
+      key_covered_count = i + 1;//get the prefix of the longest matching index
     }
     if (OB_SUCC(ret) && !is_found) {
-      //有一个序的表达式没有在exprs中被匹配，那么需要看这个表达式是否是常量，如果是常量可以跳过
+      // There is an expression in the sequence that was not matched in exprs, so we need to check if this expression is a constant, if it is a constant we can skip it
       bool is_const = false;
       if (OB_FAIL(is_const_expr(ordering.at(i), equal_sets, const_exprs, is_const))) {
         LOG_WARN("check expr is const expr failed", K(ret));
@@ -287,7 +285,7 @@ int ObOptimizerUtil::prefix_subset_exprs(const ObIArray<ObRawExpr *> &exprs,
     if (expr_idxs.has_member(i)) {
       for (int64_t j = 0; OB_SUCC(ret) && j < exprs.count(); ++j) {
         if (expr_idxs.has_member(j)) {
-          //已经和其它序的表达式对应了，不再参与比较
+          // Already matched with expressions from other sequences, no longer participate in comparison
         } else if (is_expr_equivalent(exprs.at(i), exprs.at(j), equal_sets)) {
           if (OB_FAIL(expr_idxs.add_member(j))) {
             LOG_WARN("add expr_idxs member", K(ret));
@@ -300,11 +298,11 @@ int ObOptimizerUtil::prefix_subset_exprs(const ObIArray<ObRawExpr *> &exprs,
   }
 
   if (OB_SUCC(ret)) {
-    if (covered_count == exprs.count()) { //所有表达式都被序覆盖
+    if (covered_count == exprs.count()) { // all expressions are covered
       is_covered = true;
     }
     if (NULL != match_count) {
-      *match_count = key_covered_count; //返回最长匹配索引前缀
+      *match_count = key_covered_count; // return longest matching index prefix
     }
   }
   return ret;
@@ -327,7 +325,7 @@ int ObOptimizerUtil::prefix_subset_exprs(const ObIArray<ObRawExpr *> &exprs,
       }
     }
     if (OB_SUCC(ret) && !is_prefix) {
-      //有一个序的表达式没有在exprs中被匹配，那么需要看这个表达式是否是常量，如果是常量可以跳过
+      // There is an expression in the sequence that was not matched in exprs, so we need to check if this expression is a constant, if it is a constant it can be skipped
       bool is_const = false;
       if (OB_FAIL(is_const_expr(ordering.at(i), equal_sets, const_exprs, is_const))) {
         LOG_WARN("check expr is const expr failed", K(ret));
@@ -338,8 +336,7 @@ int ObOptimizerUtil::prefix_subset_exprs(const ObIArray<ObRawExpr *> &exprs,
   }
   return ret;
 }
-
-//要求exprs是不含常量表达式的表达式集合
+// Require exprs is a collection of expressions without constant expressions
 int ObOptimizerUtil::adjust_exprs_by_ordering(ObIArray<ObRawExpr *> &exprs,
                                               const ObIArray<OrderItem> &ordering,
                                               const EqualSets &equal_sets,
@@ -375,7 +372,7 @@ int ObOptimizerUtil::adjust_exprs_by_ordering(ObIArray<ObRawExpr *> &exprs,
     }
     for (int64_t j = 0; OB_SUCC(ret) && !is_found && j < exprs.count(); ++j) {
       if (expr_idxs.has_member(j)) {
-        //已经和其它序的表达式对应了，不再参与比较
+        // Already matched with expressions from other sequences, no longer participates in comparison
       } else if (is_expr_equivalent(sort_key.expr_, exprs.at(j), equal_sets)) {
         is_found = true;
         if (OB_FAIL(adjusted_exprs.push_back(exprs.at(j)))) {
@@ -815,7 +812,7 @@ int ObOptimizerUtil::is_const_expr(const ObRawExpr* expr,
   if (OB_ISNULL(expr)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("expr passed in should not be NULL", K(expr), K(ret));
-  } else if (expr->is_const_expr()) { //为了能够将？+ const这种情况判断出是const，需要使用该函数判断
+  } else if (expr->is_const_expr()) { // In order to determine that ? + const is const, this function needs to be used for judgment
     is_const = true;
   } else if (find_item(const_exprs, expr)) {
     is_const = true;
@@ -950,7 +947,7 @@ int ObOptimizerUtil::get_expr_monotonicity_recursively(const ObRawExpr* expr,
     LOG_WARN("unexpected expression input is null error", K(ret));
   } else if (expr->is_const_raw_expr()) {
     // here if cannot merge into upperline
-    // select x + 10(:?) 通过返回结果看 + int 或者+ null都会被解析为const raw expr 只有返回类型能够区分
+    // select x + 10(:?) by returning result to see + int or + null will be parsed as const raw expr only return type can distinguish
     monotonicity = Monotonicity::CONST;
   } else if (expr->is_column_ref_expr()) {
     // there is an another col in expr but is not var
@@ -1102,9 +1099,9 @@ int ObOptimizerUtil::get_expr_monotonicity_recursively(const ObRawExpr* expr,
         } else if ((!l_expr->get_result_type().is_numeric_type() || !r_expr->get_result_type().is_numeric_type())
                    || (l_expr->get_result_type().is_float() || r_expr->get_result_type().is_float())
                    || (l_expr->get_result_type().is_double()|| r_expr->get_result_type().is_double())) {
-          // 字符串类型是不正确的 abc < abcd 但是abcz > abcdz, 而且字符串没有减法
+          // String type is incorrect abc < abcd but abcz > abcdz, and string does not have subtraction
           // explain select distinct(t0.c2)  from t0 where upper(t0.c2) + "ZHU" = "QINGZHU"; 
-          // 日期类型 日期加减有时候会是正确的。
+          // Date type date addition and subtraction might sometimes be correct.
           monotonicity = Monotonicity::NONE_MONO;
         } else if (OB_FAIL(SMART_CALL(get_expr_monotonicity_recursively(l_expr, var, ctx,
                                                                         left_mono, is_strict_l,
@@ -1458,7 +1455,7 @@ int ObOptimizerUtil::clone_expr_for_topk(ObRawExprFactory &expr_factory, ObRawEx
         break;
       }
       case ObRawExpr::EXPR_QUERY_REF :
-        // TODO@nijia.nj : 暂时没有逻辑需要copy window_function, 未来还是需要加上
+        // TODO@nijia.nj : temporarily no logic needs to copy window_function, future still needs to add
       case ObRawExpr::EXPR_WINDOW: {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("not support expr class", K(expr_class), K(ret));
@@ -1709,9 +1706,9 @@ int ObOptimizerUtil::extract_equal_exec_params(const ObIArray<ObRawExpr *> &expr
         ObExecParamRawExpr *exec_param = static_cast<ObExecParamRawExpr *>(cur_expr->get_param_expr(0));
         if (!find_item(my_params, exec_param)) {
           /*
-           * 在参数列表里没找到，说明这不是一个与自己相关的参数，跳过即可
-           * 例如NL的内表里有条件b1=? and b2=?,其中第一个？是一个const在parser阶段被参数化出来的，第二个？是外表相关
-           * 属性a1，那么第一个?在这里是肯定找不到的，跳过即可。
+           * Not found in the parameter list, indicating that this is not a parameter related to itself, skip it
+           * For example, in the internal table of NL, there are conditions b1=? and b2=?, where the first ? is a const parameterized during the parser phase, and the second ? is an attribute related to the external table a1
+           * Therefore, the first ? will definitely not be found here, so skip it.
            */
         } else if (OB_FAIL(left_key.push_back(exec_param->get_ref_expr()))) {
           LOG_WARN("push back error", K(ret));
@@ -1803,15 +1800,14 @@ int ObOptimizerUtil::extract_row_col_idx_for_in(const common::ObIArray<uint64_t>
                                                 bool &is_table_filter)
 {
   int ret = OB_SUCCESS;
-  // banliu.zyd: init_xxx 记录第一次extract的结果（即对IN表达式的第一个值）
-  // 我们期望对于IN中的每一项，extract结果都是一致的，如果有不一致，则不放到prefix_filter里
-  // 如果每一项都是一致的，最终是否放到prefix_filter再由外层决定
+  // banliu.zyd: init_xxx records the result of the first extract (i.e., the first value of the IN expression)
+  // We expect that for each item in IN, the extract result is consistent, if there is inconsistency, it will not be put into prefix_filter
+  // If each item is consistent, whether to put it into prefix_filter will be decided by the outer layer
   common::ObBitSet<> init_col_idxs = col_idxs;
   int64_t init_min_col_idx = min_col_idx;
   bool init_is_table_filter = false;
-  // banliu.zyd: tmp_xxx 临时记录extract的结果
-
-  // extract的结果是否和第一次结果一致
+  // banliu.zyd: tmp_xxx temporary record of extract result
+  // Is the result of extract consistent with the first result?
   bool equal = true;
   for (int64_t i = 0; OB_SUCC(ret) && equal && i < r_expr.get_param_count(); ++i) {
     const ObRawExpr *expr = r_expr.get_param_expr(i);
@@ -1846,12 +1842,11 @@ int ObOptimizerUtil::extract_row_col_idx_for_in(const common::ObIArray<uint64_t>
   }
   return ret;
 }
-
-//row的处理应该作为一个整体来处理，对query range有影响的有效的列应该为按照column_ids有序的索引列
-//比如(a,b,c,d) 为索引(a,b) + 主键(c,d)
-//(a,b) > (1,1) 那么对range有影响的列为a,b
-//(b,c) > (1,1) 或者 (b,a) > (1,1) b可能对range有影响，会把b放入col_idxs中，外面会再进行判断。
-//(b,c) > (a,b) 这种range是判断不出来的，不放入col_idxs中
+// The processing of row should be handled as a whole, and the valid columns that affect the query range should be index columns ordered by column_ids
+// For example (a,b,c,d) is index (a,b) + primary key (c,d)
+//(a,b) > (1,1) then the columns that affect the range are a,b
+//(b,c) > (1,1) or (b,a) > (1,1) b may affect range, it will put b into col_idxs, outside will judge again.
+//(b,c) > (a,b) this range is undeterminable, do not include in col_idxs
 int ObOptimizerUtil::extract_row_col_idx(
   const ObIArray<uint64_t> &column_ids,
   const int64_t index_col_pos,
@@ -1895,7 +1890,7 @@ int ObOptimizerUtil::extract_row_col_idx(
           LOG_WARN("extract column idx failed", K(ret));
         } else if (cur_col_idx < 0
                    || (last_idx >= 0 && last_idx + 1 != cur_col_idx)) {
-          // cur_col_idx为抽取的列id在column_idx中的pos
+          // cur_col_idx is the position of the extracted column id in column_idx
           check_next = false;
         } else if (OB_FAIL(col_idxs.add_member(cur_col_idx))) {
           LOG_WARN("failed to add idx to ObBitSet", K(ret), K(cur_col_idx));
@@ -2757,8 +2752,8 @@ int ObOptimizerUtil::is_exprs_unique(const ObIArray<ObRawExpr *> &exprs,
     ObRelIds remain_tables = all_tables;
     ObSqlBitSet<> skip_fd;
     int64_t exprs_count = -1;
-    //使用 extend_exprs 判断是否 unique, 同时扩充 extend_exprs, 当 extend_exprs 数量增加且未 unique 时,
-    //迭代进行检查, 暂时设定最大迭代次数为 10
+    // Use extend_exprs to determine if unique, while expanding extend_exprs, when the number of extend_exprs increases and it is not unique,
+    // Iterate for checking, temporarily set the maximum number of iterations to 10
     for (int64_t i = 0; OB_SUCC(ret) && !is_unique && i < 10
                         && extend_exprs.count() != exprs_count; ++i) {
       exprs_count = extend_exprs.count();
@@ -3181,7 +3176,7 @@ int ObOptimizerUtil::try_add_fd_item(const ObDMLStmt *stmt,
     LOG_WARN("get unexpected null", K(ret), K(stmt), K(index_schema));
   } else if (OB_ALL_VIRTUAL_TENANT_INFO_TID != table->ref_id_ &&
              is_virtual_table(table->ref_id_)) {
-    /*虚拟表不产生 fd 及 not null 信息*/
+    /*Virtual table does not generate fd and not null information*/
   } else if (!index_schema->get_rowkey_info().is_valid()) {
     // do nothing
   } else if (OB_FAIL(index_schema->get_rowkey_info().get_column_ids(column_ids))) {
@@ -3420,9 +3415,9 @@ int ObOptimizerUtil::convert_subplan_scan_fd_parent_exprs(ObRawExprFactory &expr
 }
 
 /**
- * 1. 根据连接条件将 candi fd item 提升为 fd item
- * 2. 确定连接是否为 n to 1 连接
- * 3. 根据连接性质确定连接结果的 fd item
+ * 1. Promote candi fd item to fd item based on connection conditions
+ * 2. Determine if the connection is an n to 1 connection
+ * 3. Determine the fd item of the connection result based on the nature of the connection
  * join_info == NULL means Cartesian join
  */
 int ObOptimizerUtil::add_fd_item_set_for_left_join(ObFdItemFactory &fd_factory,
@@ -3495,26 +3490,26 @@ int ObOptimizerUtil::check_need_sort(const ObIArray<OrderItem> &expected_order_i
 }
 
 /**
- * 假定下层序是 input_ordering，检查是否需要为 expected_order_exprs 分配 sort
- * （排序方向由 expected_order_directions 指定）
- * 当 input_ordering 能够决定 expected_order_exprs、expected_order_directions 序时不需要再分配 sort:
- * 1. expected_order_exprs 是 input_ordering 的前缀
- *  例如：expected_order_exprs: a,b
- *        input_ordering: a,b,c
- * 2. expected_order_exprs 与 input_ordering 公共前缀能决定其他expr
- *  例如：expected_order_exprs: a,b,e
- *        input_ordering: a,b,c
- *        其中 a,b function dependence c
- *  这里有一种特殊情况
- *       expected_order_exprs: e,f,g
- *       input_ordering: a,b,c
- *       两者没有公共前缀（i.e. right_match_count = 0）
- *       但假如有一组常量表达式是唯一的。那也不需要排序。
- *       常量+唯一意味着只有一行
- * 3. 使用函数依赖关系后能够找到公共前缀满足1、2
- * 例如：expected_order_exprs: a,f,b
- *        input_ordering: a,b,c
- *        其中 a,b function dependence c, a function dependence f
+ * Assume the lower-level order is input_ordering, check if sort needs to be allocated for expected_order_exprs
+ * (sort direction specified by expected_order_directions)
+ * When input_ordering can determine the order of expected_order_exprs, expected_order_directions, no need to allocate sort:
+ * 1. expected_order_exprs is a prefix of input_ordering
+ *  For example: expected_order_exprs: a,b
+ *               input_ordering: a,b,c
+ * 2. The common prefix between expected_order_exprs and input_ordering can determine other exprs
+ *  For example: expected_order_exprs: a,b,e
+ *               input_ordering: a,b,c
+ *               where a,b function dependence c
+ *  There is a special case here
+ *         expected_order_exprs: e,f,g
+ *         input_ordering: a,b,c
+ *         They have no common prefix (i.e. right_match_count = 0)
+ *         But if there is a set of unique constant expressions, sorting is also not needed.
+ *         Constant+unique means only one row
+ * 3. Using functional dependencies can find a common prefix that satisfies 1, 2
+ * For example: expected_order_exprs: a,f,b
+ *              input_ordering: a,b,c
+ *              where a,b function dependence c, a function dependence f
  **/
 int ObOptimizerUtil::check_need_sort(const ObIArray<ObRawExpr*> &expected_order_exprs,
                                      const ObIArray<ObOrderDirection> *expected_order_directions,
@@ -3550,7 +3545,7 @@ int ObOptimizerUtil::check_need_sort(const ObIArray<ObRawExpr*> &expected_order_
     if (OB_FAIL(get_fd_set_parent_exprs(fd_item_set, fd_set_parent_exprs))) {
       LOG_WARN("failed to get fd set parent exprs ", K(ret));
     }
-    //r_idx < right_count、l_idx == left_count 时仍可对 expected_order_exprs 进行检查
+    // r_idx < right_count, l_idx == left_count when it is still possible to check expected_order_exprs
     while (OB_SUCC(ret) && is_match && !find_unique && r_idx < right_count) {
       // if expected_order_expr = cast(col as dst_type), input_order_expr = col
       // and cast is lossless, no need to add sort for `cast(col as dst_type)`
@@ -3987,7 +3982,7 @@ int ObOptimizerUtil::check_push_down_expr(const ObRelIds &table_ids,
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("expr in or expr is null", K(ret));
     } else if (T_OP_AND == cur_expr->get_expr_type()) {
-      // and expr 中要求至少有一个子expr只涉及到该表的列
+      // and expr requires at least one sub-expr involving only columns of this table
       ObOpRawExpr *and_expr = static_cast<ObOpRawExpr *>(cur_expr);
       for (int64_t j = 0; OB_SUCC(ret) && j < and_expr->get_param_count(); ++j) {
         ObRawExpr *cur_and_expr = and_expr->get_param_expr(j);
@@ -4059,7 +4054,7 @@ int ObOptimizerUtil::generate_push_down_expr(const ObDMLStmt *stmt,
         }
       } else {
         ObOpRawExpr *new_param_expr = NULL;
-        // 在原or expr的子expr上有多个expr符合条件，需要生成一个新的and expr
+        // In the sub expr of the original or expr, there are multiple exprs that meet the criteria, a new and expr needs to be generated
         if (OB_FAIL(expr_factory.create_raw_expr(T_OP_AND, new_param_expr))) {
           LOG_WARN("failed to create and expr", K(ret));
         } else if (OB_ISNULL(new_param_expr)) {
@@ -4091,13 +4086,13 @@ int ObOptimizerUtil::generate_push_down_expr(const ObDMLStmt *stmt,
 
 /**
  * @brief ObOptimizerUtil::simplify_exprs
- * 给定一组 candi_exprs，该函数要找一个最小子集 root_exprs 能够唯一确定所有的 candi_exprs
- * 1. 尝试从candi exprs中找到一个拥有最小parent set的unique fd item, 如果找到了则root exprs = parent set
- * 2. 如未找到匹配的unique fd item, 则遍历not unique fd item, 对于parent set在candi exprs中的,
- *   (a) 检查fd item能否决定candi exprs中未匹配的expr
- *   (b) 检查fd item能够决定root exprs中的expr
- *   (c）如果满足(a), 或者fd item parent set的数量小于该 fd item能够决定的root exprs的数量, 则消除root exprs
- *       中能被决定的root expr, 并添加新的root expr
+ * Given a set of candi_exprs, this function aims to find a minimal subset root_exprs that can uniquely determine all candi_exprs
+ * 1. Try to find a unique fd item with the smallest parent set from candi exprs, if found then root exprs = parent set
+ * 2. If no matching unique fd item is found, traverse not unique fd items, for those whose parent set is in candi exprs,
+ *   (a) Check if the fd item can determine unmatched exprs in candi exprs
+ *   (b) Check if the fd item can determine exprs in root exprs
+ *   (c) If (a) is satisfied, or the number of fd item parent set is less than the number of root exprs that can be determined by this fd item, then eliminate the determinable root exprs
+ *       from root exprs and add new root expr
  */
 int ObOptimizerUtil::simplify_exprs(const ObFdItemSet &fd_item_set,
                                     const EqualSets &equal_sets,
@@ -4117,7 +4112,7 @@ int ObOptimizerUtil::simplify_exprs(const ObFdItemSet &fd_item_set,
   ObSqlBitSet<> root_exprs_set;
   int64_t expr_idx = -1;
   root_exprs.reset();
-  // 将 fd item 分为unique的和非unique的
+  // Split fd item into unique and non-unique
   for (int64_t i = 0; OB_SUCC(ret) && i < fd_item_set.count(); ++i) {
     if (OB_ISNULL(fd_item = fd_item_set.at(i))) {
       ret = OB_ERR_UNEXPECTED;
@@ -4130,7 +4125,7 @@ int ObOptimizerUtil::simplify_exprs(const ObFdItemSet &fd_item_set,
       LOG_WARN("failed to push back fd item", K(ret));
     }
   }
-  // 尝试找到一个parent set数量最少的unique fd item
+  // Try to find a unique fd item with the least number of parent sets
   for (int64_t i = 0; OB_SUCC(ret) && i < unique_fd_items.count(); ++i) {
     if (OB_ISNULL(fd_item = unique_fd_items.at(i)) ||
         OB_ISNULL(parent_exprs = fd_item->get_parent_exprs())) {
@@ -4146,7 +4141,7 @@ int ObOptimizerUtil::simplify_exprs(const ObFdItemSet &fd_item_set,
       }
     }
   }
-  // 找到一个unique fd item, 直接从candi exprs里找出匹配parent set的expr
+  // Find a unique fd item, directly find the matching expr from candi exprs for parent set
   if (OB_SUCC(ret) && NULL != min_parent_exprs) {
     for (int64_t i = 0; OB_SUCC(ret) && i < min_parent_exprs->count(); ++i) {
       if (find_equal_expr(candi_exprs, min_parent_exprs->at(i), equal_sets, expr_idx)) {
@@ -4156,7 +4151,7 @@ int ObOptimizerUtil::simplify_exprs(const ObFdItemSet &fd_item_set,
       } else { /* not find means min_parent_exprs->at(i) is const, do nothing */ }
     }
   }
-  // 没有找到unique fd item, 尝试遍历non unique fd items找到一个最小的root expr集合
+  // No unique fd item found, try traversing non unique fd items to find a minimal root expr set
   if (OB_SUCC(ret) && NULL == min_parent_exprs) {
     ObSqlBitSet<> eliminate_set;
     for (int64_t i = 0; OB_SUCC(ret) && eliminate_set.num_members() < candi_exprs.count() &&
@@ -4171,14 +4166,14 @@ int ObOptimizerUtil::simplify_exprs(const ObFdItemSet &fd_item_set,
       } else if (is_contain) {
         ObSEArray<ObRawExpr *, 8> left_domain;
         ObSEArray<ObRawExpr *, 8> right_domain;
-        // 生成新的root exprs集合
+        // Generate new root exprs collection
         for (int64_t j = 0; OB_SUCC(ret) && j < root_exprs.count(); ++j) {
           if (OB_FAIL(left_domain.push_back(root_exprs.at(j)))) {
             LOG_WARN("failed to push back root expr", K(ret));
           } else if (OB_FAIL(fd_item->check_expr_in_child(root_exprs.at(j), equal_sets, is_in_child))) {
             LOG_WARN("failed to check expr in child", K(ret));
           } else if (is_in_child) {
-            // root expr可以被其它expr决定
+            // root expr can be determined by other expr
           } else if (OB_FAIL(right_domain.push_back(root_exprs.at(j)))) {
             LOG_WARN("failed to push back root expr", K(ret));
           }
@@ -4194,7 +4189,7 @@ int ObOptimizerUtil::simplify_exprs(const ObFdItemSet &fd_item_set,
             }
           }
         }
-        // 检查当前fd item能否消除新的candi expr
+        // Check if the current fd item can eliminate the new candi expr
         for (int64_t j = 0; OB_SUCC(ret) && j < candi_exprs.count(); ++j) {
           if (eliminate_set.has_member(j)) {
             // do nothing
@@ -4208,8 +4203,8 @@ int ObOptimizerUtil::simplify_exprs(const ObFdItemSet &fd_item_set,
             LOG_WARN("failed to add member", K(ret));
           }
         }
-        // 如果当前fd item消除了新的candi expr或者新的root expr集合比旧的root expr集合数量更少, 则用
-        // 新的root expr集合替换旧的
+        // If the current fd item eliminates new candi expr or the new root expr set has fewer items than the old root expr set, then use
+        // New root expr collection replaces old
         if (OB_SUCC(ret)) {
           ObIArray<ObRawExpr*> &new_root_exprs = left_domain.count() <= right_domain.count()
                                                  ? left_domain : right_domain;
@@ -4227,7 +4222,7 @@ int ObOptimizerUtil::simplify_exprs(const ObFdItemSet &fd_item_set,
         LOG_WARN("failed to add member", K(ret));
       }
     }
-    // 所有non unique fd item都遍历过了, 但是还有其它无法被决定的expr, 直接加入到root exprs中
+    // All non unique fd item have been traversed, but there are still other undecidable expr, directly add to root exprs
     if (OB_SUCC(ret) && eliminate_set.num_members() < candi_exprs.count()) {
       for (int64_t i = 0; OB_SUCC(ret) && i < candi_exprs.count(); ++i) {
         if (eliminate_set.has_member(i)) {
@@ -4282,11 +4277,11 @@ int ObOptimizerUtil::simplify_ordered_exprs(const ObFdItemSet &fd_item_set,
 
 /**
  * @brief ObOptimizerUtil::simplify_ordered_exprs
- * 对给定 candi_exprs, 该函数要找 order_exprs 使得按其排序时等价于 candi_exprs:
- *  1. 顺序读取 candi_exprs 一个元素 expr, 非 const 且未被标记移除时添加到 order_exprs;
- *  2. 获取 fd_item_set 中 parent exprs 为 order_exprs 子集的 fd_items;
- *  3. 标记当前 expr 之后存在于 fd_items child exprs 中的 expr 为待移除;
- *  4. 返回 1. 继续读取 candi_exprs 并添加得到完整 order_exprs.
+ * For the given candi_exprs, this function aims to find order_exprs such that sorting by them is equivalent to sorting by candi_exprs:
+ *  1. Sequentially read one element expr from candi_exprs, add it to order_exprs if it is not const and has not been marked for removal;
+ *  2. Obtain fd_items where the parent exprs are subsets of order_exprs from fd_item_set;
+ *  3. Mark exprs that exist after the current expr in fd_items child exprs as to be removed;
+ *  4. Return 1. Continue reading candi_exprs and adding to obtain a complete order_exprs.
  */
 int ObOptimizerUtil::simplify_ordered_exprs(const ObFdItemSet &fd_item_set,
                                             const EqualSets &equal_sets,
@@ -4320,7 +4315,7 @@ int ObOptimizerUtil::simplify_ordered_exprs(const ObFdItemSet &fd_item_set,
     } else if (OB_FAIL(is_const_or_equivalent_expr(candi_exprs, equal_sets, const_exprs,
                                                    exec_ref_exprs, i, is_const))) {
       LOG_WARN("failed to check is const expr", K(ret));
-    } else if (is_const) {//const expr 不需要排序
+    } else if (is_const) {//const expr does not need sorting
       /*do nothing*/
     } else if (OB_FAIL(order_exprs.push_back(expr))) {
       LOG_WARN("failed to push back exprs", K(ret));
@@ -4331,12 +4326,12 @@ int ObOptimizerUtil::simplify_ordered_exprs(const ObFdItemSet &fd_item_set,
     } else if (OB_FAIL(candi_set.del_member(i))) {
       LOG_WARN("failed to add member", K(ret));
     } else {
-      //查找目前 extended_order_exprs 中包含的 fd, 并使用 fd 查找并标记 candi_exprs i 位置后需要移除的expr
+      // Find the fd currently included in extended_order_exprs, and use fd to find and mark the expr that needs to be removed from candi_exprs at position i
       int64_t last_count = -1;
       while (extended_order_exprs.count() > last_count && !candi_set.is_empty()) {
         last_count = extended_order_exprs.count();
         for (int64_t fd_idx = 0; OB_SUCC(ret) && fd_idx < fd_item_set.count() && !candi_set.is_empty(); ++fd_idx) {
-          if (checked_fd_item.has_member(fd_idx)) {//对于已经进行检查的 fd 不再重复检查
+          if (checked_fd_item.has_member(fd_idx)) {//For already checked fd do not check again}
             /*do nothing*/
           } else if (OB_ISNULL(fd_item = fd_item_set.at(fd_idx))) {
             ret = OB_ERR_UNEXPECTED;
@@ -4739,7 +4734,7 @@ int ObOptimizerUtil::compute_stmt_interesting_order(const ObIArray<OrderItem> &o
 
     if (has_group && check_group) {
       prefix_count = 0;
-      //group by 是否匹配索引前缀
+      // group by whether to match index prefix
       if (OB_FAIL(is_group_by_match(ordering, select_stmt, equal_sets, const_exprs,
                                     prefix_count, group_match))) {
         LOG_WARN("failed to check is group by match", K(ret));
@@ -4760,7 +4755,7 @@ int ObOptimizerUtil::compute_stmt_interesting_order(const ObIArray<OrderItem> &o
       }
     }
     if (OB_SUCC(ret) && (!check_group || !has_group) && !winfunc_require_sort) {
-      //没有group并且窗口函数不需要排序的情况下，看distinct和 order by 和 set
+      // No group and when the window function does not require sorting, look at distinct and order by and set
       if (has_distinct && check_distinct) {
         prefix_count = 0;
         if (OB_FAIL(is_distinct_match(ordering_exprs, select_stmt, equal_sets, const_exprs,
@@ -4772,7 +4767,7 @@ int ObOptimizerUtil::compute_stmt_interesting_order(const ObIArray<OrderItem> &o
           LOG_TRACE("ordering is math distinct", K(max_prefix_count), K(prefix_count));
         }
       } else if (check_set) {
-        //没有distinct的情况下才看 set(union/interscept)
+        // Without distinct, only consider set(union/intersection)
         prefix_count = 0;
         if (NULL != select_stmt && is_parent_set_distinct) {
           if (OB_FAIL(is_set_match(ordering_exprs, select_stmt, equal_sets, const_exprs,
@@ -5150,7 +5145,7 @@ int ObOptimizerUtil::match_order_by_against_index(const ObIArray<OrderItem> &exp
   bool is_const = true;
   full_covered = false;
   match_count = input_start_offset;
-  //找到第一个非const的order项
+  // Find the first non-const order item
   for (int64_t i = 0; OB_SUCC(ret) && is_const && i < expect_ordering.count(); ++i) {
     if (OB_FAIL(is_const_expr(expect_ordering.at(i).expr_, equal_sets, const_exprs, is_const))) {
       LOG_WARN("failed to check is_const_expr", K(ret));
@@ -5158,7 +5153,7 @@ int ObOptimizerUtil::match_order_by_against_index(const ObIArray<OrderItem> &exp
       expect_offset = i;
     }
   }
-  //计算index和order项的最大匹配，跳过const表达式
+  // Calculate the maximum match for index and order items, skip const expressions
   ObRawExpr *input_expr = NULL;
   ObRawExpr *expect_expr = NULL;
   bool direction_match = false;
@@ -5339,7 +5334,7 @@ bool ObOptimizerUtil::is_lossless_type_conv(const ObRawExprResType &child_type, 
   if (is_lossless) {
     //do nothing
   } else {
-    // mysql模式允许的无损类型转换可以参考
+    // mysql mode allows lossless type conversion, which can be referred to
     if (ObIntTC == child_tc || ObUIntTC == child_tc) {
       if (ObNumberTC == dst_tc || ObDecimalIntTC == dst_tc) {
         ObAccuracy lossless_acc = child_type.get_accuracy();
@@ -5459,7 +5454,7 @@ int ObOptimizerUtil::is_lossless_column_cast(const ObRawExpr *expr,
     ObRawExprResType dst_type = expr->get_result_type();
     ObObjTypeClass dst_tc = dst_type.get_type_class();
     ObAccuracy dst_acc = dst_type.get_accuracy();
-      // mysql模式允许的无损类型转换可以参考
+      // mysql mode allows lossless type conversion, which can be referred to
       if (ObIntTC == child_tc || ObUIntTC == child_tc) {
         if (ObNumberTC == dst_tc || ObDecimalIntTC == dst_tc) {
           // ObAccuracy lossless_acc = ObAccuracy::DDL_DEFAULT_ACCURACY2[ObCompatibilityMode::MYSQL_MODE][child_type.get_type()];
@@ -6183,7 +6178,7 @@ int ObOptimizerUtil::try_add_cast_to_select_list(ObIAllocator *allocator,
 
 /**
  * check_subquery_has_ref_assign_user_var
- * 检查expr的子查询中是否包含涉及到赋值操作的用户变量
+ * check if the subquery in expr contains user variables involved in assignment operations
  */
 int ObOptimizerUtil::check_subquery_has_ref_assign_user_var(ObRawExpr *expr, bool &is_has)
 {
@@ -6284,7 +6279,7 @@ int ObOptimizerUtil::check_pushdown_filter(const ObDMLStmt &parent_stmt,
   bool is_valid = false;
   ObSEArray<ObRawExpr *, 4> common_exprs;
   if (!parent_stmt.is_set_stmt() && subquery.is_set_stmt()) {
-    //如果子查询是set stmt，只需要检查是否有下推的谓词overlap index
+    // If the subquery is a set stmt, only need to check if there is an overlap index of pushed-down predicates
     if (check_match_index) {
       if (OB_FAIL(check_pushdown_filter_overlap_index(parent_stmt,
                                                       opt_ctx,
@@ -6454,7 +6449,7 @@ int ObOptimizerUtil::check_pushdown_filter_for_set(const ObSelectStmt &parent_st
       //can not push down
     } else if (!common_exprs.empty() &&
                 !subset_exprs(view_column_exprs, common_exprs)) {
-      //common_exprs为空，说明既没有windown func，也没有group by
+      // common_exprs is empty, indicating that there is neither a window function nor a group by
     } else if (OB_FAIL(candi_filters.push_back(pred))) {
       LOG_WARN("failed to push back predicate", K(ret));
     } else {
@@ -6482,8 +6477,8 @@ int ObOptimizerUtil::check_pushdown_filter_for_subquery(const ObDMLStmt &parent_
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpect set stmt here", K(ret));
   } else {
-    //只要某一个能够下推的谓词match索引，那么所有可以下推的谓词都下推
-    //否则清空所有可以下推的谓词
+    // As long as one of the pushdown predicates matches the index, all pushdown predicates are pushed down
+    // Otherwise clear all predicates that can be pushed down
     bool is_match_index = false;
     for (int64_t i = 0; OB_SUCC(ret) && i < pushdown_filters.count(); ++i) {
       ObRawExpr *pred = NULL;
@@ -6583,7 +6578,7 @@ int ObOptimizerUtil::get_groupby_win_func_common_exprs(const ObSelectStmt &subqu
   if (!has_group && !has_winfunc) {
     is_valid = false;
   } else {
-    //取所有win func的partition by表达式交集
+    // Get the intersection of all win func partition by expressions
     for (int64_t i = 0; OB_SUCC(ret) && i < subquery.get_window_func_count(); ++i) {
       const ObWinFunRawExpr *win_expr = NULL;
       if (OB_ISNULL(win_expr = subquery.get_window_func_expr(i))) {
@@ -6601,7 +6596,7 @@ int ObOptimizerUtil::get_groupby_win_func_common_exprs(const ObSelectStmt &subqu
         break;
       }
     }
-    //再与group by表达式取交集
+    // Then take the intersection with the group by expression
     if (OB_FAIL(ret)) {
     } else if (has_group && !has_winfunc &&
               OB_FAIL(append(common_exprs, subquery.get_group_exprs()))) {
@@ -6758,7 +6753,7 @@ int ObOptimizerUtil::get_set_op_remain_filter(const ObSelectStmt &stmt,
   } else if (first_child) {
     ret = output_pushdown_preds.assign(child_pushdown_preds);
   } else if (stmt.get_set_op() == ObSelectStmt::UNION) {
-    //对于未成功下推的谓词, 取并集反回上层
+    // For predicates that were not successfully pushed down, take the union and return to the upper layer
     for (int64_t i = 0; OB_SUCC(ret) && i < child_pushdown_preds.count(); ++i) {
       if (ObOptimizerUtil::find_equal_expr(output_pushdown_preds, child_pushdown_preds.at(i))) {
         /*do nothing*/
@@ -6767,7 +6762,7 @@ int ObOptimizerUtil::get_set_op_remain_filter(const ObSelectStmt &stmt,
       } else {/*do nothing*/}
     }
   } else if (stmt.get_set_op() == ObSelectStmt::INTERSECT) {
-    //对于未成功下推的谓词，取交集返回上层
+    // For predicates that were not successfully pushed down, take the intersection and return to the upper layer
     ObSEArray<ObRawExpr*, 4> pushdown_preds;
     for (int64_t i = 0; OB_SUCC(ret) && i < child_pushdown_preds.count(); ++i) {
       if (!ObOptimizerUtil::find_equal_expr(output_pushdown_preds, child_pushdown_preds.at(i))) {
@@ -8374,7 +8369,7 @@ int ObOptimizerUtil::check_pushdown_join_filter_for_subquery(const ObDMLStmt &pa
           //can not push down
         } else if (!common_exprs.empty() &&
                    !subset_exprs(view_column_exprs, common_exprs)) {
-          //common_exprs为空，说明既没有windown func，也没有group by
+          // common_exprs is empty, indicating that there is neither a window function nor a group by
         } else if (OB_FAIL(candi_right_quals.push_back(pred))) {
           LOG_WARN("failed to push back predicate", K(ret));
         } else if (OB_FAIL(candi_left_quals.push_back(pushdown_left_quals.at(i)))) {
@@ -8445,7 +8440,7 @@ int ObOptimizerUtil::check_pushdown_join_filter_for_set(const ObSelectStmt &pare
       LOG_WARN("failed to extract column exprs", K(ret));
     } else if (!common_exprs.empty() &&
                !subset_exprs(view_column_exprs, common_exprs)) {
-      //common_exprs为空，说明既没有windown func，也没有group by
+      // common_exprs is empty, indicating that there is neither a window function nor a group by
     } else {
       should_add = true;
     }
@@ -9023,7 +9018,7 @@ int ObOptimizerUtil::split_or_quals(const ObDMLStmt *stmt,
               OB_FAIL(is_joined_table_filter(stmt, table_items, qual, is_filter))) {
     LOG_WARN("failed to check is joined table filter", K(ret));
   } else if (is_filter) {
-    //joined table内部谓词等到下推on condition再拆分，否则会重复拆分or谓词
+    // joined table internal predicates are split at the on condition later, otherwise or predicates will be split repeatedly
   } else {
     ObOpRawExpr *or_qual = static_cast<ObOpRawExpr*>(qual);
     for (int64_t j = 0; OB_SUCC(ret) && j < table_items.count(); ++j) {

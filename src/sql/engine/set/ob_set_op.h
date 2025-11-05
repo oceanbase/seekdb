@@ -35,7 +35,7 @@ public:
 };
 
 /**
- * MergeSet和HashSet没有什么公用部分，所以这里暂不弄一个ObSetOp
+ * MergeSet and HashSet have nothing in common, so an ObSetOp is not created here
  **/
 // class ObSetOp : public ObOperator
 // {

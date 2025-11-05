@@ -75,10 +75,10 @@ public:
               const uint64_t stmt_id,
               ObPLFunction &func,
               ParamStore *params,
-              bool is_prepare_protocol); //匿名块接口
+              bool is_prepare_protocol); //anonymous block interface
 
 
-  int compile(const uint64_t id, ObPLFunction &func); //Procedure/Function接口
+  int compile(const uint64_t id, ObPLFunction &func); //Procedure/Function interface
 
   int analyze_package(const ObString &source, const ObPLBlockNS *parent_ns,
                       ObPLPackageAST &package_ast, bool is_for_trigger);

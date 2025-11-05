@@ -223,11 +223,11 @@ int TestPLUtils::do_resolve(const char* pl_str, sql::ObRawExprFactory &expr_fact
       if (OB_SUCC(ret)) {
         ObDataType res_type;
         res_type.set_obj_type(common::ObNullType);
-        func.set_ret_type(res_type); //无返回值
+        func.set_ret_type(res_type); // no return value
       }
 
       if (OB_SUCC(ret)) {
-        ObStmtNodeTree *body = pl_tree->children_[3]; //获取body
+        ObStmtNodeTree *body = pl_tree->children_[3]; // get body
         if (OB_ISNULL(body)) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("pl body is NULL", K(pl_tree), K(ret));

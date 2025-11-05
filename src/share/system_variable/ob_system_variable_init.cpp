@@ -26,15 +26,15 @@ static ObArenaAllocator ObSysVarAllocator(ObModIds::OB_COMMON_SYS_VAR_DEFAULT_VA
 static ObObj ObSysVarBaseValues[ObSysVarFactory::ALL_SYS_VARS_COUNT];
 static ObArenaAllocator ObBaseSysVarAllocator(ObModIds::OB_COMMON_SYS_VAR_DEFAULT_VALUE);
 static int64_t ObSysVarsIdToArrayIdx[ObSysVarFactory::OB_MAX_SYS_VAR_ID];
-// VarsInit中需要判断当前最大的SysVars对应的id，是否大于OB_MAX_SYS_VAR_ID
-// 如果大于OB_MAX_SYS_VAR_ID表示存在无效的SysVarsId
+// VarsInit needs to determine if the id of the current largest SysVars is greater than OB_MAX_SYS_VAR_ID
+// If greater than OB_MAX_SYS_VAR_ID indicates the existence of an invalid SysVarsId
 static bool HasInvalidSysVar = false;
 
 static struct VarsInit{
   VarsInit(){
-    // 保存当前系统变量的最大的id
+    // Save the maximum id of the current system variables
     int64_t cur_max_var_id = 0;
-    // ObSysVarsIdToArrayIdx数组默认初始值为-1，-1表示无效索引
+    // The default initial value of the ObSysVarsIdToArrayIdx array is -1, -1 indicates an invalid index
     memset(ObSysVarsIdToArrayIdx, -1, sizeof(ObSysVarsIdToArrayIdx));
     [&] (){
       ObSysVars[0].default_value_ = "1" ;

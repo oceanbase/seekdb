@@ -320,7 +320,7 @@ int ObLogExchange::print_annotation_keys(char *buf,
     } else if (OB_FAIL(key->get_name(buf, buf_len, pos, type))) {
       LOG_WARN("print expr name failed", K(ret));
     } else if (key->get_result_type().is_numeric_type()) {
-      //屏蔽numeric的打印
+      // Disable numeric printing
     } else if (OB_FAIL(key->get_type_and_length(buf, buf_len, pos, type))) {
       LOG_WARN("print expr type and length failed", K(ret));
     } else { /*Do nothing*/ }

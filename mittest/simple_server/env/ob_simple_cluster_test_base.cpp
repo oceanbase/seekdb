@@ -57,7 +57,7 @@ void init_log_and_gtest(int argc, char **argv)
 
 void init_gtest_output(std::string &gtest_log_name)
 {
-  // 判断是否处于Farm中
+  // Determine if it is within the Farm
   char *mit_network_start_port_env = getenv("mit_network_start_port");
   char *mit_network_port_num_env = getenv("mit_network_port_num");
   if (mit_network_start_port_env != nullptr && mit_network_port_num_env != nullptr) {

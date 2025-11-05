@@ -110,7 +110,7 @@ int ObTableLoadMergeTableOp::switch_next_op(bool is_parent_called)
           child_op_type = ObTableLoadMergeOpType::RESCAN;
           break;
         } else if (need_del_lob_) {
-          // del_lob需要用到lob数据, 不能在inner_close的时候才close
+          // del_lob needs lob data, cannot be closed at inner_close time
           if (ObTableLoadMergerPhaseType::INSERT == merge_phase_ctx_->phase_) {
             if (OB_FAIL(
                   store_ctx_->data_store_table_ctx_->lob_table_ctx_->close_build_delete_table())) {

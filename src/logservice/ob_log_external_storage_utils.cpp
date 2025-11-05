@@ -35,7 +35,7 @@ int get_and_init_io_device(const ObString &uri,
   opt.key_ = "storage_info";
   opt.value_.value_str = storage_info.ptr();
   share::ObBackupStorageInfo tmp_storage_info;
-  // TODO(zjf225077): 删除这一套ObLogExternalStorageIOTaskHandleAdapter，统一使用ObBackupIoAdapter
+  // TODO(zjf225077): Remove this set of ObLogExternalStorageIOTaskHandleAdapter, and unify the use of ObBackupIoAdapter
   ObStorageIdMod storage_id_mod(storage_id, ObStorageUsedMod::STORAGE_USED_CLOG);
   if (OB_FAIL(tmp_storage_info.set(uri.ptr(), storage_info.ptr()))) {
     CLOG_LOG(WARN, "set ObBackupStorageInfo failed", K(uri), KP(io_device));

@@ -760,8 +760,7 @@ public:
                               ObSelEstimator *&estimator);
   virtual int merge(const ObSelEstimator &other, bool &is_success) override;
   virtual bool is_independent() const override { return false; }
-
-  // 计算选择率
+  // Calculate selection rate
   virtual int get_sel(const OptTableMetas &table_metas,
                       const OptSelectivityCtx &ctx,
                       double &selectivity,
@@ -804,8 +803,7 @@ public:
                               ObSelEstimator *&estimator);
   virtual int merge(const ObSelEstimator &other, bool &is_success) override;
   virtual bool is_independent() const override { return false; }
-
-  // 计算选择率
+  // Calculate selection rate
   virtual int get_sel(const OptTableMetas &table_metas,
                       const OptSelectivityCtx &ctx,
                       double &selectivity,
@@ -837,7 +835,7 @@ private:
                                         const ObIArray<bool> &null_safes,
                                         double &selectivity);
   /**
-  * 判断多列连接是否只涉及到两个表
+  * Determine if the multi-column join involves only two tables
   */
   static int is_valid_multi_join(ObIArray<ObRawExpr *> &quals,
                                  bool &is_valid);

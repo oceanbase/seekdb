@@ -69,10 +69,10 @@ int ObXaExecutorUtil::get_org_cluster_id(ObSQLSessionInfo *session, int64_t &org
   } else if (OB_INVALID_ORG_CLUSTER_ID == org_cluster_id ||
              OB_INVALID_CLUSTER_ID == org_cluster_id) {
     org_cluster_id = ObServerConfig::get_instance().cluster_id;
-    // 如果没设置ob_org_cluster_id（0为非法值，认为没有设置），则设为当前集群的cluster_id。
-    // 如果配置项中没设置cluster_id，则ObServerConfig::get_instance().cluster_id会拿到默认值-1。
-    // 配置项中没设置cluster_id的话observer是起不来的，因此这里org_cluster_id不会为-1。
-    // 保险起见，这里判断org_cluster_id为0或者-1都将其设为ObServerConfig::get_instance().cluster_id。
+    // If ob_org_cluster_id is not set (0 is an invalid value, considered as not set), then set it to the cluster_id of the current cluster.
+    // If the configuration item does not set cluster_id, then ObServerConfig::get_instance().cluster_id will get the default value -1.
+    // If cluster_id is not set in the configuration, observer will not start, therefore org_cluster_id will not be -1.
+    // For safety, here we set org_cluster_id to 0 or -1 as ObServerConfig::get_instance().cluster_id.
     if (org_cluster_id < OB_MIN_CLUSTER_ID
         || org_cluster_id > OB_MAX_CLUSTER_ID) {
       ret = OB_ERR_UNEXPECTED;

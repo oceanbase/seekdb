@@ -57,7 +57,7 @@ int ObHSeriesAdapter::multi_put(ObTableExecCtx &ctx, const ObIArray<ObITableEnti
     real_tablet_ids.set_attr(ObMemAttr(tenant_id, "MulPutSertblt"));
     SMART_VAR(ObTableCtx, tb_ctx, allocator_)
     {
-      // tablet_ids需要调整
+      // tablet_ids need to be adjusted
       if (OB_ISNULL(cells.at(0))) {
         ret = OB_ERR_UNDEFINED;
         LOG_WARN("first cell is null", K(ret), K(cells));
@@ -167,7 +167,7 @@ int ObHSeriesAdapter::del_and_insert(ObIAllocator &alloc,
     LOG_WARN("fail to del in hbase series adapter", K(ret), K(json_cell));
   } else if (json_node.element_count() != 0) {
     // 2. construct new entity
-    // 注意，如果删除这个q，没有其他node的话，就不需要insert了
+    // Note, if this q is deleted and there are no other nodes, then insert is not needed
     ObObj value_obj;
     result.reset();
     ObTableEntity series_cell;

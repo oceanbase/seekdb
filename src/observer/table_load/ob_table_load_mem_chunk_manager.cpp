@@ -75,7 +75,7 @@ int ObTableLoadMemChunkManager::get_chunk(int64_t &chunk_node_id, ChunkType *&ch
         LOG_WARN("pre sort has error, task canceled", KR(ret));
       } else if (!chunk_node.is_used() && chunk_node.set_used()) {
         if (nullptr == chunk_node.chunk_) {
-          // 等待内存空出
+          // wait for memory to be available
           if (OB_FAIL(mem_ctx_->acquire_chunk(chunk_node.chunk_))) {
             LOG_WARN("fail to acquire chunk", KR(ret));
           } else {

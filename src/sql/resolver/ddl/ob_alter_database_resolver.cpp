@@ -63,7 +63,7 @@ int ObAlterDatabaseResolver::resolve(const ParseNode &parse_tree)
       ObString database_name;
       ParseNode *dbname_node = node->children_[DBNAME];
       if (NULL == dbname_node) {
-        // sql 语句在缺省 database_name 的时候，默认使用当前 database_name
+        // sql statement in default database_name when omitted, defaults to current database_name
         database_name = session_info_->get_database_name();
       } else {
         if (OB_UNLIKELY(T_IDENT != dbname_node->type_)) {

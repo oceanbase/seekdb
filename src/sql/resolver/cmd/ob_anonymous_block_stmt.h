@@ -81,7 +81,7 @@ private:
   uint64_t statement_id_;
   bool is_prepare_protocol_;
   ParamStore *params_;//for ps param
-  obrpc::ObDDLArg ddl_arg_; // 用于返回exec_tenant_id_
+  obrpc::ObDDLArg ddl_arg_; // used to return exec_tenant_id_
   ObBitSet<> out_idx_;
   DISALLOW_COPY_AND_ASSIGN(ObAnonymousBlockStmt);
 };

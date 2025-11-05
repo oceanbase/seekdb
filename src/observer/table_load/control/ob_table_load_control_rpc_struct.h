@@ -466,9 +466,9 @@ public:
   uint64_t table_id_;
   int64_t task_id_;
   table::ObTableLoadTransId trans_id_;
-  int32_t session_id_; // 从1开始
-  uint64_t sequence_no_; // 从1开始
-  ObString payload_; //里面包的是ObTableLoadObjArray
+  int32_t session_id_; // Start from 1
+  uint64_t sequence_no_; // Start from 1
+  ObString payload_; //It contains ObTableLoadObjArray
 };
 
 class ObDirectLoadControlInitEmptyTabletsArg final

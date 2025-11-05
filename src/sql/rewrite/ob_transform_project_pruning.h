@@ -37,7 +37,7 @@ private:
   int transform_table_items(ObDMLStmt *&stmt,
                             bool with_outline,
                             bool &trans_happened);
-  //对can_prune_select_item的subquery做project pruning
+  // Do project pruning on the subquery of can_prune_select_item
   int project_pruning(const uint64_t table_id,
                       ObSelectStmt &child_stmt,
                       ObDMLStmt &upper_stmt,

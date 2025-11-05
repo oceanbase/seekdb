@@ -329,8 +329,7 @@ protected:
           }
         }
       }
-
-      // 必须强制先dump，然后finish dump才有效
+      // Must force dump first, then finish dump is effective
       if (OB_FAIL(ret)) {
       } else if (has_addon
                  && (chunk->sk_store_.get_row_cnt() != chunk->addon_store_.get_row_cnt())) {

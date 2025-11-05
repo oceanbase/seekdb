@@ -68,7 +68,7 @@ ObHbaseSeriesCellIter::ObHbaseSeriesCellIter()
 int ObHbaseSeriesCellIter::init()
 {
   int ret = OB_SUCCESS;
-  // 先填充next_row
+  // First fill next_row
   if (is_inited_) {
     ret = OB_INIT_TWICE;
     LOG_WARN("iterator init twice", K(ret));

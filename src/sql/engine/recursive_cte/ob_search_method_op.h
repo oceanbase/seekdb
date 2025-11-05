@@ -58,10 +58,9 @@ public:
     ObBFSTreeNode* in_bstree_node_;
     TO_STRING_KV("is tree level", tree_level_, "is cycle", is_cycle_, "row", stored_row_);
   } ObTreeNode;
-
-  // input row的初始化大小，以128开始。
+  // input row's initial size, starting at 128.
   static const int64_t INIT_ROW_COUNT = 1<<7l;
-  // 探测深度优先路径上是否成环的哈希表大小，32的树高足够了。
+  // The size of the hash table for detecting cycles on the depth-first path, a tree height of 32 is sufficient.
   static const int64_t CTE_SET_NUM = 1<<5l;
 public:
   explicit ObSearchMethodOp(common::ObIAllocator &allocator, const ExprFixedArray &left_output)
@@ -73,8 +72,7 @@ public:
   virtual int reuse();
 
   virtual int add_row(const ObIArray<ObExpr *> &exprs, ObEvalCtx &eval_ctx);
-
-  // 使用行内容进行比较，若有一样的数据则认为此节点为环
+  // Use line content for comparison, if there is the same data then consider this node as a loop
   int is_same_row(ObChunkDatumStore::StoredRow &row_1st, ObChunkDatumStore::StoredRow &row_2nd,
                   bool &is_cycle);
   int64_t count() { return input_rows_.count(); }
@@ -87,13 +85,13 @@ protected:
   common::ObArray<ObChunkDatumStore::StoredRow *> input_rows_;
   common::ObArray<ObChunkDatumStore::StoredRow*> recycle_rows_;
   const ExprFixedArray &left_output_;
-  // 记录当前查询行在树中的level
+  // Record the current query row's level in the tree
   uint64_t last_node_level_;
 };
 
 /**
- * 由于需要判断环的存在，广度优先整个树都会被保存在内存中；
- * 能用深度优先的时候尽量不要使用广度优先。
+ * Since it is necessary to determine the existence of a cycle, the entire tree will be saved in memory using breadth-first search;
+ * Use depth-first search whenever possible instead of breadth-first search.
  */
 class ObBreadthFirstSearchOp : public ObSearchMethodOp
 {
@@ -121,15 +119,15 @@ private:
   int is_breadth_cycle_node(ObTreeNode &node);
 
 private:
-  // breadth first search的root节点
+  // breadth first search root node
   ObBFSTreeNode bst_root_;
   /**
    *            A
    *      AA         AB
    *  AAA  AAB    ABA   ABB
-   *  例如一次查询中过程中，current_parent_node_指向AA
-   *  search_queue_中包含AA AB是查询层
-   *  search_results_中AAA AAB是查询结果层
+   *  For example, during a query process, current_parent_node_ points to AA
+   *  search_queue_ contains AA AB as the query level
+   *  search_results_ contains AAA AAB as the query result level
    */
   ObBFSTreeNode* current_parent_node_;
   common::ObList<ObTreeNode, common::ObIAllocator> search_queue_;
@@ -166,7 +164,7 @@ private:
                         ObEvalCtx &eval_ctx, ObChunkDatumStore::StoredRow *&store_row);
 
 private:
-  // breadth first search的root节点
+  // breadth first search root node
   ObBFSTreeNode bst_root_;
   common::ObArray<ObTreeNode> search_results_;
   uint64_t cur_recursion_depth_;

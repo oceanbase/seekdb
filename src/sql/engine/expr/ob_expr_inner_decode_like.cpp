@@ -79,7 +79,7 @@ int ObExprInnerDecodeLike::eval_inner_decode_like(const ObExpr &expr, ObEvalCtx 
     ObString escape_str;
     ObString pattern_str = pattern_val->get_string();
     ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
-    if (escape->is_null()) {  //如果escape是null,则给默认的'\\'
+    if (escape->is_null()) {  // If escape is null, then give the default '\\'
       escape_str.assign_ptr("\\", 1);
     } else {
       ObString escape_val = escape->get_string();

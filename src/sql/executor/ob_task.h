@@ -28,7 +28,7 @@ class ObJob;
 class ObTaskInfo;
 class ObOpSpec;
 /*
- * 将一个任务序列化到远端执行，需要指明如下内容：
+ * Serialize a task to be executed remotely, need to specify the following:
  * 1. Operator Tree
  * 2. Operator Input Array
  * 3. Query ID, Job ID, Task ID
@@ -88,25 +88,25 @@ public:
                K_(location_idx));
   DECLARE_TO_YSON_KV;
 protected:
-  //TODO：晓楚
-  //ObTask发到远端后，远端需要如下信息：
+  //TODO: Xiao Chu
+  // ObTask sent to the remote end, the remote end needs the following information:
   //1. task location info
-  //2. 事务控制
-  //3. 扫描范围
+  //2. transaction control
+  //3. scan range
   //4. ?
   ObExecContext *exec_ctx_;
   const ObPhysicalPlan *ser_phy_plan_;
   ObPhysicalPlan *des_phy_plan_;
   ObOpSpec *root_spec_;
   ObJob *job_;
-  // ObTask要发往的目标机器
+  // ObTask target machine to send to
   common::ObAddr runner_svr_;
-  // 主控机地址，用于远端执行后汇报状态给主控机
+  // Master address, used to report status to the master after remote execution
   common::ObAddr ctrl_svr_;
-  // 本Task的寻址信息
+  // The addressing information of this Task
   ObTaskID ob_task_id_;
   int64_t location_idx_;
-  // 本Task涉及到的扫描范围，默认涉及的一张表（一个或者多个partition）
+  // This Task involves the scan range, default involving one table (one or more partitions)
   common::ObSEArray<ObNewRange, 32> ranges_;
   int64_t max_sql_no_;
   char sql_string_[common::OB_TINY_SQL_LENGTH + 1];
@@ -148,9 +148,9 @@ public:
                K_(location_idx),
                KP_(extend_root_spec));
 private:
-  //对于mini task,允许在执行主计划的时候，附带执行一个扩展计划，
-  //这个主要是用于当冲突检查的时候，获取unique index的冲突行主键的时候，
-  //可以将主键和local unique index的冲突rowkey的其它列信息也一并带回来，优化RPC次数
+  // For mini task, allow executing an extension plan along with the main plan,
+  // This mainly used when conflict checking, to get the unique index conflict row primary key when,
+  // You can also bring back the other column information of the conflicting rowkey for the primary key and local unique index, optimizing the number of RPC calls
   ObOpSpec *extend_root_spec_;
 };
 
@@ -252,21 +252,21 @@ public:
 private:
   int64_t tenant_schema_version_;
   int64_t sys_schema_version_;
-  // ObTask要发往的目标机器
+  // ObTask target machine to send to
   common::ObAddr runner_svr_;
-  // 主控机地址，用于远端执行后汇报状态给主控机
+  // Master address, used to report status to the master after remote execution
   common::ObAddr ctrl_svr_;
-  // 本Task的寻址信息
+  // The addressing information of this Task
   ObTaskID task_id_;
-  //远程执行对应的模板化SQL文本
+  // Remote execution of the corresponding templated SQL text
   ObRemoteSqlInfo *remote_sql_info_;
-  //执行涉及到的session info，主要是session中的事务状态信息
+  // Execute involved session info, mainly transaction status information in the session
   ObSQLSessionInfo *session_info_;
   ObDesExecContext *exec_ctx_;
   common::ModulePageAllocator inner_alloc_;
   DependenyTableStore dependency_tables_;
   transaction::ObTxReadSnapshot snapshot_;
-  // remote执行前保存的ls
+  // remote execution pre-save ls
   share::ObLSArray ls_list_;
 };
 }

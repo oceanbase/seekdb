@@ -725,7 +725,6 @@ namespace sql
           data.parent_span_id_.assign(buf+org_pos, pos - org_pos);
         }
         //data.parent_span_id_ = buf+org_pos;
-        //data.parent_span_id_ = buf+org_pos;
   
         if (OB_NOT_NULL(tag_buf) && tag_len != 0) {
           //skip "tags":[ and trim ]

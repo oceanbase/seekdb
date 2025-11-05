@@ -99,7 +99,7 @@ private:
   uint64_t tenant_id_;
   common::ObMySQLProxy *sql_proxy_;
 private:
-  //更新受控回放到replayservice
+  //Update controlled replay to replay service
   int update_replayable_point_();
   int update_replayable_point_from_tenant_info_();
   int update_replayable_point_from_meta_();

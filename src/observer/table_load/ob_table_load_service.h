@@ -38,14 +38,14 @@ public:
   static int mtl_new(ObTableLoadService *&service);
   static void mtl_destroy(ObTableLoadService *&service);
   static int check_tenant();
-  // 旁路导入内核获取加表锁后的schema进行检查
+  // Bypass import kernel to get the schema after acquiring the add table lock for checking
   static int check_support_direct_load(uint64_t table_id,
                                        const storage::ObDirectLoadMethod::Type method,
                                        const storage::ObDirectLoadInsertMode::Type insert_mode,
                                        const storage::ObDirectLoadMode::Type load_mode,
                                        const storage::ObDirectLoadLevel::Type load_level,
                                        const common::ObIArray<uint64_t> &column_ids);
-  // 业务层指定schema_guard进行检查
+  // Business layer specifies schema_guard for check
   static int check_support_direct_load(share::schema::ObSchemaGetterGuard &schema_guard,
                                        uint64_t table_id,
                                        const storage::ObDirectLoadMethod::Type method,

@@ -66,8 +66,7 @@ TEST_F(TestLogEXTUtils, basic_interface)
 {
   uint64_t tenant_id = 1002;
   ObLSID ls_id(1001);
-
-  // 前置条件准备
+  // Precondition preparation
   EXPECT_EQ(OB_SUCCESS, create_tenant(tenant_id));
   EXPECT_EQ(OB_SUCCESS, create_palf(tenant_id, ls_id.id_));
   
@@ -82,7 +81,7 @@ TEST_F(TestLogEXTUtils, basic_interface)
     EXPECT_EQ(newest_block_id, end_block_id);
     EXPECT_EQ(OB_SUCCESS, ObSharedLogUtils::delete_blocks(tenant_id, ls_id, start_block_id, end_block_id+1));
   }
-  // 产生10个文件，最小的block_id为10
+  // Generate 10 files, with the smallest block_id being 10
   std::vector<SCN> scns(10, SCN::min_scn());
   int64_t start_ts = ObTimeUtility::current_time();
   for (auto &scn : scns) {
@@ -106,8 +105,7 @@ TEST_F(TestLogEXTUtils, basic_interface)
   const int64_t invalid_uri_len = 0;
   char valid_uri[OB_MAX_URI_LENGTH] = {'\0'};
   const int64_t valid_uri_len = OB_MAX_URI_LENGTH;
-
-  // case1: 验证ObSharedLogUtils::get_oldest_block
+  // case1: validate ObSharedLogUtils::get_oldest_block
   {
     CLOG_LOG(INFO, "begin case1 invalid argument");
     block_id_t oldest_block_id = LOG_INVALID_BLOCK_ID;
@@ -132,16 +130,15 @@ TEST_F(TestLogEXTUtils, basic_interface)
     // OB_ENTRY_NOT_EXIST
     uint64_t not_exist_tenant_id = 500;
     ObLSID no_block_ls_id(500);
-    // 日志流不存在
+    // Log stream does not exist
     EXPECT_EQ(OB_ENTRY_NOT_EXIST, ObSharedLogUtils::get_oldest_block(
       not_exist_tenant_id, ls_id, oldest_block_id));
-    // 日志流存在
+    // Log stream exists
     EXPECT_EQ(OB_SUCCESS, create_palf(tenant_id, no_block_ls_id.id_));
     EXPECT_EQ(OB_ENTRY_NOT_EXIST, ObSharedLogUtils::get_oldest_block(
       tenant_id, no_block_ls_id, oldest_block_id));
   }
-
-  // case2: 验证get_newest_block
+  // case2: validate get_newest_block
   {
     CLOG_LOG(INFO, "begin case2 invalid argument");
     block_id_t newest_block_id = LOG_INVALID_BLOCK_ID;
@@ -162,7 +159,7 @@ TEST_F(TestLogEXTUtils, basic_interface)
     EXPECT_EQ(OB_SUCCESS, ObSharedLogUtils::get_newest_block(
       tenant_id, ls_id, tmp_start_block_id, newest_block_id));
     EXPECT_EQ(newest_block_id, end_block_id);
-    // 起始点文件oss上最小文件相同
+    // Starting point file is the smallest file on oss
     tmp_start_block_id = start_block_id;
     EXPECT_EQ(OB_SUCCESS, ObSharedLogUtils::get_newest_block(
       tenant_id, ls_id, tmp_start_block_id, newest_block_id));
@@ -179,9 +176,7 @@ TEST_F(TestLogEXTUtils, basic_interface)
     EXPECT_EQ(OB_SUCCESS, ObSharedLogUtils::get_newest_block(
       tenant_id, ls_id, tmp_start_block_id, newest_block_id));
     EXPECT_EQ(newest_block_id, end_block_id);
-
-
-    // 文件有空洞
+    // File has holes
     // 10 11 12 13...19  24 25 26
     {
       const block_id_t start_block_id_hole = 24;
@@ -204,25 +199,21 @@ TEST_F(TestLogEXTUtils, basic_interface)
     // OB_ENTRY_NOT_EXIST
     uint64_t not_exist_tenant_id = 500;
     ObLSID no_block_ls_id(500);
-
-    // 日志流不存在
+    // Log stream does not exist
     EXPECT_EQ(OB_ENTRY_NOT_EXIST, ObSharedLogUtils::get_newest_block(
       not_exist_tenant_id, ls_id, tmp_start_block_id, newest_block_id));
-
-    // 空日志流
+    // empty log stream
     EXPECT_EQ(OB_SUCCESS, create_palf(tenant_id, no_block_ls_id.id()));
     tmp_start_block_id = LOG_INITIAL_BLOCK_ID;
     EXPECT_EQ(OB_ENTRY_NOT_EXIST, ObSharedLogUtils::get_newest_block(
       tenant_id, no_block_ls_id, tmp_start_block_id, newest_block_id));
-
-    // 起点文件在oss上不存在 
+    // Start file does not exist on oss
     tmp_start_block_id = end_block_id+1;
     EXPECT_EQ(OB_ENTRY_NOT_EXIST, ObSharedLogUtils::get_newest_block(
       tenant_id, ls_id, tmp_start_block_id, newest_block_id));
   }
-  // case3: 验证locate_by_scn_corasely
-
-  // case4: 验证ObSharedLogUtils::get_block_min_scn
+  // case3: validate locate_by_scn_corasely
+  // case4: validate ObSharedLogUtils::get_block_min_scn
   {
     CLOG_LOG(INFO, "begin case4 invalid argument");
     SCN block_min_scn = SCN::min_scn();
@@ -253,8 +244,7 @@ TEST_F(TestLogEXTUtils, basic_interface)
     EXPECT_EQ(OB_ENTRY_NOT_EXIST, ObSharedLogUtils::get_block_min_scn(
       not_exist_tenant_id, ls_id, start_block_id, block_min_scn));
   }
-
-  // case5: 验证ObSharedLogUtils::delete_blocks
+  // case5: validate ObSharedLogUtils::delete_blocks
   {
     CLOG_LOG(INFO, "begin case5");
     // OB_INVLAID_ARGUMENT
@@ -270,7 +260,7 @@ TEST_F(TestLogEXTUtils, basic_interface)
       invalid_tenant_id, invalid_ls_id, invalid_start_block_id, valid_end_block_id));
     EXPECT_EQ(OB_INVALID_ARGUMENT, ObSharedLogUtils::delete_blocks(
       valid_tenant_id, valid_ls_id, start_block_id, start_block_id-1));
-    // delete_blocks仅支持左闭右开区间
+    // delete_blocks only supports left-closed right-open interval
     EXPECT_EQ(OB_INVALID_ARGUMENT, ObSharedLogUtils::delete_blocks(
       valid_tenant_id, valid_ls_id, start_block_id, start_block_id));
 
@@ -281,7 +271,7 @@ TEST_F(TestLogEXTUtils, basic_interface)
     EXPECT_EQ(OB_SUCCESS, ObSharedLogUtils::get_oldest_block(
       tenant_id, ls_id, oldest_block_id));
     EXPECT_EQ(oldest_block_id, start_block_id+2);
-    // 生成MAX_BLOCK_ID个文件
+    // Generate MAX_BLOCK_ID files
     {
       uint64_t tmp_tenant_id = 1004;
       ObLSID tmp_ls_id(1003);
@@ -308,7 +298,7 @@ TEST_F(TestLogEXTUtils, basic_interface)
       EXPECT_EQ(false, tmp_palf_exist);
       EXPECT_EQ(OB_SUCCESS, ObSharedLogUtils::check_tenant_exist(
         tmp_tenant_id, tmp_tenant_exist));
-      // 尽管租户目录存在，但在oss上没有目录的概念，因此租户不存在
+      // Although the tenant directory exists, there is no concept of directory on oss, therefore the tenant does not exist
       EXPECT_EQ(false, tmp_tenant_exist);
       sleep(10);
       EXPECT_EQ(OB_SUCCESS, delete_tenant(tmp_tenant_id));
@@ -316,7 +306,7 @@ TEST_F(TestLogEXTUtils, basic_interface)
         tmp_tenant_id, tmp_tenant_exist));
       EXPECT_EQ(false, tmp_tenant_exist);
     }
-    // 保证OSS上依旧存在相同的文件文件数目
+    // Ensure the same number of files still exist on OSS
     std::vector<SCN> tmp_scns{scns[0], scns[1]};
     EXPECT_EQ(OB_SUCCESS, upload_blocks(tenant_id, ls_id.id(), start_block_id, tmp_scns));
     EXPECT_EQ(OB_SUCCESS, ObSharedLogUtils::get_oldest_block(
@@ -324,16 +314,14 @@ TEST_F(TestLogEXTUtils, basic_interface)
     EXPECT_EQ(oldest_block_id, start_block_id);
 
     // OB_ALLOCATE_MEMORY_FAILED AND OB_OBJECT_STORAGE_IO_ERROR
-    
-    // 删除不存在文件
+    // Delete non-existent file
     uint64_t not_exist_tenant_id = 500;
     EXPECT_EQ(OB_SUCCESS, ObSharedLogUtils::delete_blocks(
       tenant_id, ls_id, start_block_id+10000, start_block_id+30000));
     EXPECT_EQ(OB_SUCCESS, ObSharedLogUtils::delete_blocks(
       not_exist_tenant_id, ls_id, start_block_id, start_block_id+10));
   }
-
-  // case6: 验证ObSharedLogUtils::construct_external_storage_access_info
+  // case6: validate ObSharedLogUtils::construct_external_storage_access_info
   {
     CLOG_LOG(INFO, "begin case6");
     ObBackupDest dest;
@@ -355,10 +343,9 @@ TEST_F(TestLogEXTUtils, basic_interface)
       tenant_id, ls_id, valid_block_id, valid_uri, valid_uri_len, dest, storage_id));
     EXPECT_EQ(0, STRNCMP(valid_uri, OB_FILE_PREFIX, strlen(OB_FILE_PREFIX)));
   }
-  
-  // case7: 验证ObSharedLogUtils::delete_tenant和delete_palf
-  // case7.1 验证ObSharedLogUtils::check_ls_exist
-  // case7.2 验证ObSharedLogUtils::check_tenant_exist
+  // case7: validate ObSharedLogUtils::delete_tenant and delete_palf
+  // case7.1 validate ObSharedLogUtils::check_ls_exist
+  // case7.2 validate ObSharedLogUtils::check_tenant_exist
   {
     CLOG_LOG(INFO, "begin case7");
     bool palf_exist = false;
@@ -390,7 +377,7 @@ TEST_F(TestLogEXTUtils, basic_interface)
     EXPECT_EQ(OB_SUCCESS, ObSharedLogUtils::check_tenant_exist(
       tenant_id, tenant_exist));
     EXPECT_EQ(false, tenant_exist);
-    // 创建空日志流，本地盘上依旧存在空目录，但oss没有目录的概念，因此check_ls_exist返回false
+    // Create empty log stream, an empty directory still exists on the local disk, but oss does not have the concept of directories, therefore check_ls_exist returns false
     EXPECT_EQ(OB_SUCCESS, create_palf(tenant_id, ls_id.id()));
     EXPECT_EQ(OB_SUCCESS, ObSharedLogUtils::check_ls_exist(
       tenant_id, ls_id, palf_exist));
@@ -408,7 +395,7 @@ TEST_F(TestLogEXTUtils, basic_interface)
     block_id_t oldest_block_id = LOG_INVALID_BLOCK_ID;
     EXPECT_EQ(OB_ENTRY_NOT_EXIST, ObSharedLogUtils::get_oldest_block(
       tenant_id, ls_id, oldest_block_id));
-    // 验证多日志流场景
+    // Validate multi-log stream scenario
     {
       uint64_t tmp_tenant_id = 1004;
       std::vector<int64_t> ls_ids = {1, 1001, 1002, 1003, 1004};
@@ -418,7 +405,7 @@ TEST_F(TestLogEXTUtils, basic_interface)
       }
       block_id_t tmp_start_block_id = 0;
       block_id_t tmp_end_block_id = 0;
-      // 每个日志流准备13个文件
+      // Each log stream prepares 13 files
       for (auto tmp_ls_id: ls_ids) {
         EXPECT_EQ(OB_SUCCESS, upload_blocks(tmp_tenant_id, tmp_ls_id, tmp_start_block_id, 13));
       }
@@ -447,7 +434,7 @@ TEST_F(TestLogEXTUtils, basic_interface)
         tmp_tenant_id, tmp_tenant_exist));
       EXPECT_EQ(false, tmp_tenant_exist);
     }
-    // 验证多租户场景
+    // Validate multi-tenant scenario
     {
       std::vector<uint64_t> tenant_ids = {1, 1001, 1002, 1003, 1004};
       std::vector<int64_t> ls_ids = {1, 1001, 1002, 1003, 1004};
@@ -505,11 +492,10 @@ TEST_F(TestLogEXTUtils, test_locate_by_scn_coarsely)
   uint64_t tenant_id = 1002;
   ObLSID ls_id(1001);
   CLOG_LOG(INFO, "begin test_locate_by_scn_coarsely");
-  // 前置条件准备
+  // Precondition preparation
   EXPECT_EQ(OB_SUCCESS, create_tenant(tenant_id));
   EXPECT_EQ(OB_SUCCESS, create_palf(tenant_id, ls_id.id_));
-  
-  // 产生5个文件，最小的block_id为10
+  // Generate 5 files, the smallest block_id is 10
   std::vector<SCN> scns(5, SCN::min_scn());
   int64_t start_ts = ObTimeUtility::current_time();
   for (SCN &scn : scns) {
@@ -530,8 +516,7 @@ TEST_F(TestLogEXTUtils, test_locate_by_scn_coarsely)
   block_id_t invalid_block_id = LOG_INVALID_BLOCK_ID;
   block_id_t valid_block_id = 1;
   SCN invalid_scn = SCN::invalid_scn();
-
-  // case3: 验证locate_by_scn_corasely
+  // case3: validate locate_by_scn_corasely
   {
     CLOG_LOG(INFO, "begin case3 invalid argument");
     block_id_t out_block_id = LOG_INVALID_BLOCK_ID;
@@ -554,7 +539,7 @@ TEST_F(TestLogEXTUtils, test_locate_by_scn_coarsely)
     EXPECT_EQ(OB_INVALID_ARGUMENT, ObSharedLogUtils::locate_by_scn_coarsely(
       valid_tenant_id, valid_ls_id, end_block_id, start_block_id,
       target_scn, out_block_id, out_block_min_scn));
-    // locate_by_scn_corasely仅支持左闭右开区间
+    // locate_by_scn_corasely only supports left-closed right-open interval
     EXPECT_EQ(OB_INVALID_ARGUMENT, ObSharedLogUtils::locate_by_scn_coarsely(
       valid_tenant_id, valid_ls_id, start_block_id, start_block_id,
       target_scn, out_block_id, out_block_min_scn));
@@ -563,7 +548,7 @@ TEST_F(TestLogEXTUtils, test_locate_by_scn_coarsely)
 
     CLOG_LOG(INFO, "begin case3 abnormal situations");
     block_id_t temp_start_block_id, temp_end_block_id;
-    // case 3.1: 本地日志区间和OSS日志区间不存在交集，return OB_ENTRY_NOT_EXIST
+    // case 3.1: local log interval and OSS log interval do not intersect, return OB_ENTRY_NOT_EXIST
     // temp_end_block_id < start_block_id
     temp_start_block_id = 1;
     temp_end_block_id = 9;
@@ -584,8 +569,7 @@ TEST_F(TestLogEXTUtils, test_locate_by_scn_coarsely)
     EXPECT_EQ(OB_ERR_OUT_OF_LOWER_BOUND, ObSharedLogUtils::locate_by_scn_coarsely(
       tenant_id, valid_ls_id, temp_start_block_id, temp_end_block_id, 
       target_scn, out_block_id, out_block_min_scn));
-  
-    // case 3.3: 日志流不存在和空日志流, return OB_ENTRY_NOT_EXIST
+    // case 3.3: log stream does not exist and empty log stream, return OB_ENTRY_NOT_EXIST
     uint64_t not_exist_tenant_id = 500;
     ObLSID no_block_ls_id(500);
 
@@ -629,12 +613,10 @@ TEST_F(TestLogEXTUtils, test_locate_by_scn_coarsely_with_holes)
   CLOG_LOG(INFO, "begin test_locate_by_scn_coarsely_with_holes");
   uint64_t tenant_id = 1002;
   ObLSID ls_id(1001);
-
-  // 前置条件准备
+  // Precondition preparation
   EXPECT_EQ(OB_SUCCESS, create_tenant(tenant_id));
   EXPECT_EQ(OB_SUCCESS, create_palf(tenant_id, ls_id.id_));
-  
-  // 产生10个连续的文件，最小的block_id为10，最大的block_id为19
+  // Generate 10 consecutive files, with the smallest block_id being 10, and the largest block_id being 19
   int block_count = 10;
   std::vector<SCN> scns(block_count, SCN::min_scn());
   int64_t start_ts = ObTimeUtility::current_time();
@@ -658,16 +640,15 @@ TEST_F(TestLogEXTUtils, test_locate_by_scn_coarsely_with_holes)
   block_id_t out_block_id = LOG_INVALID_BLOCK_ID;
 
   CLOG_LOG(INFO, "begin case1");
-  // case 1: OSS上不存在空洞
+  // case 1: OSS does not have holes
   EXPECT_EQ(OB_SUCCESS, ObSharedLogUtils::locate_by_scn_coarsely(
       tenant_id, ls_id, temp_start_block_id, temp_end_block_id,
       target_scn, out_block_id, out_block_min_scn));
   EXPECT_EQ(15, out_block_id);
   EXPECT_EQ(scns[5], out_block_min_scn);
   CLOG_LOG(INFO, "begin case1", K(scns[5]), K(target_scn));
-
-  // case 2: 假设全局checkpoint点是15，删除block 12，第一次二分查询的block不存在。
-  // OSS上日志：10 11  13 14 15 16 17 18 19
+  // case 2: Assume the global checkpoint is at block 15, delete block 12, the first binary search block does not exist.
+  // OSS logs: 10 11  13 14 15 16 17 18 19
   CLOG_LOG(INFO, "begin case2");
   block_id_t deleted_block_id = 12;
   EXPECT_EQ(OB_SUCCESS, ObSharedLogUtils::delete_blocks(
@@ -677,9 +658,8 @@ TEST_F(TestLogEXTUtils, test_locate_by_scn_coarsely_with_holes)
       target_scn, out_block_id, out_block_min_scn));
   EXPECT_EQ(15, out_block_id);
   EXPECT_EQ(scns[5], out_block_min_scn);
-
-  // case 3: 继续删除block_id为13、14和15的块，第一次和第二次二分查询的block都不存在
-  // OSS上日志：10 11  16 17 18 19
+  // case 3: continue deleting blocks with block_id 13, 14, and 15, the blocks do not exist in both the first and second binary searches
+  // OSS logs: 10 11  16 17 18 19
   CLOG_LOG(INFO, "begin case3");
   target_scn = target_scns[6];
   deleted_block_id = 13;
@@ -690,8 +670,7 @@ TEST_F(TestLogEXTUtils, test_locate_by_scn_coarsely_with_holes)
       target_scn, out_block_id, out_block_min_scn));
   EXPECT_EQ(16, out_block_id);
   EXPECT_EQ(scns[6], out_block_min_scn);
-
-  // case 4: 测试第一次二分查询的block存在，但其右边在全局checkpoint之前的block都不存在
+  // case 4: test the first binary search block exists, but all blocks to its right that are before the global checkpoint do not exist
   CLOG_LOG(INFO, "begin case4");
   temp_start_block_id = 4; 
   EXPECT_EQ(OB_SUCCESS, ObSharedLogUtils::locate_by_scn_coarsely(
@@ -699,8 +678,7 @@ TEST_F(TestLogEXTUtils, test_locate_by_scn_coarsely_with_holes)
       target_scn, out_block_id, out_block_min_scn));
   EXPECT_EQ(16, out_block_id);
   EXPECT_EQ(scns[6], out_block_min_scn);
-
-  // case 5: 测试第一次二分查询时落在全局checkpoint的右边，并且mid_block存在
+  // case 5: test the first binary search when it falls to the right of the global checkpoint, and mid_block exists
   CLOG_LOG(INFO, "begin case5");
   temp_start_block_id = 12;
   temp_end_block_id = 24;
@@ -710,8 +688,7 @@ TEST_F(TestLogEXTUtils, test_locate_by_scn_coarsely_with_holes)
         target_scn, out_block_id, out_block_min_scn));
   EXPECT_EQ(19, out_block_id);
   EXPECT_EQ(scns[9], out_block_min_scn);
-
-  // case 6: 测试第一次二分查询时落在全局checkpoint的右边，并且mid_block不存在
+  // case 6: test the first binary search falling to the right of the global checkpoint, and mid_block does not exist
   CLOG_LOG(INFO, "begin case6");
   temp_start_block_id = 15;
   temp_end_block_id = 25;
@@ -729,7 +706,7 @@ TEST_F(TestLogEXTUtils, locate_with_gc)
   uint64_t tenant_id = 1002;
   ObLSID ls_id(1001);
   const int64_t block_num = 6000;
-  // 前置条件准备
+  // Precondition preparation
   EXPECT_EQ(OB_SUCCESS, create_tenant(tenant_id));
   EXPECT_EQ(OB_SUCCESS, create_palf(tenant_id, ls_id.id_));
   int64_t start_ts = ObTimeUtility::current_time();
@@ -746,7 +723,7 @@ TEST_F(TestLogEXTUtils, locate_with_gc)
   
   sleep(1);
   {
-    // case 1: 测试locate范围完全落后OSS范围
+    // case 1: test locate range completely lags behind OSS range
     EXPECT_EQ(OB_SUCCESS, ObSharedLogUtils::delete_blocks(tenant_id, ls_id, gc_start_block_id, gc_end_block_id));
     block_id_t locate_start_block_id = 0;
     block_id_t locate_end_block_id = gc_end_block_id;
@@ -766,7 +743,7 @@ TEST_F(TestLogEXTUtils, locate_with_gc)
   min_block_id = gc_end_block_id;
 
   {
-    // case 2: 测试locate范围部分落后于OSS范围
+    // case 2: test the part of locate range lagging behind OSS range
     EXPECT_EQ(OB_SUCCESS, ObSharedLogUtils::delete_blocks(tenant_id, ls_id, gc_start_block_id, gc_end_block_id));
     block_id_t locate_start_block_id = random() % min_block_id;
     block_id_t locate_end_block_id = gc_end_block_id + 100;
@@ -796,7 +773,7 @@ TEST_F(TestLogEXTUtils, locate_with_gc)
   min_block_id = gc_end_block_id;
 
   {
-    // case 3: 测试locate范围处于OSS范围之内
+    // case 3: test locate range within OSS range
     EXPECT_EQ(OB_SUCCESS, ObSharedLogUtils::delete_blocks(tenant_id, ls_id, gc_start_block_id, gc_end_block_id));
     block_id_t locate_start_block_id = min_block_id + 100;
     block_id_t locate_end_block_id = gc_end_block_id + 1000;
@@ -811,7 +788,7 @@ TEST_F(TestLogEXTUtils, locate_with_gc)
       target_scn, out_block_id, out_block_min_scn));
     EXPECT_EQ(target_idx, out_block_id);
     EXPECT_EQ(block_scns[target_idx], out_block_min_scn);
-    // case 3.2: 测试target_scn小于查找范围内的所有scn
+    // case 3.2: test target_scn less than all scn within the lookup range
     locate_start_block_id = gc_end_block_id + 1000;
     locate_end_block_id = locate_start_block_id + random() % 1000 + 1;
     target_idx = min_block_id - 1;
@@ -828,7 +805,7 @@ TEST_F(TestLogEXTUtils, locate_with_gc)
   min_block_id = gc_end_block_id;
 
   {
-    // case 4: 测试locate范围部分超出OSS范围
+    // case 4: test locate range part exceeds OSS range
     EXPECT_EQ(OB_SUCCESS, ObSharedLogUtils::delete_blocks(tenant_id, ls_id, gc_start_block_id, gc_end_block_id));
     block_id_t locate_start_block_id = gc_end_block_id + 1000;
     block_id_t locate_end_block_id = block_num + 3000;

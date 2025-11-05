@@ -288,11 +288,9 @@ int ObDtl::init()
   }
   return ret;
 }
-
-
-// 直接根据channel id将channel从hash_table中移除，并且析构掉
-// 与remove channel不同的是，remove channel仅仅从hash_table中移除
-// 目前主要用在rpc channel的处理方式
+// Directly remove the channel from hash_table according to the channel id, and destruct it
+// With remove channel different, remove channel only removes from hash_table
+// Currently mainly used in rpc channel handling method
 int ObDtl::destroy_channel(uint64_t chid)
 {
   int ret = OB_SUCCESS;
@@ -312,8 +310,8 @@ int ObDtl::destroy_channel(uint64_t chid)
       chan->unpin();
       // spin until there's no reference of this channel.
       while (chan->get_pins() != 0) {
-        // 这里之所以添加一个sleep主要是为了让出cpu
-        // 在sysbench px的join的场景这里占10%的cpu，让出cpu后，可以提高约10%
+        // Here we add a sleep mainly to yield the cpu
+        // In the sysbench px join scenario, this occupies 10% of the CPU. After yielding the CPU, it can improve by about 10%
         // sql: select  /*+ use_px */t1.pad,t2.pad,t3.pad from sbtest1 t1,sbtest5 t2,sbtest4 t3
         //         where t1.id = 503100 and t1.id=t2.id and t2.id=t3.id
         // plan:
@@ -324,7 +322,7 @@ int ObDtl::destroy_channel(uint64_t chid)
         // |4 |    TABLE GET        |t1      |1        |52  |
         // |5 |  TABLE GET          |t2      |1        |47  |
         // |6 | TABLE GET           |t3      |1        |47  |
-        // sleep(100): cpu .0% // 看不到
+        // sleep(100): cpu .0% // cannot see
         // sleep(50 ): cpu .87%
         // sleep(10 ): cpu .88%
         ob_usleep<ObWaitEventIds::DTL_DESTROY_CHANNEL_SLEEP>(100);
@@ -338,12 +336,11 @@ int ObDtl::destroy_channel(uint64_t chid)
   }
   return ret;
 }
-
-// 这里将channel释放逻辑拆成了2步
-// 第一步：从hash_table中移除，避免后续还有rpc可以get到channel
-// 第二步：等到rpc unpin后，对channel进行dfc(流控)的后续处理
-// 最后才析构channel对象
-// 主要用于data channel的析构处理，因为data channel需要进行dfc的一些特殊处理
+// Here will split the channel release logic into 2 steps
+// First step: Remove from hash_table to avoid subsequent rpcs from getting the channel
+// Second step: wait for rpc unpin, then perform subsequent dfc (flow control) processing on the channel
+// Finally destruct the channel object
+// Mainly used for data channel destruction processing, because data channel requires some special handling of dfc
 int ObDtl::remove_channel(uint64_t chid, ObDtlChannel *&ch)
 {
   int ret = OB_SUCCESS;
@@ -365,7 +362,7 @@ int ObDtl::remove_channel(uint64_t chid, ObDtlChannel *&ch)
       // spin until there's no reference of this channel.
       while (chan->get_pins() != 0) {
       }
-      // 表示data dtl都是等到rpc线程处理结束后，才开始进行清理操作，如dfc处理等
+      // Indicates that data dtl cleanup operations, such as dfc processing, only start after the rpc thread has finished processing
       ch = chan;
       if (nullptr != ch->get_msg_watcher()) {
         ch->get_msg_watcher()->remove_data_list(ch, true);
@@ -374,8 +371,7 @@ int ObDtl::remove_channel(uint64_t chid, ObDtlChannel *&ch)
   }
   return ret;
 }
-
-//带有channel pin，封装在里面了，没有单独做一个interface来处理
+// With channel pin, encapsulated inside, did not make a separate interface to handle
 int ObDtl::get_channel(uint64_t chid, ObDtlChannel *&chan)
 {
   int ret = OB_SUCCESS;
@@ -394,8 +390,7 @@ int ObDtl::get_channel(uint64_t chid, ObDtlChannel *&chan)
   }
   return ret;
 }
-
-// 仅仅用于对channel进行unpin操作，即不再引用
+// Simply used for unpinning the channel, i.e., no longer referencing
 int ObDtl::release_channel(ObDtlChannel *chan)
 {
   int ret = OB_SUCCESS;
@@ -494,8 +489,8 @@ int ObDtl::init_channel(uint64_t tenant_id, uint64_t chid, const ObAddr &peer,
     LOG_WARN("init channel fail", K(tenant_id), KP(chid), K(ret));
   } else {
     if (nullptr != dfc) {
-      // 如果有dfc，必须和channel一起建立，否则channel创建后，有rpc processor线程处理
-      // 这样channel的dfc设置滞后后，会导致这行的处理没有dfc
+      // If there is dfc, it must be established together with the channel, otherwise, after the channel is created, there is an rpc processor thread handling
+      // This way, setting the dfc of the channel to lag will result in this line's processing not having dfc
       if (OB_FAIL(dfc_server_.register_dfc_channel(*dfc, chan))) {
         LOG_WARN("failed to register channel to dfc", K(tenant_id), KP(chid), K(ret));
       }
@@ -516,9 +511,9 @@ int ObDtl::init_channel(uint64_t tenant_id, uint64_t chid, const ObAddr &peer,
   if (OB_FAIL(ret) && nullptr != chan) {
     LOG_WARN("failed to create channel", K(tenant_id), KP(chid), K(ret), K(chan), KP(chan->get_id()));
     if (nullptr != dfc) {
-      //注意错误码不要被覆盖掉
+      // Note error codes are not overwritten
       int tmp_ret = OB_SUCCESS;
-      // 之前如果注册到dfc了，必须unregister掉，否则dfc中的channel就是无效的地址
+      // If registered to dfc before, must unregister, otherwise the channel in dfc will be an invalid address
       if (OB_SUCCESS != (tmp_ret = dfc_server_.unregister_dfc_channel(*dfc, chan))) {
         ret = tmp_ret;
         LOG_WARN("failed to register channel to dfc", K(tenant_id), KP(chid), K(ret), KP(chan->get_id()));

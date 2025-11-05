@@ -358,8 +358,7 @@ TEST_F(ObHashJoinDumpTest, test_recursion)
   ObHashJoin::PART_COUNT = part_cnt_bak;
   ObHashJoin::MAX_PAGE_COUNT = page_cnt_bak;
 }
-
-//暂时屏蔽掉这些case，否则farm时间太长，但如果修改join，请打开线下跑下这些test case
+// Temporarily comment out these cases, otherwise farm time will be too long, but if you modify join, please run these test cases offline
 // TEST_F(ObHashJoinDumpTest, test_right_outer_recursive)
 // {
 //   int64_t hash_mem = 0;

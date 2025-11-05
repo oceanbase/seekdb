@@ -15,7 +15,7 @@
 #include "sql/resolver/expr/ob_raw_expr_util.h"
 using namespace oceanbase::sql;
 
-/*@brief, remove_stmt_order_by消除stmt中可以消除的order by, eg:
+/*@brief, remove_stmt_order_by removes order by from stmt that can be removed, eg:
 * select * from t1 where c1 in (select c1 from t2 order by c2);
 * ==>
 * select * from t1 where c1 in (select c1 from t2);
@@ -77,7 +77,7 @@ int ObTransformSimplifyOrderby::transform_one_stmt(common::ObIArray<ObParentDMLS
 }
 
 // for select/update/delete/insert
-// 消除subquery中的order by子句
+// Remove order by clause from subquery
 int ObTransformSimplifyOrderby::remove_order_by_for_subquery(ObDMLStmt *stmt, bool &trans_happened)
 {
   int ret = OB_SUCCESS;
@@ -115,7 +115,7 @@ int ObTransformSimplifyOrderby::remove_order_by_for_view_stmt(ObDMLStmt *stmt, b
   if (OB_ISNULL(stmt)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("stmt is null", K(ret));
-  //select stmt不能有window function,eg:
+  //select stmt cannot have window function,eg:
   // SELECT last_value(c1) OVER (PARTITION BY c2) FROM (SELECT * FROM t1 ORDER BY c1, c2)s
   // ORDER BY c1, c2;
   } else if (!stmt->is_sel_del_upd()) {

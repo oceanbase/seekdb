@@ -24,11 +24,11 @@ const char *ObLogDelete::get_name() const
   if (is_multi_part_dml()) {
     name = "DISTRIBUTED DELETE";
   } else if (is_pdml() && is_index_maintenance()) {
-    // PDML 索引表的delete，使用 INDEX DELETE
+    // PDML index table delete, using INDEX DELETE
     name = "INDEX DELETE";
   } else {
-    // 默认Delete的name：DELETE
-    // PDML 主表的delete，也默认使用name：DELETE
+    // Default Delete name: DELETE
+    // PDML main table's delete, also default to use name: DELETE
     name = ObLogDelUpd::get_name();
   }
   return name;

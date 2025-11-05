@@ -68,8 +68,8 @@ protected:
   ObDirectLoadInsertTabletContext *insert_tablet_ctx_;
   int64_t parallel_idx_;
   int64_t affected_rows_;
-  // 无主键表的hidden pk是在最后插入的时候才组装到datum_row的, 在这之前都无法调用handle_insert_row
-  // 需要在最后插入的时候收集
+  // The hidden pk for tables without a primary key is assembled into datum_row only when inserted at the end, and handle_insert_row cannot be called before that
+  // Need to collect when inserting at the end
   bool need_handle_dml_row_;
   bool is_stop_;
   ObArray<ObDirectLoadIStoreRowIterator *> row_iters_;
@@ -111,8 +111,7 @@ private:
   ObDirectLoadOriginTable *origin_table_;
   const blocksstable::ObDatumRange *range_;
 };
-
-// 堆表列存表unrescan场景, 对于已有数据也要重新分配主键值
+// Heap table columnar store table unrescan scenario, for existing data primary key values need to be reallocated as well
 class ObDirectLoadPartitionOriginDataUnrescanMergeTask : public ObDirectLoadIMergeTask
 {
 public:
@@ -162,8 +161,7 @@ private:
   ObDirectLoadTableHandleArray sstable_array_;
   const blocksstable::ObDatumRange *range_;
 };
-
-// 堆表按分区分开写extern_table, unused
+// Heap table is written separately by partition extern_table, unused
 class ObDirectLoadPartitionHeapTableMergeTask : public ObDirectLoadPartitionMergeTask
 {
 public:

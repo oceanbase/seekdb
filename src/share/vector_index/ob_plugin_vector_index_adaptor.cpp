@@ -1634,8 +1634,7 @@ int ObPluginVectorIndexAdaptor::check_delta_buffer_table_readnext_status(ObVecto
   INIT_SUCC(ret);
   SCN min_delta_scn;
   bool can_skip = true;
-
-  // TODO 优先判断是否需要等待 PVQ_WAIT
+  // TODO First determine if waiting for PVQ_WAIT is needed
   if (OB_ISNULL(ctx) || OB_ISNULL(row_iter)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get ctx or row_iter invalid.", K(ret), KP(row_iter));
@@ -1851,8 +1850,7 @@ int ObPluginVectorIndexAdaptor::check_index_id_table_readnext_status(ObVectorQue
   ObArray<uint64_t> i_vids;
   ObTableScanIterator *table_scan_iter = static_cast<ObTableScanIterator *>(row_iter);
   bool is_skip_4th_index = is_pruned_read_index_id();
-
-  // TODO 优先判断是否需要等待 PVQ_WAIT
+  // TODO First determine if waiting for PVQ_WAIT is needed
   if (OB_ISNULL(ctx) || OB_ISNULL(table_scan_iter)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get ctx or row_iter invalid.", K(ret), KP(row_iter));
@@ -1916,7 +1914,7 @@ int ObPluginVectorIndexAdaptor::check_index_id_table_readnext_status(ObVectorQue
 int ObPluginVectorIndexAdaptor::check_snapshot_table_wait_status(ObVectorQueryAdaptorResultContext *ctx)
 {
   INIT_SUCC(ret);
-  // TODO 判断是否需要等待 PVQ_WAIT
+  // TODO Determine if waiting for PVQ_WAIT is needed
   ctx->status_ = PVQ_OK;
 
   return ret;

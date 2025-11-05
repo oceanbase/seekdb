@@ -121,7 +121,7 @@ int ObRawExprWrapEnumSet::wrap_value_vector(ObInsertStmt &stmt)
   int ret = OB_SUCCESS;
   int64_t desc_count = stmt.get_values_desc().count();
   if ((desc_count > 0)) {
-    //只有当value_desc中有enum或者set列的时候才需要做以下操作
+    // Only when value_desc contains enum or set columns do the following operations need to be performed
     bool need_check = false;
     ObColumnRefRawExpr *value_desc = NULL;
     for (int64_t i = 0; OB_SUCC(ret) && (!need_check) && (i < desc_count); ++i) {

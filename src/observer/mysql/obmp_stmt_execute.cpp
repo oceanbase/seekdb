@@ -545,7 +545,7 @@ int ObMPStmtExecute::after_do_process_for_arraybinding(ObMySQLResultSet &result)
                                           true/*arraybinding only local retry*/);
     if (OB_TRANSACTION_SET_VIOLATION != ret && OB_REPLICA_NOT_READABLE != ret) {
       if (OB_TRY_LOCK_ROW_CONFLICT == ret && retry_ctrl_.need_retry()) {
-        //锁冲突重试不打印日志，避免刷屏
+        //Lock conflict retry does not print logs to avoid screen flooding
       } else {
         LOG_WARN("result set open failed, check if need retry",
                  K(ret), K(cli_ret), K(retry_ctrl_.need_retry()));
@@ -895,7 +895,7 @@ int ObMPStmtExecute::request_params(ObSQLSessionInfo *session,
     LOG_WARN("ps_session_info is null", K(ret));
   } else if (DEFAULT_ITERATION_COUNT == ps_stmt_checksum) {
     // do nothing
-    // 新协议不在这里做
+    // New protocol is not handled here
   } else if (ps_stmt_checksum != ps_session_info->get_ps_stmt_checksum()) {
     ret = OB_ERR_PREPARE_STMT_CHECKSUM;
     LOG_ERROR("ps stmt checksum fail", K(ret), "session_id", session->get_server_sid(),
@@ -946,14 +946,13 @@ int ObMPStmtExecute::request_params(ObSQLSessionInfo *session,
       ParamCastArray param_cast_infos;
       ParamTypeArray returning_param_types;
       ParamTypeInfoArray returning_param_type_infos;
-
-      // Step1: 处理空值位图
+      // Step1: Handle null value bitmap
       const char *bitmap = pos;
       int64_t bitmap_types = (params_num_ + 7) / 8;
       PS_DEFENSE_CHECK(bitmap_types + 1)  // null value bitmap + new param bound flag
       {
         pos += bitmap_types;
-        // Step2: 获取new_param_bound_flag字段
+        // Step2: Get the new_param_bound_flag field
         ObMySQLUtil::get_int1(pos, new_param_bound_flag);
         if (new_param_bound_flag == 1) {
           // reset param_types
@@ -989,8 +988,7 @@ int ObMPStmtExecute::request_params(ObSQLSessionInfo *session,
       } else if (OB_FAIL(returning_param_type_infos.prepare_allocate(params_num_ - input_param_num))) {
         LOG_WARN("array prepare allocate failed", K(ret));
       }
-
-      // Step3: 获取type信息
+      // Step3: Get type information
       if (OB_SUCC(ret)) {
         if (1 == new_param_bound_flag) {
           ParamTypeArray tmp_param_types;
@@ -1021,8 +1019,7 @@ int ObMPStmtExecute::request_params(ObSQLSessionInfo *session,
           analysis_checker_.need_check_ = false;
         }
       }
-
-      // Step3-2: 获取returning into params type信息
+      // Step3-2: Get returning into params type information
       if (OB_SUCC(ret) && returning_params_num > 0) {
         if (new_param_bound_flag != 1) {
           ret = OB_ERR_UNEXPECTED;
@@ -1195,7 +1192,7 @@ int ObMPStmtExecute::execute_response(ObSQLSessionInfo &session,
   } else if (is_execute_ps_cursor()) {
     ObDbmsCursorInfo *cursor = NULL;
     bool use_stream = false;
-    // 1.创建cursor
+    // 1.create cursor
     if (OB_NOT_NULL(session.get_cursor(stmt_id_))) {
       if (OB_FAIL(session.close_cursor(stmt_id_))) {
         LOG_WARN("fail to close result set", K(ret), K(stmt_id_), K(session.get_server_sid()));
@@ -1247,10 +1244,10 @@ int ObMPStmtExecute::execute_response(ObSQLSessionInfo &session,
       }
     }
     /*
-    * PS模式exec-cursor协议中，
-    * 不返回 result_set 结果集，只返回包头信息
-    * 并在EOF包中设置 OB_SERVER_STATUS_CURSOR_EXISTS 状态
-    * 提示驱动发送fetch协议
+    * In the PS mode exec-cursor protocol,
+    * do not return the result_set, only return the packet header information
+    * and set the OB_SERVER_STATUS_CURSOR_EXISTS status in the EOF packet
+    * to prompt the driver to send the fetch protocol
     */
     OZ (response_query_header(session, *cursor));
     if (OB_SUCCESS != ret && OB_NOT_NULL(cursor)) {
@@ -1284,12 +1281,12 @@ int ObMPStmtExecute::execute_response(ObSQLSessionInfo &session,
       need_response_error = true;
     }
   } else {
-    //监控项统计开始
+    //Monitoring item statistics start
     exec_start_timestamp_ = ObTimeUtility::current_time();
     result.get_exec_context().set_plan_start_time(exec_start_timestamp_);
     session.reset_plsql_exec_time();
-    // 本分支内如果出错，全部会在response_result内部处理妥当
-    // 无需再额外处理回复错误包
+    // All errors within this branch will be handled properly inside response_result
+    // No need to handle the error response packet additionally
 
     need_response_error = false;
     is_diagnostics_stmt = ObStmt::is_diagnostic_stmt(result.get_literal_stmt_type());
@@ -1338,7 +1335,7 @@ int ObMPStmtExecute::do_process(ObSQLSessionInfo &session,
   single_process_timestamp_ = ObTimeUtility::current_time();
 
   /* !!!
-   * 注意req_timeinfo_guard一定要放在result前面
+   * Note that req_timeinfo_guard must be placed before result
    * !!!
    */
   ObReqTimeGuard req_timeinfo_guard;
@@ -1421,7 +1418,7 @@ int ObMPStmtExecute::do_process(ObSQLSessionInfo &session,
           }
         }
       }
-      //监控项统计结束
+      //Monitoring item statistics end
       exec_end_timestamp_ = ObTimeUtility::current_time();
 
       // some statistics must be recorded for plan stat, even though sql audit disabled
@@ -1442,13 +1439,13 @@ int ObMPStmtExecute::do_process(ObSQLSessionInfo &session,
           && !THIS_WORKER.need_retry()
           && !retry_ctrl_.need_retry()) {
         LOG_WARN("query failed", K(ret), K(retry_ctrl_.need_retry()), K_(stmt_id));
-        // 当need_retry=false时，可能给客户端回过包了，可能还没有回过任何包。
-        // 不过，可以确定：这个请求出错了，还没处理完。如果不是已经交给异步EndTrans收尾，
-        // 则需要在下面回复一个error_packet作为收尾。否则后面没人帮忙发错误包给客户端了，
-        // 可能会导致客户端挂起等回包。
+        // When need_retry=false, a response packet may have been sent to the client, or no packets may have been sent at all.
+        // However, it can be determined: this request has errored, and is not yet complete. If it has not already been handed over to asynchronous EndTrans for finalization,
+        // then it is necessary to reply with an error_packet below as a conclusion. Otherwise, no one will help send the error packet to the client afterwards,
+        // May cause the client to hang waiting for a response.
         bool is_partition_hit = session.get_err_final_partition_hit(ret);
         int err = send_error_packet(ret, NULL, is_partition_hit, (void *)ctx_.get_reroute_info());
-        if (OB_SUCCESS != err) {  // 发送error包
+        if (OB_SUCCESS != err) {  // send error packet
           LOG_WARN("send error packet failed", K(ret), K(err));
         }
       }
@@ -1603,7 +1600,7 @@ int ObMPStmtExecute::response_result(
   if (OB_LIKELY(NULL != result.get_physical_plan())) {
     if (need_trans_cb) {
       ObAsyncPlanDriver drv(gctx_, ctx_, session, retry_ctrl_, *this, is_prexecute());
-      // NOTE: sql_end_cb必须在drv.response_result()之前初始化好
+      // NOTE: sql_end_cb must be initialized before drv.response_result()
       ObSqlEndTransCb &sql_end_cb = session.get_mysql_end_trans_cb();
       if (OB_FAIL(sql_end_cb.init(packet_sender_, &session,
                                     stmt_id_, params_num_, 
@@ -1614,7 +1611,7 @@ int ObMPStmtExecute::response_result(
       }
       async_resp_used = result.is_async_end_trans_submitted();
     } else {
-      // 试点ObQuerySyncDriver
+      // Pilot ObQuerySyncDriver
       int32_t iteration_count = OB_INVALID_COUNT;
       if (is_prexecute()) {
         iteration_count = static_cast<ObMPStmtPrexecute*>(this)->get_iteration_count();
@@ -1694,11 +1691,11 @@ int ObMPStmtExecute::do_process_single(ObSQLSessionInfo &session,
 {
   int ret = OB_SUCCESS;
   ObReqTimeGuard req_timeinfo_guard;
-  // 每次执行不同sql都需要更新
+  // Each execution of different SQL requires an update
   ctx_.self_add_plan_ = false;
   oceanbase::lib::Thread::WaitGuard guard(oceanbase::lib::Thread::WAIT_FOR_LOCAL_RETRY);
   do {
-    // 每次都必须设置为OB_SCCESS, 否则可能会因为没有调用do_process()造成死循环
+    // Must always be set to OB_SUCCESS, otherwise it may cause a deadlock due to do_process() not being called
     ret = OB_SUCCESS;
     share::schema::ObSchemaGetterGuard schema_guard;
     int64_t tenant_version = 0;
@@ -1733,8 +1730,8 @@ int ObMPStmtExecute::do_process_single(ObSQLSessionInfo &session,
   } while (RETRY_TYPE_LOCAL == retry_ctrl_.get_retry_type());
 
   if (OB_SUCC(ret) && retry_ctrl_.get_retry_times() > 0) {
-    // 经过重试之后才成功的，把sql打印出来。这里只能覆盖到本地重试的情况，没法覆盖到扔回队列重试的情况。
-    // 如果需要重试则ret不可能为OB_SUCCESS，因此这里不用判断retry_type。
+    // After successful retry, print the sql. Here it can only cover the local retry case, cannot cover the case of retrying by putting back into the queue.
+    // If a retry is needed, ret will never be OB_SUCCESS, so there is no need to check retry_type here.
     LOG_TRACE("sql retry",
               K(ret), "retry_times", retry_ctrl_.get_retry_times(), "sql", ctx_.cur_sql_);
   }
@@ -1774,8 +1771,8 @@ int ObMPStmtExecute::try_batch_multi_stmt_optimization(ObSQLSessionInfo &session
                                                        bool &async_resp_used,
                                                        bool &optimization_done)
 {
-  // 1. save_exception 不能batch
-  // 2. returning 不能batch
+  // 1. save_exception cannot be batch
+  // 2. returning cannot batch
   int ret = OB_SUCCESS;
   optimization_done = false;
   ctx_.multi_stmt_item_.set_ps_mode(true);
@@ -1787,13 +1784,13 @@ int ObMPStmtExecute::try_batch_multi_stmt_optimization(ObSQLSessionInfo &session
   ObIAllocator &alloc = CURRENT_CONTEXT->get_arena_allocator();
 
   if (!enable_batch_opt) {
-    // 不支持做batch执行
+    // Does not support batch execution
     LOG_TRACE("not open the batch optimization");
   } else if (!use_plan_cache) {
     LOG_TRACE("not enable the plan_cache", K(use_plan_cache));
-    // plan_cache开关没打开
+    // plan_cache switch is not turned on
   } else if (!is_prexecute()) {
-    // 只对二合一协议开启batch优化
+    // Only enable batch optimization for the combined protocol
   } else if (is_pl_stmt(stmt_type_)) {
     LOG_TRACE("is pl execution, can't do the batch optimization");
   } else if (1 == arraybinding_size_) {
@@ -1810,14 +1807,14 @@ int ObMPStmtExecute::try_batch_multi_stmt_optimization(ObSQLSessionInfo &session
                                                        array_binding_params))) {
     LOG_WARN("fail to trans_form extend type params_store", K(ret), K(arraybinding_size_));
   } else if (OB_FAIL(do_process_single(session, array_binding_params, has_more_result, force_sync_resp, async_resp_used))) {
-    // 调用do_single接口
+    // Call the do_single interface
     if (THIS_WORKER.need_retry()) {
       // just go back to large query queue and retry
     } else if (OB_BATCHED_MULTI_STMT_ROLLBACK == ret) {
       LOG_TRACE("batched multi_stmt needs rollback", K(ret));
       ret = OB_SUCCESS;
     } else {
-      // 无论什么报错，都走单行执行一次，用于容错
+      // Regardless of the error, execute once per line for fault tolerance
       int ret_tmp = ret;
       ret = OB_SUCCESS;
       LOG_WARN("failed to process batch stmt, cover the error code, reset retry flag, then execute with single row",
@@ -1839,10 +1836,9 @@ int ObMPStmtExecute::process_execute_stmt(const ObMultiStmtItem &multi_stmt_item
 {
   int ret = OB_SUCCESS;
   bool need_response_error = true;
-
-  // 执行setup_wb后，所有WARNING都会写入到当前session的WARNING BUFFER中
+  // After executing setup_wb, all WARNINGS will be written to the WARNING BUFFER of the current session
   setup_wb(session);
-  //============================ 注意这些变量的生命周期 ================================
+  //============================ Note the lifecycle of these variables ================================
   ObSMConnection *conn = get_conn();
   if (OB_FAIL(init_process_var(ctx_, multi_stmt_item, session))) {
     LOG_WARN("init process var failed.", K(ret), K(multi_stmt_item));
@@ -1897,7 +1893,7 @@ int ObMPStmtExecute::process_execute_stmt(const ObMultiStmtItem &multi_stmt_item
           }
         }
       }
-      // 释放数组内存避免内存泄漏
+      // Release array memory to avoid memory leak
       
       OZ (response_result_for_arraybinding(session, exception_array));
     } else {
@@ -1922,8 +1918,7 @@ int ObMPStmtExecute::process_execute_stmt(const ObMultiStmtItem &multi_stmt_item
       }
     }
   }
-
-  //对于tracelog的处理, 不影响正常逻辑, 错误码无须赋值给ret, 清空WARNING BUFFER
+  //For tracelog processing, it does not affect normal logic, error code does not need to be assigned to ret, clear WARNING BUFFER
   do_after_process(session, async_resp_used);
 
   if (OB_FAIL(ret) && need_response_error && is_conn_valid()) {
@@ -1942,7 +1937,7 @@ int ObMPStmtExecute::process()
   ObSQLSessionInfo *sess = NULL;
   bool need_response_error = true;
   bool need_disconnect = true;
-  bool async_resp_used = false; // 由事务提交线程异步回复客户端
+  bool async_resp_used = false; // Asynchronously reply to the client by the transaction commit thread
   int64_t query_timeout = 0;
 
   ObCurTraceId::TraceId *cur_trace_id = ObCurTraceId::get_trace_id();
@@ -2052,8 +2047,7 @@ int ObMPStmtExecute::process()
                                  false, // has_mode
                                  false, // force_sync_resp
                                  async_resp_used);
-
-      // 退出前打印出SQL语句，便于定位各种问题
+      // Print out the SQL statement before exiting, for easy problem location
       if (OB_FAIL(ret)) {
         if (OB_EAGAIN == ret) {
           //large query, do nothing
@@ -2109,8 +2103,7 @@ int ObMPStmtExecute::process()
       LOG_WARN("disconnect connection when process query", K(ret));
     }
   }
-
-  // 如果已经异步回包，则这部分逻辑在cb中执行，这里跳过flush_buffer()
+  // If the response has already been sent asynchronously, this logic will be executed in cb, so skip flush_buffer() here
   if (!THIS_WORKER.need_retry()) {
     if (async_resp_used) {
       async_resp_used_ = true;

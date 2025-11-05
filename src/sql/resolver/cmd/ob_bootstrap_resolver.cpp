@@ -80,7 +80,7 @@ int ObBootstrapResolver::resolve(const ParseNode &parse_tree)
           obrpc::ObServerInfo server_info;
 
           if (NULL == server_info_node->children_[0] ) {
-            // ob 1.3 版本新增 REGION，方便工具渐进升级起见允许不指定REGION
+            // ob 1.3 version added REGION, for the convenience of gradual tool upgrades, it allows not specifying REGION
             region_str.assign_ptr(DEFAULT_REGION_NAME, static_cast<int32_t>(strlen(DEFAULT_REGION_NAME)));
           } else {
             region_str.assign_ptr(server_info_node->children_[0]->str_value_,

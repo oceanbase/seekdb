@@ -146,7 +146,7 @@ void ObTenantConfig::TenantConfigUpdateTask::runTimerTask()
         share::schema::ObSchemaGetterGuard schema_guard;
         share::schema::ObMultiVersionSchemaService *schema_service = GCTX.schema_service_;
         bool tenant_dropped = false;
-        // 租户如果正在删除过程中,schema失效，则返回添加反复失败，会导致定时器任务超量
+        // If the tenant is in the process of being deleted, and the schema becomes invalid, it will return repeated add failures, leading to an excessive number of timer tasks
         if (OB_ISNULL(schema_service)) {
           tmp_ret = OB_ERR_UNEXPECTED;
           LOG_WARN("schema_service is null", K(ret), K(tmp_ret));
@@ -191,11 +191,10 @@ void ObTenantConfig::TenantConfigUpdateTask::runTimerTask()
 
   ATOMIC_DEC(&running_task_count_);
 }
-
-// 需要解决的场景：
-// 场景1：脚本中更新上百个参数，每个参数触发一次 got_version，如果不加以防范，
-//        会导致 timer 线程 32 个槽位被耗尽，导致参数更新丢失。
-// 场景2: heartbeat 始终广播相同的 version，只需要响应最多一次
+// Scenarios to be addressed:
+// Scene 1: The script updates hundreds of parameters, each triggering a got_version once, if not prevented,
+//        will lead to the exhaustion of 32 slots in the timer thread, causing parameter update loss.
+// Scene 2: heartbeat always broadcasts the same version, only need to respond at most once
 int ObTenantConfig::got_version(int64_t version, const bool remove_repeat)
 {
   UNUSED(remove_repeat);
@@ -230,37 +229,36 @@ int ObTenantConfig::got_version(int64_t version, const bool remove_repeat)
       LOG_WARN("Couldn't update config because timer is NULL", K(ret));
     }
     if (schedule && !is_deleting_) {
-      // 为了避免极短时间内上百个变量被更新导致生成上百个update_task
-      // 占满 timer slots （32个），我们需要限定短时间内生成的 update_task
-      // 数量。考虑到每个 update_task 的任务都是同质的（不区分version，都是
-      // 负责把 parameter 刷到最新），我们只需要为这数百个变量更新生成
-      // 1个 update task 即可。但是，考虑到 update  task 执行过程中还会有
-      // 新的变量更新到来，为了让这些更新不丢失，需要另外在生成一个任务负责
-      // “扫尾”。整个时序如下图：
+      // To avoid generating hundreds of update_task due to hundreds of variables being updated in an extremely short period of time
+      // occupy all timer slots (32), we need to limit the number of update_tasks generated in a short period
+      // Quantity. Considering that each update_task is homogeneous (no distinction by version, all
+      // responsible for updating parameter to the latest), we only need to update the generation for these hundreds of variables
+      // 1 update task is sufficient. However, considering that there will still be
+      // New variable updates have arrived, to ensure these updates are not lost, an additional task needs to be generated to handle them
+      // "Cleanup". The entire sequence is as follows in the diagram:
       //
-      // t----> 时间增长的方向
-      // '~' 表示在 timer 队列中等待调度
-      // '-' 表示 task 被 timer 调度执行中
+      // t----> direction of time growth
+      // '~' indicates waiting in the timer queue for scheduling
+      // '-' indicates that the task is being scheduled for execution by the timer
       //
-      // case1: task3 在 task1 结束后进入 timer 队列
+      // case1: task3 enters the timer queue after task1 ends
       // |~~~~|--- task1 ----|
       //            |~~~~~~~~|--- task2 ----|
       //                      |~~~~~~~~~~~~~|--- task3 ----|
       //
-      // case2: task3 在 task1 结束前就进入了 timer 队列
+      // case2: task3 entered the timer queue before task1 ended
       // |~~~~|--- task1 ----|
       //            |~~~~~~~~|--- task2 ----|
       //                    |~~~~~~~~~~~~~~~|--- task3 ----|
       //
       //
-
-      // running_task_count_ 可以
-      // 不甚精确地限定同一时刻只能有两个 update_task，要么两个都在
-      // 调度队列中等待，要么一个在运行另一个在调度队列中等待（上图 case1)。
-      // 之所以说“不甚精确”，是因为 running_task_count_-- 操作是在
-      // runTimerTask() 的结尾调用的，那么存在一种小概率的情况，某一很短的
-      // 时刻，有大于 2 个 update_task 在调度队列中等待（上图的case2）。
-      // 不过我们认为，这种情况可以接受，不会影响正确性。
+      // running_task_count_ can
+      // Not very precisely restricts that only two update_task can exist at the same time, either both are running
+      // Waiting in the scheduling queue, either one is running and the other is waiting in the scheduling queue (case1 in the above figure).
+      // The reason it is said to be "not very precise" is because the running_task_count_-- operation is performed in
+      // called at the end of runTimerTask(), there is a small probability that a very short
+      // At the moment, there are more than 2 update_task(s) waiting in the scheduling queue (case2 in the above figure).
+      // However, we believe that this situation is acceptable and will not affect correctness.
       if ((ATOMIC_FAA(&update_task_.running_task_count_, 1) < 2)) {
         if (OB_FAIL(config_mgr_->schedule(update_task_, 0))) {
           LOG_WARN("schedule task failed", K_(tenant_id), K(ret));

@@ -122,8 +122,7 @@ int ObTransformSimplifyGroupby::transform_one_stmt(common::ObIArray<ObParentDMLS
   }
   return ret;
 }
-
-//当存在多层group by时尝试对下层group by进行消除:
+// When there are multiple layers of group by, attempt to eliminate the lower layer group by:
 //select sum(sc2) from (select sum(c2) sc2 from t ... group by c1);
 // --> select sum(c2) from (select c2 from t ...);
 int ObTransformSimplifyGroupby::remove_redundant_group_by(ObDMLStmt *stmt, bool &trans_happened)
@@ -162,12 +161,11 @@ int ObTransformSimplifyGroupby::remove_redundant_group_by(ObDMLStmt *stmt, bool 
   }
   return ret;
 }
-
-//upper stmt pre check条件:
-//  1.upper stmt 为单表查询, from table 为 generate table
-//  2.包含group by
-//  4.仅存在min/max/sum/bit_and/bit_or/bit_xor aggr, sum aggr无distinct
-//  5.是标准group by,无非聚合输出
+//upper stmt pre check condition:
+//  1.upper stmt is a single-table query, from table is generate table
+//  2.contains group by
+//  4.Only min/max/sum/bit_and/bit_or/bit_xor aggr, sum aggr has no distinct
+//  5.is standard group by, no aggregation output
 int ObTransformSimplifyGroupby::check_upper_stmt_validity(ObSelectStmt *upper_stmt, bool &is_valid)
 {
   int ret = OB_SUCCESS;
@@ -181,7 +179,7 @@ int ObTransformSimplifyGroupby::check_upper_stmt_validity(ObSelectStmt *upper_st
                                                  ctx_->session_info_->get_sql_mode())) {
     is_valid = false;
   }
-  //check aggr仅存在 min/max/sum/bit_and/bit_or/bit_xor, sum且无 distinct, bit_xor的expr本身就不支持distinct
+  // check aggr only exists min/max/sum/bit_and/bit_or/bit_xor, sum without distinct, bit_xor expr itself does not support distinct
   for (int64_t i = 0; OB_SUCC(ret) && is_valid && i < upper_stmt->get_aggr_item_size(); ++i) {
     ObAggFunRawExpr *aggr_expr = NULL;
     if (OB_ISNULL(aggr_expr = upper_stmt->get_aggr_item(i))) {
@@ -200,13 +198,12 @@ int ObTransformSimplifyGroupby::check_upper_stmt_validity(ObSelectStmt *upper_st
   }
   return ret;
 }
-
-//获取可消除group by的child stmt, 对union all查找所有分支, 判断条件:
-//  1.child stmt 不存在 window function/having/distinct/limit/rollup
-//  2.upper stmt group by 不能包含 child stmt aggr
-//  3.upper stmt aggr 与 child aggr 满足消除匹配关系
-//  4.upper stmt condition 没有使用 child stmt aggr
-//熠华 2024.07.31 修正: 对union all不应该做这个改写
+// Get the child stmt that can eliminate group by, search all branches for union all, condition:
+//  1.child stmt does not exist window function/having/distinct/limit/rollup
+//  2.upper stmt group by cannot contain child stmt aggr
+//  3.upper stmt aggr and child aggr satisfy elimination match relationship
+//  4.upper stmt condition not using child stmt aggr
+// Yihua 2024.07.31 Fix: The rewrite should not be applied to union all
 int ObTransformSimplifyGroupby::get_valid_child_stmts(ObSelectStmt *upper_stmt,
                                                       ObSelectStmt *stmt,
                                                       ObArray<ObSelectStmt*> &valid_child_stmts)
@@ -223,13 +220,13 @@ int ObTransformSimplifyGroupby::get_valid_child_stmts(ObSelectStmt *upper_stmt,
     is_valid = false;
   } else if (!stmt->has_group_by()
              || stmt->has_rollup()
-             || stmt->has_window_function()//判断条件1
+             || stmt->has_window_function()//condition 1
              || stmt->has_having()
              || stmt->has_distinct()
              || stmt->has_sequence()
              || stmt->has_limit()) {
     is_valid = false;
-  } else if (OB_FAIL(get_upper_column_exprs(*upper_stmt, *stmt,//获取upper stmt column item中的child aggr列与非aggr列
+  } else if (OB_FAIL(get_upper_column_exprs(*upper_stmt, *stmt, // get upper stmt column item's child aggr column and non-aggr column
                                             aggr_column_exprs,
                                             no_aggr_column_exprs,
                                             child_aggr_exprs,
@@ -237,17 +234,17 @@ int ObTransformSimplifyGroupby::get_valid_child_stmts(ObSelectStmt *upper_stmt,
     LOG_WARN("failed to get upper column exprs", K(ret));
   } else if (!is_valid) {
     /*do nothing*/
-  } else if (OB_FAIL(check_upper_group_by(*upper_stmt, no_aggr_column_exprs, is_valid))) {//判断条件2
+  } else if (OB_FAIL(check_upper_group_by(*upper_stmt, no_aggr_column_exprs, is_valid))) {//check condition 2
     LOG_WARN("failed to check upper group by", K(ret));
   } else if (!is_valid) {
     /*do nothing*/
-  } else if (OB_FAIL(check_aggrs_matched(upper_stmt->get_aggr_items(),//判断条件3
+  } else if (OB_FAIL(check_aggrs_matched(upper_stmt->get_aggr_items(),//condition 3
                                          aggr_column_exprs, no_aggr_column_exprs,
                                          child_aggr_exprs, is_valid))) {
     LOG_WARN("failed to check aggrs matched", K(ret));
   } else if (!is_valid) {
     /*do nothing*/
-  } else if (OB_FAIL(check_upper_condition(upper_stmt->get_condition_exprs(),//判断条件4
+  } else if (OB_FAIL(check_upper_condition(upper_stmt->get_condition_exprs(),//Judge condition 4
                                            aggr_column_exprs, is_valid))) {
     LOG_WARN("failed to check upper condition", K(ret));
   } else if (!is_valid) {
@@ -259,10 +256,9 @@ int ObTransformSimplifyGroupby::get_valid_child_stmts(ObSelectStmt *upper_stmt,
   }
   return ret;
 }
-
-//移除child_stmts中的group by/order by/aggr, 对原select中的aggr进行处理:
-//  1. max/min/sum使用aggr参数添加cast后替换aggr,
-//  2. count替换为is not, not null时结果为与count结果类型相同的const
+// Remove group by/order by/aggr from child_stmts, process aggr in the original select:
+//  1. max/min/sum use aggr parameter add cast after replace aggr,
+//  2. replace count with is not, result is a const of the same type as count when not null
 int ObTransformSimplifyGroupby::remove_child_stmts_group_by(ObArray<ObSelectStmt*> &child_stmts)
 {
   int ret = OB_SUCCESS;
@@ -311,8 +307,7 @@ int ObTransformSimplifyGroupby::remove_child_stmts_group_by(ObArray<ObSelectStmt
   }
   return ret;
 }
-
-//从stmt select中匹配group by/aggr到upper stmt column item
+// From stmt select match group by/aggr to upper stmt column item
 int ObTransformSimplifyGroupby::get_upper_column_exprs(ObSelectStmt &upper_stmt,
                                                        ObSelectStmt &stmt,
                                                        ObIArray<ObRawExpr*> &aggr_column_exprs,
@@ -363,16 +358,15 @@ int ObTransformSimplifyGroupby::get_upper_column_exprs(ObSelectStmt &upper_stmt,
         LOG_WARN("failed to push back expr", K(ret));
       }
     } else {
-      //可能允许转化的场景：
-      //  1.select 中为 cast(aggr fun())
-      //  2.select 包含 subquery
+      //Possible scenarios that may allow conversion:
+      //  1.select within is cast(aggr fun())
+      //  2.select contains subquery
       is_valid = false;
     }
   }
   return ret;
 }
-
-//check upper stmt group by/rollup 不包含 stmt aggr 项
+//check upper stmt group by/rollup does not contain stmt aggr item
 int ObTransformSimplifyGroupby::check_upper_group_by(ObSelectStmt &upper_stmt,
                                                      ObIArray<ObRawExpr*> &no_aggr_column_exprs,
                                                      bool &is_valid)
@@ -388,10 +382,9 @@ int ObTransformSimplifyGroupby::check_upper_group_by(ObSelectStmt &upper_stmt,
   }
   return ret;
 }
-
-//check upper stmt aggr 与 child aggr 满足消除条件, aggr匹配条件:
-//  1.upper aggr min/max/sum 参数为 child min/max/sum 结果, child aggr 为 sum 不能 distinct
-//  2.upper aggr min/max 参数为 child stmt 非 aggr 列
+//check upper stmt aggr with child aggr satisfies elimination condition, aggr match condition:
+//  1.upper aggr min/max/sum parameters are child min/max/sum results, child aggr as sum cannot be distinct
+//  2.upper aggr min/max parameters are child stmt non-aggr columns
 int ObTransformSimplifyGroupby::check_aggrs_matched(ObIArray<ObAggFunRawExpr*> &upper_aggrs,
                                                     ObIArray<ObRawExpr*> &aggr_column_exprs,
                                                     ObIArray<ObRawExpr*> &no_aggr_column_exprs,
@@ -414,7 +407,7 @@ int ObTransformSimplifyGroupby::check_aggrs_matched(ObIArray<ObAggFunRawExpr*> &
       LOG_WARN("unexpected null", K(ret));
     } else if (ObOptimizerUtil::find_item(aggr_column_exprs, aggr_param, &idx)) {
       const ObAggFunRawExpr *child_aggr = static_cast<ObAggFunRawExpr*>(child_aggr_exprs.at(idx));
-      if (upper_aggr->get_expr_type() != child_aggr->get_expr_type()) {//匹配条件1
+      if (upper_aggr->get_expr_type() != child_aggr->get_expr_type()) {//match condition 1}
         is_valid = false;
       } else if (T_FUN_SUM == child_aggr->get_expr_type()
                  && child_aggr->is_param_distinct()) {
@@ -422,7 +415,7 @@ int ObTransformSimplifyGroupby::check_aggrs_matched(ObIArray<ObAggFunRawExpr*> &
       } else {
         /*do nothing*/
       }
-    } else if (ObOptimizerUtil::find_item(no_aggr_column_exprs, aggr_param)) {//匹配条件2
+    } else if (ObOptimizerUtil::find_item(no_aggr_column_exprs, aggr_param)) {//match condition 2
       is_valid = (T_FUN_MAX == upper_aggr->get_expr_type() ||
                   T_FUN_MIN == upper_aggr->get_expr_type() ||
                   T_FUN_SYS_BIT_AND == upper_aggr->get_expr_type() ||
@@ -434,8 +427,7 @@ int ObTransformSimplifyGroupby::check_aggrs_matched(ObIArray<ObAggFunRawExpr*> &
   }
   return ret;
 }
-
-//check upper stmt condition 不包含 stmt aggr result
+//check upper stmt condition does not contain stmt aggr result
 int ObTransformSimplifyGroupby::check_upper_condition(ObIArray<ObRawExpr*> &cond_exprs,
                                                       ObIArray<ObRawExpr*> &aggr_column_exprs,
                                                       bool &is_valid)
@@ -476,9 +468,9 @@ int ObTransformSimplifyGroupby::exist_exprs_in_expr(const ObRawExpr *src_expr,
   return ret;
 }
 
-/* 当 group by 的表达式唯一的时候，可以做以下改写:
-1. 去除 group by
-2. 改写可以改写的聚合函数表达式，并删除原来的聚合函数。
+/* When the expression of group by is unique, the following rewrite can be done:
+1. Remove group by
+2. Rewrite the rewritable aggregate function expressions and delete the original aggregate functions.
 */
 int ObTransformSimplifyGroupby::remove_stmt_group_by(ObDMLStmt *&stmt,
                                                      bool &trans_happened)
@@ -588,8 +580,7 @@ int ObTransformSimplifyGroupby::inner_remove_stmt_group_by(ObSelectStmt *select_
   }
   return ret;
 }
-
-//移除group by重复列
+// Remove duplicate columns in group by
 //select * from t1 group by c1,c1,c1
 //==>
 //select * from t1 group by c1
@@ -878,14 +869,14 @@ int ObTransformSimplifyGroupby::remove_aggr_distinct(ObDMLStmt *stmt, bool &tran
         // do nothing
       } else if (T_FUN_MAX == aggr_expr->get_expr_type() ||
                  T_FUN_MIN == aggr_expr->get_expr_type()) {
-        // max/min(distinct) 可以直接消掉distinct
+        // max/min(distinct) can directly eliminate distinct
         aggr_expr->set_param_distinct(false);
         trans_happened = true;
       } else if (T_FUN_SUM == aggr_expr->get_expr_type() ||
                  T_FUN_COUNT == aggr_expr->get_expr_type() ||
                  T_FUN_GROUP_CONCAT == aggr_expr->get_expr_type() ||
                  T_FUNC_SYS_ARRAY_AGG == aggr_expr->get_expr_type()) {
-        // sum/count/group_concat(distinct) 要求param在做group by之前是非严格unique的
+        // sum/count/group_concat(distinct) require param to be non-strictly unique before group by
         ObSEArray<ObRawExpr *, 4> aggr_param_exprs;
         bool is_unique = false;
         if (OB_FAIL(aggr_param_exprs.assign(aggr_expr->get_real_param_exprs()))) {
@@ -923,7 +914,7 @@ int ObTransformSimplifyGroupby::remove_aggr_distinct(ObDMLStmt *stmt, bool &tran
         // do nothing
       }
     }
-    // 整合消除distinct之后重复出现的aggr item:select min(distinct c), min(c) from t1;
+    // Integrate and eliminate duplicate aggr items after removing distinct: select min(distinct c), min(c) from t1;
     if (OB_SUCC(ret) && trans_happened) {
       if (OB_FAIL(remove_aggr_duplicates(select_stmt))) {
         LOG_WARN("failed to remove aggr item duplicates", K(ret));
@@ -941,13 +932,13 @@ int ObTransformSimplifyGroupby::remove_aggr_distinct(ObDMLStmt *stmt, bool &tran
         // or aggr expr not contain distinct
       } else if (T_FUN_MAX == aggr_expr->get_expr_type() ||
                  T_FUN_MIN == aggr_expr->get_expr_type()) {
-        // max/min(distinct) 可以直接消掉distinct
+        // max/min(distinct) can directly eliminate distinct
         aggr_expr->set_param_distinct(false);
         trans_happened = true;
         win_happened = true;
       } else if (T_FUN_SUM == aggr_expr->get_expr_type() ||
                  T_FUN_COUNT == aggr_expr->get_expr_type()) {
-        // sum/count(distinct) 要求param在做group by之后是非严格unique的
+        // sum/count(distinct) requires param to be non-strictly unique after group by
         ObSEArray<ObRawExpr *, 4> aggr_param_exprs;
         bool is_unique = false;
         if (OB_FAIL(aggr_param_exprs.assign(aggr_expr->get_real_param_exprs()))) {
@@ -1267,13 +1258,13 @@ int ObTransformSimplifyGroupby::check_aggr_win_can_be_removed(const ObDMLStmt *s
     }
     case T_FUN_MAX: //return expr
     case T_FUN_MIN:
-      //case T_FUN_APPROX_COUNT_DISTINCT_SYNOPSIS_MERGE: //不进行改写
+      //case T_FUN_APPROX_COUNT_DISTINCT_SYNOPSIS_MERGE: //do not rewrite
     case T_FUN_AVG: //return expr
     case T_FUN_COUNT_SUM:
     case T_FUN_SUM:
-      //case T_FUN_APPROX_COUNT_DISTINCT: // return 1 or 0 //不进行改写
-      //case T_FUN_APPROX_COUNT_DISTINCT_SYNOPSIS://不进行改写
-      // case T_FUN_GROUP_RANK:// return 1 or 2    需要考虑order desc、nulls first、多列条件，暂不改写
+      //case T_FUN_APPROX_COUNT_DISTINCT: // return 1 or 0 //do not rewrite
+      //case T_FUN_APPROX_COUNT_DISTINCT_SYNOPSIS://do not rewrite
+      // case T_FUN_GROUP_RANK:// return 1 or 2    need to consider order desc, nulls first, multi-column conditions, do not rewrite for now
       // case T_FUN_GROUP_DENSE_RANK:
       // case T_FUN_GROUP_PERCENT_RANK:// return 1 or 0
       // case T_FUN_GROUP_CUME_DIST:// return 1 or 0.5
@@ -1287,7 +1278,7 @@ int ObTransformSimplifyGroupby::check_aggr_win_can_be_removed(const ObDMLStmt *s
     case T_FUN_KEEP_MIN:
     case T_FUN_KEEP_COUNT: // return 1 or 0
     case T_FUN_KEEP_SUM: // return expr
-      // 部分数学分析函数会在改写阶段进行展开:
+      // Some mathematical analysis functions will be expanded during the rewrite phase:
       // ObExpandAggregateUtils::expand_aggr_expr
       // ObExpandAggregateUtils::expand_window_aggr_expr
 
@@ -1389,13 +1380,13 @@ int ObTransformSimplifyGroupby::check_aggr_win_can_be_removed(const ObDMLStmt *s
       }
       break;
     }
-    case T_WIN_FUN_RATIO_TO_REPORT: { //resolver 阶段被转化为 expr/sum（expr）
+    case T_WIN_FUN_RATIO_TO_REPORT: { // resolver stage is converted to expr/sum(expr)
       can_remove = true;
       break;
     }
-    case T_WIN_FUN_SUM: //无效
-    case T_WIN_FUN_MAX: //无效
-    case T_WIN_FUN_AVG: //无效
+    case T_WIN_FUN_SUM: // invalid
+    case T_WIN_FUN_MAX: // invalid
+    case T_WIN_FUN_AVG: // invalid
     default: {
       can_remove = false;
       break;
@@ -1426,7 +1417,7 @@ int ObTransformSimplifyGroupby::transform_aggr_win_to_common_expr(ObSelectStmt *
     win_func = static_cast<ObWinFunRawExpr*>(expr);
     func_type = win_func->get_func_type();
     aggr = win_func->get_agg_expr();
-    // to fix bug: win magic 可能导致 func type 与 aggr 不一致
+    // to fix bug: win magic may cause func type to be inconsistent with aggr
     func_type = NULL == aggr ? win_func->get_func_type() : aggr->get_expr_type();
   } else {
     ret = OB_ERR_UNEXPECTED;
@@ -1604,8 +1595,7 @@ int ObTransformSimplifyGroupby::transform_aggr_win_to_common_expr(ObSelectStmt *
       break;
     }
     }
-
-    //尝试添加类型转化
+    // Try adding type conversion
     if (OB_FAIL(ret)) {
       /*do nothing*/
     } else if (OB_ISNULL(param_expr)) {

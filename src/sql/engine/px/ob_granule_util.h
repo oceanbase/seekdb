@@ -62,9 +62,9 @@ namespace sql
 * Scan all partition for every row from left.
 */
 #define GI_ACCESS_ALL                 (1ULL << 2)
-// Unused. 这个本意是用于 bloom filter 场景，用于过滤向上吐出的数据
-// GI 维护了一个 partition filter，吐出的每一行如果不在 partition 名单中就过滤
-// 这个是 Bloom Filter 的增强版
+// Unused. This is intended for use in bloom filter scenarios, used to filter data thrown upwards
+// GI maintains a partition filter, outputting each row only if it is in the partition list
+// This is an enhanced version of Bloom Filter
 #define GI_USE_PARTITION_FILTER       (1ULL << 3)
 /**
 *         |
@@ -84,7 +84,7 @@ namespace sql
 #define GI_FORCE_PARTITION_GRANULE    (1ULL << 7)
 // divide task into groups（slave mapping）
 #define GI_SLAVE_MAPPING              (1ULL << 8)
-// 通知 GI 使用 partition pruning 模式，只处理特定分区，其余分区都裁剪掉
+// Notify GI to use partition pruning mode, only process specific partitions, other partitions are pruned
 #define GI_ENABLE_PARTITION_PRUNING (1ULL << 9)
 
 class ObTablePartitionInfo;
@@ -93,13 +93,13 @@ class ObGranulePumpArgs;
 enum ObGranuleType
 {
   OB_GRANULE_UNINITIALIZED,
-  // task中的granule为partition+range
+  // task in granule is partition + range
   OB_BLOCK_RANGE_GRANULE,
   OB_PARTITION_GRANULE
 };
 
 // 
-// 《PX的GI详细实现》
+// The Detailed Implementation of PX's GI
 enum ObGranuleSplitterType
 {
   GIT_UNINITIALIZED,
@@ -251,32 +251,32 @@ struct ObParallelBlockRangeTaskParams
   { }
   int valid() const;
   TO_STRING_KV(K(parallelism_), K(expected_task_load_), K(min_task_count_per_thread_), K(max_task_count_per_thread_), K(min_task_access_size_), K(marcos_count_));
-  /* 并行度 */
+  /* parallelism */
   int64_t parallelism_;
   /**
-   * 单位为KB
-   * 默认102400，意味期待一个任务从磁盘读取100M的数据。
-   * 目前使用时都使用tablet size，而不是使用默认值。
+   * Unit is KB
+   * Default is 102400, meaning it expects a task to read 100M of data from disk.
+   * Currently, tablet size is used instead of the default value.
    */
   int64_t expected_task_load_;
   /**
-   * 单位为个
-   * 期望每个线程持有的最小任务数，默认为魔数13
+   * Unit is individual
+   * Expected minimum number of tasks each thread should hold, default is magic number 13
    */
   int64_t min_task_count_per_thread_;
   /**
-   * 单位为个
-   * 期望每个线程持有的最大任务数，默认为魔数100
+   * Unit is individual
+   * Expected maximum number of tasks each thread can hold, default is magic number 100
    */
   int64_t max_task_count_per_thread_;
   /**
-   * 单位为KB
-   * 每个任务最小的负责数据量，默认为一个宏块，2M。
-   * 可以通过系统项来改变这个值。
+   * Unit is KB
+   * The minimum amount of data each task is responsible for, default is one macroblock, 2M.
+   * This value can be changed via system settings.
    */
   int64_t min_task_access_size_;
   /**
-   * 总的宏块个数
+   * Total number of macroblocks
    */
   uint64_t marcos_count_;
 };

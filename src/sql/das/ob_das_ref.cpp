@@ -396,7 +396,7 @@ int ObDASRef::execute_all_task(DasAggregatedTaskList &agg_task_list)
         ret = aggregated_task->get_save_ret();
         LOG_WARN("can't retry for this error_ret", K(ret), KPC(aggregated_task));
       } else if (aggregated_task->has_not_execute_task()) {
-        // 还有任务没执行完毕
+        // There are still tasks not completed
         if (aggregated_task->has_failed_tasks()) {
           // retry all failed tasks.
           common::ObSEArray<ObIDASTaskOp *, 2> failed_tasks;

@@ -527,7 +527,7 @@ int ObDatumObjParam::construct_array_param_datum(const ObObjParam &obj_param, Ob
       datum_array->element_ = array_obj->element_;
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < array_obj->count_; ++i) {
-      // 每一个datum数据都有自己的类型，datum_array->element_不再准确，但是这个只适用于insert values场景
+      // Every datum has its own type, datum_array->element_ is no longer accurate, but this only applies to insert values scenario
       ObObjDatumMapType obj_datum_map = ObDatum::get_obj_datum_map_type(
           array_obj->data_[i].get_type());
       if (OB_LIKELY(OBJ_DATUM_NULL != obj_datum_map)) {

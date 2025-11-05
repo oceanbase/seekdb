@@ -553,7 +553,7 @@ int ObLoadDataDirectImpl::DataReader::read_buffer(ObLoadFileBuffer &file_buffer)
     } else if (0 == read_size) {
       LOG_TRACE("read nothing", K(is_end_file()));
     } else {
-      file_buffer.update_pos(read_size); // 更新buffer中数据长度
+      file_buffer.update_pos(read_size); // update buffer data length
       LOG_TRACE("read file sucess", K(read_size));
       ATOMIC_AAF(&execute_ctx_->job_stat_->read_bytes_, read_size);
     }
@@ -579,12 +579,11 @@ int ObLoadDataDirectImpl::DataReader::get_next_buffer(ObLoadFileBuffer &file_buf
   } else {
     file_buffer.reset();
     line_count = 0;
-
-    // 1. 从data_trimer中恢复出上次读取留下的数据
+    // 1. Restore the data left from the last read in data_trimer
     if (OB_FAIL(data_trimer_.recover_incomplate_data(file_buffer))) {
       LOG_WARN("fail to recover incomplate data", KR(ret));
     }
-    // 2. 读取数据，然后从buffer中找出完整的行，剩下的数据缓存到data_trimer
+    // 2. Read data, then find complete lines from the buffer, and cache the remaining data to data_trimer
     if (OB_SUCC(ret)) {
       int64_t complete_cnt = limit;
       int64_t complete_len = 0;
@@ -1161,7 +1160,7 @@ int ObLoadDataDirectImpl::FileLoadExecutor::fetch_task_handle(TaskHandle *&handl
       LOG_WARN("fail to handle task result", KR(ret), KPC(handle));
     }
     if (OB_FAIL(ret)) {
-      // 主动调用on_task_finished, 防止wait_all_task_finished卡住
+      // Active call on_task_finished, prevent wait_all_task_finished from hanging
       task_controller_.on_task_finished();
     }
   }
@@ -1262,7 +1261,7 @@ int ObLoadDataDirectImpl::FileLoadExecutor::process_task_handle(TaskHandle *hand
       row.count_ = column_count;
     }
     while (OB_SUCC(ret) && !is_iter_end) {
-      // 每个新的batch需要分配一个新的shared_allocator
+      // Each new batch needs to allocate a new shared_allocator
       ObTableLoadSharedAllocatorHandle allocator_handle;
       ObTableLoadObjRowArray obj_rows;
       if (OB_FAIL(ObTableLoadSharedAllocatorHandle::make_handle(
@@ -1282,8 +1281,8 @@ int ObLoadDataDirectImpl::FileLoadExecutor::process_task_handle(TaskHandle *hand
             break;
           }
         } else {
-          //此时row中的每个obj的内容指向的是data parser中的内存
-          //因此得把它们深拷贝一遍
+          // At this time, each obj in row points to the memory in data parser
+          // Therefore we need to deep copy them once
           ObTableLoadObjRow tmp_obj_row;
           tmp_obj_row.seq_no_= handle->get_next_seq_no();
           tmp_obj_row.cells_ = row.cells_;
@@ -1893,9 +1892,9 @@ int ObLoadDataDirectImpl::BackupLoadExecutor::init(const LoadExecuteParam &execu
         ret = OB_NOT_SUPPORTED;
         LOG_WARN("table partition too much", KR(ret), K(partition_count_), K(max_partition_count));
       } else {
-        // 计算subpart_count_
+        // Calculate subpart_count_
         if (partition_count_ >= worker_count_ * MIN_TASK_PER_WORKER) {
-          // 分区数目足够, 不对分区进行拆分
+          // Partition number is sufficient, do not split the partition
           subpart_count_ = 1;
         } else {
           subpart_count_ =
@@ -1970,20 +1969,20 @@ int ObLoadDataDirectImpl::BackupLoadExecutor::execute()
         LOG_WARN("fail to on next task", KR(ret));
       } else {
         ObTableLoadTask *task = nullptr;
-        // 1. 分配task
+        // 1. Assign task
         if (OB_ISNULL(task = task_allocator_.alloc(execute_param_->tenant_id_))) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
           LOG_WARN("fail to alloc task", KR(ret));
         }
-        // 2. 设置processor
+        // 2. Set processor
         else if (OB_FAIL(task->set_processor<BackupLoadTaskProcessor>(this, i + 1))) {
           LOG_WARN("fail to set backup load task processor", KR(ret));
         }
-        // 3. 设置callback
+        // 3. Set callback
         else if (OB_FAIL(task->set_callback<BackupLoadTaskCallback>(this))) {
           LOG_WARN("fail to set backup load task callback", KR(ret));
         }
-        // 4. 把task放入调度器
+        // 4. put task into scheduler
         else if (OB_FAIL(task_scheduler_->add_task(i, task))) {
           LOG_WARN("fail to add task", KR(ret), K(i), KPC(task));
         }
@@ -2069,7 +2068,7 @@ int ObLoadDataDirectImpl::BackupLoadExecutor::process_partition(int32_t session_
                K(subpart_count), K(subpart_idx));
     }
     while (OB_SUCC(ret) && !is_iter_end) {
-      // 每个新的batch需要分配一个新的shared_allocator
+      // Each new batch needs to allocate a new shared_allocator
       ObTableLoadSharedAllocatorHandle allocator_handle;
       ObTableLoadObjRowArray obj_rows;
       processed_line_count = 0;
@@ -2091,8 +2090,8 @@ int ObLoadDataDirectImpl::BackupLoadExecutor::process_partition(int32_t session_
             break;
           }
         } else {
-          //此时row中的每个obj的内容指向的是data parser中的内存
-          //因此得把它们深拷贝一遍
+          // At this time, each obj's content in row points to the memory in data parser
+          // Therefore we need to deep copy them once
           ObTableLoadObjRow tmp_obj_row;
           tmp_obj_row.seq_no_= sequence_no++;
           tmp_obj_row.cells_ = (!is_heap_table ? new_row->cells_ : new_row->cells_ + 1);
@@ -2434,15 +2433,15 @@ int ObLoadDataDirectImpl::init_execute_param()
   // column_ids_
   if (OB_SUCC(ret)) {
     execute_param_.column_ids_.reset();
-    if (is_backup) { // 备份数据导入
+    if (is_backup) { // Backup data import
       if (OB_FAIL(ObTableLoadSchema::get_column_ids(table_schema, execute_param_.column_ids_))) {
         LOG_WARN("fail to get column ids for backup", KR(ret));
       }
-    } else if (load_stmt_->get_default_table_columns()) { // 默认列导入
+    } else if (load_stmt_->get_default_table_columns()) { // default column import
       if (OB_FAIL(ObTableLoadSchema::get_user_column_ids(table_schema, execute_param_.column_ids_))) {
         LOG_WARN("fail to get user column ids", KR(ret));
       }
-    } else { // 指定列导入
+    } else { // Specify column import
       const static uint64_t INVALID_COLUMN_ID = UINT64_MAX;
       ObArray<uint64_t> user_column_ids;
       ObArray<ObString> user_column_names;

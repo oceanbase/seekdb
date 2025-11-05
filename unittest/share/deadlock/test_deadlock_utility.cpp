@@ -29,8 +29,7 @@ public:
   virtual void SetUp() {}
   virtual void TearDown() {}
 };
-
-// 序列化和反序列化的功能
+// Serialization and deserialization functionality
 TEST_F(TestDeadLockUtility, interface) {
   ObDetectorUserReportInfo info;
   ObSharedGuard<char> ptr;

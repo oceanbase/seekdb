@@ -62,10 +62,10 @@ enum class ObIOMode : uint8_t { READ = 0, WRITE = 1, MAX_MODE };
 enum class ObIOGroupMode : uint8_t { LOCALREAD = 0, LOCALWRITE = 1, REMOTEREAD = 2, REMOTEWRITE = 3, MODECNT };
 
 enum class ObIOPriority : uint8_t {
-  EMERGENT = 0,  // 预留
-  HIGH = 1,      // 转储写、中间层索引读取
-  MIDDLE = 2,    // 合并写、临时文件写
-  LOW = 3        // 后台任务读写，例如CRC校验
+  EMERGENT = 0,  // Reserved
+  HIGH = 1,      // dump write, middle layer index read
+  MIDDLE = 2,    // merge write, temporary file write
+  LOW = 3        // background task read/write, for example CRC check
 };
 
 const char *get_io_mode_string(const ObIOMode mode);
@@ -728,8 +728,8 @@ public:
     TO_STRING_KV(K_(mode), K_(deleted), K_(cleared), K_(min_percent), K_(max_percent), K_(weight_percent));
 
   public:
-    bool deleted_;  // group被删除的标记
-    bool cleared_;  // group被清零的标记，以后有新的directive就会重置
+    bool deleted_;  // flag indicating that the group has been deleted
+    bool cleared_;  // flag indicating that the group has been cleared, will be reset with new directive
     char group_name_[common::OB_MAX_RESOURCE_PLAN_NAME_LENGTH];
     int64_t min_percent_;
     int64_t max_percent_;

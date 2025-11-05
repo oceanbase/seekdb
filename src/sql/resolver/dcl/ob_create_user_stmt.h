@@ -68,7 +68,7 @@ private:
   common::ObString masked_sql_;
   bool if_not_exist_;
   uint64_t profile_id_; //only used in oracle mode
-  obrpc::ObCreateUserArg create_user_arg_; // 用于返回exec_tenant_id_
+  obrpc::ObCreateUserArg create_user_arg_; // used to return exec_tenant_id_
   uint64_t max_connections_per_hour_;
   uint64_t max_user_connections_;
 private:

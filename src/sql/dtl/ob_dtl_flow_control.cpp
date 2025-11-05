@@ -140,7 +140,7 @@ int ObDtlFlowControl::unregister_all_channel()
 {
   int ret = OB_SUCCESS;
   ObDtlChannel* ch = nullptr;
-  // 这里不能同时pop出来，否则clean recv list时，根据ch去clean
+  // Here cannot pop out at the same time, otherwise when cleaning the recv list, it will be cleaned according to ch
   for (int i = 0; i < chans_.count(); ++i) {
     if (nullptr == (ch = chans_.at(i))) {
       LOG_WARN("failed to unregister channel", K(ret));
@@ -239,9 +239,9 @@ int ObDtlFlowControl::unblock_channel(ObDtlChannel* ch)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("channel is null", K(ret), K(idx), KP(ch->get_id()), K(ch->get_peer()));
   } else {
-    // 必须等待该channel的response先回包后才能处理block消息，否则可能导致unblocking msg先到达，处理后，response再到达
-    // 这样channel的状态是unblock，所以没有执行unblock状态，后面response到达时，发现response为is_block设置了block状态，之后永远等待不到unblocking msg
-    // 这里需要将response的is_block还原，即unblocking msg，则response的block状态应该清理掉
+    // Must wait for the response of this channel to return before processing the block message, otherwise it may lead to the unblocking msg arriving first, being processed, and then the response arriving
+    // This way the channel's status is unblock, so the unblock state is not executed, when the response arrives later, it finds that the response sets the block state to is_block, and then it will never receive an unblocking msg
+    // Here we need to restore response's is_block, i.e., unblocking msg, then the block status of response should be cleared
     if (OB_FAIL(ch->clear_response_block())) {
       LOG_WARN("failed to clear response block info", K(ret));
     } else if (is_block(idx)) {
@@ -287,7 +287,7 @@ int ObDtlFlowControl::notify_channel_unblocking(
   }
   LOG_TRACE("channel status", K(this), K(ret), KP(ch->get_id()), K(ch->get_peer()), K(idx),
     K(is_block(idx)), K(get_nth_block(idx)), K(get_blocked_cnt()));
-  // 之前通过OB_ERR_SIGNALED_IN_PARALLEL_QUERY_SERVER状态来决定是否结束，但可能收到msg后，下游可能还有线程没有起来，感觉有风险
+  // Previously decided whether to end through the OB_ERR_SIGNALED_IN_PARALLEL_QUERY_SERVER status, but there might still be threads downstream that have not started after receiving msg, feeling risky
   if (OB_ERR_SIGNALED_IN_PARALLEL_QUERY_SERVER == ret) {
     ret = OB_SUCCESS;
   }
@@ -309,15 +309,15 @@ int ObDtlFlowControl::sync_send_drain(int64_t &unblock_cnt)
       LOG_TRACE("channel unblock", K(ret), KP(ch->get_id()), K(ch->get_peer()),
         K(get_nth_block(idx)), K(get_blocked_cnt()));
     } else {
-      // 这里必须先设置unblock，再发送unblocking消息
-      // 否则可能被覆盖：
-      // 如:
-      //  ch1 操作                                                                ch2操作
-      //  ch1 发送msg1 to ch2  blocked住
+      // Here must first set unblock, then send unblocking message
+      // otherwise may be overwritten:
+      // For example:
+      //  ch1 operation                                                                ch2 operation
+      //  ch1 sends msg1 to ch2 blocked
       //                                                                        ch2 unblocking msg to ch1
-      //  ch1 unblock后再发送msg2 ,blocked
-      //                                                                        ch2 设置unblock状态
-      //  这样ch1的这个msg2的block就无法再收到ch2的unblocking msg，因为flag为false了
+      //  ch1 unblock then send msg2, blocked
+      //                                                                        ch2 set unblock state
+      //  This way ch1's msg2 block can no longer receive ch2's unblocking msg, because flag is false
       LOG_TRACE("unblocking channel", K(ret), KP(ch->get_id()), K(ch->get_peer()),
         K(idx), K(cnt), K(is_block(idx)), K(get_nth_block(idx)), K(get_blocked_cnt()));
       if (OB_FAIL(notify_channel_unblocking(ch, unblock_cnt, false))) {
@@ -326,7 +326,7 @@ int ObDtlFlowControl::sync_send_drain(int64_t &unblock_cnt)
     }
     LOG_TRACE("channel status", K(this), K(ret), KP(ch->get_id()), K(ch->get_peer()), K(idx),
       K(cnt), K(is_block(idx)), K(get_nth_block(idx)), K(get_blocked_cnt()));
-    // 之前通过OB_ERR_SIGNALED_IN_PARALLEL_QUERY_SERVER状态来决定是否结束，但可能收到msg后，下游可能还有线程没有起来，感觉有风险
+    // Previously decided whether to end through the OB_ERR_SIGNALED_IN_PARALLEL_QUERY_SERVER status, but there might still be threads downstream that have not started after receiving msg, feeling risky
     if (OB_FAIL(ret)) {
       tmp_ret = ret;
       ret = OB_SUCCESS;
@@ -386,7 +386,7 @@ int ObDtlFlowControl::drain_all_channels()
       } else if (OB_FAIL(ch->flush(true))) {
         LOG_WARN("failed to drain msg", K(ret));
       }
-      // 这里必须先发送，然后set因为channel如果已经drain不会再发数据了
+      // Here must send first, then set because if the channel is already drained, it will not send any more data
       ch->set_drain();
       if (OB_FAIL(ret)) {
         tmp_ret = ret;

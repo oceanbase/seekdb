@@ -25,7 +25,7 @@ namespace common
 {
 namespace bg = boost::geometry;
 
-// adapt mysql only support ObWkbGeogPoint、ObWkbGeogMultiPoint
+// adapt mysql only support ObWkbGeogPoint, ObWkbGeogMultiPoint
 template <typename GeoType1, typename GeoType2>
 int ObGeoFuncDistanceSphereUtil::eval(const GeoType1 *g1,
                                       const GeoType2 *g2,

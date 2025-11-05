@@ -110,7 +110,7 @@ int ObMPStmtSendPieceData::process()
   int ret = OB_SUCCESS;
   ObSQLSessionInfo *sess = NULL;
   bool need_response_error = true;
-  bool async_resp_used = false; // 由事务提交线程异步回复客户端
+  bool async_resp_used = false; // Asynchronously reply to the client by the transaction commit thread
   int64_t query_timeout = 0;
   ObSMConnection *conn = get_conn();
 
@@ -207,10 +207,9 @@ int ObMPStmtSendPieceData::process_send_long_data_stmt(ObSQLSessionInfo &session
   ObThreadLogLevelUtils::init(session.get_log_id_level_map());
   ret = do_process(session);
   ObThreadLogLevelUtils::clear();
-
-  //对于tracelog的处理，不影响正常逻辑，错误码无须赋值给ret
+  //For the handling of tracelog, it does not affect the normal logic, and the error code does not need to be assigned to ret
   int tmp_ret = OB_SUCCESS;
-  //清空WARNING BUFFER
+  //Clear WARNING BUFFER
   tmp_ret = do_after_process(session, false);
   UNUSED(tmp_ret);
   return ret;
@@ -244,7 +243,7 @@ int ObMPStmtSendPieceData::do_process(ObSQLSessionInfo &session)
     }
     int64_t execution_id = 0;
     ObString sql = "send long data";
-    //监控项统计开始
+    //Monitoring item statistics start
     exec_start_timestamp_ = ObTimeUtility::current_time();
     if (FALSE_IT(execution_id = gctx_.sql_engine_->get_execution_id())) {
       //nothing to do
@@ -254,7 +253,7 @@ int ObMPStmtSendPieceData::do_process(ObSQLSessionInfo &session)
     } else if (OB_FAIL(store_piece(session))) {
       exec_end_timestamp_ = ObTimeUtility::current_time();
     } else {
-      //监控项统计结束
+      //Monitoring item statistics end
       exec_end_timestamp_ = ObTimeUtility::current_time();
 
       session.set_current_execution_id(execution_id);
@@ -284,14 +283,14 @@ int ObMPStmtSendPieceData::do_process(ObSQLSessionInfo &session)
     // if diagnostic stmt execute successfully, it dosen't clear the warning message
     session.update_show_warnings_buf();
   } else {
-    session.set_show_warnings_buf(ret); // TODO: 挪个地方性能会更好，减少部分wb拷贝
+    session.set_show_warnings_buf(ret); // TODO: Move this to a better place, reduce some wb copying
   }
 
   //set read_only
   if (OB_FAIL(ret)) {
     bool is_partition_hit = session.partition_hit().get_bool();
     int err = send_error_packet(ret, NULL, is_partition_hit);
-    if (OB_SUCCESS != err) {  // 发送error包
+    if (OB_SUCCESS != err) {  // send error packet
       LOG_WARN("send error packet failed", K(ret), K(err));
     }
   }
@@ -578,11 +577,11 @@ int ObPieceCache::get_piece_buffer(int32_t stmt_id,
     LOG_WARN("piece is null", K(stmt_id), K(ret));
   } else if (NULL == piece->get_buffer_array()
               || 0 == piece->get_buffer_array()->count()) {
-    // piecebuffer 空了的话， 就直接摘掉piece
+    // if piecebuffer is empty, just remove the piece
     if (OB_FAIL(remove_piece(get_piece_key(stmt_id, param_id), session))) {
       LOG_WARN("remove piece fail", K(stmt_id), K(param_id));
     } else {
-      // fetch阶段，前一段读到了最后一个数据，但是长度恰好和piecesize相等，所以没有设置last标记
+      // fetch stage, the previous segment read the last data, but the length is exactly equal to piecesize, so the last flag was not set
       piece_buf.set_piece_mode(ObLastPiece);
       piece_buf.set_piece_buffer(NULL);
     }
@@ -598,7 +597,7 @@ int ObPieceCache::get_piece_buffer(int32_t stmt_id,
       ObString *buf = old_piece_buf->get_piece_buffer();
       char *&pos = old_piece_buf->get_position();
       int64_t len = piece_size;
-      // buf 需要根据piece_size截断
+      // buf needs to be truncated according to piece_size
       if ((buf->length() - (pos - (buf->ptr()))) <= piece_size) {
         old_piece_buf->set_piece_mode(ObLastPiece);
         piece_buf.set_piece_mode(ObLastPiece);
@@ -711,7 +710,7 @@ int ObPieceCache::make_piece_buffer(ObIAllocator *allocator,
                                     ObPieceMode mode, 
                                     ObString *buf)
 {
-  // 这个buf是不是要deep copy一份，外层的生命周期不可控
+  // Is this buf supposed to be deep copied, the lifecycle of the outer layer is uncontrollable
   int ret = OB_SUCCESS;
   void *piece_mem = NULL;
   OV (OB_NOT_NULL(piece_mem = allocator->alloc(sizeof(ObPieceBuffer))),
@@ -752,10 +751,9 @@ int ObPieceCache::add_piece_buffer(ObPiece *piece,
 {
   int ret = OB_SUCCESS;
   ObPieceBuffer *piece_buffer = NULL;
-
-  // 这里直接push进去了，piece_buffer的生命周期是不是也要考虑
-  // 实现应该改一下，不要再传piece_buffer了，传buf和piece_mode
-  // 内部调用make_piece_buffer分配内存
+  // Here it is directly pushed in, should the lifecycle of piece_buffer also be considered?
+  // The implementation should be changed, do not pass piece_buffer anymore, pass buf and piece_mode
+  // Internal call to make_piece_buffer to allocate memory
   if (OB_ISNULL(piece) || OB_ISNULL(piece->get_allocator())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("piece is null.", K(ret));

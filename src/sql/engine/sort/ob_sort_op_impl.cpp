@@ -995,7 +995,7 @@ int ObSortOpImpl::build_chunk(const int64_t level, Input &input, int64_t extra_s
         total_size += src_store_row->row_size_;
       }
     }
-    // 必须强制先dump，然后finish dump才有效
+    // Must force dump first, then finish dump is effective
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(chunk->datum_store_.dump(false, true))) {
       LOG_WARN("failed to dump row store", K(ret));
@@ -1035,19 +1035,18 @@ int ObSortOpImpl::build_chunk(const int64_t level, Input &input, int64_t extra_s
 
   return ret;
 }
-
-// 如果发现需要dump，则
-// 1 重新获取可用内存大小
-// 2 检查是否还需要dump
-// 3 如果需要dump，分三种情况
-//   3.0 cache_size <= mem_bound 全内存(这里表示之前预估不准确，同时有足够内存可用)
-//       申请是否有更多内存可用，决定是否需要dump
-//       3.0.1 申请内存大于等于cache size，则不dump
-//       3.0.2 申请内存小于cache size，则dump，返回的是算one-pass size
-//   3.1 未超过cache size，则直接dump
-//   3.2 超过了cache size，则采用2*size方式申请内存，one-pass内存
-//       然后继续，和之前逻辑一样
-//       所以这里会导致最开始dump的partition one-pass内存较少，后面倍数cache size关系的one-pass更大
+// If dump is required, then
+// 1 reacquire available memory size
+// 2 check if dump is still needed
+// 3 If need dump, three cases
+//   3.0 cache_size <= mem_bound full memory (here it means the previous estimation was inaccurate, and there is sufficient memory available)
+//       Check if more memory is available, decide whether to dump
+//       3.0.1 Apply memory greater than or equal to cache size, then do not dump
+//       3.0.2 Apply memory less than cache size, then dump, return is one-pass size
+//   3.1 Not exceeding cache size, then directly dump
+//   3.2 Exceeds cache size, then apply for memory using 2*size method, one-pass memory
+//       Then continue, and the logic is the same as before
+//       So here it will lead to the first dumped partition having less one-pass memory, while the subsequent one-pass is larger in relation to the multiple of cache size
 int ObSortOpImpl::preprocess_dump(bool &dumped)
 {
   int ret = OB_SUCCESS;
@@ -1061,7 +1060,7 @@ int ObSortOpImpl::preprocess_dump(bool &dumped)
     dumped = need_dump();
     if (dumped) {
       if (!sql_mem_processor_.is_auto_mgr()) {
-        // 如果dump在非auto管理模式也需要注册到workarea
+        // If dump is not in auto management mode, it also needs to be registered to workarea
         if (OB_FAIL(sql_mem_processor_.extend_max_memory_size(
             &mem_context_->get_malloc_allocator(),
             [&](int64_t max_memory_size) {
@@ -1072,7 +1071,7 @@ int ObSortOpImpl::preprocess_dump(bool &dumped)
           LOG_WARN("failed to extend memory size", K(ret));
         }
       } else if (profile_.get_cache_size() < profile_.get_global_bound_size()) {
-        // in-memory：所有数据都可以缓存，即global bound size比较大，则继续看是否有更多内存可用
+        // in-memory: all data can be cached, i.e., global bound size is relatively large, then continue to see if there is more memory available
         if (OB_FAIL(sql_mem_processor_.extend_max_memory_size(
             &mem_context_->get_malloc_allocator(),
             [&](int64_t max_memory_size) {
@@ -1088,7 +1087,7 @@ int ObSortOpImpl::preprocess_dump(bool &dumped)
         // one-pass
         if (profile_.get_cache_size() <=
                                   datum_store_.get_mem_hold() + datum_store_.get_file_size()) {
-          // 总体数据量超过cache size，说明估算的cache不准确，需要重新估算one-pass size，按照2*cache_size处理
+          // Total data volume exceeds cache size, indicating that the estimated cache is inaccurate, need to re-estimate one-pass size, process according to 2*cache_size
           if (OB_FAIL(sql_mem_processor_.update_cache_size(&mem_context_->get_malloc_allocator(),
             profile_.get_cache_size() * EXTEND_MULTIPLE))) {
             LOG_WARN("failed to update cache size", K(ret), K(profile_.get_cache_size()));
@@ -1150,7 +1149,7 @@ int ObSortOpImpl::before_add_row()
       LOG_WARN("failed to update used memory size", K(ret));
     } else if (GCONF.is_sql_operator_dump_enabled()) {
       if (rows_->count() >= MAX_ROW_CNT) {
-        // 最大2G，超过2G会扩容到4G，4G申请会失败
+        // Maximum 2G, exceeding 2G will expand to 4G, 4G allocation will fail
         if (OB_FAIL(do_dump())) {
           LOG_WARN("dump failed", K(ret));
         }

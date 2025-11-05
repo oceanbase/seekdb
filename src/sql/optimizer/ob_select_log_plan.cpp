@@ -3244,8 +3244,7 @@ int ObSelectLogPlan::allocate_union_all_as_top(const ObIArray<ObLogicalOperator*
   }
   return ret;
 }
-
-// 将多元 union 拆分为 union all 和 hash distinct, 这里分配 hash distinct, 并调整估行
+// Split union into union all and hash distinct, here allocate hash distinct, and adjust row estimate
 
 int ObSelectLogPlan::candi_allocate_recursive_union_all(const ObIArray<ObSelectLogPlan*> &child_plans)
 {
@@ -5312,11 +5311,10 @@ int ObSelectLogPlan::generate_normal_raw_plan()
   }
   return ret;
 }
-
-// 1. 生成log plan tree, 包括Join/TableScan/SubplanScan/Sort/Material算子
-// 2. 分配top算子，包括Count/Group By/SubPlanFilter/Window Sort/Distinct/Order By
+// 1. Generate log plan tree, including Join/TableScan/SubplanScan/Sort/Material operators
+// 2. Allocate top operator, including Count/Group By/SubPlanFilter/Window Sort/Distinct/Order By
 //                     Limit/Late Materialization/Select Into
-// 3. 选出最终代价最小的plan
+// 3. Select the plan with the smallest final cost
 int ObSelectLogPlan::generate_raw_plan_for_plain_select()
 {
   int ret = OB_SUCCESS;
@@ -6073,14 +6071,14 @@ int ObSelectLogPlan::prune_win_func_plan_by_sort_method(ObIArray<CandidatePlan> 
 }
 
 /**
- * @brief 假设 win_func_exprs 都采用 sort_keys 进行排序
- * 同一个分组中的 win_expr 应该按照一定的顺序排序 (`sort_window_functions()`)
- * 同一个ObWindowFunction中的多个 win_expr 要按照一定的顺序组织，譬如：
+ * @brief Assume win_func_exprs are all sorted using sort_keys
+ * win_exprs within the same group should be sorted in a certain order (`sort_window_functions()`)
+ * Multiple win_exprs within the same ObWindowFunction should be organized in a certain order, for example:
  * w1(c) over (partition by e1, e2, e3)
  * w2(c) over (partition by e1)
  * w3(c) over (partition by e1 e2)
- * 一定要按照 w1, w3, w2 的顺序来组织。即排在后面的win_expr的partition表达式是前面对象的子集。
- * 这里窗口函数会按照分组表达式数量进行排序（只统计非常量的分组表达式数量，数量多的排在前）。
+ * They must be organized in the order of w1, w3, w2. That is, the partition expression of a win_expr that comes later should be a subset of the previous one.
+ * Here, window functions will be sorted based on the number of grouping expressions (only counting non-constant grouping expressions, more numerous ones come first).
  */
 int ObSelectLogPlan::create_one_window_function(CandidatePlan &candidate_plan,
                                                 const WinFuncOpHelper &win_func_helper,
@@ -7587,14 +7585,14 @@ int ObSelectLogPlan::create_pushdown_hash_dist_win_func(ObLogicalOperator *&top,
 }
 
 /**
- * @brief 假设 win_func_exprs 都采用 sort_keys 进行排序
- * 同一个分组中的 win_expr 应该按照一定的顺序排序。
- * 同一个ObWindowFunction中的多个 win_expr 要按照一定的顺序组织，譬如：
+ * @brief Assume win_func_exprs are all sorted using sort_keys
+ * win_expr within the same group should be sorted in a certain order.
+ * Multiple win_expr in the same ObWindowFunction should be organized in a certain order, for example:
  * w1(c) over (partition by e1, e2, e3)
  * w2(c) over (partition by e1)
  * w3(c) over (partition by e1 e2)
- * 一定要按照 w1, w3, w2 的顺序来组织。即排在后面的win_expr的partition表达式是前面对象的子集。
- * 这里窗口函数会按照分组表达式数量进行排序（只统计非常量的分组表达式数量，数量多的排在前）。
+ * They must be organized in the order of w1, w3, w2. That is, the partition expression of the win_expr that comes later is a subset of the previous one.
+ * Here, window functions will be sorted according to the number of grouping expressions (only counting non-constant grouping expressions, more numerous ones come first).
  */
 int ObSelectLogPlan::sort_window_functions(const ObIArray<ObWinFunRawExpr *> &win_func_exprs,
                                            ObIArray<ObWinFunRawExpr *> &ordered_win_func_exprs,
@@ -8178,8 +8176,7 @@ int ObSelectLogPlan::adjust_late_materialization_stmt_structure(ObSelectStmt *st
         range_columns.at(i).expr_ = static_cast<ObColumnRefRawExpr *>(new_col_expr);
       }
     }
-
-    //索引列、rowkey列由原表投影，剩下需要回表的列由复制表投影
+    // Index column, rowkey column are projected from the original table, the remaining columns that need to be looked up are projected from the replica table
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(index_scan->set_range_columns(range_columns))) {
       LOG_WARN("failed to set range columns", K(ret));
@@ -8271,7 +8268,7 @@ int ObSelectLogPlan::adjust_late_materialization_plan_structure(ObLogicalOperato
         LOG_WARN("failed to push back column item", K(ret));
       } else { /*do nothing*/ }
     }
-    //生成pre-query-range
+    // Generate pre-query-range
     if (OB_SUCC(ret)) {
       const ObDataTypeCastParams dtc_params =
             ObBasicSessionInfo::create_dtc_params(optimizer_context_.get_session_info());
@@ -8390,7 +8387,7 @@ int ObSelectLogPlan::generate_late_materialization_table_get(ObLogTableScan *ind
     table_scan->set_ref_table_id(index_scan->get_ref_table_id());
     table_scan->set_index_table_id(index_scan->get_ref_table_id());
     table_scan->set_scan_direction(index_scan->get_scan_direction());
-    // 改掉project table partition info的table_id
+    // Change the table_id of project table partition info
     table_scan_part_info->get_table_location().set_table_id(table_scan->get_table_id());
     table_scan_part_info->get_phy_tbl_location_info_for_update().set_table_location_key(
         table_scan->get_table_id(), table_scan->get_ref_table_id());
@@ -8857,10 +8854,10 @@ int ObSelectLogPlan::if_stmt_need_late_materialization(bool &need)
         && 1 == select_stmt->get_table_size()
         && NULL != select_stmt->get_table_item(0)
         && select_stmt->get_table_item(0)->is_basic_table()
-        && !select_stmt->get_table_item(0)->is_system_table_ //不允许系统表
+        && !select_stmt->get_table_item(0)->is_system_table_ // system table not allowed
         && NULL == get_stmt()->get_part_expr(select_stmt->get_table_item(0)->table_id_,
-                                             select_stmt->get_table_item(0)->ref_id_) //不允许分区表
-        && 0 == child_stmt_size //不允许有子查询
+                                             select_stmt->get_table_item(0)->ref_id_) // partitioned tables are not allowed
+        && 0 == child_stmt_size // no subqueries allowed
         && !select_stmt->is_calc_found_rows();
   }
   return ret;

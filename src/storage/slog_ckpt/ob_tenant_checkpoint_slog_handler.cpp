@@ -140,7 +140,7 @@ void ObTenantCheckpointSlogHandler::ObWriteCheckpointTask::runTimerTask()
       LOG_WARN("fail to write checkpoint", K(ret));
     }
   } else {
-    // 必须等待所有的slog回放完成才能做ckpt,否则有些macro block可能没有被mark
+    // Must wait for all slog replays to complete before doing ckpt, otherwise some macro blocks may not be marked
     LOG_INFO("slog replay not finish, do not write checkpoint");
   }
 }

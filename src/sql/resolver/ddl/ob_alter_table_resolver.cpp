@@ -147,7 +147,7 @@ int ObAlterTableResolver::resolve(const ParseNode &parse_tree)
                              index_schema_))) {
             LOG_WARN("fail to get index table schema", K(ret), K(table_name));
           } else if (OB_ISNULL(index_schema_)) {
-            // 获取到的 index_schema_ 为空，则说明当前 db 下没有对应的 index
+            // The obtained index_schema_ is empty, which means there is no corresponding index under the current db
             ret = OB_ERR_CANT_DROP_FIELD_OR_KEY;
             LOG_WARN("index not exists", K(ret), K(database_name), K(table_name));
             LOG_USER_ERROR(OB_ERR_CANT_DROP_FIELD_OR_KEY,
@@ -284,7 +284,7 @@ int ObAlterTableResolver::resolve(const ParseNode &parse_tree)
       }
     }
     if (OB_SUCC(ret)) {
-      // alter table 路径
+      // alter table path
       if (OB_SUCC(ret) && OB_NOT_NULL(table_schema_)) {
         if (OB_FAIL(alter_table_stmt->get_alter_table_arg().based_schema_object_infos_.
                     push_back(ObBasedSchemaObjectInfo(
@@ -309,7 +309,7 @@ int ObAlterTableResolver::resolve(const ParseNode &parse_tree)
                             get_part_option().set_part_func_type(table_schema_->get_part_option().get_part_func_type());
         }
       }
-      // alter index 路径
+      // alter index path
       if (OB_SUCC(ret) && OB_NOT_NULL(index_schema_)) {
         if (OB_FAIL(alter_table_stmt->get_alter_table_arg().based_schema_object_infos_.
                     push_back(ObBasedSchemaObjectInfo(
@@ -465,7 +465,7 @@ int ObAlterTableResolver::resolve_set_interval(ObAlterTableStmt *stmt, const Par
       ret = OB_ERR_TABLE_IS_ALREADY_A_RANGE_PARTITIONED_TABLE;
       SQL_RESV_LOG(WARN, "table alreay a range partitionted table", K(ret));
     } else {
-      /* 设置为interval -> range */
+      /* Set to interval -> range */
       stmt->get_alter_table_arg().alter_part_type_ = ObAlterTableArg::INTERVAL_TO_RANGE;
     }
   } else if (OB_INVALID_ID != table_schema_->get_tablegroup_id()) {
@@ -477,7 +477,7 @@ int ObAlterTableResolver::resolve_set_interval(ObAlterTableStmt *stmt, const Par
 
     /* set interval (expr) */
     if (false == table_schema_->is_interval_part()) {
-      /* 设置为 range -> interval */
+      /* Set to range -> interval */
       stmt->get_alter_table_arg().alter_part_type_ = ObAlterTableArg::SET_INTERVAL;
     } else {
       stmt->get_alter_table_arg().alter_part_type_ = ObAlterTableArg::SET_INTERVAL;
@@ -814,7 +814,7 @@ int ObAlterTableResolver::resolve_action_list(const ParseNode &node)
     ret = OB_ERR_UNEXPECTED;
     SQL_RESV_LOG(WARN, "alter table stmt should not be null", K(ret));
   } else {
-    // 获取表中已有的index name, 并初始化current_index_name_set_
+    // Get the existing index name in the table, and initialize current_index_name_set_
     ObSEArray<ObAuxTableMetaInfo, 16> simple_index_infos;
     // drop_col_act_position_list is only used in mysql mode
     // to resolve drop_column_nodes after drop constraint nodes resolved
@@ -832,7 +832,7 @@ int ObAlterTableResolver::resolve_action_list(const ParseNode &node)
         LOG_WARN("table schema should not be null", K(ret));
       } else if (index_table_schema->is_materialized_view()) {
         // bug: 
-        // index_tid_array: 包含index和mv, 这里只需要处理索引即可
+        // index_tid_array: contains index and mv, here we only need to process the index
         // so do-nothing for mv
       } else if (index_table_schema->is_built_in_fts_index()) {
         // skip built-in fts index
@@ -949,7 +949,7 @@ int ObAlterTableResolver::resolve_action_list(const ParseNode &node)
           }
         //deal with add index drop index rename index
         case T_ALTER_INDEX_OPTION: {
-            // mysql对应alter index
+            // mysql corresponds to alter index
             bool is_add_index = false;
             alter_table_stmt->set_alter_table_index();
             if (OB_FAIL(resolve_index_options(node, *action_node, is_add_index))) {
@@ -977,8 +977,8 @@ int ObAlterTableResolver::resolve_action_list(const ParseNode &node)
             }
             break;
           }
-        // 仅处理 mysql 模式下的 alter table add check constraint
-        // oracle 模式下的 alter table add check constraint 在 resolve_index_options 里面处理
+        // Only process alter table add check constraint in mysql mode
+        // oracle modeunderof alter table add check constraint in resolve_index_options handled inside
         case T_ALTER_CHECK_CONSTRAINT_OPTION: {
             if (OB_FAIL(resolve_constraint_options(*action_node, node.num_child_ > 1))) {
               SQL_RESV_LOG(WARN, "Resolve check constraint option in mysql mode failed!", K(ret));
@@ -1003,7 +1003,7 @@ int ObAlterTableResolver::resolve_action_list(const ParseNode &node)
             // drop check constraint/foreign key/index in oracle mode, drop check constraint/foreign key in mysql mode
             ObString constraint_name;
             uint64_t constraint_id = OB_INVALID_ID;
-            bool is_constraint = false; // 表示除去外键及唯一键以外的其他 constraint
+            bool is_constraint = false; // indicates other constraints except foreign keys and unique keys
             bool is_foreign_key = false;
             bool is_unique_key = false;
             bool is_primary_key = false;
@@ -1042,7 +1042,7 @@ int ObAlterTableResolver::resolve_action_list(const ParseNode &node)
                 }
               }
               if (OB_SUCC(ret) && (lib::is_mysql_mode() || !is_constraint)) { // drop foreign key
-                // 在 drop constraint 的时候检查约束类型是否是 foreign key 或者 unique constraint
+                // When dropping constraint check if the constraint type is foreign key or unique constraint
                 if (OB_FAIL(schema_guard->get_foreign_key_id(table_schema_->get_tenant_id(),
                                                              table_schema_->get_database_id(),
                                                              constraint_name,
@@ -1448,7 +1448,7 @@ int ObAlterTableResolver::resolve_column_options(const ParseNode &node,
             break;
           }
         //alter column attribute
-        //用来修改列的默认值
+        // used to modify the column's default value
         case T_COLUMN_ALTER: {
             if (OB_FAIL(resolve_alter_column(*column_node))) {
               SQL_RESV_LOG(WARN, "Resolve alter column error!", K(ret));
@@ -1456,7 +1456,7 @@ int ObAlterTableResolver::resolve_column_options(const ParseNode &node,
             break;
           }
         //change column name
-        //需要提供新旧两个column_name
+        // Need to provide new and old two column_name
         case T_COLUMN_CHANGE: {
             if (OB_FAIL(resolve_change_column(*column_node))) {
               SQL_RESV_LOG(WARN, "Resolve change column error!", K(ret));
@@ -1709,7 +1709,7 @@ int ObAlterTableResolver::resolve_index_column_list(const ParseNode &node,
         if (OB_FAIL(ret)) {
           //do nothing
         } else {
-          //兼容mysql5.7, 降序索引不生效且不报错
+          // Compatible with mysql5.7, descending index does not take effect and no error is reported
           sort_item.order_type_ = common::ObOrderType::ASC;
         }
 
@@ -2121,7 +2121,7 @@ int ObAlterTableResolver::resolve_add_partition(const ParseNode &node,
                                        alter_stmt->get_part_fun_exprs(), dummy_part_keys))) {
     LOG_WARN("resolve part func failed", K(ret));
   } else if (share::schema::PARTITION_LEVEL_ONE == orig_table_schema.get_part_level()) {
-    // 一级分区表加一级分区
+    // First-level partitioned table with first-level partitioning
     for (int64_t i = 0; OB_SUCC(ret) && i < part_elements_node->num_child_; ++i) {
       if (OB_ISNULL(part_elements_node->children_[i])) {
         ret = OB_ERR_UNEXPECTED;
@@ -2138,7 +2138,7 @@ int ObAlterTableResolver::resolve_add_partition(const ParseNode &node,
       }
     }
   } else {
-    // 非模板化二级分区表加一级分区, 支持显示定义一级分区下的二级分区
+    // Non-template secondary partition table plus one-level partition, supports user-defined secondary partitions under one-level partition
     // 1. no_subpart == true: subpart info is the template of table.
     // 2. no_subpart == false: subpart info is specified by clause.
     bool no_subpart = false;
@@ -2194,7 +2194,7 @@ int ObAlterTableResolver::resolve_add_partition(const ParseNode &node,
       const ObPartitionFuncType subpart_type = subpart_option.get_part_func_type();
       ParseNode *subpart_func_node = NULL;
       alter_stmt->set_use_def_sub_part(false);
-      // 先设置好sub part option, 解析二级分区的定义时依赖
+      // First set up sub part option, parsing the definition of secondary partition depends on
       alter_table_schema.get_sub_part_option() = orig_table_schema.get_sub_part_option();
       alter_table_schema.get_part_option() = orig_table_schema.get_part_option();
       if (no_subpart && orig_table_schema.is_hash_like_subpart()) {
@@ -2335,7 +2335,7 @@ int ObAlterTableResolver::resolve_add_subpartition(const ParseNode &node,
     ObPartition dummy_part;
     ObPartition *cur_partition = NULL;
     alter_stmt->set_use_def_sub_part(false);
-    // 先设置好sub part option, 解析二级分区的定义时依赖
+    // First set up sub part option, parsing the definition of secondary partition depends on
     alter_table_schema.get_sub_part_option() = orig_table_schema.get_sub_part_option();
     // resolve partition name
     ObString partition_name(static_cast<int32_t>(part_name_node->str_len_),
@@ -2656,10 +2656,10 @@ int ObAlterTableResolver::resolve_drop_index(const ParseNode &node)
       //push drop index arg
       if (OB_SUCC(ret)) {
         ObAlterTableStmt *alter_table_stmt = get_alter_table_stmt();
-        // 删除索引列的时候需要检查索引相关的列是否是外键列,如果是外键列则不允许删除，包含情况：
-        // 1. 索引的主表是父表
-        // 2. 索引的主表是子表
-        // 在 fetch_foreign_key_info 的时候，会把 parent/child table 的 foreign key info 都带过来
+        // Delete the index column when you need to check if the index-related columns are foreign key columns, if they are foreign key columns then deletion is not allowed, including cases:
+        // 1. The main table of the index is the parent table
+        // 2. The main table of the index is the subtable
+        // When fetching foreign key info, it will bring over the foreign key info of parent/child tables
         if (OB_ISNULL(alter_table_stmt)) {
           ret = OB_ERR_UNEXPECTED;
           SQL_RESV_LOG(WARN, "alter table stmt should not be null", K(ret));
@@ -3344,8 +3344,8 @@ int ObAlterTableResolver::resolve_alter_index_parallel_oracle(const ParseNode &n
       } else {
         alter_index_parallel_arg = new (tmp_ptr)ObAlterIndexParallelArg();
         alter_index_parallel_arg->tenant_id_ = session_info_->get_effective_tenant_id();
-        alter_index_parallel_arg->new_parallel_ = index_dop; // update以后的index dop
-        alter_index_parallel_arg->index_name_ = index_name; // update的索引的name
+        alter_index_parallel_arg->new_parallel_ = index_dop; // updateafterofindex dop
+        alter_index_parallel_arg->index_name_ = index_name; // update the index name
       }
       if (OB_SUCC(ret)) {
         ObAlterTableStmt *alter_table_stmt = get_alter_table_stmt();
@@ -3404,7 +3404,7 @@ int ObAlterTableResolver::resolve_alter_index_parallel_mysql(const ParseNode &no
         alter_index_parallel_arg = new (tmp_ptr)ObAlterIndexParallelArg();
         alter_index_parallel_arg->tenant_id_ = session_info_->get_effective_tenant_id();
         alter_index_parallel_arg->new_parallel_ = parallel_node->children_[0]->value_;
-        alter_index_parallel_arg->index_name_ = index_name; // update的索引的name
+        alter_index_parallel_arg->index_name_ = index_name; // update the index name
       }
       if (OB_SUCC(ret)) {
         ObAlterTableStmt *alter_table_stmt = get_alter_table_stmt();
@@ -3813,8 +3813,7 @@ int ObAlterTableResolver::resolve_index_options_oracle(const ParseNode &node)
   }
   return ret;
 }
-
-// 这里不只处理 index，还会处理 oracle 模式下 alter table 时追加约束
+// Here not only index is processed, but also constraints are appended when altering table in oracle mode
 int ObAlterTableResolver::resolve_index_options(const ParseNode &action_node_list,
                                                 const ParseNode &node,
                                                 bool &is_add_index)
@@ -4559,8 +4558,7 @@ int ObAlterTableResolver::resolve_modify_check_constraint_state_oracle(const Par
 
   return ret;
 }
-
-// 用于解析 add/drop check constraint
+// Used to parse add/drop check constraint
 int ObAlterTableResolver::resolve_constraint_options(const ParseNode &node, const bool is_multi_actions)
 {
   int ret = OB_SUCCESS;
@@ -4902,7 +4900,7 @@ int ObAlterTableResolver::resolve_split_partition(const ParseNode *node,
     ParseNode *name_list = node->children_[0];
     AlterTableSchema &alter_table_schema =
         alter_table_stmt->get_alter_table_arg().alter_table_schema_;
-    //保存原table_name在assign之前
+    // Save original table_name before assign
     if (OB_FAIL(ob_write_string(alloc,
                                 alter_table_schema.get_origin_table_name(),
                                 origin_table_name))) {
@@ -4918,7 +4916,7 @@ int ObAlterTableResolver::resolve_split_partition(const ParseNode *node,
     }
 
     if (OB_SUCC(ret)) {
-      //解析被分裂的分区名
+      // Parse the split partition name
       if (OB_ISNULL(name_list)) {
         ret = OB_INVALID_ARGUMENT;
         LOG_WARN("invalid argument", K(ret), K(node));
@@ -4959,7 +4957,7 @@ int ObAlterTableResolver::resolve_split_partition(const ParseNode *node,
     /*T_SPLIT_ACTION
      *  - T_PARTITION_LIST
      *  - T_EXPR_LIST
-     *  - T_SPLIT_LIST/T_SPLIT_RANGE(标记必须有)
+     *  - T_SPLIT_LIST/T_SPLIT_RANGE(must have a mark)
      * */
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(check_split_type_valid(split_node,
@@ -4992,7 +4990,7 @@ int ObAlterTableResolver::resolve_split_partition(const ParseNode *node,
         LOG_WARN("failed to resolve split at partition", K(ret));
       }
     } else {
-      //不能即没有at也没有partition说明
+      // Cannot be that there is neither at nor partition specified
       ret = OB_ERR_MISS_AT_VALUES;
       LOG_WARN("miss at and less than values", K(ret));
       LOG_USER_ERROR(OB_ERR_MISS_AT_VALUES);
@@ -5077,11 +5075,11 @@ int ObAlterTableResolver::resolve_reorganize_partition(const ParseNode *node,
       ret = OB_ERR_UNEXPECTED;
       SQL_RESV_LOG(WARN, "alter table stmt should not be null", K(ret));
     } else {
-      // 处理第一个节点为分裂后的分区
+      // Process the first node as the partition after split
       ParseNode *name_list = node->children_[1];
       AlterTableSchema &alter_table_schema =
         alter_table_stmt->get_alter_table_arg().alter_table_schema_;
-      //保存原table_name在assign之前
+      // Save original table_name before assign
       if (OB_FAIL(ob_write_string(alloc,
                                   alter_table_schema.get_origin_table_name(),
                                   origin_table_name))) {
@@ -5095,9 +5093,9 @@ int ObAlterTableResolver::resolve_reorganize_partition(const ParseNode *node,
       } else {
         alter_table_schema.reset_partition_schema();
       }
-      //解析添加的节点
+      // Parse the added node
       if (OB_SUCC(ret)) {
-        //解析被分裂的分区名
+        // Parse the split partition name
         if (OB_ISNULL(name_list)) {
           ret = OB_INVALID_ARGUMENT;
           LOG_WARN("invalid argument", K(ret), K(node));
@@ -5569,7 +5567,7 @@ int ObAlterTableResolver::set_column_collation(AlterColumnSchema &alter_column_s
     ObCollationType collation_type = alter_column_schema.get_collation_type();
     if (CHARSET_INVALID == charset_type && CS_TYPE_INVALID == collation_type) {
       //do nothing
-      //在rootserver会根据表的schema设置正确的collation和charset
+      // In rootserver will set the correct collation and charset according to the table's schema
     } else if (OB_FAIL(ObCharset::check_and_fill_info(charset_type, collation_type))){
       SQL_RESV_LOG(WARN, "fail to fill charset collation info", K(ret));
     } else {
@@ -5913,14 +5911,14 @@ int ObAlterTableResolver::resolve_change_column(const ParseNode &node)
     if (OB_SUCC(ret)) {
       ObColumnResolveStat stat;
       alter_column_schema.set_column_flags(origin_col_schema->get_column_flags());
-      //alter column的generated column flag应该自己解析，
-      //所以需要清空掉自己以前拷贝的generated column flag
+      //alter column's generated column flag should be parsed by itself,
+      // So need to clear the generated column flag that was previously copied
       alter_column_schema.erase_generated_column_flags();
       alter_column_schema.drop_not_null_cst();
       alter_column_schema.set_tenant_id(origin_col_schema->get_tenant_id());
       alter_column_schema.set_table_id(origin_col_schema->get_table_id());
       alter_column_schema.set_column_id(origin_col_schema->get_column_id());
-      // alter table change col 是 mysql 模式下的语法，oracle 模式不会走到这里
+      // alter table change col is MySQL mode syntax, oracle mode will not reach here
       bool is_modify_column_visibility = false;
       alter_column_schema.alter_type_ = OB_DDL_CHANGE_COLUMN;
       ObSEArray<ObColumnSchemaV2 *, 8> resolved_cols;
@@ -5973,8 +5971,8 @@ int ObAlterTableResolver::resolve_change_column(const ParseNode &node)
       }
       if (OB_SUCC(ret)) {
         if ((origin_col_schema->get_data_type()) != (alter_column_schema.get_data_type())) {
-          // alter table change column 的时候，如果只改列名字，不改列类型，就无需检查外键约束，允许改成功
-          // 如果改了列的类型，就需要检查外键约束
+          // alter table change column when, if only changing column name, not column type, then no need to check foreign key constraints, allow change to succeed
+          // If the column type is changed, you need to check the foreign key constraints
           if (OB_FAIL(check_column_in_foreign_key(*table_schema_,
                                                   alter_column_schema.get_origin_column_name(),
                                                   false /* is_drop_column */))) {
@@ -6127,9 +6125,8 @@ int ObAlterTableResolver::resolve_modify_column(const ParseNode &node,
           //identity column->generated column,NO
           //other column->identity colum,NO
           is_identity_column = alter_column_schema.is_identity_column();
-
-          //alter column的generated column flag应该自己解析，
-          //所以需要清空掉自己以前拷贝的generated column flag
+          //alter column's generated column flag should be parsed by itself,
+          // So need to clear the generated column flag that was previously copied
           alter_column_schema.set_column_flags(origin_col_schema->get_column_flags());
           alter_column_schema.erase_generated_column_flags();
           alter_column_schema.erase_string_lob_flag();
@@ -6548,7 +6545,7 @@ int ObAlterTableResolver::resolve_rename_column(const ParseNode &node)
                                                     *alter_table_stmt))) {
       LOG_WARN("check rename mysql columns failed", K(ret));
     } else {
-      //rs端复用ddl_change_column
+      //rs end reuse ddl_change_column
       alter_column_schema.alter_type_ = OB_DDL_CHANGE_COLUMN;
       if (OB_FAIL(alter_table_stmt->add_column(alter_column_schema))) {
         SQL_RESV_LOG(WARN, "add alter column schema failed", K(ret));
@@ -6805,7 +6802,7 @@ int ObAlterTableResolver::check_drop_column_is_partition_key(const ObTableSchema
     const ObColumnSchemaV2 *origin_column = table_schema.get_column_schema(column_name);
     if (OB_ISNULL(origin_column)) {
       // do nothing
-      // 根据列名查不到列是因为表中不存在该列，后面会在 RS 端再检查一遍表中是否存在该列，并在 RS 端根据操作的不同报不同的错误
+      // According to the column name, the column cannot be found because it does not exist in the table. Later, it will be checked again on the RS side whether the column exists in the table, and different errors will be reported on the RS side according to different operations
     } else if (origin_column->is_tbl_part_key_column()){
       ret = OB_ERR_DEPENDENT_BY_PARTITION_FUNC;
       LOG_USER_ERROR(OB_ERR_DEPENDENT_BY_PARTITION_FUNC,

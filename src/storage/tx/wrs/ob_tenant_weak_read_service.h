@@ -132,7 +132,7 @@ private:
   int get_cluster_version_by_rpc_(share::SCN &version);
   int get_cluster_service_master_(common::ObAddr &cluster_service_master);
   void refresh_cluster_service_master_();
-  /// do Cluster Heartbeat request，report self's server version
+  /// do Cluster Heartbeat request, report self's server version
   void do_cluster_heartbeat_();
   int post_cluster_heartbeat_rpc_(const share::SCN version,
       const int64_t valid_part_count,

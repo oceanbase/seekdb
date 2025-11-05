@@ -589,7 +589,7 @@ int ObAlterAutoPartAttrOp::alter_global_indexes_auto_part_attribute_offline(
 /* 
   description:
     Obtain the potential partition type of a non-partitioned table.
-    这里如果预分裂键为double，虽然只有1列，但partition_func_type也要变成PARTITION_FUNC_TYPE_RANGE_COLUMNS
+    Here if the pre-split key is double, although there is only 1 column, partition_func_type should also become PARTITION_FUNC_TYPE_RANGE_COLUMNS
 */
 int ObAlterAutoPartAttrOp::extract_potential_partition_func_type(
     const ObTableSchema &table_schema,

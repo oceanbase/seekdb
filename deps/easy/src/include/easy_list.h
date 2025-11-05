@@ -2,7 +2,7 @@
 #define EASY_LIST_H_
 
 /**
- * 列表，参考kernel上的list.h
+ * list, reference kernel's list.h
  */
 #include "easy_define.h"
 

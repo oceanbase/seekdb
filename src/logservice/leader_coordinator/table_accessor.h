@@ -69,46 +69,46 @@ class LsElectionReferenceInfoRow
                                   ObStringHolder/*removed_reason*/>>/*remove_member_info*/> LsElectionReferenceInfoRowTypeForUser;
 public:
   /**
-   * @description: 创建出一个数据结构映射自__all_ls_election_reference_info中的某一行，由租户ID和日志流ID确定，通过该数据结构的接口可以修改__all_ls_election_reference_info中对应行的内容
-   * @param {uint64_t} tenant_id 租户ID
-   * @param {ObLSID &} ls_id 日志流ID
+   * @description: Create a data structure mapping to a row in __all_ls_election_reference_info, determined by the tenant ID and log stream ID, through which the content of the corresponding row in __all_ls_election_reference_info can be modified via the interface of this data structure
+   * @param {uint64_t} tenant_id tenant ID
+   * @param {ObLSID &} ls_id log stream ID
    * @Date: 2022-01-29 16:45:33
    */
   LsElectionReferenceInfoRow(const uint64_t tenant_id, const share::ObLSID &ls_id);
   ~LsElectionReferenceInfoRow();
   /**
-   * @description: 当且仅当对应的行在__all_ls_election_reference_info表存在时，修改zone_priority列的内容
-   * @param {ObArray<ObArray<ObStringHolder>>} &zone_list_list 选举参考的zone优先级，表示为二维数组，形如{{z1,z2},{z3},{z4,z5}}：z1和z2具有最高优先级，z3次之，z4和z5最低
-   * @return {int} 错误码
+   * @description: Modify the content of the zone_priority column only when the corresponding row exists in the __all_ls_election_reference_info table
+   * @param {ObArray<ObArray<ObStringHolder>>} &zone_list_list Election reference zone priorities, represented as a two-dimensional array, e.g., {{z1,z2},{z3},{z4,z5}}: z1 and z2 have the highest priority, z3 is next, and z4 and z5 are the lowest
+   * @return {int} Error code
    * @Date: 2022-01-29 16:41:02
    */
   int change_zone_priority(const ObArray<ObArray<ObStringHolder>> &zone_list_list);
   /**
-   * @description: 当且仅当对应的行在__all_ls_election_reference_info表存在时，修改manual_leader_server列的内容
-   * @param {ObAddr} &manual_leader_server 指定的server地址
-   * @return {int} 错误码
+   * @description: Modify the content of the manual_leader_server column only when the corresponding row exists in the __all_ls_election_reference_info table
+   * @param {ObAddr} &manual_leader_server Specified server address
+   * @return {int} Error code
    * @Date: 2022-01-29 16:41:53
    */
   int change_manual_leader(const common::ObAddr &manual_leader_server);
   /**
-   * @description: 当且仅当对应的行在__all_ls_election_reference_info表存在时，且要移除的server在removed_member_info中不存在时，在removed_member_info列中增加被删除的server及原因
-   * @param {ObAddr} &server 不允许当leader的server
-   * @param {ObString} &reason 不允许当leader的原因
+   * @description: Add the server to be removed and the reason to the removed_member_info column only if the corresponding row exists in the __all_ls_election_reference_info table, and the server to be removed does not exist in the removed_member_info.
+   * @param {ObAddr} &server Server that is not allowed to be leader
+   * @param {ObString} &reason Reason why the server is not allowed to be leader
    * @return {*}
    * @Date: 2022-01-29 16:43:19
    */
   int add_server_to_blacklist(const common::ObAddr &server, InsertElectionBlacklistReason reason);
   /**
-   * @description: 当且仅当对应的行在__all_ls_election_reference_info表存在时，且要移除的server在removed_member_info中存在时，在removed_member_info列中移除被删除的server
-   * @param {ObAddr} &server 已经被记录的不允许当leader的server
+   * @description: Remove the deleted server from the removed_member_info column only if the corresponding row exists in the __all_ls_election_reference_info table and the server to be removed exists in removed_member_info.
+   * @param {ObAddr} &server The server that has been recorded as not allowed to be a leader.
    * @return {*}
    * @Date: 2022-01-29 16:44:51
    */
   int delete_server_from_blacklist(const common::ObAddr &server);
   /**
-   * @description: 将该原因的选举黑名单设置为对应 server,会清除掉选举黑名单中已有的该原因的 server
-   * @param {ObAddr} &server 不允许当leader的server
-   * @param {ObString} &reason 不允许当leader的原因
+   * @description: Set the election blacklist for this reason to the corresponding server, which will clear the server of this reason from the existing election blacklist
+   * @param {ObAddr} &server Server that is not allowed to be leader
+   * @param {ObString} &reason Reason why the server is not allowed to be leader
    * @return {*}
    * @Date: 2022-01-29 16:43:19
    */
@@ -128,15 +128,15 @@ private:
 private:
   const uint64_t tenant_id_;
   const share::ObLSID ls_id_;
-  uint64_t exec_tenant_id_;// 事务执行读写操作时使用的tenant_id
+  uint64_t exec_tenant_id_;// tenant_id used by the transaction when performing read and write operations
   ObMySQLTransaction trans_;
-  LsElectionReferenceInfoRowTypeForTable row_for_table_;// 对内部表友好的数据组织形式
-  LsElectionReferenceInfoRowTypeForUser row_for_user_;// 对用户友好的数据组织形式
+  LsElectionReferenceInfoRowTypeForTable row_for_table_;// Data organization form friendly to internal tables
+  LsElectionReferenceInfoRowTypeForUser row_for_user_;// Data organization form friendly to users
 };
 
 class TableAccessor
 {
-  struct ServerZoneNameCache// zone name获取成功一次即可，避免每次都访问内部表
+  struct ServerZoneNameCache// zone name retrieval is successful once, avoid accessing the internal table every time
   {
     void set_zone_name_to_global_cache(const ObStringHolder &zone_name) {
       ObSpinLockGuard lg(lock_);

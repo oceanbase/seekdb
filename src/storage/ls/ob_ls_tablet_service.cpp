@@ -1893,9 +1893,8 @@ int ObLSTabletService::upload_major_compaction_tablet_meta(
   }
   return ret;
 }
-
-// TODO 这里的实现不完善，需要进一步完善
-// 2. 对比sn的replay_create_tablet 其中check_and_set_initial_state和start_direct_load_task_if_need是否可以直接去掉，如果去掉，再真正加载的时候还是要补上相应的动作。
+// TODO The implementation here is incomplete and needs further improvement
+// 2. Compare sn's replay_create_tablet where check_and_set_initial_state and start_direct_load_task_if_need can be directly removed, if removed, the corresponding actions need to be added again when loading for real.
 int ObLSTabletService::ss_replay_create_tablet(const ObMetaDiskAddr &disk_addr, const ObTabletID &tablet_id)
 {
   int ret = OB_SUCCESS;
@@ -4470,7 +4469,7 @@ int ObLSTabletService::check_old_row_legitimacy(
     }
 
     if (OB_ERR_DEFENSIVE_CHECK == ret && dml_param.is_batch_stmt_) {
-      // 批量删除的时候可能索引表的删除在主表前边，所以所有的表在batch删除的时候出现4377，都可能是重复删导致的
+      // When performing batch deletion, the index table deletion may occur before the main table deletion, so all tables may encounter error 4377 during batch deletion, which could be due to duplicate deletions.
       ret = OB_BATCHED_MULTI_STMT_ROLLBACK;
       LOG_TRACE("batch stmt execution has a correctness error, needs rollback", K(ret),
                 "column_id", column_ids,
@@ -5885,14 +5884,14 @@ int ObLSTabletService::check_datum_row_shadow_pk(
       LOG_WARN("index column count is invalid", K(ret),
                K(index_col_cnt), K(rowkey_cnt), K(spk_cnt), K(column_ids.count()));
     } else if (lib::is_mysql_mode()) {
-      // mysql兼容：只要unique index key中有null列，则需要填充shadow列
+      // mysql compatibility: as long as there is a null column in the unique index key, the shadow column needs to be filled
       bool rowkey_has_null = false;
       for (int64_t i = 0; !rowkey_has_null && i < index_col_cnt; i++) {
         rowkey_has_null = datum_row.storage_datums_[i].is_null();
       }
       need_spk = rowkey_has_null;
     } else {
-      // oracle兼容：只有unique index key全为null列时，才需要填充shadow列
+      // oracle compatibility: only when all columns of unique index key are null, do we need to fill the shadow column
       bool is_rowkey_all_null = true;
       for (int64_t i = 0; is_rowkey_all_null && i < index_col_cnt; i++) {
         is_rowkey_all_null = datum_row.storage_datums_[i].is_null();

@@ -318,7 +318,7 @@ int ObExprOpSubQueryInPl::fetch_row(void *result_set, int64_t &row_count, ObNewR
     ObResultSet *ob_result_set = static_cast<ObResultSet*>(result_set);
     const ObNewRow *row = NULL;
     if (OB_FAIL(ob_result_set->get_next_row(row))) {
-      //上层判断返回值，这里不打印信息
+      // Upper layer checks return value, here no information is printed
     } else {
       cur_row = *row;
       ++row_count;

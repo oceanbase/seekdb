@@ -339,10 +339,10 @@ int ObExprSubAddtime::calc_result_type2(ObExprResType &type,
     date_arg.set_calc_collation_level(type.get_collation_level());
   }
   if (OB_SUCC(ret)) {
-    // date_arg无法设置calc_type的原因是，date_arg类型是varchar时，设置calc_type为time和datetime都不合适
-    // 如果设置为time，那么当字符串中包含日期时，转换后日期信息直接丢失了
-    // 如果设置为datetime，虽然保留了日期信息，但是当字符串不包含日期时，mysql会将字符串最右边视为秒，
-    // 即'123'的含义是1分23秒，但是OB cast成datetime类型会把字符串右边视为日，即‘123’的含义是1月23日
+    // date_arg cannot set calc_type because when date_arg type is varchar, setting calc_type to time and datetime are not appropriate
+    // If set to time, then when the string contains a date, the date information is lost directly after conversion
+    // If set to datetime, although the date information is retained, when the string does not contain a date, mysql will consider the rightmost part of the string as seconds,
+    // That is, '123' means 1 minute and 23 seconds, but OB casting to datetime type will consider the right side of the string as the day, i.e., '123' means January 23rd
     if (ob_is_enumset_tc(date_arg.get_type())) {
       date_arg.set_calc_type(ObVarcharType);
     }
@@ -398,7 +398,7 @@ int ObExprSubAddtime::calc_result2(common::ObObj &result,
         }
       }
       if (OB_FAIL(ret)) {
-      } else if (ObTimeType == result_type || !param_with_date) { // a#, subaddtime(时间1, 时间2)
+      } else if (ObTimeType == result_type || !param_with_date) { // a#, subaddtime(time1, time2)
         if (ObVarcharType == result_type) {
           t_val1 = ObTimeConverter::ob_time_to_time(ot1);
           if (IS_NEG_TIME(ot1.mode_)) {
@@ -421,7 +421,7 @@ int ObExprSubAddtime::calc_result2(common::ObObj &result,
             result.set_time(int_usec);
           }
         }
-      } else { // b#, subaddtime(日期时间1, 时间2)
+      } else { // b#, subaddtime(datetime1, time2)
         const ObTimeZoneInfo *tz_info = NULL;
         if (OB_ISNULL(tz_info = get_timezone_info(expr_ctx.my_session_))) {
           ret = OB_ERR_UNEXPECTED;
@@ -505,8 +505,8 @@ int ObExprSubAddtime::cg_expr(ObExprCGCtx &op_cg_ctx,
             ret = OB_INVALID_ARGUMENT;
             LOG_WARN("invalid type of first argument", K(ret), K(result_type), K(param1_type));
           } else {
-            //这里虽然参数类型、结果类型是TimeType，和上面不同，但是get/set_time/datetime的含义是相同的，
-            //两个计算函数的本质都是取第一个参数都int64_t值，与第二个参数相减，然后把结果放入expr_datum中
+            // Here although the parameter type, result type is TimeType, and it is different from above, but the meaning of get/set_time/datetime is the same,
+            // The essence of the two calculation functions is to subtract the second parameter from the int64_t value of the first parameter, and then put the result into expr_datum
             rt_expr.eval_func_ = ObExprSubAddtime::subaddtime_datetime;
           }
           break;
@@ -669,7 +669,7 @@ int ObExprSubAddtime::subaddtime_varchar(const ObExpr &expr, ObEvalCtx &ctx, ObD
         const int64_t datetime_buf_len = DATETIME_MAX_LENGTH + 1;
         char *buf = expr.get_str_res_mem(ctx, datetime_buf_len);
         int64_t pos = 0;
-				//兼容mysql行为，有毫秒则显示6位小数，否则不显示
+				// Compatible with MySQL behavior, display 6 decimal places if there are milliseconds, otherwise do not display
         ObString format;
         if (OB_ISNULL(buf)) {
           ret = OB_ALLOCATE_MEMORY_FAILED;

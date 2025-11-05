@@ -64,7 +64,7 @@ int ObExprFormat::calc_result_typeN(ObExprResType &type,
     type.set_collation_level(CS_LEVEL_COERCIBLE);
     CK (OB_NOT_NULL(type_ctx.get_session()));
     ObExprOperator::calc_result_flagN(type, type_array, params_count);
-    // 利用表达式框架，第二个参数转换成int类型处理
+    // Utilize expression framework, convert the second parameter to int type for processing
     type_array[1].set_calc_type(ObIntType);
   }
   return ret;

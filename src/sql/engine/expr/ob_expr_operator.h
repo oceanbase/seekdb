@@ -95,8 +95,8 @@ public:
                N_FLAG,
                flag_);
 private:
-  common::ObObjMeta calc_meta_; // 将ObObj转换为calc_meta_指定的type
-  common::ObLength max_length_; // 用于zerofill
+  common::ObObjMeta calc_meta_; // Convert ObObj to the type specified by calc_meta_
+  common::ObLength max_length_; // used for zerofill
   uint32_t flag_;
 };
 
@@ -349,13 +349,13 @@ public:
 
   virtual ~ObExprOperator() {}
   virtual int assign(const ObExprOperator &other);
-  // 初始化ObExpr表达式中每个expr operator特有的属性,
-  // 包括: eval_func_, inner_eval_func_, extra_
+  // Initialize the specific attributes of each expr operator in ObExpr expression,
+  // includes: eval_func_, inner_eval_func_, extra_
   virtual int cg_expr(ObExprCGCtx &op_cg_ctx,
                       const ObRawExpr &raw_expr,
                       ObExpr &rt_expr) const;
-  // 是否需要表达式级的context, 默认不需要, 如果需要, 则在对应子类表达式实现中,
-  // 定义:virtual bool need_rt_ctx() const override { return true; }
+  // Whether expression-level context is needed, default is no, if needed, then implement in the corresponding subclass expression,
+  // Define: virtual bool need_rt_ctx() const override { return true; }
   virtual bool need_rt_ctx() const { return false; }
 
   // TODO bin.lb: remove after all expr implemented in new engine.
@@ -583,7 +583,7 @@ public:
     bool is_called_in_sql = TRUE);
 
 /*
- * oracle string 类型的推导
+ * oracle string type inference
  */
 
   enum DEDUCE_STRING_TYPE_FLAG : int64_t {
@@ -696,10 +696,10 @@ protected:
 private:
   static common::ObObjType enumset_calc_types_[2 /*use_subschema*/][common::ObMaxTC];
   /*
-   * 计算框架本身提供了一个通用的数据类型转换方法，将参数转为input_types_中的类型。
-   * 这可能并不是表达式期望的行为，如需要禁止此行为，需要在构造函数中显示调 disable_operand_auto_cast().
+   * The framework itself provides a generic data type conversion method, converting parameters to types in input_types_.
+   * This may not be the behavior expected by the expression, if this behavior needs to be disabled, it must be explicitly called in the constructor disable_operand_auto_cast().
    *
-   * @output: 转换结果就地保存在stack堆栈上
+   * @output: The conversion result is saved in place on the stack.
    */
   int cast_operand_type(common::ObObj *params,
                         const int64_t param_num,
@@ -749,30 +749,33 @@ protected:
   bool param_lazy_eval_;
   ObExprResType result_type_;
   /*
-   * 为了在resolve阶段就确定各个操作数的meta信息(例如目标类型, zerofill, length等)
-   * 需要新增@input_types_，在calc_result_type阶段将操作数的目标类型记录在里面.
+   * To determine the meta information of each operand (such as target type, zerofill, length, etc.)
+   * during the resolve phase, we need to add @input_types_, and record the target type of each operand
+   * inside it during the calc_result_type phase.
    *
-   * detail: 在calc_result_type阶段，可以知道operator的全部信息，特别是每个操作数在运算
-   * 期间要转化成什么类型。在后缀表达式计算阶段，计算框架会根据@input_types_里面指定的
-   * 类型将ObObj转化好，然后才调用calc_result。
-   * 在calc_result内部不再需要关注操作数的类型，只需要assert一下类型就行了。
+   * detail: During the calc_result_type phase, all information about the operator is known, especially
+   * what type each operand needs to be converted to during the operation. During the postfix expression
+   * calculation phase, the calculation framework will convert ObObj according to the types specified
+   * in @input_types_, and then call calc_result.
+   * Inside calc_result, there is no need to concern the type of the operands; only an assert on the type
+   * is required.
    */
   typedef common::ObFixedArray<ObFuncInputType, common::ObIAllocator> ObExprOperatorInputTypeArray;
   ObExprOperatorInputTypeArray input_types_;
-  /* 表示是否进行字符集自动转换，类型推导时使用，无需序列化
-   * 1,这个变量会控制字符集自动转换，默认对所有的表达式都起作用，后续新增加了表达式，
-   *   肯定会走这个转换的，希望的是通过这个框架新加的表达式不需要写字符集转换相关的代码，
-   *   具体实现参考ob_raw_expr_deduce_type.cpp中的need_charset_convert代码附近的逻辑
-   * 2,如果新增加的表达式不想走这个框架，请在对应表达式的构造函数中添加need_charset_convert_ = false
+  /* Indicates whether to perform automatic character set conversion, used during type inference, no need for serialization
+   * 1, this variable controls automatic character set conversion, it defaults to affecting all expressions, any newly added expressions,
+   *   will go through this conversion, the hope is that new expressions added through this framework do not need to write character set conversion related code,
+   *   specific implementation refer to the logic near the need_charset_convert code in ob_raw_expr_deduce_type.cpp
+   * 2, if newly added expressions do not want to use this framework, please add need_charset_convert_ = false in the corresponding expression's constructor
    */
   bool need_charset_convert_;
   ObRawExpr *raw_expr_;
-  bool is_called_in_sql_; // 用于区分是被 pl 还是 sql 调用
-  // 一个子类如果最初没有定义自己的序列化方法，那么以后的版本也不能再添加，否则序列化buf的开头会多一个子类序列化length，
-  // 导致与老版本不兼容。
-  // 对于ObExprOperator没有定义自己的序列化方法的子类，如果现在要添加一个新成员，并且要对新成员进行序列化，会受到
-  // 上面的限制而无法实现。因此在ObExprOperator中添加extra_serialize_，每个子类可以对它进行解释。
-  // 例如对于ObExprCast, 它的含义是is_implicit_cast, 即是否为隐式cast
+  bool is_called_in_sql_; // Used to distinguish if it is called by pl or sql
+  // A subclass if initially does not define its own serialization method, then it cannot add one in later versions, otherwise the beginning of the serialization buf will have an extra subclass serialization length,
+  // Cause incompatibility with the old version.
+  // For subclasses of ObExprOperator that do not define their own serialization method, if a new member is now added and needs to be serialized, it will be affected
+  // above limitations and cannot be achieved. Therefore, add extra_serialize_ in ObExprOperator, each subclass can interpret it.
+  // For example for ObExprCast, its meaning is is_implicit_cast, i.e., whether it is an implicit cast
   int64_t extra_serialize_;
   bool is_valid_for_generated_col_;
   bool is_internal_for_mysql_;
@@ -1088,17 +1091,17 @@ public:
 
 
 /*
- * 在ObRelationalExprOperator中，有三个概念：res_type, cmp_type, calc_type
- * 前面两个是相对于表达式而言的；后面一个是对表达式的参数来说的。
- * 以"2"(type1, varchar) > 1(type2, varchar)为例子：
- * 这个表达式的res_type为ObInt32。因为它要么成立，要么不成立，所以结果类型为ObInt32(之所以不是bool是为了和mysql兼容)
- * 比较的时候，我们会把字符串的"2"和整型的1都转为decimal(number)来比较，
- * 因此，这个表达式的cmp_type(也就是转为什么来比较)都是decimal(number)
- * calc_type是指参数的期望的类型，比如说在这个例子中，我们期望"2"和1都能转为decimal
- * 因此，这两个参数的calc_type(也就是期望转为什么类型)都是decimal(number)
- * 注意到由于性能考虑，calc_type不一定总是等于cmp_type。
- * 比如说虽然3(int) > 2(uint)，虽然cmp_type是decimal(number)，但是我们并不需要任何转换
- * 那么怎么知道哪些不用转换就直接比较呢？通过ObObjCmpFuncs::can_cmp_without_cast即可
+ * In ObRelationalExprOperator, there are three concepts: res_type, cmp_type, calc_type
+ * The first two are relative to the expression; the last one is for the parameters of the expression.
+ * Taking "2"(type1, varchar) > 1(type2, varchar) as an example:
+ * The res_type of this expression is ObInt32. Because it is either true or false, the result type is ObInt32 (the reason it is not bool is for compatibility with mysql)
+ * When comparing, we will convert the string "2" and the integer 1 to decimal(number) for comparison,
+ * Therefore, the cmp_type of this expression (i.e., what to compare as) is decimal(number)
+ * calc_type refers to the expected type of the parameters. For example, in this case, we expect "2" and 1 to be converted to decimal
+ * Therefore, the calc_type of these two parameters (i.e., what type to expect to convert to) is decimal(number)
+ * Note that due to performance considerations, calc_type is not always equal to cmp_type.
+ * For example, although 3(int) > 2(uint), although cmp_type is decimal(number), we do not need any conversion
+ * So how do we know which ones can be compared directly without conversion? Through ObObjCmpFuncs::can_cmp_without_cast
  */
 class ObRelationalExprOperator : public ObExprOperator
 {
@@ -1298,13 +1301,10 @@ public:
    static int get_equal_meta(common::ObObjMeta &meta,
                              const common::ObObjMeta &meta1,
                              const common::ObObjMeta &meta2);
-
-
-  // 这个函数是为pl的udt比较增加的，udt比较不需要进行cast，改函数行为和set_cmp_func一致。
-  // 之所以加这个函数而不用set_cmp_func是因为这个函数在calc_reult_2中调用，而改函数是
-  // const修饰的，加这个函数是为了兼容前者。同时修改cmp_op_func2_为mutable。
-
-  // 为pl的udt比较准备，udt比较的时候需要比较其内部元素的值，而不是udt自身。
+  // This function is added for UDT comparison in pl, UDT comparison does not require cast, the behavior of this function is consistent with set_cmp_func.
+  // The reason for adding this function instead of using set_cmp_func is because this function is called in calc_reult_2, and this function is
+  // const modified, adding this function is for compatibility with the former. At the same time, modify cmp_op_func2_ to mutable.
+  // Prepare for pl's udt comparison, when comparing udt, compare the values of its internal elements rather than the udt itself.
   static int pl_udt_compare2(CollectionPredRes &cmp_result, const common::ObObj &obj1,
                       const common::ObObj &obj2, ObExecContext &exec_ctx,
                       const common::ObCmpOp cmp_op);
@@ -1545,22 +1545,22 @@ public:
                        K_(left_is_iter),
                        K_(right_is_iter));
 protected:
-  //处理子查询的结果是一个向量的情况，这种情况下子查询的结果最多只有一行数据，不允许出现多行数据
-  //根据向量的特性，子查询的结果也不能是单列数据，单行单列子查询结果是一个标量
+  // Processing the result of a subquery as a vector, in this case, the result of the subquery can have at most one row of data, multiple rows are not allowed
+  // According to the characteristics of vectors, the result of the subquery cannot be a single column of data, the result of a single row and single column subquery is a scalar
   int calc_result_with_none(common::ObObj &result,
                             const common::ObNewRow &left_row,
                             int64_t subquery_idx,
                             common::ObExprCtx &expr_ctx) const;
-  //处理comparison ALL(subquery)的情况，
-  //这种情况下，subquery结果是一个集合，集合中的所有元素的比较结果都为true,整个表达式结果为true
-  //否则，表达式结果为false
+  // Handle comparison ALL(subquery) case,
+  // In this case, the subquery result is a set, and the comparison result of all elements in the set is true, the entire expression result is true
+  // Otherwise, the expression result is false
   int calc_result_with_all(common::ObObj &result,
                            const common::ObNewRow &left_row,
                            int64_t subquery_idx,
                            common::ObExprCtx &expr_ctx) const;
-  //处理comparison ANY(subquery)的情况，
-  //这种情况下，subquery结果是一个集合，集合中至少有一个元素的比较结果为true,整个表达式结果为true
-  //否则，表达式结果为false
+  // Handle comparison ANY(subquery) case,
+  // In this case, the subquery result is a collection, and at least one element in the collection has a comparison result of true, the entire expression result is true
+  // Otherwise, the expression result is false
   int calc_result_with_any(common::ObObj &result,
                            const common::ObNewRow &left_row,
                            int64_t subquery_idx,
@@ -1605,9 +1605,9 @@ protected:
 
 protected:
   ObSubQueryKey subquery_key_;
-  //比较操作符的左操作符是row_iterator
+  // Comparison operator's left operand is row_iterator
   bool left_is_iter_;
-  //比较操作符的右操作符是row_iterator
+  // Comparison operator's right operand is row_iterator
   bool right_is_iter_;
 };
 
@@ -1927,9 +1927,9 @@ public:
                                 int64_t param_num,
                                 common::ObExprTypeCtx &type_ctx) const;
   // for static_typing_engine
-  // 从参数datum中获取int64/uint64,然后根据extra_字段进行实际的位操作
-  // mysql/oracle的区别在于mysql模式需要get_uint64(), oracle模式需要get_int64
-  // 且oracle模式在第一个参数为null时还是会计算第二个参数的值
+  // Get int64/uint64 from parameter datum, then perform actual bit operations based on extra_ field
+  // mysql/oracle difference lies in mysql mode needing get_uint64(), oracle mode needing get_int64
+  // And oracle mode will still calculate the value of the second parameter when the first parameter is null
   static int calc_result2_mysql(const ObExpr &expr, ObEvalCtx &ctx,
                                 ObDatum &res_datum);
 
@@ -1956,9 +1956,8 @@ protected:
   static int dispatch_calc_vector(VECTOR_EVAL_FUNC_ARG_DECL, ObCastMode cast_mode);
   template <typename RES_VEC, typename L_VEC, typename R_VEC>
   static int inner_calc_vector(VECTOR_EVAL_FUNC_ARG_DECL, ObCastMode cast_mode);
-
-  // 从datum中获取int64/uint64, 针对number需要有round/trunc操作，针对int tc会直接获取
-  // int值
+  // Get int64/uint64 from datum, for number rounding/truncation operations are needed, for int tc will get directly
+  // int value
   typedef int (*GetIntFunc)(const ObDatumMeta &, const common::ObDatum &, bool, int64_t &,
                             common::ObCastMode &);
   typedef int (*GetUIntFunc)(const ObDatumMeta &, const common::ObDatum &, bool, uint64_t &,
@@ -1972,10 +1971,10 @@ protected:
                         common::ObExprCtx &expr_ctx,
                         bool is_round,
                         int64_t &out);
-  // 初始化eval_func_, inner_functions_, extra_字段
+  // Initialize eval_func_, inner_functions_, extra_ fields
   static int cg_bitwise_expr(ObExprCGCtx &op_cg_ctx, const ObRawExpr &raw_expr,
                             ObExpr &rt_expr, const BitOperator op);
-  // 根据参数类型，从4个get_int/get_uint方法中选择合适的get_int64/get_uint64方法
+  // According to the parameter type, choose the appropriate get_int64/get_uint64 method from the 4 get_int/get_uint methods
   static int choose_get_int_func(const ObDatumMeta datum_meta, void *&out_func);
 
   static int get_uint64_from_int_tc(
@@ -2035,7 +2034,7 @@ protected:
 
 protected:
   /*
-   * 计算greatest、least的结果类型
+   * Calculate the result type of greatest, least
    */
   int calc_result_meta_for_comparison(ObExprResType &type,
                                       ObExprResType *types,

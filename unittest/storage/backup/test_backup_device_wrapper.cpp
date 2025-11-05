@@ -112,8 +112,7 @@ TEST(TestBackupDeviceWrapper, test_alloc_block) {
   int64_t read_size = 0;
   OK(wrapper_io_read.pread(read_io_fd, 0, size, read_buf, read_size, NULL));
   EXPECT_EQ(write_size, read_size);
-
-  // 比较read_buf和write_buf的内容
+  // Compare the contents of read_buf and write_buf
   bool is_same = true;
   for (int64_t i = 0; i < size; ++i) {
     if (read_buf[i] != write_buf[i]) {

@@ -253,10 +253,9 @@ int ObMergeSortReceiveTest::mock_channel_loop(
   cout << "mock channel success" << endl;
   return ret;
 }
-
-// n_channel channel个数
-// local_order是否局部有序
-// 每组有序多少行，如果是local order，则每个channel有两组，否则是一组
+// n_channel number of channels
+// is local_order locally ordered
+// How many ordered lines per group, if it is local order, then each channel has two groups, otherwise it is one group
 void ObMergeSortReceiveTest::test_sort(int64_t n_channel, bool local_order, int64_t row_count)
 {
   int ret = OB_SUCCESS;

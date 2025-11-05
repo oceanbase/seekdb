@@ -917,7 +917,7 @@ void ObTenant::mark_tenant_is_removed()
 }
 
 ERRSIM_POINT_DEF(CREATE_MTL_MODULE_FAIL)
-// 初始化租户各子模块，保证初始化同步执行，因为依赖线程局部变量和栈上变量
+// Initialize tenant sub-modules, ensuring synchronous execution during initialization, because it depends on thread-local variables and stack variables
 int ObTenant::create_tenant_module()
 {
   int ret = OB_SUCCESS;
@@ -936,9 +936,9 @@ int ObTenant::create_tenant_module()
     LOG_ERROR("create_tenant_module failed because of tracepoint CREATE_MTL_MODULE_FAIL",
               K(tenant_id), K(ret));
   } else if (FALSE_IT(ObTenantEnv::set_tenant(this))) {
-    // 上面通过ObTenantSwitchGuard中会创建一个新的TenantBase线程局部变量，而不是存TenantBase的指针，
-    // 目的是通过MTL()访问时减少一次内存跳转，但是设置的时mtl模块的指针还是nullptr, 所以在mtl创建完成时
-    // 还需要设置一次。
+    // Above, a new TenantBase thread-local variable is created through ObTenantSwitchGuard, rather than storing a pointer to TenantBase,
+    // The purpose is to reduce one memory jump when accessing via MTL(), but the pointer set for the mtl module is still nullptr, so when the mtl creation is completed
+    // Still needs to be set once.
   } else if (FALSE_IT(mtl_init = true)) {
   } else if (OB_FAIL(ObTenantBase::init_mtl_module())) {
     LOG_ERROR("init mtl module failed", K(tenant_id), K(ret));

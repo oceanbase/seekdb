@@ -34,10 +34,10 @@ ObExprConv::~ObExprConv()
 
 
 /*
- * ObExprConv(str/int, base_from,
- * base_to)的语义是将第一个参数根据base_from的进制转换为base_to的进制，并以字符串的形式输出
+ * The semantics of ObExprConv(str/int, base_from,
+ * base_to) is to convert the first parameter from base_from to base_to in terms of base, and output it as a string
  *
- * 框架无法对第一个参数进行转换，但可以对第二第三个参数进行转换
+ * The framework cannot convert the first parameter, but it can convert the second and third parameters
  */
 inline int ObExprConv::calc_result_type3(ObExprResType &type,
                                          ObExprResType &type1,
@@ -63,7 +63,7 @@ inline int ObExprConv::calc_result_type3(ObExprResType &type,
     type1.set_calc_type_default_varchar();
   }
   type2.set_calc_type(ObInt32Type);
-  type3.set_calc_type(ObInt32Type); // 可以是有符号数，表示type1是有符号数
+  type3.set_calc_type(ObInt32Type); // can be a signed number, indicating that type1 is a signed number
 
   return ret;
 }

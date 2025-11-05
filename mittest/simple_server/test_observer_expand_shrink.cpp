@@ -44,7 +44,7 @@ TestRunCtx RunCtx;
 class ObserverExpandShink : public ObSimpleClusterTestBase
 {
 public:
-  // 指定case运行目录前缀 test_ob_simple_cluster_
+  // Specify the case run directory prefix test_ob_simple_cluster_
   ObserverExpandShink() : ObSimpleClusterTestBase(TEST_FILE_NAME) {}
 };
 
@@ -73,24 +73,22 @@ TEST_F(ObserverExpandShink, basic_func)
   int64_t affected_rows = 0;
   std::string succ_sql_str = "ALTER RESOURCE UNIT sys_unit_config LOG_DISK_SIZE='3G'";
   EXPECT_EQ(OB_SUCCESS, exec_write_sql_sys(succ_sql_str.c_str(), affected_rows));
-  // tenant_node_balancer 1 s 运行一次
+  // tenant_node_balancer runs once every 1 s
   sleep(3);
 
   std::string succ_sql_str1 = "ALTER SYSTEM SET log_disk_utilization_limit_threshold = 81";
   EXPECT_EQ(OB_SUCCESS, exec_write_sql_sys(succ_sql_str1.c_str(), affected_rows));
-
-  // 验证修改租户规格失败，报错小于clog盘下限
+  // Validate tenant specification modification failure, error less than clog disk lower limit
   std::string fail_sql_str = "ALTER RESOURCE UNIT sys_unit_config LOG_DISK_SIZE='1G'";
   EXPECT_EQ(OB_RESOURCE_UNIT_VALUE_BELOW_LIMIT, exec_write_sql_sys(fail_sql_str.c_str(), affected_rows));
   std::string succ_sql_str2 = "ALTER SYSTEM SET log_disk_size = '4G'";
   EXPECT_EQ(OB_SUCCESS, exec_write_sql_sys(succ_sql_str2.c_str(), affected_rows));
   sleep(6);
   EXPECT_EQ(GCONF.log_disk_size, 4 * 1024 * 1024 * 1024ul);
-  // 验证修改租户规格失败，clog盘空间不够
+  // Verify that modifying tenant specification failed, clog disk space insufficient
   std::string fail_sql_str1 = "ALTER RESOURCE UNIT sys_unit_config LOG_DISK_SIZE='100G'";
   EXPECT_EQ(OB_MACHINE_RESOURCE_NOT_ENOUGH, exec_write_sql_sys(fail_sql_str1.c_str(), affected_rows));
-
-  // 验证创建租户失败，clog盘空间不够
+  // Validate tenant creation failure, clog disk space insufficient
   std::string succ_sql_str3 = "ALTER SYSTEM SET log_disk_size = '3G'";
   EXPECT_EQ(OB_SUCCESS, exec_write_sql_sys(succ_sql_str3.c_str(), affected_rows));
   sleep(6);
@@ -132,20 +130,20 @@ TEST_F(ObserverExpandShink, resize_tenant_log_disk)
       SERVER_LOG(WARN, "check_tenant_exist failed", K(ret));
     } 
   }
-  // 保证log_disk_size变为10G生效
+  // Ensure log_disk_size change to 10G takes effect
   sleep(3);
   int64_t log_disk_origin_assigned = GCTX.log_block_mgr_->min_log_disk_size_for_all_tenants_;
   bool bool_ret = true;
   EXPECT_EQ(bool_ret, true);
   LOG_INFO("runlin trace, before create one default tenant", KPC(GCTX.log_block_mgr_), K(log_disk_origin_assigned));
-  // 每个租户的日志盘大小为2G（默认值）
+  // The size of each tenant's log disk is 2G (default value)
   EXPECT_EQ(OB_SUCCESS, create_tenant("runlin1"));
   LOG_INFO("runlin trace, after create one default tenant", KPC(GCTX.log_block_mgr_), K(log_disk_origin_assigned));
   EXPECT_EQ(OB_SUCCESS, create_tenant("runlin2"));
   EXPECT_EQ(GCTX.log_block_mgr_->min_log_disk_size_for_all_tenants_,
             log_disk_origin_assigned + 4*1024*1024*1024ul);
   LOG_INFO("runlin trace, after create two default tenant", KPC(GCTX.log_block_mgr_), K(log_disk_origin_assigned));
-  // 修改租户规格
+  // Modify tenant specification
   int64_t affected_rows = 0;
   std::string sql_str = "ALTER RESOURCE UNIT %s%s LOG_DISK_SIZE='%s'";
   {
@@ -159,20 +157,20 @@ TEST_F(ObserverExpandShink, resize_tenant_log_disk)
     LOG_INFO("runlin trace, alter resource below limit", KPC(GCTX.log_block_mgr_));
   }
   {
-    // 扩容验证
+    // Expansion validation
     std::string alter_resource_runlin1 = string_format(sql_str, UNIT_BASE, "runlin1", "6G");
     std::string alter_resource_runlin2 = string_format(sql_str, UNIT_BASE, "runlin2", "6G");
     EXPECT_EQ(OB_SUCCESS, exec_write_sql_sys(alter_resource_runlin1.c_str(), affected_rows));
     EXPECT_EQ(OB_SUCCESS, exec_write_sql_sys(alter_resource_runlin2.c_str(), affected_rows));
     sleep(3);
-    // 扩容操作直接执行成功
+    // Expansion operation executed successfully directly
     EXPECT_EQ(GCTX.log_block_mgr_->min_log_disk_size_for_all_tenants_,
               log_disk_origin_assigned + 12*1024*1024*1024ul);
     LOG_INFO("runlin trace, alter resource to 6G success", KPC(GCTX.log_block_mgr_));
   }
   {
-    // 缩容验证
-    // 暂停TenantNodeBalancer的运行
+    // Shrink validation
+    // Pause the operation of TenantNodeBalancer
     omt::ObTenantNodeBalancer::get_instance().refresh_interval_ = 10 * 1000 * 1000;
     int64_t start_ts = ObTimeUtility::current_time();
     sleep(2);
@@ -183,9 +181,9 @@ TEST_F(ObserverExpandShink, resize_tenant_log_disk)
       EXPECT_EQ(OB_SUCCESS, exec_write_sql_sys(alter_resource_runlin2.c_str(), affected_rows));
     }
     const int64_t cost_ts = ObTimeUtility::current_time() - start_ts;
-    // 假设sleep+执行sql的时间小于4s
+    // Assume the sleep + execution of sql time is less than 4s
     EXPECT_LE(cost_ts, 4*1000*1000);
-    // 此时TenantNodeBalancer线程还未开始运行，ObServerLogBlockMgr的min_log_disk_size_for_all_tenants_不会发生变化
+    // At this time, the TenantNodeBalancer thread has not started running, ObServerLogBlockMgr's min_log_disk_size_for_all_tenants_ will not change
     EXPECT_EQ(GCTX.log_block_mgr_->min_log_disk_size_for_all_tenants_,
               log_disk_origin_assigned + 12*1024*1024*1024ul);
     omt::ObTenantNodeBalancer::get_instance().refresh_interval_ = 1 * 1000 * 1000;

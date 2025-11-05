@@ -53,7 +53,7 @@ int ObTableLoadMergeRescanOp::switch_next_op(bool is_parent_called)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected merge table ctx is null", KR(ret));
   } else {
-    // 重设merge_table_ctx_
+    // Reset merge_table_ctx_
     inner_ctx_.store_table_ctx_ = merge_table_ctx_->store_table_ctx_;
     inner_ctx_.insert_table_ctx_ = merge_table_ctx_->insert_table_ctx_;
     inner_ctx_.table_store_ = nullptr;

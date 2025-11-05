@@ -42,7 +42,7 @@ TestRunCtx RunCtx;
 class TestBigTxData : public ObSimpleClusterTestBase
 {
 public:
-  // 指定case运行目录前缀 test_ob_simple_cluster_
+  // Specify the case run directory prefix test_ob_simple_cluster_
   void minor_freeze_and_wait();
   TestBigTxData() : ObSimpleClusterTestBase("test_big_tx_data_") {}
 };
@@ -66,7 +66,7 @@ TEST_F(TestBigTxData, big_tx_data)
   MTL_SWITCH(OB_SYS_TENANT_ID) {
     int64_t affected_rows = 0;
     sqlclient::ObISQLConnection *connection = nullptr;
-    // 1，开启事务，生成一些savepoint
+    // 1, start transaction, generate some savepoints
     ASSERT_EQ(OB_SUCCESS, get_curr_simple_server().get_sql_proxy().acquire(connection));
     DO(EXEC_SQL("set ob_trx_timeout = 6000000000"));
     DO(EXEC_SQL("set ob_trx_idle_timeout = 6000000000"));
@@ -83,7 +83,7 @@ TEST_F(TestBigTxData, big_tx_data)
       DO(sql.append_fmt("savepoint s%ld", idx));
       DO(EXEC_SQL(sql.ptr()));
     }
-    // 2，获取本事务ID，这个事务的tx data足够大
+    // 2, get the transaction ID of this transaction, the tx data of this transaction is large enough
     HEAP_VAR(ObMySQLProxy::MySQLResult, res) {
       int64_t sess_id = 0;
       int64_t tx_id;
@@ -102,10 +102,10 @@ TEST_F(TestBigTxData, big_tx_data)
       ATOMIC_STORE(&TEST_TX_ID, tx_id);
       std::cout << "tx_id:" << tx_id << std::endl;
     }
-    // 3，写日志才可以生成undo status
+    // 3, write log can generate undo status
     cout << "alter system minor freeze 1" << endl;
     minor_freeze_and_wait();
-    // 4，回滚生成undo status
+    // 4, rollback to generate undo status
     for (int64_t idx = savepoint_size - 1; idx >= 0; --idx) {
       ObSqlString sql;
       DO(sql.append_fmt("rollback to s%ld", idx));
@@ -113,11 +113,11 @@ TEST_F(TestBigTxData, big_tx_data)
     }
     DO(EXEC_SQL("commit"));
     ::sleep(10);
-    // 5，把tx data转下去
+    // 5, convert tx data down
     cout << "alter system minor freeze 2" << endl;
     minor_freeze_and_wait();
-    ASSERT_EQ(ATOMIC_LOAD(&DUMP_BIG_TX_DATA), true);// 确保tx data已经走过了序列化逻辑
-    // 6, 读一次这个tx data
+    ASSERT_EQ(ATOMIC_LOAD(&DUMP_BIG_TX_DATA), true);// Ensure tx data has gone through the serialization logic
+    // 6, read this tx data once
     DoNothingOP op;
     ObLSService *ls_service = MTL(ObLSService*);
     ObLSHandle handle;
@@ -126,7 +126,7 @@ TEST_F(TestBigTxData, big_tx_data)
     ObTxDataMiniCache fake_cache;
     ObReadTxDataArg read_arg(ObTransID(ATOMIC_LOAD(&TEST_TX_ID)), 1, fake_cache);
     DO(handle.get_ls()->tx_table_.check_with_tx_data(read_arg, op));
-    // 7，检查被测事务的tx data已经经过了deserialize
+    // 7, check that the tx data of the transaction under test has already been deserialized
     ASSERT_EQ(ATOMIC_LOAD(&LOAD_BIG_TX_DATA), true);
   }
 }

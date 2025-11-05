@@ -1172,7 +1172,7 @@ OB_INLINE bool is_sys_index_table(const uint64_t tid)
   return (tid > OB_MIN_SYS_TABLE_INDEX_ID) && (tid < OB_MAX_SYS_TABLE_INDEX_ID);
 }
 
-// This function includes core table and its index、lob table
+// This function includes core table and its index, lob table
 OB_INLINE bool is_core_table(const uint64_t tid)
 {
   return (tid > OB_INVALID_OBJECT_ID && tid < OB_MAX_CORE_TABLE_ID)
@@ -1180,7 +1180,7 @@ OB_INLINE bool is_core_table(const uint64_t tid)
          || is_core_lob_table(tid);
 }
 
-// This function includes system table and its index、lob table
+// This function includes system table and its index, lob table
 OB_INLINE bool is_sys_table(const uint64_t tid)
 {
   return is_system_table(tid)
@@ -2048,7 +2048,7 @@ const int64_t OB_ORACLE_SCALE_FOR_NUMBER = -127;
 const int64_t HARD_CODE_SCHEMA_VERSION_BEGIN = 1 << 17;
 
 #define NUMBER_SCALE_UNKNOWN_YET (lib::is_oracle_mode() ? ORA_NUMBER_SCALE_UNKNOWN_YET: SCALE_UNKNOWN_YET)
-//TDE相关参数
+//TDE related parameters
 const int64_t MAX_ENCRYPTION_SECRET_LENGTH = 256;
 const int64_t MAX_DECRYPTION_SECRET_LENGTH = 256;
 const int64_t MAX_ENCRYPTION_ALGORITHM_LENGTH = 256;

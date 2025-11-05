@@ -612,16 +612,15 @@ void ObSQLSessionInfo::destroy(bool skip_sys_var)
 {
   if (is_inited_) {
     int ret = OB_SUCCESS;
-
-    // 反序列化出来的 session 不应该做 end_trans 等清理工作
+    // The deserialized session should not do end_trans etc cleanup work
     // bug: 
     if (false == get_is_deserialized()) {
       if (false == ObSchemaService::g_liboblog_mode_) {
-        //session断开时调用ObTransService::end_trans回滚事务，
-        // 此处stmt_timeout ＝ 当前时间 ＋语句query超时时间,而不是最后一条sql的start_time, 相关bug_id : 7961445
+        // session disconnects, call ObTransService::end_trans to roll back the transaction,
+        // Here stmt_timeout = current time + statement query timeout, not the start_time of the last sql, related bug_id : 7961445
         set_query_start_time(ObTimeUtility::current_time());
-        // 这里调用end_trans无需上锁，因为调用reclaim_value时意味着已经没有query并发使用session
-        // 调用这个函数之前会调session.set_session_state(SESSION_KILLED)，
+        // Here calling end_trans does not require locking, because calling reclaim_value means there is no query concurrently using the session
+        // Call this function before session.set_session_state(SESSION_KILLED),
         bool need_disconnect = false;
         // NOTE: only rollback trans if it is started on this node
         // otherwise the transaction maybe rollbacked by idle session disconnect
@@ -645,8 +644,7 @@ void ObSQLSessionInfo::destroy(bool skip_sys_var)
         }
       }
     }
-
-    // 临时表在 slave session 析构时不能清理
+    // Temporary table cannot be cleaned up when the slave session is destructed
     if (false == get_is_deserialized()) {
       int temp_ret = drop_temp_tables();
       if (OB_UNLIKELY(OB_SUCCESS != temp_ret)) {
@@ -654,8 +652,7 @@ void ObSQLSessionInfo::destroy(bool skip_sys_var)
       }
       refresh_temp_tables_sess_active_time();
     }
-
-    // slave session 上 ps_session_info_map_ 为空，调用 close 也不会有副作用
+    // slave session ps_session_info_map_ is empty, calling close will have no side effects
     if (OB_SUCC(ret)) {
       if (OB_FAIL(close_all_ps_stmt())) {
         LOG_WARN("failed to close all stmt", K(ret));
@@ -679,9 +676,7 @@ void ObSQLSessionInfo::destroy(bool skip_sys_var)
       get_session_allocator().free(piece_cache_);
       piece_cache_ = NULL;
     }
-
-
-    // 非分布式需要的话，分布式也需要，用于清理package的全局变量值
+    // Non-distributed needs it, distributed also needs it, used for cleaning up the global variable values of package
     reset_all_package_state();
     reset(skip_sys_var);
     is_inited_ = false;
@@ -708,7 +703,7 @@ int ObSQLSessionInfo::close_ps_stmt(ObPsStmtId client_stmt_id)
       } else if (OB_FAIL(ps_cache_->deref_ps_stmt(inner_stmt_id))) {
         LOG_WARN("close ps stmt failed", K(ret), "session_id", get_server_sid(), K(ret));
       }
-      //无论上面是否成功, 都需要将session info资源释放
+      // Regardless of whether the above was successful, the session info resource needs to be released
       int tmp_ret = OB_SUCCESS;
       if (OB_SUCCESS != (tmp_ret = remove_ps_session_info(client_stmt_id))) {
         ret = tmp_ret;
@@ -750,12 +745,11 @@ int ObSQLSessionInfo::close_all_ps_stmt()
   }
   return ret;
 }
-
-//mysql租户: 如果session创建过临时表, 直连模式: session断开时drop temp table;
-//oracle租户, commit时为了清空数据也会调用此接口, 但仅清除事务级别的临时表;
-//            session断开时则清理掉事务级和会话级的临时表;
-//由于oracle临时表仅仅是清理本session数据, 为避免rs拥塞,不发往rs由sql proxy执行
-//对于分布式计划, 除非ac=1否则交给master session清理, 反序列化得到的session不做事情
+//mysql tenant: If session created temporary tables, direct connection mode: drop temp table when session disconnects;
+//oracle tenant, when commit clears data will also call this interface, but only clears transaction-level temporary tables;
+//            session disconnects then clean up transaction-level and session-level temporary tables;
+// Since Oracle temporary tables only clean up data for this session, to avoid RS congestion, do not send to RS and execute by SQL proxy
+// For distributed planning, unless ac=1 otherwise hand over to master session for cleanup, deserialized session does nothing
 int ObSQLSessionInfo::drop_temp_tables(const bool is_disconn,
                                        const bool is_xa_trans,
                                        const bool is_reset_connection)
@@ -773,7 +767,7 @@ int ObSQLSessionInfo::drop_temp_tables(const bool is_disconn,
                  || is_xa_trans)
              && (!get_is_deserialized() || ac)) {
     bool need_drop_temp_table = false;
-    //mysql: 1. 直连 & sess 断开时  2. reset connection
+    //mysql: 1. direct connection & session disconnect  2. reset connection
     if (OB_SUCC(ret)) {
       if ((false == is_obproxy_mode() && is_sess_disconn) || is_reset_connection) {
         need_drop_temp_table = true;
@@ -811,11 +805,10 @@ int ObSQLSessionInfo::drop_temp_tables(const bool is_disconn,
   }
   return ret;
 }
-
-//proxy方式下session创建、断开和后台定时task检查:
-//如果距离上次更新此session->last_refresh_temp_table_time_ 超过1hr
-//则更新session创建的临时表最后活动时间SESSION_ACTIVE_TIME
-//oracle临时表依赖附加的__sess_create_time判断重用并清理, 不需要更新
+//proxy mode session creation, disconnection and background scheduled task check:
+// If the time since the last update of this session->last_refresh_temp_table_time_ exceeds 1hr
+// Then update the last active time of the temporary table created for the session SESSION_ACTIVE_TIME
+//oracle temporary table dependency additional __sess_create_time judgment reuse and cleanup, no need to update
 void ObSQLSessionInfo::refresh_temp_tables_sess_active_time()
 {
   int ret = OB_SUCCESS;
@@ -876,7 +869,7 @@ void ObSQLSessionInfo::set_show_warnings_buf(int error_code)
   } else if (OB_SUCCESS == error_code) {
     warnings_buf_.reset_err();
   }
-  show_warnings_buf_ = warnings_buf_; // show_warnings_buf_用于show warnings
+  show_warnings_buf_ = warnings_buf_; // show_warnings_buf_ used for show warnings
 }
 
 void ObSQLSessionInfo::update_show_warnings_buf()
@@ -1182,9 +1175,9 @@ int ObSQLSessionInfo::prepare_ps_stmt(const ObPsStmtId inner_stmt_id,
 {
   int ret = OB_SUCCESS;
   ObPsSessionInfo *session_info = NULL;
-  // 相同sql返回不同stmt id:
-  // 1. 有proxy且版本大于等于1.8.4以上 or 直连情况
-  // 3. 非内部sql
+  // Same sql returns different stmt id:
+  // 1. There is a proxy and the version is greater than or equal to 1.8.4 or direct connection situation
+  // 3. non-internal sql
   const bool is_new_proxy = ((is_obproxy_mode() && proxy_version_ >= min_proxy_version_ps_)
                                       || !is_obproxy_mode());
   if (is_new_proxy && !is_inner_sql) {
@@ -1335,7 +1328,7 @@ int ObSQLSessionInfo::add_cursor(pl::ObPLCursorInfo *cursor)
   if (OB_SUCC(ret)) {
     int64_t id = cursor->get_id();
     if (OB_INVALID_ID == id) {
-      // mysql ps模式时，会提前将cursor id设置为 stmt_id
+      // mysql ps mode, will set cursor id to stmt_id in advance
       id = pl_cursor_cache_.gen_cursor_id();
       // ps cursor: proxy will record server ip, other ops of ps cursor will route by record ip.
     }
@@ -1510,11 +1503,10 @@ int ObSQLSessionInfo::make_dbms_cursor(pl::ObDbmsCursorInfo *&cursor,
   OX (cursor->set_dbms_sql_cursor());
   OZ (add_cursor(cursor));
   /*
-   * 一个dbms cursor可以在open之后反复parse，每次都可以切换为不同语句，所以内部不同对象需要使用不同allocator：
-   * 1. cursor_id在open_cursor之后就不变化，直到close_cursor，所以生命周期比较长，从session的allocator分配。
-   * 2. sql_stmt_等其它属性都是每次parse之后就变化的，所以生命周期较短，从entiry分配内存，并且在每次parse时重新
-   *    创建entity。
-   * 3. spi_result、spi_cursor也要在每次parse时重置。
+   * A dbms cursor can be repeatedly parsed after being opened, each time switching to a different statement, so internal different objects need to use different allocators:
+   * 1. cursor_id does not change after open_cursor until close_cursor, so its lifecycle is relatively long, allocated from the session's allocator.
+   * 2. sql_stmt_ and other properties change every time after parsing, so their lifecycle is shorter, memory is allocated from entity, and a new entity is created each time it is parsed.
+   * 3. spi_result and spi_cursor also need to be reset every time it is parsed.
    */
   return ret;
 }
@@ -1549,8 +1541,7 @@ int ObSQLSessionInfo::check_read_only_privilege(const bool read_only,
   }
   return ret;
 }
-
-//在session中当trace被打开过一次，则分配一个buffer, 该buffer在整个session析构时才会被释放。
+// In session when trace has been opened once, a buffer is allocated, which will be released only when the session is destructed.
 
 
 OB_DEF_SERIALIZE(ObSQLSessionInfo::ApplicationInfo)
@@ -1744,7 +1735,7 @@ const ObAuditRecordData &ObSQLSessionInfo::get_final_audit_record(
         || (EXECUTE_PL_EXECUTE == mode && audit_record_.sql_len_ > 0)) {
       // spi_cursor_open may not use process_record to set audit_record_.sql_
       // so only EXECUTE_PL_EXECUTE == mode && audit_record_.sql_len_ > 0 do not set sql
-      //ps模式对应的sql在协议层中设置, session的current_query_中没值
+      // ps mode corresponding sql is set in the protocol layer, session's current_query_ has no value
       // do nothing
     } else {
       ObString sql = get_current_query_string();
@@ -2513,7 +2504,7 @@ void ObSQLSessionInfo::ObCachedTenantConfigInfo::refresh()
                   K_(saved_tenant_info), K(effective_tenant_id));
       ATOMIC_STORE(&saved_tenant_info_, effective_tenant_id);
     }
-    // 缓存data version 用于性能优化
+    // Cache data version for performance optimization
     uint64_t data_version = 0;
     if (!is_valid_tenant_id(effective_tenant_id)) {
       LOG_DEBUG("invalid tenant id", K_(saved_tenant_info), K(effective_tenant_id));
@@ -2522,13 +2513,13 @@ void ObSQLSessionInfo::ObCachedTenantConfigInfo::refresh()
     } else {
       ATOMIC_STORE(&data_version_, data_version);
     }
-      // 1.是否支持外部一致性
+      // 1.Does it support external consistency
     is_external_consistent_ = transaction::ObTsMgr::get_instance().is_external_consistent(effective_tenant_id);
     omt::ObTenantConfigGuard tenant_config(TENANT_CONF(effective_tenant_id));
     if (OB_LIKELY(tenant_config.is_valid())) {
-      // 2.是否允许 batch_multi_statement
+      // 2.Is batch_multi_statement allowed
       enable_batched_multi_statement_ = tenant_config->ob_enable_batched_multi_statement;
-      // 3.是否允许bloom_filter
+      // 3.Is bloom_filter allowed
       if (tenant_config->_bloom_filter_enabled) {
         enable_bloom_filter_ = true;
       } else {

@@ -80,8 +80,8 @@ public:
   common::ObIAllocator &alloc_; // inited by op_alloc_ in das_op
   bool use_specify_snapshot_;
   transaction::ObTxIsolationLevel isolation_level_;
-  transaction::ObTxReadSnapshot *specify_snapshot_; // 给task指定snapshot_version
-  transaction::ObTxReadSnapshot *response_snapshot_; // 远端或者本地获取到的snapshot信息
+  transaction::ObTxReadSnapshot *specify_snapshot_; // specify snapshot_version for task
+  transaction::ObTxReadSnapshot *response_snapshot_; // remote or local obtained snapshot information
 };
 
 struct ObDASRemoteInfo
@@ -113,7 +113,7 @@ public:
   TO_STRING_EMPTY();
   ObExecContext *exec_ctx_;
   const ObExprFrameInfo *frame_info_;
-  transaction::ObTxDesc *trans_desc_; //trans desc，事务是全局信息，由RPC框架管理，这里不维护其内存
+  transaction::ObTxDesc *trans_desc_; // trans desc, transaction is global information, managed by the RPC framework, memory is not maintained here
   transaction::ObTxReadSnapshot snapshot_; // Mvcc snapshot
   common::ObSEArray<const ObDASBaseCtDef*, 2> ctdefs_;
   common::ObSEArray<ObDASBaseRtDef*, 2> rtdefs_;
@@ -179,8 +179,8 @@ public:
   }
   virtual ~ObIDASTaskOp() { }
 
-  virtual int open_op() = 0; //执行具体的DAS Task Op逻辑，由实例化的TaskOp自定义自己的执行逻辑
-  virtual int release_op() = 0; //close DAS Task Op,释放对应的资源
+  virtual int open_op() = 0; // Execute specific DAS Task Op logic, customized by the instantiated TaskOp
+  virtual int release_op() = 0; //close DAS Task Op, release the corresponding resources
   virtual int record_task_result_to_rtdef() = 0;
   virtual int assign_task_result(ObIDASTaskOp *other) = 0;
   void set_tablet_id(const common::ObTabletID &tablet_id) { tablet_id_ = tablet_id; }
@@ -195,7 +195,7 @@ public:
   const ObDASTabletLoc *get_tablet_loc() const { return tablet_loc_; }
   inline int64_t get_ref_table_id() const { return tablet_loc_->loc_meta_->ref_table_id_; }
   virtual int decode_task_result(ObIDASTaskResult *task_result) = 0;
-  //远程执行填充第一个RPC结果，并返回是否还有剩余的RPC结果
+  // Remote execution fills the first RPC result, and returns whether there are remaining RPC results
   virtual int fill_task_result(ObIDASTaskResult &task_result,
                                bool &has_more, int64_t &memory_limit)
   {
@@ -292,15 +292,15 @@ protected:
 
 public:
   int errcode_; //don't need serialize it
-  transaction::ObTxDesc *trans_desc_; //trans desc，事务是全局信息，由RPC框架管理，这里不维护其内存
+  transaction::ObTxDesc *trans_desc_; // trans desc, transaction is global information, managed by the RPC framework, memory is not maintained here
   transaction::ObTxReadSnapshot *snapshot_; // Mvcc snapshot
 
 protected:
   uint64_t tenant_id_;
   int64_t task_id_;
-  ObDASOpType op_type_; //DAS提供的operation type
+  ObDASOpType op_type_; // DAS provided operation type
 protected:
-  //事务相关信息
+  // transaction related information
   union
   {
     uint32_t task_flag_;
@@ -374,7 +374,7 @@ public:
   int64_t get_task_id() { return task_id_; }
   VIRTUAL_TO_STRING_KV(K_(task_id));
 protected:
-  int64_t task_id_; //DAS Task的id编号, 在DAS层每个server上的id是递增并且唯一的
+  int64_t task_id_; // DAS Task ID number, the ID on each server in the DAS layer is incrementing and unique
 };
 
 class DASOpResultIter
@@ -449,9 +449,9 @@ public:
                KPC_(remote_info));
 private:
   int64_t timeout_ts_;
-  common::ObAddr ctrl_svr_; //DAS Task的控制端地址
-  common::ObAddr runner_svr_; //DAS Task执行端地址
-  common::ObSEArray<ObIDASTaskOp*, 2> task_ops_; //对应operation的参数信息,这是一个接口类，具体的定义由DML Service提供
+  common::ObAddr ctrl_svr_; // DAS Task control server address
+  common::ObAddr runner_svr_; // DAS Task execution endpoint address
+  common::ObSEArray<ObIDASTaskOp*, 2> task_ops_; // corresponds to the parameter information of the operation, this is an interface class, the specific definition is provided by DML Service
   ObDASRemoteInfo *remote_info_;
 };
 
@@ -484,11 +484,11 @@ public:
                K_(rcode),
                K_(trans_result));
 private:
-  bool has_more_; //还有其它的回包消息，需要通过DTL channel进行接收
-  common::ObAddr ctrl_svr_; //DAS Task的控制端地址
-  common::ObAddr runner_svr_; //DAS Task执行端地址
-  common::ObSEArray<ObIDASTaskResult*, 2> op_results_;  // 对应operation的结果信息，这是一个接口类，具体的定义由DML Service解析
-  obrpc::ObRpcResultCode rcode_; //返回的错误信息
+  bool has_more_; // There are other response messages that need to be received through the DTL channel
+  common::ObAddr ctrl_svr_; // DAS Task control server address
+  common::ObAddr runner_svr_; // DAS Task execution endpoint address
+  common::ObSEArray<ObIDASTaskResult*, 2> op_results_;  // Corresponding operation result information, this is an interface class, the specific definition is parsed by DML Service
+  obrpc::ObRpcResultCode rcode_; // returned error information
   transaction::ObTxExecResult trans_result_;
   ObDASTaskFactory *das_factory_;  // no need to serialize
 };

@@ -145,7 +145,7 @@ int ObTableLocation::PartProjector::calc_part_row(ObExecContext &ctx,
   } else {
     cur_part_row.count_ = column_cnt_;
     if (OB_ISNULL(cur_part_row.cells_)) {
-      //part row的cells未分配，这里先为cells分配空间
+      // part row's cells are not allocated, here we first allocate space for cells
       int64_t row_size = sizeof(ObObj) * column_cnt_;
       cur_part_row.cells_ = static_cast<ObObj*>(ctx.get_allocator().alloc(row_size));
       if (OB_ISNULL(cur_part_row.cells_)) {
@@ -1149,9 +1149,9 @@ int ObTableLocation::init_table_location_with_column_ids(ObSqlSchemaGuard &schem
     ret = OB_TABLE_NOT_EXIST;
     LOG_WARN("table not exist", K(table_id));
   } else {
-    //找到真实的主表id，并且用主表id去解析partition expr
-    //由于局部索引本身没有分区信息，局部索引的分区信息跟主表相同，所以这里需要传主表的table_id
-    //而全局索引的分区信息跟主表是独立的，所以全局索引应该传递自己的table_id
+    // Find the real main table id, and use the main table id to parse partition expr
+    // Since the local index itself does not have partition information, the partition information of the local index is the same as the main table, so the table_id of the main table needs to be passed here
+    // And the partition information of the global index is independent of the main table, so the global index should pass its own table_id
     uint64_t real_table_id = (table_schema->is_index_local_storage() || table_schema->is_aux_lob_table())
         ? table_schema->get_data_table_id() : table_id;
     ObResolverParams resolver_ctx;
@@ -1169,8 +1169,8 @@ int ObTableLocation::init_table_location_with_column_ids(ObSqlSchemaGuard &schem
     table_item.ref_id_ = real_table_id;
     table_item.type_ = TableItem::BASE_TABLE;
     RowDesc row_desc;
-    //这里只是为了使用resolver解析partition expr的接口，任何一个语句的resolver都有这种能力
-    //用delete resolver的原因是delete resolver最简单
+    // Here is just to use the resolver interface to parse the partition expr, any statement's resolver has this capability
+    // Use delete resolver because delete resolver is the simplest
     SMART_VAR (ObDeleteResolver, delete_resolver, resolver_ctx) {
       ObDeleteStmt *delete_stmt = nullptr;
       const ObTableSchema *real_table_schema = table_schema;
@@ -1185,7 +1185,7 @@ int ObTableLocation::init_table_location_with_column_ids(ObSqlSchemaGuard &schem
       } else if (OB_UNLIKELY(table_schema->is_index_local_storage() || table_schema->is_aux_lob_table())
           && OB_FAIL(schema_guard.get_table_schema(real_table_id, real_table_schema))) {
         LOG_WARN("get real table schema failed", K(ret), K(real_table_id));
-        //由于局部索引没有自己的partition信息，所以如果是计算索引表的partition信息，需要去主表获取分区规则表达式
+        // Since local index does not have its own partition information, if it is to calculate the partition information of the index table, you need to get the partition rule expression from the main table
       } else if (OB_FAIL(delete_resolver.resolve_table_partition_expr(table_item, *real_table_schema))) {
         LOG_WARN("resolve table partition expr failed", K(ret));
       } else if (OB_FAIL(generate_rowkey_desc(*delete_stmt,
@@ -1297,7 +1297,7 @@ int ObTableLocation::init(
     LOG_WARN("insert needn't call this function", K(ret));
   } else {
     is_in_hit_ = false;
-    if (OB_FAIL(record_in_dml_partition_info(stmt, exec_ctx, filter_exprs, is_in_hit_, table_schema))) { //这是一个特殊路径，针对in filter条件
+    if (OB_FAIL(record_in_dml_partition_info(stmt, exec_ctx, filter_exprs, is_in_hit_, table_schema))) { // This is a special path for in filter conditions
       LOG_WARN("fail to record_in_dml_partition_info", K(ret));
     } else if (!is_in_hit_) {
       bool is_dbms_stats_partition = false;
@@ -1407,7 +1407,7 @@ int ObTableLocation::get_is_weak_read(const ObDMLStmt &dml_stmt,
                K(consistency_level),
                KPC(session));
     } else {
-      // 判断是否优先读备副本
+      // Determine whether to prioritize reading from the backup copy
       is_weak_read = (ObTxConsistencyType::BOUNDED_STALENESS_READ == trans_consistency_type);
     }
   }
@@ -1783,7 +1783,7 @@ int ObTableLocation::calculate_tablet_ids(ObExecContext &exec_ctx,
     LOG_WARN("fail to get das tablet mapper", K(ret));
   } else {
     ObPartitionIdMap partition_id_map;
-    if (is_in_hit_) { //判断是否是in类型
+    if (is_in_hit_) { // Determine if it is an in type
       if (OB_FAIL(calc_partition_ids_by_in_expr(exec_ctx, tablet_mapper, tablet_ids, partition_ids, dtc_params))) {
         LOG_WARN("fail to calc_partition_ids_by_in_expr", K(ret));
       }
@@ -2017,8 +2017,7 @@ int ObTableLocation::convert_row_obj_type(const ObNewRow &from,
   }
   return ret;
 }
-
-////考虑in的类型转换，暂时不考虑不行。判断in的value是否能转换成column列要求的类型，如果不能。直接返回所有的partition。
+////Consider the type conversion of in, temporarily do not consider it cannot be done. Determine if the value of in can be converted to the type required by the column, if not. Directly return all partitions.
 int ObTableLocation::calc_partition_ids_by_in_expr(ObExecContext &exec_ctx,
                                                    ObDASTabletMapper &tablet_mapper,
                                                    ObIArray<ObTabletID> &tablet_ids,
@@ -2180,7 +2179,7 @@ T_OP_IN
     --T_OP_ROW
       --T_QUESTIONMARK
       --T_QUESTIONMARK
-    */ //in 表达式的结构，下面代码主要按照这个结构在分析
+    */ // in expression structure, below code mainly analyzes according to this structure
 
 int ObTableLocation::record_in_dml_partition_info(const ObDMLStmt &stmt,
                                                   ObExecContext *exec_ctx,
@@ -2481,7 +2480,7 @@ int ObTableLocation::get_not_insert_dml_part_sort_expr(const ObDMLStmt &stmt,
   int ret = OB_SUCCESS;
   if (NULL != sort_exprs) {
     ObRawExpr *part_expr = NULL;
-    //一级column的range分区, range columns.里面的column exprs在partition间是有序的.
+    // First-level column's range partition, range columns. The column exprs are ordered across partitions.
     if (PARTITION_LEVEL_ONE == part_level_) {
       if (((PARTITION_FUNC_TYPE_RANGE == part_type_
             || PARTITION_FUNC_TYPE_INTERVAL == part_type_) && is_col_part_expr_)
@@ -2491,8 +2490,8 @@ int ObTableLocation::get_not_insert_dml_part_sort_expr(const ObDMLStmt &stmt,
     } else if (PARTITION_LEVEL_TWO == part_level_
                && ((PARTITION_FUNC_TYPE_RANGE == subpart_type_ && is_col_subpart_expr_)
                    || PARTITION_FUNC_TYPE_RANGE_COLUMNS == subpart_type_)) {
-      //二级分区,对于subpartition是column的range分区或者range columns。
-      //同时一级分区是单值情况,那么各级分区中的column exprs就是在获取的各个partition间有序.
+      // secondary partition, for subpartition is column range partition or range columns.
+      // At the same time, if the first-level partition is a single value case, then the column exprs in each level of partition are ordered across the various partitions being retrieved.
       if (!part_get_all_ && NULL != calc_node_) {
         if (calc_node_->is_column_value_node()) {
           part_expr = stmt.get_subpart_expr(loc_meta_.table_loc_id_, loc_meta_.ref_table_id_);
@@ -2567,8 +2566,8 @@ int ObTableLocation::get_location_calc_node(const ObPartitionLevel part_level,
     only_range_node = true;
   } else if (partition_columns.count() == 1) {
     column_id = partition_columns.at(0).column_id_;
-    //当partition_expr为function，且只有一个column的时候
-    //用于处理func(col) = X or col = Y的filter计算
+    // When partition_expr is function, and there is only one column
+    // Used for processing func(col) = X or col = Y filter calculation
   } else { /*do nothing*/ }
 
   if (OB_FAIL(ret)) {
@@ -2613,7 +2612,7 @@ int ObTableLocation::get_location_calc_node(const ObPartitionLevel part_level,
       } else if (OB_FAIL(add_and_node(calc_node, func_node))) {
         LOG_WARN("Failed to add and node", K(ret));
       } else {
-        // 如果有有两个filter都贡献了calc node, 就不是precise get了。先保持原样
+        // If there are two filters that contribute to the calc node, it is not a precise get. Keep it as is for now
         is_func_precise_get = true;
         is_func_get = true;
         func_always_true &= always_true || NULL == calc_node;
@@ -2912,11 +2911,10 @@ int ObTableLocation::check_expr_equal(
   }
   return ret;
 }
-
-//我们要构造的是该索引的rowkey顺序，所以这里的rowkey_info必须要跟被计算的行的rowkey顺序对应
-//而这里的分区信息是依赖分区规则的分区信息，对于local索引，其本身没有分区规则信息，所依赖的是主表的分区规则
-//所以对于全局索引和主表，传递本身的schema，而对于local索引，rowkey传递local index schema的rowkey
-//而partition依赖主表，所以real_table_schema传递主表的schema
+// We are constructing the rowkey order for this index, so the rowkey_info here must correspond to the rowkey order of the calculated row
+// And here the partition information is dependent on the partition rules of the partition information, for local indexes, it itself does not have partition rule information, what it depends on is the partition rules of the main table
+// So for the global index and main table, pass its own schema, and for local index, pass the rowkey of the local index schema's rowkey
+// And partition depends on the main table, so real_table_schema passes the schema of the main table
 int ObTableLocation::generate_rowkey_desc(const ObDMLStmt &stmt,
                                           const ObIArray<uint64_t> &column_ids,
                                           uint64_t data_table_id,
@@ -2929,11 +2927,12 @@ int ObTableLocation::generate_rowkey_desc(const ObDMLStmt &stmt,
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < column_ids.count(); ++i) {
     uint64_t rowkey_id = column_ids.at(i);
-    //raw expr中的table_id都是主表的table_id，但是我们要构造索引(包括主键索引)的rowkey顺序，
-    //所以这里应该用主表table_id去查raw_expr
+    // Table_id in raw expr are all from the main table, but we need to construct the rowkey order for indexes (including primary key index),
+    // so here we need to adjust the field order of rowkey according to the index definition.
+
     ObColumnRefRawExpr *rowkey_col = stmt.get_column_expr_by_id(data_table_id, rowkey_id);
     if (OB_ISNULL(rowkey_col)) {
-      //rowkey在stmt中没有被解析，构造一个临时的rowkey column expr
+      // rowkey is not parsed in stmt, construct a temporary rowkey column expr
       if (OB_FAIL(expr_factory.create_raw_expr(T_REF_COLUMN, rowkey_col))) {
         LOG_WARN("create mock rowkey column expr failed", K(ret));
       } else if (OB_FAIL(row_desc.add_column(rowkey_col))) {
@@ -3155,7 +3154,7 @@ int ObTableLocation::add_partition_column(const ObDMLStmt &stmt,
                                           RowDesc &row_desc)
 {
   int ret = OB_SUCCESS;
-  //去除partition columns中重复的columns
+  // Remove duplicate columns from partition columns
   bool is_different = true;
   for (int64_t idx = 0; OB_SUCC(ret) && is_different && idx < partition_columns.count(); ++idx) {
     if (partition_columns.at(idx).column_id_ == column_id) {
@@ -5233,8 +5232,8 @@ int ObTableLocation::get_partition_ids_by_range(ObExecContext &exec_ctx,
   se_gen_col_expr = NULL == level_one_part_ids ? se_gen_col_expr_: se_sub_gen_col_expr_;
   ObSEArray<ObObjectID, 5> gen_part_ids;
   ObSEArray<ObTabletID, 5> gen_tablet_ids;
-  bool all_part_by_part_range = false;  // 通过part range计算出的partition ids是表的全部partition
-  bool all_part_by_gen_range = false;   // 通过gen range计算出的partition ids是表的全部partition
+  bool all_part_by_part_range = false;  // The partition ids calculated by part range are all partitions of the table
+  bool all_part_by_gen_range = false;   // The partition ids calculated by gen range are all partitions of the table
   ObDASTabletMapper tablet_mapper;
   if (OB_UNLIKELY(!inited_)) {
     ret = OB_NOT_INIT;
@@ -5248,7 +5247,7 @@ int ObTableLocation::get_partition_ids_by_range(ObExecContext &exec_ctx,
   } else if (!is_partitioned_) {
     OZ (tablet_mapper.get_non_partition_tablet_id(tablet_ids, partition_ids));
   } else {
-    // 计算part range涉及到的partition ids
+    // Calculate partition ids involved in part range
     if (NULL == part_range) {
       all_part_by_part_range = true;
     } else if (OB_FAIL(calc_partition_ids_by_range(exec_ctx, tablet_mapper, part_range,
@@ -5257,7 +5256,7 @@ int ObTableLocation::get_partition_ids_by_range(ObExecContext &exec_ctx,
                                                    NULL))) {
       LOG_WARN("Failed to calc partitoin ids by calc node", K(ret));
     }
-    // 计算gen range涉及到的partition ids
+    // Calculate gen range involved partition ids
     if (OB_SUCC(ret)) {
       if (NULL == gen_range || OB_ISNULL(gen_col_node)
           || OB_ISNULL(se_gen_col_expr)) {
@@ -5269,8 +5268,7 @@ int ObTableLocation::get_partition_ids_by_range(ObExecContext &exec_ctx,
         LOG_WARN("Failed to calcl partition ids by gen col node", K(ret));
       }
     }
-
-    // 通过part range和gen range分别计算出了两组partition ids, 取两者的交集
+    // Through part range and gen range respectively calculated two groups of partition ids, take their intersection
     if (OB_SUCC(ret)) {
       if (!all_part_by_part_range && !all_part_by_gen_range) {
         OZ (intersect_partition_ids(gen_part_ids, partition_ids));
@@ -5672,8 +5670,9 @@ int ObTableLocation::get_list_value_node(const ObPartitionLevel part_level,
       } else if ((ObIntTC == cur_col_expr->get_type_class() && ObIntType != cur_col_expr->get_data_type()) ||
                  (ObUIntTC == cur_col_expr->get_type_class() && ObUInt64Type != cur_col_expr->get_data_type())
                  ) {
-        /*对于int类型分区键，OB内部存储的分区定义值是用INT64保存的，因此这里需要把column expr也mock成int64的，
-          否则表达式计算时会出现column的预期类型与实际类型不符的问题*/
+        /*For int type partition key, OB internally stores the partition definition value using INT64,
+          therefore here we need to mock the column expr as int64 as well,
+          otherwise there will be a mismatch between the expected type and actual type of the column during expression calculation*/
         need_replace_column = true;     
         ObRawExpr *new_expr = nullptr;
         if (OB_FAIL(expr_copier.copy(cur_col_expr, new_expr))) {
@@ -5716,7 +5715,7 @@ int ObTableLocation::get_list_value_node(const ObPartitionLevel part_level,
         LOG_WARN("failed to add flag IS_COLUMNLIZED", K(ret));
       }
     }
-    /* int类型的列做分区键时，内部保存的分区定义中的值都会转换成INT64存储，因此*/
+    /* When an int type column is used as a partition key, the values of the partition definitions stored internally are all converted to INT64 for storage, therefore*/
     if (OB_SUCC(ret) && need_replace_column) {
       expr_copier.reuse();
       if (OB_FAIL(expr_copier.add_replaced_expr(ori_exprs, new_exprs))) {

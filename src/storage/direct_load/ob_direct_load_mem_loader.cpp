@@ -99,7 +99,7 @@ int ObDirectLoadMemLoader::work()
       }
     }
     if (OB_SUCC(ret)) {
-      fragment.reset(); // 释放磁盘空间
+      fragment.reset(); // release disk space
     }
   }
 

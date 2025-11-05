@@ -34,10 +34,10 @@ public:
   static void mtl_destroy(ObDataAccessService *&das);
   int init(rpc::frame::ObReqTransport *transport,
            const common::ObAddr &self_addr);
-  //开启DAS Task分区相关的事务控制，并执行task对应的op
+  // Enable DAS Task partition related transaction control, and execute the op corresponding to the task
   int execute_das_task(ObDASRef &das_ref,
       ObDasAggregatedTask &task_ops, bool async = true);
-  //关闭DAS Task的执行流程，并释放task持有的资源，并结束相关的事务控制
+  // Close the execution flow of DAS Task, release the resources held by the task, and end the related transaction control
   int end_das_task(ObDASRef &das_ref, ObIDASTaskOp &task_op);
   int get_das_task_id(int64_t &das_id);
   int rescan_das_task(ObDASRef &das_ref, ObDASScanOp &scan_op);

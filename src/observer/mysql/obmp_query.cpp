@@ -57,7 +57,7 @@ int ObMPQuery::process()
   ObSQLSessionInfo *sess = NULL;
   bool need_response_error = true;
   bool need_disconnect = true;
-  bool async_resp_used = false; // 由事务提交线程异步回复客户端
+  bool async_resp_used = false; // Asynchronously reply to the client by the transaction commit thread
   int64_t query_timeout = 0;
   ObCurTraceId::TraceId *cur_trace_id = ObCurTraceId::get_trace_id();
   ObSMConnection *conn = get_conn();
@@ -136,7 +136,7 @@ int ObMPQuery::process()
         LOG_WARN("session has been killed", K(session.get_session_state()), K_(sql),
                  K(session.get_server_sid()), "proxy_sessid", session.get_proxy_sessid(), K(ret));
       } else if (OB_FAIL(session.check_and_init_retry_info(*cur_trace_id, sql_))) {
-        // 注意，retry info和last query trace id的逻辑要写在query lock内，否则会有并发问题
+        // Note, the logic for retry info and last query trace id should be written inside the query lock, otherwise there will be concurrency issues
         LOG_WARN("fail to check and init retry info", K(ret), K(*cur_trace_id), K_(sql));
       } else if (OB_FAIL(session.get_query_timeout(query_timeout))) {
         LOG_WARN("fail to get query timeout", K_(sql), K(ret));
@@ -193,7 +193,7 @@ int ObMPQuery::process()
         need_response_error = false;
         ObParser parser(THIS_WORKER.get_sql_arena_allocator(),
                         session.get_sql_mode(), session.get_charsets4parser());
-        //为了性能优化考虑，减少数组长度，降低无用元素的构造和析构开销
+        //For performance optimization, reduce the array length to lower the construction and destruction overhead of unused elements
         ObSEArray<ObString, 1> queries;
         ObMPParseStat parse_stat;
         if (GCONF.enable_record_trace_id) {
@@ -210,32 +210,32 @@ int ObMPQuery::process()
         if (OB_FAIL(ret)) {
           //do nothing
         } else if (OB_FAIL(parser.split_multiple_stmt(sql_, queries, parse_stat))) {
-          // 进入本分支，说明push_back出错，OOM，委托外层代码返回错误码
-          // 且进入此分支之后，要断连接
+          // Enter this branch, indicating that push_back failed due to OOM, delegate the outer code to return an error code
+          // and after entering this branch, the connection should be terminated
           need_response_error = true;
           if (OB_ERR_PARSE_SQL == ret) {
             need_disconnect = false;
           }
         } else if (OB_UNLIKELY(queries.count() <= 0)) {
           ret = OB_ERR_UNEXPECTED;
-          need_response_error = true;//进入此分支之后，要断连接，极其严重错误
+          need_response_error = true;//Enter this branch, the connection must be terminated, it is a critical error
           LOG_ERROR("emtpy query count. client would have suspended. never be here!", K_(sql), K(ret));
         } else if (OB_UNLIKELY(1 == session.get_capability().cap_flags_.OB_CLIENT_MULTI_STATEMENTS)) {
-          // 处理Multiple Statement
-          /* MySQL处理Multi-Stmt出错时候的行为：
-          * 遇到首次运行失败（包括解析或执行）的SQL后，停止读取后继数据
-            *  例如：
+          // Handle Multiple Statement
+          /* MySQL behavior when handling Multi-Stmt errors:
+          * After encountering the first failed SQL (including parsing or execution), stop reading subsequent data
+            *  For example:
             *  (1) select 1; selct 2; select 3;
-            *  select 1执行成功，selct 2报语法错误，select 3不被执行
+            *  select 1 executes successfully, selct 2 reports a syntax error, select 3 is not executed
             *  (2) select 1; drop table not_exists_table; select 3;
-            *  select 1执行成功，drop table not_exists_table报表不存在错误，select 3不被执行
+            *  select 1 executes successfully, drop table not_exists_table reports a table does not exist error, select 3 is not executed
             *
-            * 特别注意：
-            * split_multiple_stmt是根据分号来分割语句，但有可能遇到“语法错误”，
-            * 这里说的“语法错误”不是说select写成了selct，而是“token”级别的语法错误，例如语句
+            * Special note:
+            * split_multiple_stmt splits statements based on semicolons, but there might be "syntax errors",
+            * here "syntax error" does not mean select is written as selct, but "token" level syntax errors, for example the statement
             * select 1;`select 2; select 3;
-            * 上面`和'都没有形成闭合的字符串token，token parser会报告语法错误
-            * 上面的例子中，得到的queries.count() 等于 2，分别为select 1和 `select 2; select 3;
+            * In the above example, ` and ' do not form closed string tokens, the token parser will report a syntax error
+            * In the above example, queries.count() equals 2, which are select 1 and `select 2; select 3;
           */
           bool optimization_done = false;
           const char *p_normal_start = nullptr;
@@ -270,21 +270,21 @@ int ObMPQuery::process()
               if (OB_UNLIKELY(parse_stat.parse_fail_
                   && (i == parse_stat.fail_query_idx_)
                   && ObSQLUtils::check_need_disconnect_parser_err(parse_stat.fail_ret_))) {
-                // 进入本分支，说明在multi_query中的某条query parse失败，如果不是语法错，则进入该分支
-                // 如果当前query_count 为1， 则不断连接;如果大于1，
-                // 则需要在发错误包之后断连接，防止客户端一直在等接下来的回包
-                // 这个改动是为了解决
+                // Enter this branch, indicating that parsing of a query in multi_query failed, if not due to a syntax error, then enter this branch
+                // If the current query_count is 1, then keep connecting; if greater than 1,
+                // then it is necessary to disconnect after sending the error packet to prevent the client from waiting indefinitely for the next response
+                // This change is to solve
                 ret = parse_stat.fail_ret_;
                 need_response_error = true;
                 break;
               } else {
                 has_more = (queries.count() > i + 1);
-                // 本来可以做成不管queries.count()是多少，最后一个query都可以异步回包的，
-                // 但是目前的代码实现难以在不同的线程处理同一个请求的回包，
-                // 因此这里只允许只有一个query的multi query请求异步回包。
+                // Originally, it could have been designed so that the last query can always respond asynchronously regardless of queries.count(),
+                // However, the current code implementation struggles to handle the response packets of the same request in different threads,
+                // Therefore, only one query is allowed in an asynchronous response for a multi-query request here.
                 force_sync_resp = queries.count() <= 1? false : true;
-                // is_part_of_multi 表示当前sql是 multi stmt 中的一条，
-                // 原来的值默认为true，会影响单条sql的二次路由，现在改为用 queries.count() 判断。
+                // is_part_of_multi indicates that the current sql is one of the statements in a multi stmt,
+                // The original value defaults to true, which affects the secondary routing of a single SQL statement. Now it is changed to use queries.count() for judgment.
                 bool is_part_of_multi = queries.count() > 1 ? true : false;
                 ret = process_single_stmt(ObMultiStmtItem(is_part_of_multi, i, queries.at(i)),
                                           conn,
@@ -296,9 +296,9 @@ int ObMPQuery::process()
               }
             }
           }
-          // 以multiple query协议发过来的语句总数
+          // The total number of statements sent over the multiple query protocol
           EVENT_INC(SQL_MULTI_QUERY_COUNT);
-          // 以multiple query协议发过来，但实际只包含一条SQL的语句的个数
+          // Sent using the multiple query protocol, but actually contains only one SQL statement count
           if (queries.count() <= 1) {
             EVENT_INC(SQL_MULTI_ONE_QUERY_COUNT);
           }
@@ -310,7 +310,7 @@ int ObMPQuery::process()
             LOG_WARN("unexpected error. multi stmts sql while OB_CLIENT_MULTI_STATEMENTS not enabled.", K(ret), K(sql_));
           } else {
             EVENT_INC(SQL_SINGLE_QUERY_COUNT);
-            // 处理普通的Single Statement
+            // Handle ordinary Single Statement
             ret = process_single_stmt(ObMultiStmtItem(false, 0, sql_),
                                       conn,
                                       session,
@@ -325,7 +325,7 @@ int ObMPQuery::process()
         }
       }
     }
-    // THIS_WORKER.need_retry()是指是否扔回队列重试，包括大查询被扔回队列的情况。
+    // THIS_WORKER.need_retry() means whether to put it back in the queue for retry, including the case of large queries being put back in the queue.
     session.check_and_reset_retry_info(*cur_trace_id, THIS_WORKER.need_retry());
     session.set_last_trace_id(ObCurTraceId::get_trace_id());
     IGNORE_RETURN record_flt_trace(session);
@@ -348,8 +348,7 @@ int ObMPQuery::process()
     force_disconnect();
     LOG_WARN("disconnect connection", KR(ret));
   }
-
-  // 如果已经异步回包，则这部分逻辑在cb中执行，这里跳过flush_buffer()
+  // If the response has already been sent asynchronously, this logic will be executed in cb, so skip flush_buffer() here
   if (!THIS_WORKER.need_retry()) {
     if (async_resp_used) {
       async_resp_used_ = true;
@@ -365,7 +364,7 @@ int ObMPQuery::process()
   }
 
   // bugfix: 
-  // 必须总是将 THIS_WORKER 里的指针设置为 null
+  // Must always set the pointer in THIS_WORKER to null
   THIS_WORKER.set_session(NULL); // clear session
 
   if (sess != NULL) {
@@ -397,9 +396,9 @@ int ObMPQuery::try_batched_multi_stmt_optimization(sql::ObSQLSessionInfo &sessio
   if (queries.count() <= 1 || parse_stat.parse_fail_) {
     /*do nothing*/
   } else if (!enable_batch_opt) {
-    // 未打开batch开关
+    // batch switch is not turned on
   } else if (!use_plan_cache) {
-    // 不打开plan_cache开关，则优化不支持
+    // If the plan_cache switch is not turned on, optimization is not supported
   } else if (OB_FAIL(process_single_stmt(ObMultiStmtItem(false, 0, sql_, &queries, is_ins_multi_val_opt),
                                          conn,
                                          session,
@@ -442,13 +441,12 @@ int ObMPQuery::process_single_stmt(const ObMultiStmtItem &multi_stmt_item,
   observer::ObProcessMallocCallback pmcb(0,
         session.get_raw_audit_record().request_memory_used_);
   lib::ObMallocCallbackGuard guard(pmcb);
-  // 执行setup_wb后，所有WARNING都会写入到当前session的WARNING BUFFER中
+  // After executing setup_wb, all WARNINGS will be written to the WARNING BUFFER of the current session
   setup_wb(session);
-  // 当新语句开始的时候，将该值归0，因为curr_trans_last_stmt_end_time是用于
-  // 实现事务内部的语句执行间隔过长超时功能的。
+  // When a new statement starts, set this value to 0, because curr_trans_last_stmt_end_time is used for
+  // Implement the timeout function for excessively long execution intervals of statements within a transaction.
   session.set_curr_trans_last_stmt_end_time(0);
-
-  //============================ 注意这些变量的生命周期 ================================
+  //============================ Pay attention to the lifecycle of these variables ================================
   if (OB_FAIL(init_process_var(ctx_, multi_stmt_item, session))) {
     LOG_WARN("init process var failed.", K(ret), K(multi_stmt_item));
   } else {
@@ -474,12 +472,12 @@ int ObMPQuery::process_single_stmt(const ObMultiStmtItem &multi_stmt_item,
       LOG_WARN("fail to update time zone info", K(ret));
     } else {
       need_response_error = false;
-      //每次执行不同sql都需要更新
+      //Each execution of different SQL requires an update
       ctx_.self_add_plan_ = false;
-      retry_ctrl_.reset_retry_times();//每个statement单独记录retry times
+      retry_ctrl_.reset_retry_times();//each statement records retry times separately
       oceanbase::lib::Thread::WaitGuard guard(oceanbase::lib::Thread::WAIT_FOR_LOCAL_RETRY);
       do {
-        ret = OB_SUCCESS; //当发生本地重试的时候，需要重置错误码，不然无法推进重试
+        ret = OB_SUCCESS; //When a local retry occurs, the error code needs to be reset, otherwise the retry cannot proceed
         need_disconnect = true;
         // if query need mock schema, will remember table_id in mocked_tables (local thread var)
         // when resolve, and then will try mock a table schema in sqlschemaguard.
@@ -536,24 +534,21 @@ int ObMPQuery::process_single_stmt(const ObMultiStmtItem &multi_stmt_item,
       }
     }
   }
-
-  //对于tracelog的处理，不影响正常逻辑，错误码无须赋值给ret
+  //For the handling of tracelog, it does not affect the normal logic, and the error code does not need to be assigned to ret
   int tmp_ret = OB_SUCCESS;
-  //清空WARNING BUFFER
+  //Clear WARNING BUFFER
   tmp_ret = do_after_process(session, async_resp_used);
-
-  // 设置上一条语句的结束时间，由于这里只用于实现事务内部的语句之间的执行超时，
-  // 因此，首先，需要判断是否处于事务执行的过程中。然后对于事务提交的时候的异步回包,
-  // 也不需要在这里设置结束时间，因为这已经相当于事务的最后一条语句了。
-  // 最后，需要判断ret错误码，只有成功执行的sql才记录结束时间
+  // Set the end time of the previous statement, since here it is only used to implement the execution timeout between statements within a transaction,
+  // Therefore, first, it is necessary to determine whether a transaction execution process is in progress. Then for the asynchronous response at the time of transaction submission,
+  // It is also not necessary to set the end time here, because this is already equivalent to the last statement of the transaction.
+  // Finally, need to determine the ret error code, only successfully executed sql records the end time
   if (session.get_in_transaction() && !async_resp_used && OB_SUCC(ret)) {
     session.set_curr_trans_last_stmt_end_time(ObClockGenerator::getClock());
   }
-
-  // need_response_error这个变量保证仅在
-  // do { do_process } while(retry) 之前出错才会
-  // 走到send_error_packet逻辑
-  // 所以无需考虑当前为sync还是async模式
+  // the need_response_error variable ensures that it only occurs in
+  // do { do_process } while(retry) will only occur if an error happens before
+  // Walk to the send_error_packet logic
+  // So there is no need to consider whether the current mode is sync or async
   if (!OB_SUCC(ret) && need_response_error && is_conn_valid() &&
         !ctx_.multi_stmt_item_.is_batched_multi_stmt()) {
     send_error_packet(ret, NULL);
@@ -605,7 +600,7 @@ OB_INLINE int ObMPQuery::get_tenant_schema_info_(const uint64_t tenant_id,
   bool need_refresh = false;
 
   if (!cached_guard.is_inited()) {
-    // 第一次获取schema guard
+    // First get schema guard
     need_refresh = true;
   } else if (tenant_id != cached_guard.get_tenant_id()) {
     // change tenant
@@ -618,14 +613,14 @@ OB_INLINE int ObMPQuery::get_tenant_schema_info_(const uint64_t tenant_id,
     } else if (OB_FAIL(cached_guard.get_schema_version(tenant_id, tenant_version))) {
       LOG_WARN("fail get schema version", K(ret), K(tenant_id));
     } else if (tmp_tenant_version != tenant_version) {
-      //需要获取schema guard
+      //Need to obtain schema guard
       need_refresh = true;
     } else if (OB_FAIL(gctx_.schema_service_->get_tenant_refreshed_schema_version(OB_SYS_TENANT_ID, tmp_sys_version))) {
       LOG_WARN("get sys tenant refreshed schema version error", K(ret), "sys_tenant_id", OB_SYS_TENANT_ID);
     } else if (OB_FAIL(cached_guard.get_schema_version(OB_SYS_TENANT_ID, sys_version))) {
       LOG_WARN("fail get sys schema version", K(ret));
     } else if (tmp_sys_version != sys_version) {
-      //需要获取schema guard
+      //Need to obtain schema guard
       need_refresh = true;
     } else {
       // do nothing
@@ -633,12 +628,12 @@ OB_INLINE int ObMPQuery::get_tenant_schema_info_(const uint64_t tenant_id,
   }
   if (OB_SUCC(ret)) {
     if (!need_refresh) {
-      //获取session上缓存的最新schema guard
+      //Get the latest schema guard cached on the session
       schema_guard = &(cache_info->get_schema_guard());
     } else if (OB_FAIL(cache_info->refresh_tenant_schema_guard(tenant_id))) {
       LOG_WARN("refresh tenant schema guard failed", K(ret), K(tenant_id));
     } else {
-      //获取session上缓存的最新schema guard
+      //Get the latest schema guard cached on the session
       schema_guard = &(cache_info->get_schema_guard());
       if (OB_FAIL(schema_guard->get_schema_version(tenant_id, tenant_version))) {
         LOG_WARN("fail get schema version", K(ret), K(tenant_id));
@@ -707,7 +702,7 @@ OB_INLINE int ObMPQuery::do_process_trans_ctrl(ObSQLSessionInfo &session,
   }
   single_process_timestamp_ = ObTimeUtility::current_time();
   /* !!!
-   * 注意req_timeinfo_guard一定要放在result前面
+   * Note that req_timeinfo_guard must be placed before result
    * !!!
    */
   ObReqTimeGuard req_timeinfo_guard;
@@ -743,8 +738,7 @@ OB_INLINE int ObMPQuery::do_process_trans_ctrl(ObSQLSessionInfo &session,
       // generate sql_id with sql cmd
       (void)ObSQLUtils::md5(sql, ctx_.sql_id_, (int32_t)sizeof(ctx_.sql_id_));
       session.set_cur_sql_id(ctx_.sql_id_);
-
-      //监控项统计开始
+      //Monitoring item statistics start
       exec_start_timestamp_ = ObTimeUtility::current_time();
       need_response_error = false;
       is_diagnostics_stmt = false;
@@ -761,8 +755,7 @@ OB_INLINE int ObMPQuery::do_process_trans_ctrl(ObSQLSessionInfo &session,
         need_response_error = true;
         LOG_WARN("fail to execute trans ctrl cmd", KR(ret), K(sql));
       }
-
-      // 如果没有异步提交，且执行成功，则发送ok包给客户端
+      // If there is no asynchronous submission, and the execution is successful, then send an ok packet to the client
       if (!async_resp_used && OB_SUCC(ret)) {
         ObOKPParam ok_param;
         ok_param.affected_rows_ = 0;
@@ -773,13 +766,12 @@ OB_INLINE int ObMPQuery::do_process_trans_ctrl(ObSQLSessionInfo &session,
         }
       }
     }
-
-    //注意: 在response_result接口调用后不要再使用sql_这个成员变量，这是因为sql_指向的内存来自于ObReqPacket
-    //而在事务异步提交应答客户端的流程中，应答客户端的流程位于ApplyService线程，跟SQL Worker线程没有时序保证
-    //response_result启动异步应答客户端流程后，有可能会造成先回包再执行下面的逻辑，如果回包先完成，将会导致
-    //ObReqPacket内存被释放，因而导致sql_指向非法内存地址，在下面这些逻辑访问sql_将导致crash
-    //而同步应答客户端的流程并没有类似的问题，这是因为同步应答客户端对最后一个包的flush动作位于这个接口的最下方，
-    //但异步应答流程没有这个保证
+    // Note: Do not use the sql_ member variable after calling the response_result interface, because the memory that sql_ points to comes from ObReqPacket
+    // while in the transaction asynchronous commit response client process, the response client process is located in the ApplyService thread, and there is no timing guarantee with the SQL Worker thread
+    //After starting the asynchronous response client process with response_result, it is possible that the response packet will be returned before executing the following logic. If the response packet is completed first, it will lead to
+    //ObReqPacket memory is released, thus leading to sql_ pointing to an invalid memory address, accessing sql_ in the following logic will cause a crash
+    // And the process of synchronously responding to the client does not have similar issues, because the flush action for the last packet in the synchronous response client is located at the very bottom of this interface,
+    //But the asynchronous response process does not have this guarantee
     int tmp_ret = OB_SUCCESS;
     tmp_ret = OB_E(EventTable::EN_PRINT_QUERY_SQL) OB_SUCCESS;
     if (OB_SUCCESS != tmp_ret) {
@@ -790,8 +782,7 @@ OB_INLINE int ObMPQuery::do_process_trans_ctrl(ObSQLSessionInfo &session,
                "database_name", session.get_database_name(),
                "trans_id", audit_record.trans_id_);
     }
-
-    //监控项统计结束
+    //Monitoring item statistics end
     exec_end_timestamp_ = ObTimeUtility::current_time();
 
     // some statistics must be recorded for plan stat, even though sql audit disabled
@@ -806,18 +797,18 @@ OB_INLINE int ObMPQuery::do_process_trans_ctrl(ObSQLSessionInfo &session,
       // but will do it in the callback thread.
       session.update_show_warnings_buf();
     } else {
-      session.set_show_warnings_buf(ret); // TODO: 挪个地方性能会更好，减少部分wb拷贝
+      session.set_show_warnings_buf(ret); // TODO: Move this to a better place, reduce some wb copying
     }
 
     if (OB_FAIL(ret) && !async_resp_used && need_response_error && is_conn_valid() &&
           !ctx_.multi_stmt_item_.is_batched_multi_stmt()) {
       LOG_WARN("query failed", K(ret), K(session), K(sql));
-      // 这个请求出错了，还没处理完。如果不是已经交给异步EndTrans收尾，
-      // 则需要在下面回复一个error_packet作为收尾。
-      // 否则后面没人帮忙发错误包给客户端了，可能会导致客户端挂起等回包。
+      // This request has errored, it hasn't been processed yet. If it hasn't already been handed over to async EndTrans for cleanup,
+      // then it is necessary to reply with an error_packet as a footer.
+      // Otherwise, no one will help send the error packet to the client, which may cause the client to hang waiting for a response.
       bool is_partition_hit = session.get_err_final_partition_hit(ret);
       int err = send_error_packet(ret, NULL, is_partition_hit, (void *)ctx_.get_reroute_info());
-      if (OB_SUCCESS != err) {  // 发送error包
+      if (OB_SUCCESS != err) {  // send error packet
         LOG_WARN("send error packet failed", K(ret), K(err));
       }
     }
@@ -882,7 +873,7 @@ OB_INLINE int ObMPQuery::do_process_trans_ctrl(ObSQLSessionInfo &session,
     clear_wb_content(session);
   }
 
-  need_disconnect = (need_disconnect && !is_query_killed_return(ret));//明确是kill query时，不应该断连接
+  need_disconnect = (need_disconnect && !is_query_killed_return(ret)); // Clearly it is a kill query, the connection should not be disconnected
   if (need_disconnect) {
     LOG_WARN("need disconnect", K(ret), K(need_disconnect));
   }
@@ -988,7 +979,7 @@ OB_INLINE int ObMPQuery::do_process(ObSQLSessionInfo &session,
   const bool enable_sqlstat = session.is_sqlstat_enabled();
   single_process_timestamp_ = ObTimeUtility::current_time();
   /* !!!
-   * 注意req_timeinfo_guard一定要放在result前面
+   * Note that req_timeinfo_guard must be placed before result
    * !!!
    */
   ObReqTimeGuard req_timeinfo_guard;
@@ -1068,9 +1059,9 @@ OB_INLINE int ObMPQuery::do_process(ObSQLSessionInfo &session,
           }
           ret = cli_ret;
           if (OB_ERR_PROXY_REROUTE == ret) {
-            // 该错误码在下层是由编译阶段被设置，async_resp_used标志一定为false
-            // 所以此时可以同步回包，设置need_response_error
-            // 向客户端返回一个error包，表示需要二次路由
+            // This error code is set by the compiler at the compilation stage, the async_resp_used flag must be false
+            // So at this point, we can sync the response packet and set need_response_error
+            // Return an error packet to the client indicating a secondary routing is required
             need_response_error = true;
           } else if (ctx_.multi_stmt_item_.is_batched_multi_stmt()) {
             // batch execute with error,should not response error packet
@@ -1084,11 +1075,11 @@ OB_INLINE int ObMPQuery::do_process(ObSQLSessionInfo &session,
           session.get_retry_info_for_update().inc_retry_cnt();
         }
       } else {
-        //监控项统计开始
+        //Monitoring item statistics start
         exec_start_timestamp_ = ObTimeUtility::current_time();
         result.get_exec_context().set_plan_start_time(exec_start_timestamp_);
-        // 本分支内如果出错，全部会在response_result内部处理妥当
-        // 无需再额外处理回复错误包
+        // All errors within this branch will be handled properly inside response_result
+        // No need to handle the error response packet additionally
         need_response_error = false;
         is_diagnostics_stmt = ObStmt::is_diagnostic_stmt(result.get_literal_stmt_type());
         ctx_.is_show_trace_stmt_ = ObStmt::is_show_trace_stmt(result.get_literal_stmt_type());
@@ -1120,13 +1111,12 @@ OB_INLINE int ObMPQuery::do_process(ObSQLSessionInfo &session,
           }
         }
       }
-
-      //注意: 在response_result接口调用后不要再使用sql_这个成员变量，这是因为sql_指向的内存来自于ObReqPacket
-      //而在事务异步提交应答客户端的流程中，应答客户端的流程位于ApplyService线程，跟SQL Worker线程没有时序保证
-      //response_result启动异步应答客户端流程后，有可能会造成先回包再执行下面的逻辑，如果回包先完成，将会导致
-      //ObReqPacket内存被释放，因而导致sql_指向非法内存地址，在下面这些逻辑访问sql_将导致crash
-      //而同步应答客户端的流程并没有类似的问题，这是因为同步应答客户端对最后一个包的flush动作位于这个接口的最下方，
-      //但异步应答流程没有这个保证
+      // Note: Do not use the sql_ member variable after calling the response_result interface, because the memory that sql_ points to comes from ObReqPacket
+      // while in the transaction asynchronous commit response client process, the response client process is located in the ApplyService thread, and there is no timing guarantee with the SQL Worker thread
+      //After starting the asynchronous response client process with response_result, it is possible that the response packet will be returned before executing the following logic. If the response packet is completed first, it will lead to
+      //ObReqPacket memory is released, thus leading to sql_ pointing to an invalid memory address, accessing sql_ in the following logic will cause a crash
+      // While the process of synchronously responding to the client does not have similar issues, this is because the flush action for the last packet in the synchronous response client is located at the very bottom of this interface,
+      //but the asynchronous response process does not have this guarantee
       int tmp_ret = OB_SUCCESS;
       tmp_ret = OB_E(EventTable::EN_PRINT_QUERY_SQL) OB_SUCCESS;
       if (OB_SUCCESS != tmp_ret) {
@@ -1137,8 +1127,7 @@ OB_INLINE int ObMPQuery::do_process(ObSQLSessionInfo &session,
               "database_name", result.get_session().get_database_name(),
               "trans_id", audit_record.trans_id_);
       }
-
-      //监控项统计结束
+      //Monitoring item statistics end
       exec_end_timestamp_ = ObTimeUtility::current_time();
 
       // some statistics must be recorded for plan stat, even though sql audit disabled
@@ -1151,14 +1140,14 @@ OB_INLINE int ObMPQuery::do_process(ObSQLSessionInfo &session,
         const int64_t time_cost = exec_end_timestamp_ - get_receive_timestamp();
         ObSQLUtils::record_execute_time(result.get_physical_plan()->get_plan_type(), time_cost);
       }
-      // 重试需要满足一下条件：
-      // 1. rs.open 执行失败
-      // 2. 没有给客户端返回结果，本次执行没有副作用
-      // 3. need_retry(result, ret)：schema 或 location cache 失效
-      // 4. 小于重试次数限制
+      // Retry needs to meet the following conditions:
+      // 1. rs.open execution failed
+      // 2. No result was returned to the client, this execution has no side effects
+      // 3. need_retry(result, ret): schema or location cache invalidation
+      // 4. less than retry count limit
       if (OB_UNLIKELY(retry_ctrl_.need_retry())) {
         if (OB_TRANSACTION_SET_VIOLATION != ret && OB_REPLICA_NOT_READABLE != ret && OB_TRY_LOCK_ROW_CONFLICT != ret) {
-          //锁冲突重试不打印日志, 避免刷屏
+          //Lock conflict retry does not print log, to avoid screen flooding
           LOG_WARN("try to execute again",
                    K(ret),
                    N_TYPE, result.get_stmt_type(),
@@ -1166,9 +1155,8 @@ OB_INLINE int ObMPQuery::do_process(ObSQLSessionInfo &session,
                    "timeout_remain", THIS_WORKER.get_timeout_remain());
         }
       } else {
-
-        // 首个plan执行完成后立即freeze partition hit
-        // partition_hit一旦freeze后，后继的try_set_bool操作都不生效
+        // Immediately freeze partition hit after the first plan execution completes
+        // partition_hit once frozen, subsequent try_set_bool operations are ineffective
         if (OB_LIKELY(NULL != result.get_physical_plan())) {
           session.partition_hit().freeze();
         }
@@ -1180,7 +1168,7 @@ OB_INLINE int ObMPQuery::do_process(ObSQLSessionInfo &session,
           // but will do it in the callback thread.
           session.update_show_warnings_buf();
         } else {
-          session.set_show_warnings_buf(ret); // TODO: 挪个地方性能会更好，减少部分wb拷贝
+          session.set_show_warnings_buf(ret); // TODO: Move this to a better place, reduce some wb copy
         }
 
         if (OB_FAIL(ret) && !async_resp_used && need_response_error && is_conn_valid() && !THIS_WORKER.need_retry() &&
@@ -1192,13 +1180,13 @@ OB_INLINE int ObMPQuery::do_process(ObSQLSessionInfo &session,
                      "sql", ctx_.is_sensitive_ ? ObString(OB_MASKED_STR) : sql,
                      K(retry_ctrl_.need_retry()));
           }
-          // 当need_retry=false时，可能给客户端回过包了，可能还没有回过任何包。
-          // 不过，可以确定：这个请求出错了，还没处理完。如果不是已经交给异步EndTrans收尾，
-          // 则需要在下面回复一个error_packet作为收尾。否则后面没人帮忙发错误包给客户端了，
-          // 可能会导致客户端挂起等回包。
+          // When need_retry=false, a packet may have been sent to the client, or no packets may have been sent at all.
+          // However, it can be determined: this request has errored, and is not yet complete. If it has not already been handed over to asynchronous EndTrans for finalization,
+          // then it is necessary to reply with an error_packet below as a conclusion. Otherwise, no one will help send the error packet to the client afterwards,
+          // May cause the client to hang waiting for a response.
           bool is_partition_hit = session.get_err_final_partition_hit(ret);
           int err = send_error_packet(ret, NULL, is_partition_hit, (void *)ctx_.get_reroute_info());
-          if (OB_SUCCESS != err) {  // 发送error包
+          if (OB_SUCCESS != err) {  // send error packet
             LOG_WARN("send error packet failed", K(ret), K(err));
           }
         }
@@ -1340,7 +1328,7 @@ OB_INLINE int ObMPQuery::do_process(ObSQLSessionInfo &session,
     }
 
     need_disconnect = (result.get_exec_context().need_disconnect()
-                       && !is_query_killed_return(ret));//明确是kill query时，不应该断连接
+                       && !is_query_killed_return(ret));//Explicitly when it is a kill query, the connection should not be dropped
     if (need_disconnect) {
       LOG_WARN("need disconnect", K(ret), K(need_disconnect));
     }
@@ -1456,8 +1444,8 @@ int ObMPQuery::check_readonly_stmt(ObMySQLResultSet &result)
 {
   int ret = OB_SUCCESS;
   bool is_readonly = false;
-  //在该阶段，show语句会转换为select语句，
-  //literal_stmt_type若不为stmt::T_NONE，则表示原有的类型show
+  //In this phase, the show statement will be converted to a select statement,
+  //if literal_stmt_type is not stmt::T_NONE, then it indicates the original type show
   const stmt::StmtType type = stmt::T_NONE == result.get_literal_stmt_type() ?
                               result.get_stmt_type() :
                               result.get_literal_stmt_type();
@@ -1468,14 +1456,14 @@ int ObMPQuery::check_readonly_stmt(ObMySQLResultSet &result)
     ret = OB_ERR_READ_ONLY;
     LOG_WARN("stmt is not readonly", K(ret), K(result));
   } else if (stmt::T_SELECT == type) {
-    //对select语句，需要禁强一致读
-    //通过设置/*+read_consistency()*/ hint
-    //or 指定session级别ob_read_consistency = 2
-    //来设置弱一致性读
+    //For the select statement, strong consistency read needs to be disabled
+    //Through setting /*+read_consistency()*/ hint
+    //or specify session-level ob_read_consistency = 2
+    // to set weak consistency read
     const int64_t table_count = DAS_CTX(result.get_exec_context()).get_table_loc_list().size();
     if (0 == table_count) {
-      //此处比较特殊，jdbc在发送查询语句时会带上特殊的语句select @@session.tx_read_only;
-      //为方便obtest测试，需要放开对无table_locatitons的select语句的限制
+      //This case is special, jdbc will send a special statement select @@session.tx_read_only when sending the query statement;
+      //For convenience of obtest testing, the restriction on the select statement for no table_locations needs to be removed
     } else if (OB_FAIL(result.get_read_consistency(consistency))) {
       LOG_WARN("get read consistency fail", K(ret));
     } else if (WEAK != consistency) {
@@ -1495,7 +1483,7 @@ int ObMPQuery::is_readonly_stmt(ObMySQLResultSet &result, bool &is_readonly)
                               result.get_literal_stmt_type();
   switch (type) {
     case stmt::T_SELECT: {
-      //对select...for update语句，也需要禁止
+      //Forbid the select...for update statement as well
       ObPhysicalPlan *physical_plan = result.get_physical_plan();
       if (NULL == physical_plan) {
         ret = OB_ERR_UNEXPECTED;
@@ -1508,7 +1496,7 @@ int ObMPQuery::is_readonly_stmt(ObMySQLResultSet &result, bool &is_readonly)
       break;
     }
     case stmt::T_VARIABLE_SET: {
-      //禁止set @@global.variable语句
+      //Prohibit set @@global.variable statement
       if (result.has_global_variable()) {
         is_readonly = false;
       } else {
@@ -1598,18 +1586,17 @@ OB_INLINE int ObMPQuery::response_result(ObMySQLResultSet &result,
 {
   int ret = OB_SUCCESS;
   FLTSpanGuard(sql_execute);
-  //ac = 1时线程新启事务进行oracle临时表数据清理会和clog回调形成死锁, 这里改成同步方式
+  // When ac = 1, starting a new transaction in the thread to clean up data in the Oracle temporary table will form a deadlock with the clog callback, so it is changed to a synchronous method here
   ObSQLSessionInfo &session = result.get_session();
   CHECK_COMPATIBILITY_MODE(&session);
 
   bool need_trans_cb  = result.need_end_trans_callback() && (!force_sync_resp);
-
-  // 通过判断 plan 是否为 null 来确定是 plan 还是 cmd
-  // 针对 plan 和 cmd 分开处理，逻辑会较为清晰。
+  // Determine whether it is plan or cmd by checking if plan is null
+  // Handle plan and cmd separately, the logic will be clearer.
   if (OB_LIKELY(NULL != result.get_physical_plan())) {
     if (need_trans_cb) {
       ObAsyncPlanDriver drv(gctx_, ctx_, session, retry_ctrl_, *this);
-      // NOTE: sql_end_cb必须在drv.response_result()之前初始化好
+      // NOTE: sql_end_cb must be initialized before drv.response_result()
       ObSqlEndTransCb &sql_end_cb = session.get_mysql_end_trans_cb();
       if (OB_FAIL(sql_end_cb.init(packet_sender_, &session))) {
         LOG_WARN("failed to init sql end callback", K(ret));
@@ -1618,7 +1605,7 @@ OB_INLINE int ObMPQuery::response_result(ObMySQLResultSet &result,
       }
       async_resp_used = result.is_async_end_trans_submitted();
     } else {
-      // 试点ObQuerySyncDriver
+      // Pilot ObQuerySyncDriver
       ObSyncPlanDriver drv(gctx_, ctx_, session, retry_ctrl_, *this);
       ret = drv.response_result(result);
     }
@@ -1727,22 +1714,22 @@ inline void ObMPQuery::record_stat(const stmt::StmtType type,
 int ObMPQuery::deserialize_com_field_list()
 {
   int ret = OB_SUCCESS;
-  //如果设置了只需要返回列定义，说明client传来的是COM_FIELD_LIST命令
-  /* mysql中的COM_FIELD_LIST命令用于获取table中的列定义，其从client to server的packet为:
+  //If only column definitions are to be returned, it means the client sent a COM_FIELD_LIST command
+  /* mysql's COM_FIELD_LIST command is used to get the column definitions of a table, its packet from client to server is:
   *  1              [04] COM_FIELD_LIST
   *  string[NUL]    table
   *  string[EOF]    field wildcard
-  *  首先是CMD类型，然后是表名，最后是匹配条件
+  *  First is the CMD type, then the table name, followed by the match condition
   *
-  * server to client的packet为下面中的其中一个:
-  * 1. a ERR_Packet（返回一个错误包）
-  * 2. one or more Column Definition packets and a closing EOF_Packet（返回n个列定义+EOF）
+  * The packet from server to client is one of the following:
+  * 1. an ERR_Packet (returns an error packet)
+  * 2. one or more Column Definition packets and a closing EOF_Packet (returns n column definitions + EOF)
   *
-  * 由于普通的select的查询结果已经包含了column定义，同时最大限度复用当前的代码逻辑，因此可以将COM_FIELD_LIST的命令
-  * 等价于:
-  * select * from table limit 0 ==> 获取filed define ==> 根据field wildcard 按需反回 Column Definition
+  * Since the result of a regular SELECT query already includes column definitions, and to maximize the reuse of the current code logic, the COM_FIELD_LIST command
+  * can be considered equivalent to:
+  * select * from table limit 0 ==> get field define ==> return Column Definition based on field wildcard as needed
   *
-  * 参考：https://dev.mysql.com/doc/internals/en/com-field-list.html
+  * Reference: https://dev.mysql.com/doc/internals/en/com-field-list.html
    */
   ObIAllocator *alloc = &THIS_WORKER.get_sql_arena_allocator();
   if (OB_ISNULL(alloc)) {
@@ -1758,7 +1745,7 @@ int ObMPQuery::deserialize_com_field_list()
     const int64_t str1_len = strlen(str1);
     const int64_t str2_len = strlen(str2);
     const int pre_size = str1_len + str2_len;
-    //寻找client传过来的table_name和filed wildcard之间的分隔符（table_name [NULL] filed wildcard）
+    //Find the delimiter between client-provided table_name and field wildcard (table_name [NULL] field wildcard)
     for (; static_cast<int>(str[i]) != 0 && i < length; ++i) {}
     char *dest_str = static_cast<char *>(alloc->alloc(length + pre_size));
     if (OB_ISNULL(dest_str)) {

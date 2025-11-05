@@ -116,7 +116,7 @@ public:
   }
 public:
   uint32_t sessid_;
-  uint64_t proxy_sessid_; //不参与compare, 仅存储值用于ObCTASCleanUp遍历
+  uint64_t proxy_sessid_; // do not participate in compare, only store value for ObCTASCleanUp traversal
 };
 
 struct ObContextUnit
@@ -169,8 +169,7 @@ struct ObSessionStat final
   uint64_t total_exec_time_us_;
   uint64_t total_alive_time_us_;
 };
-
-//该结构的并发控制跟Session上的其他变量一样
+// The concurrency control of this structure is the same as other variables on the Session
 class ObTenantCachedSchemaGuardInfo
 {
 public:
@@ -179,19 +178,17 @@ public:
   { reset(); }
   ~ObTenantCachedSchemaGuardInfo() { reset(); }
   void reset();
-
-  // 缓存的信息，可能跟schema service维护的version不一致，
-  // 调用者需要自己跟情况决定是否调用refresh_tenant_schema_version接口
+  // The cached information, which may be inconsistent with the version maintained by the schema service,
+  // Caller needs to decide whether to call the refresh_tenant_schema_version interface based on the situation
   share::schema::ObSchemaGetterGuard &get_schema_guard() { return schema_guard_; }
   int refresh_tenant_schema_guard(const uint64_t tenant_id);
-
-  // 尝试将schema_mgr的ref进行归还，规则：每隔10s对schema_guard做一次revert操作；
-  // 1. 如果session 有请求访问，则每条语句结束之后，尝试 触发一次；
-  // 2. 如果session 没有频发的访问，通过session_mgr后台的遍历来解决；
+  // Try to return the ref of schema_mgr, rule: perform a revert operation on schema_guard every 10s;
+  // 1. If session has request access, then after each statement ends, attempt to trigger once;
+  // 2. If session does not have frequent access, solve it through background traversal by session_mgr;
   void try_revert_schema_guard();
 private:
   share::schema::ObSchemaGetterGuard schema_guard_;
-  // 记录重新获取schema guard的时间 戳，后台 需要具备兜底revert guard ref的机制，避免schema mgr槽位无法释放
+  // Record the timestamp of re-acquiring schema guard, the background needs to have a fallback revert guard ref mechanism to avoid schema mgr slot from being unable to release
   int64_t ref_ts_;
   uint64_t tenant_id_;
   int64_t schema_version_;
@@ -512,9 +509,9 @@ typedef common::hash::ObHashMap<common::ObString, ObInnerContextMap *,
                                 2> ObContextsMap;
 typedef common::LinkHashNode<SessionInfoKey> SessionInfoHashNode;
 typedef common::LinkHashValue<SessionInfoKey> SessionInfoHashValue;
-// ObBasicSessionInfo存储系统变量及其相关变量，并存储远程执行SQL task时，需要序列化到远端的状态
-// ObPsInfoMgr存储prepared statement相关信息
-// ObSQLSessionInfo存储其他执行时状态信息，远程执行SQL执行计划时，**不需要**序列化到远端
+// ObBasicSessionInfo stores system variables and related variables, and stores the state that needs to be serialized to the remote when executing SQL tasks remotely
+// ObPsInfoMgr stores prepared statement related information
+// ObSQLSessionInfo stores other runtime state information, remote execution of SQL execution plan does not require serialization to the remote end
 class ObSQLSessionInfo: public common::ObVersionProvider, public ObBasicSessionInfo, public SessionInfoHashValue
 {
   OB_UNIS_VERSION(1);
@@ -747,7 +744,7 @@ public:
     }
 
   private:
-    //租户级别配置项缓存session 上，避免每次获取都需要刷新
+    // Tenant-level configuration item cache session, avoid refreshing every time it is retrieved
     bool is_external_consistent_;
     bool enable_batched_multi_statement_;
     bool enable_sql_extension_;
@@ -897,11 +894,11 @@ public:
   bool get_has_temp_table_flag() const { return has_temp_table_flag_; };
   void set_accessed_session_level_temp_table() { has_accessed_session_level_temp_table_ = true; }
   bool has_accessed_session_level_temp_table() const { return has_accessed_session_level_temp_table_; }
-  // 清除临时表
+  // Clear temporary table
   int drop_temp_tables(const bool is_sess_disconn = true, 
                        const bool is_xa_trans = false, 
                        const bool is_reset_connection = false);
-  void refresh_temp_tables_sess_active_time(); //更新临时表的sess active time
+  void refresh_temp_tables_sess_active_time(); // update temporary table's sess active time
 
   void set_for_trigger_package(bool value) { is_for_trigger_package_ = value; }
   bool is_for_trigger_package() const { return is_for_trigger_package_; }
@@ -1106,9 +1103,9 @@ public:
   }
   ObAuditRecordData &get_raw_audit_record() { return audit_record_; }
   const ObAuditRecordData &get_raw_audit_record() const { return audit_record_; }
-  //在最最终需要push record到audit buffer中时使用该方法，
-  //该方法会将一些session中能够拿到的并且重试过程中不会变化的
-  //字段初始化
+  // When finally need to push record to audit buffer, use this method,
+  // This method will retrieve some session data that can be obtained and will not change during the retry process
+  // Field initialization
   const ObAuditRecordData &get_final_audit_record(ObExecuteMode mode);
   ObSessionStat &get_session_stat() { return session_stat_; }
   void update_stat_from_exec_record();
@@ -1148,9 +1145,8 @@ public:
   int reset_all_serially_package_state();
   bool is_package_state_changed() const;
   int add_changed_package_info(ObExecContext &exec_ctx);
-
-  // 当前 session 上发生的 sequence.nextval 读取 sequence 值，
-  // 都会由 ObSequence 算子将读取结果保存在当前 session 上
+  // Current session occurred sequence.nextval read sequence value,
+  // All will be saved on the current session by the ObSequence operator
   int get_sequence_value(uint64_t tenant_id,
                          uint64_t seq_id,
                          share::ObSequenceValue &value);
@@ -1285,7 +1281,7 @@ public:
   uint64_t get_priv_user_id_allow_invalid() { return priv_user_id_; }
   int get_xa_last_result() const { return xa_last_result_; }
   void set_xa_last_result(const int result) { xa_last_result_ = result; }
-  // 为了性能优化考虑，租户级别配置项不需要实时获取，缓存在session上，每隔5s触发一次刷新
+  // For performance optimization, tenant-level configuration items do not need to be retrieved in real time, they are cached in the session, and refreshed every 5s
   void refresh_tenant_config() { cached_tenant_config_info_.refresh(); }
   bool is_support_external_consistent()
   {
@@ -1558,10 +1554,10 @@ private:
   ObPrivSet db_priv_set_;
   int64_t curr_trans_start_time_;
   int64_t curr_trans_last_stmt_time_;
-  int64_t sess_create_time_;  //会话创建时间, 目前仅用于临时表的清理判断
-  int64_t last_refresh_temp_table_time_; //会话最后一次刷新临时表sess active time时间, 仅用于proxy连接模式
-  bool has_temp_table_flag_;  //会话是否创建过临时表
-  bool has_accessed_session_level_temp_table_;  //是否访问过Session临时表
+  int64_t sess_create_time_;  // session creation time, currently only used for temporary table cleanup judgment
+  int64_t last_refresh_temp_table_time_; // session last refresh temporary table sess active time, only used for proxy connection mode
+  bool has_temp_table_flag_;  // Whether the session has created a temporary table
+  bool has_accessed_session_level_temp_table_;  // Whether accessed Session temporary table
   bool enable_early_lock_release_;
   // trigger.
   bool is_for_trigger_package_;
@@ -1573,20 +1569,20 @@ private:
   sql::ObFLTSpanMgr *flt_span_mgr_;
   ObPlanCache *plan_cache_;
   ObPsCache *ps_cache_;
-  //记录select stmt中scan出来的结果集行数，供设置sql_calc_found_row时，found_row()使用；
+  // Record the number of rows scanned in the select stmt result set for use with found_row() when setting sql_calc_found_row;
   int64_t found_rows_;
-  //记录dml操作中affected_row，供row_count()使用
+  // Record affected_row in dml operations, for use by row_count()
   int64_t affected_rows_;
   int64_t global_sessid_;
-  bool read_uncommited_; //记录当前语句是否读取了未提交的修改
+  bool read_uncommited_; // record whether the current statement reads uncommitted modifications
   common::ObTraceEventRecorder *trace_recorder_;
-  //标记一个事务中是否有write的操作，在设置read_only时，用来判断commit语句是否可以成功
+  // Mark whether there is a write operation in a transaction, used to determine if the commit statement can succeed when setting read_only
   // if has_write_stmt_in_trans_ && read_only => can't not commit
   // else can commit
   // in_transaction_ has been merged into trans_flags_.
 //  int64_t has_write_stmt_in_trans_;
-  bool inner_flag_; // 是否为内部请求的虚拟session
-  // 2.2版本之后，不再使用该变量
+  bool inner_flag_; // whether it is a virtual session for an internal request
+  // After version 2.2, this variable is no longer used
   bool is_max_availability_mode_;
   typedef common::hash::ObHashMap<ObPsStmtId, ObPsSessionInfo *,
                                   common::hash::SpinReadWriteDefendMode> PsSessionInfoMap;
@@ -1634,7 +1630,7 @@ private:
   }
 
   ObPsStmtId next_client_ps_stmt_id_;
-  bool is_remote_session_;//用来记录是否为执行远程计划创建的session
+  bool is_remote_session_;//used to record whether the session is created for executing a remote plan
   SessionType session_type_;
   ObPackageStateMap package_state_map_;
   ObSequenceCurrvalMap sequence_currval_map_;
@@ -1647,11 +1643,11 @@ private:
   // if any commit executed, the PL block can not be retried as a whole.
   // otherwise the PL block can be retried in all.
   // if false == pl_can_retry_, we can only retry query in PL blocks locally
-  bool pl_can_retry_; //标记当前执行的PL是否可以整体重试
+  bool pl_can_retry_; // Mark whether the current executing PL can be retried as a whole
   int64_t plsql_exec_time_;
   int64_t plsql_compile_time_;
 
-  uint32_t pl_attach_session_id_; // 如果当前session执行过dbms_debug.attach_session, 记录目标session的ID
+  uint32_t pl_attach_session_id_; // If the current session has executed dbms_debug.attach_session, record the target session's ID
 
   observer::ObQueryDriver *pl_query_sender_; // send query result in mysql pl
   bool pl_ps_protocol_; // send query result use this protocol
@@ -1670,14 +1666,14 @@ private:
   uint64_t priv_user_id_;
   int64_t xa_end_timeout_seconds_;
   int xa_last_result_;
-  // 为了性能优化考虑，租户级别配置项不需要实时获取，缓存在session上，每隔5s触发一次刷新
+  // For performance optimization, tenant-level configuration items do not need to be retrieved in real time and are cached in the session, with a refresh triggered every 5s
   ObCachedTenantConfigInfo cached_tenant_config_info_;
   bool prelock_;
   uint64_t proxy_version_;
-  uint64_t min_proxy_version_ps_; // proxy大于该版本时，相同sql返回不同的Stmt id
-  //新引擎表达式类型推导的时候需要通过ignore_stmt来确定cast_mode，
-  //由于很多接口拿不到stmt里的ignore flag,只能通过session来传递，这里只能在生成计划阶段使用
-  //在CG后这个状态将被清空
+  uint64_t min_proxy_version_ps_; // proxy greater than this version, the same sql returns different Stmt id
+  // New engine expression type inference requires using ignore_stmt to determine cast_mode,
+  // Due to many interfaces not being able to get the ignore flag from stmt, it can only be passed through the session, so this can only be used during the plan generation phase
+  // After CG this status will be cleared
   bool is_ignore_stmt_;
   ObSessionDDLInfo ddl_info_;
   bool is_table_name_hidden_;

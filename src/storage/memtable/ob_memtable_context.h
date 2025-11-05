@@ -93,7 +93,7 @@ public:
     const uint8_t real_flag = row_flag & (~ENCRYPT);
     return real_flag < MAX;
   }
-  // 是否是行首
+  // Is it the beginning of a line
   static bool is_row_start(const uint8_t row_flag)
   {
     const uint8_t real_flag = row_flag & (~ENCRYPT);

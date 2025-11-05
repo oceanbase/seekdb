@@ -273,9 +273,9 @@ public:
   int try_get_ps_plan(ObCacheObjGuard &guard, const ObPsStmtId stmt_id, ObPlanCacheCtx &pc_ctx);
 
   // cache object access functions
-  /* 根据ObPlanCacheKey以及参数在plan cache中查询符合要求的执行计划 */
+  /* Query the execution plan that meets the requirements from the plan cache based on ObPlanCacheKey and parameters */
   int get_plan(common::ObIAllocator &allocator, ObPlanCacheCtx &pc_ctx, ObCacheObjGuard& guard);
-  /* 根据ObPlanCacheKey以及参数在plan cache中查询符合要求的执行计划 */
+  /* Query the execution plan that meets the requirements from the plan cache based on ObPlanCacheKey and parameters */
   int get_ps_plan(ObCacheObjGuard& guard, const ObPsStmtId stmt_id, ObPlanCacheCtx &pc_ctx);
   int ref_cache_obj(const ObCacheObjID obj_id, ObCacheObjGuard& guard);
   int ref_plan(const ObCacheObjID obj_id, ObCacheObjGuard& guard);
@@ -289,7 +289,7 @@ public:
    *    low water mark
    *    memory used
    */
-  //后台线程会每隔30s检查内存相关设置是否更新，如果更新会变更，因此需要atomic操作
+  // Background thread will check memory-related settings every 30s, if updated it will change, therefore atomic operation is needed
   int set_mem_conf(const ObPCMemPctConf &conf);
   int update_memory_conf();
   int64_t get_mem_limit() const

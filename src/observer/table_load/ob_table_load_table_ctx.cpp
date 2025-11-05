@@ -177,7 +177,7 @@ void ObTableLoadTableCtx::unregister_job_stat()
       ret = OB_ERR_UNEXPECTED;
       LOG_ERROR("unexpected null job stat", KR(ret), K_(gid));
     } else {
-      // 可能还有其他地方在引用这个对象, 等待释放引用
+      // There may still be other places referencing this object, wait for the references to be released
       int64_t log_print_cnt = 0;
       int64_t ref_cnt = 0;
       while ((ref_cnt = job_stat->get_ref_cnt()) > 0) {

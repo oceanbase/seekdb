@@ -253,7 +253,7 @@ int ObAllVirtualThread::inner_get_next_row(common::ObNewRow *&row)
           }
         }
         if (OB_SUCC(ret)) {
-          // scanner最大支持64M，因此暂不考虑溢出的情况
+          // scanner maximum supports 64M, therefore overflow is not considered for now
           if (OB_FAIL(scanner_.add_row(cur_row_))) {
             SERVER_LOG(WARN, "fail to add row", K(ret), K(cur_row_));
             if (OB_SIZE_OVERFLOW == ret) {

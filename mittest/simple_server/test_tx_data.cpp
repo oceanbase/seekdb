@@ -47,7 +47,7 @@ TestRunCtx R;
 class ObTxDataTest : public ObSimpleClusterTestBase
 {
 public:
-  // 指定case运行目录前缀 test_ob_simple_cluster_
+  // Specify the case run directory prefix test_ob_simple_cluster_
   ObTxDataTest() : ObSimpleClusterTestBase("test_tx_data_", "50G", "50G") {}
 };
 
@@ -55,22 +55,21 @@ TEST_F(ObTxDataTest, observer_start)
 {
   SERVER_LOG(INFO, "observer_start succ");
 }
-
-// 创建租户并不轻量，看场景必要性使用
+// Creating a tenant is not lightweight, consider the necessity of use based on the scenario
 TEST_F(ObTxDataTest, add_tenant)
 {
-  // 创建普通租户tt1
+  // Create normal tenant tt1
   ASSERT_EQ(OB_SUCCESS, create_tenant("tt1", "40G", "40G", false, 10));
-  // 获取租户tt1的tenant_id
+  // Get the tenant_id of tenant tt1
   ASSERT_EQ(OB_SUCCESS, get_tenant_id(R.tenant_id_));
   ASSERT_NE(0, R.tenant_id_);
-  // 初始化普通租户tt1的sql proxy
+  // Initialize the sql proxy for normal tenant tt1
   ASSERT_EQ(OB_SUCCESS, get_curr_simple_server().init_sql_proxy2());
 }
 
 TEST_F(ObTxDataTest, create_new_ls)
 {
-  // 在单节点ObServer下创建新的日志流, 注意避免被RS任务GC掉
+  // Create a new log stream under a single-node ObServer, note to avoid being GC'd by RS tasks
   EQ(0, SSH::create_ls(R.tenant_id_, get_curr_observer().self_addr_));
   int64_t ls_count = 0;
   EQ(0, SSH::g_select_int64(R.tenant_id_, "select count(ls_id) as val from __all_ls where ls_id!=1", ls_count));

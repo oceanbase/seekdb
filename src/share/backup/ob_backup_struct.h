@@ -1097,7 +1097,7 @@ public:
   int64_t compatible_;
   int64_t cluster_version_;          //restore tenant cluster version
   ObPhysicalRestoreBackupDestList multi_restore_path_list_;
-  int64_t backup_date_;  //备份的位点，RS只允许从这个位点之后的位点恢复
+  int64_t backup_date_;  // backup point, RS is only allowed to recover from points after this one
 
   common::ObSArray<share::ObBackupSetPath> &get_backup_set_path_list() { return multi_restore_path_list_.get_backup_set_path_list(); }
   common::ObSArray<share::ObBackupPiecePath> &get_backup_piece_path_list() { return multi_restore_path_list_.get_backup_piece_path_list(); }

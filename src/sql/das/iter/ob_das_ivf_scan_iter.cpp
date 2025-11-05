@@ -1439,7 +1439,7 @@ int ObDASIvfScanIter::process_ivf_scan_post(bool is_vectorized)
     LOG_WARN("failed to process_ivf_scan_post", K(ret));
   } else if (OB_FAIL(get_nearest_limit_rowkeys_in_cids<float>(is_vectorized,
                                                               reinterpret_cast<float *>(real_search_vec_.ptr())))) {
-    // 2. get cidx in (top-nprobes 个 cid)
+    // 2. get cidx in (top-nprobes cids)
     //    scan cid_vector table, range: [cidx, min] ~ [cidx, max]; sort by l2_distance(vec, search_vec_); limit
     //    (limit+offset); return rowkey column
     LOG_WARN("failed to get nearest limit rowkeys in cids", K(near_cid_));

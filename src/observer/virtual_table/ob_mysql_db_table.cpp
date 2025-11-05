@@ -66,7 +66,7 @@ int ObMySQLDBTable::inner_get_next_row(common::ObNewRow *&row)
             if ((ObString(ObString(OB_ORA_SYS_SCHEMA_NAME)) == db_priv->get_database_name_str())
                 || (ObString(ObString(OB_ORA_LBACSYS_NAME)) == db_priv->get_database_name_str())
                 || (ObString(ObString(OB_ORA_AUDITOR_NAME)) == db_priv->get_database_name_str())) {
-              // oracle db不需要展示出来
+              // oracle db does not need to be displayed
               continue;
             }
             if (OB_FAIL(get_user_info(tenant_id_, db_priv->get_user_id(), user_info))) {

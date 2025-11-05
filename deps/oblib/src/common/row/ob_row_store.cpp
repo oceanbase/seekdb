@@ -505,9 +505,9 @@ void ObRowStore::clear_rows()
 }
 
 /*
- * 小心使用，不合理的使用会造成内存泄漏，
- * 根据alloc_和自己使用场景的内存管理来决定是否使用此函数,
- * 这个函数保留最新分配的block，删除其他的block，效果类似于reuse
+ * Use with caution, improper use can lead to memory leaks,
+ * Decide whether to use this function based on memory management with alloc_ and your own usage scenario,
+ * This function retains the most recently allocated block and deletes other blocks, similar to reuse
 */
 
 

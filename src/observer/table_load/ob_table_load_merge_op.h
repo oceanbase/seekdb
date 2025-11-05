@@ -66,9 +66,8 @@ struct ObTableLoadMergeOpType
 #define OB_TABLE_LOAD_MERGE_OP_DEF(DEF)                     \
   DEF(ObTableLoadMergeOpType::ROOT, ObTableLoadMergeRootOp) \
   OB_TABLE_LOAD_MERGE_CHILD_OP_DEF(DEF)
-
-// switch_next_op只能在op内部调用
-// 所有op的生命周期由root_op保证
+// switch_next_op can only be called within op
+// The lifecycle of all ops is guaranteed by root_op
 
 class ObTableLoadMergeOp
 {

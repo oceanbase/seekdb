@@ -80,7 +80,7 @@ int ObMPStmtGetPieceData::process()
   ObSQLSessionInfo *sess = NULL;
   bool need_response_error = true;
   bool need_disconnect = true;
-  bool async_resp_used = false; // 由事务提交线程异步回复客户端
+  bool async_resp_used = false; // Asynchronously reply to the client by the transaction commit thread
   int64_t query_timeout = 0;
   ObSMConnection *conn = get_conn();
 
@@ -181,10 +181,9 @@ int ObMPStmtGetPieceData::process_get_piece_data_stmt(ObSQLSessionInfo &session)
   ObThreadLogLevelUtils::init(session.get_log_id_level_map());
   ret = do_process(session);
   ObThreadLogLevelUtils::clear();
-
-  //对于tracelog的处理，不影响正常逻辑，错误码无须赋值给ret
+  //For the handling of tracelog, it does not affect the normal logic, and the error code does not need to be assigned to ret
   int tmp_ret = OB_SUCCESS;
-  //清空WARNING BUFFER
+  //Clear WARNING BUFFER
   tmp_ret = do_after_process(session, false);
   UNUSED(tmp_ret);
   return ret;
@@ -219,7 +218,7 @@ int ObMPStmtGetPieceData::do_process(ObSQLSessionInfo &session)
       session.sql_sess_record_sql_stat_start_value(sqlstat_record);
     }
     int64_t execution_id = 0;
-    //监控项统计开始
+    //Monitoring item statistics start
     exec_start_timestamp_ = ObTimeUtility::current_time();
     if (FALSE_IT(execution_id = gctx_.sql_engine_->get_execution_id())) {
       //nothing to do
@@ -230,8 +229,7 @@ int ObMPStmtGetPieceData::do_process(ObSQLSessionInfo &session)
       exec_end_timestamp_ = ObTimeUtility::current_time();
     } else {
       session.set_current_execution_id(execution_id);
-
-      //监控项统计结束
+      //Monitoring item statistics end
       exec_end_timestamp_ = ObTimeUtility::current_time();
 
       // some statistics must be recorded for plan stat, even though sql audit disabled
@@ -261,14 +259,14 @@ int ObMPStmtGetPieceData::do_process(ObSQLSessionInfo &session)
     // if diagnostic stmt execute successfully, it dosen't clear the warning message
     session.update_show_warnings_buf();
   } else {
-    session.set_show_warnings_buf(ret); // TODO: 挪个地方性能会更好，减少部分wb拷贝
+    session.set_show_warnings_buf(ret); // TODO: Move this to a better place, reduce some wb copy
   }
 
   //set read_only
   if (OB_FAIL(ret)) {
     bool is_partition_hit = session.partition_hit().get_bool();
     int err = send_error_packet(ret, NULL, is_partition_hit);
-    if (OB_SUCCESS != err) {  // 发送error包
+    if (OB_SUCCESS != err) {  // send error packet
       LOG_WARN("send error packet failed", K(ret), K(err));
     }
   }
@@ -340,7 +338,7 @@ int ObMPStmtGetPieceData::response_result(ObSQLSessionInfo &session)
                           ? 0 
                           : piece->get_buffer_array()->count();
         if (0 != count && offset_ == count - 1 && ObLastPiece == piece_buf.get_piece_mode()) {
-          // 证明发送完全部数据
+          // Prove that all data has been sent
           if (OB_FAIL(piece_cache->remove_piece(piece_cache->get_piece_key(stmt_id_, column_id_), 
                                                 session))) {
             LOG_WARN("remove piece fail", K(stmt_id_), K(column_id_));

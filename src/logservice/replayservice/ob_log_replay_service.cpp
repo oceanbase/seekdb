@@ -255,7 +255,7 @@ int ObLogReplayService::start()
     is_running_ = true;
     int tmp_ret = OB_SUCCESS;
     if (OB_SUCCESS != (tmp_ret = replay_stat_.start())) {
-      //不影响回放线程工作
+      //Does not affect the playback thread work
       CLOG_LOG(WARN, "replay_stat start failed", K(tmp_ret));
     }
     CLOG_LOG(INFO, "start ObLogReplayService success", K(ret), K(tg_id_));
@@ -319,7 +319,7 @@ void ObLogReplayService::handle(common::LinkTask *task)
   ObReplayServiceTask *task_to_handle = static_cast<ObReplayServiceTask *>(task);
   ObReplayStatus *replay_status = NULL;
   bool need_push_back = false;
-  // 不需要重新推入线程池的任务必须归还replay status的引用计数
+  // Tasks that do not need to be re-pushed into the thread pool must return the reference count of the replay status
   if (OB_ISNULL(task_to_handle)) {
     ret = OB_INVALID_ARGUMENT;
     CLOG_LOG(ERROR, "task is null", K(ret));
@@ -343,8 +343,8 @@ void ObLogReplayService::handle(common::LinkTask *task)
   } else {
     bool is_timeslice_run_out = false;
     ObReplayServiceTaskType task_type = task_to_handle->get_type();
-    // 此处检查is_enable不上锁, 依赖实际内部处理逻辑持锁判断
-    // 支持reuse语义, 此任务不能直接丢弃, 需要走正常的push back流程推进lease
+    // Here check is_enable without locking, relying on the actual internal logic to hold lock for judgment
+    // Support reuse semantics, this task cannot be directly discarded, it needs to go through the normal push back process to advance the lease
     if (!replay_status->is_enabled()) {
       CLOG_LOG(INFO, "replay status is disabled, just ignore the task", KPC(replay_status));
     } else if (OB_FAIL(pre_check_(*replay_status, *task_to_handle))) {
@@ -377,8 +377,8 @@ void ObLogReplayService::handle(common::LinkTask *task)
     int tmp_ret = OB_SUCCESS;
     if (OB_SUCCESS != (tmp_ret = submit_task(task_to_handle))) {
       CLOG_LOG(ERROR, "push task back after handle failed", K(tmp_ret), KPC(task_to_handle), KPC(replay_status), K(ret));
-      // simplethreadpool stop无锁, 并发下可能出现push失败
-      // 失败时归还replay_status引用计数即可, 任务可以直接丢弃
+      // simplethreadpool stop lock-free, concurrent push may fail
+      // On failure, just return the replay_status reference count, the task can be directly discarded
       revert_replay_status_(replay_status);
     } else {
       //do nothing
@@ -406,7 +406,7 @@ int ObLogReplayService::add_ls(const share::ObLSID &id)
     } else {
       replay_status->inc_ref();
       if (OB_FAIL(replay_status_map_.insert(id, replay_status))) {
-        // enable后已经开始回放,不能直接free
+        // enable after playback has started, cannot be freed directly
         CLOG_LOG(ERROR, "failed to insert log stream", K(ret), K(id), KPC(replay_status));
         revert_replay_status_(replay_status);
       } else {
@@ -416,8 +416,7 @@ int ObLogReplayService::add_ls(const share::ObLSID &id)
   }
   return ret;
 }
-
-// 先从map中摘掉再尝试释放内存
+// First remove from the map and then attempt to free memory
 int ObLogReplayService::remove_ls(const share::ObLSID &id)
 {
   int ret = OB_SUCCESS;
@@ -435,9 +434,8 @@ int ObLogReplayService::remove_ls(const share::ObLSID &id)
   }
   return ret;
 }
-
-// base_lsn可以不和base_scn完全对应,以base_scn为基准过滤回放,
-// 调用者需要注意log scn为base_scn的日志需要回放
+// base_lsn can be not completely corresponding to base_scn, filter and replay based on base_scn,
+// The caller should note that logs with log scn as base_scn need to be replayed
 int ObLogReplayService::enable(const share::ObLSID &id,
                                const LSN &base_lsn,
                                const SCN &base_scn)
@@ -617,8 +615,7 @@ int ObLogReplayService::is_submit_task_clear(const share::ObLSID &id, bool &is_c
   }
   return ret;
 }
-
-//通用接口, 受控回放时最终返回值为受控回放点前的最后一条日志的log_ts
+//Generic interface, the final return value during controlled replay is the log_ts of the last log before the controlled replay point
 int ObLogReplayService::get_max_replayed_scn(const share::ObLSID &id, SCN &scn)
 {
   int ret = OB_SUCCESS;
@@ -684,7 +681,7 @@ int ObLogReplayService::submit_task(ObReplayServiceTask *task)
   } else {
     task->set_enqueue_ts(ObTimeUtility::fast_current_time());
     while (OB_FAIL(TG_PUSH_TASK(tg_id_, task)) && OB_EAGAIN == ret) {
-      //预期不应该失败
+      //Expected not to fail
       ob_throttle_usleep(1000, ret);
       CLOG_LOG(ERROR, "failed to push", K(ret));
     }
@@ -939,7 +936,7 @@ int ObLogReplayService::pre_check_(ObReplayStatus &replay_status,
       ret = OB_EAGAIN;
       ob_throttle_usleep(1000, ret); //1ms
     } else if (!task.need_replay_immediately()) {
-      //避免重试过于频繁导致cpu跑满
+      //Avoid retrying too frequently to prevent CPU from being maxed out
       ob_throttle_usleep(10, ret); //10us
     }
     // Check the waiting time of the task in the global queue
@@ -997,7 +994,7 @@ int ObLogReplayService::do_replay_task_(ObLogReplayTask *replay_task,
       CLOG_LOG(WARN, "ls do pre barrier replay failed", K(ret), K(replay_task), KPC(replay_task),
                KPC(replay_status));
     } else {
-      //释放log_buf内存
+      //release log_buf memory
       CLOG_LOG(INFO, "pre barrier log replay succ", KPC(replay_task), KPC(replay_status),
                K(replay_queue_idx), K(ret));
       replay_task->read_log_buf_ = replay_log_buff;
@@ -1160,7 +1157,7 @@ int ObLogReplayService::fetch_and_submit_single_log_(ObReplayStatus &replay_stat
     CLOG_LOG(WARN, "failed to prepare_decompression_buf", KPC(submit_task), K(header));
 #endif
   } else if (header.need_pre_replay_barrier()) {
-    // 前向barrier日志的replay task和log buf需要分别分配内存
+    // Forward barrier log replay task and log buf need to be allocated memory separately
     if (OB_FAIL(fetch_pre_barrier_log_(replay_status,
                                        submit_task,
                                        replay_task,
@@ -1173,7 +1170,7 @@ int ObLogReplayService::fetch_and_submit_single_log_(ObReplayStatus &replay_stat
       //print log inside
     }
   } else {
-    // 非前向barrier日志的replay task分配整块内存
+    // Non-forward barrier log replay task allocates a block of memory
     const int64_t task_size = sizeof(ObLogReplayTask) + log_size;
     char *task_buf = NULL;
     if (OB_UNLIKELY(NULL == (task_buf = static_cast<char *>(alloc_replay_task(task_size))))) {
@@ -1384,7 +1381,7 @@ int ObLogReplayService::handle_replay_task_(ObReplayServiceReplayTask *task_queu
           } else {
             task_queue->clear_err_info();
             if (!replay_task->is_pre_barrier_) {
-              //前向barrier日志执行回放的线程会提前释放内存
+              //The forward barrier log replay thread will release memory in advance
               replay_status->dec_pending_task(replay_task->get_replay_payload_size());
             }
             free_replay_task(replay_task_to_destroy);

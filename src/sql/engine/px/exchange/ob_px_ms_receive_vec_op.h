@@ -51,8 +51,7 @@ OB_UNIS_VERSION_V(1);
 public:
   ObPxMSReceiveVecSpec(common::ObIAllocator &alloc, const ObPhyOperatorType type);
   virtual const ObIArray<ObExpr *> *get_all_exprs() const override { return &all_exprs_; }
-
-  // [sort_exprs, output_exprs]前面是排序列，后面是receive output列
+  // [sort_exprs, output_exprs] before are sort columns, after are receive output columns
   ExprFixedArray all_exprs_;
   ObSortCollations sort_collations_;
   ObSortFuncs sort_cmp_funs_;
@@ -116,13 +115,12 @@ private:
     int64_t processed_cnt_;
     common::ObCompressorType compressor_type_;
   };
-
-  // 全局有序，表示merge sort receive的每一个channel传入的数据是有序的。只要对所有路进行归并排序即可
-  // 每一个channel对应一个GlobalOrderInput，每一路会缓存数据来解决由于限流导致的卡死现象。
-  // 同时为了减少缓存的数据，通过两个row store来回交换地add和get数据，以达到减少buffer数据量
-  // 即一个get_row_store_来吐出数据，一个add_row_store_来获取channel数据，只要get_row_store_全部吐完，
-  // 则达到一定阙值后清空get_row_store_数据，同时切换add_row_store_为get_row_store_，get_row_store_为add_row_store_
-  // 这样来回切换数据的add和get
+  // Globally ordered, indicates that the data received by each channel in merge sort is ordered. Just perform a merge sort on all channels.
+  // Every channel corresponds to one GlobalOrderInput, each stream will cache data to solve the deadlock caused by rate limiting.
+  // At the same time, to reduce the cache data, data is added and retrieved by swapping between two row stores to achieve a reduction in buffer data volume
+  // i.e., one get_row_store_ to output data, one add_row_store_ to obtain channel data, as long as get_row_store_ has finished outputting all data,
+  // Then reach a certain threshold clear the get_row_store_ data, simultaneously switch add_row_store_ to get_row_store_, get_row_store_ to add_row_store_
+  // This way of switching between data add and get
   class GlobalOrderInput : public MergeSortInput
   {
   public:
@@ -169,26 +167,25 @@ private:
   private:
     static const int64_t MAX_ROWS_PER_STORE = 50L;
     uint64_t  tenant_id_;
-    // 由于需要两个datum store来回切，为了避免每次切的时候都将数据清空重新开始插入，
-    // 所以需要两个iterator保存当前读的位置
+    // Due to the need for two datum stores to switch back and forth, to avoid clearing the data and starting fresh inserts every time a switch occurs,
+    // So need two iterators to save the current read position
     // eg:
     // reader1        reader2     step
-    //  1               1          reader1(1) ->reader2(1) //即先读reader1的row 1，然后读reader2的row 2
+    //  1               1          reader1(1) ->reader2(1) //i.e., read row 1 from reader1, then read row 2 from reader2
     //  2               2          reader1(2) ->reader2(2)
     //  4               3          reader2(3) ->reader1(4)
-    // 这里默认父类的reader是add_reader
+    // Here the default parent class's reader is add_reader
     ObTempRowStore::Iterator get_reader_;
     ObTempRowStore::Iterator *add_row_reader_;
     ObTempRowStore::Iterator *get_row_reader_;
     int64_t output_rows_;
   };
-
-  // 局部有序，表示merge sort receive的每一个channel的输入数据是局部有序，即分段有序
-  // 可以通过切分的方式，把局部有序切分成更多路的有序，然后可以进行归并排序。
-  // 主要优化是从之前的全部数据进行排序优化成更多路的归并排序。
-  // 这样每一个channel可能对应多个LocalOrderInput，即分成了多个有序的数据段，每一个有序段通过LocalOrderInput来进行get和add
-  // 同时每一个channel会有一个row_store缓存所有数据，LocalOrderInput则指定自己的有序段的范围[start_pos, end_pos).
-  // 然后根据范围来不断pop数据
+  // Locally ordered, indicates that the input data received by each channel of merge sort is locally ordered, i.e., segmentally ordered
+  // Can be divided into more sorted paths by splitting, and then can be merged for sorting.
+  // The main optimization is changing from sorting all data to a multi-way merge sort.
+  // This way every channel may correspond to multiple LocalOrderInput, i.e., divided into multiple ordered data segments, each ordered segment is accessed via LocalOrderInput for get and add
+  // At the same time, each channel will have a row_store to cache all data, LocalOrderInput then specifies the range of its own ordered segment [start_pos, end_pos).
+  // Then according to the range to continuously pop data
   class LocalOrderInput : public MergeSortInput
   {
   public:

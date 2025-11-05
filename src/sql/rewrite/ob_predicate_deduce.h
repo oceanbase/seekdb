@@ -252,20 +252,15 @@ private:
   bool has_raw_const_equal_condition(int64_t param_idx);
 private:
   ObObjMeta cmp_type_; // the compare meta used by all exprs in the graph
-
-  /// 图中每个节点对应的表达式
+  /// The expression corresponding to each node in the graph
   ObSEArray<ObRawExpr *, 4> input_exprs_;
-
-  /// 构造连通图的输入谓词表达式
+  /// Construct the input predicate expression of the connected graph
   ObSEArray<ObRawExpr *, 4> input_preds_;
-
-  // 全连通图
+  // Fully connected graph
   ObArray<uint8_t> graph_;
-
-  /// 两个表达式之间的比较类型是否是否和 cmp_type_ 相同
+  /// The comparison type between two expressions is whether it is the same as cmp_type_
   ObArray<bool> type_safety_;
-
-  /// 按照大小关系进行拓扑排序后，图中节点的次序
+  /// After topological sorting based on size relationship, the order of nodes in the graph
   ObSEArray<int64_t, 4> topo_order_;
 
   ObDMLStmt &stmt_;

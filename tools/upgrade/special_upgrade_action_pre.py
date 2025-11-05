@@ -16,13 +16,12 @@ import my_utils
 import actions
 import sys
 import upgrade_health_checker
-
-# 主库需要执行的升级动作
+# Main database upgrade actions to be executed
 def do_special_upgrade(conn, cur, timeout, user, passwd):
   # special upgrade action
-#升级语句对应的action要写在下面的actions begin和actions end这两行之间，
-#因为基准版本更新的时候会调用reset_upgrade_scripts.py来清空actions begin和actions end
-#这两行之间的这些代码，如果不写在这两行之间的话会导致清空不掉相应的代码。
+#The action corresponding to the upgrade statement should be written between the lines actions begin and actions end,
+# Because the baseline version update will call reset_upgrade_scripts.py to clear actions begin and actions end
+# The code between these two lines, if not written between these two lines, will result in the corresponding code not being cleared.
   current_version = actions.fetch_observer_version(cur)
   target_version = actions.get_current_cluster_version()
   # when upgrade across version, disable enable_ddl/major_freeze/direct_load

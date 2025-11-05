@@ -29,8 +29,7 @@ namespace sql
 class ObExecContext;
 struct ObDMLBaseRtDef;
 class ObDMLOpTableDesc;
-
-// 操作 ObBatchRowCache 和存储层的核心类
+// Operation core class for ObBatchRowCache and storage layer
 class ObPDMLOpDataDriver
 {
 public:
@@ -84,10 +83,10 @@ private:
                                      const uint64_t pk_value);
 
 private:
-  // 因为 cache 中会缓存多个分区的数据，迭代的过程中需要
-  // 记录当前迭代到哪个分区、迭代到分区中的哪一行等状态
-  // 所以，引入 ReturningCtx
-  // 用于记录当前正在返回哪个分区的行，以支持反复 get_next_row
+  // Because cache will cache data from multiple partitions, during iteration it is necessary to
+  // Record the current iteration to which partition and which row in the partition it has reached etc. state
+  // So, introduce ReturningCtx
+  // Used to record which partition's row is currently being returned, to support repeated get_next_row
   struct ReturningCtx {
     ReturningCtx() : next_idx_(0), row_iter_(nullptr) {}
     ~ReturningCtx() = default;
@@ -101,12 +100,12 @@ private:
       row_iter_ = NULL;
     }
 
-    ObTabletIDArray tablet_id_array_; // 所有要读的分区索引
-    int64_t next_idx_; // 下一个要读的分区索引，0 if not started
-    ObPDMLOpRowIterator *row_iter_; // 当前在读分区的行迭代器
+    ObTabletIDArray tablet_id_array_; // All partition indexes to be read
+    int64_t next_idx_; // next partition index to read, 0 if not started
+    ObPDMLOpRowIterator *row_iter_; // current row iterator of the partition being read
   };
 
-  /* 状态转移图：
+  /* State transition diagram:
    *
    *           start
    *             |
@@ -127,37 +126,37 @@ private:
    *    |(4);
    *    +-----> end
    *
-   *  (0); 开始
-   *  (1); 从 PDMLDataReader 读入数据填充缓存
-   *  (2); 向上吐出数据，因为是拉数据模型，所以会多次做，在状态(2);
-   *  (3); 缓存数据全部吐出，再次开始填充缓存，进入状态(1);
-   *  (4); 无数据填充缓存，且缓存为空，结束
+   *  (0); start
+   *  (1); read data from PDMLDataReader to fill cache
+   *  (2); spit out data, as it is a pull data model, this will be done multiple times in state (2);
+   *  (3); all cached data has been spit out, start filling the cache again, enter state (1);
+   *  (4); no data to fill cache and cache is empty, end
    *
    */
   enum DriverState {
-    FILL_CACHE,  /* 填充 cache、cache 满后同步自动写盘，并转入 ROW_RETURNING 状态 */
-    ROW_RETURNING /* 返回行给上层，行全部返回后自动转入填充 cache 状态 */
+    FILL_CACHE,  /* Populate cache, sync and auto-write to disk when cache is full, and transition to ROW_RETURNING state */
+    ROW_RETURNING /* Return the row to the upper layer, automatically switch to filling cache state after all rows are returned */
   };
 
 
 private:
-  ReturningCtx returning_ctx_; // returning类型会使用到，目前还未使用
+  ReturningCtx returning_ctx_; // returning type will be used, currently not used
   ObMonitorNode &op_monitor_info_;
-  ObPDMLOpBatchRowCache cache_; // 用于缓存数据，需要在init函数中初始化，并且分配alloctor
+  ObPDMLOpBatchRowCache cache_; // used to cache data, needs to be initialized in the init function and allocator allocated
   ObDMLOpDataReader *reader_;
   ObDMLOpDataWriter *writer_;
   ObDMLBaseRtDef *dml_rtdef_;
-  DriverState state_; // Driver 当前状态：读写数据状态、向上返回数据状态
+  DriverState state_; // Driver current state: read/write data state, return data to upper layer state
 
-  ObEvalCtx *eval_ctx_; // 用于存储 last_row 做入参
-  ObChunkDatumStore::LastStoredRow last_row_; //缓存已从child读出但还没写入cache的行
-  common::ObTabletID last_row_tablet_id_; // 缓存已经从child读取出来还没有写入到cache的行的part id
-  const ObExprPtrIArray *last_row_expr_; // 指向表达式，用于把 row 数据恢复到表达式中
-  int64_t op_id_; // 当前操作这个 driver 的算子 id，用于 barrier 场景下发消息传参
+  ObEvalCtx *eval_ctx_; // used to store last_row as input parameter
+  ObChunkDatumStore::LastStoredRow last_row_; // cache the row read from child but not yet written to cache
+  common::ObTabletID last_row_tablet_id_; // Cache the part id of the row that has been read from child but not written to cache
+  const ObExprPtrIArray *last_row_expr_; // point to expression, used to restore row data to the expression
+  int64_t op_id_; // The operator id of this driver for the current operation, used for passing parameters when sending messages in barrier scenarios
   bool is_heap_table_insert_;
-  bool with_barrier_; // 当前算子需要支持 barrier，即：没有写完之前不可以对外吐出数据
-                      // 这是针对 row-movement 场景下避免 insert、delete 并发写同一行
-  uint64_t dfo_id_;   // with_barrier_等于true的情况下需要知道barrier对应的DFO
+  bool with_barrier_; // The current operator needs to support barrier, i.e.: data cannot be output externally before writing is complete
+                      // This is for the row-movement scenario to avoid concurrent insert, delete writes to the same row
+  uint64_t dfo_id_;   // when with_barrier_ equals true, need to know the DFO corresponding to barrier
   DISALLOW_COPY_AND_ASSIGN(ObPDMLOpDataDriver);;
 };
 }

@@ -115,7 +115,7 @@ TEST_F(ObExprLikeTest, fail_like_basic_test)
   // int vs normal
   T(like,int, 1, varchar, "1", int, 1);
   //todo
-  //1.0打印成字符串时，末尾的0被去掉了
+  //1.0 prints as a string with the trailing 0 removed
   //T(like,int, 1, double, 1.0, int, 0);
   T(like,int, 1, varchar, "h1", int, 0);
   T(like,int, 0, varchar, "", int, 0);

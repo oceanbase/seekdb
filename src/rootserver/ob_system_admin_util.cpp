@@ -133,7 +133,7 @@ int ObAdminSwitchReplicaRole::execute(const ObAdminSwitchReplicaRoleArg &arg)
   } else if (!arg.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arg", K(arg), KR(ret));
-  } else if (!ls_id.is_valid()) {// 表示需要改变server上或者zone中所有日志流的状态
+  } else if (!ls_id.is_valid()) {// indicates that the status of all log streams on the server or in the zone needs to be changed
     ret = OB_NOT_SUPPORTED;
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "switch server's role or zone's role");
   } else if (!arg.server_.is_valid()) {

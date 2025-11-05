@@ -82,8 +82,8 @@ private:
   bool only_need_contraints_;
   const ParamStore *param_store_;
 private:
-  // Top select stmt 是指当前调用group by checker的select_stmt，不是select_stmt的level
-  // 其他select_stmt会每进入一层，递增一层，同时检查结束退出，会递减一层
+  // Top select stmt refers to the current select_stmt calling the group by checker, not the level of the select_stmt
+  // Other select_stmt will increment by one level each time it enters a layer, and decrement by one level when checking for exit and exiting
   bool is_top_select_stmt() { return 0 == level_; }
   void set_skip_expr(ObRawExpr *expr) { skip_expr_ = expr; }
   void set_query_ctx(ObQueryCtx *query_ctx) { query_ctx_ = query_ctx; }
@@ -110,8 +110,8 @@ public:
                             bool only_need_constraints);
   static int check_analytic_function(const ParamStore *param_store,
                                      ObSelectStmt *ref_stmt,
-                                     common::ObIArray<ObRawExpr *> &arg_exp_arr,        //等价于查询项中表达式
-                                     common::ObIArray<ObRawExpr *> &partition_exp_arr); //等价于group by项
+                                     common::ObIArray<ObRawExpr *> &arg_exp_arr,        // equivalent to expressions in the query items
+                                     common::ObIArray<ObRawExpr *> &partition_exp_arr); // equivalent to group by items
 };
 
 }

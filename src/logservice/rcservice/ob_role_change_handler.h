@@ -60,7 +60,7 @@ struct RCDiagnoseInfo {
   void reset();
   int64_t id_;
   TakeOverState state_;
-  ObLogBaseType log_type_; //仅当处于WAIT_RC_HANDLER_DONE时才有意义
+  ObLogBaseType log_type_; //Only meaningful when in WAIT_RC_HANDLER_DONE state
   TO_STRING_KV(K(state_),
                K(log_type_));
 };

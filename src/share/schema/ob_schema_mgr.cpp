@@ -3026,7 +3026,7 @@ int ObSchemaMgr::del_table(const ObTenantTableId table)
                    "tenant_id", schema_to_del->get_tenant_id(),
                    "database_id", schema_to_del->get_database_id(),
                    "table_name", schema_to_del->get_table_name());
-          // 增加增量schema刷新的容错处理，此时不报错，靠rebuild逻辑解
+          // Increase fault tolerance for incremental schema refresh, do not report errors, rely on rebuild logic to resolve
           ret = OB_HASH_NOT_EXIST != hash_ret ? hash_ret : ret;
         }
       } else if (schema_to_del->is_index_table()) {
@@ -3044,7 +3044,7 @@ int ObSchemaMgr::del_table(const ObTenantTableId table)
                      K(hash_ret),
                      K(is_built_in_index),
                      "index_name", schema_to_del->get_table_name());
-            // 增加增量schema刷新的容错处理，此时不报错，靠rebuild逻辑解
+            // Increase fault tolerance for incremental schema refresh, no error is reported at this time, rely on rebuild logic to resolve
             ret = OB_HASH_NOT_EXIST != hash_ret ? hash_ret : ret;
           }
         } else { // index is not in recyclebin
@@ -4359,7 +4359,7 @@ int ObSchemaMgr::deal_with_table_rename(
           if (OB_SUCCESS != hash_ret) {
             LOG_WARN("fail to delete index from index name hashmap",
                      K(ret), K(hash_ret), K(is_built_in_index), K(old_table_name));
-            // 增加增量schema刷新的容错处理，此时不报错，靠rebuild逻辑解
+            // Increase fault tolerance for incremental schema refresh, do not report errors, rely on rebuild logic to resolve
             ret = OB_HASH_NOT_EXIST != hash_ret ? hash_ret : ret;
           }
         } else { // index is not in recyclebin

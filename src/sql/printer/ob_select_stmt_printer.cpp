@@ -103,7 +103,7 @@ int ObSelectStmtPrinter::print_set_op_stmt()
     LOG_WARN("Not a valid select stmt", K(stmt_->get_stmt_type()), K(ret));
   } else {
     const ObSelectStmt *select_stmt = static_cast<const ObSelectStmt*>(stmt_);
-    // todo: 目前 union 展平后无法保证与原始 sql 相同
+    // todo: Currently union flattening cannot guarantee to be the same as the original sql
     ObSEArray<ObSelectStmt*, 2> child_stmts;
     if (!select_stmt->is_set_stmt() || 2 > select_stmt->get_set_query().count()) {
       ret = OB_ERR_UNEXPECTED;
@@ -279,11 +279,11 @@ int ObSelectStmtPrinter::print_select()
             continue;
           }
           ObRawExpr *expr = select_item.expr_;
-          // mysql会对view_definition最顶层stmt的select_item添加别名(仅最顶层)
-          // 别名规则见case：
+          // mysql will add an alias to the select_item of the top-level stmt in view_definition (only the top level)
+          // Alias rule see case:
           // create view(a,b) v as select c1,c2 as alias from t1;
-          // 替换后：              select c1 as a, c2 as b from t1
-          // 因此需要将最顶层stmt中相应别名表达式的func_name替换成column_name
+          // replaced with:              select c1 as a, c2 as b from t1
+          // Therefore need to replace the func_name of the corresponding alias expression in the top-level stmt with column_name
           bool need_add_alias = need_print_alias() || select_item.is_real_alias_;
           if (OB_SUCC(ret)) {
             ObRawExpr *tmp_expr = expr;
@@ -314,7 +314,7 @@ int ObSelectStmtPrinter::print_select()
             } else {
               alias_string = select_item.expr_name_;
             }
-            /* oracle模式下，由于部分函数的别名可能出现双引号“”，将导致二次解析出错，因此需要将这些双引号去掉
+            /* In Oracle mode, due to some function aliases possibly appearing with double quotes "", which will cause errors during secondary parsing, it is necessary to remove these double quotes
             *  
             */
             ObArenaAllocator arena_alloc;

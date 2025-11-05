@@ -154,18 +154,15 @@ public:
   IndexBlockIterator index_block_end();
   IndexEntryIterator index_entry_begin();
   IndexEntryIterator index_entry_end();
-
-  // 迭代range内的所有数据行
+  // Iterate over all data rows in the range
   int scan(const ObDirectLoadTableDataDesc &table_data_desc,
            const ObDirectLoadMultipleDatumRange &range,
            const blocksstable::ObStorageDatumUtils *datum_utils,
            common::ObIAllocator &allocator,
            ObDirectLoadMultipleSSTableScanner *&scanner);
-
-  // 迭代所有索引块信息
-  // 迭代指定tablet的索引块信息
-
-  // 迭代所有索引块对应的endkey
+  // Iterate all index block information
+  // Iterate the index block information of the specified tablet
+  // Iterate all index block corresponding endkey
   int scan_whole_index_block_endkey(const ObDirectLoadTableDataDesc &table_data_desc,
                                     common::ObIAllocator &allocator,
                                     ObIDirectLoadMultipleDatumRowkeyIterator *&rowkey_iter);
@@ -173,8 +170,7 @@ public:
   int scan_whole_index_block_endkey(const ObDirectLoadTableDataDesc &table_data_desc,
                                     common::ObIAllocator &allocator,
                                     ObIDirectLoadDatumRowkeyIterator *&rowkey_iter);
-
-  // 迭代所有rowkey
+  // Iterate all rowkey
   int scan_whole_rowkey(const ObDirectLoadTableDataDesc &table_data_desc,
                         common::ObIAllocator &allocator,
                         ObIDirectLoadMultipleDatumRowkeyIterator *&rowkey_iter);

@@ -57,7 +57,7 @@ int ObSimpleArchive::prepare_dest()
   int ret = OB_SUCCESS;
   EXPECT_EQ(OB_SUCCESS, get_curr_simple_server().init_sql_proxy2("tt1", "oceanbase"));
   common::ObMySQLProxy &sql_proxy = get_curr_simple_server().get_sql_proxy2();
-  // 设置backup dest
+  // set backup dest
   {
     ObSqlString sql;
     sql.assign_fmt("alter system set log_archive_dest = 'location=%s'", "file://./");
@@ -199,8 +199,7 @@ int ObSimpleArchive::check_rs_archive_progress(const uint64_t tenant_id)
   OB_LOG(INFO, "check archive progress succ", K(ts), K(attr));
   return ret;
 }
-
-// 测试日志流归档进度, 需要保证日志流归档进度已经持久化成功
+// Test the log stream archiving progress, need to ensure that the log stream archiving progress has been successfully persisted
 int ObSimpleArchive::check_archive_progress(const uint64_t tenant_id, const bool check_piece_advance)
 {
   int ret = OB_SUCCESS;
@@ -264,7 +263,7 @@ int ObSimpleArchive::create_table_()
 {
   int ret = OB_SUCCESS;
   common::ObMySQLProxy &sql_proxy = get_curr_simple_server().get_sql_proxy2();
-  // 创建表
+  // Create table
   OB_LOG(INFO, "create_table start");
   ObSqlString sql;
   sql.assign_fmt(
@@ -324,7 +323,7 @@ int ObSimpleArchive::fake_piece_info_after_fake_stop(const uint64_t tenant_id, c
   ret = MTL(archive::ObArchiveService*)->persist_mgr_.load_archive_round_attr(attr);
   EXPECT_EQ(OB_SUCCESS, ret);
   share::SCN genesis_scn;
-  genesis_scn.convert_from_ts(attr.start_scn_.convert_to_ts() - 2 * piece_interval);     // 由于piece_interval粒度小, 需要调高
+  genesis_scn.convert_from_ts(attr.start_scn_.convert_to_ts() - 2 * piece_interval);     // Due to the small granularity of piece_interval, it needs to be increased
   MTL(archive::ObArchiveService*)->fetcher_.piece_interval_ = piece_interval;
   MTL(archive::ObArchiveService*)->fetcher_.genesis_scn_ = genesis_scn;
   MTL(archive::ObArchiveService*)->ls_mgr_.piece_interval_ = piece_interval;

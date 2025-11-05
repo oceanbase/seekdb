@@ -313,7 +313,7 @@ TEST_F(TestCodeGenerator, basic_test)
   of_result.close();
   // verify results
   UNUSED(result_file);
-  // TODO shengle, 暂时不对比结果， 仅用于调试, 后续会加入farm时会对比结果
+  // TODO shengle, temporarily do not compare results, only for debugging, results will be compared when farm is added later
   // ASSERT_NO_FATAL_FAILURE(TestSqlUtils::is_equal_content(tmp_file, result_file));
 }
 }

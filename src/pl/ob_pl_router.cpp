@@ -107,7 +107,7 @@ int ObPLRouter::analyze(ObString &route_sql, ObIArray<ObDependencyInfo> &dep_inf
       func_ast.set_pipelined();
     }
     if (OB_FAIL(simple_resolve(func_ast))) {
-      // 兼容mysql，部分resolve阶段错误需要在创建时抛出
+      // Compatible with MySQL, some resolve stage errors need to be thrown at creation time
       if (OB_FAIL(check_error_in_resolve(ret))) {
         LOG_WARN("resolve error with error code", K(ret));
       } else {
@@ -166,7 +166,7 @@ int ObPLRouter::simple_resolve(ObPLFunctionAST &func_ast)
   if (routine_info_.is_udt_routine()) {
       func_ast.set_is_udt_routine();
   }
-  //添加参数列表
+  //Add parameter list
   for (int64_t i = 0; OB_SUCC(ret) && i < routine_info_.get_routine_params().count(); ++i) {
     ObRoutineParam *param = routine_info_.get_routine_params().at(i);
     ObPLDataType param_type;
@@ -191,7 +191,7 @@ int ObPLRouter::simple_resolve(ObPLFunctionAST &func_ast)
                                                NULL,
                                                &param->get_extended_type_info(),
                                                param->is_in_sp_param(),
-                                               param->is_self_param()))) { //输入参数的default值在编译时候没用
+                                               param->is_self_param()))) { //The default value of the input parameter is not used at compile time
         LOG_WARN("failed to add argument", K(param->get_param_name()), K(param->get_param_type()), K(ret));
       } else {
         // do nothing
@@ -206,7 +206,7 @@ int ObPLRouter::simple_resolve(ObPLFunctionAST &func_ast)
   //Parser
   ObStmtNodeTree *parse_tree = NULL;
   if (OB_SUCC(ret)) {
-    ObString body = routine_info_.get_routine_body(); //获取body字符串
+    ObString body = routine_info_.get_routine_body(); // get body string
     ObPLParser parser(inner_allocator_, session_info_.get_charsets4parser(), session_info_.get_sql_mode());
     CHECK_COMPATIBILITY_MODE(&session_info_);
 

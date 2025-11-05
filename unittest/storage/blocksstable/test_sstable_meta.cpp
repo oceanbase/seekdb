@@ -653,8 +653,7 @@ TEST_F(TestSSTableMeta, test_common_sstable_persister_linked_block)
   ASSERT_EQ(1, sstable_macro_info.other_block_count_);
   ASSERT_EQ(0, sstable_macro_info.linked_block_count_);
   total_write_ctxs.push_back(linked_block_write_ctx);
-
-  // 幂等
+  // Idempotent
   ASSERT_EQ(OB_SUCCESS, sstable.persist_linked_block_if_need(
                                   allocator_,
                                   tablet_id,
@@ -741,8 +740,7 @@ TEST_F(TestSSTableMeta, test_huge_sstable_persister_linked_block)
   ASSERT_EQ(1, sstable_macro_info.other_block_count_);
   ASSERT_EQ(1, sstable_macro_info.linked_block_count_);
   total_write_ctxs.push_back(linked_block_write_ctx);
-
-  // 幂等
+  // Idempotent
   ASSERT_EQ(OB_SUCCESS, sstable.persist_linked_block_if_need(
                                   allocator_,
                                   tablet_id,

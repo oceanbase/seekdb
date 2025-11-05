@@ -38,23 +38,23 @@ ObDirectReceiveOp::ObDirectReceiveOp(ObExecContext &exec_ctx,
 int ObDirectReceiveOp::inner_open()
 {
   int ret = OB_SUCCESS;
-  all_data_empty_ = false; /* 是否所有scanner数据都已经读完 */
-  cur_data_empty_ = true;/* 当前scanner数据是否已经读完 */
-  first_request_received_ = false; /* 是否已经将plan发送到远端 */
-  // 接收第一个scanner，对于insert, update等DML，需要在此时获取affected_rows等
+  all_data_empty_ = false; /* Whether all scanner data has been read */
+  cur_data_empty_ = true;/* Whether the current scanner data has been fully read */
+  first_request_received_ = false; /* Whether the plan has already been sent to the remote */
+  // Receive the first scanner, for insert, update etc. DML, need to get affected_rows etc. at this time
   if (OB_FAIL(setup_next_scanner())) {
     if (OB_UNLIKELY(OB_ITER_END != ret)) {
       LOG_WARN("failed to setup first scanner", K(ret));
     } else {
-      all_data_empty_ = true; /* 没有更多scanner了 */
+      all_data_empty_ = true; /* No more scanners available */
     }
   } else {
-    cur_data_empty_ = false; /* scanner再次被填满，可以接着读 */
+    cur_data_empty_ = false; /* scanner is refilled, can continue reading */
   }
   return ret;
 }
 /*
- * 状态机：cur_data_empty_, all_data_empty_
+ * State machine: cur_data_empty_, all_data_empty_
  */
 int ObDirectReceiveOp::inner_get_next_row()
 {
@@ -73,37 +73,37 @@ int ObDirectReceiveOp::inner_get_next_row()
   } else if (OB_FAIL(THIS_WORKER.check_status())) {
     LOG_WARN("check physical plan status failed", K(ret));
   } else if (OB_ERR_TASK_SKIPPED == resp_handler->get_result_code()) {
-    // 跳过
+    // skip
     ret = OB_ITER_END;
     LOG_WARN("this remote task is skipped", K(ret));
   }
 
-  /* 用状态机思维理解下面的代码会比较容易 */
+  /* Use state machine thinking to understand the code below will be easier */
   while (OB_SUCC(ret) && false == has_got_a_row) {
-    if (all_data_empty_) { /* 所有数据均读取完毕 */
+    if (all_data_empty_) { /* All data has been read */
       ret = OB_ITER_END;
-    } else if (cur_data_empty_) { /* 当前scanner读取完毕 */
-      /* 发送RPC请求远程返回一个Scanner */
+    } else if (cur_data_empty_) { /* Current scanner read complete */
+      /* Send RPC request and remotely return a Scanner */
       if (OB_FAIL(setup_next_scanner())) {
         if (OB_UNLIKELY(OB_ITER_END != ret)) {
           LOG_WARN("fail to setup next scanner", K(ret));
         } else {
-          all_data_empty_ = true; /* 没有更多scanner了 */
+          all_data_empty_ = true; /* No more scanners available */
         }
       } else {
-        cur_data_empty_ = false; /* scanner再次被填满，可以接着读 */
+        cur_data_empty_ = false; /* scanner is refilled, can continue reading */
       }
-    } else { /* 当前scanner可读 */
+    } else { /* current scanner readable */
       if (OB_FAIL(get_next_row_from_cur_scanner())) {
         if (OB_UNLIKELY(OB_ITER_END != ret)) {
           LOG_WARN("fail to get next row from cur scanner", K(ret));
         } else {
-          // 当前scanner已经读完了
+          // Current scanner has finished reading
           cur_data_empty_ = true;
-          ret = OB_SUCCESS; // 将ret设为OB_SUCCESS以便继续循环
+          ret = OB_SUCCESS; // set ret to OB_SUCCESS to continue the loop
         }
       } else {
-        // 拿到了一行数据, 退出循环
+        // Got a line of data, exit the loop
         has_got_a_row = true;
       }
     }
@@ -173,7 +173,7 @@ int ObDirectReceiveOp::setup_next_scanner()
   }
 
   if (OB_SUCC(ret)) {
-    /* 首次读取数据，结果已经在Scheduler中调用task_submit()时获取 */
+    /* First read data, the result has already been obtained when Scheduler calls task_submit() */
     if (!first_request_received_) {
       ObScanner *scanner = resp_handler->get_result();
       if (OB_ISNULL(scanner)) {
@@ -191,10 +191,10 @@ int ObDirectReceiveOp::setup_next_scanner()
         if (OB_FAIL(scanner->get_err_code())) {
           int add_ret = OB_SUCCESS;
           const char* err_msg = scanner->get_err_msg();
-          // FORWARD_USER_ERROR(ret, err_msg)之后，如果err_msg的长度大于0，
-          // 则给用户返回的错误信息为err_msg，否则给用户返回的错误信息就是ret对应的默认错误信息。
-          // 这里要做到err_msg不为空的时候才给用户返回err_msg，否则就给用户返回ret默认的错误信息，
-          // 因此直接写FORWARD_USER_ERROR(ret, err_msg)就可以了。
+          // After FORWARD_USER_ERROR(ret, err_msg), if the length of err_msg is greater than 0,
+
+          // Then the error message returned to the user is err_msg, otherwise the error message returned to the user is the default error message corresponding to ret.
+          // Therefore you can directly write FORWARD_USER_ERROR(ret, err_msg).
           FORWARD_USER_ERROR(ret, err_msg);
           LOG_WARN("error occurring in the remote sql execution, "
                    "please use the current TRACE_ID to grep the original error message on the remote_addr.",
@@ -202,7 +202,7 @@ int ObDirectReceiveOp::setup_next_scanner()
         } else {
           scanner_ = scanner;
           first_request_received_ = true;
-          // 对于INSERT、UPDATE、DELETE，首次返回的Scanner中包含affected row
+          // For INSERT, UPDATE, DELETE, the first returned Scanner contains affected row
           plan_ctx->set_affected_rows(scanner->get_affected_rows());
           found_rows_ += scanner->get_found_rows();
           if (OB_FAIL(scanner->get_datum_store().begin(scanner_iter_))) {
@@ -224,7 +224,7 @@ int ObDirectReceiveOp::setup_next_scanner()
           }
         }
       }
-    } else { /* 后继请求，通过Handle发送SESSION_NEXT到远端 */
+    } else { /* Successive request, send SESSION_NEXT to remote via Handle */
       ObScanner *result_scanner = NULL;
       if (resp_handler->has_more()) {
         if (OB_FAIL(resp_handler->reset_and_init_result())) {
@@ -322,7 +322,7 @@ int ObDirectReceiveOp::get_next_row_from_cur_scanner()
 
 int ObDirectReceiveOp::inner_rescan()
 {
-  //不支持对远程的operator进行rescan操作
+  // Not support rescan operation for remote operator
   int ret = OB_NOT_SUPPORTED;
   LOG_USER_ERROR(OB_NOT_SUPPORTED, "Distributed rescan");
   return ret;

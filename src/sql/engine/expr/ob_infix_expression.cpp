@@ -511,9 +511,9 @@ int ObInfixExpression::eval(common::ObExprCtx &ctx, const common::ObNewRow &row,
           "type_name", get_type_name(item.get_item_type()));
     }
   }
-  // 此处在参数eval失败的情况下, 将该参数值设置为NULL, 因为该参数值
-  // ObObj之前没有初始化过, 如果不强制设置为NULL, 后面日志栈中如果出现
-  // 打印该参数的情况可能导致core
+  // In case the parameter eval fails, set the parameter value to NULL, because the parameter value
+  // ObObj has not been initialized before, if not explicitly set to NULL, it may appear in the log stack later
+  // Print this parameter may cause core
   if (OB_FAIL(ret)) {
     stack[pos].set_null();
   }

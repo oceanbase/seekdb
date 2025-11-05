@@ -27,7 +27,7 @@ int ObSetNamesExecutor::execute(ObExecContext &ctx, ObSetNamesStmt &stmt)
   } else {
     ObString charset;
     if (stmt.is_default_charset()) {
-      // 和mysql兼容，取global的character_set_client值
+      // Compatible with mysql, take the value of global character_set_client
       if (OB_FAIL(get_global_sys_var_character_set_client(ctx, charset))) {
         SQL_ENG_LOG(WARN, "fail to get global character_set_client", K(ret));
       }

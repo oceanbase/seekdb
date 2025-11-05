@@ -412,7 +412,7 @@ private:
 
 
 private:
-  bool is_all_non_partition_; //判断该plan对应的表是否均为非分区表
+  bool is_all_non_partition_; // Determine whether all tables corresponding to this plan are non-partitioned tables
   TableLocationFixedArray table_locations_;
   //used for array binding, only local plan
   ObPhysicalPlan *array_binding_plan_;
@@ -421,17 +421,16 @@ private:
   // for directly get plan
   ObPhysicalPlan *direct_local_plan_;
   ObDistPlans dist_plans_;
-
-  // 用于处理or expansion、晚期物化，全局索引等特殊场景
-  // 以上的特殊场景的共同特点是plan_set缓存的table location和计划内的table location不一致，
-  // 必须从计划内拿table location去计算物理分区地址
+  // Used for handling OR expansion, late materialization, global index, etc., special scenarios
+  // The common characteristic of the above special scenarios is that the table location in the plan_set cache is inconsistent with the table location within the plan,
+  // Must get table location from the plan to calculate physical partition address
   int64_t need_try_plan_;
-  //计划中是否含有复制表
+  // Does the plan contain table replication
   bool has_duplicate_table_;
   ObSEArray<int64_t, 4> part_param_idxs_;
-  // 是否含有虚拟表，如果包含虚拟表，不做直接获取local计划的优化
+  // Whether it contains a virtual table, if it contains a virtual table, do not perform the optimization of directly obtaining the local plan
   bool is_contain_virtual_table_;
-  // px并行度是否大于1
+  // px parallelism is greater than 1
   bool enable_inner_part_parallel_exec_;
   bool is_single_table_;
   bool is_contain_inner_table_;

@@ -658,7 +658,7 @@ void ObLibContainerNode::sort()
     std::stable_sort(sorted_children_->begin(), sorted_children_->end(), cmp);  
   }
 }
-   // 数据修改接口, 修改的是孩子
+   // Data modification interface, modifying the child
 int ObLibContainerNode::append(ObLibTreeNodeBase* node)
 {
   INIT_SUCC(ret);

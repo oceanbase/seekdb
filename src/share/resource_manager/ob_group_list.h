@@ -44,5 +44,4 @@ CGID_DEF(OBCG_DTL, 27, CRITICAL)
 CGID_DEF(OBCG_DBMS_SCHED_JOB, 28)
 // 100 for CG_LQ
 CGID_DEF(OBCG_LQ, 100)
-
-//轻量化改造去掉一部分group：
+//Lightweight transformation removes some groups:

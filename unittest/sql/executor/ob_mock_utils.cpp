@@ -67,7 +67,7 @@ ObMockSqlExecutorRpc::~ObMockSqlExecutorRpc()
 }
 
 /*
- * 提交一个异步task执行请求, 在OB_TASK_NOTIFY_FETCH消息的驱动下收取结果数据
+ * Submit an asynchronous task execution request, receive result data driven by the OB_TASK_NOTIFY_FETCH message
  */
 int ObMockSqlExecutorRpc::task_submit(
     ObExecContext &ctx,
@@ -107,7 +107,7 @@ int ObMockSqlExecutorRpc::task_submit(
     if (OB_SUCCESS != (ret = new_task.deserialize(s_buf, s_buf_pos, new_pos))) {
       SQL_EXE_LOG(WARN, "fail to deserialize", K(ret));
     } else {
-      //执行plan
+      // execute plan
       ObPhyOperator *root_op = phy_plan->get_main_query();
       ObDistributedTransmitInput *trans_input = dynamic_cast<ObDistributedTransmitInput *>(ctx.get_phy_op_input(root_op->get_id()));
       OB_ASSERT(NULL != trans_input);
@@ -116,7 +116,7 @@ int ObMockSqlExecutorRpc::task_submit(
       if (OB_SUCCESS != (ret = task_runner.execute(exec_ctx, *phy_plan))) {
         SQL_EXE_LOG(WARN, "fail execute task", K(sid));
       }
-      //返回task event
+      // return task event
       ObTaskEvent *task_event = new ObTaskEvent();
       ObTaskLocation task_loc;
       //ObAddr remote_server;
@@ -135,8 +135,8 @@ int ObMockSqlExecutorRpc::task_submit(
   return ret;
 }
 /*
- * 发送一个task并阻塞等待，直到对端返回执行状态
- * 将执行句柄保存在handler中, 随后可以通过handler收取数据
+ * Send a task and block waiting until the other end returns the execution status
+ * Save the execution handle in handler, and then data can be received through handler
  * */
 int ObMockSqlExecutorRpc::task_execute(
     ObExecContext &ctx,
@@ -160,7 +160,7 @@ int ObMockSqlExecutorRpc::task_execute(
   return OB_SUCCESS;
 }
 /*
- * 发送杀死一个task的命令并阻塞等待对端返回执行状态
+ * Send a command to kill a task and block waiting for the remote end to return the execution status
  * */
 int ObMockSqlExecutorRpc::task_kill(
     ObTaskInfo &task,
@@ -171,7 +171,7 @@ int ObMockSqlExecutorRpc::task_kill(
   return OB_SUCCESS;
 }
 /*
- * Task在Worker端执行完成，通知Scheduler启动Task读取结果
+ * Task execution completed on the Worker side, notify Scheduler to start Task reading results
  * */
 int ObMockSqlExecutorRpc::task_complete(
     ObTaskEvent &task_event,
@@ -183,7 +183,7 @@ int ObMockSqlExecutorRpc::task_complete(
 }
 
 /*
- * 发送一个task的执行结果，不等待返回
+ * Send the execution result of a task, do not wait for a response
  * */
 int ObMockSqlExecutorRpc::task_notify_fetch(
     ObTaskEvent &task_event,
@@ -194,7 +194,7 @@ int ObMockSqlExecutorRpc::task_notify_fetch(
   return OB_SUCCESS;
 }
 /*
- * 获取一个task的中间结果的所有scanner，阻塞等待直到所有的scanner都返回
+ * Get all scanners of an intermediate result of a task, blocking until all scanners return
  * */
 int ObMockSqlExecutorRpc::task_fetch_result(
     const ObSliceID &ob_slice_id,
@@ -220,10 +220,10 @@ int ObMockSqlExecutorRpc::task_fetch_result(
     SQL_EXE_LOG(WARN, "fail to get interm result iterator", K(ret),
                 "ob_slice_id", helper.convert(ob_slice_id));
   } else if (task_location_exist(task_loc)) {
-    //FIXME 暂时做成这样，第二次访问同一个location时返回OB_ITER_END
+    //FIXME Temporarily done this way, return OB_ITER_END on the second visit to the same location
     ret = OB_ITER_END;
   } else {
-    //FIXME 暂时只弄一个scanner，第二次访问同一个location返回OB_ITER_END
+    //FIXME temporarily only set up one scanner, second access to the same location returns OB_ITER_END
     while (OB_SUCC(ret)) {
       if (OB_SUCCESS != (ret = iter.get_next_row(tmp_row))) {
         if (OB_ITER_END != ret) {
@@ -318,10 +318,10 @@ int ObMockFetchResultStreamHandle::get_more(ObScanner &scanner)
     SQL_EXE_LOG(WARN, "fail to get interm result iterator", K(ret),
                 "ob_slice_id", helper.convert(ob_slice_id_));
   } else if (task_location_exist(task_loc)) {
-    //FIXME 暂时做成这样，第二次访问同一个location时返回OB_ITER_END
+    //FIXME Temporarily done this way, return OB_ITER_END on the second visit to the same location
     ret = OB_ITER_END;
   } else {
-    //FIXME 暂时只弄一个scanner，第二次访问同一个location返回OB_ITER_END
+    //FIXME temporarily only set up one scanner, return OB_ITER_END on second access to the same location
     while (OB_SUCC(ret)) {
       if (OB_SUCCESS != (ret = iter.get_next_row(tmp_row))) {
         if (OB_ITER_END != ret) {

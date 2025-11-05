@@ -81,7 +81,7 @@ public:
   public:
     bool update_meta_data_done_;
     // information for updating data
-    int64_t flush_data_page_disk_begin_id_;  // record begin page id in the macro block，for updating meta tree item
+    int64_t flush_data_page_disk_begin_id_;  // record begin page id in the macro block, for updating meta tree item
     int64_t flush_data_page_num_;
     int64_t flush_virtual_page_id_;          // record virtual_page_id while copying data, pass to meta tree while inserting items
     int64_t file_size_;                      // if file_size > 0, it means the last page is in flushing

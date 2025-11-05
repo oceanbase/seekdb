@@ -66,8 +66,8 @@ int ObDropFunctionResolver::resolve(const ParseNode &parse_tree)
   bool if_exist = false;
   bool pl_y = true;
   bool need_try_pl_function = true;
-  // 因为mysql.y和pl_mysql.y的if exists语法结构不一样，mysql.y的已经被很多用了，
-  // 没办法改成一致，暂时只能写成两套了。
+  // Because the if exists syntax structure in mysql.y and pl_mysql.y is different, mysql.y has already been widely used,
+  // Can't change to be consistent, temporarily can only write as two sets.
   if (parse_tree.type_ == T_DROP_FUNC) {
     if (OB_ISNULL(parse_tree.children_)
         || OB_UNLIKELY(parse_tree.num_child_ != 2)
@@ -103,7 +103,7 @@ int ObDropFunctionResolver::resolve(const ParseNode &parse_tree)
       ret = OB_ERR_NO_DB_SELECTED == ret && lib::is_mysql_mode() ? OB_SUCCESS : ret;
       LOG_WARN("resolve sp name failed", K(ret));
     }
-    // drop ddl function 和 drop pl function公用语法, 需要先检查是否是ddl function
+    // drop ddl function and drop pl function share syntax, need to check if it is ddl function first
     if (OB_FAIL(ret)) {
     } else if (pl_y
                && OB_LIKELY(2 == name_node->num_child_)

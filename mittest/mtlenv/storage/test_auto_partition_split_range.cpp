@@ -438,7 +438,7 @@ TEST_F(FakeObTableScanRange, test_empty_split_range)
   ASSERT_EQ(OB_SUCCESS, ret);
   ret = do_split_datum_range(split_start_val, split_end_val);
   // error
-  ASSERT_EQ(OB_INVALID_ARGUMENT, ret); // empty key is invalid， return -4016
+  ASSERT_EQ(OB_INVALID_ARGUMENT, ret); // empty key is invalid, return -4016
 }
 
 // only set split start key

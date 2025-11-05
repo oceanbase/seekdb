@@ -734,7 +734,7 @@ public:
 
 private:
   char str_[OB_MAX_CONFIG_NAME_LEN];
-  // ObConfigContainer 容器中使用了对象的拷贝构造函数,不能禁止
+  // ObConfigContainer container uses the object's copy constructor, cannot be prohibited
   //DISALLOW_COPY_AND_ASSIGN(ObConfigStringKey);
 };
 inline ObConfigStringKey::ObConfigStringKey(const char *str)
@@ -800,9 +800,9 @@ public:
 private:
   enum INT_UNIT
   {
-    // 通常对于一个数字，可以写成 1k, 1m, 分别表示
+    // Typically for a number, it can be written as 1k, 1m, respectively representing
     // 1000(kilo), 1000000(million)
-    // billion 不支持，避免和 capacity 字节的 1b 混淆
+    // billion not supported, avoid confusion with capacity byte's 1b
     UNIT_K = 1000,
     UNIT_M = 1000000,
   };

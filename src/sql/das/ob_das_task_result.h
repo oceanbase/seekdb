@@ -96,10 +96,10 @@ public:
   bool is_inited_;
   int64_t task_id_;
   int64_t table_id_;
-  int64_t expire_ts_; //结果过期时间戳
-  int packet_cnt_; //已经读出的packet大小，只有当存储中间结果时有效
-  bool is_reading_; //正在读取中间结果，TCB处于ping状态，不能退出
-  bool is_exiting_; //is_exiting_ = true表示该TCB正在退出，持有的结果已经失效，不能再访问
+  int64_t expire_ts_; // result expiration timestamp
+  int packet_cnt_; // already read packet size, only valid when storing intermediate results
+  bool is_reading_; // reading intermediate results, TCB is in ping state, cannot exit
+  bool is_exiting_; // is_exiting_ = true indicates that this TCB is exiting, the held result is invalid and should not be accessed
   bool is_vectorized_;
   bool enable_rich_format_;
   int64_t read_rows_;
@@ -122,7 +122,7 @@ public:
   // for detect & interrupt
   ObDASTCBInterruptInfo interrupt_info_;
 private:
-  common::ObSpinLock tcb_lock_; //用于控制资源资源释放的时序，保证并发访问的安全
+  common::ObSpinLock tcb_lock_; // used to control the timing of resource release, ensuring the safety of concurrent access
 };
 
 class ObDASTCBAlloc
@@ -310,7 +310,7 @@ public:
                        ObDASScanRtDef *scan_rtdef,
                        ObDASScanOp &scan_op);
   int erase_task_result(int64_t task_id, bool need_unreg_dm);
-  //从中间结果管理器中获取一个block大小的结果，默认为2M大小
+  // Get a block size result from the intermediate result manager, default is 2M size
   int iterator_task_result(ObDASDataFetchRes &res,
                            int64_t &io_read_bytes,
                            int64_t &ssstore_read_bytes,

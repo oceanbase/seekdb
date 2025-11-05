@@ -108,11 +108,11 @@ OB_INLINE int ObResultSet::open_plan()
         // Note: explain statement's phy plan is target query's plan, don't enable admission test
         LOG_DEBUG("Query is not admitted to run, try again", K(ret));
       } else if (THIS_WORKER.is_timeout()) {
-        // packet有可能在队列里面呆的时间过长，到这里已经超时，
-        // 如果这里不检查，则会继续运行，很可能进入到其他模块里面，
-        // 其他模块检测到超时，引起其他模块的疑惑，因此在这里加上超时检查。
-        // 之所以在这个位置才检查，是为了考虑hint中的超时时间，
-        // 因为在init_plan_exec_context函数里面才将hint的超时时间设进THIS_WORKER中。
+        // packet may have stayed in the queue for too long, by here it has already timed out,
+        // If here is not checked, it will continue to run, likely entering other modules,
+        // Other modules detect a timeout, causing confusion in other modules, therefore adding a timeout check here.
+        // This is checked at this position to consider the timeout time in hint,
+        // Because the hint timeout is set into THIS_WORKER inside the init_plan_exec_context function.
         ret = OB_TIMEOUT;
         LOG_WARN("query is timeout", K(ret),
                  "timeout_ts", THIS_WORKER.get_timeout_ts(),
@@ -309,11 +309,10 @@ int ObResultSet::start_stmt()
       my_session_.set_restore_auto_commit(); 
     }
     bool in_trans = my_session_.get_in_transaction();
-
-    // 1. 无论是否处于事务中，只要不是select并且plan为REMOTE的，就反馈给客户端不命中
+    // 1. Regardless of whether it is within a transaction, as long as it is not a select and the plan is REMOTE, feedback to the client that it does not hit
     // 2. feedback this misshit to obproxy (bug#6255177)
-    // 3. 对于multi-stmt，只反馈首个partition hit信息给客户端
-    // 4. 需要考虑到重试的情况，需要反馈给客户端的是首个重试成功的partition hit。
+    // 3. For multi-stmt, only feedback the first partition hit information to the client
+    // 4. Need to consider the retry situation, need to feedback to the client is the first successful partition hit.
     if (OB_SUCC(ret) && stmt::T_SELECT != stmt_type_) {
       my_session_.partition_hit().try_set_bool(
           OB_PHY_PLAN_REMOTE != phy_plan->get_plan_type());
@@ -425,21 +424,20 @@ OB_INLINE int ObResultSet::inner_get_next_row(const common::ObNewRow *&row)
 
   return ret;
 }
-
-// 触发本错误的条件： A、B两个SQL，同时修改了某几行数据（修改内容有交集）。
-// 微观上，修改操作要先读出符合条件的行，然后再更新。在读的时候，会记录一个版本号，
-// 更新的时候，会检查版本号是否有变化。如果有变化，则说明在读之后、写之前，数据被其它
-// 更新操作修改了。这个时候如果强行更新，则会违反一致性。举个例子：
-// tbl里包含一行数据 0，希望通过A、B两个并发的操作让它变成2：
+// Trigger this error condition: A, B two SQLs, simultaneously modified some rows of data (modification content has an intersection).
+// Microscopically, the modification operation needs to read out the rows that meet the conditions first, and then update them. When reading, a version number will be recorded,
+// Update will check if the version number has changed. If it has changed, it indicates that the data was modified by others after reading but before writing.
+// Update operation modified. At this point, if a forced update is performed, it will violate consistency. For example:
+// tbl contains one row of data 0, hoping to make it 2 through two concurrent operations A and B:
 // A: update tbl set a = a + 1;
 // B: update tbl set a = a + 1;
-// 如果在A读a之后、更新a之前，B完成了整个更新操作，则B的更新会丢失，最终结果为a=1
+// If B completes the entire update operation after A reads a but before A updates a, then B's update will be lost, and the final result will be a=1
 //
-// 解决方案：在更新数据之前检查版本号，发现版本号不一致，则抛出OB_TRANSACTION_SET_VIOLATION
-// 错误，由SQL层在这里重试，保证读写版本号一致。
+// Solution: Check the version number before updating the data, if the version number is inconsistent, then throw OB_TRANSACTION_SET_VIOLATION
+// Error, retried by SQL layer here to ensure consistent read and write version numbers.
 //
-// Note: 由于本重试不涉及到刷新Schema或更新Location Cache，所以无需做整个语句级重试，
-// 执行级别的重试即可。
+// Note: Since this retry does not involve refreshing Schema or updating Location Cache, so there is no need for a full statement-level retry,
+// Execute level retries are sufficient.
 bool ObResultSet::transaction_set_violation_and_retry(int &err, int64_t &retry_times)
 {
   bool bret = false;
@@ -452,13 +450,13 @@ bool ObResultSet::transaction_set_violation_and_retry(int &err, int64_t &retry_t
        || OB_TRANSACTION_SET_VIOLATION == err)
       && retry_times < TRANSACTION_SET_VIOLATION_MAX_RETRY
       && !is_batched_stmt) {
-    //batched stmt本身是一种优化，其中cursor状态在快速重路径中无法维护，不走快速重试路径
+    // batched stmt itself is an optimization, where cursor state cannot be maintained in the fast retry path, does not take the fast retry path
     ObTxIsolationLevel isolation = my_session_.get_tx_isolation();
     bool is_isolation_RR_or_SE = (isolation == ObTxIsolationLevel::RR
                                   || isolation == ObTxIsolationLevel::SERIAL);
     // bug#6361189  pass err to force rollback stmt in do_close_plan()
     if (OB_TRANSACTION_SET_VIOLATION == err && 0 == retry_times && !is_isolation_RR_or_SE) {
-      // TSC错误重试时，只在第一次打印WARN日志
+      // TSC error retry, only print WARN log on the first attempt
       LOG_WARN_RET(err, "transaction set consistency violation, will retry");
     }
     int ret = do_close_plan(err, get_exec_context());
@@ -467,8 +465,8 @@ bool ObResultSet::transaction_set_violation_and_retry(int &err, int64_t &retry_t
       plan_ctx->reset_for_quick_retry();
     }
     if (OB_SUCCESS != ret) {
-      // 注意：如果do_close失败，会影响到TSC冲突重试，导致本该重试却实际没有重试的问题
-      // 这里如果出现bug，则需要看每个涉及到的Operator的close实现
+      // Note: If do_close fails, it will affect TSC conflict retry, leading to a situation where a retry should occur but actually does not.
+      // Here if a bug occurs, then you need to check the close implementation of each involved Operator
       LOG_WARN("failed to close plan", K(err), K(ret));
     } else {
       // OB_SNAPSHOT_DISCARDED should not retry now, see:
@@ -536,10 +534,10 @@ OB_INLINE int ObResultSet::do_open_plan(ObExecContext &ctx)
         LOG_WARN("fail to start direct insert", KR(ret));
       }
     }
-    /* 将exec_result_设置到executor的运行时环境中，用于返回数据 */
-    /* 执行plan,
-     * 无论是本地、远程、还是分布式plan，除RootJob外，其余都会在execute_plan函数返回之前执行完毕
-     * exec_result_负责执行最后一个Job: RootJob
+    /* Set exec_result_ to the executor's runtime environment for returning data */
+    /* execute plan,
+     * whether it is a local, remote, or distributed plan, all except RootJob will be completed before the execute_plan function returns
+     * exec_result_ is responsible for executing the last Job: RootJob
      **/
     if OB_FAIL(ret) {
     } else if (OB_FAIL(executor_.init(physical_plan_))) {
@@ -622,7 +620,7 @@ OB_INLINE void ObResultSet::store_affected_rows(ObPhysicalPlanCtx &plan_ctx)
 OB_INLINE void ObResultSet::store_found_rows(ObPhysicalPlanCtx &plan_ctx)
 {
   int64_t rows = 1;
-  //如果是execute语句的话，则需要判断对应prepare语句的类型，如果是select的话，则会影响found_rows的值；
+  // If it is an execute statement, then you need to determine the type of the corresponding prepare statement, if it is a select, then it will affect the value of found_rows;
   //to do by rongxuan.lc 20151127
   if (plan_ctx.is_affect_found_row()) {
     if (OB_UNLIKELY(stmt::T_EXPLAIN == get_stmt_type())) {
@@ -672,8 +670,8 @@ int ObResultSet::update_is_result_accurate()
       SQL_LOG(DEBUG, "debug is_result_accurate for session", K(is_result_accurate),
               K(old_is_result_accurate), K(ret));
       if (is_result_accurate != old_is_result_accurate) {
-        // FIXME @qianfu 暂时写成update_sys_variable函数，以后再实现一个可以传入ObSysVarClassType并且
-        // 和set系统变量语句走同一套逻辑的函数，在这里调用
+        // FIXME @qianfu temporarily written as update_sys_variable function, to be implemented with an additional one that can accept ObSysVarClassType and
+        // and set system variable statement follow the same logic function, call here
         if (OB_FAIL(my_session_.update_sys_variable(SYS_VAR_IS_RESULT_ACCURATE, is_result_accurate ? 1 : 0))) {
           LOG_WARN("fail to update result accurate", K(ret));
         }
@@ -705,8 +703,8 @@ int ObResultSet::store_last_insert_id(ObExecContext &ctx)
       if (plan_ctx->get_last_insert_id_changed()) {
         ObObj last_insert_id;
         last_insert_id.set_uint64(last_insert_id_session);
-        // FIXME @qianfu 暂时写成update_sys_variable函数，以后再实现一个可以传入ObSysVarClassType并且
-        // 和set系统变量语句走同一套逻辑的函数，在这里调用
+        // FIXME @qianfu temporarily written as update_sys_variable function, to be implemented with an ability to pass ObSysVarClassType and
+        // and set system variable statement follow the same logic function, call here
         if (OB_FAIL(my_session_.update_sys_variable(SYS_VAR_LAST_INSERT_ID, last_insert_id))) {
           LOG_WARN("fail to update last_insert_id", K(ret));
         } else if (OB_FAIL(my_session_.update_sys_variable(SYS_VAR_IDENTITY, last_insert_id))) {
@@ -729,9 +727,9 @@ int ObResultSet::store_last_insert_id(ObExecContext &ctx)
 bool ObResultSet::need_rollback(int ret, int errcode, bool is_error_ignored) const
 {
   bool bret = false;
-  if (OB_SUCCESS != ret //当前close执行语句出错
-      || (errcode != OB_SUCCESS && errcode != OB_ITER_END)  //errcode是open阶段特意保存下来的错误
-      || is_error_ignored) {  //曾经出错，但是被忽略了；
+  if (OB_SUCCESS != ret // Current close execution statement error
+      || (errcode != OB_SUCCESS && errcode != OB_ITER_END)  // errcode is the error deliberately saved during the open phase
+      || is_error_ignored) {  // An error occurred, but it was ignored;
     bret = true;
   }
   return bret;
@@ -767,14 +765,13 @@ OB_INLINE int ObResultSet::do_close_plan(int errcode, ObExecContext &ctx)
   NG_TRACE(close_plan_begin);
   ObPhysicalPlan* physical_plan_ = static_cast<ObPhysicalPlan*>(cache_obj_guard_.get_cache_obj());
   if (OB_LIKELY(NULL != physical_plan_)) {
-
-    // executor_.close要在exec_result_.close之后，因为主线程get_next_row的时候会占着锁，
-    // exec_result_.close会释放锁，而executor_.close需要拿写锁来删掉该scheduler。
-    // FIXME qianfu.zpf 这里本来应该要调度线程结束才调用exec_result_.close的。调度线程给主线程push完最后一个
-    // task结果之后主线程就会往下走，有可能在调度线程结束之前主线程就调用了exec_result_.close，
-    // 但是由于目前调度线程给主线程push完最后一个task结果之后, 调度线程不会用到exec_result_.close中释放的变量，
-    // 因此目前这样写暂时是没有问题的。
-    // 以后要修正这里的逻辑。
+    // executor_.close should be after exec_result_.close, because the main thread get_next_row will hold the lock,
+    // exec_result_.close will release the lock, while executor_.close needs to acquire a write lock to delete this scheduler.
+    // FIXME qianfu.zpf Here the exec_result_.close should be called only after the scheduling thread ends. The scheduling thread pushes the last one to the main thread
+    // After task result, the main thread will continue, it's possible that the main thread calls exec_result_.close before the scheduling thread ends,
+    // But since the scheduler thread does not use the variables released by exec_result_.close after pushing the last task result to the main thread,
+    // Therefore, writing it this way for now is not a problem.
+    // The logic here needs to be corrected later.
 
     int old_errcode = ctx.get_errcode();
     if (OB_SUCCESS == old_errcode) {
@@ -789,13 +786,13 @@ OB_INLINE int ObResultSet::do_close_plan(int errcode, ObExecContext &ctx)
     }
     // whether `close` is successful or not, restore ctx.errcode_
     ctx.set_errcode(old_errcode);
-    // 通知该plan的所有task删掉对应的中间结果
+    // Notify all tasks of this plan to delete the corresponding intermediate results
     int close_ret = OB_SUCCESS;
     ObPhysicalPlanCtx *plan_ctx = NULL;
     if (OB_ISNULL(plan_ctx = get_exec_context().get_physical_plan_ctx())) {
       close_ret = OB_ERR_UNEXPECTED;
       LOG_WARN("physical plan ctx is null");
-    } else if (OB_SUCCESS != (close_ret = executor_.close(ctx))) { // executor_.close里面会等到调度线程结束才返回。
+    } else if (OB_SUCCESS != (close_ret = executor_.close(ctx))) { // executor_.close will wait for the scheduling thread to finish before returning.
       SQL_LOG(WARN, "fail to close executor", K(ret), K(close_ret));
     }
 
@@ -813,11 +810,11 @@ OB_INLINE int ObResultSet::do_close_plan(int errcode, ObExecContext &ctx)
         LOG_WARN("fail to finish direct insert", KR(tmp_ret));
       }
     }
-//    // 必须要在executor_.execute_plan运行之后再调用exec_result_的一系列函数。
+//    // Must be called after executor_.execute_plan runs to call a series of functions on exec_result_.
 //    if (OB_FAIL(exec_result_.close(ctx))) {
 //      SQL_LOG(WARN, "fail close main query", K(ret));
 //    }
-    // 无论如何都reset_op_ctx
+    // Regardless of how, reset_op_ctx
     bool err_ignored = false;
     if (OB_ISNULL(plan_ctx)) {
       ret = OB_ERR_UNEXPECTED;
@@ -847,8 +844,7 @@ OB_INLINE int ObResultSet::do_close_plan(int errcode, ObExecContext &ctx)
   } else {
     ret = OB_ERR_UNEXPECTED;
   }
-
-  // 无论如何都reset掉executor_，否则前面调executor_.init的时候可能会报init twice
+  // Regardless of how, reset executor_, otherwise it may report init twice when executor_.init is called previously
   executor_.reset();
 
   NG_TRACE(close_plan_end);
@@ -871,7 +867,7 @@ int ObResultSet::do_close(int *client_ret)
     } else {
       my_session_.set_last_plan_id(physical_plan_->get_plan_id());
     }
-    // 无论如何必须执行do_close_plan
+    // Regardless of how, do_close_plan must be executed
     if (OB_UNLIKELY(OB_SUCCESS != (do_close_plan_ret = do_close_plan(errcode_,
                                                                      get_exec_context())))) {
       SQL_LOG(WARN, "fail close main query", K(ret), K(do_close_plan_ret));
@@ -884,10 +880,9 @@ int ObResultSet::do_close(int *client_ret)
   } else {
     // inner sql executor, no plan or cmd. do nothing.
   }
-
-  // open, get_next_row无论是否成功，close总是要调用
-  // 下面的逻辑保证对外吐出的是首次出现的错误码。 by xiaochu.yh
-  // 保存close之前的错误码，用来判断本次stmt是否需要回滚； by rongxuan.lc
+  // open, get_next_row regardless of success, close must always be called
+  // The following logic ensures that the error code output externally is the first one that appears. by xiaochu.yh
+  // Save the error code before close, used to determine if this stmt needs to be rolled back; by rongxuan.lc
   if (OB_SUCCESS != errcode_ && OB_ITER_END != errcode_) {
     ret = errcode_;
   }
@@ -936,7 +931,7 @@ int ObResultSet::do_close(int *client_ret)
   if (OB_TRANS_XA_BRANCH_FAIL == ret) {
     if (my_session_.associated_xa()) {
       // ignore ret
-      //兼容oracle，这里需要重置session状态
+      // Compatible with oracle, here we need to reset session state
       LOG_WARN("branch fail in global transaction", KPC(my_session_.get_tx_desc()));
       ObSqlTransControl::clear_xa_branch(my_session_.get_xid(), my_session_.get_tx_desc());
       my_session_.reset_tx_variable();
@@ -986,12 +981,11 @@ int ObResultSet::do_close(int *client_ret)
   DAS_CTX(get_exec_context()).get_location_router().save_cur_exec_status(ret);
   //NG_TRACE_EXT(result_set_close, OB_ID(ret), ret, OB_ID(arg1), prev_ret,
                //OB_ID(arg2), ins_ret, OB_ID(arg3), errcode_, OB_ID(async), async);
-  return ret;  // 后面所有的操作都通过callback来完成
+  return ret;  // All subsequent operations are completed through callback
 }
-
-// 异步调用end_trans
-// 1. 仅仅针对AC=1的phy plan，不针对cmd (除了还没实现的commit/rollback)
-// 2. TODO:对于commit/rollback这个cmd，后面也需要走这个路径。现在还是走同步Callback。
+// Asynchronous call end_trans
+// 1. Only for phy plan with AC=1, not for cmd (except unimplemented commit/rollback)
+// 2. TODO: For commit/rollback this cmd, behind also needs to go through this path. Now it still goes through synchronous Callback.
 OB_INLINE int ObResultSet::auto_end_plan_trans(ObPhysicalPlan& plan,
                                                int ret,
                                                bool is_tx_active,
@@ -1053,9 +1047,9 @@ OB_INLINE int ObResultSet::auto_end_plan_trans(ObPhysicalPlan& plan,
       }
       if (lock_conflict_skip_end_trans) {
       } else if (OB_LIKELY(false == is_end_trans_async()) || OB_LIKELY(false == is_user_sql_)) {
-        // 对于UPDATE等异步提交的语句，如果需要重试，那么中途的rollback也走同步接口
-        // 如果没有设置end_trans_cb，就走同步接口。这个主要是为了InnerSQL提供的。
-        // 因为InnerSQL没有走Obmp_query接口，而是直接操作ResultSet
+        // For UPDATE and other asynchronously submitted statements, if retries are needed, then the rollback in between also goes through the synchronous interface
+        // If end_trans_cb is not set, use the synchronous interface. This is mainly provided for InnerSQL.
+        // Because InnerSQL did not go through the Obmp_query interface, but directly operated on ResultSet
         int save_ret = ret;
         if (OB_FAIL(ObSqlTransControl::implicit_end_trans(get_exec_context(),
                                                           is_rollback,
@@ -1108,7 +1102,7 @@ int ObResultSet::from_plan(const ObPhysicalPlan &phy_plan, const ObIArray<ObPCPa
              K(ret), K(plan_ctx));
   } else if (phy_plan.contain_paramed_column_field()
              && OB_FAIL(copy_field_columns(phy_plan))) {
-    // 因为会修改ObField中的cname_，所以这里深拷计划中的field_columns_
+    // Because it will modify cname_ in ObField, so here we deep copy field_columns_ in the plan
     LOG_WARN("failed to copy field columns", K(ret));
   } else if (phy_plan.contain_paramed_column_field()
              && OB_FAIL(construct_field_name(raw_params, false, *session_info))) {
@@ -1177,7 +1171,7 @@ int ObResultSet::get_read_consistency(ObConsistencyLevel &consistency)
     LOG_WARN("physical_plan", K_(physical_plan), K(exec_ctx_->get_sql_ctx()), K(ret));
   } else {
     const ObPhyPlanHint &phy_hint = physical_plan_->get_phy_plan_hint();
-    if (stmt::T_SELECT == stmt_type_) { // select才有weak
+    if (stmt::T_SELECT == stmt_type_) { // select has weak
       if (exec_ctx_->get_sql_ctx()->is_protocol_weak_read_) {
         consistency = WEAK;
       } else if (OB_UNLIKELY(phy_hint.read_consistency_ != INVALID_CONSISTENCY)) {
@@ -1218,8 +1212,7 @@ int ObResultSet::init_cmd_exec_context(ObExecContext &exec_ctx)
   }
   return ret;
 }
-
-// obmp_query中重试整个SQL之前，可能需要调用本接口来刷新Location，以避免总是发给了错误的服务器
+// obmp_query before retrying the entire SQL, it may be necessary to call this interface to refresh Location, to avoid always sending to the wrong server
 void ObResultSet::refresh_location_cache_by_errno(bool is_nonblock, int err)
 {
   DAS_CTX(get_exec_context()).get_location_router().refresh_location_cache_by_errno(is_nonblock, err);
@@ -1229,15 +1222,14 @@ void ObResultSet::force_refresh_location_cache(bool is_nonblock, int err)
 {
   DAS_CTX(get_exec_context()).get_location_router().force_refresh_location_cache(is_nonblock, err);
 }
-
-// 告诉mysql是否要传入一个EndTransCallback
+// Tell mysql whether to pass an EndTransCallback
 bool ObResultSet::need_end_trans_callback() const
 {
   int ret = OB_SUCCESS;
   bool need = false;
   ObPhysicalPlan* physical_plan_ = static_cast<ObPhysicalPlan*>(cache_obj_guard_.get_cache_obj());
   if (stmt::T_SELECT == get_stmt_type()) {
-    // 对于select语句，总不走callback，无论事务状态如何
+    // For the select statement, the callback is never taken, regardless of the transaction status
     need = false;
   } else if (is_returning_) {
     need = false;
@@ -1355,8 +1347,8 @@ int ObResultSet::ExternalRetrieveInfo::build(
       OZ (ObSQLUtils::reconstruct_sql(allocator_, &stmt, stmt.get_query_ctx()->get_sql_stmt(),
                                       schema_guard, session_info.create_obj_print_params()));
       /*
-       * stmt里的？是按照表达式resolve的顺序编号的，这个顺序在prepare阶段需要依赖的
-       * 但是route_sql里的？需要按照入参在符号表里的下标进行编号，这个编号是proxy做路由的时候依赖的，所以这里要改掉stmt里QUESTIONMARK的值
+       * The ? in stmt is numbered according to the order of expression resolution, which this order depends on during the prepare phase
+       * However, the ? in route_sql needs to be numbered according to the index of the parameters in the symbol table, this numbering is relied upon by proxy when doing routing, so we need to change the value of QUESTIONMARK in stmt
        */
       int64_t cnt = 0;
       for (int64_t i = param_info.count() - 1; OB_SUCC(ret) && i >= 0; i--) {
@@ -1382,7 +1374,7 @@ int ObResultSet::ExternalRetrieveInfo::build(
             LOG_WARN("apply error", K(const_expr->get_value()), K(param_info.at(i).element<1>()->get_value()), K(ret));
           }
         } else {
-          //如果不是PL的local变量，需要把QUESTIONMARK的值改为无效值，以免使proxy混淆
+          // If it is not a local variable of PL, the value of QUESTIONMARK needs to be changed to an invalid value to prevent the proxy from being confused
           param_info.at(i).element<1>()->get_value().set_unknown(OB_INVALID_INDEX);
           param_info.at(i).element<1>()->set_expr_obj_meta(
                               param_info.at(i).element<1>()->get_value().get_meta());
@@ -1402,8 +1394,8 @@ int ObResultSet::ExternalRetrieveInfo::build(
 
 int ObResultSet::drive_dml_query()
 {
-  // DML使用PX执行框架，在非returning情况下，需要主动
-  // 调用get_next_row才能驱动整个框架的执行
+  // DML uses PX execution framework, in non-returning cases, it needs to be done proactively
+  // Call get_next_row to drive the entire framework execution
   int ret = OB_SUCCESS;
   if (get_physical_plan()->is_returning()
       || (get_physical_plan()->is_local_or_remote_plan() && !get_physical_plan()->need_drive_dml_query_)) {
@@ -1420,16 +1412,16 @@ int ObResultSet::drive_dml_query()
     }
   } else if (get_physical_plan()->is_use_px() &&
              !get_physical_plan()->is_use_pdml()) {
-    // DML + PX情况下，需要调用get_next_row 来驱动PX框架
+    // DML + PX situation, need to call get_next_row to drive the PX framework
     stmt::StmtType type = get_physical_plan()->get_stmt_type();
     if (type == stmt::T_INSERT ||
         type == stmt::T_DELETE ||
         type == stmt::T_UPDATE ||
         type == stmt::T_REPLACE) {
       const ObNewRow *row = nullptr;
-      // 非returning类型的PX+DML的驱动需要主动调用 get_next_row
+      // Non-returning type PX+DML driver needs to proactively call get_next_row
       if (OB_LIKELY(OB_ITER_END == (ret = inner_get_next_row(row)))) {
-        // 外层调用已经处理了对应的affected rows
+        // Outer call has already processed the corresponding affected rows
         ret = OB_SUCCESS;
       } else {
         LOG_WARN("do dml query failed", K(ret));
@@ -1437,9 +1429,9 @@ int ObResultSet::drive_dml_query()
     }
   } else if (get_physical_plan()->is_use_pdml()) {
     const ObNewRow *row = nullptr;
-    // pdml+非returning情况下，需要调用get_next_row来驱动PX框架
+    // pdml+non-returning situation, need to call get_next_row to drive the PX framework
     if (OB_LIKELY(OB_ITER_END == (ret = inner_get_next_row(row)))) {
-      // 外层调用已经处理了对应的affected rows
+      // Outer call has already processed the corresponding affected rows
       ret = OB_SUCCESS;
     } else {
       LOG_WARN("do pdml query failed", K(ret));
@@ -1497,9 +1489,9 @@ int ObResultSet::construct_display_field_name(common::ObField &field,
 {
   int ret = OB_SUCCESS;
   char *buf = nullptr;
-  // mysql模式下，select '\t\t\t\t aaa'会去掉头部的转义字符以及空格，最后的长度不能大于MAX_COLUMN_CHAR_LENGTH
-  // 所以这里多给一些buffer来处理这种情况
-  // 如果转义字符多了还是会有问题
+  // mysql mode, select '\t\t\t\t aaa' will remove the leading escape characters and spaces, the final length cannot be greater than MAX_COLUMN_CHAR_LENGTH
+  // So here we give some extra buffer to handle this situation
+  // If there are too many escape characters, there will still be a problem
   int32_t buf_len = MAX_COLUMN_CHAR_LENGTH * 2;
   int32_t pos = 0;
   int32_t name_pos = 0;
@@ -1508,8 +1500,8 @@ int ObResultSet::construct_display_field_name(common::ObField &field,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(field.is_paramed_select_item_), K(field.paramed_ctx_));
   } else if (0 == field.paramed_ctx_->paramed_cname_.length()) {
-    // 1. 参数化的cname长度为0，说明指定了列名
-    // 2. 指定了别名，别名存在cname_里，直接使用即可
+    // 1. Parameterized cname length is 0, indicating that column names are specified
+    // 2. Specified an alias, the alias exists in cname_, use it directly
     // do nothing
   } else if (OB_FAIL(my_session_.check_feature_enable(ObCompatFeatureType::PROJECT_NULL,
                                                       enable_modify_null_name))) {
@@ -1544,25 +1536,25 @@ int ObResultSet::construct_display_field_name(common::ObField &field,
         const char *copy_str = NULL;
 
         // 1.
-        // 如果有词法分析得到常量节点有is_copy_raw_text_标记，则是有前缀的常量，比如
-        // select date'2012-12-12' from dual, column显示为date'2012-12-12',
-        // 词法分析得到的常量节点的raw_text为date'2012-12-12'，
-        // 所以直接拷贝raw_text，在oracle模式下需要还需要去空格以及转换大小写
+        // If there is a constant node obtained from lexical analysis with the is_copy_raw_text_ flag, then it is a constant with a prefix, for example
+        // select date'2012-12-12' from dual, column displays as date'2012-12-12',
+        // The raw_text of the constant node obtained from lexical analysis is date'2012-12-12',
+        // So directly copy raw_text, in oracle mode it also needs to remove spaces and convert case
         // 2.
-        // 如果esc_str_flag_被标记，那么投影列是是常量字符串，其内部字符串需要转义，
-        // 常量节点的str_value是转义好的字符串，直接使用即可，
-        // 但是在mysql模式下，字符串开头的某些转义字符不会显示，ObResultSet::make_final_field_name会处理
-        // oracle模式下，需要在加上单引号
-        // 比如MySQL模式：select '\'hello' from dual,列名显示'hello
-        //                select '\thello' from dual,列名显示hello (去掉了左边的转义字符)
-        // Oracle模式：select 'hello' from dual, 列名显示 'hello', (带引号)
-        //             select '''hello' from dual, 列名显示 ''hello'
+        // If esc_str_flag_ is marked, then the projection column is a constant string, its internal string needs to be escaped,
+        // The str_value of constant nodes is an escaped string, ready to use,
+        // But in mysql mode, some escape characters at the beginning of the string will not be displayed, ObResultSet::make_final_field_name will handle
+        // oracle mode, need to add single quotes
+        // For example MySQL mode: select '\'hello' from dual, column name displays 'hello'
+        //                select '\thello' from dual, column name displays hello (removed the leading escape character)
+        // Oracle mode: select 'hello' from dual, column name displays 'hello', (with quotes)
+        //             select '''hello' from dual, column name displays ''hello''
         // 3.
-        // mysql模式下, 有以下对于以下sql：
+        // mysql mode, the following for the following sql:
         // select 'a' 'abc' from dual
-        // 行为是a作为column name，’abc‘作为值，但是参数化后的sql为select ? from dual
-        // 在词法节点两个字符串被concat，整体作为一个varchar节点，但是该节点有一个T_CONCAT_STRING子节点，节点的str_val保存的是column name
-        // 所以这种情况下，直接去T_CONCAT_STRING的str_val作为列名
+        // Behavior is a as column name, 'abc' as value, but parameterized sql is select ? from dual
+        // In lexical node two strings are concat, as a whole it is treated as a varchar node, but this node has a T_CONCAT_STRING sub-node, the node's str_val saves the column name
+        // So in this case, directly use the str_val of T_CONCAT_STRING as the column name
         if (1 == raw_params.at(idx)->node_->is_copy_raw_text_) {
           copy_str_len = raw_params.at(idx)->node_->text_len_;
           copy_str = raw_params.at(idx)->node_->raw_text_;
@@ -1609,7 +1601,7 @@ int ObResultSet::construct_display_field_name(common::ObField &field,
 
     if (OB_FAIL(ret)) {
       // do nothing
-    } else if (name_pos < PARAM_CTX->paramed_cname_.length()) { // 如果最后一个常量后面还有字符串
+    } else if (name_pos < PARAM_CTX->paramed_cname_.length()) { // If there is a string after the last constant
       int32_t len = std::min((int32_t)PARAM_CTX->paramed_cname_.length() - name_pos, buf_len - pos);
       if (len > 0) {
         MEMCPY(buf + pos, PARAM_CTX->paramed_cname_.ptr() + name_pos, len);

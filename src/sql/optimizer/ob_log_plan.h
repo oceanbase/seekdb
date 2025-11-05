@@ -94,8 +94,8 @@ struct TableDependInfo {
     K_(depend_table_set),
     K_(table_idx)
   );
-  ObRelIds depend_table_set_;  //function table expr所依赖的表
-  int64_t table_idx_; //function table的bit index
+  ObRelIds depend_table_set_;  // function table expr dependent tables
+  int64_t table_idx_; // function table bit index
 };
 
 #undef KYES_DEF
@@ -1247,7 +1247,7 @@ public:
 
   EqualSets &get_equal_sets() { return equal_sets_; }
   const EqualSets &get_equal_sets() const { return equal_sets_; }
-  // 获取log plan中所有在执行期需要使用到的表达式
+  // Get all expressions in log plan that need to be used during execution
   int set_all_exprs(const ObAllocExprContext &ctx);
 
   EqualSets* create_equal_sets();
@@ -1323,7 +1323,7 @@ public:
   int generate_ins_replace_exprs_pair(ObLogDelUpd *op);
   int generate_old_column_exprs(ObIArray<IndexDMLInfo*> &index_dml_infos);
   /**
-   * 递归处理expr里的SubQuery，遇到SubLink就生成一个SubPlan
+   * Recursively process SubQuery in expr, generate a SubPlan when encountering a SubLink
    * @param expr
    * @return
    */
@@ -1708,7 +1708,7 @@ protected:
                                      uint32_t curr_level,
                                      ObIDPAbortType &abort_type);
   /**
-   * SubPlanInfo相关接口
+   * SubPlanInfo related interfaces
    * @return
    */
   inline common::ObIArray<SubPlanInfo*> &get_subplans()
@@ -1745,14 +1745,14 @@ protected:
   }
 
   /**
-   * 处理scalar_in，转成or形式
+   * Process scalar_in, convert to or form
    * @param expr
    * @return
    */
   int process_scalar_in(ObRawExpr *&expr);
 
   /**
-   * 根据表的id找到基表（其实这里不一定是基表，而是fromitem里的基本对象，可以是用户写的OJ，也可能是个SubQueryScan）
+   * Find the base table based on the table's id (actually, it may not be a base table here, but a basic object in fromitem, which could be a user-written OJ or a SubQueryScan)
    * @param base_level
    * @param table_id
    * @return
@@ -1760,7 +1760,7 @@ protected:
   int find_base_rel(common::ObIArray<ObJoinOrder *> &base_level, int64_t table_idx, ObJoinOrder *&base_rel);
 
   /**
-   * 根据relids找到一个joinrel
+   * Find a joinrel according to relids
    * @param join_level
    * @param relids
    * @return
@@ -1776,8 +1776,7 @@ protected:
                       bool &match_hint,
                       bool &is_legal,
                       bool &is_strict_order);
-
-  // 用于计算 px 场景下 select、update 等语句需要的线程数
+  // Used to calculate the number of threads required for select, update, etc., statements in px scenario
   int calc_plan_resource();
 
   int get_cache_calc_part_id_expr(int64_t table_id, int64_t ref_table_id,
@@ -1880,12 +1879,12 @@ protected: // member variable
   ObRawExpr* stat_partition_id_expr_;
   ObLogTableScan* stat_table_scan_;
   // used for gather statistics end
-  //上层stmt条件下推下来的谓词，已经抽出？
+  // predicates pushed down from upper layer stmt, already extracted?
   common::ObSEArray<ObRawExpr *, 4, common::ModulePageAllocator, true> pushdown_filters_;
   common::ObSEArray<ObRawExpr*, 16, common::ModulePageAllocator, true> startup_filters_;
 
 private: // member variable
-  //如果这个plan是一个子查询，并且出现在expr的位置上，这个指针指向引用这个plan的的表达式
+  // If this plan is a subquery and appears in the expr position, this pointer points to the expression that references this plan
   ObQueryRefRawExpr *query_ref_;
   ObLogicalOperator *root_;                    // root operator
   common::ObString sql_text_;                     // SQL string
@@ -1971,12 +1970,12 @@ private:
   const ObFdItemSet empty_fd_item_set_;
   // save the maxinum of the logical operator id
   uint64_t max_op_id_;
-  bool is_subplan_scan_;  // 当前plan是否是一个subplan scan
+  bool is_subplan_scan_;  // Is the current plan a subplan scan
   bool is_parent_set_distinct_;
   bool is_rescan_subplan_;    // generate subquery subplan for subplan filter or inner subquery path
   bool disable_child_batch_rescan_;  // before version 4_2_5, semi/anti join and subplan filter child op can not use batch rescan
   ObSqlTempTableInfo *temp_table_info_; // current plan is a temp table
-  // 从where condition中抽出的常量表达式
+  // Extracted constant expressions from where condition
   common::ObSEArray<ObRawExpr*, 4, common::ModulePageAllocator, true> const_exprs_;
   common::ObSEArray<ObShardingInfo*, 8, common::ModulePageAllocator, true> hash_dist_info_;
   //
@@ -2051,7 +2050,7 @@ private:
   // exchange out distr
   // condition: single is true / parallel = 1 / has limit / has order by and partition by
   //
-  // 为select into分配了range shuffle后, 在分配select into算子时不应再分配exchange算子
+  // After range shuffle is allocated for select into, the exchange operator should not be allocated again when allocating the select into operator
   bool has_allocated_range_shuffle_;
   DISALLOW_COPY_AND_ASSIGN(ObLogPlan);
 };

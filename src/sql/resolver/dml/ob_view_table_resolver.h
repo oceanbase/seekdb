@@ -89,10 +89,10 @@ protected:
   virtual const ObString get_view_name() const override { return view_name_; }
 
 protected:
-  //在视图的namespace解析当中，所有子查询都必须由ObViewTableResolver来解析
-  //current_view_item用来记录当前namespace是由哪个视图(用户创建的视图,不包含generated table)展开的
+  // In the namespace resolution of the view, all subqueries must be resolved by ObViewTableResolver
+  // current_view_item is used to record which view (user-created view, excluding generated table) the current namespace is expanded from
   TableItem current_view_item;
-  //parent_view_resolver用来记录当前namespace所处的视图是由哪个视图展开的
+  // parent_view_resolver is used to record which view expanded the current namespace's view
   ObViewTableResolver *parent_view_resolver_;
   //ObViewTableResolver was called by create view stmt
   bool is_create_view_;

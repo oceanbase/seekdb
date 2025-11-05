@@ -34,7 +34,7 @@ ObTableScanWithIndexBackSpec::~ObTableScanWithIndexBackSpec()
 int ObTableScanWithIndexBackOp::inner_open()
 {
   int ret = OB_SUCCESS;
-  //index scan需要依赖table的一些参数,所以应该先prepare table scan param，再open index scan
+  // index scan needs to rely on some parameters of the table, so table scan param should be prepared first, then open index scan
   ObOperatorKit *op_kit = nullptr;
   if (OB_ISNULL(op_kit = ctx_.get_operator_kit(MY_SPEC.get_index_scan_tree_id()))
               || OB_ISNULL(op_kit->op_)) {
@@ -72,7 +72,7 @@ int ObTableScanWithIndexBackOp::inner_rescan()
   } else {
     is_index_end_ = false;
     if (OB_ISNULL(result_)) {
-      //第一次rescan，没有初始化table iterator
+      // First rescan, table iterator not initialized
       if (OB_FAIL(do_table_scan_with_index())) {
         if (OB_TRY_LOCK_ROW_CONFLICT != ret) {
           LOG_WARN("do table scan with index failed", K(ret));
@@ -230,7 +230,7 @@ int ObTableScanWithIndexBackOp::inner_get_next_row()
         if (OB_ITER_END != ret) {
           LOG_WARN("fail to get next row from ObNewRowIterator", K(ret));
         } else {
-          //读到了迭代器末端，从storage重新读新的数据
+          // Reached the end of the iterator, read new data from storage
           read_action_ = READ_TABLE_PARTITION;
           ret = OB_SUCCESS;
         }
@@ -242,7 +242,7 @@ int ObTableScanWithIndexBackOp::inner_get_next_row()
       break;
     }
     case READ_ITER_END: {
-      //读到了数据的末端，对调用者返回OB_ITER_END
+      // Reached the end of the data, return OB_ITER_END to the caller
       ret = OB_ITER_END;
       need_continue = false;
       break;

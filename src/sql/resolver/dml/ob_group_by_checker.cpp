@@ -20,12 +20,11 @@ namespace oceanbase
 using namespace common;
 namespace sql
 {
-
-//oracle模式下, 某些分析函数的参数要求是partition by的表达式如ntile(c1) (partition by c2)需要报错
+//oracle mode, some analytic function parameters require partition by expression such as ntile(c1) (partition by c2) need to report an error
 int ObGroupByChecker::check_analytic_function(const ParamStore *param_store,
                                               ObSelectStmt *ref_stmt,
-                                              common::ObIArray<ObRawExpr *> &exp1_arr, //等价于查询项中表达式
-                                              common::ObIArray<ObRawExpr *> &exp2_arr) //等价于group by项
+                                              common::ObIArray<ObRawExpr *> &exp1_arr, // equivalent to expressions in the query items
+                                              common::ObIArray<ObRawExpr *> &exp2_arr) // equivalent to group by items
 {
   int ret = OB_SUCCESS;
   return ret;
@@ -141,11 +140,11 @@ int ObGroupByChecker::check_group_by(const ParamStore *param_store,
 int ObGroupByChecker::add_pc_const_param_info(ObExprEqualCheckContext &check_ctx)
 {
   int ret = OB_SUCCESS;
-  // 如果是oracle模式，group by表达式的常量会被参数化
+  // If it is oracle mode, group by expression constants will be parameterized
   // select a + 1 from t group by a + 1 => select a + ? from t group by a + ?
-  // 原先是为了抽取一种约束，两个问号对应的常量必须都是1，用于后续计划匹配
-  // 但现在改为了抽取两个问号相等的约束
-  // 注意：在这里没有办法拿到obj，只能拿到问号在param store中的index
+  // Originally it was to extract a constraint, the constants corresponding to the two question marks must both be 1, used for subsequent plan matching
+  // But now it has been changed to extract the constraint of two question marks being equal
+  // Note: Here there is no way to get obj, only the index of the question mark in param store can be obtained
   ObPCConstParamInfo const_param_info;
   if (OB_ISNULL(query_ctx_)) {
     ret = OB_INVALID_ARGUMENT;
@@ -249,14 +248,14 @@ bool ObGroupByChecker::find_in_group_by(ObRawExpr &expr)
   }
   if (OB_FAIL(ret)) {
   } else if (found && OB_SUCCESS == check_ctx.err_code_) {
-    // 这里抽取了两种约束：
+    // Here extracted two constraints:
     // 1. select a+1 from t1 group by a+1 --> select a+? from t1 group by a+?
-    //    抽取一种等值约束，使得只要是两个问号值相同就可以匹配，比如：
+    //    Extract one equivalence constraint, such that as long as two question mark values are the same, they can match, for example:
     //    select a+3 from t1 group by a+3
     // 2. select a+1 from t1 group by a+1 order by a+1 -->
     //                            select a+? from t1 group by a+? order by a+1
-    //    抽取一种检查参数=常量的约束，因为order by不能参数化(order by 1代表第一列)
-    //    所以需要使得两个问号和order by 后的常量相同就可以匹配。
+    //    Extract a constraint where the check parameter=constant, because order by cannot be parameterized (order by 1 represents the first column)
+    //    So need to make the two question marks and the constant after order by the same to match.
     if (OB_FAIL(append(query_ctx_->all_equal_param_constraints_,
                        check_ctx.equal_param_info_))) {
       LOG_WARN("failed to append equal params constraints", K(ret));
@@ -300,8 +299,7 @@ int ObGroupByChecker::belongs_to_check_stmt(ObRawExpr &expr, bool &belongs_to)
   }
   return ret;
 }
-
-// 判断列column是否属于当前的select stmt
+// Determine if column belongs to the current select stmt
 // eg: select a.c1+1 from t1 a group by c1;  -- a.c1 belongs to "from a group by c1"
 //  But
 //     select (select a.c1 from t1 b where c1=10 group by b.c1) c1 from t1 a group by a.c1;
@@ -394,7 +392,7 @@ int ObGroupByChecker::check_select_stmt(const ObSelectStmt *ref_stmt)
   } else {
     ObStmtExprGetter visitor;
     if (is_top_select_stmt() || only_need_contraints_) {
-      // 当前select stmt,则仅仅check having, select item, order
+      // Current select stmt, then just check having, select item, order
       // eg:
       // select c1,c2,(select d2 from t2 where t1.c1=t2.d1) as c3 from t1 group by c1,c2;
       //  level_=0, the stmt is from "select c1,c2,(select d2 from t2 where t1.c1=t2.d1) as c3 from t1 group by c1,c2"
@@ -404,7 +402,7 @@ int ObGroupByChecker::check_select_stmt(const ObSelectStmt *ref_stmt)
       visitor.add_scope(SCOPE_SELECT);
       visitor.add_scope(SCOPE_ORDERBY);
     } else {
-      // 如果是subquery，则需要check所有expression
+      // If it is a subquery, then need to check all expressions
       // following is not allow, keep the old logic
       // select (select d2 from t2 where max(t1.c1)=t2.d1) as c3 from t1 group by c1,c2;
     }
@@ -427,8 +425,7 @@ int ObGroupByChecker::check_select_stmt(const ObSelectStmt *ref_stmt)
         LOG_WARN("fail to check group by", K(i), K(ret));
       }
     }
-  
-    //处理结束，则退出
+    // Processing ends, then exit
     int tmp_ret = OB_SUCCESS;
     const ObSelectStmt *pop_stmt = NULL;
     tmp_ret = cur_stmts_.pop_back(pop_stmt);
@@ -471,8 +468,8 @@ int ObGroupByChecker::visit(ObQueryRefRawExpr &expr)
 }
 
 // check column ref
-// 检查仅当表达式level与group by exprs的level一致才进行check，即属于同一层的expr
-// 但对于子查询出现的列，仅仅检查与自己level一致的表达式
+// Check only when the level of expression level matches the level of group by exprs, i.e., expressions belong to the same level
+// But for columns appearing in subqueries, only check expressions at the same level
 // eg: select case when 1 in(select d1 from t1 where c1=d2) then 1 else 0 end as c1 from t2 group by c1;
 //   only check c1, but d1 and d2 are not checked
 int ObGroupByChecker::visit(ObColumnRefRawExpr &expr)
@@ -549,8 +546,8 @@ int ObGroupByChecker::visit(ObMatchFunRawExpr &expr)
 // following case is blocked
 // select max(data) from test group by id order by max(max(data))
 // select max(data) from test group by id order by max(max(data)),max(data)
-// having orderby select的顺序检查
-// having一定在内层，order by如果包含max max就在外层，否则在内层，select在外层
+// having orderby selectoforder check
+// having must be inside, order by if it contains max max should be outside, otherwise inside, select should be outside
 int ObGroupByChecker::visit(ObAggFunRawExpr &expr)
 {
   int ret = OB_SUCCESS;

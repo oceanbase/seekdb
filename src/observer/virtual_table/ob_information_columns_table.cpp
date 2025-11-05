@@ -76,11 +76,11 @@ int ObInfoSchemaColumnsTable::inner_get_next_row(common::ObNewRow *&row)
   } else {
     if (!start_to_read_) {
       void *tmp_ptr = NULL;
-      // 如果无db filter(is_filter_db_: false)，
-      // check_database_table_filter里面最多一次循环: start_key=MIN,MIN, end_key=MAX,MAX
+      // If there is no db filter (is_filter_db_: false),
+      // inside check_database_table_filter, the maximum number of loops is: start_key=MIN,MIN, end_key=MAX,MAX
       if (!is_filter_db_ && OB_FAIL(check_database_table_filter())) {
         SERVER_LOG(WARN, "fail to check database and table filter", K(ret));
-      // 当指定了db_name后，无需直接遍历租户所有的database_schema_array
+      // When db_name is specified, there is no need to directly iterate over the tenant's entire database_schema_array
       } else if (!is_filter_db_ && OB_FAIL(schema_guard_->get_database_schemas_in_tenant(
           tenant_id_, database_schema_array_))) {
         SERVER_LOG(WARN, "fail to get database schemas in tenant", K(ret),
@@ -99,12 +99,11 @@ int ObInfoSchemaColumnsTable::inner_get_next_row(common::ObNewRow *&row)
         column_type_str_len_ = OB_MAX_SYS_PARAM_NAME_LENGTH;
         view_resolve_alloc_.set_tenant_id(tenant_id_);
       }
-
       //
-      // 分两部分进行遍历:
+      // Traverse in two parts:
       // database_schema_array + table_schema_array
       //
-      // 1. 扫描database_schema_array
+      // 1. Scan database_schema_array
       int64_t i = 0;
       if (last_schema_idx_ != -1) {
         i = last_schema_idx_;
@@ -125,10 +124,8 @@ int ObInfoSchemaColumnsTable::inner_get_next_row(common::ObNewRow *&row)
             SERVER_LOG(WARN, "fail to iterate all table schema. ", K(ret));
         }
       } // end for database_schema_array_ loop
-
-
-      // 2. 扫描table_schema_array
-      // 扫描完database_schema_array，继续扫描filter_table_schema_array
+      // 2. scan table_schema_array
+      // Scan complete for database_schema_array, continue scanning filter_table_schema_array
       if (OB_SUCC(ret) && database_schema_array_.count() == i) {
         is_filter_table_schema = true;
         if (OB_FAIL(iterate_table_schema_array(is_filter_table_schema, -1))) {
@@ -169,7 +166,7 @@ int ObInfoSchemaColumnsTable::iterate_table_schema_array(const bool is_filter_ta
   const ObDatabaseSchema *database_schema = NULL;
   ObArray<const ObTableSchema *> table_schema_array;
   int64_t table_schema_array_size = 0;
-  // 处理table_schema_array分页
+  // Handle table_schema_array pagination
   int64_t i = 0;
   if (!is_filter_table_schema && OB_UNLIKELY(last_db_schema_idx < 0)) {
     ret = OB_ERR_UNEXPECTED;
@@ -213,7 +210,7 @@ int ObInfoSchemaColumnsTable::iterate_table_schema_array(const bool is_filter_ta
       SERVER_LOG(WARN, "table_schema should not be NULL", K(ret));
     } else {
       bool is_normal_view = table_schema->is_view_table()&& !table_schema->is_materialized_view() && (table_schema->get_table_state_flag() == ObTableStateFlag::TABLE_STATE_NORMAL || table_schema->get_table_state_flag() == ObTableStateFlag::TABLE_STATE_OFFLINE_DDL);
-      //  不显示索引表
+      //  Do not display index table
       if (table_schema->is_aux_table()
          || table_schema->is_tmp_table()
          || table_schema->is_in_recyclebin()
@@ -305,7 +302,7 @@ int ObInfoSchemaColumnsTable::iterate_column_schema_array(
 {
   int ret = OB_SUCCESS;
   uint64_t ordinal_position = 0;
-  // 记录column的逻辑顺序
+  // Record the logical order of column
   uint64_t logical_index = 0;
   if (last_column_idx_ != -1) {
     logical_index = last_column_idx_;
@@ -321,7 +318,7 @@ int ObInfoSchemaColumnsTable::iterate_column_schema_array(
       ret = OB_ERR_UNEXPECTED;
       SERVER_LOG(WARN, "column_schema is NULL", K(ret));
     } else {
-      // 不显示隐藏pk
+      // Do not display hidden pk
       if (column_schema->is_hidden()) {
         continue;
       }
@@ -363,15 +360,14 @@ int ObInfoSchemaColumnsTable::iterate_column_schema_array(
   }
   return ret;
 }
-
-// 过滤策略:
-// 如果key_ranges_抽出来db_name
-//   直接遍历当前的database_schema_array,
-//   则不再从schema guard中获取租户的所有database_schema_array;
-//   不管是否为有效的db_name, is_filter_db_均置为true
-// 如果抽出来table_name
-//   直接遍历当前的table_schema_array，
-//   则不再从database_schema中获取所有的table schema
+// Filter strategy:
+// If key_ranges_ is extracted to db_name
+//   directly traverse the current database_schema_array,
+//   then no longer obtain the tenant's entire database_schema_array from the schema guard;
+//   Regardless of whether db_name is valid, is_filter_db_ is set to true
+// if extracted table_name
+//   directly traverse the current table_schema_array,
+//   then no longer retrieve all table schemas from database_schema
 int ObInfoSchemaColumnsTable::check_database_table_filter()
 {
   int ret = OB_SUCCESS;
@@ -393,9 +389,9 @@ int ObInfoSchemaColumnsTable::check_database_table_filter()
     } else if (start_key_obj_ptr[0].is_varchar_or_char()
                && end_key_obj_ptr[0].is_varchar_or_char()
                && start_key_obj_ptr[0] == end_key_obj_ptr[0]) {
-      // 表示至少指定了db_name
-      // 包含过滤条件为db_name + table_name
-      // 则无需获取租户下所有的database_schema
+      // Indicates that at least db_name is specified
+      // Include filter condition as db_name + table_name
+      // then there is no need to obtain all database_schemas under the tenant
       ObString database_name = CS_TYPE_BINARY == start_key_obj_ptr[0].get_collation_type()
                                                  ? start_key_obj_ptr[0].get_varchar()
                                                    : start_key_obj_ptr[0].get_varchar().trim_end_space_only();
@@ -408,7 +404,7 @@ int ObInfoSchemaColumnsTable::check_database_table_filter()
       } else if (start_key_obj_ptr[1].is_varchar_or_char()
            && end_key_obj_ptr[1].is_varchar_or_char()
            && start_key_obj_ptr[1] == end_key_obj_ptr[1]) {
-        // 指定db_name，同时指定了tbl_name
+        // Specify db_name, simultaneously specifying tbl_name
         const ObTableSchema *filter_table_schema = NULL;
         ObString table_name = CS_TYPE_BINARY == start_key_obj_ptr[1].get_collation_type()
                                                 ? start_key_obj_ptr[1].get_varchar()
@@ -424,7 +420,7 @@ int ObInfoSchemaColumnsTable::check_database_table_filter()
         } else if (OB_FAIL(filter_table_schema_array_.push_back(filter_table_schema))) {
           SERVER_LOG(WARN, "push_back failed", K(filter_table_schema->get_table_name()));
         }
-      // 此时只指定了db_name，直接将该db push_back进入filter_database_schema_array
+      // At this point, only db_name is specified, directly push_back this db into filter_database_schema_array
       } else if (OB_FAIL(add_var_to_array_no_dup(database_schema_array_, filter_database_schema))) {
         SERVER_LOG(WARN, "push_back failed", K(filter_database_schema->get_database_name()));
       }
@@ -827,7 +823,7 @@ int ObInfoSchemaColumnsTable::fill_row_cells(const ObString &database_name,
         case EXTRA: {
             //TODO
             ObString extra = ObString::make_string("");
-            // auto_increment 和 on update current_timestamp 不会同时出现在同一列上
+            // auto_increment and on update current_timestamp will not appear on the same column at the same time
             if (column_schema->is_autoincrement()) {
               extra = ObString::make_string("auto_increment");
             } else if (column_schema->is_on_update_current_timestamp()) {

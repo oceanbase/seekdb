@@ -231,7 +231,7 @@ private:
   const share::schema::ObTableSchema *table_schema_;
   const share::schema::ObTableSchema *index_schema_;
 
-  IndexNameSet current_index_name_set_; //用于未指定索引名情况下，分配索引名时进行查重
+  IndexNameSet current_index_name_set_; // used for duplicate checking when allocating index names in cases where the index name is not specified
   int64_t add_or_modify_check_cst_times_;
   int64_t modify_constraint_times_;
   bool add_not_null_constraint_;

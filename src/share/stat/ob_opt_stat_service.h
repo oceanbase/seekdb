@@ -74,8 +74,8 @@ public:
 
 private:
   /**
-    * 接口load_and_put_cache(key, handle)的实现，外部不应该直接调用这个函数
-    * new_entry是在栈上分配的空间，用于临时存放统计信息
+    * Implementation of the interface load_and_put_cache(key, handle), this function should not be called directly by external code
+    * new_entry is space allocated on the stack, used for temporarily storing statistics
     */
   int load_column_stat_and_put_cache(const uint64_t tenant_id,
                                      ObIArray<const ObOptColumnStat::Key*> &keys,

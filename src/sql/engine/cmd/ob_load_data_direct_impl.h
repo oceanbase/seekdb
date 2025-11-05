@@ -41,11 +41,11 @@ class ObTableLoadBackupTable;
 namespace sql
 {
 /**
- * LOAD DATA接入direct load路径
+ * LOAD DATA access direct load path
  *
- * - 输入行必须包含表的所有列数据, 除了堆表的隐藏主键列
- * - 不支持SET子句
- * - 不支持表达式
+ * - Input lines must contain data for all columns of the table, except for the hidden primary key column of heap tables
+ * - SET clause is not supported
+ * - Expressions are not supported
  */
 class ObLoadDataDirectImpl : public ObLoadDataBase
 {
@@ -243,8 +243,8 @@ private:
   private:
     ObArenaAllocator allocator_;
     LoadExecuteContext *execute_ctx_;
-    ObCSVGeneralParser csv_parser_; // 用来计算完整行
-    ObLoadFileDataTrimer data_trimer_; // 缓存不完整行的数据
+    ObCSVGeneralParser csv_parser_; // used to calculate complete rows
+    ObLoadFileDataTrimer data_trimer_; // cache incomplete line data
     ObFileReader *file_reader_;
     int64_t end_offset_; // use -1 in stream file such as load data local
     bool read_raw_;
@@ -269,7 +269,7 @@ private:
     ObCSVGeneralParser csv_parser_;
     DataBuffer escape_buffer_;
     DataBuffer *data_buffer_;
-    // 以下参数是为了打错误日志
+    // The following parameters are for logging errors
     common::ObString file_name_;
     int64_t start_line_no_;
     int64_t pos_;
@@ -334,7 +334,7 @@ private:
     int64_t worker_idx_; // parse thread idx
     int32_t session_id_; // table load session id
     DataDesc data_desc_;
-    int64_t start_line_no_; // 从1开始
+    int64_t start_line_no_; // Start from 1
     table::ObTableLoadSequenceNo sequence_no_;
     TaskResult result_;
     TO_STRING_KV(K_(task_id), K_(data_buffer), K_(worker_idx), K_(session_id), K_(data_desc),
@@ -386,7 +386,7 @@ private:
     // task ctrl
     ObParallelTaskController task_controller_;
     ObConcurrentFixedCircularArray<TaskHandle *> handle_reserve_queue_;
-    common::ObArray<TaskHandle *> handle_resource_; // 用于释放资源
+    common::ObArray<TaskHandle *> handle_resource_; // used to release resources
     int64_t total_line_count_;
     // trans
     observer::ObTableLoadInstance::TransCtx trans_ctx_;

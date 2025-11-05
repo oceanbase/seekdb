@@ -348,7 +348,7 @@ int ObTransRpc::post_(const ObAddr &server, ObTxMsg &msg)
     case TX_ABORT:
     {
       // Why we shoud set a new mehtod : post_commit_msg ?
-      // Method stack size is overflow（max size = 10KB) because of rpc_proxy deep_copy
+      // Method stack size is overflow (max size = 10KB) because of rpc_proxy deep_copy
       ret = post_commit_msg_(server, msg);
       break;
     }

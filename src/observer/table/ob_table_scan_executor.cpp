@@ -518,7 +518,7 @@ int ObTableApiScanExecutor::check_filter(bool &filter)
     if (OB_FAIL(exprs.at(i)->eval(eval_ctx_, datum))) {
       LOG_WARN("fail to eval filter expr", K(ret), K(*exprs.at(i)));
     } else if (tb_ctx_.is_ttl_table()) {
-      filter = (!datum->is_null() && datum->get_bool()); // ttl场景下，过期表达式不过滤is_null
+      filter = (!datum->is_null() && datum->get_bool()); // ttl scenario, expiration expression does not filter is_null
     } else {
       filter = datum->get_bool();
     }
@@ -585,7 +585,7 @@ int ObTableApiScanExecutor::get_next_row_for_tsc()
 {
   int ret = OB_SUCCESS;
   if (0 == get_table_ctx().get_limit()) {
-    // limit 0，直接返回iter end
+    // limit 0, directly return iter end
     ret = OB_ITER_END;
   } else if (need_do_init_ && OB_FAIL(do_init_before_get_row())) {
     LOG_WARN("fail to do init before get row", K(ret));
@@ -757,12 +757,12 @@ int ObTableApiScanRowIterator::get_next_row(ObNewRow *&row)
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("fail to alloc cells buffer", K(ret), K(cells_cnt));
   } else {
-    // 循环select_exprs,eval获取datum，并将datum转ObObj，最后组成ObNewRow
+    // Loop through select_exprs, eval to get datum, and convert datum to ObObj, finally compose ObNewRow
     tmp_row = new(row_buf)ObNewRow(cells, cells_cnt);
     ObObj tmp_obj;
     ObDatum *datum = nullptr;
     ObEvalCtx &eval_ctx = scan_executor_->get_eval_ctx();
-    if (tb_ctx.is_scan()) { // 转为用户select的顺序
+    if (tb_ctx.is_scan()) { // Convert to the order of user's select
       const ObIArray<uint64_t> &select_col_ids = tb_ctx.get_select_col_ids();
       for (int64_t i = 0; OB_SUCC(ret) && i < query_col_ids.count(); i++) {
         uint64_t col_id = query_col_ids.at(i);

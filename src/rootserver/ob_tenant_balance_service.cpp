@@ -552,7 +552,7 @@ int ObTenantBalanceService::try_finish_current_job_(const share::ObBalanceJob &j
       LOG_WARN("job status not expected", KR(ret), K(job));
     }
     if (OB_SUCC(ret) && job.get_job_type().is_transfer_partition()) {
-    //不管job是以什么状态结束的，校验transfer_partition_task没有这个job_id的任务
+    //Regardless of the status in which the job ends, verify that transfer_partition_task does not have a task with this job_id
       if (OB_FAIL(try_finish_transfer_partition_(job, trans))) {
         LOG_WARN("try finish transfer partition task", KR(ret), K(job));
       }
@@ -576,10 +576,10 @@ int ObTenantBalanceService::try_finish_current_job_(const share::ObBalanceJob &j
   }
   return ret;
 }
-//在balance_job结束时，可能存在transfer partition任务的残留，这里残留有两种情况：
-//1. cancel 时，需要一把把没有处理完成的任务全都回滚掉。
-//2. complete时，可能也会有残留的任务，例如生成了LS_SPLIT + ALTER + MERGE任务
-//用户在split任务执行成功后，就把对应的分区删除掉了，后续的merge任务的part_list中就看不到这个分区了，所以在整个balance_job结束掉后，就会存在transfer_partition任务的残留，这种我们也回滚成WAITING状态，等待下一轮结束掉:
+//At the end of balance_job, there may be residual transfer partition tasks, here the residuals fall into two categories:
+//1. When canceling, all unfinished tasks need to be rolled back one by one.
+//2. When complete, there may still be residual tasks, such as generating LS_SPLIT + ALTER + MERGE tasks
+//The user deleted the corresponding partition after the split task was successfully executed, so this partition will not be seen in the part_list of subsequent merge tasks. Therefore, after the entire balance_job is completed, there will be residual transfer_partition tasks, which we will roll back to the WAITING state, waiting for the next round to complete:
 int ObTenantBalanceService::try_finish_transfer_partition_(
     const share::ObBalanceJob &job, common::ObMySQLTransaction &trans)
 {
@@ -591,7 +591,7 @@ int ObTenantBalanceService::try_finish_transfer_partition_(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("job is invalid", KR(ret), K(job));
   } else if (job.get_job_status().is_canceling()) {
-    //取消所有的关联的transfer partition任务
+    //Cancel all associated transfer partition tasks
     if (OB_FAIL(ObTransferPartitionTaskTableOperator::rollback_all_to_waitting(
             tenant_id_, job.get_job_id(), trans))) {
       LOG_WARN("failed to rollback task", KR(ret), K(tenant_id_), K(job));
@@ -606,7 +606,7 @@ int ObTenantBalanceService::try_finish_transfer_partition_(
       ISTAT("Job is finish, has transfer task doing, rollback such task",
           K(task_array), K(job));
       ObTransferPartList part_list;
-      //通过分析，这部分遗留下来的transfer partition任务一定是doing状态的
+      //By analysis, the remaining transfer partition tasks in this part must be in the doing state.
       for (int64_t i = 0; OB_SUCC(ret) && i < task_array.count(); ++i) {
         const ObTransferPartitionTask &task = task_array.at(i);
         if (OB_UNLIKELY(!task.get_task_status().is_doing())) {
@@ -662,7 +662,7 @@ int ObTenantBalanceService::check_ls_job_need_cancel_(const share::ObBalanceJob 
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("job is invalid", KR(ret), K(job));
   } else if (job.get_job_type().is_transfer_partition()) {
-    //手动transfer partition任务只需要看 enable_transfer 和 没有在升级状态中 即可
+    //Manual transfer partition task only needs to check enable_transfer and not in upgrading status
     if (!ObShareUtil::is_tenant_enable_transfer(tenant_id_)) {
       need_cancel = true;
       if (OB_TMP_FAIL(comment.assign("Canceled due to tenant transfer being disabled or tenant being in upgrade mode"))) {
@@ -766,9 +766,9 @@ int ObTenantBalanceService::persist_job_and_task_in_trans_(const share::ObBalanc
   } else if (OB_FAIL(lock_and_check_balance_job(trans, tenant_id_))) {
     LOG_WARN("lock and check balance job failed", KR(ret), K_(tenant_id));
   } else {
-    //由于ls_array_是在锁外获取，所以可能会存在没有获取到最新状态的问题，在锁内做二次校验
-    //TODO 是否需要检验primary_zone和unit_num，目前看不需要，这些随时都有可能被修改
-    //只能保证最终一致性
+    //Since ls_array_ is obtained outside the lock, there may be a problem of not getting the latest status, so a secondary check is done inside the lock
+    //TODO Whether primary_zone and unit_num need to be verified, currently it seems unnecessary, these can be modified at any time
+    //Can only guarantee eventual consistency
     share::ObLSStatusInfoArray tmp_ls_array;
     if (OB_FAIL(gather_ls_status_stat(tenant_id_, tmp_ls_array))) {
       LOG_WARN("failed to get ls status array", KR(ret), K(tenant_id_));

@@ -166,7 +166,7 @@ int ObTransformPreProcess::transform_one_stmt(common::ObIArray<ObParentDMLStmt> 
         LOG_TRACE("success to transform exprs", K(is_happened));
       }
     }
-    /*transform_for_nested_aggregate、transformer_aggr_expr两个函数强依赖，必须保证两者改写顺序*/
+    /*transform_for_nested_aggregate, transformer_aggr_expr two functions are strongly dependent, must ensure the order of rewriting both*/
     if (OB_SUCC(ret)) {
       if (OB_FAIL(transform_for_nested_aggregate(stmt, is_happened))) {
         LOG_WARN("failed to transform for nested aggregate.", K(ret));
@@ -811,7 +811,7 @@ int ObTransformPreProcess::replace_func_is_serving_tenant(ObDMLStmt *&stmt, bool
       if (OB_ISNULL(cond_exprs.at(i))) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("cond expr is NULL", K(ret), K(i), K(cond_exprs));
-      } else if (OB_FAIL(recursive_replace_func_is_serving_tenant(*stmt, cond_exprs.at(i), is_happended))) { // 此处必须直接传cond_exprs.at(i)，因为可能需要修改它的值
+      } else if (OB_FAIL(recursive_replace_func_is_serving_tenant(*stmt, cond_exprs.at(i), is_happended))) { // Here must directly pass cond_exprs.at(i), because its value may need to be modified
         LOG_WARN("fail to recursive replace functino is_serving_tenant",
                         K(ret), K(i), K(*cond_exprs.at(i)));
       } else if (!is_happended) {
@@ -847,16 +847,16 @@ int ObTransformPreProcess::recursive_replace_func_is_serving_tenant(ObDMLStmt &s
     LOG_WARN("too deep recursive", K(ret), K(is_stack_overflow));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < cond_expr->get_param_count(); ++i) {
-      // 此处必须直接传cond_expr->get_param_expr(i)，因为可能需要修改它的值
+      // Here you must directly pass cond_expr->get_param_expr(i), because its value may need to be modified
       if (OB_FAIL(SMART_CALL(recursive_replace_func_is_serving_tenant(stmt,
                                                                       cond_expr->get_param_expr(i),
                                                                       trans_happened)))) {
         LOG_WARN("fail to recursive replace_func_is_serving_tenant", K(ret));
       }
     }
-    // 如果是函数is_serving_tenant并且tenant_id为常量表达式，则改写为(svr_ip, svr_port) in ((ip1,
-    // port1), (ip2, port2), ...)的形式
-    // 如果当前租户是系统租户，直接返回true
+    // If is_serving_tenant and tenant_id is a constant expression, then rewrite as (svr_ip, svr_port) in ((ip1,
+    // port1), (ip2, port2), ...)  format
+    // If the current tenant is the system tenant, directly return true
     if (OB_SUCC(ret) && T_FUN_IS_SERVING_TENANT == cond_expr->get_expr_type()) {
       int64_t tenant_id_int64 = -1;
       if (OB_UNLIKELY(3 != cond_expr->get_param_count())) {
@@ -917,9 +917,9 @@ int ObTransformPreProcess::recursive_replace_func_is_serving_tenant(ObDMLStmt &s
           } else if (OB_FAIL(ui_getter.get_tenant_servers(tenant_id, servers))) {
             LOG_WARN("fail to get servers of a tenant", K(ret));
           } else if (0 == servers.count()) {
-            // 没找到该tenant_id对应的observer，可能该tenant_id是非法的，为了能通过query
-            // range，将这里改成where false的形式，这样虽然优化器会返回所有partition，但是
-            // ObPhyOperator中会处理好false的条件，不会进行多余的查询
+            // Did not find the observer corresponding to this tenant_id, it may be that the tenant_id is illegal, in order to pass the query
+            // range, will this be changed to where false form, so although the optimizer will return all partitions, but
+            // ObPhyOperator will handle the false condition properly, and will not perform unnecessary queries
             ObConstRawExpr *false_expr = NULL;
             if (OB_FAIL(ctx_->expr_factory_->create_raw_expr(T_VARCHAR, false_expr))) {
               LOG_WARN("create varchar expr failed", K(ret));
@@ -1082,8 +1082,7 @@ int ObTransformPreProcess::transform_special_expr(ObDMLStmt *&stmt, bool &trans_
   }
   return ret;
 }
-
-//递归收集from_item中所有TableItem, 用于后续的查询改写
+// Recursively collect all TableItem from from_item, used for subsequent query rewriting
 int ObTransformPreProcess::collect_all_tableitem(ObDMLStmt *stmt,
                                                  TableItem *table_item,
                                                  common::ObArray<TableItem*> &table_item_list)
@@ -1344,17 +1343,17 @@ int ObTransformPreProcess::transform_for_nested_aggregate(ObDMLStmt *&stmt, bool
     ObSelectStmt *sub_stmt = NULL;
     ObSelectStmt *select_stmt = static_cast<ObSelectStmt *>(stmt);
     /**
-     * 本函数将含有嵌套聚合的stmt改写成两层stmt
+     * This function rewrites stmt with nested aggregation into a two-layer stmt
      * select sum(b), max(sum(b)) from t1 group by b;
-     * 以上sql可以改写成
+     * The above SQL can be rewritten as
      * select sum(v.b), max(v.sum_b)
      * from (
      *      select b, sum(b) as sum_b
      *      from t1
      *      group by b
      *      ) v
-     * 其中generate_child_level_aggr_stmt函数生成视图v
-     * generate_parent_level_aggr_stmt生成外部stmt
+     * where generate_child_level_aggr_stmt function generates view v
+     * generate_parent_level_aggr_stmt generates the outer stmt
      */
     if (!select_stmt->contain_nested_aggr()) {
       /*do nothing.*/
@@ -2545,11 +2544,11 @@ int ObTransformPreProcess::transform_inner_op_row_cmp_for_decimal_int(
   return ret;
 }
 
-/*@brief ObTransformPreProcess::transformer_aggr_expr 用于将一些复杂的聚合函数展开为普通的聚合运算;
+/*@brief ObTransformPreProcess::transformer_aggr_expr is used to expand some complex aggregate functions into ordinary aggregate operations;
 * eg:var_pop(expr) ==> SUM(expr*expr) - SUM(expr)* SUM(expr)/ COUNT(expr)) / COUNT(expr)
-* 其中ObExpandAggregateUtils这个类主要涉及到相关的函数用于展开复杂的聚合函数:
-*   1.ObExpandAggregateUtils::expand_aggr_expr ==> 用于处理普通的aggr函数接口
-*   2.ObExpandAggregateUtils::expand_window_aggr_expr  ==> 用于处理窗口函数中的aggr的函数接口
+* where the ObExpandAggregateUtils class mainly involves related functions for expanding complex aggregate functions:
+*   1.ObExpandAggregateUtils::expand_aggr_expr ==> used to handle the ordinary aggr function interface
+*   2.ObExpandAggregateUtils::expand_window_aggr_expr  ==> used to handle the aggr function interface in window functions
 *
  */
 int ObTransformPreProcess::transformer_aggr_expr(ObDMLStmt *stmt,
@@ -2559,7 +2558,7 @@ int ObTransformPreProcess::transformer_aggr_expr(ObDMLStmt *stmt,
   bool is_expand_aggr = false;
   bool is_expand_window_aggr = false;
   bool is_happened = false;
-  //之前的逻辑保证了两者嵌套聚合及普通函数的改写顺序，传进来的trans_happened包含了是否发生嵌套聚合函数改写的信息
+  // The previous logic ensured the order of nested aggregation and ordinary function rewriting, trans_happened includes information on whether a nested aggregation function rewrite occurred
   bool is_trans_nested_aggr_happened = trans_happened;
   trans_happened = false;
   if (OB_ISNULL(stmt) || OB_ISNULL(ctx_) || OB_ISNULL(ctx_->expr_factory_)) {
@@ -2571,11 +2570,11 @@ int ObTransformPreProcess::transformer_aggr_expr(ObDMLStmt *stmt,
       LOG_WARN("failed to expand aggr expr", K(ret));
     } else if (OB_FAIL(expand_aggr_utils.expand_window_aggr_expr(stmt, is_expand_window_aggr))) {
       LOG_WARN("failed to expand window aggr expr", K(ret));
-    //如果发生了嵌套聚合函数改写：
+    // If nested aggregate function rewriting occurred:
     // select max(avg(c1)) from t1 group by c2;
     // ==>
     // select max(a) from (select avg(c1) as a from t1 group by c2);
-    // 需要改写view里面的聚合函数，同时需要注释的是嵌套聚合函数只有内外两层，不会生成超过2层的结构
+    // Need to rewrite the aggregate functions inside the view, and the comment is that nested aggregate functions only have two layers, will not generate a structure exceeding 2 layers
     } else if (is_trans_nested_aggr_happened) {
       TableItem *table_item = NULL;
       if (OB_UNLIKELY(stmt->get_table_items().count() != 1) ||
@@ -2786,13 +2785,13 @@ int ObTransformPreProcess::transform_for_ins_batch_stmt(ObDMLStmt *batch_stmt,
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("param_idx is invalid", K(ret), K(param_idx), K(param_store));
       } else if (!param_store.at(param_idx).is_batch_parameters()) {
-        // 不是batch 参数, 不需要打标记
+        // Not batch parameter, no need to mark
       } else {
         param_expr->set_is_batch_stmt_parameter();
       }
     }
-    // 给所有的batch参数表达上边打上了标记，需要重新做表达式推导
-    // 这里因为insert values的特殊性，所以只需要推导value_vector中的表达式即可
+    // Marked all batch parameter expressions, need to re-derive the expressions
+    // Here because of the special nature of insert values, so we only need to derive the expressions in value_vector
     for (int64_t i = 0; OB_SUCC(ret) && i < value_vector.count(); ++i) {
       if (OB_FAIL(value_vector.at(i)->formalize(session_info))) {
         LOG_WARN("formalize expr failed", K(ret), K(i), KPC(value_vector.at(i)));
@@ -2918,7 +2917,7 @@ int ObTransformPreProcess::transform_for_batch_stmt(ObDMLStmt *batch_stmt, bool 
   } else if (!exec_ctx->get_sql_ctx()->is_batch_params_execute()) {
     //rewrite only when stmt is batch multi statement
   } else if (!batch_stmt->is_dml_write_stmt()) {
-    // 非dml_stmt暂时不用处理
+    // Non-dml_stmt temporarily not processed
   } else if (stmt_type == stmt::T_UPDATE || stmt_type == stmt::T_DELETE) {
     int64_t child_size = 0;
     if (OB_FAIL(batch_stmt->get_child_stmt_size(child_size))) {
@@ -2933,7 +2932,7 @@ int ObTransformPreProcess::transform_for_batch_stmt(ObDMLStmt *batch_stmt, bool 
       LOG_WARN("fail to transform upd or del batch stmt", K(ret));
     }
   } else if (stmt_type == stmt::T_INSERT || stmt_type == stmt::T_REPLACE) {
-    // insert的改写
+    // rewrite of insert
     int64_t child_size = 0;
     bool can_batch = false;
     ObInsertStmt *insert_stmt = static_cast<ObInsertStmt *>(batch_stmt);

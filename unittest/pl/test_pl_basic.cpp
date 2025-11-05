@@ -96,15 +96,13 @@ public:
 TEST_F(ObPLBasicTest, test_declare)
 {
   int ret = OB_SUCCESS;
-
-  //构造FunctionAST
+  // Construct FunctionAST
   ObPLFunctionAST func_ast(allocator_);
   func_ast.set_name(ObString("test_func"));
   ObDataType res_type;
   res_type.set_obj_type(common::ObNullType);
-  func_ast.set_ret_type(res_type); //无返回值
-
-  //构造Stmt
+  func_ast.set_ret_type(res_type); // no return value
+  //Construct Stmt
   TestPLStmtMockService stmt_service(allocator_);
   ObPLStmtBlock *block = stmt_service.make_block(NULL, NULL, NULL, NULL, NULL, NULL, NULL);
   ObPLDeclareVarStmt *var_stmt = static_cast<ObPLDeclareVarStmt*>(stmt_service.make_stmt(PL_VAR, block));
@@ -118,8 +116,7 @@ TEST_F(ObPLBasicTest, test_declare)
 //  ObPLExternalNS external_ns(NULL);
   block->get_namespace().set_external_ns(NULL/*&external_ns*/);
   func_ast.set_body(block);
-
-  //构造符号表
+  // Construct symbol table
   ObPLDataType var1;
   ObDataType obj_type;
   ObObjMeta obj_meta;
@@ -127,8 +124,7 @@ TEST_F(ObPLBasicTest, test_declare)
   obj_type.set_meta_type(obj_meta);
   var1.set_data_type(obj_type);
   block->get_namespace().add_symbol(ObString("a"), var1);
-
-  //构造执行环境
+  // Construct execution environment
   DEFINE_PL_EXEC_CTX
 
   CG_AND_EXECUTE
@@ -137,7 +133,7 @@ TEST_F(ObPLBasicTest, test_declare)
 TEST_F(ObPLBasicTest, test_assign)
 {
   int ret = OB_SUCCESS;
-  //构造表达式
+  // Construct expression
   ObRawExprFactory expr_factory(allocator_);
   ObRawExpr *expr = NULL;
   ObConstRawExpr *left_const = NULL;
@@ -176,8 +172,7 @@ TEST_F(ObPLBasicTest, test_assign)
   } else if (OB_FAIL(ObRawExprUtils::create_param_expr(expr_factory, 1, return_expr))) { //symbol table idx: 2
     LOG_WARN("failed to create param expr", K(ret));
   } else { /*do nothing*/ }
-
-  //构造Function
+  //Construct Function
   ObPLFunctionAST func_ast(allocator_);
   func_ast.set_name(ObString("test_func"));
   ObDataType res_type;
@@ -190,14 +185,12 @@ TEST_F(ObPLBasicTest, test_assign)
   func_ast.add_expr(return_expr); //expr table idx: 1
   func_ast.add_expr(default_expr); //expr table idx: 2
   func_ast.add_expr(into_expr); //expr table idx: 3
-
-  //构造变量
+  // Construct variables
   ObPLDataType pl_arg1;
   pl_arg1.set_data_type(arg1);
   ObPLDataType var1;
   var1.set_data_type(arg1);
-
-  //构造Stmt
+  //Construct Stmt
   TestPLStmtMockService stmt_service(allocator_);
   ObPLStmtBlock *block = stmt_service.make_block(NULL, NULL, NULL, NULL, NULL, NULL, NULL);
   ObPLDeclareVarStmt *var_stmt = static_cast<ObPLDeclareVarStmt*>(stmt_service.make_stmt(PL_VAR, block));
@@ -216,21 +209,18 @@ TEST_F(ObPLBasicTest, test_assign)
 //  ObPLExternalNS external_ns(NULL);
   block->get_namespace().set_external_ns(NULL/*&external_ns*/);
   func_ast.set_body(block);
-
-
-  //构造符号表
+  // Construct symbol table
   block->get_namespace().add_symbol(ObString("test_func_arg1"), pl_arg1, NULL);
   ObObj value;
-  value.set_int(42); //声明变量默认值
+  value.set_int(42); // declare variable default value
   default_expr->set_value(value);
   block->get_namespace().add_symbol(ObString("a"), var1, default_expr);
-
-  //构造执行环境
+  // Construct execution environment
   DEFINE_PL_EXEC_CTX
   ObObjParam param;
-  param.set_int(22); //输入参数实际值
+  param.set_int(22); // input parameter actual value
   params.push_back(param);
-  param.set_int(42); //声明变量实际值
+  param.set_int(42); // declare the actual value of the variable
   params.push_back(param);
 
   CG_AND_EXECUTE
@@ -239,7 +229,7 @@ TEST_F(ObPLBasicTest, test_assign)
 TEST_F(ObPLBasicTest, test_return)
 {
   int ret = OB_SUCCESS;
-  //构造表达式
+  // Construct expression
   ObRawExprFactory expr_factory(allocator_);
   ObConstRawExpr *return_const = NULL;
   ObRawExpr *return_expr = NULL;
@@ -249,16 +239,14 @@ TEST_F(ObPLBasicTest, test_return)
   } else if (OB_FAIL(ObRawExprUtils::create_param_expr(expr_factory, 0, return_expr))) {
     LOG_WARN("failed to create param expr", K(ret));
   } else { /*do nothing*/ }
-
-  //构造Function
+  //Construct Function
   ObPLFunctionAST func_ast(allocator_);
   func_ast.set_name(ObString("test_func"));
   ObDataType res_type;
   res_type.set_obj_type(common::ObIntType);
   func_ast.set_ret_type(res_type);
   func_ast.add_expr(return_expr); //expr table idx: 0
-
-  //构造Stmt
+  //Construct Stmt
   TestPLStmtMockService stmt_service(allocator_);
   ObPLStmtBlock *block = stmt_service.make_block(NULL, NULL, NULL, NULL, NULL, NULL, NULL);
   ObPLReturnStmt *return_stmt = static_cast<ObPLReturnStmt*>(stmt_service.make_stmt(PL_RETURN, block));
@@ -272,11 +260,10 @@ TEST_F(ObPLBasicTest, test_return)
 //  ObPLExternalNS external_ns(NULL);
   block->get_namespace().set_external_ns(NULL/*&external_ns*/);
   func_ast.set_body(block);
-
-  //构造执行环境
+  // Construct execution environment
   DEFINE_PL_EXEC_CTX
   ObObjParam param;
-  param.set_int(22); //输入参数实际值
+  param.set_int(22); // input parameter actual value
   params.push_back(param);
 
   CG_AND_EXECUTE
@@ -286,7 +273,7 @@ TEST_F(ObPLBasicTest, test_return)
 TEST_F(ObPLBasicTest, test_sql)
 {
   int ret = OB_SUCCESS;
-  //构造表达式
+  // Construct expression
   ObRawExprFactory expr_factory(allocator_);
   ObConstRawExpr *return_const = NULL;
   ObRawExpr *return_expr = NULL;
@@ -301,16 +288,14 @@ TEST_F(ObPLBasicTest, test_sql)
   if (ObRawExprUtils::build_const_int_expr(expr_factory, common::ObIntType, 0, default_expr)) {
     LOG_WARN("failed to build const expr", K(ret));
   }
-
-  //构造Function
+  //Construct Function
   ObPLFunctionAST func_ast(allocator_);
   func_ast.set_name(ObString("test_func"));
   ObDataType res_type;
   res_type.set_obj_type(common::ObIntType);
   func_ast.set_ret_type(res_type);
   func_ast.add_expr(return_expr); //expr table idx: 0
-
-  //构造Stmt
+  //Construct Stmt
   TestPLStmtMockService stmt_service(allocator_);
   ObPLStmtBlock *block = stmt_service.make_block(NULL, NULL, NULL, NULL, NULL, NULL, NULL);
   ObPLDeclareVarStmt *var_stmt = static_cast<ObPLDeclareVarStmt*>(stmt_service.make_stmt(PL_VAR, block));
@@ -329,21 +314,19 @@ TEST_F(ObPLBasicTest, test_sql)
 //  ObPLExternalNS external_ns(NULL);
   block->get_namespace().set_external_ns(NULL/*&external_ns*/);
   func_ast.set_body(block);
-
-  //构造符号表
+  // Construct symbol table
   ObDataType var1;
   var1.set_int();
   ObPLDataType pl_var1;
   pl_var1.set_data_type(var1);
   ObObj value;
-  value.set_int(42); //声明变量默认值
+  value.set_int(42); // declare variable default value
   default_expr->set_value(value);
   block->get_namespace().add_symbol(ObString("a"), pl_var1, default_expr);
-
-  //构造执行环境
+  // Construct execution environment
   DEFINE_PL_EXEC_CTX
   ObObjParam param;
-  param.set_int(42); //声明变量实际值
+  param.set_int(42); // declare the actual value of the variable
   params.push_back(param);
 
   CG_AND_EXECUTE
@@ -353,15 +336,13 @@ TEST_F(ObPLBasicTest, test_sql)
 TEST_F(ObPLBasicTest, test_eh_basic)
 {
   int ret = OB_SUCCESS;
-
-  //构造Function
+  //Construct Function
   ObPLFunctionAST func_ast(allocator_);
   func_ast.set_name(ObString("p"));
   ObDataType res_type;
   res_type.set_obj_type(common::ObNullType);
-  func_ast.set_ret_type(res_type); //无返回值
-
-  //构造Stmt
+  func_ast.set_ret_type(res_type); // no return value
+  //Construct Stmt
   TestPLStmtMockService stmt_service(allocator_);
   ObPLStmtBlock *block = stmt_service.make_block(NULL, NULL, NULL, NULL, NULL, NULL, NULL);
   ObPLDeclareHandlerStmt *cond_stmt = static_cast<ObPLDeclareHandlerStmt*>(stmt_service.make_stmt(PL_HANDLER, block));
@@ -397,8 +378,7 @@ TEST_F(ObPLBasicTest, test_eh_basic)
   ObPLDataType pl_var1;
   pl_var1.set_data_type(var1);
   block->get_namespace().add_symbol(ObString("a"), pl_var1);
-
-  //构造执行环境
+  // Construct execution environment
   DEFINE_PL_EXEC_CTX
 
   CG_AND_EXECUTE
@@ -407,15 +387,13 @@ TEST_F(ObPLBasicTest, test_eh_basic)
 TEST_F(ObPLBasicTest, test_eh_1)
 {
   int ret = OB_SUCCESS;
-
-  //构造Function
+  //Construct Function
   ObPLFunctionAST func_ast(allocator_);
   func_ast.set_name(ObString("test_func"));
   ObDataType res_type;
   res_type.set_obj_type(common::ObNullType);
-  func_ast.set_ret_type(res_type); //无返回值
-
-  //构造Stmt
+  func_ast.set_ret_type(res_type); // no return value
+  //Construct Stmt
   TestPLStmtMockService stmt_service(allocator_);
   ObPLStmtBlock *block = stmt_service.make_block(NULL, NULL, NULL, NULL, NULL, NULL, NULL);
   ObPLDeclareHandlerStmt *cond_stmt = static_cast<ObPLDeclareHandlerStmt*>(stmt_service.make_stmt(PL_HANDLER, block));
@@ -454,8 +432,7 @@ TEST_F(ObPLBasicTest, test_eh_1)
   block->get_namespace().set_symbol_table(&func_ast.get_symbol_table());
   block->get_namespace().set_condition_table(&func_ast.get_condition_table());
   func_ast.set_body(block);
-
-  //构造执行环境
+  // Construct execution environment
   DEFINE_PL_EXEC_CTX
 
   CG_AND_EXECUTE
@@ -464,15 +441,13 @@ TEST_F(ObPLBasicTest, test_eh_1)
 TEST_F(ObPLBasicTest, test_eh_2)
 {
   int ret = OB_SUCCESS;
-
-  //构造Function
+  //Construct Function
   ObPLFunctionAST func_ast(allocator_);
   func_ast.set_name(ObString("test_func"));
   ObDataType res_type;
   res_type.set_obj_type(common::ObNullType);
-  func_ast.set_ret_type(res_type); //无返回值
-
-  //构造Stmt
+  func_ast.set_ret_type(res_type); // no return value
+  //Construct Stmt
   TestPLStmtMockService stmt_service(allocator_);
   ObPLStmtBlock *block = stmt_service.make_block(NULL, NULL, NULL, NULL, NULL, NULL, NULL);
   ObPLDeclareHandlerStmt *cond_stmt = static_cast<ObPLDeclareHandlerStmt*>(stmt_service.make_stmt(PL_HANDLER, block));
@@ -546,8 +521,7 @@ TEST_F(ObPLBasicTest, test_eh_2)
   signal_stmt->set_error_code(987654321);
   signal_stmt->set_sql_state("dangdangdangdang");
   signal_stmt->set_str_len(16);
-
-  //构造执行环境
+  // Construct execution environment
   DEFINE_PL_EXEC_CTX
 
   CG_AND_EXECUTE
@@ -556,15 +530,13 @@ TEST_F(ObPLBasicTest, test_eh_2)
 TEST_F(ObPLBasicTest, test_eh_3)
 {
   int ret = OB_SUCCESS;
-
-  //构造Function
+  //Construct Function
   ObPLFunctionAST func_ast(allocator_);
   func_ast.set_name(ObString("test_func"));
   ObDataType res_type;
   res_type.set_obj_type(common::ObNullType);
-  func_ast.set_ret_type(res_type); //无返回值
-
-  //构造Stmt
+  func_ast.set_ret_type(res_type); // no return value
+  // Construct Stmt
   TestPLStmtMockService stmt_service(allocator_);
   ObPLStmtBlock *block = stmt_service.make_block(NULL, NULL, NULL, NULL, NULL, NULL, NULL);
   ObPLDeclareHandlerStmt *cond_stmt = static_cast<ObPLDeclareHandlerStmt*>(stmt_service.make_stmt(PL_HANDLER, block));
@@ -627,8 +599,7 @@ TEST_F(ObPLBasicTest, test_eh_3)
   signal_stmt->set_error_code(0);
   signal_stmt->set_sql_state("42S02");
   signal_stmt->set_str_len(5);
-
-  //构造执行环境
+  // Construct execution environment
   DEFINE_PL_EXEC_CTX
 
   CG_AND_EXECUTE

@@ -332,7 +332,7 @@ int ObFastParserBase::parser_insert_str(common::ObIAllocator &allocator,
           row_count++;
           bool trimed_succ = false;
           if (first_str_buf == nullptr) {
-            first_str_buf_len = first_str.length() + 1; // copy函数要求的最后边必须有一位填'\0'
+            first_str_buf_len = first_str.length() + 1; // copy function requires that there must be one position at the end filled with '\0'
             if (OB_ISNULL(first_str_buf = static_cast<char*>(allocator.alloc(first_str_buf_len)))) {
               ret = OB_ALLOCATE_MEMORY_FAILED;
               LOG_WARN("fail to alloc memory", K(ret), K(first_str_buf_len));
@@ -471,7 +471,7 @@ int ObFastParserBase::process_insert_or_replace(const char *str, const int64_t s
     if (OB_FAIL(process_hint())) {
       LOG_WARN("failed to process hint", K(ret), K(raw_sql_.to_string()), K_(raw_sql_.cur_pos));
     } else if (found_insert_status_ == NOT_FOUND_INSERT_TOKEN) {
-      // 说明是insert token
+      // Description is insert token
       found_insert_status_ = FOUND_INSERT_TOKEN_ONCE;
     } else if (found_insert_status_ == FOUND_INSERT_TOKEN_ONCE) {
       found_insert_status_ = INVALID_TOKEN_STATUS;
@@ -2481,7 +2481,7 @@ int ObFastParserMysql::process_identifier(bool is_number_begin)
       // check whether is 'values' token
       case 'v':
       case 'V':
-        // 是不是values;
+        // Are these values;
         OZ (process_values("alues"));
         break;
 

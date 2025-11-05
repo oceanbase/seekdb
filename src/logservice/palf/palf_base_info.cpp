@@ -105,7 +105,7 @@ void PalfBaseInfo::reset()
 
 bool PalfBaseInfo::is_valid() const
 {
-  // NB: prev_log_info_、curr_lsn_预期是有效值，其他字段可能无效(全局第一条日志的场景)
+  // NB: prev_log_info_ and curr_lsn_ are expected to be valid values, other fields may be invalid (scenario of the first global log)
   return (prev_log_info_.is_valid() && curr_lsn_.is_valid() && curr_lsn_ >= prev_log_info_.lsn_);
 }
 

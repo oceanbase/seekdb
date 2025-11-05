@@ -81,8 +81,8 @@ int ObExprNot::eval_not(const ObExpr &expr,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret));
   } else {
-    // not 表示的参数被加了一个bool表达式，所以逻辑走到这里
-    // 参数的值一定是一个int（0或者1）
+    // not indicates that the parameter has been added with a bool expression, so the logic reaches here
+    // The value of the parameter must be an int (0 or 1)
     ObDatum *param = NULL;
     if (OB_FAIL(expr.args_[0]->eval(ctx, param))) {
       LOG_WARN("failed to eval", K(ret));

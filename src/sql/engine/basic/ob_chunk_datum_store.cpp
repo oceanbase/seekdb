@@ -740,7 +740,7 @@ bool ObChunkDatumStore::shrink_block(int64_t size)
             K(item->get_buffer()->data_size()), K(item->get_buffer()->mem_size()), K(size));
       }
       dumped_row_cnt_ += item->rows();
-      // 不论成功与否，都需要释放内存
+      // Regardless of success or failure, memory needs to be released
       freed_size += item->get_buffer()->mem_size();
       LOG_DEBUG("RowStore shrink dump and free", K(size), K(freed_size),
           K(item->get_buffer()->mem_size()), K(item));
@@ -795,8 +795,8 @@ int ObChunkDatumStore::alloc_block_buffer(Block *&block, const int64_t data_size
     } else if (!for_iterator) {
       if (size > max_blk_size_) {
         max_blk_size_ = size;
-      }//这里需要同时设置max_blk_size_和min_blk_size
-      //否则当chunk只add一行的时候min_blk_size是个未初始化的值
+      }//Here you need to set both max_blk_size_ and min_blk_size at the same time
+      // Otherwise when chunk only adds one line min_blk_size is an uninitialized value
       if (size < min_blk_size_) {
         min_blk_size_ = size;
       }
@@ -859,8 +859,7 @@ inline int ObChunkDatumStore::dump_one_block(BlockBuffer *item)
 }
 
 // only clean memory data
-
-// 添加一种模式，dump时候只dump已经写满的block,剩下最后一个block
+// Add a mode, dump only the blocks that are full, leaving the last block
 int ObChunkDatumStore::dump(bool reuse, bool all_dump, int64_t dumped_size)
 {
   int ret = OB_SUCCESS;
@@ -1196,13 +1195,12 @@ int ObChunkDatumStore::try_add_batch(const common::ObIArray<ObExpr*> &exprs, ObE
   }
   return ret;
 }
-
-// 该函数用于适配ObSortOpImpl::add_row()这个模板函数
+// This function is used to adapt the ObSortOpImpl::add_row() template function
 
 /*
- * 从ObChunkDatumStore读出数据，然后再写入ObChunkDatumStore时，使用copy_row
- * 从operator的ObExpr的ObDatum中写入到ObChunkDatumStore时，使用add_row
- * 理论上只有这两个接口
+ * Read data from ObChunkDatumStore, and then write to ObChunkDatumStore using copy_row
+ * When writing from operator's ObExpr's ObDatum to ObChunkDatumStore, use add_row
+ * In theory, there are only these two interfaces
  */
 int ObChunkDatumStore::add_row(
   const StoredRow &src_stored_row, StoredRow **stored_row)
@@ -1618,7 +1616,7 @@ int ObChunkDatumStore::append_block(char *buf, int size,  bool need_swizzling)
     BlockBuffer *block_buffer = new_block->get_buffer();
     use_block(new_block);
     if (block_data_size == sizeof(Block)) {
-      // 空block，忽略
+      // empty block, ignore
       free_blk_mem(new_block, block_buffer->mem_size());
     } else if (OB_FAIL(block_buffer->advance(block_data_size - sizeof(Block)))) {
       LOG_WARN("failed to advanced buffer", K(ret));
@@ -1661,7 +1659,7 @@ int ObChunkDatumStore::append_block_payload(char *payload, int size, int rows, b
     BlockBuffer *block_buffer = new_block->get_buffer();
     use_block(new_block);
     if (block_data_size == sizeof(Block)) {
-      // 空block，忽略
+      // empty block, ignore
       free_blk_mem(new_block, block_buffer->mem_size());
     } else if (OB_FAIL(block_buffer->advance(block_data_size - sizeof(Block)))) {
       LOG_WARN("failed to advanced buffer", K(ret));
@@ -1785,7 +1783,7 @@ int ObChunkDatumStore::Iterator::init(ObChunkDatumStore *store,
 
 /*
  * from StoredRow to NewRow
- * 这里暂时没有对datums的有效性做检查，理论上需要传入datums的个数cnt
+ * Here we have not yet checked the validity of the datums, theoretically the number of datums cnt should be passed in
  */
 int ObChunkDatumStore::Iterator::convert_to_row(const StoredRow *sr, common::ObDatum **datums)
 {
@@ -1802,7 +1800,7 @@ int ObChunkDatumStore::Iterator::convert_to_row(const StoredRow *sr, common::ObD
 }
 
 /*
- * 上层operator直接传入需要计算的ObExpr来获取ObDatum
+ * Upper layer operator directly passes in the ObExpr to be calculated to obtain ObDatum
  */
 int ObChunkDatumStore::Iterator::get_next_row(const common::ObIArray<ObExpr*> &exprs,
                                               ObEvalCtx &ctx,
@@ -1823,14 +1821,14 @@ int ObChunkDatumStore::Iterator::get_next_row(const common::ObIArray<ObExpr*> &e
 }
 
 /*
- * 上层operator等，通过绑定ObExpr的ObDatum或者构造ObDatum的数组
- * 当获取到一行时，直接写入datums，这样上层就可以直接拿到数据，对于operator由于已经指向了真是地址
- * 所以相当于写入了数据，不需要额外再做处理
+ * Upper layer operators, etc., by binding ObExpr's ObDatum or constructing an array of ObDatum
+ * When a row is obtained, it is directly written into datums, so the upper layer can directly get the data. For operators, since they already point to the real address,
+ * It is equivalent to writing the data, no additional processing is required.
  */
 
 /*
- * 直接获取这行数据的原始datum，没有添加任何修饰
- * 可以通过convert_to_row将 StoredRow 转化成 Datums 数据
+ * Directly obtain the raw datum of this row, without any modifications
+ * Can be converted to Row by convert_to_row from StoredRow to Datums data
  */
 int ObChunkDatumStore::Iterator::get_next_row(const StoredRow *&sr)
 {

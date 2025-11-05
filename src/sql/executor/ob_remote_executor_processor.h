@@ -89,7 +89,7 @@ protected:
   observer::ObVirtualTableIteratorFactory vt_iter_factory_;
   share::schema::ObSchemaGetterGuard schema_guard_;
   /*
-   * 用于记录事务语句是否执行过，然后判断对应的end语句是否需执行
+   * Used to record whether the transaction statement has been executed, then determine if the corresponding end statement needs to be executed
    */
   TransState trans_state_;
   int exec_errcode_;
@@ -99,7 +99,7 @@ protected:
   bool has_send_result_;
   bool is_execute_remote_plan_; // only execute remote physical_plan not sql_string
 };
-/* 处理远程单partition情况(REMOTE) */
+/* Handle remote single partition case (REMOTE) */
 class ObRpcRemoteExecuteP : public ObRemoteBaseExecuteP<
     obrpc::ObExecutorRpcProxy::ObRpc<obrpc::OB_REMOTE_EXECUTE> >
 {

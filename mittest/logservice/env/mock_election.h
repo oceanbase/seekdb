@@ -26,24 +26,24 @@ public:
   int init(const int64_t id, const common::ObAddr &self);
   void stop() override final;
   int can_set_memberlist(const palf::LogConfigVersion &new_config_version) const override final;
-  // 设置成员列表
+  // Set member list
   int set_memberlist(const MemberList &new_member_list) override final;
-  // 获取选举当前的角色
+  // Get the current role of the election
   int get_role(common::ObRole &role, int64_t &epoch) const override final;
-  // 如果自己是leader，那么拿到的就是准确的leader，如果自己不是leader，那么拿到lease的owner
+  // If you are the leader, then you get the accurate leader; if you are not the leader, then you get the lease owner
   int get_current_leader_likely(common::ObAddr &addr,
                                         int64_t &cur_leader_epoch) const override final;
-  // 供role change service使用
+  // For role change service use
   int change_leader_to(const common::ObAddr &dest_addr) override final;
   int temporarily_downgrade_protocol_priority(const int64_t time_us, const char *reason) override final;
-  // 拿本机地址
+  // Get local address
   const common::ObAddr &get_self_addr() const override final;
-  // 打印日志
+  // print log
   int64_t to_string(char *buf, const int64_t buf_len) const override final;
-  // 设置选举优先级
+  // Set election priority
   int set_priority(ElectionPriority *priority) override final;
   int reset_priority() override final;
-  // 处理消息
+  // Process message
   int handle_message(const ElectionPrepareRequestMsg &msg) override final;
   int handle_message(const ElectionAcceptRequestMsg &msg) override final;
   int handle_message(const ElectionPrepareResponseMsg &msg) override final;

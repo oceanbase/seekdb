@@ -216,8 +216,7 @@ void ObBLService::do_thread_task_(const int64_t begin_tstamp,
   ObSqlString sql;
   ObMySQLProxy *sql_proxy = NULL;
   sqlclient::ObMySQLResult *result = NULL;
-
-  // 查询ls内部表，根据时间戳信息决定是否将ls其加入黑名单
+  // Query the ls internal table, and decide whether to add ls to the blacklist based on timestamp information
   SMART_VAR(ObISQLClient::ReadResult, res) {
     ObASHSetInnerSqlWaitGuard ash_inner_sql_guard(ObInnerSqlWaitTypeId::LOG_GET_BLACK_LIST_LS_INFO);
     if (OB_ISNULL((sql_proxy = GCTX.sql_proxy_))) {
@@ -236,7 +235,7 @@ void ObBLService::do_thread_task_(const int64_t begin_tstamp,
       // do nothing
     }
   }
-  // 如果连续失败多次，黑名单失去了时效性，需要清空黑名单
+  // If multiple consecutive failures occur, the blacklist loses its validity and needs to be cleared
   static int fail_cnt = 0;
   if (OB_SUCCESS != ret) {
     fail_cnt++;
@@ -247,12 +246,12 @@ void ObBLService::do_thread_task_(const int64_t begin_tstamp,
   } else {
     fail_cnt = 0;
   }
-  // 定期清理长久未更新的对象，它们实际上可能已经不存在了
+  // Regularly clean up objects that have not been updated for a long time, as they may actually no longer exist
   if (begin_tstamp > last_clean_up_ts + BLACK_LIST_CLEAN_UP_INTERVAL) {
     do_clean_up_();
     last_clean_up_ts = begin_tstamp;
   }
-  // 定期打印黑名单内容
+  // Regularly print blacklist content
   if (ObTimeUtility::current_time() - last_print_stat_ts > BLACK_LIST_PRINT_INTERVAL) {
     print_stat_();
     last_print_stat_ts = begin_tstamp;
@@ -290,13 +289,13 @@ int ObBLService::do_black_list_check_(sqlclient::ObMySQLResult *result)
       if (gts_scn.get_val_for_gts() > ls_info.weak_read_scn_ + max_stale_time_ns
           || ls_info.tx_blocked_
           || ls_info.migrate_status_ != ObMigrationStatus::OB_MIGRATION_STATUS_NONE) {
-        // scn is out-of-time，add this log stream into blacklist (insert or update)
+        // scn is out-of-time, add this log stream into blacklist (insert or update)
         if (OB_FAIL(ls_bl_mgr_.update(bl_key, ls_info))) {
           TRANS_LOG(WARN, "ls_bl_mgr_ add fail ", KR(ret), K(bl_key), K(ls_info));
         }
         TRANS_LOG(INFO, "ls_bl_mgr_ add finish ", KR(ret), KTIME(gts), KTIME(weak_read_scn), K(max_stale_time), K(bl_key), K(ls_info));
       } else if (gts_scn.get_val_for_gts() + BLACK_LIST_WHITEWASH_INTERVAL_NS < ls_info.weak_read_scn_ + max_stale_time_ns) {
-        // scn is new enough，remove this log stream in the blacklist
+        // scn is new enough, remove this log stream in the blacklist
         need_remove = true;
       } else {
         // only update, don't insert

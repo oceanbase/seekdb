@@ -34,7 +34,7 @@ int ObTableLoadMergeDelLobOp::inner_init()
 {
   int ret = OB_SUCCESS;
   ObTableLoadStoreLobTableCtx *store_table_ctx = store_ctx_->data_store_table_ctx_->lob_table_ctx_;
-  // 重设merge_table_ctx_
+  // Reset merge_table_ctx_
   inner_ctx_.store_table_ctx_ = store_table_ctx;
   inner_ctx_.insert_table_ctx_ = store_table_ctx->insert_table_ctx_;
   if (ObTableLoadMergerPhaseType::INSERT == merge_phase_ctx_->phase_ ||

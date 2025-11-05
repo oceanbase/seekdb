@@ -473,11 +473,11 @@ int PalfHandleImpl::get_role(common::ObRole &role,
     int64_t curr_leader_epoch = -1;
     do {
       is_pending_state = mode_mgr_.is_in_pending_state();
-      // 获取当前的proposal_id
+      // get the current proposal_id
       proposal_id = state_mgr_.get_proposal_id();
-      // 获取当前的leader_epoch
+      // Get the current leader_epoch
       curr_leader_epoch = state_mgr_.get_leader_epoch();
-      // 获取当前的role, state
+      // Get the current role, state
       state_mgr_.get_role_and_state(curr_role, curr_state);
       if (LEADER != curr_role || ACTIVE != curr_state) {
         // not <LEADER, ACTIVE>
@@ -486,14 +486,14 @@ int PalfHandleImpl::get_role(common::ObRole &role,
           is_pending_state = true;
         }
       } else if (false == state_mgr_.check_epoch_is_same_with_election(curr_leader_epoch)) {
-        // PALF当前是<LEADER, ACTIVE>, 但epoch在election层发生了变化,
-        // 说明election已经切主, PALF最终一定会切为<FOLLOWER, PENDING>, 这种情况也当做pending state,
-        // 否则调用者看到PALF是<FOLLOWER, ACTIVE>, 但proposal_id却还是LEADER时的值,
-        // 可能会导致非预期行为, 比如role change service可能会提前执行卸任操作.
+        // PALF is currently <LEADER, ACTIVE>, but the epoch changed at the election layer,
+        // Explanation that election has switched to leader, PALF will eventually switch to <FOLLOWER, PENDING>, this situation is also considered as pending state,
+        // Otherwise the caller sees PALF as <FOLLOWER, ACTIVE>, but proposal_id is still the value from LEADER,
+        // May lead to unexpected behavior, such as the role change service may prematurely execute the relinquishment operation.
         role = common::FOLLOWER;
         is_pending_state = true;
       } else {
-        // 返回LEADER
+        // Return LEADER
         role = common::LEADER;
       }
       // double check proposal_id
@@ -1913,8 +1913,8 @@ int PalfHandleImpl::advance_base_info(const PalfBaseInfo &palf_base_info, const 
     } else if (OB_FAIL(check_need_advance_base_info_(new_base_lsn, prev_log_info, is_rebuild))) {
       PALF_LOG(WARN, "check_need_advance_base_info failed", K(ret), KPC(this), K(palf_base_info), K(is_rebuild));
     } else if (OB_FAIL(sw_.truncate_for_rebuild(palf_base_info))) {
-      // 与receive_log的truncate相比的不同点是，该场景truncate位点预期大于sw左边界
-      // 且小于truncate位点的日志都需要回调并丢弃
+      // The difference from the truncate in receive_log is that the expected truncate point in this scenario is greater than the left boundary of sw
+      // and logs that are less than the truncate point need to be callbacked and discarded
       PALF_LOG(WARN, "sw_ truncate_for_rebuild failed", K(ret), KPC(this), K(palf_base_info));
     } else if (OB_FAIL(log_snapshot_meta.generate(new_base_lsn, prev_log_info, new_base_lsn))) {
         PALF_LOG(WARN, "LogSnapshotMeta generate failed", K(ret), KPC(this), K(palf_base_info));
@@ -3661,9 +3661,9 @@ int PalfHandleImpl::fetch_log_from_storage_(const common::ObAddr &server,
     if (FETCH_LOG_LEADER_RECONFIRM == fetch_type
         || state_mgr_.is_leader_active()
         || state_mgr_.is_leader_reconfirm()) {
-      // leader reconfirm状态也要允许发送unconfirmed log，否则start_working日志可能无法达成多数派
-      // 因为多数派副本日志落后时，receive config_log前向校验会失败
-      // reconfirm状态下unconfirmed log可以安全地发出，因为这部分日志预期不会被truncate
+      // leader reconfirm state also needs to allow sending unconfirmed log, otherwise start_working log may not achieve a majority
+      // Because the majority replica log is behind, the forward validation before receive config_log will fail
+      // In the reconfirm state, unconfirmed logs can be safely sent because this part of the logs is expected not to be truncated
       is_limitted_by_end_lsn = false;
     }
     int64_t unused_mode_version;
@@ -4376,10 +4376,9 @@ int PalfHandleImpl::after_flush_config_change_meta_(const int64_t proposal_id, c
   }
   return ret;
 }
-
-// 1. 更新snapshot_meta串行化, 实现inc update的语义.
-// 2. 应用层先提交truncate任务, 再提交更新meta的任务, 最后开始拉日志.(不再依赖, 上层保证base_lsn不会回退)
-//    NB: TODO by runlin, 在支持多writer后, truncate和和更新meta需要做成'类似'双向barrier的语义
+// 1. Update snapshot_meta serialization, implement inc update semantics.
+// 2. The application layer first submits the truncate task, then submits the update meta task, and finally starts pulling logs. (No longer dependent, the upper layer guarantees that base_lsn will not roll back)
+//    NB: TODO by runlin, after supporting multiple writers, truncate and updating meta need to be made with 'similar' two-way barrier semantics
 int PalfHandleImpl::after_flush_snapshot_meta_(const LSN &lsn)
 {
   return log_engine_.update_base_lsn_used_for_gc(lsn);

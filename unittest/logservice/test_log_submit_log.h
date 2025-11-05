@@ -29,7 +29,7 @@ public:
   {}
   ~MockLogCtx() {}
   virtual int on_success();
-  // 日志未形成多数派时会调用此函数，调用此函数后对象不再使用
+  // The function will be called when the log has not formed a majority, after which the object will no longer be used
   virtual int on_failure();
 private:
   int64_t cb_id_;

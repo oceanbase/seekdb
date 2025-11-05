@@ -139,7 +139,7 @@ struct AutoincParam
   common::ObObjType autoinc_col_type_;
   uint64_t          total_value_count_;
   uint64_t          autoinc_desired_count_;
-  int64_t           autoinc_old_value_index_; //insert on duplicate key中使用
+  int64_t           autoinc_old_value_index_; //used in insert on duplicate key
   // need to refresh param below when ObSQL get plan from pc
   // session variable may be refreshed already
   uint64_t          autoinc_increment_;

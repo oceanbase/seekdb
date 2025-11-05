@@ -33,16 +33,16 @@ namespace observer
 class ObMySQLResultSet;
 enum ObQueryRetryType
 {
-  RETRY_TYPE_NONE, // 不重试
-  RETRY_TYPE_LOCAL, // 在本线程重试
-  RETRY_TYPE_PACKET, // 扔回队列中重试
+  RETRY_TYPE_NONE, // no retry
+  RETRY_TYPE_LOCAL, // Retry in the same thread
+  RETRY_TYPE_PACKET, // retry in the queue
 };
 
 enum RetrySleepType
 {
   RETRY_SLEEP_TYPE_NONE, // no sleep
-  RETRY_SLEEP_TYPE_LINEAR, // 线性重试
-  RETRY_SLEEP_TYPE_INDEX, // 指数重试
+  RETRY_SLEEP_TYPE_LINEAR, // linear retry
+  RETRY_SLEEP_TYPE_INDEX, // exponential retry
 };
 
 struct ObRetryParam
@@ -95,10 +95,10 @@ struct ObRetryParam
   const sql::ObSqlCtx &ctx_;
   sql::ObResultSet &result_; // for refresh location cache
   sql::ObSQLSessionInfo &session_;
-  const int64_t curr_query_tenant_local_schema_version_; // Query开始、Loc刷新前的普通租户shm ver
-  const int64_t curr_query_tenant_global_schema_version_; // Query开始时的普通租户schema version
-  const int64_t curr_query_sys_local_schema_version_; // Query开始、Loc刷新前的系统租户shm ver
-  const int64_t curr_query_sys_global_schema_version_; // Query开始时的系统租户schema version
+  const int64_t curr_query_tenant_local_schema_version_; // Schema version of the normal tenant shm before Query starts and Loc refreshes
+  const int64_t curr_query_tenant_global_schema_version_; // Schema version of the normal tenant at the start of the query
+  const int64_t curr_query_sys_local_schema_version_; // System tenant shm ver before Query starts and Loc refreshes
+  const int64_t curr_query_sys_global_schema_version_; // System tenant schema version at the start of the query
   const int64_t stmt_retry_times_; // statement retry times, including each retry, local or packet
                                    // note: PL block don't have a stmt_retry_times_ attribute
   const int64_t local_retry_times_; // local retry times, reset to zero when packet retry
@@ -123,14 +123,14 @@ protected:
                                 int64_t base_sleep_us,
                                 int64_t timeout_timestamp) const;
 public:
-  // schema类型的错误最多在本线程重试5次。
-  // 5是拍脑袋决定的
+  // The error of schema type will be retried at most 5 times in this thread.
+  // 5 is a gut feeling decision
   static const int64_t MAX_SCHEMA_ERROR_LOCAL_RETRY_TIMES = 5;
   // schema, rpc
-  // 1ms, schema刷新只需要一个RPC来回
+  // 1ms, schema refresh only requires one RPC round trip
   static const uint32_t WAIT_RETRY_SHORT_US = 1 * 1000;
   // leader election
-  // 8ms, 选出新的主耗时是秒级别(宕机14s，主动切换2s)
+  // 8ms, the time to elect a new leader is in seconds level (outage 14s, active switch 2s)
   static const uint32_t WAIT_RETRY_LONG_US = 8 * 1000;
 private:
   static uint32_t linear_timeout_factor(uint64_t times, uint64_t threshold = 100)
@@ -171,9 +171,8 @@ public:
   static int init();
   // must ensure calling destroy after all threads exit
   static void destroy();
-
-  //本接口目前在ObMPQuery和SPI使用，SPI使用的时候必须本地重试直至超时，所以需要传入force_local_retry为true
-  //force_local_retry为true时，不做try_packet_retry
+  //This interface is currently used in ObMPQuery and SPI, when used in SPI, local retry must be performed until timeout, so force_local_retry needs to be set to true
+  //when force_local_retry is true, do not perform try_packet_retry
   void test_and_save_retry_state(const ObGlobalContext &gctx,
                                  const sql::ObSqlCtx &ctx,
                                  sql::ObResultSet &result,
@@ -276,16 +275,16 @@ public:
   static void start_replica_not_readable_retry_wait_event(sql::ObSQLSessionInfo &session);
   static void start_other_retry_wait_event(sql::ObSQLSessionInfo &session, const int error_code);
 public:
-  // schema类型的错误最多在本线程重试5次。
-  // 5是拍脑袋决定的，之后还要看统计数据的反馈再修改。TODO qianfu.zpf
+  // The error of schema type will be retried at most 5 times in this thread.
+  // 5 is a gut feeling decision, and will be modified based on feedback from statistical data. TODO qianfu.zpf
   static const int64_t MAX_SCHEMA_ERROR_LOCAL_RETRY_TIMES = 5;
-  // 副本不可读类型的错误最多在本线程重试1次。
+  // The error of unreadable replica type will be retried at most once in this thread.
   static const int64_t MAX_DATA_NOT_READABLE_ERROR_LOCAL_RETRY_TIMES = 1;
-  // 1ms, schema刷新只需要一个RPC来回
+  // 1ms, schema refresh only requires one RPC round trip
   static const uint32_t WAIT_LOCAL_SCHEMA_REFRESHED_US = 1 * 1000;
-  // 8ms, 选出新的主耗时是秒级别(宕机14s，主动切换2s)
+  // 8ms, time taken to elect a new leader is in seconds level (outage 14s, active switch 2s)
   static const uint32_t WAIT_NEW_MASTER_ELECTED_US = 8 * 1000;
-  // 1ms，重试write dml等待时间
+  // 1ms, retry write dml wait time
   static const uint32_t WAIT_RETRY_WRITE_DML_US = 1 * 1000;
 
 public:
@@ -335,13 +334,13 @@ private:
   // map_ is used to fast lookup the error code retry processor
   typedef common::ObTuple<retry_func, retry_func, sql::ObDASRetryCtrl::retry_func> RetryFuncs;
   static common::hash::ObHashMap<int, RetryFuncs, common::hash::NoPthreadDefendMode> map_;
-  int64_t curr_query_tenant_local_schema_version_; // Query开始、Loc刷新前的普通租户shm ver
-  int64_t curr_query_tenant_global_schema_version_; // Query开始时的普通租户schema version
-  int64_t curr_query_sys_local_schema_version_; // Query开始、Loc刷新前的系统租户shm ver
-  int64_t curr_query_sys_global_schema_version_; // Query开始时的系统租户schema version
+  int64_t curr_query_tenant_local_schema_version_; // Schema version of the normal tenant shm before Query starts and Loc refreshes
+  int64_t curr_query_tenant_global_schema_version_; // Schema version of the normal tenant at the start of the query
+  int64_t curr_query_sys_local_schema_version_; // System tenant shm ver before Query starts and Loc refreshes
+  int64_t curr_query_sys_global_schema_version_; // System tenant schema version at the start of the query
   int64_t retry_times_;
   ObQueryRetryType retry_type_;
-  int retry_err_code_; //记录重试时的错误码(目前用于区分复制表引起重试)
+  int retry_err_code_; // record the error code during retries (currently used to distinguish retries caused by table replication)
   /* disallow copy & assign */
   DISALLOW_COPY_AND_ASSIGN(ObQueryRetryCtrl);
 };

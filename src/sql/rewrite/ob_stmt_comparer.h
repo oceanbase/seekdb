@@ -25,7 +25,7 @@ namespace sql
 // NOTE (link.zt) remember to de-construct the struct
 /**
  * @brief The ObStmtMapInfo struct
- * 记录两个 stmt 中语义相等项的映射关系
+ * Records the mapping relationship of semantically equal items between two stmts
  */
 enum QueryRelation
 {
@@ -58,9 +58,8 @@ struct ObStmtMapInfo {
   bool is_distinct_equal_;
   bool is_qualify_filter_equal_;
   bool left_can_be_replaced_; // used for mv rewrite
-
-  //如果from item是generated table，需要记录ref query的select item map关系
-  //如果是set stmt，每个set query对应的映射关系也记录在view_select_item_map_
+  // If from item is generated table, need to record ref query's select item map relationship
+  // If it is a set stmt, each set query corresponding mapping relationship is also recorded in view_select_item_map_
   ObStmtMapInfo()
     :is_table_equal_(false),
     is_from_equal_(false),
@@ -199,9 +198,8 @@ struct ObStmtCompareContext : ObExprEqualCheckContext
            const ObIArray<ObHiddenColumnItem> *calculable_items);
   
   int get_table_map_idx(uint64_t l_table_id, uint64_t r_table_id);
-
-  // 用于比较两个 expr 是否结构对称
-  // 区别仅在于部分 column 的 table id 不同
+  // Used to compare whether two expr are structurally symmetric
+  // The difference lies only in the table id of some columns
   bool compare_column(const ObColumnRefRawExpr &inner, const ObColumnRefRawExpr &outer) override;
 
   bool compare_const(const ObConstRawExpr &inner, const ObConstRawExpr &outer) override;
@@ -236,11 +234,11 @@ public:
 
    /**
    * @brief compute_overlap_between_stmts
-   * 仅考虑 from, where 部分的重叠
-   * from_map[i]: first stmt 的第 i 个 from item 对应 second stmt 的第 from_map[i] 个 from item
-   *              如果没有对应，那么 from_map[i] = OB_INVALID_ID
-   * cond_map[i]: first stmt 的第 i get condition 对应 second stmt 的第 cond_map[i] 个 condition
-   *              如果没有对应，那么 cond_map[i] = OB_INVALID_ID
+   * only consider the overlap in the from, where parts
+   * from_map[i]: the i-th from item of the first stmt corresponds to the from_map[i]-th from item of the second stmt
+   *              if there is no correspondence, then from_map[i] = OB_INVALID_ID
+   * cond_map[i]: the i-th get condition of the first stmt corresponds to the cond_map[i]-th condition of the second stmt
+   *              if there is no correspondence, then cond_map[i] = OB_INVALID_ID
    * @return
    */
   static int compute_stmt_overlap(const ObDMLStmt *first,
@@ -330,10 +328,10 @@ public:
 
   /**
    * @brief compare_basic_table_item
-   * 如果两张表partition hint分区包含的关系，
-   * 如果两张表不同，则不可比较
-   * 如果两张表相同且没有partition hint，则相等
-   * 如果两张表都是generated_table只比较引用的子查询是否相同
+   * If the partition hint relationships included in the two tables,
+   * if the two tables are different, they cannot be compared
+   * If the two tables are the same and there is no partition hint, they are equal
+   * If both tables are generated_table, only compare whether the referenced subqueries are the same
    */
   static int compare_basic_table_item (const TableItem *first_table,
                                        const TableItem *second_table,
@@ -341,8 +339,8 @@ public:
 
   /**
    * @brief compare_joined_table_item
-   * 比较两个joined table是否同构
-   * 要求每一层的左右table item相同，并且on condition相同
+   * Compare whether two joined tables are isomorphic
+   * Require that the left and right table items at each level are the same, and the on condition is the same
    */
   static int compare_joined_table_item (const ObDMLStmt *first,
                                         const TableItem *first_table,
@@ -354,7 +352,7 @@ public:
 
   /**
    * @brief compare_table_item
-   * 比较两个table item是否同构
+   * Compare two table items whether they are isomorphic
    */
   static int compare_table_item (const ObDMLStmt *first,
                                 const TableItem *first_table,

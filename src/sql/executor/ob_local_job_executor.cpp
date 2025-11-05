@@ -39,7 +39,7 @@ int ObLocalJobExecutor::execute(ObExecContext &query_ctx)
   if (OB_I(t1) (OB_ISNULL(job_) || OB_ISNULL(executor_))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("job_ or executor_ is NULL", K(ret), K(job_), K(executor_));
-  } else if (OB_FAIL(OB_I(t2) get_executable_task(query_ctx, task_info))) { //获得一个task
+  } else if (OB_FAIL(OB_I(t2) get_executable_task(query_ctx, task_info))) { // obtain a task
     LOG_WARN("fail get a executable task.", K(ret));
   } else if (OB_ISNULL(task_info)) {
     ret = OB_ERR_UNEXPECTED;

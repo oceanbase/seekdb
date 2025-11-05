@@ -19,10 +19,10 @@
 
 namespace oceanbase
 {
-// 单元测试中，将每个文件以及每条日志设置的小一些，可以在有限的时间内跑到更多的场景
+// In unit tests, setting each file and each log to be smaller can allow more scenarios to be run within a limited time
 const int64_t default_phy_block_size = 16 * 1024;
 const int64_t default_block_size = default_phy_block_size - palf::MAX_INFO_BLOCK_SIZE; 
-// 每个文件中存在8K/256(32)条日志
+// Each file contains 8K/256(32) log entries
 const int64_t single_log_entry_size = 256;
 const int64_t log_entrys_in_single_block = default_block_size / single_log_entry_size;
 const int64_t max_log_buffer_size = 2 * single_log_entry_size;
@@ -188,7 +188,7 @@ TEST_F(TestLogIteratorStorage, test_memory_storage)
 {
   CLOG_LOG(INFO, "begin test_memory_storage");
   palf::LogIOContext io_ctx(palf::LogIOUser::OTHER);
-  // case1: 测试init destroy接口
+  // case1: test init destroy interface
   {
     CLOG_LOG(INFO, "begin case1");
     ObLogMemoryStorage tmp_mem_storage;
@@ -208,8 +208,7 @@ TEST_F(TestLogIteratorStorage, test_memory_storage)
 
     EXPECT_EQ(false, tmp_mem_storage.is_inited_);
   }
-
-  // case2: 测试append接口
+  // case2: test append interface
   {
     CLOG_LOG(INFO, "begin case2");
     ObLogMemoryStorage tmp_mem_storage;
@@ -221,8 +220,7 @@ TEST_F(TestLogIteratorStorage, test_memory_storage)
     EXPECT_EQ(OB_INVALID_ARGUMENT, tmp_mem_storage.append(LSN(), NULL, 0));
     EXPECT_EQ(OB_INVALID_ARGUMENT, tmp_mem_storage.append(valid_lsn, NULL, 0));
     EXPECT_EQ(OB_INVALID_ARGUMENT, tmp_mem_storage.append(valid_lsn, buf, 0));
-
-    // OB_ERR_UNEXPECTED, lsn和log_tail不连续
+    // OB_ERR_UNEXPECTED, lsn and log_tail are not consecutive
     EXPECT_EQ(OB_ERR_UNEXPECTED, tmp_mem_storage.append(LSN(10), buf, MAX_INFO_BLOCK_SIZE));
 
     // OB_SUCCESS 
@@ -234,8 +232,7 @@ TEST_F(TestLogIteratorStorage, test_memory_storage)
     EXPECT_EQ(tmp_mem_storage.start_lsn_, LSN(10));
     EXPECT_EQ(tmp_mem_storage.log_tail_, LSN(10) + MAX_INFO_BLOCK_SIZE);
   }
-
-  // case3: 验证pread接口
+  // case3: validate pread interface
   {
     CLOG_LOG(INFO, "begin case3");
     ObLogMemoryStorage tmp_mem_storage;
@@ -277,8 +274,7 @@ TEST_F(TestLogIteratorStorage, test_memory_storage)
     EXPECT_EQ(10, out_read_size);
     EXPECT_EQ(0, strncmp(valid_read_buf.buf_, buf, 10));
   }
-
-  // case4: 验证get_data_len get_read_pos reuse接口
+  // case4: validate get_data_len get_read_pos reuse interface
   {
     CLOG_LOG(INFO, "begin case4");
     ObLogMemoryStorage tmp_mem_storage;
@@ -345,7 +341,7 @@ TEST_F(TestLogIteratorStorage, test_shared_storage)
   LSN invalid_start_lsn;
   LSN valid_start_lsn(1);
   palf::LogIOContext io_ctx(palf::LogIOUser::OTHER);
-  // case1: 测试init接口
+  // case1: test init interface
   {
     CLOG_LOG(INFO, "begin case1");
     int64_t suggessted_read_buf_size = MAX_LOG_BUFFER_SIZE;
@@ -373,8 +369,7 @@ TEST_F(TestLogIteratorStorage, test_shared_storage)
     tmp_shared_storage.destroy();
     EXPECT_EQ(false, tmp_shared_storage.is_inited_);
   }
-
-  // case2: 测试pread接口
+  // case2: test pread interface
   {
     const int64_t suggessted_read_buf_size = logservice::ObLogSharedStorage::READ_SIZE;
     LSN start_lsn(default_block_size);
@@ -457,29 +452,27 @@ TEST_F(TestLogIteratorStorage, test_hybrid_storage)
   EXPECT_EQ(OB_SUCCESS, SHARED_LOG_GLOBAL_UTILS.get_storage_dest_and_id_(dest, storage_id));
   EXPECT_EQ(OB_SUCCESS, SHARED_LOG_GLOBAL_UTILS.construct_ls_str_(
     dest, tenant_id, ObLSID(palf_id_local), root_path, sizeof(root_path)));
-  // local storage不依赖GLOBAL_UTILS
+  // local storage does not depend on GLOBAL_UTILS
   EXPECT_EQ(OB_SUCCESS, local_storage.init(tenant_id, palf_id_local, local_start_lsn, local_end_lsn));
-  // 本地存在10-15号文件
+  // Local files 10-15 exist
   EXPECT_EQ(OB_SUCCESS, create_tenant(tenant_id));
   EXPECT_EQ(OB_SUCCESS, create_palf(tenant_id, palf_id_local));
   EXPECT_EQ(OB_SUCCESS, upload_blocks(tenant_id, palf_id_local, local_start_block_id,
                                       local_end_block_id - local_start_block_id));
-
-  // shared存在5-12号文件，此时mem_storage为空
+  // shared exists in files 5-12, at this time mem_storage is empty
   EXPECT_EQ(OB_SUCCESS, shared_storage.init(tenant_id, palf_id_shared, shared_start_lsn, logservice::ObLogSharedStorage::READ_SIZE, &ext_handler));
   EXPECT_EQ(OB_SUCCESS, create_palf(tenant_id, palf_id_shared));
   EXPECT_EQ(OB_SUCCESS, upload_blocks(tenant_id, palf_id_shared, shared_start_block_id,
                                       shared_end_block_id - shared_start_block_id));
 
   ObLogHybridStorage hybrid_storage;
-  // case1: 测试init接口
+  // case1: test init interface
   {
     CLOG_LOG(INFO, "begin case1");
     EXPECT_EQ(OB_SUCCESS, hybrid_storage.init(tenant_id, palf_id_shared, shared_start_lsn, suggessted_read_buf_size, &ext_handler));
     hybrid_storage.local_storage_.palf_handle_guard_.palf_handle_.palf_handle_impl_ = &local_storage;
   }
-
-  // case2: 测试pread接口
+  // case2: test pread interface
   {
     CLOG_LOG(INFO, "begin case2");
     LSN invalid_lsn;
@@ -498,8 +491,8 @@ TEST_F(TestLogIteratorStorage, test_hybrid_storage)
 
     CLOG_LOG(INFO, "read out of lower bound");
     // OB_ERR_OUT_OF_LOWER_BOUND
-    // 1. 读取local_storage，发现本地不存在所需数据;
-    // 2. 读取shared_storage，发现shared上不存在所需数据，此步操作过后会reset shared_storage，避免内存hold
+    // 1. Read local_storage, find that the required data does not exist locally;
+    // 2. Read shared_storage, find that the required data does not exist on shared, this operation will reset shared_storage to avoid memory hold
     LSN shared_lower_bound_lsn(PALF_INITIAL_LSN_VAL);
     EXPECT_EQ(OB_ERR_OUT_OF_LOWER_BOUND, hybrid_storage.pread(
       shared_lower_bound_lsn, MAX_INFO_BLOCK_SIZE, read_buf, out_read_size, io_ctx));
@@ -514,7 +507,7 @@ TEST_F(TestLogIteratorStorage, test_hybrid_storage)
       local_upper_bound_lsn, MAX_INFO_BLOCK_SIZE, read_buf, out_read_size, io_ctx));
 
     CLOG_LOG(INFO, "read from local first");
-    // 只会从local读，预期本地缓存无效
+    // Only read from local, expect local cache to be invalid
     LSN data_on_local_lsn(local_start_block_id*default_block_size);
     EXPECT_EQ(OB_SUCCESS, hybrid_storage.pread(
       data_on_local_lsn, MAX_INFO_BLOCK_SIZE, read_buf, out_read_size, io_ctx));
@@ -524,18 +517,18 @@ TEST_F(TestLogIteratorStorage, test_hybrid_storage)
 
 
     CLOG_LOG(INFO, "read from shared first");
-    // local没有数据，预期从shared读
+    // local has no data, expected to read from shared
     LSN data_on_shared_lsn(shared_start_block_id*default_block_size);
     EXPECT_EQ(OB_SUCCESS, hybrid_storage.pread(
       data_on_shared_lsn, MAX_INFO_BLOCK_SIZE, read_buf, out_read_size, io_ctx));
     EXPECT_EQ(true, hybrid_storage.shared_storage_.read_buf_.is_valid());
     EXPECT_EQ(shared_start_lsn, hybrid_storage.shared_storage_.mem_storage_.start_lsn_);
-    // 预期会读READ_SIZE大小
+    // Expected to read READ_SIZE size
     EXPECT_EQ(shared_start_lsn + ObLogSharedStorage::READ_SIZE,
               hybrid_storage.shared_storage_.mem_storage_.log_tail_);
 
     CLOG_LOG(INFO, "read from local second");
-    // local存在数据，预期从local读，并清空shared_storage
+    // local contains data, expected to read from local and clear shared_storage
     EXPECT_EQ(OB_SUCCESS, hybrid_storage.pread(
       data_on_local_lsn, MAX_INFO_BLOCK_SIZE, read_buf, out_read_size, io_ctx));
     EXPECT_EQ(false, hybrid_storage.shared_storage_.read_buf_.is_valid());
@@ -543,7 +536,7 @@ TEST_F(TestLogIteratorStorage, test_hybrid_storage)
     EXPECT_EQ(LSN(PALF_INITIAL_LSN_VAL), hybrid_storage.shared_storage_.mem_storage_.log_tail_);
 
     CLOG_LOG(INFO, "read from shared second");
-    // local存在数据，预期从local读，并清空shared_storage
+    // local contains data, expected to read from local and clear shared_storage
     data_on_shared_lsn = data_on_shared_lsn + MAX_INFO_BLOCK_SIZE;
     EXPECT_EQ(OB_SUCCESS, hybrid_storage.pread(
       data_on_shared_lsn, MAX_INFO_BLOCK_SIZE, read_buf, out_read_size, io_ctx));
@@ -580,15 +573,14 @@ TEST_F(TestLogIteratorStorage, test_log_iterator)
   EXPECT_EQ(OB_SUCCESS, SHARED_LOG_GLOBAL_UTILS.construct_ls_str_(
     dest, tenant_id, ObLSID(palf_id_local), root_path, sizeof(root_path)));
   LocalLogStorage local_storage;
-  // local storage不依赖GLOBAL_UTILS
+  // local storage does not depend on GLOBAL_UTILS
   EXPECT_EQ(OB_SUCCESS, local_storage.init(tenant_id, palf_id_local, local_start_lsn, local_end_lsn));
-  // 本地存在10-15号文件
+  // Local files 10-15 exist
   EXPECT_EQ(OB_SUCCESS, create_tenant(tenant_id));
   EXPECT_EQ(OB_SUCCESS, create_palf(tenant_id, palf_id_local));
   EXPECT_EQ(OB_SUCCESS, upload_blocks(tenant_id, palf_id_local, local_start_block_id,
                                       local_end_block_id - local_start_block_id));
-
-  // shared存在5-12号文件，此时mem_storage为空
+  // shared exists in files 5-12, at this time mem_storage is empty
   EXPECT_EQ(OB_SUCCESS, create_palf(tenant_id, palf_id_shared));
   EXPECT_EQ(OB_SUCCESS, upload_blocks(tenant_id, palf_id_shared, shared_start_block_id,
                                       shared_end_block_id - shared_start_block_id));
@@ -604,7 +596,7 @@ TEST_F(TestLogIteratorStorage, test_log_iterator)
 
   // shared | local
   // 5-14   | 10-15
-  // 验证正常读取操作，从shared 读到 local
+  // Validate normal read operation, from shared to local
   {
     CLOG_LOG(INFO, "begin case1");
     std::vector<LSN> local_start_lsns = 
@@ -619,7 +611,7 @@ TEST_F(TestLogIteratorStorage, test_log_iterator)
       LSN lsn;
       while (OB_SUCC(s2_iterator.next())) {
         EXPECT_EQ(OB_SUCCESS, s2_iterator.get_entry(entry, lsn));
-        // 读到local_start_lsn会reset shared_storage
+        // Read local_start_lsn will reset shared_storage
         if (lsn == tmp_local_start_lsn + iterator_single_read_size) {
           CLOG_LOG(INFO, "iterate tmp_local_end_lsn", K(lsn), K(tmp_local_start_lsn), K(iterator_single_read_size),
                    K(local_storage));
@@ -631,8 +623,7 @@ TEST_F(TestLogIteratorStorage, test_log_iterator)
       EXPECT_EQ(lsn + entry.get_serialize_size(), local_end_lsn);
     }
   }
-
-  // 验证正常读取操作，local为空, 此时读到shared_end_lsn并返回OB_ERR_OUT_OF_LOWER_BOUND
+  // Validate normal read operation, local is empty, at this time read shared_end_lsn and return OB_ERR_OUT_OF_LOWER_BOUND
   {
     hybrid_storage.local_storage_.palf_handle_guard_.palf_handle_.palf_handle_impl_ = NULL;
     CLOG_LOG(INFO, "begin case2");
@@ -647,7 +638,7 @@ TEST_F(TestLogIteratorStorage, test_log_iterator)
       LSN lsn;
       while (OB_SUCC(s2_iterator.next())) {
         EXPECT_EQ(OB_SUCCESS, s2_iterator.get_entry(entry, lsn));
-        // 读到local_start_lsn会reset shared_storage
+        // Read local_start_lsn will reset shared_storage
       }
       EXPECT_EQ(OB_ERR_OUT_OF_LOWER_BOUND, ret);
       if (lsn.is_valid()) {
@@ -659,13 +650,13 @@ TEST_F(TestLogIteratorStorage, test_log_iterator)
 
   // shared | local
   // 5-14   | 10-15
-  // 验证读到一半local没有需要数据，转而向shared读取
+  // Verify that local does not have the required data when read halfway, switch to reading from shared
   {
     CLOG_LOG(INFO, "begin case3");
     // shared | local
     // 5-14   | 10-15
     // read until 12.xx
-    // 回收本地到14
+    // Recycle local to 14
     std::vector<LSN> read_until_log_start_lsns;
     for (int i = 1; i < log_entrys_in_single_block; i++) {
       LSN tmp_read_until_lsn = LSN(i*single_log_entry_size) + local_start_lsn.val_ + 2 * default_block_size;
@@ -673,7 +664,7 @@ TEST_F(TestLogIteratorStorage, test_log_iterator)
     }
     for (auto tmp_read_until_log_start_lsn : read_until_log_start_lsns) {
       S2Iterator s2_iterator;
-      // 将iterator的单次读磁盘大小变小
+      // Change the single disk read size of iterator
       EXPECT_EQ(OB_SUCCESS, s2_iterator.init(local_start_lsn, get_file_end_lsn, &hybrid_storage));
       s2_iterator.iterator_impl_.next_round_pread_size_ = iterator_single_read_size;
       int ret = OB_SUCCESS; 
@@ -681,21 +672,21 @@ TEST_F(TestLogIteratorStorage, test_log_iterator)
       LSN lsn;
       while (OB_SUCC(s2_iterator.next())) {
         EXPECT_EQ(OB_SUCCESS, s2_iterator.get_entry(entry, lsn));
-        // 读到local_start_lsn会reset shared_storage
+        // Read local_start_lsn will reset shared_storage
         if (lsn == tmp_read_until_log_start_lsn) {
           CLOG_LOG(INFO, "iterate tmp_local_end_lsn");
           break;
         }
       }
-      // 设置回收位点
+      // Set the recycling point
       local_storage.set_start_lsn(local_start_lsn+4*default_block_size);
       while (OB_SUCC(s2_iterator.next())) {
         EXPECT_EQ(OB_SUCCESS, s2_iterator.get_entry(entry, lsn));
-        // 读到tmp_read_until_log_start_lsn后会消费shared_stoarge
+        // After reading tmp_read_until_log_start_lsn, it will consume shared_storage
         if (lsn == tmp_read_until_log_start_lsn + iterator_single_read_size) {
           EXPECT_NE(nullptr, hybrid_storage.shared_storage_.read_buf_.buf_);
         }
-        // 读到后会消费shared_stoarge
+        // read to will consume shared_storage
         if (lsn == tmp_read_until_log_start_lsn + iterator_single_read_size) {
           EXPECT_NE(nullptr, hybrid_storage.shared_storage_.read_buf_.buf_);
           EXPECT_NE(0, hybrid_storage.shared_storage_.read_buf_.buf_len_);
@@ -713,11 +704,11 @@ TEST_F(TestLogIteratorStorage, test_log_iterator)
 
   // shared | local
   // 5-14   | 10-15
-  // 验证mem_storage在迭代过程中被PalfIterator reuse
+  // Verify mem_storage is reused by PalfIterator during iteration
   {
     CLOG_LOG(INFO, "begin case4");
     int ret = OB_SUCCESS;
-    // 将iterator的单次读磁盘大小变小
+    // Change the single read disk size of iterator to be smaller
     const LSN tmp_start_lsn = shared_start_lsn + 2 * default_block_size;
     LogEntry entry;
     LSN lsn;
@@ -749,7 +740,7 @@ TEST_F(TestLogIteratorStorage, test_log_iterator)
       EXPECT_EQ(OB_SUCCESS, s2_iterator.next());
       EXPECT_EQ(OB_SUCCESS, s2_iterator.get_entry(entry, tmp_lsn));
       EXPECT_EQ(tmp_reuse_lsn, shared_storage.mem_storage_.start_lsn_);
-      // reuse后预期mem_storage会被重置
+      // reuse after expected mem_storage will be reset
       while (OB_SUCC(s2_iterator.next())) {
         EXPECT_EQ(OB_SUCCESS, s2_iterator.get_entry(entry, tmp_lsn));
       }

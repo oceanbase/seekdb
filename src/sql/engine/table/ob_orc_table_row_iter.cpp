@@ -419,7 +419,7 @@ int ObOrcTableRowIterator::next_file()
 
 bool ObOrcTableRowIterator::DataLoader::is_orc_read_utc(const orc::Type *type)
 {
-  // TIMESTAMP_INSTANT 是utc时间
+  // TIMESTAMP_INSTANT is utc time
   return type->getKind() == orc::TypeKind::TIMESTAMP_INSTANT;
 }
 

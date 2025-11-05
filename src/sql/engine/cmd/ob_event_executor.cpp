@@ -174,17 +174,16 @@ int ObAlterEventExecutor::execute(ObExecContext &ctx, ObAlterEventStmt &stmt)
         repeat_interval_obj.set_char(stmt.get_event_info().get_repeat_interval());
         max_run_duration_obj.set_int(stmt.get_event_info().get_max_run_duration() > 0 ? stmt.get_event_info().get_max_run_duration() : 24 * 60 * 60);
         OZ (dbms_scheduler::ObDBMSSchedJobUtils::update_dbms_sched_job_info(trans, job_info, ObString("start_date"), start_date_obj));
-        OX (job_info.start_date_ = start_date_us); //更新本地job_info防止计算错误
+        OX (job_info.start_date_ = start_date_us); // update local job_info to prevent calculation errors
         OZ (dbms_scheduler::ObDBMSSchedJobUtils::update_dbms_sched_job_info(trans, job_info, ObString("end_date"), end_date_obj));
-        OX (job_info.end_date_ = end_date_us); //更新本地job_info防止计算错误
+        OX (job_info.end_date_ = end_date_us); // update local job_info to prevent calculation errors
         OZ (dbms_scheduler::ObDBMSSchedJobUtils::update_dbms_sched_job_info(trans, job_info, ObString("repeat_interval"), repeat_interval_obj));
         OZ (dbms_scheduler::ObDBMSSchedJobUtils::update_dbms_sched_job_info(trans, job_info, ObString("max_run_duration"), max_run_duration_obj));
       }
     }
-
-    //先更新 job_name 会导致后续的 update 执行错误，job name 的更新要放在最后。
+    // Updating job_name first will cause subsequent updates to execute incorrectly, the update of job name should be placed last.
     if (OB_SUCC(ret) && !stmt.get_event_info().get_event_rename().empty()) {
-      if (job_info.get_start_date() > ObTimeUtility::current_time()) { //job开始运行了就不能改
+      if (job_info.get_start_date() > ObTimeUtility::current_time()) { // job cannot be modified once it starts running
         ObObj obj;
         obj.set_char(stmt.get_event_info().get_event_rename());
         OZ (dbms_scheduler::ObDBMSSchedJobUtils::update_dbms_sched_job_info(trans, job_info, ObString("job_name"), obj));

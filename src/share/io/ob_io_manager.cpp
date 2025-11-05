@@ -1384,29 +1384,29 @@ int ObTenantIOManager::calc_io_memory(const uint64_t tenant_id, const int64_t me
 {
   int ret = OB_SUCCESS;
   int64_t memory_benchmark = memory / (1L * 1024L * 1024L * 1024L); //base ob 1G
-  //1w req占用1.52M
-  //1w result占用2.44M
+  //1w req occupies 1.52M
+  //1w result occupies 2.44M
   if (lib::is_mini_mode() && OB_SERVER_TENANT_ID == tenant_id) {
     request_count_ = 5000;
     result_count_ = 5000;
     io_memory_limit_ = 256L * 1024L * 1024L;
   } else if (memory_benchmark <= 1) {
-    //1G租户上限共256MB，预分配5w个request(7.6MB)和result(12.2MB)
+    //1G tenant upper limit is 256MB, pre-allocate 50k requests (7.6MB) and results (12.2MB)
     request_count_ = 50000;
     result_count_ = 50000;
     io_memory_limit_ = 256L * 1024L * 1024L;
   } else if (memory_benchmark <= 4) {
-    //4G租户上限共1G，预分配10w个request(15.2MB)和result(24.4MB)
+    //4G tenant upper limit is 1G, pre-allocate 100k request (15.2MB) and result (24.4MB)
     request_count_ = 100000;
     result_count_ = 100000;
     io_memory_limit_ = 1024 * 1024L * 1024L;
   } else if (memory_benchmark <= 8) {
-    //8G租户上限共2G，预分配20w个request和result
+    //8G tenant upper limit is 2G, pre-allocate 200k request and result
     request_count_ = 200000;
     result_count_ = 200000;
     io_memory_limit_ = 2048L * 1024L * 1024L;
   } else {
-    //unlimited，预分配30w个request和result
+    //unlimited, pre-allocate 300k request and result
     request_count_ = 300000;
     result_count_ = 300000;
     io_memory_limit_ = memory;

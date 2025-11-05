@@ -200,7 +200,7 @@ void ob_gcvt_help2(int *width, int *len, char **dend, char **src,
       *dst_ptr++ = '-';
     if (dst_ptr < dend_ptr)
       *dst_ptr++ = *src_ptr++;
-    // oracle mode 已废弃，is_zero 恒为 false
+    // oracle mode has been deprecated, is_zero is always false
     if ((*len) > 1 && dst_ptr < dend_ptr) {
       *dst_ptr++ = '.';
       while (src_ptr < (*end) && dst_ptr < dend_ptr)
@@ -233,7 +233,7 @@ void ob_gcvt_help2(int *width, int *len, char **dend, char **src,
     if (sign)
       *dst_ptr++ = '-';
     *dst_ptr++ = *src_ptr++;
-    // oracle mode 已废弃，is_zero 恒为 false
+    // oracle mode has been deprecated, is_zero is always false
     if ((*len) > 1) {
       *dst_ptr++ = '.';
       while (src_ptr < (*end))

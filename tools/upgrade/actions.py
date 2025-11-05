@@ -69,9 +69,9 @@ def get_rollback_sql_file_lines_str():
 def dump_rollback_sql_to_file(rollback_sql_filename):
   logging.info('===================== begin to dump rollback sql file ============================')
   rollback_sql_file = open(rollback_sql_filename, 'w')
-  rollback_sql_file.write('# 此文件是回滚用的sql。\n')
-  rollback_sql_file.write('# 注释的sql是已经成功commit的sql，它的下一条没被注释的sql则是对应的回滚sql。回滚的sql的排序跟commit的sql的排序刚好相反。\n')
-  rollback_sql_file.write('# 跑升级脚本失败的时候可以参考本文件来进行回滚。\n')
+  rollback_sql_file.write('# This file contains SQL for rollback.\n')
+  rollback_sql_file.write('# Commented SQL are successfully committed SQL, the next uncommented SQL is the corresponding rollback SQL. The order of rollback SQL is reversed from the order of commit SQL.\n')
+  rollback_sql_file.write('# When the upgrade script fails, you can refer to this file for rollback.\n')
   rollback_sql_file.write('\n')
   rollback_sql_file_lines_str = get_rollback_sql_file_lines_str()
   rollback_sql_file.write(rollback_sql_file_lines_str)
@@ -100,7 +100,7 @@ def check_is_update_sql(sql):
     raise MyError('sql is empty, sql="{0}"'.format(sql))
   key_word = word_list[0].lower()
   if 'insert' != key_word and 'update' != key_word and 'replace' != key_word and 'set' != key_word and 'delete' != key_word:
-    # 还有类似这种：select @current_ts := now()
+    # There are similar cases like this: select @current_ts := now()
     if not (len(word_list) >= 3 and 'select' == word_list[0].lower()\
         and word_list[1].lower().startswith('@') and ':=' == word_list[2].lower()):
       raise MyError('sql must be update, key_word="{0}", sql="{1}"'.format(key_word, sql))
@@ -433,7 +433,7 @@ class DDLCursor:
     self._cursor = Cursor(cursor)
   def exec_ddl(self, sql, print_when_succ = True):
     try:
-      # 这里检查是不是ddl，不是ddl就抛错
+      # Here check if it is ddl, not ddl then throw error
       check_is_ddl_sql(sql)
       return self._cursor.exec_sql(sql, print_when_succ)
     except Exception as e:
@@ -446,7 +446,7 @@ class QueryCursor:
     self._cursor = Cursor(cursor)
   def exec_query(self, sql, print_when_succ = True):
     try:
-      # 这里检查是不是query，不是query就抛错
+      # Here check if it is a query, if not a query then throw an error
       check_is_query_sql(sql)
       return self._cursor.exec_query(sql, print_when_succ)
     except Exception as e:
@@ -456,7 +456,7 @@ class QueryCursor:
 class DMLCursor(QueryCursor):
   def exec_update(self, sql, print_when_succ = True):
     try:
-      # 这里检查是不是update，不是update就抛错
+      # Here we check if it is an update, if not an update then throw an error
       check_is_update_sql(sql)
       return self._cursor.exec_sql(sql, print_when_succ)
     except Exception as e:
@@ -475,7 +475,7 @@ class BaseDDLAction():
     rollback_sql = self.get_rollback_sql()
     self.__ddl_cursor.exec_ddl(action_sql)
     g_succ_sql_list.append(SqlItem(action_sql, rollback_sql))
-    # ddl马上就提交了，因此刷新g_commit_sql_list
+    # ddl is about to be submitted, therefore refresh g_commit_sql_list
     refresh_commit_sql_list()
 
 class BaseDMLAction():
@@ -531,7 +531,7 @@ class BaseEachTenantDDLAction():
     rollback_sql = self.get_each_tenant_rollback_sql(tenant_id)
     self.__ddl_cursor.exec_ddl(action_sql)
     g_succ_sql_list.append(SqlItem(action_sql, rollback_sql))
-    # ddl马上就提交了，因此刷新g_commit_sql_list
+    # ddl is about to be submitted, therefore refresh g_commit_sql_list
     refresh_commit_sql_list()
 
 def actions_cls_compare(x, y):

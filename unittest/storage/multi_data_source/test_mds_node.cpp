@@ -127,7 +127,7 @@ TEST_F(TestMdsNode, release_node_while_node_in_ctx_concurrent) {
   call_try_on_abort = 0;
   MdsRow<DummyKey, UserDataWithCallBack> row;
   MdsCtx ctx(mds::MdsWriter(transaction::ObTransID(100)), transaction::ObTxSEQ::mk_v0(1));// commit finally
-  // 提交这些node将会耗时50ms
+  // Submitting these nodes will take 50ms
   ASSERT_EQ(OB_SUCCESS, row.set(UserDataWithCallBack(1), ctx, {share::ObLSID(0), 0}));
   ASSERT_EQ(OB_SUCCESS, ctx.inc_seq_no());
   ASSERT_EQ(OB_SUCCESS, row.set(UserDataWithCallBack(2), ctx, {share::ObLSID(0), 0}));
@@ -167,7 +167,7 @@ TEST_F(TestMdsNode, release_node_while_node_in_ctx_concurrent) {
 //   node.try_before_prepare();
 //   ASSERT_EQ(node.get_prepare_version_(), share::SCN::min_scn());
 //   node.try_on_prepare(mock_scn(2));
-//   ASSERT_EQ(node.get_prepare_version_(), mock_scn(2)); // prepare version没有传下来
+//   ASSERT_EQ(node.get_prepare_version_(), mock_scn(2)); // prepare version was not passed down
 //   ASSERT_EQ(node.is_aborted_(), false);
 //   ASSERT_EQ(node.is_committed_(), false);
 //   ASSERT_EQ(node.is_decided_(), false);

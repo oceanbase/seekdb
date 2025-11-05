@@ -461,10 +461,9 @@ static AllocFunc                                                                
       }                                             \
     }();                                            \
   } while(0)
-
-// 当要开发两个功能完全一致的表达式时（例如mid和substr两个表达式）可以使用这个宏
-// OriOp是已有的表达式，现在想要开发NewOp且二者功能完全一致，使用该宏就可以避免重复代码
-// 但是要求OriOp已经先注册了
+// When developing two functionally identical expressions (e.g., mid and substr expressions) you can use this macro
+// OriOp is the existing expression, now we want to develop NewOp with the same functionality, using this macro can avoid duplicate code
+// But require OriOp has already registered
 #define REG_SAME_OP(OriOpType, NewOpType, NewOpName, idx_mysql)        \
   do {                                                                 \
     [&]() {                                                            \
@@ -496,8 +495,7 @@ static AllocFunc                                                                
       }                                             \
     }();                                            \
   } while(0)
-
-// 用于Oracle模式下注册相同功能的表达式
+// Used for registering the same function expression in Oracle mode
 #define REG_SAME_OP_ORCL(OriOpType, NewOpType, NewOpName, idx_oracle)      \
   do {                                                                     \
     [&]() {                                                                \
@@ -569,10 +567,10 @@ void ObExprOperatorFactory::register_expr_operators()
   int64_t i = 0;
   int64_t j = 0;
   /*
-  --REG_OP用于mysql租户注册，REG_OP_ORCL用于oracle租户系统函数注册
-  --如果同一函数既要在mysql租户下使用也需在oracle使用，且已实现兼容
-  --请使用REG_OP()以及REG_OP_ORCL()分别注册
-  为了格式，请在函数末尾oracle系统函数集中区域注册
+  --REG_OP is used for mysql tenant registration, REG_OP_ORCL is used for oracle tenant system function registration
+  --If the same function needs to be used under both mysql tenant and oracle, and compatibility has been implemented
+  --Please use REG_OP() and REG_OP_ORCL() respectively for registration
+  For formatting, please register in the oracle system function section at the end of the function
   */
   [&]() {
     REG_OP(ObExprAdd);

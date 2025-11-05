@@ -465,8 +465,7 @@ TEST_F(ObHashSetDumpTest, test_dump_except)
   run_test();
   ASSERT_FALSE(HasFatalFailure());
 }
-
-// farm时间比较长，暂时skip掉
+// farm time is long, temporarily skip it
 // TEST_F(ObHashSetDumpTest, Size20M_union)
 // {
 //   int64_t hash_mem = 0;

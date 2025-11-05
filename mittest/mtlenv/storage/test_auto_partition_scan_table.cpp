@@ -21,14 +21,14 @@
 
 
 /*
-  0. 用主表模拟局部索引表扫描，两者差别在于主表会进行范围切割，局部索引表会进行 行过滤
-  1. 创建分区
-	2. 设置分区为split状态，把自己设置为局部索引，并且把origin tablet id设置为自己
-	3. 启动table_scan
-	4. 预期逻辑
-    1）同时获取origin table的tables ；
-    2）不会cut range；
-    3）根据当前tablet id 过滤数据，当然当前代码里分裂后的schema没有变更，计算分区方式也没有改变，因此数据全部符合
+  0. Use the main table to simulate a local index table scan, the difference being that the main table performs range cutting, while the local index table performs row filtering
+  1. Create partition
+	2. Set partition to split state, set yourself as a local index, and set the origin tablet id to yourself
+	3. Start table_scan
+	4. Expected logic
+    1) Simultaneously obtain tables from the origin table ;
+    2) Will not cut range;
+    3) Filter data based on the current tablet id, of course, the schema has not changed after splitting in the current code, and the partition calculation method has not changed, so all data fits
 */
 
 namespace oceanbase

@@ -144,7 +144,7 @@ private:
 
 
 // for st_buffer_strategy and st_buffer
-// 不能放lib/geo/ob_geo_func_common.h，由于这个func_common包含了boost库，st_buff头文件不能包含boost，会有编译问题
+// Cannot place lib/geo/ob_geo_func_common.h, as this func_common includes the boost library, and the st_buff header file cannot include boost, which would cause compilation issues
 struct ObGeoBufferStrategy 
 {
   // default value

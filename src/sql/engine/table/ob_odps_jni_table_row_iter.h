@@ -363,8 +363,8 @@ private:
   common::ObMemAttr expr_attr_;
   common::ObMalloc malloc_alloc_;
   common::ObArenaAllocator arena_alloc_;
-  common::ObArenaAllocator column_exprs_alloc_;  // op一次读取生命周期 下一次读取重置
-  common::ObArenaAllocator task_alloc_;          // task级别的生命周期 取task重置
+  common::ObArenaAllocator column_exprs_alloc_;  // op one read lifecycle next read reset
+  common::ObArenaAllocator task_alloc_;          // task-level lifecycle reset with task
   ObODPSGeneralFormat odps_format_;
   StateValues state_;
   bool is_part_table_;

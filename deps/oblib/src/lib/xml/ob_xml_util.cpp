@@ -460,7 +460,7 @@ int ObXmlUtil::to_string(ObIAllocator &allocator, double &in, char *&out)
 	} else if (std::isinf(in) && in < 0) {
 		res_buf.append("-Infinity");
 	} else {
-		// TODO 科学计数法是否需要考虑 待定
+		// TODO Should scientific notation be considered? To be determined
 		uint64_t out_len;
 		const int64_t number_str_size = 256;
 		double abs_value = fabs(in);

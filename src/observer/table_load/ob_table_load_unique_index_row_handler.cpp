@@ -89,7 +89,7 @@ int ObTableLoadUniqueIndexRowHandler::handle_update_row(const ObTabletID &tablet
         LOG_WARN("fail to handle error row", KR(ret));
       } else {
         ATOMIC_DEC(&result_info_->rows_affected_); // delete one row in load data
-        // 需要删除数据行
+        // Need to delete data row
         ObTableLoadDataTableBuilder *data_builder = nullptr;
         if (OB_FAIL(store_ctx_->data_store_table_ctx_->get_delete_table_builder(data_builder))) {
           LOG_WARN("fail to get delete table builder", KR(ret));
@@ -99,7 +99,7 @@ int ObTableLoadUniqueIndexRowHandler::handle_update_row(const ObTabletID &tablet
       }
     } else if (ObLoadDupActionType::LOAD_REPLACE == dup_action_) {
       ATOMIC_DEC(&result_info_->rows_affected_); // delete one row in data tablex
-      // 需要删除数据行
+      // Need to delete data row
       ObTableLoadDataTableBuilder *data_builder = nullptr;
       if (OB_FAIL(store_ctx_->data_store_table_ctx_->get_delete_table_builder(data_builder))) {
         LOG_WARN("fail to get delete table builder", KR(ret));
@@ -109,7 +109,7 @@ int ObTableLoadUniqueIndexRowHandler::handle_update_row(const ObTabletID &tablet
     } else if (ObLoadDupActionType::LOAD_IGNORE == dup_action_) {
       ATOMIC_INC(&result_info_->skipped_);
       ATOMIC_DEC(&result_info_->rows_affected_); // delete one row in load data
-      // 需要删除数据行
+      // Need to delete data row
       ObTableLoadDataTableBuilder *data_builder = nullptr;
       if (OB_FAIL(store_ctx_->data_store_table_ctx_->get_delete_table_builder(data_builder))) {
         LOG_WARN("fail to get delete table builder", KR(ret));
@@ -169,7 +169,7 @@ int ObTableLoadUniqueIndexRowHandler::handle_update_row(
     }
     // mark result row is ack
     const_cast<ObDirectLoadExternalRow *>(result_row)->is_ack_ = true;
-    // 删除其他行
+    // Delete other lines
     for (int64_t i = 0; OB_SUCC(ret) && i < rows.count(); i++) {
       const ObDirectLoadExternalRow *row = rows.at(i);
       ObTableLoadDataTableBuilder *data_builder = nullptr;
@@ -229,7 +229,7 @@ int ObTableLoadUniqueIndexRowHandler::handle_update_row(
     }
     // mark result row is ack
     const_cast<ObDirectLoadMultipleDatumRow *>(result_row)->is_ack_ = true;
-    // 删除其他行
+    // Delete other lines
     for (int64_t i = 0; OB_SUCC(ret) && i < rows.count(); i++) {
       const ObDirectLoadMultipleDatumRow *row = rows.at(i);
       ObTableLoadDataTableBuilder *data_builder = nullptr;

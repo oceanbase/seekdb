@@ -63,7 +63,7 @@ public:
 private:
   bool is_inited_;
   bool is_requesting_;
-  IdCache id_cache_[MAX_CACHE_NUM]; //将Cache进行分段打散，避免多个线程并发争抢，造成访问热点
+  IdCache id_cache_[MAX_CACHE_NUM]; // Segment and scatter the Cache to avoid multiple threads competing concurrently, causing access hotspots
   int64_t cur_idx_;
   int64_t cache_idx_;
   common::ObAddr server_;

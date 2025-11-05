@@ -101,7 +101,7 @@ namespace sql
     uint64_t num_include_monitoring_dump_;
     uint64_t branch_id_;
     uint64_t op_id_;
-    int64_t plan_depth_; // 算子在计划树的缩进层次，顶层算子从0算起
+    int64_t plan_depth_; // Operator indentation level in the plan tree, top-level operators start from 0
     bool going_up_;
   };
 
@@ -123,7 +123,7 @@ namespace sql
       next_px_id_ = (next_px_id_ <= 0) ? 1 : next_px_id_ + 1;
       return next_px_id_;
     }
-    // 栈顶 item 作为当前 px 的 dfo 计数器
+    // Stack top item as current px's dfo counter
     int next_dfo(int64_t &px_id, int64_t &dfo_id)
     {
       int ret = common::OB_SUCCESS;

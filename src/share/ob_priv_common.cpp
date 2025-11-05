@@ -24,7 +24,7 @@ namespace share
 
 #define N_PIRVS_PER_GROUP 30
 
-/* 300个权限*/
+/* 300 permissions */
 int group_id_arr[] = 
 {
     0,
@@ -40,7 +40,7 @@ int group_id_arr[] =
     9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9,
 };
 
-/* 300个权限 */
+/* 300 permissions */
 int th_in_group_arr[] = 
 {
     0,
@@ -112,7 +112,7 @@ int ObPrivPacker::raw_obj_priv_to_packed_info(
   return ret;
 }
 
-/* 判断一个相对的priv id是否在privset里面，同时输出option信息 */
+/* Determine if a relative priv id is in the privset, and output option information */
 int ObPrivPacker::has_raw_priv(
     const ObRawPriv raw_priv,
     const ObPrivSet priv_set,
@@ -135,7 +135,7 @@ int ObPrivPacker::has_raw_priv(
   return ret;
 }
 
-/* 将相对raw priv和group idx，还原到raw priv，根据option，push back到相应的链表 */
+/* Restore relative raw priv and group idx to raw priv, according to option, push back to the corresponding list */
 int ObPrivPacker::push_back_raw_priv_array(
     ObRawPriv raw_priv,
     bool exists,
@@ -155,7 +155,7 @@ int ObPrivPacker::push_back_raw_priv_array(
   return ret;
 }
 
-/* 解析packed_array到raw privs array，根据是否有option，输出两个链表 */
+/* Parse packed_array to raw privs array, output two lists based on whether there is an option */
 
 bool ObOraPrivCheck::user_is_owner(
    const ObString &user_name,

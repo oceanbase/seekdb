@@ -15,7 +15,7 @@
 
 #include "lib/charset/ob_ctype.h"
 #define LAST_LEVEL 4 /* TOT_LEVELS - 1 */
-/* 这一段define会和别人冲突的厉害 */
+/* This define will conflict heavily with others */
 #define _is(c) (t_ctype[(c)][LAST_LEVEL])
 #define _level 8
 #define _consnt 16

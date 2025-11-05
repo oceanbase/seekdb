@@ -58,7 +58,7 @@ public:
       str_buf_[i] = 's';
     }
   }
-  //void set_column_num(const int num) { columns_num_ = num; } 暂定3列
+  //void set_column_num(const int num) { columns_num_ = num; } temporarily set to 3 columns
 
   int test_init()
   {
@@ -200,7 +200,7 @@ public:
     gen_row(row_cnt_);
     if (row_cnt_ <= 0) {
       return iter_end_ret_;
-    } else if (OB_FAIL(convert_row(cells_, MY_SPEC.output_))) { //将cur_expr写入到output中
+    } else if (OB_FAIL(convert_row(cells_, MY_SPEC.output_))) { // copy current row to output
       OB_LOG(WARN, "copy current row failed", K(ret));
     } else {
       row_cnt_--;
@@ -217,7 +217,7 @@ public:
     gen_row(row_id_);
     if (row_id_ < 0 || row_id_ >= row_cnt_) {
       return iter_end_ret_;
-    } else if (OB_FAIL(convert_row(cells_, MY_SPEC.output_))) { //将cur_expr写入到output中
+    } else if (OB_FAIL(convert_row(cells_, MY_SPEC.output_))) { // write cur_expr to output
       OB_LOG(WARN, "copy current row failed", K(ret));
     } else {
       ++add;

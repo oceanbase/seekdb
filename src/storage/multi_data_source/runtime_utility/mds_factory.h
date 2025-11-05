@@ -37,7 +37,7 @@ namespace mds
 
 struct MdsFactory
 {
-  // 如果类型T有init函数，那么先用默认构造函数构造，然后再调用其init函数
+  // If type T has an init function, then first construct it using the default constructor, and then call its init function
   template <typename T, typename ...Args, typename std::enable_if<!std::is_base_of<BufferCtx, T>::value, bool>::type = true>
   static int create(T *&p_obj, Args &&...args)
   {
@@ -56,8 +56,7 @@ struct MdsFactory
       MdsAllocator::get_instance().free(obj);
     }
   }
-
-  // 根据构造对象时编码好的信息进行运行时反射
+  // According to the information encoded when constructing the object for runtime reflection
   static int deep_copy_buffer_ctx(const transaction::ObTransID &trans_id,
                                   const BufferCtx &old_ctx,
                                   BufferCtx *&new_ctx,
@@ -73,7 +72,7 @@ struct MdsFactory
                                const char *alloc_func = __builtin_FUNCTION(),
                                const int64_t line = __builtin_LINE());
 private:
-  // 如果类型T有init函数，那么先用默认构造函数构造，然后再调用其init函数
+  // If type T has an init function, then first construct it using the default constructor, and then call its init function
   template <typename T, typename ...Args, ENABLE_IF_HAS(T, init, int(Args...))>
   static int create_(T *&p_obj, Args &&...args)
   {
@@ -95,7 +94,7 @@ private:
     MDS_LOG(DEBUG, "create object with init", K(typeid(T).name()), KP(p_obj), K(lbt()));
     return ret;
   }
-  // 如果类型T没有init函数，则通过构造函数构造
+  // If type T does not have an init function, then construct through the constructor
   template <typename T, typename ...Args, ENABLE_IF_NOT_HAS(T, init, int(Args...))>
   static int create_(T *&p_obj, Args &&...args)
   {

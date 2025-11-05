@@ -37,7 +37,7 @@ protected:
 
 private:
   DISALLOW_COPY_AND_ASSIGN(ObDeleteLogPlan);
-  // 分配普通delete计划的delete log operator
+  // Allocate delete log operator for normal delete plan
   int candi_allocate_delete();
   int create_delete_plan(ObLogicalOperator *&top);
   int create_delete_plans(ObIArray<CandidatePlan> &candi_plans,
@@ -45,7 +45,7 @@ private:
                           const bool force_multi_part,
                           ObIArray<CandidatePlan> &delete_plans);
   int allocate_delete_as_top(ObLogicalOperator *&top, bool is_multi_part_dml);
-  // 分配pdml delete计划中的delete log operator
+  // Allocate delete log operator in pdml delete plan
   int candi_allocate_pdml_delete();
   virtual int prepare_dml_infos() override;
   virtual int prepare_table_dml_info_special(const ObDmlTableInfo& table_info,

@@ -47,8 +47,8 @@ void ObPsCache::destroy()
 {
   TG_DESTROY(tg_id_);
   if (inited_) {
-    // ps_stmt_id和ps_stmt_info创建时，会给其增加引用计数
-    // 现在PsCache要析构了，对所有内部对象减去1,如果引用计数到0，会显式free内存
+    // ps_stmt_id and ps_stmt_info will have their reference count incremented when created
+    // Now PsCache is being destructed, decrement the reference count for all internal objects, if the reference count reaches 0, memory will be explicitly freed
     cache_evict_all_ps();
     inited_ = false;
   }
@@ -200,11 +200,10 @@ int ObPsCache::get_stmt_info_guard(const ObPsStmtId ps_stmt_id,
   }
   return ret;
 }
-
-//1.set stmt_id_map_成功，创建新的stmt_item
-//2.set stmt_id_map_返回OB_HASH_EXIST时，尝试从stmt_id_map_中获取stmt_item
-//  1）获取成功，返回stmt_item
-//  2) 报OB_HASH_NOT_EXIST, 则递归调get_or_add_stmt_item，尝试重新创建
+//1.set stmt_id_map_ successfully, create new stmt_item
+//2.set stmt_id_map_ return OB_HASH_EXIST when, attempt to get stmt_item from stmt_id_map_
+//  1）Get success, return stmt_item
+//  2) Report OB_HASH_NOT_EXIST, then recursively call get_or_add_stmt_item, attempt to recreate
 int ObPsCache::get_or_add_stmt_item(const ObPsSqlKey &ps_key,
                                     const bool is_contain_tmp_tbl,
                                     ObPsStmtItem *&ps_item_value)
@@ -217,7 +216,7 @@ int ObPsCache::get_or_add_stmt_item(const ObPsSqlKey &ps_key,
   tmp_item_value.assign_sql_key(tmp_ps_key);
   //will deep copy
   ObPsStmtItem *new_item_value = NULL;
-  //由于stmt_id_map_中的value是ObPsStmtItem的指针，因此这里需要copy整个内存
+  // Since the value in stmt_id_map_ is a pointer to ObPsStmtItem, we need to copy the entire memory here
   if (!is_inited()) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
@@ -246,7 +245,7 @@ int ObPsCache::get_or_add_stmt_item(const ObPsSqlKey &ps_key,
       ObPsStmtItem *tmp_item_value = NULL;
       if (OB_FAIL(inner_ref_stmt_item(inner_ps_key, tmp_item_value))) {
         LOG_WARN("get stmt item failed", K(ret));
-        if (OB_HASH_NOT_EXIST == ret) {//stmt item被删除，需要重新创建
+        if (OB_HASH_NOT_EXIST == ret) {//stmt item was deleted, need to recreate}
           if (OB_FAIL(get_or_add_stmt_item(ps_key, is_contain_tmp_tbl, ps_item_value))) {
             LOG_WARN("fail to get or add stmt item", K(ret));
           }
@@ -272,8 +271,7 @@ int ObPsCache::get_or_add_stmt_item(const ObPsSqlKey &ps_key,
   }
   return ret;
 }
-
-// 通过plan sql key, 从key -> PsStmtIdMap中获取Item
+// Through plan sql key, from key -> PsStmtIdMap get Item
 //will increase ref count
 #define LOG_WARN_IGNORE_PS_NOTFOUND(ret, fmt, args...) \
   do {\
@@ -283,16 +281,15 @@ int ObPsCache::get_or_add_stmt_item(const ObPsSqlKey &ps_key,
       LOG_WARN(fmt, ##args);\
     }\
   } while(0);
-
-//从stmt_id_map_获取指定ps_sql_key对应的ps_stmt_item
-//1. 若call_back_ret == OB_TRY_EGAIN，说明当前item的ref_cout == 0, 已经准备淘汰；
-//   此时，重试直到报OB_HASH_NOT_EXIST,说明其他session已经将item从stmt_id_map_中删除；
-//   将OB_HASH_NOT_EXIST错误码返回给外层，期待创建新的ps_stmt_item
-//2. 该接口只有在prepare阶段使用，execute和close阶段不应该调用
-//3. 该接口会返回三类错误码：
-//   1) OB_SUCCESS: 成功获取ps_stmt_item
-//   2) OB_HASH_NOT_EXIST: a.stmt_id_map_中本身就不存在当前key b.开始key对应的引用计数为0，重试若干次后变为该错误码
-//   3) OB_EGAIN: 尝试了MAX_RETRY_CNT，ps_stmt_item的ref_count仍旧为0
+// Get the ps_stmt_item corresponding to the specified ps_sql_key from stmt_id_map_
+//1. If call_back_ret == OB_TRY_EGAIN, it means the current item's ref_cout == 0, is already prepared for elimination;
+//   At this point, retry until OB_HASH_NOT_EXIST is reported, indicating that another session has already removed the item from stmt_id_map_;
+//   Return OB_HASH_NOT_EXIST error code to the outer layer, expect to create a new ps_stmt_item
+//2. This interface is only used in the prepare phase, and should not be called in the execute and close phases
+//3. This interface will return three categories of error codes:
+//   1) OB_SUCCESS: Successfully obtained ps_stmt_item
+//   2) OB_HASH_NOT_EXIST: a.stmt_id_map_ does not contain the current key b.key corresponding reference count starts at 0, after several retries it becomes this error code
+//   3) OB_EGAIN: attempted MAX_RETRY_CNT, ps_stmt_item's ref_count is still 0
 int ObPsCache::inner_ref_stmt_item(const ObPsSqlKey &ps_sql_key,
                                    ObPsStmtItem *&ps_stmt_item)
 {

@@ -147,9 +147,9 @@ int ObPurgeDatabaseResolver::resolve(const ParseNode &parser_tree)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("session_info is null", K(ret));
   } else if (OB_UNLIKELY(is_external_catalog_id(session_info_->get_current_default_catalog()))) {
-    // 这里之所以需要额外拦截，是因为 pruge database 没有走 resolve ParseNode 逻辑，直接赋值了
-    // 所以在 resolve 处的拦截无效
-    // 如果将来需要支持 pruge database catalog.db 这种语法，那就需要走 resolve ParseNode 逻辑，那么此时这里的拦截可以删除
+    // Here we need to intercept additionally because pruge database did not go through resolve ParseNode logic, it was directly assigned
+    // So the interception at resolve is invalid
+    // If we need to support pruge database catalog.db this syntax in the future, then we need to follow the resolve ParseNode logic, so the interception here can be removed
     ret = OB_NOT_SUPPORTED;
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "purge database in catalog is");
   }

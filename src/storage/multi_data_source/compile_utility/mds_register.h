@@ -9,39 +9,37 @@
  * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PubL v2 for more details.
  */
-
-// ################################### 使用多源事务兼容性占位须知 ##################################
-// # 占位代码需要书写于宏定义块【NEED_GENERATE_MDS_FRAME_CODE_FOR_TRANSACTION】中
-// # 占位方式: 通过【注释】占位，占位需要信息：Helper类型名/Ctx类型名/Enum数值/Enum命名
+// ################################### Use multi-source transaction compatibility placeholder notes ##################################
+// # Placeholder code needs to be written within the macro definition block [NEED_GENERATE_MDS_FRAME_CODE_FOR_TRANSACTION]
+// # Placeholder method: Through [comment] placeholder, placeholder requires information: Helper type name/Ctx type name/Enum value/Enum naming
 // #
-// # 注意：
-// # 0. 在‘余留位置’之前占位
-// # 1. 始终先在master占位，保证master分支是其他所有分支的超集
-// # 2. master占位之后，开发分支上不可修改注册宏中的对应信息，否则FARM会认为占位冲突，如果有这种场景，需要先修改master占位
-// # 3. 所有类型名的书写从全局命名空间'::oceanbase'开始
-// # 4. Enum数值采用递增方式占位
-// # 5. Enum命名不可同前文重复
-// # 6. 由于采用注释方式占位，因此【不需要】书写对应的类型定义并包含在【NEED_MDS_REGISTER_DEFINE】中
+// # Note:
+// # 0. Place a placeholder before the 'reserved position'
+// # 1. Always placeholder on master first, ensure the master branch is a superset of all other branches
+// # 2. After the master placeholder is occupied, the corresponding information in the registration macro on the development branch cannot be modified, otherwise FARM will consider it a placeholder conflict. If this scenario occurs, the master placeholder needs to be modified first
+// # 3. All type names are written starting from the global namespace '::oceanbase'
+// # 4. Enum values use an incremental approach for placeholders
+// # 5. Enum naming cannot be the same as previous text
+// # 6. Since the placeholder is done using comments, therefore [do not need] to write the corresponding type definition and include it in [NEED_MDS_REGISTER_DEFINE]
 // ############################################################################################
-
-// ################################### 使用多源数据兼容性占位须知 ##################################
-// # 占位代码需要书写于宏定义块【GENERATE_MDS_UNIT】中，更近一步的:
-// # 1. 如果想要添加tablet级别元数据，则将占位信息增加至【GENERATE_NORMAL_MDS_TABLE】中
-// # 2. 如果想要添加日志流级别元数据，则将占位信息增加至【GENERATE_LS_INNER_MDS_TABLE】中
-// # 占位方式: 通过【定义】占位，占位需要信息：Key类型名/Value类型名/多版本语义支持
+// ################################### Use multi-source data compatibility placeholder notes ##################################
+// # Placeholder code needs to be written within the macro definition block [GENERATE_MDS_UNIT], further:
+// # 1. If you want to add tablet level metadata, then add the placeholder information to [GENERATE_NORMAL_MDS_TABLE]
+// # 2. If you want to add log stream level metadata, then add the placeholder information to [GENERATE_LS_INNER_MDS_TABLE]
+// # Placeholder method: Through [definition] placeholder, placeholder requires information: Key type name/Value type name/Multi-version semantic support
 // #
-// # 注意：
-// # 0. 在‘余留位置’之前占位
-// # 1. 始终先在master占位，保证master分支是其他所有分支的超集
-// # 2. master占位之后，开发分支上不可修改注册宏中的对应信息，否则FARM会认为占位冲突，如果有这种场景，需要先修改master占位
-// # 3. 所有类型名的书写从全局命名空间'::oceanbase'开始
-// # 4. 若Key类型名非'::oceanbase::storage::mds::DummyKey'，则需要提供对应的Key类型定义，并将对应头文件包含在【NEED_MDS_REGISTER_DEFINE】中
-// # 5. 需要提供对应的Value类型定义，并将对应头文件包含在【NEED_MDS_REGISTER_DEFINE】中
-// # 6. Key/Value的类型仅需要空定义，不需要定义成员方法和变量，但需要实现框架所需的接口，以通过框架的编译期检查，包括(占位时实现为空)：
-// #    a. 打印函数：[int64_t T::to_string(char *, const int64_t) const]
-// #    b. 比较函数的某种实现，例如：[bool T::operator==(const T &) const] and [bool T::operator<(const T &) const]
-// #    c. 序列化函数的某种实现，例如：[int serialize(char *, const int64_t, int64_t &) const] and [int deserialize(const char *, const int64_t, int64_t &)] and [int64_t get_serialize_size() const]
-// #    d. 拷贝/移动函数的某种实现，例如：[int T::assign(const T &)]
+// # Note:
+// # 0. Place a placeholder before the 'reserved position'
+// # 1. Always placeholder on master first, to ensure the master branch is a superset of all other branches
+// # 2. After the master placeholder is occupied, the corresponding information in the registration macro on the development branch cannot be modified, otherwise FARM will consider it a placeholder conflict. If this scenario occurs, the master placeholder needs to be modified first
+// # 3. All type names are written starting from the global namespace '::oceanbase'
+// # 4. If the Key type name is not '::oceanbase::storage::mds::DummyKey', then the corresponding Key type definition needs to be provided, and the corresponding header file should be included in [NEED_MDS_REGISTER_DEFINE]
+// # 5. Need to provide the corresponding Value type definition, and include the corresponding header file in [NEED_MDS_REGISTER_DEFINE]
+// # 6. The type of Key/Value only needs to be declared, without defining member methods and variables, but it needs to implement the interfaces required by the framework to pass the framework's compile-time checks, including (implemented as empty when placeholder):
+// #    a. print function: [int64_t T::to_string(char *, const int64_t) const]
+// #    b. Implementation of some comparison functions, for example: [bool T::operator==(const T &) const] and [bool T::operator<(const T &) const]
+// #    c. Implementation of some serialization functions, for example: [int serialize(char *, const int64_t, int64_t &) const] and [int deserialize(const char *, const int64_t, int64_t &)] and [int64_t get_serialize_size() const]
+// #    d. Copy/move function implementation, for example: [int T::assign(const T &)]
 // ############################################################################################
 
 // the MDS FRAME must know the defination of some class type to generate legal CPP codes, including:
@@ -228,7 +226,7 @@ _GENERATE_MDS_FRAME_CODE_FOR_TRANSACTION_(HELPER_CLASS, BUFFER_CTX_TYPE, ID, ENU
   //                                         ::oceanbase::storage::mds::MdsCtx, \
   //                                         43,\
   //                                         SYNC_TTL_FILTER_INFO)
-  // # 余留位置（此行之前占位）
+  // # Reserved position (placeholder before this line)
 #undef GENERATE_MDS_FRAME_CODE_FOR_TRANSACTION
 #endif
 /**************************************************************************************************/
@@ -305,13 +303,13 @@ _GENERATE_MDS_UNIT_(KEY_TYPE, VALUE_TYPE, NEED_MULTI_VERSION)
   GENERATE_MDS_UNIT(::oceanbase::storage::mds::DummyKey,\
                     ::oceanbase::storage::ObTabletDDLCompleteMdsUserData,\
                     false)
-  // # 余留位置（此行之前占位）
+  // # reserved position (this line is for placeholder)
 #endif
 
 #ifdef GENERATE_LS_INNER_MDS_TABLE
   GENERATE_MDS_UNIT(::oceanbase::storage::mds::DummyKey,\
                     ::oceanbase::unittest::ExampleUserData1,\
                     true) // replace this line if you are the first user to register LS INNER TABLET
-  // # 余留位置（此行之前占位）
+  // # reserved position (this line is for placeholder)
 #endif
 /**************************************************************************************************/

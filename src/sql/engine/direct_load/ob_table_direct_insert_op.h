@@ -72,7 +72,7 @@ public:
   }
   virtual bool is_pdml_operator() const override { return true; }
 public:
-  ObDMLOpRowDesc row_desc_;  // 记录partition id column所在row的第几个cell
+  ObDMLOpRowDesc row_desc_;  // record the position of partition id column in the row's cell
   ObInsCtDef ins_ctdef_;
   DISALLOW_COPY_AND_ASSIGN(ObTableDirectInsertSpec);
 };
@@ -84,7 +84,7 @@ public:
   ObTableDirectInsertOp(ObExecContext &exec_ctx,
                         const ObOpSpec &spec,
                         ObOpInput *input);
-  virtual bool has_foreign_key() const  { return false; } // 默认实现，先不考虑外键的问题
+  virtual bool has_foreign_key() const  { return false; } // Default implementation, do not consider foreign key issues for now
 
   virtual int inner_open() override;
   virtual int inner_close() override;

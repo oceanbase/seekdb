@@ -37,7 +37,7 @@ public:
   }
   virtual void reset() {}
   TO_STRING_KV(K_(op_id), K_(msg_type));
-  uint64_t op_id_; // 注册本 provider 的算子 id，用于 provder 数组里寻址对应 provider
+  uint64_t op_id_; // Register this provider's operator id, used for addressing the corresponding provider in the provider array
   dtl::ObDtlMsgType msg_type_;
   bool whole_msg_set_;
   volatile int64_t dh_msg_cnt_;
@@ -149,7 +149,7 @@ private:
   {
     int ret = common::OB_SUCCESS;
     if (OB_UNLIKELY(IS_INTERRUPTED())) {
-      // 中断错误处理
+      // Interrupt error handling
       // overwrite ret
       common::ObInterruptCode code = GET_INTERRUPT_CODE();
       ret = code.code_;

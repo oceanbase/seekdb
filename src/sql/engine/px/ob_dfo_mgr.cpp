@@ -39,9 +39,8 @@ int ObDfoSchedOrderGenerator::generate_sched_order(ObDfoMgr &dfo_mgr)
    }
    return ret;
 }
-
-// 正规化后的 dfo_tree 后序遍历顺序，即为调度顺序
-// 用 edge 数组表示这种顺序
+// Normalized dfo_tree post-order traversal sequence, i.e., the scheduling order
+// Use edge array to represent this order
 int ObDfoSchedOrderGenerator::do_generate_sched_order(ObDfoMgr &dfo_mgr, ObDfo &root)
 {
   int ret = OB_SUCCESS;
@@ -75,8 +74,7 @@ int ObDfoSchedDepthGenerator::generate_sched_depth(ObExecContext &exec_ctx,
   }
   return ret;
 }
-
-// dfo_tree 后序遍历，定出哪些 dfo 可以做 material op bypass
+// dfo_tree post-order traversal, determine which dfo can do material op bypass
 int ObDfoSchedDepthGenerator::do_generate_sched_depth(ObExecContext &exec_ctx,
                                                       ObDfoMgr &dfo_mgr,
                                                       ObDfo &parent)
@@ -93,15 +91,15 @@ int ObDfoSchedDepthGenerator::do_generate_sched_depth(ObExecContext &exec_ctx,
     } else {
       bool need_earlier_sched = check_if_need_do_earlier_sched(*child);
       if (need_earlier_sched) {
-        // child 里面的 material 被改造成了 bypass 的，所以 parent 必须提前调度起来
-        // 同时，parent 中如果也有 material，必须标记为 block，不可 bypass。否则会 hang。
+        // child inside the material has been transformed into bypass, so parent must be scheduled in advance
+        // At the same time, if there is also material in parent, it must be marked as block, cannot bypass. Otherwise, it will hang.
         if (OB_FAIL(try_set_dfo_unblock(exec_ctx, *child))) {
-          // 既然 parent 被提前调度了，那么 parent 千万要阻塞
-          // 否则 parent 往外吐数据，就会卡住
+          // Since parent was scheduled in advance, parent must block
+          // Otherwise parent outputs data, it will get stuck
           LOG_WARN("fail set dfo block", K(ret), K(*child), K(parent));
         } else if (OB_FAIL(try_set_dfo_block(exec_ctx, parent))) {
-          // 既然 parent 被提前调度了，那么 parent 千万要阻塞
-          // 否则 parent 往外吐数据，就会卡住
+          // Since parent was scheduled in advance, parent must block
+          // Otherwise parent outputs data, it will get stuck
           LOG_WARN("fail set dfo block", K(ret), K(*child), K(parent));
         } else {
           parent.set_earlier_sched(true);
@@ -123,9 +121,9 @@ bool ObDfoSchedDepthGenerator::check_if_need_do_earlier_sched(ObDfo &child)
       do_earlier_sched = phy_op && (PHY_MATERIAL == phy_op->type_ || PHY_MATERIAL == phy_op->type_);
     }
   } else {
-    // dfo (child) 是 earlier sched，那么可以知道 dfo 的 material 会阻塞对外吐数据.
-    // 此时 dfo 的 parent 没有必要提前调度，因为没有任何数据给它消费. parent 依靠
-    // 稍后的 2-DFO 普通调度即可。
+    // dfo (child) is earlier sched, then we can know that dfo's material will block data output.
+    // At this time, there is no need to preemptively schedule dfo's parent because there is no data for it to consume. parent relies
+    // Later 2-DFO normal scheduling will suffice.
   }
   return do_earlier_sched;
 }
@@ -189,13 +187,13 @@ int ObDfoWorkerAssignment::calc_admited_worker_count(const ObIArray<ObDfo*> &dfo
   } else if (OB_FAIL(ObDfoWorkerAssignment::get_dfos_worker_count(dfos, true, px_minimal))) {
     LOG_WARN("failed to get dfos worker count", K(ret));
   } else {
-    // px 级, 表示 optimizer 计算的数量，当前 px 理论上需要多少线程
+    // px level, indicates the number calculated by the optimizer, the current px theoretically requires how many threads
     px_expected = static_cast<const ObPxCoordSpec*>(&root_op_spec)->get_expected_worker_count();
-    // query 级, 表示 optimizer 计算的数量
+    // query level, indicates the number calculated by the optimizer
     const int64_t query_expected = task_exec_ctx->get_expected_worker_cnt();
-    // query 级, 表示调度需要最小数量
+    // query level, indicates the minimum number required for scheduling
     const int64_t query_minimal = task_exec_ctx->get_minimal_worker_cnt();
-    // query 级, 表示 admission 实际分配的数量
+    // query level, indicates the actual number of admissions allocated
     const int64_t query_admited = task_exec_ctx->get_admited_worker_cnt();
     if (query_expected > 0 && 0 >= query_admited) {
       ret = OB_ERR_INSUFFICIENT_PX_WORKER;
@@ -204,7 +202,7 @@ int ObDfoWorkerAssignment::calc_admited_worker_count(const ObIArray<ObDfo*> &dfo
       ACTIVE_SESSION_RETRY_DIAG_INFO_SETTER(admitted_px_workers_number_, query_admited);
       LOG_WARN("not enough thread resource", K(ret), K(px_expected), K(query_admited), K(query_expected));
     } else if (0 == query_expected) {
-      // note: 对于单表、dop=1的查询，会走 fast dfo，此时 query_expected = 0
+      // note: For single table, dop=1 queries, it will take the fast dfo path, at this time query_expected = 0
       px_admited = 0;
     } else if (query_admited >= query_expected) {
       px_admited = px_expected;
@@ -232,17 +230,17 @@ int ObDfoWorkerAssignment::assign_worker(ObDfoMgr &dfo_mgr,
                                          bool use_adaptive_px_dop)
 {
   int ret = OB_SUCCESS;
-  /*  算法： */
-  /*  1. 基于优化器给出的 dop，给每个 dfo 分配 worker */
-  /*  2. 理想情况是 dop = worker 数 */
-  /*  3. 但是，如果 worker 数不足，则需要降级。降级策略: 每个 dfo 等比少用 worker */
-  /*  4. 为了确定比例，需要找到同时调度时占用 worker 数最多的一组 dop，以它为基准 */
-  /*     计算比例，才能保证其余 dfo 都能获得足够 worker 数 */
+  /*  algorithm: */
+  /*  1. Based on the dop provided by the optimizer, assign workers to each dfo */
+  /*  2. The ideal situation is dop = number of workers */
+  /*  3. However, if the number of workers is insufficient, then a downgrade is needed. Downgrade strategy: each DFO uses fewer workers in a geometric progression */
+  /*  4. To determine the ratio, we need to find the group of dop that occupies the most workers when scheduled simultaneously, using it as the benchmark */
+  /*     Calculate the ratio, to ensure that all other dfo can get enough workers */
 
-  /*  算法可提升点（TODO）： */
-  /*  考虑 expected_worker_count > admited_worker_count 场景， */
-  /*  本算法中计算出 scale rate < 1 ，于是会导致每个 dfo 会做 dop 降级 */
-  /*  而实际上，可以让部分 dfo 的执行不降级。考虑下面这种场景： */
+  /*  Points for algorithm improvement (TODO): */
+  /*  Consider expected_worker_count > admitted_worker_count scenario, */
+  /*  This algorithm calculates a scale rate < 1, which will result in each dfo doing a dop downgrade */
+  /*  Actually, it is possible to allow some dfo execution without degradation. Consider the following scenario: */
   /*  */
   /*          dfo5 */
   /*         /   \ */
@@ -252,10 +250,10 @@ int ObDfoWorkerAssignment::assign_worker(ObDfoMgr &dfo_mgr,
   /*                 \ */
   /*                 dfo2 */
   /*  */
-  /*  假设 dop = 5, 那么 expected_worker_count = 3 * 5 = 15 */
+  /*  Assume dop = 5, then expected_worker_count = 3 * 5 = 15 */
   /*  */
-  /*  考虑线程不足场景，设 admited_worker_count = 10， */
-  /*  那么，算法最优的情况下，我们可以这样分配： */
+  /*  Consider the scenario of insufficient threads, set admited_worker_count = 10, */
+  /*  Then, in the optimal case of the algorithm, we can allocate as follows: */
   /*  */
   /*          dfo5 (3 threads) */
   /*         /   \ */
@@ -265,7 +263,7 @@ int ObDfoWorkerAssignment::assign_worker(ObDfoMgr &dfo_mgr,
   /*                 \ */
   /*                 dfo2 (5) */
   /*  */
-  /*  当前的实现，由于 dop 等比降低，降低后的 dop = 5 * 10 / 15 = 3，实际分配结果为： */
+  /*  The current implementation, due to dop being reduced proportionally, the reduced dop = 5 * 10 / 15 = 3, the actual allocation result is: */
   /*  */
   /*          dfo5 (3) */
   /*         /   \ */
@@ -275,13 +273,12 @@ int ObDfoWorkerAssignment::assign_worker(ObDfoMgr &dfo_mgr,
   /*                 \ */
   /*                 dfo2 (3) */
   /*  */
-  /*  显然，当前实现对 CPU 资源的利用不是最高效的。这部分工作可以留到稍后完善。暂时先这样 */
+  /*  Obviously, the current implementation is not the most efficient in terms of CPU resource utilization. This part of the work can be refined later. For now, it will suffice as is */
 
   const ObIArray<ObDfo *> & dfos = dfo_mgr.get_all_dfos();
-
-  // 基于优化器给出的 dop，给每个 dfo 分配 worker
-  // 实际分配的 worker 数一定不大于 dop，但可能小于 dop 给定值
-  // admited_worker_count在rpc作为worker的场景下，值为0.
+  // Based on the dop provided by the optimizer, assign workers to each dfo
+  // The actual number of allocated workers is definitely no greater than dop, but may be less than the given dop value
+  // admited_worker_count in rpc as worker scenario, the value is 0.
   double scale_rate = 1.0;
   bool match_expected = false;
   bool compatible_before_420 = false;
@@ -327,15 +324,14 @@ int ObDfoWorkerAssignment::assign_worker(ObDfoMgr &dfo_mgr,
               K(expected_worker_count), K(minimal_worker_count),
               "dop", child->get_dop(), K(scale_rate), K(val));
   }
-
-  // 因为上面取了 max，所以可能实际 assigned 的会超出 admission 数，这时应该报错
+  // Because the max was taken above, the actually assigned may exceed the admission number, at which point an error should be reported
   int64_t total_assigned = 0;
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(get_dfos_worker_count(dfos, false, total_assigned))) {
     LOG_WARN("failed to get dfos worker count", K(ret));
   } else if (!use_adaptive_px_dop && total_assigned > admited_worker_count
              && admited_worker_count != 0) {
-    // 意味着某些 dfo 理论上一个线程都分不到
+    // means that some dfo theoretically cannot be assigned to any thread
     ret = OB_ERR_PARALLEL_SERVERS_TARGET_NOT_ENOUGH;
     LOG_USER_ERROR(OB_ERR_PARALLEL_SERVERS_TARGET_NOT_ENOUGH, total_assigned);
     LOG_WARN("total assigned worker to dfos is more than admited_worker_count",
@@ -357,8 +353,8 @@ int ObDfoWorkerAssignment::get_dfos_worker_count(const ObIArray<ObDfo*> &dfos,
   ARRAY_FOREACH_X(dfos, idx, cnt, OB_SUCC(ret)) {
     const ObDfo *child  = dfos.at(idx);
     const ObDfo *parent = child->parent();
-    // 计算当前 dfo 和“孩子们”一起调度时消耗的线程数
-    // 找到 expected worker cnt 值最大的一组
+    // Calculate the number of threads consumed when scheduling the current dfo and its "children" together
+    // Find the group with the largest expected worker cnt value
     if (OB_ISNULL(parent) || OB_ISNULL(child)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("dfo edges expect to have parent", KPC(parent), KPC(child), K(ret));
@@ -366,7 +362,7 @@ int ObDfoWorkerAssignment::get_dfos_worker_count(const ObIArray<ObDfo*> &dfos,
       int64_t child_assigned = get_minimal ? 1 : child->get_assigned_worker_count();
       int64_t parent_assigned = get_minimal ? 1 : parent->get_assigned_worker_count();
       int64_t assigned = parent_assigned + child_assigned;
-      // 局部右深树的场景，depend_sibling 和当前 child dfo 都会被调度
+      // Local right-deep tree scenario, depend_sibling and current child dfo will both be scheduled
       /* Why need extra flag has_depend_sibling_? Why not use NULL != depend_sibling_?
        *               dfo5 (dop=2)
        *         /      |      \
@@ -456,8 +452,7 @@ int ObDfoMgr::init(ObExecContext &exec_ctx,
   }
   return ret;
 }
-
-// parent_dfo 作为输入输出参数，仅仅在第一个 op 为 coord 时才作为输出参数，其余时候都作为输入参数
+// parent_dfo as input and output parameter, it is only used as an output parameter when the first op is coord, otherwise it is always used as an input parameter
 int ObDfoMgr::do_split(ObExecContext &exec_ctx,
                        ObIAllocator &allocator,
                        const ObOpSpec *phy_op,
@@ -522,7 +517,7 @@ int ObDfoMgr::do_split(ObExecContext &exec_ctx,
       }
     }
   } else if (phy_op->is_dml_operator() && NULL != parent_dfo) {
-    // 当前op是一个dml算子，需要设置dfo的属性
+    // The current op is a dml operator, need to set the attributes of dfo
     if (ObPXServerAddrUtil::check_build_dfo_with_dml(*phy_op)) {
       parent_dfo->set_dml_op(true);
     }
@@ -548,7 +543,7 @@ int ObDfoMgr::do_split(ObExecContext &exec_ctx,
       OZ(px_coord_info.p2p_temp_table_info_.dfos_.push_back(parent_dfo));
     }
   } else if (phy_op->get_type() == PHY_SELECT_INTO && NULL != parent_dfo) {
-    // odps只支持一台机器上的并行 只能有一个sqc
+    // odps only supports parallelism on one machine can only have one sqc
     const ObSelectIntoSpec *select_into_spec = static_cast<const ObSelectIntoSpec*>(phy_op);
     ObExternalFileFormat external_properties;
     if (!select_into_spec->external_properties_.str_.empty()) {
@@ -606,9 +601,9 @@ int ObDfoMgr::do_split(ObExecContext &exec_ctx,
         LOG_WARN("fail create dfo", K(ret));
       }
     } else {
-      // 不为嵌套 px coord 在这里分配 dfo
-      // 对于嵌套 px coord，它此时只作为一个普通算子被 leaf dfo 调用
-      // leaf dfo 会调用它的 next_row 接口，驱动嵌套 px coord 开启调度
+      // Not nested px coord is allocated dfo here
+      // For nested px coord, it is only used as a normal operator called by leaf dfo
+      // leaf dfo will call its next_row interface, drive nested px coord to start scheduling
       got_fulltree_dfo = true;
     }
   } else if (IS_PX_TRANSMIT(phy_op->type_)) {
@@ -635,20 +630,20 @@ int ObDfoMgr::do_split(ObExecContext &exec_ctx,
       dfo->set_partition_random_affinitize(partition_random_affinitize);
       dfo->set_query_sql(px_coord_info.coord_.query_sql());
       if (OB_SUCC(ret)) {
-        // 存在嵌套情况，则dfo可能已经被设置过一些信息，所以这里不会覆盖
+        // If there is a nested situation, then dfo may have already been set with some information, so it will not be overwritten here
         if (OB_INVALID_ID == dfo->get_dfo_id()) {
-          //只有顶层的dfo的receive才没有设置dfo id，即使嵌套dfo，也会设置，因为会根据transmit进行设置
+          // Only the top-level dfo's receive does not have the dfo id set, even for nested dfo, it will be set because it will be determined based on transmit
           dfo->set_dfo_id(ObDfo::MAX_DFO_ID);
         }
         if (OB_INVALID_ID == dfo->get_qc_id()) {
-          // receive的px记录在了transmit上
+          // receive record of px stored on transmit
           const ObTransmitSpec *transmit = static_cast<const ObTransmitSpec *>(phy_op->get_child());
           if (OB_INVALID_ID != transmit->get_px_id()) {
             dfo->set_qc_id(transmit->get_px_id());
           }
         }
-        // 对于 root dfo 来说，它并不是一个真实的 dfo，没有分配 id
-        // 所以使用 ObDfo::MAX_DFO_ID表示
+        // For root dfo, it is not a real dfo, no id is assigned
+        // So use ObDfo::MAX_DFO_ID to represent
         if (OB_FAIL(dfo_int_gen.gen_id(dfo->get_dfo_id(), dfo->get_interrupt_id()))) {
           LOG_WARN("fail gen dfo int id", K(ret));
         }
@@ -656,8 +651,8 @@ int ObDfoMgr::do_split(ObExecContext &exec_ctx,
       }
     } else {
       const ObTransmitSpec *transmit = static_cast<const ObTransmitSpec *>(phy_op);
-      // 如果 transmit 下面的子树里包含 px coord 算子，那么下面这些设置都会被
-      // 修改成 is_local = true, dop = 1
+      // If the subtree below transmit contains px coord operator, then the following settings will be
+      // Modify to is_local = true, dop = 1
       dfo->set_coord_info_ptr(&px_coord_info);
       dfo->set_single(transmit->is_px_single());
       dfo->set_dop(transmit->is_px_single() ? transmit->get_px_dop() :
@@ -706,8 +701,8 @@ int ObDfoMgr::do_split(ObExecContext &exec_ctx,
 
   if (OB_SUCC(ret)) {
     if (got_fulltree_dfo) {
-      // 序列化包含嵌套 px coord 算子的 dfo 时，需要将它下面所有的子 dfo
-      // 都序列化出去，也就是要包含整个子树 (fulltree)
+      // Serialize the dfo containing nested px coord operator, you need to serialize all its sub dfo below
+      // Serialize everything out, that is, include the entire subtree (fulltree)
       if (OB_ISNULL(parent_dfo)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("inner px coord op should be in a dfo", K(ret));
@@ -753,9 +748,8 @@ int ObDfoMgr::create_dfo(ObIAllocator &allocator,
   }
   return ret;
 }
-
-// get_ready_dfo接口仅用于单层dfo调度.
-// 每次迭代一个dfo出来.
+// get_ready_dfo interface is only used for single-layer dfo scheduling.
+// Each iteration outputs a dfo.
 int ObDfoMgr::get_ready_dfo(ObDfo *&dfo) const
 {
   int ret = OB_SUCCESS;
@@ -779,11 +773,10 @@ int ObDfoMgr::get_ready_dfo(ObDfo *&dfo) const
   }
   return ret;
 }
-
-// 注意区别两种返回状态：
-//   - 如果有 edge 还没有 finish，且不能调度更多 dfo，则返回空集合
-//   - 如果所有 edge 都已经 finish，则返回 ITER_END
-// 每次只迭代出一对 DFO，child & parent
+// Note the difference between two return statuses:
+//   - If there is an edge that has not finished, and more dfo cannot be scheduled, then return an empty set
+//   - If all edge are already finish, then return ITER_END
+// Each iteration outputs only one pair of DFO, child & parent
 int ObDfoMgr::get_ready_dfos(ObIArray<ObDfo*> &dfos) const
 {
   int ret = OB_SUCCESS;
@@ -792,7 +785,7 @@ int ObDfoMgr::get_ready_dfos(ObIArray<ObDfo*> &dfos) const
   dfos.reset();
 
   LOG_TRACE("ready dfos", K(edges_.count()));
-  // edges 已经按照调度顺序排序，排在前面的优先调度
+  // edges have already been sorted by scheduling order, those listed first are scheduled first
   for (int64_t i = 0; OB_SUCC(ret) && i < edges_.count(); ++i) {
     ObDfo *edge = edges_.at(i);
     ObDfo *root_edge = edges_.at(edges_.count() - 1);
@@ -800,9 +793,9 @@ int ObDfoMgr::get_ready_dfos(ObIArray<ObDfo*> &dfos) const
       LOG_TRACE("finish dfo", K(*edge));
       continue;
     } else {
-      // edge 没有完成，调度的目标就是促成这条边尽快完成，包括调度起它所依赖的 DFO，即：
-      //  - edge 没有调度起来，立即调度
-      //  - edge 已经调度起来，则看这个 edge 是否依赖其它 dfo 才能完成执行
+      // edge not completed, scheduling goal is to facilitate the completion of this edge as soon as possible, including scheduling the DFO it depends on, i.e.:
+      //  - edge is not scheduled, schedule immediately
+      //  - edge has already been scheduled, then check if this edge depends on other dfo to complete execution
       all_finish = false;
       if (!edge->is_active()) {
         if (OB_FAIL(dfos.push_back(edge))) {
@@ -817,8 +810,8 @@ int ObDfoMgr::get_ready_dfos(ObIArray<ObDfo*> &dfos) const
           got_pair_dfo = true;
         }
       } else if (edge->has_depend_sibling()) {
-        // 找到 dependence 链条中优先依赖的 dfo，
-        // 要求这个 dfo 为未完成状态
+        // Find the dfo with higher priority in the dependence chain,
+        // Require this dfo to be in an unfinished state
         ObDfo *sibling_edge = edge->depend_sibling();
         for (/* nop */;
              nullptr != sibling_edge && sibling_edge->is_thread_finish();
@@ -843,27 +836,26 @@ int ObDfoMgr::get_ready_dfos(ObIArray<ObDfo*> &dfos) const
           LOG_TRACE("start schedule dfo", K(*sibling_edge), K(*sibling_edge->parent()));
         }
       }else {
-        // 当前 edge 还没有完成，也没有 sibling edge 需要调度，返回 dfos 空集，继续等待
+        // The current edge has not been completed, and there are no sibling edges to schedule, return an empty dfos, continue waiting
       }
-
-      // 三层 DFO 调度逻辑
-      // 注意：即使上面有 sibling 被调度起来了，已经调度了 3 个 DFO
-      // 也还是会去尝试调度第 4 个 depend parent dfo
+      // Three-layer DFO scheduling logic
+      // Note: Even if a sibling has been scheduled above, 3 DFOs have already been scheduled
+      // will still attempt to schedule the 4th depend parent dfo
       if (OB_SUCC(ret) && !got_pair_dfo && GCONF._px_max_pipeline_depth > 2) {
         ObDfo *parent_edge = edge->parent();
         if (NULL != parent_edge &&
             !parent_edge->is_active() &&
             NULL != parent_edge->parent() &&
             parent_edge->parent()->is_earlier_sched()) {
-          /* 为了便于描述，考虑如下场景：
+          /* For easy description, consider the following scenario:
            *       parent-parent
            *           |
            *         parent
            *           |
            *          edge
-           * 当代码运行到这个分支时，edge 已经 active，edge、parent 两个 dfo 已经被调度
-           * 并且，parent 的执行依赖于 parent-parent 也被调度（2+dfo调度优化，hash join 的
-           * 结果可以直接输出，无需在上面加 material 算子）
+           * When the code runs to this branch, edge is already active, edge and parent two dfo have been scheduled
+           * and the execution of parent depends on parent-parent being scheduled as well (2+dfo scheduling optimization, hash join result
+           * can be directly output without adding a material operator above)
            */
           if (OB_FAIL(dfos.push_back(parent_edge))) {
             LOG_WARN("fail push dfo", K(ret));
@@ -883,12 +875,12 @@ int ObDfoMgr::get_ready_dfos(ObIArray<ObDfo*> &dfos) const
             !root_edge->is_active() &&
             edge->has_parent() &&
             edge->parent() == root_edge) {
-          // 本分支是一个优化，提前调度起 root dfo，使得 root dfo
-          // 可以及时拉取下面的数据。在某些场景下，可以避免下层 dfo 添加
-          // 不必要的 material 算子阻塞数据流动
+          // This branch is an optimization, preemptively scheduling the root dfo, so that the root dfo
+          // Can timely pull the data below. In some scenarios, it can avoid adding dfo at the lower level
+          // Unnecessary material operator blocks data flow
           //
-          // 之所以可以这么做，是因为 root dfo 无论调度与否，都是占着资源的，
-          // 不调白不调
+          // The reason this can be done is because the root dfo occupies resources regardless of whether it is scheduled or not,
+          // No whitening no adjustment
           if (OB_ISNULL(root_edge->parent()) || root_edge->parent() != root_dfo_) {
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("The root edge is null or it's parent not root dfo", K(ret));
@@ -903,14 +895,14 @@ int ObDfoMgr::get_ready_dfos(ObIArray<ObDfo*> &dfos) const
           }
         }
       }
-      // 每次只迭代一对儿结果返回出去
+      // Each time only iterate one pair of results and return them out
       //
-      // 如果：
-      //   - 当前 edge 还没有完成，
-      //   - 也没有 sibling edge 需要调度，
-      //   - 没有 depend parent edge 需要调度
-      //   - root dfo 也不需要调度
-      // 则返回 dfos 空集，继续等待
+      // If:
+      //   - The current edge has not been completed,
+      //   -  there is no sibling edge to schedule,
+      //   - No depend parent edge needs scheduling
+      //   - root dfo does not need scheduling
+      // Then return dfos empty set, continue waiting
       break;
     }
   }
@@ -963,10 +955,10 @@ int ObDfoMgr::get_active_dfos(ObIArray<ObDfo*> &dfos) const
 {
   int ret = OB_SUCCESS;
   dfos.reset();
-  // edges 已经按照调度顺序排序，排在前面的优先调度
+  // edges have already been sorted by scheduling order, those listed first are scheduled first
   for (int64_t i = 0; OB_SUCC(ret) && i < edges_.count(); ++i) {
     ObDfo *edge = edges_.at(i);
-    // edge 没有完成，调度的目标就是促成这条边尽快完成
+    // edge not completed, the scheduling goal is to facilitate the completion of this edge as soon as possible
     if (edge->is_active()) {
       if (OB_FAIL(dfos.push_back(edge))) {
         LOG_WARN("fail push back edge", K(ret));
@@ -982,7 +974,7 @@ int ObDfoMgr::get_scheduled_dfos(ObIArray<ObDfo*> &dfos) const
   dfos.reset();
   for (int64_t i = 0; OB_SUCC(ret) && i < edges_.count(); ++i) {
     ObDfo *edge = edges_.at(i);
-    // 调用过 schedule_dfo 接口，无论成功失败，dfo 就会被设置为 scheduled 状态
+    // Called the schedule_dfo interface, regardless of success or failure, dfo will be set to scheduled state
     if (edge->is_scheduled()) {
       if (OB_FAIL(dfos.push_back(edge))) {
         LOG_WARN("fail push back edge", K(ret));
@@ -998,7 +990,7 @@ int ObDfoMgr::get_running_dfos(ObIArray<ObDfo*> &dfos) const
   dfos.reset();
   for (int64_t i = 0; OB_SUCC(ret) && i < edges_.count(); ++i) {
     ObDfo *edge = edges_.at(i);
-    // 调用过 schedule_dfo 接口，无论成功失败，dfo 就会被设置为 scheduled 状态
+    // Called the schedule_dfo interface, regardless of success or failure, dfo will be set to scheduled state
     if (edge->is_scheduled() && !edge->is_thread_finish()) {
       if (OB_FAIL(dfos.push_back(edge))) {
         LOG_WARN("fail push back edge", K(ret));

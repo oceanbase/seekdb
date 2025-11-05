@@ -360,10 +360,10 @@ int ObMPStmtPrexecute::before_process()
       }
     }
     session->set_last_trace_id(ObCurTraceId::get_trace_id());
-    //对于tracelog的处理，不影响正常逻辑，错误码无须赋值给ret
+    //For the handling of tracelog, it does not affect the normal logic, and the error code does not need to be assigned to ret
     if (session != NULL && OB_FAIL(ret)) {
       int tmp_ret = OB_SUCCESS;
-      //清空WARNING BUFFER
+      //Clear WARNING BUFFER
       tmp_ret = do_after_process(*session, false/*no asyn response*/);
       UNUSED(tmp_ret);
     }
@@ -393,12 +393,12 @@ int ObMPStmtPrexecute::clean_ps_stmt(ObSQLSessionInfo &session,
   if (first_time_
         && ((!is_batch && !is_local_retry)
               || (is_batch && THIS_WORKER.need_retry()))) {
-    /* 清理 ps stmt 的时机
-     * 1. 第一次执行时，也就是在 before_process 中执行 prepare 生成 stmt 时
-     * 2. 第一次执行且 非batch 模式， 非 local retry 的报错都需要清理
-     * 3. 第一次执行且 batch 模式， 参考 try_batch_multi_stmt_optimization 的实现， 
-     *    只有 THIS_WORKER.need_retry() 的时候队列重试需要清理，
-     *    其他时候都退化成了 local 重试，不需要清理
+    /* Timing for cleaning up ps stmt
+     * 1. On the first execution, i.e., when prepare generates stmt in before_process
+     * 2. On the first execution and not in batch mode, all errors that are not local retries need to be cleaned up
+     * 3. On the first execution and in batch mode, refer to the implementation of try_batch_multi_stmt_optimization,
+     *    cleanup is only needed when THIS_WORKER.need_retry(),
+     *    otherwise, it degrades into a local retry, which does not require cleanup
      */ 
     get_ctx().cur_sql_ = sql_;
     get_ctx().raw_sql_ = sql_;
@@ -430,7 +430,7 @@ int ObMPStmtPrexecute::execute_response(ObSQLSessionInfo &session,
     ObDbmsCursorInfo *cursor = NULL;
     bool use_stream = false;
     inner_stmt_id = OB_INVALID_ID;
-    // 1.创建cursor
+    // 1.create cursor
     ObPsStmtId inner_stmt_id = OB_INVALID_ID;
     if (OB_NOT_NULL(session.get_cursor(stmt_id_))) {
       if (OB_FAIL(session.close_cursor(stmt_id_))) {
@@ -454,7 +454,7 @@ int ObMPStmtPrexecute::execute_response(ObSQLSessionInfo &session,
     OZ (cursor->init_params(params.count()));
     OZ (cursor->get_exec_params().assign(params));
     OZ (gctx_.sql_engine_->init_result_set(ctx, result));
-    //监控项统计开始
+    //Monitoring item statistics start
     set_exec_start_timestamp(ObTimeUtility::current_time());
     if (OB_SUCC(ret)) {
       ObPLExecCtx pl_ctx(cursor->get_allocator(), &result.get_exec_context(), NULL/*params*/,
@@ -509,7 +509,7 @@ int ObMPStmtPrexecute::execute_response(ObSQLSessionInfo &session,
           LOG_WARN("get tenant schema guard failed ", K(ret), K(session.get_effective_tenant_id()));
         }
         if (-1 == cursor->get_current_position() && iteration_count_ > 0) {
-          // execute 如果返回数据，需要更新一下cursor的指针位置
+          // execute if data is returned, need to update the cursor's pointer position
           OX (cursor->set_current_position(0));
         }
         while (OB_SUCC(ret) && row_num < iteration_count_
@@ -663,9 +663,9 @@ int ObMPStmtPrexecute::execute_response(ObSQLSessionInfo &session,
       LOG_WARN("prexecute clean ps stmt fail. ", K(ret), K(tmp_ret));
     }
   } else {
-    //监控项统计开始
+    //Monitoring item statistics start
     set_exec_start_timestamp(ObTimeUtility::current_time());
-    // 本分支内如果出错, 全部会在response_result内部处理妥当, 无需再额外处理回复错误包
+    // If an error occurs within this branch, it will be handled properly inside response_result, no need to handle the error response packet again
     need_response_error = false;
     is_diagnostics_stmt = ObStmt::is_diagnostic_stmt(result.get_literal_stmt_type());
     ctx.is_show_trace_stmt_ = ObStmt::is_show_trace_stmt(result.get_literal_stmt_type());
@@ -748,7 +748,7 @@ int ObMPStmtPrexecute::response_query_header(ObSQLSessionInfo &session,
                                              ObResultSet &result,
                                              bool need_flush_buffer)
 {
-  // TODO: 增加com类型的处理
+  // TODO: Add handling for com type
   int ret = OB_SUCCESS;
   if (!prepare_packet_sent_) {
     const ColumnsFieldIArray *fields = result.get_field_columns();
@@ -766,9 +766,9 @@ int ObMPStmtPrexecute::response_query_header(ObSQLSessionInfo &session,
     // check has arraybinding result
     if (OB_NOT_NULL(returning_params_field) && is_arraybinding_has_result_type(stmt_type_)) {
       /*
-       * 1. arraybinding 带结果集的语句类型 包含了 DML 语句 + 匿名块 + CALL
-       * 1. returning_params_field 不为空 且语句类型满足 1 的情况，认为 arraybinding 有结果集返回
-       * 2. param 的个数包含了 returning 的个数
+       * 1. arraybinding statement type with result set includes DML statements + anonymous blocks + CALL
+       * 1. if returning_params_field is not empty and the statement type satisfies condition 1, it is considered that arraybinding has a result set to return
+       * 2. the number of params includes the number of returnings
        */ 
       returning_params_cnt = returning_params_field->count();
       params_cnt = params_cnt + returning_params_cnt;
@@ -779,11 +779,12 @@ int ObMPStmtPrexecute::response_query_header(ObSQLSessionInfo &session,
     if (((0 != iteration_count_ || stmt::T_ANONYMOUS_BLOCK == stmt_type_) && fields_count > 0)
         || (OB_OCI_EXACT_FETCH == exec_mode_ && stmt::T_SELECT == stmt_type_)) {
 
-      /* has result 的几种情况： 
-       * 1. 预取且有结果集： iteration_count_ > 0 & fields_count > 0 
-       * 2. 匿名块且有结果集 ： T_ANONYMOUS_BLOCK == stmt_type_ && fields_count > 0. 
-       *                     匿名块情况下无论 iteration_count_ 是多少，是否有预取， 都需要设置 has_result
-       * 3. exact_fetch 模式 ： OB_OCI_EXACT_FETCH == exec_mode_ && stmt::T_SELECT == stmt_type_
+      /* has result cases:
+       * 1. Prefetch and has result set: iteration_count_ > 0 & fields_count > 0
+       * 2. Anonymous block and has result set: T_ANONYMOUS_BLOCK == stmt_type_ && fields_count > 0.
+       *                                    In the case of an anonymous block, regardless of the value of iteration_count_,
+       *                                    whether prefetching is done or not, has_result needs to be set
+       * 3. exact_fetch mode: OB_OCI_EXACT_FETCH == exec_mode_ && stmt::T_SELECT == stmt_type_
        */ 
 
       has_result = 1;
@@ -791,7 +792,7 @@ int ObMPStmtPrexecute::response_query_header(ObSQLSessionInfo &session,
 
     // check ps out
     if ((stmt::T_ANONYMOUS_BLOCK == stmt_type_ || stmt::T_CALL_PROCEDURE == stmt_type_) && has_result) {
-      // PL 语句 + has_result
+      // PL statement + has_result
       ps_out = true;
     }
 
@@ -804,7 +805,7 @@ int ObMPStmtPrexecute::response_query_header(ObSQLSessionInfo &session,
                                            result.get_warning_count(),
                                            has_result,
                                            has_arraybinding_result,
-                                           ps_out && get_arraybounding()))) { // 只有 arraybinding + PL + 有结果集返回， prepare 中的 ps_out 才设置为 true
+                                           ps_out && get_arraybounding()))) { // Only arraybinding + PL + result set returned, ps_out in prepare is set to true
       LOG_WARN("packet send prepare infomation fail", K(ret), K(stmt_id_));
     } else if (params_cnt > 0 && OB_FAIL(send_param_field_packet(session, param_fields))) {
       LOG_WARN("response param packet fail", K(ret));
@@ -832,7 +833,7 @@ int ObMPStmtPrexecute::response_param_query_header(ObSQLSessionInfo &session,
                                                   int64_t warning_count,
                                                   bool ps_out)
 {
-  // TODO: 增加com类型的处理
+  // TODO: Add handling for com type
   int ret = OB_SUCCESS;
   if (!prepare_packet_sent_) {
     uint64_t params_cnt = 0;
@@ -928,7 +929,7 @@ int ObMPStmtPrexecute::after_do_process_for_arraybinding(ObSQLSessionInfo &sessi
 
   bool ps_out = result.is_pl_stmt(stmt_type_) && result.is_with_rows() ? true : false;
   if (ret != OB_SUCCESS) {
-    // 当前执行报错的情况下，如果不再retry，并且是非batch优化才需要回一个eof包
+    // In the case of an error during current execution, if no retry is to be performed and it is not a batch optimization, an eof packet needs to be returned
     if (need_response_pkg_when_error_occur()) {
       if (OB_SUCCESS != (response_ret = send_eof_packet(session, 0, false, true, ps_out))) {
         LOG_WARN("send eof field failed", K(response_ret), K(ret));
@@ -937,13 +938,13 @@ int ObMPStmtPrexecute::after_do_process_for_arraybinding(ObSQLSessionInfo &sessi
   } else {
     if (ctx_.multi_stmt_item_.is_ab_batch_opt()
         && ctx_.get_batch_params_count() == arraybinding_size_) {
-      // 执行成功，全部数据都完成batch优化，直接回eof包
+      // Execution successful, all data has been batch optimized, directly return eof packet
       if (OB_SUCCESS != (response_ret = send_eof_packet(session, 0, false, true, false))) {
         ret = response_ret;
         LOG_WARN("send eof field failed", K(response_ret), K(ret));
       }
     } else if (curr_sql_idx_ == (arraybinding_size_ - 1)) {
-      // 最后一行数据完成执行
+      // The last line of data has finished execution
       if (OB_SUCCESS != (response_ret = send_eof_packet(session, 0, false, true, ps_out))) {
         ret = response_ret;
         LOG_WARN("send eof field failed", K(response_ret), K(ret));
@@ -960,7 +961,7 @@ bool ObMPStmtPrexecute::need_response_pkg_when_error_occur()
       && !THIS_WORKER.need_retry()
       && get_arraybounding()) {
     if (ctx_.multi_stmt_item_.is_batched_multi_stmt()) {
-      // 如果是batch优化，所有失败的场景下都不回包，因为还会做强制重试
+      // If it is batch optimization, no response will be sent in all failure scenarios because a forced retry will still be performed
       bret = false;
     } else {
       bret = true;

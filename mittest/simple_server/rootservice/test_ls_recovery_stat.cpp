@@ -44,16 +44,16 @@ TEST_F(TestLSRecoveryGuard, sys_recovery_guard)
 {
   int ret = OB_SUCCESS;
   {
-    //不init直接析构
+    // Do not init directly destruct
     ObLSRecoveryGuard guard;
   }
   {
-    //init 系统租户，析构
+    // init system tenant, destructor
     ObLSRecoveryGuard guard;
     ASSERT_EQ(OB_SUCCESS, guard.init(OB_SYS_TENANT_ID, SYS_LS));
   }
   {
-    //init不存在的租户，或者日志流
+    // init non-existent tenant, or log stream
     ObLSRecoveryGuard guard;
     ASSERT_EQ(OB_TENANT_NOT_IN_SERVER, guard.init(1002, SYS_LS));
   }
@@ -82,21 +82,21 @@ TEST_F(TestLSRecoveryGuard, user_recovery_guard)
   }
   {
     ObLSRecoveryGuard guard;
-    //加锁成功后，不在汇报，但是可以在统计
+    // Lock acquisition successful, no longer report, but can be included in statistics
     ASSERT_EQ(OB_SUCCESS, guard.init(tenant_id_, SYS_LS, 300 * 1000));
-    usleep(3000 * 1000);//sleep 300ms，应该设置成最新
+    usleep(3000 * 1000);//sleep 300ms, should be set to the latest
     readable_scn = guard.ls_recovery_stat_->readable_scn_upper_limit_;
-    //内存中的scn还是可以推高的
+    // The scn in memory can still be increased
     SCN readable_scn_memory = guard.ls_recovery_stat_->replicas_scn_.at(0).get_readable_scn();
     config_version = guard.ls_recovery_stat_->config_version_in_inner_; 
     ASSERT_EQ(1, guard.ls_recovery_stat_->ref_cnt_);
     ObLSRecoveryGuard guard1;
-    //不能加锁成功
+    // Cannot acquire lock successfully
     ASSERT_EQ(OB_EAGAIN, guard1.init(tenant_id_, SYS_LS, 2 * 1000 * 1000));
     ASSERT_EQ(OB_INIT_TWICE, guard.init(tenant_id_, SYS_LS));
     ASSERT_EQ(1, guard.ls_recovery_stat_->ref_cnt_);
     ASSERT_EQ(OB_SUCCESS, guard.ls_recovery_stat_->reset_inner_readable_scn());
-    usleep(3000 * 1000);//sleep 300ms，应该设置成最新
+    usleep(3000 * 1000);//sleep 300ms, should be set to the latest
     ASSERT_EQ(readable_scn.get_val_for_sql(), guard.ls_recovery_stat_->readable_scn_upper_limit_.get_val_for_sql());
   }
   

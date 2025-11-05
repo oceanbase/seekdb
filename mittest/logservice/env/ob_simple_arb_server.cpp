@@ -25,7 +25,7 @@ namespace palflite
 int PalfEnvLiteMgr::get_palf_env_lite(const palflite::PalfEnvKey &key,
                                       PalfEnvLite *&palf_env_lite)
 {
-  // NB:保证arb server的node id为1002
+  // NB: ensure the node id of arb server is 1002
   palf_env_lite = NULL;
   int ret = OB_SUCCESS;
   if (OB_FAIL(palf_env_lite_map_.get(key, palf_env_lite))) {

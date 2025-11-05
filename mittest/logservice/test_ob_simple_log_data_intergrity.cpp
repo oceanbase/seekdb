@@ -144,7 +144,7 @@ TEST_F(TestObSimpleLogDataIntergrity, accumlate_checksum)
   }
   EXPECT_EQ(OB_SUCCESS, delete_paxos_group(id));
   PALF_LOG(INFO, "runlin trace delete_paxos_group");
-  // 模拟最后一条的LogEntry非原子写入(LogEntry没有写入)，报错OB_INVALID_DATA, 重启成功，预期log_tail是该日志头
+  // Simulate the last LogEntry not being atomically written (LogEntry not written), error OB_INVALID_DATA, restart successful, expected log_tail to be this log header
   LSN expected_log_tail;
   {
     id = ATOMIC_AAF(&palf_id_, 1);
@@ -162,7 +162,7 @@ TEST_F(TestObSimpleLogDataIntergrity, accumlate_checksum)
     EXPECT_EQ(OB_SUCCESS, iterator.next());
     EXPECT_EQ(OB_SUCCESS, iterator.get_entry(entry, curr_lsn));
     EXPECT_EQ(curr_lsn, max_lsn);
-    // LogEntry完全被写坏
+    // LogEntry is completely corrupted
     char *output_buf = NULL;
     int64_t pos = sizeof(LogGroupEntryHeader);
     DataFaultInject inject = [&pos, &entry](char *buf) {
@@ -190,7 +190,7 @@ TEST_F(TestObSimpleLogDataIntergrity, accumlate_checksum)
   PALF_LOG(INFO, "runlin trace second restart_paxos_groups begin");
   EXPECT_EQ(OB_SUCCESS, restart_paxos_groups());
   PALF_LOG(INFO, "runlin trace second restart_paxos_groups end");
-  // 模拟最后一条的LogEntry非原子写入(LogEntry部分写入, datacheck sum以及后续的数据被写坏为0)，报错OB_CHECKSUM_ERROR, 重启成功，预期log_tail是该日志头
+  // Simulate the last LogEntry not being atomically written (LogEntry part is written, data checksum and subsequent data are corrupted to 0), error OB_CHECKSUM_ERROR, restart successful, expected log_tail is this log header
   {
     PalfHandleImplGuard leader;
     EXPECT_EQ(OB_SUCCESS, get_leader(id, leader, leader_idx));
@@ -206,7 +206,7 @@ TEST_F(TestObSimpleLogDataIntergrity, accumlate_checksum)
     EXPECT_EQ(OB_SUCCESS, iterator.next());
     EXPECT_EQ(OB_SUCCESS, iterator.get_entry(entry, curr_lsn));
     EXPECT_EQ(curr_lsn, max_lsn);
-    // 模拟LogEntry的datachecsum以及后续的数据被置为全0
+    // Simulate LogEntry's data checksum and subsequent data being set to all 0
     // LogEntryHeader 16bit(maigc) 16bit(version) 32bit(size) 64bit(scn) datachecsum
     char *output_buf = NULL;
     int64_t pos = sizeof(LogGroupEntryHeader) + 16;
@@ -236,7 +236,7 @@ TEST_F(TestObSimpleLogDataIntergrity, accumlate_checksum)
     EXPECT_EQ(OB_SUCCESS, get_leader(id, leader, leader_idx));
     EXPECT_EQ(expected_log_tail, leader.palf_handle_impl_->get_max_lsn());
   }
-  // 模拟最后一条的LogEntryHeadr bit位反转, 报错OB_INVALID_DATA, 重启成功，预期log_tail是该日志头
+  // Simulate the bit inversion of the last LogEntryHeadr, error OB_INVALID_DATA, restart successful, expected log_tail is this log header
   {
     PalfHandleImplGuard leader;
     EXPECT_EQ(OB_SUCCESS, get_leader(id, leader, leader_idx));
@@ -252,7 +252,7 @@ TEST_F(TestObSimpleLogDataIntergrity, accumlate_checksum)
     EXPECT_EQ(OB_SUCCESS, iterator.next());
     EXPECT_EQ(OB_SUCCESS, iterator.get_entry(entry, curr_lsn));
     EXPECT_EQ(curr_lsn, max_lsn);
-    // 模拟LogEntry的datachecsum以及后续的数据被置为全0
+    // Simulate LogEntry's data checksum and subsequent data being set to all 0
     // LogEntryHeader 16bit(maigc) 16bit(version) 32bit(size) 64bit(scn) datachecsum
     char *output_buf = NULL;
     int64_t pos = sizeof(LogGroupEntryHeader) + 14;
@@ -276,7 +276,7 @@ TEST_F(TestObSimpleLogDataIntergrity, accumlate_checksum)
   PALF_LOG(INFO, "runlin trace fourth restart_paxos_groups begin");
   EXPECT_EQ(OB_SUCCESS, restart_paxos_groups());
   PALF_LOG(INFO, "runlin trace fourth restart_paxos_groups end");
-  // 模拟最后一条的LogGroupEntryHeadr bit位反转, 报错OB_INVALID_DATA, 重启成功，预期log_tail是该日志头
+  // Simulate the bit inversion of the last LogGroupEntryHeadr, error OB_INVALID_DATA, restart successfully, expected log_tail is this log header
   {
     PalfHandleImplGuard leader;
     EXPECT_EQ(OB_SUCCESS, get_leader(id, leader, leader_idx));
@@ -292,7 +292,7 @@ TEST_F(TestObSimpleLogDataIntergrity, accumlate_checksum)
     EXPECT_EQ(OB_SUCCESS, iterator.next());
     EXPECT_EQ(OB_SUCCESS, iterator.get_entry(entry, curr_lsn));
     EXPECT_EQ(curr_lsn, max_lsn);
-    // 模拟LogGroupEntryHeader bit位反转
+    // Simulate LogGroupEntryHeader bit reversal
     char *output_buf = NULL;
     int64_t pos = 14;
     DataFaultInject inject = [&pos](char *buf) {

@@ -344,124 +344,122 @@ class ObDBMSSchedJobUtils
 {
 public:
   /**
-   * @brief  检查是否有效的 sql name
+   * @brief  Check if the sql name is valid
    * @param [in] name  - sql name
    * @retval OB_SUCCESS execute success
-   * @retval OB_ERR_ILLEGAL_NAME 不合法的命名
+   * @retval OB_ERR_ILLEGAL_NAME illegal name
   */
   static int check_is_valid_name(const ObString &name);
   /**
-   * @brief  检查是否有效的 job style
+   * @brief  Check if the job style is valid
    * @param [in] str  - job style
    * @retval OB_SUCCESS execute success
-   * @retval OB_NOT_SUPPORTED 不支持
+   * @retval OB_NOT_SUPPORTED not supported
   */
   static int check_is_valid_job_style(const ObString &str);
   /**
-   * @brief  检查是否有效的 job type
+   * @brief  Check if the job type is valid
    * @param [in] str  - job type
    * @retval OB_SUCCESS execute success
-   * @retval OB_NOT_SUPPORTED 不支持
+   * @retval OB_NOT_SUPPORTED not supported
   */
   static int check_is_valid_job_type(const ObString &str);
   /**
-   * @brief  检查是否有效的 job argument num
+   * @brief  Check if the job argument num is valid
    * @param [in] num
    * @retval OB_SUCCESS execute success
-   * @retval OB_NOT_SUPPORTED 不支持
+   * @retval OB_NOT_SUPPORTED not supported
   */
   static int check_is_valid_argument_num(const int64_t num);
   /**
-   * @brief  检查是否有效的 sched_type
+   * @brief  Check if the sched_type is valid
    * @param [in] str  - sched_type
    * @retval OB_SUCCESS execute success
-   * @retval OB_NOT_SUPPORTED 不支持
+   * @retval OB_NOT_SUPPORTED not supported
   */
   /**
-   * @brief  检查是否有效的 state
+   * @brief  Check if the state is valid
    * @param [in] str  - state
    * @retval OB_SUCCESS execute success
-   * @retval OB_NOT_SUPPORTED 不支持
+   * @retval OB_NOT_SUPPORTED not supported
   */
   static int check_is_valid_state(const ObString &str);
   /**
-   * @brief  检查是否有效的 end_date
+   * @brief  Check if the end_date is valid
    * @param [in] start_date
    * @param [in] end_date
    * @retval OB_SUCCESS execute success
-   * @retval OB_NOT_SUPPORTED 不支持的时间
+   * @retval OB_NOT_SUPPORTED unsupported time
   */
   static int check_is_valid_end_date(const int64_t start_date, const int64_t end_date);
   /**
-   * @brief  检查是否有效的 repeat interval
+   * @brief  Check if the repeat interval is valid
    * @param [in] str repeat_interval
    * @retval OB_SUCCESS execute success
-   * @retval OB_NOT_SUPPORTED 不支持
+   * @retval OB_NOT_SUPPORTED not supported
   */
   static int check_is_valid_repeat_interval(const ObString &str, bool is_limit_interval_num = false);
   /**
-   * @brief  检查是否有效的 max_run_duration
+   * @brief  Check if max_run_duration is valid
    * @param [in] max_run_duration
    * @retval OB_SUCCESS execute success
-   * @retval OB_INVALID_ARGUMENT_NUM interval_num 超出范围
-   * @retval OB_NOT_SUPPORTED 语法不支持
+   * @retval OB_INVALID_ARGUMENT_NUM interval_num out of range
+   * @retval OB_NOT_SUPPORTED syntax not supported
   */
   static int check_is_valid_max_run_duration(const int64_t max_run_duration);
-
-
-  //TO DO DELETE 连雨
+  //TO DO DELETE continuous rain
   static int generate_job_id(int64_t tenant_id, int64_t &max_job_id);
   /**
-   * @brief  创建一个 job
+   * @brief  Create a job
    * @param [in] sql_client
-   * @param [in] tenant_id  - 租户id
-   * @param [in] job_id  - job_id
+   * @param [in] tenant_id  - tenant id
+   * @param [in] job_id  - job id
    * @retval OB_SUCCESS execute success
-   * @retval OB_ERR_UNEXPECTED 未知错误
-   * @retval OB_INVALID_ARGUMENT 当前 JOB 不存在
-   * @retval OB_ERR_NO_PRIVILEGE 当前 JOB 传入的用户没有权限修改
+   * @retval OB_ERR_UNEXPECTED unknown error
+   * @retval OB_INVALID_ARGUMENT current JOB does not exist
+   * @retval OB_ERR_NO_PRIVILEGE the user passed in for the current JOB does not have permission to modify
    */
   static int create_dbms_sched_job(common::ObISQLClient &sql_client,
                                    const uint64_t tenant_id,
                                    const int64_t job_id,
                                    const ObDBMSSchedJobInfo &job_info);
   /**
-   * @brief  直接删除一个 job
+   * @brief  Directly delete a job
    * @param [in] sql_client
-   * @param [in] tenant_id  - 租户id
-   * @param [in] job_name  - job名
-   * @param [in] if_exists  - 为 true (删除一个不存在 JOB 会报错)
+   * @param [in] tenant_id  - tenant id
+   * @param [in] job_name  - job name
+   * @param [in] if_exists  - if true (deleting a non-existent JOB will result in an error)
    * @retval OB_SUCCESS execute success
-   * @retval OB_ERR_UNEXPECTED 未知错误
-   * @retval OB_INVALID_ARGUMENT 当前 JOB 不存在
+   * @retval OB_ERR_UNEXPECTED unknown error
+   * @retval OB_INVALID_ARGUMENT current JOB does not exist
    */
   static int remove_dbms_sched_job(common::ObISQLClient &sql_client,
                                    const uint64_t tenant_id,
                                    const common::ObString &job_name,
                                    const bool if_exists = false);
   /**
-   * @brief  停止一个 未开始/正在运行的 job
+   * @brief  Stop a job that has not started/running
    * @param [in] sql_client
-   * @param [in] is_delete_after_stop  - 停止后是否删除
-   * @param [in] job_info  - 要停止的 job 信息
+   * @param [in] is_delete_after_stop  - Whether to delete after stopping
+   * @param [in] job_info  - Information of the job to stop
    * @retval OB_SUCCESS execute success
-   * @retval OB_NOT_SUPPORTED 当前版本不支持
-   * @retval OB_ERR_UNEXPECTED 未知错误
-   * @retval OB_ENTRY_NOT_EXIST 当前 JOB 不在运行
-   * @retval OB_ERR_NO_PRIVILEGE 当前 JOB 传入的用户没有权限修改
+   * @retval OB_NOT_SUPPORTED Not supported in the current version
+   * @retval OB_ERR_UNEXPECTED Unknown error
+   * @retval OB_ENTRY_NOT_EXIST The current JOB is not running
+   * @retval OB_ERR_NO_PRIVILEGE The user provided for the current JOB does not have permission to modify
    */
   static int stop_dbms_sched_job(common::ObISQLClient &sql_client,
                                  const ObDBMSSchedJobInfo &job_info,
                                  const bool is_delete_after_stop);
   /**
-   * @brief  更新 JOB 信息
+   * @brief  Update JOB information
    * @param [in] job_info
-   * @param [in] job_attribute_name - 要更新的 job 列
-   * @param [in] job_attribute_value - 要更新的列 value
+   * @param [in] job_attribute_name - The job column to be updated
+   * @param [in] job_attribute_value - The value of the column to be updated
    * @retval OB_SUCCESS execute success
-   * @retval OB_ERR_UNEXPECTED 未知错误
-   * @retval OB_INVALID_ARGUMENT 无效参数
-   * @retval OB_ENTRY_NOT_EXIST JOB 不存在/没做更改
+   * @retval OB_ERR_UNEXPECTED unknown error
+   * @retval OB_INVALID_ARGUMENT invalid argument
+   * @retval OB_ENTRY_NOT_EXIST JOB does not exist/no changes made
    */
   static int update_dbms_sched_job_info(common::ObISQLClient &sql_client,
                                         const ObDBMSSchedJobInfo &job_info,
@@ -469,15 +467,15 @@ public:
                                         const ObObj &job_attribute_value,
                                         const bool from_pl_set_attr = false);
   /**
-   * @brief  获取 JOB 信息
-   * @param [in] tenant_id  - 租户id
-   * @param [in] is_oracle_tenant  - 是否 oracle 租户, 内部表没有的值, 由调用者确定
-   * @param [in] job_name  - job名
-   * @param [in] allocator  - 合理的 allocator, 防止 job_info 失效
-   * @param [in] job_info  - job 信息
+   * @brief  Get JOB information
+   * @param [in] tenant_id  - tenant id
+   * @param [in] is_oracle_tenant  - whether it is an oracle tenant, internal table does not have this value, determined by the caller
+   * @param [in] job_name  - job name
+   * @param [in] allocator  - reasonable allocator, to prevent job_info from becoming invalid
+   * @param [in] job_info  - job information
    * @retval OB_SUCCESS execute success
-   * @retval OB_ERR_UNEXPECTED 未知错误
-   * @retval OB_ENTRY_NOT_EXIST JOB 不存在
+   * @retval OB_ERR_UNEXPECTED unknown error
+   * @retval OB_ENTRY_NOT_EXIST JOB does not exist
    */
   static int get_dbms_sched_job_info(common::ObISQLClient &sql_client,
                                      const uint64_t tenant_id,
@@ -486,29 +484,29 @@ public:
                                      common::ObIAllocator &allocator,
                                      ObDBMSSchedJobInfo &job_info);
   /**
-   * @brief  检查用户是否有修改 JOB 的权限（策略, root 用户能修改所有 job, 普通用户只能修改自己的 job)
-   * @param [in] user_info  - 用户信息
-   * @param [in] job_info  - job 信息
+   * @brief  Check if the user has permission to modify the JOB (policy: root user can modify all jobs, ordinary users can only modify their own jobs)
+   * @param [in] user_info  - User information
+   * @param [in] job_info  - Job information
    * @retval OB_SUCCESS execute success
-   * @retval OB_ERR_UNEXPECTED 未知错误
-   * @retval OB_INVALID_ARGUMENT 无效参数/ user_info 为 NULL
-   * @retval OB_ERR_NO_PRIVILEGE 传入用户没有权限
+   * @retval OB_ERR_UNEXPECTED unknown error
+   * @retval OB_INVALID_ARGUMENT invalid argument/ user_info is NULL
+   * @retval OB_ERR_NO_PRIVILEGE the input user does not have permission
    */
   static int check_dbms_sched_job_priv(const share::schema::ObUserInfo *user_info,
                                        const ObDBMSSchedJobInfo &job_info);
   /**
-   * @brief  计算 job 保存的时间表达式得到下一次执行的时间
-   * @param [in] job_info  - job 信息
+   * @brief  Calculate the next execution time based on the job's time expression
+   * @param [in] job_info  - job information
    * @param [out] next_run_time 
    * @retval OB_SUCCESS execute success
-   * @retval OB_ERR_UNEXPECTED 未知错误
-   * @retval OB_INVALID_ARGUMENT 无效参数
+   * @retval OB_ERR_UNEXPECTED unknown error
+   * @retval OB_INVALID_ARGUMENT invalid argument
    */
   static int calc_dbms_sched_repeat_expr(const ObDBMSSchedJobInfo &job_info, int64_t &next_run_time);
   static int zone_check_impl(int64_t tenant_id, const ObString &zone);
   static int job_class_check_impl(int64_t tenant_id, const ObString &job_class_name);
   static int get_max_failures_value(int64_t tenant_id, const ObString &src_str, int64_t &value);
-  static int reserve_user_with_minimun_id(ObIArray<const share::schema::ObUserInfo *> &user_infos); //TO DO 连雨 delete
+  static int reserve_user_with_minimun_id(ObIArray<const share::schema::ObUserInfo *> &user_infos); // TO DO Lianyu delete
 };
 }
 }

@@ -114,7 +114,7 @@ int ObTransformEliminateOuterJoin::recursive_eliminate_outer_join_in_table_item(
     LOG_WARN("check joined table type failed", K(ret));
   } else if (is_my_joined_table_type) {
     OPT_TRACE("try to eliminate joined table:", cur_table_item);
-    //子表无法从stmt中查找，只能通过指针转换得到joined_table
+    // Sub-table cannot be found from stmt, can only be obtained through pointer conversion to joined_table
     process_join = static_cast<JoinedTable*>(cur_table_item);
     bool is_happened = false;
     ret = do_eliminate_outer_join(stmt,
@@ -124,7 +124,7 @@ int ObTransformEliminateOuterJoin::recursive_eliminate_outer_join_in_table_item(
                                   conditions,
                                   should_move_to_from_list,
                                   is_happened);
-    //继续处理左右子表
+    // Continue processing left and right sub-tables
     if (OB_SUCC(ret)) {
       trans_happened |= is_happened;
       bool child_should_move_to_from_list = is_happened && should_move_to_from_list
@@ -188,7 +188,7 @@ int ObTransformEliminateOuterJoin::is_outer_joined_table_type(ObDMLStmt *stmt,
     LOG_WARN("param has null", K(ret));
   } else if (!cur_table_item->is_joined_table()) {
     if (should_move_to_from_list) {
-      //非joined table不处理，直接放入from_item_list
+      // Non-joined table not processed, directly put into from_item_list
       FromItem from_item;
       from_item.is_joined_ = false;
       from_item.table_id_ = cur_table_item->table_id_;
@@ -208,7 +208,7 @@ int ObTransformEliminateOuterJoin::is_outer_joined_table_type(ObDMLStmt *stmt,
     } else if (LEFT_OUTER_JOIN == cur_joined_table_item->joined_type_ ||
         FULL_OUTER_JOIN == cur_joined_table_item->joined_type_ ||
         INNER_JOIN == cur_joined_table_item->joined_type_) {
-      //仅处理left join、full join、inner join、connect by的左右table item
+      // Only process left join, full join, inner join, connect by's left and right table item
       is_my_joined_table_type = true;
     } else {
       if (should_move_to_from_list) {
@@ -247,24 +247,24 @@ int ObTransformEliminateOuterJoin::do_eliminate_outer_join(ObDMLStmt *stmt,
     LOG_WARN("param has null", K(ret));
   } else {
     if (FULL_OUTER_JOIN == cur_joined_table->joined_type_) {
-      //是否能消除左外连接
+      // Can left outer join be eliminated
       if (OB_FAIL(can_be_eliminated(stmt, cur_joined_table, conditions, can_eliminate))) {
         LOG_WARN("failed to test eliminated left join condition", K(ret));
       } else if (can_eliminate) {
-        //left join消除后，旋转right join为左连接
+        //left join elimination, rotate right join to left join
         trans_happened = true;
         TableItem* temp = cur_joined_table->left_table_;
         cur_joined_table->left_table_ = cur_joined_table->right_table_;
         cur_joined_table->right_table_ = temp;
         cur_joined_table->joined_type_ = LEFT_OUTER_JOIN;
       } else {
-        //left join不能消除，旋转连接，尝试消除right join
+        // left join cannot be removed, rotation join, try to eliminate right join
         TableItem* temp = cur_joined_table->left_table_;
         cur_joined_table->left_table_ = cur_joined_table->right_table_;
         cur_joined_table->right_table_ = temp;
       }
       if (OB_SUCC(ret)) {
-        //尝试消除right join旋转后转换的left join
+        // Attempt to eliminate left join after conversion from right join
         if (OB_FAIL(can_be_eliminated(stmt, cur_joined_table, conditions, can_eliminate))) {
             LOG_WARN("failed to test eliminated right join condition", K(ret));
         } else if (can_eliminate) {
@@ -279,7 +279,7 @@ int ObTransformEliminateOuterJoin::do_eliminate_outer_join(ObDMLStmt *stmt,
             }
         } else {
           if (cur_joined_table->joined_type_ == FULL_OUTER_JOIN) {
-            //还原旋转
+            // Restore rotation
             TableItem* temp = cur_joined_table->left_table_;
             cur_joined_table->left_table_ = cur_joined_table->right_table_;
             cur_joined_table->right_table_ = temp;
@@ -291,7 +291,7 @@ int ObTransformEliminateOuterJoin::do_eliminate_outer_join(ObDMLStmt *stmt,
         /*do nothing*/
       }
     } else if (LEFT_OUTER_JOIN == cur_joined_table->joined_type_) {
-      //是否能消除左外连接
+      // Can left outer join be eliminated
       if (OB_FAIL(can_be_eliminated(stmt, cur_joined_table, conditions, can_eliminate))) {
           LOG_WARN("failed to test eliminated left join condition", K(ret));
       } else if (can_eliminate) {
@@ -304,7 +304,7 @@ int ObTransformEliminateOuterJoin::do_eliminate_outer_join(ObDMLStmt *stmt,
       /*do nothing for inner join or connect by join*/
     }
     if (OB_SUCC(ret)) {
-      //外连接被消除了
+      // Outer join was eliminated
       if (INNER_JOIN == cur_joined_table->joined_type_) {
         if (should_move_to_from_list) {
           trans_happened = true;
@@ -319,7 +319,7 @@ int ObTransformEliminateOuterJoin::do_eliminate_outer_join(ObDMLStmt *stmt,
           /*do nothing*/
         }
       } else if (should_move_to_from_list) {
-        // 最后一个最顶层，需要加入from_item_list和joined_table_list
+        // last top-level, need to add from_item_list and joined_table_list
         FromItem from_item;
         from_item.is_joined_ = true;
         from_item.table_id_ = cur_joined_table->table_id_;
@@ -442,7 +442,7 @@ int ObTransformEliminateOuterJoin::can_be_eliminated_with_foreign_primary_join(O
                                               is_simple_condition))) {
     LOG_WARN("check is simple join condition failed", K(ret));
   } else if (!is_simple_condition) {
-    /*on condition不是简单的列相等连接，不能消除，do nothing*/
+    /*on condition is not a simple column equality join, cannot be eliminated, do nothing*/
     OPT_TRACE("on condition is not simply join condition");
   } else if (OB_FAIL(stmt->get_table_rel_ids(*(joined_table->left_table_),left_table_ids))) {
     LOG_WARN("failed to get left table rel ids", K(ret));
@@ -470,18 +470,18 @@ int ObTransformEliminateOuterJoin::can_be_eliminated_with_foreign_primary_join(O
                                                                   foreign_key_info))) {
     LOG_WARN("failed to check foreign primary join", K(ret));
   } else if (!is_foreign_primary_join || is_first_table_parent) {
-    /*不是主外键连接，或者外键表不是左表，不能消除，do nothing*/
+    /*Not a primary foreign key join, or the foreign key table is not the left table, cannot eliminate, do nothing*/
     OPT_TRACE("not foreign primary join");
   } else if (OB_FAIL(ObTransformUtils::is_foreign_key_rely(ctx_->session_info_,
                                                             foreign_key_info,
                                                             is_foreign_rely))) {
     LOG_WARN("can not get foreign key info", K(ret));
   } else if (!is_foreign_rely) {
-    /*非可靠主外键关系，不能消除，do nothing*/
+    /*Non-reliable foreign key relationship, cannot be removed, do nothing*/
     OPT_TRACE("foreign key is not rely");
   } else if (OB_UNLIKELY(!joined_table->right_table_->access_all_part())) {
-    /*右表有partition hint，不可消除*/
-    /*TODO zhenling.zzg 之后可以完善对于父表、子表均有partition hint的情况*/
+    /*Right table has partition hint, cannot be eliminated*/
+    /*TODO zhenling.zzg Afterward, we can improve the handling of cases where both parent and child tables have partition hints*/
     OPT_TRACE("right table has parition hint");
   } else if (OB_FAIL(is_all_columns_not_null(stmt, left_col_exprs, conditions,
                                              is_all_foreign_columns_not_null))) {
@@ -507,7 +507,7 @@ int ObTransformEliminateOuterJoin::is_all_columns_not_null(ObDMLStmt *stmt,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("stmt is null", K(ret));
   } else {
-    //是否外键所有列都有非空约束
+    // Whether all columns of the foreign key have non-null constraints
     bool is_nullable = false;
     bool has_null_reject = false;
     const ObRawExpr *col_expr = NULL;
@@ -529,7 +529,7 @@ int ObTransformEliminateOuterJoin::is_all_columns_not_null(ObDMLStmt *stmt,
         is_nullable = !has_null_reject;
       }
     }
-    if (is_nullable) {//不是所有外键列都有非空约束
+    if (is_nullable) {//not all foreign key columns have non-null constraints
       is_not_null = false;
     } else {
       is_not_null = true;

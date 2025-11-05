@@ -194,7 +194,7 @@ public:
 };
 
 // for normal group by pushdown
-// some helpful data buffers，the inner memory is discrete and allocated as need
+// some helpful data buffers, the inner memory is discrete and allocated as need
 template<typename T>
 class ObGroupByExtendableBuf
 {

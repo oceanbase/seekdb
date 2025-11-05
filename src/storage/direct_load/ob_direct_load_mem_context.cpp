@@ -56,8 +56,8 @@ int ObMemDumpQueue::pop(void *&p)
       p = item_ptr->ptr_;
       op_free(item_ptr);
       break;
-    } else if (ret == OB_ENTRY_NOT_EXIST) { //queue超时返回的错误码是这个，只能将错就错了
-      ret = OB_SUCCESS; //防止超时
+    } else if (ret == OB_ENTRY_NOT_EXIST) { // queue timeout returns this error code, can only go with it
+      ret = OB_SUCCESS; // prevent timeout
       count ++;
       STORAGE_LOG(WARN, "the pop operation has been timeout n times", K(count));
       continue;
@@ -198,7 +198,7 @@ void ObDirectLoadMemContext::reset()
   for (int64_t i = 0; i < loader_array.count(); i ++) {
     ObDirectLoadMemWorker *tmp = loader_array.at(i);
     if (tmp != nullptr) {
-      tmp->~ObDirectLoadMemWorker(); //是由area_allocator分配的，所以不需要free
+      tmp->~ObDirectLoadMemWorker(); // is allocated by area_allocator, so no need to free
     }
   }
   loader_array.reset();

@@ -40,13 +40,13 @@ public:
   INHERIT_TO_STRING_KV("op_spec", ObOpSpec, K_(nextval_seq_ids));
 
   /*
-   * 将 nextval sequence id 添加到 ObSequence 中，
-   * 每次迭代一行，对这些 id 取 nextval，保存到 session，
-   * 供 ObSeqNextvalExpr 读取
+   * Add nextval sequence id to ObSequence,
+   * iterate one row at a time, take nextval for these ids, save to session,
+   * for ObSeqNextvalExpr to read
    *
-   * 注意：为了避免重复计算，每个 id 只能添加一次。
-   * 例如：查询 select s.nextval as c1, s.nextval as c2 from dual;
-   * 输出的值一定满足 c1 = c2
+   * Note: To avoid duplicate calculations, each id can only be added once.
+   * For example: Query select s.nextval as c1, s.nextval as c2 from dual;
+   * The output values must satisfy c1 = c2
    */
   int add_uniq_nextval_sequence_id(uint64_t seq_id);
   common::ObFixedArray<uint64_t, common::ObIAllocator> nextval_seq_ids_;
@@ -68,7 +68,7 @@ class ObSequenceExecutor {
     int add_sequence_id(uint64_t id) { return seq_ids_.push_back(id); }
     TO_STRING_KV(K_(seq_ids), K_(dblink_id));
   protected:
-    // schema 放入 context 中是为了利用它的 cache 能力
+    // schema put into context is to utilize its cache capability
     common::ObSEArray<share::schema::ObSequenceSchema, 1> seq_schemas_;
     common::ObSEArray<uint64_t, 2> seq_ids_;
     uint64_t dblink_id_;
@@ -85,8 +85,8 @@ class ObLocalSequenceExecutor : public ObSequenceExecutor {
     int handle_gais_request(const share::ObGAISNextSequenceValReq &request,
                                   obrpc::ObGAISNextSequenceValRpcResult &result);
   private:
-    // sequence 暴露给用户层的是一个 cache
-    // cache 底层负责做 sequence 的缓存更新以及全局的协调
+    // sequence exposes to user layer is a cache
+    // cache underlying responsible for sequence cache update and global coordination
     share::ObSequenceCache *sequence_cache_;
 };
 
@@ -106,9 +106,9 @@ public:
 private:
   int init_op();
   /**
-   * 对于 select、update 语句，sequence 有 child
-   * 对于 insert 语句，sequence 没有 child
-   * 本函数根据 child 个数决定是否从 child 取下一行
+   * For select, update statements, sequence has child
+   * For insert statement, sequence does not have child
+   * This function decides whether to take the next row from child based on the number of children
    */
   int try_get_next_row();
 private:

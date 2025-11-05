@@ -813,14 +813,13 @@ bool ObTenantLogArchiveStatus::is_compatible_valid(COMPATIBLE compatible)
 {
   return compatible >= COMPATIBLE::NONE && compatible < COMPATIBLE::MAX;
 }
-
-// 备份状态机
+// backup state machine
 // STOP->STOP
 // BEGINNING -> BEGINNING\DOING\STOPPING\INERRUPTED
 // DOING -> DOING\STOPPING\INERRUPTED
 // STOPPING -> STOPPIONG\STOP
 // INTERRUPTED -> INERRUPTED\STOPPING
-// 备份备份状态机
+// backup state machine
 // DOING->PAUSED\STOP
 // PAUSED->DOING
 int ObTenantLogArchiveStatus::update(const ObTenantLogArchiveStatus &new_status)

@@ -83,8 +83,7 @@ const bool ObSelectIntoItem::DEFAULT_SINGLE_OPT = true;
 const int64_t ObSelectIntoItem::DEFAULT_MAX_FILE_SIZE = 256 * 1024 * 1024;
 const int64_t ObSelectIntoItem::DEFAULT_BUFFER_SIZE = 1 * 1024 * 1024;
 const char ObSelectIntoItem::DEFAULT_FIELD_ESCAPED_CHAR = '\\';
-
-//对于select .. for update 也认为是被更改
+// For select .. for update also consider it as being modified
 int ObSelectStmt::check_table_be_modified(uint64_t ref_table_id, bool& is_exists) const
 {
   int ret = OB_SUCCESS;

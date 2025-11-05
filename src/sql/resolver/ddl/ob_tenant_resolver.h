@@ -27,11 +27,11 @@ namespace sql
 {
 /**
 * Why use template instead of inheritance?
-* 如果使用这种继承关系：ObCreateTenantResolver:ObTenantResolver:ObStmtResolver
-* 则必须再写一个ObTenantStmt类出来，形成下面的继承关系：
+* If using this inheritance relationship: ObCreateTenantResolver:ObTenantResolver:ObStmtResolver
+* then we must write another ObTenantStmt class, forming the following inheritance relationship:
 * ObCreateTenantStmt:ObTenantStmt:ObStmt
 * ObModifyTenantStmt:ObTenantStmt:ObStmt
-* 这么做太麻烦了，不简明，所以用模板的方式解决。
+* This is too cumbersome and not concise, so we use a template approach to solve it.
 */
 template<class T>
 class ObTenantResolver {

@@ -500,7 +500,7 @@ public:
   */
   virtual int update(ObIMulModeBase* old_node, ObIMulModeBase* new_node) = 0;
 
-  // serialize as text string，json xml both require
+  // serialize as text string, json xml both require
   // format_flag: use 32 bit to indicate the print format, the specific meaning of each bit decided by each data type
   virtual int print(ObStringBuffer& x_buf, uint32_t format_flag, uint64_t depth = 0, uint64_t size = 0, ObCollationType charset = CS_TYPE_INVALID);
 

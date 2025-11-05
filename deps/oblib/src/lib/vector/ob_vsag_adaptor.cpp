@@ -265,7 +265,7 @@ int HnswIndexHandler::knn_search(const vsag::DatasetPtr &query, int64_t topk,
                                  vsag_allocator);
   tl::expected<std::shared_ptr<vsag::Dataset>, vsag::Error> result = index_->KnnSearch(query, topk, search_param);
   if (result.has_value()) {
-    // result的生命周期
+    // the lifecycle of result
     result.value()->Owner(false);
     ids = result.value()->GetIds();
     dist = result.value()->GetDistances();

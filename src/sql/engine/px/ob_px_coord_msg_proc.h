@@ -43,8 +43,7 @@ class RDWinFuncPXPieceMsg;
 class RDWinFuncPXWholeMsg;
 class ObJoinFilterCountRowPieceMsg;
 class ObJoinFilterCountRowWholeMsg;
-
-// 抽象出本接口类的目的是为了 MsgProc 和 ObPxCoord 解耦
+// The purpose of abstracting this interface class is to decouple MsgProc and ObPxCoord
 class ObIPxCoordMsgProc
 {
 public:
@@ -70,10 +69,10 @@ public:
 class ObIPxSubCoordMsgProc
 {
 public:
-  // 收到 TransmitDataChannel 消息，通知 ObPxTransmit 可以发送数据了
+  // Received TransmitDataChannel message, notifying ObPxTransmit that it can send data now
   virtual int on_transmit_data_ch_msg(
       const ObPxTransmitDataChannelMsg &pkt) const = 0;
-  // 收到 ReceiveDataChannel 消息，通知 ObPxReceive 可以接收数据了
+  // Received ReceiveDataChannel message, notify ObPxReceive that it can receive data now
   virtual int on_receive_data_ch_msg(
       const ObPxReceiveDataChannelMsg &pkt) const = 0;
   virtual int on_create_filter_ch_msg(
@@ -100,7 +99,7 @@ public:
       const RDWinFuncPXWholeMsg &pkt) const = 0;
   virtual int on_whole_msg(
       const ObJoinFilterCountRowWholeMsg &pkt) const = 0;
-  // SQC 被中断
+  // SQC is interrupted
   virtual int on_interrupted(const ObInterruptCode &ic) const = 0;
 };
 

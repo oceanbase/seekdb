@@ -59,7 +59,7 @@ TestRunCtx RunCtx;
 class ObTxDataMinorTest : public ObSimpleClusterTestBase
 {
 public:
-  // 指定case运行目录前缀 test_ob_simple_cluster_
+  // Specify the case run directory prefix test_ob_simple_cluster_
   ObTxDataMinorTest() : ObSimpleClusterTestBase("test_tx_data_minor_") {}
   void insert_and_freeze();
 

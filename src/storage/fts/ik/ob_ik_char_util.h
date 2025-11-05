@@ -91,7 +91,7 @@ private:
   is_arabic(const char *input, const uint8_t char_len, bool &is_arabic);
   /****************************************************************************************/
 
-  /*************************  Chinese: 汉字 *********************/
+  /*************************  Chinese: Characters *********************/
   template <ObCharsetType CS_TYPE>
   static typename std::enable_if<(CS_TYPE == CHARSET_UTF8MB4 || CS_TYPE == CHARSET_UTF16
                                   || CS_TYPE == CHARSET_UTF16LE),
@@ -137,7 +137,7 @@ private:
   is_ignore(const char *input, const uint8_t char_len, bool &ignore);
   /****************************************************************************************/
 
-  /*************************  CN Number: 一二两三 *********************/
+  /*************************  CN Number: one two three two *********************/
   template <ObCharsetType CS_TYPE>
   static typename std::enable_if<(CS_TYPE == CHARSET_UTF8MB4 || CS_TYPE == CHARSET_UTF16
                                   || CS_TYPE == CHARSET_UTF16LE),

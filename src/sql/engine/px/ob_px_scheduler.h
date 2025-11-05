@@ -102,7 +102,7 @@ struct ObTempTableP2PInfo
   ObSEArray<ObDfo *, 4> dfos_;
   TO_STRING_KV(K(temp_access_ops_), K(dfos_));
 };
-// 这些信息是调度时候需要用的变量，暂时统一叫做CoordInfo
+// These information are variables used during scheduling, temporarily called CoordInfo
 class ObPxCoordInfo
 {
 public:
@@ -161,7 +161,7 @@ public:
   ObDfoMgr dfo_mgr_;
   ObPieceMsgCtxMgr piece_msg_ctx_mgr_;
   obrpc::ObPxRpcProxy rpc_proxy_;
-  bool all_threads_finish_; // QC 已经明确知道所有 task 都已经执行完成并释放了资源
+  bool all_threads_finish_; // QC has already clearly known that all tasks have been executed and resources have been released
   int first_error_code_;
   dtl::ObDtlChannelLoop &msg_loop_;
   ObInterruptibleTaskID &interrupt_id_;
@@ -226,8 +226,7 @@ public:
   int on_process_end(ObExecContext &ctx);
 
   void set_scheduler(ObDfoSchedulerBasic *scheduler) { scheduler_ = scheduler; }
-
-  // root dfo 的调度特殊路径
+  // root dfo's special scheduling path
   int on_dfo_pair_thread_inited(ObExecContext &ctx, ObDfo &child, ObDfo &parent);
   static int mark_rpc_filter(ObExecContext &ctx,
                              ObJoinFilterDataCtx &bf_ctx,

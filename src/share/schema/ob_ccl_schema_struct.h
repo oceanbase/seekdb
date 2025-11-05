@@ -1,14 +1,13 @@
-
 /**
  * Copyright (c) 2021 OceanBase
  * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan
- * PubL v2. You may obtain a copy of Mulan PubL v2 at:
+ * You can use this software according to the terms and conditions of the Mulan PubL v2.
+ * You may obtain a copy of Mulan PubL v2 at:
  *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
- * KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
- * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE. See the
- * Mulan PubL v2 for more details.
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PubL v2 for more details.
  */
 
 #ifndef _OB_OCEANBASE_SCHEMA_CCL_SCHEMA_STRUCT_H
@@ -190,15 +189,15 @@ public:
   }
   inline uint64_t get_max_concurrency() const { return max_concurrency_; }
   /**
-   * @brief 将合并后的关键字字符串按照指定的分隔符和转义符进行分割。
+   * @brief Split the merged keyword string according to the specified delimiter and escape character.
    *        ccl_keywords_ -> ccl_keywords_array_
    * example1: 
    *        c1;c2 = abc;asd -> [c1, c2 = abc, asd]
    * example2: 
    *        t\\\;1\;;c1 = -> [t\;1;, c1 =]
    *
-   * @param separator 用于拼接字符串的分隔符: ';'
-   * @param escape_char 用于转义特殊字符的字符 '\'
+   * @param separator The delimiter used for concatenating strings: ';'
+   * @param escape_char The character used for escaping special characters '\'
    */
   int split_strings_with_escape(char separator, char escape_char);
 

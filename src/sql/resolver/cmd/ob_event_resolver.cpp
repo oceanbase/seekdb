@@ -132,13 +132,13 @@ int ObEventResolver::resolve_event_definer(const ParseNode *parse_node, ObEventI
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("user must be specified", K(ret));
       } else {
-        // 需要检查当前用户是否有超级权限或者set user id的权限
+        // Need to check if the current user has superuser permissions or set user ID permissions
         if (!session_info_->has_user_super_privilege()) {
           ret = OB_ERR_NO_PRIVILEGE;
           LOG_WARN("no privilege", K(ret));
         } else {
           user_name.assign_ptr(user_node->str_value_, static_cast<int32_t>(user_node->str_len_));
-          // 得区分current_user和“current_user”, 前者需要获取当前用户和host，后者是作为用户名存在
+          // Need to distinguish between current_user and "current_user", the former needs to obtain the current user and host, the latter exists as a username
           if (0 == user_name.case_compare("current_user") && T_IDENT == user_node->type_) {
             user_name = cur_user_name;
             host_name = cur_host_name;
@@ -149,7 +149,7 @@ int ObEventResolver::resolve_event_definer(const ParseNode *parse_node, ObEventI
           }
         }
         if (OB_SUCC(ret)) {
-          // 检查user@host是否在mysql.user表中
+          // Check if user@host is in the mysql.user table
           const ObUserInfo* user_info = nullptr;
           if (OB_FAIL(schema_checker_->get_schema_guard()->get_user_info(session_info_->get_effective_tenant_id(),
                                                                          user_name,
@@ -167,13 +167,13 @@ int ObEventResolver::resolve_event_definer(const ParseNode *parse_node, ObEventI
       }
     }
   } else if (lib::is_mysql_mode()) {
-    // 不指定definer时，默认为当前用户和host
+    // When definer is not specified, it defaults to the current user and host
     user_name = cur_user_name;
     host_name = cur_host_name;
     event_info.set_user_id(session_info_->get_user_id());
   }
   if (OB_SUCC(ret) && lib::is_mysql_mode()) {
-    //user@host作为一个整体存储到priv_user字段
+    // user@host as a whole is stored in the priv_user field
     char* tmp_buf = nullptr;
     if (OB_ISNULL(tmp_buf = static_cast<char*>(allocator_->alloc(OB_EVENT_DEFINER_MAX_LEN)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -520,7 +520,7 @@ int ObEventResolver::get_event_time_node_value(const ParseNode *parse_node, int6
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("time node is null", K(ret));
   } else if (T_VARCHAR == parse_node->type_) {
-    if(OB_FAIL(sql.assign_fmt("select TIME_TO_USEC (\'%.*s\') as time",  /* 如果输入为纯字符串, SQL 解析会删去 ' 号 需补回去 */ 
+    if(OB_FAIL(sql.assign_fmt("select TIME_TO_USEC (\'%.*s\') as time",  /* If input is a pure string, SQL parsing will remove ' need to add it back */
                                                                         (int)parse_node->str_len_, 
                                                                         parse_node->str_value_))) {
      LOG_WARN("time node is not vaild", K(ret));
@@ -543,7 +543,7 @@ int ObEventResolver::get_event_time_node_value(const ParseNode *parse_node, int6
         sqlclient::ObMySQLResult &res = *result.get_result();
         if (OB_SUCC(ret) && OB_SUCC(res.next())) {
           EXTRACT_INT_FIELD_MYSQL(res, "time", time_us, int64_t);
-          if (0 > time_us) { // 0 为 1970-01-01
+          if (0 > time_us) { // 0 represents 1970-01-01
             ret = OB_ERR_WRONG_VALUE;
             LOG_USER_ERROR(OB_ERR_WRONG_VALUE, "AT", parse_node->str_value_);
           }

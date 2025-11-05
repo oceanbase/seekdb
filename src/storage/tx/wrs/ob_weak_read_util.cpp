@@ -77,7 +77,7 @@ int ObWeakReadUtil::generate_min_weak_read_version(const uint64_t tenant_id, SCN
   if (OB_FAIL(OB_TS_MGR.get_gts(tenant_id, NULL, tmp_scn))) {
     TRANS_LOG(WARN, "get gts cache error", K(ret), K(tenant_id));
   } else {
-    // the unit of max_stale_time is us，we should change to ns
+    // the unit of max_stale_time is us, we should change to ns
     scn.convert_from_ts(tmp_scn.convert_to_ts() - max_stale_time);
   }
 

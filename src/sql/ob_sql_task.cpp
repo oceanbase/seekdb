@@ -32,7 +32,7 @@ int ObSqlTaskHandler::init(observer::ObSrvTask *task, ObSql *sql_engine)
     ret = OB_INVALID_ARGUMENT;;
     SQL_LOG(WARN, "invalid argument", K(ret), KP(task), KP(sql_engine));
   } else {
-    //表示该task是Observer内部生成的task
+    // Indicates that this task is an internally generated task by Observer
     task_ = task;
     sql_engine_ = sql_engine;
   }
@@ -74,7 +74,7 @@ int ObSqlTask::init(const int msg_type, const ObReqTimestamp &req_ts, const char
   } else if (OB_FAIL(handler_.init(this, sql_engine))) {
     SQL_LOG(WARN, "ObSqlTaskHandler init failed", K(ret));
   } else {
-    //与sql断连接的task区别开来，用于内存释放
+    // Distinguish from the task of disconnecting from sql, used for memory release
     set_type(ObRequest::OB_SQL_TASK);
     msg_type_ = msg_type;
     memcpy(buf_, buf, size);

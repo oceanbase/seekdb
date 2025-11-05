@@ -31,9 +31,9 @@ typedef common::ObSEArray<share::ObPartitionReplicaLocation, 1> ObPartitionRepli
 
 enum class ObDuplicateType : int64_t
 {
-  NOT_DUPLICATE = 0, //非复制表
-  DUPLICATE,         //复制表, 可以选择任意副本
-  DUPLICATE_IN_DML,  //被DML更改的复制表, 此时只能选leader副本
+  NOT_DUPLICATE = 0, // non-duplicate table
+  DUPLICATE,         //copy table, can choose any replica
+  DUPLICATE_IN_DML,  // replicated table changed by DML, can only select leader replica
 };
 
 class ObPhyTableLocation final
@@ -63,7 +63,7 @@ public:
   {
     return partition_location_list_;
   }
-  // 危险的接口
+  // Dangerous interface
   inline ObPartitionReplicaLocationIArray &get_partition_location_list()
   {
     return const_cast<ObPartitionReplicaLocationIArray &>
@@ -86,9 +86,9 @@ public:
 private:
   int try_build_location_idx_map();
 private:
-  /* 用于表ID(可能是generated alias id)寻址location */
+  /* Used for addressing location by table ID (possibly generated alias id) */
   uint64_t table_location_key_;
-  /* 用于获取实际的物理表ID */
+  /* Used to get the actual physical table ID */
   uint64_t ref_table_id_;
 
   // The following two list has one element for each partition

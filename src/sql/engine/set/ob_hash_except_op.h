@@ -42,10 +42,10 @@ public:
 
 private:
   int build_hash_table_by_part(const int64_t batch_size);
-  //从hash表中拿取处理完成的数据
+  // Fetch processed data from the hash table
   int get_next_row_from_hashtable(const ObChunkDatumStore::StoredRow *&store_row);
   int get_next_batch_from_hashtable(const int64_t batch_size);
-  //继续处理右边行或者直接从hash表中返回行
+  // Continue processing the right row or directly return the row from the hash table
   bool get_row_from_hash_table_;
   int batch_process_right();
   int batch_process_right_vectorize(const int64_t batch_size);

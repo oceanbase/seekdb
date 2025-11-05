@@ -133,9 +133,9 @@ private:
   ObPsSqlKey ps_key_;
   ObPsStmtId stmt_id_;
   bool is_expired_evicted_;
-  //ObDataBuffer用于ObPsStmtItem内部内存的使用，内存实质上来自ObPsPlancache中的inner_allocator_
+  // ObDataBuffer is used for internal memory usage of ObPsStmtItem, the memory actually comes from inner_allocator_ of ObPsPlancache
   common::ObIAllocator *allocator_;
-  //指向ObPsPlancache中的inner_allocator_, 用于释放整个ObPsStmtItem的内存
+  // Point to inner_allocator_ in ObPsPlancache, used for releasing the memory of the entire ObPsStmtItem
   common::ObIAllocator *external_allocator_;
 };
 
@@ -263,14 +263,14 @@ private:
   ObPsSqlKey ps_key_;
   ObPsSqlMeta ps_sql_meta_;
   volatile int64_t ref_count_;
-  // simple prepare protocol协议不会填充ps_sql_meta, 这里记录下question mark cnt, 用于execute时对入参个数进行检查
+  // simple prepare protocol will not fill ps_sql_meta, here we record the question mark cnt, used for checking the number of input parameters at execute time
   int64_t question_mark_count_;
 
   // for call procedure
   bool can_direct_use_param_;
   bool is_prexecute_;
   int64_t item_and_info_size_; // mem_used_;
-  int64_t last_closed_timestamp_; //引用计数上次减到1时的时间;
+  int64_t last_closed_timestamp_; // Time when the reference count was last reduced to 1;
   ObSchemaObjVersion *dep_objs_;
   int64_t dep_objs_cnt_;
   ObPsStmtItem *ps_item_;
@@ -278,11 +278,10 @@ private:
   bool is_expired_;
   //check whether has dec ref count for ps info expired
   bool is_expired_evicted_;
-
-  //ObDataBuffer用于ObPsStmtItem内部内存的使用，
-  //内存实质上来自ObPsPlancache中的inner_allocator_
+  // ObDataBuffer is used for the internal memory usage of ObPsStmtItem,
+  // Memory essentially comes from inner_allocator_ in ObPsPlancache
   common::ObIAllocator *allocator_;
-  //指向ObPsPlancache中的inner_allocator_, 用于释放整个ObPsStmtItem的内存
+  // Point to inner_allocator_ in ObPsPlancache, used for releasing the memory of the entire ObPsStmtItem
   common::ObIAllocator *external_allocator_;
   int32_t num_of_returning_into_;
   common::ObString no_param_sql_;
@@ -339,16 +338,15 @@ struct TypeInfo {
 typedef common::ObSEArray<obmysql::EMySQLFieldType, 48> ParamTypeArray;
 typedef common::ObSEArray<TypeInfo, 16> ParamTypeInfoArray;
 typedef common::ObSEArray<bool, 16> ParamCastArray;
-
-// 每个session中同一个statement的prepare只会记录一个stmt_id-->ps_session_info的映射
-// 当有多个应用线程使用同一个session， 分别对同一个语句进行prepare时, 此时会出现在重复prepare的情况, 这些应用线程拿到的ps_stmt_id都时一样的
-// 同时在每个线程多次execute后，会进行close，此时会出现对该session上同一个stmt_id进行多次close，为避免第一次close时session上stmt_id-->ps_session_info
-// 已经被删除，导致其他线程execute和close时通过stmt_id找不到ps相关信息，因此添加一个引用计数。
-// 在一个session上，对同一个statement进行prepare时，每次prepare将ps_session_info引用计数加1， 在每次close时将引用计数减1， 如果引用计数为0，
-// 则释放ps_session_info信息。
+// Each session records only one stmt_id-->ps_session_info mapping for the same statement
+// When multiple application threads use the same session, respectively preparing the same statement, duplicate prepare situations may occur, and these application threads will get the same ps_stmt_id
+// At the same time, after multiple execute on each thread, close will be performed, at which point multiple closes of the same stmt_id on the session will occur, to avoid closing the stmt_id on the session for the first time stmt_id-->ps_session_info
+// has been deleted, leading to other threads execute and close when finding no ps information through stmt_id, therefore adding a reference count.
+// On a session, when preparing the same statement, each prepare will increment the ps_session_info reference count by 1, in each close it will decrement the reference count by 1, if the reference count is 0,
+// Then release ps_session_info information.
 //
-// 对于ps cache， 每个session上对于某一个statement第一次被prepare时, session上会添加ps_session_info, 并会增加对ps_cache中ps item和ps info的引用,
-// 当statement上ps session info引用计数被close到0时，会减去ps cache中ps item和ps info的引用，当ps item/info引用计数为0时, 将其从 ps cache中释放
+// For ps cache, each session will add ps_session_info when a statement is prepared for the first time on that session, and it will increase the reference to the ps item and ps info in the ps_cache,
+// When the reference count of ps session info on statement is closed to 0, it will decrement the reference of ps item and ps info in ps cache. When the reference count of ps item/info is 0, it will be released from the ps cache
 class ObPsSessionInfo
 {
 public:

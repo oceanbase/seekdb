@@ -36,39 +36,34 @@ private:
   // disallow copy
   DISALLOW_COPY_AND_ASSIGN(TestObFunction);
 };
-
-// 以下为C++中目前(截止到C++20标准)支持的所有可能的调用形式
-// 1，普通函数
+// The following are all possible calling forms supported by C++ as of the C++20 standard
+// 1, ordinary function
 int func1(double arg1, const float &arg2) {
   return (arg1 + arg2);
 }
-
-// 2，裸函数指针
+// 2, raw function pointer
 int (*func2)(double, const float &) = func1;
-
-// 3, 类成员函数和静态成员函数
+// 3, class member functions and static member functions
 struct Example {
-  // 3.1 类成员函数
+  // 3.1 class member functions
   int func3(double arg1, const float &arg2) {
     return (arg1 + arg2);
   }
-  // 3.2 静态成员函数
+  // 3.2 static member function
   static int func4(double arg1, const float &arg2) {
     return (arg1 + arg2);
   }
 };
-
-// 4, 仿函数
+// 4, functor
 class Func5 {
 public:
   int operator()(double arg1, const float &arg2) {
     return (arg1 + arg2) * ratio;
   }
 private:
-  static constexpr int ratio = 1;// 成员状态将影响调用过程
+  static constexpr int ratio = 1;// member status will affect the calling process
 } func5;
-
-// 5, lambda表达式
+// 5, lambda expression
 auto func6 = [](double arg1, const float &arg2) -> int {
   return (arg1 + arg2);
 };
@@ -163,14 +158,14 @@ TEST_F(TestObFunction, alloc) {
 
 TEST_F(TestObFunction, standard_style) {
   ObFunction<void(int)> f = [](int) {};
-  if (f.is_valid()) {// 检查构造是否成功
+  if (f.is_valid()) {// check if construction is successful
     f(0);
   }
 }
 
 TEST_F(TestObFunction, ob_style) {
   ObFunction<void(int)> f;
-  if (OB_SUCCESS == f.assign([](int){})) {// 检查赋值是否成功
+  if (OB_SUCCESS == f.assign([](int){})) {// Check if the assignment was successful
     f(0);
   }
 }

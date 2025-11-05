@@ -123,7 +123,7 @@ int ObCreateCCLRuleResolver::resolve(const ParseNode &parse_tree)
     ObString database_name;
     ObString table_name;
     if (OB_SUCC(ret)) {
-      // node->children_指针上面已经做了判断，这里不再做判断
+      // node->children_ pointer has already been checked, no need to check again here
       ParseNode *dbname_and_table_name_node = node->children_[CCL_AFFECT_DATABASE_TABLE];
       if (OB_ISNULL(dbname_and_table_name_node)
           || dbname_and_table_name_node->type_ != T_RELATION_FACTOR

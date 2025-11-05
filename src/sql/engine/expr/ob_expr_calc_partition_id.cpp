@@ -306,7 +306,7 @@ int ObExprCalcPartitionBase::init_calc_part_info(ObIAllocator *allocator,
       calc_part_info->part_type_ = table_schema.get_part_option().get_part_func_type();
       calc_part_info->subpart_type_ = table_schema.get_sub_part_option().get_sub_part_func_type();
       calc_part_info->part_num_ = table_schema.get_first_part_num();
-      calc_part_info->subpart_num_ = OB_INVALID_ID; // 目前未使用，要使用的话需要考虑二级分区个数异构
+      calc_part_info->subpart_num_ = OB_INVALID_ID; // Currently not used, if used, need to consider heterogeneous number of secondary partitions
       calc_part_info->partition_id_calc_type_ = calc_type;
       calc_part_info->may_add_interval_part_ = add_part;
       calc_part_info->calc_id_type_ = get_calc_id_type();
@@ -870,8 +870,8 @@ int ObExprCalcPartitionBase::calc_partition_level_one_vector(const ObExpr &expr,
           if (OB_SUCC(ret)) {
             ObSEArray<ObTabletID, 1> tablet_ids;
             ObSEArray<ObObjectID, 1> partition_ids;
-            //这里也可以统一使用上面的ObNewRow接口, 并把calc_value_for_mysql
-            // 用datum实现下,  暂时和以前的方式保持一致
+            // Here you can also uniformly use the above ObNewRow interface, and put calc_value_for_mysql
+            // Use datum to implement, temporarily keep consistent with the previous method
             ObRowkey rowkey(const_cast<ObObj*>(&result), 1);
             ObNewRange range;
             if (OB_FAIL(range.build_range(calc_part_info->ref_table_id_, rowkey))) {
@@ -1109,8 +1109,8 @@ int ObExprCalcPartitionBase::build_row(ObEvalCtx &ctx,
   int ret = OB_SUCCESS;
   OB_ASSERT(T_OP_ROW == expr.type_);
   OB_ASSERT(expr.arg_cnt_ > 0);
-  //TODO shengle 这里后面可以将第一次分配的cells_内存放入expr_ctx,
-  // 重复使用进行优化;
+  //TODO shengle Here the memory of the first allocated cells_ can be placed into expr_ctx,
+  // Reuse for optimization;
   if (OB_ISNULL(row.cells_ = static_cast<ObObj *>(
                 allocator.alloc(sizeof(ObObj) * expr.arg_cnt_)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -1206,9 +1206,9 @@ int ObExprCalcPartitionBase::calc_partition_id(const ObExpr &part_expr,
     LOG_WARN("get das tablet mapper failed", K(ret), K(calc_part_info));
   } else if (T_OP_ROW == part_expr.type_) {
     ObDatum *tmp_datum = NULL;
-    //这里提前计算下expr child值, 而不是在build row中直接调用eval，
-    //是为了避免eval计算里面会使用reset tmp alloc, 影响下面分配row中
-    //cell内存对reset tmp alloc的使用
+    // Here we pre-calculate the expr child value, rather than calling eval directly in build row,
+    // is to avoid eval calculation using reset tmp alloc, affecting the allocation of row below
+    // cell memory usage for reset tmp alloc
     for (int64_t i = 0; OB_SUCC(ret) && i < part_expr.arg_cnt_; i++) {
       if (OB_FAIL(part_expr.args_[i]->eval(ctx, tmp_datum))) {
         LOG_WARN("fail to eval part expr", K(ret), K(part_expr));
@@ -1262,8 +1262,8 @@ int ObExprCalcPartitionBase::calc_partition_id(const ObExpr &part_expr,
       if (OB_SUCC(ret)) {
         ObSEArray<ObTabletID, 1> tablet_ids;
         ObSEArray<ObObjectID, 1> partition_ids;
-        //这里也可以统一使用上面的ObNewRow接口, 并把calc_value_for_mysql
-        // 用datum实现下,  暂时和以前的方式保持一致
+        // Here you can also uniformly use the above ObNewRow interface, and put calc_value_for_mysql
+        // Use datum to implement, temporarily keep consistent with the previous method
         ObRowkey rowkey(const_cast<ObObj*>(&result), 1);
         ObNewRange range;
         if (OB_FAIL(range.build_range(calc_part_info.ref_table_id_, rowkey))) {
@@ -1538,7 +1538,7 @@ int ObExprCalcPartitionBase::update_part_id_calc_type_for_upgrade(
   int ret = OB_SUCCESS;
   uint64_t expr_ctx_id = static_cast<uint64_t>(expr.expr_ctx_id_);
   if (ObExpr::INVALID_EXP_CTX_ID == expr_ctx_id) {
-    // 混跑要动态改partition_id_calc_type，434以下不会设置这个expr_ctx_id_
+    // Mixed running requires dynamic modification of partition_id_calc_type, 434 and below will not set this expr_ctx_id_
     CalcPartitionBaseInfo *calc_part_info = reinterpret_cast<CalcPartitionBaseInfo *>(expr.extra_info_);
     if (OB_ISNULL(calc_part_info)) {
       ret = OB_ERR_UNEXPECTED;

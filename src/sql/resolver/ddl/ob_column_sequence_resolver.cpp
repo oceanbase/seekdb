@@ -34,9 +34,8 @@ ObColumnSequenceResolver::ObColumnSequenceResolver(ObResolverParams &params)
 ObColumnSequenceResolver::~ObColumnSequenceResolver()
 {
 }
-
-// 什么也不做，属于identity_column
-// 解析在create_table_resolver或alter_table_resolver里面
+// Do nothing, belongs to identity_column
+// Parse inside create_table_resolver or alter_table_resolver
 int ObColumnSequenceResolver::resolve(const ParseNode &parse_tree)
 {
   UNUSED(parse_tree);

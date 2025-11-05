@@ -93,26 +93,26 @@ public:
   {
     return job_generator_.get_balance_tasks();
   }
-  //构造好每个任务所需要的源端日志流信息
+  //Construct the source log stream information required for each task
   int build(bool &has_job);
-  //加锁构造逻辑任务和物理任务并写入表中
+  //Lock construction logic task and physical task and write into the table
   int process_in_trans(const share::ObLSStatusInfoIArray &status_info_array,
       int64_t unit_num, int64_t primary_zone_num,
       ObMySQLTransaction &trans);
   /*
-  * 从按table_id递增顺序数组（table_schema_array）中查找指定分区的tablet_id信息。该函数可以反复调用，用于查找一组分区的tablet_id信息。
-  * 使用方法:
-  *     1.保证table_schema_array按table_id从小到大排序
-  *     2.一组分区信息part_info，按<table_id, part_id>从小到大排序
-  *     3. 初始化table_index = 0，按从小到大顺序指定part_info反复调用该函数，获取对应分区的tablet_id信息
+  * Find the tablet_id information of a specified partition from an array (table_schema_array) sorted in ascending order by table_id. This function can be repeatedly called to find the tablet_id information for a group of partitions.
+  * Usage method:
+  *     1. Ensure that table_schema_array is sorted in ascending order by table_id
+  *     2. A group of partition information part_info, sorted in ascending order by <table_id, part_id>
+  *     3. Initialize table_index = 0, and repeatedly call this function in ascending order with part_info to obtain the corresponding tablet_id information
   *
-  * @param[in] table_schema_array: 按照table_id升序排列的table_schema_array
-  * @param[in] part_info: 指定的part_info，table_id一定大于等于上次指定的part_info
-  * @param[in/out] table_index: 当前遍历的位置，调用者只需要第一次初始化为0，后续不要修改该变量值，否则可能导致结果报错
-  * @param[out] tablet_id:tablet_id of part_info
+  * @param[in] table_schema_array: table_schema_array sorted in ascending order by table_id
+  * @param[in] part_info: specified part_info, table_id must be greater than or equal to the table_id of the last specified part_info
+  * @param[in/out] table_index: current traversal position, the caller only needs to initialize it to 0 for the first time, do not modify this variable value subsequently, otherwise it may lead to incorrect results
+  * @param[out] tablet_id: tablet_id of part_info
   * @return OB_SUCCESS if success
-  *         OB_TABLE_NOT_EXIST :表不存在
-  *         OB_PARTITION_NOT_EXIST : part_object_id不存在
+  *         OB_TABLE_NOT_EXIST : table does not exist
+  *         OB_PARTITION_NOT_EXIST : part_object_id does not exist
   * */
   static int get_tablet_in_order_array(
       const ObArray<share::schema::ObSimpleTableSchemaV2*> &table_schema_array,
@@ -129,7 +129,7 @@ private:
   int set_task_src_ls_();
   int try_finish_failed_task_(const share::ObTransferPartList &part_list,
       const ObString &comment);
-  //通过按照tablet_id,object_id排查的part_list或者按照table_id排查过的table_schema
+  //By filtering the part_list according to tablet_id, object_id or the table_schema according to table_id
   int batch_get_table_schema_in_order_(
       common::ObArenaAllocator &allocator,
       ObArray<share::schema::ObSimpleTableSchemaV2*> &table_schema_array);
@@ -140,8 +140,7 @@ private:
   common::ObMySQLProxy *sql_proxy_;
   common::ObArenaAllocator allocator_;
   ObArray<share::ObTransferPartitionTask> task_array_;
-  //part_info_中的task指针使用了task_array的内存
-  //在初始化part_info_后，task_array不能在发生变化
+  //After initializing part_info_, task_array cannot change anymore
   ObArray<ObTransferPartitionInfo> part_info_;
   share::ObTransferPartitionTaskID max_task_id_;
   ObPartTransferJobGenerator job_generator_;

@@ -153,8 +153,7 @@ int ObTableDirectInsertOp::inner_get_next_batch(const int64_t max_row_cnt)
 {
   return MY_SPEC.use_rich_format_ ? next_vector(max_row_cnt) : next_batch(max_row_cnt);
 }
-
-// 向量化2.0
+// Vectorization 2.0
 int ObTableDirectInsertOp::next_vector(const int64_t max_row_cnt)
 {
   int ret = OB_SUCCESS;
@@ -200,8 +199,7 @@ int ObTableDirectInsertOp::next_vector(const int64_t max_row_cnt)
   } // end while
   return ret;
 }
-
-// 向量化1.0
+// Vectorization 1.0
 int ObTableDirectInsertOp::next_batch(const int64_t max_row_cnt)
 {
   int ret = OB_SUCCESS;

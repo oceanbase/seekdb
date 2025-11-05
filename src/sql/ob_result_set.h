@@ -104,9 +104,9 @@ public:
 
   enum PsMode
   {
-    NO_PS = 0, //非PS
-    SIMPLE_PS, //只走parser，不走resolver的简易PS，仅供mysql模式的PL使用
-    STD_PS, //走resolver的标准PS，供oracle模式使用，以及供mysql模式的ps协议使用
+    NO_PS = 0, //not PS
+    SIMPLE_PS, // only go through parser, not resolver, simple PS for use by PL in MySQL mode
+    STD_PS, // use the standard PS of resolver, for Oracle mode, and for the ps protocol of MySQL mode
   };
 
   typedef common::ObFastArray<ObPhysicalPlan*, 8> CandidatePlanArray;
@@ -152,9 +152,9 @@ public:
   const common::ParamsFieldIArray *get_returning_param_fields() const;
 
   /**
-   * 获取字段数（列数）
+   * Get the number of fields (columns)
    *
-   * @return 该次查询的字段数
+   * @return The number of fields for this query
    */
   uint64_t get_field_cnt() const;
 
@@ -271,7 +271,7 @@ public:
   void set_is_calc_found_rows(const bool is_calc_found_rows);
   bool get_has_top_limit() const;
   bool is_calc_found_rows() const;
-  // 判断是否提交了异步EndTrans请求，如果请求已提交，则客户端需要等待异步回包。
+  // Determine if an asynchronous EndTrans request has been submitted, if the request has been submitted, the client needs to wait for the asynchronous response.
   // ref: obmp_query.cpp, ob_mysql_end_trans_callback.cpp
   bool is_async_end_trans_submitted() const
   {
@@ -293,10 +293,9 @@ public:
   bool is_returning() const { return is_returning_; }
   void set_user_sql(bool is_user_sql) { is_user_sql_ = is_user_sql; }
   bool is_user_sql() const { return is_user_sql_; }
-
-  // 往带？的field name填充参数信息
-  // 要注意的是，除了cname_以外，其余的string都是从计划里面浅拷出来的，
-  // cname_的内存是由result_set的分配器分配出来的
+  // Fill parameter information into the field name with ?
+  // Note that, except for cname_, all other strings are shallow copied from the plan,
+  // cname_'s memory is allocated by result_set's allocator
   int construct_field_name(const common::ObIArray<ObPCParam *> &raw_params, 
                            const bool is_first_parse,
                            const ObSQLSessionInfo &session_info);
@@ -305,8 +304,7 @@ public:
                                    const ObIArray<ObPCParam *> &raw_params,
                                    const bool is_first_parse,
                                    const ObSQLSessionInfo &session_info);
-
-  // 深拷计划中的field columns，存放在field_columns_成员中
+  // Deep copy the field columns from the deep copy plan, stored in the field_columns_ member
   int copy_field_columns(const ObPhysicalPlan &plan);
   bool has_implicit_cursor() const;
   int switch_implicit_cursor(int64_t &affected_rows);
@@ -323,7 +321,7 @@ public:
     return get_exec_context().use_remote_sql()
         && physical_plan_ != nullptr
         && physical_plan_->get_location_type() != OB_PHY_PLAN_UNCERTAIN;
-    //暂时不让全局索引的计划走异步执行
+    // Temporarily do not allow the global index plan to execute asynchronously
   }
   void set_is_com_filed_list() { is_com_filed_list_ = true; }
   bool get_is_com_filed_list() { return is_com_filed_list_; }
@@ -387,7 +385,7 @@ private:
 
   // make final field name
   int make_final_field_name(char *src, int64_t len, common::ObString &field_name);
-  // 删除ParseNode中raw_text的多余的空格
+  // Remove extra spaces from raw_text in ParseNode
   // Always called in the ObResultSet constructor
   void update_start_time() const
   {
@@ -402,7 +400,7 @@ private:
   }
   bool is_will_retry_() const { return will_retry_; }
 protected:
-  // 区分本ResultSet是为User还是Inner SQL服务, 服务于EndTrans异步回调
+  // Distinguish whether this ResultSet is for User or Inner SQL, serves EndTrans asynchronous callback
   bool is_user_sql_;
 private:
   // add cache object guard
@@ -433,14 +431,14 @@ private:
   // for a prepared SELECT, stmt_type_ is T_PREPARE
   // but in perf stat we want inner info, i.e. SELECT.
   stmt::StmtType inner_stmt_type_;
-  // 字面stmt类型，例如show语句的字面类型为show，而stmt_type_为SELECT
+  // Literal stmt type, for example, the literal type of a show statement is show, while stmt_type_ is SELECT
   stmt::StmtType  literal_stmt_type_;
   char external_retrieve_info_buf_[sizeof(ExternalRetrieveInfo)];
   ExternalRetrieveInfo &external_retrieve_info_;
   bool compound_;
-  bool has_global_variable_; //表明含有global变量，与stmt_type_为T_VARIABLE_SET配合使用
-  /* ob_sql.h是SQL模块对外的接口，外界无需了解到ObExecContext
-   * 所以，将exec_ctx_作为ObResultSet的成员，不对SQL之外暴露
+  bool has_global_variable_; // indicates that it contains a global variable, used in conjunction with stmt_type_ being T_VARIABLE_SET
+  /* ob_sql.h is the interface for the SQL module, external parties do not need to understand ObExecContext
+   * Therefore, exec_ctx_ is made a member of ObResultSet without exposing it outside of SQL
    */
   int errcode_;
   ObSQLSessionInfo &my_session_; // The session who owns this result set
@@ -456,7 +454,7 @@ private:
   bool has_top_limit_;
   bool is_calc_found_rows_;
   PsMode ps_protocol_;
-  // 执行器
+  // Executor
   ObExecutor executor_;
   bool is_returning_;
   bool is_com_filed_list_; //used to mark COM_FIELD_LIST
@@ -466,7 +464,7 @@ private:
   common::ObString wild_str_;//uesd to save filed wildcard in COM_FIELD_LIST;
   common::ObString ps_sql_; // for sql in pl
   bool is_init_;
-  common::ParamStore ps_params_; // 文本 ps params 记录，用于填入 sql_audit
+  common::ParamStore ps_params_; // text ps params record, used to fill into sql_audit
   common::ObFunction<void(const int, int&)> close_fail_cb_;
 };
 

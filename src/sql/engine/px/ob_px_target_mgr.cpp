@@ -163,7 +163,7 @@ int ObPxTargetMgr::add_tenant(const uint64_t tenant_id)
   ObPxResInfo *px_res_info = NULL;
 
   if (OB_SYS_TENANT_ID != tenant_id && OB_MAX_RESERVED_TENANT_ID >= tenant_id) {
-    // 除系统租户外, 内部租户不分配 px 线程
+    // Except for the system tenant, internal tenants do not allocate px threads
   } else if (!is_inited_) {
     LOG_ERROR("px target mgr not inited");
   } else if (OB_FAIL(px_info_map_.contains_key(tenant_info))) {
@@ -206,7 +206,7 @@ int ObPxTargetMgr::delete_tenant(const uint64_t tenant_id)
   int ret = OB_SUCCESS;
   ObPxTenantInfo tenant_info(tenant_id);
   if (OB_SYS_TENANT_ID != tenant_id && OB_MAX_RESERVED_TENANT_ID >= tenant_id) {
-    // 除系统租户外, 内部租户不分配 px 线程
+    // Except for the system tenant, internal tenants do not allocate px threads
   } else {
     ObPxResInfo *res_info = NULL;
     if (OB_FAIL(px_info_map_.del(tenant_info))) {

@@ -396,7 +396,7 @@ void ObHashGroupByVecOp::destroy()
     destroy_all_parts();
   }
   ObGroupByVecOp::destroy();
-  // 内存最后释放，ObHashCtx依赖于mem_context
+  // Memory is released last, ObHashCtx depends on mem_context
   if (NULL != mem_context_) {
     DESTROY_CONTEXT(mem_context_);
     mem_context_ = NULL;
@@ -564,7 +564,7 @@ int ObHashGroupByVecOp::init_distinct_info(bool is_part)
       ObCmpFunc cmp_func;
       cmp_func.cmp_func_ = ObDatumFuncs::get_nullsafe_cmp_func(
         expr->datum_meta_.type_, expr->datum_meta_.type_,
-        NULL_LAST, //这里null last还是first无所谓
+        NULL_LAST, // here null last or first does not matter
         expr->datum_meta_.cs_type_, expr->datum_meta_.scale_, false,
         expr->obj_meta_.has_lob_header());
       hash_func.hash_func_ = expr->basic_funcs_->murmur_hash_v2_;
@@ -659,7 +659,7 @@ int64_t ObHashGroupByVecOp::detect_part_cnt(const int64_t rows) const
   int64_t mem_bound = get_mem_bound_size();
   int64_t part_cnt = (data_size + mem_bound) / mem_bound;
   part_cnt = next_pow2(part_cnt);
-  // 这里只有75%的利用率，后续改成segment array看下是否可以去掉
+  // Here only 75% utilization, change to segment array later to see if it can be removed
   int64_t availble_mem_size = mem_bound - get_mem_used_size();
   int64_t est_dump_size = part_cnt * ObTempRowStore::BLOCK_SIZE;
   if (0 < availble_mem_size) {
@@ -668,7 +668,7 @@ int64_t ObHashGroupByVecOp::detect_part_cnt(const int64_t rows) const
     }
     part_cnt = est_dump_size / ObTempRowStore::BLOCK_SIZE;
   } else {
-    // 内存使用过多
+    // Memory usage is too high
     part_cnt = MIN_PARTITION_CNT;
   }
   part_cnt = next_pow2(part_cnt);
@@ -740,7 +740,7 @@ bool ObHashGroupByVecOp::need_start_dump(const int64_t input_rows, int64_t &est_
   if (is_need_dump(data_ratio) || check_dump) {
     int ret = OB_SUCCESS;
     need_dump = true;
-    // 在认为要发生dump时，尝试扩大获取更多内存，再决定是否dump
+    // When a dump is expected to occur, try to allocate more memory to decide whether to dump
     if (OB_FAIL(sql_mem_processor_.extend_max_memory_size(
         &mem_context_->get_malloc_allocator(),
         [&](int64_t max_memory_size) {
@@ -854,8 +854,8 @@ int ObHashGroupByVecOp::setup_dump_env(const int64_t part_id, const int64_t inpu
         }
       }
     }
-    // 如果hash group发生dump，则后续每个partition都会alloc一个buffer页，约64K，
-    // 如果32个partition，则需要2M内存. 同时dump逻辑需要一些内存，需要更新
+    // If hash group occurs dump, then each subsequent partition will alloc a buffer page, about 64K,
+    // If 32 partitions, then 2M memory is required. At the same time, the dump logic requires some memory, which needs to be updated
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(sql_mem_processor_.get_max_available_mem_size(&mem_context_->get_malloc_allocator()))) {
       LOG_WARN("failed to get max available memory size", K(ret));
@@ -866,7 +866,7 @@ int ObHashGroupByVecOp::setup_dump_env(const int64_t part_id, const int64_t inpu
   }
 
   if (OB_FAIL(ret)) {
-  } else if (part_idxes_ == nullptr &&  // 只会被调用一次
+  } else if (part_idxes_ == nullptr &&  // Only be called once
              (OB_ISNULL(part_idxes_ =
              static_cast<int64_t *>
              (mem_context_->get_arena_allocator().alloc(sizeof(int64_t)
@@ -876,19 +876,19 @@ int ObHashGroupByVecOp::setup_dump_env(const int64_t part_id, const int64_t inpu
   }
   if (OB_FAIL(ret)) {
   } else {
-    // inited只会调用一次
+    // inited will only be called once
     if (!stores_mgr_.inited()) {
       if (OB_FAIL(stores_mgr_.init(MY_SPEC.max_batch_size_, part_cnt, mem_context_->get_malloc_allocator()))) {
         LOG_WARN("failed to init stores mgr", K(ret));
       }
     } else {
-      // reset_part_cnt之后每次都会调
+      // reset_part_cnt after each time will call
       if (OB_FAIL(stores_mgr_.reset_part_cnt(part_cnt))) {
         LOG_WARN("reset stores_mgr_.part_cnt failed", K(part_cnt), K(ret));
       }
     }
     for (int64_t part_idx = 0; OB_SUCC(ret) && part_idx < part_cnt; ++part_idx) {
-      // 这个应该每次都调
+      // This should be called every time
       OZ (stores_mgr_.set_temp_store(part_idx, &parts[part_idx]->row_store_));
     }
   }
@@ -1151,10 +1151,10 @@ int ObHashGroupByVecOp::by_pass_return_batch(int64_t op_max_batch_size) {
   } else if (OB_FAIL(by_pass_prepare_one_batch(op_max_batch_size))) {
     LOG_WARN("failed to prepare batch", K(ret));
   } else if (brs_.end_ && skew_detection_enabled_) {
-    // by_pass处理完毕，接下来处理ht中的，结果应该是比较小的才对,理论上只需要调用一次就行了
-    // 如果batch_size<=1,也需要确保这里的数据被取完，一下子没拿完ht中的数据下一次会继续调
-    // by_pass_prepare_one_batch（里面会将brs_.end_变为true）,然后继续走这里从哈希表
-    // 里拿数据，终究会拿完。
+    // by_pass processing complete, next process ht, the result should be relatively small, theoretically only one call is needed
+    // If batch_size<=1, we also need to ensure that the data here is fully retrieved; if not all data from ht is fetched at once, it will continue to be called next time
+    // by_pass_prepare_one_batch（inside it will change brs_.end_ to true）, then continue here from the hash table
+    // Fetch data, it will eventually be all fetched.
     LOG_DEBUG("here check op_max_batch_size", K(op_max_batch_size), K(curr_group_id_), K(local_group_rows_.size()));
     brs_.end_ = false;
     int64_t read_rows = 0;

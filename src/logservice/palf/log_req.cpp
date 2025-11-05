@@ -366,7 +366,7 @@ LogChangeConfigMetaReq::~LogChangeConfigMetaReq()
 bool LogChangeConfigMetaReq::is_valid() const
 {
   return INVALID_PROPOSAL_ID != msg_proposal_id_
-//         && INVALID_PROPOSAL_ID != prev_log_proposal_id_  // 对于日志流无写入的场景，prev_log是无效的
+//         && INVALID_PROPOSAL_ID != prev_log_proposal_id_  // For scenarios where there is no write to the log stream, prev_log is invalid
 //         && prev_lsn_.is_valid()
          && meta_.is_valid();
 }

@@ -932,9 +932,9 @@ int ObFtsIndexBuilderUtil::generate_doc_id_column(
         ObColumnSchemaV2 column_schema;
         ObObj default_value;
         default_value.set_varchar(ft_expr_def, static_cast<int32_t>(def_pos));
-        column_schema.set_rowkey_position(0); //非主键列
-        column_schema.set_index_position(0); //非索引列
-        column_schema.set_tbl_part_key_pos(0); //非partition key
+        column_schema.set_rowkey_position(0); //non-primary key column
+        column_schema.set_index_position(0); // non-index column
+        column_schema.set_tbl_part_key_pos(0); // not partition key
         column_schema.set_tenant_id(data_schema.get_tenant_id());
         column_schema.set_table_id(data_schema.get_table_id());
         column_schema.set_column_id(col_id);
@@ -1092,9 +1092,9 @@ int ObFtsIndexBuilderUtil::generate_word_segment_column(
         } else {
           ObObj default_value;
           default_value.set_varchar(ft_expr_def, static_cast<int32_t>(def_pos));
-          column_schema.set_rowkey_position(0); //非主键列
-          column_schema.set_index_position(0); //非索引列
-          column_schema.set_tbl_part_key_pos(0); //非partition key
+          column_schema.set_rowkey_position(0); //non-primary key column
+          column_schema.set_index_position(0); // non-index column
+          column_schema.set_tbl_part_key_pos(0); // not partition key
           column_schema.set_tenant_id(data_schema.get_tenant_id());
           column_schema.set_table_id(data_schema.get_table_id());
           column_schema.set_column_id(col_id);
@@ -1102,8 +1102,8 @@ int ObFtsIndexBuilderUtil::generate_word_segment_column(
           column_schema.add_column_flag(VIRTUAL_GENERATED_COLUMN_FLAG);
           column_schema.set_is_hidden(true);
           column_schema.set_data_type(ObVarcharType);
-          column_schema.set_data_length(max_data_length); //生成列的长度和被分词列的最大长度保持一致
-          column_schema.set_collation_type(collation_type); //生成列的collation和被分词列的collation保持一致
+          column_schema.set_data_length(max_data_length); //The length of the generated column is consistent with the maximum length of the tokenized column
+          column_schema.set_collation_type(collation_type); // keep the collation of the generated column consistent with the collation of the tokenized column
           column_schema.set_charset_type(charset_type);
           column_schema.set_prev_column_id(UINT64_MAX);
           column_schema.set_next_column_id(UINT64_MAX);
@@ -1210,9 +1210,9 @@ int ObFtsIndexBuilderUtil::generate_word_count_column(
         } else {
           ObObj default_value;
           default_value.set_varchar(ft_expr_def, static_cast<int32_t>(def_pos));
-          column_schema.set_rowkey_position(0); //非主键列
-          column_schema.set_index_position(0); //非索引列
-          column_schema.set_tbl_part_key_pos(0); //非partition key
+          column_schema.set_rowkey_position(0); //non-primary key column
+          column_schema.set_index_position(0); //non-index column
+          column_schema.set_tbl_part_key_pos(0); // not partition key
           column_schema.set_tenant_id(data_schema.get_tenant_id());
           column_schema.set_table_id(data_schema.get_table_id());
           column_schema.set_column_id(col_id);
@@ -1322,9 +1322,9 @@ int ObFtsIndexBuilderUtil::generate_doc_length_column(
         } else {
           ObObj default_value;
           default_value.set_varchar(ft_expr_def, static_cast<int32_t>(def_pos));
-          column_schema.set_rowkey_position(0); //非主键列
-          column_schema.set_index_position(0); //非索引列
-          column_schema.set_tbl_part_key_pos(0); //非partition key
+          column_schema.set_rowkey_position(0); //non-primary key column
+          column_schema.set_index_position(0); // non-index column
+          column_schema.set_tbl_part_key_pos(0); // not partition key
           column_schema.set_tenant_id(data_schema.get_tenant_id());
           column_schema.set_table_id(data_schema.get_table_id());
           column_schema.set_column_id(col_id);
@@ -2779,9 +2779,9 @@ int ObMulValueIndexBuilderUtil::generate_multivalue_column(
         char col_name_buf[OB_MAX_COLUMN_NAMES_LENGTH] = {'\0'};
         pos = 0;
         default_value.set_varchar(expr_def);
-        multival_col.set_rowkey_position(0); //非主键列
-        multival_col.set_index_position(0); //非索引列
-        multival_col.set_tbl_part_key_pos(0); //非partition key
+        multival_col.set_rowkey_position(0); //non-primary key column
+        multival_col.set_index_position(0); //non-index column
+        multival_col.set_tbl_part_key_pos(0); //not partition key
         multival_col.set_tenant_id(data_schema.get_tenant_id());
         multival_col.set_table_id(data_schema.get_table_id());
         multival_col.set_column_id(data_schema.get_max_used_column_id() + 1);

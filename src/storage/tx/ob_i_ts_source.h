@@ -50,7 +50,7 @@ public:
   void set_need_inc(const bool need_inc) { need_inc_ = need_inc; }
   bool need_inc() const { return need_inc_; }
 private:
-  // gts值是否需要+1，在gts cache管理中是默认加一的
+  // Whether the gts value needs to be +1, it is added by default in gts cache management
   bool need_inc_;
 };
 

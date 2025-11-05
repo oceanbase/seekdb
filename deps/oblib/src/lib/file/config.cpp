@@ -23,7 +23,7 @@ namespace obsys {
     }
 
     /**
-     * 解析字符串
+     * Parse string
      */
     int ObSysConfig::parseValue(char *str, char *key, char *val)
     {
@@ -125,7 +125,7 @@ namespace obsys {
     }
 
     /**
-     * 加载文件
+     * load file
      */
     int ObSysConfig::load(const char *filename)
     {
@@ -205,7 +205,7 @@ namespace obsys {
     }
 
     /**
-     * 取一个string
+     * take a string
      */
     const char *ObSysConfig::getString(const char *section, const string& key, const char *d)
     {
@@ -221,7 +221,7 @@ namespace obsys {
     }
 
     /**
-     * 取一string列表
+     * get a string list
      */
     vector<const char*> ObSysConfig::getStringList(const char *section, const string& key) {
         vector<const char*> ret;
@@ -246,7 +246,7 @@ namespace obsys {
     }
 
     /**
-     * 取一整型
+     * Get an integer
      */
     int ObSysConfig::getInt(const char *section, const string& key, int d)
     {
@@ -255,7 +255,7 @@ namespace obsys {
     }
 
     /**
-     * 取一int list
+     * get an int list
      */
     vector<int> ObSysConfig::getIntList(const char *section, const string& key) {
         vector<int> ret;

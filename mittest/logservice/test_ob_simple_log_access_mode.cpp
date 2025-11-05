@@ -222,8 +222,7 @@ TEST_F(TestObSimpleLogClusterAccessMode, add_member)
     EXPECT_EQ(OB_SUCCESS, leader.palf_handle_impl_->change_access_mode(curr_proposal_id, mode_version, palf::AccessMode::RAW_WRITE, share::SCN::min_scn()));
     unblock_net(leader_idx, follower1_idx);
     block_net(leader_idx, follower2_idx);
-
-    // new_leader需要在delete_paxos_group()之前析构，否则palf_handle引用计数无法清零
+    // new_leader needs to be destructed before delete_paxos_group(), otherwise palf_handle reference count cannot be reset to zero
     PalfHandleImplGuard new_leader;
     int64_t new_leader_idx;
     EXPECT_EQ(OB_SUCCESS, get_leader(id, new_leader, new_leader_idx));

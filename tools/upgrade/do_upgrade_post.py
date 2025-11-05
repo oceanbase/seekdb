@@ -15,8 +15,7 @@ import upgrade_health_checker
 import tenant_upgrade_action
 import upgrade_post_checker
 import re
-
-# 由于用了/*+read_consistency(WEAK) */来查询，因此升级期间不能允许创建或删除租户
+# Due to the use of /*+read_consistency(WEAK) */ for querying, tenant creation or deletion cannot be allowed during the upgrade period
 
 class UpgradeParams:
   log_filename = config.post_upgrade_log_filename
@@ -31,14 +30,14 @@ class PasswordMaskingFormatter(logging.Formatter):
 def config_logging_module(log_filenamme):
   logger = logging.getLogger('')
   logger.setLevel(logging.INFO)
-  # 定义日志打印格式
+  # Define log print format
   formatter = PasswordMaskingFormatter('[%(asctime)s] %(levelname)s %(filename)s:%(lineno)d %(message)s', '%Y-%m-%d %H:%M:%S')
   #######################################
-  # 定义一个Handler打印INFO及以上级别的日志到sys.stdout
+  # Define a Handler to print INFO and above level logs to sys.stdout
   stdout_handler = logging.StreamHandler(sys.stdout)
   stdout_handler.setLevel(logging.INFO)
   stdout_handler.setFormatter(formatter)
-  # 定义一个Handler处理文件输出
+  # Define a Handler to handle file output
   file_handler = logging.FileHandler(log_filenamme, mode='w')
   file_handler.setLevel(logging.INFO)
   file_handler.setFormatter(formatter)
@@ -110,9 +109,9 @@ def do_upgrade(my_host, my_port, my_user, my_passwd, timeout, my_module_set, upg
       logging.exception('run error')
       raise
     finally:
-      # 打印统计信息
+      # Print statistics information
       print_stats()
-      # 将回滚sql写到文件中
+      # Write the rollback sql to the file
       # actions.dump_rollback_sql_to_file(upgrade_params.rollback_sql_filename)
       cur.close()
       conn.close()
@@ -133,7 +132,7 @@ def do_upgrade_by_argv(argv):
     opts.check_db_client_opts()
     log_filename = opts.get_opt_log_file()
     upgrade_params.log_filename = log_filename
-    # 日志配置放在这里是为了前面的操作不要覆盖掉日志文件
+    # Log configuration is placed here to prevent previous operations from overwriting the log file
     config_logging_module(upgrade_params.log_filename)
     try:
       host = opts.get_opt_host()

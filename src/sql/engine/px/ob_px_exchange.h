@@ -38,7 +38,7 @@ public:
   int64_t get_sqc_id() const { return sqc_id_; }
   int64_t get_dfo_id() const { return dfo_id_; }
 protected:
-  int64_t task_id_; // 目前主要是用于从 ch sets 中找到属于自己的 ch set
+  int64_t task_id_; // Currently mainly used to find its own ch set from ch sets
   int64_t sqc_id_;
   int64_t dfo_id_;
 };

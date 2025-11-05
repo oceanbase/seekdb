@@ -16,10 +16,9 @@
 #include "sql/engine/expr/ob_expr_operator.h"
 #include "sql/engine/expr/ob_expr_res_type.h"
 #include "share/ob_i_sql_expression.h"
-
-// 为pdml功能中提供计算partition id的功能，具体的计算方法为：
-// 1. child算子（例如Table scan）在计算一行时，将对应的partition id填充到ObExprCtx中的ObExecContext中
-// 2. ObExprPartIdPseudoColumn表达式直接从ObExprCtx中获得对应的partition id
+// Provide the function to calculate partition id for pdml feature, the specific calculation method is:
+// 1. child operator (for example Table scan) in calculating a row, fills the corresponding partition id into ObExecContext in ObExprCtx
+// 2. ObExprPartIdPseudoColumn expression directly obtains the corresponding partition id from ObExprCtx
 namespace oceanbase
 {
 namespace sql

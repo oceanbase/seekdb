@@ -17,7 +17,7 @@ namespace oceanbase
 {
 namespace sql
 {
-//这个类仅仅是用来在后缀表达式计算里面做标记item的，不参与实际计算
+// This class is merely used to mark items in the postfix expression calculation, does not participate in the actual calculation
 class ObExprAggParamList : public ObFuncExprOperator
 {
 public:

@@ -11,8 +11,8 @@
  */
 
 #include <gtest/gtest.h>
-#define private public  // 获取private成员
-#define protected public  // 获取protect成员
+#define private public  // get private member
+#define protected public  // get protected member
 #include "observer/table/group/ob_table_tenant_group.h"
 
 using namespace oceanbase::common;

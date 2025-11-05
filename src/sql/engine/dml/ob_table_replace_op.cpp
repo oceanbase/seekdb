@@ -342,8 +342,8 @@ OB_INLINE int ObTableReplaceOp::load_all_replace_row(bool &is_iter_end)
   NG_TRACE_TIMES(2, replace_start_load_row);
 
   while (OB_SUCC(ret) && !reach_mem_limit) {
-    // todo @kaizhan.dkz @wangbo.wb 增加行前trigger逻辑在这里
-    // 新行的外键检查也在这里做
+    // todo @kaizhan.dkz @wangbo.wb add trigger logic before the line here
+    // New line foreign key check is also done here
     bool is_skipped = false;
     if (OB_FAIL(get_next_row_from_child())) {
       if (OB_ITER_END != ret) {
@@ -410,7 +410,7 @@ int ObTableReplaceOp::insert_row_to_das(bool &is_skipped)
 {
   int ret = OB_SUCCESS;
   is_skipped = false;
-  // 尝试写入数据到所有的表
+  // Try to write data to all tables
   for (int64_t i = 0; OB_SUCC(ret) && i < MY_SPEC.replace_ctdefs_.count(); ++i) {
     // insert each table with fetched row
     const ObReplaceCtDef &replace_ctdef = *(MY_SPEC.replace_ctdefs_.at(i));
@@ -477,7 +477,7 @@ int ObTableReplaceOp::fetch_conflict_rowkey(int64_t replace_row_cnt)
   bool got_row = false;
   NG_TRACE_TIMES(2, replace_build_fetch_rowkey);
   DASTaskIter task_iter = dml_rtctx_.das_ref_.begin_task_iter();
-  // 暂时拍脑袋定个100行
+  // Temporarily set to 100 lines
   if (replace_row_cnt > ObConflictCheckerCtdef::MIN_ROW_COUNT_USE_HASHSET_DO_DISTICT) {
     if (OB_FAIL(conflict_checker_.create_rowkey_check_hashset(replace_row_cnt))) {
       LOG_WARN("fail to create conflict_checker hash_set", K(ret), K(replace_row_cnt));
@@ -485,7 +485,7 @@ int ObTableReplaceOp::fetch_conflict_rowkey(int64_t replace_row_cnt)
   }
 
   while (OB_SUCC(ret) && !task_iter.is_end()) {
-    // 不需要clear rowkey表达式的eval_flag，因为主键使用的是column_ref表达式，不存在eval_fun
+    // Do not clear rowkey expression's eval_flag, because the primary key uses column_ref expression, there is no eval_fun
     if (OB_FAIL(get_next_conflict_rowkey(task_iter))) {
       if (OB_ITER_END != ret) {
         LOG_WARN("fail to get next conflict rowkey from das_result", K(ret));
@@ -554,8 +554,8 @@ int ObTableReplaceOp::get_next_conflict_rowkey(DASTaskIter &task_iter)
     ObDASInsertOp *ins_op = static_cast<ObDASInsertOp*>(*task_iter);
     ObDatumRowIterator *conflict_result = ins_op->get_duplicated_result();
     const ObDASInsCtDef *ins_ctdef = static_cast<const ObDASInsCtDef*>(ins_op->get_ctdef());
-    // 因为返回的都是主表的主键，主表的主键一定是在存储层有储存的，是不需要再收起来层再做运算的，
-    // 所以这里不需要clear eval flag
+    // Because all returned are primary keys of the main table, the primary keys of the main table must be stored in the storage layer, and there is no need for the upper layer to do further calculations,
+    // So here there is no need to clear eval flag
     // clear_datum_eval_flag();
     if (OB_ISNULL(conflict_result)) {
       ret = OB_ERR_UNEXPECTED;
@@ -682,10 +682,10 @@ int ObTableReplaceOp::do_replace_into()
     } else if (OB_FAIL(fetch_conflict_rowkey(replace_row_store_.get_row_cnt()))) {
       LOG_WARN("fail to fetch conflict row", K(ret));
     } else if (OB_FAIL(reset_das_env())) {
-      // 这里需要reuse das 相关信息
+      // Here needs to reuse das related information
       LOG_WARN("fail to reset das env", K(ret));
     } else if (OB_FAIL(rollback_savepoint(savepoint_no))) {
-      // 本次插入存在冲突, 回滚到save_point
+      // This insertion has conflicts, rollback to save_point
       LOG_WARN("fail to rollback to save_point", K(ret), K(savepoint_no));
     } else if (OB_FAIL(conflict_checker_.do_lookup_and_build_base_map(replace_row_store_.get_row_cnt()))) {
       LOG_WARN("fail to do table lookup", K(ret));
@@ -700,8 +700,8 @@ int ObTableReplaceOp::do_replace_into()
     }
     GET_DIAGNOSTIC_INFO->get_ash_stat().in_duplicate_conflict_resolve_=false;
     if (OB_SUCC(ret) && !is_iter_end) {
-      // 只有还有下一个batch时才需要做reuse，如果没有下一个batch，close和destroy中会释放内存
-      // 前边逻辑执行成功，这一批batch成功完成replace, reuse环境, 准备下一个batch
+      // Only need to do reuse if there is a next batch, if there is no next batch, memory will be released in close and destroy
+      // The previous logic executed successfully, this batch successfully completed replace, reuse environment, prepare for the next batch
       if (OB_FAIL(reuse())) {
         LOG_WARN("reuse failed", K(ret));
       }
@@ -744,8 +744,8 @@ int ObTableReplaceOp::replace_conflict_row_cache()
   if (OB_FAIL(replace_row_store_.begin(replace_row_iter))) {
     LOG_WARN("begin replace_row_store failed", K(ret), K(replace_row_store_.get_row_cnt()));
   }
-  // 构建冲突的hash map的时候也使用的是column_ref， 回表也是使用的column_ref expr来读取scan的结果
-  // 因为constarain_info中使用的column_ref expr，所以此处需要使用table_column_old_exprs (column_ref exprs)
+  // Build the conflicting hash map using column_ref as well, the lookup also uses column_ref expr to read the scan results
+  // Because constarain_info uses column_ref expr, so here we need to use table_column_old_exprs (column_ref exprs)
   while (OB_SUCC(ret) && OB_SUCC(replace_row_iter.get_next_row(stored_row))) {
     int64_t delete_rows = 0;
     int64_t insert_rows = 0;
@@ -776,7 +776,7 @@ int ObTableReplaceOp::replace_conflict_row_cache()
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("delete row failed", K(ret));
       } else if (OB_FAIL(delete_row->to_expr(get_primary_table_old_row(), eval_ctx_))) {
-        // dup checker依赖table column exprs
+        // dup checker depends on table column exprs
         LOG_WARN("flush delete_row to old_row failed", K(ret), KPC(delete_row), K(get_primary_table_old_row()));
       } else if (OB_FAIL(ObDMLService::process_delete_row(del_ctdef, del_rtdef, skip_delete, *this))) {
         LOG_WARN("process delete row failed", K(ret), KPC(delete_row), K(get_primary_table_old_row()));
@@ -976,16 +976,15 @@ const ObIArray<ObExpr *> &ObTableReplaceOp::get_primary_table_old_row()
 int ObTableReplaceOp::reset_das_env()
 {
   int ret = OB_SUCCESS;
-  // 释放第一次try insert的das task
+  // Release the das task from the first try insert
   if (OB_FAIL(dml_rtctx_.das_ref_.close_all_task())) {
     LOG_WARN("close all das task failed", K(ret));
   } else {
     dml_rtctx_.das_ref_.reuse();
     dml_modify_rows_.clear();
   }
-
-  // 因为第二次插入不需要fetch conflict result了，如果有conflict
-  // 就说明replace into的某些逻辑处理有问题
+  // Because the second insertion does not need to fetch conflict result anymore, if there is a conflict
+  // It means that there is a problem with some logic handling of replace into
   for (int64_t i = 0; OB_SUCC(ret) && i < replace_rtdefs_.count(); ++i) {
     ObInsRtDef &ins_rtdef = replace_rtdefs_.at(i).ins_rtdef_;
     ins_rtdef.das_rtdef_.need_fetch_conflict_ = false;
@@ -1052,7 +1051,7 @@ int ObTableReplaceOp::check_values(bool &is_equal,
     CK(new_row.at(i)->basic_funcs_->null_first_cmp_ == old_row.at(i)->basic_funcs_->null_first_cmp_);
     if (OB_SUCC(ret)) {
       if (share::schema::ObColumnSchemaV2::is_hidden_pk_column_id(column_ids[i])) {
-        //隐藏主键列不处理
+        // Hide primary key column do not process
       } else if (MY_SPEC.doc_id_col_id_ == column_ids[i]) {
         // skip doc id
       } else {

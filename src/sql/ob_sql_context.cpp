@@ -100,7 +100,7 @@ void ObQueryRetryInfo::reset()
 
 void ObQueryRetryInfo::clear()
 {
-  // 这里不能将inited_设为false
+  // Here cannot set inited_ to false
   is_rpc_timeout_ = false;
   //last_query_retry_err_ = OB_SUCCESS;
 }
@@ -463,7 +463,7 @@ int ObSqlSchemaGuard::get_database_schema(const uint64_t tenant_id,
     for (int64_t i = 0; OB_SUCC(ret) && i < mocked_database_schemas_.count(); i++) {
       const share::schema::ObDatabaseSchema *&tmp_schema = mocked_database_schemas_.at(i);
       if (OB_ISNULL(tmp_schema)) {
-        // 忽略本次 null，继续循环
+        // Ignore this null, continue loop
         // ignore ret
         LOG_WARN("get unexpected null", K(ret));
       } else if (database_id == tmp_schema->get_database_id()) {
@@ -512,7 +512,7 @@ int ObSqlSchemaGuard::get_catalog_database_schema(const uint64_t tenant_id,
     for (int64_t i = 0; OB_SUCC(ret) && i < mocked_database_schemas_.count(); i++) {
       const share::schema::ObDatabaseSchema *&tmp_schema = mocked_database_schemas_.at(i);
       if (OB_ISNULL(tmp_schema)) {
-        // 忽略本次 null，继续循环
+        // Ignore this null, continue loop
         // ignore ret
         LOG_WARN("get unexpected null", K(ret));
       } else if (tenant_id == tmp_schema->get_tenant_id() && catalog_id == tmp_schema->get_catalog_id()
@@ -580,7 +580,7 @@ int ObSqlSchemaGuard::get_catalog_table_schema(const uint64_t tenant_id,
     for (int64_t i = 0; OB_SUCC(ret) && i < table_schemas_.count(); i++) {
       const ObTableSchema *&tmp_schema = table_schemas_.at(i);
       if (OB_ISNULL(tmp_schema)) {
-        // 忽略本次 null，继续循环
+        // Ignore this null, continue loop
         // ignore ret
         LOG_WARN("get unexpected null", K(ret));
       } else if (tenant_id == tmp_schema->get_tenant_id() && catalog_id == tmp_schema->get_catalog_id()
@@ -834,7 +834,7 @@ int ObSqlCtx::set_location_constraints(const ObLocationConstraintContext &locati
         if (OB_FAIL(base_constraints_.push_back(base_constraints.at(i)))) {
           LOG_WARN("failed to push back base constraint", K(ret));
         } else {
-          // table_partition_info_仅在计划生成阶段使用
+          // table_partition_info_ is only used during the plan generation phase
           base_constraints_.at(i).table_partition_info_ = NULL;
         }
       }

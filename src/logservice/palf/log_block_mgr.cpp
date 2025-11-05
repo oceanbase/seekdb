@@ -335,7 +335,7 @@ int LogBlockMgr::rename_tmp_block_handler_to_normal(const block_id_t block_id)
 // For block gc, truncate will not concurrent with delete(truncate and delete block will not
 // operate the same range).
 // For migrate(truncate prefix), only one log io worker to execute truncate suffix and prefix.
-// TODO by runlin: 即使truncate_prefix_block的工作由GC线程完成, 也不应该存在并发
+// TODO by runlin: Even if the work of truncate_prefix_block is done by the GC thread, there should not be any concurrency
 int LogBlockMgr::do_truncate_(const block_id_t block_id,
                               const offset_t offset)
 {

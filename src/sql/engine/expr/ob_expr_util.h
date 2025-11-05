@@ -80,10 +80,10 @@ public:
                              common::ObCollationType cs_type,
                              common::ObIArray<size_t> &byte_num,
                              common::ObIArray<size_t> &byte_offset);
-  // 将double round到小数点后或者小数点前指定位置
+  // Round double to the specified position after or before the decimal point
   static double round_double(double val, int64_t dec);
   static uint64_t round_uint64(uint64_t val, int64_t dec);
-  // 将double trunc到小数点后或者小数点前指定位置
+  // Truncate double to specified position after or before the decimal point
   static double trunc_double(double val, int64_t dec);
   template <typename T>
   static T trunc_integer(T val, int64_t dec);
@@ -194,10 +194,9 @@ T ObExprUtil::trunc_integer(T val, int64_t dec)
   }
   return res;
 }
-
-// 定义三角函数的计算函数
+// Define the calculation function for trigonometric functions
 // eg: sin/cos/tan sinh/cosh/tanh asin/acos/atan
-// atan2的计算函数单独实现
+// atan2 calculation function implemented separately
 #define DEF_CALC_TRIGONOMETRIC_EXPR(tritype, INVALID_DOUBLE_ARG_CHECK, INVALID_DOUBLE_ARG_ERRNO) \
 int calc_##tritype##_expr(const ObExpr &expr, ObEvalCtx &ctx,                 \
                                ObDatum &res_datum)                        \

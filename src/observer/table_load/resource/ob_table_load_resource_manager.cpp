@@ -207,7 +207,7 @@ int ObTableLoadResourceManager::apply_resource(ObDirectLoadResourceApplyArg &arg
           if (OB_FAIL(resource_pool_.get_refactored(apply_unit.addr_, ctx))) {
             LOG_WARN("fail to get refactored", KR(ret), K(apply_unit.addr_));
             if (ret == OB_HASH_NOT_EXIST) {
-              // 第一次切主需要初始化，通过内部sql查询ACTIVE状态的observer可能不完整，期间若有导入任务进来时需要重试
+              // The first leader switch requires initialization, internal SQL queries for ACTIVE status observers may be incomplete during this time, if an import task comes in, a retry is needed
               ret = OB_EAGAIN;
             }
           } else if (apply_unit.memory_size_ > ctx.memory_remain_) {

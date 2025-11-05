@@ -28,8 +28,8 @@ using share::schema::ObSchemaGetterGuard;
 int ObLogJoin::build_gi_partition_pruning()
 {
   int ret = OB_SUCCESS;
-  // 1. join 上标记 request part id
-  // 2. join 上标记右侧 gi 为 partition pruning 模式
+  // 1. join upper marked request part id
+  // 2. join right marked gi as partition pruning mode
   ObLogicalOperator *receive = NULL;
   ObLogicalOperator *transmit = NULL;
   if (OB_FAIL(get_child(first_child)->find_first_recursive(LOG_EXCHANGE, receive))) {
@@ -1032,9 +1032,9 @@ int ObLogJoin::allocate_granule_post(AllocGIContext &ctx)
     }
   }
   if (OB_SUCC(ret) && can_enable_gi_partition_pruning()) {
-    // 如果是 nlj，并且右支是 local 分区表 get，则启用 gi part filter 能力，
-    // 并且 nlj 向左支 request 一个 part id
-    // 通知 GI 在迭代 partition granule 时进入 partition pruning 模式
+    // If it is nlj, and the right branch is a local partition table get, then enable gi part filter capability,
+    // And nlj requests a part id from the left branch
+    // Notify GI to enter partition pruning mode when iterating partition granule
     if (OB_FAIL(build_gi_partition_pruning())) {
       LOG_WARN("fail determine right child partition id", K(ret));
     }

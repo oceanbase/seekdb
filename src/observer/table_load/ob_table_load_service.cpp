@@ -623,7 +623,7 @@ int ObTableLoadService::check_support_direct_load_for_columns(
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("invalid column schema", KR(ret), KP(column_schema));
       } else if (column_schema->is_unused()) {
-        // 快速删除列, 仍然需要写宏块, 直接填null
+        // Fast delete column, still need to write macro block, directly fill null
       } else if ((!ObDirectLoadMethod::is_full(method) || !ObDirectLoadMode::is_insert_into(load_mode)) && column_schema->is_generated_column()) {
         ret = OB_NOT_SUPPORTED;
         LOG_WARN("direct-load does not support table has generated column", KR(ret), KPC(column_schema), K(method), K(load_mode));
@@ -677,15 +677,15 @@ int ObTableLoadService::check_support_direct_load_for_default_value(
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("unexpected null column schema", KR(ret), K(col_desc));
         }
-        // 快速删除列
-        // 对于insert into, sql会填充null
-        // 对于load data和java api, 用户无法指定被删除的列写数据, 旁路导入在类型转换时直接填充null
+        // Quick delete column
+        // For insert into, SQL will fill null
+        // For load data and java api, the user cannot specify writing data to deleted columns, bypass import directly fills null during type conversion
         else if (column_schema->is_unused()) {
         }
-        // 自增列
+        // auto-increment column
         else if (column_schema->is_autoincrement() || column_schema->is_identity_column()) {
         }
-        // 默认值是表达式
+        // Default value is expression
         else if (OB_UNLIKELY(lib::is_mysql_mode() && column_schema->get_cur_default_value().is_ext())) {
           ret = OB_NOT_SUPPORTED;
           LOG_WARN("direct-load does not support column default value is ext", KR(ret), KPC(column_schema));
@@ -695,8 +695,8 @@ int ObTableLoadService::check_support_direct_load_for_default_value(
           LOG_WARN("direct-load does not support column default value is expr", KR(ret), KPC(column_schema));
           FORWARD_USER_ERROR_MSG(ret, "direct-load does not support column default value is expr");
         }
-        // 没有默认值, 且为NOT NULL
-        // 例外:枚举类型默认为第一个
+        // No default value, and is NOT NULL
+        // Exception: Enum type defaults to the first one
         else if (OB_UNLIKELY(column_schema->is_not_null_for_write() &&
                              column_schema->get_cur_default_value().is_null() &&
                              !column_schema->get_meta_type().is_enum())) {
@@ -963,11 +963,10 @@ void ObTableLoadService::release_all_ctx()
   // 1. check all obj removed
   bool all_removed = false;
   do {
-    // 通知后台线程快速退出
+    // Notify the background thread to exit quickly
     abort_all_client_task(OB_CANCELED);
     fail_all_ctx(OB_CANCELED);
-
-    // 移除对象
+    // Remove object
     manager_.remove_inactive_table_ctx();
     manager_.remove_inactive_client_task();
     manager_.remove_all_client_task_brief();
@@ -980,7 +979,7 @@ void ObTableLoadService::release_all_ctx()
   // 2. check all obj released
   bool all_released = false;
   do {
-    // 释放对象
+    // Release object
     manager_.gc_table_ctx_in_list();
     manager_.gc_client_task_in_list();
 
@@ -1045,7 +1044,7 @@ int ObTableLoadService::delete_assigned_task(ObDirectLoadResourceReleaseArg &arg
       LOG_WARN("fail to delete_assigned_task", KR(ret), K(arg.task_key_));
     } else if (OB_FAIL(ObTableLoadResourceService::release_resource(arg))) {
       LOG_WARN("fail to release resource", KR(ret));
-      ret = OB_SUCCESS;   // 允许失败，资源管理模块可以回收
+      ret = OB_SUCCESS;   // Allow failure, the resource management module can reclaim
     }
   }
 

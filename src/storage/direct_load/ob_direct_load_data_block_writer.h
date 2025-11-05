@@ -27,8 +27,7 @@ public:
   virtual ~ObIDirectLoadDataBlockFlushCallback() = default;
   virtual int write(char *buf, int64_t buf_size, int64_t offset) = 0;
 };
-
-// align: 是否对齐写. 当前的索引文件必须对齐写, 数据文件可以不对齐写.
+// align: whether to write aligned. The current index file must be written aligned, the data file can be written unaligned.
 template <typename Header, typename T, bool align = false>
 class ObDirectLoadDataBlockWriter : public ObDirectLoadExternalWriter<T>
 {
@@ -255,7 +254,7 @@ int ObDirectLoadDataBlockWriter<Header, T, align>::close()
     } else if (OB_FAIL(file_io_handle_.seal())) {
       STORAGE_LOG(WARN, "failed to seal tmp file", KR(ret));
     } else {
-      max_block_size_ = ALIGN_UP(max_block_size_, DIO_ALIGN_SIZE); // 这个值目前没什么用了, 这里是为了过参数检查
+      max_block_size_ = ALIGN_UP(max_block_size_, DIO_ALIGN_SIZE); // this value is currently not used, here it is just to pass the parameter check
       is_opened_ = false;
     }
   }

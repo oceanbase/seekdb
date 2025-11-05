@@ -185,8 +185,8 @@ int ObSqlTempTableInfo::collect_temp_table_filters(ObDMLStmt *stmt,
   } else {
     table_id = table->table_id_;
   }
-  //如果是joined table内部表，如果在左侧，则可以使用where condition、
-  //如果在右侧，则不能使用where condition，选择可以使用的on condition
+  // If it is an inner table of a joined table, if on the left side, then where condition can be used,
+  // If on the right side, then where condition cannot be used, choose the available on condition
   bool find = false;
   for (int64_t i = 0; OB_SUCC(ret) && !find && i < stmt->get_from_item_size(); ++i) {
     FromItem &from = stmt->get_from_item(i);

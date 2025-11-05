@@ -62,8 +62,8 @@ private:
   common::ObFIFOAllocator allocator_;
   bool is_inited_;
   CacheKeyNodeMap key_node_map_;
-  // 已经淘汰的node，等待被后台删除
-  // 前台login时、后台淘汰时都会操作retired_nodes_，因此需要加锁
+  // obsolete node, waiting to be deleted by the background
+  // Frontend login and backend eviction will both operate on retired_nodes_, so locking is required
   common::ObDList<ObTableApiSessNode> retired_nodes_;
   ObSpinLock retired_nodes_lock_; // for lock retired_nodes_
   int64_t last_update_ts_;
@@ -88,7 +88,7 @@ public:
   void destroy();
   sql::ObSQLSessionInfo& get_sess_info() { return sess_info_; }
   int init_sess_info();
-  void reset_tx_desc() { // 防止异步提交场景在 session 析构的时候 rollback 事务
+  void reset_tx_desc() { // Prevent rollback of transaction during session destruction in asynchronous submission scenario
     sql::ObSQLSessionInfo::LockGuard guard(sess_info_.get_thread_data_lock());
     sess_info_.get_tx_desc() = nullptr;
   }
@@ -174,9 +174,9 @@ public:
   ObTableApiSessGuard()
       : sess_node_val_(nullptr)
   {}
-  // 析构需要做的两件事：
-  // 1. reset事务描述符，避免session析构时，回滚事务
-  // 2. 将session归还到队列，归还失败直接释放（destroy()会将owner_node_设置为null,需要提前记录owner_node）
+  // Two things to do during destruction:
+  // 1. reset transaction descriptor, avoid rolling back the transaction when session is destructed
+  // 2. Return the session to the queue, and release it directly if the return fails (destroy() will set owner_node_ to null, so the owner_node needs to be recorded in advance)
   ~ObTableApiSessGuard()
   {
     if (OB_NOT_NULL(sess_node_val_)) {

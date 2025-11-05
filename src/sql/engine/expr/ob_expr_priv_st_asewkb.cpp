@@ -54,7 +54,7 @@ int ObExprStPrivAsEwkb::calc_result_typeN(ObExprResType& type,
     }
   }
 
-  if (2 == param_num) { // _st_asewkb暂时还不支持大小端翻转
+  if (2 == param_num) { // _st_asewkb temporarily does not support endianness reversal
     ObString fun_name(N_PRIV_ST_ASEWKB);
     ret = OB_ERR_PARAM_SIZE;
     LOG_USER_ERROR(OB_ERR_PARAM_SIZE, fun_name.length(), fun_name.ptr());
@@ -136,7 +136,7 @@ int ObExprStPrivAsEwkb::eval_priv_st_as_ewkb(const ObExpr &expr,
           ObGeoWkbByteOrderUtil::write<uint32_t>(res_wkb.ptr() + WKB_GEO_BO_SIZE
               + WKB_GEO_TYPE_SIZE, header.srid_, header.bo_); // write [srid]
           pos += WKB_GEO_SRID_SIZE;
-        } else { // 当srid为0时，ewkb中不输出srid字段
+        } else { // When srid is 0, the srid field is not output in ewkb
           ObGeoWkbByteOrderUtil::write<uint32_t>(res_wkb.ptr() + WKB_GEO_BO_SIZE, geo_type, header.bo_); // 2. write [type]
           remove_len += WKB_GEO_SRID_SIZE;
         }

@@ -189,10 +189,7 @@ access_specifier:                                                               
 
 #define DEF_WORK_AREA_POLICY(args...)                                          \
   _DEF_PARAMETER_SCOPE_WORK_AREA_POLICY_EASY(public, String, args)
-
-
-
-// 对于 ERRSIM 模式下才生效的配置项，必须使用下面的宏来定义。
+// For configuration items that only take effect in ERRSIM mode, the following macro must be used to define.
 
 #ifdef ERRSIM
 
@@ -284,9 +281,8 @@ access_specifier:                                                               
 #define DEPRECATED_DEF_LOG_ARCHIVE_OPTIONS_WITH_CHECKER(args...)
 #define DEPRECATED_DEF_LOG_LEVEL(args...)
 #define DEPRECATED_DEF_WORK_AREA_POLICY(args...)
-
-// 对于临时使用的配置项（正式发版前会删除），必须使用下面的宏来定义。
-// ver 请写成 v4.2,  v3.2 等字样，不要写成 master
+// For configuration items used temporarily (to be deleted before official release), the following macro must be used to define.
+// ver Please write as v4.2, v3.2, etc., do not write as master
 #define TEMP_DEF_INT(ver, args...)                                                       \
   _DEF_PARAMETER_SCOPE_RANGE_EASY(public, Int, args)
 

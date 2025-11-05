@@ -33,12 +33,11 @@ public:
 };
 }
 }
-
-// 后序遍历 dfo tree 即为调度顺序
-// 用 edges 数组表示这种顺序
-// 注意：
-// 1. root 节点本身不会记录到 edge 中
-// 2. 不需要做 normalize，因为我们这个文件只负责估计线程数，不做也可以得到相同结果
+// Post-order traversal of dfo tree is the scheduling order
+// Use edges array to represent this order
+// Note:
+// 1. root node itself will not be recorded in edge
+// 2. No need to do normalize, because this file is only responsible for estimating the number of threads, and we can get the same result without it
 int SchedOrderGenerator::generate(
     DfoInfo &root,
     ObIArray<DfoInfo *> &edges)
@@ -156,17 +155,17 @@ int ObPxResourceAnalyzer::analyze(
     ObHashMap<ObAddr, int64_t> &max_parallel_group_map)
 {
   int ret = OB_SUCCESS;
-  // 本函数用于分析一个 PX 计划至少需要预留多少组线程才能被调度成功
+  // This function is used to analyze how many groups of threads at least need to be reserved for a PX plan to be scheduled successfully
   //
-  // 需要考虑如下场景：
+  // Need to consider the following scenarios:
   //  1. multiple px
-  //  2. subplan filter rescan (所有被标记为 rescanable 的 exchange 节点都是 QC)
+  //  2. subplan filter rescan (all nodes marked as rescanable are QC)
   //  3. bushy tree scheduling
   //
-  // 算法：
-  // 1. 按照 dfo 调度算法生成调度顺序
-  // 2. 然后模拟调度，每调度一对 dfo，就将 child 设置为 done，然后统计当前时刻多少个未完成 dfo
-  // 3. 如此继续调度，直至所有 dfo 调度完成
+  // Algorithm:
+  // 1. Generate scheduling order according to dfo scheduling algorithm
+  // 2. Then simulate scheduling, every time a pair of dfo is scheduled, set child to done, then count how many unfinished dfo at the current moment
+  // 3. Continue scheduling in this manner until all dfo scheduling is complete
   //
   // ref: 
   if (log_op_def::LOG_EXCHANGE == root_op.get_type() &&
@@ -239,11 +238,11 @@ int ObPxResourceAnalyzer::remove_px(CLOSE_PX_RESOURCE_ANALYZE_DECLARE_ARG, PxInf
 int ObPxResourceAnalyzer::convert_log_plan_to_nested_px_tree(ObLogicalOperator &root_op)
 {
   int ret = OB_SUCCESS;
-  // 算法逻辑上分为两步走：
-  // 1. qc 切分：顶层 qc ，subplan filter  右侧 qc
-  // 2. 各个 qc 分别算并行度（zigzag, left-deep, right-deep, bushy）
+  // Algorithm logic is divided into two steps:
+  // 1. qc split: top-level qc, subplan filter right-side qc
+  // 2. Each qc calculates the parallelism (zigzag, left-deep, right-deep, bushy)
   //
-  // 具体实现上，两件事情并在一个流程里做，更简单些
+  // Specifically, doing two things in one process is simpler
   bool is_stack_overflow = false;
   if (OB_FAIL(check_stack_overflow(is_stack_overflow))) {
     LOG_WARN("failed to check stack overflow", K(ret));
@@ -252,7 +251,7 @@ int ObPxResourceAnalyzer::convert_log_plan_to_nested_px_tree(ObLogicalOperator &
     LOG_WARN("stack overflow, maybe too deep recursive", K(ret));
   } else if (log_op_def::LOG_EXCHANGE == root_op.get_type() &&
       static_cast<const ObLogExchange *>(&root_op)->is_px_consumer()) {
-    // 当前 exchange 是一个 QC，将下面的所有子计划抽象成一个 dfo tree
+    // The current exchange is a QC, abstract all the sub-plans below into a dfo tree
     if (OB_FAIL(create_dfo_tree(static_cast<ObLogExchange &>(root_op)))) {
       LOG_WARN("fail create dfo tree", K(ret));
     }
@@ -275,11 +274,10 @@ int ObPxResourceAnalyzer::convert_log_plan_to_nested_px_tree(ObLogicalOperator &
 int ObPxResourceAnalyzer::create_dfo_tree(ObLogExchange &root_op)
 {
   int ret = OB_SUCCESS;
-  // 以 root_op 为根节点创建一个 dfo tree
-  // root_op 的类型一定是 EXCHANGE IN DIST
-
-  // 在向下遍历构造 dfo tree 时，如果遇到 subplan filter 右侧的 exchange，
-  // 则将其也转化成一个独立的 dfo tree
+  // Create a dfo tree with root_op as the root node
+  // root_op's type must be EXCHANGE IN DIST
+  // When traversing down to construct the dfo tree, if an exchange on the right side of a subplan filter is encountered,
+  // Then convert it into an independent dfo tree
   PxInfo *px_info = NULL;
   ObLogicalOperator *child = root_op.get_child(ObLogicalOperator::first_child);
   void *mem_ptr = allocator_.alloc(sizeof(PxInfo));
@@ -316,16 +314,15 @@ int ObPxResourceAnalyzer::do_split(
     DfoInfo *parent_dfo)
 {
   int ret = OB_SUCCESS;
-  // 遇到 subplan filter 右边的 exchange，都将它转成独立的 px tree，并终止向下遍历
-  // 算法：
-  //  1. 如果当前节点不是 TRANSMIT 算子，则递归遍历它的每一个 child
-  //  2. 如果当前是 TRANSMIT 算子，则建立一个 dfo，同时记录它的父 dfo，并继续向下遍历
-  //     如果没有父 dfo，说明它是 px root，记录到 px trees 中
-  //  3. TODO: 对于 subplan filter rescan 的考虑
-
-  // 算法分为两步走：
-  // 1. qc 切分：顶层 qc ，subplan filter  右侧 qc
-  // 2. 各个 qc 分别算并行度（zigzag, left-deep, right-deep, bushy）
+  // Encounter exchange on the right side of subplan filter, convert it to an independent px tree, and terminate further traversal
+  // Algorithm:
+  //  1. If the current node is not a TRANSMIT operator, then recursively traverse each of its children
+  //  2. If the current operator is TRANSMIT, then establish a dfo, at the same time record its parent dfo, and continue to traverse downwards
+  //     If there is no parent dfo, it means it is px root, record it to px trees
+  //  3. TODO: Consideration for subplan filter rescan
+  // Algorithm consists of two steps:
+  // 1. qc split: top-level qc, subplan filter right-side qc
+  // 2. Each qc calculates the parallelism (zigzag, left-deep, right-deep, bushy)
   bool is_stack_overflow = false;
   if (OB_FAIL(check_stack_overflow(is_stack_overflow))) {
     LOG_WARN("failed to check stack overflow", K(ret));
@@ -547,7 +544,7 @@ int ObPxResourceAnalyzer::recursive_walk_through_px_tree(PxInfo &px_tree)
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("QC op not set in px_info struct", K(ret));
     } else {
-      // 将当前 px 的 expected 线程数设置到 QC 算子中
+      // Set the current px's expected thread count to the QC operator
       px_tree.root_op_->set_expected_worker_count(px_tree.threads_cnt_);
     }
     px_tree.inited_ = true;
@@ -578,7 +575,7 @@ int ObPxResourceAnalyzer::walk_through_dfo_tree(
     ObHashMap<ObAddr, int64_t> &max_parallel_group_map)
 {
   int ret = OB_SUCCESS;
-  // 模拟调度过程
+  // Simulate scheduling process
   ObArray<DfoInfo *> edges;
   SchedOrderGenerator sched_order_gen;
   int64_t bucket_size = cal_next_prime(10);

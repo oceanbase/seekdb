@@ -54,8 +54,8 @@ class ObPL;
 namespace sql
 {
 typedef common::ObIArray<ObTablePartitionInfo *> ObTablePartitionInfoArray;
-//ObLocationConstraint如果只有一项, 则仅需要约束该location type是否一致；
-//                    如果有多项，则需要校验每一项location对应的物理分布是否一样
+//ObLocationConstraint if there is only one item, then only need to constrain whether the location type is consistent;
+//                    If there are multiple items, then it is necessary to verify whether the physical distribution corresponding to each location is the same
 struct LocationConstraint;
 typedef common::ObSEArray<LocationConstraint, 1, common::ModulePageAllocator, true> ObLocationConstraint;
 typedef common::ObFixedArray<LocationConstraint, common::ObIAllocator> ObPlanLocationConstraint;
@@ -144,9 +144,9 @@ struct LocationConstraint
   enum ConstraintFlag {
     NoExtraFlag        = 0,
     IsMultiPartInsert  = 1,
-    // 分区裁剪后基表只涉及到一个一级分区
+    // Partition pruning results in the base table involving only one first-level partition
     SinglePartition    = 1 << 1,
-    // 分区裁剪后基表每个一级分区都只涉及一个二级分区
+    // After partition pruning, each level one partition of the base table only involves one level two partition
     SingleSubPartition = 1 << 2,
     // is duplicate table not in dml
     DupTabNotInDML     = 1 << 3
@@ -203,13 +203,13 @@ struct ObLocationConstraintContext
                K_(strict_constraints),
                K_(non_strict_constraints),
                K_(dup_table_replica_cons));
-  // 基表location约束，包括TABLE_SCAN算子上的基表和INSERT算子上的基表
+  // Base table location constraint, including base tables on TABLE_SCAN operator and base tables on INSERT operator
   ObLocationConstraint base_table_constraints_;
-  // 严格partition wise join约束，要求同一个分组内的基表分区逻辑上和物理上都相等。
-  // 每个分组是一个array，保存了对应基表在base_table_constraints_中的偏移
+  // Strict partition-wise join constraint, requires that the base table partitions within the same group are logically and physically equal.
+  // Each group is an array, saving the offset of the corresponding base table in base_table_constraints_
   common::ObSEArray<ObPwjConstraint *, 8, common::ModulePageAllocator, true> strict_constraints_;
-  // 严格partition wise join约束，要求用一个分组内的基表分区物理上相等。
-  // 每个分组是一个array，保存了对应基表在base_table_constraints_中的偏移
+  // Strict partition-wise join constraint, requires that the base table partitions within a group are physically equal.
+  // Each group is an array, saving the offset of the corresponding base table in base_table_constraints_
   common::ObSEArray<ObPwjConstraint *, 8, common::ModulePageAllocator, true> non_strict_constraints_;
   // constraints for duplicate table's replica selection
   // if not found values in this array, just use local server's replica.
@@ -307,8 +307,8 @@ public:
                K_(is_ps_mode), K_(ab_cnt));
 
 private:
-  bool is_part_of_multi_stmt_; // 是否为multi stmt，非multi stmt也使用这个结构体，因此需要这个标记
-  int64_t seq_num_; // 表示是在multi stmt中的第几条
+  bool is_part_of_multi_stmt_; // whether it is a multi stmt, non-multi stmt also uses this structure, therefore this flag is needed
+  int64_t seq_num_; // indicates the sequence number in multi stmt
   common::ObString sql_;
   // is set only when doing multi-stmt optimization
   const common::ObIArray<ObString> *batched_queries_;
@@ -367,7 +367,7 @@ public:
   void clear_state_before_each_retry()
   {
     is_rpc_timeout_ = false;
-    // 这里不能清除逐次重试累计的成员，如：invalid_servers_，last_query_retry_err_
+    // Here cannot clear the accumulated members from each retry, such as: invalid_servers_, last_query_retry_err_
   }
 
   bool is_inited() const { return inited_; }
@@ -396,8 +396,8 @@ public:
     }
     return fast_fail;
   }
-  // 1. timeout 场景下，尽量反馈上次的错误码，使得报错原因可理解
-  // 2. 其余场景下，用于获取上次错误码，来决策本地重试行为（如 remote plan 优化走不走）
+  // 1. In the timeout scenario, try to feedback the error code from the last attempt, so that the reason for the error is understandable
+  // 2. In other scenarios, used to obtain the last error code to decide local retry behavior (such as whether remote plan optimization should proceed)
   int get_last_query_retry_err() const { return last_query_retry_err_; }
   void inc_retry_cnt() { retry_cnt_++; }
   int64_t get_retry_cnt() const { return retry_cnt_; }
@@ -406,14 +406,14 @@ public:
   TO_STRING_KV(K_(inited), K_(is_rpc_timeout), K_(last_query_retry_err));
 
 private:
-  bool inited_; // 这个变量用于写一些防御性代码，基本没用
-  // 用于标记是否是rpc返回的timeout错误码（包括本地超时和回包中的超时错误码）
+  bool inited_; // This variable is used to write some defensive code, basically useless
+  // Used to mark whether it is a timeout error code returned by rpc (including local timeout and timeout error codes in the response)
   bool is_rpc_timeout_;
-  // 重试阶段可以将错误码的处理分为三类:
-  // 1.重试到超时，将timeout返回给客户端;
-  // 2.不再重试的错误码，直接将其返回给客客户端;
-  // 3.重试到超时，但是将原始错误码返回给客户端，当前仅有 OB_NOT_SUPPORTED，
-  //   对于这类错误码需要正确记录到last_query_retry_err_中，不应该被类型1或2的错误码覆盖。
+  // Retry phase can divide the error code handling into three categories:
+  // 1.Retry until timeout, then return timeout to the client;
+  // 2.Errors that should not be retried, directly return them to the client;
+  // 3.Retry until timeout, but return the original error code to the client, currently only OB_NOT_SUPPORTED,
+  //   For this type of error code, it needs to be correctly recorded in last_query_retry_err_, and should not be overwritten by error codes of type 1 or 2.
   int last_query_retry_err_;
   // this value include local retry & packet retry
   int64_t retry_cnt_;
@@ -678,13 +678,13 @@ public:
   bool is_restore_;
   common::ObFixedArray<common::ObString, common::ObIAllocator> related_user_var_names_;
   //use for plan cache support dist plan
-  // 基表location约束，包括TABLE_SCAN算子上的基表和INSERT算子上的基表
+  // Base table location constraint, including base tables on TABLE_SCAN operator and base tables on INSERT operator
   common::ObFixedArray<LocationConstraint, common::ObIAllocator> base_constraints_;
-  // 严格partition wise join约束，要求同一个分组内的基表分区逻辑上和物理上都相等。
-  // 每个分组是一个array，保存了对应基表在base_table_constraints_中的偏移
+  // Strict partition-wise join constraint, requires that base table partitions within the same group are logically and physically equal.
+  // Each group is an array, saving the offset of the corresponding base table in base_table_constraints_
   common::ObFixedArray<ObPwjConstraint *, common::ObIAllocator> strict_constraints_;
-  // 严格partition wise join约束，要求用一个分组内的基表分区物理上相等。
-  // 每个分组是一个array，保存了对应基表在base_table_constraints_中的偏移
+  // Strict partition-wise join constraint, requires that the base table partitions within a group are physically equal.
+  // Each group is an array, saving the offset of the corresponding base table in base_table_constraints_
   common::ObFixedArray<ObPwjConstraint *, common::ObIAllocator> non_strict_constraints_;
   // constraints for duplicate table's replica selection
   // if not found values in this array, just use local server's replica.
@@ -692,15 +692,14 @@ public:
 
   // wether need late compilation
   bool need_late_compile_;
-
-  // 从resolver传递过来的常量约束
-  // all_possible_const_param_constraints_ 表示该sql中可能的全部常量约束
-  // all_plan_const_param_constraints_ 表示该sql中存在的全部常量约束
-  // 比如：create table t (a bigint, b bigint as (a + 1 + 2), c bigint as (a + 2 + 3), index idx_b(b), index idx_c(c));
-  // 对于：select * from t where a + 1 + 2 > 0;
-  // 有：all_plan_const_param_constraints_ = {[1, 2]}, all_possible_const_param_constraints_ = {[1, 2], [2, 3]}
-  // 对于：select * from t where a + 3 + 4 > 0;
-  // 有：all_plan_const_param_constraints_ = {}, all_possible_const_param_constraints_ = {[1, 2], [2, 3]}
+  // Constants constraints passed from resolver
+  // all_possible_const_param_constraints_ indicates all possible constant constraints in this sql
+  // all_plan_const_param_constraints_ indicates all constant constraints existing in this sql
+  // For example: create table t (a bigint, b bigint as (a + 1 + 2), c bigint as (a + 2 + 3), index idx_b(b), index idx_c(c));
+  // For: select * from t where a + 1 + 2 > 0;
+  // all_plan_const_param_constraints_ = {[1, 2]}, all_possible_const_param_constraints_ = {[1, 2], [2, 3]}
+  // For: select * from t where a + 3 + 4 > 0;
+  // all_plan_const_param_constraints_ = {}, all_possible_const_param_constraints_ = {[1, 2], [2, 3]}
   common::ObIArray<ObPCConstParamInfo> *all_plan_const_param_constraints_;
   common::ObIArray<ObPCConstParamInfo> *all_possible_const_param_constraints_;
   common::ObIArray<ObPCParamEqualInfo> *all_equal_param_constraints_;
@@ -709,12 +708,12 @@ public:
   common::ObIArray<ObPCPrivInfo> *all_priv_constraints_;
   bool need_match_all_params_; //only used for matching plans
   common::ObIArray<ObLocalSessionVar> *all_local_session_vars_; //store the old values of session vars which have changed after creating generated columns
-  bool is_ddl_from_primary_;//备集群从主库同步过来需要处理的ddl sql语句
+  bool is_ddl_from_primary_;//DDL SQL statements from the primary cluster that need to be processed
   const sql::ObStmt *cur_stmt_;
   const ObPhysicalPlan *cur_plan_;
 
-  bool can_reroute_sql_; // 是否可以重新路由
-  bool is_sensitive_;    // 是否含有敏感信息，若有则不记入 sql_audit
+  bool can_reroute_sql_; // whether can reroute
+  bool is_sensitive_;    // whether it contains sensitive information, if so, do not record in sql_audit
   bool is_protocol_weak_read_; // record whether proxy set weak read for this request in protocol flag
   common::ObFixedArray<int64_t, common::ObIAllocator> multi_stmt_rowkey_pos_;
   ObRawExpr *flashback_query_expr_;

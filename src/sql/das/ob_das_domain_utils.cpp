@@ -196,7 +196,7 @@ int ObDASDomainUtils::generate_spatial_index_rows(
         if (OB_FAIL(rows[i].init(allocator, rowkey_num))) {
           LOG_WARN("init datum row failed", K(ret), K(rowkey_num));
         } else {
-          // 索引行[cellid_obj][mbr_obj][rowkey_obj]
+          // Index row[cellid_obj][mbr_obj][rowkey_obj]
           for(uint64_t j = 0; OB_SUCC(ret) && j < rowkey_num; j++) {
             const ObObjMeta &col_type = das_ctdef.column_types_.at(j);
             const ObAccuracy &col_accuracy = das_ctdef.column_accuracys_.at(j);

@@ -67,7 +67,7 @@ int ObRecursiveInnerDataOp::get_all_data_from_left_child()
     }
   }
   if (OB_ITER_END == ret) {
-    // 左边一行都没有，整个query直接就结束了
+    // There is no line on the left, the entire query ends directly
     ret = (left_rows_count == 0) ? OB_ITER_END : OB_SUCCESS;
   }
   return ret;
@@ -137,7 +137,7 @@ int ObRecursiveInnerDataOp::get_all_data_from_right_child()
     }
   }
   if (OB_ITER_END == ret) {
-    // 右儿子行取完只是表明本轮执行完成
+    // Right son row exhausted only indicates that this round of execution is complete
     ret = OB_SUCCESS;
   }
   return ret;
@@ -446,9 +446,9 @@ int ObRecursiveInnerDataOp::try_get_right_rows(
 }
 
 /**
- * 如果行可以输出则优先输出行；
- * 没有输出行的时候，第一次先从左边拿，
- * 左边拿过来了则从右边拿。
+ * If the line can be output, prioritize outputting the line;
+ * When there is no line to output, first take from the left,
+ * After taking from the left, take from the right.
  */
 int ObRecursiveInnerDataOp::get_next_row()
 {
@@ -571,7 +571,7 @@ int ObRecursiveInnerDataOp::rescan()
   //rescan RCTE should clear cte intermediate data
   //while rescan cte don't need to clear itself because they have different meaning
   pump_operator_->reuse();
-  // 由于容器本身使用stored_row_buf_，故不能reset它。
+  // Since the container itself uses stored_row_buf_, it cannot be reset.
   return ret;
 }
 

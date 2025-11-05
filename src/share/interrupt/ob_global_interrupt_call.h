@@ -140,7 +140,7 @@ private:
   bool interrupted_;
   ObInterruptCode interrupt_code_array_;
   /*
-  * ref_count_为checker的引用计数, 当引用计数为1时, unregister_interrupt会将interrupted_置false.
+  * ref_count_ is the reference count for checker, when the reference count is 1, unregister_interrupt will set interrupted_ to false.
   */
   int64_t ref_count_;
 

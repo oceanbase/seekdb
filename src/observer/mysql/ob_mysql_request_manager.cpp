@@ -249,7 +249,7 @@ int ObMySQLRequestManager::record_request(const ObAuditRecordData &audit_record,
           free(record);
           record = NULL;
         } else if (OB_FAIL(queue_.push(record, record->data_.request_id_))) {
-          //sql audit槽位已满时会push失败, 依赖后台线程进行淘汰获得可用槽位
+          //sql audit slot will push fail when full, relying on background thread to evict and obtain available slots
           if (REACH_TIME_INTERVAL(2 * 1000 * 1000)) {
             SERVER_LOG(WARN, "push into queue failed", K(ret));
           }

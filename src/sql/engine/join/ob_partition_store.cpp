@@ -158,8 +158,7 @@ int ObPartitionStore::get_next_batch(const ObCompactRow **stored_rows,
 
   return ret;
 }
-
-// 可能会读多次，所以每次都应该set iterator，同时reset
+// Might read multiple times, so each time should set iterator, and reset
 int ObPartitionStore::begin_iterator()
 {
   int ret = OB_SUCCESS;

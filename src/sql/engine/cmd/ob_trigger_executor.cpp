@@ -44,7 +44,7 @@ int ObCreateTriggerExecutor::execute(ObExecContext &ctx, ObCreateTriggerStmt &st
   OZ (task_exec_ctx->get_common_rpc(common_rpc_proxy));
   OV (OB_NOT_NULL(common_rpc_proxy));
   OZ (common_rpc_proxy->create_trigger_with_res(arg, res), common_rpc_proxy->get_server());
-  //这里需要刷新schema，否则可能获取不到最新的trigger_info
+  // Here needs to refresh schema, otherwise may not get the latest trigger_info
   OZ (ObSPIService::force_refresh_schema(tenant_id));
   CK (OB_NOT_NULL(ctx.get_sql_ctx()));
   CK (OB_NOT_NULL(ctx.get_sql_ctx()->schema_guard_));

@@ -71,7 +71,7 @@ int ObLogHandlerBase::get_role(common::ObRole &role, int64_t &proposal_id) const
   bool is_pending_state = false;
   int64_t curr_palf_proposal_id;
   ObRole curr_palf_role;
-  // 获取当前的proposal_id
+  // Get the current proposal_id
   RLockGuard guard(lock_);
   const int64_t saved_proposal_id = ATOMIC_LOAD(&proposal_id_);
   const ObRole saved_role = ATOMIC_LOAD(&role_);
@@ -85,7 +85,7 @@ int ObLogHandlerBase::get_role(common::ObRole &role, int64_t &proposal_id) const
   } else if (OB_FAIL(palf_handle_.get_role(curr_palf_role, curr_palf_proposal_id, is_pending_state))) {
     CLOG_LOG(WARN, "get_role failed", K(ret));
   } else if (curr_palf_proposal_id != saved_proposal_id) {
-    // palf的proposal_id已经发生变化，返回FOLLOWER
+    // palf's proposal_id has changed, return FOLLOWER
     role = FOLLOWER;
     proposal_id = saved_proposal_id;
   } else {

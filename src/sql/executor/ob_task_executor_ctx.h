@@ -117,10 +117,10 @@ public:
   {
     return query_sys_begin_schema_version_;
   }
-  // init_calc_virtual_part_id_params和reset_calc_virtual_part_id_params最好成对使用，
-  // 否则calc_virtual_partition_id函数容易出错；
-  // 涉及到addr_to_part_id函数的calc函数运行的时候或者calc_virtual_partition_id函数运行的时候
-  // 才需要用到init_calc_virtual_part_id_params和reset_calc_virtual_part_id_params
+  // init_calc_virtual_part_id_params and reset_calc_virtual_part_id_params should be used in pairs,
+  // Otherwise the calc_virtual_partition_id function is prone to errors;
+  // Involving the calc function when addr_to_part_id function runs or calc_virtual_partition_id function runs
+  // Only need to use init_calc_virtual_part_id_params and reset_calc_virtual_part_id_params
   inline int init_calc_virtual_part_id_params(uint64_t ref_table_id)
   {
     return calc_params_.init(ref_table_id);
@@ -141,8 +141,8 @@ public:
   {
     return retry_times_;
   }
-  //FIXME qianfu 兼容性代码，1.4.0之后去掉这个函数
-  // 等于INVALID_CLUSTER_VERSION说明是从远端的旧observer上序列化过来的
+  //FIXME qianfu compatibility code, remove this function after 1.4.0
+  // Equals INVALID_CLUSTER_VERSION means it is serialized from an old observer on a remote node
   inline bool min_cluster_version_is_valid() const
   {
     return ObExecutorRpcCtx::INVALID_CLUSTER_VERSION != min_cluster_version_;
@@ -171,51 +171,49 @@ public:
   // if it is limited by the limiter and not be done, is_limited will be set to true
 
 private:
-  // BEGIN 本地局部变量
+  // BEGIN local local variable
   //
-  // RPC提供的流式处理接口, LocalReceiveOp从这个接口读取远端数据
-  // 之所以将这个变量放在ObTaskExecutorCtx中的原因是：task_resp_handler_
-  // 必须在Scheduler中初始化，在LocalReceiveOp中使用，所以才利用
-  // ObTaskExecutorCtx传递变量
+  // RPC provided streaming processing interface, LocalReceiveOp reads remote data from this interface
+  // The reason this variable is placed in ObTaskExecutorCtx is: task_resp_handler_
+  // Must be initialized in Scheduler, used in LocalReceiveOp, so it utilizes
+  // ObTaskExecutorCtx pass variables
   RemoteExecuteStreamHandle *task_resp_handler_;
-  // 用于封装executor最顶层Job的Op Tree，对外吐数据
+  // Used to encapsulate the Op Tree of the top-level Job of executor, outputting data externally
   ObExecuteResult execute_result_;
-  // 用于记录虚拟表的partition_id和机器的(ip, port)的对应关系，
-  // 该数组的下标即为该server对应的partition_id
+  // Used to record the correspondence between virtual table's partition_id and machine's (ip, port),
+  // The index of this array corresponds to the partition_id of the server
   common::ObList<common::ObAddr, common::ObIAllocator> virtual_part_servers_;
-  // 用于计算虚拟表的partition id的时候临时传递的参数，计算完最好reset掉该成员变量
+  // Used for temporarily passing parameters when calculating the partition id of a virtual table, it's best to reset this member variable after calculation
   CalcVirtualPartitionIdParams calc_params_;
   //
   ObExecContext *exec_ctx_;
-  // PX 记录执行预期整个 Query 需要的线程数，以及实际分配的线程数
+  // PX records the expected number of threads required for the entire Query, as well as the actual number of threads allocated
   int64_t expected_worker_cnt_; // query expected worker count computed by optimizer
   int64_t minimal_worker_cnt_;  // minimal worker count to support execute this query
   int64_t admited_worker_cnt_; // query final used worker count admitted by admission
-  // END 本地局部变量
-
-  // BEGIN 需要序列化的变量
-  // 这个信息序列化到所有参与了查询的机器上.
-  // NOTE:中间计算的机器需要判断一下，不作为Participant
+  // END local local variable
+  // BEGIN variables that need to be serialized
+  // This information is serialized to all machines that participated in the query.
+  // NOTE:The intermediate calculation machine needs to be judged, do not as Participant
   ObPhyTableLocationFixedArray table_locations_;
-  // 重试的次数
+  // The number of retries
   int64_t retry_times_;
   //
-  // 全局的observer最小版本号
+  // Global observer minimum version number
   uint64_t min_cluster_version_;
   //
-  //  END 需要序列化的变量
+  //  END variables that need to be serialized
 
   int64_t sys_job_id_;
 public:
-
-  // BEGIN 全局单例变量
+  // BEGIN global singleton variable
   //
   obrpc::ObCommonRpcProxy *rs_rpc_proxy_;
-  int64_t query_tenant_begin_schema_version_; // Query开始时获取全局最新的 tenant schema version
-  int64_t query_sys_begin_schema_version_; // Query开始时获取全局最新的 sys schema version
+  int64_t query_tenant_begin_schema_version_; // Query start time to get the latest global tenant schema version
+  int64_t query_sys_begin_schema_version_; // Query start time to get the latest global sys schema version
   share::schema::ObMultiVersionSchemaService *schema_service_;
   //
-  // END 全局单例变量
+  // END global singleton variable
 
 
   DISALLOW_COPY_AND_ASSIGN(ObTaskExecutorCtx);

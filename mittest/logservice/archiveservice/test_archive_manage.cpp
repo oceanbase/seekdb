@@ -29,7 +29,7 @@ static const int64_t ONE_MINUTE = 60L * 1000 * 1000 * 1000;
 TEST_F(MySimpleArchiveInstance, test_archive_mgr)
 {
   int ret = OB_SUCCESS;
-  // 创建普通租户以及用户表
+  // Create normal tenant and user table
   ret = prepare();
   EXPECT_EQ(OB_SUCCESS, ret);
 
@@ -37,80 +37,71 @@ TEST_F(MySimpleArchiveInstance, test_archive_mgr)
   EXPECT_EQ(OB_SUCCESS, ret);
   const uint64_t tenant_id = tenant_ids_[0];
   int64_t round_id = 0;
-
-  // =============== 首次开启归档 ================ //
-  // 开启归档
-  round_id = 1;  // 第一轮开启, round_id == 1
+  // =============== First Archive Initialization ================ //
+  // Enable archiving
+  round_id = 1;  // First round starts, round_id == 1
   ret = run_archive(tenant_id);
   EXPECT_EQ(OB_SUCCESS, ret);
-
-  // 检查rs归档状态为BEGINNING
+  // Check rs archive status is BEGINNING
   ret = check_rs_beginning(tenant_id, round_id);
   EXPECT_EQ(OB_SUCCESS, ret);
-
-  // 检查rs归档状态为DOING
+  // Check rs archive status is DOING
   ret = check_rs_doing(tenant_id, round_id);
   EXPECT_EQ(OB_SUCCESS, ret);
-
-  // 检查rs归档进度
+  // Check rs archive progress
   ret = check_rs_archive_progress(tenant_id);
   EXPECT_EQ(OB_SUCCESS, ret);
-
-  // 检查日志流归档状态推进
+  // Check the log stream archive status advancement
   ret = check_archive_progress(tenant_id);
   EXPECT_EQ(OB_SUCCESS, ret);
-
-  // 检查日志流归档任务
+  // Check log stream archiving task
   ret = check_ls_archive_task(tenant_id);
   EXPECT_EQ(OB_SUCCESS, ret);
-
-  // fake关闭归档组件
+  // fake close archive component
   ret = fake_stop_component(tenant_id);
   EXPECT_EQ(OB_SUCCESS, ret);
 
   /*
-   * TODO 暂时关闭该部分单测内容
-   * 需要补齐功能:
-   * 1. INTERRUPT持久化内部表在没有piece记录场景没有覆盖到
-   * 2. 切piece与切archive server目前可能造成归档进度回退, rs无法推进进度
+   * TODO temporarily disable this part of the unit test content
+   * functions to be completed:
+   * 1. INTERRUPT persistence internal table is not covered in scenarios without piece records
+   * 2. Switching piece and switching archive server may cause archive progress to retreat, rs cannot advance progress
    *
-  // 检查归档任务全部处理完成
+  // Check if all archive tasks are processed
   ret = check_task_finish(tenant_id);
   EXPECT_EQ(OB_SUCCESS, ret);
 
-  // fake修改piece相关信息, 将piece interval修改为秒级别
+  // fake modify piece related information, change piece interval to second level
   ret = fake_piece_info_after_fake_stop(tenant_id, ONE_MINUTE);
   EXPECT_EQ(OB_SUCCESS, ret);
 
-  // fake删除日志流归档任务
+  // fake delete log stream archive task
   ret = fake_remove_ls(tenant_id);
   EXPECT_EQ(OB_SUCCESS, ret);
 
-  // fake重启归档组件
+  // fake restart archive component
   ret = fake_restart_component(tenant_id);
   EXPECT_EQ(OB_SUCCESS, ret);
 
-  // 检查重启归档组件后, rs归档进度
+  // Check archive progress of rs after restarting archive component
   ret = check_rs_archive_progress(tenant_id);
   EXPECT_EQ(OB_SUCCESS, ret);
 
-  // 检查日志流归档状态推进
+  // Check if log stream archive status advances
   ret = check_archive_progress(tenant_id, true);
   EXPECT_EQ(OB_SUCCESS, ret);
   */
-  // =============== 关闭归档 ================ //
+  // =============== Close Archive ================ //
   ret = stop_archive();
   EXPECT_EQ(OB_SUCCESS, ret);
 
   ret = check_rs_stop(tenant_id, round_id);
   EXPECT_EQ(OB_SUCCESS, ret);
-
-  // =============== 重新开启归档 ================ //
+  // =============== Reopen Archive ================ //
   round_id = 2;
   ret = run_archive(tenant_id);
   EXPECT_EQ(OB_SUCCESS, ret);
-
-  // 检查归档组件处于doing
+  // Check if the archive component is in doing state
   ret = check_rs_doing(tenant_id, round_id);
   EXPECT_EQ(OB_SUCCESS, ret);
 }

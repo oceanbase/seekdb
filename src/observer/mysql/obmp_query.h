@@ -132,14 +132,14 @@ public:
 private:
   DISALLOW_COPY_AND_ASSIGN(ObMPQuery);
 private:
-  //生命周期在process_single_stmt()中
+  //Lifecycle in process_single_stmt()
   sql::ObSqlCtx ctx_;
   ObQueryRetryCtrl retry_ctrl_;
   common::ObString sql_;
   int64_t single_process_timestamp_;
   int64_t exec_start_timestamp_;
   int64_t exec_end_timestamp_;
-  //由于mysql的COM_FIELD_LIST命令本质上就是获取列的定义信息，只需要返回列定义
+  //Since the MySQL COM_FIELD_LIST command essentially retrieves column definition information, only the column definitions need to be returned
   bool is_com_filed_list_;
   common::ObString wild_str_;//used to save wildware string in COM_FIELD_LIST
   int64_t params_value_len_;

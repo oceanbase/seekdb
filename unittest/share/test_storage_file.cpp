@@ -350,7 +350,7 @@ TEST_F(TestStorageFile, test_list_files_with_marker)
     ASSERT_EQ(OB_SUCCESS, op.set_marker_flag("0", scan_count));
     EXPECT_EQ(OB_SUCCESS, util.adaptively_list_files(test_with_marker_str.c_str(), &storage_info, op));
     EXPECT_EQ(scan_count, op.global_objects_);
-    // 输出文件序与对象存储保持一致，字典序升序
+    // Output file sequence consistent with object storage, in ascending dictionary order
     int j = 0;
     for (int i = 0; i < scan_count; i++) {
       char expected_uri_c[OB_MAX_URI_LENGTH] = {'\0'};

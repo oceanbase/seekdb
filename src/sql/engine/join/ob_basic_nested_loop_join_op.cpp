@@ -109,16 +109,15 @@ int ObBasicNestedLoopJoinOp::prepare_rescan_params(bool is_group)
     batch_rescan_ctl->param_version_ += 1;
     OZ(batch_rescan_ctl->params_.append_batch_rescan_param(param_idxs, params, param_expr_idxs));
   }
-
-  // 左边每一行出来后，去通知右侧 GI 实施 part id 过滤，避免 PKEY NLJ 场景下扫不必要分区
+  // After each row comes out from the left side, notify the right-side GI to implement part id filtering, avoid unnecessary partition scanning in PKEY NLJ scenario
   if (OB_SUCC(ret) && !get_spec().enable_px_batch_rescan_ && get_spec().enable_gi_partition_pruning_) {
     ObDatum *datum = nullptr;
     if (OB_FAIL(get_spec().gi_partition_id_expr_->eval(eval_ctx_, datum))) {
       LOG_WARN("fail eval value", K(ret));
     } else {
-      // NOTE: 如果右侧对应多张表，这里的逻辑也没有问题
-      // 如 A REPART TO NLJ (B JOIN C) 的场景
-      // 此时 GI 在 B 和 C 的上面
+      // NOTE: If the right side corresponds to multiple tables, the logic here is also correct
+      // Like A REPART TO NLJ (B JOIN C) scenario
+      // At this time, GI is above B and C
       int64_t part_id = datum->get_int();
       ctx_.get_gi_pruning_info().set_part_id(part_id);
     }

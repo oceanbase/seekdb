@@ -84,7 +84,7 @@ int ObPlanSet::match_params_info(const ParamStore *params,
   } else if (params->count() > params_info_.count()) {
     is_same = false;
   } else {
-    //匹配原始的参数
+    // Match the original parameters
     int64_t N = params->count();
     LOG_TRACE("params info", K(params_info_), K(*params), K(this));
     for (int64_t i = 0; OB_SUCC(ret) && is_same && i < N; ++i) {
@@ -95,25 +95,23 @@ int ObPlanSet::match_params_info(const ParamStore *params,
         LOG_WARN("fail to match param info", K(ret), K(params_info_), K(*params));
       }
     }
-
-    // 匹配相关的用户session变量
-
-    // 这里应该先进行related_user_var_names_跟session_info里面变量的比较，再进行预计算
-    // 否则会导致session var类型改变后, 无法匹配上计划. 举例如下
+    // Match related user session variables
+    // Here should first compare related_user_var_names_ with variables inside session_info, then perform pre-calculation
+    // Otherwise it will lead to session var type change, unable to match the plan. Example as follows:
     // eg:   SQL                   ParamStore
     //     1. set @a := 1;
     //     2. select @a;            int obj
     //     3. set @a := '1';
     //     4. select @a;            varchar obj
-    //     5. select @a;            int obj(因为填的是匹配sql2 plan时预计算的结果)
-    //     结果: sql5无法匹配上sql4的计划
-    //     原因: sql5匹配sql2的计划时先预计算，得到int obj，再比较related_user_var_names_
-    //           发现session_info_里面的sess_var为varchar，匹配失败.
-    //           sql5再次匹配sql4的计划，由于已经预计算，不再进行计算，所以ParamStore
-    //           里面还是int obj，而params_info_中Obj为varchar，匹配失败.
+    //     5. select @a;            int obj(because it fills the pre-calculated result when matching sql2 plan)
+    //     Result: sql5 cannot match sql4's plan
+    //     Reason: sql5 matches sql2's plan by pre-calculating first, obtaining int obj, then comparing related_user_var_names_
+    //           Found sess_var in session_info_ as varchar, matching failed.
+    //           sql5 rematch sql4's plan, since it has already been pre-calculated, no further calculation is performed, so ParamStore
+    //           inside is still int obj, while Obj in params_info_ is varchar, matching failed.
     //
-    //     所以应该改为先比较related_user_var_names是否和sess_var相同，再进行预计算
-    //     就不会导致匹配时，ParamStore中填的是上一个计划的预计算结果
+    //     So it should be changed to compare related_user_var_names with sess_var first, then perform pre-calculation
+    //     would not result in matching with precomputed results of the previous plan in ParamStore
     if (OB_SUCC(ret) && is_same && related_user_var_names_.count() > 0) {
       if (related_user_var_names_.count() != related_user_sess_var_metas_.count()) {
         ret = OB_ERR_UNEXPECTED;
@@ -174,8 +172,7 @@ int ObPlanSet::match_params_info(const ParamStore *params,
         }
       }
     }
-
-    //匹配true/false,此时的params中flag_是初始化的值, 不能直接使用。
+    // Match true/false, at this time the flag_ in params is the initial value, and cannot be used directly.
     for (int64_t i = 0; OB_SUCC(ret) && is_same && i < params->count(); ++i) {
       if (OB_FAIL(match_param_bool_value(params_info_.at(i),
                                          params->at(i),
@@ -221,8 +218,7 @@ int ObPlanSet::copy_param_flag_from_param_info(ParamStore *params)
   }
   return ret;
 }
-
-//匹配参数类型信息
+// Match parameter type information
 int ObPlanSet::match_param_info(const ObParamInfo &param_info,
                                 const ObObjParam &param,
                                 bool &is_same,
@@ -304,8 +300,7 @@ int ObPlanSet::match_param_info(const ObParamInfo &param_info,
   }
   return ret;
 }
-
-// 匹配真/假参数
+// Match true/false parameter
 int ObPlanSet::match_param_bool_value(const ObParamInfo &param_info,
                                       const ObObjParam &param,
                                       bool &is_same) const
@@ -397,10 +392,9 @@ int ObPlanSet::match_multi_stmt_info(const ParamStore &params,
   }
   return ret;
 }
+// Determine whether all parameters in the same column across multiple groups are true/false, and return the first parameter that is true/false
 
-//判断多组参数中同一列参数的是否均为true/false, 并返回第一个参数是true/false
-
-/*//判断param store中array参数的每个obj是否恒真/假*/
+/*//Determine if each obj in the array parameter of param store is always true/false*/
 //int ObPlanSet::check_array_bind_same_bool_param(const Ob2DArray<ObParamInfo,
                                                 //OB_MALLOC_BIG_BLOCK_SIZE,
                                                 //ObWrapperAllocator, false> &param_infos,
@@ -413,7 +407,7 @@ int ObPlanSet::match_multi_stmt_info(const ParamStore &params,
   //for (int64_t i = 0; OB_SUCC(ret) && same_bool_param && i < param_store.count(); ++i) {
     //if (param_infos.at(i).flag_.need_to_check_bool_value_
         //&& param_store.at(i).is_ext()) {
-      ////检查每一组参数的结果是否为true/false
+      ////Check the result of each group of parameters is true/false
       //if (OB_FAIL(check_vector_param_same_bool(param_store.at(i),
                                                //first_val,
                                                //same_bool_param))) {
@@ -862,12 +856,11 @@ int ObPlanSet::match_cons(const ObPlanCacheCtx &pc_ctx, bool &is_matched)
 
   return ret;
 }
-
-// 常量约束的检查逻辑：
-// 1. all_plan_const_param_constraints_不为空，检查all_plan_const_param_constraints_的约束是否满足，
-//    满足则命中plan_set，否则不命中;
-// 2. 否则，检查所有可能的常量约束，如果某一个约束被满足，那么需要生成新的计划，也即不命中，否则命中
-// 3. 检查要求相等的参数约束是否被满足
+// Constant constraint check logic:
+// 1. all_plan_const_param_constraints_ is not empty, check if the constraints of all_plan_const_param_constraints_ are satisfied,
+//    Satisfy then hit plan_set, otherwise not hit;
+// 2. Otherwise, check all possible constant constraints, if one of the constraints is satisfied, then a new plan needs to be generated, that is, it does not hit, otherwise it hits
+// 3. Check if the parameter constraints that require equality are satisfied
 int ObPlanSet::match_constraint(const ParamStore &params, bool &is_matched)
 {
   int ret = OB_SUCCESS;
@@ -1310,7 +1303,7 @@ int ObSqlPlanSet::select_plan(ObPlanCacheCtx &pc_ctx, ObPlanCacheObject *&cache_
     }
   }
   if (OB_SUCC(ret) && OB_NOT_NULL(plan) && plan->is_remote_plan()) {
-    //记录下not param info和neg_param_index，用于在转发remote sql的时候定位能参数化常量的个数
+    // Record not param info and neg_param_index, used for locating the number of parameterizable constants when forwarding remote SQL
     pc_ctx.not_param_index_.reset();
     pc_ctx.neg_param_index_.reset();
     if (OB_FAIL(pc_ctx.not_param_index_.add_members2(plan_cache_value_->get_not_param_index()))) {
@@ -1340,14 +1333,14 @@ int ObSqlPlanSet::select_plan(ObPlanCacheCtx &pc_ctx, ObPlanCacheObject *&cache_
 }
 
 /*
- * 不查询location cache直接获取local plan 条件：
- *  1.该次请求不是在重试中
- *  2.该sql涉及的表裁剪后均为单分区
- *  3.local plan 存在
- *  4.上次执行local plan时open成功
+ * Do not query location cache and directly obtain local plan conditions:
+ *  1.This request is not in a retry
+ *  2.The tables involved in this SQL are all single-partitioned after pruning
+ *  3.Local plan exists
+ *  4.Last execution of local plan was opened successfully
  *
- *  如果直接获取了local plan, 而实际需要的不是local plan，
- *  会在执行阶段open时报错，更新plan中last_execute_result状态并重试。
+ *  If local plan is directly obtained but the actual requirement is not local plan,
+ *  it will report an error during execution when opening, update the last_execute_result status in the plan and retry.
  * */
 //int ObSqlPlanSet::get_local_plan_direct(ObPlanCacheCtx &pc_ctx,
 //                                        bool &is_direct_local_plan,
@@ -1494,28 +1487,28 @@ int ObSqlPlanSet::add_physical_plan(const ObPhyPlanType plan_type,
 //  if (OB_SQL_PC_NOT_EXIST == ret
 //      || NULL == plan) {
 //    pc_ctx.exec_ctx_.set_direct_local_plan(false);
-//    // 进入该分支, 说明不走直接获取local plan的优化，
-//    // 如果plan不为空, 说明已经拿到执行计划，
-//    // 此时已经对该plan的引用计数+1, 在这里需要先减掉引用计数
+//    // Enter this branch, indicating that the optimization of directly obtaining the local plan is not taken,
+//    // If plan is not empty, it means the execution plan has been obtained,
+//    // At this point, the reference count for this plan has already been incremented by 1, so we need to decrement the reference count here
 //    if (NULL != plan) {
 //      /*
-//       * 以下并发场景会进入该分支
-//       *                         切主
-//       *     A线程                                  B线程
+//       * The following concurrent scenario will enter this branch
+//       *                         leader switch
+//       *     Thread A                                  Thread B
 //       *
-//       * 直接获取到local plan                 直接获取local plan
+//       * Directly obtain local plan                 Directly obtain local plan
 //       *
 //       *
-//       *  分区不在本地重试
+//       *  Partition not local, retry
 //       *
-//       *                                        发现其他线程已经
-//       *                                        执行该local计划失败，
-//       *                                        重新计算plan type获取
-//       *                                        正确remote计划
+//       *                                        Discover that other threads have
+//       *                                        executed this local plan failed,
+//       *                                        recalculate plan type to get
+//       *                                        correct remote plan
 //       *
-//       *   进入plan cache，
-//       *   重新计算plan type
-//       *   获取remote 计划
+//       *   Enter plan cache,
+//       *   recalculate plan type
+//       *   get remote plan
 //       * */
 //      plan = NULL;
 //    }
@@ -1767,7 +1760,7 @@ void ObSqlPlanSet::reset()
 }
 
 //get plan used
-//need_check_on_same_server: out, 是否需要检查分区在同一server, 如果里面检查过且不在同一server则置为false
+//need_check_on_same_server: out, whether need to check if the partition is on the same server, if checked inside and not on the same server then set to false
 int ObSqlPlanSet::get_phy_locations(const ObIArray<ObTableLocation> &table_locations,
                                     ObPlanCacheCtx &pc_ctx,
                                     ObIArray<ObCandiTableLoc> &candi_table_locs)
@@ -1960,9 +1953,9 @@ int ObSqlPlanSet::get_plan_type(const ObIArray<ObTableLocation> &table_locations
                                            plan_type))) {
     LOG_WARN("failed to calcute physical plan type", K(ret));
   } else {
-    // Lookup算子支持压到远程去执行:
+    // Lookup operator supports pushing down to execute remotely:
     //   
-    // Select的sql如果包含uncertain算子，不能将类型改为分布式计划
+    // Select's sql if contains uncertain operator, cannot change type to distributed plan
     if (is_contain_uncertain_op && plan_type != OB_PHY_PLAN_LOCAL
         && stmt::T_SELECT != stmt_type_) {
       plan_type = OB_PHY_PLAN_DISTRIBUTED;

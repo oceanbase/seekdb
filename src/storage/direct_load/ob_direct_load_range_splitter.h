@@ -68,19 +68,18 @@ public:
       common::ObIArray<blocksstable::ObDatumRange> &range_array,
       const common::ObIArray<share::schema::ObColDesc> &col_descs,
       common::ObIAllocator &allocator);
-
-  // 固定步长采样
+  // Fixed step sampling
   static int rowkey_fixed_sample(ObIDirectLoadDatumRowkeyIterator &rowkey_iter,
                                  const int64_t step,
                                  common::ObIArray<blocksstable::ObDatumRowkey> &rowkey_array,
                                  common::ObIAllocator &allocator);
-  // 自适应采样
+  // Adaptive sampling
   static const int64_t DEFAULT_ADAPTIVE_SAMPLE_FACTOR = 8;
   static int rowkey_adaptive_sample(ObIDirectLoadDatumRowkeyIterator &rowkey_iter,
                                     const int64_t sample_num,
                                     common::ObIArray<blocksstable::ObDatumRowkey> &rowkey_array,
                                     common::ObIAllocator &allocator);
-  // 蓄水池采样
+  // Reservoir sampling
   static const int64_t DEFAULT_RESERVOIR_SAMPLE_NUM = 500;
   static int rowkey_reservoir_sample(ObIDirectLoadDatumRowkeyIterator &rowkey_iter,
                                      const int64_t sample_num,
@@ -208,7 +207,7 @@ private:
   ObDirectLoadMultipleDatumRowkeyCompare compare_;
   MultipleRowkeyMerger rowkey_merger_;
   TabletRowkeyIter tablet_rowkey_iter_;
-  int64_t adaptive_sample_factor_; // 自适应采样系数
+  int64_t adaptive_sample_factor_; // adaptive sampling factor
   int64_t reservoir_sample_num_;
   bool enable_reservoir_sample_;
   bool is_inited_;

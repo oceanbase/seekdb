@@ -2087,7 +2087,7 @@ int ObBackupDatabaseExecutor::execute(ObExecContext &ctx, ObBackupDatabaseStmt &
   ObString passwd;
   ObObj value;
   obrpc::ObBackupDatabaseArg arg;
-  //rs会尝试更新冻结点的schema_version的interval 5s
+  // rs will attempt to update the schema_version of the freeze point every 5s
   const int64_t SECOND = 1* 1000 * 1000; //1s
   const int64_t MAX_RETRY_NUM = UPDATE_SCHEMA_ADDITIONAL_INTERVAL / SECOND + 1;
   if (OB_ISNULL(task_exec_ctx)) {

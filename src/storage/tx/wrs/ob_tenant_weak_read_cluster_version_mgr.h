@@ -42,7 +42,7 @@ public:
   void reset(const uint64_t tenant_id);
 
   /// update server version
-  /// if the server record exist，update the record
+  /// if the server record exist, update the record
   /// if the server record not exist, insert a new record
   ///
   /// @retval OB_SUCCESS success

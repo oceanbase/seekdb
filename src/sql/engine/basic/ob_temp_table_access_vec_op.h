@@ -105,12 +105,12 @@ public:
 
 private:
   ObTempColumnStore::Iterator col_store_it_;
-  //这里的result id是当前算子可用的任务（对于rescan而言）或者是已经完成或正在完成的任务
-  //TempTableAccess的rescan不会重新从任务池中抢占任务，而是选择重新执行之前抢占到的任务
+  // Here the result id is the current operator's available task (for rescan) or a task that has already been completed or is being completed
+  // TempTableAccess's rescan will not reacquire tasks from the task pool, but instead choose to re-execute the previously acquired tasks
   common::ObSEArray<uint64_t, 8> interm_result_ids_;
   uint64_t cur_idx_;
   bool can_rescan_;
-  //如果是local result，只能读一次
+  // If it is local result, it can only be read once
   bool is_started_;
   dtl::ObDTLIntermResultInfoGuard result_info_guard_;
   ExprFixedArray output_exprs_;

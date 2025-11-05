@@ -102,7 +102,7 @@ private:
                        bool check_config = true);
 private:
   uint64_t tenant_id_;
-  int64_t current_version_; // 当前 tenant config 正在被 task 更新中的版本
+  int64_t current_version_; // The version of the tenant config that is currently being updated by the task
   obutil::Mutex mutex_;
   TenantConfigUpdateTask update_task_;
   common::ObSystemConfig system_config_;

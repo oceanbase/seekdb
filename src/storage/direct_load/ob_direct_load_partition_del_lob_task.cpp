@@ -84,7 +84,7 @@ int ObDirectLoadPartitionDelLobTask::RowIterator::get_next_row(const ObDatumRow 
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected datum row", KR(ret), KPC(datum_row));
     } else {
-      // 删除lob只需要主键列
+      // Delete lob only requires the primary key column
       for (int64_t i = 0; i < ObLobMetaUtil::LOB_META_SCHEMA_ROWKEY_COL_CNT; ++i) {
         datum_row_.storage_datums_[i] = datum_row->storage_datums_[i];
       }

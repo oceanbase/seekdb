@@ -63,7 +63,7 @@ public:
   }
   int64_t get_operator_info_memory_size()
   {
-    // 本地info内存统计在alloctor_里面，因此只需要计算非本地的内存
+    // Local info memory statistics are in alloctor_, therefore only non-local memory needs to be calculated
     return operator_infos_.count() < OPERATOR_LOCAL_COUNT ? 0 : operator_infos_.get_data_size();
   }
   void set_request_id(int64_t request_id) { request_id_ = request_id; }

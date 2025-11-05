@@ -22,15 +22,15 @@ namespace oceanbase
 {
 namespace logservice
 {
-// ObReplayBarrierType为follower回放日志时的barrier类型, 分为以下三类
+// ObReplayBarrierType is the barrier type for follower log replay, divided into the following three categories
 // 1. STRICT_BARRIER:
-//    此日志能回放的前提条件为比此日志的log ts小的日志都已回放完,
-//    并且在此日志的回放完成之前, 比此日志的log ts大的日志都不会回放.
+//    The prerequisite condition for replaying this log is that all logs with a log ts smaller than this log have already been replayed,
+//    And before the replay of this log is complete, logs with a log ts greater than this log will not be replayed.
 // 2. PRE_BARRIER:
-//    此日志能回放的前提条件为比此日志的log ts小的日志都已回放完,
-//    但此日志的回放完成之前, 比此日志的log ts大的日志可以回放.
+//    The prerequisite condition for replaying this log is that all logs with a log ts smaller than this log have already been replayed,
+//    But the replay of this log can be completed before logs with a log ts greater than this log are replayed.
 // 3. NO_NEED_BARRIER:
-//    此日志无任何特殊回放条件, 也不会对其他日志的回放有任何影响
+//    This log has no special replay conditions and will not affect the replay of any other logs
 enum ObReplayBarrierType
 {
   INVALID_BARRIER = 0,

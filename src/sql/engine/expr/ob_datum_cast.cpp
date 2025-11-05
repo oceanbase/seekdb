@@ -66,8 +66,7 @@ using namespace oceanbase::common;
     ret = OB_ERR_INVALID_JSON_TEXT;                                                                   \
     LOG_USER_ERROR(OB_ERR_INVALID_JSON_TEXT);                                                         \
   } else
-
-//oracle模式除了longtext类型的空串不等同于null，其他string类型的空串都等于null
+//oracle mode except for empty strings of longtext type not being equivalent to null, other string type empty strings are equal to null
 #define EVAL_STRING_ARG()                                  \
   int ret = OB_SUCCESS;                                    \
   ObDatum *child_res = NULL;                               \
@@ -82,8 +81,7 @@ using namespace oceanbase::common;
   ObObjType in_type = expr.args_[0]->datum_meta_.type_;   \
   ObObjType out_type = expr.datum_meta_.type_;            \
   UNUSEDx(warning, in_type, out_type);
-
-// 如果使用ObDatum::get_xxx()，需要多传递一个参数，指明函数名字，所以下面的宏直接cast
+// If using ObDatum::get_xxx(), need to pass an additional parameter to specify the function name, so the macro directly casts below
 #define DEF_IN_OUT_VAL(in_type, out_type, init_val)                      \
   int warning = OB_SUCCESS;                                              \
   UNUSED(warning);                                                       \
@@ -92,8 +90,7 @@ using namespace oceanbase::common;
 
 #define CAST_FAIL(stmt) \
   (OB_UNLIKELY((OB_SUCCESS != (ret = get_cast_ret((expr.extra_), (stmt), warning)))))
-
-// 与CAST_FAIL类似，但是上面的宏会将expr.extra_作为cast_mode,这样使用时少写一个参数
+// Similar to CAST_FAIL, but the macro above uses expr.extra_ as cast_mode, so one parameter is less when using it
 #define CAST_FAIL_CM(stmt, cast_mode) \
   (OB_UNLIKELY((OB_SUCCESS != (ret = get_cast_ret((cast_mode), (stmt), warning)))))
 
@@ -176,11 +173,10 @@ int get_cast_ret_wrap(const ObCastMode &cast_mode, int ret, int &warning)
 {
   return get_cast_ret(cast_mode, ret, warning);
 }
-
-// 出现错误时,处理如下：
-// 如果只设置了WARN_ON_FAIL，会覆盖错误码
-// 如果设置了WARN_ON_FAIL和ZERO_ON_WARN,会覆盖错误码，且结果被置为0
-// 如果设置了WARN_ON_FAIL和NULL_ON_WARN,会覆盖错误码，且结果被置为null
+// When an error occurs, handle as follows:
+// If only WARN_ON_FAIL is set, it will override the error code
+// If WARN_ON_FAIL and ZERO_ON_WARN are set, it will override the error code, and the result will be set to 0
+// If WARN_ON_FAIL and NULL_ON_WARN are set, it will override the error code, and the result will be set to null
 #define SET_RES_OBJ(cast_mode, func_val, zero_value, value)       \
   do {                                                            \
     if (OB_SUCC(ret)) {                                           \
@@ -200,8 +196,7 @@ int get_cast_ret_wrap(const ObCastMode &cast_mode, int ret, int &warning)
       res_datum.set_##func_val(value);                            \
     }                                                             \
   } while (0)
-
-// 用于设置timestamp nano以及timestamp ltz的宏
+// Used to set timestamp nano and timestamp ltz macros
 #define SET_RES_OTIMESTAMP_10BYTE(value)                          \
   do {                                                            \
     if (OB_SUCC(ret)) {                                           \
@@ -318,7 +313,7 @@ int ObDatumHexUtils::hex(const ObExpr &expr, const ObString &in_str, ObEvalCtx &
         ObString res_str;
         if (need_convert) {
           static const int32_t CharConvertFactorNum = 4;
-          const int32_t alloc_length = pos * CharConvertFactorNum; //最多使用4字节存储一个字符
+          const int32_t alloc_length = pos * CharConvertFactorNum; // use up to 4 bytes to store one character
           char *res_buf = NULL;
           if (output_result.is_init()) {
             OB_ASSERT(0); // should not inited if need_convert
@@ -468,8 +463,7 @@ int ObDatumHexUtils::get_uint(
   }
   return ret;
 }
-
-// 相比于common_copy_string_zf，不考虑zerofill。直接将src中的内容拷贝到res_datum
+// Compared to common_copy_string_zf, zero fill is not considered. Directly copy the content from src to res_datum
 // %align_offset is used in mysql mode to align blob to other charset.
 static int common_copy_string(const ObExpr &expr,
                               const ObString &src,
@@ -490,9 +484,8 @@ static int common_copy_string(const ObExpr &expr,
   }
   return ret;
 }
-
-// 将src中的内容拷贝到res_datum中，拷贝过程需要考虑res_datum空间是否足够，以及zero fill填0
-// 参数expr的作用是为了获取cast表达式的相关信息，例如res_buf_len_/max_length_/extra_
+// Copy the content from src to res_datum, the copy process needs to consider whether the space in res_datum is sufficient, as well as zero fill to fill with zeros
+// The role of parameter expr is to obtain information related to the cast expression, for example res_buf_len_/max_length_/extra_
 static int common_copy_string_zf(const ObExpr &expr,
                               const ObString &src,
                               ObEvalCtx &ctx,
@@ -504,10 +497,10 @@ static int common_copy_string_zf(const ObExpr &expr,
   if (out_len <= 0) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected zf length", K(ret), K(out_len), K(expr.datum_meta_.scale_));
-  //这里原来做了对oracle模式空串对处理，将oracle模式空串转为null。
-  //一般情况下oracle模式空串等同于null，但是支持empty_lob之后，longtext/lob类型的空串不等同于null
-  // 其他类型转到string类型时会调用common_copy_string_zf，当in_type不是string时，in_str的length不会为0
-  // in_type是string时，在cast方法入口已经判断了是否要将空串转换为null，因此删去原来的转换逻辑。
+  // Here the original processing of empty strings in oracle mode was done, converting empty strings in oracle mode to null.
+  // Generally speaking, in oracle mode, an empty string is equivalent to null, but after supporting empty_lob, empty strings for longtext/lob types are not equivalent to null
+  // Other types are converted to string type by calling common_copy_string_zf, when in_type is not string, the length of in_str will not be 0
+  // in_type is string when, in the cast method entry, it has already been judged whether to convert an empty string to null, therefore, the original conversion logic is deleted.
   } else if (CM_IS_ZERO_FILL(expr.extra_) && out_len > src.length()) {
     char *out_ptr = NULL;
     // out_ptr may overlap with src, so memmove is used.
@@ -595,8 +588,7 @@ int ObDatumHexUtils::unhex(const ObExpr &expr,
   }
   return ret;
 }
-
-// 根据in_type,force_use_standard_format信息，从session中获取fromat_str
+// According to in_type, force_use_standard_format information, get format_str from session
 int common_get_nls_format(const ObBasicSessionInfo *session,
                           ObEvalCtx &ctx,
                           const ObExpr *rt_expr,
@@ -866,7 +858,7 @@ int common_string_double(const ObExpr &expr,
       ObString trimed_str = tmp_str.trim();
       if (lib::is_mysql_mode() && 0 == trimed_str.length()) {
         if (!CM_IS_COLUMN_CONVERT(expr.extra_)) {
-          // mysql 模式下不在 convert_column 里遇到空字符串或者全是空格的字符串转 double 时，不报错
+          // In mysql mode, when not in convert_column, encountering empty string or all-space string conversion to double, do not report error
           // skip
         } else {
           ret = OB_ERR_DOUBLE_TRUNCATED;
@@ -1090,7 +1082,7 @@ static OB_INLINE int common_string_number(const ObExpr &expr,
     ObScale res_scale;
     ret = nmb.from_sci_opt(in_str.ptr(), in_str.length(), alloc,
                            &res_precision, &res_scale);
-    // bug: 4263211. 兼容mysql string转number超过最值域范围的行为
+    // bug: 4263211. Compatible with MySQL string to number conversion exceeding the maximum range behavior
     // select cast('1e500' as decimal);  -> max_val
     // select cast('-1e500' as decimal); -> min_val
     if (OB_NUMERIC_OVERFLOW == ret) {
@@ -1679,7 +1671,7 @@ static int common_string_bit(const ObExpr &expr,
       LOG_WARN("bit type length is too long", K(ret), K(in_str),
                                               K(OB_MAX_BIT_LENGTH), K(bit_len));
     } else {
-      //将str按照二进制值转换为相应的uint64
+      // Convert str to the corresponding uint64 based on its binary value
       out_val = hex_to_uint64(in_str);
     }
     if (OB_FAIL(ret) && CM_IS_WARN_ON_FAIL(expr.extra_)) {
@@ -1692,10 +1684,9 @@ static int common_string_bit(const ObExpr &expr,
   }
   return ret;
 }
-
-// lob类型和其他类型互相转换时，会把longtext类型作为中间类型，并且调用一些原有的longtext相关的转换函数
-// 这些函数把转换结果放到了get_str_res_mem, 也就是string类型的表达式存放结果的地方。
-// 因此添加了下面这个函数，把结果先从get_str_res_mem拷贝到get_reset_tmp_alloc空间中。
+// lob type and other types conversion will use longtext type as an intermediate type, and call some existing longtext related conversion functions
+// These functions put the conversion result into get_str_res_mem, which is where the result of string type expressions is stored.
+// Therefore added the following function, to copy the result first from get_str_res_mem to get_reset_tmp_alloc space.
 int copy_datum_str_with_tmp_alloc(ObEvalCtx &ctx, ObDatum &res_datum, ObString &res_str)
 {
   int ret = OB_SUCCESS;
@@ -2871,9 +2862,8 @@ static int common_year_int(const ObExpr &expr,
   }
   return ret;
 }
-
-// trunc_min_value和trunc_max_value分别是in大于最大值和小于最小值时应该trunc成的值。
-// float转int时，如果超过LLONG_MAX应该trunc成LLONG_MIN，而double转int时超过LLONG_MAX应该trunc成LLONG_MAX
+// trunc_min_value and trunc_max_value are the values that in should be truncated to when it is less than the minimum value and greater than the maximum value, respectively.
+// float to int when exceeding LLONG_MAX should be truncated to LLONG_MIN, while double to int when exceeding LLONG_MAX should be truncated to LLONG_MAX
 int common_double_int(const double in, int64_t &out,
                       const int64_t trunc_min_value,
                       const int64_t trunc_max_value)
@@ -2886,9 +2876,9 @@ int common_double_int(const double in, int64_t &out,
       ret = OB_DATA_OUT_OF_RANGE;
     }
   } else if (in >= static_cast<double>(LLONG_MAX)) {
-    // 把相等的情况放进来处理，是因为和LLONG_MAX相等的浮点数转int时结果可能是LLONG_MIN或LLONG_MAX。
-    // double转int，以及作为insert value时的float转int，结果是LLONG_MAX；
-    // 其他情况下float转int结果为LLONG_MIN。 不报错的行为也是与mysql兼容
+    // Put the equal case here to handle it, because floating-point numbers equal to LLONG_MAX may result in LLONG_MIN or LLONG_MAX when converted to int.
+    // double to int, as well as float to int when used as insert value, the result is LLONG_MAX;
+    // In other cases, the result of float to int conversion is LLONG_MIN. The behavior without error is also compatible with mysql
     out = trunc_max_value;
     if (in > static_cast<double>(LLONG_MAX)) {
       ret = OB_DATA_OUT_OF_RANGE;
@@ -2906,9 +2896,8 @@ int ObDataTypeCastUtil::common_double_int_wrap(
 {
   return common_double_int(in, out, trunc_min_value, trunc_max_value);
 }
-
-// 根据type，从ptr指向的空间中构建ObOTimestampData对象
-// 所以构造逻辑有区别
+// According to type, construct ObOTimestampData object from the space pointed by ptr
+// So the construction logic is different
 static OB_INLINE int common_construct_otimestamp(const ObObjType type,
                                                  const ObDatum &in_datum,
                                                  ObOTimestampData &out_val)
@@ -3132,11 +3121,10 @@ CAST_FUNC_NAME(unknown, other)
 {
   return cast_not_support(expr, ctx, res_datum);
 }
-
-// 有的cast没有实际的逻辑，只需要计算子节点的值即可
-// 例如int -> bit，cast结果直接使用子节点的结果即可,不需要进行计算
-// 注意：如果有新类型的转换使用该函数，一定要在is_trivial_cast()方法中更新这种转换
-// 以保证cast表达式的res_datum的指针是指向参数的空间!!!
+// Some cast does not have actual logic, only need to calculate the value of child nodes
+// For example int -> bit, cast result can directly use the child node's result, no need for calculation
+// Note: If there is a new type of conversion using this function, it must be updated in the is_trivial_cast() method
+// to ensure that the pointer of res_datum in the cast expression points to the space of the parameter!!!
 int cast_eval_arg(const sql::ObExpr &expr,
                   sql::ObEvalCtx &ctx,
                   sql::ObDatum &res_datum)
@@ -3147,7 +3135,7 @@ int cast_eval_arg(const sql::ObExpr &expr,
   if (OB_FAIL(expr.args_[0]->eval(ctx, child_res))) {
     LOG_WARN("eval arg failed", K(ret));
   } else {
-    // TODO: CG部分加了优化后, 就不用赋值
+    // TODO: CG part added optimization after, so no need to assign
     res_datum.set_datum(*child_res);
   }
   return ret;
@@ -4806,8 +4794,8 @@ CAST_FUNC_NAME(float, uint)
         out_val = static_cast<uint64_t>(static_cast<int64_t>(rint(in_val)));
       }
       if (in_val < 0 && out_val != 0) {
-        // 这里处理[LLONG_MIN, 0)范围内的in，转换为unsigned应该报OB_DATA_OUT_OF_RANGE。
-        // out不等于0避免[-0.5, 0)内的值被误判，因为它们round后的值是0，处于合法范围内。
+        // Here processing [LLONG_MIN, 0) range of in, converting to unsigned should report OB_DATA_OUT_OF_RANGE.
+        // out not equal to 0 to avoid values in [-0.5, 0) being misjudged, because their rounded values are 0, which are within the valid range.
         ret = OB_DATA_OUT_OF_RANGE;
       }
     }
@@ -5061,7 +5049,7 @@ CAST_FUNC_NAME(float, bit)
   EVAL_ARG()
   {
     float val_float = child_res->get_float();
-    // 这里没必要调用SET_RES_BIT,因为ret一定为OB_SUCCESS
+    // Here there is no need to call SET_RES_BIT, because ret must be OB_SUCCESS
     res_datum.set_bit(static_cast<uint64_t>(val_float));
   }
   return ret;
@@ -5143,8 +5131,8 @@ CAST_FUNC_NAME(double, uint)
         out_val = static_cast<uint64_t>(static_cast<int64_t>(rint(in_val)));
       }
       if (in_val < 0 && out_val != 0) {
-        // 这里处理[LLONG_MIN, 0)范围内的in，转换为unsigned应该报OB_DATA_OUT_OF_RANGE。
-        // out不等于0避免[-0.5, 0)内的值被误判，因为它们round后的值是0，处于合法范围内。
+        // Here processing [LLONG_MIN, 0) range of in, converting to unsigned should report OB_DATA_OUT_OF_RANGE.
+        // out is not equal to 0 to avoid values in the range [-0.5, 0) being misjudged, because their rounded values are 0, which fall within the valid range.
         ret = OB_DATA_OUT_OF_RANGE;
       }
     }
@@ -9288,7 +9276,7 @@ CAST_FUNC_NAME(json, string)
         ObObjType in_type = ObLongTextType;
         ObObjType out_type = expr.datum_meta_.type_;
         ObString temp_str_val(j_buf.length(), j_buf.ptr());
-        // 如果将json直接设置成binary，这里要做特殊处理，而且代码中的binary类型也要改了
+        // If you set json directly to binary, special handling needs to be done here, and the binary type in the code also needs to be changed
         ObCollationType in_cs_type = expr.args_[0]->datum_meta_.cs_type_;
         ObCollationType out_cs_type = expr.datum_meta_.cs_type_;
         bool is_need_string_string_convert = ((CS_TYPE_BINARY == out_cs_type)
@@ -10284,9 +10272,8 @@ CAST_FUNC_NAME(geometry, pl_extend)
   }
   return ret;
 }
-
-// 显式cast时，再次从parse node中获取accuracy信息(see ob_expr_cast.cpp)
-// 可能是因为cast类型推导不准，导致必须再次从parse node中获取
+// Explicit cast, get accuracy information again from parse node (see ob_expr_cast.cpp)
+// It may be because the cast type inference is inaccurate, leading to the need to obtain it again from the parse node
 int get_accuracy_from_parse_node(const ObExpr &expr, ObEvalCtx &ctx,
                                  ObAccuracy &accuracy, ObObjType &dest_type)
 {
@@ -10714,7 +10701,7 @@ int string_to_set(ObIAllocator &alloc,
           LOG_WARN("data truncate", K(pos), K(expr), K(val_str), K(in_str), K(ret));
         }
       } else {
-        pos %= 64;//MySQL中，如果value存在重复，则value_count可以大于64
+        pos %= 64;//In MySQL, if value exists duplicate, then value_count can be greater than 64
         value |= (1ULL << pos);
       }
     } while (OB_SUCC(ret) && !is_last_value);
@@ -12572,14 +12559,14 @@ int string_length_check(const ObExpr &expr,
   meta.set_collation_type(cs_type);
   // remember not to change in_datum
   res_datum.set_datum(in_datum);
-  // 处理异常情况，但str_len_byte大于max_len_char不一定有问题，还需要具体判断
+  // Handle exception cases, but str_len_byte greater than max_len_char may not be a problem, further judgment is still needed
   if (max_accuracy_len <= 0 || str_len_byte > max_accuracy_len) {
     int &cast_ret = (CM_IS_ERROR_ON_FAIL(cast_mode))
                     ? ret
                     : warning;
     const char *str = in_datum.ptr_;
     int32_t str_len_char = -1;
-    // 在parse时,如果长度大于int32_t最大值, length就会设置为-1
+    // In parse, if the length is greater than the maximum value of int32_t, length will be set to -1
     if (max_accuracy_len == -1) {
     } else if (OB_UNLIKELY(max_accuracy_len <= 0)) {
       res_datum.set_string(NULL, 0);
@@ -12609,7 +12596,7 @@ int string_length_check(const ObExpr &expr,
         // trunc_len_char > max_accuracy_len means an error or warning, without tail ' '
         // str_len_char > max_accuracy_len means only warning, even in strict mode.
         // lengthsp()  - returns the length of the given string without trailing spaces.
-        // 所以strlen_byte_no_sp返回的结果是小于等于str的长度
+        // So strlen_byte_no_sp returns the result that is less than or equal to the length of str
         trunc_len_byte =
           static_cast<int32_t>(ObCharset::strlen_byte_no_sp(cs_type, str, str_len_byte));
         trunc_len_char = meta.is_lob() ?
@@ -12664,7 +12651,7 @@ int string_length_check(const ObExpr &expr,
       }
     }
   } else {
-    // 正常分支
+    // Normal branch
     // do nothing
   }
 
@@ -12692,14 +12679,14 @@ int string_length_check(const ObExpr &expr,
   meta.set_type_simple(type);
   meta.set_collation_type(cs_type);
   out_vec.set_payload_shallow(idx, in_str.ptr(), in_str.length());
-  // 处理异常情况，但str_len_byte大于max_len_char不一定有问题，还需要具体判断
+  // Handle exception cases, but str_len_byte greater than max_len_char may not be a problem, further judgment is still needed
   if (max_accuracy_len <= 0 || str_len_byte > max_accuracy_len) {
     int &cast_ret = (CM_IS_ERROR_ON_FAIL(cast_mode))
                     ? ret
                     : warning;
     const char *str = in_str.ptr();
     int32_t str_len_char = -1;
-    // 在parse时,如果长度大于int32_t最大值, length就会设置为-1
+    // In parse, if the length is greater than the maximum value of int32_t, length will be set to -1
     if (max_accuracy_len == -1) {
     } else if (OB_UNLIKELY(max_accuracy_len <= 0)) {
       out_vec.set_string(idx, NULL, 0);
@@ -12729,7 +12716,7 @@ int string_length_check(const ObExpr &expr,
         // trunc_len_char > max_accuracy_len means an error or warning, without tail ' '
         // str_len_char > max_accuracy_len means only warning, even in strict mode.
         // lengthsp()  - returns the length of the given string without trailing spaces.
-        // 所以strlen_byte_no_sp返回的结果是小于等于str的长度
+        // So strlen_byte_no_sp returns the result that is less than or equal to the length of str
         trunc_len_byte =
           static_cast<int32_t>(ObCharset::strlen_byte_no_sp(cs_type, str, str_len_byte));
         trunc_len_char = meta.is_lob() ?
@@ -12784,7 +12771,7 @@ int string_length_check(const ObExpr &expr,
       }
     }
   } else {
-    // 正常分支
+    // Normal branch
     // do nothing
   }
 
@@ -14096,9 +14083,8 @@ ObExpr::EvalFunc OB_DATUM_CAST_ORACLE_IMPLICIT[ObMaxTC][ObMaxTC] =
     cast_not_expected,/*roaringbitmap*/
   },
 };
-
-// 目前代码里面没有使用该矩阵，Oracle模式都是使用impilicit矩阵
-// 但是新框架仍然保留，后期如果有需要可以通过cast_mode选择使用该矩阵
+// Currently the code does not use this matrix, Oracle mode always uses implicit matrix
+// But the new framework is still retained, and if needed later, it can be used by selecting this matrix through cast_mode
 ObExpr::EvalFunc OB_DATUM_CAST_ORACLE_EXPLICIT[ObMaxTC][ObMaxTC] =
 {
   {
@@ -16217,7 +16203,7 @@ int string_collation_check(const bool is_strict_mode,
   if (!ob_is_string_type(str_type)) {
     // nothing to do
   } else if (check_cs_type == CS_TYPE_BINARY) {
-    //任何类型都可以直接转成binary
+    // Any type can be directly converted to binary
     // do nothing
   } else {
     int64_t well_formed_len = 0;
@@ -16240,13 +16226,12 @@ int string_collation_check(const bool is_strict_mode,
 
   return ret;
 }
-
-// 不能进行cast的情况包括：
-// 1. Oracle模式下, string/text/lob->string/text/lob时, blob不支持转向nonblob
-// 2. Oracle模式下, string/text/lob->string/text/lob, nonblob转向blob时,如果输入必须是char/varchar/raw
+// Cannot perform cast in the following cases:
+// 1. In Oracle mode, string/text/lob->string/text/lob, blob does not support switching to nonblob
+// 2. Oracle mode, string/text/lob->string/text/lob, nonblob turns to blob when input must be char/varchar/raw
 // TODO by shaoge
-// 3. Oracle模式下, 只有string/text->string/text的转换支持blob往其他类型转,其余的不允许
-// 4. TODO: lob_outrow的处理还未完善
+// 3. In Oracle mode, only string/text->string/text conversion supports blob to other types conversion, others are not allowed
+// 4. TODO: lob_outrow processing is not yet complete
 int ObDatumCast::check_can_cast(const ObObjType in_type,
                                 const ObCollationType in_cs_type,
                                 const ObObjType out_type,
@@ -16265,15 +16250,14 @@ int ObDatumCast::check_can_cast(const ObObjType in_type,
   }
   return ret;
 }
-
-// string/text -> string/text的特殊情况的描述:
+// string/text -> special cases description of string/text:
 // 1. !blob -> blob is ok. (in_type must be varchar/char/raw, varchar/char call hextoraw to cast)
 // 2. !blob -> !blob is ok (just copy or convert charset)
-//      a. 如果是相同字符集，则调用cast_eval_arg
-//      b. 如果是不同字符集，且输入输出都不是cs_type_binary，则需要进行字符集转换
-//      c. 如果输入输出有任意一个是cs_type_binary，会调用cast_eval_arg
-// 3. blob -> blob ok. 直接调用cast_eval_arg
-// 4. blob -> !blob not ok.choose_cast_func会检测并报错
+//      a. If it is the same character set, then call cast_eval_arg
+//      b. If it is different character sets, and neither input nor output is cs_type_binary, then character set conversion is needed
+//      c. If input or output is cs_type_binary, it will call cast_eval_arg
+// 3. blob -> blob ok. Directly call cast_eval_arg
+// 4. blob -> !blob not ok. choose_cast_func will detect and report an error
 int ObDatumCast::is_trivial_cast(const ObObjType in_type,
                                  const ObCollationType in_cs_type,
                                  const ObObjType out_type,
@@ -16386,7 +16370,7 @@ int ObDatumCast::choose_cast_function(const ObObjType in_type,
                                      out_cs_type, cast_mode, just_eval_arg))) {
     LOG_WARN("is_trivial_cast failed", K(ret), K(in_type), K(out_type));
   } else if (just_eval_arg && !CM_IS_EXPLICIT_CAST(cast_mode)) {
-    // 即使是相同类型，显式cast也需要进行accuracy check
+    // Even if it is the same type, explicit cast also needs to be accuracy checked
     rt_expr.eval_func_ = cast_eval_arg;
   } else {
     if (CM_IS_EXPLICIT_CAST(cast_mode)) {
@@ -16432,7 +16416,7 @@ int ObDatumCast::get_enumset_cast_function(const common::ObObjTypeClass in_tc,
     const common::ObObjType out_type, ObExpr::EvalEnumSetFunc &eval_func)
 {
   int ret = OB_SUCCESS;
-  // in_type可以为NullType, out_type不能为NullType
+  // in_type can be NullType, out_type cannot be NullType
   if (OB_UNLIKELY(!(ObNullTC <= in_tc && in_tc < ObMaxTC))
       || OB_UNLIKELY(out_type != ObEnumType && out_type != ObSetType)) {
     ret = OB_ERR_UNEXPECTED;

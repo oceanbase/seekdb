@@ -23,11 +23,11 @@ namespace sql
 class ObExprDllUdf;
 
 /*
- * 通过expr的id作为执行期，expr获得属于自己的执行ctx的key。
- * 目前，相同列会指向同一个raw expr，相同的聚合（例如sum）会指向
- * 同一个raw expr，但是对于普通表达式没有做。
- * ATTENTION: 如果后续要做相同普通表达式共用同一个expr的优化，udf的expr必须
- * 保证不能共用expr。
+ * Use expr's id as the execution period, expr obtains the key for its own execution ctx.
+ * Currently, the same column points to the same raw expr, the same aggregation (e.g., sum) points to
+ * the same raw expr, but this is not done for ordinary expressions.
+ * ATTENTION: If optimization for sharing the same expr among ordinary expressions is done later, udf's expr must
+ * ensure that expr cannot be shared.
  *
  * */
 class ObUdfCtxMgr

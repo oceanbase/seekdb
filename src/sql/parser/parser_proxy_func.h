@@ -14,7 +14,7 @@
 #define PARSER_ALLOC_FUNC_H_
 
 #include <stdint.h>
-// ObSQLParser模块抽取了一个静态链接库给Proxy，Proxy必须要自己实现以下几个函数才能正确链接
+// ObSQLParser module extracts a static link library for Proxy, Proxy must implement the following functions on its own to link correctly
 
 void *parser_alloc_buffer(void *malloc_pool, const int64_t alloc_size);
 void parser_free_buffer(void *malloc_pool, void *buffer);

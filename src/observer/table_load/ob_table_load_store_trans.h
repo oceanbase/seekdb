@@ -68,7 +68,7 @@ private:
 public:
   int get_store_writer(ObTableLoadTransStoreWriter *&store_writer) const;
   void put_store_writer(ObTableLoadTransStoreWriter *store_writer);
-  // 取出store
+  // retrieve store
   int output_store(ObTableLoadTransStore *&trans_store);
 private:
   int handle_write_done();

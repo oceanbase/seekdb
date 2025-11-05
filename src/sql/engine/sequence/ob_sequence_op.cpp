@@ -98,8 +98,8 @@ int ObLocalSequenceExecutor::init(ObExecContext &ctx)
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("null unexpected", K(ret));
       } else if (OB_FAIL(seq_schemas_.push_back(*seq_schema))) {
-        // 注意：这里将 schema 缓存到数组里，会自动深拷贝 sequence name
-        //       即使 schema guard 释放，sequence name 的内存也还有效，直到请求结束
+        // Note: here the schema is cached to the array, it will automatically deep copy sequence name
+        //       Even if schema guard is released, the memory of sequence name remains valid until the request ends
         LOG_WARN("cache seq_schema fail", K(tenant_id), K(seq_id), K(ret));
       }
     }
@@ -130,15 +130,15 @@ int ObLocalSequenceExecutor::get_nextval(ObExecContext &ctx)
              K(ret));
   } else {
     uint64_t tenant_id = my_session->get_effective_tenant_id();
-    ObArenaAllocator allocator; // nextval 临时计算内存
-    // 当且仅当 select item 中有 nextval 时才需要去 cache 中更新 nextval
-    // 否则直接取用 session 中的值
+    ObArenaAllocator allocator; // nextval temporary calculation memory
+    // When and only when there is nextval in select item, it is necessary to update nextval in cache
+    // Otherwise directly use the value from the session
     ARRAY_FOREACH_X(seq_ids_, idx, cnt, OB_SUCC(ret)) {
       const uint64_t seq_id = seq_ids_.at(idx);
-      // int64_t dummy_seq_value = 10240012435; // TODO: xiaochu, 设置 number 到 session 中
+      // int64_t dummy_seq_value = 10240012435; // TODO: xiaochu, set number to session
       ObSequenceValue seq_value;
-      // 注意：这里 schema 的顺序和 ids 里面 id 的顺序是一一对应的
-      //       所以可以直接用下标来寻址
+      // Note: Here the order of schema and the order of id in ids are one-to-one corresponding
+      //       So you can directly use the index to address
       ObAutoincrementService &auto_service = ObAutoincrementService::get_instance();
       if (seq_schemas_.at(idx).get_order_flag()
           && seq_schemas_.at(idx).get_cache_order_mode() == NEW_ACTION) {
@@ -259,7 +259,7 @@ int ObSequenceOp::try_get_next_row()
   clear_evaluated_flag();
   if (get_child_cnt() == 0) {
     // insert stmt, no child, give an empty row
-    // 这里是否要将所有ObExpr全部设置为null
+    // Here whether to set all ObExpr to null
   } else if (OB_FAIL(child_->get_next_row())) {
     LOG_WARN_IGNORE_ITER_END(ret, "fail get next row", K(ret));
   }

@@ -72,7 +72,7 @@ int ObExprSubstrb::calc(ObString &res_str, const ObString &text,
       } else {
         MEMCPY(buf, text.ptr(), text_len);
         res_len = min(length, text_len - start);
-        // 标准Oracle会将非法的byte设置为空格
+        // Standard Oracle will set illegal byte to space
         if (OB_FAIL(handle_invalid_byte(buf, text_len, start, res_len, ' ', cs_type, false))) {
           LOG_WARN("handle invalid byte failed", K(start), K(res_len), K(cs_type));
         } else {
@@ -109,11 +109,11 @@ int ObExprSubstrb::handle_invalid_byte(char* ptr,
     }
 
     if (OB_SUCC(ret) && OB_UNLIKELY(len % mbminlen != 0)) {
-      // 防御性代码，防止hang
+      // Defensive code, prevent hang
       // eg: a -> '0061'
-      //     substrb(utf16_a, 2, 1), well_formed_len()方法认为'61'是一个合法的utf16字符
-      //     是不符合预期的，这是我们底层字符集函数的缺陷
-      //     由于不确定well_formed_len()是否有其他坑，这里进行防御，防止hang
+      //     substrb(utf16_a, 2, 1), well_formed_len() method considers '61' a legal utf16 character
+      //     is not as expected, this is a defect in our underlying character set function
+      //     Due to uncertainty about other pitfalls of well_formed_len(), a defense is performed here to prevent hang
       int64_t hex_len = 0;
       char hex_buf[1024] = {0}; // just print 512 bytes
       OZ(common::hex_print(ptr + start, len, hex_buf, sizeof(hex_buf), hex_len));

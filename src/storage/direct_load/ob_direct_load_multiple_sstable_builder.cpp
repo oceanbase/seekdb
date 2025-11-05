@@ -289,9 +289,9 @@ int ObDirectLoadMultipleSSTableBuilder::close()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("multiple sstable builder is closed", KR(ret));
   } else {
-    // mark_close是为了在数据块采样模式能记录最后一个未填满的索引块的endkey
+    // mark_close is for recording the endkey of the last unfilled index block in data block sampling mode
     callback_.mark_close();
-    // 行采样模式记录最后一行的rowkey
+    // Row sampling mode records the rowkey of the last row
     if (ObDirectLoadSampleMode::is_row_sample(param_.table_data_desc_.sample_mode_) &&
         0 != data_block_writer_.get_item_count() % param_.table_data_desc_.num_per_sample_ &&
         OB_FAIL(rowkey_block_writer_.append_row(last_rowkey_))) {

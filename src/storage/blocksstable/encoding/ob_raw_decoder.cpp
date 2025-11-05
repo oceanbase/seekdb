@@ -1039,7 +1039,7 @@ int ObRawDecoder::fast_datum_comparison_operator(
     ObGetFilterCmpRetFunc get_cmp_ret = get_filter_cmp_ret_func(filter.get_op_type());
     ObDatumCmpFuncType cmp_func = filter.cmp_func_;
 
-    // OPT: remove this rowid array usage by adding a new batch decode interface？
+    // OPT: remove this rowid array usage by adding a new batch decode interface?
     int32_t *row_ids = pd_filter_info.row_ids_;
     int64_t evaluated_row_cnt = 0;
     while (OB_SUCC(ret) && evaluated_row_cnt < pd_filter_info.count_) {

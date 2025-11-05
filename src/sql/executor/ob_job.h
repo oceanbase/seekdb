@@ -58,7 +58,7 @@ public:
   DECLARE_TO_STRING;
 private:
   const ObPhysicalPlan *phy_plan_;
-  //供新引擎使用
+  // For new engine use
   const ObOpSpec *root_spec_;
   const ObOpSpec *extend_spec_;
 };
@@ -68,16 +68,14 @@ class ObJob
 public:
   ObJob();
   virtual ~ObJob();
-  // 不同Job，Task的调度顺序不同，切分方式不同
+  // Different Job, Task scheduling order is different, splitting method is different
   void set_task_spliter(ObTaskSpliter *spliter) { task_spliter_ = spliter; }
   // @deprecated
-  // 设置依赖的Job
+  // Set dependent Job
   int add_depending_job(const ObJob *job);
-
-  // 获取Job中的Task集合
+  // Get the Task collection from Job
   int get_task_control(const ObExecContext &ctx, ObTaskControl *&task_control);
-
-  // 判断Job的当前状态
+  // Determine the current status of the Job
   ObJobState get_state() { return state_; }
   void set_state(ObJobState state) { state_ = state; }
 
@@ -89,7 +87,7 @@ public:
   inline void set_phy_plan(ObPhysicalPlan *phy_plan) {
     phy_plan_ = phy_plan;
     if (phy_plan) {
-      // 凡不是select语句，就认为是 dml，不可以做分区级重试
+      // Any statement that is not a select statement is considered DML, and partition-level retries are not allowed
       task_control_.set_is_select_plan(phy_plan->is_select_plan());
     }
   }
@@ -113,7 +111,7 @@ public:
 
   DECLARE_TO_STRING;
 private:
-  // task control 初始化接口
+  // task control initialization interface
   int prepare_task_control(const ObExecContext &exec_ctx);
   int get_parallel_degree(const ObExecContext &exec_ctx, int64_t &stmt_parallel_degree);
   // disallow copy
@@ -124,7 +122,7 @@ private:
   bool is_root_job_;
   ObPhysicalPlan *phy_plan_;
   ObJobState state_;
-  // 控制task的切分，以及task的状态
+  // Control task splitting, as well as task status
   ObTaskSpliter *task_spliter_;
   bool task_splited_;
   ObTaskControl task_control_;

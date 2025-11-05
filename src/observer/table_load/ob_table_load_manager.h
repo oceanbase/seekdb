@@ -290,14 +290,12 @@ private:
   ObjAllocator<ObTableLoadTableCtx> table_ctx_alloc_;
   ObjAllocator<ObTableLoadClientTask> client_task_alloc_;
   ObjAllocator<ObTableLoadClientTaskBrief> client_task_brief_alloc_;
-
-  // map会持有对象的引用计数
+  // map will hold a reference count of the object
   ObTableLoadTableCtxMap table_ctx_map_;
   ObTableLoadClientTaskMap client_task_map_;
   ObTableLoadClientTaskBriefMap client_task_brief_map_;
-
-  // 对象的引用计数归0后, 放入gc队列
-  // client_task_brief的引用计数归0后直接释放
+  // After the reference count of the object is reduced to 0, it is placed in the gc queue
+  // client_task_brief's reference count drops to 0 and is released directly
   mutable common::ObSpinLock gc_list_lock_;
   ObArray<ObTableLoadTableCtx *> table_ctx_gc_list_;
   ObArray<ObTableLoadClientTask *> client_task_gc_list_;

@@ -83,9 +83,9 @@ int ObMergeIntersectOp::inner_get_next_row()
   int cmp = 0;
   bool break_outer_loop = false;
   const ObIArray<ObExpr*> *left_row = NULL;
-  // 原始逻辑这里可以看到left这边一定会拿完所有数据，暂时保留之前逻辑，如果可以不用拿完，后续可以当right拿完后，
-  // 结束整个过程
-  // 这里暂时直接结束整个过程，怀疑是因为直接按照except逻辑拷贝过来的，所以保留right结束，但整个逻辑未结束
+  // Original logic here we can see that left side will definitely take all the data, temporarily keeping the previous logic, if it's possible not to take all, later it can be when right takes all,
+  // End the entire process
+  // Here temporarily end the entire process, suspecting it is because it was directly copied over from the except logic, so retain right end, but the entire logic is not finished
   clear_evaluated_flag();
   while (OB_SUCC(ret) && OB_SUCC(do_strict_distinct(*left_, last_row_.store_row_, left_row))) {
     while (OB_SUCC(ret) && !right_iter_end_) {

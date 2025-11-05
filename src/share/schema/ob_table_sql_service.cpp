@@ -2198,7 +2198,7 @@ int ObTableSqlService::update_table_options(ObISQLClient &sql_client,
   // rename constraint name while drop/truncate table and recyclebin is on.
   if (OB_SUCC(ret)) {
     if (OB_DDL_DROP_TABLE_TO_RECYCLEBIN == operation_type){
-      // 这里遍历表上所有约束，逐一改掉内部表信息, update __all_constraint 里面改表中的各个约束名，并在 __all_constraint_history 里面增加一条记录
+      // Here traverse all constraints on the table, and modify the internal table information one by one, update the constraint names in __all_constraint, and add a record in __all_constraint_history
       // TODO:@xiaofeng.lby, this interface is independent of 'truncate table', modify it later.
       if (OB_FAIL(rename_csts_in_inner_table(sql_client, new_table_schema, new_table_schema.get_schema_version()))) {
         LOG_WARN("failed to delete constraint", K(ret));

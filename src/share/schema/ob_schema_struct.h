@@ -2194,7 +2194,7 @@ private:
   common::ObString previous_locality_str_;
   uint64_t default_tablegroup_id_;
   common::ObString default_tablegroup_name_;
-  common::ObCompatibilityMode compatibility_mode_;//创建后不可修改
+  common::ObCompatibilityMode compatibility_mode_;//Cannot be modified after creation
   int64_t drop_tenant_time_;
   ObTenantStatus status_;
   bool in_recyclebin_;
@@ -6719,7 +6719,7 @@ enum ObForeignKeyRefType
   FK_REF_TYPE_INVALID = 0,
   FK_REF_TYPE_PRIMARY_KEY = 1,
   FK_REF_TYPE_UNIQUE_KEY = 2,
-  /* 因为ObForeignKeyRefType之前是从ObConstraintType改过来的，所以为了兼容，3和4不用 */
+  /* Because ObForeignKeyRefType was previously changed from ObConstraintType, for compatibility, 3 and 4 are not used */
   FK_REF_TYPE_NON_UNIQUE_KEY = 5,
   FK_REF_TYPE_MAX,
 };

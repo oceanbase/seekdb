@@ -281,7 +281,7 @@ private:
   };
 
 private:
-  //注:必须在session_map_之前定义，依赖于析构的顺序。
+  // Note: Must be defined before session_map_, depends on the order of destruction.
   //ObNullEndTransCallback null_callback_;
   // used for manage ObSQLSessionInfo
   HashMap sessinfo_map_;

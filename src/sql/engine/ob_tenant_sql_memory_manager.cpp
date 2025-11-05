@@ -159,16 +159,15 @@ void ObTenantSqlMemoryManager::ObSqlWorkAreaCalcInfo::destroy(ObIAllocator &allo
     wa_intervals_ = nullptr;
   }
 }
-
-// delta计算逻辑，前一个interval和后一个interval计算相差公式为
+// delta calculation logic, previous interval and next interval calculation difference formula is
 // suppose calculate the idx interval, and pre-interval is (idx + 1)
 // delta = intervals_[idx+1].total_hash_sise
 //       - intervals_[idx].interval_cache_size
 //       * intervals_[idx+1].total_hash_cnt + no_cache_cnt * interval_size
 // interval_size = intervals_[idx+1].interval_cache_size - intervals_[idx].interval_cache_size
-// 因为跨了一个interval后，之前不能cache的，bound全部需要减去一个interval大小
-// 可以理解为 hash：每次减少一个interval大小
-// 而sort，开始是一次性减少到one_pass_size大小，再减少，则是以interval大小减少
+// Because it crossed an interval, all bounds that could not be cached previously need to be reduced by the size of one interval
+// Can be understood as hash: each time reduce one interval size
+// and sort, start by reducing to one_pass_size size, then reduce by interval size
 int ObTenantSqlMemoryManager::ObSqlWorkAreaCalcInfo::calc_memory_target(
   int64_t idx,
   const int64_t pre_mem_target)
@@ -176,20 +175,20 @@ int ObTenantSqlMemoryManager::ObSqlWorkAreaCalcInfo::calc_memory_target(
   int ret = OB_SUCCESS;
   int64_t dst_mem_target = pre_mem_target;
   if (INTERVAL_NUM - 1 == idx) {
-    // 最后一个，独立计算
+    // last one, independent calculation
     wa_intervals_[idx].set_mem_target(dst_mem_target);
   } else {
     ObSqlWorkAreaIntervalStat &pre_interval_stat = wa_intervals_[idx + 1].get_interval_stat();
-    // hash: bound size, 这里假设如果不能全部cache，则使用bound作为work area size
-    //    当bound小于cache size时，内存减少hash_size - bound_size
+    // hash: bound size, here we assume if it cannot be fully cached, then use bound as work area size
+    //    When bound is less than cache size, memory reduces hash_size - bound_size
     int64_t hash_delta = pre_interval_stat.get_total_hash_size()
                         - wa_intervals_[idx].get_interval_cache_size()
                         * pre_interval_stat.get_total_hash_cnt()
                         + tmp_no_cache_cnt_ * (wa_intervals_[idx + 1].get_interval_cache_size()
                         - wa_intervals_[idx].get_interval_cache_size());
     // sort: one pass size as work area size
-    // sort:两段：1）当bound小于sort_size时，内存减少sort_size - one_pass_size
-    //           2）当bound小于one_pass_size时，内存减少one_pass_size - bound_size
+    // sort: two segments: 1) when bound is less than sort_size, memory reduces by sort_size - one_pass_size
+    //           2) When bound is less than one_pass_size, memory reduces by one_pass_size - bound_size
     int64_t sort_delta =
       pre_interval_stat.get_total_sort_size() - pre_interval_stat.get_total_sort_one_pass_size();
     int64_t one_pass_delta = pre_interval_stat.get_total_one_pass_size()
@@ -214,7 +213,7 @@ int ObTenantSqlMemoryManager::ObSqlWorkAreaCalcInfo::calc_memory_target(
         K(one_pass_delta), K(pre_interval_stat.get_total_one_pass_size()),
         K(pre_interval_stat.get_total_one_pass_cnt()), K(dst_mem_target), K(tmp_no_cache_cnt_));
     }
-    // 统计点只有hash和one_pass_cnt
+    // Statistics point only includes hash and one_pass_cnt
     tmp_no_cache_cnt_ +=
       (pre_interval_stat.get_total_hash_cnt() + pre_interval_stat.get_total_one_pass_cnt());
   }
@@ -255,8 +254,8 @@ int ObTenantSqlMemoryManager::ObSqlWorkAreaCalcInfo::calculate_global_bound_size
   int64_t error_sim = std::abs(OB_E(EventTable::EN_SQL_MEMORY_MRG_OPTION) 0);
   int64_t max_wa_size = wa_max_memory_size;
   // int64_t max_wa_size = wa_max_memory_size;
-  // 最大占比6.25%（oracle 5%）
-  // 这里改为按照8个并发来设置
+  // Maximum proportion 6.25% (oracle 5%)
+  // Here changed to set according to 8 concurrent requests
   int64_t max_bound_size = (0 == error_sim) ? (max_wa_size >> 3) : error_sim;
   profile_cnt_ = profile_cnt;
   int64_t avg_bound_size = (0 == profile_cnt_) ? max_bound_size : max_wa_size / profile_cnt_;
@@ -272,12 +271,12 @@ int ObTenantSqlMemoryManager::ObSqlWorkAreaCalcInfo::calculate_global_bound_size
     } else {
       calc_global_bound_size = wa_intervals_[best_interval_idx].get_interval_cache_size();
       global_bound_size_ = calc_global_bound_size;
-      // ???这里是否有问题
+      // ???Is there a problem here
       // if (global_bound_size_ < avg_bound_size) {
       //   global_bound_size_ = avg_bound_size;
       // }
     }
-    //一般是由于可能全in-memory了，导致查找到返回的idx是最后一个，所以按照一个的最大占比使用
+    // Generally it is due to being fully in-memory, leading to the found and returned idx being the last one, so using the maximum proportion of one
     if (global_bound_size_ > max_bound_size) {
       global_bound_size_ = max_bound_size;
     }
@@ -456,7 +455,7 @@ int ObTenantSqlMemoryManager::calc_work_area_size_by_profile(
     } else if (global_bound_size >= profile.get_one_pass_size()) {
       profile.set_expect_size(global_bound_size);
     } else if (global_bound_size < profile.get_min_size()) {
-      // 8个分区+1个page size
+      // 8 partitions + 1 page size
       profile.set_expect_size(profile.get_min_size());
     } else {
       profile.set_expect_size(global_bound_size);
@@ -466,7 +465,7 @@ int ObTenantSqlMemoryManager::calc_work_area_size_by_profile(
       // in-memory
       profile.set_expect_size(profile.get_cache_size());
     } else if (global_bound_size > profile.get_one_pass_size()) {
-      // sort在one-pass情况下，增加内存对性能没有影响
+      // sort in one-pass case, increasing memory has no impact on performance
       profile.set_expect_size(profile.get_one_pass_size());
     } else if (global_bound_size < profile.get_min_size()) {
       profile.set_expect_size(profile.get_min_size());
@@ -512,18 +511,17 @@ int ObTenantSqlMemoryManager::get_work_area_size(
   }
   return ret;
 }
-
-// 注册策略：满足不是小查询，即auto_sql_memory_manager is true
-// profile目前存在三种状态
+// Register strategy: meet not small query, i.e., auto_sql_memory_manager is true
+// profile currently exists in three states
 //  status             dynamic-perf-view     auto policy
-//  register + auto    统计到性能视图           内存动态调整
-//  register + manual  统计到性能视图           内存取决于xxx_area_size
-//  unregister         不统计到性能视图          内存取决于xxx_area_size
+//  register + auto    statistics to performance view           memory dynamic adjustment
+//  register + manual  statistics to performance view           memory depends on xxx_area_size
+//  unregister         do not count in performance view          memory depends on xxx_area_size
 //
-//  is_registered:  register | unregister  只会影响是否注册，同时只有注册了才能将profile写入性能视图
-//  auto_policy  :  auto|manual:  会影响内存使用策略
-//  所以是否调用自动的内存调整，使用get_auto_policy来判断
-//     当profile注册后，才能统计性能视图等
+//  is_registered:  register | unregister  will only affect whether it is registered, and only when registered can the profile be written to the performance view
+//  auto_policy  :  auto|manual:  will affect memory usage strategy
+//  So whether to call automatic memory adjustment, use get_auto_policy to judge
+//     When the profile is registered, performance view statistics can be collected etc
 int ObTenantSqlMemoryManager::register_work_area_profile(ObSqlWorkAreaProfile &profile)
 {
   int ret = OB_SUCCESS;
@@ -579,8 +577,7 @@ int ObTenantSqlMemoryManager::update_work_area_profile(
   }
   return ret;
 }
-
-// 这里暂时对并发场景的写last record不进行并发控制
+// Here temporarily do not perform concurrency control for writing last record
 int ObTenantSqlMemoryManager::fill_workarea_stat(
   ObSqlWorkAreaStat &wa_stat,
   ObSqlWorkAreaProfile &profile)
@@ -867,22 +864,22 @@ int ObTenantSqlMemoryManager::get_max_work_area_size(
               tenant_id_, resource_handle))) {
             ret = OB_SUCCESS;
           } else {
-            // TODO: kvcache大概可以淘汰多少内存，目前没有数据，后续寒晖他们会提供接口
+            // TODO: kvcache can roughly evict how much memory, currently there is no data, Hanyi will provide an interface later
             // bug34818894 
-            // 这里暂时写一个默认比例
+            // Here temporarily write a default ratio
             max_tenant_memory_size += resource_handle.get_memory_mgr()->get_cache_hold() * pctg / 100;
             washable_size = -1;
           }
         }
       }
     }
-    // 取租户最大可用内存和ctx最大可用内存的最小值
+    // Take the minimum value between the tenant's maximum available memory and ctx's maximum available memory
     int64_t remain_memory_size = min(max_workarea_memory_size, max_tenant_memory_size);
     int64_t total_alloc_size = sql_mem_callback_.get_total_alloc_size();
     double ratio = total_alloc_size * 1.0 / tenant_work_area_memory_hold;
-    // 1 - x^3函数，表示随着hold内存越多，可用内存越少，同时alloc越多，可用内存越少
-    // 反之，hold越少，可用内存越多，alloc越少，可用内存又会越多
-    // 这里采用平方主要是为了内存增长和减少都比较平滑
+    // 1 - x^3 function, indicating that as hold memory increases, available memory decreases, and as alloc increases, available memory decreases
+    // Conversely, the less hold, the more available memory, the less alloc, the more available memory again
+    // Here square is used mainly for smooth memory growth and reduction
     // so: formula
     //    hold_ratio = hold / max_size;
     //    tmp_max_wa = (1 - hold_ratio * hold_ratio * hold_ratio) * (max - hold) + alloc
@@ -895,7 +892,7 @@ int ObTenantSqlMemoryManager::get_max_work_area_size(
               : total_alloc_size;
     double alloc_ratio = total_alloc_size * 1.0 / tmp_max_wa_memory_size;
     // if (total_alloc_size >= tmp_max_wa_memory_size) {
-    //   // 这里用最近N次的结果来拟合可能比较好，但由于global bound 决定后，内存使用有延迟，比较难决定他们之间的关系
+    //   // Here using the results from the last N times for fitting might be better, but due to the delay in memory usage after the global bound is decided, it is quite difficult to determine their relationship
     //   max_wa_memory_size = (tmp_max_wa_memory_size >> 1);
     // } else
     {
@@ -922,9 +919,8 @@ int ObTenantSqlMemoryManager::get_max_work_area_size(
   }
   return ret;
 }
-
-// total size需要保持一致，在一次处理过程中，需要统一，如果在计算过程中
-// 可能被修改，会导致find的interval index和cache size不一致
+// total size needs to be consistent, during one processing procedure, it needs to be unified, if during the calculation process
+// May be modified, leading to inconsistency between find's interval index and cache size
 int ObTenantSqlMemoryManager::find_interval_index(
   const int64_t cache_size,
   int64_t &idx,
@@ -1092,7 +1088,7 @@ void ObTenantSqlMemoryManager::reset()
       profile_lists_[i].reset();
     }
   }
-  // 统计的内存通过每个operator自己来确定，否则来开与关过程中，存在申请和释放时候，统计不一致
+  // The memory statistics are determined by each operator itself, otherwise during the start and stop process, there will be inconsistencies in allocation and deallocation statistics
   //sql_mem_callback_.reset();
   drift_size_ = 0;
   profile_cnt_ = 0;
@@ -1176,13 +1172,12 @@ int ObTenantSqlMemoryManager::calculate_global_bound_size_by_interval_info(
   calc_info.destroy(allocator);
   return ret;
 }
-
-// 算法步骤：
-// 0 切分好间隔点，每个间隔表示一个内存范围
-// 1 遍历所有profiles，将profile的cache size找到对应的间隔，遍历结束后
-//   则每个区间存放了所有在这区间的所有profile个数（只是估算统计，不是准确的profile信息）
-// 2 从后往前遍历间隔，计算每个间隔如果作为bound，需要的mem_target是多少，全部计算结束后,
-//   与期望的mem_target对比，返回真正bound大小
+// Algorithm steps:
+// 0 Split good interval points, each interval represents a memory range
+// 1 Traverse all profiles, find the corresponding interval for the cache size of each profile, after traversal ends
+//   Then each interval holds the estimated count of all profiles within that interval (just an estimation, not accurate profile information)
+// 2 Traverse intervals backwards, calculate the mem_target needed if each interval is used as bound, after all calculations are done,
+//   Compare with the expected mem_target, return the actual bound size
 int ObTenantSqlMemoryManager::calculate_global_bound_size(ObIAllocator *allocator, bool auto_calc)
 {
   int ret = OB_SUCCESS;
@@ -1299,7 +1294,7 @@ int ObTenantSqlMemoryManager::get_workarea_memory_info(
   ObSqlWorkareaCurrentMemoryInfo &memory_info)
 {
   int ret = OB_SUCCESS;
-  // 这里暂时仅仅已瞬态方式输出，不考虑并发问题
+  // Here it is temporarily output in a transient manner, without considering concurrency issues
   memory_info.enable_ = enable_auto_memory_mgr_;
   memory_info.max_workarea_size_ = max_workarea_size_;
   memory_info.workarea_hold_size_ = workarea_hold_size_;

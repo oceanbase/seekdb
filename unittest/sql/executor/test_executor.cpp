@@ -151,12 +151,12 @@ int ObExecutorTest::create_local_plan_tree(ObExecContext &ctx)
   col.column_name_ = ObString::make_string("a");
   EXPECT_EQ(OB_SUCCESS, single_range_columns.push_back(col));
   ref_col.add_flag(IS_COLUMN);
-  // 构造 (a = 5)
+  // Construct (a = 5)
   ObObj value1;
   value1.set_int(5);
   ObConstRawExpr const_col1(value1, T_INT); //5
   const_col1.add_flag(IS_CONST);
-  ObOpRawExpr condition1(&ref_col, &const_col1, T_OP_EQ); // a = 5构造完毕
+  ObOpRawExpr condition1(&ref_col, &const_col1, T_OP_EQ); // a = 5 construction completed
   ObQueryRange *scan_query_range = OB_NEW(ObQueryRange, ObModIds::TEST);
   EXPECT_EQ(OB_SUCCESS, scan_query_range->preliminary_extract_query_range(single_range_columns, &condition1));
 
@@ -256,12 +256,12 @@ int ObExecutorTest::create_distributed_plan_tree(ObExecContext &ctx)
   col.column_name_ = ObString::make_string("a");
   EXPECT_EQ(OB_SUCCESS, single_range_columns.push_back(col));
   ref_col.add_flag(IS_COLUMN);
-  // 构造 (a = 5)
+  // Construct (a = 5)
   ObObj value1;
   value1.set_int(5);
   ObConstRawExpr const_col1(value1, T_INT); //5
   const_col1.add_flag(IS_CONST);
-  ObOpRawExpr condition1(&ref_col, &const_col1, T_OP_EQ); // a = 5构造完毕
+  ObOpRawExpr condition1(&ref_col, &const_col1, T_OP_EQ); // a = 5 construction completed
   ObQueryRange *scan_query_range = OB_NEW(ObQueryRange, ObModIds::TEST);
   EXPECT_EQ(OB_SUCCESS, scan_query_range->preliminary_extract_query_range(single_range_columns, &condition1));
 
@@ -379,8 +379,7 @@ TEST_F(ObExecutorTest, local_executor_test)
 TEST_F(ObExecutorTest, distributed_executor_test)
 {
   int ret = OB_SUCCESS;
-
-  //启动模拟收包队列
+  // Start simulation packet receiving queue
   ObMockPacketQueueThread::get_instance()->start();
 
   ObPhyTableLocationSEArray table_locs;

@@ -23,11 +23,11 @@ namespace oceanbase
 namespace common
 {
 /**
- * 日志读取类, 从一个指定的日志id开始, 遇到日志文件结束, 则打开下一个日志文件
- * 主要有两种使用方法:
- *   1. Master启动时回放日志, 读到所有日志结束则回放完成
- *   2. Slave的日志回放线程使用: Slave采用一个线程同步日志, 另一个线程回放日志时,
- *      回放线程不停追赶日志文件, 当读到日志结束时, 应该等待小段时间后, 再次读日志
+ * Log reading class, starting from a specified log id, when the end of the log file is encountered, open the next log file
+ * There are mainly two usage methods:
+ *   1. When Master starts, replay logs, replay is complete when all logs are read
+ *   2. Slave's log replay thread usage: Slave uses one thread to synchronize logs, another thread to replay logs,
+ *      the replay thread keeps chasing the log file, when it reads the end of the log, it should wait for a short period of time before reading the log again
  */
 class ObLogReader
 {
@@ -39,24 +39,24 @@ public:
   virtual ~ObLogReader();
 
   /**
-   * 初始化
-   * @param [in] reader 读单个文件的单元
-   * @param [in] log_dir 日志目录
-   * @param [in] log_file_id_start 日志读取起始文件id
-   * @param [in] log_seq 日志读取上一条日志的seq
-   * @param [in] is_wait 在打开文件和读取数据出错时，是否重试
+   * Initialization
+   * @param [in] reader Unit to read a single file
+   * @param [in] log_dir Log directory
+   * @param [in] log_file_id_start Starting file ID for log reading
+   * @param [in] log_seq Sequence of the previous log for reading
+   * @param [in] is_wait Whether to retry when opening a file or reading data fails
    */
 
   /**
-   * @brief 读日志
-   * 遇到SWITCH_LOG日志时直接打开下一个日志文件
-   * 在打开下一个日志文件时, 如果遇到文件不存在, 可能是产生日志的地方正在切文件
-   * 等待1ms后重试, 最多重试10次, 如果还不存在则报错
-   * @return OB_SUCCESS 成功
-   * @return OB_READ_NOTHING 没有读取到内容, 可能是日志结束了,
-   *                         也可能是日志正在产生, 读到了中间状态数据
-   *                         由调用者根据自己逻辑做不同处理
-   * @return otherwise 失败
+   * @brief Read log
+   * When encountering a SWITCH_LOG log, directly open the next log file
+   * When opening the next log file, if the file does not exist, it may be that the place generating logs is switching files
+   * Wait for 1ms and retry, retry up to 10 times, if it still does not exist then report an error
+   * @return OB_SUCCESS Success
+   * @return OB_READ_NOTHING No content read, possibly because the log has ended,
+   *                         or possibly because the log is being generated, read intermediate state data
+   *                         The caller handles differently based on their own logic
+   * @return otherwise Failure
    */
   int read_log(LogCommand &cmd, uint64_t &seq, char *&log_data, int64_t &data_len);
   //Reopen a new file and locate the next bit in the current log

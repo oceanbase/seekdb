@@ -153,8 +153,7 @@ TEST_F(ObDFOMgrTest, normalizer)
                h1    prob
 
 */
-
-  // 遍历 edge，然后逐个加入 dfo_mgr
+  // Traverse edge, then add each one to dfo_mgr
   ObDFO *c1,*c2;
   ASSERT_EQ(OB_SUCCESS, nlj.get_child_dfo(0, c1));
   ASSERT_EQ(OB_SUCCESS, nlj.get_child_dfo(1, c2));
@@ -272,8 +271,7 @@ TEST_F(ObDFOMgrTest, px_coord)
   MyRunnable myrun;
   obsys::CThread px_thread;
   px_thread.start(&myrun, &coord);
-
-  // 模拟消息到达
+  // Simulate message arrival
   h2.set_state(ObDFOState::FINISH);
   h1.set_state(ObDFOState::FINISH);
   usleep(1000 * 1000);

@@ -529,7 +529,7 @@ int ObMergeUnionVecOp::do_strict_distinct_vectorize(ObOperator &child_op,
     }
   }
   //if curr_op has row convert to output, can not get next batch before return
-  // (compare_row == nullptr && compare_idx < 0)说明没有上一个store的row，也还没有输出行
+  // (compare_row == nullptr && compare_idx < 0) indicates that there is no previous store's row, and no output row has been produced yet
   bool is_first = (compare_row == nullptr && compare_idx < 0);
   if (OB_SUCC(ret) && !op_info.op_added_) {
     //if cannot find a bigger row, iter until end or find it
@@ -542,7 +542,7 @@ int ObMergeUnionVecOp::do_strict_distinct_vectorize(ObOperator &child_op,
         if (OB_FAIL(ret)) {
         } else if (OB_FAIL(distinct_for_batch(child_op, *op_info.child_op_brs_, is_first,
                 compare_expr, compare_idx, op_info.result_op_brs_))) {
-          // 在进行batch内去重的时候，就需要根据compare_idx进行判断，看last_row是从compactrow里面拿，还是从compare_expr里面拿
+          // When performing deduplication within a batch, you need to judge based on compare_idx whether last_row is taken from compactrow or from compare_expr
           LOG_WARN("distinct for batch failed", K(ret));
         }
         op_info.op_idx_ = 0;

@@ -98,11 +98,10 @@ struct ObMviewMergeParameter
   ObMviewMergeSQL refresh_sqls_[REFRESH_SQL_COUNT];
   ObSqlString validation_sql_;
 };
-
-// 1. 默认最少校验1个合并任务，最多2个
-// 2. 保证第N=1个进来的合并任务进行校验
-// 3. 从第N=2个开始，如果当前只校验了一次，那么以 1/RANDOM_SELECT_BASE 概率选择第N个是否校验
-// 4. 另外如果有开tracepoint被选中校验，那么就校验，但默认不开启tracepoint
+// 1. Default to check a minimum of 1 merge task, a maximum of 2
+// 2. Ensure the first incoming merge task (N=1) is validated
+// 3. Starting from the N=2nd, if the current one has only been validated once, then with a probability of 1/RANDOM_SELECT_BASE, select whether to validate the Nth one
+// 4. Additionally if any tracepoints are selected for validation, then validate, but tracepoints are not enabled by default
 class ObMviewCompactionValidation
 {
 public:

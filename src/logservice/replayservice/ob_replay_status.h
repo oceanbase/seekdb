@@ -40,15 +40,15 @@ class PalfEnv;
 namespace logservice
 {
 class ObLogReplayService;
-// replay status中含有几种任务类型，它们的含义分别为:
-// 1.ObReplayServiceTask: 基类任务, 用于提交到replay service的全局队列中
-// 2.ObLogReplayTask: 每一条日志生成的具体回放任务, 聚合日志中的每一条子日志都对应一个独立的ObLogReplayTask
-// 3.ObReplayServiceSubmitTask: submit类型任务, 继承ObReplayServiceTask,
-//                              在replay status中对应submit_log_task_,
-//                              记录该日志流需要回放的日志的起点和终点,
-// 4.ObReplayServiceReplayTask: replay类型任务, 继承ObReplayServiceTask,
-//                              在replay status中对应task_queues_[i],
-//                              用于存放ObLogReplayTask
+// replay status contains several task types, their meanings are as follows:
+// 1.ObReplayServiceTask: base class task, used to submit to the global queue of replay service
+// 2.ObLogReplayTask: The specific replay task generated for each log entry, each sub-log in the aggregated log corresponds to an independent ObLogReplayTask
+// 3.ObReplayServiceSubmitTask: submit type task, inherit from ObReplayServiceTask,
+//                              In replay status corresponds to submit_log_task_,
+//                              Record the start and end of the logs that need to be replayed in this log stream,
+// 4.ObReplayServiceReplayTask: replay type task, inherit ObReplayServiceTask,
+//                              corresponds to task_queues_[i] in replay status,
+//                              Used to store ObLogReplayTask
 class ObReplayStatus;
 enum class ObReplayServiceTaskType
 {
@@ -56,8 +56,7 @@ enum class ObReplayServiceTaskType
   SUBMIT_LOG_TASK = 1,
   REPLAY_LOG_TASK = 2,
 };
-
-//虚拟表统计
+//Virtual table statistics
 struct LSReplayStat
 {
   int64_t ls_id_;
@@ -91,9 +90,8 @@ struct ReplayDiagnoseInfo
     max_replayed_scn_.reset();
   }
 };
-
-//此类型为前向barrier日志专用, 与ObLogReplayTask分开分配
-//因此此结构的内存需要单独释放
+//This type is dedicated to forward barrier logs, and is allocated separately from ObLogReplayTask
+//Therefore the memory of this structure needs to be released separately
 struct ObLogReplayBuffer
 {
 public:
@@ -168,8 +166,8 @@ public:
   int64_t init_task_ts_;
   int64_t first_handle_ts_;
   int64_t print_error_ts_;
-  int64_t replay_cost_; //此任务回放成功时的当次处理时间
-  int64_t retry_cost_; //此任务重试的总耗时时间
+  int64_t replay_cost_; //The processing time for this task during a successful replay
+  int64_t retry_cost_; //Total time cost for retrying this task
   void *read_log_buf_;
   void *decompression_buf_;//buf used to decompress log; if not NULL, means log should be decompessed
   bool has_decompressed_;
@@ -178,8 +176,7 @@ public:
 
   int64_t to_string(char* buf, const int64_t buf_len) const;
 };
-
-// replay service task基类
+// replay service task base class
 class ObReplayServiceTask : public common::LinkTask
 {
 public:
@@ -259,10 +256,10 @@ protected:
   ObReplayServiceTaskType type_;
   //for debug: task wait in queue too much time
   int64_t enqueue_ts_;
-  // 如果只通过linkhashmap管理replay status的生命周期,ObReplayServiceTask里面只存ls_id,
-  // 那么在ABA场景下残留的任务会get到新的replay status并且回放,
-  // 因此需要任务自己记录replay status,而这样会使得replay status不仅在linkhashmap处被用到.
-  // 所以需要replay status自己管理引用计数, linkhashmap的引用计数是冗余的.
+  // If only linkhashmap manages the lifecycle of replay status, ObReplayServiceTask only stores ls_id,
+  // Then in the ABA scenario, the remaining tasks will get a new replay status and replay,
+  // Therefore the task itself needs to record the replay status, and this will make the replay status not only used at the linkhashmap.
+  // So it is necessary for replay status to manage its own reference count, the reference count of linkhashmap is redundant.
   ObReplayStatus *replay_status_;
   TaskErrInfo err_info_;
   //control state transition of queue
@@ -294,10 +291,10 @@ public:
   void destroy() override;
 
 public:
-  // 迭代器是否迭代到终点
+  // Is the iterator at the end?
   bool has_remained_submit_log(const share::SCN &replayable_point,
                                bool &iterate_end_by_replayable_point);
-  // 不允许回退
+  // No rollback allowed
   int update_submit_log_meta_info(const palf::LSN &lsn, const share::SCN &scn);
   int get_next_to_submit_log_info(palf::LSN &lsn, share::SCN &scn) const;
   int get_committed_end_lsn(palf::LSN &lsn) const;
@@ -307,7 +304,7 @@ public:
   int get_log(const char *&buffer, int64_t &nbytes, share::SCN &scn, palf::LSN &offset);
   int next_log(const share::SCN &replayable_point,
                bool &iterate_end_by_replayable_point);
-  // 以当前的终点作为新起点重置迭代器
+  // Reset the iterator with the current endpoint as the new starting point
   int reset_iterator(const share::ObLSID &id,
                      const palf::LSN &begin_lsn);
 
@@ -384,8 +381,8 @@ private:
   }
 private:
   common::ObSpScLinkQueue queue_; //place ObLogReplayTask
-  int64_t idx_; //热点行优化
-  bool need_batch_push_; //batch push判断标志, 只有拉日志线程可以修改此值
+  int64_t idx_; //hotspot row optimization
+  bool need_batch_push_; // batch push judgment flag, only the log pull thread can modify this value
 };
 
 class ObReplayFsCb : public palf::PalfFSCb
@@ -404,7 +401,7 @@ public:
   {
     replay_status_ = NULL;
   }
-  // 回调接口,调用replay status的update_end_offset接口
+  // Callback interface, call the update_end_offset interface of replay status
   int update_end_lsn(int64_t id, const palf::LSN &end_offset, const share::SCN &end_scn, const int64_t proposal_id);
 private:
   ObReplayStatus *replay_status_;
@@ -498,7 +495,7 @@ public:
   //@return : OB_SUCCESS : success
   //OB_NOT_INIT: ObReplayStatus has not been inited
   int is_submit_task_clear(bool &is_clear) const;
-  // 存在待回放的已提交日志任务
+  // There are submitted log tasks pending replay
   // update right margin of logs that need to replay
   int update_end_offset(const palf::LSN &lsn);
 
@@ -506,11 +503,11 @@ public:
   int batch_push_all_task_queue();
   void inc_pending_task(const int64_t log_size);
   void dec_pending_task(const int64_t log_size);
-  //通用的replay task释放内存接口, 前向barrier的任务不会单独释放log buf内存
-  //前向barrier完整释放申请的内存需要同时调用
-  //free_replay_task_log_buf()和free_replay_task()
+  //Generic replay task memory release interface, forward barrier tasks will not release log buf memory separately
+  //Forward barrier complete release of allocated memory requires simultaneous invocation
+  //free_replay_task_log_buf() and free_replay_task()
   void free_replay_task(ObLogReplayTask *task);
-  //单独释放ObLogReplayTask中特殊的log_buf, 仅前向barrier日志生效
+  //Release the special log_buf in ObLogReplayTask, only forward barrier logs are effective
   void free_replay_task_log_buf(ObLogReplayTask *task);
 
   int get_ls_id(share::ObLSID &id);
@@ -527,9 +524,9 @@ public:
                          int64_t &unsubmitted_log_size,
                          int64_t &replayed_log_size,
                          int64_t &unreplayed_log_size);
-  //提交日志检查barrier状态
+  //Submit log check barrier status
   int check_submit_barrier();
-  //回放日志检查barrier状态
+  //Replay log check barrier status
   int check_replay_barrier(ObLogReplayTask *replay_task,
                            ObLogReplayBuffer *&replay_log_buf,
                            bool &need_replay,
@@ -553,7 +550,7 @@ public:
   {
     return replay_hint & (REPLAY_TASK_QUEUE_SIZE - 1);
   }
-  // 用于记录日志流级别的错误, 此类错误不可恢复
+  // Used to record log stream level errors, this type of error is unrecoverable
   void set_err_info(const palf::LSN &lsn,
                     const share::SCN &scn,
                     const ObLogBaseType &log_type,
@@ -587,11 +584,10 @@ public:
 private:
   void set_next_to_submit_log_info_(const palf::LSN &lsn, const share::SCN &scn);
   int submit_task_to_replay_service_(ObReplayServiceTask &task);
-  // 注册回调并提交当前初始化的submit_log_task
+  // Register callback and submit the currently initialized submit_log_task
   int enable_(const palf::LSN &base_lsn,
               const share::SCN &base_scn);
-
-  // 注销回调并清空任务
+  // Unregister callback and clear task
   int disable_();
   bool is_replay_enabled_() const;
 
@@ -600,9 +596,9 @@ private:
   static const int64_t EAGAIN_COUNT_THRESHOLD = 50000;
   static const int64_t EAGAIN_INTERVAL_THRESHOLD = 10 * 60 * 1000 * 1000LL;
   static const int64_t REPLAY_TASK_MAGNIFICATION_THRESHOLD = 10;
-  //单日志流每次提交16MB日志时需要检查当前租户memstore剩余值是否超限
+  //Single log stream needs to check if the remaining value of the current tenant's memstore is exceeded when submitting 16MB of logs each time
   static const int64_t LS_CHECK_MEMSTORE_INTERVAL_THRESHOLD = 16 * (1LL << 20);
-  //预期一条日志的回放不会超过1s
+  //Expect that the replay of a log will not exceed 1s
   static const int64_t WRLOCK_TRY_THRESHOLD = 1000 * 1000;
   static const int64_t WRLOCK_RETRY_INTERVAL = 20 * 1000; //20ms
 
@@ -621,8 +617,8 @@ private:
   int64_t pending_task_count_;
   palf::LSN last_check_memstore_lsn_;
   // protect is_enabled_ and submit_log_task_
-  // 回放一条日志时会一直持有读锁直到回放完成
-  // 保证拿写锁disable后一定不会有任何日志回放
+  // Hold the read lock until the log replay is complete when replaying a log entry
+  // Ensure that no log replay will occur after write lock is disabled
   mutable RWLock rwlock_;
   // protect is_submit_blocked_ and role_
   mutable RWLock rolelock_;

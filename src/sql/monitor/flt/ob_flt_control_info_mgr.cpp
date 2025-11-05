@@ -27,7 +27,7 @@ bool ObFLTResetSessOp::operator()(sql::ObSQLSessionMgr::Key key, ObSQLSessionInf
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("session info is not valid", K(ret));
   } else {
-    // NOTE: 下面两个guard的顺序不可更换，否则有机会形成死锁
+    // NOTE: The order of the following two guards cannot be changed, otherwise there is a chance of forming a deadlock
     if (OB_FAIL(sess_info->try_lock_query())) {
       if (OB_UNLIKELY(OB_EAGAIN != ret)) {
         LOG_WARN("fail to try lock query", K(ret));
@@ -68,7 +68,7 @@ bool ObFLTApplyByClientIDOp::operator()(sql::ObSQLSessionMgr::Key key, ObSQLSess
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("session info is not valid", K(ret));
   } else {
-    // NOTE: 下面两个guard的顺序不可更换，否则有机会形成死锁
+    // NOTE: The order of the following two guards cannot be changed, otherwise there is a chance of forming a deadlock
     if (OB_FAIL(sess_info->try_lock_query())) {
       if (OB_UNLIKELY(OB_EAGAIN != ret)) {
         LOG_WARN("fail to try lock query", K(ret));
@@ -111,7 +111,7 @@ bool ObFLTApplyByModActOp::operator()(sql::ObSQLSessionMgr::Key key, ObSQLSessio
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("session info is not valid", K(ret));
   } else {
-    // NOTE: 下面两个guard的顺序不可更换，否则有机会形成死锁
+    // NOTE: The order of the following two guards cannot be changed, otherwise there is a chance of forming a deadlock
     if (OB_FAIL(sess_info->try_lock_query())) {
       if (OB_UNLIKELY(OB_EAGAIN != ret)) {
         LOG_WARN("fail to try lock query", K(ret));
@@ -156,7 +156,7 @@ bool ObFLTApplyByTenantOp::operator()(sql::ObSQLSessionMgr::Key key, ObSQLSessio
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("session info is not valid", K(ret));
   } else {
-    // NOTE: 下面两个guard的顺序不可更换，否则有机会形成死锁
+    // NOTE: The order of the following two guards cannot be changed, otherwise there is a chance of forming a deadlock
     if (OB_FAIL(sess_info->try_lock_query())) {
       if (OB_UNLIKELY(OB_EAGAIN != ret)) {
         LOG_WARN("fail to try lock query", K(ret));

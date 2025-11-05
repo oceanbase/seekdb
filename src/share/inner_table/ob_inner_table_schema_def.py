@@ -35,7 +35,7 @@
 #    1. double、number：default value is not supported, so new column definition should be "nullable".
 #    2. longtext、timestamp：mysql can't cast default value to specified column type, so new column definition should be "nullable".
 #
-# 添加内部表编码指引详见：
+# Add internal table encoding guidelines see:
 ################################################################################
 
 ################################################################################
@@ -54,30 +54,29 @@
 # - Distributed virtual table's partition_columns should be [`svr_ip`, `svr_port`].
 # - rowkey_columns must contains columns defined in partition_columns.
 ################################################################################
-
-################################### 占位须知 ###################################
-# 占位示例: 顶格写注释，说明要占用哪个TABLE_ID，对应的名字是什么
+################################### Placeholder Notice ###################################
+# Placeholder example: Write comments at the beginning of the line to indicate which TABLE_ID is to be occupied and what the corresponding name is
 # TABLE_ID: TABLE_NAME
 #
-# FARM 会基于占位校验开发分支TABLE_ID和TABLE_NAME是否匹配，如果不匹配，FARM就会拦截报错
+# FARM will base the placeholder validation development branch TABLE_ID and TABLE_NAME match check, if they do not match, FARM will intercept and report an error
 #
-# 注意：
-# 0. 在‘余留位置’之前占位
-# 1. 始终先在master占位，保证master分支是其他所有分支的超集，避免NAME和ID冲突
-# 2. master占位之后，开发分支上不要变更NAME，否则FARM会认为ID占位冲突，如果有这种场景，需要先修改master占位
-# 3. 默认建议采用准确的TABLE_NAME进行占位，TABLE_ID和TABLE_NAME在系统内部是一一对应的
-# 4. 部分表是基于其他基表的schema定义的(例如：gen_xx_table_def())，其真实表名比较复杂，为了方便占位，建议采用基表表名进行占位
-#    - 示例1：def_table_schema(**gen_mysql_sys_agent_virtual_table_def('12393', all_def_keywords['__all_virtual_long_ops_status']))
-#      * 基表表名占位：# 12393: __all_virtual_long_ops_status
-#      * 真实表名占位：# 12393: __all_virtual_virtual_long_ops_status_mysql_sys_agent
-#    - 示例2：def_table_schema(**no_direct_access(gen_oracle_mapping_virtual_table_def('15009', all_def_keywords['__all_virtual_sql_audit'])))
-#      * 基表表名占位：# 15009: __all_virtual_sql_audit
-#      * 真实表名占位：# 15009: ALL_VIRTUAL_SQL_AUDIT
-#    - 示例3：def_table_schema(**gen_sys_agent_virtual_table_def('15111', all_def_keywords['__all_routine_param']))
-#      * 基表表名占位：# 15111: __all_routine_param
-#      * 真实表名占位：# 15111: ALL_VIRTUAL_ROUTINE_PARAM_SYS_AGENT
-# 5. 索引表占位要求TABLE_NAME采用以下方式：基表（数据表）表名、索引名(index_name)、真实的索引表表名
-#    例如：100001 索引表占位方式可以为：
+# Note:
+# 0. Placeholder before 'reserved position'
+# 1. Always start by occupying the master, ensuring that the master branch is a superset of all other branches to avoid NAME and ID conflicts
+# 2. After the master placeholder is set, do not change NAME on the development branch, otherwise FARM will consider it an ID placeholder conflict. If this scenario occurs, you need to modify the master placeholder first
+# 3. It is recommended to use the accurate TABLE_NAME for placeholder, TABLE_ID and TABLE_NAME are one-to-one corresponding within the system
+# 4. Some tables are defined based on the schema of other base tables (e.g., gen_xx_table_def()), their actual table names are relatively complex, to facilitate placeholder usage, it is recommended to use the base table name for placeholders
+#    - Example 1: def_table_schema(**gen_mysql_sys_agent_virtual_table_def('12393', all_def_keywords['__all_virtual_long_ops_status']))
+#      * Base table name placeholder: # 12393: __all_virtual_long_ops_status
+#      * Real table name placeholder: # 12393: __all_virtual_virtual_long_ops_status_mysql_sys_agent
+#    - Example 2: def_table_schema(**no_direct_access(gen_oracle_mapping_virtual_table_def('15009', all_def_keywords['__all_virtual_sql_audit'])))
+#      * Base table name placeholder: # 15009: __all_virtual_sql_audit
+#      * Real table name placeholder: # 15009: ALL_VIRTUAL_SQL_AUDIT
+#    - Example 3: def_table_schema(**gen_sys_agent_virtual_table_def('15111', all_def_keywords['__all_routine_param']))
+#      * Base table name placeholder: # 15111: __all_routine_param
+#      * Real table name placeholder: # 15111: ALL_VIRTUAL_ROUTINE_PARAM_SYS_AGENT
+# 5. Index table placeholder requirements TABLE_NAME should be used as follows: base table (data table) name, index name (index_name), actual index table name
+#    For example: 100001 The placeholder method for the index table can be:
 #       * # 100001: __idx_3_idx_data_table_id
 #       * # 100001: idx_data_table_id
 #       * # 100001: __all_table
@@ -7386,36 +7385,34 @@ def_table_schema(**all_ccl_rule_def)
 def_table_schema(**gen_history_table_def(548, all_ccl_rule_def))
 
 # 549: __all_balance_job_description
-
-# 余留位置（此行之前占位）
-# 本区域占位建议：采用真实表名进行占位
+# Reserved position (placeholder before this line)
+# Placeholder suggestion for this section: Use actual table names for placeholders
 ################################################################################
 # End of System Table(0,10000]
 ################################################################################
-
-################################### 占位须知 ###################################
-# 占位示例: 顶格写注释，说明要占用哪个TABLE_ID，对应的名字是什么
+################################### Placeholder Notice ###################################
+# Placeholder example: Write comments at the beginning of the line to indicate which TABLE_ID is to be occupied and what the corresponding name is
 # TABLE_ID: TABLE_NAME
 #
-# FARM 会基于占位校验开发分支TABLE_ID和TABLE_NAME是否匹配，如果不匹配，FARM就会拦截报错
+# FARM will base the placeholder validation development branch TABLE_ID and TABLE_NAME matching check, if they do not match, FARM will intercept and report an error
 #
-# 注意：
-# 0. 在‘余留位置’之前占位
-# 1. 始终先在master占位，保证master分支是其他所有分支的超集，避免NAME和ID冲突
-# 2. master占位之后，开发分支上不要变更NAME，否则FARM会认为ID占位冲突，如果有这种场景，需要先修改master占位
-# 3. 默认建议采用准确的TABLE_NAME进行占位，TABLE_ID和TABLE_NAME在系统内部是一一对应的
-# 4. 部分表是基于其他基表的schema定义的(例如：gen_xx_table_def())，其真实表名比较复杂，为了方便占位，建议采用基表表名进行占位
-#    - 示例1：def_table_schema(**gen_mysql_sys_agent_virtual_table_def('12393', all_def_keywords['__all_virtual_long_ops_status']))
-#      * 基表表名占位：# 12393: __all_virtual_long_ops_status
-#      * 真实表名占位：# 12393: __all_virtual_virtual_long_ops_status_mysql_sys_agent
-#    - 示例2：def_table_schema(**no_direct_access(gen_oracle_mapping_virtual_table_def('15009', all_def_keywords['__all_virtual_sql_audit'])))
-#      * 基表表名占位：# 15009: __all_virtual_sql_audit
-#      * 真实表名占位：# 15009: ALL_VIRTUAL_SQL_AUDIT
-#    - 示例3：def_table_schema(**gen_sys_agent_virtual_table_def('15111', all_def_keywords['__all_routine_param']))
-#      * 基表表名占位：# 15111: __all_routine_param
-#      * 真实表名占位：# 15111: ALL_VIRTUAL_ROUTINE_PARAM_SYS_AGENT
-# 5. 索引表占位要求TABLE_NAME采用以下方式：基表（数据表）表名、索引名(index_name)、真实的索引表表名
-#    例如：100001 索引表占位方式可以为：
+# Note:
+# 0. Placeholder before 'reserved position'
+# 1. Always start by occupying the master, ensuring that the master branch is a superset of all other branches to avoid NAME and ID conflicts
+# 2. After the master placeholder is set, do not change NAME on the development branch, otherwise FARM will consider it an ID placeholder conflict. If this scenario occurs, you need to modify the master placeholder first
+# 3. It is recommended to use the accurate TABLE_NAME as a placeholder, TABLE_ID and TABLE_NAME are one-to-one corresponding within the system
+# 4. Some tables are defined based on the schema of other base tables (e.g., gen_xx_table_def()), their actual table names are relatively complex, to facilitate placeholder usage, it is recommended to use the base table name for placeholders
+#    - Example 1: def_table_schema(**gen_mysql_sys_agent_virtual_table_def('12393', all_def_keywords['__all_virtual_long_ops_status']))
+#      * Base table name placeholder: # 12393: __all_virtual_long_ops_status
+#      * Real table name placeholder: # 12393: __all_virtual_virtual_long_ops_status_mysql_sys_agent
+#    - Example 2: def_table_schema(**no_direct_access(gen_oracle_mapping_virtual_table_def('15009', all_def_keywords['__all_virtual_sql_audit'])))
+#      * Base table name placeholder: # 15009: __all_virtual_sql_audit
+#      * Real table name placeholder: # 15009: ALL_VIRTUAL_SQL_AUDIT
+#    - Example 3: def_table_schema(**gen_sys_agent_virtual_table_def('15111', all_def_keywords['__all_routine_param']))
+#      * Base table name placeholder: # 15111: __all_routine_param
+#      * Real table name placeholder: # 15111: ALL_VIRTUAL_ROUTINE_PARAM_SYS_AGENT
+# 5. Index table placeholder requirements TABLE_NAME should be used as follows: base table (data table) name, index name (index_name), actual index table name
+#    For example: 100001 The placeholder method for the index table can be:
 #       * # 100001: __idx_3_idx_data_table_id
 #       * # 100001: idx_data_table_id
 #       * # 100001: __all_table
@@ -7423,8 +7420,7 @@ def_table_schema(**gen_history_table_def(548, all_ccl_rule_def))
 
 
 ################################################################################
-
-# 余留位置
+# Reserved position
 ################################################################################
 # Virtual Table (10000, 20000]
 # Normally, virtual table's index_using_type should be USING_HASH.
@@ -14760,15 +14756,15 @@ def_table_schema(
     ('svr_ip', 'varchar:MAX_IP_ADDR_LENGTH'),
     ('svr_port', 'int'),
     ('name', 'varchar:64', 'true', 'NULL'),               # true means nullable and NULL is the default value
-    ('status', 'varchar:64', 'true', 'NULL'),             # 插件状态：READY, UNINIT, DEAD
-    ('type', 'varchar:80', 'true', 'NULL'),               # 插件类型，比如分词器
-    ('library', 'varchar:128', 'true', 'NULL'),           # 插件动态链接库名称（内置插件没有对应链接库）
-    ('library_version', 'varchar:80', 'true', 'NULL'),    # 插件库自身的版本
-    ('library_revision', 'varchar:80', 'true', 'NULL'),   # 插件库修订版本，比如 git commit id
-    ('interface_version', 'varchar:80', 'true', 'NULL'),  # 该插件实现的具体接口API版本
-    ('author', 'varchar:64', 'true', 'NULL'),             # 插件作者信息
-    ('license', 'varchar:64', 'true', 'NULL'),            # 插件LICENSE
-    ('description', 'varchar:65535', 'true', 'NULL')      # 插件描述信息
+    ('status', 'varchar:64', 'true', 'NULL'),             # plugin status: READY, UNINIT, DEAD
+    ('type', 'varchar:80', 'true', 'NULL'),               # plugin type, such as tokenizer
+    ('library', 'varchar:128', 'true', 'NULL'),           # plugin dynamic link library name (built-in plugins do not have corresponding link libraries)
+    ('library_version', 'varchar:80', 'true', 'NULL'),    # version of the plugin library itself
+    ('library_revision', 'varchar:80', 'true', 'NULL'),   # plugin library revision version, such as git commit id
+    ('interface_version', 'varchar:80', 'true', 'NULL'),  # specific interface API version implemented by this plugin
+    ('author', 'varchar:64', 'true', 'NULL'),             # plugin author information
+    ('license', 'varchar:64', 'true', 'NULL'),            # plugin LICENSE
+    ('description', 'varchar:65535', 'true', 'NULL')      # plugin description information
   ],
   partition_columns = ['svr_ip', 'svr_port'],
   vtable_route_policy = 'distributed'
@@ -15011,36 +15007,34 @@ def_table_schema(
   partition_columns = ['svr_ip', 'svr_port'],
   vtable_route_policy = 'distributed',
 )
-
-# 余留位置（此行之前占位）
-# 本区域占位建议：采用真实表名进行占位
+# Reserved position (placeholder before this line)
+# Placeholder suggestion for this section: Use actual table names for placeholders
 ################################################################################
 # End of Mysql Virtual Table (10000, 15000]
 ################################################################################
-
-################################### 占位须知 ###################################
-# 占位示例: 顶格写注释，说明要占用哪个TABLE_ID，对应的名字是什么
+################################### Placeholder Notice ###################################
+# Placeholder example: Write the comment at the beginning of the line, indicating which TABLE_ID to occupy and the corresponding name
 # TABLE_ID: TABLE_NAME
 #
-# FARM 会基于占位校验开发分支TABLE_ID和TABLE_NAME是否匹配，如果不匹配，FARM就会拦截报错
+# FARM will base the placeholder validation development branch TABLE_ID and TABLE_NAME matching check, if they do not match, FARM will intercept and report an error
 #
-# 注意：
-# 0. 在‘余留位置’之前占位
-# 1. 始终先在master占位，保证master分支是其他所有分支的超集，避免NAME和ID冲突
-# 2. master占位之后，开发分支上不要变更NAME，否则FARM会认为ID占位冲突，如果有这种场景，需要先修改master占位
-# 3. 默认建议采用准确的TABLE_NAME进行占位，TABLE_ID和TABLE_NAME在系统内部是一一对应的
-# 4. 部分表是基于其他基表的schema定义的(例如：gen_xx_table_def())，其真实表名比较复杂，为了方便占位，建议采用基表表名进行占位
-#    - 示例1：def_table_schema(**gen_mysql_sys_agent_virtual_table_def('12393', all_def_keywords['__all_virtual_long_ops_status']))
-#      * 基表表名占位：# 12393: __all_virtual_long_ops_status
-#      * 真实表名占位：# 12393: __all_virtual_virtual_long_ops_status_mysql_sys_agent
-#    - 示例2：def_table_schema(**no_direct_access(gen_oracle_mapping_virtual_table_def('15009', all_def_keywords['__all_virtual_sql_audit'])))
-#      * 基表表名占位：# 15009: __all_virtual_sql_audit
-#      * 真实表名占位：# 15009: ALL_VIRTUAL_SQL_AUDIT
-#    - 示例3：def_table_schema(**gen_sys_agent_virtual_table_def('15111', all_def_keywords['__all_routine_param']))
-#      * 基表表名占位：# 15111: __all_routine_param
-#      * 真实表名占位：# 15111: ALL_VIRTUAL_ROUTINE_PARAM_SYS_AGENT
-# 5. 索引表占位要求TABLE_NAME采用以下方式：基表（数据表）表名、索引名(index_name)、真实的索引表表名
-#    例如：100001 索引表占位方式可以为：
+# Note:
+# 0. Placeholder before 'reserved position'
+# 1. Always start by occupying the master, ensuring the master branch is a superset of all other branches, to avoid NAME and ID conflicts
+# 2. After the master placeholder is set, do not change NAME on the development branch, otherwise FARM will consider it an ID placeholder conflict. If this scenario occurs, you need to modify the master placeholder first
+# 3. It is recommended to use the accurate TABLE_NAME as a placeholder, TABLE_ID and TABLE_NAME are one-to-one corresponding within the system
+# 4. Some tables are defined based on the schema of other base tables (e.g., gen_xx_table_def()), their actual table names are relatively complex, to facilitate placeholder usage, it is recommended to use the base table name for placeholders
+#    - Example 1: def_table_schema(**gen_mysql_sys_agent_virtual_table_def('12393', all_def_keywords['__all_virtual_long_ops_status']))
+#      * Base table name placeholder: # 12393: __all_virtual_long_ops_status
+#      * Real table name placeholder: # 12393: __all_virtual_virtual_long_ops_status_mysql_sys_agent
+#    - Example 2: def_table_schema(**no_direct_access(gen_oracle_mapping_virtual_table_def('15009', all_def_keywords['__all_virtual_sql_audit'])))
+#      * Base table name placeholder: # 15009: __all_virtual_sql_audit
+#      * Real table name placeholder: # 15009: ALL_VIRTUAL_SQL_AUDIT
+#    - Example 3: def_table_schema(**gen_sys_agent_virtual_table_def('15111', all_def_keywords['__all_routine_param']))
+#      * Base table name placeholder: # 15111: __all_routine_param
+#      * Real table name placeholder: # 15111: ALL_VIRTUAL_ROUTINE_PARAM_SYS_AGENT
+# 5. Index table placeholder requirements TABLE_NAME should be used as follows: base table (data table) name, index name (index_name), actual index table name
+#    For example: 100001 The placeholder method for the index table can be:
 #       * # 100001: __idx_3_idx_data_table_id
 #       * # 100001: idx_data_table_id
 #       * # 100001: __all_table
@@ -15052,39 +15046,37 @@ def_table_schema(
 ################################################################################
 
 # 15510: __all_virtual_balance_job_description
-
-# 余留位置（此行之前占位）
-# 本区域定义的Oracle表名比较复杂，一般都采用gen_xxx_table_def()方式定义，占位建议采用基表表名占位
-# - 示例：def_table_schema(**no_direct_access(gen_oracle_mapping_virtual_table_def('15009', all_def_keywords['__all_virtual_sql_audit'])))
-#   * 基表表名占位：# 15009: __all_virtual_sql_audit
-#   * 真实表名占位：# 15009: ALL_VIRTUAL_SQL_AUDIT
+# Reserved position (placeholder before this line)
+# This section defines Oracle table names which are relatively complex, generally defined using the gen_xxx_table_def() method, placeholder suggestion is to use the base table name as a placeholder
+# - Example: def_table_schema(**no_direct_access(gen_oracle_mapping_virtual_table_def('15009', all_def_keywords['__all_virtual_sql_audit'])))
+#   * Base table name placeholder: # 15009: __all_virtual_sql_audit
+#   * Real table name placeholder: # 15009: ALL_VIRTUAL_SQL_AUDIT
 ################################################################################
 # End of Oracle Virtual Table(15000,20000]
 ################################################################################
-
-################################### 占位须知 ###################################
-# 占位示例: 顶格写注释，说明要占用哪个TABLE_ID，对应的名字是什么
+################################### Placeholder Notice ###################################
+# Placeholder example: Write the comment at the beginning of the line, indicating which TABLE_ID to occupy and the corresponding name
 # TABLE_ID: TABLE_NAME
 #
-# FARM 会基于占位校验开发分支TABLE_ID和TABLE_NAME是否匹配，如果不匹配，FARM就会拦截报错
+# FARM will base the placeholder validation development branch TABLE_ID and TABLE_NAME matching check, if they do not match, FARM will intercept and report an error
 #
-# 注意：
-# 0. 在‘余留位置’之前占位
-# 1. 始终先在master占位，保证master分支是其他所有分支的超集，避免NAME和ID冲突
-# 2. master占位之后，开发分支上不要变更NAME，否则FARM会认为ID占位冲突，如果有这种场景，需要先修改master占位
-# 3. 默认建议采用准确的TABLE_NAME进行占位，TABLE_ID和TABLE_NAME在系统内部是一一对应的
-# 4. 部分表是基于其他基表的schema定义的(例如：gen_xx_table_def())，其真实表名比较复杂，为了方便占位，建议采用基表表名进行占位
-#    - 示例1：def_table_schema(**gen_mysql_sys_agent_virtual_table_def('12393', all_def_keywords['__all_virtual_long_ops_status']))
-#      * 基表表名占位：# 12393: __all_virtual_long_ops_status
-#      * 真实表名占位：# 12393: __all_virtual_virtual_long_ops_status_mysql_sys_agent
-#    - 示例2：def_table_schema(**no_direct_access(gen_oracle_mapping_virtual_table_def('15009', all_def_keywords['__all_virtual_sql_audit'])))
-#      * 基表表名占位：# 15009: __all_virtual_sql_audit
-#      * 真实表名占位：# 15009: ALL_VIRTUAL_SQL_AUDIT
-#    - 示例3：def_table_schema(**gen_sys_agent_virtual_table_def('15111', all_def_keywords['__all_routine_param']))
-#      * 基表表名占位：# 15111: __all_routine_param
-#      * 真实表名占位：# 15111: ALL_VIRTUAL_ROUTINE_PARAM_SYS_AGENT
-# 5. 索引表占位要求TABLE_NAME采用以下方式：基表（数据表）表名、索引名(index_name)、真实的索引表表名
-#    例如：100001 索引表占位方式可以为：
+# Note:
+# 0. Placeholder before 'reserved position'
+# 1. Always start by occupying the master, ensuring the master branch is a superset of all other branches, to avoid NAME and ID conflicts
+# 2. After the master placeholder is set, do not change NAME on the development branch, otherwise FARM will consider it an ID placeholder conflict. If this scenario occurs, you need to modify the master placeholder first
+# 3. It is recommended to use the accurate TABLE_NAME for placeholder, TABLE_ID and TABLE_NAME are one-to-one corresponding within the system
+# 4. Some tables are defined based on the schema of other base tables (e.g., gen_xx_table_def()), their actual table names are relatively complex, to facilitate placeholder usage, it is recommended to use the base table name for placeholders
+#    - Example 1: def_table_schema(**gen_mysql_sys_agent_virtual_table_def('12393', all_def_keywords['__all_virtual_long_ops_status']))
+#      * Base table name placeholder: # 12393: __all_virtual_long_ops_status
+#      * Real table name placeholder: # 12393: __all_virtual_virtual_long_ops_status_mysql_sys_agent
+#    - Example 2: def_table_schema(**no_direct_access(gen_oracle_mapping_virtual_table_def('15009', all_def_keywords['__all_virtual_sql_audit'])))
+#      * Base table name placeholder: # 15009: __all_virtual_sql_audit
+#      * Real table name placeholder: # 15009: ALL_VIRTUAL_SQL_AUDIT
+#    - Example 3: def_table_schema(**gen_sys_agent_virtual_table_def('15111', all_def_keywords['__all_routine_param']))
+#      * Base table name placeholder: # 15111: __all_routine_param
+#      * Real table name placeholder: # 15111: ALL_VIRTUAL_ROUTINE_PARAM_SYS_AGENT
+# 5. Index table placeholder requirements TABLE_NAME should be used as follows: base table (data table) name, index name (index_name), actual index table name
+#    For example: 100001 The placeholder method for the index table can be:
 #       * # 100001: __idx_3_idx_data_table_id
 #       * # 100001: idx_data_table_id
 #       * # 100001: __all_table
@@ -40094,36 +40086,34 @@ WHERE
 """.replace("\n", " "),
 
 )
-
-# 余留位置（此行之前占位）
-# 本区域占位建议：采用真实视图名进行占位
+# Reserved position (placeholder before this line)
+# Placeholder suggestion for this section: Use the actual view name for placeholder
 ################################################################################
 # End of MySQL System View (20000, 25000]
 ################################################################################
-
-################################### 占位须知 ###################################
-# 占位示例: 顶格写注释，说明要占用哪个TABLE_ID，对应的名字是什么
+################################### Placeholder Notice ###################################
+# Placeholder example: Write the comment at the beginning of the line, indicating which TABLE_ID to occupy and the corresponding name
 # TABLE_ID: TABLE_NAME
 #
-# FARM 会基于占位校验开发分支TABLE_ID和TABLE_NAME是否匹配，如果不匹配，FARM就会拦截报错
+# FARM will base the placeholder validation development branch TABLE_ID and TABLE_NAME match check, if they do not match, FARM will intercept and report an error
 #
-# 注意：
-# 0. 在‘余留位置’之前占位
-# 1. 始终先在master占位，保证master分支是其他所有分支的超集，避免NAME和ID冲突
-# 2. master占位之后，开发分支上不要变更NAME，否则FARM会认为ID占位冲突，如果有这种场景，需要先修改master占位
-# 3. 默认建议采用准确的TABLE_NAME进行占位，TABLE_ID和TABLE_NAME在系统内部是一一对应的
-# 4. 部分表是基于其他基表的schema定义的(例如：gen_xx_table_def())，其真实表名比较复杂，为了方便占位，建议采用基表表名进行占位
-#    - 示例1：def_table_schema(**gen_mysql_sys_agent_virtual_table_def('12393', all_def_keywords['__all_virtual_long_ops_status']))
-#      * 基表表名占位：# 12393: __all_virtual_long_ops_status
-#      * 真实表名占位：# 12393: __all_virtual_virtual_long_ops_status_mysql_sys_agent
-#    - 示例2：def_table_schema(**no_direct_access(gen_oracle_mapping_virtual_table_def('15009', all_def_keywords['__all_virtual_sql_audit'])))
-#      * 基表表名占位：# 15009: __all_virtual_sql_audit
-#      * 真实表名占位：# 15009: ALL_VIRTUAL_SQL_AUDIT
-#    - 示例3：def_table_schema(**gen_sys_agent_virtual_table_def('15111', all_def_keywords['__all_routine_param']))
-#      * 基表表名占位：# 15111: __all_routine_param
-#      * 真实表名占位：# 15111: ALL_VIRTUAL_ROUTINE_PARAM_SYS_AGENT
-# 5. 索引表占位要求TABLE_NAME采用以下方式：基表（数据表）表名、索引名(index_name)、真实的索引表表名
-#    例如：100001 索引表占位方式可以为：
+# Note:
+# 0. Placeholder before 'reserved position'
+# 1. Always start by occupying the master, ensuring the master branch is a superset of all other branches, to avoid NAME and ID conflicts
+# 2. After the master placeholder is set, do not change NAME on the development branch, otherwise FARM will consider it an ID placeholder conflict. If this scenario occurs, you need to modify the master placeholder first
+# 3. It is recommended to use the accurate TABLE_NAME for placeholder, TABLE_ID and TABLE_NAME are one-to-one corresponding within the system
+# 4. Some tables are defined based on the schema of other base tables (e.g., gen_xx_table_def()), their actual table names are relatively complex, to facilitate placeholder usage, it is recommended to use the base table name for placeholders
+#    - Example 1: def_table_schema(**gen_mysql_sys_agent_virtual_table_def('12393', all_def_keywords['__all_virtual_long_ops_status']))
+#      * Base table name placeholder: # 12393: __all_virtual_long_ops_status
+#      * Real table name placeholder: # 12393: __all_virtual_virtual_long_ops_status_mysql_sys_agent
+#    - Example 2: def_table_schema(**no_direct_access(gen_oracle_mapping_virtual_table_def('15009', all_def_keywords['__all_virtual_sql_audit'])))
+#      * Base table name placeholder: # 15009: __all_virtual_sql_audit
+#      * Real table name placeholder: # 15009: ALL_VIRTUAL_SQL_AUDIT
+#    - Example 3: def_table_schema(**gen_sys_agent_virtual_table_def('15111', all_def_keywords['__all_routine_param']))
+#      * Base table name placeholder: # 15111: __all_routine_param
+#      * Real table name placeholder: # 15111: ALL_VIRTUAL_ROUTINE_PARAM_SYS_AGENT
+# 5. Index table placeholder requirements TABLE_NAME should be used as follows: base table (data table) name, index name (index_name), actual index table name
+#    For example: 100001 The placeholder method for the index table can be:
 #       * # 100001: __idx_3_idx_data_table_id
 #       * # 100001: idx_data_table_id
 #       * # 100001: __all_table
@@ -40137,36 +40127,34 @@ WHERE
 
 # 28275: GV$OB_RESULT_CACHE_OBJECTS
 # 28276: V$OB_RESULT_CACHE_OBJECTS
-
-# 余留位置（此行之前占位）
-# 本区域占位建议：采用真实视图名进行占位
+# Reserved position (placeholder before this line)
+# Placeholder suggestion for this section: Use the actual view name for placeholder
 ################################################################################
 #### End of Oracle Performance View (28000, 30000]
 ################################################################################
-
-################################### 占位须知 ###################################
-# 占位示例: 顶格写注释，说明要占用哪个TABLE_ID，对应的名字是什么
+################################### Placeholder Notice ###################################
+# Placeholder example: Write comments at the beginning of the line to indicate which TABLE_ID is to be occupied and what the corresponding name is
 # TABLE_ID: TABLE_NAME
 #
-# FARM 会基于占位校验开发分支TABLE_ID和TABLE_NAME是否匹配，如果不匹配，FARM就会拦截报错
+# FARM will base the placeholder validation development branch TABLE_ID and TABLE_NAME matching check, if they do not match, FARM will intercept and report an error
 #
-# 注意：
-# 0. 在‘余留位置’之前占位
-# 1. 始终先在master占位，保证master分支是其他所有分支的超集，避免NAME和ID冲突
-# 2. master占位之后，开发分支上不要变更NAME，否则FARM会认为ID占位冲突，如果有这种场景，需要先修改master占位
-# 3. 默认建议采用准确的TABLE_NAME进行占位，TABLE_ID和TABLE_NAME在系统内部是一一对应的
-# 4. 部分表是基于其他基表的schema定义的(例如：gen_xx_table_def())，其真实表名比较复杂，为了方便占位，建议采用基表表名进行占位
-#    - 示例1：def_table_schema(**gen_mysql_sys_agent_virtual_table_def('12393', all_def_keywords['__all_virtual_long_ops_status']))
-#      * 基表表名占位：# 12393: __all_virtual_long_ops_status
-#      * 真实表名占位：# 12393: __all_virtual_virtual_long_ops_status_mysql_sys_agent
-#    - 示例2：def_table_schema(**no_direct_access(gen_oracle_mapping_virtual_table_def('15009', all_def_keywords['__all_virtual_sql_audit'])))
-#      * 基表表名占位：# 15009: __all_virtual_sql_audit
-#      * 真实表名占位：# 15009: ALL_VIRTUAL_SQL_AUDIT
-#    - 示例3：def_table_schema(**gen_sys_agent_virtual_table_def('15111', all_def_keywords['__all_routine_param']))
-#      * 基表表名占位：# 15111: __all_routine_param
-#      * 真实表名占位：# 15111: ALL_VIRTUAL_ROUTINE_PARAM_SYS_AGENT
-# 5. 索引表占位要求TABLE_NAME采用以下方式：基表（数据表）表名、索引名(index_name)、真实的索引表表名
-#    例如：100001 索引表占位方式可以为：
+# Note:
+# 0. Placeholder before 'reserved position'
+# 1. Always start by occupying the master, ensuring the master branch is a superset of all other branches, to avoid NAME and ID conflicts
+# 2. After the master placeholder is set, do not change NAME on the development branch, otherwise FARM will consider it an ID placeholder conflict. If this scenario occurs, you need to modify the master placeholder first
+# 3. It is recommended to use the accurate TABLE_NAME for placeholder, TABLE_ID and TABLE_NAME are one-to-one corresponding within the system
+# 4. Some tables are defined based on the schema of other base tables (e.g., gen_xx_table_def()), their actual table names are relatively complex, to facilitate placeholder usage, it is recommended to use the base table name for placeholders
+#    - Example 1: def_table_schema(**gen_mysql_sys_agent_virtual_table_def('12393', all_def_keywords['__all_virtual_long_ops_status']))
+#      * Base table name placeholder: # 12393: __all_virtual_long_ops_status
+#      * Real table name placeholder: # 12393: __all_virtual_virtual_long_ops_status_mysql_sys_agent
+#    - Example 2: def_table_schema(**no_direct_access(gen_oracle_mapping_virtual_table_def('15009', all_def_keywords['__all_virtual_sql_audit'])))
+#      * Base table name placeholder: # 15009: __all_virtual_sql_audit
+#      * Real table name placeholder: # 15009: ALL_VIRTUAL_SQL_AUDIT
+#    - Example 3: def_table_schema(**gen_sys_agent_virtual_table_def('15111', all_def_keywords['__all_routine_param']))
+#      * Base table name placeholder: # 15111: __all_routine_param
+#      * Real table name placeholder: # 15111: ALL_VIRTUAL_ROUTINE_PARAM_SYS_AGENT
+# 5. Index table placeholder requirements TABLE_NAME should be used as follows: base table (data table) name, index name (index_name), actual index table name
+#    For example: 100001 The placeholder method for the index table can be:
 #       * # 100001: __idx_3_idx_data_table_id
 #       * # 100001: idx_data_table_id
 #       * # 100001: __all_table
@@ -40892,38 +40880,36 @@ def_sys_index_table(
   index_using_type = 'USING_BTREE',
   index_type = 'INDEX_TYPE_NORMAL_LOCAL',
   keywords = all_def_keywords['__all_ccl_rule'])
-
-# 余留位置（此行之前占位）
-# 索引表占位建议：基于基表（数据表）表名来占位，其他方式包括：索引名（index_name）、索引表表名
+# Reserved position (placeholder before this line)
+# Index table placeholder suggestion: based on the base table (data table) name for placeholder, other methods include: index name (index_name), index table name
 ################################################################################
 # End of Sys table Index (100000, 200000)
 #     Index for core table (100000, 101000)
 #     Index for other sys table (101000, 200000)
 ################################################################################
-
-################################### 占位须知 ###################################
-# 占位示例: 顶格写注释，说明要占用哪个TABLE_ID，对应的名字是什么
+################################### Placeholder Notice ###################################
+# Placeholder example: Write the comment at the beginning of the line, indicating which TABLE_ID to occupy and the corresponding name
 # TABLE_ID: TABLE_NAME
 #
-# FARM 会基于占位校验开发分支TABLE_ID和TABLE_NAME是否匹配，如果不匹配，FARM就会拦截报错
+# FARM will base the placeholder validation development branch TABLE_ID and TABLE_NAME matching check, if they do not match, FARM will intercept and report an error
 #
-# 注意：
-# 0. 在‘余留位置’之前占位
-# 1. 始终先在master占位，保证master分支是其他所有分支的超集，避免NAME和ID冲突
-# 2. master占位之后，开发分支上不要变更NAME，否则FARM会认为ID占位冲突，如果有这种场景，需要先修改master占位
-# 3. 默认建议采用准确的TABLE_NAME进行占位，TABLE_ID和TABLE_NAME在系统内部是一一对应的
-# 4. 部分表是基于其他基表的schema定义的(例如：gen_xx_table_def())，其真实表名比较复杂，为了方便占位，建议采用基表表名进行占位
-#    - 示例1：def_table_schema(**gen_mysql_sys_agent_virtual_table_def('12393', all_def_keywords['__all_virtual_long_ops_status']))
-#      * 基表表名占位：# 12393: __all_virtual_long_ops_status
-#      * 真实表名占位：# 12393: __all_virtual_virtual_long_ops_status_mysql_sys_agent
-#    - 示例2：def_table_schema(**no_direct_access(gen_oracle_mapping_virtual_table_def('15009', all_def_keywords['__all_virtual_sql_audit'])))
-#      * 基表表名占位：# 15009: __all_virtual_sql_audit
-#      * 真实表名占位：# 15009: ALL_VIRTUAL_SQL_AUDIT
-#    - 示例3：def_table_schema(**gen_sys_agent_virtual_table_def('15111', all_def_keywords['__all_routine_param']))
-#      * 基表表名占位：# 15111: __all_routine_param
-#      * 真实表名占位：# 15111: ALL_VIRTUAL_ROUTINE_PARAM_SYS_AGENT
-# 5. 索引表占位要求TABLE_NAME采用以下方式：基表（数据表）表名、索引名(index_name)、真实的索引表表名
-#    例如：100001 索引表占位方式可以为：
+# Note:
+# 0. Placeholder before 'reserved position'
+# 1. Always start by reserving the master, ensuring the master branch is a superset of all other branches to avoid NAME and ID conflicts
+# 2. After the master placeholder is set, do not change NAME on the development branch, otherwise FARM will consider it an ID placeholder conflict. If this scenario occurs, you need to modify the master placeholder first
+# 3. It is recommended to use the accurate TABLE_NAME for placeholder, TABLE_ID and TABLE_NAME are one-to-one corresponding within the system
+# 4. Some tables are defined based on the schema of other base tables (e.g., gen_xx_table_def()), their actual table names are relatively complex, to facilitate placeholder usage, it is recommended to use the base table name for placeholders
+#    - Example 1: def_table_schema(**gen_mysql_sys_agent_virtual_table_def('12393', all_def_keywords['__all_virtual_long_ops_status']))
+#      * Base table name placeholder: # 12393: __all_virtual_long_ops_status
+#      * Real table name placeholder: # 12393: __all_virtual_virtual_long_ops_status_mysql_sys_agent
+#    - Example 2: def_table_schema(**no_direct_access(gen_oracle_mapping_virtual_table_def('15009', all_def_keywords['__all_virtual_sql_audit'])))
+#      * Base table name placeholder: # 15009: __all_virtual_sql_audit
+#      * Real table name placeholder: # 15009: ALL_VIRTUAL_SQL_AUDIT
+#    - Example 3: def_table_schema(**gen_sys_agent_virtual_table_def('15111', all_def_keywords['__all_routine_param']))
+#      * Base table name placeholder: # 15111: __all_routine_param
+#      * Real table name placeholder: # 15111: ALL_VIRTUAL_ROUTINE_PARAM_SYS_AGENT
+# 5. Index table placeholder requirements TABLE_NAME should be used as follows: base table (data table) name, index name (index_name), actual index table name
+#    For example: 100001 The placeholder method for the index table can be:
 #       * # 100001: __idx_3_idx_data_table_id
 #       * # 100001: idx_data_table_id
 #       * # 100001: __all_table

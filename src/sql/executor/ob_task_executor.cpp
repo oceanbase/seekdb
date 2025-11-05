@@ -67,7 +67,7 @@ int ObTaskExecutor::build_task_op_input(ObExecContext &query_ctx,
 int ObTaskExecutor::should_skip_failed_tasks(ObTaskInfo &task_info, bool &skip_failed_tasks) const
 {
   int ret = OB_SUCCESS;
-  // 目前的情况下，当该task只涉及到虚拟表的时候，则跳过失败的那些task
+  // In the current situation, when the task only involves virtual tables, skip the failed tasks
   skip_failed_tasks = false;
   ObOpSpec *root_spec = task_info.get_root_spec();
 

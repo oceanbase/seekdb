@@ -24,9 +24,8 @@ namespace oceanbase
 {
 namespace common
 {
-
-// 我们目前的字符集实现参考MySQL，现在MySQL源码，进入strings目录，
-// 根据文件名后缀可以大体找到对应编码实现
+// Our current character set implementation references MySQL, now enter the strings directory in the MySQL source code,
+// According to the file name suffix, you can roughly find the corresponding encoding implementation
 
 enum ObCharsetType
 {
@@ -61,11 +60,11 @@ enum ObCharsetType
 };
 
 /*
-*AGGREGATE_2CHARSET[CHARSET_UTF8MB4][CHARSET_GBK]=1表示结果为第一个参数CHARSET_UTF8MB4
-*AGGREGATE_2CHARSET[CHARSET_GBK][CHARSET_UTF8MB4]=2表示结果为第二个参数CHARSET_UTF8MB4
-*矩阵中只对当前需要考虑的情况填值1&2,其余补0
-*return value means idx of the resule type， 0 means OB_CANT_AGGREGATE_2COLLATIONS
-*there is no possibly to reach AGGREGATE_2CHARSET[CHARSET_UTF8MB4][CHARSET_UTF8MB4] and so on
+*AGGREGATE_2CHARSET[CHARSET_UTF8MB4][CHARSET_GBK]=1 indicates that the result is the first parameter CHARSET_UTF8MB4
+*AGGREGATE_2CHARSET[CHARSET_GBK][CHARSET_UTF8MB4]=2 indicates that the result is the second parameter CHARSET_UTF8MB4
+*Only fill values 1&2 in the matrix for the cases that need to be considered, and fill 0 for the rest
+*return value means idx of the result type, 0 means OB_CANT_AGGREGATE_2COLLATIONS
+*there is no possibility to reach AGGREGATE_2CHARSET[CHARSET_UTF8MB4][CHARSET_UTF8MB4] and so on
 */
 static const int AGGREGATE_2CHARSET[CHARSET_MAX][CHARSET_MAX] = {
 //CHARSET_INVALID,CHARSET_BINARY,CHARSET_UTF8MB4...
@@ -146,7 +145,7 @@ enum ObCollationType
   CS_TYPE_CP932_BIN = 96,
   CS_TYPE_EUCJPMS_JAPANESE_CI = 97,
   CS_TYPE_EUCJPMS_BIN = 98,
-  CS_TYPE_COLLATION_FREE = 100, // mysql中间没有使用这个
+  CS_TYPE_COLLATION_FREE = 100, // mysql does not use this in the middle
   CS_TYPE_UTF16_UNICODE_CI = 101,
   CS_TYPE_UTF16_ICELANDIC_UCA_CI = 102,
   CS_TYPE_UTF16_LATVIAN_UCA_CI = 103,
@@ -349,8 +348,7 @@ enum ObCollationType
   CS_TYPE_SWE7_ZH3_0900_AS_CS, // invalid
   CS_TYPE_MAX
 };
-
-// oracle 模式下字符集名称对应的 ID 值
+// oracle mode character set name corresponding ID value
 // https://docs.oracle.com/cd/B19306_01/server.102/b14200/functions095.htm
 enum ObNlsCharsetId
 {
@@ -446,7 +444,7 @@ public:
   static const int32_t MIN_MB_LEN = 1;
 
   static const int32_t MAX_CASE_MULTIPLY = 4;
-  //比如latin1 1byte ,utf8mb4 4byte,转换因子为4，也可以理解为最多使用4字节存储一个字符
+  // For example, latin1 1 byte, utf8mb4 4 bytes, the conversion factor is 4, which can also be understood as using up to 4 bytes to store one character
   static const int32_t CharConvertFactorNum = 4;
   static const int64_t VALID_CHARSET_TYPES = 24;
   static const int64_t VALID_COLLATION_TYPES = 167;
@@ -735,7 +733,7 @@ public:
 
   static int get_aggregate_len_unit(const ObCollationType collation_type, bool &len_in_byte);
 
-  // 实现不同字符集之间的转换
+  // Implement conversion between different character sets
   static int charset_convert(const ObCollationType from_type,
                              const char *from_str,
                              const uint32_t from_len,

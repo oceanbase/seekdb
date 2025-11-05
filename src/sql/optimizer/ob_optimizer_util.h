@@ -255,9 +255,9 @@ public:
 
   /**
    * @brief find_item
-   * 基于指针比较两个表达式是否相同。通常应用在以下两个场景中：
-   * 1. 表达式生成过程。判断一个表达式是否在下层已经生成了
-   * 2. 比较 column, aggregation, query ref, winfunc 等表达式
+   * Based on pointer comparison to determine if two expressions are the same. It is typically applied in the following two scenarios:
+   * 1. Expression generation process. Determine if an expression has already been generated at a lower level
+   * 2. Compare column, aggregation, query ref, winfunc, etc., expressions
    * @param items
    * @param item
    * @param idx
@@ -296,9 +296,9 @@ public:
                         const ObIArray<T> &second);
   /**
    * @brief find_equal_expr
-   * 基于语义比较两个表达式是否相同。
-   * 先比较指针，后比较表达式结构，最后尝试利用 equal sets
-   * 主要引用在改写或者计划生成中，判断一个谓词，一个排序/分组表达式是否重复
+   * Semantically compare whether two expressions are the same.
+   * First compare pointers, then compare expression structures, and finally try to use equal sets.
+   * Mainly referenced in rewriting or plan generation to determine if a predicate, a sort/grouping expression is duplicated
    * @param exprs
    * @param expr
    * @return
@@ -458,14 +458,14 @@ public:
                            bool &is_const);
 
 
-  /** @brief 获取T_OP_ROW IN T_OP_ROW中对query_range范围产生影响的column
-   *  最小的column_idx最为整体filter的column_idx，决定是否是前缀索引
-   *  @param [in] column_ids 索引列 + primary key
-   *  @param [in] index_col_pos 索引列在range_columns中最大的pos
-   *  @param [in] table_id 访问表在stmt中的table_id
+  /** @brief Get the smallest column_idx in T_OP_ROW that affects the query_range range as the column_idx for the overall filter, determining if it is a prefix index
+   *  The smallest column_idx affecting the query_range range is considered the column_idx for the overall filter, deciding whether it is a prefix index
+   *  @param [in] column_ids Index columns + primary key
+   *  @param [in] index_col_pos The maximum pos of index columns in range_columns
+   *  @param [in] table_id The table_id of the accessed table in stmt
    *  @param [in] l_expr, r_expr T_OP_ROW
-   *  @param [in/out] col_idxs记录影响query range的column
-   *  @param [out] is_table_filter 是否包含不在range columns中的列
+   *  @param [in/out] col_idxs Records columns affecting the query range
+   *  @param [out] is_table_filter Whether it includes columns not in the range columns
    */
   static int extract_row_col_idx_for_in(const common::ObIArray<uint64_t> &column_ids,
                                         const int64_t index_col_pos,
@@ -475,15 +475,14 @@ public:
                                         common::ObBitSet<> &col_idxs,
                                         int64_t &min_col_idx,
                                         bool &is_table_filter);
-
-  ///@brief 获取T_OP_ROW cmp T_OP_ROW中对query_range range范围产生影响的的column
-  ///最小的column_idx最为整体filter的column_idx，决定是否是前缀索引
-  ///@param [in] column_ids 索引列 + primary key
-  ///@param [in] index_col_pos 索引列在range_columns中最大的pos
-  ///@param [in] table_id 访问表在stmt中的table_id
+  ///@brief Get the column in T_OP_ROW cmp T_OP_ROW that affects the query_range range
+  /// The smallest column_idx serves as the column_idx for the overall filter, determining whether it is a prefix index
+  ///@param [in] column_ids index columns + primary key
+  ///@param [in] index_col_pos the maximum pos of the index column in range_columns
+  ///@param [in] table_id access table's table_id in stmt
   ///@param [in] l_expr, r_expr T_OP_ROW
-  ///@param [in/out] col_idxs记录影响query range的column
-  ///@param [out] is_table_filter 是否包含不在range columns中的列
+  ///@param [in/out] col_idxs records the columns that affect the query range
+  ///@param [out] is_table_filter whether it includes columns not in range columns
   static int extract_row_col_idx(const common::ObIArray<uint64_t> &column_ids,
                                  const int64_t index_col_pos,
                                  const uint64_t table_id,
@@ -492,10 +491,9 @@ public:
                                  common::ObBitSet<> &col_idxs,
                                  int64_t &min_col_idx,
                                  bool &is_table_filter);
-
-  ///@brief 获取filter中包含的column在column_ids中的column_idx.
-  ///负值的column_idx意义见类ColCntType
-  //@is_org_filter 输入的expr是否是原始的filter,而不是递归的expr
+  ///@brief Get the column_idx of the column included in filter from column_ids.
+  ///Negative column_idx meaning see class ColCntType
+  //@is_org_filter Is the input expr an original filter, not a recursive expr
   static int extract_column_idx(const common::ObIArray<uint64_t> &column_ids,
                                 const int64_t index_col_pos,
                                 const uint64_t table_id,
@@ -586,7 +584,7 @@ public:
   /*
    * @param [in] fd_item
    * @param [in] equal_sets
-   * @param [in/out] exprs, 分离 exprs 中包含在 fd_item child exprs 中的 expr 到 child_exprs 中
+   * @param [in/out] exprs, separate exprs that are included in fd_item child exprs to child_exprs
    * @param [in/out] child_exprs
    * */
   static int split_child_exprs(const ObFdItem *fd_item,
@@ -728,8 +726,8 @@ public:
 
   /**
      * @brief get_type_safe_join_exprs
-     * 解析 join_quals，将等值连接条件分解成 left exprs 和 right exprs
-     * 并且保证这些 exprs 在判断连接条件的时候不会有类型转换
+     * Parse join_quals, decompose equality join conditions into left exprs and right exprs
+     * and ensure that these exprs do not have type conversion when evaluating join conditions
      * @return
      */
   static int get_type_safe_join_exprs(const ObIArray<ObRawExpr *> &join_quals,
@@ -741,9 +739,9 @@ public:
                                       ObIArray<ObRawExpr *> &all_right_exprs);
   /**
    *  @brief split_or_qual_on_table
-   *  从or谓词中分离出属于特定table的谓词并生成一个新的谓词
-   *  要求or谓词的每一个子谓词中都有属于该table的谓词
-   *  @param new_expr 新生成的谓词，值为NULL表示无法从or谓词中分离属于table的谓词
+   *  Split predicates from the OR clause that belong to a specific table and generate a new predicate
+   *  Each sub-predicate in the OR clause must contain a predicate belonging to the table
+   *  @param new_expr The newly generated predicate, value of NULL indicates that predicates belonging to the table cannot be separated from the OR clause
    */
   static int split_or_qual_on_table(const ObDMLStmt *stmt,
                                     ObRawExprFactory &expr_factory,
@@ -795,13 +793,13 @@ public:
                                       ObIArray<ObRawExpr *> &output_exprs);
 
   /*
-   * 以下函数主要用于把subplan scan中内层继承上来的属性(e.g.,ordering,unique set,partition key)转换成外层可以识别的属性
-   * 例子: select * from (select * from t1 where t1.a = t1.b order by t1.a) t2 order by t2.a, t2.b;
-   * 内层ordering t1.a转换成外层可以识别的t2.a
-   * 内存的equal set t1.a = t1.b转换成外层可以识别的t2.a = t2.b
+   * The following function is mainly used to convert attributes (e.g., ordering, unique set, partition key) inherited from the inner subplan scan into attributes recognizable by the outer layer
+   * Example: select * from (select * from t1 where t1.a = t1.b order by t1.a) t2 order by t2.a, t2.b;
+   * Inner ordering t1.a is converted into t2.a recognizable by the outer layer
+   * Inner equal set t1.a = t1.b is converted into t2.a = t2.b recognizable by the outer layer
    *
-   * skip_invalid: true represents ignoring these that can not be converted(i.e., equal sets),
-   * otherwise should return empty output exprs if some input expr can not be converted (i.e., unique sets)
+   * skip_invalid: true represents ignoring those that cannot be converted (i.e., equal sets),
+   * otherwise should return empty output exprs if some input expr cannot be converted (i.e., unique sets)
    */
   static int convert_subplan_scan_expr(ObRawExprFactory &expr_factory,
                                        const EqualSets &equal_sets,
@@ -866,10 +864,10 @@ public:
                                             const int64_t check_scope,
                                             int64_t &match_info);
   /**
-   * 用来判断group by是否匹配序的前缀
-   * @ordering 待匹配的序
-   * @match_prefix_count 匹配序前缀长度
-   * @sort_match 是否是有效的匹配
+   * Used to determine if group by matches the prefix of the order
+   * @ordering Order to be matched
+   * @match_prefix_count Length of the matching order prefix
+   * @sort_match Whether it is a valid match
    */
   static int is_group_by_match(const ObIArray<OrderItem> &ordering,
                                const ObSelectStmt *select_stmt,
@@ -885,10 +883,10 @@ public:
                                bool &sort_match);
 
   /**
-   * 判断win func的partition以及orderby是否匹配序的前缀
-   * @ordering 待匹配的序
-   * @match_prefix_count 匹配序前缀长度
-   * @sort_match 是否是有效的匹配
+   * Determine if the partition and orderby of win func match the prefix of the order
+   * @ordering Order to be matched
+   * @match_prefix_count Length of the matched order prefix
+   * @sort_match Whether it is a valid match
    */
   static int is_winfunc_match(const ObIArray<OrderItem> &ordering,
                               const ObSelectStmt *select_stmt,
@@ -924,10 +922,10 @@ public:
                                           bool check_direction = true);
 
   /**
-   * 用来判断distinct的列或set的列是否匹配序前缀
-   * @ordering 待匹配的序
-   * @match_prefix_count 匹配序前缀长度
-   * @sort_match 是否是有效的匹配
+   * Used to determine if the distinct columns or set columns match the order prefix
+   * @ordering The order to be matched
+   * @match_prefix_count Length of the matching order prefix
+   * @sort_match Whether it is a valid match
    */
   static int is_set_or_distinct_match(const ObIArray<ObRawExpr*> &keys,
                                       const ObSelectStmt *select_stmt,
@@ -951,10 +949,10 @@ public:
                           bool &sort_match);
 
   /**
-   * 用来判断order by的列能否匹配序的前缀
-   * @ordering 待匹配的序
-   * @match_prefix_count 匹配序前缀长度
-   * @sort_match 是否是有效的匹配
+   * Used to determine if the columns in order by can match the prefix of the ordering
+   * @ordering The ordering to be matched
+   * @match_prefix_count Length of the matching prefix of the ordering
+   * @sort_match Whether it is a valid match
    */
   static int is_order_by_match(const ObIArray<OrderItem> &ordering,
                                const ObDMLStmt *stmt,
@@ -1043,12 +1041,12 @@ public:
 
   /**
     * @brief pushdown_filter_into_subquery
-    * 条件下推到subquery内部，如果不能下推到subquery的where
-    * 返回不能下推
-    * @param pushdown_quals 参数化后待下推的谓词
-    * @param candi_filters 能够下推的谓词
-    * @param remain_filters 未成功下推的谓词
-    * @param can_pushdown 能够下推谓词
+    * Push down conditions into subquery, if they cannot be pushed to the subquery's where
+    * return cannot push down
+    * @param pushdown_quals Parameterized predicates to be pushed down
+    * @param candi_filters Predicates that can be pushed down
+    * @param remain_filters Predicates that failed to be pushed down
+    * @param can_pushdown Predicates that can be pushed down
     */
   static int pushdown_filter_into_subquery(const ObDMLStmt &parent_stmt,
                                            const ObSelectStmt &subquery,
@@ -1061,11 +1059,11 @@ public:
 
   /**
     * @brief check_pushdown_filter
-    * 检查哪些谓词可以下推到子查询的where
-    * 谓词需要下推过win func和group by
-    * @param pushdown_filters 待下推的谓词
-    * @param candi_filters 能够下推的谓词
-    * @param remain_filters 未成功下推的谓词
+    * Check which predicates can be pushed down to the subquery's where
+    * Predicates need to be pushed through win func and group by
+    * @param pushdown_filters predicates to be pushed down
+    * @param candi_filters predicates that can be pushed down
+    * @param remain_filters predicates that failed to be pushed down
     */
   static int check_pushdown_filter(const ObDMLStmt &parent_stmt,
                                    const ObSelectStmt &subquery,
@@ -1086,12 +1084,12 @@ public:
 
   /**
     * @brief check_pushdown_filter_for_set
-    * 检查哪些谓词可以下推到子查询的where
-    * 谓词需要下推过win func和group by
-    * 如果parent stmt是set stmt，需要调用此函数
-    * @param pushdown_filters 待下推的谓词
-    * @param candi_filters 能够下推的谓词
-    * @param remain_filters 未成功下推的谓词
+    * Check which predicates can be pushed down to the subquery's where
+    * Predicates need to be pushed through win func and group by
+    * If parent stmt is set stmt, this function needs to be called
+    * @param pushdown_filters predicates to be pushed down
+    * @param candi_filters predicates that can be pushed down
+    * @param remain_filters predicates that failed to be pushed down
     */
   static int check_pushdown_filter_for_set(const ObSelectStmt &parent_stmt,
                                            const ObSelectStmt &subquery,
@@ -1111,9 +1109,9 @@ public:
 
   /**
     * @brief get_groupby_win_func_common_exprs
-    * 获取group exprs与win func partition by exprs的交集
-    * @param common_exprs 交集表达式集合
-    * @param is_valid 是否有group 或 win func
+    * Get the intersection of group exprs and win func partition by exprs
+    * @param common_exprs Intersection expression set
+    * @param is_valid Whether there is group or win func
     */
   static int get_groupby_win_func_common_exprs(const ObSelectStmt &subquery,
                                               ObIArray<ObRawExpr*> &common_exprs,
@@ -1144,10 +1142,10 @@ public:
 
   /**
     * @brief get_set_op_remain_filter
-    * 收集set stmt左右子查询下推谓词后剩余在当前stmt的谓词
-    * @param child_pushdown_preds 单个子查询未下推的谓词
-    * @param output_pushdown_preds 剩余在set stmt中的谓词
-    * @param first_child 第一个分支
+    * Collect predicates remaining in the current stmt after pushing down predicates from the left and right subqueries of the set stmt
+    * @param child_pushdown_preds Predicates not pushed down from a single subquery
+    * @param output_pushdown_preds Predicates remaining in the set stmt
+    * @param first_child First branch
     */
   static int get_set_op_remain_filter(const ObSelectStmt &stmt,
                                       const ObIArray<ObRawExpr *> &child_pushdown_preds,

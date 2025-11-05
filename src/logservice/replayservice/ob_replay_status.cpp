@@ -38,7 +38,7 @@ ObReplayServiceTask::~ObReplayServiceTask()
 
 void ObReplayServiceTask::reset()
 {
-  //考虑到reuse需求, lease不能重置, 否则可能出现同一个任务被push多次
+  //Considering the reuse requirement, lease cannot be reset, otherwise the same task may be pushed multiple times
   enqueue_ts_ = 0;
   err_info_.reset();
 }
@@ -108,7 +108,7 @@ int ObReplayServiceSubmitTask::init(const palf::LSN &base_lsn,
     base_scn_ = base_scn;
     type_ = ObReplayServiceTaskType::SUBMIT_LOG_TASK;
     if (OB_SUCCESS != (tmp_ret = iterator_.next())) {
-      // 在没有写入的情况下有可能已经到达边界
+      // It is possible to reach the boundary without writing
       CLOG_LOG(WARN, "iterator next failed", K(iterator_), K(tmp_ret));
     }
     CLOG_LOG(INFO, "submit log task init success", K(type_), K(next_to_submit_lsn_),
@@ -130,7 +130,7 @@ void ObReplayServiceSubmitTask::reset()
 void ObReplayServiceSubmitTask::destroy()
 {
   reset();
-  //iterator不支持reset语义,不能在后续可能重用的接口中调用destroy接口
+  //iterator does not support reset semantics, cannot call destroy interface in interfaces that may be reused later
   iterator_.destroy();
   ObReplayServiceTask::destroy();
 }
@@ -178,16 +178,15 @@ int ObReplayServiceSubmitTask::get_base_scn_(SCN &scn) const
 bool ObReplayServiceSubmitTask::has_remained_submit_log(const SCN &replayable_point,
                                                         bool &iterate_end_by_replayable_point)
 {
-  // next接口只在submit任务中单线程调用,和reset接口通过replay status的大锁互斥
-  // 故此处不需要submit task锁保护
+  // next interface is only called in the submit task in a single thread, and the reset interface is mutually exclusive with it through the big lock of replay status
+  // Therefore, there is no need for submit task lock protection here
   if (false == iterator_.is_valid()) {
     // maybe new logs is written after last check
     next_log(replayable_point, iterate_end_by_replayable_point);
   }
   return iterator_.is_valid();
 }
-
-//只有padding日志的场景才能调用此接口
+//Only the scenario with padding logs can call this interface
 
 int ObReplayServiceSubmitTask::update_submit_log_meta_info(const LSN &lsn,
                                                            const SCN &scn)
@@ -339,7 +338,7 @@ void ObReplayServiceReplayTask::reset()
     while (NULL != (top_item = pop_()))
     {
       ObLogReplayTask *replay_task = static_cast<ObLogReplayTask *>(top_item);
-      //此处一定只能让引用计数归零的任务释放log_buff
+      //This task that reduces the reference count to zero must release log_buff
       if (replay_task->is_pre_barrier_) {
         ObLogReplayBuffer *replay_buf = static_cast<ObLogReplayBuffer *>(replay_task->read_log_buf_);
         if (NULL == replay_buf) {
@@ -623,13 +622,13 @@ int ObReplayStatus::init(const share::ObLSID &id,
 void ObReplayStatus::destroy()
 {
   int ret = OB_SUCCESS;
-  //注意: 虽然replay status的引用计数已归0, 但此时fs_cb_依然可能访问replay status，需要先调用unregister_file_size_cb
+  // Note: Although the reference count of replay status has been set to 0, fs_cb_ may still access replay status at this time, so unregister_file_size_cb must be called first
   if (OB_FAIL(palf_handle_.unregister_file_size_cb())) {
     CLOG_LOG(ERROR, "failed to unregister cb", K(ret));
   }
   WLockGuard wlock_guard(rwlock_);
   CLOG_LOG(INFO, "destuct replay status", KPC(this));
-  // 析构前必须是disable状态
+  // Must be in disable state before destruction
   if (is_enabled_) {
     CLOG_LOG(ERROR, "is_enable when destucting", K(this));
   } else {
@@ -656,8 +655,7 @@ void ObReplayStatus::destroy()
     rp_sv_ = NULL;
   }
 }
-
-//不可重入,如果失败需要外部手动disable
+//Non-reentrant, if failed needs to be manually disabled externally
 int ObReplayStatus::enable(const LSN &base_lsn, const SCN &base_scn)
 {
   int ret = OB_SUCCESS;
@@ -674,16 +672,15 @@ int ObReplayStatus::enable(const LSN &base_lsn, const SCN &base_scn)
   }
   return ret;
 }
-
-// 提交当前的submit_log_task并注册回调
+// submit the current submit_log_task and register callback
 int ObReplayStatus::enable_(const LSN &base_lsn, const SCN &base_scn)
 {
   int ret = OB_SUCCESS;
-  // 处理submit_task需要先设置enable状态
+  // Processing submit_task requires setting the enable state first
   is_enabled_ = true;
   is_submit_blocked_ = false;
   if (0 != pending_task_count_) {
-    //针对reuse场景的防御检查
+    //Defense check for reuse scenario
     ret = OB_ERR_UNEXPECTED;
     CLOG_LOG(WARN, "remain pending task when enable replay status", K(ret), KPC(this));
   } else if (OB_FAIL(submit_log_task_.init(base_lsn, base_scn, ls_id_, this))) {
@@ -708,8 +705,7 @@ int ObReplayStatus::enable_(const LSN &base_lsn, const SCN &base_scn)
   }
   return ret;
 }
-
-//可以重入
+//Reentrant
 int ObReplayStatus::disable()
 {
   int ret = OB_SUCCESS;
@@ -869,7 +865,7 @@ int ObReplayStatus::is_replay_done(const LSN &end_lsn,
       CLOG_LOG(ERROR, "min_unreplayed_lsn invalid", K(this), K(ret), K(end_lsn));
     } else {
       is_done = min_unreplayed_lsn >= end_lsn;
-      //TODO: @keqing.llt 限流改为类内
+      //TODO: @keqing.llt Change rate limiting to within the class
       if (REACH_TIME_INTERVAL(10 * 1000 * 1000)) {
         if (is_done) {
           CLOG_LOG(INFO, "log stream finished replay", K(ls_id_), K(min_unreplayed_lsn), K(end_lsn));
@@ -987,7 +983,7 @@ int ObReplayStatus::get_min_unreplayed_log_info(LSN &lsn,
   } else if (OB_FAIL(submit_log_task_.get_base_scn(base_scn))) {
     CLOG_LOG(ERROR, "get_base_scn failed", K(ret));
   } else if (scn <= base_scn) {
-    //拉到的日志尚未超过过滤点
+    //The fetched logs have not exceeded the filter point
     scn = base_scn;
     if (palf_reach_time_interval(5 * 1000 * 1000, get_log_info_debug_time_)) {
       CLOG_LOG(INFO, "get_min_unreplayed_log_info in skip state", K(lsn), K(scn), KPC(this));
@@ -1077,10 +1073,10 @@ int ObReplayStatus::push_log_replay_task(ObLogReplayTask &task)
     ret = OB_NOT_INIT;
     CLOG_LOG(ERROR, "replay service is NULL", K(task), K(ret));
   } else if (task.is_pre_barrier_) {
-    //广播到所有队列, 分配多份内存时如果失败需要全部释放
+    //Broadcast to all queues, if memory allocation fails when allocating multiple memory blocks, all need to be released
     const int64_t task_size = sizeof(ObLogReplayTask);
     common::ObSEArray<ObLogReplayTask*, REPLAY_TASK_QUEUE_SIZE> broadcast_task_array;
-    //入参任务本身占用一个槽位
+    //The input parameter task itself occupies one slot
     broadcast_task_array.push_back(&task);
     for (int64_t i = 1; OB_SUCC(ret) && i < REPLAY_TASK_QUEUE_SIZE; ++i) {
       void *task_buf = NULL;
@@ -1110,7 +1106,7 @@ int ObReplayStatus::push_log_replay_task(ObLogReplayTask &task)
       for (index = 0; OB_SUCC(ret) && index < REPLAY_TASK_QUEUE_SIZE; ++index) {
         ObLogReplayTask *replay_task = broadcast_task_array[index];
         task_queues_[index].push(replay_task);
-        //失败后整体重试会导致此任务引用计数错乱, 必须原地重试
+        //Failure to retry as a whole will cause the reference count of this task to become inconsistent, must retry in place
         int retry_count = 0;
         while (OB_FAIL(submit_task_to_replay_service_(task_queues_[index]))) {
           //print interval 100ms
@@ -1137,8 +1133,7 @@ int ObReplayStatus::push_log_replay_task(ObLogReplayTask &task)
   }
   return ret;
 }
-
-//此接口不会失败
+//This interface will not fail
 int ObReplayStatus::batch_push_all_task_queue()
 {
   int ret = OB_SUCCESS;
@@ -1218,7 +1213,7 @@ int ObReplayStatus::check_submit_barrier()
     CLOG_LOG(ERROR, "replay status not inited", K(ret));
   } else {
     offset_t post_barrier_lsn_val = ATOMIC_LOAD(&post_barrier_lsn_.val_);
-    // 如果当前已经有后向barrier在队列中, 则需要此后向barrier日志回放完才能提交新任务
+    // If there is already a backward barrier in the queue, then the new task can only be submitted after the backward barrier log replay is complete
     if (LOG_INVALID_LSN_VAL == post_barrier_lsn_val) {
       ret = OB_SUCCESS;
     } else {
@@ -1227,8 +1222,7 @@ int ObReplayStatus::check_submit_barrier()
   }
   return ret;
 }
-
-//前向barrier日志只有引用计数减为0的线程需要回放
+// Forward barrier log is only replayed by the thread that reduces the reference count to 0
 int ObReplayStatus::check_replay_barrier(ObLogReplayTask *replay_task,
                                          ObLogReplayBuffer *&replay_log_buf,
                                          bool &need_replay,
@@ -1254,10 +1248,10 @@ int ObReplayStatus::check_replay_barrier(ObLogReplayTask *replay_task,
     } else if (replay_queue_idx == calc_replay_queue_idx(replay_hint)
                && 1 != replay_log_buf->get_replay_ref()) {
       ret = OB_EAGAIN;
-      //某个事务内的前向barrier日志只能在此队列回放
+      //The forward barrier log within a certain transaction can only be replayed in this queue
       CLOG_LOG(TRACE, "skip dec pre barrier log ref", K(ret), K(replay_task), KPC(replay_task),
                K(nv), KPC(this));
-    //TODO(yaoying.yyy):重构下这里
+    //TODO(yaoying.yyy):Refactor this part
     } else if ((0 == (nv = replay_log_buf->dec_replay_ref()))) {
       if (replay_queue_idx != calc_replay_queue_idx(replay_hint)) {
         ret = OB_ERR_UNEXPECTED;
@@ -1373,7 +1367,7 @@ int ObReplayStatus::diagnose(ReplayDiagnoseInfo &diagnose_info)
   } else if (OB_FAIL(log_base_type_to_string(log_type, log_type_str, common::MAX_SERVICE_TYPE_BUF_LENGTH))) {
     CLOG_LOG(WARN, "log_base_type_to_string failed", K(ret), K(log_type));
   } else if (OB_SUCCESS != err_info_.err_ret_) {
-    // 发生过不可重试的错误, 此场景不需要诊断最小未回放位日志
+    // An unretriable error has occurred, this scenario does not require diagnosing the minimum un-replayed log position
     min_unreplayed_lsn = err_info_.lsn_;
     min_unreplayed_scn = err_info_.scn_;
     replay_hint = err_info_.replay_hint_;

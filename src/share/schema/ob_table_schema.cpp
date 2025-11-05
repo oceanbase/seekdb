@@ -6862,26 +6862,26 @@ OB_DEF_SERIALIZE(ObTableSchema)
   OB_UNIS_ENCODE(tmp_mlog_tid_);
   // !!! end static check
   /*
-   * 在此end static check注释前新增反序列化的成员
-   * 遵循以下规则：
-   * 1. 使用OB_UNIS_ENCODE等标准序列化宏进行序列化，目前已有序列化宏如下：
+   * Add deserialized members before this end static check comment
+   * Follow these rules:
+   * 1. Use standard serialization macros such as OB_UNIS_ENCODE for serialization, the currently available serialization macros are as follows:
    *  a. OB_UNIS_ENCODE
    *  b. OB_UNIS_ENCODE_IF
    *  c. OB_UNIS_ENCODE_ARRAY_POINTER_IF
    *  d. OB_UNIS_ENCODE_ARRAY_POINTER
    *  e. OB_UNIS_ENCODE_ARRAY
-   * 2. 不用添加if (OB_SUCC(ret))
-   * 3. 序列化宏与反序列化宏需要一一对应
-   * 4. 如果有无法使用标准序列化宏处理的成员，需要使用
+   * 2. Do not add if (OB_SUCC(ret))
+   * 3. Serialization macros need to correspond one-to-one with deserialization macros
+   * 4. If there are members that cannot be handled using standard serialization macros, use
    * ```cpp
    * // !!! FOR STATIC CHECKER BEGIN
    * // THE FOLLOWING CODE CANNOT BE DESCRIBED USING SERIALIZE MACROS. THEY ARE EQUIVALENT TO THESE CODES:
-   * // 这里写对应的标准序列化宏
-   * 这里写代码
+   * // Write the corresponding standard serialization macros here
+   * Write the code here
    * // !!! FOR STATIC CHECKER END
    * ```
-   * 格式的注释和代码提醒序列化检测脚本忽略该段代码
-   * 详细文档: 
+   * formatted comments and code to remind the serialization check script to ignore this section of code
+   * Detailed documentation:
    */
   return ret;
 }
@@ -7105,27 +7105,27 @@ OB_DEF_DESERIALIZE(ObTableSchema)
   OB_UNIS_DECODE(tmp_mlog_tid_);
   // !!! end static check
   /*
-   * 在此end static check注释前新增反序列化的成员
-   * 遵循以下规则：
-   * 1. 使用OB_UNIS_DECODE等标准序列化宏进行序列化，目前已有序列化宏如下，其中提供FUNC的宏可用于拷贝数据，例如将复制ObString：
+   * Add deserialized members before this end static check comment
+   * Follow these rules:
+   * 1. Use standard serialization macros such as OB_UNIS_DECODE for serialization. The currently available serialization macros are as follows, where macros that provide FUNC can be used to copy data, for example, copying ObString:
    *  a. OB_UNIS_DECODE_ARRAY
    *  b. OB_UNIS_DECODE_ARRAY_AND_FUNC
    *  c. OB_UNIS_DECODE_ARRAY_POINTER_IF
    *  d. OB_UNIS_DECODE_AND_FUNC
    *  e. OB_UNIS_DECODE_IF
    *  f. OB_UNIS_DECODE
-   * 2. 不用添加if (OB_SUCC(ret))
-   * 3. 序列化宏与反序列化宏需要一一对应
-   * 4. 如果有无法使用标准序列化宏处理的成员，需要使用
+   * 2. Do not add if (OB_SUCC(ret))
+   * 3. Serialization macros must correspond one-to-one with deserialization macros
+   * 4. If there are members that cannot be handled using standard serialization macros, use
    * ```cpp
    * // !!! FOR STATIC CHECKER BEGIN
    * // THE FOLLOWING CODE CANNOT BE DESCRIBED USING SERIALIZE MACROS. THEY ARE EQUIVALENT TO THESE CODES:
-   * // 这里写对应的标准序列化宏
-   * 这里写代码
+   * // Write the corresponding standard serialization macro here
+   * Write the code here
    * // !!! FOR STATIC CHECKER END
    * ```
-   * 格式的注释和代码提醒序列化检测脚本忽略该段代码
-   * 详细文档: 
+   * formatted comments and code to remind the serialization check script to ignore this segment of code
+   * Detailed documentation:
    */
   return ret;
 }
@@ -7248,25 +7248,25 @@ OB_DEF_SERIALIZE_SIZE(ObTableSchema)
   OB_UNIS_ADD_LEN(tmp_mlog_tid_);
   // !!! end static check
   /*
-   * 在此end static check注释前新增反序列化的成员
-   * 遵循以下规则：
-   * 1. 使用OB_UNIS_DECODE等标准序列化宏进行序列化，目前已有序列化宏如下：
+   * Add deserialized members before this end static check comment
+   * Follow these rules:
+   * 1. Use standard serialization macros such as OB_UNIS_DECODE for serialization, the current serialization macros are as follows:
    *  a. OB_UNIS_ADD_LEN_ARRAY
    *  b. OB_UNIS_ADD_LEN_ARRAY_POINTER_IF
    *  c. OB_UNIS_ADD_LEN_IF
    *  d. OB_UNIS_ADD_LEN
-   * 2. 不用添加if (OB_SUCC(ret))
-   * 3. 序列化宏与反序列化宏需要一一对应
-   * 4. 如果有无法使用标准序列化宏处理的成员，需要使用
+   * 2. Do not add if (OB_SUCC(ret))
+   * 3. Serialization macros need to correspond one-to-one with deserialization macros
+   * 4. If there are members that cannot be handled using standard serialization macros, use
    * ```cpp
    * // !!! FOR STATIC CHECKER BEGIN
    * // THE FOLLOWING CODE CANNOT BE DESCRIBED USING SERIALIZE MACROS. THEY ARE EQUIVALENT TO THESE CODES:
-   * // 这里写对应的标准序列化宏
-   * 这里写代码
+   * // Write the corresponding standard serialization macros here
+   * Write the code here
    * // !!! FOR STATIC CHECKER END
    * ```
-   * 格式的注释和代码提醒序列化检测脚本忽略该段代码
-   * 详细文档: 
+   * formatted comments and code to remind the serialization check script to ignore this section of code
+   * Detailed documentation:
    */
   return len;
 }

@@ -33,7 +33,7 @@ ObMultiTenantOperator::~ObMultiTenantOperator()
 void ObMultiTenantOperator::reset()
 {
   if (inited_) {
-    // 如果迭代未结束，释放残留的资源
+    // If the iteration is not finished, release the remaining resources
     int ret = OB_SUCCESS;
     if (tenant_ != nullptr) {
       {
@@ -43,7 +43,7 @@ void ObMultiTenantOperator::reset()
       tenant_->unlock();
     }
     if (OB_FAIL(ret)) {
-      // 无法处理资源释放不了的问题
+      // Unable to handle the issue of resource release failure
       abort();
     } else {
       tenant_ = nullptr;

@@ -30,7 +30,7 @@ ObVirtualSqlMonitorStatname::~ObVirtualSqlMonitorStatname()
 void ObVirtualSqlMonitorStatname::reset()
 {
   ObVirtualTableScannerIterator::reset();
-  stat_iter_ = 1; // 第一项是 MONITOR_STATNAME_BEGIN，跳过
+  stat_iter_ = 1; // The first item is MONITOR_STATNAME_BEGIN, skip
   for (int64_t i = 0; i  < OB_ROW_MAX_COLUMNS_COUNT; i++) {
     cells_[i].reset();
   }

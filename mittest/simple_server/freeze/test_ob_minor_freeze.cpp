@@ -495,12 +495,12 @@ TEST_F(ObMinorFreezeTest, observer_start)
 
 TEST_F(ObMinorFreezeTest, add_tenant)
 {
-  // 创建普通租户tt1
+  // Create normal tenant tt1
   ASSERT_EQ(OB_SUCCESS, create_tenant("tt1"));
-  // 获取租户tt1的tenant_id
+  // Get the tenant_id of tenant tt1
   ASSERT_EQ(OB_SUCCESS, get_tenant_id(RunCtx.tenant_id_));
   ASSERT_NE(0, RunCtx.tenant_id_);
-  // 初始化普通租户tt1的sql proxy
+  // Initialize the sql proxy for normal tenant tt1
   ASSERT_EQ(OB_SUCCESS, get_curr_simple_server().init_sql_proxy2());
 }
 

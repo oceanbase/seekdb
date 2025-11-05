@@ -45,8 +45,7 @@ ObMultiVersionValueIterator::ObMultiVersionValueIterator()
 ObMultiVersionValueIterator::~ObMultiVersionValueIterator()
 {
 }
-
-//用于对冻结的memtable的row，所以不用判断行锁和设置barrier
+// Used for rows in the frozen memtable, so no need to check row locks and set barrier
 int ObMultiVersionValueIterator::init(ObMvccAccessCtx *ctx,
                                       const ObVersionRange &version_range,
                                       const ObMemtableKey *key,
@@ -58,9 +57,9 @@ int ObMultiVersionValueIterator::init(ObMvccAccessCtx *ctx,
   if (OB_ISNULL(value)) {
     is_inited_ = true;
   } else {
-    //多版本开始转储时，需要先等已经提交的事务都已经apply到memtable中，然后指定冻结版本来读取
-    //多版本，读取时不用再判断行锁，在遍历trans_node链表时，需要从指定的trans_version开始读取，
-    //我们先做已提交的数据转储，所以遍历list_head就可以了
+    // When starting to dump multiple versions, you need to wait for all submitted transactions to be applied to the memtable, then specify a freeze version to read
+    // Multi-version, no need to judge row lock when reading, when traversing the trans_node linked list, you need to start reading from the specified trans_version,
+    // We first do the data dump of submitted data, so traversing list_head is sufficient
 
     version_iter_ = value->get_list_head();
     value_ = value;
@@ -88,8 +87,8 @@ int ObMultiVersionValueIterator::init_multi_version_iter()
   if (OB_FAIL(cur_trans_version_.convert_for_tx(max_committed_trans_version_))) {
     TRANS_LOG(ERROR, "failed to convert scn", K(ret), K_(max_committed_trans_version));
   } else if (max_committed_trans_version_ <= version_range_.multi_version_start_) {
-    //如果多版本的开始版本大于等于当前以提交的最大版本
-    //则只迭代出所有trans node compact结果
+    // If the start version of multiple versions is greater than or equal to the current maximum submitted version
+    // Then only iterate over all trans node compact results
   } else {
     while (OB_SUCC(ret) && NULL != iter && max_committed_trans_version_ > 0) {
       // TODO: we need handle INT64_MAX and -1
@@ -386,8 +385,8 @@ int ObMultiVersionValueIterator::get_next_multi_version_node(const void *&tnode)
       }
       multi_version_iter_ = multi_version_iter_->prev_;
       if (is_compacted) {
-        //添加一层防御，对于多版本，如果出现了compacted 的trans node
-        //则下一个node一定不为NULL，是NULL则报错
+        // Add a layer of defense, for multiple versions, if a compacted trans node appears
+        // Then the next node must not be NULL, if it is NULL then report an error
         if (OB_ISNULL(multi_version_iter_)) {
           ret = OB_ERR_UNEXPECTED;
           TRANS_LOG(WARN, "multi version iter should not be NULL", K(ret), K(is_compacted),

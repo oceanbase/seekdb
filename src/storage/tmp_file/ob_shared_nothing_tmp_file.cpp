@@ -2177,7 +2177,7 @@ int ObSharedNothingTmpFile::cal_next_flush_page_id_from_flush_ctx_or_file_(
   return ret;
 }
 
-// output next page id after flushed_page_id_ in normal case，or output flushed_page_id for write operation appending last page
+// output next page id after flushed_page_id_ in normal case, or output flushed_page_id for write operation appending last page
 int ObSharedNothingTmpFile::get_next_flush_page_id_(uint32_t& next_flush_page_id, int64_t& next_flush_page_virtual_id) const
 {
   int ret = OB_SUCCESS;

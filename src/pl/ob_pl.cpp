@@ -208,8 +208,7 @@ int ObPL::init(common::ObMySQLProxy &sql_proxy)
   OX (composite_serialize_size_callback = ObUserDefinedType::get_serialize_obj_size);
   return ret;
 }
-
-// 存到objects_的obobj, 其内存必须是exec ctx的allocator来分配的
+// Store to obobj of objects_, its memory must be allocated by the allocator of exec ctx
 void ObPLCtx::reset_obj()
 {
   int tmp_ret = OB_SUCCESS;
@@ -350,7 +349,7 @@ int ObPL::execute_proc(ObPLExecCtx &ctx,
             }
           }
         }
-        ctx.exec_ctx_->get_sql_ctx()->schema_guard_ = old_schema_guard; //这里其实没有必要置回来，但是不置的话schema_guard的生命周期结束后会变成野指针太危险了
+        ctx.exec_ctx_->get_sql_ctx()->schema_guard_ = old_schema_guard; //Here it is actually unnecessary to reset, but if not reset, schema_guard will become a dangling pointer when its lifecycle ends, which is too dangerous.
         // support `SHOW WARNINGS` in mysql PL
         if (OB_FAIL(ret)) {
           ctx.exec_ctx_->get_my_session()->set_show_warnings_buf(ret);
@@ -473,8 +472,8 @@ void ObPLContext::register_after_begin_autonomous_session_for_deadlock_(ObSQLSes
                                                                         const ObTransID last_trans_id)
 {
   ObTransID now_trans_id = session_info.get_tx_id();
-  // 上一个事务等自治事务结束，若自治事务要加上一个事务已经持有的锁，则会死锁
-  // 为检测死锁，需要注册上一个事务到自治事务的等待关系
+  // Wait for the previous autonomous transaction to end, if the autonomous transaction needs to add a lock held by an existing transaction, it will cause a deadlock
+  // To detect deadlocks, the waiting relationship of the previous transaction to the autonomous transaction needs to be registered
   if (last_trans_id != now_trans_id &&
       last_trans_id.is_valid() &&
       now_trans_id.is_valid()) {
@@ -577,14 +576,14 @@ int ObPLContext::init(ObSQLSessionInfo &session_info,
     OX (need_remove_top_stack = true);
     OX (session_info.set_pl_can_retry(true));
   } else if (is_function_or_trigger && lib::is_mysql_mode()) {
-    //mysql模式, 内层function或者trigger不需要创建隐式savepoint, 只需要重置ac
-    //如果是procedure调udf场景:
-    // ac = 0时, udf内部的dml操作需要回滚, 需要创建隐式savepoint
-    // ac = 1时, procedure内部的dml语句执行完立即提交了, 所以只考虑执行udf语句本身:
-    // 1. dml触发udf, 语句本身开事务, udf执行报错时, 内部无需回滚, 跟随外面的dml语句回滚即可
-    // 2. 不开事务的dml语句, 没有事务, 无需创建隐式回滚点, 内部无需回滚, 跟随外面的dml语句回滚即可
-    // 3. pl内部表达式中调用udf, 没有事务, 无需创建隐式回滚点, 内层udf内部如果开事务了, destory阶段整体回滚或提交即可
-    //如果是udf调udf场景, 外层udf已经重置ac, 且内层udf跟随外层udf在destory阶段的回滚或提交
+    //mysql mode, inner function or trigger does not need to create an implicit savepoint, only need to reset ac
+    //If it is a procedure calling UDF scenario:
+    // When ac = 0, the DML operations inside the UDF need to be rolled back, an implicit savepoint needs to be created
+    // When ac = 1, the DML statements inside the procedure are committed immediately after execution, so only consider executing the UDF statement itself:
+    // 1. dml triggers udf, the statement itself starts a transaction, if udf execution fails, no internal rollback is needed, it will follow the rollback of the outer dml statement
+    // 2. DML statements without transaction, no transaction needed, no need to create an implicit rollback point, no internal rollback required, just follow the rollback of the outer DML statements
+    // 3. internal expression in pl calls udf, no transaction, no need to create implicit rollback point, if inner udf opens a transaction, rollback or commit as a whole in the destroy phase
+    // If it is a udf calling udf scenario, the outer udf has already reset ac, and the inner udf follows the outer udf's rollback or commit in the destroy phase
     if (OB_NOT_NULL(session_info.get_tx_desc()) &&
         session_info.get_tx_desc()->in_tx_or_has_extra_state() && !in_nested_sql_ctrl()) {
       OZ (ObSqlTransControl::create_savepoint(ctx, PL_IMPLICIT_SAVEPOINT));
@@ -599,8 +598,8 @@ int ObPLContext::init(ObSQLSessionInfo &session_info,
 
   if (OB_SUCC(ret) && is_function_or_trigger && lib::is_mysql_mode() &&
       routine->get_has_parallel_affect_factor()) {
-    // 并行场景下不能创建stash savepoint, 只有当udf/trigger内部有tcl语句时, stash savepoint才有意义
-    // udf内部有tcl语句时，该标记为true
+    // In parallel scenarios, stash savepoint cannot be created; stash savepoint is only meaningful when there are TCL statements inside udf/trigger
+    // The flag is true when there are tcl statements inside the udf
     const ObString stash_savepoint_name("PL stash savepoint");
     OZ (ObSqlTransControl::create_stash_savepoint(ctx, stash_savepoint_name));
     OX (has_stash_savepoint_ = true);
@@ -768,7 +767,7 @@ void ObPLContext::destory(
         LOG_WARN("not supported cmd execute udf which has dml stmt", K(ret));
         LOG_USER_ERROR(OB_NOT_SUPPORTED, "use cmd stmt execute udf which has dml stmt");
       }
-      if (OB_SUCCESS != ret && session_info.is_in_transaction()) { // PL执行失败, 需要回滚
+      if (OB_SUCCESS != ret && session_info.is_in_transaction()) { // PL execution failed, need to rollback
         int tmp_ret = OB_SUCCESS;
         if (has_implicit_savepoint_) {
           // ORACLE: alreay rollback to PL/SQL start.
@@ -785,8 +784,8 @@ void ObPLContext::destory(
             session_info.set_pl_can_retry(false);
           }
         } else if (!in_nested_sql_ctrl() && session_info.get_in_transaction()) {
-          // 如果没有隐式的检查点且不再嵌套事务中, 说明当前事务中仅包含该PL, 直接回滚事务
-          // 嵌套语句中的PL会随着顶层的语句一起回滚, 不需要单独回滚
+          // If there is no implicit checkpoint and not nested within a transaction, it means the current transaction contains only this PL, directly rollback the transaction
+          // PL in nested statements will roll back with the top-level statement, no separate rollback is needed
           // ORACLE: alreay rollback to PL/SQL start.
           // MYSQL : rollback only if OB_TRY_LOCK_ROW_CONFLICT==ret and PL/SQL can retry.
           if ((lib::is_mysql_mode() &&
@@ -800,27 +799,27 @@ void ObPLContext::destory(
         ret = OB_SUCCESS == ret ? tmp_ret : ret;
       } else if (!is_autonomous_ && reset_autocommit_ && !in_nested_sql_ctrl() &&
                 ((lib::is_mysql_mode() && is_function_or_trigger_))) {
-                /* 非dml出发点的udf, 如set @a= f1(), 需要在udf内部提交 */
+                /* Non-DML trigger point UDF, such as set @a = f1(), needs to be committed within the UDF */
         if (has_implicit_savepoint_) {
           // reset_autocommit_ && has_implicit_savepoint_ equal to scene of ac=1 && explict transaction.
           // no need to commit
         } else if (!session_info.associated_xa()) {
-          //如果当前事务是xa事务,则不提交当前事务,只设置ac=true.否则提交当前事务
-          // 先COMMIT, 然后再修改AutoCommit
+          // If the current transaction is an xa transaction, then do not commit the current transaction, only set ac=true. Otherwise, commit the current transaction
+          // First COMMIT, then modify AutoCommit
           int tmp_ret = OB_SUCCESS;
           if (OB_SUCCESS == ret
-              //异步提交无法带给proxy未hit信息(ObPartitionHitInfo默认值是Hit),如果未hit走同步提交
+              //Asynchronous submission cannot provide proxy with unhit information (ObPartitionHitInfo default value is Hit), if unhit, use synchronous submission
               && session_info_->partition_hit().get_bool()
-              // 如果顶层调用有出参也不走异步提交, 因为要向客户端回数据
+              // If the top-level call has out parameters, it does not go through asynchronous submission, because data needs to be returned to the client
               && !has_output_arguments()) {
             if (OB_SUCCESS !=
                 (tmp_ret = implicit_end_trans(session_info, ctx, false, true))) {
-              // 不覆盖原来的错误码
+              // Do not overwrite the original error code
               LOG_WARN("failed to explicit end trans", K(ret), K(tmp_ret));
             } else {
               LOG_DEBUG("explicit end trans success!", K(ret));
             }
-          } else { // 不确定上层是否会扔回队列重试,因此失败了一定要走同步提交
+          } else { // Uncertain if the upper layer will requeue for retry, so failure must take the synchronous submission path
             // always call commit/rollback txn in order to reset txn because of autocommit
             tmp_ret = implicit_end_trans(session_info, ctx, ret != OB_SUCCESS);
           }
@@ -836,8 +835,7 @@ void ObPLContext::destory(
           ctx.set_need_disconnect(false);
         }
       }
-
-      // 清理serially package
+      // clean serially package
       int tmp_ret = OB_SUCCESS;
       if (OB_SUCCESS !=
         (tmp_ret = session_info.reset_all_serially_package_state())) {
@@ -853,16 +851,16 @@ void ObPLContext::destory(
       }
       session_info.reset_top_query_string();
     }
-    // 无论如何恢复session上的状态
+    // Restore the state on the session in any case
     session_info.set_pl_stack_ctx(NULL);
     session_info_ = NULL;
 
     IGNORE_RETURN ObPLContext::debug_stop(&session_info);
 #undef IS_DBLINK_TRANS
   } else if (lib::is_mysql_mode() && is_function_or_trigger_) {
-    // 非嵌套场景: 内层udf一定是在表达式里面, 提交由spi_calc_expr处来保证
-    // 嵌套场景: 内层udf被dml语句触发, 回滚或提交由外层dml语句保证
-    if (OB_SUCCESS != ret && session_info.is_in_transaction()) { // PL执行失败, 需要回滚
+    // Non-nested scenario: The inner udf must be inside the expression, submission is guaranteed by spi_calc_expr
+    // Nested scenario: Inner UDF is triggered by DML statement, rollback or commit is guaranteed by the outer DML statement
+    if (OB_SUCCESS != ret && session_info.is_in_transaction()) { // PL execution failed, need to rollback
       int tmp_ret = OB_SUCCESS;
       if (has_implicit_savepoint_) {
         if (OB_SUCCESS != (tmp_ret = ObSqlTransControl::rollback_savepoint(ctx, PL_IMPLICIT_SAVEPOINT))) {
@@ -873,7 +871,7 @@ void ObPLContext::destory(
       }
       ret = OB_SUCCESS == ret ? tmp_ret : ret;
     }
-    // 无论如何都还原autocommit值
+    // Restore autocommit value in any case
     if (reset_autocommit_) {
       int tmp_ret = OB_SUCCESS;
       tmp_ret = session_info.set_autocommit(true);
@@ -889,7 +887,7 @@ void ObPLContext::destory(
     ret = OB_SUCCESS == ret ? end_trans_ret : ret;
   }
   if (is_top_stack_) {
-    // 无论如何都还原autocommit值
+    // Restore the autocommit value in any case
     if (reset_autocommit_) {
       int tmp_ret = OB_SUCCESS;
       tmp_ret = session_info.set_autocommit(true);
@@ -995,7 +993,7 @@ void ObPLContext::dec_and_check_depth(int64_t package_id,
 int ObPLContext::check_routine_legal(ObPLFunction &routine, bool in_function, bool in_tg)
 {
   int ret = OB_SUCCESS;
-  // 检查routine中语句的合法性
+  // Check the legality of statements in the routine
   if (in_function || in_tg) {
     if (routine.get_contain_dynamic_sql() && lib::is_mysql_mode()) {
       ret = OB_ER_STMT_NOT_ALLOWED_IN_SF_OR_TRG;
@@ -1055,17 +1053,17 @@ void ObPLContext::reset_exec_env(int &ret)
       // because sql_mode may be change inside PL.
       ObExecEnv curr_env;
       if (OB_SUCCESS != (tmp_ret = curr_env.load(*session_info_))) {
-        ret = OB_SUCCESS == ret ? tmp_ret : ret; // 不覆盖错误码
+        ret = OB_SUCCESS == ret ? tmp_ret : ret; // Do not overwrite error code
         LOG_WARN("failed to load current exec_env", K(ret), K(tmp_ret), K(exec_env_), K(curr_env));
       } else if (curr_env == exec_env_) {
         // do nothing
       } else if (OB_SUCCESS != (tmp_ret = exec_env_.store(*session_info_))) {
-        ret = OB_SUCCESS == ret ? tmp_ret : ret; // 不覆盖错误码
+        ret = OB_SUCCESS == ret ? tmp_ret : ret; // Do not overwrite error code
         LOG_WARN("failed to set exec_env", K(ret), K(tmp_ret), K(exec_env_), K(curr_env));
       }
     } else {  // oracle mode
       if (OB_SUCCESS != (tmp_ret = exec_env_.store(*session_info_))) {
-        ret = OB_SUCCESS == ret ? tmp_ret : ret; // 不覆盖错误码
+        ret = OB_SUCCESS == ret ? tmp_ret : ret; // Do not overwrite error code
         LOG_WARN("failed to set exec_env", K(ret), K(tmp_ret), K(exec_env_));
       }
     }
@@ -1081,8 +1079,8 @@ int ObPLContext::set_role_id_array(ObPLFunction &routine,
      and you cannot set roles within a definer's rights procedure. */
 if (lib::is_mysql_mode() && !routine.is_invoker_right() &&
              0 != routine.get_priv_user().length()
-             /* 兼容存量存储过程，存量存储过程的priv_user为空。mysql存储过程默认为definer行为，
-              当前ob mysql模式做成了默认invoker行为，支持definer后，ob mysql模式也默认为definer行为 */) {
+             /* Compatible with existing stored procedures, where the priv_user of existing stored procedures is empty. MySQL stored procedures default to definer behavior,
+              after OB MySQL mode is made to default to invoker behavior, OB MySQL mode will also default to definer behavior after supporting definer */) {
     ObString priv_user = routine.get_priv_user();
     ObString user_name = priv_user.split_on('@');
     ObString host_name = priv_user;
@@ -1199,7 +1197,7 @@ void ObPLContext::reset_default_database(int &ret)
       LOG_ERROR("current session info is null", K(ret), K(session_info_));
     } else if (OB_SUCCESS !=
         (tmp_ret = session_info_->set_default_database(database_name_.string()))) {
-      ret = OB_SUCCESS == ret ? tmp_ret : ret; // 不覆盖错误码
+      ret = OB_SUCCESS == ret ? tmp_ret : ret; // Do not overwrite error code
       LOG_ERROR("failed to reset default database", K(ret), K(tmp_ret), K(database_name_));
     } else {
       session_info_->set_database_id(database_id_);
@@ -1330,7 +1328,7 @@ int ObPL::execute(ObExecContext &ctx,
                     ctx,
                     package_guard,
                     routine,
-                    local_result, // 这里不直接传result而是用local_result，是因为调用内部要检查OB_ER_SP_NORETURNEND错误
+                    local_result, // Here we do not directly pass result but use local_result, because the internal call needs to check for OB_ER_SP_NORETURNEND error
                     NULL != status ? *status : local_status,
                     is_top_stack,
                     is_inner_call,
@@ -1421,7 +1419,7 @@ int ObPL::execute(ObExecContext &ctx,
           }
         }
       }
-      // 释放参数列表入参基础类型和init param阶段产生的复杂数据类型
+      // Release base types of parameters in the parameter list and complex data types generated during the init param phase
       for (int i = 0; i < routine.get_arg_count(); ++i) {
         if (!pl.get_params().at(i).is_pl_extend()) {
           ObUserDefinedType::destruct_objparam(pl_sym_allocator,
@@ -1446,7 +1444,7 @@ int ObPL::execute(ObExecContext &ctx,
                                                                   K(ref_cursor->get_ref_count()));
         }
       } else {
-        // do nothing, 有可能return一个null出来
+        // do nothing, there might be a return of null
       }
     }
     // process function return value
@@ -1459,8 +1457,7 @@ int ObPL::execute(ObExecContext &ctx,
         && routine.has_incomplete_rt_dep_error()) {
       LOG_USER_WARN(OB_ERR_COMPILE_RESULT_NOT_ADD_CACHE, routine.get_function_name().length(), routine.get_function_name().ptr());
     }
-
-    //当前层 pl 执行时间
+    //Current layer pl execution time
     int64_t execute_end = ObTimeUtility::current_time();
     pl.add_pl_exec_time(execute_end - execute_start - pl.get_pure_sql_exec_time(), is_called_from_sql);
   #ifndef NDEBUG
@@ -1507,7 +1504,7 @@ int ObPL::trans_sql(PlTransformTreeCtx &trans_ctx, ParseNode *root, ObExecContex
       LOG_WARN("fail to alloc memory for pc param", K(ret), K(ptr));
     }
     for (int64_t i = 0;
-        OB_SUCC(ret) && i < param_num && NULL != trans_ctx.p_list_;//p_list包含所有表达式和sql的raw param
+        OB_SUCC(ret) && i < param_num && NULL != trans_ctx.p_list_;//p_list contains all expressions and sql raw params
         ++i) {
       pc_param = new(ptr)ObPCParam();
       ptr += sizeof(ObPCParam);
@@ -1608,7 +1605,7 @@ int ObPL::transform_tree(PlTransformTreeCtx &trans_ctx, ParseNode *root, ParseNo
     LOG_WARN("arg is null", K(ret));
   } else if (OB_NOT_NULL(root) && OB_NOT_NULL(no_param_root) && (!trans_ctx.is_ps_mode_ || trans_ctx.ps_pc_ctx_->ps_need_parameterized_)) {
     if (T_QUESTIONMARK == no_param_root->type_ && trans_ctx.is_ps_mode_) {
-      // ps模式下, pl侧解析的？需要统计到raw params中
+      // ps mode, need to count the parsed by pl side into raw params
       ObPCParam *pc_param = nullptr;
       char *ptr = (char *)trans_ctx.allocator_->alloc(sizeof(ObPCParam));
       if (OB_ISNULL(ptr)) {
@@ -1623,12 +1620,12 @@ int ObPL::transform_tree(PlTransformTreeCtx &trans_ctx, ParseNode *root, ParseNo
       }
     } else if (T_EXPR == no_param_root->type_) {
       ParseNode *expr_node = NULL;
-      /* 调整语法树结构, 避免语法树分析阶段因为结构不同报错 */
+      /* Adjust the syntax tree structure, to avoid errors during syntax tree analysis due to different structures */
       if (OB_ISNULL(expr_node = new_non_terminal_node(trans_ctx.allocator_, T_EXPR, 1, root))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
         LOG_WARN("failed to alloc memory", K(ret));
       } else {
-        /* 语法树分析时会修改node上部分属性, 这里提前记录 */
+        /* Syntax tree analysis will modify some attributes of the node, so we record them in advance */
         int64_t raw_pos = expr_node->children_[0]->pos_ - trans_ctx.raw_anonymous_off_;
         int64_t raw_str_off = expr_node->children_[0]->text_len_;
         trans_ctx.raw_sql_or_expr_.assign_ptr(expr_node->children_[0]->raw_text_, expr_node->children_[0]->text_len_);
@@ -1849,7 +1846,7 @@ int ObPL::execute(ObExecContext &ctx, ParamStore &params, const ObStmtNodeTree *
   int64_t old_worker_timeout_ts = 0;
   ObPLASHGuard guard(ObPLResolver::ANONYMOUS_VIRTUAL_OBJECT_ID, OB_INVALID_ID);
   /* !!!
-   * PL，req_timeinfo_guard一定要在执行前定义
+   * PL, req_timeinfo_guard must be defined before execution
    * !!!
    */
   observer::ObReqTimeGuard req_timeinfo_guard;
@@ -2011,7 +2008,7 @@ int ObPL::execute(ObExecContext &ctx,
   ObPLASHGuard guard(ObPLResolver::ANONYMOUS_VIRTUAL_OBJECT_ID, OB_INVALID_ID);
 
   /* !!!
-   * PL，req_timeinfo_guard一定要在执行前定义
+   * PL, req_timeinfo_guard must be defined before execution
    * !!!
    */
   observer::ObReqTimeGuard req_timeinfo_guard;
@@ -2129,7 +2126,7 @@ int ObPL::execute(ObExecContext &ctx,
   ObCurTraceId::TraceId parent_trace_id;
   ObPLASHGuard guard(package_id, routine_id);
   /* !!!
-  * PL，req_timeinfo_guard一定要在执行前定义
+  * PL, req_timeinfo_guard must be defined before execution
   * !!!
   */
   SMART_VAR(ObPLContext, stack_ctx) {
@@ -2582,7 +2579,7 @@ int ObPL::add_pl_lib_cache(ObPLFunction *pl_func, ObPLCacheCtx &pc_ctx)
       ret = OB_SUCCESS;
       LOG_WARN("this plan has been added by others, need not add again", KPC(pl_func));
     } else if (OB_REACH_MEMORY_LIMIT == ret || OB_SQL_PC_PLAN_SIZE_LIMIT == ret) {
-      if (REACH_TIME_INTERVAL(1000000)) { //1s, 当内存达到上限时, 该日志打印会比较频繁, 所以以1s为间隔打印
+      if (REACH_TIME_INTERVAL(1000000)) { //1s, When memory reaches its limit, this log print will be quite frequent, so it is printed at an interval of 1s
         LOG_WARN("can't add plan to plan cache",
                  K(ret), K(pl_func->get_mem_size()), K(pc_ctx.key_),
                  K(plan_cache->get_mem_used()));
@@ -2592,8 +2589,8 @@ int ObPL::add_pl_lib_cache(ObPLFunction *pl_func, ObPLCacheCtx &pc_ctx)
       ret = OB_SUCCESS;
       LOG_WARN("plan cache don't support add this kind of plan now",  KPC(pl_func));
     } else {
-      if (OB_REACH_MAX_CONCURRENT_NUM != ret) { //如果是达到限流上限, 则将错误码抛出去
-        ret = OB_SUCCESS; //add plan出错, 覆盖错误码, 确保因plan cache失败不影响正常执行路径
+      if (OB_REACH_MAX_CONCURRENT_NUM != ret) { //if it reaches the rate limit upper bound, then throw out the error code
+        ret = OB_SUCCESS; // add plan error, overwrite error code, ensure that plan cache failure does not affect the normal execution path
         LOG_WARN("Failed to add plan to ObPlanCache", K(ret));
       }
     }
@@ -2896,7 +2893,7 @@ bool ObPLExecCtx::valid()
 {
   return OB_NOT_NULL(allocator_)
          && OB_NOT_NULL(exec_ctx_)
-         // 通过interface机制映射进来的接口无法提供、也不会使用func_指针。
+         // The interface mapped in through the interface mechanism cannot provide or use the func_ pointer.
 //       && OB_NOT_NULL(func_)
          && OB_NOT_NULL(exec_ctx_->get_sql_ctx())
          && OB_NOT_NULL(exec_ctx_->get_my_session());
@@ -2992,8 +2989,7 @@ int ObPLExecState::final(int ret)
       }
     }
   }
-
-  // 异常场景下，释放参数列表
+  // In abnormal scenarios, release the parameter list
   for (int i = 0; OB_SUCCESS != ret && i < func_.get_arg_count() && i < get_params().count(); ++i) {
     if (!get_params().at(i).is_pl_extend()) {
       ObUserDefinedType::destruct_objparam(*get_allocator(),
@@ -3005,10 +3001,9 @@ int ObPLExecState::final(int ret)
                                             ctx_.exec_ctx_->get_my_session());
     }
   }
-
-  // 1. inner call inout 非nocopy参数会深拷一份, 执行异常时需要释放
-  // 2. inner call 纯out属性复杂数据类型参数, 会生成一个新的obj, 执行失败时会抛出异常, 不会走到geneate_out_param里面的释放内存逻辑
-  // 需要提前释放内存
+  // 1. inner call inout non-nocopy parameters will be deep copied, and need to be released in case of execution exceptions
+  // 2. inner call pure out attribute complex data type parameter, will generate a new obj, execution failure will throw an exception, will not go to geneate_out_param inside the memory release logic
+  // Need to release memory in advance
   for (int64_t i = 0; OB_SUCCESS != ret && inner_call_ && !func_.is_function() && i < func_.get_arg_count(); ++i) {
     if (func_.get_variables().at(i).is_composite_type() &&
         i < get_params().count() && get_params().at(i).is_ext()) {
@@ -3063,8 +3058,8 @@ int ObPLExecState::final(int ret)
           ret = OB_SUCCESS == ret ? tmp_ret : ret;
           LOG_INFO("close session cursor after pl exec.", K(ret), K(tmp_ret), K(cursor->get_id()));
         } else if (OB_FAIL(ret)) {
-          // 函数结束这儿还需要close cursor，因为如果有异常，block结束除的close cursor就走不到，这儿还需要关闭
-          // 这儿为啥可能为null
+          // The function ends here, we still need to close the cursor, because if there is an exception, the close cursor in the block end will not be reached, so we need to close it here as well
+          // Why might this be null here
           /*
           *
           * create or replace procedure pp(a number) is
@@ -3084,8 +3079,7 @@ int ObPLExecState::final(int ret)
               dbms_output.put_line('catch exception');
             end;
           *
-          * 上例中c1 调用了cursor init，但是c2没有调用，因为被execption打断，这个时候在final函数里面调用cursor close
-          * 函数，这个obj就是null，因为c2没有调用cursor init。 另外goto也可能导致执行流变动，没有open就去close
+          * In the example above, c1 called cursor init, but c2 did not call it because it was interrupted by the exception. At this point, calling the cursor close function in the final function, this obj will be null because c2 did not call cursor init. Additionally, goto may also cause changes in the execution flow, attempting to close without opening.
           */
           if (OB_SUCCESS != ObSPIService::spi_cursor_close(&ctx_, func_.get_package_id(),
                                                   func_.get_routine_id(), i, true)) {
@@ -3518,7 +3512,7 @@ int ObPLExecState::init_params(const ParamStore *params, bool is_anonymous)
       OX (param.set_is_ref_cursor_type(true));
       OX (param.set_extend(0, PL_REF_CURSOR_TYPE));
       OX (param.set_udt_id(func_.get_variables().at(i).get_user_type_id()));
-      // CURSOR初始化为NULL
+      // CURSOR initialized to NULL
     } else if (func_.get_variables().at(i).is_cursor_type()) {
       // leave obj as null type, spi_init wil init it.
     } else if (func_.get_variables().at(i).is_subtype()) {
@@ -3591,7 +3585,7 @@ do {                                                                  \
           } else {
             OX (get_params().at(i) = params->at(i));
           }
-        } else if (params->at(i).is_pl_mock_default_param()) { // 使用参数默认值
+        } else if (params->at(i).is_pl_mock_default_param()) { // Use parameter default value
           ObObjParam result;
           sql::ObSqlExpression *default_expr = func_.get_default_expr(i);
           OV (OB_NOT_NULL(default_expr), OB_ERR_UNEXPECTED, K(i), K(func_.get_default_idxs()));
@@ -3616,19 +3610,19 @@ do {                                                                  \
         } else if (pl_type.is_composite_type()
                    && (params->at(i).is_null()
                         || (params->at(i).is_ext() && params->at(i).get_ext() == 0))) {
-          // 如果复杂类型传入了null则构造一个初始化的值
+          // If a complex type is passed as null, construct an initialized value
           OZ (init_complex_obj((*get_allocator()),
                                func_.get_variables().at(i),
                                get_params().at(i)));
-          //if (!func_.get_out_args().has_member(i)) { //纯in场景需要在执行完释放
+          //if (!func_.get_out_args().has_member(i)) { //pure in scenario needs to be released after execution
             OX (need_free_.at(i) = true);
           //}
-        } else if (pl_type.is_obj_type() // 复杂类型不需要做类型转换(不支持复杂类型的转换), 直接赋值
+        } else if (pl_type.is_obj_type() // Complex types do not require type conversion (complex type conversion is not supported), direct assignment
                    && (params->at(i).get_meta() != get_params().at(i).get_meta()
                       || params->at(i).get_accuracy() != get_params().at(i).get_accuracy())) {
           if (params->at(i).is_null()) {
             ObObjMeta param_meta = get_params().at(i).get_param_meta();
-            get_params().at(i) = params->at(i); // 空值不做cast
+            get_params().at(i) = params->at(i); // Null value does not do cast
             params->at(i).is_null() ? get_params().at(i).set_param_meta(param_meta) : (void)NULL;
           } else if (params->at(i).get_meta().get_type() == get_params().at(i).get_meta().get_type() && ob_is_enumset_tc(params->at(i).get_meta().get_type())) {
             get_params().at(i) = params->at(i); // they are both of enum/set type, no cast is performed.
@@ -3639,7 +3633,7 @@ do {                                                                  \
           } else if (get_params().at(i).get_meta().is_null()
                      && is_anonymous
                      && func_.get_is_all_sql_stmt()) {
-            // 匿名块中全部是SQL语句, 需要向Null转的情况, 这里直接跳过
+            // All statements in the anonymous block are SQL statements, and cases where conversion to Null is needed, we skip directly here
             get_params().at(i) = params->at(i);
           } else {
             LOG_DEBUG("column convert",
@@ -3655,7 +3649,7 @@ do {                                                                  \
             result_type.set_meta(func_.get_variables().at(i).get_data_type()->get_meta_type());
             result_type.set_accuracy(func_.get_variables().at(i).get_data_type()->get_accuracy());
             ObObj tmp, copy_obj;
-            // CHARSET_ANY代表接受任何字符集,因此不能改变入参的字符集
+            // CHARSET_ANY represents accepting any character set, therefore the character set of the input parameter cannot be changed
             if (CS_TYPE_ANY == result_type.get_collation_type()) {
               if (params->at(i).get_meta().is_string_or_lob_locator_type()) {
                 result_type.set_collation_type(params->at(i).get_meta().get_collation_type());
@@ -3687,7 +3681,7 @@ do {                                                                  \
                        K(ret), K(copy_obj), K(i), K(params->count()));
             } else {
               //
-              // 由存储层传入的数据未设置collation_level, 这里设置下
+              // The collation_level is not set for the data passed in from the storage layer, setting it here
               if (get_params().at(i).is_string_type()) {
                 get_params().at(i).set_collation_level(result_type.get_collation_level());
               }
@@ -3746,8 +3740,8 @@ do {                                                                  \
         CHECK_NOT_NULL_VIOLATED(i, params->at(i));
         if (OB_FAIL(ret)) {
         } else if (pl_type.is_obj_type()) {
-          // 纯OUT参数, 对于基础类型直接传入NULL的ObObj
-          ObObj obj;  // 基础类型apply一个空的OBJECT
+          // Pure OUT parameter, for basic types directly pass in NULL ObObj
+          ObObj obj;  // Basic type apply an empty OBJECT
           ObObjMeta null_meta = get_params().at(i).get_meta();
           OZ (get_params().at(i).apply(obj));
           OX (get_params().at(i).set_collation_level(null_meta.get_collation_level()));
@@ -3763,8 +3757,8 @@ do {                                                                  \
           ret = OB_NOT_SUPPORTED;
           LOG_WARN("not support nested table type", K(ret));
         } else {
-          // 纯OUT参数, 对于复杂类型需要重新初始化值; 如果传入的复杂类型值为NULL(PS协议), 则初始化一个新的复杂类型
-          // 这里先copy入参的值, 由init_complex_obj函数判断是否重新分配内存
+          // Pure OUT parameter, for complex types the value needs to be re-initialized; if the passed complex type value is NULL (PS protocol), initialize a new complex type
+          // Here we first copy the input parameter values, by the init_complex_obj function to determine if memory should be reallocated
           OX (get_params().at(i) = params->at(i));
           OZ (init_complex_obj(*(get_allocator()),
                                pl_type,
@@ -3870,7 +3864,7 @@ int ObPLExecRecursionCtx::init(sql::ObSQLSessionInfo &session_info)
       SYS_VAR_MAX_SP_RECURSION_DEPTH, max_recursion_value))) {
     LOG_WARN("fail to get system variable value", K(ret), K(SYS_VAR_MAX_SP_RECURSION_DEPTH));
   } else {
-    // Oracle兼容: 不限制递归的层次
+    // Oracle compatible: no restriction on recursion depth
     max_recursion_depth_ = max_recursion_value.get_int();
     init_ = true;
   }
@@ -3882,7 +3876,7 @@ int ObPLExecRecursionCtx::inc_and_check_depth(uint64_t package_id, uint64_t proc
   int ret = OB_SUCCESS;
   int64_t recursion_depth = 0;
   int64_t *depth_store = NULL;
-  // 兼容mysql, function不允许嵌套
+  // Compatible with MySQL, function does not allow nesting
   int64_t max_recursion_depth = is_function && lib::is_mysql_mode() ? 0 : max_recursion_depth_;
   if (!init_) {
     ret = OB_NOT_INIT;
@@ -3987,7 +3981,7 @@ int ObPLExecRecursionCtx::dec_and_check_depth(uint64_t package_id, uint64_t proc
   return ret;
 }
 
-/* check用户是否有调用存储过程的权限 */
+/* check if the user has permission to call the stored procedure */
 int ObPL::check_exec_priv(
     ObExecContext &exec_ctx,
     const ObString &database_name,
@@ -4282,7 +4276,7 @@ int ObPLExecState::execute()
         if (eptr != nullptr) {
           ret = OB_SUCCESS == ret ? (NULL != ctx_.status_ ? *ctx_.status_ : OB_ERR_UNEXPECTED)
               : ret;
-          final(ret); // 避免当前执行的pl内数组内存泄漏, 捕获到异常后先执行final, 然后将异常继续向上抛
+          final(ret); // Avoid memory leak of array in the currently executing pl, execute final before throwing the exception upwards after capturing it
           _Unwind_RaiseException(eptr);
         }
       } else {
@@ -4661,12 +4655,12 @@ int ObPLINS::init_complex_obj(ObIAllocator &allocator,
   void *ptr = NULL;
   CK (pl_type.is_composite_type());
   OZ (get_size(PL_TYPE_INIT_SIZE, pl_type, init_size, &expr_allocator));
-  // 如果原来已经有值，则不重新分配, 直接在此基础上修改
+  // If there is already a value, do not reallocate, modify directly based on this
   if (obj.is_ext() && obj.get_ext() != 0) {
     ObObj out_param = obj;
     OZ (ObUserDefinedType::destruct_obj(out_param, nullptr, true));
     CK (OB_NOT_NULL(ptr = reinterpret_cast<void*>(obj.get_ext())));
-  } else { // 如果原来没有值, 重新分配内存, PS协议的情况, 前端发过来的纯OUT参数是NULL
+  } else { // If there was no original value, reallocate memory, in the case of the PS protocol, the pure OUT parameter sent from the frontend is NULL
     if (OB_SUCC(ret) && OB_ISNULL(ptr = allocator.alloc(init_size))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("failed to allocate memory", K(ret), K(init_size));

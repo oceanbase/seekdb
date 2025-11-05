@@ -67,8 +67,8 @@ public:
   virtual int change_leader_to(const common::ObAddr &dest_addr) override final;
   virtual int temporarily_downgrade_protocol_priority(const int64_t time_us, const char *reason) override final;
   /**
-   * @description: 返回选举对象当前的角色和epoch
-   * @param {ObRole} &role 当前的角色，LEADER always
+   * @description: Return the current role and epoch of the election object
+   * @param {ObRole} &role Current role, LEADER always
    * @param {int64_t} &epoch 1 always
    * @return {int} OB_SUCCESS always
    * @Date: 2025-07-16 19:57:06
@@ -83,8 +83,8 @@ public:
     return ret;
   }
   /**
-   * @description: 获取当前的leader及其epoch
-   * @param {common::ObAddr} 自己的addr
+   * @description: Get the current leader and its epoch
+   * @param {common::ObAddr} own addr
    * @param {int64_t} 1 always
    * @return {int} OB_SUCCESS always
    * @Date: 2025-07-16 19:56:06

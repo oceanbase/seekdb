@@ -336,7 +336,7 @@ int ObTempTableAccessOp::locate_next_interm_result(bool &is_end)
   int64_t result_id = 0;
   is_end = false;
   if (can_rescan_) {
-    //rescan从context的缓存中拿result id
+    // rescan fetches result id from context's cache
     if (cur_idx_ >= interm_result_ids_.count()) {
       is_end = true;
     } else {
@@ -347,7 +347,7 @@ int ObTempTableAccessOp::locate_next_interm_result(bool &is_end)
       }
     }
   } else if (!MY_SPEC.is_distributed_) {
-    //本地结果集从exec ctx中拿result id，并且缓存下来
+    // Local result set gets result id from exec ctx and caches it down
     if (is_started_) {
       is_end = true;
     } else if (OB_FAIL(get_local_interm_result_id(result_id))) {
@@ -358,7 +358,7 @@ int ObTempTableAccessOp::locate_next_interm_result(bool &is_end)
       LOG_WARN("failed to push back result id", K(ret));
     }
   } else {
-    //分布式结果集从任务池抢占result id，并且缓存下来
+    // Distributed result set grabs result id from the task pool and caches it down
     int64_t index = 0;
     if (OB_FAIL(MY_INPUT.check_finish(is_end, index))) {
       LOG_WARN("failed to check finish.", K(ret));

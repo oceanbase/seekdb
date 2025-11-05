@@ -420,14 +420,14 @@ int ObPxCoordOp::setup_op_input(ObDfo &root)
           } else {
             input->set_child_dfo_id(child_dfo->get_dfo_id());
             if (root.is_root_dfo()) {
-              input->set_task_id(0); // root dfo 只有一个 task
+              input->set_task_id(0); // root dfo has only one task
             }
           }
         }
       }
     }
     if (OB_SUCC(ret)) {
-      // 递归设置 child 的 receive input
+      // Recursively set child's receive input
       if (OB_FAIL(setup_op_input(*child_dfo))) {
         LOG_WARN("fail setup op input", K(ret));
       }
@@ -508,7 +508,7 @@ int ObPxCoordOp::try_clear_p2p_dh_info()
 int ObPxCoordOp::inner_close()
 {
   int ret = OB_SUCCESS;
-  // close过程中忽略terminate错误码
+  // close process ignores terminate error code
   int terminate_ret = OB_SUCCESS;
   bool should_terminate_running_dfos = true;
 
@@ -591,10 +591,10 @@ int ObPxCoordOp::destroy_all_channel()
   }
   op_monitor_info_.otherstat_3_id_ = ObSqlMonitorStatIds::DTL_SEND_RECV_COUNT;
   op_monitor_info_.otherstat_3_value_ = recv_cnt;
-  // 注意：首先必须将 channel 从 msg_loop 中 unregister 掉
-  // 这样才能安全地做 unlink_channel
-  // 否则，在 unlink_channel 的时候 channel 上还可能收到数据
-  // 导致内存泄漏等未知问题
+  // Note: The channel must be unregistered from msg_loop first
+  // This is how to safely do unlink_channel
+  // Otherwise, data may still be received on the channel when unlink_channel is called
+  // Cause memory leaks and other unknown issues
   int tmp_ret = OB_SUCCESS;
   if (OB_SUCCESS != (tmp_ret = msg_loop_.unregister_all_channel())) {
     LOG_WARN("fail unregister channels from msg_loop. ignore", KR(tmp_ret));
@@ -641,8 +641,8 @@ int ObPxCoordOp::destroy_all_channel()
 int ObPxCoordOp::try_link_channel()
 {
   int ret = OB_SUCCESS;
-  // qc最后收数据的channel link是在自己get next的
-  // 调度循环中进行的，这里不用做任何事情。
+  // qc last receives data channel link is in own get next
+  // Performed in the scheduling loop, no need to do anything here.
   return ret;
 }
 
@@ -657,13 +657,13 @@ int ObPxCoordOp::wait_all_running_dfos_exit()
   if (OB_FAIL(coord_info_.dfo_mgr_.get_running_dfos(active_dfos))) {
     LOG_WARN("fail find dfo", K(ret));
   } else if (OB_UNLIKELY(!first_row_fetched_)) {
-    // 一个dfo都没有发出去，不用做任何处理了。
+    // No dfo was sent out, no further processing is needed.
     collect_trans_result_ok = true;
     ret = OB_ITER_END;
   }
 
   if (OB_SUCC(ret)) {
-    // 专用于等待各个活跃sqc的msg proc.
+    // Specifically used for waiting for msg proc. of each active sqc.
     ObDtlChannelLoop &loop = msg_loop_;
     ObIPxCoordEventListener &listener = get_listenner();
     ObPxTerminateMsgProc terminate_msg_proc(coord_info_, listener);
@@ -681,8 +681,7 @@ int ObPxCoordOp::wait_all_running_dfos_exit()
     dtl::ObDtlPacketEmptyProc<SPWinFuncPXPieceMsg> sp_winfunc_px_piece_msg_proc;
     dtl::ObDtlPacketEmptyProc<RDWinFuncPXPieceMsg> rd_winfunc_px_piece_msg_proc;
     dtl::ObDtlPacketEmptyProc<ObJoinFilterCountRowPieceMsg> join_filter_count_row_piece_msg_proc;
-
-    // 这个注册会替换掉旧的proc.
+    // This registration will replace the old proc.
     (void)msg_loop_.clear_all_proc();
     (void)msg_loop_
       .register_processor(sqc_finish_msg_proc)
@@ -710,7 +709,7 @@ int ObPxCoordOp::wait_all_running_dfos_exit()
     while (OB_SUCC(ret) && wait_msg) {
       ObDtlChannelLoop &loop = msg_loop_;
       /**
-       * 开始收下一个消息。
+       * Start receiving the next message.
        */
       if (OB_FAIL(check_all_sqc(active_dfos, times_offset, all_dfo_terminate,
                                 last_timestamp))) {
@@ -725,9 +724,9 @@ int ObPxCoordOp::wait_all_running_dfos_exit()
           LOG_WARN("fail check status, px query timeout", K(ret),
               K(start_wait_time), K(phy_plan_ctx->get_timeout_timestamp()));
         } else if (ObTimeUtility::current_time() - start_wait_time < 50 * 1000000) {
-          // 即使query被kill了, 也希望能够等到分布式任务的report结束
-          // 在被kill的情况下最多等待50秒.
-          // 预期这个时间已经足够.
+          // Even if the query is killed, we still hope to wait for the end of the distributed task report
+          // In the case of being killed, wait at most 50 seconds.
+          // Expect this time to be sufficient.
           ret = OB_SUCCESS;
         } else {
           LOG_WARN("fail check status, px query killed", K(ret),
@@ -745,8 +744,8 @@ int ObPxCoordOp::wait_all_running_dfos_exit()
       } else {
         ObDtlMsgType msg_type = loop.get_last_msg_type();
         /**
-         * sqc finish的消息已经在回调process中处理了.
-         * 对所有消息都不处理，直接丢掉.
+         * The sqc finish message has already been processed in the callback process.
+         * Do not process any messages, just discard them.
          */
         switch (msg_type) {
           case ObDtlMsgType::PX_NEW_ROW:
@@ -772,7 +771,7 @@ int ObPxCoordOp::wait_all_running_dfos_exit()
       }
     }
   }
-  //过滤掉4662的原因是，在QC希望所有dfo退出时会向所有dfo广播4662中断，这个错误码可能会被sqc report回来
+  // Filter out reason 4662 because when QC wants all dfo to exit, it will broadcast a 4662 interrupt to all dfo, this error code might be reported back by sqc
   if (OB_SUCCESS != coord_info_.first_error_code_
       && OB_GOT_SIGNAL_ABORTING != coord_info_.first_error_code_
       && OB_ERR_SIGNALED_IN_PARALLEL_QUERY_SERVER != coord_info_.first_error_code_) {
@@ -889,11 +888,11 @@ int ObPxCoordOp::receive_channel_root_dfo(
     msg_loop_.set_interm_result(enable_px_batch_rescan());
     msg_loop_.set_process_query_time(ctx_.get_my_session()->get_process_query_time());
     msg_loop_.set_query_timeout_ts(ctx_.get_physical_plan_ctx()->get_timeout_timestamp());
-    // root dfo 的 receive channel sets 在本机使用，不需要通过  DTL 发送
-    // 直接注册到 msg_loop 中收取数据即可
+    // root dfo's receive channel sets are used locally, no need to send through DTL
+    // Directly register to msg_loop to receive datais sufficient
     int64_t cnt = task_channels_.count();
     int64_t thread_id = GETTID();
-    // FIXME:  msg_loop_ 不要 unregister_channel，避免这个 ...start_ 下标变动 ?
+    // FIXME:  msg_loop_ do not unregister_channel, avoid this ...start_ index change ?
     for (int64_t idx = 0; idx < cnt && OB_SUCC(ret); ++idx) {
       dtl::ObDtlChannel *ch = task_channels_.at(idx);
       if (OB_ISNULL(ch)) {
@@ -962,11 +961,11 @@ int ObPxCoordOp::receive_channel_root_dfo(
     msg_loop_.set_interm_result(enable_px_batch_rescan());
     msg_loop_.set_process_query_time(ctx_.get_my_session()->get_process_query_time());
     msg_loop_.set_query_timeout_ts(ctx_.get_physical_plan_ctx()->get_timeout_timestamp());
-    // root dfo 的 receive channel sets 在本机使用，不需要通过  DTL 发送
-    // 直接注册到 msg_loop 中收取数据即可
+    // root dfo's receive channel sets are used locally, no need to send through DTL
+    // Directly register to msg_loop to receive datais sufficient
     int64_t cnt = task_channels_.count();
     int64_t thread_id = GETTID();
-    // FIXME:  msg_loop_ 不要 unregister_channel，避免这个 ...start_ 下标变动 ?
+    // FIXME:  msg_loop_ do not unregister_channel, avoid this ...start_ index change ?
     for (int64_t idx = 0; idx < cnt && OB_SUCC(ret); ++idx) {
       dtl::ObDtlChannel *ch = task_channels_.at(idx);
       if (OB_ISNULL(ch)) {

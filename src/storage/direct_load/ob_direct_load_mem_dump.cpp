@@ -172,7 +172,7 @@ int ObDirectLoadMemDump::close_table_builder(ObIDirectLoadPartitionTableBuilder 
     LOG_WARN("invalid args", KR(ret), KP(table_builder));
   } else {
     const bool need_close = (mem_ctx_->table_data_desc_.row_flag_.uncontain_hidden_pk_ || is_final);
-    if (need_close && table_builder->get_row_count() > 0) { //暂时因为simple file有问题
+    if (need_close && table_builder->get_row_count() > 0) { // temporarily because simple file has a problem
       ObDirectLoadTableHandleArray table_array;
       if (OB_FAIL(table_builder->close())) {
         LOG_WARN("fail to close sstable builder", KR(ret));
@@ -209,10 +209,10 @@ int ObDirectLoadMemDump::dump_tables()
   typedef ObDirectLoadExternalIterator<RowType> ExternalIterator;
   int ret = OB_SUCCESS;
   ObArray<ExternalIterator *> iters;
-  ObArray<ObDirectLoadMemChunkIter<RowType, CompareType>> chunk_iters; //用于暂存iters
+  ObArray<ObDirectLoadMemChunkIter<RowType, CompareType>> chunk_iters; // used to temporarily store iters
   ObDirectLoadExternalMerger<RowType, CompareType> merger;
   CompareType compare;
-  CompareType compare1;  //不带上seq_no的排序
+  CompareType compare1;  // sorting without seq_no
 
   const RowType *external_row = nullptr;
   ObDirectLoadDatumRow datum_row;

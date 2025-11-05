@@ -116,13 +116,13 @@ TEST_F(TestObSimpleLogClusterTruncate, truncate_log)
   set_rpc_loss(leader_idx, follower_1, 50);
   // drop 50% packet from leader -> follower_4
   set_rpc_loss(leader_idx, follower_4, 90);
-  // follower_4 -> leader 单向断网, 阻断fetch log
+  // follower_4 -> leader one-way network disconnection, block fetch log
   block_net(follower_4, leader_idx, true);
-  // follower_1 -> leader 单向断网, 阻断fetch log
+  // follower_1 -> leader one-way network disconnection, block fetch log
   block_net(follower_1, leader_idx, true);
 
   PALF_LOG(INFO, "begin submit_log", K(leader_idx));
-  // 保证只有leader副本拥有日志
+  // Ensure only the leader replica has the log
   wanted_group_log_size = 1 * 1024 * 1024;
   log_count = 16;
   EXPECT_EQ(OB_SUCCESS, submit_log(leader, log_count, leader_idx, wanted_group_log_size));
@@ -130,7 +130,7 @@ TEST_F(TestObSimpleLogClusterTruncate, truncate_log)
   EXPECT_EQ(OB_ITER_END, read_log(leader));
 
   PALF_LOG(INFO, "before sleep 15s", K(leader_idx));
-  // election 自动切主
+  // election auto role switch
   sleep(15);
   int64_t new_leader_idx = 0;
   PalfHandleImplGuard new_leader;

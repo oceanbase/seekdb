@@ -174,7 +174,7 @@ int ObCreatePackageResolver::resolve(const ParseNode &parse_tree)
           } else if (OB_FAIL(package_info.set_source(package_block))) {
             LOG_WARN("set package source failed", K(ret));
           } else if (OB_SYS_TENANT_ID == session_info_->get_effective_tenant_id()) {
-            // 系统租户在创建系统包, 环境变量使用Oracle租户默认的环境变量
+            // System tenant is creating system package, environment variables use Oracle tenant's default environment variables
             // sql_mode = "PIPES_AS_CONCAT,STRICT_ALL_TABLES,PAD_CHAR_TO_FULL_LENGTH"
             if (common::ORACLE_MODE == compa_mode) {
               if (OB_FAIL(package_info.set_exec_env(ObString("2151677954,45,46,46,")))) {
@@ -280,9 +280,9 @@ int ObCreatePackageResolver::resolve(const ParseNode &parse_tree)
     if (OB_NOT_NULL(session_info_)
         && OB_SYS_TENANT_ID == session_info_->get_effective_tenant_id()
         /*&& !session_info_->is_inner()*/) {
-      // 低版本升级到2274, 老的升级脚本中包含了创建Package语句, 部分语句在2274 Server上会产生Warning
-      // 比如: Create Package pack IS Procedure proc(x Boolean := 1); End;会报错Boolean表达式默认值非法的Warning
-      // 2274的升级脚本还会用最新的Package脚本重建这个包, 为了避免产生的Warning使得升级失败, 这里把Warning清理掉
+      // Low version upgrade to 2274, the old upgrade script included the creation of Package statements, some statements will produce Warning on 2274 Server
+      // For example: Create Package pack IS Procedure proc(x Boolean := 1); End; will report a Warning of illegal default value for Boolean expression
+      // 2274's upgrade script will also rebuild this package using the latest Package script to avoid the upgrade failure caused by generated Warnings, here we clean up the Warnings
       common::ob_reset_tsi_warning_buffer();
     }
     if (need_reset_default_database) {
@@ -392,7 +392,7 @@ int ObCreatePackageResolver::resolve_functions_spec(const ObPackageInfo &package
       } else if (pl_routine_info->is_contains_sql()) {
         routine_info.set_contains_sql();
       }
-      // udt type 相关信息设置
+      // udt type related information setting
       if (pl_routine_info->is_udt_routine()) {
         routine_info.set_is_udt_udf();
         if (pl_routine_info->is_udt_static_routine()) {
@@ -710,7 +710,7 @@ int ObCreatePackageBodyResolver::resolve(const ParseNode &parse_tree)
 
       if (OB_SUCC(ret)) {
         if (OB_UNLIKELY(OB_SYS_TENANT_ID == session_info_->get_effective_tenant_id())) {
-          // 系统租户在创建系统包, 环境变量使用Oracle租户默认的环境变量
+          // System tenant is creating system package, environment variables use Oracle tenant's default environment variables
           // sql_mode = "PIPES_AS_CONCAT,STRICT_ALL_TABLES,PAD_CHAR_TO_FULL_LENGTH"
           if (common::ORACLE_MODE == compa_mode) {
             OZ (package_info.set_exec_env(ObString("2151677954,45,46,46,")));
@@ -739,9 +739,9 @@ int ObCreatePackageBodyResolver::resolve(const ParseNode &parse_tree)
        * But package still work, It will recompile in normal tenant without warnings.
        * So here, we ignore warnings in system package create stage.
        */
-      // 低版本升级到2274, 老的升级脚本中包含了创建Package语句, 部分语句在2274 Server上会产生Warning
-      // 比如: Create Package pack IS Procedure proc(x Boolean := 1); End;会报错Boolean表达式默认值非法的Warning
-      // 2274的升级脚本还会用最新的Package脚本重建这个包, 为了避免产生的Warning使得升级失败, 这里把Warning清理掉
+      // Low version upgrade to 2274, the old upgrade script included the creation of Package statements, some statements will produce Warning on 2274 Server
+      // For example: Create Package pack IS Procedure proc(x Boolean := 1); End; will report a Warning of illegal default value for Boolean expression
+      // 2274's upgrade script will also rebuild this package using the latest Package script to avoid the upgrade failure caused by the generated Warning, here we clean up the Warning
       common::ob_reset_tsi_warning_buffer();
     }
   }

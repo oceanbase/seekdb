@@ -4,7 +4,7 @@
 #include "easy_define.h"
 
 /**
- * base pthread线程池
+ * base pthread thread pool
  */
 
 EASY_CPP_START
@@ -15,8 +15,7 @@ EASY_CPP_START
     for((th) = (typeof(*(th))*)&(tp)->data[offset];                 \
             (char*)(th) < (tp)->last;                               \
             th = (typeof(*th)*)(((char*)th) + (tp)->member_size))
-
-// 第n个
+// the nth
 static inline void *easy_thread_pool_index(easy_thread_pool_t *tp, int n)
 {
     if (n < 0 || n >= tp->thread_count)

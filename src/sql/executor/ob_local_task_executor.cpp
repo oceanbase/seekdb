@@ -25,9 +25,8 @@ ObLocalTaskExecutor::ObLocalTaskExecutor()
 ObLocalTaskExecutor::~ObLocalTaskExecutor()
 {
 }
-
-// 执行Task，负责控制Task的执行流程，通过ObTransmit结果汇报/输出结果到客户端.
-// execute内部负责重试逻辑管理，不对外暴露retry()接口
+// Execute Task, responsible for controlling the execution flow of Task, reporting/outputting results to the client through ObTransmit.
+// execute internally handles retry logic management, does not expose the retry() interface
 int ObLocalTaskExecutor::execute(ObExecContext &ctx, ObJob *job, ObTaskInfo *task_info)
 {
   UNUSED(job);
@@ -56,17 +55,16 @@ int ObLocalTaskExecutor::execute(ObExecContext &ctx, ObJob *job, ObTaskInfo *tas
       } else {
         exec_result.set_static_engine_root(op);
       }
-
-      // 将task_info设成OB_TASK_STATE_RUNNING状态，
-      // 后面如果需要重试则会根据这个状态将该task_info中的partition信息
-      // 加入到需要重试的partition里面
+      // Set task_info to OB_TASK_STATE_RUNNING state,
+      // If a retry is needed later, it will use this status to retrieve the partition information from this task_info
+      // Add to the partition that needs retry
       task_info->set_state(OB_TASK_STATE_RUNNING);
     }
 
     if (OB_FAIL(ret)) {
-      // 如果失败了，则将task_info设成OB_TASK_STATE_FAILED状态，
-      // 这样后面如果需要重试则会根据这个状态将该task_info中的partition信息
-      // 加入到需要重试的partition里面
+      // If failed, then set task_info to OB_TASK_STATE_FAILED state,
+      // This way if a retry is needed later, it will use this status to retrieve the partition information from this task_info
+      // Add to the partition that needs retry
       task_info->set_state(OB_TASK_STATE_FAILED);
     }
   }

@@ -34,9 +34,9 @@ public:
   RPC_S(PR5 init_task, OB_PX_INIT_TASK, (sql::ObPxRpcInitTaskArgs), sql::ObPxRpcInitTaskResponse);
   // init sqc rpc asynchronously
   RPC_AP(PR5 async_init_sqc, OB_PX_ASYNC_INIT_SQC, (sql::ObPxRpcInitSqcArgs), sql::ObPxRpcInitSqcResponse);
-  // 单dfo调度rpc
+  // Single dfo scheduling rpc
   RPC_AP(PR5 fast_init_sqc, OB_PX_FAST_INIT_SQC, (sql::ObPxRpcInitSqcArgs), sql::ObPxRpcInitSqcResponse);
-  // px资源监控
+  // px resource monitoring
   RPC_S(PR5 fetch_statistics, OB_PX_TARGET_REQUEST, (sql::ObPxRpcFetchStatArgs), sql::ObPxRpcFetchStatResponse);
   RPC_AP(PR5 clean_dtl_interm_result, OB_CLEAN_DTL_INTERM_RESULT, (sql::ObPxCleanDtlIntermResArgs));
 };

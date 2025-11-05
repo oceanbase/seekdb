@@ -1807,7 +1807,7 @@ int ObVecIndexAsyncTask::delete_tablet_data(
 int ObVecIndexAsyncTask::delete_incr_table_data(ObPluginVectorIndexAdaptor &adaptor, ObDMLBaseParam &dml_param, transaction::ObTxDesc *tx_desc)
 {
   int ret = OB_SUCCESS;
-  // 可以考虑一下使用inner sql删除数据。
+  // You can consider using inner SQL to delete data.
   // 1. get 3, 4 index table scan iter.
   // 2. use iter to delete data.
   schema::ObTableParam delta_table_param(allocator_);

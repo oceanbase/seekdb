@@ -472,8 +472,7 @@ public:
   // for PalfHandleImpl::receive_config_log
   virtual bool can_receive_config_log(const common::ObAddr &leader, const LogConfigMeta &meta) const;
   virtual int after_flush_config_log(const LogConfigVersion &config_version);
-
-  // follower接收到成员变更日志需要进行前向校验
+  // follower receives member change log and needs to perform forward validation
   virtual int receive_config_log(const common::ObAddr &leader, const LogConfigMeta &meta);
 
   // for PalfHandleImpl::ack_config_log

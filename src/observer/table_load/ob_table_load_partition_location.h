@@ -81,7 +81,7 @@ public:
                                      const ObIArray<table::ObTableLoadPartitionId> &target_partition_ids,
                                      ObTableLoadPartitionLocation &partition_location,
                                      ObTableLoadPartitionLocation &target_partition_location);
-  // 通过tablet_id获取
+  // Get through tablet_id
   static int fetch_ls_id(uint64_t tenant_id, const common::ObTabletID &tablet_id,
                          share::ObLSID &ls_id);
   static int fetch_ls_location(uint64_t tenant_id, const common::ObTabletID &tablet_id,
@@ -98,7 +98,7 @@ private:
     const common::ObIArray<table::ObTableLoadPartitionId> &partition_ids);
  private:
   common::ObArenaAllocator allocator_;
-  common::ObArray<common::ObTabletID> tablet_ids_; //保证遍历partition_map_的时候顺序不变
+  common::ObArray<common::ObTabletID> tablet_ids_; // Ensure the order remains unchanged when traversing partition_map_
   common::hash::ObHashMap<common::ObTabletID, PartitionLocationInfo> partition_map_;
   table::ObTableLoadArray<common::ObAddr> all_leader_addr_array_;
   table::ObTableLoadArray<LeaderInfo> all_leader_info_array_;

@@ -28,13 +28,13 @@ public:
 
 public:
   /**
-   * 将该行数据序列化成MySQL认识的格式，输出位置：buf + pos，执行后pos指向buf中第一个free的位置。
+   * Serialize this row of data into a format recognized by MySQL, output position: buf + pos, after execution pos points to the first free position in buf.
    *
-   * @param [in] buf 序列化以后输出的序列的空间
-   * @param [in] len buf的长度
-   * @param [out] pos 当前buf第一个free的位置
+   * @param [in] buf The space for the serialized output sequence
+   * @param [in] len Length of buf
+   * @param [out] pos Current first free position in buf
    *
-   * @return 成功返回OB_SUCCESS， 失败返回oceanbase error code
+   * @return Returns OB_SUCCESS on success, returns oceanbase error code on failure
    */
   int serialize(char *buf, const int64_t len, int64_t &pos) const;
   bool is_packed() const { return is_packed_; }

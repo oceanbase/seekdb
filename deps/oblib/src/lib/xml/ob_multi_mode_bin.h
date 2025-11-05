@@ -104,9 +104,9 @@ typedef struct ObMulModeBinHeader {
       reserved_(0) {}
 
   uint8_t type_;			 // node type for current node
-  uint8_t kv_entry_size_type_   : 2; // the size describe var size of key_entry，val_entry
+  uint8_t kv_entry_size_type_   : 2; // the size describe var size of key_entry, val_entry
   uint8_t count_size_type_   : 2; // the size describe var size of element count
-  uint8_t obj_size_type_ : 2; // the size describe var size of key_entry，val_entry
+  uint8_t obj_size_type_ : 2; // the size describe var size of key_entry, val_entry
   uint8_t is_continuous_  : 1; // memory of current node and subtree is continous 
   uint8_t reserved_   : 1; // reserved bit
   char used_size_[]; // var size

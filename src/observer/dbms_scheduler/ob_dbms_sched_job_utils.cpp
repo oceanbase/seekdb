@@ -290,7 +290,7 @@ int ObDBMSSchedJobInfo::deep_copy(ObIAllocator &allocator, const ObDBMSSchedJobI
   OZ (ob_write_string(allocator, other.job_type_, job_type_));
   OZ (ob_write_string(allocator, other.this_exec_addr_, this_exec_addr_));
   OZ (ob_write_string(allocator, other.this_exec_trace_id_, this_exec_trace_id_));
-  //处理存在兼容性问题的列
+  //Handle columns with compatibility issues
   //job style 
   OZ (ob_write_string(allocator, "REGULAR", job_style_));
 
@@ -778,18 +778,18 @@ int ObDBMSSchedJobUtils::check_dbms_sched_job_priv(const ObUserInfo *user_info,
     LOG_WARN("user info is NULL", KR(ret));
   } else if (is_ora_sys_user(user_info->get_user_id()) || is_root_user(user_info->get_user_id())) {
     // do nothing
-  } else if (job_info.user_id_ != OB_INVALID_ID) { //如果 job 有 user_id 优先使用
+  } else if (job_info.user_id_ != OB_INVALID_ID) { // If the job has a user_id, prioritize its use
     if (job_info.user_id_ != user_info->get_user_id()) {
       ret = OB_ERR_NO_PRIVILEGE;
       LOG_WARN("job user id check failed", KR(ret), K(user_info), K(job_info.user_id_));
     }
   } else if (is_oracle_tenant) {
-    if (0 != job_info.powner_.case_compare(user_info->get_user_name())) { // job 的 owner 和 输入的 user 不一致
+    if (0 != job_info.powner_.case_compare(user_info->get_user_name())) { // the owner of the job and the input user are inconsistent
       ret = OB_ERR_NO_PRIVILEGE;
       LOG_WARN("oracle check job owner failed", KR(ret), K(user_info), K(job_info.user_id_));
     }
   } else {
-    if (0 != job_info.powner_.case_compare(user_info->get_user_name())) { // job 保存的 owner 可能是 root@% or root (旧)
+    if (0 != job_info.powner_.case_compare(user_info->get_user_name())) { // job saved owner might be root@% or root (old)
       const char *c = job_info.powner_.reverse_find('@');
       if (OB_ISNULL(c)) {
         ret = OB_ERR_NO_PRIVILEGE;
@@ -817,12 +817,12 @@ int ObDBMSSchedJobUtils::calc_dbms_sched_repeat_expr(const ObDBMSSchedJobInfo &j
   int64_t repeat_num = 0;
   int64_t freq_num = 0;
   const int64_t now = ObTimeUtility::current_time();
-  //处理旧job
+  //Handle old job
   if (job_info.interval_ts_ > 0) {
     int64_t N = (now - job_info.start_date_) / job_info.interval_ts_;
     next_run_time = job_info.start_date_ + (N + 1) * job_info.interval_ts_;
   } else if (job_info.repeat_interval_.empty() || 0 == job_info.repeat_interval_.case_compare("null")) {
-    if (now < job_info.start_date_) { //job 未开始
+    if (now < job_info.start_date_) { // job has not started
       next_run_time = job_info.start_date_;
     } else {
       next_run_time = ObDBMSSchedJobInfo::DEFAULT_MAX_END_DATE;
@@ -836,12 +836,12 @@ int ObDBMSSchedJobUtils::calc_dbms_sched_repeat_expr(const ObDBMSSchedJobInfo &j
 
     const int MAX_REPTAT_NUM_LEN = 16;
     if (!repeat_num_str.is_numeric() || MAX_REPTAT_NUM_LEN <= repeat_num_str.length()) {
-      next_run_time = ObDBMSSchedJobInfo::DEFAULT_MAX_END_DATE; //非数字/数字太大
+      next_run_time = ObDBMSSchedJobInfo::DEFAULT_MAX_END_DATE; //non-numeric/number too large
     } else {
       char repeat_num_buf[MAX_REPTAT_NUM_LEN];
       int64_t pos = repeat_num_str.to_string(repeat_num_buf, MAX_REPTAT_NUM_LEN);
       repeat_num = atoll(repeat_num_buf);
-      if (0 >= repeat_num) { //未加参数检查前的 job 可能会有这种错误
+      if (0 >= repeat_num) { //The job might have this error before parameter checking was added
         next_run_time = ObDBMSSchedJobInfo::DEFAULT_MAX_END_DATE;
       } else {
         if (0 != freq_str.case_compare("FREQ")) {
@@ -867,19 +867,19 @@ int ObDBMSSchedJobUtils::calc_dbms_sched_repeat_expr(const ObDBMSSchedJobInfo &j
         }
 
         if (OB_SUCC(ret)) {
-          if (INT64_MAX / repeat_num < freq_num * 1000000LL) { //乘法溢出处理
+          if (INT64_MAX / repeat_num < freq_num * 1000000LL) { // multiplication overflow handling
             next_run_time = ObDBMSSchedJobInfo::DEFAULT_MAX_END_DATE;
           } else {
             int64_t repeat_interval_ts = repeat_num * freq_num * 1000000LL;
             int64_t N = (now - job_info.start_date_) / repeat_interval_ts;
             int64_t increment = (N + 1) * repeat_interval_ts;
             next_run_time = increment + job_info.start_date_;
-            if (next_run_time < increment ||  next_run_time < job_info.start_date_) { //加法溢出处理
+            if (next_run_time < increment ||  next_run_time < job_info.start_date_) { // overflow handling for addition
               next_run_time = ObDBMSSchedJobInfo::DEFAULT_MAX_END_DATE;
             } else if (ObDBMSSchedJobInfo::DEFAULT_MAX_END_DATE <= next_run_time) {
                 next_run_time = ObDBMSSchedJobInfo::DEFAULT_MAX_END_DATE;
             } else {
-              //未开始执行时，重新计算下次执行时间应该还是 start_date
+              //When not yet executed, recalculating the next execution time should still be start_date
               next_run_time = max(next_run_time, job_info.start_date_);
             }
           }

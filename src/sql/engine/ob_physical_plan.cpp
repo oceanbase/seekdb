@@ -266,7 +266,7 @@ int ObPhysicalPlan::set_vars(const common::ObIArray<ObVarInfo> &vars)
     if (OB_FAIL(var_info.deep_copy(allocator_, clone_var_info))) {
       LOG_WARN("fail to deep copy var info", K(ret), K(var_info));
     } else if (OB_FAIL(vars_.push_back(clone_var_info))) {
-      // deep_copy时只写了ObString对象，ObString对象可以在allocator_析构的时候完全释放掉，因此这里不用调ObString的析构函数
+      // deep_copy when only ObString objects were written, ObString objects can be completely released when allocator_ is destructed, therefore there is no need to call the destructor of ObString here
       LOG_WARN("fail to push back vars", K(ret), K(clone_var_info));
     }
   }
@@ -631,7 +631,7 @@ bool ObPhysicalPlan::check_if_is_expired(const int64_t elapsed_time,
   int64_t max_index = std::min(access_table_num, std::min(table_row_count_list.count(), OB_MAX_TABLE_NUM_PER_STMT));
   for (int64_t i = 0; !bret && i < max_index; ++i) {
     for (int64_t j = 0; !bret && j < max_index; ++j) {
-      // 一些场景比如并行执行时，不同次执行表的行信息存储的顺序可能不同
+      // Some scenarios, such as parallel execution, the order of row information stored in the table may be different for different executions
       if (table_row_count_list.at(i).op_id_ == table_row_count_first_exec[j].op_id_) {
         int64_t first_exec_row_count = ATOMIC_LOAD(&table_row_count_first_exec[j].row_count_);
         if (inner_check_if_is_expired(first_exec_row_count, table_row_count_list.at(i).row_count_)) {
@@ -679,14 +679,15 @@ bool ObPhysicalPlan::is_plan_unstable(const int64_t sample_count,
 }
 
 /**
- * 目前采3个指标来淘汰计划，只有同时满足这3个条件，才会触发计划的淘汰：
- *     1. 当前行数超过阈值（100行）
- *     2. 执行时间超过阈值（5ms）
- *     3. 表扫描行数与原扫描行数比值超过阈值（2倍）
+ * Currently, 3 metrics are used to evict plans, and only when all 3 conditions are met will the plan be evicted:
+ *     1. The current number of rows exceeds the threshold (100 rows)
+ *     2. Execution time exceeds the threshold (5ms)
+ *     3. The ratio of table scan rows to original scan rows exceeds the threshold (2 times)
  *
- *     设置当前行数阈值的原因是因为表扫描函数并不能保证递增，在频繁插入删除的情况下，原来的表扫描函数
- *     可能会保持在一个较低的值，这时候计划淘汰会很频繁，
- *     设置一个阈值的可以在很大程度上缓解计划淘汰的频率
+ *     The reason for setting the current row count threshold is that the table scan function does not guarantee incrementality.
+ *     In scenarios with frequent insertions and deletions, the original table scan function might remain at a low value,
+ *     leading to frequent plan eviction.
+ *     Setting a threshold can significantly alleviate the frequency of plan eviction.
  */
 inline bool ObPhysicalPlan::inner_check_if_is_expired(const int64_t first_exec_row_count,
                                                       const int64_t current_row_count) const
@@ -694,7 +695,7 @@ inline bool ObPhysicalPlan::inner_check_if_is_expired(const int64_t first_exec_r
   bool ret_bool = false;
   if (first_exec_row_count < 0) {
     /* do nothing */
-  } else if (current_row_count <= EXPIRED_PLAN_TABLE_ROW_THRESHOLD) { // 100 行
+  } else if (current_row_count <= EXPIRED_PLAN_TABLE_ROW_THRESHOLD) { // 100 rows
     ret_bool = false;
   } else {
     ret_bool =  ((first_exec_row_count == 0  && current_row_count > 0)
@@ -752,10 +753,9 @@ int64_t ObPhysicalPlan::get_max_concurrent_num()
 OB_SERIALIZE_MEMBER(FlashBackQueryItem,
                     table_id_,
                     time_val_);
-
-//因为还没看到远程执行对force_trace_log的处理，所以暂时不序列化
+// Because we haven't seen the handling of force_trace_log for remote execution yet, so we will not serialize it temporarily
 OB_SERIALIZE_MEMBER(ObPhysicalPlan,
-                    tenant_schema_version_, //该字段执行期没被使用
+                    tenant_schema_version_, // this field is not used at runtime
                     phy_hint_.query_timeout_,
                     phy_hint_.read_consistency_,
                     is_sfu_,
@@ -1041,7 +1041,7 @@ int ObPhysicalPlan::alloc_op_spec(const ObPhyOperatorType type,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("NULL operator spec returned", K(ret));
   } else {
-    // 这里是直接将log operator id赋值给 spec
+    // Here is directly assigning log operator id to spec
     uint32_t tmp_op_id = UINT32_MAX;
     if (OB_INVALID_ID != op_id) {
       tmp_op_id = op_id;
@@ -1132,7 +1132,7 @@ PreCalcExprHandler* ObPhysicalPlan::get_pre_calc_expr_handler()
 
 void ObPhysicalPlan::calc_whether_need_trans()
 {
-  // 这只是一种实现方式，通过看这个plan是否有table参与来决定是否要走事务接口
+  // This is one way to implement, by checking if this plan involves a table to decide whether to use the transaction interface
   bool bool_ret = false;
   if (OB_UNLIKELY(stmt::T_EXPLAIN == stmt_type_)) {
     // false
@@ -1152,7 +1152,7 @@ void ObPhysicalPlan::calc_whether_need_trans()
       }
     }
   }
-  // mysql允许select udf中有dml，需要保证select 整体原子性
+  // mysql allows select udf to contain dml, needs to ensure the atomicity of the entire select
   if (!bool_ret && contain_pl_udf_or_trigger() && udf_has_dml_stmt() && stmt::T_EXPLAIN != stmt_type_) {
     bool_ret = true;
   }
@@ -1269,8 +1269,8 @@ int ObPhysicalPlan::update_cache_obj_stat(ObILibCacheCtx &ctx)
       if (OB_ISNULL(stat_.table_row_count_first_exec_
                     = static_cast<ObTableRowCount *>(
                     get_allocator().alloc(get_access_table_num() * sizeof(ObTableRowCount))))) {
-        // @banliu.zyd: 这块内存存放计划涉及的表的行数，用于统计信息已经过期的计划的淘汰，分配失败时
-        //              不报错，走原来不淘汰计划的逻辑
+        // @banliu.zyd: This memory stores the number of rows involved in the plan, used foreliminate expired plans in statistics, allocation failure cases
+        //              No error, follow the original non-elimination plan logic
         // ignore ret
         LOG_WARN("allocate memory for table row count list failed", K(get_access_table_num()));
       } else {

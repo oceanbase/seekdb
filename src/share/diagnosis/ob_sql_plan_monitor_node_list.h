@@ -29,8 +29,7 @@ namespace oceanbase
 namespace sql
 {
 class ObOperator;
-
-// 用于统计一段代码的执行时间
+// Used to measure the execution time of a piece of code
 class TimingGuard
 {
 public:
@@ -146,7 +145,7 @@ private:
   TraceId trace_id_;
   int64_t rt_node_id_; // for real time sql plan monitor
 public:
-  // 每个算子都要记录的信息
+  // Each operator needs to record the information
   int64_t open_time_;
   int64_t first_row_time_;
   int64_t last_row_time_;
@@ -156,7 +155,7 @@ public:
   uint64_t db_time_; // rdtsc cpu cycles spend on this op, include cpu instructions & io
   uint64_t block_time_; // rdtsc cpu cycles wait for network, io etc
   int64_t disk_read_count_;
-  // 各个算子特有的信息
+  // specific information for each operator
   int64_t otherstat_1_value_;
   int64_t otherstat_2_value_;
   int64_t otherstat_3_value_;
@@ -303,7 +302,7 @@ private:
   common::ObConcurrentFIFOAllocator allocator_;//alloc mem for string buf
   common::ObRaQueue queue_;
   MonitorNodeMap node_map_; // for real time sql plan monitor
-  ObSqlPlanMonitorRecycleTask task_; // 定期回收 sql plan mon 内存
+  ObSqlPlanMonitorRecycleTask task_; // Periodically recycle sql plan mon memory
   bool inited_;
   bool destroyed_;
   uint64_t request_id_;

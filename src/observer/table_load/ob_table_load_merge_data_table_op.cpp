@@ -83,7 +83,7 @@ int ObTableLoadMergeDataTableOp::inner_init()
   // merge_mode_
   if (OB_SUCC(ret)) {
     switch (ctx_->param_.method_) {
-      // 全量
+      // full amount
       case ObDirectLoadMethod::FULL:
         switch (ctx_->param_.insert_mode_) {
           case ObDirectLoadInsertMode::NORMAL:
@@ -99,7 +99,7 @@ int ObTableLoadMergeDataTableOp::inner_init()
             break;
         }
         break;
-      // 增量
+      // Incremental
       case ObDirectLoadMethod::INCREMENTAL:
         if (store_table_ctx->schema_->is_table_without_pk_) {
           inner_ctx_.merge_mode_ = ObDirectLoadMergeMode::NORMAL;
@@ -109,7 +109,7 @@ int ObTableLoadMergeDataTableOp::inner_init()
               inner_ctx_.merge_mode_ = ObDirectLoadMergeMode::MERGE_WITH_CONFLICT_CHECK;
               break;
             case ObDirectLoadInsertMode::INC_REPLACE:
-              // 有lob或索引的时候还是需要进行冲突检测
+              // Conflict detection is still required when there are lobs or indexes
               if (!store_table_ctx->schema_->lob_column_idxs_.empty() ||
                   !store_table_ctx->schema_->index_table_ids_.empty()) {
                 inner_ctx_.merge_mode_ = ObDirectLoadMergeMode::MERGE_WITH_CONFLICT_CHECK;
@@ -155,7 +155,7 @@ int ObTableLoadMergeDataTableOp::inner_close()
       LOG_WARN("fail to close build index table", KR(ret));
     }
   }
-  // 关闭insert_table_ctx
+  // close insert_table_ctx
   if (OB_SUCC(ret)) {
     if (OB_FAIL(merge_table_ctx_->insert_table_ctx_->collect_sql_stats(store_ctx_->dml_stats_,
                                                                        store_ctx_->sql_stats_))) {
@@ -248,7 +248,7 @@ int ObTableLoadMergeDeletePhaseDataTableOp::inner_close()
       LOG_WARN("fail to close build index table", KR(ret));
     }
   }
-  // 关闭insert_table_ctx
+  // close insert_table_ctx
   if (OB_SUCC(ret)) {
     if (OB_FAIL(store_ctx_->data_store_table_ctx_->close_insert_table_ctx())) {
       LOG_WARN("fail to close insert table ctx", KR(ret));
@@ -312,7 +312,7 @@ int ObTableLoadMergeAckPhaseDataTableOp::inner_close()
 {
   int ret = OB_SUCCESS;
   FLOG_INFO("ObTableLoadMergeAckPhaseDataTableOp FINISH");
-  // 关闭insert_table_ctx
+  // close insert_table_ctx
   if (OB_FAIL(store_ctx_->data_store_table_ctx_->close_insert_table_ctx())) {
     LOG_WARN("fail to close insert table ctx", KR(ret));
   }

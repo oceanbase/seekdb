@@ -64,10 +64,10 @@ struct ObJoinFilterShareInfo
       : unfinished_count_ptr_(0), ch_provider_ptr_(0), release_ref_ptr_(0), filter_ptr_(0),
         shared_msgs_(0), shared_jf_constructor_(nullptr)
   {}
-  uint64_t unfinished_count_ptr_; // send_filter引用计数, 初始值为worker个数
-  uint64_t ch_provider_ptr_; // sqc_proxy, 由于序列化需要, 使用指针表示.
-  uint64_t release_ref_ptr_; // 释放内存引用计数, 初始值为worker个数.
-  uint64_t filter_ptr_;   //此指针将作为PX JOIN FILTER CREATE算子共享内存.
+  uint64_t unfinished_count_ptr_; // send_filter reference count, initial value is the number of workers
+  uint64_t ch_provider_ptr_; // sqc_proxy, due to serialization requirements, use a pointer representation.
+  uint64_t release_ref_ptr_; // Release memory reference count, initial value is the number of workers.
+  uint64_t filter_ptr_;   // This pointer will be shared memory for PX JOIN FILTER CREATE operator.
   uint64_t shared_msgs_;  //sqc-shared dh msgs
   union {
     SharedJoinFilterConstructor *shared_jf_constructor_;
@@ -129,7 +129,7 @@ public:
     new (ptr) ObJoinFilterOpInput(ctx, spec);
   }
   bool check_release();
-  // 每个worker共享同一块sqc_proxy
+  // Each worker shares the same sqc_proxy
   void set_sqc_proxy(ObPxSQCProxy &sqc_proxy)
   {
     share_info_.ch_provider_ptr_ = reinterpret_cast<uint64_t>(&sqc_proxy);
@@ -159,8 +159,8 @@ public:
   int64_t get_px_sequence_id() { return px_sequence_id_; }
   int load_runtime_config(const ObJoinFilterSpec &spec, ObExecContext &ctx);
 public:
-  ObJoinFilterShareInfo share_info_; //bloom filter共享内存
-  int64_t task_id_; //在pwj join场景中会用到此task_id作为bf_key
+  ObJoinFilterShareInfo share_info_; // bloom filter shared memory
+  int64_t task_id_; // In the pwj join scenario, this task_id will be used as bf_key
   int64_t px_sequence_id_;
   int64_t bf_idx_at_sqc_proxy_;
   ObJoinFilterRuntimeConfig config_;

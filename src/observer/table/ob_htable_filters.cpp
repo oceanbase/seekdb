@@ -2639,7 +2639,7 @@ void CheckAndMutateFilter::reset()
 }
 
 // NOTE: when value_is_null is true，cannot return other cell directly 
-// 判断是否 check 通过，例如当整个 column family 为空的时候，result_count = 0，但是应该是 check 通过
+// Determine if the check passes, for example when the entire column family is empty, result_count = 0, but it should still be a check pass
 
 // NOTE: when value_is_null is true, cannot return other cells directly and determine whether check is
 // passed by result_count > 0 in ObTableQueryAndMutateP::try_process.

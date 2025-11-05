@@ -63,7 +63,7 @@ public:
     }
     return xref_(p, cnt);
   }
-  // 不传出slot_id的只会关注自己的槽
+  // Not passing slot_id will only focus on its own slot
   int32_t inc_ref(int32_t* p) {
     int32_t ref_cnt = REF_LIMIT;
     int64_t start = ref_count_per_thread_ * (get_itid() % MAX_CPU_NUM);
@@ -94,7 +94,7 @@ public:
     }
     return ref_cnt;
   }
-  // 传出slot_id的会尝试所有的SLOT
+  // The slot_id passed out will attempt all the SLOT
   int32_t inc_ref(int32_t* p, int64_t &slot_id) {
     int32_t ref_cnt = REF_LIMIT;
     int64_t start = ref_count_per_thread_ * (get_itid() % MAX_CPU_NUM);

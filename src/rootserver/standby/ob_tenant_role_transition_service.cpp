@@ -798,8 +798,8 @@ int ObTenantRoleTransitionService::check_ls_balance_task_finish_(
     share::ObAllTenantInfo &cur_tenant_info, bool &is_finish)
 {
   int ret = OB_SUCCESS;
-  // 存tmp目的是为了最后打印是哪些日志流没回放完成
-  // 不然可能在读表更新ls_balance_tasks/balance_task_array的时候就超时了，这个时候数组里面是空的，打不出来
+  // The purpose of storing tmp is to print which log streams have not been replayed completed
+  // Otherwise, it may time out when reading the table to update ls_balance_tasks/balance_task_array, at which point the array is empty and nothing can be printed
   ObArray<ObBalanceTaskHelper> tmp_ls_balance_tasks;
   ObBalanceTaskArray tmp_balance_task_array;
   share::ObAllTenantInfo tmp_tenant_info;
@@ -819,15 +819,15 @@ int ObTenantRoleTransitionService::check_ls_balance_task_finish_(
     ret = OB_SUCCESS;
     ls_balance_tasks.reset();
     /*
-      __all_balance_task_helper表被清空不代表没有transfer任务，例子：
-      租户A是主库，发起了一轮负载均衡，balance_task表里进入transfer状态但是没有结束的时候切换成备库。
-      租户B是备库，在切成主库的时候会在回放到最新的时候，把TRANSFER_BEGIN的给清理掉。
-      如果租户B作为主库的时候也执行了几轮transfer任务但是还是没有结束掉balance_task表的transfer状态。
-      这个时候租户A在切成主库的时候是没有办法判断自己是否有transfer的发生。
-      为了解决这个问题，我们去读取了__all_balance_task表，如果这个表中有处于transfer状态的任务，则一定要等回放到最新。
-      同时这里也有一个问题：可读点会不会特别落后，我们从两个方面论述A租户可读点不会有问题
-      1. 如果可以清理__all_balance_task_helper表，则可读点一定越过了表中的记录,即使B新开启了一轮负载均衡任务，那也不会有问题
-      2. 单纯的经过主切备，可读点会推高越过最新的GTS，所以肯定可以读到最新的transfer任务*/
+      The __all_balance_task_helper table being cleared does not mean there are no transfer tasks. Example:
+      Tenant A is the primary database and initiated a round of load balancing. The balance_task table entered the transfer state but did not finish when it switched to the backup database.
+      Tenant B is the backup database and, upon switching to the primary database, will clean up TRANSFER_BEGIN entries during replay to the latest state.
+      If tenant B also executes several rounds of transfer tasks while being the primary database but the transfer state in the balance_task table has not ended,
+      tenant A will be unable to determine if any transfers occurred when it switches back to the primary database.
+      To solve this problem, we read the __all_balance_task table. If there are tasks in this table with a transfer status, we must wait for replay to the latest state.
+      There is also an issue: could the readable point lag significantly? We discuss from two aspects why tenant A's readable point will not be problematic:
+      1. If the __all_balance_task_helper table can be cleaned, the readable point must have surpassed the records in the table. Even if tenant B initiates a new round of load balancing tasks, there will be no issues.
+      2. Simply going through a leader-follower switch will push the readable point beyond the latest GTS, so the latest transfer tasks can definitely be read.*/
     if (OB_FAIL(ObBalanceTaskTableOperator::load_need_transfer_task(
         tenant_id_, tmp_balance_task_array, *sql_proxy_))) {
       LOG_WARN("failed to load need transfer task", KR(ret), K(tenant_id_));
@@ -1691,10 +1691,10 @@ int ObTenantRoleTransitionService::get_checkpoints_by_rpc(const uint64_t tenant_
     ObGetLSSyncScnProxy proxy(
         *GCTX.srv_rpc_proxy_, &obrpc::ObSrvRpcProxy::get_ls_sync_scn);
     obrpc::ObGetLSSyncScnArg arg;
-    //由于在check_sync_to_latest，需要给上游发RPC或者SQL获取准确的end_scn，所以会存在嵌套
-    //RPC的概率，OBCG_DBA_COMMAND这个队列是需要的时候创建，个数和租户的CPU相关，如果发生
-    //嵌套RPC的话，可能会出现资源型饿死的可能性。
-    //在不需要检查check_sync_to_latest使用OBCG_DBA_COMMAND，否则为了避免嵌套RPC，使用NORMAL队列
+    //Since in check_sync_to_latest, we need to send RPC or SQL to the upstream to get the accurate end_scn, there will be nesting
+    //Probability of RPC, the OBCG_DBA_COMMAND queue is created when needed, the number is related to the tenant's CPU, if it occurs
+    //Nested RPCs may lead to the possibility of resource starvation.
+    //When check_sync_to_latest is not needed, use OBCG_DBA_COMMAND, otherwise, to avoid nested RPC, use NORMAL queue
     const uint64_t group_id = check_sync_to_latest ? 0 : share::OBCG_DBA_COMMAND;
     for (int64_t i = 0; OB_SUCC(ret) && i < status_info_array.count(); ++i) {
       const ObLSStatusInfo &info = status_info_array.at(i);

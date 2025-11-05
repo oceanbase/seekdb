@@ -244,7 +244,7 @@ protected:
 private:
   common::hash::ObPlacementHashSet<uint64_t, 4229> insert_column_ids_;
   bool is_column_specify_;
-  bool is_oracle_tmp_table_; //是否创建oracle的临时表
+  bool is_oracle_tmp_table_; // whether to create oracle's temporary table
   int64_t oracle_tmp_table_type_;
 protected:
   bool is_resolve_insert_update_;

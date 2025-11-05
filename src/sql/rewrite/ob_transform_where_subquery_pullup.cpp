@@ -23,22 +23,22 @@ using share::schema::ObTableSchema;
 
 namespace sql
 {
-//遍历每一个cond_expr进行如下处理:
-//  1. 递归处理含subquery的表达式(eliminate_subquery()):
-//     1) 如果是[NOT] EXISTS:
-//         判断是否可以消除subquery
-//           a. 如果可以，则将subquery消除
-//           b. 如果不可以：
-//              * 消除select list -->常量select 1
-//              * 消除group by
-//              * 消除order by
-//     2) 如果是ANY/ALL：
-//         a. 消除group by
-//         b. 非相关any子查询如果select item为const item，则添加limit 1
+// Traverse every cond_expr for the following processing:
+//  1. Recursively process expressions containing subqueries (eliminate_subquery()):
+//     1) If is [NOT] EXISTS:
+//         Determine if subquery can be eliminated
+//           a. If possible, eliminate the subquery
+//           b. If not possible:
+//              * eliminate select list --> constant select 1
+//              * eliminate group by
+//              * eliminate order by
+//     2) If it is ANY/ALL:
+//         a. eliminate group by
+//         b. Non-related any subquery if select item is const item, then add limit 1
 //            eg: select * from t1 where c1 in (select 1 from t2);
 //                ==> select * from t1 where c1 in (select 1 from t2 limit 1);
-//         c. 消除相关子查询中的distinct
-//  2. 判断是否可以pull up
+//         c. eliminate distinct in relevant subqueries
+//  2. Determine if pull up is possible
 //  3. pull up subquery
 //     a. IN (SELECT ...) --> semi join
 //     b. NOT IN (SELECT ...) --> anti join
@@ -417,7 +417,7 @@ int ObWhereSubQueryPullup::check_subquery_validity(ObQueryRefRawExpr *query_ref,
 }
 
 /*@brief check if where subquery and having subquery in subquery is correlated
-* semi/anti 的condition中不能有包含上层相关变量的子查询，暂时不支持这种行为
+* the condition in semi/anti cannot have subqueries containing upper-level correlated variables, this behavior is not supported for now
 *   eg:select c2 from t1 where c2 not in
 *                       (select c2 from t2 where t2.c2 not in (select 1 from t3 where t1.c3 = 1));
 */
@@ -858,7 +858,7 @@ int ObWhereSubQueryPullup::make_null_test(ObDMLStmt *stmt, ObRawExpr *in_expr, O
 }
 
 /**
- * @brief  将子查询提升上来后，将原来包含子查询的谓词转化为新的条件
+ * @brief  After lifting the subquery, convert the original predicate containing the subquery into new conditions
  */
 int ObWhereSubQueryPullup::generate_conditions(ObDMLStmt *stmt,
                                                ObIArray<ObRawExpr *> &subq_exprs,
@@ -969,8 +969,8 @@ int ObWhereSubQueryPullup::generate_conditions(ObDMLStmt *stmt,
   return ret;
 }
 
-/** @brief 将和外查询无关的子查询提升为一个view
- *         并和原来的表做join，根据子查询和外查询的相关特性可能转化为：
+/** @brief Promote uncorrelated subqueries to a view
+ *         and join it with the original table, based on the correlation characteristics between the subquery and the outer query, it may be transformed into:
  *         II . IN (SELECT ...)     -> semi join
  *         III. NOT IN (SELECT ...) -> anti join
  *  NOTE: We use the term 'view' to describe a sub-query block appearing in the FROM clause,
@@ -993,23 +993,23 @@ int ObWhereSubQueryPullup::generate_conditions(ObDMLStmt *stmt,
  *  OR view.`min(c1)` IS NULL
  *
  *
- *  改写条件：
- *  I 改为semi join:
- *     1. IN(subquery)或者等价的=ANY(subquery)
- *     2. subquery和外查询无关联
- *     3. subquery不是集合操作(UNION / EXCEPT等)
+ *  Rewrite conditions:
+ *  I rewrite to semi join:
+ *     1. IN(subquery) or equivalent =ANY(subquery)
+ *     2. subquery and outer query are uncorrelated
+ *     3. subquery is not a set operation (UNION / EXCEPT etc.)
  *
- *  II 改为anti join:
- *     1. NOT IN(subquery)或者等价的<>ALL(subquery)
- *     2. subquery和外查询无关联
- *     4. subquery不是集合操作(UNION / EXCEPT等)
+ *  II rewrite to anti join:
+ *     1. NOT IN(subquery) or equivalent <>ALL(subquery)
+ *     2. subquery and outer query are uncorrelated
+ *     4. subquery is not a set operation (UNION / EXCEPT etc.)
  *
- *  执行流程：
- *         1. 生成一个generated_table，指向子查询；过程中需要填充generated_table中的列
- *         2. 生成等值连接条件，并加入到本查询的WHERE子句中
- *         3. 对于III改写anti join，如果需要，需要添加额外NOT NULL条件
- *         4. 移除原来的IN / NOT IN表达式
- *         5. 递归提升子查询和它内部表达式的层级
+ *  Execution process:
+ *         1. Generate a generated_table pointing to the subquery; during this process, columns in the generated_table need to be filled
+ *         2. Generate equality join conditions and add them to the WHERE clause of this query
+ *         3. For III rewriting anti join, if necessary, additional NOT NULL conditions need to be added
+ *         4. Remove the original IN / NOT IN expression
+ *         5. Recursively promote the subquery and its internal expressions
  */
 int ObWhereSubQueryPullup::pullup_non_correlated_subquery_as_view(ObDMLStmt *stmt,
                                                                   ObSelectStmt *subquery,
@@ -1113,8 +1113,8 @@ int ObWhereSubQueryPullup::pullup_non_correlated_subquery_as_view(ObDMLStmt *stm
 
 /**
  * @brief ObWhereSubQueryPullup::transform_single_set_query
- * 1. 检查子查询是不是 single-set spj，只要是 single-set spj 逻辑上就可以改造
- * 2. 子查询构造一个 outer join，然后替换所有的引用
+ * 1. Check if the subquery is a single-set spj, logically it can be transformed if it is a single-set spj
+ * 2. Construct an outer join for the subquery, then replace all references
  * @return
  */
 int ObWhereSubQueryPullup::transform_single_set_query(ObDMLStmt *stmt,
@@ -1318,8 +1318,7 @@ int ObWhereSubQueryPullup::check_subquery_validity(ObDMLStmt &stmt,
       LOG_WARN("failed to push back const column", K(ret));
     }
   }
-  
-  //1.检查是否是single set query
+  //1.check if it is a single set query
   if (OB_SUCC(ret) && is_valid) {
     if (OB_FAIL(ObTransformUtils::check_stmt_unique(subquery, ctx_->session_info_,
                                                     ctx_->schema_checker_, const_columns,
@@ -1341,7 +1340,7 @@ int ObWhereSubQueryPullup::check_subquery_validity(ObDMLStmt &stmt,
       OPT_TRACE("subquery contain correlated table item");
     }
   }
-  //3.检查是否以outer join上拉子查询
+  //3.Check if it is an outer join subquery pull-up
   if (OB_SUCC(ret) && is_valid) {
     bool is_null_reject = false;
     ObSEArray<const ObRawExpr *, 1> tmp;
@@ -1357,7 +1356,7 @@ int ObWhereSubQueryPullup::check_subquery_validity(ObDMLStmt &stmt,
     } else {
       param.use_outer_join_ = !is_null_reject;
     }
-    //outer join不支持上拉semi info，否则有正确性问题
+    // outer join does not support pulling up semi info, otherwise there will be correctness issues
     if (param.use_outer_join_ && subquery->get_semi_info_size() > 0) {
       is_valid = false;
       OPT_TRACE("subquery has semi info");
@@ -1376,10 +1375,9 @@ int ObWhereSubQueryPullup::check_subquery_validity(ObDMLStmt &stmt,
       }
     }
   }
-
-  //4.检查子查询是否有空拒绝表达式，如果有，需要找到not null column构造case when
+  //4.Check if the subquery has an empty reject expression, if so, need to find not null column to construct case when
   if (OB_SUCC(ret) && is_valid && param.use_outer_join_) {
-    //检查是否有空值拒绝表达式
+    // Check for null values in the reject expression
     bool find = false;
     for (int64_t i = 0; OB_SUCC(ret) && i < subquery->get_select_item_size(); ++i) {
       bool is_null_propagate = true;
@@ -1583,8 +1581,8 @@ int ObWhereSubQueryPullup::pull_up_tables_and_columns(ObDMLStmt *stmt, ObSelectS
 }
 
 /*
- *如果condition中有和上层相关的table item，需要将其放到semi join的左枝,如:
- *select c1 from t1 where c1 in (select c1 from t2 where c2 >= some(select c2 from t3 where t1.c2=t3.c1));
+ * If condition contains table items related to the upper layer, it needs to be placed on the left branch of the semi join, e.g.:
+ * select c1 from t1 where c1 in (select c1 from t2 where c2 >= some(select c2 from t3 where t1.c2=t3.c1));
 */
 int ObWhereSubQueryPullup::pull_up_semi_info(ObDMLStmt* stmt,
                                              ObSelectStmt* subquery)

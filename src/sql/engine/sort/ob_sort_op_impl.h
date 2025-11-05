@@ -499,10 +499,10 @@ public:
   {
     PartHashNode(): hash_node_next_(NULL), part_row_next_(NULL), store_row_(NULL) {}
     ~PartHashNode() { hash_node_next_ = NULL; part_row_next_ = NULL; store_row_ = NULL; }
-    // hash_node_next_ 为 buckets 中的某个 bucket 中的多个数据块之间的联系，
-    // 多个数据块之间满足：hash_value 的高 n 位相同，但 hash_value、partition by value  不相同。
-    // part_row_next_  为 buckets 中的某个 bucket 中的单个数据块内部的联系，
-    // 单个数据块内部满足：hash_value 的高 n 位相同，且 hash_value、partition by value 完全相同。
+    // hash_node_next_ is the link between multiple data blocks within a bucket in buckets,
+    // Multiple data blocks satisfy: the high n bits of hash_value are the same, but hash_value, partition by value are different.
+    // part_row_next_  is the link within a single data block inside one of the buckets,
+    // A single data block satisfies: the high n bits of hash_value are the same, and hash_value, partition by value are completely identical.
     PartHashNode *hash_node_next_;
     PartHashNode *part_row_next_;
     ObChunkDatumStore::StoredRow *store_row_;
@@ -707,11 +707,10 @@ protected:
       const ObChunkDatumStore::StoredRow *&sr);
   int part_heap_next_stored_row(
       const ObChunkDatumStore::StoredRow *&sr);
-
-  // 这里need dump外加两个条件: 1) data_size > expect_size 2) mem_used > global_bound
-  // 为什么如此，原因在于expect size可能是one pass size，所以数据大于expect size，
-  // 而总内存不能超过global bound size，否则总体内存会超限
-  // 基于此，看后面是否统一考虑采用这种方案，也就是分两部分：data size和total mem used size来判断是否dump
+  // Here need dump extra two conditions: 1) data_size > expect_size 2) mem_used > global_bound
+  // Why so, the reason is that expect size might be one pass size, so the data is greater than expect size,
+  // and total memory cannot exceed global bound size, otherwise overall memory will be out of limit
+  // Based on this, see if we should consider adopting this approach uniformly, which is to use two parts: data size and total mem used size to determine whether to dump
   bool need_dump()
   {
     return sql_mem_processor_.get_data_size() > sql_mem_processor_.get_mem_bound()

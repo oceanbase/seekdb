@@ -397,7 +397,7 @@ int ObExternalTableUtils::prepare_single_scan_range(const uint64_t tenant_id,
           LOG_WARN("failed to make external table scan range", K(ret));
         } else {
           /*
-           * 单机单线程每个part一个range
+           * Single-node single-threaded each part has one range
            */
           OZ(new_range.push_back(range));
         }
@@ -446,7 +446,7 @@ int ObExternalTableUtils::prepare_single_scan_range(const uint64_t tenant_id,
             LOG_WARN("failed to new a ptr", K(ret));
           } else if (OB_FAIL(ObExternalTableUtils::make_external_table_scan_range(part_str,
                          0,
-                         0,  // external_info.part_id_ 原来part id会存在列中可以反解出分区列的值, 现在不需要了
+                         0,  // external_info.part_id_ the original part id would exist in the column and could be decoded to get the partition column value, now it's not needed anymore
                          0,
                          INT64_MAX,
                          session_str,
@@ -479,7 +479,7 @@ int ObExternalTableUtils::prepare_single_scan_range(const uint64_t tenant_id,
             LOG_WARN("failed to new a ptr", K(ret));
           } else if (OB_FAIL(ObExternalTableUtils::make_external_table_scan_range(part_str,
                          0,
-                         0,  // external_info.part_id_ 原来part id会存在列中可以反解出分区列的值, 现在不需要了
+                         0,  // external_info.part_id_ the original part id would exist in the column and could be decoded to get the partition column value, now it's not needed anymore
                          0,
                          total_row_count,
                          session_str,
@@ -513,7 +513,7 @@ int ObExternalTableUtils::prepare_single_scan_range(const uint64_t tenant_id,
             LOG_WARN("failed to make external table scan range", K(ret));
           } else {
             /*
-             * 单机单线程每个part一个range
+             * Single-node single-threaded each part has one range
              */
             OZ(new_range.push_back(range));
           }
@@ -595,8 +595,7 @@ int ObExternalPathFilter::init(const ObString &pattern,
   }
   return ret;
 }
-
-// dfo.get_sqcs(sqcs) sqcs 里面是dfo的地址
+// dfo.get_sqcs(sqcs) sqcs contains the address of dfo
 int ObExternalTableUtils::assign_odps_file_to_sqcs(
   ObDfo &dfo,
   ObExecContext &exec_ctx,
@@ -737,7 +736,7 @@ int ObExternalTableUtils::assign_odps_file_to_sqcs(
     }
   }
   if (OB_SUCC(ret)) {
-    // 作为结尾标志放给sqc
+    // as the end marker for sqc
     ObExternalFileInfo dummy_file;
     const char* dummy_file_name = "#######DUMMY_FILE#######";
     dummy_file.file_url_ = dummy_file_name;
@@ -769,7 +768,7 @@ int ObExternalTableUtils::split_odps_to_sqcs_storage_api(int64_t split_task_coun
         info.file_id_ = 0;
         info.file_size_ = 1;
         info.file_id_ = i;
-        info.part_id_ = 0;  // 由于现在partition是多个一起合成的
+        info.part_id_ = 0;  // Since now partition is composed of multiple ones together
         info.row_start_ = 0;
         info.row_count_ = 0;
         if (OB_FAIL(sqcs.at(sqc_idx).get_access_external_table_files().push_back(info))) {
@@ -1315,7 +1314,7 @@ int ObExternalTableUtils::sort_external_files(ObIArray<ObString> &file_urls,
 }
 
 /*
-* 全局只在这里pull partition了
+* Global pull partition is done only here
 */
 int ObExternalTableUtils::collect_external_file_list(
     const ObSQLSessionInfo* session_ptr_in,
@@ -1478,7 +1477,7 @@ int ObExternalTableUtils::collect_external_file_list(
               LOG_WARN("unexpected count of partition info", K(ret), K(partition_specs.count()));
             }
             /*
-             * 没有partition
+             * no partition
              */
             OZ(file_sizes.push_back(partition_specs.at(0).record_count_));
             OZ(file_urls.push_back(ObString("")));
@@ -1527,10 +1526,10 @@ bool ObExternalTableUtils::is_skipped_insert_column(const schema::ObColumnSchema
   bool is_skip = false;
   if (OB_HIDDEN_FILE_ID_COLUMN_ID == column.get_column_id()
       || OB_HIDDEN_LINE_NUMBER_COLUMN_ID == column.get_column_id()) {
-    // 外表插入时不写隐藏列
+    // Do not write hidden columns when inserting appearance
     is_skip = true;
   } else if (column.is_tbl_part_key_column()) {
-    // 外表插入时不写分区键的列
+    // Columns to be inserted without partition key during appearance insertion
     is_skip = true;
   }
   return is_skip;

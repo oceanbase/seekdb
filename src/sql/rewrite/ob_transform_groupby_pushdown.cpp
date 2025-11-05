@@ -1334,9 +1334,8 @@ int ObTransformGroupByPushdown::check_collation_validity(const ObDMLStmt &stmt, 
   }
   return ret;
 }
-
-// 根据 group, aggregation exprs 决定 group by 可以 push 到哪些 view 上
-// 如果最后计算出来所有的 table 都要放到一个 view 里面，那说明没办法做 push down
+// According to group, aggregation exprs decide which views group by can be pushed to
+// If all the tables calculated at the end need to be put into one view, that means push down cannot be done
 int ObTransformGroupByPushdown::compute_push_down_param(ObSelectStmt *stmt,
                                                         ObIArray<PushDownParam> &params,
                                                         const ObGroupByPlacementHint *hint,
@@ -1558,8 +1557,8 @@ int ObTransformGroupByPushdown::merge_cross_join_tables_by_joined_tables(ObSelec
 }
 
 // 3. merge tables according to joined tables
-// outer join 不具备结合律，给定一个 joined_table，如果有多个 basic table 被压到了一个 view 里面
-// 那么我们只能把整个 joined table 压到一个 view 里面
+// outer join does not have associativity, given a joined_table, if there are multiple basic tables compressed into one view
+// Then we can only put the entire joined table into one view
 // TODO can improve. (a join b) left join (c join d)
 // (a, b) can be put into the same view
 int ObTransformGroupByPushdown::merge_tables_by_joined_tables(ObSelectStmt *stmt,
@@ -1725,11 +1724,11 @@ int ObTransformGroupByPushdown::get_null_side_tables(ObDMLStmt &stmt,
 
 /**
  * @brief ObTransformGroupByPushdown::is_filterable_join
- * 如果一个 Join 条件对一侧的过滤性非常的强，那么我们应该先做 join，再做 group by
- * 判定的标准
- *   1. Join 条件有一侧是表 A 的 column
- *   2. A 的 column 是某个索引的第一列
- *   3. A 上有 group by 任务
+ * If a Join condition is very filtering on one side, then we should do the join first, then the group by
+ * The determination criteria
+ *   1. The Join condition has one side as column of table A
+ *   2. Column of A is the first column of some index
+ *   3. There is a group by task on A
  * @return
  */
 int ObTransformGroupByPushdown::is_filterable_join(ObSelectStmt *stmt,
@@ -2641,9 +2640,9 @@ int ObTransformGroupByPushdown::push_down_groupby_into_cross_join(
 }
 
 /**
- * 1. 构建 STMT 做 eager aggregation
- * 2. 用 eager aggregation 的结果来推导原来 aggregation 的结果。替换掉原始 aggregation 的引用。
- * 3. 用 generated table 替换原来的 table
+ * 1. Build STMT for eager aggregation
+ * 2. Use the result of eager aggregation to derive the result of the original aggregation. Replace the reference to the original aggregation.
+ * 3. Replace the original table with the generated table
 **/
 int ObTransformGroupByPushdown::do_double_eager_rewrite(ObSelectStmt *stmt,
                                                              ObIArray<uint64_t> &flatten_joined_tables,

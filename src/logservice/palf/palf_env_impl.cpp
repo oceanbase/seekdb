@@ -176,7 +176,7 @@ PalfEnvImpl::PalfEnvImpl() : palf_meta_lock_(common::ObLatchIds::PALF_ENV_LOCK),
                              disk_not_enough_print_interval_in_gc_thread_(OB_INVALID_TIMESTAMP),
                              disk_not_enough_print_interval_in_loop_thread_(OB_INVALID_TIMESTAMP),
                              self_(),
-                             palf_handle_impl_map_(64),  // 指定min_size=64
+                             palf_handle_impl_map_(64),  // specify min_size=64
                              last_palf_epoch_(0),
                              rebuild_replica_log_lag_threshold_(0),
                              enable_log_cache_(false),

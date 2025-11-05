@@ -28,8 +28,8 @@ public:
   ObDirectLoadDataBlockHeader() : size_(0), occupy_size_(0), last_row_offset_(0) {}
   TO_STRING_KV(K_(size), K_(occupy_size), K(last_row_offset_));
 public:
-  int32_t size_; // 有效数据大小
-  int32_t occupy_size_; // 实际占用大小
+  int32_t size_; // effective data size
+  int32_t occupy_size_; // actual occupied size
   int32_t last_row_offset_;
 };
 
@@ -41,7 +41,7 @@ public:
   TO_STRING_KV(K(start_offset_), K(row_count_));
 public:
   uint64_t start_offset_;
-  int64_t row_count_; //索引块的row_count
+  int64_t row_count_; // the row_count of the index block
 };
 
 struct ObDirectLoadIndexBlockItem
@@ -51,15 +51,15 @@ public:
   ObDirectLoadIndexBlockItem() : end_offset_(0) {}
   TO_STRING_KV(K(end_offset_));
 public:
-  uint64_t end_offset_; //索引项的offset
+  uint64_t end_offset_; // the offset of the index item
 };
 
 struct ObDirectLoadIndexInfo
 {
 public:
   ObDirectLoadIndexInfo() : offset_(0), size_(0) {}
-  uint64_t offset_; //索引块对应数据块的offset
-  int64_t size_; //数据块的大小
+  uint64_t offset_; // index block corresponding data block's offset
+  int64_t size_; // the size of the data block
   TO_STRING_KV(K(offset_), K(size_));
 };
 
@@ -107,10 +107,10 @@ private:
   int64_t header_length_;
   int64_t buf_pos_;
   int64_t buf_size_;
-  int64_t item_size_; //每个索引块对应的索引项个数
-  int64_t row_count_; //索引块的总行数
-  int64_t total_index_size_; //索引项个数
-  uint64_t offset_; //维护索引项的offset
+  int64_t item_size_; // the number of index items corresponding to each index block
+  int64_t row_count_; // total number of rows in the index block
+  int64_t total_index_size_; // number of index items
+  uint64_t offset_; // maintain the offset of the index item
   char *buf_;
   common::ObArenaAllocator allocator_;
   ObDirectLoadTmpFileIOHandle file_io_handle_;

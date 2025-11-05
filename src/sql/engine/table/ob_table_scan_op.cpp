@@ -66,9 +66,8 @@ int FlashBackItem::set_flashback_query_info(ObEvalCtx &eval_ctx, ObDASScanRtDef 
       }
     }
   }
-
-  //对于同时存在hint指定的frozen_version和flashback query指定了snapshot version的情况下, 选择保留
-  //flashback query指定的snapshot version, 忽略hint指定的frozen_version
+  // For the case where both hint-specified frozen_version and flashback query specified snapshot version exist, choose to retain
+  // flashback query specified snapshot version, ignore hint specified frozen_version
   if (OB_SUCC(ret)) {
     if (scan_rtdef.fb_snapshot_.is_valid()) {
       scan_rtdef.frozen_version_ = transaction::ObTransVersion::INVALID_TRANS_VERSION;
@@ -1858,12 +1857,11 @@ int ObTableScanOp::fill_storage_feedback_info()
       table_scan_stat.output_row_count_ = scan_param.main_table_scan_stat_.out_row_cnt_;
       LOG_DEBUG("table scan feedback info for acs", K(scan_param.main_table_scan_stat_), K(table_scan_stat));
     }
-
-    // 填充计划淘汰策略所需要的反馈信息
+    // Fill in the feedback information required by the plan phase-out strategy
     ObIArray<ObTableRowCount> &table_row_count_list =
         GET_PHY_PLAN_CTX(ctx_)->get_table_row_count_list();
-    //仅索引回表时，存储层会将执行扫描索引数据放在idx_table_scan_stat_中;
-    //对于仅扫描主表或索引表的情况, 存储层会将执行扫描索引数据放在main_table_scan_stat_中
+    // Only when index back-table lookup occurs, the storage layer will place the execution scan index data in idx_table_scan_stat_;
+    // For the case where only the main table or index table is scanned, the storage layer will place the execution scan index data in main_table_scan_stat_
     if (!got_feedback_) {
       got_feedback_ = true;
       if (MY_SPEC.should_scan_index() && scan_param.scan_flag_.is_index_back()) {
@@ -1871,11 +1869,11 @@ int ObTableScanOp::fill_storage_feedback_info()
           int tmp_ret = OB_SUCCESS;
           if (OB_SUCCESS != (tmp_ret = table_row_count_list.push_back(ObTableRowCount(
                                                                         MY_SPEC.id_, scan_param.idx_table_scan_stat_.access_row_cnt_)))) {
-            // 这里忽略插入失败时的错误码. OB的Array保证push_back失败的情况下count()仍是有效的
-            // 如果一张表的信息没有被插入成功，最多
-            // 只会导致后续判断计划能否淘汰时无法使用这张表的信息进行判断，从而
-            // 导致某些计划无法被淘汰，相当于回退到了没有这部分淘汰策略时的逻辑
-            // 这里不希望淘汰机制的错误码影响原有执行逻辑 @ banliu.zyd
+            // Here we ignore the error code when insertion fails. OB's Array guarantees that count() remains valid even if push_back fails.
+            // If the information of a table is not inserted successfully, at most
+            // will only lead to the subsequent judgment of whether the plan can be phased out being unable to use the information from this table for judgment, thus
+            // Causes some plans to not be eliminated, equivalent to reverting to the logic without this elimination strategy
+            // Here do not want the error codes of the eviction mechanism to affect the original execution logic @ banliu.zyd
             LOG_WARN("push back table_id-row_count failed", K(tmp_ret), K(MY_SPEC.ref_table_id_),
                     "access row count", scan_param.idx_table_scan_stat_.access_row_cnt_);
           }
@@ -2425,12 +2423,12 @@ int ObTableScanOp::inner_get_next_row_for_tsc()
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(0 == limit_param_.limit_)) {
-    // 涉及的partition个数为0或者limit 0，直接返回iter end
+    // The number of involved partitions is 0 or limit is 0, directly return iter end
     ret = OB_ITER_END;
   } else if (OB_FAIL(do_init_before_get_row())) {
     LOG_WARN("failed to init before get row", K(ret));
   } else if (iter_end_) {
-    // 保证没有数据的时候多次调用都能返回OB_ITER_END，或者空scan直接返回iter end
+    // Ensure that multiple calls return OB_ITER_END when there is no data, or directly return iter end for an empty scan
     ret = OB_ITER_END;
     LOG_DEBUG("inner get next row meet a iter end", K(MY_SPEC.id_), K(this), K(lbt()));
   } else if (0 == (++iterated_rows_ % CHECK_STATUS_ROWS_INTERVAL)
@@ -2440,8 +2438,8 @@ int ObTableScanOp::inner_get_next_row_for_tsc()
     if (OB_ITER_END != ret) {
       LOG_WARN("fail to get next row from ObNewRowIterator", K(ret));
     } else {
-      //set found_rows:当返回总行数不为0,且带有非0offset，才需要设置found_rows的值,
-      //来修正最终设置到session内部的found_rows
+      //set found_rows:when the total number of rows returned is not 0, and there is a non-0 offset, the value of found_rows needs to be set,
+      // To correct the final found_rows set to the session internal
       if (MY_SPEC.is_top_table_scan_ && limit_param_.offset_ > 0) {
         if (output_row_cnt_ > 0) {
           int64_t total_count = output_row_cnt_ + limit_param_.offset_;
@@ -2524,13 +2522,13 @@ int ObTableScanOp::inner_get_next_batch_for_tsc(const int64_t max_row_cnt)
   clear_evaluated_flag();
   int64_t batch_size = min(max_row_cnt, MY_SPEC.max_batch_size_);
   if (OB_UNLIKELY(0 == limit_param_.limit_)) {
-    // 涉及的partition个数为0或者limit 0，直接返回iter end
+    // The number of involved partitions is 0 or limit is 0, directly return iter end
     brs_.size_ = 0;
     brs_.end_ = true;
   } else if (OB_FAIL(do_init_before_get_row())) {
     LOG_WARN("failed to init before get row", K(ret));
   } else if (iter_end_) {
-    // 保证没有数据的时候多次调用都能返回OB_ITER_END，或者空scan直接返回iter end
+    // Ensure that multiple calls return OB_ITER_END when there is no data, or directly return iter end for an empty scan
     brs_.size_ = 0;
     brs_.end_ = true;
     LOG_DEBUG("inner get next row meet a iter end", K(MY_SPEC.id_), K(this), K(lbt()));
@@ -2556,8 +2554,8 @@ int ObTableScanOp::inner_get_next_batch_for_tsc(const int64_t max_row_cnt)
   }
 
   if (OB_SUCC(ret) && brs_.end_) {
-    //set found_rows:当返回总行数不为0,且带有非0offset，才需要设置found_rows的值,
-    //来修正最终设置到session内部的found_rows
+    //set found_rows:when the total number of rows returned is not 0, and there is a non-0 offset, the value of found_rows needs to be set,
+    // To correct the final found_rows set to the session internal
     iter_end_ = true;
     if (MY_SPEC.is_top_table_scan_
         && (limit_param_.offset_ > 0)) {

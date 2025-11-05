@@ -522,8 +522,7 @@ TEST_F(TestObSimpleLogThrottleArb, test_4f1a_degrade_upgrade)
   int64_t end_ts = common::ObClockGenerator::getClock();
   int64_t used_time = end_ts - begin_ts;
   PALF_LOG(INFO, " [CASE] 4f1a degrade", K(used_time));
-
-  // 确保lease过期，验证loc_cb是否可以找到leader拉日志
+  // Ensure lease expiration, verify if loc_cb can find leader to pull logs
   sleep(5);
   unblock_all_net(another_f2_idx);
   unblock_all_net(another_f3_idx);

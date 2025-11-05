@@ -67,7 +67,7 @@ int ObSqlMemMgrProcessor::init(
         profile_.init(cache_size, OB_MALLOC_MIDDLE_BLOCK_SIZE);
         LOG_TRACE("trace register work area profile", K(profile_.get_cache_size()));
       }
-      // 每次初始化都认为是未注册
+      // Each initialization assumes it is unregistered
       profile_.set_expect_size(OB_INVALID_ID);
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(sql_mem_mgr_->register_work_area_profile(profile_))) {
@@ -85,7 +85,7 @@ int ObSqlMemMgrProcessor::init(
       if (OB_FAIL(sql_mem_mgr_->register_work_area_profile(profile_))) {
         LOG_WARN("failed to register workarea profile", K(ret));
       }
-      // 如果从AUTO->MANUAL，是否需要清理一些数据
+      // If switching from AUTO->MANUAL, do we need to clean up some data
       LOG_TRACE("trace only register sql memory manager", K(ret), K(profile_.get_cache_size()),
           K(profile_.get_expect_size()), K(is_auto_mgr_));
     }
@@ -108,7 +108,7 @@ int ObSqlMemMgrProcessor::init(
       LOG_WARN("failed to alloc dummy memory", K(ret));
     }
   }
-  // 如果开启了sql memory manager，但由于预估数据量比较少，不需要注册到manager里，这里限制为MAX_SQL_MEM_SIZE
+  // If sql memory manager is enabled, but the estimated data volume is relatively small, there is no need to register it with the manager, here it is limited to MAX_SQL_MEM_SIZE
   origin_max_mem_size_ = max_mem_size;
   default_available_mem_size_ = tmp_enable_auto_mem_mgr ? MAX_SQL_MEM_SIZE : max_mem_size;
   return ret;
@@ -152,8 +152,7 @@ int ObSqlMemMgrProcessor::update_max_available_mem_size_periodically(
   }
   return ret;
 }
-
-// 调整cache size
+// Adjust cache size
 int ObSqlMemMgrProcessor::update_cache_size(ObIAllocator *allocator, int64_t cache_size)
 {
   int ret = OB_SUCCESS;
@@ -175,9 +174,8 @@ int ObSqlMemMgrProcessor::update_cache_size(ObIAllocator *allocator, int64_t cac
   }
   return ret;
 }
-
-// 更新operator使用的memory size
-// 这里只关注终态，即申请了多少，后续每次调用，则更新，最后一次需要减为0
+// Update operator used memory size
+// Here we only focus on the final state, i.e., how much was requested, each subsequent call will update it, and the last one needs to be reduced to 0
 int ObSqlMemMgrProcessor::update_used_mem_size(int64_t used_size)
 {
   int ret = OB_SUCCESS;
@@ -203,9 +201,8 @@ int ObSqlMemMgrProcessor::update_used_mem_size(int64_t used_size)
   reset_delta_size();
   return ret;
 }
-
-// 当auto模式打开，但由于"under-estimate"导致没有采用auto管理，内存设置了一个固定大小
-// 如果超估了该值，会dump，这个时候采用"升级"模式，启动auto进行管理
+// When auto mode is on, but "under-estimate" causes auto management not to be used, memory is set to a fixed size
+// If overestimated this value, it will dump, at this time adopt "upgrade" mode, start auto for management
 int ObSqlMemMgrProcessor::try_upgrade_auto_mgr(ObIAllocator *allocator, int64_t mem_used)
 {
   int ret = OB_SUCCESS;
@@ -221,7 +218,7 @@ int ObSqlMemMgrProcessor::try_upgrade_auto_mgr(ObIAllocator *allocator, int64_t 
                             profile_.get_operator_id(), profile_.get_exec_info()))) {
       LOG_WARN("failed to upgrade sql memory manager", K(ret));
     } else if (is_auto_mgr()) {
-      // 由于之前未注册，所以对内存统计不会反应到sql mem manager中，但现在注册了，则需要重新更新下内存值
+      // Since it was not registered before, the memory statistics will not reflect in the sql mem manager, but now that it is registered, we need to update the memory values again
       if (OB_FAIL(update_used_mem_size(mem_used))) {
         LOG_WARN("failed to update used mem_size", K(ret));
       }
@@ -256,9 +253,9 @@ int ObSqlMemMgrProcessor::extend_max_memory_size(
       int64_t pre_cache_size = profile_.get_cache_size();
       int64_t pre_expect_size = profile_.get_expect_size();
       if (pre_cache_size > pre_expect_size) {
-        // 内存管理给的的内存小于实际要求的
-        // 策略：获取当前最大可用内存，如果小于cache_size，则退出，说明内存管理模块只能给这么多
-        //      否则，继续判断是否dump，走真正扩展内存逻辑
+        // Memory management provided memory less than actually required
+        // Strategy: Get the current maximum available memory, if it is less than cache_size, exit, indicating that the memory management module can only provide this much
+        //      otherwise, continue to determine whether to dump, proceed with the true memory expansion logic
         if (OB_FAIL(get_max_available_mem_size(allocator))) {
           LOG_WARN("failed to get max available memory size", K(pre_cache_size),
             K(pre_expect_size), K(ret));

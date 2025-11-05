@@ -65,7 +65,7 @@ public:
   };
   int deduplicate_for_batch(bool has_last, const ObBatchRows *child_brs);
   typedef ObChunkDatumStore::LastStoredRow LastStoreRow;
-  bool first_got_row_; // 是否第一次拿数据
+  bool first_got_row_; // Whether it is the first time to get data
   common::ObArenaAllocator alloc_;
   LastStoreRow last_row_;
   Compare cmp_;

@@ -299,13 +299,13 @@ public:
         int32_t part_shift_ : 8;     // part_shift: max value is 64(bytes)
         int32_t nth_way_ : 8;     // 0: left, 1: right
         int32_t level_ : 16;
-        // 这里采用递增方式来处理，原因是存在left和right任何一边可能没有数据
-        // 但另外一个发生了dump，导致获取其中一路为空时，可能另外一路还遗留在part_list中
-        // 从而只有(side, level, nth_part)不够表示唯一
-        // 而每层假设128个partition，总共4层，则128^4=268435456，则part需要差不多32bit表示
-        // 所以采用递增id方式来保证左右两边完全一致
-        // 这里暂时假设应用层使用part比较随机
-        // 其实如果保证按照类似先序遍历方式写入和读取，则可以保证同层次下的part只有一个，则不需要这么大的id
+        // Here we use an incremental approach to handle, the reason is that either left or right side may not have data
+        // but another one had a dump, leading to one of the routes being empty when retrieved, possibly leaving the other route in part_list
+        // Thus only (side, level, nth_part) is not sufficient to represent uniquely
+        // And each layer assumes 128 partitions, totaling 4 layers, then 128^4=268435456, then part needs about 32 bits to represent
+        // So adopt the incremental id method to ensure both sides are completely consistent
+        // Here we temporarily assume that the application layer uses part comparison randomly
+        // Actually, if we ensure writing and reading in a similar pre-order traversal manner, then there can be only one part at the same level, so such a large id is not needed
         int64_t nth_part_ : 32;
       };
     };
@@ -397,7 +397,7 @@ private:
   {
     return hash_value & (hash_table_.get_bucket_num() - 1);
   }
-  // 高位4 byte作为partition hash value
+  // High 4 byte as partition hash value
   OB_INLINE int64_t get_part_idx(const uint64_t hash_value)
   {
     return (hash_value >> part_shift_) & (est_part_cnt_ - 1);
@@ -571,11 +571,11 @@ public:
   int get_right_next_batch(const common::ObIArray<ObExpr *> &exprs,
                            const int64_t max_row_cnt,
                            int64_t &read_rows);
-  // 实现对hash table数据进行遍历，其实可以支持多种方式
-  // 如：
-  //   1）hash table的bucket遍历
-  //   2）chunk datum store顺序遍历
-  // 目前直接从store中拿数据，后续如果有需要，可以扩展该接口
+  // Implement traversal of hash table data, actually can support multiple ways
+  // For example:
+  //   1) hash table bucket traversal
+  //   2）chunk datum store sequential traversal
+  // Currently directly fetching data from store, if needed in the future, this interface can be extended
   int get_next_hash_table_row(
     const ObChunkDatumStore::StoredRow *&store_row,
     const common::ObIArray<ObExpr*> *exprs = nullptr);
@@ -783,7 +783,7 @@ private:
   ObIOEventObserver *io_event_observer_;
   ObSqlMemMgrProcessor *sql_mem_processor_;
   const common::ObIArray<ObHashFunc> *hash_funcs_;
-  // 这里暂时以一份保存，如果是多元operator，part_col_idxs不一样，需要区分
+  // Here temporarily save one, if it is a multi-operator, part_col_idxs are different, need to distinguish
   const common::ObIArray<ObSortFieldCollation> *sort_collations_;
   const common::ObIArray<ObCmpFunc> *cmp_funcs_;
   ObEvalCtx *eval_ctx_;
@@ -1385,8 +1385,7 @@ int ObHashPartInfrastructure<HashCol, HashRowStore>::end_round()
   }
   return ret;
 }
-
-// 暂时没有需求，不实现
+// Temporarily no requirement, not implemented
 // for material
 template<typename HashCol, typename HashRowStore>
 int ObHashPartInfrastructure<HashCol, HashRowStore>::direct_insert_row(
@@ -1397,8 +1396,7 @@ int ObHashPartInfrastructure<HashCol, HashRowStore>::direct_insert_row(
   UNUSED(inserted);
   return OB_NOT_SUPPORTED;
 }
-
-// 暂时没有需求，不实现
+// Temporarily no requirement, not implemented
 // for hash join
 template<typename HashCol, typename HashRowStore>
 int ObHashPartInfrastructure<HashCol, HashRowStore>::insert_row_with_hash_table(
@@ -1879,8 +1877,7 @@ int ObHashPartInfrastructure<HashCol, HashRowStore>::exists_batch(
   }
   return ret;
 }
-
-// 目前仅支持类型一致情况
+// Currently only supports consistent types
 template<typename HashCol, typename HashRowStore>
 int ObHashPartInfrastructure<HashCol, HashRowStore>::calc_hash_value(
   const common::ObIArray<ObExpr*> &exprs,
@@ -2260,7 +2257,7 @@ int ObHashPartInfrastructure<HashCol, HashRowStore>::insert_row_on_hash_table(
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL((this->*insert_row_func_)(exprs, exists, inserted))) {
-    // 暂时不打印trace或者warn，因为会返回exists或者not exists
+    // Temporarily do not print trace or warn, because it will return exists or not exists
     // LOG_TRACE("failed to insert row func", K(ret));
   }
   return ret;
@@ -2273,7 +2270,7 @@ int ObHashPartInfrastructure<HashCol, HashRowStore>::insert_row(
   int ret = OB_SUCCESS;
   ++period_row_cnt_;
   if (OB_FAIL(insert_row_on_hash_table(exprs, exists, inserted))) {
-    // 暂时不打印trace或者warn，因为会返回exists或者not exists
+    // Temporarily do not print trace or warn, because it will return exists or not exists
     // LOG_TRACE("failed to insert row func", K(ret));
   }
   return ret;
@@ -2421,8 +2418,7 @@ int ObHashPartInfrastructure<HashCol, HashRowStore>::open_hash_table_part()
   }
   return ret;
 }
-
-// close仅仅关闭iterator不会清理数据
+// close only closes iterator without cleaning data
 template<typename HashCol, typename HashRowStore>
 int ObHashPartInfrastructure<HashCol, HashRowStore>::close_hash_table_part()
 {
@@ -2550,15 +2546,14 @@ int ObHashPartInfrastructure<HashCol, HashRowStore>::get_next_partition(InputSid
   }
   return ret;
 }
-
-// 按照input_side获取下一组的partition pair<left, right>
+// Get the next group of partition pair<left, right> according to input_side
 template<typename HashCol, typename HashRowStore>
 int ObHashPartInfrastructure<HashCol, HashRowStore>::get_next_pair_partition(
   InputSide input_side)
 {
   int ret = OB_SUCCESS;
-  // 这里暂时按照input_side去拿分区，其实如果需要拿最近添加的partition，应该拿left和right中最近加入的分区
-  // 即可以取list中两者最后一个分区进行对比，哪个最近加入，获取哪个
+  // Here temporarily get the partition according to input_side, actually if we need to get the most recently added partition, we should get the most recently added partition from left and right
+  // i.e., you can take the last partition of the two in the list for comparison, and get the one that was added most recently
   if (OB_FAIL(get_next_partition(input_side))) {
     if (OB_ITER_END == ret) {
       ret = OB_SUCCESS;
@@ -2969,7 +2964,7 @@ int ObHashPartitionExtendHashTable<Item>::resize(
   if (FALSE_IT(est_max_bucket_num = estimate_bucket_num(bucket_num * EXTENDED_RATIO,
       mem_bound_func(), min_bucket_num_, is_slice_ht_))) {
   } else if (est_max_bucket_num >= get_bucket_num()) {
-    // 估算的bucket大于等于现在的，则重用
+    // Estimated bucket is greater than or equal to the current, then reuse
     reuse();
   } else {
     destroy();

@@ -110,8 +110,7 @@ private:
   }
 
   static bool is_regr_expr_type(const ObItemType aggr_type);
-
-  //构造一个特殊的case when expr:
+  // Construct a special case when expr:
   //   case when param_expr1 is not null and param_expr2 is not null
   //   then then_expr
   //   else NULL
@@ -144,7 +143,7 @@ private:
                               ObRawExpr *&replace_expr,
                               ObIArray<ObAggFunRawExpr*> &new_aggr_items);
 
-  static bool is_common_aggr_type(const ObItemType aggr_type) {//用于一些普通的aggr展开
+  static bool is_common_aggr_type(const ObItemType aggr_type) {//used for some common aggr expansion
     return aggr_type == T_FUN_AVG || aggr_type == T_FUN_STDDEV ||
            aggr_type == T_FUN_VARIANCE || aggr_type == T_FUN_STDDEV_POP ||
            aggr_type == T_FUN_STDDEV_SAMP ||

@@ -81,7 +81,7 @@ int ObMaterialOp::get_all_row_from_child(ObSQLSessionInfo &session)
     LOG_WARN("fail to get next row", K(ret));
   } else {
     ret = OB_SUCCESS;
-    // 最后一批数据retain到内存中
+    // Last batch of data retain in memory
     if (OB_FAIL(material_impl_.finish_add_row())) {
       LOG_WARN("failed to finish add row to row store", K(ret));
     } else {
@@ -126,7 +126,7 @@ int ObMaterialOp::get_all_batch_from_child(ObSQLSessionInfo &session)
   }
 
   if (OB_SUCC(ret)) {
-    // 最后一批数据retain到内存中
+    // Last batch of data retain in memory
     if (OB_FAIL(material_impl_.finish_add_row())) {
       LOG_WARN("failed to finish add row to row store", K(ret));
     } else {

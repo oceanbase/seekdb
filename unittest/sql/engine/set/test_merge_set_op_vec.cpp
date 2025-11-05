@@ -221,7 +221,7 @@ public:
     }
     pos1 = is_vec ? 6000000 : 7000000;
     for (int i = 0; i  < 3; ++i) {
-      ObExpr *expr = static_cast<ObExpr *>(alloc_.alloc(sizeof(ObExpr)));//新建expr， 设置expr对应的datum， 在对应位置放置datum
+      ObExpr *expr = static_cast<ObExpr *>(alloc_.alloc(sizeof(ObExpr)));//create expr, set the datum corresponding to expr, place the datum in the corresponding position
       if (OB_FAIL(spec.set_exprs_.push_back(expr))) {
         return ret;
       }
@@ -249,7 +249,7 @@ public:
       LOG_WARN("failed to compare function", K(ret));
     } else {
       LOG_WARN("init funcs");
-      // 初始化compare func和hash func
+      // Initialize compare func and hash func
       ObOrderDirection order_direction = default_asc_direction();
       bool is_ascending = is_ascending_direction(order_direction);
       ObSortFieldCollation field_collation(0,
@@ -322,7 +322,7 @@ public:
     }
     pos1 = is_vec ? 6000000 : 7000000;
     for (int i = 0; i  < 3; ++i) {
-      ObExpr *expr = static_cast<ObExpr *>(alloc_.alloc(sizeof(ObExpr)));//新建expr， 设置expr对应的datum， 在对应位置放置datum
+      ObExpr *expr = static_cast<ObExpr *>(alloc_.alloc(sizeof(ObExpr)));//create expr, set the datum corresponding to expr, place the datum in the corresponding position
       if (OB_FAIL(spec.distinct_exprs_.push_back(expr))) {
         return ret;
       }
@@ -348,7 +348,7 @@ public:
       LOG_WARN("failed to compare function", K(ret));
     } else {
       LOG_WARN("init funcs");
-      // 初始化compare func和hash func
+      // Initialize compare func and hash func
       ObOrderDirection order_direction = default_asc_direction();
       bool is_ascending = is_ascending_direction(order_direction);
       ObSortFieldCollation field_collation(0,
@@ -430,8 +430,7 @@ int ObMergeSetVecTest::SetPlan::setup_plan(ObOperator *set_op)
   right_spec.id_ = 1;
   set_op_spec.id_ = 2;
   //LOG_WARN("value:", K(left_spec), K(right_spec));
-
-  //set_op_->set_column_count(SetDataGenerator::CELL_CNT * 2); 没有的参数
+  //set_op_->set_column_count(SetDataGenerator::CELL_CNT * 2); no parameters
 
   left_spec.plan_=&plan_;
   right_spec.plan_=&plan_;
@@ -461,8 +460,7 @@ int ObMergeSetVecTest::SetPlan::setup_plan(ObOperator *set_op)
   } else if (OB_FAIL(set_op_spec.set_children_pointer(spec_children_ptr, (is_distinct ? 1 : 2)))) {
     LOG_WARN("failed to set spec children for set op", K(ret));
   }
-
-  //set_op_->set_distinct(true);  没有的参数
+  //set_op_->set_distinct(true);  no parameter
 
   // setup context
   ObString tenant_name("test");

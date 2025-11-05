@@ -403,10 +403,9 @@ int ObExprGeneratorImpl::visit(ObQueryRefRawExpr &expr)
         type.set_accuracy(expr.get_column_types().at(i).get_accuracy());
         OZ (subquery_op->get_row_desc().push_back(type));
       }
-
-      //expr中的ref_id是指引用的子查询是位于ObSubPlanFilter的第几个child
-      //由于child0是主表的scan结果，所以子查询的编号是从1开始的,
-      //后缀表达式里面的row_iter是从0开始编号的，所以这里应该ref_id - 1
+      //ref_id in expr refers to which child of ObSubPlanFilter the referenced subquery is located at
+      //Since child0 is the scan result of the main table, the numbering of the subqueries starts from 1,
+      //The row_iter in the postfix expression is numbered starting from 0, so here it should be ref_id - 1
       if (OB_SUCC(ret)) {
         LOG_DEBUG("convert unary current subquery ref id is", K(expr.get_ref_id()));
         subquery_op->set_subquery_idx(expr.get_ref_id() - 1);
@@ -493,8 +492,8 @@ int ObExprGeneratorImpl::visit(ObColumnRefRawExpr &expr)
       LOG_WARN("failed to add expr item", K(ret));
     }
   } else if (expr.is_generated_column() && expr.get_dependant_expr() != NULL) {
-    //如果是虚拟列，它是依赖其它列被计算出来的，因此计算虚拟列就是计算其dependant expr
-    //但是虚拟列对外输出是column ref的形式，所以要将虚拟列的column ref加入到row desc中
+    // If it is a virtual column, it is calculated based on other columns, therefore calculating the virtual column means calculating its dependent expr
+    //However, the virtual column is output externally in the form of a column ref, so the column ref of the virtual column needs to be added to the row desc.
     if (!sql_expr_->is_gen_infix_expr()) {
       if (OB_FAIL(expr.get_dependant_expr()->postorder_accept(*this))) {
         LOG_WARN("failed to postorder accept", K(ret), KPC(expr.get_dependant_expr()));
@@ -503,7 +502,7 @@ int ObExprGeneratorImpl::visit(ObColumnRefRawExpr &expr)
       // do nothing for infix expr generation, especially processed in infix_visit_child()
     }
   } else {
-    // 基本列表达式在此之前外部已经完成翻译
+    // Basic list expression has already been translated externally
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("all basic column should have been generated", K(ret), K(expr), K(&expr), K(col_idx));
   }
@@ -676,9 +675,9 @@ inline int ObExprGeneratorImpl::visit_regex_expr(ObOpRawExpr &expr, ObExprRegexp
       ret = OB_ERR_UNEXPECTED;
       LOG_ERROR("null pointer");
     } else {
-      // value为const，如果pattern也为const，则在pre_calculate中计算
+      // value is const, if pattern is also const, then calculate in pre_calculate
       regexp_op->set_value_is_const(value_expr->is_const_expr());
-      // pattern为const，正则表达式只编译一次
+      // pattern is const, regular expression is compiled only once
       regexp_op->set_pattern_is_const(pattern_expr->is_const_expr());
     }
   }
@@ -704,9 +703,9 @@ inline int ObExprGeneratorImpl::visit_like_expr(ObOpRawExpr &expr, ObExprLike *&
       LOG_ERROR("null pointer", K(pattern_expr), K(text_expr), K(escape_expr));
     } else {
       like_op->set_text_is_literal(text_expr->is_static_const_expr());
-      //对于nl_param及subplan filter中上层参数作为like pattern时,
-			//每次rescan, pattern都会变化, 因此认为不是literal；
-      //这样可以避免like的优化导致出现pattern不变, 结果不对
+      //For nl_param and subplan filter where upper-level parameters are used as like pattern,
+			//Each rescan, the pattern changes, therefore it is not considered a literal;
+      //This can avoid the optimization of like causing the pattern to remain unchanged, resulting in incorrect results
       //bug:
       like_op->set_pattern_is_literal(pattern_expr->is_static_const_expr());
       like_op->set_escape_is_literal(escape_expr->is_static_const_expr());
@@ -735,7 +734,7 @@ inline int ObExprGeneratorImpl::visit_in_expr(ObOpRawExpr &expr, ObExprInOrNotIn
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("in subquery has been rewrite in  resolver", K(expr));
   } else if (T_REF_QUERY == expr.get_param_expr(0)->get_expr_type()
-             //output column == 1 由subplan filter负责迭代数据
+             //output column == 1 is handled by subplan filter for data iteration
              && expr.get_param_expr(0)->get_output_column() > 1) {
     //like (select 1, 2) in ((1,2), (3,4))
     ObQueryRefRawExpr *left_ref = static_cast<ObQueryRefRawExpr *>(expr.get_param_expr(0));
@@ -1199,16 +1198,16 @@ inline int ObExprGeneratorImpl::visit_subquery_cmp_expr(ObOpRawExpr &expr, ObSub
     subquery_op->set_subquery_key(expr.get_subquery_key());
 
     if (T_OP_ROW == expr.get_param_expr(0)->get_expr_type()) {
-      //左边是向量，那么右边一定是子查询
+      //The left side is a vector, then the right side must be a subquery
       //OB_ASSERT(expr.get_param_expr(1)->has_flag(IS_SUB_QUERY));
       subquery_op->set_real_param_num(static_cast<int32_t>(expr.get_param_expr(0)->get_param_count()) + 1);
-      subquery_op->set_left_is_iter(false); //左边不是row_iterator
-      subquery_op->set_right_is_iter(true); //右边是row_iterator
+      subquery_op->set_left_is_iter(false); // left is not a row_iterator
+      subquery_op->set_right_is_iter(true); //right is row_iterator
     } else if (expr.get_param_expr(0)->has_flag(IS_SUB_QUERY)
                && static_cast<ObQueryRefRawExpr*>(expr.get_param_expr(0))->get_output_column() > 1) {
-      //左边是子查询,并且结果是向量
+      // The left side is a subquery, and the result is a vector
       if (T_OP_ROW == expr.get_param_expr(1)->get_expr_type()) {
-        //右边是向量
+        // The right side is the vector
         subquery_op->set_real_param_num(static_cast<int32_t>(expr.get_param_expr(1)->get_param_count()) + 1);
         subquery_op->set_left_is_iter(true);
         subquery_op->set_right_is_iter(false);
@@ -1590,8 +1589,8 @@ int ObExprGeneratorImpl::visit(ObAggFunRawExpr &expr)
     aggr_expr->set_is_need_deserialize_row(expr.is_need_deserialize_row());
     aggr_expr->set_collation_type(expr.get_collation_type());
     aggr_expr->set_accuracy(expr.get_accuracy());
-    //除了group_concat,rank,dense_rank,percent_rank,cume_dist函数、keep相关aggr及带有distinct的count函数
-    //其他聚集函数的参数只有一列
+    //Except for the group_concat, rank, dense_rank, percent_rank, cume_dist functions, keep-related aggr, and count functions with distinct
+    //The parameters of other aggregate functions have only one column
     int64_t col_count = (T_FUN_JSON_OBJECTAGG == expr.get_expr_type()
                         || T_FUN_ORA_JSON_OBJECTAGG == expr.get_expr_type()) ?  2 : 1;
     aggr_expr->set_real_param_col_count(col_count);
@@ -1675,9 +1674,9 @@ int ObExprGeneratorImpl::visit(ObAggFunRawExpr &expr)
         } else if (OB_FAIL(sql_expr_->add_expr_item(item, &expr))) {
           LOG_WARN("failed to add expr item", K(ret));
         } else {
-          // 设置除去order by列之后的参数列数，用于计算的时候截取结果
+          // Set the number of parameter columns after removing the order by column, used for truncating the result during calculation
           aggr_expr->set_real_param_col_count(expr.get_real_param_count());
-          // 设置包括order by列的所有参数列数，用于计算的时候分配空间
+          // Set the total number of parameter columns including the order by column, used for space allocation during calculation
           aggr_expr->set_all_param_col_count(expr.get_param_count());
           if (OB_SUCC(ret) &&
               (T_FUN_GROUP_CONCAT == expr.get_expr_type() ||
@@ -1734,7 +1733,7 @@ int ObExprGeneratorImpl::visit(ObAggFunRawExpr &expr)
                     LOG_WARN("array push back failed", K(ret));
                   } else if (OB_FAIL(row_desc.add_column(e))) {
                     if (OB_HASH_EXIST == ret) {
-                      //FIXME 如果重复则按这一列排序，由于值相等，所以不会出问题，之后要把重复列去掉并且计算时加上projector
+                      //FIXME If duplicates exist, sort by this column, since the values are equal, there will be no issue, remove the duplicate columns later and add projector when calculating
                       ret = OB_SUCCESS;
                     } else {
                       LOG_WARN("fail to add param expr to row desc", K(ret));
@@ -1746,8 +1745,8 @@ int ObExprGeneratorImpl::visit(ObAggFunRawExpr &expr)
               for (int64_t i = 0; OB_SUCC(ret) && i < N; ++i) {
                 const ObRawExpr* raw_expr = sort_keys.at(i).expr_;
                 if (!raw_expr->has_flag(IS_COLUMNLIZED)) {
-                  // 如果key是一个const值，这个可能并没有被columnlize,
-                  // 它的columnlize时机是在稍后的add_compute中
+                  // If key is a const value, this might not have been columnlized,
+                  // Its columnlize timing is in the subsequent add_compute
                   if (raw_expr->is_const_expr()) {
                     continue; // sort by const value, just ignore
                   } else {
@@ -1784,9 +1783,8 @@ int ObExprGeneratorImpl::visit(ObAggFunRawExpr &expr)
   }
   return ret;
 }
-
-// 对于ObWinFunRawExpr, 实现上只在物理算子中记录param_expr在child_row中的索引
-// 不会单独生成Expression
+// For ObWinFunRawExpr, the implementation only records the index of param_expr in child_row within physical operators
+// Will not generate Expression separately
 int ObExprGeneratorImpl::visit(ObWinFunRawExpr &expr)
 {
   int ret = OB_SUCCESS;
@@ -1829,7 +1827,7 @@ int ObExprGeneratorImpl::visit(ObPseudoColumnRawExpr &expr)
       LOG_WARN("failed to add expr item", K(ret), K(expr));
     }
   } else if (T_PDML_PARTITION_ID == expr.get_expr_type()) {
-    // 处理partition id伪列对应的物理expr operator
+    // Handle the physical expr operator corresponding to the partition id pseudo column
     ObExprOperator *pdml_partition_id_op = NULL;
     LOG_TRACE("alloc pdml partition id expr phy operator", K(expr));
     if (OB_FAIL(factory_.alloc(expr.get_expr_type(), pdml_partition_id_op))) {
@@ -1838,9 +1836,9 @@ int ObExprGeneratorImpl::visit(ObPseudoColumnRawExpr &expr)
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("ob pdml partition id expr operator is null", K(ret));
     } else {
-      // 默认数据类型是int，需要在ObPseudoColumnRawExpr产生的时候设置进去
+      // The default data type is int, needs to be set when ObPseudoColumnRawExpr is generated
       pdml_partition_id_op->set_result_type(expr.get_result_type());
-      // 默认是0
+      // Default is 0
       pdml_partition_id_op->set_real_param_num(expr.get_param_count());
       LOG_TRACE("alloc pdml partition id expr operator successfully", K(*pdml_partition_id_op));
       if (OB_FAIL(item.assign(pdml_partition_id_op))) {
@@ -1874,7 +1872,7 @@ int ObExprGeneratorImpl::visit(ObSysFunRawExpr &expr)
 int ObExprGeneratorImpl::visit(ObSetOpRawExpr &expr)
 {
   int ret = OB_SUCCESS;
-  //不为set op生成expr operator
+  //do not generate expr operator for set op
   ObPostExprItem item;
   item.set_accuracy(expr.get_accuracy());
   if (OB_ISNULL(sql_expr_)) {
@@ -1899,7 +1897,7 @@ int ObExprGeneratorImpl::visit(ObSetOpRawExpr &expr)
 int ObExprGeneratorImpl::visit(ObMatchFunRawExpr &expr)
 {
   int ret = OB_SUCCESS;
-  // 不为 match expr 生成 expr operator
+  // Do not generate expr operator for match expr
   ObPostExprItem item;
   item.set_accuracy(expr.get_accuracy());
   if (OB_ISNULL(sql_expr_)) {
@@ -1942,11 +1940,10 @@ int ObExprGeneratorImpl::gen_fast_expr(ObRawExpr &raw_expr)
   }
   return ret;
 }
-
-//生成fast column convert表达式
-//fast column convert表达式没有后缀结构，其内部记录了column convert的值从哪里来
-//目前只优化value来自于row中的列或者param store，或者不需要计算，本身就为常量的情况
-//column type记录的是convert要转换的目标类型以及not null信息
+//generate fast column convert expression
+//fast column convert expression has no suffix structure, its internal records where the column convert value comes from
+//Currently only optimized for the case where value comes from columns in row or param store, or does not require calculation and is itself a constant
+//column type records the target type that convert is to convert to as well as not null information
 int ObExprGeneratorImpl::gen_fast_column_conv_expr(ObRawExpr &raw_expr)
 {
   int ret = OB_SUCCESS;
@@ -1978,7 +1975,7 @@ int ObExprGeneratorImpl::gen_fast_column_conv_expr(ObRawExpr &raw_expr)
     LOG_WARN("fast column conv expr is null");
   } else if (OB_UNLIKELY(!value_expr->is_column_ref_expr())
       && OB_UNLIKELY(!value_expr->is_const_or_param_expr())) {
-    //只有value expr为常量或者column的时候才能走到该优化分支
+    //Only when value expr is a constant or column can this optimization branch be reached
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("value expr is invalid", KPC(value_expr));
   } else if (value_expr->is_column_ref_expr()) {
@@ -1996,7 +1993,7 @@ int ObExprGeneratorImpl::gen_fast_column_conv_expr(ObRawExpr &raw_expr)
     }
   }
   if (OB_SUCC(ret)) {
-    //处理fast column convert的类型
+    //Handle the type of fast column convert
     ObExprResType column_type;
     int32_t data_type = 0;
     int32_t coll_type = 0;

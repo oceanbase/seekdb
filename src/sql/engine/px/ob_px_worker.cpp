@@ -44,7 +44,7 @@ ObPxRpcWorker::~ObPxRpcWorker()
 int ObPxRpcWorker::run(ObPxRpcInitTaskArgs &arg)
 {
   int ret = OB_SUCCESS;
-  // 50ms 以内必须分配出 task 线程，若排队时间超过 50ms，则失败回退到 1 个线程
+  // Within 50ms a task thread must be allocated, if the queue time exceeds 50ms, it fails and falls back to 1 thread
   int64_t timeout_us = 50 * 1000;
   ret = rpc_proxy_
       .to(arg.task_.get_exec_addr())
@@ -92,8 +92,8 @@ int ObPxCoroWorker::deep_copy_assign(const ObPxRpcInitTaskArgs &src,
 {
   int ret = OB_SUCCESS;
   dest.set_deserialize_param(exec_ctx_, phy_plan_, &alloc_);
-  // 深拷贝 arg 中所有元素，入session、op tree 等
-  // 暂时通过序列化+反序列化完成
+  // Deep copy all elements in arg, into session, op tree, etc.
+  // Temporarily complete through serialization+deserialization
   int64_t ser_pos = 0;
   int64_t des_pos = 0;
   void *ser_ptr = NULL;
@@ -155,8 +155,8 @@ void PxWorkerFunctor::operator ()(bool need_exec)
   ObCurTraceId::set(env_arg_.get_trace_id());
   GET_DIAGNOSTIC_INFO->get_ash_stat().trace_id_ = env_arg_.get_trace_id();
   /**
-   * 中断必须覆盖到release handler，因为它的流程含有sqc向qc发送消息，
-   * 需要check中断。而中断本身是线程局部，不依赖于租户空间才对。
+   * The interrupt must cover the release handler, because its process involves sqc sending messages to qc,
+   * requiring a check for interrupts. The interrupt itself is thread-local and should not depend on tenant space.
    */
   ObPxInterruptGuard px_int_guard(task_arg_.task_.get_interrupt_id().px_interrupt_id_);
   ObPxSqcHandler *sqc_handler = task_arg_.get_sqc_handler();
@@ -200,18 +200,17 @@ void PxWorkerFunctor::operator ()(bool need_exec)
         } else {
           WITH_CONTEXT(mem_context) {
             lib::ContextTLOptGuard guard(true);
-            // 在worker线程中进行args的deep copy，分担sqc的线程的负担。
+            // In the worker thread, perform a deep copy of args to alleviate the burden on the sqc thread.
             ObPxRpcInitTaskArgs runtime_arg;
             if (OB_FAIL(runtime_arg.init_deserialize_param(task_arg_, mem_context, *env_arg_.get_gctx()))) {
               LOG_WARN("fail to init args", K(ret));
             } else if (OB_FAIL(runtime_arg.deep_copy_assign(task_arg_, mem_context->get_arena_allocator()))) {
               LOG_WARN("fail deep copy assign arg", K(task_arg_), K(ret));
             } else {
-              // 绑定sqc_handler，方便算子任何地方都可以拿sqc_handle
+              // Bind sqc_handler, convenient for the operator to get sqc_handle anywhere
               runtime_arg.sqc_handler_ = sqc_handler;
             }
-            
-            // 执行
+            // Execute
             ObPxTaskProcess worker(*env_arg_.get_gctx(), runtime_arg);
             if (OB_SUCC(ret)) {
               worker.run();
@@ -261,7 +260,7 @@ void PxWorkerFunctor::operator ()(bool need_exec)
 
 void PxWorkerFinishFunctor::operator ()()
 {
-  // 每个 worker 结束后，都释放一个槽位
+  // Each worker ends, a slot is released
   ObPxSubAdmission::release(1);
 }
 
@@ -275,8 +274,7 @@ ObPxThreadWorker::ObPxThreadWorker(const observer::ObGlobalContext &gctx)
 ObPxThreadWorker::~ObPxThreadWorker()
 {
 }
-
-// 在 group 对应的 px_pool 中执行
+// Execute in the px_pool corresponding to the group
 int ObPxThreadWorker::run(ObPxRpcInitTaskArgs &task_arg)
 {
   int ret = OB_SUCCESS;
@@ -311,8 +309,8 @@ int ObPxThreadWorker::run_at(ObPxRpcInitTaskArgs &task_arg, omt::ObPxPool &px_po
 
   PxWorkerFunctor func(env_args, task_arg);
   /*
-   * 将 task 提交到 px pool
-   * 如果 px pool 内线程不足，则会扩容 pool，直至能容纳下这个 task
+   * Submit task to px pool
+   * If there are not enough threads in px pool, it will scale up the pool until it can accommodate this task
    */
   if (OB_SUCC(ret)) {
     do {
@@ -322,7 +320,7 @@ int ObPxThreadWorker::run_at(ObPxRpcInitTaskArgs &task_arg, omt::ObPxPool &px_po
                    K(retry_times), K(ret));
         }
         if (OB_SIZE_OVERFLOW == ret) {
-          // 线程不够，动态增加线程并重试
+          // Threads are insufficient, dynamically increase threads and retry
           int tmp_ret = px_pool.inc_thread_count(1);
           if (OB_SUCCESS != tmp_ret) {
             LOG_WARN("fail increase thread count. abort!", K(tmp_ret), K(ret));

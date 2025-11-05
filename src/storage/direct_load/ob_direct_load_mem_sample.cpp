@@ -94,8 +94,7 @@ int ObDirectLoadMemSample::do_work()
     LOG_WARN("fail to init context", KR(ret));
   } else if (OB_FAIL(context_ptr->mem_chunk_array_.assign(chunks))) {
     LOG_WARN("fail to assgin chunks", KR(ret));
-
-    //出错以后释放chunks
+    // Release chunks after an error
     context_ptr->mem_chunk_array_.reset();
     for (int64_t i = 0; i < chunks.count(); i ++) {
       ChunkType *chunk = chunks.at(i);
@@ -152,7 +151,7 @@ int ObDirectLoadMemSample::do_sample()
         }
       }
       if (OB_SUCC(ret)) {
-        while (mem_ctx_->running_dump_task_cnt_ > 0 && OB_LIKELY(!mem_ctx_->has_error_)) { //等待所有的merge做完
+        while (mem_ctx_->running_dump_task_cnt_ > 0 && OB_LIKELY(!mem_ctx_->has_error_)) { // wait for all merges to complete
           usleep(100000);
         }
       }
@@ -174,7 +173,7 @@ int ObDirectLoadMemSample::do_sample()
     }
   }
   if (OB_UNLIKELY(ret != OB_SUCCESS || mem_ctx_->has_error_)) {
-    mem_ctx_->mem_dump_queue_.push(nullptr); //出错了，让dump结束，避免卡死
+    mem_ctx_->mem_dump_queue_.push(nullptr); // An error occurred, let the dump end to avoid deadlock
   }
   return ret;
 }

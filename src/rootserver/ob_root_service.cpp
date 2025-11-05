@@ -9136,8 +9136,8 @@ int ObRootService::get_tenant_schema_versions(
       schema_version = 0;
       if (OB_SYS_TENANT_ID == tenant_id
           || STANDBY_CLUSTER == ObClusterInfoGetter::get_cluster_role_v2()) {
-        // 对于备库，由于schema_status不在DDL线程推进，且能接受最终一致，
-        // 故只需取本地schema版本即可
+        // For the follower, since schema_status is not advanced by the DDL thread and can accept eventual consistency,
+        // Thus, only the local schema version needs to be retrieved
         if (OB_FAIL(schema_service_->get_tenant_refreshed_schema_version(
                     tenant_id, schema_version))) {
           LOG_WARN("fail to get tenant refreshed schema version", K(ret), K(tenant_id));

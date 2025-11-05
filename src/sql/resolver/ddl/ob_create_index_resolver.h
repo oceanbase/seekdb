@@ -64,7 +64,7 @@ protected:
                                  ObCreateIndexStmt *crt_idx_stmt);
   int add_based_udt_info(const share::schema::ObTableSchema &tbl_schema);
 private:
-  bool is_spec_block_size; //是否指定block size
+  bool is_spec_block_size; // whether block size is specified
   DISALLOW_COPY_AND_ASSIGN(ObCreateIndexResolver);
 };
 }  // namespace sql

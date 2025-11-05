@@ -85,8 +85,7 @@ public:
   int64_t est_rows_per_group_;
   bool enable_hash_base_distinct_;
 };
-
-// 输入数据已经按照groupby列排序
+// Input data has already been sorted by the groupby column
 class ObMergeGroupByOp : public ObGroupByOp
 {
 public:

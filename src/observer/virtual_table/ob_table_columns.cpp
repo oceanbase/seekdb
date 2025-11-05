@@ -195,7 +195,7 @@ int ObTableColumns::inner_get_next_row(ObNewRow *&row)
               LOG_WARN("The column is null", K(ret));
             } else if (table_schema->is_heap_organized_table() && col->is_hidden_pk_column_id(col->get_column_id())) {
               // heap organized table should not output hidden pk columns
-            } else if (col->is_invisible_column() && lib::is_oracle_mode()) { // 忽略 invisible 列
+            } else if (col->is_invisible_column() && lib::is_oracle_mode()) { // ignore invisible column
               // mysql 8.0.23 has supported invisivle column, we should not ignore them
               // for mysql
             } else if (OB_FAIL(fill_row_cells(*table_schema, *col, has_column_priv))) {
@@ -492,7 +492,7 @@ int ObTableColumns::fill_row_cells(const ObTableSchema &table_schema,
           cur_row_.cells_[cell_idx].set_collation_type(ObCharset::get_system_collation());
         } else if (def_obj.is_null()) {
           if (lib::is_oracle_mode()) {
-            cur_row_.cells_[cell_idx].set_varchar("NULL");//注：default value为NULL时显示的是字符串
+            cur_row_.cells_[cell_idx].set_varchar("NULL");// Note: default value is NULL when displayed as a string
           } else {
             cur_row_.cells_[cell_idx].set_null();//in mysql mode, should not be filled with string "NULL";
           }
@@ -524,7 +524,7 @@ int ObTableColumns::fill_row_cells(const ObTableSchema &table_schema,
         } else if (def_obj.is_varchar()) {
           cur_row_.cells_[cell_idx].set_varchar(column_schema.get_cur_default_value().get_string());
           cur_row_.cells_[cell_idx].set_collation_type(column_schema.get_collation_type());
-        } else {//TODO:由于obobj的print函数不够完善，没有与mysql做到兼容，此处是用cast函数来处理
+        } else {//TODO:Since the print function of obobj is not complete and does not achieve compatibility with MySQL, we use the cast function here to handle it}
           const ObDataTypeCastParams dtc_params = ObBasicSessionInfo::create_dtc_params(session_);
           ObCastCtx cast_ctx(allocator_, &dtc_params, CM_NONE, ObCharset::get_system_collation());
           ObObj buf_obj;
@@ -1136,7 +1136,7 @@ int ObTableColumns::set_col_attrs_according_binary_expr(
     LOG_WARN("expr type is unexpected", K(ret), K(expr->get_expr_class()));
   } else {
     bexpr = static_cast<const ObColumnRefRawExpr*>(expr);
-    // ObBinaryRefRawExpr中first_id不是真实table_id, TableItem::ref_id才是
+    // first_id in ObBinaryRefRawExpr is not the real table_id, TableItem::ref_id is the correct one
     if (OB_UNLIKELY(NULL == (tbl_item = select_stmt->get_table_item_by_id(bexpr->get_table_id())))) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("table item is NULL", K(ret), K(tbl_item));
@@ -1181,9 +1181,8 @@ int ObTableColumns::resolve_view_definition(
     bool throw_error) {
   int ret = OB_SUCCESS;
   /*
-    之前这里的逻辑是先切租户再resolve视图定义，然而resolver层已经有一套切租户的
-    逻辑, 两个共存不好维护，也容易出问题，
-    现在改造下, 构造select * from view 语句，将切租户的逻辑转移给resolver
+    The previous logic here was to switch tenants before resolving the view definition, however, the resolver layer already has a set of tenant switching logic, having both coexist is difficult to maintain and prone to issues,
+    Now we are modifying it, constructing a select * from view statement, transferring the tenant switching logic to the resolver
   */
   bool is_oracle_mode = false;
   const ObDatabaseSchema *db_schema = NULL;
@@ -1276,7 +1275,7 @@ int ObTableColumns::resolve_view_definition(
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("invalid stmt", K(ret));
           } else {
-            // 取出视图展开后的stmt
+            // Retrieve the stmt after view expansion
             select_stmt = static_cast<ObSelectStmt*>(select_resolver.get_basic_stmt());
             TableItem *view_item = NULL;
             if (OB_UNLIKELY(select_stmt->get_table_size() != 1)) {
@@ -1385,9 +1384,9 @@ int ObTableColumns::is_multiple_key(const ObTableSchema &table_schema,
                      simple_index_infos))) {
     LOG_WARN("get simple_index_infos failed", K(ret));
   } else {
-    // 3种情况会使一列显示为MUL
-    // 1.non-unique index的第一个column
-    // 2.unique index存在多列时，第一个column
+    // 3 situations will make a column display as MUL
+    // 1.first column of non-unique index
+    // 2.unique index exists in multiple columns, the first column
     // 3.spatial_index
     for (int64_t i = 0; OB_SUCC(ret) && i < simple_index_infos.count(); ++i) {
       const ObTableSchema *index_schema =  NULL;

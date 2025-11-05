@@ -850,7 +850,7 @@ int ObDASSPIVMergeIter::daat_naive(ObIAllocator &allocator, bool is_pre_filter, 
           if (OB_ISNULL(cursors_[i]) || cursors_[i]->docid_ > curr_min_docid) {
             continue;
           }
-          // iters 创建的时候是按照 key 的顺序，所以这里可以直接索引 value
+          // iters are created in the order of keys, so here we can directly index the value
           int64_t idx = cursors_[i]->iter_idx_;
           score += cursors_[i]->value_ * values[idx];
           

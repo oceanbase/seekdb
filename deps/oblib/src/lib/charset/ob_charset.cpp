@@ -1032,21 +1032,19 @@ size_t ObCharset::sortkey(ObCollationType collation_type,
   bool is_valid_unicode_tmp = 0;
   if (is_argument_valid(collation_type, str, str_len, key, key_len)) {
     const ObCharsetInfo *cs = get_charset(collation_type);
-
-    // compare_collation_free函数已经能自动过滤尾部空格了，sortkey中过滤空格的逻辑不需要了
-
-    // is_valid_unicode参数的作用如下：
-    // 以一个例子说明，待比较的字符串为：
+    // compare_collation_free function already automatically filters trailing spaces, the space filtering logic in sortkey is not needed anymore
+    // the role of the is_valid_unicode parameter is as follows:
+    // An example to illustrate, the strings to be compared are:
     //
-    // 第一个字符串：0x2c 0x80
-    // 第二个字符串：0x2c 0x80 0x20
+    // The first string: 0x2c 0x80
+    // The second string: 0x2c 0x80 0x20
     //
-    // 如果不采用sortkey转换后的字符串比较，会认为0x80及之后的字符为非法的unicode字符，对这之后的字符串采用二进制比较，则认为第二个字符串更大。
+    // If the sortkey conversion is not used for string comparison, characters 0x80 and above will be considered illegal unicode characters, and binary comparison of strings after this will consider the second string to be larger.
     //
-    // 而采用sortkey转换后的字符串，则在碰到0x80非法字符之后，就停止转换，导致认为比较结果相等。
-    // 修复方案：
+    // And the string converted using sortkey stops conversion after encountering the illegal character 0x80, leading to the belief that the comparison result is equal.
+    // Fix solution:
     //
-    // 对于有非法字符的unicode字符串，采用原生的不转换sortkey的方式进行比较。
+    // For unicode strings with illegal characters, use the native method of comparison without converting the sortkey.
     result = cs->coll->strnxfrm(cs,
                              reinterpret_cast<unsigned char *>(key),
                              key_len,
@@ -1072,8 +1070,7 @@ size_t ObCharset::sortkey_var_len(ObCollationType collation_type,
   bool is_valid_unicode_tmp = 0;
   if (is_argument_valid(collation_type, str, str_len, key, key_len)) {
     const ObCharsetInfo *cs = get_charset(collation_type);
-
-    // 对于有非法字符的unicode字符串，采用原生的不转换sortkey的方式进行比较。
+    // For unicode strings with illegal characters, use the native sortkey comparison method without conversion.
     if (cs->coll->strnxfrm_varlen == NULL) {
       result = -1;
     } else {
@@ -1158,9 +1155,9 @@ int ObCharset::like_range(ObCollationType collation_type,
     static char w_many = '%';
    // const char *tmp_str = like_str.ptr();
     // 'abc%' -> real_len=3
-	  // like_range里面会对min_str做字符填充, ('abc\min\min..', 'abc\max\max..')
-	  // 存储层那边比较的时候会有字节比较的情况，导致判断出'abc'不在这个范围内
-	  // 所以这里将start的长度修改为填充前的长度，变为('abc','abc\max\max\max..')
+	  // like_range inside will do character padding on min_str, ('abc\min\min..', 'abc\max\max..')
+	  // The storage layer compares with byte comparison, leading to the judgment that 'abc' is not within this range
+	  // So here the length of start is modified to the length before padding, becoming ('abc','abc\max\max\max..')
     //    size_t real_len = like_str.length();
     //    size_t cur_len = 0;
     //    while (cur_len < like_str.length()
@@ -1169,8 +1166,8 @@ int ObCharset::like_range(ObCollationType collation_type,
     //      ++cur_len;
     //    }
     //    real_len = cur_len;
-	//    上面的修改会引发这样的问题：'a\0' 会不在范围内，因为mysql的utf8特性使得'a\0' < 'a'，所以范围不能这么修改
-	//    具体的修正还是由存储层来做
+	//    The above modification will cause the following issue: 'a\0' will not be within the range, because MySQL's utf8 feature makes 'a\0' < 'a', so the range cannot be modified like this
+	//    the specific correction is still to be done by the storage layer
     size_t res_size = *min_str_len < *max_str_len ? *min_str_len : *max_str_len;
     size_t pre_len = 0;
     if (OB_ISNULL(cs->coll)) {
@@ -1679,7 +1676,7 @@ ObCharsetType ObCharset::charset_type(const ObString &cs_name)
 {
   ObCharsetType charset_type = CHARSET_INVALID;
   if (0 == cs_name.case_compare("utf8") || 0 == cs_name.case_compare("utf8mb3")) {
-    // utf8是utf8mb4的别名
+    // utf8 is the alias of utf8mb4
     charset_type = CHARSET_UTF8MB4;
   } else if (0 == cs_name.case_compare(ob_charset_utf8mb4_bin.csname)) {
     charset_type = CHARSET_UTF8MB4;
@@ -2018,10 +2015,11 @@ int ObCharset::aggregate_collation_old(
     LOG_WARN ("invalid collation level or type",
               K(ret), K(collation_level1), K(collation_type1), K(collation_level2), K(collation_type2));
   } else {
-    /** 先比较level，level小的优先级大，使用相应的结果。
-      * 如果优先级相同，binary和string比较，统一用binary比较
-      * 如果都是string，按照规则进行处理
-      */
+    /**
+ * First compare level, the smaller the level, the higher the priority, use the corresponding result.
+ * If the priorities are the same, compare binary and string, uniformly use binary comparison.
+ * If both are strings, process according to the rules.
+ */
     ObCharsetType cs1 = charset_type_by_coll(collation_type1);
     ObCharsetType cs2 = charset_type_by_coll(collation_type2);
     if (collation_level1 < collation_level2) {
@@ -2038,16 +2036,16 @@ int ObCharset::aggregate_collation_old(
       res_type = collation_type2;
     } else if (cs1 != cs2) {
         /**
-        * 左右字符集不相同的情况
-        * 主要以下情况
-        * utf8mb4和utf16：使用utf16
-        * utf8mb4和gbk：使用utf8mb4
-        * utf16和gbk：使用utf16
-        * utf8mb4和gb18030：使用utf8mb4
-        * utf16和gb18030：使用utf16
-        * gbk和gb18030：使用gb18030
-        * gb18030_2022 与 gb18030 的 AGGREGATE 暂定禁止
-        * 以上任一字符集X与latin1的组合结果都为X，latin1目前地位最低
+        * The case where the character sets on the left and right are different
+        * Mainly the following cases
+        * utf8mb4 and utf16: use utf16
+        * utf8mb4 and gbk: use utf8mb4
+        * utf16 and gbk: use utf16
+        * utf8mb4 and gb18030: use utf8mb4
+        * utf16 and gb18030: use utf16
+        * gbk and gb18030: use gb18030
+        * gb18030_2022 and gb18030 AGGREGATE is temporarily prohibited
+        * The combination result of any of the above character set X with latin1 is X, latin1 has the lowest status currently
         */
 
           int res = AGGREGATE_2CHARSET[cs1][cs2];
@@ -2058,11 +2056,11 @@ int ObCharset::aggregate_collation_old(
             res_type = collation_type2;
             res_level = collation_level2;
           } else {
-            // 所有不能转换的情况都到这里
+            // All cases that cannot be converted end up here
             ret = OB_CANT_AGGREGATE_2COLLATIONS;
           }
     } else {
-      //处理相同字符集的情况，每种字符集单独考虑
+      // Handle the case of the same character set, considering each character set separately
       if (collation_type1 == collation_type2) {
         res_type = collation_type1;
         res_level = collation_level1;
@@ -2075,7 +2073,7 @@ int ObCharset::aggregate_collation_old(
           res_type = CS_TYPE_UTF8MB4_BIN;
           res_level = (CS_TYPE_UTF8MB4_BIN == collation_type1) ? collation_level1 : collation_level2;
         } else {
-          // utf8mb4_unicode_ci和utf8mb4_general_ci的情况报错，和mysql兼容
+          // utf8mb4_unicode_ci and utf8mb4_general_ci cases report an error, and are compatible with mysql
           ret = OB_CANT_AGGREGATE_2COLLATIONS;
         }
       } else if (charset_type_by_coll(collation_type1) == CHARSET_GBK) {
@@ -2086,7 +2084,7 @@ int ObCharset::aggregate_collation_old(
           res_type = CS_TYPE_UTF16_BIN;
           res_level = (CS_TYPE_UTF16_BIN == collation_type1) ? collation_level1 : collation_level2;
         } else {
-          // utf16_unicode_ci和utf16_general_ci直接报错，不应该出现这种情况
+          // utf16_unicode_ci and utf16_general_ci directly report an error, this situation should not occur
           ret = OB_CANT_AGGREGATE_2COLLATIONS;
         }
       } else if (charset_type_by_coll(collation_type1) == CHARSET_UTF16LE) {
@@ -2094,7 +2092,7 @@ int ObCharset::aggregate_collation_old(
           res_type = CS_TYPE_UTF16LE_BIN;
           res_level = (CS_TYPE_UTF16LE_BIN == collation_type1) ? collation_level1 : collation_level2;
         } else {
-          // utf16le_unicode_ci和utf16le_general_ci直接报错，不应该出现这种情况
+          // utf16le_unicode_ci and utf16le_general_ci directly report an error, this situation should not occur
           ret = OB_CANT_AGGREGATE_2COLLATIONS;
         }
       } else if (charset_type_by_coll(collation_type1) == CHARSET_GB18030) {
@@ -2105,7 +2103,7 @@ int ObCharset::aggregate_collation_old(
           res_type = CS_TYPE_LATIN1_BIN;
           res_level = (CS_TYPE_LATIN1_BIN == collation_type1) ? collation_level1 : collation_level2;
         } else {
-          //未来可能支持latin1_german,与latin1_swedish不兼容
+          //Future may support latin1_german, incompatible with latin1_swedish
           ret = OB_CANT_AGGREGATE_2COLLATIONS;
         }
       } else if (is_valid_charset(charset_type_by_coll(collation_type1))){
@@ -2937,8 +2935,7 @@ bool ObCharset::case_sensitive_equal(const ObString &one, const ObString &anothe
 {
   return 0 == strcmp(CS_TYPE_UTF8MB4_BIN, one, another);
 }
-
-//当租户模式为mysql时,不敏感匹配,租户模式为oracle时,敏感匹配
+// When tenant mode is mysql, case insensitive match, tenant mode is oracle, case sensitive match
 bool ObCharset::case_compat_mode_equal(const ObString &one, const ObString &another)
 {
   return lib::is_oracle_mode() ?
@@ -3131,15 +3128,15 @@ int ObCharset::get_mbminlen_by_coll(const ObCollationType collation_type, int64_
   return ret;
 }
 
-/*in order to prevent a char from be splitted into 2 blocks
-We have to get the right bound of a string in terms a block
+/*in order to prevent a char from being split into 2 blocks
+We have to get the right bound of a string in terms of a block
 Take "我爱你" as an example
 if len_limit_in_byte = 8 which means that the max size of a block is 8 Bytes
-since '我' and '爱' takes 6 Bytes in total already.
+since '我' and '爱' take 6 Bytes in total already.
 and '你' takes 3 Bytes.
 if we assign the '你' to the block
 then the total length will be 9 which is greater than 8
-so , byte_num = 6  and char_num = 2 will be returned.
+so, byte_num = 6  and char_num = 2 will be returned.
 and '你' has to be assigned to another block.
 
 Please note that:
@@ -3235,8 +3232,7 @@ int ObCharset::get_aggregate_len_unit(const ObCollationType collation_type, bool
   }
   return ret;
 }
-
-//进行字符集之间的转换，from_type为源字符集，to_type为目标字符集
+// Perform character set conversion, from_type is the source character set, to_type is the target character set
 int ObCharset::charset_convert(const ObCollationType from_type,
                                const char *from_str,
                                const uint32_t from_len,
@@ -3798,7 +3794,7 @@ int ObCharsetUtils::init_const_str(ObCollationType coll_type, int ascii)
       MEMCPY(sys_buf, buf, result_len);
       const_str_for_ascii_[charset_type][ascii].assign_ptr(sys_buf, result_len);
     }
-    // swe7的定义中缺失了ascii的一些字符
+    // the definition of swe7 is missing some ascii characters
     if(charset_type == CHARSET_SWE7 && ret == OB_ERR_INCORRECT_STRING_VALUE) {
       LOG_WARN("swe7 character convert failed", K(ret), K(buf_len), K(coll_type), K(ascii));
       ret = OB_SUCCESS;

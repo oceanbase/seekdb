@@ -38,7 +38,7 @@ TEST(TestUUID, basic_test)
 
 TEST(TestTrace, basic_test)
 {
-  // 框架端完成初始化
+  // Framework end completes initialization
   char buffer[8 << 10];
   uint8_t level = 3;
   uint8_t auto_flush = 1;
@@ -51,7 +51,7 @@ TEST(TestTrace, basic_test)
   FLT_SET_TAG(sql_text, "select 1 from dual;");
   FLUSH_TRACE();
   auto t = std::thread([=]() {
-    // RPC框架端完成初始化
+    // RPC framework end completes initialization
     OBTRACE->init(trace_id, proxy->get_span_id(), (auto_flush << 7) + level);
     //
     FLTSpanGuard(ObSql);

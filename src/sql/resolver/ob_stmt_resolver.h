@@ -86,13 +86,13 @@ public:
                                   int32_t *dblink_name_len = NULL,
                                   bool *has_dblink_node = NULL);
   /**
-   * @brief  解析一个T_REF_FACTOR节点，得到database name和table name
-   * @param [in] node  - 语法节点
-   * @param [in] session_info  - session信息
-   * @param [out] table_name  - 表名
-   * @param [out] db_name  - 库名
-   * @param [in] dblink_name_ptr  - dblink名, 用于判别某些ddl是否引用了dblink，如果引用，该ddl应该报错ORA-02021
-   * @param [in] dblink_name_len  - dblink名长度, 用于分区 "drop table t1@;" 和 "drop table t1@q;"，应该报不同的错误
+   * @brief  Parse a T_REF_FACTOR node to get database name and table name
+   * @param [in] node  - syntax node
+   * @param [in] session_info  - session information
+   * @param [out] table_name  - table name
+   * @param [out] db_name  - database name
+   * @param [in] dblink_name_ptr  - dblink name, used to determine if certain ddl references dblink, if referenced, this ddl should return error ORA-02021
+   * @param [in] dblink_name_len  - dblink name length, used for partition "drop table t1@;" and "drop table t1@q;", should return different errors
    * @retval OB_SUCCESS execute success
    * @retval OB_SOME_ERROR special errno need to handle
    *

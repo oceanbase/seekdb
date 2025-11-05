@@ -29,10 +29,10 @@ class ObPackageInfo;
 
 enum ObUDTTypeCode
 {
-  UDT_INVALID_TYPE_CODE = 0,// 无效的类型
-  UDT_TYPE_COLLECTION = 1,  // 用户自定义数组类型 
-  UDT_TYPE_OBJECT = 2,      // 用户自定义记录类型
-  UDT_TYPE_BASE = 3,        // 系统预定义类型
+  UDT_INVALID_TYPE_CODE = 0,// invalid type
+  UDT_TYPE_COLLECTION = 1,  // user-defined array type
+  UDT_TYPE_OBJECT = 2,      // user-defined record type
+  UDT_TYPE_BASE = 3,        // system predefined type
   UDT_TYPE_OBJECT_BODY = 4, // OBJECT TYPE BODY
   UDT_TYPE_OPAQUE = 5,      // OPAQUE(ANYDATA, XMLTYPE, ANYTYPE etc...)
   UDT_TYPE_RECORD = 6,      // RECORD TYPE IN PACKAGE
@@ -121,16 +121,16 @@ public:
                K_(coll_type));
 
 private:
-  uint64_t tenant_id_;      // 租户ID
+  uint64_t tenant_id_;      // tenant ID
   int64_t schema_version_;  // schema_version
-  int64_t properties_;      // 该type的一些属性, 暂时用来记录该Type是否是复杂类型
+  int64_t properties_;      // some properties of this type, temporarily used to record whether this Type is a complex type
   int64_t charset_id_;
   int64_t charset_form_;
   int64_t length_;
   int64_t precision_;
   int64_t scale_;
   int64_t zero_fill_;
-  int64_t coll_type_; // object 类型，这个被重用为object id
+  int64_t coll_type_; // object type, this is reused as object id
 };
 
 enum ObUDTObjType
@@ -300,14 +300,14 @@ public:
                K_(getter));
 
 private:
-  int64_t type_attr_id_;  // 属性ID
-  int64_t type_id_;       // 所属Type的ID
-  common::ObString name_; // 属性名
-  int64_t attribute_;     // 该属性在Type中的位置
-  common::ObString externname_;// 扩展(UNUSED)
+  int64_t type_attr_id_;  // attribute ID
+  int64_t type_id_;       // ID of the belonging Type
+  common::ObString name_; // property name
+  int64_t attribute_;     // The position of this attribute in Type
+  common::ObString externname_;// extension (UNUSED)
   int64_t xflags_;        // 
-  int64_t setter_;        // 扩展(UNUSED)
-  int64_t getter_;        // 扩展(UNUSED)
+  int64_t setter_;        // extension(UNUSED)
+  int64_t getter_;        // extension(UNUSED)
 };
 class ObUDTCollectionType : public ObUDTBase
 {
@@ -347,12 +347,12 @@ public:
                K_(package_id),
                K_(coll_name));
 private:
-  int64_t coll_type_id_;          // 集合 ID
-  int64_t elem_type_id_;          // 集合元素类型ID
-  int64_t elem_schema_version_;   // 集合元素类型的schema_version
-  int64_t upper_bound_;           // 对于Varray代表最大大小
-  int64_t package_id_;            // 如果该集合类型来自Package, 这里记录PackageID 
-  common::ObString coll_name_;    // 集合名称
+  int64_t coll_type_id_;          // Collection ID
+  int64_t elem_type_id_;          // Collection element type ID
+  int64_t elem_schema_version_;   // schema_version of the collection element type
+  int64_t upper_bound_;           // For Varray represents the maximum size
+  int64_t package_id_;            // If this collection type comes from Package, this records the PackageID
+  common::ObString coll_name_;    // collection name
 };
 
 
@@ -562,15 +562,15 @@ public:
                K_(object_type_infos));
 
 private:
-  uint64_t tenant_id_;         // 租户ID
+  uint64_t tenant_id_;         // Tenant ID
   uint64_t database_id_;       // DatabaseID
   int64_t schema_version_;    //
-  int64_t type_id_;           // TypeID, TypeID由两部分组成tenant_id和typeId
-  int64_t typecode_;          // 记录Type的类型如Object or collection等
+  int64_t type_id_;           // TypeID, TypeID consists of tenant_id and typeId
+  int64_t typecode_;          // Record the type of Type such as Object or collection etc.
   int64_t properties_;        //
-  int64_t attributes_;        // 该Type属性数
-  int64_t methods_;           // 该Type方法数(EXTEND UNUSED)
-  int64_t hiddenmethods_;     // 隐藏方法数(EXTEND UNUSED)
+  int64_t attributes_;        // the number of attributes for this Type
+  int64_t methods_;           // the number of methods for this Type (EXTEND UNUSED)
+  int64_t hiddenmethods_;     // number of hidden methods (EXTEND UNUSED)
   int64_t supertypes_;        // (EXTEND UNUSED)
   int64_t subtypes_;          // (EXTEND UNUSED)
   int64_t externtype_;        // (EXTEND UNUSED)
@@ -579,12 +579,12 @@ private:
   int64_t local_attrs_;       // (EXTEND UNUSED)
   int64_t local_methods_;     // (EXTEND UNUSED)
   int64_t supertypeid_;       // (EXTEND UNUSED)
-  common::ObString type_name_;        // 该Type名称
-  // 如果该Type来自Package, 记录PackageID, 如果是一个type object，这个值不可能有效，
-  // 因为不能在package里面创建object，所以会被复用，当做一个owner id，它被关联到object的routine的owner id
+  common::ObString type_name_;        // The name of this Type
+  // If this Type comes from a Package, record the PackageID, if it is a type object, this value will not be valid,
+  // Because an object cannot be created inside a package, it will be reused as an owner id, and it is associated with the owner id of the object's routine
   int64_t package_id_;
-  ObUDTCollectionType *coll_info_; // 如果该Type是Coll类型, 该字段有效
-  common::ObSEArray<ObUDTTypeAttr *, 64> type_attrs_; // 记录该Type对象的属性相关信息
+  ObUDTCollectionType *coll_info_; // If this Type is Coll type, this field is valid
+  common::ObSEArray<ObUDTTypeAttr *, 64> type_attrs_; // Record the relevant attribute information of this Type object
   // object type spec and body
   common::ObSEArray<ObUDTObjectType*, 2> object_type_infos_;
 };

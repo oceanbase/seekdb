@@ -31,8 +31,7 @@ class ObPxWorkerRunnable
 public:
   virtual int run(ObPxRpcInitTaskArgs &arg) = 0;
 };
-
-// 使用 RPC 工作线程作为 Px Worker 的执行容器
+// Use RPC worker thread as the execution container for Px Worker
 class ObPxRpcWorker: public ObPxWorkerRunnable
 {
 public:
@@ -52,8 +51,7 @@ private:
   DISABLE_WARNING_GCC_POP
   ObPxRpcInitTaskResponse resp_;
 };
-
-// 使用协程作为 Px Worker 的执行容器
+// Use coroutine as Px Worker execution container
 class ObPxCoroWorker : public ObPxWorkerRunnable
 {
 public:
@@ -77,8 +75,7 @@ private:
   uint64_t task_co_id_;
   DISALLOW_COPY_AND_ASSIGN(ObPxCoroWorker);
 };
-
-// Px Worker 的执行容器
+// Px Worker's execution container
 class ObPxThreadWorker : public ObPxWorkerRunnable
 {
 public:
@@ -108,8 +105,7 @@ public:
 private:
   const observer::ObGlobalContext &gctx_;
 };
-
-// Worker 工厂，封装 Worker 的分配，便于管理资源
+// Worker factory, encapsulating Worker allocation, for easy resource management
 class ObPxRpcWorkerFactory
 {
 public:

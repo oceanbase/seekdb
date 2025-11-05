@@ -133,7 +133,7 @@ public:
     return set_value_with_lock(str);
 #endif
   }
-  // 重启生效的配置项，需要保存并dump到spfile中
+  // Configuration items that take effect on restart need to be saved and dumped to the spfile
   bool set_reboot_value(const char *str)
   {
     int64_t pos = 0;
@@ -217,7 +217,7 @@ public:
   const char *source() const { return attr_.get_source(); }
   const char *edit_level() const { return attr_.get_edit_level(); }
   const char *data_type() const;
-  /*obs启动首次读库设置该值*/
+  /*Set this value for the initial read library configuration when obs starts*/
   void initial_value_set() { initial_value_set_ = true; }
   bool is_initial_value_set() const { return initial_value_set_; }
   int64_t version() const { return version_; }

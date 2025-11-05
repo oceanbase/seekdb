@@ -117,7 +117,7 @@ int ObExprFuncPartHash::calc_hash_value_with_seed(const ObObj &obj, int64_t seed
 {
   int ret = OB_SUCCESS;
   ObObjType type = obj.get_type();
-  //定长类型需要去除末尾空格, 见 
+  // Fixed-length types need to remove trailing spaces, see
   if (ObCharType == type) {
     ObObj obj_trimmed;
     int32_t val_len = obj.get_val_len();
@@ -186,7 +186,7 @@ int ObExprFuncPartHash::calc_value(
   //This will influence data.
   //If you need to do, remember ObTableLocation has the same code!!!
   CHECK_COMPATIBILITY_MODE(expr_ctx.my_session_);
-  //mysql模式仅允许一个参数, 语法上就已限制
+  // mysql mode only allows one parameter, syntax already restricts
   if (OB_ISNULL(objs_stack) || 1 != param_num) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("objs_stack is null or number incorrect", K(objs_stack), K(param_num), K(ret));

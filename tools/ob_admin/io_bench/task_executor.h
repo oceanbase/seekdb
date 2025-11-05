@@ -69,7 +69,7 @@ struct TaskConfig
       K_(obj_size), K_(obj_num), K_(fragment_size), K_(is_adaptive), K_(type_str));
   char base_path_[OB_MAX_URI_LENGTH];
   int64_t thread_num_;
-  int64_t max_task_runs_;   // 每个线程执行次数
+  int64_t max_task_runs_;   // number of task runs per thread
   int64_t time_limit_s_;
   int64_t obj_size_;
   int64_t obj_num_;

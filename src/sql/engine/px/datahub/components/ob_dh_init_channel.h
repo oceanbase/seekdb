@@ -86,7 +86,7 @@ public:
                                  ObExecContext &ctx,
                                  int64_t task_cnt,
                                  ObPieceMsgCtx *&msg_ctx);
-  int received_; // 已经收到的 piece 数量
+  int received_; // number of pieces already received
   int64_t tenant_id_;
   ObInitChannelWholeMsg whole_msg_;
 private:

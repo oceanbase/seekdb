@@ -241,7 +241,7 @@ public:
   int create_agg_task(ObDASOpType op_type, const ObDASTabletLoc *tablet_loc, ObDasAggregatedTask *&agg_task);
   int find_agg_task(const ObDASTabletLoc *tablet_loc, ObDASOpType op_type, ObDasAggregatedTask *&agg_task);
   int add_batched_task(ObIDASTaskOp *das_task);
-  //创建一个DAS Task，并由das_ref持有
+  // Create a DAS Task, and hold it by das_ref
   template <typename DASOp>
   int prepare_das_task(const ObDASTabletLoc *tablet_loc, DASOp *&task_op);
   int create_das_task(const ObDASTabletLoc *tablet_loc,
@@ -294,7 +294,7 @@ private:
   };
   /////
   ObDASTaskFactory das_factory_;
-  //一个SQL Operator可以同时产生多个das task，并由DAS批量执行
+  // A SQL Operator can produce multiple das tasks and be executed in batch by DAS
   DasTaskList batched_tasks_;
   ObExecContext &exec_ctx_;
   ObEvalCtx &eval_ctx_;

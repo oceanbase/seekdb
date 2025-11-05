@@ -157,7 +157,7 @@ int ObLSWRSHandler::generate_weak_read_timestamp_(ObLS &ls, const int64_t max_st
   SCN min_log_service_scn, min_tx_service_ts;
   const ObLSID &ls_id = ls.get_ls_id();
 
-  //the order of apply service、trx should not be changed
+  // the order of apply service, trx should not be changed
   if (OB_FAIL(ls.get_max_decided_scn(min_log_service_scn))) {
     if (OB_STATE_NOT_MATCH == ret) {
       // print one log per minute

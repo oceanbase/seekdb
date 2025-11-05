@@ -39,7 +39,7 @@ int ObJniConnector::check_jni_exception_(JNIEnv *env) {
       if (getMessageMethod != nullptr) {
           jstring jmsg = (jstring)env->CallObjectMethod(thr, getMessageMethod);
           if (env->ExceptionCheck()) {
-              env->ExceptionClear(); // 防止调用过程中产生新异常
+              env->ExceptionClear(); // Prevent new exceptions from being generated during the call process
           }
           
           if (jmsg != nullptr) {
@@ -49,8 +49,7 @@ int ObJniConnector::check_jni_exception_(JNIEnv *env) {
               env->DeleteLocalRef(jmsg);
           }
       }
-
-      // 创建StringWriter和PrintWriter
+      // Create StringWriter and PrintWriter
       jclass stringWriterClass = env->FindClass("java/io/StringWriter");
       jmethodID stringWriterCtor = env->GetMethodID(stringWriterClass, "<init>", "()V");
       jobject stringWriter = env->NewObject(stringWriterClass, stringWriterCtor);
@@ -58,28 +57,24 @@ int ObJniConnector::check_jni_exception_(JNIEnv *env) {
       jclass printWriterClass = env->FindClass("java/io/PrintWriter");
       jmethodID printWriterCtor = env->GetMethodID(printWriterClass, "<init>", "(Ljava/io/Writer;)V");
       jobject printWriter = env->NewObject(printWriterClass, printWriterCtor, stringWriter);
-
-      // 调用printStackTrace
+      // Call printStackTrace
       jmethodID printStackTraceMethod = env->GetMethodID(
           throwableClass, 
           "printStackTrace", 
           "(Ljava/io/PrintWriter;)V"
       );
       env->CallVoidMethod(thr, printStackTraceMethod, printWriter);
-
-      // 获取堆栈字符串
+      // Get stack string
       jmethodID toStringMethod = env->GetMethodID(
           stringWriterClass, 
           "toString", 
           "()Ljava/lang/String;"
       );
       jstring stackTrace = (jstring)env->CallObjectMethod(stringWriter, toStringMethod);
-
-      // 转换为C字符串
+      // Convert to C string
       const char* cStackTrace = env->GetStringUTFChars(stackTrace, nullptr);
       LOG_WARN("Exception Stack Trace: ", K(cStackTrace));
-
-      // 释放资源
+      // Release resources
       env->ReleaseStringUTFChars(stackTrace, cStackTrace);
       env->DeleteLocalRef(stackTrace);
       env->DeleteLocalRef(printWriter);
@@ -89,7 +84,7 @@ int ObJniConnector::check_jni_exception_(JNIEnv *env) {
       env->DeleteLocalRef(stringWriterClass);
       
       env->ExceptionDescribe();
-      env->ExceptionClear(); // 清除异常状态
+      env->ExceptionClear(); // clear exception state
       env->DeleteLocalRef(thr);
     }
   }

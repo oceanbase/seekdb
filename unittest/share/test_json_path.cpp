@@ -58,8 +58,7 @@ TEST_F(TestJsonPath, test_is_mysql_terminator_mysql)
     }
   }
 }
-
-// 测试 basicNode的构造函数
+// Test basicNode's constructor
 TEST_F(TestJsonPath, test_create_basic_node)
 {
   ObArenaAllocator allocator(ObModIds::TEST);
@@ -100,8 +99,7 @@ TEST_F(TestJsonPath, test_create_basic_node)
   ASSERT_EQ(JPN_WILDCARD_ELLIPSIS, (static_cast<ObJsonPathBasicNode *> (fa1))->get_node_type());
   ASSERT_EQ(true, fa1->node_content_.is_had_wildcard_);
 }
-
-// 测试 append函数
+// test append function
 TEST_F(TestJsonPath, test_append)
 {
   // append **
@@ -163,8 +161,7 @@ TEST_F(TestJsonPath, test_append)
   ASSERT_EQ(JPN_MEMBER, test_path.path_nodes_[5]->get_node_type());
   std::cout<<"6: "<<test_path.path_nodes_[5]->node_content_.member_.object_name_<<std::endl;
 }
-
-// 测试 parse_array_index()函数，用于得到array_index(包括last和-的处理)
+// Test parse_array_index() function, used to get array_index (including handling of last and -)
 TEST_F(TestJsonPath, test_parse_array_index)
 {
   int ret = OB_SUCCESS;
@@ -178,8 +175,7 @@ TEST_F(TestJsonPath, test_parse_array_index)
   ASSERT_EQ(10, array_index);
   ASSERT_EQ(true, from_end);
 }
-
-// 测试 parse_array_node()函数，用于得到array_node(包括[*], array_cell和array_range的处理)
+// Test parse_array_node() function, used to get array_node (including [*], array_cell and array_range processing)
 TEST_F(TestJsonPath, test_parse_array_node)
 {
   int ret = OB_SUCCESS;
@@ -194,8 +190,7 @@ TEST_F(TestJsonPath, test_parse_array_node)
   //ASSERT_EQ(10, test_path1.path_nodes_[0]->path_node_content_.array_cell_.index_);
   //ASSERT_EQ(false, test_path1.path_nodes_[0]->path_node_content_.array_cell_.index_);
 }
-
-// 测试能否正确解析array_cell_node
+// Test whether array_cell_node can be parsed correctly
 TEST_F(TestJsonPath, test_array_cell_node)
 {
   int ret = OB_SUCCESS;
@@ -209,7 +204,7 @@ TEST_F(TestJsonPath, test_array_cell_node)
   }
   ret = test_path.parse_path();
   ASSERT_EQ(OB_SUCCESS, ret);
-  // 只有一个节点
+  // There is only one node
   ASSERT_EQ(1, test_path.path_node_cnt());
   ASSERT_EQ(JPN_MULTIPLE_ARRAY,test_path.path_nodes_[0]->get_node_type());
   ASSERT_EQ(10, test_path.path_nodes_[0]->node_content_.multi_array_[0]->first_index_);
@@ -217,8 +212,7 @@ TEST_F(TestJsonPath, test_array_cell_node)
   ASSERT_EQ(10, test_path.path_nodes_[0]->node_content_.multi_array_[0]->last_index_);
   ASSERT_EQ(true,test_path.path_nodes_[0]->node_content_.multi_array_[0]->is_last_index_from_end_);
 }
-
-// 测试能否正确解析array_range_node
+// Test whether array_range_node can be parsed correctly
 TEST_F(TestJsonPath, test_array_range_node)
 {
   int ret = OB_SUCCESS;
@@ -232,7 +226,7 @@ TEST_F(TestJsonPath, test_array_range_node)
   }
   ret = test_path.parse_path();
   ASSERT_EQ(OB_SUCCESS, ret);
-  // 只有一个节点
+  // There is only one node
   ASSERT_EQ(1, test_path.path_node_cnt());
   ASSERT_EQ(JPN_MULTIPLE_ARRAY,test_path.path_nodes_[0]->get_node_type());
   ASSERT_EQ(1, test_path.path_nodes_[0]->node_content_.multi_array_[0]->first_index_);
@@ -254,7 +248,7 @@ TEST_F(TestJsonPath, test_multi_array_node)
   }
   ret = test_path.parse_path();
   ASSERT_EQ(OB_SUCCESS, ret);
-  // 只有一个节点
+  // There is only one node
   ASSERT_EQ(1, test_path.path_node_cnt());
   ASSERT_EQ(JPN_MULTIPLE_ARRAY,test_path.path_nodes_[0]->get_node_type());
   ASSERT_EQ(2, test_path.path_nodes_[0]->node_content_.multi_array_.size());
@@ -294,16 +288,15 @@ TEST_F(TestJsonPath, test_filter_node)
   }
   ASSERT_EQ(OB_SUCCESS, ret);
   std::cout<<test_path.path_nodes_[0]->get_node_type()<<std::endl;
-  // 只有一个节点
+  // There is only one node
   ASSERT_EQ(1, test_path.path_node_cnt());
 
   ObJsonBuffer str2(&allocator);
   ret = test_path.to_string(str2);
   ASSERT_EQ(OB_SUCCESS, ret);
   std::cout<<"to_string successed"<<std::endl;
-
-  // 注意member解析后，如果keyname只有字母和数字会去掉双引号
-  // 直接对比会出错
+  // Note that after member parsing, if keyname contains only letters and numbers, the double quotes will be removed
+  // Direct comparison will result in an error
   std::cout<<str1.ptr()<<std::endl;
   std::cout<<str2.ptr()<<std::endl;
   if(0 == strcmp(str1.ptr(), str2.ptr()))  std::cout<<"same"<<std::endl;
@@ -312,21 +305,21 @@ TEST_F(TestJsonPath, test_filter_node)
 TEST_F(TestJsonPath, test_good_filter_to_string)
 {
   /*
-  以下为oracle文档中举例的path表达式
+  The following are path expressions from the oracle documentation example
   29. $.friends[3, 8 to 10, 12].cars[0]?(@.year > 2016)
   30. $.friends[3].cars[0]?(@.year.number() > 2016)
   31. $.friends[3].cars[0]?(@.year.numberOnly() > 2016)
-  32. $.friends[3]?(@.addresses.city == \"San Francisco\")
-  33. $.friends[*].addresses?(@.addresses.city starts with \"San \")
-  34. $.friends[3]?(@.addresses.city == \"San Francisco\" && @.addresses.state == \"Nevada\")
-  35. $.friends[3].addresses?(@.city == \"San Francisco\" && @.state == \"Nevada\")
+  32. $.friends[3]?(@.addresses.city == "San Francisco")
+  33. $.friends[*].addresses?(@.addresses.city starts with "San ")
+  34. $.friends[3]?(@.addresses.city == "San Francisco" && @.addresses.state == "Nevada")
+  35. $.friends[3].addresses?(@.city == "San Francisco" && @.state == "Nevada")
   36. $?(@.LineItems.Part.UPCCode == 85391628927  && @.LineItems.Quantity > 3)
-  37. $?(@.User == \"ABULL\" && exists(@.LineItems[*]?(@.Part.UPCCode == 85391628927 && @.Quantity > 3)))
+  37. $?(@.User == "ABULL" && exists(@.LineItems[*]?(@.Part.UPCCode == 85391628927 && @.Quantity > 3)))
   */
 
   /*
-  比较谓词
-  // node_to_string 所得字符串不会有多余的空格
+  Comparison predicates
+  // The string obtained from node_to_string will not have extra spaces
   38. $.friends[*].addresses?(@.addresses.city starts      with \"San \")
   39. $.friends[*].addresses?(@.addresses.city has substring \"San \")
   40. $.friends[*].addresses?(@.addresses.city has    substring \"San \")
@@ -382,12 +375,12 @@ TEST_F(TestJsonPath, test_good_filter_to_string)
   90. $.friends[*].addresses   ?(@.addresses.city starts with $v1)
   91. $.friends[*].addresses   ?   (@.addresses.city starts  with $v1)
 
-  比较符号(==, !=, >, ...)两端的组合可以为如下组合：
-  (标量,标量), (标量,subpath) (subpath,标量), (subpath,变量), (变量,subpath)
-  除此之外均为非法
+  Comparison symbols (==, !=, >, ...) combinations on both sides can be as follows:
+  (scalar, scalar), (scalar, subpath) (subpath, scalar), (subpath, variable), (variable, subpath)
+  Any other combination is illegal
 
-  但是starts with, has substring 等限制更多，只能是以下组合：
-  (subpath, str), (subpath, 变量), (str, str)
+  However, starts with, has substring, etc., have more restrictions and can only be the following combinations:
+  (subpath, str), (subpath, variable), (str, str)
   */
   int ret = OB_SUCCESS;
   ObArenaAllocator allocator(ObModIds::TEST);
@@ -418,9 +411,8 @@ TEST_F(TestJsonPath, test_good_filter_to_string)
   ret = test_path.to_string(str2);
   ASSERT_EQ(OB_SUCCESS, ret);
   std::cout<<"to_string successed"<<std::endl;
-
-  // 注意member解析后，如果keyname只有字母和数字会去掉双引号
-  // 直接对比会出错
+  // Note that after member parsing, if keyname contains only letters and numbers, the double quotes will be removed
+  // Direct comparison will result in an error
   ObString str3(str2.ptr());
   std::cout<<str3.ptr()<<std::endl;
   if(0 == strcmp(str1.ptr(), str2.ptr()))  std::cout<<"same"<<std::endl;
@@ -472,21 +464,21 @@ TEST_F(TestJsonPath, test_good_filter_to_string)
 TEST_F(TestJsonPath, test_bad_filter_to_string)
 {
   /*
-  过滤表达式
-  比较谓词
+  filter expression
+  comparison predicates
   has substring, starts with, like, like_regex, eq_regex, exists, !exists
   23. $.friends[3, 8 to 10, 12].cars[0]?($.year > 2016)
-  24. $.friends[*].addresses?(@.addresses.city starts with \"San )
+  24. $.friends[*].addresses?(@.addresses.city starts with "San )
   25. $.friends[3].cars[0]?(@.year.number( > 2016)
-  26. $.friends[*].addresses?(@.addresses.city start with \"San \")
-  27. $.friends[*].addresses?(@.addresses.city had substring \"San \")
-  28. $.friends[*].addresses?(@.addresses.city likes \"San \")
-  29. $.friends[*].addresses?(@.addresses.city like-regex \"San \")
-  30. $.friends[*].addresses?(@.addresses.city like _regex \"San \")
-  31. $.friends[*].addresses?(@.addresses.city eq_Regex \"San \")
-  32. $?(@.User == \"ABULL\" && exist(@.LineItems[*]?(@.Part.UPCCode == 85391628927 && @.Quantity > 3)))
-  33. $?(@.User == \"ABULL\" && exist @.LineItems[*]?(@.Part.UPCCode == 85391628927 && @.Quantity > 3))
-  34. $?(@.User == \"ABULL\" && !exist(@.LineItems[*]?(@.Part.UPCCode == 85391628927 && @.Quantity > 3)))
+  26. $.friends[*].addresses?(@.addresses.city start with "San ")
+  27. $.friends[*].addresses?(@.addresses.city had substring "San ")
+  28. $.friends[*].addresses?(@.addresses.city likes "San ")
+  29. $.friends[*].addresses?(@.addresses.city like-regex "San ")
+  30. $.friends[*].addresses?(@.addresses.city like _regex "San ")
+  31. $.friends[*].addresses?(@.addresses.city eq_Regex "San ")
+  32. $?(@.User == "ABULL" && exist(@.LineItems[*]?(@.Part.UPCCode == 85391628927 && @.Quantity > 3)))
+  33. $?(@.User == "ABULL" && exist @.LineItems[*]?(@.Part.UPCCode == 85391628927 && @.Quantity > 3))
+  34. $?(@.User == "ABULL" && !exist(@.LineItems[*]?(@.Part.UPCCode == 85391628927 && @.Quantity > 3)))
   35. $.friends[3].cars[0]?(@.year.number() >  201 6)
   36. $.friends[3].cars[0]?(@.year.number() > )
   37. $.friends[3].cars[0]?(>  201)
@@ -501,12 +493,12 @@ TEST_F(TestJsonPath, test_bad_filter_to_string)
   46. $.friends[3].cars[0]?(@.year.number() != 2016 & & @.year.number() > 2016)
   47. $.friends[3].cars[0]?(@.year.number() != 2016 | | @.year.number() > 2016)
   48. $.friends[3].cars[0]?(@.year.number() != 2016 && !@.year.number() > 2016)
-  49. $.friends[3].cars[0]?(@.year.date() == \"2022-8-22 )
+  49. $.friends[3].cars[0]?(@.year.date() == "2022-8-22 )
   50. $.LineItems.Part?(@.UPCCode ==   $ v1)
   51. $.LineItems.Part?(@.UPCCode == TRUE)
   52. $.LineItems.Part?(@.UPCCode == False)
   53. $.LineItems.Part?(@.UPCCode == NULL)
-  括号不匹配/不合法
+  mismatched/illegal brackets
   54. $.LineItems.Part?(@.UPCCode == null))
   55. $.LineItems.Part?((@.UPCCode == null)
   56. $.LineItems.Part?(@.UPCCode == null())
@@ -514,18 +506,18 @@ TEST_F(TestJsonPath, test_bad_filter_to_string)
   58. $.LineItems.Part?(@.UPCCode ==   $v1
   59. $.LineItems.Part?@.UPCCode ==   $v1)
   60. $.LineItems.Part?()(@.UPCCode ==   $v1)
-  不合法的变量名
+  illegal variable names
   61. $.LineItems.Part?([@.UPCCode ==   $1v])
   62. $.LineItems.Part?([@.UPCCode ==   $v@])
   63. $.LineItems.Part?([@.UPCCode ==   $v**])
   64. $.LineItems.Part?(@.UPCCode ==   $(v1))
-  65. $.LineItems.Part?(@.UPCCode ==   $\"v1\")
-  不合法的组合
+  65. $.LineItems.Part?(@.UPCCode ==   $"v1")
+  illegal combinations
   66. $.LineItems.Part?(2016 == $v1)
-  67. $.LineItems.Part?(\"abc\" == $v1)
+  67. $.LineItems.Part?("abc" == $v1)
   68. $.LineItems.Part?(true == $v1)
   69. $.LineItems.Part?(  $v1   == 2016)
-  70. $.LineItems.Part?(  $v1   == \"abc\")
+  70. $.LineItems.Part?(  $v1   == "abc")
   71. $.LineItems.Part?(  $v1   == false)
   72. $.LineItems.Part?(  $v1   == $v4)
   73. $.LineItems.Part?(@.UPCCode == @.UPCCode)
@@ -536,12 +528,12 @@ TEST_F(TestJsonPath, test_bad_filter_to_string)
   78. $.friends[*].addresses?(@.city like_regex @.UPCCode)
   79. $.LineItems.Part?(  $v1  starts with @.city)
   80. $.LineItems.Part?(  $v1  starts with $v1)
-  81. $.LineItems.Part?(  $v1  starts with \"abc\")
+  81. $.LineItems.Part?(  $v1  starts with "abc")
   82. $.LineItems.Part?(  $v1  starts with 123.5)
   83. $.LineItems.Part?(  $v1  starts with true)
-  84. $.LineItems.Part?(  \"abc\"  starts with $friends)
-  85. $.LineItems.Part?( \"abc\"  starts with 123.5)
-  86. $.LineItems.Part?(  \"abc\"  starts with true)
+  84. $.LineItems.Part?(  "abc"  starts with $friends)
+  85. $.LineItems.Part?( "abc"  starts with 123.5)
+  86. $.LineItems.Part?(  "abc"  starts with true)
   87. $.LineItems.Part?(true starts with true)
   88. $.LineItems.Part?(  true  starts with $friends)
   89. $.LineItems.Part?( 12345 starts with $friends)
@@ -550,11 +542,11 @@ TEST_F(TestJsonPath, test_bad_filter_to_string)
   92. $?(exists(85391628927 == 85391628927))
   93. $?(exists($v1 == 85391628927))
   94. $?(exists($v1 == $v1))
-  95. $?(exists($v1 == \"abc\"))
+  95. $?(exists($v1 == "abc"))
   96. $?(exists($v1 == true))
-  97. $?(exists(\"abc\" == \"abc\"))
-  98. $?(exists(\"abc\" has substring \"abc\"))
-  99. $?(exists(\"abc\" starts with \"abc\"))
+  97. $?(exists("abc" == "abc"))
+  98. $?(exists("abc" has substring "abc"))
+  99. $?(exists("abc" starts with "abc"))
   100. $?(exists(true == true))
   101. $?(exists(true != true))
   102. $.LineItems.Part?(@.UPCCode[1-] == null)
@@ -612,13 +604,12 @@ TEST_F(TestJsonPath, test_func_node)
   }
   ret = test_path.parse_path();
   ASSERT_EQ(OB_SUCCESS, ret);
-  // 只有一个节点
+  // There is only one node
   ASSERT_EQ(2, test_path.path_node_cnt());
   ASSERT_EQ(JPN_MEMBER,test_path.path_nodes_[0]->get_node_type());
   ASSERT_EQ(JPN_TYPE,test_path.path_nodes_[1]->get_node_type());
 }
-
-// 测试能否正确解析array_range_wildcard_node
+// Test whether array_range_wildcard_node can be parsed correctly
 TEST_F(TestJsonPath, test_array_wildcard_node)
 {
   int ret = OB_SUCCESS;
@@ -632,12 +623,11 @@ TEST_F(TestJsonPath, test_array_wildcard_node)
   }
   ret = test_path.parse_path();
   ASSERT_EQ(OB_SUCCESS, ret);
-  // 只有一个节点
+  // There is only one node
   ASSERT_EQ(1, test_path.path_node_cnt());
   ASSERT_EQ(JPN_ARRAY_CELL_WILDCARD,test_path.path_nodes_[0]->get_node_type());
 }
-
-// 测试能否正确解析member_wildcard_node
+// Test whether member_wildcard_node can be parsed correctly
 TEST_F(TestJsonPath, test_member_wildcard_node)
 {
   int ret = OB_SUCCESS;
@@ -649,12 +639,11 @@ TEST_F(TestJsonPath, test_member_wildcard_node)
     std::cout<<"oracle"<<std::endl;
   }
   ASSERT_EQ(OB_SUCCESS, ret);
-  // 只有一个节点
+  // There is only one node
   ASSERT_EQ(1, test_path.path_node_cnt());
   ASSERT_EQ(JPN_MEMBER_WILDCARD,test_path.path_nodes_[0]->get_node_type());
 }
-
-// 测试能否正确解析member_node
+// Test whether member_node can be parsed correctly
 TEST_F(TestJsonPath, test_member_node)
 {
   int ret = OB_SUCCESS;
@@ -670,7 +659,7 @@ TEST_F(TestJsonPath, test_member_node)
   ret = test_path.parse_path();
   ASSERT_EQ(OB_SUCCESS, ret);
   std::cout<<"test"<<std::endl;
-  // 只有一个节点
+  // There is only one node
   ASSERT_EQ(1, test_path.path_node_cnt());
   ASSERT_EQ(JPN_MEMBER,test_path.path_nodes_[0]->get_node_type());
   const auto &member = test_path.path_nodes_[0]->node_content_.member_;
@@ -678,8 +667,7 @@ TEST_F(TestJsonPath, test_member_node)
   ASSERT_TRUE(str.case_compare("name") == 0);
   std::cout<<test_path.path_nodes_[0]->node_content_.member_.object_name_<<std::endl;
 }
-
-// 测试能否正确解析ellipsis_node
+// Test whether ellipsis_node can be parsed correctly
 TEST_F(TestJsonPath, test_ellipsis_node)
 {
   int ret = OB_SUCCESS;
@@ -688,15 +676,14 @@ TEST_F(TestJsonPath, test_ellipsis_node)
   ObJsonPath test_path("$**[10]", &allocator);
   ret = test_path.parse_path();
   ASSERT_EQ(OB_SUCCESS, ret);
-  // 只有一个节点
+  // There is only one node
   ASSERT_EQ(2, test_path.path_node_cnt());
   ASSERT_EQ(JPN_WILDCARD_ELLIPSIS,test_path.path_nodes_[0]->get_node_type());
   ASSERT_EQ(JPN_ARRAY_CELL,test_path.path_nodes_[1]->get_node_type());
   ASSERT_EQ(10,test_path.path_nodes_[1]->node_content_.array_cell_.index_);
   ASSERT_EQ(false,test_path.path_nodes_[1]->node_content_.array_cell_.is_index_from_end_);
 }
-
-// 测试能否成功解析path表达式
+// Test whether the path expression can be successfully parsed
 TEST_F(TestJsonPath, test_parse_path)
 {
   int ret = OB_SUCCESS;
@@ -704,7 +691,7 @@ TEST_F(TestJsonPath, test_parse_path)
   ObJsonPath test_path("$[last-10 to last-1]", &allocator);
   ret = test_path.parse_path();
   ASSERT_EQ(OB_SUCCESS, ret);
-  // 只有一个节点
+  // There is only one node
   ASSERT_EQ(1, test_path.path_node_cnt());
 
   if (OB_SUCC(ret)) {
@@ -712,7 +699,7 @@ TEST_F(TestJsonPath, test_parse_path)
     {
 
       if (i==0) {
-        // 节点类型有 wildcard
+        // Node type has wildcard
         // ASSERT_EQ(JPN_MEMBER_WILDCARD,test_path.path_nodes_[i]->node_type);
         std::cout<<i<<std::endl;
         //ASSERT_EQ(JPN_ARRAY_CELL_WILDCARD,test_path.path_nodes_[i]->node_type);
@@ -859,12 +846,12 @@ TEST_F(TestJsonPath, test_random)
     dice = rand() % 5;
     switch (dice) {
       case 0:
-      // 添加 JPN_MEMBER
+      // Add JPN_MEMBER
         str.append(".keyname");
         break;
 
       case 1:
-      // 添加 JPN_MEMBER_WILDCARD
+      // Add JPN_MEMBER_WILDCARD
         str.append(".*");
         break;
 
@@ -892,7 +879,7 @@ TEST_F(TestJsonPath, test_random)
         break;
     }
   }
-  // 防止最后一个节点是**
+  // Prevent the last node from being **
   str.append("[1]");
 
   int ret = OB_SUCCESS;
@@ -925,8 +912,8 @@ TEST_F(TestJsonPath, test_good_func_path)
 {
   int ret = OB_SUCCESS;
   ObArenaAllocator allocator(ObModIds::TEST);
-  // str0用于解析
-  // str1用于和to_string的结果对比
+  // str0 is used for parsing
+  // str1 is used to compare with the result of to_string
   /* good path
   1. $.friends[3, 8 to 10, 12].cars[0].abs()
   2. $.friends[3, 8 to 10, 12].cars[0].boolean()
@@ -961,7 +948,7 @@ TEST_F(TestJsonPath, test_good_func_path)
   ObString str1 = "$[*]..size()";
 
   ObJsonPath test_path(str0, &allocator);
-  // 解析
+  // Parse
   test_path.is_mysql_ = false;
   if(test_path.is_mysql_ == false){
     std::cout<<"oracle"<<std::endl;
@@ -976,8 +963,7 @@ TEST_F(TestJsonPath, test_good_func_path)
   ret = test_path.to_string(str2);
   ASSERT_EQ(OB_SUCCESS, ret);
   std::cout<<"to_string successed"<<std::endl;
-
-  // 验证是否相等 （ObSqlString直接相比会报错，因为没有重载==
+  // Verify if they are equal (ObSqlString direct comparison will cause an error because == is not overloaded)
   ObString str3(str2.ptr());
   std::cout<<str1.ptr()<<std::endl;
   std::cout<<str3.ptr()<<std::endl;
@@ -987,7 +973,7 @@ TEST_F(TestJsonPath, test_good_func_path)
   str0 = "$.abs()";
   str1 = "$.abs()";
   ObJsonPath test_path2(str0, &allocator);
-  // 解析
+  // Parse
   test_path2.is_mysql_ = false;
   ret = test_path2.parse_path();
   ASSERT_EQ(OB_SUCCESS, ret);
@@ -1001,7 +987,7 @@ TEST_F(TestJsonPath, test_good_func_path)
   str0 = "$.boolean()";
   str1 = "$.boolean()";
   ObJsonPath test_path3(str0, &allocator);
-  // 解析
+  // Parse
   test_path3.is_mysql_ = false;
   ret = test_path3.parse_path();
   ASSERT_EQ(OB_SUCCESS, ret);
@@ -1015,7 +1001,7 @@ TEST_F(TestJsonPath, test_good_func_path)
   str0 = "$.booleanOnly()";
   str1 = "$.booleanOnly()";
   ObJsonPath test_path4(str0, &allocator);
-  // 解析
+  // Parse
   test_path4.is_mysql_ = false;
   ret = test_path4.parse_path();
   ASSERT_EQ(OB_SUCCESS, ret);
@@ -1029,7 +1015,7 @@ TEST_F(TestJsonPath, test_good_func_path)
   str0 = "$.ceiling()";
   str1 = "$.ceiling()";
   ObJsonPath test_path5(str0, &allocator);
-  // 解析
+  // Parse
   test_path5.is_mysql_ = false;
   ret = test_path5.parse_path();
   ASSERT_EQ(OB_SUCCESS, ret);
@@ -1043,7 +1029,7 @@ TEST_F(TestJsonPath, test_good_func_path)
   str0 = "$.date()";
   str1 = "$.date()";
   ObJsonPath test_path6(str0, &allocator);
-  // 解析
+  // Parse
   test_path6.is_mysql_ = false;
   ret = test_path6.parse_path();
   ASSERT_EQ(OB_SUCCESS, ret);
@@ -1057,7 +1043,7 @@ TEST_F(TestJsonPath, test_good_func_path)
   str0 = "$.double()";
   str1 = "$.double()";
   ObJsonPath test_path7(str0, &allocator);
-  // 解析
+  // Parse
   test_path7.is_mysql_ = false;
   ret = test_path7.parse_path();
   ASSERT_EQ(OB_SUCCESS, ret);
@@ -1071,7 +1057,7 @@ TEST_F(TestJsonPath, test_good_func_path)
   str0 = "$.floor()";
   str1 = "$.floor()";
   ObJsonPath test_path8(str0, &allocator);
-  // 解析
+  // Parse
   test_path8.is_mysql_ = false;
   ret = test_path8.parse_path();
   ASSERT_EQ(OB_SUCCESS, ret);
@@ -1085,7 +1071,7 @@ TEST_F(TestJsonPath, test_good_func_path)
   str0 = "$.length()";
   str1 = "$.length()";
   ObJsonPath test_path9(str0, &allocator);
-  // 解析
+  // Parse
   test_path9.is_mysql_ = false;
   ret = test_path9.parse_path();
   ASSERT_EQ(OB_SUCCESS, ret);
@@ -1099,7 +1085,7 @@ TEST_F(TestJsonPath, test_good_func_path)
   str0 = "$.lower()";
   str1 = "$.lower()";
   ObJsonPath test_path10(str0, &allocator);
-  // 解析
+  // Parse
   test_path10.is_mysql_ = false;
   ret = test_path10.parse_path();
   ASSERT_EQ(OB_SUCCESS, ret);
@@ -1113,7 +1099,7 @@ TEST_F(TestJsonPath, test_good_func_path)
   str0 = "$.number()";
   str1 = "$.number()";
   ObJsonPath test_path11(str0, &allocator);
-  // 解析
+  // Parse
   test_path11.is_mysql_ = false;
   ret = test_path11.parse_path();
   ASSERT_EQ(OB_SUCCESS, ret);
@@ -1127,7 +1113,7 @@ TEST_F(TestJsonPath, test_good_func_path)
   str0 = "$.numberOnly()";
   str1 = "$.numberOnly()";
   ObJsonPath test_path12(str0, &allocator);
-  // 解析
+  // Parse
   test_path12.is_mysql_ = false;
   ret = test_path12.parse_path();
   ASSERT_EQ(OB_SUCCESS, ret);
@@ -1141,7 +1127,7 @@ TEST_F(TestJsonPath, test_good_func_path)
   str0 = "$.string()";
   str1 = "$.string()";
   ObJsonPath test_path13(str0, &allocator);
-  // 解析
+  // Parse
   test_path13.is_mysql_ = false;
   ret = test_path13.parse_path();
   ASSERT_EQ(OB_SUCCESS, ret);
@@ -1155,7 +1141,7 @@ TEST_F(TestJsonPath, test_good_func_path)
   str0 = "$.stringOnly()";
   str1 = "$.stringOnly()";
   ObJsonPath test_path14(str0, &allocator);
-  // 解析
+  // Parse
   test_path14.is_mysql_ = false;
   ret = test_path14.parse_path();
   ASSERT_EQ(OB_SUCCESS, ret);
@@ -1169,7 +1155,7 @@ TEST_F(TestJsonPath, test_good_func_path)
   str0 = "$.timestamp()";
   str1 = "$.timestamp()";
   ObJsonPath test_path15(str0, &allocator);
-  // 解析
+  // Parse
   test_path15.is_mysql_ = false;
   ret = test_path15.parse_path();
   ASSERT_EQ(OB_SUCCESS, ret);
@@ -1183,7 +1169,7 @@ TEST_F(TestJsonPath, test_good_func_path)
   str0 = "$.type()";
   str1 = "$.type()";
   ObJsonPath test_path16(str0, &allocator);
-  // 解析
+  // Parse
   test_path16.is_mysql_ = false;
   ret = test_path16.parse_path();
   ASSERT_EQ(OB_SUCCESS, ret);
@@ -1250,19 +1236,19 @@ TEST_F(TestJsonPath, test_oracle_good_path)
 {
   int ret = OB_SUCCESS;
   ObArenaAllocator allocator(ObModIds::TEST);
-  // 用于解析
+  // Used for parsing
   ObString str0 = "$.branch_code";
   //ObString str0 = "$.abc.\"\".def";
   //.keyname[last-10 to last-1][5].a
   // ObString str0 = "$[9999999999999].keyname";
   std::cout<<str0.ptr()<<std::endl;
-  // 用于和to_string的对比(即str0去除多余空格)
-  // 去除转义符的接口待实现
-  // 此时会把转义符也作为keyname的一部分处理
+  // Used for comparison with to_string (i.e., str0 without extra spaces)
+  // The interface for removing escape characters to be implemented
+  // At this time, the escape character will also be processed as part of the keyname
   ObString str1 = "$.branch_code";
   // ObString str1 = "$[9999999999999].keyname";
   ObJsonPath test_path(str0, &allocator);
-  // 解析
+  // Parse
   test_path.is_mysql_ = false;
   if(test_path.is_mysql_ == false){
     std::cout<<"oracle"<<std::endl;
@@ -1277,8 +1263,7 @@ TEST_F(TestJsonPath, test_oracle_good_path)
   ret = test_path.to_string(str2);
   ASSERT_EQ(OB_SUCCESS, ret);
   std::cout<<"to_string successed"<<std::endl;
-
-  // 验证是否相等 （ObSqlString直接相比会报错，因为没有重载==
+  // Verify if they are equal (ObSqlString direct comparison will cause an error because == is not overloaded)
   ObString str3(str2.ptr());
   std::cout<<str2.ptr()<<std::endl;
   std::cout<<str3.ptr()<<std::endl;
@@ -1310,19 +1295,19 @@ TEST_F(TestJsonPath, test_good_path)
 {
   int ret = OB_SUCCESS;
   ObArenaAllocator allocator(ObModIds::TEST);
-  // 用于解析
+  // Used for parsing
   ObString str0 = "$.\"abc d\"";
   //ObString str0 = "$.abc.\"\".def";
   //.keyname[last-10 to last-1][5].a
   // ObString str0 = "$[9999999999999].keyname";
   std::cout<<str0.ptr()<<std::endl;
-  // 用于和to_string的对比(即str0去除多余空格)
-  // 去除转义符的接口待实现
-  // 此时会把转义符也作为keyname的一部分处理
+  // Used for comparison with to_string (i.e., str0 without extra spaces)
+  // The interface for removing escape characters to be implemented
+  // At this time, the escape character will also be processed as part of the keyname
   ObString str1 = "$.\"abc d\"";
   // ObString str1 = "$[9999999999999].keyname";
   ObJsonPath test_path(str0, &allocator);
-  // 解析
+  // Parse
   test_path.is_mysql_ = false;
   if(test_path.is_mysql_ == false){
     std::cout<<"oracle"<<std::endl;
@@ -1347,8 +1332,7 @@ TEST_F(TestJsonPath, test_good_path)
       std::cout<<"content:"<<test_path.path_nodes_[i]->node_content_.array_cell_.is_index_from_end_<<std::endl;
     }
   }
-
-  // 验证是否相等 （ObSqlString直接相比会报错，因为没有重载==
+  // Verify if they are equal (ObSqlString direct comparison will cause an error because == is not overloaded)
   ObString str3(str2.ptr());
   std::cout<<str2.ptr()<<std::endl;
   ASSERT_EQ(str1, str3);

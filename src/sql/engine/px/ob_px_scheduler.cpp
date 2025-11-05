@@ -28,10 +28,8 @@ using namespace sql;
 using namespace sql::dtl;
 namespace sql
 {
-
-
-// 仅用于本 cpp 文件，所以可以放在这里
-// 专用于处理 datahub piece 消息的逻辑
+// Only used in this cpp file, so it can be placed here
+// Dedicated to processing datahub piece messages logic
 template <typename PieceMsg>
 class ObDhPieceMsgProc
 {
@@ -45,7 +43,7 @@ public:
     ObDfo *target_dfo = nullptr;
     ObPieceMsgCtx *piece_ctx = nullptr;
     ObDfo *child_dfo = nullptr;
-    // FIXME (TODO xiaochu)：这个 dfo id 不是必须的，本地可以维护一个 op_id 到 dfo id 的映射
+    // FIXME (TODO xiaochu): this dfo id is not necessary, a local mapping from op_id to dfo id can be maintained
     if (OB_FAIL(coord_info.dfo_mgr_.find_dfo_edge(pkt.source_dfo_id_, source_dfo))) {
       LOG_WARN("fail find dfo", K(pkt), K(ret));
     } else if (OB_FAIL(coord_info.dfo_mgr_.find_dfo_edge(pkt.target_dfo_id_, target_dfo))) {
@@ -54,9 +52,9 @@ public:
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("NULL ptr or null session ptr", KP(source_dfo), KP(target_dfo), K(pkt), K(ret));
     } else if (OB_FAIL(coord_info.piece_msg_ctx_mgr_.find_piece_ctx(pkt.op_id_, pkt.type(), piece_ctx))) {
-      // 如果找不到则创建一个 ctx
-      // NOTE: 这里新建一个 piece_ctx 的方式不会出现并发问题，
-      // 因为 QC 是单线程消息循环，逐个处理 SQC 发来的消息
+      // If not found then create a ctx
+      // NOTE: Here we create a piece_ctx in a way that will not cause concurrency issues,
+      // Because QC is a single-threaded message loop, processing messages from SQC one by one
       if (OB_ENTRY_NOT_EXIST != ret) {
         LOG_WARN("fail get ctx", K(pkt), K(ret));
       } else if (OB_FAIL(PieceMsg::PieceMsgCtx::alloc_piece_msg_ctx(pkt, coord_info, ctx,
@@ -84,12 +82,12 @@ int ObPxMsgProc::on_process_end(ObExecContext &ctx)
 {
   UNUSED(ctx);
   int ret = OB_SUCCESS;
-  // 处理扫尾工作
+  // Handle cleanup work
   return ret;
 }
 
 // entry function
-// 调度入口函数
+// Scheduling entry function
 int ObPxMsgProc::startup_msg_loop(ObExecContext &ctx)
 {
   int ret = OB_SUCCESS;
@@ -116,17 +114,16 @@ void ObPxMsgProc::clean_dtl_interm_result(ObExecContext &ctx)
     scheduler_->clean_dtl_interm_result(ctx);
   }
 }
-
-// 1. 根据 pkt 信息找到对应 dfo, sqc，标记当前 sqc 线程分配完成
-// 2. 判断该 dfo 下是否所有 sqc 都分配线程完成
-//    如果完成，则标记 dfo 为 thread_inited, 进入第 3 步，否则结束处理
-// 3. 判断当前 dfo 的 parent 是否处于 thread_inited 状态，
-//    如果是:
-//       - 调用 on_dfo_pair_thread_inited 来触发 两个 dfo 的 channel 配对和分发，
-//    否则:
-//       - 判断当前 dfo 的**任意** child 是否有处于 thread_inited 状态，
-//          - 如果是，则调用 on_dfo_pair_thread_inited 来触发 两个 dfo 的 channel 配对和分发
-//          - 否则 nop
+// 1. According to pkt information find corresponding dfo, sqc, mark current sqc thread allocation complete
+// 2. Determine if all sqc under this dfo have been assigned threads to complete
+//    If completed, mark dfo as thread_inited, enter step 3, otherwise end processing
+// 3. Determine if the current dfo's parent is in the thread_inited state,
+//    if is:
+//       - Call on_dfo_pair_thread_inited to trigger the pairing and distribution of two dfo channels,
+//    Otherwise:
+//       - Determine if any child of the current dfo is in the thread_inited state,
+//          - If so, call on_dfo_pair_thread_inited to trigger the pairing and distribution of channels for two dfos
+//          - Otherwise nop
 int ObPxMsgProc::on_sqc_init_msg(ObExecContext &ctx, const ObPxInitSqcResultMsg &pkt)
 {
   int ret = OB_SUCCESS;
@@ -187,7 +184,7 @@ int ObPxMsgProc::on_sqc_init_msg(ObExecContext &ctx, const ObPxInitSqcResultMsg 
   if (OB_SUCC(ret)) {
     if (edge->is_thread_inited()) {
 
-      /* 要同时尝试通知 parent 和 child，考虑情况：
+      /* Try to notify both parent and child at the same time, consider the situation:
        *
        *  parent (thread inited)
        *    |
@@ -195,21 +192,19 @@ int ObPxMsgProc::on_sqc_init_msg(ObExecContext &ctx, const ObPxInitSqcResultMsg 
        *    |
        *  child  (thread inited)
        *
-       *  在这个情况下，self 线程被全部调度起来之前，
-       *  child 和 parent 的 thread inited 消息都无法
-       *  触发 on_dfo_pair_thread_inited 事件。
-       *  self 的 thread inited 之后，必须同时触发
-       *  同 parent 和 child 的 on_dfo_pair_thread_inited 事件
+       *  In this case, before the self thread is fully scheduled,
+       *  the thread inited messages from child and parent cannot
+       *  trigger the on_dfo_pair_thread_inited event.
+       *  After self's thread inited, the on_dfo_pair_thread_inited event
+       *  must be triggered for both parent and child simultaneously.
        */
-
-      // 尝试调度 self-parent 对
+      // Attempt to schedule self-parent pair
       if (edge->has_parent() && edge->parent()->is_thread_inited()) {
         if (OB_FAIL(on_dfo_pair_thread_inited(ctx, *edge, *edge->parent()))) {
           LOG_WARN("fail co-schedule parent-edge", K(ret));
         }
       }
-
-      // 尝试调度 self-child 对
+      // Attempt to schedule self-child pair
       if (OB_SUCC(ret)) {
         int64_t cnt = edge->get_child_count();
         for (int64_t idx = 0; idx < cnt && OB_SUCC(ret); ++idx) {
@@ -231,16 +226,15 @@ int ObPxMsgProc::on_sqc_init_msg(ObExecContext &ctx, const ObPxInitSqcResultMsg 
 
   return ret;
 }
-
-// 1. 根据 pkt 信息找到 dfo, sqc，标记当前 sqc 已经执行完成
-// 2. 判断该 dfo 下是否所有 sqc 都执行完成
-//    如果完成，则标记 dfo 为 thread_finish
-// 3. 判断当前 dfo 被标记成为 thread_finish 状态，
-//    如果是：
-//      - 给 dfo 发送释放线程消息
-//      - 调度下一个 dfo
-//        - 如果所有 dfo 都已调度完成 (不考虑 Coord)，nop
-//    否则：
+// 1. According to pkt information find dfo, sqc, mark current sqc as completed
+// 2. Determine if all sqc under this dfo have been executed
+//    If completed, mark dfo as thread_finish
+// 3. Determine if the current dfo is marked as thread_finish status,
+//    if it is:
+//      - Send release thread message to dfo
+//      - schedule next dfo
+//        - If all dfo have been scheduled (excluding Coord), nop
+//    Otherwise:
 //      - nop
 int ObPxMsgProc::on_sqc_finish_msg(ObExecContext &ctx,
                                    const ObPxFinishSqcResultMsg &pkt)
@@ -320,9 +314,9 @@ int ObPxMsgProc::process_sqc_finish_msg_once(ObExecContext &ctx, const ObPxFinis
     // process for virtual table, mock eof buffer let px exit msg loop
     if (sqc->is_ignore_vtable_error() && OB_SUCCESS != pkt.rc_
         && ObVirtualTableErrorWhitelist::should_ignore_vtable_error(pkt.rc_)) {
-       // 如果收到一个sqc finish消息, 如果该sqc涉及虚拟表, 需要忽略所有错误码
-       // 如果该dfo是root_dfo的child_dfo, 为了让px走出数据channel的消息循环
-       // 需要mock一个eof dtl buffer本地发送至px(实际未经过rpc, attach即可)
+       // If a sqc finish message is received, if the sqc involves a virtual table, all error codes need to be ignored
+       // If this dfo is a child_dfo of root_dfo, to allow px to exit the message loop of the data channel
+       // Need to mock an eof dtl buffer local send to px (actual not via rpc, attach only)
       const_cast<ObPxFinishSqcResultMsg &>(pkt).rc_ = OB_SUCCESS;
       OZ(root_dfo_action_.notify_peers_mock_eof(edge,
           phy_plan_ctx->get_timeout_timestamp(),
@@ -359,9 +353,9 @@ int ObPxMsgProc::process_sqc_finish_msg_once(ObExecContext &ctx, const ObPxFinis
   }
 
   /**
-   * 为什么在这里判断错误码？因为需要将这个出错的sqc以及dfo的状态更新，
-   * 发送这个finish消息的sqc（包括它的worker）其实已经结束了，需要将它
-   * 但是因为出错了，后续的调度流程不需要继续了，后面流程会进行错误处理。
+   * Why check the error code here? Because we need to update the status of this failed sqc and dfo,
+   * the sqc (including its worker) that sent this finish message has already ended, and we need to update it.
+   * However, because an error occurred, the subsequent scheduling process does not need to continue, and the later process will handle the error.
    */
   ObPxErrorUtil::update_qc_error_code(coord_info_.first_error_code_,
       pkt.rc_, pkt.err_msg_, sqc->get_exec_addr());
@@ -371,7 +365,7 @@ int ObPxMsgProc::process_sqc_finish_msg_once(ObExecContext &ctx, const ObPxFinis
       log_warn_sqc_fail(ret, pkt, sqc);
     } else {
       // pkt rc_ == OB_SUCCESS
-      // 处理 dml + px 框架下的affected row
+      // Process dml + px framework affected row
       DAS_CTX(ctx).get_location_router().save_cur_exec_status(pkt.das_retry_rc_);
       if (OB_ISNULL(ctx.get_physical_plan_ctx())) {
         ret = OB_ERR_UNEXPECTED;
@@ -396,7 +390,7 @@ int ObPxMsgProc::process_sqc_finish_msg_once(ObExecContext &ctx, const ObPxFinis
         LOG_TRACE("TIMERECORD ",
                   "reserve:=-1 name:=QC dfoid:=-1 sqcid:=-1 taskid:=-1 end:",
                   ObTimeUtility::current_time());
-        ret = OB_SUCCESS; // 需要覆盖，否则无法跳出 loop
+        ret = OB_SUCCESS; // need to override, otherwise cannot break out of loop
       }
     }
   }
@@ -498,11 +492,11 @@ int ObPxMsgProc::on_eof_row(ObExecContext &ctx)
 int ObPxMsgProc::on_dfo_pair_thread_inited(ObExecContext &ctx, ObDfo &child, ObDfo &parent)
 {
   int ret = OB_SUCCESS;
-  // 位置分配好了，建立 DTL 映射
+  // Position allocation is done, establish DTL mapping
   //
-  // NOTE: 这里暂时简化实现，如果 child/parent 的线程分配失败
-  // 则失败退出。更细致的实现里，可以修改不同 server 上线程分配数量，
-  // 然后重新尝试分配线程。在这种情形下， DTL Map 也要跟着变化
+  // NOTE: Here we temporarily simplify the implementation, if child/parent thread allocation fails
+  // Then fail to exit. More detailed implementation can modify the number of thread allocations on different servers,
+  // Then reattempt to allocate threads. In this scenario, the DTL Map also needs to change
   //
   if (OB_SUCC(ret)) {
     if (OB_FAIL(scheduler_->build_data_xchg_ch(ctx, child, parent))) {
@@ -511,7 +505,7 @@ int ObPxMsgProc::on_dfo_pair_thread_inited(ObExecContext &ctx, ObDfo &child, ObD
       LOG_TRACE("build data xchange channel for dfo pair ok", K(parent), K(child));
     }
   }
-  // 将 dtl 通道信息分发给 parent， child 两个 DFO，使得它们能够开始收发数据
+  // Distribute dtl channel information to parent, child two DFOs, so that they can start sending and receiving data
   if (OB_SUCC(ret)) {
     if (OB_FAIL(scheduler_->dispatch_dtl_data_channel_info(ctx, child, parent))) {
       LOG_WARN("fail setup dtl data channel for child-parent pair", K(ret));
@@ -528,7 +522,7 @@ int ObPxMsgProc::on_interrupted(ObExecContext &ctx, const ObInterruptCode &ic)
   int ret = OB_SUCCESS;
   UNUSED(ctx);
   // override ret code
-  // 抛出错误码到主处理路程
+  // Throw error code to main processing routine
   ret = ic.code_;
   LOG_TRACE("qc received a interrupt and throw out of msg proc", K(ic), K(ret));
   return ret;
@@ -550,7 +544,7 @@ int ObPxTerminateMsgProc::on_sqc_init_msg(ObExecContext &ctx, const ObPxInitSqcR
   ObDfo *edge = NULL;
   ObPxSqcMeta *sqc = NULL;
   /**
-   * 标记sqc，dfo已经为启动状态。
+   * Mark sqc, dfo as already started.
    */
   LOG_TRACE("terminate msg proc on sqc init msg", K(pkt.rc_));
   if (pkt.task_count_ <= 0) {
@@ -568,7 +562,7 @@ int ObPxTerminateMsgProc::on_sqc_init_msg(ObExecContext &ctx, const ObPxInitSqcR
     LOG_WARN("NULL ptr", KP(sqc), K(ret));
   } else {
     sqc->set_task_count(pkt.task_count_);
-    // 标记sqc已经完整启动了
+    // Mark sqc has been fully started
     sqc->set_thread_inited(true);
 
     if (pkt.rc_ != OB_SUCCESS) {
@@ -591,7 +585,7 @@ int ObPxTerminateMsgProc::on_sqc_init_msg(ObExecContext &ctx, const ObPxInitSqcR
     if (OB_SUCC(ret) && sqc_threads_inited) {
       LOG_TRACE("sqc terminate msg: all sqc returned task count. ready to do on_sqc_threads_inited",
                 K(*edge));
-      // 标记dfo已经完整启动了
+      // Mark dfo as fully started
       edge->set_thread_inited(true);
     }
   }
@@ -700,7 +694,7 @@ int ObPxTerminateMsgProc::on_interrupted(ObExecContext &ctx, const common::ObInt
   int ret = OB_SUCCESS;
   UNUSED(pkt);
   UNUSED(ctx);
-  // 已经是在回收流程了，对中断不再响应.
+  // Already in the recycling process, no longer respond to interrupts.
   LOG_WARN("terminate msg proc on sqc interrupted", K(ret));
   return ret;
 }

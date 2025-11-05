@@ -1507,7 +1507,7 @@ int ObIORequest::recycle_buffer()
       free_io_buffer();
     } else {
       if (nullptr == io_result_->user_data_buf_) {
-        // do nothing，无需memcpy，也不能free io buffer
+        // do nothing, no need for memcpy, and cannot free io buffer
       } else if (!is_canceled() && nullptr != get_io_data_buf()) {
         MEMCPY(io_result_->user_data_buf_, get_io_data_buf(), get_data_size());
         free_io_buffer();

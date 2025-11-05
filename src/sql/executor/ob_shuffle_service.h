@@ -42,20 +42,17 @@ public:
 
   ~ObShuffleService() = default;
   /*
-   * shuffle 算值的接口目前不进行分区表达式的计算。
-   * 举个例子，当分区条件为A表的（c1+1）时，分区为range类型
+   * The interface for shuffle calculation does not currently compute partition expressions.
+   * For example, when the partition condition is (c1+1) of table A, the partition type is range
    * [5,10),[10,20)
-   * 预计出现的重分区是c2 ＝c1+1，可能是c2+1 ＝c1+1。
-   * (上面两种重分区目前优化器应该是没有支持)
-   * c2 = c1+1这种肯定能将c2发到对应值的分区上。
-   * 如果是c2+1=c1+1这种类型，如果在transmit算子之前已经计算了c2+1
-   * 那么这个接口也是有效的。
+   * The expected repartitioning could be c2 = c1+1, possibly c2+1 = c1+1.
+   * (The above two types of repartitioning are currently not supported by the optimizer)
+   * c2 = c1+1 will definitely send c2 to the corresponding partition.
+   * If it is c2+1 = c1+1, this interface is also valid if c2+1 has already been calculated
+   * before the transmit operator.
    *
    * */
-
-
-
-  // 这个接口仅在px框架下使用, 非px请使用上面接口.
+  // This interface is only used under the px framework, please use the above interface if not px.
   int get_partition_ids(ObExecContext &exec_ctx,
                         const share::schema::ObTableSchema &table_schema,
                         const common::ObNewRow &row,

@@ -279,8 +279,8 @@ int ObMergeDistinctOp::Compare::init(ObEvalCtx *eval_ctx, const ObIArray<ObCmpFu
 }
 
 /**
- * 这里需要注意一种特殊场景，就是distinct 1如何处理
- * 现在处理逻辑是：last_row为nullptr，即r为null，然后不比较，同时认为l的列为0
+ * Here we need to pay attention to a special case, which is how distinct 1 is handled
+ * The current processing logic is: last_row is nullptr, i.e., r is null, then no comparison is made, and it is considered that the column of l is 0
  **/
 int ObMergeDistinctOp::Compare::equal(
   const ObIArray<ObExpr*> *l,
@@ -296,7 +296,7 @@ int ObMergeDistinctOp::Compare::equal(
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected status: it must be distinct const", K(ret));
     } else {
-      // 表示是distinct 常量，所以没有distinct列，则永远相等
+      // indicates it is a distinct constant, so if there is no distinct column, it will always be equal
       // case: select distinct 1 from t1;
       equal = true;
     }
@@ -324,7 +324,7 @@ int ObMergeDistinctOp::Compare::equal_in_batch(const common::ObIArray<ObExpr*> *
   int ret = OB_SUCCESS;
   equal = false;
   if (0 == set_exprs->count()) {
-    // 表示是distinct 常量，所以没有distinct列，则永远相等
+    // indicates it is a distinct constant, so if there is no distinct column, it will always be equal
     // case: select distinct 1 from t1;
     equal = true;
   } else {
@@ -351,7 +351,7 @@ int ObMergeDistinctOp::Compare::equal_in_batch(const common::ObIArray<ObExpr*> *
   int ret = OB_SUCCESS;
   equal = false;
   if (0 == set_exprs->count()) {
-    // 表示是distinct 常量，所以没有distinct列，则永远相等
+    // Indicates it is a distinct constant, so if there is no distinct column, it will always be equal
     // case: select distinct 1 from t1;
     equal = true;
   } else {

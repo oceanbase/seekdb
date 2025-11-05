@@ -431,7 +431,7 @@ TEST_F(ArchiveCheckpointerTest, in_prepare)
         return OB_ERR_UNEXPECTED; 
       };
 
-  // old round's status is PREPARE，checkpoint is not allowed.
+  // old round's status is PREPARE, checkpoint is not allowed.
   ObTenantArchiveRoundAttr old_round;
   fill_prepare_round(old_round);
 

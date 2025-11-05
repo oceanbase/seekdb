@@ -171,7 +171,7 @@ int ObTableScanRange::init(
       scan_param.is_tablet_spliting_,
       *simple_batch.ranges_, 
       scan_flag, 
-      nullptr))) { // 如果datum_utils不为nullptr不会对原来逻辑造成影响
+      nullptr))) { // If datum_utils is not nullptr it will not affect the original logic
     STORAGE_LOG(WARN, "Failed to init ranges", K(ret));
   }
   if (OB_SUCC(ret)) {

@@ -67,7 +67,7 @@ const int64_t PALF_PHY_BLOCK_SIZE = 1 << 26;                                    
 const int64_t PALF_BLOCK_SIZE = PALF_PHY_BLOCK_SIZE - MAX_INFO_BLOCK_SIZE;          // log block size is 64M-MAX_INFO_BLOCK_SIZE by default.
 const int64_t PALF_META_BLOCK_SIZE = PALF_PHY_BLOCK_SIZE - MAX_INFO_BLOCK_SIZE;     // meta block size is 64M-MAX_INFO_BLOCK_SIZE by default.
 
-constexpr int64_t CLOG_FILE_TAIL_PADDING_TRIGGER = 4096;     // 文件尾剩余空间补padding阈值
+constexpr int64_t CLOG_FILE_TAIL_PADDING_TRIGGER = 4096;     // Threshold for padding the remaining space at the end of the file
 // The valid group_entry (not padding entry) size range is:
 //    (0, (MAX_LOG_BODY_SIZE + MAX_LOG_HEADER_SIZE) ).
 // The padding group_entry size range is:

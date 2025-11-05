@@ -108,13 +108,13 @@ int ObViewTableResolver::expand_view(TableItem &view_item)
 int ObViewTableResolver::check_view_circular_reference(const TableItem &view_item)
 {
   int ret = OB_SUCCESS;
-  // 检查逻辑 :不断往上走，逐层判断view_item是否相同(db_name && tbl_name)
-  // -- is_view_stmt() : 判断当前stmt是不是view展开的
-  // -- get_view_item() : 展开成当前stmt的view (TableItem)
-  // -- get_view_upper_scope_stmt() : view子查询的uppe_scope_stmt
-  // 如果存在相互引用，mysql的行为是对最上层的view报错, 因此
-  // exist_circular_reference = true 时也会继续循环, 比如：
-  // v3引用v2，而v1<->v2相互引用，select * from v3 结果是对v3报错
+  // Check logic: keep going up, layer by layer to determine if view_item is the same (db_name && tbl_name)
+  // -- is_view_stmt() : determine if the current stmt is expanded from a view
+  // -- get_view_item() : expand to the view (TableItem) of the current stmt
+  // -- get_view_upper_scope_stmt() : view subquery's upper_scope_stmt
+  // If there are mutual references, MySQL's behavior is to error on the top-level view, therefore
+  // exist_circular_reference = true when it will also continue to loop, for example:
+  // v3 references v2, while v1<->v2 reference each other, select * from v3 results in an error for v3
   ObViewTableResolver *cur_resolver = this;
   if (OB_UNLIKELY(! view_db_name_.empty() && ! view_name_.empty()
                   && 0 == view_db_name_.compare(view_item.database_name_)
@@ -123,10 +123,10 @@ int ObViewTableResolver::check_view_circular_reference(const TableItem &view_ite
     LOG_USER_ERROR(OB_ERR_VIEW_RECURSIVE, view_db_name_.length(), view_db_name_.ptr(),
                     view_name_.length(), view_name_.ptr());
   } else {
-    // 原来的检测逻辑存在一个问题，对于开头的这个例子，不应该在创建v3时报错，或者说v1和v2相互引用的情况就不应该出现
-    // 而是应该在create or replace v1/v2导致v1和v2相互引用时报错。
-    // 虽然现在加了前面这个检测逻辑，在创建视图v时检查定义展开后没有出现v可以避免出现相互引用，
-    // 但是原来的检测逻辑也要保留。如果升级前创建了存在循环的视图，升级后select from这个视图，在下面报错。
+    // The original detection logic has a problem, for the example at the beginning, an error should not be reported when creating v3, or rather, the situation where v1 and v2 reference each other should not occur
+    // but should error when create or replace v1/v2 causes v1 and v2 to reference each other.
+    // Although now we have added this detection logic, checking that v does not appear after expanding the definition when creating view v can avoid mutual references,
+    // But the original detection logic should also be retained. If a view with loops was created before the upgrade, selecting from this view will result in an error below.
     do {
       if (OB_UNLIKELY(view_item.ref_id_ == cur_resolver->current_view_item.ref_id_)) {
         ret = OB_ERR_VIEW_RECURSIVE;
@@ -146,7 +146,7 @@ int ObViewTableResolver::resolve_generate_table(const ParseNode &table_node, con
 {
   int ret = OB_SUCCESS;
   ObViewTableResolver view_table_resolver(params_, view_db_name_, view_name_);
-  //from子查询和当前查询属于平级，因此current level和当前保持一致
+  // from subquery and current query belong to the same level, therefore current level and current remain consistent
   view_table_resolver.set_current_level(current_level_);
   view_table_resolver.set_current_view_level(current_view_level_);
   view_table_resolver.set_parent_namespace_resolver(parent_namespace_resolver_);
@@ -161,13 +161,11 @@ int ObViewTableResolver::resolve_generate_table(const ParseNode &table_node, con
   }
   return ret;
 }
-
-// use_sys_tenant 标记是否需要以系统租户的身份获取schema
+// use_sys_tenant flag indicates whether to obtain schema as a system tenant
 int ObViewTableResolver::check_need_use_sys_tenant(bool &use_sys_tenant) const
 {
   int ret = OB_SUCCESS;
-
-  // 若当前已经是系统租户, 则忽略
+  // If the current tenant is already the system tenant, then ignore
   const ObTableSchema *table_schema = NULL;
   if (OB_ISNULL(session_info_)) {
     ret = OB_NOT_INIT;
@@ -177,8 +175,7 @@ int ObViewTableResolver::check_need_use_sys_tenant(bool &use_sys_tenant) const
   } else {
     use_sys_tenant = true;
   }
-
-  // 若当前stmt不是系统视图展开的, 则忽略
+  // If the current stmt is not expanded from a system view, then ignore
   if (OB_SUCC(ret) && use_sys_tenant) {
     if (OB_FAIL(schema_checker_->get_table_schema(session_info_->get_effective_tenant_id(), current_view_item.ref_id_, table_schema))) {
       LOG_WARN("fail to get table_schema", K(ret));

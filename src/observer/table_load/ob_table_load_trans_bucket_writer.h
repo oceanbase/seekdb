@@ -34,7 +34,7 @@ public:
   ObTableLoadTransBucketWriter(ObTableLoadTransCtx *trans_ctx);
   ~ObTableLoadTransBucketWriter();
   int init();
-  // 只在对应工作线程中调用, 串行执行
+  // Only called in the corresponding worker thread, executed serially
   int write(int32_t session_id, table::ObTableLoadObjRowArray &obj_rows);
   int flush(int32_t session_id);
 public:
@@ -58,10 +58,10 @@ private:
                              const common::ObObj &obj,
                              common::ObObj &out_obj,
                              common::ObArenaAllocator &cast_allocator);
-  // 非分区表
+  // Non-partitioned table
   int write_for_non_partitioned(SessionContext &session_ctx,
                                 const table::ObTableLoadObjRowArray &obj_rows);
-  // 分区表
+  // partition table
   int write_for_partitioned(SessionContext &session_ctx,
                             const table::ObTableLoadObjRowArray &obj_rows);
   int get_load_bucket(SessionContext &session_ctx, const table::ObTableLoadPartitionId &partition_id,
@@ -82,7 +82,7 @@ private:
     ~SessionContext();
     void reset();
     int32_t session_id_;
-    // 以下参数只在对应工作线程中访问
+    // The following parameters are only accessed in the corresponding worker thread
     common::ObArenaAllocator allocator_;
     // for non-partitioned table
     table::ObTableLoadPartitionId partition_id_;
@@ -90,7 +90,7 @@ private:
     // for partitioned table
     common::hash::ObHashMap<common::ObAddr, ObTableLoadBucket *> load_bucket_map_;
     common::ObArray<ObTableLoadBucket *> load_bucket_array_;
-    // 以下参数加锁访问
+    // The following parameters are accessed with a lock
     lib::ObMutex mutex_;
     uint64_t last_receive_sequence_no_;
   };

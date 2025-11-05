@@ -23,12 +23,12 @@ def get_py_filename_list(except_filter_filename_list):
 def get_concat_sub_files_lines(py_filename_list, file_splitter_line, \
     sub_filename_line_prefix, sub_file_module_end_line):
   concat_sub_files_lines = []
-  # 写入__init__.py
+  # Write to __init__.py
   concat_sub_files_lines.append(file_splitter_line + '\n')
   concat_sub_files_lines.append(sub_filename_line_prefix + '__init__.py\n')
   concat_sub_files_lines.append('##!/usr/bin/env python\n')
   concat_sub_files_lines.append('## -*- coding: utf-8 -*-\n')
-  # 写入其他py文件
+  # Write to other py file
   for sub_py_filename in py_filename_list:
     sub_py_file = open(sub_py_filename, 'r')
     sub_py_file_lines = sub_py_file.readlines()
@@ -117,14 +117,14 @@ def split_py_files(sub_files_dir):
       if is_first_splitter_line:
         is_first_splitter_line = False
       else:
-        #读完一个子文件了，写到磁盘中
+        #Finished reading a subfile, write to disk
         sub_file = open(sub_files_dir + '/' + sub_filename, 'w')
         for sub_file_line in sub_file_lines:
           sub_file.write(sub_file_line[1:])
         sub_file.close()
-        #清空sub_file_lines
+        #clear sub_file_lines
         sub_file_lines = []
-      #再读取下一行的文件名或者结束标记
+      # Read the filename of the next line or the end marker
       i += 1
       if i >= cur_file_lines_count:
         raise SplitError('invalid line index:' + str(i) + ', lines_count:' + str(cur_file_lines_count))

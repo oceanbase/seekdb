@@ -24,9 +24,7 @@ namespace sql
       (type) == PHY_PX_MERGE_SORT_COORD ||\
       (type) == PHY_PX_ORDERED_COORD ||\
       (type) == PHY_VEC_PX_MERGE_SORT_COORD)
-
-
-// NOTE：可能会有多种 receive op type，这里都需要判断. 目前只有一种
+// NOTE: There may be multiple receive op types, all of which need to be judged. Currently, there is only one.
 #define IS_PX_RECEIVE(type) \
      ((type) == PHY_PX_FIFO_RECEIVE || \
       (type) == PHY_PX_MERGE_SORT_RECEIVE || \
@@ -53,10 +51,7 @@ namespace sql
    (type) == PHY_PX_MULTI_PART_DELETE || \
    (type) == PHY_PX_MULTI_PART_INSERT || \
    (type) == PHY_TABLE_DIRECT_INSERT)
-
-
-
-// 判断一个运算符是否为Transmit的子类，用于切分Job
+// Determine if an operator is a subclass of Transmit, used for splitting Job
 #define IS_TRANSMIT(type) \
     ((type) == PHY_DIRECT_TRANSMIT || \
      (type) == PHY_DISTRIBUTED_TRANSMIT || \

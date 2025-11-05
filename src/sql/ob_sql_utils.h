@@ -166,9 +166,9 @@ public:
   const static int64_t WITHOUT_FUNC_REGEXP = 1;
   const static int64_t WITHOUT_FUNC_ADDR_TO_PARTITION_ID = 2;
   const static int64_t OB_MYSQL50_TABLE_NAME_PREFIX_LENGTH = 9;
-  const static int64_t NO_VALUES = -1;        //表示没有values()
-  const static int64_t VALUE_LIST_LEVEL = 0;  //表示在parse的T_VALUE_LIST层
-  const static int64_t VALUE_VECTOR_LEVEL = 1;//表示在parse的T_VALUE_VECTOR层
+  const static int64_t NO_VALUES = -1;        // indicates no values()
+  const static int64_t VALUE_LIST_LEVEL = 0;  // indicates the T_VALUE_LIST level in parse
+  const static int64_t VALUE_VECTOR_LEVEL = 1;//indicates the T_VALUE_VECTOR level in parse
 
   static bool is_trans_commit_need_disconnect_err(int err);
 
@@ -356,7 +356,7 @@ public:
                                    common::ObCastMode &cast_mode);
   static int get_default_cast_mode(const ObSQLSessionInfo *session, common::ObCastMode &cast_mode);
   static void get_default_cast_mode(const ObSQLMode sql_mode, ObCastMode &cast_mode);
-  // 比上面三个方法多了一些cast mode的设置，例如:
+  // More cast mode settings compared to the above three methods, for example:
   // CM_EXPLICIT_CAST, CM_ZERO_FILL, CM_STRICT_MODE
   static int get_default_cast_mode(const bool is_explicit_cast,
                                     const uint32_t result_flag,
@@ -569,7 +569,7 @@ public:
   static int convert_escape_char(common::ObIAllocator &allocator,
                                  const ObString &in,
                                  ObString &out);
-  //检查参数是否为Oracle模式下的''
+  // Check if the parameter is '' in Oracle mode
   static bool is_oracle_empty_string(const common::ObObjParam &param);
   static bool is_oracle_null_with_normal_type(const common::ObObjParam &param);
   static int convert_sql_text_from_schema_for_resolve(common::ObIAllocator &allocator,
@@ -879,7 +879,7 @@ private:
 
 struct ObSqlTraits
 {
-  char sql_id_[common::OB_MAX_SQL_ID_LENGTH + 1];// sql id //最后一个字节存放'\0'
+  char sql_id_[common::OB_MAX_SQL_ID_LENGTH + 1];// sql id //the last byte stores '\0'
   bool is_readonly_stmt_;
   bool is_modify_tenant_stmt_;
   bool is_cause_implicit_commit_;
@@ -955,9 +955,8 @@ public:
 private:
     int err_ret_code_;
 };
-
-//用uint64_t存储的flag集合，最多有63个flag
-//T是enum类型
+// Use uint64_t to store a set of flags, with a maximum of 63 flags
+// T is enum type
 // enum class A {
 //    F1,
 //    F2,
@@ -1015,8 +1014,7 @@ private:
 };
 
 OB_SERIALIZE_MEMBER_TEMP(template<typename T>, ObEnumBitSet<T>, flag_);
-
-//隐式游标信息
+// Implicit cursor information
 struct ObImplicitCursorInfo
 {
   OB_UNIS_VERSION(1);

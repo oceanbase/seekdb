@@ -48,7 +48,7 @@ enum ObWeakReadServiceLevel
 
 // The maximum GAP time between MIN and MAX version when persist WRS version
 // FIXME: Considering that follower readable version maybe stuck, WRS version can not be pushed casually
-// Currently maintain <min_version, max_version>，when WRS service switch，max_version will be pushed up,
+// Currently maintain <min_version, max_version>, when WRS service switch, max_version will be pushed up,
 // That is, even all cluster readable version are stucked, WRS version will be pushed up when WRS service switch leader.
 //
 // For this reason, temporarily modify the GAP policy to ensure that the wrs version is not pushed up when the service is switched

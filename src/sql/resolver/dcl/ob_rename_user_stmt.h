@@ -36,7 +36,7 @@ private:
   // data members
   common::ObStrings rename_infos_; // (from1_user, from1_host, to1_user, to1_host), (from2_user, from2_host, to2_user, to2_host)
   uint64_t tenant_id_;
-  obrpc::ObRenameUserArg rename_user_arg_; // 用于返回exec_tenant_id_
+  obrpc::ObRenameUserArg rename_user_arg_; // used to return exec_tenant_id_
 private:
   DISALLOW_COPY_AND_ASSIGN(ObRenameUserStmt);
 };

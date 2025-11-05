@@ -100,8 +100,7 @@ int ObDfoSchedulerBasic::on_sqc_threads_inited(ObExecContext &ctx, ObDfo &dfo) c
   LOG_TRACE("on_sqc_threads_inited: dfo data xchg ch allocated", K(ret));
   return ret;
 }
-
-// 构建m * n的网络shuffle
+// Build m * n network shuffle
 int ObDfoSchedulerBasic::build_data_mn_xchg_ch(ObExecContext &ctx, ObDfo &child, ObDfo &parent) const
 {
   int ret = OB_SUCCESS;
@@ -155,7 +154,7 @@ int ObDfoSchedulerBasic::dispatch_receive_channel_info_via_sqc(ObExecContext &ct
       LOG_WARN("fail dispatch root dfo receive channel info", K(ret), K(parent), K(child));
     }
   } else {
-    // 将 receive channels sets 按照 sqc 维度拆分并发送给各个 SQC
+    // Split receive channels sets by sqc dimension and send to each SQC
     ObIArray<ObPxSqcMeta> &sqcs = parent.get_sqcs();
     ARRAY_FOREACH_X(sqcs, idx, cnt, OB_SUCC(ret)) {
       int64_t sqc_id = sqcs.at(idx).get_sqc_id();
@@ -242,8 +241,7 @@ int ObDfoSchedulerBasic::dispatch_transmit_channel_info_via_sqc(ObExecContext &c
   }
   return ret;
 }
-
-// -------------分割线-----------
+// -------------division line-----------
 int ObSerialDfoScheduler::init_all_dfo_channel(ObExecContext &ctx) const
 {
   int ret = OB_SUCCESS;
@@ -470,8 +468,8 @@ int ObSerialDfoScheduler::dispatch_sqcs(ObExecContext &exec_ctx,
         } else if (OB_FAIL(args.sqc_.assign(sqc))) {
           LOG_WARN("fail assign sqc", K(ret));
         } else if (FALSE_IT(sqc.set_need_report(true))) {
-          // 必须发 rpc 之前设置为 true
-          // 原因见 
+          // Must be set to true before sending rpc
+          // Reason see
         } else if (OB_FAIL(OB_E(EventTable::EN_PX_SQC_INIT_FAILED) OB_SUCCESS)) {
           sqc.set_need_report(false);
           LOG_WARN("[SIM] server down. fail to init sqc", K(ret));
@@ -515,8 +513,7 @@ int ObSerialDfoScheduler::do_schedule_dfo(ObExecContext &ctx, ObDfo &dfo) const
       LOG_WARN("NULL ptr session", K(ret));
     }
   }
-
-  // 0. 分配 QC-SQC 通道信息
+  // 0. Allocate QC-SQC channel information
   ARRAY_FOREACH_X(sqcs, idx, cnt, OB_SUCC(ret)) {
     ObPxSqcMeta &sqc = sqcs.at(idx);
     ObDtlChannelInfo &qc_ci = sqc.get_qc_channel_info();
@@ -536,13 +533,13 @@ int ObSerialDfoScheduler::do_schedule_dfo(ObExecContext &ctx, ObDfo &dfo) const
   }
 
   int64_t thread_id = GETTID();
-  // 1. 链接 QC-SQC 通道
+  // 1. Link QC-SQC channel
   ARRAY_FOREACH_X(sqcs, idx, cnt, OB_SUCC(ret)) {
     ObPxSqcMeta &sqc = sqcs.at(idx);
     ObDtlChannelInfo &ci = sqc.get_qc_channel_info();
     ObDtlChannel *ch = NULL;
-    // ObDtlChannelGroup::make_channel 中已经填充好了 ci 的属性
-    // 所以 link_channel 知道应该以何种方式建立 channel
+    // ObDtlChannelGroup::make_channel has already filled the attributes of ci
+    // So link_channel knows how to establish the channel
     if (OB_FAIL(ObDtlChannelGroup::link_channel(ci, ch))) {
       LOG_WARN("fail link channel", K(ci), K(ret));
     } else if (OB_ISNULL(ch)) {
@@ -676,9 +673,8 @@ void ObSerialDfoScheduler::clean_dtl_interm_result(ObExecContext &exec_ctx)
     }
   }
 }
-// -------------分割线-----------
-
-// 启动 DFO 的 SQC 线程
+// -------------division line-----------
+// Start DFO's SQC thread
 int ObParallelDfoScheduler::do_schedule_dfo(ObExecContext &exec_ctx, ObDfo &dfo) const
 {
   int ret = OB_SUCCESS;
@@ -692,7 +688,7 @@ int ObParallelDfoScheduler::do_schedule_dfo(ObExecContext &exec_ctx, ObDfo &dfo)
       LOG_WARN("NULL ptr session", K(ret));
     }
   }
-  // 0. 分配 QC-SQC 通道信息
+  // 0. Allocate QC-SQC channel information
   ARRAY_FOREACH_X(sqcs, idx, cnt, OB_SUCC(ret)) {
     ObPxSqcMeta &sqc = sqcs.at(idx);
     ObDtlChannelInfo &qc_ci = sqc.get_qc_channel_info();
@@ -712,13 +708,13 @@ int ObParallelDfoScheduler::do_schedule_dfo(ObExecContext &exec_ctx, ObDfo &dfo)
   }
 
   int64_t thread_id = GETTID();
-  // 1. 链接 QC-SQC 通道
+  // 1. Link QC-SQC channel
   ARRAY_FOREACH_X(sqcs, idx, cnt, OB_SUCC(ret)) {
     ObPxSqcMeta &sqc = sqcs.at(idx);
     ObDtlChannelInfo &ci = sqc.get_qc_channel_info();
     ObDtlChannel *ch = NULL;
-    // ObDtlChannelGroup::make_channel 中已经填充好了 ci 的属性
-    // 所以 link_channel 知道应该以何种方式建立 channel
+    // ObDtlChannelGroup::make_channel has already filled the attributes of ci
+    // So link_channel knows how to establish the channel
     if (OB_FAIL(ObDtlChannelGroup::link_channel(ci, ch))) {
       LOG_WARN("fail link channel", K(ci), K(ret));
     } else if (OB_ISNULL(ch)) {
@@ -750,20 +746,20 @@ int ObParallelDfoScheduler::do_schedule_dfo(ObExecContext &exec_ctx, ObDfo &dfo)
   }
 
   if (OB_SUCC(ret)) {
-    // 下面的逻辑处理握手阶段超时的情况
-    //  - 目的： 为了防止死锁
-    //  - 方式： 一旦超时，则终止掉全部 sqc，等待一段事件后，整个 dfo 重试
-    //  - 问题： init sqc 是异步的，其中部分 sqc 已经汇报了获取 task 的信息
-    //           突然被终止，QC 方面的状态需要重新维护。但是存在下面的问题：
-    //           场景举例：
-    //            1. sqc1 成功，sqc2 超时
+    // The following logic handles the timeout situation during the handshake phase
+    //  - Purpose: To prevent deadlock
+    //  - Method: Once a timeout occurs, terminate all sqc, wait for a period of time, and then retry the entire dfo
+    //  - Issue: init sqc is asynchronous, where part of the sqc has already reported the information of obtaining the task
+    //           suddenly terminated, QC side status needs to be re-maintained. However, there are the following issues:
+    //           Scenario example:
+    //            1. sqc1 success, sqc2 timeout
     //            2. dfo abort, clean sqc state
-    //            3. sqc1 汇报已经分配好 task (old news)
-    //            4. sqc1, sqc2 收到中断信息
-    //            5. sqc1 重新调度
-    //            6. sqc2 汇报已经分配好 task (latest news)
-    //            7. qc 认为 dfo 都已全部调度成功 (实际上没有)
-    //            8. sqc1 汇报分配好的 task (too late msg)
+    //            3. sqc1 reports that the task has already been allocated (old news)
+    //            4. sqc1, sqc2 receive interrupt information
+    //            5. sqc1 reschedule
+    //            6. sqc2 reports that tasks have been allocated (latest news)
+    //            7. qc believes that all dfo have been successfully scheduled (in fact, they have not)
+    //            8. sqc1 reports the allocated task (too late msg)
     //
     ret = dispatch_sqc(exec_ctx, dfo, sqcs);
   }
@@ -773,15 +769,15 @@ int ObParallelDfoScheduler::do_schedule_dfo(ObExecContext &exec_ctx, ObDfo &dfo)
 int ObParallelDfoScheduler::dispatch_dtl_data_channel_info(ObExecContext &ctx, ObDfo &child, ObDfo &parent) const
 {
   int ret = OB_SUCCESS;
-  /* 注意设置顺序：先设置 receive channel，再设置 transmit channel。
-   * 这么做可以尽可能保证 transmit 发数据的时候 receive 端有人已经在监听，
-   * 否则可能出现 transmit 发出的数据一段时间内无人接收，DTL 会疯狂重试影响系统性能
+  /* Note the order of settings: set receive channel first, then set transmit channel.
+   * This ensures that when transmit sends data, the receive end already has someone listening,
+   * otherwise, data sent by transmit may go unreceived for a period of time, causing DTL to retry excessively and affecting system performance
    */
 
   if (OB_SUCC(ret)) {
     if (parent.is_prealloc_receive_channel() && !parent.is_scheduled()) {
-      // 因为 parent 中可以包含多个 receive 算子，仅仅对于调度时的场景
-      // 才能通过 sqc 捎带，后继的 receive 算子 channel 信息都要走 dtl
+      // Because parent can contain multiple receive operators, only for the scheduling scenario
+      // can be carried by sqc, subsequent receive operator channel information must go through dtl
       if (OB_FAIL(dispatch_receive_channel_info_via_sqc(ctx, child, parent))) {
         LOG_WARN("fail dispatch receive channel info", K(child), K(parent), K(ret));
       }
@@ -842,7 +838,7 @@ int ObParallelDfoScheduler::dispatch_transmit_channel_info(ObExecContext &ctx, O
       }
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(ch->send(transmit_data_channel_msg,
-            phy_plan_ctx->get_timeout_timestamp()))) { // 尽力而为，如果 push 失败就由其它机制处理
+            phy_plan_ctx->get_timeout_timestamp()))) { // Do our best, if push fails it will be handled by other mechanisms
         LOG_WARN("fail push data to channel", K(ret));
       } else if (OB_FAIL(ch->flush(true, false))) {
         LOG_WARN("fail flush dtl data", K(ret));
@@ -875,7 +871,7 @@ int ObParallelDfoScheduler::dispatch_receive_channel_info(ObExecContext &ctx,
       LOG_WARN("fail dispatch root dfo receive channel info", K(ret), K(parent), K(child));
     }
   } else {
-    // 将 receive channels sets 按照 sqc 维度拆分并发送给各个 SQC
+    // Split receive channels sets by sqc dimension and send to each SQC
     ObIArray<ObPxSqcMeta> &sqcs = parent.get_sqcs();
     ARRAY_FOREACH_X(sqcs, idx, cnt, OB_SUCC(ret)) {
       ObDtlChannel *ch = sqcs.at(idx).get_qc_channel();
@@ -922,7 +918,7 @@ int ObParallelDfoScheduler::dispatch_receive_channel_info(ObExecContext &ctx,
       }
       if (OB_SUCC(ret)) {
         if (OB_FAIL(ch->send(receive_data_channel_msg,
-            phy_plan_ctx->get_timeout_timestamp()))) { // 尽力而为，如果 push 失败就由其它机制处理
+            phy_plan_ctx->get_timeout_timestamp()))) { // Do our best, if push fails it will be handled by other mechanisms
           LOG_WARN("fail push data to channel", K(ret));
         } else if (OB_FAIL(ch->flush(true, false))) {
           LOG_WARN("fail flush dtl data", K(ret));
@@ -938,8 +934,7 @@ int ObParallelDfoScheduler::dispatch_receive_channel_info(ObExecContext &ctx,
   }
   return ret;
 }
-
-// 优化点：can prealloc 可以很早就预先计算好
+// Optimization point: can prealloc can be precalculated very early
 int ObParallelDfoScheduler::check_if_can_prealloc_xchg_ch(ObDfo &child,
                                                                   ObDfo &parent,
                                                                   bool &bret) const
@@ -976,13 +971,13 @@ int ObParallelDfoScheduler::do_fast_schedule(ObExecContext &exec_ctx,
                                                      ObDfo &parent) const
 {
   int ret = OB_SUCCESS;
-  // 启用数据通道预分配模式，提示后面的逻辑不要再分配数据通道
-  // 下面三个函数的调用顺序不能错，因为：
-  //  1. 调用 root dfo 后，root dfo 会被标记为调度成功状态
-  //  2. 然后假装 child dfo 也调度成功，
-  //  经过上面两步，可以认为 child 和 parent 的线程数都确定，
-  //  可以将 parent-child 的 channel 信息分配好
-  //  3. 最后调度 child 的时候就能将 channel 信息捎带到 sqc 端
+  // Enable data channel pre-allocation mode, hinting subsequent logic not to allocate data channels
+  // The following three function calls must be in the correct order, because:
+  //  1. After calling root dfo, root dfo will be marked as a scheduling success status
+  //  2. Then pretend that child dfo also scheduled successfully,
+  //  After the above two steps, it can be considered that the number of threads for child and parent are determined,
+  //  can allocate the parent-child channel information
+  //  3. Finally schedule child to carry channel information to the sqc end
   if (OB_SUCC(ret) && !parent.is_scheduled()) {
     parent.set_prealloc_receive_channel(true);
     if (parent.has_parent() && parent.parent()->is_thread_inited()) {
@@ -1018,7 +1013,7 @@ int ObParallelDfoScheduler::mock_on_sqc_init_msg(ObExecContext &ctx, ObDfo &dfo)
 {
   int ret = OB_SUCCESS;
   if (dfo.is_root_dfo()) {
-    // root dfo 无需 mock 这个消息
+    // root dfo no need to mock this message
   } else {
     ObIArray<ObPxSqcMeta> &sqcs = dfo.get_sqcs();
     ARRAY_FOREACH_X(sqcs, idx, cnt, OB_SUCC(ret)) {
@@ -1048,13 +1043,13 @@ int ObParallelDfoScheduler::schedule_dfo(ObExecContext &exec_ctx,
   int ret = OB_SUCCESS;
   int retry_times = 0;
   ObPhysicalPlanCtx *phy_plan_ctx = NULL;
-  /* 异常处理：
-   * 1. Timeout Msg: 超时，不确定是否成功，此时可能会建立链路，如何处理？
-   * 2. No Msg: DFO 链接 DTL 失败，无法返回消息
-   * 3. DFO Msg: 线程不足导致 dispatch 失败
+  /* Exception handling:
+   * 1. Timeout Msg: Timeout, uncertain whether successful, at this time a link may be established, how to handle?
+   * 2. No Msg: DFO link to DTL failed, unable to return message
+   * 3. DFO Msg: Dispatch failed due to insufficient threads
    *
-   * 统一处理方式：
-   * 1. QC 读 DTL，直到超时
+   * Unified handling method:
+   * 1. QC reads DTL until timeout
    */
   NG_TRACE_EXT(dfo_start, OB_ID(dfo_id), dfo.get_dfo_id());
   if (dfo.is_root_dfo()) {
@@ -1067,8 +1062,8 @@ int ObParallelDfoScheduler::schedule_dfo(ObExecContext &exec_ctx,
   } else if (OB_FAIL(do_schedule_dfo(exec_ctx, dfo))) {
     LOG_WARN("fail dispatch dfo", K(ret));
   }
-  // 无论成功失败，都标记为已调度。
-  // 当 schedule 失败时，整个 query 就失败了。
+  // Regardless of success or failure, mark as scheduled.
+  // When schedule fails, the entire query fails.
   dfo.set_scheduled();
   LOG_TRACE("schedule dfo ok", K(dfo), K(retry_times), K(ret));
   return ret;
@@ -1097,7 +1092,7 @@ int ObParallelDfoScheduler::on_root_dfo_scheduled(ObExecContext &ctx, ObDfo &roo
 
   if (OB_SUCC(ret)) {
     if (root_dfo.is_thread_inited()) {
-      // 尝试调度 self-child 对
+      // Attempt to schedule self-child pair
       if (OB_SUCC(ret)) {
         int64_t cnt = root_dfo.get_child_count();
         ObDfo *child= NULL;
@@ -1110,10 +1105,10 @@ int ObParallelDfoScheduler::on_root_dfo_scheduled(ObExecContext &ctx, ObDfo &roo
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("NULL unexpected", K(ret));
         } else if (child->is_thread_inited()) {
-          // 因为 root-child 对中谁先 schedule 成功的时序是不定的
-          // 任何一个后 schedule 成功的 dfo 都有义务推进 on_dfo_pair_thread_inited 消息
-          // 例如，root-A-B 的调度里，A、B 已经调度成功，并且已经收到 thread init msg
-          // 这时候调度 root，就需要 root 来推进 on_dfo_pair_thread_inited
+          // Because the timing of who schedules successfully first in the root-child pair is uncertain
+          // Any dfo that successfully schedules after has the obligation to advance the on_dfo_pair_thread_inited message
+          // For example, in the scheduling of root-A-B, A and B have already been scheduled successfully, and thread init msg has been received
+          // At this point, scheduling root, requires root to advance on_dfo_pair_thread_inited
           ret = proc_.on_dfo_pair_thread_inited(ctx, *child, root_dfo);
         }
       }
@@ -1121,8 +1116,7 @@ int ObParallelDfoScheduler::on_root_dfo_scheduled(ObExecContext &ctx, ObDfo &roo
   }
   return ret;
 }
-
-// 批量分发 DFO 到各个 server，构建 SQC
+// Batch distribute DFO to each server, build SQC
 int ObParallelDfoScheduler::dispatch_sqc(ObExecContext &exec_ctx,
                                          ObDfo &dfo,
                                          ObIArray<ObPxSqcMeta> &sqcs) const
@@ -1152,10 +1146,9 @@ int ObParallelDfoScheduler::dispatch_sqc(ObExecContext &exec_ctx,
       sqc.set_adjoining_root_dfo(true);
     }
   }
-
-  // 分发 sqc 可能需要重试，
-  // 分发 sqc 的 rpc 成功，但 sqc 上无法分配最小个数的 worker 线程，`dispatch_sqc`内部进行重试，
-  // 如果多次重试（达到超时时间）都无法成功，不需要再重试整个DFO（因为已经超时）
+  // Distribute sqc may need retry,
+  // Distribute sqc's rpc successfully, but the minimum number of worker threads cannot be allocated on sqc, `dispatch_sqc` retries internally,
+  // If multiple retries (reaching the timeout) are unsuccessful, there is no need to retry the entire DFO (because it has already timed out)
   ObPxSqcAsyncProxy proxy(coord_info_.rpc_proxy_, dfo, exec_ctx, phy_plan_ctx, session, phy_plan, sqcs);
   auto process_failed_proxy = [&]() {
     if (is_data_not_readable_err(ret) || is_server_down_error(ret)) {
@@ -1166,7 +1159,7 @@ int ObParallelDfoScheduler::dispatch_sqc(ObExecContext &exec_ctx,
         LOG_WARN("fail to deal with init sqc error", K(exec_ctx), K(sqc), K(temp_ret));
       }
     }
-    // 对于正确process的sqc, 是需要sqc report的, 否则在后续的wait_running_dfo逻辑中不会等待此sqc结束
+    // For correctly processed sqc, sqc report is required, otherwise in the subsequent wait_running_dfo logic it will not wait for this sqc to end
     const ObSqcAsyncCB *cb = NULL;
     const ObArray<ObSqcAsyncCB *> &callbacks = proxy.get_callbacks();
     for (int i = 0; i < callbacks.count(); ++i) {
@@ -1189,7 +1182,7 @@ int ObParallelDfoScheduler::dispatch_sqc(ObExecContext &exec_ctx,
     process_failed_proxy();
     LOG_WARN("fail to send all init async sqc", K(exec_ctx), K(ret));
   } else if (OB_FAIL(proxy.wait_all())) {
-    // ret 可是能是 is_data_not_readable_err错误类型，需要通过`deal_with_init_sqc_error`进行处理
+    // ret could be is_data_not_readable_err error type, needs to be handled through `deal_with_init_sqc_error`
     process_failed_proxy();
     LOG_WARN("fail to wait all async init sqc", K(ret), K(exec_ctx));
   } else {
@@ -1228,8 +1221,8 @@ int ObParallelDfoScheduler::deal_with_init_sqc_error(ObExecContext &exec_ctx,
 {
   int ret = OB_SUCCESS;
   if (is_data_not_readable_err(rc) || is_server_down_error(ret)) {
-    // 分布式执行读到落后太多的备机或者正在回放日志的副本了，
-    // 将远端的这个observer加进retry info的invalid servers中。
+    // Distributed execution read to a follower that is too far behind or a replica that is replaying logs,
+    // Add this observer from the remote to the invalid servers in the retry info.
     const ObAddr &invalid_server = sqc.get_exec_addr();
     ObSQLSessionInfo *session = NULL;
     if (OB_ISNULL(session = GET_MY_SESSION(exec_ctx))) {
@@ -1240,9 +1233,10 @@ int ObParallelDfoScheduler::deal_with_init_sqc_error(ObExecContext &exec_ctx,
   return ret;
 }
 
-/* 当发送 sqc 超时时，可能是遇到了死锁。
- * 应对策略是：终止 dfo 下所有 sqc，清空 qc-sqc 通道，
- * 等待一段时间，然后重新调度整个 dfo
+
+/* When sending sqc times out, it may be due to a deadlock.
+ * The strategy is: terminate all sqc under dfo, clear the qc-sqc channel,
+ * wait for a period of time, then reschedule the entire dfo
  */
 
 int ObParallelDfoScheduler::try_schedule_next_dfo(ObExecContext &ctx)
@@ -1251,7 +1245,7 @@ int ObParallelDfoScheduler::try_schedule_next_dfo(ObExecContext &ctx)
   FLTSpanGuard(px_schedule);
   ObSEArray<ObDfo *, 3> dfos;
   while (OB_SUCC(ret)) {
-    // 每次只迭代出一对 DFO，parent & child
+    // Each iteration outputs only one pair of DFO, parent & child
     if (OB_FAIL(coord_info_.dfo_mgr_.get_ready_dfos(dfos))) {
       if (OB_ITER_END != ret) {
         LOG_WARN("fail get ready dfos", K(ret));
@@ -1270,7 +1264,7 @@ int ObParallelDfoScheduler::try_schedule_next_dfo(ObExecContext &ctx)
       LOG_WARN("NULL unexpetected", K(ret));
     } else {
       /*
-       * 和 get_ready_dfo() 约定，0 号是 child，1 号是 parent：
+       * Agree with get_ready_dfo() that 0 is child, 1 is parent:
        *
        *   parent  <-- 1
        *   /
@@ -1300,7 +1294,7 @@ int ObParallelDfoScheduler::schedule_pair(ObExecContext &exec_ctx,
   // for other dfo: dop + child svr -> (svr1, th_cnt1), (svr2, th_cnt2), ...
   //
   if (OB_SUCC(ret)) {
-    // 调度一定是成对调度的，任何一个 child 调度起来时，它的 parent 一定已经调度成功
+    // Scheduling must be done in pairs, whenever a child is scheduled, its parent must have already been scheduled successfully
     if (!child.is_scheduled() && child.has_child_dfo()) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("a interm node with child running should not be in state of unscheduled",
@@ -1339,37 +1333,37 @@ int ObParallelDfoScheduler::schedule_pair(ObExecContext &exec_ctx,
           LOG_WARN("fail alloc addr by data distribution", K(parent), K(ret));
         } else { /*do nohting.*/ }
       } else if (parent.is_root_dfo() || parent.has_into_odps()) {
-        // QC/local dfo，直接在本机本线程执行，无需计算执行位置
+        // QC/local dfo, directly execute on the local machine and thread, no need to calculate execution location
         if (OB_FAIL(ObPXServerAddrUtil::alloc_by_local_distribution(exec_ctx,
                                                                     parent))) {
           LOG_WARN("alloc SQC on local failed", K(parent), K(ret));
         }
       } else {
-        // DONE (xiaochu): 如果 parent dfo 里面自带了 scan，那么存在一种情况：dfo 按照 scan
-        // 数据所在的位置分配， 而 child dfo 的数据需要主动 shuffle 到 parent 所在的机器。
-        // 一般来说，有三种情况：
-        // (1) parent 向 child 靠，适合于 parent 为纯计算节点的场景
-        // (2) parent 独立，child 数据向 parent shuffle，适合于 parent 自己也要读盘的场景；
-        //     其中pdml global index maintain符合这种情况。
-        // (3) parent、child 完全独立，各自根据各自的情况分配位置，适合于需要扩展计算能力的场景
-        // (4) parent、child是特殊的slave mapping关系，需要将parent按照reference table的分布来分配
+        // DONE (xiaochu): If parent dfo already includes a scan, then there is a case where dfo processes according to scan
+        // The location of the data is allocated, and the data of child dfo needs to be actively shuffled to the machine where the parent resides.
+        // Generally, there are three cases:
+        // (1) parent approaches child, suitable for scenarios where parent is a pure compute node
+        // (2) parent independent, child data shuffle to parent, suitable for scenarios where parent also needs to read from disk;
+        //     Where pdml global index maintain fits this situation.
+        // (3) parent、child completely independent, each allocates position according to its own situation, suitable for scenarios requiring expansion of computational capacity
+        // (4) parent, child are special slave mapping relationships, need to distribute parent according to the distribution of the reference table
         // sqc。
         //
-        // 下面只实现了第一种、第二种情况，第三种需求不明确，列为 TODO
-        if (parent.has_scan_op() || parent.has_dml_op()) { // 参考 Partial Partition Wise Join
-          // 当DFO中存在TSC或者pdml中的global index maintain op：
-          // 1. 当存在TSC情况下，sqcs的location信息使用tsc表的location信息
-          // 2. 当是pdml、dml+px情况下，sqcs的locations信息使用DML对应的表的locations
+        // Below only the first and second cases are implemented, the third requirement is unclear, listed as TODO
+        if (parent.has_scan_op() || parent.has_dml_op()) { // Refer to Partial Partition Wise Join
+          // When TSC exists in DFO or global index maintain op in pdml:
+          // 1. When TSC exists, the location information of sqcs uses the location information from the tsc table
+          // 2. When it is pdml, dml+px situation, sqcs's locations information uses the locations of the DML corresponding table
           if (OB_FAIL(ObPXServerAddrUtil::alloc_by_data_distribution(
             coord_info_.pruning_table_location_, exec_ctx, parent))) {
             LOG_WARN("fail alloc addr by data distribution", K(parent), K(ret));
           }
           LOG_TRACE("alloc_by_data_distribution", K(parent));
         } else if (parent.is_single()) {
-          // 常见于PDML场景，如果parent没有tsc，则中间parent DFO需要把数据从child dfo先拉到QC本地，再shuffle到上面的DFO
-          // 比如parent 可能是一个 scalar group by，会被标记为 is_local，此时
-          // 走 alloc_by_data_distribution，内部会分配一个 QC 本地线程来执行
-          // 或者嵌套PX场景
+          // Common in PDML scenarios, if parent does not have tsc, the intermediate parent DFO needs to pull data from child DFO to QC locally first, then shuffle it to the upper DFO
+          // For example, parent might be a scalar group by, which is marked as is_local, at this time
+          // Walk alloc_by_data_distribution, internally it will allocate a QC local thread to execute
+          // or nested PX scenario
           if (OB_FAIL(ObPXServerAddrUtil::alloc_by_data_distribution(
             coord_info_.pruning_table_location_, exec_ctx, parent))) {
             LOG_WARN("fail alloc addr by data distribution", K(parent), K(ret));
@@ -1403,8 +1397,7 @@ int ObParallelDfoScheduler::schedule_pair(ObExecContext &exec_ctx,
                K(child.get_dfo_id()));
     }
   }
-
-  // 优化分支：QC 和它的 child dfo 之前的数据通道在满足一定条件时尽早分配
+  // Optimization branch: QC and its child dfo data channel allocation as early as possible when certain conditions are met
   bool can_prealloc = false;
   if (OB_SUCC(ret)) {
     if (OB_FAIL(check_if_can_prealloc_xchg_ch(child, parent, can_prealloc))) {
@@ -1415,24 +1408,23 @@ int ObParallelDfoScheduler::schedule_pair(ObExecContext &exec_ctx,
       }
     }
   }
-
-  // 注意：不用担心重复调度，原因如下：
-  // 如果上面的 do_fast_schedule 成功调度了 parent / child
-  // 那么它的 is_schedule 状态会被更新为 true，下面的 schedule_dfo
-  // 显然就不会被调度。
+  // Note: Do not worry about duplicate scheduling, the reason is as follows:
+  // If the above do_fast_schedule successfully scheduled parent / child
+  // Then its is_schedule status will be updated to true, below the schedule_dfo
+  // Obviously would not be scheduled.
   //
     // schedule child first
     // because child can do some useful (e.g. scan) work while parent is scheduling
   if (OB_SUCC(ret)) {
     if (!child.is_scheduled()) {
-      if (OB_FAIL(schedule_dfo(exec_ctx, child))) { // 发送 DFO 到各个 server
+      if (OB_FAIL(schedule_dfo(exec_ctx, child))) { // send DFO to each server
         LOG_WARN("fail schedule dfo", K(child), K(ret));
       }
     }
   }
   if (OB_SUCC(ret)) {
     if (!parent.is_scheduled()) {
-      if (OB_FAIL(schedule_dfo(exec_ctx, parent))) { // 发送 DFO 到各个 server
+      if (OB_FAIL(schedule_dfo(exec_ctx, parent))) { // send DFO to each server
         LOG_WARN("fail schedule dfo", K(parent), K(ret));
       }
     }

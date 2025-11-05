@@ -612,14 +612,14 @@ int ObMemtableMultiVersionScanIterator::get_tnode_stat(
 }
 
 // The row format is as follows:
-//rowkey｜opposite number of trans_version｜opposite number of Sql_seuqnce | non-rowkey columns
+//rowkey | opposite number of trans_version | opposite number of Sql_sequence | non-rowkey columns
 //
 //example:
 //suppose one row has 5 trans nodes with version 1, 2, 3, 4 and 5 respectively,
 // and an uncommited trans node with version MAX, then the iterating order would be:
 // |MAX | -20(Sql Sequence)
 // |MAX | -8(Sql Sequence)
-// －-result after all trans_node compaction（5 versions）
+// --result after all trans_node compaction (5 versions)
 // |---version 4
 // |----version 3
 // |-----version 2

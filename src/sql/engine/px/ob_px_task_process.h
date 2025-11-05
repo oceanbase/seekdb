@@ -74,13 +74,13 @@ public:
 
   ObPxSqcHandler *get_sqc_handler() { return arg_.sqc_handler_; }
 public:
-  // 以下一组时间，是为了便于 sql audit 查看 worker 执行时间消耗在哪里
+  // The following set of times is for convenient sql audit to see where the worker time consumption is
   void set_enqueue_timestamp(int64_t v) { enqueue_timestamp_ = v; }
   int64_t get_enqueue_timestamp() const { return enqueue_timestamp_; }
   int64_t get_process_timestamp() const { return process_timestamp_; }
   int64_t get_exec_start_timestamp() const { return exec_start_timestamp_; }
   int64_t get_exec_end_timestamp() const { return exec_end_timestamp_; }
-  // 为了接口需要，需要实现以下四个方法，因为使用的是线程池，不是 RPC，故而模拟之
+  // For interface requirements, the following four methods need to be implemented, because thread pool is used instead of RPC, so we simulate it
   int64_t get_send_timestamp() const { return get_enqueue_timestamp(); }
   int64_t get_receive_timestamp() const { return get_enqueue_timestamp(); }
   int64_t get_run_timestamp() const { return get_process_timestamp(); }

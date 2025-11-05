@@ -100,7 +100,7 @@ private:
   int check_row_param(ObOpRawExpr &expr);
   int check_param_expr_op_row(ObRawExpr *param_expr, int64_t column_count);
   int visit_left_param(ObRawExpr &expr);
-  //观察右操作符的参数个数，由于要知道左操作符参数个数，所以传入根操作符
+  // Observe the number of parameters of the right operator, since we need to know the number of parameters of the left operator, so pass in the root operator
   int visit_right_param(ObOpRawExpr &expr);
   int64_t get_expr_output_column(const ObRawExpr &expr);
   int get_row_expr_param_type(const ObRawExpr &expr, ObIExprResTypes &types);
@@ -193,15 +193,15 @@ int ObRawExprDeduceType::try_add_cast_expr(RawExprType &parent,
     SQL_RESV_LOG(WARN, "child_ptr raw expr is NULL", K(ret));
   } else {
     ObRawExpr *new_expr = NULL;
-  // 本函数原本被定义在CPP中，【因为UNITY合并编译单元的作用，而通过了编译，但模版代码的实现需要在头文件中定义】，因此关闭UNITY后导致observer无法通过编译
-  // 为解决关闭UNITY后的编译问题，将其挪至头文件中
-  // 但本函数使用了OZ、CK宏，这两个宏内部的log打印使用了LOG_WARN，要求必须定义USING_LOG_PREFIX
-  // 由于这里是头文件，这将导致非常棘手的问题：
-  // 1. 如果在本头文件之前没有定义USING_LOG_PREFIX，则必须重新定义USING_LOG_PREFIX（但宏被定义在头文件中将造成污染）
-  // 2. 如果是在本文件中新定义的USING_LOG_PREFIX，则需要被清理掉，防止污染被传播到其他.h以及cpp中
-  // 因此这里判断USING_LOG_PREFIX是否已定义，若已定义则放弃重新定义（这意味着日志并不总是被以“SQL_RESV”标识打印），同时也定义特殊标识
-  // 若发现定义特殊标识，则在预处理过程中执行宏清理动作
-  // 整个逻辑相当trick，是为了尽量少的修改代码逻辑，代码owner后续需要整改这里的逻辑
+  // This function was originally defined in CPP, [because of the effect of UNITY merging compilation units, it compiled successfully, but the implementation of template code needs to be defined in the header file], therefore, closing UNITY led to observer failing to compile
+  // To solve the compilation problem after closing UNITY, move it to the header file
+  // But this function uses OZ, CK macros, these two macros internal log print used LOG_WARN, require must define USING_LOG_PREFIX
+  // Since this is a header file, this will lead to very tricky problems:
+  // 1. If USING_LOG_PREFIX is not defined before this header file, it must be redefined (but defining the macro in the header file will cause pollution)
+  // 2. If USING_LOG_PREFIX is newly defined in this file, it needs to be cleaned up to prevent pollution from spreading to other .h and cpp files
+  // Therefore here we check if USING_LOG_PREFIX is already defined, if it is defined then we abandon redefining it (this means logs are not always printed with the "SQL_RESV" identifier), and also define a special identifier
+  // If a special identifier is found, execute macro cleanup actions during preprocessing
+  // The entire logic is quite tricky, is to minimize code logic changes, code owner needs to refactor this logic later
 #ifndef USING_LOG_PREFIX
 #define MARK_MACRO_DEFINED_BY_OB_RAW_EXPR_DEDUCE_TYPE_H
 #define USING_LOG_PREFIX SQL_RESV

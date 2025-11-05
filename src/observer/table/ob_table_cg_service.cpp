@@ -139,7 +139,7 @@ int ObTableExprCgService::generate_expire_expr(ObTableCtx &ctx,
                                                                    &schema_checker))) {
       LOG_WARN("fail to build expire expr", K(ret), K(ttl_definition));
     } else {
-      // 找到生成列引用的列并替换为真正的列
+      // Find the column referenced by the generated column and replace it with the actual column
       for (int64_t i = 0; OB_SUCC(ret) && i < columns.count(); i++) {
         const ObQualifiedName &tmp_column = columns.at(i);
         const ObString &col_name = tmp_column.col_name_;
@@ -1101,9 +1101,9 @@ int ObTableSpecCgService::generate_spec(ObIAllocator &alloc,
 
 /*
              table_loc_id_    ref_table_id_
-    主表:     主表table_id     主表table_id
-    索引表:   主表table_id     索引表table_id
-    回表:     主表table_id     主表table_id
+    main table:     main table table_id     main table table_id
+    index table:   main table table_id     index table table_id
+    back to table:     main table table_id     main table table_id
 */
 int ObTableLocCgService::generate_table_loc_meta(const ObTableCtx &ctx,
                                                  const ObSimpleTableSchemaV2 &simple_table_schema,
@@ -1209,8 +1209,7 @@ int ObTableExprCgService::refresh_delete_exprs_frame(ObTableCtx &ctx,
     ObObj q_obj;
     ObObj t_obj;
     int64_t time = 0;
-
-    // htable场景rowkey都在properties中，所以需要从properties中提取出rowkey
+    // In the htable scenario, all rowkeys are in properties, so we need to extract the rowkey from properties
     if (OB_FAIL(entity.get_property(ObHTableConstants::ROWKEY_CNAME_STR, k_obj))) {
       LOG_WARN("fail to get K", K(ret));
     } else if (OB_FAIL(entity.get_property(ObHTableConstants::CQ_CNAME_STR, q_obj))) {
@@ -2558,8 +2557,7 @@ int ObTableDmlCgService::generate_conflict_checker_ctdef(ObTableCtx &ctx,
     conflict_checker_ctdef.use_dist_das_ = ctx.need_dist_das();
     conflict_checker_ctdef.rowkey_count_ = ctx.get_table_schema()->get_rowkey_column_num();
   }
-
-  // 针对全局索引场景，生成回表的partition id表达式
+  // For the global index scenario, generate the partition id expression for table lookups
   if (OB_SUCC(ret) && (ctx.need_dist_das())) {
     ObRawExpr *part_id_expr_for_lookup = NULL;
     ObExpr *rt_part_id_expr = NULL;
@@ -2936,9 +2934,8 @@ int ObTableDmlCgService::generate_column_ids(ObTableCtx &ctx, ObTableIndexInfo &
 
   return ret;
 }
-
-// 构造 das_ctdef 中的 old_row_projector 和 new_row_projector，
-// 其中存储 storage column 对应表达式在 full row exprs 数组中下标
+// Construct the old_row_projector and new_row_projector in das_ctdef,
+// where the storage column corresponding expression index in the full row exprs array is stored
 int ObTableDmlCgService::generate_projector(const ObIArray<uint64_t> &dml_column_ids,
                                             const ObIArray<uint64_t> &storage_column_ids,
                                             const ObIArray<ObRawExpr*> &old_row,
@@ -2951,7 +2948,7 @@ int ObTableDmlCgService::generate_projector(const ObIArray<uint64_t> &dml_column
   IntFixedArray &new_row_projector = das_ctdef.new_row_projector_;
 
   // generate old row projector
-  // 查找old row expr 在full row expr中的位置（投影）
+  // Find the position (projection) of old row expr in full row expr
   if (!old_row.empty()) {
     if (OB_FAIL(old_row_projector.prepare_allocate(storage_column_ids.count()))) {
       LOG_WARN("fail to init row projector array", K(ret), K(storage_column_ids.count()));
@@ -2978,7 +2975,7 @@ int ObTableDmlCgService::generate_projector(const ObIArray<uint64_t> &dml_column
   }
 
   // generate new row projector
-  // 查找new row expr 在full row expr中的位置（投影）
+  // Find the position (projection) of new row expr in full row expr
   if (!new_row.empty() && OB_SUCC(ret)) {
     if (OB_FAIL(new_row_projector.prepare_allocate(storage_column_ids.count()))) {
       LOG_WARN("fail to init row projector array", K(ret), K(storage_column_ids.count()));
@@ -2990,7 +2987,7 @@ int ObTableDmlCgService::generate_projector(const ObIArray<uint64_t> &dml_column
                          storage_cid;
       int64_t column_idx = OB_INVALID_INDEX;
       int64_t projector_idx = OB_INVALID_INDEX;
-      // 如果 projector[i] = j, 表达式按照 schema 顺序，第 i 个 column 在 full_row 中的下标为 j，如果在 new_row 中不存在，那么 j == -1
+      // If projector[i] = j, the expression according to schema order, the index of the i-th column in full_row is j, if it does not exist in new_row, then j == -1
       new_row_projector.at(i) = OB_INVALID_INDEX;
       if (has_exist_in_array(dml_column_ids, ref_cid, &column_idx)) {
         ObRawExpr *column_expr = new_row.at(column_idx);
@@ -2999,7 +2996,7 @@ int ObTableDmlCgService::generate_projector(const ObIArray<uint64_t> &dml_column
           LOG_WARN("row column not found in full row columns", K(ret),
                    K(column_idx), KPC(new_row.at(column_idx)));
         } else {
-          new_row_projector.at(i) = projector_idx; // projector_idx 为 column storage_column_ids[i] 在 full row expr 中的 index
+          new_row_projector.at(i) = projector_idx; // projector_idx is the index of column storage_column_ids[i] in the full row expr
         }
       }
     }
@@ -3110,8 +3107,7 @@ int ObTableTscCgService::generate_rt_exprs(const ObTableCtx &ctx,
 
   return ret;
 }
-
-// 访问虚拟生成列转换为访问其依赖的列
+// Access virtual generated column is converted to access its dependent columns
 int ObTableTscCgService::replace_gen_col_exprs(const ObTableCtx &ctx,
                                                ObIArray<ObRawExpr*> &access_exprs)
 {
@@ -3213,12 +3209,10 @@ int ObTableTscCgService::generate_pushdown_aggr_ctdef(const ObTableCtx &ctx,
   }
   return ret;
 }
-
-
-// 非索引扫描: access exprs = select exprs
-// 普通索引表: access exprs = [index column exprs][rowkey expr]
-// 索引回表: access expr = [rowkey expr][select without rowkey exprs]
-// 全文索引表：access exprs = extract_text_ir_access_columns
+// Non-index scan: access exprs = select exprs
+// Normal index table: access exprs = [index column exprs][rowkey expr]
+// Index backtable: access expr = [rowkey expr][select without rowkey exprs]
+// Full-text index table: access exprs = extract_text_ir_access_columns
 int ObTableTscCgService::generate_access_ctdef(const ObTableCtx &ctx,
                                                ObIAllocator &allocator,
                                                ObDASScanCtDef &das_tsc_ctdef)
@@ -3242,25 +3236,25 @@ int ObTableTscCgService::generate_access_ctdef(const ObTableCtx &ctx,
     if (OB_FAIL(ObTableFtsTscCgService::extract_rowkey_doc_exprs(ctx, access_exprs))) {
       LOG_WARN("fail to extract rowkey doc id", K(ret));
     }
-  } else if (!ctx.is_index_scan()) { // 非索引扫描
+  } else if (!ctx.is_index_scan()) { // non-index scan
     for (int i = 0; OB_SUCC(ret) && i < select_exprs.count(); i++) {
       if (OB_FAIL(access_exprs.push_back(select_exprs.at(i)))) {
         LOG_WARN("fail to push back access exprs", K(ret), K(i));
       }
     }
-  } else if (is_normal_index_table) { // 非全文索引表
+  } else if (is_normal_index_table) { // non-full-text index table
     if (OB_FAIL(access_exprs.assign(index_exprs))) {
       LOG_WARN("fail to assign access exprs", K(ret), K(ctx.get_index_table_id()));
     } else {
       for (int64_t i = 0; OB_SUCC(ret) && i < rowkey_exprs.count(); i++) {
         if (is_in_array(index_exprs, rowkey_exprs.at(i))) {
-          // 在index_exprs中的index expr不需要再次添加
+          // The index expr in index_exprs does not need to be added again
         } else if (OB_FAIL(access_exprs.push_back(rowkey_exprs.at(i)))) {
           LOG_WARN("fail to push back rowkey expr", K(ret), K(i));
         }
       }
     }
-  } else if (ctx.is_index_scan() && is_primary_table) { // 索引回表
+  } else if (ctx.is_index_scan() && is_primary_table) { // index back table
     if (OB_FAIL(access_exprs.assign(rowkey_exprs))) {
       LOG_WARN("fail to assign access exprs", K(ret), K(ctx.get_ref_table_id()));
     } else {
@@ -3270,7 +3264,7 @@ int ObTableTscCgService::generate_access_ctdef(const ObTableCtx &ctx,
       }
       for (int64_t i = 0; OB_SUCC(ret) && i < select_exprs.count(); i++) {
         if (has_exist_in_array(rowkey_column_ids, select_exprs.at(i)->get_column_id())) {
-          // 已经在rowkey中，不需要再次添加
+          // Already in rowkey, no need to add again
         } else if (OB_FAIL(access_exprs.push_back(select_exprs.at(i)))) {
           LOG_WARN("fail to push back select expr", K(ret), K(i));
         }
@@ -3405,10 +3399,10 @@ int ObTableTscCgService::extract_select_output_column_ids(const ObTableCtx &ctx,
 }
 
 // tsc_out_cols
-// 主表/索引回表/索引扫描不需要回表: select column ids
-// 索引表: rowkey column ids
+// Main table/index backtable/index scan does not require backtable: select column ids
+// Index table: rowkey column ids
 // rowkey_doc：rowkey+doc_id
-// 全文检索：extract_text_ir_das_output_column_ids
+// Full-text search: extract_text_ir_das_output_column_ids
 int ObTableTscCgService::generate_table_param(const ObTableCtx &ctx,
                                               ObDASScanCtDef &das_tsc_ctdef,
                                               const bool query_cs_replica /*=false*/)
@@ -3433,8 +3427,8 @@ int ObTableTscCgService::generate_table_param(const ObTableCtx &ctx,
     if (OB_FAIL(tsc_out_cols.assign(das_tsc_ctdef.access_column_ids_))) {
       LOG_WARN("fail to assgin tsc_out_cols", K(ret), K(das_tsc_ctdef.access_column_ids_));
     }
-  } else if (is_primary_table // 主表扫描 + 索引扫描回主表
-            || (ctx.is_index_scan() && !ctx.is_index_back())) { //索引扫描不需要回表
+  } else if (is_primary_table // primary table scan + index scan back to primary table
+            || (ctx.is_index_scan() && !ctx.is_index_back())) { // index scan does not require back table lookup
     if (ctx.is_index_scan() && !ctx.is_index_back()) {
       index_schema = ctx.get_index_schema();
     } else {
@@ -3443,7 +3437,7 @@ int ObTableTscCgService::generate_table_param(const ObTableCtx &ctx,
     if (OB_FAIL(extract_select_output_column_ids(ctx, das_tsc_ctdef, index_schema, tsc_out_cols))) {
       LOG_WARN("fail to extract tsc output column ids", K(ret));
     }
-  } else if (ctx.is_index_scan() && is_index_table) { // 索引表
+  } else if (ctx.is_index_scan() && is_index_table) { // index table
     index_schema = ctx.get_index_schema();
     if (OB_FAIL(ctx.get_table_schema()->get_rowkey_column_ids(tsc_out_cols))) {
       LOG_WARN("fail to get rowkey column ids", K(ret));

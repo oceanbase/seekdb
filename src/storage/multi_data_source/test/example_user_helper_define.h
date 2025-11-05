@@ -25,12 +25,12 @@ namespace unittest {
 struct ExampleUserHelperFunction1 {
   static int on_register(const char* buf,
                          const int64_t len,
-                         storage::mds::BufferCtx &ctx); // 出参，将对应修改记录在Ctx中
+                         storage::mds::BufferCtx &ctx); // out parameter, will record corresponding modifications in Ctx
 
   static int on_replay(const char* buf,
                        const int64_t len,
-                       const share::SCN &scn, // 日志scn
-                       storage::mds::BufferCtx &ctx); // 备机回放
+                       const share::SCN &scn, // log scn
+                       storage::mds::BufferCtx &ctx); // standby replay
   static bool check_can_do_tx_end(const bool is_willing_to_commit,
                                   const bool for_replay,
                                   const share::SCN &log_scn,
@@ -43,23 +43,23 @@ struct ExampleUserHelperFunction1 {
 struct ExampleUserHelperFunction2 {
   static int on_register(const char* buf,
                          const int64_t len,
-                         storage::mds::BufferCtx &ctx); // 出参，将对应修改记录在Ctx中
+                         storage::mds::BufferCtx &ctx); // out parameter, will record corresponding modifications in Ctx
 
   static int on_replay(const char* buf,
                        const int64_t len,
-                       const share::SCN &scn, // 日志scn
-                       storage::mds::BufferCtx &ctx); // 备机回放
+                       const share::SCN &scn, // log scn
+                       storage::mds::BufferCtx &ctx); // standby replay
 };
 
 struct ExampleUserHelperFunction3 {
   static int on_register(const char* buf,
                          const int64_t len,
-                         storage::mds::BufferCtx &ctx); // 出参，将对应修改记录在Ctx中
+                         storage::mds::BufferCtx &ctx); // out parameter, will record corresponding modifications in Ctx
 
   static int on_replay(const char* buf,
                        const int64_t len,
-                       const share::SCN &scn, // 日志scn
-                       storage::mds::BufferCtx &ctx); // 备机回放
+                       const share::SCN &scn, // log scn
+                       storage::mds::BufferCtx &ctx); // standby replay
   static bool check_can_do_on_prepare(bool for_replay,
                                       const char *buf,
                                       const int64_t buf_len,
@@ -98,9 +98,9 @@ struct ExampleUserHelperCtx : public storage::mds::BufferCtx {
     call_times_ = rhs.call_times_;
     return OB_SUCCESS;
   }
-  int call_times_;// 这个类可以有自己的内部状态
+  int call_times_;// This class can have its own internal state
   virtual int64_t to_string(char*, const int64_t buf_len) const { return 0; }
-  // 同事务状态一起持久化以及恢复
+  // Persist and restore along with transaction status
   virtual int serialize(char*, const int64_t, int64_t&) const { return OB_SUCCESS; }
   virtual int deserialize(const char*, const int64_t, int64_t&) { return OB_SUCCESS; }
   virtual int64_t get_serialize_size(void) const { return 0; }
@@ -118,7 +118,7 @@ inline int ExampleUserHelperFunction1::on_register(const char* buf,
 
 inline int ExampleUserHelperFunction1::on_replay(const char* buf,
                                         const int64_t len,
-                                        const share::SCN &scn, // 日志scn
+                                        const share::SCN &scn, // log scn
                                         storage::mds::BufferCtx &ctx)
 {
   int ret = OB_SUCCESS;
@@ -159,7 +159,7 @@ inline int ExampleUserHelperFunction2::on_register(const char*,
 
 inline int ExampleUserHelperFunction2::on_replay(const char*,
                                         const int64_t,
-                                        const share::SCN &, // 日志scn
+                                        const share::SCN &, // log scn
                                         storage::mds::BufferCtx &)
 {
   int ret = OB_SUCCESS;
@@ -176,7 +176,7 @@ inline int ExampleUserHelperFunction3::on_register(const char*,
 
 inline int ExampleUserHelperFunction3::on_replay(const char* buf,
                                         const int64_t len,
-                                        const share::SCN &scn, // 日志scn
+                                        const share::SCN &scn, // log scn
                                         storage::mds::BufferCtx &ctx)
 {
   UNUSED(scn);

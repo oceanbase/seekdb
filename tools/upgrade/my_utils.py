@@ -20,22 +20,22 @@ def results_to_str(desc, results):
       result_col_width = len(str(result[i]))
       if max_width_list[i] < result_col_width:
         max_width_list[i] = result_col_width
-  # 打印列名
+  # Print column names
   for i in range(0, col_count):
     if i > 0:
-      ret_str += '    ' # 空四格
+      ret_str += '    ' # four spaces
     ret_str += str(desc[i][0])
-    # 补足空白
+    # Fill in the blanks
     for j in range(0, max_width_list[i] - len(str(desc[i][0]))):
       ret_str += ' '
-  # 打印数据
+  # Print data
   for result in results:
-    ret_str += '\n' # 先换行
+    ret_str += '\n' # newline first
     for i in range(0, col_count):
       if i > 0:
-        ret_str += '    ' # 空四格
+        ret_str += '    ' # four spaces
       ret_str += str(result[i])
-      # 补足空白
+      # Fill in the blanks
       for j in range(0, max_width_list[i] - len(str(result[i]))):
         ret_str += ' '
   return ret_str

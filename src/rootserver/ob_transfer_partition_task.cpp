@@ -72,7 +72,7 @@ void ObTransferPartitionHelper::destroy()
 {
   is_inited_ = false;
   sql_proxy_ = NULL;
-  //part_info的内存依赖于task_array，要先于task_array释放
+  //The memory of part_info depends on task_array, and should be released before task_array
   part_info_.reset();
   task_array_.reset();
   allocator_.reset();
@@ -99,7 +99,7 @@ int ObTransferPartitionHelper::build(bool &has_job)
   has_job = true;
   int64_t task_cnt = 0;
   ObLSStatusInfoArray status_info_array;
-  ObTransferPartitionTaskID tmp_max_task_id(INT64_MAX);//第一次获取所有的任务列表，设置了一个最大值
+  ObTransferPartitionTaskID tmp_max_task_id(INT64_MAX); // First get all the task lists, set a maximum value
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
     LOG_WARN("init twice", KR(ret));
@@ -112,21 +112,21 @@ int ObTransferPartitionHelper::build(bool &has_job)
   } else if (0 == task_array_.count()) {
     has_job = false;
     ISTAT("no transfer partition task", K(tenant_id_));
-    //防止出现load_ls_status成功很久后，才load_task成功，导致出现一些日志流不存在的误判
-    //所以先load任务，然后在获取ls_status，保证用户看到日志流存在后再去生成的任务一定不会
-    //被判断称目标的不存在
+    //Prevent the situation where load_ls_status succeeds long before load_task, leading to incorrect judgments of non-existent log streams
+    //So first load the task, then get ls_status, to ensure that any task generated after the user sees the log stream exists will not
+    //The target being judged does not exist
   } else if (OB_FAIL(ObTenantBalanceService::gather_ls_status_stat(
                  tenant_id_, status_info_array))) {
     LOG_WARN("failed to gather ls status stat", KR(ret), K(tenant_id_));
   } else if (OB_FAIL(try_process_dest_not_exist_task_(status_info_array,
                                                       task_cnt))) {
     LOG_WARN("failed to process dest not exist task", KR(ret), K(status_info_array));
-    //由于一部分任务不能成功执行，重新load，防止后面的程序还需要处理这部分非法的任务不合理
+    //Due to some tasks not being executed successfully, reload to prevent the subsequent program from having to handle these invalid tasks unreasonably
   } else if (!max_task_id_.is_valid()) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("max task id is invalid", KR(ret), K(max_task_id_));
   } else if (0 != task_cnt
-             // 这次load的范围不能超过上一次的范围
+             // The range of this load cannot exceed the range of the previous load
              && OB_FAIL(ObTransferPartitionTaskTableOperator::
                             load_all_wait_task_in_part_info_order(
                                 tenant_id_, false, max_task_id_, task_array_,
@@ -135,13 +135,13 @@ int ObTransferPartitionHelper::build(bool &has_job)
   } else if (0 == task_array_.count()) {
     has_job = false;
     ISTAT("no transfer partition task", K(tenant_id_));
-    //检查分区是否存在，不需要重新reload，分区不存在不会被放在part_info_中
+    //Check if the partition exists, no need to reload, non-existent partitions will not be placed in part_info_
   } else if (OB_FAIL(try_process_object_not_exist_task_())) {
     LOG_WARN("failed to process object not exist task", KR(ret));
   } else if (0 == part_info_.count()) {
     has_job = false;
     ISTAT("no transfer partition task", K(tenant_id_), K(task_array_));	
-    //根据part_info_中的task设置源端
+    //Set the source end according to task in part_info_
   } else if (OB_FAIL(set_task_src_ls_())) {
     LOG_WARN("failed to construct task info", KR(ret), K(status_info_array));
   } else {
@@ -332,7 +332,7 @@ int ObTransferPartitionHelper::batch_get_table_schema_in_order_(
       LOG_WARN("failed to get latest table schema", KR(ret),
           K(tenant_id_), K(table_id_array));
     } else {
-      //按照table_id的顺序对table_schema_array进行排序
+      //Sort table_schema_array in the order of table_id
       ObBootstrap::TableIdCompare compare;
       lib::ob_sort(table_schema_array.begin(), table_schema_array.end(), compare);
       if (OB_FAIL(compare.get_ret())) {
@@ -513,7 +513,7 @@ int ObTransferPartitionHelper::construct_logical_task_(
     //task_array and part_info is order by table_id, object_id
     int64_t part_info_index = 0;
     bool found = true;
-    //每个task_array肯定都可以在part_info_中找到
+    // Each task_array can definitely be found in part_info_
     for (int64_t i = 0; OB_SUCC(ret) && i < task_array.count(); ++i) {
       const ObTransferPartitionTask &task = task_array.at(i);
       found = false;

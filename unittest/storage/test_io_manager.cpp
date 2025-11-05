@@ -577,7 +577,7 @@ TEST_F(TestIOStruct, Test_Size)
   LOG_INFO("qilu :check size", K(size1), K(size2), K(size3), K(size4), K(size5), K(size6), K(max_callback_size));
   LOG_INFO("qilu :check size", K(size_request), K(size_result), K(size_info), K(size_thread_cond), K(size_flag),
           K(ref_size), K(time_size), K(return_size), K(fd_size), K(trace_size));
-  //mark: max_callback_size=208(ObMultiDataBlockIOCallback、ObStorageMetaIOCallback)
+  //mark: max_callback_size=208(ObMultiDataBlockIOCallback, ObStorageMetaIOCallback)
 }
 
 TEST_F(TestIOStruct, IOResult)
@@ -1414,7 +1414,7 @@ TEST_F(TestIOStruct, IOTracer)
     IOTracerSwitch *tracer_switch = new (modifyer_buf + i * sizeof(IOTracerSwitch)) IOTracerSwitch();
     IOPerfTenant &curr_tenant = perf_tenants.at(i);
     int64_t switch_init_ts = start_ts;
-    int64_t switch_delay_ts = 1000000L; //1s后打开开关
+    int64_t switch_delay_ts = 1000000L; // 1 second after turn on the switch
     ASSERT_SUCC(tracer_switch->init(switch_init_ts, switch_delay_ts, curr_tenant));
     ASSERT_SUCC(switches.push_back(tracer_switch));
   }
@@ -1489,7 +1489,7 @@ TEST_F(TestIOStruct, ModifyIOPS)
     IOConfModify *modifyer=new (modifyer_buf + i * sizeof(IOConfModify)) IOConfModify();
     IOPerfTenant &curr_tenant = perf_tenants.at(i);
     int64_t modify_init_ts = start_ts;
-    int64_t modify_delay_ts = 3000000L; //2s后开始修改
+    int64_t modify_delay_ts = 3000000L; // 2 seconds after start modification
     ASSERT_SUCC(modifyer->init(modify_init_ts, modify_delay_ts, curr_tenant));
     ASSERT_SUCC(modifyers.push_back(modifyer));
   }
@@ -1563,7 +1563,7 @@ TEST_F(TestIOStruct, ModifyCallbackThread)
     IOCallbackModifier *modifier=new (modifier_buf + i * sizeof(IOCallbackModifier)) IOCallbackModifier();
     IOPerfTenant &curr_tenant = perf_tenants.at(i);
     int64_t modify_init_ts = start_ts;
-    int64_t modify_delay_ts = 2000000L; //2s后开始修改
+    int64_t modify_delay_ts = 2000000L; // 2 seconds after start modification
     ASSERT_SUCC(modifier->init(modify_init_ts, modify_delay_ts, curr_tenant));
     ASSERT_SUCC(modifiers.push_back(modifier));
   }
@@ -1639,7 +1639,7 @@ TEST_F(TestIOStruct, ModifyGroupIO)
     if (curr_tenant.tenant_id_ == 1002) {
       IOGroupModify *modifyer=new (modifyer_buf + i * sizeof(IOGroupModify)) IOGroupModify();
       int64_t modify_init_ts = start_ts;
-      int64_t modify_delay_ts = 3000000L; //3s后开始修改
+      int64_t modify_delay_ts = 3000000L; // 3 seconds after start modification
       ASSERT_SUCC(modifyer->init(modify_init_ts, modify_delay_ts, curr_tenant));
       ASSERT_SUCC(modifyers.push_back(modifyer));
     }

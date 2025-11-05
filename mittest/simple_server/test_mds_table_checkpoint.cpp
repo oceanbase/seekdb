@@ -46,7 +46,7 @@ ObLSID LS_ID;
 class ObMdsTableCheckpointTest : public ObSimpleClusterTestBase
 {
 public:
-  // 指定case运行目录前缀 test_ob_simple_cluster_
+  // Specify the case run directory prefix test_ob_simple_cluster_
   ObMdsTableCheckpointTest() : ObSimpleClusterTestBase("test_mds_table_checkpoint_") {}
 
   void do_basic_test();

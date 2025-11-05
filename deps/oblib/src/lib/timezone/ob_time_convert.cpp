@@ -1686,13 +1686,12 @@ int ObTimeConverter::check_leading_precision(const ObTimeDigits &digits)
 #define ORACLE_OFFSET_MIN static_cast<int32_t>(-(15 * MINS_PER_HOUR + 59) * SECS_PER_MIN)   // -15:59 .
 #define ORACLE_OFFSET_MAX static_cast<int32_t>(15 * SECS_PER_HOUR)                          // +15:00 .
 #define ORACLE_OFFSET_MAX_HOUR 15
-
-// str_to_offset失败时通常返回的错误码是OB_ERR_UNKNOWN_TIME_ZONE，上层调用的地方看到这个错误码后，
-// 会把str当作是时区名，到time_zone_map中查找，比如'Asia/Shanghai'
-// ret_more的作用是，上层在查找也失败后，mysql抛出的错误码是OB_ERR_UNKNOWN_TIME_ZONE，但是oracle不是
-// oracle可能抛出多种错误码，比如hour大于15时抛出OB_ERR_INVALID_TIME_ZONE_HOUR，minute大于59时
-// 抛出OB_ERR_INVALID_TIME_ZONE_MINUTE。
-// ret_more把这个错误码记录并返回，上层在查找time_zone_map失败后，根据模式判断是否用ret_more覆盖ret
+// str_to_offset fails to return the error code OB_ERR_UNKNOWN_TIME_ZONE, upper-level calling places see this error code after,
+// will treat str as a time zone name, look it up in time_zone_map, for example 'Asia/Shanghai'
+// The role of ret_more is, when the upper layer fails to find it as well, the error code thrown by mysql is OB_ERR_UNKNOWN_TIME_ZONE, but oracle is not
+// Oracle may throw multiple error codes, for example, OB_ERR_INVALID_TIME_ZONE_HOUR when hour is greater than 15, minute greater than 59 when
+// Throw OB_ERR_INVALID_TIME_ZONE_MINUTE.
+// ret_more records this error code and returns it, the upper layer determines whether to use ret_more to override ret after failing to find time_zone_map based on the mode
 int ObTimeConverter::str_to_offset(const ObString &str, int32_t &value, int &ret_more,
                                   const bool is_oracle_mode, const bool need_check_valid/* false */)
 {
@@ -1737,12 +1736,12 @@ int ObTimeConverter::str_to_offset(const ObString &str, int32_t &value, int &ret
       LOG_WARN("failed to get offset", K(ret), K(str));
     } else if (!('+' == sign || '-' == sign)
         || 0 == hour.len_ || 0 == minute.len_
-        // oracle对小数部分和末尾非法字符的处理是直接忽略，因此这里加了模式判断，oracle模式接受none.len_ > 0
+        // oracle handles the fractional part and trailing illegal characters by ignoring them directly, therefore a pattern check is added here, oracle mode accepts none.len_ > 0
         || !is_single_colon(colon) || (none.len_ > 0 && use_strict_format)) {
       ret = OB_ERR_UNKNOWN_TIME_ZONE;
     } else if (! need_check_valid) {
-      // 某些场景中不需要检查合法性，比如session反序列化; load timezone 系统变量的值到session上，
-      // 只需要在设置系统变量时做检查即可。这些情况要额外处理的原因是如果做检查，无法获取真正的兼容模式。
+      // In some scenarios, legality check is not required, for example, session deserialization; load the value of the timezone system variable into the session,
+      // Only need to check when setting system variables. These cases need to be handled separately because if a check is done, the true compatibility mode cannot be obtained.
       value = static_cast<int32_t>(((hour.value_ * MINS_PER_HOUR) + minute.value_) * SECS_PER_MIN);
       if ('-' == sign) {
         value = -value;
@@ -1753,7 +1752,7 @@ int ObTimeConverter::str_to_offset(const ObString &str, int32_t &value, int &ret
       LOG_WARN("check minute leading precision failed", K(ret), K(minute));
     } else if (OB_UNLIKELY(minute.value_ >= MINS_PER_HOUR || minute.value_ < 0)) {
       ret = OB_ERR_UNKNOWN_TIME_ZONE;
-      // 在hour和minute都超出范围的情况下，oracle报的是hour越界错误
+      // In the case where both hour and minute are out of range, Oracle reports an hour out-of-bounds error
       ret_more = is_oracle_mode ? (hour.value_ > ORACLE_OFFSET_MAX_HOUR
                                     ? OB_ERR_INVALID_TIME_ZONE_HOUR
                                     : OB_ERR_INVALID_TIME_ZONE_MINUTE)
@@ -1766,7 +1765,7 @@ int ObTimeConverter::str_to_offset(const ObString &str, int32_t &value, int &ret
 
       if (is_oracle_mode ) {
         if (OB_UNLIKELY(!(ORACLE_OFFSET_MIN <= value && value <= ORACLE_OFFSET_MAX))) {
-          // 在hour和minute都超出范围的情况下，oracle报的是hour越界错误
+          // In the case where both hour and minute are out of range, Oracle reports an hour out-of-bounds error
           ret_more = hour.value_ > ORACLE_OFFSET_MAX_HOUR ? OB_ERR_INVALID_TIME_ZONE_HOUR
                 : OB_ERR_INVALID_TIME_ZONE_MINUTE;
           ret = OB_ERR_UNKNOWN_TIME_ZONE;
@@ -2320,8 +2319,7 @@ int ObTimeConverter::str_to_digit_with_date(const ObString &str, ObTimeDigits *d
   }
   return ret;
 }
-
-//dayofmonth函数需要容忍月、日为0的错误
+//dayofmonth function needs to tolerate errors where month and day are 0
 int ObTimeConverter::str_to_ob_time_with_date(const ObString &str, ObTime &ob_time, int16_t *scale,
                                               const ObDateSqlMode date_sql_mode,
                                               const bool &need_truncate)
@@ -3749,12 +3747,11 @@ int ObTimeConverter::str_to_ob_time_by_dfm_elems(const ObString &str,
     int32_t temp_tzh_value = -1;   //positive value is legal
     int32_t temp_tzm_value = -1;   //positive value is legal
     int32_t temp_tz_factor = 0;
-
-    // cvrt_ctx.tz_info_的类型如果为ObTimeZoneInfo，说明timezone以offset的形式保存；
-    // cvrt_ctx.tz_info_的类型如果是ObTimeZoneInfoPos, 说明timezone以tz_name的形式保存；
-    // 根据cvrt_ctx.tz_info_的类型为tz_hour+tz_min 或 tz_id+tran_type_id 赋值
-    // 作为dfm_elems中不包含时区相关的flag时，ob_time中时区相关变量的缺省值.
-    // TZ相关的flag包括TZH(hour), TZM(minute), TZR(region), TZD(daylight)
+    // cvrt_ctx.tz_info_ type is ObTimeZoneInfo, which means timezone is saved in offset form;
+    // cvrt_ctx.tz_info_ type is ObTimeZoneInfoPos if timezone is saved in tz_name form;
+    // Assign value to tz_hour+tz_min or tz_id+tran_type_id based on the type of cvrt_ctx.tz_info_
+    // As the flag when dfm_elems does not include timezone-related information, the default value for timezone-related variables in ob_time.
+    // TZ-related flags include TZH(hour), TZM(minute), TZR(region), TZD(daylight)
     int32_t tz_hour = 0;  //will be negetive when time zone offset < 0
     int32_t tz_min = 0;   //will be negetive when time zone offset < 0
     int32_t session_tz_id = 0;
@@ -3835,7 +3832,7 @@ int ObTimeConverter::str_to_ob_time_by_dfm_elems(const ObString &str,
           //The # of skipped non-blank chars is according to format_str
           first_non_space_sep_char = ctx.is_parse_finish() ? INT64_MAX : ctx.cur_ch_[0];
           if (ObDFMFlag::X == elem.elem_flag_) {
-            //特殊情况, 不考虑X前面的非空白分隔符
+            // Special case, do not consider non-whitespace delimiters before X
             part_sep_len = 0;
           } else {
             part_sep_len = ObDFMUtil::skip_separate_chars(ctx, format_sep_len);
@@ -3976,9 +3973,9 @@ int ObTimeConverter::str_to_ob_time_by_dfm_elems(const ObString &str,
                 // SQL> alter session set time_zone='Asia/Shanghai';
                 // SQL> select cast('01-SEP-20 11.11.11' as timestamp with time zone) from dual;
                 // 01-SEP-20 11.11.11 AM +08:00
-                // 只要format中设置TZH，无论string中是否真的包含TZH，最终的结果都应该显示offset；
-                // 如果sessiontimezone设置的是tz_name需要转为offset。
-                // 因此is_tz_name_valid_置为false的逻辑放在此处而不是成功match之后
+                // As long as TZH is set in format, regardless of whether string actually contains TZH, the final result should display offset;
+                // If sessiontimezone is set to tz_name it needs to be converted to offset.
+                // Therefore the logic for setting is_tz_name_valid_ to false is placed here rather than after a successful match
                 ob_time.is_tz_name_valid_ = false;
                 int32_t value = 0;
                 int32_t local_tz_factor = 1;
@@ -4036,7 +4033,7 @@ int ObTimeConverter::str_to_ob_time_by_dfm_elems(const ObString &str,
                   ObString digits_timezone;
                   parsed_elem_len = ObDFMUtil::UNKNOWN_LENGTH_OF_ELEMENT;
                   if (OB_LIKELY(! ctx.is_parse_finish())) {
-                    // 只要string中tz不是仅仅是'+'或'-'这一个字符，那么转换结果应该是offset，而不是tz_id/name
+                    // As long as tz in string is not just '+' or '-' this one character, then the conversion result should be offset, rather than tz_id/name
                     ob_time.is_tz_name_valid_ = false;
                   }
                   if (OB_UNLIKELY(ctx.is_parse_finish())) {
@@ -4048,7 +4045,7 @@ int ObTimeConverter::str_to_ob_time_by_dfm_elems(const ObString &str,
                     const char *local_sep = ObDFMUtil::find_first_separator(local_ctx);
 
                     if (OB_ISNULL(local_sep)) {
-                      // string中timezone offset可以不含分隔符，仅包含hour部分
+                      // string timezone offset can contain no separator, only the hour part
                     } else {
                       int64_t hour_expected_len = local_sep - digits_timezone.ptr();
                       int64_t local_parsed_len = 0;
@@ -4064,7 +4061,7 @@ int ObTimeConverter::str_to_ob_time_by_dfm_elems(const ObString &str,
                         ret = OB_INVALID_DATE_VALUE; //invalid time zone
                       } else if (FALSE_IT(local_ctx.update(hour_expected_len + 1))) {
                       } else if (OB_UNLIKELY(local_ctx.is_parse_finish())) {
-                        //format 为TZR时，允许string中的tz形式为hour:, 分隔符后为空等价于hour:00
+                        // When format is TZR, allows tz form in string as hour:, with an empty delimiter equivalent to hour:00
                         has_digit_tz_in_TZR = true;
                         tz_hour = tmp_tz_hour;
                         tz_min = tmp_tz_min;
@@ -4116,7 +4113,7 @@ int ObTimeConverter::str_to_ob_time_by_dfm_elems(const ObString &str,
                 } else {
                   MEMCPY(ob_time.tzd_abbr_, tzd_str.ptr(), tzd_str.length());
                   ob_time.tzd_abbr_[tzd_str.length()] = '\0';
-                  //ob_time.is_tz_name_valid_ = true; 只有TZD不能决定是否按照时区名解析, 这个权利是TZR的
+                  //ob_time.is_tz_name_valid_ = true; Only TZR can decide whether to parse according to the timezone name, this right belongs to TZR
                 }
               }
               break;
@@ -4143,8 +4140,8 @@ int ObTimeConverter::str_to_ob_time_by_dfm_elems(const ObString &str,
                                                             tmp_ob_time.parts_[DT_YEAR],
                                                             tmp_ob_time.parts_[DT_YEAR],
                                                             true /* overwrite */))) {
-                // 此处要覆盖，to_date('2', 'YY')把DT_YEAR赋值为2002，这里与之不冲突的julian day转换后的
-                // 年份为0002， 根据oracle行为，结果的年份为0002
+                // Here to be covered, to_date('2', 'YY') sets DT_YEAR to 2002, here the Julian day conversion does not conflict with it
+                // Year is 0002, according to Oracle behavior, the year of the result is 0002
                 LOG_WARN("set ob_time_year conflict", K(ret));
               } else {
                 yday_temp_value = tmp_ob_time.parts_[DT_YDAY];
@@ -4355,7 +4352,7 @@ int ObTimeConverter::str_to_ob_time_by_dfm_elems(const ObString &str,
                 }
               }
               if (OB_UNLIKELY(!ctx.is_valid())) {
-                //year=0 后面验证会报错
+                //year=0 the validation will report an error later
               } else if (OB_FAIL(ObDFMUtil::match_int_value(ctx, expected_elem_len, parsed_elem_len, years, sign))) {
                 LOG_WARN("failed to match int value", K(ret));
               }
@@ -4378,7 +4375,7 @@ int ObTimeConverter::str_to_ob_time_by_dfm_elems(const ObString &str,
             case ObDFMFlag::X: {
               if (OB_UNLIKELY('.' != ctx.cur_ch_[0])) {
                 ignore_fs_flag = true;
-                //revert 就当X没有出现过
+                //revert treat X as if it never appeared
                 ctx.revert(part_blank1_len + part_sep_len + part_blank2_len);
               } else {
                 parsed_elem_len = 1;
@@ -4512,8 +4509,7 @@ int ObTimeConverter::str_to_ob_time_by_dfm_elems(const ObString &str,
 
   return ret;
 }
-
-// oracle模式打印timestamp前，对obtime parts做检查
+// oracle mode print timestamp before, check obtime parts
 bool ObTimeConverter::valid_oracle_year(const ObTime &ob_time)
 {
   int ret = true;
@@ -4580,7 +4576,7 @@ int ObTimeConverter::ob_time_to_str_by_dfm_elems(const ObTime &ob_time,
     int32_t iso_week = 0;
     int32_t iso_year_delta = 0;
     bool is_iso_week_calced = false;
-    //为了避免iso week的重复计算
+    // To avoid duplicate calculation of iso week
     auto calc_iso_week = [&iso_week, &iso_year_delta, &is_iso_week_calced, &ob_time] (void)
     {
       if (!is_iso_week_calced) {
@@ -5282,7 +5278,7 @@ int check_and_get_tz_info(ObTime &ob_time,
   int ret = OB_SUCCESS;
   ObTZInfoMap *tz_info_map = NULL;
   if (OB_UNLIKELY(ob_time.is_tz_name_valid_)) {//use string literal tz_inifo
-    //原则上tz_info_均应该正确赋值，但是当前代码中有一些向datetime的转换，直接传递了值为NULL的tz_info_
+    //In principle, tz_info_ should all be correctly assigned, but there are some conversions to datetime in the current code that directly pass NULL values for tz_info_
     if (NULL == cvrt_ctx.tz_info_) {
       if (HAS_TYPE_ORACLE(ob_time.mode_)) {
         ret = OB_INVALID_ARGUMENT;
@@ -5502,8 +5498,7 @@ int32_t ObTimeConverter::ob_time_to_week(const ObTime &ob_time, ObDTMode mode, i
 }
 ////////////////////////////////
 // below are other utility functions:
-
-//dayofmonth函数需要容忍月、日为0的错误
+//dayofmonth function needs to tolerate errors where month and day are 0
 int ObTimeConverter::validate_datetime(ObTime &ob_time, const ObDateSqlMode date_sql_mode)
 {
   const int32_t *parts = ob_time.parts_;
@@ -5705,9 +5700,8 @@ int ObTimeConverter::set_ob_time_part_may_conflict(ObTime &ob_time, int64_t &con
 
   return ret;
 }
-
-// DT_YEAR的赋值没有用上面的接口，原因是year的冲突检查具有特殊性。
-// 具体原因：
+// The assignment of DT_YEAR does not use the above interface because the conflict check for year has special characteristics.
+// Specific reason:
 int ObTimeConverter::set_ob_time_year_may_conflict(ObTime &ob_time, int32_t &julian_year_value,
                                                   int32_t check_year, int32_t set_year,
                                                   bool overwrite)

@@ -91,15 +91,13 @@ void ObTestKeepAliveMinStartSCN::loop_check_start_scn(SCN &prev_min_start_scn, S
   {
     ObLS *ls = get_ls(RunCtx.tenant_id_, ObLSID(1001));
     ObTxTable *tx_table = ls->get_tx_table();
-
-    // 每100毫秒循环一次，对应tx loop worker的单次循环interval，循环200次，对应20秒
-    // 因为tx loop worker会15秒遍历一次上下文，略大于遍历间隔
+    // Every 100 milliseconds loop once, corresponding to the single loop interval of tx loop worker, loop 200 times, corresponding to 20 seconds
+    // Because tx loop worker will traverse the context every 15 seconds, which is slightly greater than the traversal interval
     int retry_times = 200;
     while (--retry_times >= 0) {
-      // 每次循环都更新tx data table中的min_start_scn
+      // Each loop updates the min_start_scn in the tx data table
       tx_table->update_min_start_scn_info(SCN::max_scn());
-
-      // 判断min_start_scn的大小关系，若出错，打印到stdout
+      // Determine the size relationship of min_start_scn, if an error occurs, print to stdout
       if (prev_min_start_scn > tx_table->ctx_min_start_scn_info_.min_start_scn_in_ctx_) {
         ObCStringHelper helper;
         fprintf(stdout,
@@ -129,12 +127,10 @@ void ObTestKeepAliveMinStartSCN::test_min_start_scn()
 
   SCN prev_min_start_scn = SCN::min_scn();
   SCN prev_keep_alive_scn = SCN::min_scn();
-
-  // 执行循环检查前，先sleep一段时间，确保tx_loop_worker成功做一次遍历，keep_alive日志中会成功写下一次NO_CTX，
-  // 在错误场景下，后续的UNKNOW日志会会修改keep_alive_handler中的keep_alive_scn，但是不会修改status
+  // Execute loop check after sleeping for a while to ensure tx_loop_worker successfully completes one traversal, the keep_alive log will successfully write one NO_CTX,
+  // In the error scenario, subsequent UNKNOW logs will modify keep_alive_handler's keep_alive_scn, but will not modify status
   ::sleep(15);
-
-  // 循环检查并使用keep_alive_handler中的信息更新tx data table中的数据，在错误场景下，min_start_scn会被错误推大
+  // Loop check and use information in keep_alive_handler to update data in tx data table, in error scenarios, min_start_scn may be incorrectly increased
   loop_check_start_scn(prev_min_start_scn, prev_keep_alive_scn);
 
   // create test table
@@ -143,15 +139,13 @@ void ObTestKeepAliveMinStartSCN::test_min_start_scn()
   // insert data and trigger redo log write
   WRITE_SQL_BY_CONN(connection, "begin");
   WRITE_SQL_BY_CONN(connection, "insert into test.test_keep_alive_min_start_scn_t values(1,1)");
-
-  // 由于系统租户设置过_private_buffer_size，所有写入都会立即产生CLOG，事务也拥有了start_scn
-  // 在错误场景下，由于之前min_start_scn已经被错误推大，此时会出现min_start_scn回退
+  // Due to the system tenant setting _private_buffer_size, all writes will immediately generate CLOG, and the transaction also has start_scn
+  // In the error scenario, since min_start_scn was incorrectly pushed forward earlier, it will now appear that min_start_scn is rolling back
   loop_check_start_scn(prev_min_start_scn, prev_keep_alive_scn);
 
   WRITE_SQL_BY_CONN(connection, "commit");
   WRITE_SQL_BY_CONN(connection, "alter system minor freeze");
-
-  // 在事务提交后再做一次检查，确保整个过程中不会有min_start_scn回退
+  // After transaction commit, do one more check to ensure that min_start_scn does not retreat throughout the entire process
   loop_check_start_scn(prev_min_start_scn, prev_keep_alive_scn);
 }
 

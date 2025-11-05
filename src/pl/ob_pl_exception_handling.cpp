@@ -22,7 +22,7 @@ namespace pl
 {
 
 _RLOCAL(_Unwind_Exception*, tl_eptr);
-ObPLException pre_reserved_e(OB_ALLOCATE_MEMORY_FAILED); //预留的exception空间，防止出现没内存的时候抛不出来exception
+ObPLException pre_reserved_e(OB_ALLOCATE_MEMORY_FAILED); // reserved exception space to prevent exceptions from not being thrown when there is no memory
 
 void ObPLEH::eh_debug_int64(const char *name_ptr, int64_t name_len, int64_t object)
 {
@@ -376,7 +376,7 @@ bool ObPLEH::handleActionValue(int64_t *resultAction,
         precedence = cur_pre;
         *resultAction = i + 1;
         ret = true;
-       break; //这里其实不应break，应该寻找precedence最高的，但是我们在前面CG阶段已经把condition已经按precedence排过序了，这里可以break提升效率
+       break; //Here actually should not break, it should find the one with the highest precedence, but we have already sorted the conditions by precedence in the previous CG phase, so we can break here to improve efficiency
       } else { /*do nothing*/ }
     }
 

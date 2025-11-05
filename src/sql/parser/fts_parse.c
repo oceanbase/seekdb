@@ -12,7 +12,7 @@
 
 #include "fts_parse.h"
 #include "ftsblex_lex.h"
-#include "ftsparser_tab.h"  // Bison 生成的头文件
+#include "ftsparser_tab.h"  // Bison generated header file
 
 
 extern int obsql_fts_yyparse(void* yyscanner);
@@ -29,9 +29,9 @@ void fts_parse_docment(const char *input, const int length, void * pool, FtsPars
     ss->charset_info_ = NULL;
     ss->malloc_pool_ = pool;
     obsql_fts_yylex_init_extra(ss, &scanner);
-    YY_BUFFER_STATE bufferState = obsql_fts_yy_scan_bytes(input, length, scanner);  // 读取字符串
+    YY_BUFFER_STATE bufferState = obsql_fts_yy_scan_bytes(input, length, scanner);  // read string
     ss->yyscanner_ = scanner;
-    obsql_fts_yyparse(ss);  // 调用语法分析器
-    obsql_fts_yy_delete_buffer(bufferState, scanner);  // 删除缓冲区
+    obsql_fts_yyparse(ss);  // call the parser
+    obsql_fts_yy_delete_buffer(bufferState, scanner);  // delete buffer
     obsql_fts_yylex_destroy(scanner);
 }

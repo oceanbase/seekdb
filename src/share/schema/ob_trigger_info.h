@@ -662,10 +662,10 @@ protected:
   ObPackageInfo package_body_info_;
   uint64_t sql_mode_;
   common::ObString priv_user_;
-  OrderType order_type_;                    // trigger指定的排序方式
-  common::ObString ref_trg_db_name_;              // 排序方式中指定的trigger的db name
-  common::ObString ref_trg_name_;                 // 排序方式中指定的trigger的name
-  int64_t action_order_;                          // 该值在rs端计算,从系统表里面读出来的值是有意义的
+  OrderType order_type_;                    // sorting method specified by trigger
+  common::ObString ref_trg_db_name_;              // db name of the trigger specified in the sorting method
+  common::ObString ref_trg_name_;                 // The name of the trigger specified in the sorting method
+  int64_t action_order_;                          // This value is calculated on the rs side, and the value read from the system table is meaningful.
   union {
     uint64_t analyze_flag_;
     struct {

@@ -50,8 +50,7 @@ TEST_F(TestObThreadLease, smoke_test)
   ASSERT_EQ(ObThreadLease::HANDLING, lease.value());
   ASSERT_EQ(true, lease.revoke());
   ASSERT_EQ(ObThreadLease::IDLE, lease.value());
-
-  // 直接revoke，期望返回成功
+  // Directly revoke, expect to return success
   ASSERT_EQ(true, lease.revoke());
   ASSERT_EQ(ObThreadLease::IDLE, lease.value());
 }
@@ -64,36 +63,28 @@ TEST_F(TestObThreadLease, simulate_multi_thread)
   for (int64_t i = 0; i < 100; i++) {
     ASSERT_EQ(true, lease.acquire());
     ASSERT_EQ(ObThreadLease::HANDLING, lease.value());
-
-    // 再次acquire，期望失败，状态变更为READY
+    // acquire again, expect failure, status change to READY
     ASSERT_EQ(false, lease.acquire());
     ASSERT_EQ(ObThreadLease::READY, lease.value());
-
-    // 再次acquire，期望失败，状态变更为READY
+    // acquire again, expect failure, status change to READY
     ASSERT_EQ(false, lease.acquire());
     ASSERT_EQ(ObThreadLease::READY, lease.value());
-
-    // 再次acquire，期望失败，状态变更为READY
+    // acquire again, expect failure, status change to READY
     ASSERT_EQ(false, lease.acquire());
     ASSERT_EQ(ObThreadLease::READY, lease.value());
-
-    // revoke一次，期望失败，状态变更为HANDLING
+    // revoke once, expect failure, status change to HANDLING
     ASSERT_EQ(false, lease.revoke());
     ASSERT_EQ(ObThreadLease::HANDLING, lease.value());
-
-    // 再次acquire，期望失败，状态变更为READY
+    // acquire again, expect failure, status change to READY
     ASSERT_EQ(false, lease.acquire());
     ASSERT_EQ(ObThreadLease::READY, lease.value());
-
-    // 再次acquire，期望失败，状态变更为READY
+    // acquire again, expect failure, status change to READY
     ASSERT_EQ(false, lease.acquire());
     ASSERT_EQ(ObThreadLease::READY, lease.value());
-
-    // revoke一次，期望失败，状态变更为HANDLING
+    // revoke once, expect failure, status changes to HANDLING
     ASSERT_EQ(false, lease.revoke());
     ASSERT_EQ(ObThreadLease::HANDLING, lease.value());
-
-    // 再次revoke，期望成功，状态变更为IDLE
+    // Again revoke, expect success, status change to IDLE
     ASSERT_EQ(true, lease.revoke());
     ASSERT_EQ(ObThreadLease::IDLE, lease.value());
   }

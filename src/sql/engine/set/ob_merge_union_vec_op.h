@@ -67,7 +67,7 @@ private:
     }
     int64_t op_idx_;
     const ObBatchRows *child_op_brs_;
-    ObBatchRows result_op_brs_; // 表示batch内去重后的结果
+    ObBatchRows result_op_brs_; // indicates the deduplicated result within the batch
     bool op_added_;
   };
   typedef int (ObMergeUnionVecOp::*GetNextRowFunc)();

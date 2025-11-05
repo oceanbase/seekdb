@@ -27,12 +27,12 @@ namespace coordinator
 enum class FailureType
 {
   INVALID_FAILURE = 0,
-  FATAL_ERROR_OCCUR = 1,// 致命错误，通常是在防御性代码中发现了bug
-  RESOURCE_NOT_ENOUGH = 2,// 资源不足，如磁盘与内存，通常为环境原因所致
-  PROCESS_HANG = 3,// 流程阻塞，发现某主要流程一直不结束或者不断重试却不能成功
-  MAJORITY_FAILURE = 4,// 多数派异常，如副本的网络与多数派断连
+  FATAL_ERROR_OCCUR = 1,// Fatal error, usually a bug is found in defensive code
+  RESOURCE_NOT_ENOUGH = 2,// Resource insufficient, such as disk and memory, usually caused by environmental factors
+  PROCESS_HANG = 3,// Process blocking, a major process is found to never end or keep retrying without success
+  MAJORITY_FAILURE = 4,// Majority failure, such as a replica's network disconnecting from the majority
   SCHEMA_NOT_REFRESHED = 5, // sql may failed when tenant schema not refreshed yet
-  ENTER_ELECTION_SILENT = 6, // 副本进入选举静默状态
+  ENTER_ELECTION_SILENT = 6, // Replica enters election silent state
 };
 
 enum class FailureModule
@@ -48,9 +48,9 @@ enum class FailureModule
 enum class FailureLevel
 {
   UNKNOWN_LEVEL = 0,
-  FATAL = 1,// 该级别的异常是非预期的，是在防御性代码中发现致命错误汇报上来的，具有比SERIOUS_FAILURE更高的切主优先级
-  SERIOUS = 2,// 该级别的异常是预期内的，常为环境因素所致，出现此种异常将触发切主
-  NOTICE = 3,// 该级别的异常只用作展示，在内部表中显示出来展示给用户，但是不会影响选举的优先级，也不会触发切主
+  FATAL = 1,// This level of exception is unexpected and is reported from defensive code indicating a critical error, with a higher leader-follower switch priority than SERIOUS_FAILURE
+  SERIOUS = 2,// This level of exception is expected, often caused by environmental factors, and the occurrence of such an exception will trigger a leader switch
+  NOTICE = 3,// This level of exception is only used for display, shown in the internal table to the user, but will not affect the election priority, nor will it trigger a leader switch
 };
 
 inline const char *obj_to_cstring(FailureType type)

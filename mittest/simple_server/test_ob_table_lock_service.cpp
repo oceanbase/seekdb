@@ -35,7 +35,7 @@ using namespace oceanbase::storage;
 class ObTableLockServiceTest : public ObSimpleClusterTestBase
 {
 public:
-  // 指定case运行目录前缀 test_ob_simple_cluster_
+  // Specify the case run directory prefix test_ob_simple_cluster_
   ObTableLockServiceTest() : ObSimpleClusterTestBase("test_ob_lock_service_") {}
   void get_table_id(const char* tname, uint64_t &table_id);
   void get_lock_owner(const char* where_cond, int64_t &raw_owner_id);

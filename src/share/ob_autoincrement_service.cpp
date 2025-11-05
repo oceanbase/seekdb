@@ -1609,7 +1609,7 @@ int ObAutoincrementService::calc_next_value(const uint64_t last_next_value,
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(increment <= 0)) {
-    //这里有除0错误，需要防御检查
+    //There is a division by zero error, need defensive check
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("increment is invalid", K(ret), K(increment));
   } else {

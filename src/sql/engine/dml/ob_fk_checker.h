@@ -103,14 +103,14 @@ private:
                            const ObPrecision dst_precision,
                            bool &need_extra_cast);
 public:
-  ObEvalCtx &eval_ctx_; // 用于表达式的计算
+  ObEvalCtx &eval_ctx_; // used for expression evaluation
   ObDASScanRtDef das_scan_rtdef_;
-  // 存储计算table loc以及构造das-task需要的分区键，主键expr等
+  // Store calculation table loc and the partition key, primary key expr, etc., needed for constructing das-task
   const ObForeignKeyCheckerCtdef  &checker_ctdef_;
-  // 外键检查回表构造das-task用
+  // Foreign key check back-table construction for das-task use
   ObDASRef das_ref_;
   ObDASTableLoc *table_loc_;
-  ObDASTabletLoc *local_tablet_loc_; //用于外键检查的表是非分区表的时候用
+  ObDASTabletLoc *local_tablet_loc_; // The table used for foreign key check is a non-partitioned table when used
   SeRowkeyDistCtx *se_rowkey_dist_ctx_;
   ObRowkey table_rowkey_;
   int64_t batch_distinct_fk_cnt_;

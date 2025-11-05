@@ -519,8 +519,7 @@ void TestResolver::do_expand_view_test() {
     }
     UNUSED(w);
     if (line.at(0) == '\r' || line.at(0) == '\n' ) continue;
-
-    // @nijia.nj 为了方便加case，这里硬编码，任何一条语句执行之前都跑一次‘drop view if exists v’
+    // @nijia.nj For convenience to add cases, hard coding here, run 'drop view if exists v' once before any statement is executed
     do_load_sql("drop view if exists v", stmt, is_print, TREE_FORMAT, expect_error);
     allocator_.reset();
     stmt_factory_.destory();

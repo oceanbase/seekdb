@@ -151,7 +151,7 @@ int ObSubPlanFilterVecOp::switch_iterator()
   if (OB_FAIL(ObOperator::inner_switch_iterator())) {
     LOG_WARN("failed to inner switch iterator", K(ret));
   } else if (OB_FAIL(child_->switch_iterator())) {
-    //TODO: 目前只支持对非相关子查询做多组迭代器切换，只切换主表
+    //TODO: Currently only supports multi-group iterator switch for non-correlated subqueries, only switches the main table
     if (OB_ITER_END != ret) {
       LOG_WARN("switch child operator iterator failed", K(ret));
     }
@@ -183,7 +183,7 @@ int ObSubPlanFilterVecOp::init_subplan_iters()
         iter->set_parent(this);
         if (MY_SPEC.init_plan_idxs_.has_member(i)) {
           iter->set_init_plan();
-          //init plan 移到get_next_row之后
+          //init plan move to get_next_rowafter
         } else if (MY_SPEC.one_time_idxs_.has_member(i)) {
           iter->set_onetime_plan();
         } else if (!MY_SPEC.enable_px_batch_rescans_.empty() &&

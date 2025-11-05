@@ -33,7 +33,7 @@ int ObInitSqcP::init()
     op_reclaim_free(sqc_handler);
   } else {
     arg_.sqc_handler_ = sqc_handler;
-    arg_.sqc_handler_->reset_reference_count(); //设置sqc_handler的引用计数为1.
+    arg_.sqc_handler_->reset_reference_count(); // Set sqc_handler reference count to 1.
   }
   return ret;
 }
@@ -42,9 +42,9 @@ void ObInitSqcP::destroy()
 {
   obrpc::ObRpcProcessor<obrpc::ObPxRpcProxy::ObRpc<obrpc::OB_PX_ASYNC_INIT_SQC> >::destroy();
   /**
-   * 如果经历了after process这个流程，arg_.sqc_handler_会被置为空。
-   * 如果这里arg_.sqc_handler_不为空，则意味着，init以后，没有进行
-   * after process这个流程，那么就应当由自己来做释放。
+   * If the after process flow has been undergone, arg_.sqc_handler_ will be set to null.
+   * If arg_.sqc_handler_ is not null here, it means that the after process flow has not been
+   * performed after init, so the release should be done by itself.
    */
   if (OB_NOT_NULL(arg_.sqc_handler_)) {
     int report_ret = OB_SUCCESS;
@@ -60,8 +60,8 @@ int ObInitSqcP::process()
   ObPxSqcHandler *sqc_handler = arg_.sqc_handler_;
   result_.sqc_order_gi_tasks_ = true;
   /**
-   * 只要能进process，after process一定会被调用，所以可以用中断覆盖整个
-   * SQC的生命周期。
+   * As long as it can enter process, after process will definitely be called, so interruption can cover the entire
+   * SQC lifecycle.
    */
   if (OB_NOT_NULL(sqc_handler)) {
     ObPxRpcInitSqcArgs &arg = sqc_handler->get_sqc_init_arg();
@@ -121,12 +121,11 @@ int ObInitSqcP::process()
     ObPxSqcHandler::release_handler(sqc_handler, report_ret);
     arg_.sqc_handler_ = nullptr;
   }
-
-  // 非rpc框架的错误内容设置到response消息中
-  // rpc框架的错误码在process中返回OB_SUCCESS
+  // Non-rpc framework error content set to response message
+  // rpc framework error code returns OB_SUCCESS in process
   result_.rc_ = ret;
-  // 异步逻辑处理接口，总返回OB_SUCCESS，逻辑处理中的错误码
-  // 通过result_.rc_返回
+  // Asynchronous logic processing interface, always returns OB_SUCCESS, error codes during logic processing
+  // Return through result_.rc_
   return OB_SUCCESS;
 }
 
@@ -172,8 +171,8 @@ int ObInitSqcP::startup_normal_sqc(ObPxSqcHandler &sqc_handler)
       LOG_WARN("fail process sqc", K(arg), K(ret));
     } else if (OB_FAIL(sub_coord.try_start_tasks(dispatched_worker_count))) {
       /**
-       * 启动部分worker失败的时候，我们这里主动将已经启动的worker中断掉。
-       * 这个操作是阻塞的，中断成功后，后续直接释放sqc handler。
+       * When starting some workers fails, we proactively interrupt the already started workers.
+       * This operation is blocking, and after successful interruption, the sqc handler is released directly.
        */
       LOG_WARN("Notity all dispatched worker to exit", K(ret), K(dispatched_worker_count));
       sub_coord.notify_dispatched_task_exit(dispatched_worker_count);
@@ -181,9 +180,9 @@ int ObInitSqcP::startup_normal_sqc(ObPxSqcHandler &sqc_handler)
     } else {
       sqc_handler.get_notifier().wait_all_worker_start();
       /**
-       * 检查中断，如果自己这边已收到中断，传递给各个worker，避免worker掉中断。
-       * process流程一旦结束，sqc就可能收到中断，但是此时worker不一定注册了中断，
-       * 所以这是sqc需要将中断传递给各个worker。
+       * Check interrupt, if an interrupt has been received on our side, pass it to each worker to avoid interrupt loss.
+       * Once the process flow ends, sqc may receive an interrupt, but at this point, the workers may not have registered for interrupts,
+       * so this is why sqc needs to pass the interrupt to each worker.
        */
       sqc_handler.check_interrupt();
       sqc_handler.worker_end_hook();
@@ -201,7 +200,7 @@ int ObInitSqcP::after_process(int error_code)
   bool no_need_startup_normal_sqc = (OB_SUCCESS != result_.rc_);
   if (no_need_startup_normal_sqc) {
     /**
-     *  rc_不等于OB_SUCCESS，不再进行sqc的流程，直接在最后面去进行sqc的释放。
+     *  rc_ not equal to OB_SUCCESS, no longer proceed with the sqc process, directly release the sqc at the end.
      */
   } else if (OB_ISNULL(sqc_handler = arg_.sqc_handler_)
              || !sqc_handler->valid()) {
@@ -217,7 +216,7 @@ int ObInitSqcP::after_process(int error_code)
     sqc_handler->set_tenant_id(sqc_handler->get_exec_ctx().get_my_session()->get_effective_tenant_id());
     ObPxRpcInitSqcArgs &arg = sqc_handler->get_sqc_init_arg();
     /**
-     * 根据 arg_ 参数来获取本机线程，并执行 task
+     * Get the local thread according to arg_ parameter and execute task
      */
     LOG_TRACE("process dfo", K(arg), K(session->get_compatibility_mode()), K(sqc_handler->get_reserved_px_thread_count()));
     ret = startup_normal_sqc(*sqc_handler);
@@ -226,11 +225,11 @@ int ObInitSqcP::after_process(int error_code)
 
   GET_DIAGNOSTIC_INFO->get_ash_stat().in_px_execution_ = false;
   /**
-   * 此处需要清理中断，并把分配的线程数和handler释放.
-   * worker正常启动后，此时它的引用计数被更新成了
-   * worker数量＋rpc，release_handler会做减掉一个引用计数，最后一个引用计数的人
-   * 会真正的对sqc handler进行释放。
-   * 最后一个工作线程，需要释放内存;
+   * Here we need to clean up interrupts and release the allocated number of threads and handler.
+   * After the worker starts normally, its reference count is updated to
+   * the number of workers plus rpc, release_handler will subtract one reference count, and the last one to hold a reference count
+   * will truly release the sqc handler.
+   * The last worker thread needs to release memory;
    */
   if (!no_need_startup_normal_sqc) {
     if (unregister_interrupt_) {
@@ -252,8 +251,7 @@ int ObInitSqcP::after_process(int error_code)
   }
   return ret;
 }
-
-// 已经未使用了，后续移除
+// Already unused, to be removed later
 int ObInitTaskP::init()
 {
   return OB_NOT_SUPPORTED;
@@ -261,7 +259,7 @@ int ObInitTaskP::init()
 
 int ObInitTaskP::process()
 {
-  // 根据 arg_ 参数来获取本机线程，并执行 task
+  // According to arg_ parameter to get the local thread and execute task
   return OB_NOT_SUPPORTED;
 }
 
@@ -278,9 +276,9 @@ void ObFastInitSqcReportQCMessageCall::operator()(hash::HashMapPair<ObInterrupti
   if (OB_NOT_NULL(sqc_)) {
     if (sqc_->is_ignore_vtable_error() && err_ != OB_SUCCESS
         && ObVirtualTableErrorWhitelist::should_ignore_vtable_error(err_)) {
-      // 当该SQC是虚拟表查询时, 调度RPC失败时需要忽略错误结果.
-      // 并mock一个sqc finsh msg发送给正在轮询消息的PX算子
-      // 此操作已确认是线程安全的.
+      // When this SQC is a virtual table query, the RPC scheduling failure needs to ignore the error result.
+      // and mock a sqc finish msg sending to the PX operator that is polling messages
+      // This operation has been confirmed to be thread-safe.
       mock_sqc_finish_msg();
     } else {
       sqc_->set_need_report(false);
@@ -344,7 +342,7 @@ int ObFastInitSqcReportQCMessageCall::mock_sqc_finish_msg()
   }
   return ret;
 }
-// ObInitFastSqcP相关函数.
+// ObInitFastSqcP related functions.
 int ObInitFastSqcP::init()
 {
   int ret = OB_SUCCESS;
@@ -358,7 +356,7 @@ int ObInitFastSqcP::init()
     op_reclaim_free(sqc_handler);
   } else {
     arg_.sqc_handler_ = sqc_handler;
-    arg_.sqc_handler_->reset_reference_count(); //设置sqc_handler的引用计数为1.
+    arg_.sqc_handler_->reset_reference_count(); // Set sqc_handler reference count to 1.
   }
   return ret;
 }
@@ -367,9 +365,9 @@ void ObInitFastSqcP::destroy()
 {
   obrpc::ObRpcProcessor<obrpc::ObPxRpcProxy::ObRpc<obrpc::OB_PX_FAST_INIT_SQC> >::destroy();
   /**
-   * 如果经历了after process这个流程，arg_.sqc_handler_会被置为空。
-   * 如果这里arg_.sqc_handler_不为空，则意味着，init以后，没有进行
-   * after process这个流程，那么就应当由自己来做释放。
+   * If the after process flow has been undergone, arg_.sqc_handler_ will be set to null.
+   * If arg_.sqc_handler_ is not null here, it means that the after process flow has not been
+   * performed after init, so the release should be done by itself.
    */
   if (OB_NOT_NULL(arg_.sqc_handler_)) {
     int report_ret = OB_SUCCESS;
@@ -427,9 +425,9 @@ int ObInitFastSqcP::process()
 
   GET_DIAGNOSTIC_INFO->get_ash_stat().in_sql_execution_ = false;
   if (OB_NOT_NULL(sqc_handler)) {
-    // link channel之前或者link过程可能会失败.
-    // 如果sqc和qc没有link, 由response将 ret 通知给px.
-    // 如果sqc和qc已经link, 由dtl msg report通知px.
+    // link channel before or during the link process may fail.
+    // If sqc and qc do not have a link, the response will notify px of ret.
+    // If sqc and qc are already linked, notify px by dtl msg report.
     sqc_handler->set_end_ret(ret);
     if (sqc_handler->has_flag(OB_SQC_HANDLER_QC_SQC_LINKED)) {
       ret = OB_SUCCESS;
@@ -550,8 +548,8 @@ void ObDealWithRpcTimeoutCall::deal_with_rpc_timeout_err()
 {
   if (OB_TIMEOUT == ret_) {
     int64_t cur_timestamp = ::oceanbase::common::ObTimeUtility::current_time();
-    // 由于存在时间精度不一致导致的时间差, 这里需要满足大于100ms才认为不是超时.
-    // 一个容错的处理.
+    // Due to the time difference caused by inconsistent time precision, here we need to satisfy greater than 100ms to be considered not a timeout.
+    // A fault-tolerant processing.
     if (timeout_ts_ - cur_timestamp > 100 * 1000) {
       LOG_DEBUG("rpc return OB_TIMEOUT, but it is actually not timeout, "
                 "change error code to OB_CONNECT_ERROR", K(ret_),
@@ -584,8 +582,7 @@ void ObPxTenantTargetMonitorP::destroy()
 {
 
 }
-
-// leader 接收各个 follower 的资源汇报，并将 leader 看到的最新视图作为结果返回给 follower
+// leader receives resource reports from each follower, and returns the latest view seen by the leader as the result to the follower
 int ObPxTenantTargetMonitorP::process()
 {
   int ret = OB_SUCCESS;

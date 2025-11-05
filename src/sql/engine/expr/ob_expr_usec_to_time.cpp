@@ -41,7 +41,7 @@ int ObExprUsecToTime::calc_result_type1(ObExprResType &type,
 
   } else {
     type.set_timestamp();
-    type.set_scale(common::MAX_SCALE_FOR_TEMPORAL); //和时间值有关，取最大值
+    type.set_scale(common::MAX_SCALE_FOR_TEMPORAL); // related to temporal value, take the maximum value
     //set calc type
     usec.set_calc_type(ObIntType);
   }

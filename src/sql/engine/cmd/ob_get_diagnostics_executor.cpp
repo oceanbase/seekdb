@@ -270,7 +270,7 @@ int ObGetDiagnosticsExecutor::get_condition_num(ObExecContext &ctx, ObGetDiagnos
 
   CK(OB_NOT_NULL(session_info));
   if (0 == stmt.get_params().count()) {
-    /* 发生了OB_ERR_BAD_FIELD_ERROR错误，但是语句能够正常执行 */
+    /* An OB_ERR_BAD_FIELD_ERROR error occurred, but the statement can still execute normally */
     ret = OB_ERR_BAD_FIELD_ERROR;
   } else {
     CK (stmt.get_params().count() == stmt.get_info_argument().count() + 1);
@@ -474,7 +474,7 @@ int ObGetDiagnosticsExecutor::execute(ObExecContext &ctx, ObGetDiagnosticsStmt &
                     static_cast<int32_t>(scope_name.length()), scope_name.ptr());
     } else if (OB_FAIL(ret)) {
       LOG_WARN("unexpected error", K(ret));
-    } else if (restored_arg > 1) { /* todo:hr-当前stack诊断区只支持存一条信息 */
+    } else if (restored_arg > 1) { /* todo:hr-the current stack diagnostic area only supports storing one piece of information */
       LOG_TRACE("type ok but out of range", K(restored_arg));
       LOG_USER_WARN(OB_ERR_INVALID_CONDITION_NUMBER);
     } else {

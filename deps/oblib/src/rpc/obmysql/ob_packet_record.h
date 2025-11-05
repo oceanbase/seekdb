@@ -25,8 +25,8 @@ namespace obmysql
 
 struct ResRecordFlags {
   uint8_t is_send_: 1; // 0-send, 1-receive
-  uint8_t processed_: 1; // 请求处理结束，发送包后将会标记该位。
-  uint8_t reservered_: 8; // 其余位用于特殊标记
+  uint8_t processed_: 1; // Request processing finished, this bit will be marked after sending the packet.
+  uint8_t reservered_: 8; // The remaining bits are used for special markers
 };
 
 struct Obp20Header {
@@ -65,9 +65,9 @@ struct Obp20Header {
 struct ObpMysqHeader {
   union {
     uint32_t len_;
-    uint32_t pkt_num_; // 表示row packet/feild packet的数量。
+    uint32_t pkt_num_; // indicates the number of row packets/field packets.
   } mysql_header_;
-  uint32_t rec_; // 表示目前收到多少byte的mysql包。
+  uint32_t rec_; // indicates how many bytes of the mysql packet have been received.
   uint32_t com_len_; // compress head len
   uint8_t seq_;
   uint8_t type_;

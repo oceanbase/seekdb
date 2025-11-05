@@ -77,8 +77,8 @@ private:
   virtual bool is_timestamp(int64_t index) const;
 protected:
   int64_t op_id_;
-  int64_t job_id_; //在分布式执行计划时有效
-  int64_t task_id_; //在分布式执行计划时有效
+  int64_t job_id_; // valid during distributed execution plan
+  int64_t task_id_; // valid during distributed execution plan
 private:
   ObPhyOperatorType op_type_;
   uint64_t info_array_[OB_MAX_INFORMATION_COUNT];

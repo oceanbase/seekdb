@@ -87,8 +87,7 @@ public:
 private:
   value_ptr_t value_ptr_;
 };
-
-// 由于allocator不是ObTableLoadArray自有的, 所以这里不能通过引用计数释放成员
+// Since allocator is not owned by ObTableLoadArray, members cannot be released through reference counting here
 template <class T>
 class ObTableLoadArray final
 {
@@ -161,8 +160,7 @@ public:
     is_ref_ = true;
     return ret;
   }
-
-  // 转移所有权
+  // Transfer ownership
   int move_to(ObTableLoadArray &dest)
   {
     int ret = common::OB_SUCCESS;
@@ -198,8 +196,7 @@ public:
   const_iterator begin() const { return const_iterator(ptr_); }
   const_iterator end() const { return const_iterator(ptr_ + count_); }
   common::ObIAllocator *get_allocator() const { return allocator_; }
-
-  // 获取一份引用
+  // Get a reference
   ObTableLoadArray &operator=(const ObTableLoadArray &rhs)
   {
     reset();
@@ -247,7 +244,7 @@ private:
   int64_t count_;
   T *ptr_;
   common::ObIAllocator *allocator_;
-  bool is_ref_; // 是否是引用, 不参与序列化
+  bool is_ref_; // whether it is a reference, does not participate in serialization
 };
 
 template <class T>

@@ -56,7 +56,7 @@ int ObAllVirtualWeakReadStat::inner_get_next_row(ObNewRow *&row)
       all_tenants.set_label(ObModIds::OB_TENANT_ID_LIST);
       GCTX.omt_->get_tenant_ids(all_tenants);
       for (int64_t index = 0; OB_SUCCESS == ret && index < all_tenants.size(); index++) {
-        //对每个租户，切换租户上下文，获得列数据
+        // For each tenant, switch tenant context to obtain column data
         tenant_id = all_tenants[index];
         char self_ip_buf[common::OB_IP_STR_BUFF];
         char master_ip_buf[common::OB_IP_STR_BUFF];

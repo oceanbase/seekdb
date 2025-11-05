@@ -42,7 +42,7 @@ int ObTransformTempTable::transform_one_stmt(common::ObIArray<ObParentDMLStmt> &
 {
   int ret = OB_SUCCESS;
   bool is_happened = false;
-  //当前stmt是root stmt时才改写
+  // Current stmt is root stmt when rewriting
   if (parent_stmts.empty()) {
     is_happened = false;
     void *buf = NULL;
@@ -185,8 +185,8 @@ int ObTransformTempTable::generate_with_clause(ObDMLStmt *&stmt, bool &trans_hap
 
 /**
  * @brief expand_temp_table
- * 尝试基于规则和代价的 inline 判定
- * 规则：单表无聚合，只被引用一次，不满足物化条件...
+ * Attempt rule and cost-based inline determination
+ * Rule: Single table with no aggregation, referenced only once, does not meet materialization conditions...
  */
 int ObTransformTempTable::try_inline_temp_table(ObDMLStmt *stmt, 
                                                 ObIArray<TempTableInfo> &temp_table_info,
@@ -275,7 +275,7 @@ int ObTransformTempTable::try_inline_temp_table(ObDMLStmt *stmt,
     } else if (!need_inline) {
       // do nothing
     } else {
-      //深拷贝每一份查询，还原成generate table
+      // Deep copy each query, restore to generate table
       ObDMLStmt *orig_stmt = helper.temp_table_query_;
       if (OB_FAIL(ObTransformUtils::inline_temp_table(ctx_, helper))) {
         LOG_WARN("failed to extend temp table", K(ret));
@@ -299,7 +299,7 @@ int ObTransformTempTable::check_stmt_can_materialize(ObSelectStmt *stmt, bool is
     LOG_WARN("unexpect null", K(ret));
   } else if (0 == stmt->get_table_items().count() &&
              !stmt->is_set_stmt()) {
-    //expression stmt不允许物化
+    //expression stmt does not allow materialization
     is_valid = false;
     OPT_TRACE("expression stmt can not materialize")
   } else if (1 == stmt->get_table_items().count()) {
@@ -354,7 +354,7 @@ int ObTransformTempTable::check_stmt_has_cross_product(ObSelectStmt *stmt, bool 
     LOG_WARN("unexpect null stmt", K(ret));
   } else if (stmt->is_set_stmt()) {
     ObIArray<ObSelectStmt*> &set_query = stmt->get_set_query();
-    //继续检查set op的每个分支
+    // Continue checking each branch of set op
     for (int64_t i = 0; OB_SUCC(ret) && !has_cross_product && i < set_query.count(); ++i) {
       if (OB_FAIL(SMART_CALL(check_stmt_has_cross_product(set_query.at(i),
                                                           has_cross_product)))) {
@@ -369,7 +369,7 @@ int ObTransformTempTable::check_stmt_has_cross_product(ObSelectStmt *stmt, bool 
     LOG_WARN("failed to get on conditions", K(ret));
   } else {
     ObIArray<ObRawExpr*> &where_conditions = stmt->get_condition_exprs();
-    //收集连接条件引用的所有表
+    // Collect all tables referenced by the connection conditions
     for (int64_t i = 0; OB_SUCC(ret) && i < where_conditions.count(); ++i) {
       ObRawExpr *expr = where_conditions.at(i);
       if (OB_ISNULL(expr)) {
@@ -411,7 +411,7 @@ int ObTransformTempTable::check_stmt_has_cross_product(ObSelectStmt *stmt, bool 
         }
       }
     }
-    //如果有表没有被连接条件引用，说明有笛卡尔积出现
+    // If there are tables not referenced by join conditions, it indicates that a Cartesian product has occurred
     for (int64_t i = 0; OB_SUCC(ret) && !has_cross_product && i < stmt->get_table_items().count(); ++i) {
       TableItem *table = stmt->get_table_item(i);
       if (OB_ISNULL(table)) {
@@ -451,8 +451,8 @@ int ObTransformTempTable::check_has_for_update(const ObDMLStmt::TempTableInfo &h
 
 /**
  * @brief extract_common_table_expression
- * 比较当前stmt的所有child stmt，
- * 把所有相似的stmt分为一组，抽离最大的公共部分作为temp table
+ * Compare all child stmts of the current stmt,
+ * group all similar stmts together, and extract the largest common part as a temp table
  */
 int ObTransformTempTable::extract_common_table_expression(ObDMLStmt *stmt,
                                                          ObIArray<ObSelectStmt*> &stmts,
@@ -472,7 +472,7 @@ int ObTransformTempTable::extract_common_table_expression(ObDMLStmt *stmt,
   } else if (OB_FAIL(classify_stmts(stmts, stmt_groups))) {
     LOG_WARN("failed to sort stmts", K(ret));
   }
-  //对每一组stmt抽离公共部分
+  // Extract common parts for each group of stmt
   for (int64_t i = 0; OB_SUCC(ret) && i < stmt_groups.count(); ++i) {
     bool is_happened = false;
     if (OB_FAIL(inner_extract_common_table_expression(*stmt,
@@ -497,8 +497,8 @@ int ObTransformTempTable::extract_common_table_expression(ObDMLStmt *stmt,
 
 /**
  * @brief inner_extract_common_table_expression
- * stmt之间两两比较，分成多个相似组，
- * 对每组相似stmt创建temp table
+ * compare each pair of stmts, divide them into multiple similar groups,
+ * create temp table for each group of similar stmts
  */
 int ObTransformTempTable::inner_extract_common_table_expression(ObDMLStmt &root_stmt,
                                                                ObIArray<ObSelectStmt*> &stmts,
@@ -584,7 +584,7 @@ int ObTransformTempTable::inner_extract_common_table_expression(ObDMLStmt &root_
       }
     }
   }
-  //对每组相似stmt创建temp table
+  // Create temp table for each group of similar stmt
   for (int64_t i = 0; OB_SUCC(ret) && i < compare_infos.count(); ++i) {
     StmtCompareHelper *helper = compare_infos.at(i);
     bool is_happened = false;
@@ -1053,10 +1053,10 @@ int ObTransformTempTable::remove_simple_stmts(ObIArray<ObSelectStmt*> &stmts)
 
 /**
  * @classify_stmts
- * 为了降低stmt比较的代价，
- * 把stmt按照table size、generate table size分组，
- * 每组stmt的basic table item size和generate table size相同
- * 因为不同table item的stmt之间一定不相似
+ * To reduce the cost of stmt comparison,
+ * group stmt by table size, generate table size,
+ * each group of stmt has the same basic table item size and generate table size
+ * Because stmts with different table items are certainly not similar
  */
 int ObTransformTempTable::classify_stmts(ObIArray<ObSelectStmt*> &stmts,
                                         ObIArray<StmtClassifyHelper> &stmt_groups)
@@ -1108,7 +1108,7 @@ int ObTransformTempTable::classify_stmts(ObIArray<ObSelectStmt*> &stmts,
 
 /**
  * @create_temp_table
- * 把相似stmt的公共部分抽离成temp table
+ * Extract the common part of similar stmt into temp table
  */
 
 int ObTransformTempTable::create_temp_table(ObDMLStmt &root_stmt,
@@ -1173,7 +1173,7 @@ int ObTransformTempTable::create_temp_table(ObDMLStmt &root_stmt,
     is_valid = false;
     OPT_TRACE("Only one valid stmt, do not transform");
   }
-  //把stmt的公共部分封装成generate table
+  // Encapsulate the common part of stmt into generate table
   for (int64_t i = 0; OB_SUCC(ret) && is_valid && i < origin_stmts.count(); ++i) {
     ObSelectStmt *similar_stmt = origin_stmts.at(i);
     ObDMLStmt *dml_stmt = NULL;
@@ -1189,7 +1189,7 @@ int ObTransformTempTable::create_temp_table(ObDMLStmt &root_stmt,
       LOG_WARN("failed to replace temp table", K(ret));
     }
   }
-  //把generate table转成temp table
+  // Convert generate table to temp table
   for (int64_t i = 0; OB_SUCC(ret) && is_valid && i < trans_stmts.count(); ++i) {
     ObSelectStmt *stmt = trans_stmts.at(i);
     if (OB_ISNULL(stmt)) {
@@ -1305,7 +1305,7 @@ int ObTransformTempTable::create_temp_table(ObDMLStmt &root_stmt,
 
 /**
  * @brief compute_common_map_info
- * 计算相似stmt的最大公共部分
+ * Calculate the maximum common part of similar stmt
  */
 int ObTransformTempTable::compute_common_map_info(ObIArray<ObStmtMapInfo>& map_infos,
                                                   ObStmtMapInfo &common_map_info)
@@ -1328,8 +1328,8 @@ int ObTransformTempTable::compute_common_map_info(ObIArray<ObStmtMapInfo>& map_i
       }
       //compute common group by map
       if (OB_SUCC(ret)) {
-        //只有当where condition完全相同时才能考虑下压group by到temp table
-        //TODO:当前不相同的condition可以推迟到having执行时也可以下压group by
+        // Only when the where condition is completely the same can we consider pushing down group by to temp table
+        //TODO:The current different conditions can be deferred to when having is executed or pushed down to group by
         if (common_map_info.is_cond_equal_) {
           if (OB_FAIL(compute_common_map(map_info.group_map_, common_map_info.group_map_))) {
             LOG_WARN("failed to compute common map info", K(ret));
@@ -1399,7 +1399,7 @@ int ObTransformTempTable::compute_common_map(ObIArray<int64_t> &source_map,
 
 /**
  * @brief inner_create_temp_table
- * 把stmt的公共部分封装在generate table内
+ * Encapsulate the common part of stmt within generate table
  */
 int ObTransformTempTable::inner_create_temp_table(ObSelectStmt *parent_stmt,
                                                   ObStmtMapInfo& map_info,
@@ -1434,14 +1434,14 @@ int ObTransformTempTable::inner_create_temp_table(ObSelectStmt *parent_stmt,
     } else if (!common_map_info.is_cond_equal_ ||
               !common_map_info.is_group_equal_) {
       //do nothing
-      //下压group by
+      // push down group by
     } else if (parent_stmt->has_group_by() &&
               OB_FAIL(ObTransformUtils::pushdown_group_by(parent_stmt,
                                                           pushdown_groupby,
                                                           pushdown_rollup,
                                                           pushdown_select))) {
       LOG_WARN("failed to pushdown group by", K(ret));
-      //下压having
+      // push having
     } else if (parent_stmt->get_having_expr_size() > 0 &&
               OB_FAIL(pushdown_having_conditions(parent_stmt,
                                                   map_info.having_map_,
@@ -1500,8 +1500,8 @@ int ObTransformTempTable::inner_create_temp_table(ObSelectStmt *parent_stmt,
 
 /**
  * @brief pushdown_conditions
- * 把公共的where condition重命名后下压到视图内
- * 不同的where condition保留在原stmt中，等待谓词推导下压
+ * Rename common where conditions and push them down into the view
+ * Different where conditions remain in the original stmt, waiting for predicate derivation to push down
  */
 int ObTransformTempTable::pushdown_conditions(ObSelectStmt *parent_stmt,
                                               const ObIArray<int64_t> &cond_map,
@@ -1518,7 +1518,7 @@ int ObTransformTempTable::pushdown_conditions(ObSelectStmt *parent_stmt,
     LOG_WARN("unexpect map info", K(cond_map), K(common_cond_map), K(ret));
   } else {
     ObIArray<ObRawExpr*> &conditions = parent_stmt->get_condition_exprs();
-    //找到相同的condition
+    // Find the same condition
     for (int64_t i = 0; OB_SUCC(ret) && i < cond_map.count(); ++i) {
       int64_t idx = cond_map.at(i);
       if (OB_INVALID_ID == common_cond_map.at(i)) {
@@ -1530,7 +1530,7 @@ int ObTransformTempTable::pushdown_conditions(ObSelectStmt *parent_stmt,
         LOG_WARN("failed to push back expr", K(ret));
       }
     }
-    //找到不同的condition
+    // Find different condition
     for (int64_t i = 0; OB_SUCC(ret) && i < conditions.count(); ++i) {
       if (ObOptimizerUtil::find_item(pushdown_conds, conditions.at(i))) {
         //do nothing
@@ -1549,7 +1549,7 @@ int ObTransformTempTable::pushdown_conditions(ObSelectStmt *parent_stmt,
 
 /**
  * @brief pushdown_having_conditions
- * 下推相同的having condition到视图中
+ * Push down the same having condition to the view
  */
 int ObTransformTempTable::pushdown_having_conditions(ObSelectStmt *parent_stmt,
                                                     const ObIArray<int64_t> &having_map,
@@ -1567,7 +1567,7 @@ int ObTransformTempTable::pushdown_having_conditions(ObSelectStmt *parent_stmt,
     LOG_WARN("unexpect map info", K(having_map), K(common_having_map), K(ret));
   } else {
     ObIArray<ObRawExpr*> &conditions = parent_stmt->get_having_exprs();
-    //找到相同的having condition
+    // Find the same having condition
     for (int64_t i = 0; OB_SUCC(ret) && i < having_map.count(); ++i) {
       int64_t idx = having_map.at(i);
       if (OB_INVALID_ID == common_having_map.at(i)) {
@@ -1579,7 +1579,7 @@ int ObTransformTempTable::pushdown_having_conditions(ObSelectStmt *parent_stmt,
         LOG_WARN("failed to push back expr", K(ret));
       }
     }
-    //找到不同的having condition
+    // Find different having condition
     for (int64_t i = 0; OB_SUCC(ret) && i < conditions.count(); ++i) {
       if (ObOptimizerUtil::find_item(pushdown_conds, conditions.at(i))) {
         //do nothing
@@ -1599,12 +1599,12 @@ int ObTransformTempTable::pushdown_having_conditions(ObSelectStmt *parent_stmt,
 
 /**
  * @brief apply_temp_table
- * 把视图view替换成temp table query，
- * 已知条件：view与temp table query仅仅只是select item不同
- * view与temp table query的基表映射关系存在于map info中
- * 只需要把view中与temp table query不同的select item转换成temp table的select item
- * 并且更新parent stmt的column item，引用temp table 的select item
- * 如果有聚合函数，需要添加到temp table query中
+ * Replace view with temp table query,
+ * Known condition: view and temp table query only differ in select items
+ * The base table mapping relationship of view and temp table query exists in map info
+ * Only need to convert the select items in view that differ from temp table query into select items of temp table
+ * And update the column items of parent stmt to reference the select items of temp table
+ * If there are aggregate functions, they need to be added to the temp table query
  */
 int ObTransformTempTable::apply_temp_table(ObSelectStmt *parent_stmt,
                                            TableItem *view_table,
@@ -1671,7 +1671,7 @@ int ObTransformTempTable::apply_temp_table_columns(ObStmtCompareContext &context
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpect null column expr", K(ret));
       }
-      //column item是否存在于temp table中
+      // Does column item exist in temp table
       for (int64_t j = 0; OB_SUCC(ret) && !find && j < temp_table_column_list.count(); ++j) {
         ObRawExpr *temp_table_column = temp_table_column_list.at(j);
         if (OB_ISNULL(temp_table_column)) {
@@ -1685,7 +1685,7 @@ int ObTransformTempTable::apply_temp_table_columns(ObStmtCompareContext &context
           find = true;
         }
       }
-      //不存在于temp table中的column需要添加到temp table中
+      // Columns that do not exist in the temp table need to be added to the temp table
       if (OB_SUCC(ret) && !find) {
         TableItem *table = NULL;
         ColumnItem *column_item = NULL;
@@ -1821,7 +1821,7 @@ int ObTransformTempTable::apply_temp_table_select_list(ObStmtCompareContext &con
       } else if (OB_FAIL(old_column_exprs.push_back(col_expr))) {
         LOG_WARN("failed to push back expr", K(ret));
       }
-      //select item是否存在于temp table中
+      // select item whether exists in temp table
       for (int64_t j = 0; OB_SUCC(ret) && !find && j < temp_table_select_list.count(); ++j) {
         ObRawExpr *temp_table_select = temp_table_select_list.at(j);
         if (OB_ISNULL(temp_table_select)) {
@@ -1835,7 +1835,7 @@ int ObTransformTempTable::apply_temp_table_select_list(ObStmtCompareContext &con
           find = true;
         }
       }
-      //不存在于temp table中的select expr需要转换成temp table的select item
+      // Select expr that does not exist in temp table needs to be converted into select item of temp table
       if (OB_SUCC(ret) && !find) {
         aggr_items.reset();
         win_func_exprs.reset();
@@ -1976,7 +1976,7 @@ int ObTransformTempTable::remove_select_items(TempTableInfo &info,
   } else if (OB_FAIL(new_column_ids.prepare_allocate(child_stmt->get_select_item_size()))) {
     LOG_WARN("failed to preallocate", K(ret));
   }
-  //计算老的column id对应的新column id关系
+  // Calculate the relationship of old column id to new column id
   for (int64_t i = 0; OB_SUCC(ret) && i < child_stmt->get_select_item_size(); i++) {
     new_column_ids.at(i) =  OB_INVALID_ID;
     if (!removed_idxs.has_member(i) ) {
@@ -1988,8 +1988,7 @@ int ObTransformTempTable::remove_select_items(TempTableInfo &info,
       }
     }
   }
-
-  //更新upper stmt的column item
+  // Update upper stmt's column item
   for (int64_t i = 0; OB_SUCC(ret) && i < info.table_items_.count(); ++i) {
     new_column_items.reuse();
     ObDMLStmt *upper_stmt = info.upper_stmts_.at(i);
@@ -2017,7 +2016,7 @@ int ObTransformTempTable::remove_select_items(TempTableInfo &info,
       LOG_WARN("failed to add column item", K(ret));
     }
   }
-  //消除child stmt的select item
+  // Remove select item of child stmt
   if (OB_SUCC(ret)) {
     if (child_stmt->is_set_stmt()) {
       if (OB_FAIL(ObTransformUtils::remove_select_items(ctx_,
@@ -3179,7 +3178,7 @@ int ObTransformTempTable::prepare_inline_materialize_stmts(ObDMLStmt *root_stmt,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpect stmt", K(ret));
   } else if (OB_FALSE_IT(temp_view = static_cast<ObSelectStmt *>(copied_temp_stmt))) {
-    // 在 temp table query 上封一层视图（用以获取 temp table access 的代价）
+    // Wrap a view on top of temp table query (used to get the cost of temp table access)
   } else if (ObTransformUtils::pack_stmt(ctx_, temp_view)) {
     LOG_WARN("failed to create simple view", K(ret));
   } else if (1 != temp_view->get_table_size()) {

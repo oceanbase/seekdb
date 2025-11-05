@@ -467,7 +467,7 @@ size_t ob_strnxfrm_unicode(const ObCharsetInfo *cs,
     src+= res;
     if (uni_plane)
       ob_tosort_unicode(uni_plane, &wc, cs->state);
-    dst = store16be(dst, wc); //这是是不是bydesign的
+    dst = store16be(dst, wc); //Is this by design?
   }
   ob_strnxfrm_unicode_help(&dst,&de, nweights, flags, &dst0);
   return dst - dst0;

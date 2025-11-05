@@ -37,7 +37,7 @@ public:
 
 public:
   common::ObFixedArray<ObDynamicParamSetter, common::ObIAllocator> rescan_params_;
-  // 指示吐出的行中 partition id 列所在位置，通过 expr 读出 part id，用于右侧 pruning
+  // Indicates the position of the partition id column in the output rows, read part id through expr, used for right pruning
   ObExpr *gi_partition_id_expr_;
   bool enable_gi_partition_pruning_;
   bool enable_px_batch_rescan_;

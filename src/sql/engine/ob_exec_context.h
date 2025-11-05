@@ -189,10 +189,9 @@ private:
 
 class ObIExtraStatusCheck;
 struct ObTempExprBackupCtx;
-
-// ObExecContext可以序列化，但不能反序列化；
-// 而ObDesExecContext不能序列化，但可以反序列化；
-// 用ObExecContext序列化，然后相对应地用ObDesExecContext反序列化
+// ObExecContext can be serialized, but cannot be deserialized;
+// And ObDesExecContext cannot be serialized, but can be deserialized;
+// Use ObExecContext to serialize, then deserialize correspondingly with ObDesExecContext
 class ObExecContext
 {
 public:
@@ -203,8 +202,7 @@ public:
 public:
   explicit ObExecContext(common::ObIAllocator &allocator);
   virtual ~ObExecContext();
-
-  // 用于result_set遇到violation重试的时候，重新生成plan
+  // Used for result_set to regenerate plan when retrying after violation
   void reset_op_env();
   void reset_op_ctx();
 
@@ -631,7 +629,7 @@ protected:
    * when operator is executed
    * ------------------------------------------------
    */
-  // 用于分布式执行的调度线程（allocator不能并发alloc和free）
+  // Used for scheduling threads in distributed execution (allocator cannot concurrently alloc and free)
   common::ObArenaAllocator sche_allocator_;
   common::ObIAllocator &allocator_;
   /**
@@ -656,7 +654,7 @@ protected:
   bool has_non_trivial_expr_op_ctx_;
   ObSqlCtx *sql_ctx_;
   pl::ObPLContext *pl_stack_ctx_;
-  bool need_disconnect_; // 是否需要断掉与客户端的连接
+  bool need_disconnect_; // Whether to disconnect from the client
   //@todo: (linlin.xll) ObPLCtx is ambiguous with ObPLContext, need to rename it
   pl::ObPLCtx *pl_ctx_;
   pl::ObPLPackageGuard *package_guard_;
@@ -665,16 +663,16 @@ protected:
   const common::ObIArray<int64_t> *row_id_list_;
   // for px insert into values
   ObRowIdListArray row_id_list_array_;
-  //判断现在执行的计划是否为演进过程中的计划
+  // Determine if the currently executing plan is a plan during the evolution process
   int64_t total_row_count_;
   // Interminate result of index building is reusable, reused in build index retry with same snapshot.
   // Reusable intermediate result is not deleted in the close phase, deleted deliberately after
   // execution is completed.
   bool reusable_interm_result_;
-  // end_trans时是否使用异步end trans
+  // end_trans when to use asynchronous end trans
   bool is_async_end_trans_;
   /*
-   * 用于记录事务语句是否执行过，然后判断对应的end语句是否需执行
+   * Used to record whether the transaction statement has been executed, then determine if the corresponding end statement needs to be executed
    */
   TransState trans_state_;
   /*
@@ -691,7 +689,7 @@ protected:
   // for call procedure_;
   ObNewRow *output_row_;
   ColumnsFieldIArray *field_columns_;
-  //记录当前执行plan是否为直接获取的local计划
+  // Record whether the current execution plan is a directly obtained local plan
   bool is_direct_local_plan_;
 
   ObPxSqcHandler *sqc_handler_;
@@ -713,8 +711,7 @@ protected:
   common::ObArenaAllocator eval_res_allocator_;
   common::ObArenaAllocator eval_tmp_allocator_;
   ObTMArray<ObSqlTempTableCtx> temp_ctx_;
-
-  // 用于 NLJ 场景下对右侧分区表 TSC 扫描做动态 pruning
+  // Used for dynamic pruning of the right partition table TSC scan in NLJ scenario
   ObGIPruningInfo gi_pruning_info_;
 
   // just for convert charset in query response result

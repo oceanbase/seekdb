@@ -171,10 +171,9 @@ void copied_inner_foreach(const ObBitVectorImpl<WordType> &skip, int64_t size, O
     step += ObBitVectorImpl<WordType>::WORD_BITS;
   } // end for
 }
-
-// 这部分代码不要删除，用于调试新接口，因为ob的单测编译要编译一大堆无效文件，而ob_bit_vector.h这个头文件又被很多地方引用，
-// 导致编译速度巨慢，尽量不要直接在ob_bit_vector.h改代码调试，而是在这里先把接口改正确了，然后再放到ob_bit_vector.h里面
-// 进行调试
+// This part of the code should not be deleted, used for debugging new interfaces, because ob's unit tests need to compile a lot of invalid files, and the ob_bit_vector.h header file is referenced by many places,
+// Cause the compilation speed to be extremely slow, try not to modify the code directly in ob_bit_vector.h for debugging, but first correct the interface here, and then move it to ob_bit_vector.h
+// perform debugging
 template <bool IS_FLIP, typename OP>
 void my_foreach_bound(const ObBitVectorImpl<WordType> &skip, int64_t start_idx, int64_t end_idx, OP op)
 {
@@ -287,55 +286,53 @@ void test_foreach_result_random(int64_t batch_size, int64_t start_idx, int64_t e
     result_flip_foreach_bound[idx] = 1;
     return OB_SUCCESS;
   });
-
-  // result结果，0表示未处理，1表示处理
+  // result, 0 indicates unprocessed, 1 indicates processed
   for (int64_t i = 0; i < batch_size; ++i) {
-    // 固定check新的batch接口是否和老的batch接口结果是否相同
+    // Fixed check new batch interface results are the same as old batch interface results
     EXPECT_EQ(result_foreach_ori[i], result_foreach_batch[i]);
     EXPECT_EQ(result_flip_foreach_ori[i], result_flip_foreach_batch[i]);
-
-    // 1. 对于 i < start_idx 部分, bound接口不会处理，只有batch接口和copied接口会处理
-    // 2. 对于 start_idx <= i < end_idx 部分, 所有接口都会处理
-    // 3. 对于 i >= end_idx 部分, 所有接口都不会处理
+    // 1. For the part where i < start_idx, the bound interface will not handle it, only the batch interface and copied interface will handle it
+    // 2. For the part where start_idx <= i < end_idx, all interfaces will be processed
+    // 3. For i >= end_idx part, all interfaces will not process
     if (i < start_idx) {
       if (i < true_start_idx) {
-        // 此部分 bit vector 为 0，因此 foreach 结果为 0， flip foreach 结果为 1
+        // This part of the bit vector is 0, therefore foreach result is 0, flip foreach result is 1
         EXPECT_EQ(0, result_foreach_batch[i]);
         EXPECT_EQ(1, result_flip_foreach_batch[i]);
       } else if (i >= true_start_idx && i < true_end_idx) {
-        // 此部分 bit vector 为 1，因此 foreach 结果为 1， flip foreach 结果为 0
+        // This part of the bit vector is 1, therefore the foreach result is 1, flip foreach result is 0
         EXPECT_EQ(1, result_foreach_batch[i]);
         EXPECT_EQ(0, result_flip_foreach_batch[i]);
       } else if (i >= true_end_idx) {
-        // 此部分 bit vector 为 0，因此 foreach 结果为 0， flip foreach 结果为 1
+        // This part of the bit vector is 0, therefore the foreach result is 0, flip foreach result is 1
         EXPECT_EQ(0, result_foreach_batch[i]);
         EXPECT_EQ(1, result_flip_foreach_batch[i]);
       }
-      // bound接口不会处理这部分数据，因此全部结果为 0
+      // bound interface will not process this part of the data, therefore all results are 0
       EXPECT_EQ(0, result_foreach_bound[i]);
       EXPECT_EQ(0, result_flip_foreach_bound[i]);
     } else if (i >= start_idx && i < end_idx) {
       if (i < true_start_idx) {
-        // 此部分 bit vector 为 0，因此 foreach 结果为 0， flip foreach 结果为 1
+        // This part of the bit vector is 0, therefore foreach result is 0, flip foreach result is 1
         EXPECT_EQ(0, result_foreach_batch[i]);
         EXPECT_EQ(1, result_flip_foreach_batch[i]);
         EXPECT_EQ(0, result_foreach_bound[i]);
         EXPECT_EQ(1, result_flip_foreach_bound[i]);
       } else if (i >= true_start_idx && i < true_end_idx) {
-        // 此部分 bit vector 为 1，因此 foreach 结果为 1， flip foreach 结果为 0
+        // This part of the bit vector is 1, therefore foreach result is 1, flip foreach result is 0
         EXPECT_EQ(1, result_foreach_batch[i]);
         EXPECT_EQ(0, result_flip_foreach_batch[i]);
         EXPECT_EQ(1, result_foreach_bound[i]);
         EXPECT_EQ(0, result_flip_foreach_bound[i]);
       } else if (i >= true_end_idx) {
-        // 此部分 bit vector 为 0，因此 foreach 结果为 0， flip foreach 结果为 1
+        // This part of the bit vector is 0, therefore foreach result is 0, flip foreach result is 1
         EXPECT_EQ(0, result_foreach_batch[i]);
         EXPECT_EQ(1, result_flip_foreach_batch[i]);
         EXPECT_EQ(0, result_foreach_bound[i]);
         EXPECT_EQ(1, result_flip_foreach_bound[i]);
       }
     } else if (i >= end_idx) {
-      // 所有接口不会处理这部分数据，因此全部结果为 0
+      // All interfaces will not process this part of the data, therefore all results are 0
       EXPECT_EQ(0, result_foreach_batch[i]);
       EXPECT_EQ(0, result_flip_foreach_batch[i]);
       EXPECT_EQ(0, result_foreach_bound[i]);

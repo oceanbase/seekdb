@@ -218,8 +218,7 @@ void ObIntermResultTest::exception_test(int expected_ret, int64_t row_num)
   //OB_DELETE(ObIntermResultPool, ObModIds::OB_SQL_EXECUTOR, ir_pool);
   //OB_DELETE(ObScannerPool, ObModIds::OB_SQL_EXECUTOR, ir_item_pool);
   //OB_DELETE(ObIntermResultManager, ObModIds::OB_SQL_EXECUTOR, ir_manager);
-
-  //断点依赖路径正确，加上ccache以后，路径变成绝对路径了
+  // Breakpoint dependency path is correct, after adding ccache, the path becomes an absolute path
   //ASSERT_EQ(expected_ret, ret);
 }
 

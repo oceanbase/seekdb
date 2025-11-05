@@ -97,7 +97,7 @@ int ObPxTenantTargetMonitor::refresh_statistics(bool need_refresh_all)
   } else if (server_ != leader) {
     LOG_TRACE("follower refresh statistics", K(tenant_id_), K(server_), K(leader),
               K(dummy_cache_leader_), K(role_), K(version_));
-    // 单机情况下，不走全局排队
+    // In a single-machine scenario, do not go through global queuing
     if (role_ == LEADER) {
       LOG_INFO("leader switch to follower", K(tenant_id_), K(server_), K(leader), K(version_));
       role_ = FOLLOWER;
@@ -111,7 +111,7 @@ int ObPxTenantTargetMonitor::refresh_statistics(bool need_refresh_all)
       LOG_WARN("query statistics failed", K(ret));
     }
   } else {
-    // 只有leader能进，可以无主，但不能多主
+    // Only leader can enter, can be leaderless, but cannot have multiple leaders
     LOG_TRACE("leader refresh statistics", K(tenant_id_), K(server_), K(leader),
               K(dummy_cache_leader_), K(role_), K(need_refresh_all), K(version_));
     // Only newly appointed leader need to reset the statistics, do nothing if the old leader become
@@ -248,8 +248,8 @@ int ObPxTenantTargetMonitor::query_statistics(ObAddr &leader)
           OB_SUCC(ret) && it != global_target_usage_.end(); ++it) {
         auto report_local_used = [&](hash::HashMapPair<ObAddr, ServerTargetUsage> &entry) -> int {
           int ret = OB_SUCCESS;
-          // 和上次汇报相比，本机又消耗了entry 机器几个资源，把这个数目汇报给 leader，leader 会把这个值加到全局统计中。
-          // 为什么是汇报“增量”呢？因为 entry 机器的资源被多台机器使用，任何一个人都拿不到全量数据
+          // Compared to the last report, this machine has consumed a few more resources of entry machines, report this number to the leader, the leader will add this value to the global statistics.
+          // Why report "increment" instead? Because the resources of the entry machine are used by multiple machines, no one can get the full data
           int64_t local_used = entry.second.get_local_used();
           if (local_used == entry.second.get_report_used()) {
             // do nothing
@@ -423,9 +423,9 @@ int ObPxTenantTargetMonitor::apply_target(hash::ObHashMap<ObAddr, int64_t> &work
         }
       }
       if (OB_SUCC(ret)) {
-        // 计算当前 server 视角下，target_usage 对应 server 已经分配出去的资源数量：
-        //  total_user = leader 反馈的 + 本地尚未同步给 leader 的
-        //  (显然，这是不精确的，比如其它 follower 尚未同步给 leader 的就没有计算在内）
+        // Calculate the amount of resources already allocated to the target_usage from the current server's perspective:
+        //  total_user = leader feedback + locally unsynchronized to leader
+        //  (Obviously, this is inaccurate, for example, other followers that have not yet synchronized to the leader are not included)
         uint64_t total_use = target_usage.get_peer_used() + (target_usage.get_local_used() - target_usage.get_report_used());
         if (total_use != 0) {
           is_first_query = false;

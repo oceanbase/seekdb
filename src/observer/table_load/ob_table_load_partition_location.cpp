@@ -261,7 +261,7 @@ int ObTableLoadPartitionLocation::init_all_leader_info()
   ObHashMap<ObAddr, ObIArray<ObTableLoadLSIdAndPartitionId> *>::const_iterator addr_iter;
   int64_t pos = 0;
   tmp_allocator.set_tenant_id(MTL_ID());
-  // 将所有addr存到set中
+  // Store all addr in the set
   if (OB_FAIL(addr_map.create(64, "TLD_PL_Tmp", "TLD_PL_Tmp"))) {
     LOG_WARN("fail to create hashmap", KR(ret));
   } else {
@@ -307,7 +307,7 @@ int ObTableLoadPartitionLocation::init_all_leader_info()
       }
     }
   }
-	// 将set中的addr存到array中
+	// Store the addr in set to array
 	if (OB_SUCC(ret)) {
 		if (OB_FAIL(all_leader_addr_array_.create(addr_map.size(), allocator_))) {
 			LOG_WARN("fail to create leader addr array", KR(ret));

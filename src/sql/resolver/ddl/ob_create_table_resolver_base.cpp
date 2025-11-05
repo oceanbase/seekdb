@@ -66,7 +66,7 @@ int ObCreateTableResolverBase::resolve_partition_option(
           ret = OB_ERR_UNEXPECTED;
           SQL_RESV_LOG(WARN, "partition node is null.", KR(ret));
         } else {
-          ParseNode *partition_node = node->children_[0]; // 普通分区partition node
+          ParseNode *partition_node = node->children_[0]; // ordinary partition node
           if (OB_FAIL(resolve_partition_node(create_table_stmt, partition_node, table_schema))) {
             LOG_WARN("failed to resolve partition option", KR(ret));
           }

@@ -86,7 +86,7 @@ int ObExprSysPrivilegeCheck::check_show_priv(bool &allow_show,
   if (OB_SUCC(ret)) {
     //tenant_id in table is static casted to int64_t,
     //and use statis_cast<uint64_t> for retrieving(same with schema_service)
-    // schema拆分后，普通租户schema表的tenant_id为0，此时鉴权取session_priv.tenant_id_
+    // After schema split, the tenant_id of the normal tenant schema table is 0, at this time, authorization takes session_priv.tenant_id_
     if (OB_FAIL(exec_ctx.get_my_session()->get_session_priv_info(session_priv))) {
       LOG_WARN("fail to get session priv info", K(ret));
     } else if (session_priv.tenant_id_ != static_cast<uint64_t>(tenant_id)

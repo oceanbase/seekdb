@@ -460,12 +460,12 @@ int ObDirectLoadInsertTableBatchRowStoreWriter::write(ObDirectLoadIStoreRowItera
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected datum row is null", KR(ret));
       }
-      // 有删除行的情况不走batch模式
+      // There are deleted lines, do not use batch mode
       else if (OB_UNLIKELY(datum_row->is_delete_)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected delete row", KR(ret), KPC(datum_row));
       }
-      // 先处理lob列, 降低内存压力
+      // First process the lob column, reduce memory pressure
       else if (OB_FAIL(row_handler_.handle_row(const_cast<ObDirectLoadDatumRow &>(*datum_row), row_flag))) {
         LOG_WARN("fail to handle row", KR(ret), KPC(datum_row), K(row_flag));
       } else if (OB_FAIL(batch_rows_.append_row(*datum_row))) {

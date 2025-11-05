@@ -278,7 +278,7 @@ public:
           }
         default: break;
         }
-      } else {//分更多种类型,default
+      } else {//divide into more types, default
         min = int_info_.min_;
         max = int_info_.max_;
       }

@@ -83,7 +83,7 @@ int ObTenantVirtualCurrentTenant::inner_get_next_row(ObNewRow *&row)
           ret = OB_ALLOCATE_MEMORY_FAILED;
           SERVER_LOG(ERROR, "fail to alloc memory", K(ret));
         } else if (OB_UNLIKELY(OB_INVALID_ID == show_tenant_id)) {
-          // FIXME(tingshuai.yts):暂时定为显示该错误信息，只有直接查询该虚拟表才可能出现
+          // FIXME(tingshuai.yts): Temporarily set to display this error message, which will only occur when directly querying this virtual table
           ret = OB_NOT_SUPPORTED;
           LOG_USER_ERROR(OB_NOT_SUPPORTED, "select a table which is used for show clause");
         } else if (OB_FAIL(schema_guard_->get_tenant_info(show_tenant_id, tenant_schema))) {

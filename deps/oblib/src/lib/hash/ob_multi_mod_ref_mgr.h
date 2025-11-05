@@ -65,8 +65,8 @@ public:
   {
     ObRef ref_info_[static_cast<int>(T::TOTAL_MAX_MOD)];
   };
-  // inc 需要在应用层保证安全，虽然这里检查了is_delete但是和inc操作并不原子
-  // 依然会有is_delete之后，增加引用计数的可能，需要应用保证inc一定是在引用计数不为0下执行
+  // inc needs to be guaranteed safe at the application layer, although here we check is_delete it is not atomic with the inc operation
+  // There will still be a possibility of increasing the reference count after is_delete, the application needs to ensure that inc is executed only when the reference count is not 0
   int inc(const T t) {
     int ret = OB_SUCCESS;
     const int mod = static_cast<int>(t);

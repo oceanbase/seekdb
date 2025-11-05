@@ -36,11 +36,11 @@ private:
 
   /**
    * @brief eliminate_outer_join
-   * 分别消除from list、semi from list里面的外连接
-   * 对于inner join直接消除
-   * 对于左外连接的消除条件：
-   *  1、右表在where conditions中有空拒绝谓词；
-   *  2、或者是根据主外键连接消除
+   * respectively eliminate outer joins in the from list, semi from list
+   * directly eliminate inner joins
+   * elimination conditions for left outer joins:
+   *  1、the right table has null-rejecting predicates in where conditions;
+   *  2、or elimination based on primary-foreign key join
    */
   int eliminate_outer_join(common::ObIArray<ObParentDMLStmt> &parent_stmts,
                            ObDMLStmt *&stmt,
@@ -48,18 +48,18 @@ private:
 
   /**
    * @brief recursive_eliminate_outer_join_in_joined_table
-   * 如果table_item是joined_table，并且是left join、full join、inner join
-   * 先消除顶层joined_table，然后递归消除左右表，否则不消除
-   * 同时如果消除成功了，对应的join_table会拆分左右表
-   * 到from_item_list中
+   * If table_item is a joined_table, and it is a left join, full join, inner join
+   * First eliminate the top-level joined_table, then recursively eliminate the left and right tables, otherwise do not eliminate
+   * At the same time, if elimination is successful, the corresponding join_table will be split into left and right tables
+   * into from_item_list
    * @param select_stmt
-   * @param cur_table_item 待处理的table item
-   * @param from_item_list 最后一个顶层tbale_item放入from_item
-   * @param joined_table_list 收集处理后得到的jioned_table
-   * @param conditions 搜索空拒绝的表达式集
-   * @param shou_move_to_from_list 如果消除成功了是否可以拆分左右表到from_item_list
-   * 如果从顶层到当前层都消除成功了，才能拆分
-   * @param trans_happened 是否发生改写
+   * @param cur_table_item The table item to be processed
+   * @param from_item_list The last top-level tbale_item is placed into from_item
+   * @param joined_table_list Collect the joined_table obtained after processing
+   * @param conditions The set of expressions for searching empty rejections
+   * @param shou_move_to_from_list If elimination is successful, whether the left and right tables can be split into from_item_list
+   * Elimination must be successful from the top level to the current level to be able to split
+   * @param trans_happened Whether rewriting has occurred
    */
   int recursive_eliminate_outer_join_in_table_item(ObDMLStmt *stmt,
                                                   TableItem *cur_table_item,
@@ -71,9 +71,9 @@ private:
 
   /**
    * @brief is_outer_joined_table_type
-   * 判定是否是joined table，并且是left join、full join、inner join
-   * 如果不是，依据should_move_to_from_list判定
-   * 是否要放置到from_item_list、joined_table_list
+   * Determine if it is a joined table, and whether it is left join, full join, inner join
+   * If not, determine based on should_move_to_from_list
+   * Whether to place it in from_item_list, joined_table_list
    */
   int is_outer_joined_table_type(ObDMLStmt *stmt,
                                   TableItem *cur_table_item,
@@ -84,10 +84,10 @@ private:
 
   /**
    * @brief do_eliminate_outer_join
-   * 执行外连接消除
-   * inner join直接消除
-   * full join先消除左连接，再把右连接转左连接消除
-   * 最后如果外连接完全消除为inner join，处理from_lsit和conditions
+   * Execute outer join elimination
+   * inner join is directly eliminated
+   * full join first eliminates the left join, then converts the right join to a left join and eliminates it
+   * Finally, if the outer join is completely eliminated to inner join, process from_list and conditions
    */
   int do_eliminate_outer_join(ObDMLStmt *stmt,
                               JoinedTable *cur_joined_table,
@@ -99,9 +99,9 @@ private:
 
   /**
    * @brief can_be_eliminated
-   * 拆分左外连接消除判定逻辑，分为两种情况
-   * 1.能否利用where condition的null reject谓词消除外连接
-   * 2.能够利用主外键连接消除外连接
+   * Split the left outer join elimination judgment logic into two cases
+   * 1.Can the outer join be eliminated using the null reject predicate of the where condition
+   * 2.Can the outer join be eliminated using the primary-foreign key join
   */
   int can_be_eliminated(ObDMLStmt *stmt,
                         JoinedTable *joined_table,
@@ -110,11 +110,11 @@ private:
 
   /**
    * @brief can_be_eliminated_with_null_reject
-   * 如果右表在conditions中有空拒绝谓词，可以消除左连接
+   * If the right table has a null-reject predicate in conditions, the left join can be eliminated
    * @param stmt select stmt
-   * @param joined_table 待处理的table items
-   * @param conditions 待处理的表达式集
-   * @param has_null_reject 右表在conditions中是否有空拒绝谓词
+   * @param joined_table table items to be processed
+   * @param conditions set of expressions to be processed
+   * @param has_null_reject whether the right table has a null-reject predicate in conditions
    */
   int can_be_eliminated_with_null_reject(ObDMLStmt *stmt,
                                         JoinedTable *joined_table,
@@ -123,24 +123,24 @@ private:
 
   /**
    * @brief can_be_eliminated_with_foreign_primary_join
-   * 根据主外键连接判断是否可能消除左外连接，消除要求：
-   * 1、链接条件为主外键连接
-   * 2、外键所在表为左表
-   * 3、外键有非空约束或者有空拒绝谓词
-   * 4、主外键为级联、检查状态
-   * 5、如果左表或右表有part hint，禁掉改写
-   * 6、on condition只有主外键等值连接条件（即保证右表的主键无损）
+   * Determine if a left outer join can be eliminated based on foreign key joins, requirements:
+   * 1、The join condition is a foreign key join
+   * 2、The table containing the foreign key is the left table
+   * 3、The foreign key has a NOT NULL constraint or a NOT NULL predicate
+   * 4、The foreign key is in CASCADE or CHECK status
+   * 5、If either the left table or the right table has a part hint, disable the rewrite
+   * 6、The ON condition only contains foreign key equality join conditions (i.e., ensuring the right table's primary key is not lost)
    * eg:
    * t1(c1 int, c2 int, primary key(c1))
    * t2(c1 int, c2 int not null,
    *          foreign key(c1) references t1(c1),
    *          foreign key(c2) references t1(c1))
    * 1.select * from t2 left join t1 on t1.c1=t2.c1;
-   *  \->不能消除，t2(c1)没有非空约束
+   *  \->Cannot be eliminated, t2(c1) does not have a NOT NULL constraint
    * 2.select * from t2 left join t1 on t1.c1=t2.c2;
-   *  \->可以改写为select * from t1,t2 where t1.c1=t2.c2;
-   * @param  joined_table 需要判定是否能够消除左外连接的joined table
-   * @param can_be_eliminated 返回是否能够消除左外连接
+   *  \->Can be rewritten as select * from t1,t2 where t1.c1=t2.c2;
+   * @param  joined_table The joined table to determine if the left outer join can be eliminated
+   * @param can_be_eliminated Returns whether the left outer join can be eliminated
    */
   int can_be_eliminated_with_foreign_primary_join(ObDMLStmt *stmt,
                                                   JoinedTable *joined_table,
@@ -160,7 +160,7 @@ private:
 
   /**
    * @brief all_columns_is_not_null
-   * col_exprs中所有的列是否都非空
+   * are all columns in col_exprs not null
    */
   int is_all_columns_not_null(ObDMLStmt *stmt,
                               const ObIArray<const ObRawExpr *> &col_exprs,
@@ -169,7 +169,7 @@ private:
 
   /**
    * @brief is_simple_join_condition
-   * 判断连接条件是否是简单的列相等的AND连接
+   * Determine if the join condition is a simple AND connection of column equalities
    */
   int is_simple_join_condition(const ObIArray<ObRawExpr *> &join_condition,
                               const TableItem* left_table,
@@ -178,8 +178,8 @@ private:
 
   /**
    * @brief extract_columns
-   * 在 expr 中找出所有满足以下条件的列 col
-   *    col 的 table_id \in rel_ids
+   * Find all columns col in expr that meet the following conditions
+   *    col's table_id \in rel_ids
    */
   int extract_columns(const ObRawExpr *expr,
                       const ObSqlBitSet<> &rel_ids,
@@ -187,8 +187,8 @@ private:
 
   /**
    * @brief extract_columns
-   * 在 exprs 中找出所有满足以下条件的列 col
-   *    col 的 table_id \in rel_ids
+   * Find all columns col in exprs that meet the following conditions
+   *    col's table_id \in rel_ids
    */
   int extract_columns_from_join_conditions(const ObIArray<ObRawExpr *> &exprs,
                                           const ObSqlBitSet<> &rel_ids,

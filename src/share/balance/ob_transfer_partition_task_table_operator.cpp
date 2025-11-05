@@ -158,7 +158,7 @@ int ObTransferPartitionTaskTableOperator::insert_new_task(
     ObMySQLTransaction &trans)
 {
   int ret = OB_SUCCESS;
-  //生成唯一并且递增的task_id, 先加表锁
+  //Generate a unique and incrementing task_id, first add table lock
   ObTransferPartitionTaskID task_id;
   if (OB_UNLIKELY(!is_valid_tenant_id(tenant_id)
       || !part_info.is_valid() || !dest_ls.is_valid())) {
@@ -409,8 +409,8 @@ int ObTransferPartitionTaskTableOperator::rollback_from_doing_to_waiting(const u
     LOG_WARN("failed to exec sql", KR(ret), K(sql), K(tenant_id));
   } else if (affected_row > part_list.count()) {
     ret = OB_ERR_UNEXPECTED;
-    // 不能检查part_list的个数等于affected_row。
-    // 对于中间状态的日志流，并没有限制新建表，所以transfer的列表是包含临时日志流上的新建表信息
+    // Cannot check if the number of part_list equals affected_row.
+    // For the log stream in intermediate states, there is no restriction on creating new tables, so the transfer list includes information about new tables on the temporary log stream
     LOG_WARN("affected row not match with part list", KR(ret), K(part_list.count()), K(affected_row),
     K(sql), K(part_list));
   }
@@ -429,8 +429,8 @@ int ObTransferPartitionTaskTableOperator::start_transfer_task(const uint64_t ten
   ObSqlString sql;
   ObSqlString part_list_sql; 
   int64_t affected_row = 0;
-  //由于一个transfer partition任务会经过多轮transfer，所以start_transfer_task会调度多轮
-  //可能status为init或者doing
+  //Since a transfer partition task will go through multiple rounds of transfer, start_transfer_task will schedule multiple rounds
+  //Possible status is init or doing
   ObTransferPartitionTaskStatus status = ObTransferPartitionTaskStatus::TRP_TASK_STATUS_DOING;
   ObTransferPartitionTaskStatus old_status = ObTransferPartitionTaskStatus::TRP_TASK_STATUS_INIT;
   if (OB_UNLIKELY(!is_valid_tenant_id(tenant_id) || !job_id.is_valid()
@@ -450,8 +450,8 @@ int ObTransferPartitionTaskTableOperator::start_transfer_task(const uint64_t ten
     LOG_WARN("failed to exec sql", KR(ret), K(sql), K(tenant_id));
   } else if (affected_row > part_list.count()) {
      ret = OB_ERR_UNEXPECTED;
-   // 不能检查part_list的个数等于affected_row。
-   // 对于中间状态的日志流，并没有限制新建表，所以transfer的列表是包含临时日志流上的新建表信息
+   // Cannot check if the number of part_list equals affected_row.
+   // For the log stream in intermediate states, there is no restriction on creating new tables, so the transfer list includes information about new tables on the temporary log stream
     LOG_WARN("affected row not match with part list", KR(ret), K(part_list.count()), K(affected_row),
     K(sql), K(part_list));
   }
@@ -495,7 +495,7 @@ int ObTransferPartitionTaskTableOperator::finish_task(const uint64_t tenant_id,
   } else if (OB_FAIL(trans.write(tenant_id, sql.ptr(), affected_row))) {
     LOG_WARN("failed to write", KR(ret), K(tenant_id), K(sql));
   } else if (affected_row > part_list.count()) {
-    //因为part_list可能不是这么准确，不能做准确
+    //Because part_list may not be this accurate, it cannot be used for accuracy
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("affected row not match with part list", KR(ret),
              K(part_list.count()), K(affected_row), K(sql));
@@ -505,7 +505,7 @@ int ObTransferPartitionTaskTableOperator::finish_task(const uint64_t tenant_id,
     } else if (OB_FAIL(trans.write(tenant_id, delete_sql.ptr(), delete_affected_row))) {
     LOG_WARN("failed to write", KR(ret), K(tenant_id), K(delete_sql));
   } else if (affected_row != delete_affected_row) {
-    //插入和删除的行应该是匹配的
+    //The inserted and deleted lines should be matched
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("affected row not match with part list", KR(ret), K(delete_affected_row),
              K(part_list.count()), K(affected_row), K(delete_sql));

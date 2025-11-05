@@ -115,9 +115,9 @@ public:
 
 private:
   ObOptTabletLoc opt_tablet_loc_;
-  //对所有partition求完交集后的结果，是最终选定的replica的index
+  // The result after computing the intersection of all partitions is the index of the finally selected replica
   int64_t selected_replica_idx_;
-  //对当前partition的所有副本进行优先级判断后，将最高优先级的replica index存到这里
+  // After priority judgment of all replicas for the current partition, store the replica index with the highest priority here
   common::ObSEArray<int64_t, 2, common::ModulePageAllocator, true> priority_replica_idxs_;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObCandiTabletLoc);
@@ -163,13 +163,13 @@ public:
                K_(duplicate_type));
 
 private:
-  /* 用于表ID(可能是generated alias id)寻址location */
+  /* Used for addressing location by table ID (possibly generated alias id) */
   uint64_t table_location_key_;
-  /* 用于获取实际的物理表ID */
+  /* Used to get the actual physical table ID */
   uint64_t ref_table_id_;
   /* locations */
   ObCandiTabletLocSEArray candi_tablet_locs_;
-  //复制表类型, 如果是复制表且未被更改则可以在分配exg算子时挑选更合适的副本
+  // Copy table type, if it is a copy table and has not been modified, then a more suitable copy can be selected when allocating exg operator
   ObDuplicateType duplicate_type_;
 private:
   /* functions */

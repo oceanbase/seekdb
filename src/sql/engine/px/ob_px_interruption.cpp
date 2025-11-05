@@ -60,7 +60,7 @@ int ObInterruptUtil::broadcast_dfo(ObDfo *dfo, int code)
     LOG_ERROR("NULL ptr unexpected", K(ret));
   } else {
     const ObIArray<ObPxSqcMeta> &sqcs = dfo->get_sqcs();
-    // 暂存上次的 id，inc_seqnum 将修改 px_interrupt_id_
+    // Store the previous id, inc_seqnum will modify px_interrupt_id_
     ObInterruptibleTaskID interrupt_id = dfo->get_interrupt_id().px_interrupt_id_;
     for (int64_t j = 0; j < sqcs.count(); ++j) {
       const ObAddr &addr = sqcs.at(j).get_exec_addr();
@@ -81,8 +81,8 @@ int ObInterruptUtil::regenerate_interrupt_id(ObDfo &dfo)
 {
   int ret = OB_SUCCESS;
   ObIArray<ObPxSqcMeta> &sqcs = dfo.get_sqcs();
-  // 每次发送完中断后，需要将中断号的 sequence 加 1，并设置到 sqc 结构中，
-  // 避免误中断重试的 sqc
+  // Each time an interrupt is sent, the sequence number of the interrupt needs to be incremented by 1 and set in the sqc structure,
+  // Avoid misinterrupting retry of the sqc
   ObDfoInterruptIdGen::inc_seqnum(dfo.get_interrupt_id().px_interrupt_id_);
 
   ARRAY_FOREACH_X(sqcs, j, cnt, OB_SUCC(ret)) {
@@ -90,8 +90,7 @@ int ObInterruptUtil::regenerate_interrupt_id(ObDfo &dfo)
   }
   return ret;
 }
-
-// 兜底函数，SQC 通知 task 尽快退出
+// Fallback function, SQC notifies task to exit as soon as possible
 int ObInterruptUtil::interrupt_tasks(ObPxSqcMeta &sqc, int code)
 {
   int ret = OB_SUCCESS;
@@ -168,8 +167,7 @@ void ObInterruptUtil::update_schema_error_code(ObExecContext *exec_ctx, int &cod
     LOG_TRACE("update_schema_error_code, exec_ctx is null", K(lbt()));
   }
 }
-
-// SQC 向 QC 发送中断
+// SQC sends interrupt to QC
 int ObInterruptUtil::interrupt_qc(ObPxSqcMeta &sqc, int code, ObExecContext *exec_ctx)
 {
   int ret = OB_SUCCESS;
@@ -199,9 +197,7 @@ int ObInterruptUtil::interrupt_qc(ObPxSqcMeta &sqc, int code, ObExecContext *exe
   }
   return ret;
 }
-
-
-// Task 向 QC 发送中断
+// Task send interrupt to QC
 int ObInterruptUtil::interrupt_qc(ObPxTask &task, int code, ObExecContext *exec_ctx)
 {
   int ret = OB_SUCCESS;
@@ -239,7 +235,7 @@ int ObInterruptUtil::generate_query_interrupt_id(const uint32_t server_id,
 {
   int ret = OB_SUCCESS;
   uint64_t timestamp = ObTimeUtility::current_time();
-  // 取低12位
+  // Take the low 12 bits
   timestamp = (uint64_t)0xfff & timestamp;
   interrupt_id.first_ = px_sequence_id;
   // [ server_id (32bits) ][ timestamp (12bits) ]
@@ -261,7 +257,7 @@ int ObInterruptUtil::generate_px_interrupt_id(const uint32_t server_id,
     LOG_ERROR("QC id is less than or equal 0 in generate px interrupt id", K(qc_id), K(dfo_id));
   } else {
     uint64_t timestamp = ObTimeUtility::current_time();
-    // 取低12位
+    // Take the low 12 bits
     timestamp = (uint64_t)0xfff & timestamp;
     interrupt_id.first_ = px_sequence_id;
     // 
@@ -274,7 +270,7 @@ int ObInterruptUtil::generate_px_interrupt_id(const uint32_t server_id,
 
 void ObDfoInterruptIdGen::inc_seqnum(common::ObInterruptibleTaskID &px_interrupt_id)
 {
-  // 将 seq 值 (last_的低 12 位） patch 最低 12 位，每调用一次都加 1
+  // Patch the seq value (low 12 bits of last_) to the lowest 12 bits, increment by 1 each call
   uint64_t last = px_interrupt_id.last_;
   px_interrupt_id.last_ = (last & (0xffffffff << 12)) | (((last & 0xfff) + 1) & 0xfff);
 }

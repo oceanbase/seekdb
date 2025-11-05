@@ -27,9 +27,9 @@ namespace share
 class ObCatalogUtils
 {
 public:
-  // 使用的名字来源于 sql，没有处理过
+  // The name used is derived from sql, and has not been processed
   static bool is_internal_catalog_name(const common::ObString &name_from_sql, const ObNameCaseMode &case_mode);
-  // 使用的名字来源于 CatalogSchema，名字大小写已经转换好了
+  // The name used is derived from CatalogSchema, the case of the name has already been converted
   static bool is_internal_catalog_name(const common::ObString &name_from_meta);
 
 private:

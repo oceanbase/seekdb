@@ -415,7 +415,7 @@ int ObLocalityManager::check_if_locality_has_been_loaded()
     const int64_t start_service_time = GCTX.start_service_time_;
     if (start_service_time > 0) {
       const int64_t now = ObTimeUtility::current_time();
-      //当observer启动后很长一段时间没刷出来cache，需要报error
+      // When the observer starts and a very long time has passed without cache being refreshed, an error needs to be reported
       if (now - start_service_time > FAIL_TO_LOAD_LOCALITY_CACHE_TIMEOUT) {
         ret = OB_ERR_UNEXPECTED;
         STORAGE_LOG(WARN, "fail to load first cache since service started!",

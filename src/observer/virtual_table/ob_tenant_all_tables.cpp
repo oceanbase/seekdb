@@ -109,7 +109,7 @@ int ObTenantAllTables::inner_open()
     }//for
     if (OB_SUCC(ret)) {
       if (OB_UNLIKELY(!is_valid_id(database_id_))) {
-        // FIXME(tingshuai.yts):暂时定为显示该错误信息，只有直接查询该虚拟表才可能出现
+        // FIXME(tingshuai.yts): Temporarily set to display this error message, which will only occur when directly querying this virtual table
         ret = OB_NOT_SUPPORTED;
         LOG_USER_ERROR(OB_NOT_SUPPORTED, "select a table which is used for show clause");
       } else {
@@ -574,7 +574,7 @@ int ObTenantAllTables::inner_get_next_row()
                   break;
                 }
                 case COMMENT: {
-                  //对于comment列mysql中system view和base table均正常显示;而user view仅显示VIEW即可
+                  //For the comment column, MySQL displays normally for both system view and base table; while user view only displays VIEW
                   if (table_schema->is_user_view()) {
                     cells[cell_idx].set_varchar(ObString::make_string("VIEW"));
                     cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));

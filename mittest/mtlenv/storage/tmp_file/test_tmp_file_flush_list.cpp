@@ -73,7 +73,7 @@ protected:
 private:
   char *random_buf_;
   const int64_t write_size_ = 4 * 1024 * 1024; // 4MB
-  unordered_map<int64_t, TestDirtyPageRecord> mock_dirty_record_; // 记录模拟生成的脏页数据代替实际写入文件
+  unordered_map<int64_t, TestDirtyPageRecord> mock_dirty_record_; // record simulated generated dirty page data instead of actual write to file
 };
 
 void get_file_range_by_state(const FlushCtxState state, int64_t &low, int64_t &high)
@@ -328,8 +328,7 @@ TEST_F(TestFlushListIterator, test_iter_data_basic)
   vector<tmp_file::ObSNTmpFileHandle> file_handles;
   int total_file_num = 0;
   const int64_t FILE_NUM = 10;
-
-  // 创建文件，根据层级生成模拟的脏页数量
+  // Create file, generate simulated dirty page count based on hierarchy
   int64_t total_file_cnt = 0;
   for (int64_t t = FlushCtxState::FSM_F1; t < FlushCtxState::FSM_FINISHED; ++t) {
     file_handles.clear();
@@ -348,8 +347,7 @@ TEST_F(TestFlushListIterator, test_iter_data_basic)
   ObTmpFileFlushListIterator iter;
   ret = iter.init(&flush_prio_mgr);
   ASSERT_EQ(OB_SUCCESS, ret);
-
-  // 遍历所有刷盘层级是否能取出该层级所有文件
+  // Traverse all flush levels to see if all files at that level can be retrieved
   int64_t iter_file_cnt = 0;
   for (int64_t t = FlushCtxState::FSM_F1; t < FlushCtxState::FSM_FINISHED; ++t) {
     for (int64_t i = 0; OB_SUCC(ret) && i < FILE_NUM * 5; ++i) {
@@ -376,8 +374,7 @@ TEST_F(TestFlushListIterator, test_iter_prev_stage)
   vector<tmp_file::ObSNTmpFileHandle> file_handles;
   int total_file_num = 0;
   const int64_t FILE_NUM = 10;
-
-  // 创建文件，根据层级生成模拟的脏页数量
+  // Create file, generate simulated dirty page count based on hierarchy
   int64_t total_file_cnt = 0;
   for (int64_t t = FlushCtxState::FSM_F1; t < FlushCtxState::FSM_FINISHED; ++t) {
     file_handles.clear();
@@ -397,8 +394,7 @@ TEST_F(TestFlushListIterator, test_iter_prev_stage)
   ObTmpFileFlushListIterator iter;
   ret = iter.init(&flush_prio_mgr);
   ASSERT_EQ(OB_SUCCESS, ret);
-
-  // 直接开始遍历F3直至OB_ITER_END
+  // Directly start traversing F3 until OB_ITER_END
   for (int64_t i = 0; OB_SUCC(ret) && i < FILE_NUM * 10; ++i) {
     tmp_file::ObSNTmpFileHandle file_handle;
     ret = iter.next(FlushCtxState::FSM_F3, file_handle);
@@ -408,14 +404,12 @@ TEST_F(TestFlushListIterator, test_iter_prev_stage)
     }
   }
   ASSERT_EQ(OB_ITER_END, ret);
-
-  // 切换到下一层级后，无法再遍历之前的层级
+  // Switch to the next level, you can no longer traverse the previous levels
   tmp_file::ObSNTmpFileHandle file_handle;
   ret = iter.next(FlushCtxState::FSM_F1, file_handle);
   ASSERT_EQ(OB_ERR_UNEXPECTED, ret);
 }
-
-// 某个文件从iterator返回、使用之后重新插回，如果迭代层级没有变更应该能被iterator重新取出
+// A file returned from iterator, after use should be reinserted, if the iteration level has not changed it should be retrievable by the iterator again
 TEST_F(TestFlushListIterator, test_iter_reinsert_file)
 {
   int ret = OB_SUCCESS;
@@ -425,8 +419,7 @@ TEST_F(TestFlushListIterator, test_iter_reinsert_file)
   vector<tmp_file::ObSNTmpFileHandle> file_handles;
   int total_file_num = 0;
   const int64_t FILE_NUM = 10;
-
-  // 创建文件，根据层级生成模拟的脏页数量
+  // Create file, generate simulated dirty page count based on hierarchy
   int64_t total_file_cnt = 0;
   create_files(FlushCtxState::FSM_F1, FILE_NUM, flush_prio_mgr, file_handles);
   for (int64_t i = 0; i < file_handles.size(); ++i) {
@@ -442,8 +435,7 @@ TEST_F(TestFlushListIterator, test_iter_reinsert_file)
   ObTmpFileFlushListIterator iter;
   ret = iter.init(&flush_prio_mgr);
   ASSERT_EQ(OB_SUCCESS, ret);
-
-  // 通过iterator取出所有文件
+  // Retrieve all files through iterator
   int64_t iter_file_cnt = 0;
   for (int64_t t = FlushCtxState::FSM_F1; t < FlushCtxState::FSM_FINISHED; ++t) {
     for (int64_t i = 0; OB_SUCC(ret) && i < FILE_NUM * 5; ++i) {
@@ -480,8 +472,7 @@ TEST_F(TestFlushListIterator, test_flush_list_remove)
   ASSERT_EQ(OB_SUCCESS, ret);
   vector<tmp_file::ObSNTmpFileHandle> file_handles;
   const int64_t FILE_NUM = 10;
-
-  // 创建文件，根据层级生成模拟的脏页数量
+  // Create file, generate simulated dirty page count based on hierarchy
   int64_t total_file_cnt = 0;
   for (int64_t t = FlushCtxState::FSM_F1; t < FlushCtxState::FSM_FINISHED; ++t) {
     vector<tmp_file::ObSNTmpFileHandle> tmp_file_handles;
@@ -497,8 +488,7 @@ TEST_F(TestFlushListIterator, test_flush_list_remove)
     }
     file_handles.insert(file_handles.end(), tmp_file_handles.begin(), tmp_file_handles.end());
   }
-
-  // 从文件链表中删除文件
+  // Remove file from file list
   const int64_t rand_remove_cnt = ObRandom::rand(1, file_handles.size());
   for (int64_t i = 0; i < rand_remove_cnt; ++i) {
     tmp_file::ObSNTmpFileHandle file_handle = file_handles.at(i);
@@ -541,12 +531,10 @@ TEST_F(TestFlushListIterator, test_flush_list_update)
   vector<tmp_file::ObSNTmpFileHandle> file_handles;
   int total_file_num = 0;
   const int64_t FILE_NUM = 10;
-
-  // 创建文件，根据层级生成模拟的脏页数量
+  // Create file, generate simulated dirty page count based on hierarchy
   int64_t total_file_cnt = 0;
   create_files(FlushCtxState::FSM_F1, FILE_NUM, flush_prio_mgr, file_handles);
-
-  // 0.插入文件0～4
+  // 0.Insert files 0~4
   for (int64_t i = 0; i < file_handles.size() / 2; ++i) {
     tmp_file::ObSNTmpFileHandle file_handle = file_handles.at(i);
     ASSERT_NE(file_handle.get(), nullptr);
@@ -556,8 +544,7 @@ TEST_F(TestFlushListIterator, test_flush_list_update)
     ASSERT_EQ(OB_SUCCESS, ret);
     total_file_cnt += 1;
   }
-
-  // 1. 更新不在链表中的文件
+  // 1. Update files not in the list
   for (int64_t i = file_handles.size() / 2; i < file_handles.size(); ++i) {
     tmp_file::ObSNTmpFileHandle file_handle = file_handles.at(i);
     ObSharedNothingTmpFile &tmp_file = *file_handle.get();
@@ -565,8 +552,7 @@ TEST_F(TestFlushListIterator, test_flush_list_update)
     ret = flush_prio_mgr.update_data_flush_list(tmp_file, dirty_record.dirty_data_size_);
     ASSERT_EQ(OB_ERR_UNEXPECTED, ret);
   }
-
-  // 2. 对层级没有变动的文件进行更新
+  // 2. Update files without changes in hierarchy
   for (int64_t i = 0; i < file_handles.size() / 2; ++i) {
     tmp_file::ObSNTmpFileHandle file_handle = file_handles.at(i);
     ObSharedNothingTmpFile &tmp_file = *file_handle.get();
@@ -574,8 +560,7 @@ TEST_F(TestFlushListIterator, test_flush_list_update)
     ret = flush_prio_mgr.update_data_flush_list(tmp_file, dirty_record.dirty_data_size_);
     ASSERT_EQ(OB_SUCCESS, ret);
   }
-
-  // 3. 更新到新的层级
+  // 3. Update to the new level
   for (int64_t i = 0; i < file_handles.size() / 2; ++i) {
     tmp_file::ObSNTmpFileHandle file_handle = file_handles.at(i);
     ObSharedNothingTmpFile &tmp_file = *file_handle.get();
@@ -584,8 +569,7 @@ TEST_F(TestFlushListIterator, test_flush_list_update)
     ret = flush_prio_mgr.update_data_flush_list(tmp_file, dirty_record.dirty_data_size_);
     ASSERT_EQ(OB_SUCCESS, ret);
   }
-
-  // 4. 插入文件5～10
+  // 4. Insert files 5~10
   for (int64_t i = file_handles.size() / 2; i < file_handles.size(); ++i) {
     tmp_file::ObSNTmpFileHandle file_handle = file_handles.at(i);
     ASSERT_NE(file_handle.get(), nullptr);
@@ -599,16 +583,14 @@ TEST_F(TestFlushListIterator, test_flush_list_update)
   ObTmpFileFlushListIterator iter;
   ret = iter.init(&flush_prio_mgr);
   ASSERT_EQ(OB_SUCCESS, ret);
-
-  // 5. F1中可以取出5个文件
+  // 5. 5 files can be retrieved from F1
   for (int64_t i = 0; i < file_handles.size() / 2; ++i) {
     tmp_file::ObSNTmpFileHandle file_handle;
     ret = iter.next(FlushCtxState::FSM_F1, file_handle);
     ASSERT_EQ(OB_SUCCESS, ret);
     ASSERT_NE(file_handle.get(), nullptr);
   }
-
-  // 6. F5中可以取出5个更新后的文件
+  // 6. F5 can retrieve 5 updated files
   for (int64_t i = 0; i < file_handles.size() / 2; ++i) {
     tmp_file::ObSNTmpFileHandle file_handle;
     ret = iter.next(FlushCtxState::FSM_F3, file_handle);
@@ -646,8 +628,7 @@ TEST_F(TestFlushListIterator, test_flush_list_reinsert_after_use)
     ret = flush_prio_mgr.insert_data_flush_list(tmp_file, dirty_record.dirty_data_size_);
     ASSERT_EQ(OB_SUCCESS, ret);
   }
-
-  // 取出迭代器dir中一半的文件
+  // Take half of the files from iterator dir
   const int64_t USED_FILE_CNT = file_handles.size() / 2;
   for (int64_t i = 0; i < USED_FILE_CNT; ++i) {
     tmp_file::ObSNTmpFileHandle file_handle;
@@ -656,13 +637,11 @@ TEST_F(TestFlushListIterator, test_flush_list_reinsert_after_use)
     ASSERT_NE(file_handle.get(), nullptr);
     printf("use file %ld\n", file_handle.get()->get_fd());
   }
-
-  // 迭代器中剩余文件重新插回flush_prio_mgr
+  // Remaining files in the iterator are reinserted into flush_prio_mgr
   iter.destroy();
   ret = iter.init(&flush_prio_mgr);
   ASSERT_EQ(OB_SUCCESS, ret);
-
-  // 重新初始化迭代器，通过迭代器取出剩余文件
+  // Reinitialize iterator, retrieve remaining files through iterator
   int64_t remain_file_cnt = 0;
   while (OB_SUCC(ret)) {
     tmp_file::ObSNTmpFileHandle file_handle;

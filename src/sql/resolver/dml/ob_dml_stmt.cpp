@@ -4430,7 +4430,7 @@ int ObDMLStmt::collect_temp_table_infos(ObIArray<TempTableInfo> &temp_table_info
       LOG_WARN("unexpect null ref query", K(ret));
     } else {
       bool find = false;
-      //找到对应的temp table集合
+      // Find the corresponding temp table collection
       for (int64_t j = 0; OB_SUCC(ret) && !find && j < temp_table_infos.count(); ++j) {
         TempTableInfo &info = temp_table_infos.at(j);
         if (table->ref_query_ == info.temp_table_query_) {
@@ -5290,7 +5290,7 @@ int ObValuesTableDef::deep_copy(const ObValuesTableDef &other,
 }
 
 /**
- * 获取指定index的分区列/分区生成列
+ * Get the partition column/partition generation column at the specified index
  * e.g. create table (c1 int, c2 int generated always as (c1 + 1)) partition by hash (c2)
  *      partition_columns = [c2]
  *      generate_columns  = [c1]

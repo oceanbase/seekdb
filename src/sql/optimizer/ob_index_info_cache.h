@@ -22,7 +22,7 @@ namespace sql
 {
 class ObShardingInfo;
 
-/* 缓存query range的信息 */
+/* Cache query range information */
 class QueryRangeInfo {
 public:
   QueryRangeInfo() : is_valid_(false),
@@ -125,7 +125,7 @@ private:
 };
 
 
-/* 索引的ordering 信息 */
+/* index ordering information */
 class OrderingInfo {
 public:
   OrderingInfo() :
@@ -147,8 +147,7 @@ private:
   common::ObArray<ObRawExpr*> ordering_;
   DISALLOW_COPY_AND_ASSIGN(OrderingInfo);
 };
-
-// 每个索引作为一个entry
+// Each index as an entry
 class IndexInfoEntry {
 public:
   IndexInfoEntry() :
@@ -180,7 +179,7 @@ public:
   uint64_t get_index_id() const { return index_id_; }
   void set_index_id(const uint64_t index_id) { index_id_ = index_id; }
   bool is_unique_index() const { return is_unique_index_; }
-  bool is_valid_unique_index() const //唯一索引在query range中能否保持唯一
+  bool is_valid_unique_index() const // Unique index can maintain uniqueness in query range
   {
     return is_unique_index_ && range_info_.is_index_column_get()
            && !((lib::is_mysql_mode() && range_info_.equal_prefix_has_null()));
@@ -219,9 +218,9 @@ private:
   bool force_direction_;
   QueryRangeInfo range_info_;
   OrderingInfo ordering_info_;
-  int64_t interesting_order_info_;  // 记录索引的序在stmt中的哪些地方用到 e.g. join, group by, order by
-  // 索引序在stmt中使用到的最大前缀数
-  // idx1(a,b,c), idx2(a,b),  对于order by a,b 两个索引使用到的最大前缀都是2
+  int64_t interesting_order_info_;  // Record where the index order is used in the stmt e.g. join, group by, order by
+  // The maximum number of prefixes used in stmt
+  // idx1(a,b,c), idx2(a,b),  For order by a,b both indexes use the maximum prefix of 2
   int64_t interesting_order_prefix_count_;
   ObTablePartitionInfo *partition_info_;
   ObShardingInfo *sharding_info_;
@@ -229,7 +228,7 @@ private:
 };
 
 
-/* 对优化器过程中抽取的query range 做一些缓存，减少计算的次数 */
+/* Cache the query range extracted during the optimizer process to reduce the number of calculations */
 class ObIndexInfoCache
 {
 public:

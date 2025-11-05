@@ -9,12 +9,11 @@
 #include "io/easy_log.h"
 #include "io/easy_summary.h"
 /**
- * IO文件头
+ * IO file header
  */
 
 EASY_CPP_START
-
-// 接口函数
+// interface function
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // easy_io_t
 extern easy_io_t           *easy_eio_create(easy_io_t *eio, int io_thread_count);
@@ -192,8 +191,7 @@ extern int easy_ssl_client_authenticate(easy_ssl_t *ssl, SSL *conn, const void *
 #define easy_io_dispatch(addr,s)                    easy_client_dispatch(&easy_io_var,addr,s)
 #define easy_io_send(addr,s)                        easy_client_send(&easy_io_var,addr,s);
 #endif
-
-// 变量
+// variable
 extern __thread easy_baseth_t *easy_baseth_self;
 extern easy_io_t        easy_io_var;
 extern struct easy_tx_session_pool_t global_tx_session_pool;

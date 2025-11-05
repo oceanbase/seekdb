@@ -71,7 +71,7 @@ int ObCreateDatabaseResolver::resolve(const ParseNode &parse_tree)
     //resolve database name
     if (OB_SUCC(ret)) {
       ObString database_name;
-      //node->children_指针上面已经做了判断，这里不再做判断
+      // node->children_ pointer has already been checked, no need to check again here
       ParseNode *dbname_node = node->children_[DBNAME];
       if (OB_ISNULL(dbname_node) || dbname_node->type_ != T_IDENT) {
         ret = OB_ERR_UNEXPECTED;
@@ -98,7 +98,7 @@ int ObCreateDatabaseResolver::resolve(const ParseNode &parse_tree)
     }
     //resolve database options
     if (OB_SUCC(ret)) {
-      //node->children_指针上面已经做了判断，这里不再做判断
+      // node->children_ pointer has already been checked, no need to check again here
       ParseNode *dboption_node = node->children_[DATABASE_OPTION];
       if (NULL != dboption_node) {
         if (T_DATABASE_OPTION_LIST != dboption_node->type_) {

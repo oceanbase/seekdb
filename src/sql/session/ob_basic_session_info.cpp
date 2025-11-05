@@ -69,10 +69,10 @@ ObBasicSessionInfo::ObBasicSessionInfo(const uint64_t tenant_id)
       sess_ref_cnt_(0),
       sess_ref_seq_(0),
       block_allocator_(SMALL_BLOCK_SIZE, common::OB_MALLOC_NORMAL_BLOCK_SIZE - 32,
-                       //这里减32是为了适配ObMalloc对齐规则, 防止超8k的内存分配
+                       // Here subtracting 32 is to adapt to the ObMalloc alignment rule, preventing memory allocation exceeding 8k
                        ObMalloc(lib::ObMemAttr(orig_tenant_id_, ObModIds::OB_SQL_SESSION_SBLOCK))),
       ps_session_info_allocator_(sizeof(ObPsSessionInfo), common::OB_MALLOC_NORMAL_BLOCK_SIZE - 32,
-                                 //这里减32是为了适配ObMalloc对齐规则, 防止超8k的内存分配
+                                 // Here subtracting 32 is to adapt to the ObMalloc alignment rule, preventing memory allocation exceeding 8k
                                  ObMalloc(lib::ObMemAttr(orig_tenant_id_, "PsSessionInfo"))),
       cursor_info_allocator_(sizeof(pl::ObDbmsCursorInfo), common::OB_MALLOC_NORMAL_BLOCK_SIZE - 32,
                              ObMalloc(lib::ObMemAttr(orig_tenant_id_, "SessCursorInfo"))),
@@ -324,8 +324,7 @@ int ObBasicSessionInfo::reset_sys_vars()
   ObObj oracle_sql_mode;
   const bool print_info_log = true;
   const bool is_sys_tenant = true;
-
-  // 清理 sys_var 信息
+  // Clean up sys_var information
   memset(sys_vars_, 0, sizeof(sys_vars_));
   influence_plan_var_indexs_.reset();
   sys_vars_cache_.reset();
@@ -338,19 +337,16 @@ int ObBasicSessionInfo::reset_sys_vars()
   inc_sys_var_alloc2_.reset();
   base_sys_var_alloc_.reset();
   sys_var_fac_.destroy();
-
-  // load 系统租户变量
+  // load system tenant variables
   OZ (load_default_sys_variable(print_info_log, is_sys_tenant));
-
-  // load 当前租户变量
+  // load current tenant variables
   OZ (GCTX.schema_service_->get_tenant_schema_guard(effective_tenant_id_, schema_guard,
                                                     OB_INVALID_VERSION));
   OZ (load_all_sys_vars(schema_guard));
   if (OB_FAIL(ret) && is_schema_error(ret)) {
     ret = OB_ERR_WAIT_REMOTE_SCHEMA_REFRESH;
   }
-
-  // 特殊变量处理
+  // Special variable processing
   OZ (update_sys_variable(share::SYS_VAR_NLS_DATE_FORMAT,
                           ObTimeConverter::COMPAT_OLD_NLS_DATE_FORMAT));
   OZ (update_sys_variable(share::SYS_VAR_NLS_TIMESTAMP_FORMAT,
@@ -467,8 +463,8 @@ void ObBasicSessionInfo::reset(bool skip_sys_var)
   last_query_trace_id_.reset();
   thread_data_.reset();
   nested_count_ = -1;
-  // session 缓存的场景下，只保留 base 值，清理 inc 值
-  // 去掉 sys var schema version 后，base 值即为 hardcode 值
+  // session caching scenario, only retain base value, clear inc value
+  // Remove sys var schema version, the base value is then the hardcoded value
   if (!skip_sys_var) {
     sys_vars_cache_.reset();
     sys_var_base_version_ = OB_INVALID_VERSION;
@@ -480,7 +476,7 @@ void ObBasicSessionInfo::reset(bool skip_sys_var)
   reserved_read_snapshot_version_.reset();
   check_sys_variable_ = true;
   acquire_from_pool_ = false;
-  // 不要重置release_to_pool_，原因见属性声明位置的注释。
+  // Do not reset release_to_pool_, reason see the comment at the property declaration location.
   is_tenant_killed_ = 0;
   first_need_txn_stmt_type_ = stmt::T_NONE;
   need_recheck_txn_readonly_ = false;
@@ -495,8 +491,8 @@ void ObBasicSessionInfo::reset(bool skip_sys_var)
   force_rich_vector_format_ = ForceRichFormatStatus::Disable;
   sess_bt_buff_pos_ = 0;
   ATOMIC_SET(&sess_ref_cnt_ , 0);
-  // 最后再重置所有allocator
-  // 否则thread_data_.user_name_之类的属性会有野指针，在session_mgr的foreach接口遍历时可能core掉。
+  // Finally reset all allocator
+  // Otherwise thread_data_.user_name_ such properties will have dangling pointers, which may cause core dump when iterating through the session_mgr's foreach interface.
   sess_level_name_pool_.reset();
   conn_level_name_pool_.reset();
   inc_sys_var_alloc1_.reset();
@@ -748,8 +744,8 @@ int ObBasicSessionInfo::check_and_init_retry_info(const ObCurTraceId::TraceId &c
                                                   const ObString &sql)
 {
   int ret = OB_SUCCESS;
-  // 下面这段判断影响太大，害怕出问题，所以打了ERROR之后还是继续执行，仅仅影响retry info，还是可以正常执行的
-  if (last_query_trace_id_.equals(cur_trace_id)) { // 是重试query的包
+  // The following judgment has a significant impact, I am afraid of problems, so after logging ERROR, it still continues to execute, only affecting retry info, it can still execute normally
+  if (last_query_trace_id_.equals(cur_trace_id)) { // is a retry query package
     if (OB_UNLIKELY(!retry_info_.is_inited())) {
       LOG_ERROR("is retry packet, but retry info is not inited, will init it",
                 K(last_query_trace_id_), K(cur_trace_id), K(retry_info_), K(get_server_sid()), K(sql));
@@ -758,13 +754,13 @@ int ObBasicSessionInfo::check_and_init_retry_info(const ObCurTraceId::TraceId &c
       }
     }
   } else {
-    //@TODO: 不是重试query的包，在正常语句结束的时候，不做清空重试信息逻辑，后续这个地方会做成按需初始化,
-    //减少正常语句的执行开销，所以如果是上一条语句初始化了重试信息，这里直接清空掉，
-    //因为对于异步执行而言，在控制端线程结束的时候判断无法判断其重试状态，所以不能做清空重试信息操作
+    //@TODO: Not a retry query packet, do not clear the retry information logic at the end of normal statement execution, this place will be made into on-demand initialization,
+    // Reduce the execution overhead of normal statements, so if the previous statement initialized the retry information, it is cleared here directly,
+    // Because for asynchronous execution, it is impossible to determine its retry status when the control thread ends, so the operation of clearing retry information cannot be performed
     if (OB_UNLIKELY(retry_info_.is_inited())) {
       retry_info_.reset();
     }
-    // 不是重试query的包都要init retry info
+    // Not a retry query packet should all init retry info
     if (OB_FAIL(retry_info_.init())) {
       LOG_WARN("fail to init retry info", K(ret), K(retry_info_), K(sql));
     } else {
@@ -961,7 +957,7 @@ int ObBasicSessionInfo::get_global_sys_variable(const ObBasicSessionInfo *sessio
   return ret;
 }
 
-int ObBasicSessionInfo::get_global_sys_variable(const uint64_t actual_tenant_id, // 为了处理租户已经切掉的情况
+int ObBasicSessionInfo::get_global_sys_variable(const uint64_t actual_tenant_id, // To handle the situation where the tenant has been switched
                                                 ObIAllocator &calc_buf,
                                                 const ObDataTypeCastParams &dtc_params,
                                                 const ObString &var_name,
@@ -1042,7 +1038,7 @@ int ObBasicSessionInfo::init_system_variables(const bool print_info_log, const b
     if (OB_FAIL(sys_variable_exists(name, is_exist))) {
       LOG_WARN("failed to check if sys variable exists", K(name), K(ret));
     } else if (!is_exist) {
-      // Note: 如果已经初始化过 base value，则下面的流程不会执行
+      // Note: If the base value has already been initialized, the following process will not be executed
       var_type = ObSysVariables::get_type(i);
       var_flag = ObSysVariables::get_flags(i);
       value.set_varchar(is_deserialized ? ObSysVariables::get_base_str_value(i) :ObSysVariables::get_value(i));
@@ -1073,7 +1069,7 @@ int ObBasicSessionInfo::init_system_variables(const bool print_info_log, const b
   release_to_pool_ = OB_SUCC(ret);
 
   if (OB_SUCC(ret)) {
-    if (OB_FAIL(gen_sys_var_in_pc_str())) { //将影响plan的系统变量序列化并缓存
+    if (OB_FAIL(gen_sys_var_in_pc_str())) { // Serialize and cache the system variable sequence that affects the plan
       LOG_INFO("fail to generate system variables in pc str");
     } else if (OB_FAIL(gen_configs_in_pc_str())) {
       LOG_INFO("fail to generate system config in pc str");
@@ -1095,14 +1091,14 @@ int ObBasicSessionInfo::update_query_sensitive_system_variable(ObSchemaGetterGua
   const uint64_t tenant_id = get_effective_tenant_id();
   int64_t refreshed_schema_version = OB_INVALID_VERSION;
   if (!check_sys_variable_) {
-    // 为了避免获取租户系统变量的SQL触发update_query_sensitive_system_variable形成循环依赖，这里直接跳过
+    // To avoid the SQL for obtaining tenant system variables triggering update_query_sensitive_system_variable and forming a circular dependency, we skip directly here
   } else if (OB_FAIL(schema_guard.get_schema_version(tenant_id, refreshed_schema_version))) {
     LOG_WARN("fail to get tenant schema version", K(ret), K(tenant_id));
   } else if (OB_INVALID_VERSION != last_refresh_schema_version_
              && last_refresh_schema_version_ == refreshed_schema_version) {
     // do nothing, version not changed, skip refresh
   } else if (OB_CORE_SCHEMA_VERSION >= refreshed_schema_version) {
-    // 建租户过程 or 建租户失败 or 本地schema未刷新出来的场景，大概率获取不到系统变量，此时跳过
+    // Start tenant process or tenant creation failed or local schema not refreshed scenario, it's likely that system variables cannot be obtained, skip in this case
   } else if (OB_FAIL(schema_guard.get_sys_variable_schema(tenant_id, sys_variable_schema))) {
     LOG_WARN("get tenant schema version failed", K(ret), K(tenant_id));
   } else if (OB_ISNULL(sys_variable_schema)) {
@@ -1111,7 +1107,7 @@ int ObBasicSessionInfo::update_query_sensitive_system_variable(ObSchemaGetterGua
   } else if (FALSE_IT(schema_version = sys_variable_schema->get_schema_version())) {
     ret = OB_ERR_UNEXPECTED;
   } else if (schema_version > get_global_vars_version()
-             && schema_version > OB_CORE_SCHEMA_VERSION) { //系统变量schema_version有效才更新
+             && schema_version > OB_CORE_SCHEMA_VERSION) { // system variable schema_version is valid before updating
     const ObTenantSchema *tenant_info = NULL;
     bool need_update_version = false;
     const ObSysVariableSchema *sys_variable_schema = NULL;
@@ -1119,7 +1115,7 @@ int ObBasicSessionInfo::update_query_sensitive_system_variable(ObSchemaGetterGua
       LOG_WARN("get tenant info from schema guard failed", K(ret));
     } else if (OB_FAIL(schema_guard.get_sys_variable_schema(get_effective_tenant_id(), sys_variable_schema))) {
       if (OB_TENANT_NOT_EXIST == ret) {
-        // 新建租户过程可能获取不到sys_variable_schema，此时先暂时忽略
+        // New tenant creation process may not obtain sys_variable_schema, at this time ignore temporarily
         LOG_INFO("tenant maybe creating, just skip", K(ret), K(ret));
         ret = OB_SUCCESS;
       } else {
@@ -1134,7 +1130,7 @@ int ObBasicSessionInfo::update_query_sensitive_system_variable(ObSchemaGetterGua
         if (sysvar != NULL && sysvar->is_query_sensitive()) {
           if (OB_FAIL(update_sys_variable(sysvar->get_name(), sysvar->get_value()))) {
             if (OB_ERR_SYS_VARIABLE_UNKNOWN == ret) {
-              //刷出来的variable可能是来自于一个更高的版本，本地没有，忽略掉
+              // The variable brushed out might be from a higher version, which we don't have locally, so ignore it
               ret = OB_SUCCESS;
             } else {
               LOG_WARN("update system variable failed", K(ret), K(*sysvar));
@@ -1163,9 +1159,8 @@ int ObBasicSessionInfo::load_default_sys_variable(const bool print_info_log, con
   }
   return ret;
 }
-
-//这个函数使用时机: 在升级期间从低版本session发至高版本后, 可能会补充某个系统变量值.
-//用于session反序列化
+// This function usage timing: During the upgrade period, after sending from a low version session to a high version, it may supplement the value of a system variable.
+// Used for session deserialization
 int ObBasicSessionInfo::load_default_sys_variable(ObIAllocator &calc_buf, int64_t var_idx)
 {
   int ret = OB_SUCCESS;
@@ -1323,11 +1318,9 @@ int ObBasicSessionInfo::change_value_for_special_sys_var(const ObSysVarClassType
   }
   return ret;
 }
-
-
-// 此函数中会调用ObBasicSessionInfo::change_value_for_special_sys_var改变一些值，
-// 仅用于ObMPBase::load_system_variables中，
-// 其他地方慎用
+// This function will call ObBasicSessionInfo::change_value_for_special_sys_var to change some values,
+// Only used in ObMPBase::load_system_variables,
+// Use with caution elsewhere
 int ObBasicSessionInfo::load_sys_variable(ObIAllocator &calc_buf,
                                           const ObString &name,
                                           const ObObj &type,
@@ -1386,10 +1379,9 @@ int ObBasicSessionInfo::load_sys_variable(ObIAllocator &calc_buf,
   }
   return ret;
 }
-
-// 此函数中会调用ObBasicSessionInfo::change_value_for_special_sys_var改变一些值，
-// 仅用于ObMPBase::load_system_variables中，
-// 其他地方慎用
+// This function will call ObBasicSessionInfo::change_value_for_special_sys_var to change some values,
+// Only used in ObMPBase::load_system_variables,
+// Use with caution elsewhere
 int ObBasicSessionInfo::load_sys_variable(ObIAllocator &calc_buf,
                                           const ObString &name,
                                           const int64_t dtype,
@@ -1433,7 +1425,7 @@ int ObBasicSessionInfo::cast_sys_variable(ObIAllocator &calc_buf,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid type", K(value), K(ret));
   } else {
-    // 为max_val和min_val进行判断，variable的value值不会进入此判断
+    // Perform judgment for max_val and min_val, the value of variable will not enter this judgment
     if (is_range_value
         && value.get_varchar() == ObString::make_string(ObBasicSysVar::EMPTY_STRING)) {
       out_value.set_null();
@@ -1471,33 +1463,33 @@ int ObBasicSessionInfo::cast_sys_variable(ObIAllocator &calc_buf,
 
 
 /*
- *获取影响physical plan的系统变量,以下系统变量会影响plan cache正确命中plan，需要在plan cache中进行处理
- *read_only:
-    ObSql中在resolver之后，生成逻辑计划之前用来判断db和table是否为只读，其变化会影响plan cache正确命中。
- *ob_enable_transformation
-    ObSql中在resolver之后，生成逻辑计划前判断是否进行改写，会影响生成plan的结构。
- *binlog_row_image
-    在resolver中会使用,对生成的plan有影响。
- *collation_connection
-    在resolver中使用，对plan有影响。
+ * Get system variables that affect the physical plan. The following system variables affect the correct hit of the plan in the plan cache and need to be handled in the plan cache.
+ * read_only:
+    Used in ObSql after the resolver and before generating the logical plan to determine if the db and table are read-only, its change will affect the correct hit of the plan cache.
+ * ob_enable_transformation
+    Used in ObSql after the resolver and before generating the logical plan to determine whether to rewrite, which will affect the structure of the generated plan.
+ * binlog_row_image
+    Used in the resolver, it has an impact on the generated plan.
+ * collation_connection
+    Used in the resolver, it has an impact on the plan.
  * sql_auto_is_null
-    在resolver中使用，对plan有影响。
- *div_precision_increment
-    expr的类型推导中会使用，暂时未将该变量传进去，使用的是hard coding, bug:1043693;
- *ob_enable_aggregation_pushdown
-    在优化器中使用，会影响生成的plan。
- *ob_enable_index_direct_select
-    在resolver中使用，判断是否可以使用索引表，影响plan cache正确命中。
- *sql_mode
-    在resolver中有使用，会影响生成的plan。
- *ob_route_policy
-    影响副本的类型的选项，进而影响决定是local还是remote的计划。plan cache当一次执行成功的local 语句，这次默认仍旧按照local执行
-    并不会去判断location，如果期间更改了ob_route_policy，则会导致无法从新选择副本。
- *ob_read_consistency
-    会影响replica的选择，进行影响plan
+    Used in the resolver, it has an impact on the plan.
+ * div_precision_increment
+    Used in type inference of expr, this variable has not been passed in yet, hard coding is used, bug:1043693;
+ * ob_enable_aggregation_pushdown
+    Used in the optimizer, it affects the generated plan.
+ * ob_enable_index_direct_select
+    Used in the resolver to determine whether index tables can be used, affecting the correct hit of the plan cache.
+ * sql_mode
+    Used in the resolver, it affects the generated plan.
+ * ob_route_policy
+    An option that affects the type of replica, thus affecting the decision between local and remote plans. When the plan cache executes a successful local statement once, it defaults to executing locally again
+    without judging the location. If ob_route_policy is changed during this period, it will lead to the inability to reselect the replica.
+ * ob_read_consistency
+    Affects the selection of replicas, impacting the plan.
  */
-//内部连接与外部连接获取到的sys_val顺序不一致，内部连接与外部连接执行同一sql不能命中同一plan,
-//暂不影响线上的plan cache命中率
+// Internal connection and external connection get sys_val in different orders, internal connection and external connection executing the same sql cannot hit the same plan,
+// Temporarily does not affect the plan cache hit rate online
 int ObBasicSessionInfo::get_influence_plan_sys_var(ObSysVarInPC &sys_vars) const
 {
   int ret = OB_SUCCESS;
@@ -1527,7 +1519,7 @@ void ObBasicSessionInfo::eval_sys_var_config_hash_val()
 }
 
 /*
- **内部session与用户session对应的影响plan的系统变量的顺序
+ **The order of system variables affected by the plan corresponding to internal session and user session
  *
  *    inner_session                                           user_session
  *
@@ -1557,7 +1549,7 @@ int ObBasicSessionInfo::gen_sys_var_in_pc_str()
   char *buf = NULL;
   int64_t pos = 0;
   if (is_first_gen_) {
-    //如果是第一次则需要分配内存
+    // If it is the first time then memory allocation is needed
     if (NULL == (buf = (char *)sess_level_name_pool_.alloc(MAX_SYS_VARS_STR_SIZE))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("fail to allocator memory", K(ret), K(MAX_SYS_VARS_STR_SIZE));
@@ -1670,7 +1662,7 @@ int ObBasicSessionInfo::update_sys_variable(const ObString &var, const ObString 
     } else {
       tmp_val.assign_ptr(val.ptr(), val.length());
     }
-    // 将varchar类型转换为实际类型
+    // Convert varchar type to actual type
     ObObj in_obj;
     in_obj.set_varchar(tmp_val);
     in_obj.set_collation_type(ObCharset::get_system_collation());
@@ -1698,7 +1690,7 @@ int ObBasicSessionInfo::update_sys_variable(const ObSysVarClassType sys_var_id, 
   ObObj obj;
   ObBasicSysVar *sys_var = NULL;
   int64_t sys_var_idx = 0;
-  // 首先track变量的修改, 这样如果变量修改失败, 也不会造成客户端与服务端不一致的情况
+  // First track the modification of the variable, so that if the variable modification fails, it will not cause inconsistency between the client and the server
   if (SYS_VAR_INVALID == sys_var_id) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid sys_var_id", K(sys_var_id), K(ret));
@@ -1715,7 +1707,7 @@ int ObBasicSessionInfo::update_sys_variable(const ObSysVarClassType sys_var_id, 
                 K(ret), K(sys_var_id), K(val), K(sys_var->get_value()));
     }
   }
-  // 更新变量
+  // Update variable
   if (OB_SUCC(ret)) {
     if (OB_FAIL(process_session_variable(sys_var_id, val, false /*check_timezone_valid*/,
                                         true /*is_update_sys_var*/))) {
@@ -1723,7 +1715,7 @@ int ObBasicSessionInfo::update_sys_variable(const ObSysVarClassType sys_var_id, 
     } else if (OB_FAIL(sys_var_inc_info_.add_sys_var_id(sys_var_id))) {
       LOG_WARN("add sys var id error",  K(sys_var_id), K(ret));
     } else {
-      // 如果设置的time_zone是一个offset而不是时区，那么对其做formalize，固定格式为 +/-HH:MM
+      // If the set time_zone is an offset rather than a timezone, then formalize it, fixed format to +/-HH:MM
       if (OB_UNLIKELY(SYS_VAR_TIME_ZONE == sys_var_id && ! tz_info_wrap_.is_position_class())) {
         const int64_t buf_len = 16;
         char tmp_buf[buf_len] = {0};
@@ -1757,7 +1749,7 @@ int ObBasicSessionInfo::update_sys_variable(const ObSysVarClassType sys_var_id, 
       }
     }
   }
-  // 处理PLAN_CHACHE相关的变量
+  // Process PLAN_CACHE related variables
   if (OB_SUCC(ret)
 			&& !is_deserialized_
       && sys_var->is_influence_plan()
@@ -1842,8 +1834,7 @@ int ObBasicSessionInfo::deep_copy_trace_id_var(const ObObj &src_val,
   }
   return ret;
 }
-
-//该接口中使用的name_pool_是一个只申请不释放的内存，暂时仅对会频繁更新的trace_id做优化
+// The name_pool_ used in this interface is a memory that is only allocated and not freed, temporarily optimized only for frequently updated trace_id
 int ObBasicSessionInfo::deep_copy_sys_variable(ObBasicSysVar &sys_var,
                                                const ObSysVarClassType sys_var_id,
                                                const ObObj &src_val)
@@ -2020,7 +2011,7 @@ int ObBasicSessionInfo::get_sys_variable(const ObSysVarClassType sys_var_id,
     LOG_WARN("invalid sys_var_id", K(sys_var_id), K(ret));
   } else if (OB_FAIL(get_sys_variable(sys_var_id, obj))) {
     LOG_WARN("failed to get system variable", K(sys_var_id), K(ret));
-  } else if (OB_FAIL(obj.get_varchar(val))) { //这里不用考虑sql_mode兼容转换，因为sql_mode取值不通过这里，而是通过sql_mode_manager_
+  } else if (OB_FAIL(obj.get_varchar(val))) { // Here we do not need to consider sql_mode compatibility conversion, because sql_mode values are not obtained here, but through sql_mode_manager_
     LOG_WARN("wrong obj type for system variable", K(sys_var_id), K(obj), K(ret));
   } else {}
   return ret;
@@ -2247,8 +2238,7 @@ ObObjType ObBasicSessionInfo::get_sys_variable_type(const ObString &var_name) co
   }
   return obj_type;
 }
-
-// select @@XXX的时候meta data中的type
+// select @@XXX when meta data type
 
 #define PROCESS_SESSION_INT_VARIABLE(sys_var)                                             \
     do {                                                                                  \
@@ -2426,13 +2416,13 @@ OB_INLINE int ObBasicSessionInfo::process_session_variable(ObSysVarClassType var
     }
     case SYS_VAR_CHARACTER_SET_RESULTS: {
       int64_t coll_int64 = 0;
-      // 无效的character type，用户获取过程中，也需要保证返回NULL
+      // Invalid character type, user acquisition process also needs to ensure returning NULL
       if (val.is_null()) {
         OX (sys_vars_cache_.set_character_set_results(CHARSET_INVALID));
       } else if (OB_FAIL(val.get_int(coll_int64))) {
         LOG_WARN("fail to get int from value", K(val), K(ret));
       } else if (OB_UNLIKELY(false == ObCharset::is_valid_collation(coll_int64))) {
-        // 这里不设置错误码
+        // Here do not set error code
         LOG_WARN("invalid collation", K(coll_int64), K(val));
         OX (sys_vars_cache_.set_character_set_results(CHARSET_INVALID));
       } else {
@@ -2443,13 +2433,13 @@ OB_INLINE int ObBasicSessionInfo::process_session_variable(ObSysVarClassType var
     }
     case SYS_VAR_CHARACTER_SET_CONNECTION: {
       int64_t coll_int64 = 0;
-      // 无效的character type，用户获取过程中，也需要保证返回NULL
+      // Invalid character type, user acquisition process also needs to ensure returning NULL
       if (val.is_null()) {
         OX (sys_vars_cache_.set_character_set_connection(CHARSET_INVALID));
       } else if (OB_FAIL(val.get_int(coll_int64))) {
         LOG_WARN("fail to get int from value", K(val), K(ret));
       } else if (OB_UNLIKELY(false == ObCharset::is_valid_collation(coll_int64))) {
-        // 这里不设置错误码
+        // Here do not set error code
         LOG_WARN("invalid collation", K(coll_int64), K(val));
         OX (sys_vars_cache_.set_character_set_connection(CHARSET_INVALID));
 
@@ -2465,13 +2455,13 @@ OB_INLINE int ObBasicSessionInfo::process_session_variable(ObSysVarClassType var
     }
     case SYS_VAR_NCHARACTER_SET_CONNECTION: {
       int64_t coll_int64 = 0;
-      // 无效的character type，用户获取过程中，也需要保证返回NULL
+      // Invalid character type, user acquisition process also needs to ensure returning NULL
       if (val.is_null()) {
         OX (sys_vars_cache_.set_ncharacter_set_connection(CHARSET_INVALID));
       } else if (OB_FAIL(val.get_int(coll_int64))) {
         LOG_WARN("fail to get int from value", K(val), K(ret));
       } else if (OB_UNLIKELY(false == ObCharset::is_valid_collation(coll_int64))) {
-        // 这里不设置错误码
+        // Here do not set error code
         LOG_DEBUG("invalid collation", K(coll_int64), K(val));
         OX (sys_vars_cache_.set_ncharacter_set_connection(CHARSET_INVALID));
       } else {
@@ -2568,10 +2558,10 @@ OB_INLINE int ObBasicSessionInfo::process_session_variable(ObSysVarClassType var
       break;
     }
     case SYS_VAR_TIMESTAMP: {
-      //系统变脸timestamp默认值为0，是number类型, 设置单位是s。
-      //当该系统变量设置为非0后, 则内部now()等时间函数会使用设置的值。
-      //由于设置的单位是s, 内部是用us为单位的int64描述, 如果是用设置的
-      //timestamp, 会先将设置的量转为us并四舍五入
+      // System timestamp default value is 0, is number type, setting unit is s.
+      // When this system variable is set to a non-zero value, the internal now() and other time functions will use the set value.
+      // Since the unit set is s, internally it is described as an int64 in us units, if using the set
+      //timestamp, will first convert the set value to us and round it to the nearest integer
       if (val.get_number().is_zero()) {
         sys_vars_cache_.set_timestamp(0);
       } else {
@@ -2593,7 +2583,7 @@ OB_INLINE int ObBasicSessionInfo::process_session_variable(ObSysVarClassType var
           ObDataTypeCastParams dtc_params = get_dtc_params();
           ObCastCtx cast_ctx(&allocator,
                              &dtc_params,
-                             0, /*number_int 该变量无用*/
+                             0, /*number_int this variable is useless*/
                              CM_NONE,
                              cast_coll_type,
                              NULL /* time zone info */);
@@ -2603,8 +2593,8 @@ OB_INLINE int ObBasicSessionInfo::process_session_variable(ObSysVarClassType var
               ret = OB_ERR_UNEXPECTED;
               LOG_WARN("result obj is null");
             } else {
-              //处理四舍五入 int64_t 最大值为9,223,372,036,854,775,807
-              //而9999-12-31到1970之间差值为2,469,899,520,000,000,000因此足够转换
+              // processing int64_t max value is 9,223,372,036,854,775,807
+              // And the difference between 9999-12-31 and 1970 is 2,469,899,520,000,000,000 so it is sufficient for conversion
               sys_vars_cache_.set_timestamp((res_obj->get_int() + 5) / 10);
             }
           } else {
@@ -3024,13 +3014,13 @@ int ObBasicSessionInfo::fill_sys_vars_cache_base_value(
     }
     case SYS_VAR_CHARACTER_SET_RESULTS: {
       int64_t coll_int64 = 0;
-      // 无效的character type，用户获取过程中，也需要保证返回NULL
+      // Invalid character type, user acquisition process also needs to ensure returning NULL
       if (val.is_null()) {
         OX (sys_vars_cache.set_base_character_set_results(CHARSET_INVALID));
       } else if (OB_FAIL(val.get_int(coll_int64))) {
         LOG_WARN("fail to get int from value", K(val), K(ret));
       } else if (OB_UNLIKELY(false == ObCharset::is_valid_collation(coll_int64))) {
-        // 这里不设置错误码
+        // Here do not set error code
         LOG_WARN("invalid collation", K(coll_int64), K(val));
         OX (sys_vars_cache.set_base_character_set_results(CHARSET_INVALID));
       } else {
@@ -3041,13 +3031,13 @@ int ObBasicSessionInfo::fill_sys_vars_cache_base_value(
     }
     case SYS_VAR_CHARACTER_SET_CONNECTION: {
       int64_t coll_int64 = 0;
-      // 无效的character type，用户获取过程中，也需要保证返回NULL
+      // Invalid character type, user acquisition process also needs to ensure returning NULL
       if (val.is_null()) {
         OX (sys_vars_cache.set_base_character_set_connection(CHARSET_INVALID));
       } else if (OB_FAIL(val.get_int(coll_int64))) {
         LOG_WARN("fail to get int from value", K(val), K(ret));
       } else if (OB_UNLIKELY(false == ObCharset::is_valid_collation(coll_int64))) {
-        // 这里不设置错误码
+        // Here do not set error code
         LOG_WARN("invalid collation", K(coll_int64), K(val));
         OX (sys_vars_cache.set_base_character_set_connection(CHARSET_INVALID));
       } else {
@@ -3058,13 +3048,13 @@ int ObBasicSessionInfo::fill_sys_vars_cache_base_value(
     }
     case SYS_VAR_NCHARACTER_SET_CONNECTION: {
       int64_t coll_int64 = 0;
-      // 无效的character type，用户获取过程中，也需要保证返回NULL
+      // Invalid character type, user acquisition process also needs to ensure returning NULL
       if (val.is_null()) {
         OX (sys_vars_cache.set_base_ncharacter_set_connection(CHARSET_INVALID));
       } else if (OB_FAIL(val.get_int(coll_int64))) {
         LOG_WARN("fail to get int from value", K(val), K(ret));
       } else if (OB_UNLIKELY(false == ObCharset::is_valid_collation(coll_int64))) {
-        // 这里不设置错误码
+        // Here do not set error code
         LOG_WARN("invalid collation", K(coll_int64), K(val));
         OX (sys_vars_cache.set_base_ncharacter_set_connection(CHARSET_INVALID));
       } else {
@@ -3167,10 +3157,10 @@ int ObBasicSessionInfo::fill_sys_vars_cache_base_value(
       break;
     }
     case SYS_VAR_TIMESTAMP: {
-      //系统变脸timestamp默认值为0，是number类型, 设置单位是s。
-      //当该系统变量设置为非0后, 则内部now()等时间函数会使用设置的值。
-      //由于设置的单位是s, 内部是用us为单位的int64描述, 如果是用设置的
-      //timestamp, 会先将设置的量转为us并四舍五入
+      // System timestamp default value is 0, is number type, setting unit is s.
+      // When this system variable is set to a non-zero value, the internal now() and other time functions will use the set value.
+      // Since the unit set is s, internally it is described as int64 in us units, if using the set
+      //timestamp, will first convert the set value to us and round it to the nearest integer
       if (val.get_number().is_zero()) {
         sys_vars_cache.set_base_timestamp(0);
       } else {
@@ -3379,8 +3369,8 @@ int ObBasicSessionInfo::process_session_variable_fast()
   OV (ObSysVarFactory::is_valid_sys_var_store_idx(store_idx));
   OZ (process_session_debug_sync(sys_vars_[store_idx]->get_value(), true, false));
   // SYS_VAR_OB_READ_CONSISTENCY
-  // 这个系统变量对应consistency_level_，该属性只能通过常规途径修改，所以适合加入sys_vars_cache_，
-  // 但这样涉及到的相关修改比较大，稳妥起见保留现有的序列化操作，只在本接口里执行，保证主线程正确初始化。
+  // This system variable corresponds to consistency_level_, this attribute can only be modified through regular means, so it is suitable for adding to sys_vars_cache_,
+  // But such modifications involve a large amount of changes, so for safety's sake, we retain the existing serialization operation and only execute it in this interface to ensure the main thread is correctly initialized.
   OZ (ObSysVarFactory::calc_sys_var_store_idx(SYS_VAR_OB_READ_CONSISTENCY, store_idx));
   OV (ObSysVarFactory::is_valid_sys_var_store_idx(store_idx));
   if (OB_SUCC(ret)) {
@@ -3397,9 +3387,9 @@ int ObBasicSessionInfo::process_session_variable_fast()
   }
 
   // SYS_VAR_TIME_ZONE / SYS_VAR_ERROR_ON_OVERLAP_TIME
-  // 这两个系统变量对应tz_info_wrap_，但该属性还有非系统变量方式的修改途径(update_timezone_info接口)，
-  // 所以tz_info_wrap_不适合加入sys_vars_cache_，但需要序列化。
-  // 主线程申请session时，会在process_single_stmt接口中调用update_timezone_info接口，所以也能得到恰当的初始化。
+  // These two system variables correspond to tz_info_wrap_, but this attribute can also be modified through non-system variable methods (update_timezone_info interface),
+  // So tz_info_wrap_ is not suitable for joining sys_vars_cache_, but it needs to be serialized.
+  // Main thread applies for session, it will call update_timezone_info interface in process_single_stmt interface, so it can also get proper initialization.
   OZ (reset_timezone());
   return ret;
 }
@@ -3431,8 +3421,7 @@ int ObBasicSessionInfo::process_session_sql_mode_value(const ObObj &value)
   }
   return ret;
 }
-
-// 检查使用is_oracle_mode与compatibility_mode是否一致，如果不一致，则说明此处不能直接用is_oracle_mode替代
+// Check if is_oracle_mode is consistent with compatibility_mode, if not, it indicates that is_oracle_mode cannot be directly used here as a replacement
 
 int ObBasicSessionInfo::process_session_compatibility_mode_value(const ObObj &value)
 {
@@ -3821,10 +3810,8 @@ int ObBasicSessionInfo::get_group_concat_max_len(uint64_t &group_concat_max_len)
 {
   return get_uint64_sys_var(SYS_VAR_GROUP_CONCAT_MAX_LEN, group_concat_max_len);
 }
-
-
-// 参数max_allowed_pkt和net_buffer_len的命名之所以不为max_allowed_packet和net_buffer_length，
-// 是为了规避lib/regex/include/mysql.h中的命名重复，使得编译能通过
+// The parameters max_allowed_pkt and net_buffer_len are named this way instead of max_allowed_packet and net_buffer_length,
+// To avoid naming conflicts in lib/regex/include/mysql.h, allowing the compilation to pass
 int ObBasicSessionInfo::get_max_allowed_packet(int64_t &max_allowed_pkt) const
 {
   return get_int64_sys_var(SYS_VAR_MAX_ALLOWED_PACKET, max_allowed_pkt);
@@ -4336,8 +4323,8 @@ int ObBasicSessionInfo::calc_need_serialize_vars(ObIArray<ObSysVarClassType> &sy
   int ret = OB_SUCCESS;
   sys_var_ids.reset();
   user_var_names.reset();
-  // 默认需要序列化的系统变量
-  // 普通租户，序列化和 hardcode 不一致的变量
+  // Default system variables that need to be serialized
+  // Normal tenant, variables that are inconsistent between serialization and hardcode
   const ObIArray<ObSysVarClassType> &ids = sys_var_inc_info_.get_all_sys_var_ids();
   for (int64_t i = 0; OB_SUCC(ret) && i < ids.count(); ++i) {
     int64_t sys_var_idx = -1;
@@ -4354,8 +4341,8 @@ int ObBasicSessionInfo::calc_need_serialize_vars(ObIArray<ObSysVarClassType> &sy
   }
 
   if (OB_SUCC(ret) && OB_NOT_NULL(cur_phy_plan_) && cur_phy_plan_->contain_pl_udf_or_trigger()) {
-    // 如果该语句包含PL UDF/TRIGGER, 将该Sesssion上变化的Package变量进行同步
-    // TODO: 当前做的不够精细, 后续应该做到仅同步需要的变量
+    // If the statement contains PL UDF/TRIGGER, synchronize the changed Package variables on this Session
+    // TODO: The current implementation is not detailed enough, subsequent improvements should only synchronize the necessary variables
     ObSessionValMap::VarNameValMap::const_iterator iter = user_var_val_map_.get_val_map().begin();
     for (; OB_SUCC(ret) && iter != user_var_val_map_.get_val_map().end(); ++iter) {
       const ObString name = iter->first;
@@ -4369,23 +4356,23 @@ int ObBasicSessionInfo::calc_need_serialize_vars(ObIArray<ObSysVarClassType> &sy
   }
 
   if (OB_SUCC(ret) && cur_phy_plan_ != nullptr) {
-    // 处理该语句用到的需要序列化的用户变量和系统变量
+    // Process the user variables and system variables that need to be serialized for this statement
     const ObIArray<ObVarInfo> &extra_serialize_vars = cur_phy_plan_->get_vars();
     for (int64_t i = 0; OB_SUCC(ret) && i < extra_serialize_vars.count(); ++i) {
       const ObVarInfo &var_info = extra_serialize_vars.at(i);
       if (USER_VAR == var_info.type_) {
-        // 用户变量
+        // User variable
         if (OB_FAIL(user_var_names.push_back(var_info.name_))) {
           LOG_WARN("fail to push user var name", K(var_info), K(user_var_names), K(ret));
         }
       } else if (SYS_VAR == var_info.type_) {
-        // 系统变量
+        // System variables
         ObSysVarClassType sys_var_id = ObSysVarFactory::find_sys_var_id_by_name(var_info.name_);
         if (SYS_VAR_INVALID == sys_var_id) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("invalid sys var id", K(sys_var_id), K(var_info), K(ret));
         } else {
-          // 去重
+          // Deduplicate
           bool sys_var_exist = false;
           for (int64_t j = 0; OB_SUCC(ret) && !sys_var_exist && j < sys_var_ids.count(); ++j) {
             if (sys_var_id == sys_var_ids.at(j)) {
@@ -4517,7 +4504,7 @@ OB_DEF_SERIALIZE_SIZE(ObBasicSessionInfo::SysVarsCacheData)
 OB_DEF_SERIALIZE(ObBasicSessionInfo)
 {
   int ret = OB_SUCCESS;
-  ObTimeZoneInfo tmp_tz_info;//为了兼容老版本，创建临时time zone info 占位
+  ObTimeZoneInfo tmp_tz_info;//For compatibility with old versions, create a temporary time zone info placeholder
   // To be compatible with old version which store sql_mode and compatibility mode in ObSQLModeManager;
   int64_t compatibility_mode_index = 0;
   if (OB_FAIL(compatibility_mode2index(get_compatibility_mode(), compatibility_mode_index))) {
@@ -4542,7 +4529,7 @@ OB_DEF_SERIALIZE(ObBasicSessionInfo)
               is_master_session() ? get_sid() : master_sessid_,
               capability_.capability_,
               thread_data_.database_name_);
-  // 序列化需要序列化的用户变量和系统变量
+  // Serialize the user variables and system variables that need serialization
   ObSEArray<ObSysVarClassType, 64> sys_var_ids;
   ObSEArray<ObString, 32> user_var_names;
   if (OB_FAIL(ret)) {
@@ -4633,8 +4620,7 @@ OB_DEF_SERIALIZE(ObBasicSessionInfo)
       LOG_WARN("fail to encode tx_read_only", K(ret));
     }
   }
-
-  // 不再有意义字段，为了兼容性考虑
+  // No longer meaningful field, for compatibility reasons
   bool unused_literal_query = false;
   int64_t unused_inner_safe_weak_read_snapshot = 0;
   int64_t unused_weak_read_snapshot_source = 0;
@@ -4696,7 +4682,7 @@ OB_DEF_SERIALIZE(ObBasicSessionInfo)
 OB_DEF_DESERIALIZE(ObBasicSessionInfo)
 {
   int ret = OB_SUCCESS;
-  ObTimeZoneInfo tmp_tz_info;//为了兼容老版本，创建临时time zone info 占位
+  ObTimeZoneInfo tmp_tz_info;//For compatibility with old versions, create a temporary time zone info placeholder
   int64_t compatibility_mode_index = 0;
   is_deserialized_ = true;
   bool has_tx_desc = 0;
@@ -4725,7 +4711,7 @@ OB_DEF_DESERIALIZE(ObBasicSessionInfo)
               thread_data_.database_name_);
   rpc_tenant_id_ = (tenant_id_ >> 32);
   tenant_id_ = (tenant_id_ << 32 >> 32);
-  // 反序列化需要序列化的用户变量和系统变量
+  // Deserialization of serialized user variables and system variables
   int64_t deserialize_user_var_count = 0;
   int64_t deserialize_sys_var_count = 0;
 
@@ -4758,8 +4744,8 @@ OB_DEF_DESERIALIZE(ObBasicSessionInfo)
   }
 
   sys_var_inc_info_.reset();
-  // 当 sys_var_base_version_ == CACHED_SYS_VAR_VERSION 时说明有缓存，不需要 load 默认值
-  // 否则说明没有缓存，需要 load 默认值，然后打补丁
+  // When sys_var_base_version_ == CACHED_SYS_VAR_VERSION it indicates that there is a cache, no need to load default value
+  // Otherwise it means there is no cache, need to load default value, then apply patch
   if (CACHED_SYS_VAR_VERSION != sys_var_base_version_) {
     OZ (load_all_sys_vars_default());
   } else {
@@ -4791,14 +4777,14 @@ OB_DEF_DESERIALIZE(ObBasicSessionInfo)
         } else if (FALSE_IT(sys_var_id = static_cast<ObSysVarClassType>(tmp_sys_var_id))) {
         } else if (OB_FAIL(ObSysVarFactory::calc_sys_var_store_idx(sys_var_id, store_idx))) {
           if (OB_SYS_VARS_MAYBE_DIFF_VERSION == ret) {
-            // 可能是版本不同，为了兼容，跳过这段数据，并继续循环
+            //possibly version different, for compatibility, skip this data, and continue loop
             ret = OB_SUCCESS;
             int64_t sys_var_version = 0;
             int64_t sys_var_len = 0;
             OB_UNIS_DECODE(sys_var_version);
             OB_UNIS_DECODE(sys_var_len);
             if (OB_SUCC(ret)) {
-              pos += sys_var_len; // 跳过这段数据
+              pos += sys_var_len; // skip this data
               LOG_WARN("invalid sys var id, maybe version is different, skip it", K(sys_var_id));
             }
           } else {
@@ -4850,7 +4836,7 @@ OB_DEF_DESERIALIZE(ObBasicSessionInfo)
   bool need_serial_exec = false;
   uint64_t sql_scope_flags = 0;
 
-  sys_var_in_pc_str_.reset(); //sys_var_in_pc_str_在反序列化系统变量阶段可能会被污染，需要reset掉
+  sys_var_in_pc_str_.reset(); // sys_var_in_pc_str_ may be contaminated during the deserialization of system variables, and needs to be reset
   config_in_pc_str_.reset();
   flt_vars_.last_flt_trace_id_.reset();
   flt_vars_.last_flt_span_id_.reset();
@@ -4928,9 +4914,9 @@ OB_DEF_DESERIALIZE(ObBasicSessionInfo)
   tz_info_wrap_.set_tz_info_map(tz_info_map);
   set_last_flt_trace_id(flt_vars_.last_flt_trace_id_);
   set_last_flt_span_id(flt_vars_.last_flt_span_id_);
-  //在升级过程中,由于版本差异,高版本server如果收到低版本server发来的session变量,需要兼容处理
-  //反序列化完成后, 由于后面存在再次序列化给其他server的场景, 所以需要补齐需要序列化的系统变量
-  //fix以下场景   A(2.1)->B(2.2)->C(2.2)-> ret = -4016
+  // During the upgrade process, due to version differences, a high-version server needs to handle session variables sent by a low-version server with compatibility.
+  // Deserialization is complete, since there is a scenario of serializing for other servers later, so the system variables that need to be serialized need to be completed
+  // fix the following scenario   A(2.1)->B(2.2)->C(2.2)-> ret = -4016
   if (OB_SUCC(ret) && GET_MIN_CLUSTER_VERSION() < CLUSTER_CURRENT_VERSION) {
     ObArenaAllocator calc_buf(ObModIds::OB_SQL_SESSION);
     for (int64_t i = 0; OB_SUCC(ret) && i < get_sys_var_count(); ++i) {
@@ -5096,7 +5082,7 @@ int ObBasicSessionInfo::load_all_sys_vars(const ObSysVariableSchema &sys_var_sch
 OB_DEF_SERIALIZE_SIZE(ObBasicSessionInfo)
 {
   int64_t len = 0;
-  ObTimeZoneInfo tmp_tz_info;//为了兼容老版本，创建临时time zone info 占位
+  ObTimeZoneInfo tmp_tz_info;//For compatibility with old versions, create a temporary time zone info placeholder
   int ret = OB_SUCCESS;
   // To be compatible with old version which store sql_mode and compatibility mode in ObSQLModeManager;
   int64_t compatibility_mode_index = 0;
@@ -5119,8 +5105,7 @@ OB_DEF_SERIALIZE_SIZE(ObBasicSessionInfo)
               is_master_session() ? get_sid() : master_sessid_,
               capability_.capability_,
               thread_data_.database_name_);
-
-  // 计算需要序列化的用户变量和系统变量的序列化长度
+  // Calculate the serialization length of user variables and system variables to be serialized
   ObSEArray<ObSysVarClassType, 128> sys_var_ids;
   ObSEArray<ObString, 32> user_var_names;
   if (OB_FAIL(ret)) {
@@ -5346,9 +5331,9 @@ int ObBasicSessionInfo::is_sys_var_actully_changed(const ObSysVarClassType &sys_
                                                    bool &changed)
 {
   int ret = OB_SUCCESS;
-  // 部分系统变量除了设置标志位外还做了其他的工作
-  // 因此这里仅CHECK只设置了标志位的系统变量
-  // 变量的设置参考函数 process_session_variable
+  // Some system variables do other work besides setting the flag
+  // Therefore here only CHECK set the system variable with a flag bit
+  // Variable setting reference function process_session_variable
   changed = true;
   OZ (get_sys_variable(sys_var_id, new_val));
   if (OB_SUCC(ret)) {
@@ -5714,7 +5699,7 @@ ObTxIsolationLevel ObBasicSessionInfo::get_tx_isolation() const
   if (next_tx_isolation_ != ObTxIsolationLevel::INVALID) {
     isolation = next_tx_isolation_;
   } else {
-    // 这里只会在本机调用，因此使用sys_vars_cache_data_的系统变量
+    // Here it will only be called locally, therefore using the system variables of sys_vars_cache_data_
     isolation = sys_vars_cache_.get_tx_isolation();
   }
   return isolation;
@@ -5739,18 +5724,18 @@ void ObBasicSessionInfo::reset_tx_isolation()
 }
 
 /*
- 这里为什么每次都要设置next_tx_read_only？
+ Why is next_tx_read_only always set here?
 
  set session transaction read only;
  set transaction read write;
  start transaction;
  insert into tt values(5);
  insert into tt values(6);
- start transaction;        //隐式提交上面的事务，开启本事务，read_only=false;
- insert into tt values(8); //对于这种case，这条语句需要执行成功，与mysql保持兼容
+ start transaction;        // Implicitly commits the above transaction, starts this transaction, read_only=false;
+ insert into tt values(8); // For this case, this statement needs to succeed to maintain compatibility with mysql
  commit;
 
- 为了保持上述行为跟mysql一致，不能做如下处理:
+ To keep the above behavior consistent with mysql, the following cannot be done:
  if (last_tx_read_only != cur_tx_read_only) {
    next_tx_read_only_ = cur_tx_read_only;
    trans_spec_status_ = TRANS_SPEC_SET;
@@ -5824,7 +5809,7 @@ bool ObBasicSessionInfo::get_tx_read_only() const
   if (next_tx_read_only_ != TX_NOT_SET) {
     tx_read_only = next_tx_read_only_;
   } else {
-    // 这里只会在本机调用，因此使用sys_vars_cache_data_的系统变量
+    // Here it will only be called locally, therefore using the system variables of sys_vars_cache_data_
     tx_read_only = sys_vars_cache_.get_tx_read_only();
   }
   return tx_read_only;
@@ -5868,7 +5853,7 @@ int ObBasicSessionInfo::store_query_string_(const ObString &stmt, int64_t& buf_l
   }
   if (OB_SUCC(ret)) {
     MEMCPY(query, stmt.ptr(), truncated_len);
-    //char query[MAX_QUERY_STRING_LEN] 不存在越界风险,且不需要判空
+    //char query[MAX_QUERY_STRING_LEN] does not have out-of-bounds risk, and does not need to be checked for null
     query[truncated_len] = '\0';
     query_len = truncated_len;
   }
@@ -5902,7 +5887,7 @@ int ObBasicSessionInfo::store_query_string_(const ObString &stmt)
   }
   if (OB_SUCC(ret)) {
     MEMCPY(thread_data_.cur_query_, stmt.ptr(), truncated_len);
-    //char cur_query_[MAX_QUERY_STRING_LEN] 不存在越界风险,且不需要判空
+    //char cur_query_[MAX_QUERY_STRING_LEN] does not have out-of-bounds risk, and does not need to be checked for null
     thread_data_.cur_query_[truncated_len] = '\0';
     thread_data_.cur_query_len_ = truncated_len;
   }
@@ -6016,8 +6001,7 @@ int ObBasicSessionInfo::is_trx_commit_timeout(transaction::ObITxCallback *&callb
   }
   return ret;
 }
-
-// 检查事务内部的语句间隔超时
+// Check statement interval timeout within the transaction
 int ObBasicSessionInfo::is_trx_idle_timeout(bool &timeout)
 {
   int ret = OB_SUCCESS;
@@ -6099,17 +6083,15 @@ int ObBasicSessionInfo::check_feature_enable(const ObCompatFeatureType feature_t
   }
   return ret;
 }
-
-//session 当前的query处于非retry的packet处理时
-//  1）如果thread_data_.state_ == SESSION_KILLED时，调用该接口直接返回OB_ERR_SESSION_INTERRUPTED错误；
-//  2）如果thread_data_.state_ != SESSION_KILLED时，进行session state的设置
-
-//session 当前的query处于retry的packet处理时
-//  1）如果thread_data_.state_ == SESSION_KILLED时，调用该接口直接返回OB_ERR_SESSION_INTERRUPTED错误；
-//  2）如果thread_data_.state_ != SESSION_KILLED时，则进一步判断
-//     2.1)如果QUERY_KILLED == thread_data_.state_ && state != SESSION_KILLED, 则返回OB_ERR_QUERY_INTERRUPTED错误
-//     2.2)如果QUERY_DEADLOCKED == thread_data_.state_ && state != SESSION_KILLED, 则返回OB_DEAD_LOCK错误
-//     2.3)其他情况则进行session state的设置
+// session current query is in packet processing without retry
+//  1）If thread_data_.state_ == SESSION_KILLED, call this interface to directly return OB_ERR_SESSION_INTERRUPTED error;
+//  2) If thread_data_.state_ != SESSION_KILLED, set the session state
+// session current query is in packet processing during retry
+//  1）If thread_data_.state_ == SESSION_KILLED, call this interface to directly return OB_ERR_SESSION_INTERRUPTED error;
+//  2) If thread_data_.state_ != SESSION_KILLED, then further judgment is made
+//     2.1) If QUERY_KILLED == thread_data_.state_ && state != SESSION_KILLED, then return OB_ERR_QUERY_INTERRUPTED error
+//     2.2) If QUERY_DEADLOCKED == thread_data_.state_ && state != SESSION_KILLED, then return OB_DEAD_LOCK error
+//     2.3) Other cases then set the session state
 int ObBasicSessionInfo::set_session_state(ObSQLSessionState state)
 {
   LockGuard lock_guard(thread_data_mutex_);
@@ -6479,7 +6461,7 @@ int ObBasicSessionInfo::set_time_zone(const ObString &str_val, const bool is_ora
     } else if (OB_ISNULL(tz_info_mgr)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("tenant timezone mgr is null", K(tz_info_mgr));
-    } else {//此处需要先更新version，这样可以保证find到的tz_info version >= cur_version
+    } else {//Here you need to update the version first, so that the found tz_info version >= cur_version
       const int64_t orig_version = tz_info_wrap_.get_cur_version();
       tz_info_wrap_.set_cur_version(tz_info_mgr->get_version());
       ObCollationType coll_type = ObCharset::get_default_collation(ObCharset::get_default_charset());
@@ -6490,7 +6472,7 @@ int ObBasicSessionInfo::set_time_zone(const ObString &str_val, const bool is_ora
       if (is_oralce_mode) {
         val_no_sp = val_no_sp.trim();
       }
-      //note:要先获取start service time；如果先find再获取start_service_time，start_service_time可能在这个时间窗口中被更改
+      //note: need to get start service time first; if find is done before getting start_service_time, start_service_time may be changed within this time window
       int64_t start_service_time = GCTX.start_service_time_;
       if (OB_FAIL(tz_info_mgr->find_time_zone_info(val_no_sp,
                                                    tz_info_wrap_.get_tz_info_pos()))) {
@@ -6503,8 +6485,8 @@ int ObBasicSessionInfo::set_time_zone(const ObString &str_val, const bool is_ora
 
       if (OB_ERR_UNKNOWN_TIME_ZONE == ret) {
         if (0 == start_service_time) {
-          //代码执行到这里有两种情况：1）session的反序列化逻辑；2）系统租户的登陆流程
-          //对于第二中情况，期待该session上的后续query会促使session更新timezone info，因此这里对timezone信息进行设置
+          // Code execution reaches here in two cases: 1) session deserialization logic; 2) system tenant login process
+          // For the second case, expect that subsequent queries on this session will prompt the session to update the timezone info, therefore, we set the timezone information here
           LOG_INFO("ignore unknow time zone, perhaps in remote/distribute task processer when server start_time is zero", K(str_val));
           offset = 0;
           if (OB_FAIL(ObTimeConverter::str_to_offset(ObString("+8:00"), offset, ret_more,
@@ -6555,7 +6537,7 @@ int ObBasicSessionInfo::update_timezone_info()
         LOG_WARN("time zone info is invalid", K(tz_info_wrap_.get_tz_info_pos()), K(ret));
       } else if (OB_FAIL(tz_info_wrap_.get_tz_info_pos().get_tz_name(tz_name))) {
         LOG_WARN("fal to get time zone name", K(tz_info_wrap_.get_tz_info_pos()), K(ret));
-      } else {//此处需要先更新version，这样可以保证find到的tz_info version >= cur_version
+      } else {//Here you need to update the version first, so that the found tz_info version >= cur_version
         int64_t orig_version = tz_info_wrap_.get_cur_version();
         tz_info_wrap_.set_cur_version(tz_info_mgr->get_version());
         if (OB_FAIL(tz_info_mgr->find_time_zone_info(tz_name, tz_info_wrap_.get_tz_info_pos()))) {
@@ -6619,7 +6601,7 @@ int ObExecEnv::gen_exec_env(const ObBasicSessionInfo &session, char* buf, int64_
         val.reset();
         OZ (session.get_sys_variable(ExecEnvMap[i], val));
         OZ (val.print_plain_str_literal(buf + pos, len - pos, size));
-        //输出间隔符
+        // Output delimiter
         OX (pos += size);
         CK (pos < len);
         OX (buf[pos++] = ',');
@@ -6689,7 +6671,7 @@ int ObExecEnv::gen_exec_env(const share::schema::ObSysVariableSchema &sys_variab
           OZ (databuff_printf(buf + pos, len - pos, size, "%.*s",
                                                     static_cast<int32_t>(val.length()), val.ptr()));
           OX (pos += size);
-          //输出间隔符
+          // Output delimiter
           CK (pos < len);
           OX (buf[pos++] = ',');
         }

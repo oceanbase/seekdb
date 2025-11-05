@@ -129,8 +129,7 @@ int ObPxMSReceiveOp::inner_open()
   }
   return ret;
 }
-
-//提前释放row store数据，而不是等到close时释放
+// Release row store data in advance, rather than waiting until close to release
 int ObPxMSReceiveOp::release_merge_inputs()
 {
   int ret = OB_SUCCESS;
@@ -314,7 +313,7 @@ int ObPxMSReceiveOp::GlobalOrderInput::switch_get_row_store() {
       LOG_WARN("failed to finish add row", K(ret));
     } else {
       // switch row store that has data
-      // 这里之前为了避免频繁的将row store来回切的同时来回reset，所以数据是append到一定量后才开始真正清空
+      // Here previously to avoid frequent row store role switch and reset, the data was appended to a certain amount before actually clearing
       ObChunkDatumStore::Iterator *tmp_reader = get_row_reader_;
       get_row_reader_ = add_row_reader_;
       add_row_reader_ = tmp_reader;
@@ -343,8 +342,8 @@ int ObPxMSReceiveOp::GlobalOrderInput::get_one_row_from_channels(
   int64_t hint_channel_idx = channel_idx;
   int64_t got_channel_idx = OB_INVALID_INDEX_INT64;
   bool fetched = false;
-  // 一直拿数据直到拿到的数据是channel_idx相同，则row_heap可以进行堆排序返回一行
-  // 当前策略是，如果channel_idx的数据没有拿到，则需要轮训所有channel之后再拿channel_idx的数据
+  // Keep fetching data until the fetched data has the same channel_idx, then row_heap can be heap sorted to return one row
+  // The current strategy is, if the data for channel_idx is not obtained, then all channels need to be polled before obtaining the data for channel_idx
   while (OB_SUCC(ret) && !fetched && !is_finish()) {
     got_channel_idx = hint_channel_idx;
     if (OB_FAIL(ms_receive_op->ptr_row_msg_loop_->process_one(got_channel_idx))) {
@@ -508,7 +507,7 @@ int ObPxMSReceiveOp::GlobalOrderInput::create_chunk_datum_store(
     LOG_WARN("create ra row store fail", K(ret));
   } else {
     row_store = new (buf) ObChunkDatumStore("PxMSRecvGlobal");
-    // TODO: llongzhong.wlz 这里应该使用一个参数来控制row_store存储的数据量，或者SQL内存管理自动控制
+    // TODO: llongzhong.wlz Here should use a parameter to control the amount of data stored in row_store, or let SQL memory management control automatically
     int64_t mem_limit = 0;
     row_store->set_allocator(*alloc_);
     row_store->set_callback(sql_mem_processor_);
@@ -595,7 +594,7 @@ int ObPxMSReceiveOp::inner_get_next_batch(const int64_t max_row_cnt)
 int ObPxMSReceiveOp::inner_get_next_row()
 {
   int ret = OB_SUCCESS;
-  // 从channel sets 读取数据，并向上迭代
+  // Read data from channel sets and iterate upwards
   const ObPxReceiveSpec &spec = static_cast<const ObPxReceiveSpec &>(get_spec());
   ObPhysicalPlanCtx *phy_plan_ctx = NULL;
   if (OB_ISNULL(phy_plan_ctx = GET_PHY_PLAN_CTX(ctx_))) {
@@ -611,7 +610,7 @@ int ObPxMSReceiveOp::inner_get_next_row()
   }
   if (OB_SUCC(ret)) {
     const ObChunkDatumStore::StoredRow *store_row = nullptr;
-    // (1) 向 heap 中添加一个或多个元素，直至 heap 满
+    // (1) Add one or more elements to the heap until the heap is full
     while (OB_SUCC(ret) && row_heap_.capacity() > row_heap_.count()) {
       // Note:
       //   inner_get_next_row is invoked in two pathes (batch vs
@@ -637,8 +636,7 @@ int ObPxMSReceiveOp::inner_get_next_row()
         LOG_WARN("fail push row to heap", K(ret));
       } else { /* nothing */ }
     }
-
-    // (2) 从 heap 中弹出最大值
+    // (2) Pop the maximum value from the heap
     if (OB_SUCC(ret)) {
       if (0 == row_heap_.capacity()) {
         ret = OB_ITER_END;
@@ -749,7 +747,7 @@ int ObPxMSReceiveOp::get_all_rows_from_channels(
       if (OB_FAIL(cmp_fun.init(&MY_SPEC.sort_collations_, &MY_SPEC.sort_cmp_funs_))) {
         LOG_WARN("failed to init cmp function", K(ret));
       }
-      // 每个channel的数据是local sort，所以需要切分出哪段有序，同时生成MergeSortInput信息
+      // Each channel's data is local sort, so it is necessary to segment which part is ordered, while generating MergeSortInput information
       while (OB_SUCC(ret) && !finish_) {
         if (ptr_row_msg_loop_->all_eof(task_channels_.count())) {
           finish_ = true;
@@ -871,7 +869,7 @@ int ObPxMSReceiveOp::get_all_rows_from_channels(
 int ObPxMSReceiveOp::try_link_channel()
 {
   int ret = OB_SUCCESS;
-  // 从channel sets 读取数据，并向上迭代
+  // Read data from channel sets and iterate upwards
   ObPhysicalPlanCtx *phy_plan_ctx = NULL;
   if (OB_ISNULL(phy_plan_ctx = GET_PHY_PLAN_CTX(ctx_))) {
     ret = OB_ERR_UNEXPECTED;

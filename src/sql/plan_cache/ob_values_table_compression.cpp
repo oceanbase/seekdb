@@ -370,7 +370,7 @@ int ObValuesTableCompression::try_batch_exec_params(ObIAllocator &allocator,
     }
     // handle error.
     if (ret != OB_SUCCESS) {
-      // 这里边的无论什么报错，都可以被吞掉，只是报错后就不能再做batch优化
+      // Here whatever error can be swallowed, just cannot do batch optimization after the error
       LOG_TRACE("failed to try fold params for values table", K(ret));
       phy_ctx->get_array_param_groups().reset();
       pc_ctx.fp_result_.array_params_.reset();
@@ -507,7 +507,7 @@ int ObValuesTableCompression::resolve_params_for_values_clause(ObPlanCacheCtx &p
               }
             }
           }
-          /* 推导类型 */
+          /* Derive type */
           if (OB_SUCC(ret) && !is_same) {
             new_res_type.reset();
             ObExprVersion dummy_op(pc_ctx.allocator_);
@@ -660,7 +660,7 @@ int ObValuesTableCompression::resolve_params_for_values_clause(ObPlanCacheCtx &p
               }
             }
           }
-          /* 推导类型 */
+          /* Derive type */
           if (OB_SUCC(ret) && !is_same) {
             new_res_type.reset();
             ObExprVersion dummy_op(pc_ctx.allocator_);

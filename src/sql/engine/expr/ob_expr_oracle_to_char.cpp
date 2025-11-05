@@ -187,16 +187,15 @@ int ObExprToChar::calc_result_typeN(ObExprResType &type,
   }
   return ret;
 }
-
-// 用于to_char, to_nchar, translate using表达式 参数为string/raw tc时推导结果的长度
-// 调用前需要设置要结果的type, collation_type和length_semantics
+// Used for to_char, to_nchar, translate using expression parameter length derivation when parameter is string/raw tc
+// Before calling, need to set the result type, collation_type, and length_semantics
 
 // '-0' => '-', '0' => ''
 
 
 /**
  * @brief ObExprToChar::format_number
- * 将 number_str 按照 format_str 格式化后输出到 result_buf
+ * Format number_str according to format_str and output to result_buf
  */
 
 int ObExprToCharCommon::cg_expr(ObExprCGCtx &expr_cg_ctx,

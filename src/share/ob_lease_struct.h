@@ -87,25 +87,25 @@ struct ObServerResourceInfo
 {
   OB_UNIS_VERSION(1);
 public:
-  double cpu_;                          // CPU总容量
-  double report_cpu_assigned_;          // CPU已分配大小: server所有unit min_cpu总和
-  double report_cpu_max_assigned_;      // CPU最大已分配大小: server所有unit max_cpu总和
+  double cpu_;                          // Total CPU capacity
+  double report_cpu_assigned_;          // CPU assigned size: total min_cpu of all units on the server
+  double report_cpu_max_assigned_;      // Maximum CPU size assigned: total max_cpu of all units on the server
 
-  int64_t mem_total_;                   // 内存总容量
-  int64_t report_mem_assigned_;         // 内存已分配大小：server所有unit memory_size总和
-  int64_t mem_in_use_;                  // 已使用内存大小
+  int64_t mem_total_;                   // total memory capacity
+  int64_t report_mem_assigned_;         // Memory assigned size: total sum of memory_size for all units in server
+  int64_t mem_in_use_;                  // size of memory in use
 
-  int64_t log_disk_total_;              // 日志盘总容量
-  int64_t report_log_disk_assigned_;    // 日志盘已分配大小：server所有unit log_disk_size总和
-  int64_t log_disk_in_use_;             // 日志盘已使用大小
+  int64_t log_disk_total_;              // total capacity of log disk
+  int64_t report_log_disk_assigned_;    // Log disk assigned size: total sum of server all unit log_disk_size
+  int64_t log_disk_in_use_;             // Log disk size in use
 
-  int64_t data_disk_total_;             // 数据盘总容量大小（旧版本 disk_total_） // FARM COMPAT WHITELIST: Type not match
-  int64_t report_data_disk_assigned_;   // 数据盘已分配大小：server所有unit data_disk_size总和.
-                                        //   仅 shared-storage 模式下有效. shared-nothing 模式下为 0
-  int64_t data_disk_in_use_;            // 数据盘已使用大小（旧版本 disk_in_use_） // FARM COMPAT WHITELIST: Type not match
+  int64_t data_disk_total_;             // total capacity of data disk (old version disk_total_) // FARM COMPAT WHITELIST: Type not match
+  int64_t report_data_disk_assigned_;   // Data disk assigned size: total sum of server all unit data_disk_size.
+                                        //   Only valid in shared-storage mode. 0 in shared-nothing mode.
+  int64_t data_disk_in_use_;            // Data disk usage size (old version disk_in_use_) // FARM COMPAT WHITELIST: Type not match
 
-  DataDiskSuggestedOperationType::TYPE report_data_disk_suggested_operation_;  // 数据盘建议操作：none（无操作），expand（扩容），shrink（缩容）. 仅SS模式下有效. SN模式下为none
-  int64_t report_data_disk_suggested_size_;                                    // 数据盘建议大小：仅SS模式下有效. SN模式下为0
+  DataDiskSuggestedOperationType::TYPE report_data_disk_suggested_operation_;  // Data disk suggested operation: none (no operation), expand (expand), shrink (shrink). Only valid in SS mode. In SN mode, it is none
+  int64_t report_data_disk_suggested_size_;                                    // Suggested size of data disk: only valid in SS mode. 0 in SN mode.
 
   ObServerResourceInfo();
   void reset();
@@ -140,9 +140,9 @@ public:
   //The order cannot be changed, this is a new field added by 22x
   int64_t timeout_partition_;
   int64_t request_lease_time_;
-  /* 1 常规部署集群汇总，request_lease_time_不被使用，始终为0
-   * 2 单zone ofs部署的场景下，request_lease_time_不为0，表示请求lease，
-   *   request_lease_time_为0，表示汇报其他observer信息。
+  /* 1 Regular deployment cluster summary, request_lease_time_ is not used, always 0
+   * 2 In the scenario of single-zone OFS deployment, request_lease_time_ is not 0, indicating a request for lease,
+   *   request_lease_time_ is 0, indicating reporting other observer information.
    */
 
   ObLeaseRequest();

@@ -277,8 +277,8 @@ public:
                      const uint64_t &package_id,
                      const uint64_t &routine_id,
                      const int64_t &cursor_index,
-                     bool ignore = false, //是否忽略未打开的游标，不忽略的情况下遇到未打开的游标会报错，默认不忽略
-                     bool exception = true); //在关闭过程中遇到错误是否抛出exception，默认抛出
+                     bool ignore = false, //whether to ignore unclosed cursors, if not ignored, an error will be reported when encountering an unclosed cursor, default is not to ignore
+                     bool exception = true); //Whether to throw an exception when an error occurs during shutdown, default is to throw
   int generate_check_not_null(const ObPLStmt &s,
                               bool is_not_null,
                               jit::ObLLVMValue &p_result_obj);
@@ -702,7 +702,7 @@ private:
   ObLLVMTypeMap user_type_map_;
   jit::ObLLVMValue saved_ob_error_;
   jit::ObLLVMValue saved_exception_;
-  ObPLSEArray<jit::ObLLVMValue> vars_; //第0个是隐藏ctx参数，从第1个开始与ObPLSymbolTable对应
+  ObPLSEArray<jit::ObLLVMValue> vars_; // The 0th is the hidden ctx parameter, starting from the 1st it corresponds to ObPLSymbolTable
   // key: stmt id, value: pair(key: index, -1,)
   goto_label_map goto_label_map_;
 

@@ -77,9 +77,9 @@
 #def dump_rollback_sql_to_file(rollback_sql_filename):
 #  logging.info('===================== begin to dump rollback sql file ============================')
 #  rollback_sql_file = open(rollback_sql_filename, 'w')
-#  rollback_sql_file.write('# 此文件是回滚用的sql。\n')
-#  rollback_sql_file.write('# 注释的sql是已经成功commit的sql，它的下一条没被注释的sql则是对应的回滚sql。回滚的sql的排序跟commit的sql的排序刚好相反。\n')
-#  rollback_sql_file.write('# 跑升级脚本失败的时候可以参考本文件来进行回滚。\n')
+#  rollback_sql_file.write('# This file is for rollback sql.\n')
+#  rollback_sql_file.write('# The commented sql is already successfully committed sql, its next uncommented sql is the corresponding rollback sql. The order of the rollback sql is exactly the opposite of the order of the committed sql.\n')
+#  rollback_sql_file.write('# Refer to this file for rollback when the upgrade script fails.\n')
 #  rollback_sql_file.write('\n')
 #  rollback_sql_file_lines_str = get_rollback_sql_file_lines_str()
 #  rollback_sql_file.write(rollback_sql_file_lines_str)
@@ -108,7 +108,7 @@
 #    raise MyError('sql is empty, sql="{0}"'.format(sql))
 #  key_word = word_list[0].lower()
 #  if 'insert' != key_word and 'update' != key_word and 'replace' != key_word and 'set' != key_word and 'delete' != key_word:
-#    # 还有类似这种：select @current_ts := now()
+#    # There are similar cases like this: select @current_ts := now()
 #    if not (len(word_list) >= 3 and 'select' == word_list[0].lower()\
 #        and word_list[1].lower().startswith('@') and ':=' == word_list[2].lower()):
 #      raise MyError('sql must be update, key_word="{0}", sql="{1}"'.format(key_word, sql))
@@ -441,7 +441,7 @@
 #    self._cursor = Cursor(cursor)
 #  def exec_ddl(self, sql, print_when_succ = True):
 #    try:
-#      # 这里检查是不是ddl，不是ddl就抛错
+#      # Here check if it is ddl, not ddl then throw an error
 #      check_is_ddl_sql(sql)
 #      return self._cursor.exec_sql(sql, print_when_succ)
 #    except Exception as e:
@@ -454,7 +454,7 @@
 #    self._cursor = Cursor(cursor)
 #  def exec_query(self, sql, print_when_succ = True):
 #    try:
-#      # 这里检查是不是query，不是query就抛错
+#      # Here check if it is a query, if not a query then throw an error
 #      check_is_query_sql(sql)
 #      return self._cursor.exec_query(sql, print_when_succ)
 #    except Exception as e:
@@ -464,7 +464,7 @@
 #class DMLCursor(QueryCursor):
 #  def exec_update(self, sql, print_when_succ = True):
 #    try:
-#      # 这里检查是不是update，不是update就抛错
+#      # Here check if it is update, not update then throw error
 #      check_is_update_sql(sql)
 #      return self._cursor.exec_sql(sql, print_when_succ)
 #    except Exception as e:
@@ -483,7 +483,7 @@
 #    rollback_sql = self.get_rollback_sql()
 #    self.__ddl_cursor.exec_ddl(action_sql)
 #    g_succ_sql_list.append(SqlItem(action_sql, rollback_sql))
-#    # ddl马上就提交了，因此刷新g_commit_sql_list
+#    # ddl is about to be submitted, therefore refresh g_commit_sql_list
 #    refresh_commit_sql_list()
 #
 #class BaseDMLAction():
@@ -539,7 +539,7 @@
 #    rollback_sql = self.get_each_tenant_rollback_sql(tenant_id)
 #    self.__ddl_cursor.exec_ddl(action_sql)
 #    g_succ_sql_list.append(SqlItem(action_sql, rollback_sql))
-#    # ddl马上就提交了，因此刷新g_commit_sql_list
+#    # ddl is about to be submitted, therefore refresh g_commit_sql_list
 #    refresh_commit_sql_list()
 #
 #def actions_cls_compare(x, y):
@@ -616,7 +616,7 @@
 #import upgrade_post_checker
 #import re
 #
-## 由于用了/*+read_consistency(WEAK) */来查询，因此升级期间不能允许创建或删除租户
+## Since /*+read_consistency(WEAK) */ is used for the query, tenant creation or deletion cannot be allowed during the upgrade period
 #
 #class UpgradeParams:
 #  log_filename = config.post_upgrade_log_filename
@@ -631,14 +631,14 @@
 #def config_logging_module(log_filenamme):
 #  logger = logging.getLogger('')
 #  logger.setLevel(logging.INFO)
-#  # 定义日志打印格式
+#  # Define log print format
 #  formatter = PasswordMaskingFormatter('[%(asctime)s] %(levelname)s %(filename)s:%(lineno)d %(message)s', '%Y-%m-%d %H:%M:%S')
 #  #######################################
-#  # 定义一个Handler打印INFO及以上级别的日志到sys.stdout
+#  # Define a Handler to print INFO and above level logs to sys.stdout
 #  stdout_handler = logging.StreamHandler(sys.stdout)
 #  stdout_handler.setLevel(logging.INFO)
 #  stdout_handler.setFormatter(formatter)
-#  # 定义一个Handler处理文件输出
+#  # Define a Handler to handle file output
 #  file_handler = logging.FileHandler(log_filenamme, mode='w')
 #  file_handler.setLevel(logging.INFO)
 #  file_handler.setFormatter(formatter)
@@ -710,9 +710,9 @@
 #      logging.exception('run error')
 #      raise
 #    finally:
-#      # 打印统计信息
+#      # Print statistics information
 #      print_stats()
-#      # 将回滚sql写到文件中
+#      # Write the rollback sql to the file
 #      # actions.dump_rollback_sql_to_file(upgrade_params.rollback_sql_filename)
 #      cur.close()
 #      conn.close()
@@ -733,7 +733,7 @@
 #    opts.check_db_client_opts()
 #    log_filename = opts.get_opt_log_file()
 #    upgrade_params.log_filename = log_filename
-#    # 日志配置放在这里是为了前面的操作不要覆盖掉日志文件
+#    # Log configuration is placed here to prevent previous operations from overwriting the log file
 #    config_logging_module(upgrade_params.log_filename)
 #    try:
 #      host = opts.get_opt_host()
@@ -785,7 +785,7 @@
 #import special_upgrade_action_pre
 #import upgrade_health_checker
 #
-## 由于用了/*+read_consistency(WEAK) */来查询，因此升级期间不能允许创建或删除租户
+## Since /*+read_consistency(WEAK) */ is used for the query, tenant creation or deletion cannot be allowed during the upgrade period
 #
 #class UpgradeParams:
 #  log_filename = config.pre_upgrade_log_filename
@@ -800,14 +800,14 @@
 #def config_logging_module(log_filenamme):
 #  logger = logging.getLogger('')
 #  logger.setLevel(logging.INFO)
-#  # 定义日志打印格式
+#  # Define log print format
 #  formatter = PasswordMaskingFormatter('[%(asctime)s] %(levelname)s %(filename)s:%(lineno)d %(message)s', '%Y-%m-%d %H:%M:%S')
 #  #######################################
-#  # 定义一个Handler打印INFO及以上级别的日志到sys.stdout
+#  # Define a Handler to print INFO and above level logs to sys.stdout
 #  stdout_handler = logging.StreamHandler(sys.stdout)
 #  stdout_handler.setLevel(logging.INFO)
 #  stdout_handler.setFormatter(formatter)
-#  # 定义一个Handler处理文件输出
+#  # Define a Handler to handle file output
 #  file_handler = logging.FileHandler(log_filenamme, mode='w')
 #  file_handler.setLevel(logging.INFO)
 #  file_handler.setFormatter(formatter)
@@ -870,9 +870,9 @@
 #      logging.exception('run error')
 #      raise
 #    finally:
-#      # 打印统计信息
+#      # Print statistics information
 #      print_stats()
-#      # 将回滚sql写到文件中
+#      # Write the rollback sql to the file
 #      # actions.dump_rollback_sql_to_file(upgrade_params.rollback_sql_filename)
 #      cur.close()
 #      conn.close()
@@ -893,7 +893,7 @@
 #    opts.check_db_client_opts()
 #    log_filename = opts.get_opt_log_file()
 #    upgrade_params.log_filename = log_filename
-#    # 日志配置放在这里是为了前面的操作不要覆盖掉日志文件
+#    # Log configuration is placed here to prevent previous operations from overwriting the log file
 #    config_logging_module(upgrade_params.log_filename)
 #    try:
 #      host = opts.get_opt_host()
@@ -960,22 +960,22 @@
 #      result_col_width = len(str(result[i]))
 #      if max_width_list[i] < result_col_width:
 #        max_width_list[i] = result_col_width
-#  # 打印列名
+#  # Print column names
 #  for i in range(0, col_count):
 #    if i > 0:
-#      ret_str += '    ' # 空四格
+#      ret_str += '    ' # four spaces
 #    ret_str += str(desc[i][0])
-#    # 补足空白
+#    # fill in the blanks
 #    for j in range(0, max_width_list[i] - len(str(desc[i][0]))):
 #      ret_str += ' '
-#  # 打印数据
+#  # Print data
 #  for result in results:
-#    ret_str += '\n' # 先换行
+#    ret_str += '\n' # first newline
 #    for i in range(0, col_count):
 #      if i > 0:
-#        ret_str += '    ' # 空四格
+#        ret_str += '    ' # four spaces
 #      ret_str += str(result[i])
-#      # 补足空白
+#      # fill in the blanks
 #      for j in range(0, max_width_list[i] - len(str(result[i]))):
 #        ret_str += ' '
 #  return ret_str
@@ -1104,9 +1104,9 @@
 #Option('u', 'user', True, False),\
 #Option('t', 'timeout', True, False, 0),\
 #Option('p', 'password', True, False, ''),\
-## 要跑哪个模块，默认全跑
+## Which module to run, default is all
 #Option('m', 'module', True, False, 'all'),\
-## 日志文件路径，不同脚本的main函数中中会改成不同的默认值
+## Log file path, different default values will be set in the main function of different scripts
 #Option('l', 'log-file', True, False)
 #]\
 #
@@ -1180,7 +1180,7 @@
 #    for opt in g_opts:
 #      if opt.is_local_opt() and opt.has_value():
 #        deal_with_local_opt(opt, filename)
-#        # 只处理一个
+#        # Only process one
 #        return
 #
 #def get_opt_host():
@@ -1338,12 +1338,12 @@
 #import sys
 #import upgrade_health_checker
 #
-## 主库需要执行的升级动作
+## Main database upgrade actions to be executed
 #def do_special_upgrade(conn, cur, timeout, user, passwd):
 #  # special upgrade action
-##升级语句对应的action要写在下面的actions begin和actions end这两行之间，
-##因为基准版本更新的时候会调用reset_upgrade_scripts.py来清空actions begin和actions end
-##这两行之间的这些代码，如果不写在这两行之间的话会导致清空不掉相应的代码。
+##Upgrade statement corresponding action should be written between the lines actions begin and actions end,
+## Because the baseline version update will call reset_upgrade_scripts.py to clear actions begin and actions end
+## These lines of code between these two lines, if not written between these two lines, will result in the corresponding code not being cleared.
 #  current_version = actions.fetch_observer_version(cur)
 #  target_version = actions.get_current_cluster_version()
 #  # when upgrade across version, disable enable_ddl/major_freeze/direct_load
@@ -1408,9 +1408,9 @@
 #
 #def do_upgrade(conn, cur, timeout, user, pwd):
 #  # upgrade action
-##升级语句对应的action要写在下面的actions begin和actions end这两行之间，
-##因为基准版本更新的时候会调用reset_upgrade_scripts.py来清空actions begin和actions end
-##这两行之间的这些代码，如果不写在这两行之间的话会导致清空不掉相应的代码。
+##Upgrade statement corresponding action should be written between the lines actions begin and actions end,
+##Because the baseline version update will call reset_upgrade_scripts.py to clear actions begin and actions end
+## These lines of code between these two lines, if not written between these two lines, will result in the corresponding code not being cleared.
 #  across_version = upgrade_across_version(cur)
 #  if across_version:
 #    run_upgrade_job(conn, cur, "UPGRADE_ALL", timeout)
@@ -1823,9 +1823,9 @@
 #Option('u', 'user', True, False),\
 #Option('t', 'timeout', True, False, 0),\
 #Option('p', 'password', True, False, ''),\
-## 要跑哪个模块，默认全跑
+## Which module to run, default all run
 #Option('m', 'module', True, False, 'all'),\
-## 日志文件路径，不同脚本的main函数中中会改成不同的默认值
+## Log file path, different default values will be set in the main function of different scripts
 #Option('l', 'log-file', True, False),\
 #Option('C', 'cpu-arch', True, False, 'unknown')
 #]\
@@ -1894,7 +1894,7 @@
 #    for opt in g_opts:
 #      if opt.is_local_opt() and opt.has_value():
 #        deal_with_local_opt(opt)
-#        # 只处理一个
+#        # Only process one
 #        return
 #
 #def get_opt_host():
@@ -1950,14 +1950,14 @@
 #def config_logging_module(log_filenamme):
 #  logger = logging.getLogger('')
 #  logger.setLevel(logging.INFO)
-#  # 定义日志打印格式
+#  # Define log print format
 #  formatter = PasswordMaskingFormatter('[%(asctime)s] %(levelname)s %(filename)s:%(lineno)d %(message)s', '%Y-%m-%d %H:%M:%S')
 #  #######################################
-#  # 定义一个Handler打印INFO及以上级别的日志到sys.stdout
+#  # Define a Handler to print INFO and above level logs to sys.stdout
 #  stdout_handler = logging.StreamHandler(sys.stdout)
 #  stdout_handler.setLevel(logging.INFO)
 #  stdout_handler.setFormatter(formatter)
-#  # 定义一个Handler处理文件输出
+#  # Define a Handler to handle file output
 #  file_handler = logging.FileHandler(log_filenamme, mode='w')
 #  file_handler.setLevel(logging.INFO)
 #  file_handler.setFormatter(formatter)
@@ -1988,7 +1988,7 @@
 #  return version
 #
 ##### START ####
-## 1. 检查前置版本
+## 1. Check previous version
 #def check_observer_version(query_cur, upgrade_params):
 #  (desc, results) = query_cur.exec_query("""select distinct value from GV$OB_PARAMETERS  where name='min_observer_version'""")
 #  if len(results) != 1:
@@ -2059,30 +2059,30 @@
 #              else:
 #                logging.info("check data version success, all tenant's upgrade_begin_data_version is {0}".format(data_version_str))
 #
-## 2. 检查paxos副本是否同步, paxos副本是否缺失
+## 2. Check if paxos replicas are synchronized, if there are any missing paxos replicas
 #def check_paxos_replica(query_cur):
-#  # 2.1 检查paxos副本是否同步
+#  # 2.1 Check if paxos replicas are synchronized
 #  (desc, results) = query_cur.exec_query("""select count(1) as unsync_cnt from GV$OB_LOG_STAT where in_sync = 'NO'""")
 #  if results[0][0] > 0 :
 #    fail_list.append('{0} replicas unsync, please check'.format(results[0][0]))
-#  # 2.2 检查paxos副本是否有缺失 TODO
+#  # 2.2 Check if there are any missing paxos replicas TODO
 #  logging.info('check paxos replica success')
 #
-## 3. 检查是否有做balance, locality变更
+## 3. Check if there is a balance, locality change
 #def check_rebalance_task(query_cur):
-#  # 3.1 检查是否有做locality变更
+#  # 3.1 Check if there is a locality change
 #  (desc, results) = query_cur.exec_query("""select count(1) as cnt from DBA_OB_TENANT_JOBS where job_status='INPROGRESS' and result_code is null""")
 #  if results[0][0] > 0 :
 #    fail_list.append('{0} locality tasks is doing, please check'.format(results[0][0]))
-#  # 3.2 检查是否有做balance
+#  # 3.2 Check if balance has been done
 #  (desc, results) = query_cur.exec_query("""select count(1) as rebalance_task_cnt from CDB_OB_LS_REPLICA_TASKS""")
 #  if results[0][0] > 0 :
 #    fail_list.append('{0} rebalance tasks is doing, please check'.format(results[0][0]))
 #  logging.info('check rebalance task success')
 #
-## 4. 检查集群状态
+## 4. Check cluster status
 #def check_cluster_status(query_cur):
-#  # 4.1 检查是否非合并状态
+#  # 4.1 Check if not in merge state
 #  (desc, results) = query_cur.exec_query("""select count(1) from CDB_OB_MAJOR_COMPACTION where (GLOBAL_BROADCAST_SCN > LAST_SCN or STATUS != 'IDLE')""")
 #  if results[0][0] > 0 :
 #    fail_list.append('{0} tenant is merging, please check'.format(results[0][0]))
@@ -2091,7 +2091,7 @@
 #    fail_list.append('{0} tablet is merging, please check'.format(results[0][0]))
 #  logging.info('check cluster status success')
 #
-## 5. 检查是否有异常租户(creating，延迟删除，恢复中，租户unit有残留)
+## 5. Check for abnormal tenants (creating, delayed deletion, restoring, tenant unit has leftovers)
 #def check_tenant_status(query_cur):
 #
 #  # check tenant schema
@@ -2132,7 +2132,7 @@
 #    logging.info('check deleted tenant unit gc success')
 #
 #
-## 6. 检查无恢复任务
+## 6. Check for no recovery tasks
 #def check_restore_job_exist(query_cur):
 #  (desc, results) = query_cur.exec_query("""select count(1) from CDB_OB_RESTORE_PROGRESS""")
 #  if len(results) != 1 or len(results[0]) != 1:
@@ -2157,7 +2157,7 @@
 #  else:
 #    return False
 #
-## 7. 升级前需要primary zone只有一个
+## 7. Primary zone needs to have only one before upgrade
 #def check_tenant_primary_zone(query_cur):
 #  sql = """select distinct value from GV$OB_PARAMETERS  where name='min_observer_version'"""
 #  (desc, results) = query_cur.exec_query(sql)
@@ -2176,18 +2176,18 @@
 #          fail_list.append('{0} tenant primary zone distributed before update not allowed'.format(item[0]))
 #      logging.info('check tenant primary zone success')
 #
-## 8. 修改永久下线的时间，避免升级过程中缺副本
+## 8. Modify the permanent offline time to avoid missing copies during the upgrade process
 #def modify_server_permanent_offline_time(cur):
 #  set_parameter(cur, 'server_permanent_offline_time', '72h')
 #
-## 9. 检查是否有DDL任务在执行
+## 9. Check if there are any DDL tasks executing
 #def check_ddl_task_execute(query_cur):
 #  (desc, results) = query_cur.exec_query("""select count(1) from __all_virtual_ddl_task_status""")
 #  if 0 != results[0][0]:
 #    fail_list.append("There are DDL task in progress")
 #  logging.info('check ddl task execut status success')
 #
-## 10. 检查无备份任务
+## 10. Check tasks without backup
 #def check_backup_job_exist(query_cur):
 #  # Backup jobs cannot be in-progress during upgrade.
 #  (desc, results) = query_cur.exec_query("""select count(1) from CDB_OB_BACKUP_JOBS""")
@@ -2198,7 +2198,7 @@
 #  else:
 #    logging.info('check backup job success')
 #
-## 11. 检查无归档任务
+## 11. Check for unarchived tasks
 #def check_archive_job_exist(query_cur):
 #  min_cluster_version = 0
 #  sql = """select distinct value from GV$OB_PARAMETERS  where name='min_observer_version'"""
@@ -2220,7 +2220,7 @@
 #      else:
 #        logging.info('check archive job success')
 #
-## 12. 检查归档路径是否清空
+## 12. Check if the archive path is cleared
 #def check_archive_dest_exist(query_cur):
 #  min_cluster_version = 0
 #  sql = """select distinct value from GV$OB_PARAMETERS  where name='min_observer_version'"""
@@ -2241,7 +2241,7 @@
 #      else:
 #        logging.info('check archive destination success')
 #
-## 13. 检查备份路径是否清空
+## 13. Check if the backup path is cleared
 #def check_backup_dest_exist(query_cur):
 #  min_cluster_version = 0
 #  sql = """select distinct value from GV$OB_PARAMETERS  where name='min_observer_version'"""
@@ -2270,21 +2270,21 @@
 #    else:
 #      logging.info("check server version success")
 #
-## 14. 检查server是否可服务
+## 14. Check if server is available
 #def check_observer_status(query_cur):
 #  (desc, results) = query_cur.exec_query("""select count(*) from oceanbase.__all_server where (start_service_time <= 0 or status != "active")""")
 #  if results[0][0] > 0 :
 #    fail_list.append('{0} observer not available , please check'.format(results[0][0]))
 #  logging.info('check observer status success')
 #
-## 15  检查schema是否刷新成功
+## 15  Check if schema refresh was successful
 #def check_schema_status(query_cur):
 #  (desc, results) = query_cur.exec_query("""select if (a.cnt = b.cnt, 1, 0) as passed from (select count(*) as cnt from oceanbase.__all_virtual_server_schema_info where refreshed_schema_version > 1 and refreshed_schema_version % 8 = 0) as a join (select count(*) as cnt from oceanbase.__all_server join oceanbase.__all_tenant) as b""")
 #  if results[0][0] != 1 :
 #    fail_list.append('{0} schema not available, please check'.format(results[0][0]))
 #  logging.info('check schema status success')
 #
-## 16. 检查是否存在名为all/all_user/all_meta的租户
+## 16. Check if there is a tenant named all/all_user/all_meta
 #def check_not_supported_tenant_name(query_cur):
 #  names = ["all", "all_user", "all_meta"]
 #  (desc, results) = query_cur.exec_query("""select tenant_name from oceanbase.DBA_OB_TENANTS""")
@@ -2293,26 +2293,26 @@
 #      fail_list.append('a tenant named all/all_user/all_meta (case insensitive) cannot exist in the cluster, please rename the tenant')
 #      break
 #  logging.info('check special tenant name success')
-## 17  检查日志传输压缩是否有使用zlib压缩算法，在升级前需要保证所有observer未开启日志传输压缩或使用非zlib压缩算法
+## 17  Check if log transmission compression uses the zlib compression algorithm, before upgrading ensure that all observers have log transmission compression disabled or are using a non-zlib compression algorithm
 #def check_log_transport_compress_func(query_cur):
 #  (desc, results) = query_cur.exec_query("""select count(1) as cnt from oceanbase.__all_virtual_tenant_parameter_info where (name like "log_transport_compress_func" and value like "zlib_1.0")""")
 #  if results[0][0] > 0 :
 #    fail_list.append('The zlib compression algorithm is no longer supported with log_transport_compress_func, please replace it with other compression algorithms')
 #  logging.info('check log_transport_compress_func success')
-## 18 检查升级过程中是否有表使用zlib压缩，在升级前需要保证所有表都不使用zlib压缩
+## 18 Check if any tables use zlib compression during the upgrade process, all tables must not use zlib compression before the upgrade
 #def check_table_compress_func(query_cur):
 #  (desc, results) = query_cur.exec_query("""select /*+ query_timeout(1000000000) */ count(1) from __all_virtual_table where (compress_func_name like '%zlib%')""")
 #  if results[0][0] > 0 :
 #    fail_list.append('There are tables use zlib compression, please replace it with other compression algorithms or do not use compression during the upgrade')
 #  logging.info('check table compression method success')
-## 19 检查升级过程中 table_api/obkv 连接传输是否使用了zlib压缩，在升级前需要保证所有 obkv/table_api 连接未开启zlib压缩传输或者使用非zlib压缩算法
+## 19 Check if zlib compression is used during the upgrade process for table_api/obkv connections. Before the upgrade, it is necessary to ensure that all obkv/table_api connections have zlib compression transmission disabled or are using a non-zlib compression algorithm
 #def check_table_api_transport_compress_func(query_cur):
 #  (desc, results) = query_cur.exec_query("""select count(1) as cnt from GV$OB_PARAMETERS where (name like "tableapi_transport_compress_func" and value like "zlib%");""")
 #  if results[0][0] > 0 :
 #    fail_list.append('Table api connection is not allowed to use zlib as compression algorithm during the upgrade, please use other compression algorithms by setting table_api_transport_compress_func')
 #  logging.info('check table_api_transport_compress_func success')
 #
-## 17. 检查无租户克隆任务
+## 17. Check tenantless clone task
 #def check_tenant_clone_job_exist(query_cur):
 #  min_cluster_version = 0
 #  sql = """select distinct value from GV$OB_PARAMETERS  where name='min_observer_version'"""
@@ -2332,7 +2332,7 @@
 #      else:
 #        logging.info('check tenant clone job success')
 #
-## 18. 检查无租户快照任务
+## 18. Check non-tenant snapshot task
 #def check_tenant_snapshot_task_exist(query_cur):
 #  min_cluster_version = 0
 #  sql = """select distinct value from GV$OB_PARAMETERS  where name='min_observer_version'"""
@@ -2352,10 +2352,10 @@
 #      else:
 #        logging.info('check tenant snapshot task success')
 #
-## 17. 检查是否有租户在升到4.3.0版本之前已将binlog_row_image设为MINIMAL
+## 17. Check if any tenant has set binlog_row_image to MINIMAL before upgrading to version 4.3.0
 #def check_variable_binlog_row_image(query_cur):
-## 4.3.0.0之前的版本,MINIMAL模式生成的日志CDC无法正常消费(DELETE日志).
-## 4.3.0版本开始,MINIMAL模式做了改进,支持CDC消费,需要在升级到4.3.0.0之后再打开.
+## Versions before 4.3.0.0, MINIMAL mode generated CDC logs (DELETE logs) cannot be consumed normally.
+## 4.3.0 version start, MINIMAL mode has been improved, supporting CDC consumption, need to turn on after upgrading to 4.3.0.0.
 #  min_cluster_version = 0
 #  sql = """select distinct value from GV$OB_PARAMETERS  where name='min_observer_version'"""
 #  (desc, results) = query_cur.exec_query(sql)
@@ -2411,7 +2411,7 @@
 #     error_msg ="upgrade checker failed with " + str(len(fail_list)) + " reasons: " + ", ".join(['['+x+"] " for x in fail_list])
 #     raise MyError(error_msg)
 #
-## 检查升级到4.3.2或更高版本时，剩余的磁盘空间是否足够做多源数据格式转换
+## Check if the remaining disk space is sufficient for multi-source data format conversion when upgrading to version 4.3.2 or higher
 #def check_disk_space_for_mds_sstable_compat(query_cur):
 #  need_check_disk_space = False
 #  sql = """select distinct value from GV$OB_PARAMETERS where name='min_observer_version'"""
@@ -2558,7 +2558,7 @@
 #    bret=True
 #  return bret
 #
-## 检查 direct_load 是否已经结束，开启升级之前需要确保没有 direct_load 任务，且升级期间尽量禁止 direct_load 任务
+## Check if direct_load has already finished, ensure there are no direct_load tasks before starting the upgrade, and try to prohibit direct_load tasks during the upgrade period
 #def check_direct_load_job_exist(cur, query_cur):
 #  sql = """select count(1) from __all_virtual_load_data_stat"""
 #  (desc, results) = query_cur.exec_query(sql)
@@ -2566,8 +2566,8 @@
 #    fail_list.append("There are direct load task in progress")
 #  logging.info('check direct load task execut status success')
 #
-## 检查cs_encoding格式是否兼容，对小于4.3.3版本的cpu不支持avx2指令集的集群，我们要求升级前schema上不存在cs_encoding的存储格式
-## 注意：这里对混布集群 / schema上row_format进行了ddl变更的场景无法做到完全的防御
+## Check if cs_encoding format is compatible, for clusters with CPUs older than version 4.3.3 that do not support the avx2 instruction set, we require that the cs_encoding storage format does not exist on the schema before upgrading
+## Note: Here the scenario of DDL changes to row_format on mixed cluster / schema cannot be fully defended
 #def check_cs_encoding_arch_dependency_compatiblity(query_cur, cpu_arch):
 #  can_upgrade = True
 #  need_check_schema = False
@@ -2636,7 +2636,7 @@
 #  else:
 #    logging.info("check upgrade for arch-dependant cs_encoding format failed")
 #
-## 开始升级前的检查
+## Check before starting the upgrade
 #def do_check(my_host, my_port, my_user, my_passwd, timeout, upgrade_params, cpu_arch):
 #  try:
 #    conn = mysql.connector.connect(user = my_user,
@@ -2703,7 +2703,7 @@
 #    check_db_client_opts()
 #    log_filename = get_opt_log_file()
 #    upgrade_params.log_filename = log_filename
-#    # 日志配置放在这里是为了前面的操作不要覆盖掉日志文件
+#    # Log configuration is placed here to prevent previous operations from overwriting the log file
 #    config_logging_module(upgrade_params.log_filename)
 #    try:
 #      host = get_opt_host()
@@ -2751,7 +2751,7 @@
 #  def __str__(self):
 #    return repr(self.value)
 #
-##### --------------start : actions.py 只允许执行查询语句--------------
+##### --------------start : actions.py only allows query statements--------------
 #class QueryCursor:
 #  __cursor = None
 #  def __init__(self, cursor):
@@ -2863,9 +2863,9 @@
 #Option('P', 'port', True, False),\
 #Option('u', 'user', True, False),\
 #Option('p', 'password', True, False, ''),\
-## 要跑哪个模块，默认全跑
+## Which module to run, default is all
 #Option('m', 'module', True, False, 'all'),\
-## 日志文件路径，不同脚本的main函数中中会改成不同的默认值
+## Log file path, different default values will be set in the main function of different scripts
 #Option('l', 'log-file', True, False),\
 #Option('t', 'timeout', True, False, 0),\
 #Option('z', 'zone', True, False, ''),\
@@ -2935,7 +2935,7 @@
 #    for opt in g_opts:
 #      if opt.is_local_opt() and opt.has_value():
 #        deal_with_local_opt(opt)
-#        # 只处理一个
+#        # Only process one
 #        return
 #
 #def get_opt_host():
@@ -2991,14 +2991,14 @@
 #def config_logging_module(log_filenamme):
 #  logger = logging.getLogger('')
 #  logger.setLevel(logging.INFO)
-#  # 定义日志打印格式
+#  # Define log print format
 #  formatter = PasswordMaskingFormatter('[%(asctime)s] %(levelname)s %(filename)s:%(lineno)d %(message)s', '%Y-%m-%d %H:%M:%S')
 #  #######################################
-#  # 定义一个Handler打印INFO及以上级别的日志到sys.stdout
+#  # Define a Handler to print INFO and above level logs to sys.stdout
 #  stdout_handler = logging.StreamHandler(sys.stdout)
 #  stdout_handler.setLevel(logging.INFO)
 #  stdout_handler.setFormatter(formatter)
-#  # 定义一个Handler处理文件输出
+#  # Define a Handler to handle file output
 #  file_handler = logging.FileHandler(log_filenamme, mode='w')
 #  file_handler.setLevel(logging.INFO)
 #  file_handler.setFormatter(formatter)
@@ -3045,7 +3045,7 @@
 #  return timeout
 #
 ##### START ####
-## 0. 检查server版本是否严格一致
+## 0. Check if the server version is strictly consistent
 #def check_server_version_by_zone(query_cur, zone):
 #  if zone == '':
 #    logging.info("skip check server version by cluster")
@@ -3057,17 +3057,17 @@
 #    else:
 #      logging.info("check server version success")
 #
-## 1. 检查paxos副本是否同步, paxos副本是否缺失
+## 1. Check if paxos replicas are synchronized, if there are any missing paxos replicas
 #def check_paxos_replica(query_cur, timeout):
-#  # 1.1 检查paxos副本是否同步
+#  # 1.1 Check if paxos replicas are synchronized
 #  sql = """select count(*) from oceanbase.GV$OB_LOG_STAT where in_sync = 'NO'"""
 #  wait_timeout = set_default_timeout_by_tenant(query_cur, timeout, 10, 600)
 #  check_until_timeout(query_cur, sql, 0, wait_timeout)
 #
-#  # 1.2 检查paxos副本是否有缺失 TODO
+#  # 1.2 Check if there are any missing paxos replicas TODO
 #  logging.info('check paxos replica success')
 #
-## 2. 检查observer是否可服务
+## 2. Check if observer is serviceable
 #def check_observer_status(query_cur, zone, timeout):
 #  sql = """select count(*) from oceanbase.__all_server where (start_service_time <= 0 or status='inactive')"""
 #  if zone != '':
@@ -3075,7 +3075,7 @@
 #  wait_timeout = set_default_timeout_by_tenant(query_cur, timeout, 10, 600)
 #  check_until_timeout(query_cur, sql, 0, wait_timeout)
 #
-## 3. 检查schema是否刷新成功
+## 3. Check if schema refresh was successful
 #def check_schema_status(query_cur, timeout):
 #  sql = """select if (a.cnt = b.cnt, 1, 0) as passed from (select count(*) as cnt from oceanbase.__all_virtual_server_schema_info where refreshed_schema_version > 1 and refreshed_schema_version % 8 = 0) as a join (select count(*) as cnt from oceanbase.__all_server join oceanbase.__all_tenant) as b"""
 #  wait_timeout = set_default_timeout_by_tenant(query_cur, timeout, 30, 600)
@@ -3115,7 +3115,7 @@
 #      raise MyError("""result not expected, sql: '{0}', expected: '{1}', current: '{2}'""".format(sql, value, results[0][0]))
 #    time.sleep(10)
 #
-## 开始健康检查
+## Start health check
 #def do_check(my_host, my_port, my_user, my_passwd, upgrade_params, timeout, need_check_major_status, zone = ''):
 #  try:
 #    conn = mysql.connector.connect(user = my_user,
@@ -3158,7 +3158,7 @@
 #    check_db_client_opts()
 #    log_filename = get_opt_log_file()
 #    upgrade_params.log_filename = log_filename
-#    # 日志配置放在这里是为了前面的操作不要覆盖掉日志文件
+#    # Log configuration is placed here to prevent previous operations from overwriting the log file
 #    config_logging_module(upgrade_params.log_filename)
 #    try:
 #      host = get_opt_host()
@@ -3193,12 +3193,12 @@
 #import actions
 #
 ##### START
-## 1 检查版本号
+## 1 Check version number
 #def check_cluster_version(cur, timeout):
 #  current_cluster_version = actions.get_current_cluster_version()
 #  actions.wait_parameter_sync(cur, False, "min_observer_version", current_cluster_version, timeout)
 #
-## 2 检查租户版本号
+## 2 Check tenant version number
 #def check_data_version(cur, query_cur, timeout):
 #
 #  # get tenant except standby tenant
@@ -3265,7 +3265,7 @@
 #  else:
 #    logging.info("all tenant's target_data_version/current_data_version/upgrade_begin_data_version are match with {0}".format(current_data_version))
 #
-## 3 检查内部表自检是否成功
+## 3 Check if internal table self-check is successful
 #def check_root_inspection(cur, query_cur, timeout):
 #  sql = "select count(*) from oceanbase.__all_virtual_upgrade_inspection where info != 'succeed'"
 #
@@ -3284,34 +3284,34 @@
 #    raise MyError('check root inspection failed!')
 #  logging.info('check root inspection success')
 #
-## 4 开ddl
+## 4 open ddl
 #def enable_ddl(cur, timeout):
 #  actions.set_parameter(cur, 'enable_ddl', 'True', timeout)
 #
-## 5 打开sys租户rebalance
+## 5 Open sys tenant rebalance
 #def enable_rebalance(cur, timeout):
 #  only_sys_tenant = True
 #  actions.set_tenant_parameter(cur, 'enable_rebalance', 'True', timeout, only_sys_tenant)
 #
-## 6 打开rereplication
+## 6 open rereplication
 #def enable_rereplication(cur, timeout):
 #  actions.set_parameter(cur, 'enable_rereplication', 'True', timeout)
 #
-## 7 打开major freeze
+## 7 Open major freeze
 #def enable_major_freeze(cur, timeout):
 #  actions.set_parameter(cur, 'enable_major_freeze', 'True', timeout)
 #  actions.set_tenant_parameter(cur, '_enable_adaptive_compaction', 'True', timeout)
 #  actions.do_resume_merge(cur, timeout)
 #
-## 8 打开 direct load
+## 8 open direct load
 #def enable_direct_load(cur, timeout):
 #  actions.set_parameter(cur, '_ob_enable_direct_load', 'True', timeout)
 #
-## 9 关闭enable_sys_table_ddl
+## 9 Close enable_sys_table_ddl
 #def disable_sys_table_ddl(cur, timeout):
 #  actions.set_parameter(cur, 'enable_sys_table_ddl', 'False', timeout)
 #
-## 开始升级后的检查
+## Start the check after upgrade
 #def do_check(conn, cur, query_cur, timeout):
 #  try:
 #    check_cluster_version(cur, timeout)
@@ -3374,14 +3374,14 @@ def split_py_files(sub_files_dir):
       if is_first_splitter_line:
         is_first_splitter_line = False
       else:
-        #读完一个子文件了，写到磁盘中
+        #Finished reading a subfile, write to disk
         sub_file = open(sub_files_dir + '/' + sub_filename, 'w')
         for sub_file_line in sub_file_lines:
           sub_file.write(sub_file_line[1:])
         sub_file.close()
-        #清空sub_file_lines
+        #clear sub_file_lines
         sub_file_lines = []
-      #再读取下一行的文件名或者结束标记
+      # Read the filename of the next line or the end marker
       i += 1
       if i >= cur_file_lines_count:
         raise SplitError('invalid line index:' + str(i) + ', lines_count:' + str(cur_file_lines_count))

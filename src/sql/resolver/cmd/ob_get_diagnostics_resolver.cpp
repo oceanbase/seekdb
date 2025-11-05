@@ -59,7 +59,7 @@ int ObGetDiagnosticsResolver::resolve(const ParseNode &parse_tree)
   } else if (OB_FAIL(set_diagnostics_type(diagnostics_stmt, is_current->value_, is_condition->value_))) {
     LOG_WARN("set diagnostic type failed", K(ret));
   } else {
-    if (1 == is_condition->value_) {/* 表示是获取condition信息的语句*/
+    if (1 == is_condition->value_) {/* indicates the statement for obtaining condition information */
       CK(OB_NOT_NULL(condition_node));
       ObRawExpr* condition_num = NULL;
       if (OB_SUCC(ret) && NULL == session_info_->get_pl_context() && T_IDENT == condition_node->type_) {
@@ -136,7 +136,7 @@ int ObGetDiagnosticsResolver::resolve(const ParseNode &parse_tree)
     }
   }
 
-  if (OB_ERR_BAD_FIELD_ERROR == ret) {/* sql环境下使用非用户/系统变量作为condition参数时，get diagnostic语句能成功执行，只会在执行期报warning */
+  if (OB_ERR_BAD_FIELD_ERROR == ret) {/* In SQL environment, when using non-user/system variables as condition parameters, the get diagnostic statement can be successfully executed, but it will only report a warning at runtime */
     ret = OB_SUCCESS;
   }
   

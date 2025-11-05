@@ -58,11 +58,10 @@ int ObExprBool::calc_result_type1(ObExprResType &type,
 #define CHECK_IS_TRUE_FUNC_NAME(type)                               \
   int calc_bool_expr_for_##type(const ObExpr &expr, ObEvalCtx &ctx, \
       ObDatum &res_datum)
-
-// ObObjEvaluator::is_true()里面，如果输入obj是null，结果是false
-// 但是我们这里需要设置为null
+// ObObjEvaluator::is_true() inside, if input obj is null, result is false
+// But we need to set it to null here
 // eg: expr1 and null -> null
-// 如果bool expr设置为false，上面结果会变成false
+// If bool expr is set to false, the above result will become false
 #define EVAL_ARG()                                      \
   int ret = OB_SUCCESS;                                 \
   ObDatum *child_datum = NULL;                          \
@@ -86,7 +85,7 @@ CHECK_IS_TRUE_FUNC_NAME(float_type)
 {
   EVAL_ARG()
   {
-    // 不考虑浮点数和0比较的问题, see ObObj::is_zero()
+    // Do not consider the problem of comparing floating-point numbers with 0, see ObObj::is_zero()
     int32_t res = (0 == child_datum->get_float()) ? 0 : 1;
     res_datum.set_int32(res);
   }
@@ -97,7 +96,7 @@ CHECK_IS_TRUE_FUNC_NAME(double_type)
 {
   EVAL_ARG()
   {
-    // 不考虑浮点数和0比较的问题, see ObObj::is_zero()
+    // Do not consider the problem of comparing floating-point numbers with 0, see ObObj::is_zero()
     int32_t res = (0 == child_datum->get_double()) ? 0 : 1;
     res_datum.set_int32(res);
   }

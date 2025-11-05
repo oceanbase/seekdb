@@ -66,7 +66,7 @@ int ObAllVirtualPsStat::fill_cells(ObPsCache &ps_cache, uint64_t tenant_id)
         break;
       }
       case share::ALL_VIRTUAL_PS_STAT_CDE::STMT_COUNT: {
-        // @shaoge 以stmt_id_map的大小作为ps_cache的大小
+        // @shaoge use the size of stmt_id_map as the size of ps_cache
         cells[i].set_int(ps_cache.get_stmt_id_map_size());
         break;
       }

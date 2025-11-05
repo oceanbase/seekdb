@@ -888,7 +888,7 @@ private:
   DISALLOW_COPY_AND_ASSIGN(ObLogHandler);
 private:
   common::ObAddr self_;
-  //log_handler会高频调用apply_status, 减少通过applyservice哈希的开销
+  //log_handler will frequently call apply_status, reducing the overhead of hashing through applyservice
   ObApplyStatus *apply_status_;
   ObLogApplyService *apply_service_;
   ObLogReplayService *replay_service_;

@@ -137,11 +137,11 @@ public:
       uint64_t is_ignore_                       : 1;
       uint64_t gi_above_                        : 1;
       uint64_t is_returning_                    : 1;
-      uint64_t is_pdml_index_maintain_          : 1; // 表示当前dml算子是否是pdml中用于维护索引操作的算子（index maintain）
-      uint64_t table_location_uncertain_        : 1; // 目标访问分区位置不确定，需要全表访问
+      uint64_t is_pdml_index_maintain_          : 1; // indicates whether the current dml operator is the operator used for index maintenance in pdml (index maintain)
+      uint64_t table_location_uncertain_        : 1; // Target access partition location uncertain, need full table scan
       uint64_t use_dist_das_                    : 1;
       uint64_t has_instead_of_trigger_          : 1; // abandoned, don't use again
-      uint64_t is_pdml_update_split_            : 1; // 标记delete, insert op是否由update拆分而来
+      uint64_t is_pdml_update_split_            : 1; // Mark whether delete, insert op is split from update
       uint64_t check_fk_batch_                  : 1; // mark if the foreign key constraint can be checked in batch    
       uint64_t is_pdml_                         : 1;
       uint64_t need_foreign_key_check_          : 1; // mark if need foreign key check  

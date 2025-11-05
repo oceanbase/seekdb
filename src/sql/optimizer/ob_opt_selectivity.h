@@ -794,8 +794,7 @@ public:
   static int check_expr_in_distinct_helper(const ObRawExpr *expr,
                                            const ObIArray<OptDistinctHelper> &helpers,
                                            bool &is_dummy_expr);
-
-  // @brief 计算一组变量的distinct
+  // @brief Calculate the distinct of a group of variables
   static int calculate_distinct(const OptTableMetas &table_metas,
                                 const OptSelectivityCtx &ctx,
                                 const common::ObIArray<ObRawExpr*>& exprs,
@@ -815,8 +814,7 @@ public:
   static double combine_two_ndvs(double ambient_card, double ndv1, double ndv2);
 
   static double combine_ndvs(double ambient_card, ObIArray<double> &ndvs);
-
-  // ndv 按照行数进行缩放.
+  // ndv scale according to the number of rows.
   static double scale_distinct(double selected_rows, double rows, double ndv);
 
   static inline double revise_between_0_1(double num)
@@ -998,16 +996,14 @@ public:
                                     ObIArray<ColumnItem> &column_items,
                                     ObIAllocator &alloc,
                                     ObQueryRangeArray &ranges);
-
-  // @brief 检测OR中 expr 对于第 index 个子表达式的互斥性, 只检测 c1 = v 的情况,
-  // 且只考虑本层.
-  // @param ref_expr OR 表达式
-  // @param index 需要检测的表达式在 ref_expr 子节点的下表
-  // @param is_mutex 返回值, 是否互斥
-
-  // @breif 从某个表达式判断并抽取单列的等值条件中包含的列
-  // @param qual 要抽取的表达式
-  // @param column 返回值, 抽取的结果, 抽取失败则是 NULL
+  // @brief Detect the mutual exclusivity of expr for the index-th sub-expression in OR, only detect the case of c1 = v,
+  // And only consider this layer.
+  // @param ref_expr OR expression
+  // @param index The index of the expression to be checked in the ref_expr sub-nodes
+  // @param is_mutex return value, whether it is mutually exclusive
+  // @breif Determine and extract the column contained in the equality condition of a single column from an expression
+  // @param qual expression to extract
+  // @param column return value, extraction result, NULL if extraction fails
   static int get_simple_mutex_column(const ObRawExpr *qual, const ObRawExpr *&column);
 
   static int filter_column_by_equal_set(const OptTableMetas &table_metas,
@@ -1023,7 +1019,7 @@ public:
                                       double &ndv);
 
   /**
-   * 检查一组expr是否包含所在表的主键
+   * Check if a set of expr contains the primary key of the table
    */
   static int is_columns_contain_pkey(const OptTableMetas &table_metas,
                                      const ObIArray<ObRawExpr *> &exprs,
@@ -1038,7 +1034,7 @@ public:
                                      bool &is_union_pkey);
 
   /**
-   * 从一组expr中提取column id, 并且检查column属于同一个表
+   * Extract column id from a set of exprs, and check if the column belongs to the same table
    */
   static int extract_column_ids(const ObIArray<ObRawExpr *> &col_exprs,
                                 ObIArray<uint64_t> &col_ids,

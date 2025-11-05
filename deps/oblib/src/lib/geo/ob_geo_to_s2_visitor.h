@@ -112,7 +112,7 @@ private:
   static int vector_emplace_back(std::vector<std::unique_ptr<S2Loop>> &vector, S2Loop *element);
   template <typename ElementType>
   static int vector_emplace_back(std::vector<std::unique_ptr<S2Region>> &vector, ElementType *element);
-  // S2对象内部使用了std::vector实现，在这里统一使用std::vector管理这些对象
+  // S2 object internally uses std::vector implementation, here we uniformly use std::vector to manage these objects
   std::vector<std::unique_ptr<S2Region>> s2v_;
   S2LatLngRect mbr_;
   std::vector<S2CellId> S2cells_;

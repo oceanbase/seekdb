@@ -402,7 +402,7 @@ int ObDynamicSamplePieceMsgCtx::append_object_sample_data(
   int ret = OB_SUCCESS;
   ObChunkDatumStore::StoredRow *store_row = last_store_row_.get_store_row();
   CK(idx < piece.tablet_ids_.count());
-  // part_ranges cnt可小于、大于、等于tablet_id cnt.
+  // part_ranges cnt can be less than, greater than, or equal to tablet_id cnt.
   for (int m = 0; m < piece.part_ranges_.count() && OB_SUCC(ret); ++m) {
     if (piece.tablet_ids_.at(idx) == piece.part_ranges_.at(m).tablet_id_) {
       if (OB_ISNULL(store_row)) {

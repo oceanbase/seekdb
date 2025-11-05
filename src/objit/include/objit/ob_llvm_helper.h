@@ -382,7 +382,7 @@ public:
   int add_compiled_object(size_t length, const char *ptr);
 
 public:
-  //指令
+  //instruction
   int create_br(const ObLLVMBasicBlock &dest);
   int create_cond_br(ObLLVMValue &value, ObLLVMBasicBlock &true_dest, ObLLVMBasicBlock &false_dest);
   int create_call(const common::ObString &name, ObLLVMFunction &callee, common::ObIArray<ObLLVMValue> &args, ObLLVMValue &result);

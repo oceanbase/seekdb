@@ -1615,7 +1615,7 @@ int ObHBaseModel::generate_new_value(ObTableExecCtx &ctx,
   } else {
     ObString orig_str;
     int64_t new_ts = htable_cell.get_timestamp(); // default insert timestamp
-    if (OB_NOT_NULL(old_entity)) { // 旧行存在，构造新值（base + delta）
+    if (OB_NOT_NULL(old_entity)) { // The old row exists, construct the new value (base + delta)
       ObObj base_obj_v;
       if (OB_FAIL(old_entity->get_property(ObHTableConstants::VALUE_CNAME_STR, base_obj_v))) {
         LOG_WARN("failed to get value", K(ret), K(old_entity));

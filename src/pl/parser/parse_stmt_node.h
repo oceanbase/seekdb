@@ -62,12 +62,12 @@ typedef struct _ObParseCtx
   int stmt_len_;
   const char *orig_stmt_str_;
   int orig_stmt_len_;
-  ObQuestionMarkCtx question_mark_ctx_;//用来记录整个anonymous中所有的question mark
+  ObQuestionMarkCtx question_mark_ctx_;//used to record all the question marks in the entire anonymous
   int comp_mode_;
   bool is_not_utf8_connection_;
   const struct ObCharsetInfo *charset_info_;
   const struct ObCharsetInfo *charset_info_oracle_db_;
-  int64_t last_escape_check_pos_;  //解析quoted string时的一个临时变量，处理连接gbk字符集时遇到的转义字符问题
+  int64_t last_escape_check_pos_;  // A temporary variable used during quoted string parsing to handle escape characters encountered when connecting with the gbk character set
   int connection_collation_;
   bool mysql_compatible_comment_; //whether the parser is parsing "/*! xxxx */"
   int copied_pos_;
@@ -81,12 +81,12 @@ typedef struct _ObParseCtx
   {
     uint32_t is_inner_parse_:1;   //is inner parser, not from the user's call
     uint32_t is_for_trigger_:1;
-    uint32_t is_dynamic_:1; //是否是从dynamic sql过来的
+    uint32_t is_dynamic_:1; //whether it comes from dynamic sql
     uint32_t is_for_preprocess_:1;
     uint32_t is_include_old_new_in_trigger_:1; // indicates whether include :old/:new/:parent in trigger body
     uint32_t in_q_quote_:1;
     uint32_t is_pl_fp_  :1;
-    uint32_t is_forbid_anony_parameter_ : 1; // 1 表示禁止匿名块参数化
+    uint32_t is_forbid_anony_parameter_ : 1; // 1 indicates that anonymous block parameterization is forbidden
     uint32_t need_switch_to_wrap_ : 1; // 1 indicates that the parser needs to switch to <wrap_begin>
     uint32_t reserved_:23;
   };

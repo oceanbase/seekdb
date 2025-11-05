@@ -581,7 +581,7 @@ TEST_F(TestDataBlockWriter, test_scan_greater_range)
   RowsGuard rows_guard;
   SSTableGuard sstable_guard;
   ASSERT_EQ(OB_SUCCESS, row_generate_.generate_rows(rows_guard, test_row_num));
-  build_sstable(rows_guard, sstable_guard, 0, 5000); // 只写前5000行
+  build_sstable(rows_guard, sstable_guard, 0, 5000); // Write only the first 5000 rows
 
   SSTableScannerGuard scanner_guard;
   ObDirectLoadSSTableScanner *iter = nullptr;
@@ -629,7 +629,7 @@ TEST_F(TestDataBlockWriter, test_scan_less_range)
   RowsGuard rows_guard;
   SSTableGuard sstable_guard;
   ASSERT_EQ(OB_SUCCESS, row_generate_.generate_rows(rows_guard, test_row_num));
-  build_sstable(rows_guard, sstable_guard, 5000); // 只写后5000行
+  build_sstable(rows_guard, sstable_guard, 5000); // Only write the last 5000 rows
 
   SSTableScannerGuard scanner_guard;
   ObDirectLoadSSTableScanner *iter = nullptr;
@@ -677,7 +677,7 @@ TEST_F(TestDataBlockWriter, test_scan_range)
   RowsGuard rows_guard;
   SSTableGuard sstable_guard;
   ASSERT_EQ(OB_SUCCESS, row_generate_.generate_rows(rows_guard, test_row_num));
-  build_sstable(rows_guard, sstable_guard, 0, 5000); // 只写前5000行
+  build_sstable(rows_guard, sstable_guard, 0, 5000); // Write only the first 5000 rows
 
   SSTableScannerGuard scanner_guard;
   ObDirectLoadSSTableScanner *iter = nullptr;
@@ -835,7 +835,7 @@ TEST_F(TestDataBlockWriter, test_write_and_scan_range_large_low)
     ObDirectLoadDatumRow *row = rows_guard.at(i);
     row->storage_datums_[24].set_string(large_string);
   }
-  build_sstable(rows_guard, sstable_guard, 0, 5000); // 只写前5000行
+  build_sstable(rows_guard, sstable_guard, 0, 5000); // Write only the first 5000 rows
 
   SSTableScannerGuard scanner_guard;
   ObDirectLoadSSTableScanner *iter = nullptr;
@@ -871,7 +871,7 @@ TEST_F(TestDataBlockWriter, test_scan_range_large_low)
     ObDirectLoadDatumRow *row = rows_guard.at(i);
     row->storage_datums_[24].set_string(large_string);
   }
-  build_sstable(rows_guard, sstable_guard, 0, 5000); // 只写前5000行
+  build_sstable(rows_guard, sstable_guard, 0, 5000); // Write only the first 5000 rows
 
   SSTableScannerGuard scanner_guard;
   ObDirectLoadSSTableScanner *iter = nullptr;

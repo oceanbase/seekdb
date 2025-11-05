@@ -8,7 +8,7 @@
 
 EASY_CPP_START
 //////////////////////////////////////////////////////////////////////////////////
-//接口函数
+// interface function
 extern easy_summary_t          *easy_summary_create();
 extern void                     easy_summary_destroy(easy_summary_t *sum);
 extern easy_summary_node_t     *easy_summary_locate_node(int fd, easy_summary_t *sum, int hidden);

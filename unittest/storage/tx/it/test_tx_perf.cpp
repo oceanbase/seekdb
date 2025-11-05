@@ -43,11 +43,11 @@ int test_time = 10;
 
 TEST_F(ObTestTxPerf, test_sp_trans_perf)
 {
-  // 创建节点
+  // Create node
   auto n1 = new ObTxNode(1, ObAddr(ObAddr::VER::IPV4, "127.0.0.1", 8888), bus_);
 
   DEFER(delete(n1));
-  // 启动节点
+  // Start node
   ASSERT_EQ(OB_SUCCESS, n1->start());
 
   std::vector<std::thread> ths;

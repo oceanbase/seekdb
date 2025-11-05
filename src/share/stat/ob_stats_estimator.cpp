@@ -122,7 +122,7 @@ int ObStatsEstimator::fill_sample_info(common::ObIAllocator &alloc,
   int ret = OB_SUCCESS;
   if (est_percent>= 0.000001 && est_percent < 100.0) {
     char *buf = NULL;
-    int32_t buf_len = 50;//double类型一般15～16位，加上字符长度16左右，因此数组长度为50足够用
+    int32_t buf_len = 50;//double type generally occupies 15~16 bits, plus the character length of about 16, therefore an array length of 50 is sufficient
     int64_t real_len = -1;
     if (OB_ISNULL(buf = static_cast<char *>(alloc.alloc(buf_len)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -197,7 +197,7 @@ int ObStatsEstimator::fill_parallel_info(common::ObIAllocator &alloc,
   int ret = OB_SUCCESS;
   if (degree > 1) {
     char *buf = NULL;
-    int32_t buf_len = 50;//int64长度不会超过20位，加上普通字符长度10，因此数组长度为50足够用
+    int32_t buf_len = 50;//The length of int64 will not exceed 20 digits, plus the length of ordinary characters 10, so an array length of 50 is sufficient
     int64_t real_len = -1;
     if (OB_ISNULL(buf = static_cast<char *>(alloc.alloc(buf_len)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -227,7 +227,7 @@ int ObStatsEstimator::fill_query_timeout_info(common::ObIAllocator &alloc,
   int ret = OB_SUCCESS;
   if (query_timeout > 0) {
     char *buf = NULL;
-    int32_t buf_len = 50;//int64长度不会超过20位，加上普通字符长度10，因此数组长度为50足够用
+    int32_t buf_len = 50;//The length of int64 will not exceed 20 digits, plus the length of ordinary characters 10, so an array length of 50 is sufficient
     int64_t real_len = -1;
     if (OB_ISNULL(buf = static_cast<char *>(alloc.alloc(buf_len)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;

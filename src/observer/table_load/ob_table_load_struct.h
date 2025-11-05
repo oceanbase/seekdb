@@ -85,10 +85,10 @@ public:
 };
 
 enum class ObTableLoadExeMode {
-  FAST_HEAP_TABLE = 0,  //快速堆表
-  GENERAL_TABLE_COMPACT = 1,  // 非堆表不排序
-  MULTIPLE_HEAP_TABLE_COMPACT = 2,  //堆表排序
-  MEM_COMPACT = 3,  //非堆表排序
+  FAST_HEAP_TABLE = 0,  //fast heap table
+  GENERAL_TABLE_COMPACT = 1,  // Non-heap table is not sorted
+  MULTIPLE_HEAP_TABLE_COMPACT = 2,  //heap table sorting
+  MEM_COMPACT = 3,  //non-heap table sorting
   MAX_TYPE
 };
 
@@ -137,7 +137,7 @@ public:
     int ret = common::OB_SUCCESS;
     if (need_sort_) {
       if (session_count_ < 2) {
-        session_count_ = 2; //排序至少要两个线程才能工作
+        session_count_ = 2; // sorting requires at least two threads to work
       }
     }
     return ret;
@@ -200,7 +200,7 @@ public:
   uint64_t max_error_row_count_;
   uint64_t sql_mode_; // unused
   int32_t column_count_;
-  bool need_sort_;  // 表示主表是否要排序
+  bool need_sort_;  // indicates whether the main table needs to be sorted
   bool px_mode_;
   bool online_opt_stat_gather_;
   sql::ObLoadDupActionType dup_action_;
@@ -213,7 +213,7 @@ public:
   ObCompressorType compressor_type_;
   double online_sample_percent_;
   storage::ObDirectLoadLevel::Type load_level_;
-  bool task_need_sort_; // 表示导入任务是否会走到排序流程
+  bool task_need_sort_; // indicates whether the import task will go through the sorting process
 };
 
 struct ObTableLoadDDLParam

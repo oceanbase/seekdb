@@ -2,7 +2,7 @@
 #define EASY_HASH_H_
 
 /**
- * 固定HASH桶的hashtable, 需要在使用的对象上定义一个easy_hash_list_t
+ * Fixed-size hash bucket hashtable, need to define an easy_hash_list_t on the used object
  */
 #include "util/easy_pool.h"
 #include "easy_list.h"

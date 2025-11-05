@@ -137,8 +137,8 @@ private:
     int dispatch_transmit_channel_info(ObExecContext &ctx, ObDfo &child, ObDfo &parent) const;
     int dispatch_receive_channel_info(ObExecContext &ctx, ObDfo &child, ObDfo &parent) const;
     int do_schedule_dfo(ObExecContext &exec_ctx, ObDfo &dfo) const;
-    /* task 的 transmit channel 数据通过 sqc 捎带过去，避免一次 rpc
-     * 用于和 root dfo 交互的场景
+    /* task's transmit channel data is carried over by sqc to avoid a single rpc
+     * used in scenarios interacting with the root dfo
      */
     int check_if_can_prealloc_xchg_ch(ObDfo &child, ObDfo &parent, bool &bret) const;
     int do_fast_schedule(ObExecContext &exec_ctx,

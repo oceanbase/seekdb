@@ -17,21 +17,19 @@
 #include "common/ob_role.h"                   // ObRole
 #include "storage/tx/ob_trans_define.h"       // ObLSID, LinkHashNode
 #include "storage/high_availability/ob_storage_ha_struct.h"        // ObMigrateStatus
-
-// 定期更新黑名单的时间间隔(us)
+// Regular update interval for blacklist (us)
 #define BLACK_LIST_REFRESH_INTERVAL       3000000     // 3s
-// 判断时间戳是否赶上/落后的缓冲时间(ns)，避免阈值附近的日志流反复加入/移出黑名单
+// Determine if the timestamp is ahead of/lags behind the buffer time (ns) to avoid log streams repeatedly being added/removed from the blacklist near the threshold
 #define BLACK_LIST_WHITEWASH_INTERVAL_NS  1000000000L  // 1s
-// 黑名单信息打印时间间隔(us)
+// Blacklist information print interval (us)
 #define BLACK_LIST_PRINT_INTERVAL         5000000    // 5s
-// 清理超时对象的时间间隔(us)，这些对象不会出现在 SQLResult 中，比如切换server之后旧server上的日志流
+// Cleanup timeout object interval (us), these objects will not appear in SQLResult, for example log streams on the old server after a server switch
 #define BLACK_LIST_CLEAN_UP_INTERVAL      5000000     // 5s
-// 最大连续失败次数，连续刷新黑名单失败 达到 该次数则清空黑名单
+// Maximum consecutive failure count, clear the blacklist if consecutive refresh blacklist failures reach this count
 #define BLACK_LIST_MAX_FAIL_COUNT         3
-// 执行内部sql的超时时间，内部sql的hint不生效，需要在接口中指定超时时间
+// The timeout time for executing internal SQL, the hint for internal SQL does not take effect, and the timeout time needs to be specified in the interface
 #define INNER_SQL_QUERY_TIMEOUT           2000000L     // 2s
-
-// 查询 __all_virtual_ls_info 的语句，设置了2s超时时间
+// Query statement for __all_virtual_ls_info, with a timeout set to 2s
 // select /*+query_timeout(2000000)*/ a.svr_ip, a.svr_port, a.tenant_id, a.ls_id, a.role, nvl(b.weak_read_scn, 1) as weak_read_scn, nvl(b.migrate_status, 0) as migrate_status, nvl(b.tx_blocked, 0) as tx_blocked from oceanbase.__all_virtual_ls_meta_table a left join oceanbase.__all_virtual_ls_info b on a.svr_ip = b.svr_ip and a.svr_port = b.svr_port and a.tenant_id = b.tenant_id and a.ls_id = b.ls_id;
 #define BLACK_LIST_SELECT_LS_INFO_STMT \
   "select a.svr_ip, a.svr_port, a.tenant_id, a.ls_id, a.role, \
@@ -159,12 +157,11 @@ public:
     return OB_MIGRATION_STATUS_MAX != migrate_status_;
   }
   TO_STRING_KV(K_(ls_state), K_(weak_read_scn), K_(migrate_status), K_(tx_blocked));
-
-  // 日志流状态（角色）：LEADER(1)、FOLLOWER(2)，其他角色对于日志流是没有意义的
+  // Log stream state (role): LEADER(1), FOLLOWER(2), other roles are meaningless for the log stream
   int64_t ls_state_;
-  // 弱读时间戳，如果落后超过一定时间就要加入黑名单，单位ns
+  // Weak timestamp, if it lags behind by more than a certain time, it should be added to the blacklist, unit ns
   int64_t weak_read_scn_;
-  // 迁移状态，正在迁移的日志流一定不可读
+  // Migration state, the log stream being migrated must not be readable
   ObMigrationStatus migrate_status_;
   // transaction ls blocked
   bool tx_blocked_;
@@ -217,9 +214,9 @@ public:
 
 private:
   ObBLKey key_;
-  // ls相关信息
+  // ls related information
   ObLsInfo ls_info_;
-  // 当前对象最后一次init/update的时间(us)
+  // The last init/update time of the current object (us)
   int64_t update_ts_;
 };
 
@@ -305,11 +302,11 @@ public:
     } else if (OB_FAIL(map_.get(bl_key, value)) && OB_ENTRY_NOT_EXIST != ret) {
       TRANS_LOG(WARN, "map get error", KR(ret), K(bl_key), K(ls_info));
     } else if (OB_ENTRY_NOT_EXIST == ret) {
-      // key不存在，创建value并插入map
+      // key does not exist, create value and insert into map
       if (only_update) {
         ret = OB_SUCCESS;
       } else if (OB_FAIL(map_.create(bl_key, value))) {
-        // 可能前面get时还没有这个key，但是在create之前别的线程把这个key插入map了
+        // The key might not have existed when get was called, but another thread inserted the key into the map before create was called
         TRANS_LOG(WARN, "map create error", KR(ret), K(bl_key), K(ls_info));
       } else {
         if (OB_FAIL(value->init(bl_key, ls_info))) {
@@ -318,9 +315,9 @@ public:
         }
         map_.revert(value);
       }
-    // key已存在，直接更新value
+    // key already exists, directly update value
     } else if (OB_FAIL(value->update(ls_info))) {
-      // 只要get成功，就要减去value的引用计数
+      // As long as get is successful, the reference count of value should be decremented
       map_.revert(value);
       TRANS_LOG(WARN, "value update error", KR(ret), KPC(value), K(bl_key), K(ls_info));
     } else {

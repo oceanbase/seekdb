@@ -219,7 +219,7 @@ int ObAllVirtualSqlStatIter::get_next_sql_stat (
           uint64_t cur_sql_stat_cache_id = sql_stat_cache_id_array_.at(sql_stat_cache_id_array_idx_);
           sql_stat_cache_id_array_idx_++;
           ObCacheObjGuard guard(VT_SQL_STAT_HANDLE);
-          int tmp_ret = plan_cache->ref_cache_obj(cur_sql_stat_cache_id, guard); //plan引用计数加VT_SQL_STAT_HANDLE
+          int tmp_ret = plan_cache->ref_cache_obj(cur_sql_stat_cache_id, guard); // plan reference count plus VT_SQL_STAT_HANDLE
           if (OB_HASH_NOT_EXIST == tmp_ret) {
             //do nothing;
           } else if (OB_SUCCESS != tmp_ret) {

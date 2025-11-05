@@ -209,7 +209,7 @@ TEST_F(TestLogGroupBuffer, test_fill_padding_cross_bround)
   EXPECT_EQ(OB_SUCCESS, log_group_buffer_.init(start_lsn));
   const int64_t unittest_log_buffer_size = 4 * 1024 * 1024;
   log_group_buffer_.available_buffer_size_ = log_group_buffer_.reserved_buffer_size_ = unittest_log_buffer_size;
-  // LSN为0，提交3条1M日志
+  // LSN is 0, submit 3 1M logs
   const int64_t log_size = 1*1024*1024;
   char *buf = reinterpret_cast<char*>(ob_malloc(1*1024*1024, "unittest"));
   ASSERT_NE(nullptr, buf);
@@ -219,39 +219,37 @@ TEST_F(TestLogGroupBuffer, test_fill_padding_cross_bround)
   EXPECT_EQ(OB_SUCCESS, log_group_buffer_.fill(lsn1, buf, log_size));
   LSN lsn2(2*1024*1024);
   EXPECT_EQ(OB_SUCCESS, log_group_buffer_.fill(lsn2, buf, log_size));
-
-  // 更新reuse lsn为1M, 继续提交2M的padding日志
+  // Update reuse lsn to 1M, continue submitting 2M of padding logs
   LSN lsn3(3*1024*1024);
   EXPECT_EQ(OB_SUCCESS, log_group_buffer_.inc_update_reuse_lsn(lsn1));
   EXPECT_EQ(OB_SUCCESS, log_group_buffer_.fill_padding_body(lsn3, padding_valid_data,
       padding_valid_data_len, 2*log_size));
   LSN lsn4(5*1024*1024);
-  // 预期已经没有可用空间
+  // Expected to have no available space
   EXPECT_EQ(OB_EAGAIN, log_group_buffer_.fill(lsn4, buf, 1));
   // |5.5|2|3|4|5.0|
-  // 判断5.0的数据是否是padding, 5号日志为2M, 其余日志为1M
+  // Determine if the data for 5.0 is padding, log 5 is 2M, and all other logs are 1M
   EXPECT_EQ(0, memcmp(padding_valid_data, log_group_buffer_.data_buf_+3*1024*1024, padding_valid_data_len));
   char *zero_data = reinterpret_cast<char*>(ob_malloc(2*log_size, "unittest"));
   ASSERT_NE(nullptr, zero_data);
   memset(zero_data, PADDING_LOG_CONTENT_CHAR, 2*1024*1024);
   EXPECT_EQ(0, memcmp(log_group_buffer_.data_buf_+3*1024*1024+1024, zero_data, 1*1024*1024-1*1024));
-  // 更新reuse_lsn为4M-LogEntryHeader::PADDING_LOG_ENTRY_SIZE，此时正好可以将padding日志的有效日志体放在group_buffer尾部
+  // Update reuse_lsn to 4M-LogEntryHeader::PADDING_LOG_ENTRY_SIZE, at this point the valid log body of padding log can just be placed at the end of group_buffer
   LSN reuse_lsn = LSN(unittest_log_buffer_size - LogEntryHeader::PADDING_LOG_ENTRY_SIZE);
   EXPECT_EQ(OB_SUCCESS, log_group_buffer_.inc_update_reuse_lsn(reuse_lsn));
   LSN lsn5(reuse_lsn);
-  // 提交2M的padding日志，有效日志长度为padding_valid_data_len
-  // 2.x表示2号日志被复写部分
-  // |5.x|2.x|3|4|5.0|, 5.0开始的地方为reuse_lsn
-  // 故意将5.x的一些数据搞坏，验证fill_padding_body是否会清0
+  // Submit 2M padding log, effective log length is padding_valid_data_len
+  // 2.x indicates the part of log 2 that has been overwritten
+  // |5.x|2.x|3|4|5.0|, 5.0 start is the reuse_lsn
+  // Intentionally corrupt some data from 5.x to verify if fill_padding_body will clear to 0
   memset(log_group_buffer_.data_buf_, 'x', 1*1024);
   EXPECT_EQ(OB_SUCCESS, log_group_buffer_.fill_padding_body(lsn5, padding_valid_data, padding_valid_data_len, 2*log_size));
-  // 预期log_group_buffer的尾部数据恰好和padding_valid_data一样
-  // log_group_buffer的padding剩余数据和padding_valid_data一样
+  // Expected the tail data of log_group_buffer to be exactly the same as padding_valid_data
+  // padding data remaining in log_group_buffer is the same as padding_valid_data
   EXPECT_EQ(0, memcmp(log_group_buffer_.data_buf_+lsn5.val_, padding_valid_data, LogEntryHeader::PADDING_LOG_ENTRY_SIZE));
   EXPECT_EQ(0, memcmp(log_group_buffer_.data_buf_, padding_valid_data+LogEntryHeader::PADDING_LOG_ENTRY_SIZE, padding_valid_data_len-LogEntryHeader::PADDING_LOG_ENTRY_SIZE));
   EXPECT_EQ(0, memcmp(log_group_buffer_.data_buf_+LogEntryHeader::PADDING_LOG_ENTRY_SIZE, zero_data, 2*log_size-padding_valid_data_len));
-
-  // 更新reuse_lsn为4M-LogEntryHeader::PADDING_LOG_ENTRY_SIZE+10，此时padding日志的有效日志体需要放在group_buffer的首尾
+  // Update reuse_lsn to 4M-LogEntryHeader::PADDING_LOG_ENTRY_SIZE+10, at this time the valid log body of padding log needs to be placed at the beginning and end of group_buffer
   memset(log_group_buffer_.data_buf_, 'x', 1*1024);
   EXPECT_EQ(OB_SUCCESS, log_group_buffer_.inc_update_reuse_lsn(reuse_lsn+10));
   LSN lsn6(reuse_lsn+10);

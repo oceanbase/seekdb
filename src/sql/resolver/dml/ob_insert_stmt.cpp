@@ -141,7 +141,7 @@ int ObInsertStmt::part_key_has_rand_value(bool &has) const
 {
   int ret = OB_SUCCESS;
   has = false;
-  //添加insert values中的分区键对应的value expr
+  // Add the value expr corresponding to the partition key in insert values
   int64_t value_desc_cnt = table_info_.values_desc_.count();
   for (int64_t i = 0; OB_SUCC(ret) && !has && i < value_desc_cnt; ++i) {
     ObColumnRefRawExpr *col_expr = table_info_.values_desc_.at(i);

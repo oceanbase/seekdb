@@ -99,7 +99,7 @@ private:
   ObPxFifoCoordOpEventListener listener_;
   ObSerialDfoScheduler serial_scheduler_;
   ObParallelDfoScheduler parallel_scheduler_;
-  ObPxMsgProc msg_proc_; // msg_loop 处理消息的回调函数
+  ObPxMsgProc msg_proc_; // msg_loop processing message callback function
   ObPxFinishSqcResultP sqc_finish_msg_proc_;
   ObPxInitSqcResultP sqc_init_msg_proc_;
   ObBarrierPieceMsgP barrier_piece_msg_proc_;

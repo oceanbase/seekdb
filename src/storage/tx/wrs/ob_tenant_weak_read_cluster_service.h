@@ -79,7 +79,7 @@ public:
   /// @retval OB_SUCCESS            success
   /// @retval OB_NOT_IN_SERVICE     self server not in wrs service
   /// @retval OB_NOT_MASTER         self is in service, but not wrs leader, should stop service
-  /// @retval OB_NEED_RETRY         wrs not ready，need retry
+  /// @retval OB_NEED_RETRY         wrs not ready, need retry
   /// @retval OTHER CODE            fail
   int get_cluster_version(share::SCN &version) const;
   int get_cluster_version(share::SCN &version, share::SCN &min_version, share::SCN &max_version) const;

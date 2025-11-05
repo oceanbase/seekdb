@@ -50,7 +50,7 @@ OB_SERIALIZE_MEMBER_INHERIT(ObTempTableInsertOpSpec, ObOpSpec,
 
 int ObTempTableInsertOp::inner_rescan()
 {
-  //暂时不支持rescan
+  // Temporarily not supporting rescan
   int ret = OB_ERR_UNEXPECTED;
   return ret;
 }
@@ -234,7 +234,7 @@ int ObTempTableInsertOp::add_row_to_temp_table(ObDTLIntermResultInfo *&chunk_row
                  MY_SPEC.get_child()->output_, &eval_ctx_))) {
     LOG_WARN("failed to add row to chunk row store.", K(ret));
   } else if (!MY_SPEC.is_distributed_) {
-    //local的数据只存一份，不切割，do nothing
+    // local data is stored only once, not split, do nothing
   } else if (chunk_row_store->datum_store_->get_row_cnt() <
              TEMP_TABLE_PAGE_SIZE) {
     //do nothing
@@ -303,7 +303,7 @@ int ObTempTableInsertOp::insert_chunk_row_store()
   } else if (!MY_SPEC.is_distributed_ &&
              all_datum_store_.empty() &&
              OB_FAIL(init_chunk_row_store(chunk_row_store))) {
-    //local temp table需要一个空的row store占位
+    // local temp table needs an empty row store placeholder
     LOG_WARN("failed to init chunk row store", K(ret));
   } else if (!MY_SPEC.is_distributed_ && all_datum_store_.count() != 1) {
     ret = OB_ERR_UNEXPECTED;
@@ -327,7 +327,7 @@ int ObTempTableInsertOp::insert_chunk_row_store()
       dtl_int_key.start_time_ = oceanbase::common::ObTimeUtility::current_time();
       dtl_int_key.timeout_ts_ = phy_plan_ctx->get_timeout_timestamp();
       row_store->set_eof(true);
-      //chunk row store不需要管理dump逻辑
+      // chunk row store does not need to manage dump logic
       row_store->is_read_ = true;
       if (OB_FAIL(MTL(dtl::ObDTLIntermResultManager*)->insert_interm_result_info(
                                         dtl_int_key, row_store))) {
@@ -341,7 +341,7 @@ int ObTempTableInsertOp::insert_chunk_row_store()
     }
   }
   if (OB_FAIL(ret)) {
-    //异常处理
+    // Exception handling
     for (int64_t i = 0; i < keys_insert.count(); ++i) {
       MTL(dtl::ObDTLIntermResultManager*)->erase_interm_result_info(keys_insert.at(i));
     }
@@ -400,8 +400,8 @@ int ObTempTableInsertOp::process_dump(dtl::ObDTLIntermResultInfo &chunk_row_stor
   bool updated = false;
   bool dumped = false;
   UNUSED(updated);
-  // 对于material由于需要保序，所以dump实现方式是，会dump掉所有的，同时可以保留最后的内存数据。目前选择一定是从前往后dump
-  //      还一种方式实现是，dump剩下到最大内存量的数据，以后写入数据则必须dump，但这种方式必须对内存进行伸缩处理
+  // For material, since order needs to be preserved, the dump implementation method is to dump all of them while retaining the last memory data. The current choice is definitely to dump from front to back
+  //      Another way to implement is, dump the remaining data up to the maximum memory capacity, any further data written must be dumped, but this approach requires memory scaling handling
   if (OB_FAIL(sql_mem_processor_.update_max_available_mem_size_periodically(
       &mem_context_->get_malloc_allocator(),
       [&](int64_t cur_cnt){ return chunk_row_store.datum_store_->get_row_cnt_in_memory() > cur_cnt; },
@@ -419,7 +419,7 @@ int ObTempTableInsertOp::process_dump(dtl::ObDTLIntermResultInfo &chunk_row_stor
     int64_t dump_start_time = oceanbase::common::ObTimeUtility::current_time();
     int64_t dump_end_time = dump_start_time;
     for (int64_t i = 0; OB_SUCC(ret) && i < all_datum_store_.count(); ++i) {
-      //最后一个chunk的最后block可能还需要插入数据，不dump
+      // The last block of the last chunk may still need to insert data, do not dump
       bool dump_last_block = i < all_datum_store_.count() - 1;
       if (OB_FAIL(all_datum_store_.at(i)->datum_store_->dump(false, dump_last_block))) {
         LOG_WARN("failed to dump row store", K(ret));

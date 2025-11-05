@@ -290,8 +290,7 @@ TEST(TestObHashMap, set_or_update)
   uint64_t value = 100;
   CallBack callback;
   HashValue value_tmp;
-
-  // 没有create
+  // There is no create
   EXPECT_EQ(OB_NOT_INIT, hm.set_or_update(key, value, callback));
   hm.create(cal_next_prime(gHashItemNum), ObModIds::OB_HASH_BUCKET);
 
@@ -316,8 +315,7 @@ TEST(TestObHashMap, erase_if)
   Predicate pred;
   HashValue value_tmp;
   bool is_erased = true;
-
-  // 没有create
+  // There is no create
   EXPECT_EQ(OB_NOT_INIT, hm.erase_if(key, pred, is_erased));
   hm.create(cal_next_prime(gHashItemNum), ObModIds::OB_HASH_BUCKET);
 

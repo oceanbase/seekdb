@@ -246,7 +246,7 @@ int ObForeignKeyChecker::init_foreign_key_checker(int64_t estimate_row,
   mem_attr.label_ = "SqlFKeyCkr";
   das_ref_.set_expr_frame_info(expr_frame_info);
   das_ref_.set_mem_attr(mem_attr);
-  das_ref_.set_execute_directly(false); // 确认这个参数设置的合理性
+  das_ref_.set_execute_directly(false); // Confirm the reasonableness of this parameter setting
   if (OB_FAIL(DAS_CTX(das_ref_.get_exec_ctx()).extended_table_loc(loc_meta, table_loc_))) {
     LOG_WARN("failed to extend table_loc", K(ret), K(loc_meta));
   } else if (OB_ISNULL(table_loc_)) {
@@ -444,7 +444,7 @@ int ObForeignKeyChecker::build_primary_table_range(const ObIArray<ObForeignKeyCo
       }
     }
     if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(ob_write_obj(*allocator_, tmp_obj, obj_ptr[rowkey_index]))) {// 这里需要做深拷贝
+    } else if (OB_FAIL(ob_write_obj(*allocator_, tmp_obj, obj_ptr[rowkey_index]))) {// Here a deep copy needs to be done
       LOG_WARN("deep copy rowkey value failed", K(ret), K(tmp_obj));
     }
   }
@@ -538,7 +538,7 @@ int ObForeignKeyChecker::build_index_table_range(const ObIArray<ObForeignKeyColu
         }
       }
       if (OB_FAIL(ret)) {
-      // 这里需要做深拷贝
+      // Here a deep copy needs to be done
       } else if (OB_FAIL(ob_write_obj(*allocator_, tmp_obj, obj_ptr[rowkey_index]))) {
         LOG_WARN("deep copy rowkey value failed", K(ret), K(tmp_obj));
       }

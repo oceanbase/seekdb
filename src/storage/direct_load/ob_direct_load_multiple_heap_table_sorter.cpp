@@ -112,7 +112,7 @@ int ObDirectLoadMultipleHeapTableSorter::close_chunk(ObDirectLoadMultipleHeapTab
   } else if (OB_FAIL(table_builder.init(table_builder_param))) {
     LOG_WARN("fail to init table builder", KR(ret));
   }
-  // 按tablet_id顺序写入table_builder
+  // Write to table_builder in order of tablet_id
   for (int64_t i = 0; OB_SUCC(ret) && i < keys.count(); i++) {
     const ObTabletID &tablet_id = keys.at(i);
     ObArray<const ObDirectLoadConstExternalMultiPartitionRow *> bag;

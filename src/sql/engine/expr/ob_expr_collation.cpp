@@ -304,8 +304,8 @@ int calc_set_collation_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_dat
     ObCollationType dst_coll = static_cast<ObCollationType>(cs_arg->get_int());
     ObCharsetType ori_charset_type =
       ObCharset::charset_type_by_coll(expr.args_[0]->datum_meta_.cs_type_);
-    // set_collation结果的coll一定要等于第二个参数的值。在resolve阶段，第二个参数的值和
-    // coll会被设置成一样的。set_collation计算时再次进行检查防止出错
+    // set_collation result's coll must be equal to the value of the second parameter. In the resolve phase, the value of the second parameter and
+    // coll will be set to the same. set_collation checks again during calculation to prevent errors
     if (OB_UNLIKELY(CS_TYPE_INVALID == dst_coll || expr.datum_meta_.cs_type_ != dst_coll)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_ERROR("invalid collation type", K(ret), K(dst_coll), K(expr.datum_meta_.cs_type_));
@@ -352,7 +352,7 @@ ObExprCmpMeta::ObExprCmpMeta(ObIAllocator &alloc)
     :ObStringExprOperator(alloc, T_FUN_SYS_CMP_META, "cmp_meta", 1, NOT_VALID_FOR_GENERATED_COL)
 {
   /*
-   * CmpMeta需要显示CalcMeta，type1的get_type()是int，meta_type是varchar，不需要转换
+   * CmpMeta needs to display CalcMeta, type1's get_type() is int, meta_type is varchar, no conversion needed
    */
   disable_operand_auto_cast();
 }

@@ -196,7 +196,7 @@ TEST_F(TestLogSQLServerProvider, fetch)
   EXPECT_EQ(1, server_provider_.get_server_count());
   EXPECT_EQ(OB_SUCCESS, server_provider_.get_server(0, server));
   EXPECT_EQ(rs_leader_.server_.get_ipv4(), server.get_ipv4());
-  EXPECT_EQ(rs_leader_.sql_port_, server.get_port());     // Server的端口应该是SQL端口
+  EXPECT_EQ(rs_leader_.sql_port_, server.get_port());     // The port of the server should be the SQL port
 
   EXPECT_EQ(OB_ENTRY_NOT_EXIST, server_provider_.get_server(1, server));
   EXPECT_EQ(OB_INVALID_ARGUMENT, server_provider_.get_server(-1, server));

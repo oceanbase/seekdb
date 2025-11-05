@@ -29,35 +29,35 @@ int PriorityV1::compare(const AbstractPriority &rhs, int &result, ObStringHolder
   LC_TIME_GUARD(1_s);
   #define PRINT_WRAPPER KR(ret), K(MTL_ID()), K(*this), K(rhs), K(result), K(reason)
   int ret = OB_SUCCESS;
-  // 这里如果转型失败直接抛异常，但设计上转型不会失败
+  // Here, if the cast fails, an exception is thrown directly, but by design, the cast will not fail
   const PriorityV1 &rhs_impl = dynamic_cast<const PriorityV1 &>(rhs);
-  if (COMPARE_OUT(compare_observer_stopped_(ret, rhs_impl))) {// kill -15 导致observer stop
+  if (COMPARE_OUT(compare_observer_stopped_(ret, rhs_impl))) {// SIGTERM causes observer to stop
     (void) reason.assign("OBSERVER STOP");
     COORDINATOR_LOG_(TRACE, "compare done! get compared result from is_observer_stopped_");
-  } else if (COMPARE_OUT(compare_server_stopped_flag_(ret, rhs_impl))) {// 比较server是否被stop
+  } else if (COMPARE_OUT(compare_server_stopped_flag_(ret, rhs_impl))) {// Compare whether the server is stopped
     (void) reason.assign("SERVER STOPPED");
     COORDINATOR_LOG_(TRACE, "compare done! get compared result from server_stopped_flag_");
-  } else if (COMPARE_OUT(compare_zone_stopped_flag_(ret, rhs_impl))) {// 比较zone是否被stop
+  } else if (COMPARE_OUT(compare_zone_stopped_flag_(ret, rhs_impl))) {// Compare whether the zone is stopped
     (void) reason.assign("ZONE STOPPED");
     COORDINATOR_LOG_(TRACE, "compare done! get compared result from zone_stopped_flag_");
-  } else if (COMPARE_OUT(compare_fatal_failures_(ret, rhs_impl))) {// 比较致命的异常
+  } else if (COMPARE_OUT(compare_fatal_failures_(ret, rhs_impl))) {// Compare fatal failures
     (void) reason.assign("FATAL FAILURE");
     COORDINATOR_LOG_(TRACE, "compare done! get compared result from fatal_failures_");
-  } else if (COMPARE_OUT(compare_scn_(ret, rhs_impl))) {// 避免切换至回放位点过小的副本
+  } else if (COMPARE_OUT(compare_scn_(ret, rhs_impl))) {// Avoid switching to a replica with a replay point that is too small
     (void) reason.assign("LOG TS");
     COORDINATOR_LOG_(TRACE, "compare done! get compared resultfrom scn_");
-  } else if (COMPARE_OUT(compare_in_blacklist_flag_(ret, rhs_impl, reason))) {// 比较是否被标记删除
+  } else if (COMPARE_OUT(compare_in_blacklist_flag_(ret, rhs_impl, reason))) {// Compare if marked for deletion
     COORDINATOR_LOG_(TRACE, "compare done! get compared result from in_blacklist_flag_");
-  } else if (COMPARE_OUT(compare_manual_leader_flag_(ret, rhs_impl))) {// 比较是否存在用户指定的leader
+  } else if (COMPARE_OUT(compare_manual_leader_flag_(ret, rhs_impl))) {// Compare if there is a user-specified leader
     (void) reason.assign("MANUAL LEADER");
     COORDINATOR_LOG_(TRACE, "compare done! get compared result from manual_leader_flag_");
-  } else if (COMPARE_OUT(compare_primary_region_(ret, rhs_impl))) {// 通常Leader不能选出primary region
+  } else if (COMPARE_OUT(compare_primary_region_(ret, rhs_impl))) {// Normally Leader cannot elect primary region
     (void) reason.assign("PRIMARY REGION");
     COORDINATOR_LOG_(TRACE, "compare done! get compared result from primary_region_");
-  } else if (COMPARE_OUT(compare_serious_failures_(ret, rhs_impl))) {// 比较会导致切主的异常
+  } else if (COMPARE_OUT(compare_serious_failures_(ret, rhs_impl))) {// Comparison will lead to a leader-follower switch exception
     (void) reason.assign("SERIOUS FAILURE");
     COORDINATOR_LOG_(TRACE, "compare done! get compared result from serious_failures_");
-  } else if (COMPARE_OUT(compare_zone_priority_(ret, rhs_impl))) {// 比较RS设置的zone priority
+  } else if (COMPARE_OUT(compare_zone_priority_(ret, rhs_impl))) {// Compare RS set zone priority
     (void) reason.assign("ZONE PRIORITY");
     COORDINATOR_LOG_(TRACE, "compare done! get compared result from zone_priority_");
   } else if (CLICK_FAIL(ret)) {

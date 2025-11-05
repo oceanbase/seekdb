@@ -1971,12 +1971,12 @@ bool ObPreRangeGraph::check_like_range_precise(const ObString &pattern_str,
         }
         ++i;
       } else {
-        // 通配符'_'对于不同的字符集有不同的处理方式, 因此这里不处理'_'的情况, 如果遇到'_'直接认为不是一个精确匹配
+        // Wildcard '_' is handled differently for different character sets, therefore '_' is not processed here, if '_' is encountered it is directly considered not an exact match
         break;
       }
     }
     bool match_without_wildcard = (i == pattern_str.length() && j == max_str_len);
-    // 以'%'结尾或pattern中不存在通配符，且上一个相等字符不是空格(即pattern中不含尾部空格)
+    // Ends with '%' or pattern contains no wildcards, and the previous equal character is not a space (i.e., pattern does not contain trailing spaces)
     if ((end_with_percent || match_without_wildcard) &&
         (-1 == last_equal_idx || pattern_str_buf[last_equal_idx] != ' ')) {
       if (match_without_wildcard) {
@@ -1988,10 +1988,8 @@ bool ObPreRangeGraph::check_like_range_precise(const ObString &pattern_str,
     }
   return is_precise;
 }
-
-
-//这个函数用来判断待抽取的表达式的column type和表达式的比较类型是否兼容，
-//然后来判断该表达式到底是应该进行精确抽取还是放大成(min, max)
+// This function is used to determine if the column type of the expression to be extracted and the comparison type of the expression are compatible,
+// Then come to judge whether this expression should be precisely extracted or expanded to (min, max)
 bool ObPreRangeGraph::can_be_extract_range(ObItemType cmp_type,
                                         const ObRawExprResType &col_type,
                                         const ObObjMeta &calc_meta,
@@ -2000,50 +1998,49 @@ bool ObPreRangeGraph::can_be_extract_range(ObItemType cmp_type,
 {
   bool bret = true;
   always_true = true;
-  //决定一个表达式能否运用我们的抽取规则的前提是进行抽取后的集合范围有没有比表达式表达的值域范围更小
-  //对于一个表达式col compare const，比较类型calc_type决定了一个集合A(A中的元素是calc_type)满足关系，
-  //而query range需要确定一个集合B(集合B中的元素都是column_type)被A包含，
-  //这样才能让query range抽取的column value都满足这个表达式
-  //而集合B是query range通过calc_type和column_type以及表达式抽取规则确定的一个集合
-  //抽取的规则无论是类型的转换，还是字符集的转换，都只能做到一对一，例如int->varchar, 123被转换成'123'，不会是'0123'
-  //字符集UTF8MB4_GENERAL_CI'A'->UTF8MB4_BIN'A'而不会是UTF8MB4_BIN'a'
-  //因此要满足col compare const这个表达式，如果column_type和calc_type不兼容，那么需要涉及到类型转换
-  //能完整表达compare关系的表达式为:f1(col, calc_type) compare f2(const, calc_type)
-  //f1表示将col的值从column_type映射到calc_type，因此要讨论集合A和集合B的关系，就是讨论f1的映射关系
-  //影响集合范围的因素可能是类型和字符集，而字符集只有在字符串类型才有意义
-  //第一种情况：
-  //如果column_type和calc_type的类型相同并且字符集也相同(如果为字符串类型)，那么f1是一一映射关系
-  //也就是集合A=集合B
-  //第二种情况：
-  //如果column_type是大小写敏感的字符集，而calc_type是大小写不敏感的字符集，那么f1就是一个一对多的关系
-  //!f1就是一个多对一的关系，general_ci 'A'-> bin'a' or bin'A'那么通过query range规则推导出来的B包含于A，不满足假设，
-  //因此这种情况query range的结果是全集(min, max)
-  //第三种情况:
-  //如果column_type是字符串类型，而calc_type是非字符串类型，由于两者的排序规则和转换规则不一,
-  //f1是多对一的关系，例如'0123'->123, '123'->123，那么!f1是一对多的关系，也不满足假设，所以这种情况下query range结果也是全集(min, max)
-  //第四种情况：
-  //如果column_type是数值类型，而calc_type是字符串类型，通过第三种情况可知，数值类型到字符串类型的映射f1是
-  //一对多的关系,那么!f1的关系是多对一的关系，而query range的抽取规则是一一映射的关系，任何一个属于集合A的元素
-  //a都能唯一确定出一个值b在集合B中使表达式成立，因此第四种情况也是能够通过抽取规则抽取的
-  //其它情况下的f1也都是一一映射关系，集合A=集合B，因此也能够使用抽取规则
-
-  // 对于 cast(column) op cast(const) 这种形式的条件，如果两个cast都是lossless的，各个输入参数的对应关系如下
+  // Determine whether an expression can apply our extraction rules by checking if the range of the resulting collection after extraction is smaller than the range expressed by the expression
+  // For an expression col compare const, the comparison type calc_type determines a set A (elements of A are calc_type) that satisfies the relationship,
+  // and query range needs to determine a set B (the elements in set B are all column_type) that is included in A,
+  // This way all column values extracted by query range will satisfy this expression
+  // And collection B is a set determined by the query range through calc_type and column_type as well as the expression extraction rules
+  // The extracted rules can only achieve one-to-one conversion, whether it is type conversion or character set conversion, for example, int->varchar, 123 is converted to '123', not '0123'
+  // Character set UTF8MB4_GENERAL_CI 'A' -> UTF8MB4_BIN 'A' and not UTF8MB4_BIN 'a'
+  // Therefore to satisfy the col compare const expression, if column_type and calc_type are incompatible, then type conversion is required
+  // An expression that can fully express the compare relationship is: f1(col, calc_type) compare f2(const, calc_type)
+  // f1 represents mapping the value of col from column_type to calc_type, therefore discussing the relationship between set A and set B is discussing the mapping relationship of f1
+  // Factors affecting the collection range may be type and character set, while the character set is only meaningful for string types
+  // First case:
+  // If column_type and calc_type are of the same type and have the same character set (if they are string types), then f1 is a one-to-one mapping relationship
+  // that is, set A = set B
+  // Second case:
+  // If column_type is a case-sensitive character set, and calc_type is a case-insensitive character set, then f1 is a one-to-many relationship
+  //!f1 is a many-to-one relationship, general_ci 'A'-> bin'a' or bin'A' then through query range rule derivation B is contained in A, does not satisfy the assumption,
+  // Therefore this situation the query range result is the full set (min, max)
+  // Third case:
+  // If column_type is string type, and calc_type is non-string type, due to their different sorting rules and conversion rules,
+  // f1 is a many-to-one relationship, for example '0123'->123, '123'->123, then !f1 is a one-to-many relationship, which also does not satisfy the assumption, so in this case the query range result is also the full set (min, max)
+  // Fourth case:
+  // If column_type is numeric type, and calc_type is string type, through the third case, we know that the mapping f1 from numeric type to string type is
+  // one-to-many relationship, then the relationship of !f1 is many-to-one, and the extraction rule of query range is a one-to-one mapping relationship, any element belonging to set A
+  // a can uniquely determine a value b in set B that makes the expression true, therefore the fourth case can also be extracted using the extraction rule
+  // Other cases for f1 are also one-to-one mapping relationships, set A = set B, therefore extraction rules can also be used
+  // For cast(column) op cast(const) this form of condition, if both casts are lossless, the corresponding relationship of each input parameter is as follows
   // cmp_type: op->get_expr_type()
   // col_type: column->get_result_type()
   // calc_type: cast(column)->get_result_meta()
   // data_type: const->get_data_type()
-  // 除了涉及 enum/set 的场景，calc_type 使用 op 任意一个参数的类型都不影响 is_cast_monotonic 的判断
-  // 对于 col_enum op const_int 的场景，calc_type 是 enum，需要将其改为 int 做特殊处理
+  // Except for scenarios involving enum/set, using any parameter type of calc_type does not affect the judgment of is_cast_monotonic
+  // For the col_enum op const_int scenario, calc_type is enum, need to change it to int for special handling
   ObObjMeta calc_type = calc_meta;
   if (calc_type.is_enum_or_set()) {
     calc_type.set_int();
   }
   if (bret && T_OP_LIKE == cmp_type) {
-    //只对string like string的形式进行抽取
+    // Only extract string like string form
     if ((! col_type.is_string_or_lob_locator_type())
       || (! calc_type.is_string_or_lob_locator_type())) {
       bret = false;
-      //不能进行规则抽取，将表达式视为恒true处理
+      // Cannot perform rule extraction, treat the expression as always true
       always_true = true;
     }
   }
@@ -2051,8 +2048,8 @@ bool ObPreRangeGraph::can_be_extract_range(ObItemType cmp_type,
     bool is_cast_monotonic = false;
     int ret = OB_SUCCESS;
     bool is_valid = false;
-    //由于cast对于某些时间类型的某些值域有特殊处理，导致A cast B，不一定可逆，
-    //一个表达式能够抽取，需要双向都满足cast单调
+    // Due to cast having special handling for certain value ranges of some time types, A cast B may not be reversible,
+    // An expression can be extracted, it needs to satisfy cast monotonicity in both directions
     if (T_OP_NSEQ == cmp_type && ObNullType == data_type) {
       bret = true;
     } else if ((T_OP_EQ == cmp_type || T_OP_NSEQ == cmp_type) && col_type.is_enum_or_set()

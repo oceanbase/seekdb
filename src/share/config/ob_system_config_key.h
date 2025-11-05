@@ -58,7 +58,7 @@ private:
   char name_[OB_MAX_CONFIG_NAME_LEN];
   char server_type_[OB_SERVER_TYPE_LENGTH];
   char server_ip_[OB_MAX_SERVER_ADDR_SIZE];
-  // ObSystemConfig中ObHashMap使用了对象的拷贝构造函数,不能禁止
+  // ObSystemConfig uses the object's copy constructor in ObHashMap, cannot be prohibited
   //DISALLOW_COPY_AND_ASSIGN(ObSystemConfigKey);
 };
 

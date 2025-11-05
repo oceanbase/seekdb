@@ -60,16 +60,16 @@ public:
   }
 
   void set_with_barrier(bool w) { with_barrier_ = w; }
-  virtual bool is_pdml_operator() const override { return true; } // pdml delete既是dml，又是pdml
+  virtual bool is_pdml_operator() const override { return true; } // pdml delete is both dml and pdml
   int register_to_datahub(ObExecContext &ctx) const override;
 public:
-  ObDMLOpRowDesc row_desc_;  // 记录partition id column所在row的第几个cell
+  ObDMLOpRowDesc row_desc_;  // record the position of partition id column in the row's cell
   ObDelCtDef del_ctdef_;
-  // 由于update row movement的存在，update计划会展开成：
+  // Due to the existence of update row movement, the update plan will expand to:
   //  INSERT
   //    DELETE
   //
-  // INSERT需要等待DELETE算子全部执行完毕，才能够output数据
+  // INSERT needs to wait for the DELETE operator to complete execution before it can output data
   bool with_barrier_;
   DISALLOW_COPY_AND_ASSIGN(ObPxMultiPartDeleteSpec);
 };
@@ -89,21 +89,20 @@ public:
   }
 
 public:
-  virtual bool has_foreign_key() const  { return false; } // 默认实现，先不考虑外键的问题
+  virtual bool has_foreign_key() const  { return false; } // Default implementation, do not consider foreign key issues for now
   // impl. ObDMLDataReader
-  // 从 child op 读入一行数据缓存到 ObPxMultiPartDelete 算子
-  // 同时还负责计算出这一行对应的 partition_id
+  // Read a line of data from child op and cache it to the ObPxMultiPartDelete operator
+  // Also responsible for calculating the corresponding partition_id for this row
   int read_row(ObExecContext &ctx,
                const ObExprPtrIArray *&row,
                common::ObTabletID &tablet_id,
                bool &is_skipped) override;
   // impl. ObDMLDataWriter
-  // 将缓存的数据批量写入到存储层
+  // Write cached data in bulk to the storage layer
   int write_rows(ObExecContext &ctx,
                  const ObDASTabletLoc *tablet_loc,
                  ObPDMLOpRowIterator &iterator) override;
-
-  // 上层 op 从 ObPxMultiPartDelete 读出一行
+  // Upper layer op reads a line from ObPxMultiPartDelete
   virtual int inner_get_next_row();
   virtual int inner_open();
   virtual int inner_close();

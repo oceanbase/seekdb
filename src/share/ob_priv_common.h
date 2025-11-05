@@ -41,8 +41,8 @@ typedef ObPrivSet ObPackedObjPriv;  // used in obj priv in priv schema packed
 
 /* database object type definition 
    table, view, pf(procedure/function)
-   这里就不用新的类型了，复用ob_max_id_fetch.h里面的id_type,
-   例如，user/role类型，就用 OB_MAX_USED_USER_ID_TYPE */
+   here we do not use new types, reuse the id_type from ob_max_id_fetch.h,
+   for example, user/role type, use OB_MAX_USED_USER_ID_TYPE */
 
 //typedef share::schema::ObObjectType ObDbObjType;
 
@@ -50,8 +50,8 @@ typedef ObPrivSet ObPackedObjPriv;  // used in obj priv in priv schema packed
 #define ADMIN_OPTION 1              /* used in system privilege */
 #define GRANT_OPTION 1              /* used in obj privilege */
 
-#define OBJ_LEVEL_FOR_TAB_PRIV         OB_ALL_MAX_COLUMN_ID   //当表级权限时，colid设置为这个值
-#define OBJ_LEVEL_FOR_COL_PRIV         (OBJ_LEVEL_FOR_TAB_PRIV + 1) //当可以检查列权限时，colid设置为这个
+#define OBJ_LEVEL_FOR_TAB_PRIV         OB_ALL_MAX_COLUMN_ID   //When table-level privileges are set, colid is set to this value
+#define OBJ_LEVEL_FOR_COL_PRIV         (OBJ_LEVEL_FOR_TAB_PRIV + 1) // When column privileges can be checked, colid is set to this
 #define ALL_DIR_NAME                "DIRECTORY"
 #define OBJ_ID_FOR_DIR              0
 
@@ -152,7 +152,7 @@ public:
       const ObPackedPrivArray &packed_array,
       bool &exists);
 
-  /* plist里面的是否至少有一个 */
+  /* whether there is at least one in the plist */
 
 
   static int raw_obj_priv_exists(

@@ -526,20 +526,20 @@ int ObPsStmtInfo::get_convert_size(int64_t &cv_size) const
 }
 
 /*
-  对于ps cache并发场景:
-  A线程接收到close请求,B线程接收到prepare_command请求, 且在接收请求前ref_cnt=1
-  ps cache中, ps_id->stmt_info这个map:
-  1. A线程在close stmt时, 会先将引用计数减1, 如果发现为0, 则将stmt_info从map
-     上摘除, 并释放stmt_info资源
-  2. B线程在获取stmt_info时(prepare), 会先判定stmt_info是否为0, 如果为0则表示
-  该stmt_info即将被删除, 则直接退出并进行获取重试; 不为0则将引用计数加1;
-  3. 上面的两个操作, 操作a. 减引用计数,并判断是否删除, 操作b. 判断是否已删除,
-  以及加引用计数, 这两个操作是需要互斥执行的, 否则会出现下图的并发问题:
+  For ps cache concurrent scenario:
+  Thread A receives a close request, Thread B receives a prepare_command request, and ref_cnt=1 before receiving the requests
+  In the ps cache, the ps_id->stmt_info map:
+  1. When Thread A closes the stmt, it will first decrement the reference count, if it finds it to be 0, then it will remove the stmt_info from the map
+     and release the stmt_info resources
+  2. When Thread B gets the stmt_info (prepare), it will first determine if stmt_info is 0, if it is 0 it means
+  that the stmt_info is about to be deleted, then it will directly exit and retry the acquisition; if not 0 then it will increment the reference count;
+  3. The above two operations, operation a. decrement reference count, and determine if to delete, operation b. determine if already deleted,
+  as well as increment reference count, these two operations need to be mutually exclusive, otherwise concurrent issues as shown in the figure below will occur:
 
-    A线程(close_command)        B线程(prepare_command)
+    Thread A(close_command)        Thread B(prepare_command)
 
        |                          read_atomic
-                                (ref_cnt<=0判断为false)
+                                (ref_cnt<=0 judgment is false)
     read_atomic
 (ref_cnt-1 = 0, is_erase=true)
    read_atomic_end
@@ -550,18 +550,18 @@ int ObPsStmtInfo::get_convert_size(int64_t &cv_size) const
        |
   stmt_info_map_.erase
     free(stmt_info_)
-                               此时stmt_info_内存已释放,
-                               当再访问时可能core,
-                               或者继续进行execute时,
-                               会报-4201(NOT_EXIST)
+                               At this point stmt_info_ memory has been released,
+                               when accessed again it may core,
+                               or continue to execute,
+                               it will report -4201(NOT_EXIST)
 
-    4. 从面的过程可以看到, 其实操作a和操作b是在hash_map中read_atomic中执行的,
-    但read_atomic这个接口加的是读锁,并不互斥,上面两个操作的互斥性需要另外保障,
-    因此加入了如下处理方式, 使用这两个接口, 确保操作a和操作b的原子性:
-      1) check_erase_inc_ref_count: 使用cas确保操作b在判断完是否erase和加引用
-      计数过程是中间没有修改引用计数的, 如果修改了, 则重新进行操作b的原子处理;
-      2) dec_ref_count_check_erase: 原子减引用计数, 并返回减引用计数后结果,
-        判断是否已erase
+    4. From the above process, it can be seen that actually operations a and b are executed in read_atomic of hash_map,
+    but the read_atomic interface adds a read lock, which is not mutually exclusive, the mutual exclusivity of the above two operations needs to be ensured separately,
+    therefore the following processing method was added, using these two interfaces to ensure the atomicity of operations a and b:
+      1) check_erase_inc_ref_count: Use cas to ensure that operation b in the process of judging whether to erase and incrementing the reference count
+      there is no modification to the reference count in between, if modified, then reprocess the atomic operation of operation b;
+      2) dec_ref_count_check_erase: Atomically decrement the reference count, and return the result after decrementing the reference count,
+        determine if already erased
 */
 
 bool ObPsStmtInfo::check_erase_inc_ref_count()

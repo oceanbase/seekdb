@@ -83,7 +83,7 @@ public:
   void set_comp_flag(int64_t comp_flag) { comp_flag_ = comp_flag; }
   void set_compatibility_mode(const common::ObCompatibilityMode compa_mode)
   {
-    /* 当前comp_flag列默认是0, 为了保持一致, 这里根据模式做反转操作, 保证mysql模式comp_flag&0x3为1, oracle模式comp_flag&0x3为0*/
+    /* The current comp_flag column defaults to 0, to maintain consistency, we perform an inversion operation here based on the mode, ensuring that in mysql mode comp_flag&0x3 is 1, and in oracle mode comp_flag&0x3 is 0*/
     if(common::MYSQL_MODE == compa_mode) {
       comp_flag_ |= COMPATIBLE_MYSQL_MODE;
     } else if (common::ORACLE_MODE == compa_mode) {

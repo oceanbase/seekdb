@@ -49,7 +49,7 @@ private:
 private:
   bool inited_;
   ObPhysicalPlan *phy_plan_;
-  // 用于distributed scheduler
+  // Used for distributed scheduler
   uint64_t execution_id_;
 };
 }

@@ -212,7 +212,7 @@ int ObDirectLoadExternalMultiPartitionTableBuilder::get_tables(
     // do nothing
   } else {
     ObDirectLoadExternalTableCreateParam create_param;
-    create_param.tablet_id_ = 0; //因为包含了所有的tablet_id，设置为一个无效值
+    create_param.tablet_id_ = 0; // because it includes all tablet_id, set to an invalid value
     create_param.data_block_size_ = param_.table_data_desc_.external_data_block_size_;
     create_param.row_count_ = total_row_count_;
     create_param.max_data_block_size_ = max_data_block_size_;

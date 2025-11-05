@@ -18,9 +18,9 @@ static t_node *mysql_none_reserved_keywords_root = NULL;
 static t_node *mysql_sql_keywords_in_pl_root = NULL;
 
 /* List of non-reserved keywords */
-/*一开始会对这些word建立一颗trie树，对于每次的查找来言，树是固定的
- *若新添加的keyword含有除大小写字母、'_'和数字以外的其它字符，请联系@叶提修改这颗树。
- *实现不需要保证字典序，但是原则上还是保证字典序，方便维护和查找*/
+/*Initially, a trie tree will be built for these words. For each lookup, the tree remains fixed.
+ *If the new keyword contains characters other than uppercase and lowercase letters, '_', and numbers, please contact @YeTi to modify this tree.
+ *The implementation does not need to guarantee lexicographical order, but it is still advisable to maintain lexicographical order for ease of maintenance and lookup.*/
 static const NonReservedKeyword Mysql_none_reserved_keywords[] =
 {
   {"access", ACCESS},
@@ -1261,7 +1261,7 @@ static const NonReservedKeyword Mysql_sql_keywords_in_pl[] =
   {"warnings", WARNINGS},
   {"with", WITH},
   /*
-   * 其他在PL中出现的SQL关键字
+   * Other SQL keywords appearing in PL
    */
   {"prepare", PREPARE},
   {"execute", EXECUTE},

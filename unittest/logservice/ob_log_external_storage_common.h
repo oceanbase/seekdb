@@ -172,13 +172,13 @@ public:
     for (int64_t palf_id = 1; palf_id < MAX_PALF_ID; palf_id++) {
       delete_palf(tenant_id, palf_id);
     }
-    // 本地盘的delete_tenant操作要求tenant目录下不为空
+    // The delete_tenant operation on the local disk requires that the tenant directory is not empty
     return GLOBAL_UTILS.delete_tenant(tenant_id);
   }
   int delete_palf(const uint64_t tenant_id,
                   const int64_t palf_id)
   {
-    // 本地盘的delete_palf操作要求palf目录下不为空
+    // The delete_palf operation on the local disk requires that the palf directory is not empty
     GLOBAL_UTILS.delete_blocks(tenant_id, palf_id, 0, MAX_BLOCK_ID+1);
     return GLOBAL_UTILS.delete_palf(tenant_id, palf_id);    
   }
@@ -250,12 +250,10 @@ TEST_F(TestLogEXTUtils, basic_interface)
 {
   uint64_t tenant_id = 1002;
   int64_t palf_id = 1001;
-
-  // 前置条件准备
+  // Precondition preparation
   EXPECT_EQ(OB_SUCCESS, create_tenant(tenant_id));
   EXPECT_EQ(OB_SUCCESS, create_palf(tenant_id, palf_id));
-  
-  // 产生4个文件，最小的block_id为10
+  // Generate 4 files, the smallest block_id is 10
   std::vector<SCN> scns(4, SCN::min_scn());
   int64_t start_ts = ObTimeUtility::current_time();
   for (auto &scn : scns) {
@@ -277,8 +275,7 @@ TEST_F(TestLogEXTUtils, basic_interface)
   block_id_t valid_block_id = 1;
   char *invalid_uri = NULL;
   char valid_uri[OB_MAX_URI_LENGTH] = {'\0'};
-
-  // case1: 验证ObSharedLogUtils::get_oldest_block
+  // case1: validate ObSharedLogUtils::get_oldest_block
   {
     CLOG_LOG(INFO, "begin case1 invalid argument");
     block_id_t oldest_block_id = LOG_INVALID_BLOCK_ID;
@@ -303,16 +300,15 @@ TEST_F(TestLogEXTUtils, basic_interface)
     // OB_ENTRY_NOT_EXIST
     uint64_t not_exist_tenant_id = 500;
     uint64_t no_block_palf_id = 500;
-    // 日志流不存在
+    // Log stream does not exist
     EXPECT_EQ(OB_ENTRY_NOT_EXIST, ObSharedLogUtils::get_oldest_block(
       not_exist_tenant_id, palf_id, oldest_block_id));
-    // 日志流存在
+    // Log stream exists
     EXPECT_EQ(OB_SUCCESS, create_palf(tenant_id, no_block_palf_id));
     EXPECT_EQ(OB_ENTRY_NOT_EXIST, ObSharedLogUtils::get_oldest_block(
       tenant_id, no_block_palf_id, oldest_block_id));
   }
-
-  // case2: 验证get_newest_block
+  // case2: validate get_newest_block
   {
     CLOG_LOG(INFO, "begin case2 invalid argument");
     block_id_t newest_block_id = LOG_INVALID_BLOCK_ID;
@@ -333,7 +329,7 @@ TEST_F(TestLogEXTUtils, basic_interface)
     EXPECT_EQ(OB_SUCCESS, ObSharedLogUtils::get_newest_block(
       tenant_id, palf_id, tmp_start_block_id, newest_block_id));
     EXPECT_EQ(newest_block_id, start_block_id);
-    // 起始点文件oss上最小文件相同
+    // Starting point file is the smallest file on oss
     tmp_start_block_id = start_block_id;
     EXPECT_EQ(OB_SUCCESS, ObSharedLogUtils::get_newest_block(
       tenant_id, palf_id, tmp_start_block_id, newest_block_id));
@@ -358,25 +354,21 @@ TEST_F(TestLogEXTUtils, basic_interface)
     // OB_ENTRY_NOT_EXIST
     uint64_t not_exist_tenant_id = 500;
     uint64_t no_block_palf_id = 500;
-
-    // 日志流不存在
+    // Log stream does not exist
     EXPECT_EQ(OB_ENTRY_NOT_EXIST, ObSharedLogUtils::get_newest_block(
       not_exist_tenant_id, palf_id, tmp_start_block_id, newest_block_id));
-
-    // 空日志流
+    // empty log stream
     EXPECT_EQ(OB_SUCCESS, create_palf(tenant_id, no_block_palf_id));
     tmp_start_block_id = LOG_INITIAL_BLOCK_ID;
     EXPECT_EQ(OB_SUCCESS, ObSharedLogUtils::get_newest_block(
       tenant_id, palf_id, tmp_start_block_id, newest_block_id));
-
-    // 起点文件在oss上不存在 
+    // Start file does not exist on oss
     tmp_start_block_id = end_block_id;
     EXPECT_EQ(OB_ENTRY_NOT_EXIST, ObSharedLogUtils::get_newest_block(
       tenant_id, palf_id, tmp_start_block_id, newest_block_id));
   }
-  // case3: 验证locate_by_scn_corasely
-
-  // case4: 验证ObSharedLogUtils::get_block_min_scn
+  // case3: validate locate_by_scn_corasely
+  // case4: validate ObSharedLogUtils::get_block_min_scn
   {
     CLOG_LOG(INFO, "begin case2 invalid argument");
     SCN block_min_scn = SCN::min_scn();
@@ -407,8 +399,7 @@ TEST_F(TestLogEXTUtils, basic_interface)
     EXPECT_EQ(OB_ENTRY_NOT_EXIST, ObSharedLogUtils::get_block_min_scn(
       not_exist_tenant_id, palf_id, start_block_id, block_min_scn));
   }
-
-  // case5: 验证ObSharedLogUtils::delete_blocks
+  // case5: validate ObSharedLogUtils::delete_blocks
   {
     CLOG_LOG(INFO, "begin case5");
     // OB_INVLAID_ARGUMENT
@@ -432,7 +423,7 @@ TEST_F(TestLogEXTUtils, basic_interface)
     EXPECT_EQ(OB_SUCCESS, ObSharedLogUtils::get_oldest_block(
       tenant_id, palf_id, oldest_block_id));
     EXPECT_EQ(oldest_block_id, start_block_id+2);
-    // 生成MAX_BLOCK_ID个文件
+    // Generate MAX_BLOCK_ID files
     {
       uint64_t tmp_tenant_id = 1004;
       int64_t tmp_palf_id = 1003;
@@ -459,7 +450,7 @@ TEST_F(TestLogEXTUtils, basic_interface)
       EXPECT_EQ(false, tmp_palf_exist);
       EXPECT_EQ(OB_SUCCESS, ObSharedLogUtils::check_tenant_exist(
         tmp_tenant_id, tmp_tenant_exist));
-      // 尽管租户目录存在，但在oss上没有目录的概念，因此租户不存在
+      // Although the tenant directory exists, there is no concept of directory on oss, therefore the tenant does not exist
       EXPECT_EQ(false, tmp_tenant_exist);
       sleep(10);
       EXPECT_EQ(OB_SUCCESS, delete_tenant(tmp_tenant_id));
@@ -467,7 +458,7 @@ TEST_F(TestLogEXTUtils, basic_interface)
         tmp_tenant_id, tmp_tenant_exist));
       EXPECT_EQ(false, tmp_tenant_exist);
     }
-    // 保证OSS上依旧存在相同的文件文件数目
+    // Ensure the same number of files still exist on OSS
     std::vector<SCN> tmp_scns{scns[0], scns[1]};
     EXPECT_EQ(OB_SUCCESS, upload_blocks(tenant_id, palf_id, start_block_id, tmp_scns));
     EXPECT_EQ(OB_SUCCESS, ObSharedLogUtils::get_oldest_block(
@@ -475,16 +466,14 @@ TEST_F(TestLogEXTUtils, basic_interface)
     EXPECT_EQ(oldest_block_id, start_block_id);
 
     // OB_ALLOCATE_MEMORY_FAILED AND OB_OBJECT_STORAGE_IO_ERROR
-    
-    // 删除不存在文件
+    // Delete non-existent file
     uint64_t not_exist_tenant_id = 500;
     EXPECT_EQ(OB_SUCCESS, ObSharedLogUtils::delete_blocks(
       tenant_id, palf_id, start_block_id+10000, start_block_id+30000));
     EXPECT_EQ(OB_SUCCESS, ObSharedLogUtils::delete_blocks(
       not_exist_tenant_id, palf_id, start_block_id, start_block_id+10));
   }
-
-  // case6: 验证ObSharedLogUtils::construct_external_storage_access_info
+  // case6: validate ObSharedLogUtils::construct_external_storage_access_info
   {
     CLOG_LOG(INFO, "begin case6");
     ObBackupDest dest;
@@ -503,10 +492,9 @@ TEST_F(TestLogEXTUtils, basic_interface)
       tenant_id, palf_id, valid_block_id, valid_uri, dest));
     EXPECT_EQ(0, STRNCMP(valid_uri, OB_FILE_PREFIX, strlen(OB_FILE_PREFIX)));
   }
-  
-  // case7: 验证ObSharedLogUtils::delete_tenant和delete_palf
-  // case7.1 验证ObSharedLogUtils::check_palf_exist
-  // case7.2 验证ObSharedLogUtils::check_tenant_exist
+  // case7: validate ObSharedLogUtils::delete_tenant and delete_palf
+  // case7.1 validate ObSharedLogUtils::check_palf_exist
+  // case7.2 validate ObSharedLogUtils::check_tenant_exist
   {
     CLOG_LOG(INFO, "begin case7");
     bool palf_exist = false;
@@ -538,7 +526,7 @@ TEST_F(TestLogEXTUtils, basic_interface)
     EXPECT_EQ(OB_SUCCESS, ObSharedLogUtils::check_tenant_exist(
       tenant_id, tenant_exist));
     EXPECT_EQ(false, tenant_exist);
-    // 创建空日志流，本地盘上依旧存在空目录，但oss没有目录的概念，因此check_palf_exist返回false
+    // Create empty log stream, an empty directory still exists on the local disk, but oss does not have the concept of directories, therefore check_palf_exist returns false
     EXPECT_EQ(OB_SUCCESS, create_palf(tenant_id, palf_id));
     EXPECT_EQ(OB_SUCCESS, ObSharedLogUtils::check_palf_exist(
       tenant_id, palf_id, palf_exist));
@@ -556,7 +544,7 @@ TEST_F(TestLogEXTUtils, basic_interface)
     block_id_t oldest_block_id = LOG_INVALID_BLOCK_ID;
     EXPECT_EQ(OB_ENTRY_NOT_EXIST, ObSharedLogUtils::get_oldest_block(
       tenant_id, palf_id, oldest_block_id));
-    // 验证多日志流场景
+    // Validate multi-log stream scenario
     {
       uint64_t tmp_tenant_id = 1004;
       std::vector<int64_t> palf_ids = {1, 1001, 1002, 1003, 1004};
@@ -566,7 +554,7 @@ TEST_F(TestLogEXTUtils, basic_interface)
       }
       block_id_t tmp_start_block_id = 0;
       block_id_t tmp_end_block_id = 0;
-      // 每个日志流准备1001个文件
+      // Each log stream prepares 1001 files
       for (auto tmp_palf_id: palf_ids) {
         EXPECT_EQ(OB_SUCCESS, upload_blocks(tmp_tenant_id, tmp_palf_id, tmp_start_block_id, 1001));
       }
@@ -595,7 +583,7 @@ TEST_F(TestLogEXTUtils, basic_interface)
         tmp_tenant_id, tmp_tenant_exist));
       EXPECT_EQ(false, tmp_tenant_exist);
     }
-    // 验证多租户场景
+    // Validate multi-tenant scenario
     {
       std::vector<uint64_t> tenant_ids = {1, 1001, 1002, 1003, 1004};
       std::vector<int64_t> palf_ids = {1, 1001, 1002, 1003, 1004};

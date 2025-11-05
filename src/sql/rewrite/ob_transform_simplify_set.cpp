@@ -63,8 +63,7 @@ int ObTransformSimplifySet::transform_one_stmt(common::ObIArray<ObParentDMLStmt>
   }
   return ret;
 }
-
-// 从upper_stmt下推distinct到stmt
+// Push distinct from upper_stmt to stmt
 int ObTransformSimplifySet::add_distinct(ObSelectStmt *stmt, ObSelectStmt *upper_stmt)
 {
   int ret = OB_SUCCESS;
@@ -80,10 +79,9 @@ int ObTransformSimplifySet::add_distinct(ObSelectStmt *stmt, ObSelectStmt *upper
   }
   return ret;
 }
-
-// 从upper_stmt下推limit到stmt
-// 上层有不带offset的limit，直接下压到两支
-// 上层有带offset的limit，将limit+offset之后下压
+// Push limit from upper_stmt to stmt
+// Upper layer has a limit without offset, directly push down to both branches
+// Upper layer has a limit with offset, will push down after limit + offset
 int ObTransformSimplifySet::add_limit(ObSelectStmt *stmt, ObSelectStmt *upper_stmt)
 {
   int ret = OB_SUCCESS;
@@ -123,8 +121,7 @@ int ObTransformSimplifySet::add_limit(ObSelectStmt *stmt, ObSelectStmt *upper_st
   }
   return ret;
 }
-
-// 从upper_stmt下推order by到stmt
+// Push order by from upper_stmt to stmt
 int ObTransformSimplifySet::add_order_by(ObSelectStmt *stmt, ObSelectStmt *upper_stmt)
 {
   int ret = OB_SUCCESS;
@@ -167,16 +164,15 @@ int ObTransformSimplifySet::add_order_by(ObSelectStmt *stmt, ObSelectStmt *upper
   }
   return ret;
 }
-
-// 判断 upper_stmt 能否下推 distinct/order by/limit 操作到 stmt
-// 如果 upper stmt 有 limit percent 或者仅有 offset，都不下推
-// 如果下层 stmt 有 limit，都不下推
-// 1. 下推 order by
-//    如果下层 stmt 有 order by, 不能下推 order by
-//    如果 upper stmt 的 order by 跟的一个子查询，不能下推 order by
+// Determine if upper_stmt can push down distinct/order by/limit operations to stmt
+// If upper stmt has limit percent or only offset, do not push down
+// If the lower layer stmt has a limit, do not push down
+// 1. Push down order by
+//    If the lower layer stmt has order by, order by cannot be pushed down
+//    If upper stmt's order by follows a subquery, order by cannot be pushed down
 //    e.g. select * from t1 union select * from t2 order by (select min(c1) from t3) limit 1;
-// 2. 下推 distinct/limit
-//    如果 upper stmt 有 order by 且不能下推，不能下推 disdinct/limit
+// 2. Push down distinct/limit
+//    If upper stmt has order by and cannot be pushed down, cannot push down distinct/limit
 int ObTransformSimplifySet::check_can_push(ObSelectStmt *stmt, ObSelectStmt *upper_stmt, 
                                            bool &need_push_distinct, bool &need_push_orderby, 
                                            bool &can_push)
@@ -199,10 +195,10 @@ int ObTransformSimplifySet::check_can_push(ObSelectStmt *stmt, ObSelectStmt *upp
     can_push = false;
   } else if (upper_stmt->has_order_by()) {
     if (stmt->has_order_by()) {
-      // 下层有 order by 不能下推
+      // Lower layer has order by cannot be pushed down
       can_push = false;
     } else {
-      // 上层有 order by subquery 不能下推
+      // Upper layer has order by subquery cannot be pushed down
       for (int64_t i = 0; OB_SUCC(ret) && can_push && i < upper_stmt->get_order_item_size(); ++i) {
         ObRawExpr *order_expr = upper_stmt->get_order_item(i).expr_;
         if (OB_ISNULL(order_expr)) {
@@ -222,9 +218,8 @@ int ObTransformSimplifySet::check_can_push(ObSelectStmt *stmt, ObSelectStmt *upp
   }
   return ret;
 }
-
-// 对Union的stmt执行以下改写：
-// 下推ORDER BY/LIMIT/DISTINCT
+// Execute the following rewrite on the stmt of Union:
+// Push down ORDER BY/LIMIT/DISTINCT
 //
 int ObTransformSimplifySet::add_limit_order_distinct_for_union(const common::ObIArray<ObParentDMLStmt> &parent_stmts,
                                                          ObDMLStmt *&stmt,

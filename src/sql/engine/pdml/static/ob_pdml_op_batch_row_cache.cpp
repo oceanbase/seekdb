@@ -131,22 +131,22 @@ int ObPDMLOpBatchRowCache::init_row_store(ObChunkDatumStore *&chunk_row_store)
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("fail alloc mem", K(ret));
   } else {
-    // 进行一个优化：
-    // 1. 如果没有barrier，就不进行的dump
-    // 2. 如果有barrier，就需要进行dump
+    // Perform an optimization:
+    // 1. If there is no barrier, do not perform the dump
+    // 2. If there is a barrier, a dump needs to be performed
     chunk_row_store = new(buf) ObChunkDatumStore("PDML_ROW_CACHE", &allocator);
     if (OB_FAIL(chunk_row_store->init(INT64_MAX, // let auto mem mgr take care of mem limit
                                       tenant_id_,
                                       ObCtxIds::WORK_AREA,
-                                      "PDML_ROW_CACHE", // 模块lable，不超过15字符
-                                      with_barrier_))) { // barrier情况下，需要支持dump能力；
-                                                         // 非barrier情况下，不支持dump
+                                      "PDML_ROW_CACHE", // module label, no more than 15 characters
+                                      with_barrier_))) { // barrier case, need to support dump capability;
+                                                         // Non-barrier case, dump is not supported
       LOG_WARN("failed to init chunk row store in batch row cache", K(ret));
     } else {
       chunk_row_store->set_callback(&sql_mem_processor_);
       chunk_row_store->set_io_event_observer(&io_event_observer_);
       if (with_barrier_) {
-        // barrier的情况下，如果数据量较大，需要对数据进行dump
+        // In the case of barrier, if the data volume is large, the data needs to be dumped
         if (OB_FAIL(chunk_row_store->alloc_dir_id())) {
           LOG_WARN("failed to alloc dir id", K(ret));
         }

@@ -19,9 +19,8 @@
 #include "deps/oblib/src/common/meta_programming/ob_type_traits.h"
 #include "deps/oblib/src/common/meta_programming/ob_meta_compare.h"
 #include "deps/oblib/src/common/meta_programming/ob_meta_copy.h"
-
-// 这个文件负责生成两个编译期的映射关系，一个是从Helper类型和BufferCtx类型到ID的映射，以及反向映射
-// 另一个是从Data类型到多版本标志的映射，不需要反向映射
+// This file is responsible for generating two compile-time mapping relationships, one from the Helper type and BufferCtx type to ID, as well as the reverse mapping
+// Another is the mapping from Data type to multi-version flags, no reverse mapping needed
 namespace oceanbase
 {
 namespace storage
@@ -34,8 +33,7 @@ class __TypeMapper {};
 
 template <int ID>
 class __IDMapper {};
-
-// 调用以下宏生成编译期的 TYPE <-> ID 映射关系
+// Call the following macro to generate compile-time TYPE <-> ID mapping relationship
 #define REGISTER_TYPE_ID(HELPER, CTX, ID) \
 template <>\
 class __TypeMapper<HELPER> {\
@@ -55,8 +53,7 @@ REGISTER_TYPE_ID(helper_type, buffer_ctx_type, ID)
 #include "mds_register.h"
 #undef _GENERATE_MDS_FRAME_CODE_FOR_TRANSACTION_
 #undef NEED_GENERATE_MDS_FRAME_CODE_FOR_TRANSACTION
-
-// 通过以下宏在编译期获取这些信息
+// Obtain this information at compile time through the following macros
 template <typename Tuple, int IDX>
 struct TupleIdxType {
   typedef typename std::decay<decltype(std::declval<Tuple>().template element<IDX>())>::type type;

@@ -46,7 +46,7 @@ int TestOptimizerUtils::generate_logical_plan(ObResultSet &result, //ObIAllocato
                                               bool &is_select,
                                               bool parameterized)
 {
-  //TODO 直接调用ob_sql.cpp的接口
+  //TODO directly call the interface in ob_sql.cpp
     UNUSED(result);
   int ret = OB_SUCCESS;
 

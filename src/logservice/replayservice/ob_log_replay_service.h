@@ -46,7 +46,7 @@ public:
   virtual void runTimerTask();
 private:
   static const int64_t SCAN_TIMER_INTERVAL = 10 * 1000 * 1000; //10s
-  //上一次轮询时总回放日志量
+  //Total replay log volume at the last poll
   int64_t last_replayed_log_size_;
   int64_t last_submitted_log_size_;
   ObLogReplayService *rp_sv_;
@@ -63,7 +63,7 @@ public:
   virtual int switch_to_leader(const share::ObLSID &id) = 0;
 };
 /*
-TODO(yaoying.yyy): replayservice的内存管理需要整理一个文档
+TODO(yaoying.yyy): memory management of replayservice needs to be documented
 */
 
 class ObLogReplayService: public lib::TGLinkTaskHandler, public ObILogReplayService
@@ -219,7 +219,7 @@ private:
                               const int64_t first_handle_time);
   void on_replay_error_(ObLogReplayTask &replay_task, int ret);
   void on_replay_error_();
-  // 析构前调用,归还所有日志流的replay status计数
+  // Called before destruction, return the replay status count of all log streams
   int remove_all_ls_();
 #ifdef OB_BUILD_LOG_STORAGE_COMPRESS
   int prepare_decompression_buf_(const ObLSID id,
@@ -242,7 +242,7 @@ private:
   const int64_t MAX_SUBMIT_TIME_PER_ROUND = 100 * 1000; //100ms
   const int64_t TASK_QUEUE_WAIT_IN_GLOBAL_QUEUE_TIME_THRESHOLD = 5 * 1000 * 1000; //5s
   const int64_t PENDING_TASK_MEMORY_LIMIT = 128 * (1LL << 20); //128MB
-  //每个日志流累计拉日志到阈值时batch提交所有task queue
+  // Each log stream accumulates log pulls to the threshold and batch submits all task queues
   static const int64_t BATCH_PUSH_REPLAY_TASK_COUNT_THRESOLD = 1024;
   static const int64_t BATCH_PUSH_REPLAY_TASK_SIZE_THRESOLD = 16 * (1LL << 20); //16MB
   // params of adaptive thread pool
@@ -259,7 +259,7 @@ private:
   palf::PalfEnv *palf_env_;
   ObILogAllocator *allocator_;
   share::SCN replayable_point_;
-  // 考虑到迁出迁入场景, 不能只通过map管理replay status的生命周期
+  // Considering the migration scenario, the lifecycle of replay status cannot be managed by map alone
   common::ObLinearHashMap<share::ObLSID, ObReplayStatus*> replay_status_map_;
   int64_t pending_replay_log_size_;
   ObMiniStat::ObStatItem wait_cost_stat_;

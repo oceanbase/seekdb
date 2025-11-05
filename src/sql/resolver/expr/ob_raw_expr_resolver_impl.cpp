@@ -1412,15 +1412,15 @@ int ObRawExprResolverImpl::process_cursor_attr_node(const ParseNode &node, ObRaw
     }
   }
   OX (c_expr->set_pl_get_cursor_attr_info(info));
-  // 注意: 在添加Child之前做一次formalize仅仅是为了推导出ROWID属性的类型
+  // Note: Do a formalize before adding Child just to derive the type of ROWID attribute
   OZ (c_expr->formalize(ctx_.session_info_));
   if (OB_SUCC(ret) && OB_NOT_NULL(child_expr)) {
     OZ (c_expr->set_param_expr(child_expr));
   }
   if (OB_SUCC(ret)) {
     if (T_FUN_PL_GET_CURSOR_ATTR == c_expr->get_expr_type()) {
-      // 注意: 替换为ColumnRef的目的是为了在DML语句中把CURSOR%ROWID替换为QuestionMark
-      // 参见: ObDMLResolver::resolve_qualified_identifier
+      // Note: Replace with ColumnRef is to replace CURSOR%ROWID with QuestionMark in DML statements
+      // See: ObDMLResolver::resolve_qualified_identifier
       ObQualifiedName column_ref;
       ObObjAccessIdent access_ident;
       ObColumnRefRawExpr *column_expr = NULL;
@@ -1431,7 +1431,7 @@ int ObRawExprResolverImpl::process_cursor_attr_node(const ParseNode &node, ObRaw
       OZ (ctx_.expr_factory_.create_raw_expr(T_REF_COLUMN, column_expr));
       CK (OB_NOT_NULL(column_expr));
       OX (column_ref.ref_expr_ = column_expr);
-      //GetCursorAttr依赖的所有孩子节点都不是Root
+      //GetCursorAttr depends on all child nodes not being Root
       for (int64_t i = child_start; OB_SUCC(ret) && i < ctx_.columns_->count(); ++i) {
         ctx_.columns_->at(i).is_access_root_ = false;
       }
@@ -1476,7 +1476,7 @@ int ObRawExprResolverImpl::process_obj_access_node(const ParseNode &node, ObRawE
       } else {
         column_ref.ref_expr_ = b_expr;
         if (column_ref.is_pl_var()) {
-          //PL变量的所有生成的孩子ObQualifiedName都不是root
+          // All generated children ObQualifiedName of PL variable are not root
           for (int64_t i = child_start; OB_SUCC(ret) && i < ctx_.columns_->count(); ++i) {
             ctx_.columns_->at(i).is_access_root_ = false;
           }
@@ -1533,7 +1533,7 @@ int ObRawExprResolverImpl::check_pl_variable(ObQualifiedName &q_name, bool &is_p
       } else if (OB_ISNULL(var)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("Invalid expr", K(q_name), K(ret));
-      } else if (T_QUESTIONMARK == var->get_expr_type()) { // PL基础变量
+      } else if (T_QUESTIONMARK == var->get_expr_type()) { // PL base variable
         is_pl_var = true;
         q_name.access_idents_.at(q_name.access_idents_.count() - 1).set_pl_var();
       } else if (var->is_obj_access_expr()) {
@@ -1736,7 +1736,7 @@ int ObRawExprResolverImpl::resolve_func_node_of_obj_access_idents(const ParseNod
         case PL_UDF: {
           ParseNode *udf_node = NULL;
           ObRawExpr *udf_expr = NULL;
-          // 到这里仅仅知道function node应该是个udf node, 具体是哪个udf是不清楚的, 因此除了udf name，其他的值都填空
+          // At this point we only know that the function node should be a udf node, but which specific udf it is is unclear, therefore other than the udf name, all other values are left blank
           if (OB_FAIL(ObResolverUtils::transform_func_sys_to_udf(&ctx_.expr_factory_.get_allocator(),
                                                                  &func_node,
                                                                  ObString(""),
@@ -2015,7 +2015,7 @@ int ObRawExprResolverImpl::process_datatype_or_questionmark(const ParseNode &nod
       c_expr->set_is_date_unit();
     }
     c_expr->set_value(val);
-    //为空串重新设置一次meta信息
+    // Reset meta information to an empty string
     c_expr->set_expr_obj_meta(val.get_param_meta());
     c_expr->set_literal_prefix(literal_prefix);
     // for mysql mode distinguish tinyint and literal bool
@@ -2029,7 +2029,7 @@ int ObRawExprResolverImpl::process_datatype_or_questionmark(const ParseNode &nod
       if (!ctx_.is_extract_param_type_) {
         if (NULL == ctx_.param_list_) {
           LOG_INFO("NOTICE : UNIT TEST Code direction.", K(ret));
-        } else if (ctx_.param_list_->empty()) { //走到这里说明当前val是？,但是param_list是empty，说明是preapre阶段
+        } else if (ctx_.param_list_->empty()) { // reach here means current val is ?, but param_list is empty, means it's prepare stage
           ObObjMeta question_mark_meta;
           // Compatible with MySQL, use the default varbinary type for type deduce in the ps prepare phase
           question_mark_meta.set_varbinary();
@@ -2056,7 +2056,7 @@ int ObRawExprResolverImpl::process_datatype_or_questionmark(const ParseNode &nod
               OX (ctx_.prepare_param_count_++);
             }
           } else {
-            //prepare stmt不需要type，只需要计算?的个数
+            // prepare stmt does not need type, only need to count the number of ?
             if (OB_SUCC(ret) && nullptr != ctx_.secondary_namespace_) {
               const pl::ObPLSymbolTable* symbol_table = NULL;
               const pl::ObPLVar* var = NULL;
@@ -2090,7 +2090,7 @@ int ObRawExprResolverImpl::process_datatype_or_questionmark(const ParseNode &nod
           ret = OB_ERR_NOT_ALL_VARIABLE_BIND;
           LOG_WARN("question mark index out of param list count",
                    "index", val.get_unknown(), "param_count", ctx_.param_list_->count());
-        } else { //带参数prepare or execute stmt阶段，注：这里没有设置c_expr的accuracy会不会有问题
+        } else { // with parameter prepare or execute stmt stage, note: will there be a problem if c_expr's accuracy is not set here
           const ObObjParam &param = ctx_.param_list_->at(val.get_unknown());
           c_expr->set_is_literal_bool(param.is_boolean());
           if (param.is_ext()) {
@@ -2160,7 +2160,7 @@ int ObRawExprResolverImpl::process_datatype_or_questionmark(const ParseNode &nod
               }
             }
           }
-//execute阶段不需要统计prepare_param_count_的个数
+//execute stage does not need to count the number of prepare_param_count_
 //          ctx_.prepare_param_count_++;
 //          LOG_DEBUG("prepare stmt add new param", K(ctx_.prepare_param_count_));
         }
@@ -3092,7 +3092,7 @@ int ObRawExprResolverImpl::convert_any_or_all_expr(ObRawExpr *&expr,
       } else if ((T_OP_EQ != expr->get_expr_type() && T_OP_NE != expr->get_expr_type()) &&
                  (T_OP_ROW == sub_expr2_child->get_param_expr(i)->get_expr_type() ||
                  T_OP_ROW == sub_expr1->get_expr_type())) {
-        //由于oracle不支持形如(2,3) < ((2,3)(2,4))向量列表,因此需要禁掉,'<='、'>'、'>='同理
+        // Since Oracle does not support vector list comparison like (2,3) < ((2,3)(2,4)), it needs to be disabled, similarly for '<=', '>', '>='
         ret = OB_ERR_OPERATOR_CANNOT_BE_USED_WITH_LIST;
         LOG_WARN("this operator cannot be used with lists", K(ret));
       } else if (T_OP_EQ == expr->get_expr_type() &&
@@ -3123,7 +3123,7 @@ int ObRawExprResolverImpl::convert_any_or_all_expr(ObRawExpr *&expr,
                  T_OP_ROW != sub_expr2_child->get_param_expr(i)->get_expr_type() &&
                  OB_FAIL(ctx_.op_exprs_->push_back(tmp_expr))) {
         LOG_WARN("failed to push back exprs", K(ret));
-      } else if (sub_expr2_child->get_param_count() == 1) {//any/all仅仅只有一个row时，没有必要创建and/or
+      } else if (sub_expr2_child->get_param_count() == 1) {//any/all has only one row, there is no need to create and/or
         op_expr = tmp_expr;
       } else if (OB_FAIL(op_expr->add_param_expr(tmp_expr))) {
         LOG_WARN("failed to add param exprs", K(ret));
@@ -3404,13 +3404,13 @@ int ObRawExprResolverImpl::process_like_node(const ParseNode *node, ObRawExpr *&
     LOG_WARN("invalid argument", K(ret), K(node));
   } else if ((T_OP_NOT_LIKE == node->type_ || T_OP_LIKE == node->type_)
       && (node->num_child_ == 3)) {
-    // 如果显式指定了escape sign 为'', oracle模式应该报错
+    // If escape sign is explicitly specified as '', Oracle mode should report an error
     ParseNode* &escape_node = node->children_[2];
     if (OB_ISNULL(escape_node)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("get unexpected escape node", K(ret), K(escape_node));
     } else if (T_QUESTIONMARK == escape_node->type_) {
-      // 如果经过了fast parser, 那么escape 会被替换为?, 需要去param list中取真正的值
+      // If it has gone through the fast parser, then escape will be replaced with ?, need to get the real value from the param list
       if (OB_ISNULL(ctx_.param_list_)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("param_list_ is null", K(ret), K(ctx_.param_list_));
@@ -3453,7 +3453,7 @@ int ObRawExprResolverImpl::process_like_node(const ParseNode *node, ObRawExpr *&
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("process node fail with invalid expr", K(ret), K(t_expr));
   } else {
-    //如果有两个child_,则说明like 或 not like的escape参数没有显示给出，这里给默认值'\\'
+    // If there are two child_, it means the escape parameter for like or not like was not explicitly given, here we set the default value '\\'
     if ((T_OP_NOT_LIKE == node->type_ || T_OP_LIKE == node->type_)
         && (2 == node->num_child_)) {
       ObRawExpr *escape_expr = NULL;
@@ -4284,7 +4284,7 @@ int ObRawExprResolverImpl::process_group_aggr_node(const ParseNode *node, ObRawE
     }
 
     if (OB_SUCC(ret)) {
-      //解析separator
+      // Parse separator
       ObRawExpr *separator_expr = NULL;
       if (NULL != node->children_[3]) {
         if (OB_UNLIKELY(1 != node->children_[3]->num_child_) || OB_ISNULL(node->children_[3]->children_)
@@ -4303,7 +4303,7 @@ int ObRawExprResolverImpl::process_group_aggr_node(const ParseNode *node, ObRawE
     }
 
     if (OB_SUCC(ret)) {
-      //解析order by
+      // Parse order by
       if (is_mysql_mode() && T_FUN_GROUP_PERCENTILE_CONT == node->type_) {
         const ParseNode *column_node = node->children_[1];
         if (OB_ISNULL(column_node)) {
@@ -4404,7 +4404,7 @@ int ObRawExprResolverImpl::process_keep_aggr_node(const ParseNode *node, ObRawEx
       if (NULL != node->children_[2] && node->children_[2]->type_ == T_LAST) {
         keep_is_last = true;
       }
-      //解析order by
+      // Parse order by
       if (NULL != node->children_[3]) {
         const ParseNode *order_by_node = node->children_[3];
         if (OB_ISNULL(order_by_node)
@@ -4417,8 +4417,8 @@ int ObRawExprResolverImpl::process_keep_aggr_node(const ParseNode *node, ObRawEx
           LOG_WARN("fail to process sort list node", K(ret), K(node));
         }
       }
-      //当keep分析函数是取排完序之后的最后一行相等值的数据进行处理时,为了在执行的时候能够更加高效,在resolve阶段
-      //就可以转为对应的first形式，这样执行的时候只需要取第一行数据，同时还可以少使用一个变量，eg:
+      // When the keep analysis function processes the data of the last equal value row after sorting, to make the execution more efficient, during the resolve phase
+      //can be converted to the corresponding first form, so when executing, only the first row of data needs to be taken, and it can also save one variable, eg:
       // select max(c1) keep (dense_rank last order by c2) from t1;
       //<==>
       // select max(c1) keep (dense_rank first order by c2 desc NULLS FIRST) from t1;
@@ -4427,8 +4427,7 @@ int ObRawExprResolverImpl::process_keep_aggr_node(const ParseNode *node, ObRawEx
           LOG_WARN("failed to reset keep aggr sort direction", K(ret));
         } else {/*do nothing*/}
       }
-
-      //对于order by item为常量的情形，可以退化普通的聚合函数，比如:
+      // For order by item being a constant, it can degrade to an ordinary aggregate function, for example:
       // count(*) keep(dense_rank first order by 1) from t1  <==> count(*) from t1;
       if (OB_SUCC(ret) && agg_expr->get_order_items().count() == 0) {
         if (OB_FAIL(convert_keep_aggr_to_common_aggr(agg_expr))) {
@@ -4488,19 +4487,17 @@ int ObRawExprResolverImpl::convert_keep_aggr_to_common_aggr(ObAggFunRawExpr *&ag
         break;
     }
     if (OB_SUCC(ret)) {
-      agg_expr->set_expr_type(aggr_type);//由于所有的aggr的结构都是一样的，所以直接改变类型就可以
+      agg_expr->set_expr_type(aggr_type);//Since all aggr structures are the same, we can directly change the type
     }
   }
   return ret;
 }
-
-
-//用于group/keep aggr
+// Used for group/keep aggr
 int ObRawExprResolverImpl::process_sort_list_node(const ParseNode *node, ObAggFunRawExpr *parent_agg_expr)
 {
   int ret = OB_SUCCESS;
-  // 只有agg function才会进这里
-  // 往agg_fun_expr中添加order item信息
+  // Only agg function will enter here
+  // Add order item information to agg_fun_expr
   if (OB_ISNULL(node) || OB_ISNULL(parent_agg_expr) || OB_ISNULL(node->children_)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(node), K(parent_agg_expr));
@@ -4524,7 +4521,7 @@ int ObRawExprResolverImpl::process_sort_list_node(const ParseNode *node, ObAggFu
         if (OB_UNLIKELY(sort_node->children_[0]->type_ == T_INT && sort_node->children_[0]->value_ >= 0)) {
           // The order-by item is specified using column position
           // ie. ORDER BY 1 DESC
-          // oracle mode: order by 1 中的1被解释成常量表达式而不是列的位置, 此时需要忽略
+          // oracle mode: order by 1 where 1 is interpreted as a constant expression rather than the position of a column, at this time it needs to be ignored
           int32_t pos = static_cast<int32_t>(sort_node->children_[0]->value_);
           if (pos <= 0 || pos > agg_real_param_exprs.count()) {
             // for SELECT statement, we need to make sure the column positions are valid
@@ -5956,8 +5953,8 @@ int ObRawExprResolverImpl::process_fun_sys_node(const ParseNode *node,
       }
     }
   }
-  // 在递归解析参数列表之前, 先检查下当前函数是否存在, 这是因为如果该函数报错OB_ERR_FUNCTION_UNKNOWN, 外部会继续尝试是否是UDF
-  // 如果先解析参数列表, 则可能会将错误的column ref加入ctx_.columns_, 外部解析UDF的时候会重复加入导致解析错误
+  // Before recursively parsing the parameter list, check if the current function exists, this is because if the function throws OB_ERR_FUNCTION_UNKNOWN, the external code will continue to try if it is a UDF
+  // If parsing the parameter list first, it may add incorrect column ref to ctx_.columns_, external parsing UDF will add duplicates leading to parsing errors
   if (OB_SUCC(ret)) {
     ObExprOperatorType type;
     type = ObExprOperatorFactory::get_type_by_name(func_name);
@@ -7039,9 +7036,8 @@ bool ObRawExprResolverImpl::should_not_contain_window_clause(const ObItemType fu
 /**
  * window function which should contain order_by clause
  */
-
-//同oracle一样, 当first_value, last_value指定了窗口时必须有order by;
-//之前解析时会转换为nth_value
+// Same as oracle, when first_value, last_value specifies a window there must be an order by;
+// Before parsing it would be converted to nth_value
 
 int ObRawExprResolverImpl::check_and_canonicalize_window_expr(ObRawExpr *expr)
 {
@@ -7061,8 +7057,7 @@ int ObRawExprResolverImpl::check_and_canonicalize_window_expr(ObRawExpr *expr)
     Bound lower = w_expr->get_lower();
     ObItemType func_type = w_expr->get_func_type();
     const ObIArray<OrderItem> &order_items = w_expr->get_order_items();
-
-    // @note: 做一些语义检查, 这一步没有在parser做是为了保持语法树的简单清晰
+    // @note: do some semantic checks, this step is not done in parser to keep the syntax tree simple and clear
     bool parse_error = false;
     if (win_type != WINDOW_MAX) {
       if (BOUND_UNBOUNDED == upper.type_ && !upper.is_preceding_) {
@@ -7104,9 +7099,9 @@ int ObRawExprResolverImpl::check_and_canonicalize_window_expr(ObRawExpr *expr)
     }
 
     if (OB_SUCC(ret)) {
-      // @note: 得到一个between形式的标准窗口
-      // 1. 如果未定义窗口, 自定义一个range between (unbounded preceding) and (unbounded following or current row)
-      // 2. 将非between的窗口转成between
+      // @note: get a standard window in between form
+      // 1. If window is not defined, define a range between (unbounded preceding) and (unbounded following or current row)
+      // 2. Convert non-between windows to between
       if (WINDOW_MAX == win_type) {
         win_type = WINDOW_RANGE;
         is_between = true;
@@ -7120,7 +7115,7 @@ int ObRawExprResolverImpl::check_and_canonicalize_window_expr(ObRawExpr *expr)
       } else {
         if (!is_between) {
           is_between = true;
-          // 走到这里, 必然定义了order by
+          // Walked here, order by must be defined
           lower.type_ = BOUND_CURRENT_ROW;
           lower.is_preceding_ = false;
         }
@@ -7133,9 +7128,8 @@ int ObRawExprResolverImpl::check_and_canonicalize_window_expr(ObRawExpr *expr)
         lower.type_ = BOUND_UNBOUNDED;
       }
     }
-
-    // 修正unbounded的is_preceding_
-    // unbounded语义下is_preceding_没有意义, 这里作修正仅仅是为了explain显示用
+    // Fix unbounded is_preceding_
+    // unbounded semantics under is_preceding_ is meaningless, here the correction is made solely for explain display use
     if (OB_SUCC(ret)) {
       if (BOUND_UNBOUNDED == upper.type_) {
         upper.is_preceding_ = true;
@@ -7144,8 +7138,7 @@ int ObRawExprResolverImpl::check_and_canonicalize_window_expr(ObRawExpr *expr)
         lower.is_preceding_ = false;
       }
     }
-
-    // oracle compatible, 解析阶段能够识别的无效窗口直接抛错
+    // oracle compatible, parsing phase directly throws an error for invalid windows that can be recognized
     if (OB_SUCC(ret)) {
       if ((BOUND_CURRENT_ROW == upper.type_ && BOUND_INTERVAL == lower.type_ && lower.is_preceding_)
           || (BOUND_CURRENT_ROW == lower.type_ && BOUND_INTERVAL == upper.type_ && !upper.is_preceding_)
@@ -7155,8 +7148,7 @@ int ObRawExprResolverImpl::check_and_canonicalize_window_expr(ObRawExpr *expr)
         LOG_WARN("invalid window specification", K(ret), K(upper), K(lower));
       }
     }
-
-    // oracle compatible, 排序列为向量时, range窗口不能为表达式, 只能是unbounded or current row
+    // oracle compatible, sort column is a vector when, range window cannot be an expression, it can only be unbounded or current row
     if (OB_SUCC(ret)) {
       if (order_items.count() > 1 &&
           WINDOW_RANGE == win_type &&
@@ -7170,7 +7162,7 @@ int ObRawExprResolverImpl::check_and_canonicalize_window_expr(ObRawExpr *expr)
           Bound *bound = bs[i];
           if (bound->interval_expr_ != NULL) {
             for (int j = 0; j < 2 && OB_SUCC(ret); j++) {
-              if (bound->is_nmb_literal_) {//普通数值类型范围加减
+              if (bound->is_nmb_literal_) {//normal numeric type range addition and subtraction
                 ObOpRawExpr *op_expr = NULL;
                 if (j == 0 && OB_FAIL(ObRawExprUtils::build_add_expr(ctx_.expr_factory_,
                                                                      order_items.at(0).expr_,
@@ -7188,7 +7180,7 @@ int ObRawExprResolverImpl::check_and_canonicalize_window_expr(ObRawExpr *expr)
                 } else {
                   bound->exprs_[j] = op_expr;
                 }
-              } else if (!bound->is_nmb_literal_) {//date类型范围加减
+              } else if (!bound->is_nmb_literal_) {//date type range addition and subtraction
                 ObSysFunRawExpr *sys_expr = NULL;
                 if (j == 0 && OB_FAIL(ObRawExprUtils::build_date_add_expr(ctx_.expr_factory_,
                                                                           order_items.at(0).expr_,
@@ -7225,11 +7217,10 @@ int ObRawExprResolverImpl::check_and_canonicalize_window_expr(ObRawExpr *expr)
 
   return ret;
 }
-
-//查询改写 ratio_to_report(c1) over (partition by c2) ==>
+// Query rewrite ratio_to_report(c1) over (partition by c2) ==>
 // c1 / case sum(c1) over (partition by c2) when 0 then null else sum(c1) over (partition by c2) end
 int ObRawExprResolverImpl::transform_ratio_afun_to_arg_div_sum(const ParseNode *ratio_fun_node,
-                                                               ParseNode *&div_node) //out, 最终的 c1 / simple_case
+                                                               ParseNode *&div_node) // out, final c1 / simple_case
 {
   int ret = OB_SUCCESS;
   const ParseNode *func_node = NULL;
@@ -7253,7 +7244,7 @@ int ObRawExprResolverImpl::transform_ratio_afun_to_arg_div_sum(const ParseNode *
   } else {
     func_node = ratio_fun_node->children_[0];
     const_cast<ParseNode*>(func_node)->type_ = T_FUN_SUM;
-    //1, 构造when 0 then null的when_list
+    //1, construct when 0 then null the when_list
     if (OB_FAIL(ObRawExprUtils::new_parse_node(when_node, ctx_.expr_factory_, T_INT, 0)) ||
         OB_FAIL(ObRawExprUtils::new_parse_node(then_node, ctx_.expr_factory_, T_NULL, 0))) {
       LOG_WARN("allocate when/then node failed", K(ret));

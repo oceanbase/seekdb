@@ -67,7 +67,7 @@ private:
   common::ObString db_charset_;
   common::ObString db_collation_;
   ObPrivSet db_priv_set_;
-  obrpc::ObUseDatabaseArg use_database_arg_; // 用于返回exec_tenant_id_
+  obrpc::ObUseDatabaseArg use_database_arg_; // used to return exec_tenant_id_
 };
 } //namespace sql
 }//namespace oceanbase

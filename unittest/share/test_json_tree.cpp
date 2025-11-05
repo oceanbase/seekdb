@@ -45,8 +45,7 @@ private:
   // disallow copy
   DISALLOW_COPY_AND_ASSIGN(TestJsonTree);
 };
-
-// ObJsonParser::parse_json_text 单元函数测试
+// ObJsonParser::parse_json_text unit function test
 TEST_F(TestJsonTree, test_parse_json_text)
 {
   const char *syntaxerr = NULL;
@@ -54,8 +53,7 @@ TEST_F(TestJsonTree, test_parse_json_text)
   ObJsonNode *j_node = NULL;
   ObArenaAllocator allocator(ObModIds::TEST);
   common::ObString j_text("{ \"greeting\" : \"Hello!\", \"farewell\" : \"bye-bye!\"}");
-
-  // 1. 入参检查测试
+  // 1. Input parameter check test
   ASSERT_EQ(OB_ERR_NULL_VALUE, ObJsonParser::parse_json_text(NULL, j_text.ptr(), j_text.length(), 
                                                syntaxerr, &err_offset, j_node));
   ASSERT_EQ(OB_ERR_NULL_VALUE, ObJsonParser::parse_json_text(&allocator, NULL, j_text.length(), 
@@ -70,15 +68,14 @@ TEST_F(TestJsonTree, test_parse_json_text)
   ASSERT_EQ(OB_ERR_INVALID_JSON_TEXT, ObJsonParser::parse_json_text(&allocator,
       j_sp_text.ptr(), j_sp_text.length(), syntaxerr, &err_offset, j_node)); 
   ASSERT_EQ(OB_ERR_INVALID_JSON_TEXT, ObJsonParser::parse_json_text(&allocator,
-      j_sp_text.ptr(), 2, syntaxerr, &err_offset, j_node)); // 只解析ab
-
-  // 2. 路径覆盖测试,有些异常分支不一定能覆盖到
-  // 2.1 成功解析，解析结果不为NULL
+      j_sp_text.ptr(), 2, syntaxerr, &err_offset, j_node)); // Only parse ab
+  // 2. Path coverage testing, some exception branches may not be covered
+  // 2.1 Successfully parsed, parsing result is not NULL
   ASSERT_EQ(OB_SUCCESS, ObJsonParser::parse_json_text(&allocator, j_text.ptr(), j_text.length(), 
                                         syntaxerr, &err_offset, j_node));
   ASSERT_TRUE(j_node != NULL);                                      
-  // 2.2 成功解析，解析结果为NULL, syntaxerr不为NULL(这个路径应该是rapidjson出错了，比较难构造用例，不测试)
-  // 2.3 解析出错，吐出语法错误内容
+  // 2.2 Successfully parsed, parse result is NULL, syntaxerr is not NULL (this path should be an error from rapidjson, it's difficult to construct a test case, not tested)
+  // 2.3 Parsing error, output syntax error content
   char buf[256] = {0};
   syntaxerr = buf;
   j_node = NULL;
@@ -95,23 +92,20 @@ TEST_F(TestJsonTree, test_parse_json_text)
   ASSERT_EQ(OB_ERR_INVALID_JSON_TEXT, ObJsonParser::parse_json_text(&allocator,
       j_err_text1.ptr(), j_err_text1.length(), syntaxerr, &err_offset, j_node));                                                                                                                                                              
 }
-
-// add_double_quote 单元函数测试
+// add_double_quote unit function test
 TEST_F(TestJsonTree, test_add_double_quote)
 {
   ObArenaAllocator allocator(ObModIds::TEST);
   common::ObString str("hello");
   ObJsonBuffer j_buf(&allocator);
-
-  // 1. 入参检查测试
+  // 1. Input parameter check test
   ASSERT_EQ(OB_ERR_NULL_VALUE, ObJsonBaseUtil::add_double_quote(j_buf, NULL, str.length()));
   ASSERT_EQ(OB_SUCCESS, ObJsonBaseUtil::add_double_quote(j_buf, str.ptr(), 0));
-
-  // 2. 路径覆盖测试,有些异常分支不一定能覆盖到
-  // 2.1 源字符串不带转义字符
+  // 2. Path coverage testing, some exception branches may not be covered
+  // 2.1 Source string does not contain escape characters
   ASSERT_EQ(OB_SUCCESS, ObJsonBaseUtil::add_double_quote(j_buf, str.ptr(), str.length()));
   cout << j_buf.ptr() << endl;
-  // 2.2 源字符串带转义字符（测试escape_character函数的所有转义字符）
+  // 2.2 Source string with escape characters (test all escape characters of the escape_character function)
   str.reset();
   str.assign_ptr("\b\t\n\f\r\"\\", strlen("\b\t\n\f\r\"\\"));
   j_buf.reset();
@@ -137,19 +131,17 @@ TEST_F(TestJsonTree, test_add_double_quote)
   ASSERT_EQ(OB_SUCCESS, ObJsonBaseUtil::add_double_quote(j_buf, str.ptr(), str.length()));
   cout << "quote: " << j_buf.ptr() << endl;
 }
-
-// ObJsonObject 单元测试
+// ObJsonObject unit test
 TEST_F(TestJsonTree, test_ObJsonObject)
 {
   ObArenaAllocator allocator(ObModIds::TEST);
   ObJsonObject obj(&allocator);
 
-  /* 1. ObJsonObject::add测试 */
-  // 参数检查测试
+  /* 1. ObJsonObject::add test */
+  // parameter check test
   ObString j_str("hello");
   ASSERT_EQ(OB_INVALID_ARGUMENT, obj.add(j_str, NULL));
-
-  // 路径覆盖测试
+  // path coverage test
   ObString k1("k1");
   ObString k2("k2");
   ObString k3("k2");
@@ -168,20 +160,19 @@ TEST_F(TestJsonTree, test_ObJsonObject)
   ASSERT_TRUE(NULL != v2);
   ObJsonInt *v2_int = static_cast<ObJsonInt *>(v2);
   ASSERT_EQ(2, v2_int->value());
-  ASSERT_EQ(OB_SUCCESS, obj.add(k3, &j_int3)); // 覆盖k2
+  ASSERT_EQ(OB_SUCCESS, obj.add(k3, &j_int3)); // cover k2
   ASSERT_EQ(2, obj.element_count());
   ObJsonNode *v3 = obj.get_value(k3);
   ASSERT_TRUE(NULL != v3);
   ObJsonInt *v3_int = static_cast<ObJsonInt *>(v3);
   ASSERT_EQ(3, v3_int->value());
 
-  /* 2. ObJsonObject::replace测试 */
-  // 参数检查测试
+  /* 2. ObJsonObject::replace test */
+  // parameter check test
   ObJsonInt j_int(1);
   ASSERT_EQ(OB_INVALID_ARGUMENT, obj.replace(NULL, &j_int));
   ASSERT_EQ(OB_INVALID_ARGUMENT, obj.replace(&j_int, NULL));
-
-  // 路径覆盖测试
+  // path coverage test
   ASSERT_EQ(OB_SEARCH_NOT_FOUND, obj.replace(&j_int, &j_int1));
   ASSERT_EQ(OB_SUCCESS, obj.replace(&j_int1, &j_int2));
   v1 = obj.get_value(k1);
@@ -189,33 +180,30 @@ TEST_F(TestJsonTree, test_ObJsonObject)
   v1_int = static_cast<ObJsonInt *>(v1);
   ASSERT_EQ(2, v1_int->value());
 
-  /* 3. ObJsonObject::get测试 */
-  // 参数检查测试
+  /* 3. ObJsonObject::get test */
+  // parameter check test
   ASSERT_EQ(NULL, obj.get_value(ULLONG_MAX));
-
-  // 路径覆盖测试
+  // path coverage test
   v1 = obj.get_value(0);
   ASSERT_TRUE(NULL != v1);
   v1_int = static_cast<ObJsonInt *>(v1);
   ASSERT_EQ(2, v1_int->value());
 
-  /* 3. ObJsonObject::remove测试 */
-  // 路径覆盖测试
+  /* 3. ObJsonObject::remove test */
+  // path coverage test
   ASSERT_EQ(OB_SUCCESS, obj.remove(k3));
   ASSERT_EQ(1, obj.element_count());
 }
-
-// ObJsonArray 单元测试
+// ObJsonArray unit test
 TEST_F(TestJsonTree, test_ObJsonArray)
 {
   ObArenaAllocator allocator(ObModIds::TEST);
   ObJsonArray j_arr(&allocator);
 
-  /* 1. ObJsonArray::append测试 */
-  // 参数检查测试
+  /* 1. ObJsonArray::append test */
+  // parameter check test
   ASSERT_EQ(OB_INVALID_ARGUMENT, j_arr.append(NULL));
-
-  // 路径覆盖测试
+  // path coverage test
   ObJsonInt j_int0(0);
   ASSERT_EQ(OB_SUCCESS, j_arr.append(&j_int0));
   ASSERT_EQ(1, j_arr.element_count());
@@ -223,11 +211,10 @@ TEST_F(TestJsonTree, test_ObJsonArray)
   ObJsonInt *v = static_cast<ObJsonInt *>(node);
   ASSERT_EQ(0, v->value());
 
-  /* 2. ObJsonArray::insert测试 */
-  // 参数检查测试
+  /* 2. ObJsonArray::insert test */
+  // parameter check test
   ASSERT_EQ(OB_INVALID_ARGUMENT, j_arr.insert(0, NULL));
-
-  // 路径覆盖测试
+  // path coverage test
   ObJsonInt j_int1(1);
   ASSERT_EQ(OB_SUCCESS, j_arr.insert(1, &j_int1));
   ASSERT_EQ(2, j_arr.element_count());
@@ -241,13 +228,12 @@ TEST_F(TestJsonTree, test_ObJsonArray)
   v = static_cast<ObJsonInt *>(node);
   ASSERT_EQ(2, v->value());
 
-  /* 3. ObJsonArray::replace测试 */
-  // 参数检查测试
+  /* 3. ObJsonArray::replace test */
+  // parameter check test
   ASSERT_EQ(OB_INVALID_ARGUMENT, j_arr.replace(NULL, &j_int0));
   ASSERT_EQ(OB_INVALID_ARGUMENT, j_arr.replace(&j_int0, NULL));
   ASSERT_EQ(OB_INVALID_ARGUMENT, j_arr.replace(NULL, NULL));
-
-  // 路径覆盖测试
+  // path coverage test
   ObJsonInt j_not_found(10);
   ASSERT_EQ(OB_SEARCH_NOT_FOUND, j_arr.replace(&j_not_found, &j_int0));
   ASSERT_EQ(OB_SUCCESS, j_arr.replace(&j_int0, &j_not_found));
@@ -255,12 +241,11 @@ TEST_F(TestJsonTree, test_ObJsonArray)
   v = static_cast<ObJsonInt *>(node);
   ASSERT_EQ(10, v->value());
 
-  /* 4. ObJsonArray::remove测试 */
-  // 参数检查测试
+  /* 4. ObJsonArray::remove test */
+  // parameter check test
   ASSERT_EQ(OB_ERROR_OUT_OF_RANGE, j_arr.remove(100));
   ObJsonNode *null_ptr = NULL;
-
-  // 路径覆盖测试
+  // path coverage test
   ASSERT_EQ(OB_SUCCESS, j_arr.remove(2));
   ASSERT_EQ(2, j_arr.element_count());
 }
@@ -320,7 +305,7 @@ TEST_F(TestJsonTree, test_json_object)
   const ObJsonString *node2 = static_cast<const ObJsonString*>(obj.get_value(k2));
   const ObJsonString *node3 = static_cast<const ObJsonString*>(obj.get_value(k3));
   ASSERT_STREQ("v1", node1->value().ptr());
-  ASSERT_STREQ("v4", node2->value().ptr()); // v4 覆盖了 v2
+  ASSERT_STREQ("v4", node2->value().ptr()); // v4 overwrites v2
   ASSERT_STREQ("v3", node3->value().ptr());
   ASSERT_EQ(OB_SUCCESS, obj.remove(k1));
   node1 = static_cast<const ObJsonString*>(obj.get_value(k1));
@@ -713,7 +698,7 @@ TEST_F(TestJsonTree, test_json_cast_to_uint)
   ObJsonBoolean my_bool(true);
   ObJsonDouble my_double(0.0);
 
-  // uint -> uint （10）
+  // uint -> uint (10)
   j_base = &my_uint;
   my_uint.set_value(10);
   ASSERT_EQ(OB_SUCCESS, j_base->to_uint(ui));
@@ -1005,7 +990,7 @@ TEST_F(TestJsonTree, test_json_cast_to_number)
   ASSERT_EQ(OB_SUCCESS, j_base->to_number(&alloc, nmb));
   ASSERT_EQ(0, nmb.compare(num));
 
-  // uint -> number （10）
+  // uint -> number (10)
   j_base = &my_uint;
   my_uint.set_value(10);
   ASSERT_EQ(OB_SUCCESS, j_base->to_number(&alloc, nmb));
@@ -1271,7 +1256,7 @@ TEST_F(TestJsonTree, test_json_cast_to_bit)
   ObJsonBoolean my_bool(true);
   ObJsonDouble my_double(0.0);
 
-  // uint -> bit （10）
+  // uint -> bit (10)
   j_base = &my_uint;
   my_uint.set_value(10);
   ASSERT_EQ(OB_SUCCESS, j_base->to_bit(bit));
@@ -1782,9 +1767,8 @@ TEST_F(TestJsonTree, test_clone_node_object)
   ObJsonObject *last_obj = NULL;
   ObJsonObject *new_obj = NULL;
   char key_buf[10] = {0};
-
-  // 1. 深度测试
-  // 99个对象嵌套
+  // 1. Depth testing
+  // 99 objects nested
   for (uint32_t i = 0; i < 100; i++) {
     sprintf(key_buf, "key%d", i);
     if (i == 0) {
@@ -1808,8 +1792,7 @@ TEST_F(TestJsonTree, test_clone_node_object)
   cout << "object_without_quote: " << new_node_buf.ptr() << endl;
   ASSERT_STREQ(new_node_buf.ptr(), j_buf.ptr());
 }
-
-// ObJsonWrapper::print 单元测试（boolean类型）
+// ObJsonWrapper::print unit test (boolean type)
 TEST_F(TestJsonTree, test_clone_node_boolean)
 {
   ObArenaAllocator allocator(ObModIds::TEST);
@@ -1829,8 +1812,7 @@ TEST_F(TestJsonTree, test_clone_node_boolean)
   cout << "boolean_without_quote: " << j_buf.ptr() << endl;
   ASSERT_STREQ("true", j_buf.ptr());
 }
-
-// ObJsonWrapper::print 单元测试（decimal类型）
+// ObJsonWrapper::print unit test (decimal type)
 TEST_F(TestJsonTree, test_clone_node_decimal)
 {
   ObArenaAllocator allocator(ObModIds::TEST);
@@ -1856,8 +1838,7 @@ TEST_F(TestJsonTree, test_clone_node_decimal)
   cout << "date_without_quote: " << j_buf.ptr() << endl;
   ASSERT_STREQ("-9223372036854775808", j_buf.ptr());
 }
-
-// ObJsonWrapper::print 单元测试（double类型）
+// ObJsonWrapper::print unit test (double type)
 TEST_F(TestJsonTree, test_clone_node_double)
 {
   ObArenaAllocator allocator(ObModIds::TEST);
@@ -1878,8 +1859,7 @@ TEST_F(TestJsonTree, test_clone_node_double)
   cout << "double_without_quote: " << j_buf.ptr() << endl;
   ASSERT_STREQ("1.7976931348623157e308", j_buf.ptr());
 }
-
-// ObJsonWrapper::print 单元测试（null类型）
+// ObJsonWrapper::print unit test (null type)
 TEST_F(TestJsonTree, test_clone_node_null)
 {
   ObArenaAllocator allocator(ObModIds::TEST);
@@ -1900,8 +1880,7 @@ TEST_F(TestJsonTree, test_clone_node_null)
   cout << "null_without_quote: " << j_buf.ptr() << endl;
   ASSERT_STREQ("null", j_buf.ptr());
 }
-
-// ObJsonWrapper::print 单元测试（opaque类型）
+// ObJsonWrapper::print unit test (opaque type)
 TEST_F(TestJsonTree, test_clone_node_opaque)
 {
   ObArenaAllocator allocator(ObModIds::TEST);
@@ -1923,8 +1902,7 @@ TEST_F(TestJsonTree, test_clone_node_opaque)
   cout << "opaque_without_quote: " << j_buf.ptr() << endl;
   ASSERT_STREQ("base64:type251:b3BhcXVl", j_buf.ptr());
 }
-
-// ObJsonWrapper::print 单元测试（string类型）
+// ObJsonWrapper::print unit test (string type)
 TEST_F(TestJsonTree, test_clone_node_string)
 {
   ObArenaAllocator allocator(ObModIds::TEST);
@@ -1967,8 +1945,7 @@ TEST_F(TestJsonTree, test_clone_node_int)
   cout << "int_without_quote: " << j_buf.ptr() << endl;
   ASSERT_STREQ("-9223372036854775808", j_buf.ptr());
 }
-
-// ObJsonWrapper::print 单元测试（uint类型）
+// ObJsonWrapper::print unit test (uint type)
 TEST_F(TestJsonTree, test_clone_node_uint)
 {
   ObArenaAllocator allocator(ObModIds::TEST);
@@ -1989,8 +1966,7 @@ TEST_F(TestJsonTree, test_clone_node_uint)
   cout << "uint_without_quote: " << j_buf.ptr() << endl;
   ASSERT_STREQ("18446744073709551615", j_buf.ptr());
 }
-
-// ObRapidJsonHandler::seeing_value 单元测试
+// ObRapidJsonHandler::seeing_value unit test
 TEST_F(TestJsonTree, test_clone_node_datetime)
 {
   ObArenaAllocator allocator(ObModIds::TEST);

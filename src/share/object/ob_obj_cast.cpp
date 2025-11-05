@@ -236,7 +236,7 @@ static int copy_string(const ObObjCastParams &params,
       if (OB_UNLIKELY(NULL == (buf = static_cast<char*>(params.alloc(str_len))))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
       } else {
-        /* 如果需要进行zerofill，这里添0 */
+        /* If zero fill is needed, add 0 here */
         int64_t zf = params.zf_info_->max_length_ - len;
         if (zf > 0) {
           MEMSET(buf, '0', zf);
@@ -418,7 +418,7 @@ OB_INLINE int get_cast_ret(const ObCastMode cast_mode,
 #define SET_RES_ENUM(res)         SET_RES_OBJ(res, enum, , , value, 0)
 #define SET_RES_SET(res)          SET_RES_OBJ(res, set, , , value, 0)
 #define SET_RES_OTIMESTAMP(res)   SET_RES_OBJ(res, otimestamp_value, expect_type, COMMA, value, ObOTimestampData())
-//这里新增了SET_RES_XXXTYPE对应的宏后需要加入到ObObjCaster::get_zero_value()接口中用来获取对应类型的zero value
+//Here the macro corresponding to SET_RES_XXXTYPE has been added and needs to be included in the ObObjCaster::get_zero_value() interface to obtain the zero value for the corresponding type
 
 
 #define SET_RES_ACCURACY(res_precision, res_scale, res_length) \
@@ -456,8 +456,8 @@ int ObNumberConstValue::init(ObIAllocator &allocator)
   int ret = OB_SUCCESS;
   int64_t total_alloc_size = 0;
   const int64_t BUFFER_SIZE = 2 * (ObNumber::MAX_SCALE + ObNumber::MAX_PRECISION);
-  // 字符数组的作用是字符保存，关于尾字符'\0' 的设置需要调用者自己设置，下面的逻辑经过梳理，已经确保'\0'的设置。
-  // 此处为了性能优化考虑，不再强制进行{0}的操作
+  // The character array is used for character storage, the setting of the null terminator '\0' needs to be done by the caller. The logic below has been reviewed and ensures the setting of '\0'.
+  // For performance optimization, the {0} operation is no longer enforced
   char buf[BUFFER_SIZE];
   buf[BUFFER_SIZE-1] = '\0';
   // prepare string like "99.999".
@@ -756,7 +756,7 @@ int ObHexUtils::rawtohex(const ObObj &text, ObCastCtx &cast_ctx, ObObj &result)
   } else {
     ObString str;
     ObObj num_obj;
-    char *splice_num_str = NULL; // 用于拼接 number 类型的元数据 Desc 和 digits_ 指向的实际存储的数据
+    char *splice_num_str = NULL; // Used for splicing number type metadata Desc and digits_ pointing to the actual stored data
     ObOTimestampData time_value;
     switch (text.get_type()) {
       //TODO::this should same as oracle, and support dump func @yanhua
@@ -1372,19 +1372,19 @@ static int int_string(const ObObjType expect_type, ObObjCastParams &params,
     ObObj tmp_out;
     ObFastFormatInt ffi(in.get_int());
     ObString tmp_str;
-    // 进行字符集转换，使用ObObjCastParams.alloc申请结果的空间。
+    // Perform character set conversion, use ObObjCastParams.alloc to allocate space for the result.
     if (OB_FAIL(convert_string_collation(ObString(ffi.length(), ffi.ptr()),
                                          ObCharset::get_system_collation(),
                                          tmp_str,
                                          params.dest_collation_,
                                          params))) {
       LOG_WARN("fail to convert string collation", K(ret));
-    // 检查字符转换，如果是oracle模式从varchar/char转为blob，那么使用hextoraw接口对字符串进行转换，
-    // 结果放在ObObjCastParams.allocator_v2_->alloc分配的空间, 与上面是同一个alloc接口
+    // Check character conversion, if it's oracle mode from varchar/char to blob, then use the hextoraw interface to convert the string,
+    // The result is placed in the space allocated by ObObjCastParams.allocator_v2_->alloc, which is the same alloc interface as above
     } else if (OB_FAIL(check_convert_string(expect_type, params, tmp_str.ptr(),
                                             tmp_str.length(), tmp_out))) {
       LOG_WARN("fail to check_convert_string", K(ret), K(in), K(expect_type));
-    // 根据align_offset和zerofill进行前后补，结果放在ObObjCastParams.alloc申请的空间中。
+    // According to align_offset and zerofill for padding before and after, the result is placed in the space allocated by ObObjCastParams.alloc.
     } else if (OB_FAIL(copy_string(params, expect_type, tmp_out.get_string(), out))) {
     } else {
       res_length = static_cast<ObLength>(out.get_string_len());
@@ -1678,7 +1678,7 @@ static int uint_float(const ObObjType expect_type, ObObjCastParams &params,
     LOG_ERROR("invalid input type",
         K(ret), K(in), K(expect_type));
   } else {
-    // uint直接转为float的结果，与先转为double再转为float的结果不同，这里与mysql兼容。
+    // The result of directly converting uint to float is different from converting it to double first and then to float. Here, we maintain compatibility with MySQL.
     double value = static_cast<double>(in.get_uint64());
     out.set_float(expect_type, static_cast<float>(value));
   }
@@ -2028,9 +2028,8 @@ static int uint_geometry(const ObObjType expect_type, ObObjCastParams &params,
 // we can see that if float value is out of range of int or uint value, the casted int or uint
 // value can't be used to compare with INT64_MAX and so on, see case 2.
 // so we should use float value to determine weither it is in range of int or uint.
-
-// trunc_min_value和trunc_max_value分别是in大于最大值和小于最小值时应该trunc成的值。
-// float转int时，如果超过LLONG_MAX应该trunc成LLONG_MIN，而double转int时超过LLONG_MAX应该trunc成LLONG_MAX
+// trunc_min_value and trunc_max_value are the values that in should be truncated to when it is less than the minimum value and greater than the maximum value, respectively.
+// float to int conversion, if exceeds LLONG_MAX should be truncated to LLONG_MIN, while double to int conversion exceeding LLONG_MAX should be truncated to LLONG_MAX
 int common_double_int(const double in, int64_t &out,
                       const int64_t trunc_min_value,
                       const int64_t trunc_max_value)
@@ -2043,9 +2042,9 @@ int common_double_int(const double in, int64_t &out,
       ret = OB_DATA_OUT_OF_RANGE;
     }
   } else if (in >= static_cast<double>(LLONG_MAX)) {
-    // 把相等的情况放进来处理，是因为和LLONG_MAX相等的浮点数转int时结果可能是LLONG_MIN或LLONG_MAX。
-    // double转int，以及作为insert value时的float转int，结果是LLONG_MAX；
-    // 其他情况下float转int结果为LLONG_MIN。 不报错的行为也是与mysql兼容
+    // Include the equal case to handle situations where a floating-point number equal to LLONG_MAX, when converted to int, may result in LLONG_MIN or LLONG_MAX.
+    // double to int, and float to int when used as insert value, the result is LLONG_MAX;
+    // In other cases, the result of float to int conversion is LLONG_MIN. The behavior without error is also compatible with mysql
     out = trunc_max_value;
     if (in > static_cast<double>(LLONG_MAX)) {
       ret = OB_DATA_OUT_OF_RANGE;
@@ -2068,7 +2067,7 @@ static int float_int(const ObObjType expect_type, ObObjCastParams &params,
     LOG_ERROR("invalid input type",
         K(ret), K(in), K(expect_type));
   } else {
-    //和LLONG_MAX相等的float值cast到int时，如果是insert value结果应该是LLONG_MAX，否则cast结果应该是LLONG_MIN
+    // The float value equal to LLONG_MAX cast to int should result in LLONG_MAX if it is an insert value, otherwise the cast result should be LLONG_MIN
     if (CAST_FAIL(common_double_int(in.get_float(), value, LLONG_MIN,
                   CM_IS_COLUMN_CONVERT(cast_mode) ? LLONG_MAX : LLONG_MIN))) {
       LOG_WARN("cast float to int failed", K(ret), K(in), K(value));
@@ -2102,16 +2101,16 @@ static int float_uint(const ObObjType expect_type, ObObjCastParams &params,
       value = static_cast<uint64_t>(LLONG_MIN);
       ret = OB_DATA_OUT_OF_RANGE;
     } else {
-      // 兼容mysql的行为，处于(INT64_MAX, UINT64_MAX)内的浮点数，插入到uint列中时cast结果约等于原来的float值
-      // 而在其他场景如cast as unsigned时，结果应该为INT64_MAX + 1, 即rint(in_value)->int->uint
+      // Compatible with MySQL behavior, floating-point numbers within (INT64_MAX, UINT64_MAX) cast to uint column result approximately equals the original float value
+      // and in other scenarios such as cast as unsigned, the result should be INT64_MAX + 1, i.e., rint(in_value)->int->uint
       if (is_column_convert) {
         value = static_cast<uint64_t>(rint(in_value));
       } else {
         value = static_cast<uint64_t>(static_cast<int64_t>(rint(in_value)));
       }
       if (in_value < 0 && value != 0) {
-        // 这里处理[LLONG_MIN, 0)范围内的in，转换为unsigned应该报OB_DATA_OUT_OF_RANGE。
-        // out不等于0避免[-0.5, 0)内的值被误判，因为它们round后的值是0，处于合法范围内。
+        // Here processing the range [LLONG_MIN, 0) of in, converting to unsigned should report OB_DATA_OUT_OF_RANGE.
+        // out is not equal to 0 to avoid values in the range [-0.5, 0) being misjudged, because their rounded values are 0, which is within the valid range.
         ret = OB_DATA_OUT_OF_RANGE;
       }
     }
@@ -2122,8 +2121,8 @@ static int float_uint(const ObObjType expect_type, ObObjCastParams &params,
 
   if (OB_FAIL(ret)) {
   } else if (CM_NEED_RANGE_CHECK(cast_mode) &&
-    // 使用value而不是in_value进行range check，因为原来使用in_value会导致输入为负数时，检查一定会失败，
-    // cast结果被置为0. mysql的结果是负的浮点数先转为int，再转为uint。
+    // Use value instead of in_value for range check, because using in_value would cause the check to always fail when the input is negative,
+    // cast result is set to 0. mysql result is a negative float first converted to int, then to uint.
           CAST_FAIL(uint_range_check(expect_type, value, value))) {
   } else {
     out.set_uint(expect_type, value);
@@ -2574,16 +2573,16 @@ static int double_uint(const ObObjType expect_type, ObObjCastParams &params,
     } else {
       if (is_column_convert) {
         value = static_cast<uint64_t>(rint(in_value));
-      // 与float_uint略有不同，[INT64_MAX, UINT64_MAX)之间的double转uint时，在非column_convert的场景中结果
-      // 应该是INT64_MAX而不是INT64_MAX + 1.
+      // Slightly different from float_uint, when converting double to uint for values in the range [INT64_MAX, UINT64_MAX), the result in scenarios other than column_convert
+      // should be INT64_MAX instead of INT64_MAX + 1.
       } else if (in_value >= static_cast<double>(LLONG_MAX)) {
         value = static_cast<uint64_t>(LLONG_MAX);
       } else {
         value = static_cast<uint64_t>(static_cast<int64_t>(rint(in_value)));
       }
       if (in_value < 0 && value != 0) {
-        // 这里处理[LLONG_MIN, 0)范围内的in，转换为unsigned应该报OB_DATA_OUT_OF_RANGE。
-        // out不等于0避免[-0.5, 0)内的值被误判，因为它们round后的值是0，处于合法范围内。
+        // Here processing the range [LLONG_MIN, 0) of in, converting to unsigned should report OB_DATA_OUT_OF_RANGE.
+        // out is not equal to 0 to avoid values in the range [-0.5, 0) being misjudged, because their rounded values are 0, which is within the valid range.
         ret = OB_DATA_OUT_OF_RANGE;
       }
     }
@@ -5911,8 +5910,7 @@ int common_string_unsigned_integer(const ObCastMode &cast_mode,
   }
   return ret;
 }
-
-// 与MySQL有不兼容行为: 
+// Incompatible behavior with MySQL:
 int common_string_integer(const ObCastMode &cast_mode,
                                  const ObObjType &in_type,
                                  const ObCollationType &in_cs_type,
@@ -6093,7 +6091,7 @@ static int string_double(const ObObjType expect_type, ObObjCastParams &params,
           ObString trimed_str = str_utf8.trim();
           if (lib::is_mysql_mode() && 0 == trimed_str.length()) {
             if (!CM_IS_COLUMN_CONVERT(cast_mode)) {
-              // mysql 模式下不在 convert_column 里遇到空字符串或者全是空格的字符串转 double 时，不报错
+              // In mysql mode, do not report an error when converting an empty string or a string with only spaces to double in convert_column
               // skip
             } else {
               ret = OB_ERR_DOUBLE_TRUNCATED;
@@ -6160,7 +6158,7 @@ static int string_number(const ObObjType expect_type, ObObjCastParams &params,
     } else {
       const ObString &str = utf8_string;
       ret = value.from_sci_opt(str.ptr(), str.length(), params, &res_precision, &res_scale);
-      // bug: 4263211. 兼容mysql string转number超过最值域范围的行为
+      // bug: 4263211. Compatibility with MySQL string to number conversion exceeding the maximum range
       // select cast('1e500' as decimal);  -> max_val
       // select cast('-1e500' as decimal); -> min_val
       if (ret == OB_NUMERIC_OVERFLOW) {
@@ -6455,7 +6453,7 @@ static int string_string(const ObObjType expect_type, ObObjCastParams &params,
   } else if (lib::is_oracle_mode()
              && !(in.is_blob() && ob_is_blob(expect_type, params.expect_obj_collation_))
              && (in.is_blob())) {
-    // 只允许 blob -> blob，不允许 blob -> !blob
+    // Only allow blob -> blob, disallow blob -> !blob
     ret = OB_NOT_SUPPORTED;
     LOG_WARN("invalid cast of blob type", K(ret), K(in), K(out.get_meta()), K(expect_type), K(cast_mode));
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "cast to blob type");
@@ -6464,7 +6462,7 @@ static int string_string(const ObObjType expect_type, ObObjCastParams &params,
     LOG_WARN("invalid cast of out row lob obj", K(ret), K(in), K(out.get_meta()), K(expect_type), K(cast_mode));
   } else {
     ObString str;
-    // 考虑不同字符集的情况
+    // Consider different character set scenarios
     if (OB_FAIL(in.get_string(str))) {
       LOG_WARN("Failed to get payload from input string", K(ret), K(in));
     } else if (0 != str.length()
@@ -6473,8 +6471,8 @@ static int string_string(const ObObjType expect_type, ObObjCastParams &params,
         && (ObCharset::charset_type_by_coll(in.get_collation_type())
             != ObCharset::charset_type_by_coll(params.dest_collation_))) {
       char *buf = NULL;
-      // buf_len 和编码长度有关，latin1使用 1 个字节编码一个字符，utf8mb4 使用 1 到 4 个字节
-      // CharConvertFactorNum 是申请的内存大小的倍数
+      // buf_len is related to the encoding length, latin1 uses 1 byte to encode a character, utf8mb4 uses 1 to 4 bytes
+      // CharConvertFactorNum is the multiple of the applied memory size
       int32_t buf_len = str.length() * ObCharset::CharConvertFactorNum;
       uint32_t result_len = 0;
       if (OB_UNLIKELY(NULL == (buf = static_cast<char*>(params.alloc(buf_len))))) {
@@ -6609,7 +6607,7 @@ static int string_bit(const ObObjType expect_type, ObObjCastParams &params,
         ret = OB_ERR_DATA_TOO_LONG;
         LOG_WARN("bit type length is too long", K(ret), K(str), K(OB_MAX_BIT_LENGTH), K(bit_len));
       } else {
-        //将str按照二进制值转换为相应的uint64
+        //Convert str to the corresponding uint64 based on its binary value
         value = hex_to_uint64(str);
       }
       if (OB_FAIL(ret) && CM_IS_WARN_ON_FAIL(cast_mode)) {
@@ -6747,7 +6745,7 @@ static int string_set(const ObExpectType &expect_type, ObObjCastParams &params, 
           LOG_WARN("data truncate", K(pos), K(in), K(val_str), K(in_str), K(expect_type), K(ret));
         }
       } else {
-        pos %= 64;//MySQL中，如果value存在重复，则value_count可以大于64
+        pos %= 64;//In MySQL, if value exists duplicate, then value_count can be greater than 64
         value |= (1ULL << pos);
       }
     } while (OB_SUCC(ret) && !is_last_value);
@@ -7721,7 +7719,7 @@ static int enumset_enumset(const ObExpectType &expect_type, ObObjCastParams &par
 
 ////////////////////////////////////////////////////////////////
 // enum -> XXX
-/*//来自同一个enum 列的obj转换使用应该使用该接口，来自不同enum列的转换使用enumsetinner_enum
+/*//Conversion of obj from the same enum column should use this interface, conversion from different enum columns should use enumsetinner_enum
 static int enumset_enum(const ObExpectType &expect_type, ObObjCastParams &params, const ObObj &in, ObObj &out)
 {
   int ret = OB_SUCCESS;
@@ -7744,7 +7742,7 @@ static int enumset_enum(const ObExpectType &expect_type, ObObjCastParams &params
 
 ////////////////////////////////////////////////////////////////
 // set -> XXX
-//来自同一个set 列的obj转换使用应该使用该接口，来自不同set列的转换使用enumsetinner_set
+//Conversion of obj from the same set column should use this interface, conversion from different set columns should use enumsetinner_set
 static int enumset_set(const ObExpectType &expect_type, ObObjCastParams &params, const ObObj &in, ObObj &out)
 {
   int ret = OB_SUCCESS;
@@ -14456,9 +14454,8 @@ int time_scale_check_only(const ObAccuracy &accuracy, const ObObj &obj)
   UNUSED(obj);
   return ret;
 }
-
-//empty string时,bit_len 为0
-//非empty string的情况，为char 对应二进制值去掉前导0后的长度, 例如'3b'的长度为15
+//empty string when, bit_len is 0
+//The length of the binary value corresponding to char without leading 0s in the case of a non-empty string, for example, the length of '3b' is 15
 int get_bit_len(const ObString &str, int32_t &bit_len)
 {
   int ret = OB_SUCCESS;
@@ -14507,7 +14504,7 @@ int string_length_check(ObObjCastParams &params, const ObAccuracy &accuracy,
   const ObLength max_accuracy_len = accuracy.get_length();
   const int32_t str_len_byte = obj.get_string_len();
   bool is_oracle = is_oracle_mode();
-  // 处理异常情况，但str_len_byte大于max_len_char不一定有问题，还需要具体判断
+  // Handle abnormal cases, but str_len_byte greater than max_len_char is not necessarily a problem, further judgment is required
   if (max_accuracy_len <= 0 || str_len_byte > max_accuracy_len) {
     int &cast_ret = (CM_IS_ERROR_ON_FAIL(cast_mode) && !is_oracle)
                     ? ret
@@ -14553,7 +14550,7 @@ int string_length_check(ObObjCastParams &params, const ObAccuracy &accuracy,
       } else {//mysql, oracle varchar(char)
         // trunc_len_char > max_accuracy_len means an error or warning, without tail ' ', otherwise
         // str_len_char > max_accuracy_len means only warning, even in strict mode.
-        // lengthsp()  - returns the length of the given string without trailing spaces. 所以strlen_byte_no_sp返回的结果是小于等于str的长度
+        // lengthsp()  - returns the length of the given string without trailing spaces. So strlen_byte_no_sp returns the result that is less than or equal to the length of str.
         trunc_len_byte = static_cast<int32_t>(ObCharset::strlen_byte_no_sp(cs_type, str, str_len_byte));
         trunc_len_char = obj.is_lob() ? trunc_len_byte : static_cast<int32_t>(ObCharset::strlen_char(cs_type, str, trunc_len_byte));
 
@@ -14586,11 +14583,11 @@ int string_length_check(ObObjCastParams &params, const ObAccuracy &accuracy,
             trunc_len_byte = static_cast<int32_t>(ObCharset::charpos(cs_type, str, str_len_byte, max_accuracy_len));
           }
           if (is_oracle) {
-          // 在oracle模式下不清理末尾的空格字符,原因如下:
-          // #bug18529663:例如select cast(' a' as char) from dual;
-          // 执行至此时,trunc_len_byte = 1,意思是截取到' a'的第一个字符' '
-          // 如果不加判断将会直接执行strlen_byte_no_sp来清理末尾的空格字符,执行完毕后由于空格被清理掉,导致trunc_len_byte=0
-          // trunc_len_byte = 0会导致最终的obchar类型的输出长度为0,在oracle模式的比较中将会判其为空,不符号预期.
+          // In oracle mode, trailing space characters are not cleaned up for the following reasons:
+          // #bug18529663:for example select cast(' a' as char) from dual;
+          // At this point, trunc_len_byte = 1, meaning it truncates to the first character ' ' of ' a'
+          // If no judgment is added, strlen_byte_no_sp will be executed directly to clean up the trailing space characters. After execution, since the spaces are cleaned up, it leads to trunc_len_byte=0
+          // trunc_len_byte = 0 will cause the final output length of obchar type to be 0, which will be judged as empty in the comparison in oracle mode, not meeting the expectation.
           } else if (obj.is_fixed_len_char_type() && !obj.is_binary()) {
             trunc_len_byte = static_cast<int32_t>(ObCharset::strlen_byte_no_sp(cs_type, str, trunc_len_byte));
           }
@@ -14611,7 +14608,7 @@ int string_length_check(ObObjCastParams &params, const ObAccuracy &accuracy,
       }
     }
   } else {
-    // 正常分支，直接赋值即可
+    // Normal branch, direct assignment is sufficient
     res_obj = &obj;
   }
 
@@ -14726,7 +14723,7 @@ int obj_collation_check(const bool is_strict_mode, const ObCollationType cs_type
   if (!ob_is_string_type(obj.get_type())) {
     //nothing to do
   } else if (cs_type == CS_TYPE_BINARY) {
-    //任何类型都可以直接转成binary
+    //Any type can be directly converted to binary
     obj.set_collation_type(cs_type);
   } else if (!lib::is_mysql_mode()) {
     obj.set_collation_type(cs_type);
@@ -15051,7 +15048,7 @@ int ob_obj_to_ob_time_without_date(const ObObj &obj, const ObTimeZoneInfo *tz_in
       if (OB_FAIL(ObTimeConverter::int_to_ob_time_without_date(obj.get_int(), ob_time))) {
         LOG_WARN("int to ob time without date failed", K(ret));
       } else {
-        //mysql中intTC转time时，如果hour超过838，那么time应该为null，而不是最大值。
+        //When converting intTC to time in mysql, if hour exceeds 838, then time should be null, rather than the maximum value.
         const int64_t time_max_val = TIME_MAX_VAL;    // 838:59:59 .
         int64_t value = ObTimeConverter::ob_time_to_time(ob_time);
         if (value > time_max_val) {
@@ -15139,7 +15136,7 @@ int ob_obj_to_ob_time_without_date(const ObObj &obj, const ObTimeZoneInfo *tz_in
           LOG_WARN("int to ob time without date failed", K(ret));
         } else {
           if ((!ob_time.parts_[DT_YEAR]) && (!ob_time.parts_[DT_MON]) && (!ob_time.parts_[DT_MDAY])) {
-            //mysql中intTC转time时，如果超过838:59:59，那么time应该为null，而不是最大值。
+            //When converting intTC to time in mysql, if it exceeds 838:59:59, then time should be null, rather than the maximum value.
             const int64_t time_max_val = TIME_MAX_VAL;    // 838:59:59 .
             int64_t value = ObTimeConverter::ob_time_to_time(ob_time);
             if(value > time_max_val) {
@@ -15234,8 +15231,7 @@ int ObObjCaster::to_datetime(const ObObjType expect_type, ObCastCtx &cast_ctx,
   }
   return ret;
 }
-
-//支持xxx向所有类型的转换（包括ObEnumType/ObSetType, 不包括ObInnerEnumType/ObInnerSetType）
+//Support xxx conversion to all types (including ObEnumType/ObSetType, excluding ObInnerEnumType/ObInnerSetType)
 int ObObjCaster::to_type(const ObExpectType &expect_type, ObCastCtx &cast_ctx,
                          const ObObj &in_obj, ObObj &buf_obj, const ObObj *&res_obj)
 {
@@ -15287,8 +15283,8 @@ int ObObjCaster::to_type(const ObObjType expect_type,
     const_cast<ObObjMeta &>(out_obj.get_meta()).set_type_simple(expect_type);
   } else {
     if (lib::is_oracle_mode() && in_obj.is_character_type()) {
-      //防御措施：转成oracle的string类型，
-      //字符集是由两个NLS变量决定的，这两个值通过ObCastCtx传入
+      //Defense measure: convert to Oracle's string type,
+      //The character set is determined by two NLS variables, which are passed in through ObCastCtx
       ObCollationType dest_collation = cast_ctx.dtc_params_.nls_collation_;
       if (CS_TYPE_INVALID != dest_collation) {
         cast_ctx.dest_collation_ = dest_collation;
@@ -15431,9 +15427,9 @@ const sql::ObJsonZeroVal OB_JSON_ZERO = sql::ObJsonZeroVal(); // binary json nul
 int ObObjCaster::get_zero_value(const ObObjType expect_type, ObCollationType expect_cs_type, ObObj &zero_obj)
 {
   int ret = OB_SUCCESS;
-  ObObjCastParams params; //构造一个空的cast_param对象，适配SET_RES_XXX宏定义
+  ObObjCastParams params; //Construct an empty cast_param object, compatible with SET_RES_XXX macro definitions
   ObCastMode cast_mode = CM_WARN_ON_FAIL;
-  params.warning_ = 1; //将warning code设置为1，避免SET_RES_XXX宏将其当做真实的warning处理
+  params.warning_ = 1; // set warning code to 1, avoid SET_RES_XXX macro treating it as a real warning
   if (ob_is_string_tc(expect_type)) {
     zero_obj.set_string(expect_type, "");
   } else if (ob_is_text_tc(expect_type)) {
@@ -15504,12 +15500,12 @@ int ObObjCaster::get_zero_value(const ObObjType expect_type, ObCollationType exp
 
 
 /**
- * 单调的意思是指：
- * 假设A类型的两个obj：a1和a2，转为B类型后分别为：b1和b2,。
- * 若对任意a1、a2，都有：a1和a2的大小关系，与b1、b2的大小关系相同，
- * 则A类型到B类型的转换操作为单调的。
- * @param tc1 源类型
- * @param tc2 目标类型
+ * Monotonic means that:
+ * For two objects of type A: a1 and a2, converted to type B as: b1 and b2.
+ * If for any a1, a2, the size relationship between a1 and a2 is the same as the size relationship between b1 and b2,
+ * then the conversion operation from type A to type B is monotonic.
+ * @param tc1 source type
+ * @param tc2 target type
  * @return
  */
 int ObObjCaster::is_cast_monotonic(ObObjType t1, ObObjType t2, bool &is_monotonic)
@@ -15618,9 +15614,9 @@ int ObObjCaster::is_order_consistent(const ObObjMeta &from,
 
 /**
  * @brief ObObjCaster::oracle_number_to_char
- * 将number类型转为兼容oracle的字符串
- * 大于40字节时将会被转成科学计数法,输出40个字节的字符串
- * 小于40字节时原样输出
+ * Convert number type to Oracle-compatible string
+ * Will be converted to scientific notation and output as a 40-byte string if greater than 40 bytes
+ * Output as is if less than 40 bytes
  */
 
 int ObObjCaster::get_obj_param_text(const ObObjParam &obj_param,

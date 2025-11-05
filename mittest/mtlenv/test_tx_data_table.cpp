@@ -645,8 +645,7 @@ void TestTxDataTable::do_repeat_insert_test() {
 
   ObTxData *tx_data = nullptr;
   transaction::ObTransID tx_id;
-
-  // 插入10000个tx data，但都是同一个txid的rollback to，所以最后只会保留一个
+  // Insert 10000 tx data, but all are the same txid rollback to, so only one will be retained in the end
   for (int i = 1; i <= 10000; i++) {
     tx_id = transaction::ObTransID(269381);
     tx_data = nullptr;
@@ -671,8 +670,7 @@ void TestTxDataTable::do_repeat_insert_test() {
 
     ASSERT_EQ(OB_SUCCESS, tx_data_table_.insert(tx_data));
   }
-
-  // 插入了4个tx data
+  // inserted 4 tx data
   for (int i = 1; i <= 4; i++) {
     tx_id = transaction::ObTransID(269381 + i);
     tx_data = nullptr;
@@ -693,18 +691,16 @@ void TestTxDataTable::do_repeat_insert_test() {
   ObTxDataMemtable *frozen_memtable = nullptr;
   ObTxDataMemtable *active_memtable = nullptr;
   check_freeze_(memtable_mgr, frozen_memtable, active_memtable);
-  // 预处理会产生一个特殊行的tx data
+  // Preprocessing will generate a special row of tx data
   ASSERT_EQ(OB_SUCCESS, frozen_memtable->pre_process_for_merge());
-
-  // 总计有6个合法的tx data待转储。此时如果试图切7个区间，函数不会报错，但是返回结果里只有一个range
+  // There are a total of 6 valid tx data to be dumped. At this time, if you attempt to split into 7 intervals, the function will not return an error, but there will only be one range in the result
   ObStoreRange input_range;
   input_range.set_whole_range();
   ObSEArray<common::ObStoreRange, 7> range_array;
   ASSERT_EQ(OB_SUCCESS, frozen_memtable->get_split_ranges(input_range, 7, range_array));
   ASSERT_EQ(1, range_array.count());
   STORAGE_LOG(INFO, "output range", K(range_array));
-
-  // 如果试图切6个区间，能顺利切出6个range
+  // If you try to slice into 6 intervals, it can smoothly slice out 6 ranges
   range_array.reuse();
   ASSERT_EQ(OB_SUCCESS, frozen_memtable->get_split_ranges(input_range, 6, range_array));
   ASSERT_EQ(6, range_array.count());

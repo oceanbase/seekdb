@@ -103,8 +103,8 @@ int ObMonitoringDumpOp::inner_close()
 int ObMonitoringDumpOp::inner_rescan()
 {
   int ret = OB_SUCCESS;
-  // 这里每次rescan后，重新记录时间，之前没有这样做
-  // 其他变量可以不用reset，这些变量都是一次性赋值
+  // Here, after each rescan, the time is recorded again, this was not done before
+  // Other variables do not need to be reset, these variables are all assigned once
   first_row_fetched_ = false;
   LOG_INFO("do rescan",
            K(tracefile_identifier_.get_string()),

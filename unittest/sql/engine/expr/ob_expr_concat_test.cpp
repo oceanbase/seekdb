@@ -110,7 +110,7 @@ TEST_F(ObExprConcatTest, basic_test)
 
   // input not varchar
   T_NULL(concat, null, int, 0, null, 0);
-  //内部不容许出现
+  // Internal is not allowed to appear
   //T_NULL(concat, max_value, int, 0, null, 0);
   //T_NULL(concat, min_value, int, 10, null, 0);
   T_NULL(concat, null, double, 10,  null, 0);
@@ -133,7 +133,7 @@ TEST_F(ObExprConcatTest, basic_test)
   T(concat, varchar, "1", varchar, "", varchar, "1");
   T(concat, int, 1, int, 1, varchar, "11");
   T(concat, int, -1, varchar, "ab", varchar, "-1ab" );
-  //精度暂时不考虑
+  // Precision is not considered for now
   //T(concat, varchar, "a", float, -4.5, varchar, "a-4.5");
   //T(concat, varchar, "abc", double, 123.1200, varchar, "abc123.1200");
   //T(concat, varchar, "a", float , -0.00, varchar, "a.0.00");

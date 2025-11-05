@@ -89,7 +89,7 @@ void print_part_map(const ObTransferPartMap &part_map, const char* label) {
 class ObBalancePartitionTest : public ObSimpleClusterTestBase
 {
 public:
-  // 指定case运行目录前缀 test_ob_simple_cluster_
+  // Specify the case run directory prefix test_ob_simple_cluster_
   ObBalancePartitionTest() : ObSimpleClusterTestBase("test_ob_balance_partition_") {
     common::ObMySQLProxy &sql_proxy = get_curr_simple_server().get_sql_proxy();
     ObSqlString sql;
@@ -149,15 +149,14 @@ TEST_F(ObBalancePartitionTest, empty)
     ASSERT_EQ(OB_SUCCESS, run(i));
   }
 }
-
-// 非分区表整体是一个均衡组，表做平铺
+// The non-partitioned table as a whole is an even group, the table is laid out evenly
 TEST_F(ObBalancePartitionTest, simple_table)
 {
   TEST_INFO("-----------simple_table-------------");
   common::ObMySQLProxy &sql_proxy = get_curr_simple_server().get_sql_proxy();
   ObSqlString sql;
   int64_t affected_rows = 0;
-  // 创建表
+  // Create table
   for (int i = 1; i <= 17; i++) {
     sql.assign_fmt("create table basic_%d(col1 int)", i);
     ASSERT_EQ(OB_SUCCESS, sql_proxy.write(sql.ptr(), affected_rows));
@@ -166,13 +165,12 @@ TEST_F(ObBalancePartitionTest, simple_table)
     ASSERT_EQ(OB_SUCCESS, run(i));
   }
 }
-
-// 每个一级分区的表是一个均衡组，一级分区做平铺
+// Each first-level partition table is a balanced group, first-level partitions are laid out evenly
 TEST_F(ObBalancePartitionTest, partition)
 {
   TEST_INFO("-----------partition-------------");
   common::ObMySQLProxy &sql_proxy = get_curr_simple_server().get_sql_proxy();
-  // 创建表
+  // Create table
   for (int i = 1; i <= 5; i++) {
     ObSqlString sql;
     sql.assign_fmt("create table partition_%d(col1 int) partition by hash(col1) partitions 10", i);
@@ -188,7 +186,7 @@ TEST_F(ObBalancePartitionTest, subpart)
 {
   TEST_INFO("-----------subpart-------------");
   common::ObMySQLProxy &sql_proxy = get_curr_simple_server().get_sql_proxy();
-   // 创建表
+   // Create table
    for (int i = 1; i <= 5; i++) {
     ObSqlString sql;
     sql.assign_fmt("create table subpart_%d(col1 int) partition by range(col1) subpartition by hash(col1) subpartitions 10 (partition p1 values less than (100), partition p2 values less than MAXVALUE)", i);

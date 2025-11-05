@@ -88,7 +88,7 @@ class MockSharedNothingTmpFile : public ObSharedNothingTmpFile
 {
 public:
   // TODO: generate_data_xxx
-  // TODO: 在MockIO里存一份错误码
+  // TODO: Store a copy of the error code in MockIO
   int generate_meta_flush_info(
       ObTmpFileFlushTask &flush_task,
       ObTmpFileFlushInfo &info,

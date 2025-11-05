@@ -160,7 +160,7 @@ private:
   int finalize_exec_params(ObDMLStmt *stmt, ObIArray<ObExecParamRawExpr*> & exec_params);
   /**
    * @brief adjust_global_dependency_tables
-   * 为pl收集依赖表的schema version信息
+   * Collect schema version information of dependency tables for pl
    */
   int adjust_global_dependency_tables(ObDMLStmt *stmt);
   int verify_all_stmt_exprs(ObDMLStmt *stmt);

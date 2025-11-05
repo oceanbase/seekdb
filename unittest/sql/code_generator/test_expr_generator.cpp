@@ -98,9 +98,8 @@ void TestExprGenerator::generate_expr(const char *expr_str,
   phy_plan_.set_regexp_op_count(expr_generator.get_cur_regexp_op_count());
   post_expr = CSJ(sql_expr);
 }
-
-//由于实现enum和set后对cg进行了更改，依赖expr调用deduce_type。
-//而该测试用无法成功调用deduce type，因为无法获得column 的type，因此暂时注销掉该case
+// Due to changes made to cg after implementing enum and set, it depends on expr to call deduce_type.
+// And this test case cannot successfully call deduce type, because the type of column cannot be obtained, therefore the case is temporarily commented out
 TEST_F(TestExprGenerator, DISABLED_basic_test)
 {
   const char* test_file = "test_expr_generator.test";

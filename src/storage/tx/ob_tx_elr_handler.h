@@ -28,11 +28,11 @@ class ObPartTransCtx;
 
 enum TxELRState
 {
-  //初始化状态
+  // Initialize state
   ELR_INIT = 0,
-  //单分区和单机多分区事务，日志已经成功提交给clog，表示elr preparing
+  // Single partition and single machine multi-partition transactions, the log has been successfully submitted to clog, indicating elr preparing
   ELR_PREPARING = 1,
-  //gts的时间戳已经推过global trans version
+  //gts's timestamp has been advanced beyond global trans version
   ELR_PREPARED = 2
 };
 

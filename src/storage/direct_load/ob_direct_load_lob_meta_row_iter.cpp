@@ -158,7 +158,7 @@ int ObDirectLoadLobMetaRowIter::get_next_row(const ObDirectLoadDatumRow *&result
 int ObDirectLoadLobMetaRowIter::switch_next_lob_id()
 {
   int ret = OB_SUCCESS;
-  // lob_id都是outrow的, 必须能扫到行
+  // lob_id are all outrow, must be able to scan the row
   if (OB_UNLIKELY(nullptr != lob_id_row_ && lob_id_row_cnt_ == 0)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected lob id row cnt", KR(ret), KPC(lob_id_row_));

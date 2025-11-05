@@ -234,7 +234,7 @@ int ObAgentTableBase::construct_columns(
   if (OB_SUCC(ret)) {
     const int64_t buf_len = 100;
     char *buf = NULL;
-    // 对query timeout取10的指数次，防止系统租户计划缓存数过大
+    // Take the 10th power of query timeout to prevent the system tenant plan cache count from becoming too large
     int64_t rest_time = scan_param_->timeout_ - ObTimeUtility::current_time();
     int64_t query_timeout = 1;
     for (; rest_time > 0;) {

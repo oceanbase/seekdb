@@ -66,7 +66,7 @@ int ObInfoSchemaTriggersTable::inner_get_next_row(ObNewRow *&row)
               ret = OB_ERR_UNEXPECTED;
               SERVER_LOG(WARN, "Trigger info should not be null", K(ret));
             } else if (tg_info->is_in_recyclebin()) {
-              //在回收站中的trigger不需要展示
+              //triggers in the recycle bin do not need to be displayed
             } else if (OB_FAIL(exec_env.init(tg_info->get_package_exec_env()))) {
               SERVER_LOG(ERROR, "fail to load exec env", K(ret));
             } else {
@@ -77,7 +77,7 @@ int ObInfoSchemaTriggersTable::inner_get_next_row(ObNewRow *&row)
                            K(tg_info->get_owner_id()), K(ret));
               } else {
                 if (OB_NOT_NULL(user_info)) {
-                  // 这里兼容mysql,如果user存在,则给user_name赋值,如果user已经被删除,则user_name = ""
+                  // Here compatibility with mysql is ensured, if user exists, then assign value to user_name, if user has been deleted, then user_name = ""
                   const int64_t USERNAME_AUX_LEN = 6;// "''@''" + '\0'
                   int64_t pos = 0;
                   int64_t buf_size = user_info->get_user_name_str().length()

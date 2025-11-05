@@ -152,11 +152,11 @@ enum LogCommand
 };
 
 /**
- * @brief 日志项
- * 一条日志项由四部分组成:
- *     ObRecordHeader + 日志序号 + LogCommand + 日志内容
- * ObLogEntry中保存ObRecordHeader, 日志序号, LogCommand 三部分
- * ObLogEntry中的data_checksum_项是对"日志序号", "LogCommand", "日志内容" 部分的校验
+ * @brief log item
+ * a log item consists of four parts:
+ *     ObRecordHeader + log sequence number + LogCommand + log content
+ * ObLogEntry stores the ObRecordHeader, log sequence number, and LogCommand parts
+ * the data_checksum_ item in ObLogEntry is a checksum for the "log sequence number", "LogCommand", and "log content" parts
  */
 struct ObLogEntry
 {
@@ -182,27 +182,27 @@ struct ObLogEntry
   }
 
   /**
-   * @brief 设置日志序号
+   * @brief Set log index
    */
   int set_log_seq(const uint64_t seq);
 
   /**
-   * @brief 设置LogCommand
+   * @brief Set LogCommand
    */
   int set_log_command(const int32_t cmd);
 
   /**
    * @brief fill all fields of ObRecordHeader
-   * 调用该函数需要保证set_log_seq函数已经被调用
-   * @param [in] log_data 日志内容缓冲区地址
-   * @param [in] data_len 缓冲区长度
+   * Call this function ensuring that the set_log_seq function has already been called
+   * @param [in] log_data log content buffer address
+   * @param [in] data_len buffer length
    */
   int fill_header(const char *log_data, const int64_t data_len, const int64_t timestamp = 0);
 
   /**
-   * @brief 计算日志序号+LogCommand+日志内容的校验和
-   * @param [in] buf 日志内容缓冲区地址
-   * @param [in] len 缓冲区长度
+   * @brief Calculate the checksum of log sequence number + LogCommand + log content
+   * @param [in] buf Address of the log content buffer
+   * @param [in] len Buffer length
    */
   int64_t calc_data_checksum(const char *log_data, const int64_t data_len) const;
 
@@ -216,8 +216,8 @@ struct ObLogEntry
 
 
   /**
-   * 调用deserialization之后, 调用该函数检查数据正确性
-   * @param [in] log 日志内容缓冲区地址
+   * Call this function to check data correctness after calling deserialization
+   * @param [in] log Address of the log content buffer
    */
 
   static int get_header_size() {return sizeof(ObRecordHeader) + sizeof(uint64_t) + sizeof(LogCommand);}

@@ -54,7 +54,7 @@ public:
   void reuse(const int64_t batch_size) override
   {
     data_vector_.reuse(batch_size);
-    // shallow_copy可能会修改nulls_
+    // shallow_copy may modify nulls_
     if (nulls_ != vec_nulls_) {
       set_vector(vec_nulls_, 0 /*flag*/);
     } else {
@@ -288,14 +288,14 @@ private:
     const int64_t null_cnt =
       base->has_null() ? base->get_nulls()->accumulate_bit_cnt(offset, offset + size) : 0;
     if (0 == null_cnt) {
-      // 全是notnull
+      // all are notnull
       is_all_null_ = false;
     } else if (size == null_cnt) {
-      // 全是null
+      // all are null
       base_->get_nulls()->set_all(batch_idx, batch_idx + size);
       base_->set_has_null(true);
     } else {
-      // 部分null
+      // part null
       sql::ObBitVector *dest_nulls = base_->get_nulls();
       sql::ObBitVector *src_nulls = base->get_nulls();
       for (int64_t src_idx = offset, dest_idx = batch_idx; src_idx < offset + size;
@@ -355,7 +355,7 @@ private:
       base_->set_has_null(base_->has_null() || null_cnt > 0);
       is_all_null_ = is_all_null_ && size == null_cnt;
     } else {
-      // 全是notnull
+      // all are notnull
       is_all_null_ = false;
     }
   }

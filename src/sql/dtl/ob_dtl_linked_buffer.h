@@ -366,9 +366,7 @@ public:
 
   uint64_t enable_channel_sync() const { return enable_channel_sync_; }
   void set_enable_channel_sync(const bool enable_channel_sync) { enable_channel_sync_ = enable_channel_sync; }
-
-
-  //不包含allocated_chid_ copy，谁申请谁释放
+  // Does not include allocated_chid_ copy, who applies who releases
   static int assign(const ObDtlLinkedBuffer &src, ObDtlLinkedBuffer *dst) {
     int ret = OB_SUCCESS;
     MEMCPY(dst->buf_, src.buf_, src.size_);

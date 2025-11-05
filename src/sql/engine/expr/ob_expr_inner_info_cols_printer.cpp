@@ -560,7 +560,7 @@ int ObExprInnerInfoColsExtraPrinter::eval_column_extra(const ObExpr &expr, ObEva
     ObEvalCtx::TempAllocGuard alloc_guard(ctx);
     ObIAllocator &calc_alloc = alloc_guard.get_allocator();
     ObString extra = ObString::make_string("");
-    // auto_increment 和 on update current_timestamp 不会同时出现在同一列上
+    // auto_increment and on update current_timestamp will not appear on the same column at the same time
     if (auto_inc->get_int()) {
       extra = ObString::make_string("auto_increment");
     } else if (on_update_current_timestamp->get_int()) {

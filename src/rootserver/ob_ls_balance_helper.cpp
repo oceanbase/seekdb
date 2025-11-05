@@ -379,7 +379,7 @@ int ObLSBalanceTaskHelper::generate_migrate_task_()
         //get one unit group, which less than primary_zone_unit_num
         const ObLSStatusInfo &ls_status = balance_info.get_redundant_ls_array().at(j);
         new_task = false;
-        //一个ls_status只能生成一个ls_alter任务，在生成任务后，要跳出循环
+        //An ls_status can only generate one ls_alter task, after generating the task, you need to break out of the loop
         for (int64_t k = 0; OB_SUCC(ret) && k < unit_group_balance_array_.count() && !new_task; ++k) {
           ObUnitGroupBalanceInfo &dest_balance_info = unit_group_balance_array_.at(k);  
           if (dest_balance_info.get_lack_ls_count() > 0) {

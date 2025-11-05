@@ -58,8 +58,7 @@ enum ObGCLSLOGType
   OFFLINE_LS = 2,
   GC_LS_LOG_TYPE_MAX_TYPE = 3,
 };
-
-// 记录LS当前GC状态,状态不能回退,增删状态需要注意对应的bool接口的正确性
+// Record LS current GC status, status cannot be rolled back, adding or deleting status should pay attention to the correctness of the corresponding bool interface
 enum LSGCState
 {
   INVALID_LS_GC_STATE = 0,
@@ -149,7 +148,7 @@ public:
   void destroy();
   void run1();
 public:
-  //当前轮次GC查询LS的状态,状态不能回退,增删状态需要注意对应的bool接口的正确性
+  //Current round GC queries the status of LS, the status cannot go backward, adding or deleting states should pay attention to the correctness of the corresponding bool interface
   enum LSStatus
   {
     LS_INVALID_STATUS = 0,
@@ -164,9 +163,9 @@ public:
 
   enum GCReason
   {
-    INVALID_GC_REASON = 0,          //不需要GC
-    NOT_IN_LEADER_MEMBER_LIST = 1,  //不在成员列表中
-    LS_STATUS_ENTRY_NOT_EXIST = 2,  //日志流状态表已删除该日志流
+    INVALID_GC_REASON = 0,          //No need for GC
+    NOT_IN_LEADER_MEMBER_LIST = 1,  // Not in member list
+    LS_STATUS_ENTRY_NOT_EXIST = 2,  //Log stream status table has deleted this log stream
     MAX_GC_REASON = 3,
   };
 
@@ -199,7 +198,7 @@ private:
   bool is_need_gc_ls_status_(const LSStatus &status);
   bool is_normal_ls_status_(const LSStatus &status);
   bool is_need_delete_entry_ls_status_(const LSStatus &status);
-  //member list相关
+  //member list related
   int gc_check_member_list_(ObGCCandidateArray &gc_candidates);
   int construct_server_ls_map_for_member_list_(ServerLSMap &server_ls_map) const;
   int handle_each_ls_for_member_list_(ServerLSMap &server_ls_map,
@@ -207,7 +206,7 @@ private:
   int construct_server_ls_map_(ServerLSMap &server_ls_map,
                                const common::ObAddr &server,
                                const share::ObLSID &id) const;
-  //日志流状态表相关
+  //Log stream status table related
   void gc_check_ls_status_(ObGCCandidateArray &gc_candidates);
   int gc_check_ls_status_(storage::ObLS &ls,
                           ObGCCandidateArray &gc_candidates);
@@ -360,7 +359,7 @@ private:
   bool is_inited_;
   mutable RWLock rwlock_; //for leader revoke/takeover submit log
   storage::ObLS *ls_;
-  int64_t gc_seq_invalid_member_; //缓存gc检查当前ls不在成员列表时的轮次
+  int64_t gc_seq_invalid_member_; // cache gc check current ls not in member list round
   int64_t gc_start_ts_;
   int64_t block_tx_ts_;
   int64_t block_log_debug_time_;

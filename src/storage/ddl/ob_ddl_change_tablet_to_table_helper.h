@@ -37,12 +37,12 @@ class ObChangeTabletToTableHelper final
 public:
   static int on_register(const char* buf,
                          const int64_t len,
-                         mds::BufferCtx &ctx); // 出参，将对应修改记录在Ctx中
+                         mds::BufferCtx &ctx); // out parameter, will record corresponding modifications in Ctx
 
   static int on_replay(const char* buf,
                        const int64_t len,
-                       const share::SCN &scn, // 日志scn
-                       mds::BufferCtx &ctx); // 备机回放
+                       const share::SCN &scn, // log scn
+                       mds::BufferCtx &ctx); // standby replay
 };
 
 inline int ObChangeTabletToTableHelper::on_register(const char* buf,
@@ -55,7 +55,7 @@ inline int ObChangeTabletToTableHelper::on_register(const char* buf,
 
 inline int ObChangeTabletToTableHelper::on_replay(const char* buf,
                                                   const int64_t len,
-                                                  const share::SCN &scn, // 日志scn
+                                                  const share::SCN &scn, // log scn
                                                   mds::BufferCtx &ctx)
 {
   int ret = OB_SUCCESS;

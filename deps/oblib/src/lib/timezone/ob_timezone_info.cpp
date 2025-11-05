@@ -39985,7 +39985,7 @@ int ObTimeZoneInfoWrap::set_error_on_overlap_time(bool is_error)
 {
   int ret = OB_SUCCESS;
   error_on_overlap_time_ = is_error;
-  if (OB_UNLIKELY(tz_info_ != NULL)) {//在系统初次load_system_variable时，tz_info可能为负值
+  if (OB_UNLIKELY(tz_info_ != NULL)) {//When the system first loads_system_variable, tz_info may be negative}
     tz_info_->set_error_on_overlap_time(is_error);
   }
   return ret;

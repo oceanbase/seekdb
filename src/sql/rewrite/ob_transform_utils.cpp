@@ -413,8 +413,7 @@ int ObTransformUtils::has_nested_subquery(const ObQueryRefRawExpr *query_ref,
   }
   return ret;
 }
-
-//判断expr是否为column expr, 且为primary key或unique index
+// Determine if expr is a column expr, and is primary key or unique index
 
 int ObTransformUtils::is_columns_unique(const ObIArray<ObRawExpr *> &exprs,
                                         uint64_t table_id,
@@ -485,8 +484,8 @@ int ObTransformUtils::exprs_has_unique_subset(const common::ObIArray<ObRawExpr*>
 {
   int ret = OB_SUCCESS;
   is_subset = true;
-  // 使用时注意 sub 为空集的情况.
-  // 注意提前验证 sub 的所在的 schema 有 full 中的列.
+  // Use with caution when sub is an empty set.
+  // Note to verify in advance that the schema where sub is located has the columns in full.
   for (int64_t i = 0; OB_SUCC(ret) && i < sub.get_size(); i++) {
     uint64_t column_id_sub = OB_INVALID_ID;
     if (OB_FAIL(sub.get_column_id(i, column_id_sub))) {
@@ -511,7 +510,7 @@ int ObTransformUtils::exprs_has_unique_subset(const common::ObIArray<ObRawExpr*>
 }
 
 /**
- * @brief  将子查询封装成一个Generated Table，放入主查询的Table Item中
+ * @brief  Encapsulate the subquery as a Generated Table and place it in the Table Item of the main query
  */
 int ObTransformUtils::add_new_table_item(ObTransformerCtx *ctx,
                                          ObDMLStmt *stmt,
@@ -675,9 +674,9 @@ int ObTransformUtils::create_new_column_expr(ObTransformerCtx *ctx,
 }
 
 /*
- *  这里默认调用此函数是为了生成一个新的joined table。
- *  由于当前stmt的joined_tables_中保存的是最顶层的joined table, 因此在生成一个整体的inner join
- *  table 后将stmt的joined_tables_清空, 用于保存接下来生成的新的joined table
+ *  Here the function is called by default to generate a new joined table.
+ *  Since the current stmt's joined_tables_ stores the top-level joined table, therefore after generating an overall inner join
+ *  table, the stmt's joined_tables_ is cleared, used to save the newly generated joined table next
  */
 int ObTransformUtils::merge_from_items_as_inner_join(ObTransformerCtx *ctx_,
                                                      ObDMLStmt &stmt,
@@ -1525,8 +1524,7 @@ int ObTransformUtils::update_table_id_index(const ObRelIds &old_ids,
   }
   return ret;
 }
-
-//TODO 更多表达式后续可放开
+//TODO More expressions can be released later
 
 int ObTransformUtils::is_expr_query(const ObSelectStmt *stmt,
                                     bool &is_expr_type)
@@ -2344,7 +2342,7 @@ int ObTransformUtils::is_general_expr_not_null(ObNotNullContext &ctx,
     }
   } else if (T_OP_LIKE == expr->get_expr_type() ||
              T_OP_NOT_LIKE == expr->get_expr_type()) {
-    // c1 like 'xxx' escape NULL 不是 null propagate. escape NULL = escape '\\'
+    // c1 like 'xxx' escape NULL not null propagate. escape NULL = escape '\\'
     for (int64_t i = 0; OB_SUCC(ret) && i < expr->get_param_count() - 1; ++i) {
       if (OB_FAIL(check_list.push_back(expr->get_param_expr(i)))) {
         LOG_WARN("failed to append check list", K(ret));
@@ -2478,8 +2476,8 @@ int ObTransformUtils::has_null_reject_condition(const ObIArray<ObRawExpr *> &con
 }
 
 /**
- * 检查conditions是否拒绝指定表上的空值
- * 如果conditions不含有指定表的列，认为是不拒绝
+ * Check if conditions reject null values on the specified table
+ * If conditions do not contain columns from the specified table, it is considered as not rejecting
  */
 int ObTransformUtils::is_null_reject_conditions(const ObIArray<ObRawExpr *> &conditions,
                                                 const ObRelIds &target_table,
@@ -2510,11 +2508,11 @@ int ObTransformUtils::is_null_reject_conditions(const ObIArray<ObRawExpr *> &con
 
 /**
  * @brief ObTransformUtils::is_null_reject_condition
- * 1. condition 是 and/or 嵌套。
- *    要求and有一个子条件是 null_reject；or所有的子条件都是 null_reject
- * 2. condition 返回 false/NULL
- * 3. condition 返回 NULL
- *    要求满足 targets 均为 NULL 时，condition 的计算结果也是 null
+ * 1. condition is and/or nested.
+ *    Requires that and has one sub-condition as null_reject; or all sub-conditions are null_reject
+ * 2. condition returns false/NULL
+ * 3. condition returns NULL
+ *    Requires that when targets are all NULL, the result of condition calculation is also null
  */
 int ObTransformUtils::is_null_reject_condition(const ObRawExpr *condition,
                                                const ObIArray<const ObRawExpr *> &targets,
@@ -2526,7 +2524,7 @@ int ObTransformUtils::is_null_reject_condition(const ObRawExpr *condition,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("params have null", K(ret), K(condition));
   } else if (T_OP_AND == condition->get_expr_type()) {
-    // and 要求一个子条件是 null reject
+    // and require one subcondition is null reject
     for (int64_t i = 0; OB_SUCC(ret) && !is_null_reject
          && i < condition->get_param_count(); ++i) {
       if (OB_FAIL(SMART_CALL(is_null_reject_condition(condition->get_param_expr(i),
@@ -2536,7 +2534,7 @@ int ObTransformUtils::is_null_reject_condition(const ObRawExpr *condition,
       }
     }
   } else if (T_OP_OR == condition->get_expr_type()) {
-    // or  要求所有的子条件是 null reject
+    // or  require all sub-conditions are null reject
     is_null_reject = true;
     for (int64_t i = 0; OB_SUCC(ret) && is_null_reject
          && i < condition->get_param_count(); ++i) {
@@ -2572,7 +2570,7 @@ int ObTransformUtils::is_simple_null_reject(const ObRawExpr *condition,
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("condition param is null", K(ret));
     } else if (T_NULL == condition->get_param_expr(1)->get_expr_type()) {
-      // param is not NULL 要求 param 是 null propagate
+      // param is not NULL require param is null propagate
       check_expr_is_null_propagate = true;
       expr = condition->get_param_expr(0);
     }
@@ -2584,10 +2582,10 @@ int ObTransformUtils::is_simple_null_reject(const ObRawExpr *condition,
       const ObConstRawExpr *b_expr =
         static_cast<const ObConstRawExpr*>(condition->get_param_expr(1));
       if (b_expr->get_value().is_true()) {
-        // param is TRUE 要求 param 是 null reject
+        // param is TRUE require param is null reject
         check_expr_is_null_reject = true;
       } else {
-        // param is FALSE 要求 param 是 null propagate
+        // param is FALSE require param is null propagate
         check_expr_is_null_propagate = true;
       }
       expr = condition->get_param_expr(0);
@@ -2654,14 +2652,14 @@ int ObTransformUtils::is_null_propagate_expr(const ObRawExpr *expr,
       }
     }
   } else if (T_OP_LIKE == expr->get_expr_type() || T_OP_NOT_LIKE == expr->get_expr_type()) {
-    // c1 like 'xxx' escape NULL 不是 null propagate. escape NULL = escape '\\'
+    // c1 like 'xxx' escape NULL not null propagate. escape NULL = escape '\\'
     for (int64_t i = 0; OB_SUCC(ret) && !bret && i < expr->get_param_count() - 1; ++i) {
       if (OB_FAIL(SMART_CALL(is_null_propagate_expr(expr->get_param_expr(i), targets, bret)))) {
         LOG_WARN("failed to check param can propagate null", K(ret));
       }
     }
   } else if (T_OP_AND == expr->get_expr_type() || T_OP_OR == expr->get_expr_type()) {
-    // 如果 target = null，所有的子条件输出都是 null，那么 expr 的输出也是 null
+    // If target = null, all sub-condition outputs are null, then the output of expr is also null
     bret = true;
     for (int64_t i = 0; OB_SUCC(ret) && bret && i < expr->get_param_count(); ++i) {
       if (OB_FAIL(SMART_CALL(is_null_propagate_expr(expr->get_param_expr(i), targets, bret)))) {
@@ -2669,7 +2667,7 @@ int ObTransformUtils::is_null_propagate_expr(const ObRawExpr *expr,
       }
     }
   } else if (T_OP_BTW == expr->get_expr_type() || T_OP_NOT_BTW == expr->get_expr_type()) {
-    // 如果是 target [not] between ? and ? 的形式，那么 target = null, expr = null
+    // If the target [not] between ? and ? form, then target = null, expr = null
     if (OB_FAIL(SMART_CALL(is_null_propagate_expr(expr->get_param_expr(0), targets, bret)))) {
       LOG_WARN("failed to check param can propagate null", K(ret));
     }
@@ -2828,13 +2826,13 @@ int ObTransformUtils::find_expr(ObIArray<ObRawExpr *> &source,
 }
 
 /**
- * column <=> ? 或 ？<=> column
- * column is ? 或 column != ?
+ * column <=> ? or ? <=> column
+ * column is ? or column != ?
  * column like ?
  * column not/between ? and ?
  * column in (?,?,?)
  * column in st_function
- * 获取存在于这一类谓词的column
+ * get the column that exists in this kind of predicate
  */
 int ObTransformUtils::get_simple_filter_column(const ObDMLStmt *stmt,
                                                ObRawExpr *expr,
@@ -2975,9 +2973,10 @@ int ObTransformUtils::get_simple_filter_column(const ObDMLStmt *stmt,
 }
 
 /**
- * @brief 获取当前stmt是哪一个stmt的generated table或者是
- * set stmt的child query，如果是generated table，还需要返回table id
- * 如果当前stmt是某个stmt的子查询，例如 c1 > subquery，则认为它没有parent stmt
+ * @brief Get which stmt the current stmt is the generated table of or
+ * the child query of a set stmt, if it is a generated table, the table id
+ * also needs to be returned. If the current stmt is a subquery of some stmt,
+ * for example c1 > subquery, it is considered to have no parent stmt.
  */
 int ObTransformUtils::get_parent_stmt(const ObDMLStmt *root_stmt,
                                       const ObDMLStmt *stmt,
@@ -2995,7 +2994,7 @@ int ObTransformUtils::get_parent_stmt(const ObDMLStmt *root_stmt,
   } else if (root_stmt == stmt) {
     //do nothing
   } else {
-    //检查是否是set stmt的子查询
+    // Check if it is a subquery of set stmt
     if (root_stmt->is_set_stmt()) {
       const ObIArray<ObSelectStmt*> &child_query =
           static_cast<const ObSelectStmt*>(root_stmt)->get_set_query();
@@ -3006,7 +3005,7 @@ int ObTransformUtils::get_parent_stmt(const ObDMLStmt *root_stmt,
         }
       }
     }
-    //从所有的generated table中查找
+    // From all the generated tables find
     for (int64_t j = 0; OB_SUCC(ret) && !is_valid && j < root_stmt->get_table_size(); ++j) {
       const TableItem *table = root_stmt->get_table_item(j);
       if (OB_ISNULL(table)) {
@@ -3023,7 +3022,7 @@ int ObTransformUtils::get_parent_stmt(const ObDMLStmt *root_stmt,
     if (OB_FAIL(ret) || is_valid) {
       //do nothing
     } else {
-      //没找到递归遍历所有的child stmt
+      // Didn't find recursive traversal of all child stmt
       ObSEArray<ObSelectStmt *, 8> child_stmts;
       if (OB_FAIL(root_stmt->get_child_stmts(child_stmts))) {
         LOG_WARN("failed to get child stmts", K(ret));
@@ -3044,8 +3043,8 @@ int ObTransformUtils::get_parent_stmt(const ObDMLStmt *root_stmt,
 
 /**
  * @brief get_simple_filter_column_in_parent_stmt
- * 如果当前stmt是parent stmt的generated table，
- * 检查parent stmt是否存在当前stmt的指定table的简单谓词
+ * If the current stmt is a generated table of the parent stmt,
+ * check if the parent stmt has simple predicates for the specified table of the current stmt
  */
 int ObTransformUtils::get_simple_filter_column_in_parent_stmt(const ObDMLStmt *root_stmt,
                                                               const ObDMLStmt *stmt,
@@ -3090,7 +3089,7 @@ int ObTransformUtils::get_simple_filter_column_in_parent_stmt(const ObDMLStmt *r
                                                    parent_col_exprs)))) {
     LOG_WARN("failed to get filter columns", K(ret));
   } else if (!parent_col_exprs.empty()) {
-    //检查parent stmt的简单谓词列是否是指定table的column
+    // Check if the simple predicate list of parent stmt is the column of the specified table
     for (int64_t i = 0; OB_SUCC(ret) && i < parent_col_exprs.count(); ++i) {
       ObColumnRefRawExpr* col = parent_col_exprs.at(i);
       int64_t sel_idx = -1;
@@ -3135,8 +3134,8 @@ int ObTransformUtils::get_simple_filter_column_in_parent_stmt(const ObDMLStmt *r
 
 /**
  * @brief get_filter_columns
- * 自底向上检查所有stmt的conditions，获取指定table上的
- * 简单谓词
+ * Check all stmt's conditions from bottom to top, get simple predicates
+ * on the specified table
  */
 int ObTransformUtils::get_filter_columns(const ObDMLStmt *root_stmt,
                                          const ObDMLStmt *stmt,
@@ -3172,8 +3171,8 @@ int ObTransformUtils::get_filter_columns(const ObDMLStmt *root_stmt,
 
 /**
  * @brief check_column_match_index
- * 检查当前column是否能够与其他常量谓词或
- * 上层stmt下推的谓词匹配索引前缀
+ * Check if the current column can match the index prefix with other constant predicates or
+ * predicates pushed down from the upper stmt
  */
 int ObTransformUtils::check_column_match_index(const ObDMLStmt *root_stmt,
                                                const ObDMLStmt *stmt,
@@ -3190,7 +3189,7 @@ int ObTransformUtils::check_column_match_index(const ObDMLStmt *root_stmt,
     LOG_WARN("params have null", K(ret), K(stmt), K(col_expr), K(schema_guard));
   } else if (OB_ISNULL(table_item = stmt->get_table_item_by_id(
                          col_expr->get_table_id()))) {
-    //不是当前stmt的column expr，do nothing
+    // Not the column expr of the current stmt, do nothing
     LOG_TRACE("table item not exists in this stmt", K(ret), K(*col_expr), K(table_item));
   } else if (table_item->is_basic_table()) {
     ObSEArray<ObColumnRefRawExpr*, 8> col_exprs;
@@ -3208,7 +3207,7 @@ int ObTransformUtils::check_column_match_index(const ObDMLStmt *root_stmt,
       LOG_WARN("failed to check is match index", K(ret));
     }
   } else if (table_item->is_generated_table()) {
-    //generated table需要递归找到基表
+    // generated table needs to recursively find the base table
     int64_t sel_idx = col_expr->get_column_id() - OB_APP_MIN_COLUMN_ID;
     const ObSelectStmt *subquery = table_item->ref_query_;
     if (OB_ISNULL(subquery)) {
@@ -3309,9 +3308,8 @@ int ObTransformUtils::get_valid_index_id(ObSqlSchemaGuard *schema_guard,
   }
   return ret;
 }
-
-// 获取用于抽取query range的column item, 取出stmt中的index column item, 直到第一个不在stmt中的为止
-// 例如：select min(c3) from t1 where c1 = 1 and c3 > 1, index i1(c1,c2,c3), 返回c1而不是c1,c3 
+// Get the column item used for extracting query range, take out the index column item from stmt until the first one not in stmt is encountered
+// For example: select min(c3) from t1 where c1 = 1 and c3 > 1, index i1(c1,c2,c3), return c1 instead of c1,c3
 int ObTransformUtils::get_range_column_items_by_ids(const ObDMLStmt *stmt,
                                                     uint64_t table_id,
                                                     const ObIArray<uint64_t> &column_ids,
@@ -3482,7 +3480,7 @@ int ObTransformUtils::is_match_index(ObSqlSchemaGuard *schema_guard,
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("get null index schema", K(ret));
       } else if (!index_schema->get_rowkey_info().is_valid()) {
-        // 一些表没有主键信息, information_schema.tables 等
+        // Some tables do not have primary key information, information_schema.tables etc
         // do nothing
       } else if (OB_UNLIKELY(index_schema->is_spatial_index())
                 && OB_FAIL(index_schema->get_spatial_index_column_ids(index_cols))) {
@@ -3979,7 +3977,7 @@ int ObTransformUtils::is_foreign_key_rely(ObSQLSessionInfo* session_info,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("param has null", K(ret), K(session_info), K(foreign_key_info));
   } else if (SMO_IS_ORACLE_MODE(session_info->get_sql_mode())) {
-    //oracle模式下的主外键约束检查目前用validate_flag_，为确保之后rely_flag生效，可以先判定rely_flag_
+    // In oracle mode, primary foreign key constraint check currently uses validate_flag_, to ensure rely_flag_ takes effect later, you can first determine rely_flag_
     if (foreign_key_info->rely_flag_) {
       is_rely = true;
     } else if (foreign_key_info->is_validated()) {
@@ -4161,8 +4159,8 @@ int ObTransformUtils::check_stmt_unique(const ObSelectStmt *stmt,
              && ObOptimizerUtil::subset_exprs(select_exprs, exprs)) {
     is_unique = true;
   } else if (!ignore_group && stmt->has_rollup()) {
-    // rollup 不忽略 group 时直接返回 false
-    // 当 exprs 为 rollup exprs 子集时为 not strict unique, 但这种场景无用
+    // rollup does not ignore group when directly returning false
+    // When exprs is a subset of rollup exprs it is not strict unique, but this scenario is useless
     is_unique = false;
     need_check = false;
   } else if (!ignore_group && stmt->get_group_expr_size() > 0 //group by
@@ -4227,8 +4225,8 @@ int ObTransformUtils::compute_stmt_property(const ObSelectStmt *stmt,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null", K(ret));
   } else if (!ignore_group && stmt->has_rollup()) {
-    // 对于 rollup 不计算 property
-    // 其实 rollup 后能产生类似于 candi_fd_sets 包含 null 的属性, 暂时不处理
+    // For rollup do not calculate property
+    // Actually rollup can produce attributes similar to candi_fd_sets containing null, temporarily not processed
   } else if (stmt->is_set_stmt()) {
     ret = compute_set_stmt_property(stmt, check_helper, res_info, extra_flags);
   } else if (OB_FAIL(compute_path_property(stmt, check_helper, res_info))) {
@@ -4261,10 +4259,9 @@ int ObTransformUtils::compute_stmt_property(const ObSelectStmt *stmt,
       ret = fd_factory->create_table_fd_item(group_unique_fd, true, stmt->get_group_exprs(),
                                              table_set);
     }
-
-    //add unique fd item and deduce fd, 仅在 compute_stmt_property 中进行 deduce_fd_item_set,
-    //避免 stmt property 向 upper stmt property 转化时丢失 const 信息.
-    //目前仅对 fd_sets 进行推导, candi_fd_sets 仅传递不推导
+    //add unique fd item and deduce fd, only in compute_stmt_property perform deduce_fd_item_set,
+    // Avoid stmt property converting to upper stmt property losing const information.
+    // Currently only derivation for fd_sets is performed, candi_fd_sets are only passed without derivation
     if (OB_FAIL(ret)) {
     } else if (NULL != select_unique_fd && OB_FAIL(res_info.fd_sets_.push_back(select_unique_fd))) {
       LOG_WARN("failed to push back fd item set", K(ret));
@@ -4766,8 +4763,7 @@ int ObTransformUtils::need_compute_fd_item_set(ObIArray<ObRawExpr*> &exprs)
   } 
   return need;
 }
-
-// generate table 不返回 candi_fd_item_set
+// generate table do not return candi_fd_item_set
 int ObTransformUtils::compute_generate_table_property(const ObDMLStmt *stmt,
                                                       UniqueCheckHelper &check_helper,
                                                       const TableItem *table,
@@ -5058,8 +5054,7 @@ int ObTransformUtils::compute_outer_join_property(const ObDMLStmt *stmt,
   }
   return ret;
 }
-
-// 获取source_exprs 中所有只包含了 target 的列的expr
+// Get all exprs in source_exprs that only contain target
 int ObTransformUtils::extract_table_exprs(const ObDMLStmt &stmt,
                                           const ObIArray<ObRawExpr *> &source_exprs,
                                           const TableItem &target,
@@ -5114,14 +5109,11 @@ int ObTransformUtils::extract_table_rel_ids(const ObIArray<ObRawExpr*> &exprs,
   }
   return ret;
 }
-
-
-
-// 从所有conditions中，找出等值连接condition，从中获取与target table相关的expr
-// 要求condition的形式为 source related expr = target related expr,
-// 当target table为t2时
-// 连接条件可以为 t1.a = t2.b 和 t1.a = t2.b + 1 或 t1.a = t2.a + t2.b
-//        不能为 t2.a = t2.b  或 t2.a = 1
+// From all conditions, find the equi-join condition, and from it get the expr related to the target table
+// Requirement condition format is source related expr = target related expr,
+// When target table is t2
+// Connection conditions can be t1.a = t2.b and t1.a = t2.b + 1 or t1.a = t2.a + t2.b
+//        cannot be t2.a = t2.b  or t2.a = 1
 int ObTransformUtils::get_table_joined_exprs(const ObSqlBitSet<> &source_ids,
                                              const ObSqlBitSet<> &target_ids,
                                              const ObIArray<ObRawExpr *> &conditions,
@@ -5272,7 +5264,7 @@ int ObTransformUtils::is_equal_correlation(const ObIArray<ObExecParamRawExpr *> 
                 K(is_valid), K(left_is_correlated), K(right_is_correlated));
     } else if ((left_is_correlated && left->has_generalized_column()) ||
                (right_is_correlated && right->has_generalized_column())) {
-      // 同时引用了本层列和上层列
+      // simultaneously references this layer's columns and the upper layer's columns
       LOG_TRACE("expr used both inner and outer block columns", K(is_valid));
     } else {
       is_valid = true;
@@ -5635,7 +5627,7 @@ int StmtUniqueKeyProvider::generate_unique_key(ObTransformerCtx *ctx,
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("invalid table bit index", K(table->table_id_), K(idx), K(ret));
       } else if (!from_rel_ids.has_member(idx)) {
-        // semi join 中的表, 不会输出
+        // table in semi join, will not be output
       } else if (ignore_tables.has_member(idx)) {
         //do nothing
       } else if (table->is_basic_table()) {
@@ -5659,14 +5651,14 @@ int StmtUniqueKeyProvider::generate_unique_key(ObTransformerCtx *ctx,
                                                                     *table,
                                                                     stmt,
                                                                     column_exprs))) {
-          //为view生成column exprs
+          // Generate column exprs for view
           LOG_WARN("failed to create columns for view", K(ret));
         } else if (OB_FAIL(ObTransformUtils::convert_select_expr_to_column_expr(stmt_unique_keys,
                                                                                 *view_stmt,
                                                                                 *stmt,
                                                                                 table->table_id_,
                                                                                 unique_keys))) {
-          //找到view的unique keys对应的本层column expr
+          // Find the unique keys of the view corresponding to the column expr at this level
           LOG_WARN("failed to get stmt unique keys columns expr", K(ret));
         } else {
           //do nothing
@@ -5780,7 +5772,7 @@ int ObTransformUtils::check_table_item_containment(ObDMLStmt *source_stmt,
     is_contain = source_table->ref_query_ == target_table->ref_query_;
   } else if (source_table->is_basic_table() && target_table->is_basic_table()) {
     QueryRelation relation = QueryRelation::QUERY_UNCOMPARABLE;
-    //zhenling.zzg 修复存在partition hint的情况下，正确性bug
+    //zhenling.zzg fix correctness bug when partition hint exists
     if (OB_FAIL(ObStmtComparer::compare_basic_table_item(source_table,
                                                          target_table,
                                                          relation))) {
@@ -6087,8 +6079,8 @@ int ObTransformUtils::remove_select_items(ObTransformerCtx *ctx,
             LOG_WARN("failed to push back select item", K(ret));
           } else if (OB_ISNULL(column_item = upper_stmt.get_column_item_by_id(table_id,
                                                                               i + OB_APP_MIN_COLUMN_ID))) {
-            // TODO yibo 如果select item是一个用户变量赋值(@a := 1), 那么即使上层stmt中没有引用到
-            // 也不能删除, 因为现在user_variable的标记还不准确, 因此暂时在project pruning中规避
+            // TODO yibo If select item is a user variable assignment (@a := 1), then even if the upper stmt does not reference it
+            //  also cannot be deleted, because the marking of user_variable is not accurate yet, therefore temporarily avoided in project pruning
             count++;
             LOG_WARN("fail to find column_item in upper_stmt");
           } else if (OB_FAIL(new_column_items.push_back(*column_item))) {
@@ -6104,7 +6096,7 @@ int ObTransformUtils::remove_select_items(ObTransformerCtx *ctx,
           LOG_WARN("failed to remove column item", K(ret));
         } else if (OB_FAIL(upper_stmt.add_column_item(new_column_items))) {
           LOG_WARN("failed to add column item", K(ret));
-        } else if (child_stmt.is_set_stmt()) { // todo 对于 set stmt 不能直接 assign
+        } else if (child_stmt.is_set_stmt()) { // todo For set stmt cannot directly assign
           ret = SMART_CALL(remove_select_items(ctx, child_stmt, removed_idxs));
         } else if (OB_FAIL(child_stmt.get_select_items().assign(new_select_items))) {
           LOG_WARN("failed to assign select item", K(ret));
@@ -6118,9 +6110,9 @@ int ObTransformUtils::remove_select_items(ObTransformerCtx *ctx,
   return ret;
 }
 
-/*@brief,remove_select_items递归移除union stmt无用的select item，这里有一个前提是union stmt的select item
-*  和它左右ref_stmt的select item是一一对应起来的
- */
+/*@brief, remove_select_items recursively remove unused select items from union stmt, here there is a premise that the select items
+*  of the union stmt are one-to-one corresponding to the select items of its left and right ref_stmt
+*/
 int ObTransformUtils::remove_select_items(ObTransformerCtx *ctx,
                                           ObSelectStmt &union_stmt,
                                           ObSqlBitSet<> &removed_idxs)
@@ -6130,7 +6122,7 @@ int ObTransformUtils::remove_select_items(ObTransformerCtx *ctx,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("argument invalid", K(ret), K(ctx), K(union_stmt));
   } else {
-    // union select item 与 child query select item 数量相等, recursive union all 不会到达此处
+    // union select item count equals child query select item count, recursive union all will not reach here
     const int64_t select_count = union_stmt.get_select_item_size();
     int64_t new_select_count = -1;
     ObSelectStmt *child_stmt = NULL;
@@ -6377,12 +6369,12 @@ int ObTransformUtils::pushdown_group_by(ObSelectStmt *parent_stmt,
 
 /**
  * @brief ObTransformUtils::create_simple_view
- * 在 push_group_by 为 false 时，将 stmt 分解成两层：
- * 内层做 table scan, join 和 filter，构成一次 SPJ 查询
- * 外层做 distinct, group-by, order-by, window function 等非 SPJ 的操作 
+ * When push_group_by is false, decompose stmt into two layers:
+ * Inner layer does table scan, join, and filter, forming an SPJ query
+ * Outer layer does distinct, group-by, order-by, window function, etc., non-SPJ operations
  * let the view_stmt process some subqueries
- * push_group_by：将聚合函数也移入 view 中计算
- * what is more : 
+ * push_group_by: move aggregate functions into the view for computation
+ * what is more:
  *   it need follow a basic 'select computing sequence' which when push_group_by is true,
  * then push_conditions need be true
  */
@@ -6693,7 +6685,7 @@ int ObTransformUtils::create_stmt_with_generated_table(ObTransformerCtx *ctx,
       LOG_WARN("failed to create select item", K(ret));
     } else {
       parent_stmt->set_select_into(child_stmt->get_select_into());
-      child_stmt->set_select_into(NULL);//转移 child_stmt select into 到 parent_stmt
+      child_stmt->set_select_into(NULL);//transfer child_stmt select into to parent_stmt
       if (OB_FAIL(parent_stmt->formalize_stmt(ctx->session_info_, false))) {
         LOG_WARN("failed to formalize stmt", K(ret));
       }
@@ -6701,14 +6693,12 @@ int ObTransformUtils::create_stmt_with_generated_table(ObTransformerCtx *ctx,
   }
   return ret;
 }
-
-//使用 join table 创建 simple_stmt, select 由 stmt 中使用的 table 列确定,
-//simple_stmt 中直接使用了 stmt 中 joined_table 对应 column expr,
-//进行 expr replace 等操作时需要注意
-
-//使用 basic table 创建 simple_stmt, select 由 stmt 中使用的 table 列确定,
-//simple_stmt 中直接使用了 stmt 中 table 对应 column expr,
-//进行 expr replace 等操作时需要注意
+// Use join table to create simple_stmt, select is determined by the tables used in stmt,
+//simple_stmt directly uses the column expr corresponding to joined_table in stmt,
+// Perform expr replace etc operations with caution
+// Use basic table to create simple_stmt, select is determined by the table columns used in stmt,
+//simple_stmt directly uses the column expr corresponding to table in stmt,
+// Perform expr replace etc operations with caution
 
 
 int ObTransformUtils::inner_copy_joined_table_expr(ObRawExprCopier &copier,
@@ -7329,15 +7319,14 @@ int ObTransformUtils::add_limit_to_semi_right_table(ObDMLStmt *stmt,
   }
   return ret;
 }
-
-//使用 basic/generate other_table 替换 stmt 中 current_table, other_table 需要已经添加到 table item 中
-// 主要步骤:
-//  1. 移除 current_table 及 column exprs, 如果为 join table, 同时移除所有 child table
-//  2. 替换 semi infos 中表信息
-//  3. 替换 joined table 中表信息
-//  4. 替换 from table 中表信息
-
-//移除 stmt 中 table_item 及其 column item
+// Use basic/generate other_table to replace current_table in stmt, other_table needs to have already been added to table item
+// Main steps:
+//  1. Remove current_table and column exprs, if it is a join table, also remove all child tables
+//  2. Replace semi infos table information
+//  3. Replace table information in joined table
+//  4. Replace table information from table
+// Remove stmt table_item and its column item
+// Remove table_item and its column item from stmt
 int ObTransformUtils::remove_tables_from_stmt(ObDMLStmt *stmt,
                                               TableItem *table_item,
                                               ObIArray<uint64_t> &table_ids)
@@ -7440,8 +7429,7 @@ int ObTransformUtils::replace_table_in_joined_tables(ObDMLStmt *stmt,
   }
   return ret;
 }
-
-//替换 table 内部的 current_table 为 other_table
+// Replace table internal current_table with other_table
 int ObTransformUtils::replace_table_in_joined_tables(TableItem *table,
                                                      TableItem *other_table,
                                                      TableItem *current_table)
@@ -8205,8 +8193,8 @@ int ObTransformUtils::merge_limit_offset(ObTransformerCtx *ctx,
 
 
   if (OB_SUCC(ret)) {		
-  //添加 cast 作用:		
-  //  1.对于新引擎, 必须保证输出结果为 int			
+  // Add cast purpose:
+  //  1.For the new engine, it must ensure that the output result is int
     ObRawExprResType dst_type;		
     dst_type.set_int();		
     ObSysFunRawExpr *cast_expr = NULL;		
@@ -8256,10 +8244,10 @@ int ObTransformUtils::merge_limit_offset(ObTransformerCtx *ctx,
 
 /**
  * @brief check_limit_value
- * 检查limit的值是否是指定value
- * 如果add_param_constraint为true
- * 需要给定query_ctx，
- * 表示加入常量约束到query context
+ * Check if the limit value is the specified value
+ * If add_param_constraint is true
+ * The query_ctx needs to be provided,
+ * indicating adding constant constraints to the query context
  */
 int ObTransformUtils::check_limit_value(const ObDMLStmt &stmt,
                                         ObExecContext *exec_ctx,
@@ -8309,7 +8297,7 @@ int ObTransformUtils::check_limit_value(const ObDMLStmt &stmt,
     } else if (params.empty()) {
       is_equal = true;
     } else if (1 != params.count()) {
-      //如果是limit ? + ?，没有办法抽取约束，则这种情况下返回false，防止误命中计划
+      // If it is limit ? + ?, there is no way to extract the constraint, then return false in this case to prevent a false hit on the plan
     } else if (OB_ISNULL(param_expr = params.at(0))) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpect null expr", K(ret));
@@ -8581,9 +8569,9 @@ int ObTransformUtils::make_pushdown_limit_count(ObRawExprFactory &expr_factory,
 
 //realize set stmt output unique
 /*@brief, recursive_set_stmt_unique to set stmt unique
-* 注意：使用之前需要调用check_can_set_stmt_unique函数确保select_stmt不存在union all,
-*      因为unoin all不能通过添加主键方式保证输出唯一
- */
+* Note: Before using, call the check_can_set_stmt_unique function to ensure that select_stmt does not contain union all,
+*       because union all cannot guarantee output uniqueness by adding a primary key.
+*/
 int StmtUniqueKeyProvider::recursive_set_stmt_unique(ObSelectStmt *select_stmt,
                                                      ObTransformerCtx *ctx,
                                                      bool ignore_check_unique,/*default false */
@@ -8637,7 +8625,7 @@ int StmtUniqueKeyProvider::recursive_set_stmt_unique(ObSelectStmt *select_stmt,
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("invalid table bit index", K(ret), K(cur_table->table_id_), K(bit_id));
       } else if (!origin_output_rel_ids.has_member(bit_id)) {
-      // semi join 中的表, 不会输出
+      // table in semi join, will not be output
       } else if (cur_table->is_generated_table() || cur_table->is_temp_table()) {
         in_temp_table_ = in_temp_table || cur_table->is_temp_table();
         ObSelectStmt *view_stmt = NULL;
@@ -8655,14 +8643,14 @@ int StmtUniqueKeyProvider::recursive_set_stmt_unique(ObSelectStmt *select_stmt,
                                                                     *cur_table,
                                                                     select_stmt,
                                                                     column_exprs))) {
-          //为view生成column exprs
+          // Generate column exprs for view
           LOG_WARN("failed to create columns for view", K(ret));
         } else if (OB_FAIL(ObTransformUtils::convert_select_expr_to_column_expr(stmt_unique_keys,
                                                                                 *view_stmt,
                                                                                 *select_stmt,
                                                                                 cur_table->table_id_,
                                                                                 added_unique_keys))) {
-          //找到stmt unique keys对应的本层column expr
+          // Find stmt unique keys corresponding to this layer column expr
           LOG_WARN("failed to get stmt unique keys columns expr", K(ret));
         }
       } else if (!cur_table->is_basic_table()) {
@@ -8840,12 +8828,12 @@ int StmtUniqueKeyProvider::check_can_set_stmt_unique(ObDMLStmt *stmt,
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("invalid table bit index", K(ret), K(table_item->table_id_), K(bit_id));
       } else if (!output_rel_ids.has_member(bit_id)) {
-        // semi join 中的表, 不会有影响
+        // table in semi join, will not have an impact
       } else if (table_item->is_generated_table() || table_item->is_temp_table()) {
         if (OB_ISNULL(view_stmt = table_item->ref_query_)) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("get unexpected null ptr", K(view_stmt), K(ret));
-        } else if (view_stmt->is_set_stmt() && !view_stmt->is_set_distinct()) {//union all不能保持唯一
+        } else if (view_stmt->is_set_stmt() && !view_stmt->is_set_distinct()) {//union all cannot guarantee uniqueness
           can_set_unique = false;
         } else if (view_stmt->is_set_stmt() && view_stmt->is_set_distinct()) {
           //do nothing
@@ -9342,9 +9330,9 @@ int ObTransformUtils::add_param_lossless_cast_constraint(ObTransformerCtx &ctx,
 
 /**
  * is_question_mark_pre_param
- * 改写阶段用于判断一个`?`是否来自参数化。
- * query context中的保存的question_marks_count_表示stmt中`?`的总数，包含参数化的`?`，预计算的`?`，
- * 条件下推抽出的`?`。
+ * Rewrite phase used to determine if a `?` comes from parameterization.
+ * The question_marks_count_ saved in the query context represents the total number of `?` in the stmt, including parameterized `?`, pre-calculated `?`,
+ * `?` extracted by condition pushdown.
  */
 // UNUSED
 
@@ -9423,8 +9411,7 @@ int ObTransformUtils::add_table_item(ObDMLStmt *stmt, ObIArray<TableItem *> &tab
   }
   return ret;
 }
-
-// 检查是否有相关连接条件, 且内表的列能走到索引上
+// Check if there are relevant join conditions, and the columns of the inner table can use the index
 int ObTransformUtils::check_subquery_match_index(ObTransformerCtx *ctx,
                                                  ObQueryRefRawExpr *query_ref,
                                                  ObSelectStmt *subquery,
@@ -10043,9 +10030,8 @@ int ObTransformUtils::check_project_pruning_validity(ObSelectStmt &stmt, bool &i
   }
   return ret;
 }
-
 //
-//check select_expr是否在set stmt中的order by中使用,如果使用则不能移除
+// check select_expr whether it is used in the order by of set stmt, if used then it cannot be removed
 //
 int ObTransformUtils::check_select_item_need_remove(const ObSelectStmt *stmt,
                                                     const int64_t idx,
@@ -11230,7 +11216,7 @@ int ObTransformUtils::pullup_correlated_conditions(const ObIArray<ObExecParamRaw
                                           is_correlated))) {
       LOG_WARN("failed to check is correlated expr", K(ret));
     } else if (!is_correlated) {
-      //非相关条件不需要上拉
+      // Non-related conditions do not need to be pulled up
       ret = remain_exprs.push_back(expr);
     } else if (OB_FAIL(pullup_correlated_expr(exec_params,
                                               expr,
@@ -12223,7 +12209,7 @@ int ObTransformUtils::transform_aggregation_expr(ObTransformerCtx *ctx,
 }
 
 // tranform select_stmt's aggr_items
-// 如果aggr是count(*), count(c1)--》主查询是column_ref
+// If aggr is count(*), count(c1)-->main query is column_ref
 int ObTransformUtils::transform_aggregation_exprs(ObTransformerCtx *ctx,
                                                   ObSelectStmt *select_stmt,
                                                   TableItem &view_item) {
@@ -13162,11 +13148,10 @@ int ObTransformUtils::adjust_col_and_sel_for_expand_mview(ObTransformerCtx *ctx,
   }
   return ret;
 }
-
-// 1. 不进行参数化
-// 2. 不需要检查权限
-// 3. 添加 dependency table
-// 4. parser 特殊路径处理: batch multi stmt 禁止，values table
+// 1. Do not parameterize
+// 2. No need to check permissions
+// 3. Add dependency table
+// 4. parser special path handling: batch multi stmt forbidden, values table
 int ObTransformUtils::generate_view_stmt_from_query_string(const ObString &query_str,
                                                            ObTransformerCtx *ctx,
                                                            ObSelectStmt *&view_stmt)
@@ -13329,7 +13314,7 @@ int ObTransformUtils::convert_preds_vector_to_scalar(ObTransformerCtx &ctx,
     ret = OB_SIZE_OVERFLOW;
     LOG_WARN("too deep recursive", K(ret), K(is_stack_overflow));
   } else if (expr->get_expr_type() == T_OP_EQ || expr->get_expr_type() == T_OP_NSEQ) {
-    // 条件1: 是等号
+    // Condition 1: is equal sign
     ObOpRawExpr *op_expr = reinterpret_cast<ObOpRawExpr*>(expr);
     ObRawExpr *param_expr1 = expr->get_param_expr(0);
     ObRawExpr *param_expr2 = expr->get_param_expr(1);
@@ -13340,7 +13325,7 @@ int ObTransformUtils::convert_preds_vector_to_scalar(ObTransformerCtx &ctx,
                K(param_expr1), K(param_expr2));
     } else if (T_OP_ROW == param_expr1->get_expr_type() &&
                T_OP_ROW == param_expr2->get_expr_type()) {
-      // 条件2: 两边都是 ROW
+      // Condition 2: Both sides are ROW
       need_push = false;
       trans_happened = true;
       if (OB_UNLIKELY(param_expr1->get_param_count() != param_expr2->get_param_count())) {
@@ -13366,7 +13351,7 @@ int ObTransformUtils::convert_preds_vector_to_scalar(ObTransformerCtx &ctx,
                                                         reinterpret_cast<ObRawExpr*>(new_op_expr),
                                                         exprs,
                                                         trans_happened)))) {
-            /// 对拆分后 expr 继续递归
+            /// Continue to recursively process the split expr
             LOG_WARN("failed to call inner convert recursive", K(ret));
           }
         }
@@ -13374,7 +13359,7 @@ int ObTransformUtils::convert_preds_vector_to_scalar(ObTransformerCtx &ctx,
     }
   }
   if (OB_SUCC(ret) && need_push && OB_FAIL(exprs.push_back(expr))) {
-    /// 不满足上述两个条件, 将该 expr 添加至输出.
+    /// Do not meet the above two conditions, add this expr to the output.
     LOG_WARN("failed to push back expr", K(ret));
   }
   return ret;
@@ -15446,8 +15431,7 @@ int ObTransformUtils::check_const_select(ObTransformerCtx *ctx,
   }
   return ret;
 }
-
-// 搜集下层 stmt 中会被上层过滤空值的投影项
+// Collect projection items in lower-level stmt that will be filtered for null values by upper level
 int ObTransformUtils::get_extra_condition_from_parent(ObDMLStmt *parent_stmt,
                                                       ObDMLStmt *stmt,
                                                       ObIArray<ObRawExpr *> &conditions)
@@ -15508,10 +15492,9 @@ int ObTransformUtils::get_extra_condition_from_parent(ObDMLStmt *parent_stmt,
   }
   return ret;
 }
-
-// left join 右表视图合并后可能会丧失条件下推的机会，需要限制 merge 场景
-// 场景1：view 中只引用唯一一张表，可以直接 merge
-// 场景2：view 中引用多张表，要求合并后能构成 left join 链式连接，即 A ⟕ (B ⟕ C) => (A ⟕ B) ⟕ C
+// left join right table view merge may lose the opportunity for condition pushdown, need to restrict merge scenario
+// Scene 1: view only references a single table, can be directly merged
+// Scene 2: view references multiple tables, requiring the merged result to form a left join chained connection, i.e. A ⟕ (B ⟕ C) => (A ⟕ B) ⟕ C
 int ObTransformUtils::check_left_join_right_view_combinable(ObDMLStmt *parent_stmt,
                                                             TableItem *view_table,
                                                             ObIArray<ObRawExpr*> &outer_join_conditions,
@@ -15535,15 +15518,15 @@ int ObTransformUtils::check_left_join_right_view_combinable(ObDMLStmt *parent_st
     LOG_WARN("unexpect null stmt", K(ret));
   } else if (child_stmt->get_from_items().count() != 1 || 
              child_stmt->get_semi_infos().count() > 0) {
-    // view 中存在 semi info 或者超过一个 from item 时，会在 join tree 上层分配 semi 或 inner join，
-    // 整体处于 left join 右侧时，无法进行 reorder，不合并
+    // view contains semi info or more than one from item, a semi or inner join will be allocated on the upper layer of the join tree,
+    // Overall is on the right side of left join, cannot perform reorder, do not merge
   } else if (!child_stmt->get_from_item(0).is_joined_) {
     combinable = true;
   } else if (OB_ISNULL(view_joined_table = child_stmt->get_joined_table(child_stmt->get_from_item(0).table_id_))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpect null joined table", K(ret));
   } else if (!view_joined_table->is_left_join() && !view_joined_table->is_right_join()) {
-    // 无法与上层构成 left/right 链式连接，不合并
+    // Unable to form a left/right chain connection with the upper layer, do not merge
   } else if (OB_FAIL(get_extra_condition_from_parent(parent_stmt, child_stmt, conditions))) {
     LOG_WARN("failed to get extra condition from parent", K(ret));
   } else if (OB_FAIL(append(conditions, child_stmt->get_condition_exprs()))) {
@@ -15576,8 +15559,7 @@ int ObTransformUtils::check_left_join_right_view_combinable(ObDMLStmt *parent_st
   }
   return ret;
 }
-
-// 根据过滤条件集抽取出能空值拒绝的关系集
+// According to the filter condition set, extract the relationship set that can reject null values
 int ObTransformUtils::get_null_reject_rels(const ObIArray<ObRawExpr *> &conditions,
                                            ObSqlBitSet<> &null_reject_rels)
 {
@@ -15605,8 +15587,7 @@ int ObTransformUtils::get_null_reject_rels(const ObIArray<ObRawExpr *> &conditio
   }
   return ret;
 }
-
-// 检查目标表是否可以 reorder 到 stmt 的 join tree 最上层作为 left join 的驱动表
+// Check if the target table can be reordered to the top of stmt's join tree as the driver table for left join
 int ObTransformUtils::check_left_join_chain_recursively(ObDMLStmt *stmt,
                                                         JoinedTable *joined_table,
                                                         const ObSqlBitSet<> &target_relation_ids,
@@ -15651,11 +15632,11 @@ int ObTransformUtils::check_left_join_chain_recursively(ObDMLStmt *stmt,
     } else if (OB_FAIL(join_right_rels.intersect(join_rels, right_table_ids))) {
       LOG_WARN("failed to intersect rels", K(ret));
     } else if (check_top_level && upper_join_right_rels.overlap(right_table_ids)) {
-      // 上层 left join 连接条件引用下层 left join 右表中的列，
-      // 存在形如 A LEFT JOIN (B LEFT JOIN C on B.b = C.b) on A.c = B.c and A.f = C.f 的环状连接，无法 reorder
+      // Upper layer left join connection condition references the column in the right table of the lower layer left join,
+      // There exists a circular join of the form A LEFT JOIN (B LEFT JOIN C on B.b = C.b) on A.c = B.c and A.f = C.f, cannot reorder
       is_valid_join_chain = false;
     } else if (!left_table_ids.is_superset(target_relation_ids)) {
-      // 目标表不位于下层 left join chain 的最左侧，无法 reorder
+      // Target table is not at the leftmost position of the lower layer left join chain, cannot reorder
       is_valid_join_chain = false;
     } else if (OB_FAIL(left_ids.add_members(left_table_ids))) {
       LOG_WARN("failed to add members", K(ret));
@@ -15664,13 +15645,13 @@ int ObTransformUtils::check_left_join_chain_recursively(ObDMLStmt *stmt,
                                                  left_null_reject))) {
       LOG_WARN("failed to check is null reject conditions", K(ret));
     } else if (!left_null_reject) {
-      // 链式 left join 应用结合律的必要条件：右侧两表的连接条件空值拒绝中间的表
+      // Chain left join application of associativity necessary condition: the join condition of the right two tables rejects nulls from the intermediate table
       is_valid_join_chain = false;
     } else if (join_left_rels.num_members() < 1 || join_right_rels.num_members() < 1) {
-      // 笛卡尔积无法 reorder
+      // Cartesian product cannot be reordered
       is_valid_join_chain = false;
     } else if (null_reject_rels.overlap(join_right_rels)) {
-      // left join 退化成 inner join，无法 reorder
+      // left join degenerates into inner join, cannot reorder
       is_valid_join_chain = false;
     } else if (!left_table->is_joined_table()) {
       is_valid_join_chain = true;

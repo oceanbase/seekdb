@@ -54,7 +54,7 @@ ObRowLatch(): latch_() {}
   bool is_locked() const { return latch_.is_locked(); }
   bool try_lock()
   {
-    //try_wrlock成功之后返回OB_SUCCESS;
+    // try_wrlock succeeds and returns OB_SUCCESS;
     return (common::OB_SUCCESS == latch_.try_wrlock(common::ObLatchIds::ROW_CALLBACK_LOCK));
   }
   void lock() { (void)latch_.wrlock(common::ObLatchIds::ROW_CALLBACK_LOCK); }

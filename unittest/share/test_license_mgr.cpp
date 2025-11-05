@@ -136,7 +136,7 @@ const char *CORRECT_LICENSE = R"({
         ],
         "Version": 1
     }
-})"; // 商业版 and 单机标准版
+})"; // commercial version and single standard version
 
 class TestLicense : public ::testing::Test
 {

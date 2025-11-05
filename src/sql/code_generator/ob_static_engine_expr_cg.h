@@ -88,7 +88,7 @@ public:
     {}
     TO_STRING_KV(K_(expr_start_pos), K_(frame_info));
   public:
-    uint64_t expr_start_pos_; // 当前frame第一个expr在该类ObExpr数组中偏移值
+    uint64_t expr_start_pos_; // The offset value of the first expr in the current frame within this ObExpr array
     ObFrameInfo frame_info_;
   };
 
@@ -112,10 +112,9 @@ public:
   {
   }
   virtual ~ObStaticEngineExprCG() {}
-
-  //将所有raw exprs展开后, 生成ObExpr
-  // @param [in] all_raw_exprs 未展开前的raw expr集合
-  // @param [out] expr_info frame及rt_exprs相关信息
+  // Expand all raw exprs and generate ObExpr
+  // @param [in] all_raw_exprs raw expr collection before expansion
+  // @param [out] expr_info information related to frame and rt_exprs
   int generate(const ObRawExprUniqueSet &all_raw_exprs, ObExprFrameInfo &expr_info);
 
   int generate(ObRawExpr *expr,
@@ -180,15 +179,14 @@ public:
 
 private:
   static ObExpr *get_rt_expr(const ObRawExpr &raw_expr);
-  // 构造ObExpr, 并将ObExpr对应设置到对应ObRawExpr中
+  // Construct ObExpr, and set the corresponding ObExpr to the corresponding ObRawExpr
   // @param [in]  raw_exprs
-  // @param [out] rt_exprs, 构造后的物理表达式
+  // @param [out] rt_exprs, constructed physical expressions
   int construct_exprs(const common::ObIArray<ObRawExpr *> &raw_exprs,
                       common::ObIArray<ObExpr> &rt_exprs);
-
-  // 初始化raw_expr中对应的rt_expr, 并返回frame信息
-  // @param [in/out] raw_exprs 用于生成rt_exprs的表达式集合
-  // @param [out] expr_info frame及rt_exprs相关信息
+  // Initialize the corresponding rt_expr in raw_expr, and return frame information
+  // @param [in/out] raw_exprs expressions used to generate rt_exprs
+  // @param [out] expr_info frame and rt_exprs related information
   int cg_exprs(const common::ObIArray<ObRawExpr *> &raw_exprs,
                ObExprFrameInfo &expr_info);
 
@@ -207,7 +205,7 @@ private:
 
   // init res_buf_len_, frame_idx_, datum_off_, res_buf_off_
   // @param [in/out] raw_exprs
-  // @param [out] expr_info frame相关信息
+  // @param [out] expr_info frame information
   int cg_all_frame_layout(const common::ObIArray<ObRawExpr *> &raw_exprs,
                           ObExprFrameInfo &expr_info);
 
@@ -224,62 +222,56 @@ private:
   int create_tmp_frameinfo(const common::ObIArray<ObRawExpr *> &raw_exprs,
                            common::ObIArray<TmpFrameInfo> &tmp_frame_infos,
                            int64_t &frame_index_pos);
-
-  // 将表达式按所属frame类型分成4类
-  // @param [in] raw_exprs 待分类的所有表达式
-  // @param [out] const_exprs 属于const frame的所有表达式
-  // @param [out] param_exprs 属于param frame的所有表达式
-  // @param [out] dynamic_param_exprs 属于dynamic frame的所有表达式
-  // @param [out] no_const_param_exprs 属于datum frame的所有表达式
+  // Divide the expression into 4 categories based on its frame type
+  // @param [in] raw_exprs all expressions to be classified
+  // @param [out] const_exprs all expressions belonging to the const frame
+  // @param [out] param_exprs all expressions belonging to the param frame
+  // @param [out] dynamic_param_exprs all expressions belonging to the dynamic frame
+  // @param [out] no_const_param_exprs all expressions belonging to the datum frame
   int classify_exprs(const common::ObIArray<ObRawExpr *> &raw_exprs,
                      common::ObIArray<ObRawExpr *> &const_exprs,
                      common::ObIArray<ObRawExpr *> &param_exprs,
                      common::ObIArray<ObRawExpr *> &dynamic_param_exprs,
                      common::ObIArray<ObRawExpr *> &no_const_param_exprs) const;
-
-  // 初始化const expr在frame中布局
-  // @param [in/out] const_exprs const frame的所有表达式
-  // @param [in/out] frame_index_pos 已生成frame的偏移, 用于计算当前生成的frame
-  //                 在所有frame中的index
-  // @param [out]    frame_info_arr 所有const frame的相关信息
+  // Initialize const expr layout in frame
+  // @param [in/out] const_exprs all expressions of the const frame
+  // @param [in/out] frame_index_pos offset of generated frame, used for calculating the current generated frame
+  //                 index in all frames
+  // @param [out]    frame_info_arr all const frame related information
   int cg_const_frame_layout(const common::ObIArray<ObRawExpr *> &const_exprs,
                             int64_t &frame_index_pos,
                             common::ObIArray<ObFrameInfo> &frame_info_arr);
-
-  // 初始化param expr在frame中布局
-  // @param [in/out] param_exprs const frame的所有表达式
-  // @param [in/out] frame_index_pos 已生成frame的偏移, 用于计算当前生成的frame
-  //                 在所有frame中的index
-  // @param [out]    frame_info_arr 所有const frame的相关信息
+  // Initialize param expr layout in frame
+  // @param [in/out] param_exprs all expressions of const frame
+  // @param [in/out] frame_index_pos offset of generated frame, used for calculating the current generated frame
+  //                 index in all frames
+  // @param [out]    frame_info_arr all const frame related information
   int cg_param_frame_layout(const common::ObIArray<ObRawExpr *> &param_exprs,
                             int64_t &frame_index_pos,
                             common::ObIArray<ObFrameInfo> &frame_info_arr);
-
-  // 初始化dynamic param expr在frame中布局
-  // @param [in/out] const_exprs const frame的所有表达式
-  // @param [in/out] frame_index_pos 已生成frame的偏移, 用于计算当前生成的frame
-  //                 在所有frame中的index
-  // @param [out]    frame_info_arr 所有const frame的相关信息
+  // Initialize dynamic param expr layout in frame
+  // @param [in/out] const_exprs all expressions of the const frame
+  // @param [in/out] frame_index_pos offset of generated frame, used for calculating the current generated frame
+  //                 index in all frames
+  // @param [out]    frame_info_arr all const frame related information
   int cg_dynamic_frame_layout(const common::ObIArray<ObRawExpr *> &exprs,
                               int64_t &frame_index_pos,
                               common::ObIArray<ObFrameInfo> &frame_info_arr);
-
-  // 初始化非const和param expr在frame中布局
-  // @param [in/out] exprs 非const和param expr的所有表达式
-  // @param [in/out] frame_index_pos 已生成frame的偏移, 用于计算当前生成的frame
-  //                 在所有frame中的index
-  // @param [out]    frame_info_arr 所有datum frame的相关信息
+  // Initialize non-const and param expr layout in frame
+  // @param [in/out] exprs all expressions of non-const and param expr
+  // @param [in/out] frame_index_pos offset of generated frame, used for calculating the current generated frame
+  //                 index in all frames
+  // @param [out]    frame_info_arr all datum frame related information
   int cg_datum_frame_layouts(const common::ObIArray<ObRawExpr *> &exprs,
                             int64_t &frame_index_pos,
                             common::ObIArray<ObFrameInfo> &frame_info_arr);
-
-  // 初始化frame中布局
-  // @param [in/out] exprs待计算frame布局的所有表达式
-  // @param [in] reserve_empty_string 对于string type类型是否再frame中分配reserve内存
+  // Initialize frame layout
+  // @param [in/out] exprs all expressions to be calculated for frame layout
+  // @param [in] reserve_empty_string Whether to allocate reserved memory for string type in frame
   // @param [in] continuous_datum ObDatum + ObEvalInfo should be continuous
-  // @param [in/out] frame_index_pos 已生成frame的偏移, 用于计算当前生成的frame
-  //                 在所有frame中的index
-  // @param [out]    frame_info_arr 所有frame的相关信息
+  // @param [in/out] frame_index_pos offset of generated frame, used for calculating the current generated frame
+  //                 index in all frames
+  // @param [out]    frame_info_arr all frame related information
   int cg_frame_layout(const common::ObIArray<ObRawExpr *> &exprs,
                       const bool reserve_empty_string,
                       const bool continuous_datum,
@@ -291,12 +283,10 @@ private:
                       const bool continuous_datum,
                       int64_t &frame_index_pos,
                       common::ObIArray<ObFrameInfo> &frame_info_arr);
-
-
-  // 分配常量表达式frame内存, 并初始化
-  // @param [in] exprs 所有常量表达式
-  // @param [in] const_frames 所有const frame相关信息
-  // @param [out] frame_ptrs 初始化后的frame指针列表
+  // Allocate constant expression frame memory, and initialize
+  // @param [in] exprs all constant expressions
+  // @param [in] const_frames all const frame related information
+  // @param [out] frame_ptrs initialized frame pointer list
   int alloc_const_frame(const common::ObIArray<ObRawExpr *> &exprs,
                         const common::ObIArray<ObFrameInfo> &const_frames,
                         common::ObIArray<char *> &frame_ptrs);
@@ -509,9 +499,9 @@ private:
   DISALLOW_COPY_AND_ASSIGN(ObStaticEngineExprCG);
 
 private:
-  //用于分配cg出来的expr对象的内存
+  // Used to allocate memory for the expr object generated by cg
   common::ObIAllocator &allocator_;
-  //所有参数化后的常量对象
+  // All parameterized constant objects
   DatumParamStore *param_store_;
 
   // original param cnt, see comment of ObPhysicalPlanCtx
@@ -519,7 +509,7 @@ private:
 
   //count of param store
   int64_t param_cnt_;
-  // operator cg的上下文
+  // operator cg's context
   ObExprCGCtx op_cg_ctx_;
   // Count of param store in generating, for calculable expressions CG.
   int64_t flying_param_cnt_;

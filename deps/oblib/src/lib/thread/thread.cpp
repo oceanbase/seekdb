@@ -313,8 +313,8 @@ void* Thread::__th_start(void *arg)
     ret = OB_INVALID_ARGUMENT;
     LOG_ERROR("invalid argument", K(th), K(ret));
   } else {
-    // pm析构逻辑上会访问其它pthread_key绑定的对象，为了避免析构顺序的影响
-    // pm不用TSI而是自己做线程局部(__thread)
+    // pm destructor logically accesses objects bound to other pthread_key, to avoid the impact of destruction order
+    // pm does not use TSI but instead does thread-local (__thread)
     // create page manager
     ObPageManager pm;
     ret = pm.set_tenant_ctx(common::OB_SERVER_TENANT_ID, common::ObCtxIds::GLIBC);

@@ -28,7 +28,7 @@ int ObIColumnDecoder::get_is_null_bitmap_from_fixed_column(
     const sql::PushdownFilterInfo &pd_filter_info,
     ObBitmap &result_bitmap) const
 {
-  // 定长列从column meta中直接读 bit packing 的 is_null_bitmap
+  // Fixed-length column reads bit packing's is_null_bitmap directly from column meta
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(pd_filter_info.count_!= result_bitmap.size())
           || OB_ISNULL(col_data)
@@ -74,7 +74,7 @@ int ObIColumnDecoder::get_is_null_bitmap_from_var_column(
     const sql::PushdownFilterInfo &pd_filter_info,
     ObBitmap &result_bitmap) const
 {
-  // 变长列需要遍历对应row区并更新result bitmap
+  // Variable-length columns require traversal of the corresponding row area and update of the result bitmap
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(pd_filter_info.count_ != result_bitmap.size())
           || OB_ISNULL(row_index)

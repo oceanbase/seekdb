@@ -144,7 +144,7 @@ int calc_left_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
   } else if (s_datum->is_null() || n_datum->is_null()) {
     res_datum.set_null();
   } else {
-    // res_str会指向s_datum的内存空间，所以下面不能改变res_str指向的字符串
+    // res_str will point to the memory space of s_datum, so the string pointed to by res_str cannot be changed below
     ObString res_str;
     const ObCollationType arg_cs_type = expr.args_[0]->datum_meta_.cs_type_;
     if (OB_FAIL(calc_left(res_str, s_datum->get_string(), arg_cs_type, n_datum->get_int()))) {

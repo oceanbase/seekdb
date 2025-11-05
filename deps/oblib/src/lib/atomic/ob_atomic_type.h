@@ -18,7 +18,7 @@ namespace oceanbase
 {
 namespace common
 {
-// 支持并发读写
+// Support concurrent read and write
 template<typename T>
 struct ObAtomicType
 {

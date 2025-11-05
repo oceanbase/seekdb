@@ -56,9 +56,9 @@ int ObDirectLoadInsertLobTabletContext::init(ObDirectLoadInsertLobTableContext *
     ls_id_ = ls_id;
     origin_tablet_id_ = origin_tablet_id;
     tablet_id_ = tablet_id;
-    pk_tablet_id_ = tablet_id_; // 从目标表取
+    pk_tablet_id_ = tablet_id_; // get from target table
     tablet_id_in_lob_id_ =
-      tablet_id_; // 与ObDirectLoadSliceWriter::fill_lob_into_macro_block中的取值保持一致
+      tablet_id_; // Keep consistent with the value in ObDirectLoadSliceWriter::fill_lob_into_macro_block
     if (param_->enable_dag_) {
       slice_idx_ = param_->reserved_parallel_;
     }

@@ -20,7 +20,7 @@ using namespace oceanbase::sql::log_op_def;
 int ObLogLimit::get_op_exprs(ObIArray<ObRawExpr*> &all_exprs)
 {
   int ret = OB_SUCCESS;
-  //支持with ties功能，如果存在order by item,需要添加对应的order by item
+  // Support with ties functionality, if there exists order by item, need to add the corresponding order by item
   ObSEArray<ObOrderDirection, 6> order_directions;
   if (is_fetch_with_ties() && OB_FAIL(ObOptimizerUtil::split_expr_direction(
                                                        order_items_,

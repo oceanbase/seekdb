@@ -135,9 +135,9 @@ public:
   {}
   virtual ~ObMergeResourcePoolStmt() {}
   virtual int get_cmd_type() const { return get_stmt_type(); }
-  int add_old_pool(const common::ObString &pool_name)//合并前
+  int add_old_pool(const common::ObString &pool_name)//before merge
   { return arg_.old_pool_list_.push_back(pool_name); }
-  int add_new_pool(const common::ObString &pool_name)//合并后
+  int add_new_pool(const common::ObString &pool_name)//merged after
   { return arg_.new_pool_list_.push_back(pool_name); }
   obrpc::ObMergeResourcePoolArg &get_arg()
   { return arg_; }

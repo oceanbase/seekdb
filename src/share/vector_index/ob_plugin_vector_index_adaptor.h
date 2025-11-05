@@ -535,10 +535,9 @@ public:
   int set_param(ObString init_str, int64_t dim);
   int get_index_type() { return type_; };
   uint64_t get_tenant_id() {return tenant_id_; };
-
-  // -- start 调试使用
+  // -- start for debugging
   void init_incr_tablet() {inc_tablet_id_ = ObTabletID(common::ObTabletID::MIN_VALID_TABLET_ID); }
-  // -- end 调试使用
+  // -- end for debugging use
 
   bool is_snap_tablet_valid() { return snapshot_tablet_id_.is_valid(); }
   bool is_inc_tablet_valid() { return inc_tablet_id_.is_valid(); }

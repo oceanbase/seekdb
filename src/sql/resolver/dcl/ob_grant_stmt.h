@@ -101,7 +101,7 @@ private:
   common::ObString masked_sql_;
   bool need_create_user_;
   bool need_create_user_priv_; // grant user identified by pwd
-  obrpc::ObGrantArg grant_arg_; // 用于返回exec_tenant_id_
+  obrpc::ObGrantArg grant_arg_; // used to return exec_tenant_id_
   common::hash::ObPlacementHashSet<common::ObString, common::MAX_ENABLED_ROLES> user_name_set_;
   common::hash::ObPlacementHashSet<common::ObString, common::MAX_ENABLED_ROLES> role_name_set_;
   share::schema::ObObjectType object_type_;
@@ -114,7 +114,7 @@ private:
   ObSEArray<uint64_t, 4, common::ModulePageAllocator, true> ins_col_ids_;
   ObSEArray<uint64_t, 4, common::ModulePageAllocator, true> upd_col_ids_;
   ObSEArray<uint64_t, 4, common::ModulePageAllocator, true> ref_col_ids_;
-  ObSelectStmt *ref_query_; // 用于grant 视图时，对视图依赖的table,view等做递归权限check.
+  ObSelectStmt *ref_query_; // Used for grant view to recursively check permissions on dependent tables, views, etc.
   bool is_grant_all_tab_priv_;
 
   ObSEArray<std::pair<ObString, ObPrivType>, 4> column_names_priv_;

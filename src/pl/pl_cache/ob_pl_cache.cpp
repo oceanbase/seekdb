@@ -740,9 +740,9 @@ int ObPLObjectValue::match_dep_schema(const ObPLCacheCtx &pc_ctx,
   } else if (schema_array.count() != stored_schema_objs_.count()) {
     is_same = false;
   } else {
-    // oracle模式临时表实际上就是实表, 只需比较schema信息即可;
-    // mysql模式临时表不能用于trigger, sql语句的表依赖信息也不会加到存储过程依赖列表中
-    // 因此, 移除临时表比较sessid相关逻辑 
+    // oracle mode temporary table is actually a real table, just need to compare schema information;
+    // MySQL mode temporary tables cannot be used in triggers, and table dependency information for SQL statements will not be added to the stored procedure dependency list
+    // Therefore, remove the logic related to comparing sessid in the temporary table
     for (int64_t i = 0; OB_SUCC(ret) && is_same && i < schema_array.count(); i++) {
       if (OB_ISNULL(stored_schema_objs_.at(i))) {
         ret = OB_INVALID_ARGUMENT;

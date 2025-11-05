@@ -85,8 +85,8 @@ struct PLCacheObjStat
   int64_t compile_time_; // pl object cost time of compile
   uint64_t hit_count_;
   ObPLCacheObjectType type_;
-  int64_t elapsed_time_;          //执行时间rt
-  int64_t execute_times_;        //SUCC下执行次数
+  int64_t elapsed_time_;          //Execution time rt
+  int64_t execute_times_;        // Execution times under SUCC
   int64_t  slowest_exec_time_;    // execution slowest time
   uint64_t slowest_exec_usec_;    // execution slowest usec
   int64_t pl_evict_version_;

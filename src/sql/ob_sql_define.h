@@ -35,15 +35,15 @@ using namespace common;
 namespace sql
 {
 const int64_t OB_SQL_MAX_CHILD_OPERATOR_NUM = 16;
-const int64_t OB_MIN_PARALLEL_TASK_COUNT = 13; //期望每一个并行度最低持有的task数量
-const int64_t OB_MAX_PARALLEL_TASK_COUNT = 100; //期望每一个并行度最大持有task数量
-const int64_t OB_MIN_MARCO_COUNT_IN_TASK = 1; //每个task最少负责的宏块个数
+const int64_t OB_MIN_PARALLEL_TASK_COUNT = 13; // expected minimum number of tasks held by each parallelism
+const int64_t OB_MAX_PARALLEL_TASK_COUNT = 100; // expected maximum number of tasks held per parallelism
+const int64_t OB_MIN_MARCO_COUNT_IN_TASK = 1; // each task is responsible for at least this number of macro blocks
 const int64_t OB_INVAILD_PARALLEL_TASK_COUNT = -1;
 const int64_t OB_EXPECTED_TASK_LOAD = 102400; //KB, one task will get 100MB data from disk
 const int64_t OB_GET_MACROS_COUNT_BY_QUERY_RANGE = 1;
 const int64_t OB_GET_BLOCK_RANGE = 2;
 const int64_t OB_BROADCAST_THRESHOLD = 100;
-const int64_t OB_PARTITION_COUNT_PRE_SQL = 16; //用于开hash表的桶大小或者SEAarry的默认大小，假定一般SQL不会超过16个partition
+const int64_t OB_PARTITION_COUNT_PRE_SQL = 16; // used for the bucket size of hash table or default size of SEAarry, assuming that general SQL will not exceed 16 partitions
 const int64_t OB_MAX_RECURSIVE_SQL_LEVELS = 50; //compatible with oracle
 
 typedef common::ObFixedArray<share::schema::ObSchemaObjVersion, common::ObIAllocator> DependenyTableStore;
@@ -52,12 +52,12 @@ typedef common::ParamStore ParamStore;
 // ob_rowkey_info.h oceanbase::common::ObOrderType also defined
 enum ObOrderDirection
 {
-  NULLS_FIRST_ASC = 0,   //顺序，正向扫描,Forward, NULLs first
-  NULLS_LAST_ASC, // 顺序，正向扫描,Forward, NULLs last
-  NULLS_FIRST_DESC, //倒序，反向扫描,Backward, NULLs first
-  NULLS_LAST_DESC,   //倒序，反向扫描,Backward, NULLs last
-  UNORDERED, //不排序，保持现状
-  MAX_DIR, //非法值
+  NULLS_FIRST_ASC = 0,   // order, forward scan, Forward, NULLs first
+  NULLS_LAST_ASC, // order, forward scan, Forward, NULLs last
+  NULLS_FIRST_DESC, // descending order, backward scan, Backward, NULLs first
+  NULLS_LAST_DESC,   // descending order, backward scan, Backward, NULLs last
+  UNORDERED, // do not sort, keep as is
+  MAX_DIR, // illegal value
 };
 
 inline bool is_null_first(ObOrderDirection order_direction) {
@@ -275,12 +275,12 @@ enum ObTableLocationType
 
 enum ObRepartitionType
 {
-  OB_REPARTITION_NO_REPARTITION = 0,//不重分区
-  OB_REPARTITION_ONE_SIDE_ONE_LEVEL,//只有一边按照一级分区做repartition,不repartition的一边是一级分区
-  OB_REPARTITION_ONE_SIDE_TWO_LEVEL,//只有一边按照二级分区做repartition, 不repartition的一边是二级分区
-  OB_REPARTITION_BOTH_SIDE_ONE_LEVEL,//两边都按照一级分区方式做repartition, 分区键是连接键
-  OB_REPARTITION_ONE_SIDE_ONE_LEVEL_FIRST,//只有一边按照另外一边(二级分区表)的一级分区做repartition
-  OB_REPARTITION_ONE_SIDE_ONE_LEVEL_SUB,//只有一边按照另外一边(二级分区)的二级分区做repartition
+  OB_REPARTITION_NO_REPARTITION = 0,//no repartition
+  OB_REPARTITION_ONE_SIDE_ONE_LEVEL,//Only one side does repartition at a single level, the other side that does not do repartition is also at a single level
+  OB_REPARTITION_ONE_SIDE_TWO_LEVEL,//Only one side does repartition according to two-level partitioning, the other side that does not do repartition is two-level partitioning
+  OB_REPARTITION_BOTH_SIDE_ONE_LEVEL,//Both sides do repartition according to the first-level partitioning method, the partition key is the join key
+  OB_REPARTITION_ONE_SIDE_ONE_LEVEL_FIRST,//Only one side repartitions according to the level one partition of the other side (secondary partition table)
+  OB_REPARTITION_ONE_SIDE_ONE_LEVEL_SUB,//Only one side repartitions according to the second-level partition of the other side (second-level partition)
 };
 
 enum ObRepartitionScope
@@ -376,9 +376,9 @@ struct ObPQDistributeMethod
     DEF(SM_BROADCAST,) \
     DEF(PARTITION_HASH,) \
     DEF(DROP,) \
-    /*PARTITION_RANDOM：PDML情况下处理分区表分区内并行；数据按照partition所在的SQC进行划分，*/ \
-    /*并行度不受partition个数的限制；但是PARTITION对应的pkey分区，分区粒度为partition，*/ \
-    /*实际并行度受partition的个数限制，无法在PDML场景下充分利用并行*/ \
+    /*PARTITION_RANDOM: PDML situation handles parallel processing within partitions of a partitioned table; data is divided according to the SQC where the partition resides,*/ \
+    /*Parallelism is not limited by the number of partitions; however, the partition granularity for the pkey partition corresponding to PARTITION is partition,*/ \
+    /*Actual parallelism is limited by the number of partitions, unable to fully utilize parallelism in PDML scenarios*/ \
     DEF(PARTITION_RANDOM,) \
     DEF(RANGE,)\
     DEF(PARTITION_RANGE,)\
@@ -461,7 +461,7 @@ enum OrderingFlag
   DISTINCT_MATCH = 1 << 3,
   SET_MATCH = 1 << 4,
   ORDERBY_MATCH = 1 << 5,
-  POTENTIAL_MATCH = 1 << 6 // ordering可能在subplan scan后用到
+  POTENTIAL_MATCH = 1 << 6 // ordering may be used after subplan scan
 };
 
 enum OrderingCheckScope
@@ -592,7 +592,7 @@ enum class PseudoColumnRefType {
   PSEUDO_SUB_PARTITION_NAME = 3,
   PSEUDO_PARTITION_INDEX = 4,
   PSEUDO_SUB_PARTITION_INDEX = 5,
-  MAX = 255  // 不超过 8 位的最大值
+  MAX = 255  // The maximum value not exceeding 8 bits
 };
 
 struct ObSqlDatumArray

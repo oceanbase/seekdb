@@ -53,9 +53,9 @@ public:
       lock_for_promote_(),
       mutex_for_promote_() {}
   int init(ObMySQLProxy *sql_proxy, share::schema::ObMultiVersionSchemaService *schema_service);
-  // 获取本地ddl_epoch
+  // Get local ddl_epoch
   int get_ddl_epoch(uint64_t tenant_id, int64_t &ddl_epoch);
-  // 推高内部表ddl_epoch
+  // Increase the internal table ddl_epoch
   int promote_ddl_epoch(const uint64_t tenant_id, int64_t wait_us, int64_t &ddl_epoch_ret);
   int remove_ddl_epoch(const uint64_t tenant_id);
   int remove_all_ddl_epoch();

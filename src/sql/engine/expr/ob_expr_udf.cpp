@@ -294,7 +294,7 @@ int ObExprUDF::process_out_params(const ObObj *objs_stack,
   UNUSED (param_num);
   CK (iparams.count() == params_desc.count());
   CK (0 == nocopy_params.count() || nocopy_params.count() == iparams.count());
-  // 先处理NoCopy参数
+  // First process NoCopy parameter
   ObSEArray<bool, 16> dones;
   for (int64_t i = 0; OB_SUCC(ret) && i < iparams.count(); ++i) {
     if (!params_desc.at(i).is_out()) {
@@ -664,8 +664,8 @@ int ObExprUDF::before_calc_result(share::schema::ObSchemaGetterGuard &schema_gua
                                   ObExecContext &exec_ctx)
 {
   int ret = OB_SUCCESS;
-  // 通过SPI执行的UDF可能会存在exec_ctx_中的schema_guard是空的情况
-  // 这里根据task_ctx中记录的schema_version重新获取schema_guard
+  // Through SPI executed UDF may have an empty schema_guard in exec_ctx_
+  // Here according to the schema_version recorded in task_ctx to reacquire schema_guard
   if (OB_ISNULL(exec_ctx.get_sql_ctx())
       || OB_ISNULL(exec_ctx.get_sql_ctx()->schema_guard_)) {
     sql::ObTaskExecutorCtx &task_ctx = exec_ctx.get_task_exec_ctx();
@@ -678,7 +678,7 @@ int ObExprUDF::before_calc_result(share::schema::ObSchemaGetterGuard &schema_gua
       LOG_WARN("get schema guard failed", K(ret));
     }
   }
-  // 通过分布式计划执行的function没有sqlctx信息, 构造一个
+  // Through distributed plan execution the function does not have sqlctx information, construct one
   if (OB_ISNULL(exec_ctx.get_sql_ctx())) {
     sql_ctx.session_info_ = exec_ctx.get_my_session();
     sql_ctx.schema_guard_ = &schema_guard;

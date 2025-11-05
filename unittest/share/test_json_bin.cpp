@@ -176,10 +176,9 @@ static void check_json_diff_valid(ObIAllocator &allocator, const ObString& j_tex
   std::cout << "-------- target" << std::endl;
   std::cout << std::string(j_target_buffer.ptr(), j_target_buffer.length()) << std::endl;  
 }
-
-// rapidjson 解析仅包含字符串的json text测试
-// 输入: json text
-// 预期: 解析完整json tree
+// rapidjson parsing test for json text containing only strings
+// Input: json text
+// Expected: parse complete json tree
 TEST_F(TestJsonBin, test_tree_to_bin)
 {
   common::ObString j_text("{ \"greeting\" : 1, \"farewell\" : 2, \"json_text\" : 3 }");
@@ -495,7 +494,7 @@ TEST_F(TestJsonBin, test_bin_lookup)
 TEST_F(TestJsonBin, test_wrapper_to_string_object)
 {
   set_compat_mode(lib::Worker::CompatMode::MYSQL);
-  // json text 转 json tree
+  // json text to json tree
   common::ObString json_text("{ \"greeting\" : \"Hello!\", \"farewell\" : \"bye-bye!\", \"json_text\" : \"test!\" }");
   common::ObArenaAllocator allocator(ObModIds::TEST);
   const char *syntaxerr = NULL;
@@ -510,7 +509,7 @@ TEST_F(TestJsonBin, test_wrapper_to_string_object)
   ObJsonBuffer buf(&allocator);
   ASSERT_EQ(OB_SUCCESS, j_base->print(buf, true));
   std::cout << buf.ptr() << std::endl;
-  // 由于构建树的过程，进行了排序，顺序已经打乱，所以输出的顺序和用户的输入顺序不一样
+  // Due to the tree construction process, sorting was performed, so the order has been disrupted, and thus the output order is different from the user's input order
   EXPECT_STREQ(buf.ptr(), "{\"farewell\": \"bye-bye!\", \"greeting\": \"Hello!\", \"json_text\": \"test!\"}");
 }
 

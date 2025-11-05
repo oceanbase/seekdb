@@ -894,8 +894,7 @@ int ObMySQLUtil::double_cell_str(char *buf, const int64_t len, double val,
             ObMySQLUtil::prepend_zeros(buf + pos + 1, length, zero_cnt);
             length = zflength;
           }
-
-          // 按照协议: 如果double的长度小于251字节，长度头只需要1个字节，否则长度头需要3个字节
+          // According to the protocol: if the length of double is less than 251 bytes, only 1 byte is needed for the length header, otherwise, 3 bytes are needed for the length header
           if (length < 251) {
             ret = ObMySQLUtil::store_length(buf, len, length, pos);
             pos += length;

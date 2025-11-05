@@ -127,8 +127,8 @@ public:
                K_(may_add_interval_part), K_(calc_id_type));
 };
 //calc partition base
-// 计算某一行数据对应的分区id, 如果没有找到对应的分区id,
-// 则结果返回NONE_PARTITION_ID(-1)
+// Calculate the partition id corresponding to a row of data, if no corresponding partition id is found,
+// Then the result returns NONE_PARTITION_ID(-1)
 class ObExprCalcPartitionBase : public ObFuncExprOperator
 {
 public:

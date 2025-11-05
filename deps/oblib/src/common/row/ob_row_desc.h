@@ -51,22 +51,22 @@ public:
   ObRowDesc();
   ~ObRowDesc();
   /**
-   * 根据表ID和列ID获得改列在元素数组中的下标
+   * Get the index of the column in the element array based on table ID and column ID
    *
-   * @param table_id 表ID
-   * @param column_id 列ID
+   * @param table_id table ID
+   * @param column_id column ID
    *
-   * @return 下标或者OB_INVALID_INDEX
+   * @return index or OB_INVALID_INDEX
    */
   int64_t get_idx(const uint64_t table_id, const uint64_t column_id) const;
   /**
-   * 根据列下标获得表ID和列ID
+   * Get table ID and column ID based on column index
    *
    * @param idx
    * @param table_id [out]
    * @param column_id [out]
    *
-   * @return OB_SUCCESS或错误码
+   * @return OB_SUCCESS or error code
    */
   int get_tid_cid(const int64_t idx, uint64_t &table_id, uint64_t &column_id) const;
 

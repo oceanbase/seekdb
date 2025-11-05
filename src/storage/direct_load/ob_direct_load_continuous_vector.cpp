@@ -44,7 +44,7 @@ ObDirectLoadContinuousVector::~ObDirectLoadContinuousVector()
 
 void ObDirectLoadContinuousVector::reuse(const int64_t batch_size)
 {
-  // shallow_copy可能会修改offsets_和data_
+  // shallow_copy may modify offsets_ and data_
   if (offsets_ != vec_offsets_ || data_ != buf_) {
     set_vector(vec_offsets_, buf_);
   } else {
@@ -98,7 +98,7 @@ inline int ObDirectLoadContinuousVector::_append_batch(const int64_t batch_idx,
 {
   int ret = OB_SUCCESS;
   const uint32_t *offsets = src_vec->get_offsets();
-  // 更新offsets
+  // update offsets
   MEMCPY(offsets_ + batch_idx + 1, offsets + offset + 1, sizeof(uint32_t) * size);
   const int64_t delta = offsets_[batch_idx] - offsets[offset];
   if (delta != 0) {
@@ -106,7 +106,7 @@ inline int ObDirectLoadContinuousVector::_append_batch(const int64_t batch_idx,
       offsets_[dest_idx + 1] += delta;
     }
   }
-  // 拷贝数据
+  // Copy data
   const int64_t total_size = offsets[offset + size] - offsets[offset];
   if (total_size <= 0) {
   } else if (OB_FAIL(expand(total_size))) {
@@ -126,12 +126,12 @@ inline int ObDirectLoadContinuousVector::_append_batch(const int64_t batch_idx,
   int ret = OB_SUCCESS;
   const ObLength *lens = src_vec->get_lens();
   char **ptrs = src_vec->get_ptrs();
-  // 统计total_size
+  // Calculate total_size
   int64_t total_size = 0;
   for (int64_t src_idx = offset; src_idx < offset + size; ++src_idx) {
     total_size += lens[src_idx];
   }
-  // 拷贝数据, 更新offsets
+  // Copy data, update offsets
   if (total_size == 0) {
     for (int64_t dest_idx = batch_idx; dest_idx < batch_idx + size; ++dest_idx) {
       offsets_[dest_idx + 1] = size_;
@@ -156,13 +156,13 @@ inline int ObDirectLoadContinuousVector::_append_batch<false>(const int64_t batc
                                                               const int64_t size)
 {
   int ret = OB_SUCCESS;
-  // 统计total_size
+  // Calculate total_size
   int64_t total_size = 0;
   for (int64_t src_idx = offset; src_idx < offset + size; ++src_idx) {
     const ObDatum &datum = datums[src_idx];
     total_size += datum.len_;
   }
-  // 拷贝数据
+  // Copy data
   if (total_size == 0) {
     for (int64_t dest_idx = batch_idx; dest_idx < batch_idx + size; ++dest_idx) {
       offsets_[dest_idx + 1] = size_;
@@ -215,13 +215,13 @@ inline int ObDirectLoadContinuousVector::_append_selective(const int64_t batch_i
   int ret = OB_SUCCESS;
   const uint32_t *offsets = src_vec->get_offsets();
   const char *data = src_vec->get_data();
-  // 统计total_size
+  // Calculate total_size
   int64_t total_size = 0;
   for (int64_t i = 0; i < size; ++i) {
     const int64_t src_idx = selector[i];
     total_size += (offsets[src_idx + 1] - offsets[src_idx]);
   }
-  // 拷贝数据, 更新offsets
+  // Copy data, update offsets
   if (total_size == 0) {
     for (int64_t dest_idx = batch_idx; dest_idx < batch_idx + size; ++dest_idx) {
       offsets_[dest_idx + 1] = size_;
@@ -249,13 +249,13 @@ inline int ObDirectLoadContinuousVector::_append_selective(const int64_t batch_i
   int ret = OB_SUCCESS;
   const ObLength *lens = src_vec->get_lens();
   char **ptrs = src_vec->get_ptrs();
-  // 统计total_size
+  // Calculate total_size
   int64_t total_size = 0;
   for (int64_t i = 0; i < size; ++i) {
     const int64_t src_idx = selector[i];
     total_size += lens[src_idx];
   }
-  // 拷贝数据, 更新offsets
+  // Copy data, update offsets
   if (total_size == 0) {
     for (int64_t dest_idx = batch_idx; dest_idx < batch_idx + size; ++dest_idx) {
       offsets_[dest_idx + 1] = size_;
@@ -280,13 +280,13 @@ inline int ObDirectLoadContinuousVector::_append_selective<false>(const int64_t 
                                                                   const int64_t size)
 {
   int ret = OB_SUCCESS;
-  // 统计total_size
+  // Calculate total_size
   int64_t total_size = 0;
   for (int64_t i = 0; i < size; ++i) {
     const int64_t src_idx = selector[i];
     total_size += datums[src_idx].len_;
   }
-  // 拷贝数据, 更新offsets
+  // Copy data, update offsets
   if (total_size == 0) {
     for (int64_t dest_idx = batch_idx; dest_idx < batch_idx + size; ++dest_idx) {
       offsets_[dest_idx + 1] = size_;

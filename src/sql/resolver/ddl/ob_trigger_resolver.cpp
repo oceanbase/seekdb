@@ -151,13 +151,13 @@ int ObTriggerResolver::resolve_sp_definer(const ParseNode *parse_node,
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("user must be specified", K(ret));
       } else {
-        // 需要检查当前用户是否有超级权限或者set user id的权限
+        // Need to check if the current user has superuser permissions or set user ID permissions
         if (!session_info_->has_user_super_privilege()) {
           ret = OB_ERR_NO_PRIVILEGE;
           LOG_WARN("no privilege", K(ret));
         } else {
           user_name.assign_ptr(user_node->str_value_, static_cast<int32_t>(user_node->str_len_));
-          // 得区分current_user和“current_user”, 前者需要获取当前用户和host，后者是作为用户名存在
+          // Need to distinguish between current_user and "current_user", the former needs to obtain the current user and host, the latter exists as a username
           if (0 == user_name.case_compare("current_user") && T_IDENT == user_node->type_) {
             user_name = cur_user_name;
             host_name = cur_host_name;
@@ -168,7 +168,7 @@ int ObTriggerResolver::resolve_sp_definer(const ParseNode *parse_node,
           }
         }
         if (OB_SUCC(ret)) {
-          // 检查user@host是否在mysql.user表中
+          // Check if user@host is in the mysql.user table
           const ObUserInfo* user_info = nullptr;
           if (OB_FAIL(schema_checker_->get_schema_guard()->get_user_info(session_info_->get_effective_tenant_id(),
                                                                          user_name,
@@ -185,12 +185,12 @@ int ObTriggerResolver::resolve_sp_definer(const ParseNode *parse_node,
       }
     }
   } else if (lib::is_mysql_mode()) {
-    // 不指定definer时，默认为当前用户和host
+    // When definer is not specified, it defaults to the current user and host
     user_name = cur_user_name;
     host_name = cur_host_name;
   }
   if (OB_SUCC(ret) && lib::is_mysql_mode()) {
-    //user@host作为一个整体存储到priv_user字段
+    // user@host as a whole is stored in the priv_user field
     char tmp_buf[common::OB_MAX_USER_NAME_LENGTH + common::OB_MAX_HOST_NAME_LENGTH + 2] = {};
     snprintf(tmp_buf, sizeof(tmp_buf), "%.*s@%.*s", user_name.length(), user_name.ptr(),
                                                     host_name.length(), host_name.ptr());
@@ -490,7 +490,7 @@ int ObTriggerResolver::resolve_compound_timing_point(const ParseNode &parse_node
           LOG_WARN("invalid section for this type of Compound Trigger", K(ret));
         } else {
           trigger_arg.trigger_info_.add_instead_row();
-          trigger_arg.trigger_info_.add_before_row(); // instead of trigger 在before row时机执行
+          trigger_arg.trigger_info_.add_before_row(); // instead of trigger at before row timing
         }
       } else {
         if (T_BEFORE == header_timing) {
@@ -787,7 +787,7 @@ int ObTriggerResolver::resolve_trigger_body(const ParseNode &parse_node,
         if (OB_FAIL(resolver.resolve(*parse_tree->children_[0]))) {
           LOG_WARN("resolve trigger procedure failed", K(parse_tree->children_[0]->type_), K(ret));
         }
-        //无论是否执行成功都要恢复该变量原值
+        // Regardless of whether the execution is successful, restore the original value of this variable
         session_info_->set_for_trigger_package(saved_trigger_flag);
       }
     }

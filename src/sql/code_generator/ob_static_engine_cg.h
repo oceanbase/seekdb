@@ -194,11 +194,10 @@ public:
   }
   // generate physical plan
   int generate(const ObLogPlan &log_plan, ObPhysicalPlan &phy_plan);
-
-  // !!! 注意: 下面两个接口仅用于初始化operator中各种表达式, 其他地方慎用， 如需使用
-  // 请先理解这两个接口实际语义, 或者联系@升乐
+  // !!! Note: The following two interfaces are only used for initializing various expressions in the operator, use with caution elsewhere, if necessary
+  // Please understand the actual semantics of these two interfaces, or contact @ShengLe
   //
-  // 接口语义：从raw expr中获取rt_expr，并将raw expr push到cur_op_exprs_中
+  // Spoken meaning: Get rt_expr from raw expr and push raw expr to cur_op_exprs_
   int generate_rt_expr(const ObRawExpr &raw_expr, ObExpr *&rt_expr);
   int generate_rt_exprs(const common::ObIArray<ObRawExpr *> &src, common::ObIArray<ObExpr *> &dst);
   // Mark support true if any operator (in the plan tree) supports vectorization
@@ -631,7 +630,7 @@ private:
   ObSEArray<ObRawExpr *, 8> cur_op_exprs_;
   // all self_produced exprs of current operator
   ObSEArray<ObRawExpr *, 8> cur_op_self_produced_exprs_;
-  //仅供递归cte使用，因为oracle的cte是不允许嵌套的，所以可以采用这种方式
+  //For recursive CTE use only, because Oracle's CTE does not allow nesting, this approach can be used
   common::ObSEArray<ObOpSpec *, 10> fake_cte_specs_;
   ObDmlCgService dml_cg_service_;
   ObTscCgService tsc_cg_service_;

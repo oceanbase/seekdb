@@ -34,7 +34,7 @@ class ObWinbufPieceMsgListener;
 class ObWinbufPieceMsgCtx;
 class ObPxCoordInfo;
 
-/* 各种 datahub 子类消息定义如下 */
+/* Various datahub subclass message definitions are as follows */
 class ObWinbufPieceMsg
   : public ObDatahubPieceMsg<dtl::ObDtlMsgType::DH_WINBUF_PIECE_MSG>
 
@@ -53,11 +53,11 @@ public:
 public:
   /* functions */
   /* variables */
-  // window fuction中只有在partition by为空
-  // 即只有一个分组时才会使用这套并行机制
-  // 因为只有一个分组, 因此每次收到的piece msg只有一行 是聚合后的结果
+  // window function is only used when partition by is empty
+  // That is, this parallel mechanism will only be used when there is only one group
+  // Because there is only one group, therefore each received piece msg has only one line which is the aggregated result
 
-  bool is_end_;     //标记这个piece没有win buf数据.
+  bool is_end_;     // Mark this piece has no win buf data.
   bool is_datum_;  // data is ObNewRow or datum array (static engine) format.
   int64_t col_count_;
   ObNewRow row_;
@@ -91,8 +91,8 @@ public:
     assign_allocator_.reset();
   }
   VIRTUAL_TO_STRING_KV(K_(ready_state));
-  int ready_state_; // 占位符，并不真用到
-  bool is_empty_; // 一行数据都没有, 就不用序列化store了
+  int ready_state_; // placeholder, not actually used
+  bool is_empty_; // There is no data at all, so there is no need to serialize the store
   bool is_datum_; // data is ObNewRow or datum array (static engine) format.
   sql::ObChunkRowStore row_store_;
   sql::ObChunkDatumStore datum_store_;
@@ -115,7 +115,7 @@ public:
                                  ObPieceMsgCtx *&msg_ctx);
   virtual int send_whole_msg(common::ObIArray<ObPxSqcMeta> &sqcs) override;
   virtual void reset_resource() override;
-  int received_; // 已经收到的 piece 数量
+  int received_; // number of pieces already received
   int64_t tenant_id_;
   ObWinbufWholeMsg whole_msg_;
 private:

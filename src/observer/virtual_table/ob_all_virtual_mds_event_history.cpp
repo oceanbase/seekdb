@@ -85,8 +85,8 @@ int ObAllVirtualMdsEventHistory::range_scan_(char *temp_buffer, int64_t buf_len)
     int ret = OB_SUCCESS;
     int tmp_ret = OB_SUCCESS;
     if (judge_key_in_ranges_(key)) {
-      if (MTL_ID() == OB_SYS_TENANT_ID ||// SYS租户可以看到所有租户的信息
-          key.tenant_id_ == MTL_ID()) {// 非SYS租户只能看到本租户的信息
+      if (MTL_ID() == OB_SYS_TENANT_ID ||// SYS tenant can see information of all tenants
+          key.tenant_id_ == MTL_ID()) {// Non-SYS tenant can only see information of its own tenant
         MAKE_TENANT_SWITCH_SCOPE_GUARD(guard);
         if (MTL_ID() != key.tenant_id_) {
           tmp_ret = guard.switch_to(key.tenant_id_);
@@ -121,8 +121,8 @@ int ObAllVirtualMdsEventHistory::point_read_(char *temp_buffer, int64_t buf_len)
       if (OB_FAIL(ObMdsEventBuffer::for_each(key, [&key, this, temp_buffer, buf_len](const MdsEvent &event) -> int {
         int ret = OB_SUCCESS;
         int tmp_ret = OB_SUCCESS;
-        if (MTL_ID() == OB_SYS_TENANT_ID ||// SYS租户可以看到所有租户的信息
-            key.tenant_id_ == MTL_ID()) {// 非SYS租户只能看到本租户的信息
+        if (MTL_ID() == OB_SYS_TENANT_ID ||// SYS tenant can see information of all tenants
+            key.tenant_id_ == MTL_ID()) {// Non-SYS tenant can only see information of its own tenant
           MAKE_TENANT_SWITCH_SCOPE_GUARD(guard);
           if (MTL_ID() != key.tenant_id_) {
             tmp_ret = guard.switch_to(key.tenant_id_);

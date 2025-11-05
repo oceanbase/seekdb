@@ -520,7 +520,7 @@ TEST_F(TestOptimizer, ob_optimizer_used_hint)
 }
 
 /*
-todo(@ banliu.zyd): 功能还没有测全，暂时注释
+todo(@ banliu.zyd): The function has not been fully tested, temporarily commented out
 TEST_F(TestOptimizer, ob_optimizer_hualong)
 {
   const char* test_file = "./test_optimizer_hualong.sql";

@@ -428,39 +428,39 @@ int ObTableIndex::add_rowkey_indexes(const ObTableSchema &table_schema,
           }
           // collation
           case OB_APP_MIN_COLUMN_ID + 8: {
-            cells[cell_idx].set_varchar(ObString("A")); //FIXME 全部是升序吗？
+            cells[cell_idx].set_varchar(ObString("A")); //FIXME Are all in ascending order?
             cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
             break;
           }
           // cardinality
           case OB_APP_MIN_COLUMN_ID + 9: {
-            //TODO 索引中唯一值的数目的估计值。通过运行ANALYZE TABLE或myisamchk -a可以更新。
-            //基数根据被存储为整数的统计数据来计数，所以即使对于小型表，该值也没有必要是精确的。
-            //基数越大，当进行联合时，MySQL使用该索引的机会就越大。
+            //TODO Estimate of the number of unique values in the index. Can be updated by running ANALYZE TABLE or myisamchk -a.
+            //The base is counted according to the statistics stored as integers, so this value does not need to be precise even for small tables.
+            //The larger the cardinality, the greater the chance MySQL will use this index when performing a join.
             cells[cell_idx].set_null();
             break;
           }
           // sub_part
           case OB_APP_MIN_COLUMN_ID + 10: {
-            //TODO 如果列只是被部分地编入索引，则为被编入索引的字符的数目。如果整列被编入索引，则为NULL。
+            //TODO If the column is indexed only partially, then it is the number of characters that are indexed. If the entire column is indexed, then it is NULL.
             cells[cell_idx].set_null();
             break;
           }
           // packed
           case OB_APP_MIN_COLUMN_ID + 11: {
-            //TODO 指示关键字如何被压缩。如果没有被压缩，则为NULL。
+            //TODO Indicate how the keyword is compressed. If not compressed, it is NULL.
             cells[cell_idx].set_null();
             break;
           }
           // null
           case OB_APP_MIN_COLUMN_ID + 12: {
-            cells[cell_idx].set_varchar(ObString("")); // 主键一定不能为NULL
+            cells[cell_idx].set_varchar(ObString("")); // Primary key must not be NULL
             cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
             break;
           }
           // index_type
           case OB_APP_MIN_COLUMN_ID + 13: {
-            cells[cell_idx].set_varchar(ObString("BTREE")); //FIXME 一定是BTREE吗？
+            cells[cell_idx].set_varchar(ObString("BTREE")); //FIXME Is it definitely BTREE?
             cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
             break;
           }
@@ -716,12 +716,12 @@ int ObTableIndex::get_normal_index_column(const ObTableSchema &table_schema,
           SERVER_LOG(WARN, "fail to get data table column schema", K(ret), K(column_desc->col_id_));
         }
       } else if (column_desc->col_type_.get_type() == ObVarcharType) {
-        is_column_visible = false; // mbr列
+        is_column_visible = false; // mbr column
         if (OB_ISNULL(column_schema = index_schema->get_column_schema(column_desc->col_id_))) {
           ret = OB_SCHEMA_ERROR;
           SERVER_LOG(WARN, "fail to get data table mbr column schema", K(ret), K(column_desc->col_id_));
         }
-      } else { // cellid列,获取主表geo列column_name
+      } else { // cellid column, get the geo column_name from the main table
         const ObColumnSchemaV2 *cellid_column = NULL;
         if (OB_ISNULL(cellid_column = index_schema->get_column_schema(column_desc->col_id_))) {
           ret = OB_SCHEMA_ERROR;
@@ -732,7 +732,7 @@ int ObTableIndex::get_normal_index_column(const ObTableSchema &table_schema,
         }
       }
     } else if (column_desc->col_id_ < OB_MIN_SHADOW_COLUMN_ID) {
-      if (OB_ISNULL(column_schema = table_schema.get_column_schema(column_desc->col_id_))) { // 索引表的column_id跟数据表的对应列的column_id是相等的
+      if (OB_ISNULL(column_schema = table_schema.get_column_schema(column_desc->col_id_))) { // The column_id of the index table is equal to the column_id of the corresponding column in the data table
         ret = OB_SCHEMA_ERROR;
         SERVER_LOG(WARN, "fail to get data table column schema", K(ret), K(column_desc->col_id_));
       }
@@ -877,24 +877,24 @@ int ObTableIndex::add_normal_index_column(const ObString &database_name,
           }
             // collation
           case OB_APP_MIN_COLUMN_ID + 8: {
-            cells[cell_idx].set_varchar(ObString("A")); //FIXME 全部是升序吗？
+            cells[cell_idx].set_varchar(ObString("A")); //FIXME Is everything in ascending order?
             cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
             break;
           }
             // cardinality
           case OB_APP_MIN_COLUMN_ID + 9: {
-            //TODO 索引中唯一值的数目的估计值。通过运行ANALYZE TABLE或myisamchk -a可以更新。
-            //基数根据被存储为整数的统计数据来计数，所以即使对于小型表，该值也没有必要是精确的。
-            //基数越大，当进行联合时，MySQL使用该索引的机会就越大。
+            //TODO Estimate of the number of unique values in the index. Can be updated by running ANALYZE TABLE or myisamchk -a.
+            //The base is counted according to the statistics stored as integers, so this value does not need to be precise even for small tables.
+            //The larger the cardinality, the greater the chance MySQL will use this index when performing a join.
             cells[cell_idx].set_null();
             break;
           }
             // sub_part
           case OB_APP_MIN_COLUMN_ID + 10: {
-            //TODO 如果列只是被部分地编入索引，则为被编入索引的字符的数目。如果整列被编入索引，则为NULL。
-            cells[cell_idx].reset(); //清空上一行的结果
+            //TODO If the column is indexed only partially, then it is the number of characters that are indexed. If the entire column is indexed, then it is NULL.
+            cells[cell_idx].reset(); // Clear the result of the previous row
             if (column_schema->is_prefix_column()) {
-              //打印前缀索引的长度
+              //print the length of the prefix index
               int64_t pos = 0;
               if (OB_FAIL(databuff_printf(buf, buf_len, pos, "%d", column_schema->get_data_length()))) {
                 LOG_WARN("print prefix column data length failed", K(ret), KPC(column_schema), K(buf), K(buf_len), K(pos));
@@ -907,7 +907,7 @@ int ObTableIndex::add_normal_index_column(const ObString &database_name,
           }
             // packed
           case OB_APP_MIN_COLUMN_ID + 11: {
-            //TODO 指示关键字如何被压缩。如果没有被压缩，则为NULL。
+            //TODO Indicate how the keyword is compressed. If not compressed, it is NULL.
             cells[cell_idx].set_null();
             break;
           }
@@ -928,7 +928,7 @@ int ObTableIndex::add_normal_index_column(const ObString &database_name,
             } else if (index_schema->is_spatial_index()) {
               cells[cell_idx].set_varchar(ObString("SPATIAL"));
             } else {
-              cells[cell_idx].set_varchar(ObString("BTREE")); //FIXME 一定是BTREE吗？
+              cells[cell_idx].set_varchar(ObString("BTREE")); //FIXME Is it definitely BTREE?
             }
             cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
             break;
@@ -1082,24 +1082,24 @@ int ObTableIndex::add_fulltext_index_column(const ObString &database_name,
           }
             // collation
           case OB_APP_MIN_COLUMN_ID + 8: {
-            cells[cell_idx].set_varchar(ObString("A")); //FIXME 全部是升序吗？
+            cells[cell_idx].set_varchar(ObString("A")); //FIXME Are all in ascending order?
             cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
             break;
           }
             // cardinality
           case OB_APP_MIN_COLUMN_ID + 9: {
-            //TODO 索引中唯一值的数目的估计值。通过运行ANALYZE TABLE或myisamchk -a可以更新。
-            //基数根据被存储为整数的统计数据来计数，所以即使对于小型表，该值也没有必要是精确的。
-            //基数越大，当进行联合时，MySQL使用该索引的机会就越大。
+            //TODO Estimate of the number of unique values in the index. Can be updated by running ANALYZE TABLE or myisamchk -a.
+            //The base is counted according to the statistics stored as integers, so this value does not need to be precise even for small tables.
+            //The larger the cardinality, the greater the chance MySQL will use this index when performing a join.
             cells[cell_idx].set_null();
             break;
           }
             // sub_part
           case OB_APP_MIN_COLUMN_ID + 10: {
-            //TODO 如果列只是被部分地编入索引，则为被编入索引的字符的数目。如果整列被编入索引，则为NULL。
-            cells[cell_idx].reset(); //清空上一行的结果
+            //TODO If the column is indexed only partially, then it is the number of characters that are indexed. If the entire column is indexed, then it is NULL.
+            cells[cell_idx].reset(); // Clear the result of the previous row
             if (column_schema->is_prefix_column()) {
-              //打印前缀索引的长度
+              //print the length of the prefix index
               int64_t pos = 0;
               if (OB_FAIL(databuff_printf(buf, buf_len, pos, "%d", column_schema->get_data_length()))) {
                 LOG_WARN("print prefix column data length failed", K(ret), KPC(column_schema), K(buf), K(buf_len), K(pos));
@@ -1112,7 +1112,7 @@ int ObTableIndex::add_fulltext_index_column(const ObString &database_name,
           }
             // packed
           case OB_APP_MIN_COLUMN_ID + 11: {
-            //TODO 指示关键字如何被压缩。如果没有被压缩，则为NULL。
+            //TODO Indicate how the keyword is compressed. If not compressed, it is NULL.
             cells[cell_idx].set_null();
             break;
           }
@@ -1269,24 +1269,24 @@ int ObTableIndex::add_vec_index_column(const ObString &database_name,
           }
             // collation
           case OB_APP_MIN_COLUMN_ID + 8: {
-            cells[cell_idx].set_varchar(ObString("A")); //FIXME 全部是升序吗？
+            cells[cell_idx].set_varchar(ObString("A")); //FIXME Is everything in ascending order?
             cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
             break;
           }
           // cardinality
           case OB_APP_MIN_COLUMN_ID + 9: {
-            //TODO 索引中唯一值的数目的估计值。通过运行ANALYZE TABLE或myisamchk -a可以更新。
-            //基数根据被存储为整数的统计数据来计数，所以即使对于小型表，该值也没有必要是精确的。
-            //基数越大，当进行联合时，MySQL使用该索引的机会就越大。
+            //TODO Estimate of the number of unique values in the index. Can be updated by running ANALYZE TABLE or myisamchk -a.
+            //The base is counted according to the statistics stored as integers, so this value does not need to be precise even for small tables.
+            //The larger the cardinality, the greater the chance MySQL will use this index when performing a join.
             cells[cell_idx].set_null();
             break;
           }
           // sub_part
           case OB_APP_MIN_COLUMN_ID + 10: {
-            //TODO 如果列只是被部分地编入索引，则为被编入索引的字符的数目。如果整列被编入索引，则为NULL。
-            cells[cell_idx].reset(); //清空上一行的结果
+            //TODO If the column is indexed only partially, then it is the number of characters that are indexed. If the entire column is indexed, then it is NULL.
+            cells[cell_idx].reset(); // Clear the result of the previous row
             if (column_schema->is_prefix_column()) {
-              //打印前缀索引的长度
+              //print the length of the prefix index
               int64_t pos = 0;
               if (OB_FAIL(databuff_printf(buf, buf_len, pos, "%d", column_schema->get_data_length()))) {
                 LOG_WARN("print prefix column data length failed", K(ret), KPC(column_schema), K(buf), K(buf_len), K(pos));
@@ -1299,7 +1299,7 @@ int ObTableIndex::add_vec_index_column(const ObString &database_name,
           }
           // packed
           case OB_APP_MIN_COLUMN_ID + 11: {
-            //TODO 指示关键字如何被压缩。如果没有被压缩，则为NULL。
+            //TODO Indicate how the keyword is compressed. If not compressed, it is NULL.
             cells[cell_idx].set_null();
             break;
           }
@@ -1373,7 +1373,7 @@ int ObTableIndex::get_show_column_name(const ObTableSchema &table_schema,
 {
   int ret = OB_SUCCESS;
   if (column_schema.is_prefix_column()) {
-    //前缀索引生成的列，需要获取到原始列
+    //Prefix index generated column, need to obtain the original column
     ObSEArray<uint64_t, 1> deps_column_ids;
     const ObColumnSchemaV2 *deps_column = NULL;
     if (OB_FAIL(column_schema.get_cascaded_column_ids(deps_column_ids))) {

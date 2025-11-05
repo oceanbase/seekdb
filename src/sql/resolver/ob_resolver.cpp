@@ -1233,9 +1233,7 @@ int ObResolver::resolve(IsPrepared if_prepared, const ParseNode &parse_tree, ObS
         break;
       }
     }  // end switch
-    
-
-    // 外表写只放开insert
+    //external table write only opensinsert
     if (OB_SUCC(ret) && stmt->is_dml_stmt() && !stmt->is_insert_stmt()) {
       OZ( (static_cast<ObDMLStmt*>(stmt)->disable_writing_external_table()) );
     }
@@ -1255,7 +1253,7 @@ int ObResolver::resolve(IsPrepared if_prepared, const ParseNode &parse_tree, ObS
     }
     
     if (OB_SUCC(ret) && stmt->is_dml_write_stmt()) {
-      // todo yanli:检查主备库
+      // todo yanli:check leader-follower database
     }
     
     if (OB_SUCC(ret) && stmt->is_dml_stmt() && !params_.session_info_->is_varparams_sql_prepare()

@@ -65,7 +65,7 @@ TEST_F(ObExprLengthTest, basic_test)
   T0(length, null, null, 0);
   T(length, varchar, "helo", int, 4);
   T(length, varchar, "", int, 0);
- //转义字符依赖sql_parser的过程
+  // Escape character depends on the sql_parser process
   //T(length, varchar, "\\_", int, 2);
   //T(length, varchar, "\\%", int, 2);
   //T(length, varchar, "\\\\", int, 1);
@@ -73,7 +73,7 @@ TEST_F(ObExprLengthTest, basic_test)
   //T(length, varchar, "\\v", int, 1);
   T(length, int, 1, int, 1);
   T(length, int, 12, int, 2);
-  //与精度有管，暂时不予处理
+  // Related to precision, temporarily not handled
   //T(length, double, 12.32, int, 5);
   //T(length, double, 0.00, int, 4);
   T(length, varchar, "好", int, 3);

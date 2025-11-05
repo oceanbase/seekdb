@@ -28,10 +28,10 @@ namespace share
 class ObVecIndexBuilderUtil
 {
 public:
-  static const int64_t OB_VEC_DELTA_BUFFER_TABLE_INDEX_COL_CNT = 2;         // 辅助表的主键列数
-  static const int64_t OB_VEC_INDEX_ID_TABLE_INDEX_COL_CNT = 3;             // 辅助表的主键列数
-  static const int64_t OB_VEC_INDEX_SNAPSHOT_DATA_TABLE_INDEX_COL_CNT = 1;  // 辅助表的主键列数
-  static const int64_t OB_VEC_DIM_DOCID_VALUE_TABLE_INDEX_COL_CNT = 2;      // 辅助表的主键列数
+  static const int64_t OB_VEC_DELTA_BUFFER_TABLE_INDEX_COL_CNT = 2;         // The primary key column count of the auxiliary table
+  static const int64_t OB_VEC_INDEX_ID_TABLE_INDEX_COL_CNT = 3;             // The number of primary key columns in the auxiliary table
+  static const int64_t OB_VEC_INDEX_SNAPSHOT_DATA_TABLE_INDEX_COL_CNT = 1;  // The number of primary key columns in the auxiliary table
+  static const int64_t OB_VEC_DIM_DOCID_VALUE_TABLE_INDEX_COL_CNT = 2;      // The primary key column count of the auxiliary table
 
   // hnsw
   static const char * ROWKEY_VID_TABLE_NAME;
@@ -459,7 +459,7 @@ private:
   static int inner_adjust_vec_arg(
       obrpc::ObCreateIndexArg *vec_arg,
       const ObIArray<const ObColumnSchemaV2 *> &vec_cols,
-      const int index_column_cnt,   // 辅助表的主键列数
+      const int index_column_cnt,   // The number of primary key columns in the auxiliary table
       ObIAllocator *allocator);
   static int check_vec_gen_col(
       const ObTableSchema &data_schema,

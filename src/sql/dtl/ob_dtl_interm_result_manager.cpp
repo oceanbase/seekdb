@@ -607,9 +607,9 @@ int ObDTLIntermResultManager::process_interm_result_inner(ObDtlLinkedBuffer &buf
   }
 
   if (OB_FAIL(ret)) {
-    // 注意这里理论上也不会有并发问题，因为channel是点对点且串行发送的
-    // 所以这个接收到了，肯定没有其他线程给这个channel发送
-    // 尝试先从hash table中释放(尽早释放内存)
+    // Note here theoretically there should be no concurrency issues, because channel is point-to-point and serially sent
+    // So this received, there must be no other thread sending to this channel
+    // Try to release from hash table first (release memory as early as possible)
     erase_interm_result_info(interm_res_key);
   }
   return ret;

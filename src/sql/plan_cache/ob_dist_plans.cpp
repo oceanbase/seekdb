@@ -30,8 +30,7 @@ int ObDistPlans::init(ObSqlPlanSet *ps)
   }
   return ret;
 }
-
-//对于复制表会在检查是否匹配的过程中修改副本index
+// For copying tables, the copy index will be modified during the check for matching process
 int ObDistPlans::get_plan(ObPlanCacheCtx &pc_ctx,
                           ObPhysicalPlan *&plan)
 {
@@ -50,7 +49,7 @@ int ObDistPlans::get_plan(ObPlanCacheCtx &pc_ctx,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid null plan_set_", K(ret));
   } else if ((plan_set_->is_multi_stmt_plan())) {
-    // 如果是multi stmt计划，一定是单表分布式计划，可以直接根据table location算出物理分区地址
+    // If it is a multi stmt plan, it must be a single-table distributed plan, and the physical partition address can be directly calculated based on table location
     // single table should just return plan, do not match
     if (0 == dist_plans_.count()) {
       ret = OB_SQL_PC_NOT_EXIST;
@@ -133,7 +132,7 @@ int ObDistPlans::add_plan(ObPhysicalPlan &plan,
   ObArray<ObTableLocation> out_tbl_locations;
 
   for (int64_t i = 0; OB_SUCC(ret) && !is_matched && i < dist_plans_.count(); i++) {
-    //检查是否已有其他线程add该plan成功
+    // Check if another thread has successfully added this plan
     phy_tbl_infos.reuse();
     out_tbl_locations.reuse();
     const ObPhysicalPlan *tmp_plan = dist_plans_.at(i);
@@ -191,8 +190,7 @@ bool ObDistPlans::is_same_plan(const ObPhysicalPlan &plan, const ObPhysicalPlan 
   }
   return is_same;
 }
-
-//删除所有plan及对应plan stat
+// Delete all plan and corresponding plan stat
 int ObDistPlans::remove_all_plan()
 {
   int ret = OB_SUCCESS;
@@ -213,8 +211,7 @@ int ObDistPlans::remove_all_plan()
 
   return ret;
 }
-
-//获取所有plan使用内存
+// Get all plan memory usage
 int64_t ObDistPlans::get_mem_size() const
 {
   int64_t plan_set_mem = 0;

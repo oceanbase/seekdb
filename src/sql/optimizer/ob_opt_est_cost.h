@@ -228,12 +228,11 @@ public:
                                       const OptSelectivityCtx &ctx,
                                       const ObIArray<ObRawExpr *> &exprs,
                                       double &width);
-
-   //将scan ranges转换为ObSimpleBatch
-  //@param[in] scan_ranges :抽取出来的query scan range信息
-  //@param[out] batch: 存储层估行需要的query range集合
-  //@param[out] range: T_SCAN batch需要的range
-  //@param[out] range_array: T_MULTI_SCAN batch需要的range
+   // Convert scan ranges to ObSimpleBatch
+  //@param[in] scan_ranges :extracted query scan range information
+  //@param[out] batch: collection of query ranges needed for storage layer estimation
+  //@param[out] range: T_SCAN batch required range
+  //@param[out] range_array: T_MULTI_SCAN batch required range
 
 
   static int calculate_filter_selectivity(AccessPath &path);

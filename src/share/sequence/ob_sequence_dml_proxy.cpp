@@ -21,11 +21,10 @@ using namespace oceanbase::common::number;
 using namespace oceanbase::common::sqlclient;
 using namespace oceanbase::share;
 using namespace oceanbase::share::schema;
-
-// 对于 prefetch 操作，超时设置得很短 （如500ms）
-// 能成功最好，不能就下次再试，避免因为 prefetch 阻塞正常查询
-// 为什么选择 500ms? 经验值，也许可以更小。
-// 一般来说，500ms 足够完成一次查询和更新操作。
+// For the prefetch operation, the timeout is set very short (e.g., 500ms)
+// Succeed if possible, otherwise try again next time, to avoid blocking normal queries due to prefetch
+// Why choose 500ms? Empirical value, maybe it can be smaller.
+// Generally, 500ms is sufficient to complete one query and update operation.
 static const int64_t  PREFETCH_OP_TIMEOUT_US = 500 * 1000; // us
 
 ObSequenceDMLProxy::ObSequenceDMLProxy()
@@ -70,9 +69,7 @@ int ObSequenceDMLProxy::set_pre_op_timeout(common::ObTimeoutCtx &ctx)
   }
   return ret;
 }
-
-
-// 获取下一批缓存数据
+// Get the next batch of cache data
 // begin;
 // obj = select * from OB_ALL_SEQUENCE_OBJECT_TNAME for update;
 // cache_inclusive_start = obj[next_value];
@@ -123,15 +120,14 @@ int ObSequenceDMLProxy::next_batch(
   } else if (OB_FAIL(trans.start(sql_proxy_, tenant_id, with_snap_shot))) {
     LOG_WARN("fail start trans", K(ret));
   }
-
   //
-  // TODO: xiaochu 查询和更新合成一条 update return 操作，
-  //       可以提高执行效率，降低 prefetch/fetch 延迟
+  // TODO: xiaochu query and update in one update return operation,
+  //       Can improve execution efficiency, reduce prefetch/fetch delay
   //
 
   bool need_init_sequence_value_table = false;
-  // note: res 放在 block 中是为了尽快析构，否则后面 update
-  // 会报错：connection still be referred by previous sql result
+  // note: res is placed in block to be destructed as soon as possible, otherwise it will interfere with the subsequent update
+  // Will throw an error: connection still be referred by previous sql result
   ObISQLClient *sql_client = &trans;
   ObSQLClientRetryWeak sql_client_retry_weak(sql_client,
                                              tenant_id,
@@ -162,10 +158,10 @@ int ObSequenceDMLProxy::next_batch(
         if (OB_FAIL(ret)) {
           LOG_WARN("fail get NEXT_VALUE", K(ret));
         } else if (OB_FAIL(next_value.from(tmp, allocator))) {
-          // 上面必须拷贝出去，因为 next() 后 Res 内存会释放
+          // The above must be copied out because the memory in Res will be released after next()
           LOG_WARN("fail deep copy next_val", K(tmp), K(ret));
         } else if (OB_ITER_END != (ret = result->next())) {
-          // 预期只应该有一行数据满足条件，如果大于一行则为异常
+          // It is expected that only one line of data should meet the condition, if more than one line is found, it is an anomaly
           LOG_WARN("expected OB_ITER_END", K(ret));
           ret = (OB_SUCCESS == ret ? OB_ERR_UNEXPECTED : ret);
         } else {
@@ -201,8 +197,8 @@ int ObSequenceDMLProxy::next_batch(
   }
 
   if (OB_SUCC(ret) && need_init_sequence_value_table) {
-    // 首次从 all_sequence_object 表读取数据时，需要先向
-    // all_sequence_object 表中插入一行初始数据
+    // When reading data from the all_sequence_object table for the first time, you need to first send a request to
+    // insert initial data into the all_sequence_object table
     if (OB_FAIL(init_sequence_value_table(trans,
                                           sql_client_retry_weak,
                                           allocator,
@@ -216,16 +212,16 @@ int ObSequenceDMLProxy::next_batch(
 
   if (OB_SUCC(ret)) {
     if (OB_FAIL(tmp_next_value.from(next_value, allocator))) {
-      // 拷贝出去，为了判断最终是否要更新内部表
+      // Copy out, to determine if the internal table needs to be updated
       LOG_WARN("fail deep copy next_val", K(next_value), K(ret));
     }
   }
 
   if (OB_SUCC(ret)) {
-    // 下面这段逻辑有如下目的：
-    // 1. 计算新的 next_value 用于更新进内部表
-    // 2. 对于 cycle 场景，要修正 next_value 到正确的值
-    // 3. 对于 no cycle 场景，需要判断是否超出了值域
+    // The purpose of the following logic is as follows:
+    // 1. Calculate the new next_value for updating into the internal table
+    // 2. For the cycle scenario, correct next_value to the correct value
+    // 3. For the no cycle scenario, it is necessary to determine if the value exceeds the range
 
     // cache_inclusive_start = next_value;
     cache_inclusive_start.shadow_copy(next_value);
@@ -245,9 +241,8 @@ int ObSequenceDMLProxy::next_batch(
       // } else {
       //   next_value = cache_exclusive_end;
       // }
-
-      // 注意：如果 cache_exclusive_end 超出了范围，需要修正到最小上界
-      //       用于调用者缓存一个可用的范围，如果不修正，则缓存范围会超出 max_value
+      // Note: If cache_exclusive_end exceeds the range, it needs to be corrected to the minimum upper bound
+      //       Used by the caller to cache an available range, if not corrected, the cached range will exceed max_value
       ObNumberCalc mv(max_value, allocator);
       if (OB_FAIL(mv.add(static_cast<int64_t>(1)).get_result(cache_exclusive_end))) {
         LOG_WARN("fail calc cache_exclusive_end", K(ret));
@@ -271,9 +266,8 @@ int ObSequenceDMLProxy::next_batch(
       // } else {
       //   next_value = cache_exclusive_end;
       // }
-
-      // 注意：如果 cache_exclusive_end 超出了范围，需要修正到最大下界
-      //       用于调用者缓存一个可用的范围，如果不修正，则缓存范围会超出 min_value
+      // Note: If cache_exclusive_end exceeds the range, it needs to be corrected to the maximum lower bound
+      //       Used by the caller to cache an available range, if not corrected, the cached range will exceed min_value
       ObNumberCalc mv(min_value, allocator);
       if (OB_FAIL(mv.sub(static_cast<int64_t>(1)).get_result(cache_exclusive_end))) {
         LOG_WARN("fail calc cache_exclusive_end", K(ret));
@@ -385,7 +379,7 @@ int ObSequenceDMLProxy::init_sequence_value_table(
      */
   ObSqlString sql;
   const char *tname = OB_ALL_SEQUENCE_VALUE_TNAME;
-  // 首次操作 sequence 对象时，同时初始化 __all_sequence_value 表
+  // First operation on the sequence object, simultaneously initialize the __all_sequence_value table
   if (OB_FAIL(sql.assign_fmt("INSERT INTO %s (", tname))) {
     STORAGE_LOG(WARN, "append table name failed, ", K(ret));
   } else {
@@ -403,7 +397,7 @@ int ObSequenceDMLProxy::init_sequence_value_table(
                                      sql.ptr(),
                                      affected_rows))) {
         if (OB_ERR_PRIMARY_KEY_DUPLICATE == ret) {
-          // 有重复列是可能的，对刚刚创建的 sequence 两个 nextval 并发读取时候出现
+          // Duplicate columns are possible, when two nextval reads of the newly created sequence occur concurrently
           // 
           ret = OB_SUCCESS;
           // 
@@ -444,10 +438,10 @@ int ObSequenceDMLProxy::init_sequence_value_table(
         if (OB_FAIL(ret)) {
           LOG_WARN("fail get NEXT_VALUE", K(ret));
         } else if (OB_FAIL(next_value.from(tmp, allocator))) {
-          // 上面必须拷贝出去，因为 next() 后 Res 内存会释放
+          // The above must be copied out because the memory in Res will be released after next()
           LOG_WARN("fail deep copy next_val", K(tmp), K(ret));
         } else if (OB_ITER_END != (ret = result->next())) {
-          // 预期只应该有一行数据满足条件，如果大于一行则为异常
+          // It is expected that only one row of data should meet the condition, if more than one row is found, it is an anomaly
           LOG_WARN("expected OB_ITER_END", K(ret));
           ret = (OB_SUCCESS == ret ? OB_ERR_UNEXPECTED : ret);
         } else {

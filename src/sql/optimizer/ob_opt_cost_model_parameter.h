@@ -170,40 +170,40 @@ public:
   double get_functional_lookup_per_row_cost(const OptSystemStat& stat) const;
 
 protected:
-  /** 读取一行的CPU开销，基本上只包括get_next_row()操作 */
+  /** Read the CPU overhead of one line, which basically includes only the get_next_row() operation */
   double CPU_TUPLE_COST;
-  /** 存储层吐出一行的代价 **/
+  /** The cost of storage layer emitting one row **/
   double TABLE_SCAN_CPU_TUPLE_COST;
-  /** 顺序读取一个微块并反序列化的开销 */
+  /** The overhead of sequentially reading a microblock and deserializing it */
   double MICRO_BLOCK_SEQ_COST;
-  /** 随机读取一个微块并反序列化的开销 */
+  /** The overhead of randomly reading a microblock and deserializing it */
   double MICRO_BLOCK_RND_COST;
-  /** 随机读取中定位某一行所在位置的开销 */
+  /** The overhead of locating a specific row position during random reads */
   double FETCH_ROW_RND_COST;
-  /** 比较一次空间数据的代价 */
+  /** Compare the cost of one space data comparison */
   double CMP_SPATIAL_COST;
-  /** 物化一个字节的代价 */
+  /** The cost of materializing a byte */
   double MATERIALIZE_PER_BYTE_WRITE_COST;
-  /** 读取物化后的行的代价，即对物化后数据结构的get_next_row() */
+  /** Read the cost of reading a materialized row, i.e., get_next_row() on the materialized data structure */
   double READ_MATERIALIZED_PER_ROW_COST;
-  /** 一次聚集函数计算的代价 */
+  /** The cost of one aggregate function calculation */
   double PER_AGGR_FUNC_COST;
-  /** 一次窗口函数计算的代价 */
+  /** The cost of one window function calculation */
   double PER_WIN_FUNC_COST;
-  /** 一次操作的基本代价 */
+  /** The basic cost of one operation */
   double CPU_OPERATOR_COST;
-  /** 连接两表的一行的基本代价 */
+  /** The basic cost of connecting one row between two tables */
   double JOIN_PER_ROW_COST;
-  /** 构建hash table时每行的均摊代价 */
+  /** Amortized cost per row when building hash table */
   double BUILD_HASH_PER_ROW_COST;
-  /** 查询hash table时每行的均摊代价 */
+  /** Amortized cost per row when querying hash table */
   double PROBE_HASH_PER_ROW_COST;
   double RESCAN_COST;
   /*network serialization cost for one byte*/
   double NETWORK_SER_PER_BYTE_COST;
   /*network de-serialization cost for one byte*/
   double NETWORK_DESER_PER_BYTE_COST;
-  /** 网络传输1个字节的代价 */
+  /** The cost of transmitting 1 byte over the network */
   double NETWORK_TRANS_PER_BYTE_COST;
   /*additional px-rescan cost*/
   double PX_RESCAN_PER_ROW_COST;
@@ -211,45 +211,45 @@ protected:
   /*additional das-rescan cost*/
   double DAS_RESCAN_PER_ROW_RPC_COST;
   double DAS_BATCH_RESCAN_PER_ROW_RPC_COST;
-  //条件下压nestloop join右表扫一次的代价
+  // Cost of scanning the right table once in nested loop join under condition
   double NL_SCAN_COST;
-  //条件下压batch nestloop join右表扫一次的代价
+  // Cost of scanning the right table once for batch nestloop join under condition
   double BATCH_NL_SCAN_COST;
-  //条件下压nestloop join右表GET一次的代价
+  // Cost of getting the right table once in nested loop join under condition
   double NL_GET_COST;
-  //条件下压batch nestloop join右表GET一次的代价
+  // Cost of getting the right table once in batch nested loop join under condition
   double BATCH_NL_GET_COST;
-  //table look up一行的rpc代价
+  // table look up one line of rpc cost
   double TABLE_LOOPUP_PER_ROW_RPC_COST;
-  //insert一行主表的代价
+  // insert one row into the main table cost
   double INSERT_PER_ROW_COST;
-  //insert一行索引表的代价
+  // insert one row into the index table cost
   double INSERT_INDEX_PER_ROW_COST;
-  //insert单个约束检查代价
+  // insert single constraint check cost
   double INSERT_CHECK_PER_ROW_COST;
-  //update一行主表的代价
+  // update one row of the main table cost
   double UPDATE_PER_ROW_COST;
-  //update一行索引表的代价
+  // update the cost of updating one row in the index table
   double UPDATE_INDEX_PER_ROW_COST;
-  //update单个约束检查代价
+  // update single constraint check cost
   double UPDATE_CHECK_PER_ROW_COST;
-  //delete一行主表的代价
+  //delete one row from the main table cost
   double DELETE_PER_ROW_COST;
-  //delete一行索引表的代价
+  //delete one row from the index table cost
   double DELETE_INDEX_PER_ROW_COST;
-  //delete单个约束检查代价
+  //delete single constraint check cost
   double DELETE_CHECK_PER_ROW_COST;
-  //空间索引扫描的线性参数
+  // Linear parameters for spatial index scan
   double SPATIAL_PER_ROW_COST;
-  //存储层切换一次range的代价
+  // Storage layer switch cost of one range
   double RANGE_COST;
-  //计算一个UDF的代价
+  // Calculate the cost of a UDF
   double CMP_UDF_COST;
-  //计算一个返回值为LOB的表达式的代价
+  // Calculate the cost of an expression with a return value of LOB
   double CMP_LOB_COST;
-  //计算一个需处理异常的表达式的代价
+  // Calculate the cost of an expression that needs to be processed for exceptions
   double CMP_ERR_HANDLE_EXPR_COST;
-  //计算一个全文索引 functional lookup 表达式的代价
+  // Calculate the cost of a full-text index functional lookup expression
   double FUNCTIONAL_LOOKUP_PER_ROW_COST;
 
   const double (&comparison_params_)[common::ObMaxTC + 1];

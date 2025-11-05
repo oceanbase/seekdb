@@ -25,8 +25,7 @@ namespace oceanbase
 {
 namespace common
 {
-
-// ModuleClass: 标识使用该线程池的目标模块
+// ModuleClass: Identify the target module using this thread pool
 template <int MAX_THREAD_NUM = 32, typename ModuleClass = void>
 class ObMQThread
 {
@@ -58,11 +57,9 @@ public:
   int push(void *data, const uint64_t hash_value, const int64_t timeout);
 
   int64_t get_thread_num() const { return thread_num_; }
-
-  // 获取所有队列总任务个数
+  // Get the total number of tasks in all queues
   int get_total_task_num(int64_t &task_count);
-
-  // 获取第thread_idx个线程对应queue待处理任务个数
+  // Get the number of pending tasks in queue for thread thread_idx
   int get_task_num(const int64_t thread_idx, int64_t &task_count);
 
 private:
@@ -228,11 +225,9 @@ void ObMQThread<MAX_THREAD_NUM, ModuleClass>::run()
       }
     }
   }
-
-  // 退出都调用thread_end()
+  // Exit all calls thread_end()
   thread_end();
-
-  // NOTE: 一个线程退出，其他线程同时退出
+  // NOTE: One thread exits, other threads exit simultaneously
   stop_flag_ = true;
 }
 

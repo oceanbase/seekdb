@@ -859,7 +859,7 @@ public:
         strncpy(unix_socket_path_, unix_socket_path, sizeof(unix_socket_path_) - 1);
         if ((unix_lfd_ = listen_create_unix(unix_socket_path_, need_monopolize)) < 0) {
           LOG_WARN("unix socket listen create fail", K(unix_socket_path_), K(errno));
-          // Unix socket失败不影响TCP socket，所以不返回错误
+          // Unix socket failure does not affect TCP socket, so no error is returned
         } else if (0 != epoll_regist(epfd_, unix_lfd_, epflag, NULL)) {
           LOG_WARN("regist unix listen fd fail", K(unix_lfd_));
           close(unix_lfd_);

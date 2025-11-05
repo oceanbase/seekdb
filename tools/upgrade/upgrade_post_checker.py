@@ -12,12 +12,11 @@ import time
 import actions
 
 #### START
-# 1 检查版本号
+# 1 check version number
 def check_cluster_version(cur, timeout):
   current_cluster_version = actions.get_current_cluster_version()
   actions.wait_parameter_sync(cur, False, "min_observer_version", current_cluster_version, timeout)
-
-# 2 检查租户版本号
+# 2 Check tenant version number
 def check_data_version(cur, query_cur, timeout):
 
   # get tenant except standby tenant
@@ -83,8 +82,7 @@ def check_data_version(cur, query_cur, timeout):
     raise MyError('target_data_version/current_data_version/upgrade_begin_data_version not match with {0}, tenant_cnt:{1}, result_cnt:{2}'.format(current_data_version, tenant_count, results[0][0]))
   else:
     logging.info("all tenant's target_data_version/current_data_version/upgrade_begin_data_version are match with {0}".format(current_data_version))
-
-# 3 检查内部表自检是否成功
+# 3 Check if internal table self-check is successful
 def check_root_inspection(cur, query_cur, timeout):
   sql = "select count(*) from oceanbase.__all_virtual_upgrade_inspection where info != 'succeed'"
 
@@ -102,35 +100,28 @@ def check_root_inspection(cur, query_cur, timeout):
     logging.warn('check root inspection failed!')
     raise MyError('check root inspection failed!')
   logging.info('check root inspection success')
-
-# 4 开ddl
+# 4 open ddl
 def enable_ddl(cur, timeout):
   actions.set_parameter(cur, 'enable_ddl', 'True', timeout)
-
-# 5 打开sys租户rebalance
+# 5 open sys tenant rebalance
 def enable_rebalance(cur, timeout):
   only_sys_tenant = True
   actions.set_tenant_parameter(cur, 'enable_rebalance', 'True', timeout, only_sys_tenant)
-
-# 6 打开rereplication
+# 6 open rereplication
 def enable_rereplication(cur, timeout):
   actions.set_parameter(cur, 'enable_rereplication', 'True', timeout)
-
-# 7 打开major freeze
+# 7 open major freeze
 def enable_major_freeze(cur, timeout):
   actions.set_parameter(cur, 'enable_major_freeze', 'True', timeout)
   actions.set_tenant_parameter(cur, '_enable_adaptive_compaction', 'True', timeout)
   actions.do_resume_merge(cur, timeout)
-
-# 8 打开 direct load
+# 8 open direct load
 def enable_direct_load(cur, timeout):
   actions.set_parameter(cur, '_ob_enable_direct_load', 'True', timeout)
-
-# 9 关闭enable_sys_table_ddl
+# 9 close enable_sys_table_ddl
 def disable_sys_table_ddl(cur, timeout):
   actions.set_parameter(cur, 'enable_sys_table_ddl', 'False', timeout)
-
-# 开始升级后的检查
+# Start the check after upgrade
 def do_check(conn, cur, query_cur, timeout):
   try:
     check_cluster_version(cur, timeout)

@@ -2302,8 +2302,7 @@ TEST_F(TestSemiStructEncoding, test_full_json_type)
   }
 
 }
-
-// 测试小于4行的场景 ObCSEncodingUtil::ENCODING_ROW_COUNT_THRESHOLD
+// Test the scenario with less than 4 rows ObCSEncodingUtil::ENCODING_ROW_COUNT_THRESHOLD
 TEST_F(TestSemiStructEncoding, test_ENCODING_ROW_COUNT_THRESHOLD)
 {
   share::ObTenantEnv::get_tenant_local()->id_ = 500;

@@ -28,15 +28,15 @@ class ElectionPriority
 {
 public:
   virtual ~ElectionPriority() {}
-  // 在日志中打印priority的能力
+  // Print the capability to log priority
   virtual int64_t to_string(char *buf, const int64_t buf_len) const = 0;
-  // 优先级需要序列化能力，以便通过消息传递给其他副本
+  // Priority needs serialization capability to be passed to other replicas via messages
   virtual int serialize(char* buf, const int64_t buf_len, int64_t& pos) const = 0;
   virtual int deserialize(const char* buf, const int64_t data_len, int64_t& pos) = 0;
   virtual int64_t get_serialize_size(void) const = 0;
-  // 主动刷新选举优先级的方法
+  // The method for actively refreshing election priority
   virtual int refresh() = 0;
-  // 在priority间进行比较的方法
+  // The method for comparing between priorities
   virtual int compare_with(const ElectionPriority &rhs,
                            const uint64_t compare_version,
                            const bool decentralized_voting,
@@ -44,7 +44,7 @@ public:
                            common::ObStringHolder &reason) const = 0;
   virtual int get_size_of_impl_type() const = 0;
   virtual void placement_new_impl(void *ptr) const = 0;
-  // 跳过RCS直接切主
+  // Skip RCS and directly switch to leader
   virtual bool has_fatal_failure() const = 0;
 };
 

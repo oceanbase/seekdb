@@ -1004,7 +1004,7 @@ int ObBalanceTaskTableOperator::update_task_part_list(const uint64_t tenant_id,
   } else if (OB_FAIL(trans.write(tenant_id, sql.ptr(), affected_rows))) {
     LOG_WARN("failed to exec sql", KR(ret), K(tenant_id), K(sql));
   } else if (is_zero_row(affected_rows)) {
-    //调用点处理
+    //Call point processing
     ret = OB_STATE_NOT_MATCH;
     LOG_WARN("expected one row, may part_list not change", KR(ret), K(sql), K(affected_rows));
   } else if (!is_single_row(affected_rows)) {

@@ -22,11 +22,11 @@ namespace oceanbase
 {
 namespace sql
 {
-// ObSortColumn没有设置OB_UNIS_VERSION，不能走序列化框架的逻辑，也就没有办法新加类型
-// 定义一个ObSortColumnExtra是为了解决ObSortColumn的扩展问题
-// is_ascending_这个成员在序列化的时候是按照1个字节的大小来序列化的，
-// 但是bool值只需要用到1位，那么剩余7位可以用一位来作为一个版本控制，
-// 如果解析时发现设置了版本号，那么就继续反序列化后面的ObSortColumnExtra
+// ObSortColumn has not set OB_UNIS_VERSION, cannot follow the serialization framework logic, thus it is impossible to add new types
+// Define an ObSortColumnExtra to solve the extension problem of ObSortColumn
+// is_ascending_this member is serialized with a size of 1 byte when serializing,
+// But bool value only needs 1 bit, then the remaining 7 bits can be used as a version control,
+// If the version number is set during parsing, then continue deserializing the following ObSortColumnExtra
 struct ObSortColumnExtra
 {
   OB_UNIS_VERSION(1);

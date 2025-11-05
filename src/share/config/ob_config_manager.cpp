@@ -145,8 +145,8 @@ int ObConfigManager::load_config(const char *path)
   }
 
   // 
-  // 为了避免和 got_version 有并发问题，
-  // 必须等到 load_config 调用后， got_version 才工作
+  // To avoid concurrency issues with got_version,
+  // Must wait for load_config to be called before got_version works
   init_config_load_ = true;
   return ret;
 }
@@ -278,7 +278,7 @@ int ObConfigManager::dump2file_unsafe(const char* path) const
           ret = OB_ERR_SYS;
           LOG_WARN("fail to backup history config file", KERRMSG, K(ret));
         }
-        // 运行到这里的时候可能掉电，导致没有 conf 文件，需要 DBA 手工拷贝  tmp 文件到这里
+        // When execution reaches here, a power failure may occur, resulting in the absence of the conf file, requiring the DBA to manually copy the tmp file here
         if (0 != ::rename(tmp_path, path) && errno != ENOENT) {
           ret = OB_ERR_SYS;
           LOG_WARN("fail to move tmp config file", KERRMSG, K(ret));
@@ -433,9 +433,9 @@ int ObConfigManager::got_version(int64_t version, const bool remove_repeat/* = f
     }
 
     if (schedule) {
-      // 如果决策了本次要调度一个新 task，那么现将队列中排队的所有 task 全部移除
-      // 有一点可以确保，到达这个点时无论移除的 task 是什么，下一个要添加的 task
-      // 的 version 一定是最新的。
+      // If the decision is to schedule a new task this time, then remove all tasks currently queued
+      // There is one thing that can be ensured, regardless of what task is removed when reaching this point, the next task to be added
+      // the version is definitely the latest.
       bool task_exist = false;
       int tmp_ret = TG_TASK_EXIST(lib::TGDefIDs::CONFIG_MGR, update_task_, task_exist);
       if (task_exist) {

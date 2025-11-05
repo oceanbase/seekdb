@@ -164,7 +164,7 @@ int ObVirtualSqlMonitor::inner_get_next_row(common::ObNewRow *&row)
     ret= OB_NOT_INIT;
     SERVER_LOG(WARN, "invalid arugment", K(ret), K(cells), K(allocator_), K(monitor_manager_));
   } else {
-    while (OB_SUCC(get_next_monitor_info())) {  //处理可能的空洞
+    while (OB_SUCC(get_next_monitor_info())) {  // handle possible gaps
       if (NULL != plan_info_) {
         start_id_++;
         break;

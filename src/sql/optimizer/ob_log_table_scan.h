@@ -1131,7 +1131,7 @@ protected: // memeber variables
   // limit params from upper limit op
   ObRawExpr *limit_count_expr_;
   ObRawExpr *limit_offset_expr_;
-  // 记录该表是否采样、采样方式、比例等信息
+  // Record whether the table is sampled, sampling method, ratio, etc. information
   SampleInfo sample_info_;
   ObCostTableScanInfo *est_cost_info_; 
   ObCostTableScanSimpleInfo est_cost_simple_info_;

@@ -28,13 +28,13 @@ ObJobParser::~ObJobParser()
 {
 }
 
-/* 本文件的入口函数，将plan里面的op tree切分成多个Job
- * 切割点为每一对ObReceive和ObTransmit之间
- * @input ObPhysicalPlan 内包含operator tree
- * @input ob_execution_id 当前execution的id，用以区分不同execution
- * @input ObTaskSpliterFactory 负责构造TaskSpliter，构造的结果保存在ObJob中.
- *        创建出的每一个Spliter都已经被初始化好, 拥有一个指向ObJob的引用
- * @output ObJobControl 切分好的job都填充到ObJobControl内管理起来
+/* The entry function of this file, which splits the op tree in plan into multiple Jobs
+ * The cutting points are between each pair of ObReceive and ObTransmit
+ * @input ObPhysicalPlan contains the operator tree
+ * @input ob_execution_id the id of the current execution, used to distinguish different executions
+ * @input ObTaskSpliterFactory responsible for constructing TaskSpliter, the result of construction is saved in ObJob.
+ *        Each created Spliter has already been initialized and holds a reference to ObJob
+ * @output ObJobControl all split jobs are filled into ObJobControl for management
  */
 int ObJobParser::parse_job(ObExecContext &exec_ctx,
                            ObPhysicalPlan *phy_plan,
@@ -159,7 +159,7 @@ int ObJobParser::create_job(
       job = NULL;
       LOG_WARN("fail add job", K(ret));
     } else {
-      // 设置Spliter和ServersProvider到Job中
+      // Set Spliter and ServersProvider to Job
       ObTaskSpliter *task_spliter = NULL;
       if (OB_FAIL(spfactory.create(exec_ctx, *job, task_split_type, task_spliter))) {
         LOG_WARN("fail create task spliter", "type", task_split_type, K(ret));

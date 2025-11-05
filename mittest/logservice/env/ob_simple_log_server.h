@@ -521,11 +521,11 @@ private:
   ObSrvRpcProxy srv_proxy_;
   logservice::coordinator::ObFailureDetector detector_;
   MockElectionMap mock_election_map_;
-  // ObTenantUnit以及__all_unit_configs
+  // ObTenantUnit and __all_unit_configs
   ObSpinLock log_disk_lock_;
-  // 本地已生效日志盘规格
+  // Local effective log disk specification
   palf::PalfDiskOptions disk_opts_;
-  // 内部表中记录日志盘规格
+  // Internal table records log disk specifications
   palf::PalfDiskOptions inner_table_disk_opts_;
   ObLooper looper_;
   MockCkptMap ckpt_map_;

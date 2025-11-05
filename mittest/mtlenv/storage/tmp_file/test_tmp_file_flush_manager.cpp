@@ -443,7 +443,7 @@ TEST_F(TestTmpFileFlushMgr, test_delete_file_when_flushing)
 
   // start a thread to remove deleting tmp file in retry list
   bool has_stop = false;
-  std::thread t(do_async_flush, MTL_CTX(), std::ref(flush_tg), std::ref(has_stop)); // TODO: 可以用async mode来替代
+  std::thread t(do_async_flush, MTL_CTX(), std::ref(flush_tg), std::ref(has_stop)); // TODO: can use async mode to replace
 
   // remove file 2, expect remove complete immediately
   int64_t fd_2 = tmp_file_handles.at(2).get()->fd_;
@@ -909,8 +909,7 @@ TEST_F(TestTmpFileFlushMgr, test_reinsert_item_into_meta_tree)
   ObTmpWriteBufferPool &wbp = pc_ctrl.write_buffer_pool_;
   ObTmpFileFlushTG &flush_tg = pc_ctrl.mock_swap_tg_.flush_tg_ref_;
   wbp.default_wbp_memory_limit_ = BIG_WBP_MEM_LIMIT * 2;
-
-  // 1. 产生data和meta的刷盘任务，所有IO都卡住
+  // 1. Generate the brush disk task for data and meta, all IOs are blocked
   MockIO.set_wait_mode(MockTmpFileUtil::MOCK_WAIT_IO_MODE::MOCK_ALL_IO_TIMEOUT);
   pc_ctrl.set_flush_all_data(true);
 
@@ -930,8 +929,7 @@ TEST_F(TestTmpFileFlushMgr, test_reinsert_item_into_meta_tree)
   EXPECT_EQ(37, flush_tg.flushing_block_num_); // 36 data task + 1 meta task(13 meta pages)
   EXPECT_TRUE(wbp.meta_page_cnt_ > 0);
   EXPECT_TRUE(wbp.dirty_meta_page_cnt_ == 0);
-
-  // 2. data IO 全部完成，重新插入data刷盘链表；再次触发data刷盘
+  // 2. data IO all completed, reinsert data flush linked list; trigger data flush again
   io_info.size_ = 8 * 1024 * 1024;
   ret = MTL(ObTenantTmpFileManager *)->write(MTL_ID(), io_info);
   ASSERT_EQ(OB_SUCCESS, ret);
@@ -942,8 +940,7 @@ TEST_F(TestTmpFileFlushMgr, test_reinsert_item_into_meta_tree)
   wbp.print_statistics();
   LOG_INFO("file status 2", KPC(file_handle.get()));
   EXPECT_EQ(nullptr, file_handle.get()->data_flush_node_.get_next());
-
-  // 3. meta IO未完成的情况下不能再次刷到meta
+  // 3. meta IO not completed, meta cannot be brushed again
   flush_tg.do_work_();
   LOG_INFO("flush info 3", K(flush_tg));
   wbp.print_statistics();
@@ -951,8 +948,7 @@ TEST_F(TestTmpFileFlushMgr, test_reinsert_item_into_meta_tree)
   // add one meta pages at level 0, level 1 rightmost meta page becomes dirty
   EXPECT_EQ(wbp.write_back_meta_cnt_, 12);
   ASSERT_EQ(OB_SUCCESS, MockIO.get_generate_error_code());
-
-  // 4. IO恢复，结束流程
+  // 4. IO recovery, end process
   MockIO.set_wait_mode(MockTmpFileUtil::MOCK_WAIT_IO_MODE::NORMAL);
   for (int32_t i = 0; i < 10; ++i) {
     flush_tg.do_work_();

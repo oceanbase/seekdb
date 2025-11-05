@@ -46,7 +46,7 @@ int ObPLParser::fast_parse(const ObString &query,
 {
   ACTIVE_SESSION_FLAG_SETTER_GUARD(in_pl_parse);
   int ret = OB_SUCCESS;
-  // 删除SQL语句末尾的空格
+  // Remove spaces at the end of the SQL statement
   int64_t len = query.length();
   while (len > 0 && ISSPACE(query[len - 1])) {
     --len;

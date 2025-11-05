@@ -30,7 +30,7 @@ public:
 };
 
 /**
- * 这里会将CTE实现剥离开了，CTE实现使用另外一套实现，与Set无关，CTE不要再继承ObMergeSetOp了
+ * Here the CTE implementation will be separated, the CTE implementation uses another set of implementation, which is unrelated to Set, CTE should no longer inherit from ObMergeSetOp
  **/
 class ObMergeSetOp : public ObOperator
 {
@@ -104,16 +104,14 @@ protected:
   common::ObArenaAllocator alloc_;
   ObChunkDatumStore::LastStoredRow last_row_;
   Compare cmp_;
-  bool need_skip_init_row_; //是否需要跳过和最初的 last_output_row_ 比较; false: 不需要; true: 需要;
-                            //目前仅针对 merge except 和 merge intersect 置为TRUE, 因为无法区分 last_output_row_
-                            //是来自初始化时的全NULL or 左侧child的全NULL, see bug
+  bool need_skip_init_row_; // Whether to skip comparison with the initial last_output_row_; false: no; true: yes;
+                            //Currently only for merge except and merge intersect set to TRUE, because cannot distinguish last_output_row_
+                            // is from initialization with all NULL or left child with all NULL, see bug
   int64_t last_row_idx_;
   bool use_last_row_;
 };
-
-
-// 同上，隐含从哪个child op拿数据，则外层就从child_op拿output结果
-// 实现成模版函数，方便对比compare_row是StoredRow或者是ObIArray<ObExpr*>
+// Same as above, implicitly taking data from which child op, then the outer layer takes the output result from child_op
+// Implement as a template function, convenient for comparing compare_row is StoredRow or ObIArray<ObExpr*>
 template<typename T>
 int ObMergeSetOp::do_strict_distinct(
   ObOperator &child_op,
@@ -131,7 +129,7 @@ int ObMergeSetOp::do_strict_distinct(
     } else if (OB_UNLIKELY(get_need_skip_init_row())) {
       set_need_skip_init_row(false);
       is_break = true;
-      // 保存第一行，作为下一次匹配的行，之前逻辑应该有问题，之所以没有问题，应该是所有的row都为null
+      // Save the first row, as the row for the next match, the previous logic should have been problematic, the reason it didn't cause a problem is probably that all rows were null
       if (OB_NOT_NULL(compare_row)) {
         ret = OB_ERR_UNEXPECTED;
         SQL_ENG_LOG(WARN, "first row: compare row must be null", K(ret));

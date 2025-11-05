@@ -43,7 +43,7 @@ private:
   int resolve_table_list(const ParseNode &table_node, bool &is_multi_table_delete);
   int generate_delete_table_info(const TableItem &table_item);
   int check_multi_delete_table_conflict();
-  //@TODO: 这里是mysql的delete table search规则，还需要加oracle的规则
+  //@TODO: This is the mysql delete table search rule, still need to add oracle's rule
   int find_delete_table_with_mysql_rule(const common::ObString &db_name,
                                         const common::ObString &table_name,
                                         TableItem *&table_item);

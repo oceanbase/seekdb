@@ -224,8 +224,8 @@ public:
     flag_ = 0;
   }
 
-  /* 如果 bitset 中未设置，则使用 from 中的值，
-   * 否则保持 this 中的值不变
+  /* If the bit is not set in the bitset, use the value from from,
+   * otherwise keep the value in this unchanged
    */
   int merge(const common::ObBitSet<> &opt_bitset,
              const share::ObSequenceOption &from)

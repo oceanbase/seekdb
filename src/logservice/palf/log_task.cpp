@@ -202,7 +202,7 @@ int LogTask::set_initial_header_info(const LogTaskHeaderInfo &header_info)
     header_.proposal_id_ = header_info.proposal_id_;
     header_.min_scn_ = header_info.min_scn_;
     update_data_len(header_info.data_len_);
-    // Note: 这里不能直接赋值，需用inc_update，因为其他log_entry可能已经更新了max_scn_
+    // Note: Here direct assignment cannot be used, inc_update must be used instead, because other log_entry may have already updated max_scn_
     inc_update_max_scn(header_info.max_scn_);
     // The first log is responsible for changing state to valid.
     set_valid();
@@ -252,7 +252,7 @@ int LogTask::set_group_header(const LSN &lsn, const SCN &scn, const LogGroupEntr
     header_.min_scn_ = scn;
     header_.max_scn_ = group_entry_header.get_max_scn();
     header_.data_len_ = group_entry_header.get_data_len();          // total len without log_group_entry_header
-    header_.committed_end_lsn_ = group_entry_header.get_committed_end_lsn();  // 乱序收日志时前面空洞补齐后需要该值
+    header_.committed_end_lsn_ = group_entry_header.get_committed_end_lsn();  // Out-of-order log reception requires this value after filling in the preceding gaps
     header_.accum_checksum_ = group_entry_header.get_accum_checksum();
     header_.is_raw_write_ = group_entry_header.is_raw_write();
     set_valid();  // set valid

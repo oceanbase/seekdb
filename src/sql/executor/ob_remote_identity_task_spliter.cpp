@@ -53,9 +53,9 @@ int ObRemoteIdentityTaskSpliter::get_next_task(ObTaskInfo *&task)
     LOG_WARN("root op is NULL", K(ret));
   } else {
     ObDASTableLoc *first_table_loc = DAS_CTX(*exec_ctx_).get_table_loc_list().get_first();
-    // t1 union t1这种情况， t1(p0) union t2(p0)这种情况，等等，
-    // 都是remote模式，但table_loc_list的count可能大于1
-    // 优化器必须保证：remote模式下，所有表的location都是一致的，并且都是单分区。
+    // t1 union t1 this situation, t1(p0) union t2(p0) this situation, etc.,
+    // All are in remote mode, but the count of table_loc_list may be greater than 1
+    // The optimizer must ensure: in remote mode, the location of all tables is consistent and each is a single partition.
     ObDASTabletLoc *first_tablet_loc = first_table_loc->get_first_tablet_loc();
     if (OB_ISNULL(ptr = allocator_->alloc(sizeof(ObTaskInfo)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -79,7 +79,7 @@ int ObRemoteIdentityTaskSpliter::get_next_task(ObTaskInfo *&task)
       } else if (OB_FAIL(task_->add_location_idx(0))) {
         LOG_WARN("add location index to task failed", K(ret));
       } else {
-        // 将task_作为类成员的目的是为了保证第二次调用get_next_task能返回OB_ITER_END
+        // The purpose of making task_ a class member is to ensure that the second call to get_next_task returns OB_ITER_END
         task = task_;
       }
     }

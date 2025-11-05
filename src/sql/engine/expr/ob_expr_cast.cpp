@@ -184,7 +184,7 @@ int ObExprCast::get_cast_string_len(ObExprResType &type1,
                         cast_coll_type);
       ObString val_str;
       EXPR_GET_VARCHAR_V2(val, val_str);
-      //这里设置的len为字符个数
+      // Here the len is set to the number of characters
       if (OB_SUCC(ret) && NULL != val_str.ptr()) {
         int32_t len_byte = val_str.length();
         res_len = len_byte;
@@ -714,10 +714,10 @@ int ObExprCast::cg_expr(ObExprCGCtx &op_cg_ctx,
              K(in_type), K(out_type), KP(op_cg_ctx.allocator_));
   } else {
     // setup cast mode for explicit cast.
-    // 隐式cast的cast mode在创建cast expr时已经被设置好了，直接从raw_expr.get_cast_mode()里拿
+    // Implicit cast's cast mode has already been set when creating cast expr, directly get it from raw_expr.get_cast_mode()
     ObCastMode cast_mode = raw_expr.get_cast_mode();
     if (cast_mode & CM_ZERO_FILL) {
-      // 将zerofill信息放在scale里面
+      // Put zerofill information inside scale
       const ObRawExpr *src_raw_expr = NULL;
       CK(OB_NOT_NULL(src_raw_expr = raw_expr.get_param_expr(0)));
       if (OB_SUCC(ret)) {
@@ -773,7 +773,7 @@ int ObExprCast::cg_expr(ObExprCGCtx &op_cg_ctx,
                                               rt_expr.get_vec_value_tc(), just_eval_arg,
                                               rt_expr.eval_func_, cast_mode) :
             nullptr;
-        // 有些VEC_TC_XXXX类中尚有部分类型暂时没有实现向量化，仍走非向量化接口
+        // Some VEC_TC_XXXX classes still have some types not yet implemented for vectorization, and they still use the non-vectorized interface
         if (ObTinyTextType == in_type || ObTinyTextType == out_type) {
           rt_expr.eval_vector_func_ = nullptr;
         }

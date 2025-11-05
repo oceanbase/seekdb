@@ -353,20 +353,20 @@ public:
   virtual void switch_to_follower_forcedly() = 0;
   virtual int switch_to_leader() = 0;
   // @retval
-  //   OB_SUCCESS, 角色切换执行成功
-  //   OB_LS_NEED_REVOKE, 角色切换执行失败, 需要主动卸任
-  //   OTHERS , 角色切换执行失败, 不需要主动卸任
+  //   OB_SUCCESS, role switch execution succeeded
+  //   OB_LS_NEED_REVOKE, role switch execution failed, need to step down proactively
+  //   OTHERS , role switch execution failed, no need to resign proactively
   //
-  // 新增OB_LS_NEED_REVOKE的原因是, switch_to_follower_gracefully, 包含两步:
-  //   a. 执行leader->follower;
-  //   b. 执行follower->leader.
+  // The reason for adding OB_LS_NEED_REVOKE is that switch_to_follower_gracefully includes two steps:
+  //   a. Execute leader->follower;
+  //   b. Execute follower->leader switch.
   //
-  //   a. 执行成功, 表示可以执行后续的切主工作
-  //   a. 执行失败, 需要执行1.b
-  //   b. 执行成功, 表示这次切主操作执行失败, 但不需要主动卸任
-  //   b. 执行失败, 表示这次切主操作执行失败, 但需要主动卸任
+  //   a. Execution successful, indicates that the subsequent leader switch work can be performed
+  //   a. Execution failed, need to execute 1.b
+  //   b. Execution successful, indicates that this leader switch operation failed, but does not require an active resignation
+  //   b. Execution failed, indicates that this leader switch operation failed, but needs to step down proactively
   //
-  // 经过协商, 决定采用错误码的方式区分上述各种异常.
+  // After negotiation, it was decided to use error codes to distinguish the above various exceptions.
   virtual int switch_to_follower_gracefully() = 0;
   virtual int resume_leader() = 0;
   VIRTUAL_TO_STRING_KV("ObIRoleChangeSubHandler", "Dummy");

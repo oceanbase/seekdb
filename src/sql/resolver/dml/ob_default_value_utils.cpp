@@ -208,8 +208,7 @@ int ObDefaultValueUtils::resolve_default_function(ObRawExpr *&expr, ObStmtScope 
   }
   return ret;
 }
-
-//为default生成一个default函数
+// Generate a default function for default
 int ObDefaultValueUtils::resolve_default_expr(const ColumnItem &column_item, ObRawExpr *&expr, ObStmtScope scope)
 {
   int ret = OB_SUCCESS;
@@ -498,8 +497,8 @@ int ObDefaultValueUtils::resolve_column_ref_in_insert(const ColumnItem *column, 
         LOG_WARN("fail to build default expr according to datatype", K(ret));
       }
     } else if (OB_TIMESTAMP_COLUMN_DEFAULT_OP == op) {
-      //timestamp列比较讨厌，很特殊；只能单独在这里处理；
-      //不走寻常路
+      //timestamp column is quite annoying, very special; can only be handled separately here;
+      // Not taking the conventional route
       if (OB_FAIL(build_default_expr_for_timestamp(column, expr))) {
         LOG_WARN("fail to build default expr for timestamp", K(ret));
       }
@@ -518,8 +517,7 @@ int ObDefaultValueUtils::resolve_column_ref_in_insert(const ColumnItem *column, 
   }
   return ret;
 }
-
-//在insert stmt中，如果insert values中不带某个列，需要填充该列的default值
+// In insert stmt, if insert values does not include a certain column, need to fill the default value for that column
 int ObDefaultValueUtils::get_default_type_for_insert(const ColumnItem *column, ObDMLDefaultOp &op)
 {
   int ret = OB_SUCCESS;
@@ -550,8 +548,8 @@ int ObDefaultValueUtils::get_default_type_for_insert(const ColumnItem *column, O
                && column->get_column_type()->is_enum()) {
       op = OB_NORMAL_DEFAULT_OP;
     } else {
-      //根据mysql文档，需要根据sql_mode来作不同的处理
-      //strict模式直接报错；非strict模式取数据类型的默认值
+      // According to the mysql documentation, different handling is required based on sql_mode
+      // strict mode directly reports an error; non-strict mode takes the default value of the data type
       if (params_->session_info_->get_ddl_info().is_ddl()) {
         op = OB_NOT_STRICT_DEFAULT_OP;
       } else if (is_strict_mode(params_->session_info_->get_sql_mode()) && !del_upd_stmt->is_ignore()) {
@@ -667,8 +665,7 @@ int ObDefaultValueUtils::get_default_type_for_default_expr(const ColumnItem *col
   }
   return ret;
 }
-
-//insert into test set c1=c1, c1为timestamp列
+// insert into test set c1=c1, c1 is a timestamp column
 //insert into test values(c1, 3);
 //insert into test set c1 = default(c1);
 //insert into test values(default(c1));
@@ -772,7 +769,7 @@ int ObDefaultValueUtils::build_default_expr_not_strict_static(
   }
   if (OB_SUCC(ret)) {
     //create default value raw expr
-    //ObObjType必须和ObItemType中的数据类型相关的item type是重合的，所以这里可以cast
+    // ObObjType must be the same as the item type related to the data type in ObItemType, so casting here is possible
     if (OB_FAIL(expr_factory.create_raw_expr(
                 static_cast<ObItemType>(default_value.get_type()), c_expr))) {
       LOG_WARN("create default value expr failed", K(ret));
@@ -780,8 +777,8 @@ int ObDefaultValueUtils::build_default_expr_not_strict_static(
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("fail to create raw expr", K(c_expr));
     } else {
-      //const expr的类型会直接从default value中推导，所以这里不需要设置类型，设置了类型也是没有意义
-      //后面deduce type会将其flush掉
+      // const expr's type will be directly inferred from the default value, so there is no need to set the type, setting the type would also be meaningless
+      // behind deduce type will flush it out
       c_expr->set_value(default_value);
       c_expr->set_accuracy(column_schema->get_accuracy());
     }
@@ -827,15 +824,15 @@ int ObDefaultValueUtils::build_default_expr_not_strict(const ColumnItem *column,
   }
   if (OB_SUCC(ret)) {
     //create default value raw expr
-    //ObObjType必须和ObItemType中的数据类型相关的item type是重合的，所以这里可以cast
+    // ObObjType must be the same as the item type related to the data type in ObItemType, so casting here is possible
     if (OB_FAIL(params_->expr_factory_->create_raw_expr(static_cast<ObItemType>(default_value.get_type()), c_expr))) {
       LOG_WARN("create default value expr failed", K(ret));
     } else if (OB_ISNULL(c_expr)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("fail to create raw expr", K(c_expr));
     } else {
-      //const expr的类型会直接从default value中推导，所以这里不需要设置类型，设置了类型也是没有意义
-      //后面deduce type会将其flush掉
+      // const expr's type will be directly inferred from the default value, so there is no need to set the type, setting the type would also be meaningless
+      // behind deduce type will flush it out
       c_expr->set_value(default_value);
       c_expr->set_accuracy(column->get_column_type()->get_accuracy());
     }
@@ -1104,7 +1101,7 @@ int ObDefaultValueUtils::build_default_expr_for_generated_column(const ColumnIte
     LOG_WARN("column expr is null", K_(column.expr), K_(stmt));
   } else if (OB_FAIL(ObResolverUtils::cnt_external_pseudo_column(*column.expr_->get_dependant_expr(), contain))) {
     LOG_WARN("failed to check if contain external pseudo column", K(ret));
-    // 外表生成列包含伪列  默认值为null
+    // Generated column contains pseudo columns  default value is null
   } else if (contain && OB_FAIL(ObRawExprUtils::build_null_expr(*params_->expr_factory_, expr))) {
     LOG_WARN("fail to build null expr", K(ret));
   } else if (!contain && OB_FAIL(ObDMLResolver::copy_schema_expr(*params_->expr_factory_,

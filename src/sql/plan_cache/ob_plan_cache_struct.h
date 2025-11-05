@@ -152,12 +152,12 @@ struct ObPlanCacheKey : public ObILibCacheKey
                K_(config_str),
                K_(flag),
                K_(namespace));
-  //通过name来进行查找，一般是shared sql/procedure
-  //cursor用这种方式，对应的namespace是CRSR
+  // Search by name, generally shared sql/procedure
+  //cursor is used in this way, the corresponding namespace is CRSR
   common::ObString name_;
-  //通过schema id来进行查找，这种方式一般是直接的schema obj需要缓存到plan
-  //cache中，例如store procedure, package, function
-  uint64_t key_id_; //在ps中key_id_的含有为statement id
+  // Through schema id to look up, this method is generally a direct schema obj that needs to be cached in plan
+  //cachein，for examplestore procedure, package, function
+  uint64_t key_id_; // In ps, key_id_ contains the statement id
   uint64_t db_id_;
   uint32_t sessid_;
   PlanCacheMode mode_;
@@ -177,8 +177,7 @@ struct ObPlanCacheKey : public ObILibCacheKey
   };
   uint64_t sys_var_config_hash_val_;
 };
-
-//记录快速化参数后不需要扣参数的原始字符串及相关信息
+// Record the original string and related information of quick parameters that do not need to deduct parameters
 struct NotParamInfo
 {
   int64_t idx_;
@@ -292,14 +291,14 @@ enum WayToGenPlan {
 
 struct SelectItemParamInfo
 {
-  // 比最大长度的column名多一倍的buffer
+  // buffer that is twice as long as the longest column name
   static const int64_t PARAMED_FIELD_BUF_LEN = MAX_COLUMN_CHAR_LENGTH;
-  // 对于 select -1 + a + 1 + b + 2 from dual，参数化后的sql为select ? + a + ? b + ? from dual
-  // questions_pos_记录每一个?相对于column表达式的偏移，即[0, 4, 9]
-  // params_idx_记录每一个?在raw_params中的下标，即[0, 1, 2]
-  // neg_params_idx_记录哪一个常量是负号，即[0]
-  // paramed_field_name_记录参数化后的column模板，即'? + a + ? + b + ?'
-  // esc_str_flag_标记z这一个column是不是字符串常量，比如 select 'abc' from dual，'abc'对应的标记为true
+  // For select -1 + a + 1 + b + 2 from dual, parameterized sql is select ? + a + ? b + ? from dual
+  // questions_pos_records the offset of each ? relative to the column expression, i.e., [0, 4, 9]
+  // params_idx_ records the index of each ? in raw_params, i.e., [0, 1, 2]
+  // neg_params_idx_ records which constant is the negative sign, i.e. [0]
+  // paramed_field_name_records parameterized column template, i.e., '? + a + ? + b + ?'
+  // esc_str_flag_ marks whether this column is a string constant, for example select 'abc' from dual, 'abc' corresponds to the mark true
   common::ObSEArray<int64_t, 16> questions_pos_;
   common::ObSEArray<int64_t, 16> params_idx_;
   common::ObBitSet<> neg_params_idx_;
@@ -440,8 +439,8 @@ struct ObPlanCacheCtx : public ObILibCacheCtx
     return ret;
   }
 
-  int is_retry(bool &v) const;  //是否在重试之中
-  int is_retry_for_dup_tbl(bool &v) const; //仅复制表原因的重试才会设置为true
+  int is_retry(bool &v) const;  // whether in retry
+  int is_retry_for_dup_tbl(bool &v) const; // Only retries due to table duplication will be set to true
   void set_begin_commit_stmt() { begin_commit_stmt_ = true; }
   bool is_begin_commit_stmt() const { return begin_commit_stmt_; }
   void set_is_parameterized_execute() { is_parameterized_execute_ = true; }
@@ -496,23 +495,21 @@ struct ObPlanCacheCtx : public ObILibCacheCtx
   common::ObFixedArray<NotParamInfo, common::ObIAllocator> not_param_info_; //used for match pcv in pcv_set, gen when add plan
   common::ObFixedArray<PsNotParamInfo, common::ObIAllocator> not_param_var_; //used for ps mode not param
   common::ObBitSet<common::OB_DEFAULT_BITSET_SIZE, common::ModulePageAllocator, true> not_param_index_;
-  //记录负数信息，在get plan时将fast parser的负数添加负号，现在是为了兼容outline中signature的生成,
-  //以前为解决负数问题引入正常parser时识别负数，然后将fast parser中?sql负号去掉，并将参数化的参数原
-  //始串前加'-', 从而生成的plan cache key中无负号,现在plan cache对负号的处理没有依赖这个方案，
-  //但outline的signature生成依赖了plan cache key, 导致对负号的处理还需保留。
+  // Record negative number information, in get plan add negative sign to fast parser's negative numbers, now it is for compatibility with signature generation in outline,
+  // Previously to solve the negative number issue, when introducing the normal parser to recognize negative numbers, then remove the negative sign of ?sql in the fast parser, and keep the parameterized parameters as they are
+  // Add '-' before the start string, so that the generated plan cache key does not contain a negative sign. Now the plan cache handling of negative signs does not rely on this scheme,
+  // But outline's signature generation depends on plan cache key, leading to the need to retain the handling of negative signs.
   common::ObBitSet<common::OB_DEFAULT_BITSET_SIZE, common::ModulePageAllocator, true> neg_param_index_;
   common::ObFixedArray<common::ObCharsetType, common::ObIAllocator> param_charset_type_;
-  // 用于存储临时表计划所包含的临时表名
+  // Used to store the temporary table names included in the temporary table plan
   TmpTableNameArray tmp_table_names_;
   ObSqlTraits sql_traits_;
   int64_t normal_parse_const_cnt_;
-
-  // select item参数化信息
+  // select item parameterized information
   SelectItemParamInfoArray select_item_param_infos_;
-
-  // 根据get plan时的一些信息(get plan失败)，判断新生成的计划是否加入plan cache
+  // According to some information when get plan fails, determine whether the newly generated plan should be added to plan cache
   bool should_add_plan_;
-  // 记录是否为begin/commit的语句，用于优化部分路径的调用
+  // Record whether it is a begin/commit statement, used to optimize some path calls
   bool begin_commit_stmt_;
 
   // record which const param must be positive

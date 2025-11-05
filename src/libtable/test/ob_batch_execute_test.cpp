@@ -3038,7 +3038,7 @@ TEST_F(TestBatchExecute, secondary_index)
     ASSERT_EQ(OB_SUCCESS, query.add_select_column(C1));
     ASSERT_EQ(OB_SUCCESS, query.add_select_column(C2));
     ASSERT_EQ(OB_SUCCESS, query.add_select_column(C3));
-    // 扫描C2为1和2的所有数据
+    // Scan all data for C2 as 1 and 2
     ObObj pk_objs_start[1];
     pk_objs_start[0].set_int(1);
     ObObj pk_objs_end[1];
@@ -3165,7 +3165,7 @@ TEST_F(TestBatchExecute, secondary_index)
     }
     ASSERT_EQ(OB_ITER_END, iter->get_next_entity(result_entity));
   }
-  // 删除后一半row
+  // Delete the second half of the row
   batch_operation.reset();
   result.reset();
   for (int64_t i = 0; i < BATCH_SIZE/2; ++i) {
@@ -3527,8 +3527,7 @@ TEST_F(TestBatchExecute, update_table_with_index_by_lowercase_rowkey)
     }
     ASSERT_EQ(OB_ITER_END, iter->get_next_entity(result_entity));
   }
-
-  // todo@wenqu: mysqlproxy使用时报-1044，后面再调通。
+  // todo@wenqu: mysqlproxy returns -1044 when used, to be resolved later.
 //  ObISQLClient::ReadResult res;
 //  uint64_t tenant_id = service_client_->get_tenant_id();
 //  ObString col_val;
@@ -4736,7 +4735,7 @@ TEST_F(TestBatchExecute, single_insert_up)
     value.set_double(c2_value);
     ASSERT_EQ(OB_SUCCESS, entity->set_property(C2, value));
     ObTableOperation table_operation = ObTableOperation::insert_or_update(*entity);
-    // TODO:@linjing 和sql行为不一致
+    // TODO:@linjing and sql behavior is inconsistent
     ASSERT_EQ(OB_ERR_UPDATE_ROWKEY_COLUMN, the_table->execute(table_operation, r));
     ASSERT_EQ(OB_SUCCESS, r.get_errno());
     ASSERT_EQ(0, r.get_affected_rows());
@@ -5307,7 +5306,7 @@ TEST_F(TestBatchExecute, multi_insert)
     ASSERT_TRUE(batch_operation.is_same_type());
     ASSERT_TRUE(batch_operation.is_same_properties_names());
     ObTableBatchOperationResult result;
-    // 冲突，但是非atomic，其他行可以写入
+    // Conflict, but not atomic, other rows can be written
     ASSERT_EQ(OB_SUCCESS, the_table->batch_execute(batch_operation, result));
   }
 }
@@ -9342,8 +9341,8 @@ TEST_F(TestBatchExecute, htble_query_async)
     ASSERT_EQ(OB_ITER_END, ret);
   }
   ASSERT_EQ(OB_ITER_END, ret);
-  ASSERT_EQ(200, result_cnt); // set_max_versions(2)，故只有200条
-  ASSERT_EQ(round, query_round - 1); // start已经扫描了一次
+  ASSERT_EQ(200, result_cnt); // set_max_versions(2), hence only 200 entries
+  ASSERT_EQ(round, query_round - 1); // start has already scanned once
   ////////////////////////////////////////////////////////////////
   // teardown
   service_client_->free_table(the_table);
@@ -11352,14 +11351,14 @@ TEST_F(TestBatchExecute, atomic_batch_ops)
       ASSERT_EQ(OB_SUCCESS, entity->add_rowkey_value(key));
       ASSERT_EQ(OB_SUCCESS, table_batch_operation.del(*entity));
     }
-    // 当前的数据
+    // Current data
     // +----+-------+------------------+----+
     // | c1 | c2    | cast(c3 as char) | c4 |
     // +----+-------+------------------+----+
     // |  5 | hello | world            |  1 |
     // |  6 | hello | world            |  1 |
     // +----+-------+------------------+----+
-    // 删唯一索引的时候会报错4377，因为c2,c4联合唯一索引有两条一模一样的数据，第二次删除会找不到记录，第一次已经删完。
+    // When deleting the unique index, error 4377 will be reported because the combined unique index of c2 and c4 has two identical records. The second deletion will not find the record as it has already been deleted in the first attempt.
     ASSERT_EQ(OB_ERR_DEFENSIVE_CHECK, table->batch_execute(table_batch_operation, req_options, result));
   }
 
@@ -11377,7 +11376,7 @@ TEST_F(TestBatchExecute, atomic_batch_ops)
     key.set_int(6);
     ASSERT_EQ(OB_SUCCESS, entity->add_rowkey_value(key));
     table_operation = ObTableOperation::del(*entity);
-    // 第二条还是删不掉，遗留成为脏数据
+    // The second one still can't be deleted, becoming dirty data
     // +----+-------+------------------+----+
     // | c1 | c2    | cast(c3 as char) | c4 |
     // +----+-------+------------------+----+

@@ -500,17 +500,15 @@ public:
                                      ObRawExpr *&new_expr,
                                      const ObLocalSessionVar *local_vars = NULL,
                                      int64_t local_var_id = OB_INVALID_INDEX_INT64);
-
-
-// 本函数原本被定义在CPP中，【因为UNITY合并编译单元的作用，而通过了编译，但模版代码的实现需要在头文件中定义】，因此关闭UNITY后导致observer无法通过编译
-// 为解决关闭UNITY后的编译问题，将其挪至头文件中
-// 但本函数使用了OZ、CK宏，这两个宏内部的log打印使用了LOG_WARN，要求必须定义USING_LOG_PREFIX
-// 由于这里是头文件，这将导致非常棘手的问题：
-// 1. 如果在本头文件之前没有定义USING_LOG_PREFIX，则必须重新定义USING_LOG_PREFIX（但宏被定义在头文件中将造成污染）
-// 2. 如果是在本文件中新定义的USING_LOG_PREFIX，则需要被清理掉，防止污染被传播到其他.h以及cpp中
-// 因此这里判断USING_LOG_PREFIX是否已定义，若已定义则放弃重新定义（这意味着日志并不总是被以“SQL_RESV”标识打印），同时也定义特殊标识
-// 若发现定义特殊标识，则在预处理过程中执行宏清理动作
-// 整个逻辑相当trick，是为了尽量少的修改代码逻辑，代码owner后续需要整改这里的逻辑
+// This function was originally defined in CPP, [because of the effect of UNITY merging compilation units, it compiled successfully, but the implementation of template code needs to be defined in the header file], therefore, closing UNITY led to observer failing to compile
+// To solve the compilation problem after closing UNITY, move it to the header file
+// But this function uses OZ, CK macros, these two macros internal log print used LOG_WARN, requirement must define USING_LOG_PREFIX
+// Since this is a header file, this will lead to very tricky problems:
+// 1. If USING_LOG_PREFIX is not defined before this header file, it must be redefined (but defining the macro in the header file will cause pollution)
+// 2. If USING_LOG_PREFIX is newly defined in this file, it needs to be cleaned up to prevent pollution from spreading to other .h and cpp files
+// Therefore here we check if USING_LOG_PREFIX is already defined, if it is defined then we abandon redefining it (this means logs are not always printed with the "SQL_RESV" identifier), and also define a special identifier
+// If a special identifier is found, execute macro cleanup actions during preprocessing
+// The entire logic is quite tricky, is to minimize changes to the code logic, code owner needs to refactor this logic later
 #ifndef USING_LOG_PREFIX
 #define MARK_MACRO_DEFINED_BY_OB_RAW_EXPR_UTIL_H
 #define USING_LOG_PREFIX SQL_RESV
@@ -641,7 +639,7 @@ public:
                                const ObRawExpr &expr, 
                                bool strict_type_check);
   static bool check_exprs_type_collation_accuracy_equal(const ObRawExpr *expr1, const ObRawExpr *expr2);
-  // 此方法请谨慎使用,会丢失enum类型的 enum_set_values
+  // This method should be used with caution, it will lose enum type enum_set_values
   static int build_column_conv_expr(ObRawExprFactory &expr_factory,
                                     const share::schema::ObColumnSchemaV2 *column_schema,
                                     ObRawExpr *&expr,
@@ -881,7 +879,7 @@ public:
                               const ObSQLSessionInfo &session_info,
                               uint16_t &subschema_id);
   static ObCollationLevel get_column_collation_level(const common::ObObjType &type);
-  /* 计算基本列的flag */
+  /* Calculate the flag for basic columns */
   static uint32_t calc_column_result_flag(const share::schema::ObColumnSchemaV2 &column_schema);
   static int is_expr_comparable(const ObRawExpr *expr, bool &can_be);
   static int function_alias(ObRawExprFactory &expr_factory, ObSysFunRawExpr *&expr);
@@ -941,7 +939,7 @@ public:
   static int rebuild_expr_params(ObUDFInfo &udf_info,
                                  sql::ObRawExprFactory *expr_factory,
                                  common::ObIArray<sql::ObRawExpr*> &expr_params);
-  //判断expr里是否包含字符串前缀的表达式
+  // Determine if expr contains an expression with a string prefix
   static bool has_prefix_str_expr(const ObRawExpr &expr,
                                   const ObColumnRefRawExpr &orig_column_expr,
                                   const ObRawExpr *&substr_expr);
@@ -969,28 +967,23 @@ public:
                                                        common::ObIArray<ObOpRawExpr*> &op_exprs);
   static int check_composite_cast(ObRawExpr *&expr, ObSchemaChecker &schema_checker, bool is_prepare, bool &skip_check);
   static int add_cast_to_multiset(ObRawExpr *&expr);
-
-
-  // 对parent的所有子节点一次调用try_create_bool_expr，给每个前面子节点按需增加bool expr
+  // Call try_create_bool_expr on all child nodes of parent, add bool expr to each preceding child node as needed
   static int try_add_bool_expr(ObOpRawExpr *parent, ObRawExprFactory &expr_factory);
-
-  // 针对case表达式的overload方法. 会给case expr的所有when expr前面按需增加bool expr
+  // For the overload method of case expression. It will add bool expr before each when expr of the case expr as needed
   static int try_add_bool_expr(ObCaseOpRawExpr *parent, ObRawExprFactory &expr_factory);
-
-  // 判断src_epxr前面是否需要bool expr，如果需要则创建bool expr并加到src_expr前面
-  // 如果不需要则out_expr被赋值为原本的src_expr
+  // Determine if a bool expr is needed before src_expr, if so, create the bool expr and add it before src_expr
+  // If not needed then out_expr is assigned the original src_expr
   static int try_create_bool_expr(ObRawExpr *src_expr, ObRawExpr *&out_expr,
                               ObRawExprFactory &expr_factory);
-  // 根据表达式类型判断是否需要增加布尔表达式
-  // 因为有些表达式的返回结果就是布尔语义的，这些表达式前面就不用再增加布尔表达式
+  // Determine if a boolean expression needs to be added based on the expression type
+  // Because some expressions return a boolean semantic result, there is no need to add a boolean expression before these expressions
   static int check_need_bool_expr(const ObRawExpr *expr, bool &need_bool_expr);
   static int check_is_bool_expr(const ObRawExpr *expr, bool &is_bool_expr);
-
-  // parent_raw_expr -> child_raw_expr加入隐式cast表达式后，变为:
+  // parent_raw_expr -> child_raw_expr after adding implicit cast expression, becomes:
   // parent_raw_expr -> cast_raw_expr -> child_raw_expr
-  // 该函数的作用是为了获得child_raw_expr，如果有多个cast_raw_expr，会迭代循环，一直循环到
-  // 第一个非隐式cast的表达式并返回
-  // deduce type阶段会调用它来忽略隐式cast expr
+  // The function is used to obtain child_raw_expr, if there are multiple cast_raw_expr, it will iterate in a loop, looping until
+  // The first non-implicit cast expression and return
+  // deduce type stage will call it to ignore implicit cast expr
   static int get_real_expr_without_cast(const ObRawExpr *expr,
                                         const ObRawExpr *&out_expr);
 
@@ -1078,8 +1071,7 @@ public:
                                     const ObItemType expect_op_type,
                                     ObRawExpr *param_expr,
                                     ObAggFunRawExpr *&aggr_expr);
-
-  //专用于limit_expr/offset_expr中，用于构造case when limit_expr < 0 then 0 else limit_expr end
+  // Specifically used in limit_expr/offset_expr to construct case when limit_expr < 0 then 0 else limit_expr end
 
 
   static int build_or_exprs(ObRawExprFactory &expr_factory,

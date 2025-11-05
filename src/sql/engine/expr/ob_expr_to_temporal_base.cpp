@@ -165,7 +165,7 @@ int ObExprToTemporalBase::calc_result_typeN(ObExprResType &type,
     ObExprResType &input_char = types_array[0];
     ObCollationType nls_collation = type_ctx.get_session()->get_nls_collation();
     if (OB_SUCC(ret)) {
-      //to_date 可以接受任何可以转换成varchar的input
+      //to_date can accept any input that can be converted to varchar
       bool accept_input_type = ob_is_datetime(get_my_target_obj_type())
           || input_char.is_null()
           || ob_is_string_tc(input_char.get_type())

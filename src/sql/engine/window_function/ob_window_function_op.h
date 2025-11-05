@@ -586,7 +586,7 @@ public:
     virtual ~WinFuncCell()
     {
     }
-    // 开始计算新一组数据时调用reset
+    // Start calculating a new set of data by calling reset
     void reset_for_restart()
     {
       last_valid_frame_.head_ = last_valid_frame_.tail_ = -1;
@@ -999,7 +999,7 @@ private:
   common::ObFixedArray<ObDatum*, common::ObIAllocator> all_expr_datums_copy_;
   common::ObFixedArray<ObDatum*, common::ObIAllocator> all_expr_datums_;
   int64_t restore_row_cnt_;
-  // 上一个输出行
+  // previous output line
   int64_t last_output_row_idx_;
   bool child_iter_end_;
   bool iter_end_;

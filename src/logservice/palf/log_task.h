@@ -37,10 +37,10 @@ struct LogTaskHeaderInfo
   int64_t data_len_;             // total len without log_group_entry_header
   int64_t proposal_id_;  // leader's proposal_id when generate this log
   LSN prev_lsn_;
-  int64_t prev_proposal_id_;  // 乱序收日志需要校验该值
-  LSN committed_end_lsn_;     // 乱序收日志时前面空洞补齐后需要该值
-  int64_t data_checksum_;        // follower收日志时校验, 本地计算accum_checksum也需要用该值
-  int64_t accum_checksum_;       // follower乱序收日志时前面空洞补齐后与本地值做校验
+  int64_t prev_proposal_id_;  // Out-of-order log reception requires validation of this value
+  LSN committed_end_lsn_;     // When logs are received out of order, this value is needed to fill in the preceding gaps
+  int64_t data_checksum_;        // follower receives log for verification, local accum_checksum calculation also uses this value
+  int64_t accum_checksum_;       // follower receives logs out of order and performs checksum validation after filling in preceding gaps with local values
   bool is_padding_log_;
   bool is_raw_write_;
 

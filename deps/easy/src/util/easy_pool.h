@@ -2,7 +2,7 @@
 #define EASY_POOL_H_
 
 /**
- * 简单的内存池
+ * simple memory pool
  */
 #include "easy_define.h"
 #include "easy_list.h"

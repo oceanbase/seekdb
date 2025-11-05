@@ -46,8 +46,8 @@ ObMPBase::ObMPBase(const ObGlobalContext &gctx)
 
 ObMPBase::~ObMPBase()
 {
-  // wakeup_request内部会判断has_req_wakeup_标，
-  // 这里调一次兜底异常路径忘记flush_buffer的场景
+  // wakeup_request internally will judge the has_req_wakeup_ flag,
+  // Here calls the fallback exception path where flush_buffer is forgotten
   if (!THIS_WORKER.need_retry()) {
     packet_sender_.finish_sql_request();
   }
@@ -115,7 +115,7 @@ int ObMPBase::after_process(int error_code)
       && !THIS_WORKER.need_retry();
     if (is_slow) {
       if (THIS_WORKER.need_retry() && OB_TRY_LOCK_ROW_CONFLICT == error_code) {
-        //如果是锁冲突，且接下来会重试，则不需要打印这条日志了
+        // If it is a lock conflict and a retry will follow, then this log does not need to be printed.
       } else {
         FORCE_PRINT_TRACE(THE_TRACE, "[slow query]");
 
@@ -123,7 +123,7 @@ int ObMPBase::after_process(int error_code)
         FLUSH_TRACE();
       }
     } else if (can_force_print(error_code)) {
-      // 需要打印TRACE日志的错误码添加在这里
+      // Error codes that need to print TRACE logs are added here
       int process_ret = error_code;
       NG_TRACE_EXT(process_ret, OB_Y(process_ret));
       FORCE_PRINT_TRACE(THE_TRACE, "[err query]");
@@ -223,9 +223,9 @@ int ObMPBase::load_system_variables(const ObSysVariableSchema &sys_variable_sche
     }
   }
   if (OB_SUCC(ret)) {
-    //设置系统变量的最大版本号
+    //Set the maximum version number of the system variable
     session.set_global_vars_version(sys_variable_schema.get_schema_version());
-    //将影响plan的系统变量序列化并缓存
+    //Serialize and cache the system variable sequence that affects the plan
     if (OB_FAIL(session.gen_sys_var_in_pc_str())) {
       LOG_WARN("fail to gen sys var in pc str", K(ret));
     } else if (OB_FAIL(session.gen_configs_in_pc_str())) {
@@ -348,7 +348,7 @@ int ObMPBase::init_process_var(sql::ObSqlCtx &ctx,
     const ObMySQLRawPacket &pkt = reinterpret_cast<const ObMySQLRawPacket&>(req_->get_packet());
 
     if (0 == multi_stmt_item.get_seq_num()) {
-      // 第一条sql
+      // The first sql
       ctx.can_reroute_sql_ = (pkt.can_reroute_pkt() && get_conn()->is_support_proxy_reroute());
     }
     ctx.is_protocol_weak_read_ = false; // never use weak read in lite-mode
@@ -359,9 +359,8 @@ int ObMPBase::init_process_var(sql::ObSqlCtx &ctx,
   }
   return ret;
 }
-
-//外层调用会忽略do_after_process的错误码，因此这里将set_session_state的错误码返回也没有意义。
-//因此这里忽略set_session_state错误码，warning buffer的reset和trace log 记录的流程不收影响。
+//The outer call will ignore the error code of do_after_process, therefore returning the error code of set_session_state here is also meaningless.
+//Therefore, here the set_session_state error code is ignored, and the reset of the warning buffer and the trace log recording process are not affected.
 int ObMPBase::do_after_process(sql::ObSQLSessionInfo &session,
                                bool async_resp_used) const
 {
@@ -373,9 +372,9 @@ int ObMPBase::do_after_process(sql::ObSQLSessionInfo &session,
     session.set_retry_active_time(0);
   }
   // reset warning buffers
-  // 注意，此处req_has_wokenup_可能为true，不能再访问req对象
-  // @todo 重构wb逻辑
-  if (!async_resp_used) { // 异步回包不重置warning buffer，重置操作在callback中做
+  // Note, req_has_wokenup_ may be true here, do not access the req object again
+  // @todo Refactor wb logic
+  if (!async_resp_used) { // Asynchronous response does not reset warning buffer, reset operation is done in callback
     session.reset_warnings_buf();
     if (!session.get_is_in_retry()) {
       session.set_session_sleep();
@@ -400,7 +399,7 @@ int ObMPBase::record_flt_trace(sql::ObSQLSessionInfo &session) const
     NG_TRACE(query_end);
 
     if (session.is_use_trace_log()) {
-      //不影响正常逻辑
+      //Does not affect normal logic
       // show trace will always show last request info
       if (OB_FAIL(ObFLTUtils::clean_flt_show_trace_env(session))) {
         LOG_WARN("failed to clean flt show trace env", K(ret));

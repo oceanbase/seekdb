@@ -118,7 +118,7 @@ int ObHashSetOp::get_left_row()
 {
   int ret = OB_SUCCESS;
   if (first_get_left_) {
-    // left_已经get_next_row
+    // left_already_get_next_row
     first_get_left_ = false;
   } else {
     if (OB_FAIL(left_->get_next_row())) {
@@ -178,7 +178,7 @@ int ObHashSetOp::build_hash_table_from_left(bool from_child)
       LOG_WARN("failed to init sql mem processor", K(ret));
     }
   }
-  // 切换到left，使得dump逻辑到left partition
+  // Switch to left, so that dump logic goes to left partition
   hp_infras_.switch_left();
   bool has_exists = false;
   while (OB_SUCC(ret)) {

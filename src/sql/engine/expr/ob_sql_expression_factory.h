@@ -18,9 +18,9 @@ namespace oceanbase
 {
 namespace sql
 {
-//不提供free(sql-expression)的接口，请在alloc上面统一释放
-//最好expr_op和sql-expression使用同一个alloc, 否则要求要求用户
-//单独释放expr_op占用的空间
+// Do not provide a free(sql-expression) interface, please release it uniformly on alloc
+// It is best for expr_op and sql-expression to use the same alloc, otherwise it requires the user
+// Release the space occupied by expr_op
 class ObSqlExpressionFactory
 {
 public:
@@ -61,7 +61,7 @@ public:
   void destroy()
   {
     //nothing todo
-    //所有内存都在alloc上面，由alloc统一释放
+    // All memory is allocated on alloc, and will be released by allocunified release
   }
   //template<typename T>
   //    void free(T *&sql_expression)

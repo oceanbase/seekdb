@@ -206,7 +206,7 @@ int ObDtlChannelMemManager::auto_free_on_time(int64_t cur_max_reserve_count)
       reserve_cnt = delta_per_sec;
     }
     if (0 < reserve_cnt) {
-      // 考虑到并发，这里要么释放到足够多buffer，要么free_queue_.size()大于reserve_cnt
+      // Considering concurrency, here we either release enough buffer or free_queue_.size() greater than reserve_cnt
       int64_t need_free_cnt = free_queue_.size() - reserve_cnt;
       void *buf = nullptr;
       while (OB_SUCC(ret) && (0 < need_free_cnt && reserve_cnt < free_queue_.size())) {

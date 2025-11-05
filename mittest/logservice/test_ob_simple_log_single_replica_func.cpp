@@ -90,7 +90,7 @@ int64_t log_entry_size = 2 * 1024 * 1024 + 16 * 1024;
 
 void read_padding_entry(PalfHandleImplGuard &leader, SCN padding_scn, LSN padding_log_lsn)
 {
-  // 从padding group entry开始读取
+  // Start reading from the padding group entry
   {
     PalfBufferIterator iterator;
     EXPECT_EQ(OB_SUCCESS, leader.get_palf_handle_impl()->alloc_palf_buffer_iterator(padding_log_lsn, iterator));
@@ -102,7 +102,7 @@ void read_padding_entry(PalfHandleImplGuard &leader, SCN padding_scn, LSN paddin
     EXPECT_EQ(true, padding_log_entry.check_integrity());
     EXPECT_EQ(padding_scn, padding_log_entry.get_scn());
   }
-  // 从padding log entry开始读取
+  // Start reading from the padding log entry
   {
     PalfBufferIterator iterator;
     EXPECT_EQ(OB_SUCCESS, leader.get_palf_handle_impl()->alloc_palf_buffer_iterator(padding_log_lsn+LogGroupEntryHeader::HEADER_SER_SIZE, iterator));
@@ -151,18 +151,17 @@ TEST_F(TestObSimpleLogClusterSingleReplica, single_replica_flashback)
   {
     SCN tmp_scn;
     LSN tmp_lsn;
-    // 提交1条日志后进行flashback
+    // Submit 1 log entry before flashback
     EXPECT_EQ(OB_SUCCESS, submit_log(leader, 1, leader_idx, 100));
     EXPECT_EQ(OB_SUCCESS, wait_until_has_committed(leader, leader.palf_handle_impl_->sw_.get_max_lsn()));
     tmp_scn = leader.palf_handle_impl_->get_max_scn();
     switch_append_to_flashback(leader, mode_version);
     EXPECT_EQ(OB_SUCCESS, leader.palf_handle_impl_->flashback(mode_version, SCN::minus(tmp_scn, 10), timeout_ts_us));
-    // 预期日志起点为LSN(0)
+    // Expected log start point is LSN(0)
     EXPECT_EQ(LSN(0), leader.palf_handle_impl_->get_max_lsn());
     EXPECT_EQ(SCN::minus(tmp_scn, 10), leader.palf_handle_impl_->get_max_scn());
     EXPECT_EQ(LSN(0), leader.palf_handle_impl_->log_engine_.log_storage_.log_tail_);
-
-    // flashback到PADDING日志
+    // flashback to PADDING log
     switch_flashback_to_append(leader, mode_version);
     EXPECT_EQ(OB_SUCCESS, submit_log(leader, 31, leader_idx, log_entry_size));
     EXPECT_EQ(OB_SUCCESS, wait_until_has_committed(leader, leader.palf_handle_impl_->sw_.get_max_lsn()));
@@ -172,30 +171,30 @@ TEST_F(TestObSimpleLogClusterSingleReplica, single_replica_flashback)
     EXPECT_LT(remained_log_size, log_entry_size);
     int need_log_size = remained_log_size - 5*1024;
     PALF_LOG(INFO, "runlin trace print sw1", K(leader.palf_handle_impl_->sw_));
-    // 保证末尾只剩小于1KB的空间
+    // Ensure that only less than 1KB of space remains at the end
     EXPECT_EQ(OB_SUCCESS, submit_log(leader, 1, leader_idx, need_log_size));
     PALF_LOG(INFO, "runlin trace print sw2", K(leader.palf_handle_impl_->sw_));
     SCN mid_scn;
     LogEntryHeader header;
-    // 此时一共存在32条日志
+    // At this point, there are a total of 32 logs
     EXPECT_EQ(OB_SUCCESS, get_middle_scn(32, leader, mid_scn, header));
     EXPECT_EQ(OB_ITER_END, get_middle_scn(33, leader, mid_scn, header));
     EXPECT_GT(LSN(PALF_BLOCK_SIZE), leader.palf_handle_impl_->sw_.get_max_lsn());
     remained_log_size = LSN(PALF_BLOCK_SIZE) - leader.palf_handle_impl_->sw_.get_max_lsn();
     EXPECT_LT(remained_log_size, 5*1024);
     EXPECT_GT(remained_log_size, 0);
-    // 写一条大小为5KB的日志
+    // Write a log of size 5KB
     LSN padding_log_lsn = leader.get_palf_handle_impl()->get_max_lsn();
     EXPECT_EQ(OB_SUCCESS, submit_log(leader, 1, leader_idx, 5*1024));
     EXPECT_EQ(OB_SUCCESS, wait_until_has_committed(leader, leader.get_palf_handle_impl()->get_max_lsn()));
-    // 验证读取padding是否成功
+    // Verify if reading padding was successful
     {
        share::SCN padding_scn = leader.get_palf_handle_impl()->get_max_scn();
        padding_scn = padding_scn.minus(padding_scn, 1);
        read_padding_entry(leader, padding_scn, padding_log_lsn);
     }
     PALF_LOG(INFO, "runlin trace print sw3", K(leader.palf_handle_impl_->sw_));
-    // Padding日志占用日志条数，因此存在34条日志
+    // Padding log occupies the number of log entries, therefore there are 34 logs
     EXPECT_EQ(OB_SUCCESS, get_middle_scn(33, leader, mid_scn, header));
     EXPECT_EQ(OB_SUCCESS, get_middle_scn(34, leader, mid_scn, header));
     EXPECT_EQ(OB_ITER_END, get_middle_scn(35, leader, mid_scn, header));
@@ -203,25 +202,23 @@ TEST_F(TestObSimpleLogClusterSingleReplica, single_replica_flashback)
     max_scn = leader.palf_handle_impl_->sw_.get_max_scn();
     EXPECT_EQ(OB_SUCCESS, wait_until_has_committed(leader, leader.palf_handle_impl_->get_max_lsn()));
     switch_append_to_flashback(leader, mode_version);
-    // flashback到padding日志尾部
+    // flashback to padding log tail
     tmp_scn = leader.palf_handle_impl_->get_max_scn();
     EXPECT_EQ(OB_SUCCESS, leader.palf_handle_impl_->flashback(mode_version, SCN::minus(tmp_scn, 1), timeout_ts_us));
     PALF_LOG(INFO, "flashback to padding tail");
     EXPECT_EQ(leader.palf_handle_impl_->get_max_lsn(), LSN(PALF_BLOCK_SIZE));
     EXPECT_EQ(OB_ITER_END, read_log(leader));
-    // flashback后存在33条日志(包含padding日志)
+    // flashback after there are 33 logs (including padding logs)
     EXPECT_EQ(OB_SUCCESS, get_middle_scn(33, leader, mid_scn, header));
     EXPECT_EQ(OB_ITER_END, get_middle_scn(34, leader, mid_scn, header));
-
-    // 验证读取padding是否成功
+    // Verify if reading padding was successful
     {
        share::SCN padding_scn = leader.get_palf_handle_impl()->get_max_scn();
        padding_scn.minus(padding_scn, 1);
        PALF_LOG(INFO, "begin read_padding_entry", K(padding_scn), K(padding_log_lsn));
        read_padding_entry(leader, padding_scn, padding_log_lsn);
     }
-
-    // flashback到padding日志头部，磁盘上还有32条日志
+    // flashback to padding log header, there are still 32 logs on disk
     tmp_scn = leader.palf_handle_impl_->get_max_scn();
     EXPECT_EQ(OB_SUCCESS, leader.palf_handle_impl_->flashback(mode_version, SCN::minus(tmp_scn, 1), timeout_ts_us));
     EXPECT_LT(leader.palf_handle_impl_->get_max_lsn(), LSN(PALF_BLOCK_SIZE));
@@ -248,10 +245,10 @@ TEST_F(TestObSimpleLogClusterSingleReplica, single_replica_flashback)
     switch_append_to_flashback(leader, mode_version);
     ref_scn.convert_for_tx(30000);
     EXPECT_EQ(OB_SUCCESS, leader.palf_handle_impl_->flashback(mode_version, ref_scn, timeout_ts_us));
-    // 验证重复的flashback任务
+    // Validate duplicate flashback tasks
     EXPECT_EQ(OB_SUCCESS, leader.palf_handle_impl_->inner_flashback(ref_scn));
     EXPECT_EQ(tmp_lsn1, leader.palf_handle_impl_->log_engine_.log_storage_.log_tail_);
-    // 验证flashback时间戳比过小
+    // Validate flashback timestamp is not too small
     ref_scn.convert_from_ts(1);
     EXPECT_EQ(OB_SUCCESS, leader.palf_handle_impl_->inner_flashback(ref_scn));
     EXPECT_GT(tmp_lsn1, leader.palf_handle_impl_->log_engine_.log_storage_.log_tail_);
@@ -261,9 +258,8 @@ TEST_F(TestObSimpleLogClusterSingleReplica, single_replica_flashback)
   EXPECT_EQ(OB_SUCCESS, submit_log(leader, 300, leader_idx));
   wait_until_has_committed(leader, leader.palf_handle_impl_->sw_.get_max_lsn());
   EXPECT_EQ(OB_ITER_END, read_log(leader));
-
-  // flashback到中间某条日志
-	// 1. 比较log_storage和日位点和滑动窗口是否相同
+  // flashback to a middle log entry
+	// 1. Compare log_storage and log position and sliding window whether they are the same
 
   switch_append_to_flashback(leader, mode_version);
   LogEntryHeader header_origin;
@@ -279,12 +275,11 @@ TEST_F(TestObSimpleLogClusterSingleReplica, single_replica_flashback)
   EXPECT_EQ(new_log_tail, leader.palf_handle_impl_->sw_.committed_end_lsn_);
   EXPECT_EQ(max_scn, leader.palf_handle_impl_->sw_.last_slide_scn_);
   EXPECT_EQ(OB_ITER_END, read_log(leader));
-	// 验证flashback后能否继续提交日志
+	// Verify if log submission can continue after flashback
   EXPECT_EQ(OB_SUCCESS, submit_log(leader, 500, leader_idx));
   wait_until_has_committed(leader, leader.palf_handle_impl_->sw_.get_max_lsn());
   EXPECT_EQ(OB_ITER_END, read_log(leader));
-
-  // 再次执行flashback到上一次的flashback位点
+  // Again execute flashback to the last flashback point
   switch_append_to_flashback(leader, mode_version);
   EXPECT_EQ(OB_SUCCESS, leader.palf_handle_impl_->flashback(mode_version, max_scn, timeout_ts_us));
   switch_flashback_to_append(leader, mode_version);
@@ -294,8 +289,7 @@ TEST_F(TestObSimpleLogClusterSingleReplica, single_replica_flashback)
   EXPECT_EQ(OB_SUCCESS, submit_log(leader, 500, leader_idx));
   wait_until_has_committed(leader, leader.palf_handle_impl_->sw_.get_max_lsn());
   EXPECT_EQ(OB_ITER_END, read_log(leader));
-
-  // 再次执行flashback到上一次的flashback后提交日志的某个时间点
+  // Again execute flashback to the time point of a log submission after the previous flashback
 	EXPECT_EQ(OB_SUCCESS, get_middle_scn(634, leader, max_scn, header_origin));
   switch_append_to_flashback(leader, mode_version);
   EXPECT_EQ(OB_SUCCESS, leader.palf_handle_impl_->flashback(mode_version, max_scn, timeout_ts_us));
@@ -307,8 +301,7 @@ TEST_F(TestObSimpleLogClusterSingleReplica, single_replica_flashback)
   wait_until_has_committed(leader, leader.palf_handle_impl_->sw_.get_max_lsn());
   EXPECT_EQ(OB_ITER_END, read_log(leader));
   PALF_LOG(INFO, "flashback to middle success");
-
-  // flashback到某个更大的时间点
+  // flashback to a larger point in time
   max_scn = leader.palf_handle_impl_->get_end_scn();
   new_log_tail = leader.palf_handle_impl_->log_engine_.log_storage_.log_tail_;
   switch_append_to_flashback(leader, mode_version);
@@ -337,8 +330,7 @@ TEST_F(TestObSimpleLogClusterSingleReplica, single_replica_flashback)
   EXPECT_EQ(new_log_tail, leader.palf_handle_impl_->sw_.committed_end_lsn_);
   EXPECT_EQ(OB_ITER_END, read_log(leader));
   PALF_LOG(INFO, "flashback to max_scn success");
-
-  // 再次执行flashback到提交日志前的max_scn
+  // Again execute flashback to max_scn before the submission log
   EXPECT_EQ(OB_SUCCESS, submit_log(leader, 300, leader_idx));
   wait_until_has_committed(leader, leader.palf_handle_impl_->sw_.get_max_lsn());
   LSN curr_lsn = leader.palf_handle_impl_->get_end_lsn();
@@ -379,8 +371,7 @@ TEST_F(TestObSimpleLogClusterSingleReplica, single_replica_flashback)
   leader.palf_handle_impl_->state_mgr_.state_ = ObReplicaState::ACTIVE;
   dynamic_cast<palf::PalfEnvImpl*>(get_cluster()[0]->get_palf_env())->log_loop_thread_.start();
   switch_flashback_to_append(leader, mode_version);
-
-  // 数据全部清空
+  // All data cleared
   wait_until_has_committed(leader, leader.palf_handle_impl_->sw_.get_max_lsn());
   switch_append_to_flashback(leader, mode_version);
   EXPECT_EQ(OB_SUCCESS, leader.palf_handle_impl_->flashback(mode_version, SCN::min_scn(), timeout_ts_us));
@@ -430,7 +421,7 @@ TEST_F(TestObSimpleLogClusterSingleReplica, single_replica_flashback_restart)
   }
   EXPECT_EQ(OB_SUCCESS, restart_paxos_groups());
   {
-  // 验证重启场景
+  // Validate restart scenario
   PalfHandleImplGuard new_leader;
   int64_t curr_mode_version = INVALID_PROPOSAL_ID;
   AccessMode curr_access_mode = AccessMode::INVALID_ACCESS_MODE;
@@ -445,7 +436,7 @@ TEST_F(TestObSimpleLogClusterSingleReplica, single_replica_flashback_restart)
   LogStorage *log_storage = &new_leader.palf_handle_impl_->log_engine_.log_storage_;
   block_id_t max_block_id = log_storage->block_mgr_.max_block_id_;
 	EXPECT_EQ(OB_SUCCESS, get_middle_scn(1329, new_leader, max_scn, header_new));
-  // flashback跨文件场景重启
+  // flashback cross-file scene restart
   EXPECT_EQ(OB_SUCCESS, submit_log(new_leader, 33, leader_idx, MAX_LOG_BODY_SIZE));
 	wait_until_has_committed(new_leader, new_leader.palf_handle_impl_->sw_.get_max_lsn());
   EXPECT_LE(max_block_id, log_storage->block_mgr_.max_block_id_);
@@ -461,8 +452,7 @@ TEST_F(TestObSimpleLogClusterSingleReplica, single_replica_flashback_restart)
   AccessMode curr_access_mode = AccessMode::INVALID_ACCESS_MODE;
   EXPECT_EQ(OB_SUCCESS, get_leader(id, new_leader, leader_idx));
   EXPECT_EQ(OB_SUCCESS, new_leader.palf_handle_impl_->get_access_mode(curr_mode_version, curr_access_mode));
-
-  // flashback到某个文件的尾部
+  // flashback to the end of a certain file
   EXPECT_EQ(OB_SUCCESS, submit_log(new_leader, 65, leader_idx, MAX_LOG_BODY_SIZE));
 	wait_until_has_committed(new_leader, new_leader.palf_handle_impl_->sw_.get_max_lsn());
   switch_append_to_flashback(new_leader, mode_version);
@@ -487,8 +477,7 @@ TEST_F(TestObSimpleLogClusterSingleReplica, single_replica_flashback_restart)
   EXPECT_EQ(OB_ITER_END, read_log(new_leader));
   }
   EXPECT_EQ(OB_SUCCESS, restart_paxos_groups());
-
-  // 重启后继续提交日志
+  // Restart and continue submitting logs
   {
     PalfHandleImplGuard new_leader;
     EXPECT_EQ(OB_SUCCESS, get_leader(id, new_leader, leader_idx));
@@ -499,13 +488,13 @@ TEST_F(TestObSimpleLogClusterSingleReplica, single_replica_flashback_restart)
 	  wait_until_has_committed(new_leader, new_leader.palf_handle_impl_->sw_.get_max_lsn());
     EXPECT_EQ(OB_ITER_END, read_log(new_leader));
     switch_append_to_flashback(new_leader, mode_version);
-    // flashback到padding日志头后重启
+    // flashback to padding log header and restart
     EXPECT_EQ(OB_SUCCESS, new_leader.palf_handle_impl_->flashback(mode_version, padding_scn.minus(padding_scn, 1), timeout_ts_us));
     EXPECT_EQ(true, 0 != lsn_2_offset(new_leader.get_palf_handle_impl()->get_max_lsn(), PALF_BLOCK_SIZE));
     new_leader.reset();
   }
   EXPECT_EQ(OB_SUCCESS, restart_paxos_groups());
-  // 重启提交日志，不产生padding日志
+  // Restart submission log, do not generate padding log
   {
     PalfHandleImplGuard new_leader;
     EXPECT_EQ(OB_SUCCESS, get_leader(id, new_leader, leader_idx));
@@ -530,7 +519,7 @@ TEST_F(TestObSimpleLogClusterSingleReplica, single_replica_flashback_restart)
     new_leader.reset();
   }
   EXPECT_EQ(OB_SUCCESS, restart_paxos_groups());
-  // 重启后继续提交日志
+  // Restart and continue submitting logs
   {
     PalfHandleImplGuard new_leader;
     EXPECT_EQ(OB_SUCCESS, get_leader(id, new_leader, leader_idx));
@@ -575,7 +564,7 @@ TEST_F(TestObSimpleLogClusterSingleReplica, test_truncate_failed)
   EXPECT_EQ(OB_SUCCESS, submit_log(leader, 32, id, MAX_LOG_BODY_SIZE));
   wait_lsn_until_flushed(leader.palf_handle_impl_->get_max_lsn(), leader);
   EXPECT_EQ(OB_ITER_END, read_log(leader));
-  // 验证truncate文件尾后重启
+  // Validate file tail after truncate and restart
   EXPECT_EQ(OB_SUCCESS, leader.palf_handle_impl_->log_engine_.truncate(LSN(PALF_BLOCK_SIZE)));
   EXPECT_EQ(LSN(PALF_BLOCK_SIZE), leader.palf_handle_impl_->log_engine_.log_storage_.log_tail_);
   leader.reset();
@@ -592,7 +581,7 @@ TEST_F(TestObSimpleLogClusterSingleReplica, test_meta)
     PalfHandleImplGuard leader;
     EXPECT_EQ(OB_SUCCESS, create_paxos_group(id, leader_idx, leader));
     sleep(1);
-    // 测试meta文件刚好写满的重启场景
+    // Test the restart scenario where the meta file is exactly full
     LogEngine *log_engine = &leader.palf_handle_impl_->log_engine_;
     LogStorage *log_meta_storage = &log_engine->log_meta_storage_;
     LSN log_meta_tail = log_meta_storage->log_tail_;
@@ -650,20 +639,19 @@ TEST_F(TestObSimpleLogClusterSingleReplica, test_iterator)
     EXPECT_EQ(OB_SUCCESS, create_paxos_group(id_raw_write, leader_idx, raw_write_leader));
     EXPECT_EQ(OB_SUCCESS, change_access_mode_to_raw_write(raw_write_leader));
     int64_t count = 5;
-    // 提交1024条日志，记录max_scn，用于后续next迭代验证，case1
+    // Submit 1024 logs, record max_scn, used for subsequent next iteration verification, case1
     for (int i = 0; i < count; i++) {
       EXPECT_EQ(OB_SUCCESS, submit_log(leader, 1, id, 4*1024));
       EXPECT_EQ(OB_SUCCESS, wait_lsn_until_flushed(leader.palf_handle_impl_->get_max_lsn(), leader));
     }
     max_scn_case1 = palf_handle_impl->get_max_scn();
-    // 提交5条日志，case1成功后，执行case2
+    // Submit 5 logs, case1 successful after, execute case2
     for (int i = 0; i < count; i++) {
       EXPECT_EQ(OB_SUCCESS, submit_log(leader, 1, id, 4*1024));
       EXPECT_EQ(OB_SUCCESS, wait_lsn_until_flushed(leader.palf_handle_impl_->get_max_lsn(), leader));
     }
     max_scn_case2 = palf_handle_impl->get_max_scn();
-
-    // 提交5条日志, case3, 验证next(replayable_point_scn, &next_log_min_scn, &bool)
+    // Submit 5 logs, case3, verify next(replayable_point_scn, &next_log_min_scn, &bool)
     std::vector<LSN> lsns;
     std::vector<SCN> logts;
     const int64_t log_size = 500;
@@ -710,50 +698,47 @@ TEST_F(TestObSimpleLogClusterSingleReplica, test_iterator)
         iterator.init(LSN(0), get_file_end_lsn, get_mode_version, &raw_write_palf_handle_impl->log_engine_.log_storage_));
     EXPECT_EQ(OB_SUCCESS, iterator.next(max_scn_case1)); count--;
     EXPECT_EQ(OB_ITER_END, iterator.next(SCN::base_scn()));
-
-    // case0: 验证group iterator迭代日志功能
+    // case0: validate group iterator log iteration functionality
     EXPECT_EQ(OB_ITER_END, read_group_log(raw_write_leader, LSN(0)));
 
     LSN curr_lsn = iterator.iterator_impl_.get_curr_read_lsn();
     // case1:
-    // - 验证mode_version变化后，cache是否清空
-    // - replayable_point_scn是否生效
-    // 当mode version发生变化时，预期cache应该清空
-    // raw模式下，当replayable_point_scn很小时，直接返回OB_ITER_END
+    // - Verify that the cache is cleared after mode_version changes
+    // - whether replayable_point_scn is effective
+    // When mode version changes, the expected cache should be cleared
+    // raw mode, when replayable_point_scn is very small, directly return OB_ITER_END
     PALF_LOG(INFO, "runlin trace case1", K(mode_version_v), K(*mode_version), K(max_scn_case1));
-    // mode_version_v 为无效值时，预期不清空
+    // mode_version_v is an invalid value, the expected behavior is not to clear
     mode_version_v = INVALID_PROPOSAL_ID;
     end_lsn_v = curr_lsn;
     EXPECT_FALSE(curr_lsn == iterator.iterator_storage_.end_lsn_);
     EXPECT_FALSE(curr_lsn == iterator.iterator_storage_.start_lsn_);
     EXPECT_EQ(OB_ITER_END, iterator.next(SCN::base_scn()));
-
-    //  mode_version_v 比inital_mode_version小，预期不清空
+    //  mode_version_v is smaller than inital_mode_version, expectation is not to clear
     mode_version_v = -1;
     EXPECT_FALSE(curr_lsn == iterator.iterator_storage_.end_lsn_);
     EXPECT_FALSE(curr_lsn == iterator.iterator_storage_.start_lsn_);
     EXPECT_EQ(OB_ITER_END, iterator.next(SCN::base_scn()));
-
-    // 合理的mode_version_v，清空cache
+    // reasonable mode_version_v, clear cache
     mode_version_v = 100;
     end_lsn_v = curr_lsn;
     EXPECT_EQ(OB_ITER_END, iterator.next(SCN::base_scn()));
-    // cache清空，依赖上一次next操作
+    // cache clear, depends on the last next operation
     EXPECT_EQ(curr_lsn, iterator.iterator_storage_.start_lsn_);
     EXPECT_EQ(curr_lsn, iterator.iterator_storage_.end_lsn_);
 
     PALF_LOG(INFO, "runlin trace", K(iterator), K(max_scn_case1), K(curr_lsn));
 
     end_lsn_v = LSN(1000000000);
-    // 当replayable_point_scn为max_log_ts，预期max_log_ts前的日志可以吐出5条日志
+    // When replayable_point_scn is max_log_ts, expect 5 logs to be output before max_log_ts
     EXPECT_EQ(OB_SUCCESS, iterator.next(max_scn_case1)); count--;
     while (count > 0) {
       EXPECT_EQ(OB_SUCCESS, iterator.next(max_scn_case1));
       count--;
     }
     EXPECT_EQ(OB_ITER_END, iterator.next(max_scn_case1));
-    // case2: next 功能是否正常
-    // 尝试读取后续的5条日志
+    // case2: next function is normal or not
+    // Try to read the next 5 logs
     count = 5;
 
     PALF_LOG(INFO, "runlin trace case2", K(iterator), K(max_scn_case2));
@@ -761,82 +746,80 @@ TEST_F(TestObSimpleLogClusterSingleReplica, test_iterator)
       EXPECT_EQ(OB_SUCCESS, iterator.next(max_scn_case2));
       count--;
     }
-
-    // 此时的curr_entry已经是第三次提交日志的第一条日志日志(first_log)
-    // 由于该日志对应的时间戳比max_scn_case2大，因此不会吐出
-    // NB: 这里测试时，遇到过以下情况:case3的第一次 next后的EXPECT_EQ：
-    // curr_entry变为first_log后，在后续的测试中，尝试把file_end_lsn设置到
-    // fisrt_log之前，然后出现了一种情况，此时调用next(fist_log_ts, next_log_min_scn)后,
-    // next_log_min_scn被设置为first_scn+1，对外表现为：尽管存在first_log，但外部在
-    // 没有看到first_log之前就已经next_log_min_scn一定大于first_scn
+    // At this point, curr_entry is already the first log (first_log) of the third commit log
+    // Since the timestamp of this log is greater than max_scn_case2, it will not be output
+    // NB: Here, during testing, we encountered the following situation: case3's first next after EXPECT_EQ:
+    // curr_entry becomes first_log after that, in subsequent tests, try setting file_end_lsn to
+    // before fisrt_log, then a situation occurred, at this point calling next(fist_log_ts, next_log_min_scn) afterwards,
+    // next_log_min_scn is set to first_scn+1, externally it appears as: although first_log exists, the external party sees that
+    // Before seeing first_log, next_log_min_scn must be greater than first_scn
     //
-    // 实际上，这种情况是不会出现的，因为file_end_lsn不会回退的
+    // Actually, this situation will not occur because file_end_lsn will not retreat
     EXPECT_EQ(OB_ITER_END, iterator.next(max_scn_case2));
 
     //case3: next(replayable_point_scn, &next_log_min_scn)
     PALF_LOG(INFO, "runlin trace case3", K(iterator), K(max_scn_case3), K(end_lsn_v), K(max_scn_case2));
     SCN first_scn = logts[0];
-    // 在使用next(replayable_point_scn, &next_log_min_scn)接口时
-    // 我们禁止使用LogEntry的头作为迭代器终点
+    // When using the next(replayable_point_scn, &next_log_min_scn) interface
+    // We prohibit using the head of LogEntry as the iterator endpoint
     LSN first_log_start_lsn = lsns[0] - sizeof(LogGroupEntryHeader);
     LSN first_log_end_lsn = lsns[0]+log_size+sizeof(LogEntryHeader);
     SCN next_log_min_scn;
     bool iterate_end_by_replayable_point = false;
     count = 5;
-    // 模拟提前达到文件终点, 没有读过新日志，因此next_log_min_scn为prev_entry_scn_+1
+    // Simulate reaching the end of the file in advance, no new logs have been read, therefore next_log_min_scn is prev_entry_scn_ + 1
     end_lsn_v = first_log_start_lsn - 1;
     CLOG_LOG(INFO, "runlin trace 1", K(iterator), K(end_lsn_v), KPC(end_lsn), K(max_scn_case2), K(first_scn));
     EXPECT_EQ(OB_ITER_END, iterator.next(SCN::plus(first_scn, 10000), next_log_min_scn, iterate_end_by_replayable_point));
-    // file_end_lsn尽管回退了，但curr_entry_已经没有被读取过, 因此next_log_min_scn依旧为first_scn
+    // Although file_end_lsn has been rolled back, curr_entry_ has not been read, so next_log_min_scn is still first_scn
     EXPECT_EQ(SCN::plus(iterator.iterator_impl_.prev_entry_scn_, 1), next_log_min_scn);
     EXPECT_EQ(iterate_end_by_replayable_point, false);
     CLOG_LOG(INFO, "runlin trace 3.1", K(iterator), K(end_lsn_v), KPC(end_lsn));
     EXPECT_EQ(first_log_start_lsn,
     iterator.iterator_impl_.log_storage_->get_lsn(iterator.iterator_impl_.curr_read_pos_));
-
-    // 读取一条日志成功，next_log_min_scn会被重置
-    // curr_entry为fisrt_log_ts对应的log
+    // Read a log successfully, next_log_min_scn will be reset
+    // curr_entry is the log corresponding to fisrt_log_ts
     end_lsn_v = first_log_end_lsn;
     CLOG_LOG(INFO, "runlin trace 2", K(iterator), K(end_lsn_v), KPC(end_lsn));
     EXPECT_EQ(OB_SUCCESS, iterator.next(first_scn, next_log_min_scn, iterate_end_by_replayable_point)); count--;
-    // iterator 返回成功，next_log_min_scn应该为OB_INVALID_TIMESTAMP
+    // iterator returns successfully, next_log_min_scn should be OB_INVALID_TIMESTAMP
     EXPECT_EQ(next_log_min_scn.is_valid(), false);
-    // iterator中的prev_entry_scn_被设置为first_scn
+    // iterator's prev_entry_scn_ is set to first_scn
     EXPECT_EQ(iterator.iterator_impl_.prev_entry_scn_, first_scn);
 
     CLOG_LOG(INFO, "runlin trace 3", K(iterator), K(end_lsn_v), KPC(end_lsn));
     {
-      // 模拟提前达到文件终点, 此时文件终点为file_log_end_lsn
-      // 预期next_log_min_scn为first_scn对应的日志+1
+      // Simulate reaching the end of the file in advance, at which point the end of the file is file_log_end_lsn
+      // Expected next_log_min_scn to be the log corresponding to first_scn + 1
       SCN second_scn = logts[1];
       EXPECT_EQ(OB_ITER_END, iterator.next(second_scn, next_log_min_scn, iterate_end_by_replayable_point));
-      // iterator返回OB_ITER_END，next_log_min_scn为first_scn+1
+      // iterator returns OB_ITER_END, next_log_min_scn is first_scn + 1
       EXPECT_EQ(next_log_min_scn, SCN::plus(first_scn, 1));
       EXPECT_EQ(iterate_end_by_replayable_point, false);
       CLOG_LOG(INFO, "runlin trace 3", K(iterator), K(end_lsn_v), KPC(end_lsn), K(first_scn), K(second_scn));
-      // 再次调用next，预期next_log_min_scn依旧为first_scn+1
+      // Call next again, expect next_log_min_scn to still be first_scn + 1
       EXPECT_EQ(OB_ITER_END, iterator.next(second_scn, next_log_min_scn, iterate_end_by_replayable_point));
-      // iterator返回OB_ITER_END，next_log_min_scn为first_scn+1
+      // iterator returns OB_ITER_END, next_log_min_scn is first_scn + 1
       EXPECT_EQ(next_log_min_scn, SCN::plus(first_scn, 1));
     }
 
     CLOG_LOG(INFO, "runlin trace 4", K(iterator), K(end_lsn_v), KPC(end_lsn));
     SCN prev_next_success_scn;
-    // 模拟到达replayable_point_scn，此时文件终点为second log, 预期next_log_min_scn为replayable_point_scn+1
-    // 同时replayable_point_scn < 缓存的日志时间戳
+    // Simulate reaching replayable_point_scn, at this time the file end is second log, expected next_log_min_scn to be replayable_point_scn+1
+    // simultaneously replayable_point_scn < cached log timestamp
     {
       SCN second_scn = logts[1];
       SCN replayable_point_scn = SCN::minus(second_scn, 1);
       end_lsn_v = lsns[1]+log_size+sizeof(LogEntryHeader);
       EXPECT_EQ(OB_ITER_END, iterator.next(replayable_point_scn, next_log_min_scn, iterate_end_by_replayable_point));
       EXPECT_EQ(iterate_end_by_replayable_point, true);
-      // iterator返回OB_ITER_END，next_log_min_scn为replayable_point_scn + 1
+      // iterator returns OB_ITER_END, next_log_min_scn is replayable_point_scn + 1
       PALF_LOG(INFO, "runliun trace 4.1", K(replayable_point_scn), K(next_log_min_scn),
       K(iterator));
       EXPECT_EQ(next_log_min_scn, SCN::plus(replayable_point_scn, 1));
-      // 再次调用next，预期next_log_min_scn还是replayable_point_scn+1
+      // Call next again, expect next_log_min_scn to still be replayable_point_scn+1
       EXPECT_EQ(OB_ITER_END, iterator.next(replayable_point_scn, next_log_min_scn, iterate_end_by_replayable_point));
-      // iterator返回OB_ITER_END，next_log_min_scn为replayable_point_scn+1
+      // iterator returns OB_ITER_END, next_log_min_scn is replayable_point_scn + 1
       EXPECT_EQ(next_log_min_scn, SCN::plus(replayable_point_scn, 1));
       EXPECT_EQ(iterate_end_by_replayable_point, true);
       EXPECT_EQ(OB_SUCCESS, iterator.next(second_scn, next_log_min_scn, iterate_end_by_replayable_point)); count--;
@@ -844,31 +827,29 @@ TEST_F(TestObSimpleLogClusterSingleReplica, test_iterator)
       prev_next_success_scn = iterator.iterator_impl_.prev_entry_scn_;
       EXPECT_EQ(prev_next_success_scn, second_scn);
     }
-
-    // 模拟file end lsn不是group entry的终点
+    // Simulate file end lsn is not the endpoint of group entry
    {
-     // 设置终点为第三条日志LogEntry对应的起点
+     // Set the endpoint to the start point of the third LogEntry
      end_lsn_v = lsns[2]+10;
-     // 设置时间戳为第三条日志
+     // Set timestamp to the third log
      SCN third_scn = logts[2];
      SCN replayable_point_scn = SCN::plus(third_scn, 10);
      CLOG_LOG(INFO, "runlin trace 5.1", K(iterator), K(end_lsn_v), KPC(end_lsn), K(replayable_point_scn));
-     // 此时内存中缓存的日志为第三条日志, iterator读取过新日志，但该日志由于end_lsn的原因不可读(此时，由于日志非受控回放，因此curr_read_pos_会被递推56)
-     // 因此next_log_min_scn会被设置为third_scn
+     // At this time, the log cached in memory is the third log, iterator has read new logs, but this log is unreadable due to end_lsn (at this point, since the log is not controlled replay, curr_read_pos_ will be advanced by 56)
+     // Therefore next_log_min_scn will be set to third_scn
      EXPECT_EQ(OB_ITER_END, iterator.next(replayable_point_scn, next_log_min_scn, iterate_end_by_replayable_point));
      CLOG_LOG(INFO, "runlin trace 5.1.1", K(iterator), K(next_log_min_scn), K(replayable_point_scn));
      EXPECT_EQ(next_log_min_scn, third_scn);
      EXPECT_EQ(iterate_end_by_replayable_point, false);
-
-     // 验证第三条日志由于受控回放无法吐出(replayable_point_scn回退是不可能出现的，为了测试故意模拟)
+     // Validate the third log entry as controlled replay cannot output (replayable_point_scn rollback should not occur, simulated intentionally for testing)
      replayable_point_scn = SCN::minus(third_scn, 4);
      EXPECT_EQ(OB_ITER_END, iterator.next(replayable_point_scn, next_log_min_scn, iterate_end_by_replayable_point));
-     // 由于replayable_point_scn与curr_entry_之间不可能有日志，同时replayable_point_scn<curr_entry_，
-     // 由于prev_entry_scn_此时为第二条日志对应的时间戳，小于replayable_point_scn，因此
-     // next_min_scn会被设置为curr_entry_ scn和replayable_point_scn+1最小值,
-     // 因此prev_entry_scn_会推到到replayable_point_scn+1
-     // 同时由于prev_entry_scn_小于replayable_point_scn，同时replayable_point_scn和prev_entry_scn_之间没有日志
-     // 因此，推到prev_entry_scn_为replayable_point_scn_
+     // Since there can be no logs between replayable_point_scn and curr_entry_, and replayable_point_scn < curr_entry_,
+     // Since prev_entry_scn_ is the timestamp of the second log entry at this point, it is less than replayable_point_scn, therefore
+     // next_min_scn will be set to the minimum value of curr_entry_scn and replayable_point_scn + 1,
+     // Therefore prev_entry_scn_ will be pushed to replayable_point_scn + 1
+     // At the same time, since prev_entry_scn_ is less than replayable_point_scn, there are no logs between replayable_point_scn and prev_entry_scn_
+     // Therefore, deduce prev_entry_scn_ to replayable_point_scn_
      EXPECT_EQ(next_log_min_scn, SCN::plus(replayable_point_scn, 1));
      EXPECT_EQ(iterate_end_by_replayable_point, true);
      EXPECT_EQ(iterator.iterator_impl_.prev_entry_scn_, replayable_point_scn);
@@ -876,8 +857,7 @@ TEST_F(TestObSimpleLogClusterSingleReplica, test_iterator)
      EXPECT_EQ(replayable_point_scn, iterator.iterator_impl_.prev_entry_scn_);
 
      CLOG_LOG(INFO, "runlin trace 5.2", K(iterator), K(end_lsn_v), KPC(end_lsn), K(replayable_point_scn));
-
-     // 将replayable_point_scn变小，此时iterator会将next_min_scn设置为prev_next_success_scn + 1
+     // Reduce replayable_point_scn, at this time iterator will set next_min_scn to prev_next_success_scn + 1
      replayable_point_scn = SCN::minus(replayable_point_scn, 2);
      EXPECT_EQ(OB_ITER_END, iterator.next(replayable_point_scn, next_log_min_scn, iterate_end_by_replayable_point));
      EXPECT_EQ(SCN::plus(prev_next_success_scn, 1), next_log_min_scn);
@@ -892,15 +872,14 @@ TEST_F(TestObSimpleLogClusterSingleReplica, test_iterator)
     }
 
     CLOG_LOG(INFO, "runlin trace 6.1", K(iterator), K(end_lsn_v), K(max_scn_case3));
-    // 磁盘上以及受控回放点之后没有可读日志，此时应该返回受控回放点+1
+    // There is no readable log on disk and after the controlled replay point, at this time, controlled replay point + 1 should be returned
     EXPECT_EQ(OB_ITER_END, iterator.next(max_scn_case3, next_log_min_scn, iterate_end_by_replayable_point));
     EXPECT_EQ(SCN::plus(max_scn_case3, 1), next_log_min_scn);
     EXPECT_EQ(max_scn_case3, prev_next_success_scn);
     CLOG_LOG(INFO, "runlin trace 6.2", K(iterator), K(end_lsn_v), K(max_scn_case3), "end_lsn_of_leader",
         raw_write_leader.palf_handle_impl_->get_max_lsn());
-
-    // raw write 变为 Append后，在写入一些日志
-    // 测试raw write变apend后，迭代日志是否正常
+    // raw write becomes Append after, then writes some logs
+    // Test raw write change to append, whether the iterative log is normal
     {
       std::vector<SCN> logts_append;
       std::vector<LSN> lsns_append;
@@ -915,19 +894,17 @@ TEST_F(TestObSimpleLogClusterSingleReplica, test_iterator)
       EXPECT_EQ(OB_SUCCESS, wait_lsn_until_flushed(raw_write_leader.palf_handle_impl_->get_max_lsn(), raw_write_leader));
       PALF_LOG(INFO, "runlin trace 6.4", "raw_write_leader_lsn", raw_write_leader.palf_handle_impl_->get_max_lsn(),
           "new_leader_lsn", leader.palf_handle_impl_->get_max_lsn());
-
-      // case 7 end_lsn_v 为很大的值之后，让内存中有2M数据, 预期iterator next会由于受控回放失败，prev_entry_scn_不变
-      // replayable_point_scn 为第一条日志的时间戳-2, next_log_min_scn 为append第一条LogEntry的时间戳
-      // NB: 如果不将数据读到内存中来，可能会出现读数据报错OB_NEED_RETRY的问题。
+      // case 7 after end_lsn_v becomes a very large value, let there be 2M of data in memory, expect iterator next to fail due to controlled replay failure, prev_entry_scn_ remains unchanged
+      // replayable_point_scn is the timestamp of the first log minus 2, next_log_min_scn is the timestamp when the first LogEntry is appended
+      // NB: If the data is not read into memory, there may be an error reading data with the issue OB_NEED_RETRY.
       end_lsn_v = LSN(1000000000);
       SCN replayable_point_scn = SCN::minus(logts_append[0], 2);
       EXPECT_EQ(OB_SUCCESS, iterator.next(replayable_point_scn, next_log_min_scn, iterate_end_by_replayable_point)); count_append--;
       prev_next_success_scn = iterator.iterator_impl_.prev_entry_scn_;
 
       end_lsn_v = lsns_append[1]+2;
-
-      // 此时curr_entry_为第二条日志, curr_entry有效但由于file end lsn不可读
-      // 对于append 日志受控回放无效
+      // At this point curr_entry_ is the second log, curr_entry is valid but file end lsn is unreadable
+      // For append log controlled replay is invalid
       replayable_point_scn = SCN::plus(raw_write_leader.palf_handle_impl_->get_max_scn(), 1000000);
       EXPECT_EQ(OB_ITER_END, iterator.next(replayable_point_scn, next_log_min_scn, iterate_end_by_replayable_point));
       PALF_LOG(INFO, "runlin trace 7.1", K(iterator), K(replayable_point_scn), K(end_lsn_v), K(logts_append[1]), K(replayable_point_scn));
@@ -939,59 +916,52 @@ TEST_F(TestObSimpleLogClusterSingleReplica, test_iterator)
       EXPECT_EQ(OB_ITER_END, iterator.next(replayable_point_scn, next_log_min_scn, iterate_end_by_replayable_point));
       EXPECT_EQ(next_log_min_scn, logts_append[1]);
       EXPECT_EQ(prev_next_success_scn, iterator.iterator_impl_.prev_entry_scn_);
-
-      // replayable_point_scn回退是一个不可能出现的情况, 但从iterator视角不能依赖这个
-      // 验证replayable_point_scn回退到一个很小的值，预期next_log_min_scn为prev_next_success_scn+1
-      // 模拟replayable_point_scn小于prev_entry_
+      // replayable_point_scn rollback is an impossible situation, but from the iterator perspective, we cannot rely on this
+      // Verify replayable_point_scn rolls back to a very small value, expect next_log_min_scn to be prev_next_success_scn+1
+      // Simulate replayable_point_scn less than prev_entry_
       replayable_point_scn.convert_for_tx(100);
       PALF_LOG(INFO, "runlin trace 7.2", K(iterator), K(replayable_point_scn), K(end_lsn_v), K(logts_append[0]));
       EXPECT_EQ(OB_ITER_END, iterator.next(replayable_point_scn, next_log_min_scn, iterate_end_by_replayable_point));
       EXPECT_EQ(SCN::plus(prev_next_success_scn, 1), next_log_min_scn);
       EXPECT_EQ(prev_next_success_scn, iterator.iterator_impl_.prev_entry_scn_);
       EXPECT_EQ(iterate_end_by_replayable_point, false);
-
-      // 在迭代一次，结果一样
+      // Iterate once more, the result is the same
       EXPECT_EQ(OB_ITER_END, iterator.next(replayable_point_scn, next_log_min_scn, iterate_end_by_replayable_point));
       EXPECT_EQ(SCN::plus(prev_next_success_scn, 1), next_log_min_scn);
       EXPECT_EQ(prev_next_success_scn, iterator.iterator_impl_.prev_entry_scn_);
-
-      // 验证replayable_point_scn的值为prev_next_success_scn和第二条append的日志之间，
-      // 预期next_log_min_scn为replayable_point_scn+1
-      // 模拟replayable_point_scn位于[prev_entry_, curr_entry_]
+      // Verify that the value of replayable_point_scn is between prev_next_success_scn and the log of the second append,
+      // Expected next_log_min_scn to be replayable_point_scn + 1
+      // Simulate replayable_point_scn located between [prev_entry_, curr_entry_]
       replayable_point_scn = SCN::minus(logts_append[1], 4);
       PALF_LOG(INFO, "runlin trace 7.3", K(iterator), K(replayable_point_scn), K(end_lsn_v),
           K(logts_append[1]), K(prev_next_success_scn));
       EXPECT_EQ(OB_ITER_END, iterator.next(replayable_point_scn, next_log_min_scn, iterate_end_by_replayable_point));
       EXPECT_EQ(next_log_min_scn, SCN::plus(replayable_point_scn, 1));
-      // 由于replayable_point_scn到curr_entry_之间没有日志，因此prev_entry_scn_会被推到replayable_point_scn
+      // Since there are no logs between replayable_point_scn and curr_entry_, prev_entry_scn_ will be pushed to replayable_point_scn
       EXPECT_EQ(replayable_point_scn, iterator.iterator_impl_.prev_entry_scn_);
-
-      // 在迭代一次
+      // In one iteration
       EXPECT_EQ(OB_ITER_END, iterator.next(replayable_point_scn, next_log_min_scn, iterate_end_by_replayable_point));
       EXPECT_EQ(next_log_min_scn, SCN::plus(replayable_point_scn, 1));
-      // 由于replayable_point_scn到curr_entry_之间没有日志，因此prev_entry_scn_会被推到replayable_point_scn
+      // Since there are no logs between replayable_point_scn and curr_entry_, prev_entry_scn_ will be pushed to replayable_point_scn
       EXPECT_EQ(replayable_point_scn, iterator.iterator_impl_.prev_entry_scn_);
-
-      // 验证迭代append日志成功,
+      // Verify that the iterative append log is successful,
       end_lsn_v = lsns_append[2]+2;
       replayable_point_scn = logts_append[0];
       EXPECT_EQ(OB_SUCCESS, iterator.next(replayable_point_scn, next_log_min_scn, iterate_end_by_replayable_point));
       EXPECT_EQ(false, next_log_min_scn.is_valid());
       EXPECT_EQ(logts_append[1], iterator.iterator_impl_.prev_entry_scn_); count_append--;
       prev_next_success_scn = logts_append[1];
-
-      // replayable_point_scn比较大，预期next_log_min_scn为logts_append[2]
+      // replayable_point_scn is large, expect next_log_min_scn to be logts_append[2]
       replayable_point_scn.convert_from_ts(ObTimeUtility::current_time() + 100000000);
       PALF_LOG(INFO, "runlin trace 7.4", K(iterator), K(replayable_point_scn), K(end_lsn_v),
           K(logts_append[2]), K(prev_next_success_scn));
       EXPECT_EQ(OB_ITER_END, iterator.next(replayable_point_scn, next_log_min_scn, iterate_end_by_replayable_point));
       EXPECT_EQ(next_log_min_scn, logts_append[2]);
-      // 在迭代一次，结果一样
+      // Iterate once more, the result is the same
       EXPECT_EQ(OB_ITER_END, iterator.next(replayable_point_scn, next_log_min_scn, iterate_end_by_replayable_point));
       EXPECT_EQ(next_log_min_scn, logts_append[2]);
       EXPECT_EQ(iterate_end_by_replayable_point, false);
-
-      // 回退replayable_point_scn，预期next_log_min_scn为prev_next_success_scn+1
+      // Rollback replayable_point_scn, expect next_log_min_scn to be prev_next_success_scn+1
       replayable_point_scn.convert_for_tx(100);
       EXPECT_EQ(OB_ITER_END, iterator.next(replayable_point_scn, next_log_min_scn, iterate_end_by_replayable_point));
       EXPECT_EQ(SCN::plus(prev_next_success_scn, 1), next_log_min_scn);
@@ -999,15 +969,14 @@ TEST_F(TestObSimpleLogClusterSingleReplica, test_iterator)
 
       end_lsn_v = LSN(1000000000);
       replayable_point_scn.convert_from_ts(ObTimeUtility::current_time() + 100000000);
-      // 留一条日志
+      // Log a message
       while (count_append > 1) {
         EXPECT_EQ(OB_SUCCESS, iterator.next(replayable_point_scn, next_log_min_scn, iterate_end_by_replayable_point));
         EXPECT_EQ(false, next_log_min_scn.is_valid());
         prev_next_success_scn = iterator.iterator_impl_.prev_entry_scn_;
         count_append--;
       }
-
-      // 验证append切回raw后是否正常工作
+      // Verify that append switches back to raw and works normally
       {
         int64_t id3 = ATOMIC_AAF(&palf_id_, 1);
         std::vector<SCN> logts_append;
@@ -1027,16 +996,15 @@ TEST_F(TestObSimpleLogClusterSingleReplica, test_iterator)
         EXPECT_EQ(OB_SUCCESS, wait_lsn_until_flushed(raw_write_leader.palf_handle_impl_->get_max_lsn(), raw_write_leader));
         PALF_LOG(INFO, "runlin trace 8.2", "raw_write_leader_lsn", raw_write_leader.palf_handle_impl_->get_max_lsn(),
             "new_leader_lsn", leader.palf_handle_impl_->get_max_lsn());
-
-        // replayable_point_scn偏小
+        // replayable_point_scn is too small
         SCN replayable_point_scn;
         replayable_point_scn.convert_for_tx(100);
         PALF_LOG(INFO, "runlin trace 8.3", K(iterator), K(replayable_point_scn), K(end_lsn_v),
           K(logts_append[0]), K(prev_next_success_scn));
-        // 迭代前一轮的日志，不需要递减count_append
+        // Log from the previous round, no need to decrement count_append
         EXPECT_EQ(OB_SUCCESS, iterator.next(replayable_point_scn, next_log_min_scn, iterate_end_by_replayable_point));
         prev_next_success_scn = iterator.iterator_impl_.prev_entry_scn_;
-        // 由于受控回放点不可读, next_log_min_scn应该为prev_next_success_scn+1
+        // Since the controlled replay point is unreadable, next_log_min_scn should be prev_next_success_scn + 1
         EXPECT_EQ(OB_ITER_END, iterator.next(replayable_point_scn, next_log_min_scn, iterate_end_by_replayable_point));
         EXPECT_EQ(SCN::plus(prev_next_success_scn, 1), next_log_min_scn);
 
@@ -1044,10 +1012,9 @@ TEST_F(TestObSimpleLogClusterSingleReplica, test_iterator)
           K(logts_append[0]), K(prev_next_success_scn));
         EXPECT_EQ(OB_ITER_END, iterator.next(replayable_point_scn, next_log_min_scn, iterate_end_by_replayable_point));
         EXPECT_EQ(SCN::plus(prev_next_success_scn, 1), next_log_min_scn);
-
-        // 推大受控回放点到第一条日志，但end_lsn_v也变为第一条日志的起点，此时会由于end_lsn_v不可读
-        // 预期next_min_scn为replayable_point_scn.
-        // 由于这条日志在此前的next中，不需要受控回放，会推大curr_read_pos_到LogEntry头，再次next不需要读数据直接返回OB_ITER_END
+        // Push the controlled replay point to the first log, but end_lsn_v also becomes the start of the first log, at which point end_lsn_v will become unreadable
+        // Expected next_min_scn to be replayable_point_scn.
+        // Since this log was not controlled replay in the previous next, it will push curr_read_pos_ to the LogEntry header, the next next does not need to read data and will directly return OB_ITER_END
         end_lsn_v = lsns_append[0]+10;
         replayable_point_scn = logts_append[0];
         PALF_LOG(INFO, "runlin trace 8.4", K(iterator), K(replayable_point_scn), K(end_lsn_v),
@@ -1064,8 +1031,8 @@ TEST_F(TestObSimpleLogClusterSingleReplica, test_iterator)
 
         PALF_LOG(INFO, "runlin trace 8.4.2", K(iterator), K(replayable_point_scn), K(end_lsn_v),
           K(logts_append[0]), K(prev_next_success_scn));
-        // 模拟prev_entry_后没有日志，replayable_point_scn小于prev_entry_scn_, 后续日志都需要受控回放
-        // replayable_point_scn回退是不会出现的事，此时next_min_scn会返回prev_entry_scn_+1
+        // Simulate no log after prev_entry_, replayable_point_scn less than prev_entry_scn_, subsequent logs need to be controlled replay
+        // replayable_point_scn rollback will not happen, at this time next_min_scn will return prev_entry_scn_ + 1
         replayable_point_scn = SCN::minus(prev_next_success_scn, 100);
         EXPECT_EQ(OB_ITER_END, iterator.next(replayable_point_scn, next_log_min_scn, iterate_end_by_replayable_point));
         EXPECT_EQ(SCN::plus(prev_next_success_scn, 1), next_log_min_scn);
@@ -1073,9 +1040,8 @@ TEST_F(TestObSimpleLogClusterSingleReplica, test_iterator)
 
         EXPECT_EQ(OB_ITER_END, iterator.next(replayable_point_scn, next_log_min_scn, iterate_end_by_replayable_point));
         EXPECT_EQ(SCN::plus(prev_next_success_scn, 1), next_log_min_scn);
-
-        // 模拟prev_entry后有日志
-        // 推大end_lsn_v到第二条日志的起点
+        // Simulate logs after prev_entry
+        // Push end_lsn_v to the start of the second log
         end_lsn_v = lsns_append[1]+2;
         replayable_point_scn = logts_append[1];
         PALF_LOG(INFO, "runlin trace 8.5", K(iterator), K(replayable_point_scn), K(end_lsn_v),
@@ -1087,19 +1053,18 @@ TEST_F(TestObSimpleLogClusterSingleReplica, test_iterator)
 
         PALF_LOG(INFO, "runlin trace 8.6", K(iterator), K(replayable_point_scn), K(end_lsn_v),
           K(logts_append[1]), K(prev_next_success_scn));
-        // 模拟prev_entry_后有日志, 但不可见的情况
-        // 此时会由于replayable_point_scn不吐出第二条日志
-        // 模拟replayable_point_scn在prev_entry_之前的情况
+        // Simulate the situation where there are logs after prev_entry_, but they are not visible
+        // At this point, the second log will not be output due to replayable_point_scn
+        // Simulate the situation where replayable_point_scn is before prev_entry_
         replayable_point_scn.convert_for_tx(100);
         EXPECT_EQ(OB_ITER_END, iterator.next(replayable_point_scn, next_log_min_scn, iterate_end_by_replayable_point));
         EXPECT_EQ(SCN::plus(prev_next_success_scn, 1), next_log_min_scn);
 
         EXPECT_EQ(OB_ITER_END, iterator.next(replayable_point_scn, next_log_min_scn, iterate_end_by_replayable_point));
         EXPECT_EQ(SCN::plus(prev_next_success_scn, 1), next_log_min_scn);
-
-        // 模拟replayable_point_scn在prev_entry_之后的情况, 由于prev_enty_后有日志，因此
-        // prev_entry_到replayable_point_scn之间不可能有未读过的日志，
-        // 因此next_log_min_scn为replayable_point_scn + 1.
+        // Simulate the situation where replayable_point_scn is after prev_entry_, since there are logs after prev_entry_, therefore
+        // there cannot be any unread logs between prev_entry_ and replayable_point_scn,
+        // Therefore next_log_min_scn is replayable_point_scn + 1.
         replayable_point_scn = SCN::plus(prev_next_success_scn , 2);
         PALF_LOG(INFO, "runlin trace 8.7", K(iterator), K(replayable_point_scn), K(end_lsn_v),
           K(logts_append[1]), K(prev_next_success_scn));
@@ -1108,8 +1073,7 @@ TEST_F(TestObSimpleLogClusterSingleReplica, test_iterator)
 
         EXPECT_EQ(OB_ITER_END, iterator.next(replayable_point_scn, next_log_min_scn, iterate_end_by_replayable_point));
         EXPECT_EQ(SCN::plus(replayable_point_scn, 1), next_log_min_scn);
-
-        // 模拟replayable_point_scn在curr_entry之后的情况
+        // Simulate the situation after curr_entry for replayable_point_scn
         replayable_point_scn.convert_from_ts(ObTimeUtility::current_time() + 100000000);
         PALF_LOG(INFO, "runlin trace 8.8", K(iterator), K(replayable_point_scn), K(end_lsn_v),
           K(logts_append[1]), K(prev_next_success_scn));
@@ -1124,8 +1088,7 @@ TEST_F(TestObSimpleLogClusterSingleReplica, test_iterator)
         EXPECT_EQ(next_log_min_scn.is_valid(), false);
         EXPECT_EQ(iterator.iterator_impl_.prev_entry_scn_, logts_append[1]);
         prev_next_success_scn = iterator.iterator_impl_.prev_entry_scn_;
-
-        // 验证受控回放
+        // Validate controlled replay
         replayable_point_scn.convert_for_tx(100);
         EXPECT_EQ(OB_ITER_END, iterator.next(replayable_point_scn, next_log_min_scn, iterate_end_by_replayable_point));
         EXPECT_EQ(SCN::plus(prev_next_success_scn, 1), next_log_min_scn);
@@ -1133,7 +1096,7 @@ TEST_F(TestObSimpleLogClusterSingleReplica, test_iterator)
       }
     }
   }
-  // 验证重启
+  // Validate restart
   restart_paxos_groups();
   {
     PalfHandleImplGuard raw_write_leader;
@@ -1220,14 +1183,13 @@ TEST_F(TestObSimpleLogClusterSingleReplica, test_iterator_with_flashback)
   SCN max_scn2 = leader.palf_handle_impl_->get_max_scn();
   LSN end_pos_of_log2 = leader.palf_handle_impl_->get_max_lsn();
   EXPECT_EQ(OB_SUCCESS, wait_until_has_committed(leader, leader.palf_handle_impl_->get_max_lsn()));
-
-  // 提交几条日志到raw_write leader
+  // Submit a few logs to raw_write leader
   EXPECT_EQ(OB_ITER_END, read_and_submit_group_log(leader, raw_write_leader));
   EXPECT_EQ(OB_SUCCESS, wait_until_has_committed(raw_write_leader, raw_write_leader.palf_handle_impl_->get_max_lsn()));
 
   PalfBufferIterator iterator;
   EXPECT_EQ(OB_SUCCESS, raw_write_leader.palf_handle_impl_->alloc_palf_buffer_iterator(LSN(0), iterator));
-  // 迭代flashback之前的日志成功
+  // Iteration of logs before flashback successful
   SCN next_min_scn;
   SCN tmp_scn; tmp_scn.val_ = 1000;
   bool iterate_end_by_replayable_point = false;
@@ -1247,8 +1209,7 @@ TEST_F(TestObSimpleLogClusterSingleReplica, test_iterator_with_flashback)
 
   int64_t mode_version;
   switch_flashback_to_append(raw_write_leader, mode_version);
-
-  // 磁盘上存在三条日志，一条日志已经迭代，另外一条日志没有迭代(raw_write)，最后一条日志为Append
+  // There are three logs on the disk, one log has been iterated, another log has not been iterated (raw_write), and the last log is Append
   EXPECT_EQ(OB_SUCCESS, submit_log(raw_write_leader, 1, leader_idx, 333));
   EXPECT_EQ(OB_SUCCESS, wait_until_has_committed(raw_write_leader, raw_write_leader.palf_handle_impl_->get_max_lsn()));
 
@@ -1257,14 +1218,13 @@ TEST_F(TestObSimpleLogClusterSingleReplica, test_iterator_with_flashback)
   PALF_LOG(INFO, "runlin trace case2", K(iterator), K(max_scn3), "end_lsn:", raw_write_leader.palf_handle_impl_->get_end_lsn());
 
   LSN iterator_end_lsn = iterator.iterator_storage_.end_lsn_;
-  // iterator内存中有几条日志，预期返回成功, 此时会清cache, 前一条日志的信息会被清除（raw_write日志）
-  // 迭代器游标预期依旧指向第一条日志的终点, 由于受控回放，返回iterate_end
+  // iterator memory contains how many logs, expect to return success, at this time cache will be cleared, the information of the previous log will be cleared (raw_write log)
+  // Iterator cursor is expected to still point to the end of the first log, due to controlled replay, return iterate_end
   EXPECT_EQ(OB_ITER_END, iterator.next(
     max_scn1, next_min_scn, iterate_end_by_replayable_point));
   EXPECT_EQ(end_pos_of_log1, iterator.iterator_impl_.log_storage_->get_lsn(iterator.iterator_impl_.curr_read_pos_));
   EXPECT_EQ(true, iterator.iterator_impl_.curr_entry_is_raw_write_);
-
-  // 需要从磁盘上将后面两日志读上来，但由于受控回放不会吐出
+  // Need to read the last two logs from the disk, but controlled playback will not output
   // EXPECT_FALSE(iterator_end_lsn == iterator.iterator_storage_.end_lsn_);
   EXPECT_EQ(OB_SUCCESS, iterator.next(max_scn2, next_min_scn, iterate_end_by_replayable_point));
   EXPECT_EQ(false, iterate_end_by_replayable_point);
@@ -1275,9 +1235,8 @@ TEST_F(TestObSimpleLogClusterSingleReplica, test_iterator_with_flashback)
   EXPECT_EQ(false, iterate_end_by_replayable_point);
   EXPECT_EQ(false, iterator.iterator_impl_.curr_entry_is_raw_write_);
   EXPECT_EQ(iterator.iterator_impl_.prev_entry_scn_, max_scn3);
-
-  // raw_write_leader已经有三条日志, raw_write(1 log entry), raw_write(1), append(1),
-  // 模拟一条group entry 中有多条小日志
+  // raw_write_leader already has three logs, raw_write(1 log entry), raw_write(1), append(1),
+  // Simulate a group entry with multiple small logs
   LSN last_lsn = raw_write_leader.palf_handle_impl_->get_max_lsn();
   SCN last_scn = raw_write_leader.palf_handle_impl_->get_max_scn();
 
@@ -1308,9 +1267,8 @@ TEST_F(TestObSimpleLogClusterSingleReplica, test_iterator_with_flashback)
   }
 
   cond.cond_.signal();
-
-  // 验证从一条包含多条LogEntry中日志中flashback，iterator迭代到中间的LogEntry后，flashback位点前还有几条LogEntry
-  // LogGroup LogGroup LogGroup LogGroup LogGroup(9条小日志)
+  // Verify flashback from a log containing multiple LogEntries, after the iterator iterates to an intermediate LogEntry, how many LogEntries are before the flashback point
+  // LogGroup LogGroup LogGroup LogGroup LogGroup(9 small logs)
   EXPECT_EQ(OB_SUCCESS, wait_until_has_committed(raw_write_leader, raw_write_leader.palf_handle_impl_->get_max_lsn()));
   {
     const int64_t id_new_raw_write = ATOMIC_AAF(&palf_id_, 1);
@@ -1327,7 +1285,7 @@ TEST_F(TestObSimpleLogClusterSingleReplica, test_iterator_with_flashback)
     EXPECT_EQ(OB_SUCCESS, new_raw_write_leader.palf_handle_impl_->alloc_palf_group_buffer_iterator(LSN(0), group_iterator));
 
     SCN replayable_point_scn(SCN::min_scn());
-    // 验证replayable_point_scn为min_scn
+    // Verify replayable_point_scn is min_scn
     EXPECT_EQ(OB_ITER_END, buff_iterator.next(replayable_point_scn, next_min_scn, iterate_end_by_replayable_point));
     EXPECT_EQ(iterate_end_by_replayable_point, true);
     EXPECT_EQ(next_min_scn, SCN::plus(replayable_point_scn, 1));
@@ -1336,9 +1294,7 @@ TEST_F(TestObSimpleLogClusterSingleReplica, test_iterator_with_flashback)
     EXPECT_EQ(iterate_end_by_replayable_point, true);
     EXPECT_EQ(next_min_scn, SCN::plus(replayable_point_scn, 1));
     EXPECT_EQ(group_iterator.iterator_impl_.prev_entry_scn_, replayable_point_scn);
-
-
-    // replayable_point_scn为第一条日志-1
+    // replayable_point_scn is the first log - 1
     replayable_point_scn = SCN::minus(max_scn1, 1);
     EXPECT_EQ(OB_ITER_END, buff_iterator.next(replayable_point_scn, next_min_scn, iterate_end_by_replayable_point));
     EXPECT_EQ(iterate_end_by_replayable_point, true);
@@ -1348,8 +1304,7 @@ TEST_F(TestObSimpleLogClusterSingleReplica, test_iterator_with_flashback)
     EXPECT_EQ(iterate_end_by_replayable_point, true);
     EXPECT_EQ(next_min_scn, SCN::plus(replayable_point_scn, 1));
     EXPECT_EQ(group_iterator.iterator_impl_.prev_entry_scn_, replayable_point_scn);
-
-    // replayable_point_scn为第一条日志
+    // replayable_point_scn is the first log entry
     replayable_point_scn = max_scn1;
     EXPECT_EQ(OB_SUCCESS, buff_iterator.next(replayable_point_scn, next_min_scn, iterate_end_by_replayable_point));
     EXPECT_EQ(iterate_end_by_replayable_point, false);
@@ -1357,8 +1312,7 @@ TEST_F(TestObSimpleLogClusterSingleReplica, test_iterator_with_flashback)
     EXPECT_EQ(OB_SUCCESS, group_iterator.next(replayable_point_scn, next_min_scn, iterate_end_by_replayable_point));
     EXPECT_EQ(iterate_end_by_replayable_point, false);
     EXPECT_EQ(group_iterator.iterator_impl_.prev_entry_scn_, replayable_point_scn);
-
-    // replayable_point_scn为第一条日志 + 1
+    // replayable_point_scn is the first log + 1
     replayable_point_scn = SCN::plus(max_scn1, 1);
     EXPECT_EQ(OB_ITER_END, buff_iterator.next(replayable_point_scn, next_min_scn, iterate_end_by_replayable_point));
     EXPECT_EQ(next_min_scn, SCN::plus(replayable_point_scn, 1));
@@ -1368,22 +1322,19 @@ TEST_F(TestObSimpleLogClusterSingleReplica, test_iterator_with_flashback)
     EXPECT_EQ(next_min_scn, SCN::plus(replayable_point_scn, 1));
     EXPECT_EQ(iterate_end_by_replayable_point, true);
     EXPECT_EQ(group_iterator.iterator_impl_.prev_entry_scn_, replayable_point_scn);
-
-    // 成功迭代第二条日志，第三条日志
+    // Successful iteration of the second log, third log
     replayable_point_scn = last_scn;
     EXPECT_EQ(OB_SUCCESS, buff_iterator.next(replayable_point_scn));
     EXPECT_EQ(OB_SUCCESS, group_iterator.next(replayable_point_scn));
     EXPECT_EQ(OB_SUCCESS, buff_iterator.next(replayable_point_scn));
     EXPECT_EQ(OB_SUCCESS, group_iterator.next(replayable_point_scn));
-
-    // 第四条日志一定是LogGroupEntry
+    // The fourth log must be a LogGroupEntry
     replayable_point_scn = scns[0];
     EXPECT_EQ(OB_SUCCESS, buff_iterator.next(replayable_point_scn));
     EXPECT_EQ(buff_iterator.iterator_impl_.prev_entry_scn_, replayable_point_scn);
     EXPECT_EQ(OB_SUCCESS, group_iterator.next(replayable_point_scn));
     EXPECT_EQ(group_iterator.iterator_impl_.prev_entry_scn_, replayable_point_scn);
-
-    // 迭代第五条LogGroupEntry的第一条LogEntry
+    // Iterate the first LogEntry of the fifth LogGroupEntry
     EXPECT_EQ(OB_ITER_END, buff_iterator.next(replayable_point_scn, next_min_scn, iterate_end_by_replayable_point));
     EXPECT_EQ(next_min_scn, SCN::plus(replayable_point_scn, 1));
     EXPECT_EQ(iterate_end_by_replayable_point, true);
@@ -1397,90 +1348,80 @@ TEST_F(TestObSimpleLogClusterSingleReplica, test_iterator_with_flashback)
     EXPECT_EQ(group_iterator.iterator_impl_.prev_entry_scn_, replayable_point_scn);
     EXPECT_NE(group_iterator.iterator_impl_.log_storage_->get_lsn(
       group_iterator.iterator_impl_.curr_read_pos_), lsns[1]);
-
-    // 由于被受控回放，buff_iterator以及group_iterator都没有推进curr_read_pos_
+    // Due to controlled replay, buff_iterator and group_iterator have not advanced curr_read_pos_
     EXPECT_EQ(group_iterator.iterator_impl_.log_storage_->get_lsn(
       group_iterator.iterator_impl_.curr_read_pos_),
               buff_iterator.iterator_impl_.log_storage_->get_lsn(
       buff_iterator.iterator_impl_.curr_read_pos_));
-
-    // 成功迭代第五条LogGroupEntry的第一条LogEntry
+    // Successfully iterated the first LogEntry of the fifth LogGroupEntry
     replayable_point_scn = scns[1];
     EXPECT_EQ(OB_SUCCESS, buff_iterator.next(replayable_point_scn, next_min_scn, iterate_end_by_replayable_point));
     EXPECT_EQ(buff_iterator.iterator_impl_.prev_entry_scn_, replayable_point_scn);
     EXPECT_EQ(buff_iterator.iterator_impl_.log_storage_->get_lsn(
       buff_iterator.iterator_impl_.curr_read_pos_), lsns[1]);
-
-    // group iterator被受控回放, 但由于第五条日志的max_scn大于受控回放点，故受控回放
+    // group iterator is controlled replay, but since the max_scn of the fifth log is greater than the controlled replay point, hence controlled replay
     EXPECT_EQ(OB_ITER_END, group_iterator.next(replayable_point_scn, next_min_scn, iterate_end_by_replayable_point));
-    // 由于受控回放的group entry对应的min scn和replayable_point_scn一样，因此next_min_scn会被设置为replayable_point_scn
+    // Since the min scn and replayable_point_scn of the group entry for controlled replay are the same, next_min_scn will be set to replayable_point_scn
     EXPECT_EQ(next_min_scn, replayable_point_scn);
     EXPECT_EQ(iterate_end_by_replayable_point, true);
     EXPECT_EQ(group_iterator.iterator_impl_.prev_entry_scn_, scns[0]);
     EXPECT_NE(group_iterator.iterator_impl_.log_storage_->get_lsn(
       group_iterator.iterator_impl_.curr_read_pos_), lsns[1]);
-
-    // 由于被第一条LogEntry受控回放，group_iterator没有推进curr_read_pos_, buff_iter推进了curr_read_pos_
+    // Due to the first LogEntry being controlled replay, group_iterator did not advance curr_read_pos_, but buff_iter advanced curr_read_pos_
     EXPECT_NE(group_iterator.iterator_impl_.log_storage_->get_lsn(
       group_iterator.iterator_impl_.curr_read_pos_),
               buff_iterator.iterator_impl_.log_storage_->get_lsn(
       buff_iterator.iterator_impl_.curr_read_pos_));
-
-    // buff_iterator的游标到了第五条group_entry的第一条小日志
-    // grou_iterator的游标到了第五条group_entry开头
-    // sncs[0] 第四条group entry，scns[1] - scns[9]是第二条
-    // 第五条group entry的第五条小日志被flashback
+    // buff_iterator's cursor is at the first small log of the fifth group_entry
+    // grou_iterator's cursor is at the beginning of the fifth group_entry
+    // sncs[0] fourth group entry, scns[1] - scns[9] are the second
+    // The fifth small log of the fifth group entry was flashback
     EXPECT_EQ(OB_SUCCESS, new_raw_write_leader.palf_handle_impl_->inner_flashback(scns[4]));
     EXPECT_EQ(new_raw_write_leader.palf_handle_impl_->get_max_scn(), scns[4]);
     EXPECT_EQ(OB_SUCCESS, change_access_mode_to_append(new_raw_write_leader));
-    // 提交一条group_entry
-    // 对于buff_iterator, 存在两条group_entry未读，一条raw_rwrite(包含4条小日志，游标停留在第一条小日志末尾)，一条append
-    // 对于group_iterator, 存在三条group_entry未读，一条raw_rwrite(包含4条小日志，游标停留在group_entry头部)，一条append
+    // submit a group_entry
+    // For buff_iterator, there are two unread group_entry, one raw_rwrite (including 4 small logs, cursor stops at the end of the first small log), one append
+    // For group_iterator, there are three unread group_entries, one raw_rwrite (containing 4 small logs, cursor is at the head of group_entry), one append
     EXPECT_EQ(OB_SUCCESS, submit_log(new_raw_write_leader, 1, leader_idx, 100));
     EXPECT_EQ(OB_SUCCESS, wait_until_has_committed(new_raw_write_leader, new_raw_write_leader.palf_handle_impl_->get_max_lsn()));
-
-    // 对于buff_iterator
-    // lsns[2]为第二条小日志开头，即第一条小日志末尾
-    // 验证游标起始位置为第一条小日志头部
-    // next 返回iterate是否清空cache
-    // 迭代raw_write写入的小日志
-    // 迭代append写入的小日志
+    // For buff_iterator
+    // lsns[2] is the start of the second small log, i.e., the end of the first small log
+    // Verify the cursor starting position is at the header of the first small log
+    // next returns whether iterate clears the cache
+    // Iterate over small logs written by raw_write
+    // iteration append write small log
     PALF_LOG(INFO, "rulin trace 1", K(lsns[2]), K(lsns[1]), K(lsns[0]), K(buff_iterator));
     EXPECT_EQ(buff_iterator.iterator_impl_.log_storage_->get_lsn(buff_iterator.iterator_impl_.curr_read_pos_), lsns[1]);
     EXPECT_EQ(OB_ITER_END, buff_iterator.next(SCN::min_scn(), next_min_scn, iterate_end_by_replayable_point));
     EXPECT_EQ(true, iterate_end_by_replayable_point);
     EXPECT_EQ(next_min_scn, SCN::plus(buff_iterator.iterator_impl_.prev_entry_scn_, 1));
     EXPECT_EQ(0, buff_iterator.iterator_impl_.curr_read_pos_);
-    // 迭代第二条日志
+    // Iterate the second log
     EXPECT_EQ(OB_SUCCESS, buff_iterator.next(SCN::max_scn()));
-    // 迭代第三条日志
+    // Iterate third log
     EXPECT_EQ(OB_SUCCESS, buff_iterator.next(SCN::max_scn()));
-    // 迭代第四条日志
+    // Iterate fourth log
     EXPECT_EQ(OB_SUCCESS, buff_iterator.next(SCN::max_scn()));
-
-    // 迭代第五条日志(迭代新的GroupENtry, 非受控回放)
+    // Iterate fifth log (iterate new GroupEntry, non-controlled replay)
     EXPECT_EQ(OB_SUCCESS, buff_iterator.next(SCN::min_scn()));
     EXPECT_EQ(OB_ITER_END, buff_iterator.next(SCN::min_scn()));
-
-    // 对于group_iterator
-    // 验证游标起始位置为raw_write日志开头
-    // next 返回iterate是否清空cache
-    // 迭代raw_write写入的大日志
-    // 迭代append写入的大日志
+    // For group_iterator
+    // Verify that the cursor start position is at the beginning of the raw_write log
+    // next returns whether iterate clears the cache
+    // Iterate over large logs written by raw_write
+    // iteration append write large log
     PALF_LOG(INFO, "rulin trace 2", K(lsns[2]), K(lsns[1]), K(lsns[0]), K(group_iterator));
     EXPECT_EQ(group_iterator.iterator_impl_.log_storage_->get_lsn(group_iterator.iterator_impl_.curr_read_pos_), lsns[1] - sizeof(LogGroupEntryHeader));
     EXPECT_EQ(OB_ITER_END, group_iterator.next(SCN::min_scn(), next_min_scn, iterate_end_by_replayable_point));
     EXPECT_EQ(true, iterate_end_by_replayable_point);
     EXPECT_EQ(next_min_scn, SCN::plus(group_iterator.iterator_impl_.prev_entry_scn_, 1));
-
-    // 迭代raw_write日志
+    // Iterate raw_write log
     EXPECT_EQ(OB_SUCCESS, group_iterator.next(SCN::max_scn()));
     EXPECT_EQ(OB_SUCCESS, group_iterator.next(SCN::max_scn()));
     EXPECT_EQ(OB_ITER_END, group_iterator.next(SCN::max_scn()));
   }
-
-  // 验证从一条包含多条LogEntry中日志中flashback，iterator迭代到中间的LogEntry后，flashback位点前没有LogEntry
-  // LogGroup LogGroup LogGroup LogGroup LogGroup(9条小日志)
+  // Verify flashback from a log containing multiple LogEntries, after the iterator iterates to an intermediate LogEntry, there are no LogEntries before the flashback point
+  // LogGroup LogGroup LogGroup LogGroup LogGroup(9 small logs)
   EXPECT_EQ(OB_SUCCESS, wait_until_has_committed(raw_write_leader, raw_write_leader.palf_handle_impl_->get_max_lsn()));
   {
     const int64_t id_new_raw_write = ATOMIC_AAF(&palf_id_, 1);
@@ -1495,8 +1436,7 @@ TEST_F(TestObSimpleLogClusterSingleReplica, test_iterator_with_flashback)
 
     EXPECT_EQ(OB_SUCCESS, new_raw_write_leader.palf_handle_impl_->alloc_palf_buffer_iterator(LSN(0), buff_iterator));
     EXPECT_EQ(OB_SUCCESS, new_raw_write_leader.palf_handle_impl_->alloc_palf_group_buffer_iterator(LSN(0), group_iterator));
-
-    // 成功迭代第一条日志，第二条日志，第三条日志
+    // Successfully iterated the first log, second log, third log
     SCN replayable_point_scn(last_scn);
     EXPECT_EQ(OB_SUCCESS, buff_iterator.next(replayable_point_scn, next_min_scn, iterate_end_by_replayable_point));
     EXPECT_EQ(OB_SUCCESS, group_iterator.next(replayable_point_scn, next_min_scn, iterate_end_by_replayable_point));
@@ -1506,15 +1446,13 @@ TEST_F(TestObSimpleLogClusterSingleReplica, test_iterator_with_flashback)
 
     EXPECT_EQ(OB_SUCCESS, buff_iterator.next(replayable_point_scn));
     EXPECT_EQ(OB_SUCCESS, group_iterator.next(replayable_point_scn));
-
-    // 第四条日志一定是LogGroupEntry
+    // The fourth log must be a LogGroupEntry
     replayable_point_scn = scns[0];
     EXPECT_EQ(OB_SUCCESS, buff_iterator.next(replayable_point_scn));
     EXPECT_EQ(buff_iterator.iterator_impl_.prev_entry_scn_, replayable_point_scn);
     EXPECT_EQ(OB_SUCCESS, group_iterator.next(replayable_point_scn));
     EXPECT_EQ(group_iterator.iterator_impl_.prev_entry_scn_, replayable_point_scn);
-
-    // 迭代第五条LogGroupEntry的第一条LogEntry
+    // Iterate the first LogEntry of the fifth LogGroupEntry
     EXPECT_EQ(OB_ITER_END, buff_iterator.next(replayable_point_scn, next_min_scn, iterate_end_by_replayable_point));
     EXPECT_EQ(next_min_scn, SCN::plus(replayable_point_scn, 1));
     EXPECT_EQ(iterate_end_by_replayable_point, true);
@@ -1528,90 +1466,80 @@ TEST_F(TestObSimpleLogClusterSingleReplica, test_iterator_with_flashback)
     EXPECT_EQ(group_iterator.iterator_impl_.prev_entry_scn_, replayable_point_scn);
     EXPECT_NE(group_iterator.iterator_impl_.log_storage_->get_lsn(
       group_iterator.iterator_impl_.curr_read_pos_), lsns[1]);
-
-    // 由于被受控回放，buff_iterator以及group_iterator都没有推进curr_read_pos_
+    // Due to controlled replay, buff_iterator and group_iterator have not advanced curr_read_pos_
     EXPECT_EQ(group_iterator.iterator_impl_.log_storage_->get_lsn(
       group_iterator.iterator_impl_.curr_read_pos_),
               buff_iterator.iterator_impl_.log_storage_->get_lsn(
       buff_iterator.iterator_impl_.curr_read_pos_));
-
-    // 成功迭代第五条LogGroupEntry的第一条LogEntry
+    // Successfully iterated the first LogEntry of the fifth LogGroupEntry
     replayable_point_scn = scns[1];
     EXPECT_EQ(OB_SUCCESS, buff_iterator.next(replayable_point_scn, next_min_scn, iterate_end_by_replayable_point));
     EXPECT_EQ(buff_iterator.iterator_impl_.prev_entry_scn_, replayable_point_scn);
     EXPECT_EQ(buff_iterator.iterator_impl_.log_storage_->get_lsn(
       buff_iterator.iterator_impl_.curr_read_pos_), lsns[1]);
-
-    // group iterator被受控回放, 但由于第五条日志的max_scn大于受控回放点，故受控回放
+    // group iterator is controlled replay, but since the max_scn of the fifth log is greater than the controlled replay point, hence controlled replay
     EXPECT_EQ(OB_ITER_END, group_iterator.next(replayable_point_scn, next_min_scn, iterate_end_by_replayable_point));
-    // 由于受控回放的group entry对应的min scn和replayable_point_scn一样，因此next_min_scn会被设置为replayable_point_scn
+    // Since the min scn and replayable_point_scn of the group entry for controlled replay are the same, next_min_scn will be set to replayable_point_scn
     EXPECT_EQ(next_min_scn, replayable_point_scn);
     EXPECT_EQ(iterate_end_by_replayable_point, true);
     EXPECT_EQ(group_iterator.iterator_impl_.prev_entry_scn_, scns[0]);
     EXPECT_NE(group_iterator.iterator_impl_.log_storage_->get_lsn(
       group_iterator.iterator_impl_.curr_read_pos_), lsns[1]);
-
-    // 由于被第一条LogEntry受控回放，group_iterator没有推进curr_read_pos_, buff_iter推进了curr_read_pos_
+    // Due to the first LogEntry being controlled replay, group_iterator did not advance curr_read_pos_, but buff_iter advanced curr_read_pos_
     EXPECT_NE(group_iterator.iterator_impl_.log_storage_->get_lsn(
       group_iterator.iterator_impl_.curr_read_pos_),
               buff_iterator.iterator_impl_.log_storage_->get_lsn(
       buff_iterator.iterator_impl_.curr_read_pos_));
-
-    // 迭代日志发现需要受控回放
+    // Iteration log discovery requires controlled replay
     EXPECT_EQ(OB_ITER_END, buff_iterator.next(scns[1], next_min_scn, iterate_end_by_replayable_point));
-
-    // buff_iterator的游标到了第五条group_entry的第一条小日志末尾
-    // grou_iterator的游标到了第五条group_entry开头
-    // sncs[0] 第四条group entry，scns[1] - scns[9]是第二条
-    // 第五条group entry的第二条小日志被flashback
+    // buff_iterator's cursor reached the end of the first small log in the fifth group_entry
+    // grou_iterator's cursor is at the beginning of the fifth group_entry
+    // sncs[0] fourth group entry, scns[1] - scns[9] are the second
+    // The second small log of the fifth group entry was flashback
     EXPECT_EQ(OB_SUCCESS, new_raw_write_leader.palf_handle_impl_->inner_flashback(scns[2]));
     EXPECT_EQ(new_raw_write_leader.palf_handle_impl_->get_max_scn(), scns[2]);
     EXPECT_EQ(OB_SUCCESS, change_access_mode_to_append(new_raw_write_leader));
-    // 提交一条group_entry
-    // 对于buff_iterator, 存在两条group_entry未读，一条raw_rwrite(包含4条小日志，游标停留在第一条小日志末尾)，一条append
-    // 对于group_iterator, 存在三条group_entry未读，一条raw_rwrite(包含4条小日志，游标停留在group_entry头部)，一条append
+    // submit a group_entry
+    // For buff_iterator, there are two unread group_entry, one raw_rwrite (including 4 small logs, cursor stops at the end of the first small log), one append
+    // For group_iterator, there are three unread group_entries, one raw_rwrite (containing 4 small logs, cursor is at the head of group_entry), one append
     EXPECT_EQ(OB_SUCCESS, submit_log(new_raw_write_leader, 1, leader_idx, 100));
     EXPECT_EQ(OB_SUCCESS, wait_until_has_committed(new_raw_write_leader, new_raw_write_leader.palf_handle_impl_->get_max_lsn()));
-
-    // 对于buff_iterator
-    // lsns[2]为第二条小日志开头，即第一条小日志末尾
-    // 验证游标起始位置为第一条小日志头部
-    // next 返回iterate是否清空cache
-    // 迭代raw_write写入的小日志
-    // 迭代append写入的小日志
+    // For buff_iterator
+    // lsns[2] is the start of the second small log, i.e., the end of the first small log
+    // Verify the cursor starting position is at the header of the first small log
+    // next returns whether iterate clears the cache
+    // Iterate over small logs written by raw_write
+    // iteration append write small log
     PALF_LOG(INFO, "rulin trace 3", K(lsns[2]), K(lsns[1]), K(lsns[0]), K(buff_iterator));
     EXPECT_EQ(buff_iterator.iterator_impl_.log_storage_->get_lsn(buff_iterator.iterator_impl_.curr_read_pos_), lsns[2]);
     EXPECT_EQ(OB_ITER_END, buff_iterator.next(SCN::min_scn(), next_min_scn, iterate_end_by_replayable_point));
     EXPECT_EQ(true, iterate_end_by_replayable_point);
     EXPECT_EQ(next_min_scn, SCN::plus(buff_iterator.iterator_impl_.prev_entry_scn_, 1));
     EXPECT_EQ(0, buff_iterator.iterator_impl_.curr_read_pos_);
-    // 迭代第二条小日志
+    // Iterate the second small log
     EXPECT_EQ(OB_SUCCESS, buff_iterator.next(SCN::max_scn()));
-    // 迭代新写入的LogGroupEntry, 不需要受控回放
+    // Iterate over newly written LogGroupEntry, no controlled replay needed
     EXPECT_EQ(OB_SUCCESS, buff_iterator.next(SCN::min_scn()));
 
     EXPECT_EQ(OB_ITER_END, buff_iterator.next(SCN::min_scn()));
-
-    // 对于group_iterator
-    // 验证游标起始位置为raw_write日志开头
-    // next 返回iterate是否清空cache
-    // 迭代raw_write写入的大日志
-    // 迭代append写入的大日志
+    // For group_iterator
+    // Verify that the cursor starting position is at the beginning of the raw_write log
+    // next returns whether iterate clears the cache
+    // Iterate over large logs written by raw_write
+    // iteration append write large log
     PALF_LOG(INFO, "rulin trace 4", K(lsns[2]), K(lsns[1]), K(lsns[0]), K(group_iterator));
     EXPECT_EQ(group_iterator.iterator_impl_.log_storage_->get_lsn(group_iterator.iterator_impl_.curr_read_pos_), lsns[1] - sizeof(LogGroupEntryHeader));
     EXPECT_EQ(OB_ITER_END, group_iterator.next(SCN::min_scn(), next_min_scn, iterate_end_by_replayable_point));
     EXPECT_EQ(true, iterate_end_by_replayable_point);
     EXPECT_EQ(next_min_scn, SCN::plus(group_iterator.iterator_impl_.prev_entry_scn_, 1));
-
-    // 迭代raw_write日志
+    // Iterate raw_write log
     EXPECT_EQ(OB_SUCCESS, group_iterator.next(SCN::max_scn()));
-    // 迭代新的GruopEntry
+    // Iterate new GroupEntry
     EXPECT_EQ(OB_SUCCESS, group_iterator.next(SCN::min_scn()));
     EXPECT_EQ(OB_ITER_END, group_iterator.next(SCN::min_scn()));
   }
-
-  // 验证一条LogGroupEntry需要受控回放，buff iterator不能更新accumlate_checksum和curr_read_pos_
-  // LogGroup LogGroup LogGroup LogGroup LogGroup(9条小日志)
+  // Verify that a LogGroupEntry requires controlled replay, buff iterator should not update accumulate_checksum and curr_read_pos_
+  // LogGroup LogGroup LogGroup LogGroup LogGroup(9 small logs)
   //                   last_scn scns[0]  scns[1]...
   {
     const int64_t id_new_raw_write = ATOMIC_AAF(&palf_id_, 1);
@@ -1633,24 +1561,21 @@ TEST_F(TestObSimpleLogClusterSingleReplica, test_iterator_with_flashback)
 
     replayable_point_scn = scns[0];
     EXPECT_EQ(OB_SUCCESS, iterator.next(replayable_point_scn));
-    // scns[1]对应的日志无法吐出
+    // The log corresponding to scns[1] cannot be output
     EXPECT_EQ(OB_ITER_END, iterator.next(replayable_point_scn, next_min_scn, iterate_end_by_replayable_point));
     EXPECT_EQ(next_min_scn, SCN::plus(scns[0], 1));
     EXPECT_EQ(iterator.iterator_impl_.prev_entry_scn_, scns[0]);
-
-    // flashback到scns[0]
+    // flashback to scns[0]
     EXPECT_EQ(OB_SUCCESS, new_raw_write_leader.palf_handle_impl_->inner_flashback(scns[0]));
     EXPECT_EQ(OB_SUCCESS, change_access_mode_to_append(new_raw_write_leader));
     EXPECT_EQ(OB_SUCCESS, submit_log(new_raw_write_leader, 1, leader_idx, 100));
     EXPECT_EQ(OB_SUCCESS, wait_until_has_committed(new_raw_write_leader, new_raw_write_leader.palf_handle_impl_->get_max_lsn()));
-
-    // scns[0]对应的日志为raw write, 被flashback了, iterator停在scns[0]的末尾
-    // 迭代新写入的日志成功
+    // scns[0] corresponding log is raw write, was flashbacked, iterator stops at the end of scns[0]
+    // Iteration of newly written logs successful
     EXPECT_EQ(OB_SUCCESS, iterator.next(SCN::min_scn(), next_min_scn, iterate_end_by_replayable_point));
     EXPECT_EQ(OB_ITER_END, iterator.next(SCN::min_scn()));
   }
-
-  // 验证一条padding LogGroupEntry需要受控回放
+  // Validate that a padding LogGroupEntry requires controlled replay
   {
     const int64_t append_id = ATOMIC_AAF(&palf_id_, 1);
     PalfHandleImplGuard append_leader;
@@ -1684,10 +1609,9 @@ TEST_F(TestObSimpleLogClusterSingleReplica, test_iterator_with_flashback)
     EXPECT_EQ(true, iterate_end_by_replayable_point);
     EXPECT_EQ(OB_ITER_END, group_buff_iterator.next(share::SCN::min_scn(), next_min_scn, iterate_end_by_replayable_point));
     EXPECT_EQ(true, iterate_end_by_replayable_point);
-
-    // 一共有33条日志，包括padding
+    // There are a total of 33 logs, including padding
     SCN replayable_point_scn = padding_scn.minus(padding_scn, 1);
-    // 直到padding日志受控回放
+    // Until padding log controlled replay
     int ret = OB_SUCCESS;
     while (OB_SUCC(buff_iterator.next(replayable_point_scn, next_min_scn, iterate_end_by_replayable_point))) {
     }
@@ -1709,7 +1633,7 @@ TEST_F(TestObSimpleLogClusterSingleReplica, test_iterator_with_flashback)
 
     EXPECT_EQ(false, buff_iterator.iterator_impl_.curr_entry_is_padding_);
     EXPECT_EQ(false, group_buff_iterator.iterator_impl_.curr_entry_is_padding_);
-    // flashback到padding日志尾
+    // flashback to padding log tail
     EXPECT_EQ(OB_SUCCESS, raw_write_leader.get_palf_handle_impl()->flashback(mode_version, padding_scn, timeout_ts_us));
     EXPECT_EQ(OB_SUCCESS, buff_iterator.next(padding_scn, next_min_scn, iterate_end_by_replayable_point));
     LogEntry padding_log_entry;
@@ -1726,12 +1650,12 @@ TEST_F(TestObSimpleLogClusterSingleReplica, test_iterator_with_flashback)
     EXPECT_EQ(OB_SUCCESS, group_buff_iterator.get_entry(padding_group_entry, padding_group_lsn));
     EXPECT_EQ(true, padding_group_entry.check_integrity());
     EXPECT_EQ(true, padding_group_entry.header_.is_padding_log());
-    // 对于LogGruopEntry的iterator，在construct_padding_log_entry_后，不会重置padding状态
+    // For the iterator of LogGruopEntry, after construct_padding_log_entry_, the padding state will not be reset
     EXPECT_EQ(true, group_buff_iterator.iterator_impl_.padding_entry_scn_.is_valid());
     EXPECT_EQ(padding_log_entry.header_.scn_, padding_group_entry.header_.max_scn_);
-    // flashback到padding日志头
+    // flashback to padding log header
     EXPECT_EQ(OB_SUCCESS, raw_write_leader.get_palf_handle_impl()->flashback(mode_version, padding_scn.minus(padding_scn, 1), timeout_ts_us));
-    // 预期是由于文件长度导致的OB_ITER_END
+    // The expectation is that OB_ITER_END is caused by the file length
     EXPECT_EQ(OB_ITER_END, buff_iterator_padding_start.next(padding_scn, next_min_scn, iterate_end_by_replayable_point));
     EXPECT_EQ(false, iterate_end_by_replayable_point);
     EXPECT_GE(next_min_scn, buff_iterator_padding_start.iterator_impl_.prev_entry_scn_);
@@ -1762,7 +1686,7 @@ TEST_F(TestObSimpleLogClusterSingleReplica, test_raw_read)
   palf_env_impl->get_options(opts);
   opts.enable_log_cache_ = true;
   palf_env_impl->update_options(opts);
-  // 提交100条日志, 每条日志大小为30K.
+  // Submit 100 logs, each log size is 30K.
   {
     char *read_buf = read_buf_ptr;
     int64_t nbytes = read_buf_ptr_len;
@@ -1774,8 +1698,7 @@ TEST_F(TestObSimpleLogClusterSingleReplica, test_raw_read)
     const LSN invalid_lsn(1);
     char *invalid_read_buf = read_buf_ptr + 1;
     const int64_t invalid_nbytes = 1;
-
-    // 非DIO对齐度
+    // Non-DIO alignment
     palf::LogIOContext io_ctx(palf::LogIOUser::META_INFO);
     EXPECT_EQ(OB_INVALID_ARGUMENT, leader.palf_handle_impl_->raw_read(
       invalid_lsn, invalid_read_buf, invalid_nbytes, out_read_size, io_ctx));
@@ -1788,23 +1711,19 @@ TEST_F(TestObSimpleLogClusterSingleReplica, test_raw_read)
     EXPECT_EQ(OB_INVALID_ARGUMENT, leader.palf_handle_impl_->raw_read(
       LSN(PALF_INITIAL_LSN_VAL), read_buf, invalid_nbytes, out_read_size, io_ctx));
     PALF_LOG(INFO, "raw read success");
-
-    // 读取成功
+    // Read successful
     EXPECT_EQ(OB_SUCCESS, leader.palf_handle_impl_->raw_read(LSN(PALF_INITIAL_LSN_VAL), read_buf, PALF_BLOCK_SIZE, out_read_size, io_ctx));
     EXPECT_LE(out_read_size, PALF_BLOCK_SIZE);
     EXPECT_EQ(out_read_size, curr_real_size);
-
-    // 读取长度超过end_lsn
+    // Read length exceeds end_lsn
     PALF_LOG(INFO, "raw read return OB_ERR_OUT_OF_UPPER_BOUND");
     LSN out_of_upper_bound(PALF_BLOCK_SIZE);
     EXPECT_EQ(OB_ERR_OUT_OF_UPPER_BOUND, leader.palf_handle_impl_->raw_read(
       out_of_upper_bound, read_buf, PALF_BLOCK_SIZE, out_read_size, io_ctx));
-
-    // 模拟生成2个文件
+    // Simulate generating 2 files
     EXPECT_EQ(OB_SUCCESS, submit_log(leader, 40, leader_idx, MAX_LOG_BODY_SIZE));
     EXPECT_EQ(OB_SUCCESS, wait_until_has_committed(leader, leader.palf_handle_impl_->get_max_lsn()));
-
-    // 模拟跨文件读
+    // Simulate cross-file read
     PALF_LOG(INFO, "raw read cross file");
     LSN curr_read_lsn(lower_align(PALF_BLOCK_SIZE/2, LOG_DIO_ALIGN_SIZE));
     int64_t expected_read_size = LSN(PALF_BLOCK_SIZE) - curr_read_lsn;
@@ -1818,8 +1737,7 @@ TEST_F(TestObSimpleLogClusterSingleReplica, test_raw_read)
     //  curr_read_lsn, read_buf, expected_read_size, out_read_size, io_ctx));
 
     EXPECT_EQ(OB_SUCCESS, leader.palf_handle_impl_->delete_block(0));
-
-    // 模拟lower_bound
+    // simulate lower_bound
     PALF_LOG(INFO, "raw read return OB_ERR_OUT_OF_LOWER_BOUND");
     LSN out_of_lower_bound(PALF_INITIAL_LSN_VAL);
     EXPECT_EQ(OB_ERR_OUT_OF_LOWER_BOUND, leader.palf_handle_impl_->raw_read(out_of_lower_bound, read_buf, PALF_BLOCK_SIZE, out_read_size, io_ctx));

@@ -205,18 +205,18 @@ int ObTableScanTest::create_local_plan_tree(ObExecContext &ctx)
   col.column_name_ = ObString::make_string("a");
   EXPECT_EQ(OB_SUCCESS, single_range_columns.push_back(col));
   ref_col.add_flag(IS_COLUMN);
-  // 构造 (a = ?)
+  // construct (a = ?)
   ObObj index1;
   index1.set_unknown(0);
   ObConstRawExpr const_col1(index1, T_QUESTIONMARK);
   const_col1.add_flag(IS_PARAM);
-  ObOpRawExpr condition1(&ref_col, &const_col1, T_OP_EQ); // a = ?构造完毕
-  // 构造 (a > ?)
+  ObOpRawExpr condition1(&ref_col, &const_col1, T_OP_EQ); // a = ? construction completed
+  // construct (a > ?)
   ObObj index2;
   index2.set_unknown(1);
   ObConstRawExpr const_col2(index2, T_QUESTIONMARK);
   const_col2.add_flag(IS_PARAM);
-  ObOpRawExpr condition2(&ref_col, &const_col2, T_OP_GT); // a > ?构造完毕
+  ObOpRawExpr condition2(&ref_col, &const_col2, T_OP_GT); // a > ? construction completed
   ObQueryRange *scan_query_range = OB_NEW(ObQueryRange, ObModIds::TEST);
   EXPECT_EQ(OB_SUCCESS, scan_query_range->preliminary_extract_query_range(single_range_columns, &condition2));
 

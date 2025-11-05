@@ -50,7 +50,7 @@ private:
   int to_vector(const ObDatum &datum, ObIVector *vector, const int64_t batch_idx);
 
 private:
-  common::ObArenaAllocator allocator_; // 常驻内存分配器
+  common::ObArenaAllocator allocator_; // resident memory allocator
   ObArray<ObIVector *> vectors_;
   int64_t max_batch_size_;
   int64_t row_count_;

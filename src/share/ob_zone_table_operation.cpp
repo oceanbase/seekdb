@@ -435,7 +435,7 @@ int ObZoneTableOperation::get_region_list(
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("failed to get result", K(sql), K(ret));
     } else {
-      int64_t tmp_real_str_len = 0; // 仅用于填充出参，不起作用，需保证对应的字符串中间没有'\0'字符
+      int64_t tmp_real_str_len = 0; // Only used to fill the output parameter, does not take effect, must ensure that there is no '\0' character in the middle of the corresponding string
       while (OB_SUCCESS == ret && OB_SUCCESS == (ret = result->next())) {
         EXTRACT_STRBUF_FIELD_MYSQL(*result, "region", region.ptr(), MAX_REGION_LENGTH, tmp_real_str_len);
         (void) tmp_real_str_len; // make compiler happy

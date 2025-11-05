@@ -448,12 +448,12 @@ int ObSlaveMapRepartIdxCalcBase::init(uint64_t tenant_id)
   if (OB_FAIL(ObRepartSliceIdxCalc::init(tenant_id))) {
     LOG_WARN("fail init base", K(ret));
   }
-  // 在pkey random情况下，一个partition是可以被其所在的SQC上的所有worker处理的，
-  // 所以一个tablet_id可能会对应多个task idx，
-  // 形成 tablet_id -> task_idx_list的映射关系
-  // 例如：SQC1有3 worker(task1,task2,task3)，2个partition(p0,p1);
-  // SQC2有2 worker(task4，task5)，1个partition(p2);
-  // 就会形成：
+  // In pkey random case, a partition can be processed by all workers on its SQC,
+  // So a tablet_id may correspond to multiple task idx,
+  // Form tablet_id -> task_idx_list mapping relationship
+  // For example: SQC1 has 3 workers(task1, task2, task3), 2 partitions(p0, p1);
+  // SQC2 has 2 workers(task4, task5), 1 partition(p2);
+  // would form:
   // p0 : [task1,task2,task3]
   // p1 : [task1,task2,task3]
   // p2 : [task4,task5]
@@ -468,7 +468,7 @@ int ObSlaveMapRepartIdxCalcBase::init(uint64_t tenant_id)
   }
 
   // TODO: jiangting.lk
-  // 这里可以再进行优化，节约空间，将相同SQC的partition使用同一个task idx array
+  // Here can be further optimized, save space, use the same task idx array for partitions with the same SQC
   ARRAY_FOREACH_X(part_ch_array, idx, cnt, OB_SUCC(ret)) {
     int64_t tablet_id = part_ch_array.at(idx).first_;
     int64_t task_idx = part_ch_array.at(idx).second_;
@@ -528,15 +528,15 @@ int ObSlaveMapPkeyRandomIdxCalc::get_slice_indexes_inner(const ObIArray<ObExpr*>
 {
   int ret = OB_SUCCESS;
   UNUSED(exprs);
-  // 计算过程：
-  // 1. 通过row计算出对应的partition id
-  // 2. 通过partition id，找到对应的task array
-  // 3. random的方式从task array中选择task idx作为slice idx
+  // Calculation process:
+  // 1. Calculate the corresponding partition id through row
+  // 2. Through partition id, find the corresponding task array
+  // 3. random way from task array to select task idx as slice idx
   int64_t tablet_id = OB_INVALID_INDEX;
   if (OB_FAIL(setup_slice_index(slice_idx_array))) {
     LOG_WARN("set slice index failed", K(ret));
   } else if (part_ch_info_.part_ch_array_.size() <= 0) {
-    // 表示没有 partition到task idx的映射
+    // Indicates there is no mapping from partition to task idx
     ret = OB_NOT_INIT;
     LOG_WARN("the size of part task channel map is zero", K(ret));
   } else if (OB_FAIL(ObRepartSliceIdxCalc::get_tablet_id<USE_VEC>(eval_ctx, tablet_id, skip))) {
@@ -572,7 +572,7 @@ int ObSlaveMapPkeyRandomIdxCalc::get_slice_idx_batch_inner(const ObIArray<ObExpr
   if (OB_FAIL(setup_slice_indexes(eval_ctx))) {
     LOG_WARN("setup slice indexes failed", K(ret));
   } else if (part_ch_info_.part_ch_array_.size() <= 0) {
-    // 表示没有 partition到task idx的映射
+    // Indicates there is no mapping from partition to task idx
     ret = OB_NOT_INIT;
     LOG_WARN("the size of part task channel map is zero", K(ret));
   } else if (OB_FAIL(ObRepartSliceIdxCalc::get_tablet_ids<USE_VEC>(eval_ctx, skip,
@@ -615,7 +615,7 @@ int ObSlaveMapPkeyRandomIdxCalc::get_task_idx_by_tablet_id(int64_t tablet_id,
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("the size of task idx array is zero", K(ret));
     } else {
-      // random的方式从 task idx array中找到结果
+      // random way from task idx array to find the result
       static const int64_t min = 0;
       static const int64_t max = INT64_MAX;
       int64_t rand_idx = common::ObRandom::rand(min, max) % task_idx_array->count();
@@ -800,7 +800,7 @@ int ObRepartSliceIdxCalc::build_repart_ch_map(ObPxPartChMap &affinity_map, uint6
   }
 
   int64_t tablet_id = common::OB_INVALID_INDEX_INT64;
-  // 将 partition idx => channel idx 的映射 array 转化成 hash map，提高查询效率
+  // Convert the mapping array of partition idx => channel idx into a hash map to improve query efficiency
   ARRAY_FOREACH_X(part_ch_array, idx, cnt, OB_SUCC(ret)) {
     LOG_DEBUG("map build", K(idx), K(cnt), "key", part_ch_array.at(idx).first_, "val",
         part_ch_array.at(idx).second_);
@@ -1674,8 +1674,7 @@ int ObSlaveMapPkeyRangeIdxCalc::get_slice_indexes_inner(const ObIArray<ObExpr*> 
   }
   return ret;
 }
-
-//TODO:shanting2.0 实现pkey range的向量化1.0和2.0接口
+//TODO:shanting2.0 implement pkey range vectorization 1.0 and 2.0 interfaces
 
 /*******************                 ObSlaveMapPkeyHashIdxCalc                 ********************/
 int ObSlaveMapPkeyHashIdxCalc::init(uint64_t tenant_id)
@@ -1710,15 +1709,15 @@ int ObSlaveMapPkeyHashIdxCalc::get_slice_indexes_inner(const ObIArray<ObExpr*> &
                                                  ObBitVector *skip)
 {
   int ret = OB_SUCCESS;
-  // 计算过程：
-  // 1. 通过row计算出对应的partition id
-  // 2. 通过partition id，找到对应的task array
-  // 3. hash 的方式从task array中选择task idx作为slice idx
+  // Calculation process:
+  // 1. Calculate the corresponding partition id through row
+  // 2. Through partition id, find the corresponding task array
+  // 3. hash the way from task array to select task idx as slice idx
   int64_t tablet_id = OB_INVALID_INDEX;
   if (OB_FAIL(setup_slice_index(slice_idx_array))) {
     LOG_WARN("set slice index failed", K(ret));
   } else if (part_ch_info_.part_ch_array_.size() <= 0) {
-    // 表示没有 partition到task idx的映射
+    // Indicates there is no mapping from partition to task idx
     ret = OB_NOT_INIT;
     LOG_WARN("the size of part task channel map is zero", K(ret));
   } else if (OB_FAIL(ObRepartSliceIdxCalc::get_tablet_id<USE_VEC>(eval_ctx, tablet_id, skip))) {
@@ -1745,7 +1744,7 @@ int ObSlaveMapPkeyHashIdxCalc::get_slice_indexes_inner(const ObIArray<ObExpr*> &
           slice_idx_array.at(0) = part_ch_array.at(hash_idx).second_;
         }
       } else {
-        // 没有找到对应的分区，返回OB_NO_PARTITION_FOR_GIVEN_VALUE
+        // No corresponding partition found, return OB_NO_PARTITION_FOR_GIVEN_VALUE
         ret = OB_NO_PARTITION_FOR_GIVEN_VALUE;
         LOG_WARN("can't get the right partition", K(ret), K(tablet_id),
                  K(unmatch_row_dist_method_));
@@ -1754,7 +1753,7 @@ int ObSlaveMapPkeyHashIdxCalc::get_slice_indexes_inner(const ObIArray<ObExpr*> &
   }
   return ret;
 }
-//TODO:shanting2.0 实现pkey hash的向量化1.0和2.0接口
+//TODO:shanting2.0 implement pkey hash vectorization 1.0 and 2.0 interfaces
 template <bool USE_VEC>
 int ObSlaveMapPkeyHashIdxCalc::get_task_idx_by_tablet_id(ObEvalCtx &eval_ctx,
                                                          int64_t tablet_id,
@@ -2142,8 +2141,7 @@ int ObWfHybridDistSliceIdCalc::get_multi_slice_idx_vector_inner(const ObIArray<O
   }
   return ret;
 }
-
-//TODO:shanting2.0 实现wf hybrid的向量化1.0和2.0接口. 否则这样直接调其他slice_calc的get_slice_indexes_inner会有问题
+//TODO:shanting2.0 Implement wf hybrid vectorization 1.0 and 2.0 interfaces. Otherwise, calling get_slice_indexes_inner from other slice_calc directly will cause issues.
 
 template <bool USE_VEC>
 int ObNullAwareHashSliceIdCalc::get_slice_indexes_inner(const ObIArray<ObExpr*> &exprs,

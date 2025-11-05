@@ -86,8 +86,8 @@ int ObLogSet::compute_const_exprs()
              OB_FAIL(append(output_const_exprs_, right_child->get_output_const_exprs()))) {
     LOG_WARN("failed to append exprs", K(ret));
   } else if (ObSelectStmt::UNION == get_set_op()) {
-    //union, left/right 均为 const 且值相等添加 const, 暂不维护
-    //union 可能有多于两个分支
+    //union, left/right are both const and have equal values add const, temporarily not maintained
+    //union may have more than two branches
   } else {
     /*do nothing*/
   }
@@ -242,9 +242,9 @@ int ObLogSet::compute_op_ordering()
   reset_op_ordering();
   if (MERGE_SET == set_algo_ && is_set_distinct()) {
     ObSEArray<OrderItem, 8> ordering;;
-    //查询项和索引key可能不是一一对应, 这时需要放入映射后的exprs到ordering
+    // Query items and index keys may not be one-to-one, this time you need to put the mapped exprs into ordering
     //only merge union generate sorted output
-    ObArray<ObRawExpr*> mapped_exprs; //按照map array的顺序调整后得到的
+    ObArray<ObRawExpr*> mapped_exprs; // adjusted according to the order of the map array
     ObSEArray<ObRawExpr *, 8> select_exprs;
     ObLogicalOperator *left_child = NULL;
     if (OB_ISNULL(left_child = get_child(ObLogicalOperator::first_child))) {

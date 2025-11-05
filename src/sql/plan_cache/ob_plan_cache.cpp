@@ -447,11 +447,10 @@ int ObPlanCache::try_get_ps_plan(ObCacheObjGuard &guard, const ObPsStmtId stmt_i
   pctx->restore_param_store(original_param_cnt);
   return ret;
 }
-
-//plan cache获取plan入口
-//1.fast parser获取param sql及raw params
-//2.根据param sql获得pcv set
-//3.检查权限信息
+// plan cache get plan entry
+//1.fast parser get param sql and raw params
+//2.Get pcv set according to param sql
+//3.check permission information
 int ObPlanCache::get_plan(common::ObIAllocator &allocator,
                           ObPlanCacheCtx &pc_ctx,
                           ObCacheObjGuard& guard)
@@ -926,7 +925,7 @@ int ObPlanCache::check_can_do_insert_opt(common::ObIAllocator &allocator,
   }
 
   if (ret != OB_SUCCESS) {
-    // 这里边的无论什么报错，都可以被吞掉，只是报错后就不能再做batch优化
+    // Here whatever error can be swallowed, just cannot do batch optimization after the error
     can_do_batch = false;
     LOG_WARN("can't do insert batch optimization, cover the error code by design", K(ret), K(pc_ctx.raw_sql_));
     ret = OB_SUCCESS;
@@ -934,11 +933,10 @@ int ObPlanCache::check_can_do_insert_opt(common::ObIAllocator &allocator,
 
   return ret;
 }
-
-//plan cache中add plan 入口
-//1.检查内存限制
-//2.添加plan
-//3.添加plan stat
+//plan cache add plan entry
+//1.check memory limit
+//2. add plan
+//3. add plan stat
 int ObPlanCache::add_plan(ObPhysicalPlan *plan, ObPlanCacheCtx &pc_ctx)
 {
   int ret = OB_SUCCESS;
@@ -949,7 +947,7 @@ int ObPlanCache::add_plan(ObPhysicalPlan *plan, ObPlanCacheCtx &pc_ctx)
     SQL_PC_LOG(WARN, "invalid physical plan", K(ret));
   } else if (is_reach_memory_limit()) {
     ret = OB_REACH_MEMORY_LIMIT;
-    if (REACH_TIME_INTERVAL(1000000)) { //1s, 当内存达到上限时, 该日志打印会比较频繁, 所以以1s为间隔打印
+    if (REACH_TIME_INTERVAL(1000000)) { //1s, when memory reaches the upper limit, this log print will be relatively frequent, so it is printed at an interval of 1s
       SQL_PC_LOG(WARN, "plan cache memory used reach limit",
                         K_(tenant_id), K(get_mem_hold()), K(get_mem_limit()), K(ret));
     }
@@ -1212,7 +1210,7 @@ int ObPlanCache::get_value(ObILibCacheKey *key,
       }
       break;
     }
-  case OB_HASH_NOT_EXIST: { //返回时 node = NULL; ret = OB_SUCCESS;
+  case OB_HASH_NOT_EXIST: { // return when node = NULL; ret = OB_SUCCESS;
       SQL_PC_LOG(TRACE, "entry does not exist.", KPC(key));
       break;
     }
@@ -1433,13 +1431,13 @@ int ObPlanCache::cache_evict_by_glitch_node()
 //       for (int64_t i = 0; i < plan_ids.count(); i++) {
 //         uint64_t plan_id= plan_ids.at(i);
 //         ObCacheObjGuard guard(LOAD_BASELINE_HANDLE);
-//         int tmp_ret = ref_plan(plan_id, guard); //plan引用计数加1
+//         int tmp_ret = ref_plan(plan_id, guard); // increment plan reference count by 1
 //         plan = static_cast<ObPhysicalPlan*>(guard.cache_obj_);
 //         if (OB_HASH_NOT_EXIST == tmp_ret) {
 //           //do nothing;
 //         } else if (OB_SUCCESS != tmp_ret || NULL == plan) {
 //           LOG_WARN("get plan failed", K(tmp_ret), KP(plan));
-//         } else if (false == plan->stat_.is_evolution_) { //不在演进中
+//         } else if (false == plan->stat_.is_evolution_) { // not in evolution
 //           LOG_DEBUG("load plan baseline", "bl_info", plan->stat_.bl_info_, K(plan->should_add_baseline()));
 //           share::schema::ObSchemaGetterGuard schema_guard;
 //           const share::schema::ObPlanBaselineInfo *bl_info = NULL;
@@ -1447,10 +1445,10 @@ int ObPlanCache::cache_evict_by_glitch_node()
 //                                                 plan->stat_.bl_info_.key_,
 //                                                 bl_info))) {
 //             LOG_WARN("fail to get outline data from baseline", K(ret));
-//           } else if (!OB_ISNULL(bl_info)) { //plan baseline不为空
+//           } else if (!OB_ISNULL(bl_info)) { // plan baseline is not null
 //             if (bl_info->outline_data_ == plan->stat_.bl_info_.outline_data_) {
 //               //do nothing
-//             } else { //outline data不同, 不同机器可能生成不同的计划, 不符合预期
+//             } else { // outline data different, different machines may generate different plans, does not meet expectations
 //               LOG_WARN("diff plan in plan cache and plan baseline",
 //                       "baseline info in plan cache", plan->stat_.bl_info_,
 //                       "baseline info in plan baseline", *bl_info);
@@ -1462,7 +1460,7 @@ int ObPlanCache::cache_evict_by_glitch_node()
 //           } else {
 //             // do nothing
 //           }
-//         } else { //plan cache计划在演进中
+//         } else { // plan cache is evolving
 //           // do nothing
 //         }
 //       }
@@ -1470,20 +1468,18 @@ int ObPlanCache::cache_evict_by_glitch_node()
 //   }
 //   return ret;
 // }
-
-// 计算plan_cache需要淘汰的pcv_set个数
-// ret = true表示执行正常，否则失败
+// Calculate the number of pcv_set to be evicted from plan_cache
+// ret = true indicates normal execution, otherwise failure
 bool ObPlanCache::calc_evict_num(int64_t &plan_cache_evict_num)
 {
   bool ret = true;
-  //按照当前各自的内存比例，先计算各自需要淘汰多少内存
+  // Calculate how much memory each should evict based on their current memory proportions
   int64_t pc_hold = get_mem_hold();
   int64_t mem_to_free = pc_hold - get_mem_low();
   if (mem_to_free <= 0) {
     ret = false;
   }
-
-  //然后计算需要淘汰的条数
+  // Then calculate the number of entries to be evicted
   if (ret) {
     if (pc_hold > 0) {
       double evict_percent = static_cast<double>(mem_to_free) / static_cast<double>(pc_hold);
@@ -1758,13 +1754,12 @@ int64_t ObPlanCache::get_label_hold(lib::ObLabel &label) const
   get_tenant_label_memory(tenant_id_, label, item);
   return item.hold_;
 }
-
-//添加plan到plan cache
-// 1.判断plan cache内存是否达到上限；
-// 2.判断plan大小是否超出限制
-// 3.通过plan cache key获取pcv：
-//     如果获取pcv成功：则将plan 加入pcv
-//     如果获取pcv失败：则新生成pcv; 将plan 加入该pcv; 最后将该pcv 加入到key->pcv map中，
+// Add plan to plan cache
+// 1. Determine if plan cache memory has reached its limit;
+// 2. Determine if the plan size exceeds the limit
+// 3.Get pcv through plan cache key:
+//     If get pcv successfully: then add plan to pcv
+//     If getting pcv fails: then generate a new pcv; add plan to this pcv; finally add this pcv to the key->pcv map,
 // template<class T>
 // int ObPlanCache::add_ps_plan(T *plan, ObPlanCacheCtx &pc_ctx)
 // {
@@ -2411,7 +2406,7 @@ void ObPlanCacheEliminationTask::runTimerTask()
   ++run_task_counter_;
   const int64_t auto_flush_pc_interval = (int64_t)(GCONF._ob_plan_cache_auto_flush_interval) / (1000 * 1000L); // second
   {
-    // 在调用plan cache接口前引用plan资源前必须定义guard
+    // Before calling the plan cache interface and referencing the plan resource, a guard must be defined
     observer::ObReqTimeGuard req_timeinfo_guard;
 
     run_plan_cache_task();
@@ -2435,7 +2430,7 @@ void ObPlanCacheEliminationTask::run_plan_cache_task()
 {
   int ret = OB_SUCCESS;
 
-  if (OB_FAIL(plan_cache_->update_memory_conf())) { //如果失败, 则不更新设置, 也不影响其他流程
+  if (OB_FAIL(plan_cache_->update_memory_conf())) { // If failed, then do not update the settings, nor affect other processes
     SQL_PC_LOG(WARN, "fail to update plan cache memory sys val", K(ret));
   }
   if (OB_FAIL(plan_cache_->cache_evict())) {

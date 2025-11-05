@@ -42,10 +42,10 @@ public:
   void reset();
   int init(ObDirectLoadInsertTabletContext *insert_tablet_ctx,
            common::ObIAllocator *lob_allocator = nullptr);
-  // 包含多版本列的完整行
+  // Include the full row with multiple version columns
   int handle_row(blocksstable::ObDatumRow &datum_row, const bool skip_lob);
   int handle_batch(blocksstable::ObBatchDatumRows &datum_rows);
-  // 中间过程数据
+  // Intermediate process data
   int handle_row(ObDirectLoadDatumRow &datum_row,
                  const ObDirectLoadRowFlag &row_flag);
   int handle_batch(const ObDirectLoadBatchRows &batch_rows,

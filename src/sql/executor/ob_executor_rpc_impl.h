@@ -36,7 +36,7 @@ namespace sql
 {
 class ObQueryRetryInfo;
 
-/* MySteamHandler生命周期为整个SQL语句, 与ObResultSet相同，本质为栈上变量。参考:obmp_query.cpp */
+/* MySteamHandler lifecycle is the entire SQL statement, the same as ObResultSet, essentially a stack variable. Reference: obmp_query.cpp */
 template <obrpc::ObRpcPacketCode pcode>
 class MyStreamHandle
 {
@@ -225,7 +225,7 @@ private:
 class ObExecutorRpcCtx
 {
 public:
-  //FIXME qianfu 仅用于兼容，1.4.0之后去掉
+  //FIXME qianfu only for compatibility, remove after 1.4.0
   static const uint64_t INVALID_CLUSTER_VERSION = 0;
 public:
   ObExecutorRpcCtx(uint64_t rpc_tenant_id,
@@ -251,7 +251,7 @@ public:
   // The timeout provided to the storage layer will be reduced by 100ms
   // The timeout here needs to be aligned.
   inline int64_t get_ps_timeout_timestamp() const { return timeout_timestamp_ - ESTIMATE_PS_RESERVE_TIME; }
-  // 等于INVALID_CLUSTER_VERSION说明是从远端的旧observer上序列化过来的
+  // Equal to INVALID_CLUSTER_VERSION means it is serialized from an old observer on a remote node
   inline bool min_cluster_version_is_valid() const
   {
     return INVALID_CLUSTER_VERSION != min_cluster_version_;
@@ -271,9 +271,9 @@ private:
   uint64_t rpc_tenant_id_;
   int64_t timeout_timestamp_;
   uint64_t min_cluster_version_;
-  // retry_info_ == NULL表示本次rpc不用给重试模块反馈信息
+  // retry_info_ == NULL indicates that no feedback information needs to be provided to the retry module for this rpc
   ObQueryRetryInfo *retry_info_;
-  const ObSQLSessionInfo *session_;//该类中的变量会并发访问，注意session成功并发访问是否正确
+  const ObSQLSessionInfo *session_;// The variables in this class will be accessed concurrently, note whether the session is correctly accessed concurrently
   bool is_plain_select_;//stmt_type == T_SELECT && not select...for update
   int32_t group_id_;
 private:
@@ -283,20 +283,19 @@ private:
 
 #define OB_SQL_REMOTE_TASK_TYPE 1
 #define OB_SQL_REMOTE_RESULT_TYPE 2
-
-// 所有调用rpc的地方都要使用to函数，以便支持并发调用
+// All calls to rpc should use the to function, in order to support concurrent calls
 class ObExecutorRpcImpl
 {
 public:
   ObExecutorRpcImpl() : proxy_(NULL), batch_rpc_(nullptr) { }
   virtual ~ObExecutorRpcImpl() {}
   /*
-   * 设置rpc proxy
+   * set rpc proxy
    * */
   int init(obrpc::ObExecutorRpcProxy *rpc_proxy, obrpc::ObBatchRpc *batch_rpc);
   /*
-   * 发送一个task并阻塞等待，直到对端返回执行状态
-   * 将执行句柄保存在handler中, 随后可以通过handler收取数据
+   * Send a task and block waiting until the peer returns the execution status
+   * Save the execution handle in handler, and subsequently data can be received through handler
    * */
   virtual int task_execute(ObExecutorRpcCtx &rpc_ctx,
                            ObTask &task,

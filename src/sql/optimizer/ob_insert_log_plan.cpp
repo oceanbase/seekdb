@@ -533,7 +533,7 @@ int ObInsertLogPlan::build_lock_row_flag_expr(ObConstRawExpr *&lock_row_flag_exp
     const ObInsertStmt *insert_stmt = get_stmt();
     const ObIArray<ObAssignment>& assignments = insert_stmt->get_table_assignments();
     if (!assignments.empty()) {
-      // table_assigns非空, 说明可能会有update子计划
+      // table_assigns is not empty, indicating that there may be an update subplan
       if (OB_FAIL(ObRawExprUtils::build_var_int_expr(optimizer_context_.get_expr_factory(),
                                                      lock_row_flag_expr))) {
         LOG_WARN("fail to create expr", K(ret));
@@ -879,7 +879,7 @@ int ObInsertLogPlan::check_insert_plan_need_multi_partition_dml(ObTablePartition
     OPT_TRACE("insert table has only one partition in partition level, force use multi part dml");
   } else if ((insert_stmt->is_ignore() && !is_one_part_table) ||
              (lib::is_mysql_mode() && !is_strict_mode(session_info->get_sql_mode()))) {
-    // insert ignore，并且是分区表插入时，不能优化
+    // insert ignore, and when inserting into a partitioned table, it cannot be optimized
     // mysql non strict mode can not optimize as multi part dml
     is_multi_part_dml = true;
     OPT_TRACE("insert partition table with ignore/mysql non strict mode, force use multi part dml");
@@ -894,7 +894,7 @@ int ObInsertLogPlan::check_insert_plan_need_multi_partition_dml(ObTablePartition
     OPT_TRACE("insert partition table with update part key, force use multi part dml");
   } else if (insert_stmt->has_part_key_sequence() &&
               share::schema::PARTITION_LEVEL_ZERO != table_schema->get_part_level()) {
-    // sequence 作为分区键的值插入分区表或者是insert...update更新了分区键，都需要使用multi table dml
+    // sequence as the value of the partition key is inserted into the partition table or insert...update updated the partition key, both need to use multi table dml
     is_multi_part_dml = true;
     OPT_TRACE("insert partition table with sequence, force use multi part dml");
   } else if (OB_FAIL(insert_stmt->part_key_has_rand_value(has_rand_part_key))) {
@@ -1004,10 +1004,10 @@ int ObInsertLogPlan::prepare_dml_infos()
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("get unexpected index dml info", K(ret), KPC(insert_up_index_upd_infos_.at(0)));
       } else {
-        //@TODO:zimiao 目前由于执行层insert up的基于表达式的实现
-        //要求update子句和insert子句的local index id保持一致
-        //这里的处理比较费解，理论上insert子句和update子句应该各自有自己独立的local index关系
-        //后续insert up会基于DAS Cache来做批处理，跟表达式的关系解耦后，这里不需要对insert up做特殊处理
+        //@TODO:zimiao Currently due to the expression-based implementation of insert up at the execution layer
+        // Require update clause and insert clause local index id to be consistent
+        // Here the processing is somewhat confusing, theoretically the insert clause and update clause should each have their own independent local index relationship
+        // Subsequent insert up will be batch processed based on DAS Cache, after decoupling from the expression relationship, there is no need to do special handling for insert up here
         if (OB_FAIL(insert_up_index_upd_infos_.at(0)->related_index_ids_.assign(
                     table_dml_info->related_index_ids_))) {
           LOG_WARN("assing related index id failed", K(ret));
@@ -1278,13 +1278,13 @@ int ObInsertLogPlan::prepare_unique_constraint_info(const ObTableSchema &index_s
    *    1 - output([__values.pk], [__values.a], [__values.b]), filter(nil)
    *          values({80, 81, 82}, {100, 101, 102})
    *
-   *  对于上面这种计划, a, b, shadow_pk_0会作为constraint_columns expr,
-   *  其中shadow_pk_0依赖的column会被替换为column_conv(..., __values.*)的表达式,
-   *  而constraint_columns是用于duplicate_checker, 为了实现更清晰, 所有duplicate_checker
-   *  中涉及的表达式计算最终都依赖于table column值, 所以用于duplicate_checker的shadow_pk_0依赖的
-   *  column不希望被替换为column_conv(..., __value.*)表达式, 因此这里解析index_rowkey_exprs时,
-   *  不会使用前面生成的index_column_exprs中shadow_pk_0, 而是重新在生成一个shadow_pk_0表达式,
-   *  该表达式最终依赖于table column值;
+   *  For the above plan, a, b, shadow_pk_0 will be used as constraint_columns expr,
+   *  where the column that shadow_pk_0 depends on will be replaced with the expression column_conv(..., __values.*),
+   *  while constraint_columns are used for duplicate_checker, to make it clearer, all expressions involved in duplicate_checker
+   *  will ultimately depend on the table column values, so the column that shadow_pk_0 depends on in duplicate_checker
+   *  does not hope to be replaced with the expression column_conv(..., __value.*), therefore, when parsing index_rowkey_exprs,
+   *  the previously generated index_column_exprs shadow_pk_0 will not be used, but a new shadow_pk_0 expression will be generated,
+   *  which expression will ultimately depend on the table column values;
    * */
   if (FAILEDx(generate_index_rowkey_exprs(constraint_info.table_id_,
                                           index_schema,
@@ -1292,8 +1292,8 @@ int ObInsertLogPlan::prepare_unique_constraint_info(const ObTableSchema &index_s
                                           true))) {
     LOG_WARN("failed to generate index rowkey exprs", K(ret));
   } else if (!index_schema.is_index_table() && index_schema.is_table_without_pk()) {
-    // 如果是堆表，那么这里还需要在 constraint_info.constraint_columns_中追加分区建
-    // 因为4.0版本堆表 分区建 + hidden_pk 才能保证唯一性
+    // If it is a heap table, then we also need to append the partition key to constraint_info.constraint_columns_
+    // Because version 4.0 heap table partitioning + hidden_pk can only guarantee uniqueness
     const ColumnItem *col_item = NULL;
     const ObRowkeyColumn *key_column = NULL;
     ObSEArray<uint64_t, 5> partkey_ids;
@@ -1380,7 +1380,7 @@ int ObInsertLogPlan::prepare_table_dml_info_for_ddl(const ObInsertTableInfo& tab
           index_dml_info->rowkey_cnt_ = index_schema->get_rowkey_column_num();
           index_dml_info->spk_cnt_ = index_schema->get_shadow_rowkey_column_num();
           index_dml_info->index_name_ = data_table_schema->get_table_name_str();
-          LOG_INFO("index dml info contains part ids: ", K(ret), K(index_dml_info->part_ids_)); //在局部索引表补数据场景下，对主表part ids和索引表part ids做了关系映射
+          LOG_INFO("index dml info contains part ids: ", K(ret), K(index_dml_info->part_ids_)); // In the scenario of supplementing data in a local index table, a relationship mapping was made between the part ids of the main table and the index table
       }
     } else {
       // global index or primary table
@@ -1392,15 +1392,15 @@ int ObInsertLogPlan::prepare_table_dml_info_for_ddl(const ObInsertTableInfo& tab
       index_dml_info->index_name_ = index_schema->get_table_name_str();
     }
     if (optimizer_context_.is_online_ddl()) {
-      //由于现在local index和主表的tablet_id和partition_id都是独立编码的，从编码的角度不存在依赖关系
-      //因此一定要让IndexDMLInfo里的table_id是local index自己的table_id，而不能是主表的
-      //后面执行层需要使用local index自己的table_id去计算自己分区的tablet_id
-      //为什么要在这里特殊处理？
-      //因为在resolver阶段，由于解析上有一些地方依赖主表的table_id，
-      //因此resolver阶段IndexDMLInfo上的index_tid是主表table_id,
-      //在优化器阶段替换成索引表自己的table_id是方便优化器使用这些信息去生成local index自己的执行信息
-      //这里先这样临时处理一下，保证create local index路径能够正常通过
-      //@TODO: 后续@yibo, @cangdi会重构create local index的处理
+      // Since now local index and the tablet_id and partition_id of the main table are independently encoded, there is no dependency relationship from an encoding perspective
+      // Therefore it is essential to make sure that the table_id in IndexDMLInfo is the table_id of the local index itself, and not the table_id of the main table
+      // The layer behind needs to use its own table_id to calculate its partition's tablet_id
+      // Why is special handling required here?
+      // because in the resolver phase, due to some parts of the parsing depending on the table_id of the main table,
+      // Therefore in resolver stage IndexDMLInfo, index_tid is main table table_id,
+      // In the optimizer phase, replacing with the table_id of the index table itself makes it convenient for the optimizer to use this information to generate execution information for the local index
+      // Here we temporarily handle it like this to ensure that the create local index path can pass normally
+      //@TODO: subsequent @yibo, @cangdi will refactor the create local index handling
       index_dml_info->ref_table_id_ = table_item->ddl_table_id_;
     }
 
@@ -1799,7 +1799,7 @@ int ObInsertLogPlan::allocate_select_into_as_top_for_insert(ObLogicalOperator *&
     if (table_format_or_properties.empty()) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("external properties is empty", K(ret));
-    } else if (table_schema->get_external_properties().empty()) { //目前只支持写odps外表 其他类型暂不支持
+    } else if (table_schema->get_external_properties().empty()) { // Currently only supports writing to ODPS external tables Other types are not supported for now
       ret = OB_NOT_SUPPORTED;
       LOG_WARN("not support to insert into external table which is not in odps", K(ret));
       LOG_USER_ERROR(OB_NOT_SUPPORTED, "insert into external table which is not in odps");

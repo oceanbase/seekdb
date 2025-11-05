@@ -138,7 +138,7 @@ int ObDirectLoadDataBlockEncoder<Header, align>::realloc_bufs(const int64_t size
       }
       buf_ = tmp_buf;
       buf_size_ = buf_size;
-      // pos_不变
+      // pos_unchanged
     }
   }
 
@@ -204,15 +204,13 @@ int ObDirectLoadDataBlockEncoder<Header, align>::write_item(const T &item)
 {
   int ret = common::OB_SUCCESS;
   const int64_t item_size = item.get_serialize_size();
-
-  // 内存太大恢复到默认数据块大小
+  // Memory is too large, revert to default block size
   if (item_size + pos_ < data_block_size_) {
     if (OB_FAIL(realloc_bufs(data_block_size_))) {
       STORAGE_LOG(WARN, "fail to realloc bufs", KR(ret));
     }
   }
-
-  // 单行数据超过默认数据块大小, 且buf未扩容, 重新分配buf
+  // Single line data exceeds the default data block size, and buf has not been resized, reallocate buf
   if (OB_SUCC(ret)) {
     if (item_size > data_block_size_ - header_size_ && item_size > buf_size_ - header_size_) {
       if (OB_FAIL(realloc_bufs(item_size + header_size_))) {

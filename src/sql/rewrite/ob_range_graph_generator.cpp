@@ -255,9 +255,9 @@ int ObRangeGraphGenerator::generate_or_range_node(ObRawExpr *or_expr,
 }
 
 /**
- * 尝试合并多个and节点，要求满足如下条件
- *  1. 合并的range node不含or next节点
- *  2. 两个range node的参数必须存在交集或相邻
+ * Try to merge multiple and nodes, requirements as follows
+ *  1. The merged range node must not contain an or next node
+ *  2. The parameters of two range nodes must have an intersection or be adjacent
 */
 int ObRangeGraphGenerator::and_range_nodes(ObIArray<ObRangeNode*> &range_nodes,
                                            const ObQueryRangeCtx &ctx,
@@ -576,7 +576,7 @@ int ObRangeGraphGenerator::or_range_nodes(ObExprRangeConverter &range_node_gener
 }
 
 /**
- * 在 pre 阶段看不到具体的参数值, or 节点的合并只能处理一些非常简单的场景
+ * In the pre stage, specific parameter values cannot be seen, or node merging can only handle some very simple scenarios
  * 1. c1 > :1      (:1,max,max; null,min,min)
  *    c1 is null   (null,min,min; null,max,max)
  *    =>      (:1,max,max, null,max,max)

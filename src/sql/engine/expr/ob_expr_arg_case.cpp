@@ -84,8 +84,8 @@ int ObExprArgCase::assign(const ObExprOperator &other)
 
 
 /*
- * TODO: 这里没有计算compare type，可能导致结果和MySQL不兼容
- *       目前做法是在calc_result中动态比较, 是否和MySQL行为一致?
+ * TODO: Here the compare type is not calculated, which may lead to results incompatible with MySQL
+ *       The current approach is dynamic comparison in calc_result, is it consistent with MySQL behavior?
  */
 int ObExprArgCase::calc_result_typeN(ObExprResType &type,
                                      ObExprResType *types_stack,

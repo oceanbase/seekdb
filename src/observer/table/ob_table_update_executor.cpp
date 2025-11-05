@@ -179,7 +179,7 @@ int ObTableApiUpdateExecutor::get_next_row()
       has_row_changed = true;
     }
     int tmp_ret = ret;
-    if (OB_FAIL(child_->close())) { // 需要写到das后才close child算子，否则扫描的行已经被析构
+    if (OB_FAIL(child_->close())) { // need to write to das before closing child operator, otherwise the scanned rows have been destructed
       LOG_WARN("fail to close scan executor", K(ret));
     }
     ret = OB_SUCC(tmp_ret) ? ret : tmp_ret;

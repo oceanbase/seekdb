@@ -23,10 +23,10 @@ namespace sql
 void ObPsStmtItemRefAtomicOp::operator()(const PsStmtIdKV &entry)
 {
   if (NULL != entry.second) {
-    if (entry.second->check_erase_inc_ref_count()) {//已经被其他线程标记位
+    if (entry.second->check_erase_inc_ref_count()) {//has been marked by other threads
       callback_ret_ = OB_EAGAIN;
       LOG_INFO("element will be free, try again", K(entry), K(callback_ret_));
-    } else {//执行到该代码块时引用计数不会为0，因为operator()会受hashtable中的lock保护
+    } else {//When execution reaches this code block, the reference count will not be 0, because operator() is protected by the lock in the hashtable}
       callback_ret_ = OB_SUCCESS;
       stmt_item_ = entry.second;
     }
@@ -65,10 +65,10 @@ void ObPsStmtItemEraseAtomicOp::operator()(const PsStmtIdKV &entry)
 void ObPsStmtInfoRefAtomicOp::operator ()(const PsStmtInfoKV &entry)
 {
   if (NULL != entry.second) {
-    if (entry.second->check_erase_inc_ref_count()) {//已经被其他线程标记位
+    if (entry.second->check_erase_inc_ref_count()) {//has been marked by other threads
       callback_ret_ = OB_EAGAIN;
       LOG_INFO("element will be free, try again", K(entry), K(callback_ret_));
-    } else {//执行到该代码块时引用计数不会为0，因为operator()会受hashtable中的lock保护
+    } else {//When execution reaches this code block, the reference count will not be 0, because operator() is protected by the lock in the hashtable}
       callback_ret_ = OB_SUCCESS;
       stmt_info_ = entry.second;
     }

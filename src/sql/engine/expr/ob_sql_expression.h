@@ -23,8 +23,7 @@
 #include "sql/engine/sort/ob_base_sort.h"
 #include "sql/engine/ob_operator.h"         // ObOpSchemaObj
 class ObAggregateFunctionTest;
-
-// 这个宏由于expr的构造需要传参，暂时没统一
+// This macro requires parameters for the construction of expr, so it has not been unified yet
 #define OB_UNIS_DECODE_EXPR_DLIST(Type, expr_list, phy_plan) \
   do { \
     int64_t list_count = 0; \
@@ -78,8 +77,8 @@ public:
   inline bool need_construct_binding_array() const { return need_construct_binding_array_; }
   inline int64_t get_array_param_index() const { return array_param_index_; }
   /**
-    common::ObIAllocator &alloc, * 设置表达式
-   * @param expr [in] 表达式，表达方式与实现相关，目前定义为后缀表达式
+    common::ObIAllocator &alloc, * set expression
+   * @param expr [in] expression, the expression format is related to the implementation, currently defined as postfix expression
    *
    * @return error code
    */
@@ -97,10 +96,10 @@ public:
   ObInfixExpression &get_infix_expr() { return infix_expr_; }
 
   /**
-   * 根据表达式语义对row的值进行计算
+   * Calculate the value of row based on the expression semantics
    *
-   * @param row [in] 输入行
-   * @param result [out] 计算结果
+   * @param row [in] input row
+   * @param result [out] calculation result
    *
    * @return error code
    */
@@ -136,7 +135,7 @@ protected:
   common::ObIAllocator &inner_alloc_;
   // data members
   ObPostfixExpression post_expr_;
-  //fast expr目前不序列化，不在远端执行
+  // fast expr currently does not serialize, not executed remotely
   ObFastExprOperator *fast_expr_;
   ObInfixExpression infix_expr_;
   int32_t array_param_index_;
@@ -223,10 +222,10 @@ public:
   inline int add_separator_param_expr_item(const ObPostExprItem &item, const ObRawExpr *raw_expr)
            { return separator_param_expr_.add_expr_item(item, raw_expr); }
   inline const ObSqlExpression &get_separator_param_expr() const { return separator_param_expr_; }
-  // 不包括sort column的真正param的列数
+  // The actual number of param columns excluding the sort column
   inline void set_real_param_col_count(int64_t real_param_col_count) { real_param_col_count_ = real_param_col_count; }
   inline int64_t get_real_param_col_count() const { return real_param_col_count_; }
-  // 包括sort column的所有param的列数
+  // Include all param columns of the sort column
   inline void set_all_param_col_count(int64_t all_param_col_count) { output_column_count_ = all_param_col_count; }
   inline int64_t get_all_param_col_count() const { return output_column_count_; }
 
@@ -295,7 +294,7 @@ public:
   common::ObFixedArray<common::ObCollationType, common::ObIAllocator> aggr_cs_types_;
 protected:
   int64_t output_column_count_;
-  common::ObFixedArray<ObOpSchemaObj, common::ObIAllocator> extra_infos_;//支持NULLs FIRST
+  common::ObFixedArray<ObOpSchemaObj, common::ObIAllocator> extra_infos_;//Support NULLs FIRST
 protected:
   ObSqlExpression window_size_param_expr_;
   ObSqlExpression item_size_param_expr_;

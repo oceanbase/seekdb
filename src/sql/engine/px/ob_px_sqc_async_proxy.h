@@ -70,13 +70,13 @@ public:
                is_processed(), "is_invalid", is_invalid());
 
 private:
-  // rpc返回resp，rpc异步线程调用callback的process方法需要赋值为true；否则为false；
+  // rpc returns resp, rpc asynchronous thread calling the callback's process method needs to be set to true; otherwise it should be false;
   bool is_processed_;
-  // rpc调用超时，rpc异步线程调用callback的on_timeout方法需要赋值为true；否则为false；
+  // rpc call timeout, rpc asynchronous thread calling callback's on_timeout method needs to be set to true; otherwise false;
   bool is_timeout_;
-  // rpc返回消息包，消息包decode失败，rpc异步线程调用callback的on_invalid方法需要赋值为true；否则为false；
+  // rpc returns message package, message package decode failed, rpc asynchronous thread calls callback's on_invalid method needs to be set to true; otherwise false;
   bool is_invalid_;
-  // 标识callback对象是否被主线程访问，第一个被主线程访问时需要赋值为true；否则为false；
+  // Identify whether the callback object is accessed by the main thread, it should be set to true when first accessed by the main thread; otherwise, it should be false;
   bool is_visited_;
   ObThreadCond &cond_;
   ObCurTraceId::TraceId trace_id_;
@@ -96,9 +96,9 @@ public:
   }
 
   ~ObPxSqcAsyncProxy() { destroy(); }
-  // 异步请求所有sqc rpc任务
+  // Asynchronous request all sqc rpc tasks
   int launch_all_rpc_request();
-  // 同步等待所有异步sqc rpc任务返回结果；内部如果有可处理的错误会进行重试。
+  // Synchronous wait for all asynchronous sqc rpc tasks to return results; internal errors that can be handled will be retried.
   int wait_all();
 
   const ObArray<ObSqcAsyncCB *> &get_callbacks() const { return callbacks_; }
@@ -107,31 +107,31 @@ public:
 
 private:
   void destroy();
-  // 异步请求单个sqc rpc任务
+  // Asynchronous request for a single sqc rpc task
   int launch_one_rpc_request(ObPxRpcInitSqcArgs &args, int64_t idx, ObSqcAsyncCB *cb);
-  // 内部发生错误以后，处理还未获得响应的callback
+  // After an internal error occurs, process the callback that has not yet received a response
   void fail_process();
 
 private:
-  // rpc proxy，提供rpc同步/异步调用方法
+  // rpc proxy, provide rpc synchronous/asynchronous call methods
   obrpc::ObPxRpcProxy &proxy_;
   ObDfo &dfo_;
   ObExecContext &exec_ctx_;
   ObPhysicalPlanCtx *phy_plan_ctx_;
   ObSQLSessionInfo *session_;
   const ObPhysicalPlan *phy_plan_;
-  // 需要异步请求的sqc的集合
+  // The collection of sqc that requires asynchronous requests
   ObIArray<ObPxSqcMeta> &sqcs_;
-  // 异步init
-  // sqc获得结果集合，每一个response都是从对应的
-  // callback获得正确响应的结果中获得
+  // asynchronous init
+  // sqc obtains the result set, every response is from the corresponding
+  // callback obtain the result from the correct response
   ObArray<const ObPxRpcInitSqcResponse *> results_;
-  // 异步请求对应的callback
+  // Asynchronous request corresponding callback
   ObArray<ObSqcAsyncCB *> callbacks_;
   ObArenaAllocator allocator_;
-  // 获得响应结果的callback的数量
+  // Get the number of callback for response result
   int64_t return_cb_count_;
-  // 第一个出现错误的异步sqc请求的index
+  // The index of the first async sqc request that encountered an error
   int64_t error_index_;
   ObThreadCond cond_;
 };

@@ -134,10 +134,10 @@ public:
   int construct_tree(common::ObArray<ObMultiModeTableNode*> all_nodes, JoinNode* parent);
   int construct_tree(common::ObArray<ObMultiModeTableNode*> all_nodes, UnionNode* parent);
   common::ObFixedArray<ObExpr*, common::ObIAllocator> value_exprs_;
-  common::ObFixedArray<ObExpr*, common::ObIAllocator> column_exprs_; // 列输出表达式
+  common::ObFixedArray<ObExpr*, common::ObIAllocator> column_exprs_; // column output expressions
   common::ObFixedArray<ObExpr*, common::ObIAllocator> emp_default_exprs_;
   common::ObFixedArray<ObExpr*, common::ObIAllocator> err_default_exprs_;
-  bool has_correlated_expr_; //是否是变量输入，用在算子rescan中，同function table
+  bool has_correlated_expr_; // whether it is variable input, used in operator rescan, same as function table
   ObIAllocator* alloc_;
 
   common::ObFixedArray<ObJtColInfo*, common::ObIAllocator> cols_def_;
@@ -354,8 +354,8 @@ public:
 
   JtNodeType node_type_;
   void* in_;
-  bool is_evaled_;  // 节点是否被解析过
-  bool is_null_result_;  // 节点是否返回空值
+  bool is_evaled_;  // Node has been evaluated
+  bool is_null_result_;  // Node returns null value
 
   TO_STRING_KV(K_(node_type),
                K_(is_evaled),

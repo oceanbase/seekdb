@@ -44,10 +44,9 @@ public:
       param_store_(param_store)
   {}
   virtual ~ObCodeGenerator() {}
-
-  //生成执行计划
-  //@param [in]  log_plan 逻辑执行计划
-  //@param [out] phy_plan 物理执行计划
+  //Generate execution plan
+  //@param [in]  log_plan logical execution plan
+  //@param [out] phy_plan physical execution plan
   int generate(const ObLogPlan &log_plan, ObPhysicalPlan &phy_plan);
 
   // detect batch row count for vectorized execution.
@@ -55,16 +54,15 @@ public:
       const ObLogPlan &log_plan, int64_t &batch_size);
 
 private:
-  //生成表达式
-  //@param [in]  log_plan 逻辑执行计划
-  //@param [out] phy_plan 物理执行计划, 会初始化物理对象中rt_exprs_, 和frame_info_
+  //Generate expression
+  //@param [in]  log_plan logical execution plan
+  //@param [out] phy_plan physical execution plan, will initialize rt_exprs_ and frame_info_ in the physical object
   int generate_exprs(const ObLogPlan &log_plan,
                      ObPhysicalPlan &phy_plan,
                      const uint64_t cur_cluster_version);
-
-  //生成物理算子
-  //@param [in]  log_plan 逻辑执行计划
-  //@param [out] phy_plan 物理执行计划
+  //Generate physical operators
+  //@param [in]  log_plan logical execution plan
+  //@param [out] phy_plan physical execution plan
   int generate_operators(const ObLogPlan &log_plan,
                          ObPhysicalPlan &phy_plan,
                          const uint64_t cur_cluster_version);
@@ -75,7 +73,7 @@ private:
   //TODO shengle remove
   bool use_jit_;
   uint64_t min_cluster_version_;
-  //所有参数化后的常量对象
+  // All parameterized constant objects
   DatumParamStore *param_store_;
 };
 

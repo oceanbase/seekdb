@@ -31,9 +31,9 @@ public:
   virtual void reset_resource() = 0;
   VIRTUAL_TO_STRING_KV(K_(op_id), K_(task_cnt));
   virtual void destroy() {}
-  uint64_t op_id_;    // 哪个算子使用 datahub 服务
-  int64_t task_cnt_;  // 这个 dfo 下实际执行的 task 数, 即：期望收到的 piece 数量
-  int64_t timeout_ts_; //超时时间, DTL发送消息时会使用
+  uint64_t op_id_;    // which operator uses the datahub service
+  int64_t task_cnt_;  // The actual number of tasks executed under this dfo, i.e.: the expected number of pieces to be received
+  int64_t timeout_ts_; // timeout time, DTL sends messages when it will use
 };
 
 class ObPieceMsgCtxMgr

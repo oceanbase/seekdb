@@ -233,7 +233,7 @@ int ObServerConfig::serialize_(char *buf, const int64_t buf_len, int64_t &pos) c
 {
   int ret = OB_SUCCESS;
   ObRecordHeader header;
-  // 这里 header 的序列化方法用的是非变长序列化，不对数字做编码
+  // Here the serialization method for header uses non-variable length serialization, without encoding numbers
   int64_t header_len = header.get_serialize_size();
   int64_t expect_data_len = get_serialize_size_() - header_len;
 

@@ -435,7 +435,7 @@ void ObHashGroupByOp::destroy()
   group_store_.reset();
   ObGroupByOp::destroy();
   distinct_data_set_.~ObHashPartInfrastructure();
-  // 内存最后释放，ObHashCtx依赖于mem_context
+  // Memory is released last, ObHashCtx depends on mem_context
   if (NULL != mem_context_) {
     DESTROY_CONTEXT(mem_context_);
     mem_context_ = NULL;
@@ -734,7 +734,7 @@ int ObHashGroupByOp::init_distinct_info(bool is_part)
       cmp_func.cmp_func_ = ObDatumFuncs::get_nullsafe_cmp_func(
                             expr->datum_meta_.type_,
                             expr->datum_meta_.type_,
-                            NULL_LAST,//这里null last还是first无所谓
+                            NULL_LAST,//Here null last or first does not matter
                             expr->datum_meta_.cs_type_,
                             expr->datum_meta_.scale_,
                             false,
@@ -863,7 +863,7 @@ int ObHashGroupByOp::get_next_distinct_row()
   if (OB_FAIL(distinct_data_set_.get_next_hash_table_row(store_row, &distinct_origin_exprs_))) {
     clear_evaluated_flag();
     if (OB_ITER_END == ret) {
-      // 返回了一批distinct数据，开始处理下一批dump数据
+      // Return a batch of distinct data, start processing the next batch of dump data
       if (OB_FAIL(distinct_data_set_.end_round())) {
         LOG_WARN("failed to end round", K(ret));
       } else if (OB_FAIL(distinct_data_set_.start_round())) {
@@ -1101,8 +1101,7 @@ int ObHashGroupByOp::load_data()
       }
     } while (!last_group && OB_SUCC(ret));
   }
-
-  //必须先reset，否则等自动析构时候，内存都被释放了，会有问题
+  // Must reset first, otherwise memory will be released during automatic destruction, causing issues
   row_store_iter.reset();
   if (OB_ITER_END == ret) {
     ret = OB_SUCCESS;
@@ -1233,7 +1232,7 @@ int64_t ObHashGroupByOp::detect_part_cnt(const int64_t rows) const
   int64_t mem_bound = get_mem_bound_size();
   int64_t part_cnt = (data_size + mem_bound) / mem_bound;
   part_cnt = next_pow2(part_cnt);
-  // 这里只有75%的利用率，后续改成segment array看下是否可以去掉
+  // Here only 75% utilization, change to segment array later to see if it can be removed
   int64_t availble_mem_size = mem_bound - get_mem_used_size();
   int64_t est_dump_size = part_cnt * ObChunkRowStore::BLOCK_SIZE;
   if (0 < availble_mem_size) {
@@ -1242,7 +1241,7 @@ int64_t ObHashGroupByOp::detect_part_cnt(const int64_t rows) const
     }
     part_cnt = est_dump_size / ObChunkRowStore::BLOCK_SIZE;
   } else {
-    // 内存使用过多
+    // Memory usage is too high
     part_cnt = MIN_PARTITION_CNT;
   }
   part_cnt = next_pow2(part_cnt);
@@ -1334,7 +1333,7 @@ bool ObHashGroupByOp::need_start_dump(const int64_t input_rows, int64_t &est_par
   if (is_need_dump(data_ratio) || check_dump) {
     int ret = OB_SUCCESS;
     need_dump = true;
-    // 在认为要发生dump时，尝试扩大获取更多内存，再决定是否dump
+    // When a dump is expected to occur, try to allocate more memory to decide whether to dump
     if (OB_FAIL(sql_mem_processor_.extend_max_memory_size(
         &mem_context_->get_malloc_allocator(),
         [&](int64_t max_memory_size) {
@@ -1446,8 +1445,8 @@ int ObHashGroupByOp::setup_dump_env(const int64_t part_id, const int64_t input_r
         }
       }
     }
-    // 如果hash group发生dump，则后续每个partition都会alloc一个buffer页，约64K，
-    // 如果32个partition，则需要2M内存. 同时dump逻辑需要一些内存，需要更新
+    // If hash group occurs dump, then each subsequent partition will alloc a buffer page, about 64K,
+    // If 32 partitions, then 2M memory is required. At the same time, the dump logic requires some memory, which needs to be updated
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(sql_mem_processor_.get_max_available_mem_size(&mem_context_->get_malloc_allocator()))) {
       LOG_WARN("failed to get max available memory size", K(ret));
@@ -2929,7 +2928,7 @@ int ObHashGroupByOp::check_popular_values_validity()
     if (OB_FAIL(local_group_rows_.foreach (cb_func))) {
       LOG_WARN("Scan local group rows", K(ret), K(local_group_rows_.size()));
     } else if (!has_valid_popular_value) {
-      popular_map_.reuse(); // 清空哈希表
+      popular_map_.reuse(); // clear hash table
     }
   }
 

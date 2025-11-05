@@ -849,7 +849,7 @@ int ObMergeGroupByVecOp::advance_collect_result(int64_t group_id)
   } /*else if (OB_FAIL(brs_holder_.restore())) {
     LOG_WARN("failed to restore child exprs", K(ret));
   }*/
-  // 按现在的优化分析下来，这里不需要restore了
+  // According to the current optimization analysis, restore is not needed here anymore
   clear_evaluated_flag();
   return ret;
 }

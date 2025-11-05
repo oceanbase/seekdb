@@ -241,8 +241,7 @@ int ObRawExprUtils::resolve_op_expr_implicit_cast(ObRawExprFactory &expr_factory
           }
         break;
         }
-
-        // 与interval的运算，不要做任何转换
+        // Calculation with interval, do not make any conversion
         if (ob_is_interval_tc(r_type1) || ob_is_interval_tc(r_type2)) {
           dir = ImplicitCastDirection::IC_NO_CAST;
         }
@@ -298,7 +297,7 @@ int ObRawExprUtils::resolve_op_expr_implicit_cast(ObRawExprFactory &expr_factory
           }
           ObCastMode cast_mode = CM_NONE;
           if (ObDecimalIntType == dst_type) {
-            // 如果是decimal int类型，accuracy和decimal int一致即可
+            // If it is decimal int type, accuracy and decimal int consistency is sufficient
             acc = sub_expr2->get_result_type().get_accuracy();
             if (!ob_is_decimal_int(r_type1) && IS_STRICT_OP(op_type)) {
               cast_mode |= ObRelationalExprOperator::get_const_cast_mode(op_type, false);
@@ -345,7 +344,7 @@ int ObRawExprUtils::resolve_op_expr_implicit_cast(ObRawExprFactory &expr_factory
             dst_type = ObNumberType;
           }
           if (ObDecimalIntType == dst_type) {
-            // 如果是decimal int类型，accuracy和decimal int一致即可
+            // If it is decimal int type, accuracy and decimal int consistency is sufficient
             acc = sub_expr1->get_result_type().get_accuracy();
             if (!ob_is_decimal_int(r_type2) && IS_STRICT_OP(op_type)) {
               cast_mode |= ObRelationalExprOperator::get_const_cast_mode(op_type, true);
@@ -541,13 +540,13 @@ int ObRawExprUtils::resolve_op_expr_for_oracle_implicit_cast(ObRawExprFactory &e
     LOG_WARN("get null expr", K(ret), K(sub_expr1), K(sub_expr2));
   } else if (T_OP_ROW == sub_expr1->get_expr_type() ||
              T_OP_ROW == sub_expr2->get_expr_type()) {
-    //左(右)子节点为 T_OP_ROW 类型的 ObOpRawExpr 不会显式 cast
+    // Left (right) child node of type T_OP_ROW ObOpRawExpr will not be explicitly cast
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get T_OP_ROW expr", K(ret), K(*sub_expr1), K(*sub_expr2));
   } else {
     if (!sub_expr1->is_query_ref_expr() && sub_expr2->is_query_ref_expr()) {
       // t1.c1 =any (select c1 from t2)
-      // 按正常流程走query_ref_expr的返回类型固定为bigint，应该取返回列的类型比较
+      // Follow the normal process, the return type of query_ref_expr is fixed as bigint, should compare with the type of the return column
       ObQueryRefRawExpr *query_ref_expr = static_cast<ObQueryRefRawExpr *>(sub_expr2);
       ObSelectStmt *query_stmt = query_ref_expr->get_ref_stmt();
       ObRawExpr *select_expr = NULL;
@@ -733,8 +732,7 @@ int ObRawExprUtils::resolve_udf_param_types(const ObIRoutineInfo* func_info,
   ObRawExprResType result_type;
   ObSEArray<ObRawExprResType, 5> params_type;
   const ObIArray<ObString> *extended_type_info = NULL;
-
-  // Step1: 处理Routine返回值
+  // Step1: Process Routine return value
   const ObIRoutineParam *ret_param = func_info->get_ret_info();
   pl::ObPLDataType ret_pl_type;
   if (OB_SUCC(ret) && OB_NOT_NULL(ret_param)) {
@@ -770,7 +768,7 @@ int ObRawExprUtils::resolve_udf_param_types(const ObIRoutineInfo* func_info,
       OX (result_type.mark_sql_enum_set_with_subschema());
     }
   }
-  // Step2: 处理入参
+  // Step2: process input parameters
   for (int64_t i = 0; OB_SUCC(ret) && i < func_info->get_param_count(); ++i) {
     ObIRoutineParam *iparam = NULL;
     pl::ObPLDataType param_pl_type;
@@ -795,7 +793,7 @@ int ObRawExprUtils::resolve_udf_param_types(const ObIRoutineInfo* func_info,
     SET_RES_TYPE_BY_PL_TYPE(param_type, param_pl_type);
     OZ (params_type.push_back(param_type));
   }
-  // Step3: 将入参返回值类型加入rawexpr
+  // Step3: Add the parameter return value type to rawexpr
   OX (udf_raw_expr->set_result_type(result_type));
   OZ (udf_raw_expr->set_params_type(params_type));
 
@@ -834,13 +832,13 @@ int ObRawExprUtils::resolve_udf_param_exprs(const ObIRoutineInfo* func_info,
 }
 
 /*!
- * 解析UDF的参数列表(主要处理参数有默认值的情况, 以及通过名字指定参数的情况):
- * 通过名字指定参数, 一定在参数列表的最后面
- * 如: func(1, 2, x=>3, y=>4); 合法
- *     func(1, x=>3, 2); 非法(无法确定2的位置)
- * 走到这个函数时在参数列表中没有通过名字指定的参数已经被加入到udf的raw expr
- * 因此这个函数主要处理通过名字指定参数的部分
- * 如果处理完所有的参数后还有参数空缺, 则尝试下是不是有默认值, 如果没有默认值则报错
+ * Parse the parameter list of UDF (mainly handling parameters with default values, as well as parameters specified by name):
+ * Parameters specified by name must be at the end of the parameter list
+ * E.g.: func(1, 2, x=>3, y=>4); valid
+ *       func(1, x=>3, 2); invalid (cannot determine the position of 2)
+ * When reaching this function, parameters specified by name in the parameter list have already been added to the udf's raw expr
+ * Therefore, this function mainly handles parameters specified by name
+ * If there are still missing parameters after processing all parameters, it attempts to use default values; if no default values are available, it reports an error
  */
 int ObRawExprUtils::resolve_udf_param_exprs(ObResolverParams &params,
                                             const ObIRoutineInfo *func_info,
@@ -851,7 +849,7 @@ int ObRawExprUtils::resolve_udf_param_exprs(ObResolverParams &params,
   ObArray<ObRawExpr*> param_exprs;
   ObArray<ObString> param_names;
   ObUDFRawExpr *udf_raw_expr = udf_info.ref_expr_;
-  // 通过名字指定参数统一记录在param_names_和param_exprs里面, 所以这里一定相等
+  // Specify parameters by name and uniformly record them in param_names_ and param_exprs, so they must be equal here
   if (udf_info.param_names_.count() != udf_info.param_exprs_.count()) {
     ret = OB_ERR_UNEXPECTED;
     SQL_LOG(WARN, "names array not equal to exprs array count",
@@ -866,8 +864,8 @@ int ObRawExprUtils::resolve_udf_param_exprs(ObResolverParams &params,
   } else if (OB_FAIL(udf_raw_expr->extend_param_exprs(func_info->get_param_count()))) {
     LOG_WARN("failed to extend param exprs", K(ret));
   } else {
-    // 处理剩余的参数, 默认值或者通过名字指定的参数
-    // Step 1: 首先初始化一个空的参数列表
+    // process the remaining parameters, default values or parameters specified by name
+    // Step 1: First initialize an empty parameter list
     int64_t count = func_info->get_param_count() - udf_info.udf_param_num_;
     for (int64_t i = 0; OB_SUCC(ret) && i < udf_info.udf_param_num_; ++i) {
       ObString empty;
@@ -880,7 +878,7 @@ int ObRawExprUtils::resolve_udf_param_exprs(ObResolverParams &params,
         SQL_LOG(WARN, "failed to push back", K(ret), K(i), K(udf_info));
       }
     }
-    // Step 2: 将通过名字指定的参数加入参数列表
+    // Step 2: Add the parameter specified by name to the parameter list
     for (int64_t i = 0; OB_SUCC(ret) && i < udf_info.param_names_.count(); ++i) {
       const ObString &name = udf_info.param_names_.at(i);
       int64_t position = -1;
@@ -890,12 +888,12 @@ int ObRawExprUtils::resolve_udf_param_exprs(ObResolverParams &params,
         ret = OB_ERR_SP_DUP_VAR;
         SQL_LOG(WARN, "parameter dup", K(ret), K(name), K(position), K(i), K(udf_info));
       } else {
-        // 注意: 加入到参数列表中需要减去未通过名字指定的参数个数
+        // Note: The number of parameters not specified by name should be subtracted when adding to the parameter list
         param_exprs.at(position - udf_info.udf_param_num_) = udf_info.param_exprs_.at(i);
         param_names.at(position - udf_info.udf_param_num_) = name;
       }
     }
-    // Step 3: 处理空缺的参数
+    // Step 3: Handle missing parameters
     for (int64_t i = 0; OB_SUCC(ret) && i < param_exprs.count(); ++i) {
       if (OB_ISNULL(param_exprs.at(i))) {
         const ParseNode *default_node = NULL;
@@ -960,7 +958,7 @@ int ObRawExprUtils::resolve_udf_param_exprs(ObResolverParams &params,
              K(ret), K(udf_info.udf_name_),
              K(func_info->get_param_count()), K(udf_info));
   }
-  // Step 4: 处理function的OUT参数
+  // Step 4: Process function's OUT parameters
   for (int64_t i = 0; OB_SUCC(ret) && i < func_info->get_param_count(); ++i) {
     ObIRoutineParam* iparam = NULL;
     pl::ObPLRoutineParamMode mode = pl::ObPLRoutineParamMode::PL_PARAM_INVALID;
@@ -1012,8 +1010,8 @@ int ObRawExprUtils::resolve_udf_param_exprs(ObResolverParams &params,
             }
           }
           if (T_QUESTIONMARK == iexpr->get_expr_type() && !is_anonymos_const_var) {
-            // 如果UDF出现在PL的DML语句中, 走到这里的ObjAccessRawExpr已经被替换为QuestionMark
-            // 我们需要找到原始的ObjAccessRawExpr, 并设置fow_write属性
+            // If UDF appears in the DML statement of PL, the ObjAccessRawExpr here has been replaced with QuestionMark
+            // We need to find the original ObjAccessRawExpr, and set the fow_write attribute
             ObConstRawExpr *c_expr = static_cast<ObConstRawExpr*>(iexpr);
             ExternalParams& extern_params = params.external_param_info_;
             for (int i = 0; OB_SUCC(ret) && i < extern_params.count(); ++i) {
@@ -1745,11 +1743,11 @@ int ObRawExprUtils::resolve_sequence_object(const ObQualifiedName &q_name,
     } else if (OB_UNLIKELY(T_FIELD_LIST_SCOPE != current_scope &&
                            T_UPDATE_SCOPE != current_scope &&
                            T_INSERT_SCOPE != current_scope)) {
-      // sequence 只能出现在以下三种场景：
+      // sequence can only appear in the following three scenarios:
       //  - select seq from ...
       //  - insert into t1 values (seq...
       //  - update t1 set c1 = seq xxxx
-      // 不可以出现在 where、group by、limit、having 等上下文中
+      // Cannot appear in the context of where, group by, limit, having, etc.
       ret = OB_ERR_SEQ_NOT_ALLOWED_HERE;
     } else if (OB_FAIL(build_seq_nextval_expr(column_expr, session_info, expr_factory, q_name,
                                               sequence_id, stmt))) {
@@ -1766,7 +1764,7 @@ int ObRawExprUtils::resolve_sequence_object(const ObQualifiedName &q_name,
           // do nothing. only generate sequence operator in INSERT/UPDATE stmt.
         } else if (!is_generated_column) {
           if (0 == q_name.col_name_.case_compare("NEXTVAL")) {
-            // 将 sequence id 记录到 plan 里
+            // Record sequence id to plan
             if (OB_FAIL(dml_resolver->add_sequence_id_to_stmt(sequence_id))) {
               LOG_WARN("fail add id to stmt", K(sequence_id), K(ret));
             }
@@ -1779,20 +1777,20 @@ int ObRawExprUtils::resolve_sequence_object(const ObQualifiedName &q_name,
       }
     }
   } else {
-    // 没有发现 nextval，currval 字样，
-    // 不是一个 sequence 对象，抛给外面处理
+    // No discovery of nextval, currval pattern,
+    // is not a sequence object, throw it to the outside for handling
     ret = OB_ERR_BAD_FIELD_ERROR;
   }
   return ret;
 }
 /**
- * @brief [Oracle兼容] 用于判断一个函数或伪列是否是 “pure” 的函数，根据Oracle官方文档：
+ * @brief [Oracle compatible] Used to determine whether a function or pseudocolumn is a "pure" function, according to the Oracle official documentation:
  * Any function you specify in column_expression must return a repeatable value. For example,
  * you cannot specify the SYSDATE or USER function or the pseudocolumn.
- * 目前仅支持对 Oracle 模式下的系统函数进行检查
- * 考虑到表达式可能是嵌套的，因此逐个遍历 child，找到任何可能是非 pure 的函数或伪列
- * @param expr 表达式
- * @param allocator 用于为 ObList 分配内存
+ * Currently, only checks for system functions in Oracle mode are supported
+ * Considering that the expression may be nested, therefore traverse each child individually, finding any function or pseudocolumn that might be non-pure
+ * @param expr expression
+ * @param allocator used to allocate memory for ObList
  * @return
  */
 int ObRawExprUtils::check_deterministic(const ObRawExpr *expr,
@@ -1817,8 +1815,8 @@ int ObRawExprUtils::check_deterministic(const ObRawExpr *expr,
 }
 
 /**
- * @brief 检查单个 expr 是否是 pure 的，并根据 expr 的类型返回不同的错误码
- * @param expr 被检查的表达式
+ * @brief Check if a single expr is pure, and return different error codes based on the type of expr
+ * @param expr The expression to be checked
  * @return
  */
 int ObRawExprUtils::check_deterministic_single(const ObRawExpr *expr,
@@ -1872,13 +1870,13 @@ int ObRawExprUtils::check_deterministic_single(const ObRawExpr *expr,
 }
 
 /**
- * @brief 创建生成列表达式
- * @param arg 需要用到 arg 中的 nls_xx_format，当 arg 为空时，使用 session 中的 nls_xx_format
- * @param expr_str 表达式定义
+ * @brief Create generate list expression
+ * @param arg Use nls_xx_format from arg, when arg is empty, use nls_xx_format from session
+ * @param expr_str Expression definition
  * @param expr_factory factory
- * @param session_info session，注意，在RS端调用时，传进来的时 default session，不是当前session
+ * @param session_info session, note that when called on the RS side, the passed in is default session, not the current session
  * @param table_schema table_schema
- * @param expr 生成好的表达式
+ * @param expr Generated expression
  * @param schema_checker checker
  * @param resolved_cols Default null. Only use in 'alter table'. Columns which have been resolved in alter table.
  * @return ret
@@ -1983,8 +1981,7 @@ int ObRawExprUtils::build_generated_column_expr(const obrpc::ObCreateIndexArg *a
       LOG_WARN("formalize expr failed", K(ret), KPC(expr));
     }
   }
-
-  // 改写上面生成的表达式
+  // Rewrite the expression generated above
   if (OB_SUCC(ret) && NULL != arg) {
     bool expr_changed = false;
     if (OB_FAIL(ObRawExprUtils::erase_operand_implicit_cast(expr, expr))) {
@@ -1993,7 +1990,7 @@ int ObRawExprUtils::build_generated_column_expr(const obrpc::ObCreateIndexArg *a
                                                     expr, expr_changed))) {
       LOG_WARN("try_add_to_char_on_expr failed", K(ret));
     }
-    // 只在必要的时候才会在做一次 formalize
+    // Only formalize once when necessary
     if (OB_SUCC(ret)) {
       OZ (expr->formalize(&session_info, true));
     }
@@ -2200,12 +2197,12 @@ int ObRawExprUtils::build_generated_column_expr(ObRawExprFactory &expr_factory,
 
 
 /**
- * @brief 递归地修改生成列表达式
+ * @brief Recursively modify the generated list expression
  * @param session session
- * @param arg arg 允许为空，此时使用 session 中的 nls_xx_format
+ * @param arg arg Allow to be empty, in which case use nls_xx_format from session
  * @param expr_factory
- * @param expr 被修改的表达式
- * @param expr_changed 表示 expr 是否被改写过的 flag
+ * @param expr The expression to be modified
+ * @param expr_changed Flag indicating whether expr has been rewritten
  * @return ret
  */
 int ObRawExprUtils::try_modify_expr_for_gen_col_recursively(const ObSQLSessionInfo &session,
@@ -2242,14 +2239,14 @@ int ObRawExprUtils::try_modify_expr_for_gen_col_recursively(const ObSQLSessionIn
 }
 
 /**
- * @brief 在 oracle 中，当expr为to_date/timestamp/timestamptz 时，将其第一个参数套上 to_char，以存储
- * 当前 session 的 nls_xx_format 信息
+ * @brief In oracle, when expr is to_date/timestamp/timestamptz, wrap its first parameter with to_char, to store
+ * the nls_xx_format information of the current session
  * to_date(c1, 'yyyy-mm-dd') => to_date(to_char(c1, nls_date_format), 'yyyy-mm-dd')
  * @param session session
- * @param arg arg允许为空，为空时，使用 session 中的 nls_xx_format
+ * @param arg arg is allowed to be empty, when empty, use nls_xx_format from the session
  * @param expr_factory factory
- * @param expr 被修改的表达式
- * @param expr_changed 表示 expr 是否被改写过的 flag
+ * @param expr the expression being modified
+ * @param expr_changed a flag indicating whether expr has been rewritten
  * @return
  */
 int ObRawExprUtils::try_add_to_char_on_expr(const ObSQLSessionInfo &session,
@@ -2264,7 +2261,7 @@ int ObRawExprUtils::try_add_to_char_on_expr(const ObSQLSessionInfo &session,
   ObSysFunRawExpr *sys_func_expr = NULL;
   ObObjType data_type = ObNullType;
   CK (OB_NOT_NULL(expr));
-  // 只有在第一个参数是时间类型的列，或者是一个返回值为时间类型的表达式时，才需要添加 to_char
+  // Only when the first parameter is a column of time type, or an expression that returns a value of time type, do you need to add to_char
   if (OB_SUCC(ret) && need_add_to_char) {
     need_add_to_char = false;
     CK (OB_NOT_NULL(first_param_expr = expr->get_param_expr(0)));
@@ -2276,7 +2273,7 @@ int ObRawExprUtils::try_add_to_char_on_expr(const ObSQLSessionInfo &session,
       }
     }
   }
-  // 在 first_param_expr 外面套上一个 to_char expr
+  // Wrap a to_char expr outside of first_param_expr
   if (OB_SUCC(ret) && need_add_to_char) {
     ObSysFunRawExpr *to_char_expr = NULL;
     OZ (actual_add_to_char_on_expr(session, arg, expr_factory, *first_param_expr,
@@ -2293,14 +2290,14 @@ int ObRawExprUtils::try_add_to_char_on_expr(const ObSQLSessionInfo &session,
 }
 
 /**
- * @brief 根据 src_expr 生成 to_char 表达式，供 try_add_to_char_on_expr 使用
+ * @brief Generate to_char expression based on src_expr for use by try_add_to_char_on_expr
  * src_expr => to_char_expr(src_expr, nls_xx_format)
  * @param session session
- * @param arg arg允许为空，为空时，使用 session 中的 nls_xx_format
+ * @param arg arg is allowed to be empty, when empty, use nls_xx_format from session
  * @param expr_factory factory
- * @param src_expr to_date/to_timestamp/to_timestamp_tz 三种表达式之一
- * @param data_type src_expr 第一个参数的类型
- * @param to_char_expr 生成的 to_char 表达式, to_char_expr 的第一个参数是 src_expr
+ * @param src_expr one of the three expressions: to_date/to_timestamp/to_timestamp_tz
+ * @param data_type type of the first parameter of src_expr
+ * @param to_char_expr generated to_char expression, the first parameter of to_char_expr is src_expr
  * @return
  */
 int ObRawExprUtils::actual_add_to_char_on_expr(const ObSQLSessionInfo& session,
@@ -2313,12 +2310,12 @@ int ObRawExprUtils::actual_add_to_char_on_expr(const ObSQLSessionInfo& session,
   int ret = OB_SUCCESS;
   ObConstRawExpr *dst_expr = NULL;
   ObCollationType collation_server = CS_TYPE_INVALID;
-  // 1. 创建空白的表达式
+  // 1. Create an empty expression
   OZ (expr_factory.create_raw_expr(T_FUN_SYS_TO_CHAR, to_char_expr));
   CK (OB_NOT_NULL(to_char_expr));
   OZ (expr_factory.create_raw_expr(T_CHAR, dst_expr));
   CK (OB_NOT_NULL(dst_expr));
-  // 2. 配置 to_char 中的第二个参数, dst_expr
+  // 2. Configure the second parameter of to_char, dst_expr
   if (OB_SUCC(ret)) {
     ObObjParam val;
     switch (data_type) {
@@ -2359,7 +2356,7 @@ int ObRawExprUtils::actual_add_to_char_on_expr(const ObSQLSessionInfo& session,
     OX (dst_expr->set_result_flag(val.get_result_flag()));
     OX (dst_expr->set_data_type(ObCharType));
   }
-  // 3. 配置 to_char
+  // 3. configure to_char
   OZ (to_char_expr->set_param_exprs(&src_expr, dst_expr));
   OX (to_char_expr->set_func_name(ObString::make_string(N_TO_CHAR)));
 
@@ -2368,13 +2365,13 @@ int ObRawExprUtils::actual_add_to_char_on_expr(const ObSQLSessionInfo& session,
 
 
 /**
- * @brief 在 Oracle 中，当 to_char 只有一个参数，且第一个参数为时间类型时，会将 nls_xx_format 添加为第二个参数
+ * @brief In Oracle, when to_char has only one parameter, and the first parameter is a date type, it will add nls_xx_format as the second parameter
  * to_char(date) => to_char(date, nls_xx_format)
  * @param session session
- * @param arg arg允许为空，为空时，使用 session 中的 nls_xx_format
+ * @param arg arg is allowed to be empty, when empty, use nls_xx_format from session
  * @param expr_factory factory
- * @param expr 被修改的 to_char 表达式
- * @param expr_changed 表示 expr 是否被改写过的 flag
+ * @param expr the to_char expression being modified
+ * @param expr_changed flag indicating whether expr has been rewritten
  * @return ret
  */
 int ObRawExprUtils::try_add_nls_fmt_in_to_char_expr(const ObSQLSessionInfo &session,
@@ -2388,11 +2385,11 @@ int ObRawExprUtils::try_add_nls_fmt_in_to_char_expr(const ObSQLSessionInfo &sess
   ObRawExpr *first_param_expr = NULL;
   ObObjType data_type = ObNullType;
   CK (OB_NOT_NULL(expr));
-  // 只有在第一个参数是时间类型的列，或者是一个返回值为时间类型的表达式时，才需要修改 to_Char
+  // Only when the first parameter is a column of time type, or an expression that returns a time type, do you need to modify to_Char
   if (OB_SUCC(ret) && need_add_nls_fmt) {
     need_add_nls_fmt = false;
     CK (OB_NOT_NULL(first_param_expr = expr->get_param_expr(0)));
-    // 当且仅当 to_char 只有一个参数时
+    // When and only when to_char has one parameter
     if (OB_SUCC(ret) && 1 == expr->get_param_count()) {
       data_type = first_param_expr->get_data_type();
       if (ObTimestampType == data_type
@@ -2401,7 +2398,7 @@ int ObRawExprUtils::try_add_nls_fmt_in_to_char_expr(const ObSQLSessionInfo &sess
       }
     }
   }
-  // 为 to_char 添加第二个参数
+  // Add second parameter to to_char
   if (OB_SUCC(ret) && need_add_nls_fmt) {
     ObSysFunRawExpr *to_char_expr = dynamic_cast<ObSysFunRawExpr *>(expr);
     CK (OB_NOT_NULL(to_char_expr));
@@ -2414,12 +2411,12 @@ int ObRawExprUtils::try_add_nls_fmt_in_to_char_expr(const ObSQLSessionInfo &sess
 }
 
 /**
- * @brief 为 to_char_expr 添加第二个参数 nls_xx_format
+ * @brief Add second parameter nls_xx_format to to_char_expr
  * @param session session
- * @param arg arg允许为空，为空时，使用 session 中的 nls_xx_format
+ * @param arg arg can be empty, if empty, use nls_xx_format from session
  * @param expr_factory factory
- * @param data_type 第一个参数类型
- * @param to_char_expr 被修改的 to_char 表达式
+ * @param data_type type of the first parameter
+ * @param to_char_expr modified to_char expression
  * @return
  */
 int ObRawExprUtils::actual_add_nls_fmt_in_to_char_expr(const ObSQLSessionInfo& session,
@@ -2431,11 +2428,11 @@ int ObRawExprUtils::actual_add_nls_fmt_in_to_char_expr(const ObSQLSessionInfo& s
   int ret = OB_SUCCESS;
   ObConstRawExpr *fmt_expr = NULL;
   ObCollationType collation_server = CS_TYPE_INVALID;
-  // 1. 创建空白的表达式
+  // 1. Create an empty expression
   OZ (expr_factory.create_raw_expr(T_CHAR, fmt_expr));
   CK (OB_NOT_NULL(fmt_expr));
   CK (OB_NOT_NULL(to_char_expr));
-  // 2. 配置 to_char 中的第二个参数, fmt_expr
+  // 2. Configure the second parameter of to_char, fmt_expr
   if (OB_SUCC(ret)) {
     ObObjParam val;
     switch (data_type) {
@@ -2476,7 +2473,7 @@ int ObRawExprUtils::actual_add_nls_fmt_in_to_char_expr(const ObSQLSessionInfo& s
     OX (fmt_expr->set_result_flag(val.get_result_flag()));
     OX (fmt_expr->set_data_type(ObCharType));
   }
-  // 3. 配置 to_char
+  // 3. configure to_char
   OZ (to_char_expr->extend_param_exprs(2));
   OZ (to_char_expr->add_param_expr(fmt_expr));
 
@@ -2735,8 +2732,7 @@ bool ObRawExprUtils::is_same_raw_expr(const ObRawExpr *src, const ObRawExpr *dst
   }
   return is_same;
 }
-
-//把计算表达式中的所有column表达式替换掉
+// Replace all column expressions in the calculation expression
 int ObRawExprUtils::replace_all_ref_column(ObRawExpr *&raw_expr, const common::ObIArray<ObRawExpr *> &exprs, int64_t &offset)
 {
   int ret = OB_SUCCESS;
@@ -4352,8 +4348,7 @@ bool ObRawExprUtils::check_exprs_type_collation_accuracy_equal(const ObRawExpr *
   }
   return equal;
 }
-
-// 此方法请谨慎使用,会丢失enum类型的 enum_set_values
+// This method should be used with caution, it will lose enum type enum_set_values
 int ObRawExprUtils::build_column_conv_expr(ObRawExprFactory &expr_factory,
                                            const share::schema::ObColumnSchemaV2 *column_schema,
                                            ObRawExpr *&expr,
@@ -4368,8 +4363,8 @@ int ObRawExprUtils::build_column_conv_expr(ObRawExprFactory &expr_factory,
         || column_schema->is_spatial_generated_column() 
         || column_schema->is_multivalue_generated_column()
         || column_schema->is_multivalue_generated_array_column()) {
-      //全文列不会破坏约束性，且数据不会存储，跳过强转
-      // 空间索引列是虚拟列，跳过强转
+      // Full text column will not violate constraints, and data will not be stored, skip casting
+      // Space index column is a virtual column, skip casting
     } else if (OB_FAIL(build_column_conv_expr(session_info,
                                               expr_factory,
                                               column_schema->get_data_type(),
@@ -4456,8 +4451,8 @@ int ObRawExprUtils::build_column_conv_expr(ObRawExprFactory &expr_factory,
         col_ref.is_multivalue_generated_column() ||
         col_ref.is_multivalue_generated_array_column() ||
         col_ref.is_vec_index_column()) {
-      // 全文列不会破坏约束性，且数据不会存储，跳过强转
-      // 空间索引列是虚拟列，跳过强转
+      // Full text column will not violate constraints, and data will not be stored, skip casting
+      // Space index column is a virtual column, skip casting
     } else if (OB_FAIL(build_column_conv_expr(session_info,
                                               expr_factory,
                                               col_ref.get_data_type(),
@@ -5132,8 +5127,8 @@ int ObRawExprUtils::build_trim_expr(const ObColumnSchemaV2 *column_schema,
     LOG_WARN("invalid argument", K(ret), K(column_schema), K(expr));
   } else {
     bool is_cs_nonascii = ObCharset::is_cs_nonascii(column_schema->get_collation_type());
-    //如果是ascii兼容的，直接用 ' ' with column collation，这样可以避免转换
-    //非ascii，用 ' ' with utf8mb4，trim类型推导之后，输入参数' '会被转换
+    // If it is ASCII compatible, directly use ' ' with column collation, this can avoid conversion
+    // Non-ASCII, use ' ' with utf8mb4, trim type inference after, input parameter ' ' would be converted
     padding_char_cs_type = is_cs_nonascii ? ObCharset::get_default_collation(CHARSET_UTF8MB4)
                                           : column_schema->get_collation_type();
   }
@@ -5233,9 +5228,8 @@ int ObRawExprUtils::build_pad_expr(ObRawExprFactory &expr_factory,
   }
   return ret;
 }
-
-//外部需要调用replace_param_expr()来特殊处理now();
-//这个表达式没有formalize
+// External needs to call replace_param_expr() to specially process now();
+// This expression has not been formalized
 int ObRawExprUtils::build_nvl_expr(ObRawExprFactory &expr_factory, const ColumnItem *column_item, ObRawExpr *&expr)
 {
   int ret = OB_SUCCESS;
@@ -5888,8 +5882,7 @@ int ObRawExprUtils::create_double_op_expr(ObRawExprFactory &expr_factory,
   }
   return ret;
 }
-
-// set op expr 不保存 child 的任何 expr
+// set op expr do not save any expr of child
 int ObRawExprUtils::make_set_op_expr(ObRawExprFactory &expr_factory,
                                      int64_t idx,
                                      ObItemType set_op_type,
@@ -6064,7 +6057,7 @@ int ObRawExprUtils::build_query_output_ref(ObRawExprFactory &expr_factory,
 
 bool ObRawExprUtils::is_same_column_ref(const ObRawExpr *column_ref1, const ObRawExpr *column_ref2)
 {
-  //如果是alias ref，需要比较alias ref里的真实节点
+  // If it is an alias ref, you need to compare the real node inside the alias ref
   const ObRawExpr *left_real_ref = column_ref1;
   const ObRawExpr *right_real_ref = column_ref2;
   while (left_real_ref != NULL && T_REF_ALIAS_COLUMN == left_real_ref->get_expr_type()) {
@@ -6264,7 +6257,7 @@ uint32_t ObRawExprUtils::calc_column_result_flag(const ObColumnSchemaV2 &column_
   if (column_schema.is_index_column()) {
     flag |= PART_KEY_FLAG;
     if (column_schema.get_index_position() == 1) {
-      flag |= MULTIPLE_KEY_FLAG;  /* 和UNIQUE_FLAG相对的概念 */
+      flag |= MULTIPLE_KEY_FLAG;  /* The concept relative to UNIQUE_FLAG */
     }
   }
   if (column_schema.is_zero_fill()) {
@@ -6280,12 +6273,12 @@ int ObRawExprUtils::need_wrap_to_string(const ObRawExprResType &src_res_type,
                                         const bool is_same_type_need, bool &need_wrap,
                                         const bool support_subschema)
 {
-  //TODO(yaoying.yyy):这个函数需要在case中覆盖 且ObExtendType 和ObUnknownType
+  //TODO(yaoying.yyy):This function needs to be covered in the case and ObExtendType and ObUnknownType
   int ret = OB_SUCCESS;
   need_wrap = false;
   ObObjType param_type = src_res_type.get_type();
   if (!ob_is_enumset_tc(param_type)) {
-    //输入参数不是enum 类型 则不需要转换
+    // Input parameter is not enum type then no conversion is needed
   } else if (param_type == calc_type && (!is_same_type_need)) {
     need_wrap = false;
   } else {
@@ -6704,7 +6697,7 @@ int ObRawExprUtils::check_composite_cast(ObRawExpr *&expr, ObSchemaChecker &sche
         } else if (ObExtendType != src->get_result_type().get_type()) {
           ret = OB_ERR_INVALID_TYPE_FOR_OP;
           LOG_WARN("invalid cast a normal type to udt", K(ret));
-        } else if (udt_id == src->get_udt_id()) { //同类型cast，直接返回原始表达式
+        } else if (udt_id == src->get_udt_id()) { // Same type cast, directly return the original expression
           expr = src;
         } else {
           ret = OB_ERR_INVALID_CAST_UDT;
@@ -7478,7 +7471,7 @@ int ObRawExprUtils::check_need_cast_expr(const ObRawExprResType &src_type,
     LOG_WARN("transition does not support", K(in_type), K(out_type));
   } else if (src_type.is_null() || dst_type.is_null()) {
     // null -> xxx or xxx -> null
-    // xxx->null 底层转换函数会报错
+    // xxx->null underlying conversion function will report an error
     need_cast = true;
   } else {
     need_cast = true;
@@ -7863,8 +7856,7 @@ int ObRawExprUtils::build_common_aggr_expr(ObRawExprFactory &expr_factory,
   } else {/*do nothing */}
   return ret;
 }
-
-//专用于limit_expr/offset_expr中，用于构造case when limit_expr < 0 then 0 else limit_expr end
+// Specifically used in limit_expr/offset_expr, used to construct case when limit_expr < 0 then 0 else limit_expr end
 
 
 int ObRawExprUtils::build_or_exprs(ObRawExprFactory &expr_factory,
@@ -8096,8 +8088,7 @@ int ObRawExprUtils::build_inner_row_cmp_expr(ObRawExprFactory &expr_factory,
   }
   return ret;
 }
-
-// 这个函数只会在 pl 里被调到，会设置 ObRawExpr 的被调用模式，用于区分是在 pl 还是 sql 中被调用
+// This function will only be called in pl, it will set the invocation mode of ObRawExpr, used to distinguish whether it is called in pl or sql
 int ObRawExprUtils::set_call_in_pl(ObRawExpr *&raw_expr)
 {
   int ret = OB_SUCCESS;
@@ -8306,7 +8297,7 @@ int ObRawExprUtils::build_shadow_pk_expr(uint64_t table_id,
       LOG_WARN("formalize shadow unique key failed", K(ret));
     } else {
       spk_expr->set_dependant_expr(spk_project_expr);
-      //将shadow unique rowkey标记为生成列，它依赖T_OP_SHADOW_UK_PROJECT表达式生成
+      // Mark shadow unique rowkey as a generated column, it depends on T_OP_SHADOW_UK_PROJECT expression for generation
       spk_expr->set_column_flags(VIRTUAL_GENERATED_COLUMN_FLAG);
     }
   }

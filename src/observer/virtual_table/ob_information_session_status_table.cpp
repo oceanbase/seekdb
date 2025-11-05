@@ -177,7 +177,7 @@ int ObInfoSchemaSessionStatusTable::inner_get_next_row(ObNewRow *&row)
             start_to_read_ = true;
           }
         }
-        // 无需考虑返回码，不管成功与否都需要释放内存
+        // No need to consider the return code, memory should be released regardless of success or failure
         int tmp_ret = OB_SUCCESS;
         if (OB_SUCCESS != (tmp_ret = all_status.destroy())) {
           SERVER_LOG(WARN, "fail to destroy all status", K(tmp_ret));

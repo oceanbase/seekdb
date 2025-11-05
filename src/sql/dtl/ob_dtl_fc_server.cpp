@@ -126,13 +126,13 @@ void ObTenantDfc::calc_max_buffer(int64_t max_parallel_cnt)
     max_parallel_cnt = 1;
   }
   max_parallel_cnt_ = max_parallel_cnt;
-  // MAX_BUFFER_CNT表示一个算子最大buffer的数据，+2表示transmit端最大2个,MAX_BUFFER_FACTOR表示浮动比例，/2表示最大并行度为max_parallel_cnt的1/2
-  // 假设max_parallel_cnt_=1，则 1 * (4 + 2) * 64 * 1024 * 2 / 2，则最大6个buffer页
-  //    max_parallel_cnt_=10，则 10 * (4 + 2) * 64 * 1024 * 2 / 2，则最大60个buffer页，假设最大的channel数为5*5*2=50，
-  //       则每个channel有1.2个buffer页,如果一个算子有5个chanel，则1.2*5=6个buffer页
-  //    max_parallel_cnt_=600，则 600 * (4 + 2) * 64 * 1024 * 2 / 2，则最大3600个buffer页
-  //      假设都是1:1，则300个并发sql，最大的channel数为600，每个dfc 约6个buffer
-  //      假设2个query，每个分别为150*2，则channel数约150*150*2，每个dfc约12个buffer
+  // MAX_BUFFER_CNT indicates the maximum buffer data for an operator, +2 indicates a maximum of 2 at the transmit end, MAX_BUFFER_FACTOR indicates the floating ratio, /2 indicates that the maximum parallelism is half of max_parallel_cnt
+  // Assume max_parallel_cnt_=1, then 1 * (4 + 2) * 64 * 1024 * 2 / 2, then maximum 6 buffer pages
+  //    max_parallel_cnt_=10, then 10 * (4 + 2) * 64 * 1024 * 2 / 2, then maximum 60 buffer pages, assuming the maximum number of channels is 5*5*2=50,
+  //       then each channel has 1.2 buffer pages, if an operator has 5 channels, then 1.2*5=6 buffer pages
+  //    max_parallel_cnt_=600, then 600 * (4 + 2) * 64 * 1024 * 2 / 2, then maximum 3600 buffer pages
+  //      Assume a 1:1 ratio, then for 300 concurrent SQLs, the maximum number of channels is 600, each dfc has about 6 buffers
+  //      Assume 2 queries, each with 150*2, then the number of channels is approximately 150*150*2, each dfc has about 12 buffers
   max_blocked_buffer_size_ = max_parallel_cnt_ * (MAX_BUFFER_CNT + 2) * GCONF.dtl_buffer_size * MAX_BUFFER_FACTOR / 2;
   max_buffer_size_ = max_blocked_buffer_size_ * MAX_BUFFER_FACTOR;
   int64_t factor = 1;
@@ -229,8 +229,8 @@ int ObTenantDfc::try_unblock_tenant_dfc(ObDtlFlowControl *dfc, int64_t ch_idx)
         ObDtlBasicChannel *ch = reinterpret_cast<ObDtlBasicChannel*>(dtl_ch);
         int64_t unblock_cnt = 0;
         if (dfc->is_qc_coord() && ch->has_less_buffer_cnt()) {
-          // 对于merge sort coord的channel，保证每一个channel的recv_list都不为空，即扩展unblock条件
-          // 否则merge sort receive可能死等，即被blocked的channel没法发送unblocking msg
+          // For merge sort coord's channel, ensure that each channel's recv_list is not empty, i.e., extend unblock condition
+          // Otherwise merge sort receive may deadlock, i.e., the blocked channel cannot send unblocking msg
           LOG_TRACE("unblock channel on decrease size by self", K(dfc), K(ret), KP(ch->get_id()), K(ch->get_peer()), K(ch_idx),
             K(ch->get_processed_buffer_cnt()));
           if (OB_FAIL(dfc->notify_channel_unblocking(ch, unblock_cnt))) {
@@ -319,13 +319,13 @@ int ObDfcServer::get_current_tenant_dfc(uint64_t tenant_id, ObTenantDfc *&tenant
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("unexpected tenant mtl", K(tenant_id), K(tenant_dfc->get_tenant_id()));
     // if (OB_SYS_TENANT_ID == tenant_dfc->get_tenant_id()) {
-    //   // 这里是为了解决 sys 租户 change tenant 到其它租户后，要求能使用 dtl 服务
-    //   // 否则有 bug：
+    //   // This is to solve the issue that after sys tenant changes tenant to another tenant, it should be able to use the dtl service
+    //   // otherwise there is a bug:
     //   //
-    //   // 进入这个分支的场景是：init_sqc 这个 rpc 在这个机器上没有找到租户资源，
-    //   // 于是 fallback 到 sys 租户，于是 MTL 中取出的 dfc tenant id 为 sys 租户 id
+    //   // The scenario for entering this branch is: the init_sqc rpc did not find tenant resources on this machine,
+    //   // Thus fallback to sys tenant, thus MTL retrieves the dfc tenant id as sys tenant id
     //   //
-    //   // 此时：返回 sys 租户的 dfc 资源给调用者
+    //   // At this time: return the dfc resource of the sys tenant to the caller
     // } else {
     //   ret = OB_ERR_UNEXPECTED;
     //   LOG_WARN("the tenant id of tenant dfc is not match with tenant id hinted",

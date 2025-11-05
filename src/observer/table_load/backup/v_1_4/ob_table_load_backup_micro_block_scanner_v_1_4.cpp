@@ -108,7 +108,7 @@ int ObTableLoadBackupMicroBlockScanner_V_1_4::init(const char *buf,
                                                    const ObTableLoadBackupColumnMap_V_1_4 *column_map)
 {
   int ret = OB_SUCCESS;
-  // meta只在内部的scan中可能会用到，所以为nullptr是可能存在的
+  // meta is only used in the internal scan, so it being nullptr is possible
   if (OB_UNLIKELY(buf == nullptr || 
                   column_ids == nullptr || 
                   column_map == nullptr || 

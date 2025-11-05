@@ -149,7 +149,7 @@ public:
       const ObTransferPartInfo &part_info,
       const ObLSID &dest_ls,
       ObMySQLTransaction &trans);
-  /* 生成任务时，需要获取所有的transfer partition任务，不关心是否有并发的新插入的任务。
+  /* When generating tasks, it is necessary to obtain all transfer partition tasks, without caring about any newly inserted concurrent tasks.
    * @description: get all transfer partition task from __all_transfer_partition_task
                    and smaller than max_task_id
    * @param[in] tenant_id : user_tenant_id
@@ -173,7 +173,7 @@ public:
       ObIArray<ObTransferPartitionTask> &task_array,
       ObISQLClient &sql_client);
   /*
-   * @description:获取某个balance_job的所有的任务
+   * @description: get all tasks of a certain balance_job
    * @param[in] tenant_id : user_tenant_id
    * @param[in] job_id : the corelative balance job id
    * @param[in] trans: sql trans or trans
@@ -185,14 +185,14 @@ public:
       ObISQLClient &sql_client);
 
   /*
-   * 构造任务时，需要保证任务之间的偏序关系，后插进来的任务task_id是小的，可能会把多个任务合并成一个balance_job
-   * 所以不能一个个的改，需要改一批，利用了偏序关系
-   * 后续如果有需求的话，可以按照批来做，例如1024个任务做一批
+   * When constructing tasks, it is necessary to ensure the partial order relationship between tasks. Tasks with smaller task_id added later may merge multiple tasks into one balance_job.
+   * Therefore, they cannot be modified one by one but in batches, utilizing the partial order relationship.
+   * If there is a requirement in the future, it can be done in batches, for example, 1024 tasks per batch.
    * @description: set all task smaller than max_task_id from waiting to schedule and set balance job id
    * @param[in] tenant_id : user_tenant_id
    * @param[in] max_task_id : max_task_id
    * @param[in] job_id : the corelative balance job id
-   * @param[in] task_count: for double check the task smller than max_task_id and affected_rows
+   * @param[in] task_count: for double check the task smaller than max_task_id and affected_rows
    * @param[in] trans: trans
    * @return OB_SUCCESS if success, otherwise failed
    * */
@@ -202,18 +202,18 @@ public:
       const int64_t &task_count,
       ObMySQLTransaction &trans);
   /*
-   * 关闭enable_transfer的时候，当前的balance_job需要取消掉，和balance_job关联的transfer partition任务需要回到waiting状态
-   * @description: balance job maybe cancel, Disassociate balance_job and transfer_partition_task,
+   * When enable_transfer is disabled, the current balance_job needs to be canceled, and the transfer partition tasks associated with balance_job need to return to the waiting state
+   * @description: balance job may be canceled, disassociate balance_job and transfer_partition_task,
    *               rollback task from doing to waiting, and clean balance_job and transfer_task_id
    *  @param[in] tenant_id : user_tenant_id
-   *  @param[in] job_id : the corelative balance job id
-   *  @param[in] trans: must in trans 
+   *  @param[in] job_id : the correlated balance job id
+   *  @param[in] trans: must be in trans
    * */
   static int rollback_all_to_waitting(const uint64_t tenant_id,
                            const ObBalanceJobID &job_id,
                            ObMySQLTransaction &trans);
   /*
-   * 当一个transfer任务开始时，需要标记这一批任务transfer task
+   * When a transfer task starts, it is necessary to mark this batch of transfer tasks
    * @description: set task corelative transfer task ID
    * @param[in] tenant_id : user_tenant_id
    * @param[in] job_id : the corelative balance job id
@@ -228,9 +228,9 @@ public:
                          ObMySQLTransaction &trans); 
 
   /*
-   * 任务在执行时发现分区不在需要失败掉,调用点在finish_task_from_init和生成balance_job的过程中
-   * transfer任务在执行成功的时候，需要结束掉，调用点在finish_task里面
-   * canceled这个状态这一次不做
+   * The task is found to be in a partition that should cause it to fail during execution, the call points are in finish_task_from_init and the generation of balance_job processes
+   * The transfer task needs to be terminated when it executes successfully, the call point is in finish_task
+   * The CANCELED status will not be handled this time
    * @description: task maybe CANCELED, FAILED, COMPLETE 
    *               and insert into __all_transfer_partition_task_history
    * @param[in] tenant_id : user_tenant_id
@@ -247,9 +247,9 @@ public:
                          const ObString &comment,
                          ObMySQLTransaction &trans); 
   /*
-   * transfer任务在结束时可能会存在一批not_exist的分区，但是这一部分分区可能
-   * 不是真的not_exist，可能是由于前置统计的源端日志流不正确导致的，需要回滚掉
-   * 这部分任务的状态到waiting状态，重新生成任务
+   * The transfer task may have a batch of not_exist partitions at the end, but this part of the partitions
+   * may not be truly not_exist, it could be due to incorrect source log stream statistics, requiring a rollback
+   * of this part of the task status to waiting status, and regenerating the task
    * @param[in] tenant_id : user_tenant_id
    * @param[in] job_id : the corelative balance job id
    * @param[in] part_list : part_info start transfer
@@ -265,7 +265,7 @@ public:
                          ObMySQLTransaction &trans); 
 
   /*
-  * 获取一批part_list的任务信息，part_list可能不存在表里。
+  * Get a batch of task information for part_list, which may not exist in the table.
   * @description: get dest_ls of part_list
    * @param[in] tenant_id : user_tenant_id
    * @param[in] part_list : part_info
@@ -279,7 +279,7 @@ public:
                          ObIArray<ObTransferPartitionTask> &task_array,
                          ObMySQLTransaction &trans);
   /*
-   * 获取指定分区的transfer partition task
+   * Get the transfer partition task for the specified partition
    * @description: get transfer partition task of part
    * @param[in] tenant_id : user_tenant_id
    * @param[in] part_info : table_id and part_object_id

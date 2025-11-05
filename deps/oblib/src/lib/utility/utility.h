@@ -1331,23 +1331,24 @@ int ob_atoull(const char *str, uint64_t &res);
 int ob_strtoll(const char *str, char *&endptr, int64_t &res);
 int ob_strtoull(const char *str, char *&endptr, uint64_t &res);
 
-/* 功能：根据localtime计算公式实现快速计算的方法, 替代系统函数localtime_r.
-   参数：
-     in: const time_t *unix_sec, 当前的时间戳(单位秒), 输入值
-     out: struct tm *result, 当前时间戳对应的可读时间localtime, 输出值
-   返回值：
-     无
+/*
+   Function: Implement a fast calculation method based on the localtime formula to replace the system function localtime_r.
+   Parameters:
+     in: const time_t *unix_sec, current timestamp (unit: seconds), input value
+     out: struct tm *result, readable local time corresponding to the current timestamp, output value
+   Return value:
+     None
 */
 struct tm *ob_localtime(const time_t *unix_sec, struct tm *result);
 
-/* 功能：根据日志时间戳特点实现最快速计算localtime. 实现逻辑: 首先检查这次输入时间戳是否和上一次相同(秒单位相同, 绝大部分连续日志秒单位都是相同的), 如果相同则直接使用上一次计算的localtime即可. 如果不相同, 就使用快速时间戳计算方法ob_localtime计算localtime.
-   参数：
-     in/out: time_t &cached_unix_sec, 缓存的上一次时间戳(秒单位)
-     in/out: struct tm &cached_localtime, 缓存的上一次时间戳对应的可读时间localtime
-     in: const time_t &input_unix_sec, 当前的时间戳(单位秒), 输入值
-     out: struct tm *output_localtime, 当前时间戳对应的可读时间localtime, 输出值
-   返回值：
-     无
+/* Function: Implement the fastest calculation of localtime based on the characteristics of log timestamps. Implementation logic: First check if the timestamp of this input is the same as the last one (second unit is the same, most consecutive logs have the same second unit). If they are the same, directly use the previously calculated localtime. If not, use the fast timestamp calculation method ob_localtime to calculate the localtime.
+   Parameters:
+     in/out: time_t &cached_unix_sec, cached timestamp from the last time (in seconds unit)
+     in/out: struct tm &cached_localtime, cached localtime corresponding to the last timestamp
+     in: const time_t &input_unix_sec, current timestamp (in seconds), input value
+     out: struct tm *output_localtime, localtime corresponding to the current timestamp, output value
+   Return value:
+     None
 */
 void ob_fast_localtime(time_t &cached_unix_sec, struct tm &cached_localtime,
                        const time_t &input_unix_sec, struct tm *output_localtime);

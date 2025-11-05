@@ -37,8 +37,7 @@ public:
   virtual ~ObIDirectoryScanner() = default;  
   virtual int list_directories(const ObString &uri, ObBaseDirEntryOperator &op) = 0;
 };
-
-// Mock 扫描器：模拟 read dir 的行为
+// Mock scanner: simulate read dir behavior
 class MockDirectoryScanner : public ObIDirectoryScanner {
 public:
   void set_entries(const ObArray<ObString>& entries) {

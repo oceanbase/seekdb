@@ -23,7 +23,7 @@ namespace storage
 {
 
 template<class T>
-class ObDirectLoadEasyQueue //性能很差的一个queue，主要为了方便使用
+class ObDirectLoadEasyQueue // A queue with very poor performance, mainly for convenience of use
 {
 public:
   ObDirectLoadEasyQueue() : malloc_(ObMemAttr(MTL_ID(), "TLD_EasyQueue")), queue_(malloc_) {}

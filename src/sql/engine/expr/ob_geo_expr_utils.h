@@ -235,7 +235,7 @@ public:
 
 private:
   common::ObIAllocator *allocator_;
-  common::ObGeometry * param1_;          // ObGeometry * param1_ 与 ObCachedGeom *cached_param1_的区别
+  common::ObGeometry * param1_;          // difference between ObGeometry * param1_ and ObCachedGeom *cached_param1_
   common::ObCachedGeom *cached_param1_;
   common::ObGeometry * param2_;
   common::ObCachedGeom *cached_param2_;

@@ -177,7 +177,7 @@ int ObLogTableScan::set_range_columns(const ObIArray<ColumnItem> &range_columns)
   if (OB_FAIL(range_columns_.assign(range_columns))) {
     LOG_WARN("failed to assign range columns", K(ret));
   } else if (!is_virtual_table(ref_table_id_)) {
-    // banliu.zyd: 虚拟表不保序，仅对非虚拟表做处理
+    // banliu.zyd: Virtual table does not guarantee order, only process non-virtual tables
     OrderItem item;
     int64_t N = range_columns.count();
     reset_op_ordering();
@@ -1308,7 +1308,7 @@ int ObLogTableScan::index_back_check()
         LOG_WARN("get unexpected null", K(ret));
       } else if (T_ORA_ROWSCN == expr->get_expr_type()) {
         column_found = false;
-      } else if (ob_is_geometry_tc(expr->get_data_type())) { // 在此处先标记为需要index_back，具体是否需要需要结合谓词来判断。
+      } else if (ob_is_geometry_tc(expr->get_data_type())) { // Mark as need index_back here, whether it is actually needed needs to be determined in combination with the predicate.
         column_found = false;
       } else if (T_PSEUDO_GROUP_ID == expr->get_expr_type() ||
                  T_PSEUDO_OLD_NEW_COL == expr->get_expr_type()) {
@@ -1479,7 +1479,7 @@ int ObLogTableScan::set_index_table_scan_filters(ObIndexMergeNode *node)
         bool found_expr = false;
         for (int64_t j = 0; OB_SUCC(ret) && !found_expr && j < range_exprs.count(); j++) {
           if (scan_pushdown_filters.at(i) == range_exprs.at(j)) {
-            //有重复表达式，忽略掉
+            // There are duplicate expressions, ignore them
             found_expr = true;
           } else { /* do nothing */ }
         }
@@ -1546,7 +1546,7 @@ int ObLogTableScan::pick_out_query_range_exprs()
       bool found_expr = false;
       for (int64_t j = 0; OB_SUCC(ret) && !found_expr && j < range_exprs.count(); ++j) {
         if (filter_exprs.at(i) == range_exprs.at(j)) {
-          //有重复表达式，忽略掉
+          // There are duplicate expressions, ignore them
           found_expr = true;
         } else { /* Do nothing */ }
       }
@@ -4508,7 +4508,7 @@ int ObLogTableScan::prepare_hnsw_vector_access_exprs()
     LOG_WARN("unexpected null pointer", K(ret));
   } else {
     const ObColumnSchemaV2 *vec_column_schema = nullptr;
-    if (OB_FAIL(ObVectorIndexUtil::get_vector_index_column_id(*table_schema, *delta_buf_table, col_ids))) { // todo 考虑下要不要改这个函数
+    if (OB_FAIL(ObVectorIndexUtil::get_vector_index_column_id(*table_schema, *delta_buf_table, col_ids))) { // todo consider changing this function
       LOG_WARN("failed to get vector index column.", K(ret));
     } else if (col_ids.count() != 1) {
       ret = OB_ERR_UNEXPECTED;
@@ -5239,7 +5239,7 @@ int ObLogTableScan::check_das_need_scan_with_domain_id()
             if (OB_FAIL(with_domain_types_.push_back(i))) {
               LOG_WARN("fail to push back domain types", K(ret), K(i));
             } else if (ddl_table_schema->is_vec_ivfflat_cid_vector_index()) {
-              // TODO(@liyao): 使用merge_iter补cid_vector
+              // TODO(@liyao): use merge_iter to fill cid_vector
               // uint64_t vec_cid_col_id = OB_INVALID_ID;
               // for (int64_t i = 0; OB_SUCC(ret) && i < ddl_table_schema->get_column_count() && OB_INVALID_ID == vec_cid_col_id; ++i) {
               //   const ObColumnSchemaV2 *col_schema = nullptr;

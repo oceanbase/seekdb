@@ -27,7 +27,7 @@ namespace unittest
 
 void init_gtest_output(std::string &gtest_log_name)
 {
-  // 判断是否处于Farm中
+  // Determine if it is within the Farm
   char *mit_network_start_port_env = getenv("mit_network_start_port");
   char *mit_network_port_num_env = getenv("mit_network_port_num");
   if (mit_network_start_port_env != nullptr && mit_network_port_num_env != nullptr) {
@@ -739,7 +739,7 @@ int ObSimpleLogClusterTestEnv::switch_leader(const int64_t id, const int64_t new
     CLOG_LOG(INFO, "switch_leader success", K(ret), "prev_leader:", cluster[prev_leader_idx_]->get_addr(), "new_leader:", cluster[new_leader_idx]->get_addr(),
              "old_leader:", cluster[old_leader_idx]->get_addr(), K(old_leader_idx), K(new_leader_idx));
     prev_leader_idx_ = new_leader_idx;
-    // 确保election已经切主成功.
+    // Ensure election has successfully switched to the new master.
     do {
       ret = get_leader(id, leader, old_leader_idx);
     } while (old_leader_idx != new_leader_idx);
@@ -781,7 +781,7 @@ int ObSimpleLogClusterTestEnv::check_replica_sync(const int64_t id, PalfHandleIm
       } else if (end_lsn_1 < max_lsn_1) {
         usleep(1 * 1000);
       } else if (max_lsn_2 < end_lsn_1) {
-        // 目前用max_lsn与leader的end_lsn比较
+        // Currently compare max_lsn with leader's end_lsn
         usleep(1 * 1000);
       } else if (max_lsn_2 > end_lsn_1) {
         ret = OB_ERR_UNEXPECTED;

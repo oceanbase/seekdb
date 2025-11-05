@@ -130,7 +130,7 @@ public:
   // the dop, the QC decide the dop before our task send to SQC server
   // but the dop may be change as the worker server don't has enough process.
   int64_t parallelism_;
-  // 在 affinitize 模式下 GI 需要知道当前 GI 所属的 task id，以拉取对应的 partition 任务
+  // In affinitize mode GI needs to know the current task id of the GI to pull the corresponding partition task
   int64_t worker_id_;
 
   ObGranulePump *pump_;
@@ -176,21 +176,21 @@ public:
 public:
   uint64_t index_table_id_;
   int64_t tablet_size_;
-  // affinitize用于表示线程和任务是否有进行绑定。
+  // affinitize is used to indicate whether threads and tasks have been bound.
   bool affinitize_;
-  // 是否是partition wise join/union/subplan filter，注意，如果是hybrid的pwj这个
-  // flag也会被设置上的。
+  // Whether it is partition wise join/union/subplan filter, note, if it is hybrid pwj this
+  // flag will also be set.
   bool partition_wise_join_;
-  // 是否是每个线程扫描sqc包含的所有的partition。
+  // Whether each thread scans all partitions included in the sqc.
   bool access_all_;
-  // 是否是含有条件下降的nlj。
+  // Whether it is a nlj with conditional descent.
   bool nlj_with_param_down_;
   common::ObFixedArray<int64_t, ObIAllocator> pw_dml_tsc_ids_;
-  // 目前GI的所有属性都设置进了flag里面，使用的时候也尽量使用flag，而不是上面的
-  // 几个单独的变量。目前来说因为兼容性的原因，无法删除上面的几个变量了，新加的
-  // GI的属性都通过这个flag来进行判断。
+  // Currently all properties of GI are set in the flag, use the flag when possible instead of the above
+  // A few separate variables. Currently, due to compatibility reasons, the above variables cannot be deleted, newly added
+  // The attributes of GI are all determined through this flag.
   uint64_t gi_attri_flag_;
-  // FULL PARTITION WISE情况下，GI可以分配在INSERT/REPLACE算子上，GI会控制insert/REPLACE表的任务划分
+  // FULL PARTITION WISE case, GI can be allocated on INSERT/REPLACE operators, GI will control the task partitioning of the insert/replace table
   // for partition join filter
   ObPxBFStaticInfo bf_info_;
   ObHashFunc hash_func_;
@@ -265,17 +265,17 @@ public:
   ObGranulePumpArgs *pump_arg() { return pump_arg_; }
 private:
   int parameters_init();
-  // 非full partition wise获得task的方式
-  // TODO: jiangting.lk 重构下函数名字
+  // Non-full partition wise way to obtain task
+  // TODO: jiangting.lk refactor function names
   int try_fetch_task(ObGranuleTaskInfo &info, bool round_robin);
   int get_next_task_pos(int64_t &pos, const ObGITaskSet *&taskset);
   int pw_get_next_task_pos(const common::ObIArray<int64_t> &op_ids);
   /**
    * @brief
-   * full partition wise的模式下，通过op ids获得对应的task infos
+   * full partition wise mode, obtain the corresponding task infos through op ids
    * IN ctx
-   * IN op_ids 消费GI task的phy op对应的op ids
-   * OUT infos 每一个phy op对应的GI tasks
+   * IN op_ids phy op ids corresponding to the GI task consuming the GI task
+   * OUT infos GI tasks corresponding to each phy op
    */
   int fetch_full_pw_tasks(ObIArray<ObGranuleTaskInfo> &infos, const ObIArray<int64_t> &op_ids);
   int try_fetch_tasks(ObIArray<ObGranuleTaskInfo> &infos, const ObIArray<const ObTableScanSpec *> &tscs);
@@ -283,8 +283,8 @@ private:
   int do_get_next_granule_task(bool &partition_pruning, bool round_robin);
   int prepare_table_scan();
   bool is_not_init() { return state_ == GI_UNINITIALIZED; }
-  // 获得消费GI task的node：
-  // 目前仅仅支持TSC或者Join
+  // Obtain the node for consuming GI task:
+  // Currently only supports TSC or Join
   int get_gi_task_consumer_node(ObOperator *cur, ObOperator *&consumer) const;
   // ---for nlj pkey
   int try_pruning_repart_partition(
@@ -349,8 +349,8 @@ private:
   const ObGITaskSet *rescan_taskset_ = NULL;
   RescanTasksInfo rescan_tasks_info_;
   int64_t rescan_task_idx_;
-  // full pwj场景下, 在执行过程中缓存住了自己的任务队列.
-  // 供GI rescan使用
+  // full pwj scenario, caching its own task queue during execution.
+  // For GI rescan use
   common::ObSEArray<ObGranuleTaskInfo, 2> pwj_rescan_task_infos_;
   // for px batch rescan and dynamic partition pruning
   common::ObSEArray<uint64_t, 2> table_location_keys_;

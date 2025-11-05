@@ -266,7 +266,7 @@ int ObStorageDestCheck::parse_shared_storage_info(
   } else if (OB_FAIL(databuff_printf(access_info, sizeof(access_info), pos, "%s&%s",
              storage_dest.get_storage_info()->access_id_, storage_dest.get_storage_info()->access_key_))) {
     LOG_WARN("failed to set access info", KR(ret), K(storage_dest));
-  // TODO: 等三月份方丹合入ram_url才能支持，先注释，现在只支持AK/SK的方式格式化启动 @xiaotao.ht
+  // TODO: Wait until Fangdan merges ram_url in March to support, comment out for now, currently only supports AK/SK format startup @xiaotao.ht
   // } else if (OB_FAIL(storage_dest.get_storage_info()->get_authorization_info(authorization, sizeof(authorization)))) {
   //   LOG_WARN("fail to get authorization info str", KR(ret), K(authorization));
   // } else if (ObStorageAccessMode::ACCESS_BY_RAM_URL == storage_dest.get_storage_info()->access_mode_ &&

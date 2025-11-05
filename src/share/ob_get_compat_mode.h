@@ -31,7 +31,7 @@ class ObCompatModeGetter
 {
 public:
   static ObCompatModeGetter &instance();
-  //对外提供全局函数接口
+  //Provide global function interface to external users
   static int get_tenant_mode(const uint64_t tenant_id, lib::Worker::CompatMode& mode);
   static int get_table_compat_mode(const uint64_t tenant_id, const int64_t table_id, lib::Worker::CompatMode& mode);
   static int get_tablet_compat_mode(const uint64_t tenant_id, const common::ObTabletID &tablet_id, lib::Worker::CompatMode& mode);
@@ -40,14 +40,14 @@ public:
              const uint64_t tenant_id,
              const int64_t table_id,
              bool &is_oracle_mode);
-  //初始化哈希表
+  //Initialize hash table
   int init(common::ObMySQLProxy *proxy);
   // Init for OBCDC
   //
   // Avoid relying on SQL when CDC consumes archive logs offline
-  //释放哈希表内存
+  //Release hash table memory
   void destroy();
-  //根据租户id,拿到租户系统变量的兼容性模式,第一次拿会发内部sql,以后直接从缓存中读取
+  //According to the tenant id, get the compatibility mode of the tenant system variables, the first time it will send an internal SQL, afterwards it will directly read from the cache
   int get_tenant_compat_mode(const uint64_t tenant_id, lib::Worker::CompatMode& mode);
   // only for unittest used
 

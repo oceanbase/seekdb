@@ -226,11 +226,11 @@ public:
   TO_STRING_KV(K_(row_cell_count), K_(des_row_buf_size));
 private:
   static const int64_t EOF_ROW_FLAG = -1;
-  char *des_row_buf_; // 反序列化时用于指向 row_ 的序列化内容
-  int64_t des_row_buf_size_; // 反序列化时用于记录 row_ 的序列化内容的 buffer 长度，get_row 时需要参考
-  const common::ObNewRow *row_; // 序列化之前传入 row_，用于序列化
+  char *des_row_buf_; // Used to point to the serialized content of row_ during deserialization
+  int64_t des_row_buf_size_; // Used to record the length of the serialized content of row_ during deserialization, reference needed when get_row
+  const common::ObNewRow *row_; // Serialize row_ before serialization, used for serialization
   const common::ObIArray<ObExpr*> *exprs_;
-  int64_t row_cell_count_; // row_cell_count_ 取特殊值 -1 时表示 EOFRow，get_row 返回 OB_ITER_END
+  int64_t row_cell_count_; // row_cell_count_ takes a special value -1 to indicate EOFRow, get_row returns OB_ITER_END
   dtl::ObDtlMsgType type_;
   int64_t vector_row_idx_;
   DISALLOW_COPY_AND_ASSIGN(ObPxNewRow);

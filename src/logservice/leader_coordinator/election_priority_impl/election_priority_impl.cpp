@@ -124,7 +124,7 @@ int ElectionPriorityImpl::deserialize(const char* buf, const int64_t data_len, i
         } else if (OB_UNLIKELY(!functor.is_decoded_success())) {
           COORDINATOR_LOG_(INFO, "this type not found in tuple, maybe is a new priority type, just skip the buffer");
           pos = functor.get_started_pos();
-          pos += data_size;// 跳过这个对象
+          pos += data_size;// skip this object
         } else {
           COORDINATOR_LOG_(DEBUG, "decode element success");
         }
@@ -191,7 +191,7 @@ int ElectionPriorityImpl::compare_with(const ElectionPriority &rhs,
 {
   LC_TIME_GUARD(1_s);
   int ret = OB_SUCCESS;
-  // 这里如果转型失败直接抛异常，但设计上转型不会失败
+  // Here, if the cast fails, an exception is thrown directly, but by design, the cast will not fail
   const ElectionPriorityImpl &rhs_impl = dynamic_cast<const ElectionPriorityImpl &>(rhs);
   GetClosestVersionPriority functor1(compare_version);
   GetClosestVersionPriority functor2(compare_version);

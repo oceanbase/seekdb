@@ -160,13 +160,12 @@ private:
   ObTZInfoMap tz_info_map_;
   ObTZInfoMap tz_info_map_buf_;
   bool inited_;
-
-  //is_usable_ == true时，server才可以对外提供服务；设置其为true的情况
-  //若__all_zone 中的time_zone_info_version == 0, 第一次接收到心跳既设置为 true
-  //若__all_zone 中的time_zone_info_version > 0, 则刷到timezone info后设置为true
+  //is_usable_ == true when the server can provide services to the outside; situations where it is set to true
+  //If time_zone_info_version in __all_zone is 0, set to true upon receiving the first heartbeat
+  //If the time_zone_info_version in __all_zone is greater than 0, set to true after brushing timezone info
   volatile bool is_usable_;
   int64_t last_version_;
-  // 记录tenant_id_用于获取本租户的tz_info_version
+  // Record tenant_id_ for obtaining the tz_info_version of this tenant
   int64_t tenant_id_;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObTimeZoneInfoManager);

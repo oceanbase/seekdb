@@ -63,7 +63,7 @@ public:
   virtual int aggregate_piece(const dtl::ObDtlMsg &other_piece) { return OB_NOT_IMPLEMENT; }
   VIRTUAL_TO_STRING_KV(K_(op_id), K_(source_dfo_id), K_(thread_id), K_(target_dfo_id),
                        K_(piece_count));
-  uint64_t op_id_;   // 在 piece 消息处理中，用于寻址 QC 端 ctx
+  uint64_t op_id_;   // In piece message processing, used for addressing QC end ctx
   /*
               piece     whole
       SRC_DFO  --->  QC  ---> TGT_DFO
@@ -101,7 +101,7 @@ public:
   virtual int aggregate_piece(const dtl::ObDtlMsg &piece) { return OB_NOT_IMPLEMENT; }
   virtual int after_aggregate_piece() { return OB_NOT_IMPLEMENT; }
   VIRTUAL_TO_STRING_KV(K_(op_id));
-  uint64_t op_id_;   // 在 whole 消息处理中，用于寻址 SQC 端 msg provider
+  uint64_t op_id_;   // In whole message processing, used for addressing SQC end msg provider
 };
 
 OB_SERIALIZE_MEMBER_TEMP(template<dtl::ObDtlMsgType T>, ObDatahubWholeMsg<T>,

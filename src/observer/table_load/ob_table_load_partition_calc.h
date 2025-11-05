@@ -65,9 +65,9 @@ private:
   const ObTableLoadParam *param_;
   // data members
   bool is_partitioned_;
-  // 非分区表
+  // Non-partitioned table
   table::ObTableLoadPartitionId partition_id_;
-  // 分区表
+  // partition table
   common::ObArenaAllocator allocator_;
   sql::ObSqlCtx sql_ctx_;
   sql::ObExecContext exec_ctx_;

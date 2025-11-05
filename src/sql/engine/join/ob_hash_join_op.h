@@ -259,11 +259,10 @@ class ObHashJoinSpec : public ObJoinSpec
 OB_UNIS_VERSION_V(1);
 public:
   ObHashJoinSpec(common::ObIAllocator &alloc, const ObPhyOperatorType type);
-
-  // all_exprs组成:(all_left_exprs keys, all_right_exprs keys)
-  // 前面的all_xxx_exprs keys没有去重
-  // 同理hash_funcs也保存了left和right的join key对应hash function
-  // 为什么保存left和right分别保存，因为可能存在类型不一致情况，如sint = usint
+  // all_exprs composition: (all_left_exprs keys, all_right_exprs keys)
+  // The previous all_xxx_exprs keys were not deduplicated
+  // Similarly, hash_funcs also stores the hash function corresponding to the join key of left and right
+  // Why save left and right separately, because there may be type inconsistency cases, such as sint = usint
   ExprFixedArray equal_join_conds_;
   ExprFixedArray all_join_keys_;
   common::ObHashFuncs all_hash_funcs_;
@@ -1034,7 +1033,7 @@ private:
     hash_equal_cnt_ = 0;
     hash_link_cnt_ = 0;
   }
-  // 这里可能会放大，暂时这样
+  // Here it may be amplified, temporarily like this
   int64_t get_extra_memory_size() const
   {
     int64_t bucket_cnt = profile_.get_bucket_size();
@@ -1113,7 +1112,7 @@ private:
   static const int64_t MIN_PART_COUNT = 8;
   static const int64_t PAGE_SIZE = ObChunkDatumStore::BLOCK_SIZE;
   static const int64_t MIN_MEM_SIZE = (MIN_PART_COUNT + 1) * PAGE_SIZE;
-  // 目前最大层次为4，通过高位4个字节作为recursive处理，超过partition level采用nest loop方式处理
+  // Currently the maximum level is 4, using the high 4 bytes for recursive processing, and using nest loop method for levels exceeding partition level
   static const int64_t MAX_PART_LEVEL = 4;
   static const int64_t PART_SPLIT_LEVEL_ONE = 1;
   static const int64_t PART_SPLIT_LEVEL_TWO = 2;
@@ -1140,7 +1139,7 @@ private:
   static int64_t PART_COUNT;
   static int64_t MAX_PAGE_COUNT;
   static const int64_t MIN_BATCH_ROW_CNT_NESTLOOP = 256;
-  // 之前hash join ctx变量
+  // previous hash join ctx variable
   state_operation_func_type state_operation_func_[JS_STATE_COUNT];
   state_function_func_type state_function_func_[JS_STATE_COUNT][FT_TYPE_COUNT];
   HJState hj_state_;
@@ -1167,7 +1166,7 @@ private:
   int64_t predict_row_cnt_;
   ObSqlWorkAreaProfile profile_;
   ObSqlMemMgrProcessor sql_mem_processor_;
-  // 之前part hash join ctx变量 ，主要是一些reset和rescan设置对不同变量进行处理，这里暂时直接隔开
+  // previous part hash join ctx variable, mainly some reset and rescan settings for different variables, here temporarily separated
   ObJoinState state_;
   uint64_t cur_right_hash_value_; // cur right row's hash_value
   bool right_has_matched_; // if cur right row has matched

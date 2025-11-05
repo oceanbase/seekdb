@@ -140,9 +140,9 @@ public:
   common::ObDLinkNode<Worker*> worker_node_;
   void *group_;
 protected:
-  // 线程运行时内存从此分配器分配
-  // 初始tenant_id=500, 在处理request时，tenant_id被更新成request的租户id
-  // 可单独指定ctx_id, 此ctx_id保持不变
+  // Thread runtime memory is allocated from this allocator
+  // Initial tenant_id=500, in processing request, tenant_id is updated to the tenant id of the request
+  // You can specify ctx_id individually, this ctx_id remains unchanged
   ObIAllocator *allocator_;
   int64_t st_current_priority_;
   sql::ObSQLSessionInfo *session_;
@@ -187,7 +187,7 @@ inline Worker &Worker::self()
 
 inline ObIAllocator &Worker::get_allocator()
 {
-  // 预期只在处理请求过程中调用
+  // Expected to be called only during request processing
   abort_unless(allocator_ != nullptr);
   return *allocator_;
 }

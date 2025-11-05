@@ -193,15 +193,14 @@ public:
   bool is_valid() { return valid_; }
 
   static int compare_cpu(const double cpu1, const double cpu2, int &compare_ret);
-
-  // 删除租户cgroup规则
+  // Delete tenant cgroup rules
   int remove_cgroup(const uint64_t tenant_id, const uint64_t group_id = OB_INVALID_GROUP_ID, const bool is_background = false);
-  // 设定指定租户cgroup组的cpu.shares
+  // Set the cpu.shares for the specified tenant cgroup group
   int set_cpu_shares(const uint64_t tenant_id, const double cpu, const uint64_t group_id = OB_INVALID_GROUP_ID, const bool is_background = false);
-  // 设定指定租户cgroup组的cpu.cfs_quota_us
+  // Set the specified tenant cgroup group's cpu.cfs_quota_us
   int set_cpu_cfs_quota(const uint64_t tenant_id, const double cpu, const uint64_t group_id = OB_INVALID_GROUP_ID, const bool is_background = false);
   int get_cpu_cfs_quota(const uint64_t tenant_id, double &cpu, const uint64_t group_id = OB_INVALID_GROUP_ID, const bool is_background = false);
-  // 获取某个cgroup组的cpuacct.usage, 即cpu time
+  // Get the cpuacct.usage of a specific cgroup group, i.e., cpu time
   int get_cpu_time(const uint64_t tenant_id, int64_t &cpu_time, const uint64_t group_id = OB_INVALID_GROUP_ID);
   int get_throttled_time(const uint64_t tenant_id, int64_t &throttled_time, const uint64_t group_id = OB_INVALID_GROUP_ID);
 
@@ -222,8 +221,8 @@ private:
   static const int32_t PATH_BUFSIZE = 512;
   static const int32_t VALUE_BUFSIZE = 64;
   static const int32_t GROUP_NAME_BUFSIZE = 129;
-  // 使用 ObCgroupCtrl 之前需要判断 group_ctrl 对象是否 valid，若为 false 则跳过 cgroup 机制
-  //  为 false 可能的原因是 cgroup 目录没有操作权限、操作系统不支持 cgroup 等。
+  // Before using ObCgroupCtrl, it is necessary to determine if the group_ctrl object is valid; if false, skip the cgroup mechanism
+  //  The reason for being false could be lack of operation permission on the cgroup directory, or the operating system does not support cgroup.
   bool valid_;
   int64_t last_cpu_usage_;
   int64_t last_usage_check_time_;

@@ -108,8 +108,8 @@ int ObPxSQCProxy::link_sqc_qc_channel(ObPxRpcInitSqcArgs &sqc_arg)
   int ret = OB_SUCCESS;
   ObPxSqcMeta &sqc = sqc_arg.sqc_;
   ObDtlChannel *ch = sqc.get_sqc_channel();
-  // 注意：ch 已经提前在 ObInitSqcP::process() 中 link 过了
-  // 这是一个优化，为了能够尽早收到 qc 下发的 data channel 信息
+  // Note: ch has already been linked in ObInitSqcP::process()
+  // This is an optimization, to be able to receive the data channel information from qc as early as possible
   if (OB_ISNULL(ch)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("fail link sqc qc channel", K(sqc), K(ret));
@@ -173,9 +173,8 @@ int ObPxSQCProxy::process_dtl_msg(int64_t timeout_ts)
   while (OB_SUCC(do_process_dtl_msg(timeout_ts))) {
     // next loop
   }
-
-  // 如果 do_process_dtl_msg 没有获取到任何消息，
-  // 则返回 EAGAIN，否则返回 SUCC
+  // If do_process_dtl_msg did not get any message,
+  // Then return EAGAIN, otherwise return SUCC
   if (OB_DTL_WAIT_EAGAIN == ret) {
     ret = OB_SUCCESS;
   } else {
@@ -216,15 +215,14 @@ int ObPxSQCProxy::get_transmit_data_ch(
         if (need_process_dtl) {
           ret = process_dtl_msg(timeout_ts);
         }
-
-        // 当收完所有消息后，再关注做自己的任务
-        // 看看自己期望的 transmit channel map 是否已经收到
+        // When all messages are received, then focus on doing your own task
+        // Check if the expected transmit channel map has already been received
         if (OB_SUCC(ret)) {
           if (OB_FAIL(sqc_ctx_.transmit_data_ch_provider_.get_data_ch_nonblock(
                       sqc_id, task_id, timeout_ts, task_ch_set, ch_info,
                       sqc_arg_.sqc_.get_qc_addr(), get_process_query_time()))) {
             if (OB_DTL_WAIT_EAGAIN == ret) {
-              // 如果 provider 里没有任何消息，同时又判定不需要通过 dtl 取数据，说明存在逻辑错误
+              // If there are no messages in provider, and it is determined that data should not be retrieved through dtl, it indicates a logical error
               if (!need_process_dtl) {
                 ret = OB_ERR_UNEXPECTED;
                 LOG_WARN("expect peek data channel succ", K(ret));
@@ -263,14 +261,14 @@ int ObPxSQCProxy::get_receive_data_ch(int64_t child_dfo_id,
         }
 
         LOG_TRACE("process dtl msg done", K(ret));
-        // 当收完所有消息后，再关注做自己的任务
-        // 看看自己期望的 receive channel map 是否已经收到
+        // When all messages are received, then focus on doing your own task
+        // Check if the expected receive channel map has already been received
         if (OB_SUCC(ret)) {
           if (OB_FAIL(sqc_ctx_.receive_data_ch_provider_.get_data_ch_nonblock(
                       child_dfo_id, sqc_id, task_id, timeout_ts, task_ch_set, ch_info,
                       sqc_arg_.sqc_.get_qc_addr(), get_process_query_time()))) {
             if (OB_DTL_WAIT_EAGAIN == ret) {
-              // 如果 provider 里没有任何消息，同时又判定不需要通过 dtl 取数据，说明存在逻辑错误
+              // If there are no messages in provider, and it is determined that data should not be retrieved through dtl, it indicates a logical error
               if (!need_process_dtl) {
                 ret = OB_ERR_UNEXPECTED;
                 LOG_WARN("expect peek data channel succ", K(ret));
@@ -304,13 +302,13 @@ int ObPxSQCProxy::get_part_ch_map(ObPxPartChInfo &map, int64_t timeout_ts)
         if (need_process_dtl) {
           ret = process_dtl_msg(timeout_ts);
         }
-        // 当收完所有消息后，再关注做自己的任务
-        // 看看自己期望的 transmit channel map 是否已经收到
+        // When all messages are received, then focus on doing your own task
+        // Check if the expected transmit channel map has already been received
         if (OB_SUCC(ret)) {
           if (OB_FAIL(sqc_ctx_.transmit_data_ch_provider_.get_part_ch_map_nonblock(
                       map, timeout_ts, sqc_arg_.sqc_.get_qc_addr(), get_process_query_time()))) {
             if (OB_DTL_WAIT_EAGAIN == ret) {
-              // 如果 provider 里没有任何消息，同时又判定不需要通过 dtl 取数据，说明存在逻辑错误
+              // If there are no messages in provider, and it is determined that data should not be retrieved through dtl, it indicates a logical error
               if (!need_process_dtl) {
                 ret = OB_ERR_UNEXPECTED;
                 LOG_WARN("expect peek data channel succ", K(ret));
@@ -350,19 +348,19 @@ int ObPxSQCProxy::check_task_finish_status(int64_t timeout_ts)
     }
     ObSqcLeaderTokenGuard guard(leader_token_lock_, msg_ready_cond_);
     if (guard.hold_token()) {
-      // 如果还有 task 没有完成，则尝试收取 dtl 消息
-      // 要特别注意，此时可能并没有什么 DTL 消息要
-      // 收了，task 的 channel 信息已经收取完毕。
-      // 这里之所以要尝试一次 process_dtl_msg 是因为
-      // 在 root 线程调用 check_task_finish_status
-      // 时，还可能存在 slave 线程等在 get_data_ch 中，
-      // 需要人帮助推进。
+      // If there are still tasks not completed, then try to receive dtl messages
+      // Pay particular attention, at this time there may be no DTL messages to process
+      // Received, the channel information for task has been received.
+      // Here we try to process_dtl_msg once because
+      // In root thread call check_task_finish_status
+      // , there may still be slave threads waiting in get_data_ch,
+      // Need human assistance to proceed.
       //
-      // FIXME: 这段代码可能引入额外代价，白等若干毫秒
-      // 更精细的控制方式是，先判断是否所有预期的消息都已经
-      // 收到并处理，如果是，则跳过 process_dtl_msg 步骤，
-      // 如果不是，则的确需要执行 process_dtl_msg
-      // 暂时总假设 all_ctrl_msg_received = false
+      // FIXME: This code may introduce additional overhead, waiting for several milliseconds
+      // A finer control method is, first determine if all expected messages have already been received
+      // received and processed, if so, skip the process_dtl_msg step,
+      // If not, then process_dtl_msg does need to be executed
+      // Temporarily assume all_ctrl_msg_received = false
       bool all_ctrl_msg_received = false;
 
       if (!all_tasks_finish && !all_ctrl_msg_received) {
@@ -394,8 +392,8 @@ int ObPxSQCProxy::report(int end_ret) const
   int64_t affected_rows = 0;
   int64_t sqc_memstore_row_read_count = 0;
   int64_t sqc_ssstore_row_read_count = 0;
-  // 任意一个 task 失败，则意味着全部 task 失败
-  // 第一版暂不支持重试
+  // Any one task fails, then it means all tasks fail
+  // First version does not support retry
   int sqc_ret = OB_SUCCESS;
   auto &tasks = sqc_ctx.get_tasks();
   ObSQLSessionInfo *session = NULL;
@@ -451,12 +449,11 @@ int ObPxSQCProxy::report(int end_ret) const
   finish_msg.sqc_id_ = sqc.get_sqc_id();
   finish_msg.dfo_id_ = sqc.get_dfo_id();
   finish_msg.rc_ = sqc_ret;
-  // 重写错误码，使得scheduler端能等待远端schema刷新并重试
+  // Rewrite error codes so that the scheduler can wait for remote schema refresh and retry
   if (OB_SUCCESS != sqc_ret && is_schema_error(sqc_ret)) {
     ObInterruptUtil::update_schema_error_code(sqc_arg.exec_ctx_, finish_msg.rc_);
   }
-
-  // 如果 session 为 null，rc 不会为 SUCCESS，没有设置 trans_result 也无妨
+  // If session is null, rc will not be SUCCESS, it's fine not to set trans_result
   if (OB_NOT_NULL(session) && OB_NOT_NULL(session->get_tx_desc())) {
     // overwrite ret
     if (OB_FAIL(MTL(transaction::ObTransService*)
@@ -496,7 +493,7 @@ int ObPxSQCProxy::report(int end_ret) const
     LOG_WARN("empty channel", K(sqc), K(ret));
   } else if (OB_FAIL(ch->send(finish_msg,
       sqc_arg.exec_ctx_->get_physical_plan_ctx()->get_timeout_timestamp()))) {
-      // 尽力而为，如果 push 失败就由其它机制处理
+      // Do our best, if push fails it will be handled by other mechanisms
     LOG_WARN("fail push data to channel", K(ret));
   } else if (OB_FAIL(ch->flush())) {
     LOG_WARN("fail flush dtl data", K(ret));

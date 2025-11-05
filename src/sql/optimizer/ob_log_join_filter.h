@@ -161,16 +161,16 @@ public:
   }
 
 private:
-  bool is_create_;   //判断是否是create算子
-  int64_t filter_id_; //设置filter_id
-  int64_t filter_len_; //设置filter长度
+  bool is_create_;   // Determine if it is a create operator
+  int64_t filter_id_; // set filter_id
+  int64_t filter_len_; // set filter length
   //ObLogJoinFilter *paired_join_filter_; //if this is a create op, set paired_join_filter_ as use open, vice versa
   // if this is a join filter create op, the paired_join_filter_ is join filter use op, vice versa
    //if this is a partition join filter create op, the paired_join_filter_ is partition filter gi
   ObLogicalOperator *paired_join_filter_;
   //equal join condition expr
   common::ObSEArray<ObRawExpr *, 8, common::ModulePageAllocator, true> join_exprs_;
-  bool is_use_filter_shuffle_; // 标记use端filter是否有shuffle
+  bool is_use_filter_shuffle_; // Mark whether use end filter has shuffle
   // join_filter_cmp_funcs_ is for join filter use
   common::ObSEArray<common::ObDatumCmpFuncType, 8, common::ModulePageAllocator, true> join_filter_cmp_funcs_; 
   common::ObSEArray<ObRawExpr *, 8, common::ModulePageAllocator, true> join_filter_exprs_;
@@ -178,7 +178,7 @@ private:
   common::ObSEArray<int64_t, 8, common::ModulePageAllocator, true> p2p_sequence_ids_;
   common::ObSEArray<bool, 8, common::ModulePageAllocator, true> is_null_safe_cmps_;
   JoinFilterSharedType filter_type_;
-  ObRawExpr *calc_tablet_id_expr_; // 计算tablet_id的expr
+  ObRawExpr *calc_tablet_id_expr_; // calculate tablet_id expr
   bool skip_subpart_; // Ignore 2-level subpart_id when calculating partition id
 
   // for runtime filter extract query range

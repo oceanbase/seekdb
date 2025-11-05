@@ -536,7 +536,7 @@ int ObMVChecker::check_and_expand_mav_aggr(const ObSelectStmt &stmt,
   if (OB_ISNULL(aggr)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null", K(ret), K(aggr));
-  } else if (aggr->is_param_distinct() || aggr->in_inner_stmt()) { // 这里判断完全没有has_nested_aggr_的时候in_inner_stmt 才会为true
+  } else if (aggr->is_param_distinct() || aggr->in_inner_stmt()) { // Here we determine that in_inner_stmt would be true only when there is no has_nested_aggr_
     is_valid = false;
     fast_refreshable_error_.assign_fmt("query with nested aggregate functions or distinct keyword is not supported");
   } else {

@@ -14,8 +14,7 @@
 #define OCEANBASE_SHARE_CONFIG_OB_SYSTEM_CONFIG_VALUE_H_
 
 #include "share/ob_define.h"
-
-// 去掉代码改动较大, 先保留
+// Remove code changes are significant, keep for now
 
 namespace oceanbase
 {
@@ -52,7 +51,7 @@ private:
   char scope_[OB_MAX_CONFIG_SCOPE_LEN];
   char source_[OB_MAX_CONFIG_SOURCE_LEN];
   char edit_level_[OB_MAX_CONFIG_EDIT_LEVEL_LEN];
-  // ObSystemConfig中ObHashMap使用了对象的拷贝构造函数,不能禁止
+  // ObSystemConfig uses the object's copy constructor in ObHashMap, cannot be prohibited
   //DISALLOW_COPY_AND_ASSIGN(ObSystemConfigValue);
 };
 

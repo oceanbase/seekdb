@@ -162,7 +162,7 @@ int ObExecutorRpcImpl::task_execute_v2(ObExecutorRpcCtx &rpc_ctx,
 }
 
 /*
- * 发送杀死一个task的命令并阻塞等待对端返回执行状态
+ * Send a command to kill a task and block waiting for the peer to return the execution status
  * */
 int ObExecutorRpcImpl::task_kill(
     ObExecutorRpcCtx &rpc_ctx,

@@ -116,7 +116,7 @@ int ObUpdateResolver::resolve(const ParseNode &parse_tree)
   }
 
   if (OB_SUCC(ret) && !has_tg) {
-    // 解析级联更新的列
+    // Parse cascading update columns
     if (OB_FAIL(resolve_additional_assignments(tables_assign,
                                                T_UPDATE_SCOPE))) {
       LOG_WARN("fail to resolve_additional_assignments", K(ret));
@@ -311,10 +311,10 @@ int ObUpdateResolver::check_safe_update_mode(ObUpdateStmt *update_stmt)
   } else if (OB_FAIL(params_.session_info_->get_sql_safe_updates(is_sql_safe_updates))) {
      LOG_WARN("failed to get is safe update mode", K(ret));
   } else if (is_sql_safe_updates) {
-    /*mysql安全模式下更新表值，需要满足下面两个条件中的其中一个:
-    * 1.含有limit；
-    * 2.含有where条件，其能够抽取query range ==> 由于抽取query range只能在optimizer阶段才能够抽取,因此这里只
-    *   检查是否存在where条件；
+    /*Update table values in mysql safe mode, needs to meet one of the following two conditions:
+    * 1.contains limit;
+    * 2.contains where condition, which can extract query range ==> Since extracting query range can only be done during the optimizer phase, therefore here we only
+    *   check if there exists a where condition;
     */
     if (!update_stmt->has_limit() && update_stmt->get_condition_exprs().empty()) {
       ret = OB_ERR_SAFE_UPDATE_MODE_NEED_WHERE_OR_LIMIT;

@@ -1044,7 +1044,7 @@ int ObWrCollector::collect_sqlstat()
                 LOG_WARN("failed to add column plan_hash", KR(ret), K(sqlstat));
               } else if (OB_FAIL(dml_splicer.add_column("plan_type", sqlstat.plan_type_))) {
                 LOG_WARN("failed to add column plan_type", KR(ret), K(sqlstat));
-              } else if (OB_FAIL(dml_splicer.add_column(true, "module"))) { // 没有设置为null
+              } else if (OB_FAIL(dml_splicer.add_column(true, "module"))) { // Not set to null
                 LOG_WARN("failed to add column module", KR(ret), K(sqlstat));
               } else if (OB_FAIL(dml_splicer.add_column(true, "action"))) {
                 LOG_WARN("failed to add column action", KR(ret), K(sqlstat));

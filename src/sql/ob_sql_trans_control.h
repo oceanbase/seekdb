@@ -50,7 +50,7 @@ class ObIDASTaskOp;
 class TransState
 {
 private:
-  /* 两位表示一个动作：低位表示是否执行，高位表示是否成功 */
+  /* Two bits represent an action: the low bit indicates whether to execute, the high bit indicates whether it was successful */
   static const uint32_t START_TRANS_EXECUTED_BIT   = (1 << 0);
   static const uint32_t END_TRANS_EXECUTED_BIT     = (1 << 2);
   static const uint32_t START_STMT_EXECUTED_BIT    = (1 << 4);
@@ -137,8 +137,8 @@ private:
   // cached for start_stmt, start_participants, end_participants
 };
 
-/* 内部类，仅用于本文件。将SQL层的Consistency转化为事务层的Consistency。
- * 事务层对Consistency只有STRONg/WEAK的概念，没有FROZEN的概念。
+/* Inner class, used only within this file. Converts Consistency from the SQL layer to the transaction layer.
+ * The transaction layer only has STRONG/WEAK concepts of Consistency, without the FROZEN concept.
  **/
 class ObConsistencyLevelAdaptor
 {

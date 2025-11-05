@@ -20,8 +20,7 @@ using namespace common;
 using namespace share::schema;
 namespace sql
 {
-
-//FIXME:支持非模版化二级分区
+//FIXME:support non-template secondary partitioning
 int ObTableGroupResolver::resolve_partition_hash_or_key(ObTablegroupStmt *stmt,
                                                         ParseNode *node,
                                                         const bool is_subpartition,
@@ -62,7 +61,7 @@ int ObTableGroupResolver::resolve_partition_hash_or_key(ObTablegroupStmt *stmt,
         }
       }
       if (OB_SUCC(ret)) {
-        //key分区必须设置column_list_num, hash分区expr_num设置为1
+        // key partition must set column_list_num, hash partition expr_num set to 1
         int64_t expr_num = -1;
         expr_num = PARTITION_FUNC_TYPE_KEY == partition_func_type ? node->children_[0]->children_[1]->value_ : 1;
         if (expr_num <= 0 || INT64_MAX == expr_num) {
@@ -93,7 +92,7 @@ int ObTableGroupResolver::resolve_partition_hash_or_key(ObTablegroupStmt *stmt,
       }
       if (OB_SUCC(ret)) {
         const bool is_hash_or_key_part = T_HASH_PARTITION == node->type_ || T_KEY_PARTITION == node->type_;
-        //如果为二级分区这里需要做防御
+        // If it is a secondary partition, defense is needed here
         if (is_hash_or_key_part && NULL != node->children_[ObTableGroupResolver::HASH_SUBPARTITIOPPN_NODE]) {
           if (T_RANGE_PARTITION == node->children_[ObTableGroupResolver::HASH_SUBPARTITIOPPN_NODE]->type_ ||
               T_RANGE_COLUMNS_PARTITION == node->children_[ObTableGroupResolver::HASH_SUBPARTITIOPPN_NODE]->type_) {
@@ -125,8 +124,7 @@ int ObTableGroupResolver::resolve_partition_hash_or_key(ObTablegroupStmt *stmt,
   }
   return ret;
 }
-
-//FIXME:支持非模版化二级分区
+//FIXME:support non-template secondary partitioning
 int ObTableGroupResolver::resolve_partition_range(ObTablegroupStmt *tablegroup_stmt,
                                                   ParseNode *node,
                                                   const bool is_subpartition,
@@ -227,7 +225,7 @@ int ObTableGroupResolver::resolve_partition_range(ObTablegroupStmt *tablegroup_s
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("part func node should not be null", K(ret));
       } else {
-        //range column分区必须设置column_list_num, range分区expr_num设置为1
+        // range column partition must set column_list_num, range partition expr_num set to 1
         expr_num = PARTITION_FUNC_TYPE_RANGE_COLUMNS == part_func_type ? partition_func_node->value_: 1;
         if (expr_num <= 0 || INT64_MAX == expr_num) {
           ret = OB_INVALID_ARGUMENT;
@@ -287,8 +285,7 @@ int ObTableGroupResolver::resolve_partition_range(ObTablegroupStmt *tablegroup_s
   }
   return ret;
 }
-
-//FIXME:支持非模版化二级分区
+//FIXME:support non-template secondary partitioning
 int ObTableGroupResolver::resolve_partition_list(ObTablegroupStmt *stmt,
                                                  ParseNode *node,
                                                  const bool is_subpartition,
@@ -398,7 +395,7 @@ int ObTableGroupResolver::resolve_partition_list(ObTablegroupStmt *tablegroup_st
       partition_option->set_part_func_type(part_func_type);
       partition_option->set_part_num(partition_num);
     }
-    if (OB_SUCC(ret)) { //这里应该能用原来range的代码
+    if (OB_SUCC(ret)) { // Here should be able to use the original range code
       bool in_tablegroup = true;
       if (OB_FAIL(ObDDLResolver::resolve_list_partition_elements(node->children_[ObTableGroupResolver::LIST_ELEMENTS_NODE],
                                                                  is_subpartition,
@@ -418,14 +415,14 @@ int ObTableGroupResolver::resolve_partition_list(ObTablegroupStmt *tablegroup_st
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("part func node should not be null", K(ret));
       } else {
-        //list column分区必须设置column_list_num, list分区expr_num设置为1
+        // list column partition must set column_list_num, list partition expr_num set to 1
         int64_t real_expr_num = PARTITION_FUNC_TYPE_LIST_COLUMNS == part_func_type ? partition_func_node->value_ : 1;
         if (real_expr_num <= 0 || INT64_MAX == real_expr_num) {
           ret = OB_INVALID_ARGUMENT;
           LOG_WARN("invalid expr num", K(ret), K(real_expr_num));
         } else if (OB_INVALID_COUNT != expr_num
                    && real_expr_num != expr_num) {
-          //当只有一个default分区不进行比较
+          // When there is only one default partition, do not compare
           ret = OB_ERR_PARTITION_COLUMN_LIST_ERROR;
           LOG_WARN("expr num is not equal", K(ret), K(expr_num), K(real_expr_num));
         } else if (!is_subpartition) {

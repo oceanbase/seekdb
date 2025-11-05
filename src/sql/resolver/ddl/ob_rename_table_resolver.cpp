@@ -88,7 +88,7 @@ int ObRenameTableResolver::resolve_rename_action(const ParseNode &rename_action_
     LOG_WARN("rename_table_stmt is null or parser error", K(ret));
   }
   if (OB_SUCC(ret)) {
-    //上面判断了rename_action_node.children_指针
+    // Above judged rename_action_node.children_ pointer
     ParseNode *origin_node = rename_action_node.children_[OLD_NAME_NODE];
     ParseNode *new_node = rename_action_node.children_[NEW_NAME_NODE];
     const share::schema::ObTableSchema *table_schema = NULL;

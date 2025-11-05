@@ -42,7 +42,7 @@ public:
   {
   }
   ~ObDefaultValueUtils() {}
-  //生成insert values()中不存在列的默认值
+  // Generate default values for columns that do not exist in insert values()
   int generate_insert_value(const ColumnItem *column,
                             ObRawExpr* &expr,
                             bool has_instead_of_trigger = false);

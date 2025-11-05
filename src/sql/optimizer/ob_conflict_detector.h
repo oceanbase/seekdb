@@ -27,7 +27,7 @@ struct TableDependInfo;
 class ObJoinOrder;
 
 /*
- * 用于指示inner join未来的连接条件
+ * Used to indicate the future join condition for inner join
  */
 struct JoinInfo
 {
@@ -53,10 +53,10 @@ struct JoinInfo
                 K_(on_conditions),
                 K_(where_conditions),
                 K_(equal_join_conditions));
-  ObRelIds table_set_; //要连接的表集合（即包含在join_qual_中的，除自己之外的所有表）
-  common::ObSEArray<ObRawExpr*, 4, common::ModulePageAllocator, true> on_conditions_; //来自on的条件，如果是outer/semi join
-  common::ObSEArray<ObRawExpr*, 4, common::ModulePageAllocator, true> where_conditions_; //来自where的条件，如果是outer/semi join，则是join filter，如果是inner join，则是join condition
-  common::ObSEArray<ObRawExpr*, 4, common::ModulePageAllocator, true> equal_join_conditions_; //是连接条件（outer/semi的on condition，inner join的where condition）的子集，仅简单等值，在预测未来的merge join所需的序的时候使用
+  ObRelIds table_set_; // set of tables to join (i.e., all tables included in join_qual_ except itself)
+  common::ObSEArray<ObRawExpr*, 4, common::ModulePageAllocator, true> on_conditions_; // from on conditions, if it is outer/semi join
+  common::ObSEArray<ObRawExpr*, 4, common::ModulePageAllocator, true> where_conditions_; // conditions from where, if it is outer/semi join, then it is join filter, if it is inner join, then it is join condition
+  common::ObSEArray<ObRawExpr*, 4, common::ModulePageAllocator, true> equal_join_conditions_; // is a subset of the join conditions (outer/semi's on condition, inner join's where condition) with only simple equality, used when predicting the order required for future merge join
   ObJoinType join_type_;
 };
 
@@ -137,7 +137,7 @@ public:
   
 
 private:
-  //table set包含的是当前join condition所引用的所有表，也就是SES
+  // table set contains all tables referenced by the current join condition, that is, SES
   JoinInfo join_info_;
   //conflict rules: R1 -> R2
   common::ObSEArray<std::pair<ObRelIds, ObRelIds> , 4, common::ModulePageAllocator, true> CR_;
@@ -147,14 +147,14 @@ private:
   ObRelIds L_TES_;
   //right total eligibility set
   ObRelIds R_TES_;
-  //left degenerate set，用于检查join condition为退化谓词的合法性，存放的是左子树的所有表集
+  // left degenerate set, used to check the validity of join condition being a degenerate predicate, stores all table sets of the left subtree
   ObRelIds L_DS_;
-  //right degenerate set，存放的是右子树的所有表集
+  // right degenerate set, holds all table sets of the right subtree
   ObRelIds R_DS_;
   bool is_degenerate_pred_;
-  //当前join是否可交换左右表
+  // Current join whether left and right tables can be swapped
   bool is_commutative_;
-  //为hint生成的冗余笛卡尔积
+  // Generate redundant Cartesian product for hint
   bool is_redundancy_;
 };
 

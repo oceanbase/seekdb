@@ -31,7 +31,7 @@ class ElectionChangeLeaderMsg;
 
 class ElectionMsgSender
 {
-// 需要由外部实现的消息发送接口
+// Need to be implemented externally message sending interface
 public:
   virtual int broadcast(const ElectionPrepareRequestMsg &msg,
                         const common::ObIArray<common::ObAddr> &list) const = 0;

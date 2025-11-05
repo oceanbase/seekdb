@@ -83,7 +83,7 @@ private:
   uint64_t actual_tenant_id_;
   common::ObArray<VariableSetNode, common::ModulePageAllocator, true> variable_nodes_;
   bool has_global_variable_;
-  obrpc::ObModifySysVarArg modify_sysvar_arg_; // 用于返回exec_tenant_id_
+  obrpc::ObModifySysVarArg modify_sysvar_arg_; // used to return exec_tenant_id_
   DISALLOW_COPY_AND_ASSIGN(ObVariableSetStmt);
 };
 

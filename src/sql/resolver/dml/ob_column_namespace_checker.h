@@ -72,8 +72,8 @@ public:
     return all_table_refs_.push_back(table_reference);
   }
   /**
-   * 使用 table id 从reference table中删除一个table id为`tid`的`TableItem`.
-   * @param tid 指定的table id
+   * Use table id to delete a `TableItem` with `tid` from the reference table.
+   * @param tid specified table id
    */
   int remove_reference_table(int64_t tid);
 

@@ -55,8 +55,7 @@ typedef common::ObFixedArray<common::ObFixedArray<int64_t, common::ObIAllocator>
 typedef common::ObFixedArray<ObTableLocation, common::ObIAllocator> TableLocationFixedArray;
 typedef common::ObFixedArray<ObPlanPwjConstraint, common::ObIAllocator> PlanPwjConstraintArray;
 typedef common::ObFixedArray<ObDupTabConstraint, common::ObIAllocator> DupTabReplicaArray;
-
-//2.2.5版本之后已废弃
+//deprecated after version 2.2.5
 struct FlashBackQueryItem {
   OB_UNIS_VERSION(1);
 public:
@@ -113,8 +112,7 @@ public:
   const common::ObIArray<ObVarInfo> &get_vars() const { return vars_; }
   /**
    *
-   * @param[in] table_row_count_list  计划涉及到的表的行数的数组，仅用来根据表行数的
-   *                                  变化来淘汰计划
+   * @param[in] table_row_count_list  An array of row counts for tables involved in the plan, used solely to eliminate plans based on changes in table row counts
    */
   void update_plan_stat(const ObAuditRecordData &record,
                         const bool is_first,
@@ -538,7 +536,7 @@ private:
   ObOpSpec *root_op_spec_;
   int64_t param_count_;
   uint64_t signature_;
-  // 运行时只读数据结构
+  // Runtime read-only data structure
   /**
    * This is stored in order to accelerate the plan cache searching.
    * During the plan cache searching, we need to calculate the table location based
@@ -563,16 +561,16 @@ private:
   share::ObTabletAutoincParam tablet_autoinc_param_;
   // for privilege check
   share::schema::ObStmtNeedPrivs stmt_need_privs_;
-  // 涉及到的系统变量和用户变量
+  // Involved system variables and user variables
   common::ObFixedArray<ObVarInfo, common::ObIAllocator> vars_;
   ObSqlExpressionFactory sql_expression_factory_;
   ObExprOperatorFactory expr_op_factory_;
-  stmt::StmtType literal_stmt_type_; // 含义参考ObBasicStmt中对应定义
-  // 指示分布式执行器以何种调度方式执行本plan
+  stmt::StmtType literal_stmt_type_; // meaning reference ObBasicStmt corresponding definition
+  // Indicate the distributed executor with which scheduling method to execute this plan
   ObPhyPlanType plan_type_;
-  //给事物使用, 指示本plan所涉及的数据的分布情况
+  // For transactions, indicating the distribution of data involved in this plan
   ObPhyPlanType location_type_;
-  // 表示计划是否一定需要local的方式执行，用于处理：multi part insert（remote）+ select （local）的情况
+  // Indicates whether the plan must be executed locally, used for handling: multi part insert (remote) + select (local) cases
   bool require_local_execution_; // not need serialize
   bool use_px_;
   int64_t px_dop_;
@@ -590,39 +588,38 @@ private:
   //such as @a:=123
   //we may need to serialize the map to remote server
   bool is_contains_assignment_;
-  bool affected_last_insert_id_; //不需要序列化远端，只在本地生成执行计划和open resultset的时候需要
-  bool is_affect_found_row_; //not need serialize，标记这个计划是否会影响 found_rows() 函数返回值
-                             // found_rows() 细节见 https://mariadb.com/kb/en/found_rows/
+  bool affected_last_insert_id_; // No need to serialize remotely, only needed when generating execution plan and opening result set locally
+  bool is_affect_found_row_; //not need serialize，mark whether this plan affects the return value of the found_rows() function
+                             // found_rows() details see https://mariadb.com/kb/en/found_rows/
   bool has_top_limit_; //not need serialize
   bool is_wise_join_; // not need serialize
-  bool contain_table_scan_; //是否包含主键扫描
-  bool has_nested_sql_; // 是否可能执行嵌套语句
-  uint64_t  session_id_; //当计划包含临时表时记录table_schema->session_id, 用于判断计划能否重用
+  bool contain_table_scan_; // whether it contains primary key scan
+  bool has_nested_sql_; // whether nested statements may be executed
+  uint64_t  session_id_; // When the plan includes temporary tables, record table_schema->session_id, used to determine if the plan can be reused
   common::ObFixedArray<uint64_t, common::ObIAllocator> immediate_refresh_external_table_ids_;
 
-  int64_t concurrent_num_;           //plan当前的并发执行个数
-  int64_t max_concurrent_num_;       //plan最大并发可执行个数, -1表示没有限制
+  int64_t concurrent_num_;           // plan current number of concurrent executions
+  int64_t max_concurrent_num_;       // plan maximum number of concurrent executions, -1 indicates no limit
   //for plan cache, not need serialize
-  TableLocationFixedArray table_locations_; //普通表的table location，参与plan cache计划选择
-  TableLocationFixedArray das_table_locations_; //DAS表的table location，用于计算DAS的分区信息
+  TableLocationFixedArray table_locations_; // ordinary table's table location, participate in plan cache plan selection
+  TableLocationFixedArray das_table_locations_; // DAS table's table location, used for calculating DAS partition information
 
   ObString dummy_string_;  // for compatible with 3.x JIT func_ member
   PhyRowParamMap row_param_map_;
   bool is_update_uniq_index_;
-  //判断该计划涉及的base table是否含有global index
+  // Determine whether the base tables involved in this plan contain a global index
   bool contain_index_location_;
-
-  // 用于分布式计划比对
-  // 基表location约束，包括TABLE_SCAN算子上的基表和INSERT算子上的基表
+  // Used for distributed plan comparison
+  // Base table location constraint, including base tables on TABLE_SCAN operator and base tables on INSERT operator
   ObPlanLocationConstraint base_constraints_;
-  // 严格partition wise join约束，要求同一个分组内的基表分区逻辑上和物理上都相等。
-  // 每个分组是一个array，保存了对应基表在base_table_constraints_中的偏移
-  // 如果t1, t2需要满足严格约束，则对于t1的每一个分区（分区裁剪后），都要求有一个分区定义相同的t2分区（分区裁剪后）
-  // 与其在相同的物理机器上
+  // Strict partition-wise join constraint, requires that the base table partitions within the same group are logically and physically equal.
+  // Each group is an array, saving the offset of the corresponding base table in base_table_constraints_
+  // If t1, t2 need to satisfy strict constraints, then for each partition of t1 (after partition pruning), there must be a corresponding partition of t2 with the same definition (after partition pruning)
+  // Instead of on the same physical machine
   PlanPwjConstraintArray strict_constrinats_;
-  // 非严格partition wise join约束，要求用一个分组内的基表分区物理上相等，目前仅UNION ALL会用到非严格约束
-  // 每个分组是一个array，保存了对应基表在base_table_constraints_中的偏移
-  // 如果t1, t2需要满足非严格约束，则对于分区裁剪后t1的每一个分区，都要求有一个t2的分区与其在相同的物理机器上
+  // Non-strict partition wise join constraint, requires that the base table partitions within a group are physically equal, currently only UNION ALL uses non-strict constraints
+  // Each group is an array, saving the offset of the corresponding base table in base_table_constraints_
+  // If t1, t2 need to satisfy non-strict constraints, then for each partition of t1 after partition pruning, there must be a partition of t2 on the same physical machine
   PlanPwjConstraintArray non_strict_constrinats_;
   // constraint for duplicate table to choose replica
   // dist plan will use this as (dup_tab_pos, advisor_tab_pos) pos is position in base constraint
@@ -639,22 +636,21 @@ public:
   ExprFixedArray var_init_exprs_;
   sql::ObExecutedSqlStatRecord sql_stat_record_value_;
 private:
-  bool is_returning_; //是否设置了returning
-
-  // 标记计划是否为晚期物化计划
+  bool is_returning_; // whether returning is set
+  // Mark whether the plan is a late materialization plan
   bool is_late_materialized_;
   // **** for spm ****
-  // 判断该计划是否依赖base table
+  // Determine whether this plan depends on base table
   bool is_dep_base_table_;
-  //判断该plan对应sql是否为insert into ... select ...
+  //judgethisplancorrespondingsqlwhether it isinsert into ... select ...
   bool is_insert_select_;
   // insert into values(x),(x)...(x)
   bool is_plain_insert_;
   // **** for spm end ***
-  //已经废弃，兼容保留
+  // Deprecated, compatibility retained
   common::ObFixedArray<FlashBackQueryItem, common::ObIAllocator> flashback_query_items_;
-  // column field数组中是否有参数化的column
-  // 如果有参数化的column，每次都ob_result_set必须深拷column_fields_，并用模板构造column
+  // column field array has parameterized column
+  // If there are parameterized columns, ob_result_set must deep copy column_fields_ each time, and construct the column using a template
   bool contain_paramed_column_field_;
   int64_t first_array_index_;
   bool need_consistent_snapshot_;

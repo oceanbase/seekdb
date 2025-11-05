@@ -36,8 +36,7 @@ enum ObBcastOptimization {
   BC_TO_WORKER,
   BC_TO_SERVER,
 };
-
-// 监听各类事件，如 root dfo 调度事件，etc
+// Listen to various events, such as root dfo scheduling events, etc
 class ObIPxCoordEventListener
 {
 public:
@@ -106,8 +105,7 @@ public:
   static uint64_t get_exec_id(ObExecContext *exec_ctx);
   static uint64_t get_session_id(ObExecContext *exec_ctx);
 };
-
-// 考虑兼容，目前设置为不是互斥
+// Consider compatibility, currently set to not be mutually exclusive
 class ObPxEstimateSizeUtil
 {
 public:
@@ -294,7 +292,7 @@ private:
    * the access sequence of the GI of the dfo where it is located:
    * 1. DESC
    * 2. ASC
-   * 目前phy_op的类型只可能是TSC或者INSERT
+   * The current phy_op type can only be TSC or INSERT
    */
   static int get_access_partition_order(
     ObDfo &dfo,
@@ -575,7 +573,7 @@ public:
           SQL_LOG(WARN, "ser frame info size overflow", K(ret), K(pos),
                    K(expr_datum_size), K(buf_len));
         } else if (0 < expr_datum_size) {
-          // TODO: longzhong.wlz 这里可能有兼容性问题，暂时这样，后面看着改
+          // TODO: longzhong.wlz There may be compatibility issues here, temporarily done this way, will modify later
           MEMCPY(buf + pos, expr_datum->ptr_, expr_datum_size);
           pos += expr_datum_size;
           ser_mem_size += expr_datum_size;
@@ -768,9 +766,9 @@ public:
           SQL_LOG(WARN, "ser frame info size overflow", K(ret), K(pos),
                    K(expr_datum_size), K(data_len));
         } else if (0 == expr_datum_size) {
-          // 对于该序列化数据，datum的len_为0， 前面已将ObDatum反序列化, 不需要再做其他处理
+          // For this serialized data, the len_ of datum is 0, ObDatum has already been deserialized before, no further processing is needed
         } else {
-          // TODO: longzhong.wlz 之前说这里有兼容性问题，后续一并处理，暂时先这样
+          // TODO: longzhong.wlz previously mentioned there was a compatibility issue here, to be addressed later, for now it's like this
           MEMCPY(expr_datum_buf, buf + pos, expr_datum_size);
           expr_datum->ptr_ = expr_datum_buf;
           pos += expr_datum_size;
@@ -885,7 +883,7 @@ public:
         expr_datum_size = no_ser_data ? 0 : (expr_datum->null_ ? 0 : expr_datum->len_);
         OB_UNIS_ADD_LEN(expr_datum_size);
         if (0 < expr_datum_size) {
-          // 这里可能有兼容性问题，暂时这样，后面看着改
+          // Here may be compatibility issues, temporarily like this, modify later
           len += expr_datum_size;
           ser_mem_size += expr_datum_size;
         }

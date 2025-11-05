@@ -156,9 +156,9 @@ int ObTenantVecAsyncTaskScheduler::init(const uint64_t tenant_id, ObMySQLProxy &
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
     LOG_WARN("tenant ttl mgr init twice", KR(ret));
-  } else if (OB_FAIL(TG_CREATE_TENANT(lib::TGDefIDs::TenantTTLManager, tg_id_))) {    // 生成新的timer
+  } else if (OB_FAIL(TG_CREATE_TENANT(lib::TGDefIDs::TenantTTLManager, tg_id_))) {    // generate new timer
     LOG_WARN("fail to init timer", KR(ret));
-  } else if (OB_FAIL(vec_history_task_.init(tenant_id, sql_proxy))) { // 历史表清理
+  } else if (OB_FAIL(vec_history_task_.init(tenant_id, sql_proxy))) { // History table cleanup
     LOG_WARN("fail to init clear history task", K(tenant_id));
   } else {
     is_inited_ = true;

@@ -169,7 +169,7 @@ int ObShowGrants::inner_get_next_row(common::ObNewRow *&row)
       if (OB_FAIL(calc_show_user_id(show_user_id, role_ids))) {
         SERVER_LOG(WARN, "fail to calc show user id", K(ret));
       } else if (OB_UNLIKELY(OB_INVALID_ID == show_user_id)) {
-        ret = OB_ITER_END;//FIXME 暂不支持，返回空集
+        ret = OB_ITER_END;//FIXME Not supported yet, return empty set
       } else if (OB_FAIL(has_show_grants_priv(show_user_id))) {
         SERVER_LOG(WARN, "There is no show grants priv", K(ret));
       } else if (OB_ISNULL(cells = cur_row_.cells_)) {

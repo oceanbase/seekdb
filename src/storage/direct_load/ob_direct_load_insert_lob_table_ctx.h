@@ -50,7 +50,7 @@ public:
                           const int64_t slice_idx,
                           ObDirectLoadMgrAgent &ddl_agent) override;
   int get_ddl_agent(ObDirectLoadMgrAgent &ddl_agent) override;
-  // 特殊写lob接口, datum_row是主表数据
+  // Special write lob interface, datum_row is main table data
   int fill_lob_sstable_slice(ObIAllocator &allocator, const int64_t &lob_slice_id,
                              share::ObTabletCacheInterval &pk_interval,
                              blocksstable::ObDatumRow &datum_row,

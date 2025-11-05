@@ -61,10 +61,10 @@ private:
                                        obrpc::ObEstPartResElement &res);
 
   // do compute query range row counts
-  // 通过存储层接口获取逻辑行和物理行信息
-  //@param[in] batch : query range集合
-  //@param[in] table_scan_param: table scan 参数
-  //@param[in] range_columns_count: 索引列数
+  // Through storage layer interface to get logical row and physical row information
+  //@param[in] batch : query range collection
+  //@param[in] table_scan_param: table scan parameter
+  //@param[in] range_columns_count: index column count
   //@param[in] part_service: partition service
   static int storage_estimate_partition_batch_rowcount(
       const uint64_t tenant_id,

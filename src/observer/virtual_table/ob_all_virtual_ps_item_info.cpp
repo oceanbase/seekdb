@@ -258,7 +258,7 @@ int ObAllVirtualPsItemInfo::get_next_row_from_specified_tenant(uint64_t tenant_i
         if (OB_NOT_NULL(stmt_info)) {
           if (OB_SUCCESS != (tmp_ret = ps_cache_->deref_stmt_info(stmt_id))) {
             if (OB_SUCCESS == ret) {
-              // 如果ret不是OB_SUCCESS，则忽略了tmp_ret
+              // If ret is not OB_SUCCESS, then tmp_ret is ignored
               ret = tmp_ret;
             }
             SERVER_LOG(WARN, "deref_stmt_info failed", K(tmp_ret), K(stmt_id));

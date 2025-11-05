@@ -37,7 +37,7 @@ int ObExprPartIdPseudoColumn::calc_result_type0(ObExprResType &type,
 {
   UNUSED(type_ctx);
   int ret = OB_SUCCESS;
-  type.set_int(); // 默认partition id的数据类型是int64_t
+  type.set_int(); // Default partition id data type is int64_t
   return ret;
 }
 
@@ -54,8 +54,8 @@ int ObExprPartIdPseudoColumn::cg_expr(ObExprCGCtx &op_cg_ctx,
 
 int ObExprPartIdPseudoColumn::eval_part_id(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
 {
-  // partition id 伪列表达式比较特殊，其对应的值是提前被设置到expr对应的datum中
-  // 每次都是直接通过local_expr_dutam获得，直接访问
+  // partition id pseudo list expression comparison is special, its corresponding value is set to the datum of expr in advance
+  // Each time it is directly obtained through local_expr_dutam, direct access
   UNUSED(expr);
   UNUSED(ctx);
   UNUSED(expr_datum);

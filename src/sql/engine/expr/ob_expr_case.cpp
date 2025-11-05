@@ -35,7 +35,7 @@ ObExprCase::~ObExprCase()
 }
 
 /*
- * NOTE：calc_result_typeN中param_num只涵盖了then/else表达式，未涵盖when表达式
+ * NOTE: calc_result_typeNinparam_num only covers the then/else expressions, not the when expression
  */
 int ObExprCase::calc_result_typeN(ObExprResType &type,
                                   ObExprResType *types_stack,
@@ -123,7 +123,7 @@ int ObExprCase::cg_expr(ObExprCGCtx &op_cg_ctx,
   UNUSED(op_cg_ctx);
 
   const ObCaseOpRawExpr &case_expr = dynamic_cast<const ObCaseOpRawExpr&>(raw_expr);
-  // 新引擎下case表达式when expr一定要返回int/null，即when expr一定是布尔语义的表达式
+  // New engine case expression when expr must return int/null, i.e., when expr is always a boolean semantic expression
   for (int64_t i = 0; OB_SUCC(ret) && i < case_expr.get_when_expr_size(); ++i) {
     const ObRawExpr *when_expr = case_expr.get_when_param_expr(i);
     const ObObjType &when_expr_res_type = when_expr->get_result_type().get_type();
@@ -202,8 +202,7 @@ int ObExprCase::calc_case_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_
   }
   return ret;
 }
-
-// Oracle模式下，在deduce type阶段需要将when/then expr类型要一致
+// Oracle mode, during the deduce type stage, the when/then expr types need to be consistent
 
 int ObExprCase::eval_case_batch(const ObExpr &expr,
                                 ObEvalCtx &ctx,

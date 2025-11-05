@@ -159,10 +159,10 @@ public:
       if (result_type != common::ObMaxType) {
         ret = common::OB_INIT_TWICE;
       } else if (obj_type_or_choice >= 0 && obj_type_or_choice < TYPE_COUNT) {
-        //是一个明确指定的
+        // is a clearly specified
         result_type = static_cast<common::ObObjType>(obj_type_or_choice);
       } else if (ObArithResultTypeChoice::is_valid_choice(obj_type_or_choice)) {
-        //是一个特殊选项
+        // is a special option
         switch (obj_type_or_choice) {
         case ObArithResultTypeChoice::FIRST:
           result_type = type1;
@@ -330,8 +330,8 @@ public:
 private:
 
   ObArithRuleMap<TYPE_COUNT, TYPE_COUNT> arith_rule_maps_[OP_CNT];
-  TypeBitset types_in_tc_set_[TC_COUNT]; //把typeclass包含的objtype转换成bitset表示
-  TypeBitset types_set_[TYPE_COUNT]; //把objtype转换成bitset表示
+  TypeBitset types_in_tc_set_[TC_COUNT]; // Convert the objtype included in typeclass to bitset representation
+  TypeBitset types_set_[TYPE_COUNT]; // Convert objtype to bitset representation
   TypeBitset func1_set_;
   TypeBitset func2_set_;
 };

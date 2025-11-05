@@ -343,11 +343,11 @@ int ObPlanCacheValue::init(ObPCVSet *pcv_set, const ObILibCacheObject *cache_obj
       // set sessid_ if necessary
       if (OB_SUCC(ret)) {
         if (is_contain_tmp_tbl()) {
-          //临时表的行为取决于用户创建的session，而对于远程执行而言，远程的session id是一个临时的session_id
-          //因此这里统一应该使用master session id，来保证匹配计划一直使用的是用户session
+          // Temporary table behavior depends on the session created by the user, and for remote execution, the remote session id is a temporary session_id
+          // Therefore here we should uniformly use master session id, to ensure that the matching plan always uses the user session
           sessid_ = pc_ctx.sql_ctx_.session_info_->get_sid();
           sess_create_time_ = pc_ctx.sql_ctx_.session_info_->get_sess_create_time();
-          // 获取临时表的表名
+          // Get the table name of the temporary table
           pc_ctx.tmp_table_names_.reset();
           if (OB_FAIL(get_tmp_depend_tbl_names(pc_ctx.tmp_table_names_))) {
             LOG_WARN("failed to get tmp depend tbl ids", K(ret));
@@ -400,7 +400,7 @@ int ObPlanCacheValue::match_all_params_info(ObPlanSet *batch_plan_set,
         // not match this plan, try match next plan
       }
     } else {
-      // pc_ctx.fp_result_.cache_params_  在batch场景下，cache_params_不应该为null
+      // pc_ctx.fp_result_.cache_params_  In batch scenarios, cache_params_ should not be null
       // When the first set of parameters cannot match the plan_set parameter requirements,
       // -5787 cannot be returned and the current batch optimization cannot be rolled back.
       for (int64_t i = 0; OB_SUCC(ret) && is_same && i < query_cnt; ++i) {
@@ -452,9 +452,9 @@ int ObPlanCacheValue::choose_plan(ObPlanCacheCtx &pc_ctx,
   uint64_t tenant_id = OB_INVALID_ID;
   ObPlanCacheObject *plan = NULL;
   int64_t outline_param_idx = 0;
-  //检查在pcv中缓存的该sql涉及的view 及 table的version，
-  //如果不为最新的,在plan cache层会删除该value，并重新add plan
-  //TODO shengle 此处拷贝需要想办法处理掉
+  // Check the version of the view and table involved in this SQL cached in pcv,
+  // If not the latest, in the plan cache layer this value will be deleted and the plan will be re-added
+  //TODO shengle This copy needs to be handled somehow
   bool need_check_schema = (schema_array.count() != 0);
   int64_t new_switchover_epoch = MTL_GET_SWITCHOVER_EPOCH();
   if (schema_array.count() == 0 && stored_schema_objs_.count() == 0) {
@@ -546,10 +546,10 @@ int ObPlanCacheValue::choose_plan(ObPlanCacheCtx &pc_ctx,
                                                outline_param_idx))) {//need use param store
       LOG_WARN("fail to judge concurrent limit sql", K(ret));
     } else {
-      // 这里记录org_param_count, 用于在匹配计划结束后, 如果没有匹配成功,
-      // 则将param store中参数恢复到当前状态(plan_set中match会进行可计算表
-      // 达式计算并将结果加入到param store) 避免本次失败后, 上层进行重试时,
-      // param store参数变多导致再匹配时, 因参数个数不符合预期报错
+      // Here record org_param_count, used at the end of the matching plan, if no match is successful,
+      // Then restore the parameters in param store to the current state (plan_set will perform the calculation table match)
+      // Expression calculation and add the result to param store) Avoid this failure from causing a retry by the upper layer,
+      // param store parameters increase causing error when rematching due to unexpected number of parameters
       int64_t org_param_count = 0;
       if (OB_NOT_NULL(params)) {
         org_param_count = params->count();
@@ -630,7 +630,7 @@ int ObPlanCacheValue::choose_plan(ObPlanCacheCtx &pc_ctx,
                 }
               }
             }
-            break; //这个地方建议保留，如果去掉，需要另外加标记在for()中判断，并且不使用上面的for循环的宏；
+            break; // this place is recommended to keep, if removed, additional markers need to be added in for() to judge, and the macro above the for loop should not be used;
           }
         }
         if (NULL == plan
@@ -670,8 +670,7 @@ int ObPlanCacheValue::choose_plan(ObPlanCacheCtx &pc_ctx,
   }
   return ret;
 }
-
-//将fast parser参数化的参数转化为ObObjParam, 用于get plan 时
+// Convert parameterized parameters of fast parser to ObObjParam, used for get plan
 int ObPlanCacheValue::resolver_params(ObPlanCacheCtx &pc_ctx,
                                       const stmt::StmtType stmt_type,
                                       const ObIArray<ObCharsetType> &param_charset_type,
@@ -775,7 +774,7 @@ int ObPlanCacheValue::resolve_multi_stmt_params(ObPlanCacheCtx &pc_ctx)
     int64_t query_num = pc_ctx.multi_stmt_fp_results_.count();
     int64_t param_num = pc_ctx.fp_result_.raw_params_.count() - not_param_info_.count();
     // check whether all the values are the same
-    // 1、创建param_store指针
+    // 1、Create param_store pointer
     if (!not_param_info_.empty() &&
         OB_FAIL(check_multi_stmt_not_param_value(pc_ctx.multi_stmt_fp_results_,
                                                  not_param_info_,
@@ -1195,7 +1194,7 @@ int ObPlanCacheValue::match_and_generate_ext_params(ObPlanSet *batch_plan_set,
         // do nothing
       }
     }
-    // 所有的参数都match 成功了，然后折叠参数
+    // All the parameters matched successfully, then fold the parameters
     if (OB_SUCC(ret)) {
       plan_ctx->reset_datum_param_store();
       plan_ctx->set_original_param_cnt(origin_params_cnt);
@@ -1221,8 +1220,8 @@ int ObPlanCacheValue::add_plan(ObPlanCacheObject &plan,
   int64_t outline_param_idx = OB_INVALID_INDEX;
   int add_plan_ret = OB_SUCCESS;
   bool is_multi_stmt_batch = pc_ctx.sql_ctx_.is_batch_params_execute();
-  //检查在pcv中缓存的该sql涉及的view 及 table的version，
-  //如果不为最新的,在plan cache层会删除该value，并重新add plan
+  // Check the version of the view and table involved in this SQL cached in pcv,
+  // If not the latest, in the plan cache layer this value will be deleted and the plan will be re-added
   if (OB_FAIL(check_value_version_for_add(plan,
                                           schema_array,
                                           is_old_version))) {
@@ -1269,7 +1268,7 @@ int ObPlanCacheValue::add_plan(ObPlanCacheObject &plan,
                                                   is_same))) {
         SQL_PC_LOG(WARN, "fail to match params info", K(ret));
       } else if (false == is_same) { //do nothing
-      } else {//param info已经匹配
+      } else {//param info already matched
         SQL_PC_LOG(DEBUG, "add plan to plan set");
         need_new_planset = false;
         if (is_multi_stmt_batch &&
@@ -1322,8 +1321,7 @@ int ObPlanCacheValue::add_plan(ObPlanCacheObject &plan,
   }
   return ret;
 }
-
-//删除对应的该plan cache value中某一个plan
+// Delete the corresponding plan from the plan cache value
 /*void ObPlanCacheValue::remove_plan(ObExecContext &exec_context, ObPhysicalPlan &plan)*/
 //{
   //int ret = OB_SUCCESS;
@@ -1431,10 +1429,9 @@ void ObPlanCacheValue::reset()
   }
   stored_schema_objs_.reset();
   enable_rich_vector_format_ = false;
-  pcv_set_ = NULL; //放最后，前面可能存在需要pcv_set
+  pcv_set_ = NULL; // put last, there may be need for pcv_set before this
 }
-
-//获取该plan cache value下所有plan占用内存
+// Get all plan memory usage under this plan cache value
 
 int ObPlanCacheValue::check_value_version_for_add(const ObPlanCacheObject &cache_obj,
                                                   const ObIArray<PCVSchemaObj> &schema_array,
@@ -1481,16 +1478,15 @@ int ObPlanCacheValue::check_value_version_for_get(share::schema::ObSchemaGetterG
   }
   return ret;
 }
-
-//检查plan是否过期逻辑：
-//1.如果:schema变化：
-//    a.判断outline version是否过期
-//    b.判断table version是否过期
-//    c.判断view version是否过期
-//  否则:直接考虑第2步
-//2.如果:plan是由outline生成的plan, 则不需要关心merge_version是否变化
-//  否则:判断merge_version是否过期。
-//3. 表的直方图统计信息是否已经过期
+// Check if the plan is expired logic:
+//1.If :schema changes:
+//    a. Determine if the outline version is expired
+//    b. judge if table version is expired
+//    c. Determine if view version is expired
+//  Otherwise: directly consider step 2
+//2.If :plan is generated by outline, then there is no need to concern whether merge_version changes
+//  Otherwise: judge if merge_version is expired.
+//3. Is the histogram statistics information of the table already expired
 int ObPlanCacheValue::check_value_version(bool need_check_schema,
                                           const ObSchemaObjVersion &outline_version,
                                           const ObIArray<PCVSchemaObj> &schema_array,
@@ -1510,8 +1506,7 @@ int ObPlanCacheValue::check_value_version(bool need_check_schema,
   }
   return ret;
 }
-
-//检查table schema version是否过期, get plan时使用
+// Check if table schema version is expired, used when getting plan
 int ObPlanCacheValue::check_dep_schema_version(const ObIArray<PCVSchemaObj> &schema_array,
                                                bool &is_old_version)
 {
@@ -1544,9 +1539,7 @@ int ObPlanCacheValue::check_dep_schema_version(const ObIArray<PCVSchemaObj> &sch
 
   return ret;
 }
-
-
-//检查outline version是否过期
+// Check if outline version is expired
 int ObPlanCacheValue::get_outline_version(ObSchemaGetterGuard &schema_guard,
                                           const uint64_t tenant_id,
                                           ObSchemaObjVersion &local_outline_version)
@@ -1614,9 +1607,8 @@ int ObPlanCacheValue::get_outline_version(ObSchemaGetterGuard &schema_guard,
   }
   return ret;
 }
-
-// 1. 通过匹配不能参数化的常量
-// 2. 检查是否包含临时表以及同名表
+// 1. Through matching non-parameterizable constants
+// 2. Check if it contains temporary tables and tables with the same name
 int ObPlanCacheValue::match(ObPlanCacheCtx &pc_ctx,
                             const ObIArray<PCVSchemaObj> &schema_array,
                             bool &is_same)
@@ -1711,9 +1703,9 @@ bool ObPlanCacheValue::is_contain_synonym() const
 }
 
 /*!
- * 系统包/类型的更新仅会推高系统租户的schema_version, 在普通租户下的对象如果依赖了系统包/类型,
- * 在更新的场景下因为未推高普通租户的schema_version, 可能会漏check系统包/类型是否过期,
- * 导致更新后依赖系统包/类型的routine对象不可用,因此对于包含系统包/类型的对象总是做schema check
+ * The update of system packages/types will only increase the schema_version of the system tenant. Objects under normal tenants that depend on system packages/types
+ * may miss the check for whether the system packages/types are expired during the update because the schema_version of the normal tenant is not increased,
+ * leading to the routine objects dependent on system packages/types being unavailable after the update. Therefore, schema checks are always performed on objects containing system packages/types.
  */
 bool ObPlanCacheValue::is_contain_sys_pl_object() const
 {
@@ -1815,7 +1807,7 @@ int ObPlanCacheValue::set_stored_schema_objs(const DependenyTableStore &dep_tabl
       table_schema = nullptr;
       int hash_err = OB_SUCCESS;
       if (table_version.get_schema_type() != TABLE_SCHEMA) {
-        // 如果不是table schema，直接存schema id和version即可，synonym 多存个 db_id
+        // If not table schema, directly store schema id and version only, synonym store an additional db_id
         if (OB_FAIL(ret)) {
         } else if (nullptr == (obj_buf = pc_alloc_->alloc(sizeof(PCVSchemaObj)))) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -1839,7 +1831,7 @@ int ObPlanCacheValue::set_stored_schema_objs(const DependenyTableStore &dep_tabl
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("get an unexpected null schema", K(ret), K(table_schema));
       } else if (table_schema->is_index_table()) {
-        // plan cache不需要考虑索引表，直接略过比较
+        // plan cache does not need to consider the index table, directly skip the comparison
         // do nothing
       } else if (nullptr == (obj_buf = pc_alloc_->alloc(sizeof(PCVSchemaObj)))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -1853,12 +1845,11 @@ int ObPlanCacheValue::set_stored_schema_objs(const DependenyTableStore &dep_tabl
       } else if (OB_FAIL(stored_schema_objs_.push_back(pcv_schema_obj))) {
         LOG_WARN("failed to push back array", K(ret));
       } else if(!contain_sys_name_table_) {
-        // oracle 模式下普通表可以和sys下的表同名，计划匹配时需要区分以匹配不同的计划
-        // sys下的表包含系统表和视图，所以调用is_sys_table_name来检查表是否在sys下
-        //
-        // 此外，sql如果包含内部表，内部表的schema version变化不会体现在普通租户的tenant schema version上
-        // 为了能够及时更新计划，需要查对应的内部表的schema 版本号，oracle租户的内部表在sys下，mysql租户
-        // 在oceanbase下。
+        // oracle mode allows regular tables to have the same name as tables under sys, plan matching needs to distinguish to match different plans
+        // The tables under sys include system tables and views, so call is_sys_table_name to check if the table is under sys
+        // In addition, if the sql contains internal tables, changes in the schema version of internal tables will not be reflected in the tenant schema version of normal tenants
+        // In order to update the plan in a timely manner, it is necessary to check the schema version number of the corresponding internal table. The internal tables of Oracle tenants are under sys, mysql tenants
+        // Under oceanbase.
         if (OB_FAIL(share::schema::ObSysTableChecker::is_sys_table_name(MTL_ID(),
                                                                                OB_SYS_DATABASE_ID,
                                                                                table_schema->get_table_name(),
@@ -1886,22 +1877,22 @@ int ObPlanCacheValue::set_stored_schema_objs(const DependenyTableStore &dep_tabl
 
 /* used to get plan
 
-   对于查询的是Table Schema的情况，需要传入database id，不同的模式有不同的策略
-   MySQL模式：
-     get plan时直接从缓存PCVSchemaObj中取database id
+   For the case where the query is for Table Schema, the database id needs to be passed in, with different strategies for different modes
+   MySQL mode:
+     When getting the plan, directly retrieve the database id from the cache PCVSchemaObj
 
-   Oracle模式：
-     Oracle模式如果在SQL中没有指定schema，使用session上的db id，比如select xx from test;
-     否则，需要直接使用PCVSchemaObj的table id查schema，比如select xx from user.test;
+   Oracle mode:
+     In Oracle mode, if the schema is not specified in the SQL, use the db id from the session, e.g., select xx from test;
+     Otherwise, directly use the table id from PCVSchemaObj to query the schema, e.g., select xx from user.test;
 
-     这样做的原因是为了解决以下场景：user1和user2都有一张名为test的表，
-     用user1连接，执行select * from user2.test，
-     如果直接使用user1连接的session上的db id，由于用的table_name查schema，
-     那么会查到user1下的schema，并用于match逻辑，一定会匹配失败。这种场景下，指定了db吗，db id是固定的，直接用table_id
-     查schema即可以查到user2下的test表的schema
+     The reason for doing this is to solve the following scenario: user1 and user2 both have a table named test,
+     when connecting with user1 and executing select * from user2.test,
+     if the db id from the session connected with user1 is used directly, since the table_name is used to query the schema,
+     it will query the schema under user1 and use it for match logic, which will definitely fail to match. In this scenario, if the db id is specified, the db id is fixed, directly using the table_id
+     to query the schema can query the schema of the test table under user2
 
-   Oracle系统表和普通表解决方式：
-     用当前session上的database id查table_name，如果存在则用这个table schema作为匹配条件；否则再去SYS DB下查schema
+   Oracle system tables and regular tables solution:
+     Use the database id from the current session to query the table_name, if it exists then use this table schema as the matching condition; otherwise go to SYS DB to query the schema
  */
 int ObPlanCacheValue::get_all_dep_schema(ObPlanCacheCtx &pc_ctx,
                                          const uint64_t database_id,
@@ -1962,7 +1953,7 @@ int ObPlanCacheValue::get_all_dep_schema(ObPlanCacheCtx &pc_ctx,
                                                               pcv_schema->database_id_,
                                                               pcv_schema->table_name_,
                                                               false,
-                                                              table_schema))) { // mysql 模式下直接用pcv schema缓存的db id查
+                                                              table_schema))) { // mysql mode directly use pcv schema cached db id query
         LOG_WARN("failed to get table schema",
                  K(ret), K(pcv_schema->tenant_id_), K(pcv_schema->database_id_),
                  K(pcv_schema->table_name_));
@@ -1989,10 +1980,9 @@ int ObPlanCacheValue::get_all_dep_schema(ObPlanCacheCtx &pc_ctx,
   }
   return ret;
 }
-
-// 针对 
-// 物化视图改写会使得同一条 SQL 的不同计划依赖的表不同，导致 plan cache 进入不同的 pcv set
-// 在检查 pcv set 的时候跳过物化视图相关的表，使得改写与不改写的 SQL 进入同一个 pcv set
+// Targeting
+// Materialized view rewrite makes different plans for the same SQL depend on different tables, leading to plan cache entering different pcv set
+// In checking pcv set, skip tables related to materialized views, so that rewritten and non-rewritten SQL enter the same pcv set
 int ObPlanCacheValue::remove_mv_schema(const common::ObIArray<PCVSchemaObj> &schema_array,
                                        common::ObIArray<PCVSchemaObj*> &check_stored_schema)
 {
@@ -2014,7 +2004,7 @@ int ObPlanCacheValue::remove_mv_schema(const common::ObIArray<PCVSchemaObj> &sch
           ++j;
         }
       } else {
-        // do nothing, 仅存在于 pcv set 中的物化视图是改写出来的，抛弃
+        // do nothing, only materialized views existing in pcv set are rewritten, discard
       }
     } else if (OB_FAIL(check_stored_schema.push_back(stored_schema_objs_.at(i)))) {
       LOG_WARN("failed to push back schema", K(ret));
@@ -2024,9 +2014,8 @@ int ObPlanCacheValue::remove_mv_schema(const common::ObIArray<PCVSchemaObj> &sch
   }
   return ret;
 }
-
-// 对于计划所依赖的schema进行比较，注意这里不比较table schema的version信息
-// table schema的version信息用于淘汰pcv set，在check_value_version时进行比较
+// For comparing the schema that the plan depends on, note that the version information of the table schema is not compared here
+// table schema version information is used to phase out pcv set, during check_value_version comparison
 int ObPlanCacheValue::match_dep_schema(const ObPlanCacheCtx &pc_ctx,
                                        const ObIArray<PCVSchemaObj> &schema_array,
                                        bool &is_same)
@@ -2041,9 +2030,9 @@ int ObPlanCacheValue::match_dep_schema(const ObPlanCacheCtx &pc_ctx,
   } else if (OB_FAIL(remove_mv_schema(schema_array, check_stored_schema))) {
     LOG_WARN("failed to remove mv schema", K(ret));
   } else if (schema_array.count() != check_stored_schema.count()) {
-    // schema objs count不匹配，可能是以下情况:
-    // select * from all_sequences;  // 系统视图，系统视图的dependency_table有多个
-    // select * from all_sequences;  // 普通表
+    // schema objs count mismatch, may be the following cases:
+    // select * from all_sequences;  // system view, the dependency_table of the system view has multiple entries
+    // select * from all_sequences;  // ordinary table
     is_same = false;
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && is_same && i < schema_array.count(); i++) {
@@ -2053,16 +2042,15 @@ int ObPlanCacheValue::match_dep_schema(const ObPlanCacheCtx &pc_ctx,
                  K(ret), K(i), K(schema_array.at(i)), K(check_stored_schema.at(i)));
       } else if (TMP_TABLE == schema_array.at(i).table_type_
                  && schema_array.at(i).is_tmp_table_) { // check for mysql tmp table
-        // 如果包含临时表
-        // 临时表也是同名表的一种特殊情况，但是这里用sessid_来区分了该pcv是否包含临时计划，
-        // sessid_不为0，则是包含临时表的pocv，否则是普通表的pcv
-        // oracle 模式下，临时表其实是一张普通表，server内部通过改写添加sessid字段以区分不同session上的临时表
-        // sessid可能存在重用的情况，所以不同的临时表需要匹配sessid以及sess_create_time_字段
-        // mysql模式下，临时表只在对应的session创建，sessid不同即可区分，sess_create_time一定相同
-
-        //plan cache匹配临时表应该始终使用用户创建的session才能保证语义的正确性
-        //远端执行的时候会创建临时的session对象，其session_id也是临时的，
-        //所以这里必须使用get_sessid_for_table()规则去判断
+        // If it contains a temporary table
+        // Temporary table is also a special case of a table with the same name, but here sessid_ is used to distinguish whether this pcv contains a temporary plan,
+        // sessid_is not 0, then it is a pocv containing temporary tables, otherwise it is a pcv of an ordinary table
+        // oracle mode, temporary tables are actually regular tables, server internally rewrites them by adding a sessid field to distinguish temporary tables on different sessions
+        // sessid may be reused, so different temporary tables need to match the sessid and sess_create_time_ fields
+        // In mysql mode, temporary tables are only created in the corresponding session, different sessid can distinguish them, sess_create_time must be the same
+        // plan cache matching temporary tables should always use the user-created session to ensure the correctness of semantics
+        // When executed remotely, a temporary session object will be created, and its session_id is also temporary,
+        // So here the get_sessid_for_table() rule must be used to determine
         is_same = ((session_info->get_sessid_for_table() == sessid_) &&
                    (session_info->get_sess_create_time() == sess_create_time_));
       } else {
@@ -2154,7 +2142,7 @@ int ObPlanCacheValue::need_check_schema_version(ObPlanCacheCtx &pc_ctx,
                   || is_contain_tmp_tbl()
                   || is_contain_sys_pl_object()
                   || contain_sys_name_table_);
-    if (need_check && REACH_TIME_INTERVAL(10000000)) { //10s间隔打印
+    if (need_check && REACH_TIME_INTERVAL(10000000)) { // 10s interval print
       LOG_INFO("need check schema", K(new_schema_version), K(cached_tenant_schema_version),
                K(is_contain_synonym()), K(contain_sys_name_table_), K(is_contain_tmp_tbl()),
                K(is_contain_sys_pl_object()), K(need_check), K(constructed_sql_));

@@ -57,7 +57,7 @@ public:
 
   virtual bool is_pdml_operator() const override { return true; }
 public:
-  ObDMLOpRowDesc row_desc_;  // 记录partition id column所在row的第几个cell
+  ObDMLOpRowDesc row_desc_;  // record the position of partition id column in the row's cell
   ObUpdCtDef upd_ctdef_;
   DISALLOW_COPY_AND_ASSIGN(ObPxMultiPartUpdateSpec);
 };
@@ -100,7 +100,7 @@ private:
 private:
   ObPDMLOpDataDriver data_driver_;
   ObUpdRtDef upd_rtdef_;
-  // 用于对child output row进行calc，并返回DML操作需要的old_row与new_row
+  // Used for calc on child output row, and return old_row and new_row needed for DML operation
   DISALLOW_COPY_AND_ASSIGN(ObPxMultiPartUpdateOp);
 };
 }

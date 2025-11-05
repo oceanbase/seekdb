@@ -443,7 +443,7 @@ int ObDirectLoadLobBuilder::append_lob(const ObDirectLoadBatchRows &batch_rows,
       LOG_WARN("fail to check can skip", KR(ret));
     } else if (can_skip) {
     } else {
-      // 暂时不改ddl接口了, 这里先按行处理
+      // Do not change the ddl interface for now, here we process it line by line
       for (int64_t i = 0; OB_SUCC(ret) && i < size; ++i) {
         const int64_t row_idx = selector[i];
         if (OB_FAIL(fill_into_datum_row(batch_rows, row_idx))) {

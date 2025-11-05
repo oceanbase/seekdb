@@ -48,8 +48,8 @@ public:
   int32_t batch_size_;
   uint64_t max_error_row_count_;
   sql::ObLoadDupActionType dup_action_;
-  bool is_need_sort_;         // 表示主表是否要排序
-  bool is_task_need_sort_;    // 表示导入任务是否会走到排序流程
+  bool is_need_sort_;         // indicates whether the main table needs to be sorted
+  bool is_task_need_sort_;    // indicates whether the import task will go through the sorting process
 };
 
 struct ObTableLoadPartitionId
@@ -168,12 +168,12 @@ public:
 enum class ObTableLoadStatusType : int64_t
 {
   NONE = 0,
-  INITED, // 初始化
-  LOADING, // 只有LOADING状态能创建trans
-  FROZEN, // 冻结, 不再创建trans
-  MERGING, // 合并中
-  MERGED, // 合并完成
-  COMMIT, // 完成
+  INITED, // initialized
+  LOADING, // Only LOADING state can create trans
+  FROZEN, // frozen, no longer create trans
+  MERGING, // merging
+  MERGED, // merge completed
+  COMMIT, // complete
   ERROR,
   ABORT,
 };
@@ -394,8 +394,8 @@ enum class ObTableLoadClientStatus : int64_t
   COMMIT = 2,
   ERROR = 3,
   ABORT = 4,
-  INITIALIZING = 5, // 初始化中
-  WAITTING = 6, // 排队等待资源中
+  INITIALIZING = 5, // Initializing
+  WAITTING = 6, // waiting for resources
   MAX_STATUS
 };
 

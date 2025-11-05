@@ -189,7 +189,7 @@ private:
     TransCtxMap;
   typedef common::ObLinkHashMap<table::ObTableLoadSegmentID, SegmentCtx> SegmentCtxMap;
 private:
-  ObTableLoadObjectAllocator<ObTableLoadCoordinatorTrans> trans_allocator_; // 多线程安全
+  ObTableLoadObjectAllocator<ObTableLoadCoordinatorTrans> trans_allocator_; // thread-safe
   uint64_t last_trans_gid_ CACHE_ALIGNED;
   uint64_t next_session_id_ CACHE_ALIGNED;
   lib::ObMutex op_lock_;
