@@ -201,6 +201,7 @@ struct ObGlobalContext
   share::ObWorkloadRepositoryService *wr_service_;
   observer::ObStartupAccelTaskHandler* startup_accel_handler_;
   bool in_bootstrap_;
+  bool sys_package_ready_;
   plugin::ObPluginMgr *plugin_mgr_ = nullptr;
 
   static ObGlobalContext& get_instance();
