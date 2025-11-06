@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #ifndef OCEANBASE_STORAGE_BLOCKSSTABLE_OB_INDEX_BLOCK_ROW_STRUCT_H_
@@ -189,7 +193,6 @@ struct ObIndexBlockRowHeader
   void reset();
   OB_INLINE bool is_valid() const
   {
-    bool aggregation_valid = (is_pre_aggregated() && is_major_node()) || !is_pre_aggregated();
     bool version_valid = INDEX_BLOCK_HEADER_V1 == version_ ||
                          INDEX_BLOCK_HEADER_V2 == version_ ||
                          INDEX_BLOCK_HEADER_V3 == version_;
@@ -198,7 +201,7 @@ struct ObIndexBlockRowHeader
           || (get_macro_id() != DEFAULT_IDX_ROW_MACRO_ID && is_data_block() && is_data_index() /* clustered index */);
     bool logic_id_valid = !(has_logic_micro_id() && has_shared_data_macro_id());
     bool bloom_filter_valid = (!has_macro_block_bloom_filter() || is_macro_node());
-    return aggregation_valid && version_valid && macro_id_valid && logic_id_valid && bloom_filter_valid;
+    return version_valid && macro_id_valid && logic_id_valid && bloom_filter_valid;
   }
 
   OB_INLINE bool is_minor_meta_info_valid() const

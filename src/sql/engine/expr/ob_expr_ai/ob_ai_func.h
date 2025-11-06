@@ -1,0 +1,141 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OB_AI_FUNC_H_
+#define OB_AI_FUNC_H_
+
+#include "sql/engine/ob_exec_context.h"
+#include "sql/engine/expr/ob_expr_json_func_helper.h"
+#include "sql/engine/expr/ob_expr_json_utils.h"
+#include "sql/engine/expr/ob_expr_operator.h"
+#include "sql/engine/expr/ob_expr_result_type_util.h"
+#include "sql/engine/expr/ob_i_expr_extra_info.h"
+#include "share/ai_service/ob_ai_service_struct.h"
+
+namespace oceanbase
+{
+namespace common
+{
+using namespace oceanbase::sql;
+
+struct ObAIFuncExprInfo : public ObIExprExtraInfo
+{
+  OB_UNIS_VERSION(1);
+public:
+  ObAIFuncExprInfo(common::ObIAllocator &alloc, ObExprOperatorType type)
+      : ObIExprExtraInfo(alloc, type),
+        name_(), type_(), model_()
+  {
+  }
+  virtual ~ObAIFuncExprInfo() {}
+  void reset()
+  {
+    name_.reset();
+    type_ = share::EndpointType::MAX_TYPE;
+    model_.reset();
+  }
+  virtual int deep_copy(common::ObIAllocator &allocator,
+                        const ObExprOperatorType type,
+                        ObIExprExtraInfo *&copied_info) const override;
+  int init(ObIAllocator &allocator, const ObString &model_id, share::schema::ObSchemaGetterGuard &schema_guard);
+  common::ObString name_;
+  share::EndpointType::TYPE type_;
+  common::ObString model_;
+};
+
+class ObAIFuncBase
+{
+public:
+  ObAIFuncBase() {}
+  virtual ~ObAIFuncBase() {}
+  virtual int get_header(common::ObIAllocator &allocator,
+                         common::ObString &api_key,
+                         ObArray<ObString> &headers) = 0;
+  virtual int parse_output(common::ObIAllocator &allocator,
+                           common::ObJsonObject *http_response,
+                           common::ObIJsonBase *&result) = 0;
+private:
+  DISALLOW_COPY_AND_ASSIGN(ObAIFuncBase);
+};
+
+class ObAIFuncIComplete : public ObAIFuncBase
+{
+public:
+  ObAIFuncIComplete() {}
+  virtual ~ObAIFuncIComplete() {}
+  virtual int get_body(common::ObIAllocator &allocator,
+                       common::ObString &model,
+                       common::ObString &prompt,
+                       common::ObString &content,
+                       common::ObJsonObject *config,
+                       common::ObJsonObject *&body) = 0;
+  virtual int set_config_json_format(common::ObIAllocator &allocator, common::ObJsonObject *config) = 0;
+private:
+  DISALLOW_COPY_AND_ASSIGN(ObAIFuncIComplete);
+};
+
+class ObAIFuncIEmbed : public ObAIFuncBase
+{
+public:
+  ObAIFuncIEmbed() {}
+  virtual ~ObAIFuncIEmbed() {}
+  virtual int get_body(common::ObIAllocator &allocator,
+                       common::ObString &model,
+                       common::ObArray<ObString> &contents,
+                       common::ObJsonObject *config,
+                       common::ObJsonObject *&body) = 0;
+private:
+  DISALLOW_COPY_AND_ASSIGN(ObAIFuncIEmbed);
+};
+
+class ObAIFuncIRerank : public ObAIFuncBase
+{
+public:
+  ObAIFuncIRerank() {}
+  virtual ~ObAIFuncIRerank() {}
+  virtual int get_body(common::ObIAllocator &allocator,
+                       common::ObString &model,
+                       common::ObString &query,
+                       common::ObJsonArray *document_array,
+                       common::ObJsonObject *config,
+                       common::ObJsonObject *&body) = 0;
+private:
+  DISALLOW_COPY_AND_ASSIGN(ObAIFuncIRerank);
+};
+
+class ObAIFuncHandle
+{
+public:
+  ObAIFuncHandle() {}
+  virtual ~ObAIFuncHandle() {}
+  virtual int send_post(common::ObIAllocator &allocator,
+                        const ObString &url,
+                        ObArray<ObString> &headers,
+                        ObJsonObject *data,
+                        ObJsonObject *&response) = 0;
+  virtual int send_post_batch(common::ObIAllocator &allocator,
+                              const ObString &url,
+                              ObArray<ObString> &headers,
+                              ObArray<ObJsonObject *> &data_array,
+                              ObArray<ObJsonObject *> &responses) = 0;
+private:
+  DISALLOW_COPY_AND_ASSIGN(ObAIFuncHandle);
+};
+
+} // namespace common
+} // namespace oceanbase
+
+#endif /* OB_AI_FUNC_H_ */

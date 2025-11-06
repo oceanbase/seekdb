@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2024 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #define USING_LOG_PREFIX SHARE
@@ -616,9 +620,16 @@ int ObMultiKmeansExecutor::init_build_handle(ObKmeansBuildTaskHandler &handle)
 {
   int ret = OB_SUCCESS;
 
-  common::ObSpinLockGuard init_guard(handle.lock_);                     // lock thread pool init to avoid init twice
-  if (handle.get_tg_id() != ObKmeansBuildTaskHandler::INVALID_TG_ID) {  // no need to init twice, skip
-  } else if (OB_FAIL(handle.init())) {
+  common::ObSpinLockGuard init_guard(handle.lock_);                  // lock thread pool init to avoid init twice
+  ObPluginVectorIndexService *service = MTL(ObPluginVectorIndexService *);
+  if (OB_ISNULL(service)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected nullptr", K(ret));
+  } else if (handle.get_tg_id() != ObKmeansBuildTaskHandler::INVALID_TG_ID) {
+    // no need to init twice, skip
+  } else if (OB_FAIL(service->start_kmeans_tg())) {
+    LOG_WARN("fail to start kmeans thread pool", K(ret));
+  } else if (OB_FAIL(handle.init(service->get_kmeans_tg_id()))) {
     LOG_WARN("fail to init vector kmeans build task handle", K(ret));
   } else if (OB_FAIL(handle.start())) {
     LOG_WARN("fail to start vector kmeans build thread pool", K(ret));
@@ -1310,14 +1321,16 @@ bool ObIvfPqBuildHelper::can_use_parallel()
 }
 
 /**************************** ObKmeansBuildTaskHandler ******************************/
-int ObKmeansBuildTaskHandler::init()
+int ObKmeansBuildTaskHandler::init(int tg_id)
 {
   int ret = OB_SUCCESS;
   if (is_inited_) {
     LOG_INFO("init before", KR(ret));
-  } else if (OB_FAIL(TG_CREATE_TENANT(lib::TGDefIDs::VectorTaskPool, tg_id_))) {
-    LOG_WARN("TG_CREATE_TENANT failed", KR(ret));
+  } else if (INVALID_TG_ID == tg_id) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid tg_id", KR(ret), K(tg_id));
   } else {
+    tg_id_ = tg_id;
     is_inited_ = true;
     LOG_INFO("init vector kmeans build task handler", K(ret), K_(tg_id));
   }
@@ -1362,9 +1375,7 @@ void ObKmeansBuildTaskHandler::wait()
 void ObKmeansBuildTaskHandler::destroy()
 {
   LOG_INFO("vector kmeans build task handler start to destroy", K_(tg_id));
-  if (OB_LIKELY(INVALID_TG_ID != tg_id_)) {
-    TG_DESTROY(tg_id_);
-  }
+  // tg_id is managed by external service, no need to destroy here
   tg_id_ = INVALID_TG_ID;
   is_inited_ = false;
 }

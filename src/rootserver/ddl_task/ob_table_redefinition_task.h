@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #ifndef OCEANBASE_ROOTSERVER_OB_TABLE_REDEFINITION_TASK_H
@@ -66,6 +70,7 @@ public:
   virtual int collect_longops_stat(share::ObLongopsValue &value) override;
   virtual bool support_longops_monitoring() const override { return true; }
   static bool check_task_status_is_pending(const share::ObDDLTaskStatus task_status);
+  virtual bool is_ddl_task_can_be_cancelled() const;
   INHERIT_TO_STRING_KV("ObDDLRedefinitionTask", ObDDLRedefinitionTask,
       K(has_rebuild_index_), K(has_rebuild_constraint_), K(has_rebuild_foreign_key_),
       K(is_copy_indexes_), K(is_copy_triggers_), K(is_copy_constraints_),
@@ -122,6 +127,7 @@ private:
   int64_t target_cg_cnt_; 
   bool use_heap_table_ddl_plan_;
   bool is_ddl_retryable_;
+  bool has_rebuild_domain_indexes_;
 };
 
 }  // end namespace rootserver

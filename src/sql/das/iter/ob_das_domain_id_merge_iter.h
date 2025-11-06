@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2024 OceanBase
- * OceanBase is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #ifndef OB_DAS_DOMAIN_ID_MERGE_ITER_H_
@@ -19,6 +23,7 @@
 #include "share/ob_ls_id.h"
 #include "storage/access/ob_dml_param.h"
 #include "share/domain_id/ob_domain_id.h"
+#include "share/vector_index/ob_vector_index_util.h"
 
 namespace oceanbase
 {
@@ -84,7 +89,11 @@ public:
   virtual int do_table_scan() override;
   virtual int rescan() override;
   virtual void clear_evaluated_flag() override;
-
+  virtual int set_scan_rowkey(ObEvalCtx *eval_ctx,
+                              const ObIArray<ObExpr *> &rowkey_exprs,
+                              const ObDASScanCtDef *lookup_ctdef,
+                              ObIAllocator *alloc,
+                              int64_t group_id) override;
   ObDASScanIter *get_data_table_iter() { return data_table_iter_; }
   int set_domain_id_merge_related_ids(const ObDASRelatedTabletID &tablet_ids, const share::ObLSID &ls_id);
 
@@ -149,6 +158,16 @@ protected:
       common::ObIArray<common::ObRowkey> &rowkeys,
       common::ObIArray<share::ObDomainIdUtils::DomainIds> &domain_ids);
   int get_domain_id_count(const ObDASScanCtDef *ctdef, int64_t &domain_id_count);
+  int multi_get_row();
+  int multi_get_rows(int64_t &count, int64_t capacity);
+  int check_is_emb_vec_domain(int64_t iter_idx, bool &is_emb_vec);
+  int check_is_emb_vec_domain_by_table_id(int64_t table_id, bool &is_emb_vec);
+  int check_use_rowkey_vid_tbl_by_table_id(int64_t table_id, bool &use_rowkey_vid_tbl);
+  int reset_rowkey_domain_iter_scan_range(int64_t iter_idx, const common::ObRowkey &data_table_rowkey);
+  int fill_null_domain_id_in_data_table(const ObDASScanCtDef *ctdef,
+                                       ObDASScanRtDef *rtdef,
+                                       common::ObIAllocator &allocator);
+  int get_sync_interval_type(int64_t table_id, ObVectorIndexSyncIntervalType &sync_interval_type);
 private:
   bool need_filter_rowkey_domain_;
   bool is_no_sample_;
@@ -162,6 +181,7 @@ private:
   ObArray<ObTabletID> rowkey_domain_tablet_ids_;
   share::ObLSID rowkey_domain_ls_id_;
   lib::MemoryContext merge_memctx_;
+  bool is_need_multi_get_;
 };
 
 } // end namespace sql

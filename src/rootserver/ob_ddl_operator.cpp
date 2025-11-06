@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #define USING_LOG_PREFIX RS
@@ -1231,7 +1235,8 @@ int ObDDLOperator::create_table(ObTableSchema &table_schema,
     }
   }
 
-  if (OB_SUCC(ret) && table_schema.is_vec_delta_buffer_type() &&
+  if (OB_SUCC(ret) && (table_schema.is_vec_delta_buffer_type() ||
+      table_schema.is_hybrid_vec_index_log_type()) &&
       OB_FAIL(ObVectorIndexUtil::add_dbms_vector_jobs(trans, tenant_id,
                                                       table_schema.get_table_id(),
                                                       table_schema.get_exec_env()))) {
@@ -3323,6 +3328,47 @@ int ObDDLOperator::alter_table_rename_index(
           LOG_WARN("failed to rename built in index_snapshot_data_table index", K(ret), K(tenant_id),
               K(data_table_id), K(database_id), K(index_name), K(new_index_name));
         }
+      } else if (is_hybrid_vec_index_log_type(index_table_schema->get_index_type())) {
+        if (OB_FAIL(alter_table_rename_built_in_index_(tenant_id,
+                                                       data_table_id,
+                                                       database_id,
+                                                       INDEX_TYPE_VEC_INDEX_ID_LOCAL, /* index_type */
+                                                       index_name,
+                                                       new_index_name,
+                                                       new_index_status,
+                                                       is_in_deleting,
+                                                       schema_guard,
+                                                       trans,
+                                                       allocator))) {
+          LOG_WARN("failed to rename built in delta_buffer_table index", K(ret), K(tenant_id),
+              K(data_table_id), K(database_id), K(index_name), K(new_index_name));
+        } else if (OB_FAIL(alter_table_rename_built_in_index_(tenant_id,
+                                                       data_table_id,
+                                                       database_id,
+                                                       INDEX_TYPE_VEC_INDEX_SNAPSHOT_DATA_LOCAL, /* index_type */
+                                                       index_name,
+                                                       new_index_name,
+                                                       new_index_status,
+                                                       is_in_deleting,
+                                                       schema_guard,
+                                                       trans,
+                                                       allocator))) {
+          LOG_WARN("failed to rename built in index_snapshot_data_table index", K(ret), K(tenant_id),
+              K(data_table_id), K(database_id), K(index_name), K(new_index_name));
+        } else if (OB_FAIL(alter_table_rename_built_in_index_(tenant_id,
+                                                       data_table_id,
+                                                       database_id,
+                                                       INDEX_TYPE_HYBRID_INDEX_EMBEDDED_LOCAL, /* index_type */
+                                                       index_name,
+                                                       new_index_name,
+                                                       new_index_status,
+                                                       is_in_deleting,
+                                                       schema_guard,
+                                                       trans,
+                                                       allocator))) {
+          LOG_WARN("failed to rename built in hybrid_index_embedded_table index", K(ret), K(tenant_id),
+              K(data_table_id), K(database_id), K(index_name), K(new_index_name));
+        }
       } else if (is_vec_ivfflat_centroid_index(index_table_schema->get_index_type())) {
         if (OB_FAIL(alter_table_rename_built_in_index_(tenant_id,
                                                        data_table_id,
@@ -4718,7 +4764,7 @@ int ObDDLOperator::drop_table(
         LOG_WARN("failed to remove mlog purge job",
             KR(ret), K(tenant_id), K(table_id));
       }
-    } else if (table_schema.is_vec_delta_buffer_type() &&
+    } else if ((table_schema.is_vec_delta_buffer_type() || table_schema.is_hybrid_vec_index_log_type()) &&
                OB_FAIL(ObVectorIndexUtil::remove_dbms_vector_jobs(trans, tenant_id, table_schema.get_table_id()))) {
       LOG_WARN("failed to remove dbms vector jobs", K(ret), K(tenant_id), K(table_schema.get_table_id()));
     }
@@ -6423,6 +6469,33 @@ int ObDDLOperator::drop_db_table_privs(
       }
     }
   }
+
+  // delete object privileges of this user MYSQL
+  if (OB_SUCC(ret)) {
+    ObArray<const ObObjMysqlPriv *> obj_mysql_privs;
+    if (OB_FAIL(schema_guard.get_obj_mysql_priv_with_user_id(
+                                 tenant_id, user_id, obj_mysql_privs))) {
+      LOG_WARN("Get obj mysql privileges of user to be deleted error",
+                K(tenant_id), K(user_id), K(ret));
+    } else {
+      for (int64_t i = 0; OB_SUCC(ret) && i < obj_mysql_privs.count(); ++i) {
+        const ObObjMysqlPriv *obj_mysql_priv = obj_mysql_privs.at(i);
+        int64_t new_schema_version = OB_INVALID_VERSION;
+        ObPrivSet empty_priv = 0;
+        ObString dcl_stmt;
+        if (OB_ISNULL(obj_mysql_priv)) {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("obj mysql priv is NULL", K(ret), K(obj_mysql_priv));
+        } else if (OB_FAIL(schema_service_.gen_new_schema_version(tenant_id, new_schema_version))) {
+          LOG_WARN("fail to gen new schema_version", K(ret), K(tenant_id));
+        } else if (OB_FAIL(schema_sql_service->get_priv_sql_service().grant_object(
+            obj_mysql_priv->get_sort_key(), empty_priv, new_schema_version, &dcl_stmt, trans,
+            0, false, "", ""))) {
+          LOG_WARN("Delete obj mysql privilege failed", K(obj_mysql_priv), K(ret));
+        }
+      }
+    }
+  }
   return ret;
 }
 
@@ -7117,6 +7190,7 @@ int ObDDLOperator::grant_table(
       bool is_directory_or_catalog = false;
       if (obj_priv_array.count() > 0
           && ((static_cast<uint64_t>(ObObjectType::DIRECTORY) == obj_priv_key.obj_type_)
+              || (static_cast<uint64_t>(ObObjectType::LOCATION) == obj_priv_key.obj_type_)
               || (static_cast<uint64_t>(ObObjectType::CATALOG) == obj_priv_key.obj_type_))) {
         is_directory_or_catalog = true;
       }

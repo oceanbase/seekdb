@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #define USING_LOG_PREFIX STORAGE
@@ -254,7 +258,8 @@ int ObCGRowFilesGenerater::init(
     const int64_t max_batch_size,
     const int64_t cg_row_file_memory_limit,
     const ObIArray<ObColumnSchemaItem> &all_column_schema_its,
-    const bool is_generation_sync_output)
+    const bool is_generation_sync_output,
+    const bool is_sorted_table_load_with_column_store_replica)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(is_inited_)) {
@@ -277,6 +282,7 @@ int ObCGRowFilesGenerater::init(
     max_batch_size_ = max_batch_size;
     is_generation_sync_output_ = is_generation_sync_output;
     cg_row_file_memory_limit_ = cg_row_file_memory_limit;
+    is_sorted_table_load_with_column_store_replica_ = is_sorted_table_load_with_column_store_replica;
     const int64_t cg_count = storage_schema->get_column_group_count();
     if (OB_UNLIKELY(cg_count <= 0)) {
       ret = OB_ERR_UNEXPECTED;
@@ -407,7 +413,8 @@ int ObCGRowFilesGenerater::try_generate_output_chunk(
     for (int64_t cg_idx = 0; OB_SUCC(ret) && cg_idx < cg_row_file_arr_.count(); ++cg_idx) {
       ObCGRowFile *&cg_row_file = cg_row_file_arr_.at(cg_idx);
       if (nullptr != cg_row_file &&
-          (cg_row_file->get_mem_hold() > cg_row_file_memory_limit_ || is_slice_end)) {
+          ((cg_row_file->get_mem_hold() > cg_row_file_memory_limit_ &&
+            !is_sorted_table_load_with_column_store_replica_) || is_slice_end)) {
         if (OB_FAIL(cg_row_file->dump(true))) {
           LOG_WARN("fail to dump cg row file", K(ret), KPC(cg_row_file));
         } else if (OB_FAIL(cg_row_file->finish_append_batch(true/*need_dump*/))) {

@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #ifndef OCEANBASE_RPC_OB_RPC_STRUCT_H_
@@ -99,6 +103,9 @@
 #include "ob_ddl_args.h"
 #include "ob_mview_args.h"
 #include "share/inner_table/ob_load_inner_table_schema.h"
+#include "share/ai_service/ob_ai_service_struct.h"
+#include "share/schema/ob_location_schema_struct.h"
+#include "share/schema/ob_objpriv_mysql_schema_struct.h"
 
 namespace oceanbase
 {
@@ -521,7 +528,7 @@ struct ObCreateTenantSchemaResult
 {
   OB_UNIS_VERSION(1);
 public:
-  ObCreateTenantSchemaResult() : 
+  ObCreateTenantSchemaResult() :
     tenant_exist_(false), user_tenant_id_(OB_INVALID_TENANT_ID) {}
   ~ObCreateTenantSchemaResult() {}
   TO_STRING_KV(K_(tenant_exist),
@@ -566,7 +573,7 @@ struct ObParallelCreateNormalTenantArg : public ObDDLArg
 {
   OB_UNIS_VERSION(1);
 public:
-  explicit ObParallelCreateNormalTenantArg() 
+  explicit ObParallelCreateNormalTenantArg()
     : create_tenant_arg_(), tenant_id_(OB_INVALID_TENANT_ID) {}
   ~ObParallelCreateNormalTenantArg() {}
   int init(const ObCreateTenantArg &create_tenant_arg,
@@ -1296,6 +1303,7 @@ public:
     is_vec_inner_drop_ = false;
     is_parent_task_dropping_fts_index_ = false;
     is_parent_task_dropping_multivalue_index_ = false;
+    is_parent_task_dropping_spiv_index_ = false;
     only_set_status_ = false;
     index_ids_.reset();
     table_id_ = common::OB_INVALID_ID;
@@ -1314,6 +1322,7 @@ public:
     is_vec_inner_drop_ = false;
     is_parent_task_dropping_fts_index_ = false;
     is_parent_task_dropping_multivalue_index_ = false;
+    is_parent_task_dropping_spiv_index_ = false;
     only_set_status_ = false;
     index_ids_.reset();
     table_id_ = common::OB_INVALID_ID;
@@ -1328,6 +1337,7 @@ public:
   bool is_vec_inner_drop_;
   bool is_parent_task_dropping_fts_index_;
   bool is_parent_task_dropping_multivalue_index_;
+  bool is_parent_task_dropping_spiv_index_;
   bool only_set_status_;
   common::ObSEArray<int64_t, 5> index_ids_;
   uint64_t table_id_;
@@ -1360,7 +1370,7 @@ public:
     REBUILD_INDEX_TYPE_VEC = 0,
     REBUILD_INDEX_TYPE_MLOG = 1
   };
-  ObRebuildIndexArg() : ObIndexArg(), 
+  ObRebuildIndexArg() : ObIndexArg(),
     vidx_refresh_info_()
   {
     index_action_type_ = REBUILD_INDEX;
@@ -2307,8 +2317,8 @@ public:
   }
   bool is_only_alter_column() const {
     return is_alter_columns_ && foreign_key_checks_
-            && !is_alter_indexs_ && !is_alter_options_ && !is_alter_partitions_ 
-            && !is_inner_ && !is_update_global_indexes_ && !is_convert_to_character_ 
+            && !is_alter_indexs_ && !is_alter_options_ && !is_alter_partitions_
+            && !is_inner_ && !is_update_global_indexes_ && !is_convert_to_character_
             && !skip_sys_table_check_ && !need_rebuild_trigger_ && !is_add_to_scheduler_;
   }
   ObAlterTableArg &operator=(const ObAlterTableArg &other) = delete;
@@ -2331,7 +2341,7 @@ public:
                                                   nls_timestamp_tz_format};
     return set_nls_formats(tmp_str);
   }
-  
+
   void set_part_storage_cache_policy(const common::ObString &part_storage_cache_policy)
   {
     part_storage_cache_policy_ = part_storage_cache_policy;
@@ -4190,6 +4200,7 @@ public:
   bool is_valid() const;
   bool is_inited() const;
   void reset();
+  int assign(const ObBatchCreateTabletArg &arg);
   int init_create_tablet(const share::ObLSID &id_,
                          const share::SCN &major_frozen_scn,
                          const bool need_check_tablet_cnt);
@@ -4530,6 +4541,7 @@ public:
   int init_cancel(
             const common::ObFixedLengthString<common::OB_MAX_TRACE_ID_BUFFER_SIZE + 1>& task_id,
             const uint64_t tenant_id);
+  void reset();
   TO_STRING_KV(K_(ls_id),
                K_(server_addr),
                K_(destination_addr),
@@ -7827,7 +7839,7 @@ public:
 struct ObForceSetServerListResult
 {
   OB_UNIS_VERSION(1);
-public:  
+public:
   ObForceSetServerListResult() : ret_(OB_SUCCESS), result_list_() {}
   ~ObForceSetServerListResult() {}
   int init();
@@ -7838,7 +7850,7 @@ public:
     OB_UNIS_VERSION(1);
   public:
     LSFailedInfo() : ls_id_(), failed_ret_code_(OB_SUCCESS), failed_reason_() {}
-    LSFailedInfo(const share::ObLSID &ls_id, 
+    LSFailedInfo(const share::ObLSID &ls_id,
                  const int failed_ret_code,
                  const common::ObString failed_reason)
         : ls_id_(ls_id), failed_ret_code_(failed_ret_code), failed_reason_(failed_reason) {}
@@ -7848,7 +7860,7 @@ public:
     int failed_ret_code_;
     common::ObString failed_reason_;
   };
-  struct ResultInfo 
+  struct ResultInfo
   {
     OB_UNIS_VERSION(1);
   public:
@@ -7949,6 +7961,9 @@ public:
   ObServerInfoList server_list_;
   common::ObClusterRole cluster_role_;
   ObString shared_storage_info_;
+
+public:
+  int init_default();
 };
 
 struct ObForceSetLSAsSingleReplicaArg
@@ -10801,7 +10816,7 @@ public:
   {}
   bool is_valid() const
   {
-    return (OB_INVALID_TENANT_ID != tenant_id_) && 
+    return (OB_INVALID_TENANT_ID != tenant_id_) &&
            (micro_cache_size_ratio_ > 0 && micro_cache_size_ratio_ < 100) &&
            (macro_cache_size_ratio_ > 0 && macro_cache_size_ratio_ < 100);
   }
@@ -12053,6 +12068,7 @@ public:
     // return cmd_code_ != -1 && OB_INVALID_ID != task_id_ && trigger_type_ != -1 && tenant_id_ != OB_INVALID_ID;
     return cmd_code_ != -1 && trigger_type_ != -1 && tenant_id_ != OB_INVALID_ID;
   }
+  int assign(const ObTTLRequestArg &other);
   TO_STRING_KV(K_(cmd_code), K_(trigger_type), K_(task_id), K_(tenant_id));
 public:
   int32_t cmd_code_; // enum TTLCmdType
@@ -12690,9 +12706,9 @@ public:
   };
   ObTriggerStorageCacheArg() : op_(MAX_OP), tenant_id_(OB_INVALID_TENANT_ID) {}
   ~ObTriggerStorageCacheArg() {}
-  bool is_valid() const 
-  { 
-    return op_ < MAX_OP && is_valid_tenant_id(tenant_id_); 
+  bool is_valid() const
+  {
+    return op_ < MAX_OP && is_valid_tenant_id(tenant_id_);
   }
   ObStorageCacheOp get_op() const { return op_; }
   int get_tenant_id() const { return tenant_id_; }
@@ -12882,6 +12898,131 @@ public:
   {}
   ~ObCreateTableGroupRes() = default;
   uint64_t tablegroup_id_;
+};
+
+struct ObCreateAiModelArg : public ObDDLArg
+{
+  OB_UNIS_VERSION(1);
+public:
+  ObCreateAiModelArg() : ObDDLArg(), model_info_() {}
+  ObCreateAiModelArg(const uint64_t tenant_id, const share::ObAiServiceModelInfo &model_info)
+  : ObDDLArg(), model_info_(model_info)
+  {
+    exec_tenant_id_ = tenant_id;
+  }
+  ~ObCreateAiModelArg() {}
+  int check_valid() const;
+  int assign(const ObCreateAiModelArg &other);
+  const share::ObAiServiceModelInfo &get_model_info() const { return model_info_; }
+  TO_STRING_KV(K_(model_info));
+  share::ObAiServiceModelInfo model_info_;
+private:
+  DISALLOW_COPY_AND_ASSIGN(ObCreateAiModelArg);
+};
+
+struct ObDropAiModelArg : public ObDDLArg
+{
+  OB_UNIS_VERSION(1);
+public:
+  ObDropAiModelArg() : ObDDLArg(), ai_model_name_() {}
+  ObDropAiModelArg(const uint64_t tenant_id, const ObString &ai_model_name)
+  : ObDDLArg(),
+    ai_model_name_(ai_model_name)
+  {
+    exec_tenant_id_ = tenant_id;
+  }
+  ~ObDropAiModelArg() {}
+  bool is_valid() const { return exec_tenant_id_ != OB_INVALID_TENANT_ID && !ai_model_name_.empty(); }
+  const ObString &get_ai_model_name() const { return ai_model_name_; }
+  int assign(const ObDropAiModelArg &other);
+  TO_STRING_KV(K_(ai_model_name));
+  ObString ai_model_name_;
+private:
+  DISALLOW_COPY_AND_ASSIGN(ObDropAiModelArg);
+};
+
+struct ObCreateLocationArg : public ObDDLArg
+{
+  OB_UNIS_VERSION(1);
+public:
+  ObCreateLocationArg()
+    : ObDDLArg(),
+      or_replace_(false),
+      user_id_(common::OB_INVALID_ID),
+      schema_()
+  {
+  }
+  virtual ~ObCreateLocationArg()
+  {
+  }
+
+  int assign(const ObCreateLocationArg &other);
+  bool is_valid() const
+  {
+    return (common::OB_INVALID_ID != user_id_) && schema_.is_valid();
+  }
+  TO_STRING_KV(K_(or_replace), K_(user_id), K_(schema));
+
+  bool or_replace_;
+  uint64_t user_id_; // grant privilege
+  share::schema::ObLocationSchema schema_;
+};
+
+struct ObDropLocationArg : public ObDDLArg
+{
+  OB_UNIS_VERSION(1);
+public:
+  ObDropLocationArg()
+    : ObDDLArg(),
+      tenant_id_(common::OB_INVALID_TENANT_ID),
+      location_name_()
+  {
+  }
+  virtual ~ObDropLocationArg()
+  {
+  }
+
+  int assign(const ObDropLocationArg &other);
+  bool is_valid() const
+  {
+    return is_valid_tenant_id(tenant_id_)
+        && location_name_.length() > 0;
+  }
+  TO_STRING_KV(K_(tenant_id), K_(location_name));
+
+  uint64_t tenant_id_;
+  common::ObString location_name_;
+};
+
+struct ObRevokeObjMysqlArg : public ObDDLArg
+{
+  OB_UNIS_VERSION(1);
+
+public:
+  ObRevokeObjMysqlArg() : ObDDLArg(), tenant_id_(common::OB_INVALID_ID), user_id_(common::OB_INVALID_ID),
+                            obj_name_(), obj_type_(common::OB_INVALID_ID),
+                            priv_set_(0), grant_(true),
+                            grantor_(), grantor_host_()
+  { }
+  bool is_valid() const;
+  int assign(const ObRevokeObjMysqlArg &other);
+  TO_STRING_KV(K_(tenant_id),
+               K_(user_id),
+               K_(obj_name),
+               "priv_set", share::schema::ObPrintPrivSet(priv_set_),
+               K_(grant),
+               K_(obj_type),
+               K_(grantor),
+               K_(grantor_host));
+
+  uint64_t tenant_id_;
+  uint64_t user_id_;
+  common::ObString obj_name_;
+  uint64_t obj_type_;
+  ObPrivSet priv_set_;
+  bool grant_;
+  common::ObString grantor_;
+  common::ObString grantor_host_;
 };
 
 }//end namespace obrpc

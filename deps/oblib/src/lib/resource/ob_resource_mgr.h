@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #ifndef OCEANBASE_RESOURCE_OB_RESOURCE_MGR_H_
@@ -44,6 +48,8 @@ public:
   void free_cache_mb(void *ptr);
 
   uint64_t get_tenant_id() const { return tenant_id_; }
+  void set_hard_limit(const int64_t hard_limit) { hard_limit_ = hard_limit; }
+  int64_t get_hard_limit() const { return hard_limit_; }
   void set_limit(const int64_t limit) { limit_ = limit; }
   int64_t get_limit() const { return limit_; }
   int64_t get_sum_hold() const { return sum_hold_; }
@@ -54,25 +60,28 @@ public:
   {
     return static_cast<int64_t>(CHUNK_MGR.aligned(static_cast<uint64_t>(size)));
   }
+  int set_ctx_hard_limit(const uint64_t ctx_id, const int64_t hard_limit);
   int set_ctx_limit(const uint64_t ctx_id, const int64_t limit);
   int get_ctx_limit(const uint64_t ctx_id, int64_t &limit) const;
   int get_ctx_hold(const uint64_t ctx_id, int64_t &hold) const;
   bool update_hold(const int64_t size, const uint64_t ctx_id, const lib::ObLabel &label,
-      bool &reach_ctx_limit);
+      bool &reach_ctx_limit, bool high_prio = false);
 private:
   void update_cache_hold(const int64_t size);
-  bool update_ctx_hold(const uint64_t ctx_id, const int64_t size);
+  bool update_ctx_hold(const uint64_t ctx_id, const int64_t size, bool high_prio);
   AChunk *ptr2chunk(void *ptr);
   AChunk *alloc_chunk_(const int64_t size, const ObMemAttr &attr);
   void free_chunk_(AChunk *chunk, const ObMemAttr &attr);
   ObICacheWasher *cache_washer_;
   uint64_t tenant_id_;
   int64_t limit_;
+  int64_t hard_limit_;
   int64_t sum_hold_;
   int64_t cache_hold_;
   int64_t cache_item_count_;
   volatile int64_t hold_bytes_[common::ObCtxIds::MAX_CTX_ID];
   volatile int64_t limit_bytes_[common::ObCtxIds::MAX_CTX_ID];
+  volatile int64_t hard_limit_bytes_[common::ObCtxIds::MAX_CTX_ID];
 };
 
 struct ObTenantResourceMgr : public common::ObLink

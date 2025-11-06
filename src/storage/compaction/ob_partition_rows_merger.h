@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 #ifndef OB_PARTITION_ROWS_MERGER_H_
 #define OB_PARTITION_ROWS_MERGER_H_
@@ -96,7 +100,7 @@ private:
 
 typedef common::ObRowsMerger<ObPartitionMergeLoserTreeItem, ObPartitionMergeLoserTreeCmp> RowsMerger;
 typedef common::ObSEArray<int64_t, DEFAULT_ITER_COUNT> CONSUME_ITER_IDX_ARRAY;
-typedef ObMergeLoserTree<ObPartitionMergeLoserTreeItem, ObPartitionMergeLoserTreeCmp, common::MAX_TABLE_CNT_IN_STORAGE> ObPartitionMergeLoserTree;
+typedef ObMergeLoserTree<ObPartitionMergeLoserTreeItem, ObPartitionMergeLoserTreeCmp> ObPartitionMergeLoserTree;
 typedef ObSimpleRowsMerger<ObPartitionMergeLoserTreeItem, ObPartitionMergeLoserTreeCmp> ObSimpleRowsPartitionMerger;
 typedef common::ObRowsMerger<ObPartitionMergeLoserTreeItem, ObPartitionMergeLoserTreeCmp> RowsMerger;
 
@@ -128,7 +132,7 @@ public:
   {}
   virtual ~ObPartitionMajorRowsMerger() { reset(); }
   virtual ObRowMergerType type() override { return common::ObRowMergerType::MAJOR_ROWS_MERGE; }
-  virtual int init(const int64_t total_player_cnt, common::ObIAllocator &allocator) override;
+  virtual int init(const int64_t max_player_cnt, const int64_t player_cnt, common::ObIAllocator &allocator) override;
   virtual int open(const int64_t total_player_cnt) override;
   virtual bool is_inited() const { return merger_state_ != MergerState::NOT_INIT; }
   virtual void reset() override;
@@ -144,7 +148,7 @@ public:
   inline bool is_need_skip() const { return merger_state_ == NEED_SKIP || merger_state_ == NEED_SKIP_REBUILD; }
   TO_STRING_KV(K_(merger_state), K_(base_item), KPC(rows_merger_))
 private:
-  int init_rows_merger(const int64_t total_player_cnt);
+  int init_rows_merger(const int64_t max_player_cnt, const int64_t total_player_cnt);
   int compare_base_iter();
   int check_row_iters_purge(const ObPartitionMergeIter &check_iter, bool &can_purged);
 private:

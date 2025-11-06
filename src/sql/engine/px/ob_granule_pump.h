@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #ifndef OB_GRANULE_PUMP_H_
@@ -149,23 +153,25 @@ class ObGITaskSet {
 public:
   struct ObGITaskInfo
   {
-    ObGITaskInfo() : tablet_loc_(nullptr), range_(), ss_range_(), idx_(0), hash_value_(0) {}
+    ObGITaskInfo() : tablet_loc_(nullptr), range_(), ss_range_(), idx_(0), hash_value_(0), granule_type_(OB_GRANULE_UNINITIALIZED) {}
     ObGITaskInfo(ObDASTabletLoc *tablet_loc,
                  const common::ObNewRange &range,
                  const common::ObNewRange &ss_range,
                  int64_t idx) :
-        tablet_loc_(tablet_loc), range_(range), ss_range_(ss_range), idx_(idx), hash_value_(0) {}
+        tablet_loc_(tablet_loc), range_(range), ss_range_(ss_range), idx_(idx), hash_value_(0), granule_type_(OB_GRANULE_UNINITIALIZED) {}
     TO_STRING_KV(KPC(tablet_loc_),
                  KP(tablet_loc_),
                  K(range_),
                  K(ss_range_),
                  K(idx_),
-                 K(hash_value_));
+                 K(hash_value_),
+                 K(granule_type_));
     ObDASTabletLoc *tablet_loc_;
     common::ObNewRange range_;
     common::ObNewRange ss_range_;
     int64_t idx_;
     uint64_t hash_value_;
+    ObGranuleType granule_type_;; // one partition one task when OB_PARTITION_GRANULE
   };
 
   enum ObGIRandomType

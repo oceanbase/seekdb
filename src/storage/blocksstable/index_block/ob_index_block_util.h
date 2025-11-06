@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2022 OceanBase
- * OceanBase is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #ifndef OCEANBASE_BLOCKSSTABLE_OB_INDEX_BLOCK_UTIL_
@@ -30,10 +34,10 @@ namespace blocksstable
 // Only MIN_MAX skipping index is supported now.
 enum ObSkipIndexType : uint8_t
 {
-  MIN_MAX, 
+  MIN_MAX,
   BLOOM_FILTER,
   NGRAM_BLOOM_FILTER,
-  MAX_TYPE 
+  MAX_TYPE
 };
 
 enum ObSkipIndexColType : uint8_t
@@ -43,6 +47,8 @@ enum ObSkipIndexColType : uint8_t
   SK_IDX_MAX,
   SK_IDX_NULL_COUNT,
   SK_IDX_SUM,
+  SK_IDX_BM25_MAX_SCORE_TOKEN_FREQ,
+  SK_IDX_BM25_MAX_SCORE_DOC_LEN,
   SK_IDX_MAX_COL_TYPE
 };
 
@@ -51,7 +57,7 @@ struct ObSkipIndexColMeta
   // For data with length larger than 40 bytes(normally string), we will store the prefix as min/max
   static constexpr int64_t MAX_SKIP_INDEX_COL_LENGTH = 40;
   static constexpr int64_t SKIP_INDEX_ROW_SIZE_LIMIT = 1 << 10; // 1kb
-  static constexpr int64_t MAX_AGG_COLUMN_PER_ROW = 4; // min / max / null count / sum
+  static constexpr int64_t MAX_AGG_COLUMN_PER_ROW = 6; // min (loose_min) / max (loose_max) / null count / sum / bm25 params
   static constexpr ObObjDatumMapType NULL_CNT_COL_TYPE = OBJ_DATUM_8BYTE_DATA;
   static_assert(common::OBJ_DATUM_NUMBER_RES_SIZE == MAX_SKIP_INDEX_COL_LENGTH,
       "Buffer size of ObStorageDatum and maximum size of skip index data is equal to maximum size of ObNumber");
@@ -59,6 +65,13 @@ struct ObSkipIndexColMeta
   ObSkipIndexColMeta(const uint32_t col_idx, const ObSkipIndexColType col_type)
       : col_idx_(col_idx), col_type_(col_type) {}
   bool is_valid() const { return col_type_ < SK_IDX_MAX_COL_TYPE; }
+  bool is_single_col_agg() const { return is_valid() && !is_multi_col_agg(); }
+  bool is_multi_col_agg() const
+  {
+    return SK_IDX_BM25_MAX_SCORE_TOKEN_FREQ == col_type_ || SK_IDX_BM25_MAX_SCORE_DOC_LEN == col_type_;
+  }
+  ObSkipIndexColType get_col_type() const { return static_cast<ObSkipIndexColType>(col_type_); }
+  uint32_t get_col_idx() const { return col_idx_; }
   bool operator <(const ObSkipIndexColMeta &rhs) const
   {
     bool ret = false;
@@ -76,6 +89,7 @@ struct ObSkipIndexColMeta
   }
 
   static int append_skip_index_meta(
+      const bool is_major,
       const share::schema::ObSkipIndexColumnAttr &skip_idx_attr,
       const int64_t col_idx,
       common::ObIArray<ObSkipIndexColMeta> &skip_idx_metas);
@@ -202,6 +216,14 @@ OB_INLINE static int get_sum_store_size(const ObObjType &obj_type, uint32_t &sum
     }
   }
   return ret;
+}
+
+OB_INLINE static bool non_baseline_enabled_agg_type(const ObSkipIndexColType &col_type)
+{
+  return ObSkipIndexColType::SK_IDX_BM25_MAX_SCORE_TOKEN_FREQ == col_type
+      || ObSkipIndexColType::SK_IDX_BM25_MAX_SCORE_DOC_LEN == col_type
+      || ObSkipIndexColType::SK_IDX_MIN == col_type
+      || ObSkipIndexColType::SK_IDX_MAX == col_type;
 }
 
 int get_prefix_for_string_tc_datum(

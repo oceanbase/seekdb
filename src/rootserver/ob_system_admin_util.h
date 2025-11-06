@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #ifndef OCEANBASE_ROOTSERVER_OB_SYSTEM_ADMIN_UTIL_H_
@@ -20,7 +24,6 @@
 #include "share/config/ob_server_config.h"
 #include "share/ob_rpc_struct.h"
 #include "share/schema/ob_schema_struct.h"
-#include "observer/omt/ob_tenant_config.h"
 
 // system admin command (alter system ...) execute
 
@@ -334,31 +337,14 @@ public:
 
   int execute(obrpc::ObAdminSetConfigArg &arg);
 
-  static int construct_arg_and_broadcast_tenant_config_map();
-
 private:
   class ObServerConfigChecker : public common::ObServerConfig
-  {
-  };
-  class ObTenantConfigChecker : public omt::ObTenantConfig
   {
   };
 
 private:
   int verify_config(obrpc::ObAdminSetConfigArg &arg);
   int update_config(obrpc::ObAdminSetConfigArg &arg, int64_t new_version);
-  int update_tenant_config_(
-      const obrpc::ObAdminSetConfigItem &item,
-      const char *svr_ip,
-      const int64_t svr_port,
-      const int64_t new_version);
-  int inner_update_tenant_config_(
-      const obrpc::ObAdminSetConfigItem &item,
-      const uint64_t tenant_id,
-      const char *table_name,
-      const char *svr_ip,
-      const int64_t svr_port,
-      const int64_t new_version);
   int inner_update_tenant_config_for_compatible_(
       const uint64_t tenant_id,
       const obrpc::ObAdminSetConfigItem *item,

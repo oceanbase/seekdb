@@ -1,0 +1,103 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_SQL_OB_EXPR_AI_COMPLETE_H_
+#define OCEANBASE_SQL_OB_EXPR_AI_COMPLETE_H_
+
+#include "sql/engine/expr/ob_expr_operator.h"
+#include "sql/engine/ob_exec_context.h"
+#include "ob_ai_func_client.h"
+#include "ob_ai_func.h"
+#include "ob_ai_func_utils.h"
+
+namespace oceanbase
+{
+namespace sql
+{
+class ObExprAIComplete : public ObFuncExprOperator
+{
+public:
+  explicit ObExprAIComplete(common::ObIAllocator &alloc);
+  virtual ~ObExprAIComplete();
+  virtual int calc_result_typeN(ObExprResType &type,
+                                ObExprResType *types_array,
+                                int64_t param_num,
+                                common::ObExprTypeCtx &type_ctx) const override;
+  static int eval_ai_complete(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res);
+  static int eval_ai_complete_vector(const ObExpr &expr, ObEvalCtx &ctx,
+                                          const ObBitVector &skip, const EvalBound &bound);
+
+  static int eval_ai_complete_vector_v2(const ObExpr &expr, ObEvalCtx &ctx,
+                                          const ObBitVector &skip, const EvalBound &bound);
+  virtual int cg_expr(ObExprCGCtx &expr_cg_ctx,
+                      const ObRawExpr &raw_expr,
+                      ObExpr &rt_expr) const override;
+  virtual bool need_rt_ctx() const override { return true; }
+private:
+  static int get_prompt_object_from_str(ObIAllocator &allocator,
+                                          const ObDatumMeta &meta,
+                                          ObArray<ObString> &prompts,
+                                          ObArray<ObJsonObject *> &prompt_objects,
+                                          bool& is_all_str);
+  static int transform_prompt_object_to_str(ObIAllocator &allocator,
+                                            ObArray<ObJsonObject *> &prompt_objects,
+                                            ObArray<ObString> &prompts);
+  static int get_prompt_and_contents_contact_str(ObIAllocator &allocator,
+                                      ObString &prompt,
+                                      ObArray<ObString> &contents,
+                                      ObString &prompt_and_contents);
+  static int construct_tuple_str(ObIAllocator &allocator, ObArray<ObString> &contents, ObString &content_str);
+  static int get_tuple_str(ObIAllocator &allocator, ObString &content, ObString &tuple_str);
+  static int get_config_with_json_response_format(ObIAllocator &allocator, ObJsonObject *config);
+  static int get_vector_params(const ObExpr &expr,
+                              ObEvalCtx &ctx,
+                              const ObBitVector &skip,
+                              const EvalBound &bound,
+                              ObString &model_id,
+                              ObArray<ObString> &prompts,
+                              ObJsonObject *&config);
+  static int pack_json_array_to_res_vector(const ObExpr &expr, ObEvalCtx &ctx,
+                                      ObIAllocator &allocator,
+                                      ObArray<ObJsonObject *> &responses,
+                                      const ObBitVector &skip,
+                                      const EvalBound &bound,
+                                      const ObAiModelEndpointInfo &endpoint_info,
+                                      ObIVector *res_vec);
+  static int pack_json_string_to_res_vector(const ObExpr &expr,
+                                            ObEvalCtx &ctx,
+                                            ObIAllocator &allocator,
+                                            ObIJsonBase *response,
+                                            const ObBitVector &skip,
+                                            const EvalBound &bound,
+                                            ObIVector *res_vec);
+  static constexpr int MODEL_IDX = 0;
+  static constexpr int PROMPT_IDX = 1;
+  static constexpr int CONFIG_IDX = 2;
+  static constexpr char PROMPT_META_PROMPT[20] = "{{USER_PROMPT}}";
+  static constexpr char TUPLES_META_PROMPT[20] = "{{TUPLES}}";
+  static constexpr char meta_prompt_[1024] = "You are OceanBase semantic analysis tool for DBMS. "
+    "You will analyze each tuple in the provided data and respond to the user prompt. "
+    "User Prompt:{{USER_PROMPT}}\n"
+    "Tuples Table:{{TUPLES}}\n"
+    "Instructions:The response should be directly relevant to each tuple without additional formatting, purely answering the user prompt as if each tuple were a standalone entity. Use clear, context-relevant language to generate a meaningful and concise answer for each tuple. "
+    "Expected Response Format:You should return the responses to the user's prompt for each tuple in json array format. Ensure no tuple is missed.\n"
+    "Example: {\"item\":[\"The response for the first tuple\", \"The response for the second tuple\"]}";
+  DISALLOW_COPY_AND_ASSIGN(ObExprAIComplete);
+};
+
+} // namespace sql
+} // namespace oceanbase
+#endif // OCEANBASE_SQL_OB_EXPR_AI_COMPLETE_H_

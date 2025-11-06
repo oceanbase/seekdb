@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #include "sql/resolver/ddl/ob_alter_table_stmt.h"
@@ -131,12 +135,7 @@ void ObAlterTableStmt::set_table_id(const uint64_t table_id)
 
 int ObAlterTableStmt::fill_session_vars(const ObBasicSessionInfo &session) {
   int ret = OB_SUCCESS;
-  uint64_t tenant_data_version = 0;
-  if (OB_FAIL(GET_MIN_DATA_VERSION(session.get_effective_tenant_id(), tenant_data_version))) {
-    SQL_RESV_LOG(WARN, "get tenant data version failed", K(ret));
-  } else if (tenant_data_version < DATA_VERSION_4_2_2_0) {
-    //do nothing
-  } else if (OB_FAIL(alter_table_arg_.local_session_var_.load_session_vars(&session))) {
+  if (OB_FAIL(alter_table_arg_.local_session_var_.load_session_vars(&session))) {
     SQL_RESV_LOG(WARN, "load local session vars failed", K(ret));
   }
   return ret;
@@ -155,7 +154,8 @@ int ObAlterTableStmt::set_lock_priority(sql::ObSQLSessionInfo *session)
 {
   int ret = OB_SUCCESS;
   const uint64_t tenant_id = session->get_effective_tenant_id();
-  omt::ObTenantConfigGuard tenant_config(OTC_MGR.get_tenant_config_with_lock(tenant_id));
+  const int64_t min_cluster_version = GET_MIN_CLUSTER_VERSION();
+  omt::ObTenantConfigGuard tenant_config(TENANT_CONF(tenant_id));
   if (!tenant_config.is_valid()) {
     ret = OB_ERR_UNEXPECTED;
     SQL_RESV_LOG(WARN, "tenant config invalid, can not do rename", K(ret), K(tenant_id));

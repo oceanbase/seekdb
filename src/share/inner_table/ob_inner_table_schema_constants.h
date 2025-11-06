@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #ifndef _OB_INNER_TABLE_SCHEMA_CONSTANTS_H_
@@ -312,6 +316,13 @@ const uint64_t OB_ALL_VECTOR_INDEX_TASK_TID = 545; // "__all_vector_index_task"
 const uint64_t OB_ALL_VECTOR_INDEX_TASK_HISTORY_TID = 546; // "__all_vector_index_task_history"
 const uint64_t OB_ALL_CCL_RULE_TID = 547; // "__all_ccl_rule"
 const uint64_t OB_ALL_CCL_RULE_HISTORY_TID = 548; // "__all_ccl_rule_history"
+const uint64_t OB_ALL_AI_MODEL_TID = 550; // "__all_ai_model"
+const uint64_t OB_ALL_AI_MODEL_HISTORY_TID = 551; // "__all_ai_model_history"
+const uint64_t OB_ALL_AI_MODEL_ENDPOINT_TID = 552; // "__all_ai_model_endpoint"
+const uint64_t OB_ALL_TENANT_LOCATION_TID = 553; // "__all_tenant_location"
+const uint64_t OB_ALL_TENANT_LOCATION_HISTORY_TID = 554; // "__all_tenant_location_history"
+const uint64_t OB_ALL_TENANT_OBJAUTH_MYSQL_TID = 555; // "__all_tenant_objauth_mysql"
+const uint64_t OB_ALL_TENANT_OBJAUTH_MYSQL_HISTORY_TID = 556; // "__all_tenant_objauth_mysql_history"
 const uint64_t OB_TENANT_VIRTUAL_ALL_TABLE_TID = 10001; // "__tenant_virtual_all_table"
 const uint64_t OB_TENANT_VIRTUAL_TABLE_COLUMN_TID = 10002; // "__tenant_virtual_table_column"
 const uint64_t OB_TENANT_VIRTUAL_TABLE_INDEX_TID = 10003; // "__tenant_virtual_table_index"
@@ -380,7 +391,6 @@ const uint64_t OB_ALL_VIRTUAL_TENANT_PARAMETER_STAT_TID = 11092; // "__all_virtu
 const uint64_t OB_ALL_VIRTUAL_SERVER_SCHEMA_INFO_TID = 11093; // "__all_virtual_server_schema_info"
 const uint64_t OB_ALL_VIRTUAL_MEMORY_CONTEXT_STAT_TID = 11094; // "__all_virtual_memory_context_stat"
 const uint64_t OB_ALL_VIRTUAL_DUMP_TENANT_INFO_TID = 11095; // "__all_virtual_dump_tenant_info"
-const uint64_t OB_ALL_VIRTUAL_TENANT_PARAMETER_INFO_TID = 11096; // "__all_virtual_tenant_parameter_info"
 const uint64_t OB_ALL_VIRTUAL_DAG_WARNING_HISTORY_TID = 11099; // "__all_virtual_dag_warning_history"
 const uint64_t OB_TENANT_VIRTUAL_SHOW_RESTORE_PREVIEW_TID = 11102; // "__tenant_virtual_show_restore_preview"
 const uint64_t OB_ALL_VIRTUAL_DAG_TID = 11105; // "__all_virtual_dag"
@@ -761,6 +771,15 @@ const uint64_t OB_ALL_VIRTUAL_MVIEW_RUNNING_JOB_TID = 12535; // "__all_virtual_m
 const uint64_t OB_ALL_VIRTUAL_DYNAMIC_PARTITION_TABLE_TID = 12536; // "__all_virtual_dynamic_partition_table"
 const uint64_t OB_ALL_VIRTUAL_CCL_RULE_HISTORY_TID = 12549; // "__all_virtual_ccl_rule_history"
 const uint64_t OB_ALL_VIRTUAL_TENANT_VECTOR_MEM_INFO_TID = 12550; // "__all_virtual_tenant_vector_mem_info"
+const uint64_t OB_ALL_VIRTUAL_AI_MODEL_TID = 12551; // "__all_virtual_ai_model"
+const uint64_t OB_ALL_VIRTUAL_AI_MODEL_HISTORY_TID = 12552; // "__all_virtual_ai_model_history"
+const uint64_t OB_ALL_VIRTUAL_AI_MODEL_ENDPOINT_TID = 12553; // "__all_virtual_ai_model_endpoint"
+const uint64_t OB_ALL_VIRTUAL_TENANT_LOCATION_TID = 12554; // "__all_virtual_tenant_location"
+const uint64_t OB_ALL_VIRTUAL_TENANT_LOCATION_HISTORY_TID = 12555; // "__all_virtual_tenant_location_history"
+const uint64_t OB_ALL_VIRTUAL_OBJAUTH_MYSQL_TID = 12556; // "__all_virtual_objauth_mysql"
+const uint64_t OB_ALL_VIRTUAL_OBJAUTH_MYSQL_HISTORY_TID = 12557; // "__all_virtual_objauth_mysql_history"
+const uint64_t OB_TENANT_VIRTUAL_SHOW_CREATE_LOCATION_TID = 12558; // "__tenant_virtual_show_create_location"
+const uint64_t OB_TENANT_VIRTUAL_LIST_FILE_TID = 12559; // "__tenant_virtual_list_file"
 const uint64_t OB_GV_OB_PLAN_CACHE_STAT_TID = 20001; // "GV$OB_PLAN_CACHE_STAT"
 const uint64_t OB_GV_OB_PLAN_CACHE_PLAN_STAT_TID = 20002; // "GV$OB_PLAN_CACHE_PLAN_STAT"
 const uint64_t OB_SCHEMATA_TID = 20003; // "SCHEMATA"
@@ -1301,6 +1320,10 @@ const uint64_t OB_CDB_OB_DYNAMIC_PARTITION_TABLES_TID = 21656; // "CDB_OB_DYNAMI
 const uint64_t OB_V_OB_DYNAMIC_PARTITION_TABLES_TID = 21657; // "V$OB_DYNAMIC_PARTITION_TABLES"
 const uint64_t OB_GV_OB_VECTOR_MEMORY_TID = 21661; // "GV$OB_VECTOR_MEMORY"
 const uint64_t OB_V_OB_VECTOR_MEMORY_TID = 21662; // "V$OB_VECTOR_MEMORY"
+const uint64_t OB_DBA_OB_AI_MODELS_TID = 21663; // "DBA_OB_AI_MODELS"
+const uint64_t OB_DBA_OB_AI_MODEL_ENDPOINTS_TID = 21664; // "DBA_OB_AI_MODEL_ENDPOINTS"
+const uint64_t OB_CDB_OB_AI_MODELS_TID = 21665; // "CDB_OB_AI_MODELS"
+const uint64_t OB_CDB_OB_AI_MODEL_ENDPOINTS_TID = 21666; // "CDB_OB_AI_MODEL_ENDPOINTS"
 const uint64_t OB_ALL_TABLE_AUX_LOB_META_TID = 50003; // "__all_table_aux_lob_meta"
 const uint64_t OB_ALL_COLUMN_AUX_LOB_META_TID = 50004; // "__all_column_aux_lob_meta"
 const uint64_t OB_ALL_DDL_OPERATION_AUX_LOB_META_TID = 50005; // "__all_ddl_operation_aux_lob_meta"
@@ -1585,6 +1608,13 @@ const uint64_t OB_ALL_VECTOR_INDEX_TASK_AUX_LOB_META_TID = 50545; // "__all_vect
 const uint64_t OB_ALL_VECTOR_INDEX_TASK_HISTORY_AUX_LOB_META_TID = 50546; // "__all_vector_index_task_history_aux_lob_meta"
 const uint64_t OB_ALL_CCL_RULE_AUX_LOB_META_TID = 50547; // "__all_ccl_rule_aux_lob_meta"
 const uint64_t OB_ALL_CCL_RULE_HISTORY_AUX_LOB_META_TID = 50548; // "__all_ccl_rule_history_aux_lob_meta"
+const uint64_t OB_ALL_AI_MODEL_AUX_LOB_META_TID = 50550; // "__all_ai_model_aux_lob_meta"
+const uint64_t OB_ALL_AI_MODEL_HISTORY_AUX_LOB_META_TID = 50551; // "__all_ai_model_history_aux_lob_meta"
+const uint64_t OB_ALL_AI_MODEL_ENDPOINT_AUX_LOB_META_TID = 50552; // "__all_ai_model_endpoint_aux_lob_meta"
+const uint64_t OB_ALL_TENANT_LOCATION_AUX_LOB_META_TID = 50553; // "__all_tenant_location_aux_lob_meta"
+const uint64_t OB_ALL_TENANT_LOCATION_HISTORY_AUX_LOB_META_TID = 50554; // "__all_tenant_location_history_aux_lob_meta"
+const uint64_t OB_ALL_TENANT_OBJAUTH_MYSQL_AUX_LOB_META_TID = 50555; // "__all_tenant_objauth_mysql_aux_lob_meta"
+const uint64_t OB_ALL_TENANT_OBJAUTH_MYSQL_HISTORY_AUX_LOB_META_TID = 50556; // "__all_tenant_objauth_mysql_history_aux_lob_meta"
 const uint64_t OB_ALL_TABLE_AUX_LOB_PIECE_TID = 60003; // "__all_table_aux_lob_piece"
 const uint64_t OB_ALL_COLUMN_AUX_LOB_PIECE_TID = 60004; // "__all_column_aux_lob_piece"
 const uint64_t OB_ALL_DDL_OPERATION_AUX_LOB_PIECE_TID = 60005; // "__all_ddl_operation_aux_lob_piece"
@@ -1869,6 +1899,13 @@ const uint64_t OB_ALL_VECTOR_INDEX_TASK_AUX_LOB_PIECE_TID = 60545; // "__all_vec
 const uint64_t OB_ALL_VECTOR_INDEX_TASK_HISTORY_AUX_LOB_PIECE_TID = 60546; // "__all_vector_index_task_history_aux_lob_piece"
 const uint64_t OB_ALL_CCL_RULE_AUX_LOB_PIECE_TID = 60547; // "__all_ccl_rule_aux_lob_piece"
 const uint64_t OB_ALL_CCL_RULE_HISTORY_AUX_LOB_PIECE_TID = 60548; // "__all_ccl_rule_history_aux_lob_piece"
+const uint64_t OB_ALL_AI_MODEL_AUX_LOB_PIECE_TID = 60550; // "__all_ai_model_aux_lob_piece"
+const uint64_t OB_ALL_AI_MODEL_HISTORY_AUX_LOB_PIECE_TID = 60551; // "__all_ai_model_history_aux_lob_piece"
+const uint64_t OB_ALL_AI_MODEL_ENDPOINT_AUX_LOB_PIECE_TID = 60552; // "__all_ai_model_endpoint_aux_lob_piece"
+const uint64_t OB_ALL_TENANT_LOCATION_AUX_LOB_PIECE_TID = 60553; // "__all_tenant_location_aux_lob_piece"
+const uint64_t OB_ALL_TENANT_LOCATION_HISTORY_AUX_LOB_PIECE_TID = 60554; // "__all_tenant_location_history_aux_lob_piece"
+const uint64_t OB_ALL_TENANT_OBJAUTH_MYSQL_AUX_LOB_PIECE_TID = 60555; // "__all_tenant_objauth_mysql_aux_lob_piece"
+const uint64_t OB_ALL_TENANT_OBJAUTH_MYSQL_HISTORY_AUX_LOB_PIECE_TID = 60556; // "__all_tenant_objauth_mysql_history_aux_lob_piece"
 const uint64_t OB_ALL_VIRTUAL_PLAN_CACHE_STAT_ALL_VIRTUAL_PLAN_CACHE_STAT_I1_TID = 14999; // "__all_virtual_plan_cache_stat"
 const uint64_t OB_ALL_VIRTUAL_SESSION_EVENT_ALL_VIRTUAL_SESSION_EVENT_I1_TID = 14998; // "__all_virtual_session_event"
 const uint64_t OB_ALL_VIRTUAL_SESSION_WAIT_ALL_VIRTUAL_SESSION_WAIT_I1_TID = 14997; // "__all_virtual_session_wait"
@@ -1968,6 +2005,11 @@ const uint64_t OB_ALL_PKG_COLL_TYPE_IDX_PKG_COLL_NAME_ID_TID = 101112; // "__all
 const uint64_t OB_ALL_CATALOG_IDX_CATALOG_NAME_TID = 101113; // "__all_catalog"
 const uint64_t OB_ALL_CATALOG_PRIVILEGE_IDX_CATALOG_PRIV_CATALOG_NAME_TID = 101114; // "__all_catalog_privilege"
 const uint64_t OB_ALL_CCL_RULE_IDX_CCL_RULE_ID_TID = 101115; // "__all_ccl_rule"
+const uint64_t OB_ALL_AI_MODEL_ENDPOINT_IDX_ENDPOINT_NAME_TID = 101116; // "__all_ai_model_endpoint"
+const uint64_t OB_ALL_AI_MODEL_ENDPOINT_IDX_AI_MODEL_NAME_TID = 101117; // "__all_ai_model_endpoint"
+const uint64_t OB_ALL_TENANT_LOCATION_IDX_LOCATION_NAME_TID = 101118; // "__all_tenant_location"
+const uint64_t OB_ALL_TENANT_OBJAUTH_MYSQL_IDX_OBJAUTH_MYSQL_USER_ID_TID = 101119; // "__all_tenant_objauth_mysql"
+const uint64_t OB_ALL_TENANT_OBJAUTH_MYSQL_IDX_OBJAUTH_MYSQL_OBJ_NAME_TID = 101120; // "__all_tenant_objauth_mysql"
 const uint64_t OB_ALL_TABLET_REORGANIZE_HISTORY_IDX_TABLET_HIS_TABLE_ID_DEST_TID = 101104; // "__all_tablet_reorganize_history"
 
 const char *const OB_ALL_CORE_TABLE_TNAME = "__all_core_table";
@@ -2255,6 +2297,13 @@ const char *const OB_ALL_VECTOR_INDEX_TASK_TNAME = "__all_vector_index_task";
 const char *const OB_ALL_VECTOR_INDEX_TASK_HISTORY_TNAME = "__all_vector_index_task_history";
 const char *const OB_ALL_CCL_RULE_TNAME = "__all_ccl_rule";
 const char *const OB_ALL_CCL_RULE_HISTORY_TNAME = "__all_ccl_rule_history";
+const char *const OB_ALL_AI_MODEL_TNAME = "__all_ai_model";
+const char *const OB_ALL_AI_MODEL_HISTORY_TNAME = "__all_ai_model_history";
+const char *const OB_ALL_AI_MODEL_ENDPOINT_TNAME = "__all_ai_model_endpoint";
+const char *const OB_ALL_TENANT_LOCATION_TNAME = "__all_tenant_location";
+const char *const OB_ALL_TENANT_LOCATION_HISTORY_TNAME = "__all_tenant_location_history";
+const char *const OB_ALL_TENANT_OBJAUTH_MYSQL_TNAME = "__all_tenant_objauth_mysql";
+const char *const OB_ALL_TENANT_OBJAUTH_MYSQL_HISTORY_TNAME = "__all_tenant_objauth_mysql_history";
 const char *const OB_TENANT_VIRTUAL_ALL_TABLE_TNAME = "__tenant_virtual_all_table";
 const char *const OB_TENANT_VIRTUAL_TABLE_COLUMN_TNAME = "__tenant_virtual_table_column";
 const char *const OB_TENANT_VIRTUAL_TABLE_INDEX_TNAME = "__tenant_virtual_table_index";
@@ -2323,7 +2372,6 @@ const char *const OB_ALL_VIRTUAL_TENANT_PARAMETER_STAT_TNAME = "__all_virtual_te
 const char *const OB_ALL_VIRTUAL_SERVER_SCHEMA_INFO_TNAME = "__all_virtual_server_schema_info";
 const char *const OB_ALL_VIRTUAL_MEMORY_CONTEXT_STAT_TNAME = "__all_virtual_memory_context_stat";
 const char *const OB_ALL_VIRTUAL_DUMP_TENANT_INFO_TNAME = "__all_virtual_dump_tenant_info";
-const char *const OB_ALL_VIRTUAL_TENANT_PARAMETER_INFO_TNAME = "__all_virtual_tenant_parameter_info";
 const char *const OB_ALL_VIRTUAL_DAG_WARNING_HISTORY_TNAME = "__all_virtual_dag_warning_history";
 const char *const OB_TENANT_VIRTUAL_SHOW_RESTORE_PREVIEW_TNAME = "__tenant_virtual_show_restore_preview";
 const char *const OB_ALL_VIRTUAL_DAG_TNAME = "__all_virtual_dag";
@@ -2704,6 +2752,15 @@ const char *const OB_ALL_VIRTUAL_MVIEW_RUNNING_JOB_TNAME = "__all_virtual_mview_
 const char *const OB_ALL_VIRTUAL_DYNAMIC_PARTITION_TABLE_TNAME = "__all_virtual_dynamic_partition_table";
 const char *const OB_ALL_VIRTUAL_CCL_RULE_HISTORY_TNAME = "__all_virtual_ccl_rule_history";
 const char *const OB_ALL_VIRTUAL_TENANT_VECTOR_MEM_INFO_TNAME = "__all_virtual_tenant_vector_mem_info";
+const char *const OB_ALL_VIRTUAL_AI_MODEL_TNAME = "__all_virtual_ai_model";
+const char *const OB_ALL_VIRTUAL_AI_MODEL_HISTORY_TNAME = "__all_virtual_ai_model_history";
+const char *const OB_ALL_VIRTUAL_AI_MODEL_ENDPOINT_TNAME = "__all_virtual_ai_model_endpoint";
+const char *const OB_ALL_VIRTUAL_TENANT_LOCATION_TNAME = "__all_virtual_tenant_location";
+const char *const OB_ALL_VIRTUAL_TENANT_LOCATION_HISTORY_TNAME = "__all_virtual_tenant_location_history";
+const char *const OB_ALL_VIRTUAL_OBJAUTH_MYSQL_TNAME = "__all_virtual_objauth_mysql";
+const char *const OB_ALL_VIRTUAL_OBJAUTH_MYSQL_HISTORY_TNAME = "__all_virtual_objauth_mysql_history";
+const char *const OB_TENANT_VIRTUAL_SHOW_CREATE_LOCATION_TNAME = "__tenant_virtual_show_create_location";
+const char *const OB_TENANT_VIRTUAL_LIST_FILE_TNAME = "__tenant_virtual_list_file";
 const char *const OB_GV_OB_PLAN_CACHE_STAT_TNAME = "GV$OB_PLAN_CACHE_STAT";
 const char *const OB_GV_OB_PLAN_CACHE_PLAN_STAT_TNAME = "GV$OB_PLAN_CACHE_PLAN_STAT";
 const char *const OB_SCHEMATA_TNAME = "SCHEMATA";
@@ -3244,6 +3301,10 @@ const char *const OB_CDB_OB_DYNAMIC_PARTITION_TABLES_TNAME = "CDB_OB_DYNAMIC_PAR
 const char *const OB_V_OB_DYNAMIC_PARTITION_TABLES_TNAME = "V$OB_DYNAMIC_PARTITION_TABLES";
 const char *const OB_GV_OB_VECTOR_MEMORY_TNAME = "GV$OB_VECTOR_MEMORY";
 const char *const OB_V_OB_VECTOR_MEMORY_TNAME = "V$OB_VECTOR_MEMORY";
+const char *const OB_DBA_OB_AI_MODELS_TNAME = "DBA_OB_AI_MODELS";
+const char *const OB_DBA_OB_AI_MODEL_ENDPOINTS_TNAME = "DBA_OB_AI_MODEL_ENDPOINTS";
+const char *const OB_CDB_OB_AI_MODELS_TNAME = "CDB_OB_AI_MODELS";
+const char *const OB_CDB_OB_AI_MODEL_ENDPOINTS_TNAME = "CDB_OB_AI_MODEL_ENDPOINTS";
 const char *const OB_ALL_TABLE_AUX_LOB_META_TNAME = "__all_table_aux_lob_meta";
 const char *const OB_ALL_COLUMN_AUX_LOB_META_TNAME = "__all_column_aux_lob_meta";
 const char *const OB_ALL_DDL_OPERATION_AUX_LOB_META_TNAME = "__all_ddl_operation_aux_lob_meta";
@@ -3528,6 +3589,13 @@ const char *const OB_ALL_VECTOR_INDEX_TASK_AUX_LOB_META_TNAME = "__all_vector_in
 const char *const OB_ALL_VECTOR_INDEX_TASK_HISTORY_AUX_LOB_META_TNAME = "__all_vector_index_task_history_aux_lob_meta";
 const char *const OB_ALL_CCL_RULE_AUX_LOB_META_TNAME = "__all_ccl_rule_aux_lob_meta";
 const char *const OB_ALL_CCL_RULE_HISTORY_AUX_LOB_META_TNAME = "__all_ccl_rule_history_aux_lob_meta";
+const char *const OB_ALL_AI_MODEL_AUX_LOB_META_TNAME = "__all_ai_model_aux_lob_meta";
+const char *const OB_ALL_AI_MODEL_HISTORY_AUX_LOB_META_TNAME = "__all_ai_model_history_aux_lob_meta";
+const char *const OB_ALL_AI_MODEL_ENDPOINT_AUX_LOB_META_TNAME = "__all_ai_model_endpoint_aux_lob_meta";
+const char *const OB_ALL_TENANT_LOCATION_AUX_LOB_META_TNAME = "__all_tenant_location_aux_lob_meta";
+const char *const OB_ALL_TENANT_LOCATION_HISTORY_AUX_LOB_META_TNAME = "__all_tenant_location_history_aux_lob_meta";
+const char *const OB_ALL_TENANT_OBJAUTH_MYSQL_AUX_LOB_META_TNAME = "__all_tenant_objauth_mysql_aux_lob_meta";
+const char *const OB_ALL_TENANT_OBJAUTH_MYSQL_HISTORY_AUX_LOB_META_TNAME = "__all_tenant_objauth_mysql_history_aux_lob_meta";
 const char *const OB_ALL_TABLE_AUX_LOB_PIECE_TNAME = "__all_table_aux_lob_piece";
 const char *const OB_ALL_COLUMN_AUX_LOB_PIECE_TNAME = "__all_column_aux_lob_piece";
 const char *const OB_ALL_DDL_OPERATION_AUX_LOB_PIECE_TNAME = "__all_ddl_operation_aux_lob_piece";
@@ -3812,6 +3880,13 @@ const char *const OB_ALL_VECTOR_INDEX_TASK_AUX_LOB_PIECE_TNAME = "__all_vector_i
 const char *const OB_ALL_VECTOR_INDEX_TASK_HISTORY_AUX_LOB_PIECE_TNAME = "__all_vector_index_task_history_aux_lob_piece";
 const char *const OB_ALL_CCL_RULE_AUX_LOB_PIECE_TNAME = "__all_ccl_rule_aux_lob_piece";
 const char *const OB_ALL_CCL_RULE_HISTORY_AUX_LOB_PIECE_TNAME = "__all_ccl_rule_history_aux_lob_piece";
+const char *const OB_ALL_AI_MODEL_AUX_LOB_PIECE_TNAME = "__all_ai_model_aux_lob_piece";
+const char *const OB_ALL_AI_MODEL_HISTORY_AUX_LOB_PIECE_TNAME = "__all_ai_model_history_aux_lob_piece";
+const char *const OB_ALL_AI_MODEL_ENDPOINT_AUX_LOB_PIECE_TNAME = "__all_ai_model_endpoint_aux_lob_piece";
+const char *const OB_ALL_TENANT_LOCATION_AUX_LOB_PIECE_TNAME = "__all_tenant_location_aux_lob_piece";
+const char *const OB_ALL_TENANT_LOCATION_HISTORY_AUX_LOB_PIECE_TNAME = "__all_tenant_location_history_aux_lob_piece";
+const char *const OB_ALL_TENANT_OBJAUTH_MYSQL_AUX_LOB_PIECE_TNAME = "__all_tenant_objauth_mysql_aux_lob_piece";
+const char *const OB_ALL_TENANT_OBJAUTH_MYSQL_HISTORY_AUX_LOB_PIECE_TNAME = "__all_tenant_objauth_mysql_history_aux_lob_piece";
 const char *const OB_ALL_VIRTUAL_PLAN_CACHE_STAT_ALL_VIRTUAL_PLAN_CACHE_STAT_I1_TNAME = "__idx_11003_all_virtual_plan_cache_stat_i1";
 const char *const OB_ALL_VIRTUAL_SESSION_EVENT_ALL_VIRTUAL_SESSION_EVENT_I1_TNAME = "__idx_11013_all_virtual_session_event_i1";
 const char *const OB_ALL_VIRTUAL_SESSION_WAIT_ALL_VIRTUAL_SESSION_WAIT_I1_TNAME = "__idx_11014_all_virtual_session_wait_i1";
@@ -3911,6 +3986,11 @@ const char *const OB_ALL_PKG_COLL_TYPE_IDX_PKG_COLL_NAME_ID_TNAME = "__idx_524_i
 const char *const OB_ALL_CATALOG_IDX_CATALOG_NAME_TNAME = "__idx_537_idx_catalog_name";
 const char *const OB_ALL_CATALOG_PRIVILEGE_IDX_CATALOG_PRIV_CATALOG_NAME_TNAME = "__idx_539_idx_catalog_priv_catalog_name";
 const char *const OB_ALL_CCL_RULE_IDX_CCL_RULE_ID_TNAME = "__idx_547_idx_ccl_rule_id";
+const char *const OB_ALL_AI_MODEL_ENDPOINT_IDX_ENDPOINT_NAME_TNAME = "__idx_552_idx_endpoint_name";
+const char *const OB_ALL_AI_MODEL_ENDPOINT_IDX_AI_MODEL_NAME_TNAME = "__idx_552_idx_ai_model_name";
+const char *const OB_ALL_TENANT_LOCATION_IDX_LOCATION_NAME_TNAME = "__idx_553_idx_location_name";
+const char *const OB_ALL_TENANT_OBJAUTH_MYSQL_IDX_OBJAUTH_MYSQL_USER_ID_TNAME = "__idx_555_idx_objauth_mysql_user_id";
+const char *const OB_ALL_TENANT_OBJAUTH_MYSQL_IDX_OBJAUTH_MYSQL_OBJ_NAME_TNAME = "__idx_555_idx_objauth_mysql_obj_name";
 const char *const OB_ALL_TABLET_REORGANIZE_HISTORY_IDX_TABLET_HIS_TABLE_ID_DEST_TNAME = "__idx_482_idx_tablet_his_table_id_dest";
 
 // initial data for __all_privilege

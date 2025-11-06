@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #define USING_LOG_PREFIX SQL_RESV
@@ -29,7 +33,6 @@ int ObAlterMviewUtils::resolve_mv_options(const ParseNode &node,
 {
   int ret = OB_SUCCESS;
   uint64_t tenant_id = 0;
-  uint64_t data_version = 0;
 
   if (OB_ISNULL(session_info) || OB_ISNULL(alter_table_stmt) || OB_ISNULL(table_schema) ||
       OB_ISNULL(schema_guard) || OB_ISNULL(allocator)) {
@@ -44,14 +47,6 @@ int ObAlterMviewUtils::resolve_mv_options(const ParseNode &node,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid mv options node", KR(ret), K(node.type_), K(node.num_child_));
   } else if (FALSE_IT(tenant_id = session_info->get_effective_tenant_id())) {
-  } else if (OB_FAIL(GET_MIN_DATA_VERSION(tenant_id, data_version))) {
-    LOG_WARN("get tenant data version failed", K(ret));
-  } else if (data_version < DATA_VERSION_4_3_5_1) {
-    ret = OB_NOT_SUPPORTED;
-    LOG_WARN("tenant data version is less than 4.3.5.1, altering mv options is not supported",
-             K(ret), K(data_version));
-    LOG_USER_ERROR(OB_NOT_SUPPORTED,
-                   "tenant data version is less than 4.3.5.1, altering mv options is");
   } else {
     ObAlterMViewArg &alter_mview_arg = alter_table_stmt->get_alter_table_arg().alter_mview_arg_;
     ObString exec_env;
@@ -91,11 +86,7 @@ int ObAlterMviewUtils::resolve_mv_options(const ParseNode &node,
       }
     } else if (4 == node.int32_values_[0]) {
       ParseNode *nest_refresh_node = node.children_[0];
-      if (data_version < DATA_VERSION_4_3_5_3) {
-        ret = OB_NOT_SUPPORTED;
-        LOG_WARN("tenant data version is less than 4.3.5.3, alter mv nested refresh mode is not supported",
-                K(ret), K(data_version)); 
-      } else if (OB_ISNULL(nest_refresh_node) ||
+      if (OB_ISNULL(nest_refresh_node) ||
                  OB_UNLIKELY(T_MV_NESTED_REFRESH_CLAUSE != nest_refresh_node->type_)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("invalid nested refresh node", KP(node.children_[0]), K(ret));
@@ -205,7 +196,6 @@ int ObAlterMviewUtils::resolve_mlog_options(const ParseNode &node,
                                             ObResolverParams &resolver_params)
 {
   int ret = OB_SUCCESS;
-  uint64_t data_version = 0;
 
   if (OB_ISNULL(session_info) || OB_ISNULL(alter_table_stmt) || OB_ISNULL(allocator)) {
     ret = OB_ERR_UNEXPECTED;
@@ -213,14 +203,6 @@ int ObAlterMviewUtils::resolve_mlog_options(const ParseNode &node,
   } else if (OB_UNLIKELY(T_ALTER_MLOG_OPTIONS != node.type_ || 1 != node.num_child_)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid mlog options node", K(node.type_), K(node.num_child_));
-  } else if (OB_FAIL(GET_MIN_DATA_VERSION(session_info->get_effective_tenant_id(), data_version))) {
-    LOG_WARN("get tenant data version failed", K(ret));
-  } else if (data_version < DATA_VERSION_4_3_5_1) {
-    ret = OB_NOT_SUPPORTED;
-    LOG_WARN("tenant data version is less than 4.3.5.1, altering mlog options is not supported",
-             K(ret), K(data_version));
-    LOG_USER_ERROR(OB_NOT_SUPPORTED,
-                   "tenant data version is less than 4.3.5.1, altering mlog options is");
   } else {
     ObAlterMLogArg &alter_mlog_arg = alter_table_stmt->get_alter_table_arg().alter_mlog_arg_;
     ObString exec_env;

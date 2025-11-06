@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #define USING_LOG_PREFIX CLOG
@@ -1239,7 +1243,7 @@ int ObServerLogBlockMgr::get_has_allocated_blocks_cnt_in_(
   int ret = OB_SUCCESS;
   DIR *dir = NULL;
   struct dirent *entry = NULL;
-  std::regex pattern_tenant(".*/tenant_[1-9]\\d*");
+  std::regex pattern_tenant(".*/sys");
   std::regex pattern_log_pool(".*/log_pool/*");
   if (NULL == (dir = opendir(log_disk_path))) {
     ret = OB_ERR_SYS;
@@ -1290,7 +1294,7 @@ int ObServerLogBlockMgr::remove_tmp_file_or_directory_for_tenant_(const char *lo
 {
   int ret = OB_SUCCESS;
   DIR *dir = NULL;
-  std::regex pattern_tenant(".*/tenant_[1-9]\\d*");
+  std::regex pattern_tenant(".*/sys");
   struct dirent *entry = NULL;
   if (NULL == (dir = opendir(log_disk_path))) {
     ret = OB_ERR_SYS;
@@ -1604,8 +1608,8 @@ int ObServerLogBlockMgr::scan_tenant_dir_(const char *tenant_dir,
 {
   int ret = OB_SUCCESS;
   DIR *dir = NULL;
-  std::regex pattern_log_stream(".*/tenant_[1-9]\\d*/[1-9]\\d*");
-  std::regex pattern_tmp_dir(".*/tenant_[1-9]\\d*/tmp_dir");
+  std::regex pattern_log_stream(".*/sys/[1-9]\\d*");
+  std::regex pattern_tmp_dir(".*/sys/tmp_dir");
   struct dirent *entry = NULL;
   if (NULL == (dir = opendir(tenant_dir))) {
     ret = OB_ERR_SYS;
@@ -1653,8 +1657,8 @@ int ObServerLogBlockMgr::scan_ls_dir_(const char *ls_dir,
 {
   int ret = OB_SUCCESS;
   DIR *dir = NULL;
-  std::regex pattern_log(".*/tenant_[1-9]\\d*/[1-9]\\d*/log");
-  std::regex pattern_meta(".*/tenant_[1-9]\\d*/[1-9]\\d*/meta");
+  std::regex pattern_log(".*/sys/[1-9]\\d*/log");
+  std::regex pattern_meta(".*/sys/[1-9]\\d*/meta");
   struct dirent *entry = NULL;
   if (NULL == (dir = opendir(ls_dir))) {
     ret = OB_ERR_SYS;

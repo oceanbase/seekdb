@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2024 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 #define USING_LOG_PREFIX SQL_DAS
 #include "sql/das/ob_das_ir_define.h"
@@ -1133,7 +1137,7 @@ int ObVectorIndexLookupOp::do_aux_table_lookup()
     doc_id_scan_param_.need_switch_param_ = false;
     // init doc_id -> rowkey table iterator as rowkey iter
     if (OB_FAIL(set_doc_id_idx_lookup_param(
-        doc_id_lookup_ctdef_, doc_id_lookup_rtdef_, doc_id_scan_param_, doc_id_idx_tablet_id_, ls_id_))) {
+        doc_id_lookup_ctdef_, doc_id_lookup_rtdef_, doc_id_scan_param_, domain_id_idx_tablet_id_, ls_id_))) {
       LOG_WARN("failed to init vid lookup scan param", K(ret));
     } else if (OB_FAIL(tsc_service.table_scan(doc_id_scan_param_, rowkey_iter_))) {
       if (OB_SNAPSHOT_DISCARDED == ret && scan_param_.fb_snapshot_.is_valid()) {
@@ -1144,13 +1148,13 @@ int ObVectorIndexLookupOp::do_aux_table_lookup()
     }
   } else {
     const ObTabletID &scan_tablet_id = doc_id_scan_param_.tablet_id_;
-    doc_id_scan_param_.need_switch_param_ = scan_tablet_id.is_valid() && (doc_id_idx_tablet_id_ != scan_tablet_id);
-    doc_id_scan_param_.tablet_id_ = doc_id_idx_tablet_id_;
+    doc_id_scan_param_.need_switch_param_ = scan_tablet_id.is_valid() && (domain_id_idx_tablet_id_ != scan_tablet_id);
+    doc_id_scan_param_.tablet_id_ = domain_id_idx_tablet_id_;
     doc_id_scan_param_.ls_id_ = ls_id_;
     if (OB_FAIL(tsc_service.reuse_scan_iter(doc_id_scan_param_.need_switch_param_, rowkey_iter_))) {
       LOG_WARN("failed to reuse vid iterator", K(ret));
     } else if (OB_FAIL(tsc_service.table_rescan(doc_id_scan_param_, rowkey_iter_))) {
-      LOG_WARN("failed to rescan vid rowkey table", K(ret), K_(doc_id_idx_tablet_id), K(scan_tablet_id));
+      LOG_WARN("failed to rescan vid rowkey table", K(ret), K_(domain_id_idx_tablet_id), K(scan_tablet_id));
     }
   }
   return ret;

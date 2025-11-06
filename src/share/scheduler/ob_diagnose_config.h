@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2022 OceanBase
- * OceanBase is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 //SUSPECT_INFO_TYPE_DEF(suspect_info_type, info_priority, with_comment, info_str, int_info_cnt, ...)
@@ -21,9 +25,9 @@ SUSPECT_INFO_TYPE_DEF(SUSPECT_MEMTABLE_CANT_MINOR_MERGE, ObDiagnoseInfoPrio::DIA
 SUSPECT_INFO_TYPE_DEF(SUSPECT_CANT_SCHEDULE_MINOR_MERGE, ObDiagnoseInfoPrio::DIAGNOSE_PRIORITY_MID, false, "can't schedule minor merge",
     3, {"min_snapshot_version", "max_snapshot_version", "mini_sstable_cnt"})
 SUSPECT_INFO_TYPE_DEF(SUSPECT_CANT_MAJOR_MERGE, ObDiagnoseInfoPrio::DIAGNOSE_PRIORITY_MID, false, "need major merge but can't merge now",
-    6, {"compaction_scn", "tablet_snapshot_version", "need_force_freeze", "ls_weak_read_ts_ready", "exist_unfinished_inc_major", "max_serialized_medium_scn"})
+    5, {"compaction_scn", "tablet_snapshot_version", "need_force_freeze", "ls_weak_read_ts_ready", "max_serialized_medium_scn"})
 SUSPECT_INFO_TYPE_DEF(SUSPECT_SCHEDULE_MEDIUM_FAILED, ObDiagnoseInfoPrio::DIAGNOSE_PRIORITY_MID, false, "schedule medium failed",
-    4, {"compaction_scn", "store_column_cnt", "exist_unfinished_inc_major", "error_code"})
+    3, {"compaction_scn", "store_column_cnt", "error_code"})
 SUSPECT_INFO_TYPE_DEF(SUSPECT_SSTABLE_COUNT_NOT_SAFE, ObDiagnoseInfoPrio::DIAGNOSE_PRIORITY_HIGH, true, "sstable count is not safe",
     4, {"minor_compact_trigger", "major_table_count", "minor_tables_count", "first_minor_start_scn"})
 SUSPECT_INFO_TYPE_DEF(SUSPECT_SUBMIT_LOG_FOR_FREEZE, ObDiagnoseInfoPrio::DIAGNOSE_PRIORITY_LOW, false, "traverse_trans_to_submit_redo_log failed",

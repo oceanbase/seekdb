@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #define USING_LOG_PREFIX RPC_OBMYSQL
@@ -106,7 +110,30 @@ int ObMySQLUtil::get_length(const char *&pos, uint64_t &length)
       get_uint3(pos, s4);
       length = s4;
     } else if (sentinel == 254) {
-      get_uint8(pos, length);
+      if (lib::is_oracle_mode()) {
+        get_uint8(pos, length);
+      } else {
+        /*
+          In our client-server protocol all numbers bigger than 2^24
+          stored as 8 bytes with uint8korr. Here we always know that
+          parameter length is less than 2^4 so we don't look at the second
+          4 bytes. But still we need to obey the protocol hence 9 in the
+          assignment below.
+          if (packet_left_len < 9) {
+            *header_len = 0;
+            return 0;
+          }
+          *header_len = 9;
+          return static_cast<ulong>(uint4korr(packet + 1));
+
+          OceanBase length parsing compatible with mysql, so we don't look at the second
+          4 bytes. But still we need to obey the protocol hence 9 in the
+          assignment below.
+        */
+        get_uint4(pos, s4);
+        length = s4;
+        pos += 4;
+      }
     } else {
       // 255??? won't get here.
       pos--;                  // roll back

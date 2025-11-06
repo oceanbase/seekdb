@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #define USING_LOG_PREFIX SQL_OPT
@@ -23,6 +27,49 @@ using namespace oceanbase::share;
 using namespace oceanbase::share::schema;
 using namespace common;
 
+int IndexDMLInfo::deep_copy(ObIRawExprCopier &expr_copier, const IndexDMLInfo &other)
+{
+  int ret = OB_SUCCESS;
+  table_id_ = other.table_id_;
+  loc_table_id_ = other.loc_table_id_;
+  ref_table_id_ = other.ref_table_id_;
+  index_name_ = other.index_name_;
+  spk_cnt_ = other.spk_cnt_;
+  rowkey_cnt_ = other.rowkey_cnt_;
+  need_filter_null_ = other.need_filter_null_;
+  is_primary_index_ = other.is_primary_index_;
+  is_update_unique_key_ = other.is_update_unique_key_;
+  is_update_part_key_ = other.is_update_part_key_;
+  is_update_primary_key_ = other.is_update_primary_key_;
+  is_vec_hnsw_index_vid_opt_ = other.is_vec_hnsw_index_vid_opt_;
+  assignments_.reset();
+  if (OB_FAIL(expr_copier.copy(other.column_exprs_, column_exprs_))) {
+    LOG_WARN("failed to assign column exprs", K(ret));
+  } else if (OB_FAIL(expr_copier.copy(other.column_convert_exprs_,
+                                      column_convert_exprs_))) {
+    LOG_WARN("failed to copy exprs", K(ret));
+  } else if (OB_FAIL(expr_copier.copy(other.column_old_values_exprs_,
+                                      column_old_values_exprs_))) {
+    LOG_WARN("failed to copy exprs", K(ret));
+  } else if (OB_FAIL(assignments_.prepare_allocate(other.assignments_.count()))) {
+    LOG_WARN("failed to prepare allocate assignment array", K(ret));
+  } else if (OB_FAIL(expr_copier.copy(other.ck_cst_exprs_, ck_cst_exprs_))) {
+    LOG_WARN("failed to copy exprs", K(ret));
+  } else if (OB_FAIL(part_ids_.assign(other.part_ids_))) {
+    LOG_WARN("failed to assign part ids", K(ret));
+  } else if (OB_NOT_NULL(other.trans_info_expr_)) {
+    if (OB_FAIL(expr_copier.copy(other.trans_info_expr_, trans_info_expr_))) {
+      LOG_WARN("failed to trans info exprs", K(ret), KPC(other.trans_info_expr_));
+    }
+  }
+  for (int64_t i = 0; OB_SUCC(ret) && i < other.assignments_.count(); ++i) {
+    if (OB_FAIL(assignments_.at(i).deep_copy(expr_copier,
+                                             other.assignments_.at(i)))) {
+      LOG_WARN("failed to deep copy assignment", K(ret));
+    }
+  }
+  return ret;
+}
 
 int IndexDMLInfo::assign_basic(const IndexDMLInfo &other)
 {
@@ -39,6 +86,7 @@ int IndexDMLInfo::assign_basic(const IndexDMLInfo &other)
   is_update_part_key_ = other.is_update_part_key_;
   is_update_primary_key_ = other.is_update_primary_key_;
   trans_info_expr_ = other.trans_info_expr_;
+  is_vec_hnsw_index_vid_opt_ = other.is_vec_hnsw_index_vid_opt_;
   if (OB_FAIL(column_exprs_.assign(other.column_exprs_))) {
     LOG_WARN("failed to assign column exprs", K(ret));
   } else if (OB_FAIL(column_convert_exprs_.assign(other.column_convert_exprs_))) {
@@ -251,7 +299,7 @@ ObLogDelUpd::ObLogDelUpd(ObDelUpdLogPlan &plan)
 {
 }
 
-int ObLogDelUpd::get_plan_item_info(PlanText &plan_text, 
+int ObLogDelUpd::get_plan_item_info(PlanText &plan_text,
                                     ObSqlPlanItem &plan_item)
 {
   int ret = OB_SUCCESS;
@@ -267,14 +315,14 @@ int ObLogDelUpd::get_plan_item_info(PlanText &plan_text,
                                                 base_table,
                                                 index_table))) {
       BEGIN_BUF_PRINT;
-      if (OB_FAIL(BUF_PRINTF("%.*s(%.*s)", 
-                             base_table.length(), 
+      if (OB_FAIL(BUF_PRINTF("%.*s(%.*s)",
+                             base_table.length(),
                              base_table.ptr(),
-                             index_table.length(), 
+                             index_table.length(),
                              index_table.ptr()))) {
         LOG_WARN("failed to print str", K(ret));
       }
-      END_BUF_PRINT(plan_item.object_alias_, 
+      END_BUF_PRINT(plan_item.object_alias_,
                     plan_item.object_alias_len_);
     }
   }
@@ -961,9 +1009,9 @@ int ObLogDelUpd::get_table_index_name(const IndexDMLInfo &index_info,
   return ret;
 }
 
-int ObLogDelUpd::print_table_infos(const ObString &prefix, 
-                                   char *buf, 
-                                   int64_t &buf_len, 
+int ObLogDelUpd::print_table_infos(const ObString &prefix,
+                                   char *buf,
+                                   int64_t &buf_len,
                                    int64_t &pos,
                                    ExplainType type)
 {
@@ -1021,8 +1069,8 @@ int ObLogDelUpd::print_table_infos(const ObString &prefix,
 }
 
 int ObLogDelUpd::print_assigns(const ObAssignments &assigns,
-                               char *buf, 
-                               int64_t &buf_len, 
+                               char *buf,
+                               int64_t &buf_len,
                                int64_t &pos,
                                ExplainType type)
 {
@@ -1487,6 +1535,21 @@ int ObLogDelUpd::replace_dml_info_exprs(
           }
         }
         // just skip, nothing to do.
+      } else if (expr->is_column_ref_expr() && static_cast<ObColumnRefRawExpr *>(expr)->is_hybrid_embedded_vec_column()) {
+        const ObTableSchema *table_schema = NULL;
+        if (OB_FAIL(schema_guard->get_table_schema(MTL_ID(), index_dml_info->ref_table_id_, table_schema))) {
+          LOG_WARN("failed to get table schema", K(ret));
+        } else if (OB_NOT_NULL(table_schema)) {
+          uint64_t embedded_vec_tid = OB_INVALID_ID;
+          if (OB_FAIL(ObVectorIndexUtil::check_hybrid_embedded_vec_cid_table_readable(schema_guard, *table_schema, static_cast<ObColumnRefRawExpr *>(expr)->get_column_id(), embedded_vec_tid))) {
+            LOG_WARN("failed to check_rowkey_cid_table_readable", K(ret));
+          } else if (OB_INVALID_ID == embedded_vec_tid) {
+            if (OB_FAIL(replace_expr_action(replacer, index_dml_info->column_old_values_exprs_.at(i)))) {
+              LOG_WARN("fail to replace expr", K(ret), K(i), K(index_dml_info->column_old_values_exprs_));
+            }
+          }
+        }
+        // just skip, nothing to do.
       } else if (OB_FAIL(replace_expr_action(replacer, index_dml_info->column_old_values_exprs_.at(i)))) {
         LOG_WARN("fail to replace expr", K(ret), K(i), K(index_dml_info->column_old_values_exprs_));
       }
@@ -1509,7 +1572,7 @@ int ObLogDelUpd::print_used_hint(PlanText &plan_text)
   } else  {
     const ObHint *hint = get_plan()->get_log_plan_hint().get_normal_hint(T_USE_DISTRIBUTED_DML);
     if (NULL != hint) {
-      bool match_hint = is_multi_part_dml() ? 
+      bool match_hint = is_multi_part_dml() ?
                         hint->is_enable_hint() : hint->is_disable_hint();
       if (match_hint && OB_FAIL(hint->print_hint(plan_text))) {
         LOG_WARN("failed to print use multi part dml hint", K(ret));

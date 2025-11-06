@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #define USING_LOG_PREFIX SQL_RESV
@@ -20,7 +24,6 @@
 #include "sql/resolver/prepare/ob_prepare_resolver.h"
 #include "sql/resolver/prepare/ob_execute_resolver.h"
 #include "sql/resolver/prepare/ob_deallocate_resolver.h"
-#include "sql/resolver/cmd/ob_bootstrap_resolver.h"
 #include "sql/resolver/ddl/ob_create_table_resolver.h"
 #include "sql/resolver/ddl/ob_create_func_resolver.h"
 #include "sql/resolver/ddl/ob_drop_func_resolver.h"
@@ -92,7 +95,6 @@
 #include "sql/resolver/cmd/ob_kill_resolver.h"
 #include "sql/resolver/cmd/ob_set_names_resolver.h"
 #include "sql/resolver/cmd/ob_set_transaction_resolver.h"
-#include "sql/resolver/cmd/ob_bootstrap_resolver.h"
 #include "sql/resolver/cmd/ob_empty_query_resolver.h"
 #include "sql/resolver/cmd/ob_anonymous_block_resolver.h"
 #include "sql/resolver/cmd/ob_call_procedure_resolver.h"
@@ -129,6 +131,10 @@
 #include "sql/resolver/ddl/ob_create_ccl_rule_resolver.h"
 #include "sql/resolver/ddl/ob_drop_ccl_rule_resolver.h"
 #include "sql/resolver/ddl/ob_catalog_resolver.h"
+#include "sql/resolver/ddl/ob_create_location_resolver.h"
+#include "sql/resolver/ddl/ob_alter_location_resolver.h"
+#include "sql/resolver/ddl/ob_drop_location_resolver.h"
+#include "sql/resolver/cmd/ob_location_utils_resolver.h"
 #ifdef OB_BUILD_SHARED_STORAGE
 #include "sql/resolver/cmd/ob_trigger_storage_cache_resolver.h"
 #endif
@@ -355,10 +361,6 @@ int ObResolver::resolve(IsPrepared if_prepared, const ParseNode &parse_tree, ObS
         //fall through
       case T_COMMIT: {
         REGISTER_STMT_RESOLVER(EndTrans);
-        break;
-      }
-      case T_BOOTSTRAP: {
-        REGISTER_STMT_RESOLVER(Bootstrap);
         break;
       }
       case T_FREEZE: {
@@ -744,7 +746,10 @@ int ObResolver::resolve(IsPrepared if_prepared, const ParseNode &parse_tree, ObS
       case T_SHOW_CHECK_TABLE:
       case T_SHOW_CREATE_USER:
       case T_SHOW_CATALOGS:
-      case T_SHOW_CREATE_CATALOG: {
+      case T_SHOW_CREATE_CATALOG:
+      case T_SHOW_LOCATIONS:
+      case T_SHOW_CREATE_LOCATION:
+      case T_LOCATION_UTILS_LIST: {
         REGISTER_STMT_RESOLVER(Show);
         break;
       }
@@ -1223,6 +1228,22 @@ int ObResolver::resolve(IsPrepared if_prepared, const ParseNode &parse_tree, ObS
       }
       case T_DROP_CCL_RULE: {
         REGISTER_STMT_RESOLVER(DropCCLRule);
+        break;
+      }
+      case T_CREATE_LOCATION: {
+        REGISTER_STMT_RESOLVER(CreateLocation);
+        break;
+      }
+      case T_ALTER_LOCATION: {
+        REGISTER_STMT_RESOLVER(AlterLocation);
+        break;
+      }
+      case T_DROP_LOCATION: {
+        REGISTER_STMT_RESOLVER(DropLocation);
+        break;
+      }
+      case T_LOCATION_UTILS: {
+        REGISTER_STMT_RESOLVER(LocationUtils);
         break;
       }
       default: {

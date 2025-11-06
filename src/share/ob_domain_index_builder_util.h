@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #ifndef OCEANBASE_SHARE_DOMAIN_INDEX_BUILDER_UTIL_H_
@@ -49,6 +53,22 @@ public:
                                 const oceanbase::common::ObAddr &addr,
                                 int map_num,
                                 const int64_t snapshot_version);
+  static int retrieve_complete_domain_index(const ObIArray<ObTableSchema> &shared_schema_array,
+                                            const ObIArray<ObTableSchema> &domain_schema_array,
+                                            const ObIArray<ObTableSchema> &aux_schema_array,
+                                            ObArenaAllocator &allocator,
+                                            const uint64_t new_data_table_id,
+                                            ObIArray<ObTableSchema> &rebuid_index_schemas,
+                                            const bool need_doc_id,
+                                            const bool need_vid);
+
+private:
+  static int locate_aux_index_schema_by_name(const ObString &inner_index_name,
+                                             const uint64_t new_data_table_id,
+                                             const ObIArray<ObTableSchema> &domain_index_schemas,
+                                             const share::schema::ObIndexType type,
+                                             ObArenaAllocator &allocator,
+                                             int64_t &index_aux_schema_idx);
 };
 
 

@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 
@@ -83,7 +87,7 @@ void FakeAllocatorForTxShare::adaptive_update_limit(const int64_t tenant_id,
   if (OB_UNLIKELY(old_ts - cur_ts > (1LL * 1000LL * 1000LL /* 1 second */))) {
     SHARE_LOG_RET(WARN, OB_ERR_UNEXPECTED, "invalid timestamp", K(cur_ts), K(old_ts));
   } else if ((cur_ts - old_ts > UPDATE_LIMIT_INTERVAL) && ATOMIC_BCAS(&last_update_limit_ts, old_ts, cur_ts)) {
-    int64_t remain_memory = lib::get_tenant_memory_remain(tenant_id);
+    int64_t remain_memory = lib::get_hard_memory_remain();
     int64_t usable_remain_memory = remain_memory / 100 * USABLE_REMAIN_MEMORY_PERCETAGE;
     if (remain_memory > MAX_UNUSABLE_MEMORY) {
       usable_remain_memory = std::max(usable_remain_memory, remain_memory - MAX_UNUSABLE_MEMORY);

@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #ifndef OCEANBASE_LIB_OBLOG_OB_LOG_
@@ -404,17 +408,13 @@ public:
                           const char* function);
 
   int64_t get_write_size() const { return log_file_[FD_SVR_FILE].write_size_; }
-  int64_t get_rs_write_size() const { return log_file_[FD_RS_FILE].write_size_; }
-  int64_t get_elec_write_size() const { return log_file_[FD_ELEC_FILE].write_size_; }
   int64_t get_trace_write_size() const { return log_file_[FD_TRACE_FILE].write_size_; }
   int64_t get_alert_write_size() const { return log_file_[FD_ALERT_FILE].write_size_; }
   int64_t get_total_write_count() const { return log_file_[FD_SVR_FILE].write_count_; }
-  int64_t get_rs_total_write_count() const { return log_file_[FD_RS_FILE].write_count_; }
-  int64_t get_elec_total_write_count() const { return log_file_[FD_ELEC_FILE].write_count_; }
   int64_t get_trace_total_write_count() const { return log_file_[FD_TRACE_FILE].write_count_; }
   int64_t get_alert_total_write_count() const { return log_file_[FD_ALERT_FILE].write_count_; }
 
-  ObPLogFileStruct &get_elec_log() { return *(log_file_ + FD_ELEC_FILE); }
+  ObPLogFileStruct &get_svr_log() { return *(log_file_ + FD_SVR_FILE); }
 
   void insert_warning_buffer(const UserMsgLevel user_msg_level,
                              const int errcode,
@@ -580,24 +580,14 @@ public:
   //@param[in] filename The log-file's name.
   //@param[in] flag Whether redirect the stdout and stderr to the descriptor of the log-file.
   //FALSE:redirect TRUE:no redirect.
-  //@param[in] open_wf whether create warning log-file to store warning buffer.
-  //@param[in] finename of rootservice log-file's name.
-  //@param[in] finename of election log-file's name.
   void set_file_name(const char *filename,
                      const bool no_redirect_flag = false,
-                     const bool open_wf = false,
-                     const char *rs_filename = NULL,
-                     const char *elec_filename = NULL,
-                     const char *trace_filename = NULL,
-                     const char *alert_filename = NULL);
-
-  //whether log warn/error log to log.wf
-  void set_log_warn(bool log_warn) { enable_wf_flag_ = log_warn; }
+                     const bool unused = false);
 
   //@brief Check the log-file's status.
   void check_file();
   //@brief Check the log-file's status.
-  void check_file(ObPLogFileStruct &log_struct, const bool redirect_flag, const bool open_wf_flag);
+  void check_file(ObPLogFileStruct &log_struct, const bool redirect_flag);
 
   //@brief Set whether checking the log-file at each message logging.
   //@param[in] v 1:with check, 0:without check
@@ -609,7 +599,7 @@ public:
   int set_max_file_index(int64_t max_file_index = 0x0F);
   //@brief Set whether record old log file. If this flag and max_file_index set,
   //will record log files in the directory for log file
-  int set_record_old_log_file(bool rec_old_file_flag = false);
+  int set_record_old_log_file();
   int set_log_compressor(ObLogCompressor *log_compressor);
   int64_t get_max_file_index() const { return max_file_index_; }
 
@@ -623,9 +613,8 @@ public:
 
   //@brief Set global log-file's level and warning log-file's level.
   //@param[in] level The log-file's level.
-  //@param[in] wf_level The warning log-file's level.
   //@param[in] version The time(us) change the log level.
-  void set_log_level(const char *level, const char *wf_level = NULL, int64_t version = 0);
+  void set_log_level(const char *level, int64_t version = 0);
   //@brief Set global level.
   void set_log_level(const int32_t level, int64_t version = 0)
   {set_log_level(static_cast<int8_t>(level), version);}
@@ -732,17 +721,14 @@ private:
 
   int setting_list_processing(ObLogIdLevelMap &id_level_map,
                               void *mod_setting_list/*ObList<ModSetting>* */);
-  //@brief record log files in the log directory. It's used when max_file_index and rec_old_file_flag_ set.
+  //@brief record log files in the log directory. It's used when max_file_index
   int record_old_log_file();
 
   int get_log_files_in_dir(const char *filename,
-                           void *files/*ObIArray<FileName> * */,
-                           void *wf_files/*ObIArray<FileName> * */);
+                           void *files/*ObIArray<FileName> * */);
 
   int add_files_to_list(void *files/*ObIArray<FileName> * */,
-                        void *wf_files/*ObIArray<FileName> * */,
-                        std::deque<std::string> &file_list,
-                        std::deque<std::string> &wf_file_list);
+                        std::deque<std::string> &file_list);
 
   void rotate_log(const int64_t size, const bool redirect_flag,
                   ObPLogFileStruct &log_struct, const ObPLogFDType fd_type);
@@ -751,16 +737,12 @@ private:
   //@param[in] fd_type.
   //@param[in] whether redirect, FALSE:redirect TRUE:no redirect
   //@param[out] after retated log, open new file_fd
-  //@param[out] after retated wf log, open new wf_file_fd
   //@param[out] add retated log file name to file list
-  //@param[out] add retated wf log file name to file list
   void rotate_log(const char *filename,
                   const ObPLogFDType fd_type,
                   const bool redirect_flag,
                   int32_t &fd,
-                  int32_t &wf_fd,
-                  std::deque<std::string> &file_list,
-                  std::deque<std::string> &wf_file_list);
+                  std::deque<std::string> &file_list);
 
   static void *async_flush_log_handler(void *arg);
   void flush_logs_to_file(ObPLogItem **log_item, const int64_t count);
@@ -832,7 +814,6 @@ private:
   //log level
   ObLogNameIdMap name_id_map_;
   ObLogIdLevelMap id_level_map_;//level of log-file
-  int8_t wf_level_;//level of warning log-file
   int8_t alert_log_level_;//level of alert log-file
   int64_t level_version_;//version of log level
 
@@ -844,9 +825,6 @@ private:
 
   bool force_check_;//whether check log-file at each message logging.
   bool redirect_flag_;//whether redirect, TRUE: redirect FALSE: no redirect.
-  bool open_wf_flag_;//whether open warning log-file.
-  bool enable_wf_flag_; //whether write waring log to wf log-file.
-  bool rec_old_file_flag_;//whether record old file.
   volatile bool can_print_;//when disk has no space, logger control
 
   bool enable_async_log_;//if false, use sync way logging
@@ -879,7 +857,6 @@ private:
   const char *new_file_info_;
   bool info_as_wdiag_;
   std::deque<std::string> file_list_;//to store the names of log-files
-  std::deque<std::string> wf_file_list_;//to store the names of warning log-files
 };
 
 inline ObLogger& ObLogger::get_logger()
@@ -1366,12 +1343,8 @@ void OB_PRINT_DBA(const char *mod_name, const char *mod_name_bracket,
 {
   if (OB_LIKELY(!OB_LOGGER.get_guard())) {
     OB_LOGGER.get_guard() = true;
-    OB_LOGGER.log_message_value(mod_name, dba_event, level, file, line, function, errcode, true,
+    OB_LOGGER.log_message_value(mod_name_bracket, nullptr, level, file, line, function, errcode, false,
                                 std::forward<const Args&&>(args)...);
-    if (print_rd_log) {
-      OB_LOGGER.log_message_value(mod_name_bracket, nullptr, level, file, line, function, errcode, false,
-                                std::forward<const Args&&>(args)...);
-    }
     OB_LOGGER.get_guard() = false;
   }
 }

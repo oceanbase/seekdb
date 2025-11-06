@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #ifndef OCEANBASE_TABLE_OB_TABLE_SCAN_OP_H_
@@ -78,7 +82,6 @@ public:
       rows_(nullptr),
       domain_row_index_(0),
       mbr_buffer_(nullptr),
-      docid_buffer_(nullptr),
       geo_idx_(0),
       cell_idx_(0),
       mbr_idx_(0),
@@ -93,7 +96,6 @@ public:
   blocksstable::ObDatumRow *rows_;
   uint32_t domain_row_index_;
   void *mbr_buffer_;
-  ObDocId* docid_buffer_;
   uint32_t geo_idx_;
   uint32_t cell_idx_;
   uint32_t mbr_idx_;
@@ -333,6 +335,8 @@ public:
   inline bool is_spatial_ddl() const { return is_spatial_ddl_; }
   inline void set_multivalue_ddl(bool is_multivalue_ddl) { is_multivalue_ddl_ = is_multivalue_ddl; }
   inline bool is_multivalue_ddl() const { return is_multivalue_ddl_; }
+  inline void set_spiv_ddl(bool is_spiv_ddl) { is_spiv_ddl_ = is_spiv_ddl; }
+  inline bool is_spiv_ddl() const { return is_spiv_ddl_; }
   void set_est_cost_simple_info(const ObCostTableScanSimpleInfo &info)
   {
     est_cost_simple_info_ = info;
@@ -428,6 +432,8 @@ public:
       uint64_t is_fts_ddl_                      : 1; // mark if ddl table is the fts index or fts doc word aux table.
       uint64_t is_fts_index_aux_                : 1; // mark if ddl table is the fts index aux table.
       uint64_t is_multivalue_ddl_               : 1;
+      uint64_t can_be_paused_                   : 1;
+      uint64_t is_spiv_ddl_                     : 1;
       uint64_t is_scan_resumable_               : 1; // FARM COMPAT WHITELIST, compact with can_be_paused_
       uint64_t need_check_outrow_lob_           : 1; // mark if need check outrow lob
       uint64_t reserved_                        : 49;
@@ -570,19 +576,39 @@ protected:
   int extend_domain_obj_buffer(uint32_t size);
   int fill_generated_multivalue_column(ObStorageDatum* store_datums);
   int multivalue_get_pure_data(ObIAllocator& tmp_allocator,
-                               const char*& data, 
+                               const char*& data,
                                int64_t& data_len,
                                uint32_t& rowkey_start,
-                               uint32_t& rowkey_end, 
-                               uint32_t& record_num, 
-                               bool& is_save_rowkey);
+                               uint32_t& rowkey_end,
+                               uint32_t& record_num,
+                               bool& is_save_rowkey,
+                               bool& use_docid);
   int inner_get_next_multivalue_index_row();
+  int init_spiv_index_rows();
+  int get_sparse_vector_index_column_idxs(int64_t &sparse_vec_idx,
+                                          int64_t &dim_idx,
+                                          int64_t &docid_idx,
+                                          int64_t &value_idx);
+  int generate_sparse_vector_index_row(ObIAllocator &allocator,
+                                       const int64_t dim_idx,
+                                       const int64_t docid_idx,
+                                       const int64_t value_idx,
+                                       const int64_t vec_idx,
+                                       ObDatum &docid_datum,
+                                       ObString &sparse_vec,
+                                       bool &need_ignore_null);
+  int get_sparse_vector_data(ObIAllocator &allocator,
+                             int64_t sparse_vec_idx,
+                             int64_t docid_idx,
+                             ObString &sparse_vector,
+                             ObDatum &docid_datum);
+  int inner_get_next_spiv_index_row();
   int set_need_check_outrow_lob();
   void set_real_rescan_cnt(int64_t real_rescan_cnt) { group_rescan_cnt_ = real_rescan_cnt; }
   int64_t get_real_rescan_cnt() { return group_rescan_cnt_; }
 
   // in_batch_rescan_subplan means the ancestor operator(NLJ/SPF) of TSC uses bacth rescan
-  bool in_batch_rescan_subplan() 
+  bool in_batch_rescan_subplan()
   {
     return !tsc_rtdef_.bnlj_params_.empty();
   }
@@ -681,13 +707,13 @@ protected:
     ParamStore &param_store_;
     int64_t range_buffer_idx_;
   };
-  
+
   OB_INLINE void* locate_range_buffer()
-  { 
-    int64_t column_count = MY_SPEC.tsc_ctdef_.get_query_range_provider().get_column_count(); 
-    size_t range_size = sizeof(ObNewRange) + sizeof(ObObj) * column_count * 2; 
-    void *range_buffers = static_cast<char*>(tsc_rtdef_.range_buffers_) + tsc_rtdef_.range_buffer_idx_ * range_size; 
-    return range_buffers; 
+  {
+    int64_t column_count = MY_SPEC.tsc_ctdef_.get_query_range_provider().get_column_count();
+    size_t range_size = sizeof(ObNewRange) + sizeof(ObObj) * column_count * 2;
+    void *range_buffers = static_cast<char*>(tsc_rtdef_.range_buffers_) + tsc_rtdef_.range_buffer_idx_ * range_size;
+    return range_buffers;
   }
 private:
   const ObTableScanSpec& get_tsc_spec() {return MY_SPEC;}

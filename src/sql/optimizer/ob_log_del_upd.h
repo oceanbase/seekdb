@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #ifndef _OB_LOG_DEL_UPD_H
@@ -45,7 +49,8 @@ public:
     new_rowid_expr_(NULL),
     trans_info_expr_(NULL),
     related_index_ids_(),
-    fk_lookup_part_id_expr_()
+    fk_lookup_part_id_expr_(),
+    is_vec_hnsw_index_vid_opt_(false)
   {
   }
   inline void reset()
@@ -76,6 +81,7 @@ public:
     trans_info_expr_ = NULL,
     related_index_ids_.reset();
     fk_lookup_part_id_expr_.reset();
+    is_vec_hnsw_index_vid_opt_ = false;
   }
   int64_t to_explain_string(char *buf, int64_t buf_len, ExplainType type) const;
   int init_assignment_info(const ObAssignments &assignments,
@@ -83,6 +89,7 @@ public:
 
   int assign_basic(const IndexDMLInfo &other);
   int assign(const ObDmlTableInfo& info);
+  int deep_copy(ObIRawExprCopier &expr_copier, const IndexDMLInfo &other);
 
 
   uint64_t hash(uint64_t seed) const
@@ -173,6 +180,8 @@ public:
 
   common::ObSEArray<ObRawExpr*, 4, common::ModulePageAllocator, true> fk_lookup_part_id_expr_;
 
+  bool is_vec_hnsw_index_vid_opt_;
+
   TO_STRING_KV(K_(table_id),
                K_(ref_table_id),
                K_(loc_table_id),
@@ -190,7 +199,8 @@ public:
                K_(is_update_part_key),
                K_(is_update_primary_key),
                K_(distinct_algo),
-               K_(related_index_ids));
+               K_(related_index_ids),
+               K_(is_vec_hnsw_index_vid_opt));
 };
 
 class ObDelUpdLogPlan;
@@ -374,14 +384,14 @@ protected:
   int generate_ddl_slice_id_expr();
 
   int print_table_infos(const ObString &prefix,
-                        char *buf, 
-                        int64_t &buf_len, 
-                        int64_t &pos, 
+                        char *buf,
+                        int64_t &buf_len,
+                        int64_t &pos,
                         ExplainType type);
   int print_assigns(const ObAssignments &assigns,
-                    char *buf, 
-                    int64_t &buf_len, 
-                    int64_t &pos, 
+                    char *buf,
+                    int64_t &buf_len,
+                    int64_t &pos,
                     ExplainType type);
 
   // The pseudo partition_id for PDML may be produced by repart exchange or TSC.
@@ -391,8 +401,8 @@ protected:
                                         const uint64_t ref_tid,
                                         ObLogExchange *&producer,
                                         ObLogTableScan *&src_tsc);
-                                
-  virtual int get_plan_item_info(PlanText &plan_text, 
+
+  virtual int get_plan_item_info(PlanText &plan_text,
                                 ObSqlPlanItem &plan_item) override;
 
   virtual int print_outline_data(PlanText &plan_text) override;

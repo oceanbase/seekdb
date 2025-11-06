@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #define USING_LOG_PREFIX SERVER
@@ -60,7 +64,6 @@
 #include "observer/virtual_table/ob_all_virtual_tablet_info.h"
 #include "observer/virtual_table/ob_all_virtual_sys_parameter_stat.h"
 #include "observer/virtual_table/ob_all_virtual_tenant_parameter_stat.h"
-#include "observer/virtual_table/ob_all_virtual_tenant_parameter_info.h"
 #include "observer/virtual_table/ob_all_virtual_memstore_info.h"
 #include "observer/virtual_table/ob_all_virtual_minor_freeze_info.h"
 #include "observer/virtual_table/ob_gv_sql_audit.h"
@@ -225,6 +228,8 @@
 #include "observer/virtual_table/ob_all_virtual_tenant_mview_running_job.h"
 #include "observer/virtual_table/ob_all_virtual_tenant_vector_mem_info.h"
 #include "observer/virtual_table/ob_all_virtual_ccl_status.h"
+#include "observer/virtual_table/ob_show_create_location.h"
+#include "observer/virtual_table/ob_all_virtual_external_location_list_file.h"
 
 namespace oceanbase
 {
@@ -706,14 +711,6 @@ int ObVTIterCreator::create_vt_iter(ObVTableScanParam &params,
               } else {
                 vt_iter = static_cast<ObAllVirtualTenantParameterStat *>(all_virtual_tenant_parameter_stat);
               }
-            }
-            break;
-          }
-          case OB_ALL_VIRTUAL_TENANT_PARAMETER_INFO_TID: {
-            ObAllVirtualTenantParameterInfo *all_virtual_tenant_parameter_info = nullptr;
-            if (OB_SUCC(NEW_VIRTUAL_TABLE(ObAllVirtualTenantParameterInfo,
-                                          all_virtual_tenant_parameter_info))) {
-              vt_iter = static_cast<ObAllVirtualTenantParameterInfo *>(all_virtual_tenant_parameter_info);
             }
             break;
           }
@@ -1293,6 +1290,20 @@ int ObVTIterCreator::create_vt_iter(ObVTableScanParam &params,
             if (OB_SUCC(NEW_VIRTUAL_TABLE(ObInfoSchemaCheckConstraintsTable, check_constraint))) {
               check_constraint->set_tenant_id(real_tenant_id);
               vt_iter = static_cast<ObVirtualTableIterator*>(check_constraint);
+            }
+            break;
+          }
+          case OB_TENANT_VIRTUAL_SHOW_CREATE_LOCATION_TID: {
+            ObShowCreateLocation *create_location = NULL;
+            if (OB_SUCC(NEW_VIRTUAL_TABLE(ObShowCreateLocation, create_location))) {
+              vt_iter = static_cast<ObVirtualTableIterator *>(create_location);
+            }
+            break;
+          }
+          case OB_TENANT_VIRTUAL_LIST_FILE_TID: {
+            ObAllVirtualExternalLocationListFile *listfile = NULL;
+            if (OB_SUCC(NEW_VIRTUAL_TABLE(ObAllVirtualExternalLocationListFile, listfile))) {
+              vt_iter = static_cast<ObVirtualTableIterator *>(listfile);
             }
             break;
           }

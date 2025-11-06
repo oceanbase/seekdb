@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #define USING_LOG_PREFIX SQL_RESV
@@ -200,7 +204,7 @@ int ObRawExprDeduceType::visit(ObColumnRefRawExpr &expr)
   }
 
   if (OB_SUCC(ret)) {
-    if (expr.get_result_type().is_lob_storage() && !IS_CLUSTER_VERSION_BEFORE_4_1_0_0) {
+    if (expr.get_result_type().is_lob_storage()) {
       expr.set_has_lob_header();
     }
   }
@@ -552,9 +556,8 @@ int ObRawExprDeduceType::calc_result_type(ObNonTerminalRawExpr &expr,
       }
     }
 
-    if (!IS_CLUSTER_VERSION_BEFORE_4_1_0_0) {
-      result_type.set_has_lob_header();
-    }
+    result_type.set_has_lob_header();
+
     if (OB_FAIL(ret)) {
     } else if (ObExprOperator::NOT_ROW_DIMENSION != row_dimension) {
       ret = op->calc_result_typeN(result_type, GET_TYPE_ARRAY(types), types.count(), type_ctx);
@@ -2481,17 +2484,9 @@ int ObRawExprDeduceType::visit(ObWinFunRawExpr &expr)
       // @TODO : nijia.nj,subdivision various window_function
       if (T_WIN_FUN_CUME_DIST == expr.get_func_type() ||
           T_WIN_FUN_PERCENT_RANK == expr.get_func_type()) {
-        const uint64_t ob_version = GET_MIN_CLUSTER_VERSION();
-        if (!((ob_version >= CLUSTER_VERSION_2277 && ob_version < CLUSTER_VERSION_3000)
-              || (ob_version >= CLUSTER_VERSION_312 && ob_version < CLUSTER_VERSION_3200)
-              || ob_version >= CLUSTER_VERSION_3_2_3_0)) {
-          result_type.set_accuracy(ObAccuracy::MAX_ACCURACY2[ORACLE_MODE][ObNumberType]);
-          result_type.set_number();
-        } else {
-          result_type.set_accuracy(ObAccuracy::DML_DEFAULT_ACCURACY[ObDoubleType]);
-          result_type.set_double();
-          result_type.set_result_flag(NOT_NULL_FLAG);
-        }
+        result_type.set_accuracy(ObAccuracy::DML_DEFAULT_ACCURACY[ObDoubleType]);
+        result_type.set_double();
+        result_type.set_result_flag(NOT_NULL_FLAG);
       } else if (T_WIN_FUN_DENSE_RANK == expr.get_func_type() ||
                   T_WIN_FUN_RANK == expr.get_func_type() ||
                   T_WIN_FUN_ROW_NUMBER == expr.get_func_type()) {
@@ -2845,6 +2840,19 @@ int ObRawExprDeduceType::visit(ObMatchFunRawExpr &expr)
       LOG_WARN("get_default_cast_mode failed", K(ret));
     } else if (OB_FAIL(try_add_cast_expr(expr, expr.get_search_key_idx(), search_key_type, def_cast_mode))) {
       LOG_WARN("add_implicit_cast failed", K(ret));
+    }
+  }
+  if (OB_FAIL(ret)) {
+  } else if (expr.is_es_match()) {
+    for (int64_t i = 0; OB_SUCC(ret) && i < expr.get_columns_boosts().count(); ++i) {
+      int index = expr.get_search_key_idx() + 1 + i;
+      ObCastMode def_cast_mode = CM_NONE;
+      ObExprResType result_type;
+      result_type.set_double();
+      result_type.set_calc_type(ObDoubleType);
+      if (OB_FAIL(try_add_cast_expr(expr, index, result_type, def_cast_mode))) {
+        LOG_WARN("add_implicit_cast failed", K(ret));
+      }
     }
   }
   return ret;

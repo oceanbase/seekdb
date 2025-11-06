@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #ifndef OB_OCEANBASE_SCHEMA_OB_SCHEMA_MGR_H_
@@ -33,6 +37,8 @@
 #include "share/schema/ob_mock_fk_parent_table_mgr.h"
 #include "share/schema/ob_catalog_mgr.h"
 #include "share/schema/ob_ccl_rule_mgr.h"
+#include "share/schema/ob_ai_model_mgr.h"
+#include "share/schema/ob_location_mgr.h"
 
 namespace oceanbase
 {
@@ -638,6 +644,26 @@ public:
       const uint64_t schema_id,
       const ObDirectorySchema *&schema) const;
 
+  // ai model
+  int get_ai_model_schema(
+      const uint64_t &tenant_id,
+      const uint64_t &ai_model_id,
+      const ObAiModelSchema *&ai_model_schema) const;
+  int get_ai_model_schema(
+      const uint64_t &tenant_id,
+      const ObString &ai_model_name,
+      const common::ObNameCaseMode &case_mode,
+      const ObAiModelSchema *&ai_model_schema) const;
+  int get_location_schema(
+      const uint64_t tenant_id,
+      const uint64_t schema_id,
+      const ObLocationSchema *&schema) const;
+  // location
+  int add_locations(const common::ObIArray<ObLocationSchema> &location_schemas);
+  int add_location(const ObLocationSchema &location_schema);
+  int del_location(const ObTenantLocationId &id);
+
+
   // other
   int get_tenant_schemas(common::ObIArray<const ObSimpleTenantSchema *> &tenant_schemas) const;
    int get_tenant_ids(common::ObIArray<uint64_t> &tenant_ids) const;
@@ -807,6 +833,10 @@ private:
   int add_ccl_rules(const common::ObIArray<ObSimpleCCLRuleSchema> &ccl_schemas);
   int add_ccl_rule(const ObSimpleCCLRuleSchema &ccl_schema);
   int del_ccl_rule(const ObTenantCCLRuleId &id);
+  // ai model
+  int add_ai_models(const common::ObIArray<ObAiModelSchema> &ai_model_schemas);
+  int add_ai_model(const ObAiModelSchema &ai_model_schema);
+  int del_ai_model(const ObTenantAiModelId &tenant_ai_model_id);
 private:
   common::ObArenaAllocator local_allocator_;
   common::ObIAllocator &allocator_;
@@ -854,6 +884,8 @@ private:
   int64_t timestamp_in_slot_; // when schema mgr put in slot, we will set the timestamp
   int64_t allocator_idx_;
   TableInfos mlog_infos_;
+  ObAiModelMgr ai_model_mgr_;
+  ObLocationMgr location_mgr_;
 };
 
 }//end of namespace schema

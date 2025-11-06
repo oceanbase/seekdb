@@ -1,20 +1,23 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #define USING_LOG_PREFIX SQL_ENG
 
 #include "sql/engine/cmd/ob_alter_system_executor.h"
 #include "observer/ob_server.h"
-#include "sql/resolver/cmd/ob_bootstrap_stmt.h"
 #ifdef OB_BUILD_ARBITRATION
 #include "share/arbitration_service/ob_arbitration_service_utils.h" //ObArbitrationServiceUtils
 #endif
@@ -1116,16 +1119,12 @@ int ObSetConfigExecutor::execute(ObExecContext &ctx, ObSetConfigStmt &stmt)
 {
   int ret = OB_SUCCESS;
   ObTaskExecutorCtx *task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx);
-  obrpc::ObCommonRpcProxy *common_rpc = NULL;
 
   if (OB_FAIL(ret)) {
   } else if (OB_ISNULL(task_exec_ctx)) {
     ret = OB_NOT_INIT;
     LOG_WARN("get task executor context failed");
-  } else if (OB_ISNULL(common_rpc = task_exec_ctx->get_common_rpc())) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("get common rpc proxy failed", K(task_exec_ctx));
-  } else if (OB_FAIL(common_rpc->admin_set_config(stmt.get_rpc_arg()))) {
+  } else if (OB_FAIL(GCTX.root_service_->admin_set_config(stmt.get_rpc_arg()))) {
     if (stmt.get_rpc_arg().is_backup_config_) {
       LOG_WARN("set backup config rpc failed", K(ret));
     } else {
@@ -1518,33 +1517,6 @@ int ObStopUpgradeJobExecutor::execute(
     LOG_WARN("run job rpc failed", K(ret), "rpc_arg", stmt.get_rpc_arg());
   }
   return ret;
-}
-
-int ObBootstrapExecutor::execute(ObExecContext &ctx, ObBootstrapStmt &stmt)
-{
-  int ret = OB_SUCCESS;
-	const int64_t BS_TIMEOUT = 600 * 1000 * 1000;  // 10 minutes
-	ObTaskExecutorCtx *task_exec_ctx = NULL;
-  obrpc::ObSrvRpcProxy *srv_rpc_proxy = NULL;
-  obrpc::ObBootstrapArg &bootstarp_arg = stmt.bootstrap_arg_;
-  int64_t rpc_timeout = BS_TIMEOUT;
-  if (INT64_MAX != THIS_WORKER.get_timeout_ts()) {
-    rpc_timeout = max(THIS_WORKER.get_timeout_remain(), BS_TIMEOUT);
-  }
-  LOG_INFO("bootstrap timeout", K(rpc_timeout));
-	if (OB_ISNULL(task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx))) {
-		ret = OB_NOT_INIT;
-		LOG_WARN("get task executor context failed");
-	} else if (OB_ISNULL(srv_rpc_proxy = task_exec_ctx->get_srv_rpc())) {
-		ret = OB_NOT_INIT;
-		LOG_WARN("get common rpc proxy failed");
-	} else if (OB_FAIL(srv_rpc_proxy->to(task_exec_ctx->get_self_addr()).timeout(rpc_timeout).bootstrap(bootstarp_arg))) {
-		LOG_WARN("rpc proxy bootstrap failed", K(ret), K(rpc_timeout));
-		BOOTSTRAP_LOG(WARN, "STEP_0.1:alter_system execute fail");
-	} else {
-		BOOTSTRAP_LOG(INFO, "STEP_0.1:alter_system execute success");
-	}
-	return ret;
 }
 
 int ObEnableSqlThrottleExecutor::execute(ObExecContext &ctx, ObEnableSqlThrottleStmt &stmt)
@@ -2632,14 +2604,11 @@ int ObResetConfigExecutor::execute(ObExecContext &ctx, ObResetConfigStmt &stmt)
 {
   int ret = OB_SUCCESS;
   ObTaskExecutorCtx *task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx);
-  obrpc::ObCommonRpcProxy *common_rpc = NULL;
+
   if (OB_ISNULL(task_exec_ctx)) {
     ret = OB_NOT_INIT;
     LOG_WARN("get task executor context failed");
-  } else if (OB_ISNULL(common_rpc = task_exec_ctx->get_common_rpc())) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("get common rpc proxy failed", K(task_exec_ctx));
-  } else if (OB_FAIL(common_rpc->admin_set_config(stmt.get_rpc_arg()))) {
+  } else if (OB_FAIL(GCTX.root_service_->admin_set_config(stmt.get_rpc_arg()))) {
     LOG_WARN("set config rpc failed", K(ret), "rpc_arg", stmt.get_rpc_arg());
   }
   return ret;

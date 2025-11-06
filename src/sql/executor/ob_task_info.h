@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #ifndef OCEANBASE_SQL_EXECUTOR_TASK_INFO_
@@ -18,6 +22,7 @@
 #include "sql/executor/ob_task_id.h"
 #include "sql/executor/ob_slice_id.h"
 #include "sql/executor/ob_task_event.h"
+#include "sql/engine/px/ob_granule_util.h"
 #include "common/ob_range.h"
 
 namespace oceanbase
@@ -89,11 +94,12 @@ public:
 	  : ranges_(),
       ss_ranges_(),
 	    tablet_loc_(nullptr),
-	    task_id_(0)
+	    task_id_(0),
+      granule_type_(OB_GRANULE_UNINITIALIZED)
 	{ }
 	virtual ~ObGranuleTaskInfo() { }
   int assign(const ObGranuleTaskInfo &other);
-	TO_STRING_KV(K_(ranges), K_(ss_ranges), K_(task_id), "tablet_id: ",
+	TO_STRING_KV(K_(ranges), K_(ss_ranges), K_(task_id), K_(granule_type), "tablet_id: ",
                OB_ISNULL(tablet_loc_) ? OB_INVALID_ID : tablet_loc_->tablet_id_.id());
 public:
   common::ObSEArray<common::ObNewRange, 1> ranges_;
@@ -101,6 +107,7 @@ public:
   ObDASTabletLoc *tablet_loc_;
   //just for print
   int64_t task_id_;
+  ObGranuleType granule_type_;
 };
 // Used for NLJ scenario to perform partition pruning on the right-side partition table scan
 class ObGIPruningInfo

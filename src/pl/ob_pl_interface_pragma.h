@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #include "lib/string/ob_string.h"
@@ -31,8 +35,10 @@
 #include "pl/sys_package/ob_dbms_limit_calculator_mysql.h"
 #include "pl/sys_package/ob_dbms_external_table.h"
 #include "pl/sys_package/ob_dbms_vector_mysql.h"
+#include "pl/sys_package/ob_dbms_hybrid_vector_mysql.h"
 #include "pl/pl_recompile/ob_pl_recompile_task_helper.h"
 #include "pl/sys_package/ob_dbms_partition.h"
+#include "pl/sys_package/ob_dbms_ai_service.h"
 
 #ifdef INTERFACE_DEF
   INTERFACE_DEF(INTERFACE_START, "TEST", (ObPLInterfaceImpl::call))
@@ -113,7 +119,7 @@
   INTERFACE_DEF(INTERFACE_DBMS_STATS_SET_SYSTEM_STATS, "SET_SYSTEM_STATS", (ObDbmsStats::set_system_stats))
   INTERFACE_DEF(INTERFACE_DBMS_STATS_ASYNC_GATHER_STATS_JOB_PROC, "ASYNC_GATHER_STATS_JOB_PROC", (ObDbmsStats::async_gather_stats_job_proc))
   //end of dbms_stat
-  
+
   //start of dbms xplan
   INTERFACE_DEF(INTERFACE_DBMS_XPLAN_ENABLE_OPT_TRACE, "ENABLE_OPT_TRACE", (ObDbmsXplan::enable_opt_trace))
   INTERFACE_DEF(INTERFACE_DBMS_XPLAN_DISABLE_OPT_TRACE, "DISABLE_OPT_TRACE", (ObDbmsXplan::disable_opt_trace))
@@ -228,6 +234,24 @@
   // start of dbms_partition
   INTERFACE_DEF(INTERFACE_DBMS_PARTITION_MANAGE_DYNAMIC_PARTITION, "DBMS_PARTITION_MANAGE_DYNAMIC_PARTITION", (ObDBMSPartition::manage_dynamic_partition))
   // end of dbms_partition
+
+  // start of dbms_ai_service
+  INTERFACE_DEF(INTERFACE_DBMS_AI_SERVICE_CREATE_AI_MODEL_MYSQL, "DBMS_AI_SERVICE_CREATE_AI_MODEL_MYSQL", (ObDBMSAiService::create_ai_model))
+  INTERFACE_DEF(INTERFACE_DBMS_AI_SERVICE_DROP_AI_MODEL_MYSQL, "DBMS_AI_SERVICE_DROP_AI_MODEL_MYSQL", (ObDBMSAiService::drop_ai_model))
+  INTERFACE_DEF(INTERFACE_DBMS_AI_SERVICE_CREATE_AI_MODEL_ENDPOINT_MYSQL, "DBMS_AI_SERVICE_CREATE_AI_MODEL_ENDPOINT_MYSQL", (ObDBMSAiService::create_ai_model_endpoint))
+  INTERFACE_DEF(INTERFACE_DBMS_AI_SERVICE_ALTER_AI_MODEL_ENDPOINT_MYSQL, "DBMS_AI_SERVICE_ALTER_AI_MODEL_ENDPOINT_MYSQL", (ObDBMSAiService::alter_ai_model_endpoint))
+  INTERFACE_DEF(INTERFACE_DBMS_AI_SERVICE_DROP_AI_MODEL_ENDPOINT_MYSQL, "DBMS_AI_SERVICE_DROP_AI_MODEL_ENDPOINT_MYSQL", (ObDBMSAiService::drop_ai_model_endpoint))
+  // end of dbms_ai_service
+
+  // start of dbms_hybrid_search
+#define DEFINE_DBMS_HYBRID_VECTOR_MYSQL_INTERFACE(symbol, func) \
+INTERFACE_DEF(INTERFACE_##symbol, #symbol, (func))
+
+DEFINE_DBMS_HYBRID_VECTOR_MYSQL_INTERFACE(DBMS_HYBRID_VECTOR_MYSQL_SEARCH, ObDBMSHybridVectorMySql::search)
+DEFINE_DBMS_HYBRID_VECTOR_MYSQL_INTERFACE(DBMS_HYBRID_VECTOR_MYSQL_GET_SQL, ObDBMSHybridVectorMySql::get_sql)
+
+#undef DEFINE_DBMS_HYBRID_VECTOR_MYSQL_INTERFACE
+  // end of dbms_hybrid_search
 
   INTERFACE_DEF(INTERFACE_END, "INVALID", (nullptr))
 #endif

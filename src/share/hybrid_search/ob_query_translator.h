@@ -1,0 +1,67 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_SHARE_OB_QUERY_TRANSLATOR_H_
+#define OCEANBASE_SHARE_OB_QUERY_TRANSLATOR_H_
+
+#include "ob_query_request.h"
+
+namespace oceanbase
+{
+namespace share
+{
+
+class ObRequestTranslator
+{
+public :
+  ObRequestTranslator(char *buf, int64_t buf_len, int64_t *pos, ObReqFromJson *req)
+    : buf_(buf), buf_len_(buf_len), pos_(pos), req_(req), print_params_() {}
+
+  int translate_from();
+  int translate_table(const ObReqTable *table);
+  // translate condition_items_ to string
+  int translate_where();
+  int translate_approx();
+  int translate_limit();
+  int translate_hints();
+  char *buf_;
+  int64_t buf_len_;
+  int64_t *pos_;
+  const ObReqFromJson *req_;
+  ObObjPrintParams print_params_;
+};
+
+
+class ObQueryTranslator : public ObRequestTranslator
+{
+public :
+  ObQueryTranslator(char *buf, int64_t buf_len, int64_t *pos, ObReqFromJson *req) :
+    ObRequestTranslator(buf, buf_len, pos, req) {}
+  int translate();
+  int translate_select();
+  // translate group_items_ to string
+  int translate_group_by();
+  // translate having_items_ to string
+  int translate_having();
+  // translate order_items_ to string
+  int translate_order_by();
+  int translate_order(const OrderInfo *order_info);
+};
+
+}  // namespace share
+}  // namespace oceanbase
+
+#endif  // OCEANBASE_SHARE_OB_QUERY_TRANSLATOR_H_

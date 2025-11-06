@@ -57,12 +57,7 @@ then
   mkdir -p $ETC_DIR
   mkdir -p $DEBUG_DIR
   mkdir -p $ADMIN_DIR
-  if [ -f $SOURCE_DIR/deps/oblib/src/lib/compress/liblz4_1.0.la ]; then
-    do_install $SOURCE_DIR/deps/oblib/src/lib/compress/liblz4_1.0.la $LIB_DIR
-    do_install $SOURCE_DIR/deps/oblib/src/lib/compress/libnone.la $LIB_DIR
-    do_install $SOURCE_DIR/deps/oblib/src/lib/compress/libsnappy_1.0.la $LIB_DIR
-    do_install $SOURCE_DIR/deps/oblib/src/lib/compress/libzlib_1.0.la $LIB_DIR
-  fi
+
   do_install $BUILD_DIR/src/observer/observer $BIN_DIR/observer
   do_install "$BUILD_DIR/syspack_release/*" $ADMIN_DIR
   do_install $SOURCE_DIR/deps/3rd/usr/local/oceanbase/devtools/bin/llvm-symbolizer $TOOL_DIR/
@@ -71,17 +66,4 @@ then
   do_install $SOURCE_DIR/deps/oblib/src/lib/profile/obperf $TOOL_DIR/ true
   do_install $SOURCE_DIR/deps/3rd/home/admin/oceanbase/bin/obshell $BIN_DIR/obshell true
   do_install "$SOURCE_DIR/tools/spatial_reference_systems.data" $ETC_DIR
-
-  wget http://11.166.86.153:8877/obproxy.support_4.0 -O $BIN_DIR/obproxy > wget.log 2>&1 && chmod 755 $BIN_DIR/obproxy
-  rpm2cpio http://yum-test.obvos.alibaba-inc.com/oceanbase/development-kit/el/7/x86_64/oracle-instantclient12.2-basic-12.2.0.1.0-1.x86_64.rpm | cpio -div -u
-
-  do_install ./usr/lib/oracle/12.2/client64/lib/libclntsh.so.12.1 $LIB_DIR true
-  do_install ./usr/lib/oracle/12.2/client64/lib/libclntsh.so.12.1 $LIB_DIR/libclntsh.so true
-  do_install ./usr/lib/oracle/12.2/client64/lib/libclntshcore.so.12.1 $LIB_DIR true
-  do_install ./usr/lib/oracle/12.2/client64/lib/libnnz12.so $LIB_DIR true
-  do_install ./usr/lib/oracle/12.2/client64/lib/libons.so $LIB_DIR true
-  do_install ./usr/lib/oracle/12.2/client64/lib/libociei.so $LIB_DIR true
-  do_install ./usr/lib/oracle/12.2/client64/lib/libmql1.so $LIB_DIR true
-  do_install ./usr/lib/oracle/12.2/client64/lib/libipc1.so $LIB_DIR true
-
 fi

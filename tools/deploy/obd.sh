@@ -1,4 +1,4 @@
-#!/bin/bash 
+#!/bin/bash
 
 BASE_DIR=$(readlink -f "$(dirname ${BASH_SOURCE[0]})/../..")
 DEPLOY_PATH="$BASE_DIR/tools/deploy"
@@ -47,13 +47,7 @@ function variables_prepare {
   HOST=$(hostname -i)
   DATA_PATH="/data/$(whoami)"
   IPADDRESS="127.0.0.1"
-  if [[ -f "$BASE_DIR/.ce" ]]
-  then
-    export IS_CE=1
-    COMPONENT="oceanbase-ce"
-  else
-    COMPONENT="oceanbase"
-  fi
+  COMPONENT="oceanbase-seekdb"
   if grep 'dep_create.sh' $BASE_DIR/build.sh 2>&1 >/dev/null
   then
     DEP_PATH=$BASE_DIR/deps/3rd
@@ -82,12 +76,6 @@ function copy_sh {
 }
 
 function mirror_create {
-  # obproxy  mirror create
-  if [[ "$WITH_LOCAL_PROXY" != "" ]] && [[ -x $DEPLOY_PATH/bin/obproxy ]]
-  then
-  odp_version=$("$DEPLOY_PATH"/bin/obproxy --version  2>&1  | grep -E 'obproxy \(OceanBase [\.0-9]+ \S+\)' | grep -Eo '\s[.0-9]+\s')
-  obd mirror create -n obproxy -p "$DEPLOY_PATH" -t $tag -V $odp_version -f
-  fi
 
   # observer mirror create
   if [[ "$OBSERVER_PATH" != "" ]]
@@ -101,21 +89,29 @@ function mirror_create {
     echo $obs_version_info
     return 1
   fi
-  obs_version=$(echo "$obs_version_info" | grep -E "observer \(OceanBase([ \_]CE)? ([.0-9]+)\)" | grep -Eo '([.0-9]+)')
+  obs_version=$(echo "$obs_version_info" | grep -E "observer \(OceanBase([ \_]SeekDB)? ([.0-9]+)\)" | grep -Eo '([.0-9]+)')
   if [[ "$obs_version" == "" ]]
   then
     echo "can not check observer version"
     echo $obs_version_info
     return 1
   fi
-  if [ "x$IS_CE" == "x" ]
-  then
-    export IS_CE="0"
-    [[ $($OBSERVER_BIN -V 2>&1 | grep -E 'OceanBase[_ ]CE') ]] && COMPONENT="oceanbase-ce" && export IS_CE="1"
-  fi
   $OBSERVER_BIN -V
+
+  mirror_path=$DEPLOY_PATH/mirror_create
+  mkdir -p $mirror_path/bin/ && \
+    cp -rf $DEPLOY_PATH/etc $mirror_path/ && \
+    cp -rf $DEPLOY_PATH/admin $mirror_path/ && \
+    ln -sf $DEPLOY_PATH/bin/observer $mirror_path/bin/observer && \
+    success=1
+  if [[ "$success" != "1" ]]
+  then
+    echo "fail to prepare obd mirror directory"
+    return 1
+  fi
+
   [[ -f "$BASE_DIR/tools/deploy/obd/.observer_obd_plugin_version" ]] && obs_version=$(cat $BASE_DIR/tools/deploy/obd/.observer_obd_plugin_version)
-  obs_mirror_info=$(obd_exec mirror create -n $COMPONENT -p "$DEPLOY_PATH" -V "$obs_version"  -t $tag -f) && success=1
+  obs_mirror_info=$(obd_exec mirror create -n $COMPONENT -p "$mirror_path" -V "$obs_version"  -t $tag -f) && success=1
   if [[ "$success" != "1" ]]
   then
   echo "$obs_mirror_info"
@@ -135,24 +131,8 @@ function generate_config {
 
   port_num=$port_gen
   mysql_port=$port_num && port_num=$((port_num+1))
-  rpc_port=$port_num && port_num=$((port_num+1))
-  mysql_port2=$port_num && port_num=$((port_num+1))
-  rpc_port2=$port_num && port_num=$((port_num+1))
-  listen_port=$port_num && port_num=$((port_num+1))
-  prometheus_listen_port=$port_num && port_num=$((port_num+1))
 
   base_template=$(cat obd/config.yaml.template)
-  proxy_conf=$(cat obd/obproxy.yaml.template)
-  if [[ "$WITH_LOCAL_PROXY" != "" ]]
-  then
-  proxy_conf=$(echo "$proxy_conf" | sed 's/package_hash: [0-9a-z]*/tag: {{%% TAG %%}}/g')
-  fi
-  proxy_conf=${proxy_conf//'{{%% TAG %%}}'/$tag}
-  proxy_conf=${proxy_conf//'{{%% COMPONENT %%}}'/$COMPONENT}
-  proxy_conf=${proxy_conf//'{{%% LISTEN_PORT %%}}'/$listen_port}
-  proxy_conf=${proxy_conf//'{{%% PROMETHEUS_LISTEN_PORT %%}}'/$prometheus_listen_port}
-  proxy_conf=${proxy_conf//'{{%% OBPORXY_HOME_PATH %%}}'/"$DATA_PATH"/obproxy}
-
 
   base_template=${base_template//"{{%% COMPONENT %%}}"/$COMPONENT}
   base_template=${base_template//"{{%% TAG %%}}"/$tag}
@@ -169,7 +149,6 @@ function generate_config {
       ip: $IPADDRESS
   server1:
     mysql_port: $mysql_port
-    rpc_port: $rpc_port
     home_path: $DATA_PATH/observer1
     zone: zone1
     # The directory for data storage. The default value is home_path/store.
@@ -181,45 +160,8 @@ EOF
   single_conf=${base_template}
   single_conf=${single_conf//"{{%% SERVERS %%}}"/$SERVERS}
   single_without_proxy_conf=${single_conf//"{{%% PROXY_CONF %%}}"/}
-  single_with_proxy_conf=${single_conf//"{{%% PROXY_CONF %%}}"/$proxy_conf}
 
   [ ! -f ./single.yaml ] && echo "$single_without_proxy_conf" > ./single.yaml && echo "generate yaml config file: $(readlink -f ./single.yaml)"
-  [ ! -f ./single-with-proxy.yaml ] && echo "$single_with_proxy_conf" > ./single-with-proxy.yaml && echo "generate yaml config file: $(readlink -f ./single-with-proxy.yaml)"
-
-  # 2x1
-  SERVERS=$(cat <<-EOF
-  servers:
-    - name: server1
-      ip: $IPADDRESS
-    - name: server2
-      ip: $IPADDRESS
-  server1:
-    mysql_port: $mysql_port
-    rpc_port: $rpc_port
-    home_path: $DATA_PATH/observer1
-    # The directory for data storage. The default value is home_path/store.
-    # data_dir: /data
-    # The directory for clog, ilog, and slog. The default value is the same as the data_dir value.
-    # redo_dir: /redo
-    zone: zone1
-  server2:
-    mysql_port: $mysql_port2
-    rpc_port: $rpc_port2
-    home_path: $DATA_PATH/observer2
-    # The directory for data storage. The default value is home_path/store.
-    # data_dir: /data
-    # The directory for clog, ilog, and slog. The default value is the same as the data_dir value.
-    # redo_dir: /redo
-    zone: zone2
-EOF
-)
-
-  distributed_conf=${base_template}
-  distributed_conf=${distributed_conf//"{{%% SERVERS %%}}"/$SERVERS}
-  distributed_without_proxy_conf=${distributed_conf//"{{%% PROXY_CONF %%}}"/}
-  distributed_with_proxy_conf=${distributed_conf//"{{%% PROXY_CONF %%}}"/$proxy_conf}
-  [ ! -f ./distributed.yaml ] && echo "$distributed_without_proxy_conf" > ./distributed.yaml && echo "generate yaml config file: $(readlink -f ./distributed.yaml)"
-  [ ! -f ./distributed-with-proxy.yaml ] && echo "$distributed_with_proxy_conf" > ./distributed-with-proxy.yaml && echo "generate yaml config file: $(readlink -f ./distributed-with-proxy.yaml)"
 }
 
 function show_deploy_name {
@@ -231,7 +173,7 @@ function get_deploy_name {
   if [[ "$deploy_name" != "" ]]
   then
   return
-  fi 
+  fi
   if [[ "$DEPLOY_NAME" == "" ]]
   then
     [[ "$YAML_CONF" != "" ]] && yaml_name=${YAML_CONF##*/} && deploy_name=${yaml_name%.yaml} && show_deploy_name && return
@@ -276,8 +218,6 @@ function get_version_and_release {
     for line in $(grep -nE '^\S+:' $config_yaml)
     do
       num=$(echo "$line" | awk -F ":" '{print $1}')
-      [ "$find_obproxy" == "1" ] && end=$num
-      [ "$(echo "$line" | grep obproxy)" != "" ] && start=$num && find_obproxy='1'
     done
     odp_conf=$(awk "NR>=$start && NR<=$end" $config_yaml)
     version=$(echo "$odp_conf" | grep 'version:' | awk '{print $2}')
@@ -286,66 +226,56 @@ function get_version_and_release {
     if [[ -f $include_file ]]
     then
       _repo=$(echo $(grep '__mirror_repository_section_name:'  $include_file | awk '{print $2}'))
-      [ "$_repo" != "" ] && repository=$_repo 
+      [ "$_repo" != "" ] && repository=$_repo
       version=$(echo $(grep 'version:' $include_file | awk '{print $2}'))
       release=$(echo $(grep 'release:' $include_file | awk '{print $2}'))
     fi
 }
 
-function get_obproxy {
-    repository="taobao"
-    obproxy_mirror_repository=$(echo $(grep '__mirror_repository_section_name' $config_yaml | awk -F':' '{print $2}'))
-    [ "$obproxy_mirror_repository" != "" ] && repository=$obproxy_mirror_repository
-
-    get_version_and_release
-    get_baseurl
-    if [[ "$baseurl" != "" && "$version" != "" && "$release" != "" ]]
-    then
-      pkg_name="obproxy-$version-$release.x86_64.rpm"
-      if [ "$(find $OBD_HOME/.obd/mirror/local -name $pkg_name)" == "" ]
-      then
-        download_dir=$OBD_HOME/.obd_download
-        mkdir -p $download_dir
-        wget $baseurl/obproxy/$pkg_name -O "$download_dir/$pkg_name" -o $download_dir/obproxy.down
-        obd mirror clone "$download_dir/$pkg_name" && rm -rf $download_dir && return 0
-      else
-        return 0
-      fi
-    fi
-    obd mirror enable $repository
-}
-
 function deploy_cluster {
   get_deploy_name
-  if [[ "$YAML_CONF" != "" ]] 
+  if [[ "$YAML_CONF" != "" ]]
   then
     config_yaml=$YAML_CONF
   else
     if [[ -f $OBD_CLUSTER_PATH/$deploy_name/tmp_config.yaml && "$(grep config_status $OBD_CLUSTER_PATH/$deploy_name/.data | awk '{print $2}')" != "UNCHNAGE" ]]
     then
       config_yaml=$OBD_CLUSTER_PATH/$deploy_name/tmp_config.yaml
-    else
+    elif [[ -f $OBD_CLUSTER_PATH/$deploy_name/config.yaml ]]
+    then
       config_yaml=$OBD_CLUSTER_PATH/$deploy_name/config.yaml
+    else
+      config_yaml=$DEPLOY_PATH/single.yaml
+    fi
+    if [[ -f $config_yaml ]]
+    then
+      echo "Use config file: " $config_yaml
+      temp_config_yaml=$(mktemp /tmp/oceanbase-seekdb-config-XXXXXX.yaml)
+      cp $config_yaml $temp_config_yaml
+      config_yaml=$temp_config_yaml
+
+    else
+      echo "Can't find config file, did you execute 'ob do prepare'?"
+      exit 1
     fi
   fi
-  [[ "$(grep -E "^obproxy:" $config_yaml)" != "" ]] && ( get_obproxy || exit 1 )
 
   echo "$deploy_name" > "$DEFAULT_DEPLOY_NAME_FILE"
   if [[ "$HIDE_DESTROY" == "1" ]]
   then
-    obd cluster destroy "$deploy_name" -f > /dev/null 2>&1
+    obd cluster destroy "$deploy_name" -f --confirm > /dev/null 2>&1
   else
-    obd cluster destroy "$deploy_name" -f
+    obd cluster destroy "$deploy_name" -f --confirm
   fi
   if [[ -f $OBD_CLUSTER_PATH/$deploy_name/inner_config.yaml ]]
   then
     sed -i '/$_deploy_/d' $OBD_CLUSTER_PATH/$deploy_name/inner_config.yaml
   fi
-  [[ "$YAML_CONF" == "" ]] || yaml_config_args="-c $YAML_CONF"
-  obd cluster deploy "$deploy_name" -C $yaml_config_args || exit 1
+  yaml_config_args="--config $config_yaml"
+  obd cluster deploy "$deploy_name" --force --clean $yaml_config_args || exit 1
   if ! obd cluster start "$deploy_name" -f;
   then
-    while [[ "$NO_CONFIRM" != "1" && "$(grep 'config_status: NEED_REDEPLOY' $OBD_CLUSTER_PATH/$deploy_name/.data)" != "" ]] 
+    while [[ "$NO_CONFIRM" != "1" && "$(grep 'config_status: NEED_REDEPLOY' $OBD_CLUSTER_PATH/$deploy_name/.data)" != "" ]]
     do
       read -r -p "Start $deploy_name failed, do you want to edit config and continue?[Y/n]" input
       case $input in
@@ -364,6 +294,11 @@ function deploy_cluster {
       esac
     done
   fi
+  if [[ $EXEC_INIT_SQL != "1" ]]
+  then
+    echo "Not execute 'init_exec_sql'"
+    exit 0
+  fi
   get_init_sql
   if [[ "$NEED_FAST_REBOOT" == "1" ]]
   then
@@ -375,10 +310,9 @@ function deploy_cluster {
 
 function get_init_sql {
   [[ "$INIT_FLIES" != "" ]] && return
-  if [[ "$MINI" == "1" && -f $BASE_DIR/tools/deploy/init.sql ]]
+  if [[ -f $BASE_DIR/tools/deploy/init.sql ]]
   then
-    INIT_FLIES="--init-sql-files=init.sql,init_user.sql|root@mysql|test"
-    [ -f init_user_oracle.sql ] && INIT_FLIES="${INIT_FLIES},init_user_oracle.sql|SYS@oracle|SYS"
+    INIT_FLIES="--init-sql-files=init.sql,init_user.sql|root@sys|test"
   fi
 }
 
@@ -410,7 +344,7 @@ function destroy_cluster {
   fi
   if [[ "$(grep 'status: STATUS_DESTROYED' $OBD_CLUSTER_PATH/$deploy_name/.data)" == "" ]]
   then
-    obd cluster destroy "$deploy_name"  -f
+    obd cluster destroy "$deploy_name"  --force --confirm
   fi
   if [[ "$RM_CLUSTER" == "1" ]]
   then
@@ -470,20 +404,6 @@ function deploy {
     exit 1
   fi
   get_deploy_name
-  if [[ "$YAML_CONF" != "" && -d "$OBD_CLUSTER_PATH"/"$deploy_name" ]]
-  then
-    while true
-    do
-      read -r -p "Deploy name: $deploy_name already exists. Do you want to OVERWRITE it?[y/n]" input
-      case $input in
-        [Yy])
-        break
-        ;;
-        [Nn])
-        exit 1
-      esac
-    done
-  fi
   HIDE_DESTROY=1
   [[ "$EXEC_CP" == "1" ]] && copy_sh
   mirror_create || exit 1
@@ -504,16 +424,6 @@ function display {
   obd cluster display $deploy_name
 }
 
-function create_tenant {
-  get_deploy_name
-  obd cluster tenant create $deploy_name $extra_args
-}
-
-function drop_tenant {
-  get_deploy_name
-  obd cluster tenant drop $deploy_name $extra_args
-}
-
 function sysbench {
   get_deploy_name
   obd test sysbench $deploy_name $OBCLIENT_BIN_ARGS $extra_args
@@ -527,16 +437,6 @@ function tpch {
 function tpcc {
   get_deploy_name
   obd test tpcc $deploy_name $OBCLIENT_BIN_ARGS $extra_args
-}
-
-function tpcds {
-  get_deploy_name
-  obd test tpcds $deploy_name $OBCLIENT_BIN_ARGS $extra_args
-}
-
-function graph {
-  get_deploy_name
-  obd tool graph $deploy_name $extra_args
 }
 
 function set-config {
@@ -571,12 +471,9 @@ destroy [-n DEPLOY_NAME]                 Destroy cluster.
 upgrade [-n DEPLOY_NAME]                 Upgrade cluster.
 list [-n DEPLOY_NAME]                    List cluster.
 display [-n DEPLOY_NAME]                 Display cluster info.
-create_tenant [-n DEPLOY_NAME]           Create tenant.
-drop_tenant [-n DEPLOY_NAME]             Drop tenant.
 sysbench [-n DEPLOY_NAME]                Run sysbench, use '--help' for more details.
 tpch [-n DEPLOY_NAME]                    Run tpch test, use '--help' for more details.
 tpcc [-n DEPLOY_NAME]                    Run tpcc test, use '--help' for more details.
-tpcds [-n DEPLOY_NAME]                   Run tpcds test, use '--help' for more details.
 mysqltest [-n DEPLOY_NAME]               Run mysqltest, use '--help' for more details.
 pid [-n DEPLOY_NAME]                     Get pid list for servers, use '--help' for more details.
 ssh [-n DEPLOY_NAME]                     Ssh to target server and change directory to log path, use '--help' for more details.
@@ -584,8 +481,6 @@ less [-n DEPLOY_NAME]                    Use command less to the observer.log, u
 gdb [-n DEPLOY_NAME]                     Use gdb to attch target server, use '--help' for more details.
 sql [-n DEPLOY_NAME]                     Connect to target server by root@sys, use '--help' for more details.
 sys [-n DEPLOY_NAME]                     Connect to target server by root@sys, use '--help' for more details.
-mysql [-n DEPLOY_NAME]                   Connect to target server by root@mysql, use '--help' for more details.
-oracle [-n DEPLOY_NAME]                  Connect to target server by SYS@oracle, use '--help' for more details.
 graph [-n DEPLOY_NAME]
 
 Options:
@@ -598,10 +493,10 @@ Options:
 -p DATA_PATH, --data-path DATA_PATH      The data path for server deployment, it can be changed in the yaml file.
 --ip IPADDRESS                           The ipaddress for server deployment, it can be changed in the yaml file.
 --port PORT_BEGIN                        The port starting point. All the ports can be changed in the yaml file.
---with-local-obproxy                     Use local obproxy.
 --skip-copy                              Skip copy.sh.
 --cp                                     Exec copy.sh.
 --reboot                                 Redeploy cluster before mysqltest.
+--exec-init-sql=<0|1>                    Exec init sql files after deploy.
 
 """
 }
@@ -615,7 +510,6 @@ function main() {
   while true; do
     case "$1" in
       -v ) VERBOSE_FLAG='-v'; set -x; shift ;;
-      --with-local-obproxy) WITH_LOCAL_PROXY="1";SKIP_COPY="1"; shift ;;
       -c | --config )
         if [[ $command == "deploy" || $command == "redeploy" || $command == "mysqltest" ]]
         then
@@ -636,10 +530,10 @@ function main() {
       --fast-reboot ) NEED_FAST_REBOOT="1"; extra_args="$extra_args $1"; shift ;;
       --cp ) EXEC_CP="1"; shift ;;
       --skip-copy ) SKIP_COPY="1"; shift ;;
-      --mini) MINI="1"; shift ;;
       --port ) export port_gen="$2"; extra_args="$extra_args $1"; shift ;;
       --observer ) OBSERVER_PATH="$2"; shift 2 ;;
       --rm ) RM_CLUSTER="1"; shift ;;
+      --exec-init-sql ) EXEC_INIT_SQL="$2"; shift 2 ;;
       -- ) shift ;;
       "" ) break ;;
       * ) extra_args="$extra_args $1"; [[ "$1" == "--help" || "$1" == "-h" ]] && HELP="1" ; shift ;;
@@ -651,9 +545,13 @@ function main() {
   BUILD_PATH=$(absolute_path ${BUILD_PATH})
   OBSERVER_PATH=$(absolute_path ${OBSERVER_PATH})
 
-  if [[ "$MINI" == "1" && "$DISABLE_REBOOT" != "1" ]]
-  then 
+  if [[ "$DISABLE_REBOOT" != "1" ]]
+  then
     NEED_REBOOT="1"
+  fi
+  if [[ "$EXEC_INIT_SQL" != "0" ]]
+  then
+    EXEC_INIT_SQL="1"
   fi
   if [[ ! -f $OBD_HOME/.obd/.obd_environ || "$(grep '"OBD_DEV_MODE": "1"' $OBD_HOME/.obd/.obd_environ)" == "" ]]
   then
@@ -709,14 +607,6 @@ function main() {
     ;;
     sql);&
     sys)
-    connect 
-    ;;
-    mysql)
-    extra_args="--tenant mysql $extra_args"
-    connect
-    ;;
-    oracle)
-    extra_args="--user SYS -m OB_ORACLE --tenant oracle $extra_args"
     connect
     ;;
     pid)
@@ -745,12 +635,6 @@ function main() {
     display)
     display
     ;;
-    create_tenant)
-    create_tenant
-    ;;
-    drop_tenant)
-    drop_tenant
-    ;;
     sysbench)
     sysbench
     ;;
@@ -759,12 +643,6 @@ function main() {
     ;;
     tpcc)
     tpcc
-    ;;
-    tpcds)
-    tpcds
-    ;;
-    graph)
-    graph
     ;;
     display-trace)
     obd display-trace ${extra_args}

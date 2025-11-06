@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #define USING_LOG_PREFIX LIB
@@ -136,32 +140,16 @@ int ObTenantCtxAllocatorV2::iter_label(VisitFunc func) const
 void ObTenantCtxAllocatorV2::print_usage() const
 {
   int ret = OB_SUCCESS;
-  static const int64_t BUFLEN = 1 << 17;
+  static const int64_t BUFLEN = 1 << 16;  // 64K
   SMART_VAR(char[BUFLEN], buf) {
     int64_t pos = 0;
     int64_t ctx_hold_bytes = 0;
     LabelItem sum_item;
     ret = iter_label([&](ObLabel &label, LabelItem *l_item)
     {
-      int ret = OB_SUCCESS;
-      if (l_item->count_ != 0) {
-        ret = databuff_printf(
-            buf, BUFLEN, pos,
-            "[MEMORY] hold=% '15ld used=% '15ld count=% '8d avg_used=% '15ld block_cnt=% '8d chunk_cnt=% '8d mod=%s\n",
-            l_item->hold_, l_item->used_, l_item->count_, l_item->used_ / l_item->count_, l_item->block_cnt_, l_item->chunk_cnt_,
-            label.str_);
-      }
       sum_item += *l_item;
-      return ret;
+      return OB_SUCCESS;
     });
-    if (OB_SUCC(ret) && sum_item.count_ > 0) {
-      ret = databuff_printf(
-          buf, BUFLEN, pos,
-          "[MEMORY] hold=% '15ld used=% '15ld count=% '8d avg_used=% '15ld mod=%s\n",
-          sum_item.hold_, sum_item.used_, sum_item.count_,
-          sum_item.used_ / sum_item.count_,
-          "SUMMARY");
-    }
     if (OB_SUCC(ret)) {
       ctx_hold_bytes = get_hold();
     }
@@ -173,11 +161,11 @@ void ObTenantCtxAllocatorV2::print_usage() const
       req_chunk_cnt += allocator_->req_chunk_mgr_.n_chunks();
       idle_size += allocator_->idle_size_;
       free_size += allocator_->chunk_cnt_ * INTACT_ACHUNK_SIZE;
-      allow_next_syslog();
-      _LOG_INFO("\n[MEMORY] tenant_id=%5ld ctx_id=%25s hold=% '15ld used=% '15ld limit=% '15ld"
-                "\n[MEMORY] idle_size=% '10ld free_size=% '10ld"
-                "\n[MEMORY] wash_related_chunks=% '10ld washed_blocks=% '10ld washed_size=% '10ld"
-                "\n[MEMORY] request_cached_chunk_cnt=% '5ld\n%s",
+      ret = databuff_printf(buf, BUFLEN, pos,
+          "\n[MEMORY] tenant_id=%5ld ctx_id=%25s hold=% '15ld used=% '15ld limit=% '15ld"
+          "\n[MEMORY] idle_size=% '10ld free_size=% '10ld"
+          "\n[MEMORY] wash_related_chunks=% '10ld washed_blocks=% '10ld washed_size=% '10ld"
+          "\n[MEMORY] request_cached_chunk_cnt=% '5ld",
           tenant_id_,
           get_global_ctx_info().get_ctx_name(ctx_id_),
           ctx_hold_bytes,
@@ -188,8 +176,41 @@ void ObTenantCtxAllocatorV2::print_usage() const
           ATOMIC_LOAD(&wash_related_chunks_),
           ATOMIC_LOAD(&washed_blocks_),
           ATOMIC_LOAD(&washed_size_),
-          req_chunk_cnt,
-          buf);
+          req_chunk_cnt);
+    }
+
+    if (OB_SUCC(ret) && sum_item.count_ > 0) {
+      ret = iter_label([&](ObLabel &label, LabelItem *l_item)
+      {
+        int ret = OB_SUCCESS;
+        if (l_item->count_ != 0) {
+          ret = databuff_printf(
+              buf, BUFLEN, pos,
+              "\n[MEMORY] hold=% '15ld used=% '15ld count=% '8d avg_used=% '15ld block_cnt=% '8d chunk_cnt=% '8d mod=%s",
+              l_item->hold_, l_item->used_, l_item->count_, l_item->used_ / l_item->count_, l_item->block_cnt_, l_item->chunk_cnt_,
+              label.str_);
+          if (pos > BUFLEN / 2) {
+            allow_next_syslog();
+            _LOG_INFO("%s", buf);
+            pos = 0;
+          }
+        }
+        return ret;
+      });
+
+      if (OB_SUCC(ret)) {
+        ret = databuff_printf(
+            buf, BUFLEN, pos,
+            "\n[MEMORY] hold=% '15ld used=% '15ld count=% '8d avg_used=% '15ld mod=%s",
+            sum_item.hold_, sum_item.used_, sum_item.count_,
+            sum_item.used_ / sum_item.count_,
+            "SUMMARY");
+      }
+    }
+
+    if (OB_SUCC(ret) && pos > 0) {
+      allow_next_syslog();
+      _LOG_INFO("%s", buf);
     }
   }
 }
@@ -253,32 +274,21 @@ void ObTenantCtxAllocator::free_chunk(AChunk *chunk, const ObMemAttr &attr)
     ctx_allocator_.free_chunk(chunk, attr);
   }
 }
-bool ObTenantCtxAllocator::update_hold(const int64_t size)
+
+// bytes need to be positive
+void ObTenantCtxAllocator::dec_hold(const int64_t size)
 {
-  return ctx_allocator_.update_hold(size);
+  ctx_allocator_.dec_hold(size);
 }
-bool ObTenantCtxAllocatorV2::update_hold(const int64_t size)
+void ObTenantCtxAllocatorV2::dec_hold(const int64_t size)
 {
-  bool update = false;
   if (!resource_handle_.is_valid()) {
     LIB_LOG_RET(ERROR, OB_INVALID_ARGUMENT, "resource_handle is invalid", K_(tenant_id), K_(ctx_id));
   } else {
     bool reach_ctx_limit = false;
-    if (size <=0) {
-      resource_handle_.get_memory_mgr()->update_hold(size, ctx_id_, ObLabel(), reach_ctx_limit);
-      AChunkMgr::instance().update_hold(size, false);
-      update = true;
-    } else {
-      if (!resource_handle_.get_memory_mgr()->update_hold(size, ctx_id_, ObLabel(), reach_ctx_limit)) {
-        // do-nothing
-      } else if (!AChunkMgr::instance().update_hold(size, false)) {
-	resource_handle_.get_memory_mgr()->update_hold(-size, ctx_id_, ObLabel(), reach_ctx_limit);
-      } else {
-	update = true;
-      }
-    }
+    resource_handle_.get_memory_mgr()->update_hold(-size, ctx_id_, ObLabel(), reach_ctx_limit);
+    AChunkMgr::instance().dec_hold(size);
   }
-  return update;
 }
 
 int ObTenantCtxAllocator::set_idle(const int64_t set_size, const bool reserve/*=false*/)

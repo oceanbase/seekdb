@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #ifndef OB_DTL_CHANNEL_MEM_MANEGER_H
@@ -68,7 +72,6 @@ public:
   OB_INLINE int64_t queue_cnt() { return free_queue_.size(); }
 
 private:
-  bool out_of_memory();
   int64_t get_used_memory_size();
   int64_t get_max_dtl_memory_size();
   int64_t get_max_tenant_memory_limit_size();
@@ -113,17 +116,6 @@ OB_INLINE int64_t ObDtlChannelMemManager::get_max_tenant_memory_limit_size()
   }
   int64_t percent_execpt_memstore = 100 - memstore_limit_percent_;
   return lib::get_tenant_memory_limit(tenant_id_) * percent_execpt_memstore / 100;
-}
-
-OB_INLINE bool ObDtlChannelMemManager::out_of_memory()
-{
-  bool oom = false;
-  int64_t used = get_used_memory_size();
-  int64_t max_dtl_memory_size = get_max_dtl_memory_size();
-  if (used > max_dtl_memory_size) {
-    oom = true;
-  }
-  return oom;
 }
 
 OB_INLINE void ObDtlChannelMemManager::update_max_memory_percent()

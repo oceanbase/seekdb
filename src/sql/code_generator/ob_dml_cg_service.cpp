@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #define USING_LOG_PREFIX SQL_CG
@@ -18,6 +22,7 @@
 #include "sql/optimizer/ob_log_insert.h"
 #include "sql/optimizer/ob_log_update.h"
 #include "share/domain_id/ob_domain_id.h"
+#include "share/external_table/ob_external_table_utils.h"
 
 namespace oceanbase
 {
@@ -1050,8 +1055,7 @@ int ObDmlCgService::generate_scan_ctdef(ObLogInsert &op,
     }
   }
   if (OB_SUCC(ret)) {
-    scan_ctdef.table_param_.get_enable_lob_locator_v2() 
-        = (cg_.get_cur_cluster_version() >= CLUSTER_VERSION_4_1_0_0);
+    scan_ctdef.table_param_.get_enable_lob_locator_v2() = true;
     if (OB_FAIL(scan_ctdef.table_param_.convert(*table_schema, scan_ctdef.access_column_ids_,
                                                 scan_ctdef.pd_expr_spec_.pd_storage_flag_))) {
       LOG_WARN("convert table param failed", K(ret));
@@ -1182,9 +1186,7 @@ int ObDmlCgService::convert_dml_column_info(ObTableID index_tid,
     column_type = column->get_meta_type();
     column_type.set_scale(column->get_accuracy().get_scale());
     if (is_lob_storage(column_type.get_type())) {
-      if (cg_.get_cur_cluster_version() >= CLUSTER_VERSION_4_1_0_0) {
-        column_type.set_has_lob_header();
-      }
+      column_type.set_has_lob_header();
     }
     if (OB_FAIL(das_dml_info.column_ids_.push_back(column->get_column_id()))) {
       LOG_WARN("store column id failed", K(ret));
@@ -1204,9 +1206,7 @@ int ObDmlCgService::convert_dml_column_info(ObTableID index_tid,
         column_type = column->get_meta_type();
         column_type.set_scale(column->get_accuracy().get_scale());
         if (is_lob_storage(column_type.get_type())) {
-          if (cg_.get_cur_cluster_version() >= CLUSTER_VERSION_4_1_0_0) {
-            column_type.set_has_lob_header();
-          }
+          column_type.set_has_lob_header();
         }
         if (OB_FAIL(das_dml_info.column_ids_.push_back(column->get_column_id()))) {
           LOG_WARN("store column id failed", K(ret));
@@ -2076,6 +2076,7 @@ int ObDmlCgService::generate_das_dml_ctdef(ObLogDelUpd &op,
     das_dml_ctdef.is_update_partition_key_ = index_dml_info.is_update_part_key_;
     das_dml_ctdef.is_update_pk_with_dop_ = is_update_uk_parallel;
     das_dml_ctdef.is_update_pk_ = index_dml_info.is_update_primary_key_;
+    das_dml_ctdef.is_vec_hnsw_index_vid_opt_ = index_dml_info.is_vec_hnsw_index_vid_opt_;
   }
   if (OB_FAIL(ret)) {
   } else if (das_dml_ctdef.table_param_.get_data_table().is_vector_index() &&
@@ -2465,6 +2466,7 @@ int ObDmlCgService::generate_dml_base_ctdef(ObLogicalOperator &op,
 {
   int ret = OB_SUCCESS;
   dml_base_ctdef.is_primary_index_ = index_dml_info.is_primary_index_;
+  dml_base_ctdef.is_vec_hnsw_index_vid_opt_ = index_dml_info.is_vec_hnsw_index_vid_opt_;
   dml_base_ctdef.column_ids_.set_capacity(index_dml_info.column_exprs_.count());
   if (OB_FAIL(generate_dml_column_ids(op, index_dml_info.column_exprs_, dml_base_ctdef.column_ids_))) {
     LOG_WARN("generate dml column ids failed", K(ret));
@@ -3244,8 +3246,9 @@ int ObDmlCgService::generate_table_loc_meta(const IndexDMLInfo &index_dml_info,
     loc_meta.unuse_related_pruning_ = (OB_PHY_PLAN_DISTRIBUTED == cg_.opt_ctx_->get_phy_plan_type()
                                        && !cg_.opt_ctx_->get_root_stmt()->is_insert_stmt());
     loc_meta.is_external_table_ = table_schema->is_external_table();
-    loc_meta.is_external_files_on_disk_ =
-        ObSQLUtils::is_external_files_on_local_disk(table_schema->get_external_file_location());
+    ObString file_location;
+    OZ(ObExternalTableUtils::get_external_file_location(*table_schema, *schema_guard, cg_.phy_plan_->get_allocator(), file_location));
+    loc_meta.is_external_files_on_disk_ = ObSQLUtils::is_external_files_on_local_disk(file_location);
   }
   if (OB_SUCC(ret) && index_dml_info.is_primary_index_) {
     TableLocRelInfo *rel_info = nullptr;
@@ -3405,9 +3408,7 @@ int ObDmlCgService::generate_fk_arg(ObForeignKeyArg &fk_arg,
     } else {
       fk_column.obj_meta_ = column_schema->get_meta_type();
       if (fk_column.obj_meta_.is_lob_storage()) {
-        if (cg_.get_cur_cluster_version() >= CLUSTER_VERSION_4_1_0_0) {
-          fk_column.obj_meta_.set_has_lob_header();
-        }
+        fk_column.obj_meta_.set_has_lob_header();
       } else if (fk_column.obj_meta_.is_decimal_int()) {
         fk_column.obj_meta_.set_stored_precision(column_schema->get_accuracy().get_precision());
         fk_column.obj_meta_.set_scale(column_schema->get_accuracy().get_scale());
@@ -3602,8 +3603,7 @@ int ObDmlCgService::generate_fk_scan_ctdef(share::schema::ObSchemaGetterGuard &s
       TABLE_SCHEMA, tenant_id, index_tid, scan_ctdef.schema_version_))) {
     LOG_WARN("fail to get schema version", K(ret), K(tenant_id), K(index_tid));
   } else {
-    scan_ctdef.table_param_.get_enable_lob_locator_v2() 
-        = (cg_.get_cur_cluster_version() >= CLUSTER_VERSION_4_1_0_0);
+    scan_ctdef.table_param_.get_enable_lob_locator_v2() = true;
     if (OB_FAIL(scan_ctdef.table_param_.convert(*table_schema, scan_ctdef.access_column_ids_,
                                                 scan_ctdef.pd_expr_spec_.pd_storage_flag_))) {
       LOG_WARN("convert table param failed", K(ret));
@@ -3861,7 +3861,6 @@ int ObDmlCgService::generate_scan_with_domain_id_ctdef_if_need(
   ObArray<uint64_t> domain_tids;
   ObArray<ObExpr*> result_outputs;
   ObDASDomainIdMergeCtDef *domain_id_merge_ctdef = nullptr;
-  uint64_t tenant_data_version = 0;
   int64_t child_cnt = 0;
   if (OB_FAIL(check_need_domain_id_merge_iter(index_dml_info.column_exprs_, op, index_dml_info.ref_table_id_, domain_types, domain_tids))) {
     LOG_WARN("fail to check need domain id merge iter", K(ret));
@@ -3871,24 +3870,6 @@ int ObDmlCgService::generate_scan_with_domain_id_ctdef_if_need(
   } else if (OB_ISNULL(cg_.opt_ctx_->get_session_info())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("fail to get session info", K(ret));
-  } else if (OB_FAIL(GET_MIN_DATA_VERSION(cg_.opt_ctx_->get_session_info()->get_effective_tenant_id(), tenant_data_version))) {
-    LOG_WARN("get tenant data version failed", K(ret));
-  } else if (tenant_data_version < DATA_VERSION_4_3_5_1) {
-    // old version, we should produce doc id/vid ctdef
-    if (domain_types.count() != 1 ||
-        (domain_types.at(0) != ObDomainIdUtils::ObDomainIDType::DOC_ID && 
-         domain_types.at(0) != ObDomainIdUtils::ObDomainIDType::VID)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("fail to check old version domain id", K(ret), K(domain_types));
-    } else if (domain_types.at(0) == ObDomainIdUtils::ObDomainIDType::DOC_ID) { // DOC_ID
-      if (OB_FAIL(generate_scan_with_doc_id_ctdef(op, index_dml_info, domain_tids.at(0), scan_ctdef, attach_spec))) {
-        LOG_WARN("fail to generate doc id ctdef", K(ret));
-      }
-    } else { // VID
-      if (OB_FAIL(generate_scan_with_vec_vid_ctdef(op, index_dml_info, domain_tids.at(0), scan_ctdef, attach_spec))) {
-        LOG_WARN("fail to generate vec vid ctdef", K(ret));
-      }
-    }
   } else if (OB_FAIL(ObDASTaskFactory::alloc_das_ctdef(DAS_OP_DOMAIN_ID_MERGE, cg_.phy_plan_->get_allocator(),
           domain_id_merge_ctdef))) {
     LOG_WARN("fail to allocate to domain id merge ctdef", K(ret));
@@ -3973,10 +3954,10 @@ int ObDmlCgService::generate_rowkey_domain_ctdef(
     loc_meta->unuse_related_pruning_ = (OB_PHY_PLAN_DISTRIBUTED == cg_.opt_ctx_->get_phy_plan_type()
                                        && !cg_.opt_ctx_->get_root_stmt()->is_insert_stmt());
     loc_meta->is_external_table_ = rowkey_domain_schema->is_external_table();
-    loc_meta->is_external_files_on_disk_ =
-        ObSQLUtils::is_external_files_on_local_disk(rowkey_domain_schema->get_external_file_location());
-    scan_ctdef->table_param_.get_enable_lob_locator_v2()
-        = (cg_.get_cur_cluster_version() >= CLUSTER_VERSION_4_1_0_0);
+    ObString file_location;
+    OZ(ObExternalTableUtils::get_external_file_location(*rowkey_domain_schema, *schema_guard->get_schema_guard(), cg_.phy_plan_->get_allocator(), file_location));
+    loc_meta->is_external_files_on_disk_ = ObSQLUtils::is_external_files_on_local_disk(file_location);
+    scan_ctdef->table_param_.get_enable_lob_locator_v2() = true;
     scan_ctdef->schema_version_ = rowkey_domain_schema->get_schema_version();
     ObSEArray<ObExpr *, 1> domain_id_expr;
     ObSEArray<uint64_t, 1> domain_id_col_ids;
@@ -4110,10 +4091,11 @@ int ObDmlCgService::check_is_main_table_in_fts_ddl(
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("table schema is null", K(ret), K(table_schema));
-  } else if (!table_schema->is_user_table()) {
+  } else if (!table_schema->is_user_table() && !table_schema->is_fts_index()) {
     das_dml_ctdef.is_main_table_in_fts_ddl_ = false;
-    LOG_TRACE("not user table, nothing to do", K(ret), K(table_id));
+    LOG_TRACE("neither user table nor fts index, nothing to do", K(ret), K(table_id));
   } else {
+    bool has_fts_index = false;
     bool is_main_table_in_fts_ddl = false;
     int64_t fts_index_aux_count = 0;
     int64_t fts_doc_word_aux_count = 0;
@@ -4125,6 +4107,7 @@ int ObDmlCgService::check_is_main_table_in_fts_ddl(
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected error, index schema is nullptr", K(ret), K(i), K(index_dml_info.related_index_ids_));
       } else if (index_schema->is_fts_index()) {
+        has_fts_index = true;
         if (index_schema->is_fts_index_aux()) {
           ++fts_index_aux_count;
         } else if (index_schema->is_fts_doc_word_aux()) {
@@ -4136,14 +4119,16 @@ int ObDmlCgService::check_is_main_table_in_fts_ddl(
       }
     }
     if (OB_SUCC(ret)) {
-      if (is_main_table_in_fts_ddl || fts_index_aux_count != fts_doc_word_aux_count) {
+      if ((has_fts_index && (0 == fts_index_aux_count || 0 == fts_doc_word_aux_count)) // fts aux index count is 0
+          || is_main_table_in_fts_ddl // some fts index is building
+          || fts_index_aux_count != fts_doc_word_aux_count) { // fts aux index count not match
         das_dml_ctdef.is_main_table_in_fts_ddl_ = true;
       } else {
         das_dml_ctdef.is_main_table_in_fts_ddl_ = false;
       }
     }
-    LOG_TRACE("check is main table in fts ddl", K(ret), K(is_main_table_in_fts_ddl), K(fts_index_aux_count),
-        K(fts_doc_word_aux_count), K(das_dml_ctdef));
+    LOG_TRACE("check is main table in fts ddl", K(ret), K(has_fts_index), K(is_main_table_in_fts_ddl), K(fts_index_aux_count),
+        K(fts_doc_word_aux_count), K(table_id), K(das_dml_ctdef.is_main_table_in_fts_ddl_), K(index_dml_info.related_index_ids_));
   }
   return ret;
 }

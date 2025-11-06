@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #ifndef OCEANBASE_SHARE_SCHEMA_OB_SCHEMA_RETRIEVE_UTILS_H_
@@ -423,6 +427,7 @@ public:
   RETRIEVE_SCHEMA_FUNC_DECLARE(db_priv);
   RETRIEVE_SCHEMA_FUNC_DECLARE(table_priv);
   RETRIEVE_SCHEMA_FUNC_DECLARE(routine_priv);
+  RETRIEVE_SCHEMA_FUNC_DECLARE(obj_mysql_priv);
   
   RETRIEVE_SCHEMA_FUNC_DECLARE(column_priv);
   RETRIEVE_SCHEMA_FUNC_DECLARE(package);
@@ -440,10 +445,13 @@ public:
 
   RETRIEVE_SCHEMA_FUNC_DECLARE(dblink);
   RETRIEVE_SCHEMA_FUNC_DECLARE(directory);
+  RETRIEVE_SCHEMA_FUNC_DECLARE(location);
   RETRIEVE_SCHEMA_FUNC_DECLARE(context);
   RETRIEVE_SCHEMA_FUNC_DECLARE(mock_fk_parent_table);
   RETRIEVE_SCHEMA_FUNC_DECLARE(catalog);
   RETRIEVE_SCHEMA_FUNC_DECLARE(ccl_rule);
+  RETRIEVE_SCHEMA_FUNC_DECLARE(ai_model);
+
   template<typename T>
   static int retrieve_object_list(const uint64_t tenant_id, T &result, common::ObIArray<uint64_t> &trigger_list);
   template<typename T>
@@ -486,6 +494,7 @@ public:
   FILL_SCHEMA_FUNC_DECLARE(udf, ObSimpleUDFSchema);
   FILL_SCHEMA_FUNC_DECLARE(sequence, ObSequenceSchema);
   FILL_SCHEMA_FUNC_DECLARE(directory, ObDirectorySchema);
+  FILL_SCHEMA_FUNC_DECLARE(location, ObLocationSchema);
   FILL_SCHEMA_FUNC_DECLARE(context, ObContextSchema);
   FILL_SCHEMA_FUNC_DECLARE(mock_fk_parent_table, ObSimpleMockFKParentTableSchema);
   FILL_SCHEMA_FUNC_DECLARE(catalog, ObCatalogSchema);
@@ -516,6 +525,7 @@ public:
   FILL_SCHEMA_FUNC_DECLARE(link_table, ObTableSchema);
   FILL_SCHEMA_FUNC_DECLARE(link_column, ObColumnSchemaV2);
   FILL_SCHEMA_FUNC_DECLARE(ccl_rule, ObCCLRuleSchema);
+  FILL_SCHEMA_FUNC_DECLARE(ai_model, ObAiModelSchema);
   template<typename T>
   static int fill_mock_fk_parent_table_column_info(
       const uint64_t tenant_id, T &result, uint64_t &parent_column_id, ObString &parent_column_name,
@@ -537,6 +547,12 @@ public:
                                   bool &is_deleted,
                                   ObRawObjPriv &raw_p_id,
                                   uint64_t &option);
+
+  template<typename T>
+  static int fill_obj_mysql_priv_schema(const uint64_t tenant_id,
+                                        T &result,
+                                        ObObjMysqlPriv &obj_mysql_priv,
+                                        bool &is_deleted);
 
   template<typename T>
   static int fill_trigger_id(const uint64_t tenant_id, T &result,

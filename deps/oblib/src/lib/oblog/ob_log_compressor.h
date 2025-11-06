@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #ifndef OB_LOG_COMPRESSOR_H_
@@ -44,7 +48,6 @@ static const int64_t OB_SYSLOG_COMPRESS_RESERVE_SIZE = 4 * (1LL << 30);  // 4GB
 static const int64_t OB_SYSLOG_DELETE_RESERVE_SIZE = 2 * (1LL << 30);  // 2GB
 static const int64_t OB_SYSLOG_COMPRESS_LOOP_INTERVAL = 5000000;  // 5s
 static const char    OB_SYSLOG_DIR[] = "log";  // same as LOG_DIR in src/observer/main.cpp
-static const char    OB_ALERT_LOG_DIR[] = "log/alert";  // same as ALERT_DIR in src/observer/main.cpp
 static const char    OB_SYSLOG_COMPRESS_ZSTD_SUFFIX[] = ".zst";  // name suffix of file compressed by zstd
 static const char    OB_UNCOMPRESSED_SYSLOG_FILE_PATTERN[] = "^[a-z]+\\.log\\.[0-9]+$";  // only uncompressed files
 static const char    OB_COMPRESSED_SYSLOG_FILE_PATTERN[] = "^[a-z]+\\.log\\.[0-9]+\\.[a-z0-9]+$";  // only compressed files
@@ -52,12 +55,10 @@ static const char    OB_ARCHIVED_SYSLOG_FILE_PATTERN[] = "^[a-z]+\\.log\\.[0-9]+
 static const char   *OB_SYSLOG_FILE_PREFIX[OB_SYSLOG_COMPRESS_TYPE_COUNT] =
 {
   "observer.log",     // FD_SVR_FILE
-  "rootservice.log",  // FD_RS_FILE
-  "election.log",     // FD_ELEC_FILE
   "trace.log",        // FD_TRACE_FILE
   // no need to compress audit log and alert log
 };
-STATIC_ASSERT(MAX_FD_FILE == 6, "if you add a new log type, add it's prefix here !!!");
+STATIC_ASSERT(MAX_FD_FILE == 4, "if you add a new log type, add it's prefix here !!!");
 
 #define OB_LOG_COMPRESSOR ::oceanbase::common::ObLogCompressor::get_log_compressor()
 

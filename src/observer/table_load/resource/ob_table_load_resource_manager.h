@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #pragma once
@@ -80,20 +84,29 @@ private:
 		ObDirectLoadResourceApplyArg apply_arg_;
 		uint64_t miss_counts_;
 	};
+	class ObInitResourceTask : public common::ObTimerTask
+	{
+	public:
+		ObInitResourceTask(ObTableLoadResourceManager &manager)
+			: manager_(manager)
+		{
+		}
+		virtual ~ObInitResourceTask() = default;
+		void runTimerTask() override;
+	public:
+		ObTableLoadResourceManager &manager_;
+	};
 	class ObRefreshAndCheckTask : public common::ObTimerTask 
 	{
   public:
     ObRefreshAndCheckTask(ObTableLoadResourceManager &manager) 
-			: manager_(manager), tenant_id_(common::OB_INVALID_ID), is_inited_(false) 
+			: manager_(manager)
 		{
 		}
     virtual ~ObRefreshAndCheckTask() = default;
-		int init(uint64_t tenant_id);
     void runTimerTask() override;
   public:
 		ObTableLoadResourceManager &manager_;
-		uint64_t tenant_id_;
-  	bool is_inited_;
   };
 	int gen_update_arg(ObDirectLoadResourceUpdateArg &update_arg);
 	int gen_check_res(bool first_check, 
@@ -104,9 +117,11 @@ private:
 private:
   typedef common::hash::ObHashMap<ObAddr, ObResourceCtx, common::hash::NoPthreadDefendMode> ResourceCtxMap;
   typedef common::hash::ObHashMap<ObTableLoadUniqueKey, ObResourceAssigned, common::hash::NoPthreadDefendMode> ResourceAssignedMap;
+  ObInitResourceTask init_resource_task_;
   ObRefreshAndCheckTask refresh_and_check_task_;
 	static const int64_t MAX_MISS_COUNT = 3;
-	static const int64_t REFRESH_AND_CHECK_TASK_INTERVAL = 30LL * 1000LL * 1000LL; // 30s
+	static const int64_t REFRESH_AND_CHECK_TASK_FIRST_TIME_INTERVAL = 1LL * 1000LL * 1000LL; // 1s
+	static const int64_t REFRESH_AND_CHECK_TASK_INTERVAL = 3LL * 1000LL * 1000LL; // 3s
 	ResourceCtxMap resource_pool_;
 	ResourceAssignedMap assigned_tasks_;
   mutable lib::ObMutex mutex_;

@@ -1,19 +1,24 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #include "lib/file/file_directory_utils.h"
 
 #include "common/ob_smart_call.h"
 #include "lib/utility/ob_hang_fatal_error.h"
+#include "lib/string/ob_sql_string.h"
 
 #include <dirent.h>
 #include <sys/statvfs.h>
@@ -40,8 +45,7 @@ int FileDirectoryUtils::is_exists(const char *file_path, bool &result)
   return ret;
 }
 
-//return true if file is accessible
-int FileDirectoryUtils::is_accessible(const char *file_path, bool &result)
+int FileDirectoryUtils::check_directory_mode(const char *file_path, int mode, bool &result)
 {
   int ret = OB_SUCCESS;
   result = false;
@@ -49,13 +53,23 @@ int FileDirectoryUtils::is_accessible(const char *file_path, bool &result)
     ret = OB_INVALID_ARGUMENT;
     LIB_LOG(WARN, "invalid arguments.", KCSTRING(file_path), K(ret));
   } else {
-    if (0 == access(file_path, R_OK)) {
+    if (0 == access(file_path, mode)) {
       result = true;
     } else {
       LIB_LOG(WARN, "access file failed", KERRMSG, K(file_path));
     }
   }
   return ret;
+}
+//return true if file is accessible
+int FileDirectoryUtils::is_accessible(const char *file_path, bool &result)
+{
+  return check_directory_mode(file_path, R_OK, result);
+}
+
+int FileDirectoryUtils::is_writable(const char *file_path, bool &result)
+{
+  return check_directory_mode(file_path, W_OK, result);
 }
 
 //return ture if dirname is a directory
@@ -502,5 +516,19 @@ int FileDirectoryUtils::fsync_dir(const char *dir_path)
   return ret;
 }
 
+int FileDirectoryUtils::to_absolute_path(ObSqlString &dir)
+{
+  int ret = OB_SUCCESS;
+  if (!dir.empty() && dir.ptr()[0] != '\0' && dir.ptr()[0] != '/') {
+    char real_path[OB_MAX_FILE_NAME_LENGTH] = {0};
+    if (NULL == realpath(dir.ptr(), real_path)) {
+      LIB_LOG(WARN, "Failed to get absolute path", K(dir), KCSTRING(strerror(errno)));
+      ret = OB_ERR_UNEXPECTED;
+    } else if (OB_FAIL(dir.assign(real_path))) {
+      LIB_LOG(WARN, "Failed to assign absolute path.", K(dir));
+    }
+  }
+  return ret;
+}
 }//end namespace common
 }//end namespace oceanbase

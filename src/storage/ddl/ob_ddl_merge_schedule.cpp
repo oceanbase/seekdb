@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #define USING_LOG_PREFIX STORAGE_COMPACTION
@@ -142,6 +146,7 @@ int ObDDLMergeScheduler::finish_log_freeze_ddl_kv(const ObLSID &ls_id, ObTabletH
 int ObDDLMergeScheduler::check_need_merge_for_idem_sn(ObTablet &tablet, ObArray<ObDDLKVHandle> &ddl_kvs, bool &need_schedule_merge, ObDDLKVType &ddl_kv_type)
 {
   int ret = OB_SUCCESS;
+  ObArenaAllocator arena(ObMemAttr(MTL_ID(), "Ddl_Check_Maj"));
   ObTabletDDLCompleteMdsUserData user_data;
   if (ddl_kv_type != ObDDLKVType::DDL_KV_INVALID || need_schedule_merge) {
     ret = OB_ERR_UNEXPECTED;
@@ -157,7 +162,7 @@ int ObDDLMergeScheduler::check_need_merge_for_idem_sn(ObTablet &tablet, ObArray<
     LOG_INFO("tablet already exist, not need to merge", K(ret), K(tablet.get_tablet_id()));
   } else {
     /* check need to merge major, first */
-    if (OB_FAIL(tablet.get_ddl_complete(share::SCN::max_scn(), user_data))) {
+    if (OB_FAIL(tablet.get_ddl_complete(share::SCN::max_scn(), arena, user_data))) {
       if (OB_EMPTY_RESULT == ret) {
         ret = OB_SUCCESS;
       } else {
@@ -430,7 +435,7 @@ int ObDDLMergeScheduler::schedule_tablet_ddl_major_merge(
     /* schedule to build major sstable, getting merge param from mds data */
     bool has_freezed_ddl_kv = false;
     ObDDLTableMergeDagParam param;
-    ObTabletCreateDeleteMdsUserData user_data;
+    ObArenaAllocator arena(ObMemAttr(MTL_ID(), "DDL_Mrg_Par"));
     ObTabletDDLCompleteMdsUserData  ddl_complete;
     if (OB_FAIL(ObDDLUtil::is_major_exist(ls_id, tablet_handle.get_obj()->get_tablet_meta().tablet_id_, is_major_sstable_exist))) {
       LOG_WARN("failed to check major sstable exist", K(ret), K(ls_id), K(tablet_handle.get_obj()->get_tablet_meta().tablet_id_));
@@ -440,7 +445,7 @@ int ObDDLMergeScheduler::schedule_tablet_ddl_major_merge(
       LOG_WARN("get ddl kv mgr failed", K(ret));
     } else if (OB_FAIL(ddl_kv_mgr_handle.get_obj()->check_has_freezed_ddl_kv(has_freezed_ddl_kv))) {
       LOG_WARN("check has freezed ddl kv failed", K(ret));
-    } else if (OB_FAIL(tablet_handle.get_obj()->get_ddl_complete(share::SCN::max_scn(), ddl_complete))) {
+    } else if (OB_FAIL(tablet_handle.get_obj()->get_ddl_complete(share::SCN::max_scn(), arena, ddl_complete))) {
       if (OB_EMPTY_RESULT == ret) {
         ret = OB_SUCCESS;
       }

@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #include "storage/ddl/ob_lob_macro_block_writer.h"
@@ -272,7 +276,7 @@ int ObLobMacroBlockWriter::switch_lob_id_cache()
       ObTabletAutoincrementService &auto_inc = ObTabletAutoincrementService::get_instance();
       lob_id_cache_.cache_size_ = AUTO_INC_CACHE_INTERVAL;
       if (OB_FAIL(auto_inc.get_tablet_cache_interval(MTL_ID(), lob_id_cache_))) {
-        LOG_WARN("autoinc service get tablet cache failed", K(ret), K(MTL_ID()), KPC(this));
+        LOG_WARN("autoinc service get tablet cache failed", K(ret), K(MTL_ID()));
       }
     }
     FLOG_INFO("switch lob id cache", K(ret), K(tablet_id_), K(slice_idx_), "is_idem", lob_id_generator_.is_inited(), K(old_value), K(total_lob_cell_count_), K(inrow_lob_cell_count_), "new_cache", lob_id_cache_);

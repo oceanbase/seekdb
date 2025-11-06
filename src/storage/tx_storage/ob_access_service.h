@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #ifndef OCEANBASE_STORAGE_OB_DATA_ACCESS_SERVICE_
@@ -224,6 +228,14 @@ public:
       common::ObIArray<double> &sortedness,
       common::ObIArray<uint64_t> &res_sample_counts) const;
 
+  int inner_tablet_scan(
+      const share::ObLSID &ls_id,
+      const common::ObTabletID &tablet_id,
+      ObTableScanParam &param,
+      ObNewRowIterator *&result);
+
+  int scan_block_stat(ObBlockStatScanParam &scan_param, ObBlockStatIterator &iter);
+
 protected:
   int check_tenant_out_of_memstore_limit_(bool &is_out_of_mem);
   int check_data_disk_full_(
@@ -266,13 +278,20 @@ protected:
       ObTabletHandle &tablet_handle,
       ObStoreCtxGuard &ctx_guard);
   static int check_mlog_safe_(
-      const ObTablet &tablet, 
+      const ObTablet &tablet,
       const ObTableScanParam &scan_param);
 
   static OB_INLINE int64_t get_lock_wait_timeout_(const int64_t abs_lock_timeout, const int64_t stmt_timeout)
   {
     return (abs_lock_timeout < 0 ? stmt_timeout : (abs_lock_timeout > stmt_timeout ? stmt_timeout : abs_lock_timeout));
   }
+
+private:
+  int do_table_scan_(
+      const share::ObLSID &ls_id,
+      const common::ObTabletID &data_tablet_id,
+      ObTableScanParam &param,
+      ObNewRowIterator *&result);
 
 private:
   bool is_inited_;

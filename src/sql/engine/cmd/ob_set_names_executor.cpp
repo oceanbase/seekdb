@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #include "sql/engine/cmd/ob_set_names_executor.h"
@@ -77,9 +81,6 @@ int ObSetNamesExecutor::execute(ObExecContext &ctx, ObSetNamesStmt &stmt)
           if (CS_TYPE_INVALID == cs_coll_type || CS_TYPE_INVALID == coll_type) {
             ret = OB_ERR_UNEXPECTED;
             SQL_ENG_LOG(ERROR, "cs coll type or coll type is invalid", K(ret), K(cs_coll_type), K(coll_type));
-          } else if (OB_FAIL(sql::ObSQLUtils::is_charset_data_version_valid(ObCharset::charset_type(charset),
-                                                                            session->get_effective_tenant_id()))) {
-            SQL_EXE_LOG(WARN, "failed to check charset data version valid", K(ret));
           } else if (OB_FAIL(session->update_sys_variable(SYS_VAR_CHARACTER_SET_CLIENT,
                                                           static_cast<int64_t>(cs_coll_type)))) {
             SQL_ENG_LOG(WARN, "failed to update sys var", K(ret));
@@ -98,10 +99,7 @@ int ObSetNamesExecutor::execute(ObExecContext &ctx, ObSetNamesStmt &stmt)
           ObObj database_charset;
           ObObj database_collation;
           ObCollationType cs_coll_type = ObCharset::get_default_collation(ObCharset::charset_type(charset));
-          if (OB_FAIL(sql::ObSQLUtils::is_charset_data_version_valid(ObCharset::charset_type(charset),
-                                                                     session->get_effective_tenant_id()))) {
-            SQL_EXE_LOG(WARN, "failed to check charset data version valid", K(ret));
-          } else if (OB_FAIL(session->get_sys_variable(SYS_VAR_CHARACTER_SET_DATABASE,
+          if (OB_FAIL(session->get_sys_variable(SYS_VAR_CHARACTER_SET_DATABASE,
                                                        database_charset))) {
           } else if (OB_FAIL(session->get_sys_variable(SYS_VAR_COLLATION_DATABASE,
                                                        database_collation))) {

@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #define USING_LOG_PREFIX SERVER
@@ -138,20 +142,14 @@ int ObServerReloadConfig::operator()()
 #endif
     enable_malloc_v2(GCONF._enable_malloc_v2);
     GMEMCONF.reload_config(GCONF);
-    const int64_t limit_memory = GMEMCONF.get_server_memory_limit();
     OB_LOGGER.set_info_as_wdiag(false);
     // reload log config again after get MIN_CLUSTER_VERSION
     if (OB_TMP_FAIL(ObReloadConfig::operator()())) {
       LOG_WARN("ObReloadConfig operator() failed", K(tmp_ret));
     }
     const int64_t reserved_memory = GCONF.cache_wash_threshold;
-    const int64_t reserved_urgent_memory = GCONF.memory_reserved;
-    LOG_INFO("set limit memory", K(limit_memory));
-    set_memory_limit(limit_memory);
     LOG_INFO("set reserved memory", K(reserved_memory));
     ob_set_reserved_memory(reserved_memory);
-    LOG_INFO("set urgent memory", K(reserved_urgent_memory));
-    ob_set_urgent_memory(reserved_urgent_memory);
 #ifdef OB_USE_ASAN
     __MemoryContext__::set_enable_asan_allocator(GCONF.enable_asan_for_memory_context);
 #endif
@@ -202,12 +200,7 @@ int ObServerReloadConfig::operator()()
   lib::AChunkMgr::instance().set_max_chunk_cache_size(cache_size, use_large_chunk_cache);
 
   if (!is_arbitration_mode) {
-    // Refresh cluster_id, cluster_name_hash for non arbitration mode
-    if (GCONF.cluster_id.get_value() > 0) {
-      obrpc::ObRpcNetHandler::CLUSTER_ID = GCONF.cluster_id.get_value();
-      LOG_INFO("set CLUSTER_ID for rpc", "cluster_id", GCONF.cluster_id.get_value());
-    }
-
+    // Refresh cluster_name_hash for non arbitration mode
     if (FAILEDx(set_cluster_name_hash(GCONF.cluster.str()))) {
       LOG_WARN("failed to set_cluster_name_hash", KR(ret), "cluster_name", GCONF.cluster.str(),
                                                 "cluster_name_len", strlen(GCONF.cluster.str()));

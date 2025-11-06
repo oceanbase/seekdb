@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #ifndef OCEANBASE_STORAGE_OB_MULTIPLE_ROW_MERGER_
@@ -27,7 +31,7 @@ public:
   virtual ObRowMergerType type() override { return ObRowMergerType::SIMPLE_MERGER; }
   ObSimpleRowsMerger(Comparator& cmp);
   virtual ~ObSimpleRowsMerger();
-  virtual int init(const int64_t table_cnt, common::ObIAllocator &allocator) override;
+  virtual int init(const int64_t max_table_cnt, const int64_t table_cnt, common::ObIAllocator &allocator) override;
   virtual bool is_inited() const override { return is_inited_; }
   virtual int open(const int64_t table_cnt) override;
   virtual void reset() override;
@@ -89,8 +93,9 @@ void ObSimpleRowsMerger<T, Comparator>::reuse()
 }
 
 template <typename T, typename Comparator>
-int ObSimpleRowsMerger<T, Comparator>::init(const int64_t table_cnt, common::ObIAllocator &allocator)
+int ObSimpleRowsMerger<T, Comparator>::init(const int64_t max_table_cnt, const int64_t table_cnt, common::ObIAllocator &allocator)
 {
+  UNUSED(max_table_cnt);
   int ret = OB_SUCCESS;
   if (IS_INIT) {
     ret = OB_INIT_TWICE;

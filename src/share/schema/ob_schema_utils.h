@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #ifndef _OCEANBASE_SQL_OB_SCHEMA_UTILS_H
@@ -95,6 +99,7 @@ public:
   static bool is_vec_spiv_dim_column(const uint64_t flag);
   static bool is_vec_spiv_value_column(const uint64_t flag);
   static bool is_vec_spiv_vec_column(const uint64_t flag);
+  static bool is_hybrid_vec_index_chunk_column(const uint64_t flag);
 
   static bool is_fulltext_column(const uint64_t flag);
   static bool is_doc_id_column(const uint64_t flag);
@@ -175,7 +180,7 @@ public:
                                          share::schema::ObTableSchema &dst_table_schema);
   static int alter_rowkey_column_group(share::schema::ObTableSchema &table_schema);
   static int alter_default_column_group(share::schema::ObTableSchema &new_table_schema);
-  
+
   static int mock_default_cg(
               const uint64_t tenant_id,
               share::schema::ObTableSchema &new_table_schema);
@@ -197,7 +202,7 @@ public:
       const common::ObIArray<ObObjectID> &table_ids,
       common::ObIArray<ObSimpleTableSchemaV2 *> &table_schemas);
 
-  // batch get table schemas by specified schema_version from cache or inner_table automatically 
+  // batch get table schemas by specified schema_version from cache or inner_table automatically
   //
   // @param[in] sql_client: ObISQLClient
   // @param[in] allocator:  allocator to manage memory of table schemas
@@ -268,6 +273,7 @@ public:
       bool &exist);
 
   static int is_drop_column_only(const schema::AlterTableSchema &alter_table_schema, bool &is_drop_col_only);
+  static int check_build_old_version_column_group(const share::schema::ObTableSchema &table_schema, bool &build_old_version_cg);
 
 private:
   static int get_tenant_variable(schema::ObSchemaGetterGuard &schema_guard,

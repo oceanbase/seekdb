@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #define USING_LOG_PREFIX LIB
@@ -115,6 +119,21 @@ int create_index(obvsag::VectorIndexPtr& index_handler, int index_type,
 #endif
 }
 
+int create_index(obvsag::VectorIndexPtr &index_handler, int index_type, const char *dtype, const char *metric,
+    bool use_reorder, float doc_prune_ratio, int window_size, void *allocator, int extra_info_size /* 0 */)
+{
+    INIT_SUCC(ret);
+#ifdef OB_BUILD_CDC_DISABLE_VSAG
+  return ret;
+#else
+  obvsag::set_block_size_limit(2*1024*1024);
+  LOG_INFO("vector index create params: ", K(index_type), KCSTRING(dtype), KCSTRING(metric), K(use_reorder), K(doc_prune_ratio), K(window_size), KP(allocator), K(extra_info_size));
+  return obvsag::create_index(index_handler, static_cast<obvsag::IndexType>(index_type),
+                                   dtype, metric, use_reorder, doc_prune_ratio, window_size,
+                                   allocator, extra_info_size);
+#endif
+}
+
 int build_index(obvsag::VectorIndexPtr index_handler, float* vector_list, int64_t* ids, int dim, int size, char* extra_info /*= nullptr*/)
 {
   INIT_SUCC(ret);
@@ -126,6 +145,17 @@ int build_index(obvsag::VectorIndexPtr index_handler, float* vector_list, int64_
 
 }
 
+int build_index(obvsag::VectorIndexPtr &index_handler, uint32_t *lens, uint32_t *dims, float *vals, int64_t *ids,
+    int size, char *extra_infos /*= nullptr*/)
+{
+  INIT_SUCC(ret);
+#ifdef OB_BUILD_CDC_DISABLE_VSAG
+    return ret;
+#else
+  return obvsag::build_index(index_handler, lens, dims, vals, ids, size, extra_infos);
+#endif
+}
+
 int add_index(obvsag::VectorIndexPtr index_handler, float* vector_list, int64_t* ids, int dim, char *extra_info, int size)
 {
   INIT_SUCC(ret);
@@ -133,6 +163,17 @@ int add_index(obvsag::VectorIndexPtr index_handler, float* vector_list, int64_t*
   return ret;
 #else
   return obvsag::add_index(index_handler, vector_list, ids, dim, size, extra_info);
+#endif
+}
+
+int add_index(obvsag::VectorIndexPtr &index_handler, uint32_t *lens, uint32_t *dims, float *vals, int64_t *ids, int size,
+    char *extra_infos)
+{
+  INIT_SUCC(ret);
+#ifdef OB_BUILD_CDC_DISABLE_VSAG
+  return ret;
+#else
+  return obvsag::add_index(index_handler, lens, dims, vals, ids, size, extra_infos);
 #endif
 }
 
@@ -170,6 +211,20 @@ int cal_distance_by_id(obvsag::VectorIndexPtr index_handler,
 #endif
 }
 
+int cal_distance_by_id(obvsag::VectorIndexPtr index_handler,
+                       uint32_t len, uint32_t *dims, float *vals,
+                       const int64_t *ids,
+                       int64_t count,
+                       const float *&distances)
+{
+  INIT_SUCC(ret);
+#ifdef OB_BUILD_CDC_DISABLE_VSAG
+    return ret;
+#else
+    return obvsag::cal_distance_by_id(index_handler, len, dims, vals, ids, count, distances);
+#endif
+}
+
 int get_vid_bound(obvsag::VectorIndexPtr index_handler, int64_t &min_vid, int64_t &max_vid)
 {
     INIT_SUCC(ret);
@@ -195,7 +250,8 @@ return ret;
 
 int knn_search(obvsag::VectorIndexPtr index_handler, float* query_vector,int dim, int64_t topk,
                const float*& result_dist, const int64_t*& result_ids, const char *&extra_info, int64_t &result_size, int ef_search,
-               void* invalid, bool reverse_filter, bool is_extra_info_filter, float valid_ratio, void *allocator, bool need_extra_info)
+               void* invalid, bool reverse_filter, bool is_extra_info_filter, float valid_ratio, void *allocator, bool need_extra_info,
+               float distance_threshold)
 {
   INIT_SUCC(ret);
 #ifdef OB_BUILD_CDC_DISABLE_VSAG
@@ -205,7 +261,7 @@ int knn_search(obvsag::VectorIndexPtr index_handler, float* query_vector,int dim
                                   result_dist, result_ids, result_size, 
                                   ef_search, need_extra_info, extra_info, 
                                   invalid, reverse_filter, is_extra_info_filter,
-                                  allocator, valid_ratio);
+                                  allocator, valid_ratio, distance_threshold);
 #endif
 }
 
@@ -223,6 +279,23 @@ int knn_search(obvsag::VectorIndexPtr index_handler, float* query_vector,int dim
                                 ef_search, need_extra_info, extra_info, 
                                 invalid, reverse_filter, is_extra_info_filter,
                                 valid_ratio, iter_ctx, is_last_search, allocator);
+#endif
+}
+
+int knn_search(obvsag::VectorIndexPtr index_handler, uint32_t len, uint32_t *dims, float *vals, int64_t topk,
+    const float *&result_dist, const int64_t *&result_ids, const char *&extra_info, int64_t &result_size, float query_prune_ratio, int64_t n_candidate,
+    void *invalid, bool reverse_filter,
+    bool is_extra_info_filter, float valid_ratio, void *allocator, bool need_extra_info)
+{
+  INIT_SUCC(ret);
+#ifdef OB_BUILD_CDC_DISABLE_VSAG
+  return ret;
+#else
+  return obvsag::knn_search(index_handler, len, dims, vals, topk,
+                                  result_dist, result_ids, extra_info, result_size,
+                                  query_prune_ratio, n_candidate,
+                                  invalid, reverse_filter, is_extra_info_filter,
+                                  valid_ratio, allocator, need_extra_info);
 #endif
 }
 

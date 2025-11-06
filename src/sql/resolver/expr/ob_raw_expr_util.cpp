@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #define USING_LOG_PREFIX SQL_RESV
@@ -3860,6 +3864,32 @@ int ObRawExprUtils::create_substr_expr(ObRawExprFactory &expr_factory,
       }
     } else {
       if (OB_FAIL(out_expr->set_param_exprs(first_expr, second_expr, third_expr))) {
+        LOG_WARN("add param expr failed", K(ret));
+      }
+    }
+  }
+  if (OB_SUCC(ret) && OB_FAIL(out_expr->formalize(session_info))) {
+    LOG_WARN("formalize to_type expr failed", K(ret));
+  }
+  return ret;
+}
+
+int ObRawExprUtils::create_concat_expr(ObRawExprFactory &expr_factory,
+                                       ObSQLSessionInfo *session_info,
+                                       ObIArray<ObRawExpr *> &exprs,
+                                       ObOpRawExpr *&out_expr)
+{
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(expr_factory.create_raw_expr(T_OP_CNN, out_expr))) {
+    LOG_WARN("create expr failed", K(ret));
+  } else if (OB_ISNULL(out_expr)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("out_expr is null");
+  } else if (OB_FAIL(out_expr->init_param_exprs(exprs.count()))) {
+    LOG_WARN("init param exprs failed", K(ret));
+  } else {
+    for (int64_t i = 0; OB_SUCC(ret) && i < exprs.count(); ++i) {
+      if (OB_FAIL(out_expr->add_param_expr(exprs.at(i)))) {
         LOG_WARN("add param expr failed", K(ret));
       }
     }
@@ -8475,15 +8505,17 @@ int ObRawExprUtils::build_bm25_expr(ObRawExprFactory &expr_factory,
                                     ObRawExpr *related_token_cnt,
                                     ObRawExpr *total_doc_cnt,
                                     ObRawExpr *doc_token_cnt,
+                                    ObRawExpr *avg_doc_token_cnt,
                                     ObOpRawExpr *&bm25,
+                                    const bool use_avg_doc_token_cnt_pseudo_column,
                                     const ObSQLSessionInfo *session)
 {
   int ret = OB_SUCCESS;
   ObConstRawExpr *approx_avg_token_cnt = nullptr;
   ObOpRawExpr *bm25_expr = nullptr;
-  // TODO: @Salton implement approx avg token cnt storage in fulltext index and rm this mock
   constexpr double mock_approx_avg_cnt = 10;
-  if (OB_FAIL(build_const_double_expr(expr_factory, ObDoubleType, mock_approx_avg_cnt, approx_avg_token_cnt))) {
+  if (!use_avg_doc_token_cnt_pseudo_column &&
+      OB_FAIL(build_const_double_expr(expr_factory, ObDoubleType, mock_approx_avg_cnt, approx_avg_token_cnt))) {
     LOG_WARN("create approx average token count failed", K(ret));
   } else if (OB_FAIL(expr_factory.create_raw_expr(T_FUN_SYS_BM25, bm25_expr))) {
     LOG_WARN("create bm25 func failed", K(ret));
@@ -8491,12 +8523,16 @@ int ObRawExprUtils::build_bm25_expr(ObRawExprFactory &expr_factory,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null pointer to created bm25 related exprs", K(ret), KP(bm25));
   } else {
-    OZ(approx_avg_token_cnt->formalize(session));
     OZ(bm25_expr->init_param_exprs(5));
     OZ(bm25_expr->add_param_expr(related_doc_cnt));
     OZ(bm25_expr->add_param_expr(total_doc_cnt));
     OZ(bm25_expr->add_param_expr(doc_token_cnt));
-    OZ(bm25_expr->add_param_expr(approx_avg_token_cnt));
+    if (use_avg_doc_token_cnt_pseudo_column) {
+      OZ(bm25_expr->add_param_expr(avg_doc_token_cnt));
+    } else {
+      OZ(approx_avg_token_cnt->formalize(session));
+      OZ(bm25_expr->add_param_expr(approx_avg_token_cnt));
+    }
     OZ(bm25_expr->add_param_expr(related_token_cnt));
     OZ(bm25_expr->formalize(session));
     OX(bm25 = bm25_expr);
@@ -8904,6 +8940,20 @@ int ObRawExprUtils::get_all_expr_types(ObRawExpr *expr, ObIArray<ObRawExprResTyp
       if (OB_FAIL(SMART_CALL(get_all_expr_types(expr->get_param_expr(i), res_types)))) {
         LOG_WARN("failed to get all expr types", K(ret));
       }
+    }
+  }
+  return ret;
+}
+
+int ObRawExprUtils::find_expr(ObRawExpr *root, const ObRawExpr *expected, bool &found)
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(root)) {
+  } else if (root == expected) {
+    found = true;
+  } else {
+    for (int i = 0; OB_SUCC(ret) && !found && i < root->get_param_count(); i++) {
+      ret = SMART_CALL(find_expr(root->get_param_expr(i), expected, found));
     }
   }
   return ret;

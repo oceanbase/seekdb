@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #ifndef OCEANBASE_STORAGE_BLOCKSSTABLE_OB_SSTABLE_H
@@ -34,6 +38,8 @@ namespace blocksstable
 {
 extern const char *DDL_EMPTY_SSTABLE_DUMMY_INDEX_DATA_BUF;
 extern const int64_t DDL_EMPTY_SSTABLE_DUMMY_INDEX_DATA_SIZE;
+class ObSSTableIndexScanParam;
+class ObSSTableIndexScanner;
 class ObSSTableSecMetaIterator;
 class ObIMacroBlockIterator;
 struct ObMacroBlocksWriteCtx;
@@ -127,7 +133,7 @@ public:
   virtual int64_t get_ref() const override;
 
   virtual int init(
-      const ObTabletCreateSSTableParam &param, 
+      const ObTabletCreateSSTableParam &param,
       common::ObArenaAllocator *allocator);
   static int copy_from_old_sstable(const ObSSTable &old_sstable, common::ObArenaAllocator &allocator, ObSSTable *&sstable);
   void reset();
@@ -170,6 +176,12 @@ public:
       blocksstable::ObSSTableSecMetaIterator *&meta_iter,
       const bool is_reverse_scan = false,
       const int64_t sample_step = 0) const;
+  int scan_index(
+      const ObDatumRange &scan_range,
+      const ObSSTableIndexScanParam &scan_param,
+      ObIAllocator &allocator,
+      ObSSTableIndexScanner *&idx_scanner);
+  int bf_may_contain_rowkey(const ObDatumRowkey &rowkey, bool &contain);
   int fill_column_ckm_array(ObIArray<int64_t> &column_checksums) const;
   // For transaction
   int check_row_locked(
@@ -351,7 +363,7 @@ protected:
   int add_used_size() const;
   int dec_used_size() const;
     int init_sstable_meta(
-        const ObTabletCreateSSTableParam &param, 
+        const ObTabletCreateSSTableParam &param,
         common::ObArenaAllocator *allocator);
   int get_last_rowkey(const ObDatumRowkey *&sstable_endkey);
   int serialize_fixed_struct(char *buf, const int64_t buf_len, int64_t &pos) const;

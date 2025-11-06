@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #ifndef OCEANBASE_ROOTSERVER_OB_ROOT_SERVICE_H_
@@ -55,6 +59,8 @@
 #include "rootserver/ob_load_sys_package_task.h"
 #include "rootserver/ob_catalog_ddl_service.h"
 #include "rootserver/ob_ccl_ddl_service.h"
+#include "rootserver/ob_location_ddl_service.h"
+#include "rootserver/ob_objpriv_mysql_ddl_service.h"
 
 namespace oceanbase
 {
@@ -566,6 +572,7 @@ public:
   int revoke_table(const obrpc::ObRevokeTableArg &arg);
   int revoke_routine(const obrpc::ObRevokeRoutineArg &arg);
   int alter_role(const obrpc::ObAlterRoleArg &arg);
+  int revoke_object(const obrpc::ObRevokeObjMysqlArg &arg);
   //----End of functions for managing privileges----
 
   //----Functions for managing outlines----
@@ -640,6 +647,16 @@ public:
   //----End of functions for managing catalog----
   int create_ccl_rule_ddl(const obrpc::ObCreateCCLRuleArg &arg);
   int drop_ccl_rule_ddl(const obrpc::ObDropCCLRuleArg &arg);
+
+  //----Functions for managing ai model----
+  int create_ai_model(const obrpc::ObCreateAiModelArg &arg);
+  int drop_ai_model(const obrpc::ObDropAiModelArg &arg);
+  //----End of functions for managing ai model----
+
+  //----Functions for location object----
+  int create_location(const obrpc::ObCreateLocationArg &arg);
+  int drop_location(const obrpc::ObDropLocationArg &arg);
+  //----End of functions for location object----
 
   // server related
   int load_server_manager();

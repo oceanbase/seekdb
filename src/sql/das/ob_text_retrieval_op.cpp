@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2024 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #define USING_LOG_PREFIX SQL_DAS
@@ -23,7 +27,7 @@ namespace sql
 OB_SERIALIZE_MEMBER((ObDASIRScanCtDef, ObDASAttachCtDef),
                     flags_,
                     search_text_,
-                    inv_scan_doc_id_col_,
+                    inv_scan_domain_id_col_,
                     inv_scan_doc_length_col_,
                     match_filter_,
                     relevance_expr_,
@@ -515,7 +519,7 @@ int ObTextRetrievalMerge::project_result(const ObIRIterLoserTreeItem &item, cons
   //       to record current disjunctive documents. Though current implementation can make sure lifetime is
   //       safe, but it's tricky and indirect to read.
   // P.S we cannot allocate multiple doc id expr at cg for every query token since tokenization now is an runtime operation
-  ObExpr *doc_id_col = retrieval_param_.get_ir_ctdef()->inv_scan_doc_id_col_;
+  ObExpr *doc_id_col = retrieval_param_.get_ir_ctdef()->inv_scan_domain_id_col_;
   ObEvalCtx *eval_ctx = retrieval_param_.get_ir_rtdef()->eval_ctx_;
   if (OB_ISNULL(doc_id_col) || OB_ISNULL(eval_ctx)) {
     ret = OB_ERR_UNEXPECTED;
@@ -546,7 +550,7 @@ int ObTextRetrievalMerge::fill_loser_tree_item(
 {
   int ret = OB_SUCCESS;
   item.iter_idx_ = iter_idx;
-  ObExpr *doc_id_expr = retrieval_param_.get_ir_ctdef()->inv_scan_doc_id_col_;
+  ObExpr *doc_id_expr = retrieval_param_.get_ir_ctdef()->inv_scan_domain_id_col_;
   const ObDatum &doc_id_datum = doc_id_expr->locate_expr_datum(*retrieval_param_.get_ir_rtdef()->eval_ctx_);
   if (OB_FAIL(item.doc_id_.from_string(doc_id_datum.get_string()))) {
     LOG_WARN("failed to get ObDocId from string", K(ret), K(doc_id_datum), KPC(doc_id_expr));

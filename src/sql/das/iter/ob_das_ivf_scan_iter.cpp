@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #define USING_LOG_PREFIX SQL_DAS
@@ -261,6 +265,20 @@ int ObDASIvfBaseScanIter::inner_init(ObDASIterParam &param)
           } else {
             need_norm_ = true;
             dis_type_ = oceanbase::sql::ObExprVectorDistance::ObVecDisType::DOT;
+          }
+        }
+        if (OB_SUCC(ret)) {
+          if (OB_FAIL(ObVectorIndexParam::build_search_param(vec_aux_ctdef_->vector_index_param_, vec_aux_ctdef_->vec_query_param_, search_param_))) {
+            LOG_WARN("build search param fail", K(vec_aux_ctdef_->vector_index_param_), K(vec_aux_ctdef_->vec_query_param_));
+          } else {
+            LOG_TRACE("search param", K(vec_aux_ctdef_->vector_index_param_), K(vec_aux_ctdef_->vec_query_param_), K(search_param_));
+
+            if (search_param_.similarity_threshold_ != 0) {
+              if (OB_FAIL(ObDasVecScanUtils::get_distance_threshold_ivf(
+                  *sort_ctdef_->sort_exprs_[0], search_param_.similarity_threshold_, distance_threshold_))) {
+                LOG_WARN("get distance threshold fail", K(ret));
+              }
+            }
           }
         }
         if (OB_FAIL(ret)) {
@@ -1212,7 +1230,7 @@ int ObDASIvfScanIter::get_nearest_probe_center_ids(bool is_vectorized)
 {
   int ret = OB_SUCCESS;
   share::ObVectorCenterClusterHelper<float, ObCenterId> nearest_cid_heap(
-      mem_context_->get_arena_allocator(), reinterpret_cast<const float *>(real_search_vec_.ptr()), dis_type_, dim_, nprobes_);
+      mem_context_->get_arena_allocator(), reinterpret_cast<const float *>(real_search_vec_.ptr()), dis_type_, dim_, nprobes_, FLT_MAX);
   if (OB_FAIL(generate_nearest_cid_heap(is_vectorized, nearest_cid_heap))) {
     LOG_WARN("failed to generate nearest cid heap", K(ret), K(nprobes_), K(dim_), K(real_search_vec_));
   }
@@ -1372,7 +1390,7 @@ int ObDASIvfScanIter::get_nearest_limit_rowkeys_in_cids(bool is_vectorized, T *s
 
   int64_t enlargement_factor = (selectivity_ != 0 && selectivity_ != 1) ? POST_ENLARGEMENT_FACTOR : 1;
   share::ObVectorCenterClusterHelper<T, ObRowkey> nearest_rowkey_heap(
-      vec_op_alloc_, serch_vec, dis_type_, dim_, get_nprobe(limit_param_, enlargement_factor));
+      vec_op_alloc_, serch_vec, dis_type_, dim_, get_nprobe(limit_param_, enlargement_factor), distance_threshold_);
 
   const ObDASScanCtDef *cid_vec_ctdef = vec_aux_ctdef_->get_vec_aux_tbl_ctdef(
       vec_aux_ctdef_->get_ivf_cid_vec_tbl_idx(), ObTSCIRScanType::OB_VEC_IVF_CID_VEC_SCAN);
@@ -1549,7 +1567,7 @@ int ObDASIvfScanIter::process_ivf_scan_pre(ObIAllocator &allocator, bool is_vect
   } else if (pre_fileter_rowkeys_.count() < IVF_MAX_BRUTE_FORCE_SIZE) {
     // do brute search
     IvfRowkeyHeap nearest_rowkey_heap(vec_op_alloc_, search_vec, raw_dis_type, dim_,
-                                      get_nprobe(limit_param_, 1));
+                                      get_nprobe(limit_param_, 1), distance_threshold_);
     if (OB_FAIL(get_rowkey_brute_post(is_vectorized, nearest_rowkey_heap))) {
       LOG_WARN("failed to get limit rowkey brute", K(ret));
     } else if (OB_FAIL(nearest_rowkey_heap.get_nearest_probe_center_ids(saved_rowkeys_))) {
@@ -1562,7 +1580,7 @@ int ObDASIvfScanIter::process_ivf_scan_pre(ObIAllocator &allocator, bool is_vect
         // cid_center table is empty, just do brute search
         ret = OB_SUCCESS;
         IvfRowkeyHeap nearest_rowkey_heap(vec_op_alloc_, search_vec /*unused*/, raw_dis_type, dim_,
-                                          get_nprobe(limit_param_, 1));
+                                          get_nprobe(limit_param_, 1), distance_threshold_);
         bool index_end = false;
         while (OB_SUCC(ret) && !index_end) {
           if (OB_FAIL(get_pre_filter_rowkey_batch(mem_context_->get_arena_allocator(), is_vectorized, batch_row_count,
@@ -1657,14 +1675,10 @@ int ObDASIvfPQScanIter::inner_init(ObDASIterParam &param)
   ObVectorIndexParam index_param;
   if (OB_FAIL(ObDASIvfBaseScanIter::inner_init(param))) {
     LOG_WARN("fail to do inner init ", K(ret), K(param));
-  } else if (GET_MIN_CLUSTER_VERSION() < CLUSTER_VERSION_4_3_5_3) {
-    if (OB_FAIL(ObVectorIndexUtil::parser_params_from_string(vec_aux_ctdef_->vec_index_param_, ObVectorIndexType::VIT_IVF_INDEX, index_param))) {
-      LOG_WARN("fail to parse params from string", K(ret), K(vec_aux_ctdef_->vec_index_param_));
-    } 
   } else if (OB_FAIL(index_param.assign(vec_aux_ctdef_->get_vec_index_param()))) {
     LOG_WARN("fail to assign params from vec_aux_ctdef_", K(ret));
   }
-  
+
   if (OB_FAIL(ret)) {
   } else {
     ObDASIvfScanIterParam &ivf_scan_param = static_cast<ObDASIvfScanIterParam &>(param);
@@ -2104,7 +2118,7 @@ int ObDASIvfPQScanIter::calc_nearest_limit_rowkeys_in_cids(
   int64_t ksub = 1L << nbits_;
   IvfRowkeyHeap nearest_rowkey_heap(
       vec_op_alloc_, search_vec/*unused*/, dis_type_, sub_dim,
-      get_nprobe(limit_param_, 1)); // pq do not need to 
+      get_nprobe(limit_param_, 1), distance_threshold_); // pq do not need to
   const ObDASScanCtDef *cid_vec_ctdef = vec_aux_ctdef_->get_vec_aux_tbl_ctdef(
       vec_aux_ctdef_->get_ivf_cid_vec_tbl_idx(), ObTSCIRScanType::OB_VEC_IVF_CID_VEC_SCAN);
   ObDASScanRtDef *cid_vec_rtdef = vec_aux_rtdef_->get_vec_aux_tbl_rtdef(vec_aux_ctdef_->get_ivf_cid_vec_tbl_idx());
@@ -2300,7 +2314,7 @@ int ObDASIvfPQScanIter::get_nearest_probe_centers(bool is_vectorized)
 {
   int ret = OB_SUCCESS;
   share::ObVectorCenterClusterHelper<float, ObCenterId> nearest_cid_heap(
-      mem_context_->get_arena_allocator(), reinterpret_cast<const float *>(real_search_vec_.ptr()), dis_type_, dim_, nprobes_);
+      mem_context_->get_arena_allocator(), reinterpret_cast<const float *>(real_search_vec_.ptr()), dis_type_, dim_, nprobes_, FLT_MAX);
   if (OB_FAIL(generate_nearest_cid_heap(is_vectorized, nearest_cid_heap, true/*save_center_vec*/))) {
     LOG_WARN("failed to generate nearest cid heap", K(ret), K(nprobes_), K(dim_), K(real_search_vec_));
   } 
@@ -2513,7 +2527,7 @@ int ObDASIvfPQScanIter::process_ivf_scan_post(bool is_vectorized)
     if (ret == OB_ENTRY_NOT_EXIST) {
       float *search_vec = reinterpret_cast<float *>(real_search_vec_.ptr());
       ObExprVectorDistance::ObVecDisType raw_dis_type = !need_norm_ ? dis_type_ : ObExprVectorDistance::ObVecDisType::COSINE;
-      IvfRowkeyHeap nearest_rowkey_heap(vec_op_alloc_, search_vec/*unused*/, raw_dis_type, dim_, get_nprobe(limit_param_, 1));
+      IvfRowkeyHeap nearest_rowkey_heap(vec_op_alloc_, search_vec/*unused*/, raw_dis_type, dim_, get_nprobe(limit_param_, 1), distance_threshold_);
       if (OB_FAIL(get_rowkey_brute_post(is_vectorized, nearest_rowkey_heap))) {
         LOG_WARN("failed to get limit rowkey brute", K(ret));
       } else if (OB_FAIL(nearest_rowkey_heap.get_nearest_probe_center_ids(saved_rowkeys_))) {
@@ -2719,7 +2733,7 @@ int ObDASIvfPQScanIter::process_ivf_scan_pre(ObIAllocator &allocator, bool is_ve
     if (ret == OB_ENTRY_NOT_EXIST) {
       // cid_center table is empty, just do brute search
       ret = OB_SUCCESS;
-      IvfRowkeyHeap nearest_rowkey_heap(vec_op_alloc_, search_vec/*unused*/, raw_dis_type, dim_, get_nprobe(limit_param_, 1));
+      IvfRowkeyHeap nearest_rowkey_heap(vec_op_alloc_, search_vec/*unused*/, raw_dis_type, dim_, get_nprobe(limit_param_, 1), distance_threshold_);
       bool index_end = false;
       while (OB_SUCC(ret) && !index_end) {
         if (OB_FAIL(get_pre_filter_rowkey_batch(mem_context_->get_arena_allocator(), is_vectorized, batch_row_count,
@@ -2743,7 +2757,7 @@ int ObDASIvfPQScanIter::process_ivf_scan_pre(ObIAllocator &allocator, bool is_ve
       LOG_WARN("failed to get rowkey pre filter", K(ret), K(is_vectorized));
     } else if (pre_fileter_rowkeys_.count() < IVF_MAX_BRUTE_FORCE_SIZE) {
       // do brute search
-      IvfRowkeyHeap nearest_rowkey_heap(vec_op_alloc_, search_vec/*unused*/, raw_dis_type, dim_, get_nprobe(limit_param_, 1));
+      IvfRowkeyHeap nearest_rowkey_heap(vec_op_alloc_, search_vec/*unused*/, raw_dis_type, dim_, get_nprobe(limit_param_, 1), distance_threshold_);
       if (OB_FAIL(get_rowkey_brute_post(is_vectorized, nearest_rowkey_heap))) {
         LOG_WARN("failed to get limit rowkey brute", K(ret));
       } else if (OB_FAIL(nearest_rowkey_heap.get_nearest_probe_center_ids(saved_rowkeys_))) {

@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2022 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #define USING_LOG_PREFIX STORAGE
@@ -844,21 +848,14 @@ int ObTabletTableStore::calculate_ddl_read_tables(
             "ddl_major_sstable_version", first_ddl_sstable->get_data_version(), K(snapshot_version));
       }
       LOG_INFO("calc ddl read tables", K(ret), K(snapshot_version), K(ddl_major_sstables.count()), KPC(first_ddl_sstable));
-    } else {
-      SCN ddl_start_scn;
-      if (has_co_ddl_memtable) {
-        ddl_start_scn = ddl_mem_sstables_[0]->get_ddl_start_scn();
-      } else {
-        if (OB_FAIL(ddl_start_scn.convert_for_tx(SS_DDL_START_SCN_VAL))) {
-          LOG_WARN("convert scn failed", K(ret));
-        }
-      }
+    } else if (has_co_ddl_memtable) {
+      const SCN ddl_start_scn = ddl_mem_sstables_[0]->get_ddl_start_scn();
       ObTableHandleV2 ddl_tmp_handle;
+      ObArenaAllocator arena(ObMemAttr(MTL_ID(), "Ddl_Com_Store"));
       ObTabletDDLCompleteMdsUserData ddl_complete_data;
       ObStorageSchema *storage_schema = nullptr;
       ObTmpSSTable *ddl_tmp_sstable = nullptr;
-      if (OB_FAIL(ret)) {
-      } else if (OB_FAIL(tablet.get_ddl_complete(share::SCN::max_scn(), ddl_complete_data))) {
+      if (OB_FAIL(tablet.get_ddl_complete(share::SCN::max_scn(), arena, ddl_complete_data))) {
         LOG_WARN("failed to get ddl complete mds user data", K(ret));
       } else if (ddl_complete_data.snapshot_version_ > snapshot_version) {
         // skip
@@ -1083,6 +1080,9 @@ int ObTabletTableStore::get_sstable(const ObITable::TableKey &table_key, ObSSTab
     } else if (OB_ISNULL(wrapper.get_sstable())) {
       ret = OB_ENTRY_NOT_EXIST;
       LOG_WARN("table not found", K(ret), K(table_key));
+    } else if (OB_UNLIKELY(wrapper.get_sstable()->get_key() != table_key)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("table key not match", K(ret), K(table_key), K(wrapper.get_sstable()->get_key()));
     }
   }
   return ret;
@@ -1809,8 +1809,9 @@ OB_INLINE int ObTabletTableStore::check_major_sstable_empty(const share::SCN &dd
 OB_INLINE int ObTabletTableStore::check_ddl_complete(const ObTablet &tablet, bool &is_empty) const
 {
   int ret = OB_SUCCESS;
+  ObArenaAllocator arena(ObMemAttr(MTL_ID(), "DdlCom_Sto"));
   ObTabletDDLCompleteMdsUserData data;
-  if (OB_FAIL(tablet.get_ddl_complete(share::SCN::max_scn(), data))) {
+  if (OB_FAIL(tablet.get_ddl_complete(share::SCN::max_scn(), arena, data))) {
     if (OB_EMPTY_RESULT == ret) {
       ret = OB_SUCCESS;
       is_empty = true;

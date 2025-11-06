@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #ifndef OCEANBASE_LIB_OB_NAME_DEF_H_
@@ -399,9 +403,15 @@
 #define N_VECTOR_INNER_PRODUCT "inner_product"
 #define N_VECTOR_NEGATIVE_INNER_PRODUCT "negative_inner_product"
 #define N_VECTOR_COS_DISTANCE "cosine_distance"
+#define N_SEMANTIC_DISTANCE "semantic_distance"
+#define N_SEMANTIC_VECTOR_DISTANCE "semantic_vector_distance"
 #define N_VECTOR_DIMS "vector_dims"
 #define N_VECTOR_NORM "vector_norm"
 #define N_VECTOR_DISTANCE "vector_distance"
+#define N_VECTOR_L2_SIMILARITY "l2_similarity"
+#define N_VECTOR_COS_SIMILARITY "cosine_similarity"
+#define N_VECTOR_INNER_PRODUCT_SIMILARITY "inner_product_similarity"
+#define N_VECTOR_SIMILARITY "vector_similarity"
 #define N_XOR "^"
 #define N_ROWEQ "row_eq"
 #define N_ROWLE "row_le"
@@ -810,6 +820,8 @@
 #define N_VEC_SCN "vec_scn"
 #define N_VEC_KEY "vec_key"
 #define N_VEC_DATA "vec_data"
+#define N_VEC_CHUNK "vec_chunk"
+#define N_EMBEDDED_VEC "embedded_vec"
 
 #define N_SPIV_DIM "spiv_dim"
 #define N_SPIV_VALUE "spiv_value"
@@ -1248,4 +1260,9 @@
 #define N_INNER_INFO_COLS_DATA_TYPE_PRINTER "inner_info_cols_data_type_printer"
 #define N_INNER_INFO_COLS_COLUMN_TYPE_PRINTER "inner_info_cols_column_type_printer"
 #define N_INNER_INFO_COLS_COLUMN_KEY_PRINTER "inner_info_cols_column_key_printer"
+#define N_AI_COMPLETE                       "ai_complete"
+#define N_AI_EMBED                          "ai_embed"
+#define N_AI_RERANK                         "ai_rerank"
+#define N_AI_PROMPT                         "ai_prompt"
+#define N_CHECK_LOCATION_ACCESS "check_location_access"
 #endif //OCEANBASE_LIB_OB_NAME_DEF_H_

@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #define USING_LOG_PREFIX SQL_REWRITE
@@ -160,18 +164,12 @@ int ObTransformTempTable::generate_with_clause(ObDMLStmt *&stmt, bool &trans_hap
   } else if (!ObOptimizerUtil::find_item(ctx_->temp_table_ignore_stmts_, stmt) &&
              OB_FAIL(ObTransformUtils::get_all_child_stmts(stmt, child_stmts, &parent_map, &ctx_->temp_table_ignore_stmts_))) {
     LOG_WARN("failed to get all child stmts", K(ret));
-  } else if (stmt->get_query_ctx()->check_opt_compat_version(COMPAT_VERSION_4_2_5, COMPAT_VERSION_4_3_0, COMPAT_VERSION_4_3_5)) {
+  } else {
     if (OB_FAIL(get_all_view_stmts(stmt, view_stmts))) {
       LOG_WARN("failed to get non correlated subquery", K(ret));
-    } else if (OB_FAIL(ObOptimizerUtil::intersect(child_stmts, view_stmts, child_stmts))) { 
+    } else if (OB_FAIL(ObOptimizerUtil::intersect(child_stmts, view_stmts, child_stmts))) {
       LOG_WARN("failed to intersect child stmts", K(ret));
-    } 
-  } else {
-    if (OB_FAIL(get_non_correlated_subquery(stmt, non_correlated_stmts))) {
-      LOG_WARN("failed to get non correlated subquery", K(ret));
-    } else if (OB_FAIL(ObOptimizerUtil::intersect(child_stmts, non_correlated_stmts, child_stmts))) { 
-      LOG_WARN("failed to intersect child stmts", K(ret));
-    } 
+    }
   }
 
   if (OB_FAIL(ret)) {
@@ -268,8 +266,7 @@ int ObTransformTempTable::try_inline_temp_table(ObDMLStmt *stmt,
     }
 
     if (OB_FAIL(ret)) {
-    } else if (stmt->get_query_ctx()->check_opt_compat_version(COMPAT_VERSION_4_2_5, COMPAT_VERSION_4_3_0, COMPAT_VERSION_4_3_5) &&
-               need_check_cost && 
+    } else if (need_check_cost &&
                OB_FAIL(check_inline_temp_table_by_cost(stmt, helper, need_inline))) {
       LOG_WARN("failed to check inline temp table by cost", K(ret));
     } else if (!need_inline) {
@@ -1262,17 +1259,7 @@ int ObTransformTempTable::create_temp_table(ObDMLStmt &root_stmt,
     trans_happened = false;
     common::ObSEArray<ObSelectStmt *, 2> accept_stmts;
     ObString temp_query_name;
-    bool use_new_accept_func = root_stmt.get_query_ctx()->check_opt_compat_version(
-                          COMPAT_VERSION_4_2_5, COMPAT_VERSION_4_3_0, COMPAT_VERSION_4_3_5);
-    if (!use_new_accept_func &&
-        OB_FAIL(accept_cte_transform(root_stmt, temp_table,
-                                    origin_stmts, trans_stmts,
-                                    accept_stmts, parent_map, 
-                                    !compare_info.hint_force_stmt_set_.empty(),
-                                    trans_happened))) {
-      LOG_WARN("failed to accept transform", K(ret));
-    } else if (use_new_accept_func &&
-               OB_FAIL(accept_cte_transform_v2(root_stmt, temp_table,
+    if (OB_FAIL(accept_cte_transform_v2(root_stmt, temp_table,
                                               origin_stmts, trans_stmts,
                                               accept_stmts, parent_map, 
                                               !compare_info.hint_force_stmt_set_.empty(),

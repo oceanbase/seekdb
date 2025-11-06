@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #define USING_LOG_PREFIX SQL_RESV
@@ -3159,6 +3163,45 @@ int ObDelUpdResolver::build_row_for_empty_brackets(ObArray<ObRawExpr*> &value_ro
   return ret;
 }
 
+int ObDelUpdResolver::check_vec_hnsw_index_vid_opt(const ObTableAssignment &ta,
+  const ObTableSchema *table_schema,
+  bool &is_vec_hnsw_index_vid_opt)
+{
+  int ret = OB_SUCCESS;
+  is_vec_hnsw_index_vid_opt = false;
+  ObSchemaGetterGuard *schema_guard = schema_checker_->get_schema_guard();
+  if (OB_ISNULL(table_schema) || OB_ISNULL(schema_guard)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get null table schema or schema guard", K(ret), K(table_schema), K(schema_guard));
+  } else if (table_schema->is_table_with_hidden_pk_column()) {
+    ObDocIDType vid_type = ObDocIDType::INVALID;
+    if (OB_FAIL(ObVectorIndexUtil::determine_vid_type(*table_schema, vid_type))) {
+      LOG_WARN("failed to determine vid type", K(ret), K(vid_type));
+    } else if (vid_type == ObDocIDType::HIDDEN_INC_PK) {
+      for (int64_t i = 0; OB_SUCC(ret) && i < ta.assignments_.count() && !is_vec_hnsw_index_vid_opt; ++i) {
+        ObColumnRefRawExpr *column_expr = ta.assignments_.at(i).column_expr_;
+        ColumnItem *column_item = nullptr;
+        ObIndexType index_type = INDEX_TYPE_MAX;
+        bool is_col_has_vec_idx = false;
+        if (OB_ISNULL(column_expr)) {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("get null column expr", K(ret));
+        } else if (OB_ISNULL(column_item = get_stmt()->get_column_item_by_id(column_expr->get_table_id(),
+                                                                             column_expr->get_column_id()))) {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("get null column item", K(ret), KPC(column_expr));
+        } else if (OB_FAIL(ObVectorIndexUtil::check_column_has_vector_index(*table_schema, *schema_guard, column_item->base_cid_,
+                                                                            is_col_has_vec_idx, index_type))) {
+          LOG_WARN("failed to check column has vector index", K(ret));
+        } else if (is_col_has_vec_idx) {
+          is_vec_hnsw_index_vid_opt = index_type == INDEX_TYPE_VEC_DELTA_BUFFER_LOCAL || index_type == INDEX_TYPE_HYBRID_INDEX_LOG_LOCAL;
+        }
+      }
+    }
+  }
+  return ret;
+}
+
 int ObDelUpdResolver::check_update_part_key(const ObTableAssignment &ta,
                                          uint64_t ref_table_id,
                                          bool &is_updated,
@@ -3291,6 +3334,7 @@ int ObDelUpdResolver::check_heap_table_update(ObTableAssignment &tas)
   const TableItem *table = NULL;
   const ObTableSchema *table_schema = NULL;
   bool is_update_part_key = false;
+  bool is_vec_hnsw_index_vid_opt = false;
 
   ObDMLStmt *stmt = get_stmt();
   if (OB_ISNULL(stmt)) {
@@ -3315,7 +3359,9 @@ int ObDelUpdResolver::check_heap_table_update(ObTableAssignment &tas)
                                            table->get_base_table_item().is_link_table()))) {
     LOG_WARN("fail to check whether update part key", K(ret), K(tas),
              "base_table_id", table->get_base_table_item().ref_id_);
-  } else if (!is_update_part_key) {
+  } else if (OB_FAIL(check_vec_hnsw_index_vid_opt(tas, table_schema, is_vec_hnsw_index_vid_opt))) {
+    LOG_WARN("failed to check vec hnsw index vid opt", K(ret));
+  } else if (!is_update_part_key && !is_vec_hnsw_index_vid_opt) {
     // Do not update partition key, do nothing
   } else if (OB_FAIL(build_hidden_pk_assignment(tas, table, table_schema))) {
     LOG_WARN("fail to build hidden_pk assignment", K(ret), K(tas), KPC(table));

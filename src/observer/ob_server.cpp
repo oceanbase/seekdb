@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #define USING_LOG_PREFIX SERVER
@@ -20,6 +24,7 @@
 #include "lib/task/ob_timer_service.h" // ObTimerService
 #include "observer/ob_server_utils.h"
 #include "observer/ob_rpc_extra_payload.h"
+#include "observer/ob_server_options.h"
 #include "observer/omt/ob_tenant_timezone_mgr.h"
 #include "observer/table/ob_table_rpc_processor.h"
 #include "share/allocator/ob_tenant_mutil_allocator_mgr.h"
@@ -75,6 +80,7 @@
 #include "share/ob_license_utils.h"
 #include "rpc/obrpc/ob_rpc_net_handler.h"
 #include "share/ob_service_epoch_proxy.h"
+#include "storage/blocksstable/ob_block_sstable_struct.h"
 
 using namespace oceanbase::lib;
 using namespace oceanbase::common;
@@ -114,6 +120,38 @@ namespace oceanbase
 {
 namespace observer
 {
+
+static int check_need_initialize(const char *base_dir, const char *data_dir, const char *redo_dir, bool &need_initialize)
+{
+  int ret = OB_SUCCESS;
+  need_initialize = false;
+  bool data_file_exists = false;
+  bool redo_empty = true;
+  ObSqlString data_file_path;
+  ObSqlString redo_file_path;
+  if (OB_FAIL(data_file_path.assign_fmt("%s/%s/%s", data_dir, BLOCK_SSTBALE_DIR_NAME, BLOCK_SSTBALE_FILE_NAME))) {
+    LOG_WARN("Failed to assign data file path.");
+  }
+  if (OB_FAIL(FileDirectoryUtils::is_exists(data_file_path.ptr(), data_file_exists))) {
+    LOG_WARN("Failed to check data file exists.", K(data_file_path));
+  } else if (OB_FAIL(FileDirectoryUtils::create_full_path(redo_dir))) {
+    LOG_WARN("Failed to create redo path", KCSTRING(redo_dir), KCSTRING(strerror(errno)));
+  } else if (OB_FAIL(ObServerLogBlockMgr::check_clog_directory_is_empty(redo_dir, redo_empty))) {
+    LOG_WARN("Failed to check redo file exists.", KCSTRING(redo_dir), K(ret));
+  } else if (!data_file_exists && redo_empty) {
+    need_initialize = true;
+  } else if (data_file_exists && !redo_empty) {
+    need_initialize = false;
+  } else {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("The status of deployment environment is not consistent. Please clear the directories and restart.");
+    LOG_WARN("    base-dir", KCSTRING(base_dir));
+    LOG_WARN("    data-dir", KCSTRING(data_dir));
+    LOG_WARN("    redo-dir", KCSTRING(redo_dir));
+  }
+  return ret;
+}
+
 ObServer::ObServer()
   : need_ctas_cleanup_(true),
     gctx_(GCTX),
@@ -124,7 +162,6 @@ ObServer::ObServer()
     executor_proxy_(), executor_rpc_(), dbms_job_rpc_proxy_(), dbms_sched_job_rpc_proxy_(), interrupt_proxy_(),
     config_(ObServerConfig::get_instance()),
     reload_config_(config_, gctx_), config_mgr_(config_, reload_config_),
-    tenant_config_mgr_(omt::ObTenantConfigMgr::get_instance()),
     tenant_timezone_mgr_(omt::ObTenantTimezoneMgr::get_instance()),
     device_config_mgr_(share::ObDeviceConfigMgr::get_instance()),
     schema_service_(share::schema::ObMultiVersionSchemaService::get_instance()),
@@ -173,62 +210,29 @@ ObServer::~ObServer()
   destroy();
 }
 
-int ObServer::parse_mode()
-{
-  int ret = OB_SUCCESS;
-  const char *mode_str = GCONF.ob_startup_mode;
-
-  if (mode_str && strlen(mode_str) > 0) {
-    if (0 == STRCASECMP(mode_str, NORMAL_MODE_STR)) {
-      gctx_.startup_mode_ = NORMAL_MODE;
-      LOG_INFO("set normal mode");
-#ifdef OB_BUILD_ARBITRATION
-    } else if (0 == STRCASECMP(mode_str, ARBITRATION_MODE_STR)) {
-      gctx_.startup_mode_ = ARBITRATION_MODE;
-      LOG_INFO("set arbitration mode");
-#endif
-#ifdef OB_BUILD_SHARED_STORAGE
-    } else if (0 == STRCASECMP(mode_str, SHARED_STORAGE_MODE_STR)) {
-      gctx_.startup_mode_ = SHARED_STORAGE_MODE;
-      LOG_INFO("set shared_storage mode");
-#endif
-    } else if (0 == STRCASECMP(mode_str, FLASHBACK_MODE_STR)) {
-      gctx_.startup_mode_ = PHY_FLASHBACK_MODE;
-      LOG_INFO("set physical_flashback mode");
-    } else if (0 == STRCASECMP(mode_str, FLASHBACK_VERIFY_MODE_STR)) {
-      gctx_.startup_mode_ = PHY_FLASHBACK_VERIFY_MODE;
-      LOG_INFO("set physical_flashback_verify mode");
-    } else if (0 == STRCASECMP(mode_str, DISABLED_CLUSTER_MODE_STR)) {
-      gctx_.startup_mode_ = DISABLED_CLUSTER_MODE;
-      LOG_INFO("set disabled_cluster mode");
-    } else if (0 == STRCASECMP(mode_str, DISABLED_WITH_READONLY_CLUSTER_MODE_STR)) {
-      gctx_.startup_mode_ = DISABLED_WITH_READONLY_CLUSTER_MODE;
-      LOG_INFO("set disabled_with_readonly_cluster mode");
-    } else {
-      LOG_INFO("invalid mode value", "startup_mode_", mode_str);
-    }
-  } else {
-    gctx_.startup_mode_ = NORMAL_MODE;
-    LOG_INFO("set normal mode");
-  }
-  return ret;
-}
-
 int ObServer::init(const ObServerOptions &opts, const ObPLogWriterCfg &log_cfg)
 {
   FLOG_INFO("[OBSERVER_NOTICE] start to init observer");
   DBA_STEP_RESET(server_start);
   int ret = OB_SUCCESS;
-  opts_ = opts;
   init_arches();
   scramble_rand_.init(static_cast<uint64_t>(start_time_), static_cast<uint64_t>(start_time_ / 2));
 
   // server parameters be inited here.
-  if (OB_FAIL(init_config())) {
+  if (OB_SUCC(ret) && OB_FAIL(init_config(opts))) {
     LOG_ERROR("init config failed", KR(ret));
   }
-  // set alert log level earlier
-  OB_LOGGER.set_alert_log_level(config_.alert_log_level);
+  bool need_initialize = false;
+  if (OB_FAIL(ret)) {
+  } else if (OB_FAIL(check_need_initialize(opts.base_dir_.ptr(),
+                                           config_.data_dir.get_value(),
+                                           config_.redo_dir.get_value(),
+                                           need_initialize))) {
+    LOG_ERROR("check need initialize failed", KR(ret));
+  }
+  if (OB_SUCC(ret) && need_initialize) {
+    LOG_INFO("Need to initialize", K(need_initialize));
+  }
   LOG_DBA_INFO_V2(OB_SERVER_INIT_BEGIN,
                   DBA_STEP_INC_INFO(server_start),
                   "observer init begin.");
@@ -296,7 +300,7 @@ int ObServer::init(const ObServerOptions &opts, const ObPLogWriterCfg &log_cfg)
         LOG_ERROR("init sql executor singletons !", KR(ret));
       } else if (OB_FAIL(sql::init_sql_expr_static_var())) {
         LOG_ERROR("init sql expr static var !", KR(ret));
-      } else if (OB_FAIL(ObPreProcessSysVars::init_sys_var())) {
+      } else if (OB_FAIL(ObPreProcessSysVars::init_sys_var(!need_initialize ? ObServerOptions::KeyValueArray() : opts.variables_))) {
         LOG_ERROR("init PreProcessing system variable failed !", KR(ret));
       } else if (OB_FAIL(ObBasicSessionInfo::init_sys_vars_cache_base_values())) {
         LOG_ERROR("init session base values failed", KR(ret));
@@ -358,7 +362,7 @@ int ObServer::init(const ObServerOptions &opts, const ObPLogWriterCfg &log_cfg)
       LOG_ERROR("init rs_mgr_ failed", KR(ret));
     } else if (OB_FAIL(server_tracer_.init(rs_rpc_proxy_, sql_proxy_))) {
       LOG_ERROR("init server tracer failed", KR(ret));
-    } else if (OB_FAIL(init_ob_service())) {
+    } else if (OB_FAIL(init_ob_service(need_initialize))) {
       LOG_ERROR("init ob service failed", KR(ret));
     } else if (OB_FAIL(init_root_service())) {
       LOG_ERROR("init root service failed", KR(ret));
@@ -532,7 +536,6 @@ int ObServer::init(const ObServerOptions &opts, const ObPLogWriterCfg &log_cfg)
                         DBA_STEP_INC_INFO(server_start),
                         "observer init fail. "
                         "you may find solutions in previous error logs or seek help from official technicians.");
-    raise(SIGKILL);
     set_stop();
     destroy();
   } else {
@@ -872,7 +875,7 @@ void ObServer::destroy()
   }
 }
 
-int ObServer::start()
+int ObServer::start(bool embed_mode)
 {
   int ret = OB_SUCCESS;
   gctx_.status_ = SS_STARTING;
@@ -916,7 +919,7 @@ int ObServer::start()
       FLOG_INFO("success to start ts mgr");
     }
 
-    if (opts_.embed_mode_) {
+    if (embed_mode) {
     } else if (FAILEDx(net_frame_.start())) {
       LOG_ERROR("fail to start net frame", KR(ret));
     } else {
@@ -1198,7 +1201,7 @@ int ObServer::start()
                         DBA_STEP_INC_INFO(server_start),
                         "observer start fail, the stop status is ", stop_, ". "
                         "you may find solutions in previous error logs or seek help from official technicians.");
-    raise(SIGKILL);
+
     set_stop();
     wait();
   } else if (!stop_) {
@@ -1894,7 +1897,7 @@ int ObServer::init_tz_info_mgr()
   return ret;
 }
 
-int ObServer::init_config()
+int ObServer::init_config(const ObServerOptions &opts)
 {
   int ret = OB_SUCCESS;
   bool has_config_file = true;
@@ -1906,25 +1909,42 @@ int ObServer::init_config()
   } else {
     // set dump path
     const char *dump_path = "etc/observer.config.bin";
-    config_mgr_.set_dump_path(dump_path);
-    if (OB_FILE_NOT_EXIST == (ret = config_mgr_.load_config())) {
-      has_config_file = false;
-      ret = OB_SUCCESS;
-    } else if (OB_FAIL(ret)) {
-      LOG_ERROR("load config from file failed", KR(ret));
+    char buffer[PATH_MAX];
+    ObSqlString abs_dump_path;
+    if (getcwd(buffer, sizeof(buffer)) == nullptr) {
+      ret = OB_ERR_SYS;
+      LOG_ERROR("failed to getcwd", K(ret), K(errno), K(strerror(errno)));
+    } else if (OB_FAIL(abs_dump_path.append_fmt("%s/%s", buffer, dump_path))) {
+      LOG_ERROR("failed to append", K(ret));
+    } else {
+      config_mgr_.set_dump_path(abs_dump_path.ptr());
+      if (OB_FILE_NOT_EXIST == (ret = config_mgr_.load_config())) {
+        has_config_file = false;
+        ret = OB_SUCCESS;
+      } else if (OB_FAIL(ret)) {
+        LOG_ERROR("load config from file failed", KR(ret));
+      }
+    }
+  }
+
+  ObSqlString optstr;
+  for (int64_t i = 0; OB_SUCC(ret) &&i < opts.parameters_.count(); ++i) {
+    const char *format = i == 0 ? "%.*s=%.*s" : ",%.*s=%.*s";
+    if (OB_FAIL(optstr.append_fmt(format,
+        opts.parameters_.at(i).first.length(), opts.parameters_.at(i).first.ptr(),
+        opts.parameters_.at(i).second.length(), opts.parameters_.at(i).second.ptr()))) {
+      LOG_ERROR("append optstr fmt failed", KR(ret));
     }
   }
 
   if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(init_opts_config(has_config_file))) {
+  } else if (OB_FAIL(init_opts_config(has_config_file, opts, optstr.ptr()))) {
     LOG_ERROR("init opts config failed", KR(ret));
   } else {
     config_.print();
   }
 
   if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(init_local_ip_and_devname())) {
-    LOG_ERROR("init local_ip and devname failed", KR(ret));
   } else if (!is_arbitration_mode() && OB_FAIL(config_.strict_check_special())) {
     LOG_ERROR("some config setting is not valid", KR(ret));
   } else if (OB_FAIL(GMEMCONF.reload_config(config_))) {
@@ -1940,7 +1960,7 @@ int ObServer::init_config()
     } else {
       LOG_INFO("config_mgr_ dump2file success", KR(ret));
     }
-  } else if (OB_FAIL(init_config_module())) {
+  } else if (OB_FAIL(init_config_module(optstr.ptr()))) {
     LOG_ERROR("init config module failed", KR(ret));
   } else {
     lib::g_runtime_enabled = true;
@@ -1949,91 +1969,32 @@ int ObServer::init_config()
   return ret;
 }
 
-int ObServer::init_opts_config(bool has_config_file)
+int ObServer::init_opts_config(bool has_config_file, const ObServerOptions &opts, const char *optstr)
 {
   int ret = OB_SUCCESS;
 
-  if (opts_.rpc_port_) {
-    config_.rpc_port = opts_.rpc_port_;
-    config_.rpc_port.set_version(start_time_);
-  }
-
-  if (opts_.mysql_port_) {
-    config_.mysql_port = opts_.mysql_port_;
+  if (opts.port_ != 0) {
+    config_.mysql_port = opts.port_;
     config_.mysql_port.set_version(start_time_);
   }
 
-  if (opts_.local_ip_ && strlen(opts_.local_ip_) > 0) {
-    config_.local_ip.set_value(opts_.local_ip_);
-    config_.local_ip.set_version(start_time_);
-  }
-
-  if (opts_.devname_ && strlen(opts_.devname_) > 0) {
-    config_.devname.set_value(opts_.devname_);
+  if (nullptr != opts.devname_) {
+    config_.devname.set_value(opts.devname_);
     config_.devname.set_version(start_time_);
-  } else {
-    if (!has_config_file) {
-      const char *devname = get_default_if();
-      if (devname && '\0' != devname[0]) {
-        LOG_INFO("guess interface name", K(devname));
-        config_.devname.set_value(devname);
-        config_.devname.set_version(start_time_);
-      } else {
-        LOG_INFO("can't guess interface name, use default bond0");
-      }
-    }
   }
 
-  if (opts_.zone_ && strlen(opts_.zone_) > 0) {
-    config_.zone.set_value(opts_.zone_);
-    config_.zone.set_version(start_time_);
-  }
-
-  if (opts_.rs_list_ && strlen(opts_.rs_list_) > 0) {
-    config_.rootservice_list.set_value(opts_.rs_list_);
-    config_.rootservice_list.set_version(start_time_);
-  }
-
-  if (opts_.startup_mode_) {
-    config_.ob_startup_mode.set_value(opts_.startup_mode_);
-    config_.ob_startup_mode.set_version(start_time_);
-    LOG_INFO("mode is not null", "mode", opts_.startup_mode_);
-  }
-  // update gctx_.startup_mode_
-  if (FAILEDx(parse_mode())) {
-    LOG_ERROR("parse_mode failed", KR(ret));
-  }
-
+  gctx_.startup_mode_ = NORMAL_MODE;
   config_.syslog_level.set_value(OB_LOGGER.get_level_str());
 
-  if (opts_.optstr_ && strlen(opts_.optstr_) > 0) {
-    if (FAILEDx(config_.add_extra_config(opts_.optstr_, start_time_))) {
-      LOG_ERROR("invalid config from cmdline options", K(opts_.optstr_), KR(ret));
+  if (nullptr != optstr) {
+    if (FAILEDx(config_.add_extra_config(optstr, start_time_))) {
+      LOG_ERROR("invalid config from cmdline options", KCSTRING(optstr), KR(ret));
     }
   }
 
-  if (opts_.appname_ && strlen(opts_.appname_) > 0) {
-    config_.cluster.set_value(opts_.appname_);
-    config_.cluster.set_version(start_time_);
-    if (FAILEDx(set_cluster_name_hash(ObString::make_string(opts_.appname_)))) {
-      LOG_WARN("failed to set_cluster_name_hash", KR(ret), "cluster_name", opts_.appname_,
-                                                  "cluster_name_len", strlen(opts_.appname_));
-    }
-  }
-
-  if (opts_.cluster_id_ >= 0) {
-    // Strictly here, everything that is less than zero is ignored, not when it is equal to -1.
-    config_.cluster_id = opts_.cluster_id_;
-    config_.cluster_id.set_version(start_time_);
-  }
-  if (config_.cluster_id.get_value() > 0) {
-    obrpc::ObRpcNetHandler::CLUSTER_ID = config_.cluster_id.get_value();
-    LOG_INFO("set CLUSTER_ID for rpc", "cluster_id", config_.cluster_id.get_value());
-  }
-
-  if (opts_.data_dir_ && strlen(opts_.data_dir_) > 0) {
-    config_.data_dir.set_value(opts_.data_dir_);
-    config_.data_dir.set_version(start_time_);
+  if (OB_FAIL(ret)) {
+  } else if (OB_FAIL(init_data_dir_and_redo_dir(opts))) {
+    LOG_ERROR("init data dir and redo dir failed", KR(ret));
   }
 
 #ifdef OB_BUILD_SHARED_STORAGE
@@ -2047,75 +2008,95 @@ int ObServer::init_opts_config(bool has_config_file)
 #endif
 
   // The command line is specified, subject to the command line
-  if (opts_.use_ipv6_) {
-    config_.use_ipv6 = opts_.use_ipv6_;
+  if (opts.use_ipv6_) {
+    config_.use_ipv6 = opts.use_ipv6_;
     config_.use_ipv6.set_version(start_time_);
-  }
-
-  if (opts_.plugins_load_) {
-    config_.plugins_load.set_value(opts_.plugins_load_);
-    config_.plugins_load.set_version(start_time_);
   }
 
   return ret;
 }
 
-int ObServer::init_local_ip_and_devname()
+int ObServer::init_data_dir_and_redo_dir(const ObServerOptions &opts)
 {
   int ret = OB_SUCCESS;
 
-  // local_ip is a critical parameter, if it is set, then verify it; otherwise, set it via devname.
-  if (OB_FAIL(ret)) {
-  } else if (strlen(config_.local_ip) > 0) {
-    char if_name[MAX_IFNAME_LENGTH] = { '\0' };
-    bool has_found = false;
-    if (OB_SUCCESS != obsys::ObNetUtil::get_ifname_by_addr(config_.local_ip, if_name, sizeof(if_name), has_found)) {
-      // if it is incorrect, then ObServer start but log a error.
-      LOG_DBA_WARN_V2(OB_SERVER_GET_IFNAME_FAIL, OB_ERR_OBSERVER_START,
-                        "get ifname by local_ip failed. ",
-                        "local_ip is ", config_.local_ip.get_value(),
-                        ". [suggestion] Verify if your local IP address is a virtual one.");
-    } else if (false == has_found) {
-      LOG_DBA_ERROR_V2(OB_SERVER_SET_LOCAL_IP_FAIL, OB_ERR_OBSERVER_START,
-                        "local_ip set failed, please check your local_ip. ",
-                        "local_ip is ", config_.local_ip.get_value(),
-                        ". [suggestion] Verify if your local IP is right. ");
-    } else if (0 != strcmp(config_.devname, if_name)) {
-      config_.devname.set_value(if_name);
-      config_.devname.set_version(start_time_);
-      // this is done to ensure the consistency of local_ip and devname.
-      LOG_DBA_WARN_V2(OB_SERVER_DEVICE_NAME_MISMATCH, OB_ITEM_NOT_MATCH,
-          "the devname has been rewritten, and the new value comes from local_ip, old value: ",
-          config_.devname.get_value(), " new value: ", if_name, " local_ip: ", config_.local_ip.get_value());
-    }
+  // remove current_directory prefix of data_dir and redo_dir if exists
+  char current_dir[PATH_MAX] = {0};
+  if (nullptr == getcwd(current_dir, sizeof(current_dir))) {
+    LOG_ERROR("failed to get current directory", K(ret), KCSTRING(strerror(errno)));
+  } else if (current_dir[strlen(current_dir) - 1] == '/') {
+  } else if (strlen(current_dir) + 2 >= PATH_MAX) {
+    ret = OB_BUF_NOT_ENOUGH;
+    LOG_ERROR("current directory is too long", K(ret), KCSTRING(current_dir));
   } else {
-    if (config_.use_ipv6) {
-      char ipv6[MAX_IP_ADDR_LENGTH] = { '\0' };
-      if (OB_FAIL(obsys::ObNetUtil::get_local_addr_ipv6(config_.devname, ipv6, sizeof(ipv6)))) {
-        LOG_ERROR("get ipv6 address by devname failed", "devname",
-            config_.devname.get_value(), KR(ret));
-      } else {
-        config_.local_ip.set_value(ipv6);
-        config_.local_ip.set_version(start_time_);
-        _LOG_INFO("set local_ip via devname, local_ip:%s, devname:%s.", ipv6, config_.devname.get_value());
-      }
-    } else {
-      uint32_t ipv4_net = 0;
-      char ipv4[INET_ADDRSTRLEN] = { '\0' };
-      if (OB_FAIL(obsys::ObNetUtil::get_local_addr_ipv4(config_.devname, ipv4_net))) {
-        LOG_ERROR("get ipv4 address by devname failed", "devname",
-            config_.devname.get_value(), KR(ret));
-      } else if (nullptr == inet_ntop(AF_INET, (void *)&ipv4_net, ipv4, sizeof(ipv4))) {
-        ret = OB_ERR_SYS;
-        LOG_ERROR("call inet_ntop failed", K(ipv4_net), K(errno), KERRMSG, KR(ret));
-      } else {
-        config_.local_ip.set_value(ipv4);
-        config_.local_ip.set_version(start_time_);
-        _LOG_INFO("set local_ip via devname, local_ip:%s, devname:%s.", ipv4, config_.devname.get_value());
-      }
+    current_dir[strlen(current_dir)] = '/';
+    current_dir[strlen(current_dir) + 1] = '\0';
+  }
+
+  ObSqlString data_dir;
+  ObSqlString redo_dir;
+  if (!opts.data_dir_.empty()) {
+    if (OB_FAIL(data_dir.assign(opts.data_dir_))) {
+      LOG_ERROR("failed to assign data dir", K(ret));
+    }
+  } else if (nullptr == config_.data_dir.get_value() || 0 == strlen(config_.data_dir.get_value())) {
+    if (OB_FAIL(data_dir.assign("store"))) {
+      LOG_ERROR("failed to append data dir", K(ret));
     }
   }
 
+  if (OB_FAIL(ret)) {
+  } else if (!data_dir.empty()) {
+    if (OB_FAIL(FileDirectoryUtils::create_full_path(data_dir.ptr()))) {
+      LOG_ERROR("failed to create data dir", K(ret));
+    } else if (OB_FAIL(FileDirectoryUtils::to_absolute_path(data_dir))) {
+      LOG_ERROR("failed to convert data dir to absolute path", K(ret));
+    } else {
+      ObString tmp_data_dir(data_dir.length(), data_dir.ptr());
+      if (tmp_data_dir.prefix_match(current_dir)) {
+        tmp_data_dir.assign(tmp_data_dir.ptr() + strlen(current_dir), tmp_data_dir.length() - (int64_t)strlen(current_dir));
+        while (tmp_data_dir.prefix_match("/")) {
+          tmp_data_dir.assign(tmp_data_dir.ptr() + 1, tmp_data_dir.length() - 1);
+        }
+      }
+      config_.data_dir.set_value(tmp_data_dir.ptr());
+      config_.data_dir.set_version(start_time_);
+      LOG_INFO("set data dir", K(config_.data_dir));
+    }
+  }
+
+  if (!opts.redo_dir_.empty()) {
+    if (OB_FAIL(redo_dir.assign(opts.redo_dir_))) {
+      LOG_ERROR("failed to assign redo dir", K(ret));
+    }
+  } else if (nullptr == config_.redo_dir.get_value() || 0 == strlen(config_.redo_dir.get_value())) {
+    ObString tmp_data_dir(data_dir.length(), data_dir.ptr());
+    if (tmp_data_dir.empty()) {
+      tmp_data_dir.assign_ptr(config_.data_dir.get_value(), strlen(config_.data_dir.get_value()));
+    }
+    if (OB_FAIL(redo_dir.assign_fmt("%.*s/redo", tmp_data_dir.length(), tmp_data_dir.ptr()))) {
+      LOG_ERROR("failed to append redo dir", K(ret));
+    }
+  }
+  if (OB_FAIL(ret)) {
+  } else if (!redo_dir.empty()) {
+    if (OB_FAIL(FileDirectoryUtils::create_full_path(redo_dir.ptr()))) {
+      LOG_ERROR("failed to create redo dir", K(ret));
+    } else if (OB_FAIL(FileDirectoryUtils::to_absolute_path(redo_dir))) {
+      LOG_ERROR("failed to convert redo dir to absolute path", K(ret));
+    } else {
+      ObString tmp_redo_dir(redo_dir.length(), redo_dir.ptr());
+      if (tmp_redo_dir.prefix_match(current_dir)) {
+        tmp_redo_dir.assign_ptr(tmp_redo_dir.ptr() + strlen(current_dir), tmp_redo_dir.length() - strlen(current_dir));
+        while (tmp_redo_dir.prefix_match("/")) {
+          tmp_redo_dir.assign_ptr(tmp_redo_dir.ptr() + 1, tmp_redo_dir.length() - 1);
+        }
+      }
+      config_.redo_dir.set_value(tmp_redo_dir.ptr());
+      config_.redo_dir.set_version(start_time_);
+      LOG_INFO("set redo dir", K(config_.redo_dir));
+    }
+  }
   return ret;
 }
 
@@ -2123,32 +2104,17 @@ int ObServer::init_self_addr()
 {
   int ret = OB_SUCCESS;
 
+  const char *ip = nullptr;
   int32_t local_port = static_cast<int32_t>(config_.rpc_port);
-  if (strlen(config_.local_ip) > 0) {
-    self_addr_.set_ip_addr(config_.local_ip, local_port);
+  if (config_.use_ipv6) {
+    ip = "::1";
   } else {
-    if (config_.use_ipv6) {
-      char ipv6[MAX_IP_ADDR_LENGTH] = { '\0' };
-      if (OB_FAIL(obsys::ObNetUtil::get_local_addr_ipv6(config_.devname, ipv6, sizeof(ipv6)))) {
-        LOG_ERROR("get ipv6 address by devname failed", "devname",
-            config_.devname.get_value(), KR(ret));
-      } else {
-        self_addr_.set_ip_addr(ipv6, local_port);
-      }
-    } else {
-      uint32_t ipv4_net = 0;
-      if (OB_FAIL(obsys::ObNetUtil::get_local_addr_ipv4(config_.devname, ipv4_net))) {
-        LOG_ERROR("get ipv4 address by devname failed", "devname",
-            config_.devname.get_value(), KR(ret));
-      } else {
-        int32_t ipv4 = ntohl(ipv4_net);
-        self_addr_.set_ipv4_addr(ipv4, local_port);
-      }
-    }
+    ip = "127.0.0.1";
   }
+  self_addr_.set_ip_addr(ip, local_port);
 
   if (OB_SUCC(ret)) {
-    const char *syslog_file_info = ObServerUtils::build_syslog_file_info(self_addr_);
+    const char *syslog_file_info = ObServerUtils::build_syslog_file_info();
     OB_LOGGER.set_new_file_info(syslog_file_info);
     LOG_INFO("Build basic information for each syslog file", "info", syslog_file_info);
 
@@ -2161,11 +2127,11 @@ int ObServer::init_self_addr()
   return ret;
 }
 
-int ObServer::init_config_module()
+int ObServer::init_config_module(const char *optstr)
 {
   int ret = OB_SUCCESS;
 
-  omt::UpdateTenantConfigCb update_tenant_config_cb =
+  UpdateTenantConfigCb update_tenant_config_cb =
     [&](uint64_t tenant_id)-> void
   {
     multi_tenant_.update_tenant_config(tenant_id);
@@ -2191,13 +2157,8 @@ int ObServer::init_config_module()
     LOG_ERROR("fail to init ctas clean up timer", KR(ret));
   } else if (OB_FAIL(config_mgr_.base_init())) {
     LOG_ERROR("config_mgr_ base_init failed", KR(ret));
-  } else if (OB_FAIL(config_mgr_.init(sql_proxy_, self_addr_))) {
+  } else if (OB_FAIL(config_mgr_.init(sql_proxy_, self_addr_, update_tenant_config_cb))) {
     LOG_ERROR("config_mgr_ init failed", K_(self_addr), KR(ret));
-  } else if (OB_FAIL(tenant_config_mgr_.init(sql_proxy_, self_addr_,
-                      &config_mgr_, update_tenant_config_cb))) {
-    LOG_ERROR("tenant_config_mgr_ init failed", K_(self_addr), KR(ret));
-  } else if (OB_FAIL(tenant_config_mgr_.add_config_to_existing_tenant(opts_.optstr_))) {
-    LOG_ERROR("tenant_config_mgr_ add_config_to_existing_tenant failed", KR(ret));
   }
 
   return ret;
@@ -2209,10 +2170,7 @@ int ObServer::set_running_mode()
   const int64_t memory_limit = GMEMCONF.get_server_memory_limit();
   const int64_t cnt = GCONF.cpu_count;
   const int64_t cpu_cnt = cnt > 0 ? cnt : common::get_cpu_num();
-  if (memory_limit < lib::ObRunningModeConfig::MINI_MEM_LOWER) {
-    ret = OB_MACHINE_RESOURCE_NOT_ENOUGH;
-    LOG_ERROR("memory limit too small", KR(ret), K(memory_limit));
-  } else if (memory_limit < lib::ObRunningModeConfig::MINI_MEM_UPPER) {
+  if (memory_limit < lib::ObRunningModeConfig::MINI_MEM_UPPER) {
     ObTaskController::get().allow_next_syslog();
     LOG_INFO("observer start with mini_mode", K(memory_limit));
     lib::update_mini_mode(memory_limit, cpu_cnt);
@@ -2236,23 +2194,18 @@ int ObServer::init_pre_setting()
   // oblog configuration
   if (OB_SUCC(ret)) {
     const int max_log_cnt = static_cast<int32_t>(config_.max_syslog_file_count);
-    const bool record_old_log_file = config_.enable_syslog_recycle;
-    const bool log_warn = config_.enable_syslog_wf;
     const bool enable_async_syslog = config_.enable_async_syslog;
     const int64_t max_disk_size = config_.syslog_disk_size;
     const int64_t min_uncompressed_count = config_.syslog_file_uncompressed_count;
     const char *compress_func_ptr = config_.syslog_compress_func.str();
     OB_LOGGER.set_max_file_index(max_log_cnt);
-    OB_LOGGER.set_record_old_log_file(record_old_log_file);
-    LOG_INFO("Whether record old log file", K(record_old_log_file));
-    OB_LOGGER.set_log_warn(log_warn);
-    LOG_INFO("Whether log warn", K(log_warn));
+    OB_LOGGER.set_record_old_log_file();
     OB_LOGGER.set_enable_async_log(enable_async_syslog);
     OB_LOG_COMPRESSOR.set_max_disk_size(max_disk_size);
     LOG_INFO("Whether compress syslog file", K(compress_func_ptr));
     OB_LOG_COMPRESSOR.set_compress_func(compress_func_ptr);
     OB_LOG_COMPRESSOR.set_min_uncompressed_count(min_uncompressed_count);
-    LOG_INFO("init log config", K(record_old_log_file), K(log_warn), K(enable_async_syslog),
+    LOG_INFO("init log config", K(enable_async_syslog),
              K(max_disk_size), K(compress_func_ptr), K(min_uncompressed_count));
     if (0 == max_log_cnt) {
       LOG_INFO("won't recycle log file");
@@ -2275,26 +2228,13 @@ int ObServer::init_pre_setting()
   // total memory limit
   if (OB_SUCC(ret)) {
     const int64_t limit_memory = GMEMCONF.get_server_memory_limit();
+    const int64_t hard_limit_memory = GMEMCONF.get_server_hard_memory_limit();
     const int64_t reserved_memory = std::min(config_.cache_wash_threshold.get_value(),
         static_cast<int64_t>(static_cast<double>(limit_memory) * KVCACHE_FACTOR));
-    const int64_t reserved_urgent_memory = config_.memory_reserved;
-    if (LEAST_MEMORY_SIZE > limit_memory) {
-      ret = OB_INVALID_CONFIG;
-      LOG_ERROR("memory limit for oceanbase isn't sufficient",
-                K(LEAST_MEMORY_SIZE),
-                "limit to", limit_memory,
-                "sys mem", get_phy_mem_size(),
-                K(reserved_memory),
-                K(reserved_urgent_memory),
-                KR(ret));
-    } else {
-      LOG_INFO("set limit memory", K(limit_memory));
-      set_memory_limit(limit_memory);
-      LOG_INFO("set reserved memory", K(reserved_memory));
-      ob_set_reserved_memory(reserved_memory);
-      LOG_INFO("set urgent memory", K(reserved_urgent_memory));
-      ob_set_urgent_memory(reserved_urgent_memory);
-    }
+    LOG_INFO("set memory config", K(hard_limit_memory), K(limit_memory), K(reserved_memory));
+    set_hard_memory_limit(hard_limit_memory);
+    set_memory_limit(limit_memory);
+    ob_set_reserved_memory(reserved_memory);
   }
   if (OB_SUCC(ret)) {
     const int64_t stack_size = std::max(1L << 19, static_cast<int64_t>(GCONF.stack_size));
@@ -2340,7 +2280,7 @@ int ObServer::init_io()
 {
   int ret = OB_SUCCESS;
 
-  if (OB_FAIL(OB_FILE_SYSTEM_ROUTER.init(GCONF.data_dir))) {
+  if (OB_FAIL(OB_FILE_SYSTEM_ROUTER.init(GCONF.data_dir, GCONF.redo_dir))) {
     LOG_ERROR("init OB_FILE_SYSTEM_ROUTER fail", KR(ret));
   }
 
@@ -2692,10 +2632,10 @@ int ObServer::init_global_kvcache()
   return ret;
 }
 
-int ObServer::init_ob_service()
+int ObServer::init_ob_service(bool need_bootstrap)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(ob_service_.init(sql_proxy_, server_tracer_))) {
+  if (OB_FAIL(ob_service_.init(sql_proxy_, server_tracer_, need_bootstrap))) {
     LOG_ERROR("oceanbase service init failed", KR(ret));
   }
   return ret;
@@ -2883,28 +2823,19 @@ int ObServer::init_global_context()
   gctx_.wr_service_ = &wr_service_;
   gctx_.startup_accel_handler_ = &startup_accel_handler_;
 
-  gctx_.flashback_scn_ = opts_.flashback_scn_;
   (void) gctx_.set_server_id(config_.observer_id);
   if (is_valid_server_id(gctx_.get_server_id())) {
     LOG_INFO("this observer has had a valid server_id", K(gctx_.get_server_id()));
   }
   gctx_.in_bootstrap_ = false;
-  if ((PHY_FLASHBACK_MODE == gctx_.startup_mode_ || PHY_FLASHBACK_VERIFY_MODE == gctx_.startup_mode_)
-      && 0 >= gctx_.flashback_scn_) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_ERROR("invalid flashback scn in flashback mode", KR(ret),
-              "server_mode", gctx_.startup_mode_,
-              "flashback_scn", gctx_.flashback_scn_);
-  } else {
-    gctx_.inited_ = true;
-  }
+  gctx_.inited_ = true;
 
   return ret;
 }
 
 int ObServer::init_version()
 {
-  return ObClusterVersion::get_instance().init(&config_, &tenant_config_mgr_);
+  return ObClusterVersion::get_instance().init(&config_);
 }
 
 int ObServer::init_ts_mgr()
@@ -4191,11 +4122,7 @@ int ObServer::destroy_server_in_arb_mode()
 
 bool ObServer::is_arbitration_mode() const
 {
-#ifdef OB_BUILD_ARBITRATION
-  return (ARBITRATION_MODE == gctx_.startup_mode_) ? true : false;
-#else
   return false;
-#endif
 }
 
 

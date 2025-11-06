@@ -1,0 +1,123 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_SQL_OB_EXPR_VECTOR_SIMILARITY
+#define OCEANBASE_SQL_OB_EXPR_VECTOR_SIMILARITY
+
+#include "sql/engine/expr/ob_expr_operator.h"
+#include "sql/engine/expr/ob_expr_vector.h"
+#include "lib/udt/ob_array_type.h"
+#include "share/vector_type/ob_vector_l2_similarity.h"
+#include "share/vector_type/ob_vector_cosine_similarity.h"
+#include "share/vector_type/ob_vector_ip_similarity.h"
+
+
+namespace oceanbase
+{
+namespace sql
+{
+class ObExprVectorSimilarity : public ObExprVector
+{
+public:
+  enum ObVecSimilarityType
+  {
+    COSINE = 0,
+    DOT, // inner product
+    EUCLIDEAN, // L2
+    MAX_TYPE,
+  };
+  template <typename T = float>
+  struct SimilarityFunc {
+    using FuncPtrType = int (*)(const T* a, const T* b, const int64_t len, double& similarity);
+    static FuncPtrType similarity_funcs[];
+  };
+public:
+  explicit ObExprVectorSimilarity(common::ObIAllocator &alloc);
+  explicit ObExprVectorSimilarity(common::ObIAllocator &alloc, ObExprOperatorType type,
+                                const char *name, int32_t param_num, int32_t dimension);
+  virtual ~ObExprVectorSimilarity() {};
+  virtual int calc_result_typeN(ObExprResType &type,
+                                ObExprResType *types_stack,
+                                int64_t param_num,
+                                common::ObExprTypeCtx &type_ctx)
+                                const override;
+  virtual int cg_expr(ObExprCGCtx &expr_cg_ctx,
+                      const ObRawExpr &raw_expr,
+                      ObExpr &rt_expr) const override;
+  static int calc_similarity(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum);
+  static int calc_similarity(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum, ObVecSimilarityType dis_type);
+
+private:
+  DISALLOW_COPY_AND_ASSIGN(ObExprVectorSimilarity);
+};
+
+template <typename T>
+typename ObExprVectorSimilarity::SimilarityFunc<T>::FuncPtrType ObExprVectorSimilarity::SimilarityFunc<T>::similarity_funcs[] =
+{
+  ObVectorCosineSimilarity<T>::cosine_similarity_func,
+  ObVectorIPSimilarity<T>::ip_similarity_func,
+  ObVectorL2Similarity<T>::l2_similarity_func,
+  nullptr,
+};
+
+class ObExprVectorL2Similarity : public ObExprVectorSimilarity
+{
+public:
+  explicit ObExprVectorL2Similarity(common::ObIAllocator &alloc);
+  virtual ~ObExprVectorL2Similarity() {};
+
+  virtual int cg_expr(ObExprCGCtx &expr_cg_ctx,
+                      const ObRawExpr &raw_expr,
+                      ObExpr &rt_expr) const override;
+
+  static int calc_l2_similarity(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum);
+private:
+  DISALLOW_COPY_AND_ASSIGN(ObExprVectorL2Similarity);
+};
+
+class ObExprVectorCosineSimilarity : public ObExprVectorSimilarity
+{
+public:
+  explicit ObExprVectorCosineSimilarity(common::ObIAllocator &alloc);
+  virtual ~ObExprVectorCosineSimilarity() {};
+
+  virtual int cg_expr(ObExprCGCtx &expr_cg_ctx,
+                      const ObRawExpr &raw_expr,
+                      ObExpr &rt_expr) const override;
+
+  static int calc_cosine_similarity(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum);
+private:
+  DISALLOW_COPY_AND_ASSIGN(ObExprVectorCosineSimilarity);
+};
+
+class ObExprVectorIPSimilarity : public ObExprVectorSimilarity
+{
+public:
+  explicit ObExprVectorIPSimilarity(common::ObIAllocator &alloc);
+  virtual ~ObExprVectorIPSimilarity() {};
+
+  virtual int cg_expr(ObExprCGCtx &expr_cg_ctx,
+                      const ObRawExpr &raw_expr,
+                      ObExpr &rt_expr) const override;
+
+  static int calc_ip_similarity(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum);
+private:
+  DISALLOW_COPY_AND_ASSIGN(ObExprVectorIPSimilarity);
+};
+
+} // sql
+} // oceanbase
+#endif // OCEANBASE_SQL_OB_EXPR_VECTOR_SIMILARITY

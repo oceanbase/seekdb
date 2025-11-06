@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #ifndef OBDEV_SRC_SQL_DAS_ITER_OB_DAS_FUNCTIONAL_LOOKUP_ITER_H_
@@ -61,6 +65,7 @@ public:
 
 class ObDASScanCtDef;
 class ObDASScanRtDef;
+class ObDASHNSWScanIter;
 
 /**
  * Func Lookup Iter:
@@ -89,7 +94,9 @@ class ObDASFuncLookupIter : public ObDASLocalLookupIter
 public:
   ObDASFuncLookupIter()
     : ObDASLocalLookupIter(ObDASIterType::DAS_ITER_FUNC_LOOKUP),
-      cap_(0)
+      index_scan_rowsize_(0),
+      data_scan_read_rowsize_(0),
+      start_table_scan_(false)
   {}
   virtual ~ObDASFuncLookupIter() {}
   void set_index_scan_param(storage::ObTableScanParam &scan_param) { static_cast<ObDASScanIter *>(index_table_iter_)->set_scan_param(scan_param);}
@@ -106,6 +113,12 @@ public:
     return group_id;
   }
   virtual void clear_evaluated_flag() override;
+  virtual int set_scan_rowkey(ObEvalCtx *eval_ctx,
+                              const ObIArray<ObExpr *> &rowkey_exprs,
+                              const ObDASScanCtDef *lookup_ctdef,
+                              ObIAllocator *alloc,
+                              int64_t group_id) override;
+  friend class ObDASHNSWScanIter;
 protected:
   virtual int inner_init(ObDASIterParam &param) override;
   virtual int inner_reuse() override;
@@ -120,7 +133,8 @@ protected:
   virtual int check_index_lookup() override;
   virtual void reset_lookup_state() override;
 protected:
-  int64_t cap_;
+  int64_t index_scan_rowsize_;
+  int64_t data_scan_read_rowsize_;
   bool start_table_scan_;
 };
 

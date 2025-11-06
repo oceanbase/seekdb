@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #ifndef OCEANBASE_ROOTSERVER_OB_DDL_TASK_H_
@@ -253,7 +257,7 @@ public:
                K_(sub_task_trace_id), KPC_(aux_rowkey_doc_schema), KPC_(aux_doc_rowkey_schema), KPC_(fts_index_aux_schema), KPC_(aux_doc_word_schema),
                K_(vec_rowkey_vid_schema), K_(vec_vid_rowkey_schema), K_(vec_domain_index_schema), K_(vec_index_id_schema), K_(vec_snapshot_data_schema),
                K_(vec_centroid_schema), K_(vec_cid_vector_schema), K_(vec_rowkey_cid_schema), K_(vec_sq_meta_schema), K_(vec_pq_centroid_schema), K_(vec_pq_code_schema),
-               K_(ddl_need_retry_at_executor), K_(is_pre_split), K_(new_snapshot_version));
+               K_(ddl_need_retry_at_executor), K_(is_pre_split), K_(new_snapshot_version), K_(hybrid_vec_embedded_schema));
 public:
   int32_t sub_task_trace_id_;
   uint64_t tenant_id_;
@@ -283,6 +287,7 @@ public:
   const ObTableSchema *vec_sq_meta_schema_;
   const ObTableSchema *vec_pq_centroid_schema_;
   const ObTableSchema *vec_pq_code_schema_;
+  const ObTableSchema *hybrid_vec_embedded_schema_;
 
   uint64_t tenant_data_version_;
   bool ddl_need_retry_at_executor_;
@@ -361,11 +366,12 @@ public:
       ObIAllocator &allocator,
       common::ObISQLClient &proxy);
 
-  static int get_schedule_info_for_update(
+  static int get_schedule_info(
       common::ObISQLClient &proxy,
       const uint64_t tenant_id,
       const int64_t task_id,
       ObIAllocator &allocator,
+      const bool is_for_update,
       ObDDLSliceInfo &ddl_slice_info,
       bool &is_idempotence_mode);
 
@@ -696,6 +702,7 @@ public:
     ObDDLTask(share::DDL_INVALID)
   {}
   virtual ~ObDDLTask() {}
+  virtual int init(const ObDDLTaskRecord &task_record) { return common::OB_NOT_IMPLEMENT; }
   virtual int on_child_task_finish(const uint64_t child_task_key, const int ret_code) { return common::OB_NOT_SUPPORTED; }
   virtual int process() { return OB_NOT_SUPPORTED; }
   virtual bool is_valid() const { return is_inited_; }
@@ -811,9 +818,11 @@ protected:
   }
   int init_ddl_task_monitor_info(const uint64_t target_table_id);
   virtual bool is_ddl_retryable() const { return true; }
+  virtual int refresh_task_context(const share::ObDDLTaskStatus status) { return OB_SUCCESS; }
 private:
   virtual int cleanup_impl() { return OB_NOT_SUPPORTED; }
   virtual bool task_can_retry() const { return true; }
+  int inner_refresh_task_context(const share::ObDDLTaskStatus status);
 protected:
   virtual void clear_old_status_context();
 protected:

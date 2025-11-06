@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #ifndef OCEANBASE_STORAGE_TABLET_OB_TABLET
@@ -132,7 +136,7 @@ public:
   TO_STRING_KV(K_(last_major_snapshot_version), K_(major_table_cnt),
       K_(minor_table_cnt), K_(recycle_version), K_(last_major_column_count),
       K_(last_major_macro_block_cnt), K_(is_row_store), K_(is_tablet_referenced_by_collect_mv),
-      K_(last_major_compressor_type), K_(last_major_latest_row_store_type), 
+      K_(last_major_compressor_type), K_(last_major_latest_row_store_type),
       K_(last_major_store_type));
 
 public:
@@ -238,6 +242,7 @@ public:
       int64_t &start_macro_seq);
   bool get_gc_occupy_flag() { return gc_occupy_flag_; }
   void set_gc_occupy_flag_true() { gc_occupy_flag_ = true; }  // only allow from false to true
+  share::SCN get_min_ss_tablet_version() const { return tablet_meta_.min_ss_tablet_version_; }
 #endif
   bool is_external_tablet() const { return is_external_tablet_; }
   // transfer build new tablet
@@ -811,7 +816,7 @@ private:
       const int64_t snapshot_version,
       ObTabletTableIterator &iter,
       bool &succ_get_split_dst_tables);
-      
+
   int allow_to_read_();
 
   int check_medium_list() const;
@@ -897,7 +902,7 @@ private:
   int wait_release_memtables_();
   int mark_mds_table_switched_to_empty_shell_();
   int handle_transfer_replace_(const ObBatchUpdateTableStoreParam &param);
-  
+
   // DDL.
   int update_restore_status_for_split_(const ObTabletTableStore &table_store);
 
@@ -946,6 +951,7 @@ private:
       storage::ObMetaDiskAddr &addr,
       char *&buf) const;
   int get_kept_snapshot_for_split(int64_t &min_split_snapshot) const;
+  int start_direct_load_task_for_idem(ObLSHandle &ls_handle);
 public:
   static constexpr int32_t VERSION_V1 = 1;
   static constexpr int32_t VERSION_V2 = 2;

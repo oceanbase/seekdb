@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #ifndef OCEANBASE_SQL_OB_RAW_EXPR_RESOLVER_IMPL_H
@@ -142,6 +146,8 @@ private:
   int resolve_udf_param_expr(const ParseNode *node,
                              common::ObIArray<ObRawExpr*> &param_exprs);
   int process_match_against(const ParseNode *node, ObRawExpr *&expr);
+  int process_match(const ParseNode *node, ObRawExpr *&expr);
+  int process_match_score(const ParseNode *node, ObRawExpr *&expr);
   int process_window_function_node(const ParseNode *node, ObRawExpr *&expr);
   int process_sort_list_node(const ParseNode *node, common::ObIArray<OrderItem> &order_items);
   int process_frame_node(const ParseNode *node,
@@ -163,6 +169,7 @@ private:
   int process_geo_func_node(const ParseNode *node, ObRawExpr *&expr);
   int set_geo_func_name(ObSysFunRawExpr *func_expr, const ObItemType func_type);
   int process_vector_func_node(const ParseNode *node, ObRawExpr *&expr);
+  int process_vector_similarity_func_node(const ParseNode *node, ObRawExpr *&expr);
   bool is_win_expr_valid_scope(ObStmtScope scope) const;
   int check_and_canonicalize_window_expr(ObRawExpr *expr);
   int process_ident_node(const ParseNode &node, ObRawExpr *&expr);
@@ -179,9 +186,9 @@ private:
   int process_call_param_node(const ParseNode *node, ObRawExpr *&expr);
 
   int convert_keep_aggr_to_common_aggr(ObAggFunRawExpr *&agg_expr);
-  
+
   int expand_node(common::ObIAllocator &allocator, ParseNode *node, int p, ObVector<const ParseNode*> &arr);
-  static int not_int_check(const ObRawExpr *expr); 
+  static int not_int_check(const ObRawExpr *expr);
   static int not_row_check(const ObRawExpr *expr);
   static int param_not_row_check(const ObRawExpr *expr);
   int process_dml_event_node(const ParseNode *node, ObRawExpr *&expr);
@@ -195,6 +202,14 @@ private:
   int process_sql_udt_construct_node(const ParseNode *node, ObRawExpr *&expr);
   int process_last_refresh_scn_node(const ParseNode *expr_node, ObRawExpr *&expr);
   int process_array_contains_node(const ParseNode *node, ObRawExpr *&expr);
+  void get_special_func_ident_name(ObString &ident_name, ObItemType func_type);
+  int process_xml_element_node(const ParseNode *node, ObRawExpr *&expr);
+  int process_xml_attributes_values_node(const ParseNode *node, ObRawExpr *&expr);
+  int process_xml_attributes_node(const ParseNode *node, ObRawExpr *&expr);
+  int process_xmlparse_node(const ParseNode *node, ObRawExpr *&expr);
+  int process_xml_forest_node(const ParseNode *node, ObRawExpr *&expr);
+  int remove_format_json_opt_in_pl(ParseNode *node, int8_t expr_flag);
+  int remove_strict_opt_in_pl(ParseNode *node, int8_t expr_flag);
   int process_lambda_func_node(const ParseNode *node, ObRawExpr *&expr);
   int process_array_map_func_node(const ParseNode *node, ObRawExpr *&expr);
   int check_replace_lambda_params_node(const ParseNode *params_node, ParseNode *func_node);

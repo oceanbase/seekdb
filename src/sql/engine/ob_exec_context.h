@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #ifndef OCEANBASE_SQL_OB_EXEC_CONTEXT_H
@@ -24,6 +28,7 @@
 #include "sql/ob_sql_trans_control.h"
 #include "sql/engine/user_defined_function/ob_udf_ctx_mgr.h"
 #include "sql/engine/px/ob_px_dtl_msg.h"
+#include "sql/engine/px/ob_granule_util.h"
 #include "sql/optimizer/ob_pwj_comparer.h"
 #include "sql/das/ob_das_context.h"
 #include "sql/engine/cmd/ob_table_direct_insert_ctx.h"
@@ -593,6 +598,9 @@ public:
   
   ObDiagnosisManager& get_diagnosis_manager() { return diagnosis_manager_; }
 
+  void set_granule_type(ObGranuleType granule_type) { current_granule_type_ = granule_type; }
+  bool is_block_granule_type() { return current_granule_type_ == OB_BLOCK_RANGE_GRANULE; }
+
 private:
   int build_temp_expr_ctx(const ObTempExpr &temp_expr, ObTempExprCtx *&temp_expr_ctx);
   int check_extra_status();
@@ -600,6 +608,7 @@ private:
   //set the parent execute context in nested sql
   void set_parent_ctx(ObExecContext *parent_ctx) { parent_ctx_ = parent_ctx; }
   void set_nested_level(int64_t nested_level) { nested_level_ = nested_level; }
+
 protected:
   /**
    * @brief the memory of exec context.
@@ -780,6 +789,11 @@ protected:
   AutoDopHashMap auto_dop_map_;
   bool force_local_plan_;
   ObDiagnosisManager diagnosis_manager_;
+  common::ObArenaAllocator deterministic_udf_cache_allocator_;
+
+  // Granule type for current GI task
+  ObGranuleType current_granule_type_;
+
 private:
   DISALLOW_COPY_AND_ASSIGN(ObExecContext);
 };

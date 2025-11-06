@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #define USING_LOG_PREFIX SHARE_SCHEMA
@@ -127,7 +131,7 @@ int ObUserSqlService::drop_user_delete_role_grantee_map(
   const uint64_t user_id = user->get_user_id();
   const ObUserInfo *tmp_user = NULL;
   int64_t affected_rows = 0;
-  common::ObSEArray<uint64_t, 8> schema_id_array = is_role
+  const common::ObSEArray<uint64_t, 8> &schema_id_array = is_role
       ? user->get_grantee_id_array()
       : user->get_role_id_array();
   const bool is_need_update = schema_id_array.count() > 0;
@@ -821,6 +825,11 @@ int ObUserSqlService::gen_user_dml(
     if ((user.get_priv_set() & OB_PRIV_EVENT) != 0) { priv_others |= OB_PRIV_OTHERS_EVENT; }
     if ((user.get_priv_set() & OB_PRIV_CREATE_CATALOG) != 0) { priv_others |= OB_PRIV_OTHERS_CREATE_CATALOG; }
     if ((user.get_priv_set() & OB_PRIV_USE_CATALOG) != 0) { priv_others |= OB_PRIV_OTHERS_USE_CATALOG; }
+    if ((user.get_priv_set() & OB_PRIV_CREATE_AI_MODEL) != 0) { priv_others |= OB_PRIV_OTHERS_CREATE_AI_MODEL; }
+    if ((user.get_priv_set() & OB_PRIV_ALTER_AI_MODEL) != 0) { priv_others |= OB_PRIV_OTHERS_ALTER_AI_MODEL; }
+    if ((user.get_priv_set() & OB_PRIV_DROP_AI_MODEL) != 0) { priv_others |= OB_PRIV_OTHERS_DROP_AI_MODEL; }
+    if ((user.get_priv_set() & OB_PRIV_ACCESS_AI_MODEL) != 0) { priv_others |= OB_PRIV_OTHERS_ACCESS_AI_MODEL; }
+    if ((user.get_priv_set() & OB_PRIV_CREATE_LOCATION) != 0) {priv_others |= OB_PRIV_OTHERS_CREATE_LOCATION; }
   }
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(dml.add_column("PRIV_OTHERS", priv_others))) {

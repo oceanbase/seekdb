@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #ifndef OCEANBASE_SQL_OB_SQL_DEFINE_H_
@@ -139,7 +143,27 @@ enum ObMatchAgainstMode {
   NATURAL_LANGUAGE_MODE_WITH_QUERY_EXPANSION = 1,
   BOOLEAN_MODE = 2,
   WITH_QUERY_EXPANSION = 3,
-  MAX_MATCH_AGAINST_MODE = 4,
+  MATCH_PHRASE_MODE = 4,
+  MAX_MATCH_AGAINST_MODE = 5,
+};
+
+enum ObMatchOperator {
+  MATCH_OPERATOR_OR = 0,
+  MATCH_OPERATOR_AND = 1,
+  MAX_MATCH_OPERATOR = 2,
+};
+
+enum ObMatchScoreNorm {
+  SCORE_NORM_NONE = 0,
+  SCORE_NORM_MIN_MAX = 1,
+  MAX_SCORE_NORM_TYPE = 3,
+};
+
+enum ObMatchFiledsType {
+  MATCH_MOST_FIELDS = 0,
+  MATCH_BEST_FIELDS = 1,
+  MATCH_CROSS_FIELDS = 2,
+  MAX_MATCH_FIELDS_TYPE = 3,
 };
 
 #define IS_HASH_SLAVE_MAPPING(type)                                                                \
@@ -696,6 +720,7 @@ inline const ObString &ob_match_against_mode_str(const ObMatchAgainstMode mode)
     "NATURAL LANGUAGE MODE WITH QUERY EXPANSION",
     "BOOLEAN MODE",
     "WITH QUERY EXPANSION",
+    "MATCH_PHRASE_MODE",
     "UNKNOWN MATCH MODE"
   };
 

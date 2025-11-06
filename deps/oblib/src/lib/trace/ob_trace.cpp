@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #include "ob_trace.h"
@@ -47,67 +51,6 @@ thread_local ObTrace* ObTrace::save_buffer = nullptr;
 
 void flush_trace()
 {
-  ObTrace& trace = *OBTRACE;
-  common::ObDList<ObSpanCtx>& current_span = trace.current_span_;
-  if (trace.is_inited() && !current_span.is_empty()) {
-    ObSpanCtx* span = current_span.get_first();
-    ObSpanCtx* next = nullptr;
-    while (current_span.get_header() != span) {
-      ObSpanCtx* next = span->get_next();
-      if (nullptr != span->tags_ || 0 != span->end_ts_) {
-        int64_t pos = 0;
-        thread_local char buf[MAX_TRACE_LOG_SIZE];
-        int ret = OB_SUCCESS;
-        ObTagCtxBase* tag = span->tags_;
-        bool first = true;
-        char tagstr[] = "\"tags\":[";
-        INIT_SPAN(span);
-        while (OB_SUCC(ret) && OB_NOT_NULL(tag)) {
-          if (pos + sizeof(tagstr) + 1 >= MAX_TRACE_LOG_SIZE) {
-            ret = OB_BUF_NOT_ENOUGH;
-          } else {
-            buf[pos++] = ',';
-            if (first) {
-              strncpy(buf + pos, tagstr, MAX_TRACE_LOG_SIZE - pos);
-              pos += sizeof(tagstr) - 1;
-              first = false;
-            }
-            ret = tag->tostring(buf, MAX_TRACE_LOG_SIZE, pos);
-            tag = tag->next_;
-          }
-        }
-        if (0 != pos) {
-          if (pos + 1 < MAX_TRACE_LOG_SIZE) {
-            buf[pos++] = ']';
-            buf[pos++] = 0;
-          } else {
-            buf[MAX_TRACE_LOG_SIZE - 2] = ']';
-            buf[MAX_TRACE_LOG_SIZE - 1] = 0;
-          }
-        }
-        INIT_SPAN(span->source_span_);
-        _FLT_LOG(INFO,
-                      TRACE_PATTERN "%s}",
-                      UUID_TOSTRING(trace.get_trace_id()),
-                      __span_type_mapper[span->span_type_],
-                      UUID_TOSTRING(span->span_id_),
-                      span->start_ts_,
-                      span->end_ts_,
-                      UUID_TOSTRING(OB_ISNULL(span->source_span_) ? OBTRACE->get_root_span_id() : span->source_span_->span_id_),
-                      span->is_follow_ ? "true" : "false",
-                      buf);
-        buf[0] = '\0';
-        IGNORE_RETURN sql::handle_span_record(sql::get_flt_span_manager(), buf, pos, span);
-        if (0 != span->end_ts_) {
-          current_span.remove(span);
-          trace.freed_span_.add_first(span);
-        }
-        span->tags_ = nullptr;
-      }
-      span = next;
-    }
-    trace.offset_ = trace.buffer_size_ / 2;
-  }
 }
 uint64_t UUID::gen_rand()
 {
@@ -364,15 +307,6 @@ ObTrace::ObTrace(int64_t buffer_size)
 
 void ObTrace::init(UUID trace_id, UUID root_span_id, uint8_t policy)
 {
-  #ifndef NDEBUG
-  if (check_magic()) {
-    check_leak_span();
-  }
-  #endif
-  reset();
-  trace_id_ = trace_id;
-  root_span_id_ = root_span_id;
-  policy_ = policy;
 }
 
 UUID ObTrace::begin()

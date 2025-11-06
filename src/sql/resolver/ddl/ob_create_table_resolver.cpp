@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #define USING_LOG_PREFIX SQL_RESV
@@ -282,13 +286,7 @@ int ObCreateTableResolver::resolve(const ParseNode &parse_tree)
               }
               break;
             case T_EXTERNAL: {
-              uint64_t tenant_version = 0;
-              if (OB_FAIL(GET_MIN_DATA_VERSION(tenant_id, tenant_version))) {
-                LOG_WARN("failed to get data version", K(ret));
-              } else if (tenant_version < DATA_VERSION_4_2_0_0) {
-                ret = OB_NOT_SUPPORTED;
-                LOG_USER_ERROR(OB_NOT_SUPPORTED, "tenant data version is less than 4.2, external table");
-              } else if (OB_FAIL(ObLicenseUtils::check_olap_allowed(session_info_->get_effective_tenant_id()))) {
+              if (OB_FAIL(ObLicenseUtils::check_olap_allowed(session_info_->get_effective_tenant_id()))) {
                 ret = OB_LICENSE_SCOPE_EXCEEDED;
                 LOG_WARN("external table is not allowed", KR(ret));
                 LOG_USER_ERROR(OB_LICENSE_SCOPE_EXCEEDED,
@@ -404,21 +402,15 @@ int ObCreateTableResolver::resolve(const ParseNode &parse_tree)
         }
 
         ObTenantConfigGuard tenant_config(TENANT_CONF(tenant_id));
-        uint64_t data_version = 0;
 
         // resolve table organizations before resolve table elements
         if (OB_FAIL(ret)) {
           //do nothing 
-        } else if (OB_FAIL(GET_MIN_DATA_VERSION(tenant_id, data_version))) {
-          LOG_WARN("fail to get data version", KR(ret), K(tenant_id));
         } else if (!is_inner_table(table_id_) && 
                     OB_FAIL(resolve_table_organization(tenant_config, create_table_node->children_[4]))) {
           SQL_RESV_LOG(WARN, "resolve table organization failed", K(ret));
         } else if (is_organization_set_to_heap()) {
-          if (data_version < DATA_VERSION_4_3_5_1) {
-            ret = OB_NOT_SUPPORTED;
-            SQL_RESV_LOG(WARN, "heap table is not supported under data version 4.3.5.1", K(ret));
-          } else if (OB_FAIL(ObLicenseUtils::check_olap_allowed(session_info_->get_effective_tenant_id()))) {
+          if (OB_FAIL(ObLicenseUtils::check_olap_allowed(session_info_->get_effective_tenant_id()))) {
             ret = OB_LICENSE_SCOPE_EXCEEDED;
             LOG_WARN("heap organization table is not allowed", KR(ret));
             LOG_USER_ERROR(OB_LICENSE_SCOPE_EXCEEDED,
@@ -658,6 +650,13 @@ int ObCreateTableResolver::resolve(const ParseNode &parse_tree)
       ObTableSchema &table_schema = create_table_stmt->get_create_table_arg().schema_;
       if (OB_FAIL(check_create_stmt_storage_cache_policy(table_schema.get_storage_cache_policy(), &table_schema))) {
         LOG_WARN("fail to check storage cache policy", K(ret), K(table_schema.get_storage_cache_policy()));;
+      }
+    }
+
+    if (OB_SUCC(ret) && create_table_stmt->get_create_table_arg().schema_.is_external_table()) {
+      ObTableSchema &table_schema = create_table_stmt->get_create_table_arg().schema_;
+      if (OB_FAIL(ObSQLUtils::check_location_constraint(table_schema))) {
+        LOG_WARN("fail to check location constraint", K(ret), K(table_schema));
       }
     }
 
@@ -1624,14 +1623,11 @@ int ObCreateTableResolver::resolve_insert_mode(const ParseNode *parse_tree)
   ObCreateTableStmt *create_table_stmt = static_cast<ObCreateTableStmt *>(stmt_);
   ObExecContext *exec_ctx = NULL;
   ObSqlCtx *sql_ctx = NULL;
-  bool is_support = GET_MIN_CLUSTER_VERSION() >= CLUSTER_VERSION_4_3_2_0;
   if (OB_ISNULL(parse_tree) ||
       OB_ISNULL(create_table_stmt) ||
       OB_ISNULL(params_.query_ctx_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected error",K(parse_tree), K(create_table_stmt), K(session_info_), K(exec_ctx), K(sql_ctx), K(ret));
-  } else if (!is_support) {
-    create_table_stmt->set_insert_mode(0);
   } else if (parse_tree->num_child_ != CREATE_TABLE_AS_SEL_NUM_CHILD){
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected child_num",K(parse_tree->num_child_), K(ret));
@@ -1947,13 +1943,10 @@ int ObCreateTableResolver::get_table_schema_for_check(const ObTableSchema *&tabl
 int ObCreateTableResolver::generate_index_arg(const bool process_heap_table_primary_key)
 {
   int ret = OB_SUCCESS;
-  uint64_t tenant_data_version = 0;
 
   if (OB_ISNULL(stmt_) || OB_ISNULL(session_info_)) {
     ret = OB_NOT_INIT;
     SQL_RESV_LOG(WARN, "variables are not inited.", K(ret), KP(stmt_));
-  } else if (OB_FAIL(GET_MIN_DATA_VERSION(session_info_->get_effective_tenant_id(), tenant_data_version))) {
-    LOG_WARN("get tenant data version failed", K(ret));
   } else if (OB_FAIL(set_index_name())) {
     SQL_RESV_LOG(WARN, "set index name failed", K(ret), K_(index_name));
   } else if (OB_FAIL(set_index_option_to_arg())) {
@@ -1988,46 +1981,28 @@ int ObCreateTableResolver::generate_index_arg(const bool process_heap_table_prim
           type = INDEX_TYPE_NORMAL_LOCAL;
         }
       } else if (SPATIAL_KEY == index_keyname_) {
-        if (tenant_data_version < DATA_VERSION_4_1_0_0) {
-          ret = OB_NOT_SUPPORTED;
-          LOG_WARN("tenant data version is less than 4.1, spatial index is not supported", K(ret), K(tenant_data_version));
-          LOG_USER_ERROR(OB_NOT_SUPPORTED, "tenant data version is less than 4.1, spatial index");
-        } else if (global_) {
+        if (global_) {
           type = INDEX_TYPE_SPATIAL_GLOBAL;
         } else {
           type = INDEX_TYPE_SPATIAL_LOCAL;
         }
       } else if (VEC_KEY == index_keyname_) {
         const int64_t tenant_id = session_info_->get_effective_tenant_id();
-        if (tenant_data_version < DATA_VERSION_4_3_3_0) {
-          ret = OB_NOT_SUPPORTED;
-          LOG_WARN("tenant data version is less than 4.3.3, vector index not supported", K(ret), K(tenant_data_version));
-          LOG_USER_ERROR(OB_NOT_SUPPORTED, "tenant data version is less than 4.3.3, vector index");
-        } else if (global_) {
+        if (global_) {
           ret = OB_NOT_SUPPORTED;
           LOG_WARN("not support global vec index now", K(ret));
         } else if (!is_user_tenant(tenant_id)) {
-          if (tenant_data_version < DATA_VERSION_4_3_5_3) {
-            ret = OB_NOT_SUPPORTED;
-            LOG_WARN("tenant is not user tenant vector index not supported ", K(ret), K(tenant_id));
-            LOG_USER_ERROR(OB_NOT_SUPPORTED, "tenant data version is less than 4.3.5.3, not user tenant create vector index is");
-          } else {
 #ifndef OB_BUILD_SYS_VEC_IDX
-            ret = OB_NOT_SUPPORTED;
-            LOG_WARN("sys tenant vector index not supported ", K(ret), K(tenant_id));
-            LOG_USER_ERROR(OB_NOT_SUPPORTED, "not user tenant create vector index is");
+          ret = OB_NOT_SUPPORTED;
+          LOG_WARN("sys tenant vector index not supported ", K(ret), K(tenant_id));
+          LOG_USER_ERROR(OB_NOT_SUPPORTED, "not user tenant create vector index is");
 #endif
-          }
-        } 
+        }
         if (OB_SUCC(ret)) {
           type = INDEX_TYPE_VEC_DELTA_BUFFER_LOCAL; // Need to consider ivf, hnsw, spiv these three modes, where ivf index is divided into ivfflat, ivfsq8, ivfpq three categories
         }
       } else if (FTS_KEY == index_keyname_) {
-        if (tenant_data_version < DATA_VERSION_4_3_1_0) {
-          ret = OB_NOT_SUPPORTED;
-          LOG_WARN("tenant data version is less than 4.3.1, fulltext index not supported", K(ret), K(tenant_data_version));
-          LOG_USER_ERROR(OB_NOT_SUPPORTED, "tenant data version is less than 4.3.1, fulltext index");
-        } else if (global_) {
+        if (global_) {
           ret = OB_NOT_SUPPORTED;
           LOG_WARN("not support global fts index now", K(ret));
           LOG_USER_ERROR(OB_NOT_SUPPORTED, "global fulltext index is");
@@ -2036,22 +2011,14 @@ int ObCreateTableResolver::generate_index_arg(const bool process_heap_table_prim
           type = INDEX_TYPE_FTS_INDEX_LOCAL;
         }
       } else if (MULTI_KEY == index_keyname_) {
-        if (tenant_data_version < DATA_VERSION_4_3_1_0) {
-          ret = OB_NOT_SUPPORTED;
-          LOG_WARN("tenant data version is less than 4.3.1, multivalue index is not supported", K(ret), K(tenant_data_version));
-          LOG_USER_ERROR(OB_NOT_SUPPORTED, "tenant data version is less than 4.3.1, multivalue index");
-        } else if (global_) {
+        if (global_) {
           ret = OB_NOT_SUPPORTED;
           LOG_WARN("not support global fts index now", K(ret));
         } else {
           type = INDEX_TYPE_NORMAL_MULTIVALUE_LOCAL;
         }
       } else if (MULTI_UNIQUE_KEY == index_keyname_) {
-        if (tenant_data_version < DATA_VERSION_4_3_1_0) {
-          ret = OB_NOT_SUPPORTED;
-          LOG_WARN("tenant data version is less than 4.3.1, multivalue index is not supported", K(ret), K(tenant_data_version));
-          LOG_USER_ERROR(OB_NOT_SUPPORTED, "tenant data version is less than 4.3.1, multivalue index");
-        } else if (global_) {
+        if (global_) {
           ret = OB_NOT_SUPPORTED;
           LOG_WARN("not support global multivalue index now", K(ret));
         } else {
@@ -2280,28 +2247,15 @@ int ObCreateTableResolver::resolve_index_node(const ParseNode *node)
         bool is_multi_value_index = false;
         const bool is_vec_index = (index_keyname_ == INDEX_KEYNAME::VEC_KEY);
         const bool is_fts_index = (index_keyname_ == INDEX_KEYNAME::FTS_KEY);
-        uint64_t tenant_data_version = 0;
-        bool is_support = false;
         if (OB_FAIL(ret)) {
         } else if (OB_ISNULL(session_info_)) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("unexpected null", K(ret));
-        } else if (OB_FAIL(GET_MIN_DATA_VERSION(session_info_->get_effective_tenant_id(), tenant_data_version))) {
-          LOG_WARN("get tenant data version failed", K(ret));
-        } else if (FALSE_IT(is_support = tenant_data_version >= DATA_VERSION_4_3_5_1)) {
         } else if (is_vec_index && index_column_list_node->num_child_ >= 2) {
           ret = OB_NOT_SUPPORTED;
           LOG_WARN("multi column of vector index is not support yet", K(ret), K(index_column_list_node->num_child_));
           LOG_USER_ERROR(OB_NOT_SUPPORTED, "multi vector index column is");
-        } else if (!is_support && ((is_vec_index && has_fts_index_) || (is_fts_index && has_vec_index_))) {
-          ret = OB_NOT_SUPPORTED;
-          LOG_WARN("vector index and fts coexist in main table is not support yet", K(ret), K(index_column_list_node->num_child_));
-          LOG_USER_ERROR(OB_NOT_SUPPORTED, "vector index and fts coexist in main table is");
 #ifdef OB_BUILD_SHARED_STORAGE
-        } else if (GCTX.is_shared_storage_mode() && is_fts_index && tenant_data_version < DATA_VERSION_4_3_5_2) {
-          ret = OB_NOT_SUPPORTED;
-          LOG_WARN("fulltext search index isn't supported in shared storage mode", K(ret));
-          LOG_USER_ERROR(OB_NOT_SUPPORTED, "fulltext search index in shared storage mode is");
         } else if (GCTX.is_shared_storage_mode() && is_vec_index) {
           ret = OB_NOT_SUPPORTED;
           LOG_WARN("vector index search index isn't supported in shared storage mode", K(ret));
@@ -2341,14 +2295,6 @@ int ObCreateTableResolver::resolve_index_node(const ParseNode *node)
                                                                         is_multi_value_index,
                                                                         reinterpret_cast<int*>(&index_keyname_)))) {
                 LOG_WARN("failed to resolve index type", K(ret));
-#ifdef OB_BUILD_SHARED_STORAGE
-              } else if (GCTX.is_shared_storage_mode()
-                         && (MULTI_KEY == index_keyname_ || MULTI_UNIQUE_KEY == index_keyname_)
-                         && tenant_data_version < DATA_VERSION_4_3_5_2) {
-                  ret = OB_NOT_SUPPORTED;
-                  LOG_WARN("multivalue search index isn't supported in shared storage mode", K(ret));
-                  LOG_USER_ERROR(OB_NOT_SUPPORTED, "multivalue search index in shared storage mode is");
-#endif
               } else if (NULL != index_column_node->children_[1]) {
                 sort_item.prefix_len_ = static_cast<int32_t>(index_column_node->children_[1]->value_);
                 if (0 == sort_item.prefix_len_) {
@@ -2468,7 +2414,7 @@ int ObCreateTableResolver::resolve_index_node(const ParseNode *node)
                 ret = OB_NOT_SUPPORTED;
                 LOG_WARN("index column is vector column, but is not vector index is not supported", K(ret));
                 LOG_USER_ERROR(OB_NOT_SUPPORTED, "vector column index but not vector index is");
-              } else if (column_schema->is_key_forbid_lob() && static_cast<int64_t>(INDEX_KEYNAME::FTS_KEY) != node->value_) {
+              } else if (column_schema->is_key_forbid_lob() && static_cast<int64_t>(INDEX_KEYNAME::FTS_KEY) != node->value_ && static_cast<int64_t>(INDEX_KEYNAME::VEC_KEY) != node->value_) {
                 if (column_schema->is_hidden()) {
                   //functional index in mysql mode
                   ret = OB_ERR_FUNCTIONAL_INDEX_ON_LOB;
@@ -2502,7 +2448,9 @@ int ObCreateTableResolver::resolve_index_node(const ParseNode *node)
 
                 if (OB_SUCC(ret)) {
                   if ((index_data_length += length) > OB_MAX_USER_ROW_KEY_LENGTH
-                      && static_cast<int64_t>(INDEX_KEYNAME::FTS_KEY) != node->value_) {
+                      && static_cast<int64_t>(INDEX_KEYNAME::FTS_KEY) != node->value_
+                      && static_cast<int64_t>(INDEX_KEYNAME::VEC_KEY) != node->value_) {
+                    // text or varchar column is bigger than 16k will be blocked
                     ret = OB_ERR_TOO_LONG_KEY_LENGTH;
                     LOG_USER_ERROR(OB_ERR_TOO_LONG_KEY_LENGTH, OB_MAX_USER_ROW_KEY_LENGTH);
                   } else if (length <= 0) {
@@ -2555,20 +2503,6 @@ int ObCreateTableResolver::resolve_index_node(const ParseNode *node)
                 index_arg_.index_using_type_ = USING_HASH;
               }
             }
-          }
-        }
-
-        if (OB_SUCC(ret) && cnt_func_index_mysql) {
-          uint64_t tenant_data_version = 0;
-          if (OB_ISNULL(session_info_)) {
-            ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("unexpected null", K(ret));
-          } else if (OB_FAIL(GET_MIN_DATA_VERSION(session_info_->get_effective_tenant_id(), tenant_data_version))) {
-            LOG_WARN("get tenant data version failed", K(ret));
-          } else if (tenant_data_version < DATA_VERSION_4_2_0_0){
-            ret = OB_NOT_SUPPORTED;
-            LOG_WARN("tenant version is less than 4.2, functional index is not supported in mysql mode", K(ret), K(tenant_data_version));
-            LOG_USER_ERROR(OB_NOT_SUPPORTED, "version is less than 4.2, functional index in mysql mode not supported");
           }
         }
 
@@ -2733,14 +2667,15 @@ int ObCreateTableResolver::resolve_index_node(const ParseNode *node)
               LOG_WARN("unexpected index type", KR(ret), K(vec_index_type_));
             } else if (FALSE_IT(create_index_arg.index_type_ = vec_index_type_)) {
             } else if (FALSE_IT(create_index_arg.index_schema_.set_index_params(index_params_))) {
-            } else if (OB_FAIL(ObVecIndexBuilderUtil::append_vec_args(resolve_result,
-                                                              create_index_arg,
-                                                              have_generate_vec_arg_,
-                                                              have_generate_fts_arg_,
-                                                              resolve_results,
-                                                              index_arg_list,
-                                                              allocator_,
-                                                              session_info_))) {
+            } else if (OB_FAIL(ObVecIndexBuilderUtil::append_vec_args(tbl_schema,
+                                                                      resolve_result,
+                                                                      create_index_arg,
+                                                                      have_generate_vec_arg_,
+                                                                      have_generate_fts_arg_,
+                                                                      resolve_results,
+                                                                      index_arg_list,
+                                                                      allocator_,
+                                                                      session_info_))) {
               LOG_WARN("failed to append vec args", K(ret));
             } else if (OB_FAIL(vec_index_col_ids_.push_back(vec_index_col_id))) {
               LOG_WARN("fail to push back vec index col id", K(ret));
@@ -2760,7 +2695,8 @@ int ObCreateTableResolver::resolve_index_node(const ParseNode *node)
               has_fts_index_ = true;
             }
           } else if (is_multivalue_index(index_arg_.index_type_)) {
-            if (OB_FAIL(ObDDLResolver::append_multivalue_args(resolve_result,
+            if (OB_FAIL(ObDDLResolver::append_multivalue_args(tbl_schema,
+                                                              resolve_result,
                                                               create_index_arg,
                                                               have_generate_fts_arg_,
                                                               resolve_results,

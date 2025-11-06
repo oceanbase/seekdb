@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #define USING_LOG_PREFIX RS
@@ -192,7 +196,7 @@ int ObTenantDDLService::init_tenant_config_(
     ObConfigItem *item = NULL;
     char svr_ip[OB_MAX_SERVER_ADDR_SIZE] = "ANY";
     int64_t svr_port = 0;
-    int64_t config_version = omt::ObTenantConfig::INITIAL_TENANT_CONF_VERSION + 1;
+    int64_t config_version = ObServerConfig::INITIAL_TENANT_CONF_VERSION + 1;
     FOREACH_X(config, tenant_config.get_configs(), OB_SUCC(ret)) {
       const ObConfigStringKey key(config->key_.ptr());
       if (OB_ISNULL(hard_code_config->get_container().get(key))
@@ -246,7 +250,7 @@ int ObTenantDDLService::init_tenant_config_from_seed_(
   ObSQLClientRetryWeak sql_client_retry_weak(sql_proxy_);
   SMART_VAR(ObMySQLProxy::MySQLResult, result) {
     int64_t expected_rows = 0;
-    int64_t config_version = omt::ObTenantConfig::INITIAL_TENANT_CONF_VERSION + 1;
+    int64_t config_version = ObServerConfig::INITIAL_TENANT_CONF_VERSION + 1;
     bool is_first = true;
     if (OB_FAIL(sql_client_retry_weak.read(result, OB_SYS_TENANT_ID, from_seed))) {
       LOG_WARN("read config from __all_seed_parameter failed", K(from_seed), K(ret));
@@ -605,13 +609,6 @@ int ObTenantDDLService::create_sys_tenant(
           ret = (OB_SUCC(ret)) ? temp_ret : ret;
           LOG_WARN("trans end failed", "is_commit", OB_SUCCESS == ret, K(temp_ret));
         }
-      }
-      if (OB_SUCC(ret) && OB_FAIL(broadcast_tenant_init_config_(OB_SYS_TENANT_ID))) {
-        // If tenant config version in RS is valid first and ddl trans doesn't commit,
-        // observer may read from empty __tenant_parameter successfully and raise its tenant config version,
-        // which makes some initial tenant configs are not actually updated before related observer restarts.
-        // To fix this problem, tenant config version in RS should be valid after ddl trans commits.
-        LOG_WARN("failed to set tenant config version", KR(ret), "tenant_id", OB_SYS_TENANT_ID);
       }
     }
   }
@@ -1156,35 +1153,6 @@ int ObTenantDDLService::notify_init_tenant_config(
   return ret;
 }
 
-int ObTenantDDLService::broadcast_tenant_init_config_(const uint64_t tenant_id)
-{
-  int ret = OB_SUCCESS;
-  if (!is_meta_tenant(tenant_id) && !is_sys_tenant(tenant_id)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("only meta tenant can braodcast tenant init config", KR(ret), K(tenant_id));
-  } else {
-    const int64_t config_version = omt::ObTenantConfig::INITIAL_TENANT_CONF_VERSION + 1;
-    const uint64_t user_tenant_id = gen_user_tenant_id(tenant_id);
-    if (OB_FAIL(OTC_MGR.set_tenant_config_version(tenant_id, config_version))) {
-      LOG_WARN("failed to set tenant config version", KR(ret), K(tenant_id));
-    } else if (OB_FAIL(OTC_MGR.got_version(tenant_id, config_version))) {
-      LOG_WARN("failed to got_version", KR(ret), K(tenant_id), K(config_version));
-    } else if (is_meta_tenant(tenant_id)) {
-      if (OB_FAIL(OTC_MGR.set_tenant_config_version(user_tenant_id,
-            config_version))) {
-      LOG_WARN("failed to set tenant config version", KR(ret), K(user_tenant_id));
-      } else if (OB_FAIL(OTC_MGR.got_version(user_tenant_id, config_version))) {
-        LOG_WARN("failed to got_version", KR(ret), K(user_tenant_id), K(config_version));
-      }
-    }
-    if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(ObAdminSetConfig::construct_arg_and_broadcast_tenant_config_map())) {
-      LOG_WARN("failed to broadcast tenant config", KR(ret));
-    }
-  }
-  return ret;
-}
-
 int ObTenantDDLService::get_tenant_schema_(
     const obrpc::ObParallelCreateNormalTenantArg &arg,
     ObTenantSchema &tenant_schema)
@@ -1320,14 +1288,6 @@ int ObTenantDDLService::init_tenant_env_after_schema_(
       ret = (OB_SUCC(ret)) ? tmp_ret : ret;
       LOG_WARN("trans end failed", K(commit), K(tmp_ret));
     }
-  }
-  if (OB_FAIL(ret)) {
-  } else if (is_meta_tenant(tenant_id) && OB_FAIL(broadcast_tenant_init_config_(tenant_id))) {
-    // If tenant config version in RS is valid first and ddl trans doesn't commit,
-    // observer may read from empty __tenant_parameter successfully and raise its tenant config version,
-    // which makes some initial tenant configs are not actually updated before related observer restarts.
-    // To fix this problem, tenant config version in RS should be valid after ddl trans commits.
-    LOG_WARN("failed to braodcast tenant init config", KR(ret), K(tenant_id));
   }
   FLOG_INFO("[CREATE_TENANT] STEP 2.6. finish init_tenant_env_after_schema_", K(tenant_id),
       "cost", ObTimeUtility::fast_current_time() - start_time);
@@ -1886,8 +1846,6 @@ int ObTenantDDLService::add_extra_tenant_init_config_(
   ObString config_value_mysql_compatible_dates("true");
   ObString config_name_immediate_check_unique("_ob_immediate_row_conflict_check");
   ObString config_value_immediate_check("False");
-  ObString config_name_system_trig_enabled("_system_trig_enabled");
-  ObString config_value_system_trig_enabled("false");
   // TODO(fanfangzhou.ffz): temporarily disable config adjustment for ddl thread isolation
   ObString config_name_ddl_thread_isolution("_enable_ddl_worker_isolation");
   ObString config_value_ddl_thread_isolution("false");
@@ -1905,8 +1863,6 @@ int ObTenantDDLService::add_extra_tenant_init_config_(
         LOG_WARN("fail to add config", KR(ret), K(config_name_mysql_compatible_dates), K(config_value_mysql_compatible_dates));
       } else if (OB_FAIL(tenant_init_config.add_config(config_name_immediate_check_unique, config_value_immediate_check))) {
         LOG_WARN("fail to add config", KR(ret), K(config_name_immediate_check_unique), K(config_value_immediate_check));
-      } else if (OB_FAIL(tenant_init_config.add_config(config_name_system_trig_enabled, config_value_system_trig_enabled))) {
-        LOG_WARN("fail to add config", KR(ret), K(config_name_system_trig_enabled), K(config_value_system_trig_enabled));
       } else if (OB_FAIL(tenant_init_config.add_config(config_name_ddl_thread_isolution, config_value_ddl_thread_isolution))) {
         LOG_WARN("fail to add config", KR(ret), K(config_name_ddl_thread_isolution), K(config_value_ddl_thread_isolution));
       }
@@ -5436,7 +5392,7 @@ int ObTenantDDLService::create_tenant_end(const uint64_t tenant_id)
       int64_t new_schema_version = OB_INVALID_VERSION;
       ObSchemaService *schema_service_impl = schema_service_->get_schema_service();
       // Ensure that the schema_version monotonically increases among tenants' cross-tenant transactions
-      // 
+      //
       if (OB_ISNULL(schema_service_impl)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("schema_service_impl is null", K(ret));

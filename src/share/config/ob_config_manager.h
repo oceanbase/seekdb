@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #ifndef OCEANBASE_SHARE_CONFIG_OB_CONFIG_MANAGER_H_
@@ -21,19 +25,20 @@
 
 namespace oceanbase
 {
-namespace omt
+
+namespace obrpc
 {
-  class ObTenantConfigMgr;
+  class ObTenantConfigArg;
 }
 
 namespace common
 {
 class ObMySQLProxy;
+using UpdateTenantConfigCb = common::ObFunction<void(uint64_t tenant_id)>;
 
 class ObConfigManager
 {
   friend class UpdateTask;
-  friend class oceanbase::omt::ObTenantConfigMgr;
 public:
   static const int64_t DEFAULT_VERSION = 1;
 
@@ -47,7 +52,8 @@ public:
 
   int base_init();
 
-  int init(ObMySQLProxy &sql_proxy, const ObAddr &server);
+  int init(ObMySQLProxy &sql_proxy, const ObAddr &server,
+           const UpdateTenantConfigCb &update_tenant_config_cb);
   void stop();
   void wait();
   void destroy();
@@ -67,10 +73,11 @@ public:
 
   ObServerConfig &get_config(void);
 
-  int config_backup();
   int update_local(int64_t expected_version);
   virtual int got_version(int64_t version, const bool remove_repeat = false);
-
+  int add_extra_config(const obrpc::ObTenantConfigArg &arg);
+  void notify_tenant_config_changed(uint64_t tenant_id);
+  int init_tenant_config(const obrpc::ObTenantConfigArg &arg);
 private:
   class UpdateTask
     : public ObTimerTask
@@ -105,6 +112,7 @@ private:
   int64_t current_version_;
   char dump_path_[OB_MAX_FILE_NAME_LENGTH];
   ObReloadConfig &reload_config_func_;
+  UpdateTenantConfigCb update_tenant_config_cb_;
   DISALLOW_COPY_AND_ASSIGN(ObConfigManager);
 };
 

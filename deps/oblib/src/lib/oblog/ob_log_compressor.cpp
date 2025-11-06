@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #define USING_LOG_PREFIX LIB
@@ -65,7 +69,6 @@ int ObLogCompressor::init()
     LOG_ERROR("failed to init ObThreadCond", K(ret));
   } else {
     strncpy(syslog_dir_, OB_SYSLOG_DIR, strlen(OB_SYSLOG_DIR));
-    strncpy(alert_log_dir_, OB_ALERT_LOG_DIR, strlen(OB_ALERT_LOG_DIR));
     stopped_ = false;
     if (OB_FAIL(TG_START(TGDefIDs::SYSLOG_COMPRESS))) {
       LOG_ERROR("failed to start log compression timer", K(ret));
@@ -215,7 +218,7 @@ bool ObLogCompressor::is_compressed_file(const char *file)
 void ObLogCompressor::run_timer_task()
 {
   int ret = OB_SUCCESS;
-  
+
 
   ObSyslogFile syslog_file;
   char compress_files[OB_SYSLOG_COMPRESS_TYPE_COUNT][OB_MAX_SYSLOG_FILE_NAME_SIZE] = {{0}};
@@ -287,38 +290,6 @@ void ObLogCompressor::run_timer_task()
                   log_min_time[log_type] = tmp_time;
                 }
               }
-            }
-          }
-        }
-      }
-      if (OB_NOT_NULL(dir)) {
-        closedir(dir);
-        dir = NULL;
-      }
-      if (OB_FAIL(ret)) {
-        // skip
-      } else if (OB_ISNULL(dir = opendir(alert_log_dir_))) {
-        ret = OB_ERR_SYS;
-        LOG_ERROR("failed to open alert log directory", K(ret), K(errno), K(alert_log_dir_));
-      } else {
-        while (OB_SUCC(ret) && OB_NOT_NULL(entry = readdir(dir))) {
-          if (strncmp(entry->d_name, ".", 1) == 0 || strncmp(entry->d_name, "..", 2) == 0) {
-            continue;
-          }
-          snprintf(syslog_file.file_name_, OB_MAX_SYSLOG_FILE_NAME_SIZE, "%s/%s", alert_log_dir_, entry->d_name);
-          if (stat(syslog_file.file_name_, &stat_info) == -1) {
-            ret = OB_FILE_NOT_EXIST;
-            LOG_WARN("failed to get file info", K(ret), K(errno), K(syslog_file.file_name_));
-            continue;
-          }
-          if (S_ISREG(stat_info.st_mode)) {
-            total_size += stat_info.st_size;
-            int64_t tmp_time = stat_info.st_mtim.tv_sec * 1000000000L + stat_info.st_mtim.tv_nsec;
-            syslog_file.mtime_ = tmp_time;
-            if (enable_delete_file
-                && regexec(&regex_archive_, entry->d_name, 0, NULL, 0) == 0
-                && OB_FAIL(oldest_files_.push(syslog_file))) {
-              LOG_ERROR("failed to put file into array", K(ret), K(syslog_file.file_name_), K(tmp_time));
             }
           }
         }

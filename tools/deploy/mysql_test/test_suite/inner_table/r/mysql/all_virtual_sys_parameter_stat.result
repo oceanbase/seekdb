@@ -50,7 +50,6 @@ compaction_low_thread_score
 compaction_mid_thread_score
 compaction_schedule_tablet_batch_cnt
 compatible
-config_additional_dir
 connection_control_failed_connections_threshold
 connection_control_max_connection_delay
 connection_control_min_connection_delay
@@ -110,8 +109,6 @@ enable_rpc_authentication_bypass
 enable_sql_audit
 enable_sql_extension
 enable_sql_operator_dump
-enable_syslog_recycle
-enable_syslog_wf
 enable_sys_table_ddl
 enable_sys_unit_standalone
 enable_tcp_keepalive
@@ -143,7 +140,6 @@ large_query_worker_percentage
 leak_mod_to_check
 lease_time
 lob_enable_block_cache_threshold
-local_ip
 location_cache_cpu_quota
 location_cache_refresh_min_interval
 location_cache_refresh_rpc_timeout
@@ -174,7 +170,6 @@ max_syslog_file_count
 memory_chunk_cache_size
 memory_limit
 memory_limit_percentage
-memory_reserved
 memstore_limit_percentage
 merger_check_interval
 micro_block_merge_verify_level
@@ -223,6 +218,7 @@ range_optimizer_max_mem_size
 recover_table_concurrency
 recover_table_dop
 recyclebin_object_expire_time
+redo_dir
 redundancy_level
 replica_parallel_migration_mode
 resource_hard_limit
@@ -515,11 +511,13 @@ _optimizer_better_inlist_costing
 _optimizer_group_by_placement
 _optimizer_skip_scan_enabled
 _optimizer_sortmerge_join_enabled
+_orc_filter_pushdown_level
 _parallel_ddl_control
 _parallel_max_active_sessions
 _parallel_min_message_pool
 _parallel_redo_logging_trigger
 _parallel_server_sleep_time
+_parquet_filter_pushdown_level
 _parquet_row_group_prebuffer_size
 _partition_wise_plan_enabled
 _pc_adaptive_effectiveness_ratio_threshold
@@ -576,7 +574,6 @@ _storage_meta_memory_limit_percentage
 _storage_stream_rpc_buffer_size
 _stream_rpc_max_wait_timeout
 _system_tenant_limit_mode
-_system_trig_enabled
 _temporary_file_io_area_size
 _trace_control_info
 _transfer_finish_trans_timeout

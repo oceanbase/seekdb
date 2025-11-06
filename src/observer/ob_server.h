@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #ifndef _OCEABASE_OBSERVER_OB_SERVER_H_
@@ -96,6 +100,9 @@ class ObAliveServerTracer;
 }
 namespace observer
 {
+
+class ObServerOptions;
+
 // This the class definition of ObAddr which responds the server
 // itself. It's designed as a singleton in program. This class is
 // structure aggregated but not logical processing. Please don't put
@@ -121,7 +128,7 @@ public:
 
   // Start OceanBase server, this function is blocked after invoking
   // until the server itself stops it.
-  int start();
+  int start(bool embed_mode);
   int wait();
   void prepare_stop();
   bool is_prepare_stopped();
@@ -262,11 +269,11 @@ private:
   ObServer();
   ~ObServer();
 
-  int init_config();
-  int init_opts_config(bool has_config_file); // init configs from command line
-  int init_local_ip_and_devname();
+  int init_config(const ObServerOptions &opts);
+  int init_opts_config(bool has_config_file, const ObServerOptions &opts, const char *optstr); // init configs from command line
+  int init_data_dir_and_redo_dir(const ObServerOptions &opts);
   int init_self_addr();
-  int init_config_module();
+  int init_config_module(const char *optstr);
   int init_tz_info_mgr();
   int init_pre_setting();
   int init_network();
@@ -283,7 +290,7 @@ private:
   int init_tablet_autoincrement_service();
   int init_global_kvcache();
   int init_global_session_info();
-  int init_ob_service();
+  int init_ob_service(bool need_bootstrap);
   int init_root_service();
   int init_sql();
   int init_sql_runner();
@@ -363,7 +370,6 @@ private:
   bool stop_;
   volatile bool has_stopped_;
   bool has_destroy_;
-  ObServerOptions opts_;
   // The network framework in OceanBase is all defined at ObServerNetworkFrame.
   ObSrvNetworkFrame net_frame_;
   obrpc::ObBatchRpc batch_rpc_;
@@ -396,7 +402,6 @@ private:
   common::ObServerConfig &config_;
   ObServerReloadConfig reload_config_;
   common::ObConfigManager config_mgr_;
-  omt::ObTenantConfigMgr &tenant_config_mgr_;
   omt::ObTenantTimezoneMgr &tenant_timezone_mgr_;
   share::ObDeviceConfigMgr &device_config_mgr_;
 

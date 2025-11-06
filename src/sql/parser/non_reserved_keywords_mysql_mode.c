@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #include <stdio.h>
@@ -26,6 +30,7 @@ static const NonReservedKeyword Mysql_none_reserved_keywords[] =
   {"access", ACCESS},
   {"accessible", ACCESSIBLE},
   {"access_info", ACCESS_INFO},
+  {"ai", AI},
   {"account", ACCOUNT},
   {"action", ACTION},
   {"activate", ACTIVATE},
@@ -47,6 +52,7 @@ static const NonReservedKeyword Mysql_none_reserved_keywords[] =
   {"analyze", ANALYZE},
   {"and", AND},
   {"any", ANY},
+  {"appid", APPID},
   {"approx", APPROX},
   {"approximate", APPROXIMATE},
   {"approx_count_distinct", APPROX_COUNT_DISTINCT},
@@ -103,7 +109,6 @@ static const NonReservedKeyword Mysql_none_reserved_keywords[] =
   {"block_size", BLOCK_SIZE},
   {"bool", BOOL},
   {"boolean", BOOLEAN},
-  {"bootstrap", BOOTSTRAP},
   {"both", BOTH},
   {"boundary_column", BOUNDARY_COLUMN},
   {"boundary_column_unit", BOUNDARY_COLUMN_UNIT},
@@ -173,6 +178,7 @@ static const NonReservedKeyword Mysql_none_reserved_keywords[] =
   {"condensed", CONDENSED},
   {"condition", CONDITION},
   {"conditional", CONDITIONAL},
+  {"configs", CONFIGS},
   {"connection", CONNECTION},
   {"consistent", CONSISTENT},
   {"constraint", CONSTRAINT},
@@ -453,10 +459,12 @@ static const NonReservedKeyword Mysql_none_reserved_keywords[] =
   {"json_table", JSON_TABLE},
   {"key", KEY},
   {"keys", KEYS},
+  {"keytab", KEYTAB},
   {"keyword", KEYWORD},
   {"key_block_size", KEY_BLOCK_SIZE},
   {"key_version", KEY_VERSION},
   {"kill", KILL},
+  {"krb5conf", KRB5CONF},
   {"kvcache", KVCACHE},
   {"ilogcache", ILOGCACHE},
   {"indexed", INDEXED},
@@ -497,6 +505,7 @@ static const NonReservedKeyword Mysql_none_reserved_keywords[] =
   {"localtime", LOCALTIME},
   {"localtimestamp", LOCALTIMESTAMP},
   {"location", LOCATION},
+  {"locations", LOCATIONS},
   {"lock", LOCK_},
   {"locked", LOCKED},
   {"locks", LOCKS},
@@ -590,6 +599,7 @@ static const NonReservedKeyword Mysql_none_reserved_keywords[] =
   {"minus", MINUS},
   {"mod", MOD},
   {"mode", MODE},
+  {"model", MODEL},
   {"modify", MODIFY},
   {"modifies", MODIFIES},
   {"module", MODULE},
@@ -709,6 +719,7 @@ static const NonReservedKeyword Mysql_none_reserved_keywords[] =
   {"performance", PERFORMANCE},
   {"row_group_size", ROW_GROUP_SIZE},
   {"phase", PHASE},
+  {"phrase", PHRASE},
   {"physical", PHYSICAL},
   {"plan", PLAN},
   {"planregress", PLANREGRESS},
@@ -729,6 +740,7 @@ static const NonReservedKeyword Mysql_none_reserved_keywords[] =
   {"prev", PREV},
   {"primary", PRIMARY},
   {"primary_zone", PRIMARY_ZONE},
+  {"principal", PRINCIPAL},
   {"privileges", PRIVILEGES},
   {"procedure", PROCEDURE},
   {"process", PROCESS},
@@ -843,6 +855,7 @@ static const NonReservedKeyword Mysql_none_reserved_keywords[] =
   {"schema_name", SCHEMA_NAME},
   {"scn", SCN},
   {"scope", SCOPE},
+  {"score", SCORE},
   {"second", SECOND},
   {"second_microsecond", SECOND_MICROSECOND},
   {"security", SECURITY},
@@ -876,11 +889,9 @@ static const NonReservedKeyword Mysql_none_reserved_keywords[] =
   {"set_tp", SET_TP},
   {"separator", SEPARATOR},
   {"share", SHARE},
-  {"shared_storage_dest", SHARED_STORAGE_DEST},
   {"show", SHOW},
   {"skewonly", SKEWONLY},
   {"skip_index", SKIP_INDEX},
-  {"shared_storage_info", SHARED_STORAGE_INFO},
   {"shutdown", SHUTDOWN},
   {"signed", SIGNED},
   {"signal", SIGNAL},
@@ -979,6 +990,7 @@ static const NonReservedKeyword Mysql_none_reserved_keywords[] =
   {"switch", SWITCH},
   {"switches", SWITCHES},
   {"switchover", SWITCHOVER},
+  {"s3_region", S3_REGION},
   {"table", TABLE},
   {"table_checksum", TABLE_CHECKSUM},
   {"table_mode", TABLE_MODE},
@@ -1080,6 +1092,7 @@ static const NonReservedKeyword Mysql_none_reserved_keywords[] =
   {"varying", VARYING},
   {"vector", VECTOR},
   {"vector_distance", VECTOR_DISTANCE},
+  {"vector_similarity", VECTOR_SIMILARITY},
   {"view", VIEW},
   {"virtual", VIRTUAL},
   {"virtual_column_id", VIRTUAL_COLUMN_ID},
@@ -1157,8 +1170,11 @@ static const NonReservedKeyword Mysql_none_reserved_keywords[] =
   {"tablets", TABLETS},
   {"enable_macro_block_bloom_filter", ENABLE_MACRO_BLOCK_BLOOM_FILTER},
   {"api_mode", API_MODE},
+  {"url", URL},
+  {"credential", CREDENTIAL},
   {"INCONSISTENT", INCONSISTENT},
   {"INDIVIDUAL", INDIVIDUAL},
+  {"hybrid_search", HYBRID_SEARCH},
 };
 
 /** https://dev.mysql.com/doc/refman/5.7/en/sql-syntax-prepared-statements.html

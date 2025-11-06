@@ -328,6 +328,8 @@ all_table_def = dict(
       ('merge_engine_type', 'int', 'false', '0'),
       ('semistruct_encoding_type', 'int', 'false', '0'),
       ('dynamic_partition_policy', 'varchar:OB_MAX_DYNAMIC_PARTITION_POLICY_LENGTH', 'false', ''),
+      ('external_location_id', 'int', 'false', 'OB_INVALID_ID'),
+      ('external_sub_path', 'varbinary:OB_MAX_VARCHAR_LENGTH', 'true'),
     ],
 )
 
@@ -7388,7 +7390,106 @@ all_ccl_rule_def = dict(
 def_table_schema(**all_ccl_rule_def)
 def_table_schema(**gen_history_table_def(548, all_ccl_rule_def))
 
+
 # 549: __all_balance_job_description
+
+all_ai_model_def = dict(
+    owner = 'shenyunlong.syl',
+    table_name = '__all_ai_model',
+    table_id = '550',
+    table_type = 'SYSTEM_TABLE',
+    gm_columns = ['gmt_create', 'gmt_modified'],
+    rowkey_columns = [
+      ('tenant_id', 'int'),
+      ('model_id', 'int'),
+    ],
+
+    in_tenant_space = True,
+    is_cluster_private = False,
+    meta_record_in_sys = False,
+    normal_columns = [
+        ('name', 'varchar:128', 'false'),
+        ('type', 'int', 'false'),
+        ('model_name', 'varchar:128', 'false'),
+    ]
+)
+
+def_table_schema(**all_ai_model_def)
+def_table_schema(**gen_history_table_def(551, all_ai_model_def))
+
+all_ai_model_endpoint_def = dict(
+    owner = 'shenyunlong.syl',
+    table_name = '__all_ai_model_endpoint',
+    table_id = '552',
+    table_type = 'SYSTEM_TABLE',
+    gm_columns = ['gmt_create', 'gmt_modified'],
+    rowkey_columns = [
+      ('tenant_id', 'int'),
+      ('endpoint_id', 'int'),
+      ('scope', 'varchar:128')
+    ],
+
+    in_tenant_space = True,
+    is_cluster_private = True,
+    meta_record_in_sys = False,
+    normal_columns = [
+        ('version', 'int', 'false'),
+        ('endpoint_name', 'varchar:128'),
+        ('ai_model_name', 'varchar:128', 'false'),
+        ('url', 'varchar:2048', 'true'),
+        ('access_key', 'varchar:2048', 'true'),
+        ('provider', 'varchar:128', 'true'),
+        ('request_model_name', 'varchar:128', 'true'),
+        ('parameters', 'varchar:2048', 'true'),
+        ('request_transform_fn', 'varchar:64', 'true'),
+        ('response_transform_fn', 'varchar:64', 'true')
+    ]
+)
+def_table_schema(**all_ai_model_endpoint_def)
+
+all_tenant_location_def = dict(
+    owner = 'cjl476581',
+    table_name     = '__all_tenant_location',
+    table_id       = '553',
+    table_type     = 'SYSTEM_TABLE',
+    gm_columns     = ['gmt_create', 'gmt_modified'],
+    rowkey_columns = [
+        ('tenant_id', 'int'),
+        ('location_id', 'int'),
+    ],
+    normal_columns = [
+        ('location_name', 'varchar:OB_MAX_LOCATION_NAME_LENGTH', 'false', ''),
+        ('location_url', 'varchar:OB_MAX_LOCATION_URL_LENGTH', 'false', ''),
+        ('location_access_info', 'varchar:OB_MAX_LOCATION_ACCESS_INFO_LENGTH', 'false', ''),
+    ],
+    in_tenant_space = True,
+)
+def_table_schema(**all_tenant_location_def)
+def_table_schema(**gen_history_table_def(554, all_tenant_location_def))
+
+all_objauth_mysql_def = dict(
+    owner = 'cjl476581',
+    table_name     = '__all_tenant_objauth_mysql',
+    table_id       = '555',
+    table_type = 'SYSTEM_TABLE',
+    gm_columns = ['gmt_create', 'gmt_modified'],
+    in_tenant_space = True,
+    rowkey_columns = [
+        ('tenant_id', 'int'),
+        ('user_id', 'int'),
+        ('obj_name', 'varchar:OB_MAX_CORE_TALBE_NAME_LENGTH'),
+        ('obj_type', 'int')
+    ],
+    normal_columns = [
+      ('all_priv', 'int', 'false', 0),
+      ('grantor', 'varchar:OB_MAX_USER_NAME_LENGTH_STORE', 'false', ''),
+      ('grantor_host', 'varchar:OB_MAX_HOST_NAME_LENGTH', 'false', ''),
+  ],
+)
+def_table_schema(**all_objauth_mysql_def)
+def_table_schema(**gen_history_table_def(556, all_objauth_mysql_def))
+
+
 # Reserved position (placeholder before this line)
 # Placeholder suggestion for this section: Use actual table names for placeholders
 ################################################################################
@@ -9561,32 +9662,7 @@ def_table_schema(
   vtable_route_policy = 'distributed',
 )
 
-def_table_schema(
-    owner = 'fyy280124',
-    table_name     = '__all_virtual_tenant_parameter_info',
-    table_id       = '11096',
-    table_type = 'VIRTUAL_TABLE',
-    gm_columns = [],
-    rowkey_columns = [
-        ('tenant_id', 'int'),
-        ('zone', 'varchar:MAX_ZONE_LENGTH'),
-        ('svr_type', 'varchar:SERVER_TYPE_LENGTH'),
-        ('svr_ip', 'varchar:MAX_IP_ADDR_LENGTH'),
-        ('svr_port', 'int'),
-        ('name', 'varchar:OB_MAX_CONFIG_NAME_LEN'),
-    ],
-  normal_columns = [
-      ('data_type', 'varchar:OB_MAX_CONFIG_TYPE_LENGTH', 'true'),
-      ('value', 'varchar:OB_MAX_CONFIG_VALUE_LEN'),
-      ('info', 'varchar:OB_MAX_CONFIG_INFO_LEN'),
-      ('section', 'varchar:OB_MAX_CONFIG_SECTION_LEN'),
-      ('scope', 'varchar:OB_MAX_CONFIG_SCOPE_LEN'),
-      ('source', 'varchar:OB_MAX_CONFIG_SOURCE_LEN'),
-      ('edit_level', 'varchar:OB_MAX_CONFIG_EDIT_LEVEL_LEN'),
-  ],
-  partition_columns = ['svr_ip', 'svr_port'],
-  vtable_route_policy = 'distributed',
-)
+# 11096 abandoned in lite version
 
 def_table_schema(
     owner = 'lixia.yq',
@@ -15011,6 +15087,72 @@ def_table_schema(
   partition_columns = ['svr_ip', 'svr_port'],
   vtable_route_policy = 'distributed',
 )
+
+def_table_schema(**gen_iterate_virtual_table_def(
+  table_id = '12551',
+  table_name = '__all_virtual_ai_model',
+  keywords = all_def_keywords['__all_ai_model']))
+
+def_table_schema(**gen_iterate_virtual_table_def(
+  table_id = '12552',
+  table_name = '__all_virtual_ai_model_history',
+  keywords = all_def_keywords['__all_ai_model_history']))
+
+def_table_schema(**gen_iterate_private_virtual_table_def(
+  table_id = '12553',
+  table_name = '__all_virtual_ai_model_endpoint',
+  keywords = all_def_keywords['__all_ai_model_endpoint'],
+  in_tenant_space=True))
+
+def_table_schema(**gen_iterate_virtual_table_def(
+  table_id = '12554',
+  table_name = '__all_virtual_tenant_location',
+  keywords = all_def_keywords['__all_tenant_location']))
+def_table_schema(**gen_iterate_virtual_table_def(
+  table_id = '12555',
+  table_name = '__all_virtual_tenant_location_history',
+  keywords = all_def_keywords['__all_tenant_location_history']))
+def_table_schema(**gen_iterate_virtual_table_def(
+  table_id = '12556',
+  table_name = '__all_virtual_objauth_mysql',
+  keywords = all_def_keywords['__all_tenant_objauth_mysql']))
+def_table_schema(**gen_iterate_virtual_table_def(
+  table_id = '12557',
+  table_name = '__all_virtual_objauth_mysql_history',
+  keywords = all_def_keywords['__all_tenant_objauth_mysql_history']))
+def_table_schema(
+  owner = 'cjl476581',
+  table_name     = '__tenant_virtual_show_create_location',
+  table_id       = '12558',
+  table_type = 'VIRTUAL_TABLE',
+  gm_columns = [],
+  rowkey_columns = [
+  ('location_id', 'int'),
+  ],
+  in_tenant_space = True,
+  normal_columns = [
+  ('location_name', 'varchar:OB_MAX_LOCATION_NAME_LENGTH'),
+  ('create_location', 'varchar:LOCATION_DEFINE_LENGTH'),
+  ],
+)
+def_table_schema(
+  owner = 'cjl476581',
+  table_name     = '__tenant_virtual_list_file',
+  table_id       = '12559',
+  table_type = 'VIRTUAL_TABLE',
+  gm_columns = [],
+  rowkey_columns = [
+  ('location_id', 'int'),
+  ('location_sub_path', 'varchar:OB_MAX_LOCATION_NAME_LENGTH'),
+  ('pattern', 'varchar:OB_MAX_LOCATION_NAME_LENGTH'),
+  ],
+  in_tenant_space = True,
+  normal_columns = [
+  ('file_name', 'varchar:16384'),
+  ('file_size', 'int')
+  ],
+)
+
 # Reserved position (placeholder before this line)
 # Placeholder suggestion for this section: Use actual table names for placeholders
 ################################################################################
@@ -30291,6 +30433,16 @@ def_table_schema(
                      AND (U.PRIV_OTHERS & (1 << 14) != 0) THEN 'CREATE CATALOG'
                 WHEN V1.C1 = 51
                      AND (U.PRIV_OTHERS & (1 << 15) != 0) THEN 'USE CATALOG'
+                WHEN V1.C1 = 52
+                     AND (U.PRIV_OTHERS & (1 << 20) != 0) THEN 'CREATE LOCATION'
+                WHEN V1.C1 = 55
+                     AND (U.PRIV_OTHERS & (1 << 16) != 0) THEN 'CREATE AI MODEL'
+                WHEN V1.C1 = 56
+                     AND (U.PRIV_OTHERS & (1 << 17) != 0) THEN 'ALTER AI MODEL'
+                WHEN V1.C1 = 57
+                     AND (U.PRIV_OTHERS & (1 << 18) != 0) THEN 'DROP AI MODEL'
+                WHEN V1.C1 = 58
+                     AND (U.PRIV_OTHERS & (1 << 19) != 0) THEN 'ACCESS AI MODEL'
                 WHEN V1.C1 = 0
                      AND U.PRIV_ALTER = 0
                      AND U.PRIV_CREATE = 0
@@ -30388,7 +30540,12 @@ def_table_schema(
         UNION ALL SELECT 47 AS C1
         UNION ALL SELECT 49 AS C1
         UNION ALL SELECT 50 AS C1
-        UNION ALL SELECT 51 AS C1) V1,
+        UNION ALL SELECT 51 AS C1
+        UNION ALL SELECT 52 AS C1
+        UNION ALL SELECT 55 AS C1
+        UNION ALL SELECT 56 AS C1
+        UNION ALL SELECT 57 AS C1
+        UNION ALL SELECT 58 AS C1) V1,
        (SELECT USER_ID
         FROM oceanbase.__all_user
         WHERE TENANT_ID = 0
@@ -40090,6 +40247,117 @@ WHERE
 """.replace("\n", " "),
 
 )
+
+def_table_schema(
+  owner           = 'shenyunlong.syl',
+  table_name      = 'DBA_OB_AI_MODELS',
+  table_id        = '21663',
+  table_type      = 'SYSTEM_VIEW',
+  rowkey_columns  = [],
+  normal_columns  = [],
+  gm_columns      = [],
+  in_tenant_space = True,
+  view_definition =
+  """
+    SELECT
+      MODEL_ID,
+      NAME,
+      case type
+        when 1 then 'DENSE_EMBEDDING'
+        when 2 then 'SPARSE_EMBEDDING'
+        when 3 then 'COMPLETION'
+        when 4 then 'RERANK'
+        else 'INVALID'
+      END AS TYPE,
+      MODEL_NAME
+    FROM oceanbase.__all_ai_model;
+  """.replace("\n", " ")
+)
+
+def_table_schema(
+  owner           = 'shenyunlong.syl',
+  table_name      = 'DBA_OB_AI_MODEL_ENDPOINTS',
+  table_id        = '21664',
+  table_type      = 'SYSTEM_VIEW',
+  rowkey_columns  = [],
+  normal_columns  = [],
+  gm_columns      = [],
+  in_tenant_space = True,
+  view_definition =
+  """
+    SELECT
+      ENDPOINT_ID,
+      ENDPOINT_NAME,
+      AI_MODEL_NAME,
+      SCOPE,
+      URL,
+      ACCESS_KEY,
+      PROVIDER,
+      REQUEST_MODEL_NAME,
+      PARAMETERS,
+      REQUEST_TRANSFORM_FN,
+      RESPONSE_TRANSFORM_FN
+    FROM oceanbase.__all_virtual_ai_model_endpoint WHERE tenant_id = effective_tenant_id() AND ENDPOINT_ID != -1;
+  """.replace("\n", " ")
+)
+
+def_table_schema(
+  owner           = 'shenyunlong.syl',
+  table_name      = 'CDB_OB_AI_MODELS',
+  table_id        = '21665',
+  table_type      = 'SYSTEM_VIEW',
+  rowkey_columns  = [],
+  normal_columns  = [],
+  gm_columns      = [],
+  in_tenant_space = False,
+  view_definition =
+  """
+    SELECT
+      TENANT_ID,
+      MODEL_ID,
+      NAME,
+      case type
+        when 1 then 'DENSE_EMBEDDING'
+        when 2 then 'SPARSE_EMBEDDING'
+        when 3 then 'COMPLETION'
+        when 4 then 'RERANK'
+        else 'INVALID'
+      END AS TYPE,
+      MODEL_NAME
+    FROM oceanbase.__all_virtual_ai_model;
+  """.replace("\n", " ")
+)
+
+def_table_schema(
+  owner           = 'shenyunlong.syl',
+  table_name      = 'CDB_OB_AI_MODEL_ENDPOINTS',
+  table_id        = '21666',
+  table_type      = 'SYSTEM_VIEW',
+  rowkey_columns  = [],
+  normal_columns  = [],
+  gm_columns      = [],
+  in_tenant_space = False,
+  view_definition =
+  """
+    SELECT
+      TENANT_ID,
+      ENDPOINT_ID,
+      ENDPOINT_NAME,
+      AI_MODEL_NAME,
+      SCOPE,
+      URL,
+      ACCESS_KEY,
+      PROVIDER,
+      REQUEST_MODEL_NAME,
+      PARAMETERS,
+      REQUEST_TRANSFORM_FN,
+      RESPONSE_TRANSFORM_FN
+    FROM oceanbase.__all_virtual_ai_model_endpoint
+    WHERE ENDPOINT_ID != -1;
+  """.replace("\n", " ")
+)
+
+
 # Reserved position (placeholder before this line)
 # Placeholder suggestion for this section: Use the actual view name for placeholder
 ################################################################################
@@ -40884,6 +41152,46 @@ def_sys_index_table(
   index_using_type = 'USING_BTREE',
   index_type = 'INDEX_TYPE_NORMAL_LOCAL',
   keywords = all_def_keywords['__all_ccl_rule'])
+
+def_sys_index_table(
+  index_name = 'idx_endpoint_name',
+  index_table_id = 101116,
+  index_columns = ['endpoint_name'],
+  index_using_type = 'USING_BTREE',
+  index_type = 'INDEX_TYPE_UNIQUE_LOCAL',
+  keywords = all_def_keywords['__all_ai_model_endpoint'])
+
+def_sys_index_table(
+  index_name = 'idx_ai_model_name',
+  index_table_id = 101117,
+  index_columns = ['ai_model_name'],
+  index_using_type = 'USING_BTREE',
+  index_type = 'INDEX_TYPE_NORMAL_LOCAL',
+  keywords = all_def_keywords['__all_ai_model_endpoint'])
+
+def_sys_index_table(
+  index_name = 'idx_location_name',
+  index_table_id = 101118,
+  index_columns = ['location_name'],
+  index_using_type = 'USING_BTREE',
+  index_type = 'INDEX_TYPE_NORMAL_LOCAL',
+  keywords = all_def_keywords['__all_tenant_location'])
+def_sys_index_table(
+  index_name = 'idx_objauth_mysql_user_id',
+  index_table_id = 101119,
+  index_columns = ['user_id'],
+  index_using_type = 'USING_BTREE',
+  index_type = 'INDEX_TYPE_NORMAL_LOCAL',
+  keywords = all_def_keywords['__all_tenant_objauth_mysql'])
+def_sys_index_table(
+  index_name = 'idx_objauth_mysql_obj_name',
+  index_table_id = 101120,
+  index_columns = ['obj_name'],
+  index_using_type = 'USING_BTREE',
+  index_type = 'INDEX_TYPE_NORMAL_LOCAL',
+  keywords = all_def_keywords['__all_tenant_objauth_mysql'])
+
+
 # Reserved position (placeholder before this line)
 # Index table placeholder suggestion: based on the base table (data table) name for placeholder, other methods include: index name (index_name), index table name
 ################################################################################

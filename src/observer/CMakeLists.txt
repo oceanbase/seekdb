@@ -122,7 +122,6 @@ ob_set_subtarget(ob_server omt
   omt/ob_multi_tenant.cpp
   omt/ob_retry_queue.cpp
   omt/ob_tenant.cpp
-  omt/ob_tenant_config.cpp
   omt/ob_tenant_config_mgr.cpp
   omt/ob_tenant_meta.cpp
   omt/ob_tenant_node_balancer.cpp
@@ -132,6 +131,7 @@ ob_set_subtarget(ob_server omt
   omt/ob_worker_processor.cpp
   omt/ob_multi_tenant_operator.cpp
   omt/ob_tenant_srs.cpp
+  omt/ob_tenant_ai_service.cpp
 )
 
 ob_set_subtarget(ob_server table
@@ -486,7 +486,6 @@ ob_set_subtarget(ob_server virtual_table
   virtual_table/ob_all_virtual_tenant_ctx_memory_info.cpp
   virtual_table/ob_all_virtual_tenant_memory_info.cpp
   virtual_table/ob_all_virtual_tenant_memstore_allocator_info.cpp
-  virtual_table/ob_all_virtual_tenant_parameter_info.cpp
   virtual_table/ob_all_virtual_tenant_parameter_stat.cpp
   virtual_table/ob_all_virtual_tx_stat.cpp
   virtual_table/ob_all_virtual_tx_lock_stat.cpp
@@ -505,6 +504,7 @@ ob_set_subtarget(ob_server virtual_table
   virtual_table/ob_gv_sql.cpp
   virtual_table/ob_gv_sql_audit.cpp
   virtual_table/ob_all_virtual_tenant_memstore_info.cpp
+  virtual_table/ob_all_virtual_external_location_list_file.cpp
   virtual_table/ob_information_check_constraints_table.cpp
   virtual_table/ob_information_columns_table.cpp
   virtual_table/ob_information_global_status_table.cpp
@@ -532,6 +532,7 @@ ob_set_subtarget(ob_server virtual_table
   virtual_table/ob_session_variables.cpp
   virtual_table/ob_show_create_catalog.cpp
   virtual_table/ob_show_create_database.cpp
+  virtual_table/ob_show_create_location.cpp
   virtual_table/ob_show_create_procedure.cpp
   virtual_table/ob_show_create_table.cpp
   virtual_table/ob_show_create_tablegroup.cpp
@@ -661,7 +662,7 @@ if (NOT OB_USE_ASAN)
   set(link_malloc_hook malloc_hook)
 endif()
 
-add_library(ob_main OBJECT main.cpp)
+add_library(ob_main OBJECT main.cpp ob_command_line_parser.cpp)
 config_ccls_flag(ob_main)
 target_link_libraries(ob_main PUBLIC ob_base)
 add_executable(observer_without_bolt)
@@ -717,11 +718,5 @@ else()
 endif()
 
 configure_file(../share/ob_version.cpp.in ob_version.cpp)
-
-message(STATUS "dump config item")
-add_custom_command(TARGET observer POST_BUILD
-COMMAND ${CMAKE_BINARY_DIR}/src/observer/observer -C
-WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
-)
 
 add_subdirectory(embed)

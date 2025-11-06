@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #ifndef OBDEV_SRC_SQL_DAS_ITER_OB_DAS_ITER_DEFINE_H
@@ -42,6 +46,7 @@ enum ObDASIterType : uint32_t
   DAS_ITER_IVF_SCAN,
   DAS_ITER_SPIV_MERGE,
   DAS_ITER_SPIV_SCAN,
+  DAS_ITER_ES_MATCH,
   // append DASIterType before me
   DAS_ITER_MAX
 };
@@ -73,6 +78,7 @@ enum ObDASIterTreeType : uint32_t
   ITER_TREE_FUNC_LOOKUP,
   ITER_TREE_MVI_LOOKUP,
   ITER_TREE_VEC_LOOKUP,
+  ITER_TREE_MATCH,
   // append iter tree type before me
   ITER_TREE_MAX
 };
@@ -83,19 +89,19 @@ public:
   ObDASFTSTabletID()
     : inv_idx_tablet_id_(),
       fwd_idx_tablet_id_(),
-      doc_id_idx_tablet_id_()
+      domain_id_idx_tablet_id_()
   {}
   common::ObTabletID inv_idx_tablet_id_;
   common::ObTabletID fwd_idx_tablet_id_;
-  common::ObTabletID doc_id_idx_tablet_id_;
+  common::ObTabletID domain_id_idx_tablet_id_;
 
   void reset()
   {
     inv_idx_tablet_id_.reset();
     fwd_idx_tablet_id_.reset();
-    doc_id_idx_tablet_id_.reset();
+    domain_id_idx_tablet_id_.reset();
   }
-  TO_STRING_KV(K_(inv_idx_tablet_id), K_(fwd_idx_tablet_id), K_(doc_id_idx_tablet_id));
+  TO_STRING_KV(K_(inv_idx_tablet_id), K_(fwd_idx_tablet_id), K_(domain_id_idx_tablet_id));
 };
 
 #define SUPPORTED_DAS_ITER_TREE(_type)                    \
@@ -104,6 +110,7 @@ public:
     ITER_TREE_LOCAL_LOOKUP == (_type)   ||               \
     ITER_TREE_TEXT_RETRIEVAL == (_type) ||               \
     ITER_TREE_FUNC_LOOKUP == (_type)    ||               \
+    ITER_TREE_MATCH == (_type)          ||               \
     ITER_TREE_INDEX_MERGE == (_type)    ||               \
     ITER_TREE_MVI_LOOKUP == (_type)     ||               \
     ITER_TREE_VEC_LOOKUP == (_type)     ||               \
@@ -126,7 +133,7 @@ public:
   /* used by basic fulltext index */
   common::ObTabletID inv_idx_tablet_id_;
   common::ObTabletID fwd_idx_tablet_id_;
-  common::ObTabletID doc_id_idx_tablet_id_;
+  common::ObTabletID domain_id_idx_tablet_id_;
   /* used by basic fulltext index */
 
   /* used by index merge */
@@ -145,6 +152,7 @@ public:
   common::ObTabletID delta_buf_tablet_id_;
   common::ObTabletID index_id_tablet_id_;
   common::ObTabletID snapshot_tablet_id_;
+  common::ObTabletID embedded_tablet_id_;
     // for ivf
   common::ObTabletID centroid_tablet_id_;
   common::ObTabletID cid_vec_tablet_id_;
@@ -152,6 +160,7 @@ public:
   common::ObTabletID special_aux_tablet_id_;
     // for spiv
   common::ObTabletID dim_docid_value_tablet_id_;
+  common::ObTabletID vid_rowkey_tablet_id_;
   /* used by vector index */
 
   void reset()
@@ -162,13 +171,15 @@ public:
     rowkey_vid_tablet_id_.reset();
     inv_idx_tablet_id_.reset();
     fwd_idx_tablet_id_.reset();
-    doc_id_idx_tablet_id_.reset();
+    domain_id_idx_tablet_id_.reset();
     index_merge_tablet_ids_.reset();
     fts_tablet_ids_.reset();
     domain_tablet_ids_.reset();
     delta_buf_tablet_id_.reset();
     index_id_tablet_id_.reset();
     snapshot_tablet_id_.reset();
+    vid_rowkey_tablet_id_.reset();
+    embedded_tablet_id_.reset();
   }
 };
 

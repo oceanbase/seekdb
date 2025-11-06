@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #define USING_LOG_PREFIX SERVER_OMT
@@ -102,8 +106,8 @@ void ObTenantNodeBalancer::handle()
     ret = OB_NEED_RETRY;
   } else if (OB_FAIL(unit_getter_.get_tenants(tenants))) {
     LOG_WARN("get cluster tenants fail", K(ret));
-  } else if (OB_FAIL(OTC_MGR.refresh_tenants(tenants))) {
-    LOG_WARN("fail refresh tenant config", K(tenants), K(ret));
+  } else if (OB_FAIL(ODV_MGR.set(OB_SYS_TENANT_ID, GCONF.compatible))) {
+    LOG_WARN("set sys tenant data version failed", K(ret));
   }
   if (OB_SUCCESS != (tmp_ret = GCTX.log_block_mgr_->try_resize())) {
     LOG_WARN("ObServerLogBlockMgr try_resize failed", K(tmp_ret));

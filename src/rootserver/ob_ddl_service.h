@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #ifndef _OCEANBASE_ROOTSERVER_OB_DDL_SERVICE_H_
@@ -671,7 +675,8 @@ public:
       ObMockFKParentTableSchema &mock_fk_parent_table_schema);
 
   int check_can_drop_primary_key(
-      const share::schema::ObTableSchema &orgin_table_schema);
+      const share::schema::ObTableSchema &orgin_table_schema,
+      ObSchemaGetterGuard &schema_guard);
   int drop_primary_key(ObTableSchema &new_table_schema);
   int add_primary_key(
       const common::ObIArray<common::ObString> &pk_column_names,
@@ -1003,7 +1008,8 @@ public:
   int update_autoinc_schema(obrpc::ObAlterTableArg &alter_table_arg);
   int build_aux_lob_table_schema_if_need(
       ObTableSchema &data_table_schema,
-      ObIArray<ObTableSchema> &table_schemas);
+      ObIArray<ObTableSchema> &table_schemas,
+      const bool force_generate_lob=false);
   int rename_dropping_index_name(
       const share::schema::ObTableSchema &orig_index_schema,
       const bool is_inner_and_fts_index,
@@ -1965,7 +1971,8 @@ int check_will_be_having_domain_index_operation(
       ObDDLOperator &ddl_operator,
       common::ObMySQLTransaction &trans,
       const bool need_sync_schema_version,
-      bool &is_add_lob);
+      bool &is_add_lob,
+      const bool is_hybrid_vector_column=false);
   int lock_tables_of_database_for_drop(const share::schema::ObDatabaseSchema &database_schema,
                                        ObMySQLTransaction &trans);
   int lock_tables_in_recyclebin(const share::schema::ObDatabaseSchema &database_schema,

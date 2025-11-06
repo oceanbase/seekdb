@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #define USING_LOG_PREFIX SHARE
@@ -16,6 +20,7 @@
 #include "share/vector_index/ob_tenant_vector_index_async_task.h"
 #include "share/vector_index/ob_plugin_vector_index_utils.h"
 #include "share/vector_index/ob_plugin_vector_index_service.h"
+#include "share/vector_index/ob_hybrid_vector_refresh_task.h"
 #include "storage/access/ob_table_scan_iterator.h"
 #include "storage/tx_storage/ob_access_service.h"
 #include "storage/ob_value_row_iterator.h"
@@ -42,6 +47,16 @@ ObVecIndexAsyncTaskCtx::~ObVecIndexAsyncTaskCtx()
     extra_data_ = nullptr;
   }
   allocator_.reset();
+}
+
+int ObAsyncTaskMapFunc::operator()(const hash::HashMapPair<common::ObTabletID, ObVecIndexAsyncTaskCtx*> &entry)
+{
+  int ret = OB_SUCCESS;
+  ObVecIndexAsyncTaskCtx* task_ctx(entry.second);
+  if (OB_FAIL(array_.push_back(task_ctx))) {
+    LOG_WARN("failed to push back task ctx", K(ret), K(array_), K(task_ctx));
+  }
+  return ret;
 }
 
 ObVecIndexAsyncTaskOption::~ObVecIndexAsyncTaskOption()
@@ -137,6 +152,29 @@ int ObVecIndexAsyncTaskUtil::check_task_is_cancel(ObVecIndexAsyncTaskCtx *task_c
   return ret;
 }
 
+int ObVecIndexAsyncTaskUtil::insert_new_task(uint64_t tenant_id, ObVecIndexTaskCtxArray &task_ctx_array)
+{
+  int ret = OB_SUCCESS;
+  if (task_ctx_array.count() <= 0) {  // skip empty array
+  } else {
+    ObMySQLTransaction trans;
+    if (OB_FAIL(trans.start(GCTX.sql_proxy_, tenant_id))) {
+      LOG_WARN("fail start transaction", K(ret), K(tenant_id));
+    } else if (OB_FAIL(ObVecIndexAsyncTaskUtil::batch_insert_vec_task(
+      tenant_id, OB_ALL_VECTOR_INDEX_TASK_TNAME, trans, task_ctx_array))) {
+      LOG_WARN("fail to insert vec tasks", K(ret), K(tenant_id));
+    }
+    if (trans.is_started()) {
+      int tmp_ret = OB_SUCCESS;
+      if (OB_SUCCESS != (tmp_ret = trans.end(OB_SUCC(ret)))) {
+        LOG_WARN("fail to commit trans", KR(ret), K(tmp_ret));
+        ret = OB_SUCC(ret) ? tmp_ret : ret;
+      }
+    }
+  }
+  return ret;
+}
+
 /////////////////////////////
 // ObVecIndexAsyncTaskUtil //
 ////////////////////////////
@@ -207,6 +245,7 @@ int ObVecIndexAsyncTaskUtil::get_table_id_from_adapter(
     table_id = adapter->get_inc_table_id();
   } else if (adapter->is_snap_tablet_valid() && tablet_id == adapter->get_snap_tablet_id()) {
   } else if (adapter->is_vbitmap_tablet_valid() && tablet_id == adapter->get_vbitmap_tablet_id()) {
+  } else if (adapter->is_embedded_tablet_valid() && tablet_id == adapter->get_embedded_tablet_id()) {
   } else {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("fail to get table id from adapter", K(ret), K(tablet_id));
@@ -231,9 +270,9 @@ bool ObVecIndexAsyncTaskUtil::check_can_do_work()
 }
 
 int ObVecIndexAsyncTaskUtil::clear_history_expire_task_record(
-    const uint64_t tenant_id, 
-    const int64_t batch_size, 
-    common::ObMySQLTransaction& proxy, 
+    const uint64_t tenant_id,
+    const int64_t batch_size,
+    common::ObMySQLTransaction& proxy,
     int64_t &clear_rows)
 {
   int ret = OB_SUCCESS;
@@ -257,9 +296,9 @@ int ObVecIndexAsyncTaskUtil::clear_history_expire_task_record(
 
 // move finish task to history table no matter task is succ or failed
 int ObVecIndexAsyncTaskUtil::move_task_to_history_table(
-    const uint64_t tenant_id, 
-    const int64_t batch_size, 
-    common::ObMySQLTransaction& proxy, 
+    const uint64_t tenant_id,
+    const int64_t batch_size,
+    common::ObMySQLTransaction& proxy,
     int64_t &move_rows)
 {
   int ret = OB_SUCCESS;
@@ -277,7 +316,7 @@ int ObVecIndexAsyncTaskUtil::move_task_to_history_table(
     LOG_WARN("fail to execute sql", K(ret), K(sql), K(tenant_id));
   } else if (OB_FAIL(sql.assign_fmt("DELETE FROM %s"
           " WHERE tenant_id = %ld AND status = 3 AND gmt_create <= (SELECT gmt_create FROM %s ORDER BY gmt_create desc LIMIT 1)",
-          share::OB_ALL_VECTOR_INDEX_TASK_TNAME, 
+          share::OB_ALL_VECTOR_INDEX_TASK_TNAME,
           ObSchemaUtils::get_extract_tenant_id(tenant_id, tenant_id),
           share::OB_ALL_VECTOR_INDEX_TASK_HISTORY_TNAME))) {
     LOG_WARN("sql assign fmt failed", K(ret));
@@ -310,15 +349,15 @@ int ObVecIndexAsyncTaskUtil::batch_insert_vec_task(
     ObVecIndexTaskCtxArray tmp_array;
     for (int64_t i = 0; OB_SUCC(ret) && i < task.size(); ++i) {
       // copy task to new array
-      if ((i == task.size() - 1) || (i % batch_size == 0 && i != 0)) {
+      if (OB_FAIL(tmp_array.push_back(task.at(i)))) {
+        LOG_WARN("fail to push back", K(ret), K(i));
+      } else if (tmp_array.count() % batch_size == 0 || i == task.size() - 1) {
         if (OB_FAIL(insert_vec_tasks(tenant_id, tname, tmp_array.size(), proxy, tmp_array))) {
           LOG_WARN("fail to insert vec tasks", K(ret), K(tmp_array.size()));
         } else {
           tmp_array.reuse();
         }
-      } else if (OB_FAIL(tmp_array.push_back(task.at(i)))) {
-        LOG_WARN("fail to push back", K(ret), K(i));
-      } 
+      }
     }
   }
   return ret;
@@ -327,7 +366,7 @@ int ObVecIndexAsyncTaskUtil::batch_insert_vec_task(
 int ObVecIndexAsyncTaskUtil::insert_vec_tasks(
     uint64_t tenant_id,
     const char* tname,
-    const int64_t batch_size, 
+    const int64_t batch_size,
     common::ObISQLClient& proxy,
     ObVecIndexTaskCtxArray& task_ctx_array)
 {
@@ -356,11 +395,11 @@ int ObVecIndexAsyncTaskUtil::insert_vec_tasks(
         ObVecIndexTaskStatus &task = task_ctx->task_status_;
         char trace_id_str[256] = { 0 };
         task.trace_id_.to_string(trace_id_str, sizeof(trace_id_str));
-        if (OB_FAIL(sql.append_fmt(" (%ld, %ld, %ld, %ld, %ld, %ld, %ld, %ld, %ld, '%s')", 
+        if (OB_FAIL(sql.append_fmt(" (%ld, %ld, %ld, %ld, %ld, %ld, %ld, %ld, %ld, '%s')",
                                   ObSchemaUtils::get_extract_tenant_id(tenant_id, tenant_id),
                                   task.table_id_, task.tablet_id_.id(),
                                   task.task_id_, task.trigger_type_, task.task_type_,
-                                  task.status_, task.target_scn_.convert_to_ts(), task.ret_code_,
+                                  task.status_, task.target_scn_.get_val_for_sql(), task.ret_code_,
                                   trace_id_str))) {
           LOG_WARN("fail to assign fmt", K(ret));
         } else if ((i != batch_size - 1) && OB_FAIL(sql.append_fmt(","))) {
@@ -386,7 +425,7 @@ int ObVecIndexAsyncTaskUtil::insert_vec_tasks(
 int ObVecIndexAsyncTaskUtil::update_vec_task(
     uint64_t tenant_id,
     const char* tname,
-    common::ObISQLClient& proxy, 
+    common::ObISQLClient& proxy,
     ObVecIndexTaskKey& key,
     ObVecIndexFieldArray& update_fields)
 {
@@ -447,11 +486,11 @@ int ObVecIndexAsyncTaskUtil::update_vec_task(
 
 
 int ObVecIndexAsyncTaskUtil::resume_task_from_inner_table(
-    const int64_t tenant_id, 
+    const int64_t tenant_id,
     const char* tname,
     const bool for_update /*false*/,
-    const ObVecIndexFieldArray &filters, 
-    ObLS *ls, /* null means get all tenant task */ 
+    const ObVecIndexFieldArray &filters,
+    ObLS *ls, /* null means get all tenant task */
     common::ObISQLClient &proxy,
     ObVecIndexAsyncTaskOption &async_task_opt)
 {
@@ -498,21 +537,27 @@ int ObVecIndexAsyncTaskUtil::resume_task_from_inner_table(
               if (OB_FAIL(ret) || !need_resumed) {  // skip
               } else if (task_result.status_ != ObVecIndexAsyncTaskStatus::OB_VECTOR_ASYNC_TASK_FINISH) { // resume not finish task
                 ObVecIndexAsyncTaskCtx *task_ctx = nullptr;
-                char *task_ctx_buf = static_cast<char *>(allocator->alloc(sizeof(ObVecIndexAsyncTaskCtx)));
+                char *task_ctx_buf = nullptr;
+                if (task_result.task_type_ == ObVecIndexAsyncTaskType::OB_VECTOR_ASYNC_HYBRID_VECTOR_EMBEDDING) {
+                  task_ctx_buf = static_cast<char *>(allocator->alloc(sizeof(ObHybridVectorRefreshTaskCtx)));
+                } else {
+                  task_ctx_buf = static_cast<char *>(allocator->alloc(sizeof(ObVecIndexAsyncTaskCtx)));
+                }
                 if (OB_ISNULL(task_ctx_buf)) {
                   ret = OB_ALLOCATE_MEMORY_FAILED;
                   LOG_WARN("async task ctx is null", K(ret));
+                } else if (task_result.task_type_ == ObVecIndexAsyncTaskType::OB_VECTOR_ASYNC_HYBRID_VECTOR_EMBEDDING && OB_FALSE_IT(task_ctx = new(task_ctx_buf) ObHybridVectorRefreshTaskCtx())) {
+                } else if (task_result.task_type_ != ObVecIndexAsyncTaskType::OB_VECTOR_ASYNC_HYBRID_VECTOR_EMBEDDING && OB_FALSE_IT(task_ctx = new(task_ctx_buf) ObVecIndexAsyncTaskCtx())) {
                 } else if (OB_FALSE_IT(task_ctx = new(task_ctx_buf) ObVecIndexAsyncTaskCtx())) {
                 } else if (OB_FALSE_IT(task_ctx->task_status_ = task_result)) {
+                } else if (OB_FALSE_IT(task_ctx->task_status_.tenant_id_ = tenant_id)) {
                 } else if (OB_FALSE_IT(task_ctx->task_status_.status_ = ObVecIndexAsyncTaskStatus::OB_VECTOR_ASYNC_TASK_PREPARE)) {
-                } else if (OB_FAIL(ObVecIndexAsyncTaskUtil::fetch_new_task_id(tenant_id, task_ctx->task_status_.task_id_))) {
-                  LOG_WARN("fail to fetch new task id", K(ret), K(tenant_id));
                 } else if (OB_FAIL(async_task_opt.add_task_ctx(tablet_id, task_ctx, inc_new_task))) {  // add task to map
                   LOG_WARN("fail to push back task", K(ret), K(task_ctx));
                 } else if (inc_new_task) {
                   LOG_INFO("resume task succ", K(tenant_id), KPC(task_ctx));
                 }
-                // free on failed 
+                // free on failed
                 if (OB_FAIL(ret) && OB_NOT_NULL(task_ctx)) {
                   task_ctx->~ObVecIndexAsyncTaskCtx();
                   allocator->free(task_ctx);
@@ -532,19 +577,107 @@ int ObVecIndexAsyncTaskUtil::resume_task_from_inner_table(
   return ret;
 }
 
+int ObVecIndexAsyncTaskUtil::read_vec_tasks(
+    const uint64_t tenant_id,
+    const char* tname,
+    const bool for_update /*false*/,
+    const ObVecIndexFieldArray& filters,
+    ObLS *ls, /* null means get all tenant task */
+    common::ObISQLClient& proxy,
+    ObVecIndexTaskStatusArray& result_arr,
+    common::ObIAllocator *allocator /*NULL*/)
+{
+  int ret = OB_SUCCESS;
+  ObSqlString sql;
+  const bool is_read_tenant_async_task = OB_ISNULL(ls) ? true : false;
 
+  if (tenant_id == OB_INVALID_TENANT_ID || OB_ISNULL(allocator)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(ret), K(tenant_id), KP(allocator));
+  } else if (OB_FAIL(construct_read_task_sql(
+      tenant_id, tname, for_update, is_read_tenant_async_task, filters, proxy, sql))) {
+    LOG_WARN("fail to construct read task sql", K(ret), K(tenant_id));
+  } else {
+    SMART_VAR(ObMySQLProxy::MySQLResult, res) {
+      sqlclient::ObMySQLResult* result = nullptr;
+      if (OB_FAIL(proxy.read(res, tenant_id, sql.ptr()))) {
+        LOG_WARN("fail to execute sql", KR(ret), K(sql));
+      } else if (OB_ISNULL(result = res.get_result())) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("error unexpected, query result must not be NULL", K(ret));
+      } else {
+        while (OB_SUCC(ret)) {
+          if (OB_FAIL(result->next())) {
+            LOG_WARN("fail to get next row", K(ret));
+          } else {
+            ObVecIndexTaskStatus task_result;
+            if (OB_FAIL(extract_one_task_sql_result(result, task_result))) {
+              LOG_WARN("fail to extrace one result", K(ret));
+            } else if (OB_FAIL(result_arr.push_back(task_result))) {
+              LOG_WARN("fail to push back task", K(ret), K(result_arr.count()));
+            }
+          }
+        }
+        if (OB_ITER_END == ret) {
+          ret = OB_SUCCESS;
+        }
+      }
+    }
+  }
+  return ret;
+}
+
+int ObVecIndexAsyncTaskUtil::construct_task_key(
+    const uint64_t tenant_id,
+    const uint64_t table_id,
+    const uint64_t tablet_id,
+    const int64_t task_id,
+    ObVecIndexFieldArray& task_key)
+{
+  int ret = OB_SUCCESS;
+  ObVecIndexTaskStatusField tenant_id_field;
+  tenant_id_field.field_name_ = ObString("tenant_id");
+  tenant_id_field.type_ = ObVecIndexTaskStatusField::UINT_TYPE;
+  tenant_id_field.data_.uint_ = tenant_id ;
+
+  ObVecIndexTaskStatusField table_id_field;
+  table_id_field.field_name_ = ObString("table_id");
+  table_id_field.type_ = ObVecIndexTaskStatusField::UINT_TYPE;
+  table_id_field.data_.uint_ = table_id;
+
+  ObVecIndexTaskStatusField tablet_id_field;
+  tablet_id_field.field_name_ = ObString("tablet_id");
+  tablet_id_field.type_ = ObVecIndexTaskStatusField::UINT_TYPE;
+  tablet_id_field.data_.uint_ = tablet_id;
+
+  ObVecIndexTaskStatusField task_type_field;
+  task_type_field.field_name_ = ObString("task_id");
+  task_type_field.type_ = ObVecIndexTaskStatusField::INT_TYPE;
+  task_type_field.data_.uint_ = task_id;
+
+  if (OB_FAIL(task_key.push_back(tenant_id_field))) {
+    LOG_WARN("failt to push back", KR(ret));
+  } else if (OB_FAIL(task_key.push_back(table_id_field))) {
+    LOG_WARN("failt to push back", KR(ret));
+  } else if (OB_FAIL(task_key.push_back(tablet_id_field))) {
+    LOG_WARN("failt to push back", KR(ret));
+  } else if (OB_FAIL(task_key.push_back(task_type_field))) {
+    LOG_WARN("failt to push back", KR(ret));
+  }
+  return ret;
+}
 
 int ObVecIndexAsyncTaskUtil::construct_read_task_sql(
     const uint64_t tenant_id,
     const char *tname,
     const bool for_update /* select for update*/,
     const bool is_read_tenant_async_task,
-    const ObVecIndexFieldArray &filters, 
+    const ObVecIndexFieldArray &filters,
     common::ObISQLClient& proxy,
     ObSqlString &sql)
 {
   int ret = OB_SUCCESS;
-  
+
   if (OB_FAIL(sql.assign_fmt("SELECT * FROM %s where ", tname))) {
     LOG_WARN("sql assign fmt failed", K(ret));
   }
@@ -586,7 +719,7 @@ int ObVecIndexAsyncTaskUtil::construct_read_task_sql(
         LOG_WARN("sql append fmt failed", K(ret));
       }
     }
-  } 
+  }
   if (OB_SUCC(ret) && for_update) {
     if (OB_FAIL(sql.append_fmt(" for update"))) {
       LOG_WARN("sql append fmt failed", K(ret));
@@ -604,7 +737,7 @@ int ObVecIndexAsyncTaskUtil::extract_one_task_sql_result(
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected nullptr", K(ret));
   } else {
-    int64_t target_scn = task.target_scn_.convert_to_ts();
+    int64_t target_scn = 0;
     EXTRACT_INT_FIELD_MYSQL(*result, "tenant_id", task.tenant_id_, uint64_t);
     EXTRACT_INT_FIELD_MYSQL(*result, "table_id", task.table_id_, uint64_t);
     EXTRACT_INT_FIELD_MYSQL(*result, "tablet_id", task.tablet_id_, uint64_t);
@@ -614,7 +747,7 @@ int ObVecIndexAsyncTaskUtil::extract_one_task_sql_result(
     EXTRACT_INT_FIELD_MYSQL(*result, "status", task.status_, int64_t);
     EXTRACT_INT_FIELD_MYSQL(*result, "target_scn", target_scn, int64_t);
     EXTRACT_INT_FIELD_MYSQL(*result, "ret_code", task.ret_code_, int64_t);
-    task.target_scn_.convert_from_ts(target_scn);
+    task.target_scn_.convert_for_sql(target_scn);
     if (OB_SUCC(ret)) {
       int64_t real_length = 0;
       char trace_id_buf[OB_MAX_TRACE_ID_BUFFER_SIZE] = {'\0'};
@@ -625,7 +758,7 @@ int ObVecIndexAsyncTaskUtil::extract_one_task_sql_result(
           LOG_WARN("fail to parse trace id from buf", K(ret), K(trace_id_buf));
         } else {
           task.trace_id_.set(trace_id.get());
-        } 
+        }
       }
     }
   }
@@ -718,7 +851,7 @@ int ObVecIndexAsyncTaskUtil::fetch_new_trace_id(
 
 /**************************** ObVecIndexAsyncTaskHandler ******************************/
 ObVecIndexAsyncTaskHandler::ObVecIndexAsyncTaskHandler()
-  : is_inited_(false), tg_id_(INVALID_TG_ID), async_task_ref_cnt_(0)
+  : is_inited_(false), tg_id_(INVALID_TG_ID), async_task_ref_cnt_(0), stopped_(false)
 {
 }
 
@@ -759,6 +892,7 @@ int ObVecIndexAsyncTaskHandler::start()
 void ObVecIndexAsyncTaskHandler::stop()
 {
   LOG_INFO("vector index async task handler start to stop", K_(tg_id));
+  set_stop();
   if (OB_LIKELY(INVALID_TG_ID != tg_id_)) {
     TG_STOP(tg_id_);
   }
@@ -816,6 +950,30 @@ int ObVecIndexAsyncTaskHandler::push_task(
     } else if (OB_NOT_NULL(async_task)) {
       handle_ls_process_task_cnt(async_task->get_ls_id(), true);
     }
+  } else if (ctx->task_status_.task_type_ == ObVecIndexAsyncTaskType::OB_VECTOR_ASYNC_HYBRID_VECTOR_EMBEDDING) {
+    ObHybridVectorRefreshTask *task = nullptr;
+    if (OB_ISNULL(task = static_cast<ObHybridVectorRefreshTask *>(allocator->alloc(sizeof(ObHybridVectorRefreshTask))))) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("fail to alloc memory of ObHybridVectorRefreshTask", K(ret), K(tenant_id), K(ls_id));
+    } else if (FALSE_IT(task = new (task) ObHybridVectorRefreshTask())) {
+    } else if (OB_FAIL(task->init(tenant_id, ls_id, ctx->task_status_.task_type_, ctx))) {
+      LOG_WARN("fail to init opt async task", KR(ret), K(tenant_id), K(ls_id));
+    } else if (OB_FAIL(TG_PUSH_TASK(tg_id_, task))) {
+      LOG_WARN("fail to TG_PUSH_TASK", KR(ret), KPC(task));
+    }
+    // free memory
+    if (OB_FAIL(ret) && OB_NOT_NULL(task)) {
+      task->~ObHybridVectorRefreshTask();
+      allocator->free(task);  // arena need free? no
+      task = nullptr;
+    }
+    if (OB_FAIL(ret)) {
+    } else if (OB_NOT_NULL(task) &&
+        (task->current_status() == ObHybridVectorRefreshTaskStatus::TASK_PREPARE || task->current_status() == ObHybridVectorRefreshTaskStatus::TASK_FINISH)) {
+      task->reset_status();
+      handle_ls_process_task_cnt(task->get_ls_id(), true);
+      inc_async_task_ref();
+    }
   } else if (ctx->task_status_.task_type_ == OB_VECTOR_ASYNC_INDEX_IVF_LOAD
           || ctx->task_status_.task_type_ == OB_VECTOR_ASYNC_INDEX_IVF_CLEAN) {
     ObIvfAsyncTask *ivf_task = nullptr;
@@ -826,7 +984,7 @@ int ObVecIndexAsyncTaskHandler::push_task(
       LOG_WARN("fail to init opt async task", KR(ret), K(tenant_id), K(ls_id));
     } else if (OB_FAIL(TG_PUSH_TASK(tg_id_, ivf_task))) {
       LOG_WARN("fail to TG_PUSH_TASK", KR(ret), KPC(ivf_task));
-    } else { 
+    } else {
       // !!!! inc async task ref cnt;
       inc_async_task_ref();
     }
@@ -883,13 +1041,15 @@ void ObVecIndexAsyncTaskHandler::handle(void *task)
     LOG_WARN("invalid argument", KR(ret));
   } else {
     async_task = static_cast<ObVecIndexIAsyncTask *>(task);
+    ObPluginVectorIndexService *vector_index_service = MTL(ObPluginVectorIndexService *);
     if (async_task->get_task_type() == ObVecIndexAsyncTaskType::OB_VECTOR_ASYNC_INDEX_OPTINAL
+    || async_task->get_task_type() == ObVecIndexAsyncTaskType::OB_VECTOR_ASYNC_HYBRID_VECTOR_EMBEDDING
     || async_task->get_task_type() == ObVecIndexAsyncTaskType::OB_VECTOR_ASYNC_INDEX_IVF_LOAD
     || async_task->get_task_type() == ObVecIndexAsyncTaskType::OB_VECTOR_ASYNC_INDEX_IVF_CLEAN) {
       ObVecIndexAsyncTaskCtx *task_ctx = async_task->get_task_ctx();
       if (OB_ISNULL(task_ctx)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected ctx nullptr", K(ret), KP(task_ctx)); 
+        LOG_WARN("unexpected ctx nullptr", K(ret), KP(task_ctx));
       }
       if (OB_SUCC(ret)) {
         common::ObSpinLockGuard ctx_guard(task_ctx->lock_); // lock ctx
@@ -898,7 +1058,9 @@ void ObVecIndexAsyncTaskHandler::handle(void *task)
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(ObVecIndexAsyncTaskUtil::check_task_is_cancel(task_ctx, is_cancel))) {
         LOG_WARN("fail to check task is cancel", K(task_ctx));
-      } else if (is_cancel) { // skip
+      } else if (is_cancel || (OB_NOT_NULL(vector_index_service) && vector_index_service->get_vec_async_task_handle().is_stopped())) {
+        async_task->check_task_free();
+        async_task->get_task_ctx()->task_status_.ret_code_ = OB_CANCELED;
       } else if (OB_FAIL(async_task->do_work())) {
         LOG_WARN("fail to do task", KR(ret), KPC(async_task));
       }
@@ -907,11 +1069,11 @@ void ObVecIndexAsyncTaskHandler::handle(void *task)
       LOG_WARN("unexpected task type", K(ret), KPC(async_task));
     }
   }
-  if (OB_NOT_NULL(async_task)) {
+  if (OB_NOT_NULL(async_task)
+      && (async_task->get_task_type() != ObVecIndexAsyncTaskType::OB_VECTOR_ASYNC_HYBRID_VECTOR_EMBEDDING || async_task->get_task_ctx()->task_status_.all_finished_)) {
     handle_ls_process_task_cnt(async_task->get_ls_id(), false);
+    dec_async_task_ref();
   }
-  // !!!!! desc async task ref cnt
-  dec_async_task_ref();
   // free memory
   if (OB_NOT_NULL(async_task)) {
     int tmp_ret = OB_SUCCESS;
@@ -1042,7 +1204,12 @@ int ObVecIndexAsyncTask::do_work()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get invalid vector index ls mgr", KR(ret), K(tenant_id_), K(ls_id_));
   } else if (OB_FAIL(vec_idx_mgr_->get_adapter_inst_guard(ctx_->task_status_.tablet_id_, adpt_guard))) {
-    LOG_WARN("fail to get adapter instance", KR(ret), KPC(ctx_));
+    if (OB_HASH_NOT_EXIST == ret) {
+      ret = OB_EAGAIN;
+      LOG_INFO("can not get adapter, need wait", K(ret), KPC(ctx_));
+    } else {
+      LOG_WARN("fail to get adapter instance", KR(ret), KPC(ctx_));
+    }
   } else if (OB_ISNULL(adpt_guard.get_adatper())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("fail to get vector index adapter", KR(ret), KPC(ctx_));
@@ -1050,6 +1217,9 @@ int ObVecIndexAsyncTask::do_work()
   } else if (adpt_guard.get_adatper()->has_doing_vector_index_task()) {
     ret = OB_EAGAIN;
     LOG_INFO("there is other vector index task running", K(ret), KP(adpt_guard.get_adatper()));
+  } else if (!adpt_guard.get_adatper()->is_complete()) {
+    ret = OB_EAGAIN;
+    LOG_INFO("adapter not complete, need wait", K(ret), KP(adpt_guard.get_adatper()));
   } else if (!check_task_satisfied_memory_limited(*adpt_guard.get_adatper())) {
     ret = OB_EAGAIN; // will retry
     LOG_INFO("skip to do async task due to tenant memory limit", KR(ret), KPC(ctx_));
@@ -1094,7 +1264,7 @@ int ObVecIndexAsyncTask::do_work()
   return ret;
 }
 
-bool ObVecIndexAsyncTask::check_task_satisfied_memory_limited(ObPluginVectorIndexAdaptor &adaptor) 
+bool ObVecIndexAsyncTask::check_task_satisfied_memory_limited(ObPluginVectorIndexAdaptor &adaptor)
 {
   int ret = OB_SUCCESS;
   bool check_result = true;
@@ -1107,7 +1277,7 @@ bool ObVecIndexAsyncTask::check_task_satisfied_memory_limited(ObPluginVectorInde
     int64_t current_incr_count = 0;
     int64_t current_snapshot_count = 0;
     int64_t estimate_row_count = 0;
-    // inc 
+    // inc
     // tips: When there are many delete operations in inc data, the estimated final result may deviate significantly from the actual result.
     if (OB_FAIL(adaptor.get_inc_index_row_cnt(current_incr_count))) {
       LOG_WARN("fail to get incr index number", K(ret));
@@ -1129,68 +1299,77 @@ bool ObVecIndexAsyncTask::check_task_satisfied_memory_limited(ObPluginVectorInde
   return check_result;
 }
 
-int ObVecIndexAsyncTask::optimize_vector_index(ObPluginVectorIndexAdaptor &adaptor)
+int ObVecIndexAsyncTask::process_data_for_index(ObPluginVectorIndexAdaptor &adaptor)
 {
   int ret = OB_SUCCESS;
   int64_t dim = 0;
   float *vectors = nullptr;
   int64_t *vids = nullptr;
-  int64_t extra_column_count = 0;
+  int extra_column_count = 0;
   ObVecExtraInfoObj *out_extra_obj = nullptr;
   ObVidBound vid_bound;
   schema::ObTableParam vid_table_param(allocator_);
   schema::ObTableParam data_table_param(allocator_);
+  //  hnsw:    [rowkey(extra_colun)]  [vid]              rowkey_vid_table.
   common::ObNewRowIterator *vid_id_iter = nullptr;
+  //  hnsw:    [vector]  [rowkey(extra_colun)]           data_table.
+  //  hybrid:  [vid]                  [vector]           embedded_table.
   common::ObNewRowIterator *data_iter = nullptr;
   ObAccessService *tsc_service = MTL(ObAccessService *);
   const uint32_t VEC_INDEX_HNSWSQ_BUILD_COUNT_THRESHOLD = 10000;
+  // (dim: 128 + vals: 128) * 4 = 1024
+  const uint32_t VEC_INDEX_IPIVF_BUILD_COUNT_THRESHOLD = 10000 * 1024;
   uint32_t current_count = 0;
-  transaction::ObTxDesc *tx_desc = nullptr;
-  oceanbase::transaction::ObTxReadSnapshot snapshot;
-  bool trans_start = false;
-  oceanbase::transaction::ObTransService *txs = MTL(transaction::ObTransService *);
-  const uint64_t timeout_us = ObTimeUtility::current_time() + ObInsertLobColumnHelper::LOB_TX_TIMEOUT;
   int64_t loop_cnt = 0; // check task is cancel
-  SMART_VARS_2((storage::ObTableScanParam, vid_id_scan_param), 
+  uint32_t *sparse_byte_lens = nullptr;
+  const uint64_t timeout_us = ObTimeUtility::current_time() + ObInsertLobColumnHelper::LOB_TX_TIMEOUT;
+  const bool is_hybrid_index = adaptor.is_hybrid_index();
+  const schema::ObIndexType vid_table_type = INDEX_TYPE_VEC_ROWKEY_VID_LOCAL;
+  const schema::ObIndexType data_table_type = is_hybrid_index? INDEX_TYPE_HYBRID_INDEX_EMBEDDED_LOCAL : INDEX_TYPE_IS_NOT;
+  SMART_VARS_2((storage::ObTableScanParam, vid_id_scan_param),
                (storage::ObTableScanParam, data_scan_param)) {
     if (OB_FAIL(adaptor.get_dim(dim))) {
       LOG_WARN("get dim failed", K(ret));
+    } else if (adaptor.is_sparse_vector_index_type()) {
+      if (OB_ISNULL(sparse_byte_lens = static_cast<uint32_t *>(allocator_.alloc(sizeof(uint32_t) * VEC_INDEX_IPIVF_BUILD_COUNT_THRESHOLD)))) {
+        ret = OB_ALLOCATE_MEMORY_FAILED;
+        LOG_WARN("failed to alloc sparse_byte_lens", K(ret));
+      } else if (OB_ISNULL(vectors = static_cast<float *>(allocator_.alloc(sizeof(char) * VEC_INDEX_IPIVF_BUILD_COUNT_THRESHOLD)))) {
+        ret = OB_ALLOCATE_MEMORY_FAILED;
+        LOG_WARN("failed to alloc vectors for sparse", K(ret));
+      }
     } else if (OB_ISNULL(vectors = static_cast<float *>(allocator_.alloc(sizeof(float) * dim * VEC_INDEX_HNSWSQ_BUILD_COUNT_THRESHOLD)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("failed to alloc new mem.", K(ret));
+    }
+    if (OB_FAIL(ret)) {
     } else if (OB_ISNULL(vids = static_cast<int64_t *>(allocator_.alloc(sizeof(int64_t) * VEC_INDEX_HNSWSQ_BUILD_COUNT_THRESHOLD)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("failed to alloc new mem.", K(ret));
-    } else if (FALSE_IT(trans_start = true)) {
-    } else if (OB_FAIL(ObInsertLobColumnHelper::start_trans(ls_id_, false/*is_for_read*/, timeout_us, tx_desc))) {
-      LOG_WARN("fail to get tx_desc", K(ret));
-    } else if (OB_ISNULL(tx_desc) || OB_ISNULL(txs)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("fail to get tx desc or ob access service, get nullptr", K(ret));
-    } else if (OB_FAIL(txs->get_ls_read_snapshot(*tx_desc, transaction::ObTxIsolationLevel::RC, ls_id_, timeout_us, snapshot))) {
-      LOG_WARN("fail to get snapshot", K(ret));
-    } else if (FALSE_IT(ctx_->task_status_.target_scn_ = snapshot.version())) {
-    } else if (OB_FAIL(ObPluginVectorIndexUtils::read_local_tablet(ls_id_,
-                                  &adaptor, 
+    } else if (!is_hybrid_index && adaptor.get_is_need_vid() && OB_FAIL(ObPluginVectorIndexUtils::read_local_tablet(ls_id_,
+                                  &adaptor,
                                   ctx_->task_status_.target_scn_,
-                                  INDEX_TYPE_VEC_ROWKEY_VID_LOCAL,
+                                  vid_table_type,
                                   allocator_,
                                   allocator_,
                                   vid_id_scan_param,
                                   vid_table_param,
                                   vid_id_iter))) {
       LOG_WARN("failed to read vid id table local tablet.", K(ret));
-    } else if (OB_FAIL(ObPluginVectorIndexUtils::read_local_tablet(ls_id_, 
+    } else if (OB_FAIL(ObPluginVectorIndexUtils::read_local_tablet(ls_id_,
                                         &adaptor,
                                         ctx_->task_status_.target_scn_,
-                                        INDEX_TYPE_IS_NOT,
+                                        data_table_type,
                                         allocator_,
                                         allocator_,
                                         data_scan_param,
                                         data_table_param,
-                                        data_iter))) {
+                                        data_iter,
+                                        nullptr,
+                                        is_hybrid_index))) {
       LOG_WARN("failed to read data table local tablet.", K(ret));
-    } else if (OB_FALSE_IT(extra_column_count = adaptor.get_extra_column_count())) {
+    } else if (OB_FAIL(ObPluginVectorIndexUtils::get_extra_column_count(adaptor, extra_column_count))) {
+      LOG_WARN("failed to get extra column count", K(ret), K(adaptor));
     } else if (extra_column_count > 0) {
       char *buf = nullptr;
       if (OB_ISNULL(buf = static_cast<char *>(allocator_.alloc(sizeof(ObVecExtraInfoObj) * extra_column_count * VEC_INDEX_HNSWSQ_BUILD_COUNT_THRESHOLD)))) {
@@ -1198,23 +1377,51 @@ int ObVecIndexAsyncTask::optimize_vector_index(ObPluginVectorIndexAdaptor &adapt
         LOG_WARN("allocate memory failed", K(ret), K(extra_column_count));
       } else if (OB_FALSE_IT(out_extra_obj = new (buf) ObVecExtraInfoObj[extra_column_count * VEC_INDEX_HNSWSQ_BUILD_COUNT_THRESHOLD])) {
       }
-    }     
-    
+    }
+
     if (OB_FAIL(ret)) {
     } else {
-      ObTableScanIterator *vid_scan_iter = static_cast<ObTableScanIterator *>(vid_id_iter);
+      ObTableScanIterator *vid_scan_iter = nullptr;
       ObTableScanIterator *table_scan_iter = static_cast<ObTableScanIterator *>(data_iter);
-      int32_t data_table_rowkey_count = vid_table_param.get_output_projector().count() - 1;
-      if (OB_ISNULL(vid_scan_iter) || OB_ISNULL(table_scan_iter)) {
+      int32_t data_table_rowkey_count = is_hybrid_index? data_table_param.get_output_projector().count() - 2: vid_table_param.get_output_projector().count() - 1;
+      int64_t current_incr_count = 0;
+      int64_t current_snapshot_count = 0;
+      if (adaptor.get_is_need_vid()) {
+        vid_scan_iter = static_cast<ObTableScanIterator *>(vid_id_iter);
+      } else {
+        data_table_rowkey_count = 1;  // pk_increrment
+      }
+      int32_t vid_column_pos = is_hybrid_index && !adaptor.get_is_need_vid()? 0: data_table_rowkey_count;
+      if (OB_ISNULL(table_scan_iter)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("get null table scan iter", K(ret));
       }
+      char *curr_vector_ptr = (char *)vectors;
+      uint32_t curr_total_length = 0;
       while (OB_SUCC(ret)) {
         blocksstable::ObDatumRow *datum_vid = nullptr;
         blocksstable::ObDatumRow *datum_row = nullptr;
-        if (OB_FAIL(vid_scan_iter->get_next_row(datum_vid))) {
+        blocksstable::ObDatumRow *vid_datum = nullptr;
+        if (OB_FAIL(table_scan_iter->get_next_row(datum_row))) {
           if (OB_ITER_END != ret) {
             LOG_WARN("get next row failed.", K(ret));
+          }
+        } else if (OB_ISNULL(datum_row) || !datum_row->is_valid()) {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("get row invalid.", K(ret));
+        } else if (datum_row->get_column_count() < extra_column_count + 1) {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("get row column cnt invalid.", K(ret), K(datum_row->get_column_count()));
+        } else if (is_hybrid_index || !adaptor.get_is_need_vid()) {
+        } else if (OB_ISNULL(vid_scan_iter)) {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("get null table scan iter", K(ret));
+        } else if (OB_FAIL(vid_scan_iter->get_next_row(datum_vid))) {
+          if (OB_ITER_END != ret) {
+            LOG_WARN("get next row failed.", K(ret));
+          } else {
+            ret = OB_ERR_UNEXPECTED;
+            LOG_WARN("data table row count mismatched", K(ret));
           }
         } else if (OB_ISNULL(datum_vid) || !datum_vid->is_valid()) {
           ret = OB_ERR_UNEXPECTED;
@@ -1222,36 +1429,30 @@ int ObVecIndexAsyncTask::optimize_vector_index(ObPluginVectorIndexAdaptor &adapt
         } else if (datum_vid->get_column_count() != data_table_rowkey_count + 1) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("get row column cnt invalid.", K(ret), K(datum_vid->get_column_count()));
-        } else if (OB_FAIL(table_scan_iter->get_next_row(datum_row))) {
-          if (OB_ITER_END != ret) {
-            LOG_WARN("get next row failed.", K(ret));
-          } else {
-            ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("data table row count mismatched", K(ret));
-          }
-        } else if (OB_ISNULL(datum_row) || !datum_row->is_valid()) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("get row invalid.", K(ret));
-        } else if (datum_row->get_column_count() != extra_column_count + 1) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("get row column cnt invalid.", K(ret), K(datum_row->get_column_count()));
+        }
+        vid_datum = is_hybrid_index || !adaptor.get_is_need_vid()? datum_row: datum_vid;
+        if (OB_FAIL(ret)) {
         } else {
+          //  hnsw:    [vector]                  [rowkey(extra_column)]
+          //  hybrid:  [rowkey(extra_column)]    [vid]                    [vector]
+          //  hybrid without vid_rowkey_tbl:  [pk(vid)] [vector]
           if (extra_column_count > 0) {
             const ObIArray<int32_t> &out_idxs = data_table_param.get_output_projector();
             const ObIArray<share::schema::ObColumnParam *> *out_col_param =
                 data_scan_param.table_param_->get_read_info().get_columns();
-            if (OB_ISNULL(out_col_param) || out_idxs.count() != extra_column_count + 1) {
+            const int extra_column_offset = is_hybrid_index? 0: 1;
+            if (OB_ISNULL(out_col_param) || out_idxs.count() < extra_column_count + extra_column_offset) {
               ret = OB_ERR_UNEXPECTED;
               LOG_WARN("column count not equal.", K(ret), KP(out_col_param), K(out_idxs), K(extra_column_count));
             }
             for (int i = 0; OB_SUCC(ret) && i < extra_column_count; ++i) {
               ObObj tmp_obj;
-              if (out_idxs.at(i + 1) >= out_col_param->count()) {
+              if (out_idxs.at(i + extra_column_offset) >= out_col_param->count()) {
                 ret = OB_ERR_UNEXPECTED;
                 LOG_WARN("column count not equal.", K(ret), KP(out_col_param), K(out_idxs), K(i));
               } else {
-                ObObjMeta meta_type = out_col_param->at(out_idxs.at(i + 1))->get_meta_type();
-                const ObDatum &extra_datum = datum_row->storage_datums_[i + 1];
+                ObObjMeta meta_type = out_col_param->at(out_idxs.at(i + extra_column_offset))->get_meta_type();
+                const ObDatum &extra_datum = datum_row->storage_datums_[i + extra_column_offset];
                 if (OB_FALSE_IT(out_extra_obj[current_count * extra_column_count + i].reset())) {
                 } else if (OB_FAIL(out_extra_obj[current_count * extra_column_count + i].from_datum(
                                extra_datum, meta_type, &allocator_))) {
@@ -1262,29 +1463,61 @@ int ObVecIndexAsyncTask::optimize_vector_index(ObPluginVectorIndexAdaptor &adapt
           }
           ObString vector_str;
           float *vector_ptr = nullptr;
-          const int64_t vec_col_idx = 0;  // ObPluginVectorIndexUtils::read_local_tablet get from INDEX_TYPE_IS_NOT only output one vector column 
+          const int64_t vec_col_idx = 0;  // ObPluginVectorIndexUtils::read_local_tablet get from INDEX_TYPE_IS_NOT output vector column first
+          int32_t vector_column_pos = is_hybrid_index? data_table_rowkey_count + 1: vec_col_idx;
+          if (is_hybrid_index && !adaptor.get_is_need_vid()) {
+            //  hybrid without vid_rowkey_tbl:  [pk(vid)] [vector]
+            vector_column_pos = 1;
+          }
+          blocksstable::ObDatumRow *vector_row = datum_row;
           if (OB_FAIL(ret)) {
-          } else if (datum_row->storage_datums_[vec_col_idx].is_null() || datum_row->storage_datums_[vec_col_idx].is_nop()) { // skip null row
-          } else if (FALSE_IT(vector_str = datum_row->storage_datums_[vec_col_idx].get_string())) {
+          } else if (vector_row->storage_datums_[vector_column_pos].is_null() || vector_row->storage_datums_[vector_column_pos].is_nop()) { // skip null row
+          } else if (FALSE_IT(vector_str = vector_row->storage_datums_[vector_column_pos].get_string())) {
           } else if (vector_str.length() == 0) {  // skip null row
-          } else if (vector_str.length() != dim * sizeof(float)) {
+          } else if (!adaptor.is_sparse_vector_index_type() && vector_str.length() != dim * sizeof(float)) {
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("get invalid string.", K(ret), K(vector_str), K(dim));
           } else if (OB_ISNULL(vector_ptr = reinterpret_cast<float *>(vector_str.ptr()))) {
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("failed to get float vector.", K(ret));
           } else {
-            for (int j = 0; OB_SUCC(ret) && j < dim; j++) {
-              vectors[current_count * dim + j] = vector_ptr[j];
+            if (adaptor.is_sparse_vector_index_type()) {
+              curr_total_length += vector_str.length();
+              if(curr_total_length <= VEC_INDEX_IPIVF_BUILD_COUNT_THRESHOLD) {
+                sparse_byte_lens[current_count] = vector_str.length();
+                MEMCPY(curr_vector_ptr, vector_str.ptr(), vector_str.length());
+                curr_vector_ptr += vector_str.length();
+              }
+            } else {
+              for (int j = 0; OB_SUCC(ret) && j < dim; j++) {
+                vectors[current_count * dim + j] = vector_ptr[j];
+              }
             }
-            vids[current_count] = datum_vid->storage_datums_[data_table_rowkey_count].get_int();
-            vid_bound.set_vid(datum_vid->storage_datums_[data_table_rowkey_count].get_int());
+            vids[current_count] = vid_datum->storage_datums_[vid_column_pos].get_int();
+            vid_bound.set_vid(vid_datum->storage_datums_[vid_column_pos].get_int());
             current_count += 1;
-            if (current_count >= VEC_INDEX_HNSWSQ_BUILD_COUNT_THRESHOLD) {
-              if (OB_FAIL(adaptor.add_snap_index(vectors, vids, out_extra_obj, extra_column_count, current_count))) {
-                LOG_WARN("failed to add snap index", K(ret), K(vectors), K(vids), K(current_count));
-              } else {
-                current_count = 0;
+            if (adaptor.is_sparse_vector_index_type()) {
+              if (curr_total_length >= VEC_INDEX_IPIVF_BUILD_COUNT_THRESHOLD) {
+                if (OB_FAIL(adaptor.add_snap_index(
+                        vectors, vids, out_extra_obj, extra_column_count, current_count, sparse_byte_lens))) {
+                  LOG_WARN("failed to add sparse snap index", K(ret), K(vectors), K(vids), K(current_count));
+                } else {
+                  current_count = 0;
+                  curr_vector_ptr = (char *)vectors;
+                  curr_total_length = 0;
+                  // copy next data
+                  sparse_byte_lens[current_count] = vector_str.length();
+                  MEMCPY(curr_vector_ptr, vector_str.ptr(), vector_str.length());
+                  curr_vector_ptr += vector_str.length();
+                }
+              }
+            } else {
+              if (current_count >= VEC_INDEX_HNSWSQ_BUILD_COUNT_THRESHOLD) {
+                if (OB_FAIL(adaptor.add_snap_index(vectors, vids, out_extra_obj, extra_column_count, current_count))) {
+                  LOG_WARN("failed to add snap index", K(ret), K(vectors), K(vids), K(current_count));
+                } else {
+                  current_count = 0;
+                }
               }
             }
           }
@@ -1315,9 +1548,39 @@ int ObVecIndexAsyncTask::optimize_vector_index(ObPluginVectorIndexAdaptor &adapt
     }
     data_iter = nullptr;
   }
-  if (OB_FAIL(ret)) {
-  } else if (current_count > 0 && OB_FAIL(adaptor.add_snap_index(vectors, vids, out_extra_obj, extra_column_count, current_count))) {
-    LOG_WARN("failed to build snap index", K(ret), K(vectors), K(vids));
+  if (OB_SUCC(ret) && current_count > 0) {
+    if (adaptor.is_sparse_vector_index_type()) {
+      if (OB_FAIL(adaptor.add_snap_index(vectors, vids, out_extra_obj, extra_column_count, current_count, sparse_byte_lens))) {
+        LOG_WARN("failed to build sparse snap index", K(ret), K(vectors), K(vids));
+      }
+    } else {
+      if (OB_FAIL(adaptor.add_snap_index(vectors, vids, out_extra_obj, extra_column_count, current_count))) {
+        LOG_WARN("failed to build snap index", K(ret), K(vectors), K(vids));
+      }
+    }
+  }
+  return ret;
+}
+
+int ObVecIndexAsyncTask::optimize_vector_index(ObPluginVectorIndexAdaptor &adaptor)
+{
+  int ret = OB_SUCCESS;
+  transaction::ObTxDesc *tx_desc = nullptr;
+  oceanbase::transaction::ObTxReadSnapshot snapshot;
+  bool trans_start = false;
+  oceanbase::transaction::ObTransService *txs = MTL(transaction::ObTransService *);
+  const uint64_t timeout_us = ObTimeUtility::current_time() + ObInsertLobColumnHelper::LOB_TX_TIMEOUT;
+  if (OB_FAIL(ObInsertLobColumnHelper::start_trans(ls_id_, false/*is_for_read*/, timeout_us, tx_desc))) {
+    LOG_WARN("fail to get tx_desc", K(ret));
+  } else if (FALSE_IT(trans_start = true)) {
+  } else if (OB_ISNULL(tx_desc) || OB_ISNULL(txs)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("fail to get tx desc or ob access service, get nullptr", K(ret));
+  } else if (OB_FAIL(txs->get_ls_read_snapshot(*tx_desc, transaction::ObTxIsolationLevel::RC, ls_id_, timeout_us, snapshot))) {
+    LOG_WARN("fail to get snapshot", K(ret));
+  } else if (FALSE_IT(ctx_->task_status_.target_scn_ = snapshot.version())) {
+  } else if (OB_FAIL(process_data_for_index(adaptor))) {
+    LOG_WARN("fail to process data for index", K(ret), K(adaptor));
   }
 
   // refresh snapshot table data.
@@ -1328,14 +1591,14 @@ int ObVecIndexAsyncTask::optimize_vector_index(ObPluginVectorIndexAdaptor &adapt
     LOG_WARN("fail to renew single snap index", K(ret));
   }
   /* Warning!!!
-  * In the process of loading data for a query, the query_lock is acquired first, followed by the adapter_map_lock. 
-  * Therefore, the order of these two locks must not be reversed; 
+  * In the process of loading data for a query, the query_lock is acquired first, followed by the adapter_map_lock.
+  * Therefore, the order of these two locks must not be reversed;
   * otherwise, a deadlock could occur between the query and asynchronous tasks. */
   RWLock::WLockGuard query_lock_guard(old_adapter_->get_query_lock()); // lock for query before end trans
   RWLock::WLockGuard lock_guard(vec_idx_mgr_->get_adapter_map_lock());
   int tmp_ret = OB_SUCCESS;
   if (trans_start && OB_SUCCESS != (tmp_ret = ObInsertLobColumnHelper::end_trans(tx_desc, OB_SUCCESS != ret, timeout_us))) {
-    ret = tmp_ret; 
+    ret = tmp_ret;
     LOG_WARN("fail to end trans", K(ret), KPC(tx_desc));
   }
   if (OB_FAIL(ret)) {
@@ -1352,7 +1615,7 @@ int ObVecIndexAsyncTask::refresh_snapshot_index_data(ObPluginVectorIndexAdaptor 
   ObVecIdxSnapshotDataWriteCtx ctx;
   ctx.ls_id_ = ls_id_;
   ctx.data_tablet_id_ = adaptor.get_data_tablet_id();
-  
+
  // get lob tablet id
   HEAP_VARS_3((ObLSHandle, ls_handle), (ObTabletHandle, data_tablet_handle), (ObTabletBindingMdsUserData, ddl_data))
   {
@@ -1378,7 +1641,7 @@ int ObVecIndexAsyncTask::refresh_snapshot_index_data(ObPluginVectorIndexAdaptor 
   ObSchemaGetterGuard schema_guard;
   const ObTableSchema *data_table_schema;
   const ObTableSchema *snapshot_table_schema;
-  int64_t lob_inrow_threshold; 
+  int64_t lob_inrow_threshold;
   ObAccessService *oas = MTL(ObAccessService *);
   share::schema::ObTableDMLParam table_dml_param(allocator_);
   share::schema::ObTableDMLParam table_delete_dml_param(allocator_);
@@ -1413,10 +1676,10 @@ int ObVecIndexAsyncTask::refresh_snapshot_index_data(ObPluginVectorIndexAdaptor 
         LOG_WARN("failed to get simple schema", KR(ret), K(tenant_id_), K(adaptor.get_data_table_id()));
       } else if (OB_ISNULL(snapshot_table_schema) || snapshot_table_schema->is_in_recyclebin() || OB_ISNULL(data_table_schema) || data_table_schema->is_in_recyclebin()) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("table schema not exist", K(ret), K(adaptor.get_snapshot_table_id()), K(adaptor.get_data_table_id()), 
+        LOG_WARN("table schema not exist", K(ret), K(adaptor.get_snapshot_table_id()), K(adaptor.get_data_table_id()),
           KP(snapshot_table_schema), KP(data_table_schema));
       } else if (FALSE_IT(lob_inrow_threshold = snapshot_table_schema->get_lob_inrow_threshold())) {
-      } else if (OB_FAIL(ObPluginVectorIndexUtils::read_local_tablet(ls_id_, 
+      } else if (OB_FAIL(ObPluginVectorIndexUtils::read_local_tablet(ls_id_,
                                             &adaptor,
                                             ctx_->task_status_.target_scn_,
                                             INDEX_TYPE_VEC_INDEX_SNAPSHOT_DATA_LOCAL,
@@ -1434,7 +1697,7 @@ int ObVecIndexAsyncTask::refresh_snapshot_index_data(ObPluginVectorIndexAdaptor 
           if (OB_ISNULL(column_schema = data_table_schema->get_column_schema(all_column_ids.at(i)))) {
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("fail to get column schema", K(ret), K(all_column_ids.at(i)));
-          } else if (column_schema->is_vec_hnsw_vid_column()) {
+          } else if (column_schema->is_vec_hnsw_vid_column() ) {
             vector_vid_col_idx = i;
             if (!column_schema->is_nullable()) {
               ObString index_name;
@@ -1445,6 +1708,11 @@ int ObVecIndexAsyncTask::refresh_snapshot_index_data(ObPluginVectorIndexAdaptor 
                 LOG_INFO("vector index created before 4.3.5.2 do not support vector index optimize task, please rebuild vector index.", K(ret), K(index_name));
               }
             } else if (OB_FAIL(dml_column_ids.push_back(all_column_ids.at(i)))) {
+              LOG_WARN("fail to push back column id", K(ret), K(all_column_ids.at(i)));
+            }
+          } else if (column_schema->is_hidden_pk_column_id(all_column_ids.at(i))) {
+            vector_vid_col_idx = i;
+            if (OB_FAIL(dml_column_ids.push_back(all_column_ids.at(i)))) {
               LOG_WARN("fail to push back column id", K(ret), K(all_column_ids.at(i)));
             }
           } else if (column_schema->is_vec_hnsw_vector_column()) {
@@ -1491,7 +1759,7 @@ int ObVecIndexAsyncTask::refresh_snapshot_index_data(ObPluginVectorIndexAdaptor 
       } else if (OB_FAIL(table_delete_dml_param.convert(snapshot_table_schema, snapshot_table_schema->get_schema_version(), dml_column_ids))) {
         LOG_WARN("failed to convert table dml param.", K(ret));
       }
-      
+
       // insert data to snapshot index table.
       ObTableScanIterator *table_scan_iter = static_cast<ObTableScanIterator *>(snap_data_iter);
       if (OB_FAIL(ret)) {
@@ -1550,6 +1818,8 @@ int ObVecIndexAsyncTask::refresh_snapshot_index_data(ObPluginVectorIndexAdaptor 
                 LOG_WARN("fail to build sq vec snapshot key str", K(ret), K(index_type));
               } else if (index_type == VIAT_HNSW_BQ && OB_FAIL(databuff_printf(key_str, ObVectorIndexSliceStore::OB_VEC_IDX_SNAPSHOT_KEY_LENGTH, key_pos, "%lu_%lu_hnsw_bq_data_part%05ld", adaptor.get_snap_tablet_id().id(), ctx_->task_status_.target_scn_.get_val_for_inner_table_field(), row_id))) {
                 LOG_WARN("fail to build bq vec snapshot key str", K(ret), K(index_type));
+              } else if (index_type == VIAT_IPIVF && OB_FAIL(databuff_printf(key_str, ObVectorIndexSliceStore::OB_VEC_IDX_SNAPSHOT_KEY_LENGTH, key_pos, "%lu_%lu_ipivf_data_part%05ld", adaptor.get_snap_tablet_id().id(), ctx_->task_status_.target_scn_.get_val_for_inner_table_field(), row_id))) {
+                LOG_WARN("fail to build ipivf vec snapshot key str", K(ret), K(index_type));
               } else if (OB_ISNULL(key_str)) {
                 ret = OB_ERR_UNEXPECTED;
                 LOG_WARN("unexpected nullptr key_str", K(ret), KP(key_str));
@@ -1558,7 +1828,7 @@ int ObVecIndexAsyncTask::refresh_snapshot_index_data(ObPluginVectorIndexAdaptor 
                 datum_row.storage_datums_[vector_data_col_idx].set_string(ctx.vals_.at(row_id));
                 datum_row.storage_datums_[vector_data_col_idx].set_has_lob_header();
                 datum_row.storage_datums_[vector_vid_col_idx].set_null();
-                datum_row.storage_datums_[vector_col_idx].set_null();
+                datum_row.storage_datums_[vector_col_idx].set_nop();
                 // set extra column default value
                 if (extra_column_idxs.count() > 0) {
                   for (int64_t i = 0; OB_SUCC(ret) && i < extra_column_idxs.count(); i++) {
@@ -1567,7 +1837,7 @@ int ObVecIndexAsyncTask::refresh_snapshot_index_data(ObPluginVectorIndexAdaptor 
                         extra_column_idxs.at(i) == vector_vid_col_idx ||
                         extra_column_idxs.at(i) == vector_col_idx) {
                       ret = OB_ERR_UNEXPECTED;
-                      LOG_WARN("unexpected extra column idx", K(i), K(extra_column_idxs.at(i)), 
+                      LOG_WARN("unexpected extra column idx", K(i), K(extra_column_idxs.at(i)),
                         K(vector_key_col_idx), K(vector_data_col_idx), K(vector_vid_col_idx), K(vector_col_idx));
                     } else {
                       datum_row.storage_datums_[extra_column_idxs.at(i)].set_null();
@@ -1613,7 +1883,7 @@ int ObVecIndexAsyncTask::refresh_snapshot_index_data(ObPluginVectorIndexAdaptor 
       }
       store_ctx_guard.reset();
     }
-  } 
+  }
   row_iter.reset();
 
   //delete old data from snapshot index table.
@@ -1646,16 +1916,16 @@ int ObVecIndexAsyncTask::refresh_snapshot_index_data(ObPluginVectorIndexAdaptor 
 }
 
 int ObVecIndexAsyncTask::get_old_snapshot_data(
-    ObPluginVectorIndexAdaptor &adaptor, 
-    transaction::ObTxDesc *tx_desc, 
-    const int64_t snapshot_column_count, 
+    ObPluginVectorIndexAdaptor &adaptor,
+    transaction::ObTxDesc *tx_desc,
+    const int64_t snapshot_column_count,
     common::ObCollationType cs_type,
-    int64_t vector_key_col_idx, 
-    int64_t vector_data_col_idx, 
-    int64_t vector_vid_col_idx, 
-    int64_t vector_col_idx, 
+    int64_t vector_key_col_idx,
+    int64_t vector_data_col_idx,
+    int64_t vector_vid_col_idx,
+    int64_t vector_col_idx,
     ObSEArray<int64_t, 4> &extra_column_idxs,
-    ObTableScanIterator *table_scan_iter, 
+    ObTableScanIterator *table_scan_iter,
     storage::ObValueRowIterator &delete_row_iter)
 {
   int ret = OB_SUCCESS;
@@ -1720,7 +1990,7 @@ int ObVecIndexAsyncTask::get_old_snapshot_data(
                   extra_column_idxs.at(i) == vector_vid_col_idx ||
                   extra_column_idxs.at(i) == vector_col_idx) {
                 ret = OB_ERR_UNEXPECTED;
-                LOG_WARN("unexpected extra column idx", K(i), K(extra_column_idxs.at(i)), 
+                LOG_WARN("unexpected extra column idx", K(i), K(extra_column_idxs.at(i)),
                   K(vector_key_col_idx), K(vector_data_col_idx), K(vector_vid_col_idx), K(vector_col_idx));
               } else {
                 d_row.storage_datums_[extra_column_idxs.at(i)].set_null();
@@ -1743,12 +2013,13 @@ int ObVecIndexAsyncTask::get_old_snapshot_data(
 }
 
 int ObVecIndexAsyncTask::delete_tablet_data(
-    ObPluginVectorIndexAdaptor &adaptor, 
+    ObPluginVectorIndexAdaptor &adaptor,
     ObTabletID& tablet_id,
-    ObDMLBaseParam &dml_param, 
+    ObDMLBaseParam &dml_param,
     transaction::ObTxDesc *tx_desc,
     ObTableScanIterator *table_scan_iter,
-    ObSEArray<uint64_t, 4> &dml_column_ids)
+    ObSEArray<uint64_t, 4> &dml_column_ids,
+    bool check_null_chunk)
 {
   int ret = OB_SUCCESS;
   int64_t loop_cnt = 0;
@@ -1777,6 +2048,9 @@ int ObVecIndexAsyncTask::delete_tablet_data(
       } else if (OB_ISNULL(datum_row) || !datum_row->is_valid()) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("get row invalid.", K(ret));
+      } else if (check_null_chunk && !datum_row->storage_datums_[2].is_null()) {
+        // log_table: [vid] [type] [chunk].
+        // skip not null chunk, which means they are not embedded.
       } else if (OB_FAIL(row_iter.add_row(*datum_row))) {
         LOG_WARN("failed to add row to iter", K(ret));
       } else {
@@ -1827,7 +2101,7 @@ int ObVecIndexAsyncTask::delete_incr_table_data(ObPluginVectorIndexAdaptor &adap
   ObSchemaGetterGuard schema_guard;
   int64_t delta_table_affected_rows = 0;
   int64_t index_table_affected_rows = 0;
-  SMART_VARS_2((storage::ObTableScanParam, delta_scan_param), 
+  SMART_VARS_2((storage::ObTableScanParam, delta_scan_param),
                (storage::ObTableScanParam, index_scan_param)) {
     if (OB_ISNULL(tx_desc) || OB_ISNULL(oas)) {
       ret = OB_ERR_UNEXPECTED;
@@ -1845,7 +2119,7 @@ int ObVecIndexAsyncTask::delete_incr_table_data(ObPluginVectorIndexAdaptor &adap
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("vector index table not exist", K(ret), K(tenant_id_), K(adaptor.get_vbitmap_table_id()));
     } else if (OB_FAIL(ObPluginVectorIndexUtils::read_local_tablet(ls_id_,
-                                  &adaptor, 
+                                  &adaptor,
                                   ctx_->task_status_.target_scn_,
                                   INDEX_TYPE_VEC_DELTA_BUFFER_LOCAL,
                                   allocator_,
@@ -1878,7 +2152,7 @@ int ObVecIndexAsyncTask::delete_incr_table_data(ObPluginVectorIndexAdaptor &adap
         LOG_WARN("failed to convert table dml param.", K(ret));
       } else if (FALSE_IT(dml_param.schema_version_ = delta_table_schema->get_schema_version())) {
       } else if (FALSE_IT(dml_param.table_param_ = &table_dml_param)) {
-      } else if (OB_FAIL(delete_tablet_data(adaptor, adaptor.get_inc_tablet_id(), dml_param, tx_desc, delta_scan_iter, delta_dml_column_ids ))) {
+      } else if (OB_FAIL(delete_tablet_data(adaptor, adaptor.get_inc_tablet_id(), dml_param, tx_desc, delta_scan_iter, delta_dml_column_ids, adaptor.is_hybrid_index()))) {
         LOG_WARN("failed to delete delta table data", K(ret));
       } else if (OB_FAIL(bitmap_table_dml_param.convert(index_table_schema, index_table_schema->get_schema_version(), index_dml_column_ids))) {
         LOG_WARN("failed to convert table dml param.", K(ret));

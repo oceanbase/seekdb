@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #define USING_LOG_PREFIX SQL_OPT
@@ -18,6 +22,7 @@
 #include "sql/optimizer/ob_log_plan.h"
 #include "observer/omt/ob_tenant_timezone_mgr.h"
 #include "sql/rewrite/ob_transform_utils.h"
+#include "share/external_table/ob_external_table_utils.h"
 
 using namespace oceanbase::transaction;
 using namespace oceanbase::sql;
@@ -896,7 +901,7 @@ int ObTableLocation::init(ObSqlSchemaGuard &schema_guard,
   const share::schema::ObTableSchema *table_schema = NULL;
   if (OB_FAIL(schema_guard.get_table_schema(ref_table_id, table_schema))) {
     SQL_OPT_LOG(WARN, "failed to get table schema", K(ret), K(ref_table_id));
-  } else if (OB_FAIL(init(table_schema, stmt, exec_ctx, filter_exprs, table_id,
+  } else if (OB_FAIL(init(*(schema_guard.get_schema_guard()), table_schema, stmt, exec_ctx, filter_exprs, table_id,
                           ref_table_id, part_ids, dtc_params, is_dml_table, sort_exprs))) {
     SQL_OPT_LOG(WARN, "failed to init", K(ret), K(ref_table_id));
   }
@@ -917,7 +922,7 @@ int ObTableLocation::init_location(ObSqlSchemaGuard *schema_guard,
   const share::schema::ObTableSchema *table_schema = NULL;
   if (OB_FAIL(schema_guard->get_table_schema(ref_table_id, table_schema))) {
     SQL_OPT_LOG(WARN, "failed to get table schema", K(ret), K(ref_table_id));
-  } else if (OB_FAIL(init(table_schema, stmt, exec_ctx, filter_exprs, table_id,
+  } else if (OB_FAIL(init(*(schema_guard->get_schema_guard()), table_schema, stmt, exec_ctx, filter_exprs, table_id,
                           ref_table_id, part_ids, dtc_params, is_dml_table, sort_exprs))) {
     SQL_OPT_LOG(WARN, "failed to init", K(ret), K(ref_table_id));
   }
@@ -1240,6 +1245,7 @@ int ObTableLocation::calc_not_partitioned_table_ids(ObExecContext &exec_ctx)
 }
 
 int ObTableLocation::init(
+    ObSchemaGetterGuard &schema_guard,
     const ObTableSchema *table_schema,
     const ObDMLStmt &stmt,
     ObExecContext *exec_ctx,
@@ -1273,8 +1279,9 @@ int ObTableLocation::init(
   } else {
     table_type_ = table_schema->get_table_type();
     loc_meta_.is_external_table_ = table_schema->is_external_table();
-    loc_meta_.is_external_files_on_disk_ =
-        ObSQLUtils::is_external_files_on_local_disk(table_schema->get_external_file_location());
+    ObString file_location;
+    OZ(ObExternalTableUtils::get_external_file_location(*table_schema, schema_guard, exec_ctx->get_allocator(), file_location));
+    loc_meta_.is_external_files_on_disk_ = ObSQLUtils::is_external_files_on_local_disk(file_location);
     loc_meta_.route_policy_ = route_policy;
   }
 
@@ -2649,8 +2656,7 @@ int ObTableLocation::get_location_calc_node(const ObPartitionLevel part_level,
     }
   }
   if (OB_SUCC(ret) && !is_get &&
-      GET_MIN_CLUSTER_VERSION() >= CLUSTER_VERSION_4_3_5_0 &&
-      ((PARTITION_LEVEL_ONE == part_level && is_column_list_part(part_type_, is_col_part_expr_)) || 
+      ((PARTITION_LEVEL_ONE == part_level && is_column_list_part(part_type_, is_col_part_expr_)) ||
        (PARTITION_LEVEL_TWO == part_level && is_column_list_part(subpart_type_, is_col_subpart_expr_)))) {
     ObPartLocCalcNode *list_value_node = NULL;
     bool list_value_always_true = false;

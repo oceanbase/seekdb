@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #define USING_LOG_PREFIX SQL_REWRITE
@@ -237,11 +241,11 @@ int ObTransformGroupByPullup::check_groupby_pullup_validity(ObDMLStmt *stmt,
   if (OB_SUCC(ret)) {
     if (OB_FAIL(check_on_conditions(*stmt, ignore_tables))) {
       LOG_WARN("failed to check ignore views", K(ret));
-    } else if (stmt->get_query_ctx()->check_opt_compat_version(COMPAT_VERSION_4_3_5_BP2)) {
+    } else {
       if (OB_FAIL(check_where_conditions(*stmt, ignore_tables))) {
         LOG_WARN("failed to check ignore views", K(ret));
       } else { /* do nothing */ }
-    } else { /* do nothing */ }
+    }
   }
   // check view validity
   for (int64_t i = 0; OB_SUCC(ret) && is_valid && i < stmt->get_from_item_size(); ++i) {
@@ -753,8 +757,7 @@ int ObTransformGroupByPullup::check_table_items(ObDMLStmt *stmt,
   } else if (stmt->get_table_size() > 1 && child_stmt->get_table_size() > 1 &&
              stmt->get_table_size() + child_stmt->get_table_size() - 1 > 10) {
     is_valid = false;
-  } else if (stmt->get_query_ctx()->check_opt_compat_version(
-                          COMPAT_VERSION_4_2_5, COMPAT_VERSION_4_3_0, COMPAT_VERSION_4_3_5)) {
+  } else {
     const TableItem *table = NULL;
     int64_t non_basic_table_count = 0;
     for (int64_t i = 0; OB_SUCC(ret) && is_valid && i < stmt->get_table_size(); ++i) {
@@ -1231,9 +1234,7 @@ int ObTransformGroupByPullup::check_original_plan_validity(ObLogicalOperator* ro
   } else if (OB_FAIL(check_view_table_in_inner_path(parent_ops, *parent_stmt,
                                                     view_table_id, is_inner_path))) {
     LOG_WARN("failed to check view table in inner path", K(ret));
-  } else if (is_inner_path &&
-             child_stmt->get_query_ctx()->check_opt_compat_version(
-                          COMPAT_VERSION_4_2_5, COMPAT_VERSION_4_3_0, COMPAT_VERSION_4_3_5)) {
+  } else if (is_inner_path) {
     is_valid = false;
     OPT_TRACE("check original plan view table in inner path:", is_inner_path);
   } else if (OB_FAIL(extract_columns_in_join_conditions(parent_ops,

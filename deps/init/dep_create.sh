@@ -81,6 +81,7 @@ function get_os_release() {
         version_ge "16.04" && compat_centos7 && return
         ;;
       centos)
+        version_ge "9.0" && OS_RELEASE=9 && return
         version_ge "8.0" && OS_RELEASE=8 && return
         version_ge "7.0" && OS_RELEASE=7 && return
         ;;
@@ -115,6 +116,7 @@ function get_os_release() {
         compat_centos8 && return
         ;;
       rocky)
+        version_ge "9.0" && compat_centos9 && return
         version_ge "8.0" && compat_centos8 && return
         ;;
       tencentos)
@@ -138,8 +140,13 @@ function get_os_release() {
         version_ge "7.0" && compat_centos7 && return
         ;;
       centos)
+        version_ge "9.0" && OS_RELEASE=9 && return
         version_ge "8.0" && OS_RELEASE=8 && return
         version_ge "7.0" && OS_RELEASE=7 && return
+        ;;
+      almalinux)
+        version_ge "9.0" && compat_centos9 && return
+        version_ge "8.0" && compat_centos8 && return
         ;;
       debian)
         version_ge "12" && compat_centos9 && return
@@ -157,6 +164,10 @@ function get_os_release() {
         ;;
       alinux)
         version_ge "3.0" && compat_alinux3 && return
+        ;;
+      rocky)
+        version_ge "9.0" && compat_centos9 && return
+        version_ge "8.0" && compat_centos8 && return
         ;;
     esac
   elif [[ "${OS_ARCH}x" == "sw_64x" ]]; then
@@ -298,25 +309,24 @@ do
     while read -r line
     do
         [[ "$line" == "" ]] && continue
-	pkg=${line%%\ *}
-	target_name="default"
+        pkg=${line%%\ *}
+        target_name="default"
         temp=$(echo "$line" | grep -Eo "target=(\S*)")
         [[ "$temp" != "" ]] && target_name=${temp#*=}
        
        	# 适配 ob 制品源下载地址
-	if [[ "${AL3_RELEASE}x" == "1x" && ( "${target_name}x" == "defaultx" || "${target_name}x" == "testx" ) ]]; then
-	    pkg_version=${pkg%.al8.${OS_ARCH}.rpm}
-	    pkg_name=$(echo "$pkg_version" | sed 's/\(.*\)-.*-.*/\1/')
-	    pkg_path=${pkg_name}/${pkg}
-	else
-      pkg_path=${pkg}
-	fi
+        pkg_path=${pkg}
+        repo=${targets["$target_name"]}
+        if [[ "${AL3_RELEASE}" == "1" && ("${target_name}" == "default" || "${target_name}" == "test") && "$repo" != *"mirror"* ]]; then
+            pkg_version=${pkg%.al8.${OS_ARCH}.rpm}
+            pkg_name=$(echo "$pkg_version" | sed 's/\(.*\)-.*-.*/\1/')
+            pkg_path=${pkg_name}/${pkg}
+        fi
 
-	if [[ -f "${TARGET_DIR_3RD}/pkg/${pkg}" ]]; then
+	      if [[ -f "${TARGET_DIR_3RD}/pkg/${pkg}" ]]; then
             echo_log "find package <${pkg}> in cache"
         else
             echo_log "downloading package <${pkg}>"
-            repo=${targets["$target_name"]}
             TEMP=$(mktemp -p "/" -u ".${pkg}.XXXX")
             wget "$repo/${pkg_path}" -O "${TARGET_DIR_3RD}/pkg/${TEMP}" &> ${TARGET_DIR_3RD}/pkg/error.log
             if (( $? == 0 )); then

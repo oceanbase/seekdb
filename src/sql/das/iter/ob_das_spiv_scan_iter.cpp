@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2024 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #define USING_LOG_PREFIX SQL_DAS
@@ -58,9 +62,10 @@ int ObDASSPIVScanIter::inner_init(ObDASIterParam &param)
     } else if (OB_FAIL(ObDasVecScanUtils::init_scan_param(ls_id_, dim_docid_value_tablet_id_, scan_ctdef_, scan_rtdef_, 
                                       tx_desc_, snapshot_, scan_iter_param_, false))) {
       LOG_WARN("failed to init scan param", K(ret), K(dim_docid_value_tablet_id_));
-    } else if (OB_FALSE_IT(scan_iter_->set_scan_param(scan_iter_param_))){
-    } else 
-    is_inited_ = true;
+    } else {
+      scan_iter_->set_scan_param(scan_iter_param_);
+      is_inited_ = true;
+    }
   }
   return ret;
 }
@@ -70,6 +75,8 @@ int ObDASSPIVScanIter::inner_reuse()
   int ret = OB_SUCCESS;
   if (OB_NOT_NULL(scan_iter_) && OB_FAIL(ObDasVecScanUtils::reuse_iter(ls_id_, scan_iter_, scan_iter_param_, dim_docid_value_tablet_id_))) {
     LOG_WARN("failed to reuse scan iter", K(ret));
+  } else if (is_first_scan_) {
+    scan_iter_param_.need_switch_param_ = false;
   }
   
   if (nullptr != mem_context_) {

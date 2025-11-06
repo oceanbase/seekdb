@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #define USING_LOG_PREFIX LIB
@@ -42,47 +46,48 @@ TEST(ObDbaLog, basic_test)
   ObClockGenerator *data_obj_ptr = (ObClockGenerator*)0x7fc1d30996d0; // do not access this addr
   const ObClockGenerator *data_obj_null = NULL;
   ASSERT_EQ(OB_SUCCESS, logdata_print_value(buf, len, pos, data_enum));
-  ASSERT_STREQ(buf, "5");
+  ASSERT_STREQ(buf, "3");
   ASSERT_EQ(pos, 1);
+  pos = 0;
   ASSERT_EQ(OB_SUCCESS, logdata_print_value(buf, len, pos, data_uint8));
-  ASSERT_EQ(pos, 2);
-  ASSERT_STREQ(buf, "52");
+  ASSERT_EQ(pos, 1);
+  ASSERT_STREQ(buf, "2");
   ASSERT_EQ(OB_SUCCESS, logdata_print_value(buf, len, pos, data_uint16));
-  ASSERT_EQ(pos, 4);
-  ASSERT_STREQ(buf, "5233");
+  ASSERT_EQ(pos, 3);
+  ASSERT_STREQ(buf, "233");
   ASSERT_EQ(OB_SUCCESS, logdata_print_value(buf, len, pos, data_int32));
-  ASSERT_EQ(pos, 8);
-  ASSERT_STREQ(buf, "5233-444");
+  ASSERT_EQ(pos, 7);
+  ASSERT_STREQ(buf, "233-444");
   ASSERT_EQ(OB_SUCCESS, logdata_print_value(buf, len, pos, data_int64));
-  ASSERT_EQ(pos, 12);
-  ASSERT_STREQ(buf, "5233-4445555");
+  ASSERT_EQ(pos, 11);
+  ASSERT_STREQ(buf, "233-4445555");
   ASSERT_EQ(OB_SUCCESS, logdata_print_value(buf, len, pos, data_char));
-  ASSERT_EQ(pos, 13);
-  ASSERT_STREQ(buf, "5233-4445555@");
+  ASSERT_EQ(pos, 12);
+  ASSERT_STREQ(buf, "233-4445555@");
   ASSERT_EQ(OB_SUCCESS, logdata_print_value(buf, len, pos, data_float));
-  ASSERT_EQ(pos, 28);
-  ASSERT_STREQ(buf, "5233-4445555@3.141592503e+00");
+  ASSERT_EQ(pos, 27);
+  ASSERT_STREQ(buf, "233-4445555@3.141592503e+00");
   ASSERT_EQ(OB_SUCCESS, logdata_print_value(buf, len, pos, data_double));
-  ASSERT_EQ(pos, 52);
-  ASSERT_STREQ(buf, "5233-4445555@3.141592503e+002.332330000000000041e+02");
+  ASSERT_EQ(pos, 51);
+  ASSERT_STREQ(buf, "233-4445555@3.141592503e+002.332330000000000041e+02");
   ASSERT_EQ(OB_SUCCESS, logdata_print_value(buf, len, pos, data_bool));
-  ASSERT_EQ(pos, 57);
-  ASSERT_STREQ(buf, "5233-4445555@3.141592503e+002.332330000000000041e+02false");
+  ASSERT_EQ(pos, 56);
+  ASSERT_STREQ(buf, "233-4445555@3.141592503e+002.332330000000000041e+02false");
   ASSERT_EQ(OB_SUCCESS, logdata_print_value(buf, len, pos, data_str));
-  ASSERT_EQ(pos, 63);
-  ASSERT_STREQ(buf, "5233-4445555@3.141592503e+002.332330000000000041e+02falsehello ");
+  ASSERT_EQ(pos, 62);
+  ASSERT_STREQ(buf, "233-4445555@3.141592503e+002.332330000000000041e+02falsehello ");
   ASSERT_EQ(OB_SUCCESS, logdata_print_value(buf, len, pos, data_const_str));
-  ASSERT_EQ(pos, 70);
-  ASSERT_STREQ(buf, "5233-4445555@3.141592503e+002.332330000000000041e+02falsehello world! ");
+  ASSERT_EQ(pos, 69);
+  ASSERT_STREQ(buf, "233-4445555@3.141592503e+002.332330000000000041e+02falsehello world! ");
   ASSERT_EQ(OB_SUCCESS, logdata_print_value(buf, len, pos, data_null));
-  ASSERT_EQ(pos, 74);
-  ASSERT_STREQ(buf, "5233-4445555@3.141592503e+002.332330000000000041e+02falsehello world! NULL");
+  ASSERT_EQ(pos, 73);
+  ASSERT_STREQ(buf, "233-4445555@3.141592503e+002.332330000000000041e+02falsehello world! NULL");
   ASSERT_EQ(OB_SUCCESS, logdata_print_value(buf, len, pos, data_obj_ptr));
-  ASSERT_EQ(pos, 88);
-  ASSERT_STREQ(buf, "5233-4445555@3.141592503e+002.332330000000000041e+02falsehello world! NULL0x7fc1d30996d0");
+  ASSERT_EQ(pos, 87);
+  ASSERT_STREQ(buf, "233-4445555@3.141592503e+002.332330000000000041e+02falsehello world! NULL0x7fc1d30996d0");
   ASSERT_EQ(OB_SUCCESS, logdata_print_value(buf, len, pos, data_obj_null));
-  ASSERT_EQ(pos, 92);
-  ASSERT_STREQ(buf, "5233-4445555@3.141592503e+002.332330000000000041e+02falsehello world! NULL0x7fc1d30996d0NULL");
+  ASSERT_EQ(pos, 91);
+  ASSERT_STREQ(buf, "233-4445555@3.141592503e+002.332330000000000041e+02falsehello world! NULL0x7fc1d30996d0NULL");
 }
 
 TEST(ObDbaLog, test_1)

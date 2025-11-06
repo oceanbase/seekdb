@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #ifndef OCEANBASE_ROOTSERVER_OB_INDEX_BUILDER_H_
@@ -81,11 +85,11 @@ public:
   bool is_drop_dense_vec_index_task(const obrpc::ObDropIndexArg &arg, const share::schema::ObTableSchema &index_schema);
   bool is_drop_with_docid_index_task(const obrpc::ObDropIndexArg &arg, const share::schema::ObTableSchema &index_schema);
   int check_drop_with_docid_indexs_ith_valid(
-      const obrpc::ObDropIndexArg &arg, 
-      const share::schema::ObTableSchema &index_schema, 
-      const int64_t schema_count, 
-      int64_t &aux_rowkey_doc_ith, 
-      int64_t &aux_doc_rowkey_ith, 
+      const obrpc::ObDropIndexArg &arg,
+      const share::schema::ObTableSchema &index_schema,
+      const int64_t schema_count,
+      int64_t &aux_rowkey_doc_ith,
+      int64_t &aux_doc_rowkey_ith,
       int64_t &aux_doc_word_ith);
   int submit_drop_index_task(
       common::ObMySQLTransaction &trans,
@@ -138,21 +142,23 @@ private:
       int64_t &vid_rowkey_ith,
       int64_t &domain_index_ith,
       int64_t &index_id_ith,
-      int64_t &snapshot_data_ith);
+      int64_t &snapshot_data_ith,
+      int64_t &embedded_vec_ith);
   int recognize_vec_ivf_index_schemas(
       const common::ObIArray<share::schema::ObTableSchema> &index_schemas,
       const bool is_vec_inner_drop,
       int64_t &index_ith,
-      int64_t &centroid_ith, 
-      int64_t &cid_vector_ith, 
-      int64_t &rowkey_cid_ith, 
-      int64_t &sq_meta_ith, 
-      int64_t &pq_centroid_ith, 
+      int64_t &centroid_ith,
+      int64_t &cid_vector_ith,
+      int64_t &rowkey_cid_ith,
+      int64_t &sq_meta_ith,
+      int64_t &pq_centroid_ith,
       int64_t &pq_code_ith);
   int recognize_fts_or_multivalue_index_schemas(
       const common::ObIArray<share::schema::ObTableSchema> &index_schemas,
       const bool is_parent_task_dropping_fts,
       const bool is_parent_task_dropping_multivalue,
+      const bool is_parent_task_dropping_spiv,
       int64_t &index_ith,
       int64_t &aux_doc_word_ith,
       int64_t &aux_rowkey_doc_ith,
@@ -190,8 +196,16 @@ private:
   int create_index_column_group(const obrpc::ObCreateIndexArg &arg,
                                 share::schema::ObTableSchema &index_table_schema);
 
-  static int get_rebuild_drop_index_id_and_name(share::schema::ObSchemaGetterGuard &schema_guard, 
-                                                obrpc::ObDropIndexArg &arg);
+  bool rowkey_doc_index_valid(const bool has_docid_col,
+                              const int64_t aux_rowkey_doc_ith,
+                              const int64_t aux_doc_rowkey_ith,
+                              const int64_t schema_count);
+
+  int check_index_for_if_not_exist_(const uint64_t tenant_id,
+                                    const ObString database_name,
+                                    const ObString index_name,
+                                    share::schema::ObSchemaGetterGuard &schema_guard,
+                                    obrpc::ObAlterTableRes &res);
 
 private:
   ObDDLService &ddl_service_;

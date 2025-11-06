@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2023 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
  
 #include <gtest/gtest.h>
@@ -192,10 +196,7 @@ int main(int argc, char **argv)
   uint64_t h = murmurhash(&tx_id, sizeof(tx_id), 0);
   system("rm -rf test_tx_ctx*.log*");
   ObLogger &logger = ObLogger::get_logger();
-  logger.set_file_name("test_tx_ctx.log", true, false,
-                       "test_tx_ctx_rs.log",       // rs
-                       "test_tx_ctx_election.log", // election
-                       "test_tx_ctx_audit.log");   // audit
+  logger.set_file_name("test_tx_ctx.log", true);   // audit
   logger.set_log_level(OB_LOG_LEVEL_DEBUG);
   ::testing::InitGoogleTest(&argc, argv);
   TRANS_LOG(INFO, "mmhash:", K(h));

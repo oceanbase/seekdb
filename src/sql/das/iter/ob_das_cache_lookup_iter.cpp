@@ -1,18 +1,24 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #define USING_LOG_PREFIX SQL_DAS
 #include "sql/das/iter/ob_das_cache_lookup_iter.h"
 #include "sql/engine/ob_exec_context.h"
+#include "sql/das/ob_das_ir_define.h"
+#include "storage/concurrency_control/ob_data_validation_service.h"
 
 namespace oceanbase
 {
@@ -184,8 +190,8 @@ int ObDASCacheLookupIter::inner_get_next_row()
 {
   int ret = OB_SUCCESS;
   bool got_next_row = false;
-  bool need_index_proj = index_proj_rows_.index_scan_proj_exprs_.count() > 0;
-  OB_ASSERT(index_proj_rows_.max_size_ == default_batch_row_count_);
+  const bool need_index_proj = index_proj_rows_.index_scan_proj_exprs_.count() > 0;
+  OB_ASSERT(need_index_proj ? index_proj_rows_.max_size_ == default_batch_row_count_ : true);
 
   do {
     switch (state_) {
@@ -270,7 +276,7 @@ int ObDASCacheLookupIter::inner_get_next_rows(int64_t &count, int64_t capacity)
 {
   int ret = OB_SUCCESS;
   bool get_next_rows = false;
-  bool need_index_proj = index_proj_rows_.index_scan_proj_exprs_.count() > 0;
+  const bool need_index_proj = index_proj_rows_.index_scan_proj_exprs_.count() > 0;
 
   do {
     switch (state_) {
@@ -278,8 +284,6 @@ int ObDASCacheLookupIter::inner_get_next_rows(int64_t &count, int64_t capacity)
         reset_lookup_state();
         int64_t storage_count = 0;
         int64_t index_capacity = 0;
-        // TODO: @zyx439997 support the outputs of index scan as the project columns by the deep copy {
-        // }
         while (OB_SUCC(ret) && !index_end_ && lookup_rowkey_cnt_ < default_batch_row_count_) {
           storage_count = 0;
           index_capacity = std::min(capacity, std::min(max_size_, default_batch_row_count_ - lookup_rowkey_cnt_));

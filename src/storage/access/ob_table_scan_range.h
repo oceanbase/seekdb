@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #ifndef OB_STORAGE_TABLE_SCAN_RANGE_H
@@ -43,7 +47,7 @@ public:
   OB_INLINE const ObIArray<blocksstable::ObDatumRange> &get_suffix_ranges() const { return skip_scan_ranges_; }
   OB_INLINE const ObIArray<blocksstable::ObDatumRowkey> &get_rowkeys() const { return rowkeys_; }
   int get_query_iter_type(ObQRIterType &iter_type) const;
-  TO_STRING_KV(K_(rowkeys), K_(ranges), K_(status), K_(is_inited));
+  TO_STRING_KV(K_(rowkeys), K_(ranges), K_(status), K_(is_inited), K_(enable_new_false_range));
 private:
   int init_rowkeys(
       const ObTablet &tablet,
@@ -98,6 +102,7 @@ private:
   common::ObSEArray<blocksstable::ObDatumRange, DEFAULT_RANGE_CNT> skip_scan_ranges_;
   ObIAllocator *allocator_;
   RangeStatus status_;
+  bool enable_new_false_range_;
   bool is_inited_;
   DISALLOW_COPY_AND_ASSIGN(ObTableScanRange);
 };

@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #define USING_LOG_PREFIX SQL_EXE
@@ -731,10 +735,7 @@ int ObSqlTransControl::stmt_setup_snapshot_(ObSQLSessionInfo *session,
     }
     // per-opt: set read elr for DML stmt
     if (OB_SUCC(ret) && local_single_ls_plan && !plan->is_plain_select() && txs->get_tx_elr_util().is_can_tenant_elr()) {
-      if (tx_desc.get_cluster_version() >= CLUSTER_VERSION_4_3_5_1) {
-        // for compatible reason, support it when upgraded to 4.3.5.1
-        snapshot.try_set_read_elr();
-      }
+      snapshot.try_set_read_elr();
     }
     if (OB_SUCC(ret) && !local_single_ls_plan) {
       ret = txs->get_read_snapshot(tx_desc,
@@ -826,8 +827,7 @@ int ObSqlTransControl::can_do_plain_insert(ObSQLSessionInfo *session,
   } else if (plan->is_plain_insert()) {
     can_plain_insert = true;
   } else if (session->enable_insertup_replace_gts_opt() && plan->get_insertup_can_do_gts_opt()) {
-    if ((GET_MIN_CLUSTER_VERSION() >= CLUSTER_VERSION_4_3_5_0)
-        && session->is_user_session()) {
+    if (session->is_user_session()) {
       can_plain_insert = true;
     }
   }

@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #define USING_LOG_PREFIX SERVER
@@ -29,19 +33,6 @@ using namespace omt;
 /**
  * ObRefreshAndCheckTask
  */
-int ObTableLoadResourceManager::ObRefreshAndCheckTask::init(uint64_t tenant_id)
-{
-  int ret = OB_SUCCESS;
-  if (IS_INIT) {
-    ret = OB_INIT_TWICE;
-    LOG_WARN("ObRefreshAndCheckTask init twice", KR(ret), KP(this));
-  } else {
-    tenant_id_ = tenant_id;
-    is_inited_ = true;
-  }
-
-  return ret;
-}
 
 void ObTableLoadResourceManager::ObRefreshAndCheckTask::runTimerTask()
 {
@@ -54,10 +45,23 @@ void ObTableLoadResourceManager::ObRefreshAndCheckTask::runTimerTask()
 }
 
 /**
+ * ObInitResourceTask
+ */
+
+void ObTableLoadResourceManager::ObInitResourceTask::runTimerTask()
+{
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(manager_.init_resource())) {
+    LOG_WARN("fail to init_resource", KR(ret));
+  }
+}
+
+/**
  * ObTableLoadResourceManager
  */
 ObTableLoadResourceManager::ObTableLoadResourceManager() 
-  : refresh_and_check_task_(*this), 
+  : init_resource_task_(*this),
+    refresh_and_check_task_(*this),
     is_stop_(false), 
     resource_inited_(false), 
     is_inited_(false)
@@ -81,8 +85,6 @@ int ObTableLoadResourceManager::init()
     LOG_WARN("fail to create hashmap", KR(ret), K(bucket_num));
   } else if (OB_FAIL(assigned_tasks_.create(bucket_num, "TLD_AssignedMgr", "TLD_AssignedMgr", tenant_id))) {
     LOG_WARN("fail to create hashmap", KR(ret), K(bucket_num));
-  } else if (OB_FAIL(refresh_and_check_task_.init(tenant_id))) {
-    LOG_WARN("fail to init check task", KR(ret));
   } else {
     is_inited_ = true;
   }
@@ -96,10 +98,11 @@ int ObTableLoadResourceManager::start()
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_INFO("ObTableLoadResourceManager init twice", KR(ret), KP(this));
-  } else if (OB_FAIL(TG_SCHEDULE(MTL(omt::ObSharedTimer*)->get_tg_id(),
-                                 refresh_and_check_task_,
-                                 REFRESH_AND_CHECK_TASK_INTERVAL,
-                                 true))) {
+  } else if (OB_FAIL(TG_SCHEDULE(MTL(omt::ObSharedTimer *)->get_tg_id(), init_resource_task_,
+                                 REFRESH_AND_CHECK_TASK_FIRST_TIME_INTERVAL, true))) {
+    LOG_WARN("fail to schedule first refresh_and_check task", KR(ret));
+  } else if (OB_FAIL(TG_SCHEDULE(MTL(omt::ObSharedTimer *)->get_tg_id(), refresh_and_check_task_,
+                                 REFRESH_AND_CHECK_TASK_INTERVAL, true))) {
     LOG_WARN("fail to schedule refresh_and_check task", KR(ret));
   }
   LOG_INFO("ObTableLoadResourceManager::start", KR(ret));
@@ -109,9 +112,8 @@ int ObTableLoadResourceManager::start()
 
 void ObTableLoadResourceManager::stop()
 {
-  if (OB_LIKELY(refresh_and_check_task_.is_inited_)) {
-    TG_CANCEL_TASK(MTL(omt::ObSharedTimer*)->get_tg_id(), refresh_and_check_task_);
-  }
+  TG_CANCEL_TASK(MTL(omt::ObSharedTimer *)->get_tg_id(), init_resource_task_);
+  TG_CANCEL_TASK(MTL(omt::ObSharedTimer *)->get_tg_id(), refresh_and_check_task_);
   {
     lib::ObMutexGuard guard(mutex_);
     is_stop_ = true;
@@ -120,27 +122,20 @@ void ObTableLoadResourceManager::stop()
 
 int ObTableLoadResourceManager::wait() 
 {
-  if (OB_LIKELY(refresh_and_check_task_.is_inited_)) {
-    TG_WAIT_TASK(MTL(omt::ObSharedTimer*)->get_tg_id(), refresh_and_check_task_);
-  }
-
+  TG_WAIT_TASK(MTL(omt::ObSharedTimer*)->get_tg_id(), init_resource_task_);
+  TG_WAIT_TASK(MTL(omt::ObSharedTimer*)->get_tg_id(), refresh_and_check_task_);
   return release_all_resource();
 }
 
-void ObTableLoadResourceManager::destroy() 
+void ObTableLoadResourceManager::destroy()
 {
   int ret = OB_SUCCESS;
   if (IS_INIT) {
-    if (refresh_and_check_task_.is_inited_) {
-      bool is_exist = true;
-      if (OB_SUCC(TG_TASK_EXIST(MTL(omt::ObSharedTimer*)->get_tg_id(), refresh_and_check_task_, is_exist))) {
-        if (is_exist) {
-          TG_CANCEL_TASK(MTL(omt::ObSharedTimer*)->get_tg_id(), refresh_and_check_task_);
-          TG_WAIT_TASK(MTL(omt::ObSharedTimer*)->get_tg_id(), refresh_and_check_task_);
-          refresh_and_check_task_.is_inited_ = false;
-        }
-      }
-    }
+    TG_CANCEL_TASK(MTL(omt::ObSharedTimer *)->get_tg_id(), init_resource_task_);
+    TG_WAIT_TASK(MTL(omt::ObSharedTimer *)->get_tg_id(), init_resource_task_);
+
+    TG_CANCEL_TASK(MTL(omt::ObSharedTimer *)->get_tg_id(), refresh_and_check_task_);
+    TG_WAIT_TASK(MTL(omt::ObSharedTimer *)->get_tg_id(), refresh_and_check_task_);
     is_inited_ = false;
   }
 }
@@ -148,8 +143,11 @@ void ObTableLoadResourceManager::destroy()
 int ObTableLoadResourceManager::resume()
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(refresh_and_check_task_.init(MTL_ID()))) {
-    LOG_WARN("fail to init check task", KR(ret));
+  if (OB_FAIL(TG_SCHEDULE(MTL(omt::ObSharedTimer*)->get_tg_id(),
+                                 init_resource_task_,
+                                 REFRESH_AND_CHECK_TASK_FIRST_TIME_INTERVAL,
+                                 true))) {
+    LOG_WARN("fail to schedule first refresh_and_check task", KR(ret));
   } else if (OB_FAIL(TG_SCHEDULE(MTL(omt::ObSharedTimer*)->get_tg_id(),
                                  refresh_and_check_task_,
                                  REFRESH_AND_CHECK_TASK_INTERVAL,
@@ -166,17 +164,10 @@ int ObTableLoadResourceManager::resume()
 
 void ObTableLoadResourceManager::pause()
 {
-  int ret = OB_SUCCESS;
-  if (refresh_and_check_task_.is_inited_) {
-    bool is_exist = true;
-    if (OB_SUCC(TG_TASK_EXIST(MTL(omt::ObSharedTimer*)->get_tg_id(), refresh_and_check_task_, is_exist))) {
-      if (is_exist) {
-        TG_CANCEL_TASK(MTL(omt::ObSharedTimer*)->get_tg_id(), refresh_and_check_task_);
-        TG_WAIT_TASK(MTL(omt::ObSharedTimer*)->get_tg_id(), refresh_and_check_task_);
-        refresh_and_check_task_.is_inited_ = false;
-      }
-    }
-  }
+  TG_CANCEL_TASK(MTL(omt::ObSharedTimer *)->get_tg_id(), init_resource_task_);
+  TG_WAIT_TASK(MTL(omt::ObSharedTimer *)->get_tg_id(), init_resource_task_);
+  TG_CANCEL_TASK(MTL(omt::ObSharedTimer *)->get_tg_id(), refresh_and_check_task_);
+  TG_WAIT_TASK(MTL(omt::ObSharedTimer *)->get_tg_id(), refresh_and_check_task_);
   resource_inited_ = false;
 }
 

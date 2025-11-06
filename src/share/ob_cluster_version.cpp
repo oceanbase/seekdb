@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #include "ob_cluster_version.h"
@@ -89,7 +93,7 @@ static int parse_version(const char *str, uint64_t *versions, const int64_t size
 
 ObClusterVersion::ObClusterVersion()
   : is_inited_(false), config_(NULL),
-    tenant_config_mgr_(NULL), cluster_version_(0), data_version_(0)
+    cluster_version_(0), data_version_(0)
 {
   cluster_version_ = cal_version(DEF_MAJOR_VERSION,
                                  DEF_MINOR_VERSION,
@@ -116,23 +120,20 @@ int ObClusterVersion::init(const uint64_t cluster_version)
   return ret;
 }
 
-int ObClusterVersion::init(
-    const ObServerConfig *config,
-    const omt::ObTenantConfigMgr *tenant_config_mgr)
+int ObClusterVersion::init(const ObServerConfig *config)
 {
   int ret = OB_SUCCESS;
 
   if (is_inited_) {
     ret = OB_INIT_TWICE;
     COMMON_LOG(ERROR, "cluster version init twice", KR(ret), KP(config));
-  } else if (OB_ISNULL(config) || OB_ISNULL(tenant_config_mgr)) {
+  } else if (OB_ISNULL(config)) {
     ret = OB_INVALID_ARGUMENT;
-    COMMON_LOG(WARN, "invalid argument", KR(ret), KP(config), KP(tenant_config_mgr));
+    COMMON_LOG(WARN, "invalid argument", KR(ret), KP(config));
   } else if (OB_FAIL(refresh_cluster_version(config->min_observer_version.str()))) {
     COMMON_LOG(WARN, "refresh cluster version error", KR(ret));
   } else {
     config_ = config;
-    tenant_config_mgr_ = tenant_config_mgr;
     COMMON_LOG(INFO, "cluster version inited success", K_(cluster_version));
     is_inited_ = true;
   }

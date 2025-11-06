@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #define USING_LOG_PREFIX SQL_REWRITE
@@ -508,14 +512,14 @@ int ObTransformAggrSubquery::check_aggr_first_validity(ObDMLStmt &stmt,
                                                                             limit_to_aggr,
                                                                             equal_param_info))) {
     LOG_WARN("failed to check select validity for limit 1", K(ret));
-  } else if (opt_version >= COMPAT_VERSION_4_3_2 && is_select_item_expr &&
+  } else if (is_select_item_expr &&
              OB_FAIL(check_can_trans_any_all_as_scalar_subquery(stmt,
                                                                 subquery, 
                                                                 &parent_expr, 
                                                                 root_expr,
                                                                 any_all_to_aggr))) {
     LOG_WARN("failed to check can trans any all as aggr subquery", K(ret));
-  } else if (opt_version >= COMPAT_VERSION_4_3_2 && is_select_item_expr &&
+  } else if (is_select_item_expr &&
              OB_FAIL(check_can_trans_exists_as_scalar_subquery(query_ref, 
                                                               parent_expr,
                                                               limit_value,
@@ -817,15 +821,8 @@ int ObTransformAggrSubquery::check_subquery_conditions(ObQueryRefRawExpr &query_
         OPT_TRACE("subquery`s condition has subquery");
       } else if (cond->is_const_expr()) {
         // filter of upper stmt
-        if (subquery.get_query_ctx()->check_opt_compat_version(COMPAT_VERSION_4_2_1_BP8, COMPAT_VERSION_4_2_2,
-                                                               COMPAT_VERSION_4_2_4, COMPAT_VERSION_4_3_0,
-                                                               COMPAT_VERSION_4_3_2)) {
-          if (OB_FAIL(upper_filters.push_back(cond))) {
-            LOG_WARN("failed to add upper filter", K(ret));
-          }
-        } else {
-          is_valid = false;
-          OPT_TRACE("subquery`s condition has pure upper filters");
+        if (OB_FAIL(upper_filters.push_back(cond))) {
+          LOG_WARN("failed to add upper filter", K(ret));
         }
       } else if (OB_FAIL(ObTransformUtils::is_equal_correlation(query_ref.get_exec_params(),
                                                                 cond,

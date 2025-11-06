@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #define USING_LOG_PREFIX SQL_ENG
@@ -301,7 +305,9 @@ bool ObDbmsStatsUtils::is_no_stat_virtual_table(const int64_t table_id)
          table_id == share::OB_TENANT_VIRTUAL_SHOW_RESTORE_PREVIEW_TID ||
          table_id == share::OB_ALL_VIRTUAL_MDS_NODE_STAT_TID ||
          table_id == share::OB_ALL_VIRTUAL_CHECKPOINT_DIAGNOSE_MEMTABLE_INFO_TID ||
-         table_id == share::OB_ALL_VIRTUAL_CHECKPOINT_DIAGNOSE_CHECKPOINT_UNIT_INFO_TID;
+         table_id == share::OB_ALL_VIRTUAL_CHECKPOINT_DIAGNOSE_CHECKPOINT_UNIT_INFO_TID ||
+         table_id == share::OB_TENANT_VIRTUAL_SHOW_CREATE_LOCATION_TID ||
+         table_id == share::OB_TENANT_VIRTUAL_LIST_FILE_TID;
 }
 
 bool ObDbmsStatsUtils::is_virtual_index_table(const int64_t table_id)
@@ -1388,10 +1394,6 @@ int ObDbmsStatsUtils::implicit_commit_before_gather_stats(sql::ObExecContext &ct
     LOG_WARN("get unexpected null", K(ret), K(ctx.get_my_session()));
   } else if (OB_FAIL(ctx.get_my_session()->get_optimizer_features_enable_version(optimizer_features_enable_version))) {
     LOG_WARN("failed to get_optimizer_features_enable_version", K(ret));
-  } else if (optimizer_features_enable_version < COMPAT_VERSION_4_2_4 ||
-             (optimizer_features_enable_version >= COMPAT_VERSION_4_3_0 &&
-              optimizer_features_enable_version < COMPAT_VERSION_4_3_3)) {
-    //do nothing
   } else if (OB_FAIL(ObResultSet::implicit_commit_before_cmd_execute(*ctx.get_my_session(), ctx, stmt::T_ANALYZE))) {
     LOG_WARN("failed to implicit commit before cmd execute", K(ret));
   } else {/*do nothing*/}

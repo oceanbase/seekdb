@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #define USING_LOG_PREFIX SQL_DAS
@@ -906,6 +910,113 @@ int ObDASUtils::find_child_das_ctdef(const ObDASBaseCtDef *root_ctdef,
     }
   }
   return ret;
+}
+
+int ObDASUtils::find_child_das_rtdef(ObDASBaseRtDef *root_rtdef,
+                                    ObDASOpType op_type,
+                                    ObDASBaseRtDef *&target_rtdef)
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(root_rtdef)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("root ctdef or rtdef is nullptr", K(ret), KP(root_rtdef));
+  } else if (root_rtdef->op_type_ == op_type) {
+    target_rtdef = root_rtdef;
+  } else {
+    for (int i = 0; OB_SUCC(ret) && i < root_rtdef->children_cnt_; ++i) {
+      if (OB_FAIL(find_child_das_rtdef(root_rtdef->children_[i],
+                                      op_type,
+                                      target_rtdef))) {
+        LOG_WARN("find child das def failed", K(ret));
+      }
+    }
+  }
+  return ret;
+}
+
+bool ObDASUtils::is_index_merge(const ObDASBaseCtDef *attach_ctdef)
+{
+  bool bret = false;
+  if (attach_ctdef != nullptr) {
+    const ObDASBaseCtDef *rowkey_scan_ctdef = nullptr;
+    if (attach_ctdef->op_type_ == DAS_OP_INDEX_MERGE) {
+      bret = true;
+    } else if (attach_ctdef->op_type_ == DAS_OP_TABLE_LOOKUP &&
+               FALSE_IT(rowkey_scan_ctdef = static_cast<const ObDASTableLookupCtDef*>(attach_ctdef)->get_rowkey_scan_ctdef())) {
+    } else if (attach_ctdef->op_type_ == DAS_OP_INDEX_PROJ_LOOKUP &&
+               FALSE_IT(rowkey_scan_ctdef = static_cast<const ObDASIndexProjLookupCtDef*>(attach_ctdef)->get_rowkey_scan_ctdef())) {
+    } else if (rowkey_scan_ctdef != nullptr) {
+      bret = rowkey_scan_ctdef->op_type_ == DAS_OP_INDEX_MERGE;
+    }
+  }
+  return bret;
+}
+
+bool ObDASUtils::is_func_lookup(const ObDASBaseCtDef *attach_ctdef)
+{
+  int ret = OB_SUCCESS;
+  bool bret = false;
+  if (nullptr != attach_ctdef && attach_ctdef->op_type_ == ObDASOpType::DAS_OP_INDEX_PROJ_LOOKUP) {
+    const ObDASBaseCtDef *func_ctdef = nullptr;
+    if (OB_FAIL(ObDASUtils::find_child_das_ctdef(attach_ctdef, DAS_OP_FUNC_LOOKUP, func_ctdef))) {
+      SQL_DAS_LOG(WARN, "find chld das def failed", K(ret));
+    } else {
+      bret = (nullptr != func_ctdef);
+    }
+  }
+  return bret;
+}
+
+bool ObDASUtils::is_vec_idx_scan(const ObDASBaseCtDef *attach_ctdef)
+{
+  int ret = OB_SUCCESS;
+
+  bool bret = false;
+  if (attach_ctdef != nullptr) {
+    const ObDASBaseCtDef *vir_scan_ctdef = nullptr;
+    if (OB_FAIL(ObDASUtils::find_child_das_ctdef(attach_ctdef, DAS_OP_VEC_SCAN, vir_scan_ctdef))) {
+      SQL_DAS_LOG(WARN, "find chld das def failed", K(ret));
+    } else {
+      bret = (nullptr != vir_scan_ctdef);
+    }
+  }
+
+  return bret;
+}
+
+bool ObDASUtils::is_fts_idx_scan(const ObDASBaseCtDef *attach_ctdef)
+{
+  int ret = OB_SUCCESS;
+
+  bool bret = false;
+  if (attach_ctdef != nullptr) {
+    const ObDASBaseCtDef *vir_scan_ctdef = nullptr;
+    if (OB_FAIL(ObDASUtils::find_child_das_ctdef(attach_ctdef, DAS_OP_IR_SCAN, vir_scan_ctdef))) {
+      SQL_DAS_LOG(WARN, "find chld das def failed", K(ret));
+    } else {
+      bret = (nullptr != vir_scan_ctdef);
+    }
+  }
+
+  return bret;
+}
+
+bool ObDASUtils::is_es_match_scan(const ObDASBaseCtDef *attach_ctdef)
+{
+  int ret = OB_SUCCESS;
+
+  bool bret = false;
+  if (attach_ctdef != nullptr) {
+    const ObDASBaseCtDef *match_scan_ctdef = nullptr;
+    ObDASBaseRtDef *match_scan_rtdef = nullptr;
+    if (OB_FAIL(ObDASUtils::find_child_das_ctdef(attach_ctdef, DAS_OP_IR_ES_SCORE, match_scan_ctdef))) {
+      SQL_DAS_LOG(WARN, "find chld das def failed", K(ret));
+    } else {
+      bret = (nullptr != match_scan_ctdef);
+    }
+  }
+
+  return bret;
 }
 
 int ObDASUtils::generate_mlog_row(const ObLSID &ls_id,

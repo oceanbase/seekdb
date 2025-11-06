@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #ifndef OB_DTL_BASIC_CHANNEL_H
@@ -373,14 +377,6 @@ OB_INLINE int ObDtlVectorRowMsgWriter::try_append_row(const common::ObIArray<ObE
   if (OB_ISNULL(meta_)) {
     ret = OB_ERR_UNEXPECTED;
     SQL_DTL_LOG(WARN, "failed to get meta", K(ret));
-  } else if (OB_UNLIKELY(write_buffer_->get_row_meta().col_cnt_ <= 0)) {
-    if (plan_min_cluster_version_ < CLUSTER_VERSION_4_3_5_3) {
-      if (OB_FAIL(write_buffer_->get_row_meta().assign(*meta_))) {
-        SQL_DTL_LOG(WARN, "failed init row meta", K(ret));
-      }
-    } else {
-      // don't try to assign meta_
-    }
   }
   ObCompactRow *new_row = nullptr;
   if (OB_FAIL(ret)) {
@@ -408,14 +404,6 @@ OB_INLINE int ObDtlVectorRowMsgWriter::try_append_batch(const common::ObIArray<O
   if (OB_ISNULL(meta_)) {
     ret = OB_ERR_UNEXPECTED;
     SQL_DTL_LOG(WARN, "failed to get meta", K(ret));
-  } else if (OB_UNLIKELY(write_buffer_->get_row_meta().col_cnt_ <= 0)) {
-    if (plan_min_cluster_version_ < CLUSTER_VERSION_4_3_5_3) {
-      if (OB_FAIL(write_buffer_->get_row_meta().assign(*meta_))) {
-        SQL_DTL_LOG(WARN, "failed init row meta", K(ret));
-      }
-    } else {
-      // don't try to assign meta_
-    }
   }
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(ObTempRowStore::RowBlock::calc_rows_size(vectors, *meta_,

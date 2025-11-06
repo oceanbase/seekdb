@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #ifndef OCEABASE_OBSERVER_OB_CLUSTER_VERSION_H_
@@ -19,10 +23,6 @@
 
 namespace oceanbase
 {
-namespace omt
-{
-class ObTenantConfigMgr;
-}
 namespace common
 {
 class ObServerConfig;
@@ -37,8 +37,7 @@ public:
   void destroy();
   int64_t to_string(char *buf, const int64_t buf_len) const;
 
-  int init(const common::ObServerConfig *config,
-           const omt::ObTenantConfigMgr *tenant_config_mgr);
+  int init(const common::ObServerConfig *config);
 
   /* cluster version related */
   int init(const uint64_t cluster_version);
@@ -71,7 +70,6 @@ public:
 private:
   bool is_inited_;
   const common::ObServerConfig *config_;
-  const omt::ObTenantConfigMgr *tenant_config_mgr_;
   uint64_t cluster_version_;
   // ATTENTION!!! this member is only valid for unittest
   uint64_t data_version_;
@@ -80,10 +78,6 @@ private:
 // the version definition is moved to deps/oblib/src/common/ob_version_def.h
 
 #define GET_MIN_CLUSTER_VERSION() (oceanbase::common::ObClusterVersion::get_instance().get_cluster_version())
-
-// TODO wangyunlai.wyl remove me after remove all dependencies
-#define IS_CLUSTER_VERSION_BEFORE_4_1_0_0 (false)
-#define IS_CLUSTER_VERSION_AFTER_4_3_1_0 (true)
 
 // should check returned ret
 #define GET_MIN_DATA_VERSION(tenant_id, data_version) (oceanbase::common::ObClusterVersion::get_instance().get_tenant_data_version((tenant_id), (data_version)))

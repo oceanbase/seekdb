@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #ifndef OCEANBASE_SHARE_VEC_INDEX_BUILDER_UTIL_H_
@@ -28,10 +32,12 @@ namespace share
 class ObVecIndexBuilderUtil
 {
 public:
-  static const int64_t OB_VEC_DELTA_BUFFER_TABLE_INDEX_COL_CNT = 2;         // The primary key column count of the auxiliary table
-  static const int64_t OB_VEC_INDEX_ID_TABLE_INDEX_COL_CNT = 3;             // The number of primary key columns in the auxiliary table
-  static const int64_t OB_VEC_INDEX_SNAPSHOT_DATA_TABLE_INDEX_COL_CNT = 1;  // The number of primary key columns in the auxiliary table
-  static const int64_t OB_VEC_DIM_DOCID_VALUE_TABLE_INDEX_COL_CNT = 2;      // The primary key column count of the auxiliary table
+  static const int64_t OB_VEC_DELTA_BUFFER_TABLE_INDEX_PK_COL_CNT = 2;         // The primary key column count of the auxiliary table
+  static const int64_t OB_VEC_INDEX_ID_TABLE_INDEX_PK_COL_CNT = 3;             // The number of primary key columns in the auxiliary table
+  static const int64_t OB_VEC_INDEX_SNAPSHOT_DATA_TABLE_INDEX_PK_COL_CNT = 1;  // The number of primary key columns in the auxiliary table
+  static const int64_t OB_VEC_DIM_DOCID_VALUE_TABLE_INDEX_PK_COL_CNT = 2;      // The primary key column count of the auxiliary table
+  static const int64_t OB_HYBRID_VEC_LOG_TABLE_INDEX_PK_COL_CNT = 2;           // The primary key column count of the auxiliary table
+  static const int64_t OB_HYBRID_VEC_EMBEDDED_TABLE_INDEX_PK_COL_CNT = 2;      // The primary key column count of the auxiliary table
 
   // hnsw
   static const char * ROWKEY_VID_TABLE_NAME;
@@ -39,6 +45,8 @@ public:
   static const char * DELTA_BUFFER_TABLE_NAME_SUFFIX;
   static const char * INDEX_ID_TABLE_NAME_SUFFIX;
   static const char * SNAPSHOT_DATA_TABLE_NAME_SUFFIX;
+  static const char * HYBRID_LOG_TABLE_NAME_SUFFIX;
+  static const char * HYBRID_EMBEDDED_VEC_TABLE_NAME_SUFFIX;
   // ivf
   static const char * IVF_CENTROID_TABLE_NAME_SUFFIX;
   static const char * IVF_ROWKEY_CID_TABLE_NAME_SUFFIX;
@@ -52,7 +60,12 @@ public:
   // spiv
   static const char * SPIV_DIM_DOCID_VALUE_TABLE_NAME_SUFFIX;
 public:
+
+  static int get_vec_rowkey_col(
+      const ObTableSchema &data_schema,
+      const ObColumnSchemaV2 *&rowkey_col);
   static int append_vec_args(
+      const share::schema::ObTableSchema &data_schema,
       const sql::ObPartitionResolveResult &resolve_result,
       const obrpc::ObCreateIndexArg &index_arg,
       bool &vec_common_aux_table_exist,
@@ -66,6 +79,7 @@ public:
       const ObTableSchema &data_schema,
       ObTableSchema &index_schema);
   static int check_vec_index_allowed(
+      const share::schema::ObIndexType index_type,
       ObTableSchema &data_schema);
   static int adjust_vec_args(
       obrpc::ObCreateIndexArg &index_arg,
@@ -95,6 +109,16 @@ public:
       const share::schema::ObTableSchema &data_schema,
       ObVectorIndexParam& index_param,
       share::schema::ObTableSchema &index_schema);
+  static int set_hybrid_vec_log_table_columns(
+      const ObCreateIndexArg &arg,
+      const ObTableSchema &data_schema,
+      ObVectorIndexParam& index_param,
+      ObTableSchema &index_schema);
+  static int set_hybrid_vec_embedded_vec_table_columns(
+      const ObCreateIndexArg &arg,
+      const ObTableSchema &data_schema,
+      ObVectorIndexParam& index_param,
+      ObTableSchema &index_schema);
   static int generate_vec_index_name(
       common::ObIAllocator *allocator,
       const share::schema::ObIndexType type,
@@ -112,6 +136,7 @@ public:
       const ObTableSchema &index_schema,
       ObString &prefix);
   static int generate_vec_index_aux_columns(
+      ObSchemaGetterGuard &schema_guard,
       const ObTableSchema &orig_table_schema,
       const ObTableSchema &index_table_schema,
       ObTableSchema &new_table_schema,
@@ -156,6 +181,7 @@ public:
       const ObTableSchema &data_schema,
       ObVectorIndexParam &index_param,
       ObTableSchema &index_schema);
+  static void add_skip_index_for_spiv_column(schema::ObColumnSchemaV2 &column_schema);
   static int check_alter_column_is_offline(
       const ObTableSchema &orig_table_schema,
       const ObColumnSchemaV2 *src_column,
@@ -165,6 +191,7 @@ public:
 
 private:
   static int append_vec_hnsw_args(
+      const share::schema::ObTableSchema &data_schema,
       const sql::ObPartitionResolveResult &resolve_result,
       const obrpc::ObCreateIndexArg &index_arg,
       bool &vec_common_aux_table_exist,
@@ -173,6 +200,7 @@ private:
       ObIAllocator *allocator,
       const sql::ObSQLSessionInfo *session_info);
   static int append_vec_spiv_args(
+      const share::schema::ObTableSchema &data_schema,
       const sql::ObPartitionResolveResult &resolve_result,
       const obrpc::ObCreateIndexArg &index_arg,
       bool &common_aux_table_exist,
@@ -185,6 +213,15 @@ private:
       ObIArray<sql::ObPartitionResolveResult> &resolve_results,
       ObIArray<obrpc::ObCreateIndexArg> &index_arg_list,
       ObIAllocator *allocator);
+  static int append_hybrid_vec_hnsw_args(
+      const share::schema::ObTableSchema &data_schema,
+      const sql::ObPartitionResolveResult &resolve_result,
+      const obrpc::ObCreateIndexArg &index_arg,
+      bool &vec_common_aux_table_exist,
+      ObIArray<sql::ObPartitionResolveResult> &resolve_results,
+      ObIArray<ObCreateIndexArg> &index_arg_list,
+      ObIAllocator *allocator,
+      const sql::ObSQLSessionInfo *session_info);
   static int append_vec_ivfsq8_args(
       const sql::ObPartitionResolveResult &resolve_result,
       const obrpc::ObCreateIndexArg &index_arg,
@@ -227,6 +264,14 @@ private:
       const obrpc::ObCreateIndexArg &arg,
       ObIAllocator *allocator,
       ObIArray<obrpc::ObCreateIndexArg> &index_arg_list);
+  static int append_hybrid_vec_log_table_arg(
+      const obrpc::ObCreateIndexArg &index_arg,
+      ObIAllocator *allocator,
+      ObIArray<obrpc::ObCreateIndexArg> &index_arg_list);
+  static int append_hybrid_vec_index_embedded_vec_arg(
+      const obrpc::ObCreateIndexArg &index_arg,
+      ObIAllocator *allocator,
+      ObIArray<obrpc::ObCreateIndexArg> &index_arg_list);
   static int adjust_vec_spiv_arg(
       obrpc::ObCreateIndexArg *index_arg,
       const ObTableSchema &data_schema,
@@ -242,6 +287,11 @@ private:
       const ObIndexType index_type, 
       const int64_t main_table_rowkey_size,
       int64_t &total_column_cnt, 
+      int64_t &index_column_cnt);
+  static int get_spiv_column_cnt(
+      const ObIndexType index_type,
+      const int64_t main_table_rowkey_size,
+      int64_t &total_column_cnt,
       int64_t &index_column_cnt);
   static int push_back_rowkey_col(
       ObIArray<const ObColumnSchemaV2 *> &cols,
@@ -361,6 +411,10 @@ private:
       const ObTableSchema &data_schema,
       const obrpc::ObCreateIndexArg *index_arg,
       const ObColumnSchemaV2 *&data_col);
+  static int get_chunk_col(
+      const ObTableSchema &data_schema,
+      const obrpc::ObCreateIndexArg *index_arg,
+      const ObColumnSchemaV2 *&chunk_col);
   static int push_back_gen_col(
       ObIArray<const ObColumnSchemaV2 *> &cols,
       const ObColumnSchemaV2 *existing_col,
@@ -405,6 +459,17 @@ private:
       const uint64_t col_id,
       ObTableSchema &data_schema,
       ObColumnSchemaV2 *&data_col);
+  static int generate_chunk_column(
+      const obrpc::ObCreateIndexArg *index_arg,
+      const uint64_t col_id,
+      ObTableSchema &data_schema,
+      ObColumnSchemaV2 *&chunk_col);
+  static int generate_embedded_vec_column(
+      const obrpc::ObCreateIndexArg *index_arg,
+      const uint64_t col_id,
+      ObTableSchema &data_schema,
+      ObColumnSchemaV2 *&embedded_vec_col,
+      ObIAllocator &allocator);
   static int generate_ivf_col_name_prefix(
       const VecColType col_type,
       char *col_name_buf,
@@ -447,6 +512,18 @@ private:
       int64_t &name_pos);
   static int construct_data_col_name(
       const obrpc::ObCreateIndexArg *index_arg,
+      const ObTableSchema &data_schema,
+      char *col_name_buf,
+      const int64_t buf_len,
+      int64_t &name_pos);
+  static int construct_chunk_col_name(
+      const ObCreateIndexArg *index_arg,
+      const ObTableSchema &data_schema,
+      char *col_name_buf,
+      const int64_t buf_len,
+      int64_t &name_pos);
+  static int construct_embedded_vector_col_name(
+      const ObCreateIndexArg *index_arg,
       const ObTableSchema &data_schema,
       char *col_name_buf,
       const int64_t buf_len,

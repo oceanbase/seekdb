@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #define USING_LOG_PREFIX SERVER
@@ -97,9 +101,15 @@ ObInnerSQLConnection::TimeoutGuard::~TimeoutGuard()
     LOG_ERROR("get timeout failed", KR(ret), K(query_timeout), K(trx_timeout));
   } else {
     if (query_timeout != query_timeout_ || trx_timeout != trx_timeout_) {
+      #ifdef OB_BUILD_EMBED_MODE
+      if (conn_.get_session().is_inner() && OB_FAIL(conn_.set_session_timeout(query_timeout_, trx_timeout_))) {
+        LOG_ERROR("set session timeout failed", K(ret));
+      }
+      #else
       if (OB_FAIL(conn_.set_session_timeout(query_timeout_, trx_timeout_))) {
         LOG_ERROR("set session timeout failed", K(ret));
       }
+      #endif
     }
   }
 }
@@ -275,7 +285,7 @@ void ObInnerSQLConnection::unref()
         LOG_WARN("revert connection failed", K(ret));
       }
     } else {
-      // see 
+      // see
       // extern_session_ = NULL;
     }
   }
@@ -2403,7 +2413,9 @@ ObInnerSqlWaitGuard::~ObInnerSqlWaitGuard()
         ObLocalDiagnosticInfo::setup_diagnostic_info(prev_di_);
       } else {
         ObLocalDiagnosticInfo::reset_diagnostic_info();
-        LOG_WARN_RET(OB_ERR_UNEXPECTED, "prev di ptr is nullptr", K(prev_di_));
+        if (REACH_TIME_INTERVAL(5L * 1000L * 1000L)) {
+          LOG_WARN_RET(OB_ERR_UNEXPECTED, "prev di ptr is nullptr", K(prev_di_));
+        }
       }
     }
 

@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #define USING_LOG_PREFIX SQL_OPT
@@ -104,15 +108,10 @@ int ObLogJoin::get_op_exprs(ObIArray<ObRawExpr*> &all_exprs)
 
 uint64_t ObLogJoin::hash(uint64_t seed) const
 {
-  ObQueryCtx *query_ctx = nullptr;
   seed = do_hash(join_type_, seed);
   seed = do_hash(join_algo_, seed);
   seed = do_hash(join_dist_algo_, seed);
-  if (is_nlj_without_param_down() && 
-      OB_NOT_NULL(get_plan()) && OB_NOT_NULL(get_plan()->get_stmt()) &&
-      OB_NOT_NULL(query_ctx = get_plan()->get_stmt()->get_query_ctx()) &&
-      query_ctx->check_opt_compat_version(COMPAT_VERSION_4_2_5_BP4, COMPAT_VERSION_4_3_0,
-                                          COMPAT_VERSION_4_3_5_BP3)) {
+  if (is_nlj_without_param_down()) {
     seed = do_hash(is_nlj_without_param_down(), seed);
   }
   seed = ObLogicalOperator::hash(seed);
@@ -524,8 +523,6 @@ int ObLogJoin::print_outline_data(PlanText &plan_text)
       LOG_WARN("fail to print pq distribute hint", K(ret));
     } else if (is_nlj_without_param_down() &&
                !join_path->need_mat_ &&
-               query_ctx->check_opt_compat_version(COMPAT_VERSION_4_2_5_BP4, COMPAT_VERSION_4_3_0,
-                                                   COMPAT_VERSION_4_3_5_BP3) &&
                OB_FAIL(print_join_hint_outline(*stmt,
                                                T_NO_USE_NL_MATERIALIZATION,
                                                qb_name,

@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #include <gtest/gtest.h>
@@ -63,12 +67,15 @@ TEST(TestTenantAllocator, SysLimit)
   cout << "current hold: " << hold << endl;
 
   set_memory_limit(hold);
+  set_hard_memory_limit(hold);
   EXPECT_EQ(NULL, ta.alloc(1, attr));
 
   set_memory_limit(hold + (1<<20));
+  set_hard_memory_limit(hold + (1<<20));
   EXPECT_EQ(NULL, ta.alloc(1, attr));
 
   set_memory_limit(hold + (3<<20));
+  set_hard_memory_limit(hold + (3<<20));
   EXPECT_TRUE(NULL != ta.alloc(1, attr));
 }
 
@@ -82,15 +89,10 @@ TEST(TestTenantAllocator, TenantLimit)
   cout << "current hold: " << hold << endl;
 
   set_memory_limit(hold);  // now, we can't allocate new memory from system
+  set_hard_memory_limit(hold);
   EXPECT_FALSE(NULL != ta.alloc(1, attr));
 
   attr.prio_ = OB_HIGH_ALLOC;
-  EXPECT_FALSE(NULL != ta.alloc(1, attr));
-
-  ob_set_urgent_memory((2 << 20) - 1);
-  EXPECT_FALSE(NULL != ta.alloc(1, attr));
-
-  ob_set_urgent_memory(2 << 20);
   EXPECT_TRUE(NULL != ta.alloc(1, attr));
   EXPECT_TRUE(NULL != ta.alloc(1, attr));
 
@@ -122,6 +124,7 @@ TEST(TestTenantAllocator, ctx_limit)
   const int64_t limit = 30 * size;
   int64_t alloced = 0;
   ctx_ta.set_limit(limit);
+  ctx_ta.set_hard_limit(limit);
   while (true) {
     if (NULL == ctx_ta.alloc(size, attr)) {
       break;
@@ -337,6 +340,7 @@ TEST(TestTenantAllocator, MERGE_RESERVE_CTX)
   const uint64_t tenant_id = OB_SYS_TENANT_ID;
   ObMallocAllocator* malloc_allocator = ObMallocAllocator::get_instance();
   ASSERT_EQ(OB_SUCCESS, malloc_allocator->create_and_add_tenant_allocator(tenant_id));
+  set_hard_memory_limit(1L * 1024L * 1024L * 1024L);
   void *ptr_0 = ob_malloc(100L<<10, ObMemAttr(tenant_id, "Test", 0));
   void *ptr_1 = ob_malloc(100L<<10, ObMemAttr(tenant_id, "Test", ObCtxIds::MERGE_RESERVE_CTX_ID));
   malloc_allocator->sync_wash(tenant_id, 0, INT64_MAX);

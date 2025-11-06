@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #define USING_LOG_PREFIX STORAGE
@@ -3875,6 +3879,7 @@ int ObVectorIndexSliceStore::init(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), KPC(tablet_direct_load_mgr));
   } else {
+    const ObIArray<share::schema::ObColDesc> &col_desc_array = static_cast<ObTabletDirectLoadMgr *>(tablet_direct_load_mgr)->get_sqc_build_ctx().data_block_desc_.get_desc().get_col_desc_array();
     is_inited_ = true;
     ctx_.ls_id_ = tablet_direct_load_mgr->get_ls_id();
     tablet_id_ = tablet_direct_load_mgr->get_tablet_id();
@@ -3905,8 +3910,14 @@ int ObVectorIndexSliceStore::init(
     for (int64_t i = 0; OB_SUCC(ret) && i < col_array.count(); i++) {
       // version control col is not valid
       if (!col_array.at(i).is_valid_) {
-      } else if (ObSchemaUtils::is_vec_hnsw_vid_column(col_array.at(i).column_flags_)) {
-        vector_vid_col_idx_ = i;
+      } else if (ObSchemaUtils::is_vec_hnsw_vid_column(col_array.at(i).column_flags_) ||
+                 col_desc_array.at(i).col_id_ == OB_HIDDEN_PK_INCREMENT_COLUMN_ID) {
+        if (vector_vid_col_idx_ == -1) {
+          vector_vid_col_idx_ = i;
+        } else {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("failed to get valid vector index col idx", K(ret), K(vector_vid_col_idx_), K(i));
+        }
       } else if (ObSchemaUtils::is_vec_hnsw_vector_column(col_array.at(i).column_flags_)) {
         vector_col_idx_ = i;
       } else if (ObSchemaUtils::is_vec_hnsw_key_column(col_array.at(i).column_flags_)) {
@@ -3919,6 +3930,7 @@ int ObVectorIndexSliceStore::init(
         }
       }
     }
+
     if (OB_SUCC(ret)) {
       if (vector_vid_col_idx_ == -1 || vector_col_idx_ == -1 || vector_key_col_idx_ == -1 || vector_data_col_idx_ == -1) {
         ret = OB_ERR_UNEXPECTED;
@@ -4106,10 +4118,10 @@ int ObVectorIndexSliceStore::append_row(const blocksstable::ObDatumRow &datum_ro
             }
           }
         }
-
+        uint32_t vec_length = vec_str.length();
         if (OB_FAIL(ret)) {
         } else if (OB_FAIL(adaptor_guard.get_adatper()->add_snap_index(reinterpret_cast<float *>(vec_str.ptr()),
-                                                                       &vec_vid, extra_obj, extra_column_count, 1))) {
+                                                                       &vec_vid, extra_obj, extra_column_count, 1, &vec_length))) {
           LOG_WARN("fail to build index to adaptor", K(ret), KPC(this));
         } else {
           LOG_DEBUG("[vec index debug] add into snap index success", K(tablet_id_), K(vec_vid), K(vec_str));
@@ -4253,6 +4265,8 @@ int ObVectorIndexSliceStore::get_next_vector_data_row(
       LOG_WARN("fail to build sq vec snapshot key str", K(ret), K(index_type));
     } else if (index_type == VIAT_HNSW_BQ && OB_FAIL(databuff_printf(key_str, OB_VEC_IDX_SNAPSHOT_KEY_LENGTH, key_pos, "%lu_%ld_hnsw_bq_data_part%05ld", tablet_id_.id(), snapshot_version, cur_row_pos_))) {
       LOG_WARN("fail to build bq vec snapshot key str", K(ret), K(index_type));
+    } else if (index_type == VIAT_IPIVF && OB_FAIL(databuff_printf(key_str, OB_VEC_IDX_SNAPSHOT_KEY_LENGTH, key_pos, "%lu_%ld_ipivf_data_part%05ld", tablet_id_.id(), snapshot_version, cur_row_pos_))) {
+      LOG_WARN("fail to build ipivf vec snapshot key str", K(ret), K(index_type));
     } else {
       current_row_.storage_datums_[vector_key_col_idx_].set_string(key_str, key_pos);
     }
@@ -5005,7 +5019,7 @@ int ObDDLTableMergeDagParam::assign(const ObDDLTableMergeDagParam &merge_param)
     seq_no_           = merge_param.seq_no_;
     table_type_       = merge_param.table_type_;
     if (is_commit_ && is_idem_type(direct_load_type_) &&
-        OB_FAIL(user_data_.assign(merge_param.user_data_))) {
+        OB_FAIL(user_data_.assign(arena_, merge_param.user_data_))) {
       LOG_WARN("failed to assign user data", K(ret));
     }
   }

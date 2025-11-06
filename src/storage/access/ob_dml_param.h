@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #ifndef OCEANBASE_STORAGE_OB_DML_PARAM_
@@ -185,7 +189,8 @@ public:
         in_row_cache_threshold_(common::DEFAULT_MAX_MULTI_GET_CACHE_AWARE_ROW_NUM),
         scan_resume_point_(nullptr),
         mds_collector_(nullptr),
-        row_scan_cnt_(NULL)
+        row_scan_cnt_(NULL),
+        enable_new_false_range_(false)
   {}
   virtual ~ObTableScanParam() {}
 public:
@@ -225,6 +230,7 @@ public:
   ScanResumePoint *scan_resume_point_; // for scan pause
   ObMdsReadInfoCollector *mds_collector_; // used for collect mds info when query mds sstable
   uint64_t *row_scan_cnt_;
+  bool enable_new_false_range_;
 
   DECLARE_VIRTUAL_TO_STRING;
 private:
@@ -254,7 +260,8 @@ struct ObDMLBaseParam
         check_schema_version_(true),
         ddl_task_id_(0),
         lob_allocator_(ObModIds::OB_LOB_ACCESS_BUFFER, OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID()),
-        data_row_for_lob_(nullptr)
+        data_row_for_lob_(nullptr),
+        is_main_table_in_fts_ddl_(false)
   {
   }
 
@@ -288,6 +295,7 @@ struct ObDMLBaseParam
   int64_t ddl_task_id_;
   mutable ObArenaAllocator lob_allocator_;
   const blocksstable::ObDatumRow *data_row_for_lob_; // for tablet split
+  bool is_main_table_in_fts_ddl_; // whether the main table is in fts ddl when dml is executed
   bool is_valid() const { return (timeout_ > 0 && schema_version_ >= 0) && nullptr != store_ctx_guard_; }
   DECLARE_TO_STRING;
 };

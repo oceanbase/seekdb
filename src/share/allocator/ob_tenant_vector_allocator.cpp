@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 
@@ -59,8 +63,7 @@ int64_t ObTenantVectorAllocator::get_vector_mem_limit_percentage(omt::ObTenantCo
 void ObTenantVectorAllocator::get_vector_mem_config(int64_t &resource_limit, int64_t &max_duration)
 {
   const int64_t VECTOR_THROTTLE_MAX_DURATION = 2LL * 60LL * 60LL * 1000LL * 1000LL;  // 2 hours
-  const int64_t tenant_memory = lib::get_tenant_memory_limit(MTL_ID());
-  int64_t tenant_memstore_limit_percent = 0;
+  const int64_t hard_memory_limit = lib::get_hard_memory_limit();
   int64_t percent = 0;
   omt::ObTenantConfigGuard tenant_config(TENANT_CONF(MTL_ID()));
   if (tenant_config.is_valid()) {
@@ -70,7 +73,7 @@ void ObTenantVectorAllocator::get_vector_mem_config(int64_t &resource_limit, int
     max_duration = VECTOR_THROTTLE_MAX_DURATION;
   }
   percent = get_vector_mem_limit_percentage(tenant_config);
-  resource_limit = tenant_memory * percent / 100;
+  resource_limit = hard_memory_limit * percent / 100;
 }
 
 

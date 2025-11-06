@@ -1,0 +1,103 @@
+#!/bin/bash
+# SeekDB start script
+# This script reads configuration from /etc/oceanbase/seekdb.cnf and starts observer
+
+CONFIG_FILE="/etc/oceanbase/seekdb.cnf"
+BASE_DIR="/var/lib/oceanbase"
+SEEKDB_TELEMETRY_FILE="$BASE_DIR/run/telemetry.json"
+CURRENT_DIR=$(dirname "$0")
+report=3
+
+# Check if config file exists
+if [ ! -f "$CONFIG_FILE" ]; then
+    echo "Error: Configuration file $CONFIG_FILE not found"
+    exit 1
+fi
+
+# Initialize additional parameters
+ADDITIONAL_PARAMS=""
+
+# Function to read configuration file and build command line arguments
+read_config() {
+    while IFS= read -r line; do
+        # Skip empty lines and comments
+        [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]] && continue
+
+        key="${line%%=*}"
+        value="${line#*=}"
+
+        # Trim whitespace
+        key="$(echo "$key" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+        value="$(echo "$value" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+
+        case "$key" in
+            "port")
+                ADDITIONAL_PARAMS="$ADDITIONAL_PARAMS --port=$value"
+                ;;
+            "data-dir")
+                ADDITIONAL_PARAMS="$ADDITIONAL_PARAMS --data-dir=$value"
+                ;;
+            "redo-dir")
+                ADDITIONAL_PARAMS="$ADDITIONAL_PARAMS --redo-dir=$value"
+                ;;
+            *)
+                ADDITIONAL_PARAMS="$ADDITIONAL_PARAMS --parameter $key=$value"
+                ;;
+        esac
+    done < "$CONFIG_FILE"
+}
+
+# Check if data-dir is specified and not empty
+read_config
+
+# Build final command
+CMD="/usr/bin/observer --base-dir=$BASE_DIR $ADDITIONAL_PARAMS"
+
+echo "Starting seekdb with command: $CMD"
+echo "Configuration loaded from: $CONFIG_FILE"
+
+# Execute the command
+$CMD &
+CMD_PID=$!
+
+# Wait for the command to complete and check its exit status
+wait $CMD_PID
+CMD_EXIT_CODE=$?
+
+# Check if command executed successfully
+if [ $CMD_EXIT_CODE -eq 0 ]; then
+    # Start obshell agent
+    echo "SeekDB started successfully, starting obshell agent..."
+    if [ -f "/usr/bin/obshell" ]; then
+        sleep 1
+        /usr/bin/obshell agent start --seekdb --base-dir=$BASE_DIR
+        if [ $? -eq 0 ]; then
+            echo "obshell agent started successfully"
+        else
+            echo "Failed to start obshell agent"
+        fi
+    else
+        echo "Warning: /usr/bin/obshell not found, skipping obshell agent start"
+    fi
+
+    echo "Sending telemetry..."
+    # Wait for SEEKDB_TELEMETRY_FILE to appear (max 10 seconds, check every 0.2 seconds)
+    wait_count=50  # 50 * 0.2 = 10 seconds
+    check_interval=0.2
+    count=0
+    while [ ! -f "$SEEKDB_TELEMETRY_FILE" ] && [ $count -lt $wait_count ]; do
+        echo "Waiting for telemetry file $count counts"
+        sleep $check_interval
+        count=$((count + 1))
+    done
+    if [ -f "$SEEKDB_TELEMETRY_FILE" ]; then
+        echo "Telemetry file found, proceeding..."
+    else
+        echo "Warning: Telemetry file not found after 10s, proceeding anyway..."
+    fi
+    /bin/bash $CURRENT_DIR/telemetry.sh $report "20" >/dev/null 2>&1
+else
+    echo "SeekDB failed to start with exit code: $CMD_EXIT_CODE"
+fi
+
+exit $CMD_EXIT_CODE

@@ -1,14 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
- * This file is for define of plugin vector index util
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #ifndef OCEANBASE_SHARE_PLUGIN_VECTOR_INDEX_UTIL_H_
@@ -73,19 +76,8 @@ private:
 class ObVectorQueryVidIterator
 {
 public:
-  ObVectorQueryVidIterator(int64_t total, int64_t *vid, int64_t extra_column_count, int64_t extra_info_actual_size, ObIAllocator *allocator) 
-    : is_init_(false),
-      total_(total),
-      cur_pos_(0),
-      batch_size_(0),
-      vids_(vid),
-      extra_column_count_(extra_column_count),
-      extra_info_ptr_(),
-      row_(nullptr),
-      obj_(nullptr),
-      allocator_(allocator) {};
-
-  explicit ObVectorQueryVidIterator(int64_t extra_column_count, int64_t extra_info_actual_size)
+  explicit ObVectorQueryVidIterator(int64_t extra_column_count, int64_t extra_info_actual_size,
+                                   int64_t rel_cnt, common::hash::ObHashMap<int64_t, double*> *rel_map_ptr)
       : is_init_(false),
         total_(0),
         cur_pos_(0),
@@ -96,7 +88,9 @@ public:
         extra_info_ptr_(),
         row_(nullptr),
         obj_(nullptr),
-        allocator_(nullptr){};
+        allocator_(nullptr),
+        rel_count_(rel_cnt),
+        rel_map_ptr_(rel_map_ptr) {};
   virtual ~ObVectorQueryVidIterator() {};
   int init(int64_t need_count, ObIAllocator *allocator);
   int add_result(int64_t add_vids, float add_distance, const char *extra_info);
@@ -109,8 +103,9 @@ public:
   int init(int64_t total, int64_t *vids, float *distance, const ObVecExtraInfoPtr &extra_info_ptr, ObIAllocator *allocator);
   void set_batch_size(int64_t batch_size) { batch_size_ = batch_size; }
   bool get_enough() { return total_ >= alloc_size_; }
+  int reset_obj();
 
-  virtual int get_next_row(ObNewRow *&row, const sql::ExprFixedArray& res_exprs);
+  virtual int get_next_row(ObNewRow *&row, const sql::ExprFixedArray& res_exprs, const bool no_rel = false);
   virtual int get_next_rows(ObNewRow *&row, int64_t &size, const sql::ExprFixedArray& res_exprs);
   virtual void reset();
   TO_STRING_EMPTY();
@@ -129,6 +124,8 @@ private:
   ObNewRow *row_;
   ObObj *obj_;
   ObIAllocator *allocator_;
+  int64_t rel_count_;
+  common::hash::ObHashMap<int64_t, double*> *rel_map_ptr_;
 };
 
 struct ObVsagQueryResult

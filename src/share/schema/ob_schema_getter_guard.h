@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #ifndef OB_OCEANBASE_SCHEMA_OB_SCHEMA_GETTER_GUARD_H_
@@ -24,6 +28,9 @@
 #include "share/schema/ob_catalog_schema_struct.h"
 #include "share/schema/ob_ccl_schema_struct.h"
 #include "share/schema/ob_ccl_rule_mgr.h"
+#include "share/schema/ob_ai_model_mgr.h"
+#include "share/schema/ob_location_schema_struct.h"
+#include "share/schema/ob_objpriv_mysql_schema_struct.h"
 
 namespace oceanbase
 {
@@ -562,6 +569,10 @@ public:
   int get_obj_privs(
       const ObObjPrivSortKey &obj_priv_key,
       ObPackedObjPriv &obj_privs);
+  int get_obj_mysql_priv_set(const ObObjMysqlPrivSortKey &obj_mysql_priv_key, ObPrivSet &priv_set);
+  int get_obj_mysql_priv_with_user_id(const uint64_t tenant_id,
+                                      const uint64_t user_id,
+                                      ObIArray<const ObObjMysqlPriv *> &obj_mysql_privs);
   //TODO@xiyu: ObDDLOperator::drop_tablegroup
   int check_database_exists_in_tablegroup(
       const uint64_t tenant_id,
@@ -787,6 +798,26 @@ public:
                                       common::ObIArray<const ObDirectorySchema *> &directory_schemas);
   // directory function end
 
+  // location function begin
+  int get_location_schema_by_name(const uint64_t tenant_id,
+                                  const common::ObString &name,
+                                  const ObLocationSchema *&schema);
+  int get_location_schema_by_id(const uint64_t tenant_id,
+                                const uint64_t location_id,
+                                const ObLocationSchema *&schema);
+  int get_location_schemas_in_tenant(const uint64_t tenant_id,
+                                     common::ObIArray<const ObLocationSchema *> &location_schemas);
+  int check_location_access(const ObSessionPrivInfo &session_priv,
+                            const common::ObIArray<uint64_t> &enable_role_id_array,
+                            const ObString &location_name,
+                            bool is_write = false);
+  int check_location_show(const ObSessionPrivInfo &session_priv,
+                          const common::ObIArray<uint64_t> &enable_role_id_array,
+                          const common::ObString &location_name,
+                          bool &allow_show);
+  // location function end
+
+
   // catalog function begin
   int get_catalog_schema_by_name(const uint64_t tenant_id,
                                  const common::ObString &name,
@@ -871,6 +902,14 @@ public:
                          const ObNeedPriv &routine_need_priv);
 
   int check_routine_definer_existed(uint64_t tenant_id, const ObString &user_name, bool &existed);
+  int check_obj_mysql_priv(const ObSessionPrivInfo &session_priv,
+                           const common::ObIArray<uint64_t> &enable_role_id_array,
+                           const ObNeedPriv &obj_mysql_need_priv);
+  int get_obj_mysql_priv_with_obj_name(const uint64_t tenant_id,
+                                       const ObString &obj_name,
+                                       const uint64_t obj_type,
+                                       ObIArray<const ObObjMysqlPriv *> &obj_privs,
+                                       bool reset_flag);
 
   int get_ccl_rule_with_name(const uint64_t tenant_id,
                              const common::ObString &name,
@@ -883,7 +922,14 @@ public:
   int get_ccl_rule_infos(const uint64_t tenant_id, CclRuleContainsInfo,
                          ObCCLRuleMgr::CCLRuleInfos *&ccl_rule_infos);
   int get_ccl_rule_count(const uint64_t tenant_id, uint64_t & count);
+  // ai function
+  int get_ai_model_schema(const uint64_t tenant_id,
+                          const uint64_t ai_model_id,
+                          const ObAiModelSchema *&ai_model_schema);
 
+  int get_ai_model_schema(const uint64_t tenant_id,
+                          const ObString &ai_model_name,
+                          const ObAiModelSchema *&ai_model_schema);
 private:
   int check_ssl_access(const ObUserInfo &user_info,
                        SSL *ssl_st);

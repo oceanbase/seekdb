@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #ifndef OCEANBASE_STORAGE_TABLET_OB_TABLET_META
@@ -200,6 +204,7 @@ public:
   int64_t max_serialized_medium_scn_; // abandon after 4.2 // alignment: 8B, size: 8B
   share::SCN ddl_commit_scn_; // alignment: 8B, size: 8B
   share::SCN mds_checkpoint_scn_; // alignment: 8B, size: 8B
+  share::SCN min_ss_tablet_version_; // alignment: 8B, size: 8B
   ObTabletTransferInfo transfer_info_; // alignment: 8B, size: 32B
   compaction::ObExtraMediumInfo extra_medium_info_;
   ObTabletCreateDeleteMdsUserData last_persisted_committed_tablet_status_; // quick access for tablet status in sstables
@@ -218,7 +223,7 @@ public:
   // - CS_REPLICA_REPLAY_NONE: initial state, tablet not doing offline ddl. only take this type for inital.
   // - CS_REPLICA_INVISILE/CS_REPLICA_VISIBLE_AND_REPLAY_COLUMN/CS_REPLICA_VISIBLE_AND_REPLAY_ROW: tablet is doing offline ddl.
   // - CS_REPLICA_REPLAY_ROW_STORE_FINISH/CS_REPLICA_REPLAY_COLUMN_FINISH: tablet finish offline ddl, set when ddl merge task create major sstable.
-  // 
+  //
   // + -------------------- + -------------------------------- + ------------------------------------ +
   // | C-Replica is visible | ls (the tablet in) is C-Replica  | when tablet created                  |
   // + -------------------- + -------------------------------- + ------------------------------------ +

@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2025 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 #define USING_LOG_PREFIX STORAGE
 
@@ -34,7 +38,6 @@ ObDirectLoadDagInsertTableBatchRowDirectWriter::ObDirectLoadDagInsertTableBatchR
     dml_row_handler_(nullptr),
     allocator_(ObMemAttr(MTL_ID(), "storage_writer")),
     slice_writer_(nullptr),
-    remain_size_(0),
     row_count_(0),
     is_inited_(false)
 {
@@ -65,10 +68,7 @@ int ObDirectLoadDagInsertTableBatchRowDirectWriter::init(
       LOG_WARN("fail to init row handler", KR(ret));
     } else if (OB_FAIL(init_batch_rows())) {
       LOG_WARN("fail to init batch rows", KR(ret));
-    } else if (OB_FAIL(switch_slice())) {
-      LOG_WARN("fail to switch slice", KR(ret));
     } else {
-      remain_size_ = MIN(write_ctx_.pk_interval_.remain_count(), batch_rows_.remain_size());
       is_inited_ = true;
     }
   }
@@ -142,12 +142,8 @@ int ObDirectLoadDagInsertTableBatchRowDirectWriter::append_batch(
       direct_datum_rows_.vectors_.at(i + multi_version_col_cnt) = vectors.at(i)->get_vector();
     }
     direct_datum_rows_.row_count_ = batch_rows.size();
-    if (write_ctx_.pk_interval_.remain_count() < batch_rows.size() && OB_FAIL(switch_slice())) {
-      LOG_WARN("fail to switch slice", KR(ret));
-    } else if (OB_FAIL(flush_batch(direct_datum_rows_))) {
+    if (OB_FAIL(flush_batch(direct_datum_rows_))) {
       LOG_WARN("fail to flush batch", KR(ret));
-    } else {
-      remain_size_ = MIN(write_ctx_.pk_interval_.remain_count(), batch_rows_.remain_size());
     }
   }
   return ret;
@@ -166,14 +162,13 @@ int ObDirectLoadDagInsertTableBatchRowDirectWriter::append_selective(
   } else {
     int64_t remaining = size;
     while (OB_SUCC(ret) && remaining > 0) {
-      const int64_t append_size = MIN(remaining, remain_size_);
+      const int64_t append_size = MIN(remaining, batch_rows_.remain_size());
       if (OB_FAIL(batch_rows_.append_selective(batch_rows, selector, append_size))) {
         LOG_WARN("fail to append selective", KR(ret));
       } else {
         remaining -= append_size;
         selector += append_size;
-        remain_size_ -= append_size;
-        if (OB_FAIL(flush_buffer_if_need())) {
+        if (batch_rows_.full() && OB_FAIL(flush_buffer())) {
           LOG_WARN("fail to flush buffer", KR(ret));
         }
       }
@@ -192,8 +187,7 @@ int ObDirectLoadDagInsertTableBatchRowDirectWriter::append_row(
   } else {
     if (OB_FAIL(batch_rows_.append_row(datum_row))) {
       LOG_WARN("fail to append row", KR(ret));
-    } else if (FALSE_IT(remain_size_ -= 1)) {
-    } else if (OB_FAIL(flush_buffer_if_need())) {
+    } else if (batch_rows_.full() && OB_FAIL(flush_buffer())) {
       LOG_WARN("fail to flush buffer", KR(ret));
     }
   }
@@ -209,10 +203,6 @@ int ObDirectLoadDagInsertTableBatchRowDirectWriter::switch_slice(const bool is_f
   } else {
     OB_DELETEx(ObITabletSliceWriter, &allocator_, slice_writer_);
     allocator_.reuse();
-    if (row_count_ > 0) {
-      insert_tablet_ctx_->inc_row_count(row_count_);
-      row_count_ = 0;
-    }
   }
   // open slice
   if (OB_FAIL(ret)) {
@@ -241,23 +231,6 @@ int ObDirectLoadDagInsertTableBatchRowDirectWriter::switch_slice(const bool is_f
   return ret;
 }
 
-int ObDirectLoadDagInsertTableBatchRowDirectWriter::flush_buffer_if_need()
-{
-  int ret = OB_SUCCESS;
-  if (remain_size_ > 0) {
-  } else {
-    const bool is_slice_end = (write_ctx_.pk_interval_.remain_count() == batch_rows_.size());
-    if (OB_FAIL(flush_buffer())) {
-      LOG_WARN("fail to flush buffer", KR(ret));
-    } else if (is_slice_end && OB_FAIL(switch_slice())) {
-      LOG_WARN("fail to switch slice", KR(ret));
-    } else {
-      remain_size_ = MIN(write_ctx_.pk_interval_.remain_count(), batch_rows_.remain_size());
-    }
-  }
-  return ret;
-}
-
 int ObDirectLoadDagInsertTableBatchRowDirectWriter::flush_buffer()
 {
   int ret = OB_SUCCESS;
@@ -273,8 +246,13 @@ int ObDirectLoadDagInsertTableBatchRowDirectWriter::flush_buffer()
 int ObDirectLoadDagInsertTableBatchRowDirectWriter::flush_batch(ObBatchDatumRows &datum_rows)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(ObDirectLoadVectorUtils::batch_fill_hidden_pk(
-        datum_rows.vectors_.at(0), 0 /*start*/, datum_rows.row_count_, write_ctx_.pk_interval_))) {
+  const bool need_switch_slice =
+    nullptr == slice_writer_ || write_ctx_.pk_interval_.remain_count() < datum_rows.row_count_;
+  if (need_switch_slice && OB_FAIL(switch_slice())) {
+    LOG_WARN("fail to switch slice", KR(ret));
+  } else if (OB_FAIL(ObDirectLoadVectorUtils::batch_fill_hidden_pk(
+               datum_rows.vectors_.at(0), 0 /*start*/, datum_rows.row_count_,
+               write_ctx_.pk_interval_))) {
     LOG_WARN("fail to batch fill hidden pk", KR(ret));
   } else if (OB_FAIL(row_handler_.handle_batch(datum_rows))) {
     LOG_WARN("fail to handle batch", KR(ret));
@@ -302,6 +280,9 @@ int ObDirectLoadDagInsertTableBatchRowDirectWriter::close()
     } else if (OB_FAIL(row_handler_.close())) {
       LOG_WARN("fail to close", KR(ret));
     } else {
+      if (row_count_ > 0) {
+        insert_tablet_ctx_->inc_row_count(row_count_);
+      }
       FLOG_INFO("direct add sstable slice", K(tablet_id_), K(row_count_));
     }
   }

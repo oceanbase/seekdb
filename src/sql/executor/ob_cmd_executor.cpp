@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #define USING_LOG_PREFIX SQL_EXE
@@ -59,7 +63,6 @@
 #include "sql/resolver/tcl/ob_start_trans_stmt.h"
 #include "sql/resolver/tcl/ob_end_trans_stmt.h"
 #include "sql/resolver/tcl/ob_savepoint_stmt.h"
-#include "sql/resolver/cmd/ob_bootstrap_stmt.h"
 #include "sql/resolver/cmd/ob_kill_stmt.h"
 #include "sql/resolver/cmd/ob_empty_query_stmt.h"
 #include "sql/resolver/cmd/ob_resource_stmt.h"
@@ -81,6 +84,8 @@
 #include "sql/resolver/cmd/ob_drop_restore_point_stmt.h"
 #include "sql/resolver/ddl/ob_create_directory_stmt.h"
 #include "sql/resolver/ddl/ob_drop_directory_stmt.h"
+#include "sql/resolver/ddl/ob_create_location_stmt.h"
+#include "sql/resolver/ddl/ob_drop_location_stmt.h"
 #include "sql/resolver/ddl/ob_create_ccl_rule_stmt.h"
 #include "sql/resolver/ddl/ob_drop_ccl_rule_stmt.h"
 #include "sql/engine/ob_exec_context.h"
@@ -107,6 +112,7 @@
 #include "sql/engine/cmd/ob_analyze_executor.h"
 #include "sql/engine/cmd/ob_udf_executor.h"
 #include "sql/engine/cmd/ob_load_data_executor.h"
+#include "sql/engine/cmd/ob_location_utils_executor.h"
 #include "sql/engine/cmd/ob_sequence_executor.h"
 #include "sql/engine/cmd/ob_role_cmd_executor.h"
 #include "sql/engine/cmd/ob_xa_executor.h"
@@ -119,6 +125,7 @@
 #include "observer/ob_server_event_history_table_operator.h"
 #include "observer/omt/ob_tenant.h"
 #include "sql/engine/cmd/ob_directory_executor.h"
+#include "sql/engine/cmd/ob_location_executor.h"
 #include "sql/resolver/dcl/ob_alter_role_stmt.h"
 #include "sql/resolver/ddl/ob_drop_context_resolver.h"
 #include "sql/engine/cmd/ob_context_executor.h"
@@ -529,10 +536,6 @@ int ObCmdExecutor::execute(ObExecContext &ctx, ObICmd &cmd)
       case stmt::T_SERVER_ACTION: {
         break;
       }
-      case stmt::T_BOOTSTRAP: {
-        DEFINE_EXECUTE_CMD(ObBootstrapStmt, ObBootstrapExecutor);
-        break;
-      }
       case stmt::T_ADMIN_ZONE: {
         DEFINE_EXECUTE_CMD(ObAdminZoneStmt, ObAdminZoneExecutor);
         break;
@@ -856,9 +859,7 @@ int ObCmdExecutor::execute(ObExecContext &ctx, ObICmd &cmd)
         } else if (OB_FAIL(ObParallelDDLControlMode::is_parallel_ddl_enable(
                            ObParallelDDLControlMode::SET_COMMENT, tenant_id, is_parallel_ddl))) {
           LOG_WARN("fail to get whether is parallel set comment", KR(ret), K(tenant_id));
-        } else if (!(data_version >= DATA_VERSION_4_3_5_0
-                     || (data_version >= DATA_VERSION_4_2_2_0 && data_version <= DATA_VERSION_4_3_0_0))
-                   || !is_parallel_ddl) {
+        } else if (!is_parallel_ddl) {
           DEFINE_EXECUTE_CMD(ObAlterTableStmt, ObAlterTableExecutor);
         } else {
           DEFINE_EXECUTE_CMD(ObAlterTableStmt, ObCommentExecutor);
@@ -979,6 +980,19 @@ int ObCmdExecutor::execute(ObExecContext &ctx, ObICmd &cmd)
       }
       case stmt::T_DROP_DIRECTORY: {
         DEFINE_EXECUTE_CMD(ObDropDirectoryStmt, ObDropDirectoryExecutor);
+        break;
+      }
+      case stmt::T_CREATE_LOCATION:
+      case stmt::T_ALTER_LOCATION: {
+        DEFINE_EXECUTE_CMD(ObCreateLocationStmt, ObCreateLocationExecutor);
+        break;
+      }
+      case stmt::T_DROP_LOCATION: {
+        DEFINE_EXECUTE_CMD(ObDropLocationStmt, ObDropLocationExecutor);
+        break;
+      }
+      case stmt::T_LOCATION_UTILS: {
+        DEFINE_EXECUTE_CMD(ObLocationUtilsStmt, ObLocationUtilsExecutor);
         break;
       }
       case stmt::T_BACKUP_BACKUPPIECE: {

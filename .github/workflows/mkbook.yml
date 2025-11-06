@@ -31,7 +31,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Depdencies 
+      - name: Install Depdencies
         run: |
           python3 -m pip install -r ./docs/requirements.txt
       - name: Setup Pages

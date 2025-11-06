@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #ifndef OCEANBASE_EXPR_OB_EXPR_H_
@@ -405,6 +409,13 @@ typedef common::ObFixedArray<common::ObString, common::ObIAllocator> ObStrValues
 extern int expr_default_eval_batch_func(BATCH_EVAL_FUNC_ARG_DECL);
 extern int expr_default_eval_vector_func(VECTOR_EVAL_FUNC_ARG_DECL);
 
+// index number for args_ in ObExpr
+extern const int64_t ARGS_IDX_ZERO;
+extern const int64_t ARGS_IDX_ONE;
+extern const int64_t ARGS_IDX_TWO;
+extern const int64_t ARGS_IDX_THREE;
+extern const int64_t ARGS_IDX_FOUR;
+extern const int64_t ARGS_IDX_FIVE;
 
 struct VectorHeader {
   VectorHeader() : format_(VEC_INVALID) {}
@@ -664,7 +675,18 @@ public:
            type_ == T_FUN_SYS_L2_SQUARED ||
            type_ == T_FUN_SYS_INNER_PRODUCT ||
            type_ == T_FUN_SYS_NEGATIVE_INNER_PRODUCT ||
-           type_ == T_FUN_SYS_COSINE_DISTANCE;
+           type_ == T_FUN_SYS_COSINE_DISTANCE ||
+           type_ == T_FUN_SYS_SEMANTIC_DISTANCE ||
+           type_ == T_FUN_SYS_SEMANTIC_VECTOR_DISTANCE;
+  }
+
+  inline bool is_semantic_distance_expr() const {
+    return type_ == T_FUN_SYS_SEMANTIC_DISTANCE ||
+           type_ == T_FUN_SYS_SEMANTIC_VECTOR_DISTANCE;
+  }
+
+  inline bool is_semantic_vector_distance_expr() const {
+    return type_ == T_FUN_SYS_SEMANTIC_VECTOR_DISTANCE;
   }
 
   // Evaluate all parameters, assign the first sizeof...(args) parameters to %args.

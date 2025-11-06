@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #pragma once
@@ -115,7 +119,7 @@ public:
 class ObVectorRefreshIndexExecutor {
 public:
   static const int MAX_REFRESH_RETRY_THRESHOLD = 3;
-  
+
   enum class VectorIndexAuxType : int8_t {
     DOMAIN_INDEX = 0,   // FARM COMPAT WHITELIST
     INDEX_ID_INDEX = 1,
@@ -134,12 +138,15 @@ public:
                       const ObVectorRebuildIndexArg &arg);
   int execute_rebuild_inner(pl::ObPLExecCtx &ctx,
                       const ObVectorRebuildIndexInnerArg &arg);
-
   static int resolve_table_name(const ObCollationType cs_type,
                                 const ObNameCaseMode case_mode,
                                 const bool is_oracle_mode, const ObString &name,
                                 ObString &database_name, ObString &table_name);
+
 private:
+  static int check_min_data_version(const uint64_t tenant_id,
+                                    const uint64_t min_data_version,
+                                    const char *errmsg);
   static void upper_db_table_name(const ObNameCaseMode case_mode,
                                   const bool is_oracle_mode, ObString &name);
   static int to_refresh_method(const ObString &arg_refresh_method,

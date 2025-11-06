@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #define USING_LOG_PREFIX PALF
@@ -174,6 +178,7 @@ int PalfHandleImpl::load(const int64_t palf_id,
 {
   int ret = OB_SUCCESS;
   PalfBaseInfo palf_base_info;
+  LSN last_group_entry_header_lsn;
   LogGroupEntryHeader entry_header;
   LSN max_committed_end_lsn;
   LogSnapshotMeta snapshot_meta;
@@ -191,7 +196,7 @@ int PalfHandleImpl::load(const int64_t palf_id,
     PALF_LOG(ERROR, "Invalid argument!!!", K(ret), K(palf_id), K(log_dir), K(alloc_mgr),
         K(log_rpc), K(log_io_worker), K(log_shared_queue_th));
   } else if (OB_FAIL(log_engine_.load(palf_id, log_dir, alloc_mgr, log_block_pool, &log_cache_, log_rpc,
-        log_io_worker, log_shared_queue_th, &plugins_, entry_header, palf_epoch, PALF_BLOCK_SIZE, 
+        log_io_worker, log_shared_queue_th, &plugins_, last_group_entry_header_lsn, entry_header, palf_epoch, PALF_BLOCK_SIZE,
         PALF_META_BLOCK_SIZE, io_adapter, is_integrity))) {
     PALF_LOG(WARN, "LogEngine load failed", K(ret), K(palf_id));
     // NB: when 'entry_header' is invalid, means that there is no data on disk, and set max_committed_end_lsn
@@ -200,7 +205,9 @@ int PalfHandleImpl::load(const int64_t palf_id,
     PALF_LOG(INFO, "palf instance is not integrity", KPC(this));
   } else if (FALSE_IT(snapshot_meta = log_engine_.get_log_meta().get_log_snapshot_meta())) {
   } else if (FALSE_IT(max_committed_end_lsn =
-         (true == entry_header.is_valid() ? entry_header.get_committed_end_lsn() : snapshot_meta.base_lsn_)))  {
+         (true == entry_header.is_valid() ?
+          last_group_entry_header_lsn + entry_header.get_serialize_size() + entry_header.get_data_len() :
+          snapshot_meta.base_lsn_))) {
   } else if (OB_FAIL(construct_palf_base_info_(max_committed_end_lsn, palf_base_info))) {
     PALF_LOG(WARN, "construct_palf_base_info_ failed", K(ret), K(palf_id), K(entry_header), K(palf_base_info));
   } else if (OB_FAIL(do_init_mem_(palf_id, palf_base_info, log_engine_.get_log_meta(), log_dir, self,

@@ -1,14 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
- * This file contains implementation support for the json tree abstraction.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #define USING_LOG_PREFIX SQL
@@ -769,6 +772,33 @@ int ObJsonObject::add(const common::ObString &key, ObJsonNode *value, bool with_
   return ret;
 }
 
+int ObJsonObject::rename_key(const common::ObString &old_key, const common::ObString &new_key){
+  INIT_SUCC(ret);
+
+  if (new_key.empty() || old_key.empty()) {
+    ret = OB_ERR_JSON_DOCUMENT_NULL_KEY;
+    LOG_WARN("key is NULL", K(ret), K(new_key), K(old_key));
+  } else {
+    ObJsonObjectPair pair(old_key, NULL);
+    ObJsonKeyCompare cmp(use_lexicographical_order_);
+    ObJsonObjectArray::iterator low_iter = std::lower_bound(object_array_.begin(),
+                                                            object_array_.end(), pair, cmp);
+    if (low_iter != object_array_.end() && low_iter->get_key() == old_key) { // Found and covered
+      if (OB_ISNULL(get_value(new_key))) {
+        low_iter->set_key(new_key);
+        sort();
+      } else {
+        ret = OB_ERR_DUPLICATE_KEY;
+        LOG_WARN("duplicated key in object array.", K(ret), K(old_key), K(new_key));
+      }
+    } else {
+      ret = OB_ERR_JSON_KEY_NOT_FOUND;
+      LOG_WARN("JSON key name not found.", K(ret), K(old_key));
+    }
+  }
+
+  return ret;
+}
 
 void ObJsonObject::sort()
 {

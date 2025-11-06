@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2024 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #define USING_LOG_PREFIX SQL_REWRITE
@@ -39,7 +43,6 @@ int ObTransformMVRewritePrepare::need_do_prepare(const ObDMLStmt *stmt,
 {
   int ret = OB_SUCCESS;
   bool has_mv = false;
-  uint64_t data_version;
   need_prepare = false;
   if (OB_ISNULL(ctx_) || OB_ISNULL(ctx_->session_info_)
       || OB_ISNULL(stmt) || OB_ISNULL(stmt->get_query_ctx())) {
@@ -48,15 +51,6 @@ int ObTransformMVRewritePrepare::need_do_prepare(const ObDMLStmt *stmt,
   } else if (ctx_->session_info_->get_ddl_info().is_refreshing_mview()) {
     need_prepare = false;
     OPT_TRACE("not a user SQL, skip mv rewrite");
-  } else if (stmt->get_query_ctx()->optimizer_features_enable_version_ < COMPAT_VERSION_4_3_1) {
-    need_prepare = false;
-    OPT_TRACE("optimizer features enable version is lower than 4.3.1, skip mv rewrite");
-  } else if (OB_FAIL(GET_MIN_DATA_VERSION(ctx_->session_info_->get_effective_tenant_id(), data_version))) {
-    LOG_WARN("failed to get data version", K(ret), K(ctx_->session_info_->get_effective_tenant_id()));
-  } else if (OB_UNLIKELY(data_version < DATA_VERSION_4_3_1_0)) {
-    // data version lower than 4.3.1 does not have the inner table used to get mv list
-    need_prepare = false;
-    OPT_TRACE("min data version is lower than 4.3.1, skip mv rewrite");
   } else if (OB_FAIL(check_table_has_mv(stmt, has_mv))) {
     LOG_WARN("failed to check table has mv", K(ret));
   } else if (!has_mv) {

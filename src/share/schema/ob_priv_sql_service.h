@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #ifndef OCEANBASE_SHARE_SCHEMA_OB_PRIV_SQL_SERVICE_H_
@@ -174,6 +178,35 @@ public:
       const ObObjPriv &obj_priv,
       const int64_t new_schema_version,
       ObISQLClient &sql_client);
+  virtual int grant_object(
+        const ObObjMysqlPrivSortKey &obj_mysql_priv_key,
+        const ObPrivSet priv_set,
+        const int64_t new_schema_version,
+        const ObString *ddl_stmt_str,
+        ObISQLClient &sql_client,
+        const uint64_t option,
+        const bool is_grant,
+        const common::ObString &grantor,
+        const common::ObString &grantor_host);
+  virtual int gen_obj_mysql_priv_dml(
+        const uint64_t exec_tenant_id,
+        const ObObjMysqlPrivSortKey &obj_mysql_priv_key,
+        const ObPrivSet &priv_set,
+        ObDMLSqlSplicer &dml,
+        const common::ObString &grantor,
+        const common::ObString &grantor_host);
+  virtual int revoke_object(
+        const ObObjMysqlPrivSortKey &object_priv_key,
+        const ObPrivSet priv_set,
+        const int64_t new_schema_version,
+        const ObString *ddl_stmt_str,
+        ObISQLClient &sql_client,
+        const common::ObString &grantor,
+        const common::ObString &grantor_host);
+  virtual int delete_obj_mysql_priv(
+        const ObObjMysqlPriv &obj_priv,
+        const int64_t new_schema_version,
+        ObISQLClient &sql_client);
 
 private:
   int log_obj_priv_operation(
@@ -249,6 +282,13 @@ private:
     const uint64_t exec_tenant_id,
     const ObRoutinePrivSortKey &routine_priv_key,
     ObDMLSqlSplicer &dml);
+  int add_obj_mysql_priv_history(
+        const ObObjMysqlPrivSortKey &obj_mysql_priv_key,
+        const ObPrivSet &priv_set,
+        const int64_t schema_version,
+        common::ObISQLClient &sql_client,
+        const common::ObString &grantor,
+        const common::ObString &grantor_host);
 
 private:
   DISALLOW_COPY_AND_ASSIGN(ObPrivSqlService);

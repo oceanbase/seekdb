@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #ifndef OCEANBASE_COMMON_FILE_DIRECTORY_UTILS_H_
@@ -21,6 +25,8 @@ namespace oceanbase
 {
 namespace common
 {
+class ObSqlString;
+
 #ifndef S_IRWXUGO
 # define S_IRWXUGO (S_IRWXU | S_IRWXG | S_IRWXO)
 #endif
@@ -30,6 +36,7 @@ class FileDirectoryUtils
 public:
   static const int MAX_PATH = 512;
   static int is_exists(const char *file_path, bool &result);
+  static int is_writable(const char *file_path, bool &result);
   static int is_accessible(const char *file_path, bool &result);
   static int is_directory(const char *directory_path, bool &result);
   static int is_link(const char *link_path, bool &result);
@@ -49,6 +56,15 @@ public:
   static int delete_directory_rec(const char *path);
   static int delete_tmp_file_or_directory_at(const char *path);
   static int fsync_dir(const char *dir_path);
+
+  /**
+  * convert relative path to absolute path
+  * @note ensure the path exists
+  */
+  static int to_absolute_path(ObSqlString &path);
+
+private:
+  static int check_directory_mode(const char *file_path, int mode, bool &result);
 };
 
 typedef FileDirectoryUtils FSU;

@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #define USING_LOG_PREFIX SQL_OPT
@@ -3513,9 +3517,6 @@ int ObLogicalOperator::project_pruning_pre()
       do_project_pruning(temp_scan->get_access_exprs(), deps);
     }
   }
-  if (OB_SUCC(ret) && OB_FAIL(try_add_remove_const_exprs())) {
-    LOG_WARN("failed to add remove const exprs", K(ret));
-  } else { /*do nothing*/ }
 
   return ret;
 }
@@ -3537,50 +3538,6 @@ void ObLogicalOperator::do_project_pruning(ObIArray<ObRawExpr *> &exprs, PPDeps 
     exprs.pop_back();
     i--;
   }
-}
-
-int ObLogicalOperator::try_add_remove_const_exprs()
-{
-  int ret = OB_SUCCESS;
-  if (GET_MIN_CLUSTER_VERSION() >= CLUSTER_VERSION_4_2_0_0) {
-    // do nothing
-  } else if (OB_ISNULL(get_plan()) || OB_ISNULL(get_plan()->get_optimizer_context().get_session_info())) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(get_plan()), K(ret));
-  } else {
-    FOREACH_X(e, output_exprs_, OB_SUCC(ret)) {
-      // Add remove_const() to above const expr, except:
-      // - remove_const() already added. (has CNT_VOLATILE_CONST flag)
-      // - is dynamic param store (has CNT_DYNAMIC_PARAM flag). Because question mark expr of
-      //   dynamic param store may be passed by operator output. e.g.:
-      //
-      if (OB_ISNULL((*e))) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected null", K(ret));
-      } else if ((*e)->is_const_expr() &&
-                 !(*e)->has_flag(CNT_VOLATILE_CONST) &&
-                 !(log_op_def::LOG_EXCHANGE == get_type()
-                   && static_cast<ObLogExchange*>(this)->is_producer()
-                   && (*e)->has_flag(CNT_DYNAMIC_PARAM))) {
-        ObRawExpr *remove_const_expr = NULL;
-        if (OB_FAIL(ObRawExprUtils::build_remove_const_expr(
-                                    get_plan()->get_optimizer_context().get_expr_factory(),
-                                    *get_plan()->get_optimizer_context().get_session_info(),
-                                    *e,
-                                    remove_const_expr))) {
-          LOG_WARN("failed to build remove const expr", K(output_exprs_), K(*e), K(ret));
-        } else if (OB_ISNULL(remove_const_expr)) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("get unexpected null", K(ret));
-        } else if (OB_FAIL(get_plan()->get_optimizer_context().get_all_exprs().append(remove_const_expr))) {
-          LOG_WARN("faield to append exprs", K(ret));
-        } else {
-          *e = remove_const_expr;
-        }
-      }
-    }
-  }
-  return ret;
 }
 
 int ObLogicalOperator::adjust_plan_root_output_exprs()
@@ -3635,6 +3592,7 @@ int ObLogicalOperator::check_stmt_can_be_packed(const ObDMLStmt *stmt, bool &nee
 {
   int ret = OB_SUCCESS;
   need_pack = false;
+  #ifndef OB_BUILD_EMBED_MODE
   ObSQLSessionInfo *session_info = NULL;
   if (OB_ISNULL(stmt) || OB_ISNULL(get_plan()) ||
       OB_ISNULL(session_info = get_plan()->get_optimizer_context().get_session_info())) {
@@ -3646,6 +3604,7 @@ int ObLogicalOperator::check_stmt_can_be_packed(const ObDMLStmt *stmt, bool &nee
     need_pack = stmt->is_select_stmt() && (!session_info->is_inner()) && LOG_EXCHANGE == type_
                  && (ObPhyPlanType::OB_PHY_PLAN_DISTRIBUTED == get_phy_plan_type()) && !has_var_assign;
   }
+  #endif
   return ret;
 }
 
@@ -4198,9 +4157,7 @@ int ObLogicalOperator::allocate_granule_nodes_above(AllocGIContext &ctx)
       ObLogGranuleIterator *gi_op = static_cast<ObLogGranuleIterator *>(log_op);
       if (NULL != get_parent()) {
         //check topN sort
-        if (stmt->get_query_ctx()->check_opt_compat_version(COMPAT_VERSION_4_2_3, COMPAT_VERSION_4_3_0,
-                                                            COMPAT_VERSION_4_3_2) &&
-            LOG_SORT == get_parent()->get_type()) {
+        if (LOG_SORT == get_parent()->get_type()) {
           ObLogSort *parent = static_cast<ObLogSort*>(get_parent());
           if (parent->is_local_merge_sort() && 
               NULL != parent->get_topn_expr()) {
@@ -5428,8 +5385,7 @@ int ObLogicalOperator::allocate_partition_join_filter(const ObIArray<JoinFilterI
       } else {
           join_filter_create->set_is_shared_partition_join_filter();
       }
-      if (get_plan()->get_optimizer_context().get_query_ctx()->check_opt_compat_version(COMPAT_VERSION_4_3_5) &&
-          (DistAlgo::DIST_PARTITION_NONE == join_dist_algo || DistAlgo::DIST_PARTITION_HASH_LOCAL == join_dist_algo)) {
+      if ((DistAlgo::DIST_PARTITION_NONE == join_dist_algo || DistAlgo::DIST_PARTITION_HASH_LOCAL == join_dist_algo)) {
         ObLogicalOperator* child = get_child(first_child);
         if (OB_ISNULL(child)) {
           ret = OB_ERR_UNEXPECTED;
@@ -5492,8 +5448,7 @@ int ObLogicalOperator::allocate_normal_join_filter(const ObIArray<JoinFilterInfo
   int64_t extra_hash_count = 1; // at least one for hash join
   bool has_shared_join_filter = false;
   bool realistic_runtime_bloom_filter_size = !GCONF._preset_runtime_bloom_filter_size;
-  if (realistic_runtime_bloom_filter_size && enable_bloom_filter
-      && GET_MIN_CLUSTER_VERSION() >= CLUSTER_VERSION_4_3_3_0) {
+  if (realistic_runtime_bloom_filter_size && enable_bloom_filter) {
     can_join_filter_material = true;
   }
   int64_t last_valid_join_filter_info_idx = -1;
@@ -5697,7 +5652,7 @@ int ObLogicalOperator::calc_rf_max_wait_time(const ObLogicalOperator *node, uint
   if (OB_ISNULL(session = get_plan()->get_optimizer_context().get_session_info())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("session is null", K(ret));
-  } else if (table_id != OB_INVALID_ID && GET_MIN_CLUSTER_VERSION() >= CLUSTER_VERSION_4_3_3_0) {
+  } else if (table_id != OB_INVALID_ID) {
     max_wait_time_ms = 10; // at least 10ms
     const OptTableMetas &table_metas = get_plan()->get_basic_table_metas();
     const OptTableMeta *table_meta = nullptr;

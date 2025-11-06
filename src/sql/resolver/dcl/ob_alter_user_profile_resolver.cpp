@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #define USING_LOG_PREFIX SQL_RESV
@@ -40,8 +44,6 @@ int ObAlterUserProfileResolver::resolve_set_role(const ParseNode &parse_tree)
   } else if (OB_ISNULL(params_.schema_checker_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("not init", K(ret));
-  } else if (lib::is_mysql_mode() && OB_FAIL(ObSQLUtils::compatibility_check_for_mysql_role_and_column_priv(MTL_ID()))) {
-    LOG_WARN("set role not supported while upgrading", K(ret));
   } else if (T_SET_ROLE != parse_tree.type_
              || 1 != parse_tree.num_child_) {
     ret = OB_INVALID_ARGUMENT;
@@ -267,8 +269,6 @@ int ObAlterUserProfileResolver::resolve_default_role(const ParseNode &parse_tree
   } else if (OB_ISNULL(params_.schema_checker_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("not init", K(ret));
-  } else if (lib::is_mysql_mode() && OB_FAIL(ObSQLUtils::compatibility_check_for_mysql_role_and_column_priv(MTL_ID()))) {
-    LOG_WARN("set default role not supported while upgrading", K(ret));
   } else if (T_ALTER_USER_DEFAULT_ROLE != parse_tree.type_
              || 2 != parse_tree.num_child_) {
     ret = OB_INVALID_ARGUMENT;

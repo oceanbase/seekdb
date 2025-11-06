@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #define USING_LOG_PREFIX SHARE_SCHEMA
@@ -470,9 +474,7 @@ int ObPrivSqlService::grant_column(
   const bool is_deleted = priv_set == 0;
   const uint64_t tenant_id = column_priv_key.tenant_id_;
   const uint64_t exec_tenant_id = ObSchemaUtils::get_exec_tenant_id(tenant_id);
-  if (OB_FAIL(ObSQLUtils::compatibility_check_for_mysql_role_and_column_priv(tenant_id))) {
-    LOG_WARN("grant/revoke column priv is not suppported", KR(ret));
-  } else if (!column_priv_key.is_valid()) {
+  if (!column_priv_key.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(column_priv_key), K(ret));
   } else if (OB_INVALID_ID == column_priv_id) {
@@ -543,22 +545,19 @@ int ObPrivSqlService::gen_column_priv_dml(
 {
   int ret = OB_SUCCESS;
   int64_t all_priv = 0;
-  if (OB_FAIL(ObSQLUtils::compatibility_check_for_mysql_role_and_column_priv(exec_tenant_id))) {
-    LOG_WARN("all column priv is not suppported", KR(ret));
-  } else {
-    if ((priv_set & OB_PRIV_SELECT) != 0) { all_priv |= 1; }
-    if ((priv_set & OB_PRIV_INSERT) != 0) { all_priv |= 2; } 
-    if ((priv_set & OB_PRIV_UPDATE) != 0) { all_priv |= 4; } 
-    if ((priv_set & OB_PRIV_REFERENCES) != 0) { all_priv |= 8; } 
-    if (OB_FAIL(dml.add_pk_column("tenant_id", 0))
-        || OB_FAIL(dml.add_pk_column("user_id", column_priv_key.user_id_))
-        || OB_FAIL(dml.add_pk_column("priv_id", priv_id))
-        || OB_FAIL(dml.add_column("database_name", column_priv_key.db_))
-        || OB_FAIL(dml.add_column("table_name", column_priv_key.table_))
-        || OB_FAIL(dml.add_column("column_name", column_priv_key.column_))
-        || OB_FAIL(dml.add_column("all_priv", all_priv))) {
-      LOG_WARN("add column failed", K(ret));
-    }
+
+  if ((priv_set & OB_PRIV_SELECT) != 0) { all_priv |= 1; }
+  if ((priv_set & OB_PRIV_INSERT) != 0) { all_priv |= 2; }
+  if ((priv_set & OB_PRIV_UPDATE) != 0) { all_priv |= 4; }
+  if ((priv_set & OB_PRIV_REFERENCES) != 0) { all_priv |= 8; }
+  if (OB_FAIL(dml.add_pk_column("tenant_id", 0))
+      || OB_FAIL(dml.add_pk_column("user_id", column_priv_key.user_id_))
+      || OB_FAIL(dml.add_pk_column("priv_id", priv_id))
+      || OB_FAIL(dml.add_column("database_name", column_priv_key.db_))
+      || OB_FAIL(dml.add_column("table_name", column_priv_key.table_))
+      || OB_FAIL(dml.add_column("column_name", column_priv_key.column_))
+      || OB_FAIL(dml.add_column("all_priv", all_priv))) {
+    LOG_WARN("add column failed", K(ret));
   }
   return ret;
 }
@@ -1259,10 +1258,6 @@ int ObPrivSqlService::grant_revoke_role(
     LOG_WARN("fail to get is oracle mode", K(ret));
   }
 
-  if (OB_SUCC(ret) && !is_oracle_mode) {
-    OZ (ObSQLUtils::compatibility_check_for_mysql_role_and_column_priv(tenant_id));
-  }
-
   // __all_tenant_role_grantee_map
   if (OB_FAIL(ret)) {
   } else if (is_grant) {
@@ -1487,6 +1482,201 @@ int ObPrivSqlService::grant_sys_priv_to_ur(
   return ret;
 }
 
+int ObPrivSqlService::grant_object(
+                      const ObObjMysqlPrivSortKey &obj_mysql_priv_key,
+                      const ObPrivSet priv_set,
+                      const int64_t new_schema_version,
+                      const ObString *ddl_stmt_str,
+                      ObISQLClient &sql_client,
+                      const uint64_t option,
+                      const bool is_grant,
+                      const common::ObString &grantor,
+                      const common::ObString &grantor_host)
+{
+  int ret = OB_SUCCESS;
+  const bool is_deleted = (priv_set == 0);
+  const uint64_t tenant_id = obj_mysql_priv_key.tenant_id_;
+  const uint64_t exec_tenant_id = ObSchemaUtils::get_exec_tenant_id(tenant_id);
+  if (!obj_mysql_priv_key.is_valid()) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid arguments", K(obj_mysql_priv_key), K(ret));
+  } else {
+    int64_t affected_rows = 0;
+    ObDMLExecHelper exec(sql_client, exec_tenant_id);
+    ObDMLSqlSplicer dml;
+    if (OB_FAIL(gen_obj_mysql_priv_dml(exec_tenant_id, obj_mysql_priv_key, priv_set, dml, grantor, grantor_host))) {
+      LOG_WARN("gen_obj_mysql_priv_dml failed", K(obj_mysql_priv_key), K(priv_set), K(ret));
+    }
+    // insert into __all_tenant_objauth_mysql
+    if (OB_SUCC(ret)) {
+      if (is_deleted) {
+        if (OB_FAIL(exec.exec_delete(OB_ALL_TENANT_OBJAUTH_MYSQL_TNAME, dml, affected_rows))) {
+          LOG_WARN("exec_delete failed", K(ret));
+        }
+      } else {
+        if (OB_FAIL(exec.exec_replace(OB_ALL_TENANT_OBJAUTH_MYSQL_TNAME, dml, affected_rows))) {
+          LOG_WARN("exec_replace failed", K(ret));
+        }
+      }
+
+      if (OB_FAIL(ret)) {
+      } else if (!is_single_row(affected_rows) && !is_double_row(affected_rows)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("affected_rows unexpected to be one ", K(affected_rows), K(ret));
+      }
+    }
+
+    // insert into __all_tenant_objauth_mysql_history
+    if (OB_SUCC(ret)) {
+      if (is_deleted) {
+        if (OB_FAIL(dml.add_pk_column("schema_version", new_schema_version))
+            || OB_FAIL(dml.add_column("is_deleted", is_deleted))) {
+          LOG_WARN("add column failed", K(ret));
+        } else if (OB_FAIL(exec.exec_replace(OB_ALL_TENANT_OBJAUTH_MYSQL_HISTORY_TNAME, dml, affected_rows))) {
+          LOG_WARN("exec_replace failed", K(ret));
+        } else if (!is_single_row(affected_rows)) {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("affected_rows expeccted to be one", K(affected_rows), K(ret));
+        }
+      } else {
+        if (OB_FAIL(add_obj_mysql_priv_history(obj_mysql_priv_key, priv_set,
+                                          new_schema_version, sql_client,
+                                          grantor, grantor_host))) {
+          LOG_WARN("add_obj_mysql_priv_history failed", K(obj_mysql_priv_key),
+            K(priv_set), K(new_schema_version), K(ret));
+        }
+      }
+    }
+
+    //log operation
+    if (OB_SUCC(ret)) {
+      ObSchemaOperation priv_operation;
+      priv_operation.tenant_id_ = obj_mysql_priv_key.tenant_id_;
+      priv_operation.user_id_ = obj_mysql_priv_key.user_id_;
+      priv_operation.obj_name_ = obj_mysql_priv_key.object_name_;
+      priv_operation.obj_type_ = obj_mysql_priv_key.object_type_;
+      priv_operation.op_type_ = (is_deleted ?
+          OB_DDL_DEL_OBJ_MYSQL_PRIV : OB_DDL_GRANT_OBJ_MYSQL_PRIV);
+      priv_operation.schema_version_ = new_schema_version;
+      priv_operation.ddl_stmt_str_ = ddl_stmt_str ? *ddl_stmt_str : ObString();
+      if (OB_FAIL(log_operation(priv_operation, sql_client))) {
+        LOG_WARN("Failed to log operation", K(ret));
+      }
+    }
+  }
+  return ret;
+}
+
+int ObPrivSqlService::revoke_object(
+    const ObObjMysqlPrivSortKey &object_priv_key,
+    const ObPrivSet priv_set,
+    const int64_t new_schema_version,
+    const ObString *ddl_stmt_str,
+    ObISQLClient &sql_client,
+    const common::ObString &grantor,
+    const common::ObString &grantor_host)
+{
+  return grant_object(object_priv_key,
+                    priv_set,
+                    new_schema_version,
+                    ddl_stmt_str,
+                    sql_client,
+                    NO_OPTION,
+                    false,
+                    grantor,
+                    grantor_host);
+}
+
+int ObPrivSqlService::delete_obj_mysql_priv(
+    const ObObjMysqlPriv &obj_priv,
+    const int64_t new_schema_version,
+    ObISQLClient &sql_client)
+{
+  int ret = OB_SUCCESS;
+  const uint64_t tenant_id = obj_priv.get_tenant_id();
+  const uint64_t exec_tenant_id = ObSchemaUtils::get_exec_tenant_id(tenant_id);
+  if (!obj_priv.is_valid()) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("Invalid arguments", K(obj_priv), K(ret));
+  } else {
+    ObObjMysqlPrivSortKey object_priv_key = obj_priv.get_sort_key();
+    OZ (grant_object(object_priv_key,
+                    0,              // delete
+                    new_schema_version,
+                    NULL,
+                    sql_client,
+                    NO_OPTION,
+                    false,
+                    ObString(),
+                    ObString()));
+  }
+  return ret;
+}
+
+int ObPrivSqlService::add_obj_mysql_priv_history(
+  const ObObjMysqlPrivSortKey &obj_mysql_priv_key,
+  const ObPrivSet &priv_set,
+  const int64_t schema_version,
+  common::ObISQLClient &sql_client,
+  const common::ObString &grantor,
+  const common::ObString &grantor_host)
+{
+  int ret = OB_SUCCESS;
+  const uint64_t tenant_id = obj_mysql_priv_key.tenant_id_;
+  const uint64_t exec_tenant_id = ObSchemaUtils::get_exec_tenant_id(tenant_id);
+  ObDMLExecHelper exec(sql_client, exec_tenant_id);
+  ObDMLSqlSplicer dml;
+  int64_t affected_rows = 0;
+  if (OB_FAIL(gen_obj_mysql_priv_dml(exec_tenant_id, obj_mysql_priv_key, priv_set, dml, grantor, grantor_host))) {
+    LOG_WARN("gen_obj_mysql_priv_dml failed", K(obj_mysql_priv_key), K(ret));
+  } else {
+    const int64_t is_deleted = 0;
+    if (OB_FAIL(dml.add_pk_column("schema_version", schema_version))
+        || OB_FAIL(dml.add_column("is_deleted", is_deleted))) {
+      LOG_WARN("add column failed", K(ret));
+    } else if (OB_FAIL(exec.exec_replace(OB_ALL_TENANT_OBJAUTH_MYSQL_HISTORY_TNAME,
+        dml, affected_rows))) {
+      LOG_WARN("execute update sql fail", K(ret));
+    } else if (!is_single_row(affected_rows)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("update should affect only 1 row", K(affected_rows), K(ret));
+    }
+  }
+  return ret;
+}
+
+int ObPrivSqlService::gen_obj_mysql_priv_dml(
+    const uint64_t exec_tenant_id,
+    const ObObjMysqlPrivSortKey &obj_mysql_priv_key,
+    const ObPrivSet &priv_set,
+    ObDMLSqlSplicer &dml,
+    const common::ObString &grantor,
+    const common::ObString &grantor_host)
+{
+  int ret = OB_SUCCESS;
+  int64_t all_priv = 0;
+
+  if ((priv_set & OB_PRIV_READ) != 0) { all_priv |= 1; }
+  if ((priv_set & OB_PRIV_WRITE) != 0) { all_priv |= 2; }
+  if ((priv_set & OB_PRIV_GRANT) != 0) {all_priv |= 4; }
+  if (OB_FAIL(dml.add_pk_column("tenant_id", 0))
+      || OB_FAIL(dml.add_pk_column("user_id", obj_mysql_priv_key.user_id_))
+      || OB_FAIL(dml.add_pk_column("obj_name", ObHexEscapeSqlStr(obj_mysql_priv_key.object_name_)))
+      || OB_FAIL(dml.add_pk_column("obj_type", obj_mysql_priv_key.object_type_))
+      || OB_FAIL(dml.add_column("all_priv", all_priv))) {
+    LOG_WARN("add column failed", K(ret));
+  }
+
+  if (OB_FAIL(ret)) {
+  } else {
+    if (grantor.length() > 0 && OB_FAIL(dml.add_column("GRANTOR", grantor))) {
+      LOG_WARN("add column failed", K(ret));
+    } else if (grantor_host.length() > 0 && OB_FAIL(dml.add_column("GRANTOR_HOST", grantor_host))) {
+      LOG_WARN("add column failed", K(ret));
+    }
+  }
+  return ret;
+}
 
 
 } //end of schema

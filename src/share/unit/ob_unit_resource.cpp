@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #define USING_LOG_PREFIX    SHARE
@@ -126,7 +130,6 @@ bool ObUnitResource::is_valid_for_unit() const
   return is_max_cpu_valid_for_unit()
       && is_min_cpu_valid_for_unit()
       && max_cpu_ >= min_cpu_
-      && is_memory_size_valid_for_unit()
       && is_log_disk_size_valid_for_unit()
       // Default value of data_disk_size was -1 in version 4.3.0.1.
       // So SKIP checking validity of data_disk_size in SN mode to avoid compatibility problem.
@@ -248,12 +251,6 @@ int ObUnitResource::init_and_check_mem_(const ObUnitResource &user_spec)
     ret = OB_MISS_ARGUMENT;
     LOG_WARN("missing 'memory_size' argument", KR(ret), K(user_spec));
     LOG_USER_ERROR(OB_MISS_ARGUMENT, "MEMORY_SIZE");
-  } else if (user_spec.memory_size() < unit_min_memory) {
-    ret = OB_RESOURCE_UNIT_VALUE_BELOW_LIMIT;
-    LOG_WARN("memory_size is below limit", KR(ret), K(user_spec), K(unit_min_memory));
-    ObCStringHelper helper;
-    LOG_USER_ERROR(OB_RESOURCE_UNIT_VALUE_BELOW_LIMIT, "MEMORY_SIZE",
-        helper.convert(unit_min_memory));
   } else {
     // memory_size valid
     memory_size_ = user_spec.memory_size();

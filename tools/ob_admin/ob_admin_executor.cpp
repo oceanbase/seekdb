@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #define USING_LOG_PREFIX COMMON
@@ -35,7 +39,6 @@ ObAdminExecutor::ObAdminExecutor()
   IGNORE_RETURN ObTimerService::get_instance().start();
   mock_server_tenant_.set(&ObTimerService::get_instance());
   share::ObTenantEnv::set_tenant(&mock_server_tenant_);
-  omt::ObTenantConfigMgr::get_instance().add_tenant_config(OB_SYS_TENANT_ID);
   storage_env_.data_dir_ = data_dir_;
   storage_env_.sstable_dir_ = sstable_dir_;
   storage_env_.default_block_size_ = 2 * 1024 * 1024;
@@ -115,7 +118,7 @@ int ObAdminExecutor::prepare_io()
     LOG_WARN("add device channel failed", K(ret));
   } else if (OB_FAIL(ObIOManager::get_instance().start())) {
     LOG_WARN("fail to start io manager", K(ret));
-  } else if (OB_FAIL(OB_FILE_SYSTEM_ROUTER.get_instance().init(data_dir_))) {
+  } else if (OB_FAIL(OB_FILE_SYSTEM_ROUTER.get_instance().init(data_dir_, clog_dir_))) {
     LOG_WARN("fail to init file system router", K(ret));
   } else if (OB_FAIL(SERVER_STORAGE_META_SERVICE.init(false/*is_shared_storage*/))) {
     LOG_WARN("fail to init storage meta service", K(ret));

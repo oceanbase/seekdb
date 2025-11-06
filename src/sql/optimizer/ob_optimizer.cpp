@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #define USING_LOG_PREFIX SQL_OPT
@@ -876,7 +880,7 @@ int ObOptimizer::extract_opt_ctx_basic_flags(const ObDMLStmt &stmt, ObSQLSession
     ctx_.set_has_subquery_in_function_table(has_subquery_in_function_table);
     ctx_.set_cost_model_type(rowsets_enabled ? ObOptEstCost::VECTOR_MODEL : ObOptEstCost::NORMAL_MODEL);
     ctx_.set_has_cursor_expression(has_cursor_expr);
-    ctx_.set_das_keep_order_enabled(GET_MIN_CLUSTER_VERSION() < CLUSTER_VERSION_4_3_2_0 ? false : das_keep_order_enabled);
+    ctx_.set_das_keep_order_enabled(das_keep_order_enabled);
     ctx_.set_optimizer_index_cost_adj(optimizer_index_cost_adj);
     ctx_.set_is_skip_scan_enabled(is_skip_scan_enable);
     ctx_.set_enable_better_inlist_costing(better_inlist_costing);
@@ -1061,9 +1065,6 @@ int ObOptimizer::init_correlation_model(ObDMLStmt &stmt, const ObSQLSessionInfo 
   if (OB_ISNULL(ctx_.get_query_ctx())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null ctx", K(ret));
-  } else if (!ctx_.get_query_ctx()->check_opt_compat_version(COMPAT_VERSION_4_2_4, COMPAT_VERSION_4_3_0,
-                                                             COMPAT_VERSION_4_3_3)) {
-    type = static_cast<int64_t>(ObEstCorrelationType::INDEPENDENT);
   } else if (OB_FAIL(ctx_.get_global_hint().opt_params_.has_opt_param(ObOptParamHint::CARDINALITY_ESTIMATION_MODEL, has_new_hint))) {
     LOG_WARN("failed to check whether has hint param", K(ret));
   } else {

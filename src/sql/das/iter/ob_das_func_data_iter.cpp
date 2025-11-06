@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2024 OceanBase
- * OceanBase is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #define USING_LOG_PREFIX SQL_DAS
@@ -16,7 +20,7 @@
 #include "sql/das/iter/ob_das_iter_define.h"
 #include "sql/das/ob_das_scan_op.h"
 #include "sql/engine/ob_exec_context.h"
-#include "sql/das/iter/ob_das_text_retrieval_iter.h"
+#include "sql/das/iter/sparse_retrieval/ob_das_tr_merge_iter.h"
 
 using namespace oceanbase::common;
 
@@ -32,6 +36,7 @@ ObDASFuncDataIterParam::ObDASFuncDataIterParam()
     main_lookup_ctdef_(nullptr),
     main_lookup_rtdef_(nullptr),
     main_lookup_iter_(nullptr),
+    doc_id_expr_(nullptr),
     trans_desc_(nullptr),
     snapshot_(nullptr)
 {}
@@ -52,7 +57,8 @@ ObDASFuncDataIter::ObDASFuncDataIter()
     main_lookup_param_(),
     merge_memctx_(),
     doc_ids_(),
-    read_count_(0)
+    read_count_(0),
+    start_table_scan_(false)
   {}
 
 ObDASFuncDataIter::~ObDASFuncDataIter()
@@ -62,6 +68,7 @@ ObDASFuncDataIter::~ObDASFuncDataIter()
 int ObDASFuncDataIter::do_table_scan()
 {
   int ret = OB_SUCCESS;
+  start_table_scan_ = true;
   if (OB_ISNULL(tr_merge_iters_) || OB_UNLIKELY(iter_count_ <= 0)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpeted error, tr merge iter is nullptr", K(ret));
@@ -97,6 +104,9 @@ int ObDASFuncDataIter::rescan()
     LOG_WARN("unexpeted error, tr merge iter is nullptr", K(ret));
   } else if (OB_FAIL(build_tr_merge_iters_rangekey())) {
     LOG_WARN("fail to build rowkey doc range", K(ret));
+  } else if (!start_table_scan_) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("table scan is not started", K(ret));
   } else if (nullptr != main_lookup_iter_ && OB_FAIL(main_lookup_iter_->rescan())) {
     LOG_WARN("fail to do table scan for main lookup table", K(ret), KPC(main_lookup_iter_));
   } else {
@@ -121,6 +131,34 @@ void ObDASFuncDataIter::clear_evaluated_flag()
   }
 }
 
+int ObDASFuncDataIter::set_scan_rowkey(ObEvalCtx *eval_ctx,
+                                       const ObIArray<ObExpr *> &rowkey_exprs,
+                                       const ObDASScanCtDef *lookup_ctdef,
+                                       ObIAllocator *alloc,
+                                       int64_t group_id)
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(eval_ctx) || OB_UNLIKELY(1 != rowkey_exprs.count())) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid eval ctx or rowkey exprs", K(eval_ctx), K(rowkey_exprs), K(ret));
+  } else {
+    ObDocIdExt doc_id;
+    const ObExpr *expr = rowkey_exprs.at(0);
+    ObDatum &col_datum = expr->locate_expr_datum(*eval_ctx);
+    if (OB_FAIL(doc_id.from_datum(col_datum))) {
+      LOG_WARN("failed to get doc id", K(ret), K(doc_id));
+    } else if (OB_FAIL(add_doc_id(doc_id))) {
+      LOG_WARN("failed to add doc id", K(ret));
+    }
+    LOG_DEBUG("set func data iter scan rowkey", K(doc_id), K(ret));
+  }
+  if (OB_SUCC(ret) && has_main_lookup_iter() && nullptr != lookup_ctdef
+      && OB_FAIL(main_lookup_iter_->set_scan_rowkey(eval_ctx, rowkey_exprs, lookup_ctdef, alloc, group_id))) {
+    LOG_WARN("failed to set scan rowkey of main lookup iter", K(ret));
+  }
+  return ret;
+}
+
 int ObDASFuncDataIter::inner_init(ObDASIterParam &param)
 {
   int ret = OB_SUCCESS;
@@ -133,6 +171,9 @@ int ObDASFuncDataIter::inner_init(ObDASIterParam &param)
     param.set_mem_attr(MTL_ID(), "FTSMerge", ObCtxIds::DEFAULT_CTX_ID).set_properties(lib::USE_TL_PAGE_OPTIONAL);
     if (OB_FAIL(CURRENT_CONTEXT->CREATE_CONTEXT(merge_memctx_, param))) {
       LOG_WARN("failed to create merge memctx", K(ret));
+    } else if (OB_ISNULL(merge_param.doc_id_expr_)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("unexpected nullptr", K(ret), KP(merge_param.doc_id_expr_));
     } else {
       tr_merge_iters_ = merge_param.tr_merge_iters_;
       iter_count_ = merge_param.iter_count_;
@@ -140,7 +181,8 @@ int ObDASFuncDataIter::inner_init(ObDASIterParam &param)
       main_lookup_rtdef_ = merge_param.main_lookup_rtdef_;
       main_lookup_iter_ = merge_param.main_lookup_iter_;
       read_count_ = 0;
-      sql::ObExprBasicFuncs *basic_funcs = ObDatumFuncs::get_basic_func(ObVarcharType, CS_TYPE_BINARY);
+      sql::ObExprBasicFuncs *basic_funcs = ObDatumFuncs::get_basic_func(merge_param.doc_id_expr_->datum_meta_.type_,
+                                                                        merge_param.doc_id_expr_->datum_meta_.cs_type_);
       cmp_func_ = basic_funcs->null_first_cmp_;
       if (main_lookup_iter_ && OB_FAIL(init_main_lookup_scan_param(main_lookup_param_,
                                                                    main_lookup_ctdef_,
@@ -159,7 +201,8 @@ int ObDASFuncDataIter::inner_reuse()
   int ret = OB_SUCCESS;
   doc_ids_.reuse();
   read_count_ = 0;
-  if (OB_NOT_NULL(main_lookup_iter_)) {
+  if (!start_table_scan_) {
+  } else if (OB_NOT_NULL(main_lookup_iter_)) {
     ObDASScanIter *main_lookup_iter = static_cast<ObDASScanIter *>(main_lookup_iter_);
     storage::ObTableScanParam &main_lookup_scan_param = main_lookup_iter->get_scan_param();
     if (OB_UNLIKELY(&main_lookup_param_ != &main_lookup_iter->get_scan_param())) {
@@ -180,7 +223,8 @@ int ObDASFuncDataIter::inner_reuse()
     }
   }
 
-  if (OB_FAIL(ret)) {
+  if (!start_table_scan_) {
+  } else if (OB_FAIL(ret)) {
   } else if (OB_ISNULL(merge_memctx_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("merge_memctx_ is nullptr", K(ret));
@@ -207,17 +251,18 @@ int ObDASFuncDataIter::inner_release()
   }
   if (OB_NOT_NULL(main_lookup_iter_)) {
     main_lookup_iter_ = nullptr;
-  } 
+  }
   for (int64_t i = 0; i < iter_count_; i++) {
     if (OB_NOT_NULL(tr_merge_iters_[i])) {
       tr_merge_iters_[i] = nullptr;
-    } 
+    }
   }
   doc_ids_.reset();
   main_lookup_param_.destroy_schema_guard();
   main_lookup_param_.snapshot_.reset();
   main_lookup_param_.destroy();
   read_count_ = 0;
+  start_table_scan_ = false;
   return ret;
 }
 
@@ -238,7 +283,7 @@ int ObDASFuncDataIter::inner_get_next_row()
     } else {
       ret = OB_SUCCESS;
     }
-  } 
+  }
 
   for (int64_t i = 0; OB_SUCC(ret) && i < iter_count_; i++) {
     if (OB_FAIL(tr_merge_iters_[i]->get_next_row())) {
@@ -280,7 +325,7 @@ int ObDASFuncDataIter::inner_get_next_rows(int64_t &count, int64_t capacity)
   }
   if (OB_SUCC(ret) && OB_UNLIKELY(main_lookup_iter_ && default_size < main_lookup_count + read_count_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected error, main lookup count is not equal to capacity", K(ret), K(default_size), K(main_lookup_count));
+    LOG_WARN("unexpected error, main lookup count is not equal to capacity", K(ret), K(default_size), K(main_lookup_count), K_(read_count));
   }
 
   int tmp_count = 0;
@@ -335,8 +380,8 @@ int ObDASFuncDataIter::build_tr_merge_iters_rangekey()
       LOG_WARN("fail to sort doc id", K(ret));
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < iter_count_; i++) {
-      ObDASTextRetrievalMergeIter *tr_merge_iter = static_cast<ObDASTextRetrievalMergeIter *>(tr_merge_iters_[i]);
-      if (OB_FAIL(tr_merge_iter->set_rangkey_and_selector(doc_ids_))) {
+      ObDASTRMergeIter *tr_merge_iter = static_cast<ObDASTRMergeIter *>(tr_merge_iters_[i]);
+      if (OB_FAIL(tr_merge_iter->set_children_iter_rangekey(doc_ids_, doc_ids_.count()))) {
         LOG_WARN("fail to add doc id", K(ret));
       }
     }

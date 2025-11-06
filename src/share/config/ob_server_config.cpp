@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #define USING_LOG_PREFIX SHARE_CONFIG
@@ -28,7 +32,7 @@ int64_t get_cpu_count()
 using namespace share;
 
 ObServerConfig::ObServerConfig()
-    : disk_actual_space_(0), self_addr_(), system_config_(NULL)
+    : disk_actual_space_(0), self_addr_(), rwlock_(ObLatchIds::CONFIG_LOCK), system_config_(NULL)
 {
 }
 
@@ -149,7 +153,7 @@ int ObServerConfig::add_extra_config(const char *config_str,
                                      const int64_t version /* = 0 */,
                                      const bool check_config /* = true */)
 {
-  DRWLock::WRLockGuard guard(OTC_MGR.rwlock_);
+  DRWLock::WRLockGuard guard(GCONF.rwlock_);
   return add_extra_config_unsafe(config_str, version, check_config);
 }
 
@@ -190,7 +194,7 @@ double ObServerConfig::get_sys_tenant_default_max_cpu()
 }
 
 ObServerMemoryConfig::ObServerMemoryConfig()
-  : memory_limit_(0)
+  : memory_limit_(0), hard_memory_limit_(INT64_MAX)
 {}
 
 ObServerMemoryConfig &ObServerMemoryConfig::get_instance()
@@ -206,11 +210,10 @@ int ObServerMemoryConfig::reload_config(const ObServerConfig& server_config)
   int64_t phy_mem_size = get_phy_mem_size();
   if (0 == memory_limit) {
     memory_limit = phy_mem_size * server_config.memory_limit_percentage / 100;
-  } else if (memory_limit >= phy_mem_size) {
-    OB_LOG_RET(ERROR, OB_ERR_UNEXPECTED, "memory_limit is larger than phy_mem_size", K(memory_limit), K(phy_mem_size));
   }
-  memory_limit_ = memory_limit;
-  LOG_INFO("update observer memory config", K_(memory_limit));
+  hard_memory_limit_ = phy_mem_size * MAX_PHY_MEM_PERCENTAGE / 100;
+  memory_limit_ = MIN(memory_limit, hard_memory_limit_);
+  LOG_INFO("update observer memory config", K_(memory_limit), K_(hard_memory_limit));
   return ret;
 }
 
@@ -245,7 +248,6 @@ int ObServerConfig::serialize_(char *buf, const int64_t buf_len, int64_t &pos) c
 
   // data first
   if (OB_FAIL(ObCommonConfig::serialize(buf, buf_len, pos))) {
-  } else if (OB_FAIL(OTC_MGR.serialize(buf, buf_len, pos))) {
   } else {
     header.magic_ = OB_CONFIG_MAGIC;
     header.header_length_ = static_cast<int16_t>(header_len);
@@ -311,8 +313,49 @@ OB_DEF_DESERIALIZE(ObServerConfig)
       LOG_ERROR("check data checksum failed", K(ret));
     } else if (OB_FAIL(ObCommonConfig::deserialize(buf, data_len, pos))) {
       LOG_ERROR("deserialize cluster config failed", K(ret));
-    } else if (OB_FAIL(OTC_MGR.deserialize(buf, data_len, pos))){
-      LOG_ERROR("deserialize tenant config failed", K(ret));
+    }
+  }
+  return ret;
+}
+
+int ObServerConfig::publish_special_config_after_dump()
+{
+  int ret = OB_SUCCESS;
+  ObConfigItem *const *pp_item = NULL;
+  if (OB_ISNULL(pp_item = container_.get(ObConfigStringKey(COMPATIBLE)))) {
+    ret = OB_INVALID_CONFIG;
+    LOG_WARN("Invalid config string", K(ret));
+  } else if (!(*pp_item)->dump_value_updated()) {
+    LOG_INFO("config dump value is not set, no need read", K((*pp_item)->spfile_str()));
+  } else {
+    uint64_t new_data_version = 0;
+    uint64_t old_data_version = 0;
+    bool value_updated = (*pp_item)->value_updated();
+    if (OB_FAIL(ObClusterVersion::get_version((*pp_item)->spfile_str(), new_data_version))) {
+      LOG_ERROR("parse data_version failed", KR(ret), K((*pp_item)->spfile_str()));
+    } else if (OB_FAIL(ObClusterVersion::get_version((*pp_item)->str(), old_data_version))) {
+      LOG_ERROR("parse data_version failed", KR(ret), K((*pp_item)->str()));
+    } else if (!value_updated && old_data_version != DATA_CURRENT_VERSION) {
+      ret = OB_ERR_UNEXPECTED;
+      SHARE_LOG(ERROR, "unexpected data_version", KR(ret), K(old_data_version));
+    } else if (value_updated && new_data_version <= old_data_version) {
+      LOG_INFO("[COMPATIBLE] [DATA_VERSION] no need to update",
+               "old_data_version", DVP(old_data_version),
+               "new_data_version", DVP(new_data_version));
+      // do nothing
+    } else {
+      if (!(*pp_item)->set_value_unsafe((*pp_item)->spfile_str())) {
+        ret = OB_INVALID_CONFIG;
+        LOG_WARN("Invalid config value", K((*pp_item)->spfile_str()), K(ret));
+      } else {
+        FLOG_INFO("[COMPATIBLE] [DATA_VERSION] read data_version after dump",
+                  KR(ret), "version", (*pp_item)->version(),
+                  "value", (*pp_item)->str(), "value_updated",
+                  (*pp_item)->value_updated(), "dump_version",
+                  (*pp_item)->dumped_version(), "dump_value",
+                  (*pp_item)->spfile_str(), "dump_value_updated",
+                  (*pp_item)->dump_value_updated());
+      }
     }
   }
   return ret;
@@ -326,8 +369,7 @@ OB_DEF_SERIALIZE_SIZE(ObServerConfig)
   len += header.get_serialize_size();
   // 2) cluster config size
   len += ObCommonConfig::get_serialize_size();
-  // 3) tenant config size
-  len += OTC_MGR.get_serialize_size();
+
   return len;
 }
 

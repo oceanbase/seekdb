@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #ifndef OCEANBASE_SQL_RESOLVER_DCL_OB_REVOKE_STMT_
@@ -69,7 +73,8 @@ public:
         : (share::schema::OB_PRIV_TABLE_LEVEL == grant_level_ ?  static_cast<obrpc::ObDDLArg &>(table_arg_)
         : (share::schema::OB_PRIV_ROUTINE_LEVEL == grant_level_ ?  static_cast<obrpc::ObDDLArg &>(routine_arg_)
         : (share::schema::OB_PRIV_CATALOG_LEVEL == grant_level_ ?  static_cast<obrpc::ObDDLArg &>(catalog_arg_)
-        : static_cast<obrpc::ObDDLArg &>(syspriv_arg_))))); 
+        : (share::schema::OB_PRIV_OBJECT_LEVEL == grant_level_ ?  static_cast<obrpc::ObDDLArg &>(obj_mysql_arg_)
+        : static_cast<obrpc::ObDDLArg &>(syspriv_arg_))))));
   }
   int add_column_privs(const ObString& column_name,const ObPrivSet priv_set) { return column_names_priv_.push_back(std::make_pair(column_name, priv_set)); }
   const ObIArray<std::pair<ObString, ObPrivType>> &get_column_privs() const { return column_names_priv_; }
@@ -95,6 +100,7 @@ private:
   obrpc::ObRevokeTableArg table_arg_;
   obrpc::ObRevokeRoutineArg routine_arg_;
   obrpc::ObRevokeSysPrivArg syspriv_arg_;
+  obrpc::ObRevokeObjMysqlArg obj_mysql_arg_;
   common::hash::ObPlacementHashSet<uint64_t, common::MAX_ENABLED_ROLES> role_id_set_;
   share::schema::ObObjectType object_type_;
   share::ObRawPrivArray sys_priv_array_;

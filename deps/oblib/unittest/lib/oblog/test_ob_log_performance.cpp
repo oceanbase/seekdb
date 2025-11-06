@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #include <gtest/gtest.h>
@@ -92,7 +96,7 @@ void ObLoggerTest::run_test()
 {
   int ret = 0;
   system("rm -rf s_log.log*");
-  OB_LOGGER.set_log_level("TRACE", "WARN");
+  OB_LOGGER.set_log_level("TRACE");
   OB_LOGGER.set_enable_async_log(false);
   //OB_LOGGER.set_max_file_size(BIG_LOG_FILE_SIZE);
   OB_LOGGER.set_file_name("s_log.log", false, true);
@@ -110,7 +114,7 @@ void ObLoggerTest::run_test_t()
 {
   int ret = 0;
   system("rm -rf t_log.log*");
-  OB_LOGGER.set_log_level("TRACE", "WARN");
+  OB_LOGGER.set_log_level("TRACE");
   OB_LOGGER.set_enable_async_log(false);
   //OB_LOGGER.set_max_file_size(BIG_LOG_FILE_SIZE);
   OB_LOGGER.set_file_name("t_log.log", false, true);
@@ -127,7 +131,7 @@ void ObLoggerTest::run_test_async()
 {
   int ret = 0;
   system("rm -rf async_log.log*");
-  OB_LOGGER.set_log_level("TRACE", "WARN");
+  OB_LOGGER.set_log_level("TRACE");
   //OB_LOGGER.set_max_file_size(BIG_LOG_FILE_SIZE);
   OB_LOGGER.set_file_name("async_log.log", true, true);
   OB_LOGGER.set_enable_async_log(true);
@@ -148,7 +152,7 @@ void ObLoggerTest::run_test_async_multi()
 {
   int ret = 0;
   system("rm -rf async_multi_log.log*");
-  OB_LOGGER.set_log_level("TRACE", "WARN");
+  OB_LOGGER.set_log_level("TRACE");
   //OB_LOGGER.set_max_file_size(BIG_LOG_FILE_SIZE);
   OB_LOGGER.set_file_name("async_multi_log.log", false, true);
   OB_LOGGER.set_enable_async_log(true);
@@ -170,7 +174,7 @@ void ObLoggerTest::run_test_t_async()
 {
   int ret = 0;
   system("rm -rf t_async_log.log*");
-  OB_LOGGER.set_log_level("TRACE", "WARN");
+  OB_LOGGER.set_log_level("TRACE");
   OB_LOGGER.set_enable_async_log(true);
   OB_LOGGER.set_use_multi_flush(false);
   //OB_LOGGER.set_max_file_size(BIG_LOG_FILE_SIZE);
@@ -188,7 +192,7 @@ void ObLoggerTest::run_test_t_async_multi()
 {
   int ret = 0;
   system("rm -rf t_async_multi_log.log*");
-  OB_LOGGER.set_log_level("TRACE", "WARN");
+  OB_LOGGER.set_log_level("TRACE");
   OB_LOGGER.set_enable_async_log(true);
   OB_LOGGER.set_use_multi_flush(true);
   //OB_LOGGER.set_max_file_size(BIG_LOG_FILE_SIZE);

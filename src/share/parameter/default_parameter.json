@@ -10,14 +10,9 @@
           "comment": "forbid recording sql and transaction trace event"
         },
         {
-          "name": "enable_syslog_recycle",
-          "value": 1,
-          "comment": "enable syslog auto recycle can prevent log files from filling up disk space"
-        },
-        {
           "name": "max_syslog_file_count",
           "value": 300,
-          "comment": "when enable_syslog_recycle is enabled, should set this value to a proper value. 300 is an empirical value."
+          "comment": "300 is an empirical value."
         }
       ],
       "tenant": [
@@ -65,14 +60,9 @@
           "comment": "for complex OLTP scenario, some query will run for very long time."
         },
         {
-          "name": "enable_syslog_recycle",
-          "value": 1,
-          "comment": "enable syslog auto recycle can prevent log files from filling up disk space"
-        },
-        {
           "name": "max_syslog_file_count",
           "value": 300,
-          "comment": "when enable_syslog_recycle is enabled, should set this value to a proper value. 300 is an empirical value."
+          "comment": "300 is an empirical value."
         }
       ],
       "tenant": [
@@ -125,14 +115,9 @@
           "comment": "disable large query detection for AP query"
         },
         {
-          "name": "enable_syslog_recycle",
-          "value": 1,
-          "comment": "enable syslog auto recycle can prevent log files from filling up disk space"
-        },
-        {
           "name": "max_syslog_file_count",
           "value": 300,
-          "comment": "when enable_syslog_recycle is enabled, should set this value to a proper value. 300 is an empirical value."
+          "comment": "300 is an empirical value."
         }
       ],
       "tenant": [
@@ -205,14 +190,9 @@
           "comment": "disable large query detection for KV mode"
         },
         {
-          "name": "enable_syslog_recycle",
-          "value": 1,
-          "comment": "enable syslog auto recycle can prevent log files from filling up disk space"
-        },
-        {
           "name": "max_syslog_file_count",
           "value": 300,
-          "comment": "when enable_syslog_recycle is enabled, should set this value to a proper value. 300 is an empirical value."
+          "comment": "300 is an empirical value."
         }
       ],
       "tenant": [
@@ -255,14 +235,9 @@
           "comment": "disable trace log for better AP performance"
         },
         {
-          "name": "enable_syslog_recycle",
-          "value": 1,
-          "comment": "enable syslog auto recycle can prevent log files from filling up disk space"
-        },
-        {
           "name": "max_syslog_file_count",
           "value": 300,
-          "comment": "when enable_syslog_recycle is enabled, should set this value to a proper value. 300 is an empirical value."
+          "comment": "300 is an empirical value."
         }
       ],
       "tenant": [

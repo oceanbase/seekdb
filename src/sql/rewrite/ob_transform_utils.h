@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #ifndef OCEANBASE_SQL_REWRITE_OB_TRANSFORM_UTILS_H_
@@ -1880,8 +1884,6 @@ public:
   static int check_contain_correlated_json_table(const ObDMLStmt *stmt, bool &is_contain);
   static int check_contain_lost_deterministic_expr(const ObIArray<ObRawExpr*> &exprs,
                                                    bool &is_contain);
-  static bool is_enable_values_table_rewrite(const uint64_t compat_version);
-  static bool is_enable_hybrid_inlist_rewrite(const uint64_t compat_version);
   // check whether the score calculated by match expr is actually utilized
   static int check_expr_eq_zero(ObExecContext *ctx,
                                 ObRawExpr *expr, 

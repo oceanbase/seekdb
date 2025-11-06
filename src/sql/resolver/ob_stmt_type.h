@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #ifdef OB_STMT_TYPE_DEF
@@ -380,6 +384,14 @@ OB_STMT_TYPE_DEF_UNKNOWN_AT(T_DROP_CCL_RULE, get_drop_ccl_priv, 381)
 OB_STMT_TYPE_DEF_UNKNOWN_AT(T_FLUSH_TABLE_MOCK, no_priv_needed, 382)
 OB_STMT_TYPE_DEF_UNKNOWN_AT(T_TRIGGER_STORAGE_CACHE, get_sys_tenant_alter_system_priv, 383)
 OB_STMT_TYPE_DEF(T_SYS_DISPATCH_CALL, no_priv_needed, 384, ACTION_TYPE_EXECUTE_PROCEDURE)
+
+OB_STMT_TYPE_DEF_UNKNOWN_AT(T_CREATE_LOCATION, get_location_privs, 385)
+OB_STMT_TYPE_DEF_UNKNOWN_AT(T_ALTER_LOCATION, get_location_privs, 386)
+OB_STMT_TYPE_DEF_UNKNOWN_AT(T_DROP_LOCATION, get_location_privs, 387)
+OB_STMT_TYPE_DEF_UNKNOWN_AT(T_SHOW_LOCATIONS, no_priv_needed, 388)
+OB_STMT_TYPE_DEF_UNKNOWN_AT(T_SHOW_CREATE_LOCATION, no_priv_needed, 389)
+OB_STMT_TYPE_DEF_UNKNOWN_AT(T_LOCATION_UTILS_LIST, no_priv_needed, 390)
+OB_STMT_TYPE_DEF_UNKNOWN_AT(T_LOCATION_UTILS, get_location_util_privs, 391)
 
 OB_STMT_TYPE_DEF_UNKNOWN_AT(T_MAX, err_stmt_type_priv, 500)
 #endif

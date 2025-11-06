@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #ifndef _OCEANBASE_STORAGE_DDL_OB_PIPELINE_H_
@@ -28,9 +32,15 @@ namespace blocksstable
 class ObBatchDatumRows;
 struct ObDatumRow;
 }
+
+namespace common
+{
+class ObIVector;
+}
+
 namespace storage
 {
-
+class ObTaskBatchInfo;
 class ObDDLTabletContext;
 class ObDDLSlice;
 class ObPipeline;
@@ -49,6 +59,7 @@ public:
     CG_ROW_TMP_FILES,
     BATCH_DATUM_ROWS,
     DIRECT_LOAD_ROW_ARRAY,
+    TASK_BATCH_INFO,
     MAX_TYPE
   };
 public:
@@ -65,6 +76,7 @@ public:
   OB_INLINE bool is_cg_row_tmp_files_type() const { return ChunkType::CG_ROW_TMP_FILES == type_; }
   OB_INLINE bool is_datum_row_type() const { return ChunkType::DATUM_ROW == type_; }
   OB_INLINE bool is_direct_load_row_array_type() const { return ChunkType::DIRECT_LOAD_ROW_ARRAY == type_; }
+  OB_INLINE bool is_task_batch_info_type() const { return ChunkType::TASK_BATCH_INFO == type_; }
   TO_STRING_KV(K_(type), KP_(data_ptr));
 public:
   ChunkType type_;
@@ -76,6 +88,7 @@ public:
     ObArray<ObCGRowFile *> *cg_row_file_arr_;
     blocksstable::ObBatchDatumRows *bdrs_;
     table::ObTableLoadTabletObjRowArray *row_array_;
+    storage::ObTaskBatchInfo *batch_info_;
   };
 };
 

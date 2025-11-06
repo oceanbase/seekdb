@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #include "logservice/palf_handle_guard.h"
@@ -28,10 +32,8 @@ class MockLSAdapter;
 
 #define SET_CASE_LOG_FILE(TEST_NAME, CASE_NAME) \
   const std::string log_file_name = TEST_NAME + "/" + CASE_NAME + ".log";\
-  const std::string ele_log_file_name = TEST_NAME + "/" + CASE_NAME + ".election.log";\
   OB_LOGGER.set_file_name(log_file_name.c_str(),\
-                          true, false, NULL, \
-                          ele_log_file_name.c_str(), NULL);
+                          true, false, NULL);
 
 #define RUN_SIMPLE_LOG_CLUSTER_TEST(TEST_NAME) \
   void *ptr = malloc(SIG_STACK_SIZE); \
@@ -57,10 +59,7 @@ class MockLSAdapter;
   system(rm_log_cmd.c_str()); \
   system(mk_base_dir_cm.c_str()); \
   const std::string log_file_name = TEST_NAME+"/"+TEST_NAME + ".log"; \
-  const std::string ele_log_file_name = TEST_NAME+"/"+TEST_NAME + ".election.log"; \
-  const std::string rs_log_file_name = TEST_NAME+"/"+TEST_NAME + ".rs.log"; \
-  OB_LOGGER.set_file_name(log_file_name.c_str(), true, false, rs_log_file_name.c_str(), \
-      ele_log_file_name.c_str(), NULL); \
+  OB_LOGGER.set_file_name(log_file_name.c_str(), true, false); \
   OB_LOGGER.set_log_level("DEBUG"); \
   OB_LOGGER.set_enable_log_limit(false); \
   OB_LOGGER.set_enable_async_log(false); \

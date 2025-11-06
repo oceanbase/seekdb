@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #define USING_LOG_PREFIX RS
@@ -251,6 +255,11 @@ int ObColumnRedefinitionTask::copy_table_indexes()
           LOG_WARN("failed to refresh schema guard", K(ret));
         }  else if (OB_FAIL(check_and_do_sync_tablet_autoinc_seq(new_schema_guard))) {
           LOG_WARN("failed to check and do sync tablet autoinc seq", K(ret), K(task_id_));
+        } else if (OB_FAIL(new_schema_guard.get_table_schema(tenant_id_, target_object_id_, table_schema))) {
+          LOG_WARN("get table schema failed", K(ret), K(tenant_id_), K(target_object_id_));
+        } else if (OB_ISNULL(table_schema)) {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("error unexpected, table schema must not be nullptr", K(ret), K(target_object_id_));
         }
         for (int64_t i = 0; OB_SUCC(ret) && i < index_ids.count(); ++i) {
           const uint64_t index_id = index_ids.at(i);	

@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #define USING_LOG_PREFIX STORAGE
@@ -491,7 +495,7 @@ int ObClusteredIndexBlockWriter::make_clustered_index_micro_block_with_rewrite(
         if (OB_FAIL(ret)) {
         } else if (OB_FAIL(idx_row_parser.get_header(idx_row_header))) {
           LOG_WARN("fail to get idx row header", K(ret));
-        } else if (!idx_row_header->is_major_node() || !idx_row_header->is_pre_aggregated()) {
+        } else if (!idx_row_header->is_pre_aggregated()) {
           clustered_row_desc.serialized_agg_row_buf_ = nullptr;
         } else if (OB_FAIL(idx_row_parser.get_agg_row(
                        clustered_row_desc.serialized_agg_row_buf_,
@@ -607,7 +611,7 @@ int ObClusteredIndexBlockWriter::make_clustered_index_micro_block_with_reuse(
       LOG_WARN("fail to assign last rowkey", K(ret), K(index_info), K(rowkey_column_count));
     } else {
       const ObIndexBlockRowHeader * idx_row_header = index_info.row_header_;
-      if (!idx_row_header->is_major_node() || !idx_row_header->is_pre_aggregated()) {
+      if (!idx_row_header->is_pre_aggregated()) {
         clustered_row_desc.serialized_agg_row_buf_ = nullptr;
       } else {
         clustered_row_desc.serialized_agg_row_buf_ = index_info.agg_row_buf_;
@@ -624,9 +628,9 @@ int ObClusteredIndexBlockWriter::make_clustered_index_micro_block_with_reuse(
       clustered_row_desc.macro_id_ = idx_row_header->get_macro_id();
       clustered_row_desc.row_offset_ = index_info.cs_row_range_.end_row_id_;
       clustered_row_desc.max_merged_trans_version_ =
-          idx_row_header->is_major_node() ? 0 : index_info.minor_meta_info_->max_merged_trans_version_;
+          nullptr == index_info.minor_meta_info_ ? 0 : index_info.minor_meta_info_->max_merged_trans_version_;
       clustered_row_desc.row_count_delta_ =
-          idx_row_header->is_major_node() ? 0 : index_info.minor_meta_info_->row_count_delta_;
+          nullptr == index_info.minor_meta_info_ ? 0 : index_info.minor_meta_info_->row_count_delta_;
       
       // Append clustered row to clustered writer.
       clustered_row_desc.set_for_clustered_index();

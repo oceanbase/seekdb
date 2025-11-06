@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #define USING_LOG_PREFIX STORAGE
@@ -400,18 +404,18 @@ int ObIndexBlockRowBuilder::calc_data_size(
     size = sizeof(ObIndexBlockRowHeader) + sizeof(ObIndexBlockRowMinorMetaInfo);
     if (desc.is_major_or_meta_merge_type()) {
       size += sizeof(int64_t); // add row offset for major sstable
-      if (nullptr != desc.aggregated_row_) {
-        if (desc.is_serialized_agg_row_) {
-          const ObAggRowHeader *agg_header = reinterpret_cast<const ObAggRowHeader *>(desc.serialized_agg_row_buf_);
-          if (OB_UNLIKELY(!agg_header->is_valid())) {
-            ret = OB_INVALID_ARGUMENT;
-            LOG_WARN("Invalid aggregate row header", K(ret), K(desc), KPC(agg_header));
-          } else {
-            size += agg_header->length_;
-          }
+    }
+    if (nullptr != desc.aggregated_row_) {
+      if (desc.is_serialized_agg_row_) {
+        const ObAggRowHeader *agg_header = reinterpret_cast<const ObAggRowHeader *>(desc.serialized_agg_row_buf_);
+        if (OB_UNLIKELY(!agg_header->is_valid())) {
+          ret = OB_INVALID_ARGUMENT;
+          LOG_WARN("Invalid aggregate row header", K(ret), K(desc), KPC(agg_header));
         } else {
-          size += agg_writer.get_serialize_data_size();
+          size += agg_header->length_;
         }
+      } else {
+        size += agg_writer.get_serialize_data_size();
       }
     }
   }
@@ -567,6 +571,7 @@ int ObIndexBlockRowParser::init(const char *data_buf, const int64_t data_len)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("Unexpected null data buffer for index block row data", K(ret));
   } else {
+    int64_t pos = 0;
     header_ = reinterpret_cast<const ObIndexBlockRowHeader *>(data_buf);
     const int64_t header_size = header_->get_serialize_size();
     if (OB_UNLIKELY(!header_->is_valid())) {
@@ -589,14 +594,16 @@ int ObIndexBlockRowParser::init(const char *data_buf, const int64_t data_len)
         // Major node
         if (data_len > pos && OB_FAIL(serialization::decode_i64(data_buf, data_len, pos, &row_offset_))) {
           LOG_WARN("Fail to decode row offset column", K(ret), K(data_len), K(pos));
-        } else if (header_->is_pre_aggregated()) {
-          const ObAggRowHeader *agg_row_header = reinterpret_cast<const ObAggRowHeader *>(data_buf + pos);
-          if (OB_UNLIKELY(!agg_row_header->is_valid())) {
-            ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("Invalid pre aggregate row header", K(ret), KPC(agg_row_header), KPC(header_));
-          } else {
-            pre_agg_row_buf_ = data_buf + pos;
-          }
+        }
+      }
+      if (OB_FAIL(ret)) {
+      } else if (header_->is_pre_aggregated()) {
+        const ObAggRowHeader *agg_row_header = reinterpret_cast<const ObAggRowHeader *>(data_buf + pos);
+        if (OB_UNLIKELY(!agg_row_header->is_valid())) {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("Invalid pre aggregate row header", K(ret), KPC(agg_row_header), KPC(header_));
+        } else {
+          pre_agg_row_buf_ = data_buf + pos;
         }
       }
     }
@@ -640,7 +647,7 @@ int ObIndexBlockRowParser::get_agg_row(const char *&row_buf, int64_t &buf_size) 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("Not inited", K(ret));
-  } else if (OB_UNLIKELY(!header_->is_major_node() || !header_->is_pre_aggregated())) {
+  } else if (OB_UNLIKELY(!header_->is_pre_aggregated())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("Not a index row with preaggregated data", K(ret), KPC(header_));
   } else {
@@ -663,7 +670,7 @@ int ObIndexBlockRowParser::parse_minor_meta_and_agg_row(
     meta = minor_meta_info_;
   }
   if (OB_FAIL(ret)) {
-  } else if (!header_->is_major_node() || !header_->is_pre_aggregated()) {
+  } else if (!header_->is_pre_aggregated()) {
     // Do not have aggregate data
   } else {
     agg_row_buf = pre_agg_row_buf_;

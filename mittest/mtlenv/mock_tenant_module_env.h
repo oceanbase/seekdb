@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #pragma once
@@ -112,6 +116,7 @@
 #include "observer/table/common/ob_table_query_session_mgr.h"
 #include "lib/roaringbitmap/ob_rb_memory_mgr.h"
 #include "rpc/obrpc/ob_rpc_net_handler.h"
+#include "observer/omt/ob_tenant_ai_service.h"
 
 namespace oceanbase
 {
@@ -380,6 +385,7 @@ private:
   share::ObCgroupCtrl cgroup_ctrl_;
   obrpc::ObBatchRpc batch_rpc_;
   omt::ObMultiTenant multi_tenant_;
+  transaction::ObWeakReadService  weak_read_service_;
   MockObService ob_service_;
   share::ObLocationService location_service_;
   share::schema::ObMultiVersionSchemaService &schema_service_;
@@ -626,6 +632,7 @@ void MockTenantModuleEnv::init_gctx_gconf()
   GCTX.net_frame_ = &net_frame_;
   GCTX.ob_service_ = &ob_service_;
   GCTX.omt_ = &multi_tenant_;
+  GCTX.weak_read_service_ = &weak_read_service_;
   GCTX.sql_engine_ = &sql_engine_;
   GCTX.cgroup_ctrl_ = &cgroup_ctrl_;
   GCTX.session_mgr_ = &session_mgr_;
@@ -715,7 +722,7 @@ int MockTenantModuleEnv::init_before_start_mtl()
     STORAGE_LOG(WARN, "fail to init env", K(ret));
   } else if (OB_FAIL(TMA_MGR_INSTANCE.init())) {
     STORAGE_LOG(WARN, "fail to init env", K(ret));
-  } else if (OB_FAIL(OB_FILE_SYSTEM_ROUTER.get_instance().init(env_dir_.c_str()))) {
+  } else if (OB_FAIL(OB_FILE_SYSTEM_ROUTER.get_instance().init(env_dir_.c_str(), clog_dir_.c_str()))) {
     STORAGE_LOG(WARN, "fail to init env", K(ret));
 #ifdef OB_BUILD_SHARED_STORAGE
   } else if (GCTX.is_shared_storage_mode() && OB_FAIL(init_device_config())) {
@@ -739,6 +746,10 @@ int MockTenantModuleEnv::init_before_start_mtl()
     STORAGE_LOG(ERROR, "init server checkpoint slog handler fail", K(ret));
   } else if (OB_FAIL(multi_tenant_.init(self_addr_, &sql_proxy_, false))) {
     STORAGE_LOG(WARN, "fail to init env", K(ret));
+  } else if (OB_FAIL(weak_read_service_.init(net_frame_.get_req_transport()))) {
+    STORAGE_LOG(WARN, "init weak_read_service failed", KR(ret));
+  } else if (FAILEDx(weak_read_service_.start())) {
+    STORAGE_LOG(WARN, "fail to start weak read service", KR(ret));
   } else if (OB_FAIL(ObTsMgr::get_instance().init(self_addr_,
                          schema_service_, location_service_, net_frame_.get_req_transport()))) {
     STORAGE_LOG(WARN, "fail to init env", K(ret));
@@ -759,7 +770,6 @@ int MockTenantModuleEnv::init_before_start_mtl()
   } else if (OB_FAIL(LOG_IO_DEVICE_WRAPPER.init(clog_dir_.c_str(), 8, 128, &OB_IO_MANAGER, &ObDeviceManager::get_instance()))) {
     STORAGE_LOG(ERROR, "init log_io_device_wrapper fail", KR(ret));
   } else {
-    obrpc::ObRpcNetHandler::CLUSTER_ID = 1;
     oceanbase::palf::election::INIT_TS = 1;
     // Ignore cgroup error
     cgroup_ctrl_.init();
@@ -851,6 +861,7 @@ int MockTenantModuleEnv::init()
       MTL_BIND2(mtl_new_default, observer::ObTenantQueryRespTimeCollector::mtl_init,nullptr, nullptr, nullptr, observer::ObTenantQueryRespTimeCollector::mtl_destroy);
       MTL_BIND2(mtl_new_default, table::ObTableClientInfoMgr::mtl_init, mtl_start_default, mtl_stop_default, mtl_wait_default, mtl_destroy_default);
       MTL_BIND2(mtl_new_default, observer::ObTableQueryASyncMgr::mtl_init, mtl_start_default, mtl_stop_default, mtl_wait_default, mtl_destroy_default);
+      MTL_BIND2(mtl_new_default, omt::ObTenantAiService::mtl_init, mtl_start_default, mtl_stop_default, mtl_wait_default, mtl_destroy_default);
     }
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(GMEMCONF.reload_config(config_))) {
@@ -961,6 +972,9 @@ void MockTenantModuleEnv::destroy()
   multi_tenant_.stop();
   multi_tenant_.wait();
   multi_tenant_.destroy();
+  weak_read_service_.stop();
+  weak_read_service_.wait();
+  weak_read_service_.destroy();
   ObKVGlobalCache::get_instance().destroy();
   SERVER_STORAGE_META_SERVICE.destroy();
 

@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #define USING_LOG_PREFIX SQL_ENG
@@ -102,8 +106,7 @@ int ObPxSqcHandler::pre_acquire_px_worker(int64_t &reserved_thread_count)
   int64_t max_thread_count = sqc_init_args_->sqc_.get_max_task_count();
   int64_t min_thread_count = sqc_init_args_->sqc_.get_min_task_count();
     // Pre-reserve thread count in the tenant for px worker execution
-  ObPxSubAdmission::acquire(max_thread_count, min_thread_count, reserved_px_thread_count_);
-  reserved_px_thread_count_ = reserved_px_thread_count_ < min_thread_count ? 0 : reserved_px_thread_count_;
+  reserved_px_thread_count_ = max_thread_count;
   if (OB_FAIL(notifier_->set_expect_worker_count(reserved_px_thread_count_))) {
     LOG_WARN("failed to set expect worker count", K(ret), K(reserved_px_thread_count_));
   } else {

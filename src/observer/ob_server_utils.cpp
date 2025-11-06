@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #define USING_LOG_PREFIX SERVER
@@ -153,7 +157,7 @@ int ObServerUtils::cal_all_part_disk_size(const int64_t suggested_data_disk_size
   return ret;
 }
 
-const char *ObServerUtils::build_syslog_file_info(const common::ObAddr &addr)
+const char *ObServerUtils::build_syslog_file_info()
 {
   int ret = OB_SUCCESS;
   const static int64_t max_info_len = 512;
@@ -164,17 +168,6 @@ const char *ObServerUtils::build_syslog_file_info(const common::ObAddr &addr)
   if (0 != ::uname(&uts)) {
     ret = OB_ERR_SYS;
     LOG_WARN("call uname failed");
-  }
-
-  // self address
-  char self_addr[OB_IP_PORT_STR_BUFF] = {'\0'};
-  if (OB_SUCC(ret)) {
-    if (addr.is_valid()) {
-      int64_t pos = 0;
-      if (OB_FAIL(databuff_printf(self_addr, sizeof(self_addr), pos, addr))) {
-        LOG_WARN("print addr to databuff failed", K(ret), K(addr), K(pos));
-      }
-    }
   }
 
   // time zone info
@@ -194,9 +187,9 @@ const char *ObServerUtils::build_syslog_file_info(const common::ObAddr &addr)
 
   if (OB_SUCC(ret)) {
     int n = snprintf(info, max_info_len,
-                     "address: %s, observer version: %s, revision: %s, "
+                     "observer version: %s, revision: %s, "
                      "sysname: %s, os release: %s, machine: %s, tz GMT offset: %02d:%02d",
-                     self_addr, PACKAGE_STRING, build_version(),
+                     PACKAGE_STRING, build_version(),
                      uts.sysname, uts.release, uts.machine, gmtoff_hour, gmtoff_minute);
     if (n <= 0) {
       ret = OB_ERR_SYS;

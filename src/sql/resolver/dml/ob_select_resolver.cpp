@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #define USING_LOG_PREFIX SQL_RESV
@@ -1763,7 +1767,7 @@ int ObSelectResolver::resolve_field_list(const ParseNode &node)
               LOG_WARN("failed to ob write string", K(ret));
             }
           } else if (T_FUN_SYS_OB_VERSION == name_expr->get_expr_type()) {
-            if (OB_FAIL(ob_write_string(*allocator_, common::ObString(PACKAGE_VERSION), select_item.alias_name_))) {
+            if (OB_FAIL(ob_write_string(*allocator_, common::ObString(OB_COMPATIBILITY_VERSION), select_item.alias_name_))) {
               LOG_WARN("failed to ob write string", K(ret));
             }
           } else if (T_FUN_SYS_ICU_VERSION == name_expr->get_expr_type()) {
@@ -2767,8 +2771,7 @@ int ObSelectResolver::resolve_group_clause(const ParseNode *node)
     omt::ObTenantConfigGuard tenant_config(TENANT_CONF(session_info_->get_effective_tenant_id()));
     bool enable_hash_rollup = tenant_config.is_valid()
                               && (tenant_config->_use_hash_rollup.case_compare("auto") == 0
-                                  || tenant_config->_use_hash_rollup.case_compare("forced") == 0)
-                              && GET_MIN_CLUSTER_VERSION() >= CLUSTER_VERSION_4_3_5_0;
+                                  || tenant_config->_use_hash_rollup.case_compare("forced") == 0);
     if (OB_SUCC(ret) && enable_hash_rollup) {
       if (OB_FAIL(append(select_stmt->get_order_items(), order_items))) {
         LOG_WARN("append order items failed", K(ret));
@@ -3541,11 +3544,7 @@ int ObSelectResolver::resolve_into_file_node(const ParseNode *list_node, ObSelec
           LOG_WARN("failed to resolve max file size", K(ret));
         }
       } else if (T_BUFFER_SIZE == node->type_) {
-        if (GET_MIN_CLUSTER_VERSION() < CLUSTER_VERSION_4_3_2_1) {
-          ret = OB_NOT_SUPPORTED;
-          LOG_WARN("not support to set buffer size during updating", K(ret));
-          LOG_USER_ERROR(OB_NOT_SUPPORTED, "set buffer size during updating");
-        } else if (OB_FAIL(ObResolverUtils::resolve_file_size_node(node, into_item.buffer_size_))) {
+        if (OB_FAIL(ObResolverUtils::resolve_file_size_node(node, into_item.buffer_size_))) {
           LOG_WARN("failed to resolve buffer size", K(ret));
         }
       } else {
@@ -3607,13 +3606,9 @@ int ObSelectResolver::resolve_into_outfile_with_format(const ParseNode *node, Ob
     LOG_WARN("resolve into outfile name failed", K(ret));
   }
   if (OB_SUCC(ret) && node->num_child_ > 1 && NULL != node->children_[1]) { // partition by
-    if (GET_MIN_CLUSTER_VERSION() < CLUSTER_VERSION_4_3_2_1) {
-      ret = OB_NOT_SUPPORTED;
-      LOG_WARN("not support to use file partition option during updating", K(ret));
-      LOG_USER_ERROR(OB_NOT_SUPPORTED, "use file partition option during updating");
-    } else if (OB_FAIL(resolve_file_partition_node(node->children_[1], into_item))) {
+    if (OB_FAIL(resolve_file_partition_node(node->children_[1], into_item))) {
       LOG_WARN("resolve file partition node failed", K(ret));
-    } 
+    }
   }
   if (OB_SUCC(ret) && node->num_child_ > 2 && NULL != (format_node = node->children_[2])) { // format
     // TODO(bitao): handle other parquet property
@@ -3669,11 +3664,7 @@ int ObSelectResolver::resolve_into_outfile_with_format(const ParseNode *node, Ob
   }
   // file: single, max_file_size, buffer_size
   if (OB_SUCC(ret) && node->num_child_ > 3 && NULL != node->children_[3]) {
-    if (GET_MIN_CLUSTER_VERSION() < CLUSTER_VERSION_4_3_1_0) {
-      ret = OB_NOT_SUPPORTED;
-      LOG_WARN("not support to use file option during updating", K(ret));
-      LOG_USER_ERROR(OB_NOT_SUPPORTED, "use file option during updating");
-    } else if (OB_FAIL(resolve_into_file_node(node->children_[3], into_item))) {
+    if (OB_FAIL(resolve_into_file_node(node->children_[3], into_item))) {
       LOG_WARN("reosolve into file node failed", K(ret));
     }
   }
@@ -3694,13 +3685,9 @@ int ObSelectResolver::resolve_into_outfile_without_format(const ParseNode *node,
     LOG_WARN("resolve into outfile name failed", K(ret));
   }
   if (OB_SUCC(ret) && node->num_child_ > 1 && NULL != node->children_[1]) { // partition by
-    if (GET_MIN_CLUSTER_VERSION() < CLUSTER_VERSION_4_3_2_1) {
-      ret = OB_NOT_SUPPORTED;
-      LOG_WARN("not support to use file partition option during updating", K(ret));
-      LOG_USER_ERROR(OB_NOT_SUPPORTED, "use file partition option during updating");
-    } else if (OB_FAIL(resolve_file_partition_node(node->children_[1], into_item))) {
+    if (OB_FAIL(resolve_file_partition_node(node->children_[1], into_item))) {
       LOG_WARN("resolve file partition node failed", K(ret));
-    } 
+    }
   }
   if (OB_SUCC(ret) && node->num_child_ > 2 && NULL != node->children_[2]) { // charset
     ObCharsetType charset_type = CHARSET_INVALID;
@@ -3728,11 +3715,7 @@ int ObSelectResolver::resolve_into_outfile_without_format(const ParseNode *node,
   }
   // file: single, max_file_size, buffer_size
   if (OB_SUCC(ret) && node->num_child_ > 5 && NULL != node->children_[5]) {
-    if (GET_MIN_CLUSTER_VERSION() < CLUSTER_VERSION_4_3_1_0) {
-      ret = OB_NOT_SUPPORTED;
-      LOG_WARN("not support to use file option during updating", K(ret));
-      LOG_USER_ERROR(OB_NOT_SUPPORTED, "use file option during updating");
-    } else if (OB_FAIL(resolve_into_file_node(node->children_[5], into_item))) {
+    if (OB_FAIL(resolve_into_file_node(node->children_[5], into_item))) {
       LOG_WARN("reosolve into file node failed", K(ret));
     }
   }
@@ -3779,11 +3762,7 @@ int ObSelectResolver::resolve_into_clause(const ParseNode *node)
           LOG_WARN("select into outfile can not in set query", K(ret));
         } else if (node->num_child_ > 2 && NULL != node->children_[2]
             && T_EXTERNAL_FILE_FORMAT == node->children_[2]->type_) { // Handle with `FORMAT`
-          if (GET_MIN_CLUSTER_VERSION() < CLUSTER_VERSION_4_3_5_0) {
-            ret = OB_NOT_SUPPORTED;
-            LOG_WARN("not support select into outfile with `FORMAT` property", K(ret));
-            LOG_USER_ERROR(OB_NOT_SUPPORTED, "select into outfile with `FORMAT` property");
-          } else if (OB_FAIL(resolve_into_outfile_with_format(node, *into_item))) {
+          if (OB_FAIL(resolve_into_outfile_with_format(node, *into_item))) {
             LOG_WARN("resolve into outfile failed", K(ret));
           }
         } else { // Be compatible with grammar before
@@ -5383,10 +5362,6 @@ int ObSelectResolver::check_union_to_values_table_valid(const ParseNode &parse_n
     LOG_WARN("got unexpected ptr", K(ret));
   } else if (OB_FAIL(session_info_->get_optimizer_features_enable_version(optimizer_version))) {
     LOG_WARN("failed to get optimizer feature enable version", K(ret));
-  } else if (optimizer_version < COMPAT_VERSION_4_2_3 ||
-             (optimizer_version >= COMPAT_VERSION_4_3_0 && optimizer_version < COMPAT_VERSION_4_3_5)) {
-    is_valid = false;
-    LOG_TRACE("rewrite not happened", K(optimizer_version));
   } else if ((T_SET_UNION != set_node->type_ && T_SET_UNION_ALL != set_node->type_) ||
              params_.is_from_create_view_ || params_.is_from_create_table_ ||
              in_pl_ || is_prepare_stage_) {

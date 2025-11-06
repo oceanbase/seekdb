@@ -1,14 +1,18 @@
-/**
-* Copyright (c) 2021 OceanBase
-* OceanBase CE is licensed under Mulan PubL v2.
-* You can use this software according to the terms and conditions of the Mulan PubL v2.
-* You may obtain a copy of Mulan PubL v2 at:
-*          http://license.coscl.org.cn/MulanPubL-2.0
-* THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
-* EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
-* MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
-* See the Mulan PubL v2 for more details.
-*/
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 
 #ifndef OCEANBASE_SCHEMA_COLUMN_SCHEMA_H_
 #define OCEANBASE_SCHEMA_COLUMN_SCHEMA_H_
@@ -281,6 +285,11 @@ int assign(const ObColumnSchemaV2 &src_schema);
   inline bool is_vec_hnsw_scn_column() const { return ObSchemaUtils::is_vec_hnsw_scn_column(column_flags_); }
   inline bool is_vec_hnsw_key_column() const { return ObSchemaUtils::is_vec_hnsw_key_column(column_flags_); }
   inline bool is_vec_hnsw_data_column() const { return ObSchemaUtils::is_vec_hnsw_data_column(column_flags_); }
+  inline bool is_hybrid_vec_index_chunk_column() const { return ObSchemaUtils::is_hybrid_vec_index_chunk_column(column_flags_); }
+  inline bool is_hybrid_embedded_vec_column() const {
+    return get_column_name_str().prefix_match(OB_HYBRID_VEC_EMBEDDED_VECTOR_COLUMN_NAME_PREFIX) &&
+           ObSchemaUtils::is_vec_hnsw_vector_column(column_flags_);
+  }
 
   inline bool is_vec_spiv_dim_column() const { return ObSchemaUtils::is_vec_spiv_dim_column(column_flags_); }
   inline bool is_vec_spiv_value_column() const { return ObSchemaUtils::is_vec_spiv_value_column(column_flags_); }

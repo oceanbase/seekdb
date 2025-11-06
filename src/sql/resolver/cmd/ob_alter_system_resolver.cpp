@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #define USING_LOG_PREFIX SQL_RESV
@@ -2420,12 +2424,12 @@ int ObSetConfigResolver::resolve(const ParseNode &parse_tree)
                               LOG_WARN("fail to get compat mode", K(ret));
                             } else if (!valid) {
                               ret = OB_OP_NOT_ALLOW;
-                              LOG_WARN("can not set defdefault_table_organization", "item", item, K(ret), "tenant_id", item.exec_tenant_id_);
-                            } else if (lib::Worker::CompatMode::ORACLE == compat_mode || OB_SYS_TENANT_ID == tenant_id) {
-                              LOG_WARN("can not set default_table_organization in oracle and sys tenants",
+                              LOG_WARN("can not set default_table_organization", "item", item, K(ret), "tenant_id", item.exec_tenant_id_);
+                            } else if (lib::Worker::CompatMode::ORACLE == compat_mode) {
+                              LOG_WARN("can not set default_table_organization in oracle tenant",
                                        "item", item, K(i), K(tenant_id), K(compat_mode));
                               LOG_USER_NOTE(OB_NOT_SUPPORTED, 
-                                            "'ALTER SYSTEM SET DEFAULT_TABLE_ORGANIZATION' syntax in oracle or sys tenant is");
+                                            "'ALTER SYSTEM SET DEFAULT_TABLE_ORGANIZATION' syntax in oracle tenant is");
                             }
                           }
                         }
@@ -2447,11 +2451,6 @@ int ObSetConfigResolver::resolve(const ParseNode &parse_tree)
                   if (!valid) {
                     ret = OB_OP_NOT_ALLOW;
                     LOG_WARN("can not set default_table_organization", "item", item, K(ret));
-                  } else if (OB_SYS_TENANT_ID == item.exec_tenant_id_) {
-                    LOG_WARN("can not set default_table_organization in the sys tenant",
-                              "item", item,"tenant_id", item.exec_tenant_id_);
-                    LOG_USER_NOTE(OB_NOT_SUPPORTED, 
-                                  "'ALTER SYSTEM SET DEFAULT_TABLE_ORGANIZATION' syntax in the sys tenant is");
                   }
                 }
 
@@ -2518,11 +2517,7 @@ int ObChangeExternalStorageDestResolver::resolve(const ParseNode &parse_tree)
           // access info may be null
           if (OB_SUCC(ret) && OB_NOT_NULL(parse_tree.children_[1])) {
             const ObString access_info_value = parse_tree.children_[1]->str_value_;
-            if (GET_MIN_CLUSTER_VERSION() < CLUSTER_VERSION_4_3_5_2) {
-              ret = OB_NOT_SUPPORTED;
-              LOG_USER_ERROR(OB_NOT_SUPPORTED, "min cluster version is less than 4.3.5.2, changing ak&sk is");
-              LOG_WARN("min cluster version is less than 4.3.5.2, changing ak&sk is not supported", K(ret));
-            } else if (OB_FAIL(item.value_.assign(access_info_value))) {
+            if (OB_FAIL(item.value_.assign(access_info_value))) {
               LOG_WARN("failed to assign config value", K(ret));
             }
           }
@@ -2969,13 +2964,6 @@ int ObAlterSystemResolverUtil::check_compatibility_for_alter_ls_replica(
   } else if (OB_FAIL(GET_MIN_DATA_VERSION(cur_tenant_id, tenant_data_version))) {
     //The internal tables involved are under the tenant (meta) and do not involve sys tenants.
     LOG_WARN("get tenant data version failed", KR(ret), K(cur_tenant_id));
-  } else if (!((tenant_data_version >= DATA_VERSION_4_3_3_0)
-            || (tenant_data_version >= MOCK_DATA_VERSION_4_2_3_0 && tenant_data_version < DATA_VERSION_4_3_0_0)
-            || (tenant_data_version >= MOCK_DATA_VERSION_4_2_1_8 && tenant_data_version < DATA_VERSION_4_2_2_0))) {
-    ret = OB_NOT_SUPPORTED;
-    LOG_WARN("Tenant data version does not match, alter LS replica command is not allowed",
-              KR(ret), K(cur_tenant_id), K(tenant_data_version));
-    LOG_USER_ERROR(OB_NOT_SUPPORTED, "Tenant data version does not match, alter LS replica command is");
   }
   return ret;
 }
@@ -4893,10 +4881,6 @@ int ObCancelRestoreResolver::resolve(const ParseNode &parse_tree)
   } else if (OB_UNLIKELY(1 != parse_tree.num_child_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("children num not match", K(ret), "num_child", parse_tree.num_child_);
-  } else if (GET_MIN_CLUSTER_VERSION() < CLUSTER_VERSION_4_2_0_0) {
-    ret = OB_NOT_SUPPORTED;
-    LOG_WARN("cancel restore is not supported under cluster version 4_2_0_0", K(ret));
-    LOG_USER_ERROR(OB_NOT_SUPPORTED, "cancel restore is");
   } else {
     ObCancelRestoreStmt *stmt = NULL;
     if (OB_ISNULL(stmt = create_stmt<ObCancelRestoreStmt>())) {
@@ -5023,10 +5007,6 @@ int ObTableTTLResolver::resolve(const ParseNode& parse_tree)
   const uint64_t cur_tenant_id = session_info_->get_effective_tenant_id();
   if (OB_FAIL(GET_MIN_DATA_VERSION(cur_tenant_id, tenant_data_version))) {
     LOG_WARN("get tenant data version failed", K(ret));
-  } else if (tenant_data_version < DATA_VERSION_4_2_1_0) {
-    ret = OB_NOT_SUPPORTED;
-    LOG_WARN("TTL command is not supported in data version less than 4.2.1", K(ret), K(tenant_data_version));
-    LOG_USER_ERROR(OB_NOT_SUPPORTED, "TTL command is not supported in data version less than 4.2.1");
   } else if (!ObKVFeatureModeUitl::is_ttl_enable()) {
     ret = OB_NOT_SUPPORTED;
     LOG_WARN("ttl is disable", K(ret));

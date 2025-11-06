@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #define USING_LOG_PREFIX RS
@@ -868,7 +872,7 @@ int ObVecIVFIndexBuildTask::prepare_sq_meta_table()
   if (OB_SUCC(ret) && sq_meta_table_task_submitted_) {
     state_finished = true;
   }
-  DEBUG_SYNC(BUILD_VECTOR_INDEX_PREPARE_VID_ROWKEY);
+  DEBUG_SYNC(AFTER_SQ_META_TABLE);
   if (state_finished && OB_SUCC(ret)) {
     ObDDLTaskStatus next_status;
     if (OB_FAIL(get_next_status(next_status))) {
@@ -909,7 +913,7 @@ int ObVecIVFIndexBuildTask::prepare_pq_centroid_table()
   if (OB_SUCC(ret) && pq_centroid_table_task_submitted_) {
     state_finished = true;
   }
-  DEBUG_SYNC(BUILD_VECTOR_INDEX_PREPARE_VID_ROWKEY);
+  DEBUG_SYNC(AFTER_PQ_CENTROID_TABLE);
   if (state_finished && OB_SUCC(ret)) {
     ObDDLTaskStatus next_status;
     if (OB_FAIL(get_next_status(next_status))) {
@@ -966,7 +970,7 @@ int ObVecIVFIndexBuildTask::prepare_centroid_table()
   if (OB_SUCC(ret) && centroid_table_task_submitted_) {
     state_finished = true;
   }
-  DEBUG_SYNC(BUILD_VECTOR_INDEX_PREPARE_VID_ROWKEY);
+  DEBUG_SYNC(AFTER_IVF_CENTROID_TABLE);
   if (state_finished && OB_SUCC(ret)) {
     ObDDLTaskStatus next_status;
     if (OB_FAIL(get_next_status(next_status))) {

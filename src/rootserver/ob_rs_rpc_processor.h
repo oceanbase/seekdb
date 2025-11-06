@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #ifndef OCEANBASE_ROOTSERVER_OB_RS_RPC_PROCESSOR_H_
@@ -682,6 +686,16 @@ DEFINE_DDL_SYS_TNT_RPC_PROCESSOR(obrpc::OB_PARALLEL_HTABLE_DDL, ObRpcParallelHTa
 
 // for ob_admin
 DEFINE_DDL_RS_RPC_PROCESSOR(obrpc::OB_FORCE_DROP_LONELY_LOB_AUX_TABLE, ObForceDropLonelyLobAuxTableP, force_drop_lonely_lob_aux_table(arg_));
+
+// ai endpoint ddl
+DEFINE_DDL_RS_RPC_PROCESSOR(obrpc::OB_CREATE_AI_MODEL, ObRpcCreateAiModelP, create_ai_model(arg_));
+DEFINE_DDL_RS_RPC_PROCESSOR(obrpc::OB_DROP_AI_MODEL, ObRpcDropAiModelP, drop_ai_model(arg_));
+
+// location object
+DEFINE_DDL_RS_RPC_PROCESSOR(obrpc::OB_CREATE_LOCATION, ObRpcCreateLocationP, create_location(arg_));
+DEFINE_DDL_RS_RPC_PROCESSOR(obrpc::OB_DROP_LOCATION, ObRpcDropLocationP, drop_location(arg_));
+
+DEFINE_DDL_RS_RPC_PROCESSOR(obrpc::OB_REVOKE_OBJECT, ObRpcRevokeObjP, revoke_object(arg_));
 
 #undef DEFINE_RS_RPC_PROCESSOR_
 #undef DEFINE_RS_RPC_PROCESSOR

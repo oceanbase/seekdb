@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #define USING_LOG_PREFIX SQL_REWRITE
@@ -316,9 +320,7 @@ int ObExprRangeConverter::get_basic_range_node(const ObRawExpr *l_expr,
                                    range_node))) {
         LOG_WARN("failed to get nvl cmp node", K(ret));
       }
-    } else if (ObSQLUtils::is_min_cluster_version_ge_425_or_435() &&
-               ObSQLUtils::is_opt_feature_version_ge_425_or_435(ctx_.optimizer_features_enable_version_) &&
-               ((l_ori_expr->get_expr_type() == T_FUN_SYS_CAST && r_ori_expr->is_const_expr()) ||
+    } else if (((l_ori_expr->get_expr_type() == T_FUN_SYS_CAST && r_ori_expr->is_const_expr()) ||
                 (r_ori_expr->get_expr_type() == T_FUN_SYS_CAST && l_ori_expr->is_const_expr()))) {
       if (OB_FAIL(get_implicit_cast_range(*l_ori_expr,
                                           *r_ori_expr,
@@ -327,9 +329,7 @@ int ObExprRangeConverter::get_basic_range_node(const ObRawExpr *l_expr,
                                           range_node))) {
         LOG_WARN("failed to get implicit cast range", K(ret));
       }
-    } else if (ObSQLUtils::is_min_cluster_version_ge_425_or_435() &&
-               ObSQLUtils::is_opt_feature_version_ge_425_or_435(ctx_.optimizer_features_enable_version_) &&
-               ((l_expr->get_expr_type() == T_FUN_SYS_SET_COLLATION && r_expr->is_const_expr()) ||
+    } else if (((l_expr->get_expr_type() == T_FUN_SYS_SET_COLLATION && r_expr->is_const_expr()) ||
                (r_expr->get_expr_type() == T_FUN_SYS_SET_COLLATION && l_expr->is_const_expr()))) {
       if (OB_FAIL(get_implicit_set_collation_range(*l_ori_expr,
                                                    *r_ori_expr,
@@ -1018,9 +1018,7 @@ int ObExprRangeConverter::convert_in_expr(const ObRawExpr *expr, int64_t expr_de
                                          expr_depth, range_node))) {
       LOG_WARN("failed to get single in range node");
     }
-  } else if (ObSQLUtils::is_min_cluster_version_ge_425_or_435() &&
-             ObSQLUtils::is_opt_feature_version_ge_425_or_435(ctx_.optimizer_features_enable_version_) &&
-             (l_expr->get_expr_type() == T_FUN_SYS_SET_COLLATION ||
+  } else if ((l_expr->get_expr_type() == T_FUN_SYS_SET_COLLATION ||
               (l_expr->get_expr_type() == T_FUN_SYS_CAST &&
                l_expr->get_result_type().is_string_type()))) {
     if (OB_FAIL(get_implicit_set_collation_in_range(l_expr, r_expr, expr->get_param_expr(0)->get_result_type(), 
@@ -1377,7 +1375,7 @@ int ObExprRangeConverter::convert_not_in_expr(const ObRawExpr *expr, int64_t exp
   const ObRawExpr* l_expr = nullptr;
   const ObRawExpr* r_expr = nullptr;
   ctx_.cur_is_precise_ = false;
-  bool use_implicit_cast_feature = ObSQLUtils::is_opt_feature_version_ge_425_or_435(ctx_.optimizer_features_enable_version_);
+  bool use_implicit_cast_feature = true;
   if (OB_ISNULL(expr) ||
       OB_ISNULL(l_expr = expr->get_param_expr(0)) ||
       OB_ISNULL(r_expr = expr->get_param_expr(1))) {
@@ -2628,9 +2626,6 @@ int ObExprRangeConverter::get_row_cmp_node(const ObRawExpr &l_expr,
           ori_column_expr = r_expr.get_param_expr(i);
           const_expr = l_param;
         }
-      } else if (!(ObSQLUtils::is_min_cluster_version_ge_425_or_435() &&
-                   ObSQLUtils::is_opt_feature_version_ge_425_or_435(ctx_.optimizer_features_enable_version_))) {
-        // do nothing
       } else if (OB_FALSE_IT(l_param = l_expr.get_param_expr(i)) ||
                  OB_FALSE_IT(r_param = r_expr.get_param_expr(i))) {
       } else if (l_param->get_expr_type() == T_FUN_SYS_CAST && r_param->is_const_expr()) {

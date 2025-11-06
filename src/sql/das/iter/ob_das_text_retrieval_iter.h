@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2024 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #ifndef OB_DAS_TEXT_RETRIEVAL_ITER_H_
@@ -32,6 +36,7 @@ class ObDASScanCtDef;
 class ObDASScanIter;
 struct ObDASIRScanCtDef;
 struct ObDASIRScanRtDef;
+class ObDocIdExt;
 
 struct ObDASTextRetrievalIterParam : public ObDASIterParam
 {
@@ -73,7 +78,7 @@ public:
   virtual int rescan() override;
 
   int set_query_token(const ObString &query_token);
-  int set_query_token_and_rangekey(const ObString &query_token, const common::ObIArray<ObDocId> &doc_id, const int64_t &batch_size);
+  int set_query_token_and_rangekey(const ObString &query_token, const common::ObIArray<ObDocIdExt> &doc_id, const int64_t &batch_size);
   void set_ls_tablet_ids(
       const share::ObLSID &ls_id,
       const ObTabletID &inv_tablet_id,
@@ -104,8 +109,8 @@ protected:
       storage::ObTableScanParam &scan_param);
   int get_next_doc_token_cnt(const bool use_fwd_idx_agg);
   int do_doc_cnt_agg();
-  int do_token_cnt_agg(const ObDocId &doc_id, int64_t &token_count);
-  int get_inv_idx_scan_doc_id(ObDocId &doc_id);
+  int do_token_cnt_agg(const ObDocIdExt &doc_id, int64_t &token_count);
+  int get_inv_idx_scan_doc_id(ObDocIdExt &doc_id);
   int get_next_row_inner();
   int fill_token_cnt_with_doc_len();
   int batch_fill_token_cnt_with_doc_len(const int64_t &count);
@@ -114,9 +119,9 @@ protected:
   int batch_project_relevance_expr(const int64_t &count);
   int reuse_fwd_idx_iter();
   int gen_default_inv_idx_scan_range(const ObString &query_token, ObNewRange &scan_range);
-  int gen_inv_idx_scan_range(const ObString &query_token, const ObDocId &doc_id, ObNewRange &scan_range);
+  int gen_inv_idx_scan_range(const ObString &query_token, const ObDocIdExt &doc_id, ObNewRange &scan_range);
 
-  int gen_fwd_idx_scan_range(const ObDocId &doc_id, ObNewRange &scan_range);
+  int gen_fwd_idx_scan_range(const ObDocIdExt &doc_id, ObNewRange &scan_range);
   inline bool need_calc_relevance() { return true; } // TODO: reduce tsc ops if no need to calc relevance
   int init_calc_exprs();
   void clear_row_wise_evaluated_flag();
@@ -197,7 +202,7 @@ class ObDASTRCacheIter : public ObDASTextRetrievalIter
 public:
   ObDASTRCacheIter();
   virtual ~ObDASTRCacheIter() {}
-  int get_cur_row(double &relevance, ObDocId &doc_id) const;
+  int get_cur_row(double &relevance, ObDocIdExt &doc_id) const;
   INHERIT_TO_STRING_KV("ObDASTextRetrievalIter", ObDASTextRetrievalIter, K_(cur_idx), K_(count),
       K_(relevance), K_(doc_id));
 protected:
@@ -213,7 +218,7 @@ private:
   int64_t cur_idx_;
   int64_t count_;
   ObFixedArray<double, ObIAllocator> relevance_;
-  ObFixedArray<ObDocId, ObIAllocator> doc_id_;
+  ObFixedArray<ObDocIdExt, ObIAllocator> doc_id_;
 };
 
 

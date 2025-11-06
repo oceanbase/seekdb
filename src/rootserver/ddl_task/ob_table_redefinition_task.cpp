@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #define USING_LOG_PREFIX RS
@@ -31,7 +35,7 @@ ObTableRedefinitionTask::ObTableRedefinitionTask()
     allocator_(lib::ObLabel("RedefTask")),
     is_copy_indexes_(true), is_copy_triggers_(true), is_copy_constraints_(true), is_copy_foreign_keys_(true), 
     is_ignore_errors_(false), is_do_finish_(false), target_cg_cnt_(0), use_heap_table_ddl_plan_(false),
-    is_ddl_retryable_(true)
+    is_ddl_retryable_(true), has_rebuild_domain_indexes_(false)
 {
 }
 
@@ -548,6 +552,11 @@ int ObTableRedefinitionTask::copy_table_indexes()
           LOG_WARN("failed to refresh schema guard", K(ret));
         } else if (OB_FAIL(check_and_do_sync_tablet_autoinc_seq(new_schema_guard))) {
           LOG_WARN("failed to check and do sync tablet autoinc seq", K(ret), K(task_id_));
+        } else if (OB_FAIL(new_schema_guard.get_table_schema(dst_tenant_id_, target_object_id_, table_schema))) {
+          LOG_WARN("get table schema failed", K(ret), K(dst_tenant_id_), K(target_object_id_));
+        } else if (OB_ISNULL(table_schema)) {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("error unexpected, table schema must not be nullptr", K(ret), K(target_object_id_));
         }
         for (int64_t i = 0; OB_SUCC(ret) && i < index_ids.count(); ++i) {
           const uint64_t index_id = index_ids.at(i);	
@@ -585,9 +594,13 @@ int ObTableRedefinitionTask::copy_table_indexes()
                 ddl_type = get_create_index_type(data_format_version_, *index_schema);
               }
               create_index_arg.index_type_ = index_schema->get_index_type();
-              if ((index_schema->is_vec_index() || index_schema->is_fts_index() || index_schema->is_multivalue_index())
-                  && OB_FAIL(ObDDLUtil::construct_domain_index_arg(table_schema, index_schema, *this, create_index_arg, ddl_type))) {
-                LOG_WARN("failed to construct domain index arg", K(ret));
+              if (index_schema->is_vec_index() || index_schema->is_fts_index() || index_schema->is_multivalue_index()) {
+                has_rebuild_domain_indexes_ = true;
+                if (OB_FAIL(ObDDLUtil::construct_domain_index_arg(table_schema, index_schema, *this, create_index_arg, ddl_type))) {
+                  LOG_WARN("failed to construct domain index arg", K(ret));
+                }
+              }
+              if (OB_FAIL(ret)) {
               } else {
                 ObCreateDDLTaskParam param(tenant_id_,
                                            ddl_type,
@@ -1015,6 +1028,15 @@ bool ObTableRedefinitionTask::check_task_status_is_pending(const share::ObDDLTas
   return task_status == ObDDLTaskStatus::REPENDING;
 }
 
+bool ObTableRedefinitionTask::is_ddl_task_can_be_cancelled() const
+{
+  bool can_be_cancelled = true;
+  if (has_rebuild_domain_indexes_) {
+    can_be_cancelled = task_status_ != ObDDLTaskStatus::COPY_TABLE_DEPENDENT_OBJECTS;
+  }
+  return can_be_cancelled;
+}
+
 int ObTableRedefinitionTask::process()
 {
   int ret = OB_SUCCESS;
@@ -1133,7 +1155,8 @@ int64_t ObTableRedefinitionTask::get_serialize_param_size() const
          + serialization::encoded_length_i64(target_cg_cnt_)
          + serialization::encoded_length_i64(complete_sstable_job_ret_code_)
          + serialization::encoded_length_i8(use_heap_table_ddl_plan_)
-         + serialization::encoded_length_i8(is_ddl_retryable_);
+         + serialization::encoded_length_i8(is_ddl_retryable_)
+         + serialization::encoded_length_i8(has_rebuild_domain_indexes_);
 }
 
 int ObTableRedefinitionTask::serialize_params_to_message(char *buf, const int64_t buf_len, int64_t &pos) const
@@ -1172,6 +1195,8 @@ int ObTableRedefinitionTask::serialize_params_to_message(char *buf, const int64_
     LOG_WARN("fail to serialize use heap table ddl plan", K(ret));
   } else if (OB_FAIL(serialization::encode_i8(buf, buf_len, pos, is_ddl_retryable_))) {
     LOG_WARN("fail to serialize ddl can retry", K(ret));
+  } else if (OB_FAIL(serialization::encode_i8(buf, buf_len, pos, has_rebuild_domain_indexes_))) {
+    LOG_WARN("fail to serialize has rebuild domain indexes", K(ret));
   }
   FLOG_INFO("serialize message for table redefinition", K(ret),
       K(copy_indexes), K(copy_triggers), K(copy_constraints), K(copy_foreign_keys), K(ignore_errors), K(do_finish), K(*this));
@@ -1242,6 +1267,14 @@ int ObTableRedefinitionTask::deserialize_params_from_message(const uint64_t tena
         LOG_WARN("fail to deserialize ddl can retry", K(ret));
       } else {
         is_ddl_retryable_ = ddl_can_retry;
+      }
+    }
+    if (OB_SUCC(ret) && pos < data_len) {
+      int8_t has_rebuild_domain_indexes = false;
+      if (OB_FAIL(serialization::decode_i8(buf, data_len, pos, &has_rebuild_domain_indexes))) {
+        LOG_WARN("fail to deserialize has rebuild domain indexes", K(ret));
+      } else {
+        has_rebuild_domain_indexes_ = has_rebuild_domain_indexes;
       }
     }
   }

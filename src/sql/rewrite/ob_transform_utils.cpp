@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #define USING_LOG_PREFIX SQL_REWRITE
@@ -14788,18 +14792,6 @@ bool ObTransformUtils::is_full_group_by(ObSelectStmt& stmt, ObSQLMode mode)
   return !stmt.has_order_by() && is_only_full_group_by_on(mode);
 }
 
-bool ObTransformUtils::is_enable_values_table_rewrite(const uint64_t compat_version)
-{
-  return compat_version >= COMPAT_VERSION_4_3_2 ||
-         (compat_version >= COMPAT_VERSION_4_2_2 && compat_version < COMPAT_VERSION_4_3_0);
-}
-
-bool ObTransformUtils::is_enable_hybrid_inlist_rewrite(const uint64_t compat_version)
-{
-  return compat_version >= COMPAT_VERSION_4_3_5_BP3;
-}
-
-
 int ObTransformUtils::inner_check_need_calc_match_score(ObExecContext *exec_ctx,
                                                         ObRawExpr* expr, 
                                                         ObRawExpr* match_expr, 
@@ -15106,9 +15098,7 @@ int ObTransformUtils::check_stmt_can_trans_as_exists(ObSelectStmt *stmt,
     }
   } else if (stmt->is_contains_assignment() ||
              stmt->has_window_function() ||
-             stmt->has_rollup() ||
-             (stmt->is_values_table_query() &&
-              !ObTransformUtils::is_enable_values_table_rewrite(stmt->get_query_ctx()->optimizer_features_enable_version_))) {
+             stmt->has_rollup()) {
     LOG_TRACE("stmt not support trans in as exists", K(stmt->is_contains_assignment()),
               K(stmt->has_window_function()),
               K(stmt->has_rollup()), K(stmt->is_values_table_query()));
@@ -15690,8 +15680,6 @@ int ObTransformUtils::partial_cost_eval_validity_check(ObTransformerCtx &ctx,
   if (OB_ISNULL(stmt) || OB_ISNULL(stmt->get_query_ctx())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("stmt is null", K(ret), K(stmt));
-  } else if (!stmt->get_query_ctx()->check_opt_compat_version(COMPAT_VERSION_4_3_5_BP2)) {
-    is_valid = false;
   } else if (OB_FAIL(ObTransformUtils::check_has_exec_param_from_parent(parent_stmts, 
                                                                         stmt, 
                                                                         has_pushed_param))) {

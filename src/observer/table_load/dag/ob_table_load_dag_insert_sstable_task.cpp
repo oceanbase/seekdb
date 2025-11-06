@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2025 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #define USING_LOG_PREFIX SERVER
@@ -364,7 +368,6 @@ void ObTableLoadMemoryFriendWriteMacroBlockPipeline::postprocess(int &ret)
     if (OB_FAIL(set_remain_block())) {
       LOG_WARN("fail to set remain block", K(ret));
     } else {
-      ddl_slice_ = nullptr;
       LOG_INFO("the ObTableLoadMemoryFriendWriteMacroBlockPipeline has ret code iter end", K(ret));
     }
   }
@@ -455,8 +458,10 @@ int ObTableLoadMacroBlockWriteTask::process()
     const ObTabletID tablet_id = row_iter->get_tablet_id();
     const int64_t slice_idx = row_iter->get_slice_idx();
     ObWriteMacroParam writer_param;
+    writer_param.is_sorted_table_load_ = true;
     if (OB_FAIL(ObDDLUtil::fill_writer_param(tablet_id, slice_idx, -1 /*cg_idx*/, dag_,
-                                             0 /*max_batch_size*/, writer_param))) {
+                                             ObTabletSliceBufferTempFileWriter::ObDDLRowBuffer::DEFAULT_MAX_BATCH_SIZE,
+                                             writer_param))) {
       LOG_WARN("fail to fill writer param", K(ret), K(tablet_id), K(slice_idx), K(dag_));
     } else if (OB_FAIL(ObDDLUtil::alloc_storage_macro_block_writer(writer_param, allocator,
                                                                    storage_writer))) {

@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #define USING_LOG_PREFIX STORAGE
@@ -1112,7 +1116,12 @@ int ObComplementWriteTask::get_next_chunk(ObChunk *&next_chunk)
   int ret = OB_SUCCESS;
   next_chunk = nullptr;
   const blocksstable::ObDatumRow *row = nullptr;
-  if (OB_ISNULL(scan_)) {
+  if (OB_ISNULL(context_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("complement context is null", K(ret), KP(context_));
+  } else if (context_->is_major_sstable_exist_) {
+    ret = OB_ITER_END;
+  } else if (OB_ISNULL(scan_)) {
     ret = OB_ERR_SYS;
     LOG_WARN("table scan has not been inited", K(ret));
   } else if (OB_FAIL(slice_row_iter_.get_next_row(row))) {
@@ -1219,7 +1228,7 @@ int ObComplementWriteTask::preprocess()
     LOG_WARN("remote scan for recover restore table ddl failed", K(ret));
   }
 
-  if (OB_FAIL(ret)) {
+  if (OB_FAIL(ret) || context_->is_major_sstable_exist_) {
   } else if (OB_FAIL(row_iter_.init(scan_))) {
     LOG_WARN("init row iterator failed", K(ret));
   } else if (OB_FAIL(slice_row_iter_.init(param_->dest_tablet_id_, task_id_, write_param_, row_iter_))) {

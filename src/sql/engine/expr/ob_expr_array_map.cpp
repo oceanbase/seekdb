@@ -1,14 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
- * This file contains implementation for array.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #define USING_LOG_PREFIX SQL_ENG
@@ -163,9 +166,10 @@ int ObExprArrayMapCommon::eval_lambda_array(ObEvalCtx &ctx, ObArenaAllocator &tm
   }
   // fill the lambda array
   for (uint32_t i = 0; i < arr_dim && OB_SUCC(ret); i++) {
-    ObSQLUtils::clear_expr_eval_flags(*lambda_expr, ctx);
-    if (OB_FAIL(set_lambda_para(tmp_allocator, ctx, info, arr_obj, arr_obj_size, i))) {
+    bool is_set_lambda_para  = false;
+    if (OB_FAIL(set_lambda_para(tmp_allocator, ctx, info, arr_obj, arr_obj_size, i, is_set_lambda_para))) {
       LOG_WARN("failed to set lambda para", K(ret), K(i));
+    } else if (is_set_lambda_para && OB_FALSE_IT(ObSQLUtils::clear_expr_eval_flags(*lambda_expr, ctx))) {
     } else if (OB_FAIL(lambda_expr->eval(ctx, datum))) {
       LOG_WARN("failed to eval args", K(ret));
     } else if (lambda_arr->get_format() == Nested_Array) {
@@ -202,9 +206,11 @@ int ObExprArrayMapCommon::set_lambda_para(ObIAllocator &alloc,
                                           ObExprArrayMapInfo *info,
                                           ObIArrayType **arr_obj,
                                           uint32_t arr_obj_size,
-                                          uint32_t idx)
+                                          uint32_t idx,
+                                          bool &is_set)
 {
   int ret = OB_SUCCESS;
+  is_set = false;
   for (uint32_t j = 0; j < info->param_num_ && OB_SUCC(ret); j++) {
     ObExpr *lambda_para = info->param_exprs_[j];
     uint32_t para_idx = info->param_idx_[j];
@@ -216,6 +222,7 @@ int ObExprArrayMapCommon::set_lambda_para(ObIAllocator &alloc,
     } else if (idx >= arr_obj[para_idx]->size()) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("invalid idx", K(ret), K(j), K(idx), K(arr_obj[para_idx]->size()));
+    } else if (OB_FALSE_IT(is_set = true)) {
     } else if (arr_obj[para_idx]->get_format() != ArrayFormat::Vector && arr_obj[para_idx]->is_null(idx)) {
       lambda_para->locate_datum_for_write(ctx).set_null();
     } else {

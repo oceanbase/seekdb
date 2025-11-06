@@ -9,12 +9,12 @@ Check the [Install toolchain](toolchain.md) guide for supported OS, GLIBC versio
 Clone the source code to your development machine:
 
 ```shell
-git clone https://github.com/oceanbase/oceanbase.git
+git clone https://github.com/oceanbase/oceanbase-seekdb.git
 ```
 
 ## Build
 
-Build OceanBase from the source code in debug mode or release mode:
+Build OceanBase SeekDB from the source code in debug mode or release mode:
 
 ### Debug mode
 
@@ -30,24 +30,24 @@ bash build.sh release --init --make
 
 ## Run
 
-Now that you built the `observer` binary, you can deploy an OceanBase instance with the `obd.sh` utility:
+Now that you built the `observer` binary, you can deploy a SeekDB instance with the `obd.sh` utility:
 
 ```shell
 ./tools/deploy/obd.sh prepare -p /tmp/obtest
 ./tools/deploy/obd.sh deploy -c ./tools/deploy/single.yaml
 ```
 
-You can check the `mysql_port` in `./tools/deploy/single.yaml` file to see the listening port. Normally, if you deploy with the root user, the OceanBase server will listen on port 10000, and the examples below are also based on this port.
+You can check the `mysql_port` in `./tools/deploy/single.yaml` file to see the listening port. Normally, if you deploy with the root user, the seekdb server will listen on port 10000, and the examples below are also based on this port.
 
 ## Connect
 
-You can use the official MySQL client to connect to OceanBase:
+You can use the official MySQL client to connect to SeekDB:
 
 ```shell
 mysql -uroot -h127.0.0.1 -P10000
 ```
 
-Alternatively, you can use the `obclient` to connect to OceanBase:
+Alternatively, you can use the `obclient` to connect to SeekDB:
 
 ```shell
 ./deps/3rd/u01/obclient/bin/obclient -h127.0.0.1 -P10000 -uroot -Doceanbase -A

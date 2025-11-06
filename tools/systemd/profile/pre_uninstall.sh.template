@@ -1,13 +1,34 @@
 #!/bin/bash
 echo "execute pre uninstall script"
-prefix=@CPACK_PACKAGING_INSTALL_PREFIX@
+cnf_file=/etc/oceanbase/seekdb.cnf
 
-echo remove oceanbase service
-systemctl stop oceanbase
-systemctl disable oceanbase
-/bin/bash $prefix/profile/oceanbase-service.sh destroy
-rm -f /etc/systemd/system/oceanbase.service /etc/oceanbase.cnf
+systemctl stop seekdb
+systemctl disable seekdb
 systemctl daemon-reload
 
 # telemetry
-/bin/bash $prefix/profile/telemetry.sh $1 >/dev/null 2>&1
+/bin/bash /usr/libexec/oceanbase/scripts/telemetry.sh $1 >/dev/null 2>&1
+
+if [ -f "$cnf_file" ] && [ -s "$cnf_file" ]; then
+    # Ensure the directory exists
+    mkdir -p /var/lib/oceanbase
+
+    # Create the clean script file
+    clean_script="/var/lib/oceanbase/seekdb_clean.sh"
+    echo "#!/bin/bash" > "$clean_script"
+    echo "# SeekDB cleanup script" >> "$clean_script"
+    echo "# This script will be executed after package removal" >> "$clean_script"
+
+    redo_dir=$(cat "$cnf_file" | grep -o 'redo-dir=[^[:space:]]*' | sed 's/redo-dir=//')
+    if [ -n "$redo_dir" ]; then
+        echo "rm -rf $redo_dir" >> "$clean_script"
+    fi
+
+    data_dir=$(cat "$cnf_file" | grep -o 'data-dir=[^[:space:]]*' | sed 's/data-dir=//')
+    if [ -n "$data_dir" ]; then
+        echo "rm -rf $data_dir" >> "$clean_script"
+    fi
+
+    # Make the script executable
+    chmod +x "$clean_script"
+fi

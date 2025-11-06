@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #define USING_LOG_PREFIX SQL_RESV
@@ -52,9 +56,6 @@ int ObRevokeResolver::resolve_revoke_role_inner(
   if (lib::is_mysql_mode() && 4 == revoke_role->num_child_) {
     ignore_unknown_role = NULL != revoke_role->children_[2];
     ignore_unknown_user = NULL != revoke_role->children_[3];
-  }
-  if (lib::is_mysql_mode()) {
-    OZ (ObSQLUtils::compatibility_check_for_mysql_role_and_column_priv(tenant_id));
   }
   // 1. resolve role list
   ParseNode *role_list = revoke_role->children_[0];
@@ -306,7 +307,6 @@ int ObRevokeResolver::resolve_mysql(const ParseNode &parse_tree)
         //resolve privileges
         if (OB_SUCC(ret) && (NULL != privs_node)) {
           ObPrivSet priv_set = 0;
-          uint64_t compat_version = 0;
           const uint64_t tenant_id = params_.session_info_->get_effective_tenant_id();  
           if (OB_ISNULL(allocator_)) {
             ret = OB_ERR_UNEXPECTED;
@@ -315,46 +315,6 @@ int ObRevokeResolver::resolve_mysql(const ParseNode &parse_tree)
                                                         params_.schema_checker_, params_.session_info_,
                                                         *allocator_))) {
             LOG_WARN("Resolve priv set error", K(ret));
-          } else if (OB_FAIL(GET_MIN_DATA_VERSION(tenant_id, compat_version))) {
-            LOG_WARN("fail to get data version", K(tenant_id));
-          } else if (!sql::ObSQLUtils::is_data_version_ge_422_or_431(compat_version)
-                     && ((priv_set & OB_PRIV_EXECUTE) != 0 ||
-                         (priv_set & OB_PRIV_ALTER_ROUTINE) != 0 ||
-                         (priv_set & OB_PRIV_CREATE_ROUTINE) != 0)) {
-            ret = OB_NOT_SUPPORTED;
-            LOG_WARN("grammar is not support when MIN_DATA_VERSION is below DATA_VERSION_4_3_1_0 or 4_2_2_0", K(ret));
-            LOG_USER_ERROR(OB_NOT_SUPPORTED, "revoke execute/alter routine/create routine privilege");
-          } else if (!sql::ObSQLUtils::is_data_version_ge_423_or_432(compat_version)
-                     && ((priv_set & OB_PRIV_CREATE_TABLESPACE) != 0 ||
-                         (priv_set & OB_PRIV_SHUTDOWN) != 0 ||
-                         (priv_set & OB_PRIV_RELOAD) != 0)) {
-            ret = OB_NOT_SUPPORTED;
-            LOG_WARN("grammar is not support when MIN_DATA_VERSION is below DATA_VERSION_4_2_3_0 or 4_3_2_0", K(ret));
-            LOG_USER_ERROR(OB_NOT_SUPPORTED, "revoke create tablespace/shutdown/reload privilege");
-          } else if (!sql::ObSQLUtils::is_data_version_ge_424_or_433(compat_version)
-                     && ((priv_set & OB_PRIV_REFERENCES) != 0 ||
-                         (priv_set & OB_PRIV_CREATE_ROLE) != 0 ||
-                         (priv_set & OB_PRIV_DROP_ROLE) != 0 ||
-                         (priv_set & OB_PRIV_TRIGGER) != 0)) {
-            ret = OB_NOT_SUPPORTED;
-            LOG_WARN("grammar is not support when MIN_DATA_VERSION is below DATA_VERSION_4_2_4_0 or 4_3_3_0", K(ret));
-            LOG_USER_ERROR(OB_NOT_SUPPORTED, "revoke references/create role/drop role/trigger");
-          } else if (!((MOCK_DATA_VERSION_4_2_5_1 <= compat_version && compat_version < DATA_VERSION_4_3_0_0) || compat_version >= DATA_VERSION_4_3_5_1)
-                     && ((priv_set & OB_PRIV_ENCRYPT) != 0 || (priv_set & OB_PRIV_DECRYPT) != 0)) {
-            ret = OB_NOT_SUPPORTED;
-            LOG_WARN("grammar is not support when MIN_DATA_VERSION is below DATA_VERSION_4_2_5_1 or 4_3_5_1", K(ret));
-            LOG_USER_ERROR(OB_NOT_SUPPORTED, "grant encrypt/decrypt privilege");
-          } else if (!((MOCK_DATA_VERSION_4_2_5_2 <= compat_version && compat_version < DATA_VERSION_4_3_0_0) || compat_version >= DATA_VERSION_4_3_5_2)
-                     && ((priv_set & OB_PRIV_EVENT) != 0)) {
-            ret = OB_NOT_SUPPORTED;
-            LOG_WARN("grammar is not support when MIN_DATA_VERSION is below DATA_VERSION_4_2_5_2 or 4_3_5_2", K(ret));
-            LOG_USER_ERROR(OB_NOT_SUPPORTED, "revoke event");
-          } else if (compat_version < DATA_VERSION_4_3_5_2
-                     && ((priv_set & OB_PRIV_CREATE_CATALOG) != 0 ||
-                         (priv_set & OB_PRIV_USE_CATALOG) != 0)) {
-            ret = OB_NOT_SUPPORTED;
-            LOG_WARN("grammar is not support when MIN_DATA_VERSION is below DATA_VERSION_4_3_5_2", K(ret));
-            LOG_USER_ERROR(OB_NOT_SUPPORTED, "grant create catalog/use catalog privilege");
           }
           if (OB_FAIL(ret)) {
           } else {

@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #ifndef OCEANBASE_STORAGE_OB_DDL_STRUCT_H_
@@ -532,6 +536,7 @@ public:
   ObArray<ObColumnSchemaItem> column_items_;
   ObArray<int64_t> reshape_column_idxs_;
   ObArray<int64_t> lob_column_idxs_;
+  ObArray<share::schema::ObColDesc> column_descs_;
 };
 
 // transaction info for inc direct load
@@ -589,7 +594,8 @@ public:
     : ls_id_(), tablet_id_(), tenant_data_version_(0), is_no_logging_(false), macro_meta_store_mgr_(nullptr),
       schema_version_(0), slice_idx_(0), slice_count_(0), ddl_thread_count_(0), snapshot_version_(0), direct_load_type_(DIRECT_LOAD_INVALID),
       task_id_(0), is_index_table_(false), tx_info_(), ddl_table_schema_(), tablet_param_(), lob_meta_tablet_param_(),
-      cg_idx_(-1), ddl_dag_(nullptr), tablet_context_(nullptr), max_batch_size_(0), start_sequence_(), row_offset_(0)
+      cg_idx_(-1), ddl_dag_(nullptr), tablet_context_(nullptr), max_batch_size_(0), start_sequence_(), row_offset_(0),
+      is_sorted_table_load_(false)
   {}
   ~ObWriteMacroParam() = default;
   bool is_valid() const
@@ -603,7 +609,8 @@ public:
   int64_t get_logic_parallel_count() const { return slice_count_ > 0 ? slice_count_ : ddl_thread_count_; }
   TO_STRING_KV(K_(ls_id), K_(tablet_id), K_(lob_meta_tablet_id), K_(tenant_data_version), K_(is_no_logging), KP_(macro_meta_store_mgr),
       K_(schema_version), K_(slice_idx), K_(slice_count), K_(ddl_thread_count), K_(snapshot_version), K_(direct_load_type),
-      K_(task_id), K_(is_index_table), K_(ddl_table_schema), K_(tablet_param), K_(lob_meta_tablet_param), KP_(tablet_context));
+      K_(task_id), K_(is_index_table), K_(ddl_table_schema), K_(tablet_param), K_(lob_meta_tablet_param), KP_(tablet_context),
+      K_(is_sorted_table_load));
 public:
   share::ObLSID ls_id_;
   ObTabletID tablet_id_;
@@ -629,6 +636,7 @@ public:
   int64_t max_batch_size_;
   blocksstable::ObMacroDataSeq start_sequence_;
   int64_t row_offset_;
+  bool is_sorted_table_load_;
 };
 
 }  // end namespace storage

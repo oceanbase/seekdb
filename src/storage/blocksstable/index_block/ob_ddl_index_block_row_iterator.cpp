@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2023 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #define USING_LOG_PREFIX STORAGE
@@ -1362,7 +1366,7 @@ int ObDDLMergeBlockRowIterator::init_merger()
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("merger is null", K(ret));
     } else if (FALSE_IT(endkey_merger_->reset())) {
-    } else if (OB_FAIL(endkey_merger_->init(iters_.count(), *allocator_))) {
+    } else if (OB_FAIL(endkey_merger_->init(MAX_SSTABLE_COUNT, iters_.count(), *allocator_))) {
       LOG_WARN("fail to init rows merger", K(ret), K(iters_.count()));
     } else if (OB_FAIL(endkey_merger_->open(iters_.count()))) {
       LOG_WARN("fail to open rows merger", K(ret), K(iters_.count()));
@@ -2483,7 +2487,7 @@ int ObUnitedSliceRowIterator::locate_slice_idx_by_key(const ObDatumRowkey &rowke
           ret = OB_SUCCESS;
         }
       } else if (slice_merge_iter.end_of_block()) {
-        ret = OB_ITER_END;
+        ret = OB_SUCCESS; // search next
       } else if (OB_FAIL(slice_merge_iter.get_next(idx_row_header, endkey, is_scan_left_border, is_scan_right_border, idx_minor_info, agg_row_buf, agg_buf_size, row_offset))) {
         if (OB_ITER_END != ret) {
           LOG_WARN("get next failed", K(ret), K(i));

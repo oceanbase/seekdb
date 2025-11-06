@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #ifndef OCEANBASE_COMMON_OB_DEFINE_H_
@@ -187,6 +191,9 @@ const uint64_t OB_INVALID_GROUP_ID = UINT64_MAX;
 const uint64_t OB_INTERNAL_CATALOG_ID = 0;
 const char *const OB_INTERNAL_CATALOG_NAME = "internal";
 const char *const OB_INTERNAL_CATALOG_NAME_UPPER = "INTERNAL";
+const char *const OB_OCEANBASE_NAME = "OceanBase";
+const char *const OB_SEEKDB_NAME = "SeekDB";
+const char *const OB_COMPATIBILITY_VERSION = "4.3.5.3";
 
 OB_INLINE bool is_valid_group(const uint64_t group_id)
 {
@@ -423,6 +430,14 @@ const int64_t OB_MAX_DIRECTORY_PATH_LENGTH = 4000; // Compatible with Oracle
 const uint64_t OB_MAX_INTERVAL_PARTITIONS = 1048575; // interval parted table max partitions
 const int64_t OB_MAX_BALANCE_GROUP_NAME_LENGTH = 512;
 const int64_t OB_SERVICE_NAME_LENGTH = 64;
+
+const int64_t OB_MAX_LOCATION_NAME_LENGTH = 128;
+
+const int64_t OB_MAX_LOCATION_URL_LENGTH = 4000;
+
+const int64_t OB_MAX_LOCATION_ACCESS_INFO_LENGTH = 8000;
+const int64_t LOCATION_DEFINE_LENGTH = 8 * 1024;
+const int64_t OB_LOCATION_UTILS_REMOVE = 1;
 
 //plan cache
 const int64_t OB_PC_NOT_PARAM_COUNT = 8;
@@ -720,6 +735,8 @@ const char *const OB_VEC_KEY_COLUMN_NAME_PREFIX = "__key";
 const char *const OB_VEC_DATA_COLUMN_NAME_PREFIX = "__data";
 const char *const OB_VEC_SPIV_DIM_COLUMN_NAME_PREFIX = "__spiv_dim";
 const char *const OB_VEC_SPIV_VALUE_COLUMN_NAME_PREFIX = "__spiv_value";
+const char *const OB_HYBRID_VEC_CHUNK_VALUE_COLUMN_NAME_PREFIX = "__chunk";
+const char *const OB_HYBRID_VEC_EMBEDDED_VECTOR_COLUMN_NAME_PREFIX = "__embedded_vector";
 
 const char *const OB_VEC_IVF_CENTER_ID_COLUMN_NAME_PREFIX = "__ivf_center_id";
 const char *const OB_VEC_IVF_CENTER_VECTOR_COLUMN_NAME_PREFIX = "__ivf_center_vector";
@@ -967,6 +984,7 @@ const char *const OB_STANDBY_USER_NAME = "__oceanbase_inner_standby_user";
 const double TENANT_RESERVE_MEM_RATIO = 0.1;
 const int64_t LEAST_MEMORY_SIZE = 1L << 30;
 const int64_t SYS_MAX_ALLOCATE_MEMORY = 1L << 34;
+const int64_t MAX_PHY_MEM_PERCENTAGE = 90;
 
 // mem factor
 const double SQL_AUDIT_MEM_FACTOR = 0.1;

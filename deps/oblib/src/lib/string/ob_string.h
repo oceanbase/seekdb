@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #ifndef OCEANBASE_LIB_OB_STRING_H_
@@ -302,6 +306,35 @@ public:
     return OB_SUCCESS;
   }
 
+  inline bool case_compare_equal(const ObString &obstr) const
+  {
+    bool cmp = true;
+    if (NULL == ptr_) {
+      if (NULL != obstr.ptr_) {
+        cmp = false;
+      }
+    } else if (NULL == obstr.ptr_) {
+      cmp = false;
+    } else if (data_length_ != obstr.data_length_) {
+      cmp = false;
+    } else {
+      cmp = (0 == strncasecmp(ptr_, obstr.ptr_, data_length_));
+    }
+
+    return cmp;
+  }
+
+  inline bool case_compare_equal(const char *str) const
+  {
+    obstr_size_t len = 0;
+    if (NULL != str) {
+      len = static_cast<obstr_size_t>(strlen(str));
+    }
+    char *p = const_cast<char *>(str);
+    const ObString rv(0, len, p);
+    return case_compare_equal(rv);
+  }
+
   inline int case_compare(const ObString &obstr) const
   {
     int cmp = 0;
@@ -331,6 +364,31 @@ public:
     return case_compare(rv);
   }
 
+  inline bool compare_equal(const ObString &obstr) const
+  {
+    bool cmp = true;
+    if (ptr_ == obstr.ptr_) {
+      cmp = data_length_ == obstr.data_length_;
+    } else if (0 == data_length_ && 0 == obstr.data_length_) {
+      cmp = true;
+    } else if (data_length_ != obstr.data_length_) {
+      cmp = false;
+    } else {
+      cmp = (0 == MEMCMP(ptr_, obstr.ptr_, data_length_));
+    }
+    return cmp;
+  }
+
+  inline bool compare_equal(const char *str) const
+  {
+    obstr_size_t len = 0;
+    if (NULL != str) {
+      len = static_cast<obstr_size_t>(strlen(str));
+    }
+    char *p = const_cast<char *>(str);
+    const ObString rv(0, len, p);
+    return compare_equal(rv);
+  }
 
   inline int compare(const ObString &obstr) const
   {
@@ -434,7 +492,7 @@ public:
     char *p = const_cast<char *>(str);
     const ObString rv(0, len, p);
     return prefix_match_ci(rv);
-  } 
+  }
 
   inline obstr_size_t shrink()
   {

@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #define USING_LOG_PREFIX SHARE_SCHEMA
@@ -409,7 +413,9 @@ ObSchemaMgr::ObSchemaMgr()
       ccl_rule_mgr_(allocator_),
       timestamp_in_slot_(0),
       allocator_idx_(OB_INVALID_INDEX),
-      mlog_infos_(0, NULL, SET_USE_500(ObModIds::OB_SCHEMA_MLOG_INFO_VEC, ObCtxIds::SCHEMA_SERVICE))
+      mlog_infos_(0, NULL, SET_USE_500(ObModIds::OB_SCHEMA_MLOG_INFO_VEC, ObCtxIds::SCHEMA_SERVICE)),
+      ai_model_mgr_(allocator_),
+      location_mgr_(allocator_)
 {
 }
 
@@ -453,7 +459,9 @@ ObSchemaMgr::ObSchemaMgr(ObIAllocator &allocator)
       ccl_rule_mgr_(allocator_),
       timestamp_in_slot_(0),
       allocator_idx_(OB_INVALID_INDEX),
-      mlog_infos_(0, NULL, SET_USE_500(ObModIds::OB_SCHEMA_MLOG_INFO_VEC, ObCtxIds::SCHEMA_SERVICE))
+      mlog_infos_(0, NULL, SET_USE_500(ObModIds::OB_SCHEMA_MLOG_INFO_VEC, ObCtxIds::SCHEMA_SERVICE)),
+      ai_model_mgr_(allocator_),
+      location_mgr_(allocator_)
 {
 }
 
@@ -508,6 +516,10 @@ int ObSchemaMgr::init(const uint64_t tenant_id)
     LOG_WARN("init mock_fk_parent_table_mgr_ failed", K(ret));
   } else if (OB_FAIL(ccl_rule_mgr_.init())) {
     LOG_WARN("init ccl_rule mgr failed", K(ret));
+  } else if (OB_FAIL(ai_model_mgr_.init())) {
+    LOG_WARN("init ai_model_mgr_ failed", K(ret));
+  } else if (OB_FAIL(location_mgr_.init())) {
+    LOG_WARN("init location mgr failed", K(ret));
   } else {
     tenant_id_ = tenant_id;
   }
@@ -563,6 +575,8 @@ void ObSchemaMgr::reset()
     context_mgr_.reset();
     mock_fk_parent_table_mgr_.reset();
     mlog_infos_.clear();
+    ai_model_mgr_.reset();
+    location_mgr_.reset();
   }
 }
 
@@ -640,6 +654,10 @@ int ObSchemaMgr::assign(const ObSchemaMgr &other)
         LOG_WARN("assign catalog mgr failed", K(ret));
       } else if (OB_FAIL(ccl_rule_mgr_.assign(other.ccl_rule_mgr_))) {
         LOG_WARN("assign ccl_rule mgr failed", K(ret));
+      } else if (OB_FAIL(ai_model_mgr_.assign(other.ai_model_mgr_))) {
+        LOG_WARN("assign ai_model_mgr_ failed", K(ret));
+      } else if (OB_FAIL(location_mgr_.assign(other.location_mgr_))) {
+        LOG_WARN("assign location mgr failed", K(ret));
       }
     }
   }
@@ -713,6 +731,10 @@ int ObSchemaMgr::deep_copy(const ObSchemaMgr &other)
         LOG_WARN("deep copy catalog mgr failed", K(ret));
       } else if (OB_FAIL(ccl_rule_mgr_.deep_copy(other.ccl_rule_mgr_))) {
         LOG_WARN("deep copy ccl_rule mgr failed", K(ret));
+      } else if (OB_FAIL(ai_model_mgr_.deep_copy(other.ai_model_mgr_))) {
+        LOG_WARN("deep copy ai_model mgr failed", K(ret));
+      } else if (OB_FAIL(location_mgr_.deep_copy(other.location_mgr_))) {
+        LOG_WARN("deep copy location mgr failed", K(ret));
       }
     }
     if (OB_SUCC(ret)) {
@@ -4055,6 +4077,10 @@ int ObSchemaMgr::del_schemas_in_tenant(const uint64_t tenant_id)
         LOG_WARN("del catalog in tenant failed", K(ret), K(tenant_id));
       } else if (OB_FAIL(ccl_rule_mgr_.del_schemas_in_tenant(tenant_id))) {
         LOG_WARN("del ccl_rule in tenant failed", K(ret), K(tenant_id));
+      } else if (OB_FAIL(ai_model_mgr_.del_schemas_in_tenant(tenant_id))) {
+        LOG_WARN("del ai_model in tenant failed", K(ret), K(tenant_id));
+      } else if (OB_FAIL(location_mgr_.del_location_schemas_in_tenant(tenant_id))) {
+        LOG_WARN("del location in tenant failed", K(ret), K(tenant_id));
       }
     }
   }
@@ -4090,6 +4116,8 @@ int ObSchemaMgr::get_schema_count(int64_t &schema_count) const
     int64_t mock_fk_parent_table_schema_count = 0;
     int64_t catalog_schema_count = 0;
     int64_t ccl_rule_schema_count = 0;
+    int64_t ai_model_schema_count = 0;
+    int64_t location_schema_count = 0;
     if (OB_FAIL(outline_mgr_.get_outline_schema_count(outline_schema_count))) {
       LOG_WARN("get_outline_schema_count failed", K(ret));
     } else if (OB_FAIL(routine_mgr_.get_routine_schema_count(routine_schema_count))) {
@@ -4116,6 +4144,10 @@ int ObSchemaMgr::get_schema_count(int64_t &schema_count) const
       LOG_WARN("get catalog schema count failed", K(ret));
     } else if (OB_FAIL(ccl_rule_mgr_.get_schema_count(ccl_rule_schema_count))) {
       LOG_WARN("get ccl_rule schema count failed", K(ret));
+    } else if (OB_FAIL(ai_model_mgr_.get_ai_model_schema_count(ai_model_schema_count))) {
+      LOG_WARN("get ai_model schema count failed", K(ret));
+    } else if (OB_FAIL(location_mgr_.get_location_schema_count(location_schema_count))) {
+      LOG_WARN("get location schema count failed", K(ret));
     } else {
       schema_count += (outline_schema_count + routine_schema_count + priv_schema_count
                        + synonym_schema_count + package_schema_count
@@ -4129,6 +4161,8 @@ int ObSchemaMgr::get_schema_count(int64_t &schema_count) const
                        + sys_variable_schema_count
                        + context_schema_count
                        + mock_fk_parent_table_schema_count
+                       + ai_model_schema_count
+                       + location_schema_count
                       );
     }
   }
@@ -4867,7 +4901,13 @@ int ObSchemaMgr::get_schema_statistics(common::ObIArray<ObSchemaStatisticsInfo> 
   } else if (OB_FAIL(ccl_rule_mgr_.get_schema_statistics(schema_info))) {
     LOG_WARN("fail to get ccl_rule statistics", K(ret));
   } else if (OB_FAIL(schema_infos.push_back(schema_info))) {
+    LOG_WARN("failed to push back schema statistics", K(ret), K(schema_info));
+  } else if (OB_FAIL(ai_model_mgr_.get_schema_statistics(schema_info))) {
+    LOG_WARN("failed to get ai_model statistics", K(ret));
+  } else if (OB_FAIL(schema_infos.push_back(schema_info))) {
     LOG_WARN("fail to push back schema statistics", K(ret), K(schema_info));
+  } else if (OB_FAIL(location_mgr_.get_schema_statistics(schema_info))) {
+    LOG_WARN("fail to get location statistics", K(ret));
   }
   return ret;
 }
@@ -5021,6 +5061,128 @@ int ObSchemaMgr::get_table_statistics(ObSchemaStatisticsInfo &schema_info) const
   }
   return ret;
 }
+
+int ObSchemaMgr::get_ai_model_schema(
+  const uint64_t &tenant_id,
+  const uint64_t &ai_model_id,
+  const ObAiModelSchema *&ai_model_schema) const
+{
+  int ret = OB_SUCCESS;
+
+  if (tenant_id_ != tenant_id) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("tenant_id not matched", K(ret), K(tenant_id), K_(tenant_id));
+  } else {
+    ret = ai_model_mgr_.get_ai_model_schema(ai_model_id, ai_model_schema);
+  }
+
+  return ret;
+}
+
+int ObSchemaMgr::add_ai_models(const common::ObIArray<ObAiModelSchema> &ai_model_schemas)
+{
+  int ret = OB_SUCCESS;
+  for (int64_t i = 0; i < ai_model_schemas.count() && OB_SUCC(ret); ++i) {
+    if (OB_FAIL(add_ai_model(ai_model_schemas.at(i)))) {
+      LOG_WARN("push schema failed", K(ret));
+    }
+  }
+  return ret;
+}
+
+int ObSchemaMgr::add_ai_model(const ObAiModelSchema &ai_model_schema)
+{
+  int ret = OB_SUCCESS;
+  ObNameCaseMode mode = OB_NAME_CASE_INVALID;
+  if (OB_FAIL(get_tenant_name_case_mode(ai_model_schema.get_tenant_id(), mode))) {
+    LOG_WARN("fail to get_tenant_name_case_mode", K(ret), "tenant_id", ai_model_schema.get_tenant_id());
+  } else if (OB_NAME_CASE_INVALID == mode) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("invalid case mode", K(ret), K(mode));
+  }
+
+  if (OB_SUCC(ret) && OB_FAIL(ai_model_mgr_.add_ai_model(ai_model_schema, mode))) {
+    LOG_WARN("fail to add ai model", K(ret));
+  }
+  return ret;
+}
+
+int ObSchemaMgr::del_ai_model(const ObTenantAiModelId &tenant_ai_model_id)
+{
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(ai_model_mgr_.del_ai_model(tenant_ai_model_id))) {
+    LOG_WARN("fail to del ai model", K(ret));
+  }
+  return ret;
+}
+
+int ObSchemaMgr::get_ai_model_schema(
+  const uint64_t &tenant_id,
+  const ObString &ai_model_name,
+  const common::ObNameCaseMode &case_mode,
+  const ObAiModelSchema *&ai_model_schema) const
+{
+  int ret = OB_SUCCESS;
+
+  if (tenant_id_ != tenant_id) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("tenant_id not matched", K(ret), K(tenant_id), K_(tenant_id));
+  } else {
+    ret = ai_model_mgr_.get_ai_model_schema(tenant_id, ai_model_name, case_mode, ai_model_schema);
+  }
+
+  return ret;
+}
+
+int ObSchemaMgr::get_location_schema(
+    const uint64_t tenant_id,
+    const uint64_t schema_id,
+    const ObLocationSchema *&schema) const
+{
+  int ret = OB_SUCCESS;
+  if (tenant_id_ != tenant_id) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("tenant_id not matched", K(ret), K(tenant_id), K_(tenant_id));
+  } else {
+    ret = location_mgr_.get_location_schema_by_id(schema_id, schema);
+  }
+  return ret;
+}
+
+int ObSchemaMgr::add_locations(const common::ObIArray<ObLocationSchema> &location_schemas)
+{
+  int ret = OB_SUCCESS;
+  for (int64_t i = 0; i < location_schemas.count() && OB_SUCC(ret); ++i) {
+    if (OB_FAIL(add_location(location_schemas.at(i)))) {
+      LOG_WARN("push schema failed", K(ret));
+    }
+  }
+  return ret;
+}
+
+int ObSchemaMgr::add_location(const ObLocationSchema &location_schema)
+{
+  int ret = OB_SUCCESS;
+  ObNameCaseMode mode = OB_NAME_CASE_INVALID;
+  if (OB_FAIL(get_tenant_name_case_mode(location_schema.get_tenant_id(), mode))) {
+    LOG_WARN("fail to get_tenant_name_case_mode", K(ret), "tenant_id", location_schema.get_tenant_id());
+  } else if (OB_NAME_CASE_INVALID == mode) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("invalid case mode", K(ret), K(mode));
+  }
+  if (OB_SUCC(ret) && OB_FAIL(location_mgr_.add_location(location_schema, mode))) {
+    LOG_WARN("failed to add location", K(ret));
+  }
+  return ret;
+}
+
+int ObSchemaMgr::del_location(const ObTenantLocationId &id)
+{
+  int ret = OB_SUCCESS;
+  OZ(location_mgr_.del_location(id));
+  return ret;
+}
+
 
 } //end of namespace schema
 } //end of namespace share

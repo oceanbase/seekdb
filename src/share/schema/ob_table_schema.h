@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #ifndef OCEANBASE_SCHEMA_TABLE_SCHEMA
@@ -1118,6 +1122,8 @@ public:
   inline bool is_vec_domain_index() const;
   inline bool is_built_in_vec_index() const;
   inline bool is_vec_hnsw_index() const;
+  inline bool is_hybrid_vec_index() const;
+  inline static bool is_hybrid_vec_index(const ObIndexType index_type);
   inline bool is_vec_ivf_index() const;
   inline bool is_vec_ivfpq_index() const;
   inline bool is_vec_ivfsq8_index() const;
@@ -1139,6 +1145,8 @@ public:
   inline bool is_vec_rowkey_vid_type() const;
   inline bool is_vec_vid_rowkey_type() const;
   inline bool is_vec_delta_buffer_type() const;
+  inline bool is_hybrid_vec_index_log_type() const;
+  inline bool is_hybrid_vec_index_embedded_type() const;
   inline bool is_vec_dim_docid_value_type() const;
   inline bool is_vec_index_id_type() const;
   inline bool is_vec_index_snapshot_data_type() const;
@@ -1237,7 +1245,8 @@ public:
     const bool heap_case =  is_index_local_storage() && data_table_schema.is_table_without_pk();
     const bool fts_case = is_partitioned_table() && is_index_local_storage() && (is_fts_index_aux() || is_fts_doc_word_aux());
     const bool multivalue_case = is_partitioned_table() && is_index_local_storage() && is_multivalue_index_aux();
-    const bool vec_case = is_partitioned_table() && is_index_local_storage() && (is_vec_delta_buffer_type() || is_vec_index_id_type() || is_vec_index_snapshot_data_type());
+    const bool vec_case = is_partitioned_table() && is_index_local_storage() &&
+                          (is_vec_delta_buffer_type() || is_vec_index_id_type() || is_vec_index_snapshot_data_type() || is_vec_spiv_index_aux());
     return heap_case || fts_case || vec_case || multivalue_case;
   }
   inline void set_with_dynamic_partition_policy(bool with_dynamic_partition_policy)
@@ -1439,6 +1448,8 @@ public:
   inline void set_dop(int64_t table_dop) { table_dop_ = table_dop; }
   int set_external_file_location(const common::ObString &location) { return deep_copy_str(location, external_file_location_); }
   int set_external_file_location_access_info(const common::ObString &access_info) { return deep_copy_str(access_info, external_file_location_access_info_); }
+  void set_external_location_id(uint64_t id) { external_location_id_ = id; }
+  int set_external_sub_path(const common::ObString &sub_path) { return deep_copy_str(sub_path, external_sub_path_); }
   int set_external_file_format(const common::ObString &format) { return deep_copy_str(format, external_file_format_); }
   int set_external_file_pattern(const common::ObString &pattern) { return deep_copy_str(pattern, external_file_pattern_); }
   int set_external_properties(const common::ObString &format) { return deep_copy_str(format, external_properties_); }
@@ -1599,6 +1610,8 @@ public:
   inline uint64_t get_catalog_id() const { return catalog_id_; }
   const ObString &get_external_file_location() const { return external_file_location_; }
   const ObString &get_external_file_location_access_info() const { return external_file_location_access_info_; }
+  uint64_t get_external_location_id() const { return external_location_id_; }
+  const ObString &get_external_sub_path() const { return external_sub_path_; }
   const ObString &get_external_file_format() const { return external_file_format_; }
   const ObString &get_external_file_pattern() const { return external_file_pattern_; }
   const ObString &get_external_properties() const { return external_properties_; }
@@ -1706,12 +1719,17 @@ public:
       const bool no_virtual = false) const;
   int get_spatial_geo_column_id(uint64_t &geo_column_id) const;
   int get_spatial_index_column_ids(common::ObIArray<uint64_t> &column_ids) const;
-  int get_fulltext_column_ids(uint64_t &doc_id_col_id, uint64_t &ft_col_id) const;
+  int get_fulltext_column_ids(uint64_t &doc_id_col_id, uint64_t &ft_col_id) const
+      __attribute__((deprecated("Use get_fulltext_typed_col_ids() which adapt to more docid type.")));
+
+  int get_fulltext_typed_col_ids(uint64_t &doc_id_col_id, ObDocIDType &type, uint64_t &ft_col_id) const;
   int get_multivalue_column_id(uint64_t &multivalue_col_id) const;
 
   int get_sparse_vec_index_column_id(uint64_t &sparse_vec_col_id) const;
   int get_vec_index_column_id(uint64_t &with_cascaded_info_column_id) const;
   int get_vec_index_vid_col_id(uint64_t &vec_id_col_id, bool is_cid = false) const;
+  int get_hybrid_vec_chunk_column_id(uint64_t &hybrid_vec_chunk_col_id) const;
+  int get_hybrid_vec_embedded_column_id(uint64_t &vec_id_col_id) const;
   // get columns for building rowid
 
   // only used by storage layer, return all columns that need to be stored in sstable
@@ -1998,8 +2016,11 @@ public:
   void set_aux_lob_meta_tid(const uint64_t& table_id) { aux_lob_meta_tid_ = table_id; }
   void set_aux_lob_piece_tid(const uint64_t& table_id) { aux_lob_piece_tid_ = table_id; }
   int get_rowkey_doc_tid(uint64_t &index_table_id) const;
+
+  // NOTE: here you can get a **generated** doc id column id.
   int get_docid_col_id(uint64_t &docid_col_id) const;
   int get_rowkey_vid_tid(uint64_t &index_table_id) const;
+  int get_embedded_vec_tid(uint64_t &index_table_id) const;
   uint64_t get_aux_lob_meta_tid() const { return aux_lob_meta_tid_; }
   uint64_t get_aux_lob_piece_tid() const { return aux_lob_piece_tid_; }
   bool has_lob_column(const bool ignore_unused_column) const;
@@ -2412,6 +2433,16 @@ inline bool ObSimpleTableSchemaV2::is_vec_domain_index() const
   return share::schema::is_vec_domain_index(index_type_);
 }
 
+inline bool ObSimpleTableSchemaV2::is_hybrid_vec_index() const
+{
+  return share::schema::is_hybrid_vec_index(index_type_);
+}
+
+inline bool ObSimpleTableSchemaV2::is_hybrid_vec_index(const ObIndexType index_type)
+{
+  return share::schema::is_hybrid_vec_index(index_type);
+}
+
 inline bool ObSimpleTableSchemaV2::is_vec_spiv_index() const
 {
   return share::schema::is_vec_spiv_index(index_type_);
@@ -2500,6 +2531,16 @@ inline bool ObSimpleTableSchemaV2::is_vec_vid_rowkey_type() const
 inline bool ObSimpleTableSchemaV2::is_vec_delta_buffer_type() const
 {
   return share::schema::is_vec_delta_buffer_type(index_type_);
+}
+
+inline bool ObSimpleTableSchemaV2::is_hybrid_vec_index_log_type() const
+{
+  return share::schema::is_hybrid_vec_index_log_type(index_type_);
+}
+
+inline bool ObSimpleTableSchemaV2::is_hybrid_vec_index_embedded_type() const
+{
+  return share::schema::is_hybrid_vec_index_embedded_type(index_type_);
 }
 
 inline bool ObSimpleTableSchemaV2::is_vec_dim_docid_value_type() const
@@ -2597,7 +2638,8 @@ inline bool ObSimpleTableSchemaV2::is_domain_index(const ObIndexType index_type)
          share::schema::is_vec_ivfflat_centroid_index(index_type) ||
          share::schema::is_vec_ivfpq_centroid_index(index_type) ||
          share::schema::is_vec_ivfsq8_centroid_index(index_type) ||
-         share::schema::is_vec_dim_docid_value_type(index_type);
+         share::schema::is_vec_dim_docid_value_type(index_type) ||
+         share::schema::is_hybrid_vec_index(index_type);
 }
 
 inline bool ObSimpleTableSchemaV2::is_fts_or_multivalue_index() const

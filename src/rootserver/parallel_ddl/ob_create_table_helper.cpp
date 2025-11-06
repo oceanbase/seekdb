@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #define USING_LOG_PREFIX RS
@@ -27,6 +31,7 @@
 #include "sql/resolver/ob_resolver_utils.h"
 #include "share/ob_fts_index_builder_util.h"
 #include "share/ob_license_utils.h"
+#include "rootserver/ob_location_ddl_service.h"
 
 using namespace oceanbase::lib;
 using namespace oceanbase::common;
@@ -892,6 +897,12 @@ int ObCreateTableHelper::generate_table_schema_()
     }
   }
 
+  if (OB_SUCC(ret) && new_table.is_external_table()) {
+    if (OB_FAIL(ObLocationDDLService::check_location_constraint(new_table))) {
+      LOG_WARN("fail to check location ", KR(ret), K(new_table));
+    }
+  }
+
   if (FAILEDx(new_tables_.push_back(new_table))) {
     LOG_WARN("fail to push back table", KR(ret));
   }
@@ -979,6 +990,19 @@ int ObCreateTableHelper::generate_aux_table_schemas_()
                                                        false, /*generate_id*/
                                                        index_schema))) {
         LOG_WARN("generate_schema for index failed", KR(ret), K(index_arg), KPC(data_table));
+      } else if (index_schema.is_hybrid_vec_index_log_type()) {
+        if (!has_lob_table) {
+          object_cnt += 2;
+          if (FAILEDx(gen_object_ids_(object_cnt, id_generator))) {
+            LOG_WARN("fail to gen object ids", KR(ret), K_(tenant_id), K(object_cnt));
+          }
+          has_lob_table = true;
+        } else {
+          // do nothing, don't need to force generate the lob table
+        }
+      }
+
+      if (OB_FAIL(ret)) {
       } else if (OB_FAIL(id_generator.next(object_id))) {
         LOG_WARN("fail to get next object_id", KR(ret));
       } else if (FALSE_IT(index_schema.set_table_id(object_id))) {
@@ -1859,7 +1883,7 @@ int ObCreateTableHelper::create_tables_()
       } else if (OB_FAIL(schema_service_impl->get_table_sql_service().insert_temp_table_info(
                  get_trans_(), new_table))) {
         LOG_WARN("insert_temp_table_info failed", KR(ret), K(new_table));
-      } else if (new_table.is_vec_delta_buffer_type() && 
+      } else if ((new_table.is_vec_delta_buffer_type() || new_table.is_hybrid_vec_index_log_type()) &&
                  OB_FAIL(ObVectorIndexUtil::add_dbms_vector_jobs(get_trans_(), new_table.get_tenant_id(), 
                                                                  new_table.get_table_id(),
                                                                  new_table.get_exec_env()))) {

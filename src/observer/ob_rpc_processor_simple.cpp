@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #define USING_LOG_PREFIX SERVER
@@ -382,8 +386,8 @@ int ObRpcGetConfigP::process()
 int ObRpcSetTenantConfigP::process()
 {
   LOG_INFO("process set tenant config", K(arg_));
-  OTC_MGR.add_extra_config(arg_);
-  OTC_MGR.notify_tenant_config_changed(arg_.tenant_id_);
+  GCTX.config_mgr_->add_extra_config(arg_);
+  GCTX.config_mgr_->notify_tenant_config_changed(arg_.tenant_id_);
   return OB_SUCCESS;
 }
 
@@ -944,18 +948,6 @@ int ObRpcWashMemFragmentationP::process()
     LOG_ERROR("invalid argument", K(gctx_.ob_service_), K(ret));
   } else {
     ret = gctx_.ob_service_->wash_memory_fragmentation();
-  }
-  return ret;
-}
-
-int ObRpcBootstrapP::process()
-{
-  int ret = OB_SUCCESS;
-  if (OB_ISNULL(gctx_.ob_service_)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_ERROR("invalid argument", K(gctx_.ob_service_), K(ret));
-  } else {
-    ret = gctx_.ob_service_->bootstrap(arg_);
   }
   return ret;
 }
@@ -3905,10 +3897,6 @@ int ObRpcBroadcastConfigVersionP::process()
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), K_(arg), KP(GCTX.config_mgr_));
   // refresh tenant config version in local OMT
-  } else if (0 < arg_.get_tenant_config_version_map().count()
-             && OB_FAIL(OTC_MGR.got_versions(arg_.get_tenant_config_version_map()))) {
-    LOG_WARN("fail to refresh tenant config version map", KR(ret), K_(arg));
-  // refresh global config version in global config manager
   } else if (0 < arg_.get_global_config_version()
              && OB_FAIL(GCTX.config_mgr_->got_version(arg_.get_global_config_version()))) {
     LOG_WARN("fail to refresh global config version", KR(ret), K_(arg));

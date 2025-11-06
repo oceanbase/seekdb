@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #ifndef OCEANBASE_SQL_RESOLVER_DML_OB_HINT_
@@ -216,6 +220,16 @@ struct ObOptParamHint
     DEF(ENABLE_TOPN_RUNTIME_FILTER, )               \
     DEF(PRESERVE_ORDER_FOR_GROUPBY,)                \
     DEF(ENABLE_PDML_INSERT_UP,)                     \
+    DEF(ENABLE_PARTIAL_LIMIT_PUSHDOWN,)             \
+    DEF(PARQUET_FILTER_PUSHDOWN_LEVEL,)             \
+    DEF(ORC_FILTER_PUSHDOWN_LEVEL,)                 \
+    DEF(ENABLE_INDEX_MERGE,)                        \
+    DEF(ENABLE_PARTIAL_GROUP_BY_PUSHDOWN,)          \
+    DEF(ENABLE_PARTIAL_DISTINCT_PUSHDOWN,)          \
+    DEF(ENABLE_RUNTIME_FILTER_ADAPTIVE_APPLY, )     \
+    DEF(ENABLE_GROUPING_SETS_EXPANSION,)            \
+    DEF(EXTENDED_SQL_PLAN_MONITOR_METRICS, )        \
+    DEF(APPROX_COUNT_DISTINCT_PRECISION,)           \
 
 
   DECLARE_ENUM(OptParamType, opt_param, OPT_PARAM_TYPE_DEF, static);
@@ -362,35 +376,10 @@ struct ObGlobalHint {
   int assign(const ObGlobalHint &other);
 
 // optimizer version define, move defines below to other file later
-#define COMPAT_VERSION_4_0        (oceanbase::common::cal_version(4, 0, 0, 0))
-#define COMPAT_VERSION_4_2_1      (oceanbase::common::cal_version(4, 2, 1, 0))
-//#define COMPAT_VERSION_4_2_1_BP3  (oceanbase::common::cal_version(4, 2, 1, 3))
-#define COMPAT_VERSION_4_2_1_BP4  (oceanbase::common::cal_version(4, 2, 1, 4))
-#define COMPAT_VERSION_4_2_1_BP5  (oceanbase::common::cal_version(4, 2, 1, 5))
-#define COMPAT_VERSION_4_2_1_BP7  (oceanbase::common::cal_version(4, 2, 1, 7))
-#define COMPAT_VERSION_4_2_1_BP8  (oceanbase::common::cal_version(4, 2, 1, 8))
-#define COMPAT_VERSION_4_2_1_BP9  (oceanbase::common::cal_version(4, 2, 1, 9))
-#define COMPAT_VERSION_4_2_1_BP10 (oceanbase::common::cal_version(4, 2, 1, 10))
-#define COMPAT_VERSION_4_2_2      (oceanbase::common::cal_version(4, 2, 2, 0))
-#define COMPAT_VERSION_4_2_1_BP10 (oceanbase::common::cal_version(4, 2, 1, 10))
-#define COMPAT_VERSION_4_2_3      (oceanbase::common::cal_version(4, 2, 3, 0))
-#define COMPAT_VERSION_4_2_4      (oceanbase::common::cal_version(4, 2, 4, 0))
-#define COMPAT_VERSION_4_2_5      (oceanbase::common::cal_version(4, 2, 5, 0))
-#define COMPAT_VERSION_4_2_5_BP1  (oceanbase::common::cal_version(4, 2, 5, 1))
-#define COMPAT_VERSION_4_2_5_BP3  (oceanbase::common::cal_version(4, 2, 5, 3))
-#define COMPAT_VERSION_4_2_5_BP4  (oceanbase::common::cal_version(4, 2, 5, 4))
-#define COMPAT_VERSION_4_3_0      (oceanbase::common::cal_version(4, 3, 0, 0))
-#define COMPAT_VERSION_4_3_1      (oceanbase::common::cal_version(4, 3, 1, 0))
-#define COMPAT_VERSION_4_3_2      (oceanbase::common::cal_version(4, 3, 2, 0))
-#define COMPAT_VERSION_4_3_3      (oceanbase::common::cal_version(4, 3, 3, 0))
-#define COMPAT_VERSION_4_3_4      (oceanbase::common::cal_version(4, 3, 4, 0))
-#define COMPAT_VERSION_4_3_5      (oceanbase::common::cal_version(4, 3, 5, 0))
-#define COMPAT_VERSION_4_3_5_BP1  (oceanbase::common::cal_version(4, 3, 5, 1))
-#define COMPAT_VERSION_4_3_5_BP2  (oceanbase::common::cal_version(4, 3, 5, 2))
-#define COMPAT_VERSION_4_3_5_BP3  (oceanbase::common::cal_version(4, 3, 5, 3))
-#define LASTED_COMPAT_VERSION     COMPAT_VERSION_4_3_5_BP3
+#define COMPAT_VERSION_1_0_0_0    (oceanbase::common::cal_version(1, 0, 0, 0))
+#define LASTED_COMPAT_VERSION     COMPAT_VERSION_1_0_0_0
   static bool is_valid_opt_features_version(uint64_t version)
-  { return COMPAT_VERSION_4_0 <= version && (LASTED_COMPAT_VERSION >= version || CLUSTER_CURRENT_VERSION >= version); }
+  { return version > 0 && (LASTED_COMPAT_VERSION >= version || CLUSTER_CURRENT_VERSION >= version); }
 
   static const common::ObConsistencyLevel UNSET_CONSISTENCY = common::INVALID_CONSISTENCY;
   static const int64_t UNSET_QUERY_TIMEOUT = -1;
@@ -513,7 +502,7 @@ struct ObGlobalHint {
                K_(has_dbms_stats_hint),
                K_(parallel_das_dml_option),
                K_(dynamic_sampling),
-               K_(alloc_op_hints), 
+               K_(alloc_op_hints),
                K_(dblink_hints),
                K_(px_node_hint));
 
@@ -950,7 +939,7 @@ private:
 class ObWinMagicHint : public ObTransHint
 {
 public:
-  
+
   ObWinMagicHint(ObItemType hint_type)
     : ObTransHint(hint_type),
       table_list_()
@@ -1226,7 +1215,7 @@ public:
   const ObIArray<ObTableInHint> &get_left_tables() const { return left_tables_; }
   bool is_part_join_filter_hint() const { return T_PX_PART_JOIN_FILTER == hint_type_; }
   bool has_left_tables() const { return !left_tables_.empty(); }
-  bool has_pushdown_filter_table() const { return !pushdown_filter_table_.table_name_.empty(); } 
+  bool has_pushdown_filter_table() const { return !pushdown_filter_table_.table_name_.empty(); }
 
   INHERIT_TO_STRING_KV("ObHint", ObHint, K_(filter_table), K_(left_tables));
 
@@ -1255,10 +1244,10 @@ class ObPQSetHint : public ObOptHint
 
   const ObIArray<ObItemType> &get_dist_methods() const { return dist_methods_; }
   ObIArray<ObItemType> &get_dist_methods() { return dist_methods_; }
-  int set_pq_set_hint(const DistAlgo dist_algo, 
-                      const int64_t child_num, 
+  int set_pq_set_hint(const DistAlgo dist_algo,
+                      const int64_t child_num,
                       const int64_t random_none_idx);
-  uint64_t get_dist_algo(int64_t &random_none_idx) const 
+  uint64_t get_dist_algo(int64_t &random_none_idx) const
   { return get_dist_algo(dist_methods_, random_none_idx); }
   const ObString &get_left_branch() const { return left_branch_; }
   void set_left_branch(const ObString &left_branch) { return left_branch_.assign_ptr(left_branch.ptr(), left_branch.length()); }

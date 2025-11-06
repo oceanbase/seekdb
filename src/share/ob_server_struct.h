@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #ifndef _OCEABASE_SHARE_OB_SERVER_STRUCT_H_
@@ -132,95 +136,6 @@ namespace schema
 {
 class ObMultiVersionSchemaService;
 } // end of namespace schema
-
-class ObServerOptions
-{
-public:
-  ObServerOptions()
-    : rpc_port_(0),
-      elect_port_(0),
-      mysql_port_(0),
-      home_(NULL),
-      zone_(NULL),
-      nodaemon_(false),
-      optstr_(NULL),
-      devname_(NULL),
-      rs_list_(NULL),
-      appname_(NULL),
-      cluster_id_(common::OB_INVALID_CLUSTER_ID),
-      data_dir_(NULL),
-      startup_mode_(NULL),
-      log_level_(0),
-      use_ipv6_(false),
-      flashback_scn_(0),
-      local_ip_(NULL),
-      plugins_load_(NULL),
-      embed_mode_(false)
-  {
-  }
-  ObServerOptions(int rpc_port,
-                  int elect_port,
-                  int mysql_port,
-                  const char *home,
-                  const char *zone,
-                  bool nodaemon,
-                  const char *optstr,
-                  const char *devname,
-                  const char *rs_list,
-                  const char *appname,
-                  int64_t cluster_id,
-                  const char *data_dir,
-                  const char *shared_storage_info,
-                  int8_t log_level,
-                  const char *mode,
-                  bool use_ipv6,
-                  int64_t flashback_scn,
-                  const char *local_ip,
-                  const char *plugins_load,
-                  const bool embed_mode = false)
-  {
-    rpc_port_ = rpc_port;
-    elect_port_ = elect_port;
-    mysql_port_ = mysql_port;
-    home_ = home;
-    zone_ = zone;
-    nodaemon_ = nodaemon;
-    optstr_ = optstr;
-    devname_ = devname;
-    rs_list_ = rs_list;
-    appname_ = appname;
-    cluster_id_ = cluster_id;
-    data_dir_ = data_dir;
-    startup_mode_ = mode;
-    log_level_ = log_level;
-    use_ipv6_ = use_ipv6;
-    flashback_scn_ = flashback_scn;
-    local_ip_ = local_ip;
-    plugins_load_ = plugins_load;
-    embed_mode_ = embed_mode;
-  }
-  virtual ~ObServerOptions() {}
-
-  int rpc_port_;
-  int elect_port_;
-  int mysql_port_;
-  const char *home_;
-  const char *zone_;
-  bool nodaemon_;
-  const char *optstr_;
-  const char *devname_;
-  const char *rs_list_;
-  const char *appname_;
-  int64_t cluster_id_;
-  const char *data_dir_;
-  const char *startup_mode_;
-  int8_t log_level_;
-  bool use_ipv6_;
-  int64_t flashback_scn_;
-  const char *local_ip_;
-  const char *plugins_load_;
-  bool embed_mode_;
-};
 
 struct ObGlobalContext
 {

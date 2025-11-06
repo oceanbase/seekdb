@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #ifndef OCEANBASE_COMMON_OB_ASYNC_LOG_STRUCT_
@@ -32,8 +36,6 @@ namespace common
 {
 enum ObPLogFDType {
   FD_SVR_FILE = 0,
-  FD_RS_FILE,
-  FD_ELEC_FILE,
   FD_TRACE_FILE,
   FD_AUDIT_FILE,
   FD_ALERT_FILE,
@@ -76,7 +78,6 @@ public:
   }
   ObPLogFDType get_fd_type() const { return fd_type_; }
   void set_fd_type(const ObPLogFDType fd_type) { fd_type_ = fd_type;}
-  bool is_elec_file() const { return FD_ELEC_FILE == fd_type_; }
   bool is_trace_file() const { return FD_TRACE_FILE == fd_type_; }
   bool is_supported_file() const { return MAX_FD_FILE != fd_type_; }
   bool is_audit_file() const { return FD_AUDIT_FILE == fd_type_; }
@@ -102,9 +103,8 @@ class ObPLogFileStruct
 public:
   ObPLogFileStruct();
   virtual ~ObPLogFileStruct() { close_all(); }
-  int open(const char *log_file, const bool open_wf_flag, const bool redirect_flag);
+  int open(const char *log_file, const bool redirect_flag);
   int reopen(const bool redirect_flag);
-  int reopen_wf();
   int close_all();
   bool is_opened() { return fd_ > STDERR_FILENO; }
   int64_t get_write_size() const { return write_size_; }
@@ -114,12 +114,10 @@ public:
 
   char filename_[MAX_LOG_FILE_NAME_SIZE];
   int32_t fd_;//descriptor of log-file
-  int32_t wf_fd_;//descriptor of warning log-file
   uint32_t write_count_;
   int64_t write_size_;
   int64_t file_size_;
   struct stat stat_;
-  struct stat wf_stat_;
 };
 
 } // common

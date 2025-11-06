@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #define USING_LOG_PREFIX SQL
@@ -3073,24 +3077,6 @@ int ObSql::generate_physical_plan(ParseResult &parse_result,
       }
     }
   }
-  // execute dml in oracle mode, regardless of success or failure, always need to maintain object dependencies
-  if (OB_NOT_NULL(basic_stmt) && basic_stmt->is_dml_stmt()) {
-    int tmp_ret = ret;
-    ObDMLStmt *stmt = static_cast<ObDMLStmt*>(basic_stmt);
-    uint64_t data_version = 0;
-    const uint64_t tenant_id = result.get_session().get_effective_tenant_id();
-    if (OB_FAIL(GET_MIN_DATA_VERSION(tenant_id, data_version))) {
-      LOG_WARN("failed to get data version", K(ret));
-    } else if (data_version < DATA_VERSION_4_1_0_0 && stmt->get_ref_obj_table()->is_inited()) {
-      if (OB_FAIL(stmt->get_ref_obj_table()->process_reference_obj_table(
-          tenant_id, OB_INVALID_ID, nullptr, queue_))) {
-        LOG_WARN("failed to process reference obj table", K(ret));
-      }
-    }
-    if (OB_SUCC(ret)) {
-      ret = tmp_ret;
-    }
-  }
   return ret;
 }
 
@@ -4719,6 +4705,8 @@ int ObSql::need_add_plan(const ObPlanCacheCtx &pc_ctx,
     need_add_plan = false;
   } else if (ObPlanCache::is_contains_external_object(
                                             result.get_physical_plan()->get_dependency_table())) {
+    need_add_plan = false;
+  } else if (result.get_exec_context().get_stmt_factory()->get_query_ctx()->has_hybrid_search()) {
     need_add_plan = false;
   }
   return ret;

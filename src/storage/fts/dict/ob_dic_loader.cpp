@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2023 OceanBase
- * OceanBase is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #define USING_LOG_PREFIX STORAGE_FTS
@@ -139,10 +143,17 @@ int ObTenantDicLoader::try_load_dictionary_in_trans(const uint64_t tenant_id)
     LOG_WARN("invalid tenant id", K(ret), K(tenant_id));
   } else {
     if (!is_load_) {
+      ObTimeoutCtx timeout_ctx;
+      const int64_t default_timeout = DEFAULT_TIMEOUT_US;
+      const int64_t timeout = MAX(default_timeout, GCONF.internal_sql_execute_timeout);
       ObMySQLTransaction trans;
       if (OB_ISNULL(GCTX.sql_proxy_)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("sql proxy is null", K(ret));
+      } else if (OB_FAIL(timeout_ctx.set_trx_timeout_us(timeout))) {
+        LOG_WARN("set trx timeout failed", K(ret));
+      } else if (OB_FAIL(timeout_ctx.set_timeout(timeout))) {
+        LOG_WARN("set timeout failed", K(ret));
       } else if (OB_FAIL(trans.start(GCTX.sql_proxy_, tenant_id))) {
         LOG_WARN("failed to start trans", K(ret), K(tenant_id));
       } else if (OB_FAIL(try_load_dictionary_in_trans(tenant_id, trans))) {

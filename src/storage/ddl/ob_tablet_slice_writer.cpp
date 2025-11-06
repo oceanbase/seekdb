@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 #include "storage/ddl/ob_tablet_slice_writer.h"
 #include "storage/ddl/ob_ddl_tablet_context.h"
@@ -351,10 +355,12 @@ int ObRsSliceWriter::init(const ObWriteMacroParam &write_param)
         LOG_WARN("init storage slice writer failed", K(ret), K(writer_param_));
       }
     } else {
+      ObWriteMacroParam &write_param = const_cast<ObWriteMacroParam &>(writer_param_);
+      write_param.max_batch_size_ = ObTabletSliceBufferTempFileWriter::ObDDLRowBuffer::DEFAULT_MAX_BATCH_SIZE;
       if (OB_ISNULL(storage_slice_writer_ = OB_NEW(ObCsReplicaTabletSliceWriter, ObMemAttr(MTL_ID(), "stor_slice_wrt")))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
         LOG_WARN("fail to allocate  memory", K(ret));
-      } else if (OB_FAIL(static_cast<ObCsReplicaTabletSliceWriter *>(storage_slice_writer_)->init(writer_param_))) {
+      } else if (OB_FAIL(static_cast<ObCsReplicaTabletSliceWriter *>(storage_slice_writer_)->init(write_param))) {
         LOG_WARN("init storage slice writer failed", K(ret), K(writer_param_));
       }
     }
@@ -638,13 +644,11 @@ int ObTabletSliceBufferTempFileWriter::init(const ObWriteMacroParam &param)
 {
   int ret = OB_SUCCESS;
   ObDDLIndependentDag *ddl_dag = param.ddl_dag_;
-  ObWriteMacroParam &write_param = const_cast<ObWriteMacroParam &>(param);
-  write_param.max_batch_size_ = ObDDLRowBuffer::DEFAULT_MAX_BATCH_SIZE;
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
     LOG_WARN("the ObTabletSliceBufferTempFileWriter has been initialized", K(ret));
-  } else if (OB_FAIL(ObTabletSliceTempFileWriter::init(write_param))) {
-    LOG_WARN("fail to initialize the ObTabletSliceTempFileWriter", K(ret), K(write_param));
+  } else if (OB_FAIL(ObTabletSliceTempFileWriter::init(param))) {
+    LOG_WARN("fail to initialize the ObTabletSliceTempFileWriter", K(ret), K(param));
   } else if (OB_UNLIKELY(nullptr == ddl_dag)) {
     ret = OB_ERR_SYS;
     LOG_WARN("the ddl dag is null", K(ret));
@@ -717,14 +721,12 @@ int ObCsReplicaTabletSliceWriter::init(
 {
   int ret = OB_SUCCESS;
   ObDDLIndependentDag *ddl_dag = param.ddl_dag_;
-  ObWriteMacroParam &write_param = const_cast<ObWriteMacroParam &>(param);
-  write_param.max_batch_size_ = ObTabletSliceBufferTempFileWriter::ObDDLRowBuffer::DEFAULT_MAX_BATCH_SIZE;
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
     LOG_WARN("the ObCsReplicaTabletSliceWriter has been initialized", K(ret));
-  } else if (OB_FAIL(ObTabletSliceWriter::init(write_param))) {
-    LOG_WARN("fail to initialize the ObRsSliceWriter", K(ret), K(write_param));
-  } else if (OB_FAIL(cg_row_tmp_files_writer_.init(write_param))) {
+  } else if (OB_FAIL(ObTabletSliceWriter::init(param))) {
+    LOG_WARN("fail to initialize the ObRsSliceWriter", K(ret), K(param));
+  } else if (OB_FAIL(cg_row_tmp_files_writer_.init(param))) {
     LOG_WARN("fail to initialize the cg row tmp files writer", K(ret));
   } else {
     is_inited_ = true;
@@ -995,6 +997,12 @@ int ObCsSliceWriter::convert_to_storage_vector(ObIArray<ObIVector *> &vectors, O
         LOG_WARN("fail to reshape vector value", K(ret), K(column_schema_item), K(idx));
       }
     }
+    ObArray<ObArray<std::pair<char **, uint32_t *>>> column_lob_cells;
+    if (OB_SUCC(ret)) {
+      if (OB_FAIL(column_lob_cells.prepare_allocate(ddl_table_schema.lob_column_idxs_.count()))) {
+        LOG_WARN("reserve column lob cells failed", K(ret));
+      }
+    }
     for (int64_t i = 0; OB_SUCC(ret) && !ddl_table_schema.table_item_.is_skip_lob() && i < ddl_table_schema.lob_column_idxs_.count(); ++i) {
       const int64_t idx = ddl_table_schema.lob_column_idxs_.at(i);
       const ObColumnSchemaItem &column_schema_item = ddl_table_schema.column_items_.at(idx);
@@ -1004,12 +1012,60 @@ int ObCsSliceWriter::convert_to_storage_vector(ObIArray<ObIVector *> &vectors, O
       if (OB_FAIL(ObDDLUtil::handle_lob_column(tablet_id_,
                                                slice_idx_,
                                                writer_param_,
-                                               lob_writer_,
+                                               true, // need_all_cells
+                                               column_lob_cells.at(i),
                                                row_arena_,
                                                column_schema_item,
                                                selector,
                                                cur_vector))) {
         LOG_WARN("fail to write lob vector value", K(ret), K(column_schema_item), K(idx));
+      }
+    }
+    int64_t row_count = -1;
+    // check row count of each column
+    for (int64_t i = 0; OB_SUCC(ret) && i < column_lob_cells.count(); ++i) {
+      const ObArray<std::pair<char **, uint32_t *>> &cur_lob_cells = column_lob_cells.at(i);
+      if (0 == i) {
+        row_count = cur_lob_cells.count();
+      } else if (row_count != cur_lob_cells.count()) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("row count different", K(ret), K(tablet_id_), K(slice_idx_), K(i), K(row_count), K(cur_lob_cells.count()));
+      }
+    }
+    if (OB_SUCC(ret) && row_count > 0) {
+      if (OB_FAIL(ObDDLUtil::prepare_lob_writer(tablet_id_, slice_idx_, writer_param_, lob_writer_))) {
+        LOG_WARN("prepare lob writer failed", K(ret), K(tablet_id_), K(slice_idx_), K(writer_param_));
+      } else if (OB_ISNULL(lob_writer_)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("lob writer is null", K(ret), K(tablet_id_), K(slice_idx_), KP(lob_writer_));
+      }
+    }
+    // for idempotence, must write lob cells row by row
+    ObStorageDatum temp_datum;
+    for (int64_t i = 0; OB_SUCC(ret) && i < row_count; ++i) {
+      for (int64_t j = 0; OB_SUCC(ret) && j < column_lob_cells.count(); ++j) {
+        std::pair<char **, uint32_t *> &cur_cell = column_lob_cells.at(j).at(i);
+        if (OB_UNLIKELY(nullptr == cur_cell.first || nullptr == cur_cell.second)) {
+          if (nullptr == cur_cell.first && nullptr == cur_cell.second) {
+            // null for const vector, skip
+          } else {
+            ret = OB_ERR_UNEXPECTED;
+            LOG_WARN("current cell is null", K(ret), K(tablet_id_), K(slice_idx_), K(i), K(j), KP(cur_cell.first), K(cur_cell.second));
+          }
+        } else {
+          temp_datum.ptr_ = *cur_cell.first;
+          temp_datum.pack_ = *cur_cell.second;
+          const int64_t lob_column_idx = ddl_table_schema.lob_column_idxs_.at(j);
+          const ObColumnSchemaItem &column_schema = ddl_table_schema.column_items_.at(lob_column_idx);
+          if (temp_datum.is_null() || temp_datum.is_nop()) {
+            // skip
+          } else if (OB_FAIL(lob_writer_->write(column_schema, row_arena_, temp_datum))) {
+            LOG_WARN("write lob cell failed", K(ret), K(tablet_id_), K(slice_idx_), K(i), K(j), K(temp_datum));
+          } else {
+            *cur_cell.first = const_cast<char *>(temp_datum.ptr_);
+            *cur_cell.second = temp_datum.len_;
+          }
+        }
       }
     }
   }
@@ -1361,13 +1417,16 @@ int ObTabletSliceTempFileWriter::init(const ObWriteMacroParam &param)
     ObStorageSchema *storage_schema = param.tablet_param_.with_cs_replica_ ?
                                       param.tablet_param_.cs_replica_storage_schema_ :
                                       param.tablet_param_.storage_schema_;
+    const bool is_sorted_table_load_with_column_store_replica_ = param.is_sorted_table_load_ &&
+                                                                 param.tablet_param_.with_cs_replica_;
     if (OB_FAIL(cg_row_file_generator_.init(param.tablet_id_,
                                             param.slice_idx_,
                                             storage_schema,
                                             param.max_batch_size_,
                                             ObCGRowFilesGenerater::CG_ROW_FILE_MEMORY_LIMIT,
                                             param.ddl_table_schema_.column_items_,
-                                            false))) {
+                                            false,
+                                            is_sorted_table_load_with_column_store_replica_))) {
       LOG_WARN("fail to initialize cg row file generator", K(ret));
     } else {
       is_inited_ = true;

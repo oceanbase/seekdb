@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #define USING_LOG_PREFIX SERVER
@@ -79,12 +83,15 @@ int ObShowGrants::add_priv_map_recursively(uint64_t user_id, PRIV_MAP &priv_map,
     ObArray<const ObTablePriv *> table_priv_array;
     ObArray<const ObColumnPriv *> column_priv_array;
     ObArray<const ObRoutinePriv *> routine_priv_array;
+    ObArray<const ObObjMysqlPriv *> obj_mysql_priv_array;
+
 
     OZ (schema_guard_->get_catalog_priv_with_user_id(tenant_id_, user_id, catalog_priv_array));
     OZ (schema_guard_->get_db_priv_with_user_id(tenant_id_, user_id, db_priv_array));
     OZ (schema_guard_->get_table_priv_with_user_id(tenant_id_, user_id, table_priv_array));
     OZ (schema_guard_->get_column_priv_with_user_id(tenant_id_, user_id, column_priv_array));
     OZ (schema_guard_->get_routine_priv_with_user_id(tenant_id_, user_id, routine_priv_array));
+    OZ (schema_guard_->get_obj_mysql_priv_with_user_id(tenant_id_, user_id, obj_mysql_priv_array));
 
     //user_level
     if (OB_SUCC(ret)) {
@@ -133,6 +140,14 @@ int ObShowGrants::add_priv_map_recursively(uint64_t user_id, PRIV_MAP &priv_map,
         routine_priv_array.at(i)->get_routine_type() == ObRoutineType::ROUTINE_PROCEDURE_TYPE ?
                                               ObObjectType::PROCEDURE : ObObjectType::FUNCTION;
       OZ (add_priv_map(priv_map, priv_key, routine_priv_array.at(i)->get_priv_set()));
+    }
+
+    //object level
+    for (int i = 0; OB_SUCC(ret) && i < obj_mysql_priv_array.count(); i++) {
+      PrivKey priv_key;
+      priv_key.table_name_ = obj_mysql_priv_array.at(i)->get_obj_name_str();
+      priv_key.obj_type_ = static_cast<ObObjectType>(obj_mysql_priv_array.at(i)->get_obj_type());
+      OZ (add_priv_map(priv_map, priv_key, obj_mysql_priv_array.at(i)->get_priv_set()));
     }
 
     if (OB_SUCC(ret) && expand_roles) {
@@ -186,8 +201,9 @@ int ObShowGrants::inner_get_next_row(common::ObNewRow *&row)
         ObArray<const ObRoutinePriv *> routine_priv_array;
         ObArray<const ObColumnPriv *> column_priv_array;
         ObArray<const ObObjPriv *>obj_priv_array;
+        ObArray<const ObObjMysqlPriv *> obj_mysql_priv_array;
         PRIV_MAP priv_map;
-        const int64_t PRIV_BUF_LENGTH = 512;
+        const int64_t PRIV_BUF_LENGTH = 1024;
         char buf[PRIV_BUF_LENGTH] = {};
         int64_t pos = 0;
         ObString user_name;
@@ -222,6 +238,10 @@ int ObShowGrants::inner_get_next_row(common::ObNewRow *&row)
                                                                        show_user_id,
                                                                        obj_priv_array))) {
           SERVER_LOG(WARN, "Get table priv with user id error", K(ret));
+        } else if (OB_FAIL(schema_guard_->get_obj_mysql_priv_with_user_id(tenant_id_,
+                                                                          show_user_id,
+                                                                          obj_mysql_priv_array))) {
+          SERVER_LOG(WARN, "Get obj mysql priv with user id error", K(ret));
         } else {
           user_name = user_info->get_user_name_str();
           host_name = user_info->get_host_name_str();
@@ -238,7 +258,9 @@ int ObShowGrants::inner_get_next_row(common::ObNewRow *&row)
           for (PRIV_MAP::const_iterator iter = priv_map.begin(); OB_SUCC(ret) && iter != priv_map.end(); ++iter) {
             const PrivKey &priv_key = iter->first;
             const ObPrivSet &privs = iter->second;
-            if (priv_key.catalog_name_.empty() && priv_key.db_name_.empty()) {
+            if (priv_key.catalog_name_.empty()
+                && priv_key.db_name_.empty()
+                && ObObjectType::INVALID == priv_key.obj_type_) {
               pos = 0;
               have_priv.priv_level_ = OB_PRIV_USER_LEVEL;
               have_priv.priv_set_ = privs;
@@ -366,6 +388,25 @@ int ObShowGrants::inner_get_next_row(common::ObNewRow *&row)
                 OZ (fill_row_cells(show_user_id, result));
                 OZ (scanner_.add_row(cur_row_));
               }
+            }
+          }
+
+          // location
+          for (PRIV_MAP::const_iterator iter = priv_map.begin(); OB_SUCC(ret) && iter != priv_map.end(); ++iter) {
+            const PrivKey &priv_key = iter->first;
+            const ObPrivSet &privs = iter->second;
+            if (!priv_key.table_name_.empty()
+                && priv_key.obj_type_ == ObObjectType::LOCATION) {
+              pos = 0;
+              have_priv.priv_level_ = OB_PRIV_OBJECT_LEVEL;
+              have_priv.priv_set_ = privs;
+              have_priv.table_ = priv_key.table_name_;
+              have_priv.obj_type_ = priv_key.obj_type_;
+
+              OZ (get_grants_string(buf, PRIV_BUF_LENGTH, pos, have_priv, user_name, host_name));
+              OX (result.assign_ptr(buf, static_cast<int32_t>(pos)));
+              OZ (fill_row_cells(show_user_id, result));
+              OZ (scanner_.add_row(cur_row_));
             }
           }
         }
@@ -529,6 +570,8 @@ int ObShowGrants::print_privs_to_buff(
     priv_all = OB_PRIV_TABLE_ACC;
   } else if (OB_PRIV_ROUTINE_LEVEL == priv_level) {
     priv_all = OB_PRIV_ALL;
+  } else if (OB_PRIV_OBJECT_LEVEL == priv_level) {
+    priv_all = OB_PRIV_OBJECT_ACC;
   } else {
     ret = OB_INVALID_ARGUMENT;
     SERVER_LOG(WARN, "Invalid priv level", K(ret));
@@ -695,6 +738,18 @@ int ObShowGrants::print_privs_to_buff(
       if ((priv_set & OB_PRIV_USE_CATALOG) && OB_SUCCESS == ret) {
         ret = BUF_PRINTF(" USE CATALOG,");
       }
+      if ((priv_set & OB_PRIV_CREATE_AI_MODEL) && OB_SUCCESS == ret) {
+        ret = BUF_PRINTF(" CREATE AI MODEL,");
+      }
+      if ((priv_set & OB_PRIV_ALTER_AI_MODEL) && OB_SUCCESS == ret) {
+        ret = BUF_PRINTF(" ALTER AI MODEL,");
+      }
+      if ((priv_set & OB_PRIV_DROP_AI_MODEL) && OB_SUCCESS == ret) {
+        ret = BUF_PRINTF(" DROP AI MODEL,");
+      }
+      if ((priv_set & OB_PRIV_ACCESS_AI_MODEL) && OB_SUCCESS == ret) {
+        ret = BUF_PRINTF(" ACCESS AI MODEL,");
+      }
       if (OB_SUCCESS == ret && pos > 0) {
         pos--; //Delete last ','
       }
@@ -746,6 +801,12 @@ int ObShowGrants::priv_level_printf(
                                 have_priv.db_.length(), have_priv.db_.ptr(),
                                 have_priv.table_.length(), have_priv.table_.ptr()))) {
       SERVER_LOG(WARN, "Fill privs to buffer failed", K(ret));
+    }
+  } else if (OB_PRIV_OBJECT_LEVEL == have_priv.priv_level_) {
+    if (ObObjectType::LOCATION == have_priv.obj_type_) {
+      if (OB_FAIL(databuff_printf(buf, buf_len, pos, " ON LOCATION `%.*s`", have_priv.table_.length(), have_priv.table_.ptr()))) {
+        SERVER_LOG(WARN, "Fill privs to buffer failed", K(ret));
+      }
     }
   }
   return ret;

@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #define USING_LOG_PREFIX STORAGE
@@ -1931,8 +1935,7 @@ int ObMacroBlockWriter::prewarm_and_cluster_micro_blocks(const ObMacroBlock &mac
         LOG_WARN("fail to get pre_warm state of current micro block", K(ret));
       } else {
         const bool need_fill_logic_id = !data_store_desc_->is_for_index_or_meta() &&
-                                    data_store_desc_->is_major_merge_type() &&
-                                    data_store_desc_->get_major_working_cluster_version() >= DATA_VERSION_4_3_3_0;
+                                    data_store_desc_->is_major_merge_type();
         if (need_fill_logic_id) {
           ObLogicMacroBlockId cur_logic_id;
           gen_logic_macro_id(cur_logic_id);
@@ -2764,11 +2767,21 @@ int ObMacroBlockWriter::init_pre_agg_util(const ObDataStoreDesc &data_store_desc
   int ret = OB_SUCCESS;
   const ObIArray<ObSkipIndexColMeta> &full_agg_metas = data_store_desc.get_agg_meta_array();
   const bool need_pre_aggregation =
-      data_store_desc.is_major_or_meta_merge_type()
-      && nullptr != data_store_desc.sstable_index_builder_
+      nullptr != data_store_desc.sstable_index_builder_
       && full_agg_metas.count() > 0;
+  bool agg_meta_valid_for_minor = true;
+  for (int64_t i = 0; i < full_agg_metas.count(); ++i) {
+    const ObSkipIndexColMeta &agg_meta = full_agg_metas.at(i);
+    if (!non_baseline_enabled_agg_type(agg_meta.get_col_type())) {
+      agg_meta_valid_for_minor = false;
+    }
+  }
+
   if (!need_pre_aggregation) {
     // Skip
+  } else if (OB_UNLIKELY(!data_store_desc.is_major_or_meta_merge_type() && !agg_meta_valid_for_minor)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid agg meta for mini / minor sstable", K(ret));
   } else {
     char *aggregator_buf = nullptr;
     if (OB_ISNULL(aggregator_buf = static_cast<char *>(
@@ -2778,6 +2791,7 @@ int ObMacroBlockWriter::init_pre_agg_util(const ObDataStoreDesc &data_store_desc
     } else {
       data_aggregator_ = new (aggregator_buf) ObSkipIndexDataAggregator();
       if (OB_FAIL(data_aggregator_->init(
+          data_store_desc.is_major_or_meta_merge_type(),
           full_agg_metas,
           data_store_desc.get_col_desc_array(),
           data_store_desc.get_major_working_cluster_version(),

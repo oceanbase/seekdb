@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #ifndef OBDEV_SRC_SQL_DAS_ITER_OB_DAS_ITER_H_
@@ -26,6 +30,7 @@ namespace sql
 class ObDASDomainIdMergeIter;
 class ObEvalCtx;
 class ObExecContext;
+class ObDASScanCtDef;
 struct ObDASIterParam
 {
 public:
@@ -117,6 +122,11 @@ public:
   virtual void reset() override {}
   // for compatibility with ObNewRowIterator
 
+  virtual int set_scan_rowkey(ObEvalCtx *eval_ctx,
+                              const ObIArray<ObExpr *> &rowkey_exprs,
+                              const ObDASScanCtDef *lookup_ctdef,
+                              ObIAllocator *alloc,
+                              int64_t group_id) { return OB_NOT_IMPLEMENT; }
   int get_domain_id_merge_iter(ObDASDomainIdMergeIter *&domain_id_merge_iter);
   virtual int get_diagnosis_info(ObDiagnosisManager* diagnosis_manager) override { return OB_SUCCESS; };
 protected:

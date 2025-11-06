@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #include "alloc_func.h"
@@ -24,8 +28,34 @@ namespace oceanbase
 namespace lib
 {
 
+void set_hard_memory_limit(int64_t bytes)
+{
+  const uint64_t tenant_id = OB_SYS_TENANT_ID;
+  // set resource manager hard memory limit
+  ObMallocAllocator *allocator = ObMallocAllocator::get_instance();
+  if (!OB_ISNULL(allocator)) {
+    allocator->set_tenant_hard_limit(tenant_id, bytes);
+  }
+
+  // set chunk manager hard memory limit
+  CHUNK_MGR.set_hard_limit(bytes);
+}
+
+int64_t get_hard_memory_limit()
+{
+  return CHUNK_MGR.get_hard_limit();
+}
+
 void set_memory_limit(int64_t bytes)
 {
+  const uint64_t tenant_id = OB_SYS_TENANT_ID;
+  // set resource manager memory limit
+  ObMallocAllocator *allocator = ObMallocAllocator::get_instance();
+  if (!OB_ISNULL(allocator)) {
+    allocator->set_tenant_limit(tenant_id, bytes);
+  }
+
+  // set chunk manager memory limit
   CHUNK_MGR.set_limit(bytes);
 }
 
@@ -49,13 +79,22 @@ int64_t get_memory_avail()
   return get_memory_limit() - get_memory_used();
 }
 
+int64_t get_hard_memory_remain()
+{
+  return get_hard_memory_limit() - get_memory_used();
+}
+
 void set_tenant_memory_limit(uint64_t tenant_id, int64_t bytes)
 {
+  // set resource manager memory limit
   if (OB_SYS_TENANT_ID != tenant_id) return;
   ObMallocAllocator *allocator = ObMallocAllocator::get_instance();
   if (!OB_ISNULL(allocator)) {
     allocator->set_tenant_limit(tenant_id, bytes);
   }
+
+  // set chunk manager memory limit
+  CHUNK_MGR.set_limit(bytes);
 }
 
 int64_t get_tenant_memory_limit(uint64_t tenant_id)
@@ -126,21 +165,12 @@ void ob_set_reserved_memory(const int64_t bytes)
   }
 }
 
-void ob_set_urgent_memory(const int64_t bytes)
-{
-  ObMallocAllocator *allocator = ObMallocAllocator::get_instance();
-  if (!OB_ISNULL(allocator)) {
-    allocator->set_urgent(bytes);
-  }
-}
-
-int64_t ob_get_reserved_urgent_memory()
+int64_t ob_get_reserved_memory()
 {
   int64_t bytes = 0;
   ObMallocAllocator *allocator = ObMallocAllocator::get_instance();
   if (!OB_ISNULL(allocator)) {
-    bytes += allocator->get_urgent();
-    bytes += allocator->get_reserved();
+    bytes = allocator->get_reserved();
   }
   return bytes;
 }

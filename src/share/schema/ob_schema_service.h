@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #ifndef _OB_OCEANBAE_SCHEMA_SCHEMA_SERVICE_H
@@ -26,6 +30,8 @@
 #include "share/schema/ob_routine_info.h"
 #include "share/schema/ob_catalog_schema_struct.h"
 #include "share/schema/ob_ccl_schema_struct.h"
+#include "share/schema/ob_location_schema_struct.h"
+#include "share/schema/ob_objpriv_mysql_schema_struct.h"
 
 namespace oceanbase
 {
@@ -45,6 +51,7 @@ class ObUDF;
 class ObRoutineInfo;
 class ObPackageInfo;
 class ObTriggerInfo;
+class ObAiModelSchema;
 
 enum ObSchemaOperationCategory
 {
@@ -362,6 +369,20 @@ enum ObSchemaOperationCategory
   ACT(OB_DDL_CREATE_CCL_RULE, = 2102)                            \
   ACT(OB_DDL_DROP_CCL_RULE, = 2103)                              \
   ACT(OB_DDL_CCL_RULE_OPERATION_END, = 2110)                     \
+  ACT(OB_DDL_AI_MODEL_OPERATION_BEGIN, = 2111)                   \
+  ACT(OB_DDL_CREATE_AI_MODEL, )                                  \
+  ACT(OB_DDL_ALTER_AI_MODEL, )                                   \
+  ACT(OB_DDL_DROP_AI_MODEL, )                                    \
+  ACT(OB_DDL_AI_MODEL_OPERATION_END, = 2120)                     \
+  ACT(OB_DDL_LOCATION_OPERATION_BEGIN, = 2121)                   \
+  ACT(OB_DDL_CREATE_LOCATION, )                                  \
+  ACT(OB_DDL_ALTER_LOCATION, )                                   \
+  ACT(OB_DDL_DROP_LOCATION, )                                    \
+  ACT(OB_DDL_LOCATION_OPERATION_END, = 2130)                     \
+  ACT(OB_DDL_OBJ_MYSQL_PRIV_OPERATION_BEGIN, = 2131)             \
+  ACT(OB_DDL_GRANT_OBJ_MYSQL_PRIV, )                             \
+  ACT(OB_DDL_DEL_OBJ_MYSQL_PRIV, )                               \
+  ACT(OB_DDL_OBJ_MYSQL_PRIV_OPERATION_END, = 2140)               \
   ACT(OB_DDL_MAX_OP,)
 
 DECLARE_ENUM(ObSchemaOperationType, op_type, OP_TYPE_DEF);
@@ -395,10 +416,12 @@ IS_DDL_TYPE(TRIGGER, trigger)
 IS_DDL_TYPE(SYS_PRIV, sys_priv)
 IS_DDL_TYPE(OBJ_PRIV, obj_priv)
 IS_DDL_TYPE(DIRECTORY, directory)
+IS_DDL_TYPE(LOCATION, location)
 IS_DDL_TYPE(CONTEXT, context)
 IS_DDL_TYPE(MOCK_FK_PARENT_TABLE, mock_fk_parent_table)
 IS_DDL_TYPE(CATALOG, catalog)
 IS_DDL_TYPE(CCL_RULE, ccl_rule)
+IS_DDL_TYPE(AI_MODEL, ai_model)
 
 struct ObSchemaOperation
 {
@@ -434,6 +457,9 @@ public:
     uint64_t column_priv_id_;
     uint64_t catalog_id_;
     uint64_t ccl_rule_id_;
+    uint64_t ai_model_id_;
+    uint64_t location_id_;
+    uint64_t obj_type_;
   };
   union {
     common::ObString table_name_;
@@ -443,6 +469,8 @@ public:
     common::ObString mock_fk_parent_table_name_;
     common::ObString routine_name_;
     common::ObString catalog_name_;
+    common::ObString ai_model_name_;
+    common::ObString obj_name_;
   };
   ObSchemaOperationType op_type_;
   common::ObString ddl_stmt_str_;
@@ -684,6 +712,7 @@ class ObSimpleTriggerSchema;
 class ObSimpleUDFSchema;
 class ObSimpleSysVariableSchema;
 class ObDirectorySchema;
+class ObLocationSchema;
 class ObSimpleMockFKParentTableSchema;
 class ObCatalogSchema;
 
@@ -704,11 +733,13 @@ class ObSequenceSqlService;
 class ObSysVariableSqlService;
 class ObErrorSqlService;
 class ObDirectorySqlService;
+class ObLocationSqlService;
 //table schema service interface layer
 class ObServerSchemaService;
 class ObContextSqlService;
 class ObCatalogSqlService;
 class ObCCLRuleSqlService;
+class ObAiModelSqlService;
 class ObSchemaService
 {
 public:
@@ -754,11 +785,12 @@ public:
   DECLARE_GET_DDL_SQL_SERVICE_FUNC(Sequence, sequence);
   DECLARE_GET_DDL_SQL_SERVICE_FUNC(SysVariable, sys_variable);
   DECLARE_GET_DDL_SQL_SERVICE_FUNC(Directory, directory);
+  DECLARE_GET_DDL_SQL_SERVICE_FUNC(Location, location);
   DECLARE_GET_DDL_SQL_SERVICE_FUNC(Context, context);
   DECLARE_GET_DDL_SQL_SERVICE_FUNC(Catalog, catalog);
   //DECLARE_GET_DDL_SQL_SERVICE_FUNC(sys_priv, priv);
   DECLARE_GET_DDL_SQL_SERVICE_FUNC(CCLRule, ccl_rule);
-
+  DECLARE_GET_DDL_SQL_SERVICE_FUNC(AiModel, ai_model);
 
   /* sequence_id related */
   virtual int init_sequence_id_by_rs_epoch(const int64_t rootservice_epoch) = 0; // for compatible use
@@ -866,6 +898,7 @@ public:
   GET_ALL_SCHEMA_FUNC_DECLARE_PURE_VIRTUAL(table_priv, ObTablePriv);
   GET_ALL_SCHEMA_FUNC_DECLARE_PURE_VIRTUAL(routine_priv, ObRoutinePriv);
   GET_ALL_SCHEMA_FUNC_DECLARE_PURE_VIRTUAL(column_priv, ObColumnPriv);
+  GET_ALL_SCHEMA_FUNC_DECLARE_PURE_VIRTUAL(obj_mysql_priv, ObObjMysqlPriv);
   GET_ALL_SCHEMA_FUNC_DECLARE_PURE_VIRTUAL(outline, ObSimpleOutlineSchema);
   GET_ALL_SCHEMA_FUNC_DECLARE_PURE_VIRTUAL(routine, ObSimpleRoutineSchema);
   GET_ALL_SCHEMA_FUNC_DECLARE_PURE_VIRTUAL(package, ObSimplePackageSchema);
@@ -875,10 +908,12 @@ public:
   GET_ALL_SCHEMA_FUNC_DECLARE_PURE_VIRTUAL(sys_priv, ObSysPriv);
   GET_ALL_SCHEMA_FUNC_DECLARE_PURE_VIRTUAL(obj_priv, ObObjPriv);
   GET_ALL_SCHEMA_FUNC_DECLARE_PURE_VIRTUAL(directory, ObDirectorySchema);
+  GET_ALL_SCHEMA_FUNC_DECLARE_PURE_VIRTUAL(location, ObLocationSchema);
   GET_ALL_SCHEMA_FUNC_DECLARE_PURE_VIRTUAL(context, ObContextSchema);
   GET_ALL_SCHEMA_FUNC_DECLARE_PURE_VIRTUAL(mock_fk_parent_table, ObSimpleMockFKParentTableSchema);
   GET_ALL_SCHEMA_FUNC_DECLARE_PURE_VIRTUAL(catalog, ObCatalogSchema);
   GET_ALL_SCHEMA_FUNC_DECLARE_PURE_VIRTUAL(ccl_rule, ObSimpleCCLRuleSchema);
+  GET_ALL_SCHEMA_FUNC_DECLARE_PURE_VIRTUAL(ai_model, ObAiModelSchema);
 
   //get tenant increment schema operation between (base_version, new_schema_version]
   virtual int get_increment_schema_operations(const ObRefreshSchemaStatus &schema_status,
@@ -938,10 +973,12 @@ public:
   virtual int fetch_new_trigger_id(const uint64_t tenant_id, uint64_t &new_trigger_id) = 0;
 
   virtual int fetch_new_directory_id(const uint64_t tenant_id, uint64_t &new_directory_id) = 0;
+  virtual int fetch_new_location_id(const uint64_t tenant_id, uint64_t &new_location_id) = 0;
   virtual int fetch_new_context_id(const uint64_t tenant_id, uint64_t &new_context_id) = 0;
   virtual int fetch_new_priv_id(const uint64_t tenant_id, uint64_t &new_priv_id) = 0;
   virtual int fetch_new_catalog_id(const uint64_t tenant_id, uint64_t &new_catalog_id) = 0;
   virtual int fetch_new_ccl_rule_id(const uint64_t tenant_id, uint64_t &new_ccl_rule_id) = 0;
+  virtual int fetch_new_ai_model_id(const uint64_t tenant_id, uint64_t &new_ai_model_id) = 0;
 
 //------------------For managing privileges-----------------------------//
   #define GET_BATCH_SCHEMAS_WITH_ALLOCATOR_FUNC_DECLARE_PURE_VIRTUAL(SCHEMA, SCHEMA_TYPE)  \
@@ -979,11 +1016,14 @@ public:
   GET_BATCH_SCHEMAS_FUNC_DECLARE_PURE_VIRTUAL(sys_variable, ObSimpleSysVariableSchema);
   GET_BATCH_SCHEMAS_FUNC_DECLARE_PURE_VIRTUAL(sys_priv, ObSysPriv);
   GET_BATCH_SCHEMAS_FUNC_DECLARE_PURE_VIRTUAL(obj_priv, ObObjPriv);
+  GET_BATCH_SCHEMAS_FUNC_DECLARE_PURE_VIRTUAL(obj_mysql_priv, ObObjMysqlPriv);
   GET_BATCH_SCHEMAS_FUNC_DECLARE_PURE_VIRTUAL(directory, ObDirectorySchema);
+  GET_BATCH_SCHEMAS_FUNC_DECLARE_PURE_VIRTUAL(location, ObLocationSchema);
   GET_BATCH_SCHEMAS_FUNC_DECLARE_PURE_VIRTUAL(context, ObContextSchema);
   GET_BATCH_SCHEMAS_FUNC_DECLARE_PURE_VIRTUAL(mock_fk_parent_table, ObSimpleMockFKParentTableSchema);
   GET_BATCH_SCHEMAS_FUNC_DECLARE_PURE_VIRTUAL(catalog, ObCatalogSchema);
   GET_BATCH_SCHEMAS_FUNC_DECLARE_PURE_VIRTUAL(ccl_rule, ObSimpleCCLRuleSchema);
+  GET_BATCH_SCHEMAS_FUNC_DECLARE_PURE_VIRTUAL(ai_model, ObAiModelSchema);
 
 
   //--------------For manaing recyclebin -----//

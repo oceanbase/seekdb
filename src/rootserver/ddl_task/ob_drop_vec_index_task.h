@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2024 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #ifndef OCEANBASE_ROOTSERVER_OB_DROP_VEC_INDEX_TASK_H
@@ -36,6 +40,7 @@ public:
       const ObVecIndexDDLChildTaskInfo &domain_index,
       const ObVecIndexDDLChildTaskInfo &vec_delta_buffer,
       const ObVecIndexDDLChildTaskInfo &vec_index_snapshot_data,
+      const ObVecIndexDDLChildTaskInfo &hybrid_embedded_vec,
       const int64_t schema_version,
       const int64_t consumer_group_id,
       const uint64_t tenant_data_version,
@@ -61,7 +66,7 @@ public:
                                         const ObDDLTaskInfo &addition_info);
 
   INHERIT_TO_STRING_KV("ObDDLTask", ObDDLTask, K_(rowkey_vid), K_(vid_rowkey), K_(domain_index), K_(vec_index_id), 
-                      K_(vec_index_snapshot_data), K(wait_trans_ctx_));
+                      K_(vec_index_snapshot_data), K_(hybrid_embedded_vec), K(wait_trans_ctx_));
 private:
   static const int64_t OB_DROP_VEC_INDEX_TASK_VERSION = 1;
   int deep_copy_index_arg(common::ObIAllocator &allocator,
@@ -113,6 +118,7 @@ private:
   ObVecIndexDDLChildTaskInfo domain_index_;
   ObVecIndexDDLChildTaskInfo vec_index_id_;
   ObVecIndexDDLChildTaskInfo vec_index_snapshot_data_;
+  ObVecIndexDDLChildTaskInfo hybrid_embedded_vec_;
   obrpc::ObDropIndexArg drop_index_arg_;
   ObDDLReplicaBuildExecutor replica_builder_;
   common::hash::ObHashMap<common::ObTabletID, common::ObTabletID> check_dag_exit_tablets_map_; // for delete lob meta row data ddl only.

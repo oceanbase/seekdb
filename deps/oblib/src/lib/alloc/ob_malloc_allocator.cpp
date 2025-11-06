@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #define USING_LOG_PREFIX LIB
@@ -42,7 +46,7 @@ namespace lib
 
 ObMallocAllocator::ObMallocAllocator()
   : allocator_(NULL),
-    reserved_(0), urgent_(0), max_used_tenant_id_(0), create_on_demand_(false)
+    reserved_(0), max_used_tenant_id_(0), create_on_demand_(false)
 {
   set_root_allocator();
   is_inited_ = true;
@@ -170,6 +174,26 @@ int ObMallocAllocator::with_resource_handle_invoke(uint64_t tenant_id, InvokeFun
   }
   return ret;
 }
+
+int ObMallocAllocator::set_tenant_hard_limit(uint64_t tenant_id, int64_t bytes)
+{
+  if (OB_SYS_TENANT_ID != tenant_id) return OB_SUCCESS;
+  return with_resource_handle_invoke(tenant_id, [bytes](ObTenantMemoryMgr *mgr) {
+      mgr->set_hard_limit(bytes);
+      return OB_SUCCESS;
+    });
+}
+
+int64_t ObMallocAllocator::get_tenant_hard_limit(uint64_t tenant_id)
+{
+  int64_t limit = 0;
+  with_resource_handle_invoke(tenant_id, [&limit](ObTenantMemoryMgr *mgr) {
+      limit = mgr->get_hard_limit();
+      return OB_SUCCESS;
+    });
+  return limit;
+}
+
 int ObMallocAllocator::set_tenant_limit(uint64_t tenant_id, int64_t bytes)
 {
   if (OB_SYS_TENANT_ID != tenant_id) return OB_SUCCESS;
@@ -290,16 +314,6 @@ void ObMallocAllocator::print_tenant_memory_usage(uint64_t tenant_id) const
     return ret;
   });
   UNUSED(ret);
-}
-
-void ObMallocAllocator::set_urgent(int64_t bytes)
-{
-  CHUNK_MGR.set_urgent(bytes);
-}
-
-int64_t ObMallocAllocator::get_urgent() const
-{
-  return CHUNK_MGR.get_urgent();
 }
 
 void ObMallocAllocator::set_reserved(int64_t bytes)

@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #define USING_LOG_PREFIX SHARE
@@ -139,7 +143,7 @@ int ObIndexBuilderUtil::add_column(
       if (column.is_spatial_generated_column()) {
         column.set_geo_col_id(data_column->get_geo_col_id());
       }
-      if (table_schema.is_fts_index() || (table_schema.is_multivalue_index())) {
+      if (table_schema.is_fts_index() || (table_schema.is_multivalue_index()) || (table_schema.is_vec_spiv_index())) {
         ObObj default_value;
         column.del_column_flag(VIRTUAL_GENERATED_COLUMN_FLAG);
         if (column.is_word_segment_column()) {
@@ -714,8 +718,8 @@ int ObIndexBuilderUtil::adjust_expr_index_args(
     } else if (OB_FAIL(gen_columns.push_back(spatial_cols.at(1)))) {
       LOG_WARN("push back mbr column to gen columns failed", K(ret));
     }
-  } else if (ObIndexBuilderUtil::is_do_create_dense_vec_index(arg.index_type_)) {
-    if (OB_FAIL(ObVecIndexBuilderUtil::check_vec_index_allowed(data_schema))) {
+  } else if (ObIndexBuilderUtil::is_do_create_dense_vec_index(arg.index_type_) || is_vec_spiv_index_aux(arg.index_type_)) {
+    if (OB_FAIL(ObVecIndexBuilderUtil::check_vec_index_allowed(arg.index_type_, data_schema))) {
       LOG_WARN("fail to check vector index allowed", K(ret));
     } else if (OB_FAIL(ObVecIndexBuilderUtil::adjust_vec_args(arg, data_schema, allocator, gen_columns))) {
       LOG_WARN("failed to adjust vec index args", K(ret), K(arg.index_type_));

@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #define USING_LOG_PREFIX SERVER
@@ -119,16 +123,8 @@ int ObAllVirtualSysStat::update_all_stats_(const int64_t tenant_id, common::ObDi
 
     stat_events.get(ObStatEventIds::OBLOGGER_WRITE_SIZE - ObStatEventIds::STAT_EVENT_ADD_END -1)->stat_value_ =
         (OB_SYS_TENANT_ID == tenant_id) ? OB_LOGGER.get_write_size() : 0;
-    stat_events.get(ObStatEventIds::ELECTION_WRITE_SIZE - ObStatEventIds::STAT_EVENT_ADD_END -1)->stat_value_ =
-        (OB_SYS_TENANT_ID == tenant_id) ? OB_LOGGER.get_elec_write_size() : 0;
-    stat_events.get(ObStatEventIds::ROOTSERVICE_WRITE_SIZE - ObStatEventIds::STAT_EVENT_ADD_END -1)->stat_value_ =
-        (OB_SYS_TENANT_ID == tenant_id) ? OB_LOGGER.get_rs_write_size() : 0;
     stat_events.get(ObStatEventIds::OBLOGGER_TOTAL_WRITE_COUNT - ObStatEventIds::STAT_EVENT_ADD_END -1)->stat_value_ =
         (OB_SYS_TENANT_ID == tenant_id) ? OB_LOGGER.get_total_write_count() : 0;
-    stat_events.get(ObStatEventIds::ELECTION_TOTAL_WRITE_COUNT - ObStatEventIds::STAT_EVENT_ADD_END -1)->stat_value_ =
-        (OB_SYS_TENANT_ID == tenant_id) ? OB_LOGGER.get_elec_total_write_count() : 0;
-    stat_events.get(ObStatEventIds::ROOTSERVICE_TOTAL_WRITE_COUNT - ObStatEventIds::STAT_EVENT_ADD_END -1)->stat_value_ =
-        (OB_SYS_TENANT_ID == tenant_id) ? OB_LOGGER.get_rs_total_write_count() : 0;
     stat_events.get(ObStatEventIds::ASYNC_ERROR_LOG_DROPPED_COUNT - ObStatEventIds::STAT_EVENT_ADD_END -1)->stat_value_ =
         (OB_SYS_TENANT_ID == tenant_id) ? OB_LOGGER.get_dropped_error_log_count() : 0;
     stat_events.get(ObStatEventIds::ASYNC_WARN_LOG_DROPPED_COUNT - ObStatEventIds::STAT_EVENT_ADD_END -1)->stat_value_ =

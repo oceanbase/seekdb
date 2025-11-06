@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #define USING_LOG_PREFIX SHARE
@@ -791,7 +795,9 @@ int ObExternalTableFileManager::calculate_file_part_val_by_file_name(const ObTab
   ObArray<sql::ObTempExpr *> temp_exprs;
   ObNewRow file_name_row; //only store file name, auto-part list val will only be calc by file name.
   CK (OB_NOT_NULL(table_schema) && OB_LIKELY(table_schema->is_external_table()));
-  const bool is_local_storage = ObSQLUtils::is_external_files_on_local_disk(table_schema->get_external_file_location());
+  ObString file_location;
+  OZ (ObExternalTableUtils::get_external_file_location(*table_schema, schema_guard, exec_ctx.get_allocator(), file_location));
+  const bool is_local_storage = ObSQLUtils::is_external_files_on_local_disk(file_location);
   OZ (cg_partition_expr_rt_expr(table_schema, exec_ctx.get_expr_factory(), exec_ctx.get_my_session(), 
                                 schema_guard, exec_ctx.get_allocator(), temp_exprs));
   OZ (build_row_for_file_name(file_name_row, exec_ctx.get_allocator()));
@@ -1540,12 +1546,13 @@ int ObExternalTableFileManager::refresh_external_table(const uint64_t tenant_id,
                                     table_id, 
                                     table_schema));
   CK (table_schema != NULL);
-  OZ (refresh_external_table(tenant_id, table_schema, exec_ctx, has_partition_changed));
+  OZ (refresh_external_table(tenant_id, table_schema, schema_guard, exec_ctx, has_partition_changed));
   return ret;
 }
 
 int ObExternalTableFileManager::refresh_external_table(const uint64_t tenant_id,
                                                        const ObTableSchema *table_schema,
+                                                       ObSchemaGetterGuard &schema_guard,
                                                        ObExecContext &exec_ctx,
                                                        bool &has_partition_changed) {
   int ret = OB_SUCCESS;
@@ -1554,8 +1561,12 @@ int ObExternalTableFileManager::refresh_external_table(const uint64_t tenant_id,
   ObExprRegexpSessionVariables regexp_vars;
   CK (table_schema != NULL);
   CK (exec_ctx.get_my_session() != NULL);
-  if (OB_SUCC(ret) && ObSQLUtils::is_external_files_on_local_disk(table_schema->get_external_file_location())) {
-    OZ (ObSQLUtils::check_location_access_priv(table_schema->get_external_file_location(), exec_ctx.get_my_session()));
+  ObString file_location;
+  ObString access_info;
+  OZ (ObExternalTableUtils::get_external_file_location(*table_schema, schema_guard, exec_ctx.get_allocator(), file_location));
+  OZ (ObExternalTableUtils::get_external_file_location_access_info(*table_schema, schema_guard, access_info));
+  if (OB_SUCC(ret) && ObSQLUtils::is_external_files_on_local_disk(file_location)) {
+    OZ (ObSQLUtils::check_location_access_priv(file_location, exec_ctx.get_my_session()));
   }
   ObSqlString full_path;
   CK (GCTX.location_service_);
@@ -1564,8 +1575,8 @@ int ObExternalTableFileManager::refresh_external_table(const uint64_t tenant_id,
               exec_ctx.get_my_session(),
               tenant_id,
               table_schema->get_table_id(),
-              table_schema->get_external_file_location(),
-              table_schema->get_external_file_location_access_info(),
+              file_location,
+              access_info,
               table_schema->get_external_file_pattern(),
               table_schema->get_external_properties(),
               table_schema->is_partitioned_table(),

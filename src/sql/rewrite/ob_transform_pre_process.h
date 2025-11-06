@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #ifndef OB_TRANSFORM_PRE_PROCESS_H_
@@ -254,6 +258,14 @@ private:
   // transform json object with star
   int transform_json_object_expr_with_star(const ObIArray<ObParentDMLStmt> &parent_stmts,
                                            ObDMLStmt *stmt, bool &trans_happened);
+  int transform_semantic_vector_dis_expr(ObDMLStmt *stmt, bool &trans_happened);
+  int add_semantic_vector_dis_params_to_new_expr(ObDMLStmt *stmt, ObRawExpr *semantic_expr, ObRawExpr *&new_semantic_expr);
+  int create_embedded_table_vector_col_ref(ObDMLStmt *stmt, TableItem *table_item, const share::schema::ObTableSchema *data_table_schema,
+    ObColumnRefRawExpr *chunk_col_ref, ObColumnRefRawExpr *&vector_col_ref);
+  int create_cast_query_vector_expr(ObRawExpr *query_vector, ObRawExpr *vector_col_ref, ObRawExpr *&cast_query_vector);
+  int create_distance_type_const_expr(ObDMLStmt *stmt, const share::schema::ObTableSchema *data_table_schema,
+    ObColumnRefRawExpr *chunk_col_ref, ObRawExpr *&dis_type);
+
 
   int check_stmt_contain_param_expr(ObDMLStmt *stmt, bool &contain);
 

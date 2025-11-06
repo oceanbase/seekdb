@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #include "ob_weak_read_util.h"
@@ -46,7 +50,6 @@ int ObWeakReadUtil::generate_min_weak_read_version(const uint64_t tenant_id, SCN
 {
   int ret = OB_SUCCESS;
   int64_t max_stale_time = 0;
-  bool tenant_config_exist = false;
   // generating min weak version version should statisfy following constraint
   // 1. not smaller than max_stale_time_for_weak_consistency - DEFAULT_MAX_STALE_BUFFER_TIME
   // 2. not bigger than readable snapshot version
@@ -55,23 +58,12 @@ int ObWeakReadUtil::generate_min_weak_read_version(const uint64_t tenant_id, SCN
                    static_cast<int64_t>(DEFAULT_REPLICA_KEEPALIVE_INTERVAL)),
           static_cast<int64_t>(DEFAULT_MAX_STALE_BUFFER_TIME));
 
-  OTC_MGR.read_tenant_config(
-      tenant_id,
-      oceanbase::omt::ObTenantConfigMgr::default_fallback_tenant_id(),
-      /* success */ [buffer_time, &tenant_config_exist, &max_stale_time](const omt::ObTenantConfig &config) mutable {
-      if (MTL_TENANT_ROLE_CACHE_IS_PRIMARY()) {
-        max_stale_time = config.max_stale_time_for_weak_consistency - buffer_time;
-      } else {
-      //standby, restore, invalid
-        max_stale_time = config.max_stale_time_for_weak_consistency + transaction::ObTimestampService::PREALLOCATE_RANGE_FOR_SWITHOVER - buffer_time;
-      }
-        tenant_config_exist = true;
-      },
-      /* failure */ [buffer_time, &tenant_config_exist, &max_stale_time]() mutable {
-        max_stale_time = DEFAULT_MAX_STALE_TIME_FOR_WEAK_CONSISTENCY - buffer_time;
-        tenant_config_exist = false;
-      }
-  );
+  if (MTL_TENANT_ROLE_CACHE_IS_PRIMARY()) {
+    max_stale_time = GCONF.max_stale_time_for_weak_consistency - buffer_time;
+  } else {
+  //standby, restore, invalid
+    max_stale_time = GCONF.max_stale_time_for_weak_consistency + transaction::ObTimestampService::PREALLOCATE_RANGE_FOR_SWITHOVER - buffer_time;
+  }
 
   max_stale_time = std::max(max_stale_time, static_cast<int64_t>(DEFAULT_REPLICA_KEEPALIVE_INTERVAL));
   SCN tmp_scn;
@@ -82,57 +74,17 @@ int ObWeakReadUtil::generate_min_weak_read_version(const uint64_t tenant_id, SCN
     scn.convert_from_ts(tmp_scn.convert_to_ts() - max_stale_time);
   }
 
-  if ((!tenant_config_exist) && REACH_TIME_INTERVAL(1 * 1000 * 1000L)) {
-    TRANS_LOG_RET(WARN, OB_ERR_UNEXPECTED, "tenant not exist when generate min weak read version, use default max stale time instead",
-        K(tenant_id), K(tmp_scn), K(lbt()));
-  }
-
   return ret;
 }
 
 bool ObWeakReadUtil::enable_monotonic_weak_read(const uint64_t tenant_id)
 {
-  bool is_monotonic = false;
-
-  OTC_MGR.read_tenant_config(
-      tenant_id,
-      oceanbase::omt::ObTenantConfigMgr::default_fallback_tenant_id(),
-      /* success */ [&is_monotonic](const omt::ObTenantConfig &config) mutable {
-        is_monotonic = config.enable_monotonic_weak_read;
-      },
-      /* failure */ [tenant_id, &is_monotonic]() mutable {
-        is_monotonic = true;
-        if (REACH_TIME_INTERVAL(1 * 1000 * 1000L)) {
-        TRANS_LOG_RET(WARN, OB_ERR_UNEXPECTED, "tenant not exist when check enable monotonic weak read, use true as default instead",
-                  K(tenant_id), K(is_monotonic), K(lbt()));
-        }
-      }
-  );
-
-  return is_monotonic;
+  return GCONF.enable_monotonic_weak_read;
 }
 
 int64_t ObWeakReadUtil::max_stale_time_for_weak_consistency(const uint64_t tenant_id, int64_t ignore_warn)
 {
-  int64_t max_stale_time = 0;
-
-  OTC_MGR.read_tenant_config(
-      tenant_id,
-      oceanbase::omt::ObTenantConfigMgr::default_fallback_tenant_id(),
-      /* success */ [&max_stale_time](const omt::ObTenantConfig &config) mutable {
-        max_stale_time = config.max_stale_time_for_weak_consistency;
-      },
-      /* failure */ [tenant_id, ignore_warn, &max_stale_time]() mutable {
-        max_stale_time = DEFAULT_MAX_STALE_TIME_FOR_WEAK_CONSISTENCY;
-        if (IGNORE_TENANT_EXIST_WARN != ignore_warn && REACH_TIME_INTERVAL(1 * 1000 * 1000L)) {
-        TRANS_LOG_RET(WARN, OB_ERR_UNEXPECTED, "tenant not exist when get max stale time for weak consistency,"
-                  " use default max stale time instead",
-                  K(tenant_id), K(max_stale_time), K(lbt()));
-        }
-      }
-  );
-
-  return max_stale_time;
+  return GCONF.max_stale_time_for_weak_consistency;
 }
 
 bool ObWeakReadUtil::check_weak_read_service_available()

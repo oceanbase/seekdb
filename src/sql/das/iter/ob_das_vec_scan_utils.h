@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #ifndef OB_DAS_VEC_SCAN_UTILS_H_
@@ -48,6 +52,12 @@ public:
                        const common::ObLimitParam &limit_param,
                        ObExpr *&search_vec,
                        ObExpr *&distance_calc);
+  static int init_sort_of_hybrid_index(ObIAllocator &allocator,
+                                       const ObDASVecAuxScanCtDef *ir_ctdef,
+                                       const ObDASSortCtDef *sort_ctdef,
+                                       ObDASSortRtDef *sort_rtdef,
+                                       ObString &hybrid_search_vec,
+                                       ObExpr *&distance_calc);
   static int reuse_iter(const share::ObLSID &ls_id,
                         ObDASScanIter *iter,
                         ObTableScanParam &scan_param,
@@ -72,6 +82,12 @@ public:
                                       ObIAllocator *scan_allocator = nullptr);
   static int get_rowkey(ObIAllocator &allocator, const ObDASScanCtDef * ctdef, ObDASScanRtDef *rtdef, ObRowkey *&rowkey);
   
+  static int get_distance_threshold_hnsw(ObExpr &expr,
+                                         float &similarity_threshold,
+                                         float &distance_threshold);
+  static int get_distance_threshold_ivf(ObExpr &expr,
+                                        float &similarity_threshold,
+                                        float &distance_threshold);
 };
 
 }  // namespace sql

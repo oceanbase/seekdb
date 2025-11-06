@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #define USING_LOG_PREFIX STORAGE
@@ -681,6 +685,7 @@ int ObMultipleScanMerge::prepare_blockscan(ObStoreRowIterator &iter)
 int ObMultipleScanMerge::set_rows_merger(const int64_t table_cnt)
 {
   int ret = OB_SUCCESS;
+  const int64_t max_table_cnt = 2 * common::MAX_TABLE_CNT_IN_STORAGE;
   if (table_cnt <= ObScanSimpleMerger::USE_SIMPLE_MERGER_MAX_TABLE_CNT) {
     STORAGE_LOG(DEBUG, "Use simple rows merger", K(table_cnt));
     if (nullptr == simple_merge_) {
@@ -703,7 +708,7 @@ int ObMultipleScanMerge::set_rows_merger(const int64_t table_cnt)
 
   if (OB_SUCC(ret)) {
     if (!rows_merger_->is_inited()) {
-      if (OB_FAIL(rows_merger_->init(table_cnt, *long_life_allocator_))) {
+      if (OB_FAIL(rows_merger_->init(max_table_cnt, table_cnt, *long_life_allocator_))) {
         STORAGE_LOG(WARN, "Failed to init rows merger", K(ret), K(table_cnt));
       }
     } else if (FALSE_IT(rows_merger_->reuse())) {

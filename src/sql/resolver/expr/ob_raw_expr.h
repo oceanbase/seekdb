@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #ifndef OCEANBASE_SQL_RESOLVER_EXPR_RAW_EXPR_
@@ -1828,7 +1832,7 @@ struct ObRawExprExtraInfo
       bool with_null_equal_cond_;
     };
     int64_t array_param_group_id_; // T_QUESTIONMARK
-    uint64_t operator_id_; 
+    uint64_t operator_id_;
     uint64_t mview_id_;    // T_FUN_SYS_LAST_REFRESH_SCN
     ObSubQueryKey subquery_key_; // IS_SUBQUERY_COMPARISON_OP(op)
     struct {
@@ -1874,6 +1878,7 @@ public:
     EXPR_EXEC_PARAM,
     EXPR_PL_QUERY_REF,
     EXPR_MATCH_AGAINST,
+    EXPR_UNPIVOT
   };
 
   explicit ObRawExpr(ObItemType expr_type = T_INVALID)
@@ -2232,19 +2237,21 @@ public:
     partition_id_calc_type_ = calc_type; }
   bool is_json_expr() const;
   bool is_multiset_expr() const;
-  bool is_vector_sort_expr() const { 
-    return get_expr_type() == T_FUN_SYS_L2_DISTANCE || 
+  bool is_vector_sort_expr() const {
+    return get_expr_type() == T_FUN_SYS_L2_DISTANCE ||
            get_expr_type() == T_FUN_SYS_L2_SQUARED ||
            get_expr_type() == T_FUN_SYS_INNER_PRODUCT ||
            get_expr_type() == T_FUN_SYS_NEGATIVE_INNER_PRODUCT ||
-           get_expr_type() == T_FUN_SYS_COSINE_DISTANCE; }
+           get_expr_type() == T_FUN_SYS_COSINE_DISTANCE ||
+           get_expr_type() == T_FUN_SYS_SEMANTIC_DISTANCE ||
+           get_expr_type() == T_FUN_SYS_SEMANTIC_VECTOR_DISTANCE; }
   PartitionIdCalcType get_partition_id_calc_type() const { return partition_id_calc_type_; }
   void set_may_add_interval_part(MayAddIntervalPart flag) {
     may_add_interval_part_ = flag;
   }
   bool is_wrappered_json_extract() const {
-   return (type_ == T_FUN_SYS_JSON_UNQUOTE && 
-           OB_NOT_NULL(get_param_expr(0)) && 
+   return (type_ == T_FUN_SYS_JSON_UNQUOTE &&
+           OB_NOT_NULL(get_param_expr(0)) &&
            (get_param_expr(0)->type_ == T_FUN_SYS_JSON_EXTRACT ||
             get_param_expr(0)->type_ == T_FUN_SYS_JSON_VALUE));
   }
@@ -2407,7 +2414,7 @@ inline uint32_t ObRawExpr::get_result_flag() const
     }
   }
   if (ob_is_bit_tc(obj_type) && get_accuracy().get_precision() > 1) {
-    // 
+    //
     // bit(1) flags -> UNSIGNED
     // bit(2) flags -> BINARY_FLAG | UNSIGNED
     flag |= BINARY_FLAG;
@@ -3177,12 +3184,17 @@ public:
   inline bool is_vec_index_column() const {return share::schema::ObSchemaUtils::is_vec_index_column(column_flags_);}
   inline bool is_vec_cid_column() const { return share::schema::ObSchemaUtils::is_vec_ivf_center_id_column(column_flags_); }
   inline bool is_vec_pq_cids_column() const { return share::schema::ObSchemaUtils::is_vec_ivf_pq_center_ids_column(column_flags_); }
-  inline bool is_domain_id_column() const 
-  { 
+  inline bool is_hybrid_embedded_vec_column() const {
+    return get_column_name().prefix_match(OB_HYBRID_VEC_EMBEDDED_VECTOR_COLUMN_NAME_PREFIX) &&
+           share::schema::ObSchemaUtils::is_vec_hnsw_vector_column(column_flags_);
+  }
+  inline bool is_domain_id_column() const
+  {
     return share::schema::ObSchemaUtils::is_doc_id_column(column_flags_) ||
            share::schema::ObSchemaUtils::is_vec_hnsw_vid_column(column_flags_) ||
            share::schema::ObSchemaUtils::is_vec_ivf_center_id_column(column_flags_) ||
-           share::schema::ObSchemaUtils::is_vec_ivf_pq_center_ids_column(column_flags_);
+           share::schema::ObSchemaUtils::is_vec_ivf_pq_center_ids_column(column_flags_) ||
+           is_hybrid_embedded_vec_column();
   }
   inline bool is_word_segment_column() const { return column_name_.prefix_match(OB_WORD_SEGMENT_COLUMN_NAME_PREFIX); }
   inline bool is_word_count_column() const { return column_name_.prefix_match(OB_WORD_COUNT_COLUMN_NAME_PREFIX); }
@@ -3227,7 +3239,8 @@ public:
 
   inline uint64_t get_udt_set_id() const { return udt_set_id_; };
   inline void set_udt_set_id(uint64_t udt_set_id) { udt_set_id_ = udt_set_id; };
-  
+  bool is_xml_column() const { return ob_is_xml_pl_type(get_data_type(), get_udt_id())
+                                      || ob_is_xml_sql_type(get_data_type(), get_subschema_id()); }
   bool is_geo_column() const { return get_data_type() == ObObjType::ObGeometryType; }
   bool is_pseudo_column_ref() const { return is_pseudo_column_ref_; }
   void set_is_pseudo_column_ref(bool value) { is_pseudo_column_ref_ = value; }
@@ -5244,7 +5257,9 @@ public:
     : ObRawExpr(),
       mode_flag_(NATURAL_LANGUAGE_MODE),
       match_columns_(),
-      search_key_(NULL)
+      search_key_(NULL),
+      columns_boosts_(),
+      param_text_expr_(NULL)
   {
     set_expr_class(EXPR_MATCH_AGAINST);
   }
@@ -5253,7 +5268,9 @@ public:
     : ObRawExpr(alloc),
       mode_flag_(NATURAL_LANGUAGE_MODE),
       match_columns_(),
-      search_key_(NULL)
+      search_key_(NULL),
+      columns_boosts_(),
+      param_text_expr_(NULL)
   {
     set_expr_class(EXPR_MATCH_AGAINST);
   }
@@ -5274,7 +5291,7 @@ public:
   virtual ObRawExpr *&get_param_expr(int64_t index);
   inline void set_mode_flag(ObMatchAgainstMode mode_flag) { mode_flag_ = mode_flag; }
   inline ObMatchAgainstMode get_mode_flag() const { return mode_flag_; }
-  inline int set_match_columns(ObIArray<ObRawExpr*> &match_columns) 
+  inline int set_match_columns(ObIArray<ObRawExpr*> &match_columns)
   {
     return match_columns_.assign(match_columns);
   }
@@ -5283,12 +5300,22 @@ public:
   inline void set_search_key(ObRawExpr *search_key) { search_key_ = search_key; }
   inline const ObRawExpr *get_search_key() const { return search_key_; }
   inline ObRawExpr *get_search_key() { return search_key_; }
+  inline int set_columns_boosts(ObIArray<ObRawExpr*> &columns_boosts)
+  {
+    return columns_boosts_.assign(columns_boosts);
+  }
+  inline void set_param_text_expr(ObRawExpr *param_text_expr) { param_text_expr_ = param_text_expr; }
+  inline ObRawExpr *get_param_text_expr() const { return param_text_expr_; }
+  inline ObRawExpr *get_param_text_expr() { return param_text_expr_; }
+  inline const ObIArray<ObRawExpr*>& get_columns_boosts() const { return columns_boosts_; }
+  inline ObIArray<ObRawExpr*>& get_columns_boosts() { return columns_boosts_; }
   int get_table_id(uint64_t &table_id);
   int get_match_column_type(ObRawExprResType &result_type);
   inline int64_t get_search_key_idx() { return get_match_columns().count(); }
 
   int replace_param_expr(int64_t index, ObRawExpr *expr);
 
+  bool is_es_match() const { return get_expr_type() == T_FUN_ES_MATCH; }
   VIRTUAL_TO_STRING_KVP(
       N_ITEM_TYPE, type_,
       N_RESULT_TYPE, result_type_,
@@ -5296,14 +5323,18 @@ public:
       N_REL_ID, rel_ids_,
       K_(mode_flag),
       K_(match_columns),
-      KPC_(search_key));
+      KPC_(search_key),
+      KPC_(param_text_expr));
 
 private:
   DISALLOW_COPY_AND_ASSIGN(ObMatchFunRawExpr);
   ObMatchAgainstMode mode_flag_; // for MySQL search mode flag
-  ObSEArray<ObRawExpr*, COMMON_MULTI_NUM, ModulePageAllocator, true> match_columns_; // columns for choosing full-text index to use, serves only as an identifier; 
+  ObSEArray<ObRawExpr*, COMMON_MULTI_NUM, ModulePageAllocator, true> match_columns_; // columns for choosing full-text index to use, serves only as an identifier;
                                                                                      // can only be replaced with equivalent base table columns, not with arbitrary expressions that are not base table columns.
   ObRawExpr *search_key_; // user defined search query
+
+  ObSEArray<ObRawExpr*, COMMON_MULTI_NUM, ModulePageAllocator, true> columns_boosts_; // boost values for each column
+  ObRawExpr *param_text_expr_; // param text expr for should_match_expr_
 };
 
 /// visitor interface
@@ -5706,6 +5737,7 @@ private:
   int64_t database_id_;
   int64_t object_schema_version_;
 };
+
 
 }// end sql
 }// end oceanbase

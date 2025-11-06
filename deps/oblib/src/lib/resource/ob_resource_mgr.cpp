@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #define USING_LOG_PREFIX COMMON
@@ -24,12 +28,13 @@ namespace lib
 {
 ObTenantMemoryMgr::ObTenantMemoryMgr(const uint64_t tenant_id)
   : cache_washer_(NULL), tenant_id_(tenant_id),
-    limit_(INT64_MAX), sum_hold_(0),
+    limit_(INT64_MAX), hard_limit_(INT64_MAX), sum_hold_(0),
     cache_hold_(0), cache_item_count_(0)
 {
   for (uint64_t i = 0; i < common::ObCtxIds::MAX_CTX_ID; i++) {
     ATOMIC_STORE(&(hold_bytes_[i]), 0);
     ATOMIC_STORE(&(limit_bytes_[i]), INT64_MAX);
+    ATOMIC_STORE(&(hard_limit_bytes_[i]), INT64_MAX);
   }
 }
 void ObTenantMemoryMgr::set_cache_washer(ObICacheWasher &cache_washer)
@@ -50,7 +55,7 @@ AChunk *ObTenantMemoryMgr::alloc_chunk(const int64_t size, const ObMemAttr &attr
   } else {
     const int64_t hold_size = static_cast<int64_t>(CHUNK_MGR.hold(static_cast<uint64_t>(size)));
     bool reach_ctx_limit = false;
-    if (update_hold(hold_size, attr.ctx_id_, attr.label_, reach_ctx_limit)) {
+    if (update_hold(hold_size, attr.ctx_id_, attr.label_, reach_ctx_limit, OB_HIGH_ALLOC == attr.prio_)) {
       chunk = alloc_chunk_(size, attr);
       if (NULL == chunk) {
         update_hold(-hold_size, attr.ctx_id_, attr.label_, reach_ctx_limit);
@@ -79,7 +84,7 @@ AChunk *ObTenantMemoryMgr::alloc_chunk(const int64_t size, const ObMemAttr &attr
           }
 
           if (update_hold(static_cast<int64_t>(hold_size), attr.ctx_id_, attr.label_,
-                          reach_ctx_limit)) {
+                          reach_ctx_limit, OB_HIGH_ALLOC == attr.prio_)) {
             chunk = alloc_chunk_(size, attr);
             if (NULL == chunk) {
               update_hold(-hold_size, attr.ctx_id_, attr.label_, reach_ctx_limit);
@@ -140,6 +145,18 @@ void ObTenantMemoryMgr::free_cache_mb(void *ptr)
   }
 }
 
+int ObTenantMemoryMgr::set_ctx_hard_limit(const uint64_t ctx_id, const int64_t hard_limit)
+{
+  int ret = OB_SUCCESS;
+  if (ctx_id >= ObCtxIds::MAX_CTX_ID || hard_limit <= 0) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid arguemnt", K(ret), K(ctx_id), K(hard_limit));
+  } else {
+    hard_limit_bytes_[ctx_id] = hard_limit;
+  }
+  return ret;
+}
+
 int ObTenantMemoryMgr::set_ctx_limit(const uint64_t ctx_id, const int64_t limit)
 {
   int ret = OB_SUCCESS;
@@ -188,12 +205,13 @@ void ObTenantMemoryMgr::update_cache_hold(const int64_t size)
 }
 
 bool ObTenantMemoryMgr::update_hold(const int64_t size, const uint64_t ctx_id,
-                                    const lib::ObLabel &label, bool &reach_ctx_limit)
+                                    const lib::ObLabel &label, bool &reach_ctx_limit, bool high_prio)
 {
   bool updated = true;
   reach_ctx_limit = false;
+  const int64_t limit = high_prio ? INT64_MAX : hard_limit_;
   const int64_t nvalue = ATOMIC_AAF(&sum_hold_, size); 
-  if (nvalue > limit_) {
+  if (nvalue > limit) {
     ATOMIC_AAF(&sum_hold_, -size);
     updated = false;
     auto &afc = g_alloc_failed_ctx();
@@ -201,9 +219,9 @@ bool ObTenantMemoryMgr::update_hold(const int64_t size, const uint64_t ctx_id,
     afc.alloc_size_ = size;
     afc.tenant_id_ = tenant_id_;
     afc.tenant_hold_ = get_sum_hold();
-    afc.tenant_limit_ = limit_;
+    afc.tenant_limit_ = hard_limit_;
   } else if (label != ObNewModIds::OB_KVSTORE_CACHE_MB) {
-    if (!update_ctx_hold(ctx_id, size)) {
+    if (!update_ctx_hold(ctx_id, size, high_prio)) {
       ATOMIC_AAF(&sum_hold_, -size);
       updated = false;
       reach_ctx_limit = true;
@@ -214,12 +232,12 @@ bool ObTenantMemoryMgr::update_hold(const int64_t size, const uint64_t ctx_id,
   return updated;
 }
 
-bool ObTenantMemoryMgr::update_ctx_hold(const uint64_t ctx_id, const int64_t size)
+bool ObTenantMemoryMgr::update_ctx_hold(const uint64_t ctx_id, const int64_t size, bool high_prio)
 {
   bool updated = false;
   if (ctx_id < ObCtxIds::MAX_CTX_ID) {
     volatile int64_t &hold = hold_bytes_[ctx_id];
-    volatile int64_t &limit = limit_bytes_[ctx_id];
+    const int64_t limit = high_prio ? INT64_MAX : hard_limit_bytes_[ctx_id];
     if (size <= 0) {
       ATOMIC_AAF(&hold, size);
       updated = true;

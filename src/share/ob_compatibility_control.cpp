@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #define USING_LOG_PREFIX SHARE
@@ -135,7 +139,7 @@ int ObCompatControl::check_compat_version(const uint64_t tenant_id, const uint64
   uint64_t min_data_version = 0;
   if (OB_UNLIKELY(compat_version > GET_MIN_CLUSTER_VERSION())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("compat version must less than min cluster version", K(ret), K(compat_version));
+    LOG_WARN("compat version must less than min cluster version", K(ret), K(compat_version), K(GET_MIN_CLUSTER_VERSION()));
   } else if (OB_FAIL(ObUpgradeChecker::get_data_version_by_cluster_version(compat_version,
                                                                            data_version))) {
     LOG_WARN("failed to get data version", K(ret));

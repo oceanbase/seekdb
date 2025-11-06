@@ -103,6 +103,7 @@ create procedure p(x int)
 begin
 end//
 delimiter ;//
+--sorted_result
 select
   db,
   name,

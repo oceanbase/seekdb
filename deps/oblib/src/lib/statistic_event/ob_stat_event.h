@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #ifdef STAT_EVENT_ADD_DEF
@@ -436,8 +440,6 @@ STAT_EVENT_ADD_DEF(CLOG_EXTLOG_FETCH_RPC_COUNT, "external log service fetch rpc 
 
 
 // CLOG.PROXY
-
-// ELECTION
 
 //OBSERVER
 
@@ -878,11 +880,7 @@ STAT_EVENT_SET_DEF(HIDDEN_SYS_DATA_DISK_SIZE, "hidden sys data disk size", ObSta
 
 // DEBUG
 STAT_EVENT_SET_DEF(OBLOGGER_WRITE_SIZE, "oblogger log bytes", ObStatClassIds::DEBUG, 160001, false, true, true)
-STAT_EVENT_SET_DEF(ELECTION_WRITE_SIZE, "election log bytes", ObStatClassIds::DEBUG, 160002, false, true, true)
-STAT_EVENT_SET_DEF(ROOTSERVICE_WRITE_SIZE, "rootservice log bytes", ObStatClassIds::DEBUG, 160003, false, true, true)
 STAT_EVENT_SET_DEF(OBLOGGER_TOTAL_WRITE_COUNT, "oblogger total log count", ObStatClassIds::DEBUG, 160004, false, true, true)
-STAT_EVENT_SET_DEF(ELECTION_TOTAL_WRITE_COUNT, "election total log count", ObStatClassIds::DEBUG, 160005, false, true, true)
-STAT_EVENT_SET_DEF(ROOTSERVICE_TOTAL_WRITE_COUNT, "rootservice total log count", ObStatClassIds::DEBUG, 160006, false, true, true)
 STAT_EVENT_SET_DEF(ASYNC_ERROR_LOG_DROPPED_COUNT, "async error log dropped count", ObStatClassIds::DEBUG, 160019, false, true, true)
 STAT_EVENT_SET_DEF(ASYNC_WARN_LOG_DROPPED_COUNT, "async warn log dropped count", ObStatClassIds::DEBUG, 160020, false, true, true)
 STAT_EVENT_SET_DEF(ASYNC_INFO_LOG_DROPPED_COUNT, "async info log dropped count", ObStatClassIds::DEBUG, 160021, false, true, true)

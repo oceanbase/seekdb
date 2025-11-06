@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #define USING_LOG_PREFIX SQL_RESV
@@ -74,22 +78,6 @@ int ObSysDispatchCallResolver::check_sys_dispatch_call_priv(const ParseNode &nam
   return ret;
 }
 
-int ObSysDispatchCallResolver::check_supported_cluster_version() const
-{
-  int ret = OB_SUCCESS;
-  if ((GET_MIN_CLUSTER_VERSION() >= MOCK_CLUSTER_VERSION_4_2_5_4
-       && GET_MIN_CLUSTER_VERSION() < CLUSTER_VERSION_4_3_0_0)
-      || GET_MIN_CLUSTER_VERSION() >= CLUSTER_VERSION_4_3_5_3) {
-    // supported cluster version for sys dispatch call
-    // [4.2.5.4, 4.3.0.0) || [4.3.5.3, +∞)
-  } else {
-    ret = OB_NOT_SUPPORTED;
-    LOG_WARN("sys dispatch call is not supported for this cluster version",
-             "cluster_version", GET_MIN_CLUSTER_VERSION());
-  }
-  return ret;
-}
-
 int ObSysDispatchCallResolver::resolve(const ParseNode &parse_tree)
 {
   int ret = OB_SUCCESS;
@@ -104,8 +92,6 @@ int ObSysDispatchCallResolver::resolve(const ParseNode &parse_tree)
   if (OB_UNLIKELY(OB_ISNULL(schema_checker_) || OB_ISNULL(session_info_))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("argument is nullptr", K(schema_checker_), K(session_info_));
-  } else if (OB_FAIL(check_supported_cluster_version())) {
-    LOG_WARN("sys dispatch call is not supported");
   } else if (OB_SYS_TENANT_ID != session_info_->get_effective_tenant_id()) {
     // check tenant privilege for dispatch call, should be sys tenant
     ret = OB_NOT_SUPPORTED;

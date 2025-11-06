@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2023 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #ifndef OCEANBASE_DAS_DOMAIN_UTILS_H
@@ -15,14 +19,16 @@
 
 #include "lib/allocator/page_arena.h"
 #include "lib/hash/ob_hashset.h"
+#include "share/datum/ob_datum.h"
 #include "sql/das/ob_das_dml_ctx_define.h"
-#include "storage/fts/ob_fts_plugin_helper.h"
 #include "storage/fts/ob_fts_doc_word_iterator.h"
+#include "storage/fts/ob_fts_plugin_helper.h"
 
 namespace oceanbase
 {
 namespace sql
 {
+
 
 class ObFTIndexRowCache final
 {
@@ -38,10 +44,7 @@ public:
       const bool is_fts_index_aux,
       const common::ObString &parser_name,
       const common::ObString &parser_properties);
-  int segment(
-      const common::ObObjMeta &ft_obj_meta,
-      const common::ObString &doc_id,
-      const common::ObString &fulltext);
+  int segment(const common::ObObjMeta &ft_obj_meta, const ObDatum &doc_id, const common::ObString &fulltext);
   int get_next_row(blocksstable::ObDatumRow *&row);
   void reset();
   void reuse();
@@ -77,41 +80,23 @@ public:
       doc_word_found_(false)
   {}
   ~ObFTDocWordInfo() = default;
-  ObFTDocWordInfo(const ObFTDocWordInfo &src)
-    : table_id_(src.table_id_),
-      doc_word_table_id_(src.doc_word_table_id_),
-      doc_word_ls_id_(src.doc_word_ls_id_),
-      doc_word_tablet_id_(src.doc_word_tablet_id_),
-      snapshot_(),
-      doc_word_schema_version_(src.doc_word_schema_version_),
-      doc_word_found_(src.doc_word_found_)
+
+  int assign(const ObFTDocWordInfo &src)
   {
-    snapshot_.valid_ = src.snapshot_.valid_;
-    snapshot_.committed_ = src.snapshot_.committed_;
-    snapshot_.core_ = src.snapshot_.core_;
-    snapshot_.source_ = src.snapshot_.source_;
-    snapshot_.snapshot_lsid_ = src.snapshot_.snapshot_lsid_;
-    snapshot_.snapshot_ls_role_ = src.snapshot_.snapshot_ls_role_;
-    snapshot_.snapshot_acquire_addr_ = src.snapshot_.snapshot_acquire_addr_;
+    int ret = OB_SUCCESS;
+    table_id_ = src.table_id_;
+    doc_word_table_id_ = src.doc_word_table_id_;
+    doc_word_ls_id_ = src.doc_word_ls_id_;
+    doc_word_tablet_id_ = src.doc_word_tablet_id_;
+    doc_word_schema_version_ = src.doc_word_schema_version_;
+    doc_word_found_ = src.doc_word_found_;
+
+    if (OB_FAIL(snapshot_.assign(src.snapshot_))) {
+      STORAGE_LOG(WARN, "failed to assign snapshot", K(ret));
+    }
+    return ret;
   }
 
-  ObFTDocWordInfo &operator=(const ObFTDocWordInfo &src)
-  {
-      table_id_ =src.table_id_;
-      doc_word_table_id_ = src.doc_word_table_id_;
-      doc_word_ls_id_ = src.doc_word_ls_id_;
-      doc_word_tablet_id_ = src.doc_word_tablet_id_;
-      doc_word_schema_version_ = src.doc_word_schema_version_;
-      doc_word_found_ = src.doc_word_found_;
-      snapshot_.valid_ = src.snapshot_.valid_;
-      snapshot_.committed_ = src.snapshot_.committed_;
-      snapshot_.core_ = src.snapshot_.core_;
-      snapshot_.source_ = src.snapshot_.source_;
-      snapshot_.snapshot_lsid_ = src.snapshot_.snapshot_lsid_;
-      snapshot_.snapshot_ls_role_ = src.snapshot_.snapshot_ls_role_;
-      snapshot_.snapshot_acquire_addr_ = src.snapshot_.snapshot_acquire_addr_;
-      return *this;
-  }
   TO_STRING_KV(K_(table_id),
                K_(doc_word_table_id),
                K_(doc_word_ls_id),
@@ -127,6 +112,9 @@ public:
   transaction::ObTxReadSnapshot snapshot_;
   int64_t doc_word_schema_version_;
   bool doc_word_found_;
+
+private:
+  DISALLOW_COPY_AND_ASSIGN(ObFTDocWordInfo);
 };
 
 class ObDomainDMLParam final
@@ -188,14 +176,13 @@ public:
       const IntFixedArray &row_projector,
       const ObDASWriteBuffer::DmlRow &dml_row,
       ObDomainIndexRow &spat_rows);
-  static int generate_fulltext_word_rows(
-      common::ObIAllocator &allocator,
-      storage::ObFTParseHelper *helper,
-      const common::ObObjMeta &ft_obj_meta,
-      const ObString &doc_id,
-      const ObString &fulltext,
-      const bool is_fts_index_aux,
-      ObDomainIndexRow &word_rows);
+  static int generate_fulltext_word_rows(common::ObIAllocator &allocator,
+                                         storage::ObFTParseHelper *helper,
+                                         const common::ObObjMeta &ft_obj_meta,
+                                         const ObDatum &doc_id_datum,
+                                         const ObString &fulltext,
+                                         const bool is_fts_index_aux,
+                                         ObDomainIndexRow &word_rows);
   static int generate_multivalue_index_rows(
       ObIAllocator &allocator,
       const ObDASDMLBaseCtDef &das_ctdef,
@@ -265,6 +252,8 @@ protected:
       const ObDASDMLBaseCtDef *das_ctdef,
       const ObDASDMLBaseCtDef *main_ctdef);
   virtual int generate_domain_rows(const ObChunkDatumStore::StoredRow *store_row) = 0;
+
+  virtual int check_sync_interval(bool &is_sync_interval) const { UNUSED(is_sync_interval); return OB_SUCCESS; }
 
 protected:
   ObDomainDMLMode mode_;
@@ -336,7 +325,6 @@ private:
     ObString &multivalue_data);
 };
 
-
 class ObFTDMLIterator final : public ObDomainDMLIterator
 {
 public:
@@ -368,16 +356,14 @@ public:
   INHERIT_TO_STRING_KV("ObDomainDMLIterator", ObDomainDMLIterator, K_(ft_parse_helper), K_(is_inited));
 protected:
   virtual int generate_domain_rows(const ObChunkDatumStore::StoredRow *store_row) override;
-  int get_ft_and_doc_id(
-      const ObChunkDatumStore::StoredRow *store_row,
-      ObString &doc_id,
-      ObString &ft,
-      common::ObObjMeta &ft_meta);
-  int get_ft_and_doc_id_for_update(
-      const ObChunkDatumStore::StoredRow *store_row,
-      ObString &doc_id,
-      ObString &ft,
-      common::ObObjMeta &ft_meta);
+  int get_ft_and_doc_id(const ObChunkDatumStore::StoredRow *store_row,
+                        ObDatum &doc_id_datum,
+                        ObString &ft,
+                        common::ObObjMeta &ft_meta);
+  int get_ft_and_doc_id_for_update(const ObChunkDatumStore::StoredRow *store_row,
+                                   ObDatum &doc_id_datum,
+                                   ObString &ft,
+                                   common::ObObjMeta &ft_meta);
   int generate_ft_word_rows(const ObChunkDatumStore::StoredRow *store_row);
   int scan_ft_word_rows(const ObChunkDatumStore::StoredRow *store_row);
   int build_ft_word_row(blocksstable::ObDatumRow *src_row, blocksstable::ObDatumRow *&dest_row);

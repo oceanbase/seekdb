@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #pragma once
@@ -104,6 +108,7 @@ public:
   int start();
   int stop();
   void wait();
+  void destroy();
   bool is_stop() const { return is_stop_; }
   ObTableLoadManager &get_manager() { return manager_; }
 private:
@@ -183,11 +188,14 @@ private:
     ObTableLoadService &service_;
   };
 private:
+  static const int64_t INVALID_TG_ID = -1;
+private:
   const uint64_t tenant_id_;
   ObTableLoadManager manager_;
   ObTableLoadAssignedMemoryManager assigned_memory_manager_;
   ObTableLoadAssignedTaskManager assigned_task_manager_;
   common::ObTimer timer_;
+  int tg_id_;
   ObCheckTenantTask check_tenant_task_;
   ObHeartBeatTask heart_beat_task_;
   ObGCTask gc_task_;

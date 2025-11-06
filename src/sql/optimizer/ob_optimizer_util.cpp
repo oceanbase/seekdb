@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #define USING_LOG_PREFIX SQL_OPT
@@ -9185,8 +9189,7 @@ int ObOptimizerUtil::check_can_batch_rescan(const ObLogicalOperator *op,
       LOG_WARN("failed to check can batch rescan for op child", K(ret));
     }
   } else if (log_op_def::LOG_SET == op->get_type()) {
-    can_batch_rescan = ObSelectStmt::UNION == static_cast<const ObLogSet*>(op)->get_set_op()
-                      || GET_MIN_CLUSTER_VERSION() >= CLUSTER_VERSION_4_3_5_0;
+    can_batch_rescan = true;
     for (int64_t i = 0; OB_SUCC(ret) && can_batch_rescan && i < op->get_num_of_child(); ++i) {
       if (OB_FAIL(SMART_CALL(check_can_batch_rescan(op->get_child(i), rescan_params, for_nlj, can_batch_rescan)))) {
         LOG_WARN("failed to check batch rescan", K(ret));

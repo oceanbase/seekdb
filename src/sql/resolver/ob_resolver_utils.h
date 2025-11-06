@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #ifndef _OB_RESOLVER_UTILS_H
@@ -146,21 +150,18 @@ public:
 
   static int resolve_extended_type_info(const ParseNode &str_list_node,
                                         ObIArray<ObString>& type_info_array);
-  static int resolve_collection_type_info(const uint64_t tenant_data_version,
-                                          const ParseNode &type_node,
+  static int resolve_collection_type_info(const ParseNode &type_node,
                                           ObStringBuffer &buf,
                                           uint8_t &depth);
   static int resolve_basic_type_info(const ParseNode &type_node,
                                      ObStringBuffer &buf);
-  static int resolve_array_type_info(const uint64_t tenant_data_version,
-                                     const ParseNode &type_node,
+  static int resolve_array_type_info(const ParseNode &type_node,
                                      ObStringBuffer &buf,
                                      uint8_t &depth);
   static int resolve_vector_type_info(const ParseNode &type_node,
                                           ObStringBuffer &buf,
                                           uint8_t &depth);
-  static int resolve_map_type_info(const uint64_t tenant_data_version,
-                                   const ParseNode &type_node,
+  static int resolve_map_type_info(const ParseNode &type_node,
                                    ObStringBuffer &buf,
                                    uint8_t &depth);
   static int resolve_sparse_vector_type_info(const ParseNode &type_node,
@@ -866,8 +867,7 @@ public:
                             bool &is_param,
                             const bool enable_decimal_int);
   static int check_not_supported_tenant_name(const common::ObString &tenant_name);
-  static int check_allowed_alter_operations_for_mlog(const uint64_t tenant_id,
-                                                  const obrpc::ObAlterTableArg &arg,
+  static int check_allowed_alter_operations_for_mlog(const obrpc::ObAlterTableArg &arg,
                                                   const share::schema::ObTableSchema &table_schema);
   static int fast_get_param_type(const ParseNode &parse_node,
                                  const ParamStore *param_store,

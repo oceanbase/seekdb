@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2024 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #define USING_LOG_PREFIX STORAGE
@@ -84,6 +88,7 @@ int ObDirectLoadMgrUtil::is_ddl_need_major_merge(const ObTablet &tablet, bool &d
   int ret = OB_SUCCESS;
   ddl_need_merging = false;
   ObTableStoreIterator ddl_iter;
+  ObArenaAllocator arena(ObMemAttr(MTL_ID(), "Ddl_Com_MgrU"));
   ObTabletDDLCompleteMdsUserData ddl_complete;
   if (!tablet.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
@@ -95,7 +100,7 @@ int ObDirectLoadMgrUtil::is_ddl_need_major_merge(const ObTablet &tablet, bool &d
   } else if (ddl_iter.is_valid()) { // indicates the existence of ddl sstable
     ddl_need_merging = true;
     LOG_WARN("major sstable do not exit, need to wait ddl merge", K(ret), "tablet_id", tablet.get_tablet_meta().tablet_id_);
-  } else if (OB_FAIL(tablet.get_ddl_complete(SCN::max_scn(), ddl_complete))) {
+  } else if (OB_FAIL(tablet.get_ddl_complete(SCN::max_scn(), arena, ddl_complete))) {
     LOG_WARN("failed to check ddl complete", K(ret), K(tablet.get_tablet_meta()));
   } else if (ddl_complete.has_complete_) {
     ddl_need_merging = true;
@@ -370,7 +375,7 @@ int ObDirectLoadMgrUtil::generate_merge_param(const ObTabletDDLCompleteMdsUserDa
     merge_param.table_key_ = data.table_key_;
     merge_param.is_commit_ = true;
 
-    if (OB_FAIL(merge_param.user_data_.assign(data))) {
+    if (OB_FAIL(merge_param.user_data_.assign(merge_param.arena_, data))) {
       LOG_WARN("failed to assgin value", K(ret));
     }
   } else {  /* generate param for freeze */

@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #define USING_LOG_PREFIX SQL_EXE
@@ -61,8 +65,7 @@ int ObRemoteBaseExecuteP<T>::base_before_process(int64_t tenant_schema_version,
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("schema service or sql engine is NULL", K(ret),
               K(gctx_.schema_service_), K(gctx_.sql_engine_));
-  } else if (GET_MIN_CLUSTER_VERSION() >= CLUSTER_VERSION_4_1_0_0 &&
-      (tenant_schema_version == OB_INVALID_VERSION || sys_schema_version == OB_INVALID_VERSION)) {
+  } else if (tenant_schema_version == OB_INVALID_VERSION || sys_schema_version == OB_INVALID_VERSION) {
     // For 4.1 and later versions, it is not allowed to pass schema_version as -1
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid tenant_schema_version and sys_schema_version", K(ret),
@@ -667,7 +670,6 @@ int ObRemoteBaseExecuteP<T>::execute_with_sql(ObRemoteTask &task)
     {
       ObMaxWaitGuard max_wait_guard(enable_perf_event ? &max_wait_desc : nullptr);
       ObTotalWaitGuard total_wait_guard(enable_perf_event ? &total_wait_desc : nullptr);
-      uint64_t min_data_version = 0;
       share::ObLSArray new_ls_list;
 
       if (enable_perf_event) {
@@ -687,9 +689,7 @@ int ObRemoteBaseExecuteP<T>::execute_with_sql(ObRemoteTask &task)
       } else if (OB_ISNULL(plan)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("plan is null", K(ret));
-      } else if (OB_FAIL(GET_MIN_DATA_VERSION(session->get_effective_tenant_id(), min_data_version))) {
-        LOG_WARN("GET_MIN_DATA_VERSION failed", K(ret));
-      } else if (OB_LIKELY(min_data_version >= DATA_VERSION_4_3_5_1)) {
+      } else {
         if (OB_FAIL(DAS_CTX(exec_ctx_).get_all_lsid(new_ls_list))) {
           LOG_WARN("get ls list failed", K(ret));
         } else if(!task.check_ls_list(new_ls_list)) {

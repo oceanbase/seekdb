@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #include "dumpsst/ob_admin_dumpsst_executor.h"
@@ -115,7 +119,7 @@ int main(int argc, char *argv[])
   if (OB_FAIL(get_log_base_directory(log_file_name, sizeof(log_file_name), log_file_rs_name, sizeof(log_file_rs_name)))) {
   } else {
     OB_LOGGER.set_log_level("INFO");
-    OB_LOGGER.set_file_name(log_file_name, true, false, log_file_rs_name);
+    OB_LOGGER.set_file_name(log_file_name, true);
   }
   const char *log_level = getenv("OB_ADMIN_LOG_LEVEL");
   if (NULL != log_level) {

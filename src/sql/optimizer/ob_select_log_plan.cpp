@@ -1,14 +1,18 @@
-/**
-* Copyright (c) 2021 OceanBase
-* OceanBase CE is licensed under Mulan PubL v2.
-* You can use this software according to the terms and conditions of the Mulan PubL v2.
-* You may obtain a copy of Mulan PubL v2 at:
-*          http://license.coscl.org.cn/MulanPubL-2.0
-* THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
-* EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
-* MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
-* See the Mulan PubL v2 for more details.
-*/
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 
 #define USING_LOG_PREFIX SQL_OPT
 #include "ob_select_log_plan.h"
@@ -2019,11 +2023,8 @@ int ObSelectLogPlan::get_distribute_distinct_method(ObLogicalOperator *top,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(ret), K(top), K(query_ctx));
   } else {
-    if (query_ctx->check_opt_compat_version(COMPAT_VERSION_4_3_5_BP2)) {
-      distinct_dist_methods |= DistAlgo::DIST_HASH_HASH_LOCAL;
-    }
-    if (!get_optimizer_context().is_partition_wise_plan_enabled() && 
-        query_ctx->check_opt_compat_version(COMPAT_VERSION_4_3_2)) {
+    distinct_dist_methods |= DistAlgo::DIST_HASH_HASH_LOCAL;
+    if (!get_optimizer_context().is_partition_wise_plan_enabled()) {
       distinct_dist_methods &= ~DistAlgo::DIST_PARTITION_WISE;
       OPT_TRACE("ignore partition wise dist distinct by tenant config");
     }
@@ -2041,8 +2042,7 @@ int ObSelectLogPlan::get_distribute_distinct_method(ObLogicalOperator *top,
     }
     can_re_parallel = top->can_re_parallel()
                       && (distinct_dist_methods & DistAlgo::DIST_HASH_HASH)
-                      && !is_merge_without_sort
-                      && query_ctx->check_opt_compat_version(COMPAT_VERSION_4_3_5_BP2);
+                      && !is_merge_without_sort;
     if (!distinct_helper.allow_hash_local()) {
       distinct_dist_methods &= ~DistAlgo::DIST_HASH_HASH_LOCAL;
       OPT_TRACE("ignore hash local dist distinct by hint");
@@ -2085,9 +2085,8 @@ int ObSelectLogPlan::get_distribute_distinct_method(ObLogicalOperator *top,
                                                                 is_partition_wise))) {
       LOG_WARN("failed to check sharding compatible with reduce expr", K(ret));
     } else if (is_partition_wise) {
-      if (top->is_parallel_more_than_part_cnt() &&
-          query_ctx->check_opt_compat_version(COMPAT_VERSION_4_3_5)) {
-        OPT_TRACE("distinct will use partition wise method");        
+      if (top->is_parallel_more_than_part_cnt()) {
+        OPT_TRACE("distinct will use partition wise method");
       } else {
         distinct_dist_methods = DistAlgo::DIST_PARTITION_WISE;
         OPT_TRACE("distinct will use partition wise method and prune other method");
@@ -2819,8 +2818,7 @@ int ObSelectLogPlan::get_distibute_union_all_method(const ObIArray<ObLogicalOper
     } else if (!is_partition_wise) {
       set_dist_methods &= ~DIST_PARTITION_WISE;
       OPT_TRACE("will not use partition wise");
-    } else if (first_child_part_cnt <= max_child_parallel &&
-               get_optimizer_context().get_query_ctx()->check_opt_compat_version(COMPAT_VERSION_4_3_5)) {
+    } else if (first_child_part_cnt <= max_child_parallel) {
       OPT_TRACE("will use partition wise");
     } else {
       set_dist_methods = DistAlgo::DIST_PARTITION_WISE;
@@ -3625,11 +3623,9 @@ int ObSelectLogPlan::get_distributed_set_methods(const EqualSets &equal_sets,
       set_dist_methods |= DistAlgo::DIST_HASH_NONE;
       set_dist_methods |= DistAlgo::DIST_PULL_TO_LOCAL;
       set_dist_methods |= DistAlgo::DIST_HASH_HASH;
-      if (query_ctx->check_opt_compat_version(COMPAT_VERSION_4_3_5_BP2)) {
-        set_dist_methods |= DistAlgo::DIST_HASH_HASH_LOCAL;
-        set_dist_methods |= DistAlgo::DIST_PARTITION_HASH_LOCAL;
-        set_dist_methods |= DistAlgo::DIST_HASH_LOCAL_PARTITION;
-      }
+      set_dist_methods |= DistAlgo::DIST_HASH_HASH_LOCAL;
+      set_dist_methods |= DistAlgo::DIST_PARTITION_HASH_LOCAL;
+      set_dist_methods |= DistAlgo::DIST_HASH_LOCAL_PARTITION;
     } else {
       OPT_TRACE("candi merge set dist method:basic, partition wise,  none all, all none");
     }
@@ -3685,8 +3681,7 @@ int ObSelectLogPlan::get_distributed_set_methods(const EqualSets &equal_sets,
     if (left_child.get_parallel() <= 1 && right_child.get_parallel() <= 1) {
       bool can_re_parallel = (left_child.get_available_parallel() > 1 || right_child.get_available_parallel() > 1)
                               && !(left_sharding->is_match_all() && right_sharding->is_match_all())
-                              && !(left_child.get_is_at_most_one_row() && right_child.get_is_at_most_one_row())
-                              && query_ctx->check_opt_compat_version(COMPAT_VERSION_4_3_5_BP2);
+                              && !(left_child.get_is_at_most_one_row() && right_child.get_is_at_most_one_row());
       if (can_re_parallel) {
         set_dist_methods = DistAlgo::DIST_HASH_HASH;
         OPT_TRACE("plan can re-parallel, will use hash hash method");
@@ -3750,8 +3745,7 @@ int ObSelectLogPlan::get_distributed_set_methods(const EqualSets &equal_sets,
       LOG_WARN("failed to check if match partition wise join", K(ret));
     } else if (is_partition_wise) {
       if ((left_child.is_parallel_more_than_part_cnt() ||
-          right_child.is_parallel_more_than_part_cnt()) &&
-          query_ctx->check_opt_compat_version(COMPAT_VERSION_4_3_5)) {
+          right_child.is_parallel_more_than_part_cnt())) {
         set_dist_methods &= ~DistAlgo::DIST_PARTITION_NONE;
         set_dist_methods &= ~DistAlgo::DIST_NONE_PARTITION;
         OPT_TRACE("plan will use partition wise method");
@@ -3828,8 +3822,7 @@ int ObSelectLogPlan::get_distributed_set_methods(const EqualSets &equal_sets,
     } else if (!left_match_repart) {
       set_dist_methods &= ~DistAlgo::DIST_PARTITION_NONE;
       OPT_TRACE("plan will not use partition none method");
-    } else if (right_child.is_parallel_more_than_part_cnt() &&
-               query_ctx->check_opt_compat_version(COMPAT_VERSION_4_3_5)) {
+    } else if (right_child.is_parallel_more_than_part_cnt()) {
       OPT_TRACE("plan will use partition none method");
     } else {
       set_dist_methods &= ~DistAlgo::DIST_HASH_NONE;
@@ -3891,8 +3884,7 @@ int ObSelectLogPlan::get_distributed_set_methods(const EqualSets &equal_sets,
     } else if (!right_match_repart) {
       set_dist_methods &= ~DistAlgo::DIST_NONE_PARTITION;
       OPT_TRACE("plan will not use none partition method");
-    } else if (left_child.is_parallel_more_than_part_cnt() &&
-               query_ctx->check_opt_compat_version(COMPAT_VERSION_4_3_5)) {
+    } else if (left_child.is_parallel_more_than_part_cnt()) {
       OPT_TRACE("plan will use partition none method");
     } else {
       set_dist_methods &= ~DistAlgo::DIST_NONE_HASH;
@@ -4855,8 +4847,6 @@ int ObSelectLogPlan::check_need_pushdown_set_distinct(ObLogicalOperator *&child,
   if (OB_ISNULL(child) || OB_ISNULL(optimizer_context_.get_query_ctx())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(ret), K(child), K(optimizer_context_.get_query_ctx()));
-  } else if (!optimizer_context_.get_query_ctx()->check_opt_compat_version(COMPAT_VERSION_4_3_5)) {
-    // do nothing
   } else if (!child->is_distributed() && is_set_op_parallel) {
     // do nothing
   } else if (LOG_SET == child->get_type()
@@ -5443,20 +5433,6 @@ int ObSelectLogPlan::allocate_plan_top()
         LOG_WARN("failed to allocate limit operator", K(ret));
       } else {
         LOG_TRACE("succeed to allocate limit operator",
-            K(candidates_.candidate_plans_.count()));
-      }
-    }
-
-    // step. allocate late materialization if needed
-    if (OB_SUCC(ret) && select_stmt->has_limit()) {
-      if ((optimizer_context_.get_query_ctx()->optimizer_features_enable_version_ >= COMPAT_VERSION_4_2_5 &&
-           optimizer_context_.get_query_ctx()->optimizer_features_enable_version_ < COMPAT_VERSION_4_3_0) ||
-          (optimizer_context_.get_query_ctx()->optimizer_features_enable_version_ >= COMPAT_VERSION_4_3_3)) {
-        /* rewrite will enhance late materialization */
-      } else if (OB_FAIL(candi_allocate_late_materialization())) {
-        LOG_WARN("failed to allocate late-materialization operator", K(ret));
-      } else {
-        LOG_TRACE("succeed to allocate late-materialization operator",
             K(candidates_.candidate_plans_.count()));
       }
     }
@@ -6194,8 +6170,7 @@ int ObSelectLogPlan::get_distribute_window_method(ObLogicalOperator *top,
     win_dist_methods &= ~WinDistAlgo::WIN_DIST_RANGE;
     win_dist_methods &= ~WinDistAlgo::WIN_DIST_LIST;
     if (top->is_distributed() &&
-        !get_optimizer_context().is_partition_wise_plan_enabled() &&
-        query_ctx->check_opt_compat_version(COMPAT_VERSION_4_3_3)) {
+        !get_optimizer_context().is_partition_wise_plan_enabled()) {
       win_dist_methods &= ~WinDistAlgo::WIN_DIST_NONE;
       OPT_TRACE("config disable partition wise window function");
     }
@@ -6203,8 +6178,7 @@ int ObSelectLogPlan::get_distribute_window_method(ObLogicalOperator *top,
   if (OB_SUCC(ret)) {
     can_re_parallel = top->can_re_parallel()
                       && (win_dist_methods & WinDistAlgo::WIN_DIST_HASH)
-                      && !win_func_helper.partition_exprs_.empty()
-                      && query_ctx->check_opt_compat_version(COMPAT_VERSION_4_3_5_BP2);
+                      && !win_func_helper.partition_exprs_.empty();
     bool force_use_slave_mapping = WinDistAlgo::WIN_DIST_HASH_LOCAL == win_dist_methods;
     if (OB_SUCCESS != (OB_E(EventTable::EN_FORCE_SLAVE_MAPPING) OB_SUCCESS)) {
       force_use_slave_mapping = true;
@@ -6215,9 +6189,6 @@ int ObSelectLogPlan::get_distribute_window_method(ObLogicalOperator *top,
           || !top->get_strong_sharding()->is_distributed_with_table_location_and_partitioning()) {
         win_dist_methods &= ~WinDistAlgo::WIN_DIST_HASH_LOCAL;
         OPT_TRACE("window function will not use slave mapping method, due to the sharding");
-      } else if (!query_ctx->check_opt_compat_version(COMPAT_VERSION_4_3_5_BP2)) {
-        win_dist_methods &= ~WinDistAlgo::WIN_DIST_HASH_LOCAL;
-        OPT_TRACE("window function will not use slave mapping method, due to optimizer features control");
       } else if (OB_FAIL(top->check_sharding_compatible_with_reduce_expr(win_func_helper.partition_exprs_,
                                                                          is_partition_wise))) {
         LOG_WARN("failed to check if sharding compatible", K(ret));
@@ -6242,8 +6213,7 @@ int ObSelectLogPlan::get_distribute_window_method(ObLogicalOperator *top,
                                                                         is_partition_wise))) {
       LOG_WARN("failed to check if sharding compatible", K(ret));
     } else if (is_partition_wise) {
-      if (top->is_parallel_more_than_part_cnt() && 
-          query_ctx->check_opt_compat_version(COMPAT_VERSION_4_3_5)) {
+      if (top->is_parallel_more_than_part_cnt()) {
         OPT_TRACE("window function will use partition wise method");
       } else {
         win_dist_methods = WinDistAlgo::WIN_DIST_NONE;

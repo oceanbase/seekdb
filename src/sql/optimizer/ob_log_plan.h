@@ -1,14 +1,18 @@
-/**
-* Copyright (c) 2021 OceanBase
-* OceanBase CE is licensed under Mulan PubL v2.
-* You can use this software according to the terms and conditions of the Mulan PubL v2.
-* You may obtain a copy of Mulan PubL v2 at:
-*          http://license.coscl.org.cn/MulanPubL-2.0
-* THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
-* EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
-* MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
-* See the Mulan PubL v2 for more details.
-*/
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 
 #ifndef OCEANBASE_SQL_OB_LOG_PLAN_H
 #define OCEANBASE_SQL_OB_LOG_PLAN_H
@@ -1483,6 +1487,9 @@ public:
   int prepare_text_retrieval_lookup(const ObIArray<ObRawExpr *> &lookup_match_exprs,
                                     const ObIArray<uint64_t> &lookup_index_ids,
                                     ObLogicalOperator *scan);
+  int prepare_text_retrieval_match_score(const ObIArray<ObRawExpr *> &match_score_exprs,
+                                         const ObIArray<uint64_t> &match_score_index_ids,
+                                         ObLogicalOperator *scan);
   int prepare_text_retrieval_merge(const ObIArray<ObRawExpr *> &merge_match_exprs,
                                    const ObIArray<uint64_t> &merge_index_ids,
                                    ObLogicalOperator *scan);
@@ -1490,7 +1497,8 @@ public:
   int prepare_hnsw_vector_index_scan(ObSchemaGetterGuard *schema_guard,
                                     const ObTableSchema &table_schema,
                                     const uint64_t& vec_col_id,
-                                    ObLogTableScan *table_scan);
+                                    ObLogTableScan *table_scan,
+                                    bool is_hybrid);
 
   int prepare_ivf_vector_index_scan(ObSchemaGetterGuard *schema_guard,
                                     const ObTableSchema &table_schema,

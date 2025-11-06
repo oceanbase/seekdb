@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #define USING_LOG_PREFIX SHARE
@@ -57,7 +61,7 @@ const char *ObTimeZoneInfoManager::FETCH_TENANT_TZ_INFO_SQL =
     "  FULL(@\"SEL$0208448F\" \"t3\"@\"SEL$2\") "
     "  PRED_DEDUCE(@\"SEL$2\") "
     "  QUERY_TIMEOUT(100000000) "
-    "  OPTIMIZER_FEATURES_ENABLE('4.0.0.0') "
+    "  OPTIMIZER_FEATURES_ENABLE('1.0.0.0') "
     "  END_OUTLINE_DATA  */ * "
     "FROM ("
     "SELECT t1.time_zone_id, t1.inner_tz_id, t1.name, t3.transition_time, t2.offset, t2.is_dst, "

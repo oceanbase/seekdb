@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2024 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #define USING_LOG_PREFIX SHARE
@@ -310,6 +314,8 @@ int ObHNSWDeserializeCallback::operator()(char*& data, const int64_t data_size, 
           } else if (index_type_ == VIAT_MAX) {
             ObPluginVectorIndexAdaptor *adp = static_cast<ObPluginVectorIndexAdaptor*>(adp_);
             ObCollationType calc_cs_type = CS_TYPE_UTF8MB4_GENERAL_CI;
+            uint32_t idx_ipivf = ObCharset::locate(calc_cs_type, key_datum.get_string().ptr(), key_datum.get_string().length(),
+                                       "ipivf", 5, 1);
             uint32_t idx_sq = ObCharset::locate(calc_cs_type, key_datum.get_string().ptr(), key_datum.get_string().length(),
                                        "hnsw_sq", 7, 1);
             uint32_t idx_bq = ObCharset::locate(calc_cs_type, key_datum.get_string().ptr(), key_datum.get_string().length(),
@@ -319,6 +325,11 @@ int ObHNSWDeserializeCallback::operator()(char*& data, const int64_t data_size, 
             if (OB_ISNULL(adp)) {
               ret = OB_ERR_UNEXPECTED;
               LOG_WARN("get invalid adp", K(ret));
+            } else if (idx_ipivf > 0) {
+              index_type_ = VIAT_IPIVF;
+              if (OB_FAIL(adp->try_init_snap_data(VIAT_IPIVF))) {
+                LOG_WARN("failed to init sparse vector snap data", K(ret), K(index_type_));
+              }
             } else if (idx_sq > 0) {
               index_type_ = VIAT_HNSW_SQ;
               if (OB_FAIL(adp->try_init_snap_data(VIAT_HNSW_SQ))) {

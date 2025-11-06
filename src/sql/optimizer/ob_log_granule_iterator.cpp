@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #define USING_LOG_PREFIX SQL_OPT
@@ -163,9 +167,7 @@ int ObLogGranuleIterator::set_range_order()
     // Suppose (range) partition order is asc, so first order is same partition order
     bool is_asc_order = is_ascending_direction(op_ordering.at(0).order_type_);
     bool used = true;
-    if (stmt->get_query_ctx()->check_opt_compat_version(COMPAT_VERSION_4_2_3, COMPAT_VERSION_4_3_0,
-                                                        COMPAT_VERSION_4_3_2) &&
-        OB_FAIL(check_op_orderding_used_by_parent(used))) {
+    if (OB_FAIL(check_op_orderding_used_by_parent(used))) {
       LOG_WARN("failed to check op ordering used by parent", K(ret));
     } else if (!used) {
       //do nothing
@@ -227,7 +229,6 @@ int ObLogGranuleIterator::check_adaptive_task_splitting(ObLogTableScan *tsc)
   omt::ObTenantConfigGuard tenant_config(TENANT_CONF(tenant_id));
   bool exist_deadlock_condition = false;
   if (!ENABLE_PX_TASK_REBALANCE) {
-  } else if (GET_MIN_CLUSTER_VERSION() < CLUSTER_VERSION_4_3_5_3) {
   } else if (!tenant_config.is_valid() || !tenant_config->_enable_px_task_rebalance) {
   } else if (!ObGranuleUtil::can_resplit_gi_task(gi_attri_flag_)) {
   } else if (is_rescanable()) {

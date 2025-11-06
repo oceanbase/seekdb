@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #ifndef OCEANBASE_SQL_STMT_H_
@@ -158,6 +162,7 @@ struct TableItem
     sample_info_ = nullptr;
     // assign default value for compatibility
     catalog_name_ = OB_INTERNAL_CATALOG_NAME;
+    external_location_id_ = common::OB_INVALID_ID;
   }
 
   virtual TO_STRING_KV(N_TID, table_id_,
@@ -181,7 +186,7 @@ struct TableItem
                KPC_(function_table_expr),
                K_(flashback_query_type), KPC_(flashback_query_expr), K_(table_type),
                K_(exec_params), KPC_(sample_info), K_(mview_id), K_(need_expand_rt_mv),
-               K_(external_table_partition), K_(catalog_name));
+               K_(external_table_partition), K_(catalog_name), K_(external_location_id));
 
   enum TableType
   {
@@ -329,6 +334,8 @@ struct TableItem
   common::ObString external_table_partition_;
   // sample scan infos
   SampleInfo *sample_info_;
+  // external location
+  uint64_t external_location_id_;
 };
 
 struct ColumnItem
@@ -897,6 +904,7 @@ public:
   { return match_exprs_; }
   common::ObIArray<ObMatchFunRawExpr *> &get_match_exprs()
   { return match_exprs_; }
+  bool has_es_match() const { return match_exprs_.count() > 0 && match_exprs_.at(0) != nullptr && match_exprs_.at(0)->is_es_match(); }
   int get_match_expr_on_table(uint64_t table_id, ObIArray<ObRawExpr *> &match_exprs) const;
   int get_table_pseudo_column_like_exprs(uint64_t table_id, ObIArray<ObRawExpr *> &pseudo_columns);
   int get_table_pseudo_column_like_exprs(ObIArray<uint64_t> &table_id, ObIArray<ObRawExpr *> &pseudo_columns);

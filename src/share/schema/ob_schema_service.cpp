@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #define USING_LOG_PREFIX SHARE_SCHEMA
@@ -385,6 +389,7 @@ int AlterTableSchema::assign(const ObTableSchema &src_schema)
       micro_index_clustered_ = src_schema.micro_index_clustered_;
       enable_macro_block_bloom_filter_ = src_schema.enable_macro_block_bloom_filter_;
       merge_engine_type_ = src_schema.merge_engine_type_;
+      external_location_id_ = src_schema.external_location_id_;
       if (OB_FAIL(deep_copy_str(src_schema.tablegroup_name_, tablegroup_name_))) {
         LOG_WARN("Fail to deep copy tablegroup_name", K(ret));
       } else if (OB_FAIL(deep_copy_str(src_schema.comment_, comment_))) {
@@ -405,6 +410,8 @@ int AlterTableSchema::assign(const ObTableSchema &src_schema)
         LOG_WARN("deep copy external_file_pattern failed", K(ret));
       } else if (OB_FAIL(deep_copy_str(src_schema.external_properties_, external_properties_))) {
         LOG_WARN("deep copy external_properties failed", K(ret));
+      } else if (OB_FAIL(deep_copy_str(src_schema.external_sub_path_, external_sub_path_))) {
+        LOG_WARN("deep copy external_sub_path failed", K(ret));
       }
 
       //view schema

@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #include "share/config/ob_reload_config.h"
@@ -32,9 +36,8 @@ int ObReloadConfig::reload_ob_logger_set()
     } else if (OB_FAIL(OB_LOGGER.set_max_file_index(
         static_cast<int32_t>(conf_->max_syslog_file_count)))) {
       OB_LOG(ERROR, "fail to set_max_file_index", K(conf_->max_syslog_file_count.get()), K(ret));
-    } else if (OB_FAIL(OB_LOGGER.set_record_old_log_file(conf_->enable_syslog_recycle))) {
-      OB_LOG(ERROR, "fail to set_record_old_log_file",
-             K(conf_->enable_syslog_recycle.str()), K(ret));
+    } else if (OB_FAIL(OB_LOGGER.set_record_old_log_file())) {
+      OB_LOG(ERROR, "fail to set_record_old_log_file", K(ret));
     } else if (OB_FAIL(OB_LOG_COMPRESSOR.set_max_disk_size(conf_->syslog_disk_size))) {
       OB_LOG(ERROR, "fail to set_max_disk_size",
              K(conf_->syslog_disk_size.str()), KR(ret));
@@ -45,7 +48,6 @@ int ObReloadConfig::reload_ob_logger_set()
       OB_LOG(ERROR, "fail to set_min_uncompressed_count",
              K(conf_->syslog_file_uncompressed_count.str()), KR(ret));
     } else {
-      OB_LOGGER.set_log_warn(conf_->enable_syslog_wf);
       OB_LOGGER.set_enable_async_log(conf_->enable_async_syslog);
       ObKVGlobalCache::get_instance().reload_priority();
     }

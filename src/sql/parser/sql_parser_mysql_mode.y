@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase 
- * OceanBase CE is licensed under Mulan PubL v2. 
- * You can use this software according to the terms and conditions of the Mulan PubL v2. 
- * You may obtain a copy of Mulan PubL v2 at: 
- *          http://license.coscl.org.cn/MulanPubL-2.0 
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, 
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, 
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE. 
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 %define api.pure
@@ -129,6 +133,7 @@ extern void obsql_oracle_parse_fatal_error(int32_t errcode, yyscan_t yyscanner, 
 %left '*' '/' '%' MOD DIV POW
 %left '^'
 %left VECTOR_DISTANCE
+%left VECTOR_SIMILARITY
 %nonassoc LOWER_THAN_NEG SAMPLE/* for simple_expr conflict*/
 %left CNNOP
 %left NEG '~'
@@ -166,7 +171,7 @@ FROZEN_VERSION TOPK QUERY_TIMEOUT READ_CONSISTENCY LOG_LEVEL USE_PLAN_CACHE
 TRACE_LOG LOAD_BATCH_SIZE TRANS_PARAM OPT_PARAM OB_DDL_SCHEMA_VERSION FORCE_REFRESH_LOCATION_CACHE
 ENABLE_PARALLEL_DAS_DML DISABLE_PARALLEL_DAS_DML DISABLE_PARALLEL_DML ENABLE_PARALLEL_DML MONITOR NO_PARALLEL CURSOR_SHARING_EXACT
 MAX_CONCURRENT DOP TRACING NO_QUERY_TRANSFORMATION NO_COST_BASED_QUERY_TRANSFORMATION BLOCKING RESOURCE_GROUP
-PX_NODE_POLICY PX_NODE_ADDRS PX_NODE_COUNT DML_PARALLEL
+PX_NODE_POLICY PX_NODE_ADDRS PX_NODE_COUNT DML_PARALLEL DISABLE_OP_RICH_FORMAT
 // transform hint
 NO_REWRITE MERGE_HINT NO_MERGE_HINT NO_EXPAND USE_CONCAT NO_UNNEST
 PLACE_GROUP_BY NO_PLACE_GROUP_BY INLINE MATERIALIZE SEMI_TO_INNER NO_SEMI_TO_INNER
@@ -266,21 +271,21 @@ END_P SET_VAR DELIMITER
 //-----------------------------reserved keyword end-------------------------------------------------
 %token <non_reserved_keyword>
 //-----------------------------non_reserved keyword begin-------------------------------------------
-        ACCESS ACCESS_INFO ACCESSID ACCESSKEY ACCESSTYPE ACCOUNT ACTION ACTIVE ADDDATE AFTER AGAINST AGGREGATE ALGORITHM ALL_META ALL_USER ALWAYS ALLOW ANALYSE ANY
-        APPROX_COUNT_DISTINCT APPROX_COUNT_DISTINCT_SYNOPSIS APPROX_COUNT_DISTINCT_SYNOPSIS_MERGE
+        ACCESS ACCESS_INFO ACCESSID ACCESSKEY ACCESSTYPE ACCOUNT ACTION ACTIVE ADDDATE AFTER AGAINST AGGREGATE AI ALGORITHM ALL_META ALL_USER ALWAYS ALLOW ANALYSE ANY
+        APPID APPROX_COUNT_DISTINCT APPROX_COUNT_DISTINCT_SYNOPSIS APPROX_COUNT_DISTINCT_SYNOPSIS_MERGE
         ARBITRATION ARRAY ASCII ASIS AT ATTRIBUTE AUTHORS AUTO AUTOEXTEND_SIZE AUTO_INCREMENT AUTO_INCREMENT_MODE AUTO_INCREMENT_CACHE_SIZE
         AVG AVG_ROW_LENGTH ACTIVATE AVAILABILITY ARCHIVELOG ASYNCHRONOUS AUDIT ADMIN AUTO_REFRESH API_MODE APPROX APPROXIMATE ARRAY_AGG ARRAY_FILTER ARRAY_FIRST ARRAY_MAP ARRAY_SORTBY 
 
         BACKUP BACKUP_COPIES BALANCE BANDWIDTH BASE BASELINE BASELINE_ID BASIC BEGI BINDING SHARDING BINARY_FORMAT BINLOG BIT BIT_AND
-        BIT_OR BIT_XOR BLOCK BLOCK_INDEX BLOCK_SIZE BLOOM_FILTER BOOL BOOLEAN BOOTSTRAP BTREE BYTE
+        BIT_OR BIT_XOR BLOCK BLOCK_INDEX BLOCK_SIZE BLOOM_FILTER BOOL BOOLEAN BTREE BYTE
         BREADTH BUCKETS BISON_LIST BACKUPSET BACKED BACKUPPIECE BACKUP_BACKUP_DEST BACKUPROUND
         BADFILE BOUNDARY_COLUMN BOUNDARY_COLUMN_UNIT BUFFER_SIZE BIGINT_PRECISION
 
         CACHE CALIBRATION CALIBRATION_INFO CANCEL CASCADED CAST CATALOG CATALOGS CATALOG_NAME CHAIN CHANGED CHARSET CHECKSUM CHECKPOINT CHUNK CIPHER
         CLASS_ORIGIN CLEAN CLEAR CLIENT CLONE CLOG CLOSE CLUSTER CLUSTER_ID CLUSTER_NAME COALESCE COLUMN_BLOOM_FILTER COLUMN_STAT
         CODE COLLATION COLLECT_STATISTICS_ON_CREATE COLUMN_FORMAT COLUMN_INDEX_TYPE COLUMN_NAME COLUMNS COMMENT COMMIT COMMITTED COMPACT COMPLETION COMPLETE
-        COMPRESSED COMPRESSION COMPRESSION_BLOCK_SIZE COMPRESSION_CODE COMPUTATION COMPUTE CONCURRENT CONCURRENT_LIMITING_RULE CONDENSED CONDITIONAL CONNECTION CONSISTENT CONSISTENT_MODE CONSTRAINT_CATALOG
-        CONSTRAINT_NAME CONSTRAINT_SCHEMA CONTAINS CONTEXT CONTRIBUTORS COPY COSINE COUNT CPU CREATE_TIMESTAMP
+        COMPRESSED COMPRESSION COMPRESSION_BLOCK_SIZE COMPRESSION_CODE COMPUTATION COMPUTE CONCURRENT CONCURRENT_LIMITING_RULE CONDENSED CONDITIONAL CONFIGS CONNECTION CONSISTENT CONSISTENT_MODE CONSTRAINT_CATALOG
+        CONSTRAINT_NAME CONSTRAINT_SCHEMA CONTAINS CONTEXT CONTRIBUTORS COPY COSINE COUNT CPU CREATE_TIMESTAMP CREDENTIAL
         CTXCAT CTX_ID CUBE CURDATE CURRENT STACKED CURTIME CURSOR_NAME CUME_DIST CYCLE CALC_PARTITION_ID CONNECT
 
         DAG DATA DATAFILE DATA_DISK_SIZE DATA_SOURCE DATA_TABLE_ID DATE DATE_ADD DATE_SUB DATETIME DAY DEALLOCATE DECRYPT DECRYPTION
@@ -299,7 +304,7 @@ END_P SET_VAR DELIMITER
         GENERAL GEOMETRY GEOMCOLLECTION GEOMETRYCOLLECTION GET_FORMAT GLOBAL GRANTS GRANULARITY GROUP_CONCAT GROUPING GTS
         GLOBAL_NAME GLOBAL_ALIAS
 
-        HANDLER HASH HEAP HELP HISTOGRAM HOST HOSTS HOT_RETENTION HOUR HIDDEN HYBRID HYBRID_HIST
+        HANDLER HASH HEAP HELP HISTOGRAM HOST HOSTS HOT_RETENTION HOUR HIDDEN HYBRID HYBRID_HIST HYBRID_SEARCH
 
         ID IDC IDENTIFIED IGNORE_SERVER_IDS IK_MODE ILOG IMMEDIATE IMPORT INCLUDING INCR INDEXES INDEX_TABLE_ID INFO INITIAL_SIZE
         INNODB INSERT_METHOD INSTALL INSTANCE INVOKER IO IOPS_WEIGHT IO_THREAD IPC ISOLATE ISOLATION ISSUER
@@ -307,11 +312,11 @@ END_P SET_VAR DELIMITER
 
         JOB JSON JSON_ARRAYAGG JSON_OBJECTAGG JSON_QUERY JSON_VALUE JSON_TABLE
 
-        KEYWORD KEY_BLOCK_SIZE KEY_VERSION KVCACHE KV_ATTRIBUTES
+        KEYWORD KEY_BLOCK_SIZE KEY_VERSION KEYTAB KRB5CONF KVCACHE KV_ATTRIBUTES
 
         LAG LANGUAGE LAST LAST_REFRESH_SCN LAST_VALUE LATERAL LEAD LEADER LEAVES LESS LEAK LEAK_MOD LEAK_RATE LIB LINESTRING LIST_
         LISTAGG LOB_INROW_THRESHOLD LOCAL LOCALITY LOCATION LOCKED LOCKS LOGFILE LOGONLY_REPLICA_NUM LOGS LOCK_ LOGICAL_READS
-        LEVEL LN LOG LS LINK LOG_RESTORE_SOURCE LINE_DELIMITER LICENSE
+        LEVEL LN LOG LS LINK LOG_RESTORE_SOURCE LINE_DELIMITER LICENSE LOCATIONS
 
         MAJOR MAP MANHATTAN MANUAL MASTER MASTER_AUTO_POSITION MASTER_CONNECT_RETRY MASTER_DELAY MASTER_HEARTBEAT_PERIOD
         MASTER_HOST MASTER_LOG_FILE MASTER_LOG_POS MASTER_PASSWORD MASTER_PORT MASTER_RETRY_COUNT
@@ -319,7 +324,7 @@ END_P SET_VAR DELIMITER
         MASTER_SSL_CRL MASTER_SSL_CRLPATH MASTER_SSL_KEY MASTER_USER MAX MAX_CONNECTIONS_PER_HOUR MAX_CPU MAX_CONCURRENCY
         MAX_FILE_SIZE MAX_TOKEN_SIZE MAX_NGRAM_SIZE LOG_DISK_SIZE MAX_NET_BANDWIDTH MAX_IOPS MEMORY_SIZE MAX_QUERIES_PER_HOUR MAX_ROWS MAX_SIZE
         MAX_UPDATES_PER_HOUR MAX_USER_CONNECTIONS MEDIUM MEMORY MEMTABLE MESSAGE_TEXT META MICROSECOND
-        MIGRATE MIN MIN_CPU MIN_IOPS MIN_MAX MIN_NGRAM_SIZE MIN_TOKEN_SIZE MINOR MIN_ROWS MINUS MINUTE MISMATCH MODE MODIFY MODULE MONTH MOVE
+        MIGRATE MIN MIN_CPU MIN_IOPS MIN_MAX MIN_NGRAM_SIZE MIN_TOKEN_SIZE MINOR MIN_ROWS MINUS MINUTE MISMATCH MODE MODIFY MODULE MONTH MOVE MODEL
         MULTILINESTRING MULTIPOINT MULTIPOLYGON MULTIVALUE MUTEX MYSQL_ERRNO MIGRATION MAX_USED_PART_ID MAXIMIZE
         MATERIALIZED MEMBER MEMSTORE_PERCENT MINVALUE MY_NAME MERGE_ENGINE
 
@@ -332,8 +337,8 @@ END_P SET_VAR DELIMITER
         OBJECT_ID
 
         PACK_KEYS PAGE PARALLEL PARAMETERS PARSER PARSER_PROPERTIES PARTIAL PARTITION_ID PARTITIONING PARTITIONS PASSWORD PATH PAUSE PAXOS_REPLICA_NUM PER PERCENTAGE
-        PERCENT_RANK PERCENTILE_CONT PHASE PLAN PHYSICAL PLANREGRESS PLUGIN PLUGIN_DIR PLUGINS POINT POLYGON PERFORMANCE
-        PROTECTION PROJECT_NAME PRIORITY PL POLICY POOL PORT POSITION PREPARE PRESERVE PRETTY PRETTY_COLOR PREV PRIMARY_ZONE PRIVILEGES PROCESS
+        PERCENT_RANK PERCENTILE_CONT PHASE PHRASE PLAN PHYSICAL PLANREGRESS PLUGIN PLUGIN_DIR PLUGINS POINT POLYGON PERFORMANCE
+        PRINCIPAL PROTECTION PROJECT_NAME PRIORITY PL POLICY POOL PORT POSITION PREPARE PRESERVE PRETTY PRETTY_COLOR PREV PRIMARY_ZONE PRIVILEGES PROCESS
         PROCESSLIST PROFILE PROFILES PROPERTIES PROXY PRECEDING PCTFREE P_ENTITY P_CHUNK
         PUBLIC PROGRESSIVE_MERGE_NUM PREVIEW PS PLUS PATTERN PARTITION_TYPE FILES PARTIAL_UPDATE PRECREATE_TIME ON_ERROR
 
@@ -347,9 +352,9 @@ END_P SET_VAR DELIMITER
         RECYCLEBIN ROTATE ROW_NUMBER RUDUNDANT RECURSIVE RANDOM REDO_TRANSPORT_OPTIONS REMOTE_OSS RT
         RANK READ_ONLY RECOVERY REJECT ROLE
 
-        SAMPLE SAVEPOINT SCALARS SCHEDULE SCHEMA_NAME SCN SCOPE SECOND SECURITY SEED SEMISTRUCT_ENCODING_TYPE SEQUENCES SERIAL SERIALIZABLE SERVER
+        S3_REGION SAMPLE SAVEPOINT SCALARS SCHEDULE SCHEMA_NAME SCN SCOPE SCORE SECOND SECURITY SEED SEMISTRUCT_ENCODING_TYPE SEQUENCES SERIAL SERIALIZABLE SERVER
         SERVER_IP SERVER_PORT SERVER_TYPE SERVICE SESSION SESSION_USER SET_MASTER_CLUSTER SET_SLAVE_CLUSTER
-        SET_TP SHARE SHARED_STORAGE_DEST SHARED_STORAGE_INFO SHUTDOWN SIGNED SIMPLE SINGLE SKIP_INDEX SLAVE SLOW SLOT_IDX SNAPSHOT SOCKET SOME SONAME SOUNDS
+        SET_TP SHARE SHUTDOWN SIGNED SIMPLE SINGLE SKIP_INDEX SLAVE SLOW SLOT_IDX SNAPSHOT SOCKET SOME SONAME SOUNDS
         SOURCE SPFILE SPLIT SQL_AFTER_GTIDS SQL_AFTER_MTS_GAPS SQL_BEFORE_GTIDS SQL_BUFFER_RESULT
         SQL_CACHE SQL_NO_CACHE SQL_ID SCHEMA_ID SQL_THREAD SQL_TSI_DAY SQL_TSI_HOUR SQL_TSI_MINUTE SQL_TSI_MONTH
         SQL_TSI_QUARTER SQL_TSI_SECOND SQL_TSI_WEEK SQL_TSI_YEAR SRID STANDBY _ST_ASMVT STAT START STARTS STATS_AUTO_RECALC
@@ -366,10 +371,10 @@ END_P SET_VAR DELIMITER
         TRANSFER TUNNEL_ENDPOINT TENANT_STS_CREDENTIAL TABLETS TIME_UNIT TIME_ZONE
 
         UNCOMMITTED UNCONDITIONAL UNDEFINED UNDO_BUFFER_SIZE UNDOFILE UNNEST UNICODE UNINSTALL UNIT UNIT_GROUP UNIT_NUM UNLOCKED UNTIL
-        UNUSUAL UPGRADE USE_BLOOM_FILTER UNKNOWN USE_FRM USER USER_RESOURCES UNBOUNDED UP UNLIMITED USER_SPECIFIED
+        UNUSUAL UPGRADE URL USE_BLOOM_FILTER UNKNOWN USE_FRM USER USER_RESOURCES UNBOUNDED UP UNLIMITED USER_SPECIFIED
 
         VALID VALUE VARIANCE VARIABLES VERBOSE VERIFY VIEW VISIBLE VIRTUAL_COLUMN_ID VALIDATE VAR_POP
-        VAR_SAMP VALIDATION VECTOR VECTOR_DISTANCE MICRO_INDEX_CLUSTERED
+        VAR_SAMP VALIDATION VECTOR VECTOR_DISTANCE MICRO_INDEX_CLUSTERED VECTOR_SIMILARITY
 
         WAIT WARNINGS WASH WEEK WEIGHT_STRING WHENEVER WORK WRAPPER WINDOW WEAK WITH_COLUMN_GROUP WITHOUT
 
@@ -470,7 +475,7 @@ END_P SET_VAR DELIMITER
 %type <node> tablegroup_option_list tablegroup_option alter_tablegroup_actions alter_tablegroup_action tablegroup_option_list_space_seperated
 %type <node> opt_tg_partition_option tg_hash_partition_option tg_key_partition_option tg_range_partition_option tg_subpartition_option tg_list_partition_option
 %type <node> alter_column_behavior opt_set opt_position_column
-%type <node> alter_system_stmt alter_system_set_parameter_actions alter_system_settp_actions settp_option alter_system_set_parameter_action server_info_list server_info opt_shared_storage_info shared_storage_info alter_system_reset_parameter_actions alter_system_reset_parameter_action
+%type <node> alter_system_stmt alter_system_set_parameter_actions alter_system_settp_actions settp_option alter_system_set_parameter_action alter_system_reset_parameter_actions alter_system_reset_parameter_action
 %type <node> opt_comment opt_as
 %type <node> column_name relation_name relation_name_list opt_relation_name function_name column_label var_name relation_name_or_string row_format_option compression_name merge_engine_types
 %type <node> opt_hint_list hint_option select_with_opt_hint update_with_opt_hint delete_with_opt_hint hint_list_with_end global_hint transform_hint optimize_hint
@@ -541,7 +546,7 @@ END_P SET_VAR DELIMITER
 %type <node> recover_tenant_stmt recover_point_clause
 %type <node> external_file_format_list external_file_format external_properties_list external_properties external_table_partition_option opt_pattern opt_as_alias pattern_expr format_expr url_expr url_table_function_expr location_expr
 %type <node> storage_cache_policy_attribute_list storage_cache_time_policy_attribute_list storage_cache_time_policy_attribute retention_time_unit
-%type <node> opt_path_info opt_access_info opt_storage_use_for opt_attribute opt_scope_type
+%type <node> opt_path_info opt_access_info opt_attribute
 %type <node> dynamic_sampling_hint add_external_table_partition_actions add_external_table_partition_action
 %type <node> external_table_partitions external_table_partition
 %type <node> skip_index_type opt_skip_index_type_list
@@ -569,7 +574,13 @@ END_P SET_VAR DELIMITER
 %type <node> module_name info_type opt_infile
 %type <node_opt_parens> select_clause_set select_clause_set_body
 %type <node> dynamic_partition_option dynamic_partition_option_list sys_view_cast_opt
+%type <node> column_list_with_boost with_param_column_ref
+%type <node> es_sql_opt
+%type <node> operator_list
+%type <node> hybrid_search_expr hybrid_search_param
+%type <node> create_location_stmt alter_location_stmt drop_location_stmt location_name location_url opt_sub_path credential_option_list credential_option opt_credential location_utils_stmt
 
+%type <node> vector_similarity_expr vector_similarity_metric
 %start sql_stmt
 %%
 ////////////////////////////////////////////////////////////////
@@ -746,6 +757,10 @@ stmt:
   | transfer_partition_stmt { $$ = $1; check_question_mark($$, result); }
   | mock_stmt {$$ = $1; check_question_mark($$, result);}
   | service_name_stmt { $$ = $1; check_question_mark($$, result); }
+  | create_location_stmt  { $$ = $1; check_question_mark($$, result); }
+  | alter_location_stmt   { $$ = $1; check_question_mark($$, result); }
+  | drop_location_stmt    { $$ = $1; check_question_mark($$, result); }
+  | location_utils_stmt   { $$ = $1; check_question_mark($$, result); }
   | create_ccl_rule_stmt       { $$ = $1; check_question_mark($$, result); }
   | drop_ccl_rule_stmt       { $$ = $1; check_question_mark($$, result); }
   ;
@@ -1902,6 +1917,16 @@ simple_expr collation %prec NEG
   malloc_non_terminal_node($$, result->malloc_pool_, T_FUN_MATCH_AGAINST, 2, column_list_node, $7);
   $$->value_ = $8[0];
 }
+| MATCH '(' column_list_with_boost ',' search_expr ',' es_sql_opt ')'
+{
+  ParseNode *column_list_node = NULL;
+  merge_nodes(column_list_node, result, T_MATCH_COLUMN_LIST, $3);
+  malloc_non_terminal_node($$, result->malloc_pool_, T_FUN_ES_MATCH, 3, column_list_node, $5, $7);
+}
+| SCORE'(' ')'
+{
+  malloc_terminal_node($$, result->malloc_pool_, T_FUN_ES_SCORE);
+}
 | case_expr
 {
   $$ = $1;
@@ -1986,6 +2011,15 @@ expr_const
   $$ = $1;
 };
 
+es_sql_opt:
+expr_const
+{
+  $$ = $1;
+}
+| func_expr
+{
+  $$ = $1;
+};
 
 opt_mode_flag:
 IN NATURAL LANGUAGE MODE
@@ -2003,6 +2037,10 @@ IN NATURAL LANGUAGE MODE
 | WITH QUERY EXPANSION
 {
   $$[0] = 3;
+}
+| IN MATCH PHRASE MODE
+{
+  $$[0] = 4;
 }
 | /*empty*/
 {
@@ -3501,6 +3539,10 @@ MOD '(' expr ',' expr ')'
 {
   $$ = $1;
 }
+| vector_similarity_expr
+{
+  $$ = $1;
+}
 | MAP '(' expr_list ')'
 {
   malloc_non_terminal_node($$, result->malloc_pool_, T_FUN_SYS_MAP, 1, $3);
@@ -3591,6 +3633,45 @@ VECTOR_DISTANCE '(' expr ',' expr ',' vector_distance_metric ')'
 ;
 
 vector_distance_metric:
+COSINE
+{
+  malloc_terminal_node($$, result->malloc_pool_, T_INT);
+  $$->is_hidden_const_ = 1;
+  $$->value_ = 0;
+}
+| DOT
+{
+  malloc_terminal_node($$, result->malloc_pool_, T_INT);
+  $$->is_hidden_const_ = 1;
+  $$->value_ = 1;
+}
+| EUCLIDEAN
+{
+  malloc_terminal_node($$, result->malloc_pool_, T_INT);
+  $$->is_hidden_const_ = 1;
+  $$->value_ = 2;
+}
+| MANHATTAN
+{
+  malloc_terminal_node($$, result->malloc_pool_, T_INT);
+  $$->is_hidden_const_ = 1;
+  $$->value_ = 3;
+}
+;
+
+vector_similarity_expr:
+VECTOR_SIMILARITY '(' expr ',' expr ')'
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_FUN_SYS_VECTOR_SIMILARITY, 2, $3, $5);
+}
+|
+VECTOR_SIMILARITY '(' expr ',' expr ',' vector_similarity_metric ')'
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_FUN_SYS_VECTOR_SIMILARITY, 3, $3, $5, $7);
+}
+;
+
+vector_similarity_metric:
 COSINE
 {
   malloc_terminal_node($$, result->malloc_pool_, T_INT);
@@ -8095,7 +8176,29 @@ LOCATION opt_equal_mark STRING_VALUE
   $$->stmt_loc_.last_column_ = @3.last_column - 1;
   $$->str_len_ = $3->str_len_;
   $$->str_value_ = $3->str_value_;
+}
+| LOCATION opt_equal_mark USER_VARIABLE opt_sub_path
+{
+  (void)($2) ; /* make bison mute */
+  malloc_non_terminal_node($$, result->malloc_pool_, T_LOCATION_OBJECT, 2, $3, $4);
+  $$->stmt_loc_.first_column_ = @3.first_column - 1;
+  $$->stmt_loc_.last_column_ = @3.last_column - 1;
+  $$->str_len_ = $3->str_len_;
+  $$->str_value_ = $3->str_value_;
 };
+
+opt_sub_path:
+STRING_VALUE
+{
+  $$ = $1;
+}
+|
+{
+  $$ = NULL;
+}
+;
+
+
 storage_cache_policy_attribute_list:
 GLOBAL COMP_EQ STRING_VALUE
 {
@@ -9309,6 +9412,9 @@ opt_pattern:
   $$ = NULL;
 }
 | pattern_expr
+{
+  $$ = $1;
+}
 ;
 
 external_file_format:
@@ -11149,6 +11255,27 @@ INSERT
 }
 ;
 
+/*TODO: support no_param_column_ref case*/
+column_list_with_boost:
+with_param_column_ref { $$ = $1}
+| column_list_with_boost ',' with_param_column_ref
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_LINK_NODE, 2, $1, $3);
+}
+;
+
+with_param_column_ref:
+no_param_column_ref '^' literal
+{
+  ParseNode *node = NULL;
+  malloc_non_terminal_node(node, result->malloc_pool_, T_COLUMN_REF, 3, NULL, NULL, $1);
+  dup_node_string($1, node, result->malloc_pool_);
+  ParseNode *list_node = NULL;
+  malloc_non_terminal_node(list_node, result->malloc_pool_, T_LINK_NODE, 2, node, $3);
+  merge_nodes($$, result, T_MATCH_COLUMN_LIST, list_node);
+}
+;
+
 column_list:
 no_param_column_ref { $$ = $1; }
 | column_list ',' no_param_column_ref
@@ -12305,6 +12432,23 @@ READ_CONSISTENCY '(' consistency_level ')'
 | PX_NODE_COUNT '(' INTNUM ')'
 {
   malloc_non_terminal_node($$, result->malloc_pool_, T_PX_NODE_COUNT, 1, $3);
+}
+| DISABLE_OP_RICH_FORMAT '(' operator_list ')'
+{
+  ParseNode *op_list = NULL;
+  merge_nodes(op_list, result, T_DISABLE_OP_RICH_FORMAT, $3);
+  $$=op_list;
+}
+;
+
+operator_list:
+STRING_VALUE
+{
+  $$ = $1;
+}
+| operator_list ',' STRING_VALUE
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_LINK_NODE, 2, $1, $3);
 }
 ;
 
@@ -13847,6 +13991,10 @@ tbl_name
   $$ = $1;
 }
 | unnest_expr
+{
+  $$ = $1;
+}
+| hybrid_search_expr
 {
   $$ = $1;
 }
@@ -16150,6 +16298,19 @@ SHOW opt_extended_or_full TABLES opt_from_or_in_database_clause opt_show_conditi
 {
   malloc_terminal_node($$, result->malloc_pool_, T_SHOW_CATALOGS);
 }
+| SHOW LOCATIONS
+{
+  malloc_terminal_node($$, result->malloc_pool_, T_SHOW_LOCATIONS);
+}
+| SHOW create_with_opt_hint LOCATION relation_name
+{
+  (void)($2);
+  malloc_non_terminal_node($$, result->malloc_pool_, T_SHOW_CREATE_LOCATION, 1, $4);
+}
+| SHOW FILES IN LOCATION USER_VARIABLE opt_sub_path opt_pattern
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_LOCATION_UTILS_LIST, 3, $5, $6, $7);
+}
 ;
 
 check_table_options:
@@ -17851,6 +18012,41 @@ role_with_host
   malloc_terminal_node($$, result->malloc_pool_, T_PRIV_TYPE);
   $$->value_ = OB_PRIV_USE_CATALOG;
 }
+| READ
+{
+  malloc_terminal_node($$, result->malloc_pool_, T_PRIV_TYPE);
+  $$->value_ = OB_PRIV_READ;
+}
+| WRITE
+{
+  malloc_terminal_node($$, result->malloc_pool_, T_PRIV_TYPE);
+  $$->value_ = OB_PRIV_WRITE;
+}
+| CREATE LOCATION
+{
+  malloc_terminal_node($$, result->malloc_pool_, T_PRIV_TYPE);
+  $$->value_ = OB_PRIV_CREATE_LOCATION;
+}
+| CREATE AI MODEL
+{
+  malloc_terminal_node($$, result->malloc_pool_, T_PRIV_TYPE);
+  $$->value_ = OB_PRIV_CREATE_AI_MODEL;
+}
+| ALTER AI MODEL
+{
+  malloc_terminal_node($$, result->malloc_pool_, T_PRIV_TYPE);
+  $$->value_ = OB_PRIV_ALTER_AI_MODEL;
+}
+| DROP AI MODEL
+{
+  malloc_terminal_node($$, result->malloc_pool_, T_PRIV_TYPE);
+  $$->value_ = OB_PRIV_DROP_AI_MODEL;
+}
+| ACCESS AI MODEL
+{
+  malloc_terminal_node($$, result->malloc_pool_, T_PRIV_TYPE);
+  $$->value_ = OB_PRIV_ACCESS_AI_MODEL;
+}
 ;
 
 opt_privilege:
@@ -17884,6 +18080,11 @@ TABLE
 {
   malloc_terminal_node($$, result->malloc_pool_, T_PRIV_OBJECT);
   $$->value_ = 4;
+}
+| LOCATION
+{
+  malloc_terminal_node($$, result->malloc_pool_, T_PRIV_OBJECT);
+  $$->value_ = 5;
 }
 ;
 
@@ -19406,14 +19607,6 @@ DUMP MEMORY LEAK
  *
  *****************************************************************************/
 alter_system_stmt:
-alter_with_opt_hint SYSTEM BOOTSTRAP server_info_list opt_shared_storage_info
-{
-  (void)($1);
-  ParseNode *server_list = NULL;
-  merge_nodes(server_list, result, T_SERVER_INFO_LIST, $4);
-  malloc_non_terminal_node($$, result->malloc_pool_, T_BOOTSTRAP, 2, server_list, $5);
-}
-|
 alter_with_opt_hint SYSTEM FLUSH cache_type CACHE opt_namespace opt_sql_id_or_schema_id opt_databases opt_tenant_list flush_scope
 {
   (void)($1);
@@ -19611,35 +19804,6 @@ alter_with_opt_hint SYSTEM alter_or_change_or_modify ZONE relation_name_or_strin
   merge_nodes(zone_options, result, T_LINK_NODE, $7);
   zone_action->value_ = 5;      /* 1:add,2:delete,3:start,4:stop,5:modify,6:force stop */
   malloc_non_terminal_node($$, result->malloc_pool_, T_ADMIN_ZONE, 3, zone_action, $5, zone_options);
-}
-|
-alter_with_opt_hint SYSTEM ADD SHARED_STORAGE_DEST opt_path_info opt_access_info opt_attribute opt_storage_use_for opt_scope_type
-{
-  (void)($1);
-  ParseNode *storage_action = NULL;
-  malloc_terminal_node(storage_action, result->malloc_pool_, T_INT);
-  storage_action->value_ = 1;    /* 1:add,2:drop,3:modify */
-  malloc_non_terminal_node($$, result->malloc_pool_, T_ADMIN_STORAGE, 6, storage_action, $5, $6, $7, $8, $9);
-}
-|
-alter_with_opt_hint SYSTEM DROP SHARED_STORAGE_DEST opt_path_info opt_storage_use_for opt_scope_type
-{
-  (void)($1);
-  ParseNode *storage_action = NULL;
-  malloc_terminal_node(storage_action, result->malloc_pool_, T_INT);
-  storage_action->value_ = 2;    /* 1:add,2:drop,3:modify */
-  malloc_non_terminal_node($$, result->malloc_pool_, T_ADMIN_STORAGE, 6, storage_action, $5, NULL, NULL, $6, $7);
-}
-|
-alter_with_opt_hint SYSTEM alter_or_change_or_modify SHARED_STORAGE_DEST opt_path_info opt_set opt_access_info opt_attribute
-{
-  (void)($1);
-  (void)($3);
-  (void)($6);
-  ParseNode *storage_action = NULL;
-  malloc_terminal_node(storage_action, result->malloc_pool_, T_INT);
-  storage_action->value_ = 3;    /* 1:add,2:drop,3:modify */
-  malloc_non_terminal_node($$, result->malloc_pool_, T_ADMIN_STORAGE, 6, storage_action, $5, $7, $8, NULL, NULL);
 }
 |
 alter_with_opt_hint SYSTEM REFRESH SCHEMA opt_server_or_zone
@@ -20949,52 +21113,6 @@ ZONE COMP_EQ zone_list
 }
 | /*empty*/ {$$ = NULL;}
 
-server_info_list:
-server_info
-{
-  $$ = $1;
-}
-| server_info_list ',' server_info
-{
-  malloc_non_terminal_node($$, result->malloc_pool_, T_LINK_NODE, 2, $1, $3);
-}
-;
-
-server_info:
-REGION opt_equal_mark relation_name_or_string ZONE opt_equal_mark relation_name_or_string SERVER opt_equal_mark STRING_VALUE
-{
-  (void)($2);
-  (void)($5);
-  (void)($8);
-  malloc_non_terminal_node($$, result->malloc_pool_, T_SERVER_INFO, 3, $3, $6, $9);
-}
-| ZONE opt_equal_mark relation_name_or_string SERVER opt_equal_mark STRING_VALUE
-{
-  (void)($2);
-  (void)($5);
-  malloc_non_terminal_node($$, result->malloc_pool_, T_SERVER_INFO, 3, NULL, $3, $6);
-}
-;
-
-shared_storage_info:
-',' SHARED_STORAGE_INFO opt_equal_mark STRING_VALUE
-{
-  (void)($3);
-  result->contain_sensitive_data_ = true;
-  $$ = $4;
-  $$->type_ = T_SHARED_STORAGE_INFO;
-}
-
-opt_shared_storage_info:
-shared_storage_info
-{
-  $$ = $1;
-}
-| /*EMPTY*/
-{
-  $$ = NULL;
-}
-
 server_action:
 ADD
 {
@@ -21571,27 +21689,6 @@ ATTRIBUTE opt_equal_mark STRING_VALUE
 }
 ;
 
-opt_storage_use_for:
-FOR relation_name_or_string
-{
-  $$ = $2;
-}
-;
-
-opt_scope_type:
-ZONE opt_equal_mark STRING_VALUE
-{
-  (void)($2);
-  $$ = $3;
-  $$->type_ = T_ZONE;
-}
-| REGION opt_equal_mark STRING_VALUE
-{
-  (void)($2);
-  $$ = $3;
-  $$->type_ = T_REGION;
-}
-
 ls:
 LS opt_equal_mark INTNUM
 {
@@ -22129,6 +22226,158 @@ BEGI
   $$->value_ = 2;
 }
 ;
+
+/*****************************************************************************
+ *
+ *   create/drop location grammar
+ *
+ ******************************************************************************/
+create_location_stmt:
+create_with_opt_hint opt_replace LOCATION location_name URL opt_equal_mark location_url opt_credential
+{
+  (void)($1);
+  (void)($6);
+  malloc_non_terminal_node($$, result->malloc_pool_, T_CREATE_LOCATION, 4, $2, $4, $7, $8);
+}
+;
+opt_credential:
+CREDENTIAL opt_equal_mark '(' credential_option_list ')' {
+  (void)($2);
+  merge_nodes($$, result, T_CREDENTIAL_OPTION_LIST, $4);
+}
+|
+{
+  $$ = NULL;
+};
+
+credential_option_list:
+credential_option
+{
+  $$ = $1;
+}
+| credential_option_list opt_comma credential_option
+{
+  (void) ($2);
+  malloc_non_terminal_node($$, result->malloc_pool_, T_LINK_NODE, 2, $1, $3);
+}
+;
+
+credential_option:
+ACCESSID COMP_EQ STRING_VALUE
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_INT, 1, $3);
+  $$->str_len_ = $3->str_len_;
+  $$->str_value_ = $3->str_value_;
+  $$->stmt_loc_.first_column_ = @3.first_column - 1;
+  $$->stmt_loc_.last_column_ = @3.last_column - 1;
+  $$->value_ = 1;
+}
+| ACCESSKEY COMP_EQ STRING_VALUE
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_INT, 1, $3);
+  $$->str_len_ = $3->str_len_;
+  $$->str_value_ = $3->str_value_;
+  $$->stmt_loc_.first_column_ = @3.first_column - 1;
+  $$->stmt_loc_.last_column_ = @3.last_column - 1;
+  $$->value_ = 2;
+}
+| HOST COMP_EQ STRING_VALUE
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_INT, 1, $3);
+  $$->str_len_ = $3->str_len_;
+  $$->str_value_ = $3->str_value_;
+  $$->stmt_loc_.first_column_ = @3.first_column - 1;
+  $$->stmt_loc_.last_column_ = @3.last_column - 1;
+  $$->value_ = 3;
+}
+| APPID COMP_EQ STRING_VALUE
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_INT, 1, $3);
+  $$->str_len_ = $3->str_len_;
+  $$->str_value_ = $3->str_value_;
+  $$->value_ = 4;
+}
+| S3_REGION COMP_EQ STRING_VALUE
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_INT, 1, $3);
+  $$->str_len_ = $3->str_len_;
+  $$->str_value_ = $3->str_value_;
+  $$->value_ = 5;
+}
+| PRINCIPAL COMP_EQ STRING_VALUE
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_INT, 1, $3);
+  $$->str_len_ = $3->str_len_;
+  $$->str_value_ = $3->str_value_;
+  $$->value_ = 6;
+}
+| KEYTAB COMP_EQ STRING_VALUE
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_INT, 1, $3);
+  $$->str_len_ = $3->str_len_;
+  $$->str_value_ = $3->str_value_;
+  $$->value_ = 7;
+}
+| KRB5CONF COMP_EQ STRING_VALUE
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_INT, 1, $3);
+  $$->str_len_ = $3->str_len_;
+  $$->str_value_ = $3->str_value_;
+  $$->value_ = 8;
+}
+| CONFIGS COMP_EQ STRING_VALUE
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_INT, 1, $3);
+  $$->str_len_ = $3->str_len_;
+  $$->str_value_ = $3->str_value_;
+  $$->value_ = 9;
+};
+
+alter_location_stmt:
+ALTER LOCATION location_name SET URL opt_equal_mark location_url
+{
+  (void) ($6);
+  $3->value_ = 1;
+  malloc_non_terminal_node($$, result->malloc_pool_, T_ALTER_LOCATION, 2, $3, $7);
+}
+| ALTER LOCATION location_name SET CREDENTIAL opt_equal_mark '(' credential_option_list ')'
+{
+  (void) ($6);
+  ParseNode *credential = NULL;
+  merge_nodes(credential, result, T_CREDENTIAL_OPTION_LIST, $8);
+  $3->value_ = 2;
+  malloc_non_terminal_node($$, result->malloc_pool_, T_ALTER_LOCATION, 2, $3, credential);
+}
+;
+
+drop_location_stmt:
+DROP LOCATION location_name
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_DROP_LOCATION, 1, $3);
+}
+;
+
+location_name:
+NAME_OB
+{ $$ = $1; }
+| unreserved_keyword
+{
+  get_non_reserved_node($$, result->malloc_pool_, @1.first_column, @1.last_column);
+}
+;
+
+location_url:
+STRING_VALUE
+{ $$ = $1; }
+;
+location_utils_stmt:
+REMOVE FILES IN LOCATION USER_VARIABLE opt_sub_path opt_pattern
+{
+  $5->value_ = 1;
+  malloc_non_terminal_node($$, result->malloc_pool_, T_LOCATION_UTILS, 3, $5, $6, $7);
+}
+;
+
 
 /*===========================================================
  *
@@ -23582,6 +23831,14 @@ NAME_OB
 {
   make_name_node($$, result->malloc_pool_, "decrypt");
 }
+| AI
+{
+  make_name_node($$, result->malloc_pool_, "ai");
+}
+| MODEL
+{
+  make_name_node($$, result->malloc_pool_, "model");
+}
 ;
 
 column_label:
@@ -24648,6 +24905,34 @@ UNNEST '(' simple_expr_list ')'
 }
 ;
 
+hybrid_search_expr:
+HYBRID_SEARCH '(' literal ',' hybrid_search_param ')'
+{
+  ParseNode *alias_node = NULL;
+  make_name_node(alias_node, result->malloc_pool_, "");
+  malloc_non_terminal_node($$, result->malloc_pool_, T_HYBRID_SEARCH_EXPRESSION, 3, $3, $5, alias_node);
+}
+| HYBRID_SEARCH '(' literal ',' hybrid_search_param ')' relation_name
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_HYBRID_SEARCH_EXPRESSION, 3, $3, $5, $7);
+}
+| HYBRID_SEARCH '(' literal ',' hybrid_search_param ')' AS relation_name
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_HYBRID_SEARCH_EXPRESSION, 3, $3, $5, $8);
+}
+;
+
+hybrid_search_param:
+literal
+{
+  $$ = $1;
+}
+| USER_VARIABLE
+{
+  $$ = $1;
+}
+;
+
 create_ccl_rule_stmt:
 CREATE CONCURRENT_LIMITING_RULE opt_if_not_exists relation_name 
 ON ccl_database_table_optition
@@ -24779,6 +25064,7 @@ ACCESS_INFO
 |       ADDDATE
 |       ADMIN
 |       AFTER
+|       AI
 |       AGAINST
 |       AGGREGATE
 |       ALGORITHM
@@ -24789,6 +25075,7 @@ ACCESS_INFO
 |       ANALYSE
 |       ANY
 |       API_MODE
+|       APPID
 |       APPROX
 |       APPROXIMATE
 |       APPROX_COUNT_DISTINCT
@@ -24843,7 +25130,6 @@ ACCESS_INFO
 |       BLOOM_FILTER
 |       BOOL
 |       BOOLEAN
-|       BOOTSTRAP
 |       BOUNDARY_COLUMN
 |       BOUNDARY_COLUMN_UNIT
 |       BTREE
@@ -24906,6 +25192,7 @@ ACCESS_INFO
 |       CONCURRENT_LIMITING_RULE
 |       CONDENSED
 |       CONDITIONAL
+|       CONFIGS
 |       CONNECTION %prec KILL_EXPR
 |       CONSISTENT
 |       CONSISTENT_MODE
@@ -24920,6 +25207,7 @@ ACCESS_INFO
 |       COSINE
 |       CPU
 |       CREATE_TIMESTAMP
+|       CREDENTIAL
 |       CTXCAT
 |       CTX_ID
 |       CUBE
@@ -25107,6 +25395,8 @@ ACCESS_INFO
 |       KEYWORD
 |       KEY_BLOCK_SIZE
 |       KEY_VERSION
+|       KEYTAB
+|       KRB5CONF
 |       LAG
 |       LATERAL %prec LOWER_PARENS
 |       LANGUAGE
@@ -25137,6 +25427,7 @@ ACCESS_INFO
 |       LOGONLY_REPLICA_NUM
 |       LOGS
 |       LOG_RESTORE_SOURCE
+|       LOCATIONS
 |       MAJOR
 |       MANHATTAN
 |       MANUAL
@@ -25203,6 +25494,7 @@ ACCESS_INFO
 |       MINUS
 |       MISMATCH
 |       MODE
+|       MODEL
 |       MODIFY
 |       MODULE
 |       MONTH
@@ -25292,6 +25584,7 @@ ACCESS_INFO
 |       PER
 |       PERCENTAGE
 |       PHASE
+|       PHRASE
 |       PHYSICAL
 |       PL
 |       PLANREGRESS
@@ -25314,6 +25607,7 @@ ACCESS_INFO
 |       PREV
 |       PRIMARY_ZONE
 |       PRIVILEGES
+|       PRINCIPAL
 |       PROCESSLIST
 |       PROFILE
 |       PROFILES
@@ -25401,6 +25695,7 @@ ACCESS_INFO
 |       SCHEMA_NAME
 |       SCN
 |       SCOPE
+|       SCORE
 |       SECOND
 |       SECURITY
 |       SEED
@@ -25421,8 +25716,6 @@ ACCESS_INFO
 |       SET_TP
 |       SHARDING
 |       SHARE
-|       SHARED_STORAGE_DEST
-|       SHARED_STORAGE_INFO
 |       SIGNED
 |       SIZE %prec LOWER_PARENS
 |       SIMPLE
@@ -25508,6 +25801,7 @@ ACCESS_INFO
 |       SYSTEM_USER
 |       SYSDATE
 |       SLOG
+|       S3_REGION
 |       TABLE_CHECKSUM
 |       TABLE_MODE
 |       TABLEGROUPS
@@ -25567,6 +25861,7 @@ ACCESS_INFO
 |       UNTIL
 |       UNUSUAL
 |       UPGRADE
+|       URL
 |       USE_BLOOM_FILTER
 |       USE_FRM
 |       USER
@@ -25584,6 +25879,7 @@ ACCESS_INFO
 |       VERBOSE
 |       VECTOR
 |       VECTOR_DISTANCE
+|       VECTOR_SIMILARITY
 |       VIRTUAL_COLUMN_ID
 |       MATERIALIZED
 |       VIEW
@@ -25658,6 +25954,7 @@ ACCESS_INFO
 |       RB_AND_CARDINALITY_AGG
 |       INCONSISTENT 
 |       INDIVIDUAL
+|       HYBRID_SEARCH
 ;
 
 unreserved_keyword_special:

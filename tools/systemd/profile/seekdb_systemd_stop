@@ -1,0 +1,10 @@
+#!/bin/bash
+BASE_DIR="/var/lib/oceanbase"
+
+pid=$(cat $BASE_DIR/run/daemon.pid)
+kill -9 "$pid"
+pid=$(cat $BASE_DIR/run/obshell.pid)
+kill -9 "$pid"
+pid=$(cat $BASE_DIR/run/observer.pid)
+kill -9 "$pid"
+systemd-notify "STATUS=seekdb is down"

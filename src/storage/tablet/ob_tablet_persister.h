@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2022 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #ifndef OCEANBASE_STORAGE_OB_TABLET_PERSIST_H_
@@ -233,13 +237,13 @@ private: // hide constructor
   public:
     ObSSTablePersistCtx(ObBlockInfoSet &block_info_set,
                                  ObIArray<ObSharedObjectsWriteCtx> &sstable_meta_write_ctxs):
-      is_inited_(false), total_tablet_meta_size_(0), cg_sstable_cnt_(0), large_co_sstable_cnt_(0), small_co_sstable_cnt_(0), 
+      is_inited_(false), total_tablet_meta_size_(0), cg_sstable_cnt_(0), large_co_sstable_cnt_(0), small_co_sstable_cnt_(0),
       normal_sstable_cnt_(0), block_info_set_(block_info_set), sstable_meta_write_ctxs_(sstable_meta_write_ctxs)
       {}
     ~ObSSTablePersistCtx() = default;
     int init(const int64_t ctx_id);
     bool is_inited() const { return is_inited_; };
-    TO_STRING_KV(K_(is_inited), K_(total_tablet_meta_size), K_(cg_sstable_cnt), K_(large_co_sstable_cnt), K_(small_co_sstable_cnt), 
+    TO_STRING_KV(K_(is_inited), K_(total_tablet_meta_size), K_(cg_sstable_cnt), K_(large_co_sstable_cnt), K_(small_co_sstable_cnt),
       K_(normal_sstable_cnt), K_(tables), K_(write_infos), K_(sstable_meta_write_ctxs));
     bool is_inited_;
     int64_t total_tablet_meta_size_;
@@ -251,7 +255,7 @@ private: // hide constructor
     common::ObSArray<ObITable *> tables_;
     common::ObSArray<ObSharedObjectWriteInfo> write_infos_;
     ObBlockInfoSet &block_info_set_;
-    ObIArray<ObSharedObjectsWriteCtx> &sstable_meta_write_ctxs_;    
+    ObIArray<ObSharedObjectsWriteCtx> &sstable_meta_write_ctxs_;
     DISALLOW_COPY_AND_ASSIGN(ObSSTablePersistCtx);
   };
 public:
@@ -410,6 +414,12 @@ private:
       const ObTablet &tablet,
       common::ObArenaAllocator &allocator,
       common::ObIArray<ObSharedObjectWriteInfo> &write_infos);
+  int link_write_medium_info_list(
+      const ObTabletDumpedMediumInfo *medium_info_list,
+      common::ObIArray<ObSharedObjectsWriteCtx> &meta_write_ctxs,
+      ObMetaDiskAddr &addr,
+      int64_t &total_tablet_meta_size,
+      ObBlockInfoSet::TabletMacroSet &meta_block_id_set);
   template <typename T>
   int fill_write_info(
       common::ObArenaAllocator &allocator,

@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #ifndef _OCEABASE_OBSERVER_OMT_OB_MULTI_TENANT_H_
@@ -40,7 +44,6 @@ class ObRequest;
 }
 namespace omt
 {
-class ObTenantConfig;
 
 struct ObCtxMemConfig
 {
@@ -104,7 +107,7 @@ public:
   int get_tenant_metas_for_ckpt(common::ObIArray<ObTenantMeta> &metas);
   int mark_del_tenant(const uint64_t tenant_id);
   int convert_real_to_hidden_sys_tenant();
-  int update_tenant_memory(const uint64_t tenant_id, const int64_t mem_limit, int64_t &allowed_mem_limit);
+  int update_tenant_memory(const uint64_t tenant_id, const int64_t mem_limit);
   int update_tenant_memory(const share::ObUnitInfoGetter::ObTenantConfig &unit);
   int update_tenant_log_disk_size(const uint64_t tenant_id,
                                   const int64_t old_log_disk_size,

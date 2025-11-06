@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2024 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #ifndef SRC_SHARE_VECTOR_TYPE_OB_VECTOR_COMMON_UTIL_H
@@ -30,11 +34,11 @@ namespace share {
 struct ObDocidScoreItem
 {
   ObDocidScoreItem() = default;
-  ObDocidScoreItem(ObString docid, double score): docid_(docid), score_(score) {}
+  ObDocidScoreItem(int64_t idx, double score): docid_idx_(idx), score_(score) {}
   ~ObDocidScoreItem() = default;
-  ObString docid_;
+  int64_t docid_idx_;
   double score_;
-  TO_STRING_KV(K_(docid), K_(score));
+  TO_STRING_KV(K_(docid_idx), K_(score));
 };
 struct ObDocidScoreItemCmp
 {
@@ -71,14 +75,12 @@ template <typename T,
           typename CompareFunctor>
 class ObSPIVFixedSizeHeap {
 public:
-  ObSPIVFixedSizeHeap(int64_t limit_size, ObIAllocator &allocator, CompareFunctor cmp):
-                                                                          limit_size_(limit_size),
-                                                                          allocator_(allocator),
-                                                                          cmp_(cmp),
-                                                                          heap_(cmp, &allocator_)
-                                                                          {}
+  ObSPIVFixedSizeHeap(int64_t limit_size, ObIAllocator &allocator, CompareFunctor cmp)
+    : limit_size_(limit_size), allocator_(allocator), cmp_(cmp), heap_(cmp, &allocator_)
+  {}
   
   ~ObSPIVFixedSizeHeap() = default;
+
   int push(T &item)
   {
     int ret = OB_SUCCESS;
@@ -354,8 +356,8 @@ class ObVectorCenterClusterHelper
 {
 
 public:
-  ObVectorCenterClusterHelper(ObIAllocator &allocator, const VEC_T *const_vec, oceanbase::sql::ObExprVectorDistance::ObVecDisType dis_type, int64_t dim, int64_t nprobe)
-      : alloc_(allocator), const_vec_(const_vec), dis_type_(dis_type), dim_(dim), nprobe_(nprobe), compare_(dis_type), heap_(compare_)
+  ObVectorCenterClusterHelper(ObIAllocator &allocator, const VEC_T *const_vec, oceanbase::sql::ObExprVectorDistance::ObVecDisType dis_type, int64_t dim, int64_t nprobe, float distance_threshold)
+      : alloc_(allocator), const_vec_(const_vec), dis_type_(dis_type), dim_(dim), nprobe_(nprobe), compare_(dis_type), heap_(compare_), distance_threshold_(distance_threshold)
   {}
 
   int push_center(const CENTER_T &center, VEC_T *center_vec, const int64_t dim, CenterSaveMode center_save_mode = NOT_SAVE_CENTER_VEC);
@@ -420,6 +422,7 @@ private:
   int64_t nprobe_;
   HeapCompare compare_;
   CenterHeap heap_;
+  float distance_threshold_;
 };
 
 // ------------------ ObCentersBuffer implement ------------------
@@ -566,55 +569,58 @@ int ObVectorCenterClusterHelper<VEC_T, CENTER_T>::push_center(
   VEC_T *center_vec /*= nullptr*/)
 {
   int ret = OB_SUCCESS;
-  if (heap_.count() < nprobe_) {
-    void *ptr = alloc_.alloc(sizeof(ObCenterWithBuf<CENTER_T>));
-    if (NULL == ptr) {
-      ret = common::OB_ALLOCATE_MEMORY_FAILED;
-      SHARE_LOG(WARN, "no memory for table entity", K(ret));
-    } else {
-      ObCenterWithBuf<CENTER_T> *center_with_buf = new (ptr) ObCenterWithBuf<CENTER_T>(&alloc_);
-      if (OB_ISNULL(center_with_buf)) {
-        ret = OB_ERR_UNEXPECTED;
-        SHARE_LOG(WARN, "center_entity is null", K(ret));
-      } else if (OB_FAIL(center_with_buf->new_from_src(center))) {
-        SHARE_LOG(WARN, "center_entity fail init", K(ret));
+  if (distance > distance_threshold_) {
+  } else {
+    if (heap_.count() < nprobe_) {
+      void *ptr = alloc_.alloc(sizeof(ObCenterWithBuf<CENTER_T>));
+      if (NULL == ptr) {
+        ret = common::OB_ALLOCATE_MEMORY_FAILED;
+        SHARE_LOG(WARN, "no memory for table entity", K(ret));
       } else {
-        HeapCenterItemTemp item(distance, center_with_buf);
-        if (center_save_mode == DEEP_COPY_CENTER_VEC && OB_FAIL(item.vec_dim_.new_from_src(alloc_, center_vec, dim_))) {
-          SHARE_LOG(WARN, "failed to new from src", K(ret), K(center_vec));
-        } else if (center_save_mode == SHALLOW_COPY_CENTER_VEC && OB_FALSE_IT(item.vec_dim_.vec_ = center_vec)) {
-        }
-        if (OB_FAIL(ret)) {
-        } else if (OB_FAIL(heap_.push(item))) {
-          SHARE_LOG(WARN, "failed to push center heap", K(ret), K(center), K(distance));
+        ObCenterWithBuf<CENTER_T> *center_with_buf = new (ptr) ObCenterWithBuf<CENTER_T>(&alloc_);
+        if (OB_ISNULL(center_with_buf)) {
+          ret = OB_ERR_UNEXPECTED;
+          SHARE_LOG(WARN, "center_entity is null", K(ret));
+        } else if (OB_FAIL(center_with_buf->new_from_src(center))) {
+          SHARE_LOG(WARN, "center_entity fail init", K(ret));
+        } else {
+          HeapCenterItemTemp item(distance, center_with_buf);
+          if (center_save_mode == DEEP_COPY_CENTER_VEC && OB_FAIL(item.vec_dim_.new_from_src(alloc_, center_vec, dim_))) {
+            SHARE_LOG(WARN, "failed to new from src", K(ret), K(center_vec));
+          } else if (center_save_mode == SHALLOW_COPY_CENTER_VEC && OB_FALSE_IT(item.vec_dim_.vec_ = center_vec)) {
+          }
+          if (OB_FAIL(ret)) {
+          } else if (OB_FAIL(heap_.push(item))) {
+            SHARE_LOG(WARN, "failed to push center heap", K(ret), K(center), K(distance));
+          }
         }
       }
-    }
-  } else {
-    const HeapCenterItemTemp &top = heap_.top();
-    ObCenterWithBuf<CENTER_T> tmp_center_with_buf;
-    HeapCenterItemTemp tmp(distance, &tmp_center_with_buf);
-    if (compare_(tmp, top)) {
-      ObCenterWithBuf<CENTER_T> *old_center_with_buf = top.center_with_buf_;
-      if (OB_ISNULL(old_center_with_buf)) {
-        ret = OB_ERR_UNEXPECTED;
-        SHARE_LOG(WARN, "center_with_buf is null", K(ret));
-      } else if (OB_FAIL(old_center_with_buf->new_from_src(center))) {
-        SHARE_LOG(WARN, "failed to new from src", K(ret), K(center));
-      } else {
-        HeapCenterItemTemp new_top(distance, old_center_with_buf);
-        if (center_save_mode == DEEP_COPY_CENTER_VEC) {
-          new_top.set_vec_dim(top.vec_dim_);
-          if (OB_FAIL(new_top.vec_dim_.reuse_from_src(center_vec, dim_))) {
-            SHARE_LOG(WARN, "failed to new from src", K(ret), K(center_vec));
+    } else {
+      const HeapCenterItemTemp &top = heap_.top();
+      ObCenterWithBuf<CENTER_T> tmp_center_with_buf;
+      HeapCenterItemTemp tmp(distance, &tmp_center_with_buf);
+      if (compare_(tmp, top)) {
+        ObCenterWithBuf<CENTER_T> *old_center_with_buf = top.center_with_buf_;
+        if (OB_ISNULL(old_center_with_buf)) {
+          ret = OB_ERR_UNEXPECTED;
+          SHARE_LOG(WARN, "center_with_buf is null", K(ret));
+        } else if (OB_FAIL(old_center_with_buf->new_from_src(center))) {
+          SHARE_LOG(WARN, "failed to new from src", K(ret), K(center));
+        } else {
+          HeapCenterItemTemp new_top(distance, old_center_with_buf);
+          if (center_save_mode == DEEP_COPY_CENTER_VEC) {
+            new_top.set_vec_dim(top.vec_dim_);
+            if (OB_FAIL(new_top.vec_dim_.reuse_from_src(center_vec, dim_))) {
+              SHARE_LOG(WARN, "failed to new from src", K(ret), K(center_vec));
+            }
+          } else if (center_save_mode == SHALLOW_COPY_CENTER_VEC) {
+            new_top.set_vec_dim(top.vec_dim_);
+            new_top.vec_dim_.vec_ = center_vec;
           }
-        } else if (center_save_mode == SHALLOW_COPY_CENTER_VEC) {
-          new_top.set_vec_dim(top.vec_dim_);
-          new_top.vec_dim_.vec_ = center_vec;
-        }
-        if (OB_FAIL(ret)) {
-        } else if (OB_FAIL(heap_.replace_top(new_top))) {
-          SHARE_LOG(WARN, "failed to replace top", K(ret), K(new_top));
+          if (OB_FAIL(ret)) {
+          } else if (OB_FAIL(heap_.replace_top(new_top))) {
+            SHARE_LOG(WARN, "failed to replace top", K(ret), K(new_top));
+          }
         }
       }
     }

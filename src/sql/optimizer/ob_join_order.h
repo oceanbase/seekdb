@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #ifndef _OB_JOIN_ORDER_H
@@ -301,6 +305,8 @@ struct DomainIndexAccessInfo
       index_scan_index_ids_(),
       func_lookup_exprs_(),
       func_lookup_index_ids_(),
+      match_exprs_(),
+      match_index_ids_(),
       domain_idx_type_(DomainIndexType::NON_DOMAIN_INDEX) {}
 
   void reset()
@@ -310,27 +316,27 @@ struct DomainIndexAccessInfo
     index_scan_index_ids_.reset();
     func_lookup_exprs_.reset();
     func_lookup_index_ids_.reset();
+    match_exprs_.reset();
+    match_index_ids_.reset();
   }
 
   bool has_ir_scan() const { return index_scan_exprs_.count() != 0 && domain_idx_type_ == DomainIndexType::FTS_INDEX; }
   bool has_func_lookup() const { return func_lookup_exprs_.count() != 0 && domain_idx_type_ == DomainIndexType::FTS_INDEX; }
-
-  bool has_vec_index() const { return domain_idx_type_ == DomainIndexType::VEC_INDEX;}
+  bool has_es_match() const { return match_exprs_.count() != 0 && domain_idx_type_ == DomainIndexType::FTS_INDEX; }
   void set_domain_idx_type(DomainIndexType domain_idx_type) { domain_idx_type_ = domain_idx_type;}
-
   TO_STRING_KV(K_(index_scan_exprs), K_(index_scan_filters), K_(index_scan_index_ids),
-      K_(func_lookup_exprs), K_(func_lookup_index_ids), K_(domain_idx_type), K_(vec_extra_info));
+      K_(func_lookup_exprs), K_(func_lookup_index_ids), K_(match_exprs), K_(match_index_ids), K_(domain_idx_type));
 
   common::ObSEArray<ObRawExpr *, 2, common::ModulePageAllocator, true> index_scan_exprs_;
   common::ObSEArray<ObRawExpr *, 2, common::ModulePageAllocator, true> index_scan_filters_;
   common::ObSEArray<uint64_t, 2, common::ModulePageAllocator, true> index_scan_index_ids_;
   common::ObSEArray<ObRawExpr *, 4, common::ModulePageAllocator, true> func_lookup_exprs_;
   common::ObSEArray<uint64_t, 4, common::ModulePageAllocator, true> func_lookup_index_ids_;
+  common::ObSEArray<ObRawExpr *, 4, common::ModulePageAllocator, true> match_exprs_;
+  common::ObSEArray<uint64_t, 4, common::ModulePageAllocator, true> match_index_ids_;
   // Add member
   DomainIndexType domain_idx_type_;
-  share::ObVecIdxExtraInfo vec_extra_info_;
 };
-
 
 class Path
 {
@@ -765,6 +771,7 @@ class Path
     int64_t range_prefix_count_; // prefix count
     BaseTableOptInfo *table_opt_info_;
     DomainIndexAccessInfo domain_idx_info_;
+    VecIndexAccessInfo vec_idx_info_;
     bool for_update_;
     OptSkipScanState use_skip_scan_;
     bool use_column_store_;
@@ -1376,7 +1383,7 @@ struct NullAwareAntiJoinInfo {
         inv_idx_id_(common::OB_INVALID_ID),
         query_range_(NULL),
         query_range_row_count_(-1),
-        selectivity_(-1.0) 
+        selectivity_(-1.0)
       {}
 
       ObMatchFunRawExpr *match_expr_;
@@ -1543,7 +1550,9 @@ struct NullAwareAntiJoinInfo {
     int get_matched_inv_index_tid(ObMatchFunRawExpr *match_expr, 
                                   uint64_t ref_table_id,
                                   uint64_t &inv_idx_tid);
-    
+    int get_matched_inv_index_tids(ObMatchFunRawExpr *match_expr,
+                                   uint64_t ref_table_id,
+                                   ObIArray<uint64_t> &inv_idx_tids);
     int get_vector_index_tid_from_expr(ObSqlSchemaGuard *schema_guard,
                                       ObRawExpr *vector_expr,
                                       const uint64_t table_id,
@@ -1748,6 +1757,11 @@ struct NullAwareAntiJoinInfo {
                               PathHelper &helper,
                               AccessPath &access_path,
                               const QueryRangeInfo &range_info);
+    int process_basic_vec_info_for_index_merge_node(const ObDMLStmt *stmt,
+                                                  const uint64_t table_id,
+                                                  const uint64_t ref_table_id,
+                                                  IndexMergePath* index_merge_path,
+                                                  ObIndexMergeNode* root_node);
     int create_access_paths(const uint64_t table_id,
                             const uint64_t ref_table_id,
                             PathHelper &helper,
@@ -2802,6 +2816,9 @@ struct NullAwareAntiJoinInfo {
     int add_valid_fts_index_ids_for_dml(const PathHelper &helper, 
                                         const uint64_t table_id,
                                         ObIArray<uint64_t> &valid_index_ids);
+    int add_valid_fts_index_ids_for_dml_and_es_match(const PathHelper &helper,
+                                         const uint64_t table_id,
+                                         ObIArray<uint64_t> &valid_index_ids);
     int add_valid_vec_index_ids(const ObDMLStmt &stmt,
                                 ObSqlSchemaGuard *schema_guard,
                                 const uint64_t table_id,
@@ -2827,6 +2844,9 @@ struct NullAwareAntiJoinInfo {
     int find_match_expr_info(const ObIArray<MatchExprInfo> &match_expr_infos,
                             ObRawExpr *match_expr,
                             const MatchExprInfo *&match_expr_info);
+    int find_match_expr_infos(const ObIArray<MatchExprInfo> &match_expr_infos,
+                              ObRawExpr *match_expr,
+                              ObIArray<const MatchExprInfo *> &found_match_expr_infos);
     int find_least_selective_expr_on_index(const ObIArray<ObMatchFunRawExpr*> &match_exprs,
                                           const ObIArray<MatchExprInfo> &match_expr_infos,
                                           uint64_t index_id,

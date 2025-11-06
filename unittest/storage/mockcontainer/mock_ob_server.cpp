@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #define USING_LOG_PREFIX STORAGE
@@ -47,26 +51,28 @@ int MockObServer::init(const char *schema_file,
     ret = OB_INVALID_ARGUMENT;
   } else {
   }
+
+  ObSqlString optstr;
+  for (int64_t i = 0; OB_SUCC(ret) &&i < opts_.parameters_.count(); ++i) {
+    const char *format = i == 0 ? "%.*s=%.*s" : ",%.*s=%.*s";
+    if (OB_FAIL(optstr.append_fmt(format,
+        opts_.parameters_.at(i).first.length(), opts_.parameters_.at(i).first.ptr(),
+        opts_.parameters_.at(i).second.length(), opts_.parameters_.at(i).second.ptr()))) {
+      LOG_ERROR("append optstr fmt failed", KR(ret));
+    }
+  }
+
   // init config
   if (OB_SUCC(ret)) {
     config_.datafile_size = data_file_size;
-    if (opts_.rpc_port_) {
-      config_.rpc_port = opts_.rpc_port_;
+    if (opts_.port_) {
+      config_.mysql_port = opts_.port_;
     }
-    if (opts_.mysql_port_) {
-      config_.mysql_port = opts_.mysql_port_;
-    }
-    if (opts_.devname_) {
-      config_.devname.set_value(opts_.devname_);
-    }
-    if (opts_.rs_list_) {
-      config_.rootservice_list.set_value(opts_.rs_list_);
-    }
-    if (opts_.optstr_) {
-      config_.add_extra_config(opts_.optstr_);
+    if (!optstr.empty()) {
+      config_.add_extra_config(optstr.ptr());
     }
 
-    if (opts_.devname_ && strlen(opts_.devname_) > 0) {
+    if (nullptr != opts_.devname_) {
       config_.devname.set_value(opts_.devname_);
     } else {
       const char *devname = get_default_if();
@@ -100,15 +106,15 @@ int MockObServer::init(const char *schema_file,
       STORAGE_LOG(ERROR, "new clog dir error");
       ret = OB_ERR_UNEXPECTED;
     } else if (0 > (tmp_ret = snprintf(logdir, MAX_PATH_SIZE, "%s/slog",
-          opts_.data_dir_/*, opts_.appname_*/))) {
+          opts_.data_dir_.ptr()/*, opts_.appname_*/))) {
       STORAGE_LOG(ERROR, "concate log path fail", "ret", tmp_ret);
       ret = OB_ERR_UNEXPECTED;
     } else if (0 > (tmp_ret = snprintf(clogdir, MAX_PATH_SIZE, "%s/clog",
-          opts_.data_dir_/*, opts_.appname_*/))) {
+          opts_.data_dir_.ptr()/*, opts_.appname_*/))) {
       STORAGE_LOG(ERROR, "concate log path fail", "ret", tmp_ret);
       ret = OB_ERR_UNEXPECTED;
     } else {
-      env.data_dir_ = opts_.data_dir_;
+      env.data_dir_ = opts_.data_dir_.ptr();
       env.default_block_size_ = macro_block_size;
       env.log_spec_.log_dir_ = logdir;
       env.log_spec_.max_log_file_size_ = ObLogConstants::MAX_LOG_FILE_SIZE;

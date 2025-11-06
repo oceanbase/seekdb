@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #define USING_LOG_PREFIX SQL_REWRITE
@@ -1239,9 +1243,6 @@ int ObTransformSimplifySubquery::eliminate_subquery(ObDMLStmt *stmt,
         LOG_WARN("Subquery stmt is NULL", K(ret));
       } else if (subquery->is_contains_assignment()) {
         // do nothing
-      } else if (subquery->is_values_table_query() &&
-                 !ObTransformUtils::is_enable_values_table_rewrite(stmt->get_query_ctx()->optimizer_features_enable_version_)) {
-        // do nothing
       } else if (OB_FAIL(subquery_can_be_eliminated_in_exists(expr->get_expr_type(),
                                                               subquery,
                                                               can_be_eliminated))) {
@@ -1491,9 +1492,6 @@ int ObTransformSimplifySubquery::eliminate_subquery_in_exists(ObDMLStmt *stmt,
     } else if (OB_ISNULL(subquery = subq_expr->get_ref_stmt())) {
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("Subquery stmt is NULL", K(ret));
-    } else if (subquery->is_values_table_query() &&
-               !ObTransformUtils::is_enable_values_table_rewrite(stmt->get_query_ctx()->optimizer_features_enable_version_)) { /* do nothing */
-      //Just in case different parameters hit same plan, firstly we need add const param constraint
     } else if (OB_FAIL(check_limit(expr->get_expr_type(), subquery, has_invalid_limit))){
       LOG_WARN("failed to check limit constraints", K(ret));
     } else if (!has_invalid_limit && NULL != subquery->get_limit_expr() &&

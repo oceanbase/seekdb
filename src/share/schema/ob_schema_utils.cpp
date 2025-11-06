@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #define USING_LOG_PREFIX SHARE_SCHEMA
@@ -116,7 +120,7 @@ int ObSchemaUtils::cascaded_generated_column(ObTableSchema &table_schema,
       } else if (T_FUN_SYS_VEC_IVF_CENTER_VECTOR == root_expr_type ||
                  T_FUN_SYS_VEC_IVF_PQ_CENTER_VECTOR == root_expr_type) {
         column.add_column_flag(GENERATED_VEC_IVF_CENTER_VECTOR_COLUMN_FLAG);
-      } else if (T_FUN_SYS_VEC_IVF_FLAT_DATA_VECTOR == root_expr_type || 
+      } else if (T_FUN_SYS_VEC_IVF_FLAT_DATA_VECTOR == root_expr_type ||
                  T_FUN_SYS_VEC_IVF_SQ8_DATA_VECTOR == root_expr_type) {
         column.add_column_flag(GENERATED_VEC_IVF_DATA_VECTOR_COLUMN_FLAG);
       } else if (T_FUN_SYS_VEC_IVF_META_ID == root_expr_type) {
@@ -132,6 +136,8 @@ int ObSchemaUtils::cascaded_generated_column(ObTableSchema &table_schema,
       } else if (T_FUN_SYS_VEC_TYPE == root_expr_type) {
         column.add_column_flag(GENERATED_VEC_TYPE_COLUMN_FLAG);
       } else if (T_FUN_SYS_VEC_VECTOR == root_expr_type) {
+        column.add_column_flag(GENERATED_VEC_VECTOR_COLUMN_FLAG);
+      } else if (T_FUN_SYS_EMBEDDED_VEC == root_expr_type) {
         column.add_column_flag(GENERATED_VEC_VECTOR_COLUMN_FLAG);
       } else if (T_FUN_SYS_VEC_SCN == root_expr_type) {
         column.add_column_flag(GENERATED_VEC_SCN_COLUMN_FLAG);
@@ -149,6 +155,8 @@ int ObSchemaUtils::cascaded_generated_column(ObTableSchema &table_schema,
         column.add_column_flag(GENERATED_FTS_WORD_COUNT_COLUMN_FLAG);
       } else if (T_FUN_SYS_DOC_LENGTH == root_expr_type) {
         column.add_column_flag(GENERATED_FTS_DOC_LENGTH_COLUMN_FLAG);
+      } else if (T_FUN_SYS_HYBRID_VEC_CHUNK == root_expr_type) {
+        column.add_column_flag(GENERATED_HYBRID_VEC_CHUNK_COLUMN_FLAG);
       } else if (T_FUN_SYS_SPATIAL_CELLID == root_expr_type || T_FUN_SYS_SPATIAL_MBR == root_expr_type) {
         column.add_column_flag(SPATIAL_INDEX_GENERATED_COLUMN_FLAG);
       } else if (T_FUN_SYS_JSON_QUERY == root_expr_type) {
@@ -258,7 +266,8 @@ bool ObSchemaUtils::is_vec_index_column(const uint64_t flag)
       || is_vec_ivf_meta_id_column(flag)
       || is_vec_ivf_meta_vector_column(flag)
       || is_vec_spiv_dim_column(flag)
-      || is_vec_spiv_value_column(flag);
+      || is_vec_spiv_value_column(flag)
+      || is_hybrid_vec_index_chunk_column(flag);
 }
 
 bool ObSchemaUtils::is_vec_spiv_dim_column(const uint64_t flag)
@@ -339,6 +348,11 @@ bool ObSchemaUtils::is_vec_hnsw_key_column(const uint64_t flag)
 bool ObSchemaUtils::is_vec_hnsw_data_column(const uint64_t flag)
 {
   return flag & GENERATED_VEC_DATA_COLUMN_FLAG;
+}
+
+bool ObSchemaUtils::is_hybrid_vec_index_chunk_column(const uint64_t flag)
+{
+  return flag & GENERATED_HYBRID_VEC_CHUNK_COLUMN_FLAG;
 }
 
 bool ObSchemaUtils::is_fulltext_column(const uint64_t flag)
@@ -635,7 +649,7 @@ int ObSchemaUtils::construct_inner_table_schemas(
         bool exist = false;
         if (OB_FAIL((*creator_ptr)(table_schema))) {
           LOG_WARN("fail to gen sys table schema", KR(ret));
-        } else if (!construct_all && is_sys_tenant(tenant_id) 
+        } else if (!construct_all && is_sys_tenant(tenant_id)
             && table_schema.get_table_id() == OB_ALL_CORE_TABLE_TID) {
           // sys tenant's __all_core_table's schema is built separately in bootstrap
         } else if (OB_FAIL(ObSchemaUtils::construct_tenant_space_full_table(
@@ -670,7 +684,7 @@ int ObSchemaUtils::construct_inner_table_schemas(
 // for virtual table with index, we should make index schema version less than virtual table schema version
 // otherwise, schema service cannot bind index schema to virtual table schema
 // system table index is no need to do this because system table indexes are hard code
-// see also: 
+// see also:
 // the algorithm:
 // 1. For the input array, construct a map from table_id to table pointer.
 // 2. Traverse the array in reverse order. For virtual table index, first insert the corresponding virtual table into the table_id array, then insert its own table_id; for other system tables, insert them directly into table_id array. Ensure that the virtual table appears in the array before its index. At this point, the schema_version in the table_id array that ranks higher is larger.
@@ -725,7 +739,7 @@ int ObSchemaUtils::generate_hard_code_schema_version(ObIArray<ObTableSchema> &ta
         current_schema_version -= ObSchemaVersionGenerator::SCHEMA_VERSION_INC_STEP;
       }
     }
-    if (OB_SUCC(ret) && current_schema_version != HARD_CODE_SCHEMA_VERSION_BEGIN * 
+    if (OB_SUCC(ret) && current_schema_version != HARD_CODE_SCHEMA_VERSION_BEGIN *
         ObSchemaVersionGenerator::SCHEMA_VERSION_INC_STEP) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("schema count not match", KR(ret), K(current_schema_version), K(HARD_CODE_SCHEMA_VERSION_BEGIN));
@@ -757,7 +771,7 @@ int ObSchemaUtils::try_check_parallel_ddl_schema_in_sync(
   int64_t start_time = ObTimeUtility::current_time();
   ObMultiVersionSchemaService *schema_service = NULL;
   int64_t consensus_timeout = 30 * 1000 * 1000L; // 30s
-  omt::ObTenantConfigGuard tenant_config(OTC_MGR.get_tenant_config_with_lock(tenant_id));
+  omt::ObTenantConfigGuard tenant_config(TENANT_CONF(tenant_id));
   if (tenant_config.is_valid()) {
     consensus_timeout = tenant_config->_wait_interval_after_parallel_ddl;
   }
@@ -1482,6 +1496,20 @@ int ObSchemaUtils::is_drop_column_only(const AlterTableSchema &alter_table_schem
   return ret;
 }
 
+int ObSchemaUtils::check_build_old_version_column_group(const share::schema::ObTableSchema &table_schema, bool &build_old_version_cg)
+{
+  int ret = OB_SUCCESS;
+  build_old_version_cg = false;
+#ifdef ERRSIM
+  int tmp_ret = OB_SUCCESS;
+  tmp_ret = OB_E(EventTable::EN_DDL_CREATE_OLD_VERSION_COLUMN_GROUP) OB_SUCCESS;
+  if (OB_TMP_FAIL(tmp_ret)) {
+    build_old_version_cg = true;
+  }
+#endif
+  return ret;
+}
+
 const char* DDLType[]
 {
   "TRUNCATE_TABLE",
@@ -1565,11 +1593,7 @@ int ObParallelDDLControlMode::is_parallel_ddl(const ObParallelDDLType type, bool
     } else if (value == ObParallelDDLControlParser::MODE_ON) {
       is_parallel = true;
     } else if (value == ObParallelDDLControlParser::MODE_DEFAULT) {
-      if (TRUNCATE_TABLE == type) {
-        is_parallel = true;
-      } else {
-        is_parallel = false;
-      }
+      is_parallel = true;
     } else {
       ret = OB_ERR_UNEXPECTED;
       OB_LOG(WARN, "invalid value unexpected", KR(ret), K(value));

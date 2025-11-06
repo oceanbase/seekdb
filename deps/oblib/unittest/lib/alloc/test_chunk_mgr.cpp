@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #include <gtest/gtest.h>
@@ -276,25 +280,12 @@ TEST_F(TestChunkMgr, BorderCase_advise_fail)
 
 TEST_F(TestChunkMgr, alloc_co_chunk)
 {
-  int LARGE_SIZE = INTACT_ACHUNK_SIZE + 100;
   int NORMAL_SIZE = OB_MALLOC_BIG_BLOCK_SIZE;
-  {
-    AChunk *chunk = alloc_chunk(NORMAL_SIZE);
-    free_chunk(chunk);
-    chunk = alloc_chunk(LARGE_SIZE);
-    free_chunk(chunk);
-  }
-  EXPECT_EQ(1, large_slot()->get_pushes());
-  EXPECT_EQ(0, large_slot()->get_pops());
-  EXPECT_EQ(1, normal_slot()->get_pushes());
-  EXPECT_EQ(0, normal_slot()->get_pops());
-  set_limit(hold_);
-  auto *chunk = alloc_co_chunk(NORMAL_SIZE);
+  set_limit(0);
+  auto *chunk = alloc_co_chunk(NORMAL_SIZE);  // high_prio alloc always succeed
   EXPECT_TRUE(chunk != NULL);
-  EXPECT_EQ(1, large_slot()->get_pops());
-  chunk = alloc_co_chunk(NORMAL_SIZE);
-  EXPECT_TRUE(chunk != NULL);
-  EXPECT_EQ(1, normal_slot()->get_pops());
+  free_chunk(chunk);
+  EXPECT_EQ(0, large_slot()->get_pushes());  // direct free
 }
 
 TEST_F(TestChunkMgr, FreeListBasic)

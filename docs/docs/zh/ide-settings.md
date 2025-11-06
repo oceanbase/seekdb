@@ -4,11 +4,11 @@ title: IDE 配置
 
 # 背景
 
-为了更好的阅读OceanBase的代码，我们建议使用一个可以方便的索引OceanBase代码的IDE。在Windows下，我们推荐使用`Source Insight`，在Mac或者Linux下，我们推荐使用`VSCode + ccls`来阅读OceanBase的代码。由于`Source Insight`使用起来非常简单，所以本文档不介绍如何使用`Source Insight`。
+为了更好的阅读 OceanBase SeekDB 的代码，我们建议使用一个可以方便的索引SeekDB代码的IDE。在Windows下，我们推荐使用`Source Insight`，在Mac或者Linux下，我们推荐使用`VSCode + ccls`来阅读OceanBase的代码。由于`Source Insight`使用起来非常简单，所以本文档不介绍如何使用`Source Insight`。
 
 本篇文档介绍如何设置 `VSCode + ccls`，这个组合非常适合阅读OceanBase的代码。[ccls](https://github.com/MaskRay/ccls) 是基于 [cquery](https://github.com/jacobdufault/cquery) 的，cquery是一个C/C++/Objective-C的 [LSP](https://en.wikipedia.org/wiki/Language_Server_Protocol) 之一（简单来说，LSP用于提供编程语言特定的功能，如代码补全、语法高亮、警告和错误标记，以及重构例程）。
 
-OceanBase 的代码量非常大，而且OceanBase不能在Mac或者Windows下编译，所以我们建议在远程服务器上下载代码，然后在本地使用VSCode访问远程服务器上的代码。
+SeekDB 的代码量非常大，而且SeekDB不能在Mac或者Windows下编译，所以我们建议在远程服务器上下载代码，然后在本地使用VSCode访问远程服务器上的代码。
 
 # 在远程服务器上配置 ccls
 
@@ -21,7 +21,7 @@ OceanBase 的代码量非常大，而且OceanBase不能在Mac或者Windows下编
 在 C/C++ LSP 领域，比较有名的工具有 clangd 和 ccls。这里我们推荐 ccls，因为：
 
 1. ccls 构建索引的速度比 clangd 慢，但是构建完成后，ccls 访问索引的速度比 clangd 快。
-2. clangd 不支持 unity 编译，而 OceanBase 是通过 unity 编译的，clangd 无法通过 compile_commands.json 构建索引。
+2. clangd 不支持 unity 编译，而 SeekDB 是通过 unity 编译的，clangd 无法通过 compile_commands.json 构建索引。
 
 # ccls 安装
 
@@ -108,7 +108,7 @@ ccls --version
 
 ## C/C++ 插件
 
-不推荐使用C/C++插件，因为无法为OceanBase提供良好的索引功能，并且与ccls插件不兼容。
+不推荐使用C/C++插件，因为无法为SeekDB提供良好的索引功能，并且与ccls插件不兼容。
 
 如果有一些简单的场景，可以在VSCode的扩展商店中下载并安装C/C++插件。
 
@@ -132,7 +132,7 @@ C/C++插件可以自动完成代码和语法高亮，但是这个插件无法为
 
 2. 设置 `ccls.index.threads`。ccls 默认使用系统80%的CPU核心作为默认的并行度。我们可以在VSCode的配置页面中搜索 `threads` 并设置如下数字。
 
-> 默认情况下，OceanBase使用unity编译，比普通情况下消耗更多的内存。如果并行度太高，例如8核16G的系统，系统可能会挂起。
+> 默认情况下，SeekDB使用unity编译，比普通情况下消耗更多的内存。如果并行度太高，例如8核16G的系统，系统可能会挂起。
 
 ![ccls threads config](images/ide-settings-ccls-threads-config.png)
 
@@ -145,7 +145,7 @@ C/C++插件可以自动完成代码和语法高亮，但是这个插件无法为
    bash build.sh ccls --init
    ```
 
-可以在 OceanBase 源码下看到 `compile_commands.json` 文件。
+可以在 SeekDB 源码下看到 `compile_commands.json` 文件。
 
 执行完上面的步骤后，需要重启 VSCode，然后在 VSCode 底部可以看到构建索引的过程：
 

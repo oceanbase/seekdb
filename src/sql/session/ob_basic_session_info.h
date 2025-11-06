@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #ifndef _OB_OBPROXY_BASIC_SESSION_INFO_H
@@ -500,8 +504,7 @@ public:
       use_rich_vector_format_ = false;
       force_rich_vector_format_ = ForceRichFormatStatus::FORCE_OFF;
     } else {
-      use_rich_vector_format_ = GET_MIN_CLUSTER_VERSION() >= CLUSTER_VERSION_4_3_0_0
-                                && sys_vars_cache_.get_enable_rich_vector_format();
+      use_rich_vector_format_ = sys_vars_cache_.get_enable_rich_vector_format();
       force_rich_vector_format_ = ForceRichFormatStatus::Disable;
     }
   }
@@ -529,11 +532,7 @@ public:
 
   void set_force_rich_format(ObBasicSessionInfo::ForceRichFormatStatus status)
   {
-    if (GET_MIN_CLUSTER_VERSION() >= CLUSTER_VERSION_4_3_0_0) {
-      force_rich_vector_format_ = status;
-    } else {
-      force_rich_vector_format_ = ForceRichFormatStatus::Disable;
-    }
+    force_rich_vector_format_ = status;
   }
   //getters
   const common::ObString get_tenant_name() const;
@@ -987,6 +986,7 @@ public:
 
   /// check the existence of the system variable
   int sys_variable_exists(const common::ObString &var, bool &is_exist) const;
+  int sys_variable_exists(const share::ObSysVarClassType sys_var_id, bool &is_exist) const;
 
   int set_client_identifier(const common::ObString &client_identifier);
   const common::ObString& get_client_identifier() const { return client_identifier_; }

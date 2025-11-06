@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #ifndef OCEANBASE_SHARE_CONFIG_OB_SERVER_CONFIG_H_
@@ -131,12 +135,14 @@ public:
   bool in_upgrade_mode() const;
   bool is_valid() const { return  system_config_!= NULL; };
   int64_t get_current_version() { return system_config_->get_version(); }
-
+  int publish_special_config_after_dump();
   OB_UNIS_VERSION(1);
 
 public:
   int64_t disk_actual_space_;
   ObAddr self_addr_;
+  mutable common::DRWLock rwlock_;
+  static const int64_t INITIAL_TENANT_CONF_VERSION = 1;
 public:
 ///////////////////////////////////////////////////////////////////////////////
 // use MACRO 'OB_CLUSTER_PARAMETER' to define new cluster parameters
@@ -167,11 +173,13 @@ public:
   static ObServerMemoryConfig &get_instance();
   int reload_config(const ObServerConfig& server_config);
   int64_t get_server_memory_limit() { return memory_limit_; }
+  int64_t get_server_hard_memory_limit() { return hard_memory_limit_; }
   int64_t get_reserved_server_memory() { return 1LL<<30; }
   int64_t get_server_memory_avail() { return memory_limit_; }
   void check_limit(bool ignore_error);
 private:
   int64_t memory_limit_;
+  int64_t hard_memory_limit_;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObServerMemoryConfig);
 };

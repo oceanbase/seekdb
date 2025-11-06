@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #define USING_LOG_PREFIX SQL_DAS
@@ -149,6 +153,59 @@ void ObDASScanIter::clear_evaluated_flag()
   if (OB_NOT_NULL(scan_param_->op_)) {
     scan_param_->op_->clear_evaluated_flag();
   }
+}
+
+int ObDASScanIter::set_scan_rowkey(ObEvalCtx *eval_ctx,
+                                   const ObIArray<ObExpr *> &rowkey_exprs,
+                                   const ObDASScanCtDef *lookup_ctdef,
+                                   ObIAllocator *alloc,
+                                   int64_t group_id)
+{
+  int ret = OB_SUCCESS;
+  ObNewRange range;
+  if (OB_ISNULL(eval_ctx) || OB_UNLIKELY(rowkey_exprs.empty()) || OB_ISNULL(lookup_ctdef) || OB_ISNULL(alloc)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid eval ctx, rowkey exprs, lookup ctdef, or allocator",
+             K(eval_ctx), K(rowkey_exprs), K(lookup_ctdef), K(alloc), K(ret));
+  } else {
+    ObObj *obj_ptr = nullptr;
+    void *buf = nullptr;
+    int64_t rowkey_cnt = rowkey_exprs.count();
+    if (OB_ISNULL(buf = alloc->alloc(sizeof(ObObj) * rowkey_cnt))) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("failed to allocate enough memory", K(rowkey_cnt), K(ret));
+    } else {
+      obj_ptr = new (buf) ObObj(rowkey_cnt);
+    }
+
+    for (int64_t i = 0; OB_SUCC(ret) && i < rowkey_cnt; i++) {
+      ObObj tmp_obj;
+      const ObExpr *expr = rowkey_exprs.at(i);
+      ObDatum &col_datum = expr->locate_expr_datum(*eval_ctx);
+      if (OB_UNLIKELY(T_PSEUDO_GROUP_ID == expr->type_ || T_PSEUDO_ROW_TRANS_INFO_COLUMN == expr->type_)) {
+        // skip.
+      } else if (OB_FAIL(col_datum.to_obj(tmp_obj, expr->obj_meta_, expr->obj_datum_map_))) {
+        LOG_WARN("failed to convert datum to obj", K(ret));
+      } else if (OB_FAIL(ob_write_obj(*alloc, tmp_obj, obj_ptr[i]))) {
+        LOG_WARN("failed to deep copy rowkey", K(ret), K(tmp_obj));
+      }
+    }
+
+    if (OB_SUCC(ret)) {
+      ObRowkey row_key(obj_ptr, rowkey_cnt);
+      if (OB_FAIL(range.build_range(lookup_ctdef->ref_table_id_, row_key))) {
+        LOG_WARN("failed to build lookup range", K(ret), K(lookup_ctdef->ref_table_id_), K(row_key));
+      } else if (FALSE_IT(range.group_idx_ = ObNewRange::get_group_idx(group_id))) {
+      } else if (OB_FAIL(scan_param_->key_ranges_.push_back(range))) {
+        LOG_WARN("failed to push back lookup range", K(ret));
+      } else {
+        scan_param_->is_get_ = true;
+      }
+    }
+  }
+  LOG_DEBUG("set scan iter scan rowkey", K(range), K(ret));
+
+  return ret;
 }
 
 }  // namespace sql

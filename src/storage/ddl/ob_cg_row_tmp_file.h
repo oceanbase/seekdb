@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2023 OceanBase
- * OceanBase is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #ifndef OCEANBASE_STORAGE_OB_CG_ROW_TMP_FILE_H_
@@ -91,6 +95,7 @@ public:
   ObCGRowFilesGenerater() :
     is_inited_(false),
     is_generation_sync_output_(false),
+    is_sorted_table_load_with_column_store_replica_(false),
     tablet_id_(ObTabletID::INVALID_TABLET_ID),
     slice_idx_(-1),
     storage_schema_(nullptr),
@@ -114,7 +119,8 @@ public:
            const int64_t max_batch_size,
            const int64_t cg_row_file_memory_limit,
            const ObIArray<ObColumnSchemaItem> &all_column_schema_its,
-           const bool is_sync_generation);
+           const bool is_sync_generation,
+           const bool is_sorted_table_load_with_column_store_replica);
   int append_batch(const blocksstable::ObBatchDatumRows &bdrs,
                    const bool is_slice_end,
                    ObDDLChunk &output_chunk);
@@ -130,6 +136,7 @@ private:
 private:
   bool is_inited_;
   bool is_generation_sync_output_;
+  bool is_sorted_table_load_with_column_store_replica_;
   ObTabletID tablet_id_;
   int64_t slice_idx_;
   ObStorageSchema *storage_schema_;

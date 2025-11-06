@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #include "ob_expr_eval_functions.h"
@@ -298,6 +302,8 @@
 #include "ob_expr_vec_vid.h"
 #include "ob_expr_vec_data.h"
 #include "ob_expr_vec_type.h"
+#include "ob_expr_vec_chunk.h"
+#include "ob_expr_embedded_vec.h"
 #include "ob_expr_spiv_dim.h"
 #include "ob_expr_spiv_value.h"
 #include "ob_expr_vector.h"
@@ -379,6 +385,13 @@
 #include "ob_expr_current_catalog.h"
 #include "ob_expr_check_catalog_access.h"
 #include "ob_expr_oracle_to_char.h"
+#include "ob_expr_semantic_distance.h"
+#include "sql/engine/expr/ob_expr_ai/ob_expr_ai_complete.h"
+#include "sql/engine/expr/ob_expr_ai/ob_expr_ai_embed.h"
+#include "sql/engine/expr/ob_expr_ai/ob_expr_ai_rerank.h"
+#include "sql/engine/expr/ob_expr_ai/ob_expr_ai_prompt.h"
+#include "ob_expr_vector_similarity.h"
+#include "ob_expr_check_location_access.h"
 
 namespace oceanbase
 {
@@ -1318,10 +1331,22 @@ static ObExpr::EvalFunc g_expr_eval_functions[] = {
   ObExprMapValues::eval_map_values,                                    /* 846 */
   ObExprSpivDim::generate_spiv_dim,                                    /* 847 */
   ObExprInnerInfoColsColumnKeyPrinter::eval_column_column_key,         /* 848 */
-  NULL, // ObExprCheckLocationAccess::eval_check_location_access,      /* 849 */
+  ObExprCheckLocationAccess::eval_check_location_access,               /* 849 */
   NULL, // ObExprUDF::eval_external_udf,                               /* 850 */
   NULL, // ObExprStartUpMode::eval_startup_mode,                       /* 851 */ 
   ObExprVectorL2Squared::calc_l2_squared,                              /* 852 */
+  ObExprVecChunk::generate_vec_chunk,                                  /* 853 */
+  ObExprEmbeddedVec::generate_embedded_vec,                            /* 854 */
+  ObExprSemanticDistance::calc_semantic_distance,                      /* 855 */
+  ObExprSemanticVectorDistance::calc_semantic_vector_distance,         /* 856 */
+  ObExprAIComplete::eval_ai_complete,                                  /* 857 */
+  ObExprAIEmbed::eval_ai_embed,                                        /* 858 */
+  ObExprAIRerank::eval_ai_rerank,                                      /* 859 */
+  ObExprAIPrompt::eval_ai_prompt,                                      /* 870 */
+  ObExprVectorL2Similarity::calc_l2_similarity,                        /* 871 */
+  ObExprVectorCosineSimilarity::calc_cosine_similarity,                /* 872 */
+  ObExprVectorIPSimilarity::calc_ip_similarity,                        /* 873 */
+  ObExprVectorSimilarity::calc_similarity,                             /* 874 */
 };
 
 static ObExpr::EvalBatchFunc g_expr_eval_batch_functions[] = {
@@ -1745,6 +1770,9 @@ static ObExpr::EvalVectorFunc g_expr_eval_vector_functions[] = {
   NULL, // ObExprOracleInstr::calc_oracle_instr_expr_vector,             /* 224 */
   NULL, // ObLocationExprOperator::calc_location_expr_vector,            /* 225 */
   ObExprConvertTZ::calc_convert_tz_vector,                               /* 226 */
+  ObExprAIComplete::eval_ai_complete_vector,                             /* 227 */
+  ObExprAIEmbed::eval_ai_embed_vector,                                   /* 228 */
+  NULL, // ObExprAIRerank::eval_ai_rerank_vector,                        /* 229 */
 };
 
 REG_SER_FUNC_ARRAY(OB_SFA_SQL_EXPR_EVAL,

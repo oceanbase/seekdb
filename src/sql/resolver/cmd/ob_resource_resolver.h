@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #ifndef OCEANBASE_SQL_RESOLVER_CMD_RESOURCE_RESOLVER_
@@ -328,19 +332,11 @@ int ObResourceUnitOptionResolver<T>::check_value_(const ValueT value,
 {
   int ret = OB_SUCCESS;
   if (T_DATA_DISK_SIZE == type) {
-    // data_disk_size should be >= 0, and 0 is supported after 4.3.5.2
+    // data_disk_size should be >= 0
     if (OB_UNLIKELY(value < 0)) {
       print_invalid_argument_user_error_(type, ", value can not be negative");
       ret = common::OB_INVALID_ARGUMENT;
       LOG_WARN("param can not be negative", KR(ret), K(type), K(value));
-    } else if (0 == value) {
-      uint64_t sys_data_version = 0;
-      if (OB_FAIL(GET_MIN_DATA_VERSION(OB_SYS_TENANT_ID, sys_data_version))) {
-        LOG_WARN("failed to get sys tenant min data version", KR(ret));
-      } else if (sys_data_version < DATA_VERSION_4_3_5_2) {
-        ret = common::OB_NOT_SUPPORTED;
-        LOG_USER_ERROR(OB_NOT_SUPPORTED, "SYS tenant data version is below 4.3.5.2, DATA_DISK_SIZE being 0");
-      }
     }
   } else if (T_IOPS_WEIGHT != type
       && T_NET_BANDWIDTH_WEIGHT != type) {

@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #define USING_LOG_PREFIX SHARE
@@ -50,14 +54,9 @@ ObSpecialSysVarValues::ObSpecialSysVarValues()
   } else if (OB_FAIL(databuff_printf(ObSpecialSysVarValues::version_comment_,
                                      ObSpecialSysVarValues::VERSION_COMMENT_MAX_LEN,
                                      pos,
-#ifdef OB_BUILD_CLOSE_MODULES
-                                     "OceanBase %s (r%s) (Built %s %s)",
-#else
-                                     "OceanBase_CE %s (r%s) (Built %s %s)",
-
-#endif
-                                     PACKAGE_VERSION, build_version(),
-                                     build_date(), build_time()))) {
+                                     "%s %s %s (r%s) (Built %s %s)",
+                                     OB_OCEANBASE_NAME, OB_COMPATIBILITY_VERSION, OB_SEEKDB_NAME, PACKAGE_VERSION,
+                                     build_version(), build_date(), build_time()))) {
     LOG_ERROR("fail to print version_comment to buff", K(ret));
   }
 
@@ -66,12 +65,8 @@ ObSpecialSysVarValues::ObSpecialSysVarValues()
   } else if (FALSE_IT(pos = 0)) {
   } else if (OB_FAIL(databuff_printf(ObSpecialSysVarValues::version_,
                                      ObSpecialSysVarValues::VERSION_MAX_LEN,
-#ifdef OB_BUILD_CLOSE_MODULES
-                                     pos, "5.7.25-OceanBase-v%s", PACKAGE_VERSION))) {
-#else
-                                     pos, "5.7.25-OceanBase_CE-v%s", PACKAGE_VERSION))) {
+                                     pos, "5.7.25-%s %s-v%s", OB_OCEANBASE_NAME, OB_SEEKDB_NAME, PACKAGE_VERSION))) {
 
-#endif
     LOG_ERROR("fail to print version to buff", K(ret));
   }
 
@@ -1829,12 +1824,6 @@ int ObSysVarOnCheckFuncs::check_and_convert_charset(ObExecContext &ctx,
         ret = OB_ERR_UNEXPECTED;
         LOG_ERROR("charset is valid, but it has no default collation", K(ret),
                   K(cs_name), K(cs_type));
-      } else if (OB_FAIL(sql::ObSQLUtils::is_charset_data_version_valid(static_cast<ObCharsetType>(cs_type),
-                                                                        session->get_effective_tenant_id()))) {
-        LOG_WARN("failed to check charset data version valid", K(ret));
-      } else if (OB_FAIL(sql::ObSQLUtils::is_collation_data_version_valid(static_cast<ObCollationType>(coll_type),
-                                                                        session->get_effective_tenant_id()))) {
-        LOG_WARN("failed to check collation data version valid", K(ret));
       } else {
         out_val.set_int(static_cast<int64_t>(coll_type));
       }
@@ -1853,12 +1842,6 @@ int ObSysVarOnCheckFuncs::check_and_convert_charset(ObExecContext &ctx,
           ObString cs_name_str(val_buf);
           LOG_USER_ERROR(OB_ERR_UNKNOWN_CHARSET, cs_name_str.length(), cs_name_str.ptr());
         }
-      } else if (OB_FAIL(sql::ObSQLUtils::is_charset_data_version_valid(common::ObCharset::charset_type_by_coll(static_cast<ObCollationType>(int64_val)),
-                                                                        session->get_effective_tenant_id()))) {
-        LOG_WARN("failed to check charset data version valid", K(ret));
-      } else if (OB_FAIL(sql::ObSQLUtils::is_collation_data_version_valid(static_cast<ObCollationType>(int64_val),
-                                                                          session->get_effective_tenant_id()))) {
-        LOG_WARN("failed to check collation data version valid", K(ret));
       } else {
         out_val = in_val;
       }
@@ -1936,12 +1919,6 @@ int ObSysVarOnCheckFuncs::check_and_convert_collation_not_null(ObExecContext &ct
       if (CS_TYPE_INVALID == (coll_type = ObCharset::collation_type(coll_name))) {
         ret = OB_ERR_UNKNOWN_COLLATION;
         LOG_USER_ERROR(OB_ERR_UNKNOWN_COLLATION, coll_name.length(), coll_name.ptr());
-      } else if (OB_FAIL(sql::ObSQLUtils::is_charset_data_version_valid(common::ObCharset::charset_type_by_coll(static_cast<ObCollationType>(coll_type)),
-                                                                       session->get_effective_tenant_id()))) {
-        LOG_WARN("failed to check charset data version valid", K(ret));
-      } else if (OB_FAIL(sql::ObSQLUtils::is_collation_data_version_valid(static_cast<ObCollationType>(coll_type),
-                                                                          session->get_effective_tenant_id()))) {
-        LOG_WARN("failed to check collation data version valid", K(ret));
       } else {
         out_val.set_int(static_cast<int64_t>(coll_type));
       }
@@ -1960,12 +1937,6 @@ int ObSysVarOnCheckFuncs::check_and_convert_collation_not_null(ObExecContext &ct
           ObString coll_name_str(val_buf);
           LOG_USER_ERROR(OB_ERR_UNKNOWN_COLLATION, coll_name_str.length(), coll_name_str.ptr());
         }
-      } else if (OB_FAIL(sql::ObSQLUtils::is_charset_data_version_valid(common::ObCharset::charset_type_by_coll(static_cast<ObCollationType>(int64_val)),
-                                                                        session->get_effective_tenant_id()))) {
-        LOG_WARN("failed to check charset data version valid", K(ret));
-      } else if (OB_FAIL(sql::ObSQLUtils::is_collation_data_version_valid(static_cast<ObCollationType>(int64_val),
-                                                                          session->get_effective_tenant_id()))) {
-        LOG_WARN("failed to check collation data version valid", K(ret));
       } else {
         out_val = in_val;
       }
@@ -3216,6 +3187,21 @@ int ObCharsetSysVarPair::get_collation_var_by_charset_var(const ObString &cs_var
   return ret;
 }
 
+int ObPreProcessSysVars::change_base_values(const ObIArray<std::pair<ObString, ObString>> &sys_vars)
+{
+  int ret = OB_SUCCESS;
+  for (int64_t i = 0; OB_SUCC(ret) && i < sys_vars.count(); ++i) {
+    const std::pair<ObString, ObString> &sys_var = sys_vars.at(i);
+    if (OB_FAIL(ObSysVariables::set_value(sys_var.first, sys_var.second))) {
+      LOG_WARN("fail to change initial value", K(ret), K(sys_var.first), K(sys_var.second));
+      ret = OB_SUCCESS; // ignore errors
+    } else {
+      LOG_INFO("succ to change initial value", K(sys_var.first), K(sys_var.second));
+    }
+  }
+  return ret;
+}
+
 int ObPreProcessSysVars::init_config_sys_vars()
 {
   int ret = OB_SUCCESS;
@@ -3264,6 +3250,15 @@ int ObPreProcessSysVars::init_config_sys_vars()
                                 cur_work_path,
                                 "run/sql.sock"))) {
       LOG_ERROR("fail to print system_pid_file to buff", K(ret));
+    }
+  }
+
+  // OB_SV_DATADIR
+  if (OB_SUCC(ret)) {
+    if (OB_FAIL(ObSysVariables::set_value(OB_SV_DATADIR, GCONF.data_dir))) {
+      LOG_WARN("fail to set datadir", K(ret));
+    } else if (OB_FAIL(ObSysVariables::set_base_value(OB_SV_DATADIR, GCONF.data_dir))) {
+      LOG_WARN("fail to set datadir base value", K(ret));
     }
   }
   return ret;
@@ -3413,10 +3408,15 @@ int ObPreProcessSysVars::change_initial_value()
   }
   return ret;
 }
-int ObPreProcessSysVars::init_sys_var()
+int ObPreProcessSysVars::init_sys_var(const ObIArray<std::pair<ObString, ObString>> &sys_vars)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(ObPreProcessSysVars::init_config_sys_vars())) {
+  if (OB_FAIL(change_base_values(sys_vars))) {
+    // sys_vars were passed from command line.
+    // we need to change the base values first and if there are some special variables,
+    // such as timezone, version_comment, we will change them to right value later.
+    LOG_WARN("fail to change base values", K(ret));
+  } else if (OB_FAIL(ObPreProcessSysVars::init_config_sys_vars())) {
     LOG_ERROR("fail to initial config sys var", K(ret));
   } else if (OB_FAIL(ObPreProcessSysVars::change_initial_value())) {
     LOG_ERROR("fail to change initial value", K(ret));

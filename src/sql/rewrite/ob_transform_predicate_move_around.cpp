@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #define USING_LOG_PREFIX SQL_REWRITE
@@ -2198,8 +2202,6 @@ int ObTransformPredicateMoveAround::pushdown_into_qualify_filter(ObIArray<ObRawE
   if (OB_ISNULL(ctx_) && OB_ISNULL(ctx_->session_info_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null", K(ret));
-  } else if (GET_MIN_CLUSTER_VERSION() < CLUSTER_VERSION_4_3_0_0) {
-    //do nothing
   } else if (!ctx_->session_info_->is_qualify_filter_enabled()) {
     //do nothing
   } else if (OB_FAIL(qualify_filters.assign(sel_stmt.get_qualify_filters()))) {
@@ -2263,7 +2265,7 @@ int ObTransformPredicateMoveAround::check_pushdown_through_groupby_validity(ObSe
   } else {
     is_valid = true;
   }
-  if (OB_SUCC(ret) && !is_valid && query_ctx->check_opt_compat_version(COMPAT_VERSION_4_3_5_BP3)) {
+  if (OB_SUCC(ret) && !is_valid) {
     block_by_groupby = false;
     block_by_rollup = false;
     if (OB_FAIL(ObOptimizerUtil::expr_calculable_by_exprs(having_expr, stmt.get_group_exprs(),

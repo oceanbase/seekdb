@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #ifndef _OB_OCEANBASE_SCHEMA_SCHEMA_SERVICE_SQL_IMPL
@@ -35,7 +39,9 @@
 #include "share/schema/ob_context_sql_service.h"
 #include "share/schema/ob_catalog_sql_service.h"
 #include "share/schema/ob_ccl_rule_sql_service.h"
+#include "share/schema/ob_ai_model_sql_service.h"
 #include "lib/string/ob_string.h"
+#include "share/schema/ob_location_sql_service.h"
 
 namespace oceanbase
 {
@@ -109,7 +115,9 @@ public:
   GET_DDL_SQL_SERVICE_FUNC(Directory, directory)
   GET_DDL_SQL_SERVICE_FUNC(Context, context)
   GET_DDL_SQL_SERVICE_FUNC(Catalog, catalog)
+  GET_DDL_SQL_SERVICE_FUNC(Location, location)
   GET_DDL_SQL_SERVICE_FUNC(CCLRule, ccl_rule)
+  GET_DDL_SQL_SERVICE_FUNC(AiModel, ai_model)
 
   /* sequence_id related */
   virtual int init_sequence_id_by_rs_epoch(const int64_t rootservice_epoch); // for compatible use
@@ -200,7 +208,10 @@ public:
   GET_ALL_SCHEMA_FUNC_DECLARE(context, ObContextSchema);
   GET_ALL_SCHEMA_FUNC_DECLARE(mock_fk_parent_table, ObSimpleMockFKParentTableSchema);
   GET_ALL_SCHEMA_FUNC_DECLARE(catalog, ObCatalogSchema);
+  GET_ALL_SCHEMA_FUNC_DECLARE(location, ObLocationSchema);
+  GET_ALL_SCHEMA_FUNC_DECLARE(obj_mysql_priv, ObObjMysqlPriv);
   GET_ALL_SCHEMA_FUNC_DECLARE(ccl_rule, ObSimpleCCLRuleSchema);
+  GET_ALL_SCHEMA_FUNC_DECLARE(ai_model, ObAiModelSchema);
 
   //get tenant increment schema operation between (base_version, new_schema_version]
   virtual int get_increment_schema_operations(const ObRefreshSchemaStatus &schema_status,
@@ -271,11 +282,13 @@ public:
   virtual int fetch_new_context_id(const uint64_t tenant_id, uint64_t &new_context_id);
   virtual int fetch_new_priv_id(const uint64_t tenant_id, uint64_t &new_priv_id);
   virtual int fetch_new_catalog_id(const uint64_t tenant_id, uint64_t &new_catalog_id);
+  virtual int fetch_new_location_id(const uint64_t tenant_id, uint64_t &new_location_id);
 //  virtual int insert_sys_param(const ObSysParam &sys_param,
 //                               common::ObISQLClient *sql_client);
 
   virtual int fetch_new_ccl_rule_id(const uint64_t tenant_id, uint64_t &new_ccl_rule_id);
 
+  virtual int fetch_new_ai_model_id(const uint64_t tenant_id, uint64_t &new_ai_model_id);
   virtual int get_tablegroup_schema(const ObRefreshSchemaStatus &schema_status,
                                     const uint64_t tablegroup_id,
                                     const int64_t schema_version,
@@ -326,6 +339,9 @@ public:
   GET_BATCH_SCHEMAS_FUNC_DECLARE(mock_fk_parent_table, ObSimpleMockFKParentTableSchema);
   GET_BATCH_SCHEMAS_FUNC_DECLARE(catalog, ObCatalogSchema);
   GET_BATCH_SCHEMAS_FUNC_DECLARE(ccl_rule, ObSimpleCCLRuleSchema);
+  GET_BATCH_SCHEMAS_FUNC_DECLARE(ai_model, ObAiModelSchema);
+  GET_BATCH_SCHEMAS_FUNC_DECLARE(location, ObLocationSchema);
+  GET_BATCH_SCHEMAS_FUNC_DECLARE(obj_mysql_priv, ObObjMysqlPriv);
 
   //batch will split big query into batch query, each time MAX_IN_QUERY_PER_TIME
   //get_batch_xxx_schema will call fetch_all_xxx_schema
@@ -395,7 +411,10 @@ public:
   FETCH_SCHEMAS_FUNC_DECLARE(context, ObContextSchema);
   FETCH_SCHEMAS_FUNC_DECLARE(mock_fk_parent_table, ObSimpleMockFKParentTableSchema);
   FETCH_SCHEMAS_FUNC_DECLARE(catalog, ObCatalogSchema);
+  FETCH_SCHEMAS_FUNC_DECLARE(location, ObLocationSchema);
+  FETCH_SCHEMAS_FUNC_DECLARE(obj_mysql_priv, ObObjMysqlPriv);
   FETCH_SCHEMAS_FUNC_DECLARE(ccl_rule, ObSimpleCCLRuleSchema);
+  FETCH_SCHEMAS_FUNC_DECLARE(ai_model, ObAiModelSchema);
 
   int fetch_mock_fk_parent_table_column_info(
       const ObRefreshSchemaStatus &schema_status,
@@ -1137,9 +1156,11 @@ private:
 
   ObSysVariableSqlService sys_variable_service_;
   ObDirectorySqlService directory_service_;
+  ObLocationSqlService location_service_;
   ObContextSqlService context_service_;
   ObCatalogSqlService catalog_service_;
   ObCCLRuleSqlService ccl_rule_service_;
+  ObAiModelSqlService ai_model_service_;
 
   ObClusterSchemaStatus cluster_schema_status_;
   common::hash::ObHashMap<uint64_t, int64_t, common::hash::NoPthreadDefendMode> gen_schema_version_map_;

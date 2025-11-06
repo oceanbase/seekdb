@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #define USING_LOG_PREFIX LIB
@@ -48,7 +52,7 @@ AChunkMgr &AChunkMgr::instance()
 }
 
 AChunkMgr::AChunkMgr()
-  : limit_(DEFAULT_LIMIT), urgent_(0), hold_(0),
+  : limit_(DEFAULT_LIMIT), hard_limit_(INT64_MAX), hold_(0),
     total_hold_(0), cache_hold_(0), large_cache_hold_(0),
     max_chunk_cache_size_(limit_)
 {
@@ -178,7 +182,7 @@ AChunk *AChunkMgr::alloc_chunk(const uint64_t size, bool high_prio)
     if (hold_size == orig_hold_size) {
       // do-nothing
     } else if (hold_size > orig_hold_size) {
-      need_free = !update_hold(hold_size - orig_hold_size, high_prio);
+      need_free = !try_inc_hold_soft(hold_size - orig_hold_size);
     } else if (chunk->is_hugetlb_) {
       need_free = true;
     } else {
@@ -187,28 +191,29 @@ AChunk *AChunkMgr::alloc_chunk(const uint64_t size, bool high_prio)
         LOG_WARN_RET(OB_ERR_SYS, "madvise failed", K(errno));
         need_free = true;
       } else {
-        IGNORE_RETURN update_hold(hold_size - orig_hold_size, false);
+        // hold_size < orig_hold_size
+        dec_hold(orig_hold_size - hold_size);
       }
     }
     if (need_free) {
       direct_free(chunk, all_size);
-      IGNORE_RETURN update_hold(-orig_hold_size, false);
+      dec_hold(orig_hold_size);
       chunk = nullptr;
     }
   }
   if (OB_ISNULL(chunk)) {
     bool updated = false;
     for (int chunk_idx = MAX_LARGE_ACHUNK_INDEX; !updated && chunk_idx >= 0; --chunk_idx) {
-      while (!(updated = update_hold(hold_size, high_prio)) &&
+      while (!(updated = try_inc_hold_soft(hold_size)) &&
           OB_NOT_NULL(chunk = pop_chunk_with_index(chunk_idx))) {
         int64_t orig_all_size = chunk->aligned();
         int64_t orig_hold_size = chunk->hold();
         direct_free(chunk, orig_all_size);
-        IGNORE_RETURN update_hold(-orig_hold_size, false);
+        dec_hold(orig_hold_size);
         chunk = nullptr;
       }
     }
-    if (updated) {
+    if (updated || try_inc_hold_hard(hold_size, high_prio)) {
       bool hugetlb_used = false;
       void *ptr = direct_alloc(all_size, true, hugetlb_used, SANITY_BOOL_EXPR(true));
       if (ptr != nullptr) {
@@ -221,7 +226,7 @@ AChunk *AChunkMgr::alloc_chunk(const uint64_t size, bool high_prio)
 #endif
         chunk->is_hugetlb_ = hugetlb_used;
       } else {
-        IGNORE_RETURN update_hold(-hold_size, false);
+        dec_hold(hold_size);
       }
     }
   }
@@ -252,7 +257,7 @@ void AChunkMgr::free_chunk(AChunk *chunk)
     }
     if (freed) {
       direct_free(chunk, all_size);
-      IGNORE_RETURN update_hold(-hold_size, false);
+      dec_hold(hold_size);
     }
   }
 }
@@ -265,16 +270,16 @@ AChunk *AChunkMgr::alloc_co_chunk(const uint64_t size)
   AChunk *chunk = nullptr;
   bool updated = false;
   for (int chunk_idx = MAX_LARGE_ACHUNK_INDEX; !updated && chunk_idx >= 0; --chunk_idx) {
-    while (!(updated = update_hold(hold_size, true)) &&
+    while (!(updated = try_inc_hold_soft(hold_size)) &&
       OB_NOT_NULL(chunk = pop_chunk_with_index(chunk_idx))) {
       int64_t all_size = chunk->aligned();
       int64_t hold_size = chunk->hold();
       direct_free(chunk, all_size);
-      IGNORE_RETURN update_hold(-hold_size, false);
+      dec_hold(hold_size);
       chunk = nullptr;
     }
   }
-  if (updated) {
+  if (updated || try_inc_hold_hard(hold_size, true)) {
     // there is performance drop when thread stack on huge_page memory.
     bool hugetlb_used = false;
     void *ptr = direct_alloc(all_size, false, hugetlb_used, SANITY_BOOL_EXPR(false));
@@ -282,7 +287,7 @@ AChunk *AChunkMgr::alloc_co_chunk(const uint64_t size)
       chunk = new (ptr) AChunk();
       chunk->is_hugetlb_ = hugetlb_used;
     } else {
-      IGNORE_RETURN update_hold(-hold_size, true);
+      dec_hold(hold_size);
     }
   }
 
@@ -304,17 +309,39 @@ void AChunkMgr::free_co_chunk(AChunk *chunk)
     const int64_t hold_size = chunk->hold();
     const uint64_t all_size = chunk->aligned();
     direct_free(chunk, all_size);
-    IGNORE_RETURN update_hold(-hold_size, false);
+    dec_hold(hold_size);
   }
 }
 
-bool AChunkMgr::update_hold(int64_t bytes, bool high_prio)
+bool AChunkMgr::try_inc_hold_hard(int64_t bytes, bool high_prio)
+{
+  bool bret = try_inc_hold(bytes, hard_limit_, high_prio);
+  if (!bret) {
+    auto &afc = g_alloc_failed_ctx();
+    afc.reason_ = SERVER_HOLD_REACH_LIMIT;
+    afc.alloc_size_ = bytes;
+    afc.server_hold_ = hold_;
+    afc.server_limit_ = hard_limit_;
+  }
+  return bret;
+}
+
+bool AChunkMgr::try_inc_hold_soft(int64_t bytes)
+{
+  return try_inc_hold(bytes, limit_, false);
+}
+
+// bytes need to be positive
+void AChunkMgr::dec_hold(int64_t bytes)
+{
+  IGNORE_RETURN ATOMIC_AAF(&hold_, -bytes);
+}
+
+bool AChunkMgr::try_inc_hold(int64_t bytes, int64_t limit, bool high_prio)
 {
   bool bret = true;
-  const int64_t limit = high_prio ? limit_ + urgent_ : limit_;
-  if (bytes <= 0) {
-    IGNORE_RETURN ATOMIC_AAF(&hold_, bytes);
-  } else if (hold_ + bytes <= limit) {
+  limit = high_prio ? INT64_MAX : limit;
+  if (hold_ + bytes <= limit) {
     const int64_t nvalue = ATOMIC_AAF(&hold_, bytes);
     if (nvalue > limit) {
       IGNORE_RETURN ATOMIC_AAF(&hold_, -bytes);
@@ -322,13 +349,6 @@ bool AChunkMgr::update_hold(int64_t bytes, bool high_prio)
     }
   } else {
     bret = false;
-  }
-  if (!bret) {
-    auto &afc = g_alloc_failed_ctx();
-    afc.reason_ = SERVER_HOLD_REACH_LIMIT;
-    afc.alloc_size_ = bytes;
-    afc.server_hold_ = hold_;
-    afc.server_limit_ = limit_;
   }
   return bret;
 }
@@ -455,7 +475,7 @@ int64_t AChunkMgr::sync_wash()
         direct_free(chunk, all_size);
         chunk = next_chunk;
       } while (chunk != head);
-      IGNORE_RETURN update_hold(-cache_hold, false);
+      dec_hold(cache_hold);
       washed_size += cache_hold;
     }
   }

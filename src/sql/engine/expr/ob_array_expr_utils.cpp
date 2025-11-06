@@ -1,14 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
- * This file contains implementation for ob_array_expr_utils.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #define USING_LOG_PREFIX SQL_ENG
@@ -1436,7 +1439,9 @@ int ObArrayExprUtils::deduce_array_type(ObExecContext *exec_ctx, ObExprResType &
     uint16_t child_subschema_id;
     ObExprResType child_type;
     ObExprResType coll_calc_type;
-    if (OB_FAIL(ObArrayExprUtils::get_coll_type_by_subschema_id(exec_ctx, type2.get_subschema_id(), type2_coll_type))) {
+    if (type2.get_subschema_id() == type1.get_subschema_id()) {
+      subschema_id = type1.get_subschema_id();
+    } else if (OB_FAIL(ObArrayExprUtils::get_coll_type_by_subschema_id(exec_ctx, type2.get_subschema_id(), type2_coll_type))) {
       LOG_WARN("failed to get array type by subschema id", K(ret), K(type1.get_subschema_id()));
     } else if (type2_coll_type->type_id_ != ObNestedType::OB_ARRAY_TYPE && type2_coll_type->type_id_ != ObNestedType::OB_VECTOR_TYPE) {
       ret = OB_ERR_INVALID_TYPE_FOR_OP;
@@ -1798,6 +1803,22 @@ int ObArrayExprUtils::get_collection_raw_data(ObIAllocator &allocator, const ObO
     } else if (OB_FAIL(str_iter.get_full_data(bin_str))) {
       LOG_WARN("Lob: str iter get full data failed", K(ret));
     }
+  }
+  return ret;
+}
+
+int ObArrayExprUtils::convert_to_string(common::ObIAllocator &allocator, ObEvalCtx &ctx, const uint16_t subschema_id, const common::ObString &data, ObString &res_str)
+{
+  int ret = OB_SUCCESS;
+  common::ObArenaAllocator tmp_allocator;
+  ObIArrayType *arr_obj = NULL;
+  ObStringBuffer buf(&allocator);
+  if (OB_FAIL(ObArrayExprUtils::get_array_obj(tmp_allocator, ctx, subschema_id, data, arr_obj))) {
+    LOG_WARN("get array failed", K(ret));
+  } else if (OB_FAIL(arr_obj->print(buf))) {
+    LOG_WARN("failed to format array", K(ret));
+  } else {
+    res_str.assign_ptr(buf.ptr(), buf.length());
   }
   return ret;
 }

@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 #include "storage/ddl/ob_cg_macro_block_write_task.h"
 #include "storage/ddl/ob_ddl_tablet_context.h"
@@ -295,7 +299,8 @@ int ObCGRowFileWriterOp::init(const ObTabletID &tablet_id,
                                                       max_batch_size,
                                                       ObCGRowFilesGenerater::CG_ROW_FILE_MEMORY_LIMIT,
                                                       ddl_dag->get_ddl_table_schema().column_items_,
-                                                      true/*is_generation_sync_output*/))) {
+                                                      true/*is_generation_sync_output*/,
+                                                      false/*is_sorted_table_load_with_column_store_replica*/))) {
         LOG_WARN("fail to initialize cg row files generater",
             K(ret), K(tablet_id_), K(slice_idx_),KP(storage_schema), K(max_batch_size));
       } else {
@@ -414,7 +419,6 @@ void ObDDLWriteMacroBlockBasePipeline::postprocess(int &ret_code)
     } else if (OB_FAIL(set_remain_block())) {
       LOG_WARN("set remain block failed", K(ret));
     } else {
-      ddl_slice_ = nullptr;
       LOG_INFO("not data any more, change ret to be success", K(ret), K(dag->get_ddl_task_param()));
       ret_code = OB_SUCCESS;
     }

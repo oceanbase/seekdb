@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #define USING_LOG_PREFIX SHARE_SCHEMA
@@ -20,6 +24,7 @@
 #include "share/ob_schema_status_proxy.h"
 #include "sql/session/ob_sql_session_info.h"
 #include "share/catalog/ob_catalog_utils.h"
+#include "ob_ai_model_schema_getter_guard.ipp"
 namespace oceanbase
 {
 using namespace common;
@@ -1854,6 +1859,12 @@ int ObSchemaGetterGuard::verify_read_only(const uint64_t tenant_id,
           }
           break;
         }
+        case OB_PRIV_OBJECT_LEVEL: {
+          if (OB_FAIL(verify_db_read_only(tenant_id, need_priv))) {
+            LOG_WARN("db is read only, can't not execute this statement", KR(ret));
+          }
+          break;
+        }
         default:{
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("unknown privilege level", K(need_priv), KR(ret));
@@ -3648,6 +3659,7 @@ GET_SCHEMAS_WITH_MGR_IN_TENANT_FUNC_DEFINE(routine_mgr_, routine, ObRoutineInfo,
 GET_SCHEMAS_WITH_MGR_IN_TENANT_FUNC_DEFINE(package_mgr_, package, ObPackageInfo, ObSimplePackageSchema, PACKAGE_SCHEMA);
 GET_SCHEMAS_WITH_MGR_IN_TENANT_FUNC_DEFINE(trigger_mgr_, trigger, ObTriggerInfo, ObSimpleTriggerSchema, TRIGGER_SCHEMA);
 GET_SCHEMAS_WITH_MGR_IN_TENANT_FUNC_DEFINE(directory_mgr_, directory, ObDirectorySchema, ObDirectorySchema, DIRECTORY_SCHEMA);
+GET_SCHEMAS_WITH_MGR_IN_TENANT_FUNC_DEFINE(location_mgr_, location, ObLocationSchema, ObLocationSchema, LOCATION_SCHEMA);
 #undef GET_SCHEMAS_WITH_MGR_IN_TENANT_FUNC_DEFINE
 
 int ObSchemaGetterGuard::get_outline_infos_in_tenant(const uint64_t tenant_id,

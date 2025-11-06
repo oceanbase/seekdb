@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2023 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #ifndef OCEANBASE_STORAGE_BLOCKSSTABLE_OB_DDL_INDEX_BLOCK_ROW_ITERATOR_H
@@ -178,7 +182,7 @@ class ObDDLMergeBlockRowIterator : public ObIndexBlockRowIterator
 public:
   static const int64_t MAX_SSTABLE_COUNT = 4096;
   typedef ObSimpleRowsMerger<ObDDLSSTableMergeLoserTreeItem, ObDDLSSTableMergeLoserTreeCompare> SimpleMerger;
-  typedef common::ObLoserTree<ObDDLSSTableMergeLoserTreeItem, ObDDLSSTableMergeLoserTreeCompare, MAX_SSTABLE_COUNT> MergeLoserTree;
+  typedef common::ObLoserTree<ObDDLSSTableMergeLoserTreeItem, ObDDLSSTableMergeLoserTreeCompare> MergeLoserTree;
   ObDDLMergeBlockRowIterator();
   virtual ~ObDDLMergeBlockRowIterator();
   virtual int init(const ObMicroBlockData &idx_block_data,
@@ -220,7 +224,7 @@ public:
   INHERIT_TO_STRING_KV("base iterator:", ObIndexBlockRowIterator, "format:", "ObDDLMergeBlockRowIterator",
                        KP(raw_iter_), KP(transformed_iter_), KP(empty_merge_iter_), KP(all_range_iter_), K(iters_), KP(allocator_), KP(consumers_),
                        K(consumer_cnt_), K(compare_), KPC(simple_merge_), KPC(loser_tree_), KPC(endkey_merger_), K(is_single_sstable_),
-                       K(is_iter_start_), K(is_iter_finish_), K(query_range_), KP(idx_block_data_), K(first_index_item_), K(iter_param_));
+                       K(is_iter_start_), K(is_iter_finish_), KP(idx_block_data_), K(first_index_item_), K(iter_param_));
   struct MergeIndexItem final
   {
   public:

@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #define USING_LOG_PREFIX SHARE
@@ -79,7 +83,9 @@ const char *ObMaxIdFetcher::max_id_name_info_[OB_MAX_ID_TYPE][2] = {
   { "ob_max_used_catalog_id", "max used catalog id"},
   { "ob_max_used_ccl_rule_id", "max used ccl rule id"},
   {"ob_max_used_external_resource_id", "max used external resources id"}, // OB_MAX_USED_EXTERNAL_RESOURCE_ID_TYPE will be changed to OB_MAX_USED_OBJECT_ID_TYPE and won't be persisted.
-  { "ob_max_used_location_id", "max used location id"}
+  { "ob_max_used_location_id", "max used location id"},
+  { "ob_max_used_ai_model_id", "max used ai model id"},
+  { "ob_max_used_ai_model_endpoint_id", "max used ai model endpoint id"}
 };
 
 lib::ObMutex ObMaxIdFetcher::mutex_;
@@ -124,6 +130,7 @@ int ObMaxIdFetcher::convert_id_type(
     case OB_MAX_USED_LOCK_OWNER_ID_TYPE:
     case OB_MAX_USED_REWRITE_RULE_VERSION_TYPE:
     case OB_MAX_USED_SERVICE_NAME_ID_TYPE:
+    case OB_MAX_USED_AI_MODEL_ENDPOINT_ID_TYPE:
     case OB_MAX_USED_TTL_TASK_ID_TYPE: {
       dst = src;
       break;
@@ -158,7 +165,9 @@ int ObMaxIdFetcher::convert_id_type(
     case OB_MAX_USED_RLS_GROUP_ID_TYPE:
     case OB_MAX_USED_RLS_CONTEXT_ID_TYPE:
     case OB_MAX_USED_CATALOG_ID_TYPE:
-    case OB_MAX_USED_CCL_RULE_ID_TYPE: {
+    case OB_MAX_USED_AI_MODEL_ID_TYPE:
+    case OB_MAX_USED_CCL_RULE_ID_TYPE:
+    case OB_MAX_USED_LOCATION_ID_TYPE: {
       dst = OB_MAX_USED_OBJECT_ID_TYPE;
       break;
     }
@@ -320,6 +329,8 @@ int ObMaxIdFetcher::fetch_new_max_id(const uint64_t tenant_id,
         case OB_MAX_USED_LS_GROUP_ID_TYPE:
         case OB_MAX_USED_REWRITE_RULE_VERSION_TYPE:
         case OB_MAX_USED_SERVICE_NAME_ID_TYPE:
+        case OB_MAX_USED_AI_MODEL_ID_TYPE:
+        case OB_MAX_USED_AI_MODEL_ENDPOINT_ID_TYPE:
         case OB_MAX_USED_TTL_TASK_ID_TYPE: {
           // won't check other id
           break;

@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #ifndef _OB_TENANT_CTX_ALLOCATOR_H_
@@ -80,7 +84,7 @@ public:
       resource_handle_.get_memory_mgr()->free_chunk(chunk, attr);
     }
   }
-  bool update_hold(const int64_t size);
+  void dec_hold(const int64_t size);
   // statistic related
   int set_tenant_memory_mgr()
   {
@@ -94,6 +98,19 @@ public:
     }
     return ret;
   }
+
+  int set_hard_limit(int64_t bytes)
+  {
+    int ret = common::OB_SUCCESS;
+    if (!resource_handle_.is_valid()) {
+      ret = common::OB_ERR_UNEXPECTED;
+      LIB_LOG(ERROR, "resource_handle is invalid", K(ret), K_(tenant_id), K_(ctx_id));
+    } else if (OB_FAIL(resource_handle_.get_memory_mgr()->set_ctx_hard_limit(ctx_id_, bytes))) {
+      LIB_LOG(WARN, "memory manager set_ctx_limit failed", K(ret), K(ctx_id_), K(bytes));
+    }
+    return ret;
+  }
+
   int set_limit(int64_t bytes)
   {
     int ret = common::OB_SUCCESS;
@@ -387,6 +404,7 @@ public:
   static int64_t get_obj_hold(void *ptr);
 
   // statistic related
+  int set_hard_limit(int64_t bytes) { return ctx_allocator_.set_hard_limit(bytes); }
   int set_limit(int64_t bytes) { return ctx_allocator_.set_limit(bytes); }
 
   int64_t get_limit() const { return ctx_allocator_.get_limit(); }
@@ -403,7 +421,7 @@ public:
   void print_memory_usage() const { ctx_allocator_.print_usage(); }
   AChunk *alloc_chunk(const int64_t size, const ObMemAttr &attr);
   void free_chunk(AChunk *chunk, const ObMemAttr &attr);
-  bool update_hold(const int64_t size);
+  void dec_hold(const int64_t size);
   int set_idle(const int64_t size, const bool reserve = false);
   IBlockMgr &get_block_mgr() { return obj_mgr_; }
   IChunkMgr &get_chunk_mgr() { return chunk_mgr_; }

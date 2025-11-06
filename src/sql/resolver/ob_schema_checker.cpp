@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #define USING_LOG_PREFIX SQL_RESV
@@ -1522,6 +1526,26 @@ int ObSchemaChecker::get_directory_id(const uint64_t tenant_id,
   return ret;
 }
 
+int ObSchemaChecker::get_location_id(const uint64_t tenant_id,
+                                     const common::ObString &location_name,
+                                     uint64_t &location_id)
+{
+  int ret = OB_SUCCESS;
+  const ObLocationSchema *schema = NULL;
+  if (IS_NOT_INIT) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("schema checker is not inited", K_(is_inited));
+  } else if (OB_FAIL(schema_mgr_->get_location_schema_by_name(tenant_id, location_name, schema))) {
+    LOG_WARN("get location schema failed", K(ret));
+  } else if (OB_ISNULL(schema)) {
+    ret = OB_LOCATION_OBJ_NOT_EXIST;
+    LOG_WARN("location is not exists", K(location_name));
+  } else {
+    location_id = schema->get_location_id();
+  }
+  return ret;
+}
+
 int ObSchemaChecker::get_table_schema_inner(const uint64_t tenant_id, uint64_t table_id,
                                             const ObTableSchema *&table_schema) const
 {
@@ -1654,7 +1678,7 @@ bool ObSchemaChecker::enable_mysql_pl_priv_check(int64_t tenant_id, ObSchemaGett
   int ret = OB_SUCCESS;
   if (OB_FAIL(GET_MIN_DATA_VERSION(tenant_id, compat_version))) {
     LOG_WARN("fail to get data version", K(tenant_id));
-  } else if (lib::is_mysql_mode() && sql::ObSQLUtils::is_data_version_ge_422_or_431(compat_version)) {
+  } else if (lib::is_mysql_mode()) {
     const ObSysVarSchema *sys_var = NULL;
     ObMalloc alloc(ObModIds::OB_TEMP_VARIABLES);
     ObObj val;

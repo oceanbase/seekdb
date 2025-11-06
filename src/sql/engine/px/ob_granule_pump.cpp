@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #define USING_LOG_PREFIX SQL_EXE
@@ -41,6 +45,7 @@ int ObGITaskSet::get_task_at_pos(ObGranuleTaskInfo &info, const int64_t &pos) co
     info.tablet_loc_ = const_cast<ObDASTabletLoc *>(gi_task_set_.at(pos).tablet_loc_);
     info.ranges_.reset();
     info.ss_ranges_.reset();
+    info.granule_type_ = gi_task_set_.at(pos).granule_type_;
     for (int64_t i = pos; OB_SUCC(ret) && i < gi_task_set_.count(); i++) {
       if (cur_idx == gi_task_set_.at(i).idx_) {
         if (OB_FAIL(info.ranges_.push_back(gi_task_set_.at(i).range_))) {
@@ -107,6 +112,7 @@ int ObGITaskSet::get_next_gi_task(ObGranuleTaskInfo &info)
     info.tablet_loc_ = gi_task_set_.at(cur_pos_).tablet_loc_;
     info.ranges_.reset();
     info.ss_ranges_.reset();
+    info.granule_type_ = gi_task_set_.at(cur_pos_).granule_type_;
     for (int64_t i = cur_pos_; OB_SUCC(ret) && i < gi_task_set_.count(); i++) {
       if (cur_idx == gi_task_set_.at(i).idx_) {
         if (OB_FAIL(info.ranges_.push_back(gi_task_set_.at(i).range_))) {
@@ -244,15 +250,27 @@ int ObGITaskSet::construct_taskset(const ObIArray<ObDASTabletLoc*> &taskset_tabl
     whole_range.set_whole_range();
     const ObNewRange &ss_range = ss_ranges.empty() ? whole_range : ss_ranges.at(0);
     int64_t max_idx = 0;
+    ObTabletID before_tablet_id(common::ObTabletID::INVALID_TABLET_ID);
+    ObTabletID after_tablet_id(common::ObTabletID::INVALID_TABLET_ID);
     for (int64_t i = 0; OB_SUCC(ret) && i < taskset_tablets.count(); i++) {
+      after_tablet_id.reset();
+      if (i + 1 < taskset_tablets.count()) {
+        after_tablet_id = taskset_tablets.at(i + 1)->tablet_id_;
+      }
       max_idx = max(max_idx, taskset_idxs.at(i));
       ObGITaskInfo task_info(taskset_tablets.at(i), taskset_ranges.at(i), ss_range, taskset_idxs.at(i));
       if (random_type != ObGITaskSet::GI_RANDOM_NONE) {
         task_info.hash_value_ = common::murmurhash(&task_info.idx_, sizeof(task_info.idx_), 0);
       }
+      if (before_tablet_id != taskset_tablets.at(i)->tablet_id_ && after_tablet_id != taskset_tablets.at(i)->tablet_id_) {
+        task_info.granule_type_ = OB_PARTITION_GRANULE;
+      } else {
+        task_info.granule_type_ = OB_BLOCK_RANGE_GRANULE;
+      }
       if (OB_FAIL(gi_task_set_.push_back(task_info))) {
         LOG_WARN("add partition key failed", K(ret));
       }
+      before_tablet_id = taskset_tablets.at(i)->tablet_id_;
     }
     task_count_ = max_idx + 1;
     if (OB_SUCC(ret) && random_type != GI_RANDOM_NONE) {

@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 #include "storage/tablet/ob_tablet_ddl_complete_mds_data.h"
 #include "lib/oblog/ob_log_module.h"
@@ -29,15 +33,13 @@ namespace storage
 {
 ObTabletDDLCompleteMdsUserData::ObTabletDDLCompleteMdsUserData():
     has_complete_(false), direct_load_type_(ObDirectLoadType::DIRECT_LOAD_INVALID), data_format_version_(0),
-    snapshot_version_(0), table_key_(), storage_schema_(), write_stat_(),
-    allocator_("MdsDdlCom")
+    snapshot_version_(0), table_key_(), storage_schema_(), write_stat_()
 {}
 
 ObTabletDDLCompleteMdsUserData::~ObTabletDDLCompleteMdsUserData()
 {
   write_stat_.reset();
   storage_schema_.reset();
-  allocator_.reset();
 }
 
 bool ObTabletDDLCompleteMdsUserData::is_valid() const
@@ -51,13 +53,13 @@ bool ObTabletDDLCompleteMdsUserData::is_valid() const
               && storage_schema_.is_valid());
 }
 
-int ObTabletDDLCompleteMdsUserData::set_storage_schema(const ObStorageSchema &other)
+int ObTabletDDLCompleteMdsUserData::set_storage_schema(const ObStorageSchema &other, common::ObIAllocator &allocator)
 {
   int ret = OB_SUCCESS;
   if (!other.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(other));
-  } else if (OB_FAIL(storage_schema_.assign(allocator_, other))) {
+  } else if (OB_FAIL(storage_schema_.assign(allocator, other))) {
     LOG_WARN("failed to assign storage schema", K(ret));
   } else{
     for (int64_t i = 0; OB_SUCC(ret) && i < storage_schema_.column_array_.count(); ++i) {
@@ -68,13 +70,13 @@ int ObTabletDDLCompleteMdsUserData::set_storage_schema(const ObStorageSchema &ot
   return ret;
 }
 
-int ObTabletDDLCompleteMdsUserData::assign(const ObTabletDDLCompleteMdsUserData &other)
+int ObTabletDDLCompleteMdsUserData::assign(common::ObIAllocator &allocator, const ObTabletDDLCompleteMdsUserData &other)
 {
   int ret = OB_SUCCESS;
   if (!other.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(other));
-  } else if (other.has_complete_ && OB_FAIL(set_storage_schema(other.storage_schema_))) {
+  } else if (other.has_complete_ && OB_FAIL(set_storage_schema(other.storage_schema_, allocator))) {
     LOG_WARN("failed to set storage schema", K(ret));
   } else if (other.has_complete_ && OB_FAIL(write_stat_.assign(other.write_stat_))) {
     LOG_WARN("failed to set storage schema", K(ret));
@@ -97,10 +99,9 @@ void ObTabletDDLCompleteMdsUserData::reset()
   table_key_.reset();
   storage_schema_.reset();
   write_stat_.reset();
-  allocator_.reset();
 }
 
-int ObTabletDDLCompleteMdsUserData::set_with_merge_arg(const ObTabletDDLCompleteArg &arg)
+int ObTabletDDLCompleteMdsUserData::set_with_merge_arg(const ObTabletDDLCompleteArg &arg, common::ObIAllocator &allocator)
 {
   int ret = OB_SUCCESS;
   if (!arg.is_valid()) {
@@ -109,7 +110,7 @@ int ObTabletDDLCompleteMdsUserData::set_with_merge_arg(const ObTabletDDLComplete
   } else if (arg.has_complete_ && nullptr == arg.get_storage_schema()) {
     ret= OB_ERR_UNEXPECTED;
     LOG_WARN("schema should not be null", K(ret));
-  } else if (arg.has_complete_ && OB_FAIL(set_storage_schema(*arg.get_storage_schema()))) {
+  } else if (arg.has_complete_ && OB_FAIL(set_storage_schema(*arg.get_storage_schema(), allocator))) {
     LOG_WARN("failed to set storage schema", K(ret), K(arg.get_storage_schema()));
   } else if (arg.has_complete_ && OB_FAIL(write_stat_.assign(arg.write_stat_))) {
     LOG_WARN("failed to set write stat", K(ret));
@@ -149,14 +150,14 @@ int ObTabletDDLCompleteMdsUserData::serialize(char *buf, const int64_t buf_len, 
   return ret;
 }
 
-int ObTabletDDLCompleteMdsUserData::deserialize(const char *buf, const int64_t data_len, int64_t &pos)
+int ObTabletDDLCompleteMdsUserData::deserialize(common::ObIAllocator &allocator, const char *buf, const int64_t data_len, int64_t &pos)
 {
   int ret = OB_SUCCESS;
   LST_DO_CODE(OB_UNIS_DECODE, has_complete_, direct_load_type_,
               data_format_version_, snapshot_version_, table_key_,
               write_stat_);
   if (OB_FAIL(ret)) {
-  } else if (has_complete_ && OB_FAIL(storage_schema_.deserialize(allocator_, buf, data_len, pos))) {
+  } else if (has_complete_ && OB_FAIL(storage_schema_.deserialize(allocator, buf, data_len, pos))) {
     LOG_WARN("failed to deserialize stroage_schema", K(ret), KPC(this));
   }
   return ret;

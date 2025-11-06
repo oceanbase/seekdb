@@ -1,13 +1,17 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #define USING_LOG_PREFIX SQL_SESSION
@@ -29,7 +33,6 @@ using namespace oceanbase::common;
 using namespace oceanbase::share;
 using namespace oceanbase::share::schema;
 using namespace oceanbase::transaction;
-using oceanbase::omt::ObTenantConfigMgr;
 
 namespace oceanbase
 {
@@ -1035,7 +1038,8 @@ int ObBasicSessionInfo::init_system_variables(const bool print_info_log, const b
     name.assign_ptr(const_cast<char*>(ObSysVariables::get_name(i).ptr()),
                     static_cast<ObString::obstr_size_t>(strlen(ObSysVariables::get_name(i).ptr())));
     bool is_exist = false;
-    if (OB_FAIL(sys_variable_exists(name, is_exist))) {
+    ObSysVarClassType sys_var_id = ObSysVariables::get_sys_var_id(i);
+    if (OB_FAIL(sys_variable_exists(sys_var_id, is_exist))) {
       LOG_WARN("failed to check if sys variable exists", K(name), K(ret));
     } else if (!is_exist) {
       // Note: If the base value has already been initialized, the following process will not be executed
@@ -1048,13 +1052,20 @@ int ObBasicSessionInfo::init_system_variables(const bool print_info_log, const b
       max_val.set_varchar(ObSysVariables::get_max(i));
       max_val.set_collation_type(ObCharset::get_system_collation());
       type.set_type(var_type);
-      if(is_sys_tenant) {
+      if (is_sys_tenant) {
         if (OB_FAIL(process_variable_for_tenant(name, value))) {
           LOG_WARN("process system variable for tenant error",  K(name), K(value), K(ret));
         }
       }
       if (OB_SUCC(ret)) {
-        if (OB_FAIL(load_sys_variable(calc_buf, name, type, value, min_val, max_val, var_flag, false))) {
+        int64_t store_idx = -1;
+        if (OB_FAIL(ObSysVarFactory::calc_sys_var_store_idx(sys_var_id, store_idx))) {
+          LOG_WARN("failed to calc sys var store idx", KR(ret), K(sys_var_id));
+        } else if (store_idx < 0 || store_idx >= ObSysVarFactory::ALL_SYS_VARS_COUNT) {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("store_idx invalid", KR(ret), K(sys_var_id), K(store_idx));
+        } else if (OB_FAIL(load_sys_variable(calc_buf, name, type, value, min_val, max_val,
+                var_flag, false, store_idx))) {
           LOG_WARN("fail to load default system variable", K(name), K(ret));
         } else if (OB_NOT_NULL(sys_vars_[i]) &&
                    sys_vars_[i]->is_influence_plan() &&
@@ -2049,13 +2060,25 @@ int ObBasicSessionInfo::get_sys_variable(const ObSysVarClassType sys_var_id, boo
 int ObBasicSessionInfo::sys_variable_exists(const ObString &var, bool &is_exists) const
 {
   int ret = OB_SUCCESS;
-  is_exists = false;
   ObSysVarClassType sys_var_id = SYS_VAR_INVALID;
-  int64_t store_idx = -1;
   if (SYS_VAR_INVALID == (sys_var_id = ObSysVarFactory::find_sys_var_id_by_name(var))) {
     LOG_DEBUG("sys var is not exist", K(var), K(ret));
+  } else if (OB_FAIL(sys_variable_exists(sys_var_id, is_exists))) {
+    LOG_WARN("failed to check sys variable exists", KR(ret), K(sys_var_id));
+  }
+  return ret;
+}
+
+int ObBasicSessionInfo::sys_variable_exists(const share::ObSysVarClassType sys_var_id,
+    bool &is_exists) const
+{
+  int ret = OB_SUCCESS;
+  is_exists = false;
+  int64_t store_idx = -1;
+  if (sys_var_id == SYS_VAR_INVALID) {
+    LOG_DEBUG("sys var is not exist", K(sys_var_id), K(ret));
   } else if (OB_FAIL(ObSysVarFactory::calc_sys_var_store_idx(sys_var_id, store_idx))) {
-    LOG_WARN("fail to calc sys var store idx", K(sys_var_id), K(var), K(ret));
+    LOG_WARN("fail to calc sys var store idx", K(sys_var_id), K(ret));
   } else if (store_idx < 0 || store_idx >= ObSysVarFactory::ALL_SYS_VARS_COUNT) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("got store_idx is invalid", K(store_idx), K(ret));
@@ -4882,7 +4905,7 @@ OB_DEF_DESERIALIZE(ObBasicSessionInfo)
   if (OB_SUCC(ret) && pos < data_len) {
     OB_UNIS_DECODE(exec_min_cluster_version_);
   } else {
-    exec_min_cluster_version_ = CLUSTER_VERSION_4_0_0_0;
+    exec_min_cluster_version_ = CLUSTER_VERSION_1_0_0_0;
   }
   if (OB_SUCC(ret) && pos < data_len) {
     LST_DO_CODE(OB_UNIS_DECODE, is_client_sessid_support_);
@@ -5529,8 +5552,8 @@ int ObBasicSessionInfo::get_auto_increment_cache_size(int64_t &auto_increment_ca
 int ObBasicSessionInfo::get_optimizer_features_enable_version(uint64_t &version) const
 {
   int ret = OB_SUCCESS;
-  // if OPTIMIZER_FEATURES_ENABLE is set as '', use COMPAT_VERSION_4_2_1 where this variable is introduced.
-  version = COMPAT_VERSION_4_2_1;
+  // if OPTIMIZER_FEATURES_ENABLE is set as ''
+  version = COMPAT_VERSION_1_0_0_0;
   ObString version_str;
   uint64_t tmp_version = 0;
   if (OB_FAIL(get_string_sys_var(SYS_VAR_OPTIMIZER_FEATURES_ENABLE, version_str))) {
@@ -5563,52 +5586,30 @@ int ObBasicSessionInfo::get_enable_parallel_ddl(bool &v) const
 
 int ObBasicSessionInfo::get_force_parallel_query_dop(uint64_t &v) const
 {
-  int ret = OB_SUCCESS;
-  if (exec_min_cluster_version_ >= CLUSTER_VERSION_3100) {
-    ret = get_uint64_sys_var(SYS_VAR__FORCE_PARALLEL_QUERY_DOP, v);
-  } else {
-    v = 1;
-  }
-  return ret;
+  return get_uint64_sys_var(SYS_VAR__FORCE_PARALLEL_QUERY_DOP, v);
 }
 
 int ObBasicSessionInfo::get_parallel_degree_policy_enable_auto_dop(bool &v) const
 {
   int ret = OB_SUCCESS;
   v = false;
-  if (exec_min_cluster_version_ >= CLUSTER_VERSION_4_2_0_0) {
-    int64_t value = 0;
-    if (OB_FAIL(get_int64_sys_var(SYS_VAR_PARALLEL_DEGREE_POLICY, value))) {
-      LOG_WARN("failed to update session_timeout", K(ret));
-    } else {
-      v = 1 == value;
-    }
+  int64_t value = 0;
+  if (OB_FAIL(get_int64_sys_var(SYS_VAR_PARALLEL_DEGREE_POLICY, value))) {
+    LOG_WARN("failed to update session_timeout", K(ret));
   } else {
-    v = false;
+    v = 1 == value;
   }
   return ret;
 }
 
 int ObBasicSessionInfo::get_force_parallel_dml_dop(uint64_t &v) const
 {
-  int ret = OB_SUCCESS;
-  if (exec_min_cluster_version_ >= CLUSTER_VERSION_3100) {
-    ret = get_uint64_sys_var(SYS_VAR__FORCE_PARALLEL_DML_DOP, v);
-  } else {
-    v = 1;
-  }
-  return ret;
+  return get_uint64_sys_var(SYS_VAR__FORCE_PARALLEL_DML_DOP, v);
 }
 
 int ObBasicSessionInfo::get_force_parallel_ddl_dop(uint64_t &v) const
 {
-  int ret = OB_SUCCESS;
-  if (exec_min_cluster_version_ >= CLUSTER_VERSION_3200) {
-    ret = get_uint64_sys_var(SYS_VAR__FORCE_PARALLEL_DDL_DOP, v);
-  } else {
-    v = 1;
-  }
-  return ret;
+  return get_uint64_sys_var(SYS_VAR__FORCE_PARALLEL_DDL_DOP, v);
 }
 
 int ObBasicSessionInfo::get_partial_rollup_pushdown(int64_t &partial_rollup) const
@@ -5672,13 +5673,7 @@ int ObBasicSessionInfo::get_activate_all_role_on_login(bool &v) const
 
 int ObBasicSessionInfo::get_mview_refresh_dop(uint64_t &v) const
 {
-  int ret = OB_SUCCESS;
-  if (exec_min_cluster_version_ >= CLUSTER_VERSION_4_3_5_1) {
-    ret = get_uint64_sys_var(SYS_VAR_MVIEW_REFRESH_DOP, v);
-  } else {
-    v = 0;
-  }
-  return ret;
+  return get_uint64_sys_var(SYS_VAR_MVIEW_REFRESH_DOP, v);
 }
 
 void ObBasicSessionInfo::reset_tx_variable(bool reset_next_scope)
@@ -6976,8 +6971,7 @@ bool ObBasicSessionInfo::has_active_autocommit_trans(transaction::ObTransID & tr
 bool ObBasicSessionInfo::get_enable_hyperscan_regexp_engine() const
 {
   // disable hyperscan during upgrading
-  return inf_pc_configs_.enable_hyperscan_regexp_engine_
-         && GET_MIN_CLUSTER_VERSION() >= CLUSTER_VERSION_4_3_3_0;
+  return inf_pc_configs_.enable_hyperscan_regexp_engine_;
 }
 
 int8_t ObBasicSessionInfo::get_min_const_integer_precision() const

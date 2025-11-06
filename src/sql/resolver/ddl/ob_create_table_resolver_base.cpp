@@ -1,18 +1,23 @@
-/**
- * Copyright (c) 2021 OceanBase
- * OceanBase CE is licensed under Mulan PubL v2.
- * You can use this software according to the terms and conditions of the Mulan PubL v2.
- * You may obtain a copy of Mulan PubL v2 at:
- *          http://license.coscl.org.cn/MulanPubL-2.0
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- * See the Mulan PubL v2 for more details.
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #define USING_LOG_PREFIX SQL_RESV
 #include "sql/resolver/ddl/ob_create_table_resolver_base.h"
 #include "share/ob_license_utils.h"
+#include "share/external_table/ob_external_table_utils.h"
 
 namespace oceanbase
 {
@@ -42,16 +47,6 @@ int ObCreateTableResolverBase::resolve_partition_option(
     SQL_RESV_LOG(WARN, "failed to build partition key info!", KR(ret), KP(session_info_));
   } else {
     if (NULL != node) {
-      uint64_t tenant_data_version = 0;
-      if (OB_FAIL(GET_MIN_DATA_VERSION(session_info_->get_effective_tenant_id(), tenant_data_version))) {
-        LOG_WARN("get tenant data version failed", K(ret), K(session_info_->get_effective_tenant_id()));
-      } else if (tenant_data_version < DATA_VERSION_4_3_1_0) {
-        if (table_schema.is_external_table()) {
-          ret = OB_NOT_SUPPORTED;
-          LOG_WARN("partition ext table is not supported in data version less than 4.3.1", K(ret), K(tenant_data_version));
-          LOG_USER_ERROR(OB_NOT_SUPPORTED, "partition external table in data version less than 4.3.1");
-        }
-      }
       ObCreateTableStmt *create_table_stmt = static_cast<ObCreateTableStmt *>(stmt_);
       if (OB_FAIL(ret)) {
       } else if (!is_partition_option_node_with_opt) {
@@ -208,33 +203,13 @@ int ObCreateTableResolverBase::set_table_option_to_schema(ObTableSchema &table_s
       }
     }
 
-    if (OB_SUCC(ret) && table_schema.get_compressor_type() == ObCompressorType::ZLIB_LITE_COMPRESSOR) {
-      uint64_t tenant_data_version = 0;
-      if (OB_FAIL(GET_MIN_DATA_VERSION(session_info_->get_effective_tenant_id(), tenant_data_version))) {
-        LOG_WARN("get tenant data version failed", K(ret));
-      } else if (tenant_data_version < DATA_VERSION_4_3_0_0) {
-        ret = OB_NOT_SUPPORTED;
-        LOG_WARN("tenant version is less than 4.3, zlib_lite compress method is not supported",
-                 K(ret), K(tenant_data_version));
-        LOG_USER_ERROR(OB_NOT_SUPPORTED, "version is less than 4.3, zlib_lite");
-      }
-    }
-
     if (OB_SUCC(ret)) {
       // if lob_inrow_threshold not set, used config default_lob_inrow_threshold
-      uint64_t tenant_data_version = 0;
       if (is_set_lob_inrow_threshold_) {
         table_schema.set_lob_inrow_threshold(lob_inrow_threshold_);
       } else if (OB_ISNULL(session_info_)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("session if NULL", K(ret));
-      } else if (OB_FAIL(GET_MIN_DATA_VERSION(session_info_->get_effective_tenant_id(), tenant_data_version))) {
-        LOG_WARN("get tenant data version failed", K(ret));
-      } else if (tenant_data_version < DATA_VERSION_4_2_1_2){
-        // lob_inrow_threshold is added in 421 bp2
-        // so need ensure lob_inrow_threshold is 4096 before 421 bp2 for compat
-        lob_inrow_threshold_ = OB_DEFAULT_LOB_INROW_THRESHOLD; 
-        table_schema.set_lob_inrow_threshold(lob_inrow_threshold_);
       } else if (OB_FALSE_IT((lob_inrow_threshold_ = session_info_->get_default_lob_inrow_threshold()))) {
       } else if (lob_inrow_threshold_ < OB_MIN_LOB_INROW_THRESHOLD || lob_inrow_threshold_ > OB_MAX_LOB_INROW_THRESHOLD) {
         ret = OB_INVALID_ARGUMENT;
@@ -245,8 +220,12 @@ int ObCreateTableResolverBase::set_table_option_to_schema(ObTableSchema &table_s
       }
     }
     if (OB_SUCC(ret) && table_schema.is_external_table()) {
+      ObString file_location;
+      ObSchemaGetterGuard *schema_guard = schema_checker_->get_schema_guard();
+      CK (OB_NOT_NULL(schema_guard));
+      OZ (ObExternalTableUtils::get_external_file_location(table_schema, *schema_guard, *allocator_, file_location));
       if ((table_schema.get_external_file_format().empty()
-          || table_schema.get_external_file_location().empty()) &&
+          || file_location.empty()) &&
            table_schema.get_external_properties().empty()) {
         ret = OB_NOT_SUPPORTED;
         LOG_USER_ERROR(OB_NOT_SUPPORTED, "Default properties or format or location option for external table");
@@ -327,19 +306,11 @@ int ObCreateTableResolverBase::resolve_column_group_helper(const ParseNode *cg_n
 {
   int ret = OB_SUCCESS;
   ObArray<uint64_t> column_ids; // not include virtual column
-  uint64_t compat_version = 0;
   ObTableStoreType table_store_type = OB_TABLE_STORE_INVALID;
   const uint64_t tenant_id = table_schema.get_tenant_id();
   const int64_t column_cnt = table_schema.get_column_count();
   if (OB_FAIL(column_ids.reserve(column_cnt))) {
       LOG_WARN("fail to reserve", KR(ret), K(column_cnt));
-  } else if (OB_FAIL(GET_MIN_DATA_VERSION(tenant_id, compat_version))) {
-      LOG_WARN("fail to get min data version", KR(ret), K(tenant_id));
-  } else if (!(compat_version >= DATA_VERSION_4_3_0_0)) {
-      if (OB_NOT_NULL(cg_node) && (T_COLUMN_GROUP == cg_node->type_)) {
-        ret = OB_NOT_SUPPORTED;
-        LOG_WARN("can't support column store if version less than 4_1_0_0", KR(ret), K(compat_version));
-      }
   } else {
     table_schema.set_column_store(true);
     bool is_each_cg_exist = false;
