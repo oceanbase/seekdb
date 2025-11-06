@@ -323,9 +323,8 @@ void ObFailureDetector::detect_palf_hang_failure_()
       COORDINATOR_LOG(ERROR, "add_failure_event failed", K(ret), K(clog_disk_hang_event));
     } else {
       ATOMIC_SET(&has_add_clog_hang_event_, true);
-      LOG_DBA_ERROR(OB_DISK_HUNG, "msg", "clog disk may be hung, add failure event", K(clog_disk_hang_event),
-                    K(clog_disk_last_working_time), "hung time", now - clog_disk_last_working_time);
-      LOG_DBA_ERROR_V2(OB_FAILURE_LOG_DISK_HUNG, OB_DISK_HUNG, "clog disk may be hung, add failure event");
+      COORDINATOR_LOG(WARN, "clog disk may be hang, add failure event", K(clog_disk_hang_event),
+                    K(clog_disk_last_working_time), "hang time", now - clog_disk_last_working_time);
     }
   } else {
     if (is_clog_disk_hang) {
