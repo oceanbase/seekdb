@@ -41,7 +41,7 @@ PYBIND11_MODULE(pyseekdb, m) {
                                                   pybind11::arg("port") = 2881,
                                                  "open db");
 
-    m.def("connect", &oceanbase::embed::ObLiteEmbed::connect, pybind11::arg("db_name") = "test",
+    m.def("connect", &oceanbase::embed::ObLiteEmbed::connect, pybind11::arg("database") = "test",
                                                         pybind11::arg("autocommit") = false,
                                                        "connect seekdb");
 
