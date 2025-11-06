@@ -213,6 +213,7 @@ def_table_schema(
         ('column_name', 'varchar:OB_MAX_COLUMN_NAME_LENGTH'),
     ],
     in_tenant_space = True,
+    is_core_related = True,
 
   normal_columns = [
       ('column_value', 'varchar:OB_OLD_MAX_VARCHAR_LENGTH', 'true'),
@@ -232,6 +233,7 @@ all_table_def = dict(
         ('table_id', 'int'),
     ],
     in_tenant_space = True,
+    is_core_related = True,
 
     normal_columns = [
       ('table_name', 'varchar:OB_MAX_TABLE_NAME_LENGTH', 'false', ''),
@@ -343,6 +345,7 @@ all_column_def = dict(
         ('column_id', 'int'),
     ],
     in_tenant_space = True,
+    is_core_related = True,
 
     normal_columns = [
       ('column_name', 'varchar:OB_MAX_COLUMN_NAME_LENGTH', 'false', ''),
@@ -390,6 +393,7 @@ def_table_schema(
         ('schema_version', 'int'),
     ],
     in_tenant_space = True,
+    is_core_related = True,
 
     normal_columns = [
       ('tenant_id', 'int'),

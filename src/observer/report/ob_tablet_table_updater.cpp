@@ -937,5 +937,14 @@ int ObTabletTableUpdater::throttle_(
   return ret;
 }
 
+int64_t ObTabletTableUpdateTaskQueue::task_count() const
+{
+  if (GCTX.in_bootstrap_) {
+    return 0;
+  } else {
+    return ObUniqTaskQueue<ObTabletTableUpdateTask, ObTabletTableUpdater>::task_count();
+  }
+}
+
 } // end namespace observer
 } // end namespace oceanbase

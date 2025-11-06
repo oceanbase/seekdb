@@ -227,6 +227,14 @@ int ObTenantNodeBalancer::get_server_allocated_resource(ServerResource &server_r
   return ret;
 }
 
+int64_t ObTenantNodeBalancer::get_refresh_interval() {
+  if (!omt_->has_synced()) {
+    return BOOTSTRAP_REFRESH_INTERVAL;
+  } else {
+    return refresh_interval_;
+  }
+}
+
 int ObTenantNodeBalancer::check_del_tenants(const TenantUnits &local_units, TenantUnits &units)
 {
   int ret = OB_SUCCESS;

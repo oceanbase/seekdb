@@ -172,7 +172,7 @@ int ObAllVirtualProxyPartitionInfo::fill_row_(const ObTableSchema &table_schema)
   ObObj *cells = cur_row_.cells_;
   int64_t all_part_num = table_schema.get_all_part_num();
   const ObPartitionOption &part_option = table_schema.get_part_option();
-  const ObPartitionOption &sub_part_option = table_schema.get_sub_part_option();
+  const ObSubPartitionOption &sub_part_option = table_schema.get_sub_part_option();
 
   // part key column
   uint64_t column_id = OB_INVALID_ID;

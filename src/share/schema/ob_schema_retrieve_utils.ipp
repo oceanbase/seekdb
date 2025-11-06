@@ -1399,7 +1399,7 @@ int ObSchemaRetrieveUtils::fill_table_schema(
       }
     }
     //sub_part_expr
-    ObPartitionOption &sub_part_option = table_schema.get_sub_part_option();
+    ObSubPartitionOption &sub_part_option = table_schema.get_sub_part_option();
     EXTRACT_INT_FIELD_MYSQL(result, "sub_part_func_type", part_func_type, ObPartitionFuncType);
     sub_part_option.set_part_func_type(part_func_type);
     EXTRACT_INT_FIELD_MYSQL(result, "sub_part_num", part_num, int64_t);
@@ -1808,7 +1808,7 @@ int ObSchemaRetrieveUtils::fill_tablegroup_schema(
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(result, part_func_type, partition_option, ObPartitionFuncType, skip_null_error, ObSchemaService::g_ignore_column_retrieve_error_, default_part_func_type);
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(result, part_func_expr_num, tg_schema, int64_t, skip_null_error, ObSchemaService::g_ignore_column_retrieve_error_, default_func_expr_num);
 
-    ObPartitionOption &sub_part_option = tg_schema.get_sub_part_option();
+    ObSubPartitionOption &sub_part_option = tg_schema.get_sub_part_option();
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(result, sub_part_func_type, sub_part_option, ObPartitionFuncType, skip_null_error, ObSchemaService::g_ignore_column_retrieve_error_, default_part_func_type);
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(result, sub_part_func_expr_num, tg_schema, int64_t, skip_null_error, ObSchemaService::g_ignore_column_retrieve_error_, default_func_expr_num);
     EXTRACT_INT_FIELD_MYSQL_WITH_DEFAULT_VALUE(result, "sub_part_num", def_sub_part_num, int64_t, skip_null_error, ObSchemaService::g_ignore_column_retrieve_error_, default_part_num);
@@ -3624,7 +3624,7 @@ int ObSchemaRetrieveUtils::fill_table_schema(
         }
       }
       //sub_part_expr
-      ObPartitionOption &sub_part_option = table_schema.get_sub_part_option();
+      ObSubPartitionOption &sub_part_option = table_schema.get_sub_part_option();
       EXTRACT_INT_FIELD_MYSQL(result, "sub_part_func_type", part_func_type, ObPartitionFuncType);
       sub_part_option.set_part_func_type(part_func_type);
       EXTRACT_INT_FIELD_MYSQL(result, "sub_part_num", part_num, int64_t);

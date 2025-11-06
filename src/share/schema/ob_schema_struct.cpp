@@ -5095,6 +5095,71 @@ OB_DEF_SERIALIZE_SIZE(ObPartitionOption)
   return len;
 }
 
+ObSubPartitionOption::ObSubPartitionOption()
+    : ObPartitionOption()
+{
+  set_part_num(0);
+}
+
+ObSubPartitionOption::ObSubPartitionOption(ObIAllocator *allocator)
+    : ObPartitionOption(allocator)
+{
+  set_part_num(0);
+}
+
+ObSubPartitionOption::~ObSubPartitionOption()
+{
+}
+
+ObSubPartitionOption::ObSubPartitionOption(const ObSubPartitionOption &expr)
+    : ObPartitionOption(expr)
+{
+}
+
+ObSubPartitionOption &ObSubPartitionOption::operator=(const ObSubPartitionOption &expr)
+{
+  if (this != &expr) {
+    ObPartitionOption::operator=(expr);
+  }
+  return *this;
+}
+
+bool ObSubPartitionOption::operator==(const ObSubPartitionOption &expr) const
+{
+  return ObPartitionOption::operator==(expr);
+}
+
+void ObSubPartitionOption::reset()
+{
+  ObPartitionOption::reset();
+  set_part_num(0);
+}
+
+void ObSubPartitionOption::reuse()
+{
+  ObPartitionOption::reuse();
+  set_part_num(0);
+}
+
+OB_DEF_SERIALIZE(ObSubPartitionOption)
+{
+  int ret = OB_SUCCESS;
+  BASE_SER((, ObPartitionOption));
+  return ret;
+}
+
+OB_DEF_DESERIALIZE(ObSubPartitionOption)
+{
+  int ret = OB_SUCCESS;
+  BASE_DESER((, ObPartitionOption));
+  return ret;
+}
+
+OB_DEF_SERIALIZE_SIZE(ObSubPartitionOption)
+{
+  return ObPartitionOption::get_serialize_size();
+}
+
 ObBasePartition::ObBasePartition()
   : tenant_id_(common::OB_INVALID_ID), table_id_(common::OB_INVALID_ID),
     part_id_(common::OB_INVALID_INDEX),

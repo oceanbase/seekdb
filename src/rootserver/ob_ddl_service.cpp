@@ -9676,7 +9676,7 @@ int ObDDLService::modify_func_expr_column_name(
   ObArray<ObQualifiedName> columns;
   const ObColumnSchemaV2 *col_schema = NULL;
   ObPartitionOption &part_option = table_schema.get_part_option();
-  ObPartitionOption &sub_part_option = table_schema.get_sub_part_option();
+  ObSubPartitionOption &sub_part_option = table_schema.get_sub_part_option();
   ObString orig_part_expr;
   ObArray<ObString> expr_strs;
 
@@ -13510,7 +13510,7 @@ int ObDDLService::check_could_write_truncate_info_(
   bool enable_preserve_index = false;
   bool only_ref_columns = false;
   const ObPartitionOption &part_option = orig_table_schema.get_part_option();
-  const ObPartitionOption &sub_part_option = orig_table_schema.get_sub_part_option();
+  const ObSubPartitionOption &sub_part_option = orig_table_schema.get_sub_part_option();
   if (!arg.is_update_global_indexes_) {
   } else {
     {
@@ -17740,7 +17740,7 @@ int ObDDLService::check_alter_drop_subpartitions(const share::schema::ObTableSch
 {
   int ret = OB_SUCCESS;
   const ObPartitionLevel part_level = orig_table_schema.get_part_level();
-  const ObPartitionOption &subpart_option = orig_table_schema.get_sub_part_option();
+  const ObSubPartitionOption &subpart_option = orig_table_schema.get_sub_part_option();
   if (PARTITION_LEVEL_ZERO == part_level || PARTITION_LEVEL_ONE == part_level) {
     ret = OB_ERR_PARTITION_MGMT_ON_NONPARTITIONED;
     LOG_WARN("unsupport management on non-partition table", K(ret));
@@ -18353,7 +18353,7 @@ int ObDDLService::check_alter_add_subpartitions(const share::schema::ObTableSche
 
   ObPartition **part_array = alter_table_schema.get_part_array();
   const ObPartitionLevel part_level = orig_table_schema.get_part_level();
-  const ObPartitionOption &subpart_option = orig_table_schema.get_sub_part_option();
+  const ObSubPartitionOption &subpart_option = orig_table_schema.get_sub_part_option();
   bool is_oracle_mode = false;
   if (OB_SUCC(ret) && OB_ISNULL(part_array)) {
     ret = OB_ERR_UNEXPECTED;
@@ -29874,7 +29874,8 @@ int ObDDLService::alter_tablegroup(const ObAlterTablegroupArg &arg)
   return ret;
 }
 
-int ObDDLService::refresh_schema(uint64_t tenant_id, int64_t *publish_schema_version /*NULL*/)
+int ObDDLService::refresh_schema(uint64_t tenant_id, int64_t *publish_schema_version /*NULL*/,
+                                 common::ObIArray<share::schema::ObTableSchema> *table_schemas /*nullptr*/)
 {
   int ret = OB_SUCCESS;
   int64_t refresh_count = 0;
@@ -29897,7 +29898,7 @@ int ObDDLService::refresh_schema(uint64_t tenant_id, int64_t *publish_schema_ver
       // reset ctx to retry to die
       common::ObTimeoutCtx ctx;
       ctx.reset_timeout_us();
-      ret = schema_service_->refresh_and_add_schema(tenant_ids);
+      ret = schema_service_->refresh_and_add_schema(tenant_ids, false, table_schemas);
 
       if (OB_SUCC(ret)) {
         break;
@@ -35782,7 +35783,7 @@ int ObDDLService::fix_local_idx_subpart_name_(const ObSimpleTableSchemaV2 &ori_d
   bool is_matched = false;
   const schema::ObPartitionOption &ori_part_option = ori_table_schema.get_part_option();
   schema::ObPartitionFuncType ori_part_func_type = ori_part_option.get_part_func_type();
-  const schema::ObPartitionOption &ori_subpart_option = ori_table_schema.get_sub_part_option();
+  const schema::ObSubPartitionOption &ori_subpart_option = ori_table_schema.get_sub_part_option();
   schema::ObPartitionFuncType ori_subpart_func_type = ori_subpart_option.get_sub_part_func_type();
   ObCheckPartitionMode check_partition_mode = CHECK_PARTITION_MODE_NORMAL;
   const ObPartitionLevel part_level = inc_table_schema.get_part_level();

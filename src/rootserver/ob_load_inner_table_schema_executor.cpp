@@ -150,9 +150,7 @@ int ObLoadInnerTableSchemaExecutor::init_args_(ObIArray<ObTableSchema> &table_sc
 
   // generate inner table schema info
   share::ObInnerTableSchemaDumper dumper(table_schemas, allocator_);
-  if (OB_FAIL(ObSchemaUtils::generate_hard_code_schema_version(table_schemas))) {
-    LOG_WARN("failed to generate hard code schema version", KR(ret));
-  } else if (OB_FAIL(dumper.get_inner_table_schema_info(infos_))) {
+  if (OB_FAIL(dumper.get_inner_table_schema_info(infos_))) {
     LOG_WARN("failed to get inner table schema info", KR(ret));
   }
 

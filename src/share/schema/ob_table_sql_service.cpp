@@ -2155,7 +2155,7 @@ int ObTableSqlService::check_table_history_matched_(
         } else {
           ret = OB_STATE_NOT_MATCH;
           LOG_WARN("__all_table_history's row not match with __all_table's",
-                   KR(ret), K(tenant_id), K(table_id), K(schema_version));
+                   KR(ret), K(sql), K(tenant_id), K(table_id), K(schema_version));
         }
       } // end SMART_VAR
       }
@@ -3069,7 +3069,7 @@ int ObTableSqlService::gen_table_dml_without_check(
   int ret = OB_SUCCESS;
   ObString empty_str("");
   const ObPartitionOption &part_option = table.get_part_option();
-  const ObPartitionOption &sub_part_option = table.get_sub_part_option();
+  const ObSubPartitionOption &sub_part_option = table.get_sub_part_option();
   const char *expire_info = table.get_expire_info().length() <= 0 ?
     "" : table.get_expire_info().ptr();
   const char *part_func_expr = part_option.get_part_func_expr_str().length() <= 0 ?
@@ -3080,9 +3080,7 @@ int ObTableSqlService::gen_table_dml_without_check(
     "" : table.get_encryption_str().ptr();
   const int64_t INVALID_REPLICA_NUM = -1;
   const int64_t part_num = part_option.get_part_num();
-  const int64_t sub_part_num = PARTITION_LEVEL_TWO == table.get_part_level()
-    && table.has_sub_part_template_def() ?
-    sub_part_option.get_part_num() : 0;
+  const int64_t sub_part_num = sub_part_option.get_part_num();
   const char *ttl_definition = table.get_ttl_definition().empty() ?
     "" : table.get_ttl_definition().ptr();
   const char *kv_attributes = table.get_kv_attributes().empty() ?
@@ -3312,7 +3310,7 @@ int ObTableSqlService::gen_partition_option_dml(const ObTableSchema &table, ObDM
   const uint64_t table_id = table.get_table_id();
   const uint64_t exec_tenant_id = ObSchemaUtils::get_exec_tenant_id(table.get_tenant_id());
   const ObPartitionOption &part_option = table.get_part_option();
-  const ObPartitionOption &sub_part_option = table.get_sub_part_option();
+  const ObSubPartitionOption &sub_part_option = table.get_sub_part_option();
   const char *part_func_expr = part_option.get_part_func_expr_str().length() <= 0 ?
   "" : part_option.get_part_func_expr_str().ptr();
   const char *sub_part_func_expr = sub_part_option.get_part_func_expr_str().length() <= 0 ?

@@ -83,6 +83,7 @@ public:
   static const int64_t MAX_CACHE_NUM = 16;
   static const int64_t PRE_CACHE_NUM = MAX_CACHE_NUM / 4;
   static const int64_t RETRY_REQUEST_INTERVAL = 100000;
+  static const int64_t BOOTSTRAP_RETRY_REQUEST_INTERVAL = 10000;
   static const int64_t MAX_RETRY_REQUEST_INTERVAL = RETRY_REQUEST_INTERVAL * 10;
 private:
   bool is_inited_;

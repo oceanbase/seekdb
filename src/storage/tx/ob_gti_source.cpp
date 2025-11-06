@@ -212,7 +212,12 @@ int ObGtiSource::get_trans_id(int64_t &trans_id)
   const int64_t left_cache_count = cache_idx_ - cur_idx_;
   if (left_cache_count < PRE_CACHE_NUM && !ATOMIC_LOAD(&is_requesting_)) {
     const int64_t cur_ts = ObTimeUtility::current_time();
-    const int64_t retry_interval = min(retry_request_cnt_ * RETRY_REQUEST_INTERVAL, MAX_RETRY_REQUEST_INTERVAL);
+    int64_t retry_interval = 0;
+    if (GCTX.in_bootstrap_) {
+      retry_interval = min(retry_request_cnt_ * BOOTSTRAP_RETRY_REQUEST_INTERVAL, MAX_RETRY_REQUEST_INTERVAL);
+    } else {
+      retry_interval = min(retry_request_cnt_ * RETRY_REQUEST_INTERVAL, MAX_RETRY_REQUEST_INTERVAL);
+    }
     if (cur_ts - last_request_ts_ > retry_interval && ATOMIC_BCAS(&is_requesting_, false, true)) {
       ObGtiRequest req;
       if (OB_FAIL(req.init(MTL_ID(), get_preallocate_count_()))) {

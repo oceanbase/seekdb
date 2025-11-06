@@ -708,11 +708,11 @@ int ObSchemaServiceSQLImpl::get_not_core_table_schemas(
              && end - begin < MAX_IN_QUERY_PER_TIME) {
         end++;
       }
-      if (OB_FAIL(fetch_all_table_info(schema_status, schema_version, tenant_id, sql_client, allocator,
-                                       not_core_schemas, &table_ids.at(begin), end - begin))) {
+      if (!GCTX.in_bootstrap_ && OB_FAIL(fetch_all_table_info(schema_status, schema_version, tenant_id, sql_client, allocator,
+                                         not_core_schemas, &table_ids.at(begin), end - begin))) {
         LOG_WARN("fetch all table info failed", K(schema_version), K(schema_status), K(tenant_id), K(ret));
-      } else if (OB_FAIL(fetch_all_column_info(schema_status, schema_version, tenant_id, sql_client,
-                                               not_core_schemas, &table_ids.at(begin), end - begin))) {
+      } else if (!GCTX.in_bootstrap_ && OB_FAIL(fetch_all_column_info(schema_status, schema_version, tenant_id, sql_client,
+                                                not_core_schemas, &table_ids.at(begin), end - begin))) {
         LOG_WARN("fetch all column info failed", K(schema_version), K(schema_status), K(tenant_id), K(ret));
       } else if (OB_FAIL(fetch_all_column_group_info(schema_status, schema_version, tenant_id, sql_client,
                                                      not_core_schemas, &table_ids.at(begin), end - begin))) {

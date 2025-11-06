@@ -125,8 +125,15 @@ private:
   int64_t start_timestamp_;
 };
 
-typedef ObUniqTaskQueue<ObTabletTableUpdateTask, ObTabletTableUpdater> ObTabletTableUpdateTaskQueue;
-typedef ObUniqTaskQueue<ObTabletTableUpdateTask, ObTabletTableUpdater> ObTabletTableRemoveTaskQueue;
+class ObTabletTableUpdateTaskQueue : public ObUniqTaskQueue<ObTabletTableUpdateTask, ObTabletTableUpdater>
+{
+public:
+  ObTabletTableUpdateTaskQueue() : ObUniqTaskQueue<ObTabletTableUpdateTask, ObTabletTableUpdater>() {}
+  virtual ~ObTabletTableUpdateTaskQueue() {}
+  virtual int64_t task_count() const override;
+};
+
+typedef ObTabletTableUpdateTaskQueue ObTabletTableRemoveTaskQueue;
 typedef ObArray<ObTabletTableUpdateTask> UpdateTaskList;
 typedef ObArray<ObTabletTableUpdateTask> RemoveTaskList;
 
