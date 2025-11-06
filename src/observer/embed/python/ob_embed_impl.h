@@ -87,6 +87,12 @@ public:
   static int convert_result_to_pyobj(const int64_t col_idx, common::sqlclient::ObMySQLResult &result,ObObjMeta &type, pybind11::object &val);
   static int convert_collection_to_string(ObObj &obj, ObObjMeta &obj_meta, observer::ObInnerSQLResult &inner_result,
       ObIAllocator &allocator, ObString &res_str);
+  // Convert string charset using session's character_set_results
+  static int convert_string_charset(sql::ObSQLSessionInfo &session,
+                                     ObIAllocator &allocator,
+                                     const ObString &in_str,
+                                     ObCollationType col_collation,
+                                     ObString &out_str);
 };
 
 } // end embed

@@ -27,6 +27,7 @@
 #include "sql/engine/expr/ob_expr_sql_udt_utils.h"
 #include "sql/engine/expr/ob_expr_lob_utils.h"
 #include "lib/timezone/ob_time_convert.h"
+#include "lib/charset/ob_charset.h"
 
 PYBIND11_MODULE(pyseekdb, m) {
     m.doc() = "OceanBase SeekDB";
@@ -584,7 +585,6 @@ void ObLiteEmbedConn::begin()
   if (OB_ISNULL(conn_)) {
     ret = OB_CONNECT_ERROR;
   } else if (session_->is_in_transaction()) {
-    reset_result();
     conn_->set_is_in_trans(true);
     conn_->rollback();
     LOG_WARN("last trans need rollback", KP(conn_));
@@ -600,7 +600,6 @@ void ObLiteEmbedConn::begin()
 void ObLiteEmbedConn::commit()
 {
   int ret = OB_SUCCESS;
-  reset_result();
   if (OB_ISNULL(conn_)) {
     ret = OB_CONNECT_ERROR;
   } else if (!session_->is_in_transaction()) {
@@ -616,7 +615,6 @@ void ObLiteEmbedConn::commit()
 void ObLiteEmbedConn::rollback()
 {
   int ret = OB_SUCCESS;
-  reset_result();
   if (OB_ISNULL(conn_)) {
     ret = OB_CONNECT_ERROR;
   } else if (!session_->is_in_transaction()) {
@@ -636,6 +634,7 @@ int ObLiteEmbedUtil::convert_result_to_pyobj(const int64_t col_idx, common::sqlc
   ObArenaAllocator allocator(mem_attr);
   ObInnerSQLResult &inner_result = reinterpret_cast<ObInnerSQLResult&>(result);
   ObObjType type = obj_meta.get_type();
+  ObSQLSessionInfo &session = inner_result.result_set().get_session();
   switch (type) {
     case ObNullType: {
       val = pybind11::none();
@@ -840,7 +839,13 @@ int ObLiteEmbedUtil::convert_result_to_pyobj(const int64_t col_idx, common::sqlc
       } else if (obj_meta.get_collation_type() == ObCollationType::CS_TYPE_BINARY) {
         val = pybind11::bytes(obj_str.ptr(), obj_str.length());
       } else {
-        val = pybind11::str(obj_str.ptr(), obj_str.length());
+        ObString out_str;
+        if (OB_FAIL(convert_string_charset(session, allocator, obj_str,
+                                           obj_meta.get_collation_type(), out_str))) {
+          LOG_WARN("convert string charset failed", K(ret), K(obj_str));
+        } else {
+          val = pybind11::str(out_str.ptr(), out_str.length());
+        }
       }
       break;
     }
@@ -856,7 +861,13 @@ int ObLiteEmbedUtil::convert_result_to_pyobj(const int64_t col_idx, common::sqlc
         } else if (OB_FAIL(sql::ObTextStringHelper::read_real_string_data(&allocator, obj, real_data))) {
           LOG_WARN("failed to read real string data", K(ret), K(obj));
         } else {
-          val = pybind11::str(real_data.ptr(), real_data.length());
+          ObString out_str;
+          if (OB_FAIL(convert_string_charset(session, allocator, real_data,
+                                             obj_meta.get_collation_type(), out_str))) {
+            LOG_WARN("convert string charset failed", K(ret) ,K(real_data));
+          } else {
+            val = pybind11::str(out_str.ptr(), out_str.length());
+          }
         }
       }
       break;
@@ -935,6 +946,40 @@ int ObLiteEmbedUtil::convert_result_to_pyobj(const int64_t col_idx, common::sqlc
     default: {
       ret = OB_NOT_SUPPORTED;
       break;
+    }
+  }
+  return ret;
+}
+
+int ObLiteEmbedUtil::convert_string_charset(sql::ObSQLSessionInfo &session,
+                                             ObIAllocator &allocator,
+                                             const ObString &in_str,
+                                             ObCollationType col_collation,
+                                             ObString &out_str)
+{
+  int ret = OB_SUCCESS;
+  out_str.reset();
+
+  ObCharsetType result_charset = CHARSET_INVALID;
+  if (OB_FAIL(session.get_character_set_results(result_charset))) {
+    LOG_WARN("get character_set_results failed", K(ret));
+  } else if (result_charset == CHARSET_INVALID) {
+    out_str = in_str;
+  } else if (col_collation == CS_TYPE_BINARY) {
+    out_str = in_str;
+  } else {
+    ObCollationType result_collation = ObCharset::get_default_collation(result_charset);
+    if (col_collation == result_collation || col_collation == CS_TYPE_INVALID) {
+      out_str = in_str;
+    } else {
+      if (OB_FAIL(ObCharset::charset_convert(allocator,
+                                              in_str,
+                                              col_collation,
+                                              result_collation,
+                                              out_str))) {
+        LOG_WARN("charset convert failed, use original string", K(ret),
+                 K(col_collation), K(result_collation));
+      }
     }
   }
   return ret;

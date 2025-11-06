@@ -101,9 +101,15 @@ ObInnerSQLConnection::TimeoutGuard::~TimeoutGuard()
     LOG_ERROR("get timeout failed", KR(ret), K(query_timeout), K(trx_timeout));
   } else {
     if (query_timeout != query_timeout_ || trx_timeout != trx_timeout_) {
+      #ifdef OB_BUILD_EMBED_MODE
+      if (conn_.get_session().is_inner() && OB_FAIL(conn_.set_session_timeout(query_timeout_, trx_timeout_))) {
+        LOG_ERROR("set session timeout failed", K(ret));
+      }
+      #else
       if (OB_FAIL(conn_.set_session_timeout(query_timeout_, trx_timeout_))) {
         LOG_ERROR("set session timeout failed", K(ret));
       }
+      #endif
     }
   }
 }
