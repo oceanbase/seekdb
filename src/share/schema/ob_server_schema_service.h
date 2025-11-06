@@ -879,7 +879,8 @@ protected:
                                   const int64_t schema_version);
   //refresh schema and update schema_manager_for_cache_
   //leave the job of schema object copy to get_schema func
-  int refresh_schema(const ObRefreshSchemaStatus &schema_status);
+  int refresh_schema(const ObRefreshSchemaStatus &schema_status,
+                     common::ObIArray<share::schema::ObTableSchema> *table_schemas = nullptr);
 
   virtual int publish_schema(const uint64_t tenant_id) = 0;
   virtual int init_multi_version_schema_struct(const uint64_t tenant_id) = 0;
@@ -935,11 +936,17 @@ private:
   };
 
   int refresh_increment_schema(const ObRefreshSchemaStatus &schema_status);
-  int refresh_full_schema(const ObRefreshSchemaStatus &schema_status);
+  int refresh_full_schema(const ObRefreshSchemaStatus &schema_status,
+                         common::ObIArray<share::schema::ObTableSchema> *table_schemas = nullptr);
   int refresh_tenant_full_normal_schema(
       common::ObISQLClient &sql_client,
       const ObRefreshSchemaStatus &schema_status,
-      const int64_t schema_version);
+      const int64_t schema_version,
+      common::ObIArray<share::schema::ObTableSchema> *table_schemas = nullptr);
+  int construct_related_table_schemas(
+      const common::ObIArray<uint64_t> &table_ids,
+      common::ObIArray<share::schema::ObTableSchema> *table_schemas,
+      common::ObIArray<share::schema::ObTableSchema *> &tables);
 
 #define GET_INCREMENT_SCHEMA_KEY_FUNC_DECLARE(SCHEMA)               \
   int get_increment_##SCHEMA##_keys(const ObSchemaMgr &schema_guard,  \
@@ -1053,7 +1060,8 @@ private:
                                     const int64_t schema_version,
                                     const int64_t publish_version,
                                     common::ObISQLClient &sql_client,
-                                    bool &sys_schema_change);
+                                    bool &sys_schema_change,
+                                    common::ObIArray<share::schema::ObTableSchema> *table_schemas = nullptr);
 
   int check_core_or_sys_schema_change(common::ObISQLClient &sql_client,
                                       const ObRefreshSchemaStatus &schema_status,

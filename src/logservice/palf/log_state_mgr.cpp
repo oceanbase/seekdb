@@ -296,6 +296,9 @@ int LogStateMgr::switch_state()
         int64_t new_leader_epoch = OB_INVALID_TIMESTAMP;
         if (follower_need_update_role_(new_leader, new_leader_epoch)) {
           ret = follower_active_to_reconfirm_(new_leader_epoch);
+          if (OB_SUCC(ret)) {
+            ret = reconfirm_to_leader_active_();
+          }
         } else {
           set_leader_and_epoch_(new_leader, new_leader_epoch);
         }
@@ -654,12 +657,15 @@ int LogStateMgr::reconfirm_to_leader_active_()
   LogConfigVersion config_version;
   if (OB_FAIL(mm_->get_config_version(config_version))) {
     PALF_LOG(WARN, "get_config_version failed", K(ret), K_(palf_id));
-  } else if (OB_FAIL(mm_->get_alive_member_list_with_arb(member_list, replica_num))) {
-    PALF_LOG(WARN, "get_alive_member_list_with_arb failed", K(ret), K_(palf_id));
-  } else if (!member_list.contains(self_)) {
-    PALF_LOG(ERROR, "curr_member_list doesn't contain self, revoke", K_(palf_id),
-             K(member_list), K_(self));
-  } else if (OB_FAIL(sw_->to_leader_active())) {
+  }
+  // set_initial_member_list hasn't been called, so self_ may not be in member_list
+  // else if (OB_FAIL(mm_->get_alive_member_list_with_arb(member_list, replica_num))) {
+  //   PALF_LOG(WARN, "get_alive_member_list_with_arb failed", K(ret), K_(palf_id));
+  // } else if (!member_list.contains(self_)) {
+  //   PALF_LOG(ERROR, "curr_member_list doesn't contain self, revoke", K_(palf_id),
+  //            K(member_list), K_(self));
+  // }
+  else if (OB_FAIL(sw_->to_leader_active())) {
     PALF_LOG(WARN, "sw leader_active failed", K(ret), K_(palf_id));
   } else {
     update_role_and_state_(LEADER, ACTIVE);

@@ -268,7 +268,7 @@ int ObTablegroupSqlService::gen_tablegroup_dml(
       LOG_WARN("tablegroup schema sharding can not be empty when data version is greater than 4.2", KR(ret), K(tablegroup_schema));
     } else {
       const ObPartitionOption &part_option = tablegroup_schema.get_part_option();
-      const ObPartitionOption &sub_part_option = tablegroup_schema.get_sub_part_option();
+      const ObSubPartitionOption &sub_part_option = tablegroup_schema.get_sub_part_option();
 
       if (OB_FAIL(dml.add_pk_column("tenant_id", ObSchemaUtils::get_extract_tenant_id(
                                                 exec_tenant_id, tablegroup_schema.get_tenant_id())))

@@ -287,11 +287,12 @@ int ObParallelCreateTenantExecutor::call_create_normal_tenant_(
   return ret;
 }
 
+// TODO(fankun.fan): remove in futrue
 int ObParallelCreateTenantExecutor::call_create_normal_tenant_(
     ObParallelCreateNormalTenantProxy &proxy)
 {
   int ret = OB_SUCCESS;
-  const bool async_call = GCONF._enable_parallel_tenant_creation;
+  const bool async_call = true;
   if (OB_FAIL(call_create_normal_tenant_(meta_tenant_schema_, async_call, proxy))) {
     LOG_WARN("failed to call create normal tenant for meta tenant", KR(ret), K(meta_tenant_schema_),
         K(async_call));

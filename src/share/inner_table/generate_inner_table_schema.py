@@ -97,6 +97,7 @@ all_ora_mapping_virtual_table_org_tables = []
 all_ora_mapping_virtual_tables = []
 real_table_virtual_table_names = []
 cluster_private_tables = []
+core_related_tables = []
 all_only_sys_table_name = {}
 mysql_compat_agent_tables = {}
 column_collation = 'CS_TYPE_INVALID'
@@ -938,7 +939,8 @@ def check_fileds(fields, keywords):
         raise IOError("no field {0} found in def_table_schema, table_name={1}".format(field, keywords["table_name"]))
 
   non_field_keywords = ('index', 'enable_column_def_enum', 'base_def_keywords',
-                        'self_tid', 'mapping_tid', 'real_vt', 'meta_record_in_sys')
+                        'self_tid', 'mapping_tid', 'real_vt', 'meta_record_in_sys',
+                        'is_core_related')
   for kw in keywords:
     if not kw.startswith("base_table_name") and kw not in fields and not keywords.has_key('index_name') and kw not in non_field_keywords and keywords['table_type'] != 'AUX_LOB_META' and keywords['table_type'] != 'AUX_LOB_PIECE':
       raise IOError("unknown field {0} found in def_table_schema, table_name={1}".format(kw, keywords["table_name"]))
@@ -1766,6 +1768,7 @@ def def_table_schema(**keywords):
   global column_collation
   global is_oracle_sys_table
   global cluster_private_tables
+  global core_related_tables
   global lob_aux_data_def
   global lob_aux_meta_def
 
@@ -1835,6 +1838,9 @@ def def_table_schema(**keywords):
     table_name_postfix_table_names.append((keywords['table_name']+ keywords['name_postfix'], keywords['table_name']))
 
     table_name_ids.append((keywords['table_name'], int(keywords['table_id']), keywords['base_table_name'], keywords['base_table_name1'], keywords['base_table_name2']))
+
+  if keywords.has_key('is_core_related') and keywords['is_core_related']:
+    core_related_tables.append(int(keywords['table_id']))
 
   print "\table_id=",  keywords['table_id'], ", table_name=" + keywords['table_name'], ", base_table_name=", keywords['base_table_name'], ", base_table_name1=" + keywords['base_table_name1'], ", base_table_name2=" + keywords['base_table_name2']
 
@@ -2277,6 +2283,12 @@ private:
     if is_core_table(table_id) and table_id != kv_core_table_id:
       h_f.write(method_name.format(table_name.replace('$', '_').lower().strip('_'), table_name))
       core_table_count = core_table_count + 1
+  h_f.write("  NULL,};\n\n")
+
+  h_f.write("const schema_create_func core_related_table_schema_creators [] = {\n")
+  for (table_name, table_id) in new_table_name_postfix_ids:
+    if int(table_id) in core_related_tables and not is_virtual_table(table_id):
+      h_f.write(method_name.format(table_name.replace('$', '_').lower().strip('_'), table_name))
   h_f.write("  NULL,};\n\n")
 
   h_f.write("const schema_create_func sys_table_schema_creators [] = {\n")

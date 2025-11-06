@@ -2068,7 +2068,7 @@ static int print_partition_func(const ObTableSchema &table_schema,
                                               func_expr.ptr()))) {
       SHARE_SCHEMA_LOG(WARN, "fail to append display partition expr", K(ret), K(type_str), K(func_expr));
     } else if (is_subpart) { // sub part
-      const ObPartitionOption &sub_part_opt = table_schema.get_sub_part_option();
+      const ObSubPartitionOption &sub_part_opt = table_schema.get_sub_part_option();
       ObString sub_type_str;
       ObPartitionFuncType sub_type = sub_part_opt.get_part_func_type();
 

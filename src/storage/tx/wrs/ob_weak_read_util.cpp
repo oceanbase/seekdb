@@ -26,7 +26,8 @@ namespace transaction
 int64_t ObWeakReadUtil::replica_keepalive_interval()
 {
   int64_t interval = 0;
-  int64_t weak_read_refresh_interval = GCONF.weak_read_version_refresh_interval;
+  int64_t weak_read_refresh_interval = GCTX.in_bootstrap_ ? BOOTSTRAP_REPLICA_KEEPALIVE_INTERVAL
+    : GCONF.weak_read_version_refresh_interval;
   if (weak_read_refresh_interval <= 0
       || weak_read_refresh_interval > DEFAULT_REPLICA_KEEPALIVE_INTERVAL) {
     interval = DEFAULT_REPLICA_KEEPALIVE_INTERVAL;

@@ -710,8 +710,8 @@ int ObSimpleTableSchemaV2::compare_partition_option(const schema::ObSimpleTableS
       } else if (PARTITION_LEVEL_TWO != t1.get_part_level()) {
         //don't have sub part, just skip
       } else {
-        const schema::ObPartitionOption &t1_subpart = t1.get_sub_part_option();
-        const schema::ObPartitionOption &t2_subpart = t2.get_sub_part_option();
+        const schema::ObSubPartitionOption &t1_subpart = t1.get_sub_part_option();
+        const schema::ObSubPartitionOption &t2_subpart = t2.get_sub_part_option();
         schema::ObPartitionFuncType t1_subpart_func_type = t1_subpart.get_part_func_type();
         schema::ObPartitionFuncType t2_subpart_func_type = t2_subpart.get_part_func_type();
         if (t1_subpart_func_type != t2_subpart_func_type

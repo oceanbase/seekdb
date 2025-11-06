@@ -2190,7 +2190,7 @@ int ObAlterTableResolver::resolve_add_partition(const ParseNode &node,
         // set sub_part_template_def to invalid, which is only used for schema printer
         alter_table_schema.unset_sub_part_template_def_valid();
       }
-      const ObPartitionOption &subpart_option = orig_table_schema.get_sub_part_option();
+      const ObSubPartitionOption &subpart_option = orig_table_schema.get_sub_part_option();
       const ObPartitionFuncType subpart_type = subpart_option.get_part_func_type();
       ParseNode *subpart_func_node = NULL;
       alter_stmt->set_use_def_sub_part(false);

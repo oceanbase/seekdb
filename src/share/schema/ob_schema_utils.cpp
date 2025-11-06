@@ -719,7 +719,7 @@ int ObSchemaUtils::generate_hard_code_schema_version(ObIArray<ObTableSchema> &ta
         for (ObTableSchema::const_column_iterator iter = table->column_begin();
             OB_SUCC(ret) && iter != table->column_end(); ++iter) {
           (*iter)->set_schema_version(current_schema_version);
-          (*iter)->set_tenant_id(OB_INVALID_TENANT_ID);
+          (*iter)->set_tenant_id(OB_SYS_TENANT_ID);
           (*iter)->set_table_id(table->get_table_id());
         }
         current_schema_version -= ObSchemaVersionGenerator::SCHEMA_VERSION_INC_STEP;
