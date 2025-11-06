@@ -12,6 +12,7 @@ osRelease=$(cat /etc/os-release | grep "^VERSION_ID=" | cut -f2 -d= | tr -d '"')
 cnf_file='/etc/oceanbase/seekdb.cnf'
 json_pre_file='/etc/oceanbase/telemetry-pre.json'
 json_file='/etc/oceanbase/telemetry.json'
+BASE_DIR="/var/lib/oceanbase"
 
 step='none'
 reporter='none'
@@ -45,19 +46,14 @@ function add_observer_config {
 }
 
 function update_json {
+    clusterId=0
     # Get script directory
-    CLUSTER_ID_FILE="$CURRENT_DIR/cluster_id"
+    SEEKDB_TELEMETRY_FILE="$BASE_DIR/run/telemetry.json"
 
     # Check if cluster_id file exists
-    if [ -f "$CLUSTER_ID_FILE" ]; then
+    if [ -f "$SEEKDB_TELEMETRY_FILE" ]; then
         # If file exists, read clusterId from file cluster_id
-        clusterId=$(cat "$CLUSTER_ID_FILE")
-    else
-        time_now=$(date +%s)
-        rounded_time=$(printf "%.0f" $time_now)
-        clusterId=$((rounded_time % 4294901759))
-
-        echo $clusterId > "$CLUSTER_ID_FILE"
+        clusterId=$(grep '"id":' $SEEKDB_TELEMETRY_FILE | sed -E 's/.*"id": *"([^"]*)".*/\1/')
     fi
 
     sed -i "s|#reporter#|${reporter}|g" $json_file

@@ -14,9 +14,9 @@ if [ -f "$cnf_file" ] && [ -s "$cnf_file" ]; then
     mkdir -p /var/lib/oceanbase
 
     # Create the clean script file
-    clean_script="/var/lib/oceanbase/oceanbase_clean.sh"
+    clean_script="/var/lib/oceanbase/seekdb_clean.sh"
     echo "#!/bin/bash" > "$clean_script"
-    echo "# OceanBase cleanup script" >> "$clean_script"
+    echo "# SeekDB cleanup script" >> "$clean_script"
     echo "# This script will be executed after package removal" >> "$clean_script"
 
     redo_dir=$(cat "$cnf_file" | grep -o 'redo-dir=[^[:space:]]*' | sed 's/redo-dir=//')

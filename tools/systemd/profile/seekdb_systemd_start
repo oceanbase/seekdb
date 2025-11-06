@@ -1,9 +1,10 @@
 #!/bin/bash
-# OceanBase start script
+# SeekDB start script
 # This script reads configuration from /etc/oceanbase/seekdb.cnf and starts observer
 
 CONFIG_FILE="/etc/oceanbase/seekdb.cnf"
 BASE_DIR="/var/lib/oceanbase"
+SEEKDB_TELEMETRY_FILE="$BASE_DIR/run/telemetry.json"
 CURRENT_DIR=$(dirname "$0")
 report=3
 
@@ -52,7 +53,7 @@ read_config
 # Build final command
 CMD="/usr/bin/observer --base-dir=$BASE_DIR $ADDITIONAL_PARAMS"
 
-echo "Starting OceanBase with command: $CMD"
+echo "Starting seekdb with command: $CMD"
 echo "Configuration loaded from: $CONFIG_FILE"
 
 # Execute the command
@@ -65,11 +66,8 @@ CMD_EXIT_CODE=$?
 
 # Check if command executed successfully
 if [ $CMD_EXIT_CODE -eq 0 ]; then
-    echo "OceanBase started successfully, sending telemetry..."
-    /bin/bash $CURRENT_DIR/telemetry.sh $report "20" >/dev/null 2>&1
-
     # Start obshell agent
-    echo "Starting obshell agent..."
+    echo "SeekDB started successfully, starting obshell agent..."
     if [ -f "/usr/bin/obshell" ]; then
         sleep 1
         /usr/bin/obshell agent start --seekdb --base-dir=$BASE_DIR
@@ -81,8 +79,25 @@ if [ $CMD_EXIT_CODE -eq 0 ]; then
     else
         echo "Warning: /usr/bin/obshell not found, skipping obshell agent start"
     fi
+
+    echo "Sending telemetry..."
+    # Wait for SEEKDB_TELEMETRY_FILE to appear (max 10 seconds, check every 0.2 seconds)
+    wait_count=50  # 50 * 0.2 = 10 seconds
+    check_interval=0.2
+    count=0
+    while [ ! -f "$SEEKDB_TELEMETRY_FILE" ] && [ $count -lt $wait_count ]; do
+        echo "Waiting for telemetry file $count counts"
+        sleep $check_interval
+        count=$((count + 1))
+    done
+    if [ -f "$SEEKDB_TELEMETRY_FILE" ]; then
+        echo "Telemetry file found, proceeding..."
+    else
+        echo "Warning: Telemetry file not found after 10s, proceeding anyway..."
+    fi
+    /bin/bash $CURRENT_DIR/telemetry.sh $report "20" >/dev/null 2>&1
 else
-    echo "OceanBase failed to start with exit code: $CMD_EXIT_CODE"
+    echo "SeekDB failed to start with exit code: $CMD_EXIT_CODE"
 fi
 
 exit $CMD_EXIT_CODE

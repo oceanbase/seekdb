@@ -81,6 +81,7 @@ function get_os_release() {
         version_ge "16.04" && compat_centos7 && return
         ;;
       centos)
+        version_ge "9.0" && OS_RELEASE=9 && return
         version_ge "8.0" && OS_RELEASE=8 && return
         version_ge "7.0" && OS_RELEASE=7 && return
         ;;
@@ -115,6 +116,7 @@ function get_os_release() {
         compat_centos8 && return
         ;;
       rocky)
+        version_ge "9.0" && compat_centos9 && return
         version_ge "8.0" && compat_centos8 && return
         ;;
       tencentos)
@@ -138,6 +140,7 @@ function get_os_release() {
         version_ge "7.0" && compat_centos7 && return
         ;;
       centos)
+        version_ge "9.0" && OS_RELEASE=9 && return
         version_ge "8.0" && OS_RELEASE=8 && return
         version_ge "7.0" && OS_RELEASE=7 && return
         ;;
@@ -161,6 +164,10 @@ function get_os_release() {
         ;;
       alinux)
         version_ge "3.0" && compat_alinux3 && return
+        ;;
+      rocky)
+        version_ge "9.0" && compat_centos9 && return
+        version_ge "8.0" && compat_centos8 && return
         ;;
     esac
   elif [[ "${OS_ARCH}x" == "sw_64x" ]]; then
