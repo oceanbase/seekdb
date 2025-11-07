@@ -272,7 +272,7 @@ else()
     set(OCI_DEVEL_INC "${DEP_3RD_DIR}/usr/include/oracle/19.10/client64")
 endif()
 
-# AIO library detection for Ubuntu >= 24
+# AIO library detection for Ubuntu >= 24.04 and Debian >= 13
 # Set OB_AIO_LINK_OPTION for linking and OB_AIO_PACKAGE_DEPENDENCY for package dependencies
 set(OB_AIO "libaio")
 find_program(LSB_RELEASE_EXEC lsb_release)
@@ -291,12 +291,19 @@ if(LSB_RELEASE_EXEC)
       OUTPUT_STRIP_TRAILING_WHITESPACE
       ERROR_QUIET
     )
-    if(DEBIAN_NAME STREQUAL "ubuntu" AND DEBIAN_VERSION)
-      # Compare version: Ubuntu 24.04 and higher
-      if(DEBIAN_VERSION VERSION_GREATER_EQUAL "24.04")
-        # Set package dependency
-        set(OB_AIO "libaio1t64")
-        message(STATUS "Ubuntu ${DEBIAN_VERSION} detected, using ${OB_AIO}")
+    if(DEBIAN_VERSION)
+      # Check for Ubuntu >= 24.04
+      if(DEBIAN_NAME STREQUAL "ubuntu")
+        if(DEBIAN_VERSION VERSION_GREATER_EQUAL "24.04")
+          set(OB_AIO "libaio1t64")
+          message(STATUS "Ubuntu ${DEBIAN_VERSION} detected, using ${OB_AIO}")
+        endif()
+      # Check for Debian >= 13
+      elseif(DEBIAN_NAME STREQUAL "debian")
+        if(DEBIAN_VERSION VERSION_GREATER_EQUAL "13")
+          set(OB_AIO "libaio1t64")
+          message(STATUS "Debian ${DEBIAN_VERSION} detected, using ${OB_AIO}")
+        endif()
       endif()
     endif()
   endif()
