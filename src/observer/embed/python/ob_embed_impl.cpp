@@ -858,6 +858,34 @@ int ObLiteEmbedUtil::convert_result_to_pyobj(const int64_t col_idx, common::sqlc
       }
       break;
     }
+    case ObDateTimeType: {
+      ObObj obj;
+      if (OB_FAIL(result.get_obj(col_idx, obj))) {
+        LOG_WARN("get obj failed", K(ret), K(col_idx));
+      } else {
+        int64_t datetime_val = 0;
+        if (OB_FAIL(obj.get_datetime(datetime_val))) {
+          LOG_WARN("get_datetime failed", K(ret), K(obj));
+        } else {
+          const ObTimeZoneInfo *tz_info = session.get_timezone_info();
+          ObTime ob_time(DT_TYPE_DATETIME);
+          if (OB_FAIL(ObTimeConverter::datetime_to_ob_time(datetime_val, tz_info, ob_time))) {
+            LOG_WARN("failed to convert datetime to ob_time", K(ret), K(datetime_val));
+          } else {
+            val = datetime_class(
+              pybind11::int_(ob_time.parts_[DT_YEAR]),
+              pybind11::int_(ob_time.parts_[DT_MON]),
+              pybind11::int_(ob_time.parts_[DT_MDAY]),
+              pybind11::int_(ob_time.parts_[DT_HOUR]),
+              pybind11::int_(ob_time.parts_[DT_MIN]),
+              pybind11::int_(ob_time.parts_[DT_SEC]),
+              pybind11::int_(ob_time.parts_[DT_USEC])
+            );
+          }
+        }
+      }
+      break;
+    }
     case ObYearType: {
       uint8_t v = 0;
       if (OB_SUCC(result.get_year(col_idx, v))) {
