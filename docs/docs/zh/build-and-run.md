@@ -9,7 +9,7 @@
 把代码clone到本地：
 
 ```shell
-git clone https://github.com/oceanbase/oceanbase-seekdb.git
+git clone https://github.com/oceanbase/seekdb.git
 ```
 
 ## 构建
