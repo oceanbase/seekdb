@@ -248,6 +248,9 @@ struct ObTrace
   ObTrace(int64_t buffer_size);
   void init(FltTransCtx &flt_ctx)
   {
+    root_span_id_ = flt_ctx.span_id_;
+    trace_id_ = flt_ctx.trace_id_;
+    policy_ = flt_ctx.policy_;
   }
   void init(UUID trace_id, UUID root_span_id, uint8_t policy = 0);
   bool is_inited() { return check_magic() && trace_id_.is_inited(); }

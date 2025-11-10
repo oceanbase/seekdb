@@ -51,6 +51,57 @@ thread_local ObTrace* ObTrace::save_buffer = nullptr;
 
 void flush_trace()
 {
+  ObTrace& trace = *OBTRACE;
+  common::ObDList<ObSpanCtx>& current_span = trace.current_span_;
+  if (trace.is_inited() && !current_span.is_empty()) {
+    ObSpanCtx* span = current_span.get_first();
+    ObSpanCtx* next = nullptr;
+    while (current_span.get_header() != span) {
+      ObSpanCtx* next = span->get_next();
+      if (nullptr != span->tags_ || 0 != span->end_ts_) {
+        int64_t pos = 0;
+        thread_local char buf[MAX_TRACE_LOG_SIZE];
+        int ret = OB_SUCCESS;
+        ObTagCtxBase* tag = span->tags_;
+        bool first = true;
+        char tagstr[] = "\"tags\":[";
+        INIT_SPAN(span);
+        while (OB_SUCC(ret) && OB_NOT_NULL(tag)) {
+          if (pos + sizeof(tagstr) + 1 >= MAX_TRACE_LOG_SIZE) {
+            ret = OB_BUF_NOT_ENOUGH;
+          } else {
+            buf[pos++] = ',';
+            if (first) {
+              strncpy(buf + pos, tagstr, MAX_TRACE_LOG_SIZE - pos);
+              pos += sizeof(tagstr) - 1;
+              first = false;
+            }
+            ret = tag->tostring(buf, MAX_TRACE_LOG_SIZE, pos);
+            tag = tag->next_;
+          }
+        }
+        if (0 != pos) {
+          if (pos + 1 < MAX_TRACE_LOG_SIZE) {
+            buf[pos++] = ']';
+            buf[pos++] = 0;
+          } else {
+            buf[MAX_TRACE_LOG_SIZE - 2] = ']';
+            buf[MAX_TRACE_LOG_SIZE - 1] = 0;
+          }
+        }
+        INIT_SPAN(span->source_span_);
+        buf[0] = '\0';
+        IGNORE_RETURN sql::handle_span_record(sql::get_flt_span_manager(), buf, pos, span);
+        if (0 != span->end_ts_) {
+          current_span.remove(span);
+          trace.freed_span_.add_first(span);
+        }
+        span->tags_ = nullptr;
+      }
+      span = next;
+    }
+    trace.offset_ = trace.buffer_size_ / 2;
+  }
 }
 uint64_t UUID::gen_rand()
 {
@@ -307,6 +358,15 @@ ObTrace::ObTrace(int64_t buffer_size)
 
 void ObTrace::init(UUID trace_id, UUID root_span_id, uint8_t policy)
 {
+  #ifndef NDEBUG
+  if (check_magic()) {
+    check_leak_span();
+  }
+  #endif
+  reset();
+  trace_id_ = trace_id;
+  root_span_id_ = root_span_id;
+  policy_ = policy;
 }
 
 UUID ObTrace::begin()
