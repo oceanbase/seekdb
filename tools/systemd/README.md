@@ -11,7 +11,7 @@ Config yum repo then install OceanBase SeekDB, it will automatically install the
 ```bash
 yum install -y yum-utils
 yum-config-manager --add-repo https://mirrors.aliyun.com/oceanbase/OceanBase.repo
-yum install -y oceanbase-seekdb
+yum install -y seekdb
 ```
 
 ## Installing OceanBase SeekDB via apt
@@ -22,7 +22,7 @@ apt install -y lsb-release wget gnupg2 mysql-client curl
 wget http://mirrors.oceanbase.com/oceanbase/oceanbase_deb.pub && apt-key add oceanbase_deb.pub
 echo "deb http://mirrors.oceanbase.com/oceanbase/community/stable/$(lsb_release -is | awk '{print tolower($0)}')/$(lsb_release -cs)/$(dpkg --print-architecture)/ ./" | tee -a /etc/apt/sources.list.d/oceanbase.list
 apt update
-apt install -y oceanbase-seekdb
+apt install -y seekdb
 ```
 
 ## Dependencies list：

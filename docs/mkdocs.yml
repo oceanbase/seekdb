@@ -1,7 +1,7 @@
 site_name: OceanBase SeekDB Developer Guide
-site_url: https://oceanbase.github.io/oceanbase-seekdb
-repo_url: https://github.com/oceanbase/oceanbase-seekdb
-repo_name: oceanbase/oceanbase-seekdb
+site_url: https://oceanbase.github.io/seekdb
+repo_url: https://github.com/oceanbase/seekdb
+repo_name: oceanbase/seekdb
 plugins:
   - search
   #- material-relative-language-selector
@@ -26,7 +26,7 @@ nav:
   - toolchain.md
   - build-and-run.md
   - ide-settings.md
-  - coding-convension.md
+  - coding-convention.md
   - unittest.md
   - mysqltest.md
   - debug.md
@@ -34,7 +34,7 @@ nav:
   - memory.md
   - container.md
   - architecture.md
-  - coding_standard.md
+  - coding-standard.md
 
 markdown_extensions:
   - pymdownx.highlight:
