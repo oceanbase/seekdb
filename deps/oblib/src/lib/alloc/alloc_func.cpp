@@ -81,7 +81,7 @@ int64_t get_memory_avail()
 
 int64_t get_hard_memory_remain()
 {
-  return get_hard_memory_limit() - get_memory_used();
+  return get_hard_memory_limit() - get_memory_used() + get_tenant_cache_hold(OB_SYS_TENANT_ID);
 }
 
 void set_tenant_memory_limit(uint64_t tenant_id, int64_t bytes)
