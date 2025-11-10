@@ -88,6 +88,9 @@ int ObLoadSysPackageTask::process()
     } else {
       LOG_WARN("failed to load sys package, will retry", KR(ret));
     }
+  } else {
+    // Set sys package ready flag in GCTX when load successfully
+    GCTX.sys_package_ready_ = true;
   }
   FLOG_INFO("[LOAD_SYS_PACKAGE] load all sys package finished", KR(ret));
   return ret;

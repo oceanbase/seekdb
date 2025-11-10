@@ -41,7 +41,7 @@ PYBIND11_MODULE(pyseekdb, m) {
                                                   pybind11::arg("port") = 2881,
                                                  "open db");
 
-    m.def("connect", &oceanbase::embed::ObLiteEmbed::connect, pybind11::arg("db_name") = "test",
+    m.def("connect", &oceanbase::embed::ObLiteEmbed::connect, pybind11::arg("database") = "test",
                                                         pybind11::arg("autocommit") = false,
                                                        "connect seekdb");
 
@@ -585,6 +585,7 @@ void ObLiteEmbedConn::begin()
   if (OB_ISNULL(conn_)) {
     ret = OB_CONNECT_ERROR;
   } else if (session_->is_in_transaction()) {
+    reset_result();
     conn_->set_is_in_trans(true);
     conn_->rollback();
     LOG_WARN("last trans need rollback", KP(conn_));
@@ -600,6 +601,7 @@ void ObLiteEmbedConn::begin()
 void ObLiteEmbedConn::commit()
 {
   int ret = OB_SUCCESS;
+  reset_result();
   if (OB_ISNULL(conn_)) {
     ret = OB_CONNECT_ERROR;
   } else if (!session_->is_in_transaction()) {
@@ -615,6 +617,7 @@ void ObLiteEmbedConn::commit()
 void ObLiteEmbedConn::rollback()
 {
   int ret = OB_SUCCESS;
+  reset_result();
   if (OB_ISNULL(conn_)) {
     ret = OB_CONNECT_ERROR;
   } else if (!session_->is_in_transaction()) {
@@ -664,8 +667,7 @@ int ObLiteEmbedUtil::convert_result_to_pyobj(const int64_t col_idx, common::sqlc
       }
       break;
     }
-    case ObFloatType:
-    case ObUFloatType: {
+    case ObFloatType: {
       float float_val = 0;
       if (OB_SUCC(result.get_float(col_idx, float_val))) {
         char buf[64];
@@ -679,11 +681,45 @@ int ObLiteEmbedUtil::convert_result_to_pyobj(const int64_t col_idx, common::sqlc
       }
       break;
     }
-    case ObDoubleType:
-    case ObUDoubleType: {
+    case ObUFloatType: {
+      ObObj obj;
+      if (OB_FAIL(result.get_obj(col_idx, obj))) {
+        LOG_WARN("get obj failed", K(ret), K(col_idx));
+      } else {
+        float float_val = 0;
+        if (OB_FAIL(obj.get_ufloat(float_val))) {
+          LOG_WARN("get_ufloat failed", K(ret), K(obj));
+        } else {
+          char buf[64];
+          int len = snprintf(buf, sizeof(buf), "%.6g", float_val);
+          if (len > 0 && len < sizeof(buf)) {
+            std::string formatted_str(buf, len);
+            val = builtins.attr("float")(formatted_str);
+          } else {
+            ret = OB_NOT_SUPPORTED;
+          }
+        }
+      }
+      break;
+    }
+    case ObDoubleType: {
       double double_val = 0;
       if (OB_SUCC(result.get_double(col_idx, double_val))) {
         val = pybind11::float_(double_val);
+      }
+      break;
+    }
+    case ObUDoubleType: {
+      ObObj obj;
+      if (OB_FAIL(result.get_obj(col_idx, obj))) {
+        LOG_WARN("get obj failed", K(ret), K(col_idx));
+      } else {
+        double double_val = 0;
+        if (OB_FAIL(obj.get_udouble(double_val))) {
+          LOG_WARN("get_udouble failed", K(ret), K(obj));
+        } else {
+          val = pybind11::float_(double_val);
+        }
       }
       break;
     }
@@ -822,10 +858,43 @@ int ObLiteEmbedUtil::convert_result_to_pyobj(const int64_t col_idx, common::sqlc
       }
       break;
     }
+    case ObDateTimeType: {
+      ObObj obj;
+      if (OB_FAIL(result.get_obj(col_idx, obj))) {
+        LOG_WARN("get obj failed", K(ret), K(col_idx));
+      } else {
+        int64_t datetime_val = 0;
+        if (OB_FAIL(obj.get_datetime(datetime_val))) {
+          LOG_WARN("get_datetime failed", K(ret), K(obj));
+        } else {
+          const ObTimeZoneInfo *tz_info = session.get_timezone_info();
+          ObTime ob_time(DT_TYPE_DATETIME);
+          if (OB_FAIL(ObTimeConverter::datetime_to_ob_time(datetime_val, tz_info, ob_time))) {
+            LOG_WARN("failed to convert datetime to ob_time", K(ret), K(datetime_val));
+          } else {
+            val = datetime_class(
+              pybind11::int_(ob_time.parts_[DT_YEAR]),
+              pybind11::int_(ob_time.parts_[DT_MON]),
+              pybind11::int_(ob_time.parts_[DT_MDAY]),
+              pybind11::int_(ob_time.parts_[DT_HOUR]),
+              pybind11::int_(ob_time.parts_[DT_MIN]),
+              pybind11::int_(ob_time.parts_[DT_SEC]),
+              pybind11::int_(ob_time.parts_[DT_USEC])
+            );
+          }
+        }
+      }
+      break;
+    }
     case ObYearType: {
       uint8_t v = 0;
       if (OB_SUCC(result.get_year(col_idx, v))) {
-        val = pybind11::int_(v);
+        int64_t year_int = 0;
+        if (OB_FAIL(ObTimeConverter::year_to_int(v, year_int))) {
+          LOG_WARN("year_to_int failed", K(ret), K(v));
+        } else {
+          val = pybind11::int_(year_int);
+        }
       }
       break;
     }
