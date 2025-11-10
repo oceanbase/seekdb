@@ -78,6 +78,13 @@ private:
   bool is_inited_;
 };
 
+class TelemetryTask : public common::ObTimerTask {
+public:
+  TelemetryTask(bool embed_mode);
+  virtual void runTimerTask() override;
+  bool embed_mode_;
+};
+
 class ObService : public ObIMetaReport
 {
 public:
@@ -87,7 +94,7 @@ public:
   int init(common::ObMySQLProxy &sql_proxy,
            share::ObIAliveServerTracer &server_tracer,
            bool need_bootstrap);
-  int start();
+  int start(bool embed_mode);
   void set_stop();
   void stop();
   void wait();
@@ -331,7 +338,7 @@ private:
   // report
   ObLSTableUpdater ls_table_updater_;
   ObServerMetaTableChecker meta_table_checker_;
-
+  TelemetryTask telemetry_task_;
   bool need_bootstrap_;
 };
 

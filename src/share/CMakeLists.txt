@@ -243,6 +243,7 @@ ob_set_subtarget(ob_share common
   ob_tablet_replica_checksum_operator.cpp
   ob_tablet_meta_table_compaction_operator.cpp
   ob_task_define.cpp
+  ob_telemetry.cpp
   ob_tenant_info_proxy.cpp
   ob_tenant_role.cpp
   ob_tenant_switchover_status.cpp
