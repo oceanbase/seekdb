@@ -669,7 +669,7 @@ DEF_MODE_WITH_PARSER(_parallel_ddl_control, OB_CLUSTER_PARAMETER, "",
         ObParameterAttr(Section::ROOT_SERVICE, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 // ========================= LogService Config Begin =====================
 
-DEF_CAP(log_disk_size, OB_CLUSTER_PARAMETER, "2G", "[0M,)",
+DEF_CAP(log_disk_size, OB_CLUSTER_PARAMETER, "10G", "[0M,)",
         "the size of disk space used by the log files. Range: [0, +∞)",
         ObParameterAttr(Section::LOGSERVICE, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 

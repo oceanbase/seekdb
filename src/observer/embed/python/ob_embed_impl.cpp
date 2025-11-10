@@ -150,7 +150,13 @@ int ObLiteEmbed::do_open_(const char* db_dir, int64_t port)
     opts.embed_mode_ = false;
   }
   opts.use_ipv6_ = false;
-  opts.parameters_.push_back(std::make_pair(common::ObString("memory_limit"), common::ObString("1G")));
+  const char *params[][2] = {
+    {"memory_limit", "1G"},
+    {"log_disk_size", "2G"}
+  };
+  for (int i = 0; OB_SUCC(ret) && i < ARRAYSIZEOF(params); i++) {
+    ret = opts.parameters_.push_back(std::make_pair(params[i][0], params[i][1]));
+  }
 
   char buffer[PATH_MAX];
   ObSqlString work_abs_dir;
@@ -159,7 +165,8 @@ int ObLiteEmbed::do_open_(const char* db_dir, int64_t port)
   int64_t start_time = ObTimeUtility::current_time();
 
   ObWarningBuffer::set_warn_log_on(true);
-  if (getcwd(buffer, sizeof(buffer)) == nullptr) {
+  if (OB_FAIL(ret)) {
+  } else if (getcwd(buffer, sizeof(buffer)) == nullptr) {
     MPRINT("getcwd failed %d %s", errno, strerror(errno));
   } else if (FALSE_IT(work_abs_dir.assign(buffer))) {
   } else if (OB_FAIL(opts.base_dir_.assign(db_dir))) {
