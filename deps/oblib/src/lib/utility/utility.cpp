@@ -2111,5 +2111,73 @@ int64_t calculate_scaled_value_by_memory(int64_t min_value, int64_t max_value)
   return value;
 }
 
+int get_os_info(char *name, int64_t name_size, char *release, int64_t release_size)
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(name) || name_size <= 0 || OB_ISNULL(release) || release_size <= 0) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("Invalid argument", K(ret), KP(name), K(name_size), KP(release), K(release_size));
+  } else {
+    FILE *file = fopen("/etc/os-release", "r");
+    if (NULL == file) {
+      LOG_WARN("Failed to open /etc/os-release", K(ret));
+      ret = OB_IO_ERROR;
+    } else {
+      char line[64];
+      char value[64];
+      while (fgets(line, sizeof(line), file) != nullptr) {
+        if (1 == sscanf(line, "ID=%s", value)) {
+          strncpy(name, value + 1, MIN(name_size, strlen(value) - 2));
+        } else if (1 == sscanf(line, "VERSION_ID=%s", value)) {
+          strncpy(release, value + 1, MIN(release_size, strlen(value) - 2));
+        }
+      }
+      fclose(file);
+    }
+  }
+  return ret;
+}
+
+int get_cpu_model(char *buf, int64_t buf_size)
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(buf) || buf_size <= 0) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("Invalid argument", K(ret), KP(buf), K(buf_size));
+  } else {
+    FILE *file = fopen("/proc/cpuinfo", "r");
+    if (NULL == file) {
+      LOG_WARN("Failed to open /proc/cpuinfo", K(ret));
+      ret = OB_IO_ERROR;
+    } else {
+      char line[256];
+      while (fgets(line, sizeof(line), file)) {
+        if (NULL != strstr(line, "model name")) {
+          char *colon = strchr(line, ':');
+          if (NULL != colon) {
+            // skip ":" and " "
+            colon++;
+            while (*colon == ' ' || *colon == '\t') {
+              colon++;
+            }
+
+            size_t len = strlen(colon);
+            if (len > 0 && '\n' == colon[len - 1]) {
+              colon[len - 1] = '\0';
+              len--;
+            }
+
+            strncpy(buf, colon, buf_size - 1);
+            buf[buf_size - 1] = '\0';
+            break;
+          }
+        }
+      }
+      fclose(file);
+    }
+  }
+  return ret;
+}
+
 } // end namespace common
 } // end namespace oceanbase
