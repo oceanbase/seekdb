@@ -10,19 +10,23 @@ OceanBase SeekDB 并不支持所有的操作系统，特别是 Windows 和 Mac O
 
 | 操作系统                  | 版本               | 架构   | 是否兼容 | 安装包是否可部署 | 编译的二进制文件是否可部署 | 是否测试过 MYSQLTEST |
 | ------------------- | --------------------- | ------ | ---------- | ------------------ | -------------------------- | ---------------- |
-| Alibaba Cloud Linux | 2.1903                | x86_64 | Yes        | Yes                | Yes                        | Yes              |
-| CentOS              | 8.3                   | x86_64 | Yes        | Yes                | Yes                        | Yes              |
-| Debian              | 9.8 / 10.9            | x86_84 | Yes        | Yes                | Yes                        | Yes              |
-| Fedora              | 33                    | x86_84 | Yes        | Yes                | Yes                        | Yes              |
-| openSUSE            | 15.2                  | x86_84 | Yes        | Yes                | Yes                        | Yes              |
-| OpenAnolis          | 8.2                   | x86_84 | Yes        | Yes                | Yes                        | Yes              |
-| StreamOS            | 3.4.8                 | x86_84 | Unknown    | Yes                | Yes                        | Unknown          |
-| SUSE                | 15.2                  | x86_84 | Yes        | Yes                | Yes                        | Yes              |
-| Ubuntu              | 20.04 / 22.04         | x86_84 | Yes        | Yes                | Yes                        | Yes              |
+| Alibaba Cloud Linux | 3                     | x86_64 / aarch64 | Yes        | Yes                | Yes                        | Yes              |
+| CentOS              | 7 / 8 / 9             | x86_64 / aarch64 | Yes        | Yes                | Yes                        | Yes              |
+| Debian              | 11 / 12 / 13          | x86_84 / aarch64 | Yes        | Yes                | Yes                        | Yes              |
+| Fedora              | 33                    | x86_84 / aarch64 | Yes        | Yes                | Yes                        | Yes              |
+| Kylin               | V10                   | x86_84 / aarch64 | Yes        | Yes                | Yes                        | Yes
+| openSUSE            | 15.2                  | x86_84 / aarch64 | Yes        | Yes                | Yes                        | Yes              |
+| OpenAnolis          | 8  / 23               | x86_84 / aarch64 | Yes        | Yes                | Yes                        | Yes              |
+| OpenEuler           | 22.03  / 24.03        | x86_84 / aarch64 | Yes        | Yes                | Yes                        | Yes              |
+| Rocky Linux         | 8  / 9                | x86_84 / aarch64 | Yes        | Yes                | Yes                        | Yes              |
+| StreamOS            | 3.4.8                 | x86_84 / aarch64 | Unknown    | Yes                | Yes                        | Unknown          |
+| SUSE                | 15.2                  | x86_84 / aarch64 | Yes        | Yes                | Yes                        | Yes              |
+| Ubuntu              | 20.04 / 22.04 / 24.04 | x86_84 / aarch64 | Yes        | Yes                | Yes                        | Yes              |
+| UOS                 | 20                    | x86_84 / aarch64 | Yes        | Yes                | Yes                        | Yes              |
 
 > **注意**:
 >
-> 其它的 Linux 发行版可能也可以工作。如果你验证了 OceanBase 可以在除了上面列出的发行版之外的发行版上编译和部署，请随时提交一个拉取请求来添加它。
+> 其它的 Linux 发行版可能也可以工作。如果你验证了 OceanBase SeekDB 可以在除了上面列出的发行版之外的发行版上编译和部署，请随时提交一个拉取请求来添加它。
 
 ## 安装
 
@@ -41,8 +45,14 @@ yum install git wget rpm* cpio make glibc-devel glibc-headers binutils m4 libtoo
 包括 Debian, Ubuntu 等等。
 
 ```shell
-apt-get install git wget rpm rpm2cpio cpio make build-essential binutils m4
+apt-get install git wget rpm rpm2cpio cpio make build-essential binutils m4 file
 ```
+
+> **注意**: 如果你使用的是 Ubuntu 24.04 及以上版本或 Debian 13 及以上版本的系统，还需额外安装 `libaio1t64`：
+>
+> ```shell
+> apt-get install libaio1t64
+> ```
 
 ### SUSE 系统
 

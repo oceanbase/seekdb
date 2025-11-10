@@ -9,7 +9,7 @@ Check the [Install toolchain](toolchain.md) guide for supported OS, GLIBC versio
 Clone the source code to your development machine:
 
 ```shell
-git clone https://github.com/oceanbase/oceanbase-seekdb.git
+git clone https://github.com/oceanbase/seekdb.git
 ```
 
 ## Build
