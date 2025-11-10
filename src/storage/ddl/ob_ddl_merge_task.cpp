@@ -159,6 +159,8 @@ int ObDDLTableMergeDag::init_tablet_ctx()
     } else {
       if (OB_FAIL(tablet_handle.get_obj()->load_storage_schema(arena_, tablet_ctx_->tablet_param_.storage_schema_))) {
         LOG_WARN("failed to load storage schema", K(ret));
+      } else if (OB_FAIL(tablet_ctx_->merge_ctx_.init(ddl_param_.direct_load_type_))) {
+        LOG_WARN("failed to get merge helper", K(ret));
       }
     }
   }
@@ -205,7 +207,6 @@ int ObDDLTableMergeDag::create_first_task()
                                     ddl_param_.start_scn_,
                                     ddl_param_.direct_load_type_,
                                     task_param,
-                                    arena_,
                                     tablet_ctx_,
                                     ddl_param_.trans_id_,
                                     ddl_param_.seq_no_))) {
