@@ -35,7 +35,7 @@ The installation instructions vary among the operating systems and package manag
 This includes CentOS, Fedora, OpenAnolis, RedHat, UOS, etc.
 
 ```shell
-yum install git wget rpm* cpio make glibc-devel glibc-headers binutils m4 libtool libaio
+yum install git wget rpm* cpio make glibc-devel glibc-headers binutils m4 libtool libaio python3
 ```
 
 ### Debian based
@@ -43,7 +43,7 @@ yum install git wget rpm* cpio make glibc-devel glibc-headers binutils m4 libtoo
 This includes Debian, Ubuntu, etc.
 
 ```shell
-apt-get install git wget rpm rpm2cpio cpio make build-essential binutils m4 file
+apt-get install git wget rpm rpm2cpio cpio make build-essential binutils m4 file python3
 ```
 
 > **Note**: If you are using Ubuntu 24.04 or later, or Debian 13 or later, you also need to install `libaio1t64`:
@@ -57,5 +57,5 @@ apt-get install git wget rpm rpm2cpio cpio make build-essential binutils m4 file
 This includes SUSE, openSUSE, etc.
 
 ```shell
-zypper install git wget rpm cpio make glibc-devel binutils m4
+zypper install git wget rpm cpio make glibc-devel binutils m4 python3
 ```
