@@ -41,6 +41,7 @@ void ObSharedMemAllocMgr::update_throttle_config()
   }
 
   int64_t total_memory = lib::get_tenant_memory_limit(tenant_id_);
+  int64_t hard_memory_limit = lib::get_hard_memory_limit();
   omt::ObTenantConfigGuard tenant_config(TENANT_CONF(MTL_ID()));
   if (tenant_config.is_valid()) {
     int64_t share_mem_limit_percentage = tenant_config->_tx_share_memory_limit_percentage;
@@ -55,11 +56,11 @@ void ObSharedMemAllocMgr::update_throttle_config()
       share_mem_limit_percentage = MAX(tenant_memstore_limit_percentage, tenant_vector_limit_percentage + 5) + 10;
     }
 
-    int64_t share_mem_limit = total_memory / 100 * share_mem_limit_percentage;
+    int64_t share_mem_limit = hard_memory_limit / 100 * share_mem_limit_percentage;
     int64_t memstore_limit = total_memory / 100 * tenant_memstore_limit_percentage;
     int64_t tx_data_limit = total_memory / 100 * tx_data_limit_percentage;
     int64_t mds_limit = total_memory / 100 * mds_limit_percentage;
-    int64_t vector_limit = total_memory / 100 * tenant_vector_limit_percentage;
+    int64_t vector_limit = hard_memory_limit / 100 * tenant_vector_limit_percentage;
 
     bool share_config_changed = false;
     (void)share_resource_throttle_tool_.update_throttle_config<FakeAllocatorForTxShare>(

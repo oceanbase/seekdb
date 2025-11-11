@@ -1389,6 +1389,9 @@ int read_one_int(const char *file_name, int64_t &value);
 
 int64_t calculate_scaled_value_by_memory(int64_t min_value, int64_t max_value);
 
+int get_os_info(char *name, int64_t name_size, char *release, int64_t release_size);
+int get_cpu_model(char *buf, int64_t buf_size);
+
 } // end namespace common
 } // end namespace oceanbase
 

@@ -1,133 +1,405 @@
-<p align="center">
-    <a href="https://github.com/oceanbase/oceanbase">
-        <img alt="OceanBase Logo" src="images/logo.svg" width="50%" />
-    </a>
-</p>
+<div align="center">
 
-<p align="center">
-    <a href="https://en.oceanbase.com/docs/oceanbase-database">
-        <img alt="English doc" src="https://img.shields.io/badge/docs-English-blue" />
-    </a>
-    <a href="https://www.oceanbase.com/docs/oceanbase-database-cn">
-        <img alt="Chinese doc" src="https://img.shields.io/badge/文档-简体中文-blue" />
-    </a>
-    <a href="https://github.com/oceanbase/oceanbase/commits/master">
-        <img alt="last commit" src="https://img.shields.io/github/last-commit/oceanbase/oceanbase/master" />
-    </a>
-    <a href="https://github.com/oceanbase/oceanbase">
-        <img alt="stars" src="https://img.shields.io/badge/dynamic/json?color=blue&label=stars&query=stargazers_count&url=https%3A%2F%2Fapi.github.com%2Frepos%2Foceanbase%2Foceanbase" />
-    </a>
-    <a href="https://github.com/oceanbase/oceanbase/actions/workflows/compile.yml">
-        <img alt="building status" src="https://img.shields.io/github/actions/workflow/status/oceanbase/oceanbase/compile.yml?branch=master" />
-    </a>
-    <a href="https://github.com/oceanbase/oceanbase/blob/master/LICENSE">
-        <img alt="license" src="https://img.shields.io/badge/license-MulanPubL--2.0-blue" />
-    </a>
-</p>
+# <img src="images/logo.svg" alt="OceanBase Logo" width="40%" />
 
+### **🔷 The AI-native hybrid search database**
+
+**Powerful AI search capabilities · Lightweight · Production-ready**
+
+</div>
+
+---
 <p align="center">
+    <a href="https://oceanbase.ai">
+        <img alt="Documentation" height="20" src="https://img.shields.io/badge/OceanBase.ai-4285F4?style=for-the-badge&logo=read-the-docs&logoColor=white" />
+    </a>
+    <a href="https://www.linkedin.com/company/oceanbase" target="_blank">
+        <img src="https://custom-icon-badges.demolab.com/badge/LinkedIn-0A66C2?logo=linkedin-white&logoColor=fff" alt="follow on LinkedIn">
+    </a>
+    <a href="https://www.youtube.com/@OceanBaseDB">
+        <img alt="Static Badge" src="https://img.shields.io/badge/YouTube-red?logo=youtube">
+    </a>
     <a href="https://discord.gg/74cF8vbNEs">
-        <img alt="Support" src="https://img.shields.io/badge/Disord-Join%20Oceanbase-brightgreen?logo=discord" />
+        <img alt="Discord" src="https://img.shields.io/discord/74cF8vbNEs?label=Discord&logo=discord&style=flat-square&color=5865F2" />
     </a>
-    <a href="https://stackoverflow.com/questions/tagged/oceanbase">
-        <img alt="Stack Overflow" src="https://img.shields.io/badge/Stack-Stack%20Overflow-brightgreen?logo=stackoverflow" />
+    <a href="https://pepy.tech/projects/">
+        <img alt="Downloads" src="https://static.pepy.tech/badge/seekdb" />
+    </a>
+    <a href="https://github.com/oceanbase/seekdb/blob/master/LICENSE">
+        <img alt="License" src="https://img.shields.io/badge/License-Apache_2.0-blue.svg" />
     </a>
 </p>
 
-English | [中文版](README_CN.md)
+<div align="center">
 
-**OceanBase Database** is a distributed relational database. It is developed entirely by Ant Group. The OceanBase Database is built on a common server cluster. Based on the [Paxos](https://lamport.azurewebsites.net/pubs/lamport-paxos.pdf) protocol and its distributed structure, the OceanBase Database provides high availability and linear scalability. The OceanBase Database is not dependent on specific hardware architectures.
+**English** | [中文版](README_CN.md)
 
-# Key features
+---
 
-- **Transparent Scalability**: 1,500 nodes, PB data and a trillion rows of records in one cluster.
-- **Ultra-fast Performance**: TPC-C 707 million tmpC and TPC-H 15.26 million QphH @30000GB.
-- **Cost Efficiency**: saves 70%–90% of storage costs.
-- **Real-time Analytics**: supports HTAP without additional cost. 
-- **Continuous Availability**: RPO = 0(zero data loss) and RTO < 8s(recovery time)
-- **MySQL Compatible**: easily migrated from MySQL database.
+</div>
 
-See also [key features](https://en.oceanbase.com/product/opensource) for more details.
+## 🚀 What is OceanBase SeekDB?
 
-# Quick start
+**OceanBase SeekDB** is the lightweight, embedded version of OceanBase Database - a powerful AI search database designed for the AI applications. It combines enterprise-grade database capabilities with cutting-edge **AI search ** features, such as Vector search, fulltext search, Json.
 
-See also [Quick experience](https://en.oceanbase.com/docs/community-observer-en-10000000000829647) or [Quick Start (Simplified Chinese)](https://open.oceanbase.com/quickStart) for more details.
+---
 
-## 🔥 Start with all-in-one
+## 🔥 Why OceanBase SeekDB?
 
-You can quickly deploy a stand-alone OceanBase Database to experience with the following commands:
+---
+| Feature | OceanBase SeekDB | Traditional DB | Vector-only DB | Full-Text Engine |
+|---------|----------------|----------------|----------------|------------------|
+| **Embedded Mode** | ✅ Native | ⚠️ Possible | ⚠️ Possible | ⚠️ Possible |
+| **SQL Support** | ✅ Full SQL | ✅ Full SQL | ❌ Limited | ❌ Limited |
+| **Vector Search** | ✅ Built-in | ❌ Limited | ✅ Supported | ❌ Limited |
+| **Full-Text Search** | ✅ Built-in | ✅ Supported | ❌ Limited | ✅ Advanced |
+| **Json** | ✅ Yes | ⚠️ Varies by Product | ❌ Not Supported | ❌ Not Supported |
+| **ACID Transactions** | ✅ Full | ✅ Full | ❌ Limited | ❌ Limited |
+| **Easy Migration** | ✅ MySQL Compatible | ✅ Standard | ❌ No | ❌ No |
 
-**Note**: Linux Only
 
-```shell
-# download and install all-in-one package (internet connection is required)
-bash -c "$(curl -s https://obbusiness-private.oss-cn-shanghai.aliyuncs.com/download-center/opensource/oceanbase-all-in-one/installer.sh)"
-source ~/.oceanbase-all-in-one/bin/env.sh
+---
 
-# quickly deploy OceanBase database
-obd demo
+## ✨ Key Features
+
+### 🎯 **AI-Powered Search**
+- **Vector Similarity Search**: Optimize vector query accuracy, performance, and cost for different scenarios using different algorithms
+- **Hybrid Search**: Combine vector search, scalar search, and full-text retrieval for optimal results
+- **Full-Text Search**: Built-in full-text indexing for keyword-based searches
+- **Json**：Built-in Json schema and query, support Json index.
+
+### 📦 **Embedded & Lightweight**
+- **Zero Dependencies**: Run embedded in your application - no separate database server required
+- **Tiny Footprint**: Minimal memory and disk usage, perfect for edge devices and containers
+- **Single Binary**: Easy to deploy and distribute with your application
+- **Local-First**: Work offline, sync when ready
+
+### ⚡ **Simple & Developer-Friendly**
+- **MySQL Compatible**: Use familiar SQL syntax - no learning curve
+- **Instant Setup**: Get started in seconds, not minutes
+- **Rich APIs**: Support for Python, Java, Go, and more
+- **Comprehensive Docs**: Clear documentation with examples for every use case
+
+### 🚀 **Production-Ready**
+- **Stability**: More than 15 years of technical expertise and 4000+ enterprise implementations
+- **ACID Compliance**: Full transaction support with strong consistency guarantees
+- **Horizontal Scalability**: Scale from single node to distributed cluster seamlessly
+- **Enterprise Security**: Built-in encryption, authentication, and access control
+
+---
+
+## 🎬 Quick Start
+
+### Installation
+
+Choose your platform:
+
+<details>
+<summary><b>🐍 Python (Recommended for AI/ML)</b></summary>
+
+```bash
+pip install seekdb
 ```
 
-## 🐳 Start with docker
+</details>
 
-**Note**: We provide images on [dockerhub](https://hub.docker.com/r/oceanbase/oceanbase-ce/tags), [quay.io](https://quay.io/repository/oceanbase/oceanbase-ce?tab=tags) and [ghcr.io](https://github.com/oceanbase/docker-images/pkgs/container/oceanbase-ce). If you have problems pulling images from dockerhub, please try the other two registries.
+<details>
+<summary><b>🐳 Docker (Quick Testing)</b></summary>
 
-1. Start an OceanBase Database instance:
+```bash
+docker run -d \
+  --name seekdb \
+  -p 2881:2881 \
+  -v ./data:/var/lib/oceanbase/store \
+  oceanbase/seekdb:latest
+```
 
-    ```shell
-    # Deploy a mini standalone instance.
-    docker run -p 2881:2881 --name oceanbase-ce -e MODE=mini -d oceanbase/oceanbase-ce
+</details>
 
-    # Deploy a mini standalone instance using image from quay.io.
-    # docker run -p 2881:2881 --name oceanbase-ce -e MODE=mini -d quay.io/oceanbase/oceanbase-ce
+<details>
+<summary><b>📦 Binary (Standalone)</b></summary>
 
-    # Deploy a mini standalone instance using image from ghcr.io.
-    # docker run -p 2881:2881 --name oceanbase-ce -e MODE=mini -d ghcr.io/oceanbase/oceanbase-ce
-    ```
+```bash
+# Linux
+rpm -ivh seekdb-1.x.x.x-xxxxxxx.el8.x86_64.rpm
+```
+Please replace the version number with the actual RPM package version.
 
-2. Connect to the OceanBase Database instance:
+</details>
 
-    ```shell
-    docker exec -it oceanbase-ce obclient -h127.0.0.1 -P2881 -uroot # Connect to the root user of the sys tenant.
-    ```
+<details>
+<summary><b>☁️ Cloud </b></summary>
 
-See also [Docker Readme](https://github.com/oceanbase/docker-images/blob/main/oceanbase-ce/README.md) for more details.
+Quickly experience OceanBase Cloud on AWS Marketplace - a highly scalable distributed database for transactional, analytical, and AI workloads. [Get started now](https://aws.amazon.com/marketplace/pp/prodview-d2evwth3ztaja?sr=0-1&ref_=beagle&applicationId=AWSMPContessa)
 
-## ☸️ Start with Kubernetes
+</details>
 
-You can deploy and manage OceanBase Database instance in kubernetes cluster with [ob-operator](https://github.com/oceanbase/ob-operator) quickly. Refer to the document [Quick Start for ob-operator](https://oceanbase.github.io/ob-operator) to see details.
+### 🎯 AI Search Example
 
-## 👨‍💻 Start developing
-See [OceanBase Developer Document](https://oceanbase.github.io/oceanbase/build-and-run) to learn how to compile and deploy a manually compiled observer.
+Build a semantic search system in 5 minutes:
 
-# Roadmap
+<details>
+<summary><b>🗄️ 🐍 New Python SDK</b></summary>
 
-For future plans, see [Product Iteration Progress](https://github.com/oceanbase/oceanbase/issues/1839). See also [OceanBase Roadmap](https://github.com/orgs/oceanbase/projects/4) for more details.
+```python
+import seekdb
+client = seekdb.Client()
 
-# Case study
+collection = client.get_or_create_collection(name="my_collection")
 
-OceanBase has been serving more than 2000 customers and upgraded their database from different industries, including Financial Services, Telecom, Retail, Internet, and more.
+collection.upsert(
+    documents=[
+        "It's rainy today",
+        "It was cloudy yesterday",
+        "The forecast for tomorrow is fine weather"
+   ]
+)
 
-See also [success stories](https://en.oceanbase.com/customer/home) and [Who is using OceanBase](https://github.com/oceanbase/oceanbase/issues/1301) for more details.
+results = collection.query(
+    query_texts=[" What's the weather like today"], # SeekDB will embed this for you
+    n_results=2 # how many results to return
+)
 
-# System architecture
+print(results)
+```
+Please refer to the [User Guide](docs/user-guide/en/pyseekdb-sdk.md) for more details.
+</details>
+<details>
+<summary><b>🗄️ 🐍 Old Python SDK</b></summary>
 
-[Introduction to system architecture](https://en.oceanbase.com/docs/community-observer-en-10000000000829641)
+```python
+from pyobvector import *
 
-# Contributing
+# Don't support Embedded mode
+client = MilvusLikeClient(uri="127.0.0.1:2881", user="test@test")
 
-Contributions are highly appreciated. Read the [development guide](https://oceanbase.github.io/oceanbase) to get started.
+test_collection_name = "ann_test"
+# define the schema of collection with optional partitions
+range_part = ObRangePartition(False, range_part_infos = [
+    RangeListPartInfo('p0', 100),
+    RangeListPartInfo('p1', 'maxvalue'),
+], range_expr='id')
+schema = client.create_schema(partitions=range_part)
+# define field schema of collection
+schema.add_field(field_name="id", datatype=DataType.INT64, is_primary=True)
+schema.add_field(field_name="embedding", datatype=DataType.FLOAT_VECTOR, dim=3)
+schema.add_field(field_name="meta", datatype=DataType.JSON, nullable=True)
+# define index parameters
+idx_params = client.prepare_index_params()
+idx_params.add_index(
+    field_name='embedding',
+    index_type=VecIndexType.HNSW,
+    index_name='vidx',
+    metric_type="L2",
+    params={"M": 16, "efConstruction": 256},
+)
+# create collection
+client.create_collection(
+    collection_name=test_collection_name,
+    schema=schema,
+    index_params=idx_params,
+)
 
-# License
+# insert value
+# prepare data
+vector_value1 = [0.748479, 0.276979, 0.555195]
+vector_value2 = [0, 0, 0]
+data1 = [{'id': i, 'embedding': vector_value1} for i in range(10)]
+data1.extend([{'id': i, 'embedding': vector_value2} for i in range(10, 13)])
+data1.extend([{'id': i, 'embedding': vector_value2} for i in range(111, 113)])
+# insert data
+client.insert(collection_name=test_collection_name, data=data1)
 
-OceanBase Database is licensed under the Mulan Public License, Version 2. See the [LICENSE](LICENSE) file for more info.
+# do search
+res = client.search(collection_name=test_collection_name, data=[0, 0, 0], anns_field='embedding', limit=5, output_fields=['id'])
+# For example, the result will be:
+# [{'id': 112}, {'id': 111}, {'id': 10}, {'id': 11}, {'id': 12}]
 
-# Community
+```
+Please refer to the [User Guide](https://github.com/oceanbase/pyobvector) for more details.
+</details>
 
-Join the OceanBase community via:
+<details>
+<summary><b>🗄️ SQL</b></summary>
 
-* [Discord](https://discord.gg/74cF8vbNEs)
-* [Ask on Stack Overflow](https://stackoverflow.com/questions/tagged/oceanbase)
-* [Chinese User Forum](https://ask.oceanbase.com/)
-* DingTalk Group: [33254054](images/dingtalk.png)
-* WeChat Group (Add the assistant with WeChat ID: OBCE666)
+```python
+import seekdb
+
+# Open a database
+seekdb.open()
+
+# Connect to a database
+conn = seekdb.connect()
+
+# Use the connection
+cursor = conn.cursor()
+cursor.execute("""-- Create table with vector column
+CREATE TABLE articles (
+    id INT PRIMARY KEY,
+    title TEXT,
+    content TEXT,
+    embedding VECTOR(384)
+);""")
+
+cursor.execute("""-- Create vector index for fast similarity search
+CREATE INDEX idx_vector ON articles USING VECTOR (embedding);""")
+
+cursor.execute("""-- Insert documents with embeddings
+-- Note: Embeddings should be pre-computed using your embedding model
+INSERT INTO articles (id, title, content, embedding)
+VALUES
+    (1, 'AI and Machine Learning', 'Artificial intelligence is transforming...', '[0.1, 0.2, ...]'),
+    (2, 'Database Systems', 'Modern databases provide high performance...', '[0.3, 0.4, ...]'),
+    (3, 'Vector Search', 'Vector databases enable semantic search...', '[0.5, 0.6, ...]');""")
+
+cursor.execute("""-- Example: Hybrid search combining vector and full-text
+-- Replace '[query_embedding]' with your actual query embedding vector
+SELECT
+    title,
+    content,
+    embedding <-> '[query_embedding]' AS vector_distance,
+    MATCH(content) AGAINST('your keywords' IN NATURAL LANGUAGE MODE) AS text_score
+FROM articles
+WHERE MATCH(content) AGAINST('your keywords' IN NATURAL LANGUAGE MODE)
+ORDER BY vector_distance ASC, text_score DESC
+LIMIT 10;""")
+
+results = cursor.fetchall()
+
+# Close the connection
+conn.close()
+```
+</details>
+
+
+## 📚 Use Cases
+
+<div align="center">
+
+| 🎯 **RAG Systems** | 🔍 **Semantic Search** | 💬 **Chatbots** | 🎬 **Recommendations** |
+|:---:|:---:|:---:|:---:|
+| Build retrieval-augmented generation pipelines with vector search | Power semantic search across documents, images, and multimedia | Create intelligent chatbots with memory and context | Build recommendation engines with hybrid search |
+
+</div>
+
+### 🎯 Real-World Examples
+
+- **📚 Document Q&A**: Build ChatGPT-like document search with RAG
+- **🖼️ Image Search**: Find similar images using vision embeddings
+- **💼 E-commerce**: Semantic product search and recommendations
+- **🔬 Scientific Research**: Search through research papers and datasets
+- **📊 Business Intelligence**: Combine SQL analytics with AI search
+
+---
+
+## 🌟 Ecosystem & Integrations
+
+<div align="center">
+
+<p>
+    <a href="https://huggingface.co">
+        <img src="https://img.shields.io/badge/HuggingFace-✅-00A67E?style=flat-square&logo=huggingface" alt="HuggingFace" />
+    </a>
+    <a href="https://github.com/langchain-ai/langchain/pulls?q=is%3Apr+is%3Aclosed+oceanbase">
+        <img src="https://img.shields.io/badge/LangChain-✅-00A67E?style=flat-square&logo=langchain" alt="LangChain" />
+    </a>
+    <a href="https://github.com/langchain-ai/langchain/pulls?q=is%3Apr+is%3Aclosed+oceanbase">
+        <img src="https://img.shields.io/badge/LangGraph-✅-00A67E?style=flat-square&logo=langgrap" alt="LangGraph" />
+    </a>
+    <a href="https://github.com/langgenius/dify/pulls?q=is%3Apr+is%3Aclosed+oceanbase">
+        <img src="https://img.shields.io/badge/Dify-✅-00A67E?style=flat-square&logo=dify" alt="Dify" />
+    </a>
+    <a href="https://github.com/coze-dev/coze-studio/pulls?q=is%3Apr+oceanbase+is%3Aclosed">
+        <img src="https://img.shields.io/badge/Coze-✅-00A67E?style=flat-square&logo=coze" alt="Coze" />
+    </a>
+    <a href="https://github.com/run-llama/llama_index/pulls?q=is%3Apr+is%3Aclosed+oceanbase">
+        <img src="https://img.shields.io/badge/LlamaIndex-✅-00A67E?style=flat-square&logo=llama" alt="LlamaIndex" />
+    </a>
+    <a href="https://firecrawl.dev">
+        <img src="https://img.shields.io/badge/Firecrawl-✅-00A67E?style=flat-square&logo=firecrawl" alt="Firecrawl" />
+    </a>
+    <a href="https://github.com/labring/FastGPT/pulls?q=is%3Apr+oceanbase+is%3Aclosed">
+        <img src="https://img.shields.io/badge/FastGPT-✅-00A67E?style=flat-square&logo=FastGPT" alt="FastGPT" />
+    </a>
+    <a href="https://db-gpt.io">
+        <img src="https://img.shields.io/badge/DB--GPT-✅-00A67E?style=flat-square&logo=db-gpt" alt="DB-GPT" />
+    </a>
+    <a href="https://github.com/camel-ai/camel/pulls?q=is%3Apr+oceanbase+is%3Aclosed">
+        <img src="https://img.shields.io/badge/camel-✅-00A67E?style=flat-square&logo=camel" alt="Camel-AI" />
+    </a>
+    <a href="https://github.com/alibaba/spring-ai-alibaba">
+        <img src="https://img.shields.io/badge/spring--ai--alibaba-✅-00A67E?style=flat-square&logo=spring" alt="spring-ai-alibaba" />
+    </a>
+    <a href="https://developers.cloudflare.com/workers-ai">
+        <img src="https://img.shields.io/badge/Cloudflare%20Workers%20AI-✅-00A67E?style=flat-square&logo=cloudflare" alt="Cloudflare Workers AI" />
+    </a>
+    <a href="https://jina.ai">
+        <img src="https://img.shields.io/badge/Jina%20AI-✅-00A67E?style=flat-square&logo=jina" alt="Jina AI" />
+    </a>
+    <a href="https://ragas.io">
+        <img src="https://img.shields.io/badge/Ragas-✅-00A67E?style=flat-square&logo=ragas" alt="Ragas" />
+    </a>
+    <a href="https://jxnl.github.io/instructor">
+        <img src="https://img.shields.io/badge/Instructor-✅-00A67E?style=flat-square&logo=instructor" alt="Instructor" />
+    </a>
+    <a href="https://baseten.co">
+        <img src="https://img.shields.io/badge/Baseten-✅-00A67E?style=flat-square&logo=baseten" alt="Baseten" />
+    </a>
+</p>
+
+<p>
+Please refer to the [User Guide](docs/user-guide/README.md) for more details.
+</p>
+
+
+</div>
+
+---
+
+
+## 🤝 Community & Support
+
+<div align="center">
+
+<p>
+    <a href="https://discord.gg/74cF8vbNEs">
+        <img src="https://img.shields.io/badge/Discord-Join%20Chat-5865F2?style=for-the-badge&logo=discord&logoColor=white" alt="Discord" />
+    </a>
+    <a href="https://github.com/oceanbase/seekdb/discussions">
+        <img src="https://img.shields.io/badge/GitHub%20Discussion-181717?style=for-the-badge&logo=github&logoColor=white" alt="GitHub Discussion" />
+    </a>
+    <a href="https://ask.oceanbase.com/">
+        <img src="https://img.shields.io/badge/Forum-Chinese%20Community-FF6900?style=for-the-badge" alt="Forum" />
+    </a>
+</p>
+
+</div>
+
+---
+
+## 🛠️ Development
+
+### Build from Source
+
+```bash
+# Clone the repository
+git clone https://github.com/oceanbase/seekdb.git
+cd seekdb
+bash build.sh debug --init --make
+./debug/observer
+```
+
+See the [Developer Guide](docs/developer-guide/en/README.md) for detailed instructions.
+
+### Contributing
+
+We welcome contributions! See our [Contributing Guide](CONTRIBUTING.md) to get started.
+
+---
+
+
+## 📄 License
+
+OceanBase SeekDB is licensed under the [Apache License, Version 2.0](LICENSE).
+
+

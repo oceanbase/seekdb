@@ -484,8 +484,13 @@ public:
       }
       BASIC_TIME_GUARD(time_guard, "ObMalloc");
       DEFER(ObMallocTimeMonitor::get_instance().record_malloc_time(time_guard, size, inner_attr));
+#ifdef OB_BUILD_EMBED_MODE
+      bool light_backtrace_allowed = false;
+      bool sample_allowed = false;
+#else
       const bool light_backtrace_allowed = is_memleak_light_backtrace_enabled() && ObLightBacktraceGuard::is_enabled() && ObCtxIds::GLIBC != attr.ctx_id_;
       bool sample_allowed = light_backtrace_allowed || malloc_sample_allowed(size, inner_attr);
+#endif
       inner_attr.alloc_extra_info_ = sample_allowed;
       nobj = allocator.realloc_object(obj, size, inner_attr);
       if (OB_ISNULL(nobj)) {

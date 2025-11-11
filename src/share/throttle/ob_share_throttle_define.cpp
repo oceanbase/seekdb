@@ -40,7 +40,7 @@ void FakeAllocatorForTxShare::init_throttle_config(int64_t &resource_limit,
   const int64_t SR_THROTTLE_TRIGGER_PERCENTAGE = 60;
   const int64_t SR_THROTTLE_MAX_DURATION = 2LL * 60LL * 60LL * 1000LL * 1000LL;  // 2 hours
 
-  int64_t total_memory = lib::get_tenant_memory_limit(MTL_ID());
+  int64_t hard_memory_limit = lib::get_hard_memory_limit();
 
   omt::ObTenantConfigGuard tenant_config(TENANT_CONF(MTL_ID()));
   if (tenant_config.is_valid()) {
@@ -51,11 +51,11 @@ void FakeAllocatorForTxShare::init_throttle_config(int64_t &resource_limit,
       int64_t vector_limit = ObTenantVectorAllocator::get_vector_mem_limit_percentage(tenant_config);
       share_mem_limit = MAX(memstore_limit, vector_limit + 5) + 10;
     }
-    resource_limit = total_memory * share_mem_limit / 100LL;
+    resource_limit = hard_memory_limit * share_mem_limit / 100LL;
     trigger_percentage = tenant_config->writing_throttling_trigger_percentage;
     max_duration = tenant_config->writing_throttling_maximum_duration;
   } else {
-    resource_limit = total_memory * SR_LIMIT_PERCENTAGE / 100;
+    resource_limit = hard_memory_limit * SR_LIMIT_PERCENTAGE / 100;
     trigger_percentage = SR_THROTTLE_TRIGGER_PERCENTAGE;
     max_duration = SR_THROTTLE_MAX_DURATION;
   }

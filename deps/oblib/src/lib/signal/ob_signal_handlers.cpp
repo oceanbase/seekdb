@@ -186,9 +186,11 @@ void coredump_cb(volatile int sig, volatile int sig_code, void* volatile sig_add
 #elif defined(__aarch64__)
     int64_t ip = con->uc_mcontext.regs[30];
     int64_t bp = con->uc_mcontext.regs[29];
-    void* addrs[64];
-    int n_addr = light_backtrace(addrs, ARRAYSIZEOF(addrs), bp);
-    len += safe_parray(bt, sizeof(bt) - 1, (int64_t*)addrs, n_addr);
+    #ifndef OB_BUILD_EMBED_MODE
+      void* addrs[64];
+      int n_addr = light_backtrace(addrs, ARRAYSIZEOF(addrs), bp);
+      len += safe_parray(bt, sizeof(bt) - 1, (int64_t*)addrs, n_addr);
+    #endif
 #else
     int64_t ip = -1;
     int64_t bp = -1;

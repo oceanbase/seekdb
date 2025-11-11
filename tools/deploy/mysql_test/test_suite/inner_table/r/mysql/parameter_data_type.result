@@ -282,7 +282,7 @@ zone	svr_type	svr_ip	svr_port	name	data_type	value	info	section	scope	source	edi
 zone1	observer	server_ip	server_port	default_row_format	STRING	value	info	OBSERVER	CLUSTER	DEFAULT	DYNAMIC_EFFECTIVE	dynamic	1
 show parameters where svr_ip = host_ip() and svr_port = rpc_port() and name = 'log_disk_size';
 zone	svr_type	svr_ip	svr_port	name	data_type	value	info	section	scope	source	edit_level	default_value	isdefault
-zone1	observer	server_ip	server_port	log_disk_size	CAPACITY	value	info	LOGSERVICE	CLUSTER	DEFAULT	DYNAMIC_EFFECTIVE	2G	1
+zone1	observer	server_ip	server_port	log_disk_size	CAPACITY	value	info	LOGSERVICE	CLUSTER	DEFAULT	DYNAMIC_EFFECTIVE	10G	1
 show parameters where svr_ip = host_ip() and svr_port = rpc_port() and name = 'rpc_timeout';
 zone	svr_type	svr_ip	svr_port	name	data_type	value	info	section	scope	source	edit_level	default_value	isdefault
 zone1	observer	server_ip	server_port	rpc_timeout	TIME	value	info	RPC	CLUSTER	DEFAULT	DYNAMIC_EFFECTIVE	2s	1
@@ -489,7 +489,7 @@ zone	svr_type	svr_ip	svr_port	name	data_type	value	info	section	scope	source	edi
 zone1	observer	server_ip	server_port	default_row_format	STRING	value	info	OBSERVER	CLUSTER	DEFAULT	DYNAMIC_EFFECTIVE	dynamic	1
 show parameters where svr_ip = host_ip() and svr_port = rpc_port() and name = 'log_disk_size';
 zone	svr_type	svr_ip	svr_port	name	data_type	value	info	section	scope	source	edit_level	default_value	isdefault
-zone1	observer	server_ip	server_port	log_disk_size	CAPACITY	value	info	LOGSERVICE	CLUSTER	DEFAULT	DYNAMIC_EFFECTIVE	2G	1
+zone1	observer	server_ip	server_port	log_disk_size	CAPACITY	value	info	LOGSERVICE	CLUSTER	DEFAULT	DYNAMIC_EFFECTIVE	10G	1
 show parameters where svr_ip = host_ip() and svr_port = rpc_port() and name = 'rpc_timeout';
 zone	svr_type	svr_ip	svr_port	name	data_type	value	info	section	scope	source	edit_level	default_value	isdefault
 zone1	observer	server_ip	server_port	rpc_timeout	TIME	value	info	RPC	CLUSTER	DEFAULT	DYNAMIC_EFFECTIVE	2s	1

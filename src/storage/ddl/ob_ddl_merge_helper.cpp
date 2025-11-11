@@ -54,10 +54,10 @@ int ObIDDLMergeHelper::get_merge_helper(ObIAllocator &allocator,
 
   char *buf = nullptr;
   switch(direct_load_type) {
-    #ifdef OB_BUILD_SHARED_STORAGE
     case ObDirectLoadType::DIRECT_LOAD_INCREMENTAL:
       BUILD_MERGE_HELPER(ObIncMinDDLMergeHelper);
       break;
+    #ifdef OB_BUILD_SHARED_STORAGE
     case ObDirectLoadType::DIRECT_LOAD_DDL_V2:
     case ObDirectLoadType::DIRECT_LOAD_LOAD_DATA_V2:
       BUILD_MERGE_HELPER(ObSSDDLMergeHelper);

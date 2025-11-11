@@ -64,6 +64,11 @@ using namespace storage;
 using namespace backup;
 using namespace palf;
 
+namespace share
+{
+extern int report_telemetry(const char *reporter, const char *event_name);
+}
+
 namespace observer
 {
 
@@ -149,6 +154,16 @@ void ObRemoteMasterRsUpdateTask::runTimerTask()
   }
 }
 
+TelemetryTask::TelemetryTask(bool embed_mode)
+  : embed_mode_(embed_mode)
+{}
+
+void TelemetryTask::runTimerTask()
+{
+  const char *reporter = embed_mode_ ? "embed" : "server";
+  share::report_telemetry(reporter, "bootstraped");
+}
+
 //////////////////////////////////////
 
 // here gctx may hasn't been initialized already
@@ -159,7 +174,7 @@ ObService::ObService(const ObGlobalContext &gctx)
     lease_state_mgr_(), heartbeat_process_(gctx, schema_updater_, lease_state_mgr_),
     gctx_(gctx), server_trace_task_(), schema_release_task_(),
     schema_status_task_(), remote_master_rs_update_task_(gctx), ls_table_updater_(),
-    meta_table_checker_(),
+    meta_table_checker_(), telemetry_task_(false),
     need_bootstrap_(false)
   {
   }
@@ -245,7 +260,7 @@ int ObService::register_self()
   return ret;
 }
 
-int ObService::start()
+int ObService::start(bool embed_mode)
 {
   int ret = OB_SUCCESS;
   FLOG_INFO("[OBSERVICE_NOTICE] start ob_service begin");
@@ -255,6 +270,13 @@ int ObService::start()
   } else if (need_bootstrap_) {
     if (OB_FAIL(bootstrap())) {
       LOG_ERROR("bootstrap failed", KR(ret));
+    }
+    if (OB_SUCC(ret)) {
+      telemetry_task_.embed_mode_ = embed_mode;
+      if (OB_SUCCESS != TG_SCHEDULE(lib::TGDefIDs::ServerGTimer, telemetry_task_,
+          1L * 1000 * 1000, false)) {
+        FLOG_ERROR("fail to schedule telemetry task");
+      }
     }
     need_bootstrap_ = false;
   }
