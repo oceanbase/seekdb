@@ -82,9 +82,13 @@ int ObTenantMdsService::mtl_init(ObTenantMdsService *&mds_service)
     MDS_LOG(ERROR, "init mds tenant service twice!", KR(ret), KPC(mds_service));
   } else if (MDS_FAIL(mds_service->memory_leak_debug_map_.init("MdsDebugMap", MTL_ID()))) {
     MDS_LOG(WARN, "init map failed", K(ret));
-  } else if (MDS_FAIL(TG_START(lib::TGDefIDs::TenantMdsServiceRecyle))) {
+  } else if (MDS_FAIL(TG_CREATE_TENANT(lib::TGDefIDs::TenantMdsServiceRecyle, mds_service->recyle_timer_id_))) {
+    MDS_LOG(WARN, "fail to create TenantMdsServiceRecyle timer", K(ret));
+  } else if (MDS_FAIL(TG_START(mds_service->recyle_timer_id_))) {
     MDS_LOG(WARN, "fail to start TenantMdsServiceRecyle timer", K(ret));
-  } else if (MDS_FAIL(TG_START(lib::TGDefIDs::TenantMdsServiceDumpStatus))) {
+  } else if (MDS_FAIL(TG_CREATE_TENANT(lib::TGDefIDs::TenantMdsServiceDumpStatus, mds_service->dump_status_timer_id_))) {
+    MDS_LOG(WARN, "fail to start TenantMdsServiceDumpStatus timer", K(ret));
+  } else if (MDS_FAIL(TG_START(mds_service->dump_status_timer_id_))) {
     MDS_LOG(WARN, "fail to start TenantMdsServiceDumpStatus timer", K(ret));
   } else {
     mds_service->is_inited_ = true;
@@ -96,12 +100,14 @@ int ObTenantMdsService::mtl_start(ObTenantMdsService *&mds_service)
 {
   int ret = OB_SUCCESS;
   MDS_TG(10_ms);
-  if (MDS_FAIL(TG_SCHEDULE(lib::TGDefIDs::TenantMdsServiceRecyle, mds_service->recyle_timer_task_,
+  if (MDS_FAIL(TG_SCHEDULE(mds_service->recyle_timer_id_, mds_service->recyle_timer_task_,
                            3_s, true/*repeat*/, false/*immediate*/))) {
-    MDS_LOG(ERROR, "fail to register recycle timer task to timer", KR(ret), KPC(mds_service));
-  } else if (MDS_FAIL(TG_SCHEDULE(lib::TGDefIDs::TenantMdsServiceDumpStatus, mds_service->dump_status_timer_task_,
+    MDS_LOG(ERROR, "fail to register recycle timer task to timer",
+        KR(ret), K(mds_service->recyle_timer_id_), KPC(mds_service));
+  } else if (MDS_FAIL(TG_SCHEDULE(mds_service->dump_status_timer_id_, mds_service->dump_status_timer_task_,
                                   15_s, true/*repeat*/, false/*immediate*/))) {
-    MDS_LOG(ERROR, "fail to register dump mds table status task to timer", KR(ret), KPC(mds_service));
+    MDS_LOG(ERROR, "fail to register dump mds table status task to timer",
+        KR(ret), K(mds_service->dump_status_timer_id_), KPC(mds_service));
   }
 
   return ret;
@@ -110,16 +116,24 @@ int ObTenantMdsService::mtl_start(ObTenantMdsService *&mds_service)
 void ObTenantMdsService::mtl_stop(ObTenantMdsService *&mds_service)
 {
   if (nullptr != mds_service) {
-    TG_STOP(lib::TGDefIDs::TenantMdsServiceRecyle);
-    TG_STOP(lib::TGDefIDs::TenantMdsServiceDumpStatus);
+    if (mds_service->recyle_timer_id_ != -1) {
+      TG_STOP(mds_service->recyle_timer_id_);
+    }
+    if (mds_service->dump_status_timer_id_ != -1) {
+      TG_STOP(mds_service->dump_status_timer_id_);
+    }
   }
 }
 
 void ObTenantMdsService::mtl_wait(ObTenantMdsService *&mds_service)
 {
   if (nullptr != mds_service) {
-    TG_WAIT(lib::TGDefIDs::TenantMdsServiceRecyle);
-    TG_WAIT(lib::TGDefIDs::TenantMdsServiceDumpStatus);
+    if (mds_service->recyle_timer_id_ != -1) {
+      TG_WAIT(mds_service->recyle_timer_id_);
+    }
+    if (mds_service->dump_status_timer_id_ != -1) {
+      TG_WAIT(mds_service->dump_status_timer_id_);
+    }
   }
 }
 
