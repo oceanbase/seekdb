@@ -358,6 +358,8 @@ int ObCallProcedureResolver::resolve(const ParseNode &parse_tree)
                                   session_info_->get_effective_tenant_id()));
     OX (call_proc_info = static_cast<ObCallProcedureInfo*>(stmt->get_cacheobj_guard().get_cache_obj()));
     CK (OB_NOT_NULL(call_proc_info));
+    // Wait for sys package to be loaded if not ready yet
+    OZ (ObResolverUtils::wait_for_sys_package_ready(*session_info_));
     // Parsing process name
     if (OB_SUCC(ret)) {
       if (T_SP_ACCESS_NAME != name_node->type_) {

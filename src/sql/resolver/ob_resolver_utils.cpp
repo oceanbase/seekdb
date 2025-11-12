@@ -6799,6 +6799,37 @@ int ObResolverUtils::set_parallel_info(sql::ObSQLSessionInfo &session_info,
   return ret;
 }
 
+int ObResolverUtils::wait_for_sys_package_ready(ObSQLSessionInfo &session_info)
+{
+  int ret = OB_SUCCESS;
+  if (GCONF._enable_async_load_sys_package && !GCTX.sys_package_ready_ && session_info.is_user_session()) {
+    const int64_t retry_interval_us = 100L * 1000L; // 100ms
+    bool waited = false;
+    while (!GCTX.sys_package_ready_ && OB_SUCC(ret)) {
+      if (NULL != session_info.get_cur_exec_ctx() && OB_FAIL(session_info.get_cur_exec_ctx()->check_status())) {
+        LOG_WARN("check status failed", K(ret));
+      } else {
+        if (!waited) {
+          LOG_INFO("sys package not ready yet, waiting for loading completion");
+          waited = true;
+        }
+        ob_usleep(retry_interval_us);
+      }
+    }
+    if (OB_FAIL(ret)) {
+      LOG_WARN("sys package waiting interrupted", K(ret));
+    } else if (!GCTX.sys_package_ready_) {
+      LOG_WARN("sys package not ready after waiting");
+    } else {
+      if (waited) {
+        LOG_INFO("sys package ready after waiting");
+      }
+      // Return OB_SCHEMA_EAGAIN to retry acquiring schema
+      ret = OB_SCHEMA_EAGAIN;
+    }
+  }
+  return ret;
+}
 
 int ObResolverUtils::resolve_external_symbol(common::ObIAllocator &allocator,
                                              sql::ObRawExprFactory &expr_factory,
@@ -6839,32 +6870,8 @@ int ObResolverUtils::resolve_external_symbol(common::ObIAllocator &allocator,
 
   if (OB_SUCC(ret)) {
     // Wait for sys package to be loaded if not ready yet
-    if (GCONF._enable_async_load_sys_package && !GCTX.sys_package_ready_ && session_info.is_user_session()) {
-      const int64_t retry_interval_us = 100L * 1000L; // 100ms
-      bool waited = false;
-      while (!GCTX.sys_package_ready_ && OB_SUCC(ret)) {
-        if (NULL != session_info.get_cur_exec_ctx() && OB_FAIL(session_info.get_cur_exec_ctx()->check_status())) {
-          LOG_WARN("check status failed", K(ret));
-        } else {
-          if (!waited) {
-            LOG_INFO("sys package not ready yet, waiting for loading completion", K(q_name));
-            waited = true;
-          }
-          ob_usleep(retry_interval_us);
-        }
-      }
-      if (OB_FAIL(ret)) {
-        LOG_WARN("sys package waiting interrupted", K(ret), K(q_name));
-      } else if (!GCTX.sys_package_ready_) {
-        LOG_WARN("sys package not ready after waiting", K(q_name));
-      } else {
-        if (waited) {
-          LOG_INFO("sys package ready after waiting", K(q_name));
-        }
-        // Return OB_SCHEMA_EAGAIN to retry acquiring schema
-        ret = OB_SCHEMA_EAGAIN;
-      }
-    } else {
+    OZ (wait_for_sys_package_ready(session_info));
+    if (OB_SUCC(ret)) {
       pl::ObPLResolver pl_resolver(allocator,
                                   session_info,
                                   schema_guard,
