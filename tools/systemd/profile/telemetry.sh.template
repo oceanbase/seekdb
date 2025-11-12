@@ -46,16 +46,6 @@ function add_observer_config {
 }
 
 function update_json {
-    clusterId=0
-    # Get script directory
-    SEEKDB_TELEMETRY_FILE="$BASE_DIR/run/telemetry.json"
-
-    # Check if cluster_id file exists
-    if [ -f "$SEEKDB_TELEMETRY_FILE" ]; then
-        # If file exists, read clusterId from file cluster_id
-        clusterId=$(grep '"id":' $SEEKDB_TELEMETRY_FILE | sed -E 's/.*"id": *"([^"]*)".*/\1/')
-    fi
-
     sed -i "s|#reporter#|${reporter}|g" $json_file
     sed -i "s|#type#|${type}|g" $json_file
     sed -i "s|#step#|${step}|g" $json_file
@@ -64,7 +54,6 @@ function update_json {
     sed -i "s|#hostHash#|${hostHash}|g" $json_file
     sed -i "s|#osName#|${osName}|g" $json_file
     sed -i "s|#osRelease#|${osRelease}|g" $json_file
-    sed -i "s|#clusterId#|${clusterId}|g" $json_file
 }
 
 # Function Name: do_telemetry

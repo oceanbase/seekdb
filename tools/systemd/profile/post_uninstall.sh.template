@@ -16,7 +16,6 @@ if [ "$1" -eq 0 ] 2>/dev/null || [ "$1" = "remove" ] || [ "$1" = "purge" ]; then
         echo "# This script will clean all SeekDB configuration and data files" >> "$clean_script"
     fi
 
-    echo "rm -rf /usr/libexec/oceanbase/scripts/cluster_id" >> "$clean_script"
     echo "rm -rf /var/lib/oceanbase" >> "$clean_script"
     echo "echo OK" >> "$clean_script"
 

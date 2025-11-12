@@ -29,6 +29,11 @@ if [ -f "$cnf_file" ] && [ -s "$cnf_file" ]; then
         echo "rm -rf $data_dir" >> "$clean_script"
     fi
 
+    base_dir=$(cat "$cnf_file" | grep -o 'base-dir=[^[:space:]]*' | sed 's/base-dir=//')
+    if [ -n "$base_dir" ]; then
+        echo "rm -rf $base_dir" >> "$clean_script"
+    fi
+
     # Make the script executable
     chmod +x "$clean_script"
 fi
