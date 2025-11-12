@@ -4,9 +4,7 @@
 
 CONFIG_FILE="/etc/oceanbase/seekdb.cnf"
 BASE_DIR="/var/lib/oceanbase"
-SEEKDB_TELEMETRY_FILE="$BASE_DIR/run/telemetry.json"
-CURRENT_DIR=$(dirname "$0")
-report=3
+SYSTEMD_PID_FILE="$BASE_DIR/run/observer.pid"
 
 # Check if config file exists
 if [ ! -f "$CONFIG_FILE" ]; then
@@ -34,6 +32,9 @@ read_config() {
             "port")
                 ADDITIONAL_PARAMS="$ADDITIONAL_PARAMS --port=$value"
                 ;;
+            "base-dir")
+                BASE_DIR="$value"
+                ;;
             "data-dir")
                 ADDITIONAL_PARAMS="$ADDITIONAL_PARAMS --data-dir=$value"
                 ;;
@@ -56,26 +57,27 @@ CMD="/usr/bin/observer --base-dir=$BASE_DIR $ADDITIONAL_PARAMS"
 echo "Starting seekdb with command: $CMD"
 echo "Configuration loaded from: $CONFIG_FILE"
 
-# Execute the command
-$CMD &
-CMD_PID=$!
-
-# Wait for the command to complete and check its exit status
-wait $CMD_PID
+$CMD
 CMD_EXIT_CODE=$?
+
+# Create softlink for PID file to systemd expected location
+SEEKDB_PID_FILE="$BASE_DIR/run/observer.pid"
+if [ -f "$SEEKDB_PID_FILE" ] && [ "$SEEKDB_PID_FILE" != "$SYSTEMD_PID_FILE" ]; then
+    # Create target directory if it doesn't exist
+    mkdir -p "$(dirname "$SYSTEMD_PID_FILE")"
+    # Remove existing link or file if exists
+    rm -f "$SYSTEMD_PID_FILE"
+    # Create softlink
+    ln -s "$SEEKDB_PID_FILE" "$SYSTEMD_PID_FILE"
+fi
 
 # Check if command executed successfully
 if [ $CMD_EXIT_CODE -eq 0 ]; then
-    # Start obshell agent
+    # Start obshell agent (ignore errors)
     echo "SeekDB started successfully, starting obshell agent..."
     if [ -f "/usr/bin/obshell" ]; then
         sleep 1
-        /usr/bin/obshell agent start --seekdb --base-dir=$BASE_DIR
-        if [ $? -eq 0 ]; then
-            echo "obshell agent started successfully"
-        else
-            echo "Failed to start obshell agent"
-        fi
+        /usr/bin/obshell agent start --seekdb --base-dir=$BASE_DIR || true
     else
         echo "Warning: /usr/bin/obshell not found, skipping obshell agent start"
     fi

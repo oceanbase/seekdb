@@ -4,7 +4,7 @@ Description=seekdb
 [Service]
 User=root
 Type=notify
-Environment=REPORT=systemd
+Environment=REPORTER=systemd
 ExecStart=/usr/libexec/oceanbase/scripts/seekdb_systemd_start
 ExecStop=/usr/libexec/oceanbase/scripts/seekdb_systemd_stop
 PIDFile=/var/lib/oceanbase/run/observer.pid

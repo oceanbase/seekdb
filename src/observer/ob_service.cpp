@@ -160,7 +160,7 @@ TelemetryTask::TelemetryTask(bool embed_mode)
 
 void TelemetryTask::runTimerTask()
 {
-  const char *env_reporter = std::getenv("REPORT");
+  const char *env_reporter = std::getenv("REPORTER");
   const char *reporter = env_reporter ? env_reporter : (embed_mode_ ? "embed" : "server");
   share::report_telemetry(reporter, "bootstraped");
 }

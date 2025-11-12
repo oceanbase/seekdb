@@ -8,11 +8,6 @@ os=7
 arch=aarch64
 repo=http://mirrors.oceanbase.com/oceanbase/community/stable/el/7/aarch64/
 
-[target-obdeploy]
-os=7
-arch=aarch64
-repo=https://ob-yum.oceanbase-dev.com/7/aarch64/test/ob-deploy/
-
 
 [deps]
 devdeps-gtest-1.8.0-132022101316.el7.aarch64.rpm
