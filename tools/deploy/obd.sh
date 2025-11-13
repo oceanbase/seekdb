@@ -47,7 +47,7 @@ function variables_prepare {
   HOST=$(hostname -i)
   DATA_PATH="/data/$(whoami)"
   IPADDRESS="127.0.0.1"
-  COMPONENT="oceanbase-seekdb"
+  COMPONENT="seekdb"
   if grep 'dep_create.sh' $BASE_DIR/build.sh 2>&1 >/dev/null
   then
     DEP_PATH=$BASE_DIR/deps/3rd

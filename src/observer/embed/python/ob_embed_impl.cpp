@@ -341,6 +341,9 @@ std::shared_ptr<ObLiteEmbedConn> ObLiteEmbed::connect(const char* db_name, const
     OX (session->set_priv_user_id(user_info->get_user_id()));
     OX (session->set_user_priv_set(user_info->get_priv_set()));
     OX (session->init_use_rich_format());
+    ObObj param_val;
+    param_val.set_int(60 * 1000 * 1000);
+    OZ(session->update_sys_variable(SYS_VAR_OB_QUERY_TIMEOUT, param_val));
     if (OB_NOT_NULL(db_name) && STRLEN(db_name) > 0) {
       OZ (schema_guard.get_db_priv_set(OB_SYS_TENANT_ID, user_info->get_user_id(), db_name, db_priv_set));
       OX (session->set_db_priv_set(db_priv_set));

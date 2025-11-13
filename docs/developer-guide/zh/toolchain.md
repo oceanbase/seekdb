@@ -44,7 +44,7 @@ OceanBase SeekDB 并不支持所有的操作系统，特别是 Windows 和 Mac O
 适用于：CentOS、Fedora、OpenAnolis、RedHat、UOS 等使用 `yum` 包管理器的系统。
 
 ```shell
-yum install git wget rpm* cpio make glibc-devel glibc-headers binutils m4 libtool libaio
+yum install git wget rpm* cpio make glibc-devel glibc-headers binutils m4 libtool libaio python3
 ```
 
 > **注意**：如果没有权限执行 `yum`，请使用 `sudo yum ...`。
@@ -54,7 +54,7 @@ yum install git wget rpm* cpio make glibc-devel glibc-headers binutils m4 libtoo
 适用于：Debian、Ubuntu 等使用 `apt-get` 包管理器的系统。
 
 ```shell
-apt-get install git wget rpm rpm2cpio cpio make build-essential binutils m4
+apt-get install git wget rpm rpm2cpio cpio make build-essential binutils m4 python3
 ```
 
 > **注意**：如果没有权限执行 `apt-get`，请使用 `sudo apt-get ...`。
@@ -64,7 +64,7 @@ apt-get install git wget rpm rpm2cpio cpio make build-essential binutils m4
 适用于：SUSE、openSUSE 等使用 `zypper` 包管理器的系统。
 
 ```shell
-zypper install git wget rpm cpio make glibc-devel binutils m4
+zypper install git wget rpm cpio make glibc-devel binutils m4 python3
 ```
 
 > **注意**：如果没有权限执行 `zypper`，请使用 `sudo zypper ...`。

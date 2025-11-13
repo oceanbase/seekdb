@@ -18,25 +18,25 @@ OceanBase 轻量版（SeekDB）要给开发者提供简单易用的 API，减少
 ## Client 对象
 ### 嵌入式模式
 ```python
-import seekdb
+import pyseekdb
 
-client = seekdb.Client(path="/path/to/save/to", database="db1")
+client = pyseekdb.Client(path="/path/to/save/to", database="db1")
 ```
 
 ### 服务器模式
 ```python
-import seekdb
+import pyseekdb
 
-client = seekdb.Client(host='localhost', port=2882, database="db1", user="u01“, password="pass")
+client = pyseekdb.Client(host='localhost', port=2882, database="db1", user="u01“, password="pass")
 ```
 
 ### OceanBase 模式
 连接 OceanBase 的本地部署，需要传递租户名。如果是连接 OB Cloud中的云服务，无需指定租户名。
 
 ```python
-import seekdb
+import pyseekdb
 
-client = seekdb.OBClient(host='localhost', port=2882, tenant="tenant1", database="db1", user="u01“, passwd="pass")
+client = pyseekdb.OBClient(host='localhost', port=2882, tenant="tenant1", database="db1", user="u01“, passwd="pass")
 ```
 
 ## Collection对象

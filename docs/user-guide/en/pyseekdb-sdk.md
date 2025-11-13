@@ -18,25 +18,25 @@ In this SDK, the database object concepts are shown in the following diagram.
 ## Client Object
 ### Embedded Mode
 ```python
-import seekdb
+import pyseekdb
 
-client = seekdb.Client(path="/path/to/save/to", database="db1")
+client = pyseekdb.Client(path="/path/to/save/to", database="db1")
 ```
 
 ### Server Mode
 ```python
-import seekdb
+import pyseekdb
 
-client = seekdb.Client(host='localhost', port=2882, database="db1", user="u01", password="pass")
+client = pyseekdb.Client(host='localhost', port=2882, database="db1", user="u01", password="pass")
 ```
 
 ### OceanBase Mode
 To connect to a local deployment of OceanBase, you need to pass the tenant name. If connecting to cloud services in OB Cloud, you don't need to specify the tenant name.
 
 ```python
-import seekdb
+import pyseekdb
 
-client = seekdb.OBClient(host='localhost', port=2882, tenant="tenant1", database="db1", user="u01", passwd="pass")
+client = pyseekdb.OBClient(host='localhost', port=2882, tenant="tenant1", database="db1", user="u01", passwd="pass")
 ```
 
 ## Collection Object

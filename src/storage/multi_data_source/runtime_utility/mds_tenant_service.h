@@ -102,7 +102,10 @@ struct ObMdsMemoryLeakDebugInfo
 class ObTenantMdsService
 {
 public:
-  ObTenantMdsService() : is_inited_(false), recyle_timer_task_(*this) {}
+  ObTenantMdsService() : is_inited_(false),
+                         recyle_timer_task_(*this),
+                         recyle_timer_id_(-1),
+                         dump_status_timer_id_(-1) {}
   ~ObTenantMdsService() {
     if (memory_leak_debug_map_.count() != 0) {
       MDS_LOG_RET(ERROR, OB_ERR_UNEXPECTED, "there are holding items not released when mds allocator released");
@@ -184,6 +187,9 @@ private:
   /*******************debug for memoy leak************************/
   ObLinearHashMap<ObIntWarp, ObMdsMemoryLeakDebugInfo> memory_leak_debug_map_;
   /***************************************************************/
+
+  int recyle_timer_id_;
+  int dump_status_timer_id_;
 };
 
 }  // namespace mds

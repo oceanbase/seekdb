@@ -1,4 +1,5 @@
 port=2881
+base-dir=/var/lib/oceanbase
 data-dir=/var/lib/oceanbase/store
 redo-dir=/var/lib/oceanbase/store/redo
 datafile_size=2G

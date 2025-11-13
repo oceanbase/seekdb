@@ -1,4 +1,4 @@
-oceanbase-ce:
+{{%% COMPONENT %%}}:
 {{%% SERVERS %%}}
   tag: latest
   include: obd/observer.include.yaml

@@ -87,7 +87,7 @@ file(GLOB SQL_FILES "${SYS_PACK_SQL_SOURCE_DIR}/*.sql")
 
 add_custom_command(
   OUTPUT ${gen_syspack_src}
-  COMMAND python ${SYS_PACK_SQL_SOURCE_DIR}/syspack_codegen.py -rd ${SYS_PACK_RELEASE_DIR}
+  COMMAND python3 ${SYS_PACK_SQL_SOURCE_DIR}/syspack_codegen.py -rd ${SYS_PACK_RELEASE_DIR}
   DEPENDS ${SQL_FILES} ${SYS_PACK_SQL_SOURCE_DIR}/syspack_codegen.py
   WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
   COMMENT "Generating wrapped syspack source files"
