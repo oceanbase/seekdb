@@ -36,7 +36,7 @@ To connect to a local deployment of OceanBase, you need to pass the tenant name.
 ```python
 import pyseekdb
 
-client = pyseekdb.OBClient(host='localhost', port=2882, tenant="tenant1", database="db1", user="u01", passwd="pass")
+client = pyseekdb.Client(host='localhost', port=2882, tenant="tenant1", database="db1", user="u01", passwd="pass")
 ```
 
 ## Collection Object
@@ -46,13 +46,12 @@ A Collection stores a set of "records". In SeekDB and OceanBase, each Collection
 ```sql
 create table c$v1$coll1
 (
-  _id bigint PRIMARY KEY NOT NULL AUTO_INCREMENT,
+  _id varbinary(512) PRIMARY KEY NOT NULL,
   document string,
-  embedding vector(?) DEFAULT ai_embed(default_model, document),
+  embedding vector(?),
   metadata json,
-  FULLTEXT INDEX idx1(document),
-  VECTOR INDEX idx2 (embedding),
-  GIN INDEX idx3 (metadata)
+  FULLTEXT INDEX idx_fts(document),
+  VECTOR INDEX idx_vec (embedding)
 );
 ```
 
@@ -67,8 +66,6 @@ Future data models can be modified as follows, with different predefined structu
 #### 1.create
 ```python
 collection = client.create_collection(name="my_collection")
-collection = client.create_collection(name="my_collection",
-                                      embedding_model="my_model")
 ```
 
 Creates a new collection. Raises an error if it already exists.
@@ -95,6 +92,7 @@ collection = client.delete_collection(name="my_collection")
 #### 1.add
 ```python
 collection.add(
+    ids=["item1", "item2", ...],
     documents=["lorem ipsum...", "doc2", "doc3", ...],
     metadatas=[{"chapter": 3, "verse": 16}, {"chapter": 3, "verse": 5}, {"chapter": 29, "verse": 11}, ...],
 )
@@ -103,15 +101,15 @@ collection.add(
 Adds documents to the collection. Each document can have associated metadata. The server will automatically assign a unique id to each document and automatically generate embeddings for each document. The above interface is internally implemented in the SDK as executing the following SQL statement:
 
 ```sql
-insert into c$coll1 (content, metadata)
-values (('lorem ipsum...', '{"chapter": 3, "verse": 16}'),
-        ('doc2', '{"chapter": 3, "verse": 5}'),
-        ('doc3', '{"chapter": 29, "verse": 11}'));
+insert into c$v1$coll1 (_id, content, metadata)
+values (('item1', 'lorem ipsum...', '{"chapter": 3, "verse": 16}'),
+        ('item2', 'doc2', '{"chapter": 3, "verse": 5}'),
+        ('item3', 'doc3', '{"chapter": 29, "verse": 11}'));
 ```
 
 ```python
 collection.add(
-    ids=[1, 2, 3, ...],
+    ids=["1", "2", "3", ...],
     documents=["lorem ipsum...", "doc2", "doc3", ...],
     metadatas=[{"chapter": 3, "verse": 16}, {"chapter": 3, "verse": 5}, {"chapter": 29, "verse": 11}, ...],
 )
@@ -122,7 +120,7 @@ You can also specify the id for each document when adding documents.
 #### 2.update
 ```python
 collection.update(
-    ids=[1, 2, 3, ...],
+    ids=["1", "2", "3", ...],
     embeddings=[[1.1, 2.3, 3.2], [4.5, 6.9, 4.4], [1.1, 2.3, 3.2], ...],
     metadatas=[{"chapter": 3, "verse": 16}, {"chapter": 3, "verse": 5}, {"chapter": 29, "verse": 11}, ...],
     documents=["doc1", "doc2", "doc3", ...],
@@ -133,7 +131,7 @@ This operation specifies an id and updates the corresponding record's data. If a
 
 ```python
 collection.upsert(
-    ids=[1, 2, 3, ...],
+    ids=["1", "2", "3", ...],
     embeddings=[[1.1, 2.3, 3.2], [4.5, 6.9, 4.4], [1.1, 2.3, 3.2], ...],
     metadatas=[{"chapter": 3, "verse": 16}, {"chapter": 3, "verse": 5}, {"chapter": 29, "verse": 11}, ...],
     documents=["doc1", "doc2", "doc3", ...],
@@ -145,7 +143,7 @@ If a record with the specified id exists, it performs an `update` operation; oth
 #### 3.delete
 ```python
 collection.delete(
-    ids=[1, 2, 3,...],
+    ids=["1", "2", "3",...],
 )
 ```
 
@@ -153,7 +151,7 @@ Deletes records based on the specified ids.
 
 ```python
 collection.delete(
-    ids=[1, 2, 3,...],
+    ids=["1", "2", "3",...],
     where={"chapter": "20"}
 )
 ```
@@ -182,7 +180,7 @@ Queries records in the collection directly based on the specified vector embeddi
 
 #### Query by ID
 ```python
-collection.get(ids=[1, 2, ...], limit=5, offset=10)
+collection.get(ids=["1", "2", ...], limit=5, offset=10)
 ```
 
 Returns records based on the specified ids. If limit is not specified, it defaults to 100. If offset is not specified, it defaults to 0. If ids is empty, it returns data from the entire collection.
@@ -284,7 +282,7 @@ Here, query, knn, and rank must be provided. In knn, you can use query_embedding
 All the above query operations return a JSON object with the following structure:
 
 ```json
-[{'_id': 0,
+[{'_id': '1',
   'document': 'a document text'
   'embedding': [0.35803765, -0.6023496, 0.18414013, -0.26286206, 0.90294385],
   'metadata': {
@@ -310,12 +308,13 @@ def list_databases(limit: Optional[int] = None, offset: Optional[int] = None, te
 
 ## Examples
 ```python
-import seekdb
-client = seekdb.Client()
+import pyseekdb
+client = pyseekdb.Client()
 
 collection = client.get_or_create_collection(name="my_collection")
 
 collection.upsert(
+    ids=["itemA", "itemB"],
     documents=[
         "This is a document about pineapple",
         "This is a document about oranges"

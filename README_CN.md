@@ -98,7 +98,7 @@
 <details>
 <summary><b>🐍 Python（推荐用于 AI/ML）</b></summary>
 ```bash
-pip install seekdb
+pip install pylibseekdb
 ```
 </details>
 
@@ -141,12 +141,13 @@ rpm -ivh seekdb-1.x.x.x-xxxxxxx.el8.x86_64.rpm
 <summary><b>🗄️ 🐍 新版 Python SDK</b></summary>
 
 ```python
-import seekdb
-client = seekdb.Client()
+import pyseekdb
+client = pyseekdb.Client()
 
 collection = client.get_or_create_collection(name="my_collection")
 
 collection.upsert(
+    ids=["item1", "item2", "item3"],
     documents=[
         "It's rainy today",
         "It was cloudy yesterday",
@@ -222,7 +223,7 @@ res = client.search(collection_name=test_collection_name, data=[0, 0, 0], anns_f
 <summary><b>🗄️ SQL</b></summary>
 
 ```python
-import seekdb
+import pylibseekdb as seekdb
 
 # Open a database
 seekdb.open()

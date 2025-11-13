@@ -18,13 +18,13 @@ from typing import Optional
 import traceback
 
 try:
-  __version__ = importlib.metadata.version("seekdb")
+  __version__ = importlib.metadata.version("pylibseekdb")
 except importlib.metadata.PackageNotFoundError:
   __version__ = "0.0.1.dev1"
 
 __author__ = "OceanBase"
 
-_LIB_FILE_NAME = "pyseekdb"
+_LIB_FILE_NAME = "libseekdb_python"
 
 # Configuration for downloading the .so file
 _SO_DOWNLOAD_CONFIG = {
@@ -90,39 +90,39 @@ def _merge_so_file() -> bool:
         return True
 
     try:
-        seekdb_lib_name = 'seekdb_lib'
-        seekdb_name = 'seekdb'
+        seekdb_lib_name = 'pylibseekdb_runtime'
+        seekdb_name = 'pylibseekdb'
         # locate the seekdb-lib package
         seekdb_lib_package = importlib.metadata.distribution(seekdb_lib_name)
         seekdb_lib_path = seekdb_lib_package.locate_file(f"{seekdb_lib_name}/{_LIB_FILE_NAME}.so.0.gz")
         if not seekdb_lib_path.exists():
-            raise FileNotFoundError(f"seekdb-lib package does not contain {seekdb_lib_name}/{_LIB_FILE_NAME}.so.0.gz, path: {seekdb_lib_path}")
+            raise FileNotFoundError(f"{seekdb_lib_name} package does not contain {seekdb_lib_name}/{_LIB_FILE_NAME}.so.0.gz, path: {seekdb_lib_path}")
 
         # locate the seekdb package
         seekdb_core_package = importlib.metadata.distribution(seekdb_name)
         seekdb_core_path = seekdb_core_package.locate_file(f"{seekdb_name}/{_LIB_FILE_NAME}.so.1.gz")
         if not seekdb_core_path.exists():
-            raise FileNotFoundError(f"seekdb package does not contain {seekdb_name}/{_LIB_FILE_NAME}.so.1.gz, path: {seekdb_core_path}")
+            raise FileNotFoundError(f"{seekdb_name} package does not contain {seekdb_name}/{_LIB_FILE_NAME}.so.1.gz, path: {seekdb_core_path}")
 
         libaio_path = seekdb_core_package.locate_file(f"{seekdb_name}/libaio.so.1")
         if not libaio_path.exists():
-            raise FileNotFoundError(f"seekdb package does not contain {seekdb_name}/libaio.so.1, path: {libaio_path}")
+            raise FileNotFoundError(f"{seekdb_name} package does not contain {seekdb_name}/libaio.so.1, path: {libaio_path}")
 
         seekdb_core_sha_path = seekdb_core_package.locate_file(f"{seekdb_name}/{_LIB_FILE_NAME}.so.sha.1")
         seekdb_lib_sha_path = seekdb_core_package.locate_file(f"{seekdb_name}/{_LIB_FILE_NAME}.so.sha.0")
         seekdb_sha_path = seekdb_core_package.locate_file(f"{seekdb_name}/{_LIB_FILE_NAME}.so.sha")
         if not seekdb_core_sha_path.exists():
-            raise FileNotFoundError(f"seekdb package does not contain {seekdb_name}/{_LIB_FILE_NAME}.so.sha.1, path: {seekdb_core_sha_path}")
+            raise FileNotFoundError(f"{seekdb_name} package does not contain {seekdb_name}/{_LIB_FILE_NAME}.so.sha.1, path: {seekdb_core_sha_path}")
         if not seekdb_lib_sha_path.exists():
-            raise FileNotFoundError(f"seekdb package does not contain {seekdb_name}/{_LIB_FILE_NAME}.so.sha.0, path: {seekdb_lib_sha_path}")
+            raise FileNotFoundError(f"{seekdb_name} package does not contain {seekdb_name}/{_LIB_FILE_NAME}.so.sha.0, path: {seekdb_lib_sha_path}")
         if not seekdb_sha_path.exists():
-            raise FileNotFoundError(f"seekdb package does not contain {seekdb_name}/{_LIB_FILE_NAME}.so.sha, path: {seekdb_sha_path}")
+            raise FileNotFoundError(f"{seekdb_name} package does not contain {seekdb_name}/{_LIB_FILE_NAME}.so.sha, path: {seekdb_sha_path}")
 
         # verify the sha of the seekdb-lib package
         if not _verify_checksum(seekdb_lib_path, seekdb_lib_sha_path):
-            raise ValueError(f"seekdb-lib package sha mismatch: seekdb lib = {seekdb_lib_path}, sha = {seekdb_lib_sha_path}, path: {seekdb_lib_path}")
+            raise ValueError(f"{seekdb_lib_name} package sha mismatch: seekdb lib = {seekdb_lib_path}, sha = {seekdb_lib_sha_path}, path: {seekdb_lib_path}")
         if not _verify_checksum(seekdb_core_path, seekdb_core_sha_path):
-            raise ValueError(f"seekdb package sha mismatch: seekdb core = {seekdb_core_path}, sha = {seekdb_core_sha_path}, path: {seekdb_core_path}")
+            raise ValueError(f"{seekdb_name} package sha mismatch: seekdb core = {seekdb_core_path}, sha = {seekdb_core_sha_path}, path: {seekdb_core_path}")
 
         # copy the seekdb-lib and seekdb-core to the cache directory
         tmp_lib_path = so_path.with_suffix('.tmp')
@@ -136,7 +136,7 @@ def _merge_so_file() -> bool:
 
         # check the checksum of the tmp file
         if not _verify_checksum(tmp_lib_path, seekdb_sha_path):
-            raise ValueError(f"seekdb package sha mismatch: seekdb = {tmp_lib_path}, sha = {seekdb_sha_path}")
+            raise ValueError(f"{seekdb_name} package sha mismatch: seekdb = {tmp_lib_path}, sha = {seekdb_sha_path}")
 
         # rename the tmp file to the final name
         so_path.unlink(missing_ok=True)
@@ -173,8 +173,8 @@ def _load_oblite_module():
 
     try:
         # Import the module
-        import pyseekdb
-        return pyseekdb
+        import libseekdb_python
+        return libseekdb_python
     except ImportError as e:
         raise ImportError(f"Failed to import {_LIB_FILE_NAME} module from {cache_dir}: {e}")
 
