@@ -98,7 +98,7 @@ Choose your platform:
 <summary><b>🐍 Python (Recommended for AI/ML)</b></summary>
 
 ```bash
-pip install seekdb
+pip install pylibseekdb
 ```
 
 </details>
@@ -140,14 +140,19 @@ Build a semantic search system in 5 minutes:
 
 <details>
 <summary><b>🗄️ 🐍 New Python SDK</b></summary>
+```bash
+# install sdk first
+pip install -U pyseekdb
+```
 
 ```python
-import seekdb
-client = seekdb.Client()
+import pyseekdb
+client = pyseekdb.Client()
 
 collection = client.get_or_create_collection(name="my_collection")
 
 collection.upsert(
+    ids=["1", "2", "3"],
     documents=[
         "It's rainy today",
         "It was cloudy yesterday",
@@ -223,7 +228,7 @@ Please refer to the [User Guide](https://github.com/oceanbase/pyobvector) for mo
 <summary><b>🗄️ SQL</b></summary>
 
 ```python
-import seekdb
+import pylibseekdb as seekdb
 
 # Open a database
 seekdb.open()

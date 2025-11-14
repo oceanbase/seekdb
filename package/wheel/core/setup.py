@@ -24,12 +24,15 @@ def get_long_description():
     return "OceanBase SeekDB"
 
 def __library_name():
-    return "pyseekdb"
+    return "libseekdb_python"
+
+def __package_name():
+    return "pylibseekdb"
 
 def get_package_data():
     """Get package data files"""
     return {
-        "seekdb": [
+        f"{__package_name()}": [
             #"dummy.so",
             "libaio.so.1",
             f"{__library_name()}.so.1.gz",
@@ -41,7 +44,7 @@ def get_package_data():
 
 # Setup configuration
 setup(
-    name="seekdb",
+    name=__package_name(),
     version=get_version(),
     description="OceanBase SeekDB",
     long_description=get_long_description(),
@@ -57,8 +60,8 @@ setup(
         "Documentation": "https://github.com/oceanbase/seekdb",
         "Bug Tracker": "https://github.com/oceanbase/seekdb/issues",
     },
-    packages=["seekdb"],
-    package_dir={"seekdb": "."},
+    packages=[__package_name()],
+    package_dir={f"{__package_name()}": "."},
     package_data=get_package_data(),
     include_package_data=True,
     ext_modules = [ Extension('seekdb.dummy', ['dummy.c'], extra_link_args=['-nostdlib']) ],
@@ -81,7 +84,7 @@ setup(
     ],
     python_requires=">=3.8",
     install_requires=[
-        f"seekdb_lib=={get_version()}"
+        f"pylibseekdb_runtime=={get_version()}"
     ],
     platforms=["manylinux"],
     license="Apache 2.0"

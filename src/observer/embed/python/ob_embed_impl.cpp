@@ -29,13 +29,13 @@
 #include "lib/timezone/ob_time_convert.h"
 #include "lib/charset/ob_charset.h"
 
-PYBIND11_MODULE(pyseekdb, m) {
+PYBIND11_MODULE(PYTHON_MODEL_NAME, m) {
     m.doc() = "OceanBase SeekDB";
     char embed_version_str[oceanbase::common::OB_SERVER_VERSION_LENGTH];
     oceanbase::common::VersionUtil::print_version_str(embed_version_str, sizeof(embed_version_str), DATA_CURRENT_VERSION);
     m.attr("__version__") = embed_version_str;
 
-    const char *default_service_path = "./seekdb";
+    const char *default_service_path = "./seekdb.db";
     m.def("open", &oceanbase::embed::ObLiteEmbed::open, pybind11::arg("db_dir") = default_service_path, "open db");
     m.def("_open_with_service", &oceanbase::embed::ObLiteEmbed::open_with_service, pybind11::arg("db_dir") = default_service_path,
                                                   pybind11::arg("port") = 2881,
