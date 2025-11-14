@@ -149,20 +149,22 @@ if(BUILD_EMBED_MODE)
   find_package(pybind11 CONFIG REQUIRED)
   message(STATUS "pybind11 version: ${pybind11_VERSION}")
   
-  pybind11_add_module(pyseekdb NO_EXTRAS python/ob_embed_impl.cpp)
+  set(libname "libseekdb_python")
+  pybind11_add_module(${libname} NO_EXTRAS python/ob_embed_impl.cpp)
 
-  set_target_properties(pyseekdb PROPERTIES
+  target_compile_definitions(${libname} PRIVATE PYTHON_MODEL_NAME=${libname})
+  set_target_properties(${libname} PROPERTIES
     PREFIX ""
     SUFFIX ".so"
-    OUTPUT_NAME "pyseekdb"
+    OUTPUT_NAME "${libname}"
   )
 
-  target_link_libraries(pyseekdb PUBLIC
+  target_link_libraries(${libname} PUBLIC
     oceanbase_static
     -static-libgcc
     -static-libstdc++
   )
   if (OB_USE_LLD)
-    target_link_options(pyseekdb PRIVATE -fuse-ld=${DEVTOOLS_DIR}/bin/ld.lld)
+    target_link_options(${libname} PRIVATE -fuse-ld=${DEVTOOLS_DIR}/bin/ld.lld)
   endif()
 endif()
