@@ -1,16 +1,17 @@
 <div align="center">
 
-# <img src="images/logo.svg" alt="OceanBase Logo" width="40%" />
+# <img src="https://mdn.alipayobjects.com/huamei_ytl0i7/afts/img/A*6BO4Q6D78GQAAAAAQFAAAAgAejCYAQ/original" width="420">
 
-### **🔷 面向 AI 应用的混合搜索数据库**
+### **🔷 AI 原生混合搜索数据库**
 
-**强大的 AI 搜索能力 · 轻量级 · 生产级别**
+**在一个数据库中融合向量、文本、结构化与半结构化数据能力，并通过内置 AI Functions 支持多模混合搜索与智能推理。**
 
 </div>
 
 ---
 
-<p align="center">
+<div align="center">
+<p>
     <a href="https://oceanbase.ai">
         <img alt="Documentation" height="20" src="https://img.shields.io/badge/OceanBase.ai-4285F4?style=for-the-badge&logo=read-the-docs&logoColor=white" />
     </a>
@@ -30,6 +31,7 @@
         <img height="20" alt="License" src="https://img.shields.io/badge/License-Apache_2.0-blue.svg" />
     </a>
 </p>
+</div>
 
 <div align="center">
 
@@ -39,53 +41,57 @@
 
 </div>
 
-## 🚀 什么是 OceanBase SeekDB？
+## 🚀 什么是 OceanBase seekdb？
 
-**OceanBase SeekDB** 是 一个专为 AI 应用设计的强大混合搜索数据库。它结合了企业级数据库能力与前沿的 **AI 搜索** 功能，支持向量, 全文索引, Json, 是构建下一代 AI 应用的完美选择。
-
----
-
-## 🔥 为什么选择 OceanBase SeekDB？
+**OceanBase seekdb** 是 OceanBase 打造的一款开发者友好的 AI 原生数据库产品，专注于为 AI 应用提供高效的混合搜索能力。它支持向量、文本、结构化与半结构化数据的统一存储与检索，并通过内置 AI Functions 支持数据嵌入、重排与库内实时推理。seekdb 在继承 OceanBase 核心引擎高性能优势与 MySQL 全面兼容特性的基础上，通过深度优化数据搜索架构，为开发者提供更符合 AI 应用数据处理需求的解决方案。
 
 ---
-| 特性 | OceanBase SeekDB | 传统数据库 | 纯向量数据库 | 全文搜索引擎 |
-|---------|----------------|----------------|----------------|------------------|
-| **嵌入式模式** | ✅ 原生支持 | ⚠️ 可能 | ⚠️ 可能 | ⚠️ 可能 |
-| **SQL 支持** | ✅ 完整 SQL | ✅ 完整 SQL | ❌ 有限 | ❌  有限 |
-| **向量搜索** | ✅ 内置 | ❌ 有限 | ✅ 支持 | ❌ 有限 |
-| **全文搜索** | ✅ 内置 | ✅ 支持 | ❌ 有限 | ✅ 高级 |
-| **Json** | ✅ 是 | ⚠️ 因产品而异 | ❌ 不支持 | ❌ 不支持 |
-| **ACID 事务** | ✅ 完整支持 | ✅ 完整支持 | ❌ 有限  | ❌ 有限 |
-| **易于迁移** | ✅ MySQL 兼容 | ✅ 标准 | ❌ 不支持 | ❌ 不支持 |
 
+## 🔥 为什么选择 OceanBase seekdb？
+
+---
+| **特性** | **OceanBase seekdb** | **OceanBase** | **MySQL 9.0** | **Chroma** | **Elasticsearch** | **DuckDB** | **Milvus** | **PostgreSQL**<br/>**+pgvector** |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| **嵌入式数据库** | **✅支持** | ❌ 不支持 | ❌ 不支持（8.0移除） | ✅支持 | ❌ 不支持 | ✅支持 | ✅支持 |  ❌ 不支持 |
+| **单机数据库** | **✅支持** | ✅支持 | ✅支持 | ✅支持 | ✅支持 | ✅支持 | ✅支持 | ✅支持 |
+| **分布式数据库** | ❌ 不支持 | ✅支持 | ❌ 不支持 | ❌ 不支持 | ✅支持 | ❌ 不支持 | ✅支持 | ❌ 不支持 |
+| **MySQL 兼容** | **✅支持** | ✅支持 | ✅支持 | ❌ 不支持 | ❌ 不支持 | ✅支持 | ❌ 不支持 | ❌ 不支持 |
+| **向量搜索** | **✅支持** | ✅支持 | ❌ 不支持 | ✅支持 | ✅支持 | ✅支持 | ✅支持 | ✅支持 |
+| **全文检索** | **✅支持** | ✅支持 | ✅支持 | ✅支持 | ✅支持 | ✅支持 | ⚠️ 有限 | ✅支持 |
+| **混合搜索** | **✅支持** | ✅支持 | ❌ 不支持 | ✅支持 | ✅支持 | ❌ 不支持 | ✅支持 | ⚠️ 有限 |
+| **OLTP** | **✅支持** | **✅支持** | **✅支持** | ❌ 不支持 | ❌ 不支持 | ❌ 不支持 | ❌ 不支持 | **✅支持** |
+| **OLAP** | **✅支持** | ✅支持 | ❌ 不支持 | ❌ 不支持 | ⚠️ 有限 | ✅支持 | ❌ 不支持 | **✅支持** |
+| **开源协议** | Apache 2.0 | MulanPubL 2.0 | GPL 2.0 | Apache 2.0 | AGPLv3<br/>+SSPLv1<br/>+Elastic 2.0 | MIT | Apache 2.0 | PostgreSQL License |
 
 ---
 
 ## ✨ 核心特性
 
-### 🎯 **AI 驱动的搜索**
-- **混合搜索**：将向量搜索, 标量搜索, 全文检索 混合查询，获得更佳效果
-- **向量相似度搜索**：针对不同的场景, 使用不同的算法, 获得更佳的向量查询准确率, 性能和成本.
-- **全文搜索**：内置全文索引，支持基于关键词的搜索
-- **Json 支持**：支持Json 查询, 支持Json 多值索引.
+### 开箱即用，极速开发，易学易用
+采用单点架构设计，可快速完成安装配置；无其他组件依赖，单点启动即可运行，适用于 AI 业务敏捷开发场景。提供灵活多样的部署方式，支持服务器和嵌入式两种部署模式：服务器部署模式下，支持 yum install、docker 或 Windows/macOS 桌面版部署方式；嵌入式部署模式下，支持原生 Python 集成，可作为 AI 应用内嵌数据库。已集成各类 AI 应用开发框架，几分钟即可快速构建 AI 应用。
 
-### 📦 **嵌入式与轻量级**
-- **零依赖**：嵌入到您的应用程序中运行——无需单独的数据库服务器
-- **小巧占用**：最小内存和磁盘使用，非常适合边缘设备和容器
-- **单一二进制文件**：易于部署和与应用程序一起分发
-- **本地优先**：离线工作，准备好时同步
+### 支持 1C2G 小规格，垂直弹性扩缩容
+1 核 CPU + 2GB 内存即可运行 VectorDBBench Performance1536D50K 基准测试。当系统对并发量、数据量、查询复杂度有较高要求时，可灵活垂直扩展资源规格。
 
-### ⚡ **简单且开发者友好**
-- **MySQL 兼容**：使用熟悉的 SQL 语法——无需学习曲线
-- **即时设置**：几秒钟内即可开始，无需分钟级
-- **丰富的 API**：支持 Python、Java、Go 等
-- **全面的文档**：清晰的文档，每个用例都有示例
+### 高性能向量索引、全文索引，支持向量、全文、标量混合搜索
+* <b>向量搜索：</b>支持高达 16,000 维向量存储与高性能检索，兼容 L2、内积、余弦相似度等多种距离计算方式。提供 HNSW/IVF 索引及相关量化算法，支持精确最近邻及近似最近邻搜索，满足 AI 场景多样化的向量检索需求。
+* <b>全文搜索：</b>支持基于 BM25 相关性排序算法的高性能全文索引，实现面向关键词的精准搜索。提供 Space、Beng、Ngram、IK、Jieba 等多种分词器，支持 Natural Language Mode、Boolean Mode、Phrase Query、Multi Match 等多种查询模式，可在海量数据中高效检索符合过滤规则的相关文本。
+* <b>混合搜索：</b>支持向量、全文、标量、空间等多类数据的混合搜索，一条 SQL 即可完成多路查询与重排序，大幅提升 RAG 应用查询结果的准确性。
 
-### 🚀 **生产就绪**
-- **稳定性**：历经15年+的技术沉淀, 2000+ 企业落地实践
-- **ACID 合规**：完整的事务支持，具有强一致性保证
-- **水平可扩展**：从单节点无缝扩展到分布式集群
-- **企业级安全**：内置加密、身份验证和访问控制
+### 向量搜索升级，基于 Semantic Index 指定文本也可进行语义搜索
+seekdb 提供了 Semantic Index 功能，只需写入文本数据，系统即可自动进行 Embedding 并生成向量索引，查询时仅需指定文本搜索条件即可进行语义搜索。该功能对用户屏蔽了向量嵌入和查询结果 Rerank 的复杂流程，显著简化 AI 应用开发对数据库的使用方式。
+
+### 无缝对接各类模型，内置 AI Function 实现库内实时推理
+seekdb 支持大语言模型和向量嵌入模型接入，通过 DBMS_AI_SERVICE 系统包实现模型注册和管理。内置 AI_COMPLETE、AI_PROMPT、AI_EMBED、AI_RERANK 等 AI Function，支持在标准 SQL 语法下进行数据嵌入和库内实时推理。
+
+### 基于 JSON 的动态 Schema，支持文档元数据动态存储和高效访问
+seekdb 支持 JSON 数据类型，具备动态 Schema 能力。支持 JSON 的部分更新以降低数据更新成本，提供 JSON 函数索引、多值索引来优化查询性能。实现半结构化编码降低存储成本。在 AI 应用中，JSON 可作为文档元信息的存储类型，并支持与全文、向量的混合搜索。
+
+### 数据实时写入，实时可查
+基于 LSM-Tree 存储架构，seekdb 支持数据的高频实时写入。在执行数据 DML 操作时同步构建全文、向量、标量等各类索引，数据入库成功后立即可查。
+
+### 兼容 MySQL 不止于 MySQL，支撑 HTAP 混合负载
+深度兼容 MySQL 的语法、协议、数据字典等，确保 MySQL 应用无缝迁移。同时通过创新架构突破 MySQL 支持的场景边界，基于行列混存技术和向量化执行能力，一个实例可同时支持联机交易和实时分析等多种负载，省去数据同步的时间延迟和同步链路的维护成本。
 
 ---
 
@@ -97,8 +103,10 @@
 
 <details>
 <summary><b>🐍 Python（推荐用于 AI/ML）</b></summary>
+
 ```bash
-pip install pylibseekdb
+pip install -U pyseekdb
+
 ```
 </details>
 
@@ -140,32 +148,138 @@ rpm -ivh seekdb-1.x.x.x-xxxxxxx.el8.x86_64.rpm
 <details>
 <summary><b>🗄️ 🐍 新版 Python SDK</b></summary>
 
+```bash
+# install sdk first
+pip install -U pyseekdb
+```
+
 ```python
+"""
+this example demonstrates the most common operations with embedding functions:
+1. Create a client connection
+2. Create a collection with embedding function
+3. Add data using documents (embeddings auto-generated)
+4. Query using query texts (embeddings auto-generated)
+5. Print query results
+
+This is a minimal example to get you started quickly with embedding functions.
+"""
+
 import pyseekdb
-client = pyseekdb.Client()
+from pyseekdb import DefaultEmbeddingFunction
 
-collection = client.get_or_create_collection(name="my_collection")
+# ==================== Step 1: Create Client Connection ====================
+# You can use embedded mode, server mode, or OceanBase mode
+# For this example, we'll use server mode (you can change to embedded or OceanBase)
 
-collection.upsert(
-    ids=["item1", "item2", "item3"],
-    documents=[
-        "It's rainy today",
-        "It was cloudy yesterday",
-        "The forecast for tomorrow is fine weather"
-   ]
+# Embedded mode (local SeekDB)
+client = pyseekdb.Client(
+    path="./seekdb.db",
+    database="test"
 )
+# Alternative: Server mode (connecting to remote SeekDB server)
+# client = pyseekdb.Client(
+#     host="127.0.0.1",
+#     port=2881,
+#     database="test",
+#     user="root",
+#     password=""
+# )
+
+# Alternative: Remote server mode (OceanBase Server)
+# client = pyseekdb.Client(
+#     host="127.0.0.1",
+#     port=2881,
+#     tenant="test",  # OceanBase default tenant
+#     database="test",
+#     user="root",
+#     password=""
+# )
+
+# ==================== Step 2: Create a Collection with Embedding Function ====================
+# A collection is like a table that stores documents with vector embeddings
+collection_name = "my_simple_collection"
+
+# Create collection with default embedding function
+# The embedding function will automatically convert documents to embeddings
+collection = client.create_collection(
+    name=collection_name,
+    #embedding_function=DefaultEmbeddingFunction()  # Uses default model (384 dimensions)
+)
+
+print(f"Created collection '{collection_name}' with dimension: {collection.dimension}")
+print(f"Embedding function: {collection.embedding_function}")
+
+# ==================== Step 3: Add Data to Collection ====================
+# With embedding function, you can add documents directly without providing embeddings
+# The embedding function will automatically generate embeddings from documents
+
+documents = [
+    "Machine learning is a subset of artificial intelligence",
+    "Python is a popular programming language",
+    "Vector databases enable semantic search",
+    "Neural networks are inspired by the human brain",
+    "Natural language processing helps computers understand text"
+]
+
+ids = ["id1", "id2", "id3", "id4", "id5"]
+
+# Add data with documents only - embeddings will be auto-generated by embedding function
+collection.add(
+    ids=ids,
+    documents=documents,  # embeddings will be automatically generated
+    metadatas=[
+        {"category": "AI", "index": 0},
+        {"category": "Programming", "index": 1},
+        {"category": "Database", "index": 2},
+        {"category": "AI", "index": 3},
+        {"category": "NLP", "index": 4}
+    ]
+)
+
+print(f"\nAdded {len(documents)} documents to collection")
+print("Note: Embeddings were automatically generated from documents using the embedding function")
+
+# ==================== Step 4: Query the Collection ====================
+# With embedding function, you can query using text directly
+# The embedding function will automatically convert query text to query vector
+
+# Query using text - query vector will be auto-generated by embedding function
+query_text = "artificial intelligence and machine learning"
 
 results = collection.query(
-    query_texts=[" What's the weather like today"], # SeekDB will embed this for you
-    n_results=2 # how many results to return
+    query_texts=query_text,  # Query text - will be embedded automatically
+    n_results=3  # Return top 3 most similar documents
 )
 
-print(results)
+print(f"\nQuery: '{query_text}'")
+print(f"Query results: {len(results['ids'][0])} items found")
+
+# ==================== Step 5: Print Query Results ====================
+for i in range(len(results['ids'][0])):
+    print(f"\nResult {i+1}:")
+    print(f"  ID: {results['ids'][0][i]}")
+    print(f"  Distance: {results['distances'][0][i]:.4f}")
+    if results.get('documents'):
+        print(f"  Document: {results['documents'][0][i]}")
+    if results.get('metadatas'):
+        print(f"  Metadata: {results['metadatas'][0][i]}")
+
+# ==================== Step 6: Cleanup ====================
+# Delete the collection
+client.delete_collection(collection_name)
+print(f"\nDeleted collection '{collection_name}'")
 ```
-更多详情请参考[用户指南](docs/user-guide/zh/pyseekdb-sdk.md)。
+更多详情请参考[用户指南](https://github.com/oceanbase/pyseekdb)。
 </details>
+
 <details>
 <summary><b>🗄️ 🐍 旧版 Python SDK</b></summary>
+
+```bash
+# install old sdk first, not recommended
+pip install -U pyobvector
+```
 
 ```python
 from pyobvector import *
@@ -222,37 +336,27 @@ res = client.search(collection_name=test_collection_name, data=[0, 0, 0], anns_f
 <details>
 <summary><b>🗄️ SQL</b></summary>
 
-```python
-import pylibseekdb as seekdb
-
-# Open a database
-seekdb.open()
-
-# Connect to a database
-conn = seekdb.connect()
-
-# Use the connection
-cursor = conn.cursor()
-cursor.execute("""-- Create table with vector column
+```sql
+-- Create table with vector column
 CREATE TABLE articles (
     id INT PRIMARY KEY,
     title TEXT,
     content TEXT,
     embedding VECTOR(384)
-);""")
+);
 
-cursor.execute("""-- Create vector index for fast similarity search
-CREATE INDEX idx_vector ON articles USING VECTOR (embedding);""")
+-- Create vector index for fast similarity search
+CREATE INDEX idx_vector ON articles USING VECTOR (embedding);
 
-cursor.execute("""-- Insert documents with embeddings
+-- Insert documents with embeddings
 -- Note: Embeddings should be pre-computed using your embedding model
 INSERT INTO articles (id, title, content, embedding)
 VALUES
     (1, 'AI and Machine Learning', 'Artificial intelligence is transforming...', '[0.1, 0.2, ...]'),
     (2, 'Database Systems', 'Modern databases provide high performance...', '[0.3, 0.4, ...]'),
-    (3, 'Vector Search', 'Vector databases enable semantic search...', '[0.5, 0.6, ...]');""")
+    (3, 'Vector Search', 'Vector databases enable semantic search...', '[0.5, 0.6, ...]');
 
-cursor.execute("""-- Example: Hybrid search combining vector and full-text
+-- Example: Hybrid search combining vector and full-text
 -- Replace '[query_embedding]' with your actual query embedding vector
 SELECT
     title,
@@ -262,35 +366,29 @@ SELECT
 FROM articles
 WHERE MATCH(content) AGAINST('your keywords' IN NATURAL LANGUAGE MODE)
 ORDER BY vector_distance ASC, text_score DESC
-LIMIT 10;""")
-
-results = cursor.fetchall()
-
-# Close the connection
-conn.close()
+LIMIT 10;
 ```
+
+对于python 开发者, 推荐使用sqlalchemy 来操作数据
 </details>
 
 
 ## 📚 使用场景
 
-<div align="center">
+### 📖 RAG 应用
+针对智能聊天机器人、知识库及领域专家系统等 RAG（检索增强生成）场景，seekdb 提供了一套完整的 RAG Pipeline 解决方案。该方案整合了文档解析处理、向量嵌入（Embedding）、结果重排序（Rerank）及大语言模型（LLM）交互能力，支持向量、全文与标量的混合搜索，可在单一数据库实例内完成从文档输入到数据输出的端到端处理（Doc In Data Out）。以知识库场景为例，seekdb 能够从知识库中高效检索事实信息，为 LLM 提供精准、实时的数据支撑，既提升了生成内容的准确性，又增强了生成过程的可解释性。
 
-| 🎯 **RAG 系统** | 🔍 **语义搜索** | 💬 **聊天机器人** | 🎬 **推荐系统** |
-|:---:|:---:|:---:|:---:|
-| 使用向量搜索构建检索增强生成管道 | 跨文档、图像和多媒体进行语义搜索 | 创建具有记忆和上下文的智能聊天机器人 | 使用混合搜索构建推荐引擎 |
+### 💻 AI 辅助编程
+面向 AI 辅助编程场景，seekdb 支持对代码仓库构建向量和全文索引，基于代码关键词或代码语义进行高效的代码搜索和生成补全。同时，seekdb 提供了高效的数据组织能力，支持代码片段的结构化存储（如语法树、依赖关系图谱）与非结构化存储（如原始代码文本），并通过动态元数据管理实现对代码属性（如语言类型、函数名、参数列表）的灵活扩展与高效查询。
 
-</div>
+### 🎯 AI Agent 平台类应用
+seekdb 为 AI Agent 开发提供了一站式的数据解决方案，支持快速启动和嵌入式部署，可及时拉起服务以满足敏捷开发需求。其高性能引擎保障高频增删改操作和实时查询能力，有效消除数据库性能瓶颈对 AI 开发效率的影响。内置向量搜索、全文搜索及混合搜索功能，配合灵活的元数据管理和会话管理能力，同时集成记忆存储模块，无需引入其他库即可快速构建完备的 AI Agent，显著降低系统复杂度和开发门槛。
 
-### 🎯 真实世界示例
+### 🔍 语义搜索引擎
+针对电商商品搜索与推荐、多媒体内容检索、图片搜索、人脸识别等语义搜索场景，seekdb 提供了完整的向量搜索解决方案。支持对接主流向量嵌入模型，将文本或图像特征以向量形式存储在 seekdb 中，并通过高性能索引实现高效的相似度计算，快速返回与查询内容最匹配的结果。同时，seekdb 的 Semantic Index 功能进一步简化了开发流程，用户只需提交文本查询即可自动完成向量嵌入和结果重排序（Rerank），无需关注底层复杂实现，显著降低 AI 应用与数据库的集成门槛，使语义搜索更加易用且高效。
 
-- **📚 文档问答**：使用 RAG 构建类似 ChatGPT 的文档搜索
-- **🖼️ 图像搜索**：使用视觉嵌入查找相似图像
-- **💼 电商**：语义产品搜索和推荐
-- **🔬 科学研究**：搜索研究论文和数据集
-- **📊 商业智能**：将 SQL 分析与 AI 搜索相结合
-
----
+### ⬆️ MySQL 应用现代化和 AI 化升级
+seekdb 继承了 OceanBase 单机存储引擎、执行引擎、事务引擎、高级查询优化器的完整能力，高度兼容 MySQL，并在此基础上扩展了 AI 能力。小规格适用于物联网边缘设备、小型应用开发和实验教学等场景，中大规格适用于各行业 OLTP、HTAP 或 AI 业务场景。
 
 ## 🌟 生态系统与集成
 
@@ -397,6 +495,6 @@ bash build.sh debug --init --make
 
 ## 📄 许可证
 
-OceanBase SeekDB 采用 [Apache License, Version 2.0](LICENSE) 许可证。
+OceanBase seekdb 采用 [Apache License, Version 2.0](LICENSE) 许可证。
 
 
