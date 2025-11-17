@@ -42,7 +42,7 @@
 
 ## 🚀 What is OceanBase seekdb?
 
-**OceanBase seekdb** unifies vector, text, structured and semi-structured data in a single engine, enabling hybrid search and in-database AI workflows.
+**OceanBase seekdb** is an AI-native search database that unifies relational, vector, text, JSON and GIS in a single engine, enabling hybrid search and in-database AI workflows.
 
 ---
 
@@ -66,21 +66,15 @@
 
 ## ✨ Key Features
 
-### Hybrid Search
-1. Supports multi-channel retrieval in a single SQL query, combining vector-based semantic search with keyword-based search for optimized recall.
-2. Query reranking supports weighted scores, Reciprocal Rank Fusion (RRF), and LLM-based reranking for enhanced results.
-3. Relational filters are pushed down to storage for optimized performance, and multi-table joins allow related data retrieval.
+### Build fast + Hybrid search + Multi model
+1. **Build fast:** From prototype to production in minutes: create AI apps using Python, run VectorDBBench on 1C2G.
+2. **Hybrid Search:** Combine vector search, full-text search and relational query in a single statement.
+3. **Multi-Model:** Support relational, vector, text, JSON and GIS in a single engine.
 
-### Vector & Full-Text Search
-1. Supports dense vectors and sparse vectors, with multiple distance metrics including Manhattan, Euclidean, inner product, and cosine similarity.
-2. Vector indexes support in-memory types such as HNSW, HNSW-SQ, HNSW-BQ, and disk-based types including IVF and IVF-PQ, optimizing storage costs.
-3. Full-text search supports keyword, phrase, and Boolean queries, with BM25 ranking for relevance.
 
-### AI Functions
-1. Manage built-in AI services via the DBMS_AI_SERVICE package in SQL, and register external LLM services.
-2. Convert text to vector embeddings directly in SQL using the AI_EMBED function.
-3. Generate text in SQL with AI_COMPLETE, supporting reusable prompt templates.
-4. Rerank text using LLM-based models in SQL via AI_RERANK.
+### AI inside + SQL inside
+1. **AI Inside:** Run embedding, reranking, LLM inference and prompt management inside the database, supporting a complete document-in/data-out RAG workflow.
+2. **SQL Inside:** 	Powered by the proven OceanBase engine, delivering real-time writes and queries with full ACID compliance, and seamless MySQL ecosystem compatibility.
 
 
 
@@ -125,12 +119,6 @@ Please replace the version number with the actual RPM package version.
 
 </details>
 
-<details>
-<summary><b>☁️ Cloud </b></summary>
-
-Quickly experience OceanBase Cloud on AWS Marketplace - a highly scalable distributed database for transactional, analytical, and AI workloads. [Get started now](https://aws.amazon.com/marketplace/pp/prodview-d2evwth3ztaja?sr=0-1&ref_=beagle&applicationId=AWSMPContessa)
-
-</details>
 
 ### 🎯 AI Search Example
 
@@ -307,46 +295,71 @@ We suggest developers use sqlalchemy to access data by SQL for python developers
 
 ## 📚 Use Cases
 
-### 📖 RAG & Knowledge Retrieval
+<details>
+<summary><b> 📖 RAG & Knowledge Retrieval</b></summary>
+
 Large language models are limited by their training data. RAG introduces timely and trusted external knowledge to improve answer quality and reduce hallucination. seekdb enhances search accuracy through vector search, full-text search, hybrid search, built-in AI functions, and efficient indexing, while multi-level access control safeguards data privacy across heterogeneous knowledge sources.
 1. Enterprise QA
 2. Customer support
 3. Industry insights
 4. Personal knowledge
 
-### 🔍 Semantic Search Engine
+</details>
+
+<details>
+<summary><b> 🔍 Semantic Search Engine</b></summary>
+
 Traditional keyword search struggles to capture intent. Semantic search leverages embeddings and vector search to understand meaning and connect text, images, and other modalities. seekdb's hybrid search and multi-model querying deliver more precise, context-aware results across complex search scenarios.
 1. Product search
 2. Text-to-image
 3. Image-to-product
 
-### 🎯 Agentic AI Applications
+</details>
+
+<details>
+<summary><b> 🎯 Agentic AI Applications</b></summary>
+
 Agentic AI requires memory, planning, perception, and reasoning. seekdb provides a unified foundation for agents through metadata management, vector/text/mixed queries, multimodal data processing, RAG, built-in AI functions and inference, and robust privacy controls—enabling scalable, production-grade agent systems.
 1. Personal assistants
 2. Enterprise automation
 3. Vertical agents
 4. Agent platforms
 
-### 💻 AI-Assisted Coding & Development
+</details>
+
+<details>
+<summary><b> 💻 AI-Assisted Coding & Development</b></summary>
+
 AI-powered coding combines natural-language understanding and code semantic analysis to enable generation, completion, debugging, testing, and refactoring. seekdb enhances code intelligence with semantic search, multi-model storage for code and documents, isolated multi-project management, and time-travel queries—supporting both local and cloud IDE environments.
 1. IDE plugins
 2. Design-to-web
 3. Local IDEs
 4. Web IDEs
 
-### ⬆️ Enterprise Application Intelligence
+</details>
+
+<details>
+<summary><b> ⬆️ Enterprise Application Intelligence</b></summary>
+
 AI transforms enterprise systems from passive tools into proactive collaborators. seekdb provides a unified AI-ready storage layer, fully compatible with MySQL syntax and views, and accelerates mixed workloads with parallel execution and hybrid row-column storage. Legacy applications gain intelligent capabilities with minimal migration across office, workflow, and business analytics scenarios.
 1. Document intelligence
 2. Business insights
 3. Finance systems
 
-### On-Device & Edge AI Applications
+</details>
+
+
+<details>
+<summary><b> 📱 On-Device & Edge AI Applications</b></summary>
+
 Edge devices—from mobile to vehicle and industrial terminals—operate with constrained compute and storage. seekdb's lightweight architecture supports embedded and micro-server modes, delivering full SQL, JSON, and hybrid search under low resource usage. It integrates seamlessly with OceanBase cloud services to enable unified edge-to-cloud intelligent systems.
 1. Personal assistants
 2. In-vehicle systems
 3. AI education
 4. Companion robots
 5. Healthcare devices
+
+</details>
 
 ---
 
