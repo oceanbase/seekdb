@@ -415,10 +415,14 @@ seekdb 继承了 OceanBase 单机存储引擎、执行引擎、事务引擎、�
 git clone https://github.com/oceanbase/seekdb.git
 cd seekdb
 bash build.sh debug --init --make
-./debug/observer
+mkdir ~/seekdb
+mkdir ~/seekdb/bin
+cp build_debug/src/observer/observer ~/seekdb/bin
+cd ~/seekdb
+./bin/observer
 ```
 
-详细说明请参见[开发者指南](docs/developer-guide/zh/README.md)。
+本例中, 使用 $HOME/seekdb 作为测试目录, 开发者可以酌情使用一个空目录作为测试工作目录, 更多详细说明请参见[开发者指南](docs/developer-guide/zh/README.md)。
 
 ### 贡献
 
