@@ -36,7 +36,7 @@ client = pyseekdb.Client(host='localhost', port=2882, database="db1", user="u01�
 ```python
 import pyseekdb
 
-client = pyseekdb.OBClient(host='localhost', port=2882, tenant="tenant1", database="db1", user="u01“, passwd="pass")
+client = pyseekdb.Client(host='localhost', port=2882, tenant="tenant1", database="db1", user="u01“, passwd="pass")
 ```
 
 ## Collection对象
@@ -46,13 +46,12 @@ Collection 中保存一组“记录”，在 SeekDB 和 OceanBase 中，每一�
 ```sql
 create table c$v1$coll1
 (
-  _id bigint PRIMARY KEY NOT NULL AUTO_INCREMENT,
+  _id varbinary(512) PRIMARY KEY NOT NULL,
   document string,
-  embedding vector(?) DEFAULT ai_embed(default_model, document),
+  embedding vector(?),
   metadata json,
-  FULLTEXT INDEX idx1(document),
-  VECTOR INDEX idx2 (embedding),
-  GIN INDEX idx3 (metadata)
+  FULLTEXT INDEX idx_fts(document),
+  VECTOR INDEX idx_vec (embedding)
 );
 ```
 
@@ -67,8 +66,6 @@ collection 在 SeekDB 和 OceanBase 中的表名采用 `c$v1$<名称>`。其中v
 #### 1.create
 ```python
 collection = client.create_collection(name="my_collection")
-collection = client.create_collection(name="my_collection",
-                                      embedding_model="my_model")
 ```
 
 新建，如果已经存在则报错。
@@ -95,6 +92,7 @@ collection = client.delete_collection(name="my_collection")
 #### 1.add
 ```python
 collection.add(
+    ids=["item1", "item2", ...],
     documents=["lorem ipsum...", "doc2", "doc3", ...],
     metadatas=[{"chapter": 3, "verse": 16}, {"chapter": 3, "verse": 5}, {"chapter": 29, "verse": 11}, ...],
 )
@@ -105,14 +103,14 @@ collection.add(
 
 ```sql
 insert into c$coll1 (content, metadata)
-values (('lorem ipsum...', '{"chapter": 3, "verse": 16}'),
-        ('doc2', '{"chapter": 3, "verse": 5}'),
-        ('doc3', '{"chapter": 29, "verse": 11}'));
+values (('item1', 'lorem ipsum...', '{"chapter": 3, "verse": 16}'),
+        ('item2', 'doc2', '{"chapter": 3, "verse": 5}'),
+        ('item3', 'doc3', '{"chapter": 29, "verse": 11}'));
 ```
 
 ```python
 collection.add(
-    ids=[1, 2, 3, ...],
+    ids=["1", "2", "3", ...],
     documents=["lorem ipsum...", "doc2", "doc3", ...],
     metadatas=[{"chapter": 3, "verse": 16}, {"chapter": 3, "verse": 5}, {"chapter": 29, "verse": 11}, ...],
 )
@@ -124,7 +122,7 @@ collection.add(
 #### 2.update
 ```python
 collection.update(
-    ids=[1, 2, 3, ...],
+    ids=["1", "2", "3", ...],
     embeddings=[[1.1, 2.3, 3.2], [4.5, 6.9, 4.4], [1.1, 2.3, 3.2], ...],
     metadatas=[{"chapter": 3, "verse": 16}, {"chapter": 3, "verse": 5}, {"chapter": 29, "verse": 11}, ...],
     documents=["doc1", "doc2", "doc3", ...],
@@ -135,7 +133,7 @@ collection.update(
 
 ```python
 collection.upsert(
-    ids=[1, 2, 3, ...],
+    ids=["1", "2", "3", ...],
     embeddings=[[1.1, 2.3, 3.2], [4.5, 6.9, 4.4], [1.1, 2.3, 3.2], ...],
     metadatas=[{"chapter": 3, "verse": 16}, {"chapter": 3, "verse": 5}, {"chapter": 29, "verse": 11}, ...],
     documents=["doc1", "doc2", "doc3", ...],
@@ -147,7 +145,7 @@ collection.upsert(
 #### 3.delete
 ```python
 collection.delete(
-    ids=[1, 2, 3,...],
+    ids=["1", "2", "3",...],
 )
 ```
 
@@ -155,8 +153,8 @@ collection.delete(
 
 ```python
 collection.delete(
-    ids=[1, 2, 3,...],
-	where={"chapter": "20"}
+    ids=["1", "2", "3",...],
+	  where={"chapter": "20"}
 )
 ```
 
@@ -185,7 +183,7 @@ collection.query(
 
 #### 按 ID 查询
 ```python
-collection.get(ids=[1, 2, ...], limit=5, offset=10)
+collection.get(ids=["1", "2", ...], limit=5, offset=10)
 ```
 
 根据指定 id 返回记录。如果不指定 limit，默认为 100。如果不指定 offset，默认为 0。如果 ids 为空，则从整个 collection 中返回数据。
@@ -287,7 +285,7 @@ collection.hybrid_search(
 上述所有查询操作，返回如下结构的 JSON 对象：
 
 ```json
-[{'_id': 0,
+[{'_id': '1',
   'document': 'a document text'
   'embedding': [0.35803765, -0.6023496, 0.18414013, -0.26286206, 0.90294385],
   'metadata': {
@@ -313,12 +311,13 @@ def list_databases(limit: Optional[int] = None, offset: Optional[int] = None, te
 
 ## 示例
 ```python
-import seekdb
-client = seekdb.Client()
+import pyseekdb
+client = pyseekdb.Client()
 
 collection = client.get_or_create_collection(name="my_collection")
 
 collection.upsert(
+    ids=["itemA", "itemB"],
     documents=[
         "This is a document about pineapple",
         "This is a document about oranges"

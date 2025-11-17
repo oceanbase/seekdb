@@ -25,7 +25,7 @@ $PYTHON -m pip install build wheel setuptools pybind11 auditwheel
 ARCH=`uname -m`
 REBUILD=${REBUILD:-"1"}
 BUILD_TYPE=release
-LIBRARY_NAME=pyseekdb
+LIBRARY_NAME=libseekdb_python
 OBLITE_LIBRARY_PATH=$TOPDIR/build_$BUILD_TYPE/src/observer/embed/${LIBRARY_NAME}.so
 PYTHON_EMBED_DIR=$TOPDIR/package/wheel
 PYTHON_CORE_SRC_DIR=$PYTHON_EMBED_DIR/core/
@@ -72,7 +72,7 @@ split --numeric-suffixes --suffix-length=1 --bytes=300M $OBLITE_LIBRARY_PATH ${L
 ls -lh ${LIBRARY_NAME}.so.0 ${LIBRARY_NAME}.so.1
 # oblite.so.0 is a library and will be repaired by auditwheel, but it's invalid.
 # so I compress it to make it a plain file.
-gzip --fast --force ${LIBRARY_NAME}.so.0 ${LIBRARY_NAME}.so.1
+gzip --force ${LIBRARY_NAME}.so.0 ${LIBRARY_NAME}.so.1
 sha256sum $OBLITE_LIBRARY_PATH | awk '{print $1}' > ${LIBRARY_NAME}.so.sha
 sha256sum ${LIBRARY_NAME}.so.0.gz | awk '{print $1}' > ${LIBRARY_NAME}.so.sha.0
 sha256sum ${LIBRARY_NAME}.so.1.gz | awk '{print $1}' > ${LIBRARY_NAME}.so.sha.1
