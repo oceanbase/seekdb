@@ -457,10 +457,15 @@ Please refer to the [User Guide](docs/user-guide/README.md) for more details.
 git clone https://github.com/oceanbase/seekdb.git
 cd seekdb
 bash build.sh debug --init --make
-./debug/observer
+mkdir ~/seekdb
+mkdir ~/seekdb/bin
+cp build_debug/src/observer/observer ~/seekdb/bin
+cd ~/seekdb
+./bin/observer
 ```
 
-See the [Developer Guide](docs/developer-guide/en/README.md) for detailed instructions.
+
+In this example, the working director is $HOME/seekdb, please use a fresh director for testing, Please see the [Developer Guide](docs/developer-guide/en/README.md) for detailed instructions.
 
 ### Contributing
 
