@@ -134,12 +134,6 @@ rpm -ivh seekdb-1.x.x.x-xxxxxxx.el8.x86_64.rpm
 
 </details>
 
-<details>
-<summary><b>☁️ 云平台</b></summary>
-
-快速体验 OceanBase Cloud——一个高度可扩展的分布式数据库，适用于事务、分析和 AI 工作负载。[立即开始](https://console-cn.oceanbase.com/)
-
-</details>
 
 ### 🎯 AI 搜索示例
 
