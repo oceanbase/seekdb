@@ -23,8 +23,8 @@
     <a href="https://discord.gg/74cF8vbNEs">
         <img alt="Discord" src="https://img.shields.io/discord/74cF8vbNEs?label=Discord&logo=discord&style=flat-square&color=5865F2" />
     </a>
-    <a href="https://pepy.tech/projects/">
-        <img alt="Downloads" src="https://static.pepy.tech/badge/seekdb" />
+    <a href="https://pepy.tech/projects/pylibseekdb">
+        <img height="20" alt="Downloads" src="https://static.pepy.tech/badge/pylibseekdb" />
     </a>
     <a href="https://github.com/oceanbase/seekdb/blob/master/LICENSE">
         <img alt="License" src="https://img.shields.io/badge/License-Apache_2.0-blue.svg" />
