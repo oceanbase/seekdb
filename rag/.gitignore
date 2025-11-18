@@ -1,0 +1,5 @@
+data/dataset/
+data/dataset.zip
+data/output.json
+
+.env
