@@ -24,8 +24,8 @@
     <a href="https://h5.dingtalk.com/circle/joinCircle.html?corpId=ding320493024256007024f2f5cc6abecb85&token=be84625101d2c2b2b675e1835e5b7988&groupCode=v1,k1,EoWBexMbnAnivFZPFszVivlsxkpAYNcvXRdF071nRRY=&from=group&ext=%7B%22channel%22%3A%22QR_GROUP_NORMAL%22%2C%22extension%22%3A%7B%22groupCode%22%3A%22v1%2Ck1%2CEoWBexMbnAnivFZPFszVivlsxkpAYNcvXRdF071nRRY%3D%22%2C%22groupFrom%22%3A%22group%22%7D%2C%22inviteId%22%3A1057855%2C%22orgId%22%3A313467091%2C%22shareType%22%3A%22GROUP%22%7D&origin=11?#/">
         <img height="20"  src="https://img.shields.io/badge/钉钉群-33254054-0084FF?style=for-the-badge&logo=dingtalk&logoColor=white" alt="钉钉群 33254054" />
     </a>
-    <a href="https://pepy.tech/projects/seekdb">
-        <img height="20" alt="Downloads" src="https://static.pepy.tech/badge/seekdb" />
+    <a href="https://pepy.tech/projects/pylibseekdb">
+        <img height="20" alt="Downloads" src="https://static.pepy.tech/badge/pylibseekdb" />
     </a>
     <a href="https://github.com/oceanbase/seekdb/blob/master/LICENSE">
         <img height="20" alt="License" src="https://img.shields.io/badge/License-Apache_2.0-blue.svg" />
@@ -50,19 +50,22 @@
 ## 🔥 为什么选择 OceanBase seekdb？
 
 ---
-| **特性** | **OceanBase seekdb** | **OceanBase** | **MySQL 9.0** | **Chroma** | **Elasticsearch** | **DuckDB** | **Milvus** | **PostgreSQL**<br/>**+pgvector** |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| **嵌入式数据库** | **✅支持** | ❌ 不支持 | ❌ 不支持（8.0移除） | ✅支持 | ❌ 不支持 | ✅支持 | ✅支持 |  ❌ 不支持 |
-| **单机数据库** | **✅支持** | ✅支持 | ✅支持 | ✅支持 | ✅支持 | ✅支持 | ✅支持 | ✅支持 |
-| **分布式数据库** | ❌ 不支持 | ✅支持 | ❌ 不支持 | ❌ 不支持 | ✅支持 | ❌ 不支持 | ✅支持 | ❌ 不支持 |
-| **MySQL 兼容** | **✅支持** | ✅支持 | ✅支持 | ❌ 不支持 | ❌ 不支持 | ✅支持 | ❌ 不支持 | ❌ 不支持 |
-| **向量搜索** | **✅支持** | ✅支持 | ❌ 不支持 | ✅支持 | ✅支持 | ✅支持 | ✅支持 | ✅支持 |
-| **全文检索** | **✅支持** | ✅支持 | ✅支持 | ✅支持 | ✅支持 | ✅支持 | ⚠️ 有限 | ✅支持 |
-| **混合搜索** | **✅支持** | ✅支持 | ❌ 不支持 | ✅支持 | ✅支持 | ❌ 不支持 | ✅支持 | ⚠️ 有限 |
-| **OLTP** | **✅支持** | **✅支持** | **✅支持** | ❌ 不支持 | ❌ 不支持 | ❌ 不支持 | ❌ 不支持 | **✅支持** |
-| **OLAP** | **✅支持** | ✅支持 | ❌ 不支持 | ❌ 不支持 | ⚠️ 有限 | ✅支持 | ❌ 不支持 | **✅支持** |
-| **开源协议** | Apache 2.0 | MulanPubL 2.0 | GPL 2.0 | Apache 2.0 | AGPLv3<br/>+SSPLv1<br/>+Elastic 2.0 | MIT | Apache 2.0 | PostgreSQL License |
+| **Feature**              | **OceanBase seekdb** | **OceanBase** | **Chroma** | **Milvus** | **MySQL 9.0**           | PostgreSQL<br/>**+pgvector** | **DuckDB** | **Elasticsearch**                   |
+| ------------------------ |:--------------------:|:-------------:|:----------:|:----------:|:-----------------------:|:----------------------------:|:----------:|:-----------------------------------:|
+| **Embedded Database**    | ✅                    | ❌             | ✅          | ✅          | ❌<br/> (removed in 8.0) | ❌                            | ✅          | ❌                                   |
+| **Single-Node Database** | ✅                    | ✅             | ✅          | ✅          | ✅                       | ✅                            | ✅          | ✅                                   |
+| **Distributed Database** | ❌                    | ✅             | ❌          | ✅          | ❌                       | ❌                            | ❌          | ✅                                   |
+| **MySQL Compatible**     | ✅                    | ✅             | ❌          | ❌          | ✅                       | ❌                            | ✅          | ❌                                   |
+| **Vector Search**        | ✅                    | ✅             | ✅          | ✅          | ❌                       | ✅                            | ✅          | ✅                                   |
+| **Full-Text Search**     | ✅                    | ✅             | ✅          | ⚠️         | ✅                       | ✅                            | ✅          | ✅                                   |
+| **Hybrid Search**        | ✅                    | ✅             | ✅          | ✅          | ❌                       | ⚠️                           | ❌          | ✅                                   |
+| **OLTP**                 | ✅                    | ✅             | ❌          | ❌          | ✅                       | ✅                            | ❌          | ❌                                   |
+| **OLAP**                 | ✅                    | ✅             | ❌          | ❌          | ❌                       | ✅                            | ✅          | ⚠️                                  |
+| **Open Source License**  | Apache 2.0           | MulanPubL 2.0 | Apache 2.0 | Apache 2.0 | GPL 2.0                 | PostgreSQL License           | MIT        | AGPLv3<br/>+SSPLv1<br/>+Elastic 2.0 |
 
+- ✅ 支持
+- ❌ 不支持
+- ⚠️ 有限支持
 ---
 
 ## ✨ 核心特性
