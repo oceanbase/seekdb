@@ -498,13 +498,13 @@ $ cd rag && timeout 500 python3.10 -m pip install -r requirements.txt
 
 ##### 执行 RAG (限时 40 分钟内完成)
 
-```plain
+```bash
 $ cd rag && timeout 2400 python3.10 main.py --dataset="xxx" --questions="xxx" --output="xxx"
 ```
 
 ##### 执行评测
 
-```plain
+```bash
 $ cd rag && python3.10 eval.py --output="xxx" --answer="xxx"
 ```
 
@@ -655,7 +655,7 @@ seekdb (与 OceanBase 类似) 的编译部署可以参考初赛文档：[https:/
 
 ## 赛后查重
 
-决赛结束后，我们将对最终成绩对应的代码进行查重以及人工代码审查，请在决赛结束后保留最终成绩对应的代码提交信息，若仓库或对应提交信息，我们将取消该队的决赛成绩。
+决赛结束后，我们将对最终成绩对应的代码进行查重以及人工代码审查，请在决赛结束后保留最终成绩对应的代码提交信息，若仓库或对应提交信息不存在，我们将取消该队的决赛成绩。
 
 ## 决赛 FAQ
 
