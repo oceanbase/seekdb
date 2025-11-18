@@ -24,8 +24,8 @@
     <a href="https://h5.dingtalk.com/circle/joinCircle.html?corpId=ding320493024256007024f2f5cc6abecb85&token=be84625101d2c2b2b675e1835e5b7988&groupCode=v1,k1,EoWBexMbnAnivFZPFszVivlsxkpAYNcvXRdF071nRRY=&from=group&ext=%7B%22channel%22%3A%22QR_GROUP_NORMAL%22%2C%22extension%22%3A%7B%22groupCode%22%3A%22v1%2Ck1%2CEoWBexMbnAnivFZPFszVivlsxkpAYNcvXRdF071nRRY%3D%22%2C%22groupFrom%22%3A%22group%22%7D%2C%22inviteId%22%3A1057855%2C%22orgId%22%3A313467091%2C%22shareType%22%3A%22GROUP%22%7D&origin=11?#/">
         <img height="20"  src="https://img.shields.io/badge/钉钉群-33254054-0084FF?style=for-the-badge&logo=dingtalk&logoColor=white" alt="钉钉群 33254054" />
     </a>
-    <a href="https://pepy.tech/projects/seekdb">
-        <img height="20" alt="Downloads" src="https://static.pepy.tech/badge/seekdb" />
+    <a href="https://pepy.tech/projects/pylibseekdb">
+        <img height="20" alt="Downloads" src="https://static.pepy.tech/badge/pylibseekdb" />
     </a>
     <a href="https://github.com/oceanbase/seekdb/blob/master/LICENSE">
         <img height="20" alt="License" src="https://img.shields.io/badge/License-Apache_2.0-blue.svg" />
