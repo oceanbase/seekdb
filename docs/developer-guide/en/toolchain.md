@@ -8,19 +8,21 @@ OceanBase makes strong assumption on the underlying operating systems. Not all t
 
 Below is the OS compatibility list:
 
- | Alibaba Cloud Linux | 3                     | x86_64 / aarch64 | Yes        | Yes                | Yes                        | Yes              |
- | CentOS              | 7 / 8 / 9             | x86_64 / aarch64 | Yes        | Yes                | Yes                        | Yes              |
- | Debian              | 11 / 12 / 13          | x86_84 / aarch64 | Yes        | Yes                | Yes                        | Yes              |
- | Fedora              | 33                    | x86_84 / aarch64 | Yes        | Yes                | Yes                        | Yes              |
- | Kylin               | V10                   | x86_84 / aarch64 | Yes        | Yes                | Yes                        | Yes
- | openSUSE            | 15.2                  | x86_84 / aarch64 | Yes        | Yes                | Yes                        | Yes              |
- | OpenAnolis          | 8  / 23               | x86_84 / aarch64 | Yes        | Yes                | Yes                        | Yes              |
- | OpenEuler           | 22.03  / 24.03        | x86_84 / aarch64 | Yes        | Yes                | Yes                        | Yes              |
- | Rocky Linux         | 8  / 9                | x86_84 / aarch64 | Yes        | Yes                | Yes                        | Yes              |
- | StreamOS            | 3.4.8                 | x86_84 / aarch64 | Unknown    | Yes                | Yes                        | Unknown          |
- | SUSE                | 15.2                  | x86_84 / aarch64 | Yes        | Yes                | Yes                        | Yes              |
- | Ubuntu              | 20.04 / 22.04 / 24.04 | x86_84 / aarch64 | Yes        | Yes                | Yes                        | Yes              |
- | UOS                 | 20                    | x86_84 / aarch64 | Yes        | Yes                | Yes                        | Yes              |
+| Operating System    | Version               | Architecture     | Compatibility | Installer Deployment | Binary Deployment          | MySQLTest Test   |
+| ------------------- | --------------------- | ---------------- | ------------- | -------------------- | -------------------------- | ---------------- |
+| Alibaba Cloud Linux | 3                     | x86_64 / aarch64 | Yes           | Yes                  | Yes                        | Yes              |
+| CentOS              | 7 / 8 / 9             | x86_64 / aarch64 | Yes           | Yes                  | Yes                        | Yes              |
+| Debian              | 11 / 12 / 13          | x86_84 / aarch64 | Yes           | Yes                  | Yes                        | Yes              |
+| Fedora              | 33                    | x86_84 / aarch64 | Yes           | Yes                  | Yes                        | Yes              |
+| Kylin               | V10                   | x86_84 / aarch64 | Yes           | Yes                  | Yes                        | Yes              |
+| openSUSE            | 15.2                  | x86_84 / aarch64 | Yes           | Yes                  | Yes                        | Yes              |
+| OpenAnolis          | 8  / 23               | x86_84 / aarch64 | Yes           | Yes                  | Yes                        | Yes              |
+| OpenEuler           | 22.03  / 24.03        | x86_84 / aarch64 | Yes           | Yes                  | Yes                        | Yes              |
+| Rocky Linux         | 8  / 9                | x86_84 / aarch64 | Yes           | Yes                  | Yes                        | Yes              |
+| StreamOS            | 3.4.8                 | x86_84 / aarch64 | Unknown       | Yes                  | Yes                        | Unknown          |
+| SUSE                | 15.2                  | x86_84 / aarch64 | Yes           | Yes                  | Yes                        | Yes              |
+| Ubuntu              | 20.04 / 22.04 / 24.04 | x86_84 / aarch64 | Yes           | Yes                  | Yes                        | Yes              |
+| UOS                 | 20                    | x86_84 / aarch64 | Yes           | Yes                  | Yes                        | Yes              |
 
 > **Note**:
 >
