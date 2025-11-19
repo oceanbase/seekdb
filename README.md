@@ -20,6 +20,9 @@
     <a href="https://www.youtube.com/@OceanBaseDB">
         <img alt="Static Badge" src="https://img.shields.io/badge/YouTube-red?logo=youtube">
     </a>
+    <a href="https://deepwiki.com/oceanbase/seekdb">
+        <img alt="Ask DeepWiki" src="https://deepwiki.com/badge.svg" />
+    </a>
     <a href="https://discord.gg/74cF8vbNEs">
         <img alt="Discord" src="https://img.shields.io/discord/74cF8vbNEs?label=Discord&logo=discord&style=flat-square&color=5865F2" />
     </a>
