@@ -263,14 +263,13 @@ Please refer to the [User Guide](https://github.com/oceanbase/pyseekdb) for more
 ```sql
 -- Create table with vector column
 CREATE TABLE articles (
-    id INT PRIMARY KEY,
-    title TEXT,
-    content TEXT,
-    embedding VECTOR(384)
-);
-
--- Create vector index for fast similarity search
-CREATE INDEX idx_vector ON articles USING VECTOR (embedding);
+            id INT PRIMARY KEY,
+            title TEXT,
+            content TEXT,
+            embedding VECTOR(384),
+            FULLTEXT INDEX idx_fts(content) WITH PARSER ik,
+            VECTOR INDEX idx_vec (embedding) WITH(DISTANCE=l2, TYPE=hnsw, LIB=vsag)
+        ) ORGANIZATION = HEAP;
 
 -- Insert documents with embeddings
 -- Note: Embeddings should be pre-computed using your embedding model
@@ -285,13 +284,12 @@ VALUES
 SELECT
     title,
     content,
-    embedding <-> '[query_embedding]' AS vector_distance,
+    l2_distance(embedding, '[query_embedding]') AS vector_distance,
     MATCH(content) AGAINST('your keywords' IN NATURAL LANGUAGE MODE) AS text_score
 FROM articles
 WHERE MATCH(content) AGAINST('your keywords' IN NATURAL LANGUAGE MODE)
-ORDER BY vector_distance ASC, text_score DESC
+ORDER BY vector_distance APPROXIMATE
 LIMIT 10;
-
 ```
 We suggest developers use sqlalchemy to access data by SQL for python developers.
 </details>
