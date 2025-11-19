@@ -1,8 +1,10 @@
 ---
-name: 🚀 Feature Request
+name: "\U0001F680 Feature Request"
 about: Suggest an idea for this project
 title: "[Feature]: "
-labels: ["type: feature"]
+labels: 'type: feature'
+assignees: ''
+
 ---
 
 **Use Case**

@@ -1,8 +1,10 @@
 ---
-name: 🐞 Bug report
+name: "\U0001F41E Bug report"
 about: Create a report to help us improve
 title: "[Bug]: "
-labels: ["type: bug"]
+labels: 'type: bug'
+assignees: ''
+
 ---
 
 **Describe the bug**
@@ -14,6 +16,7 @@ labels: ["type: bug"]
 
 - OB Version(`LD_LIBRARY_PATH=../lib:$LD_LIBRARY_PATH ./observer -V`):
 
+- Hardware resource(`cpu core/memory size/disk hardware`):
 
 **Fast Reproduce Steps(Required)**
 
