@@ -17,6 +17,16 @@ ssh -J jumpuser@47.243.211.179 root@xxx.xxx.xxx.xxx
 
 - 跳板机的 `jumpuser` 是一个低权限用户，无法直接登录，仅用于 SSH 跳转中转
 
+## 比赛提供的 Api Key 对应的 BaseURL 是什么?
+
+http://47.243.159.229:8081/v1 这个，.env 示例：
+
+```bash
+# LLM Config
+OPENAI_API_KEY="xxx" # your api-key here
+OPENAI_BASE_URL="http://47.243.159.229:8081/v1"
+```
+
 ## 比赛提供的 Api Key 有限流吗，能否无限制使用?
 
 代理平台 Api Key 未开启限流，仅有百炼测限流。但用量存在监控，请合理的使用，且用于大赛。若存在滥用行为，可能将取消 Api Key 使用权。
