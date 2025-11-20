@@ -475,7 +475,7 @@ Examples:
 ##### 编译 seekdb 数据库
 
 ```bash
-$ bash build.sh --init release -DOB_USE_CCACHE=ON -DOB_BUILD_UNITTEST=OFF -DOB_INCLUDE_UNITTEST=OFF --make -j4
+$ bash build.sh --init release -DOB_USE_CCACHE=ON -DOB_BUILD_UNITTEST=OFF -DOB_INCLUDE_UNITTEST=OFF --make -j6
 ```
 
 ##### 启动 seekdb 数据库
