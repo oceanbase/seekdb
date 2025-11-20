@@ -20,7 +20,7 @@
 #include "lib/queue/ob_priority_queue.h"
 #include "rpc/ob_request.h"
 /// TODO remove multi level queue
-#define MULTI_LEVEL_QUEUE_SIZE (1)
+#define MULTI_LEVEL_QUEUE_SIZE (5)
 #define MULTI_LEVEL_THRESHOLD (2)
 #define GROUP_MULTI_LEVEL_THRESHOLD (1)
 

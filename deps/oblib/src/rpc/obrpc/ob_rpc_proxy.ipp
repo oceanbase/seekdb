@@ -216,6 +216,7 @@ int ObRpcProxy::rpc_call(ObRpcPacketCode pcode, const Input &args,
     //do nothing
   }
   if (dst_ == ObRpcProxy::myaddr_) {
+    oceanbase::lib::Thread::WaitGuard guard(oceanbase::lib::Thread::WAIT);
     ret = oceanbase::oblpc::send(*this, pcode, args, result, handle, opts);
   } else {
     ret = OB_NOT_SUPPORTED;
