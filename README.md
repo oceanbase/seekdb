@@ -60,7 +60,7 @@
 | **MySQL Compatible**     | ✅                    | ✅             | ❌          | ❌          | ✅                       | ❌                            | ✅          | ❌                                   |
 | **Vector Search**        | ✅                    | ✅             | ✅          | ✅          | ❌                       | ✅                            | ✅          | ✅                                   |
 | **Full-Text Search**     | ✅                    | ✅             | ✅          | ⚠️         | ✅                       | ✅                            | ✅          | ✅                                   |
-| **Hybrid Search**        | ✅                    | ✅             | ✅          | ✅          | ❌                       | ⚠️                           | ❌          | ✅                                   |
+| <nobr>**Hybrid Search**</nobr> | ✅                    | ✅             | ✅          | ✅          | ❌                       | ⚠️                           | ❌          | ✅                                   |
 | **OLTP**                 | ✅                    | ✅             | ❌          | ❌          | ✅                       | ✅                            | ❌          | ❌                                   |
 | **OLAP**                 | ✅                    | ✅             | ❌          | ❌          | ❌                       | ✅                            | ✅          | ⚠️                                  |
 | **Open Source License**  | Apache 2.0           | MulanPubL 2.0 | Apache 2.0 | Apache 2.0 | GPL 2.0                 | PostgreSQL License           | MIT        | AGPLv3<br/>+SSPLv1<br/>+Elastic 2.0 |
