@@ -50,23 +50,22 @@
 
 ## 🔥 为什么选择 OceanBase seekdb？
 
----
-| **Feature**              | **OceanBase seekdb** | **OceanBase** | **Chroma** | **Milvus** | **MySQL 9.0**           | PostgreSQL<br/>**+pgvector** | **DuckDB** | **Elasticsearch**                   |
+| **Feature**              | **seekdb** | **OceanBase** | **Chroma** | **Milvus** | **MySQL&nbsp;9.0**           | **PostgreSQL<br/>+pgvector** | **DuckDB** | **Elasticsearch**                   |
 | ------------------------ |:--------------------:|:-------------:|:----------:|:----------:|:-----------------------:|:----------------------------:|:----------:|:-----------------------------------:|
-| **Embedded Database**    | ✅                    | ❌             | ✅          | ✅          | ❌<br/> (removed in 8.0) | ❌                            | ✅          | ❌                                   |
-| **Single-Node Database** | ✅                    | ✅             | ✅          | ✅          | ✅                       | ✅                            | ✅          | ✅                                   |
-| **Distributed Database** | ❌                    | ✅             | ❌          | ✅          | ❌                       | ❌                            | ❌          | ✅                                   |
-| **MySQL Compatible**     | ✅                    | ✅             | ❌          | ❌          | ✅                       | ❌                            | ✅          | ❌                                   |
-| **Vector Search**        | ✅                    | ✅             | ✅          | ✅          | ❌                       | ✅                            | ✅          | ✅                                   |
-| **Full-Text Search**     | ✅                    | ✅             | ✅          | ⚠️         | ✅                       | ✅                            | ✅          | ✅                                   |
-| **Hybrid Search**        | ✅                    | ✅             | ✅          | ✅          | ❌                       | ⚠️                           | ❌          | ✅                                   |
+| **Embedded**    | ✅                    | ❌             | ✅          | ✅          | ❌<sup>[1]</sup> | ❌                            | ✅          | ❌                                   |
+| **Single-Node** | ✅                    | ✅             | ✅          | ✅          | ✅                       | ✅                            | ✅          | ✅                                   |
+| **Distributed** | ❌                    | ✅             | ❌          | ✅          | ❌                       | ❌                            | ❌          | ✅                                   |
+| **MySQL&nbsp;Compatible**   | ✅                    | ✅             | ❌          | ❌          | ✅                       | ❌                            | ✅          | ❌                                   |
+| **Vector&nbsp;Search**     | ✅                    | ✅             | ✅          | ✅          | ❌                       | ✅                            | ✅          | ✅                                   |
+| **Full-Text&nbsp;Search**    | ✅                    | ✅             | ✅          | ⚠️         | ✅                       | ✅                            | ✅          | ✅                                   |
+| **Hybrid&nbsp;Search** | ✅                    | ✅             | ✅          | ✅          | ❌                       | ⚠️                           | ❌          | ✅                                   |
 | **OLTP**                 | ✅                    | ✅             | ❌          | ❌          | ✅                       | ✅                            | ❌          | ❌                                   |
 | **OLAP**                 | ✅                    | ✅             | ❌          | ❌          | ❌                       | ✅                            | ✅          | ⚠️                                  |
-| **Open Source License**  | Apache 2.0           | MulanPubL 2.0 | Apache 2.0 | Apache 2.0 | GPL 2.0                 | PostgreSQL License           | MIT        | AGPLv3<br/>+SSPLv1<br/>+Elastic 2.0 |
-
-- ✅ 支持
-- ❌ 不支持
-- ⚠️ 有限支持
+| **License**  | Apache 2.0           | MulanPubL 2.0 | Apache 2.0 | Apache 2.0 | GPL 2.0                 | PostgreSQL License           | MIT        | AGPLv3<br/>+SSPLv1<br/>+Elastic 2.0 |
+> [1] Embedded capability is removed in MySQL 8.0
+> - ✅ 支持
+> - ❌ 不支持
+> - ⚠️ 有限支持
 ---
 
 ## ✨ 核心特性
