@@ -533,9 +533,17 @@ RAG 执行时间 (含文档导入，输出结果等) 不超过 40 分钟
 
 比赛模型提供来自阿里云百炼平台，可选模型列表参考: https://modelstudio.console.aliyun.com/?tab=doc#/doc/?type=model&url=2840914
 
+##### 模型提供
+
+为保证模型使用的公平性, 不允许自定义 BaseURL, API KEY 等变量，我们强制要求使用测评中的环境变量。
+
 ##### 模型限速
 
 参考 [https://modelstudio.console.aliyun.com/?tab=doc#/doc/?type=model&url=2840182](https://modelstudio.console.aliyun.com/?tab=doc#/doc/?type=model&url=2840182)
+
+#### 数据库使用
+
+本题目要求使用并且只能使用自己团队的 seekdb 做为数据库。不得使用如 SQLite, faiss 等替代 seekdb 的功能。
 
 ---
 
@@ -652,6 +660,8 @@ seekdb (与 OceanBase 类似) 的编译部署可以参考初赛文档：[https:/
 - 蓄意上传携带病毒文件的；
 - 通过扫盘等行为获取测试数据/评测代码的；
 - 蓄意发起对比赛平台、评估系统的攻击，扰乱比赛秩序的。
+
+**（4）违反上文中提到过的约束条件。**
 
 ## 赛后查重
 
