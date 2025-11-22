@@ -18,7 +18,7 @@
 
 本次赛题是在 OceanBase-seekdb 社区版（基于 2025-final-competition 分支，以下简称 seekdb）的基础上，在 MLDR 英文数据集（[mldr-v1.0-en](https://hf-mirror.com/datasets/Shitao/MLDR/tree/main/mldr-v1.0-en)）上，优化带标量的全文索引检索的性能。
 
-```plsql
+```sql
 SELECT docid_col, MATCH(fulltext_col) AGAINST(XXX) as _score
 FROM items1
 WHERE MATCH(fulltext_col) AGAINST(XXX)
@@ -119,7 +119,6 @@ python3 evaluate_results_oceanbase.py \
 选手使用的基础环境中提供了用于编译部署 seekdb 运行测试所需的必要依赖。基础环境中提供了`/root/source/seekdb`做为基础代码，可免于大家 clone 代码，下载依赖。也提供了 mldr_benchmark 脚本，位于`/root/source/mldr_benchmark`
 
 ```bash
-# 编译部署 seekdb 相关的环境依赖请参考初赛文档：https://open.oceanbase.com/train/TopicDetails?questionId=600034&subQesitonId=800284&subQuestionName=basic
 # 运行 mldr_benchmark 需要先安装 python3.11 相关依赖，如果遇到依赖版本不兼容等问题，可以使用 conda 安装 python 3.11 环境。
 # 推荐 python3.11 以上，python 版本不低于3.9
 mkdir -p ~/miniconda3
@@ -345,8 +344,8 @@ $ wget -O ./rag/data/dataset.zip https://obcommunityprod.oss-cn-shanghai.aliyunc
   {
     "question": "千味央厨的成立时间是什么时候？",
     "answer": "千味央厨成立于2012年。",
-    "filename": "千味央厨-公司研究报告-深耕餐饮供应链为人间千味-23011258页.pdf",
-    "page": 15
+    "filename": "千味央厨-公司深度报告打造央厨之道服务千万餐饮-22121364页.pdf",
+    "page": 8
   },
   {
     "question": "千味央厨的财务报表预测中，预计2024年的营业收入是多少？",
