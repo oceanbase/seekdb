@@ -1,4 +1,4 @@
-site_name: OceanBase SeekDB Developer Guide
+site_name: OceanBase seekdb Developer Guide
 site_url: https://oceanbase.github.io/seekdb
 repo_url: https://github.com/oceanbase/seekdb
 repo_name: oceanbase/seekdb
@@ -16,10 +16,11 @@ plugins:
           default: true
           name: English
           build: true
+          link: /developer-guide/en/
         - locale: zh
           name: 中文
           build: true
-          link: /zh/
+          link: /developer-guide/zh/
   - git-authors
 nav:
   - README.md
@@ -33,7 +34,6 @@ nav:
   - logging.md
   - memory.md
   - container.md
-  - architecture.md
   - coding-standard.md
 
 markdown_extensions:
