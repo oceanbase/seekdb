@@ -82,4 +82,4 @@ git push -u origin $new_branch_name
 
 ![CLA](https://user-images.githubusercontent.com/5435903/204097095-6a19d2d1-ee0c-4fb6-be2d-77f7577d75d2.png#crop=0&crop=0&crop=1&crop=1&from=url&id=Mmj8a&margin=%5Bobject%20Object%5D&originHeight=271&originWidth=919&originalType=binary&ratio=1&rotation=0&showTitle=false&status=done&style=none&title=)
 
-After you submit your updates, OceanBase SeekDB will review and comment if needed. Once we approve your updates, the system will automatically run CI testing and stress testing. If no issues are found in the tests, your updates will be merged. Now you have successfully completed your contribution task and become one of our contributors.
+After you submit your updates, OceanBase seekdb will review and comment if needed. Once we approve your updates, the system will automatically run CI testing and stress testing. If no issues are found in the tests, your updates will be merged. Now you have successfully completed your contribution task and become one of our contributors.

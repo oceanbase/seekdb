@@ -15,7 +15,7 @@ git clone https://github.com/oceanbase/seekdb.git
 
 ## Build
 
-Build OceanBase SeekDB from the source code in debug mode or release mode:
+Build OceanBase seekdb from the source code in debug mode or release mode:
 
 ### Debug mode
 
@@ -31,7 +31,7 @@ bash build.sh release --init --make
 
 ## Run
 
-Now that you built the `observer` binary, you can deploy a SeekDB instance with the `obd.sh` utility:
+Now that you built the `observer` binary, you can deploy a seekdb instance with the `obd.sh` utility:
 
 ```shell
 ./tools/deploy/obd.sh prepare -p /tmp/obtest
@@ -42,13 +42,13 @@ You can check the `mysql_port` in `./tools/deploy/single.yaml` file to see the l
 
 ## Connect
 
-You can use the official MySQL client to connect to SeekDB:
+You can use the official MySQL client to connect to seekdb:
 
 ```shell
 mysql -uroot -h127.0.0.1 -P10000
 ```
 
-Alternatively, you can use the `obclient` to connect to SeekDB:
+Alternatively, you can use the `obclient` to connect to seekdb:
 
 ```shell
 ./deps/3rd/u01/obclient/bin/obclient -h127.0.0.1 -P10000 -uroot -Doceanbase -A

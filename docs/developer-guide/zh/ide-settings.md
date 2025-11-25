@@ -5,11 +5,11 @@ title: IDE 配置
 
 # IDE 配置
 
-本文档介绍如何配置开发环境以便更好地阅读 OceanBase SeekDB 的代码。
+本文档介绍如何配置开发环境以便更好地阅读 OceanBase seekdb 的代码。
 
 ## 概述
 
-为了更好的阅读 OceanBase SeekDB 的代码，我们建议使用一个可以方便索引 SeekDB 代码的 IDE。
+为了更好的阅读 OceanBase seekdb 的代码，我们建议使用一个可以方便索引 seekdb 代码的 IDE。
 
 - **Windows**：推荐使用 `Source Insight`
 - **Mac/Linux**：推荐使用 `VSCode + ccls`
@@ -19,7 +19,7 @@ title: IDE 配置
 ## 相关文档
 
 - [编译与运行](build-and-run.md) - 编译项目
-- [编程惯例](coding-convention.md) - 了解 SeekDB 的编程风格
+- [编程惯例](coding-convention.md) - 了解 seekdb 的编程风格
 
 ## 为什么选择 VSCode + ccls
 
@@ -32,11 +32,11 @@ title: IDE 配置
 在 C/C++ LSP 领域，比较有名的工具有 clangd 和 ccls。这里我们推荐 ccls，因为：
 
 1. **索引性能**：ccls 构建索引的速度比 clangd 慢，但是构建完成后，ccls 访问索引的速度比 clangd 快
-2. **Unity 编译支持**：clangd 不支持 unity 编译，而 SeekDB 是通过 unity 编译的，clangd 无法通过 compile_commands.json 构建索引
+2. **Unity 编译支持**：clangd 不支持 unity 编译，而 seekdb 是通过 unity 编译的，clangd 无法通过 compile_commands.json 构建索引
 
 ### 远程开发
 
-SeekDB 的代码量非常大，而且 SeekDB 不能在 Mac 或者 Windows 下编译，所以我们建议在远程服务器上下载代码，然后在本地使用 VSCode 访问远程服务器上的代码。
+seekdb 的代码量非常大，而且 seekdb 不能在 Mac 或者 Windows 下编译，所以我们建议在远程服务器上下载代码，然后在本地使用 VSCode 访问远程服务器上的代码。
 
 ## 在远程服务器上配置 ccls
 
@@ -127,7 +127,7 @@ ccls --version
 
 ## C/C++ 插件
 
-不推荐使用C/C++插件，因为无法为SeekDB提供良好的索引功能，并且与ccls插件不兼容。
+不推荐使用C/C++插件，因为无法为seekdb提供良好的索引功能，并且与ccls插件不兼容。
 
 如果有一些简单的场景，可以在VSCode的扩展商店中下载并安装C/C++插件。
 
@@ -151,7 +151,7 @@ C/C++插件可以自动完成代码和语法高亮，但是这个插件无法为
 
 2. 设置 `ccls.index.threads`。ccls 默认使用系统80%的CPU核心作为默认的并行度。我们可以在VSCode的配置页面中搜索 `threads` 并设置如下数字。
 
-> 默认情况下，SeekDB使用unity编译，比普通情况下消耗更多的内存。如果并行度太高，例如8核16G的系统，系统可能会挂起。
+> 默认情况下，seekdb使用unity编译，比普通情况下消耗更多的内存。如果并行度太高，例如8核16G的系统，系统可能会挂起。
 
 ![ccls threads config](images/ide-settings-ccls-threads-config.png)
 
@@ -174,7 +174,7 @@ cd seekdb
 bash build.sh ccls --init
 ```
 
-执行完成后，可以在 SeekDB 源码根目录下看到 `compile_commands.json` 文件。
+执行完成后，可以在 seekdb 源码根目录下看到 `compile_commands.json` 文件。
 
 ### 步骤 3: 重启 VSCode 并构建索引
 

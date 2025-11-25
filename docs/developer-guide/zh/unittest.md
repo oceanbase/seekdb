@@ -1,27 +1,27 @@
 # 编写与运行单元测试
 
-本文档介绍如何在 OceanBase SeekDB 项目中编写和运行单元测试。
+本文档介绍如何在 OceanBase seekdb 项目中编写和运行单元测试。
 
 ## 概述
 
-SeekDB 使用 [Google Test](https://github.com/google/googletest) 作为单元测试框架。单元测试代码位于项目根目录下的 `unittest` 目录中。
+seekdb 使用 [Google Test](https://github.com/google/googletest) 作为单元测试框架。单元测试代码位于项目根目录下的 `unittest` 目录中。
 
 ## 相关文档
 
 - [编译与运行](build-and-run.md) - 编译项目的基础
-- [编程惯例](coding-convention.md) - 了解 SeekDB 的编程风格
+- [编程惯例](coding-convention.md) - 了解 seekdb 的编程风格
 - [调试方法](debug.md) - 调试测试代码
 
 ## 编译及运行所有单元测试
 
-SeekDB 有两个单元测试目录：
+seekdb 有两个单元测试目录：
 
 - `unittest`：主要的单元测试用例，测试 `src` 目录中的代码
 - `deps/oblib/unittest`：oblib 库的测试用例
 
 ### 编译单元测试
 
-默认情况下，构建 SeekDB 项目时不会自动编译单元测试。需要显式编译：
+默认情况下，构建 seekdb 项目时不会自动编译单元测试。需要显式编译：
 
 ```bash
 # 1. 首先编译项目（Debug 模式）
@@ -78,7 +78,7 @@ find . -name "test_chunk_row_store"
 
 ### 测试文件命名
 
-SeekDB 使用 `test_xxx.cpp` 作为单元测试文件名。创建测试文件后，需要将文件名添加到对应的 `CMakeLists.txt` 文件中。
+seekdb 使用 `test_xxx.cpp` 作为单元测试文件名。创建测试文件后，需要将文件名添加到对应的 `CMakeLists.txt` 文件中。
 
 ### 测试文件模板
 
@@ -142,7 +142,7 @@ TEST(RARowStore, alloc_project_fail)
 ### 更多信息
 
 - [Google Test 文档](https://google.github.io/googletest/) - 了解 `TEST`、`ASSERT` 和 `EXPECT` 等宏的详细用法
-- [编程惯例](coding-convention.md) - 了解 SeekDB 的编程风格
+- [编程惯例](coding-convention.md) - 了解 seekdb 的编程风格
 
 ## CI 中的单元测试
 

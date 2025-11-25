@@ -1,6 +1,6 @@
 # 编译与运行
 
-本文档介绍如何获取 OceanBase SeekDB 源代码、编译项目以及运行 SeekDB 实例。
+本文档介绍如何获取 OceanBase seekdb 源代码、编译项目以及运行 seekdb 实例。
 
 ## 前置条件
 
@@ -27,7 +27,7 @@ cd seekdb
 
 ## 编译项目
 
-SeekDB 支持两种编译模式：Debug 和 Release。推荐开发时使用 Debug 模式，生产环境使用 Release 模式。
+seekdb 支持两种编译模式：Debug 和 Release。推荐开发时使用 Debug 模式，生产环境使用 Release 模式。
 
 ### Debug 模式
 
@@ -53,7 +53,7 @@ bash build.sh release --init --make
 
 ## 运行实例
 
-编译完成后，可以使用 `obd.sh` 工具部署一个 SeekDB 实例。
+编译完成后，可以使用 `obd.sh` 工具部署一个 seekdb 实例。
 
 ### 部署步骤
 
@@ -73,11 +73,11 @@ bash build.sh release --init --make
 
 部署完成后，可以通过查看 `./tools/deploy/single.yaml` 文件中的 `mysql_port` 配置项来确认监听端口。
 
-> **默认端口**：如果使用 root 用户部署，SeekDB 服务程序默认监听 10000 端口。下文示例基于此默认端口。
+> **默认端口**：如果使用 root 用户部署，seekdb 服务程序默认监听 10000 端口。下文示例基于此默认端口。
 
 ## 连接数据库
 
-部署成功后，可以使用以下方式连接 SeekDB：
+部署成功后，可以使用以下方式连接 seekdb：
 
 ### 使用 MySQL 客户端
 
@@ -104,10 +104,10 @@ mysql -uroot -h127.0.0.1 -P10000
 ./tools/deploy/obd.sh destroy --rm -n single
 ```
 
-该命令会停止运行中的 SeekDB 实例并清理相关资源。
+该命令会停止运行中的 seekdb 实例并清理相关资源。
 
 ## 下一步
 
 - [编写单元测试](unittest.md) - 学习如何编写和运行单元测试
-- [调试方法](debug.md) - 了解如何调试 SeekDB
-- [编程惯例](coding-convention.md) - 了解 SeekDB 的编程规范
+- [调试方法](debug.md) - 了解如何调试 seekdb
+- [编程惯例](coding-convention.md) - 了解 seekdb 的编程规范

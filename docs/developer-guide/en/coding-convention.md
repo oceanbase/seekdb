@@ -2,7 +2,7 @@
 title: Coding Convention
 ---
 
-OceanBase SeekDB is a giant project that has been developed for more than ten years and contains millions of lines of C++ code. It already has many unique programming habits. Here are some OceanBase SeekDB programming habits to help people who come into contact with the OceanBase SeekDB source code for the first time have an easier time accepting and understanding. For more detailed information, please refer to ["OceanBase SeekDB C++ Coding Standard"](./coding_standard.md).
+OceanBase seekdb is a giant project that has been developed for more than ten years and contains millions of lines of C++ code. It already has many unique programming habits. Here are some OceanBase seekdb programming habits to help people who come into contact with the OceanBase seekdb source code for the first time have an easier time accepting and understanding. For more detailed information, please refer to ["OceanBase seekdb C++ Coding Standard"](./coding-standard.md).
 
 # Naming Convention
 
@@ -20,7 +20,7 @@ Both function names and variables use lowercase naming separated by `_`. Member 
 
 # Coding Style
 
-SeekDB uses some relatively simple coding styles to try to make the code readable and clear, such as adding necessary spaces for operator brackets, not too long codes, not too long functions, adding necessary comments, reasonable naming, etc. Since the coding style has many details, new developers can just refer to the coding style in the current code to write code. This is also a suggestion for participating in other projects for the first time. We should try to keep it consistent with the original style.
+seekdb uses some relatively simple coding styles to try to make the code readable and clear, such as adding necessary spaces for operator brackets, not too long codes, not too long functions, adding necessary comments, reasonable naming, etc. Since the coding style has many details, new developers can just refer to the coding style in the current code to write code. This is also a suggestion for participating in other projects for the first time. We should try to keep it consistent with the original style.
 
 There is no need to worry about the styles that you are not sure about. You can discuss it with us, or after submitting the code, someone will give suggestions or code together.
 
@@ -28,21 +28,21 @@ There is no need to worry about the styles that you are not sure about. You can 
 
 ## Prohibitting STL Containers
 
-Since SeekDB supports multi-tenants resource isolation, in order to facilitate memory control, SeekDB prohibits the use of STL, boost and other containers. At the same time, SeekDB provides its own containers, such as `ObSEArray`, etc. For more information about SeekDB containers, please refer to [OceanBase SeekDB Container Introduction] (./container.md).
+Since seekdb supports multi-tenants resource isolation, in order to facilitate memory control, seekdb prohibits the use of STL, boost and other containers. At the same time, seekdb provides its own containers, such as `ObSEArray`, etc. For more information about seekdb containers, please refer to [OceanBase seekdb Container Introduction] (./container.md).
 
 ## Be Caution with the New C++ Standard
 
-SeekDB does not encourage the use of some syntax of the new C++ standard, such as auto, smart pointers, move semantics, range-based loops, lambda, etc. SeekDB believes that these will bring many negative effects, such as
+seekdb does not encourage the use of some syntax of the new C++ standard, such as auto, smart pointers, move semantics, range-based loops, lambda, etc. seekdb believes that these will bring many negative effects, such as
 
 - Improper use of `auto` can cause serious performance problems, but it only brings syntactic convenience;
 - Smart pointers cannot solve the problem of object memory usage, and improper use can also cause performance problems;
 - The use of move is extremely complex, and it will lead to deeply hidden BUGs without ensuring that everyone understands it correctly.
 
-Of course, SeekDB does not exclude all new standards, such as encouraging the use of override, final, constexpr, etc. If you are not sure whether a certain syntax can be used, you can search and confirm in ["OceanBase SeekDB C++ Coding Standard"](./coding_standard.md).
+Of course, seekdb does not exclude all new standards, such as encouraging the use of override, final, constexpr, etc. If you are not sure whether a certain syntax can be used, you can search and confirm in ["OceanBase seekdb C++ Coding Standard"](./coding-standard.md).
 
 ## Single Entrance and Single Exit
 
-It is mandatory for all functions to return at the end, and it is prohibited to call global jump instructions such as return, goto, and exit midway. This is also the most confusing part for everyone who comes into contact with SeekDB code for the first time.
+It is mandatory for all functions to return at the end, and it is prohibited to call global jump instructions such as return, goto, and exit midway. This is also the most confusing part for everyone who comes into contact with seekdb code for the first time.
 
 In order to achieve this requirement, there will be a lot of `if/else if` in the code, and there are many less intuitive conditional judgments such as `OB_SUCC(ret)` in the `for` loop. At the same time, in order to reduce nesting, the macro `FALSE_IT` will be used to execute certain statements. for example
 
@@ -102,7 +102,7 @@ Or similar simple judgment functions do not need to return int error codes.
 
 ## Need to Determine the Validity of All Return Values and Parameters
 
-SeekDB requires that as long as the function has a return value, the return value must be tested, and "check if possible." Function parameters, especially pointers, must be checked for validity before use.
+seekdb requires that as long as the function has a return value, the return value must be tested, and "check if possible." Function parameters, especially pointers, must be checked for validity before use.
 
 For example:
 
@@ -127,9 +127,9 @@ int ObDDLServerClient::abort_redef_table(const obrpc::ObAbortRedefTableArg &arg,
 
 ## Memory Management
 
-Memory management is a very troublesome issue in C/C++ programs. SeekDB has done a lot of work for memory management, including efficient memory allocation, memory problem detection, tenant memory isolation, etc. SeekDB provides a set of memory management mechanisms for this purpose, and also prohibits the direct use of C/C++ native memory allocation interfaces in programs, such as malloc, new, etc.
+Memory management is a very troublesome issue in C/C++ programs. seekdb has done a lot of work for memory management, including efficient memory allocation, memory problem detection, tenant memory isolation, etc. seekdb provides a set of memory management mechanisms for this purpose, and also prohibits the direct use of C/C++ native memory allocation interfaces in programs, such as malloc, new, etc.
 
-The simplest, SeekDB provides the `ob_malloc/ob_free` interface to allocate and release memory:
+The simplest, seekdb provides the `ob_malloc/ob_free` interface to allocate and release memory:
 
 ```cpp
 void *ptr = ob_malloc(100, ObModIds::OB_COMMON_ARRAY);
@@ -143,18 +143,18 @@ if (NULL != ptr) {
 }
 ```
 
-SeekDB requires that the pointer must be assigned to null immediately after the memory is released.
-For more information about memory management, please refer to [OceanBase SeekDB Memory Management](./memory.md).
+seekdb requires that the pointer must be assigned to null immediately after the memory is released.
+For more information about memory management, please refer to [OceanBase seekdb Memory Management](./memory.md).
 
 # Some Conventional Interfaces
 
 ## init/destroy
 
-SeekDB requires that only some very lightweight data initialization work can be implemented in the constructor, such as variables initialized to 0, pointers initialized to nullptr, etc. Because in the constructor, it is not easy to handle some complex exception scenarios, and the return value cannot be given. Most classes in SeekDB have an init function, which is usually executed after the constructor and has an int error code as the return value. Do some more complex initialization work here. Correspondingly, the destroy function is usually provided to do resource destruction.
+seekdb requires that only some very lightweight data initialization work can be implemented in the constructor, such as variables initialized to 0, pointers initialized to nullptr, etc. Because in the constructor, it is not easy to handle some complex exception scenarios, and the return value cannot be given. Most classes in seekdb have an init function, which is usually executed after the constructor and has an int error code as the return value. Do some more complex initialization work here. Correspondingly, the destroy function is usually provided to do resource destruction.
 
 ## reuse/reset
 
-Memory caching is a very effective way of improving performance. Many classes in SeekDB will have reuse/reset interfaces to facilitate the subsequent reuse of an object. Reuse usually represents lightweight cleanup work, while reset will do more resource cleanup work. But you need to look at the specific implementation class and cannot generalize.
+Memory caching is a very effective way of improving performance. Many classes in seekdb will have reuse/reset interfaces to facilitate the subsequent reuse of an object. Reuse usually represents lightweight cleanup work, while reset will do more resource cleanup work. But you need to look at the specific implementation class and cannot generalize.
 
 ## Operator Overloading
 

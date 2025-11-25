@@ -1,19 +1,19 @@
 ---
-title: OceanBase SeekDB 系统日志介绍
+title: OceanBase seekdb 系统日志介绍
 ---
 
-# OceanBase SeekDB 系统日志介绍
+# OceanBase seekdb 系统日志介绍
 
 ## 介绍
 
-本篇文档主要介绍 OceanBase SeekDB 的系统日志，包括日志的分类、级别，如何在程序中输出日志，以及一些日志的实现细节。
+本篇文档主要介绍 OceanBase seekdb 的系统日志，包括日志的分类、级别，如何在程序中输出日志，以及一些日志的实现细节。
 
 
 ## 系统日志介绍
 
-与常见的应用系统类似，系统日志是SeekDB开发人员排查问题时常用的重要手段之一。
+与常见的应用系统类似，系统日志是seekdb开发人员排查问题时常用的重要手段之一。
 
-SeekDB 的系统日志存储在observero工作目录下的log目录下面。
+seekdb 的系统日志存储在observero工作目录下的log目录下面。
 
 | 日志文件名称 | 记录的信息 |
 | ------------------ | ----------------------------- |
@@ -38,7 +38,7 @@ SeekDB 的系统日志存储在observero工作目录下的log目录下面。
 
 ## 日志回收
 
-SeekDB的日志可以配置文件个数上限，以防止日志文件占用过大的磁盘空间。
+seekdb的日志可以配置文件个数上限，以防止日志文件占用过大的磁盘空间。
 
 如果 `enable_syslog_recycle = true` 且 `max_syslog_file_count > 0` ，每种日志文件的数量不能超过 `max_syslog_file_count`。日志内容刷新到磁盘中时触发旧日志文件回收。
 
@@ -48,12 +48,12 @@ SeekDB的日志可以配置文件个数上限，以防止日志文件占用过�
 新日志文件都会在开头打印一个特殊日志，信息包含当前节点的IP和端口、版本号、以及一些系统信息，参考 `ObLogger::log_new_file_info`。
 
 ```
-[2023-12-26 13:15:58.612579] INFO  New syslog file info: [address: "127.0.0.1:2882", observer version: OceanBase SeekDB 1.0.0.0, revision: 101010012023111012-2f6924cd5a576f09d6e7f212fac83f1a15ff531a, sysname: Linux, os release: 3.10.0-327.ali2019.alios7.x86_64, machine: x86_64, tz GMT offset: 08:00]
+[2023-12-26 13:15:58.612579] INFO  New syslog file info: [address: "127.0.0.1:2882", observer version: OceanBase seekdb 1.0.0.0, revision: 101010012023111012-2f6924cd5a576f09d6e7f212fac83f1a15ff531a, sysname: Linux, os release: 3.10.0-327.ali2019.alios7.x86_64, machine: x86_64, tz GMT offset: 08:00]
 ```
 
 ## 日志级别
 
-与常见的系统打日志方法类似，SeekDB 也提供了日志宏来打印不同级别的日志：
+与常见的系统打日志方法类似，seekdb 也提供了日志宏来打印不同级别的日志：
 
 | 级别    | 代码宏       | 说明 |
 | ----- | --------- | ---- |
@@ -63,7 +63,7 @@ SeekDB的日志可以配置文件个数上限，以防止日志文件占用过�
 | WARN  | LOG_DBA_WARN  | 面向DBA的日志。出现非预期场景，observer能提供服务，但行为可能不符合预期，比如我们的写入限流 |
 | ERROR | LOG_DBA_ERROR | 面向DBA的日志。observer不能提供正常服务的异常，如磁盘满监听端口被占用等。也可以是我们产品化后的一些内部检查报错，如我们的4377(dml defensive check error), 4103 (data checksum error)等，需DBA干预恢复 |
 | WDIAG | LOG_WARN | Warning Diagnosis, 协助故障排查的诊断信息，预期内的错误，如函数返回失败。级别与WARN相同 |
-| EDIAG | LOG_ERROR | Error Diagnosis, 协助故障排查的诊断信息，非预期的逻辑错误，如函数参数不符合预期等，通常为SeekDB程序BUG。级别与ERROR相同 |
+| EDIAG | LOG_ERROR | Error Diagnosis, 协助故障排查的诊断信息，非预期的逻辑错误，如函数参数不符合预期等，通常为seekdb程序BUG。级别与ERROR相同 |
 
 
 > 这里仅介绍了最常用的日志级别，更详细的信息参考 `ob_parameter_seed.ipp` 中关于 `syslog_level` 的配置，以及`ob_log_module.h` 文件中 `LOG_ERROR` 等宏定义。
@@ -72,7 +72,7 @@ SeekDB的日志可以配置文件个数上限，以防止日志文件占用过�
 
 有三种方式调整日志级别：
 
-- SeekDB 程序在启动时会读取配置文件或通过命令行参数输入系统日志级别配置，配置项名称是`syslog_level`。
+- seekdb 程序在启动时会读取配置文件或通过命令行参数输入系统日志级别配置，配置项名称是`syslog_level`。
 - 启动后也可以通过MySQL客户端连接，执行SQL命令 `alter system set syslog_level='DEBUG`;
 - 通过SQL HINT修改执行请求时的日志级别，比如 `select /*+ log_level("ERROR") */ * from foo;`。这种方式只对当前SQL请求相关的日志有效。
 
@@ -88,11 +88,11 @@ if (OB_FAIL(OB_LOGGER.parse_set(conf_->syslog_level,
 
 ## 如何打印日志
 
-常见的系统会使用C++ stream方式或C fprintf风格打印日志，但是SeekDB略有不同。接下来从示例入手看如何打印日志。
+常见的系统会使用C++ stream方式或C fprintf风格打印日志，但是seekdb略有不同。接下来从示例入手看如何打印日志。
 
 ### 打印日志的例子
 
-与fprintf不一样，SeekDB的系统日志没有formt string，而只有"info"参数，和各个参数信息。比如：
+与fprintf不一样，seekdb的系统日志没有formt string，而只有"info"参数，和各个参数信息。比如：
 
 ```cpp
 LOG_INFO("start stmt", K(ret),
@@ -173,9 +173,9 @@ cflict_txs:[]})
 
 对于开发者来说，我们只需要关心如何输出我们的对象信息。通常我们编写`K(obj)`即可将我们想要的信息输出到日志中。下面介绍一些细节。
 
-SeekDB 为了避免format string的一些错误，使用自动识别类型然后序列化来解决这个问题。日志任意参数中会识别为多个Key Value对，其中Key是要打印的字段名称，Value是字段的值。比如上面的示例中的 `"consistency_level_in_plan_ctx", plan_ctx->get_consistency_level()` ，就是打印了一个字段的名称和值，SeekDB 自动识别 Value 的类型并转换为字符串。
+seekdb 为了避免format string的一些错误，使用自动识别类型然后序列化来解决这个问题。日志任意参数中会识别为多个Key Value对，其中Key是要打印的字段名称，Value是字段的值。比如上面的示例中的 `"consistency_level_in_plan_ctx", plan_ctx->get_consistency_level()` ，就是打印了一个字段的名称和值，seekdb 自动识别 Value 的类型并转换为字符串。
 
-因为大部分日志都是打印对象的某个字段，所以SeekDB提供了一些宏来简化打印日志的操作。最常用的就是 `K`，以上面的例子 `K(ret)`，其展开后在代码中是：
+因为大部分日志都是打印对象的某个字段，所以seekdb提供了一些宏来简化打印日志的操作。最常用的就是 `K`，以上面的例子 `K(ret)`，其展开后在代码中是：
 
 ```cpp
 "ret", ret
@@ -186,7 +186,7 @@ SeekDB 为了避免format string的一些错误，使用自动识别类型然后
 ret=-5595
 ```
 
-SeekDB 还提供了一些其它的宏，在不同的场景下使用不同的宏。
+seekdb 还提供了一些其它的宏，在不同的场景下使用不同的宏。
 
 > 日志参数宏定义可以在 `ob_log_module.h` 文件中找到。
 
@@ -194,7 +194,7 @@ SeekDB 还提供了一些其它的宏，在不同的场景下使用不同的宏�
 | --------------------------- | ---------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | K                           | K(ret)                             | 展开后就是 `"ret", ret`。参数可以是一个简单值，也可以是一个普通对象                                                                                                                                                  |
 | K_                          | K_(consistency_level)              | 展开后是 `"consistency_level", consistency_level_`。与 K 不同的是，会在展开的 Value 后自动增加 `_`后缀，用在类成员变量的打印                                                                                                |
-| KR                          | KR(ret)                            | 展开后是 `"ret", ret, "ret", common::ob_error_name(ret)`。这个宏是为了方便打印错误码与错误码名称。在 SeekDB 中，通常使用 `ret` 作为函数的返回值，而每个返回值会有一个对应的字符串描述。`ob_error_name` 就可以获得错误码对应的字符串描述。注意，这个宏只能用在非lib代码中          |
+| KR                          | KR(ret)                            | 展开后是 `"ret", ret, "ret", common::ob_error_name(ret)`。这个宏是为了方便打印错误码与错误码名称。在 seekdb 中，通常使用 `ret` 作为函数的返回值，而每个返回值会有一个对应的字符串描述。`ob_error_name` 就可以获得错误码对应的字符串描述。注意，这个宏只能用在非lib代码中          |
 | KCSTRING/<br/>KCSTRING_     | KCSTRING(consistency_level_name)   | 展开后是 `"consistency_level_name", consistency_level_name`。这个宏是为了打印 C 格式的字符串。由于`const char *` 类型的变量在C++中未必表示一个字符串，比如一个二进制buffer，那么打印这个变量的值时，当做C字符串来打印输出的话，会遇到访问非法内存的错误，所以增加了这个宏，用来明确表示打印C字符串 |
 | KP/KP_                      | KP(plan)                           | 展开后是 `"plan", plan`，其中 `plan` 是一个指针。这个宏将会打印出某个指针的十六进制值                                                                                                                                    |
 | KPC/KPC_                    | KPC(session)                       | 输入参数是对象指针。如果是NULL时会输出NULL，否则调用指针的to_string方法输出字符串 |
@@ -208,14 +208,14 @@ SeekDB 还提供了一些其它的宏，在不同的场景下使用不同的宏�
 
 ### 值如何转换为字符串
 
-SeekDB 会自动识别日志中想要打印的值的类型，然后将其转换为字符串。比如上面的例子中，`ret` 是一个 `int` 类型的变量，而 `plan_ctx->get_consistency_level()` 返回的是一个 `enum` 类型的变量，这两个变量都会被转换为字符串。
+seekdb 会自动识别日志中想要打印的值的类型，然后将其转换为字符串。比如上面的例子中，`ret` 是一个 `int` 类型的变量，而 `plan_ctx->get_consistency_level()` 返回的是一个 `enum` 类型的变量，这两个变量都会被转换为字符串。
 
-不过由于SeekDB不知道如何将一个普通对象转换为字符串，所以需要用户自己实现一个 `TO_STRING_KV` 函数，来将对象转换为字符串。比如上面的例子中，`snapshot` 是一个 `ObTxReadSnapshot` 类型的对象，这个对象实现了 `TO_STRING_KV` 函数，所以可以直接打印。
+不过由于seekdb不知道如何将一个普通对象转换为字符串，所以需要用户自己实现一个 `TO_STRING_KV` 函数，来将对象转换为字符串。比如上面的例子中，`snapshot` 是一个 `ObTxReadSnapshot` 类型的对象，这个对象实现了 `TO_STRING_KV` 函数，所以可以直接打印。
 
 **普通值转换为字符串**
 
 
-SeekDB 可以自动识别简单类型的值，比如`int`、`int64_t`、`double`、`bool`、`const char *` 等，将其转换为字符串。对于枚举类型，会当做数字来处理。对于指针，将会使用十六进制的方式输出指针值。
+seekdb 可以自动识别简单类型的值，比如`int`、`int64_t`、`double`、`bool`、`const char *` 等，将其转换为字符串。对于枚举类型，会当做数字来处理。对于指针，将会使用十六进制的方式输出指针值。
 
 
 
@@ -245,7 +245,7 @@ class ObTxReadSnapshot {
 
 ### 日志模块
 
-SeekDB 的日志是区分模块的，而且可以支持子模块。比如上面的例子中，`[SQL.EXE]` 就是一个模块，`SQL` 是一个主模块，`EXE` 是一个子模块。日志模块的定义可以参考 `ob_log_module.h` 文件中 `LOG_MOD_BEGIN` 和 `DEFINE_LOG_SUB_MOD` 相关的代码。
+seekdb 的日志是区分模块的，而且可以支持子模块。比如上面的例子中，`[SQL.EXE]` 就是一个模块，`SQL` 是一个主模块，`EXE` 是一个子模块。日志模块的定义可以参考 `ob_log_module.h` 文件中 `LOG_MOD_BEGIN` 和 `DEFINE_LOG_SUB_MOD` 相关的代码。
 
 
 
@@ -261,7 +261,7 @@ SeekDB 的日志是区分模块的，而且可以支持子模块。比如上面�
 **如何明确的指定模块名称？**
 
 
-使用上面的方式确实有些不够灵活，SeekDB 还有另一种方式来指定模块名称，即使用宏 `OB_MOD_LOG` 或 `OB_SUB_MOD_LOG`。这两个宏的使用方法与 `LOG_WARN` 类似，只是多了模块参数与日志级别：
+使用上面的方式确实有些不够灵活，seekdb 还有另一种方式来指定模块名称，即使用宏 `OB_MOD_LOG` 或 `OB_SUB_MOD_LOG`。这两个宏的使用方法与 `LOG_WARN` 类似，只是多了模块参数与日志级别：
 
 ```cpp
 OB_MOD_LOG(parMod, level, info_string, args...)
@@ -269,7 +269,7 @@ OB_SUB_MOD_LOG(parMod, subMod, level, info_string, args...)
 ```
 
 **设置模块的日志级别**
-SeekDB 除了可以设置全局和当前线程的日志级别，还可以调整某个模块的日志级别。当前可以通过 SQL HINT 的方式修改执行请求时的某个模块的日志级别，比如：
+seekdb 除了可以设置全局和当前线程的日志级别，还可以调整某个模块的日志级别。当前可以通过 SQL HINT 的方式修改执行请求时的某个模块的日志级别，比如：
 
 ```sql
 select /*+ log_level("SHARE.SCHEMA:ERROR") */ * from foo;
@@ -279,26 +279,26 @@ select /*+ log_level("SHARE.SCHEMA:ERROR") */ * from foo;
 
 ### 日志时间
 
-SeekDB 的日志时间是当前本地时间的微秒数。
-由于将时间戳转换为字符串是一个相当耗时的事情，SeekDB 将时间戳转换缓存下来以加速该过程，具体可以参考 `ob_fast_localtime` 函数。
+seekdb 的日志时间是当前本地时间的微秒数。
+由于将时间戳转换为字符串是一个相当耗时的事情，seekdb 将时间戳转换缓存下来以加速该过程，具体可以参考 `ob_fast_localtime` 函数。
 
 ### 线程标识
 
 当前会记录两个线程相关的信息：
 
 - 线程号：系统调用 `__NR_gettid` 返回的信息（系统调用比较低效，这个值会缓存下来）；
-- 线程名称：线程名称字段中可能会包含租户ID、线程池类型和线程池中的编号。SeekDB的线程号是通过 `set_thread_name` 函数设置的，还会显示在 `top` 命令中。
+- 线程名称：线程名称字段中可能会包含租户ID、线程池类型和线程池中的编号。seekdb的线程号是通过 `set_thread_name` 函数设置的，还会显示在 `top` 命令中。
 
 > NOTE：线程名称是由创建的线程决定的，由于创建线程的租户可能与此线程后续运行的租户不同，所以线程名称中的租户可能不对。
 
 ### 日志限速
 
-SeekDB 支持两种日志限速：一个普通系统日志磁盘IO带宽限制，一个是WARN系统日志限制。
+seekdb 支持两种日志限速：一个普通系统日志磁盘IO带宽限制，一个是WARN系统日志限制。
 
 
 **系统日志带宽限速**
 
-SeekDB 会按照磁盘带宽来限制日志输出。日志带宽限速不会针对不同的日志级别限速。如果日志限速，可能会打印限速日志，关键字 `REACH SYSLOG RATE LIMIT `。
+seekdb 会按照磁盘带宽来限制日志输出。日志带宽限速不会针对不同的日志级别限速。如果日志限速，可能会打印限速日志，关键字 `REACH SYSLOG RATE LIMIT `。
 
 限速日志示例：
 
@@ -311,7 +311,7 @@ SeekDB 会按照磁盘带宽来限制日志输出。日志带宽限速不会针�
 限速的代码细节请参考 `check_tl_log_limiter` 函数。
 
 **WDIAG 日志限速**
-SeekDB 对WARN级别的日志做了限流，每个错误码每秒钟默认限制输出200条日志。超过限制会输出限流日志，关键字 `Throttled WDIAG logs in last second`。可以通过配置项 `diag_syslog_per_error_limit` 来调整限流阈值。
+seekdb 对WARN级别的日志做了限流，每个错误码每秒钟默认限制输出200条日志。超过限制会输出限流日志，关键字 `Throttled WDIAG logs in last second`。可以通过配置项 `diag_syslog_per_error_limit` 来调整限流阈值。
 
 限流日志示例：
 
@@ -328,7 +328,7 @@ SeekDB 对WARN级别的日志做了限流，每个错误码每秒钟默认限制
 
 ### DBA日志
 
-SeekDB 中还有两类特殊的日志，LOG_DBA_WARN 和 LOG_DBA_ERROR，分别对应了WARN和ERROR日志。由于SeekDB日志量特别大，并且大部分只有研发人员才能理解，为DBA运维排查问题带来了一定的负担，因此增加这两种日志，希望让DBA仅关注少量的这两类日志即可排查系统问题。而使用 LOG_WARN 和 LOG_ERROR 输出的日志被转换成 WDIAG 和 EDIAG 日志，帮助开发人员排查问题。
+seekdb 中还有两类特殊的日志，LOG_DBA_WARN 和 LOG_DBA_ERROR，分别对应了WARN和ERROR日志。由于seekdb日志量特别大，并且大部分只有研发人员才能理解，为DBA运维排查问题带来了一定的负担，因此增加这两种日志，希望让DBA仅关注少量的这两类日志即可排查系统问题。而使用 LOG_WARN 和 LOG_ERROR 输出的日志被转换成 WDIAG 和 EDIAG 日志，帮助开发人员排查问题。
 
 ### 输出提示信息到用户终端
 
@@ -352,7 +352,7 @@ LOG_USER_ERROR 宏定义如下：
 
 ### 健康日志
 
-SeekDB 会周期性的输出一些内部状态信息，比如各模块、租户的内存信息，到日志中，方便查找问题。这种日志通常一条会输出多行数据，比如：
+seekdb 会周期性的输出一些内部状态信息，比如各模块、租户的内存信息，到日志中，方便查找问题。这种日志通常一条会输出多行数据，比如：
 
 ```txt
 [2023-12-26 13:15:58.608131] INFO  [LIB] print_usage (ob_tenant_ctx_allocator.cpp:176) [35582][MemDumpTimer][T0][Y0-0000000000000000-0-0] [lt=116]
@@ -367,4 +367,4 @@ SeekDB 会周期性的输出一些内部状态信息，比如各模块、租户�
 这种数据会查找历史问题很有帮助。
 
 ### ERROR 日志
-对系统出现的一般错误，比如处理某个请求时，出现了异常，会以WARN级别输出日志。只有影响到SeekDB进程正常运行，或者认为有严重问题时，会以ERROR级别输出日志。因此如果遇到进程异常退出，或者无法启动时，搜索ERROR日志会更有效地查找问题原因。
+对系统出现的一般错误，比如处理某个请求时，出现了异常，会以WARN级别输出日志。只有影响到seekdb进程正常运行，或者认为有严重问题时，会以ERROR级别输出日志。因此如果遇到进程异常退出，或者无法启动时，搜索ERROR日志会更有效地查找问题原因。
