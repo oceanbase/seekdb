@@ -52,7 +52,6 @@ WAIT_EVENT_DEF(TMP_FILE_WRITE, 11020, "tmp file write", "schedule_queue_delay", 
 WAIT_EVENT_DEF(TMP_FILE_READ, 11021, "tmp file read", "schedule_queue_delay", "device_delay", "callback_delay", USER_IO, true, true)
 
 // SCHEDULER 12001-12999
-WAIT_EVENT_DEF(OMT_WAIT, 12001, "sched wait", "req type", "req start timestamp", "wait start timestamp", SCHEDULER, true, false)
 WAIT_EVENT_DEF(OMT_IDLE, 12002, "sched idle", "wait start timestamp", "", "", IDLE, true, true)
 
 // NETWORK 13000-13999
@@ -64,9 +63,7 @@ WAIT_EVENT_DEF(NETWORK_QUEUE_WAIT, 13004, "wait in request queue", "pcode", "lev
 
 // APPLICATION 14001-14999
 WAIT_EVENT_DEF(MT_READ_LOCK_WAIT,14001,"memstore read lock wait","lock","waiter","owner",APPLICATION,false, true)
-WAIT_EVENT_DEF(MT_WRITE_LOCK_WAIT,14002,"memstore write lock wait","lock","waiter","owner",APPLICATION,false, false)
 WAIT_EVENT_DEF(ROW_LOCK_WAIT,14003,"row lock wait","lock holder tx id","data seq number","holder lock time",APPLICATION,false, true)
-WAIT_EVENT_DEF(ROW_LOCK_RETRY, 14004, "retry wait because of row lock wait", "lock holder tx id","data seq number","holder lock time", APPLICATION, false , false)
 WAIT_EVENT_DEF(EXPR_FUNC_SLEEP, 14005, "sleep: wait for user calls", "sleep_interval", "", "", APPLICATION, true, true)
 WAIT_EVENT_DEF(TRANS_SET_VIOLATION_RETRY, 14006, "retry: transaction set violation", "max trans id", "data seq number", "holder lock time", APPLICATION, false, true)
 // CONCURRENCY
@@ -75,11 +72,9 @@ WAIT_EVENT_DEF(IO_QUEUE_COND_WAIT, 15066, "io queue condition wait", "address", 
 WAIT_EVENT_DEF(LATCH_WAIT_QUEUE_LOCK_WAIT, 15084, "latch wait queue lock wait", "address", "number", "tries", CONCURRENCY, true, true)
 WAIT_EVENT_DEF(DEFAULT_COND_WAIT, 15101, "default condition wait", "address", "", "", CONCURRENCY, true, true)
 WAIT_EVENT_DEF(DEFAULT_SLEEP, 15102, "sleep wait", "sleep_interval", "", "", IDLE, true, true)
-WAIT_EVENT_DEF(CLOG_WRITER_COND_WAIT, 15103, "clog writer condition wait", "address", "", "", CONCURRENCY, true, false)
 WAIT_EVENT_DEF(IO_CONTROLLER_COND_WAIT, 15104, "io controller condition wait", "address", "", "", CONCURRENCY, true, true)
 WAIT_EVENT_DEF(IO_PROCESSOR_COND_WAIT, 15105, "io processor condition wait", "address", "", "", CONCURRENCY, true, false)
 WAIT_EVENT_DEF(DEDUP_QUEUE_COND_WAIT, 15106, "dedup queue condition wait", "address", "", "", CONCURRENCY, true, true)
-WAIT_EVENT_DEF(SEQ_QUEUE_COND_WAIT, 15107, "seq queue condition wait", "address", "", "", CONCURRENCY, true, false)
 WAIT_EVENT_DEF(INNER_CONNECTION_POOL_COND_WAIT, 15108, "inner connection pool condition wait", "address", "", "", CONCURRENCY, true, true)
 WAIT_EVENT_DEF(PARTITION_TABLE_UPDATER_COND_WAIT, 15109, "partition table updater condition wait", "address", "", "", CONCURRENCY, true, true)
 WAIT_EVENT_DEF(REBALANCE_TASK_MGR_COND_WAIT, 15110, "rebalance task mgr condition wait", "address", "", "", CONCURRENCY, true, true)
@@ -88,8 +83,6 @@ WAIT_EVENT_DEF(THREAD_IDLING_COND_WAIT, 15112, "thread idling condition wait", "
 WAIT_EVENT_DEF(RPC_SESSION_HANDLER_COND_WAIT, 15113, "rpc session handler condition wait", "address", "", "", CONCURRENCY, true, true)
 WAIT_EVENT_DEF(LOCATION_CACHE_COND_WAIT, 15114, "location cache condition wait", "address", "", "", CONCURRENCY, true, true)
 WAIT_EVENT_DEF(REENTRANT_THREAD_COND_WAIT, 15115, "reentrant thread condition wait", "address", "", "", CONCURRENCY, true, true)
-WAIT_EVENT_DEF(MAJOR_FREEZE_COND_WAIT, 15116, "major freeze condition wait", "address", "", "", CONCURRENCY, true, false)
-WAIT_EVENT_DEF(MINOR_FREEZE_COND_WAIT, 15117, "minor freeze condition wait", "address", "", "", CONCURRENCY, true, false)
 WAIT_EVENT_DEF(TH_WORKER_COND_WAIT, 15118, "th worker condition wait", "address", "", "", CONCURRENCY, true, true)
 WAIT_EVENT_DEF(DEBUG_SYNC_COND_WAIT, 15119, "debug sync condition wait", "address", "", "", CONCURRENCY, true, true)
 WAIT_EVENT_DEF(EMPTY_SERVER_CHECK_COND_WAIT, 15120, "empty server check condition wait", "address", "", "", CONCURRENCY, true, true)
@@ -104,7 +97,6 @@ WAIT_EVENT_DEF(LS_BACKUP_CTX_COND_WAIT, 15155, "ls backup ctx condition wait", "
 WAIT_EVENT_DEF(SSTABLE_META_BACKUP_READER_COND_WAIT, 15156, "sstable meta backup reader condition wait", "address", "", "", CONCURRENCY, true, true)
 WAIT_EVENT_DEF(BACKUP_MACRO_BLOCK_TASK_COND_WAIT, 15157, "backup macro blcok task condition wait", "address", "", "", CONCURRENCY, true, true)
 WAIT_EVENT_DEF(BACKUP_TASK_SCHEDULER_COND_WAIT, 15158, "backup scheduler condition wait", "address", "", "", CONCURRENCY, true, true)
-WAIT_EVENT_DEF(SLOG_CKPT_LOCK_WAIT, 15185, "slog checkpoint lock wait", "address", "", "", CONCURRENCY, true, false)
 WAIT_EVENT_DEF(BACKUP_DATA_SERVICE_COND_WAIT, 15248, "backup data service condition wait", "address", "", "", CONCURRENCY, true, true)
 WAIT_EVENT_DEF(BACKUP_CLEAN_SERVICE_COND_WAIT, 15249, "backup clean service condition wait", "address", "", "", CONCURRENCY, true, true)
 WAIT_EVENT_DEF(BACKUP_ARCHIVE_SERVICE_COND_WAIT, 15250, "backup archive service condition wait", "address", "", "", CONCURRENCY, true, true)
@@ -112,19 +104,10 @@ WAIT_EVENT_DEF(SQL_WF_PARTICIPATOR_COND_WAIT, 15256, "window function participat
 WAIT_EVENT_DEF(HA_SERVICE_COND_WAIT, 15159, "ha service condition wait", "address", "", "", CONCURRENCY, false, true)
 WAIT_EVENT_DEF(PX_LOOP_COND_WAIT, 15160, "px loop condition wait", "address", "", "", NETWORK, true, true)
 WAIT_EVENT_DEF(SQL_SHARED_HJ_COND_WAIT, 15165, "shared hash join cond wait", "address", "", "", CONCURRENCY, true, true)
-WAIT_EVENT_DEF(TENANT_IO_POOL_WAIT, 15261, "rwlock: tenant io pool wait", "address", "number", "tries", CONCURRENCY, true, false)
-WAIT_EVENT_DEF(DISPLAY_TASKS_LOCK_WAIT, 15262, "latch: display tasks lock wait", "address", "number", "tries", CONCURRENCY, true, false)
 WAIT_EVENT_DEF(RESOURCE_SERVICE_LOCK_WAIT, 15263, "latch: resource_service lock wait", "address", "number", "tries", CONCURRENCY, true, true)
-WAIT_EVENT_DEF(RESOURCE_SERVICE_SWITCH_LOCK_WAIT, 15264, "latch:resource_service switch lock wait", "address", "number", "tries", CONCURRENCY, true, true)
 WAIT_EVENT_DEF(COLUMN_STORE_DDL_RESCAN_LOCK_WAIT, 15265, "latch: column store ddl rescan lock wait", "address", "number", "tries", CONCURRENCY, true, true)
 WAIT_EVENT_DEF(TABLET_DIRECT_LOAD_MGR_SCHEMA_WAIT, 15266, "latch: tablet direct load mgr schema wait", "address", "number", "tries", CONCURRENCY, true, true)
 WAIT_EVENT_DEF(TENANT_SNAPSHOT_SERVICE_COND_WAIT, 15267, "tenant snapshot service condition wait", "address", "", "", CONCURRENCY, true, true)
-WAIT_EVENT_DEF(END_TRANS_WAIT, 16001, "wait end trans", "rollback", "trans_hash_value", "participant_count", COMMIT,false, false)
-WAIT_EVENT_DEF(START_STMT_WAIT, 16002, "wait start stmt", "trans_hash_value", "physic_plan_type", "participant_count", CLUSTER, false, false)
-WAIT_EVENT_DEF(END_STMT_WAIT, 16003, "wait end stmt", "rollback", "trans_hash_value", "physic_plan_type", CLUSTER, false, false)
-WAIT_EVENT_DEF(REMOVE_PARTITION_WAIT, 16004, "wait remove partition", "tenant_id", "table_id", "partition_id", ADMINISTRATIVE, false, false)
-WAIT_EVENT_DEF(TABLET_LOCK_WAIT, 16016, "tablet lock wait", "", "", "", CONCURRENCY, true, false)
-WAIT_EVENT_DEF(IND_NAME_CACHE_LOCK_WAIT, 16017, "latch:index name cache lock wait", "address", "number", "tries", CONCURRENCY, true, false)
 WAIT_EVENT_DEF(ASYNC_COMMITTING_WAIT, 16018, "tx commiting wait", "", "", "", COMMIT, false, true)
 WAIT_EVENT_DEF(OBCDC_PART_MGR_SCHEMA_VERSION_WAIT, 18000, "oblog part mgr schema version wait", "", "", "", CONCURRENCY, true, true)
 WAIT_EVENT_DEF(BACKUP_TMP_FILE_WAIT, 18001, "backup tmp file wait", "", "", "", CONCURRENCY, true, true)
@@ -153,8 +136,6 @@ WAIT_EVENT_DEF(STORAGE_HA_FINISH_TRANSFER, 20006, "sleep: finish transfer sleep 
 
 // logsergice
 WAIT_EVENT_DEF(LOG_EXTERNAL_STORAGE_IO_TASK_WAIT, 20007, "latch: log external storage io task wait", "", "", "", SYSTEM_IO, true, true)
-WAIT_EVENT_DEF(LOG_EXTERNAL_STORAGE_HANDLER_RW_WAIT, 20008, "latch: log external storage handler rw wait", "", "", "", CONCURRENCY, true, false)
-WAIT_EVENT_DEF(LOG_EXTERNAL_STORAGE_HANDLER_WAIT, 20009, "latch: log external storage handler spin wait", "", "", "", CONCURRENCY, true, false)
 WAIT_EVENT_DEF(DH_LOCAL_SYNC_COND_WAIT, 20010, "datahub local sync conditional wait", "address", "", "", CONCURRENCY, true, true)
 WAIT_EVENT_DEF(TRANSFER_HANDLER_COND_WAIT, 20011, "transfer handler condition wait", "address", "", "", CONCURRENCY, true, true)
 
@@ -164,16 +145,6 @@ WAIT_EVENT_DEF(TRANSFER_HANDLER_COND_WAIT, 20011, "transfer handler condition wa
 WAIT_EVENT_DEF(TASK_THROTTLE_SLEEP, 20200, "sleep: periodic task throttle wait", "sleep_interval", "task errcode", "", CONCURRENCY, true, true)
 
 // share storage 21001-21999
-WAIT_EVENT_DEF(ZONE_STORAGE_MANAGER_LOCK_WAIT, 21001, "latch: zone storage manager maintaince lock wait", "address", "number", "tries", CONCURRENCY, true, false)
-WAIT_EVENT_DEF(ZONE_STORAGE_INFO_RW_LOCK_WAIT, 21002, "latch: zone storage infos rw lock wait", "address", "number", "tries", CONCURRENCY, true, false)
-WAIT_EVENT_DEF(DEVICE_MANIFEST_RW_LOCK_WAIT, 21003, "latch: device_manifest rw lock wait", "address", "number", "tries", CONCURRENCY, true, false)
-WAIT_EVENT_DEF(MANIFEST_TASK_LOCK_WAIT, 21004, "latch: manifest task lock wait", "address", "number", "tries", CONCURRENCY, true, false)
-WAIT_EVENT_DEF(OB_DEVICE_CREDENTIAL_MGR_WAIT, 21005, "latch: device credential mgr wait", "address", "number", "tries", CONCURRENCY, true, false)
-WAIT_EVENT_DEF(DISK_SPACE_MANAGER_LOCK_WAIT, 21006, "share storage disk space manager lock wait", "address", "", "", CONCURRENCY, true, false)
-WAIT_EVENT_DEF(TIERED_SUPER_BLOCK_LOCK_WAIT, 21007, "latch: tiered super block wait", "address", "number", "tries", CONCURRENCY, true, false)
-WAIT_EVENT_DEF(TSLOG_PROCESSING_MUTEX_WAIT, 21008, "latch: tslog processing mutex wait", "address", "number", "tries", CONCURRENCY, true, false)
-WAIT_EVENT_DEF(TSLOG_CKPT_LOCK_WAIT, 21009, "tslog checkpoint lock wait", "address", "", "", CONCURRENCY, true, false)
-WAIT_EVENT_DEF(FILE_MANAGER_LOCK_WAIT, 21010, "file manager lock wait", "address", "", "", CONCURRENCY, true, false)
 WAIT_EVENT_DEF(TIERED_BLOCK_WRITE_REMOTE, 21011, "tiered block write remote", "address", "", "", CONCURRENCY, true, true)
 WAIT_EVENT_DEF(TIERED_BLOCK_WRITE_LOCAL, 21012, "tiered block write local", "address", "", "", CONCURRENCY, true, true)
 WAIT_EVENT_DEF(TIERED_BLOCK_READ_REMOTE, 21013, "tiered block read remote", "address", "", "", CONCURRENCY, true, true)
