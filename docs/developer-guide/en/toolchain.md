@@ -1,6 +1,6 @@
 # Install toolchain
 
-To build OceanBase SeekDB from source code, you need to install the C++ toolchain in your development environment first. If the C++ toolchain is not installed yet, you can follow the instructions in this document for installation.
+To build OceanBase seekdb from source code, you need to install the C++ toolchain in your development environment first. If the C++ toolchain is not installed yet, you can follow the instructions in this document for installation.
 
 ## Supported OS
 
@@ -24,7 +24,7 @@ Below is the OS compatibility list:
 
 > **Note**:
 >
-> Other Linux distributions _may_ work. If you verify that OceanBase SeekDB can compile and deploy on a distribution except ones listed above, feel free to submit a pull request to add it.
+> Other Linux distributions _may_ work. If you verify that OceanBase seekdb can compile and deploy on a distribution except ones listed above, feel free to submit a pull request to add it.
 
 ## Installation
 

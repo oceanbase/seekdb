@@ -2,11 +2,11 @@
 title: System Log
 ---
 
-# OceanBase SeekDB System Log Introduction
+# OceanBase seekdb System Log Introduction
 
 ## Introduction
 
-This document mainly introduces the system logs of Oceanbase SeekDB, including the classification and level of the log, how to output logs in the program, and the details of some log implementation.
+This document mainly introduces the system logs of Oceanbase seekdb, including the classification and level of the log, how to output logs in the program, and the details of some log implementation.
 
 
 ## System Log Introduction
@@ -38,14 +38,14 @@ There are 7 parameters related to syslog, which are dynamically effective, that 
 
 ## Log File Recycle
 
-SeekDB's log can be configured with the upper limit of the number of files to prevent the log file from occupying too much disk space.
+seekdb's log can be configured with the upper limit of the number of files to prevent the log file from occupying too much disk space.
 
-If `enable_syslog_recycle = true` and `max_syslog_file_count > 0`, the number of each type log files can not exceed `max_syslog_file_count`. SeekDB will detect and delete old log files periodically.
+If `enable_syslog_recycle = true` and `max_syslog_file_count > 0`, the number of each type log files can not exceed `max_syslog_file_count`. seekdb will detect and delete old log files periodically.
 
 The new log files will print a special log at the beginning. The information contains the IP and ports of the current node, version number, and some system information. Refer to `ObLogger::log_new_file_info` for more details.
 
 ```
-[2023-12-26 13:15:58.612579] INFO  New syslog file info: [address: "127.0.0.1:2882", observer version: OceanBase SeekDB 1.0.0.0, revision: 101010012023111012-2f6924cd5a576f09d6e7f212fac83f1a15ff531a, sysname: Linux, os release: 3.10.0-327.ali2019.alios7.x86_64, machine: x86_64, tz GMT offset: 08:00]
+[2023-12-26 13:15:58.612579] INFO  New syslog file info: [address: "127.0.0.1:2882", observer version: OceanBase seekdb 1.0.0.0, revision: 101010012023111012-2f6924cd5a576f09d6e7f212fac83f1a15ff531a, sysname: Linux, os release: 3.10.0-327.ali2019.alios7.x86_64, machine: x86_64, tz GMT offset: 08:00]
 ```
 
 ## Log Level
@@ -69,7 +69,7 @@ Similar to the common system, Oceanbase also provides log macro to print differe
 
 There are three ways to adjust the log level:
 
-- When the SeekDB process starts, it reads the log level config from configuration file or command line parameters. The configuration item name is `syslog_level`;
+- When the seekdb process starts, it reads the log level config from configuration file or command line parameters. The configuration item name is `syslog_level`;
 - After startup, you can also connect through the MySQL client and execute the SQL command `alter system set syslog_level='DEBUG'`;
 - Modify the log level when the request is executed through the SQL Hint. For example `select /*+ log_level("ERROR") */ * from foo;`. This method is only effective for the current SQL request related logs.
 
@@ -170,9 +170,9 @@ A log mainly contains the following parts:
 
 For developers, we only need to care about how to output our object information. Usually we write `K(obj)` to output the information we want in the log. Below are some details。
 
-In order to avoid some errors in format string, SeekDB uses automatic recognition of types and then serialization to solve this problem. Any parameter in the log will be identified as multiple Key Value pairs, where Key is the name of the field to be printed and Value is the value of the field. For example, `"consistency_level_in_plan_ctx", plan_ctx->get_consistency_level()` in the above example prints the name and value of a field. SeekDB automatically recognizes the type of Value and converts it to a string. The final output in the log may be "consistency_level_in_plan_ctx=3".
+In order to avoid some errors in format string, seekdb uses automatic recognition of types and then serialization to solve this problem. Any parameter in the log will be identified as multiple Key Value pairs, where Key is the name of the field to be printed and Value is the value of the field. For example, `"consistency_level_in_plan_ctx", plan_ctx->get_consistency_level()` in the above example prints the name and value of a field. seekdb automatically recognizes the type of Value and converts it to a string. The final output in the log may be "consistency_level_in_plan_ctx=3".
 
-Because most logs print the original name and value of the specified object, SeekDB provides some macros to simplify the operation of printing logs. The most commonly used one is `K`. Taking the above example `K(ret)`, its expansion in the code is:
+Because most logs print the original name and value of the specified object, seekdb provides some macros to simplify the operation of printing logs. The most commonly used one is `K`. Taking the above example `K(ret)`, its expansion in the code is:
 
 ```cpp
 "ret", ret
@@ -183,7 +183,7 @@ The final information in the log is:
 ret=-5595
 ```
 
-SeekDB also provides some other macros, which are used in different scenarios.
+seekdb also provides some other macros, which are used in different scenarios.
 
 > Log parameter macro definitions can be found in the `ob_log_module.h` file.
 
@@ -191,7 +191,7 @@ SeekDB also provides some other macros, which are used in different scenarios.
 | ------ | --------------- | ----------- |
 | K | K(ret) | After expansion, it is `"ret", ret`. The parameter can be a simple value or an ordinary object |
 | K_      | K_(consistency_level)   | After expansion, it is `"consistency_level", consistency_level_`. Different from K, the `_` suffix will be automatically added after the expanded Value, which is used for printing class member variables. |
-| KR                          | KR(ret)                            | After expansion, it is `"ret", ret, "ret", common::ob_error_name(ret)`. This macro is for the convenience of printing error code and error code name. In SeekDB, `ret` is usually used as the return value of a function, and each return value has a corresponding string description. `ob_error_name` can get the string description corresponding to the error code. Note that this macro can only be used in non-lib code |
+| KR                          | KR(ret)                            | After expansion, it is `"ret", ret, "ret", common::ob_error_name(ret)`. This macro is for the convenience of printing error code and error code name. In seekdb, `ret` is usually used as the return value of a function, and each return value has a corresponding string description. `ob_error_name` can get the string description corresponding to the error code. Note that this macro can only be used in non-lib code |
 | KCSTRING/<br/>KCSTRING_     | KCSTRING(consistency_level_name)   | After expansion, it is `"consistency_level_name", consistency_level_name`. This macro is used to print C-formatted strings. Since a variable of type `const char *` does not necessarily represent a string in C++, such as a binary buffer, when printing the value of this variable, if it is printed as a C string, an illegal memory access error will occur, so this macro has been added to explicitly print C strings |
 | KP/KP_                      | KP(plan)  | After expansion, it is `"plan", plan`, where `plan` is a pointer. This macro will print out the hexadecimal value of a pointer  |
 | KPC/KPC_                    | KPC(session)  | The input parameters are object pointers. If it is NULL, "NULL" will be output. Otherwise, the `to_string` method of the pointer will be called to output the string. |
@@ -205,13 +205,13 @@ SeekDB also provides some other macros, which are used in different scenarios.
 
 ### How to Convert Value to String
 
-SeekDB automatically identifies the type of value you want to print in the log and converts it to a string. For example, in the above example, `ret` is an `int` type variable, and `plan_ctx->get_consistency_level()` returns an `enum` type variable. Both variables will be converted to strings.
+seekdb automatically identifies the type of value you want to print in the log and converts it to a string. For example, in the above example, `ret` is an `int` type variable, and `plan_ctx->get_consistency_level()` returns an `enum` type variable. Both variables will be converted to strings.
 
-However, since SeekDB does not know how to convert an ordinary object into a string, the user needs to implement a `TO_STRING_KV` function to convert the object into a string. For example, in the above example, `snapshot` is an object of type `ObTxReadSnapshot`. This object implements the `TO_STRING_KV` function, so it can be printed directly.
+However, since seekdb does not know how to convert an ordinary object into a string, the user needs to implement a `TO_STRING_KV` function to convert the object into a string. For example, in the above example, `snapshot` is an object of type `ObTxReadSnapshot`. This object implements the `TO_STRING_KV` function, so it can be printed directly.
 
 **Convert normal value to string**
 
-SeekDB can automatically identify simple type values, such as `int`, `int64_t`, `double`, `bool`, `const char *`, etc., and convert them into strings. For enumeration types, they will be treated as numbers. For pointers, the pointer value will be output in hexadecimal format.
+seekdb can automatically identify simple type values, such as `int`, `int64_t`, `double`, `bool`, `const char *`, etc., and convert them into strings. For enumeration types, they will be treated as numbers. For pointers, the pointer value will be output in hexadecimal format.
 
 **Convert class object to string**
 
@@ -238,7 +238,7 @@ As you can see, in `TO_STRING_KV`, you can directly use a macro similar to print
 
 ### Log Module
 
-SeekDB's logs are module-specific and can support sub-modules. For example, in the above example, `[SQL.EXE]` is a module, `SQL` is a main module, and `EXE` is a submodule. For the definition of the log module, please refer to the `LOG_MOD_BEGIN` and `DEFINE_LOG_SUB_MOD` related codes in the `ob_log_module.h` file.
+seekdb's logs are module-specific and can support sub-modules. For example, in the above example, `[SQL.EXE]` is a module, `SQL` is a main module, and `EXE` is a submodule. For the definition of the log module, please refer to the `LOG_MOD_BEGIN` and `DEFINE_LOG_SUB_MOD` related codes in the `ob_log_module.h` file.
 
 **How does the log module output to the log?**
 
@@ -249,7 +249,7 @@ Normally, we just use macros like `LOG_WARN` to print logs, and different module
 
 **How to specify module name explicitly?**
 
-The above method is indeed a bit inflexible. SeekDB has another way to specify the module name, which is to use the macro `OB_MOD_LOG` or `OB_SUB_MOD_LOG`. The usage of these two macros is similar to `LOG_WARN`, except that there are additional module parameters and log levels:
+The above method is indeed a bit inflexible. seekdb has another way to specify the module name, which is to use the macro `OB_MOD_LOG` or `OB_SUB_MOD_LOG`. The usage of these two macros is similar to `LOG_WARN`, except that there are additional module parameters and log levels:
 
 ```cpp
 OB_MOD_LOG(parMod, level, info_string, args...)
@@ -258,7 +258,7 @@ OB_SUB_MOD_LOG(parMod, subMod, level, info_string, args...)
 
 **Set the module's log level**
 
-In addition to setting the global and current thread log levels, SeekDB can also adjust the log level of a certain module. Currently, you can use `SQL HINT` to modify the log level of a module when executing a request, for example:
+In addition to setting the global and current thread log levels, seekdb can also adjust the log level of a certain module. Currently, you can use `SQL HINT` to modify the log level of a module when executing a request, for example:
 
 ```sql
 select /*+ log_level("SHARE.SCHEMA:ERROR") */ * from foo;
@@ -268,26 +268,26 @@ Where `SHARE` is the main module, `SCHEMA` is the submodule, and `ERROR` is the 
 
 ### Log Time
 
-SeekDB's log time is the number of microseconds in the current local time.
-Since converting a timestamp into a string is a time-consuming task, SeekDB caches the timestamp conversion to speed up the process. For details, please refer to the `ob_fast_localtime` function.
+seekdb's log time is the number of microseconds in the current local time.
+Since converting a timestamp into a string is a time-consuming task, seekdb caches the timestamp conversion to speed up the process. For details, please refer to the `ob_fast_localtime` function.
 
 ### Thread Identifier
 
 Currently, two information related to thread will be recorded:
 
 - Thread ID: the information returned by the system call `__NR_gettid` (the system call is relatively inefficient, and this value will be cached);
-- Thread name: The thread name field may contain the tenant ID, thread pool type, and thread pool index. The thread name of SeekDB is set through the `set_thread_name` function and will also be displayed in the `top` command.
+- Thread name: The thread name field may contain the tenant ID, thread pool type, and thread pool index. The thread name of seekdb is set through the `set_thread_name` function and will also be displayed in the `top` command.
 
 > NOTE：The thread name is determined by the created thread. Since the tenant of the created thread may be different from the tenant of subsequent runs of this thread, the tenant in the thread name may be incorrect.
 
 ### Log Rate Limit
 
-SeekDB supports two log rate limits: a common system log disk IO bandwidth limit and a WDIAG system log limit.
+seekdb supports two log rate limits: a common system log disk IO bandwidth limit and a WDIAG system log limit.
 
 
 **System log bandwidth rate limit**
 
-SeekDB will limit log output according to disk bandwidth. The log bandwidth rate limit does not limit the rate for different log levels. If the log rate is limited, the rate limit log may be printed with the keyword `REACH SYSLOG RATE LIMIT`.
+seekdb will limit log output according to disk bandwidth. The log bandwidth rate limit does not limit the rate for different log levels. If the log rate is limited, the rate limit log may be printed with the keyword `REACH SYSLOG RATE LIMIT`.
 
 Rate limit log example:
 
@@ -301,7 +301,7 @@ Please refer to the `check_tl_log_limiter` function for rate limiting code detai
 
 **WDIAG log rate limit**
 
-SeekDB has implemented a current limit for WARN level logs. Each error code is limited to 200 logs per second by default. If the limit is exceeded, the current limiting log will be output, keyword `Throttled WDIAG logs in last second`. The current limiting threshold can be adjusted through the configuration item `diag_syslog_per_error_limit`.
+seekdb has implemented a current limit for WARN level logs. Each error code is limited to 200 logs per second by default. If the limit is exceeded, the current limiting log will be output, keyword `Throttled WDIAG logs in last second`. The current limiting threshold can be adjusted through the configuration item `diag_syslog_per_error_limit`.
 
 Limiting log example:
 
@@ -316,7 +316,7 @@ Limiting code reference `ObSyslogPerErrLimiter::do_acquire`。
 
 ### Logs for DBA
 
-There are also two types of special logs in SeekDB, LOG_DBA_WARN and LOG_DBA_ERROR, which correspond to WARN and ERROR logs respectively. Since the volume of SeekDB logs is extremely large, and most of them can only be understood by R&D personnel, it brings a certain burden to DBA operation and maintenance troubleshooting problems. Therefore, these two types of logs are added, hoping that the DBA can only focus on a small amount of these two types of logs to troubleshoot system problems. The logs output using LOG_WARN and LOG_ERROR are converted into WDIAG and EDIAG logs to help developers troubleshoot problems.
+There are also two types of special logs in seekdb, LOG_DBA_WARN and LOG_DBA_ERROR, which correspond to WARN and ERROR logs respectively. Since the volume of seekdb logs is extremely large, and most of them can only be understood by R&D personnel, it brings a certain burden to DBA operation and maintenance troubleshooting problems. Therefore, these two types of logs are added, hoping that the DBA can only focus on a small amount of these two types of logs to troubleshoot system problems. The logs output using LOG_WARN and LOG_ERROR are converted into WDIAG and EDIAG logs to help developers troubleshoot problems.
 
 ### Output Prompt Information to the User Terminal
 
@@ -340,7 +340,7 @@ Since `LOG_USER_XXX` provides fixed error information, if we want to output some
 
 ### Health Log
 
-SeekDB will periodically output some internal status information, such as the memory information of each module and tenant, to the log to facilitate problem finding. This kind of log usually outputs multiple lines of data in one log, such as:
+seekdb will periodically output some internal status information, such as the memory information of each module and tenant, to the log to facilitate problem finding. This kind of log usually outputs multiple lines of data in one log, such as:
 
 ```txt
 [2023-12-26 13:15:58.608131] INFO  [LIB] print_usage (ob_tenant_ctx_allocator.cpp:176) [35582][MemDumpTimer][T0][Y0-0000000000000000-0-0] [lt=116]
@@ -355,4 +355,4 @@ SeekDB will periodically output some internal status information, such as the me
 This kind of data can be helpful for finding historical issues.
 
 ### ERROR Log
-For general errors that occur in the system, such as an exception when processing a certain request, logs will be output at WARN level. Only when the normal operation of the SeekDB process is affected, or if there is a serious problem, the log will be output at the ERROR level. Therefore, if a process exits abnormally or cannot be started, searching the ERROR log will more effectively find the cause of the problem.
+For general errors that occur in the system, such as an exception when processing a certain request, logs will be output at WARN level. Only when the normal operation of the seekdb process is affected, or if there is a serious problem, the log will be output at the ERROR level. Therefore, if a process exits abnormally or cannot be started, searching the ERROR log will more effectively find the cause of the problem.

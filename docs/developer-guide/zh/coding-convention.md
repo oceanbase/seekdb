@@ -2,13 +2,13 @@
 title: 编程惯例
 ---
 
-OceanBase SeekDB 编程惯例
+OceanBase seekdb 编程惯例
 
-OceanBase SeekDB 是一个发展了十几年的、包含几百万行C++代码的巨型工程，它已经有了很多自己特有的编程习惯，这里介绍一些首次接触SeekDB源码同学一些需要注意的事项，也可以让大家更方便的阅读SeekDB源码。更详细的内容可以参考[OceanBase SeekDB C++编程规范](coding_standard.md)。
+OceanBase seekdb 是一个基于发展了十几年的、包含几百万行C++代码的巨型工程 OceanBase 演化而来，它已经有了很多自己特有的编程习惯，这里介绍一些首次接触seekdb源码同学一些需要注意的事项，也可以让大家更方便的阅读seekdb源码。更详细的内容可以参考[OceanBase seekdb C++编程规范](coding-standard.md)。
 
 # 命名习惯
 ## 文件命名
-SeekDB中代码文件名都以`ob_`开头。但也有一些陈旧的例外文件。
+seekdb中代码文件名都以`ob_`开头。但也有一些陈旧的例外文件。
 
 ## 类命名
 类都以`Ob`开头，也有一些陈旧类的意外。
@@ -18,10 +18,10 @@ SeekDB中代码文件名都以`ob_`开头。但也有一些陈旧的例外文件
 
 # 函数编程习惯
 ## 禁止使用STL容器
-由于SeekDB支持多租户资源隔离，为了方便控制内存，SeekDB禁止使用STL、boost等容器。同时，SeekDB提供了自己实现的容器，比如 `ObSEArray` 等。
+由于seekdb支持多租户资源隔离，为了方便控制内存，seekdb禁止使用STL、boost等容器。同时，seekdb提供了自己实现的容器，比如 `ObSEArray` 等。
 
 ## 单入口单出口
-强制要求所有函数在末尾返回，禁止中途调用return、goto、exit等全局跳转指令。这一条也是所有首次接触SeekDB代码的人最迷惑的地方。
+强制要求所有函数在末尾返回，禁止中途调用return、goto、exit等全局跳转指令。这一条也是所有首次接触seekdb代码的人最迷惑的地方。
 为了实现这一要求，代码中会出现很多 `if/else if` ，并且在 `for` 循环中存在 `OB_SUCC(ret)` 等多个不那么直观的条件判断。同时为了减少嵌套，会使用宏 `FALSE_IT` 执行某些语句。比如
 
 ```cpp
@@ -74,7 +74,7 @@ int64_t get_capacity();
 或者类似的简单判断的函数不需要返回int错误码。
 
 ## 需要判断所有函数值与函数参数有效性
-SeekDB 要求只要函数有返回值，就必须对返回值做检测，做到“能检就检”。对于函数参数，特别是指针，在使用前都必须检查其有效性。
+seekdb 要求只要函数有返回值，就必须对返回值做检测，做到“能检就检”。对于函数参数，特别是指针，在使用前都必须检查其有效性。
 比如：
 ```cpp
 int ObDDLServerClient::abort_redef_table(const obrpc::ObAbortRedefTableArg &arg, sql::ObSQLSessionInfo *session)
@@ -97,10 +97,10 @@ int ObDDLServerClient::abort_redef_table(const obrpc::ObAbortRedefTableArg &arg,
 
 # 一些约定函数接口
 ## init/destroy
-SeekDB 要求在构造函数中，仅实现一些非常轻量级的数据初始化工作，比如变量初始化为0，指针初始化为nullptr等。因为构造函数中，不太容易处理一些复杂的异常场景，并且无法给出返回值。SeekDB绝大多数的类都有 init 函数，通常在构造函数之后执行，并且拥有int错误码作为返回值。这里做一些比较复杂的初始化工作。相对应的，通常也会提供destroy函数做资源销毁工作。
+seekdb 要求在构造函数中，仅实现一些非常轻量级的数据初始化工作，比如变量初始化为0，指针初始化为nullptr等。因为构造函数中，不太容易处理一些复杂的异常场景，并且无法给出返回值。seekdb绝大多数的类都有 init 函数，通常在构造函数之后执行，并且拥有int错误码作为返回值。这里做一些比较复杂的初始化工作。相对应的，通常也会提供destroy函数做资源销毁工作。
 
 ## reuse/reset
-内存缓存是提高性能非常有效的手段。SeekDB 很多类都会有reuse/reset接口，以方便某个对象后续重用。reuse 通常表示轻量级的清理工作，而reset会做更多的资源清理工作。但是需要看具体实现类，不能一概而论。
+内存缓存是提高性能非常有效的手段。seekdb 很多类都会有reuse/reset接口，以方便某个对象后续重用。reuse 通常表示轻量级的清理工作，而reset会做更多的资源清理工作。但是需要看具体实现类，不能一概而论。
 ## 操作符重载
 C++ 提供了非常方便编写程序的运算符重载功能，但是这些重载往往会带来很多负担，使得代码难以阅读、功能误用。比如运算符重载可能会导致程序员不知情的情况下出现类型隐式转换、或者看起来一个简单的操作却有比较高的开销。
 另外，要尽量避免使用 `operator=` ，尽量以`deep_copy`、`shallow_copy`的方式实现对象的复制。

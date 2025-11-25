@@ -1,8 +1,10 @@
 ---
-name: 🌟 Enhancement
+name: "\U0001F31F Enhancement"
 about: I want to make an enhancement.
-labels: ["type: enhancement"]
 title: "[Enhancement]: "
+labels: 'type: enhancement'
+assignees: ''
+
 ---
 
 **Enhancement**

@@ -18,14 +18,15 @@
     <a href="https://space.bilibili.com/3546900567427713">
         <img height="20"  alt="Static Badge" src="https://img.shields.io/badge/Bilibili-00A1D6?logo=bilibili">
     </a>
+    <a href="https://zread.ai/oceanbase/seekdb" target="_blank"><img src="https://img.shields.io/badge/Ask_Zread-_.svg?style=flat&color=00b0aa&labelColor=000000&logo=data%3Aimage%2Fsvg%2Bxml%3Bbase64%2CPHN2ZyB3aWR0aD0iMTYiIGhlaWdodD0iMTYiIHZpZXdCb3g9IjAgMCAxNiAxNiIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZD0iTTQuOTYxNTYgMS42MDAxSDIuMjQxNTZDMS44ODgxIDEuNjAwMSAxLjYwMTU2IDEuODg2NjQgMS42MDE1NiAyLjI0MDFWNC45NjAxQzEuNjAxNTYgNS4zMTM1NiAxLjg4ODEgNS42MDAxIDIuMjQxNTYgNS42MDAxSDQuOTYxNTZDNS4zMTUwMiA1LjYwMDEgNS42MDE1NiA1LjMxMzU2IDUuNjAxNTYgNC45NjAxVjIuMjQwMUM1LjYwMTU2IDEuODg2NjQgNS4zMTUwMiAxLjYwMDEgNC45NjE1NiAxLjYwMDFaIiBmaWxsPSIjZmZmIi8%2BCjxwYXRoIGQ9Ik00Ljk2MTU2IDEwLjM5OTlIMi4yNDE1NkMxLjg4ODEgMTAuMzk5OSAxLjYwMTU2IDEwLjY4NjQgMS42MDE1NiAxMS4wMzk5VjEzLjc1OTlDMS42MDE1NiAxNC4xMTM0IDEuODg4MSAxNC4zOTk5IDIuMjQxNTYgMTQuMzk5OUg0Ljk2MTU2QzUuMzE1MDIgMTQuMzk5OSA1LjYwMTU2IDE0LjExMzQgNS42MDE1NiAxMy43NTk5VjExLjAzOTlDNS42MDE1NiAxMC42ODY0IDUuMzE1MDIgMTAuMzk5OSA0Ljk2MTU2IDEwLjM5OTlaIiBmaWxsPSIjZmZmIi8%2BCjxwYXRoIGQ9Ik0xMy43NTg0IDEuNjAwMUgxMS4wMzg0QzEwLjY4NSAxLjYwMDEgMTAuMzk4NCAxLjg4NjY0IDEwLjM5ODQgMi4yNDAxVjQuOTYwMUMxMC4zOTg0IDUuMzEzNTYgMTAuNjg1IDUuNjAwMSAxMS4wMzg0IDUuNjAwMUgxMy43NTg0QzE0LjExMTkgNS42MDAxIDE0LjM5ODQgNS4zMTM1NiAxNC4zOTg0IDQuOTYwMVYyLjI0MDFDMTQuMzk4NCAxLjg4NjY0IDE0LjExMTkgMS42MDAxIDEzLjc1ODQgMS42MDAxWiIgZmlsbD0iI2ZmZiIvPgo8cGF0aCBkPSJNNCAxMkwxMiA0TDQgMTJaIiBmaWxsPSIjZmZmIi8%2BCjxwYXRoIGQ9Ik00IDEyTDEyIDQiIHN0cm9rZT0iI2ZmZiIgc3Ryb2tlLXdpZHRoPSIxLjUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPgo8L3N2Zz4K&logoColor=ffffff" alt="zread"/></a>
     <a href="https://ask.oceanbase.com/"  >
         <img height="20" src="https://img.shields.io/badge/Forum-中文社区-FF6900?style=for-the-badge" alt="Forum" />
     </a>
     <a href="https://h5.dingtalk.com/circle/joinCircle.html?corpId=ding320493024256007024f2f5cc6abecb85&token=be84625101d2c2b2b675e1835e5b7988&groupCode=v1,k1,EoWBexMbnAnivFZPFszVivlsxkpAYNcvXRdF071nRRY=&from=group&ext=%7B%22channel%22%3A%22QR_GROUP_NORMAL%22%2C%22extension%22%3A%7B%22groupCode%22%3A%22v1%2Ck1%2CEoWBexMbnAnivFZPFszVivlsxkpAYNcvXRdF071nRRY%3D%22%2C%22groupFrom%22%3A%22group%22%7D%2C%22inviteId%22%3A1057855%2C%22orgId%22%3A313467091%2C%22shareType%22%3A%22GROUP%22%7D&origin=11?#/">
         <img height="20"  src="https://img.shields.io/badge/钉钉群-33254054-0084FF?style=for-the-badge&logo=dingtalk&logoColor=white" alt="钉钉群 33254054" />
     </a>
-    <a href="https://pepy.tech/projects/seekdb">
-        <img height="20" alt="Downloads" src="https://static.pepy.tech/badge/seekdb" />
+    <a href="https://pepy.tech/projects/pylibseekdb">
+        <img height="20" alt="Downloads" src="https://static.pepy.tech/badge/pylibseekdb" />
     </a>
     <a href="https://github.com/oceanbase/seekdb/blob/master/LICENSE">
         <img height="20" alt="License" src="https://img.shields.io/badge/License-Apache_2.0-blue.svg" />
@@ -49,21 +50,22 @@
 
 ## 🔥 为什么选择 OceanBase seekdb？
 
----
-| **特性** | **OceanBase seekdb** | **OceanBase** | **MySQL 9.0** | **Chroma** | **Elasticsearch** | **DuckDB** | **Milvus** | **PostgreSQL**<br/>**+pgvector** |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| **嵌入式数据库** | **✅支持** | ❌ 不支持 | ❌ 不支持（8.0移除） | ✅支持 | ❌ 不支持 | ✅支持 | ✅支持 |  ❌ 不支持 |
-| **单机数据库** | **✅支持** | ✅支持 | ✅支持 | ✅支持 | ✅支持 | ✅支持 | ✅支持 | ✅支持 |
-| **分布式数据库** | ❌ 不支持 | ✅支持 | ❌ 不支持 | ❌ 不支持 | ✅支持 | ❌ 不支持 | ✅支持 | ❌ 不支持 |
-| **MySQL 兼容** | **✅支持** | ✅支持 | ✅支持 | ❌ 不支持 | ❌ 不支持 | ✅支持 | ❌ 不支持 | ❌ 不支持 |
-| **向量搜索** | **✅支持** | ✅支持 | ❌ 不支持 | ✅支持 | ✅支持 | ✅支持 | ✅支持 | ✅支持 |
-| **全文检索** | **✅支持** | ✅支持 | ✅支持 | ✅支持 | ✅支持 | ✅支持 | ⚠️ 有限 | ✅支持 |
-| **混合搜索** | **✅支持** | ✅支持 | ❌ 不支持 | ✅支持 | ✅支持 | ❌ 不支持 | ✅支持 | ⚠️ 有限 |
-| **OLTP** | **✅支持** | **✅支持** | **✅支持** | ❌ 不支持 | ❌ 不支持 | ❌ 不支持 | ❌ 不支持 | **✅支持** |
-| **OLAP** | **✅支持** | ✅支持 | ❌ 不支持 | ❌ 不支持 | ⚠️ 有限 | ✅支持 | ❌ 不支持 | **✅支持** |
-| **开源协议** | Apache 2.0 | MulanPubL 2.0 | GPL 2.0 | Apache 2.0 | AGPLv3<br/>+SSPLv1<br/>+Elastic 2.0 | MIT | Apache 2.0 | PostgreSQL License |
-
----
+| **Feature**              | **seekdb** | **OceanBase** | **Chroma** | **Milvus** | **MySQL&nbsp;9.0**           | **PostgreSQL<br/>+pgvector** | **DuckDB** | **Elasticsearch**                   |
+| ------------------------ |:--------------------:|:-------------:|:----------:|:----------:|:-----------------------:|:----------------------------:|:----------:|:-----------------------------------:|
+| **Embedded**    | ✅                    | ❌             | ✅          | ✅          | ❌<sup>[1]</sup> | ❌                            | ✅          | ❌                                   |
+| **Single-Node** | ✅                    | ✅             | ✅          | ✅          | ✅                       | ✅                            | ✅          | ✅                                   |
+| **Distributed** | ❌                    | ✅             | ❌          | ✅          | ❌                       | ❌                            | ❌          | ✅                                   |
+| **MySQL&nbsp;Compatible**   | ✅                    | ✅             | ❌          | ❌          | ✅                       | ❌                            | ✅          | ❌                                   |
+| **Vector&nbsp;Search**     | ✅                    | ✅             | ✅          | ✅          | ❌                       | ✅                            | ✅          | ✅                                   |
+| **Full-Text&nbsp;Search**    | ✅                    | ✅             | ✅          | ⚠️         | ✅                       | ✅                            | ✅          | ✅                                   |
+| **Hybrid&nbsp;Search** | ✅                    | ✅             | ✅          | ✅          | ❌                       | ⚠️                           | ❌          | ✅                                   |
+| **OLTP**                 | ✅                    | ✅             | ❌          | ❌          | ✅                       | ✅                            | ❌          | ❌                                   |
+| **OLAP**                 | ✅                    | ✅             | ❌          | ❌          | ❌                       | ✅                            | ✅          | ⚠️                                  |
+| **License**  | Apache 2.0           | MulanPubL 2.0 | Apache 2.0 | Apache 2.0 | GPL 2.0                 | PostgreSQL License           | MIT        | AGPLv3<br/>+SSPLv1<br/>+Elastic 2.0 |
+> [1] MySQL 8.0 移除了嵌入式能力
+> - ✅ 支持
+> - ❌ 不支持
+> - ⚠️ 有限支持
 
 ## ✨ 核心特性
 
@@ -134,19 +136,13 @@ rpm -ivh seekdb-1.x.x.x-xxxxxxx.el8.x86_64.rpm
 
 </details>
 
-<details>
-<summary><b>☁️ 云平台</b></summary>
-
-快速体验 OceanBase Cloud——一个高度可扩展的分布式数据库，适用于事务、分析和 AI 工作负载。[立即开始](https://console-cn.oceanbase.com/)
-
-</details>
 
 ### 🎯 AI 搜索示例
 
 在 5 分钟内构建语义搜索系统：
 
 <details>
-<summary><b>🗄️ 🐍 新版 Python SDK</b></summary>
+<summary><b>🗄️ 🐍 Python SDK</b></summary>
 
 ```bash
 # install sdk first
@@ -274,79 +270,18 @@ print(f"\nDeleted collection '{collection_name}'")
 </details>
 
 <details>
-<summary><b>🗄️ 🐍 旧版 Python SDK</b></summary>
-
-```bash
-# install old sdk first, not recommended
-pip install -U pyobvector
-```
-
-```python
-from pyobvector import *
-
-# Don't support Embedded mode
-client = MilvusLikeClient(uri="127.0.0.1:2881", user="test@test")
-
-test_collection_name = "ann_test"
-# define the schema of collection with optional partitions
-range_part = ObRangePartition(False, range_part_infos = [
-    RangeListPartInfo('p0', 100),
-    RangeListPartInfo('p1', 'maxvalue'),
-], range_expr='id')
-schema = client.create_schema(partitions=range_part)
-# define field schema of collection
-schema.add_field(field_name="id", datatype=DataType.INT64, is_primary=True)
-schema.add_field(field_name="embedding", datatype=DataType.FLOAT_VECTOR, dim=3)
-schema.add_field(field_name="meta", datatype=DataType.JSON, nullable=True)
-# define index parameters
-idx_params = client.prepare_index_params()
-idx_params.add_index(
-    field_name='embedding',
-    index_type=VecIndexType.HNSW,
-    index_name='vidx',
-    metric_type="L2",
-    params={"M": 16, "efConstruction": 256},
-)
-# create collection
-client.create_collection(
-    collection_name=test_collection_name,
-    schema=schema,
-    index_params=idx_params,
-)
-
-# insert value
-# prepare data
-vector_value1 = [0.748479, 0.276979, 0.555195]
-vector_value2 = [0, 0, 0]
-data1 = [{'id': i, 'embedding': vector_value1} for i in range(10)]
-data1.extend([{'id': i, 'embedding': vector_value2} for i in range(10, 13)])
-data1.extend([{'id': i, 'embedding': vector_value2} for i in range(111, 113)])
-# insert data
-client.insert(collection_name=test_collection_name, data=data1)
-
-# do search
-res = client.search(collection_name=test_collection_name, data=[0, 0, 0], anns_field='embedding', limit=5, output_fields=['id'])
-# For example, the result will be:
-# [{'id': 112}, {'id': 111}, {'id': 10}, {'id': 11}, {'id': 12}]
-
-```
-更多详情请参考[用户指南](https://github.com/oceanbase/pyobvector)。
-</details>
-
-<details>
 <summary><b>🗄️ SQL</b></summary>
 
 ```sql
 -- Create table with vector column
 CREATE TABLE articles (
-    id INT PRIMARY KEY,
-    title TEXT,
-    content TEXT,
-    embedding VECTOR(384)
-);
-
--- Create vector index for fast similarity search
-CREATE INDEX idx_vector ON articles USING VECTOR (embedding);
+            id INT PRIMARY KEY,
+            title TEXT,
+            content TEXT,
+            embedding VECTOR(384),
+            FULLTEXT INDEX idx_fts(content) WITH PARSER ik,
+            VECTOR INDEX idx_vec (embedding) WITH(DISTANCE=l2, TYPE=hnsw, LIB=vsag)
+        ) ORGANIZATION = HEAP;
 
 -- Insert documents with embeddings
 -- Note: Embeddings should be pre-computed using your embedding model
@@ -361,11 +296,11 @@ VALUES
 SELECT
     title,
     content,
-    embedding <-> '[query_embedding]' AS vector_distance,
+    l2_distance(embedding, '[query_embedding]') AS vector_distance,
     MATCH(content) AGAINST('your keywords' IN NATURAL LANGUAGE MODE) AS text_score
 FROM articles
 WHERE MATCH(content) AGAINST('your keywords' IN NATURAL LANGUAGE MODE)
-ORDER BY vector_distance ASC, text_score DESC
+ORDER BY vector_distance APPROXIMATE
 LIMIT 10;
 ```
 
@@ -481,10 +416,14 @@ seekdb 继承了 OceanBase 单机存储引擎、执行引擎、事务引擎、�
 git clone https://github.com/oceanbase/seekdb.git
 cd seekdb
 bash build.sh debug --init --make
-./debug/observer
+mkdir ~/seekdb
+mkdir ~/seekdb/bin
+cp build_debug/src/observer/observer ~/seekdb/bin
+cd ~/seekdb
+./bin/observer
 ```
 
-详细说明请参见[开发者指南](docs/developer-guide/zh/README.md)。
+本例中, 使用 $HOME/seekdb 作为测试目录, 开发者可以酌情使用一个空目录作为测试工作目录, 更多详细说明请参见[开发者指南](docs/developer-guide/zh/README.md)。
 
 ### 贡献
 
