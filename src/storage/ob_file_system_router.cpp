@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX STORAGE
 #include "ob_file_system_router.h"
 #include "share/ob_io_device_helper.h"
+#include "lib/file/file_directory_utils.h"
 
 namespace oceanbase {
 using namespace common;

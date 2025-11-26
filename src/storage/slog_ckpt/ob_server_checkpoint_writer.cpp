@@ -19,6 +19,7 @@
 #include "storage/slog_ckpt/ob_server_checkpoint_writer.h"
 #include "storage/slog/ob_storage_logger_manager.h"
 #include "observer/omt/ob_tenant_meta.h"
+#include "observer/ob_server_struct.h"
 
 namespace oceanbase
 {

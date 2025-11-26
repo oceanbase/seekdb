@@ -23,7 +23,6 @@
 
 using namespace oceanbase::share;
 using namespace oceanbase::common;
-
 namespace oceanbase
 {
 namespace omt
@@ -89,7 +88,7 @@ int ObAiServiceGuard::check_access_privilege()
   int ret = OB_SUCCESS;
   bool has_priv = false;
 
-  ObSQLSessionInfo *session = nullptr;
+  sql::ObSQLSessionInfo *session = nullptr;
   if (OB_ISNULL(session = THIS_WORKER.get_session())) {
     // system background task thread do not have session, skip check
   } else {

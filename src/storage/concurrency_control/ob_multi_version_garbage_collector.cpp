@@ -19,6 +19,7 @@
 #include "storage/tx/ob_trans_service.h"
 #include "storage/tx/wrs/ob_weak_read_util.h"
 #include "rootserver/mview/ob_mview_maintenance_service.h"
+#include "share/ob_io_device_helper.h"
 
 namespace oceanbase
 {

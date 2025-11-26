@@ -28,6 +28,8 @@
 #include "storage/compaction/ob_ls_compaction_status.h"
 #include "share/ob_tablet_replica_checksum_operator.h"
 #endif
+#include "rootserver/freeze/ob_major_freeze_util.h"
+#include "share/ob_freeze_info_proxy.h"
 
 namespace oceanbase
 {

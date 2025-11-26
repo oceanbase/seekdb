@@ -22,6 +22,7 @@
 #include "storage/ddl/ob_macro_meta_store_manager.h"
 #include "storage/ddl/ob_ddl_pipeline.h"
 #include "storage/ob_storage_schema_util.h"
+#include "storage/ddl/ob_ddl_merge_helper.h"
 
 #define USING_LOG_PREFIX STORAGE
 

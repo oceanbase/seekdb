@@ -221,7 +221,7 @@ int ObAiServiceExecutor::lock_and_fetch_endpoint_version(ObMySQLTransaction &tra
     LOG_WARN("failed to assign sql", KR(ret), K(tenant_id));
   } else {
     SMART_VAR(ObMySQLProxy::MySQLResult, res) {
-      ObMySQLResult *result = NULL;
+      common::sqlclient::ObMySQLResult *result = NULL;
       int tmp_ret = OB_SUCCESS;
       const int64_t idx = 0;
       if (OB_FAIL(trans.read(res, tenant_id, sql.ptr()))) {

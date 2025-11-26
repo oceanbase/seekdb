@@ -47,6 +47,7 @@
 #include "share/vector_index/ob_vector_index_util.h"
 #include "sql/optimizer/ob_log_expand.h"
 #include "share/ob_fts_index_builder_util.h"
+#include "sql/optimizer/ob_log_insert.h"
 
 using namespace oceanbase;
 using namespace sql;
