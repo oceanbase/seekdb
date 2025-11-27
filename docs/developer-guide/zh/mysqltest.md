@@ -1,14 +1,14 @@
 # 使用 obd.sh 运行 mysqltest
 
-要使用 obd.sh 运行 mysqltest 测试，需要通过 obd.sh 部署 OceanBase SeekDB 数据库。本文从编译源代码开始，使用示例介绍如何使用 obd.sh 部署 SeekDB 数据库并运行 mysqltest 测试。
+要使用 obd.sh 运行 mysqltest 测试，需要通过 obd.sh 部署 OceanBase seekdb 数据库。本文从编译源代码开始，使用示例介绍如何使用 obd.sh 部署 seekdb 数据库并运行 mysqltest 测试。
 
 ## 背景
 
-为了简化开发者的操作步骤，降低其理解成本，我们将一些 OBD 命令封装到 obd.sh 脚本中，并将脚本存放在 SeekDB 源代码的 oceanbase/tools/deploy 目录下。本文通过在 OBD 中调用 [obd test mysqltest](https://www.oceanbase.com/docs/community-obd-cn-10000000002048173) 命令，运行 mysqltest 测试。
+为了简化开发者的操作步骤，降低其理解成本，我们将一些 OBD 命令封装到 obd.sh 脚本中，并将脚本存放在 seekdb 源代码的 oceanbase/tools/deploy 目录下。本文通过在 OBD 中调用 [obd test mysqltest](https://www.oceanbase.com/docs/community-obd-cn-10000000002048173) 命令，运行 mysqltest 测试。
 
 ## 相关概念
 
-mysqltest 是SeekDB数据库中的一种准入测试，简单来说，它以编写的 case 文件为输入，将数据库的输出与预期输出进行比较。SeekDB数据库中 mysqltest 测试的 case 都位于 `tools/deploy/mysql_test` 目录下。
+mysqltest 是seekdb数据库中的一种准入测试，简单来说，它以编写的 case 文件为输入，将数据库的输出与预期输出进行比较。seekdb数据库中 mysqltest 测试的 case 都位于 `tools/deploy/mysql_test` 目录下。
 
 `case` 是 mysqltest 的最小执行单元，一个 `case` 至少包含一个 test 文件和一个 result 文件。对 case 进行分类形成 `suite`，`suite` 是 case 的集合。
 

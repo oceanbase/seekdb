@@ -1,15 +1,15 @@
 # 贡献指南
 
-OceanBase SeekDB 社区热情欢迎每一位对数据库技术热爱的开发者，期待携手开启思维碰撞之旅。无论是文档格式调整或文字修正、问题修复还是增加新功能，都是对 OceanBase SeekDB 社区参与和贡献方式之一，立刻开启您的 First Contribution 吧！
+OceanBase seekdb 社区热情欢迎每一位对数据库技术热爱的开发者，期待携手开启思维碰撞之旅。无论是文档格式调整或文字修正、问题修复还是增加新功能，都是对 OceanBase seekdb 社区参与和贡献方式之一，立刻开启您的 First Contribution 吧！
 
 ## 概述
 
-本文档介绍如何为 OceanBase SeekDB 项目做出贡献，包括如何找到合适的 Issue、如何提交代码、如何创建 Pull Request 等。
+本文档介绍如何为 OceanBase seekdb 项目做出贡献，包括如何找到合适的 Issue、如何提交代码、如何创建 Pull Request 等。
 
 ## 相关文档
 
 - [编译与运行](build-and-run.md) - 编译项目
-- [编程惯例](coding-convention.md) - 了解 SeekDB 的编程风格
+- [编程惯例](coding-convention.md) - 了解 seekdb 的编程风格
 - [C++ 编程规范](coding-standard.md) - 详细的编程规范
 - [编写单元测试](unittest.md) - 编写测试代码
 
@@ -109,7 +109,7 @@ git push -u origin $new_branch_name
 
 ### 10. 祝贺成为贡献者
 
-当 pull request 合并后，则所有的 contributing 工作全部完成，恭喜您，您成为 OceanBase SeekDB 贡献者！
+当 pull request 合并后，则所有的 contributing 工作全部完成，恭喜您，您成为 OceanBase seekdb 贡献者！
 
 ## 贡献类型
 
@@ -120,4 +120,4 @@ git push -u origin $new_branch_name
 - **代码审查**：帮助审查其他人的 Pull Request
 - **社区支持**：在 Issue 和讨论区帮助其他开发者
 
-感谢您对 OceanBase SeekDB 项目的贡献！
+感谢您对 OceanBase seekdb 项目的贡献！

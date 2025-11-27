@@ -19,6 +19,7 @@
 #include "share/catalog/ob_catalog_meta_getter.h"
 
 #include "share/catalog/odps/ob_odps_catalog.h"
+#include "src/share/catalog/ob_catalog_properties.h"
 
 namespace oceanbase
 {

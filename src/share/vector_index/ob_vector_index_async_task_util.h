@@ -414,7 +414,7 @@ public:
       const char* tname,
       const bool for_update,
       const ObVecIndexFieldArray& filters,
-      ObLS *ls,
+      storage::ObLS *ls,
       common::ObISQLClient& proxy,
       ObVecIndexTaskStatusArray& result_arr,
       common::ObIAllocator *allocator);

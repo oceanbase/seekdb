@@ -3,7 +3,7 @@ title: Memory Management
 ---
 
 # Introduction
-Memory management is one of the most important modules in any large C++ project. Since OceanBase SeekDB also needs to deal with the issue of multi-tenant memory resource isolation, SeekDB's memory management is more complicated than ordinary C++ projects. Generally, a good memory management module needs to consider the following issues:
+Memory management is one of the most important modules in any large C++ project. Since OceanBase seekdb also needs to deal with the issue of multi-tenant memory resource isolation, seekdb's memory management is more complicated than ordinary C++ projects. Generally, a good memory management module needs to consider the following issues:
 
 - Easy to use. The designed interface must be understood and used by the container, otherwise the code will be difficult to read and maintain, and memory errors will be more likely to occur;
 - Efficient. An efficient memory allocator has a crucial impact on performance, especially in high-concurrency scenarios;
@@ -13,14 +13,14 @@ For the multi-tenant model, the impact of memory management design mainly includ
 - Transparent interface design. How to make developers have no awareness or little need to care about the memory management of different tenants;
 - Efficient and accurate. Sufficient memory must be applied successfully, and tenant memory exhaustion must be detected in time, which is the most basic condition for multi-tenant memory management.
 
-This article will introduce the commonly used memory allocation interfaces and memory management related idioms in SeekDB. For technical details of memory management, please refer to [Memory Management](https://open.oceanbase.com/blog/8501613072)( In Chinese).
+This article will introduce the commonly used memory allocation interfaces and memory management related idioms in seekdb. For technical details of memory management, please refer to [Memory Management](https://open.oceanbase.com/blog/8501613072)( In Chinese).
 
-# Common Interfaces and Methods of OceanBase SeekDB Memory Management
-SeekDB provides different memory allocators for different scenarios. In addition, in order to improve program execution efficiency, there are some conventional implementations, such as reset/reuse, etc.
+# Common Interfaces and Methods of OceanBase seekdb Memory Management
+seekdb provides different memory allocators for different scenarios. In addition, in order to improve program execution efficiency, there are some conventional implementations, such as reset/reuse, etc.
 
 ## ob_malloc
 
-SeekDB has developed a set of libc-style interface functions ob_malloc/ob_free/ob_realloc. This set of interfaces will dynamically apply for memory blocks of size based on tenant_id, ctx_id, label and other attributes, and mark the memory blocks to determine ownership. This not only facilitates multi-tenant resource management, but is also very helpful in diagnosing memory problems.
+seekdb has developed a set of libc-style interface functions ob_malloc/ob_free/ob_realloc. This set of interfaces will dynamically apply for memory blocks of size based on tenant_id, ctx_id, label and other attributes, and mark the memory blocks to determine ownership. This not only facilitates multi-tenant resource management, but is also very helpful in diagnosing memory problems.
 ob_malloc will index to the corresponding ObTenantCtxAllocator based on tenant_id and ctx_id, and ObTenantCtxAllocator will allocate memory according to the current tenant context.
 
 ob_free uses offset operation to find the object allocator corresponding to the memory to be released, and then returns the memory to the memory pool.
@@ -53,13 +53,13 @@ Similar to ob_malloc, OB_NEW provides a set of "C++" interfaces that call the ob
 
 The design feature is to allocate release multiple times and only release once. Only reset or destruction can truly release the memory. The memory allocated before will not have any effect even if `free` is actively called.
 
-ObArenaAllocator is suitable for scenarios where many small memory allocates are released in a short period of time. For example, in a SQL request, many small block memories will be frequently allocated, and the life cycle of these small memories will last for the entire request period. Usually, the processing time of an SQL request is also very short. This memory allocation method is very effective for small memory and avoiding memory leaks. In SeekDB's code, don't be surprised if you see there is only apply for memory but cannot find a place to release it.
+ObArenaAllocator is suitable for scenarios where many small memory allocates are released in a short period of time. For example, in a SQL request, many small block memories will be frequently allocated, and the life cycle of these small memories will last for the entire request period. Usually, the processing time of an SQL request is also very short. This memory allocation method is very effective for small memory and avoiding memory leaks. In seekdb's code, don't be surprised if you see there is only apply for memory but cannot find a place to release it.
 
 > Code reference `page_arena.h`
 
 ## ObMemAttr Introduction
 
-SeekDB uses `ObMemAttr` to mark a section of memory.
+seekdb uses `ObMemAttr` to mark a section of memory.
 
 ```cpp
 struct ObMemAttr
@@ -80,7 +80,7 @@ Memory allocation management perform resource statistics and restrictions based 
 
 **label**
 
-At the beginning, SeekDB uses a predefined method to create memory labels for each module. However, as the amount of code increases, the method of predefined labels is not suitable. Currently, ObLabel is constructed directly using constant strings. When using ob_malloc, you can also directly pass in a constant string as the ObLabel parameter, such as `buf = ob_malloc(disk_addr.size_, "ReadBuf");`.
+At the beginning, seekdb uses a predefined method to create memory labels for each module. However, as the amount of code increases, the method of predefined labels is not suitable. Currently, ObLabel is constructed directly using constant strings. When using ob_malloc, you can also directly pass in a constant string as the ObLabel parameter, such as `buf = ob_malloc(disk_addr.size_, "ReadBuf");`.
 
 **ctx_id**
 
@@ -106,7 +106,7 @@ Currently, two memory allocation priorities are supported, Normal and High. The 
 
 ## init/destroy/reset/reuse
 
-Caching is one of the important methods to improve program performance. Object reuse is also a way of caching. On the one hand, it reduces the frequency of memory allocate and release, and on the other hand, it can reduce some construction and destruction overhead. There is a lot of object reuse in SeekDB, and some conventions have been formed, such as the reset and reuse functions.
+Caching is one of the important methods to improve program performance. Object reuse is also a way of caching. On the one hand, it reduces the frequency of memory allocate and release, and on the other hand, it can reduce some construction and destruction overhead. There is a lot of object reuse in seekdb, and some conventions have been formed, such as the reset and reuse functions.
 
 **reset**
 
@@ -118,7 +118,7 @@ Compared with reset, it is more lightweight. Try not to release some expensive r
 
 **init/destroy**
 
-There are two other common interfaces in SeekDB: `init` and `destroy`. `init` is used to initizalize object and `destory` to release resources. Only do some very lightweight initialization work in the constructor, such as initializing the pointer to `nullptr`.
+There are two other common interfaces in seekdb: `init` and `destroy`. `init` is used to initizalize object and `destory` to release resources. Only do some very lightweight initialization work in the constructor, such as initializing the pointer to `nullptr`.
 
 ## SMART_VAR/HEAP_VAR
 

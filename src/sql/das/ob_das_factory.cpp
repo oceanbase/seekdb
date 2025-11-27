@@ -24,6 +24,7 @@
 #include "sql/das/ob_das_ir_define.h"
 #include "sql/das/ob_das_vec_define.h"
 #include "share/datum/ob_datum_util.h"
+#include "sql/das/ob_das_extra_data.h"
 
 #define STORE_DAS_OBJ(obj_store, das_obj, class_name)       \
   if (OB_SUCC(ret)) {                                       \

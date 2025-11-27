@@ -2,13 +2,13 @@
 
 ## How to Build and Run All Unit Tests
 
-[OceanBase SeekDB](https://github.com/oceanbase/seekdb) has two unittest directories.
+[OceanBase seekdb](https://github.com/oceanbase/seekdb) has two unittest directories.
 
 - `unittest`: These are the main unit test cases, and they test the code in the `src` directory.
 
 - `deps/oblib/unittest`: Test cases for oblib.
 
-First, you should build `unittest`. Enter the `unittest` directory in the build directory and build explicitly. When you build the SeekDB project, it doesn't build the unit tests by default. For example:
+First, you should build `unittest`. Enter the `unittest` directory in the build directory and build explicitly. When you build the seekdb project, it doesn't build the unit tests by default. For example:
 
 ```bash
 bash build.sh --init --make # init and build a debug mode project
@@ -33,9 +33,9 @@ find . -name "test_chunk_row_store"
 
 ## How to Write Unit Tests
 
-As a C++ project, [OceanBase SeekDB](https://github.com/oceanbase/seekdb) uses [Google Test](https://github.com/google/googletest) as the unit test framework.
+As a C++ project, [OceanBase seekdb](https://github.com/oceanbase/seekdb) uses [Google Test](https://github.com/google/googletest) as the unit test framework.
 
-SeekDB uses `test_xxx.cpp` as the unit test file name. Create a `test_xxx.cpp` file and add the file name to the specific `CMakeLists.txt` file.
+seekdb uses `test_xxx.cpp` as the unit test file name. Create a `test_xxx.cpp` file and add the file name to the specific `CMakeLists.txt` file.
 
 In the `test_xxx.cpp` file, add the header file `#include <gtest/gtest.h>` and the main function below.
 

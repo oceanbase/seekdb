@@ -7,7 +7,7 @@ title: Coding Standard
 | 1      | 1.0              |                 | New                 | Nov 7th, 2025 |
 
 # 1 Introduction
-This coding standard is applicable to the OceanBase SeekDB project of Ant Group. It provides some coding constraints and defines coding styles. In the OceanBase SeekDB project, the kernel code must comply with the coding style of this document, the test code is recommended to comply with the coding constraints of this document, and other codes must also comply with the coding constraints and coding style of this document.
+This coding standard is applicable to the OceanBase seekdb project of Ant Group. It provides some coding constraints and defines coding styles. In the OceanBase seekdb project, the kernel code must comply with the coding style of this document, the test code is recommended to comply with the coding constraints of this document, and other codes must also comply with the coding constraints and coding style of this document.
 
 This coding standard is committed to writing C/C++ code that is easy to understand, reduces traps, and has a unified format. Therefore:
 
@@ -336,7 +336,7 @@ b.cpp &bbb=0x400798
 
 Simple variable declarations should be initialized when declared.
 
-OceanBase SeekDB believes that declaring variables at the beginning of each statement block leads to more readable code. Additionally, OceanBase SeekDB allows for code such as `for (int i = 0; i < 10; ++i)` where the variable 'i' is declared at the beginning of the loop statement block. If the declaration and use of a variable are far apart, it indicates that the statement block contains too much code, which often means that the code needs to be refactored.
+OceanBase seekdb believes that declaring variables at the beginning of each statement block leads to more readable code. Additionally, OceanBase seekdb allows for code such as `for (int i = 0; i < 10; ++i)` where the variable 'i' is declared at the beginning of the loop statement block. If the declaration and use of a variable are far apart, it indicates that the statement block contains too much code, which often means that the code needs to be refactored.
 
 Declaring variables inside a loop body can be inefficient, as the constructor and destructor of an object will be called each time the loop iterates, and the variable will need to be pushed and popped from the stack each time. Therefore, it is recommended to extract such variables from the loop body to improve efficiency. **It is prohibited to declare complex variables** (e.g. class variables) inside a loop body, but if it is necessary to do so, approval from the team leader must be obtained, and a detailed comment explaining the reason must be provided. For the sake of code readability, declaring references inside a loop body is allowed.
 
@@ -362,7 +362,7 @@ for(int i = 0; i < N; ++i) {
 }
 ```
 
-In addition, OceanBase SeekDB sets limits on the size of local variables and does not recommend defining excessively large local variables.
+In addition, OceanBase seekdb sets limits on the size of local variables and does not recommend defining excessively large local variables.
 1. The function stack should not exceed 32K.
 2. A single local variable should not exceed 8K.
 
@@ -426,7 +426,7 @@ Before C\+\+11, the C\+\+98 standard only allowed static const variables of inte
 
 **Case 1**
 
-According to the current code style of OceanBase SeekDB, we will define static variables (such as `ob_define.h`) in the header file, so that each cpp file will generate a declaration and definition of this variable when including this header file. In particular, some large objects (latch, wait event, etc.) generate a static definition in the header file, resulting in the generation of binary and memory expansion.
+According to the current code style of OceanBase seekdb, we will define static variables (such as `ob_define.h`) in the header file, so that each cpp file will generate a declaration and definition of this variable when including this header file. In particular, some large objects (latch, wait event, etc.) generate a static definition in the header file, resulting in the generation of binary and memory expansion.
 
 Simply move the definition of several static variables from the header file to the cpp file, and change the header file to extern definition, the effect is quite obvious:
 binary size: 2.6G->2.4G, reduce 200M.
@@ -843,7 +843,7 @@ All inheritance must be `public`, and inheritance must be used with care: use in
 
 When a subclass inherits from a parent class, the subclass contains all the data and operation definitions of the parent class. In C++ practice, inheritance is mainly used in two scenarios: implementation inheritance, where the subclass inherits the implementation code of the parent class; interface inheritance, where the subclass inherits the method name of the parent class. For implementation inheritance, because the code that implements the subclass is extended between the parent class and the subclass, it becomes more difficult to understand its implementation, and it should be used with caution.
 
-Multiple inheritance is also used in OceanBase SeekDB. The scenario is rare, and requires at most one base class to contain implementation, and other base classes are pure interface classes.
+Multiple inheritance is also used in OceanBase seekdb. The scenario is rare, and requires at most one base class to contain implementation, and other base classes are pure interface classes.
 
 ## 4.10 Operator Overloading
 **Except for container classes, custom data types (`ObString`, `ObNumber`, etc.) and a few global basic classes such as `ObRowkey`, `ObObj`, `ObRange`, etc., do not overload operators (except simple structure assignment operations)**. If it must be violated, please discuss and approve it in advance, and explain the reasons in detail.
@@ -1003,7 +1003,7 @@ if (OB_SUCCESS == ret) {  // start a new logic
 }
 ```
 
-In the actual coding process, when should concise writing be used? OceanBase SeekDB believes that when each step of a sequential statement has only one line of statement, and these steps are logically coupled tightly, the concise writing method should be used as much as possible. However, if it logically belongs to multiple sections, each of which does a different thing, then brevity should only be used within each section, not brevity for the sake of brevity.
+In the actual coding process, when should concise writing be used? OceanBase seekdb believes that when each step of a sequential statement has only one line of statement, and these steps are logically coupled tightly, the concise writing method should be used as much as possible. However, if it logically belongs to multiple sections, each of which does a different thing, then brevity should only be used within each section, not brevity for the sake of brevity.
 It should be noted that if the sequential statement is followed by a conditional statement. If sequential statements are reduced to conditional statements, then they cannot be combined into one large conditional statement, but should be separated in code structure. For example:
 
 ```cpp
@@ -1140,7 +1140,7 @@ if (cond1 && cond2) {
 }
 ```
 
-The first writing method is divided into two layers, and the second writing method is divided into one layer. OceanBase SeekDB only allows the first writing method. Of course, `cond1` and `cond2` here are from the perspective of business logic, referring to two independent business logics, rather than saying that `cond1` and `cond2` cannot contain `&&` or `||` operators. For example:
+The first writing method is divided into two layers, and the second writing method is divided into one layer. OceanBase seekdb only allows the first writing method. Of course, `cond1` and `cond2` here are from the perspective of business logic, referring to two independent business logics, rather than saying that `cond1` and `cond2` cannot contain `&&` or `||` operators. For example:
 
 ```cpp
 // Whether app_name is empty, including ||
@@ -1222,7 +1222,7 @@ int ret = do_something(param1, NUM_TIMES, null_callback);
 ## 5.9 Pointer or Reference
 Function parameters can choose pointers or references. Use more references while respecting idioms.
 
-Pointer parameters and reference parameters can often achieve the same effect. Considering that the OceanBase SeekDB coding specification has strict requirements for error judgment, more references are used to reduce some redundant error judgment codes. Provided, of course, that idioms are followed, such as:
+Pointer parameters and reference parameters can often achieve the same effect. Considering that the OceanBase seekdb coding specification has strict requirements for error judgment, more references are used to reduce some redundant error judgment codes. Provided, of course, that idioms are followed, such as:
 
 1. The method of applying for an object often returns a pointer, and the corresponding release method also passes in a pointer.
 2. If the member of the object is a pointer, the corresponding `set_xxx` input is also a pointer.
@@ -1230,7 +1230,7 @@ Pointer parameters and reference parameters can often achieve the same effect. C
 ## 5.10 Function Length
 It is mandatory that a single function does not exceed 120 lines. If it must be violated, please obtain the consent of the group leader in advance, and explain the reasons in detail.
 
-Most open source projects limit the number of lines of a single function. Generally speaking, functions with more than 80 lines are often inappropriate. Considering that OceanBase SeekDB has a lot of redundant error judgment codes, a single function is limited to no more than 120 lines. If the function is too long, consider splitting it into several smaller and more manageable functions, or re-examine the design and modify the structure of the class.
+Most open source projects limit the number of lines of a single function. Generally speaking, functions with more than 80 lines are often inappropriate. Considering that OceanBase seekdb has a lot of redundant error judgment codes, a single function is limited to no more than 120 lines. If the function is too long, consider splitting it into several smaller and more manageable functions, or re-examine the design and modify the structure of the class.
 
 ## 5.11 Summary
 1. **Strictly abide by the single-entry single-exit function. If it must be violated, please obtain the consent of the project leader and project architect in advance, and explain the reasons in detail.**
@@ -1246,20 +1246,20 @@ Most open source projects limit the number of lines of a single function. Genera
 11. It is mandatory that a single function does not exceed 120 lines. If it must be violated, please obtain the consent of the group leader in advance, and explain the reasons in detail.
 
 # 6 C&C++ Features
-The advantage of C++ is flexibility, and the disadvantage is also flexibility. For many functions of C++, OceanBase SeekDB is conservative, and this section describes some of them. There are two principles for choosing these features:
+The advantage of C++ is flexibility, and the disadvantage is also flexibility. For many functions of C++, OceanBase seekdb is conservative, and this section describes some of them. There are two principles for choosing these features:
 1. Principle of caution: This feature is relatively "safe", even for beginners, there are not too many "pitfalls"
-2. Necessity: It has "sufficient" benefits to improve the coding quality of OceanBase SeekDB
+2. Necessity: It has "sufficient" benefits to improve the coding quality of OceanBase seekdb
 
 ## 6.1 Smart Pointers and Resource Guard
 
 Smart pointers are not allowed, allowing automatic release of resources through the Guard class.
-The boost library supports smart pointers, including `scoped_ptr`, `shared_ptr`, and `auto_ptr`. Many people think that smart pointers can be used safely, especially `scoped_ptr`. However, most of OceanBase SeekDB's existing code releases resources manually, and smart pointers are prone to side effects if they are not used well. Therefore, smart pointers are not allowed.
+The boost library supports smart pointers, including `scoped_ptr`, `shared_ptr`, and `auto_ptr`. Many people think that smart pointers can be used safely, especially `scoped_ptr`. However, most of OceanBase seekdb's existing code releases resources manually, and smart pointers are prone to side effects if they are not used well. Therefore, smart pointers are not allowed.
 Users are allowed to write some Guard classes by hand. The methods of these classes will apply for some resources, and these resources will be released automatically when the class is destroyed, such as LockGuard and SessionGuard.
 
 ## 6.2 Memory Allocation and Release
 It is required to use the memory allocator to allocate memory, and immediately set the pointer to NULL after the memory is released.
 
-The methods OceanBase SeekDB can use for memory allocation include `ob_malloc` and various memory allocators. It is required to use the memory allocator to allocate memory, and specify the module it belongs to when allocating. The advantage of this is that it is convenient for the system to manage memory. If there is a memory leak, it is easy to see which module it is. In addition, it is necessary to prevent reference to the memory space that has been released, and it is required to set the pointer to `NULL` immediately after free.
+The methods OceanBase seekdb can use for memory allocation include `ob_malloc` and various memory allocators. It is required to use the memory allocator to allocate memory, and specify the module it belongs to when allocating. The advantage of this is that it is convenient for the system to manage memory. If there is a memory leak, it is easy to see which module it is. In addition, it is necessary to prevent reference to the memory space that has been released, and it is required to set the pointer to `NULL` immediately after free.
 
 ```cpp
 void *ptr = ob_malloc(100, ObModIds::OB_COMMON_ARRAY);
@@ -1276,7 +1276,7 @@ if (NULL != ptr) {
 ## 6.3 String
 The `std::string` class is prohibited, and `ObString` is used instead. In addition, when manipulating C strings, it is required to use length-limited string functions.
 
-C++'s `std::string` class is very convenient to use. The problem is that it is impossible to figure out its internal behavior, such as copying and implicit conversion. OceanBase SeekDB requires the use of `ObString` as much as possible, and the memory used in it needs to be manually managed by developers.
+C++'s `std::string` class is very convenient to use. The problem is that it is impossible to figure out its internal behavior, such as copying and implicit conversion. OceanBase seekdb requires the use of `ObString` as much as possible, and the memory used in it needs to be manually managed by developers.
 
 Sometimes C strings are used. Be careful not to use string manipulation functions with unlimited length, including `strcpy/strcat/strdup/sprintf/strncpy`, but use the corresponding string manipulation functions with limited length `strncat/strndup/snprintf/memcpy`. You can use strlen to get the length of a string. The reason why `strncpy` is not used is that if the incoming buffer is not enough, it will not automatically '\0', and there are performance problems, so it needs to be replaced by `memcpy/snprintf`.
 
@@ -1372,7 +1372,7 @@ The principle of judgment is: in addition to output and serialization, as long a
 ## 6.14 Boost and STL
 **In STL, only algorithm functions defined in the <algorithm> header file are allowed, such as std_sort, and other STL or boost functions are prohibited. If it must be violated, please obtain the consent of the project leader and project architect in advance, and explain the reasons in detail.**
 
-OceanBase SeekDB has a conservative attitude towards libraries like boost and STL, and we believe that writing code correctly is far more important than writing code conveniently. Except for the algorithm class functions defined by STL <algorithm>, other functions should not be used.
+OceanBase seekdb has a conservative attitude towards libraries like boost and STL, and we believe that writing code correctly is far more important than writing code conveniently. Except for the algorithm class functions defined by STL <algorithm>, other functions should not be used.
 
 ## 6.15 auto
 **What is**
@@ -1401,7 +1401,7 @@ for(const auto& kvp : map) {
 ```
 **Is it allowed**
 **Prohibited.**
-This feature is just a syntactic sugar. The `FOREACH` macro defined by ourselves has been widely used in the previous OceanBase SeekDB code, which can achieve similar effects.
+This feature is just a syntactic sugar. The `FOREACH` macro defined by ourselves has been widely used in the previous OceanBase seekdb code, which can achieve similar effects.
 
 ## 6.17 Override and Final
 **What is**
@@ -1430,7 +1430,7 @@ public:
 **Is it allowed**
 **Allow.** `override` and `final` are not only allowed, but strongly recommended, and should be added wherever they can be used.
 
-According to previous experience, the overloading of the virtual function in the OceanBase SeekDB missed the `const`, resulting in endless errors of overloading errors. It is required that in the new code, all overloads must be added with override to avoid this wrong overload situation.
+According to previous experience, the overloading of the virtual function in the OceanBase seekdb missed the `const`, resulting in endless errors of overloading errors. It is required that in the new code, all overloads must be added with override to avoid this wrong overload situation.
 
 In addition to being used for virtual functions, when a class is added with the final keyword, it means that it cannot be further derived, which is conducive to compiler optimization. When such a class has no parent class, the destructor does not need to add virtual.
 
@@ -1479,7 +1479,7 @@ std::for_each(std::begin(arr), std::end(arr), [](int n) {std::cout << n << std::
 ```
 
 **Is it allowed**
-**Prohibited**. This feature is mainly to make STL easier to use, but OceanBase SeekDB prohibits the use of STL containers.
+**Prohibited**. This feature is mainly to make STL easier to use, but OceanBase seekdb prohibits the use of STL containers.
 
 ## 6.21 static_assert and Type Traits
 **What is**
@@ -1512,9 +1512,9 @@ Buffer(Buffer&& temp):
 ```
 **Is it allowed**
 **Prohibited**. Banning it may bring some controversy. Mainly based on the following considerations:
-1. OceanBase SeekDB does not use STL containers, so the optimization of the standard library using move semantics does not bring us benefits.
+1. OceanBase seekdb does not use STL containers, so the optimization of the standard library using move semantics does not bring us benefits.
 2. The semantics of move semantic and rvalue are more complicated, and it is easy to introduce pitfalls
-3. Using it to transform some existing containers of OceanBase SeekDB can indeed improve performance. However, the memory management method of OceanBase SeekDB has made the use of move semantics smaller. In many cases, we have optimized it during implementation, and only store pointers in the container, not large objects.
+3. Using it to transform some existing containers of OceanBase seekdb can indeed improve performance. However, the memory management method of OceanBase seekdb has made the use of move semantics smaller. In many cases, we have optimized it during implementation, and only store pointers in the container, not large objects.
 
 It is recommended to consider other C++11 features after a period of familiarity, when the coding standard is revised next time.
 
@@ -1545,7 +1545,7 @@ X* p = new X{1,2};
 ```
 
 **Is it allowed**
-**Prohibited**. Syntactically more uniform, but again without any significant benefit. At the same time, it will significantly affect the style of OceanBase SeekDB code and affect readability.
+**Prohibited**. Syntactically more uniform, but again without any significant benefit. At the same time, it will significantly affect the style of OceanBase seekdb code and affect readability.
 ## 6.24 Right Angle Brackets
 **What is**
 Fix a common syntax problem in original C. It turns out that when the templates of C-defined templates are nested, the ending >> must be separated by spaces, which is no longer needed.
@@ -1571,7 +1571,7 @@ void func(const Arg1& arg1, const Args&... args)
 }
 ```
 **Is it allowed**
-**Allow**. This is a key feature for template programming. Because there is no variable-length template parameter, some basic libraries of OceanBase SeekDB, such as `to_string`, `to_yson`, RPC framework, log library, etc., need to be implemented with some tricks and macros. And more type safe.
+**Allow**. This is a key feature for template programming. Because there is no variable-length template parameter, some basic libraries of OceanBase seekdb, such as `to_string`, `to_yson`, RPC framework, log library, etc., need to be implemented with some tricks and macros. And more type safe.
 
 ## 6.26 Unrestricted Unions
 **What is**
@@ -1593,7 +1593,7 @@ union_{
 };
 ```
 **Is it allowed**
-**Allow**. There are many places in the OceanBase SeekDB code that have to define redundant domains because of this limitation, or use tricky methods to bypass (define char array placeholders). See `sql::ObPostExprItem` for a miserable example.
+**Allow**. There are many places in the OceanBase seekdb code that have to define redundant domains because of this limitation, or use tricky methods to bypass (define char array placeholders). See `sql::ObPostExprItem` for a miserable example.
 
 ## 6.27 Explicitly Defaulted and Deleted Special Member Functions
 **What is**
@@ -1612,7 +1612,7 @@ struct NoInt {
 ```
 
 **Is it allowed**
-**Allowed**. This feature is like tailor-made for OceanBase SeekDB; the function of disabling a certain function is also very useful.
+**Allowed**. This feature is like tailor-made for OceanBase seekdb; the function of disabling a certain function is also very useful.
 ## 6.28 Type Alias (Alias Declaration)
 **What is**
 Use the new alias declaration syntax to define an alias of a type, similar to the previous typedef; moreover, you can also define an alias template.
@@ -2281,7 +2281,7 @@ For functions that have not been implemented or are not perfectly implemented, s
 2. In order to ensure that a thread will not be busy waiting in an infinite loop when exiting, the loop generally needs to judge the stop flag.
 ## 10.2 pthread_key
 1. There are only 1024 `pthread_key` at most, and this limit cannot be increased, so special attention should be paid when using it.
-2. If you want to use a large number of thread-local variables, it is recommended to use the thread number as an array subscript to obtain a thread-private variable. An `itid()` function is encapsulated in the OceanBase SeekDB to obtain continuously increasing thread numbers.
+2. If you want to use a large number of thread-local variables, it is recommended to use the thread number as an array subscript to obtain a thread-private variable. An `itid()` function is encapsulated in the OceanBase seekdb to obtain continuously increasing thread numbers.
 
 ```cpp
 void *get_thread_local_variable()

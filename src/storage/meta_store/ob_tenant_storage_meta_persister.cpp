@@ -22,6 +22,9 @@
 #include "observer/omt/ob_tenant.h"
 #ifdef OB_BUILD_SHARED_STORAGE
 #endif
+#include "storage/slog/ob_storage_logger.h"
+#include "storage/slog/ob_storage_log_replayer.h"
+#include "storage/slog_ckpt/ob_tenant_checkpoint_slog_handler.h"
 
 namespace oceanbase
 {

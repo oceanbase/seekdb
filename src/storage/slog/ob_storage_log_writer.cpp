@@ -21,6 +21,7 @@
 #include "storage/slog/ob_storage_log_item.h"
 #include "storage/slog/ob_storage_log_replayer.h"
 #include "storage/slog/ob_storage_log_writer.h"
+#include "share/ob_thread_mgr.h"
 
 namespace oceanbase
 {

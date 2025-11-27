@@ -24,6 +24,7 @@
 #ifdef OB_BUILD_SHARED_STORAGE
 #include "share/io/ob_ss_io_request.h"
 #endif
+#include "share/ob_io_device_helper.h"
 
 using namespace oceanbase::lib;
 using namespace oceanbase::common;

@@ -1,23 +1,23 @@
 # Running mysqltest by obd.sh
 
-When using obd.sh to run the mysqltest test, you need to use the OceanBase SeekDB database deployed through obd.sh. This article uses examples to introduce how to use obd.sh to deploy the SeekDB database and run the mysqltest test starting from compiling the source code.
+When using obd.sh to run the mysqltest test, you need to use the OceanBase seekdb database deployed through obd.sh. This article uses examples to introduce how to use obd.sh to deploy the seekdb database and run the mysqltest test starting from compiling the source code.
 
 ## Background
 
-In order to simplify the operating steps for developers and reduce their understanding costs, we encapsulate some OBD commands into the obd.sh script and store the script in the oceanbase/tools/deploy directory of the SeekDB source code. This article runs the mysqltest test by calling the [obd test mysqltest](https://www.oceanbase.com/docs/community-obd-cn-10000000002048173) commands in OBD.
+In order to simplify the operating steps for developers and reduce their understanding costs, we encapsulate some OBD commands into the obd.sh script and store the script in the oceanbase/tools/deploy directory of the seekdb source code. This article runs the mysqltest test by calling the [obd test mysqltest](https://www.oceanbase.com/docs/community-obd-cn-10000000002048173) commands in OBD.
 
 ## Concepts
 
-mysqltest is a test in the SeekDB database access test. Simply put, it takes the written case file as input and compares the output of the database with the expected output. The cases tested by mysqltest in the SeekDB database are all located in the `tools/deploy/mysqltest` directory of the SeekDB source code.
+mysqltest is a test in the seekdb database access test. Simply put, it takes the written case file as input and compares the output of the database with the expected output. The cases tested by mysqltest in the seekdb database are all located in the `tools/deploy/mysqltest` directory of the seekdb source code.
 
 `case` is the smallest execution unit of mysqltest. A `case` contains at least one test file and one result file. Classifying cases forms a `suite`, and a `suite` is a collection of cases.
 
 
 ## Steps
 
-### Step 1: Compile OceanBase SeekDB database from source code
+### Step 1: Compile OceanBase seekdb database from source code
 
-Please refer to [build-and-run](./build-and-run.md) to compile the SeekDB database from source code.
+Please refer to [build-and-run](./build-and-run.md) to compile the seekdb database from source code.
 
 ### Step 2: Run mysqltest test
 

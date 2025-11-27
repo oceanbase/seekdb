@@ -23,6 +23,7 @@
 #ifdef OB_BUILD_SHARED_STORAGE
 #include "storage/shared_storage/ob_file_manager.h"
 #endif
+#include "share/ob_io_device_helper.h"
 
 using namespace oceanbase::lib;
 using namespace oceanbase::common;

@@ -1,19 +1,19 @@
 # 安装工具链
 
-在编译 OceanBase SeekDB 源码之前，需要先在开发环境中安装 C++ 工具链。本文档介绍如何在不同操作系统上安装所需的工具链。
+在编译 OceanBase seekdb 源码之前，需要先在开发环境中安装 C++ 工具链。本文档介绍如何在不同操作系统上安装所需的工具链。
 
 ## 概述
 
-SeekDB 是一个 C++ 项目，需要特定的编译工具链。请根据你的操作系统选择对应的安装方法。
+seekdb 是一个 C++ 项目，需要特定的编译工具链。请根据你的操作系统选择对应的安装方法。
 
 ## 相关文档
 
-- [编译与运行](build-and-run.md) - 编译和运行 SeekDB
+- [编译与运行](build-and-run.md) - 编译和运行 seekdb
 - [IDE 配置](ide-settings.md) - 配置开发环境
 
 ## 支持的操作系统
 
-OceanBase SeekDB 并不支持所有的操作系统，特别是 Windows 和 Mac OS X。
+OceanBase seekdb 并不支持所有的操作系统，特别是 Windows 和 Mac OS X。
 
 这是当前兼容的操作系统列表：
 
@@ -86,5 +86,5 @@ make --version
 
 工具链安装完成后，可以继续：
 
-- [编译与运行](build-and-run.md) - 编译 SeekDB 项目
+- [编译与运行](build-and-run.md) - 编译 seekdb 项目
 - [IDE 配置](ide-settings.md) - 配置开发环境以便更好地阅读代码

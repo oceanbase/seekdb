@@ -18,6 +18,7 @@
 #include "ob_tenant_storage_meta_replayer.h"
 #include "storage/meta_store/ob_storage_meta_io_util.h"
 #include "storage/tx_storage/ob_ls_service.h"
+#include "storage/slog_ckpt/ob_tenant_checkpoint_slog_handler.h"
 #ifdef OB_BUILD_SHARED_STORAGE
 #endif
 

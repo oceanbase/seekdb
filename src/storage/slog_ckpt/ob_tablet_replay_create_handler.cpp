@@ -20,6 +20,7 @@
 #include "ob_tablet_replay_create_handler.h"
 #include "observer/omt/ob_tenant.h"
 #include "storage/tx_storage/ob_ls_service.h"
+#include "storage/meta_store/ob_tenant_storage_meta_service.h"
 
 namespace oceanbase
 {

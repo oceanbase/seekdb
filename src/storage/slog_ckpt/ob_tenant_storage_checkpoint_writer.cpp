@@ -20,6 +20,10 @@
 #include "storage/tablet/ob_tablet_iterator.h"
 #include "storage/tablet/ob_tablet_mds_table_mini_merger.h"
 #include "storage/tx_storage/ob_ls_service.h"
+#include "storage/slog_ckpt/ob_tenant_storage_checkpoint_reader.h"
+#include "share/ob_io_device_helper.h"
+#include "storage/slog_ckpt/ob_tenant_checkpoint_slog_handler.h"
+#include "storage/meta_store/ob_tenant_storage_meta_service.h"
 
 namespace oceanbase
 {

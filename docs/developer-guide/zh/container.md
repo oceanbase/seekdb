@@ -4,16 +4,16 @@ title: 基础数据结构
 
 # 介绍
 
-C++ STL提供了很多很方便的容器，比如vector、map、unordered_map等，由于OceanBase SeekDB 编程风格与内存控制等原因，在SeekDB中禁止使用STL的容器。SeekDB 提供了一些容器实现，包括数组、链表、HashMap等，本篇文档会对这些容器做一些介绍。
+C++ STL提供了很多很方便的容器，比如vector、map、unordered_map等，由于OceanBase seekdb 编程风格与内存控制等原因，在seekdb中禁止使用STL的容器。seekdb 提供了一些容器实现，包括数组、链表、HashMap等，本篇文档会对这些容器做一些介绍。
 
 > 本篇文档假设你对C++ STL 容器已经有了一定的理解。
 
 > pair不属于容器，因此可以使用。
 
-> 由于历史遗留原因，SeekDB中包含了一些不再建议使用但是没有删除的容器代码。
+> 由于历史遗留原因，seekdb中包含了一些不再建议使用但是没有删除的容器代码。
 
 # 字符串
-SeekDB 提供的字符串类是 ObString。代码参考 ob_string.h。
+seekdb 提供的字符串类是 ObString。代码参考 ob_string.h。
 
 在介绍ObString的接口之前，先介绍一下ObSring的内存管理方式，这样会更加容易理解ObString的接口设计。
 
@@ -90,7 +90,7 @@ ObString 还有一些其它的接口，需要时浏览下 ob_string.h 代码即�
 
 # 数组
 
-SeekDB的数组接口设计与STL vector类似，只是更加符合SeekDB的风格。比如接口会有一个int返回值表示执行成功或失败。SeekDB 提供了多个不同实现的数组，不过它们提供的接口是类似的。
+seekdb的数组接口设计与STL vector类似，只是更加符合seekdb的风格。比如接口会有一个int返回值表示执行成功或失败。seekdb 提供了多个不同实现的数组，不过它们提供的接口是类似的。
 
 常用的数组实现类都继承了同一个接口 `ObIArray`。我们先看一下接口定义，然后再分别介绍不同的数组实现之间的差别。
 
@@ -172,7 +172,7 @@ int assign(const ObIArray &other);
 ```
 
 ## ObArray
-ObArray 自己管理内存，在声明ObArray模板类时，需要指定分配器，或者使用默认分配器 `ModulePageAllocator`。由于SeekDB要求所有的动作都要判断返回值，因此ObArray的 `operator=` 等不带返回值的函数，不建议使用。
+ObArray 自己管理内存，在声明ObArray模板类时，需要指定分配器，或者使用默认分配器 `ModulePageAllocator`。由于seekdb要求所有的动作都要判断返回值，因此ObArray的 `operator=` 等不带返回值的函数，不建议使用。
 
 ObArray的很多行为表现与STL vector类似，每次内存扩展时表现也类似，会扩展两倍当前数据大小，但最多 `block_size_` 大小。一个 `block_size_` 默认值是 `OB_MALLOC_NORMAL_BLOCK_SIZE` （可以认为是8K）。
 
@@ -338,7 +338,7 @@ DLinkNode *remove(DLinkNode *e);
 void clear();
 ```
 
-SeekDB 提供了辅助 `DLinkNode` 实现 `ObDLinkNode` 和 `ObDLinkDerived`，只需要使用任一复制类即可轻松地使用 ObDList。
+seekdb 提供了辅助 `DLinkNode` 实现 `ObDLinkNode` 和 `ObDLinkDerived`，只需要使用任一复制类即可轻松地使用 ObDList。
 
 在介绍这两个辅助类之前，先简单看一下一个基础的辅助接口实现 `ObDLinkBase`，它是上面两个辅助类的基类。它包含了 ObDList 需要的前后节点指针与一些基本的节点操作，两个辅助类都是通过继承基类来实现，而且只是使用方法不同而已。
 
@@ -386,9 +386,9 @@ ObDLinkDerived<MyObj> *nodep = alist.get_first();
 # Map
 Map 是一个常用的数据结构，它的插入和查询的效率都非常高。通常情况下，Map有两种实现方法，一种是平衡查找树，典型的是红黑树，常见的编译器使用这种方式实现，一种是散列表，STL中是unordered_map。
 
-SeekDB中实现了非常多的Map，其中包括平衡查找树实现 ObRbTree 和适用于不同场景的hash map，比如 ObHashMap、ObLinkHashMap和ObLinearHashMap。
+seekdb中实现了非常多的Map，其中包括平衡查找树实现 ObRbTree 和适用于不同场景的hash map，比如 ObHashMap、ObLinkHashMap和ObLinearHashMap。
 
-> SeekDB 实现了很多种hash map，但是推荐使用这里介绍的几个，除非你对其它实现理解特别清晰。
+> seekdb 实现了很多种hash map，但是推荐使用这里介绍的几个，除非你对其它实现理解特别清晰。
 
 ## ObHashMap
 ObHashMap 的实现在 ob_hashmap.h 中，为了方便理解 ObHashMap 的实现，我会对照STL::unordered_map来介绍。
@@ -407,7 +407,7 @@ template<
 
 模板参数中 Key 是我们的键值，T 就是我们值的类型，Hash 是根据键值计算hash值的类或函数，KeyEqual 是判断两个键值是否相等的方法，Allocator 是一个分配器，分配的对象是键和值组成在一起的pair。
 
-SeekDB 中的声明是类似的：
+seekdb 中的声明是类似的：
 
 ```cpp
 template <class _key_type,
@@ -424,7 +424,7 @@ class ObHashMap;
 
 其中 `_key_type`、`_value_type`、`_hashfunc`、`_equal`，与STL::unordered_map的声明参数含义是一样的。这里多了一些参数：
 
-- `_defendmode`: SeekDB 提供了有限条件的线程安全hashmap实现，可以使用默认值，当前先忽略，稍后会介绍；
+- `_defendmode`: seekdb 提供了有限条件的线程安全hashmap实现，可以使用默认值，当前先忽略，稍后会介绍；
 - `_allocer`与`_bucket_allocer`：STL::unordered_map只需要一个分配器，而这里要求提供两个分配器。hashmap中，通常会有一个数组作为桶(bucket)数组，元素进行hash后，找到对应桶，然后将元素”挂载“在对应的桶上。`_bucket_allocer` 就是桶数组的分配器，而`_allocer` 是元素的分配器，也就是建值对的分配器；
 - EXTEND_RATIO：如果EXTEND_RATIO是1，就不会进行扩展。
 
@@ -640,8 +640,8 @@ template <typename Function> int remove_if(Function &fn);
 ```
 
 ## ObRbTree
-ObRbTree 是一个红黑树实现，支持插入、删除、查找等基本操作，非线程安全。由于ObRbTree 在SeekDB中并没有使用，因此不再介绍，有兴趣的请阅读源码 `ob_rbtree.h`。
+ObRbTree 是一个红黑树实现，支持插入、删除、查找等基本操作，非线程安全。由于ObRbTree 在seekdb中并没有使用，因此不再介绍，有兴趣的请阅读源码 `ob_rbtree.h`。
 
 
 # 其它
-SeekDB 还有很多基础容器的实现，比如一些队列（ObFixedQueue、ObLightyQueue、ObLinkQueue）、bitmap(ObBitmap)、tuple(ObTuple)等。如果常见的容器不能满足你的需求，可以在 `deps/oblib/src/lib` 目录下找到更多。
+seekdb 还有很多基础容器的实现，比如一些队列（ObFixedQueue、ObLightyQueue、ObLinkQueue）、bitmap(ObBitmap)、tuple(ObTuple)等。如果常见的容器不能满足你的需求，可以在 `deps/oblib/src/lib` 目录下找到更多。

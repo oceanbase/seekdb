@@ -19,6 +19,7 @@
 #include "ob_tenant_meta_snapshot_handler.h"
 #include "observer/omt/ob_tenant.h"
 #include "src/storage/ls/ob_ls.h"
+#include "storage/meta_store/ob_tenant_storage_meta_service.h"
 
 
 namespace oceanbase

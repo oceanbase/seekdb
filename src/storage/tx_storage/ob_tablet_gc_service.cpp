@@ -19,6 +19,7 @@
 #include "ob_tablet_gc_service.h"
 #include "storage/tablet/ob_tablet_iterator.h"
 #include "logservice/ob_log_service.h"
+#include "storage/meta_store/ob_tenant_storage_meta_service.h"
 
 namespace oceanbase
 {

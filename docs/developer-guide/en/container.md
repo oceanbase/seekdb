@@ -4,16 +4,16 @@ title: Basic Data Structures
 
 # Introduction
 
-C++ STL provides many convenient containers, such as vector, map, unordered_map, etc. Due to SeekDB programming style and memory control, the use of STL containers is prohibited in SeekDB. SeekDB provides some container implementations, including arrays, linked lists, HashMap, etc. This document will introduce some of these containers.
+C++ STL provides many convenient containers, such as vector, map, unordered_map, etc. Due to seekdb programming style and memory control, the use of STL containers is prohibited in seekdb. seekdb provides some container implementations, including arrays, linked lists, HashMap, etc. This document will introduce some of these containers.
 
 > This document assumes that you already have a certain understanding of C++ STL containers.
 
-> pair does not belong to the container, so it can be used in SeekDB.
+> pair does not belong to the container, so it can be used in seekdb.
 
-> Due to historical reasons, SeekDB contains some container code that is no longer recommended but has not been deleted.
+> Due to historical reasons, seekdb contains some container code that is no longer recommended but has not been deleted.
 
 # String
-The string class provided by SeekDB is ObString. Code reference ob_string.h.
+The string class provided by seekdb is ObString. Code reference ob_string.h.
 
 Before introducing ObString's interface, let's first look at ObSring's memory management method, which will make it easier to understand ObString's interface design.
 
@@ -94,7 +94,7 @@ ObString also has some other interfaces, just browse the ob_string.h code if nee
 
 # Array
 
-SeekDB's array interface design is similar to STL vector, but it is more in line with SeekDB's style. For example, the interface will have an int return value indicating success or failure of execution. SeekDB provides multiple arrays with different implementations, but the interfaces they provide are similar.
+seekdb's array interface design is similar to STL vector, but it is more in line with seekdb's style. For example, the interface will have an int return value indicating success or failure of execution. seekdb provides multiple arrays with different implementations, but the interfaces they provide are similar.
 
 Commonly used array implementation classes all inherit the same interface `ObIArray`. Let's take a look at the interface definition first, and then introduce the differences between different array implementations.
 
@@ -180,7 +180,7 @@ int assign(const ObIArray &other);
 ```
 
 ## ObArray
-ObArray manages memory by itself. When declaring the ObArray template class, you need to specify an allocator, or use the default allocator `ModulePageAllocator`. Since SeekDB requires all actions to determine the return value, it is not recommended to use ObArray's `operator=` and other functions without return values.
+ObArray manages memory by itself. When declaring the ObArray template class, you need to specify an allocator, or use the default allocator `ModulePageAllocator`. Since seekdb requires all actions to determine the return value, it is not recommended to use ObArray's `operator=` and other functions without return values.
 
 Many behaviors of ObArray are similar to STL vectors. Each time the memory is expanded, the behavior is similar. It will expand twice the current data size, but up to `block_size_` size. A `block_size_` default value is `OB_MALLOC_NORMAL_BLOCK_SIZE` (think of it as 8K).
 
@@ -364,7 +364,7 @@ bool is_empty() const
 int32_t get_size() const
 ```
 
-SeekDB provides auxiliary `DLinkNode` implementations `ObDLinkNode` and `ObDLinkDerived`, making it easy to use ObDList simply by using either replication class.
+seekdb provides auxiliary `DLinkNode` implementations `ObDLinkNode` and `ObDLinkDerived`, making it easy to use ObDList simply by using either replication class.
 
 Before introducing these two auxiliary classes, let's take a brief look at a basic auxiliary interface implementation `ObDLinkBase`, which is the base class of the above two auxiliary classes. It contains the front and rear node pointers required by ObDList and some basic node operations. Both auxiliary classes are implemented by inheriting the base class, and only use different methods.
 
@@ -416,9 +416,9 @@ Since ObDList does not manage the memory of nodes, you need to be careful when u
 # Map
 Map is a commonly used data structure, and its insertion and query efficiency are very high. Normally, there are two implementation methods for Map. One is a balanced search tree, typically a red-black tree. Common compilers use this method to implement it. The other is a hash table, which is unordered_map in STL.
 
-There are many Maps implemented in SeekDB, including the balanced search tree implementation ObRbTree and hash maps suitable for different scenarios, such as ObHashMap, ObLinkHashMap and ObLinearHashMap.
+There are many Maps implemented in seekdb, including the balanced search tree implementation ObRbTree and hash maps suitable for different scenarios, such as ObHashMap, ObLinkHashMap and ObLinearHashMap.
 
-> SeekDB implements many types of hash maps, but it is recommended to use the few introduced here unless you have a clear understanding of other implementations.
+> seekdb implements many types of hash maps, but it is recommended to use the few introduced here unless you have a clear understanding of other implementations.
 
 ## ObHashMap
 The implementation of ObHashMap is in ob_hashmap.h. In order to facilitate the understanding of the implementation of ObHashMap, I will introduce it with reference to STL::unordered_map.
@@ -437,7 +437,7 @@ template<
 
 Key in the template parameters is our key, T is the type of our value, Hash is a class or function that calculates the hash value based on the key, KeyEqual is a method to determine whether two key values are equal, and Allocator is an allocator. An object is a pair of keys and values.
 
-The declaration in SeekDB is similar:
+The declaration in seekdb is similar:
 
 ```cpp
 template <class _key_type,
@@ -454,7 +454,7 @@ class ObHashMap;
 
 Among them, `_key_type`, `_value_type`, `_hashfunc`, `_equal` have the same meaning as the declared parameters of STL::unordered_map. There are some more parameters here:
 
-- `_defendmode`: SeekDB provides a thread-safe hashmap implementation with limited conditions. You can use the default value and ignore it for now, which will be introduced later;
+- `_defendmode`: seekdb provides a thread-safe hashmap implementation with limited conditions. You can use the default value and ignore it for now, which will be introduced later;
 - `_allocer` and `_bucket_allocer`: STL::unordered_map requires only one allocator, but here requires two allocators. In a hashmap, there is usually an array as a bucket array. After the elements are hashed, the corresponding bucket is found, and then the element is "mounted" on the corresponding bucket. `_bucket_allocer` is the allocator of the bucket array, and `_allocer` is the allocator of elements, that is, the allocator of key value pairs;
 - EXTEND_RATIO: If EXTEND_RATIO is 1, no expansion will occur. Otherwise, the hash map is not thread-safe.
 
@@ -691,8 +691,8 @@ template <typename Function> int remove_if(Function &fn);
 ```
 
 ## ObRbTree
-ObRbTree is a red-black tree implementation that supports basic operations such as insertion, deletion, and search, and is not thread-safe. Since ObRbTree is not used in SeekDB, it will not be introduced again. If you are interested, please read the source code `ob_rbtree.h`.
+ObRbTree is a red-black tree implementation that supports basic operations such as insertion, deletion, and search, and is not thread-safe. Since ObRbTree is not used in seekdb, it will not be introduced again. If you are interested, please read the source code `ob_rbtree.h`.
 
 
 # Others
-SeekDB also has many basic container implementations, such as some queues (ObFixedQueue, ObLightyQueue, ObLinkQueue), bitmap (ObBitmap), tuple (ObTuple), etc. If the common containers don't meet your needs, you can find more in the `deps/oblib/src/lib` directory.
+seekdb also has many basic container implementations, such as some queues (ObFixedQueue, ObLightyQueue, ObLinkQueue), bitmap (ObBitmap), tuple (ObTuple), etc. If the common containers don't meet your needs, you can find more in the `deps/oblib/src/lib` directory.
