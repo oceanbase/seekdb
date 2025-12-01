@@ -110,9 +110,11 @@ pip install -U pyseekdb
 docker run -d \
   --name seekdb \
   -p 2881:2881 \
-  -v ./data:/var/lib/oceanbase/store \
+  -p 2886:2886 \
+  -v ./data:/var/lib/oceanbase \
   oceanbase/seekdb:latest
 ```
+Please refer to the [document](https://github.com/oceanbase/docker-images/blob/main/seekdb/README.md) of this docker image for details.
 
 </details>
 
