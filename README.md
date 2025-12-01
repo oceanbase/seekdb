@@ -28,7 +28,7 @@
         <img alt="Ask DeepWiki" src="https://deepwiki.com/badge.svg" />
     </a>
     <a href="https://discord.gg/74cF8vbNEs">
-        <img alt="Discord" src="https://img.shields.io/discord/74cF8vbNEs?label=Discord&logo=discord&style=flat-square&color=5865F2" />
+        <img alt="Join Discord" src="https://img.shields.io/badge/Discord-Join%20Chat-5865F2?logo=discord&style=flat-square" />
     </a>
     <a href="https://pepy.tech/projects/pylibseekdb">
         <img height="20" alt="Downloads" src="https://static.pepy.tech/badge/pylibseekdb" />
