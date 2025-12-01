@@ -145,7 +145,7 @@ rpm2cpio seekdb-debuginfo-1.0.0.0-102000042023061314.el7.x86_64.rpm | cpio -div
 
 **使用 debug-info 包调试 seekdb**
 
-使用gdb命令 attch 到一个进程或者打开coredump文件。
+使用gdb命令 attach 到一个进程或者打开coredump文件。
 
 ```bash
 # attach 进程
