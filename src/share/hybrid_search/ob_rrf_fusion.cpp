@@ -29,7 +29,7 @@ int ObRRFFusion::init(const ObRRFConfig &config, ObIAllocator &allocator)
     config_ = config;
     allocator_ = &allocator;
     
-    // 初始化结果映射表
+    // Initialize result mapping table
     if (OB_FAIL(result_map_.create(10240, &allocator))) {
       OB_LOG(WARN, "failed to create result map", K(ret));
     } else {
@@ -75,8 +75,8 @@ int ObRRFFusion::add_vector_results(const common::ObIArray<ObHybridSearchResult>
 
 double ObRRFFusion::calculate_rrf_score(int64_t rank) const
 {
-  // RRF 公式：score = 1 / (rank + rank_constant)
-  // rank 从 1 开始计数
+  // RRF formula: score = 1 / (rank + rank_constant)
+  // rank starts counting from 1
   if (rank <= 0) {
     return 0.0;
   }
@@ -93,39 +93,39 @@ int ObRRFFusion::fuse()
     return ret;
   }
   
-  // 清空融合结果和映射表
+  // Clear fused results and mapping table
   fused_results_.clear();
   result_map_.clear();
   
-  // 处理全文搜索结果
+  // Process full-text search results
   for (int64_t i = 0; OB_SUCC(ret) && i < fts_results_.count(); ++i) {
     const ObHybridSearchResult &result = fts_results_.at(i);
-    int64_t rank = i + 1;  // 排名从 1 开始
+    int64_t rank = i + 1;  // Rank starts from 1
     
     ObHybridSearchResult merged_result = result;
     merged_result.fts_rank_ = rank;
     merged_result.fts_score_ = calculate_rrf_score(rank);
-    merged_result.source_flag_ |= 1;  // 标记来自全文搜索
+    merged_result.source_flag_ |= 1;  // Mark as from full-text search
     
     if (OB_FAIL(result_map_.set_refactored(result.doc_id_, merged_result))) {
       OB_LOG(WARN, "failed to insert fts result into map", K(ret), K(result));
     }
   }
   
-  // 处理向量搜索结果
+  // Process vector search results
   for (int64_t i = 0; OB_SUCC(ret) && i < vector_results_.count(); ++i) {
     const ObHybridSearchResult &result = vector_results_.at(i);
-    int64_t rank = i + 1;  // 排名从 1 开始
+    int64_t rank = i + 1;  // Rank starts from 1
     
     ObHybridSearchResult merged_result = result;
     merged_result.vector_rank_ = rank;
     merged_result.vector_score_ = calculate_rrf_score(rank);
-    merged_result.source_flag_ |= 2;  // 标记来自向量搜索
+    merged_result.source_flag_ |= 2;  // Mark as from vector search
     
     ObHybridSearchResult *existing = nullptr;
     if (OB_FAIL(result_map_.get_refactored(result.doc_id_, existing))) {
       if (OB_HASH_NOT_EXIST == ret) {
-        // 新文档，直接插入
+        // New document, insert directly
         ret = result_map_.set_refactored(result.doc_id_, merged_result);
         if (OB_FAIL(ret)) {
           OB_LOG(WARN, "failed to insert vector result into map", K(ret), K(result));
@@ -134,10 +134,10 @@ int ObRRFFusion::fuse()
         OB_LOG(WARN, "failed to get result from map", K(ret));
       }
     } else {
-      // 文档已存在，更新分数和排名
+      // Document already exists, update score and rank
       existing->vector_rank_ = rank;
       existing->vector_score_ = calculate_rrf_score(rank);
-      existing->source_flag_ |= 2;  // 添加向量搜索标记
+      existing->source_flag_ |= 2;  // Add vector search flag
       
       if (OB_FAIL(result_map_.set_refactored(result.doc_id_, *existing))) {
         OB_LOG(WARN, "failed to update result in map", K(ret));
@@ -145,11 +145,11 @@ int ObRRFFusion::fuse()
     }
   }
   
-  // 从映射表中提取结果并计算最终得分
+  // Extract results from mapping table and calculate final score
   for (ResultMap::iterator iter = result_map_.begin(); OB_SUCC(ret) && iter != result_map_.end(); ++iter) {
     ObHybridSearchResult result = iter->second;
     
-    // 计算最终得分（两个分数的和）
+    // Calculate final score (sum of two scores)
     result.final_score_ = result.fts_score_ + result.vector_score_;
     
     if (OB_FAIL(fused_results_.push_back(result))) {
@@ -157,7 +157,7 @@ int ObRRFFusion::fuse()
     }
   }
   
-  // 按最终得分降序排序
+  // Sort by final score in descending order
   if (OB_SUCC(ret)) {
     std::sort(fused_results_.begin(), fused_results_.end(),
               [](const ObHybridSearchResult &a, const ObHybridSearchResult &b) {

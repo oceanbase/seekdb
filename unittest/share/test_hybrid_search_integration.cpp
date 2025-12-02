@@ -15,8 +15,8 @@
  */
 
 /*
- * 混合搜索集成测试
- * 测试向量和全文搜索混合融合系统的端到端功能
+ * Hybrid Search Integration Tests
+ * Test end-to-end functionality of hybrid fusion system for vector and full-text search
  */
 
 #include <gtest/gtest.h>
@@ -31,7 +31,7 @@ namespace oceanbase
 namespace common
 {
 
-// 公共数据结构定义（简化版本用于测试）
+// Common data structure definitions (simplified version for testing)
 enum class ObHybridSearchFusionType
 {
   UNKNOWN = 0,
@@ -82,7 +82,7 @@ struct ObWeightedFusionConfig
 };
 
 // ============================================================
-// RRF 融合器简化实现（用于测试）
+// Simplified RRF Fusion Implementation (for testing)
 // ============================================================
 class SimpleRRFFusion
 {
@@ -110,11 +110,11 @@ public:
     int ret = OB_SUCCESS;
     fused_results_.clear();
 
-    // 创建 doc_id -> result 映射
+    // Create doc_id -> result mapping
     common::hash::ObHashMap<uint64_t, ObHybridSearchResult> result_map;
     result_map.create(10240, allocator_);
 
-    // 处理全文搜索结果
+    // Process full-text search results
     for (int64_t i = 0; OB_SUCC(ret) && i < fts_results_.count(); ++i) {
       const ObHybridSearchResult &result = fts_results_.at(i);
       int64_t rank = i + 1;
@@ -127,7 +127,7 @@ public:
       result_map.set_refactored(result.doc_id_, merged);
     }
 
-    // 处理向量搜索结果
+    // Process vector search results
     for (int64_t i = 0; OB_SUCC(ret) && i < vector_results_.count(); ++i) {
       const ObHybridSearchResult &result = vector_results_.at(i);
       int64_t rank = i + 1;
@@ -147,7 +147,7 @@ public:
       }
     }
 
-    // 提取结果并计算最终得分
+    // Extract results and calculate final score
     for (common::hash::ObHashMap<uint64_t, ObHybridSearchResult>::iterator iter = result_map.begin();
          OB_SUCC(ret) && iter != result_map.end(); ++iter) {
       ObHybridSearchResult result = iter->second;
@@ -155,7 +155,7 @@ public:
       fused_results_.push_back(result);
     }
 
-    // 排序
+    // Sort
     if (OB_SUCC(ret)) {
       std::sort(fused_results_.begin(), fused_results_.end(),
                 [](const ObHybridSearchResult &a, const ObHybridSearchResult &b) {
@@ -204,7 +204,7 @@ private:
 };
 
 // ============================================================
-// 加权融合器简化实现（用于测试）
+// Simplified Weighted Fusion Implementation (for testing)
 // ============================================================
 class SimpleWeightedFusion
 {
@@ -232,11 +232,11 @@ public:
     int ret = OB_SUCCESS;
     fused_results_.clear();
 
-    // 创建映射
+    // Create mapping
     common::hash::ObHashMap<uint64_t, ObHybridSearchResult> result_map;
     result_map.create(10240, allocator_);
 
-    // 处理全文搜索结果
+    // Process full-text search results
     for (int64_t i = 0; OB_SUCC(ret) && i < fts_results_.count(); ++i) {
       const ObHybridSearchResult &result = fts_results_.at(i);
       ObHybridSearchResult merged = result;
@@ -244,7 +244,7 @@ public:
       result_map.set_refactored(result.doc_id_, merged);
     }
 
-    // 处理向量搜索结果
+    // Process vector search results
     for (int64_t i = 0; OB_SUCC(ret) && i < vector_results_.count(); ++i) {
       const ObHybridSearchResult &result = vector_results_.at(i);
       ObHybridSearchResult *existing = nullptr;
@@ -259,23 +259,23 @@ public:
       }
     }
 
-    // 提取结果并计算最终得分
+    // Extract results and calculate final score
     for (common::hash::ObHashMap<uint64_t, ObHybridSearchResult>::iterator iter = result_map.begin();
          OB_SUCC(ret) && iter != result_map.end(); ++iter) {
       ObHybridSearchResult result = iter->second;
 
-      // Min-Max 规范化
+      // Min-Max normalization
       double norm_fts = (fts_results_.count() > 0) ? result.fts_score_ : 0.0;
       double norm_vector = (vector_results_.count() > 0) ? result.vector_score_ : 0.0;
 
-      // 加权和
+      // Weighted sum
       result.final_score_ = fusion_config_.fts_weight_ * norm_fts +
                             fusion_config_.vector_weight_ * norm_vector;
 
       fused_results_.push_back(result);
     }
 
-    // 排序
+    // Sort
     if (OB_SUCC(ret)) {
       std::sort(fused_results_.begin(), fused_results_.end(),
                 [](const ObHybridSearchResult &a, const ObHybridSearchResult &b) {
@@ -317,7 +317,7 @@ private:
 };
 
 // ============================================================
-// 测试用例
+// Test Cases
 // ============================================================
 
 class HybridSearchIntegrationTest : public ::testing::Test
@@ -336,7 +336,7 @@ protected:
   ObIAllocator *allocator_;
 };
 
-// 测试 1: RRF 融合 - 基本场景
+// Test 1: RRF Fusion - Basic Scenario
 TEST_F(HybridSearchIntegrationTest, RRF_BasicFusion)
 {
   OB_LOG(INFO, "=== Test: RRF_BasicFusion ===");
@@ -346,7 +346,7 @@ TEST_F(HybridSearchIntegrationTest, RRF_BasicFusion)
 
   EXPECT_EQ(OB_SUCCESS, rrf.init(config, *allocator_));
 
-  // 准备全文搜索结果
+  // Prepare full-text search results
   ObSEArray<ObHybridSearchResult, 64> fts_results;
   for (int i = 0; i < 5; ++i) {
     ObHybridSearchResult result;
@@ -355,11 +355,11 @@ TEST_F(HybridSearchIntegrationTest, RRF_BasicFusion)
     fts_results.push_back(result);
   }
 
-  // 准备向量搜索结果
+  // Prepare vector search results
   ObSEArray<ObHybridSearchResult, 64> vector_results;
   for (int i = 0; i < 5; ++i) {
     ObHybridSearchResult result;
-    result.doc_id_ = (i + 2) % 5 + 1;  // 错位排列
+    result.doc_id_ = (i + 2) % 5 + 1;  // Offset arrangement
     result.vector_score_ = 0.95 - i * 0.12;
     vector_results.push_back(result);
   }
@@ -368,23 +368,23 @@ TEST_F(HybridSearchIntegrationTest, RRF_BasicFusion)
   EXPECT_EQ(OB_SUCCESS, rrf.add_vector_results(vector_results));
   EXPECT_EQ(OB_SUCCESS, rrf.fuse());
 
-  // 验证融合结果
+  // Verify fusion results
   EXPECT_GT(rrf.get_fused_result_count(), 0);
   OB_LOG(INFO, "Fused result count: %ld", rrf.get_fused_result_count());
 
-  // 获取前 3 个结果
+  // Get top 3 results
   ObSEArray<ObHybridSearchResult, 64> results;
   EXPECT_EQ(OB_SUCCESS, rrf.get_results(results, 3));
   EXPECT_EQ(3, results.count());
 
-  // 验证排序
+  // Verify sorting
   for (int i = 1; i < results.count(); ++i) {
     EXPECT_GE(results.at(i - 1).final_score_, results.at(i).final_score_);
     OB_LOG(INFO, "Doc ID: %lu, Score: %.4f", results.at(i).doc_id_, results.at(i).final_score_);
   }
 }
 
-// 测试 2: RRF 融合 - 空结果处理
+// Test 2: RRF Fusion - Empty Result Handling
 TEST_F(HybridSearchIntegrationTest, RRF_EmptyVectorResults)
 {
   OB_LOG(INFO, "=== Test: RRF_EmptyVectorResults ===");
@@ -394,7 +394,7 @@ TEST_F(HybridSearchIntegrationTest, RRF_EmptyVectorResults)
 
   EXPECT_EQ(OB_SUCCESS, rrf.init(config, *allocator_));
 
-  // 仅全文搜索结果
+  // Full-text search results only
   ObSEArray<ObHybridSearchResult, 64> fts_results;
   for (int i = 0; i < 3; ++i) {
     ObHybridSearchResult result;
@@ -403,7 +403,7 @@ TEST_F(HybridSearchIntegrationTest, RRF_EmptyVectorResults)
     fts_results.push_back(result);
   }
 
-  ObSEArray<ObHybridSearchResult, 64> vector_results;  // 空
+  ObSEArray<ObHybridSearchResult, 64> vector_results;  // Empty
 
   EXPECT_EQ(OB_SUCCESS, rrf.add_fts_results(fts_results));
   EXPECT_EQ(OB_SUCCESS, rrf.add_vector_results(vector_results));
@@ -413,7 +413,7 @@ TEST_F(HybridSearchIntegrationTest, RRF_EmptyVectorResults)
   OB_LOG(INFO, "Handle empty vector results successfully");
 }
 
-// 测试 3: 加权融合 - 平衡权重
+// Test 3: Weighted Fusion - Balanced Weights
 TEST_F(HybridSearchIntegrationTest, WeightedFusion_Balanced)
 {
   OB_LOG(INFO, "=== Test: WeightedFusion_Balanced ===");
@@ -423,7 +423,7 @@ TEST_F(HybridSearchIntegrationTest, WeightedFusion_Balanced)
 
   EXPECT_EQ(OB_SUCCESS, fusion.init(config, *allocator_));
 
-  // 准备全文搜索结果
+  // Prepare full-text search results
   ObSEArray<ObHybridSearchResult, 64> fts_results;
   for (int i = 0; i < 3; ++i) {
     ObHybridSearchResult result;
@@ -432,7 +432,7 @@ TEST_F(HybridSearchIntegrationTest, WeightedFusion_Balanced)
     fts_results.push_back(result);
   }
 
-  // 准备向量搜索结果
+  // Prepare vector search results
   ObSEArray<ObHybridSearchResult, 64> vector_results;
   for (int i = 0; i < 3; ++i) {
     ObHybridSearchResult result;
@@ -449,7 +449,7 @@ TEST_F(HybridSearchIntegrationTest, WeightedFusion_Balanced)
   OB_LOG(INFO, "Weighted fusion with balanced weights completed");
 }
 
-// 测试 4: 加权融合 - 关键词优先
+// Test 4: Weighted Fusion - Keyword Priority
 TEST_F(HybridSearchIntegrationTest, WeightedFusion_KeywordPriority)
 {
   OB_LOG(INFO, "=== Test: WeightedFusion_KeywordPriority ===");
@@ -459,7 +459,7 @@ TEST_F(HybridSearchIntegrationTest, WeightedFusion_KeywordPriority)
 
   EXPECT_EQ(OB_SUCCESS, fusion.init(config, *allocator_));
 
-  // 准备数据
+  // Prepare data
   ObSEArray<ObHybridSearchResult, 64> fts_results;
   ObHybridSearchResult fts1;
   fts1.doc_id_ = 1;
@@ -481,13 +481,13 @@ TEST_F(HybridSearchIntegrationTest, WeightedFusion_KeywordPriority)
   EXPECT_EQ(OB_SUCCESS, fusion.add_vector_results(vector_results));
   EXPECT_EQ(OB_SUCCESS, fusion.fuse());
 
-  // 验证全文搜索优先级更高
+  // Verify full-text search has higher priority
   ObSEArray<ObHybridSearchResult, 64> results;
   EXPECT_EQ(OB_SUCCESS, fusion.get_results(results));
   OB_LOG(INFO, "Keyword priority fusion completed, result count: %ld", results.count());
 }
 
-// 测试 5: 加权融合 - 语义优先
+// Test 5: Weighted Fusion - Semantic Priority
 TEST_F(HybridSearchIntegrationTest, WeightedFusion_SemanticPriority)
 {
   OB_LOG(INFO, "=== Test: WeightedFusion_SemanticPriority ===");
@@ -497,7 +497,7 @@ TEST_F(HybridSearchIntegrationTest, WeightedFusion_SemanticPriority)
 
   EXPECT_EQ(OB_SUCCESS, fusion.init(config, *allocator_));
 
-  // 准备数据
+  // Prepare data
   ObSEArray<ObHybridSearchResult, 64> fts_results;
   for (int i = 0; i < 2; ++i) {
     ObHybridSearchResult result;
@@ -522,7 +522,7 @@ TEST_F(HybridSearchIntegrationTest, WeightedFusion_SemanticPriority)
   OB_LOG(INFO, "Semantic priority fusion completed");
 }
 
-// 测试 6: 大规模融合性能测试
+// Test 6: Large-scale Fusion Performance Test
 TEST_F(HybridSearchIntegrationTest, LargeScaleFusion)
 {
   OB_LOG(INFO, "=== Test: LargeScaleFusion ===");
@@ -532,7 +532,7 @@ TEST_F(HybridSearchIntegrationTest, LargeScaleFusion)
 
   EXPECT_EQ(OB_SUCCESS, rrf.init(config, *allocator_));
 
-  // 准备大规模数据
+  // Prepare large-scale data
   ObSEArray<ObHybridSearchResult, 1024> fts_results;
   for (int i = 0; i < 500; ++i) {
     ObHybridSearchResult result;
@@ -544,7 +544,7 @@ TEST_F(HybridSearchIntegrationTest, LargeScaleFusion)
   ObSEArray<ObHybridSearchResult, 1024> vector_results;
   for (int i = 0; i < 500; ++i) {
     ObHybridSearchResult result;
-    result.doc_id_ = (i * 7) % 500 + 1;  // 伪随机分布
+    result.doc_id_ = (i * 7) % 500 + 1;  // Pseudo-random distribution
     result.vector_score_ = 1.0 - (i % 100) * 0.01;
     vector_results.push_back(result);
   }
@@ -555,7 +555,7 @@ TEST_F(HybridSearchIntegrationTest, LargeScaleFusion)
 
   EXPECT_GT(rrf.get_fused_result_count(), 0);
 
-  // 获取前 10 个结果
+  // Get top 10 results
   ObSEArray<ObHybridSearchResult, 1024> results;
   EXPECT_EQ(OB_SUCCESS, rrf.get_results(results, 10));
   EXPECT_EQ(10, results.count());
@@ -563,7 +563,7 @@ TEST_F(HybridSearchIntegrationTest, LargeScaleFusion)
   OB_LOG(INFO, "Large scale fusion completed, total fused: %ld", rrf.get_fused_result_count());
 }
 
-// 测试 7: 重复添加结果（去重验证）
+// Test 7: Duplicate Addition Results (Deduplication Verification)
 TEST_F(HybridSearchIntegrationTest, DuplicateDocHandling)
 {
   OB_LOG(INFO, "=== Test: DuplicateDocHandling ===");
@@ -573,7 +573,7 @@ TEST_F(HybridSearchIntegrationTest, DuplicateDocHandling)
 
   EXPECT_EQ(OB_SUCCESS, rrf.init(config, *allocator_));
 
-  // 全文搜索和向量搜索都包含相同的文档
+  // Both full-text search and vector search contain the same documents
   ObSEArray<ObHybridSearchResult, 64> fts_results;
   for (int i = 0; i < 3; ++i) {
     ObHybridSearchResult result;
@@ -585,7 +585,7 @@ TEST_F(HybridSearchIntegrationTest, DuplicateDocHandling)
   ObSEArray<ObHybridSearchResult, 64> vector_results;
   for (int i = 0; i < 3; ++i) {
     ObHybridSearchResult result;
-    result.doc_id_ = i + 1;  // 相同的 doc_id
+    result.doc_id_ = i + 1;  // Same doc_id
     result.vector_score_ = 0.9 - i * 0.1;
     vector_results.push_back(result);
   }
@@ -594,20 +594,20 @@ TEST_F(HybridSearchIntegrationTest, DuplicateDocHandling)
   EXPECT_EQ(OB_SUCCESS, rrf.add_vector_results(vector_results));
   EXPECT_EQ(OB_SUCCESS, rrf.fuse());
 
-  // 应该只有 3 个融合结果（去重后）
+  // Should have only 3 fusion results (after deduplication)
   EXPECT_EQ(3, rrf.get_fused_result_count());
 
-  // 验证每个结果都同时包含两个搜索结果
+  // Verify each result contains both search results
   for (int i = 0; i < rrf.get_fused_result_count(); ++i) {
     const auto *result = rrf.get_result_at(i);
     EXPECT_NE(nullptr, result);
-    EXPECT_EQ(3, result->source_flag_);  // 1|2 = 3，表示来自两个源
+    EXPECT_EQ(3, result->source_flag_);  // 1|2 = 3, indicating from both sources
   }
 
   OB_LOG(INFO, "Duplicate document handling verified");
 }
 
-// 测试 8: 结果限制测试
+// Test 8: Result Limit Test
 TEST_F(HybridSearchIntegrationTest, ResultLimitTest)
 {
   OB_LOG(INFO, "=== Test: ResultLimitTest ===");
@@ -617,7 +617,7 @@ TEST_F(HybridSearchIntegrationTest, ResultLimitTest)
 
   EXPECT_EQ(OB_SUCCESS, rrf.init(config, *allocator_));
 
-  // 准备 10 个结果
+  // Prepare 10 results
   ObSEArray<ObHybridSearchResult, 64> fts_results;
   for (int i = 0; i < 10; ++i) {
     ObHybridSearchResult result;
@@ -630,17 +630,17 @@ TEST_F(HybridSearchIntegrationTest, ResultLimitTest)
   EXPECT_EQ(OB_SUCCESS, rrf.add_vector_results(ObSEArray<ObHybridSearchResult, 64>()));
   EXPECT_EQ(OB_SUCCESS, rrf.fuse());
 
-  // 测试不同的限制
+  // Test different limits
   ObSEArray<ObHybridSearchResult, 64> results_5;
   EXPECT_EQ(OB_SUCCESS, rrf.get_results(results_5, 5));
   EXPECT_EQ(5, results_5.count());
 
   ObSEArray<ObHybridSearchResult, 64> results_20;
   EXPECT_EQ(OB_SUCCESS, rrf.get_results(results_20, 20));
-  EXPECT_EQ(10, results_20.count());  // 只有 10 个，不能超过
+  EXPECT_EQ(10, results_20.count());  // Only 10, cannot exceed
 
   ObSEArray<ObHybridSearchResult, 64> results_0;
-  EXPECT_EQ(OB_SUCCESS, rrf.get_results(results_0, 0));  // 0 表示全部
+  EXPECT_EQ(OB_SUCCESS, rrf.get_results(results_0, 0));  // 0 means all
   EXPECT_EQ(10, results_0.count());
 
   OB_LOG(INFO, "Result limit handling verified");
@@ -650,7 +650,7 @@ TEST_F(HybridSearchIntegrationTest, ResultLimitTest)
 } // namespace oceanbase
 
 // ============================================================
-// 主测试实例
+// Main Test Instance
 // ============================================================
 int main(int argc, char **argv)
 {

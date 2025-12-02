@@ -11,26 +11,26 @@ namespace common
 {
 
 /*
- * RRF (Reciprocal Rank Fusion) 融合实现
+ * RRF (Reciprocal Rank Fusion) Fusion Implementation
  * 
- * 基本原理：
- * RRF 是一种无参数融合算法，通过将多个排序列表转换为得分，
- * 并将这些得分相加来生成混合排名。
+ * Basic Principle:
+ * RRF is a parameter-free fusion algorithm that converts multiple ranked lists into scores,
+ * and combines these scores to generate a hybrid ranking.
  * 
- * 公式：
- * score = 1/(rank + rank_constant) 对于每个搜索引擎
+ * Formula:
+ * score = 1/(rank + rank_constant) for each search engine
  * final_score = score_from_fts + score_from_vector
  * 
- * 优点：
- * 1. 自动规范化：通过排名自然解决不同评分系统的规范化问题
- * 2. 鲁棒性强：对异常值不敏感
- * 3. 参数简单：只需要配置 rank_constant 一个参数
- * 4. 性能优异：不需要额外的规范化计算
+ * Advantages:
+ * 1. Automatic normalization: naturally solves normalization problems between different scoring systems
+ * 2. Strong robustness: insensitive to outliers
+ * 3. Simple parameters: only requires configuring rank_constant
+ * 4. Excellent performance: no extra normalization computation needed
  * 
- * 应用场景：
- * - 需要平衡关键字匹配和语义相似度的搜索
- * - 对异常得分值鲁棒的应用
- * - 中等规模数据集（通常 rank_window_size = 100-1000）
+ * Application Scenarios:
+ * - Search applications that need to balance keyword matching and semantic similarity
+ * - Applications robust to anomalous score values
+ * - Medium-scale datasets (typically rank_window_size = 100-1000)
  */
 class ObRRFFusion
 {
@@ -41,107 +41,107 @@ public:
   virtual ~ObRRFFusion();
   
   /*
-   * 初始化 RRF 融合器
+   * Initialize RRF fusion engine
    * 
-   * @param config RRF 配置参数
-   * @param allocator 内存分配器
-   * @return 成功返回 OB_SUCCESS，失败返回相应错误码
+   * @param config RRF configuration parameters
+   * @param allocator Memory allocator
+   * @return Returns OB_SUCCESS on success, corresponding error code on failure
    */
   int init(const ObRRFConfig &config, ObIAllocator &allocator);
   
   /*
-   * 添加全文搜索结果
+   * Add full-text search results
    * 
-   * @param fts_results 全文搜索结果列表，按相关性降序排列
-   * @return 成功返回 OB_SUCCESS，失败返回相应错误码
+   * @param fts_results Full-text search result list, sorted by relevance in descending order
+   * @return Returns OB_SUCCESS on success, corresponding error code on failure
    */
   int add_fts_results(const common::ObIArray<ObHybridSearchResult> &fts_results);
   
   /*
-   * 添加向量搜索结果
+   * Add vector search results
    * 
-   * @param vector_results 向量搜索结果列表，按相似度降序排列
-   * @return 成功返回 OB_SUCCESS，失败返回相应错误码
+   * @param vector_results Vector search result list, sorted by similarity in descending order
+   * @return Returns OB_SUCCESS on success, corresponding error code on failure
    */
   int add_vector_results(const common::ObIArray<ObHybridSearchResult> &vector_results);
   
   /*
-   * 执行 RRF 融合计算
+   * Execute RRF fusion calculation
    * 
-   * 该方法会：
-   * 1. 为两个结果列表中的每个结果分配排名
-   * 2. 使用 RRF 公式计算规范化分数
-   * 3. 合并两个列表的结果
-   * 4. 按最终得分排序
+   * This method will:
+   * 1. Assign ranks to each result in both result lists
+   * 2. Calculate normalized scores using RRF formula
+   * 3. Merge results from both lists
+   * 4. Sort by final score
    * 
-   * @return 成功返回 OB_SUCCESS，失败返回相应错误码
+   * @return Returns OB_SUCCESS on success, corresponding error code on failure
    */
   int fuse();
   
   /*
-   * 获取融合后的结果
+   * Get fusion results
    * 
-   * @param results 输出参数，包含融合后的结果列表
-   * @param limit 返回结果的最大数量，0 表示返回全部结果
-   * @return 成功返回 OB_SUCCESS，失败返回相应错误码
+   * @param results Output parameter containing the fused result list
+   * @param limit Maximum number of results to return, 0 means return all results
+   * @return Returns OB_SUCCESS on success, corresponding error code on failure
    */
   int get_results(common::ObIArray<ObHybridSearchResult> &results, int64_t limit = 0) const;
   
   /*
-   * 重置融合器状态，准备下一次融合
+   * Reset fusion engine state, prepare for next fusion
    */
   void reset();
   
   /*
-   * 获取全文搜索结果数量
+   * Get count of full-text search results
    */
   int64_t get_fts_result_count() const { return fts_results_.count(); }
   
   /*
-   * 获取向量搜索结果数量
+   * Get count of vector search results
    */
   int64_t get_vector_result_count() const { return vector_results_.count(); }
   
   /*
-   * 获取融合后的结果数量
+   * Get count of fused results
    */
   int64_t get_fused_result_count() const { return fused_results_.count(); }
   
   /*
-   * 获取单个融合后的结果
+   * Get single fused result
    * 
-   * @param index 结果索引
-   * @return 融合后的结果，如果索引越界返回空结果
+   * @param index Result index
+   * @return Fused result, returns empty result if index is out of bounds
    */
   const ObHybridSearchResult *get_result_at(int64_t index) const;
   
 private:
-  // 计算 RRF 分数
+  // Calculate RRF score
   double calculate_rrf_score(int64_t rank) const;
   
-  // 验证配置参数
+  // Validate configuration parameters
   int validate_config() const;
   
 private:
-  // RRF 配置参数
+  // RRF configuration parameters
   ObRRFConfig config_;
   
-  // 全文搜索结果
+  // Full-text search results
   common::ObSEArray<ObHybridSearchResult, 64> fts_results_;
   
-  // 向量搜索结果
+  // Vector search results
   common::ObSEArray<ObHybridSearchResult, 64> vector_results_;
   
-  // 融合后的结果
+  // Fused results
   common::ObSEArray<ObHybridSearchResult, 64> fused_results_;
   
-  // 记录已初始化状态
+  // Record initialization state
   bool is_initialized_;
   
-  // 内存分配器（不拥有所有权）
+  // Memory allocator (non-owner)
   ObIAllocator *allocator_;
   
-  // 用于去重的结果映射表
+  // Result mapping table for deduplication
   ResultMap result_map_;
 };
 
