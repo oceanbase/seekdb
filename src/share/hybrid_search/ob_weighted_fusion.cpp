@@ -32,7 +32,7 @@ int ObWeightedFusion::init(const ObWeightedFusionConfig &config,
     norm_config_ = norm_config;
     allocator_ = &allocator;
     
-    // 初始化结果映射表
+    // Initialize result mapping table
     if (OB_FAIL(result_map_.create(10240, &allocator))) {
       OB_LOG(WARN, "failed to create result map", K(ret));
     } else {
@@ -81,7 +81,7 @@ int ObWeightedFusion::calculate_statistics()
 {
   int ret = OB_SUCCESS;
   
-  // 计算全文搜索分数统计
+  // Calculate statistics for full-text search scores
   if (fts_results_.count() > 0) {
     double sum = 0.0;
     fts_stats_.min_score_ = fts_results_.at(0).fts_score_;
@@ -101,7 +101,7 @@ int ObWeightedFusion::calculate_statistics()
     
     fts_stats_.mean_score_ = sum / fts_stats_.count_;
     
-    // 计算标准差
+    // Calculate standard deviation
     double variance = 0.0;
     for (int64_t i = 0; i < fts_results_.count(); ++i) {
       double diff = fts_results_.at(i).fts_score_ - fts_stats_.mean_score_;
@@ -110,7 +110,7 @@ int ObWeightedFusion::calculate_statistics()
     fts_stats_.stddev_ = std::sqrt(variance / fts_stats_.count_);
   }
   
-  // 计算向量搜索分数统计
+  // Calculate statistics for vector search scores
   if (vector_results_.count() > 0) {
     double sum = 0.0;
     vector_stats_.min_score_ = vector_results_.at(0).vector_score_;
@@ -130,7 +130,7 @@ int ObWeightedFusion::calculate_statistics()
     
     vector_stats_.mean_score_ = sum / vector_stats_.count_;
     
-    // 计算标准差
+    // Calculate standard deviation
     double variance = 0.0;
     for (int64_t i = 0; i < vector_results_.count(); ++i) {
       double diff = vector_results_.at(i).vector_score_ - vector_stats_.mean_score_;
@@ -146,7 +146,7 @@ int ObWeightedFusion::calculate_statistics()
 double ObWeightedFusion::min_max_normalize(double score, double min_val, double max_val)
 {
   if (max_val - min_val < 1e-10) {
-    return 0.5;  // 避免分母为零
+    return 0.5;  // Avoid division by zero
   }
   return (score - min_val) / (max_val - min_val);
 }
@@ -154,9 +154,9 @@ double ObWeightedFusion::min_max_normalize(double score, double min_val, double 
 double ObWeightedFusion::z_score_normalize(double score, double mean, double stddev)
 {
   if (stddev < 1e-10) {
-    return 0.0;  // 避免分母为零
+    return 0.0;  // Avoid division by zero
   }
-  // 使用 Sigmoid 函数将 Z-Score 映射到 [0, 1]
+  // Use Sigmoid function to map Z-Score to [0, 1]
   double z = (score - mean) / stddev;
   return 1.0 / (1.0 + std::exp(-z));
 }
