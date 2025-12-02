@@ -1,8 +1,8 @@
 /*
- * 混合搜索演示示例和测试用例
+ * Hybrid Search Demo Examples and Test Cases
  * 
- * 本文件展示如何使用混合搜索 API 实现向量和全文搜索的融合。
- * 包含多个场景的演示代码和单元测试。
+ * This file demonstrates how to use the hybrid search API to implement fusion
+ * of vector and full-text search. Includes demo code and unit tests for multiple scenarios.
  */
 
 #include "ob_rrf_fusion.h"
@@ -18,24 +18,24 @@ namespace common
 
 /*
  * =============================================
- * 演示 1: 使用 RRF 融合方法
+ * Demo 1: Using RRF Fusion Method
  * =============================================
- * 场景：平衡的混合搜索，需要自动规范化
- * 适用场景：关键词匹配和语义相似度需要平衡的应用
+ * Scenario: Balanced hybrid search with automatic normalization
+ * Use Case: Applications that need to balance keyword matching and semantic similarity
  */
 void demo_rrf_fusion()
 {
   std::cout << "\n========== RRF Fusion Demo ==========" << std::endl;
   
-  // 1. 准备内存分配器
+  // 1. Prepare memory allocator
   ObMallocAllocator allocator;
   
-  // 2. 创建 RRF 融合器
+  // 2. Create RRF fusion engine
   ObRRFFusion rrf_fusion;
   
-  // 3. 配置参数
-  // rank_constant 为 60 表示排名差异影响相对较小
-  // rank_window_size 为 100 表示从 100 个搜索结果中融合
+  // 3. Configure parameters
+  // rank_constant 60 means ranking differences have relatively small impact
+  // rank_window_size 100 means fusing from 100 search results
   ObRRFConfig rrf_config(60, 100);
   
   if (rrf_fusion.init(rrf_config, allocator) != OB_SUCCESS) {
@@ -43,7 +43,7 @@ void demo_rrf_fusion()
     return;
   }
   
-  // 4. 准备全文搜索结果（BM25 得分，通常在 0-几十之间）
+  // 4. Prepare full-text search results (BM25 scores, typically between 0 and tens)
   common::ObSEArray<ObHybridSearchResult, 16> fts_results;
   ObHybridSearchResult fts_result1;
   fts_result1.doc_id_ = 1;
@@ -70,7 +70,7 @@ void demo_rrf_fusion()
     std::cout << "  Doc ID: " << r.doc_id_ << ", Score: " << std::fixed << std::setprecision(2) << r.fts_score_ << std::endl;
   }
   
-  // 5. 准备向量搜索结果（向量相似度，通常在 0-1 之间）
+  // 5. Prepare vector search results (vector similarity, typically between 0-1)
   common::ObSEArray<ObHybridSearchResult, 16> vector_results;
   ObHybridSearchResult vec_result1;
   vec_result1.doc_id_ = 2;
@@ -97,7 +97,7 @@ void demo_rrf_fusion()
     std::cout << "  Doc ID: " << r.doc_id_ << ", Score: " << std::fixed << std::setprecision(2) << r.vector_score_ << std::endl;
   }
   
-  // 6. 添加搜索结果并执行融合
+  // 6. Add search results and perform fusion
   if (rrf_fusion.add_fts_results(fts_results) != OB_SUCCESS ||
       rrf_fusion.add_vector_results(vector_results) != OB_SUCCESS ||
       rrf_fusion.fuse() != OB_SUCCESS) {
@@ -105,7 +105,7 @@ void demo_rrf_fusion()
     return;
   }
   
-  // 7. 获取融合结果（取前 5 个）
+  // 7. Get fusion results (top 5)
   common::ObSEArray<ObHybridSearchResult, 16> fused_results;
   if (rrf_fusion.get_results(fused_results, 5) != OB_SUCCESS) {
     std::cout << "Failed to get results" << std::endl;
@@ -137,25 +137,25 @@ void demo_rrf_fusion()
 
 /*
  * =============================================
- * 演示 2: 使用加权融合方法 - 平衡方案
+ * Demo 2: Using Weighted Fusion Method - Balanced Approach
  * =============================================
- * 场景：全文搜索和向量搜索权重相等（各 50%）
- * 适用场景：关键词匹配和语义相似度同等重要
+ * Scenario: Equal weights for full-text and vector search (50% each)
+ * Use Case: Both keyword matching and semantic similarity are equally important
  */
 void demo_weighted_fusion_balanced()
 {
   std::cout << "\n========== Weighted Fusion Demo (Balanced 50:50) ==========" << std::endl;
   
-  // 1. 准备内存分配器
+  // 1. Prepare memory allocator
   ObMallocAllocator allocator;
   
-  // 2. 创建加权融合器
+  // 2. Create weighted fusion engine
   ObWeightedFusion weighted_fusion;
   
-  // 3. 配置参数 - 平衡方案
+  // 3. Configure parameters - Balanced approach
   ObWeightedFusionConfig fusion_config(0.5, 0.5, true);  // 50% FTS, 50% Vector, enable normalization
   
-  // 4. 规范化配置 - 使用 Min-Max 规范化
+  // 4. Normalization configuration - Use Min-Max normalization
   ObNormalizationConfig norm_config;
   norm_config.norm_type_ = ObNormalizationConfig::NormalizationType::MIN_MAX;
   
@@ -164,7 +164,7 @@ void demo_weighted_fusion_balanced()
     return;
   }
   
-  // 5. 准备测试数据（同 RRF 演示）
+  // 5. Prepare test data (same as RRF demo)
   common::ObSEArray<ObHybridSearchResult, 16> fts_results;
   ObHybridSearchResult fts_r1 = {1, 15.5, 0.0, -1, -1, 0.0, 0};
   ObHybridSearchResult fts_r2 = {2, 12.3, 0.0, -1, -1, 0.0, 0};
@@ -181,7 +181,7 @@ void demo_weighted_fusion_balanced()
   vector_results.push_back(vec_r2);
   vector_results.push_back(vec_r3);
   
-  // 6. 执行融合
+  // 6. Perform fusion
   if (weighted_fusion.add_fts_results(fts_results) != OB_SUCCESS ||
       weighted_fusion.add_vector_results(vector_results) != OB_SUCCESS ||
       weighted_fusion.fuse() != OB_SUCCESS) {
@@ -189,7 +189,7 @@ void demo_weighted_fusion_balanced()
     return;
   }
   
-  // 7. 获取结果
+  // 7. Get results
   common::ObSEArray<ObHybridSearchResult, 16> fused_results;
   if (weighted_fusion.get_results(fused_results, 5) != OB_SUCCESS) {
     std::cout << "Failed to get results" << std::endl;
@@ -214,10 +214,10 @@ void demo_weighted_fusion_balanced()
 
 /*
  * =============================================
- * 演示 3: 使用加权融合方法 - 精确匹配优先
+ * Demo 3: Using Weighted Fusion Method - Exact Match Priority
  * =============================================
- * 场景：优先考虑关键词精确匹配（70% FTS, 30% Vector）
- * 适用场景：用户搜索关键词通常准确，不需要太多语义理解
+ * Scenario: Prioritize keyword exact matching (70% FTS, 30% Vector)
+ * Use Case: Users' search keywords are usually accurate, minimal semantic understanding needed
  */
 void demo_weighted_fusion_keyword_priority()
 {
@@ -226,10 +226,10 @@ void demo_weighted_fusion_keyword_priority()
   ObMallocAllocator allocator;
   ObWeightedFusion weighted_fusion;
   
-  // 70% 全文搜索，30% 向量搜索
+  // 70% full-text search, 30% vector search
   ObWeightedFusionConfig fusion_config(0.7, 0.3, true);
   
-  // 使用 Z-Score 规范化
+  // Use Z-Score normalization
   ObNormalizationConfig norm_config;
   norm_config.norm_type_ = ObNormalizationConfig::NormalizationType::Z_SCORE;
   
@@ -238,7 +238,7 @@ void demo_weighted_fusion_keyword_priority()
     return;
   }
   
-  // 准备数据
+  // Prepare data
   common::ObSEArray<ObHybridSearchResult, 16> fts_results;
   for (int i = 0; i < 3; ++i) {
     ObHybridSearchResult result = {static_cast<uint64_t>(i+1), 10.0 - i*3, 0.0, -1, -1, 0.0, 0};
@@ -274,10 +274,10 @@ void demo_weighted_fusion_keyword_priority()
 
 /*
  * =============================================
- * 演示 4: 使用加权融合方法 - 语义相似度优先
+ * Demo 4: Using Weighted Fusion Method - Semantic Similarity Priority
  * =============================================
- * 场景：优先考虑语义相似度（30% FTS, 70% Vector）
- * 适用场景：用户搜索意图复杂，需要通过向量搜索理解语义
+ * Scenario: Prioritize semantic similarity (30% FTS, 70% Vector)
+ * Use Case: Complex user search intent, need to understand semantics through vector search
  */
 void demo_weighted_fusion_semantic_priority()
 {
@@ -286,10 +286,10 @@ void demo_weighted_fusion_semantic_priority()
   ObMallocAllocator allocator;
   ObWeightedFusion weighted_fusion;
   
-  // 30% 全文搜索，70% 向量搜索
+  // 30% full-text search, 70% vector search
   ObWeightedFusionConfig fusion_config(0.3, 0.7, true);
   
-  // 使用 Min-Max 规范化
+  // Use Min-Max normalization
   ObNormalizationConfig norm_config;
   norm_config.norm_type_ = ObNormalizationConfig::NormalizationType::MIN_MAX;
   
@@ -298,7 +298,7 @@ void demo_weighted_fusion_semantic_priority()
     return;
   }
   
-  // 准备数据
+  // Prepare data
   common::ObSEArray<ObHybridSearchResult, 16> fts_results;
   ObHybridSearchResult fts1 = {1, 8.0, 0.0, -1, -1, 0.0, 0};
   ObHybridSearchResult fts2 = {2, 6.5, 0.0, -1, -1, 0.0, 0};
@@ -341,7 +341,7 @@ int main()
   std::cout << "Hybrid Search Fusion Demonstrations" << std::endl;
   std::cout << "========================================" << std::endl;
   
-  // 运行所有演示
+  // Run all demos
   oceanbase::common::demo_rrf_fusion();
   oceanbase::common::demo_weighted_fusion_balanced();
   oceanbase::common::demo_weighted_fusion_keyword_priority();

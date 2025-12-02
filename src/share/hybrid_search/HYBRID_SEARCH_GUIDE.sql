@@ -1,38 +1,38 @@
 /*
- * 混合搜索实现指南和 SQL 示例
+ * Hybrid Search Implementation Guide and SQL Examples
  * ================================
  * 
- * 本文档提供了如何使用混合搜索功能的详细说明和 SQL 示例。
+ * This document provides detailed instructions and SQL examples on how to use hybrid search features.
  */
 
 -- ========================================================
--- 第一部分：表结构设计
+-- Part 1: Table Structure Design
 -- ========================================================
 
--- 创建包含向量和全文索引的表
+-- Create a table with vector and full-text indexes
 CREATE TABLE documents (
     id INT PRIMARY KEY,
     title VARCHAR(255),
     content TEXT,
-    embedding VECTOR(384),  -- 384 维向量
+    embedding VECTOR(384),  -- 384-dimensional vector
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     
-    -- 全文索引配置
+    -- Full-text index configuration
     FULLTEXT INDEX idx_content(content) WITH PARSER jieba,
     
-    -- 向量索引配置
-    -- DISTANCE=l2: 使用 L2 欧几里得距离
-    -- TYPE=hnsw: 使用 HNSW (Hierarchical Navigable Small Worlds) 算法
-    -- LIB=vsag: 使用 VSAG 向量搜索库
+    -- Vector index configuration
+    -- DISTANCE=l2: Uses L2 Euclidean distance
+    -- TYPE=hnsw: Uses HNSW (Hierarchical Navigable Small Worlds) algorithm
+    -- LIB=vsag: Uses VSAG vector search library
     VECTOR INDEX idx_embedding(embedding) WITH(DISTANCE=l2, TYPE=hnsw, LIB=vsag)
 ) ORGANIZATION = HEAP;
 
 -- ========================================================
--- 第二部分：数据插入示例
+-- Part 2: Data Insertion Example
 -- ========================================================
 
--- 插入示例数据
+-- Insert sample data
 INSERT INTO documents (id, title, content, embedding) VALUES
 (1, 'Artificial Intelligence Overview', 
  'Machine learning is a branch of artificial intelligence that enables systems to learn and improve from experience without being explicitly programmed. It focuses on developing computer programs that can access data and use it to learn for themselves.',
@@ -55,14 +55,14 @@ INSERT INTO documents (id, title, content, embedding) VALUES
  VECTOR('[0.18, 0.28, 0.38, ..., 0.388]'));
 
 -- ========================================================
--- 第三部分：RRF 融合方法的 SQL 示例
+-- Part 3: SQL Examples for RRF Fusion Method
 -- ========================================================
 
--- 方案 1.1：基础 RRF 融合查询
--- 用途：需要自动规范化，对异常值鲁棒
--- 参数说明：
---   rank_constant: 60（较大的值对低排名文档更友好）
---   rank_window_size: 100（从 100 个结果中融合）
+-- Scheme 1.1: Basic RRF Fusion Query
+-- Use Case: Automatic normalization needed, robust to outliers
+-- Parameter Explanation:
+--   rank_constant: 60 (larger values are more favorable to low-ranked documents)
+--   rank_window_size: 100 (fuse from 100 results)
 
 EXPLAIN SELECT 
     doc_id,
@@ -96,7 +96,7 @@ FROM (
             COALESCE(v.vector_score, 0) AS vector_score,
             COALESCE(f.fts_rank, -1) AS fts_rank,
             COALESCE(v.vector_rank, -1) AS vector_rank,
-            -- RRF 公式：score = 1 / (rank + rank_constant)
+            -- RRF formula: score = 1 / (rank + rank_constant)
             COALESCE(1.0 / (f.fts_rank + 60), 0) +
             COALESCE(1.0 / (v.vector_rank + 60), 0) AS final_score
         FROM fts_results f
@@ -108,11 +108,11 @@ ORDER BY final_score DESC
 LIMIT 10;
 
 -- ========================================================
--- 第四部分：加权融合方法的 SQL 示例
+-- Part 4: SQL Examples for Weighted Fusion Method
 -- ========================================================
 
--- 方案 2.1：平衡融合（50% 全文 + 50% 向量）
--- 用途：关键词匹配和语义相似度同等重要
+-- Scheme 2.1: Balanced Fusion (50% Full-text + 50% Vector)
+-- Use Case: Keyword matching and semantic similarity are equally important
 
 WITH fts_results AS (
     SELECT 
@@ -145,7 +145,7 @@ normalized_scores AS (
         COALESCE(f.title, 'N/A') AS title,
         COALESCE(f.fts_score, 0) AS fts_score,
         COALESCE(v.vector_score, 0) AS vector_score,
-        -- Min-Max 规范化
+        -- Min-Max normalization
         COALESCE((f.fts_score - s.min_fts) / (s.max_fts - s.min_fts), 0) AS norm_fts,
         COALESCE((v.vector_score - s.min_vector) / (s.max_vector - s.min_vector), 0) AS norm_vector,
         s.max_fts,
@@ -161,15 +161,15 @@ SELECT
     title,
     norm_fts,
     norm_vector,
-    -- 加权和：0.5 * 规范化_fts + 0.5 * 规范化_vector
+    -- Weighted sum: 0.5 * normalized_fts + 0.5 * normalized_vector
     (0.5 * norm_fts + 0.5 * norm_vector) AS final_score
 FROM normalized_scores
 WHERE norm_fts IS NOT NULL OR norm_vector IS NOT NULL
 ORDER BY final_score DESC
 LIMIT 10;
 
--- 方案 2.2：关键词优先融合（70% 全文 + 30% 向量）
--- 用途：用户搜索关键词通常准确，不需要太多语义理解
+-- Scheme 2.2: Keyword Priority Fusion (70% Full-text + 30% Vector)
+-- Use Case: Users' search keywords are usually accurate, minimal semantic understanding needed
 
 WITH fts_results AS (
     SELECT 
@@ -189,7 +189,7 @@ min_max_norm AS (
         COALESCE(f.id, v.id) AS id,
         COALESCE(f.fts_score, 0) AS fts_score,
         COALESCE(v.vector_score, 0) AS vector_score,
-        -- Min-Max 规范化
+        -- Min-Max normalization
         CASE WHEN (MAX(f.fts_score) OVER () - MIN(f.fts_score) OVER ()) > 0 
              THEN (COALESCE(f.fts_score, 0) - MIN(f.fts_score) OVER ()) / 
                   (MAX(f.fts_score) OVER () - MIN(f.fts_score) OVER ())
@@ -203,14 +203,14 @@ min_max_norm AS (
 )
 SELECT 
     id,
-    -- 加权和：0.7 * 规范化_fts + 0.3 * 规范化_vector
+    -- Weighted sum: 0.7 * normalized_fts + 0.3 * normalized_vector
     (0.7 * norm_fts + 0.3 * norm_vector) AS final_score
 FROM min_max_norm
 ORDER BY final_score DESC
 LIMIT 10;
 
--- 方案 2.3：语义优先融合（30% 全文 + 70% 向量）
--- 用途：用户搜索意图复杂，需要通过向量搜索理解语义
+-- Scheme 2.3: Semantic Priority Fusion (30% Full-text + 70% Vector)
+-- Use Case: Complex user search intent, need to understand semantics through vector search
 
 WITH fts_results AS (
     SELECT 
@@ -230,7 +230,7 @@ weighted_hybrid AS (
         COALESCE(f.id, v.id) AS id,
         COALESCE(f.fts_score, 0) AS fts_score,
         COALESCE(v.vector_score, 0) AS vector_score,
-        -- Z-Score 规范化（使用 Sigmoid 函数）
+        -- Z-Score normalization (using Sigmoid function)
         1.0 / (1.0 + EXP(-(COALESCE(f.fts_score, 0) - AVG(f.fts_score) OVER ()) / 
                STDDEV(f.fts_score) OVER ())) AS norm_fts,
         1.0 / (1.0 + EXP(-(COALESCE(v.vector_score, 0) - AVG(v.vector_score) OVER ()) / 
@@ -240,18 +240,18 @@ weighted_hybrid AS (
 )
 SELECT 
     id,
-    -- 加权和：0.3 * 规范化_fts + 0.7 * 规范化_vector
+    -- Weighted sum: 0.3 * normalized_fts + 0.7 * normalized_vector
     (0.3 * norm_fts + 0.7 * norm_vector) AS final_score
 FROM weighted_hybrid
 ORDER BY final_score DESC
 LIMIT 10;
 
 -- ========================================================
--- 第五部分：高级规范化策略示例
+-- Part 5: Advanced Normalization Strategy Examples
 -- ========================================================
 
--- 方案 3.1：Min-Max 规范化示例
--- 特点：将所有分数映射到 [0, 1] 范围内
+-- Scheme 3.1: Min-Max Normalization Example
+-- Characteristic: Maps all scores to [0, 1] range
 
 WITH score_stats AS (
     SELECT 
@@ -263,10 +263,10 @@ WITH score_stats AS (
 )
 SELECT 
     id,
-    -- 全文搜索分数规范化
+    -- Full-text search score normalization
     (MATCH(content) AGAINST('query' IN NATURAL LANGUAGE MODE) - s.min_fts) / 
     (s.max_fts - s.min_fts) * 0.5 +
-    -- 向量搜索分数规范化（距离转相似度）
+    -- Vector search score normalization (distance to similarity)
     (1.0 - (l2_distance(embedding, '[...]') - s.min_vec) / 
     (s.max_vec - s.min_vec)) * 0.5 AS final_score
 FROM documents, score_stats s
@@ -274,8 +274,8 @@ WHERE MATCH(content) AGAINST('query' IN NATURAL LANGUAGE MODE)
 ORDER BY final_score DESC
 LIMIT 10;
 
--- 方案 3.2：Z-Score 规范化示例
--- 特点：标准化分数的分布，对异常值敏感
+-- Scheme 3.2: Z-Score Normalization Example
+-- Characteristic: Standardizes score distribution, sensitive to outliers
 
 WITH score_stats AS (
     SELECT 
@@ -287,7 +287,7 @@ WITH score_stats AS (
 )
 SELECT 
     id,
-    -- 标准化分数（Z-Score）
+    -- Standardized scores (Z-Score)
     ((MATCH(content) AGAINST('query' IN NATURAL LANGUAGE MODE) - s.avg_fts) / s.std_fts) * 0.5 +
     ((s.avg_vec - l2_distance(embedding, '[...]')) / s.std_vec) * 0.5 AS final_score
 FROM documents, score_stats s
