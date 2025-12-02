@@ -80,6 +80,7 @@ ob_unittest(test_text_analyzer text_analysis/test_text_analyzer.cpp)
 
 ob_unittest(test_ash_index)
 ob_unittest(test_wr)
+ob_unittest(test_hybrid_search_integration)
 
 add_subdirectory(allocator)
 add_subdirectory(auto_increment)
