@@ -276,7 +276,7 @@ public:
          OB_SUCC(ret) && iter != result_map.end(); ++iter) {
       ObHybridSearchResult result = iter->second;
 
-      // Min-Max normalization
+      // Use raw scores if results exist (simplified test implementation)
       double norm_fts = (fts_results_.count() > 0) ? result.fts_score_ : 0.0;
       double norm_vector = (vector_results_.count() > 0) ? result.vector_score_ : 0.0;
 
