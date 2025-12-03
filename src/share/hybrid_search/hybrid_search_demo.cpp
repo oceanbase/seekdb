@@ -261,7 +261,7 @@ void demo_weighted_fusion_keyword_priority()
   
   common::ObSEArray<ObHybridSearchResult, 16> vector_results;
   for (int i = 0; i < 3; ++i) {
-    ObHybridSearchResult result = {static_cast<uint64_t>((i+1)%3+1), 0.9 - i*0.05, 0.0, -1, -1, 0.0, 0};
+    ObHybridSearchResult result = {static_cast<uint64_t>((i+1)%3+1), 0.0, 0.9 - i*0.05, -1, -1, 0.0, 0};
     vector_results.push_back(result);
   }
   
