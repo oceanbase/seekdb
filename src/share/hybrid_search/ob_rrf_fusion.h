@@ -136,7 +136,7 @@ private:
   double calculate_rrf_score(int64_t rank) const;
   
   // Validate configuration parameters
-  int validate_config() const;
+  int validate_config(const ObRRFConfig &config) const;
   
 private:
   // RRF configuration parameters

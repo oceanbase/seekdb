@@ -39,7 +39,7 @@ int ObRRFFusion::init(const ObRRFConfig &config, ObIAllocator &allocator)
   if (is_initialized_) {
     ret = OB_INIT_TWICE;
     OB_LOG(WARN, "RRF fusion is already initialized", K(ret));
-  } else if (OB_FAIL(validate_config())) {
+  } else if (OB_FAIL(validate_config(config))) {
     OB_LOG(WARN, "failed to validate rrf config", K(ret));
   } else {
     config_ = config;
@@ -237,16 +237,16 @@ void ObRRFFusion::reset()
   allocator_ = nullptr;
 }
 
-int ObRRFFusion::validate_config() const
+int ObRRFFusion::validate_config(const ObRRFConfig &config) const
 {
   int ret = OB_SUCCESS;
   
-  if (config_.rank_constant_ < 0) {
+  if (config.rank_constant_ < 0) {
     ret = OB_INVALID_ARGUMENT;
-    OB_LOG(WARN, "rank constant must be non-negative", K(ret), K(config_.rank_constant_));
-  } else if (config_.rank_window_size_ <= 0) {
+    OB_LOG(WARN, "rank constant must be non-negative", K(ret), K(config.rank_constant_));
+  } else if (config.rank_window_size_ <= 0) {
     ret = OB_INVALID_ARGUMENT;
-    OB_LOG(WARN, "rank window size must be positive", K(ret), K(config_.rank_window_size_));
+    OB_LOG(WARN, "rank window size must be positive", K(ret), K(config.rank_window_size_));
   }
   
   return ret;
