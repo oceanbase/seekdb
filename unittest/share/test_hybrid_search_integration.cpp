@@ -124,7 +124,9 @@ public:
       merged.fts_score_ = 1.0 / (rank + config_.rank_constant_);
       merged.source_flag_ |= 1;
 
-      result_map.set_refactored(result.doc_id_, merged);
+      if (OB_FAIL(result_map.set_refactored(result.doc_id_, merged))) {
+        break;
+      }
     }
 
     // Process vector search results
@@ -138,12 +140,16 @@ public:
         merged.vector_rank_ = rank;
         merged.vector_score_ = 1.0 / (rank + config_.rank_constant_);
         merged.source_flag_ |= 2;
-        result_map.set_refactored(result.doc_id_, merged);
+        if (OB_FAIL(result_map.set_refactored(result.doc_id_, merged))) {
+          break;
+        }
       } else {
         existing->vector_rank_ = rank;
         existing->vector_score_ = 1.0 / (rank + config_.rank_constant_);
         existing->source_flag_ |= 2;
-        result_map.set_refactored(result.doc_id_, *existing);
+        if (OB_FAIL(result_map.set_refactored(result.doc_id_, *existing))) {
+          break;
+        }
       }
     }
 
@@ -241,7 +247,9 @@ public:
       const ObHybridSearchResult &result = fts_results_.at(i);
       ObHybridSearchResult merged = result;
       merged.source_flag_ |= 1;
-      result_map.set_refactored(result.doc_id_, merged);
+      if (OB_FAIL(result_map.set_refactored(result.doc_id_, merged))) {
+        break;
+      }
     }
 
     // Process vector search results
@@ -251,11 +259,15 @@ public:
       if (OB_HASH_NOT_EXIST == result_map.get_refactored(result.doc_id_, existing)) {
         ObHybridSearchResult merged = result;
         merged.source_flag_ |= 2;
-        result_map.set_refactored(result.doc_id_, merged);
+        if (OB_FAIL(result_map.set_refactored(result.doc_id_, merged))) {
+          break;
+        }
       } else {
         existing->vector_score_ = result.vector_score_;
         existing->source_flag_ |= 2;
-        result_map.set_refactored(result.doc_id_, *existing);
+        if (OB_FAIL(result_map.set_refactored(result.doc_id_, *existing))) {
+          break;
+        }
       }
     }
 
