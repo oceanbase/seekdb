@@ -41,7 +41,7 @@ int ObWeightedFusion::init(const ObWeightedFusionConfig &config,
   if (is_initialized_) {
     ret = OB_INIT_TWICE;
     OB_LOG(WARN, "weighted fusion is already initialized", K(ret));
-  } else if (OB_FAIL(validate_config())) {
+  } else if (OB_FAIL(validate_config(config))) {
     OB_LOG(WARN, "failed to validate config", K(ret));
   } else {
     fusion_config_ = config;
@@ -351,18 +351,18 @@ void ObWeightedFusion::reset()
   stats_calculated_ = false;
 }
 
-int ObWeightedFusion::validate_config() const
+int ObWeightedFusion::validate_config(const ObWeightedFusionConfig &config) const
 {
   int ret = OB_SUCCESS;
   
-  // 检查权重
-  if (fusion_config_.fts_weight_ < 0.0 || fusion_config_.fts_weight_ > 1.0) {
+  // Check weights
+  if (config.fts_weight_ < 0.0 || config.fts_weight_ > 1.0) {
     ret = OB_INVALID_ARGUMENT;
-    OB_LOG(WARN, "fts weight must be in [0, 1]", K(ret), K(fusion_config_.fts_weight_));
-  } else if (fusion_config_.vector_weight_ < 0.0 || fusion_config_.vector_weight_ > 1.0) {
+    OB_LOG(WARN, "fts weight must be in [0, 1]", K(ret), K(config.fts_weight_));
+  } else if (config.vector_weight_ < 0.0 || config.vector_weight_ > 1.0) {
     ret = OB_INVALID_ARGUMENT;
-    OB_LOG(WARN, "vector weight must be in [0, 1]", K(ret), K(fusion_config_.vector_weight_));
-  } else if (fusion_config_.fts_weight_ + fusion_config_.vector_weight_ < 1e-10) {
+    OB_LOG(WARN, "vector weight must be in [0, 1]", K(ret), K(config.vector_weight_));
+  } else if (config.fts_weight_ + config.vector_weight_ < 1e-10) {
     ret = OB_INVALID_ARGUMENT;
     OB_LOG(WARN, "sum of weights should be positive", K(ret));
   }

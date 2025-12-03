@@ -140,7 +140,7 @@ private:
   double sigmoid_normalize(double score);
   
   // Validate configuration parameters
-  int validate_config() const;
+  int validate_config(const ObWeightedFusionConfig &config) const;
   
 private:
   // Weighted fusion configuration
