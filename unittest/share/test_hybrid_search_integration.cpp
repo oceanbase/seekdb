@@ -112,7 +112,9 @@ public:
 
     // Create doc_id -> result mapping
     common::hash::ObHashMap<uint64_t, ObHybridSearchResult> result_map;
-    result_map.create(10240, allocator_);
+    if (OB_FAIL(result_map.create(10240, allocator_))) {
+      return ret;
+    }
 
     // Process full-text search results
     for (int64_t i = 0; OB_SUCC(ret) && i < fts_results_.count(); ++i) {
@@ -240,7 +242,9 @@ public:
 
     // Create mapping
     common::hash::ObHashMap<uint64_t, ObHybridSearchResult> result_map;
-    result_map.create(10240, allocator_);
+    if (OB_FAIL(result_map.create(10240, allocator_))) {
+      return ret;
+    }
 
     // Process full-text search results
     for (int64_t i = 0; OB_SUCC(ret) && i < fts_results_.count(); ++i) {
