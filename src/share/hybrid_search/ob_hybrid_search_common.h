@@ -91,6 +91,10 @@ struct ObNormalizationConfig
   double mean_value_ = 0.0;
   double stddev_value_ = 1.0;
   
+  // Note: Normalization statistics (min, max, mean, stddev) are computed automatically from the data
+  // during the fusion process. The above fields are provided for configuration purposes but are
+  // not directly used in the ObWeightedFusion implementation.
+  
   ObNormalizationConfig() = default;
 };
 
