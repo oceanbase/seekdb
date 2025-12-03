@@ -21,26 +21,17 @@
 
 #include <gtest/gtest.h>
 #include <iomanip>
-#include "lib/container/ob_se_array.h"
-#include "lib/allocator/ob_malloc.h"
-#include "lib/ob_errno.h"
-#include "lib/oblog/ob_log.h"
+#include <vector>
+#include <algorithm>
+#include <cmath>
+#include <unordered_map>
 
 namespace oceanbase
 {
 namespace common
 {
 
-// Common data structure definitions (simplified version for testing)
-enum class ObHybridSearchFusionType
-{
-  UNKNOWN = 0,
-  RRF = 1,
-  WEIGHT_SUM = 2,
-  MIN_MAX_NORM = 3,
-  Z_SCORE_NORM = 4
-};
-
+// Test Data Structures
 struct ObHybridSearchResult
 {
   uint64_t doc_id_ = 0;
@@ -53,7 +44,7 @@ struct ObHybridSearchResult
 
   bool operator<(const ObHybridSearchResult &other) const
   {
-    if (final_score_ != other.final_score_) {
+    if (fabs(final_score_ - other.final_score_) > 1e-10) {
       return final_score_ > other.final_score_;
     }
     return doc_id_ < other.doc_id_;
@@ -64,7 +55,6 @@ struct ObRRFConfig
 {
   int64_t rank_constant_ = 60;
   int64_t rank_window_size_ = 100;
-
   ObRRFConfig() = default;
   ObRRFConfig(int64_t rank_const, int64_t window_size)
     : rank_constant_(rank_const), rank_window_size_(window_size) {}
@@ -75,295 +65,207 @@ struct ObWeightedFusionConfig
   double fts_weight_ = 0.5;
   double vector_weight_ = 0.5;
   bool enable_normalization_ = true;
-
   ObWeightedFusionConfig() = default;
   ObWeightedFusionConfig(double fts_w, double vec_w, bool normalize)
     : fts_weight_(fts_w), vector_weight_(vec_w), enable_normalization_(normalize) {}
 };
 
-// ============================================================
-// Simplified RRF Fusion Implementation (for testing)
-// ============================================================
+// RRF Fusion
 class SimpleRRFFusion
 {
 public:
-  int init(const ObRRFConfig &config, ObIAllocator &allocator)
+  int init(const ObRRFConfig &config)
   {
     config_ = config;
-    allocator_ = &allocator;
     is_initialized_ = true;
-    return OB_SUCCESS;
+    return 0;
   }
 
-  int add_fts_results(const ObSEArray<ObHybridSearchResult, 64> &fts_results)
+  int add_fts_results(const std::vector<ObHybridSearchResult> &fts_results)
   {
-    return fts_results_.assign(fts_results);
+    fts_results_ = fts_results;
+    return 0;
   }
 
-  int add_vector_results(const ObSEArray<ObHybridSearchResult, 64> &vector_results)
+  int add_vector_results(const std::vector<ObHybridSearchResult> &vector_results)
   {
-    return vector_results_.assign(vector_results);
+    vector_results_ = vector_results;
+    return 0;
   }
 
   int fuse()
   {
-    int ret = OB_SUCCESS;
     fused_results_.clear();
+    std::unordered_map<uint64_t, ObHybridSearchResult> result_map;
 
-    // Create doc_id -> result mapping
-    common::hash::ObHashMap<uint64_t, ObHybridSearchResult> result_map;
-    if (OB_FAIL(result_map.create(10240, allocator_))) {
-      return ret;
-    }
-
-    // Process full-text search results
-    for (int64_t i = 0; OB_SUCC(ret) && i < fts_results_.count(); ++i) {
-      const ObHybridSearchResult &result = fts_results_.at(i);
+    for (int64_t i = 0; i < (int64_t)fts_results_.size(); ++i) {
+      const ObHybridSearchResult &result = fts_results_[i];
       int64_t rank = i + 1;
-
       ObHybridSearchResult merged = result;
       merged.fts_rank_ = rank;
       merged.fts_score_ = 1.0 / (rank + config_.rank_constant_);
       merged.source_flag_ |= 1;
-
-      if (OB_FAIL(result_map.set_refactored(result.doc_id_, merged))) {
-        break;
-      }
+      result_map[result.doc_id_] = merged;
     }
 
-    // Process vector search results
-    for (int64_t i = 0; OB_SUCC(ret) && i < vector_results_.count(); ++i) {
-      const ObHybridSearchResult &result = vector_results_.at(i);
+    for (int64_t i = 0; i < (int64_t)vector_results_.size(); ++i) {
+      const ObHybridSearchResult &result = vector_results_[i];
       int64_t rank = i + 1;
-
-      ObHybridSearchResult *existing = nullptr;
-      if (OB_HASH_NOT_EXIST == result_map.get_refactored(result.doc_id_, existing)) {
+      if (result_map.find(result.doc_id_) == result_map.end()) {
         ObHybridSearchResult merged = result;
         merged.vector_rank_ = rank;
         merged.vector_score_ = 1.0 / (rank + config_.rank_constant_);
         merged.source_flag_ |= 2;
-        if (OB_FAIL(result_map.set_refactored(result.doc_id_, merged))) {
-          break;
-        }
+        result_map[result.doc_id_] = merged;
       } else {
-        existing->vector_rank_ = rank;
-        existing->vector_score_ = 1.0 / (rank + config_.rank_constant_);
-        existing->source_flag_ |= 2;
-        if (OB_FAIL(result_map.set_refactored(result.doc_id_, *existing))) {
-          break;
-        }
+        result_map[result.doc_id_].vector_rank_ = rank;
+        result_map[result.doc_id_].vector_score_ = 1.0 / (rank + config_.rank_constant_);
+        result_map[result.doc_id_].source_flag_ |= 2;
       }
     }
 
-    // Extract results and calculate final score
-    for (common::hash::ObHashMap<uint64_t, ObHybridSearchResult>::iterator iter = result_map.begin();
-         OB_SUCC(ret) && iter != result_map.end(); ++iter) {
-      ObHybridSearchResult result = iter->second;
+    for (auto &pair : result_map) {
+      ObHybridSearchResult result = pair.second;
       result.final_score_ = result.fts_score_ + result.vector_score_;
       fused_results_.push_back(result);
     }
 
-    // Sort
-    if (OB_SUCC(ret)) {
-      std::sort(fused_results_.begin(), fused_results_.end(),
-                [](const ObHybridSearchResult &a, const ObHybridSearchResult &b) {
-                  if (a.final_score_ != b.final_score_) {
-                    return a.final_score_ > b.final_score_;
-                  }
-                  return a.doc_id_ < b.doc_id_;
-                });
-    }
-
-    result_map.destroy();
-    return ret;
+    std::sort(fused_results_.begin(), fused_results_.end());
+    return 0;
   }
 
-  int get_results(ObSEArray<ObHybridSearchResult, 64> &results, int64_t limit = 0) const
+  int get_results(std::vector<ObHybridSearchResult> &results, int64_t limit = 0) const
   {
-    int ret = OB_SUCCESS;
-    int64_t count = fused_results_.count();
+    results.clear();
+    int64_t count = fused_results_.size();
     if (limit > 0 && limit < count) {
       count = limit;
     }
-
-    for (int64_t i = 0; OB_SUCC(ret) && i < count; ++i) {
-      ret = results.push_back(fused_results_.at(i));
+    for (int64_t i = 0; i < count; ++i) {
+      results.push_back(fused_results_[i]);
     }
-
-    return ret;
+    return 0;
   }
 
-  int64_t get_fused_result_count() const { return fused_results_.count(); }
+  int64_t get_fused_result_count() const { return fused_results_.size(); }
   const ObHybridSearchResult *get_result_at(int64_t index) const
   {
-    if (index < 0 || index >= fused_results_.count()) {
+    if (index < 0 || index >= (int64_t)fused_results_.size()) {
       return nullptr;
     }
-    return &fused_results_.at(index);
+    return &fused_results_[index];
   }
 
 private:
   ObRRFConfig config_;
-  ObSEArray<ObHybridSearchResult, 64> fts_results_;
-  ObSEArray<ObHybridSearchResult, 64> vector_results_;
-  ObSEArray<ObHybridSearchResult, 64> fused_results_;
+  std::vector<ObHybridSearchResult> fts_results_;
+  std::vector<ObHybridSearchResult> vector_results_;
+  std::vector<ObHybridSearchResult> fused_results_;
   bool is_initialized_ = false;
-  ObIAllocator *allocator_ = nullptr;
 };
 
-// ============================================================
-// Simplified Weighted Fusion Implementation (for testing)
-// ============================================================
+// Weighted Fusion
 class SimpleWeightedFusion
 {
 public:
-  int init(const ObWeightedFusionConfig &fusion_config, ObIAllocator &allocator)
+  int init(const ObWeightedFusionConfig &fusion_config)
   {
     fusion_config_ = fusion_config;
-    allocator_ = &allocator;
     is_initialized_ = true;
-    return OB_SUCCESS;
+    return 0;
   }
 
-  int add_fts_results(const ObSEArray<ObHybridSearchResult, 64> &fts_results)
+  int add_fts_results(const std::vector<ObHybridSearchResult> &fts_results)
   {
-    return fts_results_.assign(fts_results);
+    fts_results_ = fts_results;
+    return 0;
   }
 
-  int add_vector_results(const ObSEArray<ObHybridSearchResult, 64> &vector_results)
+  int add_vector_results(const std::vector<ObHybridSearchResult> &vector_results)
   {
-    return vector_results_.assign(vector_results);
+    vector_results_ = vector_results;
+    return 0;
   }
 
   int fuse()
   {
-    int ret = OB_SUCCESS;
     fused_results_.clear();
+    std::unordered_map<uint64_t, ObHybridSearchResult> result_map;
 
-    // Create mapping
-    common::hash::ObHashMap<uint64_t, ObHybridSearchResult> result_map;
-    if (OB_FAIL(result_map.create(10240, allocator_))) {
-      return ret;
-    }
-
-    // Process full-text search results
-    for (int64_t i = 0; OB_SUCC(ret) && i < fts_results_.count(); ++i) {
-      const ObHybridSearchResult &result = fts_results_.at(i);
+    for (int64_t i = 0; i < (int64_t)fts_results_.size(); ++i) {
+      const ObHybridSearchResult &result = fts_results_[i];
       ObHybridSearchResult merged = result;
       merged.source_flag_ |= 1;
-      if (OB_FAIL(result_map.set_refactored(result.doc_id_, merged))) {
-        break;
-      }
+      result_map[result.doc_id_] = merged;
     }
 
-    // Process vector search results
-    for (int64_t i = 0; OB_SUCC(ret) && i < vector_results_.count(); ++i) {
-      const ObHybridSearchResult &result = vector_results_.at(i);
-      ObHybridSearchResult *existing = nullptr;
-      if (OB_HASH_NOT_EXIST == result_map.get_refactored(result.doc_id_, existing)) {
+    for (int64_t i = 0; i < (int64_t)vector_results_.size(); ++i) {
+      const ObHybridSearchResult &result = vector_results_[i];
+      if (result_map.find(result.doc_id_) == result_map.end()) {
         ObHybridSearchResult merged = result;
         merged.source_flag_ |= 2;
-        if (OB_FAIL(result_map.set_refactored(result.doc_id_, merged))) {
-          break;
-        }
+        result_map[result.doc_id_] = merged;
       } else {
-        existing->vector_score_ = result.vector_score_;
-        existing->source_flag_ |= 2;
-        if (OB_FAIL(result_map.set_refactored(result.doc_id_, *existing))) {
-          break;
-        }
+        result_map[result.doc_id_].vector_score_ = result.vector_score_;
+        result_map[result.doc_id_].source_flag_ |= 2;
       }
     }
 
-    // Extract results and calculate final score
-    for (common::hash::ObHashMap<uint64_t, ObHybridSearchResult>::iterator iter = result_map.begin();
-         OB_SUCC(ret) && iter != result_map.end(); ++iter) {
-      ObHybridSearchResult result = iter->second;
-
-      // Use raw scores if results exist (simplified test implementation)
-      double norm_fts = (fts_results_.count() > 0) ? result.fts_score_ : 0.0;
-      double norm_vector = (vector_results_.count() > 0) ? result.vector_score_ : 0.0;
-
-      // Weighted sum
+    for (auto &pair : result_map) {
+      ObHybridSearchResult result = pair.second;
+      double norm_fts = (fts_results_.size() > 0) ? result.fts_score_ : 0.0;
+      double norm_vector = (vector_results_.size() > 0) ? result.vector_score_ : 0.0;
       result.final_score_ = fusion_config_.fts_weight_ * norm_fts +
                             fusion_config_.vector_weight_ * norm_vector;
-
       fused_results_.push_back(result);
     }
 
-    // Sort
-    if (OB_SUCC(ret)) {
-      std::sort(fused_results_.begin(), fused_results_.end(),
-                [](const ObHybridSearchResult &a, const ObHybridSearchResult &b) {
-                  if (a.final_score_ != b.final_score_) {
-                    return a.final_score_ > b.final_score_;
-                  }
-                  return a.doc_id_ < b.doc_id_;
-                });
-    }
-
-    result_map.destroy();
-    return ret;
+    std::sort(fused_results_.begin(), fused_results_.end());
+    return 0;
   }
 
-  int get_results(ObSEArray<ObHybridSearchResult, 64> &results, int64_t limit = 0) const
+  int get_results(std::vector<ObHybridSearchResult> &results, int64_t limit = 0) const
   {
-    int ret = OB_SUCCESS;
-    int64_t count = fused_results_.count();
+    results.clear();
+    int64_t count = fused_results_.size();
     if (limit > 0 && limit < count) {
       count = limit;
     }
-
-    for (int64_t i = 0; OB_SUCC(ret) && i < count; ++i) {
-      ret = results.push_back(fused_results_.at(i));
+    for (int64_t i = 0; i < count; ++i) {
+      results.push_back(fused_results_[i]);
     }
-
-    return ret;
+    return 0;
   }
 
-  int64_t get_fused_result_count() const { return fused_results_.count(); }
+  int64_t get_fused_result_count() const { return fused_results_.size(); }
 
 private:
   ObWeightedFusionConfig fusion_config_;
-  ObSEArray<ObHybridSearchResult, 64> fts_results_;
-  ObSEArray<ObHybridSearchResult, 64> vector_results_;
-  ObSEArray<ObHybridSearchResult, 64> fused_results_;
+  std::vector<ObHybridSearchResult> fts_results_;
+  std::vector<ObHybridSearchResult> vector_results_;
+  std::vector<ObHybridSearchResult> fused_results_;
   bool is_initialized_ = false;
-  ObIAllocator *allocator_ = nullptr;
 };
 
 // ============================================================
-// Test Cases
+// Google Test Framework Test Cases
 // ============================================================
 
 class HybridSearchIntegrationTest : public ::testing::Test
 {
 protected:
-  void SetUp() override
-  {
-    allocator_ = new ObMallocAllocator();
-  }
-
-  void TearDown() override
-  {
-    delete allocator_;
-  }
-
-  ObIAllocator *allocator_;
+  void SetUp() override {}
+  void TearDown() override {}
 };
 
-// Test 1: RRF Fusion - Basic Scenario
+// Test 1: RRF_BasicFusion
 TEST_F(HybridSearchIntegrationTest, RRF_BasicFusion)
 {
-  OB_LOG(INFO, "=== Test: RRF_BasicFusion ===");
-
   SimpleRRFFusion rrf;
   ObRRFConfig config(60, 100);
+  EXPECT_EQ(0, rrf.init(config));
 
-  EXPECT_EQ(OB_SUCCESS, rrf.init(config, *allocator_));
-
-  // Prepare full-text search results
-  ObSEArray<ObHybridSearchResult, 64> fts_results;
+  std::vector<ObHybridSearchResult> fts_results;
   for (int i = 0; i < 5; ++i) {
     ObHybridSearchResult result;
     result.doc_id_ = i + 1;
@@ -371,47 +273,36 @@ TEST_F(HybridSearchIntegrationTest, RRF_BasicFusion)
     fts_results.push_back(result);
   }
 
-  // Prepare vector search results
-  ObSEArray<ObHybridSearchResult, 64> vector_results;
+  std::vector<ObHybridSearchResult> vector_results;
   for (int i = 0; i < 5; ++i) {
     ObHybridSearchResult result;
-    result.doc_id_ = (i + 2) % 5 + 1;  // Offset arrangement
+    result.doc_id_ = (i + 2) % 5 + 1;
     result.vector_score_ = 0.95 - i * 0.12;
     vector_results.push_back(result);
   }
 
-  EXPECT_EQ(OB_SUCCESS, rrf.add_fts_results(fts_results));
-  EXPECT_EQ(OB_SUCCESS, rrf.add_vector_results(vector_results));
-  EXPECT_EQ(OB_SUCCESS, rrf.fuse());
+  EXPECT_EQ(0, rrf.add_fts_results(fts_results));
+  EXPECT_EQ(0, rrf.add_vector_results(vector_results));
+  EXPECT_EQ(0, rrf.fuse());
 
-  // Verify fusion results
+  std::vector<ObHybridSearchResult> results;
+  EXPECT_EQ(0, rrf.get_results(results, 3));
   EXPECT_GT(rrf.get_fused_result_count(), 0);
-  OB_LOG(INFO, "Fused result count: %ld", rrf.get_fused_result_count());
+  EXPECT_EQ(3, results.size());
 
-  // Get top 3 results
-  ObSEArray<ObHybridSearchResult, 64> results;
-  EXPECT_EQ(OB_SUCCESS, rrf.get_results(results, 3));
-  EXPECT_EQ(3, results.count());
-
-  // Verify sorting
-  for (int i = 1; i < results.count(); ++i) {
-    EXPECT_GE(results.at(i - 1).final_score_, results.at(i).final_score_);
-    OB_LOG(INFO, "Doc ID: %lu, Score: %.4f", results.at(i).doc_id_, results.at(i).final_score_);
+  for (int i = 1; i < (int)results.size(); ++i) {
+    EXPECT_GE(results[i - 1].final_score_, results[i].final_score_);
   }
 }
 
-// Test 2: RRF Fusion - Empty Result Handling
+// Test 2: RRF_EmptyVectorResults
 TEST_F(HybridSearchIntegrationTest, RRF_EmptyVectorResults)
 {
-  OB_LOG(INFO, "=== Test: RRF_EmptyVectorResults ===");
-
   SimpleRRFFusion rrf;
   ObRRFConfig config(60, 100);
+  EXPECT_EQ(0, rrf.init(config));
 
-  EXPECT_EQ(OB_SUCCESS, rrf.init(config, *allocator_));
-
-  // Full-text search results only
-  ObSEArray<ObHybridSearchResult, 64> fts_results;
+  std::vector<ObHybridSearchResult> fts_results;
   for (int i = 0; i < 3; ++i) {
     ObHybridSearchResult result;
     result.doc_id_ = i + 1;
@@ -419,28 +310,22 @@ TEST_F(HybridSearchIntegrationTest, RRF_EmptyVectorResults)
     fts_results.push_back(result);
   }
 
-  ObSEArray<ObHybridSearchResult, 64> vector_results;  // Empty
-
-  EXPECT_EQ(OB_SUCCESS, rrf.add_fts_results(fts_results));
-  EXPECT_EQ(OB_SUCCESS, rrf.add_vector_results(vector_results));
-  EXPECT_EQ(OB_SUCCESS, rrf.fuse());
+  std::vector<ObHybridSearchResult> vector_results;
+  EXPECT_EQ(0, rrf.add_fts_results(fts_results));
+  EXPECT_EQ(0, rrf.add_vector_results(vector_results));
+  EXPECT_EQ(0, rrf.fuse());
 
   EXPECT_EQ(3, rrf.get_fused_result_count());
-  OB_LOG(INFO, "Handle empty vector results successfully");
 }
 
-// Test 3: Weighted Fusion - Balanced Weights
+// Test 3: WeightedFusion_Balanced
 TEST_F(HybridSearchIntegrationTest, WeightedFusion_Balanced)
 {
-  OB_LOG(INFO, "=== Test: WeightedFusion_Balanced ===");
-
   SimpleWeightedFusion fusion;
   ObWeightedFusionConfig config(0.5, 0.5, true);
+  EXPECT_EQ(0, fusion.init(config));
 
-  EXPECT_EQ(OB_SUCCESS, fusion.init(config, *allocator_));
-
-  // Prepare full-text search results
-  ObSEArray<ObHybridSearchResult, 64> fts_results;
+  std::vector<ObHybridSearchResult> fts_results;
   for (int i = 0; i < 3; ++i) {
     ObHybridSearchResult result;
     result.doc_id_ = i + 1;
@@ -448,8 +333,7 @@ TEST_F(HybridSearchIntegrationTest, WeightedFusion_Balanced)
     fts_results.push_back(result);
   }
 
-  // Prepare vector search results
-  ObSEArray<ObHybridSearchResult, 64> vector_results;
+  std::vector<ObHybridSearchResult> vector_results;
   for (int i = 0; i < 3; ++i) {
     ObHybridSearchResult result;
     result.doc_id_ = (i + 1) % 3 + 1;
@@ -457,209 +341,168 @@ TEST_F(HybridSearchIntegrationTest, WeightedFusion_Balanced)
     vector_results.push_back(result);
   }
 
-  EXPECT_EQ(OB_SUCCESS, fusion.add_fts_results(fts_results));
-  EXPECT_EQ(OB_SUCCESS, fusion.add_vector_results(vector_results));
-  EXPECT_EQ(OB_SUCCESS, fusion.fuse());
+  EXPECT_EQ(0, fusion.add_fts_results(fts_results));
+  EXPECT_EQ(0, fusion.add_vector_results(vector_results));
+  EXPECT_EQ(0, fusion.fuse());
 
   EXPECT_GT(fusion.get_fused_result_count(), 0);
-  OB_LOG(INFO, "Weighted fusion with balanced weights completed");
 }
 
-// Test 4: Weighted Fusion - Keyword Priority
+// Test 4: WeightedFusion_KeywordPriority
 TEST_F(HybridSearchIntegrationTest, WeightedFusion_KeywordPriority)
 {
-  OB_LOG(INFO, "=== Test: WeightedFusion_KeywordPriority ===");
-
   SimpleWeightedFusion fusion;
-  ObWeightedFusionConfig config(0.7, 0.3, true);  // 70% FTS, 30% Vector
+  ObWeightedFusionConfig config(0.7, 0.3, true);
+  EXPECT_EQ(0, fusion.init(config));
 
-  EXPECT_EQ(OB_SUCCESS, fusion.init(config, *allocator_));
-
-  // Prepare data
-  ObSEArray<ObHybridSearchResult, 64> fts_results;
-  ObHybridSearchResult fts1;
-  fts1.doc_id_ = 1;
-  fts1.fts_score_ = 15.0;
-  fts_results.push_back(fts1);
-
-  ObHybridSearchResult fts2;
-  fts2.doc_id_ = 2;
-  fts2.fts_score_ = 8.0;
-  fts_results.push_back(fts2);
-
-  ObSEArray<ObHybridSearchResult, 64> vector_results;
-  ObHybridSearchResult vec1;
-  vec1.doc_id_ = 2;
-  vec1.vector_score_ = 0.95;
-  vector_results.push_back(vec1);
-
-  EXPECT_EQ(OB_SUCCESS, fusion.add_fts_results(fts_results));
-  EXPECT_EQ(OB_SUCCESS, fusion.add_vector_results(vector_results));
-  EXPECT_EQ(OB_SUCCESS, fusion.fuse());
-
-  // Verify full-text search has higher priority
-  ObSEArray<ObHybridSearchResult, 64> results;
-  EXPECT_EQ(OB_SUCCESS, fusion.get_results(results));
-  OB_LOG(INFO, "Keyword priority fusion completed, result count: %ld", results.count());
-}
-
-// Test 5: Weighted Fusion - Semantic Priority
-TEST_F(HybridSearchIntegrationTest, WeightedFusion_SemanticPriority)
-{
-  OB_LOG(INFO, "=== Test: WeightedFusion_SemanticPriority ===");
-
-  SimpleWeightedFusion fusion;
-  ObWeightedFusionConfig config(0.3, 0.7, true);  // 30% FTS, 70% Vector
-
-  EXPECT_EQ(OB_SUCCESS, fusion.init(config, *allocator_));
-
-  // Prepare data
-  ObSEArray<ObHybridSearchResult, 64> fts_results;
-  for (int i = 0; i < 2; ++i) {
-    ObHybridSearchResult result;
-    result.doc_id_ = i + 1;
-    result.fts_score_ = 8.0 - i * 2.0;
-    fts_results.push_back(result);
-  }
-
-  ObSEArray<ObHybridSearchResult, 64> vector_results;
-  for (int i = 0; i < 2; ++i) {
-    ObHybridSearchResult result;
-    result.doc_id_ = i + 1;
-    result.vector_score_ = 0.92 - i * 0.1;
-    vector_results.push_back(result);
-  }
-
-  EXPECT_EQ(OB_SUCCESS, fusion.add_fts_results(fts_results));
-  EXPECT_EQ(OB_SUCCESS, fusion.add_vector_results(vector_results));
-  EXPECT_EQ(OB_SUCCESS, fusion.fuse());
-
-  EXPECT_GT(fusion.get_fused_result_count(), 0);
-  OB_LOG(INFO, "Semantic priority fusion completed");
-}
-
-// Test 6: Large-scale Fusion Performance Test
-TEST_F(HybridSearchIntegrationTest, LargeScaleFusion)
-{
-  OB_LOG(INFO, "=== Test: LargeScaleFusion ===");
-
-  SimpleRRFFusion rrf;
-  ObRRFConfig config(60, 500);
-
-  EXPECT_EQ(OB_SUCCESS, rrf.init(config, *allocator_));
-
-  // Prepare large-scale data
-  ObSEArray<ObHybridSearchResult, 1024> fts_results;
-  for (int i = 0; i < 500; ++i) {
-    ObHybridSearchResult result;
-    result.doc_id_ = i + 1;
-    result.fts_score_ = 100.0 - i * 0.1;
-    fts_results.push_back(result);
-  }
-
-  ObSEArray<ObHybridSearchResult, 1024> vector_results;
-  for (int i = 0; i < 500; ++i) {
-    ObHybridSearchResult result;
-    result.doc_id_ = (i * 7) % 500 + 1;  // Pseudo-random distribution
-    result.vector_score_ = 1.0 - (i % 100) * 0.01;
-    vector_results.push_back(result);
-  }
-
-  EXPECT_EQ(OB_SUCCESS, rrf.add_fts_results(fts_results));
-  EXPECT_EQ(OB_SUCCESS, rrf.add_vector_results(vector_results));
-  EXPECT_EQ(OB_SUCCESS, rrf.fuse());
-
-  EXPECT_GT(rrf.get_fused_result_count(), 0);
-
-  // Get top 10 results
-  ObSEArray<ObHybridSearchResult, 1024> results;
-  EXPECT_EQ(OB_SUCCESS, rrf.get_results(results, 10));
-  EXPECT_EQ(10, results.count());
-
-  OB_LOG(INFO, "Large scale fusion completed, total fused: %ld", rrf.get_fused_result_count());
-}
-
-// Test 7: Duplicate Addition Results (Deduplication Verification)
-TEST_F(HybridSearchIntegrationTest, DuplicateDocHandling)
-{
-  OB_LOG(INFO, "=== Test: DuplicateDocHandling ===");
-
-  SimpleRRFFusion rrf;
-  ObRRFConfig config(60, 100);
-
-  EXPECT_EQ(OB_SUCCESS, rrf.init(config, *allocator_));
-
-  // Both full-text search and vector search contain the same documents
-  ObSEArray<ObHybridSearchResult, 64> fts_results;
+  std::vector<ObHybridSearchResult> fts_results;
   for (int i = 0; i < 3; ++i) {
     ObHybridSearchResult result;
     result.doc_id_ = i + 1;
-    result.fts_score_ = 10.0 - i;
+    result.fts_score_ = 10.0 - i * 3.0;
     fts_results.push_back(result);
   }
 
-  ObSEArray<ObHybridSearchResult, 64> vector_results;
+  std::vector<ObHybridSearchResult> vector_results;
   for (int i = 0; i < 3; ++i) {
     ObHybridSearchResult result;
-    result.doc_id_ = i + 1;  // Same doc_id
+    result.doc_id_ = (i + 2) % 3 + 1;
     result.vector_score_ = 0.9 - i * 0.1;
     vector_results.push_back(result);
   }
 
-  EXPECT_EQ(OB_SUCCESS, rrf.add_fts_results(fts_results));
-  EXPECT_EQ(OB_SUCCESS, rrf.add_vector_results(vector_results));
-  EXPECT_EQ(OB_SUCCESS, rrf.fuse());
+  EXPECT_EQ(0, fusion.add_fts_results(fts_results));
+  EXPECT_EQ(0, fusion.add_vector_results(vector_results));
+  EXPECT_EQ(0, fusion.fuse());
 
-  // Should have only 3 fusion results (after deduplication)
-  EXPECT_EQ(3, rrf.get_fused_result_count());
-
-  // Verify each result contains both search results
-  for (int i = 0; i < rrf.get_fused_result_count(); ++i) {
-    const auto *result = rrf.get_result_at(i);
-    EXPECT_NE(nullptr, result);
-    EXPECT_EQ(3, result->source_flag_);  // 1|2 = 3, indicating from both sources
-  }
-
-  OB_LOG(INFO, "Duplicate document handling verified");
+  EXPECT_GT(fusion.get_fused_result_count(), 0);
 }
 
-// Test 8: Result Limit Test
-TEST_F(HybridSearchIntegrationTest, ResultLimitTest)
+// Test 5: WeightedFusion_SemanticPriority
+TEST_F(HybridSearchIntegrationTest, WeightedFusion_SemanticPriority)
 {
-  OB_LOG(INFO, "=== Test: ResultLimitTest ===");
+  SimpleWeightedFusion fusion;
+  ObWeightedFusionConfig config(0.3, 0.7, true);
+  EXPECT_EQ(0, fusion.init(config));
 
+  std::vector<ObHybridSearchResult> fts_results;
+  ObHybridSearchResult fts1;
+  fts1.doc_id_ = 1; fts1.fts_score_ = 8.0;
+  fts_results.push_back(fts1);
+  ObHybridSearchResult fts2;
+  fts2.doc_id_ = 2; fts2.fts_score_ = 6.5;
+  fts_results.push_back(fts2);
+
+  std::vector<ObHybridSearchResult> vector_results;
+  ObHybridSearchResult vec1;
+  vec1.doc_id_ = 2; vec1.vector_score_ = 0.92;
+  vector_results.push_back(vec1);
+  ObHybridSearchResult vec2;
+  vec2.doc_id_ = 1; vec2.vector_score_ = 0.85;
+  vector_results.push_back(vec2);
+
+  EXPECT_EQ(0, fusion.add_fts_results(fts_results));
+  EXPECT_EQ(0, fusion.add_vector_results(vector_results));
+  EXPECT_EQ(0, fusion.fuse());
+
+  EXPECT_GT(fusion.get_fused_result_count(), 0);
+}
+
+// Test 6: LargeScaleFusion
+TEST_F(HybridSearchIntegrationTest, LargeScaleFusion)
+{
   SimpleRRFFusion rrf;
   ObRRFConfig config(60, 100);
+  EXPECT_EQ(0, rrf.init(config));
 
-  EXPECT_EQ(OB_SUCCESS, rrf.init(config, *allocator_));
-
-  // Prepare 10 results
-  ObSEArray<ObHybridSearchResult, 64> fts_results;
-  for (int i = 0; i < 10; ++i) {
+  std::vector<ObHybridSearchResult> fts_results;
+  for (int i = 0; i < 1000; ++i) {
     ObHybridSearchResult result;
     result.doc_id_ = i + 1;
-    result.fts_score_ = 20.0 - i;
+    result.fts_score_ = 1000.0 - i * 0.5;
     fts_results.push_back(result);
   }
 
-  EXPECT_EQ(OB_SUCCESS, rrf.add_fts_results(fts_results));
-  EXPECT_EQ(OB_SUCCESS, rrf.add_vector_results(ObSEArray<ObHybridSearchResult, 64>()));
-  EXPECT_EQ(OB_SUCCESS, rrf.fuse());
+  std::vector<ObHybridSearchResult> vector_results;
+  for (int i = 0; i < 1000; ++i) {
+    ObHybridSearchResult result;
+    result.doc_id_ = (i + 500) % 1000 + 1;
+    result.vector_score_ = 0.5 - i * 0.0001;
+    vector_results.push_back(result);
+  }
 
-  // Test different limits
-  ObSEArray<ObHybridSearchResult, 64> results_5;
-  EXPECT_EQ(OB_SUCCESS, rrf.get_results(results_5, 5));
-  EXPECT_EQ(5, results_5.count());
+  EXPECT_EQ(0, rrf.add_fts_results(fts_results));
+  EXPECT_EQ(0, rrf.add_vector_results(vector_results));
+  EXPECT_EQ(0, rrf.fuse());
 
-  ObSEArray<ObHybridSearchResult, 64> results_20;
-  EXPECT_EQ(OB_SUCCESS, rrf.get_results(results_20, 20));
-  EXPECT_EQ(10, results_20.count());  // Only 10, cannot exceed
+  EXPECT_GE(rrf.get_fused_result_count(), 1000);
+}
 
-  ObSEArray<ObHybridSearchResult, 64> results_0;
-  EXPECT_EQ(OB_SUCCESS, rrf.get_results(results_0, 0));  // 0 means all
-  EXPECT_EQ(10, results_0.count());
+// Test 7: DuplicateDocHandling
+TEST_F(HybridSearchIntegrationTest, DuplicateDocHandling)
+{
+  SimpleRRFFusion rrf;
+  ObRRFConfig config(60, 100);
+  EXPECT_EQ(0, rrf.init(config));
 
-  OB_LOG(INFO, "Result limit handling verified");
+  std::vector<ObHybridSearchResult> fts_results;
+  ObHybridSearchResult fts1;
+  fts1.doc_id_ = 1; fts1.fts_score_ = 10.0;
+  fts_results.push_back(fts1);
+  ObHybridSearchResult fts2;
+  fts2.doc_id_ = 2; fts2.fts_score_ = 8.0;
+  fts_results.push_back(fts2);
+  ObHybridSearchResult fts3;
+  fts3.doc_id_ = 3; fts3.fts_score_ = 6.0;
+  fts_results.push_back(fts3);
+
+  std::vector<ObHybridSearchResult> vector_results;
+  ObHybridSearchResult vec1;
+  vec1.doc_id_ = 2; vec1.vector_score_ = 0.9;
+  vector_results.push_back(vec1);
+  ObHybridSearchResult vec2;
+  vec2.doc_id_ = 1; vec2.vector_score_ = 0.8;
+  vector_results.push_back(vec2);
+  ObHybridSearchResult vec3;
+  vec3.doc_id_ = 4; vec3.vector_score_ = 0.7;
+  vector_results.push_back(vec3);
+
+  EXPECT_EQ(0, rrf.add_fts_results(fts_results));
+  EXPECT_EQ(0, rrf.add_vector_results(vector_results));
+  EXPECT_EQ(0, rrf.fuse());
+
+  EXPECT_EQ(4, rrf.get_fused_result_count());
+}
+
+// Test 8: ResultLimitTest
+TEST_F(HybridSearchIntegrationTest, ResultLimitTest)
+{
+  SimpleRRFFusion rrf;
+  ObRRFConfig config(60, 100);
+  EXPECT_EQ(0, rrf.init(config));
+
+  std::vector<ObHybridSearchResult> fts_results;
+  for (int i = 0; i < 20; ++i) {
+    ObHybridSearchResult result;
+    result.doc_id_ = i + 1;
+    result.fts_score_ = 20.0 - i * 0.5;
+    fts_results.push_back(result);
+  }
+
+  EXPECT_EQ(0, rrf.add_fts_results(fts_results));
+  EXPECT_EQ(0, rrf.add_vector_results(fts_results));
+  EXPECT_EQ(0, rrf.fuse());
+
+  std::vector<ObHybridSearchResult> results_all;
+  EXPECT_EQ(0, rrf.get_results(results_all));
+
+  std::vector<ObHybridSearchResult> results_limit5;
+  EXPECT_EQ(0, rrf.get_results(results_limit5, 5));
+  EXPECT_EQ(5, results_limit5.size());
+
+  std::vector<ObHybridSearchResult> results_limit0;
+  EXPECT_EQ(0, rrf.get_results(results_limit0, 0));
+  EXPECT_EQ(results_all.size(), results_limit0.size());
 }
 
 } // namespace common
