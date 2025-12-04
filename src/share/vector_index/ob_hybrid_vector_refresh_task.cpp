@@ -1102,10 +1102,10 @@ void ObHybridVectorRefreshTaskCtx::set_task_finish()
     if (ret != OB_SUCCESS) {
       LOG_WARN("revert scan iter failed", K(ret));
     }
-    scan_iter_ = nullptr;
-    table_scan_param_ = nullptr;
-    table_param_ = nullptr;
   }
+  scan_iter_ = nullptr;
+  table_scan_param_ = nullptr;
+  table_param_ = nullptr;
   if (task_started_) {
     adp_guard_.get_adatper()->vector_index_task_finish();
     adp_guard_.~ObPluginVectorIndexAdapterGuard();
