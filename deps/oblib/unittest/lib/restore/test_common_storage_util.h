@@ -77,9 +77,6 @@ int TestCommonStorageUtil::build_object_storage_info(
           && OB_FAIL(databuff_printf(account, sizeof(account), pos,
                                      "&checksum_type=%s", checksum_type))) {
         OB_LOG(WARN, "fail to databuff printf", K(ret), K(checksum_type));
-      } else if (ObStorageType::OB_STORAGE_COS == storage_type && 
-                 databuff_printf(account, sizeof(account), pos, "&appid=%s", appid)) {
-        OB_LOG(WARN, "fail to databuff printf", K(ret), K(appid));
       } else if (ObStorageType::OB_STORAGE_S3 == storage_type &&
                  databuff_printf(account, sizeof(account), pos, "&s3_region=%s", region)) {
         OB_LOG(WARN, "fail to databuff printf", K(ret), K(region));

@@ -150,8 +150,6 @@ int get_storage_prefix_from_path(const common::ObString &uri, const char *&prefi
   int ret = OB_SUCCESS;
   if (uri.prefix_match(OB_OSS_PREFIX)) {
     prefix = OB_OSS_PREFIX;
-  } else if (uri.prefix_match(OB_COS_PREFIX)) {
-    prefix = OB_COS_PREFIX;
   } else if (uri.prefix_match(OB_S3_PREFIX)) {
     prefix = OB_S3_PREFIX;
   } else if (uri.prefix_match(OB_FILE_PREFIX)) {
@@ -369,7 +367,7 @@ int ob_set_field(const char *value, char *field, const uint32_t field_length)
 int ob_apr_abort_fn(int retcode)
 {
   int ret = OB_ALLOCATE_MEMORY_FAILED;
-  OB_LOG(ERROR, "fail to alloc mem for OSS/COS", K(ret), K(retcode));
+  OB_LOG(ERROR, "fail to alloc mem for OSS", K(ret), K(retcode));
   return ret;
 }
 
@@ -805,7 +803,7 @@ int ObStoragePartInfoHandler::add_part_info(
     ret = OB_NOT_INIT;
     OB_LOG(WARN, "ObStoragePartInfoHandler not inited", K(ret));
   // checksum is allowed to be null
-  // e.g. S3 use md5 | OSS | COS | OBS 
+  // e.g. S3 use md5 | OSS | OBS 
   } else if (OB_UNLIKELY(part_id < 1) || OB_ISNULL(etag)) {
     ret = OB_INVALID_ARGUMENT;
     OB_LOG(WARN, "invalid args", K(ret), K(part_id), KP(etag));
@@ -827,13 +825,11 @@ int ObStoragePartInfoHandler::add_part_info(
 static lib::ObMemAttr get_mem_attr_from_storage_info(const ObObjectStorageInfo *storage_info)
 {
   static lib::ObMemAttr oss_attr;
-  static lib::ObMemAttr cos_attr;
   static lib::ObMemAttr s3_attr;
   static lib::ObMemAttr nfs_attr;
   static lib::ObMemAttr hdfs_attr;
   static lib::ObMemAttr default_attr;
   oss_attr.label_ = "OSS_SDK";
-  cos_attr.label_ = "COS_SDK";
   s3_attr.label_ = "S3_SDK";
   nfs_attr.label_ = "NFS_SDK";
   hdfs_attr.label_ = "HDFS_SDK";
@@ -844,8 +840,6 @@ static lib::ObMemAttr get_mem_attr_from_storage_info(const ObObjectStorageInfo *
     const ObStorageType type = storage_info->get_type();
     if (OB_STORAGE_OSS == type) {
       ret_attr = oss_attr;
-    } else if (OB_STORAGE_COS == type) {
-      ret_attr = cos_attr;
     } else if (OB_STORAGE_S3 == type) {
       ret_attr = s3_attr;
     } else if (OB_STORAGE_FILE == type) {

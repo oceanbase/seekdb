@@ -138,8 +138,6 @@ int ObDeviceManager::init_devices_env()
       OB_LOG(WARN, "fail to init lock", KR(ret));
     } else if (OB_FAIL(init_oss_env())) {
       OB_LOG(WARN, "fail to init oss storage", K(ret));
-    } else if (OB_FAIL(init_cos_env())) {
-      OB_LOG(WARN, "fail to init cos storage", K(ret));
     } else if (OB_FAIL(init_s3_env())) {
       OB_LOG(WARN, "fail to init s3 storage", K(ret));
     } else if (OB_FAIL(ObObjectStorageInfo::register_cluster_version_mgr(
@@ -205,7 +203,6 @@ void ObDeviceManager::destroy()
     }
     allocator_.reset();
     fin_oss_env();
-    fin_cos_env();
     fin_s3_env();
     lock_.destroy();
     ObDeviceCredentialMgr::get_instance().destroy();
@@ -245,10 +242,6 @@ int parse_storage_info(common::ObString storage_type_prefix, ObIODevice*& device
     if (NULL != mem) {new(mem)ObObjectDevice;}
   } else if (storage_type_prefix.prefix_match(OB_OSS_PREFIX)) {
     device_type = OB_STORAGE_OSS;
-    mem = allocator.alloc(sizeof(ObObjectDevice));
-    if (NULL != mem) {new(mem)ObObjectDevice;}
-  } else if (storage_type_prefix.prefix_match(OB_COS_PREFIX)) {
-    device_type = OB_STORAGE_COS;
     mem = allocator.alloc(sizeof(ObObjectDevice));
     if (NULL != mem) {new(mem)ObObjectDevice;}
   } else if (storage_type_prefix.prefix_match(OB_S3_PREFIX)) {

@@ -8,8 +8,6 @@ oblib_add_library(restore OBJECT
   ob_storage.h
   ob_storage_oss_base.cpp
   ob_storage_oss_base.h
-  ob_storage_cos_base.cpp
-  ob_storage_cos_base.h
   ob_storage_path.cpp
   ob_storage_path.h
   ob_storage_info.cpp
@@ -18,9 +16,6 @@ oblib_add_library(restore OBJECT
   hdfs/ob_storage_hdfs_cache.h
   hdfs/ob_storage_hdfs_jni_base.cpp
   hdfs/ob_storage_hdfs_jni_base.h
-  cos/ob_cos_wrapper_handle.cpp
-  cos/ob_cos_wrapper_handle.h
-  cos/ob_singleton.h
   ob_object_device.cpp
   hmac_signature.cpp
   ob_object_device.h
@@ -65,6 +60,4 @@ target_link_libraries(s3
 )
 target_link_libraries(s3 PUBLIC oblib_base_without_pass)
 
-target_link_libraries(restore PUBLIC oss cos_sdk oblib_base s3)
-
-add_subdirectory(cos)
+target_link_libraries(restore PUBLIC oss oblib_base s3)

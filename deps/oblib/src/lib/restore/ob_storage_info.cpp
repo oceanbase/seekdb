@@ -309,7 +309,6 @@ const char *ObObjectStorageInfo::get_checksum_type_str() const
 }
 
 // oss:host=xxxx&access_id=xxx&access_key=xxx
-// cos:host=xxxx&access_id=xxx&access_key=xxxappid=xxx
 // s3:host=xxxx&access_id=xxx&access_key=xxx&s3_region=xxx
 // hdfs:krb5conf=xxx&principal=xxx&keytab=xxx&ticket_cache_path=xxx
 int ObObjectStorageInfo::set(const common::ObStorageType device_type, const char *storage_info)
@@ -339,9 +338,6 @@ int ObObjectStorageInfo::set(const common::ObStorageType device_type, const char
     }
   } else if (OB_FAIL(parse_storage_info_(storage_info, has_needed_extension))) {
     LOG_WARN("parse storage info failed", K(ret), KP(storage_info), K_(device_type));
-  } else if (OB_STORAGE_COS == device_type && !has_needed_extension) {
-    ret = OB_INVALID_BACKUP_DEST;
-    LOG_WARN("invalid cos info, appid do not allow to be empty", K(ret), K_(extension));
   } else if (OB_FAIL(validate_arguments())) {
     ret = OB_INVALID_BACKUP_DEST;
     LOG_WARN("invalid arguments after parse storage info", K(ret), KPC(this));
@@ -486,14 +482,6 @@ int ObObjectStorageInfo::parse_storage_info_(const char *storage_info, bool &has
             LOG_INFO("parse bandwidth value", K(buf), K(value));
           }
         }
-      } else if (0 == strncmp(APPID, token, strlen(APPID))) {
-        has_needed_extension = (OB_STORAGE_COS == device_type_);
-        if (OB_UNLIKELY(OB_STORAGE_COS != device_type_)) {
-          ret = OB_INVALID_ARGUMENT;
-          LOG_WARN("only cos protocol can appid", K(ret), K(token), K(device_type_));
-        } else if (OB_FAIL(set_storage_info_field_(token, extension_, sizeof(extension_)))) {
-          LOG_WARN("failed to set appid", K(ret), K(token));
-        }
       } else if (0 == strncmp(DELETE_MODE, token, strlen(DELETE_MODE))) {
         if (OB_STORAGE_FILE == device_type_) {
           ret = OB_INVALID_BACKUP_DEST;
@@ -631,12 +619,6 @@ bool is_oss_supported_checksum(const ObStorageChecksumType checksum_type)
       || checksum_type == ObStorageChecksumType::OB_MD5_ALGO;
 }
 
-bool is_cos_supported_checksum(const ObStorageChecksumType checksum_type)
-{
-  return checksum_type == ObStorageChecksumType::OB_NO_CHECKSUM_ALGO
-      || checksum_type == ObStorageChecksumType::OB_MD5_ALGO;
-}
-
 bool is_s3_supported_checksum(const ObStorageChecksumType checksum_type)
 {
   return checksum_type == ObStorageChecksumType::OB_CRC32_ALGO
@@ -667,10 +649,6 @@ int ObObjectStorageInfo::set_checksum_type_(const char *checksum_type_str)
     ret = OB_CHECKSUM_TYPE_NOT_SUPPORTED;
     OB_LOG(WARN, "not supported checksum type for oss",
         K(ret), K_(device_type), K(checksum_type_str), K_(checksum_type));
-  } else if (OB_UNLIKELY(OB_STORAGE_COS == device_type_ && !is_cos_supported_checksum(checksum_type_))) {
-    ret = OB_CHECKSUM_TYPE_NOT_SUPPORTED;
-    OB_LOG(WARN, "not supported checksum type for cos",
-        K(ret), K_(device_type), K(checksum_type_str), K_(checksum_type));
   } else if (OB_UNLIKELY(OB_STORAGE_S3 == device_type_ && !is_s3_supported_checksum(checksum_type_))) {
     ret = OB_CHECKSUM_TYPE_NOT_SUPPORTED;
     OB_LOG(WARN, "not supported checksum type for s3",
@@ -693,7 +671,6 @@ int ObObjectStorageInfo::set_storage_info_field_(const char *info, char *field, 
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("info is too long ", K(ret), K(info_len), K(length));
     } else if (pos > 0 && OB_FAIL(databuff_printf(field, length, pos, "&"))) {
-      // cos:host=xxxx&access_id=xxx&access_key=xxx&appid=xxx&delete_mode=xxx
       // extension_ may contain both appid and delete_mode
       // so delimiter '&' should be included
       LOG_WARN("failed to add delimiter to storage info field", K(ret), K(pos), KP(field), K(length));
