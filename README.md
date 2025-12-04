@@ -1,6 +1,10 @@
 <div align="center">
 
-# <img src="https://mdn.alipayobjects.com/huamei_ytl0i7/afts/img/A*6BO4Q6D78GQAAAAAQFAAAAgAejCYAQ/original" width="420">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://mdn.alipayobjects.com/huamei_ytl0i7/afts/img/A*pKqtRILxGioAAAAAQLAAAAgAejCYAQ/original" width="420">
+  <source media="(prefers-color-scheme: light)" srcset="https://mdn.alipayobjects.com/huamei_ytl0i7/afts/img/A*6BO4Q6D78GQAAAAAQFAAAAgAejCYAQ/original" width="420">
+  <img alt="示意图" src="light-mode.png">
+</picture>
 
 ### **🔷 The AI-Native Search Database**
 
@@ -24,7 +28,7 @@
         <img alt="Ask DeepWiki" src="https://deepwiki.com/badge.svg" />
     </a>
     <a href="https://discord.gg/74cF8vbNEs">
-        <img alt="Discord" src="https://img.shields.io/discord/74cF8vbNEs?label=Discord&logo=discord&style=flat-square&color=5865F2" />
+        <img alt="Join Discord" src="https://img.shields.io/badge/Discord-Join%20Chat-5865F2?logo=discord&style=flat-square" />
     </a>
     <a href="https://pepy.tech/projects/pylibseekdb">
         <img height="20" alt="Downloads" src="https://static.pepy.tech/badge/pylibseekdb" />
@@ -106,9 +110,11 @@ pip install -U pyseekdb
 docker run -d \
   --name seekdb \
   -p 2881:2881 \
-  -v ./data:/var/lib/oceanbase/store \
+  -p 2886:2886 \
+  -v ./data:/var/lib/oceanbase \
   oceanbase/seekdb:latest
 ```
+Please refer to the [document](https://github.com/oceanbase/docker-images/blob/main/seekdb/README.md) of this docker image for details.
 
 </details>
 
