@@ -1184,6 +1184,47 @@ int ObVecIndexIAsyncTask::init(
   return ret;
 }
 
+int ObVecIndexATaskUpdIterator::init() {
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(old_row_.init())) {
+    LOG_WARN("fail to init old rows iter", K(ret));
+  } else if (OB_FAIL(new_row_.init())) {
+    LOG_WARN("fail to init new rows iter", K(ret));
+  }
+  return ret;
+}
+
+int ObVecIndexATaskUpdIterator::add_row(blocksstable::ObDatumRow &old_datum_row, blocksstable::ObDatumRow &new_datum_row) {
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(old_row_.add_row(old_datum_row))) {
+    LOG_WARN("failed to add row to iter", K(ret));
+  } else if (OB_FAIL(new_row_.add_row(new_datum_row))) {
+    LOG_WARN("fail to init new rows iter", K(ret));
+  }
+  return ret;
+}
+
+int ObVecIndexATaskUpdIterator::get_next_row(blocksstable::ObDatumRow *&row)
+{
+  int ret = OB_SUCCESS;
+  if (!got_old_row_) {
+    got_old_row_ = true;
+    if (OB_FAIL(old_row_.get_next_row(row))) {
+      if (OB_ITER_END != ret) {
+        LOG_WARN("fail to get next old row", K(ret));
+      }
+    }
+  } else {
+    got_old_row_ = false;
+    if (OB_FAIL(new_row_.get_next_row(row))) {
+      if (OB_ITER_END != ret) {
+        LOG_WARN("fail to get next new row", K(ret));
+      }
+    }
+  }
+  return ret;
+}
+
 /**************************** ObVecIndexAsyncTask ******************************/
 int ObVecIndexAsyncTask::do_work()
 {

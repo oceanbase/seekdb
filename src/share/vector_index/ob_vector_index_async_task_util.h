@@ -25,6 +25,7 @@
 #include "lib/thread/thread_mgr_interface.h"
 #include "storage/access/ob_dml_param.h"
 #include "storage/tx/ob_trans_define_v4.h"
+#include "storage/ob_value_row_iterator.h"
 
 namespace oceanbase
 {
@@ -314,6 +315,36 @@ protected:
   ObObj vid_obj_;
   bool all_finished_;
   DISALLOW_COPY_AND_ASSIGN(ObVecIndexIAsyncTask);
+};
+
+class ObVecIndexATaskUpdIterator : public blocksstable::ObDatumRowIterator
+{
+public:
+  ObVecIndexATaskUpdIterator()
+    : got_old_row_(false),
+      is_iter_end_(false)
+  {}
+
+  virtual ~ObVecIndexATaskUpdIterator() {
+    old_row_.reset();
+    new_row_.reset();
+  }
+
+  int init();
+  int add_row(blocksstable::ObDatumRow &old_datum_row, blocksstable::ObDatumRow &new_datum_row);
+
+  virtual int get_next_row(blocksstable::ObDatumRow *&row) override;
+  virtual void reset() override {}
+
+private:
+  // disallow copy
+  DISALLOW_COPY_AND_ASSIGN(ObVecIndexATaskUpdIterator);
+
+private:
+  storage::ObValueRowIterator old_row_;
+  storage::ObValueRowIterator new_row_;
+  bool got_old_row_;
+  bool is_iter_end_;
 };
 
 class ObVecIndexAsyncTask : public ObVecIndexIAsyncTask
