@@ -285,7 +285,8 @@ public:
         old_adapter_(nullptr),
         mem_attr_(mem_attr),
         allocator_(ObMemAttr(MTL_ID(), "VecIdxASyTask")),
-        vid_obj_()
+        vid_obj_(),
+        all_finished_(false)
   {}
   virtual ~ObVecIndexIAsyncTask() {}
   int init(const uint64_t tenant_id, const ObLSID &ls_id, const int task_type,
@@ -294,6 +295,7 @@ public:
   ObLSID &get_ls_id() { return ls_id_; }
   ObVecIndexAsyncTaskCtx *get_task_ctx() { return ctx_; }
   void set_old_adapter(ObPluginVectorIndexAdaptor* adapter) { old_adapter_ = adapter; }
+  bool all_finished() { return all_finished_; }
   virtual void check_task_free() {}
   virtual int do_work() = 0;
 
@@ -310,6 +312,7 @@ protected:
   ObMemAttr mem_attr_;
   common::ObArenaAllocator allocator_;
   ObObj vid_obj_;
+  bool all_finished_;
   DISALLOW_COPY_AND_ASSIGN(ObVecIndexIAsyncTask);
 };
 
