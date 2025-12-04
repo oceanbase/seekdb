@@ -128,10 +128,6 @@ public:
                                   "host=%s&access_id=%s&access_key=%s",
                                   endpoint, secretid, secretkey))) {
         OB_LOG(WARN, "fail to set account", K(ret), K(endpoint), K(secretid), K(secretkey));
-      } else if (ObStorageType::OB_STORAGE_COS == storage_type) {
-        if (OB_FAIL(databuff_printf(account, sizeof(account), pos, "&appid=%s", appid))) {
-          OB_LOG(WARN, "fail to set appid", K(ret), K(pos), K(account), K(appid));
-        }
       } else if (ObStorageType::OB_STORAGE_S3 == storage_type) {
         if (OB_FAIL(databuff_printf(account, sizeof(account), pos, "&s3_region=%s", region))) {
           OB_LOG(WARN, "fail to set region", K(ret), K(pos), K(account), K(region));
@@ -1449,8 +1445,6 @@ TEST_F(TestObjectStorage, test_del_unmerged_parts)
     if (info_base.get_type() == ObStorageType::OB_STORAGE_OSS) {
       ASSERT_EQ(OB_OBJECT_STORAGE_IO_ERROR, writer.close());
     } else if (ObStorageType::OB_STORAGE_S3 == info_base.get_type()) {
-      ASSERT_EQ(OB_OBJECT_STORAGE_IO_ERROR, writer.close());
-    } else if (info_base.get_type() == ObStorageType::OB_STORAGE_COS) {
       ASSERT_EQ(OB_OBJECT_STORAGE_IO_ERROR, writer.close());
     }
     
