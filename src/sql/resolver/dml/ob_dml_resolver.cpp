@@ -17128,7 +17128,6 @@ int ObDMLResolver::fill_doc_id_expr_param(
     ObDMLStmt *stmt /* = NULL */)
 {
   int ret = OB_SUCCESS;
-  uint64_t rowkey_doc_tid = 0;
   if (NULL == stmt) {
     stmt = get_stmt();
   }
@@ -17144,8 +17143,6 @@ int ObDMLResolver::fill_doc_id_expr_param(
   } else if (OB_ISNULL(session_info_) || OB_ISNULL(params_.expr_factory_) || OB_ISNULL(stmt)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("session info is NULL", KP_(session_info), KP_(params_.expr_factory), KP(stmt));
-  } else if (!table_schema->is_table_without_pk() && OB_FAIL(table_schema->get_rowkey_doc_tid(rowkey_doc_tid))) {
-    LOG_WARN("get rowkey doc table id failed", K(ret), KPC(table_schema));
   } else {
     CopySchemaExpr copier(*params_.expr_factory_);
     ObSysFunRawExpr *expr = static_cast<ObSysFunRawExpr *>(doc_id_expr);
@@ -17157,9 +17154,8 @@ int ObDMLResolver::fill_doc_id_expr_param(
       LOG_WARN("failed to copy expr", K(ret));
     } else if (OB_FAIL(copier.copy(stmt->get_subpart_expr(table_id, index_tid), subpart_expr))) {
       LOG_WARN("failed to copy expr", K(ret));
-    } else if (OB_FAIL(ObRawExprUtils::build_calc_partition_tablet_id_expr(*params_.expr_factory_, *session_info_,
-            table_schema->is_table_without_pk() ? index_tid : rowkey_doc_tid,
-            part_level, part_expr, subpart_expr, calc_tablet_id_expr))) {
+    } else if (OB_FAIL(ObRawExprUtils::build_calc_partition_tablet_id_expr(*params_.expr_factory_, *session_info_, index_tid,
+                                                                           part_level, part_expr, subpart_expr, calc_tablet_id_expr))) {
       LOG_WARN("fail to build calculate tablet id expr", K(ret), K(index_tid), KPC(table_schema));
     } else if (OB_ISNULL(calc_tablet_id_expr)) {
       ret = OB_ERR_UNEXPECTED;
