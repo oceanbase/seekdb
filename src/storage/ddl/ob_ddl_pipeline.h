@@ -125,6 +125,11 @@ public:
       const ObIndexType &index_type,
       const int64_t snapshot_version,
       const ObDDLTableSchema &ddl_table_schema);
+
+  int build_extra_column_idxs(const int32_t chunk_col_idx, common::ObSEArray<int32_t, 4> &extra_column_idxs) const;
+
+TO_STRING_KV(K_(tenant_id), K_(ls_id), K_(tablet_id), K_(snapshot_version), K_(index_type));
+
 private:
   int init_hnsw_index(const ObDDLTableSchema &ddl_table_schema);
   int init_ivf_center_index(const ObDDLTableSchema &ddl_table_schema);
@@ -719,7 +724,7 @@ class ObHNSWEmbeddingOperator : public ObVectorIndexBaseOperator
 public:
   explicit ObHNSWEmbeddingOperator(ObPipeline *pipeline)
     : ObVectorIndexBaseOperator(pipeline), embedmgr_(nullptr), vec_dim_(-1), rowkey_cnt_(-1),
-      vid_col_idx_(-1), text_col_idx_(-1), is_inited_(false), error_ret_code_(OB_SUCCESS),
+      text_col_idx_(-1), is_inited_(false), error_ret_code_(OB_SUCCESS),
       batch_size_(0), current_batch_(nullptr), http_timeout_us_(20 * 1000 * 1000) /* 20s */
   {}
   ~ObHNSWEmbeddingOperator();
@@ -735,15 +740,13 @@ private:
   int get_ready_results(ObChunk &output_chunk, ResultState &result_state);
   int process_input_chunk(const ObChunk &input_chunk);
   int get_next_row_from_tmp_files(common::ObArray<ObCGRowFile *> *cg_row_file_arr,
-                                  int64_t &vid,
                                   common::ObString &text,
-                                  common::ObArray<blocksstable::ObStorageDatum> &rowkeys,
+                                  common::ObArray<blocksstable::ObStorageDatum> &extras,
                                   bool &has_row);
   int get_next_batch_from_tmp_files(ObCGRowFile *&row_file);
   int parse_row(const blocksstable::ObDatumRow &current_row,
-                int64_t &vid,
                 common::ObString &text,
-                common::ObArray<blocksstable::ObStorageDatum> &rowkeys);
+                common::ObArray<blocksstable::ObStorageDatum> &extras);
   int flush_current_batch();
   bool is_chunk_exhausted() const { return chunk_exhausted_; }
   void reset_chunk_exhausted() { chunk_exhausted_ = false; }
@@ -754,8 +757,9 @@ private:
   common::ObString model_id_;
   int64_t vec_dim_;
   int64_t rowkey_cnt_;
-  int64_t vid_col_idx_;
   int64_t text_col_idx_;
+  // extras carry all non-embedding columns
+  ObSEArray<int32_t, 4> extra_column_idxs_;
   bool is_inited_;
   int error_ret_code_;
   // batch submit
@@ -775,7 +779,7 @@ class ObHNSWEmbeddingRowIterator : public ObVectorIndexRowIterator
 {
 public:
   ObHNSWEmbeddingRowIterator() : rowkey_cnt_(0), column_cnt_(0), snapshot_version_(0),
-                            vid_col_idx_(-1), vector_col_idx_(-1),
+                            vector_col_idx_(-1),
                             batch_info_(nullptr), cur_result_pos_(0)
   {}
 
@@ -789,24 +793,24 @@ public:
     rowkey_cnt_ = 0;
     column_cnt_ = 0;
     snapshot_version_ = 0;
-    vid_col_idx_ = -1;
     vector_col_idx_ = -1;
     batch_info_ = nullptr;
     cur_result_pos_ = 0;
+    extra_column_idxs_.reset();
   }
 private:
   bool is_embedding_col_invalid(const int64_t column_cnt) const {
-    return vid_col_idx_ < 0 || vid_col_idx_ >= column_cnt ||
-           vector_col_idx_ < 0 || vector_col_idx_ >= column_cnt;
+    return vector_col_idx_ < 0 || vector_col_idx_ >= column_cnt;
   }
 private:
   int64_t rowkey_cnt_;
   int64_t column_cnt_;
   int64_t snapshot_version_;
-  int32_t vid_col_idx_;
   int32_t vector_col_idx_;
   ObTaskBatchInfo *batch_info_;  // Not owned, just a reference
   int64_t cur_result_pos_;
+  // extras carry all non-embedding columns
+  ObSEArray<int32_t, 4> extra_column_idxs_;
 };
 
 class ObHNSWEmbeddingWriteMacroOperator : public ObVectorIndexWriteMacroBaseOperator
