@@ -871,6 +871,7 @@ private:
   int get_current_scn(share::SCN &current_scn);
 
   int init_sparse_vector_type();
+  void free_sparse_vector_type_mem();
 
   bool is_sync_index();
 
