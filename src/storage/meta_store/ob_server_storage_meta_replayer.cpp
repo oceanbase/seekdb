@@ -29,7 +29,6 @@ using namespace omt;
 namespace storage
 {
 int ObServerStorageMetaReplayer::init(
-    
     ObServerStorageMetaPersister &persister,
     ObServerCheckpointSlogHandler &ckpt_slog_handler)
 {
@@ -57,12 +56,12 @@ int ObServerStorageMetaReplayer::start_replay()
   } else if (OB_FAIL(tenant_meta_map.create(MAX_TENANT_CNT, MEM_LABEL, MEM_LABEL))) {
     LOG_WARN("create tenant meta map fail", K(ret));
   } else if (OB_FAIL(ckpt_slog_handler_->start_replay(tenant_meta_map))) {
-      LOG_WARN("fail to start replay", K(ret));
-    } else if (OB_FAIL(apply_replay_result_(tenant_meta_map))) {
-      LOG_WARN("fail to apply repaly result", K(ret));
-    } else if (OB_FAIL(ckpt_slog_handler_->do_post_replay_work())) {
-      LOG_WARN("fail to do post repaly work", K(ret));
-    }
+    LOG_WARN("fail to start replay", K(ret));
+  } else if (OB_FAIL(apply_replay_result_(tenant_meta_map))) {
+    LOG_WARN("fail to apply repaly result", K(ret));
+  } else if (OB_FAIL(ckpt_slog_handler_->do_post_replay_work())) {
+    LOG_WARN("fail to do post repaly work", K(ret));
+  }
   
 
   if (OB_FAIL(ret)) {

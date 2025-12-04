@@ -36,8 +36,7 @@ public:
   ObServerStorageMetaReplayer(const ObServerStorageMetaReplayer &) = delete;
   ObServerStorageMetaReplayer &operator=(const ObServerStorageMetaReplayer &) = delete;
       
-  int init(
-           ObServerStorageMetaPersister &persister,
+  int init(ObServerStorageMetaPersister &persister,
            ObServerCheckpointSlogHandler &ckpt_slog_handler);
   int start_replay();
   void destroy();
