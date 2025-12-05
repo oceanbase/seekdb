@@ -520,7 +520,6 @@ int ObServerAutoSplitScheduler::check_tablet_creation_limit(const int64_t inc_ta
   int ret = OB_SUCCESS;
   real_split_size = OB_INVALID_SIZE;
   const uint64_t tenant_id = MTL_ID();
-  ObUnitInfoGetter::ObTenantConfig unit;
   ObTenantMetaMemMgr *t3m = MTL(ObTenantMetaMemMgr*);
   int64_t tablet_cnt_per_gb = ObServerAutoSplitScheduler::TABLET_CNT_PER_GB; // default value
   if (OB_UNLIKELY(inc_tablet_cnt < 0 || safe_ratio > 1 || safe_ratio <= 0 || split_size <= 0)) {
@@ -536,21 +535,14 @@ int ObServerAutoSplitScheduler::check_tablet_creation_limit(const int64_t inc_ta
     }
   }
 
-  if (FAILEDx(GCTX.omt_->get_tenant_unit(tenant_id, unit))) {
-    if (OB_TENANT_NOT_IN_SERVER != ret) {
-      LOG_WARN("failed to get tenant unit", K(ret), K(tenant_id));
-    } else {
-      // during restart, tenant unit not ready, skip check
-      ret = OB_SUCCESS;
-    }
-  } else {
-    const double memory_limit = unit.config_.memory_size();
-    const int64_t max_tablet_cnt = static_cast<int64_t>(memory_limit / (1 << 30) * tablet_cnt_per_gb * safe_ratio);
+  if (OB_SUCC(ret)) {
+    const double hard_memory_limit = lib::get_hard_memory_limit();
+    const int64_t max_tablet_cnt = static_cast<int64_t>(hard_memory_limit / (1 << 30) * tablet_cnt_per_gb * safe_ratio);
     const int64_t cur_tablet_cnt = t3m->get_total_tablet_cnt();
     double cur_ratio = 0.0;
     if (OB_UNLIKELY(cur_tablet_cnt + inc_tablet_cnt > max_tablet_cnt)) {
       ret = OB_TOO_MANY_PARTITIONS_ERROR;
-      LOG_WARN("too many partitions of tenant", K(ret), K(tenant_id), K(memory_limit), K(tablet_cnt_per_gb),
+      LOG_WARN("too many partitions of tenant", K(ret), K(tenant_id), K(hard_memory_limit), K(tablet_cnt_per_gb),
           K(max_tablet_cnt), K(cur_tablet_cnt), K(inc_tablet_cnt));
     } else if (OB_UNLIKELY(max_tablet_cnt <= 0)) {
       ret = OB_ERR_UNEXPECTED;

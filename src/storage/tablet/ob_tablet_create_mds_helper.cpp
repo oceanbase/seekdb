@@ -203,7 +203,6 @@ int ObTabletCreateMdsHelper::check_create_new_tablets(
 {
   int ret = OB_SUCCESS;
   const uint64_t tenant_id = MTL_ID();
-  ObUnitInfoGetter::ObTenantConfig unit;
   ObTenantMetaMemMgr *t3m = MTL(ObTenantMetaMemMgr*);
   int64_t tablet_cnt_per_gb = 20000; // default value
 
@@ -228,21 +227,14 @@ int ObTabletCreateMdsHelper::check_create_new_tablets(
     }
   }
 
-  if (FAILEDx(GCTX.omt_->get_tenant_unit(tenant_id, unit))) {
-    if (OB_TENANT_NOT_IN_SERVER != ret) {
-      LOG_WARN("failed to get tenant unit", K(ret), K(tenant_id));
-    } else {
-      // during restart, tenant unit not ready, skip check
-      ret = OB_SUCCESS;
-    }
-  } else {
-    const double memory_limit = unit.config_.memory_size();
-    const int64_t max_tablet_cnt = memory_limit / (1 << 30) * tablet_cnt_per_gb;
+  if (OB_SUCC(ret)) {
+    const double hard_memory_limit = lib::get_hard_memory_limit();
+    const int64_t max_tablet_cnt = hard_memory_limit / (1 << 30) * tablet_cnt_per_gb;
     const int64_t cur_tablet_cnt = t3m->get_total_tablet_cnt();
 
     if (OB_UNLIKELY(cur_tablet_cnt + inc_tablet_cnt > max_tablet_cnt)) {
       ret = OB_TOO_MANY_PARTITIONS_ERROR;
-      LOG_WARN("too many partitions of tenant", K(ret), K(tenant_id), K(level), K(memory_limit), K(tablet_cnt_per_gb),
+      LOG_WARN("too many partitions of tenant", K(ret), K(tenant_id), K(level), K(hard_memory_limit), K(tablet_cnt_per_gb),
           K(max_tablet_cnt), K(cur_tablet_cnt), K(inc_tablet_cnt));
     }
   }
