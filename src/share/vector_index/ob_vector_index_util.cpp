@@ -377,14 +377,6 @@ int ObVectorIndexUtil::parser_params_from_string(
         }
       }
     }
-    if (OB_SUCC(ret)) {
-      if (ObVectorIndexAlgorithmType::VIAT_HNSW_BQ == param.type_
-          && ObVectorIndexDistAlgorithm::VIDA_L2 != param.dist_algorithm_) {
-        ret = OB_NOT_SUPPORTED;
-        LOG_WARN("not support distance algorithm for hnsw bq index", K(ret), K(param));
-        LOG_USER_ERROR(OB_NOT_SUPPORTED, "current distance algorithm for hnsw bq index is");
-      }
-    }
 
     if (OB_SUCC(ret) && set_default) {  // if vector param is not set, use default
       if (index_type == ObVectorIndexType::VIT_HNSW_INDEX) {
@@ -3369,14 +3361,6 @@ int ObVectorIndexUtil::check_index_param(
           LOG_WARN("not support vector index param", K(ret), K(last_variable));
           LOG_USER_ERROR(OB_NOT_SUPPORTED, "this value of vector index ef_search is");
         }
-      }
-    }
-
-    if (OB_SUCC(ret) && type_hnsw_bq_is_set) {
-      if (type_hnsw_bq_is_set && distance_name != "L2") {
-        ret = OB_NOT_SUPPORTED;
-        LOG_WARN("not support distance algorithm for hnsw bq index", K(ret), K(distance_name));
-        LOG_USER_ERROR(OB_NOT_SUPPORTED, "current distance algorithm for hnsw bq index is");
       }
     }
 
