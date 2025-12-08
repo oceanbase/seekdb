@@ -3063,6 +3063,7 @@ int ObJoinOrder::create_access_paths(const uint64_t table_id,
   bool use_index_merge = false;
   bool use_index_merge_by_hint = false;
   ObArray<ObIndexMergeNode*> union_merge_nodes;
+  bool is_es_match = false;
   bool ignore_normal_access_path = false;
   if (OB_ISNULL(get_plan()) ||
       OB_ISNULL(stmt = get_plan()->get_stmt()) ||
@@ -3080,9 +3081,10 @@ int ObJoinOrder::create_access_paths(const uint64_t table_id,
     LOG_WARN("get prefix index qual failed");
   } else if (OB_FAIL(init_basic_text_retrieval_info(table_id,
                                                     ref_table_id,
-                                                    helper))) {
+                                                    helper,
+                                                    is_es_match))) {
     LOG_WARN("failed to init basic text retrieval info", K(ret));
-  } else if (OB_FAIL(create_index_merge_access_paths(table_id,
+  } else if (!is_es_match && OB_FAIL(create_index_merge_access_paths(table_id,
                                                      ref_table_id,
                                                      helper,
                                                      index_info_cache,
@@ -19429,7 +19431,8 @@ int ObJoinOrder::process_index_for_match_expr(const uint64_t table_id,
 
 int ObJoinOrder::init_basic_text_retrieval_info(uint64_t table_id,
                                                 uint64_t ref_table_id,
-                                                PathHelper &helper)
+                                                PathHelper &helper,
+                                                bool &is_es_match)
 {
   int ret = OB_SUCCESS;
   helper.match_expr_infos_.reuse();
@@ -19452,7 +19455,7 @@ int ObJoinOrder::init_basic_text_retrieval_info(uint64_t table_id,
     LOG_WARN("unexpected null partition info", K(ret));
   } else {
     // generate selectivity info for each match against expr
-    bool is_es_match = false;
+    is_es_match = false;
     for (int64_t i = 0; OB_SUCC(ret) && i < match_exprs.count(); ++i) {
       ObMatchFunRawExpr *match_expr = NULL;
       uint64_t index_id = OB_INVALID_ID;
