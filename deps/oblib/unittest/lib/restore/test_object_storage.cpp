@@ -63,8 +63,6 @@ public:
 
   static void SetUpTestCase()
   {
-    ASSERT_EQ(OB_SUCCESS, init_oss_env());
-    ASSERT_EQ(OB_SUCCESS, init_cos_env());
     ASSERT_EQ(OB_SUCCESS, init_s3_env());
     if (enable_test) {
       ASSERT_EQ(OB_SUCCESS, set_storage_info(bucket, endpoint, secretid, secretkey,
@@ -73,8 +71,6 @@ public:
   }
   static void TearDownTestCase()
   {
-    fin_oss_env();
-    fin_cos_env();
     fin_s3_env();
   }
 
@@ -1442,9 +1438,7 @@ TEST_F(TestObjectStorage, test_del_unmerged_parts)
     ASSERT_EQ(content_size, writer.get_length());
 
     ASSERT_EQ(OB_SUCCESS, util.del_unmerged_parts(uri));
-    if (info_base.get_type() == ObStorageType::OB_STORAGE_OSS) {
-      ASSERT_EQ(OB_OBJECT_STORAGE_IO_ERROR, writer.close());
-    } else if (ObStorageType::OB_STORAGE_S3 == info_base.get_type()) {
+    if (ObStorageType::OB_STORAGE_S3 == info_base.get_type()) {
       ASSERT_EQ(OB_OBJECT_STORAGE_IO_ERROR, writer.close());
     }
     

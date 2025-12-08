@@ -77,7 +77,6 @@ int check_files_map_validity(const hash::ObHashMap<ObString, int64_t> &files_to_
 int record_failed_files_idx(const hash::ObHashMap<ObString, int64_t> &files_to_delete,
                             ObIArray<int64_t> &failed_files_idx);
 int ob_set_field(const char *value, char *field, const uint32_t field_length);
-int ob_apr_abort_fn(int retcode);
 
 struct ObStorageObjectMetaBase
 {

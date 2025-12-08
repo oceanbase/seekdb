@@ -430,11 +430,7 @@ int ObSelectIntoOp::calc_url_and_set_access_info()
   int ret = OB_SUCCESS;
   const ObItemType into_type = MY_SPEC.into_type_;
   ObString path = file_name_.get_varchar().trim();
-  if (path.prefix_match_ci(OB_OSS_PREFIX)) {
-    file_location_ = IntoFileLocation::REMOTE_OSS;
-  } else if (path.prefix_match_ci(OB_COS_PREFIX)) {
-    file_location_ = IntoFileLocation::REMOTE_COS;
-  } else if (path.prefix_match_ci(OB_S3_PREFIX)) {
+  if (path.prefix_match_ci(OB_S3_PREFIX)) {
     file_location_ = IntoFileLocation::REMOTE_S3;
   } else if (path.prefix_match_ci(OB_AZBLOB_PREFIX)) {
     file_location_ = IntoFileLocation::REMOTE_AZBLOB;

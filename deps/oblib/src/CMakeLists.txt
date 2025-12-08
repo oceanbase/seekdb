@@ -188,7 +188,6 @@ endif()
 target_link_libraries(oblib_base_without_pass
   INTERFACE
   -L${DEP_DIR}/lib
-  oss
   ${DEP_DIR}/lib/libcurl.a
   ${DEP_DIR}/lib/libssl.a
   ${DEP_DIR}/lib/libcrypto.a

@@ -107,52 +107,48 @@ bool ObTableLoadBackupTable_V_1_4::is_valid() const
 int ObTableLoadBackupTable_V_1_4::parse_path(const ObString &path)
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(storage_info_.get_type() != OB_STORAGE_OSS)) {
-    ret = OB_NOT_SUPPORTED;
-    LOG_WARN("unsupport storage type", KR(ret), K(storage_info_));
+  int64_t pos = 0;
+  char buf[OB_MAX_URI_LENGTH];
+  if (OB_FAIL(databuff_printf(buf, OB_MAX_URI_LENGTH, pos, "%.*s", 
+                              path.length(), path.ptr()))) {
+    LOG_WARN("fail to fill buf", KR(ret), K(pos), K(path));                            
   } else {
-    int64_t pos = 0;
-    char buf[OB_MAX_URI_LENGTH];
-    if (OB_FAIL(databuff_printf(buf, OB_MAX_URI_LENGTH, pos, "%.*s", 
-                                path.length(), path.ptr()))) {
-      LOG_WARN("fail to fill buf", KR(ret), K(pos), K(path));                            
+    if (buf[pos - 1] != '/') {
+      buf[pos++] = '/';
+    }
+    if (OB_FAIL(ob_write_string(allocator_, ObString(pos, buf), data_path_))) {
+      LOG_WARN("fail to ob_write_string", KR(ret));
     } else {
-      if (buf[pos - 1] != '/') {
-        buf[pos++] = '/';
-      }
-      if (OB_FAIL(ob_write_string(allocator_, ObString(pos, buf), data_path_))) {
-        LOG_WARN("fail to ob_write_string", KR(ret));
-      } else {
-        ObString str(pos, buf);
-        while (OB_SUCC(ret)) {
-          ObString tmp_str = str.split_on(str.reverse_find('/'));
-          if (!str.empty()) {
-            if (OB_FAIL(ob_write_string(allocator_, str, table_id_))) {
-              LOG_WARN("fail to ob_write_string", KR(ret));
-            } else {
-              break;
-            }
+      ObString str(pos, buf);
+      while (OB_SUCC(ret)) {
+        ObString tmp_str = str.split_on(str.reverse_find('/'));
+        if (!str.empty()) {
+          if (OB_FAIL(ob_write_string(allocator_, str, table_id_))) {
+            LOG_WARN("fail to ob_write_string", KR(ret));
           } else {
-            str = tmp_str;
+            break;
           }
+        } else {
+          str = tmp_str;
         }
       }
-      if (OB_SUCC(ret)) {
-        ObString pattern("base_data_");
-        char *match_ptr = nullptr;
-        if (OB_ISNULL(match_ptr = strstr(buf, pattern.ptr()))) {
-          ret = OB_INVALID_ARGUMENT;
-          LOG_WARN("not match pattern", KR(ret), K(pattern));
-        } else {
-          pos -= pattern.length();
-          MEMMOVE(match_ptr, match_ptr + pattern.length(), pos - (match_ptr - buf));
-          if (OB_FAIL(ob_write_string(allocator_, ObString(pos, buf), meta_path_, true))) {
-            LOG_WARN("fail to ob_write_string", KR(ret));
-          }
+    }
+    if (OB_SUCC(ret)) {
+      ObString pattern("base_data_");
+      char *match_ptr = nullptr;
+      if (OB_ISNULL(match_ptr = strstr(buf, pattern.ptr()))) {
+        ret = OB_INVALID_ARGUMENT;
+        LOG_WARN("not match pattern", KR(ret), K(pattern));
+      } else {
+        pos -= pattern.length();
+        MEMMOVE(match_ptr, match_ptr + pattern.length(), pos - (match_ptr - buf));
+        if (OB_FAIL(ob_write_string(allocator_, ObString(pos, buf), meta_path_, true))) {
+          LOG_WARN("fail to ob_write_string", KR(ret));
         }
       }
     }
   }
+  
 
   return ret;
 }

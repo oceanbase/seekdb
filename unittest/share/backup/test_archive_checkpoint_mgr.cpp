@@ -28,8 +28,7 @@ using namespace oceanbase::common;
 using namespace oceanbase::share;
 
 const ObStorageType TEST_STORAGE_TYPES[] = {
-    OB_STORAGE_FILE,
-    OB_STORAGE_OSS,
+    OB_STORAGE_FILE
 };
 
 class TestArchiveCheckpointMgr: public ::testing::Test
@@ -109,11 +108,7 @@ int TestArchiveCheckpointMgr::get_root_path(const ObStorageType &type, ObBackupP
   int ret = OB_SUCCESS;
   root_path.reset();
 
-  if (OB_STORAGE_OSS == type) {
-    if (OB_FAIL(root_path.init(oss_root_path))) {
-      LOG_WARN("failed to init oss root path", K(ret));
-    }
-  } else if (OB_STORAGE_FILE == type) {
+  if (OB_STORAGE_FILE == type) {
     if (OB_FAIL(root_path.init(file_root_path))) {
       LOG_WARN("failed to init file root path", K(ret));
     }
@@ -128,9 +123,7 @@ int TestArchiveCheckpointMgr::get_storage_info(const ObStorageType &type, ObStri
 {
   int ret = OB_SUCCESS;
   storage_info.reset();
-  if (OB_STORAGE_OSS == type) {
-    storage_info = ObString(oss_storage_info);
-  } else if (OB_STORAGE_FILE == type) {
+  if (OB_STORAGE_FILE == type) {
     storage_info = ObString(file_storage_info);
   } else {
     ret = OB_ERROR;

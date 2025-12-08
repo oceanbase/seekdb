@@ -66,7 +66,7 @@ TEST(ObBackupDest, nfs)
   LOG_INFO("dump backup dest", K(dest), K(dest.get_root_path()), KPC(dest.get_storage_info()));
   LOG_INFO("dump backup dest", K(dest3), K(dest.get_root_path()), KPC(dest.get_storage_info()));
   ASSERT_EQ(0, strcmp(dest.root_path_, "file:///backup_dir"));
-  ASSERT_TRUE(dest.storage_info_->device_type_ == 1);
+  ASSERT_TRUE(dest.storage_info_->device_type_ == 0);
   ObString backup_str("file:///backup_dir/");
   ASSERT_EQ(OB_SUCCESS, dest2.set(backup_str));
   ASSERT_EQ(0, strcmp(dest.root_path_, "file:///backup_dir"));

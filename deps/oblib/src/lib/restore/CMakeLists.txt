@@ -6,8 +6,6 @@ oblib_add_library(restore OBJECT
   ob_storage_file.cpp
   ob_storage_file.h
   ob_storage.h
-  ob_storage_oss_base.cpp
-  ob_storage_oss_base.h
   ob_storage_path.cpp
   ob_storage_path.h
   ob_storage_info.cpp
@@ -21,22 +19,6 @@ oblib_add_library(restore OBJECT
   ob_object_device.h
   ob_object_storage_base.cpp
 )
-
-add_library(oss INTERFACE)
-target_include_directories(oss
-  INTERFACE
-  ${DEP_DIR}/include/apr-1
-  ${DEP_DIR}/include
-  ${DEP_DIR}/include/oss_c_sdk
-  ${DEP_DIR}/include/mxml
-)
-
-target_link_libraries(oss
-  INTERFACE
-  ${DEP_DIR}/lib/liboss_c_sdk_static.a
-  ${DEP_DIR}/lib/libaprutil-1.a
-  ${DEP_DIR}/lib/libapr-1.a
-  ${DEP_DIR}/lib/libmxml.a)
 
 oblib_add_library(s3 ob_storage_s3_base.cpp)
 target_link_directories(s3 PUBLIC ${DEP_3RD_DIR}/usr/local/oceanbase/deps/devel/lib64)
@@ -60,4 +42,4 @@ target_link_libraries(s3
 )
 target_link_libraries(s3 PUBLIC oblib_base_without_pass)
 
-target_link_libraries(restore PUBLIC oss oblib_base s3)
+target_link_libraries(restore PUBLIC oblib_base s3)
