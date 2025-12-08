@@ -291,8 +291,6 @@ int ObBackupWrapperIODevice::parse_storage_device_type_(
     device_type = OB_STORAGE_LOCAL;
   } else if (storage_type_prefix.prefix_match(OB_FILE_PREFIX)) {
     device_type = OB_STORAGE_FILE;
-  } else if (storage_type_prefix.prefix_match(OB_OSS_PREFIX)) {
-    device_type = OB_STORAGE_OSS;
   } else if (storage_type_prefix.prefix_match(OB_S3_PREFIX)) {
     device_type = OB_STORAGE_S3;
   } else if (storage_type_prefix.prefix_match(OB_AZBLOB_PREFIX)) {

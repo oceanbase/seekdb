@@ -1191,9 +1191,7 @@ int get_real_file_path(const common::ObString &uri, char *buf, const int64_t buf
   int64_t offset = 0;
   const char* prefix = NULL;
 
-  if (OB_STORAGE_OSS == device_type) {
-    prefix = OB_OSS_PREFIX;
-  } else if (OB_STORAGE_S3 == device_type) {
+  if (OB_STORAGE_S3 == device_type) {
     prefix = OB_S3_PREFIX;
   } else if (OB_STORAGE_FILE == device_type) {
     prefix = OB_FILE_PREFIX;

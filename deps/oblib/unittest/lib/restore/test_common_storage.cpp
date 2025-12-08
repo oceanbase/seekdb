@@ -333,12 +333,6 @@ void TestCommonStorage::fin_obj_env(const ObTestStorageType type)
     case ObTestStorageType::TEST_STORAGE_S3:
       fin_s3_env();
       break;
-    case ObTestStorageType::TEST_STORAGE_OSS:
-      fin_oss_env();
-      break;
-    case ObTestStorageType::TEST_STORAGE_COS:
-      fin_cos_env();
-      break;
     default:
       break;
   }

@@ -738,10 +738,6 @@ void ObServer::destroy()
     net_frame_.destroy();
     FLOG_INFO("net frame destroyed");
 
-    FLOG_INFO("begin to destroy oss storage");
-    fin_oss_env();
-    FLOG_INFO("oss storage destroyed");
-
     FLOG_INFO("begin to destroy io manager");
     ObIOManager::get_instance().destroy();
     FLOG_INFO("io manager destroyed");
