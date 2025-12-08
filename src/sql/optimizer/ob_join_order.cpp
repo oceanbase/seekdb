@@ -18977,8 +18977,7 @@ int ObJoinOrder::add_valid_vec_index_ids(const ObDMLStmt &stmt,
                                                     index_type))) {
       LOG_WARN("failed to get vector index tid", K(ret));
   } else if ((vec_index_tid != OB_INVALID_ID)) {
-    if (index_type >= ObIndexType::INDEX_TYPE_VEC_ROWKEY_VID_LOCAL
-    && index_type <= INDEX_TYPE_VEC_INDEX_SNAPSHOT_DATA_LOCAL
+    if (is_local_vec_hnsw_index(index_type)
     && helper.vec_index_type_ != ObVecIndexType::VEC_INDEX_ADAPTIVE_SCAN) {
       // if hnsw, do not add vec_index_tid, mark adaptive_scan
       helper.vec_index_type_ = ObVecIndexType::VEC_INDEX_ADAPTIVE_SCAN;
