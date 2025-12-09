@@ -156,15 +156,9 @@ int ObCreateLocationResolver::resolve(const ParseNode &parse_tree)
   }
   // check url and aksk
   // url like: oss://bucket/...?host=xxxx&access_id=xxx&access_key=xxx
-  const bool is_hdfs_type = location_url.prefix_match(OB_HDFS_PREFIX);
-  ObHDFSStorageInfo hdfs_storage_info;
   ObBackupStorageInfo external_storage_info;
   ObObjectStorageInfo *storage_info = nullptr;
-  if (is_hdfs_type) {
-    storage_info = &hdfs_storage_info;
-  } else {
-    storage_info = &external_storage_info;
-  }
+  storage_info = &external_storage_info;
   char storage_info_buf[OB_MAX_BACKUP_STORAGE_INFO_LENGTH] = { 0 };
   ObString uri_cstr = location_url;
   ObString storage_info_cstr = credential_params.string();

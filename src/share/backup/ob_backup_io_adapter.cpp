@@ -17,7 +17,6 @@
 #include "ob_backup_io_adapter.h"
 #include "share/ob_device_manager.h"
 #include "lib/restore/ob_object_device.h"
-#include "share/external_table/ob_hdfs_storage_info.h"
 #include "share/io/ob_io_manager.h"
  
 namespace oceanbase
@@ -176,17 +175,6 @@ int ObBackupIoAdapter::get_and_init_device(ObIODevice *&dev_handle,
   }
   if (OB_FAIL(ret)) {
     /* do nothing */
-  } else if (OB_LIKELY(storage_info->is_hdfs_storage())) {
-    // External storage info
-    share::ObHDFSStorageInfo external_storage_info;
-    if (OB_FAIL(external_storage_info.assign(*storage_info))) {
-      OB_LOG(WARN, "fail to assign external storage info!", KR(ret),
-             KPC(storage_info), K(storage_type_prefix), K(storage_id_mod));
-    } else if (OB_FAIL(external_storage_info.get_storage_info_str(
-                   storage_info_str, sizeof(storage_info_str)))) {
-      OB_LOG(WARN, "fail to get external storage info str!", KR(ret), KPC(storage_info),
-             K(storage_type_prefix), K(storage_id_mod));
-    }
   } else {
     common::ObObjectStorageInfo storage_info_base;
     if (OB_FAIL(storage_info_base.assign(*storage_info))) {
@@ -1195,8 +1183,6 @@ int get_real_file_path(const common::ObString &uri, char *buf, const int64_t buf
     prefix = OB_S3_PREFIX;
   } else if (OB_STORAGE_FILE == device_type) {
     prefix = OB_FILE_PREFIX;
-  } else if (OB_STORAGE_HDFS == device_type) {
-    prefix = OB_HDFS_PREFIX;
   } else if (OB_STORAGE_AZBLOB == device_type) {
     prefix = OB_AZBLOB_PREFIX;
   } else {
@@ -1306,11 +1292,7 @@ int ObBackupIoAdapter::is_directory(
   ObIODFileStat statbuf;
   is_directory = false;
   DeviceGuard device_guard;
-  if (OB_UNLIKELY(!uri.prefix_match(OB_HDFS_PREFIX))) {
-    ret = OB_NOT_SUPPORTED;
-    OB_LOG(WARN, "not support device type", KR(ret), K(uri), KPC(storage_info),
-           K(device_guard));
-  } else if (OB_FAIL(device_guard.init(uri, storage_info,
+  if (OB_FAIL(device_guard.init(uri, storage_info,
                                        ObStorageIdMod::get_default_id_mod()))) {
     OB_LOG(WARN, "fail to init device guard", KR(ret), K(uri),
            KPC(storage_info));

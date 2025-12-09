@@ -31,32 +31,6 @@ GETJNIENV getJNIEnv = NULL;
 DETACHCURRENTTHREAD detachCurrentThread = NULL;
 DESTROYJNIENV destroyJNIEnv = NULL;
 
-// hdfs functions
-HdfsGetPathInfoFunc obHdfsGetPathInfo = NULL;
-HdfsFreeFileInfoFunc obHdfsFreeFileInfo = NULL;
-HdfsDeleteFunc obHdfsDelete = NULL;
-HdfsGetLastExceptionRootCauseFunc obHdfsGetLastExceptionRootCause = NULL;
-HdfsCreateDirectoryFunc obHdfsCreateDirectory = NULL;
-HdfsListDirectoryFunc obHdfsListDirectory = NULL;
-HdfsCloseFileFunc obHdfsCloseFile = NULL;
-HdfsOpenFileFunc obHdfsOpenFile = NULL;
-HdfsFileIsOpenForReadFunc obHdfsFileIsOpenForRead = NULL;
-HdfsFileIsOpenForWriteFunc obHdfsFileIsOpenForWrite = NULL;
-HdfsPreadFunc obHdfsPread = NULL;
-HdfsNewBuilderFunc obHdfsNewBuilder = NULL;
-HdfsBuilderSetNameNodeFunc obHdfsBuilderSetNameNode = NULL;
-HdfsBuilderSetUserNameFunc obHdfsBuilderSetUserName = NULL;
-HdfsBuilderSetForceNewInstanceFunc obHdfsBuilderSetForceNewInstance = NULL;
-HdfsBuilderConnectFunc obHdfsBuilderConnect = NULL;
-HdfsFreeBuilderFunc obHdfsFreeBuilder = NULL;
-HdfsDisconnectFunc obHdfsDisconnect = NULL;
-
-HdfsBuilderConfSetStrFunc obHdfsBuilderConfSetStr = NULL;
-HdfsBuilderSetPrincipalFunc obHdfsBuilderSetPrincipal = NULL;
-HdfsBuilderSetKerb5ConfFunc obHdfsBuilderSetKerb5Conf = NULL;
-HdfsBuilderSetKeyTabFileFunc obHdfsBuilderSetKeyTabFile = NULL;
-HdfsBuilderSetKerbTicketCachePathFunc obHdfsBuilderSetKerbTicketCachePath = NULL;
-
 namespace oceanbase
 {
 
@@ -170,29 +144,6 @@ void *JVMFunctionHelper::ob_alloc_jni(void* ctxp, int64_t size)
   return ptr;
 }
 
-void *JVMFunctionHelper::ob_alloc_hdfs(void* ctxp, int64_t size) 
-{
-  void *ptr = nullptr;
-  ObHdfsEnvContext *ctx = static_cast<ObHdfsEnvContext *>(ctxp);
-  if (NULL == ctx) {
-    // do nothing
-  } else if (size != 0) {
-    ObMemAttr attr;
-    attr.label_ = "ob_alloc_hdfs";
-    attr.ctx_id_ = ObCtxIds::DEFAULT_CTX_ID;
-    {
-      ptr = ob_malloc(size, attr);
-    }
-    if (NULL == ptr) {
-      _OB_LOG_RET(WARN, OB_ALLOCATE_MEMORY_FAILED, "ob_tc_malloc failed, size:%lu", size);
-    } else {
-      ctx->mem_bytes_hdfs_ += size;
-      ctx->hdfs_alloc_times_ += 1;
-    }
-  }
-  return ptr;
-}
-
 int JVMFunctionHelper::search_dir_file(const char *path, const char *file_name, bool &found)
 {
   int ret = OB_SUCCESS;
@@ -284,8 +235,6 @@ int JVMFunctionHelper::get_lib_path(char *path, uint64_t length, const char* lib
       const char *default_lib_path = "";
       if (0 == STRCMP(lib_name, "libjvm.so")) {
         default_lib_path = "/home/admin/oceanbase/lib/libjvm.so";
-      } else if (0 == STRCMP(lib_name, "libhdfs.so")) {
-        default_lib_path = "/home/admin/oceanbase/lib/libhdfs.so";
       } else {
         ret = OB_INVALID_ARGUMENT;
         LOG_WARN("unsupport library to load", K(ret), K(lib_name));
@@ -333,17 +282,6 @@ void JVMFunctionHelper::ob_java_free(void *ctxp, void *ptr)
   }
 }
 
-void JVMFunctionHelper::ob_hdfs_free(void *ctxp, void *ptr)
-{
-  ObHdfsEnvContext *ctx = static_cast<ObHdfsEnvContext *>(ctxp);
-  if (nullptr == ptr) {
-    // do nothig
-  } else {
-    ob_free(ptr);
-    ctx->hdfs_free_times_ += 1;
-  }
-}
-
 int JVMFunctionHelper::open_java_lib(ObJavaEnvContext &java_env_ctx)
 {
   int ret = OB_SUCCESS;
@@ -368,7 +306,7 @@ int JVMFunctionHelper::open_java_lib(ObJavaEnvContext &java_env_ctx)
 
     if (OB_FAIL(ret) && OB_NOT_NULL(jvm_lib_handle_)) {
       if (OB_JNI_ENV_ERROR == ret) {
-        // LOG_USER_ERROR(OB_JNI_ENV_ERROR, user_error_len, hdfs_lib_buf);
+        // LOG_USER_ERROR(OB_JNI_ENV_ERROR, user_error_len, jvm_lib_buf);
         LOG_WARN("failed to open jvm lib handle", K(ret));
       }
       LIB_CLOSE(jvm_lib_handle_);
@@ -384,129 +322,34 @@ int JVMFunctionHelper::open_java_lib(ObJavaEnvContext &java_env_ctx)
   return ret;
 }
 
-int JVMFunctionHelper::open_hdfs_lib(ObHdfsEnvContext &hdfs_env_ctx) 
-{
-  int ret = OB_SUCCESS;
-  char * hdfs_lib_buf = nullptr;
-  const char* hdfs_lib_name = "libhdfs.so";
-
-  int64_t load_lib_size = 4096; // 4k is enough for library path on `ext4` file system.
-  if (OB_ISNULL(jvm_lib_handle_)) {
-    ret = OB_JNI_ENV_ERROR;
-    LOG_WARN("invalid previous jvm lib handle which should be not null", K(ret));
-  } else if (OB_ISNULL(hdfs_lib_buf = static_cast<char *>(ob_alloc_hdfs(&hdfs_env_ctx, load_lib_size)))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("failed to allocate jni env for hdfs lib", K(ret));
-  } else if (OB_FAIL(get_lib_path(hdfs_lib_buf, load_lib_size, hdfs_lib_name))) {
-    // if return OB_SUCCESS, this func will obtain the C-style hdfs lib path string.
-    LOG_WARN("failed to get hdfs path", K(ret));
-  } else if (OB_ISNULL(hdfs_lib_handle_ = LIB_OPEN(hdfs_lib_buf))) {
-    ret = OB_JNI_ENV_ERROR;
-    const char * dlerror_str = dlerror();
-    int dlerror_str_len = STRLEN(dlerror_str);
-    // LOG_USER_ERROR(OB_JNI_ENV_ERROR, dlerror_str_len, dlerror_str);
-    LOG_WARN("failed to open hdfs lib from path", K(ret), K(ObString(hdfs_lib_buf)), K(dlerror_str));
-  } else {
-    LOG_TRACE("succ to open jvm and hdfs lib from patch", K(ObString(hdfs_lib_buf)), K(ObString(hdfs_lib_buf)));
-    LIB_SYMBOL(hdfs_lib_handle_, "getJNIEnv", getJNIEnv, GETJNIENV);
-    LIB_SYMBOL(hdfs_lib_handle_, "detachCurrentThread", detachCurrentThread, DETACHCURRENTTHREAD);
-    LIB_SYMBOL(hdfs_lib_handle_, "destroyJNIEnv", destroyJNIEnv, DESTROYJNIENV);
-    // link related useful hdfs func
-    LIB_SYMBOL(hdfs_lib_handle_, "hdfsGetPathInfo", obHdfsGetPathInfo, HdfsGetPathInfoFunc);
-    LIB_SYMBOL(hdfs_lib_handle_, "hdfsFreeFileInfo", obHdfsFreeFileInfo, HdfsFreeFileInfoFunc);
-    LIB_SYMBOL(hdfs_lib_handle_, "hdfsDelete", obHdfsDelete, HdfsDeleteFunc);
-    LIB_SYMBOL(hdfs_lib_handle_, "hdfsGetLastExceptionRootCause", obHdfsGetLastExceptionRootCause, HdfsGetLastExceptionRootCauseFunc);
-    LIB_SYMBOL(hdfs_lib_handle_, "hdfsCreateDirectory", obHdfsCreateDirectory, HdfsCreateDirectoryFunc);
-    LIB_SYMBOL(hdfs_lib_handle_, "hdfsListDirectory", obHdfsListDirectory, HdfsListDirectoryFunc);
-    LIB_SYMBOL(hdfs_lib_handle_, "hdfsCloseFile", obHdfsCloseFile, HdfsCloseFileFunc);
-    LIB_SYMBOL(hdfs_lib_handle_, "hdfsOpenFile", obHdfsOpenFile, HdfsOpenFileFunc);
-    LIB_SYMBOL(hdfs_lib_handle_, "hdfsFileIsOpenForRead", obHdfsFileIsOpenForRead, HdfsFileIsOpenForReadFunc);
-    LIB_SYMBOL(hdfs_lib_handle_, "hdfsFileIsOpenForWrite", obHdfsFileIsOpenForWrite, HdfsFileIsOpenForWriteFunc);
-    LIB_SYMBOL(hdfs_lib_handle_, "hdfsPread", obHdfsPread, HdfsPreadFunc);
-    LIB_SYMBOL(hdfs_lib_handle_, "hdfsNewBuilder", obHdfsNewBuilder, HdfsNewBuilderFunc);
-    LIB_SYMBOL(hdfs_lib_handle_, "hdfsBuilderSetNameNode", obHdfsBuilderSetNameNode, HdfsBuilderSetNameNodeFunc);
-    LIB_SYMBOL(hdfs_lib_handle_, "hdfsBuilderSetUserName", obHdfsBuilderSetUserName, HdfsBuilderSetUserNameFunc);
-    LIB_SYMBOL(hdfs_lib_handle_, "hdfsBuilderSetForceNewInstance", obHdfsBuilderSetForceNewInstance, HdfsBuilderSetForceNewInstanceFunc);
-    LIB_SYMBOL(hdfs_lib_handle_, "hdfsBuilderConnect", obHdfsBuilderConnect, HdfsBuilderConnectFunc);
-    LIB_SYMBOL(hdfs_lib_handle_, "hdfsFreeBuilder", obHdfsFreeBuilder, HdfsFreeBuilderFunc);
-    LIB_SYMBOL(hdfs_lib_handle_, "hdfsDisconnect", obHdfsDisconnect, HdfsDisconnectFunc);
-
-    // extra added for kerberos auth
-    LIB_SYMBOL(hdfs_lib_handle_, "hdfsBuilderConfSetStr", obHdfsBuilderConfSetStr, HdfsBuilderConfSetStrFunc);
-    LIB_SYMBOL(hdfs_lib_handle_, "hdfsBuilderSetPrincipal", obHdfsBuilderSetPrincipal, HdfsBuilderSetPrincipalFunc);
-    LIB_SYMBOL(hdfs_lib_handle_, "hdfsBuilderSetKerb5Conf", obHdfsBuilderSetKerb5Conf, HdfsBuilderSetKerb5ConfFunc);
-    LIB_SYMBOL(hdfs_lib_handle_, "hdfsBuilderSetKeyTabFile", obHdfsBuilderSetKeyTabFile, HdfsBuilderSetKeyTabFileFunc);
-    LIB_SYMBOL(hdfs_lib_handle_, "hdfsBuilderSetKerbTicketCachePath", obHdfsBuilderSetKerbTicketCachePath, HdfsBuilderSetKerbTicketCachePathFunc);
-
-    int user_error_len = STRLEN(hdfs_lib_buf);
-    if (OB_ISNULL(getJNIEnv) || OB_ISNULL(detachCurrentThread) ||
-        OB_ISNULL(destroyJNIEnv) ||
-        /* hdfs funcs */
-        OB_ISNULL(obHdfsGetPathInfo) ||
-        OB_ISNULL(obHdfsFreeFileInfo) || OB_ISNULL(obHdfsDelete) ||
-        OB_ISNULL(obHdfsGetLastExceptionRootCause) ||
-        OB_ISNULL(obHdfsCreateDirectory) || OB_ISNULL(obHdfsListDirectory) ||
-        OB_ISNULL(obHdfsCloseFile) || OB_ISNULL(obHdfsOpenFile) ||
-        OB_ISNULL(obHdfsFileIsOpenForRead) || OB_ISNULL(obHdfsFileIsOpenForWrite) ||
-        OB_ISNULL(obHdfsPread) || OB_ISNULL(obHdfsNewBuilder) ||
-        OB_ISNULL(obHdfsBuilderSetNameNode) ||
-        OB_ISNULL(obHdfsBuilderSetUserName) ||
-        OB_ISNULL(obHdfsBuilderSetForceNewInstance) ||
-        OB_ISNULL(obHdfsBuilderConnect) || OB_ISNULL(obHdfsFreeBuilder) ||
-        OB_ISNULL(obHdfsDisconnect) || OB_ISNULL(obHdfsBuilderSetPrincipal) ||
-        OB_ISNULL(obHdfsBuilderSetKerb5Conf) || OB_ISNULL(obHdfsBuilderSetKeyTabFile)) {
-      ret = OB_ERR_UNEXPECTED;
-      const char * dlerror_str = dlerror();
-      int dlerror_str_len = STRLEN(dlerror_str);
-      LOG_WARN("expected funcs exist some null, the loaded hdfs lib is not the expected", K(ret), K(dlerror_str));
-    }
-
-    if (OB_FAIL(ret) && OB_NOT_NULL(hdfs_lib_handle_)) {
-      if (OB_JNI_ENV_ERROR == ret) {
-        // LOG_USER_ERROR(OB_JNI_ENV_ERROR, user_error_len, hdfs_lib_buf);
-        LOG_WARN("failed to open hdfs lib handle", K(ret));
-      }
-      LIB_CLOSE(hdfs_lib_handle_);
-      hdfs_lib_handle_ = nullptr;
-      // Because hdfs lib depends on jvm lib, and hdfs lis closes then jvm lib close too.
-      if (OB_NOT_NULL(jvm_lib_handle_)) {
-        LIB_CLOSE(jvm_lib_handle_);
-        jvm_lib_handle_ = nullptr;
-      }
-      LOG_WARN("lib_close hdfs and jni lib", K(ret));
-    }
-  }
-
-  if (OB_NOT_NULL(hdfs_lib_buf)) {
-    ob_hdfs_free(&hdfs_env_ctx, hdfs_lib_buf);
-    hdfs_lib_buf = nullptr;
-  } else { /* do nothing */ }
-  return ret;
-}
-
-int JVMFunctionHelper::load_lib(ObJavaEnvContext &java_env_ctx,
-                                ObHdfsEnvContext &hdfs_env_ctx) {
+int JVMFunctionHelper::load_lib(ObJavaEnvContext &java_env_ctx) {
   int ret = OB_SUCCESS;
   obsys::ObWLockGuard wg(load_lib_lock_);
-  if (java_env_ctx.is_valid() && hdfs_env_ctx.is_valid()) {
+  if (java_env_ctx.is_valid()) {
     // do nothing
-    LOG_TRACE("already success to open java and hdfs lib", K(ret));
-  } else if (OB_NOT_NULL(jvm_lib_handle_) && OB_NOT_NULL(hdfs_lib_handle_)) {
+    LOG_TRACE("already success to open java lib", K(ret));
+  } else if (OB_NOT_NULL(jvm_lib_handle_)) {
     // do nothing
-    LOG_TRACE("already success to open java and hdfs lib", K(ret));
+    LOG_TRACE("already success to open java lib", K(ret));
   } else if (OB_ISNULL(jvm_lib_handle_) && OB_FAIL(open_java_lib(java_env_ctx))) {
     LOG_WARN("failed to open java lib", K(ret));
-  } else if (OB_ISNULL(hdfs_lib_handle_) && OB_FAIL(open_hdfs_lib(hdfs_env_ctx))) {
-    LOG_WARN("failed to open hdfs lib", K(ret));
   } else {
-    LOG_TRACE("succ to open java and hdfs lib", K(ret));
+    LOG_TRACE("succ to open java lib", K(ret));
     LOG_TRACE("start to load most important method: getJNIEnv", K(ret));
-    LIB_SYMBOL(hdfs_lib_handle_, "getJNIEnv", getJNIEnv, GETJNIENV);
-
+    // Load JNI functions from JVM library
+    LIB_SYMBOL(jvm_lib_handle_, "getJNIEnv", getJNIEnv, GETJNIENV);
+    LIB_SYMBOL(jvm_lib_handle_, "detachCurrentThread", detachCurrentThread, DETACHCURRENTTHREAD);
+    LIB_SYMBOL(jvm_lib_handle_, "destroyJNIEnv", destroyJNIEnv, DESTROYJNIENV);
+    
+    if (OB_ISNULL(getJNIEnv) || OB_ISNULL(detachCurrentThread) || OB_ISNULL(destroyJNIEnv)) {
+      ret = OB_ERR_UNEXPECTED;
+      const char * dlerror_str = dlerror();
+      LOG_WARN("expected funcs exist some null, the loaded jvm lib is not the expected", K(ret), K(dlerror_str));
+    }
+    
     if (OB_SUCC(ret)) {
       LOG_TRACE("success to load most important method: getJNIEnv", K(ret));
       java_env_ctx.jvm_loaded_ = true;
-      hdfs_env_ctx.hdfs_loaded_ = true;
     }
   }
   return ret;
@@ -552,7 +395,7 @@ int JVMFunctionHelper::init_jni_env() {
   LockGuard guard(lock_);
   if (OB_FAIL(check_valid_env())) {
     LOG_WARN("jni env is invalid", K(ret));
-  } else if (OB_FAIL(load_lib(java_env_ctx_, hdfs_env_ctx_))) {
+  } else if (OB_FAIL(load_lib(java_env_ctx_))) {
     LOG_WARN("failed to load dynamic library", K(ret));
   } else if (nullptr == jni_env_) {
     jni_env_ = getJNIEnv();
@@ -743,14 +586,6 @@ int detect_java_runtime() {
           OB_INVALID_ARGUMENT,
           "run jvm without critical config `-Djdk.lang.processReaperUseDefaultStackSize=true`");
     } else { /* do nothing */}
-  }
-
-  if (OB_SUCC(ret)) {
-    const char *libhdfs_opts = std::getenv("LIBHDFS_OPTS");
-    if (nullptr == libhdfs_opts) {
-      ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("env 'LIBHDFS_OPTS' is not set", K(ret), K(libhdfs_opts));
-    }
   }
 
   if (OB_SUCC(ret)) {

@@ -5854,26 +5854,6 @@ int ObSchemaPrinter::print_location_definiton(const uint64_t tenant_id,
         if (OB_FAIL(databuff_printf(buf, buf_len, pos, "\n  S3_REGION = "))) {
           SHARE_SCHEMA_LOG(WARN, "fail to print s3_region", K(ret), K(*location_schema));
         }
-      } else if (0 == strncmp(PRINCIPAL, token, strlen(PRINCIPAL))) {
-        length = strlen(PRINCIPAL);
-        if (OB_FAIL(databuff_printf(buf, buf_len, pos, "\n  PRINCIPAL = "))) {
-          SHARE_SCHEMA_LOG(WARN, "fail to print principal", K(ret), K(*location_schema));
-        }
-      } else if (0 == strncmp(KEYTAB, token, strlen(KEYTAB))) {
-        length = strlen(KEYTAB);
-        if (OB_FAIL(databuff_printf(buf, buf_len, pos, "\n  KEYTAB = "))) {
-          SHARE_SCHEMA_LOG(WARN, "fail to print keytab", K(ret), K(*location_schema));
-        }
-      } else if (0 == strncmp(KRB5CONF, token, strlen(KRB5CONF))) {
-        length = strlen(KRB5CONF);
-        if (OB_FAIL(databuff_printf(buf, buf_len, pos, "\n  KRB5CONF = "))) {
-          SHARE_SCHEMA_LOG(WARN, "fail to print krb5conf", K(ret), K(*location_schema));
-        }
-      } else if (0 == strncmp(HDFS_CONFIGS, token, strlen(HDFS_CONFIGS))) {
-        length = strlen(HDFS_CONFIGS);
-        if (OB_FAIL(databuff_printf(buf, buf_len, pos, "\n  CONFIGS = "))) {
-          SHARE_SCHEMA_LOG(WARN, "fail to print configs", K(ret), K(*location_schema));
-        }
       }
 
       if (length < strlen(token) && OB_FAIL(databuff_printf(buf, buf_len, pos, "'%s'", token+length))) {

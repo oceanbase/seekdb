@@ -28,7 +28,6 @@
 #include "share/ob_i_sql_expression.h"          // ObISqlExpression,ObExprCtx
 #include "share/schema/ob_table_param.h"        // ObColDesc
 #include "share/schema/ob_multi_version_schema_service.h"     // ObMultiVersionSchemaService
-#include "share/external_table/ob_hdfs_storage_info.h"    // ObHDFSStorageInfo
 #include "share/ob_simple_batch.h"
 #include "sql/ob_phy_table_location.h"
 #include "sql/ob_sql_define.h"
@@ -43,7 +42,6 @@
 namespace oceanbase
 {
 namespace share {
-class ObHDFSStorageInfo;
 }
 namespace sql
 {

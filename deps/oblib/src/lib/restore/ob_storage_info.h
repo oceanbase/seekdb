@@ -253,7 +253,6 @@ public:
   ObStorageChecksumType get_checksum_type() const;
   const char *get_checksum_type_str() const;
 
-  bool is_hdfs_storage() const { return OB_STORAGE_HDFS == device_type_; }
   bool is_enable_worm() const;
   bool is_assume_role_mode() const;
   virtual bool is_valid() const;

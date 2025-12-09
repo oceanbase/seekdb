@@ -19,7 +19,6 @@
 #include "ob_i_storage.h"
 #include "ob_storage_file.h"
 #include "ob_storage_s3_base.h"
-#include "hdfs/ob_storage_hdfs_jni_base.h"
 #include "common/storage/ob_io_device.h"
 
 namespace oceanbase
@@ -357,7 +356,6 @@ private:
 
   ObStorageFileUtil file_util_;
   ObStorageS3Util s3_util_;
-  ObStorageHdfsJniUtil hdfs_util_;
   ObIStorageUtil* util_;
   common::ObObjectStorageInfo* storage_info_;
   bool init_state;
@@ -428,7 +426,6 @@ protected:
   ObIStorageReader *reader_;
   ObStorageFileReader file_reader_;
   ObStorageS3Reader s3_reader_;
-  ObStorageHdfsReader hdfs_reader_;
   int64_t start_ts_;
   char uri_[OB_MAX_URI_LENGTH];
   bool has_meta_;
@@ -457,7 +454,6 @@ private:
   ObIStorageReader *reader_;
   ObStorageFileReader file_reader_;
   ObStorageS3Reader s3_reader_;
-  ObStorageHdfsReader hdfs_reader_;
   int64_t start_ts_;
   char uri_[OB_MAX_URI_LENGTH];
   ObObjectStorageInfo *storage_info_;

@@ -1618,8 +1618,7 @@ int ObExternalTableUtils::remove_external_file_list(const uint64_t tenant_id,
     } else {
       ObStorageType device_type = OB_STORAGE_MAX_TYPE;
       OZ (get_storage_type_from_path(location, device_type));
-      // hdfs支持直接删除目录, 删除hdfs下的某个路径时不需要先获取文件
-      bool is_del_all = (pattern.empty() || pattern == "*") && (OB_STORAGE_HDFS == device_type);
+      bool is_del_all = (pattern.empty() || pattern == "*");
       ObArray<ObString> file_urls;
       ObArray<int64_t> file_sizes;
       ObSqlString full_path;
@@ -1632,12 +1631,7 @@ int ObExternalTableUtils::remove_external_file_list(const uint64_t tenant_id,
         ObArray<int64_t> failed_files_idx;
         common::ObObjectStorageInfo *storage_access_info = NULL;
         share::ObBackupStorageInfo backup_storage_info;
-        share::ObHDFSStorageInfo hdfs_storage_info;
-        if (device_type == OB_STORAGE_HDFS) {
-          storage_access_info = &hdfs_storage_info;
-        } else {
-          storage_access_info = &backup_storage_info;
-        }
+        storage_access_info = &backup_storage_info;
         OZ (storage_access_info->set(device_type, access_info.ptr()));
 
         ObIODOpts opts;
@@ -1690,16 +1684,6 @@ int ObExternalTableUtils::get_credential_field_name(ObSqlString &str, int64_t op
     OZ (str.append(common::APPID));
   } else if (opt == 5) {
     OZ (str.append(common::REGION));
-  } else if (opt == 6) {
-    OZ (str.append(share::PRINCIPAL));
-  } else if (opt == 7) {
-    OZ (str.append(share::KEYTAB));
-  } else if (opt == 8) {
-    OZ (str.append(share::KRB5CONF));
-  } else if (opt == 9) {
-    OZ (str.append(share::HDFS_CONFIGS));
-  } else if (opt == 10) {
-    OZ (str.append(share::HADOOP_USERNAME));
   } else {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid opt", K(ret), K(opt));

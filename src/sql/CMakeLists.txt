@@ -305,15 +305,16 @@ ob_set_subtarget(ob_sql engine_cmd
   engine/cmd/ob_sys_dispatch_call_executor.cpp
   engine/cmd/ob_ccl_rule_executor.cpp
 )
-
-ob_set_subtarget(ob_sql engine_connector
-  engine/connector/ob_java_native_method.cpp
-  engine/connector/ob_java_env.cpp
-  engine/connector/ob_java_helper.cpp
-  engine/connector/ob_jni_connector.cpp
-  engine/connector/ob_jni_scanner.cpp
-  engine/connector/ob_jni_writer.cpp
-)
+if (OB_BUILD_JNI_ODPS)
+  ob_set_subtarget(ob_sql engine_connector
+    engine/connector/ob_java_native_method.cpp
+    engine/connector/ob_java_env.cpp
+    engine/connector/ob_java_helper.cpp
+    engine/connector/ob_jni_connector.cpp
+    engine/connector/ob_jni_scanner.cpp
+    engine/connector/ob_jni_writer.cpp
+  )
+endif()
 
 ob_set_subtarget(ob_sql engine_dml
   engine/dml/ob_conflict_checker.cpp
