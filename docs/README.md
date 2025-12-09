@@ -1,8 +1,8 @@
 # seekdb Documentation
 
-Welcome to [seekdb-docs](https://github.com/oceanbase/seekdb-doc) to view the official documents for seekdb, the AI-native search database that unifies relational, vector, text, JSON and GIS in a single engine to enable hybrid search and in‑database AI workflows.
+Visit the [seekdb-doc](https://github.com/oceanbase/seekdb-doc) repository to view the official documents for seekdb, the AI-native search database that unifies relational, vector, text, JSON and GIS in a single engine to enable hybrid search and in-database AI workflows.
 
-The seekdb-docs repository hosts the full set of seekdb documentation, including product overview, developer guides, tutorials, and integration references.
+The seekdb-doc repository hosts the full set of seekdb documentation, including product overview, developer guides, tutorials, and integration references.
 
 [Documentation site](https://www.oceanbase.ai/docs/seekdb-overview/)
 
