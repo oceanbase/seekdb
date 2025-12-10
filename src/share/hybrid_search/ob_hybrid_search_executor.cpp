@@ -17,6 +17,8 @@
 #include "ob_hybrid_search_executor.h"
 #include "ob_hybrid_search_fusion_engine.h"
 #include "storage/vector_index/cmd/ob_vector_refresh_index_executor.h"
+#include "lib/json_type/ob_json_base.h"
+#include "lib/json_type/ob_json_tree.h"
 
 #define USING_LOG_PREFIX SHARE
 
