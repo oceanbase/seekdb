@@ -22,8 +22,6 @@
 #include <vector>
 
 #include <jni.h>
-#include <hdfs/hdfs.h>
-#include <hdfs/hdfs.h>
 
 #include "lib/oblog/ob_log_module.h"
 #include "lib/string/ob_string.h"
@@ -31,17 +29,6 @@
 #include "common/ob_common_utility.h"
 #include "ob_java_native_method.h"
 #include "lib/lock/ob_mutex.h"
-
-// implements by libhdfs
-// hadoop-hdfs-native-client/src/main/native/libhdfs/jni_helper.c
-// Why do we need to use this function?
-// 1. a thread can not attach to more than one virtual machine
-//    this means the second call to getJNIEnv will return same result as the first call
-//    if we do not destory this jni env, all thread will get same env
-// 2. libhdfs depends on this function and does some initialization,
-// if the JVM has already created it, it won't create it anymore.
-// If we skip this function call will cause libhdfs to miss some initialization operations
-// extern "C" JNIEnv* getJNIEnv(void);
 
 // Copy from `close_modules/dblink/deps/oblib/src/lib/oracleclient/ob_dlsym_loader.h`
 #if defined(_AIX)
@@ -95,64 +82,10 @@ typedef JNIEnv* (*GETJNIENV)(void);
 typedef jint (*DETACHCURRENTTHREAD)(void);
 typedef jint (*DESTROYJNIENV)(void);
 
-// hdfs related symbols
-typedef hdfsFileInfo* (*HdfsGetPathInfoFunc)(hdfsFS, const char*);
-typedef void (*HdfsFreeFileInfoFunc)(hdfsFileInfo *, int);
-typedef int (*HdfsDeleteFunc)(hdfsFS, const char*, int);
-typedef char* (*HdfsGetLastExceptionRootCauseFunc)();
-typedef int (*HdfsCreateDirectoryFunc)(hdfsFS, const char*);
-typedef hdfsFileInfo* (*HdfsListDirectoryFunc)(hdfsFS, const char*, int*);
-typedef int (*HdfsCloseFileFunc)(hdfsFS, hdfsFile);
-typedef hdfsFile (*HdfsOpenFileFunc)(hdfsFS, const char*, int, int, short, tSize);
-typedef int (*HdfsFileIsOpenForReadFunc)(hdfsFile);
-typedef int (*HdfsFileIsOpenForWriteFunc)(hdfsFile);
-typedef tSize (*HdfsPreadFunc)(hdfsFS, hdfsFile, tOffset, void*, tSize);
-typedef struct hdfsBuilder* (*HdfsNewBuilderFunc)(void);
-typedef void (*HdfsBuilderSetNameNodeFunc)(struct hdfsBuilder *, const char *);
-typedef void (*HdfsBuilderSetUserNameFunc)(struct hdfsBuilder *, const char *);
-typedef void (*HdfsBuilderSetForceNewInstanceFunc)(struct hdfsBuilder *);
-typedef hdfsFS (*HdfsBuilderConnectFunc)(struct hdfsBuilder *);
-typedef void (*HdfsFreeBuilderFunc)(struct hdfsBuilder *);
-typedef int (*HdfsDisconnectFunc)(hdfsFS);
-
-// extra added for kerberos auth
-typedef int (*HdfsBuilderConfSetStrFunc)(struct hdfsBuilder *, const char *, const char *);
-typedef void (*HdfsBuilderSetPrincipalFunc)(struct hdfsBuilder *, const char *);
-typedef void (*HdfsBuilderSetKerb5ConfFunc)(struct hdfsBuilder *, const char *);
-typedef void (*HdfsBuilderSetKeyTabFileFunc)(struct hdfsBuilder *, const char *);
-typedef void (*HdfsBuilderSetKerbTicketCachePathFunc)(struct hdfsBuilder *, const char *);
-
 // desclare function
 extern "C" GETJNIENV getJNIEnv;
 extern "C" DETACHCURRENTTHREAD detachCurrentThread;
 extern "C" DESTROYJNIENV destroyJNIEnv;
-
-// declare hdfs functions
-extern "C" HdfsGetPathInfoFunc obHdfsGetPathInfo;
-extern "C" HdfsFreeFileInfoFunc obHdfsFreeFileInfo;
-extern "C" HdfsDeleteFunc obHdfsDelete;
-extern "C" HdfsGetLastExceptionRootCauseFunc obHdfsGetLastExceptionRootCause;
-extern "C" HdfsCreateDirectoryFunc obHdfsCreateDirectory;
-extern "C" HdfsListDirectoryFunc obHdfsListDirectory;
-extern "C" HdfsCloseFileFunc obHdfsCloseFile;
-extern "C" HdfsOpenFileFunc obHdfsOpenFile;
-extern "C" HdfsFileIsOpenForReadFunc obHdfsFileIsOpenForRead;
-extern "C" HdfsFileIsOpenForWriteFunc obHdfsFileIsOpenForWrite;
-extern "C" HdfsPreadFunc obHdfsPread;
-extern "C" HdfsNewBuilderFunc obHdfsNewBuilder;
-extern "C" HdfsBuilderSetNameNodeFunc obHdfsBuilderSetNameNode;
-extern "C" HdfsBuilderSetUserNameFunc obHdfsBuilderSetUserName;
-extern "C" HdfsBuilderSetForceNewInstanceFunc obHdfsBuilderSetForceNewInstance;
-extern "C" HdfsBuilderConnectFunc obHdfsBuilderConnect;
-extern "C" HdfsFreeBuilderFunc obHdfsFreeBuilder;
-extern "C" HdfsDisconnectFunc obHdfsDisconnect;
-
-// extra added for kerberos auth
-extern "C" HdfsBuilderConfSetStrFunc obHdfsBuilderConfSetStr;
-extern "C" HdfsBuilderSetPrincipalFunc obHdfsBuilderSetPrincipal;
-extern "C" HdfsBuilderSetKerb5ConfFunc obHdfsBuilderSetKerb5Conf;
-extern "C" HdfsBuilderSetKeyTabFileFunc obHdfsBuilderSetKeyTabFile;
-extern "C" HdfsBuilderSetKerbTicketCachePathFunc obHdfsBuilderSetKerbTicketCachePath;
 
 namespace oceanbase
 {
@@ -163,46 +96,6 @@ namespace sql
 class JVMClass;
 
 typedef lib::ObLockGuard<lib::ObMutex> LockGuard;
-
-struct ObHdfsEnvContext {
-public:
-  bool hdfs_loaded_; /* Hdfs correctly loaded ? */
-  uint64_t mem_bytes_hdfs_; /* allocated bytes by OCILIB */
-  uint64_t hdfs_alloc_times_;
-  uint64_t hdfs_realloc_times_;
-  uint64_t hdfs_free_times_;
-  int64_t hdfs_created_time_; /* get from current_time() of hdfs */
-  int64_t referece_times_; /* check refrence times of jni env */
-
-public:
-  void reset() {
-    hdfs_loaded_ = false;
-    mem_bytes_hdfs_ = 0;
-    hdfs_alloc_times_ = 0;
-    hdfs_realloc_times_ = 0;
-    hdfs_free_times_ = 0;
-    hdfs_created_time_ = 0;
-    referece_times_ = 0;
-  }
-
-  ObHdfsEnvContext() {
-    reset();
-  }
-
-  bool is_valid() {
-    return hdfs_loaded_;
-  }
-
-  TO_STRING_KV(
-    K(hdfs_loaded_),
-    K(mem_bytes_hdfs_),
-    K(hdfs_alloc_times_),
-    K(hdfs_realloc_times_),
-    K(hdfs_free_times_),
-    K(hdfs_created_time_),
-    K(referece_times_)
-  );
-};
 
 struct ObJavaEnvContext {
 public:
@@ -293,18 +186,15 @@ private:
   int do_init_();
   int jni_find_class(const char *clazz, jclass *gen_clazz);
   void *ob_alloc_jni(void* ctxp, int64_t size);
-  void *ob_alloc_hdfs(void* ctxp, int64_t size);
 
   int search_dir_file(const char *path, const char *file_name, bool &found);
   int get_lib_path(char *path, uint64_t length, const char* lib_name);
 
   void ob_java_free(void *ctxp, void *ptr);
-  void ob_hdfs_free(void *ctxp, void *ptr);
 
   int open_java_lib(ObJavaEnvContext &java_env_ctx);
-  int open_hdfs_lib(ObHdfsEnvContext &java_env_ctx);
 
-  int load_lib(ObJavaEnvContext &java_env_ctx, ObHdfsEnvContext &hdfs_env_ctx);
+  int load_lib(ObJavaEnvContext &java_env_ctx);
 
 private:
   const char* JAR_VERSION_CLASS = "com/oceanbase/utils/version/JarVersion";
@@ -327,11 +217,9 @@ private:
 
   // Env contexts
   ObJavaEnvContext java_env_ctx_;
-  ObHdfsEnvContext hdfs_env_ctx_;
 
   // Handle the runtime shared library
   void* jvm_lib_handle_ = nullptr;                  
-  void* hdfs_lib_handle_ = nullptr;
 
 private:
   lib::ObMutex lock_;

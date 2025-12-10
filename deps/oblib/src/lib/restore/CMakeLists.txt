@@ -10,10 +10,6 @@ oblib_add_library(restore OBJECT
   ob_storage_path.h
   ob_storage_info.cpp
   ob_storage_info.h
-  hdfs/ob_storage_hdfs_cache.cpp
-  hdfs/ob_storage_hdfs_cache.h
-  hdfs/ob_storage_hdfs_jni_base.cpp
-  hdfs/ob_storage_hdfs_jni_base.h
   ob_object_device.cpp
   hmac_signature.cpp
   ob_object_device.h

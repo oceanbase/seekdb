@@ -26,7 +26,6 @@
 #include "sql/engine/expr/ob_expr_lob_utils.h"
 #include "sql/rewrite/ob_transform_pre_process.h"
 #include "share/ob_vec_index_builder_util.h"
-#include "share/external_table/ob_hdfs_storage_info.h"
 #include "sql/resolver/ddl/ob_fts_parser_resolver.h"
 #include "share/ob_dynamic_partition_manager.h"
 #include "share/ob_license_utils.h"
