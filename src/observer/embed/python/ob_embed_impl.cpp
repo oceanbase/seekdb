@@ -37,7 +37,7 @@ PYBIND11_MODULE(PYTHON_MODEL_NAME, m) {
 
     const char *default_service_path = "./seekdb.db";
     m.def("open", &oceanbase::embed::ObLiteEmbed::open, pybind11::arg("db_dir") = default_service_path, "open db");
-    m.def("_open_with_service", &oceanbase::embed::ObLiteEmbed::open_with_service, pybind11::arg("db_dir") = default_service_path,
+    m.def("open_with_service", &oceanbase::embed::ObLiteEmbed::open_with_service, pybind11::arg("db_dir") = default_service_path,
                                                   pybind11::arg("port") = 2881,
                                                  "open db");
 
@@ -995,19 +995,21 @@ int ObLiteEmbedUtil::convert_result_to_pyobj(const int64_t col_idx, common::sqlc
       break;
     }
     case ObCollectionSQLType: {
-      ObObj obj;
-      ObArenaAllocator allocator(mem_attr);
-      ObString res_str;
-      if (OB_FAIL(result.get_obj(col_idx, obj))) {
-        LOG_WARN("get obj failed", K(ret), K(col_idx));
-      } else if (OB_FAIL(convert_collection_to_string(obj, obj_meta, inner_result, allocator, res_str))) {
-        LOG_WARN("convert collection failed", KR(ret), K(obj), K(obj_meta));
-        if (ret == OB_NOT_SUPPORTED) {
-          val = pybind11::bytes(obj.get_string_ptr(), obj.get_string_len());
-          ret = OB_SUCCESS;
+      MTL_SWITCH(OB_SYS_TENANT_ID) {
+        ObObj obj;
+        ObArenaAllocator allocator(mem_attr);
+        ObString res_str;
+        if (OB_FAIL(result.get_obj(col_idx, obj))) {
+          LOG_WARN("get obj failed", K(ret), K(col_idx));
+        } else if (OB_FAIL(convert_collection_to_string(obj, obj_meta, inner_result, allocator, res_str))) {
+          LOG_WARN("convert collection failed", KR(ret), K(obj), K(obj_meta));
+          if (ret == OB_NOT_SUPPORTED) {
+            val = pybind11::bytes(obj.get_string_ptr(), obj.get_string_len());
+            ret = OB_SUCCESS;
+          }
+        } else {
+          val = pybind11::str(res_str.ptr(), res_str.length());
         }
-      } else {
-        val = pybind11::str(res_str.ptr(), res_str.length());
       }
       break;
     }
