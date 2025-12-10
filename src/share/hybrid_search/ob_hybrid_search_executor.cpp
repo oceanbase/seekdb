@@ -278,10 +278,10 @@ int ObHybridSearchExecutor::apply_fusion_and_convert_to_json(
     
     // Step 2: Determine fusion strategy and parameters from search_params_str
     // Parse fusion configuration from search parameters
+    // Expected format: {"rank": {"rrf": {"rank_constant": 60, "rank_window_size": 1000}}}
     ObRRFConfig rrf_config(60, 1000);  // Default: rank_constant=60, rank_window_size=1000
     
-    // Extract RRF parameters from search_params_str if provided
-    // Expected format: search_params contains "rrf_query_param" with rank_constant and rank_window_size
+    // Extract RRF parameters from search_params_str if provided via rank.rrf path
     if (OB_FAIL(parse_rrf_config_from_params(search_params_str, rrf_config))) {
       // If parsing fails, use default configuration
       LOG_INFO("fail to parse rrf config from params, using default config", K(ret));
@@ -415,8 +415,16 @@ int ObHybridSearchExecutor::parse_rrf_config_from_params(
     return OB_SUCCESS;
   }
   
-  // Parse rrf_query_param from JSON search parameters
-  // Expected format: {..., "rrf_query_param": {"rank_constant": 60, "rank_window_size": 1000}, ...}
+  // Parse rank.rrf from JSON search parameters
+  // Expected format according to ObESQueryParser:
+  // {
+  //   "rank": {
+  //     "rrf": {
+  //       "rank_constant": 60,
+  //       "rank_window_size": 1000
+  //     }
+  //   }
+  // }
   ObIJsonBase *json_base = nullptr;
   if (OB_FAIL(common::ObJsonBaseFactory::get_json_base(&ctx_->get_allocator(), 
                                                         search_params_str,
@@ -431,54 +439,72 @@ int ObHybridSearchExecutor::parse_rrf_config_from_params(
     ret = OB_SUCCESS;
   } else {
     common::ObJsonObject *json_obj = static_cast<common::ObJsonObject*>(json_base);
-    common::ObIJsonBase *rrf_param_base = nullptr;
+    common::ObIJsonBase *rank_base = nullptr;
     
-    // Try to get rrf_query_param object
-    if (OB_FAIL(json_obj->get_object_value(common::ObString::make_string("rrf_query_param"), 
-                                             rrf_param_base))) {
+    // Try to get rank object (first level)
+    if (OB_FAIL(json_obj->get_object_value(common::ObString::make_string("rank"), 
+                                             rank_base))) {
       if (OB_ERR_JSON_PATH_EXPRESSION_ERROR == ret) {
-        // rrf_query_param not found, use default configuration
-        LOG_INFO("rrf_query_param not found in search params, using default config");
+        // rank not found, use default configuration
+        LOG_INFO("rank not found in search params, using default config");
         ret = OB_SUCCESS;
       } else {
-        LOG_WARN("fail to get rrf_query_param from search params", K(ret));
+        LOG_WARN("fail to get rank from search params", K(ret));
       }
-    } else if (OB_ISNULL(rrf_param_base)) {
-      // rrf_param_base is null, use default config
+    } else if (OB_ISNULL(rank_base)) {
+      // rank is null, use default config
       ret = OB_SUCCESS;
     } else {
-      common::ObJsonObject *rrf_param_obj = static_cast<common::ObJsonObject*>(rrf_param_base);
+      common::ObJsonObject *rank_obj = static_cast<common::ObJsonObject*>(rank_base);
+      common::ObIJsonBase *rrf_base = nullptr;
       
-      // Extract rank_constant
-      common::ObIJsonBase *rank_const_base = nullptr;
-      if (OB_FAIL(rrf_param_obj->get_object_value(
-          common::ObString::make_string("rank_constant"), rank_const_base))) {
-        if (OB_ERR_JSON_PATH_EXPRESSION_ERROR != ret) {
-          LOG_WARN("fail to get rank_constant from rrf_query_param", K(ret));
+      // Try to get rrf object (second level)
+      if (OB_FAIL(rank_obj->get_object_value(common::ObString::make_string("rrf"), 
+                                               rrf_base))) {
+        if (OB_ERR_JSON_PATH_EXPRESSION_ERROR == ret) {
+          // rrf not found, use default configuration
+          LOG_INFO("rrf not found in rank config, using default config");
+          ret = OB_SUCCESS;
+        } else {
+          LOG_WARN("fail to get rrf from rank config", K(ret));
         }
-        ret = OB_SUCCESS;  // Not critical, use default
-      } else if (OB_NOT_NULL(rank_const_base)) {
-        common::ObJsonNumber *rank_const_num = 
-            static_cast<common::ObJsonNumber*>(rank_const_base);
-        rrf_config.rank_constant_ = static_cast<int64_t>(rank_const_num->get_double());
-        LOG_INFO("parsed rank_constant from rrf_query_param", 
-                 K(rrf_config.rank_constant_));
-      }
-      
-      // Extract rank_window_size
-      common::ObIJsonBase *window_size_base = nullptr;
-      if (OB_FAIL(rrf_param_obj->get_object_value(
-          common::ObString::make_string("rank_window_size"), window_size_base))) {
-        if (OB_ERR_JSON_PATH_EXPRESSION_ERROR != ret) {
-          LOG_WARN("fail to get rank_window_size from rrf_query_param", K(ret));
+      } else if (OB_ISNULL(rrf_base)) {
+        // rrf is null, use default config
+        ret = OB_SUCCESS;
+      } else {
+        common::ObJsonObject *rrf_obj = static_cast<common::ObJsonObject*>(rrf_base);
+        
+        // Extract rank_constant
+        common::ObIJsonBase *rank_const_base = nullptr;
+        if (OB_FAIL(rrf_obj->get_object_value(
+            common::ObString::make_string("rank_constant"), rank_const_base))) {
+          if (OB_ERR_JSON_PATH_EXPRESSION_ERROR != ret) {
+            LOG_WARN("fail to get rank_constant from rrf config", K(ret));
+          }
+          ret = OB_SUCCESS;  // Not critical, use default
+        } else if (OB_NOT_NULL(rank_const_base)) {
+          common::ObJsonNumber *rank_const_num = 
+              static_cast<common::ObJsonNumber*>(rank_const_base);
+          rrf_config.rank_constant_ = static_cast<int64_t>(rank_const_num->get_double());
+          LOG_INFO("parsed rank_constant from rank.rrf config", 
+                   K(rrf_config.rank_constant_));
         }
-        ret = OB_SUCCESS;  // Not critical, use default
-      } else if (OB_NOT_NULL(window_size_base)) {
-        common::ObJsonNumber *window_size_num = 
-            static_cast<common::ObJsonNumber*>(window_size_base);
-        rrf_config.rank_window_size_ = static_cast<int64_t>(window_size_num->get_double());
-        LOG_INFO("parsed rank_window_size from rrf_query_param", 
-                 K(rrf_config.rank_window_size_));
+        
+        // Extract rank_window_size
+        common::ObIJsonBase *window_size_base = nullptr;
+        if (OB_FAIL(rrf_obj->get_object_value(
+            common::ObString::make_string("rank_window_size"), window_size_base))) {
+          if (OB_ERR_JSON_PATH_EXPRESSION_ERROR != ret) {
+            LOG_WARN("fail to get rank_window_size from rrf config", K(ret));
+          }
+          ret = OB_SUCCESS;  // Not critical, use default
+        } else if (OB_NOT_NULL(window_size_base)) {
+          common::ObJsonNumber *window_size_num = 
+              static_cast<common::ObJsonNumber*>(window_size_base);
+          rrf_config.rank_window_size_ = static_cast<int64_t>(window_size_num->get_double());
+          LOG_INFO("parsed rank_window_size from rank.rrf config", 
+                   K(rrf_config.rank_window_size_));
+        }
       }
     }
   }
