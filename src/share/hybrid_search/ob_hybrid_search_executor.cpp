@@ -316,28 +316,49 @@ int ObHybridSearchExecutor::apply_fusion_and_convert_to_json(
             common::ObJsonObject result_obj(&allocator);
             
             // Add doc_id
-            if (OB_FAIL(result_obj.add(common::ObString::make_string("doc_id"), 
-                                        static_cast<int64_t>(result.doc_id_)))) {
+            common::ObJsonInt *doc_id_node = OB_NEWx(common::ObJsonInt, (&allocator), 
+                                                     static_cast<int64_t>(result.doc_id_));
+            if (OB_ISNULL(doc_id_node)) {
+              ret = OB_ALLOCATE_MEMORY_FAILED;
+              LOG_WARN("fail to allocate doc_id node", K(ret));
+              break;
+            } else if (OB_FAIL(result_obj.add(common::ObString::make_string("doc_id"), doc_id_node))) {
               LOG_WARN("fail to add doc_id", K(ret));
               break;
             }
             
             // Add final score
-            if (OB_FAIL(result_obj.add(common::ObString::make_string("score"), 
-                                        result.final_score_))) {
+            common::ObJsonDouble *score_node = OB_NEWx(common::ObJsonDouble, (&allocator), 
+                                                       result.final_score_);
+            if (OB_ISNULL(score_node)) {
+              ret = OB_ALLOCATE_MEMORY_FAILED;
+              LOG_WARN("fail to allocate score node", K(ret));
+              break;
+            } else if (OB_FAIL(result_obj.add(common::ObString::make_string("score"), score_node))) {
               LOG_WARN("fail to add score", K(ret));
               break;
             }
             
             // Add FTS score if available
             if (result.fts_rank_ >= 0) {
-              if (OB_FAIL(result_obj.add(common::ObString::make_string("fts_score"), 
-                                          result.fts_score_))) {
+              common::ObJsonDouble *fts_score_node = OB_NEWx(common::ObJsonDouble, (&allocator), 
+                                                             result.fts_score_);
+              if (OB_ISNULL(fts_score_node)) {
+                ret = OB_ALLOCATE_MEMORY_FAILED;
+                LOG_WARN("fail to allocate fts_score node", K(ret));
+                break;
+              } else if (OB_FAIL(result_obj.add(common::ObString::make_string("fts_score"), fts_score_node))) {
                 LOG_WARN("fail to add fts_score", K(ret));
                 break;
               }
-              if (OB_FAIL(result_obj.add(common::ObString::make_string("fts_rank"), 
-                                          result.fts_rank_))) {
+              
+              common::ObJsonInt *fts_rank_node = OB_NEWx(common::ObJsonInt, (&allocator), 
+                                                        result.fts_rank_);
+              if (OB_ISNULL(fts_rank_node)) {
+                ret = OB_ALLOCATE_MEMORY_FAILED;
+                LOG_WARN("fail to allocate fts_rank node", K(ret));
+                break;
+              } else if (OB_FAIL(result_obj.add(common::ObString::make_string("fts_rank"), fts_rank_node))) {
                 LOG_WARN("fail to add fts_rank", K(ret));
                 break;
               }
@@ -345,21 +366,37 @@ int ObHybridSearchExecutor::apply_fusion_and_convert_to_json(
             
             // Add Vector score if available
             if (result.vector_rank_ >= 0) {
-              if (OB_FAIL(result_obj.add(common::ObString::make_string("vector_score"), 
-                                          result.vector_score_))) {
+              common::ObJsonDouble *vector_score_node = OB_NEWx(common::ObJsonDouble, (&allocator), 
+                                                                 result.vector_score_);
+              if (OB_ISNULL(vector_score_node)) {
+                ret = OB_ALLOCATE_MEMORY_FAILED;
+                LOG_WARN("fail to allocate vector_score node", K(ret));
+                break;
+              } else if (OB_FAIL(result_obj.add(common::ObString::make_string("vector_score"), vector_score_node))) {
                 LOG_WARN("fail to add vector_score", K(ret));
                 break;
               }
-              if (OB_FAIL(result_obj.add(common::ObString::make_string("vector_rank"), 
-                                          result.vector_rank_))) {
+              
+              common::ObJsonInt *vector_rank_node = OB_NEWx(common::ObJsonInt, (&allocator), 
+                                                            result.vector_rank_);
+              if (OB_ISNULL(vector_rank_node)) {
+                ret = OB_ALLOCATE_MEMORY_FAILED;
+                LOG_WARN("fail to allocate vector_rank node", K(ret));
+                break;
+              } else if (OB_FAIL(result_obj.add(common::ObString::make_string("vector_rank"), vector_rank_node))) {
                 LOG_WARN("fail to add vector_rank", K(ret));
                 break;
               }
             }
             
             // Add source flag
-            if (OB_FAIL(result_obj.add(common::ObString::make_string("source"), 
-                                        static_cast<int64_t>(result.source_flag_)))) {
+            common::ObJsonInt *source_node = OB_NEWx(common::ObJsonInt, (&allocator), 
+                                                     static_cast<int64_t>(result.source_flag_));
+            if (OB_ISNULL(source_node)) {
+              ret = OB_ALLOCATE_MEMORY_FAILED;
+              LOG_WARN("fail to allocate source node", K(ret));
+              break;
+            } else if (OB_FAIL(result_obj.add(common::ObString::make_string("source"), source_node))) {
               LOG_WARN("fail to add source flag", K(ret));
               break;
             }
@@ -378,8 +415,12 @@ int ObHybridSearchExecutor::apply_fusion_and_convert_to_json(
               LOG_WARN("fail to add hits array to response", K(ret));
             } else {
               // Add metadata
-              if (OB_FAIL(response_json.add(common::ObString::make_string("total"), 
-                                             static_cast<int64_t>(fused_results.count())))) {
+              common::ObJsonInt *total_node = OB_NEWx(common::ObJsonInt, (&allocator), 
+                                                      static_cast<int64_t>(fused_results.count()));
+              if (OB_ISNULL(total_node)) {
+                ret = OB_ALLOCATE_MEMORY_FAILED;
+                LOG_WARN("fail to allocate total node", K(ret));
+              } else if (OB_FAIL(response_json.add(common::ObString::make_string("total"), total_node))) {
                 LOG_WARN("fail to add total count", K(ret));
               } else {
                 // Convert JSON object to string and set as result
@@ -444,7 +485,7 @@ int ObHybridSearchExecutor::parse_rrf_config_from_params(
     // Try to get rank object (first level)
     if (OB_FAIL(json_obj->get_object_value(common::ObString::make_string("rank"), 
                                              rank_base))) {
-      if (OB_ERR_JSON_PATH_EXPRESSION_ERROR == ret) {
+      if (OB_ERR_JSON_PATH_EXPRESSION_SYNTAX_ERROR == ret) {
         // rank not found, use default configuration
         LOG_INFO("rank not found in search params, using default config");
         ret = OB_SUCCESS;
@@ -461,7 +502,7 @@ int ObHybridSearchExecutor::parse_rrf_config_from_params(
       // Try to get rrf object (second level)
       if (OB_FAIL(rank_obj->get_object_value(common::ObString::make_string("rrf"), 
                                                rrf_base))) {
-        if (OB_ERR_JSON_PATH_EXPRESSION_ERROR == ret) {
+        if (OB_ERR_JSON_PATH_EXPRESSION_SYNTAX_ERROR == ret) {
           // rrf not found, use default configuration
           LOG_INFO("rrf not found in rank config, using default config");
           ret = OB_SUCCESS;
@@ -478,7 +519,7 @@ int ObHybridSearchExecutor::parse_rrf_config_from_params(
         common::ObIJsonBase *rank_const_base = nullptr;
         if (OB_FAIL(rrf_obj->get_object_value(
             common::ObString::make_string("rank_constant"), rank_const_base))) {
-          if (OB_ERR_JSON_PATH_EXPRESSION_ERROR != ret) {
+          if (OB_ERR_JSON_PATH_EXPRESSION_SYNTAX_ERROR != ret) {
             LOG_WARN("fail to get rank_constant from rrf config", K(ret));
           }
           ret = OB_SUCCESS;  // Not critical, use default
@@ -494,7 +535,7 @@ int ObHybridSearchExecutor::parse_rrf_config_from_params(
         common::ObIJsonBase *window_size_base = nullptr;
         if (OB_FAIL(rrf_obj->get_object_value(
             common::ObString::make_string("rank_window_size"), window_size_base))) {
-          if (OB_ERR_JSON_PATH_EXPRESSION_ERROR != ret) {
+          if (OB_ERR_JSON_PATH_EXPRESSION_SYNTAX_ERROR != ret) {
             LOG_WARN("fail to get rank_window_size from rrf config", K(ret));
           }
           ret = OB_SUCCESS;  // Not critical, use default
