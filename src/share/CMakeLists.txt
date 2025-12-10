@@ -733,6 +733,9 @@ ob_set_subtarget(ob_share hybrid_search
   hybrid_search/ob_query_request.cpp
   hybrid_search/ob_query_translator.cpp
   hybrid_search/ob_hybrid_search_executor.cpp
+  hybrid_search/ob_hybrid_search_fusion_engine.cpp
+  hybrid_search/ob_rrf_fusion.cpp
+  hybrid_search/ob_weighted_fusion.cpp
 )
 
 ob_set_subtarget(ob_share domain_id
