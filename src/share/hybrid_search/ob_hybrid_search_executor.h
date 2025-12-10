@@ -92,6 +92,8 @@ private:
                                         const common::ObIArray<ObHybridSearchResult> &vector_results,
                                         const ObString &search_params_str,
                                         ObObj &query_res);
+  int parse_rrf_config_from_params(const ObString &search_params_str,
+                                   ObRRFConfig &rrf_config);
 
 private:
   sql::ObExecContext *ctx_;
