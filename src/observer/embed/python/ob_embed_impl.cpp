@@ -939,6 +939,8 @@ int ObLiteEmbedUtil::convert_result_to_pyobj(const int64_t col_idx, common::sqlc
           LOG_WARN("get obj failed", K(ret), K(col_idx));
         } else if (OB_FAIL(sql::ObTextStringHelper::read_real_string_data(&allocator, obj, real_data))) {
           LOG_WARN("failed to read real string data", K(ret), K(obj));
+        } else if (obj_meta.get_collation_type() == ObCollationType::CS_TYPE_BINARY) {
+          val = pybind11::bytes(real_data.ptr(), real_data.length());
         } else {
           ObString out_str;
           if (OB_FAIL(convert_string_charset(session, allocator, real_data,
