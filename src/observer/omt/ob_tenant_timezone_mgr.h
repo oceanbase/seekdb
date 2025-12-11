@@ -57,42 +57,6 @@ private:
   private:
     DISALLOW_COPY_AND_ASSIGN(__ObTimezoneContainer);
   };
-  // Obtain all_tenant_ids regularly and update the timezone_map in mgr.
-  class AddTenantTZTask : public common::ObTimerTask
-  {
-  public:
-    AddTenantTZTask(ObTenantTimezoneMgr *tenant_tz_mgr)
-      : tenant_tz_mgr_(tenant_tz_mgr) {}
-    virtual ~AddTenantTZTask() {}
-    AddTenantTZTask(const AddTenantTZTask &) = delete;
-    AddTenantTZTask &operator=(const AddTenantTZTask &) = delete;
-    void runTimerTask(void) override;
-    int update_tenant_map(common::ObIArray<uint64_t> &latest_tenant_ids);
-
-    ObTenantTimezoneMgr *tenant_tz_mgr_;
-  };
-  class DeleteTenantTZTask : public common::ObTimerTask
-  {
-  public:
-    DeleteTenantTZTask(ObTenantTimezoneMgr *tenant_tz_mgr)
-      : tenant_tz_mgr_(tenant_tz_mgr) {}
-    int init(ObTenantTimezoneMgr *tz_mgr);
-    virtual ~DeleteTenantTZTask() {}
-    void runTimerTask(void) override;
-
-    ObTenantTimezoneMgr *tenant_tz_mgr_;
-  };
-  class UpdateTenantTZOp
-  {
-  public:
-    UpdateTenantTZOp()
-    {}
-    virtual ~UpdateTenantTZOp() = default;
-    int operator() (common::hash::HashMapPair<uint64_t, ObTenantTimezone*> &entry);
-  public:
-  private:
-    DISALLOW_COPY_AND_ASSIGN(UpdateTenantTZOp);
-  };
   class UpdateTenantTZTask : public common::ObTimerTask
   {
   public:
@@ -103,8 +67,6 @@ private:
     void runTimerTask(void) override;
     ObTenantTimezoneMgr *tenant_tz_mgr_;
   };
-  friend AddTenantTZTask;
-  friend DeleteTenantTZTask;
   friend UpdateTenantTZTask;
 public:
   using TenantTimezoneMap = __ObTimezoneContainer<uint64_t, ObTenantTimezone, common::OB_MAX_SERVER_TENANT_CNT>;
@@ -121,19 +83,12 @@ public:
   // init interface for liboblog only.
   void init(tenant_timezone_map_getter tz_map_getter);
   int start();
-  int add_tenant_timezone(uint64_t tenant_id);
-  int del_tenant_timezone(uint64_t tenant_id);
 
   // observer and liboblog get tenant tz map with the following function.
   int get_tenant_tz(const uint64_t tenant_id,
                     common::ObTZMapWrap &timezone_wrap);
-  int refresh_tenant_timezone(const uint64_t tenant_id);
-  int get_tenant_timezone(const uint64_t tenant_id, common::ObTZMapWrap &timezone_wrap,
+  int get_tenant_timezone(const uint64_t /*tenant_id*/, common::ObTZMapWrap &timezone_wrap,
                           common::ObTimeZoneInfoManager *&tz_info_mgr);
-  int remove_nonexist_tenant();
-  int add_new_tenants(const common::ObIArray<uint64_t> &latest_tenant_ids);
-  int update_timezone_map();
-  int delete_tenant_timezone();
   bool is_inited() { return is_inited_; }
   bool is_usable() { return usable_; }
   void set_usable() { usable_ = true; }
@@ -142,9 +97,9 @@ public:
   void wait();
   void destroy();
 
+  int refresh_timezone_info();
 private:
-  int get_tenant_timezone_inner(const uint64_t tenant_id, common::ObTZMapWrap &timezone_wrap,
-                                common::ObTimeZoneInfoManager *&tz_info_mgr);
+  int init_timezone();
   // static function of calling instance().get_tenant_timezone_map(). For init tenant_tz_map_getter_
   static int get_tenant_timezone_static(const uint64_t tenant_id,
                                         common::ObTZMapWrap &timezone_wrap);
@@ -157,12 +112,9 @@ private:
   bool is_inited_;
   common::ObAddr self_;
   common::ObMySQLProxy *sql_proxy_;
-  // protect timezone_map_
   common::DRWLock rwlock_;
-  TenantTimezoneMap timezone_map_;
-  AddTenantTZTask add_task_;
-  DeleteTenantTZTask delete_task_;
   UpdateTenantTZTask update_task_;
+  ObTenantTimezone *timezone_ = nullptr;
   bool usable_;
   share::schema::ObMultiVersionSchemaService *schema_service_;
 public:

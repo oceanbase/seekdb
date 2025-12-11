@@ -1276,7 +1276,7 @@ int ObServer::check_if_schema_ready()
   while (OB_SUCC(ret) && !stop_ && !schema_ready) {
     schema_ready = schema_service_.is_sys_full_schema();
     if (!schema_ready) {
-      SLEEP(1);
+      ob_usleep(10 * 1000);
     }
   }
   FLOG_INFO("check if schema ready", KR(ret), K(stop_), K(schema_ready));
@@ -1297,16 +1297,17 @@ int ObServer::check_if_timezone_usable()
 {
   int ret = OB_SUCCESS;
   bool timezone_usable = false;
+  while (OB_SUCC(ret) && !stop_ && !timezone_usable) {
+    timezone_usable = tenant_timezone_mgr_.is_usable();
+    if (!timezone_usable) {
+      (void) (tenant_timezone_mgr_.refresh_timezone_info());
+      ob_usleep(10 * 1000);
+    }
+  }
   if (FAILEDx(tenant_timezone_mgr_.start())) {
     LOG_ERROR("fail to start tenant timezone mgr", KR(ret));
   } else {
     FLOG_INFO("success to start tenant timezone mgr");
-  }
-  while (OB_SUCC(ret) && !stop_ && !timezone_usable) {
-    timezone_usable = tenant_timezone_mgr_.is_usable();
-    if (!timezone_usable) {
-      ob_usleep(10 * 1000);
-    }
   }
   FLOG_INFO("check if timezone usable", KR(ret), K(stop_), K(timezone_usable));
   return ret;
