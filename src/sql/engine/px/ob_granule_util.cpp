@@ -241,39 +241,13 @@ int ObGranuleUtil::split_granule_for_external_table(ObIAllocator &allocator,
              ObExternalFileFormat::ODPS_FORMAT == external_file_format.format_type_) {
     LOG_TRACE("odps external table granule switch", K(ret), K(external_table_files.count()), K(external_table_files));
     if (!GCONF._use_odps_jni_connector) {
-#if defined(OB_BUILD_CPP_ODPS)
-      if (OB_FAIL(split_granule_by_partition_line(allocator, tablets, external_table_files, granule_tablets, granule_ranges, granule_idx))) {
-        LOG_WARN("failed to split granule by partition line", K(ret));
-      }
-#else
     ret = OB_NOT_SUPPORTED;
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "external odps table");
     LOG_WARN("not support odps table in opensource", K(ret));
-#endif
     } else {
-#if defined (OB_BUILD_JNI_ODPS)
-      if (external_file_format.odps_format_.api_mode_ != ObODPSGeneralFormat::ApiMode::TUNNEL_API) {
-        if (external_file_format.odps_format_.api_mode_ == ObODPSGeneralFormat::ApiMode::BYTE) {
-          if (OB_FAIL(split_granule_by_total_byte(allocator, parallelism, tablets, external_table_files, granule_tablets, granule_ranges, granule_idx))) {
-            LOG_WARN("failed to split granule by total byte", K(ret));
-          }
-        } else {
-          if (OB_FAIL(split_granule_by_total_row(allocator, parallelism, tablets, external_table_files, granule_tablets, granule_ranges, granule_idx))) {
-            LOG_WARN("failed to split granule by total row", K(ret));
-          }
-        }
-      } else {
-        // tunnel api
-        if (OB_FAIL(split_granule_by_partition_line(
-                allocator, tablets, external_table_files, granule_tablets, granule_ranges, granule_idx))) {
-          LOG_WARN("failed to split granule by partition line", K(ret));
-        }
-      }
-#else
     ret = OB_NOT_SUPPORTED;
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "external odps table");
     LOG_WARN("not support odps table in opensource", K(ret));
-#endif
     }
 
   } else {

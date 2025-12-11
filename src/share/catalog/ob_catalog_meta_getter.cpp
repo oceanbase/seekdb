@@ -17,8 +17,6 @@
 #define USING_LOG_PREFIX SHARE
 
 #include "share/catalog/ob_catalog_meta_getter.h"
-
-#include "share/catalog/odps/ob_odps_catalog.h"
 #include "src/share/catalog/ob_catalog_properties.h"
 
 namespace oceanbase
@@ -195,18 +193,8 @@ int ObCatalogMetaGetter::get_catalog_(const uint64_t tenant_id, const uint64_t c
   } else {
     switch (catalog_type) {
       case ObCatalogProperties::CatalogType::ODPS_TYPE: {
-#ifdef OB_BUILD_CPP_ODPS
-        catalog = OB_NEWx(ObOdpsCatalog, &allocator_, allocator_);
-        if (OB_ISNULL(catalog)) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("alloc failed", K(ret));
-        } else if (OB_FAIL(catalog->init(schema->get_catalog_properties()))) {
-          LOG_WARN("failed to init odps catalog", K(ret));
-        }
-#else
         ret = OB_NOT_SUPPORTED;
         LOG_WARN("ODPS CPP connector is not enabled", K(ret));
-#endif
         break;
       }
       default: {

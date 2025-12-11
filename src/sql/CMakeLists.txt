@@ -305,16 +305,6 @@ ob_set_subtarget(ob_sql engine_cmd
   engine/cmd/ob_sys_dispatch_call_executor.cpp
   engine/cmd/ob_ccl_rule_executor.cpp
 )
-if (OB_BUILD_JNI_ODPS)
-  ob_set_subtarget(ob_sql engine_connector
-    engine/connector/ob_java_native_method.cpp
-    engine/connector/ob_java_env.cpp
-    engine/connector/ob_java_helper.cpp
-    engine/connector/ob_jni_connector.cpp
-    engine/connector/ob_jni_scanner.cpp
-    engine/connector/ob_jni_writer.cpp
-  )
-endif()
 
 ob_set_subtarget(ob_sql engine_dml
   engine/dml/ob_conflict_checker.cpp
@@ -779,7 +769,6 @@ ob_set_subtarget(ob_sql engine_expr
   engine/expr/ob_expr_func_ceil.cpp
   engine/expr/ob_expr_eval_functions.cpp
   engine/expr/ob_expr_in.cpp
-  engine/expr/ob_expr_calc_odps_size.cpp
   engine/expr/ob_expr_to_pinyin_tab.cpp
   engine/expr/ob_expr_to_pinyin.cpp
   engine/expr/ob_expr_url_codec.cpp
@@ -988,10 +977,7 @@ ob_set_subtarget(ob_sql engine_table
   engine/table/ob_csv_table_row_iter.cpp
   engine/table/ob_orc_table_row_iter.cpp
   engine/table/ob_parquet_table_row_iter.cpp
-  engine/table/ob_odps_table_row_iter.cpp
   engine/table/ob_file_prefetch_buffer.cpp
-  engine/table/ob_odps_jni_table_row_iter.cpp
-  engine/table/ob_odps_table_utils.cpp
   engine/table/ob_ddl_block_sample_scan_op.cpp
 )
 

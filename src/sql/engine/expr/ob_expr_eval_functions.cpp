@@ -349,7 +349,6 @@
 #include "ob_expr_array_remove.h"
 #include "ob_expr_array_map.h"
 #include "ob_expr_array_range.h"
-#include "ob_expr_calc_odps_size.h"
 #include "ob_expr_array_first.h"
 #include "ob_expr_mysql_proc_info.h"
 #include "ob_expr_get_mysql_routine_parameter_type_str.h"
@@ -1273,7 +1272,7 @@ static ObExpr::EvalFunc g_expr_eval_functions[] = {
   NULL, // ObExprCalcSubPartitionName::get_sub_partition_name,        /* 788 */
   NULL, // ObExprCalcPartitionIdx::get_partition_idx,                 /* 789 */
   NULL, // ObExprCalcSubPartitionIdx::get_sub_partition_idx,          /* 790 */
-  ObExprCalcOdpsSize::calc_odps_size,                                 /* 791 */
+  NULL, // ObExprCalcOdpsSize::calc_odps_size,                        /* 791 */
   ObExprVecIVFCenterID::calc_center_id,                               /* 792 */
   ObExprVecIVFCenterVector::generate_center_vector,                   /* 793 */
   ObExprVecIVFFlatDataVector::generate_data_vector,                   /* 794 */

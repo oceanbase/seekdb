@@ -615,8 +615,6 @@ ob_set_subtarget(ob_share catalog
   catalog/ob_catalog_meta_getter.cpp
   catalog/ob_cached_catalog_meta_getter.cpp
   catalog/ob_catalog_utils.cpp
-  catalog/odps/ob_odps_catalog_utils.cpp
-  catalog/odps/ob_odps_catalog.cpp
 )
 
 

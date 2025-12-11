@@ -19,9 +19,6 @@
 #include "ob_load_data_parser.h"
 #include "lib/string/ob_hex_utils_base.h"
 #include "src/sql/engine/ob_exec_context.h"
-#if defined (OB_BUILD_CPP_ODPS) || defined (OB_BUILD_JNI_ODPS)
-#include "share/ob_encryption_util.h"
-#endif
 
 using namespace oceanbase::sql;
 using namespace oceanbase::common;
