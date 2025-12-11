@@ -22,6 +22,8 @@ namespace oceanbase
 namespace common
 {
 
+USING_LOG_PREFIX(OLOG);
+
 ObRRFFusion::ObRRFFusion()
   : is_initialized_(false), allocator_(nullptr)
 {
@@ -46,7 +48,7 @@ int ObRRFFusion::init(const ObRRFConfig &config, ObIAllocator &allocator)
     allocator_ = &allocator;
     
     // Initialize result mapping table
-    if (OB_FAIL(result_map_.create(10240, &allocator))) {
+    if (OB_FAIL(result_map_.create(10240, common::ObMemAttr(common::OB_SERVER_TENANT_ID)))) {
       OB_LOG(WARN, "failed to create result map", K(ret));
     } else {
       is_initialized_ = true;

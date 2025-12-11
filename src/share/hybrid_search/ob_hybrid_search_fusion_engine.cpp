@@ -24,6 +24,8 @@ namespace share {
 
 using namespace oceanbase::common;
 
+USING_LOG_PREFIX(OLOG);
+
 // ==================== RRF Strategy Adapter ====================
 class ObRRFFusionStrategy : public IObHybridSearchFusionStrategy {
 public:
@@ -173,7 +175,7 @@ int ObHybridSearchFusionEngine::create_strategy(FusionStrategy strategy, ObIAllo
     case FusionStrategy::UNKNOWN:
     default:
       ret = OB_NOT_SUPPORTED;
-      LOG_WARN("unsupported fusion strategy", K(ret), K(strategy));
+      OB_LOG(WARN, "unsupported fusion strategy", K(ret), K(strategy));
   }
   
   return ret;
@@ -186,23 +188,23 @@ int ObHybridSearchFusionEngine::init(FusionStrategy strategy, const void *config
   
   if (is_initialized_) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("fusion engine already initialized", K(ret));
+    OB_LOG(WARN, "fusion engine already initialized", K(ret));
     return ret;
   }
   
   if (OB_FAIL(create_strategy(strategy, allocator))) {
-    LOG_WARN("failed to create fusion strategy", K(ret));
+    OB_LOG(WARN, "failed to create fusion strategy", K(ret));
     return ret;
   }
   
   if (OB_ISNULL(strategy_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("strategy is null after creation", K(ret));
+    OB_LOG(WARN, "strategy is null after creation", K(ret));
     return ret;
   }
   
   if (OB_FAIL(strategy_->init(config, allocator))) {
-    LOG_WARN("failed to initialize fusion strategy", K(ret));
+    OB_LOG(WARN, "failed to initialize fusion strategy", K(ret));
     return ret;
   }
   
@@ -218,13 +220,13 @@ int ObHybridSearchFusionEngine::feed_fts_results(const ObIArray<ObHybridSearchRe
   
   if (!is_initialized_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("fusion engine not initialized", K(ret));
+    OB_LOG(WARN, "fusion engine not initialized", K(ret));
     return ret;
   }
   
   if (OB_ISNULL(strategy_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("strategy is null", K(ret));
+    OB_LOG(WARN, "strategy is null", K(ret));
     return ret;
   }
   
@@ -237,13 +239,13 @@ int ObHybridSearchFusionEngine::feed_vector_results(const ObIArray<ObHybridSearc
   
   if (!is_initialized_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("fusion engine not initialized", K(ret));
+    OB_LOG(WARN, "fusion engine not initialized", K(ret));
     return ret;
   }
   
   if (OB_ISNULL(strategy_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("strategy is null", K(ret));
+    OB_LOG(WARN, "strategy is null", K(ret));
     return ret;
   }
   
@@ -256,13 +258,13 @@ int ObHybridSearchFusionEngine::execute_fusion()
   
   if (!is_initialized_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("fusion engine not initialized", K(ret));
+    OB_LOG(WARN, "fusion engine not initialized", K(ret));
     return ret;
   }
   
   if (OB_ISNULL(strategy_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("strategy is null", K(ret));
+    OB_LOG(WARN, "strategy is null", K(ret));
     return ret;
   }
   
@@ -276,13 +278,13 @@ int ObHybridSearchFusionEngine::get_fused_results(ObIArray<ObHybridSearchResult>
   
   if (!is_initialized_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("fusion engine not initialized", K(ret));
+    OB_LOG(WARN, "fusion engine not initialized", K(ret));
     return ret;
   }
   
   if (OB_ISNULL(strategy_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("strategy is null", K(ret));
+    OB_LOG(WARN, "strategy is null", K(ret));
     return ret;
   }
   

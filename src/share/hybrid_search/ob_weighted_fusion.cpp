@@ -22,6 +22,8 @@ namespace oceanbase
 namespace common
 {
 
+USING_LOG_PREFIX(OLOG);
+
 ObWeightedFusion::ObWeightedFusion()
   : is_initialized_(false), allocator_(nullptr), stats_calculated_(false)
 {
@@ -49,7 +51,7 @@ int ObWeightedFusion::init(const ObWeightedFusionConfig &config,
     allocator_ = &allocator;
     
     // Initialize result mapping table
-    if (OB_FAIL(result_map_.create(10240, &allocator))) {
+    if (OB_FAIL(result_map_.create(10240, common::ObMemAttr(common::OB_SERVER_TENANT_ID)))) {
       OB_LOG(WARN, "failed to create result map", K(ret));
     } else {
       is_initialized_ = true;
