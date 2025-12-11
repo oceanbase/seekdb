@@ -24,10 +24,6 @@
 #include "share/backup/ob_backup_struct.h"
 #include "sql/engine/table/ob_external_table_access_service.h"
 #include "sql/engine/cmd/ob_load_data_parser.h"
-#ifdef OB_BUILD_CPP_ODPS
-#include <odps/odps_tunnel.h>
-#include <odps/odps_api.h>
-#endif
 #include <parquet/api/writer.h>
 #include "ob_select_into_basic.h"
 #include "sql/resolver/dml/ob_select_stmt.h"

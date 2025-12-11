@@ -25,7 +25,6 @@
 #include "sql/resolver/ob_resolver_utils.h"
 #include "sql/resolver/expr/ob_raw_expr_util.h"
 #include "src/sql/resolver/ob_stmt_resolver.h"
-#include "sql/engine/table/ob_odps_table_row_iter.h"
 
 namespace oceanbase {
 namespace sql {

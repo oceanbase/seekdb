@@ -21,12 +21,6 @@
 #include "share/external_table/ob_external_table_utils.h"
 #include "share/ob_device_manager.h"
 #include "sql/engine/table/ob_parquet_table_row_iter.h"
-#ifdef OB_BUILD_CPP_ODPS
-#include "sql/engine/table/ob_odps_table_row_iter.h"
-#endif
-#ifdef OB_BUILD_JNI_ODPS
-#include "sql/engine/table/ob_odps_jni_table_row_iter.h"
-#endif
 #include "sql/engine/cmd/ob_load_data_file_reader.h"
 #include "sql/engine/table/ob_orc_table_row_iter.h"
 #include "sql/engine/table/ob_csv_table_row_iter.h"
@@ -584,27 +578,11 @@ int ObExternalTableAccessService::table_scan(
       break;
     case ObExternalFileFormat::ODPS_FORMAT:
       if (!GCONF._use_odps_jni_connector) {
-#if defined(OB_BUILD_CPP_ODPS) 
-        if (OB_ISNULL(row_iter = OB_NEWx(ObODPSTableRowIterator,
-                                         (scan_param.allocator_)))) {
-          ret = OB_ALLOCATE_MEMORY_FAILED;
-          LOG_WARN("alloc memory failed", K(ret));
-        }
-#else
         ret = OB_NOT_SUPPORTED;
         LOG_WARN("odps cpp connector is not enabled", K(ret));
-#endif
       } else {
-#if defined(OB_BUILD_JNI_ODPS)
-        if (OB_ISNULL(row_iter = OB_NEWx(ObODPSJNITableRowIterator,
-                                         (scan_param.allocator_)))) {
-          ret = OB_ALLOCATE_MEMORY_FAILED;
-          LOG_WARN("alloc memory failed for jni row iterator", K(ret));
-        }
-#else
         ret = OB_NOT_SUPPORTED;
         LOG_WARN("odps jni connector is not enabled", K(ret));
-#endif
       }
       break;
     case ObExternalFileFormat::ORC_FORMAT:
@@ -651,13 +629,9 @@ int ObExternalTableAccessService::table_rescan(ObVTableScanParam &param, ObNewRo
         result->reset();
         break;
       case ObExternalFileFormat::ODPS_FORMAT:
-#if defined (OB_BUILD_CPP_ODPS) || defined (OB_BUILD_JNI_ODPS)
-        result->reset();
-#else
         ret = OB_NOT_SUPPORTED;
         LOG_USER_ERROR(OB_NOT_SUPPORTED, "external odps table");
         LOG_WARN("not support to read odps in opensource", K(ret));
-#endif
         break;
       default:
         ret = OB_ERR_UNEXPECTED;

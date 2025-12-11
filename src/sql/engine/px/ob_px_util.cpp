@@ -26,9 +26,6 @@
 #include "rpc/obrpc/ob_net_keepalive.h"
 #include "share/external_table/ob_external_table_utils.h"
 #include "sql/engine/px/ob_dfo_scheduler.h"
-#ifdef OB_BUILD_CPP_ODPS
-#include "sql/engine/table/ob_odps_table_row_iter.h"
-#endif
 
 
 using namespace oceanbase::common;

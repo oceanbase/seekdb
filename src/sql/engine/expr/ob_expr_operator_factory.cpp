@@ -415,7 +415,6 @@
 #include "sql/engine/expr/ob_expr_array_remove.h"
 #include "sql/engine/expr/ob_expr_array_map.h"
 #include "sql/engine/expr/ob_expr_array_range.h"
-#include "sql/engine/expr/ob_expr_calc_odps_size.h"
 #include "sql/engine/expr/ob_expr_array_first.h"
 #include "sql/engine/expr/ob_expr_mysql_proc_info.h"
 #include "sql/engine/expr/ob_expr_get_mysql_routine_parameter_type_str.h"
@@ -1136,7 +1135,6 @@ void ObExprOperatorFactory::register_expr_operators()
     REG_OP(ObExprArrayIntersect);
     REG_OP(ObExprArrayUnion);
     REG_OP(ObExprGetMySQLRoutineParameterTypeStr);
-    REG_OP(ObExprCalcOdpsSize);
     REG_OP(ObExprToPinyin);
     REG_OP(ObExprURLEncode);
     REG_OP(ObExprURLDecode);

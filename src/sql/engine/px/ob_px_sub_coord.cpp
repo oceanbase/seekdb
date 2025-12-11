@@ -570,33 +570,11 @@ int ObPxSubCoord::setup_op_input(ObExecContext &ctx,
       // do nothing
     } else { 
       if (!GCONF._use_odps_jni_connector) {
-#if defined (OB_BUILD_CPP_ODPS)
-        ObOdpsPartitionDownloaderMgr &odps_mgr = sqc_ctx.gi_pump_.get_odps_mgr();
-        if (OB_FAIL(odps_mgr.init_uploader(
-                select_into_spec->external_properties_.str_,
-                select_into_spec->external_partition_.str_,
-                select_into_spec->is_overwrite_, sqc.get_task_count()))) {
-          LOG_WARN("failed to init odps uploader", K(ret));
-        }
-#else
         ret = OB_NOT_SUPPORTED;
         LOG_WARN("not support odps cpp connector", K(ret));
-#endif
       } else {
-#if defined (OB_BUILD_JNI_ODPS)
-        // For the same partition with multiple tasks, these tasks share one session
-        ObOdpsJniUploaderMgr &odps_mgr =
-            sqc_ctx.gi_pump_.get_odps_jni_uploader_mgr();
-        if (OB_FAIL(odps_mgr.init_writer_params_in_px(
-                select_into_spec->external_properties_.str_,
-                select_into_spec->external_partition_.str_,
-                select_into_spec->is_overwrite_, sqc.get_task_count()))) {
-          LOG_WARN("failed to init odps jni uploader", K(ret));
-        }
-#else
         ret = OB_NOT_SUPPORTED;
         LOG_WARN("not support odps jni connector", K(ret));
-#endif
       }
     }
   }

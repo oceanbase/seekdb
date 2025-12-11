@@ -23,24 +23,11 @@
 #include "share/backup/ob_backup_struct.h"
 #include "sql/engine/table/ob_external_table_access_service.h"
 #include "sql/engine/cmd/ob_load_data_parser.h"
-#include "sql/engine/table/ob_odps_jni_table_row_iter.h"
-
-#ifdef OB_BUILD_CPP_ODPS
-#include <odps/odps_tunnel.h>
-#include <odps/odps_api.h>
-#endif
-
-#ifdef OB_BUILD_JNI_ODPS
-#include "sql/engine/connector/ob_jni_writer.h"
-#include <arrow/api.h>
-#include "sql/engine/basic/ob_arrow_basic.h"
-#endif
 
 #include <parquet/api/writer.h>
 #include "sql/engine/basic/ob_select_into_basic.h"
 #include "sql/engine/basic/ob_external_file_writer.h"
 #include "sql/resolver/dml/ob_select_stmt.h"
-#include "sql/engine/table/ob_odps_table_utils.h"
 
 namespace oceanbase
 {
@@ -162,20 +149,11 @@ public:
       format_type_(ObExternalFileFormat::FormatType::CSV_FORMAT),
       is_odps_cpp_table_(false),
       is_odps_java_table_(false),
-#ifdef OB_BUILD_CPP_ODPS
-      upload_(NULL),
-      record_writer_(NULL),
-#endif
-#ifdef OB_BUILD_JNI_ODPS
-      uploader_(),
-      arrow_schema_(nullptr),
-#endif
       block_id_(0),
       need_commit_(true),
       arrow_alloc_(),
       parquet_writer_schema_(nullptr),
-      orc_schema_(nullptr),
-      array_helpers_()
+      orc_schema_(nullptr)
   {
   }
 
@@ -247,40 +225,6 @@ private:
   int init_env_common();
   int init_csv_env();
   void set_csv_format_options();
-#ifdef OB_BUILD_CPP_ODPS
-  int init_odps_tunnel();
-  int into_odps();
-  int into_odps_batch(const ObBatchRows &brs);
-  int odps_commit_upload();
-  int set_odps_column_value_mysql(apsara::odps::sdk::ODPSTableRecord &table_record,
-                                  const ObDatum &datum,
-                                  const ObDatumMeta &datum_meta,
-                                  const ObObjMeta &obj_meta,
-                                  uint32_t col_idx,
-                                  const bool is_strict_mode,
-                                  const ObDateSqlMode date_sql_mode);
-#endif
-#ifdef OB_BUILD_JNI_ODPS
-  int init_odps_jni_tunnel();
-  int into_odps_jni_batch(const ObBatchRows &brs);
-  int odps_jni_commit_upload();
-
-  int create_odps_schema();
-  
-  int into_odps_jni_batch_one_col(int64_t col_idx, ObJniConnector::OdpsType odps_type, arrow::Field &arrow_field,
-      ObDatumMeta &meta, ObObjMeta &obj_meta, ObIVector &expr_vector, arrow::ArrayBuilder *builder,
-      const ObBatchRows &brs, int &act_cnt, ObIAllocator &alloc, const bool is_strict_mode, const ObDateSqlMode date_sql_mode);
-
-  int set_odps_column_value_mysql_jni(arrow::ArrayBuilder *builder,
-                                                ObJniConnector::OdpsType odps_type,
-                                                const ObDatum &datum,
-                                                const ObDatumMeta &datum_meta,
-                                                const ObObjMeta &obj_meta,
-                                                arrow::Field &arrow_field,
-                                                uint32_t col_idx,
-                                                const bool is_strict_mode,
-                                                const ObDateSqlMode date_sql_mode);
-#endif
 
   int decimal_to_string(const ObDatum &datum,
                         const ObDatumMeta &datum_meta,
@@ -415,21 +359,6 @@ private:
   int check_oracle_number(ObObjType obj_type, int16_t &precision, int8_t scale);
   static bool day_number_checker(int32_t days);
 
-  #ifdef OB_BUILD_CPP_ODPS
-  int recursive_fill_list_record(shared_ptr<apsara::odps::sdk::ODPSArray> odps_array,
-                                 ObODPSArrayHelper *array_helper,
-                                 ObIAllocator &alloc,
-                                 const bool is_strict_mode,
-                                 const ObDateSqlMode date_sql_mode);
-  #endif
-  #ifdef OB_BUILD_JNI_ODPS
-  int recursive_fill_list_builder(arrow::ListBuilder *list_builder,
-                                  arrow::ArrayBuilder *child_builder,
-                                  ObODPSArrayHelper *array_helper,
-                                  ObIAllocator &alloc,
-                                  const bool is_strict_mode,
-                                  const ObDateSqlMode date_sql_mode);
-  #endif
 private:
   int64_t top_limit_cnt_;
   bool is_first_;
@@ -466,14 +395,6 @@ private:
   ObExternalFileFormat::FormatType format_type_;
   bool is_odps_cpp_table_;
   bool is_odps_java_table_;
-#ifdef OB_BUILD_CPP_ODPS
-  apsara::odps::sdk::IUploadPtr upload_;
-  apsara::odps::sdk::IRecordWriterPtr record_writer_;
-#endif
-#ifdef OB_BUILD_JNI_ODPS
-  ObOdpsJniUploaderMgr::OdpsUploader uploader_;
-  std::shared_ptr<arrow::Schema> arrow_schema_;
-#endif
   uint32_t block_id_;
   bool need_commit_;
   // Handle parquet variables
@@ -486,7 +407,6 @@ private:
   orc::WriterOptions options_;
   ObOrcMemPool orc_alloc_;
   std::unique_ptr<orc::Type> orc_schema_;
-  ObSEArray<ObODPSArrayHelper*, 8> array_helpers_;
 };
 
 

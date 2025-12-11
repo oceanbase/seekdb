@@ -26,7 +26,6 @@
 #include "sql/engine/px/ob_px_dtl_msg.h"
 #include "sql/engine/px/ob_granule_util.h"
 #include "sql/engine/ob_engine_op_traits.h"
-#include "sql/engine/table/ob_odps_jni_table_row_iter.h"
 
 
 namespace oceanbase
@@ -464,30 +463,6 @@ public:
                               common::ObIArray<const ObTableScanSpec *> &scan_ops,
                               const bool check_task_exist, int64_t &idx);
 
-#ifdef OB_BUILD_CPP_ODPS
-  inline int get_odps_downloader(int64_t part_id, apsara::odps::sdk::IDownloadPtr &downloader) { 
-    int ret = OB_SUCCESS;
-    downloader = NULL;
-    ret = odps_partition_downloader_mgr_.get_odps_downloader(part_id, downloader);
-    return ret;
-  }
-  inline ObOdpsPartitionDownloaderMgr::OdpsMgrMap& get_odps_map() { 
-    return odps_partition_downloader_mgr_.get_odps_map();
-  }
-  inline bool is_odps_downloader_inited() {  return odps_partition_downloader_mgr_.is_download_mgr_inited(); }
-  ObOdpsPartitionDownloaderMgr &get_odps_mgr() { return odps_partition_downloader_mgr_; }
-#endif
-#ifdef OB_BUILD_JNI_ODPS
-  inline bool is_odps_scanner_mgr_inited() {
-    return odps_partition_jni_scanner_mgr_.is_jni_scanner_mgr_inited();
-  }
-  ObOdpsPartitionJNIScannerMgr &get_odps_jni_scanner_mgr() {
-    return odps_partition_jni_scanner_mgr_;
-  }
-  ObOdpsJniUploaderMgr &get_odps_jni_uploader_mgr() {
-    return odps_jni_uploader_mgr_;
-  }
-#endif
 private:
   int init_external_odps_table_downloader(ObGranulePumpArgs &args);
   int fetch_granule_by_worker_id(const ObGITaskSet *&task_set,
@@ -538,13 +513,6 @@ private:
   int64_t tablet_size_;
   bool partition_wise_join_;
   GITaskArrayMap gi_task_array_map_;
-#ifdef OB_BUILD_CPP_ODPS
-  ObOdpsPartitionDownloaderMgr odps_partition_downloader_mgr_;
-#endif
-#ifdef OB_BUILD_JNI_ODPS
-  ObOdpsPartitionJNIScannerMgr odps_partition_jni_scanner_mgr_;
-  ObOdpsJniUploaderMgr         odps_jni_uploader_mgr_;
-#endif
   common::ObArray<ObGranulePumpArgs> pump_args_;
   bool need_partition_pruning_;
   common::ObArray<ObTableLocation> pruning_table_locations_;

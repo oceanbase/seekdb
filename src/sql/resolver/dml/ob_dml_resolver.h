@@ -26,9 +26,6 @@
 #include "sql/resolver/expr/ob_shared_expr_resolver.h"
 #include <orc/Common.hh>
 #include "parquet/schema.h"
-#ifdef OB_BUILD_CPP_ODPS
-#include "sql/engine/table/ob_odps_table_row_iter.h"
-#endif
 namespace oceanbase
 {
 namespace sql
@@ -911,13 +908,6 @@ private:
 public:
   static int resolve_direct_load_hint(const ParseNode &hint_node, ObDirectLoadHint &hint);
   //////////end of functions for sql hint/////////////
-#ifdef OB_BUILD_CPP_ODPS
-  static int build_column_schemas_for_odps(const common::ObIArray<oceanbase::sql::ObODPSTableRowIterator::OdpsColumn> &column_list,
-                                           const common::ObIArray<ObString> &part_col_names,
-                                           ObTableSchema& table_schema);
-  static int set_partition_info_for_odps(ObTableSchema &table_schema,
-                                         const common::ObIArray<ObString> &part_col_names);
-#endif
 
 private:
   int resolve_table_check_constraint_items(const TableItem *table_item,
