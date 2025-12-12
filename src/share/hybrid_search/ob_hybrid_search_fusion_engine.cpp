@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+#define USING_LOG_PREFIX OLOG
+
 #include "ob_hybrid_search_fusion_engine.h"
 #include "ob_rrf_fusion.h"
 #include "ob_weighted_fusion.h"
@@ -21,7 +23,6 @@
 
 namespace oceanbase {
 namespace share {
-USING_LOG_PREFIX(OLOG);
 using namespace oceanbase::common;
 
 // ==================== RRF Strategy Adapter ====================

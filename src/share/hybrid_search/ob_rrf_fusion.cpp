@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+#define USING_LOG_PREFIX OLOG
+
 #include "ob_rrf_fusion.h"
 #include "lib/ob_errno.h"
 
@@ -21,7 +23,6 @@ namespace oceanbase
 {
 namespace common
 {
-USING_LOG_PREFIX(OLOG);
 using namespace oceanbase::common;
 
 ObRRFFusion::ObRRFFusion()
