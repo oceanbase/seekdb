@@ -196,13 +196,19 @@ double ObWeightedFusion::apply_normalization(double score, bool is_fts)
       return score;
     
     case ObNormalizationConfig::NormalizationType::MIN_MAX: {
-      const ScoreStats &stats = is_fts ? fts_stats_ : vector_stats_;
-      return min_max_normalize(score, stats.min_score_, stats.max_score_);
+      if (is_fts) {
+        return min_max_normalize(score, fts_stats_.min_score_, fts_stats_.max_score_);
+      } else {
+        return min_max_normalize(score, vector_stats_.min_score_, vector_stats_.max_score_);
+      }
     }
     
     case ObNormalizationConfig::NormalizationType::Z_SCORE: {
-      const ScoreStats &stats = is_fts ? fts_stats_ : vector_stats_;
-      return z_score_normalize(score, stats.mean_score_, stats.stddev_);
+      if (is_fts) {
+        return z_score_normalize(score, fts_stats_.mean_score_, fts_stats_.stddev_);
+      } else {
+        return z_score_normalize(score, vector_stats_.mean_score_, vector_stats_.stddev_);
+      }
     }
     
     case ObNormalizationConfig::NormalizationType::SIGMOID:
