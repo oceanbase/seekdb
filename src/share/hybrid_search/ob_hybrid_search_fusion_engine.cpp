@@ -21,7 +21,6 @@
 
 namespace oceanbase {
 namespace share {
-
 USING_LOG_PREFIX(OLOG);
 using namespace oceanbase::common;
 

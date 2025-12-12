@@ -21,8 +21,8 @@ namespace oceanbase
 {
 namespace common
 {
-
 USING_LOG_PREFIX(OLOG);
+using namespace oceanbase::common;
 
 ObWeightedFusion::ObWeightedFusion()
   : is_initialized_(false), allocator_(nullptr), stats_calculated_(false)
@@ -190,17 +190,19 @@ double ObWeightedFusion::apply_normalization(double score, bool is_fts)
     return score;
   }
   
-  const ScoreStats &stats = is_fts ? fts_stats_ : vector_stats_;
-  
   switch (norm_config_.norm_type_) {
     case ObNormalizationConfig::NormalizationType::NONE:
       return score;
     
-    case ObNormalizationConfig::NormalizationType::MIN_MAX:
+    case ObNormalizationConfig::NormalizationType::MIN_MAX: {
+      const ScoreStats &stats = is_fts ? fts_stats_ : vector_stats_;
       return min_max_normalize(score, stats.min_score_, stats.max_score_);
+    }
     
-    case ObNormalizationConfig::NormalizationType::Z_SCORE:
+    case ObNormalizationConfig::NormalizationType::Z_SCORE: {
+      const ScoreStats &stats = is_fts ? fts_stats_ : vector_stats_;
       return z_score_normalize(score, stats.mean_score_, stats.stddev_);
+    }
     
     case ObNormalizationConfig::NormalizationType::SIGMOID:
       return sigmoid_normalize(score);

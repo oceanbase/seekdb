@@ -21,8 +21,8 @@ namespace oceanbase
 {
 namespace common
 {
-
 USING_LOG_PREFIX(OLOG);
+using namespace oceanbase::common;
 
 ObRRFFusion::ObRRFFusion()
   : is_initialized_(false), allocator_(nullptr)
