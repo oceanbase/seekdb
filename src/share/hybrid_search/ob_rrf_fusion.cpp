@@ -52,7 +52,7 @@ int ObRRFFusion::init(const ObRRFConfig &config, ObIAllocator &allocator)
       OB_LOG(WARN, "failed to create result map", K(ret));
     } else {
       is_initialized_ = true;
-      OB_LOG(DEBUG, "RRF fusion initialized successfully", K(config_));
+      OB_LOG(DEBUG, "RRF fusion initialized successfully");
     }
   }
   
@@ -112,7 +112,7 @@ int ObRRFFusion::fuse()
   }
   
   // Clear fused results and mapping table
-  fused_results_.clear();
+  fused_results_.reuse();
   result_map_.clear();
   
   // Process full-text search results
@@ -140,7 +140,7 @@ int ObRRFFusion::fuse()
     merged_result.vector_score_ = calculate_rrf_score(rank);
     merged_result.source_flag_ |= 2;  // Mark as from vector search
     
-    ObHybridSearchResult *existing = nullptr;
+    ObHybridSearchResult existing;
     if (OB_FAIL(result_map_.get_refactored(result.doc_id_, existing))) {
       if (OB_HASH_NOT_EXIST == ret) {
         // New document, insert directly
@@ -153,11 +153,11 @@ int ObRRFFusion::fuse()
       }
     } else {
       // Document already exists, update score and rank
-      existing->vector_rank_ = rank;
-      existing->vector_score_ = calculate_rrf_score(rank);
-      existing->source_flag_ |= 2;  // Add vector search flag
-      
-      if (OB_FAIL(result_map_.set_refactored(result.doc_id_, *existing))) {
+      existing.vector_rank_ = rank;
+      existing.vector_score_ = calculate_rrf_score(rank);
+      existing.source_flag_ |= 2;  // Add vector search flag
+            
+      if (OB_FAIL(result_map_.set_refactored(result.doc_id_, existing))) {
         OB_LOG(WARN, "failed to update result in map", K(ret));
       }
     }
@@ -228,9 +228,9 @@ const ObHybridSearchResult *ObRRFFusion::get_result_at(int64_t index) const
 
 void ObRRFFusion::reset()
 {
-  fts_results_.clear();
-  vector_results_.clear();
-  fused_results_.clear();
+  fts_results_.reuse();
+  vector_results_.reuse();
+  fused_results_.reuse();
   if (nullptr != allocator_) {
     result_map_.clear();
     result_map_.destroy();

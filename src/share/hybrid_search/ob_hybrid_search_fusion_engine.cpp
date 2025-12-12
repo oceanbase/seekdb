@@ -22,9 +22,8 @@
 namespace oceanbase {
 namespace share {
 
-using namespace oceanbase::common;
-
 USING_LOG_PREFIX(OLOG);
+using namespace oceanbase::common;
 
 // ==================== RRF Strategy Adapter ====================
 class ObRRFFusionStrategy : public IObHybridSearchFusionStrategy {
@@ -293,6 +292,7 @@ int ObHybridSearchFusionEngine::get_fused_results(ObIArray<ObHybridSearchResult>
 
 int64_t ObHybridSearchFusionEngine::get_fused_result_count() const
 {
+  int ret = OB_SUCCESS;
   if (!is_initialized_ || OB_ISNULL(strategy_)) {
     return 0;
   }

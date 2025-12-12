@@ -50,6 +50,8 @@ struct ObRRFConfig
   ObRRFConfig() = default;
   ObRRFConfig(int64_t rank_const, int64_t window_size)
     : rank_constant_(rank_const), rank_window_size_(window_size) {}
+  
+  TO_STRING_KV(K_(rank_constant), K_(rank_window_size));
 };
 
 // Configuration parameters for weighted fusion

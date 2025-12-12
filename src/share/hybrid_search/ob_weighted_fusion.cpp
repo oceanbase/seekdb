@@ -190,7 +190,7 @@ double ObWeightedFusion::apply_normalization(double score, bool is_fts)
     return score;
   }
   
-  const auto &stats = is_fts ? fts_stats_ : vector_stats_;
+  const ScoreStats &stats = is_fts ? fts_stats_ : vector_stats_;
   
   switch (norm_config_.norm_type_) {
     case ObNormalizationConfig::NormalizationType::NONE:
@@ -221,7 +221,7 @@ int ObWeightedFusion::fuse()
   }
   
   // 清空融合结果和映射表
-  fused_results_.clear();
+  fused_results_.reuse();
   result_map_.clear();
   
   // 计算统计信息
@@ -249,7 +249,7 @@ int ObWeightedFusion::fuse()
     ObHybridSearchResult merged_result = result;
     merged_result.source_flag_ |= 2;  // 标记来自向量搜索
     
-    ObHybridSearchResult *existing = nullptr;
+    ObHybridSearchResult existing;
     if (OB_FAIL(result_map_.get_refactored(result.doc_id_, existing))) {
       if (OB_HASH_NOT_EXIST == ret) {
         // 新文档，直接插入
@@ -262,10 +262,10 @@ int ObWeightedFusion::fuse()
       }
     } else {
       // 文档已存在，更新向量分数
-      existing->vector_score_ = result.vector_score_;
-      existing->source_flag_ |= 2;  // 添加向量搜索标记
+      existing.vector_score_ = result.vector_score_;
+      existing.source_flag_ |= 2;  // 添加向量搜索标记
       
-      if (OB_FAIL(result_map_.set_refactored(result.doc_id_, *existing))) {
+      if (OB_FAIL(result_map_.set_refactored(result.doc_id_, existing))) {
         OB_LOG(WARN, "failed to update result in map", K(ret));
       }
     }
@@ -341,9 +341,9 @@ const ObHybridSearchResult *ObWeightedFusion::get_result_at(int64_t index) const
 
 void ObWeightedFusion::reset()
 {
-  fts_results_.clear();
-  vector_results_.clear();
-  fused_results_.clear();
+  fts_results_.reuse();
+  vector_results_.reuse();
+  fused_results_.reuse();
   if (nullptr != allocator_) {
     result_map_.clear();
     result_map_.destroy();
