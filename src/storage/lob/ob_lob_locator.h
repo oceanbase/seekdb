@@ -83,6 +83,7 @@ private:
   int64_t tx_id_;
   int64_t snapshot_version_;
   transaction::ObTxReadSnapshot tx_read_snapshot_;
+  share::SCN fb_snapshot_;
   common::ObSEArray<common::ObObj, DEFAULT_LOCATOR_OBJ_ARRAY_SIZE> rowid_objs_;
   common::ObArenaAllocator locator_allocator_;
   ObString rowkey_str_; // for default values
