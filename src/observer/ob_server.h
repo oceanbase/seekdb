@@ -309,7 +309,6 @@ private:
   int init_table_lock_rpc_client();
   int start_log_mgr();
   int stop_log_mgr();
-  int reload_bandwidth_throttle_limit(int64_t network_speed);
   int refresh_cpu_frequency();
   int refresh_io_calibration();
   int clean_up_invalid_tables();

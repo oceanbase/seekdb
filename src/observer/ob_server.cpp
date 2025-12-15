@@ -3087,13 +3087,6 @@ int ObServer::init_bandwidth_throttle()
   int ret = OB_SUCCESS;
   int64_t network_speed = 0;
 
-  if (OB_SUCC(get_network_speed_from_config_file(network_speed))) {
-    LOG_DEBUG("got network speed from config file", K(network_speed));
-  } else {
-    network_speed = DEFAULT_ETHERNET_SPEED;
-    LOG_DEBUG("using default network speed", K(network_speed));
-  }
-
   sys_bkgd_net_percentage_ = config_.sys_bkgd_net_percentage;
   if (network_speed > 0) {
     int64_t rate = network_speed * sys_bkgd_net_percentage_ / 100;
@@ -3124,37 +3117,8 @@ int ObServer::reload_config()
                                                    GCONF.bf_cache_priority,
                                                    GCONF.storage_meta_cache_priority))) {
     LOG_WARN("set cache priority fail, ", KR(ret));
-  } else if (OB_FAIL(reload_bandwidth_throttle_limit(ethernet_speed_))) {
-    LOG_WARN("failed to reload_bandwidth_throttle_limit", KR(ret));
   }
 
-  return ret;
-}
-
-int ObServer::reload_bandwidth_throttle_limit(int64_t network_speed)
-{
-  int ret = OB_SUCCESS;
-  const int64_t sys_bkgd_net_percentage = config_.sys_bkgd_net_percentage;
-
-  if ((sys_bkgd_net_percentage_ != sys_bkgd_net_percentage) || (ethernet_speed_ != network_speed)) {
-    if (network_speed <= 0) {
-      LOG_WARN("wrong network speed.", K(ethernet_speed_));
-      network_speed = DEFAULT_ETHERNET_SPEED;
-    }
-
-    int64_t rate = network_speed * sys_bkgd_net_percentage / 100;
-    if (OB_FAIL(bandwidth_throttle_.set_rate(rate))) {
-      LOG_WARN("failed to reset bandwidth throttle", KR(ret), K(rate), K(ethernet_speed_));
-    } else {
-      LOG_INFO("succeed to reload_bandwidth_throttle_limit",
-          "old_percentage", sys_bkgd_net_percentage_,
-          "new_percentage", sys_bkgd_net_percentage,
-          K(network_speed),
-          K(rate));
-      sys_bkgd_net_percentage_ = sys_bkgd_net_percentage;
-      ethernet_speed_ = network_speed;
-    }
-  }
   return ret;
 }
 
@@ -3444,18 +3408,6 @@ int ObServer::ObRefreshNetworkSpeedTask::init(ObServer *obs, int tg_id)
     }
   }
   return ret;
-}
-
-void ObServer::ObRefreshNetworkSpeedTask::runTimerTask()
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(!is_inited_)) {
-    ret = OB_NOT_INIT;
-    LOG_ERROR("ObRefreshNetworkSpeedTask has not been inited", KR(ret));
-  } else if (OB_ISNULL(obs_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_ERROR("ObRefreshNetworkSpeedTask cleanup task got null ptr", KR(ret));
-  }
 }
 
 ObServer::ObRefreshCpuFreqTimeTask::ObRefreshCpuFreqTimeTask()
