@@ -76,10 +76,10 @@ int ObTenantTimezoneMgr::start()
   int ret = OB_SUCCESS;
   const int64_t delay = SLEEP_USECONDS;
   const bool repeat = true;
-  const bool immediate = true;
+  const bool immediate = false;
   if (OB_FAIL(TG_START(lib::TGDefIDs::TIMEZONE_MGR))) {
     LOG_WARN("fail to start timer", K(ret));
-  } else if (OB_FAIL(TG_SCHEDULE(lib::TGDefIDs::TIMEZONE_MGR, update_task_, delay / 1000000L, repeat, immediate))) {
+  } else if (OB_FAIL(TG_SCHEDULE(lib::TGDefIDs::TIMEZONE_MGR, update_task_, delay, repeat, immediate))) {
     LOG_WARN("schedual time zone mgr failed", K(ret));
   }
   return ret;
