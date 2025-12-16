@@ -3085,7 +3085,7 @@ int ObServer::get_network_speed_from_config_file(int64_t &network_speed)
 int ObServer::init_bandwidth_throttle()
 {
   int ret = OB_SUCCESS;
-  int64_t network_speed = 0;
+  int64_t network_speed = DEFAULT_ETHERNET_SPEED;
 
   sys_bkgd_net_percentage_ = config_.sys_bkgd_net_percentage;
   if (network_speed > 0) {
