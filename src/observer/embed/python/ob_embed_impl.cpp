@@ -928,6 +928,16 @@ int ObLiteEmbedUtil::convert_result_to_pyobj(const int64_t col_idx, common::sqlc
       }
       break;
     }
+    case ObHexStringType: {
+      ObObj obj;
+      if (OB_FAIL(result.get_obj(col_idx, obj))) {
+        LOG_WARN("get obj failed", K(ret), K(col_idx));
+      } else {
+        ObString hex_str = obj.get_hex_string();
+        val = pybind11::bytes(hex_str.ptr(), hex_str.length());
+      }
+      break;
+    }
     case ObTinyTextType:
     case ObTextType:
     case ObMediumTextType:

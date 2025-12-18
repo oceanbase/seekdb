@@ -1,0 +1,49 @@
+#owner: shouju.zyp
+#owner group: RS
+#tags: schema
+#description: used for inner table column definition checks during static test
+
+--disable_abort_on_error
+connect (sys,$OBMYSQL_MS0,root,,oceanbase,$OBMYSQL_PORT);
+connection sys;
+let $tenant_id = 1;
+
+# enum ObTableType in src/share/schema/ob_schema_struct.h
+# 0 means SYSTEM_TABLE
+# 1 means SYSTEM_VIEW
+# 2 means VIRTUAL_TABLE
+let $sys_table_filter = (table_type = 0);
+let $virtual_table_filter = (table_type = 2);
+let $table_type_filter = $sys_table_filter;
+
+let $cnt = query_get_value(select count(*) as cnt from oceanbase.__all_virtual_core_all_table where tenant_id = $tenant_id and $table_type_filter, cnt, 1);
+let $columns = column_id id, column_name field, data_type type, data_length length, data_precision `precision`, nullable;
+
+let $idx = 1;
+while ($idx <= $cnt)
+{
+let $database_name = query_get_value(select d.database_name from oceanbase.__all_virtual_core_all_table as t join oceanbase.__all_virtual_database as d on t.tenant_id = d.tenant_id and t.database_id = d.database_id where t.tenant_id = $tenant_id and $table_type_filter order by t.table_id, database_name, $idx);
+let $table_name = query_get_value(select table_name from oceanbase.__all_virtual_core_all_table where tenant_id = $tenant_id and $table_type_filter order by table_id, table_name, $idx);
+let $table_id = query_get_value(select table_id from oceanbase.__all_virtual_core_all_table where table_name='$table_name' and tenant_id=$tenant_id, table_id, 1);
+let $column_count = query_get_value(select count(*) cnt from __all_virtual_core_column_table where tenant_id=$tenant_id and table_id=$table_id, cnt, 1);
+-- echo table $database_name.$table_name column_count $column_count table_id $table_id
+eval select $columns from __all_virtual_core_column_table where tenant_id=$tenant_id and table_id=$table_id order by column_id;
+inc $idx;
+}
+
+let $table_type_filter = (($sys_table_filter) or ($virtual_table_filter));
+
+let $cnt = query_get_value(select count(*) as cnt from oceanbase.__all_virtual_table where tenant_id = $tenant_id and $table_type_filter, cnt, 1);
+
+let $idx = 1;
+
+while ($idx <= $cnt)
+{
+let $database_name = query_get_value(select d.database_name from oceanbase.__all_virtual_table as t join oceanbase.__all_virtual_database as d on t.tenant_id = d.tenant_id and t.database_id = d.database_id where t.tenant_id = $tenant_id and $table_type_filter order by t.table_id, database_name, $idx);
+let $table_name = query_get_value(select table_name from oceanbase.__all_virtual_table where tenant_id = $tenant_id and $table_type_filter order by table_id, table_name, $idx);
+let $table_id = query_get_value(select table_id from oceanbase.__all_virtual_table where table_name='$table_name' and tenant_id=$tenant_id, table_id, 1);
+let $column_count = query_get_value(select count(*) cnt from __all_virtual_column where tenant_id=$tenant_id and table_id=$table_id, cnt, 1);
+-- echo table $database_name.$table_name column_count $column_count table_id $table_id
+eval select $columns from __all_virtual_column where tenant_id=$tenant_id and table_id=$table_id order by column_id;
+inc $idx;
+}
