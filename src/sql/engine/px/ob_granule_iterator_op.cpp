@@ -623,7 +623,9 @@ int ObGranuleIteratorOp::rescan()
   int ret = ObOperator::inner_rescan();
   CK(NULL != pump_);
   CK(NULL != pump_arg_);
-  bool is_child_sample_scan = IS_SAMPLE_SCAN(real_child_->get_spec().type_);
+  bool is_child_sample_scan = !MY_SPEC.full_partition_wise() &&
+                              OB_NOT_NULL(real_child_) &&
+                              IS_SAMPLE_SCAN(real_child_->get_spec().type_);
   LOG_TRACE("gi begin rescan");
   if (OB_FAIL(ret)) {
   } else if (pump_version_ != pump_arg_->pump_version_) {
