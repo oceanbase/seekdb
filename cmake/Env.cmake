@@ -29,6 +29,7 @@ ob_define(OB_CC "")
 ob_define(OB_CXX "")
 ob_define(OB_BUILD_STANDALONE OFF)
 ob_define(OB_BUILD_LITE ON)
+ob_define(DEFAULT_LOG_LEVEL OB_LOG_LEVEL_WARN)
 
 # 'ENABLE_PERF_MODE' use for offline system insight performance test
 # PERF_MODE macro controls many special code path in system
@@ -165,6 +166,8 @@ endif()
 if(BUILD_EMBED_MODE)
   add_definitions(-DOB_BUILD_EMBED_MODE)
 endif()
+
+add_definitions(-DDEFAULT_LOG_LEVEL=${DEFAULT_LOG_LEVEL})
 
 set(OB_OBJCOPY_BIN "${DEVTOOLS_DIR}/bin/objcopy")
 

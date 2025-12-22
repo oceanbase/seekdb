@@ -310,7 +310,7 @@ int inner_main(int argc, char *argv[])
   setlocale(LC_TIME, "en_US.UTF-8");
   setlocale(LC_NUMERIC, "en_US.UTF-8");
 
-  opts->log_level_ = OB_LOG_LEVEL_WARN;
+  opts->log_level_ = DEFAULT_LOG_LEVEL;
   if (FAILEDx(parse_args(argc, argv, *opts))) {
   }
 

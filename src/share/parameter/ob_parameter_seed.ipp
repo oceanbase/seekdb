@@ -202,7 +202,7 @@ DEF_INT(cluster_id, OB_CLUSTER_PARAMETER, "1", "[1,4294901759]", "ID of the clus
         ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 DEF_STR(obconfig_url, OB_CLUSTER_PARAMETER, "", "URL for OBConfig service",
         ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
-DEF_LOG_LEVEL(syslog_level, OB_CLUSTER_PARAMETER, "WDIAG", "specifies the current level of logging. There are DEBUG, TRACE, WDIAG, EDIAG, INFO, WARN, ERROR, seven different log levels.",
+DEF_LOG_LEVEL(syslog_level, OB_CLUSTER_PARAMETER, ObLogger::get_level_str(DEFAULT_LOG_LEVEL), "specifies the current level of logging. There are DEBUG, TRACE, WDIAG, EDIAG, INFO, WARN, ERROR, seven different log levels.",
               ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE),
              "DEBUG, TRACE, WDIAG, EDIAG, INFO, WARN, ERROR");
 DEF_STR_WITH_CHECKER(alert_log_level, OB_CLUSTER_PARAMETER, "INFO",
