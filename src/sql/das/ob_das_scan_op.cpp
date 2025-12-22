@@ -78,7 +78,8 @@ OB_SERIALIZE_MEMBER(ObDASScanCtDef,
                     domain_tids_,
                     pre_range_graph_,
                     external_file_pattern_,
-                    external_object_ctx_);
+                    external_object_ctx_,
+                    semantic_index_info_);
 
 OB_DEF_SERIALIZE(ObDASScanRtDef)
 {
