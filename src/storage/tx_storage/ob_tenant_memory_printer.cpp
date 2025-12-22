@@ -101,13 +101,6 @@ int ObTenantMemoryPrinter::print_tenant_usage()
     }
 
     // print global chunk freelist
-    const int64_t max_unmanaged_memory_size = 10LL<<30;
-    int64_t resident_size = 0;
-    int64_t memory_used = get_virtual_memory_used(&resident_size);
-    int64_t limit = CHUNK_MGR.get_limit();
-    if (resident_size > limit + max_unmanaged_memory_size) {
-      LOG_ERROR("RESIDENT_SIZE OVER MEMORY_LIMIT", K(resident_size), K(limit));
-    }
     int64_t pos = CHUNK_MGR.to_string(print_buf, BUF_LEN);
     _STORAGE_LOG(INFO, "%.*s", static_cast<int>(pos), print_buf);
     ObMallocTimeMonitor::get_instance().print();
