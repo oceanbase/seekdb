@@ -230,9 +230,7 @@ int ObDelUpdLogPlan::get_pdml_parallel_degree(const int64_t target_part_cnt,
     LOG_WARN("get unexpected params", K(ret), K(get_optimizer_context().get_query_ctx()),
                                             K(use_pdml_), K(max_dml_parallel_), K(target_part_cnt));
   } else {
-    OPT_TRACE("Decided PDML DOP by Auto DOP.");
-    dop = std::min(max_dml_parallel_, target_part_cnt * PDML_DOP_LIMIT_PER_PARTITION);
-    OPT_TRACE("PDML target partition count:", target_part_cnt, "Max dml parallel", max_dml_parallel_);
+    dop = max_dml_parallel_;
   }
   OPT_TRACE("Get final PDML DOP: ", dop);
   return ret;
