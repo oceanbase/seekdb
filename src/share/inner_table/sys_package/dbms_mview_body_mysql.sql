@@ -28,6 +28,10 @@ CREATE OR REPLACE PACKAGE BODY dbms_mview
     IN     nested                 BOOLEAN        DEFAULT FALSE,
     IN     nested_refresh_mode    VARCHAR(65535) DEFAULT NULL)
   BEGIN
+    DECLARE EXIT HANDLER for SQLWARNING
+    BEGIN
+      SIGNAL SQLSTATE 'HY000' SET MESSAGE_TEXT = 'mview refresh failed with sql warning exception';
+    END;
     COMMIT;
     SET @ob_dbmsmview_cno=null;
     SET @ob_dbmsmview_errno=null;
