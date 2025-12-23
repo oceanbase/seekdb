@@ -42,7 +42,7 @@ TEST_F(TestClusterVersion, init)
 
   version = cal_version(1, 4, 79, 0);
   ObClusterVersion ver_2;
-  ASSERT_EQ(ver_2.init(version), OB_INVALID_ARGUMENT);
+  ASSERT_EQ(ver_2.init(version), OB_SUCCESS);
 
   version = cal_version(3, 2, 0, 0);
   ObClusterVersion ver_3;
@@ -58,31 +58,27 @@ TEST_F(TestClusterVersion, init)
 
   version = cal_version(3, 2, 1, 0);
   ObClusterVersion ver_6;
-  ASSERT_EQ(ver_6.init(version), OB_INVALID_ARGUMENT);
+  ASSERT_EQ(ver_6.init(version), OB_SUCCESS);
 
   version = cal_version(3, 2, 1, 1);
   ObClusterVersion ver_18;
-  ASSERT_EQ(ver_18.init(version), OB_INVALID_ARGUMENT);
+  ASSERT_EQ(ver_18.init(version), OB_SUCCESS);
 
   version = cal_version(3, 2, 2, 0);
   ObClusterVersion ver_7;
-  ASSERT_EQ(ver_7.init(version), OB_INVALID_ARGUMENT);
+  ASSERT_EQ(ver_7.init(version), OB_SUCCESS);
 
   version = cal_version(3, 2, 2, 1);
   ObClusterVersion ver_19;
-  ASSERT_EQ(ver_19.init(version), OB_INVALID_ARGUMENT);
+  ASSERT_EQ(ver_19.init(version), OB_SUCCESS);
 
   version = cal_version(3, 2, 0, 3);
   ObClusterVersion ver_8;
-  ASSERT_EQ(ver_8.init(version), OB_INVALID_ARGUMENT);
+  ASSERT_EQ(ver_8.init(version), OB_SUCCESS);
 
   version = cal_version(3, 2, 0, 4);
   ObClusterVersion ver_17;
-  ASSERT_EQ(ver_17.init(version), OB_INVALID_ARGUMENT);
-
-  // major_patch_version(3rd) can be greator than 0 when:
-  // - cluster_version >= "3.3"
-  // - cluster_version >= "3.2.3.0"
+  ASSERT_EQ(ver_17.init(version), OB_SUCCESS);
 
   version = cal_version(3, 2, 3, 0);
   ObClusterVersion ver_9;
@@ -121,7 +117,7 @@ TEST_F(TestClusterVersion, refresh_cluster_version)
 {
   // 1.4.79
   ObClusterVersion ver_1;
-  ASSERT_EQ(ver_1.refresh_cluster_version("1.4.0.79"), OB_INVALID_ARGUMENT);
+  ASSERT_EQ(ver_1.refresh_cluster_version("1.4.0.79"), OB_SUCCESS);
 
   ObClusterVersion ver_2;
   ASSERT_EQ(ver_2.refresh_cluster_version("1.4.79.0"), OB_SUCCESS);
@@ -142,7 +138,7 @@ TEST_F(TestClusterVersion, refresh_cluster_version)
 
   // 3.2.1
   ObClusterVersion ver_6;
-  ASSERT_EQ(ver_6.refresh_cluster_version("3.2.0.1"), OB_INVALID_ARGUMENT);
+  ASSERT_EQ(ver_6.refresh_cluster_version("3.2.0.1"), OB_SUCCESS);
 
   ObClusterVersion ver_7;
   ASSERT_EQ(ver_7.refresh_cluster_version("3.2.1.0"), OB_SUCCESS);
@@ -154,11 +150,11 @@ TEST_F(TestClusterVersion, refresh_cluster_version)
 
   // 3.2.1.1
   ObClusterVersion ver_26;
-  ASSERT_EQ(ver_26.refresh_cluster_version("3.2.1.1"), OB_INVALID_ARGUMENT);
+  ASSERT_EQ(ver_26.refresh_cluster_version("3.2.1.1"), OB_SUCCESS);
 
   // 3.2.2
   ObClusterVersion ver_9;
-  ASSERT_EQ(ver_9.refresh_cluster_version("3.2.0.2"), OB_INVALID_ARGUMENT);
+  ASSERT_EQ(ver_9.refresh_cluster_version("3.2.0.2"), OB_SUCCESS);
 
   ObClusterVersion ver_10;
   ASSERT_EQ(ver_10.refresh_cluster_version("3.2.2.0"), OB_SUCCESS);
@@ -170,7 +166,7 @@ TEST_F(TestClusterVersion, refresh_cluster_version)
 
   // 3.2.2.1
   ObClusterVersion ver_25;
-  ASSERT_EQ(ver_25.refresh_cluster_version("3.2.2.1"), OB_INVALID_ARGUMENT);
+  ASSERT_EQ(ver_25.refresh_cluster_version("3.2.2.1"), OB_SUCCESS);
 
   // cluster version which is less than "3.2.3":
   // - should be format as "a.b.c" or "a.b.c.0"
@@ -178,7 +174,7 @@ TEST_F(TestClusterVersion, refresh_cluster_version)
 
   // 3.2.3
   ObClusterVersion ver_12;
-  ASSERT_EQ(ver_12.refresh_cluster_version("3.2.0.3"), OB_INVALID_ARGUMENT);
+  ASSERT_EQ(ver_12.refresh_cluster_version("3.2.0.3"), OB_SUCCESS);
 
   ObClusterVersion ver_13;
   ASSERT_EQ(ver_13.refresh_cluster_version("3.2.3.0"), OB_SUCCESS);
@@ -194,7 +190,7 @@ TEST_F(TestClusterVersion, refresh_cluster_version)
 
   // 3.2.4
   ObClusterVersion ver_15;
-  ASSERT_EQ(ver_15.refresh_cluster_version("3.2.0.4"), OB_INVALID_ARGUMENT);
+  ASSERT_EQ(ver_15.refresh_cluster_version("3.2.0.4"), OB_SUCCESS);
 
   ObClusterVersion ver_16;
   ASSERT_EQ(ver_16.refresh_cluster_version("3.2.4.0"), OB_SUCCESS);
@@ -237,29 +233,6 @@ TEST_F(TestClusterVersion, encode)
 {
   uint64_t version = 0;
 
-  // for cluster_version < 3.2.3, cluster version string which like "a.b.c" or "a.b.c.0" is encoded as "a|b|0|c".
-  version = cal_version(1, 4, 0, 79);
-  ObClusterVersion ver_1;
-  ASSERT_EQ(ver_1.init(version), OB_SUCCESS);
-  ObClusterVersion ver_2;
-  ASSERT_EQ(ver_2.refresh_cluster_version("1.4.79.0"), OB_SUCCESS);
-  ASSERT_EQ(ver_1.get_cluster_version(), ver_2.get_cluster_version());
-
-  version = cal_version(3, 2, 0, 1);
-  ObClusterVersion ver_3;
-  ASSERT_EQ(ver_3.init(version), OB_SUCCESS);
-  ObClusterVersion ver_4;
-  ASSERT_EQ(ver_4.refresh_cluster_version("3.2.1.0"), OB_SUCCESS);
-  ASSERT_EQ(ver_3.get_cluster_version(), ver_4.get_cluster_version());
-
-  version = cal_version(3, 2, 0, 2);
-  ObClusterVersion ver_5;
-  ASSERT_EQ(ver_5.init(version), OB_SUCCESS);
-  ObClusterVersion ver_6;
-  ASSERT_EQ(ver_6.refresh_cluster_version("3.2.2.0"), OB_SUCCESS);
-  ASSERT_EQ(ver_5.get_cluster_version(), ver_6.get_cluster_version());
-
-  // for cluster_version >= 3.2.3, cluster_version string which like "a.b.c.d" is encoded as "a|b|c|d".
   version = cal_version(3, 2, 3, 0);
   ObClusterVersion ver_7;
   ASSERT_EQ(ver_7.init(version), OB_SUCCESS);
@@ -306,30 +279,28 @@ TEST_F(TestClusterVersion, encode)
 
 TEST_F(TestClusterVersion, is_valid)
 {
-  ASSERT_EQ(ObClusterVersion::is_valid("1.4.0.79"), OB_INVALID_ARGUMENT);
+  ASSERT_EQ(ObClusterVersion::is_valid("1.4.0.79"), OB_SUCCESS);
   ASSERT_EQ(ObClusterVersion::is_valid("1.4.79.0"), OB_SUCCESS);
   ASSERT_EQ(ObClusterVersion::is_valid("1.4.79"), OB_SUCCESS);
 
   ASSERT_EQ(ObClusterVersion::is_valid("3.2.0.0"), OB_SUCCESS);
   ASSERT_EQ(ObClusterVersion::is_valid("3.2.0"), OB_SUCCESS);
 
-  ASSERT_EQ(ObClusterVersion::is_valid("3.2.0.1"), OB_INVALID_ARGUMENT);
+  ASSERT_EQ(ObClusterVersion::is_valid("3.2.0.1"), OB_SUCCESS);
   ASSERT_EQ(ObClusterVersion::is_valid("3.2.1.0"), OB_SUCCESS);
   ASSERT_EQ(ObClusterVersion::is_valid("3.2.1"), OB_SUCCESS);
-  ASSERT_EQ(ObClusterVersion::is_valid("3.2.1.1"), OB_INVALID_ARGUMENT);
+  ASSERT_EQ(ObClusterVersion::is_valid("3.2.1.1"), OB_SUCCESS);
 
-  ASSERT_EQ(ObClusterVersion::is_valid("3.2.0.2"), OB_INVALID_ARGUMENT);
+  ASSERT_EQ(ObClusterVersion::is_valid("3.2.0.2"), OB_SUCCESS);
   ASSERT_EQ(ObClusterVersion::is_valid("3.2.2.0"), OB_SUCCESS);
   ASSERT_EQ(ObClusterVersion::is_valid("3.2.2"), OB_SUCCESS);
-  ASSERT_EQ(ObClusterVersion::is_valid("3.2.2.1"), OB_INVALID_ARGUMENT);
+  ASSERT_EQ(ObClusterVersion::is_valid("3.2.2.1"), OB_SUCCESS);
 
   // for cluster_version < "3.2.3", 4th cluster version should be 0.
-  ASSERT_EQ(ObClusterVersion::is_valid("3.2.0.3"), OB_INVALID_ARGUMENT);
   ASSERT_EQ(ObClusterVersion::is_valid("3.2.3.0"), OB_SUCCESS);
   ASSERT_EQ(ObClusterVersion::is_valid("3.2.3"), OB_SUCCESS);
   ASSERT_EQ(ObClusterVersion::is_valid("3.2.3.1"), OB_SUCCESS);
 
-  ASSERT_EQ(ObClusterVersion::is_valid("3.2.0.4"), OB_INVALID_ARGUMENT);
   ASSERT_EQ(ObClusterVersion::is_valid("3.2.4.0"), OB_SUCCESS);
   ASSERT_EQ(ObClusterVersion::is_valid("3.2.4"), OB_SUCCESS);
   ASSERT_EQ(ObClusterVersion::is_valid("3.2.4.1"), OB_SUCCESS);
@@ -346,16 +317,17 @@ TEST_F(TestClusterVersion, get_version)
   uint64_t version = 0;
   uint64_t version_1 = 0;
   uint64_t res_version = 0;
+  uint64_t res_version1 = 0;
   // 1.4.79
   version = cal_version(1, 4, 0, 79);   // right
   version_1 = cal_version(1, 4, 79, 0); // wrong
-  ASSERT_EQ(ObClusterVersion::get_version("1.4.0.79", res_version), OB_INVALID_ARGUMENT);
-  ASSERT_EQ(ObClusterVersion::get_version("1.4.79.0", res_version), OB_SUCCESS);
+  ASSERT_EQ(ObClusterVersion::get_version("1.4.0.79", res_version), OB_SUCCESS);
+  ASSERT_EQ(ObClusterVersion::get_version("1.4.79.0", res_version1), OB_SUCCESS);
   ASSERT_EQ(version, res_version);
   ASSERT_NE(version_1, res_version);
   ASSERT_EQ(ObClusterVersion::get_version("1.4.79", res_version), OB_SUCCESS);
-  ASSERT_EQ(version, res_version);
-  ASSERT_NE(version_1, res_version);
+  ASSERT_NE(version, res_version);
+  ASSERT_EQ(version_1, res_version);
 
   // 3.2
   version = cal_version(3, 2, 0, 0);
@@ -366,58 +338,20 @@ TEST_F(TestClusterVersion, get_version)
 
   // 3.2.1
   version = cal_version(3, 2, 0, 1);   // right
-  version_1 = cal_version(3, 2, 1, 0); // wrong
-  ASSERT_EQ(ObClusterVersion::get_version("3.2.1.1", res_version), OB_INVALID_ARGUMENT);
-  ASSERT_EQ(ObClusterVersion::get_version("3.2.0.1", res_version), OB_INVALID_ARGUMENT);
+  version_1 = cal_version(3, 2, 1, 0);
+  ASSERT_EQ(ObClusterVersion::get_version("3.2.1.1", res_version), OB_SUCCESS);
+  ASSERT_EQ(ObClusterVersion::get_version("3.2.0.1", res_version), OB_SUCCESS);
   ASSERT_EQ(ObClusterVersion::get_version("3.2.1.0", res_version), OB_SUCCESS);
-  ASSERT_EQ(version, res_version);
-  ASSERT_NE(version_1, res_version);
+  ASSERT_NE(version, res_version);
+  ASSERT_EQ(version_1, res_version);
   ASSERT_EQ(ObClusterVersion::get_version("3.2.1", res_version), OB_SUCCESS);
-  ASSERT_EQ(version, res_version);
-  ASSERT_NE(version_1, res_version);
-
-  // 3.2.2
-  version = cal_version(3, 2, 0, 2);   // right
-  version_1 = cal_version(3, 2, 2, 0); // wrong
-  ASSERT_EQ(ObClusterVersion::get_version("3.2.2.1", res_version), OB_INVALID_ARGUMENT);
-  ASSERT_EQ(ObClusterVersion::get_version("3.2.0.2", res_version), OB_INVALID_ARGUMENT);
-  ASSERT_EQ(ObClusterVersion::get_version("3.2.2.0", res_version), OB_SUCCESS);
-  ASSERT_EQ(version, res_version);
-  ASSERT_NE(version_1, res_version);
-  ASSERT_EQ(ObClusterVersion::get_version("3.2.2", res_version), OB_SUCCESS);
-  ASSERT_EQ(version, res_version);
-  ASSERT_NE(version_1, res_version);
-
-  // cluster version which is less than "3.2.3":
-  // - should be format as "a.b.c" or "a.b.c.0"
-  // - "a.b.0.c" is invalid
-
-  // 3.2.3
-  version = cal_version(3, 2, 3, 0);    // right
-  version_1 = cal_version(3, 2, 0, 3);  // wrong
-  ASSERT_EQ(ObClusterVersion::get_version("3.2.0.3", res_version), OB_INVALID_ARGUMENT);
-  ASSERT_EQ(ObClusterVersion::get_version("3.2.3.0", res_version), OB_SUCCESS);
-  ASSERT_EQ(version, res_version);
-  ASSERT_NE(version_1, res_version);
-  ASSERT_EQ(ObClusterVersion::get_version("3.2.3", res_version), OB_SUCCESS);
-  ASSERT_EQ(version, res_version);
-  ASSERT_NE(version_1, res_version);
+  ASSERT_NE(version, res_version);
+  ASSERT_EQ(version_1, res_version);
 
   // 3.2.3.1
   version = cal_version(3, 2, 3, 1);    // right
   ASSERT_EQ(ObClusterVersion::get_version("3.2.3.1", res_version), OB_SUCCESS);
   ASSERT_EQ(version, res_version);
-
-  // 3.2.4.0
-  version = cal_version(3, 2, 4, 0);    // right
-  version_1 = cal_version(3, 2, 0, 4);  // wrong
-  ASSERT_EQ(ObClusterVersion::get_version("3.2.0.4", res_version), OB_INVALID_ARGUMENT);
-  ASSERT_EQ(ObClusterVersion::get_version("3.2.4.0", res_version), OB_SUCCESS);
-  ASSERT_EQ(version, res_version);
-  ASSERT_NE(version_1, res_version);
-  ASSERT_EQ(ObClusterVersion::get_version("3.2.4", res_version), OB_SUCCESS);
-  ASSERT_EQ(version, res_version);
-  ASSERT_NE(version_1, res_version);
 
   // 3.2.4.1
   version = cal_version(3, 2, 4, 1);
@@ -462,41 +396,44 @@ TEST_F(TestClusterVersion, print_version_str)
 
   // 1.4.79
   version = cal_version(1, 4, 79, 0);
-  ASSERT_EQ(OB_INVALID_INDEX, ObClusterVersion::print_version_str(version_str, OB_CLUSTER_VERSION_LENGTH, version));
+  ASSERT_NE(OB_INVALID_INDEX, ObClusterVersion::print_version_str(version_str, OB_CLUSTER_VERSION_LENGTH, version));
   version = cal_version(1, 4, 0, 79);
   ASSERT_NE(OB_INVALID_INDEX, ObClusterVersion::print_version_str(version_str, OB_CLUSTER_VERSION_LENGTH, version));
-  ASSERT_EQ(0, STRNCMP(version_str, "1.4.79", OB_CLUSTER_VERSION_LENGTH));
+  ASSERT_EQ(0, STRNCMP(version_str, "1.4.0.79", OB_CLUSTER_VERSION_LENGTH));
 
   // 3.2
   version = cal_version(3, 2, 0, 0);
   ASSERT_NE(OB_INVALID_INDEX, ObClusterVersion::print_version_str(version_str, OB_CLUSTER_VERSION_LENGTH, version));
-  ASSERT_EQ(0, STRNCMP(version_str, "3.2.0", OB_CLUSTER_VERSION_LENGTH));
+  ASSERT_EQ(0, STRNCMP(version_str, "3.2.0.0", OB_CLUSTER_VERSION_LENGTH));
 
   // 3.2.1
   version = cal_version(3, 2, 1, 0);
-  ASSERT_EQ(OB_INVALID_INDEX, ObClusterVersion::print_version_str(version_str, OB_CLUSTER_VERSION_LENGTH, version));
+  ASSERT_NE(OB_INVALID_INDEX, ObClusterVersion::print_version_str(version_str, OB_CLUSTER_VERSION_LENGTH, version));
+  ASSERT_EQ(0, STRNCMP(version_str, "3.2.1.0", OB_CLUSTER_VERSION_LENGTH));
   version = cal_version(3, 2, 0, 1);
   ASSERT_NE(OB_INVALID_INDEX, ObClusterVersion::print_version_str(version_str, OB_CLUSTER_VERSION_LENGTH, version));
-  ASSERT_EQ(0, STRNCMP(version_str, "3.2.1", OB_CLUSTER_VERSION_LENGTH));
+  ASSERT_EQ(0, STRNCMP(version_str, "3.2.0.1", OB_CLUSTER_VERSION_LENGTH));
 
   // 3.2.1.1
   version = cal_version(3, 2, 1, 1);
-  ASSERT_EQ(OB_INVALID_INDEX, ObClusterVersion::print_version_str(version_str, OB_CLUSTER_VERSION_LENGTH, version));
+  ASSERT_NE(OB_INVALID_INDEX, ObClusterVersion::print_version_str(version_str, OB_CLUSTER_VERSION_LENGTH, version));
 
   // 3.2.2
   version = cal_version(3, 2, 2, 0);
-  ASSERT_EQ(OB_INVALID_INDEX, ObClusterVersion::print_version_str(version_str, OB_CLUSTER_VERSION_LENGTH, version));
+  ASSERT_NE(OB_INVALID_INDEX, ObClusterVersion::print_version_str(version_str, OB_CLUSTER_VERSION_LENGTH, version));
+  ASSERT_EQ(0, STRNCMP(version_str, "3.2.2.0", OB_CLUSTER_VERSION_LENGTH));
   version = cal_version(3, 2, 0, 2);
   ASSERT_NE(OB_INVALID_INDEX, ObClusterVersion::print_version_str(version_str, OB_CLUSTER_VERSION_LENGTH, version));
-  ASSERT_EQ(0, STRNCMP(version_str, "3.2.2", OB_CLUSTER_VERSION_LENGTH));
+  ASSERT_EQ(0, STRNCMP(version_str, "3.2.0.2", OB_CLUSTER_VERSION_LENGTH));
 
   // 3.2.2.1
   version = cal_version(3, 2, 2, 1);
-  ASSERT_EQ(OB_INVALID_INDEX, ObClusterVersion::print_version_str(version_str, OB_CLUSTER_VERSION_LENGTH, version));
+  ASSERT_NE(OB_INVALID_INDEX, ObClusterVersion::print_version_str(version_str, OB_CLUSTER_VERSION_LENGTH, version));
 
   // 3.2.3
   version = cal_version(3, 2, 0, 3);
-  ASSERT_EQ(OB_INVALID_INDEX, ObClusterVersion::print_version_str(version_str, OB_CLUSTER_VERSION_LENGTH, version));
+  ASSERT_NE(OB_INVALID_INDEX, ObClusterVersion::print_version_str(version_str, OB_CLUSTER_VERSION_LENGTH, version));
+  ASSERT_EQ(0, STRNCMP(version_str, "3.2.0.3", OB_CLUSTER_VERSION_LENGTH));
   version = cal_version(3, 2, 3, 0);
   ASSERT_NE(OB_INVALID_INDEX, ObClusterVersion::print_version_str(version_str, OB_CLUSTER_VERSION_LENGTH, version));
   ASSERT_EQ(0, STRNCMP(version_str, "3.2.3.0", OB_CLUSTER_VERSION_LENGTH));
@@ -508,7 +445,8 @@ TEST_F(TestClusterVersion, print_version_str)
 
   // 3.2.4
   version = cal_version(3, 2, 0, 4);
-  ASSERT_EQ(OB_INVALID_INDEX, ObClusterVersion::print_version_str(version_str, OB_CLUSTER_VERSION_LENGTH, version));
+  ASSERT_NE(OB_INVALID_INDEX, ObClusterVersion::print_version_str(version_str, OB_CLUSTER_VERSION_LENGTH, version));
+  ASSERT_EQ(0, STRNCMP(version_str, "3.2.0.4", OB_CLUSTER_VERSION_LENGTH));
   version = cal_version(3, 2, 4, 0);
   ASSERT_NE(OB_INVALID_INDEX, ObClusterVersion::print_version_str(version_str, OB_CLUSTER_VERSION_LENGTH, version));
   ASSERT_EQ(0, STRNCMP(version_str, "3.2.4.0", OB_CLUSTER_VERSION_LENGTH));

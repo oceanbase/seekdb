@@ -74,9 +74,10 @@ cal_version(const uint64_t major, const uint64_t minor, const uint64_t major_pat
 // - 4. Print: cluster version str will be printed as 4 parts.
 
 #define CLUSTER_VERSION_1_0_0_0 (oceanbase::common::cal_version(1, 0, 0, 0))
+#define CLUSTER_VERSION_1_0_1_0 (oceanbase::common::cal_version(1, 0, 1, 0))
 //!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 //TODO: If you update the above version, please update CLUSTER_CURRENT_VERSION.
-#define CLUSTER_CURRENT_VERSION CLUSTER_VERSION_1_0_0_0
+#define CLUSTER_CURRENT_VERSION CLUSTER_VERSION_1_0_1_0
 
 // ATTENSION !!!!!!!!!!!!!!!!!!!!!!!!!!!
 // 1. each cluster_version is corresponed to a data version.
@@ -85,7 +86,8 @@ cal_version(const uint64_t major, const uint64_t minor, const uint64_t major_pat
 #define DEFAULT_MIN_DATA_VERSION (oceanbase::common::cal_version(0, 0, 0, 1))
 
 #define DATA_VERSION_1_0_0_0 (oceanbase::common::cal_version(1, 0, 0, 0))
-#define DATA_CURRENT_VERSION DATA_VERSION_1_0_0_0
+#define DATA_VERSION_1_0_1_0 (oceanbase::common::cal_version(1, 0, 1, 0))
+#define DATA_CURRENT_VERSION DATA_VERSION_1_0_1_0
 // ATTENSION !!!!!!!!!!!!!!!!!!!!!!!!!!!
 // LAST_BARRIER_DATA_VERSION should be the latest barrier data version before DATA_CURRENT_VERSION
 #define LAST_BARRIER_DATA_VERSION DATA_VERSION_1_0_0_0
@@ -97,7 +99,6 @@ cal_version(const uint64_t major, const uint64_t minor, const uint64_t major_pat
 class VersionUtil
 {
 public:
-  static bool check_version_valid(const uint64_t version);
   static int64_t print_version_str(char *buf, const int64_t buf_len, uint64_t version);
 };
 

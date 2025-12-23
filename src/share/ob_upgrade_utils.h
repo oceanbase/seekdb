@@ -188,7 +188,7 @@ public:
              const uint64_t cluster_version,
              uint64_t &data_version);
 public:
-  static const int64_t DATA_VERSION_NUM = 1;
+  static const int64_t DATA_VERSION_NUM = 2;
   static const uint64_t UPGRADE_PATH[];
 };
 

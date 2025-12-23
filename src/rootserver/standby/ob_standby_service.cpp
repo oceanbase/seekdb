@@ -797,9 +797,6 @@ int ObStandbyService::write_barrier_log_(
   } else if (!is_user_tenant(tenant_id)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("not user tenant_id", KR(ret), K(tenant_id));
-  } else if (!ObClusterVersion::check_version_valid_(data_version)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid data_version", KR(ret), K(data_version));
   } else {
     const int64_t length = primary_data_version.get_serialize_size();
     char *buf = NULL;

@@ -20,7 +20,6 @@ namespace oceanbase
 {
 namespace common
 {
-// for compat, cluster_version str("a.b.c"/"a.b.c.0") which is less than "3.2.3" will be parsed as "a.b.0.c".
 static int parse_version(const char *str, uint64_t *versions, const int64_t size)
 {
   int ret = OB_SUCCESS;
@@ -55,23 +54,6 @@ static int parse_version(const char *str, uint64_t *versions, const int64_t size
     } else if (i == LAST_VERSION_ITEM) {
       // padding cluster_versions with 0
       versions[VERSION_ITEM - 1] = 0;
-    }
-    // cluster version str which is less than "3.2.3"
-    if (OB_FAIL(ret)) {
-    } else if (versions[ObClusterVersion::MAJOR_POS] < 3
-               || (3 == versions[ObClusterVersion::MAJOR_POS]
-                   && versions[ObClusterVersion::MINOR_POS] < 2)
-               || (3 == versions[ObClusterVersion::MAJOR_POS]
-                   && 2 == versions[ObClusterVersion::MINOR_POS]
-                   && versions[ObClusterVersion::MAJOR_PATCH_POS] < 3)) {
-      if (OB_UNLIKELY(0 != versions[ObClusterVersion::MINOR_PATCH_POS])) {
-        ret = OB_INVALID_ARGUMENT;
-        COMMON_LOG(WARN, "invalid package version", KR(ret), "version", str);
-      } else {
-        // convert "a.b.c" or "a.b.c.0" to "a.b.0.c"
-        versions[ObClusterVersion::MINOR_PATCH_POS] = versions[ObClusterVersion::MAJOR_PATCH_POS];
-        versions[ObClusterVersion::MAJOR_PATCH_POS] = 0;
-      }
     }
     if (OB_FAIL(ret)) {
     } else if (OB_UNLIKELY(
@@ -108,9 +90,6 @@ int ObClusterVersion::init(const uint64_t cluster_version)
   if (is_inited_) {
     ret = OB_INIT_TWICE;
     COMMON_LOG(ERROR, "cluster version init twice", KR(ret), K(cluster_version));
-  } else if (!check_version_valid_(cluster_version)) {
-    ret = OB_INVALID_ARGUMENT;
-    COMMON_LOG(WARN, "invalid cluster version", KR(ret), K(cluster_version));
   } else {
     ATOMIC_SET(&cluster_version_, cluster_version);
     COMMON_LOG(INFO, "cluster version inited success", K(cluster_version));
@@ -165,21 +144,9 @@ int64_t ObClusterVersion::print_vsn(char *buf, const int64_t buf_len, uint64_t v
   const uint16_t minor = OB_VSN_MINOR(version);
   const uint8_t major_patch = OB_VSN_MAJOR_PATCH(version);
   const uint8_t minor_patch = OB_VSN_MINOR_PATCH(version);
-  if (OB_UNLIKELY(!check_version_valid_(version))) {
-    ret = OB_INVALID_ARGUMENT;
-    COMMON_LOG(ERROR, "invalid cluster version", KR(ret), K(version), K(lbt()));
-  } else if (major < 3
-             || (3 == major && minor < 2)
-             || (3 == major && 2 == minor && 0 == major_patch && minor_patch < 3)) {
-    if (OB_FAIL(databuff_printf(buf, buf_len, pos, "%lu(%u, %u, %u)",
-                version, major, minor, minor_patch))) {
-      COMMON_LOG(WARN, "fail to print vsn", KR(ret), K(version));
-    }
-  } else {
-    if (OB_FAIL(databuff_printf(buf, buf_len, pos, "%lu(%u, %u, %u, %u)",
-                version, major, minor, major_patch, minor_patch))) {
-      COMMON_LOG(WARN, "fail to print vsn", KR(ret), K(version));
-    }
+  if (OB_FAIL(databuff_printf(buf, buf_len, pos, "%lu(%u, %u, %u, %u)",
+              version, major, minor, major_patch, minor_patch))) {
+    COMMON_LOG(WARN, "fail to print vsn", KR(ret), K(version));
   }
   if (OB_FAIL(ret)) {
     pos = OB_INVALID_INDEX;
@@ -309,11 +276,6 @@ int ObClusterVersion::get_version(const char *verstr, uint64_t &version)
                           items[ObClusterVersion::MINOR_PATCH_POS]);
   }
   return ret;
-}
-
-bool ObClusterVersion::check_version_valid_(const uint64_t version)
-{
-  return VersionUtil::check_version_valid(version);
 }
 
 ObClusterVersion &ObClusterVersion::get_instance()

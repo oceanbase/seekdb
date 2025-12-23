@@ -60,7 +60,6 @@ public:
   static int get_version(const common::ObString &verstr, uint64_t &version);
   static int64_t print_vsn(char *buf, const int64_t buf_len, uint64_t version);
   static int64_t print_version_str(char *buf, const int64_t buf_len, uint64_t version);
-  static bool check_version_valid_(const uint64_t version);
 public:
   static const int64_t MAX_VERSION_ITEM = 16;
   static const int64_t MAJOR_POS       = 0;

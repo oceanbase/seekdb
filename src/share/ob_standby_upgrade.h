@@ -37,7 +37,7 @@ struct ObStandbyUpgrade
   ~ObStandbyUpgrade() {}
   bool is_valid() const
   {
-    return ObClusterVersion::check_version_valid_(data_version_);
+    return true;
   }
   uint64_t get_data_version() const
   {
