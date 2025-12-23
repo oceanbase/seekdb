@@ -2,7 +2,7 @@ ob_define(CPACK_PACKAGING_INSTALL_PREFIX /)
 set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "OceanBase is a distributed relational database")
 set(CPACK_PACKAGE_VENDOR "OceanBase Inc.")
 set(CPACK_PACKAGE_DESCRIPTION "OceanBase is a distributed relational database")
-set(CPACK_COMPONENTS_ALL server sql-parser)
+# set(CPACK_COMPONENTS_ALL server sql-parser)
 
 set(CPACK_PACKAGE_NAME "seekdb")
 set(CPACK_PACKAGE_VERSION "${OceanBase_VERSION}")
@@ -124,44 +124,44 @@ install(DIRECTORY
   DESTINATION usr/share/oceanbase/software_package
   COMPONENT server)
 
-## oceanbase-sql-parser
-if (OB_BUILD_LIBOB_SQL_PROXY_PARSER)
+# ## oceanbase-sql-parser
+# if (OB_BUILD_LIBOB_SQL_PROXY_PARSER)
 
-  if (ENABLE_THIN_LTO)
-    message(STATUS "add libob_sql_proxy_parser_static_to_elf")
-    add_custom_command(
-      OUTPUT libob_sql_proxy_parser_static_to_elf
-      COMMAND ${CMAKE_SOURCE_DIR}/cmake/script/bitcode_to_elfobj --ld=${OB_LD_BIN} --input=${CMAKE_BINARY_DIR}/src/sql/parser/libob_sql_proxy_parser_static.a --output=${CMAKE_BINARY_DIR}/src/sql/parser/libob_sql_proxy_parser_static.a
-      DEPENDS ob_sql_proxy_parser_static
-      COMMAND_EXPAND_LISTS)
-    list(APPEND BITCODE_TO_ELF_LIST libob_sql_proxy_parser_static_to_elf)
-  endif()
+#   if (ENABLE_THIN_LTO)
+#     message(STATUS "add libob_sql_proxy_parser_static_to_elf")
+#     add_custom_command(
+#       OUTPUT libob_sql_proxy_parser_static_to_elf
+#       COMMAND ${CMAKE_SOURCE_DIR}/cmake/script/bitcode_to_elfobj --ld=${OB_LD_BIN} --input=${CMAKE_BINARY_DIR}/src/sql/parser/libob_sql_proxy_parser_static.a --output=${CMAKE_BINARY_DIR}/src/sql/parser/libob_sql_proxy_parser_static.a
+#       DEPENDS ob_sql_proxy_parser_static
+#       COMMAND_EXPAND_LISTS)
+#     list(APPEND BITCODE_TO_ELF_LIST libob_sql_proxy_parser_static_to_elf)
+#   endif()
 
-  install(PROGRAMS
-    ${CMAKE_BINARY_DIR}/src/sql/parser/libob_sql_proxy_parser_static.a
-    DESTINATION usr/lib64
-    COMPONENT sql-parser
-    )
-endif()
+#   install(PROGRAMS
+#     ${CMAKE_BINARY_DIR}/src/sql/parser/libob_sql_proxy_parser_static.a
+#     DESTINATION usr/lib64
+#     COMPONENT sql-parser
+#     )
+# endif()
 
-install(FILES
-  src/objit/include/objit/common/ob_item_type.h
-  deps/oblib/src/common/sql_mode/ob_sql_mode.h
-  src/sql/parser/ob_sql_parser.h
-  src/sql/parser/parse_malloc.h
-  src/sql/parser/parser_proxy_func.h
-  src/sql/parser/parse_node.h
-  DESTINATION usr/include
-  COMPONENT sql-parser)
+# install(FILES
+#   src/objit/include/objit/common/ob_item_type.h
+#   deps/oblib/src/common/sql_mode/ob_sql_mode.h
+#   src/sql/parser/ob_sql_parser.h
+#   src/sql/parser/parse_malloc.h
+#   src/sql/parser/parser_proxy_func.h
+#   src/sql/parser/parse_node.h
+#   DESTINATION usr/include
+#   COMPONENT sql-parser)
 
-if(OB_BUILD_OBADMIN)
-  ## oceanbase-utils
-  list(APPEND CPACK_COMPONENTS_ALL utils)
-  install(PROGRAMS
-    ${CMAKE_BINARY_DIR}/tools/ob_admin/ob_admin
-    ${CMAKE_BINARY_DIR}/tools/ob_error/src/ob_error
-    ${DEVTOOLS_DIR}/bin/obstack
-    DESTINATION usr/bin
-    COMPONENT utils
-  )
-endif()
+# if(OB_BUILD_OBADMIN)
+#   ## oceanbase-utils
+#   list(APPEND CPACK_COMPONENTS_ALL utils)
+#   install(PROGRAMS
+#     ${CMAKE_BINARY_DIR}/tools/ob_admin/ob_admin
+#     ${CMAKE_BINARY_DIR}/tools/ob_error/src/ob_error
+#     ${DEVTOOLS_DIR}/bin/obstack
+#     DESTINATION usr/bin
+#     COMPONENT utils
+#   )
+# endif()
