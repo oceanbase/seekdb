@@ -3,6 +3,7 @@ set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "OceanBase is a distributed relational dat
 set(CPACK_PACKAGE_VENDOR "OceanBase Inc.")
 set(CPACK_PACKAGE_DESCRIPTION "OceanBase is a distributed relational database")
 # set(CPACK_COMPONENTS_ALL server sql-parser)
+set(CPACK_COMPONENTS_ALL server)
 
 set(CPACK_PACKAGE_NAME "seekdb")
 set(CPACK_PACKAGE_VERSION "${OceanBase_VERSION}")
@@ -154,14 +155,14 @@ install(DIRECTORY
 #   DESTINATION usr/include
 #   COMPONENT sql-parser)
 
-# if(OB_BUILD_OBADMIN)
-#   ## oceanbase-utils
-#   list(APPEND CPACK_COMPONENTS_ALL utils)
-#   install(PROGRAMS
-#     ${CMAKE_BINARY_DIR}/tools/ob_admin/ob_admin
-#     ${CMAKE_BINARY_DIR}/tools/ob_error/src/ob_error
-#     ${DEVTOOLS_DIR}/bin/obstack
-#     DESTINATION usr/bin
-#     COMPONENT utils
-#   )
-# endif()
+if(OB_BUILD_OBADMIN)
+  ## oceanbase-utils
+  list(APPEND CPACK_COMPONENTS_ALL utils)
+  install(PROGRAMS
+    ${CMAKE_BINARY_DIR}/tools/ob_admin/ob_admin
+    ${CMAKE_BINARY_DIR}/tools/ob_error/src/ob_error
+    ${DEVTOOLS_DIR}/bin/obstack
+    DESTINATION usr/bin
+    COMPONENT utils
+  )
+endif()
