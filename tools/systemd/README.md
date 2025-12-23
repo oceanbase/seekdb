@@ -48,4 +48,4 @@ systemctl {start|stop|restart|status} seekdb
 ```
 
 ## Oceanbase configuration by systemd
-Systemd provide `/etc/oceanbase/seekdb.cnf` to config OceanBase before startup.
+Systemd provide `/etc/oceanbase/init.cnf` to config OceanBase before first startup.

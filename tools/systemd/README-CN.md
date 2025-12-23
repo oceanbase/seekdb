@@ -49,4 +49,4 @@ systemctl {start|stop|restart|status} seekdb
 ```
 
 ## 通过systemd配置OceanBase
-systemd提供了配置文件`/etc/oceanbase/seekdb.cnf`,可以在启动前修改配置进行带参启动
+systemd提供了配置文件`/etc/oceanbase/init.cnf`,可以在第一次初始化启动前修改配置

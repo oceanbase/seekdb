@@ -1,8 +1,8 @@
 #!/bin/bash
 # SeekDB start script
-# This script reads configuration from /etc/oceanbase/seekdb.cnf and starts observer
+# This script reads configuration from /etc/oceanbase/init.cnf and starts observer
 
-CONFIG_FILE="/etc/oceanbase/seekdb.cnf"
+CONFIG_FILE="/etc/oceanbase/init.cnf"
 BASE_DIR="/var/lib/oceanbase"
 SYSTEMD_PID_FILE="$BASE_DIR/run/observer.pid"
 
@@ -14,6 +14,7 @@ fi
 
 # Initialize additional parameters
 ADDITIONAL_PARAMS=""
+DATA_DIR=""
 
 # Function to read configuration file and build command line arguments
 read_config() {
@@ -37,6 +38,7 @@ read_config() {
                 ;;
             "data-dir")
                 ADDITIONAL_PARAMS="$ADDITIONAL_PARAMS --data-dir=$value"
+                DATA_DIR="$value"
                 ;;
             "redo-dir")
                 ADDITIONAL_PARAMS="$ADDITIONAL_PARAMS --redo-dir=$value"
@@ -51,8 +53,18 @@ read_config() {
 # Check if data-dir is specified and not empty
 read_config
 
+if [ -z "$DATA_DIR" ]; then
+    DATA_DIR="$BASE_DIR/data"
+fi
+
 # Build final command
-CMD="/usr/bin/observer --base-dir=$BASE_DIR $ADDITIONAL_PARAMS"
+if [ -d "$DATA_DIR" ] && [ "$(ls -A "$DATA_DIR" 2>/dev/null)" ]; then
+    # If data-dir has data, only use base-dir
+    CMD="/usr/bin/observer --base-dir=$BASE_DIR"
+else
+    # If data-dir doesn't exist or is empty, use all parameters
+    CMD="/usr/bin/observer --base-dir=$BASE_DIR $ADDITIONAL_PARAMS"
+fi
 
 echo "Starting seekdb with command: $CMD"
 echo "Configuration loaded from: $CONFIG_FILE"

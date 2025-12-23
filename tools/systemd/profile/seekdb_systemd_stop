@@ -1,5 +1,5 @@
 #!/bin/bash
-CONFIG_FILE="/etc/oceanbase/seekdb.cnf"
+CONFIG_FILE="/etc/oceanbase/init.cnf"
 BASE_DIR="/var/lib/oceanbase"
 
 # Function to read base-dir from configuration file (consistent with start script)

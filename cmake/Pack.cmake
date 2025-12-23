@@ -74,7 +74,7 @@ install(FILES
   tools/upgrade/deps_compat.yml
   ${CMAKE_BINARY_DIR}/src/share/ob_system_variable_init.json
   ${INSTALL_EXTRA_FILES}
-  tools/systemd/profile/seekdb.cnf
+  tools/systemd/profile/init.cnf
   tools/systemd/profile/oceanbase-pre.json
   tools/systemd/profile/telemetry-pre.json
   DESTINATION etc/oceanbase
