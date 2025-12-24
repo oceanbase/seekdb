@@ -342,12 +342,16 @@ uint64_t HnswIndexHandler::estimate_memory(const uint64_t row_count, const bool 
 int HnswIndexHandler::immutable_optimize()
 {
   int ret = OB_SUCCESS;
-  tl::expected<void, Error> res = index_->SetImmutable();
-  if (res.has_value()) {
-    LOG_INFO("[OBVSAG] set immutable success", KPC(this));
+  if (index_type_ == IPIVF_TYPE) {
+    // TODO(ningxin.ning): support SetImmutable for sparse vector index
   } else {
-    ret = vsag_errcode2ob(res.error().type);
-    LOG_WARN("[OBVSAG] index set immutable error", K(ret), K(res.error().type));
+    tl::expected<void, Error> res = index_->SetImmutable();
+    if (res.has_value()) {
+      LOG_INFO("[OBVSAG] set immutable success", KPC(this));
+    } else {
+      ret = vsag_errcode2ob(res.error().type);
+      LOG_WARN("[OBVSAG] index set immutable error", K(ret), K(res.error().type));
+    }
   }
   return ret;
 }
