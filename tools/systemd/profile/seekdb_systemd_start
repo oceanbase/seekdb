@@ -1,8 +1,8 @@
 #!/bin/bash
 # SeekDB start script
-# This script reads configuration from /etc/oceanbase/init.cnf and starts observer
+# This script reads configuration from /etc/oceanbase/seekdb.cnf and starts observer
 
-CONFIG_FILE="/etc/oceanbase/init.cnf"
+CONFIG_FILE="/etc/oceanbase/seekdb.cnf"
 BASE_DIR="/var/lib/oceanbase"
 SYSTEMD_PID_FILE="$BASE_DIR/run/observer.pid"
 
