@@ -534,6 +534,14 @@ int ObVecIndexAsyncTaskUtil::resume_task_from_inner_table(
                   ret = OB_SUCCESS; // continue
                 }
               }
+
+              if (OB_FAIL(ret)) {
+              } else if (task_result.task_type_ == ObVecIndexAsyncTaskType::OB_VECTOR_ASYNC_INDEX_IVF_LOAD ||
+                         task_result.task_type_ == ObVecIndexAsyncTaskType::OB_VECTOR_ASYNC_INDEX_IVF_CLEAN) {
+                need_resumed = false;
+              }
+
+              LOG_INFO("resume task", K(ret), K(need_resumed), K(ls->get_ls_id()), K(task_result));
               if (OB_FAIL(ret) || !need_resumed) {  // skip
               } else if (task_result.status_ != ObVecIndexAsyncTaskStatus::OB_VECTOR_ASYNC_TASK_FINISH) { // resume not finish task
                 ObVecIndexAsyncTaskCtx *task_ctx = nullptr;
