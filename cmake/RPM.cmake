@@ -50,6 +50,7 @@ set(CPACK_RPM_SPEC_MORE_DEFINE
 %undefine __brp_mangle_shebangs
 %global __requires_exclude ^\(/bin/bash\|/usr/bin/\.*\)$
 %define __debug_install_post ${DEBUG_INSTALL_POST}
+%debug_package
 ")
 
 # systemd define on rpm
