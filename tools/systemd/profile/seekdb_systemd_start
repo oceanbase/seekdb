@@ -15,6 +15,7 @@ fi
 # Initialize additional parameters
 ADDITIONAL_PARAMS=""
 DATA_DIR=""
+REDO_DIR=""
 
 # Function to read configuration file and build command line arguments
 read_config() {
@@ -42,6 +43,7 @@ read_config() {
                 ;;
             "redo-dir")
                 ADDITIONAL_PARAMS="$ADDITIONAL_PARAMS --redo-dir=$value"
+                REDO_DIR="$value"
                 ;;
             *)
                 ADDITIONAL_PARAMS="$ADDITIONAL_PARAMS --parameter $key=$value"
@@ -57,13 +59,20 @@ if [ -z "$DATA_DIR" ]; then
     DATA_DIR="$BASE_DIR/data"
 fi
 
+if [ -z "$REDO_DIR" ]; then
+    REDO_DIR="$BASE_DIR/redo"
+fi
+
 # Build final command
-if [ -d "$DATA_DIR" ] && [ "$(ls -A "$DATA_DIR" 2>/dev/null)" ]; then
-    # If data-dir has data, only use base-dir
-    CMD="/usr/bin/observer --base-dir=$BASE_DIR"
-else
-    # If data-dir doesn't exist or is empty, use all parameters
+# Check if it is a new database (empty data/redo dirs and no meta file)
+if ( [ ! -d "$DATA_DIR" ] || [ -z "$(ls -A "$DATA_DIR" 2>/dev/null)" ] ) && \
+   ( [ ! -d "$REDO_DIR" ] || [ -z "$(ls -A "$REDO_DIR" 2>/dev/null)" ] ) && \
+   [ ! -f "$BASE_DIR/.meta" ]; then
+    # New database initialization, use all parameters
     CMD="/usr/bin/observer --base-dir=$BASE_DIR $ADDITIONAL_PARAMS"
+else
+    # Existing database, only use base-dir
+    CMD="/usr/bin/observer --base-dir=$BASE_DIR"
 fi
 
 echo "Starting seekdb with command: $CMD"
