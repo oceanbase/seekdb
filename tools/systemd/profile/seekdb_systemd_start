@@ -65,9 +65,12 @@ fi
 
 # Build final command
 # Check if it is a new database (empty data/redo dirs and no meta file)
-if ( [ ! -d "$DATA_DIR" ] || [ -z "$(ls -A "$DATA_DIR" 2>/dev/null)" ] ) && \
-   ( [ ! -d "$REDO_DIR" ] || [ -z "$(ls -A "$REDO_DIR" 2>/dev/null)" ] ) && \
-   [ ! -f "$BASE_DIR/.meta" ]; then
+# Or if FORCE_START_WITH_ARGS environment variable is set to true/1 (case insensitive)
+force_start_with_args=$(echo "$FORCE_START_WITH_ARGS" | tr '[:upper:]' '[:lower:]')
+if [ "$force_start_with_args" = "true" ] || [ "$force_start_with_args" = "1" ] || \
+   ( ( [ ! -d "$DATA_DIR" ] || [ -z "$(ls -A "$DATA_DIR" 2>/dev/null)" ] ) && \
+     ( [ ! -d "$REDO_DIR" ] || [ -z "$(ls -A "$REDO_DIR" 2>/dev/null)" ] ) && \
+     [ ! -f "$BASE_DIR/.meta" ] ); then
     # New database initialization, use all parameters
     CMD="/usr/bin/observer --base-dir=$BASE_DIR $ADDITIONAL_PARAMS"
 else

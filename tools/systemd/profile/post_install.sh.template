@@ -1,10 +1,19 @@
 #!/bin/bash
 echo "execute post install script"
 
-if [ "$1" -ge 2 ] && [ -f /tmp/seekdb.cnf.bak ]; then
-    mv /tmp/seekdb.cnf.bak /etc/oceanbase/seekdb.cnf
+# Check for upgrade scenario
+# RPM: $1 >= 2
+# Debian: $1 = "configure" AND $2 is set (old version)
+is_upgrade=0
+if [ "$1" = "configure" ] && [ -n "$2" ]; then
+    is_upgrade=1
+elif ( [ "$1" -ge 2 ] 2>/dev/null ); then
+    is_upgrade=1
 fi
 
+if [ "$is_upgrade" -eq 1 ] && [ -f /tmp/seekdb.cnf.bak ]; then
+    mv /tmp/seekdb.cnf.bak /etc/oceanbase/seekdb.cnf
+fi
 # prepare the systemd service unit
 systemctl daemon-reload
 
