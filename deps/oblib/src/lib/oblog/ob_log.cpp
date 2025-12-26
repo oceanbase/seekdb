@@ -469,6 +469,7 @@ void ObLogger::print_trace_buffer(const char* mod_name,
 
 
 
+const char *const ObLogger::errstr_[] = {"ERROR", "WARN", "INFO", "EDIAG", "WDIAG", "TRACE", "DEBUG"};
 
 ObLogger::ObLogger()
   : ObBaseLogWriter(), log_file_(), max_file_size_(DEFAULT_MAX_FILE_SIZE), max_file_index_(0),

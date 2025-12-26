@@ -203,9 +203,9 @@ int ObCommandLineParser::handle_option(int option, const char* value, ObServerOp
         MPRINT("Invalid argument, the value should not be empty");
       } else {
         if (OB_FAIL(OB_LOGGER.level_str2int(value, opts.log_level_))) {
-          MPRINT("Invalid log level. Back to default log level.");
+          MPRINT("Invalid log level. Back to INFO log level.");
           ret = OB_SUCCESS;
-          opts.log_level_ = DEFAULT_LOG_LEVEL;
+          opts.log_level_ = OB_LOG_LEVEL_WARN;
         }
       }
       break;

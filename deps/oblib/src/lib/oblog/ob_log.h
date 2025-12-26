@@ -631,7 +631,6 @@ public:
   int32_t get_log_level(const uint64_t par_mod_id) const;
   int32_t get_log_level(const uint64_t par_mod_id, const uint64_t sub_mod_id) const;
   inline const char *get_level_str() const { return errstr_[id_level_map_.get_level()]; }
-  static constexpr const char *get_level_str(const int8_t level) { return errstr_[level]; }
 
   void disable_thread_log_level() { disable_thread_log_level_ = true; }
 
@@ -791,7 +790,7 @@ private:
   void drop_log_items(ObIBaseLogItem **items, const int64_t item_cnt) override;
   void unlink_if_need(const char *file);
 private:
-  static constexpr const char *const errstr_[] = {"ERROR", "WARN", "INFO", "EDIAG", "WDIAG", "TRACE", "DEBUG"};
+  static const char *const errstr_[];
   // default log rate limiter if there's no tl_log_limiger
   static ::oceanbase::lib::ObRateLimiter *default_log_limiter_;
   RLOCAL_STATIC(lib::ObRateLimiter*, tl_log_limiter_);
