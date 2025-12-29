@@ -17,6 +17,7 @@
 #pragma once
 
 #include "ob_query_parse.h"
+#include "ob_hybrid_search_fusion_engine.h"
 #include "pl/ob_pl.h"
 #include "share/schema/ob_schema_struct.h"
 #include "sql/engine/ob_exec_context.h"
@@ -76,9 +77,23 @@ private:
   /// int do_get_sql_with_retry(ObString &sql_result);
 
   int generate_sql_from_params(const ObString &search_params_str, ObString &sql_result);
-  int construct_column_index_info(ObIAllocator &alloc, const ObString &database_name, const ObString &table_name,
-                                  ColumnIndexNameMap &column_index_info, ObIArray<ObString> &col_names);
+  int construct_column_index_info(ObIAllocator &alloc, ObESQueryParser &parser);
   int get_basic_column_names(const ObTableSchema *table_schema, ObIArray<ObString> &col_names);
+  int extract_partition_column_ids(const ObPartitionKeyInfo &part_key_info,
+                                   hash::ObPlacementHashSet<uint64_t, 32> &column_id_set,
+                                   ObIArray<uint64_t> &column_ids);
+  int get_partition_info(const ObTableSchema *table_schema, ObESQueryParser &parser);
+
+  // Hybrid search fusion engine integration
+  int parse_hybrid_search_result(const common::sqlclient::ObMySQLResult *result,
+                                 common::ObIArray<ObHybridSearchResult> &fts_results,
+                                 common::ObIArray<ObHybridSearchResult> &vector_results);
+  int apply_fusion_and_convert_to_json(const common::ObIArray<ObHybridSearchResult> &fts_results,
+                                        const common::ObIArray<ObHybridSearchResult> &vector_results,
+                                        const ObString &search_params_str,
+                                        ObObj &query_res);
+  int parse_rrf_config_from_params(const ObString &search_params_str,
+                                   ObRRFConfig &rrf_config);
 
 private:
   sql::ObExecContext *ctx_;
