@@ -47,11 +47,6 @@ ob_define(OB_DISABLE_PIE OFF)
 ob_define(OB_ENABLE_MCMODEL OFF)
 
 ob_define(USE_LTO_CACHE OFF)
-# odps jni
-ob_define(OB_BUILD_JNI_ODPS OFF)
-
-# odps
-ob_define(OB_BUILD_CPP_ODPS OFF)
 
 ob_define(ASAN_DISABLE_STACK ON)
 
@@ -139,14 +134,6 @@ endif()
 
 if(OB_BUILD_OBSERVER_LITE)
   add_definitions(-DOB_BUILD_OBSERVER_LITE)
-endif()
-
-if (OB_BUILD_JNI_ODPS)
- add_definitions(-DOB_BUILD_JNI_ODPS)
-endif()
-
-if (OB_BUILD_CPP_ODPS)
- add_definitions(-DOB_BUILD_CPP_ODPS)
 endif()
 
 if (OB_BUILD_SYS_VEC_IDX)

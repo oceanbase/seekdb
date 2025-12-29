@@ -55,29 +55,6 @@ private:
   int64_t cur_pos_;
 };
 
-
-class ObStoragePathUtil
-{
-public:
-  //example: oss://runiu1/ob1.haipeng.zhp/all_tenant_id_list
-  //The data_version on the path of the logical backup task will only be the latest, and the data_version of the macro data on the physical backup task is the data_version of the full backup task
-  //The path on the physical backup task macro meta is consistent with the logical backup task, and both are the latest version
-  //Logical backup tasks will back up every time without multiplexing; physical backup tasks will multiplex macroblocks according to conditions.
-  //path example "file:///mnt/test_nfs_runiu/ob1.haipeng.zhp/2/1"
-  //marco data dir path example:
-  //"oss://runiu1/ob1.haipeng.zhp/base_data_3/1001/1100611139453834/3"
-  //"oss://runiu1/ob1.haipeng.zhp/base_data_3/1001/1100611139453834/3/1100611139453834"
-  //macro data full path, for backup, example:
-  // "oss://runiu1/ob1.haipeng.zhp/base_data_5/1001/1100611139453836/1152921522055151616/1100611139453836/3_0"
-  //macro data full path, for restore
-  //backup_info file path "oss://runiu1/ob1.haipeng.zhp/tenant_id/1001/backup_info"
-  //table definition example: "oss://runiu1/ob1.haipeng.zhp/3/1001/1100611139453822/inc_table_2_definition"
-  //sstable_meta example: "oss://runiu1/ob1.haipeng.zhp/2/1001/1100611139453799/1152921513465217024/sstable_meta"
-  //table_keys example: "oss://runiu1/ob1.haipeng.zhp/2/1001/1100611139453799/1152921513465217024/table_keys"
-  //partition_meta example: "oss://runiu1/ob1.haipeng.zhp/2/1001/1100611139453805/1/partition_meta"
-  //part_list example: "oss://runiu1/ob1.haipeng.zhp/3/1/1099511677788/0/1099511677788/part_list"
-};
-
 }//common
 }//oceanbase
 
