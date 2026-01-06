@@ -121,14 +121,6 @@ int ObExprPLSQLCodeSQLErrm::eval_pl_sql_code_errm(
       } else if (sqlcode > 0) {
         CK (OB_NOT_NULL(sqlerrm_result = expr.get_str_res_mem(ctx, max_buf_size)));
         OZ (databuff_printf(sqlerrm_result, max_buf_size, pos, "User-Defined Exception"));
-      } else if (sqlcode >= OB_MIN_RAISE_APPLICATION_ERROR
-                 && sqlcode <= OB_MAX_RAISE_APPLICATION_ERROR) {
-        max_buf_size = 30 + sqlcode_info->get_sqlmsg().length(); // OBE-CODE: ERRMSG
-        CK (OB_NOT_NULL(sqlerrm_result = expr.get_str_res_mem(ctx, max_buf_size)));
-        OZ (databuff_printf(sqlerrm_result, max_buf_size, pos,
-                           "OBE%ld: %.*s", sqlcode,
-                           sqlcode_info->get_sqlmsg().length(),
-                           sqlcode_info->get_sqlmsg().ptr()));
       } else {
         const ObWarningBuffer *wb = common::ob_get_tsi_warning_buffer();
         if (OB_LIKELY(NULL != wb) && wb->get_err_code() == sqlcode) {
@@ -158,21 +150,6 @@ int ObExprPLSQLCodeSQLErrm::eval_pl_sql_code_errm(
       } else if (sqlcode == 0) {
         CK (OB_NOT_NULL(sqlerrm_result = expr.get_str_res_mem(ctx, max_buf_size)));
         OZ (databuff_printf(sqlerrm_result, 200, pos, "OBE-0000: normal, successful completion"));
-      } else if (sqlcode >= OB_MIN_RAISE_APPLICATION_ERROR
-                 && sqlcode <= OB_MAX_RAISE_APPLICATION_ERROR) {
-        if (sqlcode_info->get_sqlcode() == sqlcode) {
-          max_buf_size = 30 + sqlcode_info->get_sqlmsg().length(); // OBE-CODE: ERRMSG
-          CK (OB_NOT_NULL(
-            sqlerrm_result = expr.get_str_res_mem(ctx, max_buf_size)));
-          OZ (databuff_printf(sqlerrm_result, max_buf_size, pos,
-                             "OBE%ld: %.*s", sqlcode,
-                             sqlcode_info->get_sqlmsg().length(),
-                             sqlcode_info->get_sqlmsg().ptr()));
-        } else {
-          CK (OB_NOT_NULL(sqlerrm_result
-            = expr.get_str_res_mem(ctx, max_buf_size)));
-          OZ (databuff_printf(sqlerrm_result, 200, pos, "OBE%ld:", sqlcode));
-        }
       } else if (sqlcode < 0) {
         const ObWarningBuffer *wb = common::ob_get_tsi_warning_buffer();
         if (OB_LIKELY(NULL != wb) && wb->get_err_code() == sqlcode) {

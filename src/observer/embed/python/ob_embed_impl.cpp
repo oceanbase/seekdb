@@ -273,8 +273,7 @@ std::string handle_err_msg(int ret)
   if (OB_FAIL(ret)) {
     const common::ObWarningBuffer *wb = common::ob_get_tsi_warning_buffer();
     if (nullptr != wb) {
-      if (wb->get_err_code() == ret ||
-          (ret >= OB_MIN_RAISE_APPLICATION_ERROR && ret <= OB_MAX_RAISE_APPLICATION_ERROR)) {
+      if (wb->get_err_code() == ret) {
         if (wb->get_err_msg() != nullptr && wb->get_err_msg()[0] != '\0') {
           errmsg = std::string(wb->get_err_msg());
         }

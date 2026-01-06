@@ -396,18 +396,12 @@ int ObMPPacketSender::send_error_packet(int err,
     const int32_t MAX_MSG_BUF_SIZE = 512;
     char msg_buf[MAX_MSG_BUF_SIZE];
     const ObWarningBuffer *wb = common::ob_get_tsi_warning_buffer();
-    if (NULL != wb
-        && (wb->get_err_code() == err
-            || (err >= OB_MIN_RAISE_APPLICATION_ERROR
-                && err <= OB_MAX_RAISE_APPLICATION_ERROR))) {
+    if (NULL != wb && wb->get_err_code() == err) {
       message = wb->get_err_msg();
     }
     if (message.length() <= 0) {
       if (OB_LIKELY(NULL != errmsg) && 0 < strlen(errmsg)) {
         message = ObString::make_string(errmsg);
-      } else if (err >= OB_MIN_RAISE_APPLICATION_ERROR
-                 && err <= OB_MAX_RAISE_APPLICATION_ERROR) {
-        // do nothing ...
       } else {
         snprintf(msg_buf, MAX_MSG_BUF_SIZE, "%s", ob_errpkt_strerror(err, lib::is_oracle_mode()));
         message = ObString::make_string(msg_buf); // default error message

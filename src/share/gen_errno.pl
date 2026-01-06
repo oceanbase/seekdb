@@ -17,10 +17,6 @@ my %map;
 my %other_map;
 my $last_errno = 0;
 my $error_count=0;
-my $def_ora_errno=600;
-my $def_ora_errmsg="\"internal error code, arguments: %d, %s\"";
-my $print_def_ora_errmsg="\"%s-%05d: internal error code, arguments: %d, %s\"";
-my $print_ora_errmsg="\"%s-%05d: %s\"";
 my $print_error_cause="\"Internal Error\"";
 my $print_error_solution="\"Contact OceanBase Support\"";
 
@@ -32,10 +28,8 @@ while(<$fh>) {
   if (/^DEFINE_ERROR\(([^,]+),\s*([^,]*),\s*([^,]*),\s*([^,]*),\s*("[^"]*"),\s*("[^"]*"),\s*("[^"]*")/) {
     ++$error_count;
     #print "\"$1\", $1, $2, $3, $4, $5, $6, $7\n";
-    my $tmp_ora_errmsg=sprintf($print_def_ora_errmsg, "ORA", $def_ora_errno, $2, substr($5, 1, length($5) - 2));
-    my $tmp_obe_errmsg=sprintf($print_def_ora_errmsg, "OBE", $def_ora_errno, $2, substr($5, 1, length($5) - 2));
-    $map_share{$1} = [$2, $3, $4, $5, $5, "$1", $def_ora_errno, $tmp_ora_errmsg, $tmp_ora_errmsg, $tmp_obe_errmsg, $tmp_obe_errmsg, $6, $7];
-    $map{$1} = [$2, $3, $4, $5, $5, "$1", $def_ora_errno, $tmp_ora_errmsg, $tmp_ora_errmsg, $tmp_obe_errmsg, $tmp_obe_errmsg, $6, $7];
+    $map_share{$1} = [$2, $3, $4, $5, $5, "$1", $6, $7];
+    $map{$1} = [$2, $3, $4, $5, $5, "$1", $6, $7];
     $last_errno = $2 if ($2 < $last_errno);
     $error_code = $2;
     $sqlstate = $4;
@@ -43,10 +37,8 @@ while(<$fh>) {
   } elsif (/^DEFINE_ERROR\(([^,]+),\s*([^,]*),\s*([^,]*),\s*([^,]*),\s*("[^"]*")/) {
     ++$error_count;
     #print "\"$1\", $1, $2, $3, $4, $5\n";
-    my $tmp_ora_errmsg=sprintf($print_def_ora_errmsg, "ORA", $def_ora_errno, $2, substr($5, 1, length($5) - 2));
-    my $tmp_obe_errmsg=sprintf($print_def_ora_errmsg, "OBE", $def_ora_errno, $2, substr($5, 1, length($5) - 2));
-    $map_share{$1} = [$2, $3, $4, $5, $5, "$1", $def_ora_errno, $tmp_ora_errmsg, $tmp_ora_errmsg, $tmp_obe_errmsg, $tmp_obe_errmsg, $print_error_cause, $print_error_solution];
-    $map{$1} = [$2, $3, $4, $5, $5, "$1", $def_ora_errno, $tmp_ora_errmsg, $tmp_ora_errmsg, $tmp_obe_errmsg, $tmp_obe_errmsg, $print_error_cause, $print_error_solution];
+    $map_share{$1} = [$2, $3, $4, $5, $5, "$1", $print_error_cause, $print_error_solution];
+    $map{$1} = [$2, $3, $4, $5, $5, "$1", $print_error_cause, $print_error_solution];
     $last_errno = $2 if ($2 < $last_errno);
     $error_code = $2;
     $sqlstate = $4;
@@ -54,12 +46,8 @@ while(<$fh>) {
   } elsif (/^DEFINE_ERROR_EXT\(([^,]+),\s*([^,]*),\s*([^,]*),\s*([^,]*),\s*([^,]*),\s*("[^"]*"),\s*("[^"]*"),\s*("[^"]*")/) {
     ++$error_count;
     #print "\"$1\", $1, $2, $3, $4, $5, $6, $7, $8\n";
-    my $tmp_ora_errmsg=sprintf($print_def_ora_errmsg, "ORA", $def_ora_errno, $2, substr($5, 1, length($5) - 2));
-    my $tmp_ora_user_errmsg=sprintf($print_def_ora_errmsg, "ORA", $def_ora_errno, $2, substr($6, 1, length($6) - 2));
-    my $tmp_obe_errmsg=sprintf($print_def_ora_errmsg, "OBE", $def_ora_errno, $2, substr($5, 1, length($5) - 2));
-    my $tmp_obe_user_errmsg=sprintf($print_def_ora_errmsg, "OBE", $def_ora_errno, $2, substr($6, 1, length($6) - 2));
-    $map_share{$1} = [$2, $3, $4, $5, $6, "$1", $def_ora_errno, $tmp_ora_errmsg, $tmp_ora_user_errmsg, $tmp_obe_errmsg, $tmp_obe_user_errmsg, $7, $8];
-    $map{$1} = [$2, $3, $4, $5, $6, "$1", $def_ora_errno, $tmp_ora_errmsg, $tmp_ora_user_errmsg, $tmp_obe_errmsg, $tmp_obe_user_errmsg, $7, $8];
+    $map_share{$1} = [$2, $3, $4, $5, $6, "$1", $7, $8];
+    $map{$1} = [$2, $3, $4, $5, $6, "$1", $7, $8];
     $last_errno = $2 if ($2 < $last_errno);
     $error_code = $2;
     $sqlstate = $4;
@@ -67,64 +55,8 @@ while(<$fh>) {
   } elsif (/^DEFINE_ERROR_EXT\(([^,]+),\s*([^,]*),\s*([^,]*),\s*([^,]*),\s*([^,]*),\s*("[^"]*")/) {
     ++$error_count;
     #print "\"$1\", $1, $2, $3, $4, $5, $6\n";
-    my $tmp_ora_errmsg=sprintf($print_def_ora_errmsg, "ORA", $def_ora_errno, $2, substr($5, 1, length($5) - 2));
-    my $tmp_ora_user_errmsg=sprintf($print_def_ora_errmsg, "ORA", $def_ora_errno, $2, substr($6, 1, length($6) - 2));
-    my $tmp_obe_errmsg=sprintf($print_def_ora_errmsg, "OBE", $def_ora_errno, $2, substr($5, 1, length($5) - 2));
-    my $tmp_obe_user_errmsg=sprintf($print_def_ora_errmsg, "OBE", $def_ora_errno, $2, substr($6, 1, length($6) - 2));
-    $map_share{$1} = [$2, $3, $4, $5, $6, "$1", $def_ora_errno, $tmp_ora_errmsg, $tmp_ora_user_errmsg, $tmp_obe_errmsg, $tmp_obe_user_errmsg, $print_error_cause, $print_error_solution];
-    $map{$1} = [$2, $3, $4, $5, $6, "$1", $def_ora_errno, $tmp_ora_errmsg, $tmp_ora_user_errmsg, $tmp_obe_errmsg, $tmp_obe_user_errmsg, $print_error_cause, $print_error_solution];
-    $last_errno = $2 if ($2 < $last_errno);
-    $error_code = $2;
-    $sqlstate = $4;
-    $error_msg = $5;
-  } elsif (/^DEFINE_ORACLE_ERROR\(([^,]+),\s*([^,]*),\s*([^,]*),\s*([^,]*),\s*("[^"]*")\s*,\s*([^,]*),\s*("[^"]*"),\s*("[^"]*"),\s*("[^"]*")/) {
-    ++$error_count;
-    #print "\"$1\", $1, $2, $3, $4, $5, $6, $7, $8, $9\n";
-    #print "\"$1\", $6, $7\n";
-    my $tmp_ora_errmsg=sprintf($print_ora_errmsg, "ORA", $6, substr($7, 1, length($7) - 2));
-    my $tmp_obe_errmsg=sprintf($print_ora_errmsg, "OBE", $6, substr($7, 1, length($7) - 2));
-    $map_share{$1} = [$2, $3, $4, $5, $5, "$1", $6, $tmp_ora_errmsg, $tmp_ora_errmsg, $tmp_obe_errmsg, $tmp_obe_errmsg, $8, $9];
-    $map{$1} = [$2, $3, $4, $5, $5, "$1", $6, $tmp_ora_errmsg, $tmp_ora_errmsg, $tmp_obe_errmsg, $tmp_obe_errmsg, $8, $9];
-    $last_errno = $2 if ($2 < $last_errno);
-    $error_code = $2;
-    $sqlstate = $4;
-    $error_msg = $5;
-  } elsif (/^DEFINE_ORACLE_ERROR\(([^,]+),\s*([^,]*),\s*([^,]*),\s*([^,]*),\s*("[^"]*")\s*,\s*([^,]*),\s*("[^"]*")/) {
-    ++$error_count;
-    #print "\"$1\", $1, $2, $3, $4, $5, $6, $7\n";
-    #print "\"$1\", $6, $7\n";
-    my $tmp_ora_errmsg=sprintf($print_ora_errmsg, "ORA", $6, substr($7, 1, length($7) - 2));
-    my $tmp_obe_errmsg=sprintf($print_ora_errmsg, "OBE", $6, substr($7, 1, length($7) - 2));
-    $map_share{$1} = [$2, $3, $4, $5, $5, "$1", $6, $tmp_ora_errmsg, $tmp_ora_errmsg, $tmp_obe_errmsg, $tmp_obe_errmsg, $print_error_cause, $print_error_solution];
-    $map{$1} = [$2, $3, $4, $5, $5, "$1", $6, $tmp_ora_errmsg, $tmp_ora_errmsg, $tmp_obe_errmsg, $tmp_obe_errmsg, $print_error_cause, $print_error_solution];
-    $last_errno = $2 if ($2 < $last_errno);
-    $error_code = $2;
-    $sqlstate = $4;
-    $error_msg = $5;
-  } elsif (/^DEFINE_ORACLE_ERROR_EXT\(([^,]+),\s*([^,]*),\s*([^,]*),\s*([^,]*),\s*("[^"]*")\s*,\s*("[^"]*")\s*,\s*([^,]*),\s*("[^"]*")\s*,\s*("[^"]*"),\s*("[^"]*"),\s*("[^"]*")/) {
-    ++$error_count;
-    #print "\"$1\", $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11\n";
-    #print "\"$1\", $7, $8, $9\n";
-    my $tmp_ora_errmsg=sprintf($print_ora_errmsg, "ORA", $7, substr($8, 1, length($8) - 2));
-    my $tmp_ora_user_errmsg=sprintf($print_ora_errmsg, "ORA", $7, substr($9, 1, length($9) - 2));
-    my $tmp_obe_errmsg=sprintf($print_ora_errmsg, "OBE", $7, substr($8, 1, length($8) - 2));
-    my $tmp_obe_user_errmsg=sprintf($print_ora_errmsg, "OBE", $7, substr($9, 1, length($9) - 2));
-    $map_share{$1} = [$2, $3, $4, $5, $6, "$1", $7, $tmp_ora_errmsg, $tmp_ora_user_errmsg, $tmp_obe_errmsg, $tmp_obe_user_errmsg, $10, $11];
-    $map{$1} = [$2, $3, $4, $5, $6, "$1", $7, $tmp_ora_errmsg, $tmp_ora_user_errmsg, $tmp_obe_errmsg, $tmp_obe_user_errmsg, $10, $11];
-    $last_errno = $2 if ($2 < $last_errno);
-    $error_code = $2;
-    $sqlstate = $4;
-    $error_msg = $5;
-  } elsif (/^DEFINE_ORACLE_ERROR_EXT\(([^,]+),\s*([^,]*),\s*([^,]*),\s*([^,]*),\s*("[^"]*")\s*,\s*("[^"]*")\s*,\s*([^,]*),\s*("[^"]*")\s*,\s*("[^"]*")/) {
-    ++$error_count;
-    #print "\"$1\", $1, $2, $3, $4, $5, $6, $7, $8, $9\n";
-    #print "\"$1\", $7, $8, $9\n";
-    my $tmp_ora_errmsg=sprintf($print_ora_errmsg, "ORA", $7, substr($8, 1, length($8) - 2));
-    my $tmp_ora_user_errmsg=sprintf($print_ora_errmsg, "ORA", $7, substr($9, 1, length($9) - 2));
-    my $tmp_obe_errmsg=sprintf($print_ora_errmsg, "OBE", $7, substr($8, 1, length($8) - 2));
-    my $tmp_obe_user_errmsg=sprintf($print_ora_errmsg, "OBE", $7, substr($9, 1, length($9) - 2));
-    $map_share{$1} = [$2, $3, $4, $5, $6, "$1", $7, $tmp_ora_errmsg, $tmp_ora_user_errmsg, $tmp_obe_errmsg, $tmp_obe_user_errmsg, $print_error_cause, $print_error_solution];
-    $map{$1} = [$2, $3, $4, $5, $6, "$1", $7, $tmp_ora_errmsg, $tmp_ora_user_errmsg, $tmp_obe_errmsg, $tmp_obe_user_errmsg, $print_error_cause, $print_error_solution];
+    $map_share{$1} = [$2, $3, $4, $5, $6, "$1", $print_error_cause, $print_error_solution];
+    $map{$1} = [$2, $3, $4, $5, $6, "$1", $print_error_cause, $print_error_solution];
     $last_errno = $2 if ($2 < $last_errno);
     $error_code = $2;
     $sqlstate = $4;
@@ -133,83 +65,11 @@ while(<$fh>) {
     #print "\"$1\", $1, $2, $3, $4\n";
     $other_map_share{$1} = [$2, $3, $4];
     $other_map{$1} = [$2, $3, $4];
-  } elsif (/^DEFINE_PLS_ERROR\(([^,]+),\s*([^,]*),\s*([^,]*),\s*([^,]*),\s*("[^"]*")\s*,\s*([^,]*),\s*("[^"]*"),\s*("[^"]*"),\s*("[^"]*")/) {
-    ++$error_count;
-    #print "\"$1\", $1, $2, $3, $4, $5, $6, $7, $8, $9\n";
-    #print "\"$1\", $6, $7\n";
-    my $tmp_ora_errmsg=sprintf($print_ora_errmsg, "PLS", $6, substr($7, 1, length($7) - 2));
-    $map_share{$1} = [$2, $3, $4, $5, $5, "$1", $6, $tmp_ora_errmsg, $tmp_ora_errmsg, $tmp_ora_errmsg, $tmp_ora_errmsg, $8, $9];
-    $map{$1} = [$2, $3, $4, $5, $5, "$1", $6, $tmp_ora_errmsg, $tmp_ora_errmsg, $tmp_ora_errmsg, $tmp_ora_errmsg, $8, $9];
-    $last_errno = $2 if ($2 < $last_errno);
-    $error_code = $2;
-    $sqlstate = $4;
-    $error_msg = $5;
-  } elsif (/^DEFINE_PLS_ERROR\(([^,]+),\s*([^,]*),\s*([^,]*),\s*([^,]*),\s*("[^"]*")\s*,\s*([^,]*),\s*("[^"]*")/) {
-    ++$error_count;
-    #print "\"$1\", $1, $2, $3, $4, $5, $6, $7\n";
-    #print "\"$1\", $6, $7\n";
-    my $tmp_ora_errmsg=sprintf($print_ora_errmsg, "PLS", $6, substr($7, 1, length($7) - 2));
-    $map_share{$1} = [$2, $3, $4, $5, $5, "$1", $6, $tmp_ora_errmsg, $tmp_ora_errmsg, $tmp_ora_errmsg, $tmp_ora_errmsg, $print_error_cause, $print_error_solution];
-    $map{$1} = [$2, $3, $4, $5, $5, "$1", $6, $tmp_ora_errmsg, $tmp_ora_errmsg, $tmp_ora_errmsg, $tmp_ora_errmsg, $print_error_cause, $print_error_solution];
-    $last_errno = $2 if ($2 < $last_errno);
-    $error_code = $2;
-    $sqlstate = $4;
-    $error_msg = $5;
-  } elsif (/^DEFINE_PLS_ERROR_EXT\(([^,]+),\s*([^,]*),\s*([^,]*),\s*([^,]*),\s*("[^"]*")\s*,\s*("[^"]*")\s*,\s*([^,]*),\s*("[^"]*")\s*,\s*("[^"]*"),\s*("[^"]*"),\s*("[^"]*")/) {
-    ++$error_count;
-    #print "\"$1\", $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11\n";
-    #print "\"$1\", $7, $8, $9\n";
-    my $tmp_ora_errmsg=sprintf($print_ora_errmsg, "PLS", $7, substr($8, 1, length($8) - 2));
-    my $tmp_ora_user_errmsg=sprintf($print_ora_errmsg, "PLS", $7, substr($9, 1, length($9) - 2));
-    $map_share{$1} = [$2, $3, $4, $5, $6, "$1", $7, $tmp_ora_errmsg, $tmp_ora_user_errmsg, $tmp_ora_errmsg, $tmp_ora_user_errmsg, $10, $11];
-    $map{$1} = [$2, $3, $4, $5, $6, "$1", $7, $tmp_ora_errmsg, $tmp_ora_user_errmsg, $tmp_ora_errmsg, $tmp_ora_user_errmsg, $10, $11];
-    $last_errno = $2 if ($2 < $last_errno);
-    $error_code = $2;
-    $sqlstate = $4;
-    $error_msg = $5;
-  } elsif (/^DEFINE_PLS_ERROR_EXT\(([^,]+),\s*([^,]*),\s*([^,]*),\s*([^,]*),\s*("[^"]*")\s*,\s*("[^"]*")\s*,\s*([^,]*),\s*("[^"]*")\s*,\s*("[^"]*")/) {
-    ++$error_count;
-    #print "\"$1\", $1, $2, $3, $4, $5, $6, $7, $8, $9\n";
-    #print "\"$1\", $7, $8, $9\n";
-    my $tmp_ora_errmsg=sprintf($print_ora_errmsg, "PLS", $7, substr($8, 1, length($8) - 2));
-    my $tmp_ora_user_errmsg=sprintf($print_ora_errmsg, "PLS", $7, substr($9, 1, length($9) - 2));
-    $map_share{$1} = [$2, $3, $4, $5, $6, "$1", $7, $tmp_ora_errmsg, $tmp_ora_user_errmsg, $tmp_ora_errmsg, $tmp_ora_user_errmsg, $print_error_cause, $print_error_solution];
-    $map{$1} = [$2, $3, $4, $5, $6, "$1", $7, $tmp_ora_errmsg, $tmp_ora_user_errmsg, $tmp_ora_errmsg, $tmp_ora_user_errmsg, $print_error_cause, $print_error_solution];
-    $last_errno = $2 if ($2 < $last_errno);
-    $error_code = $2;
-    $sqlstate = $4;
-    $error_msg = $5;
-  } elsif (/^DEFINE_ORACLE_ERROR_V2_EXT\(([^,]+),\s*([^,]*),\s*([^,]*),\s*([^,]*),\s*("[^"]*")\s*,\s*("[^"]*")\s*,\s*([^,]*),\s*("[^"]*")\s*,\s*("[^"]*"),\s*("[^"]*"),\s*("[^"]*")/) {
-    ++$error_count;
-    #print "\"$1\", $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11\n";
-    #print "\"$1\", $7, $8, $9\n";
-    my $tmp_ora_errmsg=sprintf("\"%s\"", substr($8, 1, length($8) - 2));
-    my $tmp_ora_user_errmsg=sprintf("\"%s\"", substr($9, 1, length($9) - 2));
-    $map_share{$1} = [$2, $3, $4, $5, $6, "$1", $7, $tmp_ora_errmsg, $tmp_ora_user_errmsg, $tmp_ora_errmsg, $tmp_ora_user_errmsg, $10, $11];
-    $map{$1} = [$2, $3, $4, $5, $6, "$1", $7, $tmp_ora_errmsg, $tmp_ora_user_errmsg, $tmp_ora_errmsg, $tmp_ora_user_errmsg, $10, $11];
-    $last_errno = $2 if ($2 < $last_errno);
-    $error_code = $2;
-    $sqlstate = $4;
-    $error_msg = $5;
-  } elsif (/^DEFINE_ORACLE_ERROR_V2_EXT\(([^,]+),\s*([^,]*),\s*([^,]*),\s*([^,]*),\s*("[^"]*")\s*,\s*("[^"]*")\s*,\s*([^,]*),\s*("[^"]*")\s*,\s*("[^"]*")/) {
-    ++$error_count;
-    #print "\"$1\", $1, $2, $3, $4, $5, $6, $7, $8, $9\n";
-    #print "\"$1\", $7, $8, $9\n";
-    my $tmp_ora_errmsg=sprintf("\"%s\"", substr($8, 1, length($8) - 2));
-    my $tmp_ora_user_errmsg=sprintf("\"%s\"", substr($9, 1, length($9) - 2));
-    $map_share{$1} = [$2, $3, $4, $5, $6, "$1", $7, $tmp_ora_errmsg, $tmp_ora_user_errmsg, $tmp_ora_errmsg, $tmp_ora_user_errmsg, $print_error_cause, $print_error_solution];
-    $map{$1} = [$2, $3, $4, $5, $6, "$1", $7, $tmp_ora_errmsg, $tmp_ora_user_errmsg, $tmp_ora_errmsg, $tmp_ora_user_errmsg, $print_error_cause, $print_error_solution];
-    $last_errno = $2 if ($2 < $last_errno);
-    $error_code = $2;
-    $sqlstate = $4;
-    $error_msg = $5;
   } elsif (/^DEFINE_ERROR_DEP\(([^,]+),\s*([^,]*),\s*([^,]*),\s*([^,]*),\s*("[^"]*"),\s*("[^"]*"),\s*("[^"]*")/) {
     ++$error_count;
     #print "\"$1\", $1, $2, $3, $4, $5, $6, $7\n";
-    my $tmp_ora_errmsg=sprintf($print_def_ora_errmsg, "ORA", $def_ora_errno, $2, substr($5, 1, length($5) - 2));
-    my $tmp_obe_errmsg=sprintf($print_def_ora_errmsg, "OBE", $def_ora_errno, $2, substr($5, 1, length($5) - 2));
-    $map_deps{$1} = [$2, $3, $4, $5, $5, "$1", $def_ora_errno, $tmp_ora_errmsg, $tmp_ora_errmsg, $tmp_obe_errmsg, $tmp_obe_errmsg, $6, $7];
-    $map{$1} = [$2, $3, $4, $5, $5, "$1", $def_ora_errno, $tmp_ora_errmsg, $tmp_ora_errmsg, $tmp_obe_errmsg, $tmp_obe_errmsg, $6, $7];
+    $map_deps{$1} = [$2, $3, $4, $5, $5, "$1", $6, $7];
+    $map{$1} = [$2, $3, $4, $5, $5, "$1", $6, $7];
     $last_errno = $2 if ($2 < $last_errno);
     $error_code = $2;
     $sqlstate = $4;
@@ -217,10 +77,8 @@ while(<$fh>) {
   } elsif (/^DEFINE_ERROR_DEP\(([^,]+),\s*([^,]*),\s*([^,]*),\s*([^,]*),\s*("[^"]*")/) {
     ++$error_count;
     #print "\"$1\", $1, $2, $3, $4, $5\n";
-    my $tmp_ora_errmsg=sprintf($print_def_ora_errmsg, "ORA", $def_ora_errno, $2, substr($5, 1, length($5) - 2));
-    my $tmp_obe_errmsg=sprintf($print_def_ora_errmsg, "OBE", $def_ora_errno, $2, substr($5, 1, length($5) - 2));
-    $map_deps{$1} = [$2, $3, $4, $5, $5, "$1", $def_ora_errno, $tmp_ora_errmsg, $tmp_ora_errmsg, $tmp_obe_errmsg, $tmp_obe_errmsg, $print_error_cause, $print_error_solution];
-    $map{$1} = [$2, $3, $4, $5, $5, "$1", $def_ora_errno, $tmp_ora_errmsg, $tmp_ora_errmsg, $tmp_obe_errmsg, $tmp_obe_errmsg, $print_error_cause, $print_error_solution];
+    $map_deps{$1} = [$2, $3, $4, $5, $5, "$1", $print_error_cause, $print_error_solution];
+    $map{$1} = [$2, $3, $4, $5, $5, "$1", $print_error_cause, $print_error_solution];
     $last_errno = $2 if ($2 < $last_errno);
     $error_code = $2;
     $sqlstate = $4;
@@ -228,12 +86,8 @@ while(<$fh>) {
   } elsif (/^DEFINE_ERROR_EXT_DEP\(([^,]+),\s*([^,]*),\s*([^,]*),\s*([^,]*),\s*([^,]*),\s*("[^"]*"),\s*("[^"]*"),\s*("[^"]*")/) {
     ++$error_count;
     #print "\"$1\", $1, $2, $3, $4, $5, $6, $7, $8\n";
-    my $tmp_ora_errmsg=sprintf($print_def_ora_errmsg, "ORA", $def_ora_errno, $2, substr($5, 1, length($5) - 2));
-    my $tmp_ora_user_errmsg=sprintf($print_def_ora_errmsg, "ORA", $def_ora_errno, $2, substr($6, 1, length($6) - 2));
-    my $tmp_obe_errmsg=sprintf($print_def_ora_errmsg, "OBE", $def_ora_errno, $2, substr($5, 1, length($5) - 2));
-    my $tmp_obe_user_errmsg=sprintf($print_def_ora_errmsg, "OBE", $def_ora_errno, $2, substr($6, 1, length($6) - 2));
-    $map_deps{$1} = [$2, $3, $4, $5, $6, "$1", $def_ora_errno, $tmp_ora_errmsg, $tmp_ora_user_errmsg, $tmp_obe_errmsg, $tmp_obe_user_errmsg, $7, $8];
-    $map{$1} = [$2, $3, $4, $5, $6, "$1", $def_ora_errno, $tmp_ora_errmsg, $tmp_ora_user_errmsg, $tmp_obe_errmsg, $tmp_obe_user_errmsg, $7, $8];
+    $map_deps{$1} = [$2, $3, $4, $5, $6, "$1", $7, $8];
+    $map{$1} = [$2, $3, $4, $5, $6, "$1", $7, $8];
     $last_errno = $2 if ($2 < $last_errno);
     $error_code = $2;
     $sqlstate = $4;
@@ -241,64 +95,8 @@ while(<$fh>) {
   } elsif (/^DEFINE_ERROR_EXT_DEP\(([^,]+),\s*([^,]*),\s*([^,]*),\s*([^,]*),\s*([^,]*),\s*("[^"]*")/) {
     ++$error_count;
     #print "\"$1\", $1, $2, $3, $4, $5, $6\n";
-    my $tmp_ora_errmsg=sprintf($print_def_ora_errmsg, "ORA", $def_ora_errno, $2, substr($5, 1, length($5) - 2));
-    my $tmp_ora_user_errmsg=sprintf($print_def_ora_errmsg, "ORA", $def_ora_errno, $2, substr($6, 1, length($6) - 2));
-    my $tmp_obe_errmsg=sprintf($print_def_ora_errmsg, "OBE", $def_ora_errno, $2, substr($5, 1, length($5) - 2));
-    my $tmp_obe_user_errmsg=sprintf($print_def_ora_errmsg, "OBE", $def_ora_errno, $2, substr($6, 1, length($6) - 2));
-    $map_deps{$1} = [$2, $3, $4, $5, $6, "$1", $def_ora_errno, $tmp_ora_errmsg, $tmp_ora_user_errmsg, $tmp_obe_errmsg, $tmp_obe_user_errmsg, $print_error_cause, $print_error_solution];
-    $map{$1} = [$2, $3, $4, $5, $6, "$1", $def_ora_errno, $tmp_ora_errmsg, $tmp_ora_user_errmsg, $tmp_obe_errmsg, $tmp_obe_user_errmsg, $print_error_cause, $print_error_solution];
-    $last_errno = $2 if ($2 < $last_errno);
-    $error_code = $2;
-    $sqlstate = $4;
-    $error_msg = $5;
-  } elsif (/^DEFINE_ORACLE_ERROR_DEP\(([^,]+),\s*([^,]*),\s*([^,]*),\s*([^,]*),\s*("[^"]*")\s*,\s*([^,]*),\s*("[^"]*"),\s*("[^"]*"),\s*("[^"]*")/) {
-    ++$error_count;
-    #print "\"$1\", $1, $2, $3, $4, $5, $6, $7, $8, $9\n";
-    #print "\"$1\", $6, $7\n";
-    my $tmp_ora_errmsg=sprintf($print_ora_errmsg, "ORA", $6, substr($7, 1, length($7) - 2));
-    my $tmp_obe_errmsg=sprintf($print_ora_errmsg, "OBE", $6, substr($7, 1, length($7) - 2));
-    $map_deps{$1} = [$2, $3, $4, $5, $5, "$1", $6, $tmp_ora_errmsg, $tmp_ora_errmsg, $tmp_obe_errmsg, $tmp_obe_errmsg, $8, $9];
-    $map{$1} = [$2, $3, $4, $5, $5, "$1", $6, $tmp_ora_errmsg, $tmp_ora_errmsg, $tmp_obe_errmsg, $tmp_obe_errmsg, $8, $9];
-    $last_errno = $2 if ($2 < $last_errno);
-    $error_code = $2;
-    $sqlstate = $4;
-    $error_msg = $5;
-  } elsif (/^DEFINE_ORACLE_ERROR_DEP\(([^,]+),\s*([^,]*),\s*([^,]*),\s*([^,]*),\s*("[^"]*")\s*,\s*([^,]*),\s*("[^"]*")/) {
-    ++$error_count;
-    #print "\"$1\", $1, $2, $3, $4, $5, $6, $7\n";
-    #print "\"$1\", $6, $7\n";
-    my $tmp_ora_errmsg=sprintf($print_ora_errmsg, "ORA", $6, substr($7, 1, length($7) - 2));
-    my $tmp_obe_errmsg=sprintf($print_ora_errmsg, "OBE", $6, substr($7, 1, length($7) - 2));
-    $map_deps{$1} = [$2, $3, $4, $5, $5, "$1", $6, $tmp_ora_errmsg, $tmp_ora_errmsg, $tmp_obe_errmsg, $tmp_obe_errmsg, $print_error_cause, $print_error_solution];
-    $map{$1} = [$2, $3, $4, $5, $5, "$1", $6, $tmp_ora_errmsg, $tmp_ora_errmsg, $tmp_obe_errmsg, $tmp_obe_errmsg, $print_error_cause, $print_error_solution];
-    $last_errno = $2 if ($2 < $last_errno);
-    $error_code = $2;
-    $sqlstate = $4;
-    $error_msg = $5;
-  } elsif (/^DEFINE_ORACLE_ERROR_EXT_DEP\(([^,]+),\s*([^,]*),\s*([^,]*),\s*([^,]*),\s*("[^"]*")\s*,\s*("[^"]*")\s*,\s*([^,]*),\s*("[^"]*")\s*,\s*("[^"]*"),\s*("[^"]*"),\s*("[^"]*")/) {
-    ++$error_count;
-    #print "\"$1\", $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11\n";
-    #print "\"$1\", $7, $8, $9\n";
-    my $tmp_ora_errmsg=sprintf($print_ora_errmsg, "ORA", $7, substr($8, 1, length($8) - 2));
-    my $tmp_ora_user_errmsg=sprintf($print_ora_errmsg, "ORA", $7, substr($9, 1, length($9) - 2));
-    my $tmp_obe_errmsg=sprintf($print_ora_errmsg, "OBE", $7, substr($8, 1, length($8) - 2));
-    my $tmp_obe_user_errmsg=sprintf($print_ora_errmsg, "OBE", $7, substr($9, 1, length($9) - 2));
-    $map_deps{$1} = [$2, $3, $4, $5, $6, "$1", $7, $tmp_ora_errmsg, $tmp_ora_user_errmsg, $tmp_obe_errmsg, $tmp_obe_user_errmsg, $10, $11];
-    $map{$1} = [$2, $3, $4, $5, $6, "$1", $7, $tmp_ora_errmsg, $tmp_ora_user_errmsg, $tmp_obe_errmsg, $tmp_obe_user_errmsg, $10, $11];
-    $last_errno = $2 if ($2 < $last_errno);
-    $error_code = $2;
-    $sqlstate = $4;
-    $error_msg = $5;
-  } elsif (/^DEFINE_ORACLE_ERROR_EXT_DEP\(([^,]+),\s*([^,]*),\s*([^,]*),\s*([^,]*),\s*("[^"]*")\s*,\s*("[^"]*")\s*,\s*([^,]*),\s*("[^"]*")\s*,\s*("[^"]*")/) {
-    ++$error_count;
-    #print "\"$1\", $1, $2, $3, $4, $5, $6, $7, $8, $9\n";
-    #print "\"$1\", $7, $8, $9\n";
-    my $tmp_ora_errmsg=sprintf($print_ora_errmsg, "ORA", $7, substr($8, 1, length($8) - 2));
-    my $tmp_ora_user_errmsg=sprintf($print_ora_errmsg, "ORA", $7, substr($9, 1, length($9) - 2));
-    my $tmp_obe_errmsg=sprintf($print_ora_errmsg, "OBE", $7, substr($8, 1, length($8) - 2));
-    my $tmp_obe_user_errmsg=sprintf($print_ora_errmsg, "OBE", $7, substr($9, 1, length($9) - 2));
-    $map_deps{$1} = [$2, $3, $4, $5, $6, "$1", $7, $tmp_ora_errmsg, $tmp_ora_user_errmsg, $tmp_obe_errmsg, $tmp_obe_user_errmsg, $print_error_cause, $print_error_solution];
-    $map{$1} = [$2, $3, $4, $5, $6, "$1", $7, $tmp_ora_errmsg, $tmp_ora_user_errmsg, $tmp_obe_errmsg, $tmp_obe_user_errmsg, $print_error_cause, $print_error_solution];
+    $map_deps{$1} = [$2, $3, $4, $5, $6, "$1", $print_error_cause, $print_error_solution];
+    $map{$1} = [$2, $3, $4, $5, $6, "$1", $print_error_cause, $print_error_solution];
     $last_errno = $2 if ($2 < $last_errno);
     $error_code = $2;
     $sqlstate = $4;
@@ -307,41 +105,6 @@ while(<$fh>) {
     #print "\"$1\", $1, $2, $3, $4\n";
     $other_map_deps{$1} = [$2, $3, $4];
     $other_map{$1} = [$2, $3, $4];
-  } elsif (/^DEFINE_PLS_ERROR_DEP\(([^,]+),\s*([^,]*),\s*([^,]*),\s*([^,]*),\s*("[^"]*")\s*,\s*([^,]*),\s*("[^"]*")/) {
-    ++$error_count;
-    #print "\"$1\", $1, $2, $3, $4, $5, $6, $7\n";
-    #print "\"$1\", $6, $7\n";
-    my $tmp_ora_errmsg=sprintf($print_ora_errmsg, "PLS", $6, substr($7, 1, length($7) - 2));
-    $map_deps{$1} = [$2, $3, $4, $5, $5, "$1", $6, $tmp_ora_errmsg, $tmp_ora_errmsg, $tmp_ora_errmsg, $tmp_ora_errmsg];
-    $map{$1} = [$2, $3, $4, $5, $5, "$1", $6, $tmp_ora_errmsg, $tmp_ora_errmsg, $tmp_ora_errmsg, $tmp_ora_errmsg];
-    $last_errno = $2 if ($2 < $last_errno);
-    $error_code = $2;
-    $sqlstate = $4;
-    $error_msg = $5;
-  } elsif (/^DEFINE_PLS_ERROR_EXT_DEP\(([^,]+),\s*([^,]*),\s*([^,]*),\s*([^,]*),\s*("[^"]*")\s*,\s*("[^"]*")\s*,\s*([^,]*),\s*("[^"]*")\s*,\s*("[^"]*")/) {
-    ++$error_count;
-    #print "\"$1\", $1, $2, $3, $4, $5, $6, $7, $8, $9\n";
-    #print "\"$1\", $7, $8, $9\n";
-    my $tmp_ora_errmsg=sprintf($print_ora_errmsg, "PLS", $7, substr($8, 1, length($8) - 2));
-    my $tmp_ora_user_errmsg=sprintf($print_ora_errmsg, "PLS", $7, substr($9, 1, length($9) - 2));
-    $map_deps{$1} = [$2, $3, $4, $5, $6, "$1", $7, $tmp_ora_errmsg, $tmp_ora_user_errmsg, $tmp_ora_errmsg, $tmp_ora_user_errmsg];
-    $map{$1} = [$2, $3, $4, $5, $6, "$1", $7, $tmp_ora_errmsg, $tmp_ora_user_errmsg, $tmp_ora_errmsg, $tmp_ora_user_errmsg];
-    $last_errno = $2 if ($2 < $last_errno);
-    $error_code = $2;
-    $sqlstate = $4;
-    $error_msg = $5;
-  } elsif (/^DEFINE_ORACLE_ERROR_V2_EXT_DEP\(([^,]+),\s*([^,]*),\s*([^,]*),\s*([^,]*),\s*("[^"]*")\s*,\s*("[^"]*")\s*,\s*([^,]*),\s*("[^"]*")\s*,\s*("[^"]*")/) {
-    ++$error_count;
-    #print "\"$1\", $1, $2, $3, $4, $5, $6, $7, $8, $9\n";
-    #print "\"$1\", $7, $8, $9\n";
-    my $tmp_ora_errmsg=sprintf("\"%s\"", substr($8, 1, length($8) - 2));
-    my $tmp_ora_user_errmsg=sprintf("\"%s\"", substr($9, 1, length($9) - 2));
-    $map_deps{$1} = [$2, $3, $4, $5, $6, "$1", $7, $tmp_ora_errmsg, $tmp_ora_user_errmsg, $tmp_ora_errmsg, $tmp_ora_user_errmsg];
-    $map{$1} = [$2, $3, $4, $5, $6, "$1", $7, $tmp_ora_errmsg, $tmp_ora_user_errmsg, $tmp_ora_errmsg, $tmp_ora_user_errmsg];
-    $last_errno = $2 if ($2 < $last_errno);
-    $error_code = $2;
-    $sqlstate = $4;
-    $error_msg = $5;
   }
   if (defined $error_code) {
     print "WARN: undefined SQLSTATE for $1\n" if ($sqlstate eq "\"\"");
@@ -434,25 +197,6 @@ constexpr int OB_ERR_SQL_END = -5999;
   foreach my $oberr (keys %other_map){
     print $fh_header "#define ${oberr}__USER_ERROR_MSG $other_map{$oberr}->[1]\n";
   }
-  print $fh_header "\n\n";
-  for my $oberr (@errors) {
-    print $fh_header "#define ${oberr}__ORA_USER_ERROR_MSG $map{$oberr}->[8]\n";
-    print $fh_header "#define ${oberr}__OBE_USER_ERROR_MSG $map{$oberr}->[10]\n";
-  }
-  foreach my $oberr (keys %other_map){
-    my $ora_errno;
-    if (exists($map{$other_map{$oberr}->[0]})){
-      $ora_errno = $map{$other_map{$oberr}->[0]}->[6];
-    } else {
-      print "Error: error code($other_map{$oberr}->[0]) is not exists\n";
-      exit 1;
-    }
-    my $ora_msg=$other_map{$oberr}->[2];
-    my $tmp_ora_user_errmsg=sprintf($print_ora_errmsg, "ORA", $ora_errno, substr($ora_msg, 1, length($ora_msg) - 2));
-    my $tmp_obe_user_errmsg=sprintf($print_ora_errmsg, "OBE", $ora_errno, substr($ora_msg, 1, length($ora_msg) - 2));
-    print $fh_header "#define ${oberr}__ORA_USER_ERROR_MSG $tmp_ora_user_errmsg\n";
-    print $fh_header "#define ${oberr}__OBE_USER_ERROR_MSG $tmp_obe_user_errmsg\n";
-  }
 
   print $fh_header "\nextern int g_all_ob_errnos[${\(scalar @errnos)}];";
 
@@ -467,18 +211,6 @@ constexpr int OB_ERR_SQL_END = -5999;
   const char *ob_sqlstate(const int oberr);
   const char *ob_strerror(const int oberr);
   const char *ob_str_user_error(const int oberr);
-
-  int ob_oracle_errno(const int oberr);
-  int ob_oracle_errno_with_check(const int oberr);
-  const char *ob_oracle_strerror(const int oberr);
-  const char *ob_oracle_str_user_error(const int oberr);
-
-#ifndef __ERROR_CODE_PARSER_
-  int get_ob_errno_from_oracle_errno(const int error_no, const char *error_msg, int &ob_errno);
-#endif
-  int ob_errpkt_errno(const int oberr, const bool is_oracle_mode);
-  const char *ob_errpkt_strerror(const int oberr, const bool is_oracle_mode);
-  const char *ob_errpkt_str_user_error(const int oberr, const bool is_oracle_mode);
 
 
 } // end namespace common
@@ -524,9 +256,6 @@ for my $oberr (@errors_deps) {
 }
 
 print $fh_header_dep '
-constexpr int OB_MAX_RAISE_APPLICATION_ERROR         = -20000;
-constexpr int OB_MIN_RAISE_APPLICATION_ERROR         = -20999;
-
 } // common
 using namespace common; // maybe someone can fix
 } // oceanbase
@@ -586,11 +315,6 @@ struct _error {
     const char *sqlstate;
     const char *str_error;
     const char *str_user_error;
-    int         oracle_errno;
-    const char *oracle_str_error;
-    const char *oracle_str_user_error;
-    const char *ob_str_error;
-    const char *ob_str_user_error;
 };
 static _error _error_default;
 static _error const *_errors[OB_MAX_ERROR_CODE] = {NULL};
@@ -600,17 +324,12 @@ for my $oberr (@errors) {
   if (0 > $map{$oberr}->[0]) {
     my $err = "static const _error _error_$oberr = {
       .error_name            = \"$map{$oberr}->[5]\",
-      .error_cause           = $map{$oberr}->[11],
-      .error_solution        = $map{$oberr}->[12],
+      .error_cause           = $map{$oberr}->[6],
+      .error_solution        = $map{$oberr}->[7],
       .mysql_errno           = $map{$oberr}->[1],
       .sqlstate              = $map{$oberr}->[2],
       .str_error             = $map{$oberr}->[3],
-      .str_user_error        = $map{$oberr}->[4],
-      .oracle_errno          = $map{$oberr}->[6],
-      .oracle_str_error      = $map{$oberr}->[7],
-      .oracle_str_user_error = $map{$oberr}->[8],
-      .ob_str_error          = $map{$oberr}->[9],
-      .ob_str_user_error     = $map{$oberr}->[10]
+      .str_user_error        = $map{$oberr}->[4]
 };\n";
   print $fh_cpp $err;
   }
@@ -641,19 +360,9 @@ inline const _error *get_error(int index)
   return _errors[index];
 }
 
-int get_oracle_errno(int index)
-{
-  return get_error(index)->oracle_errno;
-}
-
 int get_mysql_errno(int index)
 {
   return get_error(index)->mysql_errno;
-}
-
-const char* get_oracle_str_error(int index)
-{
-  return get_error(index)->oracle_str_error;
 }
 
 const char* get_mysql_str_error(int index)
@@ -761,73 +470,7 @@ print $fh_cpp '
     }
     return ret;
   }
-  const char *ob_oracle_strerror(const int err)
-  {
-    const char *ret = "Unknown error";
-    if (OB_LIKELY(0 >= err && err > -OB_MAX_ERROR_CODE)) {
-      if (!g_enable_ob_error_msg_style) {
-        ret = get_error(-err)->oracle_str_error;
-      } else {
-        ret = get_error(-err)->ob_str_error;
-      }
-      if (OB_UNLIKELY(NULL == ret || \'\0\' == ret[0]))
-      {
-        ret = "Unknown Error";
-      }
-    }
-    return ret;
-  }
-  const char *ob_oracle_str_user_error(const int err)
-  {
-    const char *ret = NULL;
-    if (OB_LIKELY(0 >= err && err > -OB_MAX_ERROR_CODE)) {
-      if (!g_enable_ob_error_msg_style) {
-        ret = get_error(-err)->oracle_str_user_error;
-      } else {
-        ret = get_error(-err)->ob_str_user_error;
-      }
-      if (OB_UNLIKELY(NULL == ret || \'\0\' == ret[0])) {
-        ret = NULL;
-      }
-    }
-    return ret;
-  }
-  int ob_oracle_errno(const int err)
-  {
-    int ret = -1;
-    if (OB_ERR_PROXY_REROUTE == err) {
-      // Oracle Mode and MySQL mode should return same errcode for reroute sql
-      // thus we make the specialization here
-      ret = -1;
-    } else if (err >= OB_MIN_RAISE_APPLICATION_ERROR && err <= OB_MAX_RAISE_APPLICATION_ERROR) {
-      ret = err; // PL/SQL Raise Application Error
-    } else if (OB_LIKELY(0 >= err && err > -OB_MAX_ERROR_CODE)) {
-      ret = get_error(-err)->oracle_errno;
-    }
-    return ret;
-  }
-  int ob_oracle_errno_with_check(const int err)
-  {
-    int ret = ob_oracle_errno(err);
-    if (ret < 0) {
-      ret = -err;
-    }
-    return ret;
-  }
-  int ob_errpkt_errno(const int err, const bool is_oracle_mode)
-  {
-    return (is_oracle_mode ? ob_oracle_errno_with_check(err) : ob_mysql_errno_with_check(err));
-  }
-  const char *ob_errpkt_strerror(const int err, const bool is_oracle_mode)
-  {
-    return (is_oracle_mode ? ob_oracle_strerror(err) : ob_strerror(err));
-  }
-  const char *ob_errpkt_str_user_error(const int err, const bool is_oracle_mode)
-  {
-    return (is_oracle_mode ? ob_oracle_str_user_error(err) : ob_str_user_error(err));
-  }
 
 } // end namespace common
 } // end namespace oceanbase
 ';
-
