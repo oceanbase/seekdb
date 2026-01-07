@@ -150,7 +150,9 @@ int ObDDLTableMergeDag::init_tablet_ctx()
     /* only sn major merge need to load storage schema from user data
      * otherwise, load from cur tablet
     */
-    if (ddl_param_.is_commit_ && !is_cs_replica_for_full_direct_load &&
+    if (OB_FAIL(tablet_ctx_->merge_ctx_.init(ddl_param_.direct_load_type_))) {
+      LOG_WARN("failed to get merge helper", K(ret));
+    } else if (ddl_param_.is_commit_ && !is_cs_replica_for_full_direct_load &&
                (ddl_param_.direct_load_type_ == SN_IDEM_DIRECT_LOAD_DDL || ddl_param_.direct_load_type_ == SN_IDEM_DIRECT_LOAD_DATA)) {
       tablet_ctx_->tablet_param_.storage_schema_ = &ddl_param_.user_data_.storage_schema_;
     } else if (is_incremental_major_direct_load(ddl_param_.direct_load_type_)) {
@@ -159,8 +161,6 @@ int ObDDLTableMergeDag::init_tablet_ctx()
     } else {
       if (OB_FAIL(tablet_handle.get_obj()->load_storage_schema(arena_, tablet_ctx_->tablet_param_.storage_schema_))) {
         LOG_WARN("failed to load storage schema", K(ret));
-      } else if (OB_FAIL(tablet_ctx_->merge_ctx_.init(ddl_param_.direct_load_type_))) {
-        LOG_WARN("failed to get merge helper", K(ret));
       }
     }
   }
