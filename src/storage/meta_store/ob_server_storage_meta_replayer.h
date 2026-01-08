@@ -31,14 +31,12 @@ class ObServerStorageMetaReplayer
 public:
   ObServerStorageMetaReplayer()
     : is_inited_(false),
-      is_shared_storage_(false),
       persister_(nullptr),
       ckpt_slog_handler_(nullptr) {}
   ObServerStorageMetaReplayer(const ObServerStorageMetaReplayer &) = delete;
   ObServerStorageMetaReplayer &operator=(const ObServerStorageMetaReplayer &) = delete;
       
-  int init(const bool is_share_storage,
-           ObServerStorageMetaPersister &persister,
+  int init(ObServerStorageMetaPersister &persister,
            ObServerCheckpointSlogHandler &ckpt_slog_handler);
   int start_replay();
   void destroy();
@@ -52,15 +50,10 @@ private:
   static int finish_storage_meta_replay_();
   static int online_ls_();
 
-#ifdef OB_BUILD_SHARED_STORAGE
-  int ss_start_replay_(TENANT_META_MAP &tenant_meta_map) const;
-  int ss_read_tenant_super_block_(ObArenaAllocator &allocator, const ObTenantItem &item, ObTenantSuperBlock &super_block) const;
-  int ss_read_tenant_unit_(ObArenaAllocator &allocator, const ObTenantItem &item, share::ObUnitInfoGetter::ObTenantConfig &unit) const;
-#endif 
+
 
 private:
   bool is_inited_;
-  bool is_shared_storage_;
   ObServerStorageMetaPersister *persister_;
   ObServerCheckpointSlogHandler *ckpt_slog_handler_;
 };

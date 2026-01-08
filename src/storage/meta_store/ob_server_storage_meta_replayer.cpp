@@ -21,8 +21,7 @@
 #include "storage/slog_ckpt/ob_server_checkpoint_slog_handler.h"
 #include "storage/tx_storage/ob_ls_service.h"
 #include "storage/ls/ob_ls.h"
-#ifdef OB_BUILD_SHARED_STORAGE
-#endif
+
 
 namespace oceanbase
 {
@@ -30,7 +29,6 @@ using namespace omt;
 namespace storage
 {
 int ObServerStorageMetaReplayer::init(
-    const bool is_shared_storage,
     ObServerStorageMetaPersister &persister,
     ObServerCheckpointSlogHandler &ckpt_slog_handler)
 {
@@ -39,7 +37,6 @@ int ObServerStorageMetaReplayer::init(
     ret = OB_INIT_TWICE;
     LOG_WARN("ObServerStorageMetaReplayer has inited", K(ret));
   } else {
-    is_shared_storage_ = is_shared_storage; 
     persister_ = &persister;
     ckpt_slog_handler_ = &ckpt_slog_handler;
     is_inited_ = true;
@@ -58,23 +55,14 @@ int ObServerStorageMetaReplayer::start_replay()
     LOG_WARN("not init", K(ret));
   } else if (OB_FAIL(tenant_meta_map.create(MAX_TENANT_CNT, MEM_LABEL, MEM_LABEL))) {
     LOG_WARN("create tenant meta map fail", K(ret));
-  } else if (!is_shared_storage_) {
-    if (OB_FAIL(ckpt_slog_handler_->start_replay(tenant_meta_map))) {
-      LOG_WARN("fail to start replay", K(ret));
-    } else if (OB_FAIL(apply_replay_result_(tenant_meta_map))) {
-      LOG_WARN("fail to apply repaly result", K(ret));
-    } else if (OB_FAIL(ckpt_slog_handler_->do_post_replay_work())) {
-      LOG_WARN("fail to do post repaly work", K(ret));
-    }
-  } else {
-#ifdef OB_BUILD_SHARED_STORAGE
-    if (OB_FAIL(ss_start_replay_(tenant_meta_map))) {
-      LOG_WARN("fail to start replay", K(ret));
-    } else if (OB_FAIL(apply_replay_result_(tenant_meta_map))) {
-      LOG_WARN("fail to apply repaly result", K(ret));
-    }
-#endif 
+  } else if (OB_FAIL(ckpt_slog_handler_->start_replay(tenant_meta_map))) {
+    LOG_WARN("fail to start replay", K(ret));
+  } else if (OB_FAIL(apply_replay_result_(tenant_meta_map))) {
+    LOG_WARN("fail to apply repaly result", K(ret));
+  } else if (OB_FAIL(ckpt_slog_handler_->do_post_replay_work())) {
+    LOG_WARN("fail to do post repaly work", K(ret));
   }
+
 
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(finish_storage_meta_replay_())) {
@@ -87,7 +75,6 @@ int ObServerStorageMetaReplayer::start_replay()
 
 void ObServerStorageMetaReplayer::destroy()
 {
-  is_shared_storage_ = false;
   persister_ = nullptr;
   ckpt_slog_handler_ = nullptr;
   is_inited_ = false;
@@ -160,39 +147,12 @@ int ObServerStorageMetaReplayer::handle_tenant_create_commit_(const ObTenantMeta
 {
   int ret = OB_SUCCESS;
   const uint64_t tenant_id = tenant_meta.unit_.tenant_id_;
-#ifdef OB_BUILD_SHARED_STORAGE
-  if (OB_FAIL(ret)) {
-  } else if (GCTX.is_shared_storage_mode()) {
-    // when restart observer, need update_hidden_sys_data_disk_config_size value from sys_tenant_unit_meta
-    if (OB_SYS_TENANT_ID == tenant_id) {
-      const int64_t hidden_sys_data_disk_config_size = tenant_meta.unit_.hidden_sys_data_disk_config_size_;
-      if (OB_FAIL(OB_SERVER_DISK_SPACE_MGR.update_hidden_sys_data_disk_config_size(hidden_sys_data_disk_config_size))) {
-        LOG_WARN("fail to update default hidden sys data_disk_size", KR(ret), K(hidden_sys_data_disk_config_size));
-      }
-    }
-  }
-#endif
+
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(GCTX.omt_->create_tenant(tenant_meta, false/* write_slog */))) {
     LOG_ERROR("fail to replay create tenant", K(ret), K(tenant_meta));
   }
-#ifdef OB_BUILD_SHARED_STORAGE
-  if (OB_FAIL(ret)) {
-  } else if (GCTX.is_shared_storage_mode()) {
-    MTL_SWITCH(tenant_id) {
-      // for macro check in observer start
-      MTL(checkpoint::ObTabletGCService*)->set_observer_start_macro_block_id_trigger();
-    }
-    // when restart observer, if current sys tenant is hidden, hidden_sys_data_disk_size is hidden_sys_data_disk_config_size
-    const bool is_hidden = tenant_meta.super_block_.is_hidden_;
-    if ((OB_SYS_TENANT_ID == tenant_id) && is_hidden) {
-      const int64_t hidden_sys_data_disk_size = tenant_meta.unit_.config_.data_disk_size();
-      if (OB_FAIL(OB_SERVER_DISK_SPACE_MGR.update_hidden_sys_data_disk_size(hidden_sys_data_disk_size))) {
-        LOG_WARN("fail to update hidden sys data disk size", KR(ret), K(hidden_sys_data_disk_size));
-      }
-    }
-  }
-#endif
+
 
   return ret;
 }
@@ -277,69 +237,6 @@ int ObServerStorageMetaReplayer::online_ls_()
   FLOG_INFO("enable replay clog", K(ret));
   return ret;
 }
-
-#ifdef OB_BUILD_SHARED_STORAGE
-int ObServerStorageMetaReplayer::ss_start_replay_(TENANT_META_MAP &tenant_meta_map) const
-{
-  int ret = OB_SUCCESS;
-  const ObServerSuperBlock &super_block = OB_STORAGE_OBJECT_MGR.get_server_super_block();
-  ObArenaAllocator allocator("TenantReplay");
-
-  for (int64_t i = 0; OB_SUCC(ret) && i < super_block.body_.tenant_cnt_; i++) {
-    ObTenantMeta tenant_meta;
-    const ObTenantItem &item = super_block.body_.tenant_item_arr_[i]; 
-    tenant_meta.epoch_ = item.epoch_;
-    tenant_meta.create_status_ = item.status_;
-    if (ObTenantCreateStatus::CREATED == tenant_meta.create_status_) {
-      if (OB_FAIL(ss_read_tenant_super_block_(allocator, item, tenant_meta.super_block_))) {
-        LOG_WARN("fail to read tenant super block", K(ret), K(item));
-      } else if (OB_FAIL(ss_read_tenant_unit_(allocator, item, tenant_meta.unit_))) {
-        LOG_WARN("fail to read tenant unit", K(ret), K(item));
-      }
-    }
-    if (OB_FAIL(ret)) {
-    } else if (ObTenantCreateStatus::CREATE_ABORT == item.status_ || 
-               ObTenantCreateStatus::DELETED == item.status_ ) {
-      // do nothing
-    } else if (OB_FAIL(tenant_meta_map.set_refactored(item.tenant_id_, tenant_meta))) {
-      LOG_WARN("fail to insert tenant meta", K(ret), K(item));
-    }
-    allocator.reuse();
-  }
-  return ret;
-}
-
-int ObServerStorageMetaReplayer::ss_read_tenant_super_block_(
-    ObArenaAllocator &allocator, const ObTenantItem &item, ObTenantSuperBlock &super_block) const
-{
-  int ret = OB_SUCCESS;
-  ObStorageObjectOpt opt;
-  opt.set_ss_tenant_level_meta_object_opt(
-      ObStorageObjectType::TENANT_SUPER_BLOCK, item.tenant_id_, item.epoch_);
-
-  if (OB_FAIL(ObStorageMetaIOUtil::read_storage_meta_object(
-      opt, allocator, OB_SERVER_TENANT_ID, 0/*ls_epoch*/, super_block))) {
-    LOG_WARN("fail to tenant super block", K(ret));
-  }
-  return ret;
-}
-
-int ObServerStorageMetaReplayer::ss_read_tenant_unit_(
-    ObArenaAllocator &allocator, const ObTenantItem &item, share::ObUnitInfoGetter::ObTenantConfig &unit) const
-{
-  int ret = OB_SUCCESS;
-  ObStorageObjectOpt opt;
-  opt.set_ss_tenant_level_meta_object_opt(
-      ObStorageObjectType::TENANT_UNIT_META, item.tenant_id_, item.epoch_);
-
-  if (OB_FAIL(ObStorageMetaIOUtil::read_storage_meta_object(
-      opt, allocator, OB_SERVER_TENANT_ID, 0/*ls_epoch*/, unit))) {
-    LOG_WARN("fail to tenant super block", K(ret));
-  }
-  return ret;
-}
-
-#endif 
 
 
 } // namespace storage

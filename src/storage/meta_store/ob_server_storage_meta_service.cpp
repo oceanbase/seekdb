@@ -59,7 +59,7 @@ int ObServerStorageMetaService::init(const bool is_shared_storage)
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(persister_.init(is_shared_storage, server_slogger_))) {
     LOG_WARN("fail to init persister", K(ret));
-  } else if (OB_FAIL(replayer_.init(is_shared_storage, persister_, ckpt_slog_handler_))) {
+  } else if (OB_FAIL(replayer_.init(persister_, ckpt_slog_handler_))) {
     LOG_WARN("fail to init replayer", K(ret));
   } else {
     is_shared_storage_ = is_shared_storage; 
