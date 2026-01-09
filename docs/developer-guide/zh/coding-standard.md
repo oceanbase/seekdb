@@ -35,7 +35,7 @@ C代码的实现文件命名为.c，头文件命名为.h，C++代码的实现文
 当然，开发人员也会做一些模块内或者多个模块的集成测试，这些测试代码也放到unittest，但是所在的子目录和文件名不要求和src一一对应。例如，基线存储引擎的集成测试代码放到unittest/storagetest目录中。
 
 ## 2.2 版权信息
-目前（2021-3），observer & obproxy所有源代码文件头中必须使用如下版权信息：
+目前（2021-3），seekdb 所有源代码文件头中必须使用如下版权信息：
 ```cpp
 /*
  * Copyright (c) 2025 OceanBase.
@@ -408,7 +408,7 @@ constexpr double moon_gravitational_acceleration = earth_gravitational_accelerat
 简单将几个static变量的定义由头文件移至cpp文件，头文件改成extern定义，效果还是比较明显：
 binary大小: 2.6G->2.4G ，减少200M
 
-observer初始运行内存：6.3G->5.9G，减少400M
+seekdb初始运行内存：6.3G->5.9G，减少400M
 
 **案例二**
 

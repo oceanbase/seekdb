@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+#define USING_LOG_PREFIX SERVER
+
 #include "observer/ob_command_line_parser.h"
 
 #include <getopt.h>
@@ -33,6 +35,28 @@ namespace oceanbase {
 namespace observer {
 
 const char *COPYRIGHT  = "Copyright (c) 2011-present OceanBase Inc.";
+
+static int get_executable_name(ObSqlString &exe_name)
+{
+  int ret = OB_SUCCESS;
+  char buf[PATH_MAX] = {0};
+  ssize_t len = readlink("/proc/self/exe", buf, sizeof(buf) - 1);
+  if (-1 == len) {
+    ret = OB_ERROR;
+    LOG_WARN("fail to get self exe path", KCSTRING(strerror(errno)));
+  } else {
+    const char *last_slash = strrchr(buf, '/');
+    if (nullptr == last_slash) {
+      last_slash = buf;
+    } else {
+      last_slash++;
+    }
+    if (OB_FAIL(exe_name.assign(last_slash))) {
+      LOG_WARN("fail to assign exe name to `sql string`", K(ret));
+    }
+  }
+  return ret;
+}
 
 /**
  * 命令行选项枚举
@@ -328,9 +352,12 @@ int ObCommandLineParser::parse_args(int argc, char* argv[], ObServerOptions& opt
 
 void ObCommandLineParser::print_help() const
 {
+  ObSqlString exe_name;
+  (void) get_executable_name(exe_name);
+
   MPRINT("%s", COPYRIGHT);
   MPRINT();
-  MPRINT("Usage: observer [OPTIONS]\n");
+  MPRINT("Usage: %s [OPTIONS]\n", exe_name.ptr());
   MPRINT("Options:");
   MPRINT("  --nodaemon                      whether to not run as a daemon");
   MPRINT("  --port, -P <port>               the port, default is 2881");
@@ -361,7 +388,9 @@ void ObCommandLineParser::print_version()
 #else
   const char *extra_flags = "|Sanity";
 #endif
-  MPRINT("observer (%s %s %s)\n", OB_OCEANBASE_NAME, OB_SEEKDB_NAME, PACKAGE_VERSION);
+  ObSqlString exe_name;
+  (void) get_executable_name(exe_name);
+  MPRINT("%s (%s %s %s)\n", exe_name.ptr(), OB_OCEANBASE_NAME, OB_SEEKDB_NAME, PACKAGE_VERSION);
   MPRINT("REVISION: %s", build_version());
   MPRINT("BUILD_BRANCH: %s", build_branch());
   MPRINT("BUILD_TIME: %s %s", build_date(), build_time());

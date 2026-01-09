@@ -30,7 +30,7 @@
 #include "lib/charset/ob_charset.h"
 
 PYBIND11_MODULE(PYTHON_MODEL_NAME, m) {
-    m.doc() = "OceanBase SeekDB";
+    m.doc() = "OceanBase seekdb";
     char embed_version_str[oceanbase::common::OB_SERVER_VERSION_LENGTH];
     oceanbase::common::VersionUtil::print_version_str(embed_version_str, sizeof(embed_version_str), DATA_CURRENT_VERSION);
     m.attr("__version__") = embed_version_str;

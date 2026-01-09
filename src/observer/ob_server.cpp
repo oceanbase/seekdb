@@ -1902,7 +1902,7 @@ int ObServer::init_config(const ObServerOptions &opts)
     LOG_ERROR("failed to load data_version_mgr file", KR(ret));
   } else {
     // set dump path
-    const char *dump_path = "etc/observer.config.bin";
+    const char *dump_path = "etc/seekdb.config.bin";
     char buffer[PATH_MAX];
     ObSqlString abs_dump_path;
     if (getcwd(buffer, sizeof(buffer)) == nullptr) {

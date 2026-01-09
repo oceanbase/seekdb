@@ -12,12 +12,12 @@ This document mainly introduces the system logs of Oceanbase seekdb, including t
 ## System Log Introduction
 
 Similar to common application systems, system logs are one of the important means for Oceanbase developers to investigate problems.
-Oceanbase's system log is stored under the log directory under the observer installation path.
+Oceanbase's system log is stored under the log directory under the seekdb installation path.
 
 
 | log file name  | record information    |
 | ------------------ | ----------------------------- |
-| observer.log       | General logs (warning logs, general query logs, other logs)       |
+| seekdb.log       | General logs (warning logs, general query logs, other logs)       |
 
 ### Log Parameters
 
@@ -45,7 +45,7 @@ If `enable_syslog_recycle = true` and `max_syslog_file_count > 0`, the number of
 The new log files will print a special log at the beginning. The information contains the IP and ports of the current node, version number, and some system information. Refer to `ObLogger::log_new_file_info` for more details.
 
 ```
-[2023-12-26 13:15:58.612579] INFO  New syslog file info: [address: "127.0.0.1:2882", observer version: OceanBase seekdb 1.0.0.0, revision: 101010012023111012-2f6924cd5a576f09d6e7f212fac83f1a15ff531a, sysname: Linux, os release: 3.10.0-327.ali2019.alios7.x86_64, machine: x86_64, tz GMT offset: 08:00]
+[2023-12-26 13:15:58.612579] INFO  New syslog file info: [address: "127.0.0.1:2882", seekdb version: OceanBase seekdb 1.0.0.0, revision: 101010012023111012-2f6924cd5a576f09d6e7f212fac83f1a15ff531a, sysname: Linux, os release: 3.10.0-327.ali2019.alios7.x86_64, machine: x86_64, tz GMT offset: 08:00]
 ```
 
 ## Log Level
@@ -57,8 +57,8 @@ Similar to the common system, Oceanbase also provides log macro to print differe
 | DEBUG | LOG_DEBUG | Developers debug logs |
 | TRACE | LOG_TRACE | Incident tracking logs are usually viewed by developers |
 | INFO  | LOG_INFO  | System state change log |
-| WARN  | LOG_DBA_WARN  | For DBA. observer can provide services, but the behavior not meet expectations |
-| ERROR | LOG_DBA_ERROR | For DBA. observer cannot provide services, such as the disk full of monitoring ports occupied. Need DBA intervention to restore service |
+| WARN  | LOG_DBA_WARN  | For DBA. seekdb can provide services, but the behavior not meet expectations |
+| ERROR | LOG_DBA_ERROR | For DBA. seekdb cannot provide services, such as the disk full of monitoring ports occupied. Need DBA intervention to restore service |
 | WDIAG | LOG_WARN | Warning Diagnosis. Assisting the diagnostic information of fault investigation, and the errors in the expected expectations, if the function returns failure. The level is the same as WARN |
 | EDIAG | LOG_ERROR | Error Diagnosis. Assisting the diagnostic information of faulty investigation, unexpected logical errors, such as the function parameters do not meet the expected, are usually Oceanbase program bugs. The level is the same as ERROR |
 

@@ -19,17 +19,17 @@ Debugging oceanbase is similar to debugging other C++ programs, you can use gdb 
 
 1. find the process id
 ```bash
-ps -ef | grep observer
+ps -ef | grep seekdb
 ```
 
 or
 ```bash
-pidof observer
+pidof seekdb
 ```
 
 2. attach the process
 ```bash
-gdb observer <pid>
+gdb seekdb <pid>
 ```
 
 Then you can set breakpoint, print variable, etc. Please refer to [gdb manual](https://sourceware.org/gdb/current/onlinedocs/gdb.html/) for more information.
@@ -45,10 +45,10 @@ Below are some tips.
 
 You can get the package revision by the command below.
 ```bash
-# in the observer runtime path
-clusters/local/bin [83] $ ./observer -V
-./observer -V
-observer (OceanBase seekdb 1.0.0.0)
+# in the seekdb runtime path
+clusters/local/bin [83] $ ./seekdb -V
+./seekdb -V
+seekdb (OceanBase seekdb 1.0.0.0)
 
 REVISION: 102000042023061314-43bca414d5065272a730c92a645c3e25768c1d05
 BUILD_BRANCH: HEAD
@@ -61,22 +61,17 @@ Copyright (c) 2011-2022 OceanBase Inc.
 
 If you see the error below
 ```
-./observer -V
-./observer: error while loading shared libraries: libmariadb.so.3: cannot open shared object file: No such file or directory
+./seekdb -V
+./seekdb: error while loading shared libraries: libmariadb.so.3: cannot open shared object file: No such file or directory
 ```
 
 You can run command below to get the revision
 ```bash
-clusters/local/bin [83] $ LD_LIBRARY_PATH=../lib:$LD_LIBRARY_PATH ./observer -V
-./observer -V
-observer (OceanBase seekdb 1.0.0.0)
+clusters/local/bin [83] $ LD_LIBRARY_PATH=../lib:$LD_LIBRARY_PATH ./seekdb -V
+./seekdb -V
+seekdb (OceanBase seekdb 1.0.0.0)
 
 REVISION: 102000042023061314-43bca414d5065272a730c92a645c3e25768c1d05
-BUILD_BRANCH: HEAD
-BUILD_TIME: Nov 1 2025 14:26:23
-BUILD_FLAGS: RelWithDebInfo
-BUILD_INFO:
-
 Copyright (c) 2011-2022 OceanBase Inc.
 ```
 
@@ -114,39 +109,39 @@ Then you can get this.
         └── debug
             ├── .build-id
             │   └── ee
-            │       ├── f87ee72d228069aab083d8e6d2fa2fcb5c03f2 -> ../../../../../home/admin/oceanbase/bin/observer
-            │       └── f87ee72d228069aab083d8e6d2fa2fcb5c03f2.debug -> ../../home/admin/oceanbase/bin/observer.debug
+            │       ├── f87ee72d228069aab083d8e6d2fa2fcb5c03f2 -> ../../../../../home/admin/oceanbase/bin/seekdb
+            │       └── f87ee72d228069aab083d8e6d2fa2fcb5c03f2.debug -> ../../home/admin/oceanbase/bin/seekdb.debug
             └── home
                 └── admin
                     └── oceanbase
                         └── bin
-                            └── observer.debug
+                            └── seekdb.debug
 ```
 
-`observer.debug` is the debug-info package we need and `f87ee72d228069aab083d8e6d2fa2fcb5c03f2.debug` is a symbolic link.
+`seekdb.debug` is the debug-info package we need and `f87ee72d228069aab083d8e6d2fa2fcb5c03f2.debug` is a symbolic link.
 
 **Debug oceanbase with debug-info package**
 
 Now, you can attach a process or a coredump file with gdb with commands below.
 ```bash
 # attach a process
-gdb ./observer `pidof observer`
+gdb ./seekdb `pidof seekdb`
 ```
 
 or
 
 ```bash
 # open a coredump file
-gdb ./observer <coredump file name>
+gdb ./seekdb <coredump file name>
 ```
 
 Usually, you will get this message.
 
 ```
 Type "apropos word" to search for commands related to "word"...
-Reading symbols from clusters/local/bin/observer...
-(No debugging symbols found in clusters/local/bin/observer)
-Attaching to program: clusters/local/bin/observer, process 57296
+Reading symbols from clusters/local/bin/seekdb...
+(No debugging symbols found in clusters/local/bin/seekdb)
+Attaching to program: clusters/local/bin/seekdb, process 57296
 ```
 
 This means that there are no debugging symbols.
@@ -168,8 +163,8 @@ We cannot get the source code file name or function parameters information.
 Let's load the debug-info package.
 
 ```bash
-(gdb) symbol-file usr/lib/debug/home/admin/oceanbase/bin/observer.debug
-Reading symbols from usr/lib/debug/home/admin/oceanbase/bin/observer.debug...
+(gdb) symbol-file usr/lib/debug/home/admin/oceanbase/bin/seekdb.debug
+Reading symbols from usr/lib/debug/home/admin/oceanbase/bin/seekdb.debug...
 ```
 
 > It's better to use the full path of the debug info file.
@@ -254,7 +249,7 @@ lbt()="0x14371609 0xe4ce783 0x54fd9b6 0x54ebb1b 0x905e62e 0x92a4dc8 0x905df11 0x
 
 Then you can use the command below to get the call stack information:
 ```bash
-addr2line -pCfe ./bin/observer 0x14371609 0xe4ce783 0x54fd9b6 0x54ebb1b 0x905e62e 0x92a4dc8 0x905df11 0x905dc94 0x13d2278e 0x13d22be3 0x6b10b81 0x6b0f0f7 0x62e2491 0x10ff6409 0x1475f87a 0x10ff6428 0x1475f1c2 0x1476ba83 0x14767fb5 0x14767ae8 0x7ff340250e25 0x7ff33fd0ff1d
+addr2line -pCfe ./bin/seekdb 0x14371609 0xe4ce783 0x54fd9b6 0x54ebb1b 0x905e62e 0x92a4dc8 0x905df11 0x905dc94 0x13d2278e 0x13d22be3 0x6b10b81 0x6b0f0f7 0x62e2491 0x10ff6409 0x1475f87a 0x10ff6428 0x1475f1c2 0x1476ba83 0x14767fb5 0x14767ae8 0x7ff340250e25 0x7ff33fd0ff1d
 ```
 
 I got this:

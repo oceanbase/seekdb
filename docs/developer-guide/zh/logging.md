@@ -13,11 +13,11 @@ title: OceanBase seekdb 系统日志介绍
 
 与常见的应用系统类似，系统日志是seekdb开发人员排查问题时常用的重要手段之一。
 
-seekdb 的系统日志存储在observero工作目录下的log目录下面。
+seekdb 的系统日志存储在工作目录下的log目录下面。
 
 | 日志文件名称 | 记录的信息 |
 | ------------------ | ----------------------------- |
-| observer.log       | 一般日志（警告日志、一般查询日志、其他日志） General logs (warning logs, general query logs, other logs)       |
+| seekdb.log       | 一般日志（警告日志、一般查询日志、其他日志） General logs (warning logs, general query logs, other logs)       |
 
 ### 日志参数
 
@@ -48,7 +48,7 @@ seekdb的日志可以配置文件个数上限，以防止日志文件占用过�
 新日志文件都会在开头打印一个特殊日志，信息包含当前节点的IP和端口、版本号、以及一些系统信息，参考 `ObLogger::log_new_file_info`。
 
 ```
-[2023-12-26 13:15:58.612579] INFO  New syslog file info: [address: "127.0.0.1:2882", observer version: OceanBase seekdb 1.0.0.0, revision: 101010012023111012-2f6924cd5a576f09d6e7f212fac83f1a15ff531a, sysname: Linux, os release: 3.10.0-327.ali2019.alios7.x86_64, machine: x86_64, tz GMT offset: 08:00]
+[2023-12-26 13:15:58.612579] INFO  New syslog file info: [address: "127.0.0.1:2882", seekdb version: OceanBase SeekDB 1.0.0.0, revision: 101010012023111012-2f6924cd5a576f09d6e7f212fac83f1a15ff531a, sysname: Linux, os release: 3.10.0-327.ali2019.alios7.x86_64, machine: x86_64, tz GMT offset: 08:00]
 ```
 
 ## 日志级别
@@ -60,8 +60,8 @@ seekdb的日志可以配置文件个数上限，以防止日志文件占用过�
 | DEBUG | LOG_DEBUG | 开发人员调试日志 |
 | TRACE | LOG_TRACE | 事件跟踪日志，通常也是开发人员查看 |
 | INFO  | LOG_INFO  | 系统状态变化日志 |
-| WARN  | LOG_DBA_WARN  | 面向DBA的日志。出现非预期场景，observer能提供服务，但行为可能不符合预期，比如我们的写入限流 |
-| ERROR | LOG_DBA_ERROR | 面向DBA的日志。observer不能提供正常服务的异常，如磁盘满监听端口被占用等。也可以是我们产品化后的一些内部检查报错，如我们的4377(dml defensive check error), 4103 (data checksum error)等，需DBA干预恢复 |
+| WARN  | LOG_DBA_WARN  | 面向DBA的日志。出现非预期场景，seekdb能提供服务，但行为可能不符合预期，比如我们的写入限流 |
+| ERROR | LOG_DBA_ERROR | 面向DBA的日志。seekdb不能提供正常服务的异常，如磁盘满监听端口被占用等。也可以是我们产品化后的一些内部检查报错，如我们的4377(dml defensive check error), 4103 (data checksum error)等，需DBA干预恢复 |
 | WDIAG | LOG_WARN | Warning Diagnosis, 协助故障排查的诊断信息，预期内的错误，如函数返回失败。级别与WARN相同 |
 | EDIAG | LOG_ERROR | Error Diagnosis, 协助故障排查的诊断信息，非预期的逻辑错误，如函数参数不符合预期等，通常为seekdb程序BUG。级别与ERROR相同 |
 

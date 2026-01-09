@@ -467,9 +467,9 @@ cd seekdb
 bash build.sh debug --init --make
 mkdir ~/seekdb
 mkdir ~/seekdb/bin
-cp build_debug/src/observer/observer ~/seekdb/bin
+cp build_debug/src/observer/seekdb ~/seekdb/bin
 cd ~/seekdb
-./bin/observer
+./bin/seekdb
 ```
 
 

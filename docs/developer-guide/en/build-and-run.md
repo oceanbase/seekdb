@@ -31,7 +31,7 @@ bash build.sh release --init --make
 
 ## Run
 
-Now that you built the `observer` binary, you can deploy a seekdb instance with the `obd.sh` utility:
+Now that you built the `seekdb` binary, you can deploy a seekdb instance with the `obd.sh` utility:
 
 ```shell
 ./tools/deploy/obd.sh prepare -p /tmp/obtest

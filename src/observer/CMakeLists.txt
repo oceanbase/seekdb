@@ -717,6 +717,14 @@ else()
     DEPENDS fake_observer)
 endif()
 
+add_custom_target(seekdb ALL
+  DEPENDS observer
+  COMMAND ${CMAKE_COMMAND} -E copy
+      ${CMAKE_BINARY_DIR}/src/observer/observer
+      ${CMAKE_BINARY_DIR}/src/observer/seekdb
+  COMMENT "Creating seekdb from observer"
+)
+
 configure_file(../share/ob_version.cpp.in ob_version.cpp)
 
 add_subdirectory(embed)

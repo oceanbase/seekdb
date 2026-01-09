@@ -159,7 +159,7 @@ private:
   // 1. we only insert new entry into the hashmap, never delete or overwrite existing entry
   // 2. before insert new entry, we acquire a global lock in ObTenantDataVersionMgr
   typedef hash::ObHashMap<uint64_t, ObTenantDataVersion *, hash::NoPthreadDefendMode> ObTenantDataVersionMap;
-  static constexpr const char *TENANT_DATA_VERSION_FILE_PATH = "etc/observer.data_version.bin";
+  static constexpr const char *TENANT_DATA_VERSION_FILE_PATH = "etc/seekdb.data_version.bin";
   static constexpr int64_t TENANT_DATA_VERSION_FILE_MAX_SIZE = 1 << 26; // 64MB
   // The number of tenant won't be too large, so 1024 buckets should be enough
   static constexpr int64_t TENANT_DATA_VERSION_BUCKET_NUM = 1024;

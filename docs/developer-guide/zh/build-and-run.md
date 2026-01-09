@@ -37,7 +37,7 @@ Debug 模式包含调试信息，便于开发和调试：
 bash build.sh debug --init --make
 ```
 
-编译完成后，二进制文件位于 `build_debug/bin/observer`。
+编译完成后，二进制文件位于 `build_debug/bin/observer/seekdb`。
 
 ### Release 模式
 
@@ -47,7 +47,7 @@ Release 模式优化了性能，适合生产环境：
 bash build.sh release --init --make
 ```
 
-编译完成后，二进制文件位于 `build_release/bin/observer`。
+编译完成后，二进制文件位于 `build_release/bin/observer/seekdb`。
 
 > **提示**：首次编译可能需要较长时间，请耐心等待。编译过程中如果遇到问题，请检查工具链是否正确安装。
 
