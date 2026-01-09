@@ -34,12 +34,15 @@ class ObCheckPointService
 public:
   ObCheckPointService()
     : is_inited_(false),
+      prev_advance_ckpt_task_ts_(0),
       checkpoint_timer_(),
       traversal_flush_timer_(),
       check_clog_disk_usage_timer_(),
+      advance_ckpt_timer_(),
       checkpoint_task_(),
       traversal_flush_task_(),
-      check_clog_disk_usage_task_(*this)
+      check_clog_disk_usage_task_(*this),
+      advance_ckpt_task_()
   {}
 
   static const int64_t NEED_FLUSH_CLOG_DISK_PERCENT = 30;
@@ -56,6 +59,8 @@ public:
   int add_ls_freeze_task(
       ObDataCheckpoint *data_checkpoint,
       share::SCN rec_scn);
+  void set_prev_advance_ckpt_task_ts(int64_t rhs) { prev_advance_ckpt_task_ts_ = rhs; }
+  int64_t prev_advance_ckpt_task_ts() { return prev_advance_ckpt_task_ts_; }
 private:
   bool is_inited_;
 
@@ -67,6 +72,7 @@ private:
   static int64_t CHECK_CLOG_USAGE_INTERVAL;
   static int64_t CHECKPOINT_INTERVAL;
   static int64_t TRAVERSAL_FLUSH_INTERVAL;
+  static int64_t TRY_ADVANCE_CKPT_INTERVAL;
   class ObCheckpointTask : public common::ObTimerTask
   {
   public:
@@ -96,12 +102,20 @@ private:
       ObCheckPointService &checkpoint_service_;
   };
 
+  class ObAdvanceCkptTask : public common::ObTimerTask {
+  public:
+    virtual void runTimerTask() override;
+  };
+
+  int64_t prev_advance_ckpt_task_ts_;
   common::ObTimer checkpoint_timer_;
   common::ObTimer traversal_flush_timer_;
   common::ObTimer check_clog_disk_usage_timer_;
+  common::ObTimer advance_ckpt_timer_;
   ObCheckpointTask checkpoint_task_;
   ObTraversalFlushTask traversal_flush_task_;
   ObCheckClogDiskUsageTask check_clog_disk_usage_task_;
+  ObAdvanceCkptTask advance_ckpt_task_;
 };
 
 } // checkpoint

@@ -168,6 +168,7 @@ max_stale_time_for_weak_consistency
 max_string_print_length
 max_syslog_file_count
 memory_chunk_cache_size
+memory_hard_limit
 memory_limit
 memory_limit_percentage
 memstore_limit_percentage
@@ -303,6 +304,7 @@ workers_per_cpu_quota
 writing_throttling_maximum_duration
 writing_throttling_trigger_percentage
 zone
+_advance_checkpoint_interval
 _advance_checkpoint_timeout
 _allow_skip_replay_redo_after_detete_tablet
 _auto_broadcast_tablet_location_rate_limit

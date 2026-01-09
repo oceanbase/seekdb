@@ -301,7 +301,7 @@ private:
 
   static const int64_t RECYCLE_DELAY_US = 30 * 1000 * 1000; // 30s
   static const int64_t INSPECT_DELAY_US = 1  * 1000 * 1000; // 1s
-  static const int64_t AUTO_EXTEND_LEAST_FREE_BLOCK_CNT = 512; // 1G
+  static const int64_t AUTO_EXTEND_LEAST_FREE_BLOCK_CNT = 8; // 16M
 
   typedef common::ObLinearHashMap<MacroBlockId, BlockInfo, common::UniqueMemMgrTag> BlockMap;
   typedef common::ObLinearHashMap<MacroBlockId, bool> MacroBlkIdMap;
@@ -440,6 +440,7 @@ private:
   int  extend_file_size_if_need();
   bool check_can_be_extend(
       const int64_t reserved_size);
+  int inner_alloc_block(ObIODOpts &opts, ObIOFd &io_fd);
 
 private:
   // not thread-safe, only for first mark device.

@@ -746,17 +746,6 @@ int ObMultiTenant::create_tenant(const ObTenantMeta &meta, bool write_slog, cons
       create_step = ObTenantCreateStep::STEP_CTX_MEM_CONFIG_SETTED; // step1
     }
   }
-  if (OB_SUCC(ret)) {
-    if (!is_virtual_tenant_id(tenant_id)
-        && OB_FAIL(GCTX.log_block_mgr_->create_tenant(log_disk_size))) {
-      LOG_ERROR("create_tenant in ObServerLogBlockMgr failed", KR(ret));
-    }
-    // if create_tenant in ObServerLogBlockMGR success, the log disk size need by this tenant has been pinned,
-    // otherwise, the assigned log disk size of ObServerLogBlockMGR is origin.
-    if (OB_SUCC(ret)) {
-      create_step = ObTenantCreateStep::STEP_LOG_DISK_SIZE_PINNED;  // step2
-    }
-  }
 
   if (OB_FAIL(ret)) {
     // do nothing
@@ -851,15 +840,6 @@ int ObMultiTenant::create_tenant(const ObTenantMeta &meta, bool write_slog, cons
             LOG_ERROR("fail to cleanup ctx mem config", K(tmp_ret), K(tenant_id), K(ctx_id));
             SLEEP(1);
           }
-        }
-      }
-    } while (OB_SUCCESS != tmp_ret);
-
-    do {
-      tmp_ret = OB_SUCCESS;
-      if (create_step >= ObTenantCreateStep::STEP_LOG_DISK_SIZE_PINNED) {
-        if (!is_virtual_tenant_id(tenant_id)) {
-          GCTX.log_block_mgr_->abort_create_tenant(log_disk_size);
         }
       }
     } while (OB_SUCCESS != tmp_ret);
@@ -1570,9 +1550,6 @@ void ObMultiTenant::remove_tenant()
     }
 
     if (OB_SUCC(ret)) {
-      const share::ObUnitInfoGetter::ObTenantConfig &config = tenant_->get_unit();
-      const int64_t log_disk_size = config.config_.log_disk_size();
-      GCTX.log_block_mgr_->remove_tenant(log_disk_size);
       tenant_->destroy();
       ob_delete(tenant_);
       LOG_INFO("remove tenant success", K(tenant_id));

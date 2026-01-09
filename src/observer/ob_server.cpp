@@ -2343,16 +2343,6 @@ int ObServer::init_io()
                                                       &OB_IO_MANAGER,
                                                       &ObDeviceManager::get_instance()))) {
           LOG_ERROR("log_io_device_wrapper init failed", KR(ret));
-        } else {
-          if (log_block_mgr_.is_reserved()) {
-            int64_t clog_pool_in_use = 0;
-            int64_t clog_pool_total_size = 0;
-            if (OB_FAIL(log_block_mgr_.get_disk_usage(clog_pool_in_use, clog_pool_total_size))) {
-               LOG_ERROR("get clog disk size failed", KR(ret));
-            } else {
-              log_disk_size = clog_pool_total_size;
-            }
-          }
         }
         if (OB_SUCC(ret)) {
           storage_env_.data_disk_size_ = data_disk_size;
@@ -2865,11 +2855,9 @@ int ObServer::init_storage()
   bool clogdir_is_empty = false;
 
   if (OB_SUCC(ret)) {
-    int64_t total_log_disk_size = 0;
     int64_t log_disk_in_use = 0;
     // Check if the clog directory is empty
-    if (OB_FAIL(log_block_mgr_.get_disk_usage(
-            log_disk_in_use, total_log_disk_size))) {
+    if (OB_FAIL(log_block_mgr_.get_disk_usage(log_disk_in_use))) {
       LOG_ERROR("ObServerLogBlockMgr get_disk_usage failed", K(ret));
     } else if (0 == log_disk_in_use
         && OB_FAIL(logservice::ObServerLogBlockMgr::check_clog_directory_is_empty(

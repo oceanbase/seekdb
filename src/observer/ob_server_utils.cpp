@@ -57,9 +57,10 @@ int ObServerUtils::get_log_disk_info_in_config(int64_t& log_disk_size,
                                                int64_t& total_log_disk_size)
 {
   int ret = OB_SUCCESS;
+  const int64_t DEFAULT_LOG_DISK_SIZE = MIN(MAX(2LL << 30, lib::get_memory_limit() / 2),  8LL << 30);
   int64_t suggested_data_disk_size = GCONF.datafile_size;
   int64_t suggested_data_disk_percentage = GCONF.datafile_disk_percentage;
-  int64_t suggested_clog_disk_size = GCONF.log_disk_size;
+  int64_t suggested_clog_disk_size = 0 == GCONF.log_disk_size ? DEFAULT_LOG_DISK_SIZE : GCONF.log_disk_size;
   int64_t suggested_clog_disk_percentage = GCONF.log_disk_percentage;
   int64_t data_default_disk_percentage = 0;
   int64_t clog_default_disk_percentage = 0;
@@ -98,9 +99,10 @@ int ObServerUtils::get_data_disk_info_in_config(int64_t& data_disk_size,
                                                 int64_t& data_disk_percentage)
 {
   int ret = OB_SUCCESS;
+  const int64_t DEFAULT_LOG_DISK_SIZE = MIN(MAX(2LL << 30, lib::get_memory_limit() / 2),  8LL << 30);
   int64_t suggested_data_disk_size = GCONF.datafile_size;
   int64_t suggested_data_disk_percentage = GCONF.datafile_disk_percentage;
-  int64_t suggested_clog_disk_size = GCONF.log_disk_size;
+  int64_t suggested_clog_disk_size = 0 == GCONF.log_disk_size ? DEFAULT_LOG_DISK_SIZE : GCONF.log_disk_size;
   int64_t suggested_clog_disk_percentage = GCONF.log_disk_percentage;
   int64_t data_default_disk_percentage = 0;
   int64_t clog_default_disk_percentage = 0;
@@ -202,8 +204,8 @@ const char *ObServerUtils::build_syslog_file_info()
 
 /*
  * calc actual_extend_size, following the rules:
- *  1. if datafile_next less than 1G, actual_extend_size equal to min(1G, datafile_maxsize * 10%)
- *  2. if datafile_next large than 1G, actual_extend_size equal to min(datafile_next, max_extend_file)
+ *  1. if datafile_next less than 32M, actual_extend_size equal to min(32M, datafile_maxsize * 10%)
+ *  2. if datafile_next large than 32M, actual_extend_size equal to min(datafile_next, max_extend_file)
 */
 int ObServerUtils::calc_auto_extend_size(int64_t &actual_extend_size)
 {
@@ -226,7 +228,7 @@ int ObServerUtils::calc_auto_extend_size(int64_t &actual_extend_size)
     // 2. auto extend to size to C ( A < C < B )
     // 3. alter datafile_maxsize as D ( A < D < C )
     int64_t max_extend_file = datafile_maxsize - datafile_size;
-    const int64_t datafile_next_minsize = 1 * 1024 * 1024 * 1024; // 1G
+    const int64_t datafile_next_minsize = 32 * 1024 * 1024; // 32M
     if (datafile_next < datafile_next_minsize) {
       int64_t min_extend_size = datafile_maxsize * 10 / 100;
       actual_extend_size =

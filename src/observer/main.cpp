@@ -283,7 +283,7 @@ int inner_main(int argc, char *argv[])
 #endif
 
   ObCurTraceId::SeqGenerator::seq_generator_  = ObTimeUtility::current_time();
-  static const int  LOG_FILE_SIZE             = 256 * 1024 * 1024;
+  static const int  LOG_FILE_SIZE             = DEFAULT_LOG_FILE_SIZE_MB * 1024 * 1024;
   const char *const LOG_FILE_NAME             = "log/seekdb.log";
   const char *const PID_FILE_NAME             = "run/seekdb.pid";
   int               ret                       = OB_SUCCESS;
@@ -310,7 +310,7 @@ int inner_main(int argc, char *argv[])
   setlocale(LC_TIME, "en_US.UTF-8");
   setlocale(LC_NUMERIC, "en_US.UTF-8");
 
-  opts->log_level_ = OB_LOG_LEVEL_WARN;
+  opts->log_level_ = DEFAULT_LOG_LEVEL;
   if (FAILEDx(parse_args(argc, argv, *opts))) {
   }
 

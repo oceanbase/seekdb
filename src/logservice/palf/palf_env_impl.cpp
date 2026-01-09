@@ -702,6 +702,10 @@ int PalfEnvImpl::try_recycle_blocks()
   int64_t total_unrecyclable_size_byte = 0;
   int64_t total_size_to_recycle_blocks = disk_opts_for_recycling_blocks.log_disk_usage_limit_size_;
   int64_t total_size_to_stop_write = disk_opts_for_stopping_writing.log_disk_usage_limit_size_;
+  int64_t utl_threshold_to_recycle_blocks = disk_opts_for_recycling_blocks.log_disk_utilization_threshold_;
+  int64_t utl_threshold_to_stop_write = disk_opts_for_stopping_writing.log_disk_utilization_threshold_;
+  utl_threshold_to_recycle_blocks = 0 == utl_threshold_to_recycle_blocks ? DEFAULT_LOG_UTL_THRESHOLD : utl_threshold_to_recycle_blocks;
+  utl_threshold_to_stop_write = 0 == utl_threshold_to_stop_write ? DEFAULT_LOG_UTL_THRESHOLD : utl_threshold_to_stop_write;
   int64_t palf_id = 0;
   int64_t maximum_used_size = 0;
   int tmp_ret = OB_SUCCESS;
@@ -716,17 +720,17 @@ int PalfEnvImpl::try_recycle_blocks()
   } else {
     const int64_t usable_disk_size_to_recycle_blocks =
         total_size_to_recycle_blocks
-        * disk_opts_for_recycling_blocks.log_disk_utilization_threshold_ / 100LL;
+        * utl_threshold_to_recycle_blocks / 100LL;
     const int64_t usable_disk_limit_size_to_stop_writing =
         total_size_to_stop_write
         * disk_opts_for_stopping_writing.log_disk_utilization_limit_threshold_ / 100LL;
-    const bool need_recycle =
-        usable_disk_size_to_recycle_blocks >= total_used_size_byte ? false : true;
+    const bool need_recycle = (disk_opts_for_recycling_blocks.log_disk_utilization_threshold_ == 0 ||
+        usable_disk_size_to_recycle_blocks < total_used_size_byte) ? true : false;
     const bool is_shrinking = disk_options_wrapper_.is_shrinking();
     constexpr int64_t MB = 1024 * 1024LL;
     const int64_t print_error_log_disk_size =
         disk_opts_for_stopping_writing.log_disk_usage_limit_size_
-        * disk_opts_for_stopping_writing.log_disk_utilization_threshold_ / 100LL;
+        * utl_threshold_to_stop_write / 100LL;
     const bool need_print_error_log =
         print_error_log_disk_size >= total_used_size_byte ? false : true;
 
@@ -762,8 +766,8 @@ int PalfEnvImpl::try_recycle_blocks()
       constexpr int64_t INTERVAL = 1*1000*1000;
       if (palf_reach_time_interval(INTERVAL, disk_not_enough_print_interval_in_gc_thread_)) {
         int tmp_ret = OB_LOG_OUTOF_DISK_SPACE;
+        const int64_t log_disk_warn_percent = utl_threshold_to_stop_write;
         const int64_t log_disk_usage_limit_size = disk_opts_for_stopping_writing.log_disk_usage_limit_size_;
-        const int64_t log_disk_warn_percent = disk_opts_for_stopping_writing.log_disk_utilization_threshold_;
         const int64_t log_disk_limit_percent = disk_opts_for_stopping_writing.log_disk_utilization_limit_threshold_;
         LOG_DBA_ERROR(OB_LOG_OUTOF_DISK_SPACE, "msg", "log disk space is almost full", "ret", tmp_ret,
             "total_size(MB)", log_disk_usage_limit_size/MB,
@@ -1343,7 +1347,8 @@ void PalfEnvImpl::period_calc_disk_usage()
   } else {
     const int64_t log_disk_usage_limit_size =  disk_options.log_disk_usage_limit_size_;
     const int64_t log_disk_limit_percent = disk_options.log_disk_utilization_limit_threshold_;
-    const int64_t log_disk_warn_percent = disk_options.log_disk_utilization_threshold_;
+    const int64_t log_disk_warn_percent = 0 == disk_options.log_disk_utilization_threshold_ ?
+                                          DEFAULT_LOG_UTL_THRESHOLD : disk_options.log_disk_utilization_threshold_;
     const int64_t usable_disk_limit_size_to_stop_writing =
       log_disk_usage_limit_size * log_disk_limit_percent / 100LL;
     const bool curr_diskspace_enough =

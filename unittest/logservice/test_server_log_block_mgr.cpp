@@ -109,55 +109,6 @@ public:
     return ret;
   }
 
-  static constexpr int64_t GB = 1024 * 1024 * 1024ul;
-  int create_tenant(int key, int64_t size) {
-    ObSpinLockGuard guard(this->lock_);
-    int ret = OB_SUCCESS;
-    if (map_.end() != map_.find(key)) {
-      ret = OB_ENTRY_EXIST;
-    } else {
-      ret = this->log_block_mgr_.create_tenant(size);
-      if (OB_SUCC(ret)) {
-        map_[key] = size;
-      } else {
-      }
-    }
-    return ret;
-  };
-  int remove_tenant(int key) {
-    ObSpinLockGuard guard(this->lock_);
-    int ret = OB_SUCCESS;
-    if (map_.end() == map_.find(key)) {
-      ret = OB_ENTRY_NOT_EXIST;
-    } else {
-      int64_t size = map_[key];
-      map_.erase(key);
-      this->log_block_mgr_.remove_tenant(size);
-    }
-    return ret;
-  };
-  int update_tenant(int key, int64_t new_size) {
-    ObSpinLockGuard guard(this->lock_);
-    int ret = OB_SUCCESS;
-    if (map_.end() == map_.find(key)) {
-      ret = OB_ENTRY_NOT_EXIST;
-    } else {
-      int64_t old_size = map_[key];
-      int64_t tmp_min_log_disk_size_for_all_tenants = this->log_block_mgr_.min_log_disk_size_for_all_tenants_;
-      tmp_min_log_disk_size_for_all_tenants -= old_size;
-      tmp_min_log_disk_size_for_all_tenants += new_size;
-      if (tmp_min_log_disk_size_for_all_tenants > this->log_block_mgr_.get_total_size_guarded_by_lock_()) {
-        ret = OB_MACHINE_RESOURCE_NOT_ENOUGH;
-      }
-      if (OB_SUCCESS != ret) {
-        map_[key] = old_size;
-      } else {
-        this->log_block_mgr_.min_log_disk_size_for_all_tenants_ = tmp_min_log_disk_size_for_all_tenants;
-        map_[key] = new_size;
-      } 
-    }
-    return ret;
-  };
 public:
   virtual void SetUp();
   virtual void TearDown();
@@ -262,39 +213,23 @@ void TestServerLogBlockMgr::TearDown()
 using namespace palf;
 TEST_F(TestServerLogBlockMgr, basic_func)
 {
-  const int64_t reserved_size = 2 * ObServerLogBlockMgr::GB;
-  const int64_t aligned_reserved_size = log_block_mgr_.lower_align_(reserved_size);
-  // resize
-  EXPECT_EQ(0, log_block_mgr_.log_pool_meta_.curr_total_size_);
-  EXPECT_EQ(OB_SUCCESS, log_block_mgr_.start(aligned_reserved_size));
-  EXPECT_EQ(aligned_reserved_size, log_block_mgr_.log_pool_meta_.curr_total_size_);
-  EXPECT_EQ(OB_SUCCESS, log_block_mgr_.resize_(2 * aligned_reserved_size));
-  EXPECT_EQ(2 * aligned_reserved_size, log_block_mgr_.log_pool_meta_.curr_total_size_);
-  EXPECT_EQ(OB_SUCCESS, log_block_mgr_.resize_(aligned_reserved_size));
-  EXPECT_EQ(aligned_reserved_size, log_block_mgr_.log_pool_meta_.curr_total_size_);
-
   const int64_t ls_id = 1;
   EXPECT_EQ(OB_SUCCESS, create_new_blocks_at(ls_id, tenant_ls_fd_map_[ls_id], 0, 10));
-  int64_t in_use_size_byte, total_size_byte;
-  EXPECT_EQ(OB_SUCCESS, log_block_mgr_.get_disk_usage(in_use_size_byte, total_size_byte));
+  int64_t in_use_size_byte;
+  EXPECT_EQ(OB_SUCCESS, log_block_mgr_.get_disk_usage(in_use_size_byte));
   EXPECT_EQ(10*ObServerLogBlockMgr::BLOCK_SIZE, in_use_size_byte);
   EXPECT_EQ(OB_SUCCESS, delete_blocks_at(ls_id, tenant_ls_fd_map_[ls_id], 0, 10));
-  EXPECT_EQ(OB_SUCCESS, log_block_mgr_.get_disk_usage(in_use_size_byte, total_size_byte));
+  EXPECT_EQ(OB_SUCCESS, log_block_mgr_.get_disk_usage(in_use_size_byte));
   EXPECT_EQ(0, in_use_size_byte);
 }
 
 TEST_F(TestServerLogBlockMgr, restart_for_empty_log_disk)
 {
   log_block_mgr_.destroy();
-  const int64_t reserved_size = 2 * ObServerLogBlockMgr::GB;
-  const int64_t aligned_reserved_size = log_block_mgr_.lower_align_(reserved_size);
-  int64_t in_use_size_byte, total_size_byte;
+  int64_t in_use_size_byte;
   EXPECT_EQ(OB_SUCCESS, log_block_mgr_.init(log_pool_base_path_));
-  EXPECT_EQ(aligned_reserved_size, log_block_mgr_.log_pool_meta_.curr_total_size_);
-  EXPECT_EQ(aligned_reserved_size, log_block_mgr_.log_pool_meta_.next_total_size_);
-  EXPECT_EQ(OB_SUCCESS, log_block_mgr_.get_disk_usage(in_use_size_byte, total_size_byte));
+  EXPECT_EQ(OB_SUCCESS, log_block_mgr_.get_disk_usage(in_use_size_byte));
   EXPECT_EQ(0, in_use_size_byte);
-  EXPECT_EQ(0, log_block_mgr_.log_pool_meta_.status_);
 }
 
 TEST_F(TestServerLogBlockMgr, allocate_blocks_in_tenant)
@@ -307,61 +242,9 @@ TEST_F(TestServerLogBlockMgr, allocate_blocks_in_tenant)
 TEST_F(TestServerLogBlockMgr, restart_for_non_empty_log_disk)
 {
   log_block_mgr_.destroy();
-  const int64_t reserved_size = 2 * ObServerLogBlockMgr::GB;
-  const int64_t aligned_reserved_size = log_block_mgr_.lower_align_(reserved_size);
   EXPECT_EQ(OB_SUCCESS, log_block_mgr_.init(log_pool_base_path_));
-  EXPECT_EQ(aligned_reserved_size, log_block_mgr_.log_pool_meta_.curr_total_size_);
-  EXPECT_EQ(aligned_reserved_size, log_block_mgr_.log_pool_meta_.next_total_size_);
-  EXPECT_EQ(0, log_block_mgr_.log_pool_meta_.status_);
   const int64_t ls_id = 1;
   EXPECT_EQ(OB_SUCCESS, delete_blocks_at(ls_id, tenant_ls_fd_map_[ls_id], 3, 7));
-}
-
-TEST_F(TestServerLogBlockMgr, concurrent_create_delete_resize)
-{
-  const int64_t reserved_size = 4 * ObServerLogBlockMgr::GB;
-  const int64_t aligned_reserved_size = log_block_mgr_.lower_align_(reserved_size);
-  EXPECT_EQ(OB_SUCCESS, log_block_mgr_.resize_(aligned_reserved_size));
-  const int64_t free_block_size = log_block_mgr_.get_free_size_guarded_by_lock_();
-  std::vector<std::thread> threads;
-  std::atomic<int64_t> total_allocate_block_count(0);
-  auto create_func = [&](int64_t ls_id) -> int {
-    int64_t block_cnt = 6;
-    total_allocate_block_count += block_cnt;
-    return create_new_blocks_at(ls_id, tenant_ls_fd_map_[ls_id], 0, block_cnt);
-  };
-  auto delete_func = [&](int64_t ls_id) -> int {
-    int64_t block_cnt = 6;
-    create_new_blocks_at(ls_id, tenant_ls_fd_map_[ls_id], 0, block_cnt);
-    total_allocate_block_count += 2;
-    return delete_blocks_at(ls_id, tenant_ls_fd_map_[ls_id], 0, block_cnt-2);
-  };
-  std::vector< std::function<int(int64_t) > > funcs;
-  funcs.push_back(create_func);
-  funcs.push_back(delete_func);
-
-  std::thread resize_thread([&]() -> int
-  {
-    const int64_t reserved_size = 10 * ObServerLogBlockMgr::GB;
-    const int64_t aligned_reserved_size = log_block_mgr_.lower_align_(reserved_size);
-    return log_block_mgr_.resize_(reserved_size);
-  });
-
-  for (int i = 0; i < DEFAULT_LS_COUNT; i++) {
-    threads.emplace_back(std::thread(funcs[i%2], ls_id_array_[i]));
-  }
-
-  for (int i = 0; i < DEFAULT_LS_COUNT; i++) {
-    threads[i].join();
-  }
-  resize_thread.join();
-
-  const int64_t curr_free_zie = log_block_mgr_.get_free_size_guarded_by_lock_();
-  int64_t total_allocate_block_count_int = total_allocate_block_count;
-  const int64_t total_block_size = log_block_mgr_.log_pool_meta_.curr_total_size_;
-  EXPECT_EQ(total_allocate_block_count_int*ObServerLogBlockMgr::BLOCK_SIZE + curr_free_zie, total_block_size);
-  int64_t ls_id = ls_id_array_[0];
-  EXPECT_EQ(OB_SUCCESS, create_new_blocks_at(ls_id, tenant_ls_fd_map_[ls_id], 6, 3));
 }
 
 TEST_F(TestServerLogBlockMgr, dirty_ls_dir_and_log_pool_file)
@@ -370,10 +253,8 @@ TEST_F(TestServerLogBlockMgr, dirty_ls_dir_and_log_pool_file)
   system("mkdir clog_disk/clog/tenant_0111/log");
   system("touch clog_disk/clog/tenant_0111/log/0");
   system("touch clog_disk/clog/tenant_0111/log/1");
-  system("touch clog_disk/clog/log_pool/0.tmp");
   system("touch clog_disk/clog/sys/1/meta/10000.tmp");
   system("fallocate -l 67108863 clog_disk/clog/sys/1/meta/10000.tmp ");
-  system("mkdir clog_disk/clog/log_pool/1.tmp");
   log_block_mgr_.destroy();
   bool result = false;
   EXPECT_EQ(OB_ERR_UNEXPECTED, log_block_mgr_.init(log_pool_base_path_));
@@ -383,24 +264,6 @@ TEST_F(TestServerLogBlockMgr, dirty_ls_dir_and_log_pool_file)
   EXPECT_EQ(OB_SUCCESS, log_block_mgr_.init(log_pool_base_path_));
 }
 
-TEST_F(TestServerLogBlockMgr, resize_failed_and_restar)
-{
-  const int64_t reserved_size = 15 * ObServerLogBlockMgr::GB;
-  const int64_t aligned_reserved_size = log_block_mgr_.lower_align_(reserved_size);
-  ObServerLogBlockMgr::LogPoolMeta meta = log_block_mgr_.get_log_pool_meta_guarded_by_lock_();
-  meta.status_ = ObServerLogBlockMgr::EXPANDING_STATUS;
-  meta.next_total_size_ = aligned_reserved_size;
-  log_block_mgr_.update_log_pool_meta_guarded_by_lock_(meta);
-  // trigger trim
-  system("touch clog_disk/clog/log_pool/100050");
-  system("touch clog_disk/clog/log_pool/100000");
-
-  log_block_mgr_.destroy();
-  EXPECT_EQ(OB_SUCCESS, log_block_mgr_.init(log_pool_base_path_));
-
-  EXPECT_EQ(false, log_block_mgr_.log_pool_meta_.resizing());
-  EXPECT_EQ(aligned_reserved_size, log_block_mgr_.log_pool_meta_.curr_total_size_);
-}
 
 // This case will cause disk space not enough, ignore it.
 //TEST_F(TestServerLogBlockMgr, expand_when_disk_space_not_enough)
@@ -437,116 +300,12 @@ TEST_F(TestServerLogBlockMgr, resize_failed_and_restar)
 TEST_F(TestServerLogBlockMgr, check_dir_is_empty)
 {
   system("mkdir clog_disk/test");
-  system("mkdir clog_disk/test/log_pool");
   bool result = false;
   EXPECT_EQ(OB_SUCCESS, ObServerLogBlockMgr::check_clog_directory_is_empty("clog_disk/test", result));
   EXPECT_EQ(true, result);
-  system("mkdir clog_disk/test/log_pool1");
+  system("mkdir clog_disk/test/sys");
   EXPECT_EQ(OB_SUCCESS, ObServerLogBlockMgr::check_clog_directory_is_empty("clog_disk/test", result));
   EXPECT_EQ(false, result);
-}
-TEST_F(TestServerLogBlockMgr, create_tenant_resize)
-{
-  EXPECT_EQ(OB_SUCCESS, log_block_mgr_.resize_(4 * GB));
-  EXPECT_EQ(0, log_block_mgr_.min_log_disk_size_for_all_tenants_);
-  EXPECT_EQ(OB_SUCCESS, create_tenant(OB_MAX_RESERVED_TENANT_ID + 1, 2 * GB));
-  EXPECT_EQ(OB_SUCCESS, create_tenant(OB_MAX_RESERVED_TENANT_ID + 2, 2 * GB));
-  EXPECT_EQ(OB_MACHINE_RESOURCE_NOT_ENOUGH, create_tenant(OB_MAX_RESERVED_TENANT_ID + 3, 2 * GB));
-  EXPECT_EQ(OB_SUCCESS, remove_tenant(OB_MAX_RESERVED_TENANT_ID + 1));
-  EXPECT_EQ(2 * GB, log_block_mgr_.min_log_disk_size_for_all_tenants_);
-  EXPECT_EQ(OB_SUCCESS, update_tenant(OB_MAX_RESERVED_TENANT_ID + 2, 3 * GB));
-  EXPECT_EQ(3 * GB, log_block_mgr_.min_log_disk_size_for_all_tenants_);
-  EXPECT_EQ(OB_ENTRY_NOT_EXIST, update_tenant(OB_MAX_RESERVED_TENANT_ID + 1, 3 * GB));
-  EXPECT_EQ(OB_MACHINE_RESOURCE_NOT_ENOUGH, update_tenant(OB_MAX_RESERVED_TENANT_ID + 2, 5 * GB));
-  EXPECT_EQ(3 * GB, log_block_mgr_.min_log_disk_size_for_all_tenants_);
-  EXPECT_EQ(OB_SUCCESS, log_block_mgr_.resize_(10 * GB));
-  EXPECT_EQ(3 * GB, log_block_mgr_.min_log_disk_size_for_all_tenants_);
-  EXPECT_EQ(10 * GB, log_block_mgr_.get_total_size_guarded_by_lock_());
-  constexpr int64_t MB = 1024*1024;
-  std::thread t_create1(
-    [&](){
-      for (int i = 4+OB_MAX_RESERVED_TENANT_ID; i < 1000+OB_MAX_RESERVED_TENANT_ID; i++) {
-        create_tenant(i, 32*MB);
-      }; 
-    }
-  );
-  std::thread t_create2(
-    [&](){
-      for (int i = 4+OB_MAX_RESERVED_TENANT_ID; i < 1000+OB_MAX_RESERVED_TENANT_ID; i++) {
-        create_tenant(i, 32*MB);
-      }; 
-    }
-  );
-  std::thread t_update1(
-    [&](){
-      usleep(10);
-      for (int i = 4+OB_MAX_RESERVED_TENANT_ID; i < 1000+OB_MAX_RESERVED_TENANT_ID; i++) {
-        update_tenant(i, 128*MB);
-      }; 
-    }
-  );
-  std::thread t_update2(
-    [&](){
-      usleep(10);
-      for (int i = 4+OB_MAX_RESERVED_TENANT_ID; i < 1000+OB_MAX_RESERVED_TENANT_ID; i++) {
-        update_tenant(i, 128*MB);
-      }; 
-    }
-  );
-  t_create1.join();
-  t_create2.join();
-  t_update1.join();
-  t_update2.join();
-  EXPECT_EQ(10*GB, log_block_mgr_.min_log_disk_size_for_all_tenants_);
-  std::thread t_remove1(
-    [&](){
-      for (int i = 4+OB_MAX_RESERVED_TENANT_ID; i < 1000+OB_MAX_RESERVED_TENANT_ID; i++) {
-        remove_tenant(i);
-      }; 
-    }
-  );
-  std::thread t_remove2(
-    [&](){
-      for (int i = 4+OB_MAX_RESERVED_TENANT_ID; i < 1000+OB_MAX_RESERVED_TENANT_ID; i++) {
-        remove_tenant(i);
-      }; 
-    }
-  );
-  t_remove1.join();
-  t_remove2.join();
-  EXPECT_EQ(3*GB, log_block_mgr_.min_log_disk_size_for_all_tenants_);
-}
-
-TEST_F(TestServerLogBlockMgr, resize_log_loop_and_restart)
-{
-  ObServerLogBlockMgr::LogPoolMeta meta;
-  meta.curr_total_size_ = log_block_mgr_.log_pool_meta_.curr_total_size_;
-  int64_t next_total_size = meta.next_total_size_ = meta.curr_total_size_ + 1*1024*1024*1024;
-  meta.status_ = ObServerLogBlockMgr::EXPANDING_STATUS;
-  log_block_mgr_.update_log_pool_meta_guarded_by_lock_(meta);
-  char tmp_dir_path[OB_MAX_FILE_NAME_LENGTH] = {'\0'};
-  snprintf(tmp_dir_path, OB_MAX_FILE_NAME_LENGTH, "%s/expanding.tmp", log_block_mgr_.log_pool_path_);
-  int tmp_dir_fd = -1;
-  EXPECT_EQ(OB_SUCCESS, log_block_mgr_.make_resizing_tmp_dir_(tmp_dir_path, tmp_dir_fd));
-  EXPECT_EQ(OB_SUCCESS, log_block_mgr_.remove_resizing_tmp_dir_(tmp_dir_path, tmp_dir_fd));
-  char file_path[OB_MAX_FILE_NAME_LENGTH] = {'\0'};
-  auto touch_file_in_log_pool = [](const char *file_path) {
-    char cmd_touch[OB_MAX_FILE_NAME_LENGTH] = {'\0'};
-    char cmd_fallocate[OB_MAX_FILE_NAME_LENGTH] = {'\0'};
-    snprintf(cmd_touch, OB_MAX_FILE_NAME_LENGTH, "touch %s", file_path);
-    snprintf(cmd_fallocate, OB_MAX_FILE_NAME_LENGTH, "fallocate -l %lu %s", PALF_PHY_BLOCK_SIZE, file_path);
-    system(cmd_touch);
-    system(cmd_fallocate);
-  };
-  for (int i = 0; i < 10; i++) {
-    int64_t file_id = i + 10000;
-    snprintf(file_path, OB_MAX_FILE_NAME_LENGTH, "%s/%ld", log_block_mgr_.log_pool_path_, file_id);
-    touch_file_in_log_pool(file_path);
-  }
-  log_block_mgr_.destroy();
-  EXPECT_EQ(OB_SUCCESS, log_block_mgr_.init(log_pool_base_path_));
-  EXPECT_EQ(ObServerLogBlockMgr::NORMAL_STATUS, log_block_mgr_.log_pool_meta_.status_);
-  EXPECT_EQ(next_total_size, log_block_mgr_.log_pool_meta_.curr_total_size_);
 }
 
 class DummyBlockPool : public palf::ILogBlockPool {

@@ -251,6 +251,26 @@ void ObBlockManager::destroy() {
   group_id_ = 0;
   is_inited_ = false;
 }
+
+int ObBlockManager::inner_alloc_block(ObIODOpts &opts, ObIOFd &io_fd) {
+  int ret = OB_SUCCESS;
+  bool need_retry = true;
+  // retry loop: keep trying until success or extend fails
+  while (need_retry) {
+    ret = io_device_->alloc_block(&opts, io_fd);
+    if (OB_SERVER_OUTOF_DISK_SPACE == ret) {
+      if (OB_FAIL(extend_file_size_if_need())) {
+        ret = OB_SERVER_OUTOF_DISK_SPACE;
+        need_retry = false;
+        LOG_ERROR("The data file disk space is exhausted. Please expand the capacity by resizing datafile!!!", K(ret));
+      }
+    } else {
+      need_retry = false;
+    }
+  }
+  return ret;
+}
+
 int ObBlockManager::alloc_object(ObStorageObjectHandle &object_handle) {
   int ret = OB_SUCCESS;
   MacroBlockId macro_id;
@@ -262,24 +282,10 @@ int ObBlockManager::alloc_object(ObStorageObjectHandle &object_handle) {
   if (IS_NOT_INIT || !is_started()) {
     ret = OB_NOT_INIT;
     LOG_WARN("ObBlockManager not init", K(ret));
-  } else if (OB_FAIL(io_device_->alloc_block(&opts, io_fd))) {
-    if (ret != OB_SERVER_OUTOF_DISK_SPACE) {
-      LOG_WARN("Failed to alloc block from io device", K(ret));
-    }
+  } else if (OB_FAIL(inner_alloc_block(opts, io_fd))) {
+    LOG_WARN("Failed to alloc block", K(ret));
   }
-  // try alloc block
-  if (ret == OB_SERVER_OUTOF_DISK_SPACE) {
-    if (OB_FAIL(extend_file_size_if_need())) { // block to get disk
-      ret = OB_SERVER_OUTOF_DISK_SPACE;        // reuse last ret code
-      LOG_ERROR("The data file disk space is exhausted. Please expand the capacity by resizing datafile!!!", K(ret));
-    } else if (OB_FAIL(io_device_->alloc_block(&opts, io_fd))) {
-      if (OB_SERVER_OUTOF_DISK_SPACE == ret) {
-        LOG_ERROR("The data file disk space is exhausted. Please expand the capacity by resizing datafile!!!", K(ret));
-      } else {
-        LOG_ERROR("Failed to alloc block from io device", K(ret));
-      }
-    }
-  }
+
   if (OB_SUCC(ret)) {
     if (OB_FAIL(blk_seq_generator_.generate_next_sequence(write_seq))) {
       LOG_WARN("Failed to generate next block id", K(ret), K(write_seq),
@@ -309,24 +315,10 @@ int ObBlockManager::alloc_block(ObMacroBlockHandle &macro_handle) {
   if (IS_NOT_INIT || !is_started()) {
     ret = OB_NOT_INIT;
     LOG_WARN("ObBlockManager not init", K(ret));
-  } else if (OB_FAIL(io_device_->alloc_block(&opts, io_fd))) {
-    if (ret != OB_SERVER_OUTOF_DISK_SPACE) {
-      LOG_WARN("Failed to alloc block from io device", K(ret));
-    }
+  } else if (OB_FAIL(inner_alloc_block(opts, io_fd))) {
+    LOG_WARN("Failed to alloc block", K(ret));
   }
-  // try alloc block
-  if (ret == OB_SERVER_OUTOF_DISK_SPACE) {
-    if (OB_FAIL(extend_file_size_if_need())) { // block to get disk
-      ret = OB_SERVER_OUTOF_DISK_SPACE;        // reuse last ret code
-      LOG_ERROR("The data file disk space is exhausted. Please expand the capacity by resizing datafile!!!", K(ret));
-    } else if (OB_FAIL(io_device_->alloc_block(&opts, io_fd))) {
-      if (OB_SERVER_OUTOF_DISK_SPACE == ret) {
-        LOG_ERROR("The data file disk space is exhausted. Please expand the capacity by resizing datafile!!!", K(ret));
-      } else {
-        LOG_ERROR("Failed to alloc block from io device", K(ret));
-      }
-    }
-  }
+
   if (OB_SUCC(ret)) {
     if (OB_FAIL(blk_seq_generator_.generate_next_sequence(write_seq))) {
       LOG_WARN("Failed to generate next block id", K(ret), K(write_seq),

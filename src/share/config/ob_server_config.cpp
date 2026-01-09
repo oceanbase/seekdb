@@ -207,11 +207,15 @@ int ObServerMemoryConfig::reload_config(const ObServerConfig& server_config)
 {
   int ret = OB_SUCCESS;
   int64_t memory_limit = server_config.memory_limit;
+  int64_t hard_memory_limit = server_config.memory_hard_limit;
   int64_t phy_mem_size = get_phy_mem_size();
   if (0 == memory_limit) {
     memory_limit = phy_mem_size * server_config.memory_limit_percentage / 100;
   }
-  hard_memory_limit_ = phy_mem_size * MAX_PHY_MEM_PERCENTAGE / 100;
+  if (0 == hard_memory_limit) {
+    hard_memory_limit = phy_mem_size * MAX_PHY_MEM_PERCENTAGE / 100;
+  }
+  hard_memory_limit_ = hard_memory_limit;
   memory_limit_ = MIN(memory_limit, hard_memory_limit_);
   LOG_INFO("update observer memory config", K_(memory_limit), K_(hard_memory_limit));
   return ret;

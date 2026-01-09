@@ -220,7 +220,7 @@ int ObLiteEmbed::do_open_(const char* db_dir, int64_t port)
     MPRINT("db %s opened by other process", db_dir);
   } else if (FALSE_IT(pid_locked = true)) {
   } else {
-    OB_LOGGER.set_log_level("INFO");
+    OB_LOGGER.set_log_level(DEFAULT_LOG_LEVEL);
     ObSqlString log_file;
     if (OB_FAIL(log_file.assign_fmt("%s/log/seekdb.log", opts.base_dir_.ptr()))) {
       MPRINT("calculate log file failed %d", ret);

@@ -3316,9 +3316,11 @@ int ObForceDumpServerUsageP::process()
   ObDumpUnitInfoFunctor dump_unit_info(result);
   if (OB_FAIL(GCTX.omt_->operate_in_each_tenant(dump_unit_info))) {
     CLOG_LOG(WARN, "operate_in_each_tenant failed", KR(ret));
-  } else if (OB_FAIL(GCTX.log_block_mgr_->get_disk_usage(log_disk_assigned, log_disk_capacity))) {
+  } else if (OB_FAIL(GCTX.log_block_mgr_->get_disk_usage(log_disk_assigned))) {
     CLOG_LOG(WARN, "get_disk_usage failed", KR(ret));
-  } else {}
+  } else {
+    log_disk_capacity = GCTX.log_block_mgr_->get_log_disk_size();
+  }
   return ret;
 }
 

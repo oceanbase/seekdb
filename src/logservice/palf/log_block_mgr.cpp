@@ -118,6 +118,7 @@ int LogBlockMgr::switch_next_block(const block_id_t next_block_id)
 {
   int ret = OB_SUCCESS;
   char block_path[OB_MAX_FILE_NAME_LENGTH] = {'\0'};
+  char tmp_block_path[OB_MAX_FILE_NAME_LENGTH] = {'\0'};
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
   } else if (true == is_valid_block_id(curr_writable_block_id_) && next_block_id != curr_writable_block_id_ + 1) {
@@ -125,8 +126,12 @@ int LogBlockMgr::switch_next_block(const block_id_t next_block_id)
     PALF_LOG(ERROR, "block_id is not continous, unexpected error", K(ret), K(next_block_id), K(curr_writable_block_id_));
   } else if (OB_FAIL(block_id_to_string(next_block_id, block_path, OB_MAX_FILE_NAME_LENGTH))) {
     PALF_LOG(ERROR, "block_id_to_string failed", K(ret), KPC(this), K(next_block_id));
-  } else if (OB_FAIL(log_block_pool_->create_block_at(dir_fd_, block_path, log_block_size_))) {
+  } else if (OB_FAIL(block_id_to_tmp_string(next_block_id, tmp_block_path, OB_MAX_FILE_NAME_LENGTH))) {
+    PALF_LOG(ERROR, "block_id_to_tmp_string failed", K(ret), KPC(this), K(next_block_id));
+  } else if (OB_FAIL(log_block_pool_->create_block_at(dir_fd_, tmp_block_path, log_block_size_))) {
     PALF_LOG(ERROR, "create_block_at failed", K(ret), KPC(this), K(next_block_id));
+  } else if (OB_FAIL(do_rename_and_fsync_(tmp_block_path, block_path))) {
+    PALF_LOG(ERROR, "do_rename_and_fsync_ failed", K(ret), K(next_block_id));
   } else if (OB_FAIL(construct_absolute_block_path(log_dir_, next_block_id, OB_MAX_FILE_NAME_LENGTH, block_path))) {
     PALF_LOG(ERROR, "failed to construct absolute block path", K(ret), KPC(this), K(next_block_id));
   } else if (OB_FAIL(curr_writable_handler_.switch_next_block(block_path))) {
