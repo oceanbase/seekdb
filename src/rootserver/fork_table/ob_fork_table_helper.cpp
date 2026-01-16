@@ -137,7 +137,6 @@ int ObForkTableHelper::copy_tablet_autoinc_seq_info_()
     LOG_WARN("fork table helper not init", KR(ret));
   } else {
     ObArenaAllocator allocator("ForkAutoinc");
-    ObTabletAutoincSeq autoinc_seq;
     obrpc::ObBatchSetTabletAutoincSeqArg arg;
     arg.tenant_id_ = tenant_id_;
     arg.ls_id_ = SYS_LS;
@@ -148,6 +147,7 @@ int ObForkTableHelper::copy_tablet_autoinc_seq_info_()
       const ObTabletID &src_tablet_id = src_tablet_ids_.at(i);
       const ObTabletID &dst_tablet_id = dst_tablet_ids_.at(i);
       ObTabletHandle tablet_handle;
+      ObTabletAutoincSeq autoinc_seq;
       share::ObMigrateTabletAutoincSeqParam param;
       param.src_tablet_id_ = src_tablet_id;
       param.dest_tablet_id_ = dst_tablet_id;
