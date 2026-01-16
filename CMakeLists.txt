@@ -4,9 +4,9 @@ include(cmake/Utils.cmake)
 include(cmake/Env.cmake)
 
 project("OceanBase"
-  VERSION 1.0.1.0
-  DESCRIPTION "OceanBase SeekDB database system"
-  HOMEPAGE_URL "https://open.oceanbase.com"
+  VERSION 1.1.0.0
+  DESCRIPTION "OceanBase seekdb database system"
+  HOMEPAGE_URL "https://www.oceanbase.ai"
   LANGUAGES CXX C ASM)
 
 

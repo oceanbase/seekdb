@@ -37,8 +37,7 @@ using namespace sql;
 namespace share
 {
 const uint64_t ObUpgradeChecker::UPGRADE_PATH[] = {
-  CALC_VERSION(1UL, 0UL, 0UL, 0UL),  // 1.0.0.0
-  CALC_VERSION(1UL, 0UL, 1UL, 0UL),  // 1.0.1.0
+  CALC_VERSION(1UL, 1UL, 0UL, 0UL),  // 1.1.0.0
 };
 
 int ObUpgradeChecker::get_data_version_by_cluster_version(
@@ -54,6 +53,7 @@ int ObUpgradeChecker::get_data_version_by_cluster_version(
     }
     CONVERT_CLUSTER_VERSION_TO_DATA_VERSION(CLUSTER_VERSION_1_0_0_0, DATA_VERSION_1_0_0_0)
     CONVERT_CLUSTER_VERSION_TO_DATA_VERSION(CLUSTER_VERSION_1_0_1_0, DATA_VERSION_1_0_1_0)
+    CONVERT_CLUSTER_VERSION_TO_DATA_VERSION(CLUSTER_VERSION_1_1_0_0, DATA_VERSION_1_1_0_0)
 
 #undef CONVERT_CLUSTER_VERSION_TO_DATA_VERSION
     default: {
