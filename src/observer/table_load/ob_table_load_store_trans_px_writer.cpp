@@ -67,10 +67,6 @@ void ObTableLoadStoreTransPXWriter::reset()
   can_write_ = false;
   if (nullptr != store_ctx_) {
     if (nullptr != trans_) {
-      if (nullptr != writer_) {
-        trans_->put_store_writer(writer_);
-        writer_ = nullptr;
-      }
       store_ctx_->put_trans(trans_);
       trans_ = nullptr;
     }
@@ -113,7 +109,6 @@ int ObTableLoadStoreTransPXWriter::init(ObTableLoadStoreCtx *store_ctx,
     trans_ = trans;
     writer_ = writer;
     trans_->inc_ref_count();
-    writer_->inc_ref_count();
     ATOMIC_AAF(&store_ctx_->write_ctx_.px_writer_cnt_, 1);
 
     column_count_ = store_ctx_->write_ctx_.px_column_descs_.count();
