@@ -39,6 +39,7 @@
   RPC_S(PRD drop_table, obrpc::OB_DROP_TABLE, (ObDropTableArg), ObDDLRes);
   RPC_S(PRD parallel_drop_table, obrpc::OB_PARALLEL_DROP_TABLE, (ObDropTableArg), ObDropTableRes);
   RPC_S(PRD rename_table, obrpc::OB_RENAME_TABLE, (ObRenameTableArg));
+  RPC_S(PRD fork_table, obrpc::OB_FORK_TABLE, (ObForkTableArg), ObDDLRes);
   RPC_S(PRD truncate_table, obrpc::OB_TRUNCATE_TABLE, (ObTruncateTableArg), ObDDLRes);
   RPC_S(PRD truncate_table_v2, obrpc::OB_TRUNCATE_TABLE_V2, (ObTruncateTableArg), ObDDLRes);
   RPC_S(PRD create_aux_index, obrpc::OB_CREATE_AUX_INDEX, (obrpc::ObCreateAuxIndexArg), obrpc::ObCreateAuxIndexRes);

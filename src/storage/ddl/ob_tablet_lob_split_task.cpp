@@ -1547,12 +1547,12 @@ int ObTabletLobWriteDataTask::create_sstables(
         // fill empty minor sstable if scn not contiguous
         bool need_fill_empty_sstable = false;
         SCN end_scn;
-        if (OB_FAIL(ObTabletSplitMergeTask::check_need_fill_empty_sstable(ctx_->ls_handle_,
-                                                                          is_minor_merge(write_sstable_ctx.merge_type_),
-                                                                          write_sstable_ctx.table_key_,
-                                                                          dst_tablet_id,
-                                                                          need_fill_empty_sstable,
-                                                                          end_scn))) {
+        if (OB_FAIL(ObTabletRebuildUtil::check_need_fill_empty_sstable(ctx_->ls_handle_,
+                                                                       is_minor_merge(write_sstable_ctx.merge_type_),
+                                                                       write_sstable_ctx.table_key_,
+                                                                       dst_tablet_id,
+                                                                       need_fill_empty_sstable,
+                                                                       end_scn))) {
           LOG_WARN("failed to check need fill", K(ret));
         } else if (need_fill_empty_sstable) {
           new_table_handle.reset();
@@ -1622,7 +1622,7 @@ int ObTabletLobWriteDataTask::create_empty_sstable(const ObTabletLobWriteSSTable
   int ret = OB_SUCCESS;
   new_table_handle.reset();
   ObTabletCreateSSTableParam create_sstable_param;
-  if (OB_FAIL(ObTabletSplitMergeTask::build_create_empty_sstable_param(write_sstable_ctx.meta_, write_sstable_ctx.table_key_, new_tablet_id, end_scn, create_sstable_param))) {
+  if (OB_FAIL(ObTabletRebuildUtil::build_create_empty_sstable_param(write_sstable_ctx.meta_, write_sstable_ctx.table_key_, new_tablet_id, end_scn, create_sstable_param))) {
     LOG_WARN("failed to build create empty sstable param", K(ret));
   } else {
     if (OB_FAIL(ObTabletCreateDeleteHelper::create_sstable(create_sstable_param, ctx_->allocator_, new_table_handle))) {

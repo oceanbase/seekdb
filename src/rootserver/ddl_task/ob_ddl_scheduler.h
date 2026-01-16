@@ -639,6 +639,16 @@ int create_partition_split_task(
       const uint64_t tenant_data_version,
       ObIAllocator &allocator,
       ObDDLTaskRecord &task_record);
+  int create_fork_table_task(
+      common::ObISQLClient &proxy,
+      const share::schema::ObTableSchema *src_table_schema,
+      const share::schema::ObTableSchema *dst_table_schema,
+      const int64_t schema_version,
+      const int64_t snapshot_version,
+      const int64_t parent_task_id,
+      const obrpc::ObForkTableArg *fork_table_arg,
+      ObIAllocator &allocator,
+      ObDDLTaskRecord &task_record);
 
   int schedule_build_fts_index_task(
     const ObDDLTaskRecord &task_record);
@@ -663,6 +673,7 @@ int create_partition_split_task(
   int schedule_ddl_retry_task(const ObDDLTaskRecord &task_record);
   int schedule_partition_split_task(const ObDDLTaskRecord &task_record);
   int schedule_recover_restore_table_task(const ObDDLTaskRecord &task_record);
+  int schedule_fork_table_task(const ObDDLTaskRecord &task_record);
   int add_sys_task(ObDDLTask *task);
   int remove_sys_task(ObDDLTask *task);
   int add_task_to_longops_mgr(ObDDLTask *ddl_task);

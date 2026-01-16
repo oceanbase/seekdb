@@ -16,8 +16,7 @@
 #ifndef OB_ROOTSERVER_TRUNCATE_INFO_TRUNCATE_INFO_SERVICE_H_
 #define OB_ROOTSERVER_TRUNCATE_INFO_TRUNCATE_INFO_SERVICE_H_
 #include "/usr/include/stdint.h"
-#include "storage/truncate_info/ob_truncate_info.h"
-#include "share/ob_ls_id.h"
+#include "rootserver/truncate_info/ob_truncate_tablet_arg.h"
 #include "storage/truncate_info/ob_truncate_partition_filter.h"
 #include "sql/resolver/expr/ob_raw_expr.h"
 namespace oceanbase
@@ -44,49 +43,6 @@ class ObInnerSQLConnection;
 namespace rootserver
 {
 class ObDDLOperator;
-struct ObTruncateTabletArg
-{
-public:
-  ObTruncateTabletArg()
-    : version_(TRUNCATE_INFO_ARG_VERSION_V1),
-      reserved_(0),
-      ls_id_(),
-      index_tablet_id_(),
-      truncate_info_()
-  {}
-  ~ObTruncateTabletArg() { destroy(); }
-  void destroy() {
-    ls_id_.reset();
-    index_tablet_id_.reset();
-    truncate_info_.destroy();
-  }
-  bool is_valid() const { return ls_id_.is_valid() && index_tablet_id_.is_valid() && truncate_info_.is_valid(); }
-
-  int serialize(char *buf, const int64_t buf_len, int64_t &pos) const;
-  int deserialize(
-      common::ObIAllocator &allocator,
-      const char *buf,
-      const int64_t data_len,
-      int64_t &pos);
-  int64_t get_serialize_size() const;
-  TO_STRING_KV(K_(version), K_(ls_id), K_(index_tablet_id), K_(truncate_info));
-  static const int64_t TRUNCATE_INFO_ARG_VERSION_V1 = 1;
-  static const int32_t TIA_ONE_BYTE = 8;
-  static const int32_t TIA_RESERVED_BITS = 56;
-  union {
-    uint64_t info_;
-    struct
-    {
-      uint64_t version_     : TIA_ONE_BYTE;
-      uint64_t reserved_    : TIA_RESERVED_BITS;
-    };
-  };
-  share::ObLSID ls_id_;
-  ObTabletID index_tablet_id_;
-  storage::ObTruncateInfo truncate_info_;
-private:
-  DISALLOW_COPY_AND_ASSIGN(ObTruncateTabletArg);
-};
 
 struct ObTruncatePartKeyInfo final
 {

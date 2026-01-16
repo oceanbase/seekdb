@@ -19,6 +19,7 @@
 #include "ob_ddl_clog.h"
 #include "storage/ddl/ob_direct_insert_sstable_ctx_new.h"
 #include "storage/ddl/ob_ddl_merge_schedule.h"
+#include "storage/ddl/ob_tablet_fork_task.h"
 namespace oceanbase
 {
 
@@ -755,6 +756,10 @@ OB_DEF_SERIALIZE_SIZE(ObTabletSplitInfo)
 OB_SERIALIZE_MEMBER(ObTabletSplitStartLog, basic_info_);
 OB_SERIALIZE_MEMBER(ObTabletSplitFinishLog, basic_info_);
 OB_SERIALIZE_MEMBER(ObTabletFreezeLog, tablet_id_);
+
+OB_SERIALIZE_MEMBER(ObTableForkFreezeLog, tablet_ids_);
+OB_SERIALIZE_MEMBER(ObTableForkStartLog, fork_info_);
+OB_SERIALIZE_MEMBER(ObTableForkFinishLog, fork_info_);
 
 } // namespace storage
 } // namespace oceanbase

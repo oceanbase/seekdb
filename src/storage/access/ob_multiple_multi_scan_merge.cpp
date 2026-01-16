@@ -223,13 +223,16 @@ int ObMultipleMultiScanMerge::construct_iters()
     } else {
       const int64_t table_cnt = tables_.count() - 1;
       for (int64_t i = table_cnt; OB_SUCC(ret) && i >= di_base_cnt; --i) {
+        ObTableAccessContext *access_ctx = nullptr;
         if (OB_FAIL(tables_.at(i, table))) {
           STORAGE_LOG(WARN, "Fail to get ith store, ", K(ret), K(i), K_(tables));
         } else if (OB_ISNULL(iter_param = get_actual_iter_param(table))) {
           ret = OB_ERR_UNEXPECTED;
           STORAGE_LOG(WARN, "Fail to get access param", K(ret), K(i), KPC(table));
+        } else if (OB_FAIL(get_access_ctx(table->get_key().get_tablet_id(), access_ctx))) {
+          STORAGE_LOG(WARN, "Fail to get access_ctx", KR(ret), K(table->get_key().get_tablet_id()));
         } else if (!use_cache_iter) {
-          if (OB_FAIL(table->multi_scan(*iter_param, *access_ctx_, *ranges_, iter))) {
+          if (OB_FAIL(table->multi_scan(*iter_param, *access_ctx, *ranges_, iter))) {
             STORAGE_LOG(WARN, "Fail to get iterator, ", K(ret), K(i), KPC(table), K(*iter_param));
           } else if (OB_FAIL(iters_.push_back(iter))) {
             iter->~ObStoreRowIterator();
@@ -238,7 +241,7 @@ int ObMultipleMultiScanMerge::construct_iters()
         } else if (OB_ISNULL(iter = iters_.at(table_cnt - i))) {
           ret = OB_ERR_UNEXPECTED;
           STORAGE_LOG(WARN, "Unexpected null iter", K(ret), "idx", table_cnt - i, K_(iters));
-        } else if (OB_FAIL(iter->init(*iter_param, *access_ctx_, table, ranges_))) {
+        } else if (OB_FAIL(iter->init(*iter_param, *access_ctx, table, ranges_))) {
           STORAGE_LOG(WARN, "failed to init scan iter", K(ret), "idx", table_cnt - i);
         }
 

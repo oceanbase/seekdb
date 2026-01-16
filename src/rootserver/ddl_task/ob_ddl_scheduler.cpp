@@ -26,6 +26,7 @@
 #include "rootserver/ddl_task/ob_build_mview_task.h"
 #include "rootserver/ddl_task/ob_drop_vec_ivf_index_task.h"
 #include "rootserver/ddl_task/ob_rebuild_index_task.h"
+#include "rootserver/fork_table/ob_fork_table_task.h"
 #include "rootserver/ddl_task/ob_sys_ddl_util.h" // for ObSysDDLSchedulerUtil
 #include "rootserver/ddl_task/ob_vec_index_build_task.h"
 #include "rootserver/ob_root_service.h" // for ObRootService
@@ -1248,6 +1249,7 @@ int ObDDLScheduler::create_ddl_task(const ObCreateDDLTaskParam &param,
   const obrpc::ObPartitionSplitArg *partition_split_arg = nullptr;
   const obrpc::ObRebuildIndexArg *rebuild_index_arg = nullptr;
   const obrpc::ObMViewCompleteRefreshArg *mview_complete_refresh_arg = nullptr;
+  const obrpc::ObForkTableArg *fork_table_arg = nullptr;
   LOG_INFO("create ddl task", K(param));
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
@@ -1587,6 +1589,21 @@ int ObDDLScheduler::create_ddl_task(const ObCreateDDLTaskParam &param,
           LOG_WARN("fail to create partition split task", K(ret));
         }
         break;
+      case DDL_FORK_TABLE: {
+        fork_table_arg = static_cast<const obrpc::ObForkTableArg *>(param.ddl_arg_);
+        if (OB_FAIL(create_fork_table_task(proxy,
+                                           param.src_table_schema_,
+                                           param.dest_table_schema_,
+                                           param.schema_version_,
+                                           param.new_snapshot_version_,
+                                           param.parent_task_id_,
+                                           fork_table_arg,
+                                           *param.allocator_,
+                                           task_record))) {
+          LOG_WARN("fail to create fork table task", K(ret));
+        }
+        break;
+      }
       case DDL_DROP_DATABASE:
       case DDL_DROP_TABLE:
       case DDL_TRUNCATE_TABLE:
@@ -3000,6 +3017,55 @@ int ObDDLScheduler::create_recover_restore_table_task(
   return ret;
 }
 
+int ObDDLScheduler::create_fork_table_task(
+    common::ObISQLClient &proxy,
+    const share::schema::ObTableSchema *src_table_schema,
+    const share::schema::ObTableSchema *dst_table_schema,
+    const int64_t schema_version,
+    const int64_t snapshot_version,
+    const int64_t parent_task_id,
+    const obrpc::ObForkTableArg *fork_table_arg,
+    ObIAllocator &allocator,
+    ObDDLTaskRecord &task_record)
+{
+  int ret = OB_SUCCESS;
+  int64_t task_id = 0;
+  SMART_VAR(ObForkTableTask, fork_table_task) {
+    if (OB_UNLIKELY(!is_inited_)) {
+      ret = OB_NOT_INIT;
+      LOG_WARN("not init", KR(ret));
+    } else if (OB_ISNULL(fork_table_arg)
+               || OB_ISNULL(src_table_schema)
+               || OB_ISNULL(dst_table_schema)
+               || OB_ISNULL(GCTX.sql_proxy_)
+               || schema_version <= 0
+               || snapshot_version <= 0) {
+      ret = OB_INVALID_ARGUMENT;
+      LOG_WARN("invalid argument", KR(ret), K(fork_table_arg),
+          K(src_table_schema), K(dst_table_schema), K(schema_version), K(snapshot_version), KP(GCTX.sql_proxy_));
+    } else if (OB_FAIL(ObDDLTask::fetch_new_task_id(*GCTX.sql_proxy_, src_table_schema->get_tenant_id(), task_id))) {
+      LOG_WARN("failed to fetch new task id", KR(ret));
+    } else if (OB_FAIL(fork_table_task.init(src_table_schema->get_tenant_id(),
+                                            task_id,
+                                            share::DDL_FORK_TABLE,
+                                            src_table_schema,
+                                            dst_table_schema,
+                                            schema_version,
+                                            snapshot_version,
+                                            *fork_table_arg,
+                                            parent_task_id))) {
+      LOG_WARN("failed to init fork table task", KR(ret));
+    } else if (OB_FAIL(fork_table_task.set_trace_id(*ObCurTraceId::get_trace_id()))) {
+      LOG_WARN("failed to set trace id", KR(ret), K(fork_table_task));
+    } else if (OB_FAIL(insert_task_record(proxy, fork_table_task, allocator, task_record))) {
+      LOG_WARN("failed to insert task record", KR(ret), K(fork_table_task));
+    } else {
+      LOG_INFO("create fork table task finished", K(fork_table_task), K(task_record));
+    }
+  }
+  return ret;
+}
+
 int ObDDLScheduler::insert_task_record(
     common::ObISQLClient &proxy,
     ObDDLTask &ddl_task,
@@ -3212,6 +3278,9 @@ int ObDDLScheduler::schedule_ddl_task(const ObDDLTaskRecord &record)
       case ObDDLType::DDL_DROP_MULVALUE_INDEX:
       case ObDDLType::DDL_DROP_VEC_SPIV_INDEX:
         ret = schedule_drop_fts_index_task(record);
+        break;
+      case ObDDLType::DDL_FORK_TABLE:
+        ret = schedule_fork_table_task(record);
         break;
       case ObDDLType::DDL_REBUILD_INDEX:
       case ObDDLType::DDL_REPLACE_MLOG:
@@ -3832,6 +3901,33 @@ int ObDDLScheduler::schedule_recover_restore_table_task(const ObDDLTaskRecord &t
     redefinition_task->~ObRecoverRestoreTableTask();
     allocator_.free(redefinition_task);
     redefinition_task = nullptr;
+  }
+  return ret;
+}
+
+int ObDDLScheduler::schedule_fork_table_task(
+    const ObDDLTaskRecord &task_record)
+{
+  int ret = OB_SUCCESS;
+  ObForkTableTask *fork_table_task = nullptr;
+  if (OB_UNLIKELY(!is_inited_)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("not init", K(ret));
+  } else if (OB_FAIL(alloc_ddl_task(fork_table_task))) {
+    LOG_WARN("alloc ddl task failed", K(ret));
+  } else if (OB_FAIL(fork_table_task->init(task_record))) {
+    LOG_WARN("init fork table task failed", K(ret), K(task_record));
+  } else if (OB_FAIL(fork_table_task->set_trace_id(task_record.trace_id_))) {
+    LOG_WARN("set trace id failed", K(ret));
+  } else if (OB_FAIL(inner_schedule_ddl_task(fork_table_task, task_record))) {
+    if (OB_ENTRY_EXIST != ret) {
+      LOG_WARN("inner schedule task failed", K(ret), K(*fork_table_task));
+    }
+  }
+  if (OB_FAIL(ret) && nullptr != fork_table_task) {
+    fork_table_task->~ObForkTableTask();
+    allocator_.free(fork_table_task);
+    fork_table_task = nullptr;
   }
   return ret;
 }

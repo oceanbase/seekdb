@@ -24,6 +24,7 @@
 #include "share/scn.h"
 #include "storage/access/ob_micro_block_handle_mgr.h"
 #include "storage/column_store/ob_i_cg_iterator.h"
+#include "share/ob_fork_table_util.h"
 
 namespace oceanbase
 {
@@ -183,7 +184,11 @@ struct ObTableAccessContext
     return nullptr == range_allocator_ ? allocator_ : range_allocator_;
   }
   inline void reset_lob_locator_helper() {
-    if (OB_NOT_NULL(lob_locator_helper_)) {
+    // fork ctx shallow-copies lob_locator_helper_ from the main ctx, should not release it
+    if (is_fork_ctx_) {
+      lob_locator_helper_ = nullptr;
+      lob_allocator_.reset();
+    } else if (OB_NOT_NULL(lob_locator_helper_)) {
       lob_locator_helper_->~ObLobLocatorHelper();
       lob_locator_helper_ = nullptr;
       lob_allocator_.reset();
@@ -222,6 +227,10 @@ struct ObTableAccessContext
   int init_for_mview(common::ObIAllocator *allocator,
                      const ObTableAccessContext &access_ctx,
                      ObStoreCtx &store_ctx);
+  // used for fork table scan
+  int init_for_fork(ObTableAccessContext &other,
+                    ObStoreCtx *store_ctx,
+                    const ObForkTabletInfo &fork_info);
   OB_INLINE bool is_mview_query() const
   {
     return nullptr != mview_scan_info_;
@@ -336,6 +345,9 @@ public:
     return mds_collector_;
   }
   bool is_inited_;
+  // whether this ctx is initialized via init_for_fork(); fork ctx shallow-copies many pointer
+  // members from the main ctx, thus it must NOT manage/release their lifecycles.
+  bool is_fork_ctx_;
   bool use_fuse_row_cache_; // temporary code
   bool need_scn_;
   bool need_release_mview_scan_info_;
@@ -376,6 +388,10 @@ public:
   ObTruncatePartitionFilter *truncate_part_filter_;
   ObMdsReadInfoCollector *mds_collector_; // used for collect mds info when query mds sstable
   uint64_t *row_scan_cnt_;
+
+  // MAINTENANCE NOTE: `init_for_fork()` is a initializer in fork table scenario.
+  // When adding/removing fields in `ObTableAccessContext`, keep `init_for_fork()`
+  // in sync with `init(...)`, `reset()`, `reuse()`, and destructor.
 };
 
 } // namespace storage

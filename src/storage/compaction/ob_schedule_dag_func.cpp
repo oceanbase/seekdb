@@ -20,6 +20,7 @@
 #include "storage/multi_data_source/ob_mds_table_merge_dag.h"
 #include "storage/multi_data_source/ob_mds_table_merge_dag_param.h"
 #include "storage/ddl/ob_tablet_lob_split_task.h"
+#include "storage/ddl/ob_tablet_fork_task.h"
 #include "storage/compaction/ob_batch_freeze_tablets_dag.h"
 #ifdef OB_BUILD_SHARED_STORAGE
 #include "storage/compaction/ob_tablet_refresh_dag.h"
@@ -141,6 +142,15 @@ int ObScheduleDagFunc::schedule_and_get_lob_tablet_split_dag(
 {
   int ret = OB_SUCCESS;
   CREATE_AND_GET_DAG(ObTabletLobSplitDag, dag);
+  return ret;
+}
+
+int ObScheduleDagFunc::schedule_tablet_fork_dag(
+    storage::ObTabletForkParam &param,
+    const bool is_emergency)
+{
+  int ret = OB_SUCCESS;
+  CREATE_DAG(ObTabletForkDag);
   return ret;
 }
 

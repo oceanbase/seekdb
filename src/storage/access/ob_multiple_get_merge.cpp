@@ -149,21 +149,24 @@ int ObMultipleGetMerge::construct_iters()
 
   for (int64_t i = tables_.count() - 1; OB_SUCC(ret) && i >= 0; --i) {
     ObITable *table = nullptr;
+    ObTableAccessContext *access_ctx = nullptr;
     if (OB_FAIL(tables_.at(i, table))) {
       STORAGE_LOG(WARN, "fail to get table", K(ret));
     } else {
       if (OB_ISNULL(iter_param = get_actual_iter_param(table))) {
         ret = OB_ERR_UNEXPECTED;
         STORAGE_LOG(WARN, "fail to get iter param", K(ret), K(i), K(*table));
+      } else if (OB_FAIL(get_access_ctx(table->get_key().get_tablet_id(), access_ctx))) {
+        STORAGE_LOG(WARN, "fail to get access_ctx", KR(ret), K(table->get_key().get_tablet_id()));
       } else if (iter_idx >= iter_cnt) {
-        if (OB_FAIL(table->multi_get(*iter_param, *access_ctx_, *rowkeys_, iter))) {
+        if (OB_FAIL(table->multi_get(*iter_param, *access_ctx, *rowkeys_, iter))) {
           STORAGE_LOG(WARN, "fail to multi get", K(ret));
         } else if (OB_FAIL(iters_.push_back(iter))) {
           iter->~ObStoreRowIterator();
           iter = nullptr;
           STORAGE_LOG(WARN, "fail to push back iter", K(ret));
         }
-      } else if (OB_FAIL(iters_.at(iter_idx)->init(*iter_param, *access_ctx_, table, rowkeys_))) {
+      } else if (OB_FAIL(iters_.at(iter_idx)->init(*iter_param, *access_ctx, table, rowkeys_))) {
         STORAGE_LOG(WARN, "fail to init iterator", K(ret));
       }
       ++iter_idx;

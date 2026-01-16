@@ -246,6 +246,14 @@ int ObTabletTableIterator::assign(const ObTabletTableIterator& other)
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(split_extra_tablet_handles_.assign(other.split_extra_tablet_handles_))) {
       LOG_WARN("failed to assign", K(ret));
+    } else if (nullptr == other.fork_ctx_) {
+      destroy_fork_ctx_();
+    } else if (OB_FAIL(build_fork_ctx_())) {
+      LOG_WARN("failed to build fork ctx", K(ret));
+    } else if (OB_FAIL(fork_ctx_->fork_tablet_handles_.assign(other.fork_ctx_->fork_tablet_handles_))) {
+      LOG_WARN("failed to assign fork tablet handles", K(ret));
+    } else if (OB_FAIL(fork_ctx_->fork_infos_.assign(other.fork_ctx_->fork_infos_))) {
+      LOG_WARN("failed to assign fork infos", K(ret));
     }
   }
   return ret;
@@ -300,6 +308,20 @@ int ObTabletTableIterator::add_split_extra_tablet_handle(const ObTabletHandle &t
   return ret;
 }
 
+int ObTabletTableIterator::add_fork_tablet_handle(const ObTabletHandle &tablet_handle,
+    ObForkTabletInfo &fork_info)
+{
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(build_fork_ctx_())) {
+    LOG_WARN("failed to build fork ctx", K(ret));
+  } else if (OB_FAIL(fork_ctx_->fork_tablet_handles_.push_back(tablet_handle))) {
+    LOG_WARN("failed to push back", K(ret));
+  } else if (OB_FAIL(fork_ctx_->fork_infos_.push_back(fork_info))) {
+    LOG_WARN("failed to push back", K(ret));
+  }
+  return ret;
+}
+
 int ObTabletTableIterator::refresh_read_tables_from_tablet(
     const int64_t snapshot_version,
     const bool allow_no_ready_read,
@@ -314,7 +336,7 @@ int ObTabletTableIterator::refresh_read_tables_from_tablet(
   } else if (major_sstable_only) {
     if (OB_FAIL(tablet_handle_.get_obj()->get_read_major_sstable(
         snapshot_version, *this, need_split_src_table))) {
-      LOG_WARN("failed to get read major sstable from tablet", 
+      LOG_WARN("failed to get read major sstable from tablet",
         K(ret), K(snapshot_version), K_(tablet_handle));
     }
   } else {

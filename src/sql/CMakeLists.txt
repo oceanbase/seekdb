@@ -1303,6 +1303,8 @@ ob_set_subtarget(ob_sql resolver_ddl
   resolver/ddl/ob_explain_stmt.cpp
   resolver/ddl/ob_external_file_ddl_resolver.cpp
   resolver/ddl/ob_flashback_resolver.cpp
+  resolver/ddl/ob_fork_table_resolver.cpp
+  resolver/ddl/ob_fork_table_stmt.cpp
   resolver/ddl/ob_lock_table_resolver.cpp
   resolver/ddl/ob_lock_table_stmt.cpp
   resolver/ddl/ob_lock_tenant_resolver.cpp

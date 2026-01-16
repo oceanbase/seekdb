@@ -25,6 +25,8 @@
 #include "storage/meta_mem/ob_tablet_pointer.h"
 #include "logservice/ob_append_callback.h"
 #include "storage/tablet/ob_tablet.h"
+#include "storage/ddl/ob_tablet_fork_task.h"
+#include "storage/ddl/ob_table_fork_info.h"
 namespace oceanbase
 {
 
@@ -42,6 +44,9 @@ enum class ObDDLClogType : int64_t
   DDL_TABLET_SPLIT_START_LOG = 0x41,
   DDL_TABLET_SPLIT_FINISH_LOG = 0x42,
   DDL_TABLET_FREEZE_LOG = 0x43,
+  DDL_TABLE_FORK_FREEZE_LOG = 0x44,
+  DDL_TABLE_FORK_START_LOG = 0x45,
+  DDL_TABLE_FORK_FINISH_LOG = 0x46,
   DDL_FINISH_LOG = 0x80,// finish log, smilarity role in shared storage mode
 };
 
@@ -421,6 +426,48 @@ public:
   TO_STRING_KV(K(tablet_id_));
 public:
   common::ObTabletID tablet_id_;
+};
+
+struct ObTableForkFreezeLog final
+{
+  OB_UNIS_VERSION(1);
+public:
+  ObTableForkFreezeLog()
+  { }
+  ~ObTableForkFreezeLog() = default;
+  bool is_valid() const { return tablet_ids_.count() > 0; }
+  const common::ObSArray<common::ObTabletID> &get_source_tablet_ids() const { return tablet_ids_; }
+  TO_STRING_KV(K_(tablet_ids));
+public:
+  common::ObSArray<common::ObTabletID> tablet_ids_;
+};
+
+struct ObTableForkStartLog final
+{
+  OB_UNIS_VERSION(1);
+public:
+  ObTableForkStartLog()
+  { }
+  ~ObTableForkStartLog() = default;
+  bool is_valid() const { return fork_info_.is_valid(); }
+  const common::ObSEArray<common::ObTabletID, 4> &get_source_tablet_ids() const { return fork_info_.source_tablet_ids_; }
+  TO_STRING_KV(K_(fork_info));
+public:
+  ObTableForkInfo fork_info_;
+};
+
+struct ObTableForkFinishLog final
+{
+  OB_UNIS_VERSION(1);
+public:
+  ObTableForkFinishLog()
+  { }
+  ~ObTableForkFinishLog() = default;
+  bool is_valid() const { return fork_info_.is_valid(); }
+  const common::ObSEArray<common::ObTabletID, 4> &get_source_tablet_ids() const { return fork_info_.source_tablet_ids_; }
+  TO_STRING_KV(K_(fork_info));
+public:
+  ObTableForkInfo fork_info_;
 };
 
 } // namespace storage

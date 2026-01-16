@@ -35,6 +35,7 @@ class ObMdsTableMergeDagParam;
 struct ObDDLTableMergeDagParam;
 struct ObTabletSplitParam;
 struct ObLobSplitParam;
+struct ObTabletForkParam;
 class ObTabletSplitDag;
 class ObTabletLobSplitDag;
 class ObComplementDataDag;
@@ -84,6 +85,9 @@ public:
   static int schedule_and_get_lob_tablet_split_dag(
       storage::ObLobSplitParam &param,
       storage::ObTabletLobSplitDag *&dag,
+      const bool is_emergency = false);
+  static int schedule_tablet_fork_dag(
+      storage::ObTabletForkParam &param,
       const bool is_emergency = false);
   static int schedule_mds_table_merge_dag(
       storage::mds::ObMdsTableMergeDagParam &param,

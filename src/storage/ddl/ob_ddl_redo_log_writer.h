@@ -328,6 +328,12 @@ public:
                                   const logservice::ObReplayBarrierType &replay_barrier_type,
                                   const T &log,
                                   SCN &scn);
+  template <typename T>
+  static int write_auto_fork_log(const share::ObLSID &ls_id,
+                                  const ObDDLClogType &clog_type,
+                                  const logservice::ObReplayBarrierType &replay_barrier_type,
+                                  const T &log,
+                                  SCN &scn);
   int write_commit_log_with_retry(
       const bool allow_remote_write,
       const ObITable::TableKey &table_key,

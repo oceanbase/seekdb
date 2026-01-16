@@ -20,6 +20,9 @@
 #include "storage/ddl/ob_ddl_lock.h"
 #include "storage/tablelock/ob_lock_inner_connection_util.h"
 #include "storage/tablelock/ob_lock_utils.h"
+#include "lib/string/ob_sql_string.h"
+#include "share/inner_table/ob_inner_table_schema_constants.h"
+#include "lib/mysqlclient/ob_mysql_result.h"
 
 using namespace oceanbase::transaction::tablelock;
 using oceanbase::share::ObLSID;
@@ -596,6 +599,282 @@ int ObDDLLock::lock_for_add_partition_in_trans(
   return ret;
 }
 
+int ObDDLLock::lock_table_and_global_indexes_for_fork(
+    share::schema::ObSchemaGetterGuard &schema_guard,
+    const share::schema::ObTableSchema &table_schema,
+    const transaction::tablelock::ObTableLockOwnerID lock_owner,
+    ObMySQLTransaction &trans)
+{
+  int ret = OB_SUCCESS;
+  const uint64_t tenant_id = schema_guard.get_tenant_id();
+  const uint64_t table_id = table_schema.get_table_id();
+  const int64_t timeout_us = DEFAULT_TIMEOUT;
+  ObSEArray<ObTabletID, 1> tablet_ids;
+  ObSEArray<const share::schema::ObSimpleTableSchemaV2 *, 4> index_schemas;
+
+  if (!need_lock(table_schema)) {
+    LOG_INFO("skip ddl lock", K(table_id));
+  } else if (OB_FAIL(table_schema.get_tablet_ids(tablet_ids))) {
+    LOG_WARN("failed to get tablet ids", K(ret));
+  } else if (OB_FAIL(do_table_lock(tenant_id, table_id, tablet_ids, ROW_SHARE, lock_owner, timeout_us, true/*is_lock*/, trans))) {
+    LOG_WARN("failed to lock data table", K(ret));
+  } else if (OB_FAIL(ObOnlineDDLLock::lock_table(tenant_id, table_id, EXCLUSIVE, lock_owner, timeout_us, trans))) {
+    LOG_WARN("failed to lock data table", K(ret));
+  } else if (OB_FAIL(ObOnlineDDLLock::lock_tablets(tenant_id, tablet_ids, ROW_EXCLUSIVE, lock_owner, timeout_us, trans))) {
+    LOG_WARN("failed to lock data table tablet", K(ret));
+  } else if (OB_FAIL(schema_guard.get_index_schemas_with_data_table_id(tenant_id, table_id, index_schemas))) {
+    LOG_WARN("failed to get index schemas", K(ret), K(tenant_id), K(table_id));
+  } else {
+    for (int64_t i = 0; OB_SUCC(ret) && i < index_schemas.count(); ++i) {
+      const share::schema::ObSimpleTableSchemaV2 *index_schema = index_schemas.at(i);
+      if (OB_ISNULL(index_schema)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("index schema is null", K(ret), K(i));
+      } else if (index_schema->is_global_index_table()) {
+        const uint64_t index_table_id = index_schema->get_table_id();
+        ObSEArray<ObTabletID, 1> index_tablet_ids;
+        if (OB_FAIL(index_schema->get_tablet_ids(index_tablet_ids))) {
+          LOG_WARN("failed to get index tablet ids", K(ret), K(index_table_id));
+        } else if (OB_FAIL(ObOnlineDDLLock::lock_table(tenant_id, index_table_id, EXCLUSIVE, lock_owner, timeout_us, trans))) {
+          LOG_WARN("failed to lock index table", K(ret), K(index_table_id));
+        } else if (OB_FAIL(ObOnlineDDLLock::lock_tablets(tenant_id, index_tablet_ids, ROW_EXCLUSIVE, lock_owner, timeout_us, trans))) {
+          LOG_WARN("failed to lock index table tablet", K(ret), K(index_table_id));
+        }
+        // Note: For global index tables, we only use OnlineDDL locks, not table locks via do_table_lock,
+        // to avoid "lock table not allowed now" errors that may occur during Fork Table operations.
+      }
+    }
+  }
+  return ret;
+}
+
+int ObDDLLock::unlock_table_and_global_indexes_for_fork(
+    share::schema::ObSchemaGetterGuard &schema_guard,
+    const share::schema::ObTableSchema &table_schema,
+    const transaction::tablelock::ObTableLockOwnerID lock_owner,
+    ObMySQLTransaction &trans)
+{
+  int ret = OB_SUCCESS;
+  const uint64_t tenant_id = schema_guard.get_tenant_id();
+  const uint64_t table_id = table_schema.get_table_id();
+  const int64_t timeout_us = DEFAULT_TIMEOUT;
+  ObSEArray<ObTabletID, 1> tablet_ids;
+  ObSEArray<const share::schema::ObSimpleTableSchemaV2 *, 4> index_schemas;
+  bool some_lock_not_exist = false;
+
+  if (!need_lock(table_schema) || table_schema.is_user_hidden_table()) {
+    LOG_INFO("skip ddl unlock", K(table_id));
+  } else if (OB_FAIL(table_schema.get_tablet_ids(tablet_ids))) {
+    LOG_WARN("failed to get tablet ids", K(ret));
+  } else if (OB_FAIL(ObOnlineDDLLock::unlock_tablets(tenant_id, tablet_ids, ROW_EXCLUSIVE, lock_owner, timeout_us, trans, some_lock_not_exist))) {
+    LOG_WARN("failed to unlock tablet", K(ret));
+  } else if (OB_FAIL(ObOnlineDDLLock::unlock_table(tenant_id, table_id, EXCLUSIVE, lock_owner, timeout_us, trans, some_lock_not_exist))) {
+    LOG_WARN("failed to unlock table", K(ret));
+  } else if (OB_FAIL(do_table_lock(tenant_id, table_id, tablet_ids, ROW_SHARE, lock_owner, timeout_us, false/*is_lock*/, trans))) {
+    LOG_WARN("failed to unlock tablet", K(ret));
+  } else if (OB_FAIL(schema_guard.get_index_schemas_with_data_table_id(tenant_id, table_id, index_schemas))) {
+    LOG_WARN("failed to get index schemas", K(ret), K(tenant_id), K(table_id));
+  } else {
+    for (int64_t i = 0; OB_SUCC(ret) && i < index_schemas.count(); ++i) {
+      const share::schema::ObSimpleTableSchemaV2 *index_schema = index_schemas.at(i);
+      if (OB_ISNULL(index_schema)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("index schema is null", K(ret), K(i));
+      } else if (index_schema->is_global_index_table()) {
+        const uint64_t index_table_id = index_schema->get_table_id();
+        ObSEArray<ObTabletID, 1> index_tablet_ids;
+        if (OB_FAIL(index_schema->get_tablet_ids(index_tablet_ids))) {
+          LOG_WARN("failed to get index tablet ids", K(ret), K(index_table_id));
+        } else if (OB_FAIL(ObOnlineDDLLock::unlock_tablets(tenant_id, index_tablet_ids, ROW_EXCLUSIVE, lock_owner, timeout_us, trans, some_lock_not_exist))) {
+          LOG_WARN("failed to unlock index tablet", K(ret), K(index_table_id));
+        } else if (OB_FAIL(ObOnlineDDLLock::unlock_table(tenant_id, index_table_id, EXCLUSIVE, lock_owner, timeout_us, trans, some_lock_not_exist))) {
+          LOG_WARN("failed to unlock index table", K(ret), K(index_table_id));
+        } else if (OB_FAIL(do_table_lock(tenant_id, OB_INVALID_ID, index_tablet_ids, ROW_SHARE, lock_owner, timeout_us, false/*is_lock*/, trans))) {
+          LOG_WARN("failed to unlock index tablet table lock", K(ret), K(index_table_id));
+        }
+        // Note: For global index tables, we unlock both OnlineDDL locks and table locks.
+        // The table lock unlock is needed for dst tables which have table locks via lock_dst_table_and_global_indexes_for_fork.
+        // For src tables without table locks, the unlock will succeed gracefully (OB_OBJ_LOCK_NOT_EXIST is handled).
+      }
+    }
+  }
+  return ret;
+}
+
+int ObDDLLock::lock_dst_table_and_global_indexes_for_fork(
+    const ObIArray<share::schema::ObTableSchema> &dst_table_schemas,
+    const transaction::tablelock::ObTableLockOwnerID lock_owner,
+    ObMySQLTransaction &trans)
+{
+  int ret = OB_SUCCESS;
+  const ObLSID ls_id(share::SYS_LS);
+  const int64_t timeout_us = DEFAULT_TIMEOUT;
+  ObSEArray<ObTabletID, 1> data_tablet_ids;
+  ObSEArray<ObTabletID, 4> all_tablet_ids;
+
+  if (dst_table_schemas.empty()) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("dst_table_schemas is empty", K(ret));
+  } else {
+    // First element is the data table
+    const share::schema::ObTableSchema &data_table_schema = dst_table_schemas.at(0);
+    const uint64_t tenant_id = data_table_schema.get_tenant_id();
+    const uint64_t data_table_id = data_table_schema.get_table_id();
+
+    if (OB_INVALID_TENANT_ID == tenant_id || OB_INVALID_ID == data_table_id) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("invalid tenant_id or data_table_id", K(ret), K(tenant_id), K(data_table_id));
+    } else if (!need_lock(data_table_schema)) {
+      LOG_INFO("skip ddl lock", K(data_table_id));
+    } else if (OB_FAIL(data_table_schema.get_tablet_ids(data_tablet_ids))) {
+      LOG_WARN("failed to get data tablet ids", K(ret));
+    } else if (OB_FAIL(append(all_tablet_ids, data_tablet_ids))) {
+      LOG_WARN("failed to append data tablet ids", K(ret));
+    } else {
+      // Lock OnlineDDL table lock for data table
+      if (OB_FAIL(ObOnlineDDLLock::lock_table(tenant_id, data_table_id, EXCLUSIVE, lock_owner, timeout_us, trans))) {
+        LOG_WARN("failed to lock data table", K(ret));
+      } else {
+        // Find and lock global index tables from dst_table_schemas (starting from index 1)
+        for (int64_t i = 1; OB_SUCC(ret) && i < dst_table_schemas.count(); ++i) {
+          const share::schema::ObTableSchema &table_schema = dst_table_schemas.at(i);
+          if (table_schema.is_global_index_table() && table_schema.get_data_table_id() == data_table_id) {
+            const uint64_t index_table_id = table_schema.get_table_id();
+            ObSEArray<ObTabletID, 1> index_tablet_ids;
+            if (OB_FAIL(table_schema.get_tablet_ids(index_tablet_ids))) {
+              LOG_WARN("failed to get index tablet ids", K(ret), K(index_table_id));
+            } else if (OB_FAIL(ObOnlineDDLLock::lock_table(tenant_id, index_table_id, EXCLUSIVE, lock_owner, timeout_us, trans))) {
+              LOG_WARN("failed to lock index table", K(ret), K(index_table_id));
+            } else if (OB_FAIL(append(all_tablet_ids, index_tablet_ids))) {
+              LOG_WARN("failed to append index tablet ids", K(ret));
+            }
+          }
+        }
+
+        // Lock all tablets (data table + global indexes) OnlineDDL locks in one request
+        if (OB_SUCC(ret)) {
+          if (OB_FAIL(ObOnlineDDLLock::lock_tablets(tenant_id, all_tablet_ids, ROW_EXCLUSIVE, lock_owner, timeout_us, trans))) {
+            LOG_WARN("failed to lock all tablets", K(ret));
+          } else {
+            // Lock all tablets (data table + global indexes) in one request using ObLockAloneTabletRequest
+            ObLockAloneTabletRequest arg;
+            arg.lock_mode_ = ROW_SHARE;
+            arg.op_type_ = ObTableLockOpType::OUT_TRANS_LOCK;
+            arg.owner_id_ = lock_owner;
+            arg.timeout_us_ = timeout_us;
+            arg.ls_id_ = ls_id;
+            ObInnerSQLConnection *iconn = nullptr;
+            if (OB_ISNULL(iconn = static_cast<ObInnerSQLConnection *>(trans.get_connection()))) {
+              ret = OB_ERR_UNEXPECTED;
+              LOG_WARN("invalid conn", K(ret));
+            } else if (OB_FAIL(append(arg.tablet_ids_, all_tablet_ids))) {
+              LOG_WARN("failed to push back", K(ret));
+            } else if (OB_FAIL(ObInnerConnectionLockUtil::lock_tablet(tenant_id, arg, iconn))) {
+              LOG_WARN("failed to lock tablet", K(ret), K(arg));
+            }
+          }
+        }
+      }
+    }
+  }
+  return ret;
+}
+
+int ObDDLLock::lock_for_fork_table(
+    share::schema::ObSchemaGetterGuard &schema_guard,
+    const share::schema::ObTableSchema &src_table_schema,
+    const ObIArray<share::schema::ObTableSchema> &dst_table_schemas,
+    const transaction::tablelock::ObTableLockOwnerID lock_owner,
+    ObMySQLTransaction &trans)
+{
+  int ret = OB_SUCCESS;
+
+  // lock src table and src global indexes
+  if (OB_FAIL(lock_table_and_global_indexes_for_fork(schema_guard, src_table_schema, lock_owner, trans))) {
+    LOG_WARN("failed to lock src table and global indexes", K(ret));
+  } else if (OB_FAIL(lock_dst_table_and_global_indexes_for_fork(dst_table_schemas, lock_owner, trans))) {
+    LOG_WARN("failed to lock dst table and global indexes", K(ret));
+  }
+
+  return ret;
+}
+
+int ObDDLLock::check_has_dependent_task(
+    const uint64_t tenant_id,
+    const int64_t current_task_id,
+    const uint64_t table_id,
+    ObMySQLTransaction &trans,
+    bool &has_dependent_task)
+{
+  int ret = OB_SUCCESS;
+  has_dependent_task = false;
+  ObSqlString sql_string;
+  ObISQLClient::ReadResult res;
+  sqlclient::ObMySQLResult *result = NULL;
+
+  if (OB_FAIL(sql_string.assign_fmt("SELECT EXISTS(SELECT 1 FROM %s WHERE task_id != %ld AND (object_id = %lu OR target_object_id = %lu)) as has",
+      share::OB_ALL_DDL_TASK_STATUS_TNAME, current_task_id, table_id, table_id))) {
+    LOG_WARN("assign sql string failed", K(ret));
+  } else {
+    ObInnerSQLConnection *iconn = static_cast<ObInnerSQLConnection *>(trans.get_connection());
+    if (OB_ISNULL(iconn)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("invalid connection", K(ret));
+    } else if (OB_FAIL(iconn->execute_read(tenant_id, sql_string.ptr(), res))) {
+      LOG_WARN("query ddl task record failed", K(ret), K(sql_string));
+    } else if (OB_ISNULL(result = res.get_result())) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("fail to get sql result", K(ret), KP(result));
+    } else if (OB_FAIL(result->next())) {
+      LOG_WARN("result next failed", K(ret), K(tenant_id));
+    } else {
+      EXTRACT_BOOL_FIELD_MYSQL(*result, "has", has_dependent_task);
+    }
+  }
+
+  return ret;
+}
+
+int ObDDLLock::unlock_for_fork_table(
+    share::schema::ObSchemaGetterGuard &schema_guard,
+    const share::schema::ObTableSchema &src_table_schema,
+    const share::schema::ObTableSchema &dst_table_schema,
+    const int64_t task_id,
+    const transaction::tablelock::ObTableLockOwnerID lock_owner,
+    ObMySQLTransaction &trans)
+{
+  int ret = OB_SUCCESS;
+  const uint64_t tenant_id = schema_guard.get_tenant_id();
+  const uint64_t src_table_id = src_table_schema.get_table_id();
+  const uint64_t dst_table_id = dst_table_schema.get_table_id();
+
+  if (task_id <= 0) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid task id", K(ret), K(task_id));
+  } else {
+    // Check and unlock src table and src global indexes
+    bool has_src_dependent_task = false;
+    if (OB_FAIL(check_has_dependent_task(tenant_id, task_id, src_table_id, trans, has_src_dependent_task))) {
+      LOG_WARN("failed to check src dependent task", K(ret));
+    } else if (has_src_dependent_task) {
+      LOG_INFO("skip unlock for src table due to dependent tasks", K(task_id), K(src_table_id));
+    } else if (OB_FAIL(unlock_table_and_global_indexes_for_fork(schema_guard, src_table_schema, lock_owner, trans))) {
+      LOG_WARN("failed to unlock src table and global indexes", K(ret));
+    }
+
+    // Check and unlock dst table and dst global indexes
+    bool has_dst_dependent_task = false;
+    if (OB_FAIL(ret)) {
+    } else if (OB_FAIL(check_has_dependent_task(tenant_id, task_id, dst_table_id, trans, has_dst_dependent_task))) {
+      LOG_WARN("failed to check dst dependent task", K(ret));
+    } else if (has_dst_dependent_task) {
+      LOG_INFO("skip unlock for dst table due to dependent tasks", K(task_id), K(dst_table_id));
+    } else if (OB_FAIL(unlock_table_and_global_indexes_for_fork(schema_guard, dst_table_schema, lock_owner, trans))) {
+      LOG_WARN("failed to unlock dst table and global indexes", K(ret));
+    }
+  }
+  return ret;
+}
 
 int ObDDLLock::lock_for_common_ddl_in_trans(
     const ObTableSchema &table_schema,

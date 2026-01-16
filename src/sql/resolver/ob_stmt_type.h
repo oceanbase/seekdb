@@ -139,6 +139,7 @@ OB_STMT_TYPE_DEF_UNKNOWN_AT(T_EMPTY_QUERY, no_priv_needed, 123)
 OB_STMT_TYPE_DEF(T_CREATE_OUTLINE, get_create_outline_stmt_need_privs, 124, ACTION_TYPE_CREATE_OUTLINE)
 OB_STMT_TYPE_DEF(T_ALTER_OUTLINE, get_alter_outline_stmt_need_privs, 125, ACTION_TYPE_ALTER_OUTLINE)
 OB_STMT_TYPE_DEF(T_DROP_OUTLINE, get_drop_outline_stmt_need_privs, 126, ACTION_TYPE_DROP_OUTLINE)
+OB_STMT_TYPE_DEF(T_FORK_TABLE, get_fork_table_stmt_need_privs, 127, ACTION_TYPE_FORK_TABLE)
 // stmt type 127, 128 used by plan baseline, and is been delete
 OB_STMT_TYPE_DEF_UNKNOWN_AT(T_SWITCH_RS_ROLE, get_sys_tenant_alter_system_priv, 129)
 OB_STMT_TYPE_DEF_UNKNOWN_AT(T_FLASHBACK_TENANT, get_flashback_tenant_stmt_need_privs, 130)

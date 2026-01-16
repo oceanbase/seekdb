@@ -231,6 +231,9 @@ const char *oceanbase::share::get_ddl_type(ObDDLType ddl_type)
     case ObDDLType::DDL_ALTER_COLUMN_GROUP_DELAYED:
       ret_name = "DDL_ALTER_COLUMN_GROUP_DELAYED";
       break;
+    case ObDDLType::DDL_FORK_TABLE:
+      ret_name = "DDL_FORK_TABLE";
+      break;
     default:
       break;
   }
@@ -2777,7 +2780,6 @@ int ObDDLUtil::release_snapshot(
     } else if (OB_FAIL(ObDDLUtil::get_tablet_ids(tenant_id, table_id, target_table_id, tablet_ids))) {
       LOG_WARN("failed to get tablet ids", K(ret), K(tenant_id), K(table_id), K(target_table_id));
     }
-
     if (OB_FAIL(ret)) {
     } else if (tablet_ids.count() <= 0) {
     } else if (OB_FAIL(task->batch_release_snapshot(snapshot_version, tablet_ids))) {
@@ -4408,6 +4410,18 @@ int ObDDLUtil::replace_user_tenant_id(const uint64_t tenant_id, obrpc::ObCreateI
     if (is_user_tenant(create_index_arg.index_schema_.get_tenant_id())) {
       create_index_arg.index_schema_.set_tenant_id(tenant_id);
     }
+  }
+  return ret;
+}
+
+int ObDDLUtil::replace_user_tenant_id(const uint64_t tenant_id, obrpc::ObForkTableArg &fork_table_arg)
+{
+  int ret = OB_SUCCESS;
+  if (!is_user_tenant(tenant_id)) {
+    LOG_TRACE("not user tenant, no need to replace", K(tenant_id));
+  } else {
+    try_replace_user_tenant_id(tenant_id, fork_table_arg.exec_tenant_id_);
+    try_replace_user_tenant_id(tenant_id, fork_table_arg.tenant_id_);
   }
   return ret;
 }

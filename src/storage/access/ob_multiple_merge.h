@@ -117,6 +117,8 @@ protected:
   int save_curr_rowkey();
   int prepare_di_base_blockscan(bool di_base_only, ObDatumRow *row = nullptr);
   virtual int get_range_count() const { return 1; }
+  int build_extra_access_ctx();
+  int get_access_ctx(ObTabletID tablet_id, ObTableAccessContext *&access_ctx);
 private:
   int get_next_normal_row(blocksstable::ObDatumRow *&row);
   int get_next_normal_rows(int64_t &count, int64_t capacity);
@@ -153,6 +155,7 @@ private:
   void inner_reset();
   int refresh_filter_params_on_demand(const bool is_open);
   int prepare_truncate_filter();
+  void reset_extra_access_ctx();
 
 protected:
   common::ObArenaAllocator padding_allocator_;
@@ -160,6 +163,7 @@ protected:
   MergeIterators di_base_iters_;
   ObTableAccessParam *access_param_;
   ObTableAccessContext *access_ctx_;
+  hash::ObHashMap<ObTabletID, ObTableAccessContext*> extra_access_ctx_;
   common::ObSEArray<storage::ObITable *, common::DEFAULT_STORE_CNT_IN_STORAGE> tables_;
   blocksstable::ObDatumRow cur_row_;
   blocksstable::ObDatumRow unprojected_row_;

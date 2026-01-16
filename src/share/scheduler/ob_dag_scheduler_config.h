@@ -93,6 +93,8 @@ DAG_SCHEDULER_DAG_TYPE_DEF(DAG_TYPE_TABLET_SPLIT, ObDagPrio::DAG_PRIO_DDL, ObSys
     true, 2, {"ls_id", "source_tablet_id"})
 DAG_SCHEDULER_DAG_TYPE_DEF(DAG_TYPE_LOB_SPLIT, ObDagPrio::DAG_PRIO_DDL, ObSysTaskType::DDL_TABLET_SPLIT, "DDL_TABLET_SPLIT", "DDL",
     true, 2, {"ls_id", "source_tablet_id"})
+DAG_SCHEDULER_DAG_TYPE_DEF(DAG_TYPE_FORK_TABLE, ObDagPrio::DAG_PRIO_DDL, ObSysTaskType::DDL_TASK, "DDL_FORK_TABLE", "DDL",
+  true, 2, {"ls_id", "source_tablet_id"})
 
 
 // DAG_SCHEDULER_DAG_TYPE_DEF(DAG_TYPE_MIGRATE, ObDagPrio::DAG_PRIO_HA_HIGH, ObSysTaskType::MIGRATION_TASK, "MIGRATE", "MIGRATE")

@@ -491,6 +491,23 @@ public:
   ObSEArray<ObITable::TableKey, MAX_SSTABLE_CNT_IN_STORAGE> skip_split_keys_;
 };
 
+struct ObForkTableStoreParam final
+{
+public:
+  ObForkTableStoreParam();
+  ~ObForkTableStoreParam();
+  bool is_valid() const;
+  void reset();
+  TO_STRING_KV(K_(snapshot_version), K_(multi_version_start), K_(merge_type), K_(clog_checkpoint_scn), K_(mds_checkpoint_scn));
+
+public:
+  int64_t snapshot_version_;
+  int64_t multi_version_start_;
+  compaction::ObMergeType merge_type_;
+  share::SCN clog_checkpoint_scn_;
+  share::SCN mds_checkpoint_scn_;
+};
+
 struct ObBatchUpdateTableStoreParam final
 {
   ObBatchUpdateTableStoreParam();
@@ -500,7 +517,7 @@ struct ObBatchUpdateTableStoreParam final
 
   TO_STRING_KV(K_(tables_handle), K_(rebuild_seq), K_(is_transfer_replace),
       K_(start_scn), KP_(tablet_meta), K_(restore_status), K_(tablet_split_param),
-      K_(need_replace_remote_sstable), K_(release_mds_scn));
+      K_(tablet_fork_param), K_(need_replace_remote_sstable), K_(release_mds_scn));
 
   ObTablesHandleArray tables_handle_;
 #ifdef ERRSIM
@@ -512,6 +529,7 @@ struct ObBatchUpdateTableStoreParam final
   const ObMigrationTabletParam *tablet_meta_;
   ObTabletRestoreStatus::STATUS restore_status_;
   ObSplitTableStoreParam tablet_split_param_;
+  ObForkTableStoreParam tablet_fork_param_;
   bool need_replace_remote_sstable_;
   share::SCN release_mds_scn_;
 

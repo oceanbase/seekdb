@@ -850,6 +850,9 @@ int ObDDLTask::get_ddl_type_str(const int64_t ddl_type, const char *&ddl_type_st
     case DDL_TRUNCATE_TABLE:
       ddl_type_str = "truncate table";
       break;
+    case DDL_FORK_TABLE:
+      ddl_type_str = "fork table";
+      break;
     case DDL_DROP_PARTITION:
       ddl_type_str = "drop table";
       break;
@@ -4024,7 +4027,7 @@ int ObDDLTaskRecordOperator::get_ddl_task_record(const uint64_t tenant_id,
   } else if (OB_FAIL(get_task_record(tenant_id, sql_string, proxy, allocator, task_records))) {
     LOG_WARN("get task record failed", K(ret), K(sql_string));
   } else if (task_records.count() != 1) {
-    ret = OB_ERR_UNEXPECTED;
+    ret = OB_ENTRY_NOT_EXIST;
     LOG_WARN("one task_id but task_records count() != 1", K(ret), K(task_id), K(task_records));
   } else if (OB_FAIL(DDL_SIM(record.tenant_id_, task_id, TASK_STATUS_OPERATOR_SLOW))) {
     LOG_WARN("ddl sim failure: slow inner sql", K(ret), K(record.tenant_id_), K(task_id));

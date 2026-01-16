@@ -23,6 +23,7 @@
 #include "storage/ddl/ob_direct_insert_sstable_ctx_new.h"
 #include "storage/ddl/ob_ddl_merge_task_utils.h"
 #include "storage/ddl/ob_ddl_merge_schedule.h"
+#include "storage/ddl/ob_tablet_fork_task.h"
 #ifdef OB_BUILD_SHARED_STORAGE
 #include "close_modules/shared_storage/storage/compaction/ob_refresh_tablet_util.h"
 #endif
@@ -1355,6 +1356,190 @@ int ObTabletFreezeReplayExecutor::do_replay_(ObTabletHandle &handle)
   return ret;
 }
 
+ObTabletForkFreezeReplayExecutor::ObTabletForkFreezeReplayExecutor()
+  : ObDDLReplayExecutor(), log_(nullptr)
+{
+}
+
+int ObTabletForkFreezeReplayExecutor::init(
+    ObLS *ls,
+    const ObTableForkFreezeLog &log,
+    const SCN &scn)
+{
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(is_inited_)) {
+    ret = OB_INIT_TWICE;
+    LOG_WARN("init twice", K(ret), K_(is_inited));
+  } else if (OB_ISNULL(ls) || OB_UNLIKELY(!log.is_valid()) || OB_UNLIKELY(!scn.is_valid())) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid arguments", K(ret), KPC(ls), K(log), K(scn));
+  } else {
+    ls_ = ls;
+    log_ = &log;
+    scn_ = scn;
+    is_inited_ = true;
+  }
+  return ret;
+}
+
+int ObTabletForkFreezeReplayExecutor::do_replay_(ObTabletHandle &handle)
+{
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(!is_inited_)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("ObTabletForkFreezeReplayExecutor has not been inited", K(ret));
+  } else if (OB_ISNULL(log_)
+      || OB_UNLIKELY(!log_->is_valid())
+      || OB_UNLIKELY(!handle.is_valid())
+      || OB_ISNULL(handle.get_obj())) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid arguments", K(ret), KPC(log_), K(handle));
+  } else {
+    const ObTabletID &tablet_id = handle.get_obj()->get_tablet_id();
+    if (OB_FAIL(ObTabletForkUtil::freeze_tablet(ls_->get_ls_id(), tablet_id))) {
+      LOG_WARN("failed to freeze tablet from fork freeze log", K(ret), K(ls_->get_ls_id()), K(tablet_id), KPC(log_));
+    } else {
+      LOG_INFO("succeeded to replay table fork freeze log: tablet frozen", K(tablet_id));
+    }
+  }
+  return ret;
+}
+
+ObTabletForkStartReplayExecutor::ObTabletForkStartReplayExecutor()
+  : ObDDLReplayExecutor(), log_(nullptr)
+{
+}
+
+int ObTabletForkStartReplayExecutor::init(
+    ObLS *ls,
+    const ObTableForkStartLog &log,
+    const SCN &scn)
+{
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(is_inited_)) {
+    ret = OB_INIT_TWICE;
+    LOG_WARN("init twice", K(ret), K_(is_inited));
+  } else if (OB_ISNULL(ls) || OB_UNLIKELY(!log.is_valid()) || OB_UNLIKELY(!scn.is_valid())) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid arguments", K(ret), KPC(ls), K(log), K(scn));
+  } else {
+    ls_ = ls;
+    log_ = &log;
+    scn_ = scn;
+    is_inited_ = true;
+  }
+  return ret;
+}
+
+int ObTabletForkStartReplayExecutor::do_replay_(ObTabletHandle &handle)
+{
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(!is_inited_)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("ObTabletForkStartReplayExecutor has not been inited", K(ret));
+  } else if (OB_ISNULL(log_)
+      || OB_UNLIKELY(!log_->is_valid())
+      || OB_UNLIKELY(!handle.is_valid())
+      || OB_ISNULL(handle.get_obj())) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid arguments", K(ret), KPC(log_), K(handle));
+  } else {
+    const ObTableForkInfo &fork_info = log_->fork_info_;
+    const ObTabletID &src_tablet_id = handle.get_obj()->get_tablet_id();
+    ObTabletForkParam fork_param;
+    if (OB_FAIL(fork_info.get_tablet_fork_param(src_tablet_id, fork_param))) {
+      if (OB_ENTRY_NOT_EXIST == ret) {
+        ret = OB_NO_NEED_UPDATE;
+        LOG_INFO("fork start replay skip: src tablet not in fork info", K(src_tablet_id), K(fork_info));
+      } else {
+        LOG_WARN("failed to get tablet fork param", K(ret), K(src_tablet_id), K(fork_info));
+      }
+    } else if (OB_FAIL(compaction::ObScheduleDagFunc::schedule_tablet_fork_dag(fork_param, false /* is_emergency */))) {
+      if (OB_SIZE_OVERFLOW != ret && OB_EAGAIN != ret) {
+        LOG_WARN("failed to schedule tablet fork dag from start log", K(ret), K(fork_param), K(fork_info));
+      } else if (OB_EAGAIN == ret) {
+        LOG_DEBUG("exists same fork dag, wait the dag to finish", K(ret), K(fork_param));
+        ret = OB_SUCCESS;
+      }
+    } else {
+      LOG_INFO("succeeded to replay table fork start log: scheduled one fork dag", K(fork_param));
+    }
+  }
+  return ret;
+}
+
+ObTabletForkFinishReplayExecutor::ObTabletForkFinishReplayExecutor()
+  : ObDDLReplayExecutor(), log_(nullptr)
+{
+}
+
+int ObTabletForkFinishReplayExecutor::init(
+    ObLS *ls,
+    const ObTableForkFinishLog &log,
+    const SCN &scn)
+{
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(is_inited_)) {
+    ret = OB_INIT_TWICE;
+    LOG_WARN("init twice", K(ret), K_(is_inited));
+  } else if (OB_ISNULL(ls) || OB_UNLIKELY(!log.is_valid()) || OB_UNLIKELY(!scn.is_valid())) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid arguments", K(ret), KPC(ls), K(log), K(scn));
+  } else {
+    ls_ = ls;
+    log_ = &log;
+    scn_ = scn;
+    is_inited_ = true;
+  }
+  return ret;
+}
+
+int ObTabletForkFinishReplayExecutor::do_replay_(ObTabletHandle &handle)
+{
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(!is_inited_)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("ObTabletForkFinishReplayExecutor has not been inited", K(ret));
+  } else if (OB_ISNULL(log_)
+      || OB_UNLIKELY(!log_->is_valid())
+      || OB_UNLIKELY(!handle.is_valid())
+      || OB_ISNULL(handle.get_obj())) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid arguments", K(ret), KPC(log_), K(handle));
+  } else {
+    const ObTableForkInfo &fork_info = log_->fork_info_;
+    const ObTabletID &src_tablet_id = handle.get_obj()->get_tablet_id();
+    ObTabletForkParam fork_param;
+    if (OB_FAIL(fork_info.get_tablet_fork_param(src_tablet_id, fork_param))) {
+      if (OB_ENTRY_NOT_EXIST == ret) {
+        ret = OB_NO_NEED_UPDATE;
+        LOG_INFO("fork finish replay skip: src tablet not in fork info", K(src_tablet_id), K(fork_info));
+      } else {
+        LOG_WARN("failed to get tablet fork param", K(ret), K(src_tablet_id), K(fork_info));
+      }
+    } else if (OB_FAIL(compaction::ObScheduleDagFunc::schedule_tablet_fork_dag(fork_param, false /* is_emergency */))) {
+      if (OB_SIZE_OVERFLOW != ret && OB_EAGAIN != ret) {
+        LOG_WARN("failed to try schedule fork dag from finish log", K(ret), K(fork_param), K(fork_info));
+      } else if (OB_EAGAIN == ret) {
+        ret = OB_SUCCESS;
+      }
+    } else {
+      const ObTabletID &dst_tablet_id = fork_param.dest_tablet_id_;
+      bool is_complete = false;
+      if (OB_FAIL(storage::ObTabletForkUtil::check_fork_data_complete(dst_tablet_id, is_complete))) {
+        LOG_WARN("failed to check fork data complete", K(ret), K(dst_tablet_id), K(fork_param));
+      } else if (!is_complete) {
+        ret = OB_EAGAIN; // retry replay until fork data complete
+        if (REACH_COUNT_INTERVAL(1000L)) {
+          LOG_INFO("fork data not complete yet, need retry", K(ret), K(dst_tablet_id), K(fork_param));
+        }
+      } else {
+        LOG_INFO("replay table fork finish log: data complete for one tablet", K(fork_param));
+      }
+    }
+  }
+  return ret;
+}
 
 #ifdef OB_BUILD_SHARED_STORAGE
 // ObDDLFinishReplayExecutor

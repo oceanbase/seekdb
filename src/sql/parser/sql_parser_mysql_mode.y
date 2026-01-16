@@ -298,7 +298,7 @@ END_P SET_VAR DELIMITER
         EXTENDED_NOADDR EXTENT_SIZE EXTRACT EXCEPT EXPIRED ENCODING EMPTY_FIELD_AS_NULL EUCLIDEAN EXTERNAL EXTERNAL_STORAGE_DEST EXPIRE_TIME
 
         FAILOVER FAST FAULTS FILE_BLOCK_SIZE FIELDS FILEX FINAL_COUNT FIRST FIRST_VALUE FIXED FLUSH FOLLOWER FORMAT
-        FOUND FREEZE FREQUENCY FUNCTION FOLLOWING FLASHBACK FULL FRAGMENTATION FROZEN FILE_ID FILTER
+        FOUND FORK FREEZE FREQUENCY FUNCTION FOLLOWING FLASHBACK FULL FRAGMENTATION FROZEN FILE_ID FILTER
         FIELD_OPTIONALLY_ENCLOSED_BY FIELD_DELIMITER FIELD_ENCLOSED_BY FILE_EXTENSION
 
         GENERAL GEOMETRY GEOMCOLLECTION GEOMETRYCOLLECTION GET_FORMAT GLOBAL GRANTS GRANULARITY GROUP_CONCAT GROUPING GTS
@@ -389,7 +389,7 @@ END_P SET_VAR DELIMITER
 %type <node> sql_stmt stmt_list stmt opt_end_p
 %type <node> select_stmt update_stmt delete_stmt
 %type <node> insert_stmt single_table_insert values_clause dml_table_name
-%type <node> create_table_stmt create_table_like_stmt opt_table_option_list table_option_list table_option table_option_list_space_seperated create_function_stmt drop_function_stmt parallel_option lob_storage_clause lob_storage_parameter lob_storage_parameters lob_chunk_size
+%type <node> create_table_stmt create_table_like_stmt fork_table_stmt opt_table_option_list table_option_list table_option table_option_list_space_seperated create_function_stmt drop_function_stmt parallel_option lob_storage_clause lob_storage_parameter lob_storage_parameters lob_chunk_size
 %type <node> opt_force
 %type <node> index_or_heap
 %type <node> create_sequence_stmt alter_sequence_stmt drop_sequence_stmt opt_sequence_option_list sequence_option_list sequence_option simple_num
@@ -638,6 +638,7 @@ stmt:
   | create_function_stmt    { $$ = $1; check_question_mark($$, result); }
   | drop_function_stmt      { $$ = $1; check_question_mark($$, result); }
   | create_table_like_stmt  { $$ = $1; check_question_mark($$, result); }
+  | fork_table_stmt         { $$ = $1; check_question_mark($$, result); }
   | create_database_stmt    { $$ = $1; check_question_mark($$, result); }
   | drop_database_stmt      { $$ = $1; check_question_mark($$, result); }
   | alter_database_stmt     { $$ = $1; check_question_mark($$, result); }
@@ -5553,6 +5554,19 @@ create_with_opt_hint special_table_type TABLE opt_if_not_exists relation_factor 
 {
   (void)($1);
   malloc_non_terminal_node($$, result->malloc_pool_, T_CREATE_TABLE_LIKE, 4, $2, $4, $5, $8);
+}
+;
+
+/*****************************************************************************
+ *
+ *	FORK TABLE grammar
+ *
+ *****************************************************************************/
+
+fork_table_stmt:
+FORK TABLE relation_factor TO relation_factor
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_FORK_TABLE, 2, $5, $3);
 }
 ;
 

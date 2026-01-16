@@ -478,7 +478,8 @@ int ObTableLockOwnerID::get_ddl_owner_id(int64_t &id) const
 {
   int ret = OB_SUCCESS;
   if (static_cast<unsigned char>(ObLockOwnerType::INVALID_OWNER_TYPE) != type_
-      && static_cast<unsigned char>(ObLockOwnerType::DEFAULT_OWNER_TYPE) != type_) {
+      && static_cast<unsigned char>(ObLockOwnerType::DEFAULT_OWNER_TYPE) != type_
+      && static_cast<unsigned char>(ObLockOwnerType::FORK_TABLE_OWNER_TYPE) != type_) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("this is not a ddl owner", K(ret), K(type_));
   } else {

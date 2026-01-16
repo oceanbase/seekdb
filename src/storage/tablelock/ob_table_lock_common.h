@@ -425,6 +425,8 @@ enum class ObLockOwnerType : unsigned char {
   INVALID_OWNER_TYPE    = 255,
 };
 
+static constexpr int64_t FORK_TABLE_LOCK_OWNER_ID = 1;
+
 const char *get_name(const ObLockOwnerType intype);
 static inline
 bool is_lock_owner_type_valid(const ObLockOwnerType &type)

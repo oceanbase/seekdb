@@ -2733,6 +2733,56 @@ OB_SERIALIZE_MEMBER((ObDropTableArg, ObDDLArg),
                     force_drop_,
                     compat_mode_);
 
+int ObForkTableArg::assign(const ObForkTableArg &other)
+{
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(ObDDLArg::assign(other))) {
+    LOG_WARN("assign ddl arg failed", K(ret));
+  } else {
+    tenant_id_ = other.tenant_id_;
+    src_database_name_ = other.src_database_name_;
+    src_table_name_ = other.src_table_name_;
+    dst_database_name_ = other.dst_database_name_;
+    dst_table_name_ = other.dst_table_name_;
+    if_not_exist_ = other.if_not_exist_;
+    session_id_ = other.session_id_;
+  }
+  return ret;
+}
+
+bool ObForkTableArg::is_valid() const
+{
+  return (OB_INVALID_ID != tenant_id_
+          && !src_database_name_.empty()
+          && !src_table_name_.empty()
+          && !dst_database_name_.empty()
+          && !dst_table_name_.empty());
+}
+
+DEF_TO_STRING(ObForkTableArg)
+{
+  int64_t pos = 0;
+  J_OBJ_START();
+  J_KV(K_(tenant_id),
+       K_(src_database_name),
+       K_(src_table_name),
+       K_(dst_database_name),
+       K_(dst_table_name),
+       K_(if_not_exist),
+       K_(session_id));
+  J_OBJ_END();
+  return pos;
+}
+
+OB_SERIALIZE_MEMBER((ObForkTableArg, ObDDLArg),
+                    tenant_id_,
+                    src_database_name_,
+                    src_table_name_,
+                    dst_database_name_,
+                    dst_table_name_,
+                    if_not_exist_,
+                    session_id_);
+
 bool ObOptimizeTableArg::is_valid() const
 {
   return (OB_INVALID_ID != tenant_id_ && tables_.count() > 0);
@@ -7495,6 +7545,7 @@ void ObCreateTabletInfo::reset()
   is_create_bind_hidden_tablets_ = false;
   create_commit_versions_.reset();
   has_cs_replica_ = false;
+  fork_tablet_infos_.reset();
 }
 
 int ObCreateTabletInfo::assign(const ObCreateTabletInfo &info)
@@ -7509,6 +7560,8 @@ int ObCreateTabletInfo::assign(const ObCreateTabletInfo &info)
     LOG_WARN("failed to assign table schema index", KR(ret), K(info));
   } else if (OB_FAIL(create_commit_versions_.assign(info.create_commit_versions_))) {
     LOG_WARN("failed to assign create commit versions", KR(ret), K(info));
+  } else if (OB_FAIL(fork_tablet_infos_.assign(info.fork_tablet_infos_))) {
+    LOG_WARN("failed to assign fork tablet infos", KR(ret), K(info));
   } else {
     data_tablet_id_ = info.data_tablet_id_;
     compat_mode_ = info.compat_mode_;
@@ -7552,14 +7605,51 @@ int ObCreateTabletInfo::init(const ObIArray<common::ObTabletID> &tablet_ids,
   return ret;
 }
 
+int ObCreateTabletInfo::init(const ObIArray<common::ObTabletID> &tablet_ids,
+                             common::ObTabletID data_tablet_id,
+                             const common::ObIArray<int64_t> &table_schema_index,
+                             const lib::Worker::CompatMode &mode,
+                             const bool is_create_bind_hidden_tablets,
+                             const ObIArray<int64_t> &create_commit_versions,
+                             const bool has_cs_replica,
+                             const ObIArray<share::ObForkTabletInfo> &fork_tablet_infos)
+{
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(fork_tablet_infos.count() != 0 && fork_tablet_infos.count() != tablet_ids.count())) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("fork tablet infos count not match tablet ids count", KR(ret), K(tablet_ids.count()),
+      K(fork_tablet_infos));
+  } else if (OB_FAIL(init(tablet_ids, data_tablet_id, table_schema_index, mode, is_create_bind_hidden_tablets,
+      create_commit_versions, has_cs_replica))) {
+    LOG_WARN("failed to init create tablet info", KR(ret));
+  } else if (OB_FAIL(fork_tablet_infos_.assign(fork_tablet_infos))) {
+    LOG_WARN("failed to assign fork tablet infos", KR(ret), K(fork_tablet_infos));
+  }
+  return ret;
+}
+
+int ObCreateTabletInfo::get_fork_tablet_info(const int64_t idx, share::ObForkTabletInfo &fork_tablet_info) const
+{
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(idx < 0 || idx >= tablet_ids_.count() || (fork_tablet_infos_.count() > 0 && idx >= fork_tablet_infos_.count()))) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid index", KR(ret), K(idx), "tablet_count", tablet_ids_.count(), "fork_tablet_infos_count", fork_tablet_infos_.count());
+  } else if (fork_tablet_infos_.empty()) {
+    fork_tablet_info.reset();
+  } else {
+    fork_tablet_info = fork_tablet_infos_.at(idx);
+  }
+  return ret;
+}
+
 DEF_TO_STRING(ObCreateTabletInfo)
 {
   int64_t pos = 0;
-  J_KV(K_(tablet_ids), K_(data_tablet_id), K_(table_schema_index), K_(compat_mode), K_(is_create_bind_hidden_tablets), K_(create_commit_versions), K_(has_cs_replica));
+  J_KV(K_(tablet_ids), K_(data_tablet_id), K_(table_schema_index), K_(compat_mode), K_(is_create_bind_hidden_tablets), K_(create_commit_versions), K_(has_cs_replica), K_(fork_tablet_infos));
   return pos;
 }
 
-OB_SERIALIZE_MEMBER(ObCreateTabletInfo, tablet_ids_, data_tablet_id_, table_schema_index_, compat_mode_, is_create_bind_hidden_tablets_, create_commit_versions_, has_cs_replica_);
+OB_SERIALIZE_MEMBER(ObCreateTabletInfo, tablet_ids_, data_tablet_id_, table_schema_index_, compat_mode_, is_create_bind_hidden_tablets_, create_commit_versions_, has_cs_replica_, fork_tablet_infos_);
 
 int ObCreateTabletExtraInfo::init(const uint64_t tenant_data_version,
                                   const bool need_create_empty_major,

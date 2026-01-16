@@ -66,6 +66,7 @@
   #include "src/storage/tablet/ob_tablet_binding_mds_user_data.h"
   #include "src/storage/tablet/ob_tablet_split_mds_helper.h"
   #include "src/storage/tablet/ob_tablet_split_mds_user_data.h"
+  #include "src/storage/tablet/ob_tablet_fork_mds_helper.h"
   #include "src/share/ob_tablet_autoincrement_param.h"
   #include "src/storage/compaction/ob_medium_compaction_info.h"
   #include "src/storage/tablet/ob_tablet_start_transfer_mds_helper.h"
@@ -222,6 +223,10 @@ _GENERATE_MDS_FRAME_CODE_FOR_TRANSACTION_(HELPER_CLASS, BUFFER_CTX_TYPE, ID, ENU
                                           ::oceanbase::storage::mds::MdsCtx,\
                                           41,\
                                           DDL_COMPLETE_MDS)
+  GENERATE_MDS_FRAME_CODE_FOR_TRANSACTION(::oceanbase::storage::ObTabletForkMdsHelper,\
+                                          ::oceanbase::storage::mds::MdsCtx,\
+                                          42,\
+                                          TABLET_FORK)
   // GENERATE_MDS_FRAME_CODE_FOR_TRANSACTION(::oceanbase::storage::ObTabletDDLCompleteMdsHelper,\
   //                                         ::oceanbase::storage::mds::MdsCtx,\
   //                                         41,\

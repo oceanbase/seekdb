@@ -224,6 +224,13 @@ ob_set_subtarget(ob_rootserver direct_load
   direct_load/ob_direct_load_partition_exchange.cpp
 )
 
+ob_set_subtarget(ob_rootserver fork_table
+  fork_table/ob_fork_table_info_builder.cpp
+  fork_table/ob_fork_table_helper.cpp
+  fork_table/ob_fork_table_service.cpp
+  fork_table/ob_fork_table_task.cpp
+)
+
 ob_set_subtarget(ob_rootserver standby
   standby/ob_standby_service.cpp
   standby/ob_recovery_ls_service.cpp

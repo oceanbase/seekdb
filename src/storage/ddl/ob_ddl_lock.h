@@ -122,6 +122,20 @@ public:
       const share::schema::ObTableSchema &table_schema,
       ObMySQLTransaction &trans);
 
+  static int lock_for_fork_table(
+      share::schema::ObSchemaGetterGuard &schema_guard,
+      const share::schema::ObTableSchema &src_table_schema,
+      const ObIArray<share::schema::ObTableSchema> &dst_table_schemas,
+      const transaction::tablelock::ObTableLockOwnerID lock_owner,
+      ObMySQLTransaction &trans);
+
+  static int unlock_for_fork_table(
+      share::schema::ObSchemaGetterGuard &schema_guard,
+      const share::schema::ObTableSchema &src_table_schema,
+      const share::schema::ObTableSchema &dst_table_schema,
+      const int64_t task_id,
+      const transaction::tablelock::ObTableLockOwnerID lock_owner,
+      ObMySQLTransaction &trans);
 
   static int lock_for_common_ddl_in_trans(
       const share::schema::ObTableSchema &table_schema,
@@ -201,6 +215,26 @@ private:
     const ObIArray<ObTabletID> &tablet_ids,
     ObArray<transaction::tablelock::ObUnLockAloneTabletRequest> &unlock_args,
     ObMySQLTransaction &trans);
+  static int lock_table_and_global_indexes_for_fork(
+      share::schema::ObSchemaGetterGuard &schema_guard,
+      const share::schema::ObTableSchema &table_schema,
+      const transaction::tablelock::ObTableLockOwnerID lock_owner,
+      ObMySQLTransaction &trans);
+  static int lock_dst_table_and_global_indexes_for_fork(
+      const ObIArray<share::schema::ObTableSchema> &dst_table_schemas,
+      const transaction::tablelock::ObTableLockOwnerID lock_owner,
+      ObMySQLTransaction &trans);
+  static int unlock_table_and_global_indexes_for_fork(
+    share::schema::ObSchemaGetterGuard &schema_guard,
+    const share::schema::ObTableSchema &table_schema,
+    const transaction::tablelock::ObTableLockOwnerID lock_owner,
+    ObMySQLTransaction &trans);
+  static int check_has_dependent_task(
+    const uint64_t tenant_id,
+    const int64_t current_task_id,
+    const uint64_t table_id,
+    ObMySQLTransaction &trans,
+    bool &has_dependent_task);
   static constexpr int64_t DEFAULT_TIMEOUT = 0;
 };
 

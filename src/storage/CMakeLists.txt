@@ -385,6 +385,7 @@ ob_set_subtarget(ob_storage tablet
   tablet/ob_tablet_mds_table_mini_merger.cpp
   tablet/ob_tablet_start_transfer_mds_helper.cpp
   tablet/ob_tablet_finish_transfer_mds_helper.cpp
+  tablet/ob_tablet_fork_mds_helper.cpp
   tablet/ob_tablet_abort_transfer_mds_helper.cpp
   tablet/ob_tablet_persister.cpp
   tablet/ob_tablet_obj_load_helper.cpp
@@ -620,6 +621,9 @@ ob_set_subtarget(ob_storage ddl
   ddl/ob_delete_lob_meta_row_task.cpp
   ddl/ob_ddl_clog.cpp
   ddl/ob_ddl_merge_task.cpp
+  ddl/ob_table_fork_info.cpp
+  ddl/ob_tablet_fork_task.cpp
+  ddl/ob_tablet_rebuild_util.cpp
   ddl/ob_ddl_redo_log_replayer.cpp
   ddl/ob_ddl_redo_log_writer.cpp
   ddl/ob_ddl_struct.cpp

@@ -2005,7 +2005,7 @@ int ObCopyRemoteSSTableInfoObProducer::get_next_sstable_info(
       } else if (!need_copy_sstable) {
        //do nothing
         LOG_INFO("no need copy sstable", KPC(sstable));
-      } else if (OB_FAIL(tablet_handle_.get_obj()->build_migration_sstable_param(table->get_key(), sstable_info.param_))) {
+      } else if (OB_FAIL(tablet_handle_.get_obj()->build_migration_sstable_param(table->get_key(), sstable_info.param_, false/*is_fork_table*/))) {
         LOG_WARN("failed to build migration sstable param", K(ret), K(*table));
       } else {
         sstable_info.tablet_id_ = tablet_id_;

@@ -16,7 +16,11 @@
 
 #define USING_LOG_PREFIX RS
 
+#include <algorithm>
+
 #include "ob_ddl_service.h"
+#include "share/ob_ddl_common.h"
+#include "share/inner_table/ob_inner_table_schema_constants.h"
 #include "share/schema/ob_schema_printer.h"
 #include "share/schema/ob_schema_service_sql_impl.h"
 #include "share/ob_tablet_autoincrement_service.h"
@@ -25,6 +29,7 @@
 #include "share/sequence/ob_sequence_ddl_proxy.h"
 #include "share/ob_global_stat_proxy.h"
 #include "share/ob_service_epoch_proxy.h"
+#include "share/ob_fork_table_util.h"
 #include "rootserver/standby/ob_standby_service.h" // ObStandbyService
 #include "sql/resolver/ddl/ob_ddl_resolver.h"
 #include "sql/resolver/expr/ob_raw_expr_modify_column_name.h"
@@ -84,6 +89,10 @@
 #include "share/ob_license_utils.h"
 #include "share/ob_domain_index_builder_util.h"
 #include "rootserver/ob_objpriv_mysql_ddl_service.h"
+#include "rootserver/ob_rs_async_rpc_proxy.h"
+#include "share/location_cache/ob_location_service.h"
+#include "share/tablet/ob_tablet_to_ls_operator.h"
+#include "share/ob_autoincrement_service.h"
 
 namespace oceanbase
 {
@@ -2226,12 +2235,15 @@ int ObDDLService::create_tablets_in_trans_(ObIArray<ObTableSchema> &table_schema
                                            ObDDLOperator &ddl_operator,
                                            ObMySQLTransaction &trans,
                                            ObSchemaGetterGuard &schema_guard,
-                                           const uint64_t tenant_data_version)
+                                           const uint64_t tenant_data_version,
+                                           const share::ObForkTableInfo &fork_table_info)
 {
   int ret = OB_SUCCESS;
   SCN frozen_scn;
   share::schema::ObTableSchema *first_table = nullptr;
   uint64_t tenant_id = OB_INVALID_ID;
+  bool need_create_empty_major = true;
+  ObArray<share::ObForkTableInfo> fork_table_infos;
   if (table_schemas.count() <= 0) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("table_schemas should not be emtpy", KR(ret), K(table_schemas.count()));
@@ -2247,21 +2259,42 @@ int ObDDLService::create_tablets_in_trans_(ObIArray<ObTableSchema> &table_schema
   } else if (OB_FAIL(ObMajorFreezeHelper::get_frozen_scn(tenant_id, frozen_scn))) {
     LOG_WARN("failed to get frozen status for create tablet", KR(ret), K(tenant_id));
   } else {
-    ObTableCreator table_creator(
-                   tenant_id,
-                   frozen_scn,
-                   trans);
+    ObTableCreator table_creator(tenant_id, frozen_scn, trans);
     ObNewTableTabletAllocator new_table_tablet_allocator(
                               tenant_id,
                               schema_guard,
                               sql_proxy_);
     common::ObArray<share::ObLSID> ls_id_array;
     const ObTablegroupSchema *data_tablegroup_schema = NULL; // keep NULL if no tablegroup
-    if (OB_FAIL(table_creator.init(true/*need_tablet_cnt_check*/))) {
-      LOG_WARN("fail to init table creator", KR(ret));
-    } else if (OB_FAIL(new_table_tablet_allocator.init())) {
+
+    if (OB_FAIL(new_table_tablet_allocator.init())) {
       LOG_WARN("fail to init new table tablet allocator", KR(ret));
-    } else if (OB_INVALID_ID != first_table->get_tablegroup_id()) {
+    } else if (fork_table_info.is_valid()) {
+      common::ObArray<uint64_t> dest_table_ids;
+      for (int64_t i = 0; OB_SUCC(ret) && i < table_schemas.count(); ++i) {
+        const uint64_t table_id = table_schemas.at(i).get_table_id();
+        if (OB_FAIL(dest_table_ids.push_back(table_id))) {
+          LOG_WARN("failed to push back dest table id", KR(ret), K(table_id));
+        }
+      }
+      if (OB_SUCC(ret)) {
+        // sort dest_table_ids to ensure the order of src_table_ids is the same as dest_table_ids
+        std::sort(dest_table_ids.begin(), dest_table_ids.end());
+        if (OB_FAIL(table_creator.init_with_fork_table_info(
+                  fork_table_info,
+                  dest_table_ids,
+                  schema_guard,
+                  true/*need_tablet_cnt_check*/))) {
+        LOG_WARN("fail to init table creator with fork table info", KR(ret), K(fork_table_info), K(dest_table_ids));
+        } else {
+          need_create_empty_major = false;
+        }
+      }
+    } else if (OB_FAIL(table_creator.init(true/*need_tablet_cnt_check*/))) {
+      LOG_WARN("fail to init table creator", KR(ret));
+    }
+
+    if (OB_SUCC(ret) && OB_INVALID_ID != first_table->get_tablegroup_id()) {
       if (OB_FAIL(schema_guard.get_tablegroup_schema(
           first_table->get_tenant_id(),
           first_table->get_tablegroup_id(),
@@ -2281,7 +2314,7 @@ int ObDDLService::create_tablets_in_trans_(ObIArray<ObTableSchema> &table_schema
       const int64_t table_id = this_table.get_table_id();
       if (!this_table.has_tablet()) {
       } else if (!this_table.is_global_index_table()) {
-        if (OB_FAIL(schemas.push_back(&this_table)) || OB_FAIL(need_create_empty_majors.push_back(true))) {
+        if (OB_FAIL(schemas.push_back(&this_table)) || OB_FAIL(need_create_empty_majors.push_back(need_create_empty_major))) {
           LOG_WARN("failed to push_back", KR(ret), K(this_table));
         }
       } else {
@@ -2294,7 +2327,8 @@ int ObDDLService::create_tablets_in_trans_(ObIArray<ObTableSchema> &table_schema
             this_table,
             ls_id_array,
             tenant_data_version,
-            true /*need_create_empty_major_sstable*/))) {
+            need_create_empty_major /*need_create_empty_major_sstable*/,
+            &schema_guard))) {
           LOG_WARN("create table partitions failed", KR(ret), K(this_table));
         }
       }
@@ -2322,9 +2356,10 @@ int ObDDLService::create_tablets_in_trans_(ObIArray<ObTableSchema> &table_schema
             schemas,
             ls_id_array,
             tenant_data_version,
-            need_create_empty_majors/*need_create_empty_major_sstable*/))) {
-      LOG_WARN("create table partitions failed", KR(ret), KPC(first_table),
-           K(last_schema_version));
+            need_create_empty_majors,
+            false,
+            &schema_guard))) {
+      LOG_WARN("create table partitions failed", KR(ret), KPC(first_table), K(last_schema_version));
     } else if (OB_FAIL(table_creator.execute())) {
       LOG_WARN("execute create partition failed", KR(ret));
     }

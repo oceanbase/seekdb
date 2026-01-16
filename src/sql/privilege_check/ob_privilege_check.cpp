@@ -41,6 +41,7 @@
 #include "sql/resolver/ddl/ob_truncate_table_stmt.h"
 #include "sql/resolver/ddl/ob_rename_table_stmt.h"
 #include "sql/resolver/ddl/ob_create_table_like_stmt.h"
+#include "sql/resolver/ddl/ob_fork_table_stmt.h"
 #include "sql/resolver/ddl/ob_drop_tablegroup_stmt.h"
 #include "sql/resolver/ddl/ob_flashback_stmt.h"
 #include "sql/resolver/cmd/ob_call_procedure_stmt.h"
@@ -1932,6 +1933,48 @@ int get_create_table_like_stmt_need_privs(
       ADD_NEED_PRIV(need_priv);
       need_priv.db_ = stmt->get_new_db_name();
       need_priv.table_ = stmt->get_new_table_name();
+      need_priv.priv_set_ = OB_PRIV_CREATE;
+      need_priv.priv_level_ = OB_PRIV_TABLE_LEVEL;
+      ADD_NEED_PRIV(need_priv);
+    }
+  }
+  return ret;
+}
+
+int get_fork_table_stmt_need_privs(
+    const ObSessionPrivInfo &session_priv,
+    const ObStmt *basic_stmt,
+    ObIArray<ObNeedPriv> &need_privs)
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(basic_stmt)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("Basic stmt should be not be NULL", K(ret));
+  } else if (OB_UNLIKELY(stmt::T_FORK_TABLE != basic_stmt->get_stmt_type())) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("Stmt type should be T_FORK_TABLE",
+             K(ret), "stmt type", basic_stmt->get_stmt_type());
+  } else {
+    ObNeedPriv need_priv;
+    const ObForkTableStmt *stmt = static_cast<const ObForkTableStmt *>(basic_stmt);
+    const obrpc::ObForkTableArg &fork_table_arg = stmt->get_fork_table_arg();
+    if (OB_FAIL(ret)) {
+    } else if (session_priv.tenant_id_ != fork_table_arg.tenant_id_) {
+      ret = OB_ERR_NO_PRIVILEGE;
+      LOG_WARN("Can not fork other tenant's table. Should not be here except change"
+               "tenant which not suggested", K(ret));
+    } else if (OB_FAIL(ObPrivilegeCheck::can_do_operation_on_db(session_priv, fork_table_arg.dst_database_name_))) {
+      LOG_WARN("Can not do this operation on the database", K(session_priv), K(ret));
+    } else {
+      // Need SELECT privilege on source table
+      need_priv.db_ = fork_table_arg.src_database_name_;
+      need_priv.table_ = fork_table_arg.src_table_name_;
+      need_priv.priv_set_ = OB_PRIV_SELECT;
+      need_priv.priv_level_ = OB_PRIV_TABLE_LEVEL;
+      ADD_NEED_PRIV(need_priv);
+      // Need CREATE privilege on destination database
+      need_priv.db_ = fork_table_arg.dst_database_name_;
+      need_priv.table_ = fork_table_arg.dst_table_name_;
       need_priv.priv_set_ = OB_PRIV_CREATE;
       need_priv.priv_level_ = OB_PRIV_TABLE_LEVEL;
       ADD_NEED_PRIV(need_priv);

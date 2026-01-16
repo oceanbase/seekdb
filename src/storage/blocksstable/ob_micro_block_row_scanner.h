@@ -325,7 +325,8 @@ public:
         reserved_pos_(ObIMicroBlockReaderInfo::INVALID_ROW_INDEX),
         trans_version_col_idx_(-1),
         sql_sequence_col_idx_(-1),
-        cell_cnt_(0)
+        cell_cnt_(0),
+        skip_running_tx_(false)
   {}
   virtual ~ObMultiVersionMicroBlockRowScanner() {}
   virtual void reuse() override;
@@ -404,6 +405,7 @@ private:
   int64_t sql_sequence_col_idx_;
   int64_t cell_cnt_;
   common::ObVersionRange version_range_;
+  bool skip_running_tx_;
 };
 
 // multi version sstable micro block scanner for mow tables
@@ -468,7 +470,8 @@ public:
       trans_version_col_idx_(ObIMicroBlockReaderInfo::INVALID_ROW_INDEX),
       sql_sequence_col_idx_(ObIMicroBlockReaderInfo::INVALID_ROW_INDEX),
       committed_trans_version_(INT64_MAX),
-      last_trans_state_(INT64_MAX)
+      last_trans_state_(INT64_MAX),
+      skip_running_tx_(false)
   {}
   virtual ~ObMultiVersionMicroBlockMinorMergeRowScanner()
   {}
@@ -511,13 +514,14 @@ private:
     const transaction::ObTxSEQ &sql_seq,
     int64_t &state,
     bool &can_read);
-  int check_row_trans_state(bool &skip_curr_row);
+  int check_row_trans_state(bool &skip_curr_row, const bool skip_running_tx = false);
 private:
   // multi version
   int64_t trans_version_col_idx_;
   int64_t sql_sequence_col_idx_;
   int64_t committed_trans_version_;
   int64_t last_trans_state_;
+  bool skip_running_tx_;  // If true, skip RUNNING transactions (e.g., for fork operations)
 };
 
 }

@@ -338,6 +338,54 @@ private:
   const ObTabletFreezeLog *log_;
 };
 
+class ObTabletForkFreezeReplayExecutor final : public ObDDLReplayExecutor
+{
+public:
+  ObTabletForkFreezeReplayExecutor();
+  ~ObTabletForkFreezeReplayExecutor() = default;
+  int init(ObLS *ls, const ObTableForkFreezeLog &log, const share::SCN &scn);
+protected:
+  virtual int do_replay_(ObTabletHandle &handle) override;
+private:
+  const ObTableForkFreezeLog *log_;
+};
+
+class ObTabletForkStartReplayExecutor final : public ObDDLReplayExecutor
+{
+public:
+  ObTabletForkStartReplayExecutor();
+  ~ObTabletForkStartReplayExecutor() = default;
+
+  int init(
+      ObLS *ls,
+      const ObTableForkStartLog &log,
+      const share::SCN &scn);
+
+protected:
+  virtual int do_replay_(ObTabletHandle &handle) override;
+
+private:
+  const ObTableForkStartLog *log_;
+};
+
+class ObTabletForkFinishReplayExecutor final : public ObDDLReplayExecutor
+{
+public:
+  ObTabletForkFinishReplayExecutor();
+  ~ObTabletForkFinishReplayExecutor() = default;
+
+  int init(
+      ObLS *ls,
+      const ObTableForkFinishLog &log,
+      const share::SCN &scn);
+
+protected:
+  virtual int do_replay_(ObTabletHandle &handle) override;
+
+private:
+  const ObTableForkFinishLog *log_;
+};
+
 
 class ObSchemaChangeReplayExecutor final : public logservice::ObTabletReplayExecutor
 {

@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX RS
 #include "rootserver/ob_table_creator.h"
 #include "share/tablet/ob_tablet_to_table_history_operator.h" // ObTabletToTableHistoryOperator
+#include <algorithm>
 
 namespace oceanbase
 {
@@ -35,6 +36,27 @@ int ObTableCreator::init(const bool need_tablet_cnt_check)
     LOG_WARN("ObTableCreator init twice", KR(ret));
   } else if (OB_FAIL(tablet_creator_.init(need_tablet_cnt_check))) {
     LOG_WARN("fail to init tablet creator", KR(ret));
+  } else {
+    inited_ = true;
+  }
+  return ret;
+}
+
+int ObTableCreator::init_with_fork_table_info(
+    const share::ObForkTableInfo &main_fork_table_info,
+    const common::ObIArray<uint64_t> &dest_table_ids,
+    share::schema::ObSchemaGetterGuard &schema_guard,
+    const bool need_tablet_cnt_check)
+{
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(inited_)) {
+    ret = OB_INIT_TWICE;
+    LOG_WARN("ObTableCreator init twice", KR(ret));
+  } else if (OB_FAIL(tablet_creator_.init(need_tablet_cnt_check))) {
+    LOG_WARN("fail to init tablet creator", KR(ret));
+  } else if (OB_FAIL(fork_table_info_builder_.init_with_fork_table_info(
+              main_fork_table_info, dest_table_ids, schema_guard))) {
+    LOG_WARN("fail to init fork table info builder", KR(ret), K(main_fork_table_info), K(dest_table_ids));
   } else {
     inited_ = true;
   }
@@ -127,7 +149,8 @@ int ObTableCreator::add_create_tablets_of_table_arg(
                     const share::schema::ObTableSchema &table_schema,
                     const common::ObIArray<share::ObLSID> &ls_id_array,
                     const uint64_t tenant_data_version,
-                    const bool need_create_empty_major_sstable)
+                    const bool need_create_empty_major_sstable,
+                    share::schema::ObSchemaGetterGuard *schema_guard)
 {
   int ret = OB_SUCCESS;
   ObSEArray<const share::schema::ObTableSchema*, 1> schemas;
@@ -139,7 +162,7 @@ int ObTableCreator::add_create_tablets_of_table_arg(
     || OB_FAIL(need_create_empty_majors.push_back(need_create_empty_major_sstable))) {
     LOG_WARN("failed to push_back", KR(ret), K(table_schema), K(need_create_empty_major_sstable));
   } else if (OB_FAIL(add_create_tablets_of_tables_arg_(
-          schemas, NULL, ls_id_array, tenant_data_version, need_create_empty_majors))) {
+          schemas, NULL, ls_id_array, tenant_data_version, need_create_empty_majors, false, schema_guard))) {
     LOG_WARN("failed to add create tablet arg", KR(ret), K(table_schema));
   }
   return ret;
@@ -150,7 +173,8 @@ int ObTableCreator::add_create_tablets_of_tables_arg(
                     const common::ObIArray<share::ObLSID> &ls_id_array,
                     const uint64_t tenant_data_version,
                     const common::ObIArray<bool> &need_create_empty_majors,
-                    const bool ignore_cs_replica /*=false*/)
+                    const bool ignore_cs_replica /*=false*/,
+                    share::schema::ObSchemaGetterGuard *schema_guard)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(tenant_data_version <= 0 
@@ -183,7 +207,7 @@ int ObTableCreator::add_create_tablets_of_tables_arg(
   }
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(add_create_tablets_of_tables_arg_(
-          schemas, NULL, ls_id_array, tenant_data_version, need_create_empty_majors, ignore_cs_replica))) {
+          schemas, NULL, ls_id_array, tenant_data_version, need_create_empty_majors, ignore_cs_replica, schema_guard))) {
     LOG_WARN("fail to add_create_tablets_of_tables_arg_", KR(ret), K(schemas));
   }
   return ret;
@@ -198,7 +222,8 @@ int ObTableCreator::add_create_tablets_of_tables_arg_(
                     const common::ObIArray<share::ObLSID> &ls_id_array,
                     const uint64_t tenant_data_version,
                     const common::ObIArray<bool> &need_create_empty_majors,
-                    const bool ignore_cs_replica /*=false*/)
+                    const bool ignore_cs_replica /*=false*/,
+                    share::schema::ObSchemaGetterGuard *schema_guard)
 {
   int ret = OB_SUCCESS;
   int tmp_ret = OB_SUCCESS;
@@ -301,7 +326,8 @@ int ObTableCreator::add_create_tablets_of_tables_arg_(
                     is_create_bind_hidden_tablets,
                     tenant_data_version,
                     need_create_empty_majors,
-                    cs_replica_mgr))) {
+                    cs_replica_mgr,
+                    schema_guard))) {
           LOG_WARN("fail to generate_create_tablet_arg",
                    K(table_schema), K(schemas), KR(ret), K(is_create_bind_hidden_tablets));
         }
@@ -328,7 +354,8 @@ int ObTableCreator::add_create_tablets_of_tables_arg_(
                           is_create_bind_hidden_tablets,
                           tenant_data_version,
                           need_create_empty_majors,
-                          cs_replica_mgr))) {
+                          cs_replica_mgr,
+                          schema_guard))) {
                 LOG_WARN("fail to generate_create_tablet_arg",
                          K(table_schema), K(schemas), KR(ret), K(i), K(is_create_bind_hidden_tablets));
               }
@@ -355,7 +382,8 @@ int ObTableCreator::add_create_tablets_of_tables_arg_(
                                 is_create_bind_hidden_tablets,
                                 tenant_data_version,
                                 need_create_empty_majors,
-                                cs_replica_mgr))) {
+                                cs_replica_mgr,
+                                schema_guard))) {
                       LOG_WARN("fail to generate_create_tablet_arg",
                                K(table_schema), K(schemas), KR(ret), K(i), K(j), K(is_create_bind_hidden_tablets));
                     }
@@ -397,12 +425,14 @@ int ObTableCreator::generate_create_tablet_arg_(
                     const bool is_create_bind_hidden_tablets,
                     const uint64_t tenant_data_version,
                     const common::ObIArray<bool> &need_create_empty_majors,
-                    const ObGlobalCSReplicaMgr &cs_replica_mgr)
+                    const ObGlobalCSReplicaMgr &cs_replica_mgr,
+                    ObSchemaGetterGuard *schema_guard)
 {
   int ret = OB_SUCCESS;
   ObTabletID data_tablet_id;
   ObTabletCreatorArg create_tablet_arg;
   common::ObArray<ObTabletID> tablet_id_array;
+  common::ObArray<share::ObForkTabletInfo> fork_tablet_infos;
   common::ObArray<int64_t> no_create_commit_versions;
   ObTabletID tablet_id;
   ObBasePartition *data_part = NULL;
@@ -456,21 +486,40 @@ int ObTableCreator::generate_create_tablet_arg_(
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(cs_replica_mgr.check_cs_replica_global_visible(ls_id, is_cs_replica_global_visible))) {
     LOG_WARN("fail to check need process cs replica", KR(ret), K(ls_id));
-  } else if (OB_FAIL(create_tablet_arg.init(
-                     tablet_id_array,
-                     ls_id,
-                     data_tablet_id,
-                     schemas,
-                     mode,
-                     is_create_bind_hidden_tablets,
-                     tenant_data_version,
-                     need_create_empty_majors,
-                     no_create_commit_versions,
-                     is_cs_replica_global_visible))) {
-    LOG_WARN("fail to init create tablet arg", KR(ret), K(schemas), K(is_create_bind_hidden_tablets));
-  } else if (OB_FAIL(tablet_creator_.add_create_tablet_arg(create_tablet_arg))) {
-    LOG_WARN("fail to add create tablet arg", KR(ret), K(create_tablet_arg));
+  } else if (fork_table_info_builder_.has_fork_table()) {
+    if (OB_ISNULL(schema_guard)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("schema guard is null", KR(ret));
+    } else {
+      if (OB_FAIL(fork_table_info_builder_.build_fork_tablet_infos(
+              schemas, part_idx, subpart_idx, *schema_guard, fork_tablet_infos))) {
+        LOG_WARN("fail to build fork tablet infos", KR(ret), K(part_idx), K(subpart_idx));
+      }
+    }
   }
+  if (OB_SUCC(ret) && fork_tablet_infos.count() > 0) {
+    LOG_INFO("generate fork tablet infos finished", "fork_tablet_cnt", fork_tablet_infos.count(), K(ls_id));
+  }
+
+  if (OB_SUCC(ret)) {
+    if (OB_FAIL(create_tablet_arg.init(
+                        tablet_id_array,
+                        ls_id,
+                        data_tablet_id,
+                        schemas,
+                        mode,
+                        is_create_bind_hidden_tablets,
+                        tenant_data_version,
+                        need_create_empty_majors,
+                        no_create_commit_versions,
+                        is_cs_replica_global_visible,
+                        fork_tablet_infos))) {
+      LOG_WARN("fail to init create tablet arg", KR(ret), K(schemas), K(is_create_bind_hidden_tablets));
+    } else if (OB_FAIL(tablet_creator_.add_create_tablet_arg(create_tablet_arg))) {
+      LOG_WARN("fail to add create tablet arg", KR(ret), K(create_tablet_arg));
+    }
+  }
+
   return ret;
 }
 

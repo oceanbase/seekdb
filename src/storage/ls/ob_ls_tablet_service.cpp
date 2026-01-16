@@ -2384,7 +2384,8 @@ int ObLSTabletService::create_tablet(
     const bool has_cs_replica,
     const ObTabletID &split_src_tablet_id,
     const uint64_t data_format_version,
-    ObTabletHandle &tablet_handle)
+    ObTabletHandle &tablet_handle,
+    const share::ObForkTabletInfo &fork_info)
 {
   int ret = OB_SUCCESS;
   UNUSED(data_format_version);
@@ -2414,7 +2415,7 @@ int ObLSTabletService::create_tablet(
       LOG_ERROR("new tablet is null", K(ret), KP(tablet), KP(allocator), K(tablet_handle));
     } else if (OB_FAIL(tablet->init_for_first_time_creation(*allocator, ls_id, tablet_id, data_tablet_id,
         create_scn, snapshot_version, create_tablet_schema, need_create_empty_major_sstable, clog_checkpoint_scn, mds_checkpoint_scn,
-        is_split_dest_tablet, split_src_tablet_id, micro_index_clustered, need_generate_cs_replica_cg_array, has_cs_replica, freezer))) {
+        is_split_dest_tablet, split_src_tablet_id, micro_index_clustered, need_generate_cs_replica_cg_array, has_cs_replica, freezer, fork_info))) {
       LOG_WARN("failed to init tablet", K(ret), K(ls_id), K(tablet_id), K(data_tablet_id),
           K(create_scn), K(snapshot_version), K(create_tablet_schema));
     } else if (OB_FAIL(tablet->get_updating_tablet_pointer_param(param))) {

@@ -42,6 +42,9 @@ public:
   int replay_split_start(const ObTabletSplitStartLog &log, const share::SCN &scn);
   int replay_split_finish(const ObTabletSplitFinishLog &log, const share::SCN &scn);
   int replay_tablet_freeze(const ObTabletFreezeLog &log, const share::SCN &scn);
+  int replay_table_fork_freeze(const ObTableForkFreezeLog &log, const share::SCN &scn);
+  int replay_table_fork_start(const ObTableForkStartLog &log, const share::SCN &scn);
+  int replay_table_fork_finish(const ObTableForkFinishLog &log, const share::SCN &scn);
   #ifdef OB_BUILD_SHARED_STORAGE
   int replay_finish(const ObDDLFinishLog &log, const share::SCN &scn);
   #endif

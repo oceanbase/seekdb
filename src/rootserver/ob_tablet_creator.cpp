@@ -56,13 +56,15 @@ int ObTabletCreatorArg::init(
     const uint64_t tenant_data_version,
     const ObIArray<bool> &need_create_empty_majors,
     const ObIArray<int64_t> &create_commit_versions,
-    const bool has_cs_replica)
+    const bool has_cs_replica,
+    const ObIArray<share::ObForkTabletInfo> &fork_tablet_infos)
 {
   int ret = OB_SUCCESS;
   bool is_valid = ls_key.is_valid() && table_schemas.count() > 0
                   && table_schemas.count() == tablet_ids.count() 
                   && tenant_data_version > 0
-                  && need_create_empty_majors.count() == table_schemas.count();
+                  && need_create_empty_majors.count() == table_schemas.count()
+                  && (fork_tablet_infos.count() == 0 || fork_tablet_infos.count() == tablet_ids.count());
   for (int64_t i = 0; i < tablet_ids.count() && is_valid; i++) {
     is_valid = tablet_ids.at(i).is_valid();
   }
@@ -70,7 +72,8 @@ int ObTabletCreatorArg::init(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), K(tablet_ids),
              "count", table_schemas.count(), K(tablet_ids), K(ls_key),
-             K(tenant_data_version), "count_to_create_empty_major", need_create_empty_majors.count());
+             K(tenant_data_version), "count_to_create_empty_major", need_create_empty_majors.count(),
+             "fork_tablet_infos_count", fork_tablet_infos.count());
   } else if (OB_FAIL(tablet_ids_.assign(tablet_ids))) {
     LOG_WARN("failed to assign table schemas", KR(ret), K(tablet_ids));
   } else if (OB_FAIL(table_schemas_.assign(table_schemas))) {
@@ -79,6 +82,8 @@ int ObTabletCreatorArg::init(
     LOG_WARN("failed to assign need create empty majors", K(ret), K(need_create_empty_majors));
   } else if (OB_FAIL(create_commit_versions_.assign(create_commit_versions))) {
     LOG_WARN("failed to assign create commit versions", KR(ret), K(create_commit_versions));
+  } else if (OB_FAIL(fork_tablet_infos_.assign(fork_tablet_infos))) {
+    LOG_WARN("failed to assign fork tablet infos", KR(ret), K(fork_tablet_infos));
   } else {
     data_tablet_id_ = data_tablet_id;
     ls_key_ = ls_key;
@@ -90,11 +95,30 @@ int ObTabletCreatorArg::init(
   return ret;
 }
 
+int ObTabletCreatorArg::init(
+    const ObIArray<common::ObTabletID> &tablet_ids,
+    const share::ObLSID &ls_key,
+    const ObTabletID data_tablet_id,
+    const ObIArray<const share::schema::ObTableSchema*> &table_schemas,
+    const lib::Worker::CompatMode &mode,
+    const bool is_create_bind_hidden_tablets,
+    const uint64_t tenant_data_version,
+    const ObIArray<bool> &need_create_empty_majors,
+    const ObIArray<int64_t> &create_commit_versions,
+    const bool has_cs_replica)
+{
+  ObArray<share::ObForkTabletInfo> empty_fork_tablet_infos;
+  return init(tablet_ids, ls_key, data_tablet_id, table_schemas, mode,
+              is_create_bind_hidden_tablets, tenant_data_version,
+              need_create_empty_majors, create_commit_versions,
+              has_cs_replica, empty_fork_tablet_infos);
+}
+
 DEF_TO_STRING(ObTabletCreatorArg)
 {
   int64_t pos = 0;
   J_KV(K_(compat_mode), K_(tablet_ids), K_(data_tablet_id), K_(ls_key), K_(table_schemas), K_(is_create_bind_hidden_tablets), 
-    K_(tenant_data_version), K_(need_create_empty_majors), K_(create_commit_versions), K_(has_cs_replica));
+    K_(tenant_data_version), K_(need_create_empty_majors), K_(create_commit_versions), K_(has_cs_replica), K_(fork_tablet_infos));
   return pos;
 }
 
@@ -156,7 +180,8 @@ int ObBatchCreateTabletHelper::add_arg_to_batch_arg(
                             tablet_arg.compat_mode_,
                             tablet_arg.is_create_bind_hidden_tablets_,
                             tablet_arg.create_commit_versions_,
-                            tablet_arg.has_cs_replica_))) {
+                            tablet_arg.has_cs_replica_,
+                            tablet_arg.fork_tablet_infos_))) {
         LOG_WARN("failed to init create tablet info", KR(ret), K(index_array), K(tablet_arg));
       } else if (OB_FAIL(batch_arg_.tablets_.push_back(info))) {
         LOG_WARN("failed to push back info", KR(ret), K(info));

@@ -228,7 +228,8 @@ public:
       const bool micro_index_clustered,
       const bool need_generate_cs_replica_cg_array,
       const bool has_cs_replica,
-      ObFreezer *freezer);
+      ObFreezer *freezer,
+      const share::ObForkTabletInfo &fork_info = share::ObForkTabletInfo());
   // dump/merge build new multi version tablet
   int init_for_merge(
       common::ObArenaAllocator &allocator,
@@ -480,7 +481,8 @@ public:
       ObMigrationTabletParam &mig_tablet_param) const;
   int build_migration_sstable_param(
       const ObITable::TableKey &table_key,
-      blocksstable::ObMigrationSSTableParam &mig_sstable_param) const;
+      blocksstable::ObMigrationSSTableParam &mig_sstable_param,
+      const bool is_fork_table) const;
   int build_migration_sstable_param(
       const ObITable::TableKey &table_key,
       const blocksstable::ObSSTableMergeRes &res,
@@ -663,6 +665,7 @@ public:
       const ObDDLMacroBlock &macro_block,
       const int64_t snapshot_version,
       const uint64_t data_format_version);
+  int get_fork_info(share::ObForkTabletInfo &fork_info) const;
 protected:// for MDS use
   virtual bool check_is_inited_() const override final { return is_inited_; }
   virtual const ObTabletMeta &get_tablet_meta_() const override final { return tablet_meta_; }
@@ -816,6 +819,9 @@ private:
       const int64_t snapshot_version,
       ObTabletTableIterator &iter,
       bool &succ_get_split_dst_tables);
+  int get_fork_src_read_tables_(
+      ObTabletTableIterator &iter,
+      const bool allow_no_ready_read);
 
   int allow_to_read_();
 

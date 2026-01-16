@@ -530,6 +530,7 @@ ObBatchUpdateTableStoreParam::ObBatchUpdateTableStoreParam()
     tablet_meta_(nullptr),
     restore_status_(ObTabletRestoreStatus::FULL),
     tablet_split_param_(),
+    tablet_fork_param_(),
     need_replace_remote_sstable_(false),
     release_mds_scn_()
 {
@@ -544,6 +545,7 @@ void ObBatchUpdateTableStoreParam::reset()
   tablet_meta_ = nullptr;
   restore_status_ = ObTabletRestoreStatus::FULL;
   tablet_split_param_.reset();
+  tablet_fork_param_.reset();
   need_replace_remote_sstable_ = false;
   release_mds_scn_.reset();
 }
@@ -583,6 +585,38 @@ void ObSplitTableStoreParam::reset()
   multi_version_start_ = -1;
   merge_type_ = INVALID_MERGE_TYPE;
   skip_split_keys_.reset();
+}
+
+ObForkTableStoreParam::ObForkTableStoreParam()
+  : snapshot_version_(-1),
+    multi_version_start_(-1),
+    merge_type_(INVALID_MERGE_TYPE),
+    clog_checkpoint_scn_(),
+    mds_checkpoint_scn_()
+{
+}
+
+ObForkTableStoreParam::~ObForkTableStoreParam()
+{
+  reset();
+}
+
+bool ObForkTableStoreParam::is_valid() const
+{
+  return snapshot_version_ > -1
+    && multi_version_start_ >= 0
+    && is_valid_merge_type(merge_type_)
+    && clog_checkpoint_scn_.is_valid()
+    && mds_checkpoint_scn_.is_valid();
+}
+
+void ObForkTableStoreParam::reset()
+{
+  snapshot_version_ = -1;
+  multi_version_start_ = -1;
+  merge_type_ = INVALID_MERGE_TYPE;
+  clog_checkpoint_scn_.reset();
+  mds_checkpoint_scn_.reset();
 }
 
 ObPartitionReadableInfo::ObPartitionReadableInfo()

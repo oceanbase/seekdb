@@ -26,31 +26,15 @@
 #include "storage/blocksstable/index_block/ob_index_block_builder.h"
 #include "storage/ddl/ob_complement_data_task.h"
 #include "storage/ddl/ob_ddl_merge_task.h"
+#include "storage/ddl/ob_tablet_rebuild_util.h"
+#include "common/ob_tablet_id.h"
 
 namespace oceanbase
 {
 namespace storage
 {
-struct ObSplitSSTableTaskKey final
-{
-public:
-  ObSplitSSTableTaskKey()
-    : src_sst_key_(), dest_tablet_id_() { }
-  ObSplitSSTableTaskKey(const ObITable::TableKey &src_key, const ObTabletID &dst_tablet_id)
-    : src_sst_key_(src_key), dest_tablet_id_(dst_tablet_id)
-  { }
-  ~ObSplitSSTableTaskKey() = default;
-  uint64_t hash() const { return src_sst_key_.hash() + dest_tablet_id_.hash(); }
-  int hash(uint64_t &hash_val) const { hash_val = hash(); return OB_SUCCESS; }
-  bool operator== (const ObSplitSSTableTaskKey &other) const {
-    return src_sst_key_ == other.src_sst_key_ && dest_tablet_id_ == other.dest_tablet_id_;
-  }
-  bool is_valid() const { return src_sst_key_.is_valid() && dest_tablet_id_.is_valid(); }
-  TO_STRING_KV(K_(src_sst_key), K_(dest_tablet_id));
-public:
-  ObITable::TableKey src_sst_key_;
-  ObTabletID dest_tablet_id_;
-};
+using common::ObTabletID;
+using ObSplitSSTableTaskKey = ObDdlSSTableTaskKey;
 
 typedef std::pair<common::ObTabletID, blocksstable::ObDatumRowkey> TabletBoundPair;
 
@@ -101,36 +85,9 @@ public:
   TO_STRING_KV(K_(is_inited), K_(data_split_ranges), K_(complement_data_ret), 
     K_(row_inserted), K_(physical_row_count), K_(skipped_split_major_keys),
     K(ls_rebuild_seq_));
-
-private:
-  template <typename KEY, typename VALUE>
-  struct GetMapItemKeyFn final
-  {
-  public:
-    GetMapItemKeyFn() : map_keys_(), ret_code_(OB_SUCCESS) {}
-    ~GetMapItemKeyFn() = default;
-    int operator() (common::hash::HashMapPair<KEY, VALUE> &entry) 
-    {
-      int ret = ret_code_; // for LOG_WARN
-      if (OB_LIKELY(OB_SUCCESS == ret_code_) && OB_SUCCESS != (ret_code_ = map_keys_.push_back(entry.first))) {
-        ret = ret_code_;
-        LOG_WARN("push back map item key failed", K(ret_code_), K(entry.first));
-      }
-      return ret_code_;
-    }
-  public:
-    ObArray<KEY> map_keys_;
-    int ret_code_;
-  };
 public:
   // generate index tree.
   int prepare_index_builder(const ObTabletSplitParam &param);
-  int get_clipped_storage_schema_on_demand(
-      const ObTabletID &src_tablet_id,
-      const ObSSTable &src_sstable,
-      const ObStorageSchema &latest_schema,
-      const bool try_create,
-      const ObStorageSchema *&storage_schema);
 private:
   common::ObArenaAllocator range_allocator_; // for datum range.
 public:
@@ -265,19 +222,6 @@ public:
   virtual ~ObTabletSplitMergeTask() = default;
   int init(ObTabletSplitParam &param, ObTabletSplitCtx &ctx);
   virtual int process() override;
-  static int check_need_fill_empty_sstable(
-      ObLSHandle &ls_handle,
-      const bool is_minor_sstable,
-      const ObITable::TableKey &table_key,
-      const ObTabletID &dst_tablet_id,
-      bool &need_fill_empty_sstable,
-      SCN &end_scn);
-  static int build_create_empty_sstable_param(
-      const ObSSTableBasicMeta &meta,
-      const ObITable::TableKey &table_key,
-      const ObTabletID &dst_tablet_id,
-      const SCN &end_scn,
-      ObTabletCreateSSTableParam &create_sstable_param);
   static int update_table_store_with_batch_tables(
       const int64_t ls_rebuild_seq,
       const ObLSHandle &ls_handle,

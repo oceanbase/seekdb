@@ -292,7 +292,7 @@ public:
   uint64_t tenant_data_version_;
   bool ddl_need_retry_at_executor_;
   bool is_pre_split_;
-  int64_t new_snapshot_version_;  // fts rowkey doc or vec rowkey vid index build snapshot version
+  int64_t new_snapshot_version_;  // fts rowkey doc or vec rowkey vid index build snapshot version or fork_snapshot_version
 };
 
 class ObDDLTaskRecordOperator final

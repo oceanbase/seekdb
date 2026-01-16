@@ -211,6 +211,85 @@ int ObDDLRedoLogReplayer::replay_tablet_freeze(const ObTabletFreezeLog &log, con
   return ret;
 }
 
+int ObDDLRedoLogReplayer::replay_table_fork_freeze(const ObTableForkFreezeLog &log, const share::SCN &scn)
+{
+  int ret = OB_SUCCESS;
+  ObTabletForkFreezeReplayExecutor replay_executor;
+
+  if (OB_UNLIKELY(!is_inited_)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("ObDDLRedoLogReplayer has not been inited", K(ret));
+  } else if (OB_FAIL(replay_executor.init(ls_, log, scn))) {
+    LOG_WARN("failed to init table fork freeze log replay executor", K(ret));
+  } else {
+    const ObSArray<ObTabletID> &tablet_ids = log.tablet_ids_;
+    for (int64_t i = 0; OB_SUCC(ret) && i < tablet_ids.count(); ++i) {
+      const ObTabletID &tablet_id = tablet_ids.at(i);
+      if (OB_FAIL(replay_executor.execute(scn, ls_->get_ls_id(), tablet_id))) {
+        if (OB_TABLET_NOT_EXIST == ret || OB_NO_NEED_UPDATE == ret || OB_TASK_EXPIRED == ret) {
+          ret = OB_SUCCESS;
+        } else if (OB_EAGAIN != ret) {
+          LOG_WARN("failed to replay table fork freeze log", K(ret), K(scn), K(log), K(ls_->get_ls_id()), K(tablet_id));
+        }
+      }
+    }
+  }
+
+  return ret;
+}
+
+int ObDDLRedoLogReplayer::replay_table_fork_start(const ObTableForkStartLog &log, const share::SCN &scn)
+{
+  int ret = OB_SUCCESS;
+  ObTabletForkStartReplayExecutor replay_executor;
+
+  if (OB_UNLIKELY(!is_inited_)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("ObDDLRedoLogReplayer has not been inited", K(ret));
+  } else if (OB_FAIL(replay_executor.init(ls_, log, scn))) {
+    LOG_WARN("failed to init table fork start log replay executor", K(ret));
+  } else {
+    const ObSEArray<ObTabletID, 4> &source_tablet_ids = log.fork_info_.source_tablet_ids_;
+    for (int64_t i = 0; OB_SUCC(ret) && i < source_tablet_ids.count(); ++i) {
+      const ObTabletID &tablet_id = source_tablet_ids.at(i);
+      if (OB_FAIL(replay_executor.execute(scn, ls_->get_ls_id(), tablet_id))) {
+        if (OB_TABLET_NOT_EXIST == ret || OB_NO_NEED_UPDATE == ret || OB_TASK_EXPIRED == ret) {
+          ret = OB_SUCCESS;
+        } else if (OB_EAGAIN != ret) {
+          LOG_WARN("failed to replay table fork start log", K(ret), K(scn), K(log), K(ls_->get_ls_id()), K(tablet_id));
+        }
+      }
+    }
+  }
+  return ret;
+}
+
+int ObDDLRedoLogReplayer::replay_table_fork_finish(const ObTableForkFinishLog &log, const share::SCN &scn)
+{
+  int ret = OB_SUCCESS;
+  ObTabletForkFinishReplayExecutor replay_executor;
+
+  if (OB_UNLIKELY(!is_inited_)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("ObDDLRedoLogReplayer has not been inited", K(ret));
+  } else if (OB_FAIL(replay_executor.init(ls_, log, scn))) {
+    LOG_WARN("failed to init table fork finish log replay executor", K(ret));
+  } else {
+    const ObSEArray<ObTabletID, 4> &source_tablet_ids = log.fork_info_.source_tablet_ids_;
+    for (int64_t i = 0; OB_SUCC(ret) && i < source_tablet_ids.count(); ++i) {
+      const ObTabletID &tablet_id = source_tablet_ids.at(i);
+      if (OB_FAIL(replay_executor.execute(scn, ls_->get_ls_id(), tablet_id))) {
+        if (OB_TABLET_NOT_EXIST == ret || OB_NO_NEED_UPDATE == ret || OB_TASK_EXPIRED == ret) {
+          ret = OB_SUCCESS;
+        } else if (OB_EAGAIN != ret) {
+          LOG_WARN("failed to replay fork table finish log", K(ret), K(scn), K(log), K(ls_->get_ls_id()), K(tablet_id));
+        }
+      }
+    }
+  }
+  return ret;
+}
+
 int ObDDLRedoLogReplayer::replay_inc_commit(
     const ObDDLIncCommitLog &log,
     const SCN &scn)

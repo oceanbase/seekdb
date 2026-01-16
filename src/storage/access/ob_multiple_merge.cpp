@@ -196,11 +196,135 @@ int ObMultipleMerge::init(
     } else {
       skip_bit_->init(batch_size);
       access_ctx_->block_row_store_ = block_row_store_;
-      inited_ = true;
-      LOG_TRACE("succ to init multiple merge", K(*this));
+      if (OB_FAIL(build_extra_access_ctx())) {
+        LOG_WARN("fail to build access_cx for fork", K(ret));
+      } else {
+        inited_ = true;
+        LOG_TRACE("succ to init multiple merge", K(*this));
+      }
     }
   }
   LOG_DEBUG("init multiple merge", K(ret), KP(this), K(param), K(context), K(get_table_param));
+  return ret;
+}
+
+int ObMultipleMerge::build_extra_access_ctx()
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(get_table_param_) || OB_ISNULL(access_ctx_) || OB_ISNULL(access_ctx_->stmt_allocator_) || OB_ISNULL(access_ctx_->store_ctx_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("invalid argument for build_extra_access_ctx", KR(ret),
+        KP_(get_table_param), KP_(access_ctx),
+        KP(access_ctx_ ? access_ctx_->stmt_allocator_ : nullptr),
+        KP(access_ctx_ ? access_ctx_->store_ctx_ : nullptr));
+  } else {
+    const ObIArray<ObForkTabletInfo> *fork_infos = get_table_param_->tablet_iter_.get_fork_infos();
+    const ObIArray<ObTabletHandle> *split_infos = get_table_param_->tablet_iter_.get_split_extra_tablet_handles_ptr();
+    const int64_t total_cnt = (OB_NOT_NULL(fork_infos) ? fork_infos->count() : 0)
+                            + (OB_NOT_NULL(split_infos) ? split_infos->count() : 0);
+    if (0 == total_cnt) {
+      LOG_DEBUG("skip build_extra_access_ctx", K(total_cnt), K(access_ctx_->tablet_id_));
+    } else if (!extra_access_ctx_.created() && OB_FAIL(extra_access_ctx_.create(total_cnt * 2, "EAccessCtx"))) {
+      LOG_WARN("failed to create extra_access_ctx map", KR(ret), K(total_cnt));
+    } else {
+      for (int64_t i = 0; OB_NOT_NULL(fork_infos) && OB_SUCC(ret) && i < fork_infos->count(); i++) {
+        const ObForkTabletInfo &fork_info = fork_infos->at(i);
+        const ObTabletID fork_src_tablet_id = fork_info.get_fork_src_tablet_id();
+        ObTableAccessContext *fork_ctx = nullptr;
+        ObStoreCtx *fork_store_ctx = nullptr;
+        share::SCN fork_snapshot_scn;
+        int tmp_ret = extra_access_ctx_.get_refactored(fork_src_tablet_id, fork_ctx);
+        if (OB_HASH_NOT_EXIST == tmp_ret) {
+          fork_ctx = nullptr;
+          tmp_ret = OB_SUCCESS;
+        } else if (OB_SUCCESS != tmp_ret) {
+          ret = tmp_ret;
+          LOG_WARN("fail to get fork access ctx", KR(ret), K(fork_info));
+        }
+
+        if (OB_FAIL(ret)) {
+        } else if (OB_NOT_NULL(fork_ctx)) {
+          // fork ctx already exists, no need do anything
+        } else {
+          fork_ctx = (ObTableAccessContext*)access_ctx_->stmt_allocator_->alloc(sizeof(ObTableAccessContext));
+          fork_store_ctx = (ObStoreCtx*)access_ctx_->stmt_allocator_->alloc(sizeof(ObStoreCtx));
+          if (OB_ISNULL(fork_ctx) || OB_ISNULL(fork_store_ctx)) {
+            ret = OB_ALLOCATE_MEMORY_FAILED;
+            LOG_WARN("fail to alloc memory for fork access ctx", KR(ret), K(i), KP(fork_ctx), KP(fork_store_ctx));
+          } else {
+            new (fork_ctx) ObTableAccessContext();
+            new (fork_store_ctx) ObStoreCtx();
+            if (OB_FAIL(fork_snapshot_scn.convert_for_tx(fork_info.get_fork_snapshot_version()))) {
+              LOG_WARN("fail to convert snapshot version", KR(ret), K(fork_info));
+            } else if (OB_FAIL(fork_store_ctx->init_for_read(
+                access_ctx_->store_ctx_->ls_id_,
+                fork_src_tablet_id,
+                access_ctx_->store_ctx_->timeout_,
+                0, // tx_lock_timeout
+                fork_snapshot_scn))) {
+              LOG_WARN("fail to init fork store_ctx", KR(ret), K(fork_info));
+            } else if (OB_FAIL(fork_ctx->init_for_fork(*access_ctx_, fork_store_ctx, fork_info))) {
+              LOG_WARN("fail to init fork access ctx", KR(ret), K(fork_info));
+            } else if (OB_FAIL(extra_access_ctx_.set_refactored(fork_src_tablet_id, fork_ctx, true))) {
+              LOG_WARN("fail to set fork access ctx", KR(ret), K(fork_info));
+            } else {
+              LOG_DEBUG("build_extra_access_ctx for fork", K(fork_info), KP(fork_ctx), KP(fork_store_ctx));
+            }
+          }
+          if (OB_FAIL(ret) && (OB_NOT_NULL(fork_store_ctx) || OB_NOT_NULL(fork_ctx))) {
+            access_ctx_->stmt_allocator_->free(fork_store_ctx);
+            access_ctx_->stmt_allocator_->free(fork_ctx);
+          }
+        }
+      }
+
+      for (int64_t i = 0; OB_NOT_NULL(split_infos) && OB_SUCC(ret)  && i < split_infos->count(); i++) {
+        const ObTabletHandle &tablet_handle = split_infos->at(i);
+        const ObTablet *tablet = tablet_handle.get_obj();
+        if (OB_ISNULL(tablet)) {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("split tablet is null", KR(ret), K(i), KP(tablet));
+        } else {
+          const ObTabletID split_tablet_id = tablet->get_tablet_id();
+          ObTableAccessContext *tmp_ctx = nullptr;
+          int tmp_ret = extra_access_ctx_.get_refactored(split_tablet_id, tmp_ctx);
+          if (OB_SUCCESS == tmp_ret) {
+            // already exists, do nothing
+          } else if (OB_HASH_NOT_EXIST == tmp_ret) {
+            if (OB_FAIL(extra_access_ctx_.set_refactored(split_tablet_id, nullptr, true))) {
+              LOG_WARN("fail to set split access ctx placeholder", KR(ret), K(split_tablet_id));
+            }
+          } else {
+            ret = tmp_ret;
+            LOG_WARN("fail to get split access ctx placeholder", KR(ret), K(split_tablet_id));
+          }
+        }
+      }
+
+      LOG_DEBUG("build_extra_access_ctx finished", K(extra_access_ctx_.size()), K(access_ctx_->tablet_id_));
+    }
+  }
+
+  if (OB_FAIL(ret)) {
+    reset_extra_access_ctx();
+  }
+  return ret;
+}
+
+int ObMultipleMerge::get_access_ctx(ObTabletID tablet_id, ObTableAccessContext *&access_ctx)
+{
+  int ret = OB_SUCCESS;
+  if (tablet_id == access_ctx_->tablet_id_) {
+    access_ctx = access_ctx_;
+  } else if (OB_FAIL(extra_access_ctx_.get_refactored(tablet_id, access_ctx))) {
+    FLOG_WARN("get extra access_ctx failed", KR(ret), K(tablet_id), K(access_ctx_->tablet_id_),
+        KP(access_ctx), KP(&extra_access_ctx_), K(extra_access_ctx_.size()));
+  } else if (OB_ISNULL(access_ctx)) {
+    // split scenario: extra_access_ctx_ only marks tablet_id existence
+    access_ctx = access_ctx_;
+  } else {
+    FLOG_INFO("get access_ctx", K(tablet_id), K(access_ctx_->tablet_id_), KP(access_ctx), KP(access_ctx_));
+  }
   return ret;
 }
 
@@ -221,6 +345,8 @@ int ObMultipleMerge::switch_param(
     STORAGE_LOG(WARN, "Failed to init read tables", K(ret), K(*this));
   } else if (OB_UNLIKELY(param.iter_param_.need_truncate_filter()) && OB_FAIL(prepare_truncate_filter())) {
     LOG_WARN("failed to prepare truncate filter", K(ret));
+  } else if (OB_FAIL(build_extra_access_ctx())) {
+    LOG_WARN("fail to build access_cx for fork", K(ret));
   }
   STORAGE_LOG(TRACE, "switch param", K(ret), KP(this), K(param), K(context), K(get_table_param));
   return ret;
@@ -286,6 +412,9 @@ int ObMultipleMerge::switch_table(
     } else {
       skip_bit_->init(batch_size);
       access_ctx_->block_row_store_ = block_row_store_;
+      if (OB_FAIL(build_extra_access_ctx())) {
+        LOG_WARN("fail to build access_cx for fork", K(ret));
+      }
     }
   }
   LOG_DEBUG("switch table", K(ret), KP(this), K(param), K(context), K(get_table_param));
@@ -1169,6 +1298,7 @@ void ObMultipleMerge::inner_reset()
   padding_allocator_.reset();
   access_param_ = NULL;
   access_ctx_ = NULL;
+  reset_extra_access_ctx();
   nop_pos_.reset();
   scan_cnt_ = 0;
   need_padding_ = false;
@@ -1186,6 +1316,41 @@ void ObMultipleMerge::inner_reset()
   major_table_version_ = 0;
   curr_rowkey_.reset();
   di_base_curr_rowkey_.reset();
+}
+
+void ObMultipleMerge::reset_extra_access_ctx()
+{
+  int ret = OB_SUCCESS;
+  if (!extra_access_ctx_.created()) {
+    // nothing
+  } else {
+    for (hash::ObHashMap<ObTabletID, ObTableAccessContext*>::iterator it = extra_access_ctx_.begin();
+         it != extra_access_ctx_.end();
+         ++it) {
+      ObTableAccessContext *access_ctx = it->second;
+      if (OB_ISNULL(access_ctx)) {
+        // split scenario: placeholder entry
+      } else if (access_ctx == access_ctx_) {
+        // extra map should not own the main access ctx
+      } else {
+        ObIAllocator *allocator = access_ctx->stmt_allocator_;
+        if (OB_ISNULL(allocator)) {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("extra access ctx has null stmt_allocator", K(ret), KP(access_ctx), KP_(access_ctx));
+        } else {
+          ObStoreCtx *store_ctx = access_ctx->store_ctx_;
+          access_ctx->store_ctx_ = nullptr;
+          if (OB_NOT_NULL(store_ctx)) {
+            store_ctx->~ObStoreCtx();
+            allocator->free(store_ctx);
+          }
+          access_ctx->~ObTableAccessContext();
+          allocator->free(access_ctx);
+        }
+      }
+    }
+    extra_access_ctx_.clear();
+  }
 }
 
 void ObMultipleMerge::reset_iter_array(const bool can_reuse)
@@ -1800,6 +1965,8 @@ int ObMultipleMerge::refresh_table_on_demand()
                OB_FAIL(prepare_truncate_filter())) {
       LOG_WARN("failed to prepare truncate filter", K(ret));
     } else if (nullptr != block_row_store_ && FALSE_IT(block_row_store_->reuse())) {
+    } else if (OB_FAIL(build_extra_access_ctx())) {
+      LOG_WARN("fail to build access_cx for fork", K(ret));
     } else {
       refreshed = true;
     }
@@ -1914,10 +2081,10 @@ int ObMultipleMerge::read_lob_columns_full_data(blocksstable::ObDatumRow &row)
 
 OB_INLINE bool ObMultipleMerge::need_handle_lob_columns(const blocksstable::ObDatumRow &row)
 {
-  bool bret = !access_ctx_->query_flag_.is_skip_read_lob() && 
-              access_param_->iter_param_.has_lob_column_out_ && 
+  bool bret = !access_ctx_->query_flag_.is_skip_read_lob() &&
+              access_param_->iter_param_.has_lob_column_out_ &&
               row.row_flag_.is_exist();
-  if (bret && lib::is_mysql_mode() && 
+  if (bret && lib::is_mysql_mode() &&
       OB_NOT_NULL(access_ctx_->lob_locator_helper_) &&
       access_ctx_->lob_locator_helper_->enable_lob_locator_v2() &&
       !is_sys_table(access_param_->iter_param_.table_id_)) {

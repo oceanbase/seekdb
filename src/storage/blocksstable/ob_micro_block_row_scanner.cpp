@@ -1414,6 +1414,7 @@ void ObMultiVersionMicroBlockRowScanner::reuse()
   finish_scanning_cur_rowkey_ = true;
   is_last_multi_version_row_ = true;
   read_row_direct_flag_ = false;
+  skip_running_tx_ = false;
 }
 
 
@@ -1438,6 +1439,7 @@ int ObMultiVersionMicroBlockRowScanner::switch_context(
     sql_sequence_col_idx_ = ObMultiVersionRowkeyHelpper::get_sql_sequence_col_store_index(
         read_info_->get_schema_rowkey_count(), true);
     version_range_ = context.trans_version_range_;
+    skip_running_tx_ = context.query_flag_.is_skip_running_tx();
   }
   return ret;
 }
@@ -1468,6 +1470,7 @@ int ObMultiVersionMicroBlockRowScanner::init(
     }
     if (OB_SUCC(ret)) {
       version_range_ = context.trans_version_range_;
+      skip_running_tx_ = context.query_flag_.is_skip_running_tx();
       is_inited_ = true;
     }
   }
@@ -1936,8 +1939,9 @@ int ObMultiVersionMicroBlockRowScanner::check_trans_version(
         if (transaction::is_effective_trans_version(trans_version)
             && trans_version <= version_range_.base_version_) {
           version_fit = false;
-          // filter multi version row whose trans version is smaller than base_version
           final_result = true;
+        } else if (skip_running_tx_ && ObTxData::RUNNING == trans_state.trans_state_) {
+          version_fit = false;
         }
       } else {
         transaction::ObLockForReadArg lock_for_read_arg(
@@ -1946,7 +1950,6 @@ int ObMultiVersionMicroBlockRowScanner::check_trans_version(
           tx_sequence,
           context_->query_flag_.read_latest_,
           context_->query_flag_.iter_uncommitted_row(),
-          // TODO(handora.qc): remove it in the future
           sstable_->get_end_scn());
 
         if (OB_FAIL(lock_for_read(lock_for_read_arg,
@@ -1957,8 +1960,20 @@ int ObMultiVersionMicroBlockRowScanner::check_trans_version(
         } else if (transaction::is_effective_trans_version(trans_version)
                     && trans_version <= version_range_.base_version_) {
           version_fit = false;
-          // filter multi version row whose trans version is smaller than base_version
           final_result = true;
+        } else if (skip_running_tx_) {
+          int64_t tx_state = ObTxData::MAX_STATE_CNT;
+          share::SCN scn_commit_trans_version = SCN::max_scn();
+          storage::ObTxTableGuards &tx_table_guards = acc_ctx.get_tx_table_guards();
+          if (OB_FAIL(tx_table_guards.get_tx_state_with_scn(
+              transaction::ObTransID(row_header->get_trans_id()),
+              context_->merge_scn_,
+              tx_state,
+              scn_commit_trans_version))) {
+            LOG_WARN("get transaction status failed", K(ret), K(row_header->get_trans_id()));
+          } else if (ObTxData::RUNNING == tx_state) {
+            version_fit = false;
+          }
         }
       }
     } else {
@@ -2754,6 +2769,7 @@ int ObMultiVersionMicroBlockMinorMergeRowScanner::init(
         read_info_->get_schema_rowkey_count(), true);
     sql_sequence_col_idx_ = ObMultiVersionRowkeyHelpper::get_sql_sequence_col_store_index(
         read_info_->get_schema_rowkey_count(), true);
+    skip_running_tx_ = context.query_flag_.is_skip_running_tx();
     is_inited_ = true;
   }
   return ret;
@@ -2804,7 +2820,7 @@ int ObMultiVersionMicroBlockMinorMergeRowScanner::inner_get_next_row(const ObDat
       }
     } else if (OB_FAIL(reader_->get_row(current_, row_))) {
       LOG_WARN("micro block reader fail to get row.", K(ret), K_(macro_id));
-    } else if (OB_FAIL(check_row_trans_state(skip_curr_row))) {
+    } else if (OB_FAIL(check_row_trans_state(skip_curr_row, skip_running_tx_))) {
       LOG_WARN("fail to check_row_trans_state", K(ret));
     } else if (FALSE_IT(++current_)) {
     } else if (skip_curr_row) {
@@ -2847,7 +2863,7 @@ int ObMultiVersionMicroBlockMinorMergeRowScanner::inner_get_next_row(const ObDat
   return ret;
 }
 
-int ObMultiVersionMicroBlockMinorMergeRowScanner::check_row_trans_state(bool &skip_curr_row)
+int ObMultiVersionMicroBlockMinorMergeRowScanner::check_row_trans_state(bool &skip_curr_row, const bool skip_running_tx)
 {
   int ret = OB_SUCCESS;
   skip_curr_row = false;
@@ -2875,6 +2891,8 @@ int ObMultiVersionMicroBlockMinorMergeRowScanner::check_row_trans_state(bool &sk
         break;
       }
       case ObTxData::RUNNING: {
+        // Skip RUNNING transactions if skip_running_tx is true (e.g., for fork operations)
+        skip_curr_row = skip_running_tx;
         break;
       }
       case ObTxData::ABORT: {

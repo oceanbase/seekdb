@@ -21,6 +21,7 @@
 #include "share/leak_checker/obj_leak_checker.h"
 #include "storage/tablet/ob_table_store_util.h"
 #include "storage/tablet/ob_tablet_table_store_iterator.h"
+#include "share/ob_ddl_common.h"
 
 namespace oceanbase
 {
@@ -77,9 +78,37 @@ class ObTabletTableIterator final
   friend class ObTablet;
   friend class ObLSTabletService;
   typedef ObSEArray<ObTabletHandle, 1> SplitExtraTabletHandleArray;
+  typedef ObSEArray<ObTabletHandle, 1> ForkTabletHandleArray;
+  typedef ObSEArray<share::ObForkTabletInfo, 1> ForkTabletInfoArray;
+  struct ForkCtx final
+  {
+    ForkCtx() : fork_tablet_handles_(), fork_infos_() {}
+    ~ForkCtx() { reset(); }
+    void reset()
+    {
+      fork_tablet_handles_.reset();
+      fork_infos_.reset();
+    }
+    TO_STRING_KV(K_(fork_tablet_handles), K_(fork_infos));
+    ForkTabletHandleArray fork_tablet_handles_;
+    ForkTabletInfoArray fork_infos_;
+    DISALLOW_COPY_AND_ASSIGN(ForkCtx);
+  };
 public:
-  ObTabletTableIterator() : tablet_handle_(), table_store_iter_(), transfer_src_handle_(nullptr), split_extra_tablet_handles_() {}
-  explicit ObTabletTableIterator(const bool is_reverse) : tablet_handle_(), table_store_iter_(is_reverse), transfer_src_handle_(nullptr), split_extra_tablet_handles_() {}
+  ObTabletTableIterator()
+      : tablet_handle_(),
+        table_store_iter_(),
+        transfer_src_handle_(nullptr),
+        split_extra_tablet_handles_(),
+        fork_ctx_(nullptr)
+  {}
+  explicit ObTabletTableIterator(const bool is_reverse)
+      : tablet_handle_(),
+        table_store_iter_(is_reverse),
+        transfer_src_handle_(nullptr),
+        split_extra_tablet_handles_(),
+        fork_ctx_(nullptr)
+  {}
   int assign(const ObTabletTableIterator& other);
   ~ObTabletTableIterator() { reset(); }
   void reset()
@@ -92,6 +121,7 @@ public:
       transfer_src_handle_ = nullptr;
     }
     split_extra_tablet_handles_.reset();
+    destroy_fork_ctx_();
   }
   bool is_valid() const { return tablet_handle_.is_valid() || table_store_iter_.is_valid(); }
   ObTableStoreIterator *table_iter();
@@ -101,9 +131,14 @@ public:
   const ObTabletHandle &get_tablet_handle() { return tablet_handle_; }
   const ObTabletHandle *get_tablet_handle_ptr() const { return &tablet_handle_; }
   const ObIArray<ObTabletHandle> *get_split_extra_tablet_handles_ptr() const { return split_extra_tablet_handles_.empty() ? nullptr : &split_extra_tablet_handles_; }
+  const ObIArray<share::ObForkTabletInfo> *get_fork_infos() const
+  {
+    return (nullptr == fork_ctx_ || fork_ctx_->fork_infos_.empty()) ? nullptr : &fork_ctx_->fork_infos_;
+  }
   int set_tablet_handle(const ObTabletHandle &tablet_handle);
   int set_transfer_src_tablet_handle(const ObTabletHandle &tablet_handle);
   int add_split_extra_tablet_handle(const ObTabletHandle &tablet_handle);
+  int add_fork_tablet_handle(const ObTabletHandle &tablet_handle, share::ObForkTabletInfo &fork_info);
   int refresh_read_tables_from_tablet(
       const int64_t snapshot_version,
       const bool allow_no_ready_read,
@@ -118,12 +153,36 @@ public:
       const bool need_split_src_table,
       const bool need_split_dst_table,
       ObIArray<ObITable *> &tables);
-  TO_STRING_KV(K_(tablet_handle), K_(transfer_src_handle), K_(table_store_iter), K_(split_extra_tablet_handles));
+  TO_STRING_KV(K_(tablet_handle), K_(transfer_src_handle), K_(table_store_iter), K_(split_extra_tablet_handles), KPC_(fork_ctx));
 private:
+  void destroy_fork_ctx_()
+  {
+    if (nullptr != fork_ctx_) {
+      fork_ctx_->~ForkCtx();
+      ob_free(fork_ctx_);
+      fork_ctx_ = nullptr;
+    }
+  }
+
+  int build_fork_ctx_()
+  {
+    int ret = OB_SUCCESS;
+    if (nullptr == fork_ctx_) {
+      void *buf = ob_malloc(sizeof(ForkCtx), ObMemAttr(MTL_ID(), "ForkTblIter"));
+      if (OB_ISNULL(buf)) {
+        ret = OB_ALLOCATE_MEMORY_FAILED;
+      } else {
+        fork_ctx_ = new (buf) ForkCtx();
+      }
+    }
+    return ret;
+  }
+
   ObTabletHandle tablet_handle_;
   ObTableStoreIterator table_store_iter_;
   ObTabletHandle *transfer_src_handle_;
   SplitExtraTabletHandleArray split_extra_tablet_handles_;
+  ForkCtx *fork_ctx_;
   DISALLOW_COPY_AND_ASSIGN(ObTabletTableIterator);
 };
 

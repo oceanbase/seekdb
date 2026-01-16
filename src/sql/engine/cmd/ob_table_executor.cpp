@@ -24,6 +24,7 @@
 #include "sql/resolver/ddl/ob_rename_table_stmt.h"
 #include "sql/resolver/ddl/ob_truncate_table_stmt.h"
 #include "sql/resolver/ddl/ob_create_table_like_stmt.h"
+#include "sql/resolver/ddl/ob_fork_table_stmt.h"
 #include "sql/resolver/ddl/ob_flashback_stmt.h"
 #include "sql/resolver/ddl/ob_purge_stmt.h"
 #include "sql/resolver/ddl/ob_optimize_stmt.h"
@@ -2356,12 +2357,16 @@ int ObCreateTableLikeExecutor::execute(ObExecContext &ctx, ObCreateTableLikeStmt
   const obrpc::ObCreateTableLikeArg &create_table_like_arg = stmt.get_create_table_like_arg();
   obrpc::ObCreateTableLikeArg &tmp_arg = const_cast<obrpc::ObCreateTableLikeArg&>(create_table_like_arg);
   ObString first_stmt;
+  ObSQLSessionInfo *my_session = nullptr;
   if (OB_FAIL(stmt.get_first_stmt(first_stmt))) {
     LOG_WARN("get first statement failed", K(ret));
+  } else if (OB_ISNULL(my_session = ctx.get_my_session())) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("session is null", K(ret));
   } else {
     tmp_arg.ddl_stmt_str_ = first_stmt;
     tmp_arg.consumer_group_id_ = THIS_WORKER.get_group_id();
-    tmp_arg.session_id_ = ctx.get_my_session()->get_sessid_for_table();
+    tmp_arg.session_id_ = my_session->get_sessid_for_table();
     ObTaskExecutorCtx *task_exec_ctx = NULL;
     obrpc::ObCommonRpcProxy *common_rpc_proxy = NULL;
     if (OB_ISNULL(task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx))) {
@@ -2374,6 +2379,50 @@ int ObCreateTableLikeExecutor::execute(ObExecContext &ctx, ObCreateTableLikeStmt
       LOG_WARN("common rpc proxy should not be null", K(ret));
     } else if (OB_FAIL(common_rpc_proxy->create_table_like(create_table_like_arg))) {
       LOG_WARN("rpc proxy create table like failed", K(ret));
+    }
+  }
+  return ret;
+}
+
+ObForkTableExecutor::ObForkTableExecutor()
+{
+}
+
+ObForkTableExecutor::~ObForkTableExecutor()
+{
+}
+
+int ObForkTableExecutor::execute(ObExecContext &ctx, ObForkTableStmt &stmt)
+{
+  int ret = OB_SUCCESS;
+  const obrpc::ObForkTableArg &fork_table_arg = stmt.get_fork_table_arg();
+  obrpc::ObForkTableArg &tmp_arg = const_cast<obrpc::ObForkTableArg&>(fork_table_arg);
+  ObString first_stmt;
+  obrpc::ObDDLRes res;
+  ObSQLSessionInfo *my_session = nullptr;
+  if (OB_FAIL(stmt.get_first_stmt(first_stmt))) {
+    LOG_WARN("get first statement failed", K(ret));
+  } else if (OB_ISNULL(my_session = ctx.get_my_session())) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("session is null", K(ret));
+  } else {
+    tmp_arg.ddl_stmt_str_ = first_stmt;
+    tmp_arg.consumer_group_id_ = THIS_WORKER.get_group_id();
+    tmp_arg.session_id_ = my_session->get_sessid_for_table();
+    ObTaskExecutorCtx *task_exec_ctx = NULL;
+    obrpc::ObCommonRpcProxy *common_rpc_proxy = NULL;
+    if (OB_ISNULL(task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx))) {
+      ret = OB_NOT_INIT;
+      LOG_WARN("get task executor context failed");
+    } else if (OB_FAIL(task_exec_ctx->get_common_rpc(common_rpc_proxy))) {
+      LOG_WARN("get common rpc proxy failed", K(ret));
+    } else if (OB_ISNULL(common_rpc_proxy)){
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("common rpc proxy should not be null", K(ret));
+    } else if (OB_FAIL(common_rpc_proxy->fork_table(fork_table_arg, res))) {
+      LOG_WARN("rpc proxy fork table failed", K(ret), K(res), K(fork_table_arg));
+    } else {
+      LOG_INFO("fork table executor finished", K(fork_table_arg));
     }
   }
   return ret;

@@ -170,6 +170,7 @@ ob_set_subtarget(ob_share common
   ob_core_table_proxy.cpp
   ob_ddl_checksum.cpp
   ob_ddl_sim_point.cpp
+  ob_fork_table_util.cpp
   ob_ddl_common.cpp
   ob_ddl_error_message_table_operator.cpp
   ob_tablet_reorganize_history_table_operator.cpp

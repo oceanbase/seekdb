@@ -3334,6 +3334,192 @@ int ObTabletTableStore::build_split_new_table_store_(
   return ret;
 }
 
+int ObTabletTableStore::build_fork_new_table_store(
+    common::ObArenaAllocator &allocator,
+    ObTablet &tablet,
+    const ObBatchUpdateTableStoreParam &param,
+    const ObTabletTableStore &old_store)
+{
+  int ret = OB_SUCCESS;
+  if (IS_INIT) {
+    ret = OB_INIT_TWICE;
+    LOG_WARN("double init when build fork new table store", KR(ret), "tablet_id", tablet.get_tablet_id());
+  } else if (OB_UNLIKELY(!param.is_valid() || !old_store.is_valid())) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument to build fork new table store", KR(ret),
+        "tablet_id", tablet.get_tablet_id(),
+        "param_fork", param.tablet_fork_param_,
+        "param_valid", param.is_valid(),
+        "old_store_valid", old_store.is_valid());
+  } else if (OB_FAIL(init(allocator, tablet))) {
+    LOG_WARN("failed to init empty table store for fork", KR(ret), "tablet_id", tablet.get_tablet_id(),
+        "param_fork", param.tablet_fork_param_);
+  } else if (OB_FAIL(build_fork_new_table_store_(allocator, tablet, param, old_store))) {
+    LOG_WARN("failed to build fork new table store", KR(ret), "tablet_id", tablet.get_tablet_id(),
+        "param_fork", param.tablet_fork_param_);
+  }
+  return ret;
+}
+
+int ObTabletTableStore::build_fork_new_table_store_(
+    common::ObArenaAllocator &allocator,
+    const ObTablet &tablet,
+    const ObBatchUpdateTableStoreParam &param,
+    const ObTabletTableStore &old_store)
+{
+  int ret = OB_SUCCESS;
+  ObSEArray<ObITable *, OB_DEFAULT_SE_ARRAY_COUNT> batch_tables;
+  int64_t inc_base_snapshot_version = -1;
+
+  if (OB_FAIL(param.tables_handle_.get_tables(batch_tables))) {
+    LOG_WARN("get tables failed when build fork new table store", KR(ret),
+        "tablet_id", tablet.get_tablet_id(), "param_fork", param.tablet_fork_param_);
+  } else if (OB_FAIL(inner_build_major_tables_(
+      allocator,
+      old_store,
+      batch_tables,
+      param.tablet_fork_param_.multi_version_start_,
+      false/*allow_duplicate_sstable*/,
+      inc_base_snapshot_version))) {
+    LOG_WARN("failed to inner build major tables for fork", KR(ret),
+        "tablet_id", tablet.get_tablet_id(),
+        "param_fork", param.tablet_fork_param_,
+        "batch_cnt", batch_tables.count(),
+        K(inc_base_snapshot_version));
+  } else if (OB_FAIL(build_fork_minor_tables_(allocator, tablet, param, old_store, batch_tables))) {
+    LOG_WARN("failed to build fork minor tables", KR(ret),
+        "tablet_id", tablet.get_tablet_id(),
+        "param_fork", param.tablet_fork_param_,
+        "batch_cnt", batch_tables.count());
+  } else {
+    is_inited_ = true;
+    if (OB_FAIL(check_ready_for_read(tablet))) {
+      LOG_WARN("failed to check ready for read after fork build", KR(ret), "tablet_id", tablet.get_tablet_id(),
+          "param_fork", param.tablet_fork_param_);
+    } else {
+      try_cache_local_sstables(allocator);
+      LOG_INFO("succeed to build fork new table store",
+          "tablet_id", tablet.get_tablet_id(),
+          "param_fork", param.tablet_fork_param_,
+          "major_cnt", major_tables_.count(),
+          "minor_cnt", minor_tables_.count(),
+          "mem_cnt", memtables_.count(),
+          K_(is_ready_for_read));
+      LOG_DEBUG("fork new table store detail", "tablet_id", tablet.get_tablet_id(), K(PRINT_TS(*this)));
+    }
+  }
+
+  return ret;
+}
+
+int ObTabletTableStore::build_fork_minor_tables_(
+    common::ObArenaAllocator &allocator,
+    const ObTablet &tablet,
+    const ObBatchUpdateTableStoreParam &param,
+    const ObTabletTableStore &dst_store,
+    const ObIArray<ObITable *> &tables_array)
+{
+  int ret = OB_SUCCESS;
+  ObArray<ObITable *> src_minor_tables;
+  ObSEArray<ObITable *, common::MAX_SSTABLE_CNT_IN_STORAGE> dst_minor_tables;
+  const SCN &clog_checkpoint_scn = tablet.get_tablet_meta().clog_checkpoint_scn_;
+  const int64_t fork_snapshot_version = param.tablet_fork_param_.snapshot_version_;
+
+  // 1. Extract src minor sstables from tables_array
+  for (int64_t i = 0; OB_SUCC(ret) && i < tables_array.count(); i++) {
+    ObITable *src_table = tables_array.at(i);
+    if (OB_ISNULL(src_table)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("unexpected null table when extracting fork minor tables", KR(ret),
+          "tablet_id", tablet.get_tablet_id(), K(i), K(fork_snapshot_version));
+    } else if (src_table->is_minor_sstable() && OB_FAIL(src_minor_tables.push_back(src_table))) {
+      LOG_WARN("failed to push back src minor table", KR(ret),
+          "tablet_id", tablet.get_tablet_id(), K(i), K(fork_snapshot_version), KPC(src_table));
+    }
+  }
+
+  // 2. Sort src minor tables
+  if (OB_FAIL(ret)) {
+  } else if (!src_minor_tables.empty() && OB_FAIL(ObTableStoreUtil::sort_minor_tables(src_minor_tables))) {
+    LOG_WARN("failed to sort src minor tables for fork", KR(ret),
+        "tablet_id", tablet.get_tablet_id(), "src_minor_cnt", src_minor_tables.count(), K(fork_snapshot_version));
+  }
+
+  // 3. Get dst minor sstables from dst_store
+  if (OB_FAIL(ret)) {
+  } else if (OB_FAIL(dst_store.minor_tables_.get_all_tables(dst_minor_tables))) {
+    LOG_WARN("failed to get dst minor tables for fork", KR(ret),
+        "tablet_id", tablet.get_tablet_id(), "dst_minor_cnt", dst_minor_tables.count(), K(fork_snapshot_version));
+  } else if (OB_FAIL(check_minor_tables_(dst_minor_tables, true/*no remote table*/))) {
+    LOG_WARN("failed to check dst store minor sstables for fork", KR(ret),
+        "tablet_id", tablet.get_tablet_id(), "dst_minor_cnt", dst_minor_tables.count(), K(fork_snapshot_version));
+  }
+
+  // 4. Check continuity and merge with dst minor tables
+  if (OB_SUCC(ret)) {
+    ObITable *newest_minor_in_src = src_minor_tables.empty() ? nullptr : src_minor_tables.at(src_minor_tables.count() - 1);
+    ObITable *oldest_minor_in_dst = dst_minor_tables.empty() ? nullptr : dst_minor_tables.at(0);
+    ObArray<ObITable *> merged_minor_tables;
+
+    if (OB_NOT_NULL(newest_minor_in_src) && OB_NOT_NULL(oldest_minor_in_dst) &&
+        newest_minor_in_src->get_end_scn() != oldest_minor_in_dst->get_start_scn()) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("non-continuous fork minor tables", KR(ret),
+          "tablet_id", tablet.get_tablet_id(),
+          KPC(newest_minor_in_src), KPC(oldest_minor_in_dst),
+          "src_end_scn", newest_minor_in_src->get_end_scn(),
+          "dst_start_scn", oldest_minor_in_dst->get_start_scn(),
+          "src_minor_cnt", src_minor_tables.count(),
+          "dst_minor_cnt", dst_minor_tables.count(),
+          K(fork_snapshot_version), K(clog_checkpoint_scn));
+    } else if (OB_FAIL(merged_minor_tables.push_back(src_minor_tables))) {
+      LOG_WARN("failed to push back src minor tables", KR(ret),
+          "tablet_id", tablet.get_tablet_id(), "src_minor_cnt", src_minor_tables.count(), K(fork_snapshot_version));
+    } else if (OB_FAIL(merged_minor_tables.push_back(dst_minor_tables))) {
+      LOG_WARN("failed to push back dst minor tables", KR(ret),
+          "tablet_id", tablet.get_tablet_id(), "dst_minor_cnt", dst_minor_tables.count(), K(fork_snapshot_version));
+    } else if (merged_minor_tables.empty()) {
+      // No minor tables after merge
+    } else if (OB_FAIL(ObTableStoreUtil::sort_minor_tables(merged_minor_tables))) {
+      LOG_WARN("failed to sort merged minor tables for fork", KR(ret),
+          "tablet_id", tablet.get_tablet_id(), "merged_cnt", merged_minor_tables.count(), K(fork_snapshot_version));
+    } else if (OB_FAIL(check_minor_tables_(merged_minor_tables))) {
+      ObITable *first = merged_minor_tables.at(0);
+      ObITable *last = merged_minor_tables.at(merged_minor_tables.count() - 1);
+      LOG_WARN("merged minor tables is not continuous for fork", KR(ret),
+          "tablet_id", tablet.get_tablet_id(),
+          "merged_cnt", merged_minor_tables.count(),
+          "first", OB_ISNULL(first) ? "NULL" : to_cstring(first->get_key()),
+          "last", OB_ISNULL(last) ? "NULL" : to_cstring(last->get_key()),
+          K(fork_snapshot_version), K(clog_checkpoint_scn));
+    } else if (merged_minor_tables.at(merged_minor_tables.count() - 1)->get_end_scn() != clog_checkpoint_scn) {
+      ret = OB_ERR_UNEXPECTED;
+      const ObITable *last = merged_minor_tables.at(merged_minor_tables.count() - 1);
+      LOG_WARN("tablet meta clog_checkpoint_scn not match with merged fork minors", KR(ret),
+          "tablet_id", tablet.get_tablet_id(),
+          "merged_cnt", merged_minor_tables.count(),
+          "last_end_scn", OB_ISNULL(last) ? SCN::invalid_scn() : last->get_end_scn(),
+          K(clog_checkpoint_scn), K(fork_snapshot_version));
+    } else if (OB_FAIL(minor_tables_.init(allocator, merged_minor_tables, 0))) {
+      LOG_WARN("failed to init merged minor tables for fork", KR(ret),
+          "tablet_id", tablet.get_tablet_id(), "merged_cnt", merged_minor_tables.count(), K(fork_snapshot_version));
+    } else {
+      ObITable *first = merged_minor_tables.at(0);
+      ObITable *last = merged_minor_tables.at(merged_minor_tables.count() - 1);
+      LOG_INFO("succeed to build fork minor tables",
+          "tablet_id", tablet.get_tablet_id(),
+          "src_minor_cnt", src_minor_tables.count(),
+          "dst_minor_cnt", dst_minor_tables.count(),
+          "merged_cnt", merged_minor_tables.count(),
+          "first_scn", OB_ISNULL(first) ? SCN::invalid_scn() : first->get_start_scn(),
+          "last_scn", OB_ISNULL(last) ? SCN::invalid_scn() : last->get_end_scn(),
+          K(fork_snapshot_version), K(clog_checkpoint_scn));
+    }
+  }
+
+  return ret;
+}
+
 // TODO(@DanLing) support split inc major sstable here.
 int ObTabletTableStore::build_split_minor_tables_(
     common::ObArenaAllocator &allocator,

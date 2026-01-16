@@ -25,6 +25,7 @@
 #include "storage/blocksstable/ob_block_sstable_struct.h"
 #include "storage/tablet/ob_tablet_common.h"
 #include "share/ob_batch_selector.h"
+#include "share/ob_fork_table_util.h"
 
 namespace oceanbase
 {
@@ -40,6 +41,7 @@ struct ObRebuildIndexArg;
 struct ObTruncateTableArg;
 struct ObCreateIndexArg;
 struct ObIndexArg;
+struct ObForkTableArg;
 }
 namespace sql
 {
@@ -154,6 +156,7 @@ enum ObDDLType
   DDL_ADD_COLUMN_INSTANT = 10006, // add after/before column
   DDL_COMPOUND_INSTANT = 10007,
   DDL_ALTER_COLUMN_GROUP_DELAYED = 10008,
+  DDL_FORK_TABLE = 10009, // fork table
   ///< @note add new normal ddl type before this line
   DDL_MAX
 };
@@ -231,6 +234,8 @@ enum ObDDLTaskStatus { // FARM COMPAT WHITELIST
   WAIT_PQ_CENTROID_TABLE_COMPLEMENT = 45,
   LOAD_DICTIONARY = 46,
   PURGE_OLD_MLOG = 47,
+  BUILD_DATA = 48,
+  WAIT_DATA_COMPLEMENT = 49,
 
   FAIL = 99,
   SUCCESS = 100
@@ -407,6 +412,12 @@ static const char* ddl_task_status_to_str(const ObDDLTaskStatus &task_status) {
       break;
     case ObDDLTaskStatus::PURGE_OLD_MLOG:
       str = "PURGE_OLD_MLOG";
+      break;
+    case ObDDLTaskStatus::BUILD_DATA:
+      str = "BUILD_DATA";
+      break;
+    case ObDDLTaskStatus::WAIT_DATA_COMPLEMENT:
+      str = "WAIT_DATA_COMPLEMENT";
       break;
     case ObDDLTaskStatus::FAIL:
       str = "FAIL";
@@ -1292,6 +1303,7 @@ public:
   static int replace_user_tenant_id(const uint64_t tenant_id, obrpc::ObRebuildIndexArg &rebuild_index_arg);
   static int replace_user_tenant_id(const uint64_t tenant_id, obrpc::ObTruncateTableArg &trucnate_table_arg);
   static int replace_user_tenant_id(const uint64_t tenant_id, obrpc::ObCreateIndexArg &create_index_arg);
+  static int replace_user_tenant_id(const uint64_t tenant_id, obrpc::ObForkTableArg &fork_table_arg);
 
   static int generate_column_name_str(
     const common::ObIArray<ObColumnNameInfo> &column_names,
@@ -1474,6 +1486,11 @@ public:
       const int64_t ddl_task_id = 0,
       const int64_t trans_end_snapshot = 0,
       const int64_t index_snapshot_version_diff = 0);
+  static int obtain_snapshot(
+      common::ObMySQLTransaction &trans,
+      schema::ObSchemaGetterGuard &schema_guard,
+      const ObTableSchema &data_table_schema,
+      int64_t &new_fetched_snapshot);
   static int construct_domain_index_arg(const ObTableSchema *table_schema,
     const ObTableSchema *index_schema,
     rootserver::ObDDLTask &task,

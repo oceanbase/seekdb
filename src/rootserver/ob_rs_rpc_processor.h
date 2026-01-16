@@ -485,6 +485,7 @@ DEFINE_DDL_RS_RPC_PROCESSOR(obrpc::OB_SPLIT_GLOBAL_INDEX_TABLET, ObSplitGlobalIn
 DEFINE_DDL_SYS_TNT_RPC_PROCESSOR(obrpc::OB_DROP_TABLE, ObRpcDropTableP, drop_table(arg_, result_));
 DEFINE_DDL_SYS_TNT_RPC_PROCESSOR(obrpc::OB_PARALLEL_DROP_TABLE, ObRpcParallelDropTableP, parallel_drop_table(arg_, result_));
 DEFINE_DDL_SYS_TNT_RPC_PROCESSOR(obrpc::OB_RENAME_TABLE, ObRpcRenameTableP, rename_table(arg_));
+DEFINE_DDL_SYS_TNT_RPC_PROCESSOR(obrpc::OB_FORK_TABLE, ObRpcForkTableP, fork_table(arg_, result_));
 DEFINE_DDL_SYS_TNT_RPC_PROCESSOR(obrpc::OB_TRUNCATE_TABLE, ObRpcTruncateTableP, truncate_table(arg_, result_));
 DEFINE_DDL_SYS_TNT_RPC_PROCESSOR(obrpc::OB_TRUNCATE_TABLE_V2, ObRpcTruncateTableV2P, truncate_table_v2(arg_, result_));
 DEFINE_DDL_RS_RPC_PROCESSOR(obrpc::OB_CREATE_AUX_INDEX, ObRpcCreateAuxIndexP, create_aux_index(arg_, result_));

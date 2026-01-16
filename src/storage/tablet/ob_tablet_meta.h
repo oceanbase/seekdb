@@ -81,7 +81,8 @@ public:
       const bool micro_index_clustered,
       const bool has_cs_replica,
       const bool need_generate_cs_replica_cg_array,
-      const bool has_truncate_info);
+      const bool has_truncate_info,
+      const share::ObForkTabletInfo &fork_info = share::ObForkTabletInfo());
   int init(
       const ObTabletMeta &old_tablet_meta,
       const int64_t snapshot_version,
@@ -91,6 +92,14 @@ public:
       const share::SCN clog_checkpoint_scn = share::SCN::min_scn(),
       const ObDDLTableStoreParam &ddl_info = ObDDLTableStoreParam(),
       const bool has_truncate_info = false);
+  int init(
+      const ObTabletMeta &old_tablet_meta,
+      const int64_t snapshot_version,
+      const int64_t multi_version_start,
+      const int64_t max_sync_storage_schema_version,
+      const share::SCN &clog_checkpoint_scn,
+      const share::SCN &mds_checkpoint_scn,
+      const share::ObForkTabletInfo &fork_info);
   int init(
       const ObTabletMeta &old_tablet_meta,
       const share::SCN &flush_scn);
@@ -174,6 +183,7 @@ public:
                K_(micro_index_clustered),
                K_(ddl_replay_status),
                K_(split_info),
+               K_(fork_info),
                K_(has_truncate_info));
 
 public:
@@ -234,12 +244,13 @@ public:
   ObCSReplicaDDLReplayStatus ddl_replay_status_;
   //ATTENTION : Add a new variable need consider ObMigrationTabletParam
   // and tablet meta init interface for migration.
-  // yuque : 
+  // yuque :
   lib::Worker::CompatMode compat_mode_; // alignment: 1B, size: 4B
   bool has_next_tablet_; // alignment: 1B, size: 2B
   bool is_empty_shell_; // alignment: 1B, size: 2B
   bool micro_index_clustered_; // alignment: 1B, size: 2B
   share::ObSplitTabletInfo split_info_; // alignment: 8B, size: 16B
+  share::ObForkTabletInfo fork_info_; // alignment: 8B, size: 24B
   bool has_truncate_info_; // be True after first major with truncate info
 private:
   void update_extra_medium_info(

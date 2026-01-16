@@ -54,6 +54,7 @@ int ObTableAccessContext::init_column_scale_info(ObTableScanParam &scan_param)
 
 ObTableAccessContext::ObTableAccessContext()
   : is_inited_(false),
+    is_fork_ctx_(false),
     use_fuse_row_cache_(false),
     need_scn_(false),
     need_release_mview_scan_info_(true),
@@ -94,35 +95,51 @@ ObTableAccessContext::ObTableAccessContext()
 
 ObTableAccessContext::~ObTableAccessContext()
 {
-  reset_lob_locator_helper();
-  cached_iter_node_ = nullptr;
-  if (nullptr != stmt_iter_pool_) {
-    stmt_iter_pool_->~ObStoreRowIterPool<ObStoreRowIterator>();
-    if (OB_NOT_NULL(stmt_allocator_)) {
-      stmt_allocator_->free(stmt_iter_pool_);
-    }
-    stmt_iter_pool_ = nullptr;
-  }
-  if (nullptr != cg_iter_pool_) {
-    cg_iter_pool_->~ObStoreRowIterPool<ObICGIterator>();
-    if (OB_NOT_NULL(stmt_allocator_)) {
-      stmt_allocator_->free(cg_iter_pool_);
-    }
-    cg_iter_pool_ = nullptr;
-  }
-  if (OB_UNLIKELY(nullptr != sample_filter_)) {
-    ObRowSampleFilterFactory::destroy_sample_filter(sample_filter_);
-  }
-  if (OB_UNLIKELY(need_release_mview_scan_info_ && nullptr != mview_scan_info_)) {
-    release_mview_scan_info(stmt_allocator_, mview_scan_info_);
+  if (is_fork_ctx_) {
+    // fork ctx shallow-copies many pointer members from the main ctx. It should NOT manage
+    // their lifecycles during destruction; just detach them.
     need_release_mview_scan_info_ = false;
-  } else {
+    need_release_truncate_part_filter_ = false;
+    reset_lob_locator_helper(); // fork-aware: won't destruct shared helper
+    cached_iter_node_ = nullptr;
+    stmt_iter_pool_ = nullptr;
+    cg_iter_pool_ = nullptr;
+    cg_param_pool_ = nullptr;
+    block_row_store_ = nullptr;
+    sample_filter_ = nullptr;
     mview_scan_info_ = nullptr;
-  }
-  if (OB_UNLIKELY(need_release_truncate_part_filter_ && nullptr != truncate_part_filter_)) {
-    ObTruncatePartitionFilterFactory::destroy_truncate_partition_filter(truncate_part_filter_);
-  } else {
     truncate_part_filter_ = nullptr;
+  } else {
+    reset_lob_locator_helper();
+    cached_iter_node_ = nullptr;
+    if (nullptr != stmt_iter_pool_) {
+      stmt_iter_pool_->~ObStoreRowIterPool<ObStoreRowIterator>();
+      if (OB_NOT_NULL(stmt_allocator_)) {
+        stmt_allocator_->free(stmt_iter_pool_);
+      }
+      stmt_iter_pool_ = nullptr;
+    }
+    if (nullptr != cg_iter_pool_) {
+      cg_iter_pool_->~ObStoreRowIterPool<ObICGIterator>();
+      if (OB_NOT_NULL(stmt_allocator_)) {
+        stmt_allocator_->free(cg_iter_pool_);
+      }
+      cg_iter_pool_ = nullptr;
+    }
+    if (OB_UNLIKELY(nullptr != sample_filter_)) {
+      ObRowSampleFilterFactory::destroy_sample_filter(sample_filter_);
+    }
+    if (OB_UNLIKELY(need_release_mview_scan_info_ && nullptr != mview_scan_info_)) {
+      release_mview_scan_info(stmt_allocator_, mview_scan_info_);
+      need_release_mview_scan_info_ = false;
+    } else {
+      mview_scan_info_ = nullptr;
+    }
+    if (OB_UNLIKELY(need_release_truncate_part_filter_ && nullptr != truncate_part_filter_)) {
+      ObTruncatePartitionFilterFactory::destroy_truncate_partition_filter(truncate_part_filter_);
+    } else {
+      truncate_part_filter_ = nullptr;
+    }
   }
 }
 
@@ -216,7 +233,7 @@ int ObTableAccessContext::init(ObTableScanParam &scan_param,
     table_scan_stat_->reset();
     table_store_stat_.in_row_cache_threshold_ = scan_param.in_row_cache_threshold_;
     trans_version_range_ = trans_version_range;
-    need_scn_ = scan_param.need_scn_ || 
+    need_scn_ = scan_param.need_scn_ ||
                 (nullptr != scan_param.table_param_ && OB_INVALID_INDEX != scan_param.table_param_->get_read_info().get_trans_col_index());
     range_array_pos_ = &scan_param.range_array_pos_;
     use_fuse_row_cache_ = false;
@@ -236,7 +253,7 @@ int ObTableAccessContext::init(ObTableScanParam &scan_param,
                   table_scan_stat_,
                   query_flag_))) {
       LOG_WARN("Fail to init micro block handle mgr", K(ret));
-    } else if (scan_param.sample_info_.is_row_sample() 
+    } else if (scan_param.sample_info_.is_row_sample()
         && OB_FAIL(ObRowSampleFilterFactory::build_sample_filter(
           scan_param.sample_info_,
           sample_filter_,
@@ -388,6 +405,65 @@ int ObTableAccessContext::init_for_mview(common::ObIAllocator *allocator, const 
   return ret;
 }
 
+int ObTableAccessContext::init_for_fork(ObTableAccessContext &other,
+    ObStoreCtx *store_ctx, const ObForkTabletInfo &fork_info)
+{
+  int ret = OB_SUCCESS;
+  // Copy all access context fields from original access context.
+  // Note: pointer members are shallow-copied by design.
+  is_fork_ctx_ = true;
+  stmt_allocator_ = other.stmt_allocator_;
+  allocator_ = other.allocator_;
+  cached_iter_node_ = other.cached_iter_node_;
+  range_allocator_ = other.range_allocator_;
+  ls_id_ = other.ls_id_;
+  tablet_id_ = other.tablet_id_;
+  query_flag_ = other.query_flag_;
+  // disable row cache for fork
+  query_flag_.set_not_use_row_cache();
+  sql_mode_ = other.sql_mode_;
+  timeout_ = other.timeout_;
+  store_ctx_ = store_ctx;
+  table_scan_stat_ = other.table_scan_stat_;
+  limit_param_ = other.limit_param_;
+  table_store_stat_ = other.table_store_stat_;
+  out_cnt_ = other.out_cnt_;
+  in_row_cache_threshold_ = other.in_row_cache_threshold_;
+  trans_version_range_ = other.trans_version_range_;
+  trans_version_range_.snapshot_version_ = fork_info.get_fork_snapshot_version();
+  need_scn_ = other.need_scn_;
+  range_array_pos_ = other.range_array_pos_;
+  // disable fuse row cache for fork
+  use_fuse_row_cache_ = false;
+  lob_locator_helper_ = other.lob_locator_helper_;
+  stmt_iter_pool_ = other.stmt_iter_pool_;
+  cg_iter_pool_ = other.cg_iter_pool_;
+  cg_param_pool_ = other.cg_param_pool_;
+  block_row_store_ = other.block_row_store_;
+  sample_filter_ = other.sample_filter_;
+  trans_state_mgr_ = other.trans_state_mgr_;
+  mview_scan_info_ = other.mview_scan_info_;
+  scan_resume_point_ = other.scan_resume_point_;
+  truncate_part_filter_ = other.truncate_part_filter_;
+  // fork ctx shallow-copies these shared pointers, should not release them
+  need_release_mview_scan_info_ = false;
+  need_release_truncate_part_filter_ = false;
+  mds_collector_ = other.mds_collector_;
+  row_scan_cnt_ = other.row_scan_cnt_;
+  if (!micro_block_handle_mgr_.is_valid() &&
+      OB_FAIL(micro_block_handle_mgr_.init(
+              false,
+              table_store_stat_,
+              table_scan_stat_,
+              query_flag_))) {
+    LOG_WARN("Failed to init micro block handle mgr", K(ret));
+  } else {
+    need_release_mview_scan_info_ = false;
+    is_inited_ = true;
+  }
+  return ret;
+}
+
 void ObTableAccessContext::inc_micro_access_cnt()
 {
   ++table_store_stat_.micro_access_cnt_;
@@ -434,32 +510,47 @@ int ObTableAccessContext::init_mview_scan_info(const int64_t multi_version_start
 
 void ObTableAccessContext::reset()
 {
-  reset_lob_locator_helper();
-  if (OB_UNLIKELY(need_release_mview_scan_info_ && nullptr != mview_scan_info_)) {
-    release_mview_scan_info(stmt_allocator_, mview_scan_info_);
+  if (is_fork_ctx_) {
+    // fork ctx shallow-copies many pointer members from main ctx; don't release/mutate them.
     need_release_mview_scan_info_ = false;
-  } else {
+    need_release_truncate_part_filter_ = false;
+    reset_lob_locator_helper(); // fork-aware
     mview_scan_info_ = nullptr;
-  }
-  if (OB_UNLIKELY(need_release_truncate_part_filter_ && nullptr != truncate_part_filter_)) {
-    ObTruncatePartitionFilterFactory::destroy_truncate_partition_filter(truncate_part_filter_);
-  } else {
     truncate_part_filter_ = nullptr;
-  }
-  cached_iter_node_ = nullptr;
-  if (nullptr != stmt_iter_pool_) {
-    stmt_iter_pool_->~ObStoreRowIterPool<ObStoreRowIterator>();
-    if (OB_NOT_NULL(stmt_allocator_)) {
-      stmt_allocator_->free(stmt_iter_pool_);
-    }
+    cached_iter_node_ = nullptr;
     stmt_iter_pool_ = nullptr;
-  }
-  if (nullptr != cg_iter_pool_) {
-    cg_iter_pool_->~ObStoreRowIterPool<ObICGIterator>();
-    if (OB_NOT_NULL(stmt_allocator_)) {
-      stmt_allocator_->free(cg_iter_pool_);
-    }
     cg_iter_pool_ = nullptr;
+    cg_param_pool_ = nullptr;
+    block_row_store_ = nullptr;
+    sample_filter_ = nullptr;
+  } else {
+    reset_lob_locator_helper();
+    if (OB_UNLIKELY(need_release_mview_scan_info_ && nullptr != mview_scan_info_)) {
+      release_mview_scan_info(stmt_allocator_, mview_scan_info_);
+      need_release_mview_scan_info_ = false;
+    } else {
+      mview_scan_info_ = nullptr;
+    }
+    if (OB_UNLIKELY(need_release_truncate_part_filter_ && nullptr != truncate_part_filter_)) {
+      ObTruncatePartitionFilterFactory::destroy_truncate_partition_filter(truncate_part_filter_);
+    } else {
+      truncate_part_filter_ = nullptr;
+    }
+    cached_iter_node_ = nullptr;
+    if (nullptr != stmt_iter_pool_) {
+      stmt_iter_pool_->~ObStoreRowIterPool<ObStoreRowIterator>();
+      if (OB_NOT_NULL(stmt_allocator_)) {
+        stmt_allocator_->free(stmt_iter_pool_);
+      }
+      stmt_iter_pool_ = nullptr;
+    }
+    if (nullptr != cg_iter_pool_) {
+      cg_iter_pool_->~ObStoreRowIterPool<ObICGIterator>();
+      if (OB_NOT_NULL(stmt_allocator_)) {
+        stmt_allocator_->free(cg_iter_pool_);
+      }
+      cg_iter_pool_ = nullptr;
+    }
   }
   is_inited_ = false;
   timeout_ = 0;
@@ -488,11 +579,12 @@ void ObTableAccessContext::reset()
   range_array_pos_ = nullptr;
   cg_param_pool_ = nullptr;
   block_row_store_ = nullptr;
-  ObRowSampleFilterFactory::destroy_sample_filter(sample_filter_);
-  scan_resume_point_ = nullptr;
-  if (OB_UNLIKELY(nullptr != sample_filter_)) {
+  if (!is_fork_ctx_) {
     ObRowSampleFilterFactory::destroy_sample_filter(sample_filter_);
+  } else {
+    sample_filter_ = nullptr;
   }
+  scan_resume_point_ = nullptr;
   row_scan_cnt_ = nullptr;
 }
 

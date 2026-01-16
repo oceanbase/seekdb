@@ -711,7 +711,7 @@ int ObSSTableMetaBackupReader::get_meta_data(blocksstable::ObBufferReader &buffe
         if (GCTX.is_shared_storage_mode() && table_key.is_ddl_dump_sstable()) {
           if (FAILEDx(get_macro_block_id_list_(*sstable_ptr, backup_sstable_meta))) {
             LOG_WARN("failed to get macro block id list", K(ret), KPC(sstable_ptr));
-          } else if (OB_FAIL(tablet->build_migration_sstable_param(table_key, backup_sstable_meta.sstable_meta_))) {
+          } else if (OB_FAIL(tablet->build_migration_sstable_param(table_key, backup_sstable_meta.sstable_meta_, false/*is_fork_table*/))) {
             LOG_WARN("failed to build migration sstable param", K(ret), K(table_key));
           } else if (OB_FAIL(deal_with_ddl_sstable_(table_key, linked_writer_, backup_sstable_meta))) {
             LOG_WARN("failed to deal with ddl sstable", K(ret), K(table_key));
