@@ -5,9 +5,9 @@ Description=seekdb
 User=root
 Type=notify
 Environment=REPORTER=systemd
-ExecStart=/usr/libexec/oceanbase/scripts/seekdb_systemd_start
-ExecStop=/usr/libexec/oceanbase/scripts/seekdb_systemd_stop
-PIDFile=/var/lib/oceanbase/run/observer.pid
+ExecStart=/usr/libexec/seekdb/scripts/seekdb_systemd_start
+ExecStop=/usr/libexec/seekdb/scripts/seekdb_systemd_stop
+PIDFile=/var/lib/seekdb/run/seekdb.pid
 NotifyAccess=all
 Restart=on-failure
 RestartSec=3

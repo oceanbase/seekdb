@@ -1,10 +1,10 @@
 #!/bin/bash
 # SeekDB start script
-# This script reads configuration from /etc/oceanbase/seekdb.cnf and starts observer
+# This script reads configuration from /etc/seekdb/seekdb.cnf and starts seekdb
 
-CONFIG_FILE="/etc/oceanbase/seekdb.cnf"
-BASE_DIR="/var/lib/oceanbase"
-SYSTEMD_PID_FILE="$BASE_DIR/run/observer.pid"
+CONFIG_FILE="/etc/seekdb/seekdb.cnf"
+BASE_DIR="/var/lib/seekdb"
+SYSTEMD_PID_FILE="$BASE_DIR/run/seekdb.pid"
 
 # Check if config file exists
 if [ ! -f "$CONFIG_FILE" ]; then
@@ -72,10 +72,10 @@ if [ "$force_start_with_args" = "true" ] || [ "$force_start_with_args" = "1" ] |
      ( [ ! -d "$REDO_DIR" ] || [ -z "$(ls -A "$REDO_DIR" 2>/dev/null)" ] ) && \
      [ ! -f "$BASE_DIR/.meta" ] ); then
     # New database initialization, use all parameters
-    CMD="/usr/bin/observer --base-dir=$BASE_DIR $ADDITIONAL_PARAMS"
+    CMD="/usr/bin/seekdb --base-dir=$BASE_DIR $ADDITIONAL_PARAMS"
 else
     # Existing database, only use base-dir
-    CMD="/usr/bin/observer --base-dir=$BASE_DIR"
+    CMD="/usr/bin/seekdb --base-dir=$BASE_DIR"
 fi
 
 echo "Starting seekdb with command: $CMD"
@@ -85,7 +85,7 @@ $CMD
 CMD_EXIT_CODE=$?
 
 # Create softlink for PID file to systemd expected location
-SEEKDB_PID_FILE="$BASE_DIR/run/observer.pid"
+SEEKDB_PID_FILE="$BASE_DIR/run/seekdb.pid"
 if [ -f "$SEEKDB_PID_FILE" ] && [ "$SEEKDB_PID_FILE" != "$SYSTEMD_PID_FILE" ]; then
     # Create target directory if it doesn't exist
     mkdir -p "$(dirname "$SYSTEMD_PID_FILE")"

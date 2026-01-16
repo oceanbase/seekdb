@@ -82,7 +82,7 @@ install(FILES
   tools/systemd/profile/post_install.sh
   tools/systemd/profile/post_uninstall.sh
   tools/systemd/profile/pre_uninstall.sh
-  DESTINATION usr/libexec/oceanbase/scripts
+  DESTINATION usr/libexec/seekdb/scripts
   COMPONENT server)
 
 if (BUILD_CDC_ONLY)
@@ -120,7 +120,7 @@ configure_file(${CMAKE_CURRENT_SOURCE_DIR}/tools/ocp/software_package.template
 
 install(FILES
   tools/ocp/software_package
-  DESTINATION usr/share/oceanbase/software_package
+  DESTINATION usr/share/seekdb/software_package
   COMPONENT server)
 
 message(STATUS "Cpack Components:${CPACK_COMPONENTS_ALL}")

@@ -29,7 +29,7 @@ set(CPACK_RPM_EXCLUDE_FROM_AUTO_FILELIST_ADDITION
 
 # Install binaries to /usr/bin
 install(PROGRAMS
-  ${CMAKE_BINARY_DIR}/src/observer/observer
+  ${CMAKE_BINARY_DIR}/src/observer/seekdb
   deps/3rd/home/admin/oceanbase/bin/obshell
   DESTINATION usr/bin
   COMPONENT server)
@@ -51,14 +51,14 @@ install(FILES
 install(PROGRAMS
   tools/import_time_zone_info.py
   tools/import_srs_data.py
-  DESTINATION usr/libexec/oceanbase
+  DESTINATION usr/libexec/seekdb
   COMPONENT server)
 
 install(PROGRAMS
   tools/systemd/profile/seekdb_systemd_start
   tools/systemd/profile/seekdb_systemd_stop
   tools/systemd/profile/telemetry.sh
-  DESTINATION usr/libexec/oceanbase/scripts
+  DESTINATION usr/libexec/seekdb/scripts
   COMPONENT server)
 
 # Install configuration files to /etc/oceanbase
@@ -78,20 +78,20 @@ install(FILES
   tools/systemd/profile/seekdb.cnf
   tools/systemd/profile/oceanbase-pre.json
   tools/systemd/profile/telemetry-pre.json
-  DESTINATION etc/oceanbase
+  DESTINATION etc/seekdb
   COMPONENT server)
 
 # Install admin SQL files to /usr/share/oceanbase/admin
 message(STATUS "system package release directory: " ${SYS_PACK_RELEASE_DIR})
 install(
   DIRECTORY ${SYS_PACK_RELEASE_DIR}/
-  DESTINATION usr/share/oceanbase/admin
+  DESTINATION usr/share/seekdb/admin
   COMPONENT server)
 
 # Install help files to /usr/share/oceanbase/help
 install(FILES
   src/sql/fill_help_tables-ob.sql
-  DESTINATION usr/share/oceanbase/help
+  DESTINATION usr/share/seekdb/help
   COMPONENT server)
 
 # Install timezone files to /usr/share/oceanbase/timezone
@@ -101,14 +101,14 @@ install(FILES
   tools/timezone_name.data
   tools/timezone_trans.data
   tools/timezone_trans_type.data
-  DESTINATION usr/share/oceanbase/timezone
+  DESTINATION usr/share/seekdb/timezone
   COMPONENT server)
 
 # Install SRS files to /usr/share/oceanbase/srs
 install(FILES
   tools/spatial_reference_systems.data
   tools/default_srs_data_mysql.sql
-  DESTINATION usr/share/oceanbase/srs
+  DESTINATION usr/share/seekdb/srs
   COMPONENT server)
 
 # Install upgrade scripts to /usr/share/oceanbase/upgrade
@@ -117,12 +117,12 @@ install(FILES
   tools/upgrade/upgrade_post.py
   tools/upgrade/upgrade_checker.py
   tools/upgrade/upgrade_health_checker.py
-  DESTINATION usr/share/oceanbase/upgrade
+  DESTINATION usr/share/seekdb/upgrade
   COMPONENT server)
 
 # Install ocp configuration to /usr/share/oceanbase/software_package
 install(DIRECTORY
-  DESTINATION usr/share/oceanbase/software_package
+  DESTINATION usr/share/seekdb/software_package
   COMPONENT server)
 
 # ## oceanbase-sql-parser

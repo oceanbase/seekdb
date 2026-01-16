@@ -73,7 +73,7 @@ install(FILES
   tools/systemd/profile/postinst
   tools/systemd/profile/prerm
   tools/systemd/profile/postrm
-  DESTINATION usr/libexec/oceanbase/scripts
+  DESTINATION usr/libexec/seekdb/scripts
   COMPONENT server)
 
 # install cpack to make everything work
