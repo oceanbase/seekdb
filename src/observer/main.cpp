@@ -206,7 +206,7 @@ static int check_uid_before_start(const char *dir_path)
   } else {
     if (current_uid != dir_info.st_uid) {
       ret = OB_UTL_FILE_ACCESS_DENIED;
-      MPRINT("ERROR: current user(uid=%u) that starts observer is not the same with the original one(uid=%u), observer starts failed!",
+      MPRINT("ERROR: current user(uid=%u) that starts seekdb is not the same with the original one(uid=%u), seekdb starts failed!",
               current_uid, dir_info.st_uid);
     }
   }
@@ -255,7 +255,7 @@ int inner_main(int argc, char *argv[])
   backtrace_symbolize_func = oceanbase::common::backtrace_symbolize;
 #endif
   if (0 != pthread_getname_np(pthread_self(), ob_get_tname(), OB_THREAD_NAME_BUF_LEN)) {
-    snprintf(ob_get_tname(), OB_THREAD_NAME_BUF_LEN, "observer");
+    snprintf(ob_get_tname(), OB_THREAD_NAME_BUF_LEN, "seekdb");
   }
   ObStackHeaderGuard stack_header_guard;
   int64_t memory_used = get_virtual_memory_used();
@@ -331,7 +331,7 @@ int inner_main(int argc, char *argv[])
 
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(check_uid_before_start(CONF_DIR))) {
-    MPRINT("Fail check_uid_before_start, please use the initial user to start observer!");
+    MPRINT("Fail check_uid_before_start, please use the initial user to start seekdb!");
   } else if (OB_FAIL(FileDirectoryUtils::create_full_path(PID_DIR))) {
     MPRINT("create pid dir fail: ./run/");
   } else if (OB_FAIL(FileDirectoryUtils::create_full_path(LOG_DIR))) {
@@ -344,14 +344,14 @@ int inner_main(int argc, char *argv[])
   }
   if (OB_FAIL(ret)) {
   } else if (!opts->nodaemon_ && !opts->initialize_) {
-    MPRINT("The observer will be started as a daemon process. You can check the server status by client later.");
-    MPRINT("    Start observer with --nodaemon if you don't want to start as a daemon process.");
+    MPRINT("The seekdb will be started as a daemon process. You can check the server status by client later.");
+    MPRINT("    Start seekdb with --nodaemon if you don't want to start as a daemon process.");
     if (OB_FAIL(start_daemon(PID_FILE_NAME))) {
-      MPRINT("Start observer as a daemon failed. Did you started observer already?");
+      MPRINT("Start seekdb as a daemon failed. Did you started seekdb already?");
     }
   } else if (opts->nodaemon_) {
     if (OB_FAIL(start_daemon(PID_FILE_NAME, true/*skip_daemon*/))) {
-      MPRINT("Start observer failed. Did you started observer already?");
+      MPRINT("Start seekdb failed. Did you started seekdb already?");
     }
   }
 
@@ -400,28 +400,28 @@ int inner_main(int argc, char *argv[])
       lib::Worker worker;
       lib::Worker::set_worker_to_thread_local(&worker);
       ObServer &observer = ObServer::get_instance();
-      LOG_INFO("observer starts", "observer_version", PACKAGE_STRING);
+      LOG_INFO("seekdb starts", "seekdb_version", PACKAGE_STRING);
       // to speed up bootstrap phase, need set election INIT TS
-      // to count election keep silence time as soon as possible after observer process started
+      // to count election keep silence time as soon as possible after seekdb process started
       ATOMIC_STORE(&palf::election::INIT_TS, palf::election::get_monotonic_ts());
       if (OB_FAIL(observer.init(*opts, log_cfg))) {
-        LOG_ERROR("observer init fail", K(ret));
+        LOG_ERROR("seekdb init fail", K(ret));
       }
       OB_DELETE(ObServerOptions, mem_attr, opts);
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(observer.start(embed_mode))) {
-        LOG_ERROR("observer start fail", K(ret));
+        LOG_ERROR("seekdb start fail", K(ret));
       } else {
         safe_sd_notify(0, "READY=1\n"
                        "STATUS=seekdb is ready and running\n");
       }
       if (initialize) {
-        LOG_INFO("observer starts in initialize mode, exit now", K(initialize));
+        LOG_INFO("seekdb starts in initialize mode, exit now", K(initialize));
         _exit(OB_SUCC(ret) ? 0 : 1);
       }
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(observer.wait())) {
-        LOG_ERROR("observer wait fail", K(ret));
+        LOG_ERROR("seekdb wait fail", K(ret));
       }
 
       if (OB_FAIL(ret)) {
@@ -433,7 +433,7 @@ int inner_main(int argc, char *argv[])
     unlink(PID_FILE_NAME);
   }
 
-  LOG_INFO("observer exits", "observer_version", PACKAGE_STRING);
+  LOG_INFO("seekdb exits", "seekdb_version", PACKAGE_STRING);
   return ret;
 }
 

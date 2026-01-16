@@ -28,6 +28,6 @@ CGROUP_PATH	varchar(256)	NO		NULL
 select count(1) from oceanbase.__all_virtual_thread where tname = "";
 count(1)
 0
-select count(1) from oceanbase.V$OB_THREAD where tname = "observer";
+select count(1) from oceanbase.V$OB_THREAD where tname = "seekdb";
 count(1)
 1
