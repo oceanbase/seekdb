@@ -378,6 +378,9 @@ private :
   inline bool check_is_bool_key(ObString &key) {
     return key.case_compare("must") == 0 || key.case_compare("must_not") == 0 || key.case_compare("should") == 0 || key.case_compare("filter") == 0 || key.case_compare("bool") == 0;
   }
+  bool check_is_column_name(const ObString &key);
+  int create_column_or_base_expr(const ObString &key, ObReqExpr *&expr);
+
   ObIAllocator &alloc_;
   common::ObSEArray<common::ObString, 4, common::ModulePageAllocator, true> source_cols_;
   bool need_json_wrap_;

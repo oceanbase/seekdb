@@ -325,6 +325,7 @@ int ObReqColumnExpr::translate_expr(ObObjPrintParams &print_params_, char *buf_,
     PRINT_IDENT_WITH_QUOT(table_name);
     DATA_PRINTF(".");
   }
+
   PRINT_IDENT_WITH_QUOT(expr_name);
   // For ES mode MATCH field, output weight in format: `column`^weight
   if (OB_SUCC(ret) && print_weight_ && weight_ >= 0) {
@@ -934,19 +935,19 @@ int ObReqOpExpr::construct_op_expr(ObReqOpExpr *&expr, ObIAllocator &alloc, ObIt
   return ret;
 }
 
-int ObReqOpExpr::construct_in_expr(ObIAllocator &alloc, ObReqColumnExpr *col_expr, common::ObIArray<ObReqConstExpr *> &value_exprs, ObReqOpExpr *&in_expr)
+int ObReqOpExpr::construct_in_expr(ObIAllocator &alloc, ObReqExpr *key_expr, common::ObIArray<ObReqConstExpr *> &value_exprs, ObReqOpExpr *&in_expr)
 {
   int ret = OB_SUCCESS;
-  if (OB_ISNULL(col_expr) || value_exprs.count() == 0) {
+  if (OB_ISNULL(key_expr) || value_exprs.count() == 0) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret));
   } else if (OB_ISNULL(in_expr = OB_NEWx(ObReqOpExpr, &alloc, T_OP_IN))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("fail to create in expr", K(ret));
-  } else if (OB_ISNULL(col_expr)) {
+  } else if (OB_ISNULL(key_expr)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpectd null ptr", K(ret));
-  } else if (OB_FAIL(in_expr->params.push_back(col_expr))) {
+  } else if (OB_FAIL(in_expr->params.push_back(key_expr))) {
     LOG_WARN("fail to push in expr param", K(ret));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < value_exprs.count(); i++) {

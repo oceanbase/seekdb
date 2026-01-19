@@ -196,7 +196,7 @@ public:
   static int construct_binary_op_expr(ObReqOpExpr *&expr, ObIAllocator &alloc, ObItemType type, ObReqExpr *l_param, ObReqExpr *r_param, const ObString &alias_name = ObString());
   static int construct_unary_op_expr(ObReqOpExpr *&expr, ObIAllocator &alloc, ObItemType type,  ObReqExpr *param);
   static int construct_op_expr(ObReqOpExpr *&expr, ObIAllocator &alloc, ObItemType type, const common::ObIArray<ObReqExpr *> &params);
-  static int construct_in_expr(ObIAllocator &alloc, ObReqColumnExpr *col_expr, common::ObIArray<ObReqConstExpr *> &value_exprs, ObReqOpExpr *&in_expr);
+  static int construct_in_expr(ObIAllocator &alloc, ObReqExpr *key_expr, common::ObIArray<ObReqConstExpr *> &value_exprs, ObReqOpExpr *&in_expr);
   virtual ~ObReqOpExpr() {}
   virtual int translate_expr(ObObjPrintParams &print_params_, char *buf_, int64_t buf_len_, int64_t *pos_, ObReqScope scope = FIELD_LIST_SCOPE, bool need_alias = true);
   int translate_in_expr(ObObjPrintParams &print_params_, char *buf_, int64_t buf_len_, int64_t *pos_, ObReqScope scope = FIELD_LIST_SCOPE, bool need_alias = true);

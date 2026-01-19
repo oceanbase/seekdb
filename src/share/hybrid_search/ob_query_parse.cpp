@@ -1566,7 +1566,7 @@ int ObESQueryParser::parse_range(ObIJsonBase &req_node, ObEsQueryInfo &query_inf
   int ret = OB_SUCCESS;
   ObString col_name;
   ObIJsonBase *sub_node = nullptr;
-  ObReqColumnExpr *col_para = nullptr;
+  ObReqExpr *key_expr = nullptr;
   uint64_t count = 0;
   int condition_num = 0;
   common::ObSEArray<ObReqExpr *, 4, common::ModulePageAllocator, true> condition_exprs;
@@ -1585,8 +1585,8 @@ int ObESQueryParser::parse_range(ObIJsonBase &req_node, ObEsQueryInfo &query_inf
   } else if (count == 0) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("unexpectd range condition", K(ret));
-  } else if (OB_FAIL(ObReqColumnExpr::construct_column_expr(col_para, alloc_, col_name))) {
-    LOG_WARN("fail to create column expr", K(ret));
+  } else if (OB_FAIL(create_column_or_base_expr(col_name, key_expr))) {
+    LOG_WARN("fail to create column or base expr", K(ret));
   }
   for (uint64_t i = 0; OB_SUCC(ret) && i < count; i++) {
     ObString key;
@@ -1627,7 +1627,7 @@ int ObESQueryParser::parse_range(ObIJsonBase &req_node, ObEsQueryInfo &query_inf
     }
 
     if (OB_FAIL(ret)) {
-    } else if (type != T_INVALID && OB_FAIL(ObReqOpExpr::construct_binary_op_expr(cmp_expr, alloc_, type, col_para, var))) {
+    } else if (type != T_INVALID && OB_FAIL(ObReqOpExpr::construct_binary_op_expr(cmp_expr, alloc_, type, key_expr, var))) {
       LOG_WARN("fail to construct cmp expr", K(ret));
     } else if (OB_FAIL(condition_exprs.push_back(cmp_expr))) {
       LOG_WARN("fail to add condition to array", K(ret));
@@ -2005,7 +2005,7 @@ int ObESQueryParser::parse_term(ObIJsonBase &req_node, ObEsQueryInfo &query_info
   ObString col_name;
   ObIJsonBase *col_para = NULL;
   ObReqOpExpr *eq_expr = NULL;
-  ObReqColumnExpr *col_expr = NULL;
+  ObReqExpr *key_expr = NULL;
   ObReqConstExpr *value_expr = NULL;
   query_info.query_item_ = QUERY_ITEM_TERM;
   if (req_node.json_type() != ObJsonNodeType::J_OBJECT) {
@@ -2016,15 +2016,15 @@ int ObESQueryParser::parse_term(ObIJsonBase &req_node, ObEsQueryInfo &query_info
     LOG_WARN("term expr should have exactly one element", K(ret));
   } else if (OB_FAIL(req_node.get_object_value(0, col_name, col_para))) {
     LOG_WARN("fail to get value.", K(ret));
-  } else if (OB_FAIL(ObReqColumnExpr::construct_column_expr(col_expr, alloc_, col_name))) {
-    LOG_WARN("fail to create term expr", K(ret));
+  } else if (OB_FAIL(create_column_or_base_expr(col_name, key_expr))) {
+    LOG_WARN("fail to create column or base expr", K(ret));
   } else if (col_para->json_type() == ObJsonNodeType::J_ARRAY) {
     ret = OB_ERR_INVALID_TYPE_FOR_ARGUMENT;
     LOG_WARN("term field should have exactly one element", K(ret));
   } else if (col_para->json_type() != ObJsonNodeType::J_OBJECT) {
     if (OB_FAIL(parse_const(*col_para, value_expr))) {
       LOG_WARN("fail to parse const value", K(ret));
-    } else if (OB_FAIL(ObReqOpExpr::construct_binary_op_expr(eq_expr, alloc_, T_OP_EQ, col_expr, value_expr))) {
+    } else if (OB_FAIL(ObReqOpExpr::construct_binary_op_expr(eq_expr, alloc_, T_OP_EQ, key_expr, value_expr))) {
       LOG_WARN("fail to construct eq expr", K(ret));
     } else {
       query_info.score_expr_ = eq_expr;
@@ -2039,7 +2039,7 @@ int ObESQueryParser::parse_term(ObIJsonBase &req_node, ObEsQueryInfo &query_info
       } else if (key.case_compare("value") == 0) {
         if (OB_FAIL(parse_const(*value_node, value_expr))) {
           LOG_WARN("fail to parse const value", K(ret));
-        } else if (OB_FAIL(ObReqOpExpr::construct_binary_op_expr(eq_expr, alloc_, T_OP_EQ, col_expr, value_expr))) {
+        } else if (OB_FAIL(ObReqOpExpr::construct_binary_op_expr(eq_expr, alloc_, T_OP_EQ, key_expr, value_expr))) {
           LOG_WARN("fail to construct eq expr", K(ret));
         }
       } else if (key.case_compare("boost") == 0) {
@@ -2070,7 +2070,7 @@ int ObESQueryParser::parse_terms(ObIJsonBase &req_node, ObEsQueryInfo &query_inf
 {
   int ret = OB_SUCCESS;
   uint64_t count = 0;
-  ObReqColumnExpr *col_expr = NULL;
+  ObReqExpr *key_expr = NULL;
   ObReqConstExpr *value_expr = NULL;
   ObReqOpExpr *in_expr = NULL;
   common::ObSEArray<ObReqConstExpr*, 4, common::ModulePageAllocator, true> value_exprs;
@@ -2108,11 +2108,11 @@ int ObESQueryParser::parse_terms(ObIJsonBase &req_node, ObEsQueryInfo &query_inf
         ret = OB_INVALID_ARGUMENT;
         LOG_WARN("field should not be empty string", K(ret));
       } else if (FALSE_IT(has_field = true)) {
-      } else if (OB_FAIL(ObReqColumnExpr::construct_column_expr(col_expr, alloc_, key))) {
-        LOG_WARN("fail to create term expr", K(ret));
+      } else if (OB_FAIL(create_column_or_base_expr(key, key_expr))) {
+        LOG_WARN("fail to create column or base expr", K(ret));
       } else if (OB_FAIL(parse_keyword_array(*value_node, value_exprs))) {
         LOG_WARN("fail to parse keyword array", K(ret));
-      } else if (OB_FAIL(ObReqOpExpr::construct_in_expr(alloc_, col_expr, value_exprs, in_expr))) {
+      } else if (OB_FAIL(ObReqOpExpr::construct_in_expr(alloc_, key_expr, value_exprs, in_expr))) {
         LOG_WARN("fail to construct in expr", K(ret));
       }
     }
@@ -3974,6 +3974,36 @@ int ObESQueryParser::construct_partition_cols(const ObIArray<ObString> &column_n
     } else if (OB_FALSE_IT(part_col->set_alias(alias_str))) {
     } else if (OB_FAIL(part_cols_.push_back(part_col))) {
       LOG_WARN("failed to push back partition column expr", K(ret));
+    }
+  }
+  return ret;
+}
+
+bool ObESQueryParser::check_is_column_name(const ObString &key)
+{
+  bool is_column_name = false;
+  for (int64_t i = 0; !is_column_name && i < user_cols_.count(); i++) {
+    if (user_cols_.at(i).case_compare(key) == 0) {
+      is_column_name = true;
+    }
+  }
+  LOG_INFO("hnwyllmm check_is_column_name", K(key), K(is_column_name));
+  return is_column_name;
+}
+
+int ObESQueryParser::create_column_or_base_expr(const ObString &key, ObReqExpr *&expr)
+{
+  int ret = OB_SUCCESS;
+  if (check_is_column_name(key)) {
+    ObReqColumnExpr *col_expr = nullptr;
+    if (OB_FAIL(ObReqColumnExpr::construct_column_expr(col_expr, alloc_, key))) {
+      LOG_WARN("fail to create column expr", K(ret));
+    } else {
+      expr = col_expr;
+    }
+  } else {
+    if (OB_FAIL(ObReqExpr::construct_expr(expr, alloc_, key))) {
+      LOG_WARN("fail to create normal expr", K(ret));
     }
   }
   return ret;
