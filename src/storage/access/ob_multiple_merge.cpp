@@ -316,14 +316,19 @@ int ObMultipleMerge::get_access_ctx(ObTabletID tablet_id, ObTableAccessContext *
   int ret = OB_SUCCESS;
   if (tablet_id == access_ctx_->tablet_id_) {
     access_ctx = access_ctx_;
-  } else if (OB_FAIL(extra_access_ctx_.get_refactored(tablet_id, access_ctx))) {
-    FLOG_WARN("get extra access_ctx failed", KR(ret), K(tablet_id), K(access_ctx_->tablet_id_),
-        KP(access_ctx), KP(&extra_access_ctx_), K(extra_access_ctx_.size()));
-  } else if (OB_ISNULL(access_ctx)) {
-    // split scenario: extra_access_ctx_ only marks tablet_id existence
-    access_ctx = access_ctx_;
   } else {
-    FLOG_INFO("get access_ctx", K(tablet_id), K(access_ctx_->tablet_id_), KP(access_ctx), KP(access_ctx_));
+    int tmp_ret = extra_access_ctx_.get_refactored(tablet_id, access_ctx);
+    if (OB_SUCCESS == tmp_ret && OB_NOT_NULL(access_ctx)) {
+      // fork scenario: found a specific access_ctx for this tablet_id
+      LOG_DEBUG("get access_ctx for fork", K(tablet_id), K(access_ctx_->tablet_id_), KP(access_ctx));
+    } else if (OB_SUCCESS == tmp_ret || OB_HASH_NOT_EXIST == tmp_ret) {
+      // found nullptr (split scenario) or not found, fallback to access_ctx_
+      access_ctx = access_ctx_;
+    } else {
+      ret = tmp_ret;
+      LOG_WARN("get extra access_ctx failed", KR(ret), K(tablet_id), K(access_ctx_->tablet_id_),
+          KP(access_ctx), KP(&extra_access_ctx_), K(extra_access_ctx_.size()));
+    }
   }
   return ret;
 }
