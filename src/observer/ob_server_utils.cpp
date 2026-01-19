@@ -57,9 +57,7 @@ int ObServerUtils::get_log_disk_info_in_config(int64_t& log_disk_size,
                                                int64_t& total_log_disk_size)
 {
   int ret = OB_SUCCESS;
-  const int64_t DEFAULT_LOG_DISK_SIZE = MIN(MAX(2LL << 30, lib::get_memory_limit() / 2),  8LL << 30);
-  int64_t suggested_data_disk_size = GCONF.datafile_size;
-  int64_t suggested_data_disk_percentage = GCONF.datafile_disk_percentage;
+  const int64_t DEFAULT_LOG_DISK_SIZE = MAX(2LL << 30, lib::get_memory_limit() / 2);
   int64_t suggested_clog_disk_size = 0 == GCONF.log_disk_size ? DEFAULT_LOG_DISK_SIZE : GCONF.log_disk_size;
   int64_t suggested_clog_disk_percentage = GCONF.log_disk_percentage;
   int64_t data_default_disk_percentage = 0;
@@ -75,8 +73,7 @@ int ObServerUtils::get_log_disk_info_in_config(int64_t& log_disk_size,
                                                    clog_default_disk_percentage,
                                                    shared_mode))) {
     LOG_ERROR("cal all part disk default percentage failed",
-        KR(ret), K(data_dir), K(suggested_data_disk_size), K(suggested_data_disk_percentage),
-        K(data_default_disk_percentage), K(shared_mode));
+        KR(ret), K(data_dir), K(data_default_disk_percentage), K(shared_mode));
   } else if (OB_FAIL(decide_disk_size(clog_disk_total_size,
                                       suggested_clog_disk_size,
                                       suggested_clog_disk_percentage,
@@ -84,12 +81,11 @@ int ObServerUtils::get_log_disk_info_in_config(int64_t& log_disk_size,
                                       log_disk_size,
                                       log_disk_percentage))) {
     LOG_ERROR("decide disk size failed",
-        KR(ret), K(data_dir), K(suggested_data_disk_size), K(suggested_data_disk_percentage),
-        K(data_default_disk_percentage), K(shared_mode));
+        KR(ret), K(data_dir), K(data_default_disk_percentage), K(shared_mode));
   } else {
     total_log_disk_size = clog_disk_total_size;
-    LOG_INFO("get_log_disk_info_in_config", K(suggested_data_disk_size), K(suggested_clog_disk_size),
-             K(suggested_data_disk_percentage), K(suggested_clog_disk_percentage), K(log_disk_size),
+    LOG_INFO("get_log_disk_info_in_config", K(suggested_clog_disk_size),
+             K(suggested_clog_disk_percentage), K(log_disk_size),
              K(log_disk_percentage), K(total_log_disk_size));
   }
   return ret;
@@ -99,11 +95,8 @@ int ObServerUtils::get_data_disk_info_in_config(int64_t& data_disk_size,
                                                 int64_t& data_disk_percentage)
 {
   int ret = OB_SUCCESS;
-  const int64_t DEFAULT_LOG_DISK_SIZE = MIN(MAX(2LL << 30, lib::get_memory_limit() / 2),  8LL << 30);
   int64_t suggested_data_disk_size = GCONF.datafile_size;
   int64_t suggested_data_disk_percentage = GCONF.datafile_disk_percentage;
-  int64_t suggested_clog_disk_size = 0 == GCONF.log_disk_size ? DEFAULT_LOG_DISK_SIZE : GCONF.log_disk_size;
-  int64_t suggested_clog_disk_percentage = GCONF.log_disk_percentage;
   int64_t data_default_disk_percentage = 0;
   int64_t clog_default_disk_percentage = 0;
   int64_t data_disk_total_size = 0;
@@ -129,8 +122,8 @@ int ObServerUtils::get_data_disk_info_in_config(int64_t& data_disk_size,
         KR(ret), K(data_dir), K(suggested_data_disk_size), K(suggested_data_disk_percentage),
         K(data_default_disk_percentage), K(shared_mode));
   } else {
-    LOG_INFO("get_data_disk_info_in_config", K(suggested_data_disk_size), K(suggested_clog_disk_size),
-             K(suggested_data_disk_percentage), K(suggested_clog_disk_percentage), K(data_disk_size),
+    LOG_INFO("get_data_disk_info_in_config", K(suggested_data_disk_size),
+             K(suggested_data_disk_percentage), K(data_disk_size),
              K(data_disk_percentage));
   }
   return ret;
@@ -207,7 +200,7 @@ const char *ObServerUtils::build_syslog_file_info()
  *  1. if datafile_next less than 32M, actual_extend_size equal to min(32M, datafile_maxsize * 10%)
  *  2. if datafile_next large than 32M, actual_extend_size equal to min(datafile_next, max_extend_file)
 */
-int ObServerUtils::calc_auto_extend_size(int64_t &actual_extend_size)
+int ObServerUtils::calc_auto_extend_size(int64_t &cur_datafile_size, int64_t &actual_extend_size)
 {
   int ret = OB_SUCCESS;
 
@@ -248,6 +241,7 @@ int ObServerUtils::calc_auto_extend_size(int64_t &actual_extend_size)
       }
     } else {
       actual_extend_size += datafile_size; // suggest block file size
+      cur_datafile_size = datafile_size;
     }
   }
   return ret;
