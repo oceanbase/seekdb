@@ -3391,6 +3391,16 @@ int ObTabletTableStore::build_fork_new_table_store_(
         "tablet_id", tablet.get_tablet_id(),
         "param_fork", param.tablet_fork_param_,
         "batch_cnt", batch_tables.count());
+  } else if (OB_FAIL(build_memtable_array(tablet))) {
+    LOG_WARN("failed to pull memtable from memtable_mgr for fork", KR(ret),
+        "tablet_id", tablet.get_tablet_id(), "param_fork", param.tablet_fork_param_);
+  } else if (OB_FAIL(pull_ddl_memtables(allocator, tablet))) {
+    LOG_WARN("failed to pull ddl memtables for fork", KR(ret),
+        "tablet_id", tablet.get_tablet_id(), "param_fork", param.tablet_fork_param_);
+  } else if (OB_FAIL(build_mds_minor_tables(allocator, nullptr/*new_sstable*/, old_store.mds_sstables_))) {
+    LOG_WARN("failed to build mds sstables for fork", KR(ret),
+        "tablet_id", tablet.get_tablet_id(), "param_fork", param.tablet_fork_param_,
+        "old_mds_cnt", old_store.mds_sstables_.count());
   } else {
     is_inited_ = true;
     if (OB_FAIL(check_ready_for_read(tablet))) {
@@ -3403,6 +3413,7 @@ int ObTabletTableStore::build_fork_new_table_store_(
           "param_fork", param.tablet_fork_param_,
           "major_cnt", major_tables_.count(),
           "minor_cnt", minor_tables_.count(),
+          "mds_cnt", mds_sstables_.count(),
           "mem_cnt", memtables_.count(),
           K_(is_ready_for_read));
       LOG_DEBUG("fork new table store detail", "tablet_id", tablet.get_tablet_id(), K(PRINT_TS(*this)));
