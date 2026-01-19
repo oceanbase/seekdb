@@ -117,6 +117,8 @@ public:
       common::ObIArray<common::ObTabletID> &tablet_ids);
 
   static int collect_table_ids_from_table(
+      share::schema::ObSchemaGetterGuard &schema_guard,
+      const uint64_t tenant_id,
       const share::schema::ObTableSchema &table_schema,
       common::ObIArray<uint64_t> &table_ids);
 

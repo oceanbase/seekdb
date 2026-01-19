@@ -114,6 +114,10 @@ int ObForkTableUtil::collect_index_tablet_ids(
       } else if (OB_ISNULL(index_schema)) {
         ret = OB_TABLE_NOT_EXIST;
         LOG_WARN("index table schema is null", K(ret), K(tenant_id), K(index_table_id));
+      } else if (index_schema->is_in_recyclebin() ||
+                 INDEX_STATUS_AVAILABLE != index_schema->get_index_status()) {
+        // Skip indexes not yet built or already recycled to keep tablet counts aligned.
+        continue;
       } else {
         ObSEArray<ObTabletID, 4> index_tablet_ids;
         if (OB_FAIL(index_schema->get_tablet_ids(index_tablet_ids))) {
@@ -186,15 +190,22 @@ int ObForkTableUtil::collect_lob_aux_tablet_ids(
 }
 
 int ObForkTableUtil::collect_table_ids_from_table(
-    const ObTableSchema &table_schema,
+    share::schema::ObSchemaGetterGuard &schema_guard,
+    const uint64_t tenant_id,
+    const share::schema::ObTableSchema &table_schema,
     common::ObIArray<uint64_t> &table_ids)
 {
   int ret = OB_SUCCESS;
   table_ids.reset();
 
+  if (OB_UNLIKELY(OB_INVALID_ID == tenant_id)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid tenant_id", K(ret), K(tenant_id));
+  }
+
   // 1. main table
   const uint64_t main_table_id = table_schema.get_table_id();
-  if (OB_FAIL(table_ids.push_back(main_table_id))) {
+  if (OB_SUCC(ret) && OB_FAIL(table_ids.push_back(main_table_id))) {
     LOG_WARN("fail to push back main table id", K(ret), K(main_table_id));
   }
 
@@ -205,8 +216,18 @@ int ObForkTableUtil::collect_table_ids_from_table(
       LOG_WARN("fail to get simple index infos", K(ret), K(table_schema));
     } else {
       for (int64_t i = 0; OB_SUCC(ret) && i < simple_index_infos.count(); ++i) {
+        const ObTableSchema *index_schema = nullptr;
         const uint64_t index_table_id = simple_index_infos.at(i).table_id_;
-        if (OB_INVALID_ID != index_table_id && OB_FAIL(table_ids.push_back(index_table_id))) {
+        if (OB_INVALID_ID == index_table_id) {
+        } else if (OB_FAIL(schema_guard.get_table_schema(tenant_id, index_table_id, index_schema))) {
+          LOG_WARN("get index table schema failed", K(ret), K(tenant_id), K(index_table_id));
+        } else if (OB_ISNULL(index_schema)) {
+          ret = OB_TABLE_NOT_EXIST;
+          LOG_WARN("index table schema is null", K(ret), K(tenant_id), K(index_table_id));
+        } else if (index_schema->is_in_recyclebin() ||
+                   INDEX_STATUS_AVAILABLE != index_schema->get_index_status()) {
+          continue;
+        } else if (OB_FAIL(table_ids.push_back(index_table_id))) {
           LOG_WARN("fail to push back index table id", K(ret), K(index_table_id));
         }
       }
