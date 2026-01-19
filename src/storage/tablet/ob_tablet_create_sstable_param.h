@@ -130,7 +130,8 @@ public:
   int init_for_fork(const blocksstable::ObMigrationSSTableParam &sstable_param,
                     const ObTabletID &dst_tablet_id,
                     const ObITable::TableKey &src_table_key,
-                    const blocksstable::ObSSTableMeta &sstable_meta);
+                    const blocksstable::ObSSTableMeta &sstable_meta,
+                    const share::SCN &max_end_scn = share::SCN());
 
   // Without checking the validity of the input parameters, necessary to ensure the correctness of the method call.
   int init_for_ha(const blocksstable::ObMigrationSSTableParam &migration_param,

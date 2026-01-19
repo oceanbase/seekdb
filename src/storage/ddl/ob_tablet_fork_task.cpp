@@ -620,7 +620,6 @@ int ObTabletForkDag::create_first_task()
   ObSEArray<ObITable *, MAX_SSTABLE_CNT_IN_STORAGE> src_sstables;
   ObTabletForkPrepareTask *prepare_task = nullptr;
   ObTabletForkMergeTask *merge_task = nullptr;
-  share::SCN fork_snapshot_scn;
 
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
@@ -652,8 +651,6 @@ int ObTabletForkDag::create_first_task()
       LOG_WARN("unexpected nullptr task", K(ret));
     } else if (OB_FAIL(merge_task->init(param_, context_))) {
       LOG_WARN("init merge task failed", K(ret));
-    } else if (OB_FAIL(fork_snapshot_scn.convert_for_tx(param_.fork_snapshot_version_))) {
-      LOG_WARN("failed to convert fork snapshot version to scn", K(ret), K(param_.fork_snapshot_version_), K(param_));
     } else {
       for (int64_t i = 0; OB_SUCC(ret) && i < src_sstables.count(); i++) {
         blocksstable::ObSSTable *sstable = static_cast<blocksstable::ObSSTable *>(src_sstables.at(i));
@@ -662,10 +659,7 @@ int ObTabletForkDag::create_first_task()
           LOG_WARN("unexpected nullptr sstable", K(ret), K(param_));
         } else if (sstable->get_upper_trans_version() <= param_.fork_snapshot_version_) {
           ObTabletForkReuseTask *reuse_task = nullptr;
-          if (OB_UNLIKELY(sstable->get_end_scn() > fork_snapshot_scn)) {
-            ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("sstable end scn is greater than fork snapshot scn", K(ret), K(sstable->get_end_scn()), K(fork_snapshot_scn));
-          } else if (OB_FAIL(alloc_task(reuse_task))) {
+          if (OB_FAIL(alloc_task(reuse_task))) {
             LOG_WARN("alloc reuse task failed", K(ret));
           } else if (OB_ISNULL(reuse_task)) {
             ret = OB_ERR_UNEXPECTED;
@@ -922,10 +916,13 @@ int ObTabletForkReuseTask::process_reuse_sstable()
   ObTabletCreateSSTableParam param;
   ObTableHandleV2 table_handle;
   blocksstable::ObMigrationSSTableParam mig_sstable_param;
+  share::SCN fork_snapshot_scn;
 
   if (OB_ISNULL(sstable_)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("sstable is null", K(ret));
+  } else if (OB_FAIL(fork_snapshot_scn.convert_for_tx(param_->fork_snapshot_version_))) {
+    LOG_WARN("failed to convert fork snapshot version to scn", K(ret), K(param_->fork_snapshot_version_));
   } else {
     ObITable::TableKey src_table_key = sstable_->get_key();
     ObSSTableMetaHandle meta_handle;
@@ -934,8 +931,8 @@ int ObTabletForkReuseTask::process_reuse_sstable()
     } else if (OB_FAIL(context_->src_tablet_handle_.get_obj()->build_migration_sstable_param(
         src_table_key, mig_sstable_param, true/*is_fork_table*/))) {
       LOG_WARN("failed to build migration sstable param", K(ret), K(src_table_key));
-    } else if (OB_FAIL(param.init_for_fork(mig_sstable_param, param_->dest_tablet_id_, src_table_key, meta_handle.get_sstable_meta()))) {
-      LOG_WARN("init for fork failed", K(ret), K(param_->dest_tablet_id_), K(src_table_key));
+    } else if (OB_FAIL(param.init_for_fork(mig_sstable_param, param_->dest_tablet_id_, src_table_key, meta_handle.get_sstable_meta(), fork_snapshot_scn))) {
+      LOG_WARN("init for fork failed", K(ret), K(param_->dest_tablet_id_), K(src_table_key), K(fork_snapshot_scn));
     } else if (OB_FAIL(context_->create_sstable(param, table_handle))) {
       LOG_WARN("failed to create sstable with reused blocks", K(ret));
     }

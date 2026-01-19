@@ -1213,13 +1213,23 @@ int ObTabletCreateSSTableParam::init_for_fork(
     const blocksstable::ObMigrationSSTableParam &sstable_param,
     const ObTabletID &dst_tablet_id,
     const ObITable::TableKey &src_table_key,
-    const blocksstable::ObSSTableMeta &sstable_meta)
+    const blocksstable::ObSSTableMeta &sstable_meta,
+    const share::SCN &max_end_scn)
 {
   int ret = OB_SUCCESS;
   set_init_value_for_column_store_();
 
   table_key_ = src_table_key;
   table_key_.tablet_id_ = dst_tablet_id;
+  // For fork reuse: limit end_scn to max_end_scn (e.g., fork_snapshot_scn)
+  if (max_end_scn.is_valid() && table_key_.scn_range_.end_scn_ > max_end_scn) {
+    LOG_WARN("fork reuse sstable end_scn exceeds max_end_scn, truncating",
+        "original_end_scn", table_key_.scn_range_.end_scn_,
+        K(max_end_scn),
+        K(dst_tablet_id),
+        K(src_table_key));
+    table_key_.scn_range_.end_scn_ = max_end_scn;
+  }
 
   sstable_logic_seq_ = sstable_param.basic_meta_.sstable_logic_seq_;
   schema_version_ = sstable_param.basic_meta_.schema_version_;
