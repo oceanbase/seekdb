@@ -1771,15 +1771,12 @@ bool ObBlockManager::check_can_be_extend(const int64_t reserved_size) {
   bool can_be_extended = false;
 
   const int64_t datafile_maxsize = GCONF.datafile_maxsize;
-  const int64_t datafile_next = GCONF.datafile_next;
   const int64_t current_block_file_size = io_device_->get_total_block_size();
-
-  if (OB_UNLIKELY(datafile_maxsize <= 0) || OB_UNLIKELY(datafile_next <= 0) ||
+  if (OB_UNLIKELY(datafile_maxsize <= 0) ||
       OB_UNLIKELY(current_block_file_size <= 0)) {
     LOG_DEBUG("Do not extend file size, datafile param not set or unexpected "
               "block file size",
-              K(datafile_maxsize), K(datafile_next),
-              K(current_block_file_size));
+              K(datafile_maxsize), K(current_block_file_size));
   } else if (datafile_maxsize <= current_block_file_size) {
     LOG_DEBUG("Do not extend file size, maxsize is smaller than datafile size",
               K(datafile_maxsize), K(current_block_file_size));

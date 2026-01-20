@@ -37,7 +37,8 @@ DEF_STR(redundancy_level, OB_CLUSTER_PARAMETER, "NORMAL",
 // ObServerUtils::get_data_disk_info_in_config()
 DEF_CAP(datafile_size, OB_CLUSTER_PARAMETER, "32M", "[0M,)", "size of the data file. Range: [0, +∞)",
         ObParameterAttr(Section::SSTABLE, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
-DEF_CAP(datafile_next, OB_CLUSTER_PARAMETER, "32M", "[0M,)", "the auto extend step. Range: [0, +∞)",
+DEF_CAP(datafile_next, OB_CLUSTER_PARAMETER, "0M", "[0M,)", "the auto extend step. "
+        "0 means using adaptive extend step size. Range: [0, +∞)",
         ObParameterAttr(Section::SSTABLE, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 DEF_CAP(datafile_maxsize, OB_CLUSTER_PARAMETER, "1T", "[0M,)", "the auto extend max size. Range: [0, +∞)",
         ObParameterAttr(Section::SSTABLE, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));

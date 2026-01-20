@@ -210,29 +210,32 @@ int ObServerUtils::calc_auto_extend_size(int64_t &cur_datafile_size, int64_t &ac
     OB_STORAGE_OBJECT_MGR.get_total_macro_block_count() * OB_STORAGE_OBJECT_MGR.get_macro_block_size();
 
   if (OB_UNLIKELY(datafile_maxsize <= 0) ||
-      OB_UNLIKELY(datafile_size) <= 0 ||
-      OB_UNLIKELY(datafile_next) <= 0) {
+      OB_UNLIKELY(datafile_size) <= 0) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("Invalid argument",
-      K(ret), K(datafile_maxsize), K(datafile_size), K(datafile_next));
+      K(ret), K(datafile_maxsize), K(datafile_size));
   } else {
     // attention: max_extend_file maybe equal to zero in the following situations:
     // 1. alter datafile_size as A, alter datafile_maxsize as B, and A < B
     // 2. auto extend to size to C ( A < C < B )
     // 3. alter datafile_maxsize as D ( A < D < C )
+    int64_t extend_size = 0;
     int64_t max_extend_file = datafile_maxsize - datafile_size;
-    const int64_t datafile_next_minsize = 32 * 1024 * 1024; // 32M
-    if (datafile_next < datafile_next_minsize) {
-      int64_t min_extend_size = datafile_maxsize * 10 / 100;
-      actual_extend_size =
-        min_extend_size < datafile_next_minsize ? min_extend_size : datafile_next_minsize;
-      if (actual_extend_size > max_extend_file) { // take the smaller
-        actual_extend_size = max_extend_file;
-      }
+    if (0 == datafile_next) {
+      const int64_t datafile_next_scale_limit = 1L * 1024 * 1024 * 1024; // 1G
+      extend_size = MIN(datafile_size, datafile_next_scale_limit);
     } else {
-      actual_extend_size =
-        datafile_next < max_extend_file ? datafile_next : max_extend_file;
+      const int64_t datafile_next_minsize = 32 * 1024 * 1024; // 32M
+      if (datafile_next < datafile_next_minsize) {
+        int64_t min_extend_size = datafile_maxsize * 10 / 100;
+        extend_size =
+          min_extend_size < datafile_next_minsize ? min_extend_size : datafile_next_minsize;
+      } else {
+        extend_size = datafile_next;
+      }
     }
+    actual_extend_size = MIN(extend_size, max_extend_file);
+
     if (actual_extend_size <= 0) {
       ret = OB_SERVER_OUTOF_DISK_SPACE;
       if (REACH_TIME_INTERVAL(300 * 1000 * 1000L)) { // 5 min
