@@ -7314,7 +7314,7 @@ int ObDDLService::create_aux_index_task_(
                                &create_index_arg,
                                parent_task_id);
     param.tenant_data_version_ = tenant_data_version;
-    param.ddl_need_retry_at_executor_ = share::schema::is_rowkey_doc_aux(create_index_arg.index_type_)
+    param.ddl_need_retry_at_executor_ = (share::schema::is_rowkey_doc_aux(create_index_arg.index_type_) || share::schema::is_vec_rowkey_vid_type(create_index_arg.index_type_))
                                         && !create_index_arg.is_offline_rebuild_;
     param.new_snapshot_version_ = snapshot_version;
     if (OB_FAIL(ObSysDDLSchedulerUtil::create_ddl_task(param, trans, task_record))) {
