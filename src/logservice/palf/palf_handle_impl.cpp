@@ -2157,6 +2157,18 @@ int PalfHandleImpl::get_min_block_info_for_gc(block_id_t &min_block_id, SCN &max
   return ret;
 }
 
+int PalfHandleImpl::get_min_block_id_for_gc(block_id_t &min_block_id)
+{
+  int ret = OB_SUCCESS;
+  block_id_t max_block_id = LOG_INVALID_BLOCK_ID;
+  if (IS_NOT_INIT) {
+    ret = OB_NOT_INIT;
+  } else if (OB_FAIL(log_engine_.get_block_id_range(min_block_id, max_block_id))) {
+    PALF_LOG(WARN, "get_block_id_range failed", K(ret), KPC(this));
+  }
+  return ret;
+}
+
 int PalfHandleImpl::delete_block(const block_id_t &block_id)
 {
   int ret = OB_SUCCESS;
