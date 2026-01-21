@@ -145,7 +145,7 @@ DEFINE_ERROR_DEP(OB_DESERIALIZE_ERROR, -4034, -1, "HY000", "Deserialize error");
 DEFINE_ERROR_DEP(OB_AIO_TIMEOUT, -4035, -1, "HY000", "Asynchronous IO error");
 DEFINE_ERROR_DEP(OB_NEED_RETRY, -4036, -1, "HY000", "Need retry");
 DEFINE_ERROR(OB_TOO_MANY_SSTABLE, -4037, -1, "HY000", "Too many sstable");
-DEFINE_ERROR_DEP(OB_NOT_MASTER, -4038, -1, "HY000", "The observer or zone is not the master");
+DEFINE_ERROR_DEP(OB_NOT_MASTER, -4038, -1, "HY000", "The seekdb or zone is not the master");
 DEFINE_ERROR(OB_KILLED_BY_THROTTLING, -4039, -1, "HY000", "Request has killed by sql throttle");
 DEFINE_ERROR_DEP(OB_DECRYPT_FAILED, -4041, -1, "HY000", "Decrypt error");
 DEFINE_ORACLE_ERROR_EXT(OB_USER_NOT_EXIST, -4042, ER_PASSWORD_NO_MATCH, "42000", "Can not find any matching row in the user table", "Can not find any matching row in the user table'%.*s'", 1918, "user does not exist", "user '%.*s' does not exist");
@@ -303,7 +303,7 @@ DEFINE_ORACLE_ERROR_EXT(OB_ERR_FIELD_SPECIFIED_TWICE, -4228, ER_FIELD_SPECIFIED_
 DEFINE_ERROR_EXT(OB_ERR_TOO_LONG_TABLE_COMMENT, -4229, ER_TOO_LONG_TABLE_COMMENT, "HY000", "Comment for table is too long", "Comment for table is too long (max = %ld)");
 DEFINE_ERROR_EXT(OB_ERR_TOO_LONG_FIELD_COMMENT, -4230, ER_TOO_LONG_FIELD_COMMENT, "HY000", "Comment for field is too long", "Comment for field is too long (max = %ld)");
 DEFINE_ERROR_EXT(OB_ERR_TOO_LONG_INDEX_COMMENT, -4231, ER_TOO_LONG_INDEX_COMMENT, "HY000", "Comment for index is too long", "Comment for index is too long (max = %ld)");
-DEFINE_ERROR(OB_NOT_FOLLOWER, -4232, -1, "HY000", "The observer or zone is not a follower");
+DEFINE_ERROR(OB_NOT_FOLLOWER, -4232, -1, "HY000", "The seekdb or zone is not a follower");
 DEFINE_ERROR_DEP(OB_ERR_OUT_OF_LOWER_BOUND, -4233, -1, "HY000", "smaller than container lower bound");
 DEFINE_ERROR_DEP(OB_ERR_OUT_OF_UPPER_BOUND, -4234, -1, "HY000", "bigger than container upper bound");
 DEFINE_ORACLE_ERROR_EXT_DEP(OB_BAD_NULL_ERROR, -4235, ER_BAD_NULL_ERROR, "23000", "Column cannot be null", "Column '%.*s' cannot be null", 1400, "cannot insert NULL", "cannot insert NULL into '(%.*s)'");
@@ -445,7 +445,7 @@ DEFINE_ERROR(OB_KMS_SERVER_CONNECT_ERROR, -4371, -1, "HY000", "kms server connec
 DEFINE_ERROR(OB_KMS_SERVER_IS_BUSY, -4372, -1, "HY000", "kms server is busy, try again");
 DEFINE_ERROR(OB_KMS_SERVER_UPDATE_KEY_CONFLICT, -4373, -1, "HY000", "kms server update key conflict at the same time, please try again");
 DEFINE_ORACLE_ERROR(OB_ERR_VALUE_LARGER_THAN_ALLOWED, -4374, -1, "HY000", "value larger than specified precision allowed for this column", 1438, "value larger than specified precision allowed for this column");
-DEFINE_ERROR(OB_DISK_ERROR, -4375, -1, "HY000", "observer has disk error");
+DEFINE_ERROR(OB_DISK_ERROR, -4375, -1, "HY000", "seekdb has disk error");
 DEFINE_ORACLE_ERROR(OB_UNIMPLEMENTED_FEATURE, -4376, -1, "HY000", "unimplemented feature", 3001, "unimplemented feature");
 DEFINE_ERROR_EXT(OB_ERR_DEFENSIVE_CHECK, -4377, -1, "HY000", "fatal internal error", "fatal internal error in [%.*s]");
 DEFINE_ERROR(OB_CLUSTER_NAME_HASH_CONFLICT, -4378, -1, "HY000", "cluster name conflict");
@@ -462,8 +462,8 @@ DEFINE_ERROR_DEP(OB_ERR_TOO_MUCH_TIME, -4389, -1, "HY000", "Processing time is t
 DEFINE_ERROR(OB_ERR_REMOTE_SCHEMA_NOT_FULL, -4390, -1, "HY000", "Schema of remote server is not refreshed yet");
 DEFINE_ERROR(OB_DDL_SSTABLE_RANGE_CROSS, -4391, -1, "HY000", "ddl sstable version range cross");
 DEFINE_ERROR(OB_DISK_HUNG, -4392, -1, "HY000", "disk is hung");
-DEFINE_ERROR(OB_ERR_OBSERVER_START, -4393, -1, "HY000", "observer start process failure");
-DEFINE_ERROR(OB_ERR_OBSERVER_STOP, -4394, -1, "HY000", "observer stop process failure");
+DEFINE_ERROR(OB_ERR_OBSERVER_START, -4393, -1, "HY000", "seekdb start process failure");
+DEFINE_ERROR(OB_ERR_OBSERVER_STOP, -4394, -1, "HY000", "seekdb stop process failure");
 DEFINE_ERROR(OB_ERR_OBSERVICE_START, -4395, -1, "HY000", "observice start process has failure");
 DEFINE_ERROR_DEP(OB_ERR_THREAD_PANIC, -4396, -1, "HY000", "Worker thread panic, thread may be terminated or hung");
 DEFINE_ERROR(OB_ENCODING_EST_SIZE_OVERFLOW, -4397, -1, "HY000", "Encoding estimated size overflow");
@@ -531,7 +531,7 @@ DEFINE_ERROR(OB_RS_SHUTDOWN, -4550, -1, "HY000", "rootservice is shutdown");
 DEFINE_ERROR(OB_SERVER_MIGRATE_IN_DENIED, -4551, -1, "HY000", "server migrate in denied");
 DEFINE_ERROR(OB_REBALANCE_TASK_CANT_EXEC, -4552, -1, "HY000", "rebalance task can not executing now");
 DEFINE_ERROR(OB_PARTITION_CNT_REACH_ROOTSERVER_LIMIT, -4553, -1, "HY000", "rootserver can not hold more partition");
-DEFINE_ERROR(OB_REBALANCE_TASK_NOT_IN_PROGRESS, -4554, -1, "HY000", "rebalance task not in progress on observer");
+DEFINE_ERROR(OB_REBALANCE_TASK_NOT_IN_PROGRESS, -4554, -1, "HY000", "rebalance task not in progress on seekdb");
 DEFINE_ERROR(OB_DATA_SOURCE_NOT_EXIST, -4600, -1, "HY000", "Data source not exist");
 DEFINE_ERROR(OB_DATA_SOURCE_TABLE_NOT_EXIST, -4601, -1, "HY000", "Data source table not exist");
 DEFINE_ERROR(OB_DATA_SOURCE_RANGE_NOT_EXIST, -4602, -1, "HY000", "Data source range not exist");
@@ -638,7 +638,7 @@ DEFINE_ERROR_EXT(OB_FAILOVER_NOT_ALLOW, -4708, -1, "HY000", "Failover is not all
 DEFINE_ERROR_EXT(OB_ADD_CLUSTER_NOT_ALLOWED, -4709, -1, "HY000", "Add cluster not allowed.", "Add cluster not allowed. Actions: %s");
 DEFINE_ORACLE_ERROR_EXT(OB_ERR_CONSUMER_GROUP_NOT_EXIST, -4710, -1, "HY000", "consumer group does not exist", "consumer group %.*s does not exist", 29368, "consumer group does not exist", "consumer group %.*s does not exist");
 DEFINE_ERROR_EXT(OB_CLUSTER_NOT_ACCESSIBLE, -4711, -1, "HY000", "cluster is not accessible", "cluster is not accessible, cluster_id: %ld");
-DEFINE_ERROR_EXT(OB_TENANT_RESOURCE_UNIT_EXIST, -4712, -1, "HY000", "tenant already has resource unit configured", "tenant already has resource unit configured, tenant_id: %ld, observer: \'%s\'");
+DEFINE_ERROR_EXT(OB_TENANT_RESOURCE_UNIT_EXIST, -4712, -1, "HY000", "tenant already has resource unit configured", "tenant already has resource unit configured, tenant_id: %ld, seekdb: \'%s\'");
 DEFINE_ERROR_EXT(OB_ERR_DROP_TRUNCATE_PARTITION_REBUILD_INDEX, -4713, -1, "HY000", "rebuild global index failed when drop/truncate partitions", "rebuild global index:'%.*s' failed when drop/truncate partitions");
 DEFINE_ORACLE_ERROR(OB_ERR_ATLER_TABLE_ILLEGAL_FK, -4714, -1, "HY000", "unique/primary keys in table referenced by enabled foreign keys", 02266, "unique/primary keys in table referenced by enabled foreign keys");
 DEFINE_ORACLE_ERROR(OB_ERR_NO_RESOURCE_MANAGER_PRIVILEGE, -4715, -1, "HY000", "insufficient Resource Manager privileges", 56713, "insufficient Resource Manager privileges");
@@ -2300,7 +2300,7 @@ DEFINE_ERROR_DEP(OB_BACKUP_PWRITE_CONTENT_NOT_MATCH, -9084, -1, "HY000", "the co
 
 DEFINE_ERROR(OB_BACKUP_MAJOR_NOT_COVER_MINOR, -9085, -1, "HY000", "backup major sstable range not cover minor sstable");
 DEFINE_ERROR(OB_BACKUP_ADVANCE_CHECKPOINT_TIMEOUT, -9086, -1, "HY000", "backup advance checkpoint by flush timeout");
-DEFINE_ERROR(OB_CLOG_RECYCLE_BEFORE_ARCHIVE, -9087, -1, "HY000", "observer clog is recycled before archive");
+DEFINE_ERROR(OB_CLOG_RECYCLE_BEFORE_ARCHIVE, -9087, -1, "HY000", "seekdb clog is recycled before archive");
 DEFINE_ERROR(OB_SOURCE_TENANT_STATE_NOT_MATCH, -9088, -1, "HY000", "log restore source tenant state not match, switchover to primary not allowed");
 DEFINE_ERROR(OB_SOURCE_LS_STATE_NOT_MATCH, -9089, -1, "HY000", "log restore source LS state not match, switchover to primary is not allowed");
 
