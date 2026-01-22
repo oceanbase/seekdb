@@ -34,6 +34,7 @@
 #include "lib/lock/ob_mutex.h"
 #include "storage/ddl/ob_tablet_rebuild_util.h"
 #include "common/ob_tablet_id.h"
+#include "storage/tablet/ob_tablet_table_store_iterator.h"
 
 namespace oceanbase
 {
@@ -171,6 +172,7 @@ public:
   ObLSHandle ls_handle_;
   ObTabletHandle src_tablet_handle_;
   ObTabletHandle dst_tablet_handle_;
+  ObTableStoreIterator table_store_iterator_;
   INDEX_BUILDER_MAP index_builder_map_;
   common::hash::ObHashMap<ObITable::TableKey, ObStorageSchema*> clipped_schemas_map_;
   ObTablesHandleArray created_sstable_handles_;

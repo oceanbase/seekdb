@@ -387,6 +387,7 @@ ObTabletForkCtx::ObTabletForkCtx()
     ls_handle_(),
     src_tablet_handle_(),
     dst_tablet_handle_(),
+    table_store_iterator_(),
     index_builder_map_(),
     clipped_schemas_map_(),
     created_sstable_handles_(),
@@ -404,6 +405,7 @@ ObTabletForkCtx::~ObTabletForkCtx()
   ls_handle_.reset();
   src_tablet_handle_.reset();
   dst_tablet_handle_.reset();
+  table_store_iterator_.reset();
   (void)ObTabletRebuildUtil::destroy_value_ptr_map<ObForkSSTableTaskKey, ObSSTableIndexBuilder>(allocator_, index_builder_map_);
   (void)ObTabletRebuildUtil::destroy_value_ptr_map<ObITable::TableKey, ObStorageSchema>(allocator_, clipped_schemas_map_);
   created_sstable_handles_.reset();
@@ -470,6 +472,8 @@ int ObTabletForkCtx::init(const ObTabletForkParam &param)
   } else if (OB_FAIL(ObDDLUtil::ddl_get_tablet(ls_handle_,
       param.source_tablet_id_, src_tablet_handle_, ObMDSGetTabletMode::READ_ALL_COMMITED))) {
     LOG_WARN("get source tablet failed", K(ret), K(param.source_tablet_id_));
+  } else if (OB_FAIL(src_tablet_handle_.get_obj()->get_all_tables(table_store_iterator_))) {
+    LOG_WARN("fail to fetch table store", K(ret));
   } else if (OB_FAIL(ObDDLUtil::ddl_get_tablet(ls_handle_,
       param.dest_tablet_id_, dst_tablet_handle_, ObMDSGetTabletMode::READ_ALL_COMMITED))) {
     LOG_WARN("get destination tablet failed", K(ret), K(param.dest_tablet_id_));
@@ -624,14 +628,9 @@ int ObTabletForkDag::create_first_task()
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
-  } else {
-    ObTableStoreIterator table_store_iterator;
-    if (OB_FAIL(context_.src_tablet_handle_.get_obj()->get_all_tables(table_store_iterator))) {
-      LOG_WARN("fail to fetch table store", K(ret));
-    } else if (OB_FAIL(ObTabletForkUtil::get_participants(
-        table_store_iterator, param_.fork_snapshot_version_, src_sstables))) {
-      LOG_WARN("get all sstables failed", K(ret));
-    }
+  } else if (OB_FAIL(ObTabletForkUtil::get_participants(
+      context_.table_store_iterator_, param_.fork_snapshot_version_, src_sstables))) {
+    LOG_WARN("get all sstables failed", K(ret));
   }
 
   if (OB_SUCC(ret)) {
