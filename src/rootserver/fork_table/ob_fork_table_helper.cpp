@@ -205,11 +205,11 @@ int ObForkTableHelper::copy_tablet_truncate_info_()
     }
 
     for (int64_t i = 0; OB_SUCC(ret) && i < src_tablet_ids_.count(); ++i) {
+      truncate_info_array.reset();
       allocator.reuse();
       const ObTabletID &src_tablet_id = src_tablet_ids_.at(i);
       const ObTabletID &dst_tablet_id = dst_tablet_ids_.at(i);
       ObTabletHandle src_tablet_handle;
-      truncate_info_array.reset();
 
       if (OB_FAIL(get_tablet_handle_(src_tablet_id, src_tablet_handle))) {
         LOG_WARN("failed to get source tablet", K(ret), K(src_tablet_id));
