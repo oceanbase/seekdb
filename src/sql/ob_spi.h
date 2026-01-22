@@ -25,6 +25,7 @@
 #include "sql/session/ob_sql_session_info.h"
 #include "sql/ob_result_set.h"
 #include "pl/ob_pl_allocator.h"
+#include "sql/ob_spi_param.h"
 
 namespace oceanbase
 {
@@ -550,7 +551,95 @@ public:
                                    bool is_bulk = false,
                                    bool is_returning = false,
                                    bool is_type_record = false);
-  
+
+  //========== Parameterized Query Interfaces ==========
+  // These interfaces provide type-safe parameter binding similar to pymysql,
+  // preventing SQL injection and handling special characters automatically.
+
+  /**
+   * spi_query_with_params - Parameterized query interface
+   *
+   * @param ctx           PL execution context
+   * @param sql           SQL statement with ? placeholders
+   * @param params        Parameter list
+   * @param type          Statement type
+   * @param into_exprs    INTO clause variable expressions
+   * @param into_count    Number of INTO clause variables
+   * @param column_types  Result column types
+   * @param type_count    Number of result columns
+   * @param exprs_not_null_flag  Not null flags
+   * @param pl_integer_ranges    PL integer ranges
+   * @param is_bulk       Whether bulk operation
+   * @param is_type_record Whether record type
+   * @param for_update    Whether FOR UPDATE
+   *
+   * @return OB_SUCCESS on success, error code otherwise
+   *
+   * Example:
+   *   ObSPIParamList params(allocator);
+   *   params.add_int(1001).add_string("John").add_double(5000.50);
+   *   ret = ObSPIService::spi_query_with_params(ctx,
+   *           "SELECT * FROM emp WHERE id = ? AND name = ? AND salary > ?",
+   *           params, stmt::T_SELECT, ...);
+   */
+  static int spi_query_with_params(
+      pl::ObPLExecCtx *ctx,
+      const char* sql,
+      const ObSPIParamList &params,
+      int64_t type,
+      const ObSqlExpression **into_exprs = NULL,
+      int64_t into_count = 0,
+      const ObDataType *column_types = NULL,
+      int64_t type_count = 0,
+      const bool *exprs_not_null_flag = NULL,
+      const int64_t *pl_integer_ranges = NULL,
+      bool is_bulk = false,
+      bool is_type_record = false,
+      bool for_update = false);
+
+  /**
+   * spi_execute_with_params - Parameterized execution interface (INSERT/UPDATE/DELETE)
+   *
+   * @param ctx           PL execution context
+   * @param sql           SQL statement with ? placeholders
+   * @param params        Parameter list
+   * @param affected_rows Output parameter, number of affected rows
+   *
+   * @return OB_SUCCESS on success, error code otherwise
+   *
+   * Example:
+   *   ObSPIParamList params(allocator);
+   *   params.add_string("John's Company").add_int(100);
+   *   int64_t affected = 0;
+   *   ret = ObSPIService::spi_execute_with_params(ctx,
+   *           "INSERT INTO company (name, employee_count) VALUES (?, ?)",
+   *           params, affected);
+   */
+  static int spi_execute_with_params(
+      pl::ObPLExecCtx *ctx,
+      const char* sql,
+      const ObSPIParamList &params,
+      int64_t &affected_rows);
+
+  /**
+   * spi_execute_with_params_ex - Extended parameterized execution interface
+   *
+   * RETURNING is supported. OUT/INOUT parameters are not supported yet.
+   */
+  static int spi_execute_with_params_ex(
+      pl::ObPLExecCtx *ctx,
+      const char* sql,
+      ObSPIParamList &params,  // Non-const for OUT parameters
+      int64_t &affected_rows,
+      const ObSqlExpression **into_exprs = NULL,
+      int64_t into_count = 0,
+      const ObDataType *column_types = NULL,
+      int64_t type_count = 0,
+      const bool *exprs_not_null_flag = NULL,
+      const int64_t *pl_integer_ranges = NULL,
+      bool is_returning = false,
+      bool is_type_record = false);
+
   static int check_dynamic_sql_legal(pl::ObPLExecCtx *ctx,
                                      ObIAllocator &alloc,
                                      ObSqlString &sql_str,
@@ -915,6 +1004,15 @@ private:
 
   static int calc_obj_access_expr(pl::ObPLExecCtx *ctx, const ObSqlExpression &expr, ObObjParam &result);
 
+  //========== Parameterized Query Helper Methods ==========
+
+  /**
+   * Transform SQL with ? placeholders to $N format for OceanBase PS
+   */
+  /**
+   * Validate parameter security
+   */
+  static int validate_param_security(const ObSPIParamList &params);
 
   static int set_variable(pl::ObPLExecCtx *ctx,
                           const share::ObSetVar::SetScopeType scope,

@@ -60,6 +60,9 @@ FLT_DEF_SPAN(com_query_process, "com_query process")
   FLT_DEF_SPAN(pl_spi_cursor_close, "pl spi close cursor")
   FLT_DEF_SPAN(pl_spi_execute_immediate, "pl spi execute dynamic SQL")
   FLT_DEF_SPAN(pl_prepare_dynamic, "pl prepare dynamic SQL")
+  FLT_DEF_SPAN(pl_spi_query_with_params, "pl spi query with params")
+  FLT_DEF_SPAN(pl_spi_execute_with_params, "pl spi execute with params")
+  FLT_DEF_SPAN(pl_spi_execute_with_params_ex, "pl spi execute with params ex")
   // **** for pl end ****
 
   // **** for inner sql ****

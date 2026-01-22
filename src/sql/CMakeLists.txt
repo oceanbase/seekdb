@@ -14,6 +14,7 @@ ob_set_subtarget(ob_sql common
   ob_phy_table_location.cpp
   ob_result_set.cpp
   ob_spi.cpp
+  ob_spi_param.cpp
   ob_sql.cpp
   ob_sql_context.cpp
   ob_sql_define.cpp

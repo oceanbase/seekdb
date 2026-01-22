@@ -30,6 +30,7 @@
 #include "pl/ob_pl_exception_handling.h"
 #include "sql/dblink/ob_tm_service.h"
 #include "pl/diagnosis/ob_pl_sql_audit_guard.h"
+#include "lib/utility/utility.h"
 
 namespace oceanbase
 {
@@ -7818,6 +7819,301 @@ int ObSPICursor::release_complex_obj(ObObj &complex_obj)
       LOG_WARN("failed to destruct obj", K(ret));
     }
   }
+  return ret;
+}
+
+//============================================================================
+// Parameterized Query Interface Implementation
+//============================================================================
+
+static int build_spi_param_ptrs(
+    ObIAllocator &allocator,
+    const ObSPIParamList &params,
+    ObObjParam **&param_ptrs)
+{
+  int ret = OB_SUCCESS;
+  const int64_t param_count = params.count();
+  param_ptrs = NULL;
+
+  if (param_count > 0) {
+    param_ptrs = static_cast<ObObjParam **>(
+        allocator.alloc(sizeof(ObObjParam *) * param_count));
+    if (OB_ISNULL(param_ptrs)) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("failed to alloc param pointer array", K(ret), K(param_count));
+    }
+    for (int64_t i = 0; OB_SUCC(ret) && i < param_count; ++i) {
+      ObObjParam *param = static_cast<ObObjParam *>(
+          allocator.alloc(sizeof(ObObjParam)));
+      if (OB_ISNULL(param)) {
+        ret = OB_ALLOCATE_MEMORY_FAILED;
+        LOG_WARN("failed to alloc param", K(ret), K(i));
+      } else {
+        new (param) ObObjParam();
+        if (OB_FAIL(deep_copy_objparam(allocator, params.at(i).get_obj_param(), *param))) {
+          LOG_WARN("failed to deep copy param", K(ret), K(i));
+        } else {
+          param->set_param_meta();
+          param_ptrs[i] = param;
+        }
+      }
+    }
+  }
+
+  return ret;
+}
+
+int ObSPIService::validate_param_security(const ObSPIParamList &params)
+{
+  int ret = OB_SUCCESS;
+
+  for (int64_t i = 0; OB_SUCC(ret) && i < params.count(); ++i) {
+    const ObSPIParam &param = params.at(i);
+
+    if (param.get_mode() != ObSPIParam::SPI_PARAM_IN) {
+      ret = OB_NOT_SUPPORTED;
+      LOG_WARN("out/inout parameters not supported yet", K(ret), K(i));
+      LOG_USER_ERROR(OB_NOT_SUPPORTED, "OUT/INOUT parameters");
+    }
+
+    // Reject extend type (may contain unsafe pointers)
+    if (OB_SUCC(ret) && param.get_type() == ObExtendType) {
+      ret = OB_NOT_SUPPORTED;
+      LOG_WARN("extend type not supported in parameterized query", K(ret), K(i));
+    }
+
+    // String length check
+    if (OB_SUCC(ret) && param.get_obj_param().is_string_type()
+        && !param.is_null()
+        && !param.get_obj_param().is_lob()
+        && !param.get_obj_param().is_lob_storage()) {
+      ObString str = param.get_obj_param().get_string();
+      if (str.length() > OB_MAX_VARCHAR_LENGTH) {
+        ret = OB_SIZE_OVERFLOW;
+        LOG_WARN("string param too long", K(ret), K(i), K(str.length()));
+      }
+    }
+  }
+
+  return ret;
+}
+
+int ObSPIService::spi_query_with_params(
+    pl::ObPLExecCtx *ctx,
+    const char* sql,
+    const ObSPIParamList &params,
+    int64_t type,
+    const ObSqlExpression **into_exprs,
+    int64_t into_count,
+    const ObDataType *column_types,
+    int64_t type_count,
+    const bool *exprs_not_null_flag,
+    const int64_t *pl_integer_ranges,
+    bool is_bulk,
+    bool is_type_record,
+    bool for_update)
+{
+  int ret = OB_SUCCESS;
+
+  FLTSpanGuard(pl_spi_query_with_params);
+
+  ObSQLSessionInfo *session = NULL;
+  ObArenaAllocator allocator(
+      GET_PL_MOD_STRING(PL_MOD_IDX::OB_PL_DYNAMIC_SQL_EXEC),
+      OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID());
+
+  ObSqlString sql_str;
+  ObString ps_sql;
+  stmt::StmtType stmt_type = stmt::T_NONE;
+  bool parsed_for_update = false;
+  bool hidden_rowid = false;
+  bool skip_locked = false;
+  int64_t inner_into_cnt = 0;
+  ObObjParam **param_ptrs = NULL;
+
+  // Basic checks
+  CK (OB_NOT_NULL(ctx), ctx->valid());
+  CK (OB_NOT_NULL(sql));
+  CK (OB_NOT_NULL(session = ctx->exec_ctx_->get_my_session()));
+
+  // Check for errors in param list construction
+  if (OB_SUCC(ret) && params.has_error()) {
+    ret = params.get_last_error();
+    LOG_WARN("param list has error", K(ret));
+  }
+
+  // Validate parameter security
+  OZ (validate_param_security(params));
+
+  // Prepare SQL and validate placeholder count through parser
+  OZ (sql_str.append(sql));
+  OZ (prepare_dynamic(ctx, allocator, false, false, params.count(), sql_str,
+                      ps_sql, stmt_type, parsed_for_update, hidden_rowid,
+                      inner_into_cnt, skip_locked, NULL));
+
+  // Build parameter pointer array
+  OZ (build_spi_param_ptrs(allocator, params, param_ptrs));
+
+  if (OB_SUCC(ret) && type != stmt::T_NONE
+      && stmt_type != stmt::T_NONE
+      && type != static_cast<int64_t>(stmt_type)) {
+    LOG_WARN("statement type mismatch", K(type), K(stmt_type));
+  }
+  if (OB_SUCC(ret) && for_update != parsed_for_update) {
+    LOG_TRACE("for_update mismatch", K(for_update), K(parsed_for_update));
+  }
+
+  // Call existing internal execution interface
+  if (OB_SUCC(ret)) {
+    OZ (SMART_CALL(spi_inner_execute(
+        ctx,
+        allocator,
+        sql,
+        ps_sql.ptr(),
+        static_cast<int64_t>(stmt_type),
+        reinterpret_cast<void*>(param_ptrs),
+        params.count(),
+        into_exprs,
+        into_count,
+        column_types,
+        type_count,
+        exprs_not_null_flag,
+        pl_integer_ranges,
+        is_bulk,
+        false,  // is_forall
+        is_type_record,
+        parsed_for_update,
+        true,   // is_dynamic_sql
+        NULL,   // using_out_params
+        false   // is_dbms_sql
+    )));
+  }
+
+  return ret;
+}
+
+int ObSPIService::spi_execute_with_params(
+    pl::ObPLExecCtx *ctx,
+    const char* sql,
+    const ObSPIParamList &params,
+    int64_t &affected_rows)
+{
+  int ret = OB_SUCCESS;
+
+  FLTSpanGuard(pl_spi_execute_with_params);
+
+  affected_rows = 0;
+
+  // Execute without INTO clause
+  OZ (spi_query_with_params(ctx, sql, params, stmt::T_NONE,
+                            NULL, 0, NULL, 0, NULL, NULL,
+                            false, false, false));
+
+  // Get affected rows from implicit cursor
+  if (OB_SUCC(ret)) {
+    ObSQLSessionInfo *session = ctx->exec_ctx_->get_my_session();
+    if (OB_NOT_NULL(session)) {
+      pl::ObPLCursorInfo *implicit_cursor = session->get_pl_implicit_cursor();
+      if (OB_NOT_NULL(implicit_cursor)) {
+        affected_rows = implicit_cursor->get_rowcount();
+      }
+    }
+  }
+
+  return ret;
+}
+
+int ObSPIService::spi_execute_with_params_ex(
+    pl::ObPLExecCtx *ctx,
+    const char* sql,
+    ObSPIParamList &params,
+    int64_t &affected_rows,
+    const ObSqlExpression **into_exprs,
+    int64_t into_count,
+    const ObDataType *column_types,
+    int64_t type_count,
+    const bool *exprs_not_null_flag,
+    const int64_t *pl_integer_ranges,
+    bool is_returning,
+    bool is_type_record)
+{
+  int ret = OB_SUCCESS;
+
+  FLTSpanGuard(pl_spi_execute_with_params_ex);
+
+  affected_rows = 0;
+
+  ObSQLSessionInfo *session = NULL;
+  ObArenaAllocator allocator(
+      GET_PL_MOD_STRING(PL_MOD_IDX::OB_PL_DYNAMIC_SQL_EXEC),
+      OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID());
+
+  ObSqlString sql_str;
+  ObString ps_sql;
+  stmt::StmtType stmt_type = stmt::T_NONE;
+  bool parsed_for_update = false;
+  bool hidden_rowid = false;
+  bool skip_locked = false;
+  int64_t inner_into_cnt = 0;
+  ObObjParam **param_ptrs = NULL;
+
+  // Basic checks
+  CK (OB_NOT_NULL(ctx), ctx->valid());
+  CK (OB_NOT_NULL(sql));
+  CK (OB_NOT_NULL(session = ctx->exec_ctx_->get_my_session()));
+
+  // Check for errors in param list construction
+  if (OB_SUCC(ret) && params.has_error()) {
+    ret = params.get_last_error();
+    LOG_WARN("param list has error", K(ret));
+  }
+
+  // Validate parameter security
+  OZ (validate_param_security(params));
+
+  // Prepare SQL and validate placeholder count through parser
+  OZ (sql_str.append(sql));
+  OZ (prepare_dynamic(ctx, allocator, is_returning, false, params.count(), sql_str,
+                      ps_sql, stmt_type, parsed_for_update, hidden_rowid,
+                      inner_into_cnt, skip_locked, NULL));
+
+  // Build parameter pointer array
+  OZ (build_spi_param_ptrs(allocator, params, param_ptrs));
+
+  // Execute with INTO clause for RETURNING
+  if (OB_SUCC(ret)) {
+    OZ (SMART_CALL(spi_inner_execute(
+        ctx,
+        allocator,
+        sql,
+        ps_sql.ptr(),
+        static_cast<int64_t>(stmt_type),
+        reinterpret_cast<void*>(param_ptrs),
+        params.count(),
+        into_exprs,
+        into_count,
+        column_types,
+        type_count,
+        exprs_not_null_flag,
+        pl_integer_ranges,
+        false,  // is_bulk
+        false,  // is_forall
+        is_type_record,
+        parsed_for_update,
+        true,   // is_dynamic_sql
+        NULL,   // using_out_params
+        false   // is_dbms_sql
+    )));
+  }
+
+  // Get affected rows
+  if (OB_SUCC(ret) && OB_NOT_NULL(session)) {
+    pl::ObPLCursorInfo *implicit_cursor = session->get_pl_implicit_cursor();
+    if (OB_NOT_NULL(implicit_cursor)) {
+      affected_rows = implicit_cursor->get_rowcount();
+    }
+  }
+
   return ret;
 }
 
