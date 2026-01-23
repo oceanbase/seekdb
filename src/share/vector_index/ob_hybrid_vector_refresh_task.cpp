@@ -508,6 +508,7 @@ int ObHybridVectorRefreshTask::prepare_for_embedding(ObPluginVectorIndexAdaptor 
   storage::ObTableScanParam *&table_scan_param = task_ctx->table_scan_param_;
   schema::ObTableParam *&table_param = task_ctx->table_param_;
   storage::ObValueRowIterator &delta_delete_iter = task_ctx->delta_delete_iter_;
+  ObCollationType col_type = CS_TYPE_INVALID;
   int64_t dim = 0;
   int64_t loop_cnt = 0;
   int64_t http_timeout_us = 0;
@@ -528,6 +529,8 @@ int ObHybridVectorRefreshTask::prepare_for_embedding(ObPluginVectorIndexAdaptor 
     LOG_WARN("unexpected error", K(ret), KPC(task_ctx));
   } else if (OB_FAIL(adaptor.get_dim(dim))) {
     LOG_WARN("get dim failed", K(ret));
+  } else if (OB_FAIL(ObVectorIndexUtil::get_index_column_collation_type(tenant_id_, adaptor.get_embedded_table_id(), col_type))) {
+    LOG_WARN("failed to get chunc column col_type", K(ret), K(adaptor));
   } else {
     if (OB_NOT_NULL(tsc_iter) || OB_NOT_NULL(table_scan_param) || OB_NOT_NULL(table_param)) {
       if (OB_ISNULL(tsc_iter) || OB_ISNULL(table_scan_param) || OB_ISNULL(table_param)) {
@@ -656,6 +659,7 @@ int ObHybridVectorRefreshTask::prepare_for_embedding(ObPluginVectorIndexAdaptor 
           const ObAiModelEndpointInfo *endpoint = task_ctx->endpoint_; // endpoint should not be null after init.
           task_ctx->embedding_task_ = new(task_buf)ObEmbeddingTask(task_ctx->allocator_);
           ObPluginVectorIndexService *service = MTL(ObPluginVectorIndexService *);
+
           if (OB_ISNULL(service)) {
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("unexpected null ptr", K(ret), KPC(service));
@@ -664,7 +668,8 @@ int ObHybridVectorRefreshTask::prepare_for_embedding(ObPluginVectorIndexAdaptor 
           } else if (OB_FAIL(ob_write_string(task_ctx->allocator_, endpoint->get_url(), url, true))) {
             LOG_WARN("fail to write string", K(ret));
           } else if (OB_FAIL(task_ctx->embedding_task_->init(url, endpoint->get_request_model_name(),
-                             endpoint->get_provider(), access_key, chunk_array, dim, http_timeout_us, http_max_retries))) {
+                             endpoint->get_provider(), access_key, chunk_array, col_type, dim, http_timeout_us,
+                             http_max_retries, ctx_->task_status_.task_id_, ObEmbeddingTasSourceType::ASYNC_INDEX))) {
             LOG_WARN("failed to init embedding task", K(ret), KPC(endpoint));
           } else {
             ObEmbeddingTaskHandler *embedding_handler = nullptr;

@@ -832,6 +832,9 @@ public:
                                                const ObString &new_idx_params,
                                                const ObTableSchema &index_table_schema,
                                                bool &need_embedding_when_rebuild);
+
+  static int get_index_column_collation_type(const int64_t tenant_id, const uint64_t index_table_id, ObCollationType &col_type);
+
 private:
   static void save_column_schema(
       const ObColumnSchemaV2 *&old_column,
