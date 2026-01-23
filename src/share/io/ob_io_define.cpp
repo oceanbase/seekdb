@@ -418,12 +418,6 @@ bool ObIOFlag::is_need_close_dev_and_fd() const
   return need_close_dev_and_fd_;
 }
 
-
-bool oceanbase::common::is_atomic_write_callback(const ObIOCallbackType type)
-{
-  return (ObIOCallbackType::ATOMIC_WRITE_CALLBACK == type);
-}
-
 /******************             IOCallback              **********************/
 ObIOCallback::ObIOCallback(const ObIOCallbackType type)
   : type_(type), compat_mode_(static_cast<lib::Worker::CompatMode>(lib::get_compat_mode()))
@@ -2265,10 +2259,9 @@ int ObTenantIOConfig::get_group_config(const uint64_t index, int64_t &min, int64
 
 int64_t ObTenantIOConfig::get_callback_thread_count() const
 {
-  int64_t memory_benchmark = 4L * 1024L * 1024L * 1024L; //4G memory
-  //Based on 4G memory, one thread will be added for each additional 4G of memory, and the maximum number of callback_thread_count is 16
-  int64_t callback_thread_num = 0 == param_config_.callback_thread_count_? min(16, (param_config_.memory_limit_ / memory_benchmark) + 1) : param_config_.callback_thread_count_;
-  LOG_INFO("get callback thread by memory success", K(param_config_.memory_limit_), K(callback_thread_num));
+  const int64_t DEFAULT_CALLBACK_THREAD_COUNT = 16;
+  int64_t callback_thread_num = 0 == param_config_.callback_thread_count_? DEFAULT_CALLBACK_THREAD_COUNT : param_config_.callback_thread_count_;
+  LOG_INFO("get callback thread success", K(callback_thread_num));
   return callback_thread_num;
 }
 

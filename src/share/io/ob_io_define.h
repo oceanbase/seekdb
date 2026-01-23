@@ -27,6 +27,7 @@
 #include "lib/profile/ob_trace_id.h"
 #include "lib/restore/ob_storage.h"
 #include "lib/tc/ob_tc.h"
+#include "lib/thread/thread_mgr_interface.h"
 #include "lib/worker.h"
 #include "share/resource_manager/ob_resource_plan_info.h"
 #include "storage/ob_storage_checked_object_base.h"
@@ -50,6 +51,7 @@ namespace common
 {
 
 class ObObjectDevice;
+class ObIOCallbackManager;
 
 // the timestamp adjustment will not adjust until the queue is idle for more than this time
 static constexpr int64_t CLOCK_IDLE_THRESHOLD_US = 100 * 1000L;  // 100ms
@@ -215,24 +217,21 @@ private:
 
 // different io callback types enqueue different io callback thread queue
 enum class ObIOCallbackType : uint8_t {
-  ATOMIC_WRITE_CALLBACK = 0,
-  ASYNC_SINGLE_MICRO_BLOCK_CALLBACK = 1,
-  MULTI_DATA_BLOCK_CALLBACK = 2,
-  SYNC_SINGLE_MICRO_BLOCK_CALLBACK = 3,
-  SS_CACHE_LOAD_FROM_REMOTE_CALLBACK = 4,
-  SS_CACHE_LOAD_FROM_LOCAL_CALLBACK = 5,
-  SS_MC_PREWARM_CALLBACK = 6,
-  STORAGE_META_CALLBACK = 7,
-  TMP_PAGE_CALLBACK = 8,
-  TMP_MULTI_PAGE_CALLBACK = 9,
-  TMP_DIRECT_READ_PAGE_CALLBACK = 10,
-  TEST_CALLBACK = 11, // just for unittest
-  SS_TMP_FILE_CALLBACK = 12,
-  TMP_CACHED_READ_CALLBACK = 13,
-  MAX_CALLBACK_TYPE = 14
+  ASYNC_SINGLE_MICRO_BLOCK_CALLBACK = 0,
+  MULTI_DATA_BLOCK_CALLBACK = 1,
+  SYNC_SINGLE_MICRO_BLOCK_CALLBACK = 2,
+  SS_CACHE_LOAD_FROM_REMOTE_CALLBACK = 3,
+  SS_CACHE_LOAD_FROM_LOCAL_CALLBACK = 4,
+  SS_MC_PREWARM_CALLBACK = 5,
+  STORAGE_META_CALLBACK = 6,
+  TMP_PAGE_CALLBACK = 7,
+  TMP_MULTI_PAGE_CALLBACK = 8,
+  TMP_DIRECT_READ_PAGE_CALLBACK = 9,
+  TEST_CALLBACK = 10, // just for unittest
+  SS_TMP_FILE_CALLBACK = 11,
+  TMP_CACHED_READ_CALLBACK = 12,
+  MAX_CALLBACK_TYPE = 13
 };
-
-bool is_atomic_write_callback(const ObIOCallbackType type);
 
 class ObIOCallback
 {
@@ -528,7 +527,7 @@ private:
   friend class ObTenantIOManager;
   friend class ObAsyncIOChannel;
   friend class ObSyncIOChannel;
-  friend class ObIORunner;
+  friend class ObIOCallbackManager;
   friend class backup::ObBackupDeviceHelper;
   bool is_inited_;
   bool is_finished_;
@@ -602,7 +601,7 @@ private:
   friend class ObDeviceChannel;
   friend class ObIOManager;
   friend class ObIOResult;
-  friend class ObIORunner;
+  friend class ObIOCallbackManager;
   friend class ObMClockQueue;
   friend class ObAsyncIOChannel;
   friend class ObSyncIOChannel;
@@ -618,6 +617,7 @@ private:
   int hold_storage_accesser(const ObIOFd &fd, ObObjectDevice &object_device);
   int calc_io_offset_and_size_();
 public:
+  common::LinkTask req_node_;
   ObIOResult *io_result_;
   TCRequest qsched_req_;
 protected:

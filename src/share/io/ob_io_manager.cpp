@@ -1366,7 +1366,8 @@ int ObTenantIOManager::start()
     LOG_WARN("not init", K(ret), K(is_inited_));
   } else if (is_working()) {
     // do nothing
-  } else if (OB_FAIL(callback_mgr_.init(tenant_id_, callback_thread_count, DEFAULT_QUEUE_DEPTH, &io_allocator_))) {
+  } else if (OB_FAIL(callback_mgr_.init(tenant_id_, callback_thread_count,
+                     callback_thread_count * DEFAULT_QUEUE_DEPTH))) {
     LOG_WARN("init callback manager failed", K(ret), K(tenant_id_), K(callback_thread_count));
   } else {
     is_working_ = true;
