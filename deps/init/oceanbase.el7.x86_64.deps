@@ -57,6 +57,6 @@ obshell-4.3.3.0-12025110521.el7.x86_64.rpm target=community
 #obshell-4.3.3.1-12025121911.el7.x86_64.rpm target=community
 
 [test-utils]
-ob-deploy-3.6.1-10.el7.x86_64.rpm target=community
+ob-deploy-4.1.0-2.el7.x86_64.rpm target=community
 obclient-2.2.2-1.el7.x86_64.rpm target=community
 libobclient-2.2.2-3.el7.x86_64.rpm target=community
