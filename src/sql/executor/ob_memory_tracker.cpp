@@ -29,13 +29,13 @@ thread_local ObMemTracker ObMemTrackerGuard::mem_tracker_;
 void ObMemTrackerGuard::update_mem_limit()
 {
   int ret = common::OB_SUCCESS;
-  int64_t tenant_mem_limit = lib::get_tenant_memory_limit(MTL_ID());
+  int64_t hard_memory_limit = lib::get_hard_memory_limit();
   int64_t mem_quota_pct = 100;
   omt::ObTenantConfigGuard tenant_config(TENANT_CONF(MTL_ID()));
   if (OB_UNLIKELY(tenant_config.is_valid())) {
     mem_quota_pct = tenant_config->query_memory_limit_percentage;
   }
-  mem_tracker_.cache_mem_limit_ = tenant_mem_limit / 100 * mem_quota_pct;
+  mem_tracker_.cache_mem_limit_ = hard_memory_limit / 100 * mem_quota_pct;
 }
 int ObMemTrackerGuard::check_status()
 {
