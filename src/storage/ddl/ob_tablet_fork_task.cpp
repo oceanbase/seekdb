@@ -537,15 +537,9 @@ int ObTabletForkCtx::prepare_index_builder(const ObTabletForkParam &param)
       const ObMergeType merge_type = sstable->is_major_sstable() ? MAJOR_MERGE : MINOR_MERGE;
       // For fork table, use fork_snapshot_version instead of sstable's snapshot_version
       const int64_t snapshot_version = param.fork_snapshot_version_;
-      const ObStorageSchema *clipped_storage_schema = nullptr;
 
-      if (OB_FAIL(ObTabletRebuildUtil::get_clipped_storage_schema_on_demand(
-          allocator_, clipped_schemas_map_,
-          param.source_tablet_id_, *sstable, *storage_schema,
-          true/*try_create*/, clipped_storage_schema))) {
-        LOG_WARN("get storage schema via sstable failed", K(ret));
-      } else if (OB_FAIL(data_desc.init(
-          true/*is_ddl*/, *clipped_storage_schema, param.ls_id_,
+      if (OB_FAIL(data_desc.init(
+          true/*is_ddl*/, *storage_schema, param.ls_id_,
           param.dest_tablet_id_, merge_type, snapshot_version, param.data_format_version_,
           dst_tablet_handle_.get_obj()->get_tablet_meta().micro_index_clustered_,
           dst_tablet_handle_.get_obj()->get_transfer_seq(),
