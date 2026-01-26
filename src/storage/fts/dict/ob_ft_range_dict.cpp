@@ -16,6 +16,7 @@
 
 #include "storage/fts/dict/ob_ft_range_dict.h"
 
+#include "storage/fts/dict/ob_ik_dic.h"
 #include "lib/allocator/page_arena.h"
 #include "lib/charset/ob_charset.h"
 #include "lib/mysqlclient/ob_isql_client.h"
@@ -41,6 +42,194 @@ namespace oceanbase
 {
 namespace storage
 {
+
+
+int ObFTRangeDict::build_cache_from_ik_dict(const ObFTDictDesc &desc, ObFTCacheRangeContainer &range_container)
+{
+  int ret = OB_SUCCESS;
+
+  ObIKDictLoader::RawDict raw_dict;
+  switch (desc.type_) {
+  case ObFTDictType::DICT_IK_MAIN: {
+    raw_dict = ObIKDictLoader::dict_text();
+  } break;
+  case ObFTDictType::DICT_IK_QUAN: {
+    raw_dict = ObIKDictLoader::dict_quen_text();
+  } break;
+  case ObFTDictType::DICT_IK_STOP: {
+    raw_dict = ObIKDictLoader::dict_stop();
+  } break;
+  default:
+    ret = OB_NOT_SUPPORTED;
+    LOG_WARN("Not supported dict type.", K(ret));
+  }
+
+  if (OB_SUCC(ret)) {
+    ObIKDictIterator iter(raw_dict);
+    if (OB_FAIL(iter.init())) {
+      LOG_WARN("Failed to init iterator.", K(ret));
+    } else if (OB_FAIL(ObFTRangeDict::build_ranges_concurrently_thread_pool(desc, iter, range_container))) {
+      LOG_WARN("Failed to build ranges.", K(ret));
+    }
+  }
+
+  return ret;
+}
+
+// Thread pool for building DATs concurrently
+class DATBuilderThreadPool : public lib::Threads
+{
+public:
+  DATBuilderThreadPool()
+      : all_tries_(nullptr),
+        desc_(nullptr),
+        container_(nullptr),
+        error_code_(OB_SUCCESS)
+  {}
+
+  void set_tries(ObVector<ObFTTrie<void> *, ObArenaAllocator> *tries) { all_tries_ = tries; }
+  void set_desc(const ObFTDictDesc *desc) { desc_ = desc; }
+  void set_container(ObFTCacheRangeContainer *container) { container_ = container; }
+  int64_t get_range_count() const { return all_tries_ ? all_tries_->size() : 0; }
+  int get_error_code() const { return error_code_.load(); }
+
+  void run1() override
+  {
+    int ret = OB_SUCCESS;
+    int64_t idx = get_thread_idx();
+
+    if (OB_ISNULL(all_tries_) || idx >= static_cast<int64_t>(all_tries_->size())) {
+      return;
+    }
+
+    ObFTTrie<void> *trie = (*all_tries_)[idx];
+    ObArenaAllocator dat_alloc(lib::ObMemAttr(OB_SERVER_TENANT_ID, "DATBuild"));
+    ObFTDATBuilder<void> builder(dat_alloc);
+
+    ObFTDAT *dat_buff = nullptr;
+    size_t buffer_size = 0;
+    ObFTCacheRangeHandle *info = nullptr;
+
+    if (OB_FAIL(builder.init(*trie))) {
+      LOG_WARN("Failed to init builder.", K(ret), K(idx));
+    } else if (OB_FAIL(builder.build_from_trie(*trie))) {
+      LOG_WARN("Failed to build datrie.", K(ret), K(idx));
+    } else if (OB_FAIL(builder.get_mem_block(dat_buff, buffer_size))) {
+      LOG_WARN("Failed to get mem block.", K(ret), K(idx));
+    } else if (OB_FAIL(container_->fetch_info_for_dict(info))) {
+      LOG_WARN("Failed to fetch info for dict.", K(ret), K(idx));
+    } else if (OB_FAIL(ObFTCacheDict::make_and_fetch_cache_entry(*desc_,
+                                                                  dat_buff,
+                                                                  buffer_size,
+                                                                  static_cast<int32_t>(idx),
+                                                                  info->value_,
+                                                                  info->handle_))) {
+      LOG_WARN("Failed to put dict into kv cache", K(ret), K(idx));
+    }
+
+    if (OB_FAIL(ret)) {
+      int expected = OB_SUCCESS;
+      error_code_.compare_exchange_strong(expected, ret);
+    }
+
+    dat_alloc.reset();
+  }
+
+private:
+  ObVector<ObFTTrie<void> *, ObArenaAllocator> *all_tries_;
+  const ObFTDictDesc *desc_;
+  ObFTCacheRangeContainer *container_;
+  std::atomic<int> error_code_;
+};
+
+int ObFTRangeDict::build_ranges_concurrently_thread_pool(const ObFTDictDesc &desc,
+                                                         ObIFTDictIterator &iter,
+                                                         ObFTCacheRangeContainer &range_container)
+{
+  int ret = OB_SUCCESS;
+
+  // Phase 1: Collect words into tries range by range
+  ObArenaAllocator tmp_alloc(lib::ObMemAttr(MTL_ID(), "Tmp Allocator"));
+  ObVector<ObFTTrie<void> *, ObArenaAllocator> all_tries(&tmp_alloc);
+
+  bool build_next_range = true;
+  while (OB_SUCC(ret) && build_next_range) {
+    ObFTTrie<void> *trie = OB_NEWx(ObFTTrie<void>, &tmp_alloc, tmp_alloc, desc.coll_type_);
+    if (OB_ISNULL(trie)) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("Failed to allocate ObFTTrie", K(ret));
+      break;
+    }
+
+    int count = 0;
+    int64_t first_char_len = 0;
+    ObFTSingleWord end_char;
+    bool range_end = false;
+
+    while (OB_SUCC(ret) && !range_end) {
+      ObString key;
+      if (OB_FAIL(iter.get_key(key))) {
+        LOG_WARN("Failed to get key", K(ret));
+      } else {
+        ++count;
+
+        if (count >= DEFAULT_KEY_PER_RANGE
+            && OB_FAIL(ObCharset::first_valid_char(desc.coll_type_,
+                                                   key.ptr(),
+                                                   key.length(),
+                                                   first_char_len))) {
+          LOG_WARN("First char is not valid.");
+        } else if (DEFAULT_KEY_PER_RANGE == count
+                   && OB_FAIL(end_char.set_word(key.ptr(), first_char_len))) {
+          LOG_WARN("Failed to record first char.", K(ret));
+        } else if (count > DEFAULT_KEY_PER_RANGE
+                   && (end_char.get_word() != ObString(first_char_len, key.ptr()))) {
+          range_end = true;
+        } else {
+          if (OB_FAIL(trie->insert(key, {}))) {
+            LOG_WARN("Failed to insert key to trie", K(ret));
+          } else if (OB_FAIL(iter.next()) && OB_ITER_END != ret) {
+            LOG_WARN("Failed to step to next word entry.", K(ret));
+          }
+        }
+      }
+    }
+
+    if (OB_ITER_END == ret) {
+      build_next_range = false;
+      ret = OB_SUCCESS;
+    }
+
+    if (OB_SUCC(ret) && trie->node_num() > 0) {
+      if (OB_FAIL(all_tries.push_back(trie))) {
+        LOG_WARN("Failed to push back trie", K(ret));
+      }
+    }
+  }
+
+  // Phase 2: Build DATs concurrently using DATBuilderThreadPool
+  if (OB_SUCC(ret) && all_tries.size() > 0) {
+    DATBuilderThreadPool pool;
+    pool.set_tries(&all_tries);
+    pool.set_desc(&desc);
+    pool.set_container(&range_container);
+    pool.set_thread_count(static_cast<int64_t>(all_tries.size()));
+
+    if (OB_FAIL(pool.start())) {
+      LOG_WARN("Failed to start thread pool", K(ret));
+    } else {
+      pool.wait();
+      ret = pool.get_error_code();
+      if (OB_FAIL(ret)) {
+        LOG_WARN("Thread pool encountered error", K(ret));
+      }
+    }
+  }
+
+  LOG_INFO("build_ranges_concurrently_thread_pool completed", K(ret), K(all_tries.size()));
+  return ret;
+}
+
 int ObFTRangeDict::build_one_range(const ObFTDictDesc &desc,
                                    const int32_t range_id,
                                    ObIFTDictIterator &iter,
