@@ -252,15 +252,39 @@ int ObForkSnapshotRowScan::get_next_row(const ObDatumRow *&tmp_row)
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
-  } else if (OB_FAIL(row_iter_->get_next_row(row))) {
-    if (OB_UNLIKELY(OB_ITER_END != ret)) {
-      LOG_WARN("fail to get next row", K(ret));
-    }
-  } else if (OB_UNLIKELY(nullptr == row || !row->is_valid())) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected datum row", K(ret), KPC(row));
   } else {
-    tmp_row = row;
+    const ObITableReadInfo *read_info = access_param_.iter_param_.get_read_info();
+    const int64_t trans_idx = OB_NOT_NULL(read_info) ? read_info->get_trans_col_index() : OB_INVALID_INDEX;
+    while (OB_SUCC(ret)) {
+      if (OB_FAIL(row_iter_->get_next_row(row))) {
+        if (OB_UNLIKELY(OB_ITER_END != ret)) {
+          LOG_WARN("fail to get next row", K(ret));
+        }
+      } else if (OB_UNLIKELY(nullptr == row || !row->is_valid())) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("unexpected datum row", K(ret), KPC(row));
+      } else {
+        bool need_skip = false;
+        if (OB_INVALID_INDEX != trans_idx && trans_idx < row->count_) {
+          const ObStorageDatum &trans_datum = row->storage_datums_[trans_idx];
+          if (!trans_datum.is_nop() && !trans_datum.is_null()) {
+            int64_t trans_version = trans_datum.get_int();
+            if (trans_version < 0) {
+              trans_version = -trans_version;
+            }
+            if (trans_version > fork_snapshot_version_) {
+              need_skip = true;
+              LOG_DEBUG("fork scan: skip row with trans_version > fork_snapshot_version",
+                  K(trans_version), K_(fork_snapshot_version), KPC(row));
+            }
+          }
+        }
+        if (!need_skip) {
+          tmp_row = row;
+          break;
+        }
+      }
+    }
   }
   return ret;
 }
@@ -650,7 +674,10 @@ int ObTabletForkDag::create_first_task()
         if (OB_ISNULL(sstable)) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("unexpected nullptr sstable", K(ret), K(param_));
-        } else if (sstable->get_upper_trans_version() <= param_.fork_snapshot_version_) {
+        } else if ((sstable->is_major_sstable()
+            // major sstable may temporarily have upper_trans_version=0 right after merge; use end_scn instead
+            ? (sstable->get_end_scn().get_val_for_tx() <= param_.fork_snapshot_version_)
+            : (sstable->get_upper_trans_version() <= param_.fork_snapshot_version_))) {
           ObTabletForkReuseTask *reuse_task = nullptr;
           if (OB_FAIL(alloc_task(reuse_task))) {
             LOG_WARN("alloc reuse task failed", K(ret));
@@ -1039,7 +1066,7 @@ int ObTabletForkRewriteTask::process()
           if (OB_FAIL(context_->add_created_sstable(table_handle))) {
             LOG_WARN("failed to add table handle", K(ret));
           } else {
-            LOG_DEBUG("fork rewrite: successfully created sstable",
+            LOG_INFO("fork rewrite: successfully created sstable",
                 K(sstable_->get_key()), K(param_->dest_tablet_id_), K(max_end_scn), K(param_->fork_snapshot_version_));
           }
         }
