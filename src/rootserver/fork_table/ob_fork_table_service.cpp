@@ -31,6 +31,98 @@ using namespace obrpc;
 using namespace storage;
 namespace rootserver
 {
+static int check_table_index_features(
+    const ObTableSchema &table_schema,
+    ObSchemaGetterGuard &schema_guard,
+    bool &has_semantic_index,
+    bool &has_ivf_index,
+    bool &has_spatial_index)
+{
+  int ret = OB_SUCCESS;
+  ObSEArray<ObAuxTableMetaInfo, 16> simple_index_infos;
+  has_semantic_index = false;
+  has_ivf_index = false;
+  has_spatial_index = false;
+  if (OB_FAIL(table_schema.get_simple_index_infos(simple_index_infos))) {
+    LOG_WARN("fail to get simple index infos", K(ret));
+  } else {
+    const uint64_t tenant_id = table_schema.get_tenant_id();
+    for (int64_t i = 0; OB_SUCC(ret) && i < simple_index_infos.count()
+        && (!has_semantic_index || !has_ivf_index || !has_spatial_index); ++i) {
+      const ObTableSchema *index_schema = nullptr;
+      const uint64_t index_table_id = simple_index_infos.at(i).table_id_;
+      if (OB_FAIL(schema_guard.get_table_schema(tenant_id, index_table_id, index_schema))) {
+        LOG_WARN("fail to get index table schema", K(ret), K(tenant_id), K(index_table_id));
+      } else if (OB_ISNULL(index_schema)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("index table schema should not be null", K(ret), K(index_table_id));
+      } else {
+        if (index_schema->is_hybrid_vec_index()) {
+          has_semantic_index = true;
+        }
+        if (index_schema->is_vec_ivf_index()) {
+          has_ivf_index = true;
+        }
+        if (index_schema->is_spatial_index()) {
+          has_spatial_index = true;
+        }
+      }
+    }
+  }
+  return ret;
+}
+
+static int check_fork_table_supported(
+    const ObTableSchema &src_table_schema,
+    const ObForkTableArg &fork_table_arg,
+    ObSchemaGetterGuard &schema_guard)
+{
+  int ret = OB_SUCCESS;
+  bool has_semantic_index = false;
+  bool has_ivf_index = false;
+  bool has_spatial_index = false;
+  if (src_table_schema.is_tmp_table() || src_table_schema.is_ctas_tmp_table()) {
+    ret = OB_NOT_SUPPORTED;
+    LOG_WARN("fork table on temporary table is not supported", KR(ret), K(src_table_schema));
+    LOG_USER_ERROR(OB_NOT_SUPPORTED, "fork table on temporary table is");
+  } else if (!src_table_schema.is_user_table()) {
+    ret = OB_ERR_WRONG_OBJECT;
+    LOG_USER_ERROR(OB_ERR_WRONG_OBJECT,
+                   to_cstring(fork_table_arg.src_database_name_),
+                   to_cstring(fork_table_arg.src_table_name_),
+                   "BASE TABLE");
+  } else if (src_table_schema.is_in_recyclebin()) {
+    ret = OB_ERR_OPERATION_ON_RECYCLE_OBJECT;
+    LOG_WARN("can fork table from table in recyclebin", K(ret), K(src_table_schema));
+  } else if (src_table_schema.has_mlog_table()) {
+    ret = OB_NOT_SUPPORTED;
+    LOG_WARN("fork table on table with materialized view log is not supported", KR(ret));
+    LOG_USER_ERROR(OB_NOT_SUPPORTED, "fork table on table with materialized view log is");
+  } else if (src_table_schema.table_referenced_by_fast_lsm_mv()) {
+    ret = OB_NOT_SUPPORTED;
+    LOG_WARN("fork table on table required by materialized view is not supported", KR(ret));
+    LOG_USER_ERROR(OB_NOT_SUPPORTED, "fork table on table required by materialized view is");
+  } else if (OB_FAIL(check_table_index_features(src_table_schema,
+                                                schema_guard,
+                                                has_semantic_index,
+                                                has_ivf_index,
+                                                has_spatial_index))) {
+    LOG_WARN("fail to check table index features", K(ret), K(src_table_schema));
+  } else if (has_semantic_index) {
+    ret = OB_NOT_SUPPORTED;
+    LOG_WARN("fork table on table with semantic index is not supported", KR(ret), K(src_table_schema));
+    LOG_USER_ERROR(OB_NOT_SUPPORTED, "fork table on table with semantic index is");
+  } else if (has_ivf_index) {
+    ret = OB_NOT_SUPPORTED;
+    LOG_WARN("fork table on table with ivf index is not supported", KR(ret), K(src_table_schema));
+    LOG_USER_ERROR(OB_NOT_SUPPORTED, "fork table on table with ivf index is");
+  } else if (has_spatial_index) {
+    ret = OB_NOT_SUPPORTED;
+    LOG_WARN("fork table on table with spatial index is not supported", KR(ret), K(src_table_schema));
+    LOG_USER_ERROR(OB_NOT_SUPPORTED, "fork table on table with spatial index is");
+  }
+  return ret;
+}
 
 int ObDDLService::create_tables_for_fork_(
     const common::ObString &ddl_stmt_str,
@@ -171,24 +263,8 @@ int ObDDLService::fork_table(const obrpc::ObForkTableArg &fork_table_arg, obrpc:
       } else if (OB_ISNULL(src_table_schema)) {
         ret = OB_TABLE_NOT_EXIST;
         LOG_WARN("source table not exist", K(ret), K(fork_table_arg));
-      } else if (src_table_schema->is_tmp_table() || src_table_schema->is_ctas_tmp_table()) {
-        ret = OB_NOT_SUPPORTED;
-        LOG_WARN("fork table on temporary table is not supported", KR(ret), K(*src_table_schema));
-        LOG_USER_ERROR(OB_NOT_SUPPORTED, "fork table on temporary table is");
-      } else if (!src_table_schema->is_user_table()) {
-        ret = OB_ERR_WRONG_OBJECT;
-        LOG_USER_ERROR(OB_ERR_WRONG_OBJECT, to_cstring(fork_table_arg.src_database_name_), to_cstring(fork_table_arg.src_table_name_), "BASE TABLE");
-      } else if (src_table_schema->is_in_recyclebin()) {
-        ret = OB_ERR_OPERATION_ON_RECYCLE_OBJECT;
-        LOG_WARN("can fork table from table in recyclebin", K(ret), K(*src_table_schema));
-      } else if (src_table_schema->has_mlog_table()) {
-        ret = OB_NOT_SUPPORTED;
-        LOG_WARN("fork table on table with materialized view log is not supported", KR(ret));
-        LOG_USER_ERROR(OB_NOT_SUPPORTED, "fork table on table with materialized view log is");
-      } else if (src_table_schema->table_referenced_by_fast_lsm_mv()) {
-        ret = OB_NOT_SUPPORTED;
-        LOG_WARN("fork table on table required by materialized view is not supported", KR(ret));
-        LOG_USER_ERROR(OB_NOT_SUPPORTED, "fork table on table required by materialized view is");
+      } else if (OB_FAIL(check_fork_table_supported(*src_table_schema, fork_table_arg, schema_guard))) {
+        LOG_WARN("fork table is not supported for source table", K(ret), K(fork_table_arg));
       }
     }
 
