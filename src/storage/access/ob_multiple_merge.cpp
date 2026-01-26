@@ -1964,14 +1964,14 @@ int ObMultipleMerge::refresh_table_on_demand()
       STORAGE_LOG(WARN, "fail to prepare read tables", K(ret));
     } else if (OB_FAIL(check_base_version(is_di_merge_scan))) {
       STORAGE_LOG(WARN, "di base snapshot version changed", K(ret));
+    } else if (OB_FAIL(build_extra_access_ctx())) {
+      LOG_WARN("fail to build access_cx for fork", K(ret));
     } else if (OB_FAIL(reset_tables())) {
       STORAGE_LOG(WARN, "fail to reset tables", K(ret));
     } else if (OB_UNLIKELY(access_param_->iter_param_.need_truncate_filter()) &&
                OB_FAIL(prepare_truncate_filter())) {
       LOG_WARN("failed to prepare truncate filter", K(ret));
     } else if (nullptr != block_row_store_ && FALSE_IT(block_row_store_->reuse())) {
-    } else if (OB_FAIL(build_extra_access_ctx())) {
-      LOG_WARN("fail to build access_cx for fork", K(ret));
     } else {
       refreshed = true;
     }
