@@ -19,6 +19,15 @@
 #include <stdlib.h>
 #include "lib/utility/ob_macro_utils.h"
 
+// Define __THROW if not available (e.g., on macOS)
+#ifndef __THROW
+# ifdef __cplusplus
+#  define __THROW
+# else
+#  define __THROW
+# endif
+#endif
+
 extern void ob_abort (void) __THROW;
 
 // we use int instead of bool to compatible with c code.

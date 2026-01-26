@@ -16,7 +16,9 @@
 
 #include "rpc/obrpc/ob_listener.h"
 #include "lib/net/ob_net_util.h"
+#ifdef __linux__
 #include <sys/epoll.h>
+#endif
 
 using namespace oceanbase::common;
 using namespace oceanbase::obrpc;

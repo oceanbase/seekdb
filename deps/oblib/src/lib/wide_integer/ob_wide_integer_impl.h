@@ -949,7 +949,7 @@ struct ObWideInteger<Bits, Signed>::_impl
           typename CommonType<ObWideInteger<Bits, Signed>,
                               ObWideInteger<Bits2, Signed2>>::type;
       calc_type xres;
-      ret = calc_type::_impl::template bitwise_and(calc_type(lhs), rhs, xres);
+      ret = calc_type::_impl::bitwise_and(calc_type(lhs), rhs, xres);
       res = xres;
     }
     return ret;
@@ -984,7 +984,7 @@ struct ObWideInteger<Bits, Signed>::_impl
     } else {
       using calc_type = typename CommonType<ObWideInteger<Bits, Signed>, T>::type;
       calc_type xres;
-      ret = calc_type::_impl::template bitwise_and(calc_type(self), rhs, xres);
+      ret = calc_type::_impl::bitwise_and(calc_type(self), rhs, xres);
       res = xres;
     }
     return ret;

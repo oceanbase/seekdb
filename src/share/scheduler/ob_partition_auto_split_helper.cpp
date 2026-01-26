@@ -23,6 +23,8 @@
 #include "storage/tx_storage/ob_ls_service.h"
 #include "sql/resolver/ob_resolver_utils.h"
 #include "rootserver/ddl_task/ob_ddl_scheduler.h"
+#include <algorithm>
+#include <random>
 
 namespace oceanbase
 {
@@ -1067,7 +1069,13 @@ int ObAutoSplitTaskPollingMgr::pop_tasks(const int64_t num_tasks_can_pop, ObArra
     int64_t tasks_pop_this_round = (total_tasks_pop_budge / get_total_tenants() == 0) ? 0 : total_tasks_pop_budge % get_total_tenants();
     total_tasks_pop_budge -= tasks_pop_this_round;
     if (tasks_budget_per_tenant == 1) {
+#ifdef __APPLE__
+      std::random_device rd;
+      std::mt19937 g(rd());
+      std::shuffle(tenants_id.begin(), tenants_id.end(), g);
+#else
       std::random_shuffle(tenants_id.begin(), tenants_id.end());
+#endif
     }
     for (int64_t i = 0; OB_SUCC(ret) && (tasks_pop_this_round > 0 || total_tasks_pop_budge > 0) && i < tenants_id.size(); ++i) {
       int tmp_ret = OB_SUCCESS;

@@ -339,7 +339,7 @@ bool SList<Node>::lock_unless_empty()
   bool b_ret = true;
   uintptr_t head;
   do {
-    head = set_last_bit((uintptr_t*)&head_);
+    head = set_last_bit(reinterpret_cast<uint64_t*>(&head_));
     if (head == 1) {
       b_ret = false;
       break;

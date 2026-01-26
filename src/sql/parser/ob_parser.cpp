@@ -1051,7 +1051,7 @@ int ObParser::parse(const ObString &query,
       LOG_ERROR("no memory for parser");
     } else {
       MEMCPY(buf, line_str, strlen(line_str));
-      stmt.assign_ptr(buf, strlen(line_str));
+      stmt.assign_ptr(buf, static_cast<ObString::obstr_size_t>(strlen(line_str)));
     }
   }
   if (OB_SUCC(ret) && OB_ISNULL(parse_result.charset_info_)) {

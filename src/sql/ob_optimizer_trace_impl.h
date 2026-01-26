@@ -372,6 +372,10 @@ public:
   template <typename T>
   int append(const ObIArrayWrap<T>& value);
 
+  // Helper function to handle type conversion for append (macOS compatibility)
+  template<typename T>
+  int append_helper(const T& value);
+
   //template for function append
   template<typename T1, typename T2, typename ...ARGS>
   int append(const T1& value1, const T2& value2, const ARGS&... args);
@@ -468,6 +472,25 @@ int ObOptimizerTraceImpl::append(const ObIArrayWrap<T>& value)
   return ret;
 }
 
+// Helper function implementation for type conversion (macOS compatibility)
+template<typename T>
+int ObOptimizerTraceImpl::append_helper(const T& value) {
+#ifdef __APPLE__
+  // On macOS, long and long long are different types
+  if constexpr (std::is_same_v<T, long>) {
+    int64_t val = static_cast<int64_t>(value);
+    return append(val);
+  } else if constexpr (std::is_same_v<T, unsigned long>) {
+    uint64_t val = static_cast<uint64_t>(value);
+    return append(val);
+  } else {
+    return append(value);
+  }
+#else
+  return append(value);
+#endif
+}
+
 //template for function append
 template<typename T1, typename T2, typename ...ARGS>
 int ObOptimizerTraceImpl::append(const T1& value1, const T2& value2, const ARGS&... args)
@@ -477,7 +500,7 @@ int ObOptimizerTraceImpl::append(const T1& value1, const T2& value2, const ARGS&
     //LOG_WARN
   } else if (OB_FAIL(append(" "))) {
     //LOG_WARN
-  } else if (OB_FAIL(append(value2))) {
+  } else if (OB_FAIL(append_helper(value2))) {
     //LOG_WARN
   } else if (OB_FAIL(append(" "))) {
     //LOG_WARN

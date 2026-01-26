@@ -251,7 +251,12 @@ void TestBackupMacroIndexMerger::inner_init_()
 {
   int ret = OB_SUCCESS;
   ObBackupIoAdapter util;
+#ifdef __APPLE__
+  char buf[PATH_MAX];
+  ret = databuff_printf(test_dir_, sizeof(test_dir_), "%s/test_backup_macro_block_index_merger_dir", getcwd(buf, sizeof(buf)));
+#else
   ret = databuff_printf(test_dir_, sizeof(test_dir_), "%s/test_backup_macro_block_index_merger_dir", get_current_dir_name());
+#endif
   EXPECT_EQ(OB_SUCCESS, ret);
   ret = databuff_printf(test_dir_uri_, sizeof(test_dir_uri_), "file://%s", test_dir_);
   EXPECT_EQ(OB_SUCCESS, ret);

@@ -254,7 +254,12 @@ TEST_F(TestServerLogBlockMgr, dirty_ls_dir_and_log_pool_file)
   system("touch clog_disk/clog/tenant_0111/log/0");
   system("touch clog_disk/clog/tenant_0111/log/1");
   system("touch clog_disk/clog/sys/1/meta/10000.tmp");
+#ifdef __APPLE__
+  // macOS doesn't have fallocate, use dd instead
+  system("dd if=/dev/zero of=clog_disk/clog/sys/1/meta/10000.tmp bs=67108863 count=1 2>/dev/null");
+#else
   system("fallocate -l 67108863 clog_disk/clog/sys/1/meta/10000.tmp ");
+#endif
   log_block_mgr_.destroy();
   bool result = false;
   EXPECT_EQ(OB_ERR_UNEXPECTED, log_block_mgr_.init(log_pool_base_path_));
@@ -336,17 +341,22 @@ TEST_F(TestServerLogBlockMgr, basic_func_test)
   const char *file_path = "clog_disk/basic_func_test/1.tmp";
   char cmd_mkdir[OB_MAX_FILE_NAME_LENGTH] = {'\0'};
   char cmd_touch[OB_MAX_FILE_NAME_LENGTH] = {'\0'};
-  char cmd_fallocate[OB_MAX_FILE_NAME_LENGTH] = {'\0'};
+  char cmd_alloc_file[OB_MAX_FILE_NAME_LENGTH] = {'\0'};
   snprintf(cmd_mkdir, OB_MAX_FILE_NAME_LENGTH, "mkdir %s", test_path);
   snprintf(cmd_touch, OB_MAX_FILE_NAME_LENGTH, "touch %s", file_path);
-  snprintf(cmd_fallocate, OB_MAX_FILE_NAME_LENGTH, "fallocate -l %lu %s", PALF_PHY_BLOCK_SIZE, file_path);
+#ifdef __APPLE__
+  // macOS doesn't have fallocate, use dd instead
+  snprintf(cmd_alloc_file, OB_MAX_FILE_NAME_LENGTH, "dd if=/dev/zero of=%s bs=%lu count=1 2>/dev/null", file_path, PALF_PHY_BLOCK_SIZE);
+#else
+  snprintf(cmd_alloc_file, OB_MAX_FILE_NAME_LENGTH, "fallocate -l %lu %s", PALF_PHY_BLOCK_SIZE, file_path);
+#endif
   system(cmd_mkdir);
   system(cmd_touch);
   int dir_fd = ::open(test_path, O_DIRECTORY | O_RDONLY);
   bool result = false;
   EXPECT_EQ(OB_SUCCESS, is_block_used_for_palf(dir_fd, file_path_obs, result));
   EXPECT_EQ(false, result);
-  system(cmd_fallocate);
+  system(cmd_alloc_file);
   EXPECT_EQ(OB_SUCCESS, is_block_used_for_palf(dir_fd, file_path_obs, result));
   EXPECT_EQ(true, result);
   DummyBlockPool block_pool;

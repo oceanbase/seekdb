@@ -321,7 +321,7 @@ int ObDASUtils::reshape_datum_vector_value(const ObObjMeta &col_type,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", KR(ret), K(batch_selector));
   } else {
-    ObBatchSelector single_selector(0L, 1);
+    ObBatchSelector single_selector(static_cast<int64_t>(0), 1);
     ObBatchSelector &selector = datum_vector.is_batch() ? batch_selector : single_selector;
     if (col_type.is_binary()) {
       const int32_t binary_len = col_accuracy.get_length();

@@ -16,6 +16,9 @@
 
 #define USING_LOG_PREFIX SERVER
 #include "ob_htable_filters.h"
+#ifdef __APPLE__
+#include <cstdlib> // For free() on macOS
+#endif
 using namespace oceanbase::common;
 using namespace oceanbase::table;
 using namespace oceanbase::table::hfilter;
@@ -242,14 +245,29 @@ int RegexStringComparator::compare_to(const ObString &b)
 int SubStringComparator::compare_to(const ObString &b)
 {
   int cmp_ret = 0;
+#ifdef __APPLE__
+  // macOS doesn't have strndupa, use strndup instead (requires free)
+  char *a_dup = strndup(comparator_value_.ptr(), comparator_value_.length());
+  char *b_dup = strndup(b.ptr(), b.length());
+#else
   char *a_dup = strndupa(comparator_value_.ptr(), comparator_value_.length());
   char *b_dup = strndupa(b.ptr(), b.length());
+#endif
   if (NULL == a_dup || NULL == b_dup) {
     LOG_WARN_RET(common::OB_ALLOCATE_MEMORY_FAILED, "failed to dup string");
   } else {
     char* p = strcasestr(b_dup, a_dup);
     cmp_ret = (NULL == p) ? 1: 0;
   }
+#ifdef __APPLE__
+  // Free memory allocated by strndup on macOS
+  if (a_dup != NULL) {
+    free(a_dup);
+  }
+  if (b_dup != NULL) {
+    free(b_dup);
+  }
+#endif
   return cmp_ret;
 }
 

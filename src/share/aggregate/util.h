@@ -29,7 +29,7 @@
 #define EXTRACT_MEM_ADDR(ptr) (reinterpret_cast<char *>(*reinterpret_cast<int64_t *>((ptr))))
 #define STORE_MEM_ADDR(addr, dst)                                                                  \
   do {                                                                                             \
-    *reinterpret_cast<int64_t *>((dst)) = reinterpret_cast<int64_t>((addr));                       \
+    *reinterpret_cast<int64_t *>((dst)) = static_cast<int64_t>(reinterpret_cast<intptr_t>((addr))); \
   } while (false)
 
 namespace oceanbase
@@ -141,7 +141,7 @@ struct AddRow
   template <typename... Args>
   OB_INLINE static int do_op(T &v, Args &&... args)
   {
-    return v.template add_row(std::forward<Args>(args)...);
+    return v.add_row(std::forward<Args>(args)...);
   }
 };
 
@@ -170,7 +170,7 @@ struct AddNullableRow
   template <typename... Args>
   OB_INLINE static int do_op(T &v, Args &&... args)
   {
-    return v.template add_nullable_row(std::forward<Args>(args)...);
+    return v.add_nullable_row(std::forward<Args>(args)...);
   }
 };
 

@@ -135,7 +135,7 @@ int ObHbaseMultiCFIterator::init_cf_queries(ObTableExecCtx &exec_ctx, const ObHb
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected table name without $", K(ret));
     } else {
-      tablegroup_name.assign_ptr(first_table_name, end - first_table_name);
+      tablegroup_name.assign_ptr(first_table_name, static_cast<ObString::obstr_size_t>(end - first_table_name));
     }
 
     if (OB_SUCC(ret) && OB_FAIL(ObHTableUtils::process_columns(columns, family_addfamily_flag_pairs, real_columns))) {

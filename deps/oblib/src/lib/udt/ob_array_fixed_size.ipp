@@ -660,7 +660,7 @@ int ObArrayFixedSize<T>::distinct(ObIAllocator &alloc, ObIArrayType *&output) co
         ObString val;
         if (this->is_null(i)) {
           // do nothing
-        } else if (FALSE_IT(val.assign_ptr(reinterpret_cast<char *>(&data_[i]), sizeof(T)))) {
+        } else if (FALSE_IT(val.assign_ptr(reinterpret_cast<char *>(&data_[i]), static_cast<ObString::obstr_size_t>(sizeof(T))))) {
         } else if (OB_FAIL(elem_set.exist_refactored(val))) {
           if (ret == OB_HASH_NOT_EXIST) {
             if (OB_FAIL(arr_data->push_back((*this)[i]))) {
@@ -702,7 +702,7 @@ int ObArrayFixedSize<T>::push_not_in_set(const ObArrayFixedSize<T> *arr_bin_ptr,
           OB_LOG(WARN, "push null failed", K(ret));
         }
       }
-    } else if (FALSE_IT(val.assign_ptr(arr_bin_ptr->get_data() + i * sizeof(T), sizeof(T)))) {
+    } else if (FALSE_IT(val.assign_ptr(arr_bin_ptr->get_data() + i * sizeof(T), static_cast<ObString::obstr_size_t>(sizeof(T))))) {
     } else if (OB_FAIL(elem_set.exist_refactored(val))) {
       if (ret == OB_HASH_NOT_EXIST) {
         if (OB_FAIL(this->push_back((*arr_bin_ptr)[i]))) {
@@ -748,7 +748,7 @@ int ObArrayFixedSize<T>::except(ObIAllocator &alloc, ObIArrayType *arr2, ObIArra
       ObString val;
       if (arr2->is_null(i)) {
         arr2_contain_null = true;
-      } else if (FALSE_IT(val.assign_ptr(arr2_bin_ptr->get_data() + i * sizeof(T), sizeof(T)))) {
+      } else if (FALSE_IT(val.assign_ptr(arr2_bin_ptr->get_data() + i * sizeof(T), static_cast<ObString::obstr_size_t>(sizeof(T))))) {
       } else if (OB_FAIL(elem_set.exist_refactored(val))) {
         if (ret == OB_HASH_NOT_EXIST) {
           if (OB_FAIL(elem_set.set_refactored(val))) {
@@ -827,7 +827,7 @@ int ObArrayFixedSize<T>::intersect(ObIAllocator &alloc, ObIArrayType **arr, uint
               OB_LOG(WARN, "push null failed", K(ret));
             }
           }
-        } else if (FALSE_IT(val.assign_ptr(arr_bin_ptr->get_data() + j * sizeof(T), sizeof(T)))) {
+        } else if (FALSE_IT(val.assign_ptr(arr_bin_ptr->get_data() + j * sizeof(T), static_cast<ObString::obstr_size_t>(sizeof(T))))) {
         } else if (OB_FAIL(elem_map.get_refactored(val, cnt))) {
           if (ret == OB_HASH_NOT_EXIST) {
             if (i == 0 && OB_FAIL(elem_map.set_refactored(val, 1))) {

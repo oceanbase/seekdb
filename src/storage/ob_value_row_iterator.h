@@ -18,6 +18,7 @@
 #define OCEANBASE_STORAGE_OB_VALUE_ROW_ITERATOR_
 
 #include "access/ob_table_access_param.h"
+#include "access/ob_table_access_context.h"
 #include "lib/allocator/page_arena.h"
 #include "lib/hash/ob_placement_hashmap.h"
 #include "lib/container/ob_se_array.h"

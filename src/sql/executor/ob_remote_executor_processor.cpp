@@ -875,7 +875,7 @@ int ObRemoteBaseExecuteP<T>::try_refresh_schema_(const uint64_t tenant_id,
     LOG_WARN("schema service is NULL", KR(ret), K(tenant_id));
   } else {
     const int64_t orig_timeout_ts = THIS_WORKER.get_timeout_ts();
-    const int64_t try_refresh_time = is_inner_sql ? timeout_remain : std::min(10 * 1000L, timeout_remain);
+    const int64_t try_refresh_time = is_inner_sql ? timeout_remain : std::min(static_cast<int64_t>(10 * 1000), timeout_remain);
     THIS_WORKER.set_timeout_ts(ObTimeUtility::current_time() + try_refresh_time);
     if (OB_FAIL(gctx_.schema_service_->async_refresh_schema(
                 tenant_id, schema_version))) {

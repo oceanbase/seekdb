@@ -1309,7 +1309,7 @@ const char *ObIORequest::get_io_data_buf()
 
 int64_t ObIORequest::get_align_size() const
 {
-  return std::max(1L, align_size_);
+  return std::max(static_cast<int64_t>(1), align_size_);
 }
 
 int64_t ObIORequest::get_align_offset() const
@@ -1540,7 +1540,7 @@ int ObIORequest::try_alloc_buf_until_timeout(char *&io_buf)
     } else if (OB_FAIL(alloc_io_buf(io_buf))) {
       if (OB_ALLOCATE_MEMORY_FAILED == ret) {
         const int64_t remain_time = timeout_ts() - current_ts;
-        const int64_t sleep_time = min(remain_time, 1000L);
+        const int64_t sleep_time = min(remain_time, static_cast<int64_t>(1000L));
         if (TC_REACH_TIME_INTERVAL(1000L * 1000L)) {
           LOG_INFO("alloc memory failed, retry later", K(ret), K(remain_time), K(sleep_time), K(retry_alloc_count));
         }

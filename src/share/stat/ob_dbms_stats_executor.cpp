@@ -272,7 +272,7 @@ int ObDbmsStatsExecutor::collect_last_part_and_global_if_timeout(
       }
     }
     temp_stat_param.duration_time_ = temp_stat_param.duration_time_ > 0
-                                         ? std::min(temp_stat_param.duration_time_ / 100, 10000000L)
+                                         ? std::min(temp_stat_param.duration_time_ / 100, static_cast<int64_t>(10000000L))
                                          : 10000000L;  // extra 10s
     int64_t origin_duration_time = THIS_WORKER.get_timeout_ts();
     sql::ObSQLSessionInfo *origin_session = THIS_WORKER.get_session();
@@ -1787,7 +1787,7 @@ int ObDbmsStatsExecutor::cancel_gather_stats(ObExecContext &ctx, ObString &task_
           LOG_WARN("failed to cancel gather stats", K(ret));
         } else {/*do nothing*/}
       } else {//remote
-        int64_t timeout = std::min(10000000L, THIS_WORKER.get_timeout_remain());
+        int64_t timeout = std::min(static_cast<int64_t>(10000000L), THIS_WORKER.get_timeout_remain());
         obrpc::ObCancelGatherStatsArg arg;
         arg.tenant_id_ = tenant_id;
         arg.task_id_ = task_id;

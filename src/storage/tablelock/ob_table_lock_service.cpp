@@ -2344,7 +2344,7 @@ int ObTableLockService::start_tx_(ObTableLockCtx &ctx)
   ObTxParam &tx_param = ctx.tx_param_;
   tx_param.access_mode_ = ObTxAccessMode::RW;
   tx_param.isolation_ = ObTxIsolationLevel::RC;
-  tx_param.timeout_us_ = common::max(0l, ctx.abs_timeout_ts_ - ObTimeUtility::current_time());
+  tx_param.timeout_us_ = common::max(static_cast<int64_t>(0), ctx.abs_timeout_ts_ - ObTimeUtility::current_time());
   tx_param.lock_timeout_us_ = -1; // use abs_timeout_ts as lock wait timeout
   tx_param.cluster_id_ = GCONF.cluster_id;
   // no session id here

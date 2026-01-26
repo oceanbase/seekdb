@@ -19,6 +19,13 @@
 #include <cstdint>                                       // UINT64_MAX
 #include <string.h>                                      // strncmp...
 #include <dirent.h>                                      // dirent
+#include <fcntl.h>                                       // O_RDONLY, O_RDWR, O_SYNC
+#ifdef __APPLE__
+// macOS doesn't support O_DIRECT, define it as 0 (no-op)
+#ifndef O_DIRECT
+#define O_DIRECT 0
+#endif
+#endif
 #include "lib/ob_errno.h"                                // errno
 #include "lib/utility/ob_print_utils.h"                  // databuff_printf
 #include "lib/container/ob_fixed_array.h"                // ObFixedArray

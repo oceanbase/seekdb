@@ -18,6 +18,10 @@
 #include <fstream>
 #include "deps/oblib/src/lib/rc/context.h"
 
+#ifdef __APPLE__
+#define __timezone timezone
+#endif
+
 using namespace oceanbase::common;
 using namespace std;
 

@@ -22,6 +22,7 @@
 #include <cstddef>
 #include <utility>
 #include "lib/ob_define.h"
+#include "lib/utility/ob_platform_utils.h"
 #include "lib/ob_abort.h"
 #include "lib/utility/ob_macro_utils.h"
 #include "lib/alloc/alloc_assist.h"
@@ -59,8 +60,7 @@ static const int64_t ALLOC_ABLOCK_CONCURRENCY = 4;
 
 static ssize_t get_page_size()
 {
-  static ssize_t ps = getpagesize();
-  return ps;
+  return ob_get_page_size();
 }
 
 class BlockSet;

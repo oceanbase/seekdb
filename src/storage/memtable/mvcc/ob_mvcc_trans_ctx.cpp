@@ -2247,7 +2247,7 @@ void ObTransCallbackMgr::check_all_redo_flushed()
 #endif
   }
 }
-__attribute__((noinline))
+__attribute__((noinline, weak))
 int ObTransCallbackMgr::get_logging_list_count() const
 {
   return callback_lists_ ? MAX_CALLBACK_LIST_COUNT : 1;

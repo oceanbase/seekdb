@@ -31,7 +31,9 @@
 #include <net/if.h>
 #include <inttypes.h>
 #include <sys/types.h>
+#ifdef __linux__
 #include <linux/unistd.h>
+#endif
 #include <string>
 
 #include "lib/string/ob_string.h"

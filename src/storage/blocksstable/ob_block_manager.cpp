@@ -584,7 +584,7 @@ int ObBlockManager::report_bad_block(const MacroBlockId &macro_block_id,
                                      const char *file_path) {
   int ret = OB_SUCCESS;
   const int64_t MAX_BAD_BLOCK_NUMBER =
-      std::max(10L, OB_STORAGE_OBJECT_MGR.get_total_macro_block_count() / 100);
+      std::max(static_cast<int64_t>(10), OB_STORAGE_OBJECT_MGR.get_total_macro_block_count() / 100);
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("The block manager has not been inited", K(ret));

@@ -2988,7 +2988,7 @@ int ObDirectLoadSliceWriter::fill_sstable_slice(
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("invalid args", KR(ret), K(datum_rows.get_column_count()), K(data_desc.get_col_desc_array()));
     } else { // row reshape
-      ObBatchSelector selector(0L, datum_rows.row_count_);
+      ObBatchSelector selector(static_cast<int64_t>(0), datum_rows.row_count_);
       for (int64_t i = 0; OB_SUCC(ret) && i < datum_rows.get_column_count(); ++i) {
         const ObColDesc &col_desc = data_desc.get_col_desc_array().at(i);
         ObIVector *vector = datum_rows.vectors_.at(i);

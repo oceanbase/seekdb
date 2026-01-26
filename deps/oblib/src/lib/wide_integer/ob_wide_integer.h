@@ -154,7 +154,7 @@ struct ObWideInteger
   template<typename T>
   int bitwise_and(const T &rhs, ObWideInteger<Bits, Signed> &res) const
   {
-    return _impl::template bitwise_and(*this, rhs, res);
+    return _impl::bitwise_and(*this, rhs, res);
   }
 
   template<int check_overflow, typename T>
@@ -601,7 +601,7 @@ template<unsigned Bits, typename T>
 ObWideInteger<Bits> operator&(const ObWideInteger<Bits> &lhs, const T &rhs)
 {
   ObWideInteger<Bits> res;
-  ObWideInteger<Bits>::_impl::template bitwise_and(lhs, rhs, res);
+  ObWideInteger<Bits>::_impl::bitwise_and(lhs, rhs, res);
   return res;
 }
 
@@ -609,7 +609,7 @@ template<unsigned Bits, typename T>
 ObWideInteger<Bits> operator&(const T &lhs, const ObWideInteger<Bits> &rhs)
 {
   ObWideInteger<Bits> res;
-  ObWideInteger<Bits>::_impl::template bitwise_and(rhs, lhs, res);
+  ObWideInteger<Bits>::_impl::bitwise_and(rhs, lhs, res);
   return res;
 }
 
@@ -621,9 +621,9 @@ ObWideInteger<Bits1 >= Bits2 ? Bits1 : Bits2> operator&(const ObWideInteger<Bits
   using ResType = ObWideInteger<res_bits>;
   ResType res;
   if (Bits1 >= Bits2) {
-    ObWideInteger<res_bits>::_impl::template bitwise_add(lhs, rhs, res);
+    ObWideInteger<res_bits>::_impl::bitwise_and(lhs, rhs, res);
   } else {
-    ObWideInteger<res_bits>::_impl::template bitwise_add(rhs, lhs, res);
+    ObWideInteger<res_bits>::_impl::bitwise_and(rhs, lhs, res);
   }
   return res;
 }

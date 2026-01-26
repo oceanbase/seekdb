@@ -6490,7 +6490,7 @@ int ObSPIService::store_result(ObPLExecCtx *ctx,
       } else if (PL_REF_CURSOR_TYPE == row_desc.at(0).get_meta_type().get_extend_type()) {
         ObObj tmp_obj;
         OX (tmp_obj.reset());
-        OX (tmp_obj.set_extend(NULL, PL_REF_CURSOR_TYPE));
+        OX (tmp_obj.set_extend(static_cast<int64_t>(0), PL_REF_CURSOR_TYPE));
         OZ (tmp_obj_array.push_back(tmp_obj));
         OX (calc_array = &tmp_obj_array);
       }

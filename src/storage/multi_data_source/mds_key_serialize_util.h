@@ -15,7 +15,7 @@
  */
 #ifndef OB_STORAGE_MULTI_DATA_SOURCE_MDS_KEY_SERIALIZE_UTIL_H_
 #define OB_STORAGE_MULTI_DATA_SOURCE_MDS_KEY_SERIALIZE_UTIL_H_
-#include "/usr/include/stdint.h"
+#include <stdint.h>
 namespace oceanbase
 {
 namespace storage

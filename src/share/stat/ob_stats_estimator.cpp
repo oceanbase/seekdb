@@ -267,7 +267,7 @@ int ObStatsEstimator::add_hint(const ObString &hint_str,
       LOG_WARN("failed to alloc memory", K(ret), K(buf), K(strlen(str)));
     } else {
       MEMCPY(buf, str, strlen(str));
-      other_hints_.assign_ptr(buf, strlen(str));
+      other_hints_.assign_ptr(buf, static_cast<ObString::obstr_size_t>(strlen(str)));
     }
   }
   if (OB_SUCC(ret) && hint_str.length() > 0) {

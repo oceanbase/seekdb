@@ -386,7 +386,8 @@ TEST_F(FTParserTest, IK_LLT)
   int ret = OB_SUCCESS;
   ObArenaAllocator alloc(ObModIds::TEST);
   ObFTDictHub hub;
-  hub.init();
+  ret = hub.init();
+  ASSERT_EQ(OB_SUCCESS, ret);
 
   auto case_insensitive_equal = [](const std::string &a, const std::string &b) {
     bool ret
@@ -856,14 +857,16 @@ TEST_F(FTParserTest, DISABLED_benchmark)
   {
     // load dict
     ik_tokenize(test_str, sizeof(test_str), true);
-    std::chrono::system_clock::time_point now = std::chrono::high_resolution_clock::now();
+    auto steady_now = std::chrono::high_resolution_clock::now();
+    std::chrono::system_clock::time_point now = std::chrono::system_clock::now();
     long start
         = std::chrono::duration_cast<std::chrono::nanoseconds>(now.time_since_epoch()).count();
     int times = 1000;
     for (int i = 0; i < times; i++) {
       ik_tokenize(test_str, sizeof(test_str), true);
     }
-    now = std::chrono::high_resolution_clock::now();
+    steady_now = std::chrono::high_resolution_clock::now();
+    now = std::chrono::system_clock::now();
     long end = std::chrono::duration_cast<std::chrono::nanoseconds>(now.time_since_epoch()).count();
     long time_cost_in_ns = end - start;
     std::cout << "Time cost pertime: " << time_cost_in_ns / 1000000 / times << ".\n";
@@ -872,14 +875,16 @@ TEST_F(FTParserTest, DISABLED_benchmark)
   }
 
   {
-    std::chrono::system_clock::time_point now = std::chrono::high_resolution_clock::now();
+    auto steady_now = std::chrono::high_resolution_clock::now();
+    std::chrono::system_clock::time_point now = std::chrono::system_clock::now();
     long start
         = std::chrono::duration_cast<std::chrono::nanoseconds>(now.time_since_epoch()).count();
     int times = 1000;
     for (int i = 0; i < times; i++) {
       ik_tokenize(test_str, sizeof(test_str), false);
     }
-    now = std::chrono::high_resolution_clock::now();
+    steady_now = std::chrono::high_resolution_clock::now();
+    now = std::chrono::system_clock::now();
     long end = std::chrono::duration_cast<std::chrono::nanoseconds>(now.time_since_epoch()).count();
     long time_cost_in_ns = end - start;
     std::cout << "Time cost pertime: " << time_cost_in_ns / 1000000 / times << ".\n";

@@ -1111,8 +1111,13 @@ uint64_t ObCharset::hash(ObCollationType collation_type,
       LOG_WARN("unexpected error. invalid argument(s)", K(cs), K(cs->coll), K(lbt()));
     } else {
       seed = 0xc6a4a7935bd1e995;
+      // hash_sort expects ulong* (unsigned long*), but ret and seed are uint64_t
+      // On macOS ARM64, ulong is unsigned long, while uint64_t is unsigned long long
+      ulong ret_ulong = static_cast<ulong>(ret);
+      ulong seed_ulong = static_cast<ulong>(seed);
       cs->coll->hash_sort(cs, reinterpret_cast<const unsigned char *>(str), str_len,
-                          &ret, &seed, calc_end_space, hash_algo);
+                          &ret_ulong, &seed_ulong, calc_end_space, hash_algo);
+      ret = static_cast<uint64_t>(ret_ulong);
     }
   }
   return ret;
@@ -3768,7 +3773,7 @@ int ObCharsetUtils::remove_char_endspace(ObString &str,
   end = (const char *) charsetInfo->cset->skip_trailing_space(charsetInfo, (const unsigned char *)str.ptr(), str.length());
 
   if (end >= str.ptr()) {
-    str.assign_ptr(str.ptr(), end - str.ptr());
+    str.assign_ptr(str.ptr(), static_cast<ObString::obstr_size_t>(end - str.ptr()));
   } else {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("str len < 0", K(ret));

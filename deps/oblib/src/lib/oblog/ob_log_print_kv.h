@@ -391,10 +391,36 @@ inline int logdata_print_info_begin(char *buf, const int64_t buf_len, int64_t &p
   return ret;
 }
 
+// print arithmetic types (basic types like int, long, unsigned long, etc.)
+template<class T>
+typename std::enable_if<std::is_arithmetic<T>::value && !std::is_enum<T>::value, int>::type
+logdata_print_key_obj(char *buf, const int64_t buf_len, int64_t &pos, const char *key,
+                      const bool with_comma, const T &obj, FalseType)
+{
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(pos < 0)) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (OB_UNLIKELY(pos >= buf_len)) {
+    ret = OB_SIZE_OVERFLOW;
+  } else {
+    if (std::is_integral<T>::value) {
+      if (std::is_unsigned<T>::value) {
+        ret = logdata_printf(buf, buf_len, pos, WITH_COMMA("%s=%lu"), key, static_cast<unsigned long>(obj));
+      } else {
+        ret = logdata_printf(buf, buf_len, pos, WITH_COMMA("%s=%ld"), key, static_cast<long>(obj));
+      }
+    } else {
+      ret = logdata_printf(buf, buf_len, pos, WITH_COMMA("%s=%g"), key, static_cast<double>(obj));
+    }
+  }
+  return ret;
+}
+
 // print object with to_string() member
 template<class T>
-int logdata_print_key_obj(char *buf, const int64_t buf_len, int64_t &pos, const char *key,
-                          const bool with_comma, const T &obj, FalseType)
+typename std::enable_if<!std::is_arithmetic<T>::value || std::is_enum<T>::value, int>::type
+logdata_print_key_obj(char *buf, const int64_t buf_len, int64_t &pos, const char *key,
+                      const bool with_comma, const T &obj, FalseType)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(pos < 0)) {

@@ -66,8 +66,25 @@ void TestCharset::gen_random_unicode_string(const int len, char *res, int &real_
   int i = 0;
   int unicode_point = 0;
   std::wstring_convert<std::codecvt_utf8<char32_t>, char32_t> converter;
+#ifdef __APPLE__
+  auto is_valid_scalar = [](int code_point) {
+    return code_point >= 0 && code_point <= 0x10FFFF &&
+           !(code_point >= 0xD800 && code_point <= 0xDFFF);
+  };
+#endif
   for (i = 0; i < len; ) {
     const int bytes = random_range(1, 7);
+#ifdef __APPLE__
+    do {
+      if (bytes < 4) {
+        unicode_point = random_range(0, 127);
+      } else if (bytes < 6) {
+        unicode_point = random_range(0xFF, 0xFFFF);
+      } else if (bytes < 7) {
+        unicode_point = random_range(0XFFFF, 0X10FFFF);
+      }
+    } while (!is_valid_scalar(unicode_point));
+#else
     if (bytes < 4) {
       unicode_point = random_range(0, 127);
     } else if (bytes < 6) {
@@ -75,6 +92,7 @@ void TestCharset::gen_random_unicode_string(const int len, char *res, int &real_
     } else if (bytes < 7) {
       unicode_point = random_range(0XFFFF, 0X10FFFF);
     }
+#endif
     std::string utf_str = converter.to_bytes(unicode_point);
     //fprintf(stdout, "code_point=%d\n", unicode_point);
     //fprintf(stdout, "utf8_str=%s\n", utf_str.c_str());
@@ -537,9 +555,9 @@ TEST_F(TestCharset, tolower)
   ObString y1;
   ObString y2;
   ObString y3;
-  y1.assign_ptr(a1, strlen(a1));
-  y2.assign_ptr(a2, strlen(a2));
-  y3.assign_ptr(a3, strlen(a3));
+  y1.assign_ptr(a1, static_cast<int64_t>(strlen(a1)));
+  y2.assign_ptr(a2, static_cast<int64_t>(strlen(a2)));
+  y3.assign_ptr(a3, static_cast<int64_t>(strlen(a3)));
   fprintf(stdout, "ret:%p, %d\n", y1.ptr(), y1.length() );
   for (int cs_i = CHARSET_INVALID; cs_i < CHARSET_MAX; ++cs_i) {
     auto charset_type = static_cast<ObCharsetType>(cs_i);
@@ -573,9 +591,9 @@ TEST_F(TestCharset, toupper)
   ObString y1;
   ObString y2;
   ObString y3;
-  y1.assign_ptr(a1, strlen(a1));
-  y2.assign_ptr(a2, strlen(a2));
-  y3.assign_ptr(a3, strlen(a3));
+  y1.assign_ptr(a1, static_cast<int64_t>(strlen(a1)));
+  y2.assign_ptr(a2, static_cast<int64_t>(strlen(a2)));
+  y3.assign_ptr(a3, static_cast<int64_t>(strlen(a3)));
   fprintf(stdout, "ret:%p, %d\n", y1.ptr(), y1.length() );
   for (int cs_i = CHARSET_INVALID; cs_i < CHARSET_MAX; ++cs_i) {
     auto charset_type = static_cast<ObCharsetType>(cs_i);

@@ -314,7 +314,7 @@ int ObDfoWorkerAssignment::assign_worker(ObDfoMgr &dfo_mgr,
     if (match_expected) {
       val = child->get_dop();
     } else if (compatible_before_420) {
-      val = std::max(1L, static_cast<int64_t>(static_cast<double>(child->get_dop()) * scale_rate));
+      val = std::max(static_cast<int64_t>(1), static_cast<int64_t>(static_cast<double>(child->get_dop()) * scale_rate));
     } else {
       val = 1L + static_cast<int64_t>(std::max(static_cast<double>(child->get_dop() - 1), 0.0) * scale_rate);
     }

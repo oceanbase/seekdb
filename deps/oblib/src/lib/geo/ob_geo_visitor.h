@@ -492,7 +492,7 @@ int ObIWkbVisitorImplement::polygon_do_visitor(T_IBIN *geo, ObIGeoVisitor &visit
         const T_INNER_RING &rings = polygon->inner_rings();
         typename T_INNER_RING::iterator iter = rings.begin();
         for ( ; iter != rings.end() && OB_SUCC(ret) && !visitor.is_end(geo); ++iter) {
-          data.assign_ptr(reinterpret_cast<const char *>(iter.operator->()), sizeof(T_RING));
+          data.assign_ptr(reinterpret_cast<const char *>(iter.operator->()), static_cast<ObString::obstr_size_t>(sizeof(T_RING)));
           ring.set_data(data);
           if (OB_FAIL(ring.do_visit(visitor))) {
             OB_LOG(WARN,"failed to do geog polygon inner ring visit", K(ret));

@@ -17,7 +17,30 @@
 #ifndef SRC_SHARE_OB_LOCAL_DEVICE_H_
 #define SRC_SHARE_OB_LOCAL_DEVICE_H_
 
+#ifdef __linux__
 #include <libaio.h>
+#elif defined(__APPLE__)
+// macOS doesn't have libaio, provide stub types
+#include <stdint.h>
+#include <stddef.h>
+struct iocb {
+  void *data;
+  uint32_t aio_fildes;
+  uint64_t aio_offset;
+  void *aio_buf;
+  size_t aio_nbytes;
+  int aio_reqprio;
+  int aio_lio_opcode;
+};
+typedef void* io_context_t;
+struct io_event {
+  void *data;
+  struct iocb *obj;
+  uint64_t data2;
+  uint64_t res;
+  uint64_t res2;
+};
+#endif
 #include "lib/allocator/ob_vslice_alloc.h"
 #include "common/storage/ob_io_device.h"
 

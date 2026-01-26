@@ -1986,11 +1986,46 @@ int ObLLVMHelper::get_llvm_type(common::ObObjType obj_type, ObLLVMType &type)
   if (OB_ISNULL(jc_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("jc is NULL", K(jc_), K(ret));
-  } else if (obj_type < 0 || obj_type >= common::ObMaxType || OB_ISNULL(OB_IR_TYPE[obj_type])) {
+  } else if (obj_type < 0 || obj_type >= common::ObMaxType) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("obj_type passed in is invalid", K(obj_type), K(ret));
   } else {
-    type.set_v(OB_IR_TYPE[obj_type](jc_->get_context(), 0));
+    llvm::LLVMContext &ctx = jc_->get_context();
+    llvm::Type *llvm_type = nullptr;
+
+    // Handle pointer types separately to avoid variadic function pointer issues
+    // In LLVM 17 with opaque pointers, all pointer types should use the same base ptr type
+    switch (obj_type) {
+      case common::ObVarcharType:    // 22
+      case common::ObCharType:       // 23
+      case common::ObHexStringType:  // 24
+      case common::ObEnumInnerType:  // 34
+      case common::ObSetInnerType:   // 35
+        // These are string/char pointer types - use getInt8PtrTy with explicit address space 0
+        llvm_type = llvm::Type::getInt8PtrTy(ctx, 0);
+        break;
+      case common::ObNumberType:     // 15
+      case common::ObUNumberType:    // 16
+        // Number types use int32 pointer
+        llvm_type = llvm::Type::getInt32PtrTy(ctx, 0);
+        break;
+      default:
+        // For non-pointer types, use the original array approach
+        if (OB_ISNULL(OB_IR_TYPE[obj_type])) {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("obj_type passed in is invalid (no handler)", K(obj_type), K(ret));
+        } else {
+          llvm_type = OB_IR_TYPE[obj_type](ctx);
+        }
+        break;
+    }
+
+    if (OB_SUCC(ret) && OB_NOT_NULL(llvm_type)) {
+      type.set_v(llvm_type);
+    } else if (OB_SUCC(ret)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("failed to get llvm type", K(obj_type), K(ret));
+    }
   }
   return ret;
 }

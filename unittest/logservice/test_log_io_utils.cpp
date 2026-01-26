@@ -31,7 +31,12 @@ TEST(TestLogIOUtils, test_rename)
 
   const char *src_name = "src_file";
   const char *dest_name = "src_file.tmp";
+#ifdef __APPLE__
+  char buf[PATH_MAX];
+  const char *curr_dir_name = getcwd(buf, sizeof(buf));
+#else
   const char *curr_dir_name  = get_current_dir_name();
+#endif
   int dir_fd = 0;
   system("rm -rf src_file*");
   EXPECT_LE(0, dir_fd = ::open(curr_dir_name, O_DIRECTORY | O_RDONLY));

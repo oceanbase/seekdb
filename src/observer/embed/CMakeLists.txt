@@ -161,10 +161,10 @@ if(BUILD_EMBED_MODE)
 
   target_link_libraries(${libname} PUBLIC
     oceanbase_static
-    -static-libgcc
-    -static-libstdc++
+    $<$<NOT:$<PLATFORM_ID:Darwin>>:-static-libgcc>
+    $<$<NOT:$<PLATFORM_ID:Darwin>>:-static-libstdc++>
   )
-  if (OB_USE_LLD)
+  if (OB_USE_LLD AND NOT APPLE)
     target_link_options(${libname} PRIVATE -fuse-ld=${DEVTOOLS_DIR}/bin/ld.lld)
   endif()
 endif()

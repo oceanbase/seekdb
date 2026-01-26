@@ -725,16 +725,6 @@ ObIDag::~ObIDag()
   reset();
 }
 
-OB_INLINE bool ObIDag::inner_check_can_retry()
-{
-  bool bret = false;
-  if (running_times_ < max_retry_times_) {
-    running_times_++;
-    bret = true;
-  }
-  return bret;
-}
-
 bool ObIDag::check_can_retry()
 {
   bool bret = false;

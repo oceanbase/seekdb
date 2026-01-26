@@ -20,7 +20,12 @@
 #include <atomic>
 #include "lib/ob_errno.h"
 #include "lib/list/ob_dlist.h"
+#ifdef __linux__
 #include <linux/futex.h>
+#endif
+#ifdef __APPLE__
+#include <pthread.h>
+#endif
 #include "lib/ob_abort.h"
 
 extern "C" {
@@ -29,6 +34,7 @@ extern int futex_hook(uint32_t *uaddr, int futex_op, uint32_t val, const struct 
 
 #define futex(...) futex_hook(__VA_ARGS__)
 
+#ifdef __linux__
 inline int futex_wake(volatile int *p, int val)
 {
   return futex((uint32_t *)p, FUTEX_WAKE_PRIVATE, val, NULL);
@@ -42,6 +48,11 @@ inline int futex_wait(volatile int *p, int val, const timespec *timeout)
   }
   return ret;
 }
+#elif defined(__APPLE__)
+// macOS implementation using ulock (Darwin's native futex-like mechanism)
+extern int futex_wake(volatile int *p, int val);
+extern int futex_wait(volatile int *p, int val, const timespec *timeout);
+#endif
 
 namespace oceanbase {
 namespace lib {

@@ -24,15 +24,15 @@ namespace storage
 namespace mds
 {
 
-void *DefaultAllocator::alloc(const int64_t size)  { return ob_malloc(size, "MDS"); }
+__attribute__((weak)) void *DefaultAllocator::alloc(const int64_t size)  { return ob_malloc(size, "MDS"); }
 void *DefaultAllocator::alloc(const int64_t size, const ObMemAttr &attr) { return ob_malloc(size, attr); }
-void DefaultAllocator::free(void *ptr) { ob_free(ptr); }
+__attribute__((weak)) void DefaultAllocator::free(void *ptr) { ob_free(ptr); }
 void DefaultAllocator::set_label(const lib::ObLabel &) {}
 DefaultAllocator &DefaultAllocator::get_instance() { static DefaultAllocator alloc; return alloc; }
 int64_t DefaultAllocator::get_alloc_times() { return ATOMIC_LOAD(&get_instance().alloc_times_); }
 int64_t DefaultAllocator::get_free_times() { return ATOMIC_LOAD(&get_instance().free_times_); }
 
-void *MdsAllocator::alloc(const int64_t size)
+__attribute__((weak)) void *MdsAllocator::alloc(const int64_t size)
 {
   void *ptr = MTL(share::ObSharedMemAllocMgr *)->mds_allocator().alloc(size);
   if (OB_NOT_NULL(ptr)) {
@@ -46,7 +46,7 @@ void *MdsAllocator::alloc(const int64_t size, const ObMemAttr &attr)
   return MTL(share::ObSharedMemAllocMgr *)->mds_allocator().alloc(size, attr);
 }
 
-void MdsAllocator::free(void *ptr) {
+__attribute__((weak)) void MdsAllocator::free(void *ptr) {
   if (OB_NOT_NULL(ptr)) {
     ATOMIC_INC(&free_times_);
     MTL(share::ObSharedMemAllocMgr *)->mds_allocator().free(ptr);

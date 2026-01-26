@@ -1031,7 +1031,9 @@ int ObAdminObjectStorageDriverQualityExecutor::execute(int argc, char *argv[])
     OSDQLogEntry::print_log("TEST RESULT FAILED", "", RED_COLOR_PREFIX);
   }
   monitor_.destroy();
+#ifdef __linux__
   malloc_trim(0);
+#endif
   free_scene_(scene);
   if (OB_SUCC(ret)) {
     OSDQLogEntry::print_log("TEST RESULT SUCCESS", "");
@@ -1161,10 +1163,14 @@ int ObAdminObjectStorageDriverQualityExecutor::parse_cmd_(int argc, char *argv[]
 int ObAdminObjectStorageDriverQualityExecutor::set_environment_()
 {
   int ret = OB_SUCCESS;
+#ifndef __APPLE__
   init_malloc_hook();
+#endif
   lib::set_memory_limit(MEMORY_LIMITED_SIZE);
   lib::set_tenant_memory_limit(OB_SERVER_TENANT_ID, MEMORY_LIMITED_SIZE);
+#ifdef __linux__
   mallopt(M_MMAP_THRESHOLD, 128 * 1024);
+#endif
   OB_LOGGER.set_log_level("INFO");
 
   ObTenantBase *tenant_base = new ObTenantBase(OB_SERVER_TENANT_ID);

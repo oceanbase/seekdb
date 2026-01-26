@@ -19,6 +19,11 @@
 #include "core/ob_jit_allocator.h"
 #include "common/ob_clock_generator.h"
 
+#if defined(__APPLE__) && defined(__MACH__)
+#include <pthread.h>
+#include <libkern/OSCacheControl.h>
+#endif
+
 using namespace oceanbase::common;
 
 namespace oceanbase {
@@ -78,17 +83,20 @@ class ObJitMemory {
 public:
   // num_bytes bytes of virtual memory is made.
   // flags is used to set the initial protection flags for the block
-  static ObJitMemoryBlock allocate_mapped_memory(int64_t num_bytes, int64_t p_flags);
+  // is_code_memory: on macOS, code memory needs special handling with MAP_JIT
+  static ObJitMemoryBlock allocate_mapped_memory(int64_t num_bytes, int64_t p_flags, bool is_code_memory = false);
 
   // block describes the memory to be released.
   static int release_mapped_memory(ObJitMemoryBlock &block);
 
   // set memory protection state.
-  static int protect_mapped_memory(const ObJitMemoryBlock &block, int64_t p_flags);
+  // is_code_memory: on macOS, code memory uses pthread_jit_write_protect_np instead of mprotect
+  static int protect_mapped_memory(const ObJitMemoryBlock &block, int64_t p_flags, bool is_code_memory = false);
 };
 
 ObJitMemoryBlock ObJitMemory::allocate_mapped_memory(int64_t num_bytes,
-                                                     int64_t p_flags)
+                                                     int64_t p_flags,
+                                                     bool is_code_memory)
 {
   if (num_bytes == 0) {
     return ObJitMemoryBlock();
@@ -98,6 +106,18 @@ ObJitMemoryBlock ObJitMemory::allocate_mapped_memory(int64_t num_bytes,
   int fd = -1;
   uintptr_t start = 0;
   int64_t mm_flags = MAP_PRIVATE | MAP_ANONYMOUS;
+#if defined(__APPLE__) && defined(__MACH__)
+  if (is_code_memory) {
+    // On macOS, use MAP_JIT for JIT code to enable W^X switching
+    // This is required because macOS enforces W^X (Write XOR Execute) policy
+    mm_flags |= MAP_JIT;
+    // For MAP_JIT on macOS, we need to use PROT_READ | PROT_WRITE | PROT_EXEC initially
+    // The actual W^X protection is managed via pthread_jit_write_protect_np()
+    p_flags = PROT_READ | PROT_WRITE | PROT_EXEC;
+  }
+#else
+  (void)is_code_memory;  // Suppress unused parameter warning on non-macOS
+#endif
   void *addr = nullptr;
   // Loop mmap memory, until memory is allocated, avoid core dump by llvm internal if memory allocation fails
   do {
@@ -111,9 +131,18 @@ ObJitMemoryBlock ObJitMemory::allocate_mapped_memory(int64_t num_bytes,
     } else {
       LOG_DEBUG("allocate mapped memory success!",
                 K(addr), K(start),
-                K(page_size), K(num_pages), K(num_pages*page_size), K(num_bytes), K(p_flags));
+                K(page_size), K(num_pages), K(num_pages*page_size), K(num_bytes), K(p_flags), K(is_code_memory));
     }
   } while (MAP_FAILED == addr);
+
+#if defined(__APPLE__) && defined(__MACH__)
+  if (is_code_memory && addr != MAP_FAILED) {
+    // After allocating MAP_JIT memory, we need to enable write mode
+    // so that LLVM can write code into it. The default state might be
+    // executable (not writable), so we explicitly switch to writable mode.
+    pthread_jit_write_protect_np(false);
+  }
+#endif
 
   return ObJitMemoryBlock((char *)addr, num_pages*page_size);
 }
@@ -136,7 +165,8 @@ int ObJitMemory::release_mapped_memory(ObJitMemoryBlock &block)
 }
 
 int ObJitMemory::protect_mapped_memory(const ObJitMemoryBlock &block,
-                                       int64_t p_flags)
+                                       int64_t p_flags,
+                                       bool is_code_memory)
 {
   int ret = OB_SUCCESS;
   int tmp_ret = 0;
@@ -145,6 +175,40 @@ int ObJitMemory::protect_mapped_memory(const ObJitMemoryBlock &block,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(block), K(p_flags), K(ret));
   } else {
+#if defined(__APPLE__) && defined(__MACH__)
+    if (is_code_memory) {
+      // On macOS with MAP_JIT, we use pthread_jit_write_protect_np() to switch
+      // between writable and executable modes instead of mprotect
+      // When p_flags contains PROT_EXEC, we want to make the memory executable (disable write)
+      if (p_flags & PROT_EXEC) {
+        // Switch from writable to executable mode
+        pthread_jit_write_protect_np(true);
+        // Flush instruction cache to ensure coherency
+        sys_icache_invalidate(block.addr_, block.size_);
+        LOG_DEBUG("macOS JIT: switched to executable mode", K(block));
+      } else {
+        // Switch to writable mode
+        pthread_jit_write_protect_np(false);
+        LOG_DEBUG("macOS JIT: switched to writable mode", K(block));
+      }
+    } else {
+      // For data memory on macOS, we still use mprotect (no MAP_JIT)
+      do {
+        tmp_ret = 0;
+        if (0 != (tmp_ret = ::mprotect((void*)((uintptr_t)block.addr_& ~(page_size-1)),
+                                       page_size*((block.size_+page_size-1)/page_size),
+                                       p_flags))) {
+          if (REACH_TIME_INTERVAL(10000000)) {
+            LOG_ERROR("jit block mprotect failed", K(block), K(errno), K(tmp_ret),
+                      K((uintptr_t)block.addr_& ~(page_size - 1)),
+                      K(page_size * ((block.size_ + page_size - 1) / page_size)),
+                      K(p_flags));
+          }
+        }
+      } while (-1 == tmp_ret && 12 == errno);
+    }
+#else
+    (void)is_code_memory;  // Suppress unused parameter warning on non-macOS
     do {
       tmp_ret = 0;
       if (0 != (tmp_ret = ::mprotect((void*)((uintptr_t)block.addr_& ~(page_size-1)),
@@ -159,6 +223,7 @@ int ObJitMemory::protect_mapped_memory(const ObJitMemoryBlock &block,
       }
     } while (-1 == tmp_ret && 12 == errno);
     // `-1 == tmp_ret` means `mprotect` failed, `12 == errno` means `Cannot allocate memory`
+#endif
   }
 
   return ret;
@@ -184,7 +249,7 @@ void *ObJitMemoryBlock::alloc_align(int64_t sz, int64_t align)
   return ret;
 }
 
-void *ObJitMemoryGroup::alloc_align(int64_t sz, int64_t align, int64_t p_flags)
+void *ObJitMemoryGroup::alloc_align(int64_t sz, int64_t align, int64_t p_flags, bool is_code_memory)
 {
    void *ret = NULL;
    ObJitMemoryBlock *cur = header_;
@@ -199,7 +264,7 @@ void *ObJitMemoryGroup::alloc_align(int64_t sz, int64_t align, int64_t p_flags)
      cur = cur->next_;
    }
    if (NULL == avail_block) {
-     if (NULL != (cur = alloc_new_block(sz + align, p_flags))) {
+     if (NULL != (cur = alloc_new_block(sz + align, p_flags, is_code_memory))) {
        if (NULL == header_) {
          header_ = tailer_ = cur;
        } else {
@@ -227,10 +292,10 @@ void *ObJitMemoryGroup::alloc_align(int64_t sz, int64_t align, int64_t p_flags)
    return ret;
 }
 
-ObJitMemoryBlock *ObJitMemoryGroup::alloc_new_block(int64_t sz, int64_t p_flags)
+ObJitMemoryBlock *ObJitMemoryGroup::alloc_new_block(int64_t sz, int64_t p_flags, bool is_code_memory)
 {
   ObJitMemoryBlock *ret = NULL;
-  ObJitMemoryBlock block = ObJitMemory::allocate_mapped_memory(sz, p_flags);
+  ObJitMemoryBlock block = ObJitMemory::allocate_mapped_memory(sz, p_flags, is_code_memory);
   if (OB_ISNULL(block.addr_) || 0 == block.size_) {
     ret = NULL;
   } else if (NULL != (ret = new ObJitMemoryBlock(block.addr_,
@@ -243,15 +308,15 @@ ObJitMemoryBlock *ObJitMemoryGroup::alloc_new_block(int64_t sz, int64_t p_flags)
   return ret;
 }
 
-int ObJitMemoryGroup::finalize(int64_t p_flags)
+int ObJitMemoryGroup::finalize(int64_t p_flags, bool is_code_memory)
 {
   int ret = OB_SUCCESS;
   ObJitMemoryBlock *cur = header_;
   for (int64_t i = 0;
        OB_SUCCESS == ret && i < block_cnt_ && NULL != cur;
        i++) {
-    if (OB_FAIL(ObJitMemory::protect_mapped_memory(*cur, p_flags))) {
-      LOG_WARN("jit fail to finalize memory", K(p_flags), K(*cur), K(ret));
+    if (OB_FAIL(ObJitMemory::protect_mapped_memory(*cur, p_flags, is_code_memory))) {
+      LOG_WARN("jit fail to finalize memory", K(p_flags), K(*cur), K(ret), K(is_code_memory));
     }
     cur = cur->next_;
   }
@@ -259,10 +324,10 @@ int ObJitMemoryGroup::finalize(int64_t p_flags)
   return ret;
 }
 
-void ObJitMemoryGroup::reserve(int64_t sz, int64_t align, int64_t p_flags)
+void ObJitMemoryGroup::reserve(int64_t sz, int64_t align, int64_t p_flags, bool is_code_memory)
 {
   ObJitMemoryBlock *cur  = NULL;
-  if (NULL != (cur = alloc_new_block(sz + align, p_flags))) {
+  if (NULL != (cur = alloc_new_block(sz + align, p_flags, is_code_memory))) {
     if (NULL == header_) {
       header_ = tailer_ = cur;
     } else {
@@ -307,23 +372,23 @@ void *ObJitAllocator::alloc(const JitMemType mem_type, int64_t sz, int64_t align
     case JMT_RO: {
       ret =
 #if defined(__aarch64__)
-          code_mem_
+          // On ARM64, use code_mem_ with is_code_memory=true
+          code_mem_.alloc_align(sz, align, PROT_WRITE | PROT_READ, true /*is_code_memory*/);
 #else
-          ro_data_mem_
+          ro_data_mem_.alloc_align(sz, align, PROT_WRITE | PROT_READ, false /*is_code_memory*/);
 #endif
-          .alloc_align(sz, align, PROT_WRITE | PROT_READ);
     } break;
     case JMT_RW: {
       ret =
 #if defined(__aarch64__)
-          code_mem_
+          // On ARM64, use code_mem_ with is_code_memory=true
+          code_mem_.alloc_align(sz, align, PROT_WRITE | PROT_READ, true /*is_code_memory*/);
 #else
-          rw_data_mem_
+          rw_data_mem_.alloc_align(sz, align, PROT_WRITE | PROT_READ, false /*is_code_memory*/);
 #endif
-          .alloc_align(sz, align, PROT_WRITE | PROT_READ);
     } break;
     case JMT_RWE: {
-      ret = code_mem_.alloc_align(sz, align, PROT_WRITE | PROT_READ);
+      ret = code_mem_.alloc_align(sz, align, PROT_WRITE | PROT_READ, true /*is_code_memory*/);
     } break;
     default : {
       LOG_WARN_RET(OB_ERR_UNEXPECTED, "invalid mem type", K(mem_type));
@@ -338,13 +403,13 @@ void ObJitAllocator::reserve(const JitMemType mem_type, int64_t sz, int64_t alig
   int ret = OB_SUCCESS;
   switch (mem_type) {
     case JMT_RO: {
-      ro_data_mem_.reserve(sz, align, PROT_WRITE | PROT_READ);
+      ro_data_mem_.reserve(sz, align, PROT_WRITE | PROT_READ, false /*is_code_memory*/);
     } break;
     case JMT_RW: {
-      rw_data_mem_.reserve(sz, align, PROT_WRITE | PROT_READ);
+      rw_data_mem_.reserve(sz, align, PROT_WRITE | PROT_READ, false /*is_code_memory*/);
     } break;
     case JMT_RWE: {
-      code_mem_.reserve(sz, align, PROT_WRITE | PROT_READ);
+      code_mem_.reserve(sz, align, PROT_WRITE | PROT_READ, true /*is_code_memory*/);
     } break;
     default : {
       LOG_WARN("invalid mem type", K(mem_type));
@@ -356,13 +421,13 @@ void ObJitAllocator::reserve(const JitMemType mem_type, int64_t sz, int64_t alig
 bool ObJitAllocator::finalize()
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(ro_data_mem_.finalize(PROT_READ))) {
+  if (OB_FAIL(ro_data_mem_.finalize(PROT_READ, false /*is_code_memory*/))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("fail to finalize ro data memory", K(ret));
-  } else if (OB_FAIL(rw_data_mem_.finalize(PROT_READ | PROT_WRITE))) {
+  } else if (OB_FAIL(rw_data_mem_.finalize(PROT_READ | PROT_WRITE, false /*is_code_memory*/))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("fail to finalize rw data memory", K(ret));
-  } else if (OB_FAIL(code_mem_.finalize(PROT_READ | PROT_WRITE | PROT_EXEC))) {
+  } else if (OB_FAIL(code_mem_.finalize(PROT_READ | PROT_WRITE | PROT_EXEC, true /*is_code_memory*/))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("fail to finalize code memory", K(ret));
   }

@@ -47,16 +47,18 @@ public:
   }
   ~ObJitMemoryGroup() { free(); }
   // Traverse block_list when allocating, if there is a block with available size, then directly get memory from the block
-  void *alloc_align(int64_t sz, int64_t align, int64_t p_flags = PROT_READ | PROT_WRITE);
-  int finalize(int64_t p_flags);
+  // is_code_memory: on macOS, code memory needs special handling with MAP_JIT
+  void *alloc_align(int64_t sz, int64_t align, int64_t p_flags = PROT_READ | PROT_WRITE, bool is_code_memory = false);
+  // is_code_memory: on macOS, code memory uses pthread_jit_write_protect_np instead of mprotect
+  int finalize(int64_t p_flags, bool is_code_memory = false);
   //free all
   void free();
   void reset();
-  void reserve(int64_t sz, int64_t align, int64_t p_flags);
+  void reserve(int64_t sz, int64_t align, int64_t p_flags, bool is_code_memory = false);
 
   DECLARE_TO_STRING;
 private:
-  ObJitMemoryBlock *alloc_new_block(int64_t sz, int64_t p_flags);
+  ObJitMemoryBlock *alloc_new_block(int64_t sz, int64_t p_flags, bool is_code_memory = false);
 private:
   DISALLOW_COPY_AND_ASSIGN(ObJitMemoryGroup);
 

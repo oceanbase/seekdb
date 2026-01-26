@@ -1442,7 +1442,7 @@ int ObSortOpImpl::do_partition_sort(common::ObIArray<ObChunkDatumStore::StoredRo
   int64_t hash_expr_cnt = 1;
   ObIAllocator &allocator = mem_context_->get_malloc_allocator();
   uint64_t node_cnt = rows_end - rows_begin;
-  uint64_t bucket_cnt = next_pow2(std::max(16L, rows.count()));
+  uint64_t bucket_cnt = next_pow2(std::max(static_cast<int64_t>(16), rows.count()));
   uint64_t shift_right = __builtin_clzll(bucket_cnt) + 1;
 
   if (OB_SUCC(ret)) {
@@ -1792,7 +1792,7 @@ int ObSortOpImpl::build_ems_heap(int64_t &merge_ways)
     }
     if (OB_SUCC(ret)) {
       merge_ways = get_memory_limit() / ObChunkDatumStore::BLOCK_SIZE;
-      merge_ways = std::max(2L, merge_ways);
+      merge_ways = std::max(static_cast<int64_t>(2), merge_ways);
       if (merge_ways < max_ways) {
         bool dumped = false;
         int64_t need_size = max_ways * ObChunkDatumStore::BLOCK_SIZE;

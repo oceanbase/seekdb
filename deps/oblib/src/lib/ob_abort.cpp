@@ -17,7 +17,7 @@
 #include "ob_abort.h"
 #include "lib/ob_define.h"
 
-void ob_abort (void) __THROW
+__attribute__((weak)) void ob_abort (void) __THROW
 {
   fprintf(stderr, "OB_ABORT, tid: %ld, lbt: %s\n", GETTID(), oceanbase::common::lbt());
   abort();

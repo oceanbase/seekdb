@@ -151,7 +151,7 @@ int ObMergeJoinOp::inner_open()
                                   (left_width + right_width);
     if (OB_FAIL(sql_mem_processor_.init(&mem_context_->get_malloc_allocator(),
                                         tenant_id,
-                                        std::max(2L << 20, cache_size),
+                                        std::max(static_cast<int64_t>(2L << 20), cache_size),
                                         MY_SPEC.type_,
                                         MY_SPEC.id_,
                                         &ctx_))) {

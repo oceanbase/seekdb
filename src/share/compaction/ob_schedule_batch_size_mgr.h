@@ -15,7 +15,7 @@
  */
 #ifndef OB_SHARE_COMPACTION_SCHEDULE_BATCH_SIZE_MGR_H_
 #define OB_SHARE_COMPACTION_SCHEDULE_BATCH_SIZE_MGR_H_
-#include "/usr/include/stdint.h"
+#include <stdint.h>
 namespace oceanbase
 {
 namespace compaction

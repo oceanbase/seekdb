@@ -1709,6 +1709,13 @@ inline int encode(char *buf, const int64_t buf_len, int64_t &pos, int32_t val)
 {
   return encode_vi32(buf, buf_len, pos, val);
 }
+#if defined(__APPLE__)
+// macOS ARM64: size_t is unsigned long, need explicit specialization
+inline int encode(char *buf, const int64_t buf_len, int64_t &pos, size_t val)
+{
+  return encode_vi64(buf, buf_len, pos, static_cast<int64_t>(val));
+}
+#endif
 inline int encode(char *buf, const int64_t buf_len, int64_t &pos, uint32_t val)
 {
   return encode_vi32(buf, buf_len, pos, static_cast<int32_t>(val));
@@ -1845,6 +1852,16 @@ inline int decode(const char *buf, const int64_t data_len, int64_t &pos, uint64_
   val = 0;
   return decode_vi64(buf, data_len, pos, reinterpret_cast<int64_t *>(&val));
 }
+#if defined(__APPLE__)
+// macOS ARM64: size_t is unsigned long, need explicit specialization
+inline int decode(const char *buf, const int64_t data_len, int64_t &pos, size_t &val)
+{
+  int64_t tmp = 0;
+  int ret = decode_vi64(buf, data_len, pos, &tmp);
+  val = static_cast<size_t>(tmp);
+  return ret;
+}
+#endif
 inline int decode(const char *buf, const int64_t data_len, int64_t &pos, bool &val)
 {
   val = 0;
@@ -1922,6 +1939,13 @@ inline int64_t encoded_length(uint64_t val)
 {
   return encoded_length_vi64(static_cast<int64_t>(val));
 }
+#if defined(__APPLE__)
+// macOS ARM64: size_t is unsigned long, need explicit specialization
+inline int64_t encoded_length(size_t val)
+{
+  return encoded_length_vi64(static_cast<int64_t>(val));
+}
+#endif
 inline int64_t encoded_length(int32_t val)
 {
   return encoded_length_vi32(val);

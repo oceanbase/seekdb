@@ -15,10 +15,124 @@
  */
 
 #include "ob_local_device.h"
-#include <sys/vfs.h>
 #include <sys/statvfs.h>
 #include <unistd.h>
+#ifdef __linux__
+#include <sys/vfs.h>
 #include <linux/falloc.h>
+#include <libaio.h>
+#elif defined(__APPLE__)
+#include <sys/mount.h> // For statfs on macOS, replaces sys/vfs.h
+#include <fcntl.h> // For fcntl on macOS (fallocate replacement)
+#include <stdlib.h> // For malloc/free
+#include <mutex>
+#include <vector>
+#include <condition_variable>
+#include <chrono>
+
+// macOS doesn't have libaio, provide a synchronous emulation
+struct io_event_queue {
+  std::mutex mtx;
+  std::condition_variable cv;
+  std::vector<struct io_event> events;
+};
+
+// macOS doesn't have linux/falloc.h, define fallocate constants
+#ifndef FALLOC_FL_KEEP_SIZE
+#define FALLOC_FL_KEEP_SIZE 0x01
+#endif
+#ifndef FALLOC_FL_PUNCH_HOLE
+#define FALLOC_FL_PUNCH_HOLE 0x02
+#endif
+
+// libaio emulation functions
+static inline int io_setup(int maxevents, io_context_t *ctxp) {
+  (void)maxevents;
+  io_event_queue *q = new (std::nothrow) io_event_queue();
+  if (q == nullptr) return -ENOMEM;
+  *ctxp = (io_context_t)q;
+  return 0; // Success
+}
+static inline int io_destroy(io_context_t ctx) {
+  io_event_queue *q = (io_event_queue *)ctx;
+  if (q != nullptr) {
+    delete q;
+  }
+  return 0; // Success
+}
+static inline void io_prep_pwrite(struct iocb *iocb, int fd, void *buf, size_t count, int64_t offset) {
+  iocb->aio_fildes = fd;
+  iocb->aio_buf = buf;
+  iocb->aio_nbytes = count;
+  iocb->aio_offset = offset;
+  iocb->aio_lio_opcode = 1; // Use 1 for PWRITE (IOCB_CMD_PWRITE)
+}
+static inline void io_prep_pread(struct iocb *iocb, int fd, void *buf, size_t count, int64_t offset) {
+  iocb->aio_fildes = fd;
+  iocb->aio_buf = buf;
+  iocb->aio_nbytes = count;
+  iocb->aio_offset = offset;
+  iocb->aio_lio_opcode = 0; // Use 0 for PREAD (IOCB_CMD_PREAD)
+}
+static inline int io_submit(io_context_t ctx, long nr, struct iocb **iocbpp) {
+  io_event_queue *q = (io_event_queue *)ctx;
+  if (q == nullptr) return -EINVAL;
+
+  int completed = 0;
+  for (long i = 0; i < nr; ++i) {
+    struct iocb *iocb = iocbpp[i];
+    ssize_t res = 0;
+    if (iocb->aio_lio_opcode == 1) { // PWRITE
+      res = pwrite(iocb->aio_fildes, iocb->aio_buf, iocb->aio_nbytes, iocb->aio_offset);
+    } else if (iocb->aio_lio_opcode == 0) { // PREAD
+      res = pread(iocb->aio_fildes, iocb->aio_buf, iocb->aio_nbytes, iocb->aio_offset);
+    }
+
+    struct io_event ev;
+    ev.data = iocb->data;
+    ev.obj = iocb;
+    ev.res = (res >= 0) ? res : -errno;
+    ev.res2 = 0;
+
+    {
+      std::lock_guard<std::mutex> lock(q->mtx);
+      q->events.push_back(ev);
+    }
+    q->cv.notify_one();
+    completed++;
+  }
+  return completed;
+}
+static inline int io_cancel(io_context_t ctx, struct iocb *iocb, struct io_event *result) {
+  (void)ctx; (void)iocb; (void)result;
+  return 0; // Success (stub)
+}
+static inline int io_getevents(io_context_t ctx, long min_nr, long nr, struct io_event *events, struct timespec *timeout) {
+  io_event_queue *q = (io_event_queue *)ctx;
+  if (q == nullptr) return -EINVAL;
+
+  std::unique_lock<std::mutex> lock(q->mtx);
+  std::function<bool()> wait_condition = [&] { return q->events.size() >= (size_t)min_nr; };
+
+  if (min_nr > 0 && (size_t)q->events.size() < (size_t)min_nr) {
+    if (timeout != nullptr) {
+      std::chrono::nanoseconds duration = std::chrono::seconds(timeout->tv_sec) + std::chrono::nanoseconds(timeout->tv_nsec);
+      if (!q->cv.wait_for(lock, duration, wait_condition)) {
+        // Timeout
+      }
+    } else {
+      q->cv.wait(lock, wait_condition);
+    }
+  }
+
+  int count = 0;
+  while (count < nr && !q->events.empty()) {
+    events[count++] = q->events.front();
+    q->events.erase(q->events.begin());
+  }
+  return count;
+}
+#endif
 #include "share/ob_resource_limit.h"
 #include "storage/slog/ob_storage_logger_manager.h"
 #include "lib/ash/ob_active_session_guard.h"
@@ -1263,7 +1377,7 @@ int64_t ObLocalDevice::get_max_block_size(int64_t reserved_size) const
     ret = ObIODeviceLocalFileOp::convert_sys_errno();
     SHARE_LOG(WARN, "Failed to get disk space", K(ret), K(sstable_dir_));
   } else {
-    const int64_t free_space = std::max(0L, (int64_t)(svfs.f_bavail * svfs.f_bsize));
+    const int64_t free_space = std::max(static_cast<int64_t>(0), (int64_t)(svfs.f_bavail * svfs.f_bsize));
     const int64_t max_file_size = std::max(block_file_size_, block_file_size_ + free_space - reserved_size);
     /* when datafile_maxsize is large than current datafile_size, we should return
        the Maximun left space that can be extend. */
@@ -1374,15 +1488,44 @@ int ObLocalDevice::resize_block_file(const int64_t new_size)
         K(block_file_size_));
   } else if (0 == delta_size) {
     SHARE_LOG(INFO, "The file size is not changed, ", K(new_size), K(block_file_size_));
-  } else if (0 != (sys_ret = ::fallocate(block_fd_, 0, block_file_size_, delta_size))) {
-    ret = ObIODeviceLocalFileOp::convert_sys_errno();
-    SHARE_LOG(WARN, "fail to expand file size", K(ret), K(sys_ret), K(block_file_size_),
-        K(delta_size), K(errno), KERRMSG);
-  } else if (OB_ISNULL(new_free_block_array
-      = (int64_t *) ob_malloc(sizeof(int64_t) * new_total_block_cnt, mem_attr))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-    SHARE_LOG(WARN, "Fail to allocate memory, ", K(ret), K(new_size), K(new_total_block_cnt));
-  } else if (OB_ISNULL(new_block_bitmap
+  } else {
+#ifdef __APPLE__
+    // macOS doesn't have fallocate, use fcntl F_PREALLOCATE instead
+    // F_PEOFPOSMODE: offset is relative to the physical end of file
+    // When using F_PEOFPOSMODE, fst_offset should be 0 (start from EOF)
+    fstore_t store = {F_ALLOCATECONTIG, F_PEOFPOSMODE, 0, delta_size, 0};
+    sys_ret = fcntl(block_fd_, F_PREALLOCATE, &store);
+    if (-1 == sys_ret) {
+      // Try allocating non-contiguous space if contiguous allocation failed
+      store.fst_flags = F_ALLOCATEALL;
+      store.fst_offset = 0;  // Reset offset for retry
+      sys_ret = fcntl(block_fd_, F_PREALLOCATE, &store);
+    }
+    // F_PREALLOCATE only reserves space but doesn't change file size.
+    // We must call ftruncate to actually set the file size.
+    if (0 == sys_ret) {
+      sys_ret = ::ftruncate(block_fd_, new_size);
+    }
+    if (0 != sys_ret) {
+      ret = ObIODeviceLocalFileOp::convert_sys_errno();
+      SHARE_LOG(WARN, "fail to expand file size", K(ret), K(sys_ret), K(block_file_size_),
+          K(delta_size), K(new_size), K(errno), KERRMSG);
+    }
+#else
+    if (0 != (sys_ret = ::fallocate(block_fd_, 0, block_file_size_, delta_size))) {
+      ret = ObIODeviceLocalFileOp::convert_sys_errno();
+      SHARE_LOG(WARN, "fail to expand file size", K(ret), K(sys_ret), K(block_file_size_),
+          K(delta_size), K(errno), KERRMSG);
+    }
+#endif
+  }
+
+  if (OB_SUCC(ret)) {
+    if (OB_ISNULL(new_free_block_array
+        = (int64_t *) ob_malloc(sizeof(int64_t) * new_total_block_cnt, mem_attr))) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+      SHARE_LOG(WARN, "Fail to allocate memory, ", K(ret), K(new_size), K(new_total_block_cnt));
+    } else if (OB_ISNULL(new_block_bitmap
       = (bool *) ob_malloc(sizeof(bool) * new_total_block_cnt, mem_attr))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     SHARE_LOG(WARN, "Fail to allocate memory, ", K(ret), K(new_size), K(new_total_block_cnt));
@@ -1417,6 +1560,7 @@ int ObLocalDevice::resize_block_file(const int64_t new_size)
     }
     total_block_cnt_ = new_total_block_cnt;
     SHARE_LOG(INFO, "succeed to resize file", K(new_size), K(total_block_cnt_), K(free_block_cnt_));
+    }
   }
 
   if (OB_FAIL(ret)) {

@@ -151,7 +151,7 @@ int ObLobManager::fill_lob_header(ObIAllocator &allocator, ObString &data, ObStr
   } else {
     ObLobCommon *lob_data = new(buf)ObLobCommon();
     MEMCPY(lob_data->buffer_, data.ptr(), data.length());
-    out.assign_ptr(reinterpret_cast<char*>(buf), data.length() + sizeof(ObLobCommon));
+    out.assign_ptr(reinterpret_cast<char*>(buf), static_cast<ObString::obstr_size_t>(data.length() + sizeof(ObLobCommon)));
   }
   return ret;
 }

@@ -18,6 +18,11 @@
 #include "block_set.h"
 #include "lib/alloc/ob_tenant_ctx_allocator.h"
 
+// macOS sys/param.h defines isset macro which conflicts with method calls
+#ifdef isset
+#undef isset
+#endif
+
 using namespace oceanbase;
 using namespace oceanbase::lib;
 

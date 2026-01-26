@@ -29,7 +29,7 @@ target_link_libraries(s3
   libaws-c-auth.a
   libaws-c-http.a
   libaws-c-io.a
-  libs2n.a
+  $<$<NOT:$<PLATFORM_ID:Darwin>>:libs2n.a>
   libaws-c-compression.a
   libaws-c-cal.a
   libaws-c-sdkutils.a

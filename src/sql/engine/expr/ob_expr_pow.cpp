@@ -65,7 +65,7 @@ int ObExprPow::safe_set_double(ObDatum &datum, double value)
 {
   int ret = OB_SUCCESS;
   if (lib::is_mysql_mode() &&
-         (isinfl(value) || isnan(static_cast<float>(value)))) {
+          (std::isinf(value) || isnan(static_cast<float>(value)))) {
     ret = OB_OPERATE_OVERFLOW;
   } else {
     datum.set_double(value);

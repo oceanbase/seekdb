@@ -479,7 +479,7 @@ inline void reset_inner_proxyro_scramble(
 {
   const ObString PROXYRO_OLD_SCRAMBLE("aaaaaaaabbbbbbbbbbbb");
   MEMCPY(conn.scramble_buf_, PROXYRO_OLD_SCRAMBLE.ptr(), PROXYRO_OLD_SCRAMBLE.length());
-  login_info.scramble_str_.assign_ptr(conn.scramble_buf_, sizeof(conn.scramble_buf_));
+  login_info.scramble_str_.assign_ptr(conn.scramble_buf_, static_cast<ObString::obstr_size_t>(sizeof(conn.scramble_buf_)));
 }
 
 const char *AUTH_PLUGIN_MYSQL_NATIVE_PASSWORD = "mysql_native_password";
@@ -589,7 +589,7 @@ int ObMPConnect::load_privilege_info(ObSQLSessionInfo &session)
         if (OB_FAIL(ret)) {
           // Do nothing
         } else {
-          login_info.scramble_str_.assign_ptr(conn->scramble_buf_, sizeof(conn->scramble_buf_));
+          login_info.scramble_str_.assign_ptr(conn->scramble_buf_, static_cast<ObString::obstr_size_t>(sizeof(conn->scramble_buf_)));
           login_info.passwd_ = hsr_.get_auth_response();// Assume client is use mysql_native_password
           bool is_empty_passwd = false;
           if (OB_FAIL(schema_guard.is_user_empty_passwd(login_info, is_empty_passwd))) {
@@ -671,7 +671,7 @@ int ObMPConnect::load_privilege_info(ObSQLSessionInfo &session)
                 } else {
                   // packet_sender_.release_packet will recycle mem of auth_data, need using mem allocated by asr_mem_pool_ to save it
                   MEMCPY(auth_buf, auth_data, auth_data_len);
-                  login_info.scramble_str_.assign_ptr(conn->scramble_buf_, sizeof(conn->scramble_buf_));
+                  login_info.scramble_str_.assign_ptr(conn->scramble_buf_, static_cast<ObString::obstr_size_t>(sizeof(conn->scramble_buf_)));
                   login_info.passwd_.assign_ptr(static_cast<const char*>(auth_buf), auth_data_len);
                 }
                 packet_sender_.release_packet(asr_pkt);

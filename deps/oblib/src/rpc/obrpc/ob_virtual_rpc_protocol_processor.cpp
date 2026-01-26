@@ -17,7 +17,15 @@
 #define USING_LOG_PREFIX RPC_OBRPC
 
 #include "ob_virtual_rpc_protocol_processor.h"
+
+#ifdef __linux__
 #include <byteswap.h>
+#else
+#include <libkern/OSByteOrder.h>
+#define bswap_16(x) OSSwapInt16(x)
+#define bswap_32(x) OSSwapInt32(x)
+#define bswap_64(x) OSSwapInt64(x)
+#endif
 #include "lib/utility/ob_tracepoint.h"
 #include "rpc/obrpc/ob_rpc_proxy.h"
 

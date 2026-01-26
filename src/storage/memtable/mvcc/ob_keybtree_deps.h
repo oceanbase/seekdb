@@ -393,7 +393,7 @@ public:
     }
     return ret;
   }
-  OB_INLINE void resize(int64_t depth) { depth_ = std::max(depth, 0l); }
+  OB_INLINE void resize(int64_t depth) { depth_ = std::max(depth, static_cast<int64_t>(0)); }
   OB_INLINE void set_is_found(bool is_found = true) { is_found_ = is_found; }
   bool get_is_found() { return is_found_; }
 private:

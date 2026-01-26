@@ -138,7 +138,7 @@ int ObCachedGeoPolygon::polygon_init_rings_rtree(T_IBIN *geo)
       const T_INNER_RING &rings = polygon->inner_rings();
       typename T_INNER_RING::iterator iter = rings.begin();
       for ( ; iter != rings.end() && OB_SUCC(ret); ++iter) {
-        data.assign_ptr(reinterpret_cast<const char *>(iter.operator->()), sizeof(T_RING));
+        data.assign_ptr(reinterpret_cast<const char *>(iter.operator->()), static_cast<ObString::obstr_size_t>(sizeof(T_RING)));
         ring.set_data(data);
         tmp_rtree = nullptr;
         seg_start_idx = rings_rtree_.ring_segments_.size();

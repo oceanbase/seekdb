@@ -62,7 +62,7 @@ void ObTenantTxDataAllocator::adaptive_update_limit(const int64_t tenant_id,
   // do nothing
 }
 
-int ObTenantTxDataAllocator::init(const char *label)
+__attribute__((weak)) int ObTenantTxDataAllocator::init(const char *label)
 {
   int ret = OB_SUCCESS;
   ObMemAttr mem_attr;
@@ -93,7 +93,7 @@ void ObTenantTxDataAllocator::reset()
   slice_allocator_.purge_extra_cached_block(0);
 }
 
-void *ObTenantTxDataAllocator::alloc(const bool enable_throttle, const int64_t abs_expire_time)
+__attribute__((weak)) void *ObTenantTxDataAllocator::alloc(const bool enable_throttle, const int64_t abs_expire_time)
 {
   // do throttle if needed
   if (OB_LIKELY(enable_throttle)) {

@@ -16,7 +16,9 @@
 
 #ifndef  OCEANBASE_COMMON_QUEUE_THREAD_H_
 #define  OCEANBASE_COMMON_QUEUE_THREAD_H_
+#ifdef __linux__
 #include <sys/epoll.h>
+#endif
 #include "lib/ob_define.h"
 #include "lib/queue/ob_fixed_queue.h"
 #include "lib/allocator/page_arena.h"

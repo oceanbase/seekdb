@@ -496,7 +496,7 @@ int64_t ObIHashPartInfrastructure::est_bucket_count(
   const int64_t bkt_size = get_each_bucket_size();
   int64_t est_bucket_mem_size = next_pow2(rows) * bkt_size;
   int64_t est_data_mem_size = rows * width;
-  int64_t max_remain_mem_size = std::max(0l, sql_mem_processor_->get_mem_bound() - est_part_cnt_ * BLOCK_SIZE);
+  int64_t max_remain_mem_size = std::max(static_cast<int64_t>(0), sql_mem_processor_->get_mem_bound() - est_part_cnt_ * BLOCK_SIZE);
   int64_t est_bucket_num = rows;
   while (est_bucket_mem_size + est_data_mem_size > max_remain_mem_size && est_bucket_num > 0) {
     est_bucket_num >>= 1;

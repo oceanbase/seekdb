@@ -709,7 +709,7 @@ int ObExprResultTypeUtil::get_array_calc_type(ObExecContext *exec_ctx,
     LOG_WARN("invalid subschema type", K(ret), K(type1), K(type2));
   } else if (OB_FAIL(ObArrayUtil::get_type_name(ObNestedType::OB_ARRAY_TYPE, elem_data, type_name, MAX_LEN, depth))) {
     LOG_WARN("failed to convert len to string", K(ret));
-  } else if (FALSE_IT(type_info.assign_ptr(type_name, strlen(type_name)))) {
+  } else if (FALSE_IT(type_info.assign_ptr(type_name, static_cast<ObString::obstr_size_t>(strlen(type_name))))) {
   } else if (OB_FAIL(exec_ctx->get_subschema_id_by_type_string(type_info, subschema_id))) {
     LOG_WARN("failed get subschema id", K(ret), K(type_info));
   } else {

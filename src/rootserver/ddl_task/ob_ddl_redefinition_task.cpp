@@ -655,7 +655,7 @@ int ObDDLRedefinitionTask::send_build_single_replica_request()
       param.ddl_type_ = task_type_;
       param.snapshot_version_ = snapshot_version_;
       param.task_id_ = task_id_;
-      param.parallelism_ = std::max(alter_table_arg_.parallelism_, 1L);
+      param.parallelism_ = std::max(alter_table_arg_.parallelism_, static_cast<int64_t>(1));
       param.execution_id_ = execution_id_;
       param.data_format_version_ = data_format_version_;
       param.consumer_group_id_ = alter_table_arg_.consumer_group_id_;
@@ -1123,7 +1123,7 @@ int ObDDLRedefinitionTask::sync_auto_increment_position()
         // which leads to RPC-receiver worker timeout due to overflow when select val from __ALL_AUTO_INCREMENT.
         // More details, refer to comments in 
         const int64_t save_timeout_ts = THIS_WORKER.get_timeout_ts();
-        THIS_WORKER.set_timeout_ts(ObTimeUtility::current_time() + max(GCONF.rpc_timeout, 1000 * 1000 * 20L));
+        THIS_WORKER.set_timeout_ts(ObTimeUtility::current_time() + max(GCONF.rpc_timeout, static_cast<int64_t>(1000 * 1000 * 20)));
         ObAutoincrementService &auto_inc_service = ObAutoincrementService::get_instance();
         uint64_t sequence_value = 0;
         AutoincParam param;
@@ -1266,7 +1266,7 @@ int ObDDLRedefinitionTask::modify_autoinc(const ObDDLTaskStatus next_task_status
     if (OB_SUCC(ret) && is_update_autoinc_end && OB_NOT_NULL(new_table_schema)
         && (alter_autoinc_column_id = new_table_schema->get_autoinc_column_id()) != 0) {
       const int64_t save_timeout_ts = THIS_WORKER.get_timeout_ts();
-      THIS_WORKER.set_timeout_ts(ObTimeUtility::current_time() + max(GCONF.rpc_timeout, 1000 * 1000 * 20L));
+      THIS_WORKER.set_timeout_ts(ObTimeUtility::current_time() + max(GCONF.rpc_timeout, static_cast<int64_t>(1000 * 1000 * 20)));
       ObAutoincrementService &auto_inc_service = ObAutoincrementService::get_instance();
       const uint64_t autoinc_val = alter_table_schema.get_auto_increment();
       AutoincParam param;
@@ -1510,8 +1510,8 @@ int ObDDLRedefinitionTask::get_estimated_timeout(const ObTableSchema *dst_table_
     LOG_WARN("get all tablet and object ids failed", K(ret));
   } else {
     estimated_timeout = tablet_ids.count() * dst_table_schema->get_column_count() * 120L * 1000L; // 120ms for each column
-    estimated_timeout = max(estimated_timeout, 9 * 1000 * 1000L);
-    estimated_timeout = min(estimated_timeout, 3600 * 1000 * 1000L);
+    estimated_timeout = max(estimated_timeout, static_cast<int64_t>(9 * 1000 * 1000));
+    estimated_timeout = min(estimated_timeout, static_cast<int64_t>(3600LL * 1000 * 1000));
     estimated_timeout = max(estimated_timeout, GCONF._ob_ddl_timeout);
     LOG_INFO("get estimate timeout", K(estimated_timeout));
   }

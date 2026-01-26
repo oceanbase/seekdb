@@ -19,7 +19,55 @@
 
 #include <thread>
 
+#ifdef __linux__
 #include <sys/epoll.h>
+#elif defined(__APPLE__)
+// macOS doesn't have epoll, provide stub definitions
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <fcntl.h> // For fcntl to set non-blocking mode
+#include <unistd.h>
+#include <errno.h>
+// Stub epoll types and constants
+typedef union epoll_data {
+  void *ptr;
+  int fd;
+  uint32_t u32;
+  uint64_t u64;
+} epoll_data_t;
+
+struct epoll_event {
+  uint32_t events;
+  epoll_data_t data;
+};
+
+#define EPOLL_CTL_ADD 1
+#define EPOLL_CTL_DEL 2
+#define EPOLL_CTL_MOD 3
+#define EPOLLIN 0x001
+#define EPOLLOUT 0x004
+#define EPOLLERR 0x008
+#define EPOLLHUP 0x010
+
+// Stub epoll functions for macOS
+static inline int epoll_create(int size) {
+  (void)size;
+  errno = ENOSYS;
+  return -1;
+}
+
+static inline int epoll_ctl(int epfd, int op, int fd, struct epoll_event *event) {
+  (void)epfd; (void)op; (void)fd; (void)event;
+  errno = ENOSYS;
+  return -1;
+}
+
+static inline int epoll_wait(int epfd, struct epoll_event *events, int maxevents, int timeout) {
+  (void)epfd; (void)events; (void)maxevents; (void)timeout;
+  errno = ENOSYS;
+  return -1;
+}
+#endif
 
 #include "lib/signal/ob_signal_utils.h"
 #include "lib/thread/ob_thread_name.h"
@@ -29,8 +77,18 @@ extern "C" {
   #include <lua.h>
   #include <lauxlib.h>
   #include <lualib.h>
+#ifdef __linux__
 extern int ob_epoll_wait(int __epfd, struct epoll_event *__events,
 		                     int __maxevents, int __timeout);
+#elif defined(__APPLE__)
+// macOS stub implementation
+static inline int ob_epoll_wait(int __epfd, struct epoll_event *__events,
+                                 int __maxevents, int __timeout) {
+  (void)__epfd; (void)__events; (void)__maxevents; (void)__timeout;
+  errno = ENOSYS;
+  return -1;
+}
+#endif
 }
 
 using namespace oceanbase;
@@ -122,10 +180,26 @@ int ObLuaHandler::process(const char* lua_code)
 void ObUnixDomainListener::run1()
 {
   int ret = OB_SUCCESS;
+#ifdef __APPLE__
+  // macOS doesn't support SOCK_NONBLOCK, use fcntl instead
+  if ((listen_fd_ = socket(AF_UNIX, SOCK_STREAM, 0)) < 0) {
+    OB_LOG(ERROR, "ObUnixDomainListener socket init failed", K(errno));
+    ret = OB_ERR_UNEXPECTED;
+  } else {
+    // Set non-blocking mode using fcntl
+    int flags = fcntl(listen_fd_, F_GETFL, 0);
+    if (flags < 0 || fcntl(listen_fd_, F_SETFL, flags | O_NONBLOCK) < 0) {
+      OB_LOG(ERROR, "ObUnixDomainListener set non-blocking failed", K(errno));
+      close(listen_fd_);
+      listen_fd_ = -1;
+      ret = OB_ERR_UNEXPECTED;
+    }
+#else
   if ((listen_fd_ = socket(AF_UNIX, SOCK_STREAM | SOCK_NONBLOCK, 0)) < 0) {
     OB_LOG(ERROR, "ObUnixDomainListener socket init failed", K(errno));
     ret = OB_ERR_UNEXPECTED;
   } else {
+#endif
     struct sockaddr_un s;
     struct epoll_event listen_ev;
     int epoll_fd = epoll_create(256);

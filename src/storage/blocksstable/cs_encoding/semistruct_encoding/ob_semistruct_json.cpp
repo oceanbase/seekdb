@@ -397,7 +397,7 @@ int ObJsonDataFlatter::add_spare_col(const ObFlatJson &flat_json, const ObSemiSt
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("alloc fail", K(ret));
   } else if (OB_FALSE_IT(*col_id = sub_column.get_col_id())) {
-  } else if (OB_FALSE_IT(key.assign_ptr(reinterpret_cast<char*>(col_id), sizeof(int32_t)))) {
+  } else if (OB_FALSE_IT(key.assign_ptr(reinterpret_cast<char*>(col_id), static_cast<ObString::obstr_size_t>(sizeof(int32_t))))) {
   } else if (flat_json.json_type() == ObJsonNodeType::J_NULL) {
     node = &ObSemiStructScalar::null_;
   } else if (OB_FAIL(ObJsonBaseFactory::alloc_node(spare_data_allocator_, flat_json.json_type(), node))) {
@@ -1606,7 +1606,7 @@ int ObJsonReassembler::serialize(const ObDatumRow &row, ObString &result)
       LOG_WARN("serialize json binary fail", K(ret));
     } else if (OB_FAIL(j_bin_buf.get_result_string(result))) {
       LOG_WARN("get_result_string fail", K(ret), K(row), K(j_bin_buf));
-    } else if (OB_FALSE_IT(json_data.assign_ptr(result.ptr() + sizeof(ObLobCommon), result.length() - sizeof(ObLobCommon)))) {
+    } else if (OB_FALSE_IT(json_data.assign_ptr(result.ptr() + sizeof(ObLobCommon), static_cast<ObString::obstr_size_t>(result.length() - sizeof(ObLobCommon))))) {
     } else if (OB_FAIL(ObJsonBin::set_doc_header_v0(json_data, json_data.length(), sub_schema_->use_lexicographical_order()))) {
       LOG_WARN("set_doc_header_v0 fail", K(ret));
     }

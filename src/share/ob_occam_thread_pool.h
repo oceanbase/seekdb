@@ -30,6 +30,7 @@
 #define OCEANBASE_LIB_THREAD_OB_EASY_THREAD_POOL_H
 
 #include <assert.h>
+#include <type_traits>                                   // std::invoke_result
 #include "lib/function/ob_function.h"
 #include "lib/future/ob_future.h"
 #include "lib/guard/ob_shared_guard.h"
@@ -320,7 +321,7 @@ public:
   template<TASK_PRIORITY PRIORITY = TASK_PRIORITY::NORMAL,
            class F,
            class... Args>
-  int commit_task(ObFuture<typename std::result_of<F(Args...)>::type> &future,
+  int commit_task(ObFuture<typename std::invoke_result<F, Args...>::type> &future,
                   F &&f,
                   Args &&...args)
   {
@@ -328,7 +329,7 @@ public:
     if (!is_inited_) {
       ret = OB_NOT_INIT;
     } else {
-      using result_type = typename std::result_of<F(Args...)>::type;
+      using result_type = typename std::invoke_result<F, Args...>::type;
       OCCAM_LOG(DEBUG, "commit task");
       ObPromise<result_type> promise;
       if (OB_FAIL(promise.init())) {
@@ -533,7 +534,7 @@ public:
   template<occam::TASK_PRIORITY PRIORITY = occam::TASK_PRIORITY::NORMAL,
            class F,
            class... Args>
-  int commit_task(ObFuture<typename std::result_of<F(Args...)>::type> &future,
+  int commit_task(ObFuture<typename std::invoke_result<F, Args...>::type> &future,
                   F &&f,
                   Args &&...args)
   {
@@ -554,7 +555,7 @@ public:
   int commit_task_ignore_ret(F &&f, Args &&...args)
   {
     int ret = OB_SUCCESS;
-    using result_type = typename std::result_of<F(Args...)>::type;
+    using result_type = typename std::invoke_result<F, Args...>::type;
     ObFuture<result_type> future;
     if (OB_LIKELY(!thread_pool_.is_valid())) {
       ret = OB_NOT_INIT;

@@ -1450,7 +1450,7 @@ int ObAdminStorageResolver::resolve(const ParseNode &parse_tree)
                       STORAGE_MAX_IOPS, max_iops, STORAGE_MAX_BANDWIDTH, max_bandwidth))) {
             SQL_RESV_LOG(WARN, "fail to databuff printf", KR(ret));
           } else {
-            attribute.assign_ptr(attribute_str, strlen(attribute_str));
+            attribute.assign_ptr(attribute_str, static_cast<ObString::obstr_size_t>(strlen(attribute_str)));
             if (OB_FAIL(admin_storage_stmt->set_attribute(attribute))) {
               SQL_RESV_LOG(WARN, "fail to set attribute", KR(ret), K(attribute));
             }

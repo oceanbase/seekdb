@@ -1353,7 +1353,13 @@ int ObLocalityCheckHelp::check_alter_single_zone_locality_valid(
 int ObRootUtils::get_rs_default_timeout_ctx(ObTimeoutCtx &ctx)
 {
   int ret = OB_SUCCESS;
-  const int64_t DEFAULT_TIMEOUT_US = GCONF.rpc_timeout; // default is 2s
+  int64_t DEFAULT_TIMEOUT_US = GCONF.rpc_timeout; // default is 2s
+#ifdef __APPLE__
+  // On Mac, the system is significantly slower due to lack of O_DIRECT and software CRC.
+  // Increase the default timeout to 10s to avoid bootstrap failure.
+  DEFAULT_TIMEOUT_US = std::max(DEFAULT_TIMEOUT_US, 10000000LL);
+#endif
+
   if (OB_FAIL(ObShareUtil::set_default_timeout_ctx(ctx, DEFAULT_TIMEOUT_US))) {
     LOG_WARN("fail to set default_timeout_ctx", KR(ret));
   }

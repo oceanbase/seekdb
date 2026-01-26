@@ -360,6 +360,7 @@ ob_set_subtarget(oblib_lib thread
 ob_set_subtarget(oblib_lib utility
   utility/ob_fast_convert.cpp
   utility/ob_hang_fatal_error.cpp
+  utility/ob_platform_utils.cpp
   utility/ob_print_utils.cpp
   utility/ob_serialization_helper.cpp
   utility/ob_tracepoint.cpp
@@ -446,15 +447,17 @@ endif()
 add_library(ob_malloc STATIC)
 target_link_libraries(ob_malloc ob_malloc_object)
 
-add_library(malloc_hook STATIC
-    alloc/malloc_hook.cpp
-    alloc/malloc_hook.h
-    alloc/malloc_hook_extended.cpp)
-if (BUILD_CDC_ONLY)
-  set_target_properties(malloc_hook PROPERTIES EXCLUDE_FROM_ALL TRUE)
+# malloc_hook is only available on Linux (uses Linux-specific syscall and weak alias)
+if(NOT APPLE)
+  add_library(malloc_hook STATIC
+      alloc/malloc_hook.cpp
+      alloc/malloc_hook.h
+      alloc/malloc_hook_extended.cpp)
+  if (BUILD_CDC_ONLY)
+    set_target_properties(malloc_hook PROPERTIES EXCLUDE_FROM_ALL TRUE)
+  endif()
+  target_link_libraries(malloc_hook oblib_base)
 endif()
-
-target_link_libraries(malloc_hook oblib_base)
 
 target_compile_options(oblib_lib PUBLIC -D_GLIBCXX_USE_CXX11_ABI=0)
 
@@ -469,7 +472,9 @@ if (NOT BUILD_CDC_ONLY)
 target_link_directories(
   oblib_lib PUBLIC ${DEP_DIR}/lib ${DEP_DIR}/lib/vsag_lib
 )
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fopenmp")
+if(NOT APPLE)
+  target_compile_options(oblib_lib PUBLIC -fopenmp)
+endif()
 
 if(BUILD_EMBED_MODE)
     set(GOMP_LIB libgomp_embed_static.a)
@@ -502,6 +507,25 @@ elseif(CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64")
     libopenblas.a
     libgfortran_static.a
     ${GOMP_LIB}
+    libroaring.a
+    libantlr4-runtime.a
+    libantlr4-autogen.a
+    libfmt.a
+  )
+elseif(CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  target_link_libraries(oblib_lib
+    PUBLIC
+    libcpuinfo.a
+    libsimd.a
+    libvsag_static.a
+    libdiskann.a
+    libio.a
+    libgfortran_static.a
+    libquadmath_static.a
+    libgcc.a
+    # libgomp.a
+    libomp_static.a
+    libopenblas.a
     libroaring.a
     libantlr4-runtime.a
     libantlr4-autogen.a

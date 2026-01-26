@@ -110,7 +110,7 @@ void ObAshRefreshTask::runTimerTask()
           ret = OB_SUCCESS;
           LOG_WARN("last snapshot end time doesn't exist in this cluster", K(tenant_id));
         }
-      } else if (OB_FAIL(result->get_int(0L, last_snapshot_end_time))) {
+      } else if (OB_FAIL(result->get_int(static_cast<int64_t>(0), last_snapshot_end_time))) {
           LOG_WARN("get column fail", KR(ret), K(sql));
       } else if (OB_FAIL(result->get_int(1L, snapshot_flag))) {
           LOG_WARN("get column fail", KR(ret), K(sql));
@@ -134,7 +134,7 @@ void ObAshRefreshTask::runTimerTask()
           LOG_WARN("fail to get mysql result", KR(ret), K(sql));
         } else if (OB_FAIL(result->next())) {
           LOG_WARN("fail to get next row", KR(ret));
-        } else if (OB_FAIL(result->get_int(0L, read_pos))) {
+        } else if (OB_FAIL(result->get_int(static_cast<int64_t>(0), read_pos))) {
             LOG_WARN("get column fail", KR(ret), K(sql));
         }
       }

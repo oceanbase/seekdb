@@ -22,6 +22,20 @@
 #include <cstdlib>
 #include <cstring>
 #include <cstdio>
+#include <unistd.h>
+
+#ifdef __APPLE__
+// macOS: use _exit instead of exit to skip static destructors
+// This is to work around memory deallocation issues during LLVM PassRegistry static destruction
+// LLVM is statically linked, its internal malloc/free calls do not go through DYLD_INTERPOSE,
+// but some memory is allocated via OceanBase's hooked_malloc (with Header),
+// when LLVM calls system free() to release this memory during destruction, it causes a crash
+// Note: _exit() is preferred over quick_exit() for better macOS compatibility (quick_exit may
+// not be available in libSystem.B.dylib on some macOS versions)
+#define OB_EXIT(code) _exit(code)
+#else
+#define OB_EXIT(code) exit(code)
+#endif
 
 #include "lib/oblog/ob_log.h"
 #include "lib/utility/ob_print_utils.h"
@@ -59,10 +73,10 @@ static int get_executable_name(ObSqlString &exe_name)
 }
 
 /**
- * 命令行选项枚举
- * 从1000开始是为了避免与getopt_long的短选项字符冲突
- * 短选项使用ASCII字符值（如'P'=80, 'V'=86, 'h'=104, '6'=54）
- * 长选项使用1000以上的数值来区分
+ * Command line option enumeration
+ * Starting from 1000 to avoid conflicts with getopt_long short option characters
+ * Short options use ASCII character values (e.g. 'P'=80, 'V'=86, 'h'=104, '6'=54)
+ * Long options use values above 1000 to distinguish them
  */
 enum ObCommandOption {
   COMMAND_OPTION_INITIALIZE = 1000,
@@ -76,7 +90,7 @@ enum ObCommandOption {
   COMMAND_OPTION_PARAMETER,
 };
 
-// 定义长选项
+// Define long options
 static struct option long_options[] = {
   {"initialize", no_argument,       0, COMMAND_OPTION_INITIALIZE}, // TODO wangyunlai.wyl remove me before 2025-12-01
   {"variable",   required_argument, 0, COMMAND_OPTION_VARIABLE},
@@ -94,12 +108,12 @@ static struct option long_options[] = {
   {0, 0, 0, 0}
 };
 
-// 定义短选项字符串
+// Define short options string
 static const char* short_options = "P:Vh6";
 
 
 /**
- * 将字符串按照 '=' 分割成 key 和 value
+ * Split string into key and value by '='
  */
 static int split_key_value(const ObString &str, ObString &key, ObString &value)
 {
@@ -260,38 +274,38 @@ int ObCommandLineParser::parse_args(int argc, char* argv[], ObServerOptions& opt
 {
   int ret = OB_SUCCESS;
 
-  // 重置选项状态
+  // Reset option state
   help_requested_ = false;
   version_requested_ = false;
 
   int option_index = 0;
   int c;
 
-  // 使用getopt_long解析参数
+  // Parse arguments using getopt_long
   while (OB_SUCC(ret) && (c = getopt_long(argc, argv, short_options, long_options, &option_index)) != -1) {
     ret = handle_option(c, optarg, opts);
   }
 
-  // 检查是否有非选项参数
-  // optind是getopt_long处理完选项参数后，argv中下一个未处理参数的索引
+  // Check for non-option arguments
+  // optind is the index of the next unprocessed argument in argv after getopt_long finishes processing options
   if (OB_SUCC(ret) && optind < argc) {
     ret = OB_INVALID_ARGUMENT;
     MPRINT("Invalid argument, unexpected non-option parameter: %s", argv[optind]);
     print_help();
-    exit(1);
+    OB_EXIT(1);
   }
 
-  // 处理帮助和版本请求
+  // Handle help and version requests
   if (OB_FAIL(ret)) {
   } else if (help_requested_) {
     print_help();
-    exit(0);
+    OB_EXIT(0);
   } else if (version_requested_) {
     print_version();
-    exit(0);
+    OB_EXIT(0);
   }
 
-  // 设置默认值
+  // Set default values
   if (OB_FAIL(ret)) {
   } else if (opts.base_dir_.empty() && OB_FAIL(opts.base_dir_.assign("."))) {
   }

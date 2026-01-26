@@ -1363,7 +1363,7 @@ bool ObKVCacheStore::compute_tenant_wash_size()
     tenant_wash_info->reserve_mem_ = reserve_mem;
 
     //identify min_wash_size
-    tenant_wash_info->min_wash_size_ = std::max(0L, mem_usage - upper_limit + reserve_mem);
+    tenant_wash_info->min_wash_size_ = std::max(static_cast<int64_t>(0), mem_usage - upper_limit + reserve_mem);
     if (tenant_wash_info->min_wash_size_ > tenant_wash_info->cache_size_) {
       tenant_wash_info->min_wash_size_ = tenant_wash_info->cache_size_;
     }
@@ -1371,7 +1371,7 @@ bool ObKVCacheStore::compute_tenant_wash_size()
       tenant_min_wash_size += tenant_wash_info->min_wash_size_;
     }
     //identify max_wash_size
-    tenant_wash_info->max_wash_size_ = std::max(0L, mem_usage - lower_limit + reserve_mem);
+    tenant_wash_info->max_wash_size_ = std::max(static_cast<int64_t>(0), mem_usage - lower_limit + reserve_mem);
     if (tenant_wash_info->max_wash_size_ > tenant_wash_info->cache_size_) {
       tenant_wash_info->max_wash_size_ = tenant_wash_info->cache_size_;
     }

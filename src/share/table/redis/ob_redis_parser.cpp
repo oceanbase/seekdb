@@ -133,7 +133,7 @@ int ObRedisParser::encode_array(ObIAllocator &allocator, const ObIArray<ObString
 {
   int ret = OB_SUCCESS;
   if (array.empty()) {
-    encoded_msg.assign_ptr(ObRedisFmt::EMPTY_ARRAY, strlen(ObRedisFmt::EMPTY_ARRAY));
+    encoded_msg.assign_ptr(ObRedisFmt::EMPTY_ARRAY, static_cast<ObString::obstr_size_t>(strlen(ObRedisFmt::EMPTY_ARRAY)));
   } else {
     ObFastFormatInt ffi(array.count());
     ObString int_str(ffi.length(), ffi.ptr());

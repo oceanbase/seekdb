@@ -17,7 +17,19 @@
 #ifndef OB_VTOA_UTIL_H
 #define OB_VTOA_UTIL_H
 
+#ifdef __linux__
 #include <linux/types.h>
+#elif defined(__APPLE__)
+// macOS doesn't have linux/types.h, provide type definitions
+#include <stdint.h>
+#include <sys/types.h>
+typedef uint32_t __u32;
+typedef uint16_t __u16;
+// __be32 and __be16 are big-endian types, on macOS (which is little-endian on ARM/x86_64),
+// we use regular types and rely on network byte order conversion functions
+typedef uint32_t __be32;
+typedef uint16_t __be16;
+#endif
 #include <netinet/in.h>
 #include "lib/hash/ob_hashmap.h"
 #include <lib/net/ob_addr.h>

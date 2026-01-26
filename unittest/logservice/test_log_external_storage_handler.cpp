@@ -77,7 +77,12 @@ TEST(TestLogExternalStorageHandler, test_log_external_storage_handler)
   EXPECT_EQ(false, handler.is_inited_);
   EXPECT_EQ(OB_NOT_INIT, handler.start(10));
   const int64_t MB = 1*1024*1024;
+#ifdef __APPLE__
+  char buf[PATH_MAX];
+  std::string curr_dir(getcwd(buf, sizeof(buf)));
+#else
   std::string curr_dir(get_current_dir_name());
+#endif
   std::string test_file = "file://" + curr_dir + "/runlin_test";
   ObString uri = test_file.c_str();
   ObString storage_info = "runlin_test";

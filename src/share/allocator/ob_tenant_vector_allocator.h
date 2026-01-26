@@ -90,11 +90,11 @@ public:
   std::string Name() override {
     return "ObVsagAlloc";
   }
-  void* Allocate(size_t size) override;
+  void* Allocate(uint64_t size) override;
 
   void Deallocate(void* p) override;
 
-  void* Reallocate(void* p, size_t size) override;
+  void* Reallocate(void* p, uint64_t size) override;
 
   int64_t hold() {
     int res = 0;

@@ -187,7 +187,12 @@ int prepare_backup_device_handle(const ObStorageAccessType &access_type,
   char test_dir_uri[OB_MAX_URI_LENGTH];
   char uri[OB_MAX_URI_LENGTH];
 
+#ifdef __APPLE__
+  char buf[PATH_MAX];
+  databuff_printf(test_dir, sizeof(test_dir), "%s/test_backup_async_io_dir", getcwd(buf, sizeof(buf)));
+#else
   databuff_printf(test_dir, sizeof(test_dir), "%s/test_backup_async_io_dir", get_current_dir_name());
+#endif
   databuff_printf(test_dir_uri, sizeof(test_dir_uri), "file://%s", test_dir);
   databuff_printf(uri, sizeof(uri), "file://%s/test_file", test_dir);
 

@@ -1367,7 +1367,7 @@ int ObRootInspection::check_sys_view_(
         // case 1: check column name with lower case
         ObString col_name;
         while (OB_SUCC(ret) && OB_SUCC(result->next())) {
-          if (OB_FAIL(result->get_varchar(0L, col_name))) {
+          if (OB_FAIL(result->get_varchar(static_cast<int64_t>(0), col_name))) {
             LOG_WARN("fail to get filed", KR(ret), K(tenant_id), K(table_name));
           } else if (check_str_with_lower_case_(col_name)) {
             ret = OB_SCHEMA_ERROR;

@@ -57,7 +57,7 @@ int ObInsertLobColumnHelper::start_trans(const share::ObLSID &ls_id,
   tx_param.access_mode_ = is_for_read ? ObTxAccessMode::RD_ONLY : ObTxAccessMode::RW; 
   tx_param.cluster_id_ = ObServerConfig::get_instance().cluster_id;
   tx_param.isolation_ = transaction::ObTxIsolationLevel::RC;
-  tx_param.timeout_us_ = std::max(0l, timeout_ts - ObTimeUtility::current_time());
+  tx_param.timeout_us_ = std::max(static_cast<int64_t>(0), timeout_ts - ObTimeUtility::current_time());
 
   ObTransService *txs = MTL(ObTransService*);
   if (OB_FAIL(txs->acquire_tx(tx_desc))) {

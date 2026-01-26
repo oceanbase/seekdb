@@ -214,7 +214,7 @@ protected:
     int64_t row_cnt = sk_store_.get_row_cnt();
     return mem_context_->used() + ((part_cnt_ == 0) ? 0 :
           ((row_cnt * FIXED_PART_NODE_SIZE * 2) +                         // size of(part_hash_nodes_)
-          (next_pow2(std::max(16L, row_cnt)) * FIXED_PART_BKT_SIZE * 2))); // size of(buckets_)
+          (next_pow2(std::max(static_cast<int64_t>(16), row_cnt)) * FIXED_PART_BKT_SIZE * 2))); // size of(buckets_)
   }
   inline int64_t get_tmp_buffer_mem_bound() {
     // The memory reserved for ObSortVecOpEagerFilter should be deducted when topn filter is enabled.

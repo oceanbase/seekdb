@@ -68,8 +68,14 @@ int prepare_backup_dest(ObBackupDest &backup_dest)
   ObBackupIoAdapter util;
   char test_dir_[OB_MAX_URI_LENGTH];
   char test_dir_uri_[OB_MAX_URI_LENGTH];
+#ifdef __APPLE__
+  char buf[PATH_MAX];
+  if (OB_FAIL(databuff_printf(test_dir_, sizeof(test_dir_),
+      "%s/test_backup_linked_item_write_and_read_dir", getcwd(buf, sizeof(buf))))) {
+#else
   if (OB_FAIL(databuff_printf(test_dir_, sizeof(test_dir_),
       "%s/test_backup_linked_item_write_and_read_dir", get_current_dir_name()))) {
+#endif
     LOG_WARN("failed to databuff_printf", K(ret));
   } else if (OB_FAIL(databuff_printf(test_dir_uri_, sizeof(test_dir_uri_), "file://%s", test_dir_))) {
     LOG_WARN("failed to databuff printf", K(ret));
@@ -337,7 +343,12 @@ void TestBackupLinkedReaderWriter::TearDown()
 void TestBackupLinkedReaderWriter::clean_env_()
 {
   char test_dir_[OB_MAX_URI_LENGTH];
+#ifdef __APPLE__
+  char buf[PATH_MAX];
+  databuff_printf(test_dir_, sizeof(test_dir_), "%s/test_backup_linked_item_write_and_read_dir", getcwd(buf, sizeof(buf)));
+#else
   databuff_printf(test_dir_, sizeof(test_dir_), "%s/test_backup_linked_item_write_and_read_dir", get_current_dir_name());
+#endif
   system((std::string("rm -rf ") + test_dir_ + std::string("*")).c_str());
 }
 

@@ -19,6 +19,7 @@
 #include "ob_signal_handlers.h"
 #include <dirent.h>
 #include <sys/wait.h>
+#include "lib/utility/ob_platform_utils.h"  // Platform compatibility layer
 #include "lib/utility/utility.h"
 #include "lib/signal/ob_libunwind.h"
 #include "lib/utility/ob_hang_fatal_error.h"
@@ -92,7 +93,12 @@ int install_ob_signal_handler()
   sigemptyset(&sa.sa_mask);
   for (int i = 0; OB_SUCC(ret) && i < ARRAYSIZEOF(SIG_SET); i++) {
     if (-1 == sigaction(SIG_SET[i], &sa, nullptr)) {
+#ifdef __APPLE__
+      // On macOS, some signals may fail to install, just log and continue
+      // This is not a fatal error on macOS
+#else
       ret = OB_INIT_FAIL;
+#endif
     }
   }
   return ret;
@@ -152,18 +158,14 @@ void close_socket_fd()
 
 void coredump_cb(volatile int sig, volatile int sig_code, void* volatile sig_addr, void *context)
 {
-  int ret = OB_SUCCESS;
   if (g_coredump_num++ < 1) {
-    pid_t pid;
     close_socket_fd();
-    ret = minicoredump(sig, GETTID(), pid);
-    // parent or fork failed
     timespec time = {0, 0};
     clock_gettime(CLOCK_REALTIME, &time);
     int64_t ts = time.tv_sec * 1000000 + time.tv_nsec / 1000;
     // thread_name
     char tname[16];
-    prctl(PR_GET_NAME, tname);
+    oceanbase::lib::ob_get_thread_name(tname, sizeof(tname));
     // backtrace
     char bt[512] = {'\0'};
     int64_t len = 0;
@@ -184,8 +186,14 @@ void coredump_cb(volatile int sig, volatile int sig_code, void* volatile sig_add
     int64_t bp = con->uc_mcontext.gregs[REG_RBP]; // stack base
     safe_backtrace(bt, sizeof(bt) - 1, &len);
 #elif defined(__aarch64__)
+#ifdef __APPLE__
+    // macOS ARM64: uc_mcontext is a pointer, use __ss.__pc and __ss.__fp
+    int64_t ip = con->uc_mcontext->__ss.__pc;
+    int64_t bp = con->uc_mcontext->__ss.__fp;
+#else
     int64_t ip = con->uc_mcontext.regs[30];
     int64_t bp = con->uc_mcontext.regs[29];
+#endif
     #ifndef OB_BUILD_EMBED_MODE
       void* addrs[64];
       int n_addr = light_backtrace(addrs, ARRAYSIZEOF(addrs), bp);
@@ -230,43 +238,10 @@ void coredump_cb(volatile int sig, volatile int sig_code, void* volatile sig_add
     iov[5].iov_base = end;
     iov[5].iov_len = strlen(end);
     writev(STDERR_FILENO, iov, sizeof(iov) / sizeof(iov[0]));
-    if (OB_SUCC(ret)) {
-      int status = 0;
-      waitpid(pid, &status, __WALL);
-    }
   }
   // Reset back to the default handler
   signal(sig, SIG_DFL);
   raise(sig);
-}
-
-int minicoredump(int sig, int64_t tid, pid_t& pid)
-{
-  static constexpr int64_t MIN_INTERVAL = 5 * 60 * 1000 * 1000; // 5min
-  static int64_t last_ts = 0;
-  int64_t now = ObTimeUtility::fast_current_time();
-  int64_t last = ATOMIC_LOAD(&last_ts);
-  int ret = OB_SUCCESS;
-  UNUSED(sig);
-  UNUSED(tid);
-  if (now - last < MIN_INTERVAL) {
-    ret = OB_EAGAIN;
-  } else if (!ATOMIC_BCAS(&last_ts, last, now)) {
-    ret = OB_EAGAIN;
-  } else if (-1 == access("bin/minicore.py", R_OK)) {
-    ret = OB_FILE_NOT_EXIST;
-  } else if (-1 == access(MINICORE_SHELL_PATH, R_OK)) {
-    if (0 == (pid = syscall(__NR_clone, CLONE_VFORK, nullptr, nullptr, nullptr, nullptr))) {
-      IGNORE_RETURN execlp("sh", "sh", "-c", MINICORE_SCRIPT, nullptr);
-      _exit(EXIT_FAILURE);
-    }
-  } else if (-1 != access(MINICORE_SHELL_PATH, X_OK)) {
-    if (0 == (pid = syscall(__NR_clone, CLONE_VFORK, nullptr, nullptr, nullptr, nullptr))) {
-      IGNORE_RETURN execlp("sh", "sh", MINICORE_SHELL_PATH, nullptr);
-      _exit(EXIT_FAILURE);
-    }
-  }
-  return ret;
 }
 
 int faststack()

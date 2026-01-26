@@ -19,6 +19,23 @@
 #include "lib/thread/protected_stack_allocator.h"
 #include "lib/resource/ob_affinity_ctrl.h"
 
+#ifdef __APPLE__
+#include <sys/uio.h>
+// macOS doesn't have process_vm_readv, provide a stub implementation
+static ssize_t process_vm_readv(pid_t pid, const struct iovec *local_iov, unsigned long liovcnt,
+                                const struct iovec *remote_iov, unsigned long riovcnt, unsigned long flags) {
+  (void)pid;
+  (void)local_iov;
+  (void)liovcnt;
+  (void)remote_iov;
+  (void)riovcnt;
+  (void)flags;
+  // Stub implementation: return -1 to indicate failure
+  // This functionality is not available on macOS
+  return -1;
+}
+#endif
+
 #define GET_OTHER_TSI_ADDR(var_name, addr) \
 const int64_t var_name##_offset = ((int64_t)addr - (int64_t)pthread_self()); \
 decltype(*addr) var_name = *(decltype(addr))(thread_base + var_name##_offset);
@@ -62,6 +79,12 @@ int ObAllVirtualThread::inner_get_next_row(common::ObNewRow *&row)
       SERVER_LOG(WARN, "fail check file exist", K(cgroup_path), K(ret));
     }
     #ifdef OB_BUILD_EMBED_MODE
+    ret = OB_NOT_SUPPORTED;
+    return ret;
+    #endif
+    #ifdef __APPLE__
+    // GET_OTHER_TSI_ADDR macro relies on Linux-specific pthread/TLS memory layout.
+    // On macOS, pthread_t offset calculation cannot access other threads' TLS variables.
     ret = OB_NOT_SUPPORTED;
     return ret;
     #endif
@@ -163,8 +186,8 @@ int ObAllVirtualThread::inner_get_next_row(common::ObNewRow *&row)
                 int64_t pos1 = 0;
                 int64_t pos2 = 0;
                 if (((pos1 = snprintf(wait_event_, 37, "rpc 0x%X(%s", pcode, obrpc::ObRpcPacketSet::instance().name_of_idx(obrpc::ObRpcPacketSet::instance().idx_of_pcode(pcode)) + 3)) > 0)
-                    && ((pos2 = snprintf(wait_event_ + std::min(36L, pos1), 6, ") to ")) > 0)) {
-                  int64_t pos = std::min(36L, pos1) + std::min(5L, pos2);
+                    && ((pos2 = snprintf(wait_event_ + std::min(static_cast<int64_t>(36L), pos1), 6, ") to ")) > 0)) {
+                  int64_t pos = std::min(static_cast<int64_t>(36L), pos1) + std::min(static_cast<int64_t>(5L), pos2);
                   pos += addr.to_string(wait_event_ + pos, buf_size - pos);
                 }
               } else if (0 != blocking_ts && (0 != (Thread::WAIT_IN_TENANT_QUEUE & event))) {

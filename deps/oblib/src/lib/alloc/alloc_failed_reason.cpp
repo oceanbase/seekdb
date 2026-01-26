@@ -16,6 +16,7 @@
 
 #include "lib/alloc/alloc_failed_reason.h"
 #include <unistd.h>
+#include "lib/utility/ob_platform_utils.h"  // Platform compatibility layer
 #include "lib/allocator/ob_tc_malloc.h"
 #include "lib/allocator/ob_mod_define.h"
 #include "lib/alloc/memory_dump.h"
@@ -108,10 +109,12 @@ char *alloc_failed_msg()
   case PHYSICAL_MEMORY_EXHAUST: {
       int64_t process_hold = 0;
       int64_t virtual_memory_used = common::get_virtual_memory_used(&process_hold);
+      int64_t os_total = lib::ob_get_total_memory();
+      int64_t os_available = lib::ob_get_available_memory();
       snprintf(msg, len,
                "physical memory exhausted(os_total: %ld, os_available: %ld, virtual_memory_used: %ld, server_hold: %ld, errno: %d, alloc_size: %ld)",
-               sysconf(_SC_PHYS_PAGES) * sysconf(_SC_PAGESIZE),
-               sysconf(_SC_AVPHYS_PAGES) * sysconf(_SC_PAGESIZE),
+               os_total,
+               os_available,
                virtual_memory_used,
                process_hold,
                afc.errno_,

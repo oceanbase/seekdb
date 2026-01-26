@@ -263,7 +263,8 @@ int ObStorageLogReplayer::parse_log(
       ObIRedoModule::parse_cmd(entry.cmd_, main_type, sub_type);
       int64_t time = entry.timestamp_ / 1000000L;
       int64_t ms = entry.timestamp_ % 1000000L / 1000L;
-      strftime(date, sizeof(date), "%Y-%m-%d %H:%M:%S", localtime(static_cast<time_t *>(&time)));
+      time_t time_val = static_cast<time_t>(time);
+      strftime(date, sizeof(date), "%Y-%m-%d %H:%M:%S", localtime(&time_val));
       if (OB_UNLIKELY(0 > fprintf(stream, "\nmain_type:%d, sub_type:%d, log_seq:%lu, date:%s:%ld",
           main_type, sub_type, entry.seq_, date, ms))) {
         ret = OB_IO_ERROR;

@@ -20,7 +20,28 @@
 #include <sched.h>
 #include <stdint.h>
 #include <sys/types.h>
+#ifdef __linux__
 #include <linux/mempolicy.h>
+#include <pthread.h>
+#elif defined(__APPLE__)
+#include <pthread.h>
+#include <string.h>
+// macOS doesn't have cpu_set_t in sched.h, define it ourselves
+#ifndef CPU_SETSIZE
+#define CPU_SETSIZE 1024
+#endif
+typedef struct {
+  uint64_t __bits[CPU_SETSIZE / 64];
+} cpu_set_t;
+#define CPU_ZERO(set) do { \
+  memset((set)->__bits, 0, sizeof((set)->__bits)); \
+} while (0)
+#define CPU_SET(cpu, set) do { \
+  if ((cpu) < CPU_SETSIZE) { \
+    (set)->__bits[(cpu) / 64] |= (1ULL << ((cpu) % 64)); \
+  } \
+} while (0)
+#endif
 #include "lib/ob_define.h"
 
 #define AFFINITY_CTRL (oceanbase::lib::ObAffinityCtrl::get_instance())

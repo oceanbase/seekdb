@@ -2194,7 +2194,7 @@ int ObDDLUtil::handle_lob_columns(
     const ObDDLTableSchema &ddl_table_schema = param.ddl_table_schema_;
     const int64_t row_count = batch_rows.row_count_;
     const int64_t lob_inrow_threshold = ddl_table_schema.table_item_.lob_inrow_threshold_;
-    ObBatchSelector selector(0L, batch_rows.row_count_);
+    ObBatchSelector selector(static_cast<int64_t>(0), batch_rows.row_count_);
     ObArray<std::pair<char **, uint32_t *>> lob_cells;
     for (int64_t i = 0; OB_SUCC(ret) && i < ddl_table_schema.lob_column_idxs_.count(); i++) {
       const int64_t idx = ddl_table_schema.lob_column_idxs_.at(i);
@@ -4180,7 +4180,7 @@ int ObDDLUtil::get_ddl_tx_timeout(const int64_t tablet_count, int64_t &ddl_tx_ti
 
 int64_t ObDDLUtil::get_default_ddl_rpc_timeout()
 {
-  return min(20L * 60L * 1000L * 1000L, max(GCONF.rpc_timeout, 9 * 1000 * 1000L));
+  return min(static_cast<int64_t>(20L * 60L * 1000L * 1000L), max(GCONF.rpc_timeout, static_cast<int64_t>(9 * 1000 * 1000L)));
 }
 
 
@@ -5068,9 +5068,9 @@ int64_t ObDDLUtil::get_real_parallelism(const int64_t parallelism, const bool is
 {
   int64_t real_parallelism = 0L;
   if (is_mv_refresh) {
-    real_parallelism = std::max(2L, parallelism);
+    real_parallelism = std::max(static_cast<int64_t>(2), parallelism);
   } else {
-    real_parallelism = std::min(oceanbase::ObMacroDataSeq::MAX_PARALLEL_IDX + 1, std::max(1L, parallelism));
+    real_parallelism = std::min(oceanbase::ObMacroDataSeq::MAX_PARALLEL_IDX + 1, std::max(static_cast<int64_t>(1), parallelism));
   }
   return real_parallelism;
 }
@@ -6281,7 +6281,7 @@ int ObCheckTabletDataComplementOp::do_check_tablets_merge_status(
     rootserver::ObCheckTabletMergeStatusProxy proxy(*rpc_proxy,
         &obrpc::ObSrvRpcProxy::check_ddl_tablet_merge_status);
     obrpc::ObDDLCheckTabletMergeStatusArg arg;
-    const int64_t rpc_timeout = max(GCONF.rpc_timeout, 1000L * 1000L * 9L);
+    const int64_t rpc_timeout = max(GCONF.rpc_timeout, static_cast<int64_t>(1000L * 1000L * 9L));
 
     for (int64_t i = 0; OB_SUCC(ret) && i < tablet_ids.count(); ++i) {
       const ObTabletID &tablet_id = tablet_ids.at(i);

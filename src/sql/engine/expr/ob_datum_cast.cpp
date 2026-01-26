@@ -10696,7 +10696,7 @@ int string_to_set(ObIAllocator &alloc,
           LOG_WARN("fail to find type", K(str_values), K(cs_type), K(in_str), K(pos), K(ret));
         }
       } else {
-        val_str.assign_ptr(remain, sep_loc - remain);
+        val_str.assign_ptr(remain, static_cast<ObString::obstr_size_t>(sep_loc - remain));
         remain_len = remain_len - (sep_loc - remain + sep.length());
         remain = sep_loc + sep.length();
         if (OB_FAIL(find_type(str_values, cs_type, val_str, pos))) {

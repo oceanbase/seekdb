@@ -583,6 +583,12 @@ class Path
 
   enum OptSkipScanState
   {
+#ifdef __APPLE__
+    // macOS defines SS_DISABLE in sys/signal.h, undefine it first
+    #ifdef SS_DISABLE
+    #undef SS_DISABLE
+    #endif
+#endif
     SS_DISABLE = 0,
     SS_UNSET,
     SS_HINT_ENABLE,

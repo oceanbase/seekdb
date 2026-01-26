@@ -146,11 +146,17 @@ struct sockaddr_storage* ObNetUtil::make_unix_sockaddr(bool is_ipv6, const void 
 {
   if (!is_ipv6) {
     struct sockaddr_in      *sin = (struct sockaddr_in *)sock_addr;
+#ifdef __APPLE__
+    sin->sin_len = sizeof(struct sockaddr_in);
+#endif
     sin->sin_port = (uint16_t)htons((uint16_t)port);
     sin->sin_addr.s_addr = htonl(*(uint32_t*)ip);
     sin->sin_family = AF_INET;
   } else {
     struct sockaddr_in6     *sin = (struct sockaddr_in6 *)sock_addr;
+#ifdef __APPLE__
+    sin->sin6_len = sizeof(struct sockaddr_in6);
+#endif
     sin->sin6_port = (uint16_t)htons((uint16_t)port);
     memcpy(&sin->sin6_addr.s6_addr, ip, sizeof(in6_addr::s6_addr));
     sin->sin6_family = AF_INET6;

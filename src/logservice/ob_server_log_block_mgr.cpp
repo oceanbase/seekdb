@@ -17,6 +17,10 @@
 #define USING_LOG_PREFIX CLOG
 #include "ob_server_log_block_mgr.h"
 #include <regex>                                // std::regex
+#ifdef __APPLE__
+#include <fcntl.h>                              // For fcntl, F_PREALLOCATE on macOS
+#include <unistd.h>                             // For ftruncate
+#endif
 #include "observer/ob_server.h"                 // OBSERVER
 #include "observer/ob_server_utils.h"           // get_log_disk_info_in_config
 #include "logservice/ob_log_service.h"          // ObLogService
@@ -329,10 +333,17 @@ int ObServerLogBlockMgr::allocate_block_at_(const FileDesc &dir_fd,
   if (-1 == (fd = ::openat(dir_fd, block_path, CREATE_FILE_FLAG, CREATE_FILE_MODE))) {
     ret = convert_sys_errno();
     CLOG_LOG(ERROR, "::openat failed", K(ret), KPC(this), K(dir_fd), K(block_path));
+#ifdef __APPLE__
+  } else if (-1 == ftruncate(fd, block_size)) {
+    ret = convert_sys_errno();
+    CLOG_LOG(ERROR, "::ftruncate failed (macOS fallocate replacement)", K(ret), KPC(this), K(dir_fd), K(block_path),
+             K(errno));
+#else
   } else if (-1 == ::fallocate(fd, 0, 0, block_size)) {
     ret = convert_sys_errno();
     CLOG_LOG(ERROR, "::fallocate failed", K(ret), KPC(this), K(dir_fd), K(block_path),
              K(errno));
+#endif
   } else {
     if (REACH_TIME_INTERVAL(PRINT_INTERVAL)) {
       CLOG_LOG(INFO, "allocate_block_at_ success", K(ret), KPC(this), K(dir_fd),

@@ -137,7 +137,7 @@ int ObDelUpdLogPlan::inner_compute_dml_dop_by_auto_dop(const ObDelUpdStmt &stmt,
     LOG_WARN("failed to get insert cost", K(ret));
   } else {
     int64_t server_cnt = 1;
-    const double cost_threshold_us = 1000.0 * std::max(10L, opt_ctx.get_parallel_min_scan_time_threshold());
+    const double cost_threshold_us = 1000.0 * std::max(static_cast<int64_t>(10), opt_ctx.get_parallel_min_scan_time_threshold());
     const int64_t calc_dop_limit = opt_ctx.get_parallel_degree_limit(server_cnt);
     int64_t calc_dop = op_cost / cost_threshold_us;
     dop = std::min(calc_dop, calc_dop_limit);

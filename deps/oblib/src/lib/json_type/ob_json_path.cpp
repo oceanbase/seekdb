@@ -72,7 +72,7 @@ public:
 };
 
 
-ObJsonArrayIndex::ObJsonArrayIndex(uint64_t index, bool is_from_end, uint64_t array_length)
+ObJsonArrayIndex::ObJsonArrayIndex(uint64_t index, bool is_from_end, size_t array_length)
 {
   if (is_from_end) {
     if (index < array_length) {

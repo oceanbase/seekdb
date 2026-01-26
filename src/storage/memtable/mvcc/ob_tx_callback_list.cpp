@@ -544,7 +544,7 @@ int ObTxCallbackList::remove_callbacks_for_rollback_to(const transaction::ObTxSE
 
 // caller must has hold log_latch_
 // fill log from log_cursor -> end
-__attribute__((noinline))
+__attribute__((noinline, weak))
 int ObTxCallbackList::fill_log(ObITransCallback* log_cursor, ObTxFillRedoCtx &ctx, ObITxFillRedoFunctor &functor)
 {
   // the remove callback operations is either remove logged callback or unlogged cabback
@@ -950,7 +950,7 @@ bool ObTxCallbackList::check_all_redo_flushed(const bool quite) const
   return ok;
 }
 
-__attribute__((noinline))
+__attribute__((noinline, weak))
 int64_t ObTxCallbackList::get_log_epoch() const
 {
   return ATOMIC_LOAD(&log_epoch_);

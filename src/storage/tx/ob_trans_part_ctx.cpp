@@ -6891,7 +6891,7 @@ OB_NOINLINE int ObPartTransCtx::errism_submit_prepare_log_()
   return ret;
 }
 
-OB_NOINLINE int ObPartTransCtx::errsim_notify_mds_()
+OB_NOINLINE __attribute__((weak)) int ObPartTransCtx::errsim_notify_mds_()
 {
   int ret = OB_SUCCESS;
 

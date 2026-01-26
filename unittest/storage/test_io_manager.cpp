@@ -1178,7 +1178,11 @@ int prepare_file(const char *file_path, const int64_t file_size, int32_t &fd)
       ret = OB_IO_ERROR;
       LOG_WARN("fail to create file", K(ret));
     } else {
+#ifdef __linux__
       if (fallocate(fd, 0, 0, file_size) < 0) {
+#else
+      if (myfallocate(fd, 0, 0, file_size) < 0) {
+#endif
         ret = OB_IO_ERROR;
         LOG_WARN("fail to allocate file", K(ret), K(fd), K(file_size));
       } else {

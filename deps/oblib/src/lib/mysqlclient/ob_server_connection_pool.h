@@ -17,7 +17,11 @@
 #ifndef __COMMON_OB_SERVER_CONNECTION_POOL__
 #define __COMMON_OB_SERVER_CONNECTION_POOL__
 
+#ifdef __APPLE__
+#include <mariadb/mysql.h>
+#else
 #include <mysql.h>
+#endif
 #include "lib/lock/ob_spin_lock.h"
 #include "lib/mysqlclient/ob_connection_allocator.h"
 #include "lib/mysqlclient/ob_mysql_connection.h"

@@ -7574,8 +7574,8 @@ int AccessPath::check_and_prepare_estimate_parallel_params(const int64_t cur_min
   } else if (OB_FAIL(get_dop_limit_by_pushdown_limit(dop_limit))) {
     LOG_WARN("failed to get dop limit by pushdown limit", K(ret));
   } else {
-    px_part_gi_min_part_per_dop = std::max(1L, px_part_gi_min_part_per_dop);
-    cost_threshold_us = 1000.0 * std::max(10L, opt_ctx->get_parallel_min_scan_time_threshold());
+    px_part_gi_min_part_per_dop = std::max(static_cast<int64_t>(1), px_part_gi_min_part_per_dop);
+    cost_threshold_us = 1000.0 * std::max(static_cast<int64_t>(10), opt_ctx->get_parallel_min_scan_time_threshold());
     cur_parallel_degree_limit = opt_ctx->get_parallel_degree_limit(server_cnt);
     const int64_t row_parallel_limit = std::floor(get_phy_query_range_row_count() / ROW_COUNT_THRESHOLD_PER_DOP);
     if (dop_limit > ObGlobalHint::UNSET_PARALLEL && dop_limit < cur_parallel_degree_limit) {
@@ -7593,7 +7593,7 @@ int AccessPath::check_and_prepare_estimate_parallel_params(const int64_t cur_min
         cur_parallel_degree_limit = ss_scan_parallel_limit;
       }
     }
-    cur_parallel_degree_limit = std::max(1L, cur_parallel_degree_limit);
+    cur_parallel_degree_limit = std::max(static_cast<int64_t>(1), cur_parallel_degree_limit);
   }
   return ret;
 }
@@ -7671,7 +7671,7 @@ int AccessPath::prepare_estimate_parallel(const int64_t pre_parallel,
     int64_t step = std::ceil(cost / cost_threshold_us);
     if (px_cost / cost < 0.1 && step > 1) {  // zhanyuetodo: optimize this
       step = std::max(server_cnt, step);
-      cur_parallel += std::min(step, 32L);
+      cur_parallel += std::min(step, static_cast<int64_t>(32));
     } else {
       cur_parallel += server_cnt;
     }

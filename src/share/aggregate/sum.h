@@ -798,7 +798,7 @@ public:
           float *float_res = reinterpret_cast<float *>(agg_array_data.ptr());
           for (int64_t i = 0; OB_SUCC(ret) && i < length; ++i) {
             float_res[i] += float_data[i];
-            if (isinff(float_res[i]) != 0) {
+            if (std::isinf(float_res[i]) != 0) {
               ret = OB_OPERATE_OVERFLOW;
               SQL_LOG(WARN, "value overflow", K(ret), K(i), K(float_data[i]), K(float_res[i]));
             }
@@ -856,7 +856,7 @@ public:
         float *float_res = reinterpret_cast<float *>(agg_array_data.ptr());
         for (int64_t i = 0; OB_SUCC(ret) && i < length; ++i) {
           is_add ? float_res[i] += float_data[i] : float_res[i] -= float_data[i];
-          if (isinff(float_res[i]) != 0) {
+          if (std::isinf(float_res[i]) != 0) {
             ret = OB_OPERATE_OVERFLOW;
             SQL_LOG(WARN, "value overflow", K(ret), K(i), K(float_data[i]), K(float_res[i]));
           }

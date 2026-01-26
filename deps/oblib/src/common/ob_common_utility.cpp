@@ -111,6 +111,7 @@ int get_stackattr(void *&stackaddr, size_t &stacksize)
     bool in_hook_bak = in_hook();
     in_hook() = true;
     DEFER(in_hook() = in_hook_bak);
+#ifdef __linux__
     pthread_attr_t attr;
     if (OB_UNLIKELY(0 != pthread_getattr_np(pthread_self(), &attr))) {
       ret = OB_ERROR;
@@ -126,6 +127,16 @@ int get_stackattr(void *&stackaddr, size_t &stacksize)
       g_stackaddr = (char*)stackaddr;
       g_stacksize = stacksize;
     }
+#elif defined(__APPLE__)
+    // macOS doesn't support pthread_getattr_np, use macOS specific APIs
+    stacksize = pthread_get_stacksize_np(pthread_self());
+    void *stacktop = pthread_get_stackaddr_np(pthread_self());
+    // pthread_get_stackaddr_np returns the TOP of the stack.
+    // OceanBase's check_stack_overflow expects stackaddr to be the BOTTOM (lowest address).
+    stackaddr = (void*)((char*)stacktop - stacksize);
+    g_stackaddr = (char*)stackaddr;
+    g_stacksize = stacksize;
+#endif
   }
   return ret;
 }

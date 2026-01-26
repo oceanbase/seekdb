@@ -1637,7 +1637,7 @@ void ObDDLTask::calc_next_schedule_ts(const int ret_code, const int64_t total_ta
   int64_t ddl_rpc_timeout = ObDDLUtil::get_default_ddl_rpc_timeout();
   if (OB_TIMEOUT == ret_code) {
     const int64_t SEC = 1000000;
-    const int64_t max_delay = std::min(total_task_cnt * ddl_rpc_timeout * 10, 600 * 1000 * 1000L/*10 min*/);
+    const int64_t max_delay = std::min(total_task_cnt * ddl_rpc_timeout * 10, static_cast<int64_t>(600 * 1000 * 1000)/*10 min*/);
     delay_schedule_time_ = std::min(delay_schedule_time_ * 6/5 + SEC/10, max_delay);
     const int64_t max_dt = delay_schedule_time_;
     const int64_t min_dt = max_dt / 2;

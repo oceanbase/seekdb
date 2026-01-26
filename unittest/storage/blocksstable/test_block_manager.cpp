@@ -14,7 +14,12 @@
  * limitations under the License.
  */
 
+#ifdef __linux__
 #include <sys/vfs.h>
+#elif __APPLE__
+#include <sys/mount.h>
+#include <algorithm>
+#endif
 #include <sys/statvfs.h>
 #include <gtest/gtest.h>
 
@@ -345,6 +350,26 @@ int64_t get_current_datafile_size()
 TEST_F(TestBlockManager, test_resize_file_1)
 {
   struct statvfs svfs;
+#ifdef __APPLE__
+  ASSERT_EQ(0, statvfs(util_.storage_env_.sstable_dir_, &svfs));
+  const int64_t free_space = svfs.f_bavail * svfs.f_bsize;
+  const int64_t used_space =
+      OB_STORAGE_OBJECT_MGR.get_total_macro_block_count() *
+      OB_STORAGE_OBJECT_MGR.get_macro_block_size();
+
+  const int64_t extend_cap = std::min<int64_t>(
+      free_space / 2,
+      4LL * 1024 * 1024 * 1024);
+  const int64_t target_size = used_space + std::max<int64_t>(0, extend_cap);
+  int ret = OB_STORAGE_OBJECT_MGR.resize_local_device(get_current_datafile_size(), target_size, 99, 0);
+  ASSERT_EQ(common::OB_SUCCESS, ret);
+
+  int64_t free_blk_cnt_1 = OB_SERVER_BLOCK_MGR.io_device_->get_free_block_count();
+  ret = OB_STORAGE_OBJECT_MGR.resize_local_device(get_current_datafile_size(), target_size, 99,  0);
+  ASSERT_EQ(common::OB_SUCCESS, ret);
+  int64_t free_blk_cnt_2 = OB_SERVER_BLOCK_MGR.io_device_->get_free_block_count();
+  ASSERT_TRUE(free_space > 0 ? free_blk_cnt_1 <= free_blk_cnt_2 : free_blk_cnt_1 == free_blk_cnt_2);
+#else
   statvfs(util_.storage_env_.sstable_dir_, &svfs);
   int64_t free_space = svfs.f_bavail * svfs.f_bsize;
   int used_space = OB_STORAGE_OBJECT_MGR.get_total_macro_block_count() * OB_STORAGE_OBJECT_MGR.get_macro_block_size();
@@ -358,6 +383,7 @@ TEST_F(TestBlockManager, test_resize_file_1)
   ASSERT_EQ(common::OB_SUCCESS, ret);
   int64_t free_blk_cnt_2 = OB_SERVER_BLOCK_MGR.io_device_->get_free_block_count();
   ASSERT_TRUE(free_space > 0 ? free_blk_cnt_1 < free_blk_cnt_2 : free_blk_cnt_1 == free_blk_cnt_2);
+#endif
 
   ret = OB_STORAGE_OBJECT_MGR.resize_local_device(get_current_datafile_size(), used_space, 99, 0);
   ASSERT_EQ(common::OB_NOT_SUPPORTED, ret);
@@ -368,6 +394,21 @@ TEST_F(TestBlockManager, test_resize_file_1)
 TEST_F(TestBlockManager, test_resize_file_2)
 {
   struct statvfs svfs;
+#ifdef __APPLE__
+  ASSERT_EQ(0, statvfs(util_.storage_env_.sstable_dir_, &svfs));
+  const int64_t free_space = svfs.f_bavail * svfs.f_bsize;
+  const int64_t used_space =
+      OB_STORAGE_OBJECT_MGR.get_total_macro_block_count() *
+      OB_STORAGE_OBJECT_MGR.get_macro_block_size();
+  int ret = OB_STORAGE_OBJECT_MGR.resize_local_device(get_current_datafile_size(),used_space + 2 * free_space, 99, 0);
+  ASSERT_EQ(common::OB_SERVER_OUTOF_DISK_SPACE, ret);
+
+  const int64_t delta_space = std::min<int64_t>(
+      free_space / 2,
+      4LL * 1024 * 1024 * 1024);
+  ret = OB_STORAGE_OBJECT_MGR.resize_local_device(get_current_datafile_size(),
+      used_space + std::max<int64_t>(0, delta_space), 99, 0);
+#else
   statvfs(util_.storage_env_.sstable_dir_, &svfs);
   int64_t free_space = svfs.f_bavail * svfs.f_bsize;
   int used_space = OB_STORAGE_OBJECT_MGR.get_total_macro_block_count() * OB_STORAGE_OBJECT_MGR.get_macro_block_size();
@@ -378,6 +419,7 @@ TEST_F(TestBlockManager, test_resize_file_2)
   int64_t min_space = 0;
   ret = OB_STORAGE_OBJECT_MGR.resize_local_device(get_current_datafile_size(),
       used_space + std::max(delta_space, min_space), 99, 0);
+#endif
   ASSERT_EQ(common::OB_SUCCESS, ret);
 }
 

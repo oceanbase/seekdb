@@ -17,6 +17,18 @@
 #ifndef OCEANBASE_LIB_OBLOG_OB_LOG_
 #define OCEANBASE_LIB_OBLOG_OB_LOG_
 
+#ifdef __APPLE__
+// Define _DARWIN_C_SOURCE before including any system headers to enable BSD types (u_int, u_short, etc.)
+// This must be defined before including sys/types.h
+#ifndef _DARWIN_C_SOURCE
+#define _DARWIN_C_SOURCE
+#endif
+// Undefine _POSIX_C_SOURCE if it's defined, as it conflicts with _DARWIN_C_SOURCE
+#ifdef _POSIX_C_SOURCE
+#undef _POSIX_C_SOURCE
+#endif
+#endif
+
 #include <stdarg.h>
 #include <time.h>
 #include <stdio.h>
@@ -34,7 +46,11 @@
 #include <stdint.h>
 #include <cstring>
 #include <sys/uio.h>
+#ifdef __APPLE__
+#include <sys/mount.h> // For statfs on macOS
+#else
 #include <sys/statfs.h>
+#endif
 #include <signal.h>
 
 #include "lib/ob_errno.h"
@@ -1242,7 +1258,7 @@ inline void ObLogger::do_log_message(const bool is_async,
 
 
     if (OB_SUCC(ret)) {
-      limited_left_log_size_ = std::max(0L, log_item->get_data_len() - NORMAL_LOG_SIZE);
+      limited_left_log_size_ = std::max(static_cast<int64_t>(0), log_item->get_data_len() - NORMAL_LOG_SIZE);
       if (is_async) {
         // clone by data_size
         ObPLogItem *new_log_item = nullptr;

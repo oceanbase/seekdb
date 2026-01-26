@@ -18,7 +18,11 @@
 #define SRC_LIBRARY_SRC_LIB_RESTORE_OB_STORAGE_S3_BASE_H_
 
 #include <openssl/md5.h>
+#ifdef __linux__
 #include <malloc.h>
+#elif defined(__APPLE__)
+#include <stdlib.h> // malloc is in stdlib.h on macOS
+#endif
 #include "lib/restore/ob_i_storage.h"
 #include "lib/container/ob_array.h"
 #include "lib/container/ob_se_array.h"

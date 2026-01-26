@@ -16,6 +16,21 @@
 
 #include "ob_lua_api.h"
 
+#ifdef __linux__
+#include <sys/uio.h> // For process_vm_readv on Linux
+#elif defined(__APPLE__)
+// macOS doesn't have process_vm_readv, provide a stub implementation
+#include <sys/uio.h> // For struct iovec
+#include <unistd.h> // For ssize_t
+#include <errno.h> // For errno
+// Stub implementation: process_vm_readv is not available on macOS
+static inline ssize_t process_vm_readv(pid_t pid, const struct iovec *local_iov, unsigned long liovcnt,
+                                       const struct iovec *remote_iov, unsigned long riovcnt, unsigned long flags) {
+  (void)pid; (void)local_iov; (void)liovcnt; (void)remote_iov; (void)riovcnt; (void)flags;
+  errno = ENOSYS; // Function not implemented
+  return -1; // Always fail on macOS
+}
+#endif
 
 #include "lib/alloc/memory_dump.h"
 #include "lib/allocator/ob_mem_leak_checker.h"
@@ -1812,8 +1827,8 @@ int dump_thread_info(lua_State *L)
             int64_t pos1 = 0;
             int64_t pos2 = 0;
             if (((pos1 = snprintf(wait_event, 37, "rpc 0x%X(%s", pcode, obrpc::ObRpcPacketSet::instance().name_of_idx(obrpc::ObRpcPacketSet::instance().idx_of_pcode(pcode)) + 3)) > 0)
-                && ((pos2 = snprintf(wait_event + std::min(36L, pos1), 6, ") to ")) > 0)) {
-              int64_t pos = std::min(36L, pos1) + std::min(5L, pos2);
+                && ((pos2 = snprintf(wait_event + std::min(static_cast<int64_t>(36), pos1), 6, ") to ")) > 0)) {
+              int64_t pos = std::min(static_cast<int64_t>(36), pos1) + std::min(static_cast<int64_t>(5), pos2);
               pos += addr.to_string(wait_event + pos, BUF_LEN - pos);
             }
           } else if (0 != blocking_ts && (0 != (Thread::WAIT_IN_TENANT_QUEUE & event))) {

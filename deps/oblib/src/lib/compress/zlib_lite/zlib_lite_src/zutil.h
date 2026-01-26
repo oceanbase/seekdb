@@ -138,11 +138,14 @@ extern z_const char * const z_errmsg[10]; /* indexed by 2-zlib_error */
 #endif
 
 #if defined(MACOS) || defined(TARGET_OS_MAC)
-#  define OS_CODE  7
+#  ifndef OS_CODE
+#    define OS_CODE  7
+#  endif
 #  ifndef Z_SOLO
 #    if defined(__MWERKS__) && __dest_os != __be_os && __dest_os != __win32_os
 #      include <unix.h> /* for fdopen */
-#    else
+#    elif !defined(__APPLE__)
+#      // macOS has fdopen() in stdio.h, don't redefine it
 #      ifndef fdopen
 #        define fdopen(fd,mode) NULL /* No fdopen() */
 #      endif
@@ -151,23 +154,39 @@ extern z_const char * const z_errmsg[10]; /* indexed by 2-zlib_error */
 #endif
 
 #ifdef __acorn
-#  define OS_CODE 13
+#  ifndef OS_CODE
+#    define OS_CODE 13
+#  endif
 #endif
 
 #if defined(WIN32) && !defined(__CYGWIN__)
-#  define OS_CODE  10
+#  ifndef OS_CODE
+#    define OS_CODE  10
+#  endif
 #endif
 
 #ifdef _BEOS_
-#  define OS_CODE  16
+#  ifndef OS_CODE
+#    define OS_CODE  16
+#  endif
 #endif
 
 #ifdef __TOS_OS400__
-#  define OS_CODE 18
+#  ifndef OS_CODE
+#    define OS_CODE 18
+#  endif
 #endif
 
 #ifdef __APPLE__
-#  define OS_CODE 19
+#  ifndef OS_CODE
+#    define OS_CODE 19
+#  endif
+#  ifndef Z_SOLO
+#    // macOS has fdopen() in stdio.h, don't redefine it
+#    ifdef fdopen
+#      #undef fdopen
+#    endif
+#  endif
 #endif
 
 #if defined(_BEOS_) || defined(RISCOS)

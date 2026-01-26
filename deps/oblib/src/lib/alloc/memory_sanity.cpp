@@ -398,6 +398,11 @@ int64_t get_global_addr()
 
 bool init_sanity()
 {
+#ifdef __APPLE__
+  // macOS doesn't support sanity checking (no /proc/self/maps, no MAP_NORESERVE)
+  // Return true to indicate success without actually enabling sanity checks
+  return true;
+#endif
   ObUnmanagedMemoryStat::DisableGuard guard;
   bool succ = false;
   int64_t maxs[] = {0x600000000000, 0x500000000000, 0x400000000000};

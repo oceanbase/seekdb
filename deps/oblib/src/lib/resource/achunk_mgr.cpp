@@ -125,7 +125,8 @@ void *AChunkMgr::low_alloc(const uint64_t size, const bool can_use_huge_page, bo
   }
 #endif
   // for debug more efficiently
-  const int fd = -1234;
+  // On macOS, fd must be -1 when using MAP_ANONYMOUS, otherwise mmap returns EINVAL
+  const int fd = -1;
   const int offset = 0;
   const int large_page_type = ObLargePageHelper::get_type();
   ObUnmanagedMemoryStat::DisableGuard guard;

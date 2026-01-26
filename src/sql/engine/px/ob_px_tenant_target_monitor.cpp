@@ -478,7 +478,7 @@ int ObPxTenantTargetMonitor::apply_target(hash::ObHashMap<ObAddr, int64_t> &work
     //       this is because the returned resource maybe a very big chunk,
     //       which can feed many waiting threads
     LOG_DEBUG("wait begin", K(wait_time_us), K(session_target), K(req_cnt));
-    int64_t wait_us = min(wait_time_us, 1000000L);
+    int64_t wait_us = min(wait_time_us, static_cast<int64_t>(1000000));
     target_cond_.wait(wait_us); // sleep at most 1sec, in order to check interrupt
     LOG_DEBUG("wait finish");
   }

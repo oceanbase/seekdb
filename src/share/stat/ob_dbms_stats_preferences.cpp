@@ -717,7 +717,7 @@ int ObGranularityPrefs::check_pref_value_validity(ObTableStatParam *param/*defau
   int ret = OB_SUCCESS;
   const char *default_value = get_stat_pref_default_value();
   if (pvalue_.empty()) {
-    pvalue_.assign_ptr(default_value, strlen(default_value));
+    pvalue_.assign_ptr(default_value, static_cast<ObString::obstr_size_t>(strlen(default_value)));
   }
   if (param != NULL) {//no need check
     char *buf = NULL;
@@ -784,7 +784,7 @@ int ObMethodOptPrefs::check_pref_value_validity(ObTableStatParam *param/*default
   int ret = OB_SUCCESS;
   const char *default_value = get_stat_pref_default_value();
   if (pvalue_.empty()) {
-    pvalue_.assign_ptr(default_value, strlen(default_value));
+    pvalue_.assign_ptr(default_value, static_cast<ObString::obstr_size_t>(strlen(default_value)));
   }
   if (OB_ISNULL(session_info_) || OB_ISNULL(allocator_)) {
     ret = OB_ERR_UNEXPECTED;

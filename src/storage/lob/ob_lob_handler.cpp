@@ -767,7 +767,7 @@ int ObLobWriteHandler::execute(ObLobQueryIter *iter, ObString& read_buf, ObStrin
       ObString seq_id_st, seq_id_ed;
       if (old_data.length() > 0) {
         // inrow to outrow, set st 0, set ed null
-        seq_id_st.assign_ptr(reinterpret_cast<char*>(&inrow_st), sizeof(uint32_t));
+        seq_id_st.assign_ptr(reinterpret_cast<char*>(&inrow_st), static_cast<ObString::obstr_size_t>(sizeof(uint32_t)));
         seq_id_ed.assign_ptr(nullptr, 0);
       } else if (found_begin && found_end) {
         seq_id_st = range_end.seq_id_;

@@ -1247,7 +1247,7 @@ int ObMergeJoinVecOp::inner_open() {
     const bool is_compatible_mode = false;
     if (OB_FAIL(sql_mem_processor_.init(allocator_,
                                         tenant_id,
-                                        std::max(2L << 20, cache_size),
+                                        std::max(static_cast<int64_t>(2L << 20), cache_size),
                                         MY_SPEC.type_, MY_SPEC.id_, &ctx_))) {
       LOG_WARN("failed to init sql memory manager processor", K(ret));
     } else if (OB_FAIL(left_cursor_.init(true,

@@ -25,6 +25,7 @@
 #include <sys/time.h>
 #include <algorithm>
 #include <typeinfo>
+#include "lib/utility/ob_platform_utils.h"  // Platform compatibility layer (includes spinlock compat)
 #include "lib/utility/utility.h"
 #include "lib/oblog/ob_log.h"
 #include "lib/hash_func/murmur_hash.h"
@@ -63,6 +64,16 @@ extern bool parsenode_equal(const _ParseNode *node1, const _ParseNode *node2, in
 }
 #endif
 
+// Helper functions to initialize pthread types dynamically.
+// On macOS, pthread types need explicit initialization (memset is not sufficient).
+// These are now available on all platforms for consistency.
+inline void init_hash_lock(pthread_rwlock_t &lock) { pthread_rwlock_init(&lock, NULL); }
+inline void init_hash_lock(pthread_mutex_t &lock) { pthread_mutex_init(&lock, NULL); }
+template <typename T> inline void init_hash_lock(T &lock) { (void)lock; }
+
+inline void init_hash_cond(pthread_cond_t &cond) { pthread_cond_init(&cond, NULL); }
+template <typename T> inline void init_hash_cond(T &cond) { (void)cond; }
+
 namespace oceanbase
 {
 namespace common
@@ -96,8 +107,9 @@ class SpinLocker
 public:
   explicit SpinLocker(pthread_spinlock_t &spin) : succ_(false), spin_(NULL)
   {
-    if (0 != pthread_spin_lock(&spin)) {
-      HASH_WRITE_LOG_RET(HASH_WARNING, OB_ERR_SYS, "lock spin fail errno=%u", errno);
+    int pret = pthread_spin_lock(&spin);
+    if (0 != pret) {
+      HASH_WRITE_LOG_RET(HASH_WARNING, OB_ERR_SYS, "lock spin fail errno=%u", pret);
     } else {
       //HASH_WRITE_LOG(HASH_DEBUG, "lock spin succ spin=%p", &spin);
       spin_ = &spin;
@@ -127,8 +139,9 @@ class MutexLocker
 public:
   explicit MutexLocker(pthread_mutex_t &mutex) : succ_(false), mutex_(NULL)
   {
-    if (0 != pthread_mutex_lock(&mutex)) {
-      HASH_WRITE_LOG_RET(HASH_WARNING, OB_ERR_SYS, "lock mutex fail errno=%u", errno);
+    int pret = pthread_mutex_lock(&mutex);
+    if (0 != pret) {
+      HASH_WRITE_LOG_RET(HASH_WARNING, OB_ERR_SYS, "lock mutex fail errno=%u", pret);
     } else {
       //HASH_WRITE_LOG(HASH_DEBUG, "lock mutex succ mutex=%p", &mutex);
       mutex_ = &mutex;
@@ -180,8 +193,9 @@ class ReadLocker
 public:
   explicit ReadLocker(pthread_rwlock_t &rwlock) : succ_(false), rwlock_(NULL)
   {
-    if (0 != pthread_rwlock_rdlock(&rwlock)) {
-      HASH_WRITE_LOG_RET(HASH_WARNING, OB_ERR_SYS, "rdlock rwlock fail errno=%u", errno);
+    int pret = pthread_rwlock_rdlock(&rwlock);
+    if (0 != pret) {
+      HASH_WRITE_LOG_RET(HASH_WARNING, OB_ERR_SYS, "rdlock rwlock fail errno=%u", pret);
     } else {
       //HASH_WRITE_LOG(HASH_DEBUG, "rdlock rwlock succ rwlock=%p", &rwlock);
       rwlock_ = &rwlock;
@@ -211,8 +225,9 @@ class WriteLocker
 public:
   explicit WriteLocker(pthread_rwlock_t &rwlock) : succ_(false), rwlock_(NULL)
   {
-    if (0 != pthread_rwlock_wrlock(&rwlock)) {
-      HASH_WRITE_LOG_RET(HASH_WARNING, OB_ERR_SYS, "wrlock wrlock fail errno=%u", errno);
+    int pret = pthread_rwlock_wrlock(&rwlock);
+    if (0 != pret) {
+      HASH_WRITE_LOG_RET(HASH_WARNING, OB_ERR_SYS, "wrlock wrlock fail errno=%u", pret);
     } else {
       //HASH_WRITE_LOG(HASH_DEBUG, "wrlock rwlock succ rwlock=%p", &rwlock);
       rwlock_ = &rwlock;
@@ -445,6 +460,13 @@ public:
     usr = &nlock;
     UNUSED(usr);
   }
+  // Template constructor to accept any lock type (e.g., ObLatch, SpinRWLock)
+  // Used by LatchReadWriteDefendMode and SpinReadWriteDefendMode
+  template <typename T>
+  explicit NullIniter(T &lock)
+  {
+    UNUSED(lock);
+  }
 private:
   NullIniter();
 };
@@ -516,6 +538,20 @@ struct LatchReadWriteDefendMode
   typedef NBroadCaster cond_broadcaster;
 };
 
+// On macOS, pthread_rwlock has known issues that can cause deadlocks in certain scenarios.
+// Use mutex-based locking as a safer alternative (sacrifices some read concurrency for stability).
+#ifdef __APPLE__
+struct ReadWriteDefendMode
+{
+  typedef MutexLocker readlocker;   // Use mutex for read (safe, but no concurrent reads)
+  typedef MutexLocker writelocker;  // Use mutex for write
+  typedef pthread_mutex_t lock_type;
+  typedef NCond cond_type;
+  typedef MutexIniter lock_initer;
+  typedef NWaiter<lock_type> cond_waiter;
+  typedef NBroadCaster cond_broadcaster;
+};
+#else
 struct ReadWriteDefendMode
 {
   typedef ReadLocker readlocker;
@@ -526,6 +562,7 @@ struct ReadWriteDefendMode
   typedef NWaiter<lock_type> cond_waiter;
   typedef NBroadCaster cond_broadcaster;
 };
+#endif
 struct SpinReadWriteDefendMode
 {
   typedef SpinReadLocker readlocker;
@@ -772,6 +809,11 @@ _HASH_FUNC_SPEC(int32_t);
 _HASH_FUNC_SPEC(uint32_t);
 _HASH_FUNC_SPEC(int64_t);
 _HASH_FUNC_SPEC(uint64_t);
+#ifdef __APPLE__
+// macOS: uintptr_t is unsigned long, which is different from uint64_t
+_HASH_FUNC_SPEC(unsigned long);
+_HASH_FUNC_SPEC(long);
+#endif
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -940,7 +982,13 @@ class BigArrayTemp
                        array_size);
         ret = -1;
       } else {
+#ifdef __APPLE__
+        for (int64_t i = 0; i < array_size; ++i) {
+          new (&array_[i]) T();
+        }
+#else
         memset(array_, 0, array_size * sizeof(T));
+#endif
         allocer_ = allocer;
       }
       return ret;
@@ -1136,8 +1184,17 @@ int do_create(Array &array, const int64_t total_size, const int64_t array_size, 
     ret = OB_ALLOCATE_MEMORY_FAILED;
     _OB_LOG(WARN, "alloc memory failed,size:%ld", total_size * item_size);
   } else {
+#ifdef __APPLE__
+    // On macOS, we must call constructors to initialize complex types like pthread_rwlock_t
+    // because memset(0) is not sufficient for dynamic initialization.
+    typedef typename std::remove_pointer<Array>::type ItemType;
+    for (int64_t i = 0; i < total_size; ++i) {
+      new (&array[i]) ItemType();
+    }
+#else
     //BACKTRACE(WARN, total_size * item_size > 65536, "hashutil create init size=%ld", total_size * item_size);
     memset(array, 0, total_size * item_size);
+#endif
   }
   return ret;
 }

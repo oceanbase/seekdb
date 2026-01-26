@@ -54,7 +54,7 @@ void pack(ObHexStringPacker &packer, const unsigned char *str, const int64_t len
 {
   int64_t done = 0;
   while (done < len) {
-    const int64_t step =  std::max(std::min(len - done, random() % (std::max(len / 2, 1L))), 1L);
+    const int64_t step =  std::max(std::min(len - done, random() % (std::max(len / 2, static_cast<int64_t>(1)))), static_cast<int64_t>(1));
     if (random() & 0x1) {
       packer.pack(str + done, step);
     } else {
@@ -70,7 +70,7 @@ void unpack(ObHexStringUnpacker &unpacker, unsigned char *str, const int64_t len
 {
   int64_t done = 0;
   while (done < len) {
-    const int64_t step =  std::max(std::min(len - done, random() % (std::max(len / 2, 1L))), 1L);
+    const int64_t step =  std::max(std::min(len - done, random() % (std::max(len / 2, static_cast<int64_t>(1)))), static_cast<int64_t>(1));
     if (random() & 0x1) {
       unpacker.unpack(str + done, step);
     } else {

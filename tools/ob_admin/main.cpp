@@ -112,7 +112,9 @@ int get_log_base_directory(char *log_file_name, const int64_t log_file_name_len,
 
 int main(int argc, char *argv[])
 {
+#ifndef __APPLE__
   init_malloc_hook();
+#endif
   int ret = 0;
   char log_file_name[OB_MAX_FILE_NAME_LENGTH] = {'\0'};
   char log_file_rs_name[OB_MAX_FILE_NAME_LENGTH] = {'\0'};

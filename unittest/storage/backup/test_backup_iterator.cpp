@@ -172,7 +172,12 @@ void TestBackupIndexIterator::inner_init_()
 {
   int ret = OB_SUCCESS;
   ObBackupIoAdapter util;
+#ifdef __APPLE__
+  char buf[PATH_MAX];
+  ret = databuff_printf(test_dir_, sizeof(test_dir_), "%s/test_backup_index_iterator_dir", getcwd(buf, sizeof(buf)));
+#else
   ret = databuff_printf(test_dir_, sizeof(test_dir_), "%s/test_backup_index_iterator_dir", get_current_dir_name());
+#endif
   ASSERT_EQ(OB_SUCCESS, ret);
   ret = databuff_printf(test_dir_uri_, sizeof(test_dir_uri_), "file://%s", test_dir_);
   ASSERT_EQ(OB_SUCCESS, ret);

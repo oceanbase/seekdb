@@ -318,7 +318,7 @@ int ObCommonConfig::add_extra_config_unsafe(const char *config_str,
     buf[config_str_length] = '\0';
     for (int i = 0; i < sizeof(delimiters)/sizeof(delimiters[0]); i++) {
       token = STRTOK_R(buf, delimiters[i], &saveptr);
-      if (0 != STRLEN(saveptr)) {
+      if (OB_NOT_NULL(saveptr) && 0 != STRLEN(saveptr)) {
         delimiter = delimiters[i];
         break;
       }
@@ -407,7 +407,7 @@ int ObCommonConfig::add_extra_config_unsafe(const char *config_str,
     delimiter = "\n";
     for (int i = 0; i < sizeof(delimiters)/sizeof(delimiters[0]); i++) {
       token = STRTOK_R(buf, delimiters[i], &saveptr);
-      if (0 != STRLEN(saveptr)) {
+      if (OB_NOT_NULL(saveptr) && 0 != STRLEN(saveptr)) {
         delimiter = delimiters[i];
         break;
       }

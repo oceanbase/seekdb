@@ -1152,7 +1152,7 @@ int ObOptimizer::set_auto_dop_params(const ObSQLSessionInfo &session)
       LOG_WARN("fail read tenant variable", K(ret), K(session.get_effective_tenant_id()));
     } else {
       params.unit_min_cpu_ = std::max(tenant->unit_min_cpu(), 0.0);
-      params.parallel_servers_target_ = std::max(parallel_servers_target, 0L);
+      params.parallel_servers_target_ = std::max(parallel_servers_target, static_cast<int64_t>(0));
     }
   }
 

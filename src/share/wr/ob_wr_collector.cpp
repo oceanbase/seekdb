@@ -100,7 +100,7 @@ int ObWrCollector::init()
         LOG_WARN("first time to take wr snapshot in this cluster", K(tenant_id), K(begin_interval_time));
         get_begin_interval_time(begin_interval_time);
       }
-    } else if (OB_FAIL(result->get_int(0L, begin_interval_time))) {
+    } else if (OB_FAIL(result->get_int(static_cast<int64_t>(0), begin_interval_time))) {
         LOG_WARN("get column fail", KR(ret), K(sql));
     }
     snapshot_begin_time_ = begin_interval_time;
@@ -1683,7 +1683,7 @@ int ObWrCollector::get_cur_snapshot_id_for_ahead_snapshot(int64_t &snap_id)
       LOG_WARN("failed to get mysql result", KR(ret), K(sql));
     } else if (OB_FAIL(result->next())) {
       LOG_WARN("get next result failed", KR(ret), K(sql));
-    } else if (OB_FAIL(result->get_int(0L, snap_id))) {
+    } else if (OB_FAIL(result->get_int(static_cast<int64_t>(0), snap_id))) {
       if (ret == OB_ERR_NULL_VALUE) {
         // no record in __wr_snapshot table. this is the first time we take snapshot in this
         // cluster.
@@ -1728,7 +1728,7 @@ int ObWrCollector::get_begin_interval_time(int64_t &begin_interval_time)
       } else {
         LOG_WARN("get next result failed", KR(ret), K(sql));
       }
-    } else if (OB_FAIL(result->get_int(0L, begin_interval_time))) {
+    } else if (OB_FAIL(result->get_int(static_cast<int64_t>(0), begin_interval_time))) {
       LOG_WARN("get column fail", KR(ret), K(sql));
     }
   }

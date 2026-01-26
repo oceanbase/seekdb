@@ -16,6 +16,7 @@
 
 #ifndef OCEANBASE_OBSERVER_OB_PLUGIN_VECTOR_INDEX_SERVICE_DEFINE_H_
 #define OCEANBASE_OBSERVER_OB_PLUGIN_VECTOR_INDEX_SERVICE_DEFINE_H_
+#include <type_traits> // For std::invoke_result
 #include "sql/engine/expr/ob_expr_lob_utils.h"
 #include "share/ob_ls_id.h"
 #include "logservice/ob_log_base_type.h"
@@ -506,7 +507,7 @@ int ObPluginVectorIndexService::process_ivf_aux_info(
   int ret = OB_SUCCESS;
   bool is_hidden_table = false;
   ObSqlString sql_string;
-  static_assert(std::is_same<typename std::result_of<CallbackFunc(int64_t, float*)>::type, int>::value,
+  static_assert(std::is_same<typename std::invoke_result<CallbackFunc, int64_t, float*>::type, int>::value,
         "process_ivf_aux_info callback format error");
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;

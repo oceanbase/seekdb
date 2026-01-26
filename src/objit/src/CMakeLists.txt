@@ -17,5 +17,5 @@ target_link_libraries(objit
   PUBLIC
   objit_objects objit_base oblib "${llvm_libs}"
   INTERFACE
-  -lrt -ldl -lpthread -lm
+  $<$<NOT:$<PLATFORM_ID:Darwin>>:-lrt -ldl -lpthread -lm>
 )

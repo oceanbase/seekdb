@@ -1969,7 +1969,7 @@ int ObStaticEngineExprCG::generate_partial_expr_frame(
       // will got index out of expr array error.
       if ((*e)->parent_cnt_ > 0) {
         for (int64_t i = 0; i < (*e)->parent_cnt_; i++) {
-          max_expr_idx = std::max(max_expr_idx, (*e)->parents_[i] - base);
+          max_expr_idx = std::max(max_expr_idx, static_cast<int64_t>((*e)->parents_[i] - base));
         }
       }
       ObExpr *&p = farthest_exprs.at((*e)->frame_idx_);

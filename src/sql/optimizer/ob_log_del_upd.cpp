@@ -275,7 +275,7 @@ int IndexDMLInfo::is_new_row_expr(const ObRawExpr *expr, bool &bret) const
 ObLogDelUpd::ObLogDelUpd(ObDelUpdLogPlan &plan)
   : ObLogicalOperator(plan),
     my_dml_plan_(plan),
-    view_check_exprs_(NULL),
+    view_check_exprs_(),
     table_partition_info_(NULL),
     stmt_id_expr_(nullptr),
     lock_row_flag_expr_(NULL),

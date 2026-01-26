@@ -1279,9 +1279,9 @@ int mock_get_tenant_srs_item(ObIAllocator &allocator, uint64_t srs_id, const ObS
 {
     int ret = OB_SUCCESS;
     ObGeographicRs rs;
-    rs.rs_name.assign_ptr("ED50", strlen("ED50"));
-    rs.datum_info.name.assign_ptr("European Datum 1950", strlen("European Datum 1950"));
-    rs.datum_info.spheroid.name.assign_ptr("International 1924", strlen("International 1924"));
+    rs.rs_name.assign_ptr("ED50", static_cast<int64_t>(strlen("ED50")));
+    rs.datum_info.name.assign_ptr("European Datum 1950", static_cast<int64_t>(strlen("European Datum 1950")));
+    rs.datum_info.spheroid.name.assign_ptr("International 1924", static_cast<int64_t>(strlen("International 1924")));
     rs.datum_info.spheroid.inverse_flattening = 297;
     rs.datum_info.spheroid.semi_major_axis = 6378388;
     rs.primem.longtitude = 0;

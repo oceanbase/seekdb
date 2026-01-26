@@ -915,7 +915,7 @@ int ObOptEstObjToScalar::get_string_sort_key(ObIAllocator &alloc, ObCollationTyp
     } else {
       size_t sort_key_len = ObCharset::sortkey(cs_type, str.ptr(), str.length(),
                                                buffer.get_data(), buf_len, is_valid_character);
-      sort_key.assign_ptr(buffer.get_data(), sort_key_len);
+      sort_key.assign_ptr(buffer.get_data(), static_cast<ObString::obstr_size_t>(sort_key_len));
     }
   }
   return ret;

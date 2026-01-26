@@ -643,23 +643,34 @@ else()
     INTERFACE
     ${STDC_SHARED_LIB}
     PRIVATE
-    -Wl,-z,notext
-    -Wl,--whole-archive
+    $<$<NOT:$<PLATFORM_ID:Darwin>>:-Wl,-z,notext>
+    $<$<NOT:$<PLATFORM_ID:Darwin>>:-Wl,--whole-archive>
     "${ob_objects}" "${oblib_object_libraries}"
     ob_sql_static
     ob_storage_static
     ob_share_static
     ob_plugin
-    -Wl,--no-whole-archive
-    -static-libgcc -static-libstdc++
+    $<$<NOT:$<PLATFORM_ID:Darwin>>:-Wl,--no-whole-archive>
+    $<$<NOT:$<PLATFORM_ID:Darwin>>:-static-libgcc>
+    $<$<NOT:$<PLATFORM_ID:Darwin>>:-static-libstdc++>
     objit)
 endif()
 
-get_filename_component(STDC_SHARED_LIB_DIR ${STDC_SHARED_LIB} DIRECTORY)
-target_link_options(oceanbase INTERFACE "-Wl,-rpath=${STDC_SHARED_LIB_DIR}")
+if(STDC_SHARED_LIB)
+  get_filename_component(STDC_SHARED_LIB_DIR ${STDC_SHARED_LIB} DIRECTORY)
+  target_link_options(oceanbase INTERFACE "-Wl,-rpath=${STDC_SHARED_LIB_DIR}")
+endif()
 
 if (NOT OB_USE_ASAN)
-  set(link_malloc_hook malloc_hook)
+  # On macOS, malloc_hook conflicts with linked LLVM
+  # LLVM's global constructors run before main() and use hooked malloc,
+  # but free with system free, causing crashes
+  if (NOT APPLE)
+    set(link_malloc_hook malloc_hook)
+  else()
+    message(STATUS "Disabling malloc_hook on macOS (conflicts with dynamic LLVM)")
+    set(link_malloc_hook "")
+  endif()
 endif()
 
 add_library(ob_main OBJECT main.cpp ob_command_line_parser.cpp)
@@ -668,20 +679,20 @@ target_link_libraries(ob_main PUBLIC ob_base)
 add_executable(observer_without_bolt)
 target_link_libraries(observer_without_bolt
   PRIVATE
-  -Wl,--start-group
+  $<$<NOT:$<PLATFORM_ID:Darwin>>:-Wl,--start-group>
   ob_main
-  ob_malloc
+  $<$<NOT:$<PLATFORM_ID:Darwin>>:ob_malloc>
   oceanbase_static
   ob_sql_static
   ob_storage_static
   ob_share_static
-  -Wl,--end-group
-  -Wl,--whole-archive
+  $<$<NOT:$<PLATFORM_ID:Darwin>>:-Wl,--end-group>
+  $<$<NOT:$<PLATFORM_ID:Darwin>>:-Wl,--whole-archive>
   ob_plugin_export_static
-  -Wl,--no-whole-archive
-  -Wl,--export-dynamic-symbol=obp_*
-  -static-libgcc
-  -static-libstdc++
+  $<$<NOT:$<PLATFORM_ID:Darwin>>:-Wl,--no-whole-archive>
+  $<$<NOT:$<PLATFORM_ID:Darwin>>:-Wl,--export-dynamic-symbol=obp_*>
+  $<$<NOT:$<PLATFORM_ID:Darwin>>:-static-libgcc>
+  $<$<NOT:$<PLATFORM_ID:Darwin>>:-static-libstdc++>
   ${link_malloc_hook}
   ${BOLT_OPT}
 )

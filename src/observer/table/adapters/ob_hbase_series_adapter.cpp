@@ -581,7 +581,7 @@ int ObHSeriesAdapter::construct_series_value(ObIAllocator &allocator, ObJsonNode
   } else if (OB_FAIL(json_buf.get_result_string(str_out))) {
     LOG_WARN("get_result_string fail", K(ret), K(json_buf));
   } else if (OB_FALSE_IT(json_data.assign_ptr(str_out.ptr() + sizeof(ObLobCommon), 
-                                              str_out.length() - sizeof(ObLobCommon)))) {
+                                              static_cast<ObString::obstr_size_t>(str_out.length() - sizeof(ObLobCommon))))) {
   } else if (OB_FAIL(ObJsonBin::set_doc_header_v0(json_data, 
                                                   json_data.length(), 
                                                   json_obj.use_lexicographical_order()))) {

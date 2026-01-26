@@ -20,6 +20,7 @@
 #include "lib/ob_define.h"
 #include "lib/string/ob_string.h"
 #include "lib/utility/utility.h"
+#include <type_traits>
 
 namespace oceanbase
 {
@@ -126,7 +127,7 @@ protected:
 };
 
 template<typename FuncType, typename... Args>
-using FuncRetType = typename std::result_of<FuncType(Args...)>::type;
+using FuncRetType = typename std::invoke_result<FuncType, Args...>::type;
 
 template<typename FuncType, typename... Args>
 FuncRetType<FuncType, Args...> execute_until_timeout(

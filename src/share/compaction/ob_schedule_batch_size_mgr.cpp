@@ -46,7 +46,7 @@ void ObScheduleBatchSizeMgr::get_rs_check_batch_size(
 
 int64_t ObScheduleBatchSizeMgr::get_inner_table_scan_batch_size() const
 {
-  return std::max(1L, (tablet_batch_size_ / DEFAULT_TABLET_BATCH_CNT)) * DEFAULT_INNER_TABLE_SCAN_BATCH_SIZE;
+  return std::max(static_cast<int64_t>(1), (tablet_batch_size_ / DEFAULT_TABLET_BATCH_CNT)) * DEFAULT_INNER_TABLE_SCAN_BATCH_SIZE;
 }
 
 bool ObScheduleBatchSizeMgr::need_rebuild_map(

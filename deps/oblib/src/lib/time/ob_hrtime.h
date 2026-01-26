@@ -12,6 +12,9 @@
 #include <sys/time.h>
 #include <stdlib.h>
 #include "lib/ob_define.h"
+#ifdef __APPLE__
+#include <mach/mach_time.h>
+#endif
 
 typedef int64_t ObHRTime;
 
@@ -187,7 +190,33 @@ static inline int hrtime_to_timeval2(ObHRTime t, struct timeval *tv)
 
 static inline ObHRTime get_hrtime_internal()
 {
-#if HAVE_CLOCK_GETTIME
+#ifdef __APPLE__
+  // Use mach_absolute_time for better performance on macOS
+  // Cache the timebase info and initial wall clock
+  static struct {
+    int64_t base_wall_time_ns;
+    uint64_t base_mach_time;
+    uint32_t numer;
+    uint32_t denom;
+    bool initialized;
+  } hrtime_base = {0, 0, 0, 0, false};
+
+  if (OB_UNLIKELY(!hrtime_base.initialized)) {
+    mach_timebase_info_data_t timebase;
+    mach_timebase_info(&timebase);
+    hrtime_base.numer = timebase.numer;
+    hrtime_base.denom = timebase.denom;
+    struct timeval tv;
+    gettimeofday(&tv, nullptr);
+    hrtime_base.base_wall_time_ns = tv.tv_sec * 1000000000LL + tv.tv_usec * 1000LL;
+    hrtime_base.base_mach_time = mach_absolute_time();
+    hrtime_base.initialized = true;
+  }
+
+  uint64_t current_mach = mach_absolute_time();
+  int64_t elapsed_ns = (current_mach - hrtime_base.base_mach_time) * hrtime_base.numer / hrtime_base.denom;
+  return hrtime_base.base_wall_time_ns + elapsed_ns;
+#elif HAVE_CLOCK_GETTIME
   timespec ts;
   clock_gettime(CLOCK_REALTIME, &ts);
   return hrtime_from_timespec(&ts);

@@ -436,9 +436,9 @@ void ObTrafficControl::inner_calc_()
     int64_t write_bytes = 0;
     net_ibw_.inc(read_bytes);
     net_obw_.inc(write_bytes);
-    if (0 != (ret = qdisc_set_limit(OB_IO_MANAGER_V2.get_sub_root_qid((int)ObIOMode::READ), std::max(0L, device_bandwidth_ - read_bytes)))) {
+    if (0 != (ret = qdisc_set_limit(OB_IO_MANAGER_V2.get_sub_root_qid((int)ObIOMode::READ), std::max(static_cast<int64_t>(0), device_bandwidth_ - read_bytes)))) {
       LOG_WARN("set net_in limit failed", K(ret));
-    } else if (0 != (ret = qdisc_set_limit(OB_IO_MANAGER_V2.get_sub_root_qid((int)ObIOMode::WRITE), std::max(0L, device_bandwidth_ - write_bytes)))) {
+    } else if (0 != (ret = qdisc_set_limit(OB_IO_MANAGER_V2.get_sub_root_qid((int)ObIOMode::WRITE), std::max(static_cast<int64_t>(0), device_bandwidth_ - write_bytes)))) {
       LOG_WARN("set net_out limit failed", K(ret));
     }
   }

@@ -72,17 +72,17 @@ public:
 public:
   std::string Name() override { return "DefaultVsagAllocator"; }
 
-  void* Allocate(size_t size) override;
+  void* Allocate(uint64_t size) override;
 
   void Deallocate(void* p) override;
 
-  void* Reallocate(void* p, size_t size) override;
+  void* Reallocate(void* p, uint64_t size) override;
 
 
   int64_t total_{0};
 };
 
-void* DefaultVsagAllocator::Allocate(size_t size)
+void* DefaultVsagAllocator::Allocate(uint64_t size)
 {
   void *ret_ptr = nullptr;
   if (size != 0) {
@@ -117,7 +117,7 @@ void DefaultVsagAllocator::Deallocate(void* p)
   }
 }
 
-void* DefaultVsagAllocator::Reallocate(void* p, size_t size)
+void* DefaultVsagAllocator::Reallocate(void* p, uint64_t size)
 {
   void *new_ptr = nullptr;
   if (size == 0) {

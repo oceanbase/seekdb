@@ -64,7 +64,7 @@ int ObThreadIdling::idle(const int64_t max_idle_time_us)
     if (wait_time_ms <= 0) {
       break;
     }
-    wait_time_ms = std::min(1000l, wait_time_ms);
+    wait_time_ms = std::min(static_cast<int64_t>(1000), wait_time_ms);
     ObBKGDSessInActiveGuard inactive_guard;
     if (OB_FAIL(cond_.wait(static_cast<int>(wait_time_ms)))) {
       ret = OB_SUCCESS;

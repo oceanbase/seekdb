@@ -402,7 +402,7 @@ int ObStorageLoggerManager::get_reserved_size(int64_t &reserved_size) const
     if (OB_FAIL(get_using_disk_space(used_size))) {
       STORAGE_REDO_LOG(WARN, "fail to get using size for slog", K(ret));
     } else {
-      reserved_size = std::max(0L, RESERVED_DISK_SIZE - used_size);
+      reserved_size = std::max(static_cast<int64_t>(0), RESERVED_DISK_SIZE - used_size);
     }
   }
   return ret;

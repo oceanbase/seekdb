@@ -660,7 +660,7 @@ int ObSnapshotTableProxy::check_snapshot_exist(
         } else {
           LOG_WARN("fail to get next", KR(ret), K(tenant_id), K(snapshot_type));
         }
-      } else if (OB_FAIL(result->get_int(0L, latest_restore_point_value))) {
+      } else if (OB_FAIL(result->get_int(static_cast<int64_t>(0), latest_restore_point_value))) {
         LOG_WARN("fail to get lastest restore point create time", KR(ret), K(tenant_id), 
           K(latest_restore_point_value));
       } else {

@@ -17,6 +17,50 @@
 #include "lib/allocator/ob_concurrent_fifo_allocator.h"
 #include "gtest/gtest.h"
 #include "lib/coro/testing.h"
+#ifdef __APPLE__
+#define _DARWIN_C_SOURCE
+#include <pthread.h>
+#ifndef pthread_barrier_t
+// pthread_barrier_t is not available on macOS, provide a compatibility shim
+typedef struct {
+  int count;
+  pthread_mutex_t mutex;
+  pthread_cond_t cond;
+  unsigned long event;
+} pthread_barrier_t;
+
+static inline int pthread_barrier_init(pthread_barrier_t *barrier, const void *attr, unsigned count) {
+  (void)attr;
+  barrier->count = count;
+  barrier->event = 0;
+  pthread_mutex_init(&barrier->mutex, NULL);
+  pthread_cond_init(&barrier->cond, NULL);
+  return 0;
+}
+
+static inline int pthread_barrier_wait(pthread_barrier_t *barrier) {
+  pthread_mutex_lock(&barrier->mutex);
+  barrier->event++;
+  if (barrier->event >= barrier->count) {
+    barrier->event = 0;
+    pthread_cond_broadcast(&barrier->cond);
+  } else {
+    unsigned long my_event = barrier->event;
+    while (my_event == barrier->event) {
+      pthread_cond_wait(&barrier->cond, &barrier->mutex);
+    }
+  }
+  pthread_mutex_unlock(&barrier->mutex);
+  return 0;
+}
+
+static inline int pthread_barrier_destroy(pthread_barrier_t *barrier) {
+  pthread_mutex_destroy(&barrier->mutex);
+  pthread_cond_destroy(&barrier->cond);
+  return 0;
+}
+#endif
+#endif
 
 using namespace oceanbase;
 using namespace oceanbase::common;

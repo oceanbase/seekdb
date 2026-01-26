@@ -20,6 +20,9 @@
 #include "../parser/ob_admin_parser_log_entry.h"
 #include "../parser/ob_admin_parser_group_entry.h"
 #include "../../archiveservice_utils/utils.h"
+#ifdef __APPLE__
+#include <libgen.h>
+#endif
 #ifdef OB_BUILD_LOG_STORAGE_COMPRESS
 #include "logservice/ob_log_compression.h"
 #endif

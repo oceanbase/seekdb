@@ -261,7 +261,7 @@ int64_t ObTabletTableUpdater::cal_thread_count_()
       LOG_WARN_RET(tmp_ret, "fail to get tenant cpu", K(tmp_ret), K(min_cpu), K(max_cpu));
     } else {
       thread_cnt = std::max(MIN_UPDATE_TASK_THREAD_CNT, 
-          lround(MIN_UPDATE_TASK_THREAD_CNT * UPDATE_TASK_THREAD_RATIO * max_cpu));
+          static_cast<int64_t>(lround(MIN_UPDATE_TASK_THREAD_CNT * UPDATE_TASK_THREAD_RATIO * max_cpu)));
       thread_cnt = std::min(thread_cnt, MAX_UPDATE_TASK_THREAD_CNT);
     }
   }

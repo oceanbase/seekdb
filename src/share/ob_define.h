@@ -25,8 +25,14 @@
 #include "lib/worker.h"
 #include "share/ob_ls_id.h"
 #include "cmath"
+#ifdef __linux__
 #include <features.h>
 #if __GLIBC__ > 2 || (__GLIBC__ == 2 && __GLIBC_MINOR__ > 17)
+using std::isinf;
+using std::isnan;
+#endif
+#elif defined(__APPLE__)
+// macOS doesn't have features.h, but std::isinf and std::isnan are available in <cmath>
 using std::isinf;
 using std::isnan;
 #endif

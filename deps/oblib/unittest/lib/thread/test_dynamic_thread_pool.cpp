@@ -105,7 +105,9 @@ TEST_F(TestObDynamicThreadPool, test_change_thread_num)
 
 int main(int argc, char **argv)
 {
-  mallopt(M_ARENA_MAX, 1);  // disable malloc multiple arena pool
+#ifndef __APPLE__
+  mallopt(M_ARENA_MAX, 1);  // disable malloc multiple arena pool (Linux only)
+#endif
   OB_LOGGER.set_log_level("INFO");
   OB_LOGGER.set_file_name("test_dynamic_thread_pool.log", true);
   ::testing::InitGoogleTest(&argc,argv);

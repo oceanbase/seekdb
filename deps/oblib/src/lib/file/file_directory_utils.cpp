@@ -18,6 +18,7 @@
 
 #include "common/ob_smart_call.h"
 #include "lib/utility/ob_hang_fatal_error.h"
+#include "lib/utility/ob_platform_utils.h"  // Platform compatibility layer
 #include "lib/string/ob_sql_string.h"
 
 #include <dirent.h>
@@ -34,12 +35,12 @@ int FileDirectoryUtils::is_exists(const char *file_path, bool &result)
 {
   int ret = OB_SUCCESS;
   result = false;
-  struct stat64 file_info;
+  ob_stat64_t file_info;
   if (OB_ISNULL(file_path) || OB_UNLIKELY(strlen(file_path) == 0)) {
     ret = OB_INVALID_ARGUMENT;
     LIB_LOG(WARN, "invalid arguments.", KCSTRING(file_path), K(ret));
   } else {
-    result = (0 == stat64(file_path, &file_info));
+    result = (0 == ob_stat64(file_path, &file_info));
   }
 
   return ret;
@@ -77,12 +78,12 @@ int FileDirectoryUtils::is_directory(const char *directory_path, bool &result)
 {
   int ret = OB_SUCCESS;
   result = false;
-  struct stat64 file_info;
+  ob_stat64_t file_info;
   if (NULL == directory_path ||  strlen(directory_path) == 0) {
     ret = OB_INVALID_ARGUMENT;
     LIB_LOG(WARN, "invalid arguments.", KCSTRING(directory_path), K(ret));
   } else {
-    result = (0 == stat64(directory_path, &file_info) && S_ISDIR(file_info.st_mode));
+    result = (0 == ob_stat64(directory_path, &file_info) && S_ISDIR(file_info.st_mode));
   }
 
   return ret;
@@ -95,8 +96,8 @@ int FileDirectoryUtils::is_link(const char *link_path, bool &result)
     ret = OB_INVALID_ARGUMENT;
     LIB_LOG(WARN, "invalid arguments.", KCSTRING(link_path), K(ret));
   }  else {
-    struct stat64 file_info;
-    result = (0 == lstat64(link_path, &file_info) && S_ISLNK(file_info.st_mode));
+    ob_stat64_t file_info;
+    result = (0 == ob_lstat64(link_path, &file_info) && S_ISLNK(file_info.st_mode));
   }
   return ret;
 }
@@ -130,13 +131,13 @@ int FileDirectoryUtils::create_full_path(const char *fullpath)
 {
 
   int ret = OB_SUCCESS;
-  struct stat64 file_info;
+  ob_stat64_t file_info;
   int64_t len = 0;
   if (NULL == fullpath || (len = strlen(fullpath)) == 0) {
     ret = OB_INVALID_ARGUMENT;
     LIB_LOG(WARN, "invalid arguments.", KCSTRING(fullpath), K(ret));
   } else {
-    ret = ::stat64(fullpath, &file_info);
+    ret = ::ob_stat64(fullpath, &file_info);
     if (0 == ret) {
       if (!S_ISDIR(file_info.st_mode)) {
         ret = OB_ENTRY_EXIST;
@@ -188,12 +189,12 @@ int FileDirectoryUtils::create_full_path(const char *fullpath)
 int FileDirectoryUtils::delete_file(const char *filename)
 {
   int ret = OB_SUCCESS;
-  struct stat64 file_info;
+  ob_stat64_t file_info;
   if (NULL == filename || strlen(filename) == 0) {
     ret = OB_INVALID_ARGUMENT;
     LIB_LOG(WARN, "invalid arguments.", KCSTRING(filename), K(ret));
   } else {
-    ret = ::stat64(filename, &file_info);
+    ret = ::ob_stat64(filename, &file_info);
     if (0 != ret) {
       ret = OB_FILE_NOT_EXIST;
       LIB_LOG(WARN, "file is not exists.", KCSTRING(filename), K(ret));
@@ -235,12 +236,12 @@ int FileDirectoryUtils::delete_directory(const char *dirname)
 int FileDirectoryUtils::get_file_size(const char *filename, int64_t &size)
 {
   int ret = OB_SUCCESS;
-  struct stat64 file_info;
+  ob_stat64_t file_info;
   if (NULL == filename || strlen(filename) == 0) {
     ret = OB_INVALID_ARGUMENT;
     LIB_LOG(WARN, "invalid arguments.", KCSTRING(filename), K(ret));
   } else {
-    ret = ::stat64(filename, &file_info);
+    ret = ::ob_stat64(filename, &file_info);
     if (0 != ret) {
       ret = OB_FILE_NOT_EXIST;
       LIB_LOG(WARN, "file is not exists.", KCSTRING(filename), K(ret));

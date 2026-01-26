@@ -27,9 +27,16 @@ namespace observer
 class ObSignalHandle: public share::ObThreadPool
 {
 public:
-  ObSignalHandle() {}
+  ObSignalHandle() : thread_id_(0) {}
   ~ObSignalHandle() {
     stop();
+#ifdef __APPLE__
+    // On macOS, sigwait() may block indefinitely. Send SIGUSR1 to wake up the thread.
+    // SIGUSR1 is in the signal set being waited on (see add_signums_to_set).
+    if (thread_id_ != 0) {
+      pthread_kill(thread_id_, SIGUSR1);
+    }
+#endif
     wait();
   }
   virtual void run1();
@@ -39,6 +46,9 @@ public:
   static int add_signums_to_set(sigset_t &sig_set);
   //deal signals. Called in the signal handle thread.
   static int deal_signals(int signum);
+
+  // Store thread id for macOS wakeup
+  pthread_t thread_id_;
 };
 
 }

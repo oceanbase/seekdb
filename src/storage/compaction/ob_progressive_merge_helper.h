@@ -15,7 +15,7 @@
  */
 #ifndef OB_STORAGE_COMPACTION_PROGRESSIVE_MERGE_HELPER_H_
 #define OB_STORAGE_COMPACTION_PROGRESSIVE_MERGE_HELPER_H_
-#include "/usr/include/stdint.h"
+#include <stdint.h>
 #include "lib/utility/ob_print_utils.h"
 namespace oceanbase
 {

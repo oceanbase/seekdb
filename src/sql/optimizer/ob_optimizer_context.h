@@ -127,7 +127,7 @@ struct AutoDOPParams {
     } else {
       limit = std::min(parallel_servers_target_, server_cnt * unit_min_cpu_);
     }
-    return std::max(limit, 1L);
+    return std::max(limit, static_cast<int64_t>(1));
   }
   bool is_valid() { return parallel_min_scan_time_threshold_ >= 10
                           && (parallel_degree_limit_ > 0 || parallel_servers_target_ > 0

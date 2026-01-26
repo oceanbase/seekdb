@@ -3048,7 +3048,7 @@ int ObMulValueIndexBuilderUtil::generate_multivalue_column(
       ObColumnSchemaV2 *old_gen_col = NULL;
 
       size_t expr_str_len = strlen(expr_def_buf);
-      expr_def.assign_ptr(expr_def_buf, expr_str_len);
+      expr_def.assign_ptr(expr_def_buf, static_cast<ObString::obstr_size_t>(expr_str_len));
 
       if (!force_rebuild && OB_FAIL(data_schema.get_generated_column_by_define(expr_def,
                                                              true/*only hidden column*/,
@@ -3137,7 +3137,7 @@ int ObMulValueIndexBuilderUtil::generate_multivalue_column(
                  "%s", " multivalue)");
 
           expr_str_len = strlen(expr_def_buf);
-          expr_def.assign_ptr(expr_def_buf, expr_str_len);
+          expr_def.assign_ptr(expr_def_buf, static_cast<ObString::obstr_size_t>(expr_str_len));
           default_value.set_varchar(expr_def);
 
           multival_arr_col.set_data_type(ObJsonType);

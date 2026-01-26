@@ -19,6 +19,11 @@
 #include "lib/utility/ob_tracepoint.h"
 #include "lib/alloc/ob_malloc_time_monitor.h"
 
+// macOS sys/param.h defines isset macro which conflicts with method calls
+#ifdef isset
+#undef isset
+#endif
+
 using namespace oceanbase::lib;
 using namespace oceanbase::common;
 

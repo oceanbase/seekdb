@@ -1168,11 +1168,11 @@ int ObExternalFileFormat::get_format_file_extension(FormatType format_type, ObSt
       break;
     }
     case PARQUET_FORMAT: {
-      file_extension.assign_ptr(ObParquetGeneralFormat::DEFAULT_FILE_EXTENSION, strlen(ObParquetGeneralFormat::DEFAULT_FILE_EXTENSION));
+      file_extension.assign_ptr(ObParquetGeneralFormat::DEFAULT_FILE_EXTENSION, static_cast<ObString::obstr_size_t>(strlen(ObParquetGeneralFormat::DEFAULT_FILE_EXTENSION)));
       break;
     }
     case ORC_FORMAT: {
-      file_extension.assign_ptr(ObOrcGeneralFormat::DEFAULT_FILE_EXTENSION, strlen(ObOrcGeneralFormat::DEFAULT_FILE_EXTENSION));
+      file_extension.assign_ptr(ObOrcGeneralFormat::DEFAULT_FILE_EXTENSION, static_cast<ObString::obstr_size_t>(strlen(ObOrcGeneralFormat::DEFAULT_FILE_EXTENSION)));
       break;
     }
     default: {

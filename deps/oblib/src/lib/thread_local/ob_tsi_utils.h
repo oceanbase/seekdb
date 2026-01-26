@@ -20,7 +20,9 @@
 #include <unistd.h>
 #include <sys/syscall.h>
 #include <sys/time.h>
+#ifdef __linux__
 #include <linux/futex.h>
+#endif
 #include <sched.h>
 #include "lib/atomic/ob_atomic.h"
 #include "lib/ob_define.h"

@@ -225,9 +225,9 @@ int ObSqlWorkareaActive::fill_row(
       case POLICY: {
         ObString exec_str;
         if (wa_active.profile_.get_auto_policy()) {
-          exec_str.assign_ptr(EXECUTION_AUTO_POLICY, strlen(EXECUTION_AUTO_POLICY));
+          exec_str.assign_ptr(EXECUTION_AUTO_POLICY, static_cast<ObString::obstr_size_t>(strlen(EXECUTION_AUTO_POLICY)));
         } else {
-          exec_str.assign_ptr(EXECUTION_MANUAL_POLICY, strlen(EXECUTION_MANUAL_POLICY));
+          exec_str.assign_ptr(EXECUTION_MANUAL_POLICY, static_cast<ObString::obstr_size_t>(strlen(EXECUTION_MANUAL_POLICY)));
         }
         cells[cell_idx].set_varchar(exec_str);
         cells[cell_idx].set_collation_type(

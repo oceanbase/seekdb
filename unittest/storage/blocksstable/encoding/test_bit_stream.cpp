@@ -156,7 +156,7 @@ TEST(ObBitStream, get_26)
 {
   int16_t data[16];
   unsigned char buf[32];
-  MEMSET(buf, 0, 64);
+  MEMSET(buf, 0, sizeof(buf));
   for (int16_t i = 0; i < 16; ++i) {
     data[i] = i;
   }
@@ -172,7 +172,7 @@ TEST(ObBitStream, get_26)
   for (int16_t i = 0; i < 16; ++i) {
     get_16_value = 0;
     ObBitStream::get<ObBitStream::PACKED_LEN_LESS_THAN_26>(
-        buf, offset, cnt, 32 * sizeof(unsigned char), get_16_value);
+        buf, offset, cnt, CHAR_BIT * sizeof(buf), get_16_value);
     ASSERT_EQ(data[i], get_16_value);
     offset += cnt;
   }

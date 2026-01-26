@@ -55,6 +55,15 @@ int ObDMLSqlSplicer::append_value(const int64_t value, bool &is_null)
   return values_.append_fmt("%ld", value);
 }
 
+#ifdef __APPLE__
+// macOS: long and long long are different types, need explicit overload for long
+int ObDMLSqlSplicer::append_value(const long value, bool &is_null)
+{
+  // Convert long to int64_t and use the int64_t implementation
+  return append_value(static_cast<int64_t>(value), is_null);
+}
+#endif
+
 int ObDMLSqlSplicer::append_value(const uint32_t value, bool &is_null)
 {
   is_null = false;

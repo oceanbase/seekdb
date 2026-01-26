@@ -17,6 +17,10 @@
 #define USING_LOG_PREFIX  SQL_ENG
 #include <sys/ioctl.h>
 #include <net/if.h>
+#ifdef __APPLE__
+#include <ifaddrs.h>
+#include <net/if_dl.h>
+#endif
 #include "sql/engine/expr/ob_expr_uuid.h"
 #include "sql/engine/ob_exec_context.h"
 using namespace oceanbase::common;
@@ -68,10 +72,49 @@ ObUUIDNode::ObUUIDNode()
 int ObUUIDNode::init()
 {
   int ret = OB_SUCCESS;
+  is_inited_ = false;
+#ifdef __APPLE__
+  // macOS: Use getifaddrs to get network interface information
+  struct ifaddrs *ifaddrs_list = nullptr;
+  struct ifaddrs *ifa = nullptr;
+  bool mac_addr_found = false;
+
+  if (getifaddrs(&ifaddrs_list) != 0) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("getifaddrs failed", K(ret), K(errno));
+  } else {
+    for (ifa = ifaddrs_list; ifa != nullptr && OB_SUCC(ret) && !mac_addr_found; ifa = ifa->ifa_next) {
+      if (ifa->ifa_addr == nullptr) {
+        continue;
+      }
+      // Check if it's a link-level address (MAC address)
+      if (ifa->ifa_addr->sa_family == AF_LINK) {
+        // Skip loopback interface
+        if ((ifa->ifa_flags & IFF_LOOPBACK) == 0) {
+          struct sockaddr_dl *sdl = (struct sockaddr_dl *)ifa->ifa_addr;
+          if (sdl->sdl_alen == 6) {  // MAC address is 6 bytes
+            MEMCPY(mac_addr_, LLADDR(sdl), 6);
+            mac_addr_found = true;
+          }
+        }
+      }
+    }
+    freeifaddrs(ifaddrs_list);
+
+    if (OB_FAIL(ret)) {
+      // Error already logged
+    } else if (!mac_addr_found) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("unexpected error. can not get mac address", K(ret), K(errno));
+    } else {
+      is_inited_ = true;
+    }
+  }
+#else
+  // Linux: Use ioctl to get MAC address
   struct ifreq ifr;
   struct ifconf ifc;
   char buf[1024];
-  is_inited_ = false;
   int sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_IP);
   if (sock == -1) {
     ret = OB_ERR_UNEXPECTED;
@@ -116,6 +159,7 @@ int ObUUIDNode::init()
     }
     close(sock);
   }
+#endif
   return ret;
 }
 

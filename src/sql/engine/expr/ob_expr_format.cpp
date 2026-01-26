@@ -254,7 +254,7 @@ int ObExprFormat::build_format_str(char *buf,
       *--dst = '-';
     }
     size_t result_length = start_dst - dst;
-    num_str.assign_ptr(dst, result_length);
+    num_str.assign_ptr(dst, static_cast<ObString::obstr_size_t>(result_length));
   } else if (decimal_length && locale.decimal_point_ != '.') {
     if (decimal_length > str_length) {
       ret = OB_ERR_UNEXPECTED;

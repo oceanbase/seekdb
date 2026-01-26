@@ -737,7 +737,7 @@ int ObAutoincrementService::try_lock_autoinc_row(const uint64_t &tenant_id,
       }
     } else {
       int64_t inner_autoinc_version = OB_INVALID_VERSION;
-      if (OB_FAIL(result->get_int(0l, inner_autoinc_version))) {
+      if (OB_FAIL(result->get_int(static_cast<int64_t>(0), inner_autoinc_version))) {
         LOG_WARN("fail to get truncate_version", KR(ret));
       } else if (inner_autoinc_version > autoinc_version) {
         ret = OB_ERR_UNEXPECTED;
@@ -1960,13 +1960,13 @@ int ObAutoIncInnerTableProxy::next_autoinc_value(const AutoincKey &key,
                 LOG_WARN("failed to get next", K(ret));
               }
             } else {
-              if (OB_FAIL(result->get_int(0l, fetch_table_id))) {
+              if (OB_FAIL(result->get_int(static_cast<int64_t>(0), fetch_table_id))) {
                 LOG_WARN("fail to get int_value.", K(ret));
-              } else if (OB_FAIL(result->get_uint(1l, sequence_value))) {
+              } else if (OB_FAIL(result->get_uint(static_cast<int64_t>(1), sequence_value))) {
                 LOG_WARN("fail to get int_value.", K(ret));
-              } else if (OB_FAIL(result->get_uint(2l, sync_value))) {
+              } else if (OB_FAIL(result->get_uint(static_cast<int64_t>(2), sync_value))) {
                 LOG_WARN("fail to get int_value.", K(ret));
-              } else if (OB_FAIL(result->get_int(3l, inner_autoinc_version))) {
+              } else if (OB_FAIL(result->get_int(static_cast<int64_t>(3), inner_autoinc_version))) {
                 LOG_WARN("fail to get inner_autoinc_version.", K(ret));
               } else if (OB_FAIL(check_inner_autoinc_version(tmp_autoinc_version, inner_autoinc_version, key))) {
                 LOG_WARN("fail to check inner_autoinc_version", KR(ret));
@@ -2109,11 +2109,11 @@ int ObAutoIncInnerTableProxy::get_autoinc_value(const AutoincKey &key,
       }
     } else {
       int64_t inner_autoinc_version = OB_INVALID_VERSION;
-      if (OB_FAIL(result->get_uint(0l, seq_value))) {
+      if (OB_FAIL(result->get_uint(static_cast<int64_t>(0), seq_value))) {
         LOG_WARN("fail to get int_value.", K(ret));
-      } else if (OB_FAIL(result->get_uint(1l, sync_value))) {
+      } else if (OB_FAIL(result->get_uint(static_cast<int64_t>(1), sync_value))) {
         LOG_WARN("fail to get int_value.", K(ret));
-      } else if (OB_FAIL(result->get_int(2l, inner_autoinc_version))) {
+      } else if (OB_FAIL(result->get_int(static_cast<int64_t>(2), inner_autoinc_version))) {
         LOG_WARN("fail to get truncate_version.", K(ret));
       } else if (OB_FAIL(check_inner_autoinc_version(tmp_autoinc_version, inner_autoinc_version, key))) {
         LOG_WARN("fail to check inner_autoinc_version", KR(ret));
@@ -2196,11 +2196,11 @@ int ObAutoIncInnerTableProxy::get_autoinc_value_in_batch(
           ret = OB_ERR_UNEXPECTED;
         } else {
           while(OB_SUCC(ret) && OB_SUCC(result->next())) {
-            if (OB_FAIL(result->get_int(0l, table_id))) {
+            if (OB_FAIL(result->get_int(static_cast<int64_t>(0), table_id))) {
               LOG_WARN("fail to get int_value.", K(ret));
-            } else if (OB_FAIL(result->get_int(1l, column_id))) {
+            } else if (OB_FAIL(result->get_int(static_cast<int64_t>(1), column_id))) {
               LOG_WARN("fail to get int_value.", K(ret));
-            } else if (OB_FAIL(result->get_uint(2l, seq_value))) {
+            } else if (OB_FAIL(result->get_uint(static_cast<int64_t>(2), seq_value))) {
               LOG_WARN("fail to get int_value.", K(ret));
             } else {
               AutoincKey key;
@@ -2283,13 +2283,13 @@ int ObAutoIncInnerTableProxy::sync_autoinc_value(const AutoincKey &key,
             ret = OB_SCHEMA_ERROR;
             LOG_WARN("failed to get next", K(ret));
           }
-        } else if (OB_FAIL(result->get_int(0l, fetch_table_id))) {
+        } else if (OB_FAIL(result->get_int(static_cast<int64_t>(0), fetch_table_id))) {
           LOG_WARN("failed to get int_value.", K(ret));
-        } else if (OB_FAIL(result->get_uint(1l, fetch_seq_value))) {
+        } else if (OB_FAIL(result->get_uint(static_cast<int64_t>(1), fetch_seq_value))) {
           LOG_WARN("failed to get int_value.", K(ret));
-        } else if (OB_FAIL(result->get_uint(2l, sync_value))) {
+        } else if (OB_FAIL(result->get_uint(static_cast<int64_t>(2), sync_value))) {
           LOG_WARN("failed to get int_value.", K(ret));
-        } else if (OB_FAIL(result->get_int(3l, inner_autoinc_version))) {
+        } else if (OB_FAIL(result->get_int(static_cast<int64_t>(3), inner_autoinc_version))) {
           LOG_WARN("failed to get inner_autoinc_version.", K(ret));
         } else if (OB_FAIL(check_inner_autoinc_version(tmp_autoinc_version, inner_autoinc_version, key))) {
           LOG_WARN("failed to check inner_autoinc_version", KR(ret));
@@ -2430,9 +2430,9 @@ int ObAutoIncInnerTableProxy::read_and_push_inner_table(const AutoincKey &key,
             ret = OB_SCHEMA_ERROR;
             LOG_WARN("failed to get next", K(ret));
           }
-        } else if (OB_FAIL(result->get_uint(0l, fetch_seq_value))) {
+        } else if (OB_FAIL(result->get_uint(static_cast<int64_t>(0), fetch_seq_value))) {
           LOG_WARN("failed to get int_value.", K(ret));
-        } else if (OB_FAIL(result->get_int(1l, inner_autoinc_version))) {
+        } else if (OB_FAIL(result->get_int(static_cast<int64_t>(1), inner_autoinc_version))) {
           LOG_WARN("failed to get inner_autoinc_version.", K(ret));
         }
         if (OB_SUCC(ret)) {

@@ -108,6 +108,10 @@ cmake-build-release
 ## OSX dir files
 .DS_Store
 
+############# deps #############
+deps/3rd_party
+deps/usr
+
 ############# src #############
 src/.settings/
 src/client/*

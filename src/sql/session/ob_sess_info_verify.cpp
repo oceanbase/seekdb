@@ -460,7 +460,7 @@ int ObSessInfoVerify::sql_port_to_rpc_port(sql::ObSQLSessionInfo &sess,
                     SERVER_LOG(WARN, "failed to get result", K(ret));
                   } else {
                     while (OB_SUCC(ret) && OB_SUCC(result->next())) {
-                      if (OB_FAIL(result->get_int(0l, rpc_port))) {
+                      if (OB_FAIL(result->get_int(static_cast<int64_t>(0l), rpc_port))) {
                         LOG_WARN("fail to get varchar.", K(ret));
                       } else {
                         sess_info_verification.get_verify_info_addr().set_port(rpc_port);

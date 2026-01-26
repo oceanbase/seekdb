@@ -46,7 +46,7 @@ target_link_libraries(zstd_objs PUBLIC oblib_base)
 
 add_custom_command(
   OUTPUT zstd_objs.o
-  COMMAND ${OB_LD_BIN} -r $<TARGET_OBJECTS:zstd_objs> -o zstd_objs.tmp.o
+  COMMAND ${OB_LD_BIN} ${ARCH_ARGS} ${OB_DEPLOY} -r $<TARGET_OBJECTS:zstd_objs> -o zstd_objs.tmp.o
   COMMAND ${OB_OBJCOPY_BIN} --localize-hidden zstd_objs.tmp.o zstd_objs.o
   DEPENDS zstd_objs
   COMMAND_EXPAND_LISTS

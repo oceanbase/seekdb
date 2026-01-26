@@ -475,7 +475,7 @@ int mvt_agg_result::mvt_pack(ObString &blob_res)
         LOG_WARN("failed to allocate memory", K(ret));
       } else {
         vector_tile__tile__pack(tile_, buf);
-        blob_res.assign_ptr(reinterpret_cast<char *>(buf), total_len);
+        blob_res.assign_ptr(reinterpret_cast<char *>(buf), static_cast<ObString::obstr_size_t>(total_len));
       }
     }
   }

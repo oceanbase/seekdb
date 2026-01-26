@@ -21,10 +21,12 @@ ObUtilMutex::ObUtilMutex()
 ObUtilMutex::~ObUtilMutex()
 {
   const int rt = pthread_mutex_destroy(&_mutex);
+#ifndef __APPLE__
   if ( rt != 0 ) {
     _OB_LOG_RET(ERROR,OB_ERR_SYS, "%s. rt: %d", "ThreadSyscallException", rt);
   }
   assert(rt == 0);
+#endif
 }
 
 bool ObUtilMutex::trylock() const

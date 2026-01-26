@@ -619,13 +619,13 @@ OB_INLINE int64_t ObResourceGroup::min_worker_cnt() const
   int64_t cnt = 1;
   if (is_resource_manager_group(group_id_)) {
     worker_concurrency = tenant_->cpu_quota_concurrency();
-    cnt = std::max(worker_concurrency * (int64_t)ceil(tenant_->unit_min_cpu()), 1UL);
+    cnt = std::max(static_cast<int64_t>(worker_concurrency * (int64_t)ceil(tenant_->unit_min_cpu())), static_cast<int64_t>(1));
   } else {
     // worker_concurrency = share::ObCgSet::instance().get_worker_concurrency(group_id_);
-    cnt = std::max(share::ObCgSet::instance().get_worker_concurrency(group_id_), 1UL);
+    cnt = std::max(static_cast<int64_t>(share::ObCgSet::instance().get_worker_concurrency(group_id_)), static_cast<int64_t>(1));
   }
   if (share::OBCG_CLOG == group_id_ || share::OBCG_LQ == group_id_) {
-    cnt = std::max(cnt, 8L);
+    cnt = std::max(cnt, static_cast<int64_t>(8));
   } else if (share::OBCG_WR == group_id_) {
     cnt = 2; // one for take snapshot, one for purge
   } else if (share::OBCG_HB_SERVICE == group_id_) {
@@ -639,7 +639,7 @@ OB_INLINE int64_t ObResourceGroup::max_worker_cnt() const
   int64_t cnt = 0;
   if (share::OBCG_CLOG == group_id_) {
     const int64_t worker_concurrency = share::ObCgSet::instance().get_worker_concurrency(group_id_);
-    cnt = std::max(worker_concurrency * (int64_t)ceil(tenant_->unit_max_cpu()), 8L);
+    cnt = std::max(worker_concurrency * (int64_t)ceil(tenant_->unit_max_cpu()), static_cast<int64_t>(8));
   } else if (OB_UNLIKELY(share::OBCG_WR == group_id_)) {
     cnt = 2;
   } else if (OB_UNLIKELY(share::OBCG_HB_SERVICE == group_id_)) {

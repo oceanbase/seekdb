@@ -245,7 +245,7 @@ int ObDDLCtrlSpeedItem::do_sleep(
   }
 
   if (OB_SUCC(ret)) {
-    real_sleep_us = std::max(0L, next_available_ts - ObTimeUtility::current_time());
+    real_sleep_us = std::max(static_cast<int64_t>(0), next_available_ts - ObTimeUtility::current_time());
     ob_usleep(real_sleep_us);
   }
   return ret;

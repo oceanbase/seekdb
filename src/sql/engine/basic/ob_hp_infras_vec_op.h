@@ -963,7 +963,7 @@ template <typename HashBucket>
 int64_t ObHashPartInfrastructureVec<HashBucket>::est_extend_hash_bucket_num(
   const int64_t bucket_num, const int64_t max_hash_mem, const int64_t min_bucket)
 {
-  int64_t max_bound_size = std::max(0l, max_hash_mem * MAX_MEM_PERCENT / 100);
+  int64_t max_bound_size = std::max(static_cast<int64_t>(0), max_hash_mem * MAX_MEM_PERCENT / 100);
   int64_t est_bucket_num = common::next_pow2(bucket_num);
   int64_t est_size = est_bucket_num * sizeof(HashBucket);
   while (est_size > max_bound_size && est_bucket_num > 0) {

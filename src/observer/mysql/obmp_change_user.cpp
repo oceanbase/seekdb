@@ -493,7 +493,7 @@ int ObMPChangeUser::load_login_info(ObSQLSessionInfo *session)
     OB_LOG(INFO, "com change user", "username", login_info.user_name_,
           "tenant name", login_info.tenant_name_);
     const ObSMConnection &conn = *get_conn();
-    login_info.scramble_str_.assign_ptr(conn.scramble_buf_, sizeof(conn.scramble_buf_));
+    login_info.scramble_str_.assign_ptr(conn.scramble_buf_, static_cast<ObString::obstr_size_t>(sizeof(conn.scramble_buf_)));
     login_info.passwd_ = auth_response_;
     if (OB_FAIL(session->set_login_info(login_info))) {
       LOG_WARN("failed to set login_info", K(ret));

@@ -18,7 +18,10 @@
 
 #include "utility.h"
 #include "dirent.h"
+#ifdef __linux__
 #include <gnu/libc-version.h>
+#endif
+#include "lib/utility/ob_platform_utils.h"  // Platform compatibility layer
 #include "lib/file/file_directory_utils.h"
 #include "deps/oblib/src/common/ob_string_buf.h"
 #include "lib/string/ob_sql_string.h"
@@ -368,7 +371,8 @@ const char *time2str(const int64_t time_us, char *buf, const int64_t buf_len, co
     struct tm time_struct;
     int64_t time_s = time_us / 1000000;
     int64_t cur_second_time_us = time_us % 1000000;
-    if (nullptr != localtime_r(&time_s, &time_struct)) {
+    time_t time_t_val = static_cast<time_t>(time_s);
+    if (nullptr != localtime_r(&time_t_val, &time_struct)) {
       int64_t pos = strftime(buf, buf_len, format, &time_struct);
       // since libc 4.4.4, strftime returns 0 if failed
       if (pos > 0) {
@@ -1182,6 +1186,27 @@ static int use_daemon()
     ret = OB_ERR_SYS;
   }
   reset_tid_cache();
+#ifdef __APPLE__
+  // On macOS, after daemon() the process becomes a background process with low QoS priority.
+  // This causes severe thread scheduling delays (300-500ms instead of 2-3ms).
+  // Multiple approaches to restore normal scheduling:
+  if (OB_SUCC(ret)) {
+    // 1. Remove background state from current thread using PRIO_DARWIN_THREAD
+    int darwin_thread_ret = setpriority(PRIO_DARWIN_THREAD, 0, 0);
+
+    // 2. Remove background state from process using PRIO_DARWIN_PROCESS
+    int darwin_proc_ret = setpriority(PRIO_DARWIN_PROCESS, 0, 0);
+
+    // 3. Set thread QoS to USER_INITIATED using platform compatibility layer
+    int qos_ret = lib::ob_set_thread_qos(lib::ObThreadQoS::USER_INITIATED);
+
+    // 4. Set normal process priority
+    int prio_ret = setpriority(PRIO_PROCESS, 0, 0);
+
+    _LOG_INFO("macOS daemon priority setup: darwin_thread=%d, darwin_proc=%d, qos=%d, prio=%d",
+              darwin_thread_ret, darwin_proc_ret, qos_ret, prio_ret);
+  }
+#endif
   // bt("enable_preload_bt") = 1;
   return ret;
 }
@@ -1775,7 +1800,14 @@ struct tm *ob_localtime(const time_t *unix_sec, struct tm *result)
   static const int MAGIC_UNKONWN_FIRST = 146097;
   static const int MAGIC_UNKONWN_SEC = 1461;
   //use __timezone from glibc/time/tzset.c, default value is -480 for china
+#ifdef __linux__
   const int32_t tz_minutes = static_cast<int32_t>(__timezone / 60);
+#elif defined(__APPLE__)
+  // macOS uses timezone variable (seconds west of UTC, negative for east)
+  // timezone is declared in <time.h> on macOS
+  #include <time.h>
+  const int32_t tz_minutes = static_cast<int32_t>(timezone / 60);
+#endif
 
 //only support time > 1970/1/1 8:0:0
   if (OB_LIKELY(NULL != result) && OB_LIKELY(NULL != unix_sec) && OB_LIKELY(*unix_sec > 0)) {
@@ -1867,7 +1899,13 @@ int is_dir_empty(const char *dirname, bool &is_empty)
 
 static int64_t get_cpu_cache_size(int sysconf_name, const char *sysfs_path, int64_t default_value)
 {
-  int64_t cache_size = sysconf(sysconf_name);
+  int64_t cache_size = 0;
+#ifdef __linux__
+  cache_size = sysconf(sysconf_name);
+#elif defined(__APPLE__)
+  // macOS doesn't support these sysconf constants, skip sysconf call
+  cache_size = -1;
+#endif
   if (OB_UNLIKELY(cache_size <= 0)) {
     FILE *file = nullptr;
     file = fopen(sysfs_path, "r");
@@ -1888,28 +1926,44 @@ static int64_t get_cpu_cache_size(int sysconf_name, const char *sysfs_path, int6
 int64_t get_level1_dcache_size()
 {
   const char *path = "/sys/devices/system/cpu/cpu0/cache/index0/size";
+#ifdef __linux__
   static int64_t l1_dcache_size = get_cpu_cache_size(_SC_LEVEL1_DCACHE_SIZE, path, 32768/*default L1 dcache size : 32K*/);
+#elif defined(__APPLE__)
+  static int64_t l1_dcache_size = get_cpu_cache_size(-1, path, 32768/*default L1 dcache size : 32K*/);
+#endif
   return l1_dcache_size;
 }
 
 int64_t get_level1_icache_size()
 {
   const char *path = "/sys/devices/system/cpu/cpu0/cache/index1/size";
+#ifdef __linux__
   static int64_t l1_icache_size = get_cpu_cache_size(_SC_LEVEL1_ICACHE_SIZE, path, 32768/*default L1 icache size : 32K*/);
+#elif defined(__APPLE__)
+  static int64_t l1_icache_size = get_cpu_cache_size(-1, path, 32768/*default L1 icache size : 32K*/);
+#endif
   return l1_icache_size;
 }
 
 int64_t get_level2_cache_size()
 {
   const char *path = "/sys/devices/system/cpu/cpu0/cache/index2/size";
+#ifdef __linux__
   static int64_t l2_cache_size = get_cpu_cache_size(_SC_LEVEL2_CACHE_SIZE, path, 524288/*default L2 cache size : 512K*/);
+#elif defined(__APPLE__)
+  static int64_t l2_cache_size = get_cpu_cache_size(-1, path, 524288/*default L2 cache size : 512K*/);
+#endif
   return l2_cache_size;
 }
 
 int64_t get_level3_cache_size()
 {
   const char *path = "/sys/devices/system/cpu/cpu0/cache/index3/size";
+#ifdef __linux__
   static int64_t l3_cache_size = get_cpu_cache_size(_SC_LEVEL3_CACHE_SIZE, path, 8388608/*default L3 cache size : 8192K*/);
+#elif defined(__APPLE__)
+  static int64_t l3_cache_size = get_cpu_cache_size(-1, path, 8388608/*default L3 cache size : 8192K*/);
+#endif
   return l3_cache_size;
 }
 
@@ -2015,10 +2069,16 @@ void get_glibc_version(int &major, int &minor)
 {
   major = 0;
   minor = 0;
+#ifdef __linux__
   const char *glibc_version = gnu_get_libc_version();
   if (NULL != glibc_version) {
     sscanf(glibc_version, "%d.%d", &major, &minor);
   }
+#elif defined(__APPLE__)
+  // macOS doesn't use glibc, return 0,0
+  (void)major;
+  (void)minor;
+#endif
 }
 
 bool glibc_prereq(int major, int minor)

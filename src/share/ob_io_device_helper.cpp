@@ -15,7 +15,19 @@
  */
 
 #define USING_LOG_PREFIX SHARE
+#ifdef __APPLE__
+#include <sys/mount.h> // For statfs on macOS, replaces sys/vfs.h
+#include <fcntl.h> // For fcntl on macOS (fallocate replacement)
+#include <unistd.h> // For O_RDWR, O_CREAT, etc.
+#ifndef O_LARGEFILE
+#define O_LARGEFILE 0 // macOS supports large files by default
+#endif
+#ifndef O_DIRECT
+#define O_DIRECT 0 // macOS does not support O_DIRECT
+#endif
+#else
 #include <sys/vfs.h>
+#endif
 #include <sys/statvfs.h>
 #include "common/storage/ob_io_device.h"
 #include "share/ob_device_manager.h"
@@ -547,7 +559,12 @@ int ObIODeviceLocalFileOp::fdatasync(const ObIOFd &fd)
     SHARE_LOG(WARN, "invalid fd, not normal file, ", K(ret), K(fd));
   } else {
     int sys_ret = 0;
+#ifdef __APPLE__
+    // macOS doesn't have fdatasync, use fsync instead
+    if (0 != (sys_ret = ::fsync(static_cast<int32_t>(fd.second_id_)))) {
+#else
     if (0 != (sys_ret = ::fdatasync(static_cast<int32_t>(fd.second_id_)))) {
+#endif
       ret = convert_sys_errno();
       SHARE_LOG(WARN, "Fail to fdatasync, ", K(ret), K(sys_ret), K(fd), KERRMSG);
     }
@@ -567,10 +584,33 @@ int ObIODeviceLocalFileOp::fallocate(
     SHARE_LOG(WARN, "invalid args, not normal file", K(ret), K(fd));
   } else {
     int sys_ret = 0;
+#ifdef __APPLE__
+    // macOS doesn't have fallocate, use fcntl F_PREALLOCATE instead
+    fstore_t store = {F_ALLOCATECONTIG, F_PEOFPOSMODE, 0, len, 0};
+    sys_ret = fcntl(static_cast<int32_t>(fd.second_id_), F_PREALLOCATE, &store);
+    if (-1 == sys_ret) {
+      // Try allocating non-contiguous space
+      store.fst_flags = F_ALLOCATEALL;
+      sys_ret = fcntl(static_cast<int32_t>(fd.second_id_), F_PREALLOCATE, &store);
+    }
+    if (0 != sys_ret) {
+      ret = convert_sys_errno();
+      SHARE_LOG(WARN, "fail to fallocate", K(ret), K(sys_ret), K(fd), K(offset), K(len), KERRMSG);
+    } else {
+      // F_PREALLOCATE only reserves disk space but doesn't change file size.
+      // Use ftruncate to set the logical file size to match Linux fallocate behavior.
+      const int64_t new_size = offset + len;
+      if (0 != ::ftruncate(static_cast<int32_t>(fd.second_id_), new_size)) {
+        ret = convert_sys_errno();
+        SHARE_LOG(WARN, "fail to ftruncate after preallocate", K(ret), K(fd), K(new_size), KERRMSG);
+      }
+    }
+#else
     if (0 != (sys_ret = ::fallocate(static_cast<int32_t>(fd.second_id_), mode, offset, len))) {
       ret = convert_sys_errno();
       SHARE_LOG(WARN, "fail to fallocate", K(ret), K(sys_ret), K(fd), K(offset), K(len), KERRMSG);
     }
+#endif
   }
   return ret;
 }
@@ -653,9 +693,15 @@ int ObIODeviceLocalFileOp::stat(const char *pathname, ObIODFileStat &statbuf)
       statbuf.size_ = static_cast<uint64_t>(buf.st_size);
       statbuf.block_cnt_ = static_cast<uint64_t>(buf.st_blocks);
       statbuf.block_size_ = static_cast<uint64_t>(buf.st_blksize);
+#ifdef __APPLE__
+      statbuf.atime_s_ = static_cast<int64_t>(buf.st_atimespec.tv_sec);
+      statbuf.mtime_s_ = static_cast<int64_t>(buf.st_mtimespec.tv_sec);
+      statbuf.ctime_s_ = static_cast<int64_t>(buf.st_ctimespec.tv_sec);
+#else
       statbuf.atime_s_ = static_cast<int64_t>(buf.st_atim.tv_sec);
       statbuf.mtime_s_ = static_cast<int64_t>(buf.st_mtim.tv_sec);
       statbuf.ctime_s_ = static_cast<int64_t>(buf.st_ctim.tv_sec);
+#endif
       statbuf.btime_s_ = INT64_MAX; // local file system stat does not offer birth time
     }
   }
@@ -685,9 +731,15 @@ int ObIODeviceLocalFileOp::fstat(const ObIOFd &fd, ObIODFileStat &statbuf)
       statbuf.size_ = static_cast<uint64_t>(buf.st_size);
       statbuf.block_cnt_ = static_cast<uint64_t>(buf.st_blocks);
       statbuf.block_size_ = static_cast<uint64_t>(buf.st_blksize);
+#ifdef __APPLE__
+      statbuf.atime_s_ = static_cast<int64_t>(buf.st_atimespec.tv_sec);
+      statbuf.mtime_s_ = static_cast<int64_t>(buf.st_mtimespec.tv_sec);
+      statbuf.ctime_s_ = static_cast<int64_t>(buf.st_ctimespec.tv_sec);
+#else
       statbuf.atime_s_ = static_cast<int64_t>(buf.st_atim.tv_sec);
       statbuf.mtime_s_ = static_cast<int64_t>(buf.st_mtim.tv_sec);
       statbuf.ctime_s_ = static_cast<int64_t>(buf.st_ctim.tv_sec);
+#endif
       statbuf.btime_s_ = INT64_MAX; // local file system stat does not offer birth time
     }
   }
@@ -903,7 +955,7 @@ int ObIODeviceLocalFileOp::compute_block_file_size(
     SHARE_LOG(WARN, "Failed to get disk space ", K(ret), K(sstable_dir));
   } else {
     // remove reserved space for root user
-    total_space = std::max(0L, (int64_t)((svfs.f_blocks + svfs.f_bavail - svfs.f_bfree) * svfs.f_bsize - reserved_size));
+    total_space = std::max(static_cast<int64_t>(0), (int64_t)((svfs.f_blocks + svfs.f_bavail - svfs.f_bfree) * svfs.f_bsize - reserved_size));
     block_file_size = suggest_file_size > 0 ? suggest_file_size : total_space * disk_percentage / 100;
     if (block_file_size <= block_size) {
       ret = OB_INVALID_ARGUMENT;
@@ -937,7 +989,7 @@ int ObIODeviceLocalFileOp::check_disk_space_available(
     SHARE_LOG(WARN, "Failed to get disk space ", K(ret), K(sstable_dir));
   } else {
     // check disk space availability for datafile_size, must satisfy datafile_size < used_disk_size + disk_free_space
-    const int64_t free_space = std::max(0L, (int64_t)(svfs.f_bavail * svfs.f_bsize - reserved_size));
+    const int64_t free_space = std::max(static_cast<int64_t>(0), (int64_t)(svfs.f_bavail * svfs.f_bsize - reserved_size));
     if (data_disk_size > used_disk_size + free_space) {
       ret = OB_SERVER_OUTOF_DISK_SPACE;
       if (need_report_user_error) {
@@ -986,7 +1038,24 @@ int ObIODeviceLocalFileOp::open_block_file(
       SHARE_LOG(ERROR, "open file error", K(ret), "store_path", block_file_attr.store_path_, K(errno), KERRMSG);
     } else {
       if (!is_exist) {
+#ifdef __APPLE__
+        // macOS doesn't have fallocate, use fcntl F_PREALLOCATE instead
+        fstore_t store = {F_ALLOCATECONTIG, F_PEOFPOSMODE, 0, adjust_file_size, 0};
+        sys_ret = fcntl(block_file_attr.block_fd_, F_PREALLOCATE, &store);
+        if (-1 == sys_ret) {
+          // Try allocating non-contiguous space
+          store.fst_flags = F_ALLOCATEALL;
+          sys_ret = fcntl(block_file_attr.block_fd_, F_PREALLOCATE, &store);
+        }
+        // F_PREALLOCATE only reserves space but doesn't change file size.
+        // We must call ftruncate to actually set the file size.
+        if (0 == sys_ret) {
+          sys_ret = ::ftruncate(block_file_attr.block_fd_, adjust_file_size);
+        }
+        if (0 != sys_ret) {
+#else
         if (0 != (sys_ret = ::fallocate(block_file_attr.block_fd_, 0/*MODE*/, 0/*offset*/, adjust_file_size))) {
+#endif
           ret = ObIODeviceLocalFileOp::convert_sys_errno();
           SHARE_LOG(ERROR, "Fail to fallocate block file, ", K(ret), K(sys_ret), "store_path",
                     block_file_attr.store_path_, K(adjust_file_size), KERRMSG);

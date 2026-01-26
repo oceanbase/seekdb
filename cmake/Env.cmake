@@ -155,15 +155,38 @@ if(BUILD_EMBED_MODE)
   add_definitions(-DOB_BUILD_EMBED_MODE)
 endif()
 
+# Find objcopy - on macOS it may be installed via Homebrew or available as llvm-objcopy
+set(OB_CLANG_BIN "clang-17")
+set(OB_CLANGXX_BIN "clang++-17")
+
 add_definitions(-DDEFAULT_LOG_LEVEL=${DEFAULT_LOG_LEVEL})
 add_definitions(-DDEFAULT_LOG_FILE_SIZE_MB=${DEFAULT_LOG_FILE_SIZE_MB})
 
 set(OB_OBJCOPY_BIN "${DEVTOOLS_DIR}/bin/objcopy")
-
-# NO RELERO: -Wl,-znorelro
-# Partial RELRO: -Wl,-z,relro
-# Full RELRO: -Wl,-z,relro,-z,now
-ob_define(OB_RELRO_FLAG "-Wl,-z,relro,-z,now")
+set(CMAKE_TOOLCHAIN_PATH "${DEVTOOLS_DIR}")
+set(GCC_DEVTOOL_PATH "${CMAKE_SOURCE_DIR}/deps/3rd/usr/local/oceanbase")
+if(APPLE)
+  ob_define(SYS_INCLUDE_DIR "/usr")
+  add_definitions(-D_DARWIN_C_SOURCE)
+  set(OB_CLANG_BIN "clang")
+  set(OB_CLANGXX_BIN "clang++")
+  set(CMAKE_TOOLCHAIN_PATH "/usr")
+  set(GCC_DEVTOOL_PATH "/usr/lib/")
+  # Set macOS deployment target to match the current system version
+  # This eliminates linker warnings when linking with Homebrew libraries
+  execute_process(
+    COMMAND sw_vers -productVersion
+    OUTPUT_VARIABLE MACOS_VERSION
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+  )
+  set(CMAKE_OSX_DEPLOYMENT_TARGET "${MACOS_VERSION}" CACHE STRING "Minimum macOS deployment version")
+else()
+  # NO RELERO: -Wl,-znorelro
+  # Partial RELRO: -Wl,-z,relro
+  # Full RELRO: -Wl,-z,relro,-z,now
+  # macOS doesn't support RELRO flags
+  ob_define(OB_RELRO_FLAG "-Wl,-z,relro,-z,now")
+endif()
 
 ob_define(OB_USE_CCACHE OFF)
 if (OB_USE_CCACHE)
@@ -181,7 +204,7 @@ if (OB_USE_CLANG)
   if (OB_CC)
     message(STATUS "Using OB_CC compiler: ${OB_CC}")
   else()
-    find_program(OB_CC clang-17
+    find_program(OB_CC ${OB_CLANG_BIN}
     "${DEVTOOLS_DIR}/bin"
       NO_DEFAULT_PATH)
   endif()
@@ -189,7 +212,7 @@ if (OB_USE_CLANG)
   if (OB_CXX)
     message(STATUS "Using OB_CXX compiler: ${OB_CXX}")
   else()
-    find_program(OB_CXX clang++-17
+    find_program(OB_CXX ${OB_CLANGXX_BIN}
     "${DEVTOOLS_DIR}/bin"
       NO_DEFAULT_PATH)
   endif()
@@ -197,10 +220,10 @@ if (OB_USE_CLANG)
   set(OB_OBJCOPY_BIN "${DEVTOOLS_DIR}/bin/llvm-objcopy")
 
   find_file(GCC9 devtools
-    PATHS ${CMAKE_SOURCE_DIR}/deps/3rd/usr/local/oceanbase
+    PATH ${GCC_DEVTOOL_PATH}
     NO_DEFAULT_PATH)
   set(_CMAKE_TOOLCHAIN_PREFIX llvm-)
-  set(_CMAKE_TOOLCHAIN_LOCATION "${DEVTOOLS_DIR}/bin")
+  set(_CMAKE_TOOLCHAIN_LOCATION "${CMAKE_TOOLCHAIN_PATH}/bin")
 
   if (OB_USE_ASAN)
     if (ASAN_DISABLE_STACK)
@@ -211,16 +234,29 @@ if (OB_USE_CLANG)
   endif()
 
   if (OB_USE_LLD)
-    set(LD_OPT "-fuse-ld=${DEVTOOLS_DIR}/bin/ld.lld -Wno-unused-command-line-argument")
-    set(REORDER_COMP_OPT "-ffunction-sections -fdata-sections -fdebug-info-for-profiling")
-    set(REORDER_LINK_OPT "-Wl,--no-rosegment,--build-id=sha1,--gc-sections ${HOTFUNC_OPT}")
-    set(OB_LD_BIN "${DEVTOOLS_DIR}/bin/ld.lld")
+    if(APPLE)
+      set(LD_OPT "-Wl,-dead_strip")
+      set(REORDER_COMP_OPT "-ffunction-sections -fdata-sections")
+      set(REORDER_LINK_OPT "-Wl,-dead_strip")
+      set(OB_LD_BIN "ld")
+    else()
+      set(LD_OPT "-fuse-ld=${DEVTOOLS_DIR}/bin/ld.lld -Wno-unused-command-line-argument")
+      set(REORDER_COMP_OPT "-ffunction-sections -fdata-sections -fdebug-info-for-profiling")
+      set(REORDER_LINK_OPT "-Wl,--no-rosegment,--build-id=sha1,--gc-sections ${HOTFUNC_OPT}")
+      set(OB_LD_BIN "${DEVTOOLS_DIR}/bin/ld.lld")
+    endif()
   endif()
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} --gcc-toolchain=${GCC9} -gdwarf-4 ${DEBUG_PREFIX} ${FILE_PREFIX} ${AUTO_FDO_OPT} ${THIN_LTO_OPT} -fcolor-diagnostics ${REORDER_COMP_OPT} -fmax-type-align=8 ${CMAKE_ASAN_FLAG}")
-  set(CMAKE_C_FLAGS "--gcc-toolchain=${GCC9} -gdwarf-4 ${DEBUG_PREFIX} ${FILE_PREFIX} ${AUTO_FDO_OPT} ${THIN_LTO_OPT} -fcolor-diagnostics ${REORDER_COMP_OPT} -fmax-type-align=8 ${CMAKE_ASAN_FLAG}")
-  set(CMAKE_CXX_LINK_FLAGS "${LD_OPT} --gcc-toolchain=${GCC9} ${DEBUG_PREFIX} ${FILE_PREFIX} ${AUTO_FDO_OPT}")
-  set(CMAKE_SHARED_LINKER_FLAGS "${LD_OPT} -Wl,-z,noexecstack ${THIN_LTO_CONCURRENCY_LINK} ${REORDER_LINK_OPT}")
-  set(CMAKE_EXE_LINKER_FLAGS "${LD_OPT} -Wl,-z,noexecstack ${PIE_OPT} ${THIN_LTO_CONCURRENCY_LINK} ${REORDER_LINK_OPT} ${CMAKE_COVERAGE_EXE_LINKER_OPTIONS}")
+  if(APPLE)
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -gdwarf-4 ${DEBUG_PREFIX} ${FILE_PREFIX} ${AUTO_FDO_OPT} ${THIN_LTO_OPT} -fcolor-diagnostics ${REORDER_COMP_OPT} -fmax-type-align=8 ${CMAKE_ASAN_FLAG}")
+    set(CMAKE_C_FLAGS "-gdwarf-4 ${DEBUG_PREFIX} ${FILE_PREFIX} ${AUTO_FDO_OPT} ${THIN_LTO_OPT} -fcolor-diagnostics ${REORDER_COMP_OPT} -fmax-type-align=8 ${CMAKE_ASAN_FLAG}")
+    set(CMAKE_CXX_LINK_FLAGS "${LD_OPT} ${DEBUG_PREFIX} ${FILE_PREFIX} ${AUTO_FDO_OPT}")
+  else()
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} --gcc-toolchain=${GCC9} -gdwarf-4 ${DEBUG_PREFIX} ${FILE_PREFIX} ${AUTO_FDO_OPT} ${THIN_LTO_OPT} -fcolor-diagnostics ${REORDER_COMP_OPT} -fmax-type-align=8 ${CMAKE_ASAN_FLAG}")
+    set(CMAKE_C_FLAGS "--gcc-toolchain=${GCC9} -gdwarf-4 ${DEBUG_PREFIX} ${FILE_PREFIX} ${AUTO_FDO_OPT} ${THIN_LTO_OPT} -fcolor-diagnostics ${REORDER_COMP_OPT} -fmax-type-align=8 ${CMAKE_ASAN_FLAG}")
+    set(CMAKE_CXX_LINK_FLAGS "${LD_OPT} --gcc-toolchain=${GCC9} ${DEBUG_PREFIX} ${FILE_PREFIX} ${AUTO_FDO_OPT}")
+    set(CMAKE_SHARED_LINKER_FLAGS "${LD_OPT} -Wl,-z,noexecstack ${THIN_LTO_CONCURRENCY_LINK} ${REORDER_LINK_OPT}")
+    set(CMAKE_EXE_LINKER_FLAGS "${LD_OPT} -Wl,-z,noexecstack ${PIE_OPT} ${THIN_LTO_CONCURRENCY_LINK} ${REORDER_LINK_OPT} ${CMAKE_COVERAGE_EXE_LINKER_OPTIONS}")
+  endif()
 else() # not clang, use gcc
   message("gcc9 not support currently, please set OB_USE_CLANG ON and we will finish it as soon as possible")
 endif()
@@ -267,7 +303,15 @@ else()
       set(MARCH_CFLAGS "-march=armv8-a+crc+lse")
     endif()
     set(MTUNE_CFLAGS "-mtune=generic" )
-    set(ARCH_LDFLAGS "-l:libatomic.a")
+    if(APPLE)
+      # macOS doesn't support -l:libatomic.a format, use -latomic or find the library
+      find_library(ATOMIC_LIB atomic)
+      if(ATOMIC_LIB)
+        set(ARCH_LDFLAGS "${ATOMIC_LIB}")
+      endif()
+    else()
+      set(ARCH_LDFLAGS "-l:libatomic.a")
+    endif()
     set(OCI_DEVEL_INC "${DEP_3RD_DIR}/usr/include/oracle/19.10/client64")
 endif()
 

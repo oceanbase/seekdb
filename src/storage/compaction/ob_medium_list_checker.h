@@ -15,7 +15,7 @@
  */
 #ifndef OB_STORAGE_COMPACTION_MEDIUM_LIST_CHECKER_H_
 #define OB_STORAGE_COMPACTION_MEDIUM_LIST_CHECKER_H_
-#include "/usr/include/stdint.h"
+#include <stdint.h>
 #include "lib/container/ob_iarray.h"
 namespace oceanbase
 {

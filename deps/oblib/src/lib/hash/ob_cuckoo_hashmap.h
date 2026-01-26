@@ -344,7 +344,7 @@ int ObCuckooHashMap<_key_type, _value_type, _hashfunc, _equal>::create(
   int ret = common::OB_SUCCESS;
   char *buf = nullptr;
   const int64_t tmp_advised_bucket_num = advised_bucket_num(bucket_num);
-  bucket_num_ = std::max(tmp_advised_bucket_num / BUCKET_SLOT_COUNT + 1, 2L);
+  bucket_num_ = std::max(tmp_advised_bucket_num / BUCKET_SLOT_COUNT + 1, static_cast<int64_t>(2));
   bucket_num_ = (bucket_num_ % 2 == 0) ? bucket_num_ : bucket_num_ + 1;
   if (bucket_num_ <= 0 || nullptr == allocator) {
     ret = OB_INVALID_ARGUMENT;

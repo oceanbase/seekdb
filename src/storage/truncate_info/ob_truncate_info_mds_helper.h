@@ -15,7 +15,7 @@
  */
 #ifndef OB_STORAGE_TRUNCATE_INFO_TRUNCATE_INFO_MDS_HELPER_H_
 #define OB_STORAGE_TRUNCATE_INFO_TRUNCATE_INFO_MDS_HELPER_H_
-#include "/usr/include/stdint.h"
+#include <stdint.h>
 #include "src/share/scn.h"
 namespace oceanbase
 {

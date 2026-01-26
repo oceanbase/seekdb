@@ -17,6 +17,16 @@
 #include "lib/hash/ob_hashtable.h"
 #include <ext/hash_map>
 
+#ifdef __APPLE__
+// macOS libc++ doesn't provide __gnu_cxx::hash specializations for builtin types
+namespace __gnu_cxx {
+  template<>
+  struct hash<unsigned long long> : public std::hash<unsigned long long> {
+    using std::hash<unsigned long long>::hash;
+  };
+}
+#endif
+
 using namespace oceanbase;
 using namespace common;
 using namespace hash;

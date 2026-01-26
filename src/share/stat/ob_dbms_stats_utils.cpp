@@ -2022,7 +2022,7 @@ int ObDbmsStatsUtils::get_max_work_area_size(uint64_t tenant_id, int64_t &max_wa
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null", K(ret));
   } else {
-    int64_t worker_cnt = std::max(static_cast<const omt::ObTenant *>(tenant)->min_worker_cnt(), 4L);
+    int64_t worker_cnt = std::max(static_cast<const omt::ObTenant *>(tenant)->min_worker_cnt(), static_cast<int64_t>(4L));
     max_wa_memory_size = lib::get_tenant_memory_limit(tenant_id) / worker_cnt;
     if (lib::ObMallocAllocator::get_instance() != NULL) {
       ObTenantCtxAllocatorGuard ta = lib::ObMallocAllocator::get_instance()->get_tenant_ctx_allocator(tenant_id, common::ObCtxIds::WORK_AREA);

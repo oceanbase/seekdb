@@ -34,6 +34,7 @@ namespace core
 {
 
 DenseMap<StringRef, JITTargetAddress> ObJitGlobalSymbolGenerator::symbol_table;
+std::vector<std::string*> ObJitGlobalSymbolGenerator::persistent_strings;
 
 std::pair<lib::ObMutex, ObNotifyLoaded::KeyEntryMap> ObNotifyLoaded::AllGdbReg;
 
@@ -182,7 +183,7 @@ void ObNotifyLoaded::notifyObjectLoaded(
   char *obj_buf = static_cast<char*>(Allocator.alloc(Obj.getData().size()));
   if (OB_NOT_NULL(obj_buf)) {
     MEMCPY(obj_buf, Obj.getData().data(), Obj.getData().size());
-    SoObject.assign_ptr(obj_buf, Obj.getData().size());
+    SoObject.assign_ptr(obj_buf, static_cast<ObString::obstr_size_t>(Obj.getData().size()));
   }
 
   object::OwningBinary<object::ObjectFile> DebugObj = Info.getObjectForDebug(Obj);

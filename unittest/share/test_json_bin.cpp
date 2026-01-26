@@ -1325,7 +1325,7 @@ TEST_F(TestJsonBin, test_bin_object_add)
 
   // after j_bin has been update, j_bin1 is unavailable
   ASSERT_EQ(false, j_bin->is_tree());
-  size_t free_space;
+  uint64_t free_space;
   ASSERT_EQ(OB_SUCCESS, j_bin->get_free_space(free_space));
   ASSERT_GT(free_space, 0);
   fprintf(stdout, "[test] after update bin free_space is %zu\n", free_space);
@@ -1375,7 +1375,7 @@ TEST_F(TestJsonBin, test_bin_object_add2)
   check_diff_valid(allocator, result, update_ctx);
   check_json_diff_valid(allocator, j_text, update_ctx, 1);
 
-  size_t free_space;
+  uint64_t free_space;
   ASSERT_EQ(OB_SUCCESS, j_bin->get_free_space(free_space));
   //ASSERT_GT(free_space, 0);
   fprintf(stdout, "[test] after update bin free_space is %zu\n", free_space);
@@ -3178,7 +3178,7 @@ TEST_F(TestJsonBin, test_type)
   ObJsonDecimal j_dec_1(res_nmb, res_precision, res_scale);
   ASSERT_EQ(OB_SUCCESS, tree.add("j_dec_1", &j_dec_1));
 
-  nmb_str.assign_ptr("-1.1234e9", STRLEN("-1.1234e9"));  
+  nmb_str.assign_ptr("-1.1234e9", static_cast<int64_t>(STRLEN("-1.1234e9")));
   res_precision = 10;
   res_scale = 4;
   ASSERT_EQ(OB_SUCCESS, res_nmb.from_sci_opt(nmb_str.ptr(), nmb_str.length(), allocator, &res_precision, &res_scale));

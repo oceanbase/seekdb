@@ -831,5 +831,19 @@ int ObRowWriter::write_uint(const uint64_t value, const int64_t bytes)
   return ret;
 }
 
+// Explicit template instantiation for ObStorageDatum to resolve linker errors on macOS
+#include "ob_storage_datum.h"
+
+namespace oceanbase {
+namespace blocksstable {
+
+template void ObRowWriter::loop_cells<ObStorageDatum>(
+    const ObStorageDatum *cells,
+    const int64_t cell_cnt,
+    int64_t &cluster_cnt,
+    bool *output_sparse_row);
+
+} // end namespace blocksstable
+} // end namespace oceanbase
 
 

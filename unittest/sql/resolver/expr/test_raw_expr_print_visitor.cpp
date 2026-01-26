@@ -84,7 +84,7 @@ TEST_F(TestRawExprPrintVisitor, const_test)
   {
     number::ObNumber nmb;
     ObArenaAllocator allocator(ObModIds::TEST);
-    nmb.from(9000000000L, allocator);
+    nmb.from(static_cast<int64_t>(9000000000L), allocator);
     ObObj obj;
     obj.set_number(nmb);
     ObConstRawExpr expr(obj, T_NUMBER);

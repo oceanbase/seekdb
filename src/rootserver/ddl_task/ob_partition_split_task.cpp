@@ -634,7 +634,7 @@ int ObPartitionSplitTask::check_freeze_progress(
   int64_t num_tablet_finished = 0;
   ObLocationService *location_service = nullptr;
   ObArray<ObTabletID> request_tablet_ids;
-  const int64_t rpc_timeout = max(GCONF.rpc_timeout, 1000L * 1000L * 9L);
+  const int64_t rpc_timeout = max(GCONF.rpc_timeout, static_cast<int64_t>(1000L * 1000L * 9L));
   obrpc::ObSrvRpcProxy *rpc_proxy = GCTX.srv_rpc_proxy_;
   ObCheckMemtableCntProxy check_memtable_cnt_proxy(*rpc_proxy,
       &obrpc::ObSrvRpcProxy::check_memtable_cnt);
@@ -1414,7 +1414,7 @@ int ObPartitionSplitTask::setup_split_finish_items(
   ObLSID ls_id;
   ObArray<obrpc::ObTabletSplitArg> tmp_split_info_array;
   ObLocationService *location_service = nullptr;
-  const int64_t rpc_timeout = max(GCONF.rpc_timeout, 1000L * 1000L * 9L);
+  const int64_t rpc_timeout = max(GCONF.rpc_timeout, static_cast<int64_t>(1000L * 1000L * 9L));
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
@@ -1453,7 +1453,7 @@ int ObPartitionSplitTask::send_split_rpc(
   int ret = OB_SUCCESS;
   int tmp_ret = OB_SUCCESS;
   ObAddr leader_addr;
-  const int64_t rpc_timeout = max(GCONF.rpc_timeout, 1000L * 1000L * 30L);
+  const int64_t rpc_timeout = max(GCONF.rpc_timeout, static_cast<int64_t>(1000L * 1000L * 30L));
   ObTabletSplitStartArg start_arg;
   ObTabletSplitStartResult start_result;
   ObTabletSplitFinishArg finish_arg;
@@ -2600,7 +2600,7 @@ int ObPartitionSplitTask::prepare_tablet_split_ranges(
       arg.ls_id_              = ls_id;
       arg.tablet_id_          = src_tablet_id;
       arg.user_parallelism_   = parallelism_; // parallelism_;
-      arg.schema_tablet_size_ = std::max(tablet_size_, 128 * 1024 * 1024L/*128MB*/);
+      arg.schema_tablet_size_ = std::max(tablet_size_, static_cast<int64_t>(128 * 1024 * 1024L)/*128MB*/);
       arg.ddl_type_ = task_type_;
       if (OB_FAIL(GCTX.srv_rpc_proxy_->to(leader_addr)
         .by(tenant_id_).timeout(rpc_timeout).prepare_tablet_split_task_ranges(arg, result))) {
@@ -2665,7 +2665,7 @@ int ObPartitionSplitTask::prepare_tablet_split_infos(
   ObSArray<bool> can_reuse_macro_blocks;
   ObSchemaGetterGuard schema_guard;
   ObMultiVersionSchemaService &schema_service = ObMultiVersionSchemaService::get_instance();
-  const int64_t rpc_timeout = max(GCONF.rpc_timeout, 1000L * 1000L * 9L);
+  const int64_t rpc_timeout = max(GCONF.rpc_timeout, static_cast<int64_t>(1000L * 1000L * 9L));
   if (all_src_tablet_ids_.empty() && OB_FAIL(setup_src_tablet_ids_array())) {
     LOG_WARN("failed to setup all src tablet ids", K(ret));
   } else if (OB_FAIL(setup_lob_idxs_arr(lob_col_idxs))) {

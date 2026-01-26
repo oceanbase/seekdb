@@ -440,7 +440,7 @@ int ObServerTableOperator::update_status(
         "WHERE svr_ip = '%s' AND svr_port = %d",
         OB_ALL_SERVER_TNAME, display_status_str,
         // set min gmt_modified to 1 second to avoid mysql 1292 error.
-        std::max(last_hb_time, 1000000L), ip, server.get_port()))) {
+        std::max(last_hb_time, static_cast<int64_t>(1000000L)), ip, server.get_port()))) {
       LOG_WARN("assign_fmt failed", K(ret));
     } else if (OB_FAIL(trans.write(sql.ptr(), affected_rows))) {
       LOG_WARN("execute sql failed", K(sql), K(ret));

@@ -971,7 +971,7 @@ int ObDropVecIndexTask::send_build_single_replica_request()
     param.ddl_type_ = task_type_;
     param.snapshot_version_ = snapshot_version_; // should > 0, but = 0
     param.task_id_ = task_id_;
-    param.parallelism_ = std::max(parallelism_, 1L);
+    param.parallelism_ = std::max(parallelism_, static_cast<int64_t>(1));
     param.execution_id_ = execution_id_; // should >= 0
     param.data_format_version_ = data_format_version_; // should > 0
     param.consumer_group_id_ = consumer_group_id_;

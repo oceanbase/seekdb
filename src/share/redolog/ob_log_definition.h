@@ -18,6 +18,12 @@
 #define OCEANBASE_COMMON_OB_LOG_DEFINITION_H_
 
 #include <fcntl.h>
+#ifdef __APPLE__
+// macOS does not support O_DIRECT
+#ifndef O_DIRECT
+#define O_DIRECT 0
+#endif
+#endif
 
 namespace oceanbase
 {

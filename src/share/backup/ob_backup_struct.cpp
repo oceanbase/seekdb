@@ -4370,7 +4370,7 @@ int ObRestoreBackupSetBriefInfo::get_restore_backup_set_brief_info_str(
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected format str", KR(ret), K(str_buf), K(str_buf_len));
   } else {
-    str.assign_ptr(str_buf, STRLEN(str_buf));
+    str.assign_ptr(str_buf, static_cast<ObString::obstr_size_t>(STRLEN(str_buf)));
     LOG_DEBUG("get log path list str", KR(ret), K(str));
   }
   return ret;
@@ -4466,7 +4466,7 @@ int ObRestoreLogPieceBriefInfo::get_restore_log_piece_brief_info_str(
     LOG_WARN("unexpected format str", KR(ret), K(str_buf), K(str_buf_len));
   } else {
 
-    str.assign_ptr(str_buf, STRLEN(str_buf));
+    str.assign_ptr(str_buf, static_cast<ObString::obstr_size_t>(STRLEN(str_buf)));
     LOG_DEBUG("get log path list str", KR(ret), K(str));
   }
   return ret;

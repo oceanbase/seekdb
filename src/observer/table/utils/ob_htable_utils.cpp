@@ -17,6 +17,16 @@
 #define USING_LOG_PREFIX SERVER
 #include "ob_htable_utils.h"
 #include "src/observer/table/ob_table_filter.h"
+
+#ifdef __APPLE__
+#include <libkern/OSByteOrder.h>
+// macOS doesn't have be64toh/htobe64, use OSSwapBigToHostInt64/OSSwapHostToBigInt64
+#define be64toh(x) OSSwapBigToHostInt64(x)
+#define htobe64(x) OSSwapHostToBigInt64(x)
+#elif defined(__linux__)
+#include <endian.h>
+#endif
+
 using namespace oceanbase::common;
 using namespace oceanbase::table;
 using namespace oceanbase::share::schema;

@@ -423,7 +423,7 @@ int WorkloadRepositoryTask::get_begin_interval_time(int64_t &begin_interval_time
       } else {
         LOG_WARN("get next result failed", KR(ret), K(sql));
       }
-    } else if (OB_FAIL(result->get_int(0L, begin_interval_time))) {
+    } else if (OB_FAIL(result->get_int(static_cast<int64_t>(0), begin_interval_time))) {
       LOG_WARN("get column fail", KR(ret), K(sql));
     }
   }
@@ -682,7 +682,7 @@ int WorkloadRepositoryTask::get_last_snapshot_task_begin_ts(int64_t snap_id, int
           LOG_INFO(
               "target snap_id didn't have any records", KR(ret), K(snap_id), K(cluster_id), K(sql));
         }
-      } else if (OB_FAIL(result->get_int(0L, task_begin_ts))) {
+      } else if (OB_FAIL(result->get_int(static_cast<int64_t>(0), task_begin_ts))) {
         LOG_WARN("get column fail", KR(ret), K(sql));
       } else {
         OB_ASSERT(result->next() == OB_ITER_END);

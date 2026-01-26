@@ -583,11 +583,11 @@ int ObSrvNetworkFrame::shared_storage_net_throt_predict(
     uint64_t value = predicted_resource.array_[i].value_;
     const ResourceType type = predicted_resource.array_[i].type_;
     if (type == ResourceType::ops || type == ResourceType::ips || type == ResourceType::iops) {
-      value = value + max((int64_t)value / 5, 100L);
+      value = value + max((int64_t)value / 5, static_cast<int64_t>(100L));
     } else if (type == ResourceType::obw || type == ResourceType::ibw || type == ResourceType::iobw) {
-      value = value + max((int64_t)value / 5, 1024L * 1024L);
+      value = value + max((int64_t)value / 5, static_cast<int64_t>(1024L * 1024L));
     } else {
-      value = value + max((int64_t)value / 5, 10L);
+      value = value + max((int64_t)value / 5, static_cast<int64_t>(10L));
     }
     predicted_resource.array_[i].value_ = (uint64_t)(value);
   }
@@ -641,7 +641,7 @@ uint64_t ObSrvNetworkFrame::get_root_certificate_table_hash()
             LOG_WARN("failed to get result", K(ret));
           } else {
             while (OB_SUCC(ret) && OB_SUCC(result->next())) {
-              if (OB_FAIL(result->get_int(0l, row_count))) {
+              if (OB_FAIL(result->get_int(static_cast<int64_t>(0l), row_count))) {
                 LOG_WARN("failed to get row_count", K(ret));
               } else if (OB_FAIL(result->get_timestamp("max(gmt_modified)", NULL, last_modify_time))) {
                 LOG_WARN("failed to get modify_time", K(ret));

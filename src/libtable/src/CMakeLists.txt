@@ -16,13 +16,20 @@ add_library(obtable
   SHARED
   EXCLUDE_FROM_ALL)
 
-target_link_libraries(obtable
-  PUBLIC obtable_base_objects
-  PRIVATE
-  -Wl,--whole-archive
-  obtable_base_objects
-  -Wl,--no-whole-archive
-  -Wl,--allow-multiple-definition)
+if(NOT APPLE)
+  target_link_libraries(obtable
+    PUBLIC obtable_base_objects
+    PRIVATE
+    -Wl,--whole-archive
+    obtable_base_objects
+    -Wl,--no-whole-archive
+    -Wl,--allow-multiple-definition)
+else()
+  target_link_libraries(obtable
+    PUBLIC obtable_base_objects
+    PRIVATE
+    -Wl,--allow-multiple-definition)
+endif()
 set_target_properties(obtable PROPERTIES SOVERSION 1 VERSION 1.0.0)
 
 if(ENABLE_THIN_LTO AND USE_LTO_CACHE)

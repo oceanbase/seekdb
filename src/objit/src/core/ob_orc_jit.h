@@ -32,6 +32,7 @@
 #include "llvm/ExecutionEngine/Orc/Shared/ExecutorSymbolDef.h"
 
 #include <string>
+#include <vector>
 
 #include "core/ob_jit_memory_manager.h"
 #include "lib/hash/ob_hashmap.h"
@@ -200,7 +201,18 @@ public:
 
   static void add_symbol(StringRef name, void *addr) {
     symbol_table[name] = pointerToJITTargetAddress(addr);
+#if defined(__APPLE__) && defined(__MACH__)
+    // On macOS, C symbols have underscore prefix in Mach-O format
+    // Register with underscore prefix - store in persistent_strings to keep the data alive
+    std::string *prefixed = new std::string("_" + name.str());
+    persistent_strings.push_back(prefixed);
+    symbol_table[StringRef(*prefixed)] = pointerToJITTargetAddress(addr);
+#endif
   }
+
+private:
+  // Storage for prefixed symbol names on macOS
+  static std::vector<std::string*> persistent_strings;
 
 private:
   static DenseMap<StringRef, JITTargetAddress> symbol_table;

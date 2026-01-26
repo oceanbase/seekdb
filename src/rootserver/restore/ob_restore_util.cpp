@@ -309,7 +309,7 @@ int ObRestoreUtil::get_encrypt_backup_dest_format_str(
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected format str", KR(ret), K(buf)); 
     } else {
-      encrypt_dest_str.assign_ptr(buf, strlen(buf));
+      encrypt_dest_str.assign_ptr(buf, static_cast<ObString::obstr_size_t>(strlen(buf)));
       LOG_DEBUG("get format encrypt backup dest str", KR(ret), K(encrypt_dest_str));
     }
   }

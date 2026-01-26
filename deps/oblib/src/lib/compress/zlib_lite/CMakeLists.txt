@@ -50,7 +50,7 @@ endif()
 
 add_custom_command(
   OUTPUT zlib_lite_objs.o
-  COMMAND ${OB_LD_BIN} -r $<TARGET_OBJECTS:zlib_lite_src> $<TARGET_OBJECTS:zlib_lite_adaptor> -o zlib_lite_objs.tmp.o
+  COMMAND ${OB_LD_BIN} ${ARCH_ARGS} ${OB_DEPLOY} -r $<TARGET_OBJECTS:zlib_lite_src> $<TARGET_OBJECTS:zlib_lite_adaptor> -o zlib_lite_objs.tmp.o
   COMMAND ${OB_OBJCOPY_BIN} --localize-hidden zlib_lite_objs.tmp.o zlib_lite_objs.o
   DEPENDS zlib_lite_src zlib_lite_adaptor
   COMMAND_EXPAND_LISTS

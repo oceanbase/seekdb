@@ -151,38 +151,45 @@ int ob_str_to_sql_mode(const ObString &str, ObSQLMode &mode)
   if (OB_UNLIKELY(str.length() >= MAX_MODE_STR_BUF_LEN)) {
     ret = OB_BUF_NOT_ENOUGH;
     LOG_WARN("sql mode string is too long", K(str), K(ret));
-  } else if (OB_ISNULL(buf = strndupa(str.ptr(), str.length()))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_ERROR("failed to alloc memory", K(ret));
   } else {
-    char  *value = NULL;
-    char  *saveptr = NULL;
-    ObSQLMode tmp_mode = 0;
-    for (value = strtok_r(buf, ", ", &saveptr);
-         NULL != value && OB_SUCC(ret);
-         value = strtok_r(NULL, ", ", &saveptr)) {
-      uint64_t i = 0;
-      for (; NULL != STR_TO_SQL_MODE_MAP[i].str_val && OB_SUCC(ret); ++i) {
-        // there is no need to use ObCharset::strcmp, because all valid values are comprised of
-        // ascii character, we can use C string functions instead.
-        // besides, we are sure that these two strings are both '\0' terminated, so strcasecmp().
-        if (0 == STRCASECMP(value, STR_TO_SQL_MODE_MAP[i].str_val)) {
-          tmp_mode |= STR_TO_SQL_MODE_MAP[i].int_val;
-          if (is_sql_mode_supported(STR_TO_SQL_MODE_MAP[i].int_val)) {
-          } else {
-            LOG_WARN("invalid sql_mode, not supported", KCSTRING(STR_TO_SQL_MODE_MAP[i].str_val));
-            ret = OB_NOT_SUPPORTED;
+    // alloca is supported on both Linux and macOS, stack allocation is automatically freed on function return
+    if (OB_ISNULL(buf = (char *)alloca(str.length() + 1))) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_ERROR("failed to alloc memory", K(ret));
+    } else {
+      MEMCPY(buf, str.ptr(), str.length());
+      buf[str.length()] = '\0';
+    }
+    if (OB_SUCC(ret) && OB_NOT_NULL(buf)) {
+      char  *value = NULL;
+      char  *saveptr = NULL;
+      ObSQLMode tmp_mode = 0;
+      for (value = strtok_r(buf, ", ", &saveptr);
+           NULL != value && OB_SUCC(ret);
+           value = strtok_r(NULL, ", ", &saveptr)) {
+        uint64_t i = 0;
+        for (; NULL != STR_TO_SQL_MODE_MAP[i].str_val && OB_SUCC(ret); ++i) {
+          // there is no need to use ObCharset::strcmp, because all valid values are comprised of
+          // ascii character, we can use C string functions instead.
+          // besides, we are sure that these two strings are both '\0' terminated, so strcasecmp().
+          if (0 == STRCASECMP(value, STR_TO_SQL_MODE_MAP[i].str_val)) {
+            tmp_mode |= STR_TO_SQL_MODE_MAP[i].int_val;
+            if (is_sql_mode_supported(STR_TO_SQL_MODE_MAP[i].int_val)) {
+            } else {
+              LOG_WARN("invalid sql_mode, not supported", KCSTRING(STR_TO_SQL_MODE_MAP[i].str_val));
+              ret = OB_NOT_SUPPORTED;
+            }
+            break;
           }
-          break;
         }
+        if (OB_ISNULL(STR_TO_SQL_MODE_MAP[i].str_val) && OB_SUCC(ret)) {
+          ret = OB_ERR_WRONG_VALUE_FOR_VAR;
+          LOG_WARN("failed to set sql_mode", KCSTRING(value), K(ret));
+        }
+      } // for
+      if (OB_SUCC(ret)) {
+        mode = tmp_mode;
       }
-      if (OB_ISNULL(STR_TO_SQL_MODE_MAP[i].str_val) && OB_SUCC(ret)) {
-        ret = OB_ERR_WRONG_VALUE_FOR_VAR;
-        LOG_WARN("failed to set sql_mode", KCSTRING(value), K(ret));
-      }
-    } // for
-    if (OB_SUCC(ret)) {
-      mode = tmp_mode;
     }
   }
   return ret;

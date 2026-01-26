@@ -14,10 +14,20 @@
  * limitations under the License.
  */
 
+#ifdef __linux__
 #include <linux/falloc.h> // FALLOC_FL_ZERO_RANGE for linux kernel 3.15
+#endif
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#ifdef __APPLE__
+#include <fcntl.h> // For fcntl, F_PREALLOCATE on macOS
+#include <string.h> // For memset
+#include <stdlib.h> // For calloc, free
+// macOS doesn't have stat64/fstatat64, use stat/fstatat instead
+#define stat64 stat
+#define fstatat64 fstatat
+#endif
 #include "log_io_utils.h"
 #include "logservice/ob_server_log_block_mgr.h"
 
@@ -70,7 +80,11 @@ int check_file_exist(const char *file_name,
 {
   int ret = OB_SUCCESS;
   exist = false;
+#ifdef __APPLE__
+  struct stat file_info;
+#else
   struct stat64 file_info;
+#endif
   if (OB_ISNULL(file_name) || OB_UNLIKELY(strlen(file_name) == 0)) {
     ret = OB_INVALID_ARGUMENT;
     PALF_LOG(WARN, "invalid arguments.", KCSTRING(file_name), K(ret));
@@ -86,7 +100,11 @@ int check_file_exist(const int dir_fd,
 {
   int ret = OB_SUCCESS;
   exist = false;
+#ifdef __APPLE__
+  struct stat file_info;
+#else
   struct stat64 file_info;
+#endif
   const int64_t flag = 0;
   if (OB_ISNULL(file_name) || OB_UNLIKELY(strlen(file_name) == 0)) {
     ret = OB_INVALID_ARGUMENT;
@@ -359,11 +377,42 @@ int reuse_block_at(const int dir_fd, const char *block_path)
   if (-1 == (fd = ::openat(dir_fd, block_path, LOG_WRITE_FLAG))) {
     ret = convert_sys_errno();
     PALF_LOG(ERROR, "::openat failed", K(ret), K(block_path));
+#ifdef __APPLE__
+  } else if (-1 == ftruncate(fd, PALF_PHY_BLOCK_SIZE)) {
+    ret = convert_sys_errno();
+    PALF_LOG(ERROR, "::ftruncate failed (macOS fallocate replacement)", K(ret), K(block_path));
+  } else {
+    // Zero out the file by writing zeros
+    char *zero_buf = static_cast<char *>(calloc(1, 64 * 1024)); // 64KB buffer
+    if (NULL == zero_buf) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+      PALF_LOG(ERROR, "failed to allocate zero buffer", K(ret));
+    } else {
+      int64_t written = 0;
+      int64_t remain = PALF_PHY_BLOCK_SIZE;
+      while (OB_SUCC(ret) && remain > 0) {
+        int64_t to_write = (remain > 64 * 1024) ? 64 * 1024 : remain;
+        ssize_t n = pwrite(fd, zero_buf, to_write, written);
+        if (n != to_write) {
+          ret = convert_sys_errno();
+          PALF_LOG(ERROR, "pwrite failed", K(ret), K(block_path));
+          break;
+        }
+        written += n;
+        remain -= n;
+      }
+      free(zero_buf);
+      if (OB_SUCC(ret)) {
+        PALF_LOG(INFO, "reuse_block_at success", K(ret), K(block_path));
+      }
+    }
+#else
   } else if (-1 == ::fallocate(fd, FALLOC_FL_ZERO_RANGE, 0, PALF_PHY_BLOCK_SIZE)) {
     ret = convert_sys_errno();
     PALF_LOG(ERROR, "::fallocate failed", K(ret), K(block_path));
   } else {
     PALF_LOG(INFO, "reuse_block_at success", K(ret), K(block_path));
+#endif
   }
 
   if (-1 != fd) {

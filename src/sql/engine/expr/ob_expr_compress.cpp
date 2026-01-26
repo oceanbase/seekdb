@@ -85,14 +85,31 @@ int ObExprCompress::eval_compress(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &e
     if (OB_ISNULL(buf)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("allocate memory failed", K(ret));
-    } else if (OB_UNLIKELY(Z_OK != compress(reinterpret_cast<unsigned char*>(buf + COMPRESS_HEADER_LEN), &new_len,
-        reinterpret_cast<const unsigned char*>(str_val.ptr()), str_val.length()))) {
-      ret = OB_ERR_COMPRESS_DECOMPRESS_DATA;
-      LOG_WARN("fail to compress data", K(ret));
     } else {
-      int32_t compress_header = str_val.length() & COMPRESS_HEADER_MASK;
-      MEMCPY(buf, &compress_header, sizeof(compress_header));
-      expr_datum.set_string(buf, new_len + COMPRESS_HEADER_LEN);
+#ifdef __APPLE__
+      // On macOS ARM64, uLongf is unsigned long, but new_len is uint64_t (unsigned long long)
+      uLongf new_len_zlib = static_cast<uLongf>(new_len);
+      if (OB_UNLIKELY(Z_OK != compress(reinterpret_cast<unsigned char*>(buf + COMPRESS_HEADER_LEN), &new_len_zlib,
+          reinterpret_cast<const unsigned char*>(str_val.ptr()), static_cast<uLong>(str_val.length())))) {
+        ret = OB_ERR_COMPRESS_DECOMPRESS_DATA;
+        LOG_WARN("fail to compress data", K(ret));
+      } else {
+        new_len = static_cast<uint64_t>(new_len_zlib);
+        int32_t compress_header = str_val.length() & COMPRESS_HEADER_MASK;
+        MEMCPY(buf, &compress_header, sizeof(compress_header));
+        expr_datum.set_string(buf, new_len + COMPRESS_HEADER_LEN);
+      }
+#else
+      if (OB_UNLIKELY(Z_OK != compress(reinterpret_cast<unsigned char*>(buf + COMPRESS_HEADER_LEN), &new_len,
+          reinterpret_cast<const unsigned char*>(str_val.ptr()), str_val.length()))) {
+        ret = OB_ERR_COMPRESS_DECOMPRESS_DATA;
+        LOG_WARN("fail to compress data", K(ret));
+      } else {
+        int32_t compress_header = str_val.length() & COMPRESS_HEADER_MASK;
+        MEMCPY(buf, &compress_header, sizeof(compress_header));
+        expr_datum.set_string(buf, new_len + COMPRESS_HEADER_LEN);
+      }
+#endif
     }
   }
   return ret;
@@ -195,14 +212,35 @@ int ObExprUncompress::eval_uncompress(const ObExpr &expr, ObEvalCtx &ctx, ObDatu
       } else if (orig_len > 0) {
         if (OB_FAIL(output_result.get_reserved_buffer(buf, buf_size))) {
           LOG_WARN("stringtext result reserve buffer failed");
-        } else if (OB_UNLIKELY(Z_OK != uncompress(reinterpret_cast<unsigned char*>(buf), &orig_len,
-            reinterpret_cast<const unsigned char*>(str_val.ptr() + COMPRESS_HEADER_LEN), str_val.length()))) {
-          expr_datum.set_null();
-          LOG_USER_WARN(OB_ERR_ZLIB_DATA);
-        } else if (OB_FAIL(output_result.lseek(orig_len, 0))) {
-          LOG_WARN("result lseek failed", K(ret));
         } else {
-          output_result.set_result();
+#ifdef __APPLE__
+          // On macOS ARM64, uLongf is unsigned long, but orig_len is uint64_t (unsigned long long)
+          uLongf orig_len_zlib = static_cast<uLongf>(orig_len);
+          if (OB_UNLIKELY(Z_OK != uncompress(reinterpret_cast<unsigned char*>(buf), &orig_len_zlib,
+              reinterpret_cast<const unsigned char*>(str_val.ptr() + COMPRESS_HEADER_LEN), static_cast<uLong>(str_val.length())))) {
+            expr_datum.set_null();
+            LOG_USER_WARN(OB_ERR_ZLIB_DATA);
+          } else {
+            orig_len = static_cast<uint64_t>(orig_len_zlib);
+            if (OB_FAIL(output_result.lseek(orig_len, 0))) {
+              LOG_WARN("result lseek failed", K(ret));
+            } else {
+              output_result.set_result();
+            }
+          }
+#else
+          if (OB_UNLIKELY(Z_OK != uncompress(reinterpret_cast<unsigned char*>(buf), &orig_len,
+              reinterpret_cast<const unsigned char*>(str_val.ptr() + COMPRESS_HEADER_LEN), str_val.length()))) {
+            expr_datum.set_null();
+            LOG_USER_WARN(OB_ERR_ZLIB_DATA);
+          } else {
+            if (OB_FAIL(output_result.lseek(orig_len, 0))) {
+              LOG_WARN("result lseek failed", K(ret));
+            } else {
+              output_result.set_result();
+            }
+          }
+#endif
         }
       } else {
         output_result.set_result();

@@ -74,7 +74,7 @@ int ObBackupSetDecryptionStmt::add_passwd(const ObString &passwd)
   int ret = OB_SUCCESS;
   char passwd_buf[OB_MAX_PASSWORD_LENGTH];
   ObString encrypted_passwd;
-  encrypted_passwd.assign_ptr(passwd_buf, sizeof(passwd_buf));
+  encrypted_passwd.assign_ptr(passwd_buf, static_cast<ObString::obstr_size_t>(sizeof(passwd_buf)));
 
   if (pos_ != 0) {
     if (FAILEDx(databuff_printf(passwd_array_, sizeof(passwd_array_), pos_, ","))) {

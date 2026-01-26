@@ -83,15 +83,15 @@ add_executable(ob_admin
 target_include_directories(ob_admin PRIVATE)
 target_link_libraries(ob_admin
   PRIVATE
-  -Wl,--start-group
+  $<$<NOT:$<PLATFORM_ID:Darwin>>:-Wl,--start-group>
   oceanbase_static
   ob_sql_static
   ob_storage_static
   ob_share_static
-  -Wl,--end-group
-  -static-libgcc
-  -static-libstdc++
-  malloc_hook)
+  $<$<NOT:$<PLATFORM_ID:Darwin>>:-Wl,--end-group>
+  $<$<NOT:$<PLATFORM_ID:Darwin>>:-static-libgcc>
+  $<$<NOT:$<PLATFORM_ID:Darwin>>:-static-libstdc++>
+  $<$<NOT:$<PLATFORM_ID:Darwin>>:malloc_hook>)
 
 if(ENABLE_THIN_LTO AND USE_LTO_CACHE)
   add_dependencies(ob_admin observer)

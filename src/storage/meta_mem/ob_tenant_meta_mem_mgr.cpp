@@ -258,7 +258,7 @@ int ObTenantMetaMemMgr::init()
   return ret;
 }
 
-int ObTenantMetaMemMgr::fetch_tenant_config()
+__attribute__((weak)) int ObTenantMetaMemMgr::fetch_tenant_config()
 {
   int ret = OB_SUCCESS;
   omt::ObTenantConfigGuard tenant_config(TENANT_CONF(tenant_id_));

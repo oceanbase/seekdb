@@ -17,7 +17,9 @@
 #define USING_LOG_PREFIX RPC_OBRPC
 #include "ob_net_keepalive.h"
 #include <sys/ioctl.h>
+#ifdef __linux__
 #include <sys/epoll.h>
+#endif
 #include <sys/poll.h>
 #include "lib/thread/ob_thread_name.h"
 #include "lib/utility/utility.h"

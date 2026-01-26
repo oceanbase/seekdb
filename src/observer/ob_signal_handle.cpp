@@ -16,7 +16,29 @@
 
 #define USING_LOG_PREFIX SERVER
 
+#ifdef __APPLE__
+#include <signal.h>
+#include <errno.h>
+#include <unistd.h>
+#include <pthread.h>
 
+// macOS doesn't have sigtimedwait. Use simple sigwait since thread wakeup
+// is handled by pthread_kill(SIGUSR1) in the destructor.
+// The timeout is not implemented - relies on external wakeup signal.
+static int sigtimedwait(const sigset_t *set, siginfo_t *info, const struct timespec *timeout) {
+  (void)info;
+  (void)timeout; // Timeout not implemented; wakeup via pthread_kill(SIGUSR1)
+
+  int signum = 0;
+  int result = sigwait(const_cast<sigset_t*>(set), &signum);
+
+  if (result != 0) {
+    errno = result;
+    return -1;
+  }
+  return signum;
+}
+#endif
 
 #include "ob_signal_handle.h"
 #include "observer/ob_server.h"
@@ -37,7 +59,8 @@ namespace observer
 
 void ObSignalHandle::run1()
 {
-
+  // Save thread id for macOS wakeup in destructor
+  thread_id_ = pthread_self();
 
   int ret = OB_SUCCESS;
   lib::set_thread_name("SignalHandle");

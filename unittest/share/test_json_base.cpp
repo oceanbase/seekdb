@@ -2572,47 +2572,47 @@ TEST_F(TestJsonBase, test_compare)
 
   json_text_a.reset();
   json_text_b.reset();
-  json_text_a.assign_ptr("[0, 1, 2, 3]", strlen("[0, 1, 2, 3]"));
-  json_text_b.assign_ptr("[0, 1, 3, 1, 1, 1, 1]", strlen("[0, 1, 3, 1, 1, 1, 1]"));
+  json_text_a.assign_ptr("[0, 1, 2, 3]", static_cast<int64_t>(strlen("[0, 1, 2, 3]")));
+  json_text_b.assign_ptr("[0, 1, 3, 1, 1, 1, 1]", static_cast<int64_t>(strlen("[0, 1, 3, 1, 1, 1, 1]")));
   ASSERT_EQ(-1, json_compare_json_text(json_text_a, json_text_b));
 
   json_text_a.reset();
   json_text_b.reset();
-  json_text_a.assign_ptr("[0, 1, 2]", strlen("[0, 1, 2]"));
-  json_text_b.assign_ptr("[0, 1, 2, 1, 1, 1, 1]", strlen("[0, 1, 2, 1, 1, 1, 1]"));
+  json_text_a.assign_ptr("[0, 1, 2]", static_cast<int64_t>(strlen("[0, 1, 2]")));
+  json_text_b.assign_ptr("[0, 1, 2, 1, 1, 1, 1]", static_cast<int64_t>(strlen("[0, 1, 2, 1, 1, 1, 1]")));
   ASSERT_EQ(-1, json_compare_json_text(json_text_a, json_text_b));
 
   // J_OBJECT vs J_OBJECT
   json_text_a.reset();
   json_text_b.reset();
   json_text_a.assign_ptr("{ \"a\" : \"1\", \"b\" : \"2\", \"c\" : \"3\" }",
-                         strlen("{ \"a\" : \"1\", \"b\" : \"2\", \"c\" : \"3\" }"));
+                         static_cast<int64_t>(strlen("{ \"a\" : \"1\", \"b\" : \"2\", \"c\" : \"3\" }")));
   json_text_b.assign_ptr("{ \"a\" : \"1\", \"b\" : \"2\", \"c\" : \"3\" }",
-                         strlen("{ \"a\" : \"1\", \"b\" : \"2\", \"c\" : \"3\" }"));
+                         static_cast<int64_t>(strlen("{ \"a\" : \"1\", \"b\" : \"2\", \"c\" : \"3\" }")));
   ASSERT_EQ(0, json_compare_json_text(json_text_a, json_text_b));
 
   json_text_a.reset();
   json_text_b.reset();
   json_text_a.assign_ptr("{ \"a\" : \"1\", \"b\" : \"2\" }",
-                         strlen("{ \"a\" : \"1\", \"b\" : \"2\" }"));
+                         static_cast<int64_t>(strlen("{ \"a\" : \"1\", \"b\" : \"2\" }")));
   json_text_b.assign_ptr("{ \"a\" : \"1\", \"b\" : \"2\", \"c\" : \"3\" }",
-                         strlen("{ \"a\" : \"1\", \"b\" : \"2\", \"c\" : \"3\" }"));
+                         static_cast<int64_t>(strlen("{ \"a\" : \"1\", \"b\" : \"2\", \"c\" : \"3\" }")));
   ASSERT_EQ(-1, json_compare_json_text(json_text_a, json_text_b));
 
   json_text_a.reset();
   json_text_b.reset();
   json_text_a.assign_ptr("{ \"a\" : \"1\", \"b\" : \"2\", \"c\" : \"3\" }",
-                         strlen("{ \"a\" : \"1\", \"b\" : \"2\", \"c\" : \"3\" }"));
+                         static_cast<int64_t>(strlen("{ \"a\" : \"1\", \"b\" : \"2\", \"c\" : \"3\" }")));
   json_text_b.assign_ptr("{ \"a\" : \"1\", \"d\" : \"2\", \"c\" : \"3\" }",
-                         strlen("{ \"a\" : \"1\", \"d\" : \"2\", \"c\" : \"3\" }"));
+                         static_cast<int64_t>(strlen("{ \"a\" : \"1\", \"d\" : \"2\", \"c\" : \"3\" }")));
   ASSERT_EQ(-1, json_compare_json_text(json_text_a, json_text_b));
 
   json_text_a.reset();
   json_text_b.reset();
   json_text_a.assign_ptr("{ \"a\" : \"1\", \"b\" : \"2\", \"c\" : \"3\" }",
-                         strlen("{ \"a\" : \"1\", \"b\" : \"2\", \"c\" : \"3\" }"));
+                         static_cast<int64_t>(strlen("{ \"a\" : \"1\", \"b\" : \"2\", \"c\" : \"3\" }")));
   json_text_b.assign_ptr("{ \"a\" : \"1\", \"b\" : \"20\", \"c\" : \"3\" }",
-                         strlen("{ \"a\" : \"1\", \"b\" : \"20\", \"c\" : \"3\" }"));
+                         static_cast<int64_t>(strlen("{ \"a\" : \"1\", \"b\" : \"20\", \"c\" : \"3\" }")));
   ASSERT_EQ(-1, json_compare_json_text(json_text_a, json_text_b));
 
   // J_STRING vs J_STRING

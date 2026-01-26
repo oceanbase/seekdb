@@ -470,7 +470,7 @@ void ObResourceGroup::check_worker_count()
     int64_t token = 0;
     bool is_group_critical = share::ObCgSet::instance().is_group_critical(group_id_) ||
                              (is_resource_manager_group(group_id_) && !is_deleted());
-    int64_t unit_min_cpu = std::max((int64_t)ceil(tenant_->unit_min_cpu()), 1L);
+    int64_t unit_min_cpu = std::max((int64_t)ceil(tenant_->unit_min_cpu()), static_cast<int64_t>(1L));
     const int64_t quick_expand_limit = 8 * unit_min_cpu;
     bool need_quick_expand = share::ObCgSet::instance().is_group_quick_expand(group_id_) && (unit_min_cpu + blocking_cnt <= quick_expand_limit);
     int64_t new_token = need_quick_expand ? (unit_min_cpu + blocking_cnt) : (1 + blocking_cnt);
@@ -1144,7 +1144,7 @@ int64_t ObTenant::cpu_quota_concurrency() const
 int64_t ObTenant::min_worker_cnt() const
 {
   ObTenantConfigGuard tenant_config(TENANT_CONF(id_));
-  int64_t cnt =  2 + std::max(1L, static_cast<int64_t>(unit_min_cpu() * (tenant_config.is_valid() ? tenant_config->cpu_quota_concurrency : 4)));
+  int64_t cnt =  2 + std::max(static_cast<int64_t>(1L), static_cast<int64_t>(unit_min_cpu() * (tenant_config.is_valid() ? tenant_config->cpu_quota_concurrency : 4)));
   if (GCONF._enable_numa_aware) {
     int numa_node_count = AFFINITY_CTRL.get_num_nodes();
     if (cnt < numa_node_count) {
@@ -1157,7 +1157,7 @@ int64_t ObTenant::min_worker_cnt() const
 int64_t ObTenant::max_worker_cnt() const
 {
   int64_t cnt = std::max(tenant_meta_.unit_.config_.memory_size() / 20 / (GCONF.stack_size + (3 << 20) + (512 << 10)),
-                  150L);
+                  static_cast<int64_t>(150L));
   if (GCONF._enable_numa_aware) {
     int numa_node_count = AFFINITY_CTRL.get_num_nodes();
     if (cnt < numa_node_count) {

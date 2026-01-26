@@ -3877,7 +3877,7 @@ int ObLogPlan::get_popular_values_hash(ObIAllocator &allocator,
     const ObHistogram &histogram = handle.stat_->get_histogram();
     // get total value count via last bucket by it's cumulative endpoint num
     const ObHistBucket &last_bucket = histogram.get(histogram.get_bucket_size() - 1);
-    int64_t total_cnt = std::max(1L, last_bucket.endpoint_num_); // avoid zero div
+    int64_t total_cnt = std::max(static_cast<int64_t>(1), last_bucket.endpoint_num_); // avoid zero div
     int64_t min_freq = optimizer_context_.get_session_info()->get_px_join_skew_minfreq();
     for (int64_t i = 0; OB_SUCC(ret) && i < histogram.get_bucket_size(); ++i) {
       const ObHistBucket &bucket = histogram.get(i);
@@ -6080,7 +6080,7 @@ int ObLogPlan::inner_compute_three_stage_groupby_dop_by_auto_dop(const ObIArray<
     LOG_WARN("failed to get three stage groupby number of copies", K(ret), K(non_distinct_aggrs), K(distinct_aggrs));
   } else {
     const ObOptimizerContext &opt_ctx = get_optimizer_context();
-    const double cost_threshold_us = 1000.0 * std::max(10L, opt_ctx.get_parallel_min_scan_time_threshold());
+    const double cost_threshold_us = 1000.0 * std::max(static_cast<int64_t>(10), opt_ctx.get_parallel_min_scan_time_threshold());
     const int64_t calc_dop_limit = opt_ctx.get_parallel_degree_limit(server_cnt);
     const double op_cost = ObOptEstCost::cost_hash_group(child->get_card() * number_of_copies,
                                                          0, // do not consider grouop by result

@@ -259,7 +259,7 @@ int ObTxCtxTable::init(const ObLSID& ls_id) {
   return acquire_ref_(ls_id);
 }
 
-int ObTxCtxTable::acquire_ref_(const ObLSID& ls_id)
+__attribute__((weak)) int ObTxCtxTable::acquire_ref_(const ObLSID& ls_id)
 {
   reset();
   int ret = OB_SUCCESS;
@@ -283,7 +283,7 @@ int ObTxCtxTable::acquire_ref_(const ObLSID& ls_id)
   return ret;
 }
 
-int ObTxCtxTable::release_ref_()
+__attribute__((weak)) int ObTxCtxTable::release_ref_()
 {
   int ret = OB_SUCCESS;
   transaction::ObTransService *txs = NULL;

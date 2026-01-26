@@ -18,6 +18,7 @@
 #include "share/ob_device_manager.h"
 #include "lib/restore/ob_object_device.h"
 #include "share/io/ob_io_manager.h"
+#include "lib/utility/ob_platform_utils.h"
  
 namespace oceanbase
 {

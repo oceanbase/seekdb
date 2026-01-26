@@ -1374,7 +1374,7 @@ int ObSortVecOpImpl<Compare, Store_Row, has_addon>::do_partition_sort(
   CK(part_cnt_ > 0);
   int64_t hash_expr_cnt = 1;
   uint64_t node_cnt = rows_end - rows_begin;
-  uint64_t bucket_cnt = next_pow2(std::max(16L, rows.count()));
+  uint64_t bucket_cnt = next_pow2(std::max(static_cast<int64_t>(16), rows.count()));
   uint64_t shift_right = __builtin_clzll(bucket_cnt) + 1;
 
   if (OB_SUCC(ret)) {
@@ -1865,7 +1865,7 @@ int ObSortVecOpImpl<Compare, Store_Row, has_addon>::build_ems_heap(int64_t &merg
     }
     if (OB_SUCC(ret)) {
       merge_ways = get_memory_limit() / ObTempBlockStore::BLOCK_SIZE;
-      merge_ways = std::max(2L, merge_ways);
+      merge_ways = std::max(static_cast<int64_t>(2), merge_ways);
       if (merge_ways < max_ways) {
         bool dumped = false;
         int64_t need_size = max_ways * ObTempBlockStore::BLOCK_SIZE;

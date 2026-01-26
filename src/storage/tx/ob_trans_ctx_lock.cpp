@@ -16,6 +16,9 @@
 
 #include "ob_trans_ctx_lock.h"
 #include "ob_trans_service.h"
+#ifdef __APPLE__
+#include <pthread.h>
+#endif
 
 namespace oceanbase
 {
@@ -55,13 +58,25 @@ void CtxLock::after_unlock(CtxLockArg &arg)
 }
 
 thread_local pid_t lock_thread_id_ = 0;
+
+static inline void init_lock_thread_id()
+{
+  if (lock_thread_id_ == 0) {
+#ifdef __APPLE__
+    uint64_t thread_id = 0;
+    pthread_threadid_np(NULL, &thread_id);
+    lock_thread_id_ = (pid_t)thread_id;
+#else
+    lock_thread_id_ = (pid_t)syscall(__NR_gettid);
+#endif
+  }
+}
+
 #define CHECK_LOCK(the_lock)                                            \
   {                                                                     \
     int64_t tid = - (OB_E(EventTable::EN_CHECK_TX_CTX_LOCK) OB_SUCCESS); \
     if (tid) {                                                          \
-      if (lock_thread_id_ == 0) {                                       \
-        lock_thread_id_ = (pid_t)syscall(__NR_gettid);                  \
-      }                                                                 \
+      init_lock_thread_id();                                            \
       const int64_t diff = tid - lock_thread_id_;                       \
       if (diff == 0) {                                                  \
         TRANS_LOG(INFO, "[CHECK_LOCK]", "lock", the_lock,               \

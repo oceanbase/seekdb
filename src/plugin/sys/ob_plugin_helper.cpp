@@ -49,7 +49,7 @@ int ObPluginHelper::find_ftparser_entry(const ObString &parser_name, ObPluginEnt
     ret = OB_FUNCTION_NOT_DEFINED;
     LOG_WARN("invalid interface version",
              K(ObPluginVersionAdaptor(entry_handle->entry().interface_version)),
-             K(ObPluginVersionAdaptor(OBP_FTPARSER_INTERFACE_VERSION_CURRENT)));
+             K(ObPluginVersionAdaptor(static_cast<int64_t>(OBP_FTPARSER_INTERFACE_VERSION_CURRENT))));
   } else if (OB_ISNULL(entry_handle->entry().descriptor)) {
     ret = OB_FUNCTION_NOT_DEFINED;
     LOG_WARN("find ftparser but descriptor is null", K(ret), K(parser_name));

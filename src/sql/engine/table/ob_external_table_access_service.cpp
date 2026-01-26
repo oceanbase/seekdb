@@ -319,7 +319,7 @@ int ObExternalDataAccessDriver::init(const ObString &location, const ObString &a
     if (device_type == OB_STORAGE_FILE ||
         (OB_ISNULL(access_info) || OB_LIKELY(0 == access_info.length()))) {
       OZ(ob_write_string(temp_allocator, location, location_cstr, true));
-      access_info_cstr.assign_ptr(&dummy_empty_char, strlen(&dummy_empty_char));
+      access_info_cstr.assign_ptr(&dummy_empty_char, static_cast<ObString::obstr_size_t>(strlen(&dummy_empty_char)));
     } else {
       OZ (ob_write_string(temp_allocator, location, location_cstr, true));
       OZ (ob_write_string(temp_allocator, access_info, access_info_cstr, true));

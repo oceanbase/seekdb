@@ -159,7 +159,7 @@ int ObLSTxCtxIterator::get_next_tx_id_(ObTransID& tx_id)
   return ret;
 }
 
-int ObLSTxCtxMgr::init(const int64_t tenant_id,
+__attribute__((weak)) int ObLSTxCtxMgr::init(const int64_t tenant_id,
                        const ObLSID &ls_id,
                        ObTxTable *tx_table,
                        ObLockTable *lock_table,

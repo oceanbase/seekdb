@@ -4888,16 +4888,24 @@ int ObIJsonBase::get_free_space(uint64_t &size)
 
   if (is_bin()) {
     const ObJsonBin *j_bin = static_cast<const ObJsonBin *>(this);
-    if (OB_FAIL(j_bin->get_free_space(size))) {
+    size_t space = 0;
+    if (OB_FAIL(j_bin->get_free_space(space))) {
       LOG_WARN("fail to get json binary free space", K(ret), K(*j_bin));
+    } else {
+      size = static_cast<uint64_t>(space);
     }
   } else { // is tree
     ObArenaAllocator allocator;
     ObIJsonBase *j_bin = NULL;
     if (OB_FAIL(ObJsonBaseFactory::transform(&allocator, this, ObJsonInType::JSON_BIN, j_bin))) {
       LOG_WARN("fail to transform to tree", K(ret));
-    } else if (OB_FAIL(static_cast<const ObJsonBin *>(j_bin)->get_free_space(size))) {
-      LOG_WARN("fail to get json binary free space after transforming", K(ret), K(*j_bin));
+    } else {
+      size_t space = 0;
+      if (OB_FAIL(static_cast<const ObJsonBin *>(j_bin)->get_free_space(space))) {
+        LOG_WARN("fail to get json binary free space after transforming", K(ret), K(*j_bin));
+      } else {
+        size = static_cast<uint64_t>(space);
+      }
     }
   }
 

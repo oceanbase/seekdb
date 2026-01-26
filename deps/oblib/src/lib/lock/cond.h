@@ -114,7 +114,13 @@ Cond::timed_wait_impl(const M& mutex, const ObSysTime& timeout) const
     LockState state;
     mutex.unlock(state);
 
+#ifdef __APPLE__
+    // On macOS, pthread_cond_timedwait uses CLOCK_REALTIME
+    // We need to use Realtime clock for the absolute timeout
+    timeval tv = ObSysTime::now(ObSysTime::Realtime) + timeout;
+#else
     timeval tv = ObSysTime::now(ObSysTime::Monotonic) + timeout;
+#endif
     timespec ts;
     ts.tv_sec = tv.tv_sec;
     ts.tv_nsec = tv.tv_usec * 1000;

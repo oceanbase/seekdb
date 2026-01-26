@@ -273,7 +273,12 @@ void ObLogCompressor::run_timer_task()
           }
           if (S_ISREG(stat_info.st_mode)) {
             total_size += stat_info.st_size;
+#ifdef __APPLE__
+            // macOS uses st_mtimespec instead of st_mtim
+            int64_t tmp_time = stat_info.st_mtimespec.tv_sec * 1000000000L + stat_info.st_mtimespec.tv_nsec;
+#else
             int64_t tmp_time = stat_info.st_mtim.tv_sec * 1000000000L + stat_info.st_mtim.tv_nsec;
+#endif
             syslog_file.mtime_ = tmp_time;
             if (enable_delete_file
                 && regexec(&regex_archive_, entry->d_name, 0, NULL, 0) == 0

@@ -15,7 +15,11 @@
  */
 
 #include "lib/thread/ob_thread_name.h"
+#ifdef __linux__
 #include <sys/prctl.h>
+#elif defined(__APPLE__)
+#include <pthread.h>
+#endif
 #include "lib/ob_define.h"
 #include "lib/stat/ob_diagnostic_info_guard.h"
 
@@ -26,7 +30,11 @@ namespace lib
 
 void set_thread_name_inner(const char* name)
 {
+#ifdef __APPLE__
+  pthread_setname_np(name);
+#else
   prctl(PR_SET_NAME, name);
+#endif
 }
 
 void set_thread_name(const char* type, uint64_t idx)

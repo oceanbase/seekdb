@@ -19,6 +19,12 @@
 
 #include "lib/ob_define.h"
 #include "common/log/ob_log_cursor.h"
+#include <fcntl.h> // For O_WRONLY, O_CREAT, etc.
+#ifdef __APPLE__
+#ifndef O_DIRECT
+#define O_DIRECT 0 // macOS does not support O_DIRECT
+#endif
+#endif
 
 namespace oceanbase
 {

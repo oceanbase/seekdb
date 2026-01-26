@@ -9731,7 +9731,7 @@ int ObDMLResolver::json_table_make_json_path(const ParseNode &parse_tree,
       } else {
         MEMCPY(path_buf, path_buffer->ptr(), path_buffer->length());
         path_buf[path_buffer->length()] = 0;
-        path_str.assign_ptr(path_buf, strlen(path_buf));
+        path_str.assign_ptr(path_buf, static_cast<ObString::obstr_size_t>(strlen(path_buf)));
       }
     }
   } else {
@@ -9750,7 +9750,7 @@ int ObDMLResolver::json_table_make_json_path(const ParseNode &parse_tree,
         } else {
           MEMCPY(str_buf + 2, parse_tree.raw_text_, parse_tree.text_len_);
         }
-        path_str.assign_ptr(str_buf, strlen(str_buf));
+        path_str.assign_ptr(str_buf, static_cast<ObString::obstr_size_t>(strlen(str_buf)));
       }
     } else {
       ret = OB_ERR_UNEXPECTED;

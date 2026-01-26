@@ -45,7 +45,7 @@ class ObDatabaseSchema;
 }  // namespace share
 
 namespace observer {
-
+using uint = unsigned int;
 static const int32_t OB_QRT_POSITIVE_LENGTH = 7;
 static const int32_t OB_QRT_NEGATIVE_LENGTH = 7;
 

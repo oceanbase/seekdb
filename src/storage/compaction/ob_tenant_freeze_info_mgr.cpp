@@ -733,7 +733,7 @@ int ObTenantFreezeInfoMgr::try_update_reserved_snapshot()
       STORAGE_LOG(WARN, "fail to get multi version duration", K(ret));
     } else {
       int64_t snapshot_gc_ts = freeze_info_mgr_.get_snapshot_gc_scn().get_val_for_tx();
-      reserved_snapshot = std::max(0L, snapshot_gc_ts - duration * 1000L * 1000L *1000L);
+      reserved_snapshot = std::max(static_cast<int64_t>(0), snapshot_gc_ts - duration * 1000L * 1000L * 1000L);
       LOG_INFO("success to update min reserved snapshot", K(reserved_snapshot), K(duration), K(snapshot_gc_ts));
     }
   } // end of lock

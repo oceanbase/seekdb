@@ -94,7 +94,7 @@ public:
   void add(uint32_t x) { ATOMIC_FAA(&count_, x); }
   uint32_t fetch() {
     int64_t sum = ATOMIC_TAS(&count_, 0);
-    return (uint32_t)std::min(sum, 65536L);
+    return (uint32_t)std::min(sum, static_cast<int64_t>(65536));
   }
 private:
   int64_t count_;
@@ -116,7 +116,7 @@ public:
     for(int i = 0; i < CPU_COUNT; i++) {
       sum += ATOMIC_TAS(&count_[i].count_, 0);
     }
-    return (uint32_t)std::min(sum, 65536L);
+    return (uint32_t)std::min(sum, static_cast<int64_t>(65536));
   }
 private:
   Item count_[CPU_COUNT];

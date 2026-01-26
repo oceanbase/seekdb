@@ -419,7 +419,7 @@ int ObMViewRefreshStatsCollector::commit()
     {
       ObMViewRefreshStatsCollection *collection = iter->second;
       run_stats_.log_purge_time_ += collection->refresh_stats_.log_purge_time_;
-      collection->refresh_stats_.result_ != OB_SUCCESS ? run_stats_.number_of_failures_++ : NULL;
+      collection->refresh_stats_.result_ != OB_SUCCESS ? (void)(run_stats_.number_of_failures_++) : (void)0;
       if (ObMVRefreshStatsCollectionLevel::NONE != collection->collection_level_) {
         if (OB_FAIL(collection->commit(trans))) {
           LOG_WARN("fail to commit collection", KR(ret), KPC(collection));

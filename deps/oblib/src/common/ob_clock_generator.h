@@ -22,8 +22,6 @@
 #include "lib/ob_define.h"
 #include "lib/oblog/ob_log.h"
 #include "lib/atomic/ob_atomic.h"
-#include "lib/lock/ob_monitor.h"
-#include "lib/lock/mutex.h"
 #include "lib/time/ob_time_utility.h"
 #include "lib/thread/thread_pool.h"
 #include "lib/ash/ob_ash_bkgd_sess_inactive_guard.h"
@@ -88,17 +86,21 @@ inline int64_t ObClockGenerator::getRealClock()
 inline void ObClockGenerator::msleep(const int64_t ms)
 {
   if (ms > 0) {
-    obutil::ObMonitor<obutil::Mutex> monitor_;
-    (void)monitor_.timed_wait(obutil::ObSysTime(ms * 1000));
+    struct timespec ts;
+    ts.tv_sec = ms / 1000;
+    ts.tv_nsec = (ms % 1000) * 1000000;
+    (void)nanosleep(&ts, nullptr);
   }
 }
 
 inline void ObClockGenerator::usleep(const int64_t us)
 {
   if (us > 0) {
-    obutil::ObMonitor<obutil::Mutex> monitor_;
+    struct timespec ts;
+    ts.tv_sec = us / 1000000;
+    ts.tv_nsec = (us % 1000000) * 1000;
     ObBKGDSessInActiveGuard inactive_guard;
-    (void)monitor_.timed_wait(obutil::ObSysTime(us));
+    (void)nanosleep(&ts, nullptr);
   }
 }
 

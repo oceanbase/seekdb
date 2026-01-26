@@ -816,7 +816,7 @@ private:
                      const char *file,
                      const int64_t line,
                      F &&func) {
-    static_assert(std::is_same<typename std::result_of<F()>::type, bool>::value, "the function must return bool type, false means keep scheduling this task, true means stop the task");
+    static_assert(std::is_same<typename std::invoke_result<F>::type, bool>::value, "the function must return bool type, false means keep scheduling this task, true means stop the task");
     TIMEGUARD_INIT(OCCAM, 100_ms);
     int ret = OB_SUCCESS;
     ATOMIC_INC(&total_running_task_count_);

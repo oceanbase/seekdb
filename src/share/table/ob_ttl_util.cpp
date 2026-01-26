@@ -117,8 +117,8 @@ int ObTTLUtil::parse(const char* str, ObTTLDutyDuration& duration)
       LOG_WARN("fail to parse str", K(ret));
     } else {
       ObString first_param, second_param;
-      first_param.assign_ptr(begin + 1, split - begin - 1);
-      second_param.assign_ptr(split + 1, end - split - 1);
+      first_param.assign_ptr(begin + 1, static_cast<ObString::obstr_size_t>(split - begin - 1));
+      second_param.assign_ptr(split + 1, static_cast<ObString::obstr_size_t>(end - split - 1));
 
       if (OB_FAIL(parse_ttl_daytime(first_param, duration.begin_)) ||
           OB_FAIL(parse_ttl_daytime(second_param, duration.end_))) {

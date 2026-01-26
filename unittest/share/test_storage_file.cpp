@@ -31,9 +31,12 @@ public:
   virtual ~TestStorageFile(){}
   virtual void SetUp()
   {
-    ASSERT_EQ(OB_SUCCESS,
-        databuff_printf(test_dir_, sizeof(test_dir_), "%s/test_storage",
-            get_current_dir_name()));
+#ifdef __APPLE__
+    char buf[PATH_MAX];
+    ASSERT_EQ(OB_SUCCESS, databuff_printf(test_dir_, sizeof(test_dir_), "%s/test_storage", getcwd(buf, sizeof(buf))));
+#else
+    ASSERT_EQ(OB_SUCCESS, databuff_printf(test_dir_, sizeof(test_dir_), "%s/test_storage", get_current_dir_name()));
+#endif
     ASSERT_EQ(OB_SUCCESS,
         databuff_printf(test_dir_uri_, sizeof(test_dir_uri_), "file://%s", test_dir_));
     STORAGE_LOG(INFO, "clean test_storageg dir");

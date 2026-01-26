@@ -31,6 +31,10 @@
 #include "lib/allocator/ob_malloc.h"
 #include "common/ob_clock_generator.h"
 
+#ifdef __APPLE__
+#include <sys/types.h>  // includes BSD type definitions
+using uint = unsigned int;
+#endif
 #define FALSE_IT(stmt) ({ (stmt); false; })
 #define OB_FALSE_IT(stmt) ({ (stmt); false; })
 
@@ -646,10 +650,17 @@ int str_cmp(const void *v1, const void *v2);
 
 inline void bind_self_to_core(uint64_t id)
 {
+#ifdef __linux__
   cpu_set_t cpuset;
   CPU_ZERO(&cpuset);
   CPU_SET(id, &cpuset);
   pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &cpuset);
+#elif defined(__APPLE__)
+  // macOS doesn't support CPU affinity binding in the same way
+  // pthread_setaffinity_np is not available on macOS
+  // This is a no-op on macOS
+  (void)id;
+#endif
 }
 inline void bind_core()
 {

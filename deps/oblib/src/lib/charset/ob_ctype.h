@@ -168,6 +168,10 @@ extern "C" void right_to_die_or_duty_to_live_c();
 struct ObCharsetInfo;
 
 typedef char        ob_bool; /* Small bool */
+// Ensure ulong is defined before using it
+#ifndef ulong
+typedef unsigned long ulong;
+#endif
 #define ob_wc_t ulong
 
 #define OB_CS_REPLACEMENT_CHARACTER 0xFFFD
@@ -732,7 +736,7 @@ unsigned int ob_instr_mb(const ObCharsetInfo *cs,
                  const char *s, size_t s_length,
                  ob_match_t *match, unsigned int nmatch);
 
-uint ob_mbcharlen_ptr(const struct ObCharsetInfo *cs, const char *s, const char *e);
+unsigned int ob_mbcharlen_ptr(const struct ObCharsetInfo *cs, const char *s, const char *e);
 
 void ob_hash_sort_simple(const ObCharsetInfo *cs,
 				const unsigned char *key, size_t len,

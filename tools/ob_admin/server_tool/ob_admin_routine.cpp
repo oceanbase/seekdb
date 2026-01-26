@@ -319,7 +319,7 @@ DEF_COMMAND(TRANS, set_tenant_config, 1, "tenant_id config_item1=config_value1,c
           ret = OB_SIZE_OVERFLOW;
           COMMON_LOG(WARN, "invalid config str length", K(ret), "str", arg_str.c_str());
         } else {
-          arg.config_str_.assign_ptr(config_str.c_str(), config_str.length());
+          arg.config_str_.assign_ptr(config_str.c_str(), static_cast<int64_t>(config_str.length()));
         }
       }
     }
@@ -466,7 +466,7 @@ DEF_COMMAND(SERVER, force_set_locality, 1, "tenant_id locality # force set local
           ret = OB_SIZE_OVERFLOW;
           COMMON_LOG(WARN, "invalid locality str length", K(ret), "str", arg_str.c_str());
         } else {
-          arg.locality_.assign_ptr(locality_str.c_str(), locality_str.length());
+          arg.locality_.assign_ptr(locality_str.c_str(), static_cast<int64_t>(locality_str.length()));
         }
       }
     }

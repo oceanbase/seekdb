@@ -344,7 +344,7 @@ int ObExprRegexContext::replace(ObExprStringBuf &string_buf,
             for (int64_t i = 0; i < buff_pos; ++i) {
               replace_buff[i] = ntohs(static_cast<uint16_t>(replace_buff[i]));
             }
-            result.assign_ptr(static_cast<char*>((void*)replace_buff), buff_pos * sizeof(UChar));
+            result.assign_ptr(static_cast<char*>((void*)replace_buff), static_cast<ObString::obstr_size_t>(buff_pos * sizeof(UChar)));
           }
         }
       }

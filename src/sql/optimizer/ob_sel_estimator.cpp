@@ -1174,7 +1174,7 @@ int ObAggSelEstimator::get_agg_sel(const OptTableMetas &table_metas,
         } else if (N < 6) {
           selectivity = DEFAULT_AGG_EQ * N;
         } else {
-          N = std::min(N, 15L);
+          N = std::min(N, static_cast<int64_t>(15));
           selectivity = DEFAULT_AGG_EQ * 5 + (DEFAULT_AGG_EQ - 0.0005 * (N - 4)) * (N - 5);
         }
       } else if (T_OP_NOT_IN == type) {

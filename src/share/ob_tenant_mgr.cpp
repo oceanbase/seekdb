@@ -350,7 +350,7 @@ int64_t ObTenantCpuShare::calc_px_pool_share(uint64_t tenant_id, int64_t min_cpu
     share = 3;
     COMMON_LOG(ERROR, "fail get tenant config. share default to 3", K(share));
   } else {
-    share = std::max(3L, min_cpu * tenant_config->px_workers_per_cpu_quota);
+    share = std::max(static_cast<int64_t>(3), min_cpu * tenant_config->px_workers_per_cpu_quota);
   }
   return share;
 }

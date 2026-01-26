@@ -151,7 +151,13 @@ TEST_F(TestMdsTableFlush, flusher_for_all_order_with_enough_memory) {
   for (int i = 0; i < TEST_ALL_SIZE; ++i) {
     v_key.push_back({ObTabletID(100 + i), mock_scn(100 + i)});
   }
+#ifdef __APPLE__
+  std::random_device rd;
+  std::mt19937 rng(rd());
+  std::shuffle(v_key.begin(), v_key.end(), rng);
+#else
   std::random_shuffle(v_key.begin(), v_key.end());
+#endif
   ObLS ls;
   ObMdsTableMgr mgr;
   vector<MdsTableHandle> v;
@@ -186,7 +192,13 @@ TEST_F(TestMdsTableFlush, flusher_for_all_order_with_limitted_memory_reserve_fai
   for (int i = 0; i < TEST_ALL_SIZE; ++i) {
     v_key.push_back({ObTabletID(100 + i), mock_scn(100 + i)});
   }
+#ifdef __APPLE__
+  std::random_device rd;
+  std::mt19937 rng(rd());
+  std::shuffle(v_key.begin(), v_key.end(), rng);
+#else
   std::random_shuffle(v_key.begin(), v_key.end());
+#endif
   ObLS ls;
   ObMdsTableMgr mgr;
   vector<MdsTableHandle> v;

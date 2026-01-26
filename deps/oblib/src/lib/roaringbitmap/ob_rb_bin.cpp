@@ -738,7 +738,7 @@ int ObRoaring64Bin::init()
       }
       // get roaring_buf (32bits)
       if (OB_FAIL(ret)) {
-      } else if (OB_FALSE_IT(roaring_bin.assign_ptr(buf, roaring_bin_.length() - read_bytes))) {
+      } else if (OB_FALSE_IT(roaring_bin.assign_ptr(buf, static_cast<ObString::obstr_size_t>(roaring_bin_.length() - read_bytes)))) {
       } else if (OB_ISNULL(roaring_bufs_[bucket] = OB_NEWx(ObRoaringBin, allocator_, allocator_, roaring_bin))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
         LOG_WARN("failed to alloc memory for roaring_bufs_", K(ret), K(bucket));

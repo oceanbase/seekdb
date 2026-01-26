@@ -250,7 +250,7 @@ int ObTableLoadPXBatchRows::shallow_copy(const IVectorPtrs &vectors, const int64
     for (int64_t i = 0; OB_SUCC(ret) && i < vectors_.count(); ++i) {
       if (nullptr != vectors_.at(i)) {
         ObIVector *vector = vectors.at(i);
-        ObBatchSelector batch_selector(0L, batch_size);
+        ObBatchSelector batch_selector(static_cast<int64_t>(0L), batch_size);
         if (need_reshape_ &&
             OB_FAIL(ObDASUtils::reshape_vector_value(col_types_.at(i), col_accuracys_.at(i), false,
                                                      reshape_allocator_, vector, batch_selector))) {
@@ -282,7 +282,7 @@ int ObTableLoadPXBatchRows::shallow_copy(const ObIArray<ObDatumVector> &datum_ve
     for (int64_t i = 0; OB_SUCC(ret) && i < vectors_.count(); ++i) {
       if (nullptr != vectors_.at(i)) {
         const ObDatumVector &datum_vector = datum_vectors.at(i);
-        ObBatchSelector batch_selector(0L, batch_size);
+        ObBatchSelector batch_selector(static_cast<int64_t>(0L), batch_size);
         if (need_reshape_ && OB_FAIL(ObDASUtils::reshape_datum_vector_value(
                                col_types_.at(i), col_accuracys_.at(i), reshape_allocator_,
                                datum_vector, batch_selector))) {

@@ -16,6 +16,8 @@
 
 #define USING_LOG_PREFIX STORAGE
 #include "ob_storage_ha_service.h"
+#include <algorithm>
+#include <random>
 
 
 namespace oceanbase
@@ -195,7 +197,13 @@ int ObStorageHAService::scheduler_ls_ha_handler_()
     ret = OB_NOT_INIT;
     LOG_WARN("storage ha service do not init", K(ret));
   } else {
+#ifdef __APPLE__
+    std::random_device rd;
+    std::mt19937 g(rd());
+    std::shuffle(ls_id_array_.begin(), ls_id_array_.end(), g);
+#else
     std::random_shuffle(ls_id_array_.begin(), ls_id_array_.end());
+#endif
     LOG_INFO("start do ls ha handler", K(ls_id_array_));
 
     for (int64_t i = 0; OB_SUCC(ret) && i < ls_id_array_.count(); ++i) {

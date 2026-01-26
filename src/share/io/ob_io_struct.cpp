@@ -1351,7 +1351,7 @@ int ObSyncIOChannel::submit(ObIORequest &req)
 {
   int ret = OB_SUCCESS;
   const int64_t current_ts = ObTimeUtility::current_time();
-  const int64_t io_depth = get_io_depth(min(max(GMEMCONF.get_server_memory_limit() / 10, 500 * 1024L * 1024L), 4 * 1024L * 1024L * 1024L)); 
+  const int64_t io_depth = get_io_depth(min(max(GMEMCONF.get_server_memory_limit() / 10, static_cast<int64_t>(500 * 1024L * 1024L)), static_cast<int64_t>(4 * 1024L * 1024L * 1024L)));
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret), K(is_inited_));
@@ -2039,8 +2039,8 @@ void ObIOFaultDetector::handle(void *task)
       // remain 1s to avoid race condition for retry_black_list_interval
       const int64_t retry_black_list_interval_ms = io_config_.read_failure_black_list_interval_ / 1000L - 1000L;
       // rety_io_timeout must less than black_list_interval
-      const int64_t MIN_IO_RETRY_TIMEOUT_MS = min(10L * 1000L/* 10s */, retry_black_list_interval_ms);
-      const int64_t MAX_IO_RETRY_TIMEOUT_MS = min(180L * 1000L/* 180s*/, retry_black_list_interval_ms);
+      const int64_t MIN_IO_RETRY_TIMEOUT_MS = min(static_cast<int64_t>(10L * 1000L)/* 10s */, retry_black_list_interval_ms);
+      const int64_t MAX_IO_RETRY_TIMEOUT_MS = min(static_cast<int64_t>(180L * 1000L)/* 180s*/, retry_black_list_interval_ms);
       const int64_t diagnose_begin_ts = ObTimeUtility::fast_current_time();
       bool is_retry_succ = false;
       int64_t fs_error_times = 0;

@@ -15,7 +15,7 @@
  */
 #ifndef OB_ROOTSERVER_TRUNCATE_INFO_TRUNCATE_INFO_SERVICE_H_
 #define OB_ROOTSERVER_TRUNCATE_INFO_TRUNCATE_INFO_SERVICE_H_
-#include "/usr/include/stdint.h"
+#include <stdint.h>
 #include "rootserver/truncate_info/ob_truncate_tablet_arg.h"
 #include "storage/truncate_info/ob_truncate_partition_filter.h"
 #include "sql/resolver/expr/ob_raw_expr.h"

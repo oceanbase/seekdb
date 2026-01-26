@@ -19,6 +19,13 @@
 #include "lib/statistic_event/ob_stat_event.h"
 #include "lib/time/ob_time_utility.h"
 #include "lib/stat/ob_diagnostic_info.h"
+#include <sys/resource.h>
+#ifdef __APPLE__
+// macOS doesn't support RUSAGE_THREAD, use RUSAGE_SELF as fallback
+#ifndef RUSAGE_THREAD
+#define RUSAGE_THREAD RUSAGE_SELF
+#endif
+#endif
 
 namespace oceanbase
 {

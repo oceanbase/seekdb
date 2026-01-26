@@ -76,7 +76,12 @@ ObSpecialSysVarValues::ObSpecialSysVarValues()
     tzset(); // init tzname
     int64_t current_time_us = ObTimeUtility::current_time();
     struct tm tmp_tm;
+#ifdef __APPLE__
+    time_t current_time_t = static_cast<time_t>(current_time_us / 1000000L);
+    UNUSED(localtime_r(&current_time_t, &tmp_tm));
+#else
     UNUSED(localtime_r(&current_time_us, &tmp_tm));
+#endif
     bool is_neg = false;
     if (tmp_tm.tm_gmtoff < 0) {
       is_neg = true;
@@ -2322,7 +2327,7 @@ int ObSysVarOnCheckFuncs::check_and_convert_max_min_timestamp(ObExecContext &ctx
     //nothing to do
   } else if (OB_FAIL(ObSQLUtils::get_default_cast_mode(ctx.get_my_session(), cast_mode))) {
     LOG_WARN("failed to get cast_mode", K(ret));
-  } else if (in_val.get_number().is_negative() || in_val.get_number() >= TIMESTAMP_MAX_VAL) {
+  } else if (in_val.get_number().is_negative() || in_val.get_number() >= static_cast<int64_t>(TIMESTAMP_MAX_VAL)) {
     if (CM_WARN_ON_FAIL == cast_mode) {
       const char *value = in_val.get_number().format();
       LOG_USER_WARN(OB_ERR_TRUNCATED_WRONG_VALUE, set_var.var_name_.length(),
@@ -2386,7 +2391,7 @@ int ObSysVarOnCheckFuncs::check_and_convert_sql_throttle_queue_time(ObExecContex
   } else if (pos >= sizeof (buf)) {
     ret = OB_SIZE_OVERFLOW;
   } else if (FALSE_IT(lower = atof(buf))) {
-  } else if (lower < 0.001 && num != -1l) {
+  } else if (lower < 0.001 && num != static_cast<int64_t>(-1)) {
     ret = OB_ERR_WRONG_VALUE_FOR_VAR;
     LOG_USER_ERROR(OB_ERR_WRONG_VALUE_FOR_VAR, sys_var.get_name().length(), sys_var.get_name().ptr(),
                    static_cast<int>(strlen("NULL")), "NULL");
@@ -3435,9 +3440,17 @@ int ObSetSysVar::find_set(const ObString &str)
   } else if (OB_UNLIKELY(str.length() >=  MAX_STR_BUF_LEN)) {
     ret = OB_BUF_NOT_ENOUGH;
     LOG_WARN("system variable string is too long", K(ret), K(str));
+#ifdef __linux__
+    // strndupa uses alloca (stack allocation), automatically freed on function return
   } else if (OB_ISNULL(buf = strndupa(str.ptr(), str.length()))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_ERROR("failed to alloc memory", K(ret));
+#elif defined(__APPLE__)
+    // macOS doesn't support strndupa, use strndup (heap allocation) and free manually
+  } else if (OB_ISNULL(buf = strndup(str.ptr(), str.length()))) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_ERROR("failed to alloc memory", K(ret));
+#endif
   } else {
     char *value = NULL;
     char *saveptr = NULL;
@@ -3457,6 +3470,11 @@ int ObSetSysVar::find_set(const ObString &str)
         }
       }
     }
+#ifdef __APPLE__
+    // Free memory allocated by strndup on macOS
+    free(buf);
+    buf = NULL;
+#endif
   }
   return ret;
 }

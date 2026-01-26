@@ -415,7 +415,7 @@ int ObAdaptiveAutoDop::calculate_tsc_auto_dop(const ObIArray<ObBatchEstTasks *> 
                K(sql_ctx->session_info_->get_effective_tenant_id()));
     } else {
       unit_min_cpu = std::max(tenant->unit_min_cpu(), 0.0);
-      parallel_servers_target = std::max(parallel_servers_target, 0L);
+      parallel_servers_target = std::max(parallel_servers_target, static_cast<int64_t>(0));
     }
   }
   if (OB_SUCC(ret)) {
@@ -427,8 +427,8 @@ int ObAdaptiveAutoDop::calculate_tsc_auto_dop(const ObIArray<ObBatchEstTasks *> 
     } else {
       parallel_degree_limit = std::min(parallel_servers_target, server_cnt * unit_min_cpu);
     }
-    cost_threshold_us = 1000.0 * std::max(10UL, parallel_min_scan_time_threshold);
-    parallel_degree_limit = std::max(parallel_degree_limit, 1UL);
+    cost_threshold_us = 1000.0 * std::max(static_cast<uint64_t>(10), parallel_min_scan_time_threshold);
+    parallel_degree_limit = std::max(parallel_degree_limit, static_cast<uint64_t>(1));
   }
   BEGIN_OPT_TRACE(sql_ctx->session_info_, "");
   if (OB_FAIL(ret)) {

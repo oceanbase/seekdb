@@ -247,6 +247,15 @@ struct ObHashTableBucket : public MProtect
   mutable _lock_type lock;
   mutable _cond_type cond;
   ObHashTableNode<_value_type> *node;
+
+  ObHashTableBucket() : node(NULL)
+  {
+#ifdef __APPLE__
+    init_hash_lock(lock);
+    init_hash_cond(cond);
+#endif
+  }
+
   typedef ObHashTableBucketNodeIterator<_value_type, _lock_type, _cond_type> iterator;
   typedef ObHashTableBucketNodeConstIterator<_value_type, _lock_type, _cond_type> const_iterator;
   iterator node_begin()
@@ -273,6 +282,7 @@ struct ObHashTableBucket<_value_type,
                          NoPthreadDefendMode::cond_type> : public MProtect
 {
   ObHashTableNode<_value_type> *node;
+  ObHashTableBucket() : node(NULL) {}
 };
 
 template<class _value_type, class _defendmode>

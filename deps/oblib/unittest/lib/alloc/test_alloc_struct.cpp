@@ -83,7 +83,7 @@ TEST(TestABitSet, Basic)
   }
 
   char bm2_buf[ABitSet::buf_len(129)];
-  ABitSet bm2(129, bm_buf);
+  ABitSet bm2(129, bm2_buf);
   bm2.set(65);
   bm2.set(128);
   EXPECT_EQ(65, bm2.find_first_significant(0));

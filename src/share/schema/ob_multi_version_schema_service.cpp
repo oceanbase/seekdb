@@ -18,6 +18,9 @@
 // for materialized view
 #include "ob_multi_version_schema_service.h"
 #include "observer/ob_server.h"
+#ifdef __APPLE__
+#include <unistd.h> // For useconds_t on macOS
+#endif
 
 namespace oceanbase
 {
@@ -2281,7 +2284,11 @@ int ObMultiVersionSchemaService::async_refresh_schema(
     // do nothing
   } else {
     int64_t retry_cnt = 0;
+#ifdef __APPLE__
+    const useconds_t RETRY_IDLE_TIME = 10 * 1000L; // 10ms
+#else
     const __useconds_t RETRY_IDLE_TIME = 10 * 1000L; // 10ms
+#endif
     const int64_t MAX_RETRY_CNT = 100 * 1000 * 1000L / RETRY_IDLE_TIME; // 100s at most
     const int64_t SUBMIT_TASK_FREQUENCE = 2 * 1000 * 1000L / RETRY_IDLE_TIME; // each 2s
     while (OB_SUCC(ret)) {

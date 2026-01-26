@@ -18,6 +18,9 @@
 
 #define ASSERT_OK(x) ASSERT_EQ(OB_SUCCESS, (x))
 #include <gtest/gtest.h>
+#ifdef __APPLE__
+#include <random>
+#endif
 #define private public
 #define protected public
 #include "share/scheduler/ob_partition_auto_split_helper.h"
@@ -227,7 +230,13 @@ TEST_F(TestSplitTaskScheduler, mutiple_tenants_hard_push_and_pop)
   for (int64_t i = 2; i < 102; ++i) {
     ASSERT_OK(nums.push_back(i));
   }
+#ifdef __APPLE__
+  std::random_device rd;
+  std::mt19937 rng(rd());
+  std::shuffle(nums.begin(), nums.end(), rng);
+#else
   std::random_shuffle(nums.begin(), nums.end());
+#endif
   for (int64_t i = 0; i < nums.count(); ++i ) {
     int64_t num = nums.at(i);
     ASSERT_OK(task_array.push_back(ObAutoSplitTask(TEST_TENANT_A_ID, ls_id, num/*tablet_id*/, 1/*auto_split_size*/, num/*used_disk_size*/, 0)));
@@ -303,7 +312,13 @@ TEST_F(TestSplitTaskScheduler, parallel_push_and_pop)
       ASSERT_OK(nums_2.push_back(i));
     }
   }
+#ifdef __APPLE__
+  std::random_device rd;
+  std::mt19937 rng(rd());
+  std::shuffle(nums_1.begin(), nums_1.end(), rng);
+#else
   std::random_shuffle(nums_1.begin(), nums_1.end());
+#endif
   ObArray<ObAutoSplitTask> tmp_array;
   for (int64_t i = 0; i < nums_1.count(); ++i ) {
     tmp_array.reuse();

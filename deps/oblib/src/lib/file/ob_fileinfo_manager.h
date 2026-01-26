@@ -18,7 +18,11 @@
 #define  OCEANBASE_UPDATESERVER_FILEINFO_MANAGER_H_
 #include <sys/types.h>
 #include <dirent.h>
+#ifdef __APPLE__
+#include <sys/mount.h> // sys/vfs.h is not available on macOS, use sys/mount.h instead
+#else
 #include <sys/vfs.h>
+#endif
 #include <unistd.h>
 #include <stdlib.h>
 #include <stdint.h>

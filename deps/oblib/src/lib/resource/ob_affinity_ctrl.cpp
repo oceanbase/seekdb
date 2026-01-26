@@ -37,6 +37,7 @@ ObAffinityCtrl::ObAffinityCtrl()
 int ObAffinityCtrl::init()
 {
   int ret = OB_SUCCESS;
+#ifdef __linux__
   DIR *dir;
   struct dirent *de;
 
@@ -90,6 +91,17 @@ int ObAffinityCtrl::init()
       }
     }
   }
+#elif defined(__APPLE__)
+  // macOS doesn't support NUMA nodes
+  // Just mark as initialized with 1 node
+  if (inited_) {
+    ret = OB_INIT_TWICE;
+    LOG_WARN("ObAffnityCtrl already inited");
+  } else {
+    num_nodes_ = 1;
+    inited_ = true;
+  }
+#endif
 
   return ret;
 }
@@ -107,12 +119,20 @@ int ObAffinityCtrl::run_on_node(const int node) {
     ret = OB_NOT_INIT;
   } else if (node >= num_nodes_ || node < 0) {
     ret = OB_INVALID_ARGUMENT;
+#ifdef __linux__
   } else if (-1 == ::sched_setaffinity(0, sizeof(cpu_set_t), &nodes_[node].cpu_set_mask)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("sched_setaffinity syscall error", K(ret), K(errno), K(node));
   } else {
     get_tls_node() = node;
   }
+#elif defined(__APPLE__)
+  } else {
+    // macOS doesn't support NUMA node binding
+    // Just set the TLS node value
+    get_tls_node() = node;
+  }
+#endif
 
   return ret;
 }

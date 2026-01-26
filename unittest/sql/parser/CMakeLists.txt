@@ -11,9 +11,12 @@ target_link_libraries(test_sql_fast_parser
   ob_sql_proxy_parser_static
   gtest
   gmock
-  -static-libstdc++
+  $<$<NOT:$<PLATFORM_ID:Darwin>>:-static-libstdc++>
 )
-target_link_options(test_sql_fast_parser PRIVATE LINKER:--unresolved-symbols=ignore-all)
+
+if(NOT APPLE)
+  target_link_options(test_sql_fast_parser PRIVATE LINKER:--unresolved-symbols=ignore-all)
+endif()
 target_include_directories(test_sql_fast_parser
   PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}

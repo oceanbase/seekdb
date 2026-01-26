@@ -17,7 +17,14 @@
 #define USING_LOG_PREFIX COMMON
 
 #include "share/ob_order_perserving_encoder.h"
+#ifdef __linux__
 #include <byteswap.h>
+#elif defined(__APPLE__)
+#include <libkern/OSByteOrder.h>
+#define bswap_16 OSSwapInt16
+#define bswap_32 OSSwapInt32
+#define bswap_64 OSSwapInt64
+#endif
 #include "common/ob_target_specific.h"
 #include "storage/blocksstable/encoding/ob_encoding_query_util.h"
 #if OB_USE_MULTITARGET_CODE

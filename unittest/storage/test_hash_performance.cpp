@@ -15,6 +15,10 @@
  */
 
 # include <gtest/gtest.h>
+#ifdef __APPLE__
+# include <algorithm>
+# include <random>
+#endif
 # include "lib/container/ob_array.h"
 # include "lib/container/ob_array_iterator.h"
 # include "lib/hash/ob_hashmap.h"
@@ -159,8 +163,15 @@ int TestHashMapPerformance::generate_data(const int64_t count,
       STORAGE_LOG(WARN, "fail to push back sstable block idx", K(ret));
     }
   }
+#ifdef __APPLE__
+  std::random_device rd;
+  std::mt19937 rng(rd());
+  std::shuffle(block_ids.begin(), block_ids.end(), rng);
+  std::shuffle(sstable_block_idx.begin(), sstable_block_idx.end(), rng);
+#else
   std::random_shuffle(block_ids.begin(), block_ids.end());
   std::random_shuffle(sstable_block_idx.begin(), sstable_block_idx.end());
+#endif
   return ret;
 }
 

@@ -84,15 +84,15 @@ public:
   {
     return (value_ptr_ < (other.value_ptr_));
   };
-  difference_type operator- (const self_t &rhs)
+  difference_type operator- (const self_t &rhs) const
   {
     return value_ptr_ - rhs.value_ptr_;
   };
-  self_t operator-(difference_type step)
+  self_t operator-(difference_type step) const
   {
     return self_t(value_ptr_ - step);
   };
-  self_t operator+(difference_type step)
+  self_t operator+(difference_type step) const
   {
     return self_t(value_ptr_ + step);
   };

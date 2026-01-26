@@ -5,10 +5,17 @@ BUILD_SH=$TOPDIR/build.sh
 
 DEP_DIR=${TOPDIR}/deps/3rd/usr/local/oceanbase/deps/devel
 TOOLS_DIR=${TOPDIR}/deps/3rd/usr/local/oceanbase/devtools
-CMAKE_COMMAND="${TOOLS_DIR}/bin/cmake -DCMAKE_EXPORT_COMPILE_COMMANDS=1"
 
-CPU_CORES=`grep -c ^processor /proc/cpuinfo`
-KERNEL_RELEASE=`grep -Po 'release [0-9]{1}' /etc/issue 2>/dev/null`
+# Get CPU cores and CMAKE command, compatible with macOS and Linux
+if [[ "$(uname -s)" == "Darwin" ]]; then
+  CMAKE_COMMAND="cmake -DCMAKE_EXPORT_COMPILE_COMMANDS=1"
+  CPU_CORES=$(sysctl -n hw.ncpu)
+  KERNEL_RELEASE=""
+else
+  CMAKE_COMMAND="${TOOLS_DIR}/bin/cmake -DCMAKE_EXPORT_COMPILE_COMMANDS=1"
+  CPU_CORES=$(grep -c ^processor /proc/cpuinfo)
+  KERNEL_RELEASE=$(grep -Po 'release [0-9]{1}' /etc/issue 2>/dev/null)
+fi
 
 ALL_ARGS=("$@")
 BUILD_ARGS=()
@@ -111,15 +118,31 @@ function prepare_build_dir
     mkdir -p $TOPDIR/build_$TYPE && cd $TOPDIR/build_$TYPE
 }
 
+# Get millisecond timestamp, compatible with macOS and Linux
+function get_timestamp_ms
+{
+    if [[ "$(uname -s)" == "Darwin" ]]; then
+        # macOS: date doesn't support %N, use Python or just seconds
+        if command -v python3 &> /dev/null; then
+            python3 -c "import time; print(int(time.time() * 1000))"
+        else
+            echo $(($(date +%s) * 1000))
+        fi
+    else
+        # Linux: use date +%s%N
+        echo $(($(date +%s%N)/1000000))
+    fi
+}
+
 # dep_create
 function do_init
 {
-    time1_ms=$(echo $[$(date +%s%N)/1000000])
+    time1_ms=$(get_timestamp_ms)
     (cd $TOPDIR/deps/init && bash dep_create.sh)
     if [ $? -ne 0 ]; then
       exit $?
     fi
-    time2_ms=$(echo $[$(date +%s%N)/1000000])
+    time2_ms=$(get_timestamp_ms)
 
     cost_time_ms=$(($time2_ms - $time1_ms))
     cost_time_s=`expr $cost_time_ms / 1000`
@@ -132,7 +155,21 @@ function do_init
 # make build directory && cmake && make (if need)
 function do_build
 {
-    if [ ! -f ${TOOLS_DIR}/bin/cmake ]; then
+    # Check if cmake exists, compatible with macOS and Linux
+    CMAKE_PATH=""
+    if [[ "$(uname -s)" == "Darwin" ]]; then
+      # macOS: cmake may be at /opt/homebrew/bin/cmake or /usr/local/bin/cmake
+      if [ -f /opt/homebrew/bin/cmake ]; then
+        CMAKE_PATH="/opt/homebrew/bin/cmake"
+      elif [ -f /usr/local/bin/cmake ]; then
+        CMAKE_PATH="/usr/local/bin/cmake"
+      fi
+    else
+      # Linux
+      CMAKE_PATH="${TOOLS_DIR}/bin/cmake"
+    fi
+
+    if [ -z "$CMAKE_PATH" ]; then
       echo_log "[NOTICE] Your workspace has not initialized dependencies, please append '--init' args to initialize dependencies"
       exit 1
     fi
@@ -158,6 +195,13 @@ function build_package
     STATIC_LINK_LGPL_DEPS_OPTION=ON
     ENABLE_BOLT_OPTION=OFF
     do_build "$@" -DOB_BUILD_PACKAGE=ON -DCMAKE_BUILD_TYPE=RelWithDebInfo -DOB_USE_LLD=$LLD_OPTION -DENABLE_FATAL_ERROR_HANG=OFF -DENABLE_AUTO_FDO=ON -DENABLE_THIN_LTO=ON -DENABLE_HOTFUNC=ON -DENABLE_BOLT=$ENABLE_BOLT_OPTION -DOB_STATIC_LINK_LGPL_DEPS=$STATIC_LINK_LGPL_DEPS_OPTION -DDEFAULT_LOG_LEVEL=OB_LOG_LEVEL_DBA_WARN -DDEFAULT_LOG_FILE_SIZE_MB=16
+}
+
+function build_package_tgz
+{
+    STATIC_LINK_LGPL_DEPS_OPTION=ON
+    ENABLE_BOLT_OPTION=OFF
+    do_build "$@" -DOB_BUILD_PACKAGE=ON -DCMAKE_BUILD_TYPE=RelWithDebInfo -DOB_USE_LLD=$LLD_OPTION -DENABLE_THIN_LTO=ON -DDEFAULT_LOG_LEVEL=OB_LOG_LEVEL_DBA_WARN -DDEFAULT_LOG_FILE_SIZE_MB=16 -DENABLE_FATAL_ERROR_HANG=OFF -DENABLE_AUTO_FDO=OFF -DENABLE_HOTFUNC=OFF -DOB_ENABLE_BOLT=$ENABLE_BOLT_OPTION -DOB_STATIC_LINK_LGPL_DEPS=$STATIC_LINK_LGPL_DEPS_OPTION
 }
 
 # build - configurate project and prepare to compile, by calling make
@@ -196,11 +240,17 @@ function build
       xperf)
         do_build "$@" -DCMAKE_BUILD_TYPE=RelWithDebInfo -DENABLE_AUTO_FDO=ON -DENABLE_THIN_LTO=ON -DOB_USE_LLD=$LLD_OPTION -DENABLE_HOTFUNC=ON -DENABLE_BOLT_AUTO=ON -DENABLE_FATAL_ERROR_HANG=OFF
         ;;
+      xmac_perf)
+        do_build "$@" -DCMAKE_BUILD_TYPE=RelWithDebInfo -DENABLE_THIN_LTO=ON -DOB_USE_LLD=ON -DENABLE_AUTO_FDO=OFF -DENABLE_HOTFUNC=OFF -DOB_ENABLE_BOLT=OFF -DENABLE_FATAL_ERROR_HANG=OFF
+        ;;
       xerrsim)
         do_build "$@" -DCMAKE_BUILD_TYPE=RelWithDebInfo -DOB_ERRSIM=ON -DOB_USE_LLD=$LLD_OPTION
         ;;
       xrpm) 
         build_package "$@" -DCMAKE_BUILD_RPM=ON
+        ;;
+      xtgz)
+        build_package_tgz "$@" -DCMAKE_BUILD_TGZ=ON
         ;;
       xdeb) 
         build_package "$@" -DCMAKE_BUILD_DEB=ON

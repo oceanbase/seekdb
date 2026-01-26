@@ -500,7 +500,12 @@ int MockTenantModuleEnv::init_dir()
 {
   system(("rm -rf " + run_dir_).c_str());
 
+#ifdef __APPLE__
+  char buf[PATH_MAX];
+  curr_dir_ = getcwd(buf, sizeof(buf));
+#else
   curr_dir_ = get_current_dir_name();
+#endif
 
   int ret = OB_SUCCESS;
   sstable_dir_ = env_dir_ + "/sstable";

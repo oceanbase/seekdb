@@ -39,8 +39,13 @@ public:
   typedef T &reference;
 public:
   ObTableLoadIterator() : value_ptr_(nullptr) {}
+#ifdef __APPLE__
+  ObTableLoadIterator(value_ptr_t value_ptr) { value_ptr_ = value_ptr; }
+  ObTableLoadIterator(const self_t &other) : value_ptr_(other.value_ptr_) {}
+#else
   explicit ObTableLoadIterator(value_ptr_t value_ptr) { value_ptr_ = value_ptr; }
   ObTableLoadIterator(const self_t &other) { *this = other; }
+#endif
   ObTableLoadIterator &operator=(const self_t &other)
   {
     value_ptr_ = other.value_ptr_;

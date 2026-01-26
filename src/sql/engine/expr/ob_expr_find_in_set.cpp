@@ -184,7 +184,7 @@ int gen_sortkey(ObCollationType cs_type, ObIAllocator &allocator, ObString &elem
       if (OB_UNLIKELY(!is_valid_character)) {
         ret = OB_ERR_INCORRECT_STRING_VALUE;
       } else {
-        sort_key.assign_ptr(buffer.get_data(), sort_key_len);
+        sort_key.assign_ptr(buffer.get_data(), static_cast<ObString::obstr_size_t>(sort_key_len));
       }
     }
   }

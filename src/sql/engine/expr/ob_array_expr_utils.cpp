@@ -115,7 +115,7 @@ int ObArrayExprUtils::vector_datum_add(ObDatum &res, const ObDatum &data, ObIAll
     float *float_res = reinterpret_cast<float *>(blob_res.ptr());
     for (int64_t i = 0; OB_SUCC(ret) && i < length; ++i) {
       negative ? float_res[i] -= float_data[i] : float_res[i] += float_data[i];
-      if (isinff(float_res[i]) != 0) {
+      if (std::isinf(float_res[i]) != 0) {
         ret = OB_OPERATE_OVERFLOW;
         SQL_LOG(WARN, "value overflow", K(ret), K(i), K(float_data[i]), K(float_res[i]));
       }
@@ -709,7 +709,7 @@ int ObVectorVectorArithFunc::operator()(ObDatum &res, const ObDatum &l, const Ob
       const float float_res = type == ADD ? data_l[i] + data_r[i] :
                               type == MUL ? data_l[i] * data_r[i] :
                               data_l[i] - data_r[i];
-      if (isinff(float_res) != 0) {
+      if (std::isinf(float_res) != 0) {
         ret = OB_OPERATE_OVERFLOW;
         LOG_WARN("value overflow", K(ret), K(i), K(data_l[i]), K(data_r[i]));
       } else if (OB_FAIL(float_array->push_back(float_res))) {
@@ -810,7 +810,7 @@ int ObVectorElemArithFunc::operator()(ObDatum &res, const ObDatum &l, const ObDa
       ObVectorF32Data *float_array = static_cast<ObVectorF32Data *>(arr_res);
       for (int64_t i = 0; OB_SUCC(ret) && i < size; ++i) {
         const float float_res = data_l[i] / data_r; // only support div now
-        if (isinff(float_res) != 0) {
+        if (std::isinf(float_res) != 0) {
           ret = OB_OPERATE_OVERFLOW;
           LOG_WARN("value overflow", K(ret), K(i), K(data_l[i]), K(data_r));
         } else if (OB_FAIL(float_array->push_back(float_res))) {
@@ -823,7 +823,7 @@ int ObVectorElemArithFunc::operator()(ObDatum &res, const ObDatum &l, const ObDa
       ObVectorU8Data *uint8_array = static_cast<ObVectorU8Data *>(arr_res);
       for (int64_t i = 0; OB_SUCC(ret) && i < size; ++i) {
         const uint8_t uint8_res = data_l[i] / data_r; // only support div now
-        if (isinff(uint8_res) != 0) {
+        if (std::isinf(static_cast<float>(uint8_res)) != 0) {
           ret = OB_OPERATE_OVERFLOW;
           LOG_WARN("value overflow", K(ret), K(i), K(data_l[i]), K(data_r));
         } else if (OB_FAIL(uint8_array->push_back(uint8_res))) {

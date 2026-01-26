@@ -10,7 +10,7 @@ macro(gen_local_lib NAME)
 
   add_custom_command(
     OUTPUT ${NAME}
-    COMMAND ${OB_LD_BIN} -r $<TARGET_OBJECTS:${TGT}> -o ${NAME}
+    COMMAND ${OB_LD_BIN} ${ARCH_ARGS} ${OB_DEPLOY} -r $<TARGET_OBJECTS:${TGT}> -o ${NAME}
     COMMAND ${OB_OBJCOPY_BIN} --localize-hidden ${NAME}
     DEPENDS ${TGT}
     DEPENDS $<TARGET_OBJECTS:${TGT}>
@@ -47,7 +47,7 @@ target_link_libraries(lz4_objs PUBLIC oblib_base)
 
 add_custom_command(
   OUTPUT lz4-all.a.o
-  COMMAND ${OB_LD_BIN} -r ${LZ4_LOCAL_LIBS} $<TARGET_OBJECTS:lz4_objs> -o lz4-all.a.o
+  COMMAND ${OB_LD_BIN} ${ARCH_ARGS} ${OB_DEPLOY} -r ${LZ4_LOCAL_LIBS} $<TARGET_OBJECTS:lz4_objs> -o lz4-all.a.o
   DEPENDS ${LZ4_LOCAL_LIBS} lz4_objs
   DEPENDS ${LZ4_LOCAL_LIB_OBJS} $<TARGET_OBJECTS:lz4_objs>
   COMMAND_EXPAND_LISTS)

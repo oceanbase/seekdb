@@ -8426,7 +8426,7 @@ int ObSelectLogPlan::generate_late_materialization_table_item(ObSelectStmt *stmt
     } else {
       MEMCPY(buf, old_table_item->table_name_.ptr(), old_table_item->table_name_.length());
       MEMCPY(buf + old_table_item->table_name_.length(), str, strlen(str));
-      temp_item->alias_name_.assign_ptr(buf, old_table_item->table_name_.length() + strlen(str));
+      temp_item->alias_name_.assign_ptr(buf, static_cast<ObString::obstr_size_t>(old_table_item->table_name_.length() + strlen(str)));
     }
 
     if (OB_SUCC(ret)) {

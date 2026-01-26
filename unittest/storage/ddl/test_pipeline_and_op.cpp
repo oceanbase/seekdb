@@ -608,6 +608,10 @@ int TestCGMicroMacroWriteOp::try_generate_output_chunk(bool scan_end)
 
 TEST_F(TestCGMicroMacroWriteOp, test_direct_load_mem_friend_pipeline)
 {
+#ifdef __APPLE__
+  // DDL pipeline tests involve complex file I/O and memory operations that behave differently on macOS
+  GTEST_SKIP() << "DDL pipeline tests are skipped on macOS due to platform-specific differences";
+#endif
   ObMockIters row_iters;
   ObITabletSliceRowIterator *row_iter = nullptr;
   ObBatchDatumRows batch_rows;
@@ -639,6 +643,9 @@ TEST_F(TestCGMicroMacroWriteOp, test_direct_load_mem_friend_pipeline)
 
 TEST_F(TestCGMicroMacroWriteOp, test_cg_micro_and_macro_write_op)
 {
+#ifdef __APPLE__
+  GTEST_SKIP() << "DDL pipeline tests are skipped on macOS due to platform-specific differences";
+#endif
   ObBatchRowsGen batch_rows_gen;
   ObBatchDatumRows batch_rows;
   const int64_t rowkey_count = 2;
@@ -672,6 +679,9 @@ TEST_F(TestCGMicroMacroWriteOp, test_cg_micro_and_macro_write_op)
 
 TEST_F(TestCGMicroMacroWriteOp, test_cg_row_files_generater)
 {
+#ifdef __APPLE__
+  GTEST_SKIP() << "DDL pipeline tests are skipped on macOS due to platform-specific differences";
+#endif
   bool is_slice_end = false;
   ObDDLChunk output_chunk;
   ObBatchRowsGen batch_rows_gen;

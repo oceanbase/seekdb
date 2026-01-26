@@ -111,7 +111,7 @@ int ObSysDispatchCallResolver::resolve(const ParseNode &parse_tree)
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("create ObSysDispatchCallStmt failed");
   } else if (FALSE_IT(stmt_ = stmt)) {
-  } else if (FALSE_IT(call_stmt.assign_ptr(parse_tree.str_value_, strlen(parse_tree.str_value_)))) {
+  } else if (FALSE_IT(call_stmt.assign_ptr(parse_tree.str_value_, static_cast<ObString::obstr_size_t>(strlen(parse_tree.str_value_))))) {
   } else if (FALSE_IT(stmt->set_call_stmt(call_stmt))) {
     // this call statement would be dispatched to another tenant
   } else if (FALSE_IT(tenant_name.assign_ptr(designated_tenant_node->str_value_,

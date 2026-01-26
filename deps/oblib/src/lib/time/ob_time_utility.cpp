@@ -16,6 +16,9 @@
 
 #include "lib/time/ob_time_utility.h"
 #include "lib/utility/ob_print_utils.h"
+#ifdef __APPLE__
+#include <mach/mach_time.h>
+#endif
 
 using namespace oceanbase;
 using namespace oceanbase::common;
@@ -24,8 +27,39 @@ OB_SERIALIZE_MEMBER(ObMonotonicTs, mts_);
 
 static __thread bool systime_error = false;
 
+#ifdef __APPLE__
+struct MachTimeBase {
+  int64_t base_wall_time_us;
+  uint64_t base_mach_time;
+  uint32_t numer;
+  uint32_t denom;
+
+  MachTimeBase() {
+    mach_timebase_info_data_t timebase;
+    mach_timebase_info(&timebase);
+    numer = timebase.numer;
+    denom = timebase.denom;
+    struct timeval tv;
+    gettimeofday(&tv, nullptr);
+    base_wall_time_us = tv.tv_sec * 1000000LL + tv.tv_usec;
+    base_mach_time = mach_absolute_time();
+  }
+};
+
+static MachTimeBase& get_mach_time_base() {
+  static MachTimeBase base;
+  return base;
+}
+#endif
+
 int64_t ObTimeUtility::current_time()
 {
+#ifdef __APPLE__
+  MachTimeBase& base = get_mach_time_base();
+  uint64_t current_mach = mach_absolute_time();
+  uint64_t elapsed_ns = (current_mach - base.base_mach_time) * base.numer / base.denom;
+  return base.base_wall_time_us + static_cast<int64_t>(elapsed_ns / 1000);
+#else
   int err_ret = 0;
   struct timeval t;
   if (OB_UNLIKELY((err_ret = gettimeofday(&t, nullptr)) < 0)) {
@@ -35,6 +69,7 @@ int64_t ObTimeUtility::current_time()
   }
   return (static_cast<int64_t>(t.tv_sec) * 1000000L +
           static_cast<int64_t>(t.tv_usec));
+#endif
 }
 
 int64_t ObTimeUtility::current_time_s()

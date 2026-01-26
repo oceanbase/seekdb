@@ -6589,7 +6589,7 @@ uint64_t ObSimpleTableSchemaV2::extract_data_table_id_from_index_name(const ObSt
     } else {
       data_table_id_str.assign_ptr(
           index_name.ptr() + strlen(OB_INDEX_PREFIX),
-          static_cast<ObString::obstr_size_t>(pos) - strlen(OB_INDEX_PREFIX));
+          static_cast<ObString::obstr_size_t>(pos - static_cast<int64_t>(strlen(OB_INDEX_PREFIX))));
       int ret = (common_string_unsigned_integer(
                   0, ObVarcharType, CS_TYPE_UTF8MB4_GENERAL_CI, data_table_id_str, false, data_table_id));
       if (OB_FAIL(ret)) {

@@ -203,7 +203,7 @@ int ObTransformMVRewritePrepare::get_mv_list(const ObDMLStmt *root_stmt,
         while (OB_SUCC(ret) && OB_SUCC(mysql_result->next())) {
           int64_t mv_id = OB_INVALID_ID;
           int64_t tbl_num = 0;
-          if (OB_FAIL(mysql_result->get_int(0L, mv_id))) {
+          if (OB_FAIL(mysql_result->get_int(static_cast<int64_t>(0L), mv_id))) {
             LOG_WARN("failed to get mv id", K(ret));
           } else if (OB_FAIL(mysql_result->get_int(1L, tbl_num))) {
             LOG_WARN("failed to get intersect table num", K(ret));

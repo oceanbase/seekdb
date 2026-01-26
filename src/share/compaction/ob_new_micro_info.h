@@ -15,7 +15,7 @@
  */
 #ifndef OB_SHARE_COMPACTION_NEW_MICRO_INFO_H_
 #define OB_SHARE_COMPACTION_NEW_MICRO_INFO_H_
-#include "/usr/include/stdint.h"
+#include <stdint.h>
 #include "lib/utility/ob_print_utils.h"
 namespace oceanbase
 {

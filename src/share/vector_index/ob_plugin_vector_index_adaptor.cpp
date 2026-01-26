@@ -4595,7 +4595,7 @@ bool ObHnswBitmapFilter::is_subset(roaring::api::roaring64_bitmap_t *bitmap)
   return bret;
 }
 
-void *ObVsagSearchAlloc::Allocate(size_t size)
+void *ObVsagSearchAlloc::Allocate(uint64_t size)
 {
   void *ret_ptr = nullptr;
   
@@ -4612,7 +4612,7 @@ void *ObVsagSearchAlloc::Allocate(size_t size)
   return ret_ptr;  
 }
 
-void *ObVsagSearchAlloc::Reallocate(void* p, size_t size)
+void *ObVsagSearchAlloc::Reallocate(void* p, uint64_t size)
 {
   void *new_ptr = nullptr;
   if (size == 0) {

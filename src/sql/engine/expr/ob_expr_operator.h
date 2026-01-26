@@ -20,6 +20,7 @@
 #include "share/ob_define.h"
 #include "share/ob_errno.h"
 #include <math.h>
+#include <cmath>  // For std::isinf on macOS
 #include "lib/objectpool/ob_tc_factory.h"
 #include "lib/utility/ob_print_utils.h"
 #include "lib/timezone/ob_timezone_info.h"
@@ -1652,7 +1653,12 @@ public:
   virtual int assign(const ObExprOperator &other);
   OB_INLINE static bool is_float_out_of_range(float res)
   {
+#ifdef __APPLE__
+    // macOS doesn't have isinff, use std::isinf instead
+    return std::isinf(res);
+#else
     return (0 != isinff(res));
+#endif
   }
   OB_INLINE static bool is_double_out_of_range(double res)
   {

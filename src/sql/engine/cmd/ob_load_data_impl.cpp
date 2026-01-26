@@ -2709,7 +2709,7 @@ int ObLoadDataSPImpl::ToolBox::init(ObExecContext &ctx, ObLoadDataStmt &load_stm
     } else if (0 == hint_batch_size) {
       batch_row_count = DEFAULT_BUFFERRED_ROW_COUNT;
     } else {
-      batch_row_count = std::max(1L, std::min(DEFAULT_BUFFERRED_ROW_COUNT, hint_batch_size));
+      batch_row_count = std::max(static_cast<int64_t>(1), std::min(DEFAULT_BUFFERRED_ROW_COUNT, hint_batch_size));
     }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(hint.get_value(ObLoadDataHint::BATCH_BUFFER_SIZE, hint_batch_buffer_size_str))) {

@@ -56,11 +56,18 @@ ObRWLock::ObRWLock(LockMode lockMode)
 {
   pthread_rwlockattr_t attr;
   pthread_rwlockattr_init(&attr);
+  // Note: pthread_rwlockattr_setkind_np is Linux-specific, not available on macOS
+  // On macOS, rwlocks use default behavior (no priority mode support)
+#ifdef __linux__
   if (lockMode == READ_PRIORITY) {
     pthread_rwlockattr_setkind_np(&attr, PTHREAD_RWLOCK_PREFER_READER_NP);
   } else if (lockMode == WRITE_PRIORITY) {
     pthread_rwlockattr_setkind_np(&attr, PTHREAD_RWLOCK_PREFER_WRITER_NONRECURSIVE_NP);
   }
+#elif defined(__APPLE__)
+  // macOS doesn't support pthread_rwlockattr_setkind_np, use default behavior
+  (void)lockMode; // Suppress unused parameter warning
+#endif
   pthread_rwlock_init(&rwlock_, &attr);
 }
 

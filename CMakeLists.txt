@@ -92,11 +92,27 @@ message(STATUS "This is BINARY dir " ${PROJECT_BINARY_DIR})
 message(STATUS "This is SOURCE dir " ${PROJECT_SOURCE_DIR})
 
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
-
 set(STDC_SHARED_LIB "")
 set(STDC_SHARED_LIB_SYMLINK "${DEVTOOLS_DIR}/lib64/libstdc++.so")
-file(REAL_PATH ${STDC_SHARED_LIB_SYMLINK} STDC_SHARED_LIB)
-message(STATUS "STDC_SHARED_LIB: ${STDC_SHARED_LIB}")
+
+if(APPLE)
+  set(CMAKE_NO_SYSTEM_FROM_IMPORTED 1)
+  # Set CMake policy CMP0152 to suppress warning about file(REAL_PATH) behavior
+  if(POLICY CMP0152)
+    cmake_policy(SET CMP0152 NEW)
+  endif()
+  set(STDC_SHARED_LIB_SYMLINK "${DEVTOOLS_DIR}/lib64/")
+endif()
+# Disable Boost header deprecation warnings (clang uses -Wno-#pragma-messages)
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-#pragma-messages")
+
+# Only resolve path if it exists (on macOS, this directory may not exist)
+if(EXISTS "${STDC_SHARED_LIB_SYMLINK}")
+  file(REAL_PATH ${STDC_SHARED_LIB_SYMLINK} STDC_SHARED_LIB)
+  message(STATUS "STDC_SHARED_LIB: ${STDC_SHARED_LIB}")
+else()
+  message(STATUS "STDC_SHARED_LIB: not found (path does not exist: ${STDC_SHARED_LIB_SYMLINK})")
+endif()
 
 set(HYPERSCAN_LIB "")
 set(HYPERSCAN_SHARED_LIB "")
@@ -163,29 +179,34 @@ elseif (OB_INCLUDE_TOOLS)
   add_subdirectory(tools EXCLUDE_FROM_ALL)
 endif()
 
-if (CMAKE_BUILD_RPM)
-  include(cmake/RPM.cmake)
-elseif(CMAKE_BUILD_DEB)
-  include(cmake/DEB.cmake)
-else()
-  if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
-    include(FindPkgConfig)
-    if(PKG_CONFIG_FOUND)
-      execute_process(
-        COMMAND ${PKG_CONFIG_EXECUTABLE} --variable=systemdsystemunitdir systemd
-        RESULT_VARIABLE result_var
-        OUTPUT_VARIABLE output_var
-        ERROR_QUIET
-        OUTPUT_STRIP_TRAILING_WHITESPACE
-      )
-      if("${result_var}" STREQUAL "0" AND "${output_var}" STREQUAL "/lib/systemd/system")
-        include(cmake/DEB.cmake)
-      else()
-        include(cmake/RPM.cmake)
-      endif()
-    endif()
+if(NOT APPLE)
+  if (CMAKE_BUILD_RPM)
+    include(cmake/RPM.cmake)
+  elseif(CMAKE_BUILD_DEB)
+    include(cmake/DEB.cmake)
   else()
-    message(FATAL_ERROR "Unsupported system: ${CMAKE_SYSTEM_NAME}")
+    if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+      include(FindPkgConfig)
+      if(PKG_CONFIG_FOUND)
+        execute_process(
+          COMMAND ${PKG_CONFIG_EXECUTABLE} --variable=systemdsystemunitdir systemd
+          RESULT_VARIABLE result_var
+          OUTPUT_VARIABLE output_var
+          ERROR_QUIET
+          OUTPUT_STRIP_TRAILING_WHITESPACE
+        )
+        if("${result_var}" STREQUAL "0" AND "${output_var}" STREQUAL "/lib/systemd/system")
+          include(cmake/DEB.cmake)
+        else()
+          include(cmake/RPM.cmake)
+        endif()
+      endif()
+    else()
+      message(FATAL_ERROR "Unsupported system: ${CMAKE_SYSTEM_NAME}")
+    endif()
+  endif()
+elseif(APPLE)
+  if(CMAKE_BUILD_TGZ)
+    include(cmake/TGZ.cmake)
   endif()
 endif()
-

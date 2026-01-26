@@ -38,12 +38,37 @@
 #include <curl/curl.h>
 #include <getopt.h>
 #include <locale.h>
+#ifdef __APPLE__
+#include <stdlib.h> // malloc.h is not available on macOS, use stdlib.h instead
+#include <mach-o/dyld.h> // for _NSGetExecutablePath
+#else
 #include <malloc.h>
+#endif
 #include <sys/time.h>
 #include <sys/resource.h>
 // easy complains in compiling if put the right position.
+#ifdef __APPLE__
+// macOS doesn't have link.h, provide stub definitions
+#include <dlfcn.h>
+#include <stdint.h>
+// Simplified stub structure for macOS (not using ELF types)
+struct dl_phdr_info {
+  uintptr_t dlpi_addr;  // Base address of object
+  const char *dlpi_name; // (Null-terminated) name of object
+  const void *dlpi_phdr; // Pointer to array of program headers (stub)
+  uint16_t dlpi_phnum; // # of items in dlpi_phdr
+};
+// Stub implementation of dl_iterate_phdr for macOS
+static int dl_iterate_phdr(int (*callback)(struct dl_phdr_info *info, size_t size, void *data), void *data) {
+  (void)callback;
+  (void)data;
+  // macOS doesn't support dl_iterate_phdr, return 0 (no error but no iterations)
+  return 0;
+}
+#else
 #include <link.h>
 #include <dlfcn.h>
+#endif
 
 using namespace oceanbase::obsys;
 using namespace oceanbase;
@@ -69,11 +94,33 @@ static int create_observer_softlink()
   char softlink_path[PATH_MAX] = {0};
   snprintf(softlink_path, PATH_MAX, "%s/seekdb", PID_DIR);
   char target_path[PATH_MAX] = {0};
+#ifdef __APPLE__
+  // On macOS, use _NSGetExecutablePath to get the executable path
+  uint32_t size = PATH_MAX;
+  if (0 != _NSGetExecutablePath(target_path, &size)) {
+    ret = OB_IO_ERROR;
+    MPRINT("failed to get executable path on macOS");
+  }
+  // Resolve symlinks to get the real path
+  if (OB_SUCC(ret)) {
+    char resolved_path[PATH_MAX] = {0};
+    if (nullptr == realpath(target_path, resolved_path)) {
+      ret = OB_IO_ERROR;
+      MPRINT("failed to resolve executable path, errno=%s", strerror(errno));
+    } else {
+      strncpy(target_path, resolved_path, PATH_MAX - 1);
+      target_path[PATH_MAX - 1] = '\0';
+    }
+  }
+#else
   ssize_t read_len = readlink("/proc/self/exe", target_path, PATH_MAX - 1);
   if (read_len < 0) {
     ret = OB_IO_ERROR;
     MPRINT("failed to readlink /proc/self/exe, errno=%s", strerror(errno));
+  } else {
+    target_path[read_len] = '\0';
   }
+#endif
   if (OB_FAIL(ret)) {
   } else if (FALSE_IT(FileDirectoryUtils::unlink_symlink(softlink_path))) {
   } else if (OB_FAIL(FileDirectoryUtils::symlink(target_path, softlink_path))) {
@@ -152,6 +199,10 @@ static int callback(struct dl_phdr_info *info, size_t size, void *data)
     LOG_ERROR_RET(OB_INVALID_ARGUMENT, "invalid argument", K(info));
   } else {
     _LOG_INFO("name=%s (%d segments)", info->dlpi_name, info->dlpi_phnum);
+#ifdef __APPLE__
+    // macOS stub: dlpi_phdr is const void* and cannot be accessed
+    // Skip the loop that accesses program headers
+#else
     for (int j = 0; j < info->dlpi_phnum; j++) {
       if (NULL != info->dlpi_phdr) {
         _LOG_INFO(
@@ -160,6 +211,7 @@ static int callback(struct dl_phdr_info *info, size_t size, void *data)
             (void *)(info->dlpi_addr + info->dlpi_phdr[j].p_vaddr));
       }
     }
+#endif
   }
   return 0;
 }
@@ -186,7 +238,11 @@ static void print_all_limits()
   print_limit("RLIMIT_CPU",RLIMIT_CPU);
   print_limit("RLIMIT_DATA",RLIMIT_DATA);
   print_limit("RLIMIT_FSIZE",RLIMIT_FSIZE);
+#ifdef __APPLE__
+  // RLIMIT_LOCKS is not available on macOS
+#else
   print_limit("RLIMIT_LOCKS",RLIMIT_LOCKS);
+#endif
   print_limit("RLIMIT_MEMLOCK",RLIMIT_MEMLOCK);
   print_limit("RLIMIT_NOFILE",RLIMIT_NOFILE);
   print_limit("RLIMIT_NPROC",RLIMIT_NPROC);
@@ -198,10 +254,18 @@ static int check_uid_before_start(const char *dir_path)
 {
   int ret = OB_SUCCESS;
   uid_t current_uid = UINT_MAX;
+#ifdef __APPLE__
+  struct stat dir_info;
+#else
   struct stat64 dir_info;
+#endif
 
   current_uid = getuid();
+#ifdef __APPLE__
+  if (0 != ::stat(dir_path, &dir_info)) {
+#else
   if (0 != ::stat64(dir_path, &dir_info)) {
+#endif
     /* do nothing */
   } else {
     if (current_uid != dir_info.st_uid) {
@@ -271,8 +335,21 @@ int inner_main(int argc, char *argv[])
   bzero(&oss, sizeof(oss));
   nss.ss_sp = ptr;
   nss.ss_size = SIG_STACK_SIZE;
+#ifdef __APPLE__
+  // On macOS, sigaltstack might fail or behave differently
+  // Just try to set it but don't abort if it fails
+  int sigaltstack_ret = sigaltstack(&nss, &oss);
+  if (0 == sigaltstack_ret) {
+    DEFER(sigaltstack(&oss, nullptr));
+  } else {
+    // sigaltstack failed, but continue anyway
+    free(ptr);
+    ptr = nullptr;
+  }
+#else
   abort_unless(0 == sigaltstack(&nss, &oss));
   DEFER(sigaltstack(&oss, nullptr));
+#endif
   ::oceanbase::common::g_redirect_handler = true;
 #endif
 
@@ -383,9 +460,14 @@ int inner_main(int argc, char *argv[])
     print_all_limits();
     dl_iterate_phdr(callback, NULL);
 
+#ifdef __linux__
     static const int DEFAULT_MMAP_MAX_VAL = 1024 * 1024 * 1024;
     mallopt(M_MMAP_MAX, DEFAULT_MMAP_MAX_VAL);
     mallopt(M_ARENA_MAX, 1); // disable malloc multiple arena pool
+#elif defined(__APPLE__)
+    // macOS doesn't support M_MMAP_MAX and M_ARENA_MAX
+    // These mallopt options are Linux-specific
+#endif
 
     // turn warn log on so that there's a observer.log.wf file which
     // records all WARN and ERROR logs in log directory.
@@ -399,6 +481,12 @@ int inner_main(int argc, char *argv[])
       // new worker with it.
       lib::Worker worker;
       lib::Worker::set_worker_to_thread_local(&worker);
+      // Initialize thread group manager before using TGMgr
+      // This ensures that all TGDefIDs (like ServerGTimer) have their create functions registered
+      // Explicitly call init_create_func() to register all TG creation functions including ServerGTimer
+      // before accessing TGMgr::instance(), which will create all thread groups in its constructor
+      lib::init_create_func();
+      lib::TGMgr::instance();
       ObServer &observer = ObServer::get_instance();
       LOG_INFO("seekdb starts", "seekdb_version", PACKAGE_STRING);
       // to speed up bootstrap phase, need set election INIT TS

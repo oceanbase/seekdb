@@ -184,7 +184,7 @@ int ObBackupPieceOp::func(const dirent *entry)
   } else if (len <= 0) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("file name without a unified suffix", K(ret), K(entry->d_name), K(OB_ARCHIVE_SUFFIX)); 
-  } else if (FALSE_IT(entry_suffix.assign_ptr(entry->d_name + len, strlen(OB_ARCHIVE_SUFFIX)))) {
+  } else if (FALSE_IT(entry_suffix.assign_ptr(entry->d_name + len, static_cast<ObString::obstr_size_t>(strlen(OB_ARCHIVE_SUFFIX))))) {
   } else if (!entry_suffix.prefix_match(OB_ARCHIVE_SUFFIX)) {
     // not ended with archive suffix
     ObString file_name_str(entry->d_name);

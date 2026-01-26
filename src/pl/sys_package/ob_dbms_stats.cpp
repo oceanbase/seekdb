@@ -4524,7 +4524,7 @@ int ObDbmsStats::parse_granularity_and_method_opt(ObExecContext &ctx,
     // method_opt => null, do not gather histogram, gather basic column stat
     const char *method_opt_str = "FOR ALL COLUMNS SIZE 1";
     if (param.method_opt_.empty() || is_vt) {
-      param.method_opt_.assign_ptr(method_opt_str, strlen(method_opt_str));
+      param.method_opt_.assign_ptr(method_opt_str, static_cast<ObString::obstr_size_t>(strlen(method_opt_str)));
     }
     if (OB_FAIL(ObDbmsStats::parse_method_opt(ctx, param.allocator_,
                                               param.column_params_,

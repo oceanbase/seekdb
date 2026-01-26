@@ -15,6 +15,21 @@
  */
 
 #include "lib/file/ob_file.h"
+#ifdef __APPLE__
+#include <stdlib.h> // For posix_memalign
+#include <fcntl.h> // For O_DIRECT (if not already defined)
+#ifndef O_DIRECT
+#define O_DIRECT 0 // macOS does not support O_DIRECT
+#endif
+// macOS doesn't have memalign, provide a wrapper using posix_memalign
+static inline void* memalign(size_t alignment, size_t size) {
+  void* ptr = nullptr;
+  if (posix_memalign(&ptr, alignment, size) == 0) {
+    return ptr;
+  }
+  return nullptr;
+}
+#endif
 
 namespace oceanbase
 {

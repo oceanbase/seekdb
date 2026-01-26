@@ -17,6 +17,16 @@
 
 #include "ob_storage_file.h"
 #include "lib/utility/ob_sort.h"
+#include "lib/utility/ob_platform_utils.h"
+#include <sys/stat.h>
+#include <dirent.h>
+#include <errno.h>
+#include <string.h>
+#ifdef __APPLE__
+// macOS doesn't have stat64/fstat64, use stat/fstat instead
+#define stat64 stat
+#define fstat64 fstat
+#endif
 
 namespace oceanbase
 {
@@ -358,7 +368,7 @@ int ObStorageFileUtil::list_files(const common::ObString &uri, common::ObBaseDir
     if (ENOENT != errno) {
       convert_io_error(errno, ret);
       OB_LOG(WARN, "fail to open dir", K(ret), KCSTRING(dir_path),
-          KCSTRING(strerror_r(errno, errno_buf, sizeof(errno_buf))));
+          KCSTRING(ob_strerror_r(errno, errno_buf, sizeof(errno_buf))));
     }
   }
 
@@ -369,7 +379,7 @@ int ObStorageFileUtil::list_files(const common::ObString &uri, common::ObBaseDir
     if (0 != ::readdir_r(open_dir, &entry, &result)) {
       convert_io_error(errno, ret);
       OB_LOG(WARN, "read dir error", K(ret),
-          KCSTRING(strerror_r(errno, errno_buf, sizeof(errno_buf))));
+          KCSTRING(ob_strerror_r(errno, errno_buf, sizeof(errno_buf))));
     } else if (NULL != result) {
       if (0 == strcmp(entry.d_name, ".") || 0 == strcmp(entry.d_name, "..")) {
         is_file = false;
@@ -385,7 +395,7 @@ int ObStorageFileUtil::list_files(const common::ObString &uri, common::ObBaseDir
           if (-1 == ::stat(sub_dir_path, &sb)) {
             convert_io_error(errno, ret);
             OB_LOG(WARN, "stat fail", K(ret),
-                KCSTRING(strerror_r(errno, errno_buf, sizeof(errno_buf))));
+                KCSTRING(ob_strerror_r(errno, errno_buf, sizeof(errno_buf))));
           } else if (!S_ISREG(sb.st_mode)) {
             is_file = false;
           } else {
@@ -442,7 +452,7 @@ int ObStorageFileUtil::list_files(const common::ObString &uri, ObStorageListCtxB
         if (ENOENT != errno) {
           convert_io_error(errno, ret);
           OB_LOG(WARN, "fail to open dir", K(ret), KCSTRING(dir_path),
-              KCSTRING(strerror_r(errno, errno_buf, sizeof(errno_buf))));
+              KCSTRING(ob_strerror_r(errno, errno_buf, sizeof(errno_buf))));
         }
       } else {
         list_ctx.already_open_dir_ = true;
@@ -462,7 +472,7 @@ int ObStorageFileUtil::list_files(const common::ObString &uri, ObStorageListCtxB
       if (0 != ::readdir_r(list_ctx.open_dir_, &(list_ctx.next_entry_), &result)) {
         convert_io_error(errno, ret);
         OB_LOG(WARN, "read dir error", K(ret),
-            KCSTRING(strerror_r(errno, errno_buf, sizeof(errno_buf))));
+            KCSTRING(ob_strerror_r(errno, errno_buf, sizeof(errno_buf))));
       } else if (NULL != result) {
         if (0 == strcmp(list_ctx.next_entry_.d_name, ".") || 0 == strcmp(list_ctx.next_entry_.d_name, "..")) {
           // not a file
@@ -483,7 +493,7 @@ int ObStorageFileUtil::list_files(const common::ObString &uri, ObStorageListCtxB
             struct stat sb;
             if (-1 == ::stat(sub_dir_path, &sb)) {
               convert_io_error(errno, ret);
-              OB_LOG(WARN, "stat fail", K(ret), KCSTRING(strerror_r(errno, errno_buf, sizeof(errno_buf))));
+              OB_LOG(WARN, "stat fail", K(ret), KCSTRING(ob_strerror_r(errno, errno_buf, sizeof(errno_buf))));
             } else if (!S_ISREG(sb.st_mode)) {
               // not a file
             } else {
@@ -586,14 +596,14 @@ int ObStorageFileUtil::del_dir(const common::ObString &uri)
     if (ENOENT != errno) {
       convert_io_error(errno, ret);
       OB_LOG(WARN, "fail to open dir", K(ret), KCSTRING(dir_path),
-          KCSTRING(strerror_r(errno, errno_buf, sizeof(errno_buf))));
+          KCSTRING(ob_strerror_r(errno, errno_buf, sizeof(errno_buf))));
     }
   } else {
     while (OB_SUCC(ret) && NULL != open_dir && 0 == dir_file_count) {
       if (0 != ::readdir_r(open_dir, &entry, &result)) {
         convert_io_error(errno, ret);
         OB_LOG(WARN, "read dir error", K(ret),
-            KCSTRING(strerror_r(errno, errno_buf, sizeof(errno_buf))));
+            KCSTRING(ob_strerror_r(errno, errno_buf, sizeof(errno_buf))));
       } else if (NULL != result
           && (DT_REG == entry.d_type || DT_UNKNOWN  == entry.d_type || (DT_DIR == entry.d_type))
           && 0 != strcmp(entry.d_name, ".")
@@ -642,7 +652,7 @@ int ObStorageFileUtil::list_directories(
     if (ENOENT != errno) {
       convert_io_error(errno, ret);
       OB_LOG(WARN, "fail to open dir", K(ret), KCSTRING(dir_path),
-          KCSTRING(strerror_r(errno, errno_buf, sizeof(errno_buf))));
+          KCSTRING(ob_strerror_r(errno, errno_buf, sizeof(errno_buf))));
     }
   } else {
     dir_path_len = strlen(dir_path);
@@ -654,7 +664,7 @@ int ObStorageFileUtil::list_directories(
     if (0 != ::readdir_r(open_dir, &entry, &result)) {
       convert_io_error(errno, ret);
       OB_LOG(WARN, "read dir error", K(ret),
-          KCSTRING(strerror_r(errno, errno_buf, sizeof(errno_buf))));
+          KCSTRING(ob_strerror_r(errno, errno_buf, sizeof(errno_buf))));
     } else if (NULL != result) {
       if (0 == strcmp(entry.d_name, ".") || 0 == strcmp(entry.d_name, "..")) {
         //do nothing
@@ -671,7 +681,7 @@ int ObStorageFileUtil::list_directories(
           if (-1 == stat(sub_dir_path, &sb)) {
             convert_io_error(errno, ret);
             OB_LOG(WARN, "read dir path error", K(ret),
-                KCSTRING(strerror_r(errno, errno_buf, sizeof(errno_buf))));
+                KCSTRING(ob_strerror_r(errno, errno_buf, sizeof(errno_buf))));
           } else if (!S_ISDIR(sb.st_mode)) {
             is_directory = false;
           } else {

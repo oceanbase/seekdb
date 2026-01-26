@@ -4039,10 +4039,10 @@ int ObDRWorker::try_generate_remove_replica_locality_alignment_task(
     ObString comment_to_set = "";
     if (ObReplicaTypeCheck::is_paxos_replica_V2(my_task->replica_type_)) {
       comment_to_set.assign_ptr(drtask::REMOVE_LOCALITY_PAXOS_REPLICA,
-                                strlen(drtask::REMOVE_LOCALITY_PAXOS_REPLICA));
+                                static_cast<ObString::obstr_size_t>(strlen(drtask::REMOVE_LOCALITY_PAXOS_REPLICA)));
     } else {
       comment_to_set.assign_ptr(drtask::REMOVE_LOCALITY_NON_PAXOS_REPLICA,
-                                strlen(drtask::REMOVE_LOCALITY_NON_PAXOS_REPLICA));
+                                static_cast<ObString::obstr_size_t>(strlen(drtask::REMOVE_LOCALITY_NON_PAXOS_REPLICA)));
     }
 
     if (FALSE_IT(task_id.init(GCONF.self_addr_))) {
@@ -4105,10 +4105,10 @@ int ObDRWorker::try_generate_add_replica_locality_alignment_task(
     ObString comment_to_set;
     if (ObReplicaTypeCheck::is_paxos_replica_V2(my_task->replica_type_)) {
       comment_to_set.assign_ptr(drtask::ADD_LOCALITY_PAXOS_REPLICA,
-                                strlen(drtask::ADD_LOCALITY_PAXOS_REPLICA));
+                                static_cast<ObString::obstr_size_t>(strlen(drtask::ADD_LOCALITY_PAXOS_REPLICA)));
     } else {
       comment_to_set.assign_ptr(drtask::ADD_LOCALITY_NON_PAXOS_REPLICA,
-                                strlen(drtask::ADD_LOCALITY_NON_PAXOS_REPLICA));
+                                static_cast<ObString::obstr_size_t>(strlen(drtask::ADD_LOCALITY_NON_PAXOS_REPLICA)));
     }
 
     if (FALSE_IT(task_id.init(GCONF.self_addr_))) {
@@ -4347,9 +4347,9 @@ int ObDRWorker::record_task_plan_for_locality_alignment(
         source_replica_paxos_replica_number = my_task->orig_paxos_replica_number_;
         target_replica_paxos_replica_number = my_task->paxos_replica_number_;
         if (task_type == ObDRTaskType::LS_REMOVE_PAXOS_REPLICA) {
-          comment.assign_ptr(drtask::REMOVE_LOCALITY_PAXOS_REPLICA, strlen(drtask::REMOVE_LOCALITY_PAXOS_REPLICA));
+          comment.assign_ptr(drtask::REMOVE_LOCALITY_PAXOS_REPLICA, static_cast<ObString::obstr_size_t>(strlen(drtask::REMOVE_LOCALITY_PAXOS_REPLICA)));
         } else {
-          comment.assign_ptr(drtask::REMOVE_LOCALITY_NON_PAXOS_REPLICA, strlen(drtask::REMOVE_LOCALITY_NON_PAXOS_REPLICA));
+          comment.assign_ptr(drtask::REMOVE_LOCALITY_NON_PAXOS_REPLICA, static_cast<ObString::obstr_size_t>(strlen(drtask::REMOVE_LOCALITY_NON_PAXOS_REPLICA)));
         }
         break;
       }
@@ -4368,9 +4368,9 @@ int ObDRWorker::record_task_plan_for_locality_alignment(
           source_replica_paxos_replica_number = my_task->orig_paxos_replica_number_;
           target_replica_paxos_replica_number = my_task->paxos_replica_number_;
           if (ObReplicaTypeCheck::is_paxos_replica_V2(target_replica_type)) {
-            comment.assign_ptr(drtask::ADD_LOCALITY_PAXOS_REPLICA, strlen(drtask::ADD_LOCALITY_PAXOS_REPLICA));
+            comment.assign_ptr(drtask::ADD_LOCALITY_PAXOS_REPLICA, static_cast<ObString::obstr_size_t>(strlen(drtask::ADD_LOCALITY_PAXOS_REPLICA)));
           } else {
-            comment.assign_ptr(drtask::ADD_LOCALITY_NON_PAXOS_REPLICA, strlen(drtask::ADD_LOCALITY_NON_PAXOS_REPLICA));
+            comment.assign_ptr(drtask::ADD_LOCALITY_NON_PAXOS_REPLICA, static_cast<ObString::obstr_size_t>(strlen(drtask::ADD_LOCALITY_NON_PAXOS_REPLICA)));
           }
         }
         break;
@@ -4389,7 +4389,7 @@ int ObDRWorker::record_task_plan_for_locality_alignment(
           execute_svr = my_task->dst_server_;
           source_replica_paxos_replica_number = my_task->orig_paxos_replica_number_;
           target_replica_paxos_replica_number = my_task->paxos_replica_number_;
-          comment.assign_ptr(drtask::TRANSFORM_LOCALITY_REPLICA_TYPE, strlen(drtask::TRANSFORM_LOCALITY_REPLICA_TYPE));
+          comment.assign_ptr(drtask::TRANSFORM_LOCALITY_REPLICA_TYPE, static_cast<ObString::obstr_size_t>(strlen(drtask::TRANSFORM_LOCALITY_REPLICA_TYPE)));
         }
         break;
       }
@@ -4403,7 +4403,7 @@ int ObDRWorker::record_task_plan_for_locality_alignment(
         execute_svr = leader_addr;
         source_replica_paxos_replica_number = my_task->orig_paxos_replica_number_;
         target_replica_paxos_replica_number = my_task->paxos_replica_number_;
-        comment.assign_ptr(drtask::MODIFY_PAXOS_REPLICA_NUMBER, strlen(drtask::MODIFY_PAXOS_REPLICA_NUMBER));
+        comment.assign_ptr(drtask::MODIFY_PAXOS_REPLICA_NUMBER, static_cast<ObString::obstr_size_t>(strlen(drtask::MODIFY_PAXOS_REPLICA_NUMBER)));
         break;
       }
       default: {
@@ -5186,10 +5186,10 @@ int ObDRWorker::generate_cancel_unit_migration_task(
   ObReplicaType replica_type = remove_member.get_replica_type();
   if (is_paxos_replica_related) {
     comment_to_set.assign_ptr(drtask::CANCEL_MIGRATE_UNIT_WITH_PAXOS_REPLICA,
-                              strlen(drtask::CANCEL_MIGRATE_UNIT_WITH_PAXOS_REPLICA));
+                              static_cast<ObString::obstr_size_t>(strlen(drtask::CANCEL_MIGRATE_UNIT_WITH_PAXOS_REPLICA)));
   } else {
     comment_to_set.assign_ptr(drtask::CANCEL_MIGRATE_UNIT_WITH_NON_PAXOS_REPLICA,
-                              strlen(drtask::CANCEL_MIGRATE_UNIT_WITH_NON_PAXOS_REPLICA));
+                              static_cast<ObString::obstr_size_t>(strlen(drtask::CANCEL_MIGRATE_UNIT_WITH_NON_PAXOS_REPLICA)));
   }
   if (OB_FAIL(remove_member_task.build(
                   task_key,
@@ -5273,10 +5273,10 @@ int ObDRWorker::try_cancel_unit_migration(
         ObString comment_to_set = "";
         if (is_paxos_replica_related) {
           comment_to_set.assign_ptr(drtask::CANCEL_MIGRATE_UNIT_WITH_PAXOS_REPLICA,
-                                    strlen(drtask::CANCEL_MIGRATE_UNIT_WITH_PAXOS_REPLICA));
+                                    static_cast<ObString::obstr_size_t>(strlen(drtask::CANCEL_MIGRATE_UNIT_WITH_PAXOS_REPLICA)));
         } else {
           comment_to_set.assign_ptr(drtask::CANCEL_MIGRATE_UNIT_WITH_NON_PAXOS_REPLICA,
-                                    strlen(drtask::CANCEL_MIGRATE_UNIT_WITH_NON_PAXOS_REPLICA));
+                                    static_cast<ObString::obstr_size_t>(strlen(drtask::CANCEL_MIGRATE_UNIT_WITH_NON_PAXOS_REPLICA)));
         }
 
         if (OB_FAIL(construct_extra_info_to_build_cancel_migration_task(
@@ -5433,10 +5433,10 @@ int ObDRWorker::generate_migrate_to_unit_task(
   ObString comment_to_set;
   if (is_unit_in_group_related) {
     comment_to_set.assign_ptr(drtask::MIGRATE_REPLICA_DUE_TO_UNIT_GROUP_NOT_MATCH,
-                              strlen(drtask::MIGRATE_REPLICA_DUE_TO_UNIT_GROUP_NOT_MATCH));
+                              static_cast<ObString::obstr_size_t>(strlen(drtask::MIGRATE_REPLICA_DUE_TO_UNIT_GROUP_NOT_MATCH)));
   } else {
     comment_to_set.assign_ptr(drtask::MIGRATE_REPLICA_DUE_TO_UNIT_NOT_MATCH,
-                              strlen(drtask::MIGRATE_REPLICA_DUE_TO_UNIT_NOT_MATCH));
+                              static_cast<ObString::obstr_size_t>(strlen(drtask::MIGRATE_REPLICA_DUE_TO_UNIT_NOT_MATCH)));
   }
   if (OB_FAIL(migrate_task.build(
                          task_key,
@@ -5569,10 +5569,10 @@ int ObDRWorker::try_migrate_replica_for_migrate_to_unit_(
 
     if (is_unit_in_group_related) {
       comment_to_set.assign_ptr(drtask::MIGRATE_REPLICA_DUE_TO_UNIT_GROUP_NOT_MATCH,
-                                strlen(drtask::MIGRATE_REPLICA_DUE_TO_UNIT_GROUP_NOT_MATCH));
+                                static_cast<ObString::obstr_size_t>(strlen(drtask::MIGRATE_REPLICA_DUE_TO_UNIT_GROUP_NOT_MATCH)));
     } else {
       comment_to_set.assign_ptr(drtask::MIGRATE_REPLICA_DUE_TO_UNIT_NOT_MATCH,
-                                strlen(drtask::MIGRATE_REPLICA_DUE_TO_UNIT_NOT_MATCH));
+                                static_cast<ObString::obstr_size_t>(strlen(drtask::MIGRATE_REPLICA_DUE_TO_UNIT_NOT_MATCH)));
     }
     if (OB_FAIL(dr_ls_info.get_default_data_source(data_source, data_size))) {
       LOG_WARN("fail to get data_size", KR(ret), K(dr_ls_info));

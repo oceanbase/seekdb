@@ -18,6 +18,9 @@
 #include "lib/thread/ob_simple_thread_pool.h"
 #include "lib/ash/ob_active_session_guard.h"
 #include "lib/thread/ob_dynamic_thread_pool.h"
+#ifdef __APPLE__
+#include <unistd.h>
+#endif
 
 namespace oceanbase
 {
@@ -137,7 +140,11 @@ void ObSimpleThreadPoolBase<T>::run1()
       }
     } else if (thread_idx >= old_thread_num) {
       ObBKGDSessInActiveGuard inactive_guard;
+#ifdef __APPLE__
+      usleep(static_cast<useconds_t>((10 + thread_idx - old_thread_num) * 1000));
+#else
       usleep(static_cast<__useconds_t>((10 + thread_idx - old_thread_num) * 1000));
+#endif
     } else {
       QElemType *task = NULL;
       const int64_t least_thread_num = adaptive_strategy_.get_least_thread_num();

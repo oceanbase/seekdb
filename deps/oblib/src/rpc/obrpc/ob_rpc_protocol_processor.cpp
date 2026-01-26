@@ -17,7 +17,15 @@
 #define USING_LOG_PREFIX RPC_OBRPC
 #include "rpc/obrpc/ob_rpc_protocol_processor.h"
 
+#ifdef __linux__
 #include <byteswap.h>
+#elif defined(__APPLE__)
+// macOS doesn't have byteswap.h, use libkern/OSByteOrder.h instead
+#include <libkern/OSByteOrder.h>
+#define bswap_16(x) OSSwapInt16(x)
+#define bswap_32(x) OSSwapInt32(x)
+#define bswap_64(x) OSSwapInt64(x)
+#endif
 #include "rpc/obrpc/ob_rpc_proxy.h"
 
 using namespace oceanbase::common;

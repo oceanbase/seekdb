@@ -22,8 +22,18 @@
 #include <pthread.h>
 #include <new>
 #include <algorithm>
+#ifdef __APPLE__
+#include <stdlib.h> // malloc.h is not available on macOS, use stdlib.h instead
+#include <fcntl.h> // For O_RDWR, O_CREAT, etc.
+#ifndef O_DIRECT
+#define O_DIRECT 0 // macOS does not support O_DIRECT
+#endif
+#else
 #include <malloc.h>
-#include <libaio.h>
+#endif
+#ifdef __linux__
+#include <libaio.h> // libaio is Linux-specific, not available on macOS
+#endif
 #include "lib/ob_define.h"
 #include "lib/allocator/ob_malloc.h"
 #include "lib/atomic/ob_atomic.h"
@@ -371,7 +381,10 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+// libaio is Linux-specific, not available on macOS
+#ifndef __APPLE__
 #define __USE_AIO_FILE
+#endif
 #ifdef __USE_AIO_FILE
 class ObIWaiter
 {

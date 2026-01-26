@@ -197,6 +197,10 @@ struct                  ev_loop;
 #define EV_VERSION_MINOR 1
 
 /* eventmask, revents, events... */
+/* macOS sys/event.h defines EV_ERROR macro, undefine it before enum definition */
+#ifdef EV_ERROR
+#undef EV_ERROR
+#endif
         enum {
     EV_UNDEF    = 0xFFFFFFFF, /* guaranteed to be invalid */
     EV_NONE     =       0x00, /* no events */

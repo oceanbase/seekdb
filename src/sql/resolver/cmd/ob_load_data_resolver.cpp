@@ -766,7 +766,7 @@ int ObLoadDataResolver::resolve_filename(ObLoadDataStmt *load_stmt, ParseNode *n
               ret = OB_INVALID_ARGUMENT;
               LOG_USER_ERROR(OB_INVALID_ARGUMENT, "file name");
             } else {
-              dir_path.assign_ptr(temp_file_name.ptr(), file_ptr - temp_file_name.ptr() + 1);
+              dir_path.assign_ptr(temp_file_name.ptr(), static_cast<ObString::obstr_size_t>(file_ptr - temp_file_name.ptr() + 1));
               pattern.assign_ptr(file_ptr + 1, temp_file_name.length() - dir_path.length());
               if (exist_wildcard(dir_path)) {
                 ret = OB_NOT_SUPPORTED;

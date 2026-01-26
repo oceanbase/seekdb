@@ -367,9 +367,15 @@ int CheckAllParams::check_current_clocksource(bool strict_check)
 int check_os_params(bool strict_check_params = false)
 {
   int ret = OB_SUCCESS;
+#ifdef __APPLE__
+  // On macOS, skip OS parameter checks as they are Linux-specific
+  // (e.g., /proc/sys/vm/, /sys/devices/system/clocksource/)
+  LOG_INFO("[check OS params]:skipping OS parameter checks on macOS");
+#else
   if (OB_FAIL(CheckAllParams::check_all_params(strict_check_params))) {
     LOG_DBA_ERROR_V2(OB_SERVER_CHECK_ALL_PARAMS_FAIL, OB_IMPROPER_OS_PARAM, "check os params failed ");
   }
+#endif
   return ret;
 }
 }  // namespace observer

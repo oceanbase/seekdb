@@ -1239,7 +1239,7 @@ int ObMultiTenant::update_tenant_query_response_time_flush_config()
         LOG_DEBUG("config result is null", K(tenant_id), K(ret));
       } else if (OB_FAIL(result.get_result()->next())) {
         LOG_WARN("get result next failed", K(tenant_id), K(ret));
-      } else if (OB_FAIL(result.get_result()->get_int(0L, flush_version))) {
+      } else if (OB_FAIL(result.get_result()->get_int(static_cast<int64_t>(0L), flush_version))) {
         if (OB_ERR_NULL_VALUE != ret) {
           LOG_WARN("get config_version failed", K(tenant_id), K(ret));
         } else {
