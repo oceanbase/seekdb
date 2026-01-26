@@ -22,6 +22,7 @@
 #include "share/schema/ob_multi_version_schema_service.h"
 #include "share/schema/ob_schema_service.h"
 #include "share/ob_fork_table_util.h"
+#include "lib/utility/utility.h"
 #include "rootserver/ob_root_service.h"
 #include "rootserver/ddl_task/ob_ddl_task.h"
 #include "lib/mysqlclient/ob_mysql_transaction.h"
@@ -464,12 +465,41 @@ int ObForkTableUtil::obtain_snapshot(
     LOG_WARN("failed to convert snapshot", K(ret), K(new_fetched_snapshot));
   } else if (OB_FAIL(ObForkTableUtil::collect_tablet_ids_from_table(schema_guard, tenant_id, data_table_schema, tablet_ids))) {
     LOG_WARN("fail to collect tablet ids", K(ret), K(data_table_schema));
-  } else if (OB_FAIL(ddl_service.get_snapshot_mgr().batch_acquire_snapshot(
-            trans, SNAPSHOT_FOR_DDL, tenant_id, data_table_schema.get_schema_version(), snapshot_scn, nullptr, tablet_ids))) {
-    LOG_WARN("batch acquire snapshot failed", K(ret), K(tablet_ids));
   } else {
-    LOG_INFO("hold snapshot finished", K(snapshot_scn), K(schema_version), "tablet_cnt", tablet_ids.count());
-    LOG_DEBUG("hold snapshot detail", K(snapshot_scn), K(schema_version), K(tablet_ids));
+    const int64_t retry_interval_us = 10 * 1000; // 10ms
+    int64_t retry_count = 0;
+    while (OB_SUCC(ret)) {
+      if (OB_FAIL(ddl_service.get_snapshot_mgr().batch_acquire_snapshot(
+              trans, SNAPSHOT_FOR_DDL, tenant_id, data_table_schema.get_schema_version(),
+              snapshot_scn, nullptr, tablet_ids))) {
+        if (OB_ERR_EXCLUSIVE_LOCK_CONFLICT_NOWAIT == ret) {
+          const bool has_timeout = THIS_WORKER.is_timeout_ts_valid();
+          const bool timeouted = has_timeout ? THIS_WORKER.is_timeout() : true;
+          if (timeouted) {
+            LOG_WARN("batch acquire snapshot timeout on nowait conflict",
+                     KR(ret), K(tenant_id), K(retry_count), K(has_timeout), K(tablet_ids));
+          } else {
+            if (REACH_TIME_INTERVAL(1000 * 1000)) { // 1s
+              LOG_INFO("retry batch acquire snapshot on nowait conflict",
+                       KR(ret), K(tenant_id), K(retry_count));
+            }
+	    // clear last error to keep transaction usable for next retry
+            trans.reset_last_error();
+            ret = OB_SUCCESS;
+            ++retry_count;
+            ob_usleep(retry_interval_us);
+            continue;
+          }
+        } else {
+          LOG_WARN("batch acquire snapshot failed", K(ret), K(tablet_ids));
+        }
+      }
+      break;
+    }
+    if (OB_SUCC(ret)) {
+      LOG_INFO("hold snapshot finished", K(snapshot_scn), K(schema_version), "tablet_cnt", tablet_ids.count());
+      LOG_DEBUG("hold snapshot detail", K(snapshot_scn), K(schema_version), K(tablet_ids));
+    }
   }
   return ret;
 }
