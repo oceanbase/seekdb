@@ -1102,13 +1102,9 @@ int ObTabletForkRewriteTask::prepare_context(const ObStorageSchema *&clipped_sto
   } else if (OB_ISNULL(storage_schema)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("storage schema is null", K(ret));
-  } else if (OB_FAIL(ObTabletRebuildUtil::get_clipped_storage_schema_on_demand(
-      context_->get_allocator(), context_->clipped_schemas_map_,
-      param_->source_tablet_id_, *sstable_, *storage_schema,
-      false/*try_create*/, clipped_storage_schema))) {
-    LOG_WARN("get storage schema via sstable failed", K(ret));
+  } else {
+    clipped_storage_schema = storage_schema;
   }
-
   return ret;
 }
 
