@@ -301,6 +301,72 @@ int ObOpenAIUtils::ObOpenAIEmbed::parse_output(common::ObIAllocator &allocator,
   return ret;
 }
 
+int ObOpenAIUtils::ObOpenAICompatRerank::get_header(common::ObIAllocator &allocator,
+                                                    common::ObString &api_key,
+                                                    common::ObArray<ObString> &headers)
+{
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(ObOpenAIUtils::get_header(allocator, api_key, headers))) {
+    LOG_WARN("Failed to get header", K(ret));
+  }
+  return ret;
+}
+
+int ObOpenAIUtils::ObOpenAICompatRerank::get_body(common::ObIAllocator &allocator,
+                                                  common::ObString &model,
+                                                  common::ObString &query,
+                                                  common::ObJsonArray *document_array,
+                                                  common::ObJsonObject *config,
+                                                  common::ObJsonObject *&body)
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(model) || OB_ISNULL(query) || OB_ISNULL(document_array)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("model or query or document_array is null", K(ret));
+  } else {
+    // {"model":"*", "query":"*", "documents":[...], ...config }
+    ObJsonObject *body_obj = nullptr;
+    ObJsonString *model_str = nullptr;
+    ObJsonString *query_str = nullptr;
+    if (OB_FAIL(ObAIFuncJsonUtils::get_json_object(allocator, body_obj))) {
+      LOG_WARN("Failed to get json object", K(ret));
+    } else if (OB_FAIL(ObAIFuncJsonUtils::get_json_string(allocator, model, model_str))) {
+      LOG_WARN("Failed to get json string", K(ret));
+    } else if (OB_FAIL(body_obj->add("model", model_str))) {
+      LOG_WARN("Failed to add model", K(ret));
+    } else if (OB_FAIL(ObAIFuncJsonUtils::get_json_string(allocator, query, query_str))) {
+      LOG_WARN("Failed to get json string", K(ret));
+    } else if (OB_FAIL(body_obj->add("query", query_str))) {
+      LOG_WARN("Failed to add query", K(ret));
+    } else if (OB_FAIL(body_obj->add("documents", document_array))) {
+      LOG_WARN("Failed to add documents", K(ret));
+    } else if (OB_FAIL(ObAIFuncJsonUtils::compact_json_object(allocator, config, body_obj))) {
+      LOG_WARN("Failed to compact json object", K(ret));
+    } else {
+      body = body_obj;
+    }
+  }
+  return ret;
+}
+
+int ObOpenAIUtils::ObOpenAICompatRerank::parse_output(common::ObIAllocator &allocator,
+                                                      common::ObJsonObject *http_response,
+                                                      common::ObIJsonBase *&result)
+{
+  int ret = OB_SUCCESS;
+  ObJsonArray *results_array = nullptr;
+  if (OB_ISNULL(http_response)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("http_response is null", K(ret));
+  } else if (OB_ISNULL(results_array = static_cast<ObJsonArray *>(http_response->get_value("results")))) {
+    ret = OB_INVALID_DATA;
+    LOG_WARN("results_array is null", K(ret));
+  } else {
+    result = results_array;
+  }
+  return ret;
+}
+
 int ObOllamaUtils::get_header(common::ObIAllocator &allocator,
                               common::ObArray<ObString> &headers)
 {
@@ -838,71 +904,6 @@ int ObSiliconflowUtils::get_header(common::ObIAllocator &allocator,
   return ret;
 }
 
-int ObSiliconflowUtils::ObSiliconflowRerank::get_header(common::ObIAllocator &allocator,
-                                                    common::ObString &api_key,
-                                                    common::ObArray<ObString> &headers)
-{
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(ObOpenAIUtils::get_header(allocator, api_key, headers))) {
-    LOG_WARN("Failed to get header", K(ret));
-  }
-  return ret;
-}
-
-int ObSiliconflowUtils::ObSiliconflowRerank::get_body(common::ObIAllocator &allocator,
-                                                  common::ObString &model,
-                                                  common::ObString &query,
-                                                  common::ObJsonArray *document_array,
-                                                  common::ObJsonObject *config,
-                                                  common::ObJsonObject *&body)
-{
-  int ret = OB_SUCCESS;
-  if (OB_ISNULL(model) || OB_ISNULL(query) || OB_ISNULL(document_array)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("model or query or document_array is null", K(ret));
-  } else {
-    ObJsonObject *body_obj = nullptr;
-    ObJsonString *model_str = nullptr;
-    ObJsonString *query_str = nullptr;
-    if (OB_FAIL(ObAIFuncJsonUtils::get_json_object(allocator, body_obj))) {
-      LOG_WARN("Failed to get json object", K(ret));
-    } else if (OB_FAIL(ObAIFuncJsonUtils::get_json_string(allocator, model, model_str))) {
-      LOG_WARN("Failed to get json string", K(ret));
-    } else if (OB_FAIL(body_obj->add("model", model_str))) {
-      LOG_WARN("Failed to add model", K(ret));
-    } else if (OB_FAIL(ObAIFuncJsonUtils::get_json_string(allocator, query, query_str))) {
-      LOG_WARN("Failed to get json string", K(ret));
-    } else if (OB_FAIL(body_obj->add("query", query_str))) {
-      LOG_WARN("Failed to add query", K(ret));
-    } else if (OB_FAIL(body_obj->add("documents", document_array))) {
-      LOG_WARN("Failed to add documents", K(ret));
-    } else if (OB_FAIL(ObAIFuncJsonUtils::compact_json_object(allocator, config, body_obj))) {
-      LOG_WARN("Failed to compact json object", K(ret));
-    } else {
-      body = body_obj;
-    }
-  }
-  return ret;
-}
-
-int ObSiliconflowUtils::ObSiliconflowRerank::parse_output(common::ObIAllocator &allocator,
-                                                      common::ObJsonObject *http_response,
-                                                      common::ObIJsonBase *&result)
-{
-  int ret = OB_SUCCESS;
-  ObJsonArray *results_array = nullptr;
-  if (OB_ISNULL(http_response)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("http_response is null", K(ret));
-  } else if (OB_ISNULL(results_array = static_cast<ObJsonArray *>(http_response->get_value("results")))) {
-    ret = OB_INVALID_DATA;
-    LOG_WARN("results_array is null", K(ret));
-  } else {
-    result = results_array;
-  }
-  return ret;
-}
-
 
 int ObAIFuncUtils::get_header(ObIAllocator &allocator,
                               const ObAIFuncExprInfo &info,
@@ -1283,6 +1284,14 @@ int ObAIFuncUtils::get_embed_provider(ObIAllocator &allocator, const ObString &p
   return ret;
 }
 
+static bool is_openai_compatible_rerank_provider(const ObString &provider)
+{
+  return ObAIFuncUtils::ob_provider_check(provider, ObAIFuncProviderUtils::OPENAI)
+      || ObAIFuncUtils::ob_provider_check(provider, ObAIFuncProviderUtils::ALIYUN)
+      || ObAIFuncUtils::ob_provider_check(provider, ObAIFuncProviderUtils::HUNYUAN)
+      || ObAIFuncUtils::ob_provider_check(provider, ObAIFuncProviderUtils::SILICONFLOW);
+}
+
 int ObAIFuncUtils::get_rerank_provider(ObIAllocator &allocator, const ObString &provider, ObAIFuncIRerank *&rerank_provider)
 {
   int ret = OB_SUCCESS;
@@ -1290,14 +1299,16 @@ int ObAIFuncUtils::get_rerank_provider(ObIAllocator &allocator, const ObString &
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("provider is empty", K(ret));
     LOG_USER_ERROR(OB_INVALID_ARGUMENT, "ai_function, provider is empty");
-  } else if (ob_provider_check(provider, ObAIFuncProviderUtils::SILICONFLOW)) {
-    rerank_provider = OB_NEWx(ObSiliconflowUtils::ObSiliconflowRerank, &allocator);
   } else if (ob_provider_check(provider, ObAIFuncProviderUtils::DASHSCOPE)) {
     rerank_provider = OB_NEWx(ObDashscopeUtils::ObDashscopeRerank, &allocator);
+  } else if (ob_provider_check(provider, ObAIFuncProviderUtils::SILICONFLOW)) {
+    rerank_provider = OB_NEWx(ObSiliconflowUtils::ObSiliconflowRerank, &allocator);
+  } else if (is_openai_compatible_rerank_provider(provider)) {
+    rerank_provider = OB_NEWx(ObOpenAIUtils::ObOpenAICompatRerank, &allocator);
   } else {
     ret = OB_NOT_SUPPORTED;
     LOG_WARN("this provider current not support", K(ret));
-    LOG_USER_ERROR(OB_NOT_SUPPORTED, "rerank support siliconflow and ailiyun-dashscope, this provider current is");
+    LOG_USER_ERROR(OB_NOT_SUPPORTED, "rerank supports openai-compatible providers and aliyun-dashscope, this provider current is");
   }
   if (OB_SUCC(ret) && OB_ISNULL(rerank_provider)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;

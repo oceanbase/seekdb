@@ -72,6 +72,27 @@ public:
   private:
     DISALLOW_COPY_AND_ASSIGN(ObOpenAIEmbed);
   };
+
+  class ObOpenAICompatRerank : public ObAIFuncIRerank
+  {
+  public:
+    ObOpenAICompatRerank() {}
+    virtual ~ObOpenAICompatRerank() {}
+    virtual int get_header(common::ObIAllocator &allocator,
+                           common::ObString &api_key,
+                           common::ObArray<ObString> &headers) override;
+    virtual int get_body(common::ObIAllocator &allocator,
+                         common::ObString &model,
+                         common::ObString &query,
+                         common::ObJsonArray *document_array,
+                         common::ObJsonObject *config,
+                         common::ObJsonObject *&body) override;
+    virtual int parse_output(common::ObIAllocator &allocator,
+                             common::ObJsonObject *http_response,
+                             common::ObIJsonBase *&result) override;
+  private:
+    DISALLOW_COPY_AND_ASSIGN(ObOpenAICompatRerank);
+  };
   static int get_header(common::ObIAllocator &allocator,
                         common::ObString &api_key,
                         common::ObArray<ObString> &headers);
@@ -204,23 +225,11 @@ private:
 class ObSiliconflowUtils
 {
 public:
-  class ObSiliconflowRerank : public ObAIFuncIRerank
+  class ObSiliconflowRerank : public ObOpenAIUtils::ObOpenAICompatRerank
   {
   public:
     ObSiliconflowRerank() {}
     virtual ~ObSiliconflowRerank() {}
-    virtual int get_header(common::ObIAllocator &allocator,
-                           common::ObString &api_key,
-                           common::ObArray<ObString> &headers) override;
-    virtual int get_body(common::ObIAllocator &allocator,
-                         common::ObString &model,
-                         common::ObString &query,
-                         common::ObJsonArray *document_array,
-                         common::ObJsonObject *config,
-                         common::ObJsonObject *&body) override;
-    virtual int parse_output(common::ObIAllocator &allocator,
-                             common::ObJsonObject *http_response,
-                             common::ObIJsonBase *&result) override;
   private:
     DISALLOW_COPY_AND_ASSIGN(ObSiliconflowRerank);
   };
