@@ -52,8 +52,8 @@ obdevtools-llvm-17.0.6-72025060300.el8.x86_64.rpm
 devdeps-oblogmsg-1.1-52024052811.el8.x86_64.rpm
 devdeps-rocksdb-6.22.1-32024123015.el8.x86_64.rpm
 obstack-2.0.4-172024070513.el8.x86_64.rpm
-obshell-4.3.3.0-12025110521.el8.x86_64.rpm target=community
-#obshell-4.3.3.1-12025121911.el8.x86_64.rpm target=community
+obshell-4.3.3.1-12025121911.el8.x86_64.rpm target=community
+#obshell-4.4.0.1-12026012311.el8.x86_64.rpm target=community
 
 [test-utils]
 ob-deploy-4.1.0-2.el8.x86_64.rpm target=community
