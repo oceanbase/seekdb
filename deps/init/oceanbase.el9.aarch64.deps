@@ -60,7 +60,7 @@ obshell-4.3.3.1-12025121911.el8.aarch64.rpm target=community
 #obshell-4.4.0.1-12026012311.el8.aarch64.rpm target=community
 
 [test-utils]
-ob-deploy-4.1.x-159.el8.aarch64.rpm target=community
+ob-deploy-4.1.x-180.el8.aarch64.rpm target=community
 obclient-2.2.2-1.el8.aarch64.rpm target=community
 libobclient-2.2.2-3.el8.aarch64.rpm target=community
 
