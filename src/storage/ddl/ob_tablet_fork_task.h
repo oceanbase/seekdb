@@ -28,6 +28,7 @@
 #include "storage/blocksstable/index_block/ob_index_block_builder.h"
 #include "storage/ob_storage_schema.h"
 #include "storage/tablet/ob_tablet_obj_load_helper.h"
+#include "storage/tablet/ob_tablet_member_wrapper.h"
 #include "lib/oblog/ob_log_module.h"
 #include "storage/tx_storage/ob_ls_handle.h" // For ObLSHandle
 #include "storage/tablet/ob_tablet_create_delete_helper.h"
@@ -173,6 +174,7 @@ public:
   ObLSHandle ls_handle_;
   ObTabletHandle src_tablet_handle_;
   ObTabletHandle dst_tablet_handle_;
+  ObTabletMemberWrapper<ObTabletTableStore> snapshot_table_store_;
   ObTableStoreIterator table_store_iterator_;
   INDEX_BUILDER_MAP index_builder_map_;
   common::hash::ObHashMap<ObITable::TableKey, ObStorageSchema*> clipped_schemas_map_;
