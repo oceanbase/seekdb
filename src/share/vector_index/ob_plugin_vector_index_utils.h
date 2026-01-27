@@ -72,8 +72,9 @@ public:
   static ObVectorIndexRecordType index_type_to_record_type(schema::ObIndexType type);
 
   static ObAdapterCreateType index_type_to_create_type(schema::ObIndexType type);
-  
+  static int get_vector_index_prefix_inner(const ObTableSchema &index_schema, const ObString index_name, ObString &prefix);
   static int get_vector_index_prefix(const ObTableSchema &index_schema, ObString &prefix);
+  static int get_vector_index_name_prefix(const ObTableSchema &index_schema, ObString &prefix);
   static int split_snapshot_prefix(const ObString &src, const ObString &item, ObString &dst);
   static int get_split_snapshot_prefix(const ObVectorIndexAlgorithmType index_type, 
                                        const ObString &src, 

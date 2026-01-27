@@ -1486,6 +1486,11 @@ int ObIndexBuilder::do_create_local_index(
                      true /*generate_id*/, index_schema))) {
         LOG_WARN("fail to generate schema", K(ret), K(my_arg));
       }
+      // create empty major for domain table
+      if (OB_FAIL(ret)) {
+      } else if (index_schema.is_vec_delta_buffer_type() || index_schema.is_hybrid_vec_index_log_type()) {
+        index_schema.set_index_status(INDEX_STATUS_AVAILABLE);
+      }
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(new_table_schema.check_create_index_on_hidden_primary_key(index_schema))) {
         LOG_WARN("failed to check create index on table", K(ret), K(index_schema));
