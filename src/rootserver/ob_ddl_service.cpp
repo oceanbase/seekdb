@@ -25757,7 +25757,8 @@ int ObDDLService::rebuild_table_schema_with_new_id(const ObTableSchema &orig_tab
                                                    ObSchemaService &schema_service,
                                                    ObIArray<ObTableSchema> &new_schemas,
                                                    ObArenaAllocator &allocator,
-                                                   const uint64_t define_user_id)
+                                                   const uint64_t define_user_id,
+                                                   const bool delete_unused_columns)
 {
   int ret = OB_SUCCESS;
   uint64_t orig_tid = orig_table_schema.get_table_id();
@@ -25768,10 +25769,11 @@ int ObDDLService::rebuild_table_schema_with_new_id(const ObTableSchema &orig_tab
   bool is_oracle_mode = false;
   if (OB_FAIL(new_table_schema.assign(orig_table_schema))) {
     LOG_WARN("fail to assign schema", K(ret));
-  } else if (OB_FAIL(delete_unused_columns_and_redistribute_schema(orig_table_schema,
-    false/*need_redistribute_column_id, to avoid column_id mismatched between data table and index ones.*/,
-    new_table_schema))) {
-    LOG_WARN("remove all unused columns internally failed", KR(ret));
+  } else if (delete_unused_columns
+             && OB_FAIL(delete_unused_columns_and_redistribute_schema(orig_table_schema,
+               false/*need_redistribute_column_id, to avoid column_id mismatched between data table and index ones.*/,
+               new_table_schema))) {
+    LOG_WARN("remove all unused columns internally failed", KR(ret), K(delete_unused_columns));
   } else if (OB_FAIL(get_tenant_schema_guard_with_version_in_inner_table(tenant_id, schema_guard))) {
     LOG_WARN("fail to get schema guard with version in inner table", K(ret), K(tenant_id));
   } else if (OB_FAIL(check_inner_stat())) {
@@ -26068,7 +26070,8 @@ int ObDDLService::create_table_like(const ObCreateTableLikeArg &arg)
                                                      *schema_service,
                                                      table_schemas,
                                                      allocator,
-                                                     arg.define_user_id_))) {
+                                                     arg.define_user_id_,
+                                                     true /* delete_unused_columns */))) {
           LOG_WARN("failed to rebuild table schema with new id", KR(ret));
         } else if (OB_FAIL(generate_object_id_for_partition_schemas(table_schemas))) {
           LOG_WARN("fail to generate object_id for partition schema", KR(ret), K(table_schemas));

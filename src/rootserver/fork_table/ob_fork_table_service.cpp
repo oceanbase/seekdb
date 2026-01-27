@@ -339,7 +339,8 @@ int ObDDLService::fork_table(const obrpc::ObForkTableArg &fork_table_arg, obrpc:
                                                        *schema_service,
                                                        table_schemas,
                                                        inner_allocator,
-                                                       OB_INVALID_ID))) { // define_user_id
+                                                       OB_INVALID_ID, // define_user_id
+                                                       false /* delete_unused_columns */))) {
             LOG_WARN("failed to rebuild table schema with new id", KR(ret));
           } else if (OB_FAIL(generate_object_id_for_partition_schemas(table_schemas))) {
             LOG_WARN("fail to generate object_id for partition schema", KR(ret), K(table_schemas));

@@ -2231,7 +2231,8 @@ private:
                                        share::schema::ObSchemaService &schema_service,
                                        common::ObIArray<share::schema::ObTableSchema> &new_scheams,
                                        common::ObArenaAllocator &allocator,
-                                       const uint64_t define_user_id);
+                                       const uint64_t define_user_id,
+                                       const bool delete_unused_columns);
   int check_enable_sys_table_ddl(const share::schema::ObTableSchema &table_schema,
                                  const share::schema::ObSchemaOperationType operation_type);
   int log_drop_warn_or_err_msg(const obrpc::ObTableItem table_item,

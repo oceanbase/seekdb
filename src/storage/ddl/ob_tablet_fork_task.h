@@ -41,6 +41,7 @@ namespace oceanbase
 namespace storage
 {
 class ObTableForkInfo;
+struct ObMigrationTabletParam;
 
 struct ObForkScanParam final
 {
@@ -287,6 +288,7 @@ private:
       const int64_t ls_rebuild_seq,
       const ObLSHandle &ls_handle,
       const ObTabletHandle &src_tablet_handle,
+      const ObTabletHandle &dst_tablet_handle,
       const common::ObTabletID &dst_tablet_id,
       const ObTablesHandleArray &tables_handle,
       const compaction::ObMergeType &merge_type);
