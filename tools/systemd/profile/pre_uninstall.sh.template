@@ -1,23 +1,23 @@
 #!/bin/bash
 echo "execute pre uninstall script"
-cnf_file=/etc/oceanbase/seekdb.cnf
+cnf_file=/etc/seekdb/seekdb.cnf
 
 systemctl stop seekdb
 systemctl disable seekdb
 systemctl daemon-reload
 
 # telemetry
-/bin/bash /usr/libexec/oceanbase/scripts/telemetry.sh $1 >/dev/null 2>&1
+/bin/bash /usr/libexec/seekdb/scripts/telemetry.sh $1 >/dev/null 2>&1
 
 if [ "$1" -eq 0 ] 2>/dev/null || [ "$1" = "remove" ] || [ "$1" = "purge" ]; then
     if [ -f "$cnf_file" ] && [ -s "$cnf_file" ]; then
         # Ensure the directory exists
-        mkdir -p /var/lib/oceanbase
+        mkdir -p /var/lib/seekdb
 
         # Create the clean script file
-        clean_script="/var/lib/oceanbase/seekdb_clean.sh"
+        clean_script="/var/lib/seekdb/seekdb_clean.sh"
         echo "#!/bin/bash" > "$clean_script"
-        echo "# SeekDB cleanup script" >> "$clean_script"
+        echo "# seekdb cleanup script" >> "$clean_script"
         echo "# This script will be executed after package removal" >> "$clean_script"
 
         redo_dir=$(cat "$cnf_file" | grep -o 'redo-dir=[^[:space:]]*' | sed 's/redo-dir=//')

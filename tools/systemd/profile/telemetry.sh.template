@@ -9,10 +9,10 @@ ip=$(hostname -I | awk '/^[0-9]/ {print $1; exit}')
 hostHash=$(echo -n "$ip" | sha1sum | awk '{print $1}')
 osName=$(cat /etc/os-release | grep "^ID=" | cut -f2 -d= | tr -d '"')
 osRelease=$(cat /etc/os-release | grep "^VERSION_ID=" | cut -f2 -d= | tr -d '"')
-cnf_file='/etc/oceanbase/seekdb.cnf'
-json_pre_file='/etc/oceanbase/telemetry-pre.json'
-json_file='/etc/oceanbase/telemetry.json'
-BASE_DIR="/var/lib/oceanbase"
+cnf_file='/etc/seekdb/seekdb.cnf'
+json_pre_file='/etc/seekdb/telemetry-pre.json'
+json_file='/etc/seekdb/telemetry.json'
+BASE_DIR="/var/lib/seekdb"
 
 step='none'
 reporter='none'

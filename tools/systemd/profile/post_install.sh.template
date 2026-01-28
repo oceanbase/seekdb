@@ -12,17 +12,17 @@ elif ( [ "$1" -ge 2 ] 2>/dev/null ); then
 fi
 
 if [ "$is_upgrade" -eq 1 ] && [ -f /tmp/seekdb.cnf.bak ]; then
-    mv /tmp/seekdb.cnf.bak /etc/oceanbase/seekdb.cnf
+    mv /tmp/seekdb.cnf.bak /etc/seekdb/seekdb.cnf
 fi
 # prepare the systemd service unit
 systemctl daemon-reload
 
 # telemetry
-/bin/bash /usr/libexec/oceanbase/scripts/telemetry.sh $1 >/dev/null 2>&1
+/bin/bash /usr/libexec/seekdb/scripts/telemetry.sh $1 >/dev/null 2>&1
 
 GREEN='\033[32m'
 NC="\033[0m"
-echo -e "${GREEN}To configure OceanBase${NC} : edit /etc/oceanbase/seekdb.cnf"
-echo -e "${GREEN}To start OceanBase${NC}     : systemctl start seekdb"
-echo -e "${GREEN}To enable OceanBase auto reboot ${NC} : systemctl enable seekdb"
+echo -e "${GREEN}To configure seekdb${NC} : edit /etc/seekdb/seekdb.cnf"
+echo -e "${GREEN}To start seekdb${NC}     : systemctl start seekdb"
+echo -e "${GREEN}To enable seekdb auto reboot ${NC} : systemctl enable seekdb"
 echo -e "${GREEN}To get more infomation${NC} : https://www.oceanbase.ai/"
