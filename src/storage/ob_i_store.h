@@ -36,6 +36,8 @@ MULTI_VERSION_EXTRA_ROWKEY_DEF(MAX_EXTRA_ROWKEY, 0, NULL, NULL)
 #include "storage/ob_table_store_stat_mgr.h"
 #include "storage/memtable/mvcc/ob_mvcc_acc_ctx.h"
 #include "storage/ob_tenant_tablet_stat_mgr.h"
+#include "share/ob_fork_table_util.h"
+#include "lib/hash/ob_hashmap.h"
 
 namespace oceanbase
 {
@@ -444,6 +446,23 @@ void free_store_row(AllocatorT &allocator, ObStoreRow *&row)
   }
 }
 
+struct ObStoreCtx;
+
+// RAII guard for fork context, saves and restores snapshot version and fork flag
+class ObStoreCtxForkGuard final
+{
+public:
+  explicit ObStoreCtxForkGuard(ObStoreCtx &ctx);
+  ~ObStoreCtxForkGuard();
+  int enter_fork_snapshot(const share::SCN &fork_snapshot_scn);
+  bool is_opened() const { return opened_; }
+private:
+  ObStoreCtx &ctx_;
+  share::SCN saved_snapshot_version_;
+  bool opened_;
+  DISALLOW_COPY_AND_ASSIGN(ObStoreCtxForkGuard);
+};
+
 struct ObStoreCtx
 {
   ObStoreCtx() { reset(); }
@@ -474,7 +493,11 @@ struct ObStoreCtx
   { return mvcc_acc_ctx_.init_mds_filter(mds_filter); }
   memtable::ObMvccMdsFilter &get_mds_filter() { return mvcc_acc_ctx_.mds_filter_; }
   void clear_mds_filter() { mvcc_acc_ctx_.mds_filter_.reset(); }
+  int enter_fork_snapshot(const share::SCN &fork_snapshot_scn,
+                          share::SCN &saved_snapshot_version);
+  void exit_fork_snapshot(const share::SCN &saved_snapshot_version);
   int get_all_tables(ObIArray<ObITable *> &iter_tables);
+  int get_fork_snapshot_scn(const common::ObTabletID &tablet_id, share::SCN &fork_snapshot_scn);
   TO_STRING_KV(KP(this),
                K_(ls_id),
                KP_(ls),
@@ -486,7 +509,8 @@ struct ObStoreCtx
                K_(mvcc_acc_ctx),
                K_(tablet_stat),
                K_(is_read_store_ctx),
-               K_(update_full_column));
+               K_(update_full_column),
+               K_(is_fork_ctx));
   share::ObLSID ls_id_;
   storage::ObLS *ls_;
   int16_t branch_;                                 // parallel write id
@@ -498,6 +522,10 @@ struct ObStoreCtx
   storage::ObTabletStat tablet_stat_;              // used for collecting query statistics
   bool is_read_store_ctx_;
   bool update_full_column_;
+  bool is_fork_ctx_;
+  // Cached fork snapshot map for current table iterator (built on demand)
+  hash::ObHashMap<common::ObTabletID, share::SCN> fork_snapshot_map_;
+  bool fork_snapshot_map_inited_;
   int64_t check_seq_;
 };
 

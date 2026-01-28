@@ -4418,6 +4418,10 @@ int ObTablet::auto_get_read_tables(
       LOG_WARN("failed to get split dst read table", K(ret));
     }
   }
+  if (OB_SUCC(ret)) {
+    // Pass fork infos pointer from ObTabletTableIterator to ObTableStoreIterator
+    iter.table_store_iter_.set_fork_infos(iter.get_fork_infos());
+  }
 
 #ifdef ENABLE_DEBUG_LOG
   if (OB_SUCC(ret) && (succ_get_split_src_tables || succ_get_split_dst_tables || fork_get_src_tables)) {

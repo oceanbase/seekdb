@@ -64,6 +64,9 @@ void ObStoreCtx::reset()
   tablet_stat_.reset();
   is_read_store_ctx_ = false;
   update_full_column_ = false;
+  is_fork_ctx_ = false;
+  fork_snapshot_map_.destroy();
+  fork_snapshot_map_inited_ = false;
   check_seq_ = 0;
 }
 
@@ -130,6 +133,55 @@ bool ObStoreCtx::is_uncommitted_data_rollbacked() const
   return bret;
 }
 
+int ObStoreCtx::enter_fork_snapshot(const share::SCN &fork_snapshot_scn,
+                                    share::SCN &saved_snapshot_version)
+{
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(!fork_snapshot_scn.is_valid())) {
+    ret = OB_INVALID_ARGUMENT;
+    STORAGE_LOG(WARN, "invalid fork snapshot scn", K(ret), K(fork_snapshot_scn));
+  } else {
+    saved_snapshot_version = mvcc_acc_ctx_.snapshot_.version_;
+    is_fork_ctx_ = true;
+    mvcc_acc_ctx_.is_fork_ctx_ = true;  // sync to mvcc_acc_ctx for internal use
+    mvcc_acc_ctx_.snapshot_.version_ = fork_snapshot_scn;
+  }
+  return ret;
+}
+
+void ObStoreCtx::exit_fork_snapshot(const share::SCN &saved_snapshot_version)
+{
+  mvcc_acc_ctx_.snapshot_.version_ = saved_snapshot_version;
+  is_fork_ctx_ = false;
+  mvcc_acc_ctx_.is_fork_ctx_ = false;  // sync to mvcc_acc_ctx
+}
+
+ObStoreCtxForkGuard::ObStoreCtxForkGuard(ObStoreCtx &ctx)
+    : ctx_(ctx), saved_snapshot_version_(), opened_(false)
+{}
+
+ObStoreCtxForkGuard::~ObStoreCtxForkGuard()
+{
+  if (opened_) {
+    ctx_.exit_fork_snapshot(saved_snapshot_version_);
+  }
+}
+
+int ObStoreCtxForkGuard::enter_fork_snapshot(const share::SCN &fork_snapshot_scn)
+{
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(opened_)) {
+    ret = OB_INIT_TWICE;
+    STORAGE_LOG(WARN, "fork snapshot entered twice", K(ret));
+  } else if (OB_FAIL(ctx_.enter_fork_snapshot(fork_snapshot_scn,
+                                              saved_snapshot_version_))) {
+    STORAGE_LOG(WARN, "enter fork snapshot failed", K(ret), K(fork_snapshot_scn));
+  } else {
+    opened_ = true;
+  }
+  return ret;
+}
+
 int ObStoreCtx::get_all_tables(ObIArray<ObITable *> &iter_tables)
 {
   int ret = OB_SUCCESS;
@@ -148,6 +200,51 @@ int ObStoreCtx::get_all_tables(ObIArray<ObITable *> &iter_tables)
       TRANS_LOG(WARN, "table must not be null", K(ret), KPC(table_iter_));
     } else if (OB_FAIL(iter_tables.push_back(table_ptr))) {
       TRANS_LOG(WARN, "rowkey_exists check::", K(ret), KPC(table_ptr));
+    }
+  }
+  return ret;
+}
+
+int ObStoreCtx::get_fork_snapshot_scn(const common::ObTabletID &tablet_id,
+                                      share::SCN &fork_snapshot_scn)
+{
+  int ret = OB_SUCCESS;
+  fork_snapshot_scn.reset();
+  if (OB_ISNULL(table_iter_)) {
+    ret = OB_ERR_UNEXPECTED;
+    STORAGE_LOG(WARN, "table iter is null when get fork snapshot", K(ret));
+  } else if (!fork_snapshot_map_inited_) {
+    const ObIArray<share::ObForkTabletInfo> *fork_infos = table_iter_->get_fork_infos();
+    if (OB_ISNULL(fork_infos) || fork_infos->empty()) {
+      fork_snapshot_map_inited_ = true;
+    } else if (OB_FAIL(fork_snapshot_map_.create(fork_infos->count() * 2, "ForkSnapMap"))) {
+      STORAGE_LOG(WARN, "failed to create fork snapshot map", K(ret), K(fork_infos->count()));
+    } else {
+      for (int64_t i = 0; OB_SUCC(ret) && i < fork_infos->count(); ++i) {
+        const share::ObForkTabletInfo &fork_info = fork_infos->at(i);
+        share::SCN fork_snapshot_scn;
+        if (OB_FAIL(fork_snapshot_scn.convert_for_tx(fork_info.get_fork_snapshot_version()))) {
+          STORAGE_LOG(WARN, "failed to convert fork snapshot version", K(ret), K(fork_info));
+        } else if (OB_FAIL(fork_snapshot_map_.set_refactored(
+                     fork_info.get_fork_src_tablet_id(), fork_snapshot_scn, true))) {
+          STORAGE_LOG(WARN, "failed to set fork snapshot map", K(ret), K(fork_info));
+        }
+      }
+      if (OB_SUCC(ret)) {
+        fork_snapshot_map_inited_ = true;
+      } else {
+        fork_snapshot_map_.destroy();
+      }
+    }
+  }
+
+  if (OB_SUCC(ret) && fork_snapshot_map_.created()) {
+    int tmp_ret = fork_snapshot_map_.get_refactored(tablet_id, fork_snapshot_scn);
+    if (OB_HASH_NOT_EXIST == tmp_ret) {
+      tmp_ret = OB_SUCCESS;
+    } else if (OB_SUCCESS != tmp_ret) {
+      ret = tmp_ret;
+      STORAGE_LOG(WARN, "failed to get fork snapshot scn", K(ret), K(tablet_id));
     }
   }
   return ret;

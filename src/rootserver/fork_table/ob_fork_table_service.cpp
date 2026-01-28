@@ -36,19 +36,21 @@ static int check_table_index_features(
     ObSchemaGetterGuard &schema_guard,
     bool &has_semantic_index,
     bool &has_ivf_index,
-    bool &has_spatial_index)
+    bool &has_spatial_index,
+    bool &has_global_index)
 {
   int ret = OB_SUCCESS;
   ObSEArray<ObAuxTableMetaInfo, 16> simple_index_infos;
   has_semantic_index = false;
   has_ivf_index = false;
   has_spatial_index = false;
+  has_global_index = false;
   if (OB_FAIL(table_schema.get_simple_index_infos(simple_index_infos))) {
     LOG_WARN("fail to get simple index infos", K(ret));
   } else {
     const uint64_t tenant_id = table_schema.get_tenant_id();
     for (int64_t i = 0; OB_SUCC(ret) && i < simple_index_infos.count()
-        && (!has_semantic_index || !has_ivf_index || !has_spatial_index); ++i) {
+        && (!has_semantic_index || !has_ivf_index || !has_spatial_index || !has_global_index); ++i) {
       const ObTableSchema *index_schema = nullptr;
       const uint64_t index_table_id = simple_index_infos.at(i).table_id_;
       if (OB_FAIL(schema_guard.get_table_schema(tenant_id, index_table_id, index_schema))) {
@@ -66,6 +68,9 @@ static int check_table_index_features(
         if (index_schema->is_spatial_index()) {
           has_spatial_index = true;
         }
+        if (index_schema->is_global_index_table()) {
+          has_global_index = true;
+        }
       }
     }
   }
@@ -81,6 +86,7 @@ static int check_fork_table_supported(
   bool has_semantic_index = false;
   bool has_ivf_index = false;
   bool has_spatial_index = false;
+  bool has_global_index = false;
   if (src_table_schema.is_tmp_table() || src_table_schema.is_ctas_tmp_table()) {
     ret = OB_NOT_SUPPORTED;
     LOG_WARN("fork table on temporary table is not supported", KR(ret), K(src_table_schema));
@@ -106,7 +112,8 @@ static int check_fork_table_supported(
                                                 schema_guard,
                                                 has_semantic_index,
                                                 has_ivf_index,
-                                                has_spatial_index))) {
+                                                has_spatial_index,
+                                                has_global_index))) {
     LOG_WARN("fail to check table index features", K(ret), K(src_table_schema));
   } else if (has_semantic_index) {
     ret = OB_NOT_SUPPORTED;
@@ -120,6 +127,10 @@ static int check_fork_table_supported(
     ret = OB_NOT_SUPPORTED;
     LOG_WARN("fork table on table with spatial index is not supported", KR(ret), K(src_table_schema));
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "fork table on table with spatial index is");
+  } else if (src_table_schema.is_partitioned_table() && has_global_index) {
+    ret = OB_NOT_SUPPORTED;
+    LOG_WARN("fork table on partitioned table with global index is not supported", KR(ret), K(src_table_schema));
+    LOG_USER_ERROR(OB_NOT_SUPPORTED, "fork table on partitioned table with global index is");
   }
   return ret;
 }

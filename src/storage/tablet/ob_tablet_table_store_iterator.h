@@ -19,6 +19,7 @@
 
 #include "storage/meta_mem/ob_storage_meta_cache.h"
 #include "share/cache/ob_kv_storecache.h"
+#include "share/ob_fork_table_util.h"
 
 namespace oceanbase
 {
@@ -86,12 +87,17 @@ public:
       const int64_t start_pos = 0,
       const int64_t count = 1,
       const bool unpack_co_table = false);
+  void set_fork_infos(const ObIArray<share::ObForkTabletInfo> *fork_infos) { fork_infos_ = fork_infos; }
+  const ObIArray<share::ObForkTabletInfo> *get_fork_infos() const { return fork_infos_; }
+  // Get fork snapshot SCN for given tablet_id, returns invalid SCN if not found
+  int get_fork_snapshot_scn(const common::ObTabletID &tablet_id, share::SCN &fork_snapshot_scn) const;
   inline bool check_store_expire() const
   {
     return (NULL == memstore_retired_) ? false : ATOMIC_LOAD(memstore_retired_);
   }
   TO_STRING_KV(K_(table_ptr_array), K_(sstable_handle_array), K_(pos), K_(step), K_(memstore_retired),
-      K_(need_load_sstable), K_(table_store_handle), KPC_(transfer_src_table_store_handle), K_(split_extra_table_store_handles));
+      K_(need_load_sstable), K_(table_store_handle), KPC_(transfer_src_table_store_handle), K_(split_extra_table_store_handles),
+      KP_(fork_infos));
 private:
   int inner_move_idx_to_next();
   int get_table_ptr_with_meta_handle(
@@ -116,6 +122,7 @@ private:
   ObStorageMetaHandle *transfer_src_table_store_handle_;
   ObSEArray<ObStorageMetaHandle, 1> split_extra_table_store_handles_;
   ObTableHandleV2 *ddl_co_sstable_handle_;
+  const ObIArray<share::ObForkTabletInfo> *fork_infos_;  // pointer to fork infos from ObTabletTableIterator
   DISALLOW_COPY_AND_ASSIGN(ObTableStoreIterator);
 };
 
