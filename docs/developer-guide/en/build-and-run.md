@@ -3,7 +3,7 @@
 
 ## Prerequisites
 
-Check the [Install toolchain](toolchain.md) guide for supported OS, GLIBC version requirement, and how to install the C++ toolchain.
+Check the [Install toolchain](toolchain.md) guide for supported OS, GLIBC version requirement, and how to install the C++ toolchain. For macOS-specific installation and troubleshooting, see the [macOS section](toolchain.md#macos) in the toolchain guide.
 
 ## Clone
 

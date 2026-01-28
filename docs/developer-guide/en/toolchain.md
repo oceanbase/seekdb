@@ -4,7 +4,7 @@ To build OceanBase seekdb from source code, you need to install the C++ toolchai
 
 ## Supported OS
 
-OceanBase makes strong assumption on the underlying operating systems. Not all the operating systems are supported; especially, Windows and Mac OS X are not supported yet.
+OceanBase makes strong assumption on the underlying operating systems. Not all the operating systems are supported; especially, Windows is not supported yet.
 
 Below is the OS compatibility list:
 
@@ -23,10 +23,12 @@ Below is the OS compatibility list:
 | SUSE                | 15.2                  | x86_84 / aarch64 | Yes           | Yes                  | Yes                        | Yes              |
 | Ubuntu              | 20.04 / 22.04 / 24.04 | x86_84 / aarch64 | Yes           | Yes                  | Yes                        | Yes              |
 | UOS                 | 20                    | x86_84 / aarch64 | Yes           | Yes                  | Yes                        | Yes              |
+| macOS                | 12.0+ (Monterey+)     | x86_64 / arm64        | Yes*        | Yes                  | Yes                        | Limited          |
 
 > **Note**:
 >
-> Other Linux distributions _may_ work. If you verify that OceanBase seekdb can compile and deploy on a distribution except ones listed above, feel free to submit a pull request to add it.
+> - Other Linux distributions _may_ work. If you verify that OceanBase seekdb can compile and deploy on a distribution except ones listed above, feel free to submit a pull request to add it.
+> - macOS support is experimental and tested on both Intel (x86_64) and Apple Silicon (arm64) architectures. Some features may have limitations compared to Linux builds.
 
 ## Installation
 
@@ -61,3 +63,54 @@ This includes SUSE, openSUSE, etc.
 ```shell
 zypper install git wget rpm cpio make glibc-devel binutils m4 python3
 ```
+
+### macOS
+
+For macOS development, you need to install Homebrew first if it's not already installed:
+
+```shell
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+```
+
+Then install the required dependencies:
+
+```shell
+# Install essential build tools and libraries
+brew install zstd googletest utf8proc thrift re2 brotli bzip2
+
+# Note: bzip2 is keg-only (not symlinked), but macOS usually provides a system version
+# that should work for linking purposes.
+```
+
+**Required dependencies for macOS:**
+- `zstd` - Compression library required by the build toolchain
+- `googletest` - Google Test framework for unit tests (includes GTest and GMock)
+- `utf8proc` - UTF-8 processing library (dependency of Apache Arrow on macOS)
+- `thrift` - Apache Thrift (dependency of Apache Arrow on macOS)
+- `re2` - Regular expression library (dependency of Apache Arrow on macOS)
+- `brotli` - Compression library (dependency of Apache Arrow on macOS)
+- `bzip2` - Compression library (dependency of Apache Arrow on macOS)
+
+**Additional notes:**
+- The build system will automatically download and use the OceanBase development toolchain (LLVM, Bison, Flex) from the dependency packages.
+- Make sure you have Xcode Command Line Tools installed:
+  ```shell
+  xcode-select --install
+  ```
+
+**Common macOS build issues and solutions:**
+
+If you encounter build errors on macOS, here are common issues and their solutions:
+
+- **Error: `library 'utf8proc' not found`**: Make sure you've installed all required dependencies via Homebrew. Run `brew install utf8proc thrift re2 brotli` if you haven't already.
+
+- **Error: `Could NOT find GTest`**: Install googletest via `brew install googletest`.
+
+- **Error: `Library not loaded: libzstd.1.dylib`**: Install zstd via `brew install zstd`.
+
+- **Error: `Cannot find source file: ftsblex_lex.c`**: This usually happens if parser files were deleted but the cache file (`_MD5`) still exists. Delete the cache files and rebuild:
+  ```shell
+  rm src/sql/parser/_MD5
+  rm src/pl/parser/_MD5
+  ```
+  Then run the build again. The build system will automatically regenerate the parser files.
