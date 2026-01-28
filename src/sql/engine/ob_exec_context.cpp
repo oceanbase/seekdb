@@ -172,6 +172,9 @@ ObExecContext::ObExecContext(ObIAllocator &allocator)
     bloom_filter_ctx_array_(),
     frames_(NULL),
     frame_cnt_(0),
+    ori_frames_(nullptr),
+    ori_frame_cnt_(0),
+    ori_expr_op_size_(0),
     op_kit_store_(),
     convert_allocator_(nullptr),
     mem_context_(nullptr),
@@ -1068,7 +1071,7 @@ DEFINE_SERIALIZE(ObExecContext)
     LOG_WARN("add changed package info failed", K(ret));
   } else {
     my_session_->reset_all_package_changed_info();
-    phy_plan_ctx_->set_expr_op_size(expr_op_size_);
+    phy_plan_ctx_->set_expr_op_size(ori_expr_op_size_ > 0 ? ori_expr_op_size_ : expr_op_size_);
     if (ser_version == SER_VERSION_1) {
       OB_UNIS_ENCODE(my_session_->get_login_tenant_id());
     }
@@ -1100,7 +1103,7 @@ DEFINE_GET_SERIALIZE_SIZE(ObExecContext)
 
   if (is_valid() && OB_SUCCESS == my_session_->add_changed_package_info(*const_cast<ObExecContext *>(this))) {
     my_session_->reset_all_package_changed_info();
-    phy_plan_ctx_->set_expr_op_size(expr_op_size_);
+    phy_plan_ctx_->set_expr_op_size(ori_expr_op_size_ > 0 ? ori_expr_op_size_ : expr_op_size_);
     if (ser_version == SER_VERSION_1) {
       OB_UNIS_ADD_LEN(my_session_->get_login_tenant_id());
     }
