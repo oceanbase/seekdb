@@ -208,7 +208,14 @@ function get_os_release() {
 get_os_release || exit 1
 
 if [[ "${OS_RELEASE}x" == "macosx" ]]; then
-    OS_TAG="macos.$OS_ARCH"
+    MACOS_VERSION=$(sw_vers -productVersion | awk -F. '{print $1}')
+    if [ $MACOS_VERSION -lt 13 ]; then
+      not_supported && exit 1
+    elif [ $MACOS_VERSION -lt 15 ]; then
+      OS_TAG="macos13.$OS_ARCH"
+    else
+      OS_TAG="macos15.$OS_ARCH"
+    fi
 elif [[ "${AL3_RELEASE}x" == "1x" ]]; then
     OS_TAG="al$OS_RELEASE.$OS_ARCH"
 else

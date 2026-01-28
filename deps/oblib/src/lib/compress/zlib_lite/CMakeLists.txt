@@ -22,19 +22,16 @@ add_library(zlib_lite_adaptor OBJECT
   zlib_lite_adaptor.cpp
 )
 
-# We can not put the file codec_deflate_qpl.cpp into zlib_lite_objs.
-# I got some link error messages like below:
-# ld.lld: error: relocation refers to a symbol in a discarded section: __clang_call_terminate
-add_library(zlib_lite_qpl
-  codec_deflate_qpl.cpp
-)
-
 set(ZLIB_LITE_COMPILE_DEFINITIONS -fvisibility=hidden -Wno-deprecated-non-prototype)
 
 target_compile_options(zlib_lite_src PRIVATE ${ZLIB_LITE_COMPILE_DEFINITIONS})
 target_compile_options(zlib_lite_adaptor PRIVATE ${ZLIB_LITE_COMPILE_DEFINITIONS})
 
 if(${ARCHITECTURE} STREQUAL "x86_64")
+  # We can not put the file codec_deflate_qpl.cpp into zlib_lite_objs.
+  # I got some link error messages like below:
+  # ld.lld: error: relocation refers to a symbol in a discarded section: __clang_call_terminate
+  add_library(zlib_lite_qpl codec_deflate_qpl.cpp)
   target_include_directories(zlib_lite_adaptor PUBLIC "${DEP_DIR}/include/")
   target_compile_options(zlib_lite_adaptor PUBLIC -DENABLE_QPL_COMPRESSION)
 
@@ -45,6 +42,8 @@ if(${ARCHITECTURE} STREQUAL "x86_64")
 
   message(STATUS "zlib_lite use qpl")
 else()
+  # Keep a no-op target to avoid linking an empty static archive on non-x86_64.
+  add_library(zlib_lite_qpl INTERFACE)
   message(STATUS "zlib_lite use zlib compressor")
 endif()
 

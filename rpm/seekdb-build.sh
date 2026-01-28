@@ -25,7 +25,7 @@ echo "[BUILD] args: TOP_DIR=${TOP_DIR} PROJECT_NAME=${PROJECT_NAME} VERSION=${VE
 cd ${TOP_DIR}
 ./build.sh clean
 ./build.sh                    \
-    ${PACKAGE_TYPE}              \
+    ${PACKAGE_TYPE}           \
     -DOB_RELEASEID=$RELEASE   \
     -DBUILD_NUMBER=$RELEASE   \
     -DUSE_LTO_CACHE=ON	      \
