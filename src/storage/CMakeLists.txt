@@ -171,7 +171,6 @@ ob_set_subtarget(ob_storage blocksstable_index_block
 ob_set_subtarget(ob_storage meta_store
   meta_store/ob_server_storage_meta_service.cpp
   meta_store/ob_server_storage_meta_persister.cpp
-  meta_store/ob_server_storage_meta_replayer.cpp
   meta_store/ob_storage_meta_io_util.cpp
   meta_store/ob_tenant_storage_meta_service.cpp
   meta_store/ob_tenant_storage_meta_persister.cpp

@@ -18,7 +18,6 @@
 
 #include <stdint.h>
 #include "storage/meta_store/ob_server_storage_meta_persister.h"
-#include "storage/meta_store/ob_server_storage_meta_replayer.h"
 #include "storage/slog_ckpt/ob_server_checkpoint_slog_handler.h"
 #include "storage/slog/ob_storage_logger_manager.h"
 
@@ -30,7 +29,7 @@ class ObServerStorageMetaService
 {
 public:
   static ObServerStorageMetaService &get_instance();
-  int init(const bool is_share_storage);
+  int init();
   int start();
   void stop();
   void wait();
@@ -63,10 +62,6 @@ public:
     DISALLOW_COPY_AND_ASSIGN(ObTenantItemIterator);
   };
 
-  int get_tenant_items_by_status(
-      const storage::ObTenantCreateStatus status,
-      ObIArray<storage::ObTenantItem> &tenant_items);
-
 private:
   ObServerStorageMetaService();
   ~ObServerStorageMetaService() = default;
@@ -76,9 +71,7 @@ private:
 private:
   bool is_inited_;
   bool is_started_;
-  bool is_shared_storage_;
   ObServerStorageMetaPersister persister_;
-  ObServerStorageMetaReplayer replayer_;
   ObStorageLoggerManager slogger_mgr_;
   ObStorageLogger *server_slogger_;
   ObServerCheckpointSlogHandler ckpt_slog_handler_;
