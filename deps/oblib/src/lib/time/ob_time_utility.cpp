@@ -126,6 +126,15 @@ int64_t ObTimeUtility::current_monotonic_raw_time()
 
 int64_t ObTimeUtility::current_time_coarse()
 {
+#ifdef __APPLE__
+  // On macOS, use the same time source as current_time() to avoid clock skew.
+  // This is because current_time() uses mach_absolute_time() with a fixed base,
+  // while clock_gettime(CLOCK_REALTIME) returns the actual system clock which
+  // may drift due to NTP adjustments. Using different time sources causes
+  // check_clock() in timer service to detect false "Hardware clock skew" and
+  // generate massive warning logs, leading to CPU exhaustion over time.
+  return current_time();
+#else
   struct timespec t;
   int err_ret = 0;
   if (OB_UNLIKELY((err_ret = clock_gettime(
@@ -141,6 +150,7 @@ int64_t ObTimeUtility::current_time_coarse()
   }
   return (static_cast<int64_t>(t.tv_sec) * 1000000L +
           static_cast<int64_t>(t.tv_nsec / 1000));
+#endif
 }
 
 int64_t ObMonotonicTs::to_string(char *buf, const int64_t buf_len) const

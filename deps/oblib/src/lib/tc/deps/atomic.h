@@ -21,5 +21,11 @@
 #define ATOMIC_TAS(val, newv) __sync_lock_test_and_set((val), (newv))
 #define ATOMIC_VCAS(val, cmpv, newv) __sync_val_compare_and_swap((val), (cmpv), (newv))
 #define ATOMIC_BCAS(val, cmpv, newv) __sync_bool_compare_and_swap((val), (cmpv), (newv))
-#define PAUSE() __asm__("pause\n")
+#if defined(__x86_64__) || defined(__i386__)
+#define PAUSE() __asm__ volatile("pause\n" ::: "memory")
+#elif defined(__aarch64__) || defined(__arm__)
+#define PAUSE() __asm__ volatile("yield\n" ::: "memory")
+#else
+#define PAUSE() ((void)0)
+#endif
 #endif

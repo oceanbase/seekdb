@@ -95,13 +95,10 @@ int ObCond::timedwait(const int64_t time_us)
     }
   }
   if (need_wait) {
-    int64_t abs_time = time_us + ::oceanbase::common::ObTimeUtility::current_time();
-    struct timespec ts;
-    ts.tv_sec = abs_time / 1000000;
-    ts.tv_nsec = (abs_time % 1000000) * 1000;
     pthread_mutex_lock(&mutex_);
     while (OB_SUCC(ret) && false == ATOMIC_CAS(&bcond_, true, false)) {
-      int tmp_ret = ob_pthread_cond_timedwait(&cond_, &mutex_, &ts);
+      // Use portable timed wait with relative timeout to avoid clock drift issues on macOS
+      int tmp_ret = ob_pthread_cond_timedwait_us(&cond_, &mutex_, time_us);
       if (ETIMEDOUT == tmp_ret) {
         ret = OB_TIMEOUT;
         break;
