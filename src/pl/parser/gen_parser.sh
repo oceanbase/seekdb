@@ -20,6 +20,21 @@ if [ "$BISON_VERSION" != "$NEED_VERSION" ]; then
   exit 1
 fi
 
+# Check if any required output files are missing.
+outputs_missing() {
+  local required_files=(
+    "$CURDIR/pl_parser_mysql_mode_tab.c"
+    "$CURDIR/pl_parser_mysql_mode_tab.h"
+    "$CURDIR/pl_parser_mysql_mode_lex.c"
+  )
+  for file in "${required_files[@]}"; do
+    if [[ ! -s "$file" ]]; then
+      return 0
+    fi
+  done
+  return 1
+}
+
 bison_parser() {
 BISON_OUTPUT="$(bison -v -Werror -d $1 -o $2 2>&1)"
 BISON_RETURN="$?"
@@ -56,7 +71,7 @@ function generate_parser {
 if [[ -n "$NEED_PARSER_CACHE" && "$NEED_PARSER_CACHE" == "ON" ]]; then
     echo "generate pl parser with cache"
     origin_md5sum_value=$(<$CACHE_MD5_FILE)
-    if [[ "$md5sum_value" == "$origin_md5sum_value" ]]; then 
+    if [[ "$md5sum_value" == "$origin_md5sum_value" ]] && ! outputs_missing; then
       echo "hit the md5 cache"
     else
       generate_parser
