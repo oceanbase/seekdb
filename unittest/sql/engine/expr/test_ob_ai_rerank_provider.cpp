@@ -172,6 +172,24 @@ TEST_F(ObAIRerankProviderTest, parse_output_should_fail_without_results)
   ASSERT_EQ(nullptr, result);
 }
 
+TEST_F(ObAIRerankProviderTest, parse_output_should_fail_with_non_array_results)
+{
+  ObArenaAllocator allocator(ObModIds::TEST);
+  ObAIFuncIRerank *rerank_provider = nullptr;
+  ASSERT_EQ(OB_SUCCESS, ObAIFuncUtils::get_rerank_provider(allocator, ObString("openai"), rerank_provider));
+  ASSERT_NE(nullptr, rerank_provider);
+
+  ObString response("{\"id\": 0, \"results\": {}}");
+  ObIJsonBase *j_base = nullptr;
+  ASSERT_EQ(OB_SUCCESS,
+            ObJsonBaseFactory::get_json_base(
+                &allocator, response, ObJsonInType::JSON_TREE, ObJsonInType::JSON_TREE, j_base));
+  ObJsonObject *http_response = static_cast<ObJsonObject *>(j_base);
+  ObIJsonBase *result = nullptr;
+  ASSERT_EQ(OB_INVALID_DATA, rerank_provider->parse_output(allocator, http_response, result));
+  ASSERT_EQ(nullptr, result);
+}
+
 int main(int argc, char **argv)
 {
   ::testing::InitGoogleTest(&argc, argv);

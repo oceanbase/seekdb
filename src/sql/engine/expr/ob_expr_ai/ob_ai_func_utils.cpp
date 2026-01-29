@@ -320,9 +320,9 @@ int ObOpenAIUtils::ObOpenAICompatRerank::get_body(common::ObIAllocator &allocato
                                                   common::ObJsonObject *&body)
 {
   int ret = OB_SUCCESS;
-  if (OB_ISNULL(model) || OB_ISNULL(query) || OB_ISNULL(document_array)) {
+  if (model.empty() || query.empty() || OB_ISNULL(document_array)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("model or query or document_array is null", K(ret));
+    LOG_WARN("model or query is empty or document_array is null", K(ret));
   } else {
     // {"model":"*", "query":"*", "documents":[...], ...config }
     ObJsonObject *body_obj = nullptr;
@@ -355,13 +355,18 @@ int ObOpenAIUtils::ObOpenAICompatRerank::parse_output(common::ObIAllocator &allo
 {
   int ret = OB_SUCCESS;
   ObJsonArray *results_array = nullptr;
+  ObJsonNode *results_node = nullptr;
   if (OB_ISNULL(http_response)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("http_response is null", K(ret));
-  } else if (OB_ISNULL(results_array = static_cast<ObJsonArray *>(http_response->get_value("results")))) {
+  } else if (OB_ISNULL(results_node = http_response->get_value("results"))) {
     ret = OB_INVALID_DATA;
-    LOG_WARN("results_array is null", K(ret));
+    LOG_WARN("results node is null", K(ret));
+  } else if (results_node->json_type() != ObJsonNodeType::J_ARRAY) {
+    ret = OB_INVALID_DATA;
+    LOG_WARN("results node is not array", K(ret), K(results_node->json_type()));
   } else {
+    results_array = static_cast<ObJsonArray *>(results_node);
     result = results_array;
   }
   return ret;
@@ -1288,8 +1293,7 @@ static bool is_openai_compatible_rerank_provider(const ObString &provider)
 {
   return ObAIFuncUtils::ob_provider_check(provider, ObAIFuncProviderUtils::OPENAI)
       || ObAIFuncUtils::ob_provider_check(provider, ObAIFuncProviderUtils::ALIYUN)
-      || ObAIFuncUtils::ob_provider_check(provider, ObAIFuncProviderUtils::HUNYUAN)
-      || ObAIFuncUtils::ob_provider_check(provider, ObAIFuncProviderUtils::SILICONFLOW);
+      || ObAIFuncUtils::ob_provider_check(provider, ObAIFuncProviderUtils::HUNYUAN);
 }
 
 int ObAIFuncUtils::get_rerank_provider(ObIAllocator &allocator, const ObString &provider, ObAIFuncIRerank *&rerank_provider)
