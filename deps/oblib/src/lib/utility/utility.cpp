@@ -21,6 +21,9 @@
 #ifdef __linux__
 #include <gnu/libc-version.h>
 #endif
+#ifdef __APPLE__
+#include <sys/sysctl.h>
+#endif
 #include "lib/utility/ob_platform_utils.h"  // Platform compatibility layer
 #include "lib/file/file_directory_utils.h"
 #include "deps/oblib/src/common/ob_string_buf.h"
@@ -2178,6 +2181,19 @@ int get_os_info(char *name, int64_t name_size, char *release, int64_t release_si
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("Invalid argument", K(ret), KP(name), K(name_size), KP(release), K(release_size));
   } else {
+#ifdef __APPLE__
+    // On macOS, use sysctl to get system info
+    // Set OS name to "macOS"
+    strncpy(name, "macOS", name_size - 1);
+    name[name_size - 1] = '\0';
+    // Get macOS product version (e.g., "15.2", "16.0") via sysctl
+    size_t len = static_cast<size_t>(release_size);
+    if (0 != sysctlbyname("kern.osproductversion", release, &len, NULL, 0)) {
+      ret = OB_ERR_SYS;
+      LOG_WARN("Failed to get macOS version via sysctl", K(ret), K(errno));
+    }
+    release[release_size - 1] = '\0';
+#else
     FILE *file = fopen("/etc/os-release", "r");
     if (NULL == file) {
       LOG_WARN("Failed to open /etc/os-release", K(ret));
@@ -2194,6 +2210,7 @@ int get_os_info(char *name, int64_t name_size, char *release, int64_t release_si
       }
       fclose(file);
     }
+#endif
   }
   return ret;
 }
@@ -2205,6 +2222,21 @@ int get_cpu_model(char *buf, int64_t buf_size)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("Invalid argument", K(ret), KP(buf), K(buf_size));
   } else {
+#ifdef __APPLE__
+    // On macOS, use sysctl to get CPU brand string
+    size_t len = static_cast<size_t>(buf_size);
+    // Try Intel CPU brand string first
+    if (0 != sysctlbyname("machdep.cpu.brand_string", buf, &len, NULL, 0)) {
+      // For Apple Silicon (M1/M2/etc.), brand_string may not exist
+      // Fall back to hw.model which gives chip name like "Mac14,2"
+      len = static_cast<size_t>(buf_size);
+      if (0 != sysctlbyname("hw.model", buf, &len, NULL, 0)) {
+        ret = OB_ERR_SYS;
+        LOG_WARN("Failed to get CPU model via sysctl", K(ret), K(errno));
+      }
+    }
+    buf[buf_size - 1] = '\0';
+#else
     FILE *file = fopen("/proc/cpuinfo", "r");
     if (NULL == file) {
       LOG_WARN("Failed to open /proc/cpuinfo", K(ret));
@@ -2235,6 +2267,7 @@ int get_cpu_model(char *buf, int64_t buf_size)
       }
       fclose(file);
     }
+#endif
   }
   return ret;
 }
