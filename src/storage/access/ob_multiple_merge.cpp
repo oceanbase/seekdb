@@ -316,6 +316,10 @@ int ObMultipleMerge::get_access_ctx(ObTabletID tablet_id, ObTableAccessContext *
   int ret = OB_SUCCESS;
   if (tablet_id == access_ctx_->tablet_id_) {
     access_ctx = access_ctx_;
+  } else if (!extra_access_ctx_.created()) {
+    // extra_access_ctx_ is only created when fork/split info exists.
+    // Fall back to the main access_ctx_ to avoid OB_NOT_INIT from hash map.
+    access_ctx = access_ctx_;
   } else {
     int tmp_ret = extra_access_ctx_.get_refactored(tablet_id, access_ctx);
     if (OB_SUCCESS == tmp_ret && OB_NOT_NULL(access_ctx)) {
