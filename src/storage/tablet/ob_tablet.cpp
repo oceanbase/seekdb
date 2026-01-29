@@ -1036,7 +1036,9 @@ int ObTablet::init_for_sstable_replace(
       storage_schema_addr_.get_ptr()->is_tablet_referenced_by_collect_mv()))) {
     LOG_WARN("failed to init table store cache", K(ret), KPC(this));
   } else if (FALSE_IT(finish_medium_scn = get_last_major_snapshot_version())) {
-  } else if (nullptr != param.tablet_meta_ && FALSE_IT(tablet_meta_.update_extra_medium_info(
+  } else if (is_tablet_fork && FALSE_IT(tablet_meta_.extra_medium_info_.reset())) {
+    // Fork table should not inherit source extra_medium_info; keep it consistent with forked major.
+  } else if (!is_tablet_fork && nullptr != param.tablet_meta_ && FALSE_IT(tablet_meta_.update_extra_medium_info(
       old_tablet.tablet_meta_.extra_medium_info_, param.tablet_meta_->extra_medium_info_, finish_medium_scn))) {
   } else if (!is_ls_inner_tablet() && !param.is_transfer_replace_ && !is_tablet_split && !is_tablet_fork && OB_FAIL(update_tablet_status_from_sstable(false/*expect_persist_status*/))) {
     LOG_WARN("fail to update tablet status from sstable", K(ret));
