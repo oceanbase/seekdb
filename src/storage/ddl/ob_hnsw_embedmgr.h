@@ -171,7 +171,7 @@ public:
   int mark_ready(const int64_t slot_idx, const int ret_code);
   // Pop ready batch_info
   int pop_ready_in_order(ObTaskBatchInfo *&batch_info, int &ret_code);
-  int wait_for_head_completion(bool &is_finished);
+  int wait_for_head_completion();
   void set_task(const int64_t slot_idx, share::ObEmbeddingTask *task);
   void set_batch_info(const int64_t slot_idx, ObTaskBatchInfo *batch_info);
 
@@ -184,9 +184,6 @@ public:
 
 private:
   void reset();
-
-private:
-  static const int64_t CHECK_INTERVAL_US = 10 * 1000 * 1000; // 10 seconds;
 
 private:
   common::ObSpinLock lock_;
@@ -243,23 +240,22 @@ private:
 class ObEmbeddingTaskMgr
 {
 public:
-  ObEmbeddingTaskMgr(ObHNSWEmbeddingOperator &embedding_operator);
+  ObEmbeddingTaskMgr() : allocator_("EmbedTaskMgr", OB_MALLOC_NORMAL_BLOCK_SIZE, MTL_ID()),
+                         embedding_handler_(nullptr), slot_ring_(), ring_capacity_(9),
+                         cfg_(), is_inited_(false), is_failed_(false) {}
   ~ObEmbeddingTaskMgr();
-  int init(const common::ObString &model_id, const ObCollationType col_type);
+  int init(const common::ObString &model_id);
   int submit_batch_info(ObTaskBatchInfo *&batch_info);
   int get_ready_batch_info(ObTaskBatchInfo *&batch_info, int &error_ret_code);
   int mark_task_ready(const int64_t slot_idx, const int ret_code);
   int wait_for_completion();
   bool get_failed() const { return is_failed_; }
 
-  bool need_stop() const;
-
   TO_STRING_KV(K_(ring_capacity), K_(slot_ring), K_(cfg), K_(is_inited));
 
 private:
   int get_ai_config(const common::ObString &model_id);
   void set_failed();
-  int init_task_id();
 
 private:
   ObArenaAllocator allocator_;
@@ -271,9 +267,6 @@ private:
   bool is_failed_;
   int64_t model_request_timeout_us_; //For controlling the maximum timeout of calling model http service
   int64_t model_max_retries_; //For controlling the maximum retries of calling model http service
-  ObCollationType cs_type_;
-  ObHNSWEmbeddingOperator &embedding_operator_;
-  int64_t task_id_;
   DISALLOW_COPY_AND_ASSIGN(ObEmbeddingTaskMgr);
 };
 
