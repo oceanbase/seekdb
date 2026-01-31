@@ -17,11 +17,26 @@
 #define USING_LOG_PREFIX SQL_ENG
 #include "ob_ai_func_utils.h"
 #include "ob_ai_func_client.h"
+#include "lib/string/ob_sql_string.h"
 
 namespace oceanbase
 {
 namespace common
 {
+
+static void log_provider_not_supported(const char *func_name,
+                                       const ObString &provider,
+                                       const char *supported)
+{
+  ObSqlString msg;
+  int ret = msg.append_fmt("%s, provider '%.*s' is not supported, supported: %s",
+                           func_name, provider.length(), provider.ptr(), supported);
+  if (OB_FAIL(ret)) {
+    LOG_USER_ERROR(OB_NOT_SUPPORTED, "ai_function, provider is not supported");
+  } else {
+    LOG_USER_ERROR(OB_NOT_SUPPORTED, msg.ptr());
+  }
+}
 
 int ObOpenAIUtils::get_header(common::ObIAllocator &allocator,
                               ObString &api_key,
@@ -1248,7 +1263,9 @@ int ObAIFuncUtils::get_complete_provider(ObIAllocator &allocator, const ObString
   } else {
     ret = OB_NOT_SUPPORTED;
     LOG_WARN("this provider current not support", K(ret));
-    LOG_USER_ERROR(OB_NOT_SUPPORTED, "this provider current is");
+    log_provider_not_supported("ai_complete",
+                               provider,
+                               "openai, aliyun, deepseek, siliconflow, hunyuan, dashscope");
   }
   if (OB_SUCC(ret) && OB_ISNULL(complete_provider)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -1274,7 +1291,9 @@ int ObAIFuncUtils::get_embed_provider(ObIAllocator &allocator, const ObString &p
   } else {
     ret = OB_NOT_SUPPORTED;
     LOG_WARN("this provider current not support", K(ret));
-    LOG_USER_ERROR(OB_NOT_SUPPORTED, "this provider current is");
+    log_provider_not_supported("ai_embed",
+                               provider,
+                               "openai, aliyun, hunyuan, siliconflow, dashscope");
   }
   if (OB_SUCC(ret) && OB_ISNULL(embed_provider)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -1297,7 +1316,7 @@ int ObAIFuncUtils::get_rerank_provider(ObIAllocator &allocator, const ObString &
   } else {
     ret = OB_NOT_SUPPORTED;
     LOG_WARN("this provider current not support", K(ret));
-    LOG_USER_ERROR(OB_NOT_SUPPORTED, "rerank support siliconflow and ailiyun-dashscope, this provider current is");
+    log_provider_not_supported("ai_rerank", provider, "siliconflow, dashscope");
   }
   if (OB_SUCC(ret) && OB_ISNULL(rerank_provider)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
