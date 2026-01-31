@@ -300,8 +300,14 @@ ObString format_embed_error(int ret)
 {
   static thread_local char err_buf[1024];
   int64_t pos = 0;
-  ObString errmsg = handle_err_msg(ret);
-  const int err_no = ob_errpkt_errno(ret, false);
+  const int err_no = ob_mysql_errno_with_check(ret);
+  const char *user_msg = ob_str_user_error(ret);
+  if (nullptr == user_msg || '\0' == user_msg[0]) {
+    user_msg = ob_errpkt_str_user_error(ret, false);
+  }
+  ObString errmsg = (nullptr != user_msg && user_msg[0] != '\0')
+      ? ObString(strlen(user_msg), user_msg)
+      : ObString();
   const char *err_name = ob_error_name(ret);
   if (nullptr == err_name || '\0' == err_name[0]) {
     err_name = "UnknownError";
