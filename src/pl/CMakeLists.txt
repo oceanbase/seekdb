@@ -82,12 +82,14 @@ ob_server_add_target(ob_pl)
 set(SYS_PACK_SQL_SOURCE_DIR ${PROJECT_SOURCE_DIR}/src/share/inner_table/sys_package)
 set(gen_syspack_src ${SYS_PACK_SQL_SOURCE_DIR}/syspack_source.cpp)
 set(SYS_PACK_RELEASE_DIR ${CMAKE_BINARY_DIR}/syspack_release CACHE PATH "The path to the system package release directory")
-
+set(SYS_PACK_RELEASE_STAMP ${SYS_PACK_RELEASE_DIR}/.stamp)
 file(GLOB SQL_FILES "${SYS_PACK_SQL_SOURCE_DIR}/*.sql")
 
 add_custom_command(
-  OUTPUT ${gen_syspack_src}
+  OUTPUT ${gen_syspack_src} ${SYS_PACK_RELEASE_STAMP}
+  COMMAND ${CMAKE_COMMAND} -E make_directory ${SYS_PACK_RELEASE_DIR}
   COMMAND python3 ${SYS_PACK_SQL_SOURCE_DIR}/syspack_codegen.py -rd ${SYS_PACK_RELEASE_DIR}
+  COMMAND ${CMAKE_COMMAND} -E touch ${SYS_PACK_RELEASE_STAMP}
   DEPENDS ${SQL_FILES} ${SYS_PACK_SQL_SOURCE_DIR}/syspack_codegen.py
   WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
   COMMENT "Generating wrapped syspack source files"

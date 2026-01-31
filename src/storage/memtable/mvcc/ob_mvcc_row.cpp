@@ -1154,6 +1154,7 @@ int ObMvccRow::check_row_locked(ObMvccAccessCtx &ctx,
   transaction::ObTxSnapshot &snapshot = ctx.snapshot_;
   const SCN snapshot_version = snapshot.version_;
   const ObTransID checker_tx_id = ctx.get_tx_id();
+  const bool is_fork_ctx = ctx.is_fork_ctx_;
   ObMvccTransNode *iter = ATOMIC_LOAD(&list_head_);
   bool need_retry = true;
   ObMvccRowFilter row_filter(ctx.mds_filter_);
@@ -1178,30 +1179,42 @@ int ObMvccRow::check_row_locked(ObMvccAccessCtx &ctx,
                                                                 false  /*need_row_latch*/))) {
         TRANS_LOG(WARN, "cleanout tx state failed", K(ret), K(*this));
       } else if (iter->is_committed() || iter->is_elr()) {
-        // Case 2: the newest node is decided, so node currently is not be locked
-        bool complete = true;
-        bool filtered = false;
-        if (iter->is_committed()
-            && row_filter.is_inited()
-            && OB_FAIL(row_filter.read_row_and_check(*iter, complete, filtered))) {
-          TRANS_LOG(WARN, "failed to check trans node filtered", KR(ret), K(ctx.mds_filter_), KPC(iter));
-        } else if (!complete) {
+        if (is_fork_ctx && iter->trans_version_ > snapshot_version) {
+          // Case 2: fork ctx and the trans version is greater than snapshot version, so we need to skip the node
           iter = iter->prev_;
           need_retry = true;
         } else {
-          lock_state.is_locked_ = false;
-          lock_state.lock_trans_id_.reset();
-          need_retry = false;
-          if (filtered) {
-            lock_state.trans_version_.set_min();
-            lock_state.lock_dml_flag_ = blocksstable::ObDmlFlag::DF_NOT_EXIST;
-            iter = nullptr;
+          // Case 3: the newest node is decided, so node currently is not be locked
+          bool complete = true;
+          bool filtered = false;
+          if (iter->is_committed()
+              && row_filter.is_inited()
+              && OB_FAIL(row_filter.read_row_and_check(*iter, complete, filtered))) {
+            TRANS_LOG(WARN, "failed to check trans node filtered", KR(ret), K(ctx.mds_filter_), KPC(iter));
+          } else if (!complete) {
+            iter = iter->prev_;
+            need_retry = true;
           } else {
-            lock_state.trans_version_ = get_max_trans_version();
-            lock_state.lock_dml_flag_ = iter->get_dml_flag();
+            lock_state.is_locked_ = false;
+            lock_state.lock_trans_id_.reset();
+            need_retry = false;
+            if (filtered) {
+              lock_state.trans_version_.set_min();
+              lock_state.lock_dml_flag_ = blocksstable::ObDmlFlag::DF_NOT_EXIST;
+              iter = nullptr;
+            } else if (is_fork_ctx) {
+              lock_state.trans_version_ = iter->trans_version_;
+              lock_state.lock_dml_flag_ = iter->get_dml_flag();
+            } else {
+              lock_state.trans_version_ = get_max_trans_version();
+              lock_state.lock_dml_flag_ = iter->get_dml_flag();
+            }
           }
         }
       } else if (iter->is_aborted()) {
+        iter = iter->prev_;
+        need_retry = true;
+      } else if (is_fork_ctx) {
         iter = iter->prev_;
         need_retry = true;
       } else {

@@ -25,13 +25,24 @@ echo "[BUILD] args: TOP_DIR=${TOP_DIR} PROJECT_NAME=${PROJECT_NAME} VERSION=${VE
 cd ${TOP_DIR}
 ./build.sh clean
 ./build.sh                    \
+<<<<<<< HEAD
     ${PACKAGE_TYPE}                       \
+=======
+    ${PACKAGE_TYPE}           \
+>>>>>>> master
     -DOB_RELEASEID=$RELEASE   \
     -DBUILD_NUMBER=$RELEASE   \
     -DUSE_LTO_CACHE=ON	      \
     ${OB_DISABLE_LSE_OPTION}  \
     --init                    \
     --make ${PACKAGE_TYPE} || exit 1
+<<<<<<< HEAD
 
 cd ${TOP_DIR}/build_${PACKAGE_TYPE}
 mv *.${PACKAGE_EXTENSION} $CURDIR || exit 2
+=======
+
+cd ${TOP_DIR}/build_${PACKAGE_TYPE}
+mv *.${PACKAGE_EXTENSION} $CURDIR || exit 2
+
+>>>>>>> master

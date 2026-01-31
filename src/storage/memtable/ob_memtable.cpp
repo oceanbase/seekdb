@@ -29,6 +29,10 @@
 #include "storage/tx_storage/ob_tenant_freezer.h"
 #include "storage/access/ob_row_sample_iterator.h"
 #include "storage/ddl/ob_tablet_ddl_kv.h"
+#include "storage/ob_i_table.h"
+#include "storage/ob_i_store.h"
+#include "share/ob_fork_table_util.h"
+#include "lib/hash/ob_hashmap.h"
 
 #include "logservice/ob_log_service.h"
 
@@ -44,6 +48,28 @@ using namespace transaction;
 using namespace palf;
 namespace memtable
 {
+
+static int enter_fork_snapshot_if_needed(ObStoreCtx &ctx,
+                                         const ObITable *table,
+                                         const bool has_fork_snapshot,
+                                         ObStoreCtxForkGuard &fork_guard)
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(table)) {
+    ret = OB_ERR_UNEXPECTED;
+    TRANS_LOG(WARN, "table is null when entering fork snapshot", K(ret));
+  } else if (OB_SUCC(ret) && has_fork_snapshot) {
+    share::SCN fork_snapshot_scn;
+    if (OB_FAIL(ctx.get_fork_snapshot_scn(
+            table->get_key().get_tablet_id(), fork_snapshot_scn))) {
+      TRANS_LOG(WARN, "failed to get fork snapshot scn", K(ret), KPC(table));
+    } else if (fork_snapshot_scn.is_valid()
+               && OB_FAIL(fork_guard.enter_fork_snapshot(fork_snapshot_scn))) {
+      TRANS_LOG(WARN, "failed to enter fork snapshot", K(ret), K(fork_snapshot_scn));
+    }
+  }
+  return ret;
+}
 
 class ObGlobalMtAlloc
 {
@@ -1071,6 +1097,7 @@ int ObMemtable::check_row_locked_on_frozen_stores_(
   } else if (!check_exist && param.is_non_unique_local_index_) {
     // skip if it is non-unique index for which the lock has been checked in primary table
   } else {
+    const bool has_fork_snapshot = OB_NOT_NULL(ctx.table_iter_->get_fork_infos());
     common::ObSEArray<ObITable *, 8> iter_tables;
     if (OB_FAIL(ctx.get_all_tables(iter_tables))) {
       TRANS_LOG(WARN, "get all tables from table iter failed", KR(ret));
@@ -1082,7 +1109,10 @@ int ObMemtable::check_row_locked_on_frozen_stores_(
       const ObIArray<ObITable *> *stores = &iter_tables;
       for (int64_t i = stores->count() - 2; OB_SUCC(ret) && !row_is_decided && i >= 0; i--) {
         lock_state.reset();
-        if (NULL == stores->at(i)) {
+        // Try to enter fork snapshot if this table is a fork source
+        ObStoreCtxForkGuard fork_guard(ctx);
+        if (OB_FAIL(enter_fork_snapshot_if_needed(ctx, stores->at(i), has_fork_snapshot, fork_guard))) {
+        } else if (NULL == stores->at(i)) {
           ret = OB_ERR_UNEXPECTED;
           TRANS_LOG(WARN, "ObIStore is null", K(ret), K(i));
 #ifdef ENABLE_DEBUG_LOG
@@ -1326,6 +1356,7 @@ int ObMemtable::check_rows_locked_on_frozen_stores_(
     // skip if it is non-unique index table for which the transaction conflict has checked in primary table,
     // so there is no need to check transaction conflict again.
   } else {
+    const bool has_fork_snapshot = OB_NOT_NULL(ctx.table_iter_->get_fork_infos());
     common::ObSEArray<ObITable *, 8> iter_tables;
     if (OB_FAIL(ctx.get_all_tables(iter_tables))) {
       TRANS_LOG(WARN, "get all tables from table iter failed", KR(ret));
@@ -1340,7 +1371,10 @@ int ObMemtable::check_rows_locked_on_frozen_stores_(
       const bool need_find_all_duplicate_key = rows_info.need_find_all_duplicate_key();
 
       for (int64_t i = stores->count() - 2; OB_SUCC(ret) && !rows_are_decided && i >= 0; i--) {
-        if (NULL == stores->at(i)) {
+        // Try to enter fork snapshot if this table is a fork source
+        ObStoreCtxForkGuard fork_guard(ctx);
+        if (OB_FAIL(enter_fork_snapshot_if_needed(ctx, stores->at(i), has_fork_snapshot, fork_guard))) {
+        } else if (NULL == stores->at(i)) {
           ret = OB_ERR_UNEXPECTED;
           TRANS_LOG(WARN, "ObIStore is null", K(ret), K(i));
 #ifdef ENABLE_DEBUG_LOG

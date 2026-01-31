@@ -314,12 +314,9 @@ private:
     bool operator() (const LSKey &palf_id, IPalfHandleImpl *palf_handle_impl);
     int64_t id_;
     block_id_t min_block_id_;
-    share::SCN min_block_max_scn_;
     block_id_t min_using_block_id_;
-    int64_t oldest_palf_id_;
-    share::SCN oldest_block_scn_;
     int ret_code_;
-    TO_STRING_KV(K_(id), K_(min_block_max_scn), K_(min_block_id), K_(min_using_block_id), K_(oldest_palf_id), K_(oldest_block_scn), K_(ret_code));
+    TO_STRING_KV(K_(id), K_(min_block_id), K_(min_using_block_id), K_(ret_code));
   };
   struct GetTotalUsedDiskSpace
   {
@@ -357,7 +354,7 @@ private:
                       int64_t &unrecyclable_disk_space,
                       int64_t &palf_id,
                       int64_t &maximum_used_size);
-  int recycle_blocks_(bool &has_recycled, int64_t &oldest_palf_id, share::SCN &oldest_scn);
+  int recycle_blocks_(bool &has_recycled);
   int wait_until_reference_count_to_zero_(const int64_t palf_id);
   // check the diskspace whether is enough to hold a new palf instance.
   bool check_can_create_palf_handle_impl_() const;

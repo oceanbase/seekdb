@@ -155,6 +155,42 @@ int ob_pthread_cond_timedwait(pthread_cond_t *__restrict __cond,
   return ret;
 }
 
+int ob_pthread_cond_timedwait_us(pthread_cond_t *__restrict __cond,
+                                 pthread_mutex_t *__restrict __mutex,
+                                 int64_t timeout_us,
+                                 bool use_monotonic)
+{
+  int ret = 0;
+#ifdef __APPLE__
+  // On macOS, use pthread_cond_timedwait_relative_np with relative timeout.
+  // This avoids clock drift issues because:
+  // 1. ObTimeUtility::current_time() uses mach_absolute_time() with a fixed base from startup
+  // 2. pthread_cond_timedwait internally uses gettimeofday/system clock (adjusted by NTP)
+  // 3. Over time these clocks drift apart, causing pthread_cond_timedwait to return immediately
+  //    (thinking timeout already passed), leading to busy-wait and CPU exhaustion
+  // pthread_cond_timedwait_relative_np takes a relative timeout, avoiding this issue entirely.
+  (void)use_monotonic; // Not needed on macOS - relative timeout works with any clock
+  struct timespec reltime;
+  reltime.tv_sec = static_cast<time_t>(timeout_us / 1000000);
+  reltime.tv_nsec = static_cast<long>((timeout_us % 1000000) * 1000);
+  ret = pthread_cond_timedwait_relative_np(__cond, __mutex, &reltime);
+#else
+  // On Linux, compute absolute time using the specified clock source.
+  // use_monotonic=true: for pthread_cond configured with pthread_condattr_setclock(CLOCK_MONOTONIC)
+  // use_monotonic=false: for pthread_cond initialized with default attributes (CLOCK_REALTIME)
+  struct timespec abstime;
+  clock_gettime(use_monotonic ? CLOCK_MONOTONIC : CLOCK_REALTIME, &abstime);
+  abstime.tv_sec += static_cast<time_t>(timeout_us / 1000000);
+  abstime.tv_nsec += static_cast<long>((timeout_us % 1000000) * 1000);
+  if (abstime.tv_nsec >= 1000000000L) {
+    abstime.tv_sec += 1;
+    abstime.tv_nsec -= 1000000000L;
+  }
+  ret = ob_pthread_cond_timedwait(__cond, __mutex, &abstime);
+#endif
+  return ret;
+}
+
 // ob_usleep wrapper function for C file
 
 

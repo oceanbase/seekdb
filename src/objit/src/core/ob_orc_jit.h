@@ -209,7 +209,7 @@ public:
     symbol_table[StringRef(*prefixed)] = pointerToJITTargetAddress(addr);
 #endif
   }
-  
+
 private:
   // Storage for prefixed symbol names on macOS
   static std::vector<std::string*> persistent_strings;

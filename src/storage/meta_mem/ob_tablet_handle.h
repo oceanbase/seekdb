@@ -78,19 +78,16 @@ class ObTabletTableIterator final
   friend class ObTablet;
   friend class ObLSTabletService;
   typedef ObSEArray<ObTabletHandle, 1> SplitExtraTabletHandleArray;
-  typedef ObSEArray<ObTabletHandle, 1> ForkTabletHandleArray;
   typedef ObSEArray<share::ObForkTabletInfo, 1> ForkTabletInfoArray;
   struct ForkCtx final
   {
-    ForkCtx() : fork_tablet_handles_(), fork_infos_() {}
+    ForkCtx() : fork_infos_() {}
     ~ForkCtx() { reset(); }
     void reset()
     {
-      fork_tablet_handles_.reset();
       fork_infos_.reset();
     }
-    TO_STRING_KV(K_(fork_tablet_handles), K_(fork_infos));
-    ForkTabletHandleArray fork_tablet_handles_;
+    TO_STRING_KV(K_(fork_infos));
     ForkTabletInfoArray fork_infos_;
     DISALLOW_COPY_AND_ASSIGN(ForkCtx);
   };

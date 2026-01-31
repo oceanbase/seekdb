@@ -847,4 +847,3 @@ template void ObRowWriter::loop_cells<ObStorageDatum>(
 } // end namespace oceanbase
 
 
-

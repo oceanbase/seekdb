@@ -1357,7 +1357,7 @@ int ObRootUtils::get_rs_default_timeout_ctx(ObTimeoutCtx &ctx)
 #ifdef __APPLE__
   // On Mac, the system is significantly slower due to lack of O_DIRECT and software CRC.
   // Increase the default timeout to 10s to avoid bootstrap failure.
-  DEFAULT_TIMEOUT_US = std::max(DEFAULT_TIMEOUT_US, 10000000LL); 
+  DEFAULT_TIMEOUT_US = std::max(DEFAULT_TIMEOUT_US, 10000000LL);
 #endif
 
   if (OB_FAIL(ObShareUtil::set_default_timeout_ctx(ctx, DEFAULT_TIMEOUT_US))) {

@@ -593,13 +593,13 @@ static const _error _error_OB_NOT_MASTER = {
       .error_solution        = "Contact OceanBase Support",
       .mysql_errno           = -1,
       .sqlstate              = "HY000",
-      .str_error             = "The observer or zone is not the master",
-      .str_user_error        = "The observer or zone is not the master",
+      .str_error             = "The seekdb or zone is not the master",
+      .str_user_error        = "The seekdb or zone is not the master",
       .oracle_errno          = 600,
-      .oracle_str_error      = "ORA-00600: internal error code, arguments: -4038, The observer or zone is not the master",
-      .oracle_str_user_error = "ORA-00600: internal error code, arguments: -4038, The observer or zone is not the master",
-      .ob_str_error          = "OBE-00600: internal error code, arguments: -4038, The observer or zone is not the master",
-      .ob_str_user_error     = "OBE-00600: internal error code, arguments: -4038, The observer or zone is not the master"
+      .oracle_str_error      = "ORA-00600: internal error code, arguments: -4038, The seekdb or zone is not the master",
+      .oracle_str_user_error = "ORA-00600: internal error code, arguments: -4038, The seekdb or zone is not the master",
+      .ob_str_error          = "OBE-00600: internal error code, arguments: -4038, The seekdb or zone is not the master",
+      .ob_str_user_error     = "OBE-00600: internal error code, arguments: -4038, The seekdb or zone is not the master"
 };
 static const _error _error_OB_KILLED_BY_THROTTLING = {
       .error_name            = "OB_KILLED_BY_THROTTLING",
@@ -2777,13 +2777,13 @@ static const _error _error_OB_NOT_FOLLOWER = {
       .error_solution        = "Contact OceanBase Support",
       .mysql_errno           = -1,
       .sqlstate              = "HY000",
-      .str_error             = "The observer or zone is not a follower",
-      .str_user_error        = "The observer or zone is not a follower",
+      .str_error             = "The seekdb or zone is not a follower",
+      .str_user_error        = "The seekdb or zone is not a follower",
       .oracle_errno          = 600,
-      .oracle_str_error      = "ORA-00600: internal error code, arguments: -4232, The observer or zone is not a follower",
-      .oracle_str_user_error = "ORA-00600: internal error code, arguments: -4232, The observer or zone is not a follower",
-      .ob_str_error          = "OBE-00600: internal error code, arguments: -4232, The observer or zone is not a follower",
-      .ob_str_user_error     = "OBE-00600: internal error code, arguments: -4232, The observer or zone is not a follower"
+      .oracle_str_error      = "ORA-00600: internal error code, arguments: -4232, The seekdb or zone is not a follower",
+      .oracle_str_user_error = "ORA-00600: internal error code, arguments: -4232, The seekdb or zone is not a follower",
+      .ob_str_error          = "OBE-00600: internal error code, arguments: -4232, The seekdb or zone is not a follower",
+      .ob_str_user_error     = "OBE-00600: internal error code, arguments: -4232, The seekdb or zone is not a follower"
 };
 static const _error _error_OB_ERR_OUT_OF_LOWER_BOUND = {
       .error_name            = "OB_ERR_OUT_OF_LOWER_BOUND",
@@ -4751,13 +4751,13 @@ static const _error _error_OB_DISK_ERROR = {
       .error_solution        = "Contact OceanBase Support",
       .mysql_errno           = -1,
       .sqlstate              = "HY000",
-      .str_error             = "observer has disk error",
-      .str_user_error        = "observer has disk error",
+      .str_error             = "seekdb has disk error",
+      .str_user_error        = "seekdb has disk error",
       .oracle_errno          = 600,
-      .oracle_str_error      = "ORA-00600: internal error code, arguments: -4375, observer has disk error",
-      .oracle_str_user_error = "ORA-00600: internal error code, arguments: -4375, observer has disk error",
-      .ob_str_error          = "OBE-00600: internal error code, arguments: -4375, observer has disk error",
-      .ob_str_user_error     = "OBE-00600: internal error code, arguments: -4375, observer has disk error"
+      .oracle_str_error      = "ORA-00600: internal error code, arguments: -4375, seekdb has disk error",
+      .oracle_str_user_error = "ORA-00600: internal error code, arguments: -4375, seekdb has disk error",
+      .ob_str_error          = "OBE-00600: internal error code, arguments: -4375, seekdb has disk error",
+      .ob_str_user_error     = "OBE-00600: internal error code, arguments: -4375, seekdb has disk error"
 };
 static const _error _error_OB_UNIMPLEMENTED_FEATURE = {
       .error_name            = "OB_UNIMPLEMENTED_FEATURE",
@@ -4989,13 +4989,13 @@ static const _error _error_OB_ERR_OBSERVER_START = {
       .error_solution        = "Contact OceanBase Support",
       .mysql_errno           = -1,
       .sqlstate              = "HY000",
-      .str_error             = "observer start process failure",
-      .str_user_error        = "observer start process failure",
+      .str_error             = "seekdb start process failure",
+      .str_user_error        = "seekdb start process failure",
       .oracle_errno          = 600,
-      .oracle_str_error      = "ORA-00600: internal error code, arguments: -4393, observer start process failure",
-      .oracle_str_user_error = "ORA-00600: internal error code, arguments: -4393, observer start process failure",
-      .ob_str_error          = "OBE-00600: internal error code, arguments: -4393, observer start process failure",
-      .ob_str_user_error     = "OBE-00600: internal error code, arguments: -4393, observer start process failure"
+      .oracle_str_error      = "ORA-00600: internal error code, arguments: -4393, seekdb start process failure",
+      .oracle_str_user_error = "ORA-00600: internal error code, arguments: -4393, seekdb start process failure",
+      .ob_str_error          = "OBE-00600: internal error code, arguments: -4393, seekdb start process failure",
+      .ob_str_user_error     = "OBE-00600: internal error code, arguments: -4393, seekdb start process failure"
 };
 static const _error _error_OB_ERR_OBSERVER_STOP = {
       .error_name            = "OB_ERR_OBSERVER_STOP",
@@ -5003,13 +5003,13 @@ static const _error _error_OB_ERR_OBSERVER_STOP = {
       .error_solution        = "Contact OceanBase Support",
       .mysql_errno           = -1,
       .sqlstate              = "HY000",
-      .str_error             = "observer stop process failure",
-      .str_user_error        = "observer stop process failure",
+      .str_error             = "seekdb stop process failure",
+      .str_user_error        = "seekdb stop process failure",
       .oracle_errno          = 600,
-      .oracle_str_error      = "ORA-00600: internal error code, arguments: -4394, observer stop process failure",
-      .oracle_str_user_error = "ORA-00600: internal error code, arguments: -4394, observer stop process failure",
-      .ob_str_error          = "OBE-00600: internal error code, arguments: -4394, observer stop process failure",
-      .ob_str_user_error     = "OBE-00600: internal error code, arguments: -4394, observer stop process failure"
+      .oracle_str_error      = "ORA-00600: internal error code, arguments: -4394, seekdb stop process failure",
+      .oracle_str_user_error = "ORA-00600: internal error code, arguments: -4394, seekdb stop process failure",
+      .ob_str_error          = "OBE-00600: internal error code, arguments: -4394, seekdb stop process failure",
+      .ob_str_user_error     = "OBE-00600: internal error code, arguments: -4394, seekdb stop process failure"
 };
 static const _error _error_OB_ERR_OBSERVICE_START = {
       .error_name            = "OB_ERR_OBSERVICE_START",
@@ -5717,13 +5717,13 @@ static const _error _error_OB_REBALANCE_TASK_NOT_IN_PROGRESS = {
       .error_solution        = "Contact OceanBase Support",
       .mysql_errno           = -1,
       .sqlstate              = "HY000",
-      .str_error             = "rebalance task not in progress on observer",
-      .str_user_error        = "rebalance task not in progress on observer",
+      .str_error             = "rebalance task not in progress on seekdb",
+      .str_user_error        = "rebalance task not in progress on seekdb",
       .oracle_errno          = 600,
-      .oracle_str_error      = "ORA-00600: internal error code, arguments: -4554, rebalance task not in progress on observer",
-      .oracle_str_user_error = "ORA-00600: internal error code, arguments: -4554, rebalance task not in progress on observer",
-      .ob_str_error          = "OBE-00600: internal error code, arguments: -4554, rebalance task not in progress on observer",
-      .ob_str_user_error     = "OBE-00600: internal error code, arguments: -4554, rebalance task not in progress on observer"
+      .oracle_str_error      = "ORA-00600: internal error code, arguments: -4554, rebalance task not in progress on seekdb",
+      .oracle_str_user_error = "ORA-00600: internal error code, arguments: -4554, rebalance task not in progress on seekdb",
+      .ob_str_error          = "OBE-00600: internal error code, arguments: -4554, rebalance task not in progress on seekdb",
+      .ob_str_user_error     = "OBE-00600: internal error code, arguments: -4554, rebalance task not in progress on seekdb"
 };
 static const _error _error_OB_DATA_SOURCE_NOT_EXIST = {
       .error_name            = "OB_DATA_SOURCE_NOT_EXIST",
@@ -7202,12 +7202,12 @@ static const _error _error_OB_TENANT_RESOURCE_UNIT_EXIST = {
       .mysql_errno           = -1,
       .sqlstate              = "HY000",
       .str_error             = "tenant already has resource unit configured",
-      .str_user_error        = "tenant already has resource unit configured, tenant_id: %ld, observer: \'%s\'",
+      .str_user_error        = "tenant already has resource unit configured, tenant_id: %ld, seekdb: \'%s\'",
       .oracle_errno          = 600,
       .oracle_str_error      = "ORA-00600: internal error code, arguments: -4712, tenant already has resource unit configured",
-      .oracle_str_user_error = "ORA-00600: internal error code, arguments: -4712, tenant already has resource unit configured, tenant_id: %ld, observer: \'%s\'",
+      .oracle_str_user_error = "ORA-00600: internal error code, arguments: -4712, tenant already has resource unit configured, tenant_id: %ld, seekdb: \'%s\'",
       .ob_str_error          = "OBE-00600: internal error code, arguments: -4712, tenant already has resource unit configured",
-      .ob_str_user_error     = "OBE-00600: internal error code, arguments: -4712, tenant already has resource unit configured, tenant_id: %ld, observer: \'%s\'"
+      .ob_str_user_error     = "OBE-00600: internal error code, arguments: -4712, tenant already has resource unit configured, tenant_id: %ld, seekdb: \'%s\'"
 };
 static const _error _error_OB_ERR_DROP_TRUNCATE_PARTITION_REBUILD_INDEX = {
       .error_name            = "OB_ERR_DROP_TRUNCATE_PARTITION_REBUILD_INDEX",
@@ -27151,13 +27151,13 @@ static const _error _error_OB_CLOG_RECYCLE_BEFORE_ARCHIVE = {
       .error_solution        = "Contact OceanBase Support",
       .mysql_errno           = -1,
       .sqlstate              = "HY000",
-      .str_error             = "observer clog is recycled before archive",
-      .str_user_error        = "observer clog is recycled before archive",
+      .str_error             = "seekdb clog is recycled before archive",
+      .str_user_error        = "seekdb clog is recycled before archive",
       .oracle_errno          = 600,
-      .oracle_str_error      = "ORA-00600: internal error code, arguments: -9087, observer clog is recycled before archive",
-      .oracle_str_user_error = "ORA-00600: internal error code, arguments: -9087, observer clog is recycled before archive",
-      .ob_str_error          = "OBE-00600: internal error code, arguments: -9087, observer clog is recycled before archive",
-      .ob_str_user_error     = "OBE-00600: internal error code, arguments: -9087, observer clog is recycled before archive"
+      .oracle_str_error      = "ORA-00600: internal error code, arguments: -9087, seekdb clog is recycled before archive",
+      .oracle_str_user_error = "ORA-00600: internal error code, arguments: -9087, seekdb clog is recycled before archive",
+      .ob_str_error          = "OBE-00600: internal error code, arguments: -9087, seekdb clog is recycled before archive",
+      .ob_str_user_error     = "OBE-00600: internal error code, arguments: -9087, seekdb clog is recycled before archive"
 };
 static const _error _error_OB_SOURCE_TENANT_STATE_NOT_MATCH = {
       .error_name            = "OB_SOURCE_TENANT_STATE_NOT_MATCH",
@@ -36776,70 +36776,17 @@ int g_all_ob_errnos[2440] = {0, -4000, -4001, -4002, -4003, -4004, -4005, -4006,
     }
     return ret;
   }
-  const char *ob_oracle_strerror(const int err)
+  int ob_errpkt_errno(const int err, const bool /* is_oracle_mode - deprecated */)
   {
-    const char *ret = "Unknown error";
-    if (OB_LIKELY(0 >= err && err > -OB_MAX_ERROR_CODE)) {
-      if (!g_enable_ob_error_msg_style) {
-        ret = get_error(-err)->oracle_str_error;
-      } else {
-        ret = get_error(-err)->ob_str_error;
-      }
-      if (OB_UNLIKELY(NULL == ret || '\0' == ret[0]))
-      {
-        ret = "Unknown Error";
-      }
-    }
-    return ret;
+    return ob_mysql_errno_with_check(err);
   }
-  const char *ob_oracle_str_user_error(const int err)
+  const char *ob_errpkt_strerror(const int err, const bool /* is_oracle_mode - deprecated */)
   {
-    const char *ret = NULL;
-    if (OB_LIKELY(0 >= err && err > -OB_MAX_ERROR_CODE)) {
-      if (!g_enable_ob_error_msg_style) {
-        ret = get_error(-err)->oracle_str_user_error;
-      } else {
-        ret = get_error(-err)->ob_str_user_error;
-      }
-      if (OB_UNLIKELY(NULL == ret || '\0' == ret[0])) {
-        ret = NULL;
-      }
-    }
-    return ret;
+    return ob_strerror(err);
   }
-  int ob_oracle_errno(const int err)
+  const char *ob_errpkt_str_user_error(const int err, const bool /* is_oracle_mode - deprecated */)
   {
-    int ret = -1;
-    if (OB_ERR_PROXY_REROUTE == err) {
-      // Oracle Mode and MySQL mode should return same errcode for reroute sql
-      // thus we make the specialization here
-      ret = -1;
-    } else if (err >= OB_MIN_RAISE_APPLICATION_ERROR && err <= OB_MAX_RAISE_APPLICATION_ERROR) {
-      ret = err; // PL/SQL Raise Application Error
-    } else if (OB_LIKELY(0 >= err && err > -OB_MAX_ERROR_CODE)) {
-      ret = get_error(-err)->oracle_errno;
-    }
-    return ret;
-  }
-  int ob_oracle_errno_with_check(const int err)
-  {
-    int ret = ob_oracle_errno(err);
-    if (ret < 0) {
-      ret = -err;
-    }
-    return ret;
-  }
-  int ob_errpkt_errno(const int err, const bool is_oracle_mode)
-  {
-    return (is_oracle_mode ? ob_oracle_errno_with_check(err) : ob_mysql_errno_with_check(err));
-  }
-  const char *ob_errpkt_strerror(const int err, const bool is_oracle_mode)
-  {
-    return (is_oracle_mode ? ob_oracle_strerror(err) : ob_strerror(err));
-  }
-  const char *ob_errpkt_str_user_error(const int err, const bool is_oracle_mode)
-  {
-    return (is_oracle_mode ? ob_oracle_str_user_error(err) : ob_str_user_error(err));
+    return ob_str_user_error(err);
   }
 
 } // end namespace common

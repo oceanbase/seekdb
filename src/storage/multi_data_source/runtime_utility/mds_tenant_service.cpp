@@ -226,7 +226,6 @@ int ObTenantMdsService::for_each_ls_in_tenant(const ObFunction<int(ObLS &)> &op)
   } else if (MDS_FAIL(MTL(ObLSService*)->get_ls_iter(iter, ObLSGetMod::MDS_TABLE_MOD))) {
     MDS_LOG_NONE(WARN, "fail to get ls iterator");
   } else {
-    MDS_LOG_NONE(INFO, "ls service is valid");
     do {
       if (MDS_FAIL(iter->get_next(ls))) {
         if (OB_ITER_END != ret) {

@@ -7230,7 +7230,11 @@ int ObDDLService::generate_aux_index_schema_(
       index_schema.set_in_offline_ddl_white_list(true);
       nonconst_data_schema.set_in_offline_ddl_white_list(true);
     }
-
+    // create empty major for table 3,4
+    if (OB_FAIL(ret)) {
+    } else if (index_schema.is_vec_delta_buffer_type() || index_schema.is_hybrid_vec_index_log_type() || index_schema.is_vec_index_id_type()) {
+      index_schema.set_index_status(INDEX_STATUS_AVAILABLE);
+    }
     // for post-create hybrid vector index
     if (OB_FAIL(ret)) {
     } else if (gen_columns.empty()) {
@@ -7351,6 +7355,8 @@ int ObDDLService::create_aux_index(
     ObSEArray<ObColumnSchemaV2 *, 1> gen_columns;
     ObArenaAllocator allocator(lib::ObLabel("DdlTaskTmp"));
     ObDDLTaskRecord task_record;
+    ObDDLOperator ddl_operator(*schema_service_, *sql_proxy_);
+
     if (!arg.is_valid()) {
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("invalid argument", K(ret), K(arg));
@@ -7420,6 +7426,9 @@ int ObDDLService::create_aux_index(
         result.schema_generated_ = true;
         result.aux_table_id_ = index_table_id;
         result.ddl_task_id_ = OB_INVALID_ID; // no need to wait task
+      } else if (idx_schema->is_vec_delta_buffer_type() || idx_schema->is_hybrid_vec_index_log_type() || idx_schema->is_vec_index_id_type()) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("unexpected index status of delta buffer and index id table here", K(ret), KPC(idx_schema));
       } else { // 2. index schema exists && not available, create ddl task
         result.schema_generated_ = true;
         result.aux_table_id_ = index_table_id;
@@ -7456,6 +7465,9 @@ int ObDDLService::create_aux_index(
         LOG_WARN("failed to generate aux index schema", K(ret), K(create_index_arg));
       } else if (FALSE_IT(result.schema_generated_ = true)) {
       } else if (FALSE_IT(result.aux_table_id_ = index_schema.get_table_id())) {
+      } else if (index_schema.is_vec_delta_buffer_type() || index_schema.is_hybrid_vec_index_log_type() || index_schema.is_vec_index_id_type()) {
+        // no need to create ddl task
+        result.ddl_task_id_ = OB_INVALID_ID;
       } else if (OB_FAIL(create_aux_index_task_(data_schema,
                                                 &index_schema,
                                                 create_index_arg,
@@ -7582,6 +7594,8 @@ int ObDDLService::create_index_tablet(const ObTableSchema &index_schema,
     const uint64_t data_table_id = index_schema.get_data_table_id();
     const ObTableSchema *data_table_schema = NULL;
     const ObTablegroupSchema *data_tablegroup_schema = NULL; // keep NULL if no tablegroup
+    const bool is_vec_create_empty_major = index_schema.is_vec_delta_buffer_type() || index_schema.is_hybrid_vec_index_log_type() || index_schema.is_vec_index_id_type();
+
     if (OB_FAIL(table_creator.init(need_check_tablet_cnt))) {
       LOG_WARN("fail to init table creator", KR(ret));
     } else if (OB_FAIL(new_table_tablet_allocator.init())) {
@@ -7612,7 +7626,7 @@ int ObDDLService::create_index_tablet(const ObTableSchema &index_schema,
         ret = OB_TABLE_NOT_EXIST;
         LOG_WARN("data table schema not exists", KR(ret), K(data_table_id));
       } else if (OB_FAIL(schemas.push_back(&index_schema))
-        || OB_FAIL(need_create_empty_majors.push_back(false))) {
+        || OB_FAIL(need_create_empty_majors.push_back(false || is_vec_create_empty_major))) {
         LOG_WARN("failed to push_back", KR(ret), K(index_schema));
       } else if (OB_FAIL(new_table_tablet_allocator.prepare(trans, index_schema, data_tablegroup_schema))) {
         LOG_WARN("fail to prepare ls for index schema tablets", KR(ret));
@@ -21511,11 +21525,12 @@ int ObDDLService::reconstruct_index_schema(obrpc::ObAlterTableArg &alter_table_a
               LOG_WARN("fail to generate tablet id for hidden table", K(ret), K(new_index_schema));
             } else {
               bool is_exist = false;
+              const ObIndexStatus new_index_status = (new_index_schema.is_vec_delta_buffer_type() || new_index_schema.is_hybrid_vec_index_log_type() || new_index_schema.is_vec_index_id_type()) ? INDEX_STATUS_AVAILABLE : INDEX_STATUS_UNAVAILABLE;
               new_index_schema.set_max_used_column_id(max(
               new_index_schema.get_max_used_column_id(), hidden_table_schema.get_max_used_column_id()));
               new_index_schema.set_table_id(new_idx_tid);
               new_index_schema.set_data_table_id(hidden_table_schema.get_table_id());
-              new_index_schema.set_index_status(INDEX_STATUS_UNAVAILABLE);
+              new_index_schema.set_index_status(new_index_status);
               new_index_schema.set_tenant_id(hidden_table_schema.get_tenant_id());
               new_index_schema.set_database_id(hidden_table_schema.get_database_id());
               new_index_schema.set_table_state_flag(target_flag);
@@ -25757,7 +25772,8 @@ int ObDDLService::rebuild_table_schema_with_new_id(const ObTableSchema &orig_tab
                                                    ObSchemaService &schema_service,
                                                    ObIArray<ObTableSchema> &new_schemas,
                                                    ObArenaAllocator &allocator,
-                                                   const uint64_t define_user_id)
+                                                   const uint64_t define_user_id,
+                                                   const bool delete_unused_columns)
 {
   int ret = OB_SUCCESS;
   uint64_t orig_tid = orig_table_schema.get_table_id();
@@ -25768,10 +25784,11 @@ int ObDDLService::rebuild_table_schema_with_new_id(const ObTableSchema &orig_tab
   bool is_oracle_mode = false;
   if (OB_FAIL(new_table_schema.assign(orig_table_schema))) {
     LOG_WARN("fail to assign schema", K(ret));
-  } else if (OB_FAIL(delete_unused_columns_and_redistribute_schema(orig_table_schema,
-    false/*need_redistribute_column_id, to avoid column_id mismatched between data table and index ones.*/,
-    new_table_schema))) {
-    LOG_WARN("remove all unused columns internally failed", KR(ret));
+  } else if (delete_unused_columns
+             && OB_FAIL(delete_unused_columns_and_redistribute_schema(orig_table_schema,
+               false/*need_redistribute_column_id, to avoid column_id mismatched between data table and index ones.*/,
+               new_table_schema))) {
+    LOG_WARN("remove all unused columns internally failed", KR(ret), K(delete_unused_columns));
   } else if (OB_FAIL(get_tenant_schema_guard_with_version_in_inner_table(tenant_id, schema_guard))) {
     LOG_WARN("fail to get schema guard with version in inner table", K(ret), K(tenant_id));
   } else if (OB_FAIL(check_inner_stat())) {
@@ -26068,7 +26085,8 @@ int ObDDLService::create_table_like(const ObCreateTableLikeArg &arg)
                                                      *schema_service,
                                                      table_schemas,
                                                      allocator,
-                                                     arg.define_user_id_))) {
+                                                     arg.define_user_id_,
+                                                     true /* delete_unused_columns */))) {
           LOG_WARN("failed to rebuild table schema with new id", KR(ret));
         } else if (OB_FAIL(generate_object_id_for_partition_schemas(table_schemas))) {
           LOG_WARN("fail to generate object_id for partition schema", KR(ret), K(table_schemas));

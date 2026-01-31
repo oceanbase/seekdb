@@ -316,6 +316,10 @@ int ObMultipleMerge::get_access_ctx(ObTabletID tablet_id, ObTableAccessContext *
   int ret = OB_SUCCESS;
   if (tablet_id == access_ctx_->tablet_id_) {
     access_ctx = access_ctx_;
+  } else if (!extra_access_ctx_.created()) {
+    // extra_access_ctx_ is only created when fork/split info exists.
+    // Fall back to the main access_ctx_ to avoid OB_NOT_INIT from hash map.
+    access_ctx = access_ctx_;
   } else {
     int tmp_ret = extra_access_ctx_.get_refactored(tablet_id, access_ctx);
     if (OB_SUCCESS == tmp_ret && OB_NOT_NULL(access_ctx)) {
@@ -1964,14 +1968,14 @@ int ObMultipleMerge::refresh_table_on_demand()
       STORAGE_LOG(WARN, "fail to prepare read tables", K(ret));
     } else if (OB_FAIL(check_base_version(is_di_merge_scan))) {
       STORAGE_LOG(WARN, "di base snapshot version changed", K(ret));
+    } else if (OB_FAIL(build_extra_access_ctx())) {
+      LOG_WARN("fail to build access_cx for fork", K(ret));
     } else if (OB_FAIL(reset_tables())) {
       STORAGE_LOG(WARN, "fail to reset tables", K(ret));
     } else if (OB_UNLIKELY(access_param_->iter_param_.need_truncate_filter()) &&
                OB_FAIL(prepare_truncate_filter())) {
       LOG_WARN("failed to prepare truncate filter", K(ret));
     } else if (nullptr != block_row_store_ && FALSE_IT(block_row_store_->reuse())) {
-    } else if (OB_FAIL(build_extra_access_ctx())) {
-      LOG_WARN("fail to build access_cx for fork", K(ret));
     } else {
       refreshed = true;
     }

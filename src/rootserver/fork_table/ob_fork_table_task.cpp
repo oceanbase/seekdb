@@ -477,10 +477,8 @@ int ObForkTableTask::wait_data_complement(const ObDDLTaskStatus next_task_status
         break;
       } else if (!is_complete) {
         all_complete = false;
-        if (REACH_TIME_INTERVAL(10 * 1000 * 1000)) {
-          LOG_INFO("waiting for fork data complement", K(task_id_), K(tablet_id),
-              "dst_table_id", target_object_id_, "tablet_cnt", dst_tablet_ids.count());
-        }
+        LOG_INFO("waiting for fork data complement", K(task_id_), K(tablet_id),
+            "dst_table_id", target_object_id_, "tablet_cnt", dst_tablet_ids.count());
         // Do not block RS worker thread here. Return OB_EAGAIN to let scheduler reschedule later.
         break;
       }

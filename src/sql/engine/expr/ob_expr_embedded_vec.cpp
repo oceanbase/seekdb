@@ -156,8 +156,6 @@ int ObExprEmbeddedVec::cg_expr(
     } else if (data_datum->is_null() || model_datum->is_null() || url_datum->is_null() || user_key_datum->is_null() || sync_mode_datum->is_null() || dim_datum->is_null()) {
       // If any parameter is null, return null
       expr_datum.set_null();
-    } else if (sync_mode_datum->get_string().compare("IMMEDIATE") != 0) {
-      expr_datum.set_null();
     } else {
       ObString chunk_data = data_datum->get_string();
       if (OB_FAIL(pack_embedded_res(raw_ctx, eval_ctx, expr_datum, chunk_data))) {

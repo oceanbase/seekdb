@@ -1003,7 +1003,7 @@ int ObMPStmtPrexecute::response_fail_result(sql::ObSQLSessionInfo &session, int 
   for (int64_t i = 2; i < (arraybinding_row_->get_count() - 1); i++) {
     arraybinding_row_->get_cell(i).set_null();
   }
-  arraybinding_row_->get_cell(arraybinding_row_->get_count() - 1).set_varchar(ob_oracle_strerror(err_ret));
+  arraybinding_row_->get_cell(arraybinding_row_->get_count() - 1).set_varchar(ob_strerror(err_ret));
   if (OB_FAIL(response_row(session, *arraybinding_row_, arraybinding_columns_, false))) {
     LOG_WARN("fail to response fail row to client", K(ret));
   }
@@ -1052,7 +1052,7 @@ int ObMPStmtPrexecute::response_returning_rows(ObSQLSessionInfo &session,
       for (int i = 0; i < result_row->get_count(); i++) {
         arraybinding_row_->get_cell(i+2).set_null();
       }
-      arraybinding_row_->get_cell(arraybinding_row_->get_count() - 1).set_varchar(ob_oracle_strerror(ret));
+      arraybinding_row_->get_cell(arraybinding_row_->get_count() - 1).set_varchar(ob_strerror(ret));
       LOG_DEBUG("error occured before send arraybinding_row_", KPC(arraybinding_row_));
       if (OB_SUCCESS != (response_ret = response_row(session, *arraybinding_row_, arraybinding_columns_, false, &result.get_exec_context()))) {
         LOG_WARN("fail to response row to client", K(response_ret));

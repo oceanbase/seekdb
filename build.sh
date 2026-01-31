@@ -168,7 +168,6 @@ function do_build
       # Linux
       CMAKE_PATH="${TOOLS_DIR}/bin/cmake"
     fi
-    
     if [ -z "$CMAKE_PATH" ]; then
       echo_log "[NOTICE] Your workspace has not initialized dependencies, please append '--init' args to initialize dependencies"
       exit 1

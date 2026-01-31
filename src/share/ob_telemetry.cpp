@@ -21,7 +21,11 @@
 #include "share/config/ob_server_config.h"
 #include "share/ob_encryption_util.h"
 #include "common/ob_version_def.h"
+#ifdef __APPLE__
+#include <unistd.h>
+#else
 #include <curl/curl.h>
+#endif
 
 #define USING_LOG_PREFIX SHARE
 
@@ -199,8 +203,75 @@ int generate_telemetry_json(const char* reporter, const char* event_name, ObIAll
   return ret;
 }
 
-size_t discard(void* ptr, size_t size, size_t nmemb, void* userdata) {
+// macOS: Use system curl command to avoid libcurl ssl issues
+int send_telemetry_by_curl_cmd(const char *url)
+{
+  int ret = OB_SUCCESS;
+  // Use existing run/telemetry.json file which is already written by generate_telemetry_json()
+  char cmd[512];
+  snprintf(cmd, sizeof(cmd),
+           "curl -s -X POST -H \"Content-Type: application/json\" "
+           "-d @%s --connect-timeout 10 -m 15 \"%s\" >/dev/null 2>&1",
+           TELEMETRY_FILE_NAME, url);
+
+  int sys_ret = system(cmd);
+  if (sys_ret != 0) {
+    ret = OB_CURL_ERROR;
+    LOG_ERROR("Failed to execute curl command for telemetry", K(ret), K(sys_ret), K(url));
+  }
+  return ret;
+}
+// Linux: Use libcurl
+static size_t discard(void* ptr, size_t size, size_t nmemb, void* userdata) {
   return size * nmemb;
+}
+
+int send_telemetry_by_libcurl(const char *url, const ObString &json_str)
+{
+  int ret = OB_SUCCESS;
+  CURL *curl = curl_easy_init();
+  if (curl == nullptr) {
+    LOG_WARN("Failed to init curl");
+    ret = OB_CURL_ERROR;
+  } else {
+    CURLcode cc = CURLE_OK;
+    struct curl_slist *list = NULL;
+    // set post options
+    if (NULL == (list = curl_slist_append(list, "Content-Type: application/json"))) {
+      ret = OB_CURL_ERROR;
+      LOG_WARN("append list failed", K(ret));
+    } else {
+      curl_easy_setopt(curl, CURLOPT_URL, url);
+      curl_easy_setopt(curl, CURLOPT_HTTPHEADER, list);
+      curl_easy_setopt(curl, CURLOPT_POST, 1L);
+      curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, json_str.length());
+      curl_easy_setopt(curl, CURLOPT_POSTFIELDS, json_str.ptr());
+      curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, discard);
+      curl_easy_setopt(curl, CURLOPT_WRITEDATA, NULL);
+
+      // set other options
+      const int64_t no_signal = 1;
+      const int64_t timeout_ms = 1000; // 1s
+      const int64_t no_delay = 1;
+      const int64_t max_redirect = 3; // set max redirect
+      const int64_t follow_location = 1; // for http redirect 301 302
+      curl_easy_setopt(curl, CURLOPT_NOSIGNAL, no_signal);
+      curl_easy_setopt(curl, CURLOPT_TIMEOUT_MS, timeout_ms);
+      curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT_MS, timeout_ms);
+      curl_easy_setopt(curl, CURLOPT_TCP_NODELAY, no_delay);
+      curl_easy_setopt(curl, CURLOPT_MAXREDIRS, max_redirect);
+      curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, follow_location);
+
+      // send request and do not care about the http code
+      if (CURLE_OK != (cc = curl_easy_perform(curl))) {
+        LOG_WARN("Failed to perform curl", K(cc));
+        ret = OB_CURL_ERROR;
+      }
+      curl_slist_free_all(list);
+    }
+    curl_easy_cleanup(curl);
+  }
+  return ret;
 }
 
 int send_telemetry(const char *url, const ObString &json_str)
@@ -210,48 +281,12 @@ int send_telemetry(const char *url, const ObString &json_str)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("Invalid argument", K(ret), KP(url), K(json_str));
   } else {
-    CURL *curl = curl_easy_init();
-    if (curl == nullptr) {
-      LOG_WARN("Failed to init curl");
-      ret = OB_CURL_ERROR;
-    } else {
-      CURLcode cc = CURLE_OK;
-      struct curl_slist *list = NULL;
-      // set post options
-      if (NULL == (list = curl_slist_append(list, "Content-Type: application/json"))) {
-        ret = OB_CURL_ERROR;
-        LOG_WARN("append list failed", K(ret));
-      } else {
-        curl_easy_setopt(curl, CURLOPT_URL, url);
-        curl_easy_setopt(curl, CURLOPT_HTTPHEADER, list);
-        curl_easy_setopt(curl, CURLOPT_POST, 1L);
-        curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, json_str.length());
-        curl_easy_setopt(curl, CURLOPT_POSTFIELDS, json_str.ptr());
-        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, discard);
-        curl_easy_setopt(curl, CURLOPT_WRITEDATA, NULL);
-
-        // set other options
-        const int64_t no_signal = 1;
-        const int64_t timeout_ms = 1000; // 1s
-        const int64_t no_delay = 1;
-        const int64_t max_redirect = 3; // set max redirect
-        const int64_t follow_location = 1; // for http redirect 301 302
-        curl_easy_setopt(curl, CURLOPT_NOSIGNAL, no_signal);
-        curl_easy_setopt(curl, CURLOPT_TIMEOUT_MS, timeout_ms);
-        curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT_MS, timeout_ms);
-        curl_easy_setopt(curl, CURLOPT_TCP_NODELAY, no_delay);
-        curl_easy_setopt(curl, CURLOPT_MAXREDIRS, max_redirect);
-        curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, follow_location);
-
-        // send request and do not care about the http code
-        if (CURLE_OK != (cc = curl_easy_perform(curl))) {
-          LOG_WARN("Failed to perform curl", K(cc));
-          ret = OB_CURL_ERROR;
-        }
-        curl_slist_free_all(list);
-      }
-      curl_easy_cleanup(curl);
-    }
+#ifdef __APPLE__
+    // macOS uses the telemetry file directly, json_str already written to TELEMETRY_FILE_NAME
+    ret = send_telemetry_by_curl_cmd(url);
+#else
+    ret = send_telemetry_by_libcurl(url, json_str);
+#endif
   }
   return ret;
 }

@@ -22,14 +22,140 @@
 #include "share/schema/ob_multi_version_schema_service.h"
 #include "share/schema/ob_schema_service.h"
 #include "share/ob_fork_table_util.h"
+#include "lib/utility/utility.h"
 #include "rootserver/ob_root_service.h"
 #include "rootserver/ddl_task/ob_ddl_task.h"
 #include "lib/mysqlclient/ob_mysql_transaction.h"
+#include "share/ob_domain_index_builder_util.h"
+#include "share/ob_fts_index_builder_util.h"
+#include "share/vector_index/ob_vector_index_util.h"
+#include "lib/hash/ob_hashset.h"
 
 using namespace oceanbase;
 using namespace oceanbase::share;
 using namespace oceanbase::common;
 using namespace oceanbase::share::schema;
+
+int ObForkTableUtil::collect_complete_domain_index_schemas(
+    ObSchemaGetterGuard &schema_guard,
+    const uint64_t tenant_id,
+    const ObTableSchema &table_schema,
+    hash::ObHashMap<uint64_t, ObTableSchema> &complete_index_schema_map)
+{
+  int ret = OB_SUCCESS;
+  ObArray<ObAuxTableMetaInfo> simple_index_infos;
+  ObSArray<ObTableSchema> shared_schema_array;
+  ObSArray<ObTableSchema> domain_schema_array;
+  ObSArray<ObTableSchema> aux_schema_array;
+  ObArenaAllocator allocator(lib::ObLabel("ForkTableIdx"));
+  ObSArray<ObTableSchema> complete_index_schemas;
+
+  if (OB_FAIL(table_schema.get_simple_index_infos(simple_index_infos))) {
+    LOG_WARN("fail to get simple index infos", K(ret), K(table_schema));
+  } else {
+    if (complete_index_schema_map.created()) {
+      if (OB_FAIL(complete_index_schema_map.clear())) {
+        LOG_WARN("fail to clear complete index schema map", K(ret));
+      }
+    } else if (OB_FAIL(complete_index_schema_map.create(simple_index_infos.count() * 2 + 8,
+                                                        lib::ObLabel("ForkTableIdxMap")))) {
+      LOG_WARN("fail to create complete index schema map", K(ret), K(simple_index_infos.count()));
+    }
+    for (int64_t i = 0; OB_SUCC(ret) && i < simple_index_infos.count(); ++i) {
+      const ObTableSchema *index_schema = nullptr;
+      const uint64_t index_table_id = simple_index_infos.at(i).table_id_;
+      if (OB_INVALID_ID == index_table_id) {
+        continue;
+      } else if (OB_FAIL(schema_guard.get_table_schema(tenant_id, index_table_id, index_schema))) {
+        LOG_WARN("get index table schema failed", K(ret), K(tenant_id), K(index_table_id));
+      } else if (OB_ISNULL(index_schema)) {
+        ret = OB_TABLE_NOT_EXIST;
+        LOG_WARN("index table schema is null", K(ret), K(tenant_id), K(index_table_id));
+      } else if (index_schema->is_in_recyclebin() ||
+                 INDEX_STATUS_AVAILABLE != index_schema->get_index_status()) {
+        continue;
+      } else {
+        HEAP_VAR(ObTableSchema, tmp_schema) {
+          const ObIndexType index_type = index_schema->get_index_type();
+          if (OB_FAIL(tmp_schema.assign(*index_schema))) {
+            LOG_WARN("fail to assign index schema", K(ret), K(index_table_id));
+          } else if (tmp_schema.is_rowkey_doc_id() ||
+                     tmp_schema.is_doc_id_rowkey() ||
+                     tmp_schema.is_vec_rowkey_vid_type() ||
+                     tmp_schema.is_vec_vid_rowkey_type()) {
+            if (OB_FAIL(shared_schema_array.push_back(tmp_schema))) {
+              LOG_WARN("fail to push back shared schema", K(ret), K(index_table_id));
+            }
+          } else if (tmp_schema.is_fts_index_aux() ||
+                     tmp_schema.is_multivalue_index_aux() ||
+                     tmp_schema.is_vec_domain_index()) {
+            if (OB_FAIL(domain_schema_array.push_back(tmp_schema))) {
+              LOG_WARN("fail to push back domain schema", K(ret), K(index_table_id));
+            }
+          } else if (share::schema::is_fts_doc_word_aux(index_type) ||
+                     share::schema::is_vec_index_id_type(index_type) ||
+                     share::schema::is_vec_index_snapshot_data_type(index_type) ||
+                     share::schema::is_built_in_vec_ivf_index(index_type) ||
+                     share::schema::is_hybrid_vec_index_embedded_type(index_type)) {
+            if (OB_FAIL(aux_schema_array.push_back(tmp_schema))) {
+              LOG_WARN("fail to push back aux schema", K(ret), K(index_table_id));
+            }
+          }
+        }
+      }
+    }
+  }
+
+  if (OB_SUCC(ret) && !domain_schema_array.empty()) {
+    bool need_doc_id = false;
+    bool need_vid = false;
+    if (OB_FAIL(ObFtsIndexBuilderUtil::check_need_doc_id(table_schema, need_doc_id))) {
+      LOG_WARN("fail to check need doc id", K(ret));
+    } else if (OB_FAIL(ObVectorIndexUtil::check_need_vid(table_schema, need_vid))) {
+      LOG_WARN("fail to check need vid", K(ret));
+    } else if (OB_FAIL(ObDomainIndexBuilderUtil::retrieve_complete_domain_index(
+                 shared_schema_array,
+                 domain_schema_array,
+                 aux_schema_array,
+                 allocator,
+                 table_schema.get_table_id(),
+                 complete_index_schemas,
+                 need_doc_id,
+                 need_vid))) {
+      LOG_WARN("fail to retrieve complete domain index", K(ret), K(table_schema.get_table_id()));
+    } else {
+      for (int64_t i = 0; OB_SUCC(ret) && i < complete_index_schemas.count(); ++i) {
+        const ObTableSchema &schema = complete_index_schemas.at(i);
+        if (OB_FAIL(complete_index_schema_map.set_refactored(schema.get_table_id(), schema))) {
+          if (OB_HASH_EXIST == ret) {
+            ret = OB_SUCCESS;
+          } else {
+            LOG_WARN("fail to set complete index schema", K(ret), K(schema.get_table_id()));
+          }
+        }
+      }
+    }
+  }
+
+  return ret;
+}
+
+bool ObForkTableUtil::is_domain_or_aux_index(const ObTableSchema &index_schema)
+{
+  const ObIndexType index_type = index_schema.get_index_type();
+  return index_schema.is_rowkey_doc_id()
+         || index_schema.is_doc_id_rowkey()
+         || index_schema.is_vec_rowkey_vid_type()
+         || index_schema.is_vec_vid_rowkey_type()
+         || index_schema.is_fts_index_aux()
+         || index_schema.is_multivalue_index_aux()
+         || index_schema.is_vec_domain_index()
+         || share::schema::is_fts_doc_word_aux(index_type)
+         || share::schema::is_vec_index_id_type(index_type)
+         || share::schema::is_vec_index_snapshot_data_type(index_type)
+         || share::schema::is_built_in_vec_ivf_index(index_type)
+         || share::schema::is_hybrid_vec_index_embedded_type(index_type);
+}
 
 int ObForkTableUtil::collect_tablet_ids_from_table(
     schema::ObSchemaGetterGuard &schema_guard,
@@ -105,6 +231,14 @@ int ObForkTableUtil::collect_index_tablet_ids(
   if (OB_FAIL(table_schema.get_simple_index_infos(simple_index_infos))) {
     LOG_WARN("get simple index infos failed", K(ret));
   } else {
+    hash::ObHashMap<uint64_t, ObTableSchema> complete_index_schema_map;
+    if (OB_FAIL(ObForkTableUtil::collect_complete_domain_index_schemas(
+            schema_guard,
+            tenant_id,
+            table_schema,
+            complete_index_schema_map))) {
+      LOG_WARN("fail to collect complete domain index schemas", K(ret), K(table_schema.get_table_id()));
+    }
     for (int64_t i = 0; OB_SUCC(ret) && i < simple_index_infos.count(); ++i) {
       const ObTableSchema *index_schema = nullptr;
       const uint64_t index_table_id = simple_index_infos.at(i).table_id_;
@@ -117,6 +251,27 @@ int ObForkTableUtil::collect_index_tablet_ids(
       } else if (index_schema->is_in_recyclebin() ||
                  INDEX_STATUS_AVAILABLE != index_schema->get_index_status()) {
         // Skip indexes not yet built or already recycled to keep tablet counts aligned.
+        continue;
+      } else if (ObForkTableUtil::is_domain_or_aux_index(*index_schema)) {
+        ObTableSchema aux_index_schema;
+        int tmp_ret = complete_index_schema_map.get_refactored(index_table_id, aux_index_schema);
+        if (OB_HASH_NOT_EXIST == tmp_ret) {
+          // skip incomplete domain/aux index
+        } else if (OB_SUCCESS != tmp_ret) {
+          ret = tmp_ret;
+          LOG_WARN("failed to get complete domain index schema", K(ret), K(index_table_id));
+        } else {
+          ObSEArray<ObTabletID, 4> index_tablet_ids;
+          if (OB_FAIL(aux_index_schema.get_tablet_ids(index_tablet_ids))) {
+            LOG_WARN("failed to get index tablet ids", K(ret), K(aux_index_schema.get_table_id()));
+          } else {
+            for (int64_t j = 0; OB_SUCC(ret) && j < index_tablet_ids.count(); ++j) {
+              if (OB_FAIL(tablet_ids.push_back(index_tablet_ids.at(j)))) {
+                LOG_WARN("failed to push back index tablet id", K(ret));
+              }
+            }
+          }
+        }
         continue;
       } else {
         ObSEArray<ObTabletID, 4> index_tablet_ids;
@@ -215,20 +370,44 @@ int ObForkTableUtil::collect_table_ids_from_table(
     if (OB_FAIL(table_schema.get_simple_index_infos(simple_index_infos))) {
       LOG_WARN("fail to get simple index infos", K(ret), K(table_schema));
     } else {
-      for (int64_t i = 0; OB_SUCC(ret) && i < simple_index_infos.count(); ++i) {
-        const ObTableSchema *index_schema = nullptr;
-        const uint64_t index_table_id = simple_index_infos.at(i).table_id_;
-        if (OB_INVALID_ID == index_table_id) {
-        } else if (OB_FAIL(schema_guard.get_table_schema(tenant_id, index_table_id, index_schema))) {
-          LOG_WARN("get index table schema failed", K(ret), K(tenant_id), K(index_table_id));
-        } else if (OB_ISNULL(index_schema)) {
-          ret = OB_TABLE_NOT_EXIST;
-          LOG_WARN("index table schema is null", K(ret), K(tenant_id), K(index_table_id));
-        } else if (index_schema->is_in_recyclebin() ||
-                   INDEX_STATUS_AVAILABLE != index_schema->get_index_status()) {
-          continue;
-        } else if (OB_FAIL(table_ids.push_back(index_table_id))) {
-          LOG_WARN("fail to push back index table id", K(ret), K(index_table_id));
+      hash::ObHashMap<uint64_t, ObTableSchema> complete_index_schema_map;
+      if (OB_FAIL(ObForkTableUtil::collect_complete_domain_index_schemas(
+              schema_guard,
+              tenant_id,
+              table_schema,
+              complete_index_schema_map))) {
+        LOG_WARN("fail to collect complete domain index schemas", K(ret), K(table_schema.get_table_id()));
+      } else {
+        for (int64_t i = 0; OB_SUCC(ret) && i < simple_index_infos.count(); ++i) {
+          const ObTableSchema *index_schema = nullptr;
+          const uint64_t index_table_id = simple_index_infos.at(i).table_id_;
+          if (OB_INVALID_ID == index_table_id) {
+            continue;
+          } else if (OB_FAIL(schema_guard.get_table_schema(tenant_id, index_table_id, index_schema))) {
+            LOG_WARN("get index table schema failed", K(ret), K(tenant_id), K(index_table_id));
+          } else if (OB_ISNULL(index_schema)) {
+            ret = OB_TABLE_NOT_EXIST;
+            LOG_WARN("index table schema is null", K(ret), K(tenant_id), K(index_table_id));
+          } else if (index_schema->is_in_recyclebin() ||
+                     INDEX_STATUS_AVAILABLE != index_schema->get_index_status()) {
+            continue;
+          } else if (ObForkTableUtil::is_domain_or_aux_index(*index_schema)) {
+            ObTableSchema aux_index_schema;
+            int tmp_ret = complete_index_schema_map.get_refactored(index_table_id, aux_index_schema);
+            if (OB_HASH_NOT_EXIST == tmp_ret) {
+              // skip incomplete domain/aux index
+            } else if (OB_SUCCESS != tmp_ret) {
+              ret = tmp_ret;
+              LOG_WARN("failed to get complete domain index schema", K(ret), K(index_table_id));
+            } else {
+              if (OB_FAIL(table_ids.push_back(index_table_id))) {
+                LOG_WARN("fail to push back domain index table id", K(ret), K(index_table_id));
+              }
+            }
+            continue;
+          } else if (OB_FAIL(table_ids.push_back(index_table_id))) {
+            LOG_WARN("fail to push back index table id", K(ret), K(index_table_id));
+          }
         }
       }
     }
@@ -286,12 +465,41 @@ int ObForkTableUtil::obtain_snapshot(
     LOG_WARN("failed to convert snapshot", K(ret), K(new_fetched_snapshot));
   } else if (OB_FAIL(ObForkTableUtil::collect_tablet_ids_from_table(schema_guard, tenant_id, data_table_schema, tablet_ids))) {
     LOG_WARN("fail to collect tablet ids", K(ret), K(data_table_schema));
-  } else if (OB_FAIL(ddl_service.get_snapshot_mgr().batch_acquire_snapshot(
-            trans, SNAPSHOT_FOR_DDL, tenant_id, data_table_schema.get_schema_version(), snapshot_scn, nullptr, tablet_ids))) {
-    LOG_WARN("batch acquire snapshot failed", K(ret), K(tablet_ids));
   } else {
-    LOG_INFO("hold snapshot finished", K(snapshot_scn), K(schema_version), "tablet_cnt", tablet_ids.count());
-    LOG_DEBUG("hold snapshot detail", K(snapshot_scn), K(schema_version), K(tablet_ids));
+    const int64_t retry_interval_us = 10 * 1000; // 10ms
+    int64_t retry_count = 0;
+    while (OB_SUCC(ret)) {
+      if (OB_FAIL(ddl_service.get_snapshot_mgr().batch_acquire_snapshot(
+              trans, SNAPSHOT_FOR_DDL, tenant_id, data_table_schema.get_schema_version(),
+              snapshot_scn, nullptr, tablet_ids))) {
+        if (OB_ERR_EXCLUSIVE_LOCK_CONFLICT_NOWAIT == ret) {
+          const bool has_timeout = THIS_WORKER.is_timeout_ts_valid();
+          const bool timeouted = has_timeout ? THIS_WORKER.is_timeout() : true;
+          if (timeouted) {
+            LOG_WARN("batch acquire snapshot timeout on nowait conflict",
+                     KR(ret), K(tenant_id), K(retry_count), K(has_timeout), K(tablet_ids));
+          } else {
+            if (REACH_TIME_INTERVAL(1000 * 1000)) { // 1s
+              LOG_INFO("retry batch acquire snapshot on nowait conflict",
+                       KR(ret), K(tenant_id), K(retry_count));
+            }
+	    // clear last error to keep transaction usable for next retry
+            trans.reset_last_error();
+            ret = OB_SUCCESS;
+            ++retry_count;
+            ob_usleep(retry_interval_us);
+            continue;
+          }
+        } else {
+          LOG_WARN("batch acquire snapshot failed", K(ret), K(tablet_ids));
+        }
+      }
+      break;
+    }
+    if (OB_SUCC(ret)) {
+      LOG_INFO("hold snapshot finished", K(snapshot_scn), K(schema_version), "tablet_cnt", tablet_ids.count());
+      LOG_DEBUG("hold snapshot detail", K(snapshot_scn), K(schema_version), K(tablet_ids));
+    }
   }
   return ret;
 }

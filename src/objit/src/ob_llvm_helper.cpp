@@ -1992,7 +1992,7 @@ int ObLLVMHelper::get_llvm_type(common::ObObjType obj_type, ObLLVMType &type)
   } else {
     llvm::LLVMContext &ctx = jc_->get_context();
     llvm::Type *llvm_type = nullptr;
-    
+
     // Handle pointer types separately to avoid variadic function pointer issues
     // In LLVM 17 with opaque pointers, all pointer types should use the same base ptr type
     switch (obj_type) {
@@ -2019,7 +2019,7 @@ int ObLLVMHelper::get_llvm_type(common::ObObjType obj_type, ObLLVMType &type)
         }
         break;
     }
-    
+
     if (OB_SUCC(ret) && OB_NOT_NULL(llvm_type)) {
       type.set_v(llvm_type);
     } else if (OB_SUCC(ret)) {

@@ -4,24 +4,24 @@ GREEN='\033[32m'
 NC="\033[0m"
 
 if [ "$1" -eq 0 ] 2>/dev/null || [ "$1" = "remove" ] || [ "$1" = "purge" ]; then
-    clean_script="/var/lib/oceanbase/seekdb_clean.sh"
+    clean_script="/var/lib/seekdb/seekdb_clean.sh"
 
     # Ensure the directory exists
-    mkdir -p /var/lib/oceanbase
+    mkdir -p /var/lib/seekdb
 
     # Create the clean script file if it doesn't exist
     if [ ! -f "$clean_script" ]; then
         echo "#!/bin/bash" > "$clean_script"
-        echo "# SeekDB cleanup script" >> "$clean_script"
-        echo "# This script will clean all SeekDB configuration and data files" >> "$clean_script"
+        echo "# seekdb cleanup script" >> "$clean_script"
+        echo "# This script will clean all seekdb configuration and data files" >> "$clean_script"
     fi
 
-    echo "rm -rf /var/lib/oceanbase" >> "$clean_script"
+    echo "rm -rf /var/lib/seekdb" >> "$clean_script"
     echo "echo OK" >> "$clean_script"
 
     # Make the script executable
     chmod +x "$clean_script"
 
     echo "Clean seekdb script can clean all configuration files and all data files."
-    echo -e "${GREEN}To clean SeekDB${NC} : bash /var/lib/oceanbase/seekdb_clean.sh"
+    echo -e "${GREEN}To clean seekdb${NC} : bash /var/lib/seekdb/seekdb_clean.sh"
 fi

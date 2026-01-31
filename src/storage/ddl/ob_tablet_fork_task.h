@@ -28,18 +28,21 @@
 #include "storage/blocksstable/index_block/ob_index_block_builder.h"
 #include "storage/ob_storage_schema.h"
 #include "storage/tablet/ob_tablet_obj_load_helper.h"
+#include "storage/tablet/ob_tablet_member_wrapper.h"
 #include "lib/oblog/ob_log_module.h"
 #include "storage/tx_storage/ob_ls_handle.h" // For ObLSHandle
 #include "storage/tablet/ob_tablet_create_delete_helper.h"
 #include "lib/lock/ob_mutex.h"
 #include "storage/ddl/ob_tablet_rebuild_util.h"
 #include "common/ob_tablet_id.h"
+#include "storage/tablet/ob_tablet_table_store_iterator.h"
 
 namespace oceanbase
 {
 namespace storage
 {
 class ObTableForkInfo;
+struct ObMigrationTabletParam;
 
 struct ObForkScanParam final
 {
@@ -171,6 +174,8 @@ public:
   ObLSHandle ls_handle_;
   ObTabletHandle src_tablet_handle_;
   ObTabletHandle dst_tablet_handle_;
+  ObTabletMemberWrapper<ObTabletTableStore> snapshot_table_store_;
+  ObTableStoreIterator table_store_iterator_;
   INDEX_BUILDER_MAP index_builder_map_;
   common::hash::ObHashMap<ObITable::TableKey, ObStorageSchema*> clipped_schemas_map_;
   ObTablesHandleArray created_sstable_handles_;
@@ -285,6 +290,7 @@ private:
       const int64_t ls_rebuild_seq,
       const ObLSHandle &ls_handle,
       const ObTabletHandle &src_tablet_handle,
+      const ObTabletHandle &dst_tablet_handle,
       const common::ObTabletID &dst_tablet_id,
       const ObTablesHandleArray &tables_handle,
       const compaction::ObMergeType &merge_type);

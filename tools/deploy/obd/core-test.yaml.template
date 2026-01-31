@@ -1,4 +1,4 @@
-oceanbase-ce:
+seekdb:
 {{%% SERVERS %%}}
   tag: latest
   include: obd/observer.include.yaml

@@ -131,7 +131,7 @@ void *ObTenantVectorAllocator::alloc(const int64_t size, const ObMemAttr &attr)
 }
 
 
-void *ObVsagMemContext::Allocate(uint64_t size) 
+void *ObVsagMemContext::Allocate(uint64_t size)
 {
   void *ret_ptr = nullptr;
   int ret = OB_SUCCESS;

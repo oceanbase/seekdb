@@ -117,13 +117,17 @@ int ObMicroBlockRowLockChecker::get_next_row(const ObDatumRow *&row)
     memtable::ObMvccAccessCtx &ctx = context_->store_ctx_->mvcc_acc_ctx_;
     const transaction::ObTransID &read_trans_id = ctx.get_tx_id();
     const bool is_major_sstable = sstable_->is_major_sstable() || sstable_->is_ddl_sstable();
+    const bool is_fork_ctx = ctx.is_fork_ctx_;
+    const int64_t fork_snapshot_version = snapshot_version_.get_val_for_tx();
     int64_t trans_version = INT64_MAX;
     int64_t current;
     row = &row_;
     ObStoreRowLockState *lock_state = nullptr;
     bool filtered_by_truncate = false;
+    bool filtered_by_fork = false;
     while (OB_SUCC(ret)) {
       filtered_by_truncate = false;
+      filtered_by_fork = false;
       if (OB_FAIL(inner_get_next_row(current, lock_state))) {
         if (OB_UNLIKELY(OB_ITER_END != ret)) {
           LOG_WARN("Failed to get next row", K(ret), K_(macro_id), K(is_major_sstable));
@@ -152,6 +156,22 @@ int ObMicroBlockRowLockChecker::get_next_row(const ObDatumRow *&row)
                                                               sstable_->get_end_scn(),
                                                               uncommited_lock_state))) {
           } else if (FALSE_IT(trans_version = uncommited_lock_state.trans_version_.get_val_for_tx())) {
+          } else if (is_fork_ctx) {
+            // In fork context: check if the row is truly committed and visible
+            if (!uncommited_lock_state.is_lock_decided()) {
+              // Transaction state not decided yet (still running or aborted), skip
+              filtered_by_fork = true;
+            } else if (uncommited_lock_state.is_locked_) {
+              // Still locked by active transaction, skip in fork context
+              filtered_by_fork = true;
+            } else if (trans_version > fork_snapshot_version) {
+              // Committed after fork snapshot, not visible to fork
+              filtered_by_fork = true;
+            } else {
+              // Committed before fork snapshot, visible to fork
+              *lock_state = uncommited_lock_state;
+              lock_state->lock_dml_flag_ = row_header->get_row_flag().get_dml_flag();
+            }
           } else if (OB_UNLIKELY(nullptr != context_->truncate_part_filter_) &&
                      transaction::is_effective_trans_version(trans_version) &&
                      OB_FAIL(check_truncate_part_filter(current,
@@ -168,6 +188,10 @@ int ObMicroBlockRowLockChecker::get_next_row(const ObDatumRow *&row)
                    OB_FAIL(check_truncate_part_filter(current, 0/*trans_version*/, row_header->get_row_multi_version_flag().is_ghost_row(), filtered_by_truncate))) {
           LOG_WARN("failed to check truncate part filter", K(ret), K(current), K(trans_version), K(is_major_sstable));
         } else if (filtered_by_truncate) {
+        } else if (is_fork_ctx && trans_version > fork_snapshot_version) {
+          // In fork context, skip committed rows with trans_version > fork_snapshot_version
+          // These rows were written after the fork point and should not be visible
+          filtered_by_fork = true;
         } else if (OB_FAIL(lock_state->trans_version_.convert_for_tx(trans_version))) {
           LOG_ERROR("convert failed", K(ret), K(trans_version));
         } else {
@@ -181,7 +205,7 @@ int ObMicroBlockRowLockChecker::get_next_row(const ObDatumRow *&row)
         lock_state->trans_version_ = sstable_->get_end_scn();
         lock_state->lock_dml_flag_ = blocksstable::ObDmlFlag::DF_INSERT;
       }
-      if (OB_SUCC(ret) && !filtered_by_truncate) {
+      if (OB_SUCC(ret) && !filtered_by_truncate && !filtered_by_fork) {
         bool need_stop = false;
         if (is_major_sstable) {
           check_row_in_major_sstable(need_stop);

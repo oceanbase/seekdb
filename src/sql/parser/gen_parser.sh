@@ -43,6 +43,25 @@ fi
 
 md5sum_value=$(md5sum "$TEMP_FILE" | awk '{ print $1 }')
 
+# Check if any required output files are missing.
+outputs_missing() {
+  local required_files=(
+    "$CURDIR/ftsparser_tab.c"
+    "$CURDIR/ftsparser_tab.h"
+    "$CURDIR/ftsblex_lex.c"
+    "$CURDIR/sql_parser_mysql_mode_tab.c"
+    "$CURDIR/sql_parser_mysql_mode_tab.h"
+    "$CURDIR/sql_parser_mysql_mode_lex.c"
+    "$CURDIR/type_name.c"
+  )
+  for file in "${required_files[@]}"; do
+    if [[ ! -s "$file" ]]; then
+      return 0
+    fi
+  done
+  return 1
+}
+
 bison_parser() {
 BISON_OUTPUT="$(bison -v -Werror -d $1 -o $2 2>&1)"
 BISON_RETURN="$?"
@@ -308,7 +327,7 @@ echo "$md5sum_value" > $CACHE_MD5_FILE
 if [[ -n "$NEED_PARSER_CACHE" && "$NEED_PARSER_CACHE" == "ON" ]]; then
     echo "generate sql parser with cache"
     origin_md5sum_value=$(<$CACHE_MD5_FILE)
-    if [[ "$md5sum_value" == "$origin_md5sum_value" ]]; then 
+    if [[ "$md5sum_value" == "$origin_md5sum_value" ]] && ! outputs_missing; then
       echo "hit the md5 cache"
     else
       generate_parser

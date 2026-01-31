@@ -1,8 +1,8 @@
 #!/bin/bash
 echo "execute pre install script"
-version=@OceanBase_CE_VERSION@
+version=@OceanBase_VERSION@
 
 # Check if this is an upgrade (RPM: $1 >= 2, DEB: $1 = "upgrade")
-if ( [ "$1" = "upgrade" ] || [ "$1" -ge 2 ] ) 2>/dev/null && [ -f /etc/oceanbase/seekdb.cnf ]; then
-    cp /etc/oceanbase/seekdb.cnf /tmp/seekdb.cnf.bak
+if ( [ "$1" = "upgrade" ] || [ "$1" -ge 2 ] ) 2>/dev/null && [ -f /etc/seekdb/seekdb.cnf ]; then
+    cp /etc/seekdb/seekdb.cnf /tmp/seekdb.cnf.bak
 fi

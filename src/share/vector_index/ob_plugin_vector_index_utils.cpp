@@ -1829,7 +1829,8 @@ ObAdapterCreateType ObPluginVectorIndexUtils::index_type_to_create_type(schema::
   return create_type;
 }
 
-int ObPluginVectorIndexUtils::get_vector_index_prefix(const ObTableSchema &index_schema,
+int ObPluginVectorIndexUtils::get_vector_index_prefix_inner(const ObTableSchema &index_schema,
+                                                      const ObString index_name,
                                                       ObString &prefix)
 {
   int ret = OB_SUCCESS;
@@ -1842,8 +1843,7 @@ int ObPluginVectorIndexUtils::get_vector_index_prefix(const ObTableSchema &index
     LOG_WARN("unexpected vector index type, only support get none share table prefix", 
       K(ret), K(index_schema));
   } else {
-    ObString tmp_table_name = index_schema.get_table_name();
-    const int64_t table_name_len = tmp_table_name.length();
+    const int64_t table_name_len = index_name.length();
 
     const char* delta_buffer_table = ObVecIndexBuilderUtil::DELTA_BUFFER_TABLE_NAME_SUFFIX;
     const char* index_id_table = ObVecIndexBuilderUtil::INDEX_ID_TABLE_NAME_SUFFIX;
@@ -1867,9 +1867,33 @@ int ObPluginVectorIndexUtils::get_vector_index_prefix(const ObTableSchema &index
       LOG_WARN("unexpected vector index type", K(ret), K(index_schema));
     }
     if (OB_SUCC(ret)) {
-      prefix.assign_ptr(tmp_table_name.ptr(), prefix_len);
-      LOG_INFO("get_index_prefix", K(prefix), K(tmp_table_name));
+      prefix.assign_ptr(index_name.ptr(), prefix_len);
+      LOG_INFO("get_index_prefix", K(prefix), K(index_name));
     }
+  }
+  return ret;
+}
+
+int ObPluginVectorIndexUtils::get_vector_index_prefix(const ObTableSchema &index_schema,
+                                                      ObString &prefix)
+{
+  int ret = OB_SUCCESS;
+  ObString tmp_table_name = index_schema.get_table_name();
+  if (OB_FAIL(get_vector_index_prefix_inner(index_schema, tmp_table_name, prefix))) {
+    LOG_WARN("failed to get_vector_index_prefix_inner", K(ret), K(tmp_table_name));
+  }
+  return ret;
+}
+
+int ObPluginVectorIndexUtils::get_vector_index_name_prefix(const ObTableSchema &index_schema,
+                                                      ObString &prefix)
+{
+  int ret = OB_SUCCESS;
+  ObString index_name;
+  if (OB_FAIL(index_schema.get_index_name(index_name))) {
+    LOG_WARN("failed to get index name", K(ret), K(index_schema));
+  } else if (OB_FAIL(get_vector_index_prefix_inner(index_schema, index_name, prefix))) {
+    LOG_WARN("failed to get_vector_index_prefix_inner", K(ret), K(index_name));
   }
   return ret;
 }
@@ -2090,6 +2114,22 @@ int ObPluginVectorIndexUtils::fill_ivf_mem_context_detail_info(ObPluginVectorInd
         } 
       }
     }
+  }
+  return ret;
+}
+
+int ObPluginVectorIndexUtils::get_tenant_vector_index_ids(const uint64_t tenant_id, bool &has_ivf_index, common::ObIArray<uint64_t> &table_id_array)
+{
+  int ret = OB_SUCCESS;
+  ObSchemaGetterGuard schema_guard;
+  ObMultiVersionSchemaService &schema_service = ObMultiVersionSchemaService::get_instance();
+  if (!schema_service.is_tenant_full_schema(tenant_id)) {
+    ret = OB_EAGAIN;
+    LOG_INFO("tenant does not has a full schema already, maybe server is restart, need retry!");
+  } else if (OB_FAIL(schema_service.get_tenant_schema_guard(tenant_id, schema_guard))) {
+    LOG_WARN("fail to get schema guard", KR(ret), K(tenant_id));
+  } else if (OB_FAIL(schema_guard.get_vector_info_index_ids_in_tenant(tenant_id, has_ivf_index, table_id_array))) {
+    LOG_WARN("fail to get table ids in tenant", KR(ret), K(tenant_id));
   }
   return ret;
 }

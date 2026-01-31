@@ -135,6 +135,11 @@ int ObPxMultiPartSSTableInsertOp::inner_open()
       if (OB_ISNULL(ddl_dag_)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("ddl dag is null", K(ret), KP(ddl_dag_));
+      } else if (share::schema::is_vec_delta_buffer_type(ddl_dag_->get_ddl_table_schema().table_item_.index_type_)
+          || share::schema::is_hybrid_vec_index_log_type(ddl_dag_->get_ddl_table_schema().table_item_.index_type_)
+          || share::schema::is_vec_index_id_type(ddl_dag_->get_ddl_table_schema().table_item_.index_type_)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("unexpected vector index type", K(ret), K(ddl_dag_->get_ddl_table_schema().table_item_.index_type_));
       } else if (OB_FAIL(check_need_idempotence())) {
         LOG_WARN("check need idempotence failed", K(ret));
       } else if (OB_FAIL(locate_exprs())) {
@@ -259,13 +264,6 @@ int ObPxMultiPartSSTableInsertOp::get_next_row_from_child(ObInsertMonitor *inser
     is_all_partition_finished_ = true;
     FLOG_INFO("all partition iterate finished", KP(this));
   }
-  if (share::schema::is_vec_delta_buffer_type(ddl_dag_->get_ddl_table_schema().table_item_.index_type_)
-      || share::schema::is_vec_index_id_type(ddl_dag_->get_ddl_table_schema().table_item_.index_type_)
-      || share::schema::is_hybrid_vec_index_log_type(ddl_dag_->get_ddl_table_schema().table_item_.index_type_)) {
-    is_all_partition_finished_ = true;
-    ret = OB_ITER_END;
-    FLOG_INFO("all partition iterate finished for vec index type", KP(this));
-  }
   return ret;
 }
 
@@ -282,13 +280,6 @@ int ObPxMultiPartSSTableInsertOp::get_next_batch_from_child(const int64_t max_ba
   if (OB_ITER_END == ret) {
     is_all_partition_finished_ = true;
     FLOG_INFO("all partition iterate finished", KP(this));
-  }
-  if (share::schema::is_vec_delta_buffer_type(ddl_dag_->get_ddl_table_schema().table_item_.index_type_)
-      || share::schema::is_vec_index_id_type(ddl_dag_->get_ddl_table_schema().table_item_.index_type_)
-      || share::schema::is_hybrid_vec_index_log_type(ddl_dag_->get_ddl_table_schema().table_item_.index_type_)) {
-    is_all_partition_finished_ = true;
-    ret = OB_ITER_END;
-    FLOG_INFO("all partition iterate finished for vec index type", KP(this));
   }
   return ret;
 }

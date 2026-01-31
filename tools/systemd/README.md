@@ -1,21 +1,21 @@
-# Installing OceanBase SeekDB via yum/apt
-If you want to deploy OceanBase SeekDB on a Linux RPM platform, you can use yum/apt for single-node installation and simple management with systemd.
+# Installing seekdb via yum/apt
+If you want to deploy seekdb on a Linux RPM platform, you can use yum/apt for single-node installation and simple management with systemd.
 
 **WARNING**
 
 - The installation method is just used for study or test;
 - You should not deploy it with important data as it is not used in production environment.
 
-## Installing OceanBase SeekDB via yum
-Config yum repo then install OceanBase SeekDB, it will automatically install the required dependencies.
+## Installing seekdb via yum
+Config yum repo then install seekdb, it will automatically install the required dependencies.
 ```bash
 yum install -y yum-utils
 yum-config-manager --add-repo https://mirrors.aliyun.com/oceanbase/OceanBase.repo
 yum install -y seekdb
 ```
 
-## Installing OceanBase SeekDB via apt
-Config apt repo then install OceanBase SeekDB, it will automatically install the required dependencies.
+## Installing seekdb via apt
+Config apt repo then install seekdb, it will automatically install the required dependencies.
 ```bash
 apt update
 apt install -y lsb-release wget gnupg2 mysql-client curl
@@ -32,20 +32,20 @@ apt install -y seekdb
 | systemd | / |
 
 # Startup Method
-You can install and run OceanBase service using the following command:
+You can install and run seekdb service using the following command:
 ```bash
 systemctl start seekdb
 ```
-You can set the OceanBase service to start automatically on boot using the following command:
+You can set the seekdb service to start automatically on boot using the following command:
 ```bash
 systemctl enable seekdb
 ```
 
 ## Overview of systemd
-Systemd provides automatic OceanBase startup and shutdown. It also enables manual server management using the systemctl command. For example:
+Systemd provides automatic seekdb startup and shutdown. It also enables manual server management using the systemctl command. For example:
 ```bash
 systemctl {start|stop|restart|status} seekdb
 ```
 
-## Oceanbase configuration by systemd
-Systemd provide `/etc/oceanbase/seekdb.cnf` to config OceanBase before first startup.
+## seekdb configuration by systemd
+Systemd provide `/etc/seekdb/seekdb.cnf` to config seekdb before first startup.

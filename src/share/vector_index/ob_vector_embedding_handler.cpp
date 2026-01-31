@@ -817,7 +817,7 @@ int ObEmbeddingTask::check_http_progress()
               }
 
               if (need_retry_flag_) {
-                if (http_retry_count_ == 1) { // 第一次重试
+                if (http_retry_count_ == 1) {
                   http_retry_start_time_us_ = ObTimeUtility::current_time();
                 }
                 http_last_retry_time_us_ = ObTimeUtility::current_time();

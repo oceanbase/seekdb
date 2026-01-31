@@ -35,7 +35,8 @@ ObTableStoreIterator::ObTableStoreIterator(const bool reverse, const bool need_l
     memstore_retired_(nullptr),
     transfer_src_table_store_handle_(nullptr),
     split_extra_table_store_handles_(),
-    ddl_co_sstable_handle_(nullptr)
+    ddl_co_sstable_handle_(nullptr),
+    fork_infos_(nullptr)
 {
   step_ = reverse ? -1 : 1;
   sstable_handle_array_.set_attr(ObMemAttr(MTL_ID(), "TblHdlArray"));
@@ -104,6 +105,8 @@ int ObTableStoreIterator::assign(const ObTableStoreIterator& other)
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(split_extra_table_store_handles_.assign(other.split_extra_table_store_handles_))) {
       LOG_WARN("failed to assign split extra table store handles", K(ret));
+    } else {
+      fork_infos_ = other.fork_infos_;
     }
   }
   return ret;
@@ -129,6 +132,7 @@ void ObTableStoreIterator::reset()
   split_extra_table_store_handles_.reset();
   pos_ = INT64_MAX;
   memstore_retired_ = nullptr;
+  fork_infos_ = nullptr;
 }
 
 void ObTableStoreIterator::resume()

@@ -67,6 +67,7 @@ public:
       is_standby_read_(false),
       has_create_tx_ctx_(false),
       is_delete_insert_(false),
+      is_fork_ctx_(false),
       abs_lock_timeout_ts_(-1),
       tx_lock_timeout_us_(-1),
       major_snapshot_(0),
@@ -119,6 +120,7 @@ public:
       is_standby_read_ = false;
       has_create_tx_ctx_ = false;
       is_delete_insert_ = false;
+      is_fork_ctx_ = false;
       major_snapshot_ = 0;
       lock_wait_start_ts_ = 0;
       mds_filter_.reset();
@@ -335,6 +337,7 @@ public: // NOTE: those field should only be accessed by txn relative routine
   bool is_standby_read_;
   bool has_create_tx_ctx_;
   bool is_delete_insert_;
+  bool is_fork_ctx_;  // indicates current context is in fork table access
   int64_t abs_lock_timeout_ts_;
   // tx_lock_timeout_us is defined as a system variable `ob_trx_lock_timeout`,
   // as the timeout of waiting on the WW conflict. it timeout reached

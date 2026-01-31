@@ -23,6 +23,7 @@
 #include "lib/lock/ob_drw_lock.h"
 #include "lib/thread/thread_mgr_interface.h"
 #include "lib/thread/ob_simple_thread_pool.h"
+#include "lib/queue/ob_link_queue.h"
 #include "lib/queue/ob_fixed_queue.h"
 #include "lib/container/ob_array_iterator.h"
 #include "lib/container/ob_array_wrap.h"
@@ -281,8 +282,6 @@ public:
   int send_detect_task();
   virtual void run1() override;
 private:
-  int try_release_thread();
-private:
   bool is_inited_;
   ObCpuUsage cpu_usage_;
 };
@@ -426,63 +425,23 @@ private:
   ObSpinLock lock_for_sync_io_;
 };
 
-class ObIORunner : public lib::TGRunnable
-{
-public:
-  ObIORunner();
-  virtual ~ObIORunner();
-  int init(const int64_t queue_capacity, ObIAllocator &allocator, const int64_t idx);
-  void stop();
-  void wait();
-  void destroy();
-  virtual void run1() override;
-  void stop_accept_req() { stop_accept_ = true; }
-  void reuse_runner() { stop_accept_ = false; }
-  bool is_stop_accept() { return stop_accept_; }
-  int push(ObIORequest &req);
-  int pop(ObIORequest *&req);
-  int handle(ObIORequest *req);
-  int64_t get_queue_count();
-
-  int64_t get_tid() const { return tid_; }
-
-  TO_STRING_KV(K(is_inited_), K(queue_.get_total()), K(tg_id_), K(idx_), K(tid_));
-private:
-  static const int64_t CALLBACK_WAIT_PERIOD_US = 1000L * 1000L; // 1s
-  bool is_inited_;
-  bool stop_accept_;
-  int tg_id_;
-  ObThreadCond cond_;
-  ObFixedQueue<ObIORequest> queue_;
-  int64_t idx_;
-  int64_t tid_;
-};
-
-
-class ObIOCallbackManager final
+class ObIOCallbackManager final : public ObLinkQueueThreadPool
 {
 public:
   ObIOCallbackManager();
   ~ObIOCallbackManager();
   int init(const int64_t tenant_id, int64_t thread_count,
-           const int32_t queue_depth, ObIOAllocator *io_allocator);
+           const int32_t queue_depth);
   void destroy();
 
   int enqueue_callback(ObIORequest &req);
-  void try_release_thread();
   int update_thread_count(const int64_t thread_count);
   int64_t to_string(char *buf, const int64_t len) const;
 private:
-  int64_t get_callback_queue_idx_(const ObIOCallbackType cb_type) const;
-private:
-  static const int64_t ATOMIC_WRITE_CALLBACK_THREAD_RATIO = 2;
+  virtual void handle(LinkTask *task) override;
 private:
   bool is_inited_;
-  int32_t queue_depth_;
   int64_t config_thread_count_;
-  mutable common::DRWLock lock_;
-  ObArray<ObIORunner *> runners_;
-  ObIOAllocator *io_allocator_;
 };
 
 struct ObIOGroupMemInfo

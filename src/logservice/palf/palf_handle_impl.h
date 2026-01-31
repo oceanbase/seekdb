@@ -585,6 +585,7 @@ public:
   virtual int get_base_lsn(LSN &lsn) const = 0;
   virtual int get_base_info(const LSN &base_lsn, PalfBaseInfo &base_info) = 0;
 
+  virtual int get_min_block_id_for_gc(block_id_t &min_block_id) = 0;
   virtual int get_min_block_info_for_gc(block_id_t &min_block_id, share::SCN &max_scn) = 0;
   //begin lsn                          base lsn                                end lsn
   //   │                                │                                         │
@@ -1004,6 +1005,7 @@ public:
   int get_begin_scn(share::SCN &scn)  override final;
   int get_base_lsn(LSN &lsn) const override final;
   int get_base_info(const LSN &base_lsn, PalfBaseInfo &base_info) override final;
+  int get_min_block_id_for_gc(block_id_t &min_block_id) override final;
   int get_min_block_info_for_gc(block_id_t &min_block_id, share::SCN &max_scn) override final;
   // return the block length which the previous data was committed
   const LSN get_end_lsn() const override final

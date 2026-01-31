@@ -174,36 +174,8 @@ int ObTenantDicLoader::try_load_dictionary_in_trans(const uint64_t tenant_id)
 int ObTenantDicLoader::check_need_load_dic(const uint64_t tenant_id, bool &is_need_load_dic)
 {
   int ret = OB_SUCCESS;
-  ObSqlString sql;
+  // we keep the code here even though we don't load data into system table anymore.
   is_need_load_dic = false;
-  if (OB_UNLIKELY(!is_inited_)) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("the dic loader is not initialized", K(ret), K(tenant_id));
-  } else if (OB_UNLIKELY(!is_valid_tenant_id(tenant_id))) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid tenant id", K(ret), K(tenant_id));
-  } else {
-    SMART_VAR(ObMySQLProxy::MySQLResult, res)
-    {
-      if (OB_FAIL(sql.assign_fmt("SELECT * FROM %s LIMIT 1", dic_tables_info_.at(0).table_name_))) {
-        LOG_WARN("fail to append sql", KR(ret), K(tenant_id));
-      } else if (OB_FAIL(GCTX.sql_proxy_->read(res, tenant_id, sql.ptr()))) {
-        LOG_WARN("fail to execute sql", KR(ret), K(sql), K(tenant_id));
-      } else if (OB_ISNULL(res.get_result())) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("fail to get sql result", KR(ret), K(sql), K(tenant_id));
-      } else if (OB_FAIL(res.get_result()->next())) {
-        if (OB_ITER_END != ret) {
-          LOG_WARN("fail to get next row", KR(ret), K(tenant_id));
-        } else {
-          ret = OB_SUCCESS;
-          is_need_load_dic = true;
-        }
-      } else {
-        is_need_load_dic = false;
-      }
-    }
-  }
   return ret;
 }
 

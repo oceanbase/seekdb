@@ -80,7 +80,6 @@ function get_os_release() {
       return 0
     fi
   fi
-  
   if [[ "${OS_ARCH}x" == "x86_64x" ]]; then
     case "$ID" in
       rhel)
@@ -208,7 +207,14 @@ function get_os_release() {
 get_os_release || exit 1
 
 if [[ "${OS_RELEASE}x" == "macosx" ]]; then
-    OS_TAG="macos.$OS_ARCH"
+    MACOS_VERSION=$(sw_vers -productVersion | awk -F. '{print $1}')
+    if [ $MACOS_VERSION -lt 13 ]; then
+      not_supported && exit 1
+    elif [ $MACOS_VERSION -lt 15 ]; then
+      OS_TAG="macos13.$OS_ARCH"
+    else
+      OS_TAG="macos15.$OS_ARCH"
+    fi
 elif [[ "${AL3_RELEASE}x" == "1x" ]]; then
     OS_TAG="al$OS_RELEASE.$OS_ARCH"
 else
@@ -367,10 +373,10 @@ do
         pkg=${line%%\ *}
         target_name="default"
         temp=$(echo "$line" | grep -Eo "target=(\S*)")
-        
+
         [[ "$temp" != "" ]] && target_name=${temp#*=}
        
-       	# Adapt to OB artifact repository download URL
+	# Adapt to OB artifact repository download URL
         pkg_path=${pkg}
         # 在 targets_sections 中查找对应的 repo
         repo=""
