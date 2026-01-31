@@ -24,28 +24,59 @@ namespace oceanbase
 namespace common
 {
 
+static const char *const COMPLETE_SUPPORTED_PROVIDERS[] = {
+    ObAIFuncProviderUtils::OPENAI,
+    ObAIFuncProviderUtils::ALIYUN,
+    ObAIFuncProviderUtils::DEEPSEEK,
+    ObAIFuncProviderUtils::SILICONFLOW,
+    ObAIFuncProviderUtils::HUNYUAN,
+    ObAIFuncProviderUtils::DASHSCOPE,
+};
+static const char *const EMBED_SUPPORTED_PROVIDERS[] = {
+    ObAIFuncProviderUtils::OPENAI,
+    ObAIFuncProviderUtils::ALIYUN,
+    ObAIFuncProviderUtils::HUNYUAN,
+    ObAIFuncProviderUtils::SILICONFLOW,
+    ObAIFuncProviderUtils::DASHSCOPE,
+};
+static const char *const RERANK_SUPPORTED_PROVIDERS[] = {
+    ObAIFuncProviderUtils::SILICONFLOW,
+    ObAIFuncProviderUtils::DASHSCOPE,
+};
+
+static int append_supported_list(char *buf, const int64_t buf_len, int64_t &pos,
+                                 const char *const *providers, const int64_t count)
+{
+  int ret = OB_SUCCESS;
+  for (int64_t i = 0; OB_SUCC(ret) && i < count; ++i) {
+    if (i > 0 && OB_FAIL(databuff_printf(buf, buf_len, pos, ", "))) {
+      break;
+    } else if (OB_FAIL(databuff_printf(buf, buf_len, pos, "%s", providers[i]))) {
+      break;
+    }
+  }
+  return ret;
+}
+
 static void log_provider_not_supported(const char *func_name,
                                        const ObString &provider,
-                                       const char *supported)
+                                       const char *const *supported,
+                                       const int64_t supported_count)
 {
   char msg_buf[256] = {0};
   int64_t pos = 0;
   int ret = databuff_printf(msg_buf, sizeof(msg_buf), pos,
-                            "%s, provider '%.*s' is not supported, supported: %s",
-                            func_name, provider.length(), provider.ptr(), supported);
+                            "%s, provider '%.*s' is not supported, supported: ",
+                            func_name, provider.length(), provider.ptr());
+  if (OB_SUCC(ret)) {
+    ret = append_supported_list(msg_buf, sizeof(msg_buf), pos, supported, supported_count);
+  }
   if (OB_FAIL(ret)) {
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "ai_function, provider is not supported");
   } else {
     LOG_USER_ERROR(OB_NOT_SUPPORTED, msg_buf);
   }
 }
-
-static const char *const COMPLETE_SUPPORTED_PROVIDERS =
-    "OPENAI, ALIYUN-OPENAI, DEEPSEEK, SILICONFLOW, HUNYUAN-OPENAI, ALIYUN-DASHSCOPE";
-static const char *const EMBED_SUPPORTED_PROVIDERS =
-    "OPENAI, ALIYUN-OPENAI, HUNYUAN-OPENAI, SILICONFLOW, ALIYUN-DASHSCOPE";
-static const char *const RERANK_SUPPORTED_PROVIDERS =
-    "SILICONFLOW, ALIYUN-DASHSCOPE";
 
 static bool is_complete_provider_supported(const ObString &provider)
 {
@@ -1290,7 +1321,8 @@ int ObAIFuncUtils::get_complete_provider(ObIAllocator &allocator, const ObString
     LOG_WARN("this provider current not support", K(ret));
     log_provider_not_supported("ai_complete",
                                provider,
-                               COMPLETE_SUPPORTED_PROVIDERS);
+                               COMPLETE_SUPPORTED_PROVIDERS,
+                               ARRAYSIZEOF(COMPLETE_SUPPORTED_PROVIDERS));
   }
   if (OB_SUCC(ret) && OB_ISNULL(complete_provider)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -1316,7 +1348,8 @@ int ObAIFuncUtils::get_embed_provider(ObIAllocator &allocator, const ObString &p
     LOG_WARN("this provider current not support", K(ret));
     log_provider_not_supported("ai_embed",
                                provider,
-                               EMBED_SUPPORTED_PROVIDERS);
+                               EMBED_SUPPORTED_PROVIDERS,
+                               ARRAYSIZEOF(EMBED_SUPPORTED_PROVIDERS));
   }
   if (OB_SUCC(ret) && OB_ISNULL(embed_provider)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -1339,7 +1372,8 @@ int ObAIFuncUtils::get_rerank_provider(ObIAllocator &allocator, const ObString &
   } else {
     ret = OB_NOT_SUPPORTED;
     LOG_WARN("this provider current not support", K(ret));
-    log_provider_not_supported("ai_rerank", provider, RERANK_SUPPORTED_PROVIDERS);
+    log_provider_not_supported("ai_rerank", provider, RERANK_SUPPORTED_PROVIDERS,
+                               ARRAYSIZEOF(RERANK_SUPPORTED_PROVIDERS));
   }
   if (OB_SUCC(ret) && OB_ISNULL(rerank_provider)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
