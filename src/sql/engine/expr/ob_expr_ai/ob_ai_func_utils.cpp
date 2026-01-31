@@ -47,6 +47,25 @@ static const char *const EMBED_SUPPORTED_PROVIDERS =
 static const char *const RERANK_SUPPORTED_PROVIDERS =
     "siliconflow, dashscope";
 
+static bool is_complete_provider_supported(const ObString &provider)
+{
+  return ob_provider_check(provider, ObAIFuncProviderUtils::OPENAI)
+      || ob_provider_check(provider, ObAIFuncProviderUtils::ALIYUN)
+      || ob_provider_check(provider, ObAIFuncProviderUtils::DEEPSEEK)
+      || ob_provider_check(provider, ObAIFuncProviderUtils::SILICONFLOW)
+      || ob_provider_check(provider, ObAIFuncProviderUtils::HUNYUAN)
+      || ob_provider_check(provider, ObAIFuncProviderUtils::DASHSCOPE);
+}
+
+static bool is_embed_provider_supported(const ObString &provider)
+{
+  return ob_provider_check(provider, ObAIFuncProviderUtils::OPENAI)
+      || ob_provider_check(provider, ObAIFuncProviderUtils::ALIYUN)
+      || ob_provider_check(provider, ObAIFuncProviderUtils::HUNYUAN)
+      || ob_provider_check(provider, ObAIFuncProviderUtils::SILICONFLOW)
+      || ob_provider_check(provider, ObAIFuncProviderUtils::DASHSCOPE);
+}
+
 int ObOpenAIUtils::get_header(common::ObIAllocator &allocator,
                               ObString &api_key,
                               common::ObArray<ObString> &headers)
@@ -1261,11 +1280,8 @@ int ObAIFuncUtils::get_complete_provider(ObIAllocator &allocator, const ObString
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("provider is empty", K(ret));
     LOG_USER_ERROR(OB_INVALID_ARGUMENT, "ai_function, provider is empty");
-  } else if (ob_provider_check(provider, ObAIFuncProviderUtils::OPENAI)
-      || ob_provider_check(provider, ObAIFuncProviderUtils::ALIYUN)
-      || ob_provider_check(provider, ObAIFuncProviderUtils::DEEPSEEK)
-      || ob_provider_check(provider, ObAIFuncProviderUtils::SILICONFLOW)
-      || ob_provider_check(provider, ObAIFuncProviderUtils::HUNYUAN)) {
+  } else if (is_complete_provider_supported(provider)
+      && !ob_provider_check(provider, ObAIFuncProviderUtils::DASHSCOPE)) {
     complete_provider = OB_NEWx(ObOpenAIUtils::ObOpenAIComplete, &allocator);
   } else if (ob_provider_check(provider, ObAIFuncProviderUtils::DASHSCOPE)) {
     complete_provider = OB_NEWx(ObDashscopeUtils::ObDashscopeComplete, &allocator);
@@ -1290,10 +1306,8 @@ int ObAIFuncUtils::get_embed_provider(ObIAllocator &allocator, const ObString &p
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("provider is empty", K(ret));
     LOG_USER_ERROR(OB_INVALID_ARGUMENT, "ai_function, provider is empty");
-  } else if (ob_provider_check(provider, ObAIFuncProviderUtils::OPENAI)
-      || ob_provider_check(provider, ObAIFuncProviderUtils::ALIYUN)
-      || ob_provider_check(provider, ObAIFuncProviderUtils::HUNYUAN)
-      || ob_provider_check(provider, ObAIFuncProviderUtils::SILICONFLOW)) {
+  } else if (is_embed_provider_supported(provider)
+      && !ob_provider_check(provider, ObAIFuncProviderUtils::DASHSCOPE)) {
     embed_provider = OB_NEWx(ObOpenAIUtils::ObOpenAIEmbed, &allocator);
   } else if (ob_provider_check(provider, ObAIFuncProviderUtils::DASHSCOPE)) {
     embed_provider = OB_NEWx(ObDashscopeUtils::ObDashscopeEmbed, &allocator);
