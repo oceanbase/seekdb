@@ -282,28 +282,17 @@ void ObLiteEmbed::close()
 
 ObString handle_err_msg(int ret)
 {
-  static thread_local ObSqlString err_buf;
-  err_buf.reset();
-  if (OB_FAIL(ret)) {
-    const common::ObWarningBuffer *wb = common::ob_get_tsi_warning_buffer();
-    if (nullptr != wb) {
-      if (wb->get_err_code() == ret ||
-          (ret >= OB_MIN_RAISE_APPLICATION_ERROR && ret <= OB_MAX_RAISE_APPLICATION_ERROR)) {
-        if (wb->get_err_msg() != nullptr && wb->get_err_msg()[0] != '\0') {
-          err_buf.append(wb->get_err_msg());
-        }
-      }
-    }
-    if (err_buf.empty()) {
-      const char *user_msg = ob_errpkt_str_user_error(ret, false);
-      if (nullptr != user_msg && user_msg[0] != '\0') {
-        err_buf.append(user_msg);
-      } else {
-        err_buf.append(ob_errpkt_strerror(ret, false));
-      }
+  ObString errmsg = common::ob_get_tsi_err_msg(ret);
+  if (errmsg.empty() && ret != OB_SUCCESS) {
+    const char *user_msg = ob_errpkt_str_user_error(ret, false);
+    if (nullptr != user_msg && user_msg[0] != '\0') {
+      errmsg = ObString(strlen(user_msg), user_msg);
+    } else {
+      const char *err_str = ob_errpkt_strerror(ret, false);
+      errmsg = ObString(strlen(err_str), err_str);
     }
   }
-  return err_buf.empty() ? ObString() : ObString(err_buf.length(), err_buf.ptr());
+  return errmsg;
 }
 
 ObString format_embed_error(int ret)
@@ -329,9 +318,13 @@ void throw_embed_error(const char *action, int ret)
   ObString err_msg = format_embed_error(ret);
   ObSqlString msg;
   if (err_msg.empty()) {
-    msg.append_fmt("%s failed", action);
+    if (OB_FAIL(msg.append_fmt("%s failed", action))) {
+      throw std::runtime_error("embed error");
+    }
   } else {
-    msg.append_fmt("%s failed %.*s", action, err_msg.length(), err_msg.ptr());
+    if (OB_FAIL(msg.append_fmt("%s failed %.*s", action, err_msg.length(), err_msg.ptr()))) {
+      throw std::runtime_error("embed error");
+    }
   }
   throw std::runtime_error(msg.ptr());
 }
