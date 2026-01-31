@@ -50,10 +50,10 @@ int ObErrLogService::gen_insert_sql_str(ObIAllocator &alloc,
   int64_t default_column_name_pos = 0;
   int64_t default_column_value_pos = 0;
 
-  const int err_no = ob_oracle_errno(first_err_ret);
+  const int err_no = ob_mysql_errno(first_err_ret);
   // ObString msg = ob_get_tsi_err_msg(first_err_ret);
   // Because there are escape characters in dynamic_msg, use static error messages now
-  ObString msg = ObString::make_string(ob_oracle_strerror(first_err_ret));
+  ObString msg = ObString::make_string(ob_strerror(first_err_ret));
 
   // %.*s 1:database_name
   // %.*s 2:table_name
