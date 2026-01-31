@@ -2718,7 +2718,7 @@ int ObPL::insert_error_msg(int errcode)
   if (err_txt.empty()) {
     ObWarningBuffer *wb = common::ob_get_tsi_warning_buffer();
     if (OB_NOT_NULL(wb)) {
-      wb->set_error(common::ob_oracle_strerror(errcode), errcode);
+      wb->set_error(common::ob_strerror(errcode), errcode);
     }
   }
   return ret;

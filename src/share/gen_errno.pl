@@ -468,11 +468,6 @@ constexpr int OB_ERR_SQL_END = -5999;
   const char *ob_strerror(const int oberr);
   const char *ob_str_user_error(const int oberr);
 
-  int ob_oracle_errno(const int oberr);
-  int ob_oracle_errno_with_check(const int oberr);
-  const char *ob_oracle_strerror(const int oberr);
-  const char *ob_oracle_str_user_error(const int oberr);
-
 #ifndef __ERROR_CODE_PARSER_
   int get_ob_errno_from_oracle_errno(const int error_no, const char *error_msg, int &ob_errno);
 #endif
@@ -641,19 +636,9 @@ inline const _error *get_error(int index)
   return _errors[index];
 }
 
-int get_oracle_errno(int index)
-{
-  return get_error(index)->oracle_errno;
-}
-
 int get_mysql_errno(int index)
 {
   return get_error(index)->mysql_errno;
-}
-
-const char* get_oracle_str_error(int index)
-{
-  return get_error(index)->oracle_str_error;
 }
 
 const char* get_mysql_str_error(int index)
@@ -761,73 +746,22 @@ print $fh_cpp '
     }
     return ret;
   }
-  const char *ob_oracle_strerror(const int err)
-  {
-    const char *ret = "Unknown error";
-    if (OB_LIKELY(0 >= err && err > -OB_MAX_ERROR_CODE)) {
-      if (!g_enable_ob_error_msg_style) {
-        ret = get_error(-err)->oracle_str_error;
-      } else {
-        ret = get_error(-err)->ob_str_error;
-      }
-      if (OB_UNLIKELY(NULL == ret || \'\0\' == ret[0]))
-      {
-        ret = "Unknown Error";
-      }
-    }
-    return ret;
-  }
-  const char *ob_oracle_str_user_error(const int err)
-  {
-    const char *ret = NULL;
-    if (OB_LIKELY(0 >= err && err > -OB_MAX_ERROR_CODE)) {
-      if (!g_enable_ob_error_msg_style) {
-        ret = get_error(-err)->oracle_str_user_error;
-      } else {
-        ret = get_error(-err)->ob_str_user_error;
-      }
-      if (OB_UNLIKELY(NULL == ret || \'\0\' == ret[0])) {
-        ret = NULL;
-      }
-    }
-    return ret;
-  }
-  int ob_oracle_errno(const int err)
-  {
-    int ret = -1;
-    if (OB_ERR_PROXY_REROUTE == err) {
-      // Oracle Mode and MySQL mode should return same errcode for reroute sql
-      // thus we make the specialization here
-      ret = -1;
-    } else if (err >= OB_MIN_RAISE_APPLICATION_ERROR && err <= OB_MAX_RAISE_APPLICATION_ERROR) {
-      ret = err; // PL/SQL Raise Application Error
-    } else if (OB_LIKELY(0 >= err && err > -OB_MAX_ERROR_CODE)) {
-      ret = get_error(-err)->oracle_errno;
-    }
-    return ret;
-  }
-  int ob_oracle_errno_with_check(const int err)
-  {
-    int ret = ob_oracle_errno(err);
-    if (ret < 0) {
-      ret = -err;
-    }
-    return ret;
-  }
   int ob_errpkt_errno(const int err, const bool is_oracle_mode)
   {
-    return (is_oracle_mode ? ob_oracle_errno_with_check(err) : ob_mysql_errno_with_check(err));
+    (void)is_oracle_mode;
+    return ob_mysql_errno_with_check(err);
   }
   const char *ob_errpkt_strerror(const int err, const bool is_oracle_mode)
   {
-    return (is_oracle_mode ? ob_oracle_strerror(err) : ob_strerror(err));
+    (void)is_oracle_mode;
+    return ob_strerror(err);
   }
   const char *ob_errpkt_str_user_error(const int err, const bool is_oracle_mode)
   {
-    return (is_oracle_mode ? ob_oracle_str_user_error(err) : ob_str_user_error(err));
+    (void)is_oracle_mode;
+    return ob_str_user_error(err);
   }
 
 } // end namespace common
 } // end namespace oceanbase
 ';
-

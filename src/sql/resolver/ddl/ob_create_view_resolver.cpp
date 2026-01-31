@@ -436,7 +436,7 @@ int ObCreateViewResolver::try_add_error_info(const uint64_t error_number,
   if (ERROR_STATUS_HAS_ERROR == error_info.get_error_status()) {
     /* do nothing */
   } else {
-    ObString err_txt(common::ob_oracle_strerror(error_number));
+    ObString err_txt(common::ob_strerror(error_number));
     error_info.set_error_number(error_number);
     error_info.set_error_status(ERROR_STATUS_HAS_ERROR);
     if (err_txt.empty()) {
