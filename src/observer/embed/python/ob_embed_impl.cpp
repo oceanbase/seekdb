@@ -23,6 +23,7 @@
 #include <endian.h>
 #endif
 #include <pybind11/stl.h>
+#include <cstring>
 #include <memory>
 #include "observer/embed/python/ob_embed_impl.h"
 #include "observer/ob_server.h"
@@ -94,6 +95,7 @@ static pybind11::module builtins = pybind11::module::import("builtins");
 
 std::string handle_err_msg(int ret);
 ObString format_embed_error(int ret);
+void throw_embed_error(const char *action, int ret);
 
 ObSqlString pid_file_name;
 bool pid_locked = false;
@@ -144,8 +146,7 @@ void ObLiteEmbed::open_inner(const char* db_dir, const int64_t port)
     }
   }
   if (OB_FAIL(ret)) {
-    ObString err_msg = format_embed_error(ret);
-    throw std::runtime_error("open seekdb failed " + std::string(err_msg.ptr(), err_msg.length()));
+    throw_embed_error("open seekdb", ret);
   }
   // TODO promise service ready
   omt::ObTenantNodeBalancer::get_instance().handle();
@@ -322,6 +323,17 @@ ObString format_embed_error(int ret)
   return ObString(err_buf.length(), err_buf.ptr());
 }
 
+void throw_embed_error(const char *action, int ret)
+{
+  ObString err_msg = format_embed_error(ret);
+  std::string msg;
+  msg.reserve(strlen(action) + 8 + err_msg.length());
+  msg.append(action);
+  msg.append(" failed ");
+  msg.append(err_msg.ptr(), err_msg.length());
+  throw std::runtime_error(msg);
+}
+
 std::shared_ptr<ObLiteEmbedConn> ObLiteEmbed::connect(const char* db_name, const bool autocommit)
 {
   int ret = OB_SUCCESS;
@@ -395,8 +407,7 @@ std::shared_ptr<ObLiteEmbedConn> ObLiteEmbed::connect(const char* db_name, const
   } else if (FALSE_IT(embed_conn->get_conn() = static_cast<observer::ObInnerSQLConnection*>(inner_conn))) {
   }
   if (OB_FAIL(ret)) {
-    ObString err_msg = format_embed_error(ret);
-    throw std::runtime_error("connect failed " + std::string(err_msg.ptr(), err_msg.length()));
+    throw_embed_error("connect", ret);
   }
   common::ob_setup_tsi_warning_buffer(NULL);
   FLOG_INFO("connect", K(db_name), K(sid), KP(session), KPC(session), KPC(user_info), "cost", ObTimeUtility::current_time()-start_time);
@@ -502,8 +513,7 @@ uint64_t ObLiteEmbedCursor::execute(const char *sql)
     result_seq_ = result_seq;
   }
   if (OB_FAIL(ret)) {
-    ObString err_msg = format_embed_error(ret);
-    throw std::runtime_error("execute sql failed " + std::string(err_msg.ptr(), err_msg.length()));
+    throw_embed_error("execute sql", ret);
   }
   if (embed_conn_->need_autocommit()) {
     embed_conn_->commit();
@@ -572,8 +582,7 @@ std::vector<pybind11::tuple> ObLiteEmbedCursor::fetchall()
     }
   }
   if (OB_FAIL(ret)) {
-    ObString err_msg = format_embed_error(ret);
-    throw std::runtime_error("fetchall failed " + std::string(err_msg.ptr(), err_msg.length()));
+    throw_embed_error("fetchall", ret);
   }
   return res;
 }
@@ -622,8 +631,7 @@ pybind11::object ObLiteEmbedCursor::fetchone()
     }
   }
   if (OB_FAIL(ret)) {
-    ObString err_msg = format_embed_error(ret);
-    throw std::runtime_error("fetchone failed " + std::string(err_msg.ptr(), err_msg.length()));
+    throw_embed_error("fetchone", ret);
   }
   return pybind11::tuple(row_data);
 }
@@ -643,8 +651,7 @@ void ObLiteEmbedConn::begin()
     LOG_WARN("start trans failed", KR(ret));
   }
   if (OB_FAIL(ret)) {
-    ObString err_msg = format_embed_error(ret);
-    throw std::runtime_error("begin failed " + std::string(err_msg.ptr(), err_msg.length()));
+    throw_embed_error("begin", ret);
   }
 }
 
@@ -660,8 +667,7 @@ void ObLiteEmbedConn::commit()
     LOG_WARN("commit trans failed", KR(ret));
   }
   if (OB_FAIL(ret)) {
-    ObString err_msg = format_embed_error(ret);
-    throw std::runtime_error("commit failed " + std::string(err_msg.ptr(), err_msg.length()));
+    throw_embed_error("commit", ret);
   }
 }
 
@@ -677,8 +683,7 @@ void ObLiteEmbedConn::rollback()
     LOG_WARN("rollback trans failed", KR(ret));
   }
   if (OB_FAIL(ret)) {
-    ObString err_msg = format_embed_error(ret);
-    throw std::runtime_error("rollback failed " + std::string(err_msg.ptr(), err_msg.length()));
+    throw_embed_error("rollback", ret);
   }
 }
 
