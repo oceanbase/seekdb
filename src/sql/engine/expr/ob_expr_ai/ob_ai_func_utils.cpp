@@ -41,11 +41,11 @@ static void log_provider_not_supported(const char *func_name,
 }
 
 static const char *const COMPLETE_SUPPORTED_PROVIDERS =
-    "openai, aliyun, deepseek, siliconflow, hunyuan, dashscope";
+    "OPENAI, ALIYUN-OPENAI, DEEPSEEK, SILICONFLOW, HUNYUAN-OPENAI, ALIYUN-DASHSCOPE";
 static const char *const EMBED_SUPPORTED_PROVIDERS =
-    "openai, aliyun, hunyuan, siliconflow, dashscope";
+    "OPENAI, ALIYUN-OPENAI, HUNYUAN-OPENAI, SILICONFLOW, ALIYUN-DASHSCOPE";
 static const char *const RERANK_SUPPORTED_PROVIDERS =
-    "siliconflow, dashscope";
+    "SILICONFLOW, ALIYUN-DASHSCOPE";
 
 static bool is_complete_provider_supported(const ObString &provider)
 {
