@@ -40,6 +40,13 @@ static void log_provider_not_supported(const char *func_name,
   }
 }
 
+static const char *const COMPLETE_SUPPORTED_PROVIDERS =
+    "openai, aliyun, deepseek, siliconflow, hunyuan, dashscope";
+static const char *const EMBED_SUPPORTED_PROVIDERS =
+    "openai, aliyun, hunyuan, siliconflow, dashscope";
+static const char *const RERANK_SUPPORTED_PROVIDERS =
+    "siliconflow, dashscope";
+
 int ObOpenAIUtils::get_header(common::ObIAllocator &allocator,
                               ObString &api_key,
                               common::ObArray<ObString> &headers)
@@ -1267,7 +1274,7 @@ int ObAIFuncUtils::get_complete_provider(ObIAllocator &allocator, const ObString
     LOG_WARN("this provider current not support", K(ret));
     log_provider_not_supported("ai_complete",
                                provider,
-                               "openai, aliyun, deepseek, siliconflow, hunyuan, dashscope");
+                               COMPLETE_SUPPORTED_PROVIDERS);
   }
   if (OB_SUCC(ret) && OB_ISNULL(complete_provider)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -1295,7 +1302,7 @@ int ObAIFuncUtils::get_embed_provider(ObIAllocator &allocator, const ObString &p
     LOG_WARN("this provider current not support", K(ret));
     log_provider_not_supported("ai_embed",
                                provider,
-                               "openai, aliyun, hunyuan, siliconflow, dashscope");
+                               EMBED_SUPPORTED_PROVIDERS);
   }
   if (OB_SUCC(ret) && OB_ISNULL(embed_provider)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -1318,7 +1325,7 @@ int ObAIFuncUtils::get_rerank_provider(ObIAllocator &allocator, const ObString &
   } else {
     ret = OB_NOT_SUPPORTED;
     LOG_WARN("this provider current not support", K(ret));
-    log_provider_not_supported("ai_rerank", provider, "siliconflow, dashscope");
+    log_provider_not_supported("ai_rerank", provider, RERANK_SUPPORTED_PROVIDERS);
   }
   if (OB_SUCC(ret) && OB_ISNULL(rerank_provider)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
