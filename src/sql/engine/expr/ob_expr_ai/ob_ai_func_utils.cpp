@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX SQL_ENG
 #include "ob_ai_func_utils.h"
 #include "ob_ai_func_client.h"
-#include "lib/string/ob_sql_string.h"
+#include "lib/utility/ob_print_utils.h"
 
 namespace oceanbase
 {
@@ -28,13 +28,15 @@ static void log_provider_not_supported(const char *func_name,
                                        const ObString &provider,
                                        const char *supported)
 {
-  ObSqlString msg;
-  int ret = msg.append_fmt("%s, provider '%.*s' is not supported, supported: %s",
-                           func_name, provider.length(), provider.ptr(), supported);
+  char msg_buf[256] = {0};
+  int64_t pos = 0;
+  int ret = databuff_printf(msg_buf, sizeof(msg_buf), pos,
+                            "%s, provider '%.*s' is not supported, supported: %s",
+                            func_name, provider.length(), provider.ptr(), supported);
   if (OB_FAIL(ret)) {
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "ai_function, provider is not supported");
   } else {
-    LOG_USER_ERROR(OB_NOT_SUPPORTED, msg.ptr());
+    LOG_USER_ERROR(OB_NOT_SUPPORTED, msg_buf);
   }
 }
 
