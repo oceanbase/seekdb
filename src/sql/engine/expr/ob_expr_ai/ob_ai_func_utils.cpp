@@ -80,21 +80,21 @@ static void log_provider_not_supported(const char *func_name,
 
 static bool is_complete_provider_supported(const ObString &provider)
 {
-  return ob_provider_check(provider, ObAIFuncProviderUtils::OPENAI)
-      || ob_provider_check(provider, ObAIFuncProviderUtils::ALIYUN)
-      || ob_provider_check(provider, ObAIFuncProviderUtils::DEEPSEEK)
-      || ob_provider_check(provider, ObAIFuncProviderUtils::SILICONFLOW)
-      || ob_provider_check(provider, ObAIFuncProviderUtils::HUNYUAN)
-      || ob_provider_check(provider, ObAIFuncProviderUtils::DASHSCOPE);
+  return ObAIFuncUtils::ob_provider_check(provider, ObAIFuncProviderUtils::OPENAI)
+      || ObAIFuncUtils::ob_provider_check(provider, ObAIFuncProviderUtils::ALIYUN)
+      || ObAIFuncUtils::ob_provider_check(provider, ObAIFuncProviderUtils::DEEPSEEK)
+      || ObAIFuncUtils::ob_provider_check(provider, ObAIFuncProviderUtils::SILICONFLOW)
+      || ObAIFuncUtils::ob_provider_check(provider, ObAIFuncProviderUtils::HUNYUAN)
+      || ObAIFuncUtils::ob_provider_check(provider, ObAIFuncProviderUtils::DASHSCOPE);
 }
 
 static bool is_embed_provider_supported(const ObString &provider)
 {
-  return ob_provider_check(provider, ObAIFuncProviderUtils::OPENAI)
-      || ob_provider_check(provider, ObAIFuncProviderUtils::ALIYUN)
-      || ob_provider_check(provider, ObAIFuncProviderUtils::HUNYUAN)
-      || ob_provider_check(provider, ObAIFuncProviderUtils::SILICONFLOW)
-      || ob_provider_check(provider, ObAIFuncProviderUtils::DASHSCOPE);
+  return ObAIFuncUtils::ob_provider_check(provider, ObAIFuncProviderUtils::OPENAI)
+      || ObAIFuncUtils::ob_provider_check(provider, ObAIFuncProviderUtils::ALIYUN)
+      || ObAIFuncUtils::ob_provider_check(provider, ObAIFuncProviderUtils::HUNYUAN)
+      || ObAIFuncUtils::ob_provider_check(provider, ObAIFuncProviderUtils::SILICONFLOW)
+      || ObAIFuncUtils::ob_provider_check(provider, ObAIFuncProviderUtils::DASHSCOPE);
 }
 
 int ObOpenAIUtils::get_header(common::ObIAllocator &allocator,
