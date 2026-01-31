@@ -37,6 +37,7 @@
 #include "sql/engine/expr/ob_expr_lob_utils.h"
 #include "lib/timezone/ob_time_convert.h"
 #include "lib/charset/ob_charset.h"
+#include "lib/utility/ob_print_utils.h"
 
 PYBIND11_MODULE(PYTHON_MODEL_NAME, m) {
     m.doc() = "OceanBase seekdb";
@@ -297,8 +298,8 @@ ObString handle_err_msg(int ret)
 
 ObString format_embed_error(int ret)
 {
-  static thread_local ObSqlString err_buf;
-  err_buf.reset();
+  static thread_local char err_buf[1024];
+  int64_t pos = 0;
   ObString errmsg = handle_err_msg(ret);
   const int err_no = ob_errpkt_errno(ret, false);
   const char *err_name = ob_error_name(ret);
@@ -306,27 +307,26 @@ ObString format_embed_error(int ret)
     err_name = "UnknownError";
   }
   if (errmsg.empty()) {
-    err_buf.append_fmt("%s(%d)", err_name, err_no);
+    (void)databuff_printf(err_buf, sizeof(err_buf), pos, "%s(%d)", err_name, err_no);
   } else {
-    err_buf.append_fmt("%s(%d): %.*s", err_name, err_no, errmsg.length(), errmsg.ptr());
+    (void)databuff_printf(err_buf, sizeof(err_buf), pos, "%s(%d): %.*s",
+                          err_name, err_no, errmsg.length(), errmsg.ptr());
   }
-  return ObString(err_buf.length(), err_buf.ptr());
+  return ObString(static_cast<int32_t>(pos), err_buf);
 }
 
 void throw_embed_error(const char *action, int ret)
 {
+  static thread_local char msg_buf[1200];
+  int64_t pos = 0;
   ObString err_msg = format_embed_error(ret);
-  ObSqlString msg;
   if (err_msg.empty()) {
-    if (OB_FAIL(msg.append_fmt("%s failed", action))) {
-      throw std::runtime_error("embed error");
-    }
+    (void)databuff_printf(msg_buf, sizeof(msg_buf), pos, "%s failed", action);
   } else {
-    if (OB_FAIL(msg.append_fmt("%s failed %.*s", action, err_msg.length(), err_msg.ptr()))) {
-      throw std::runtime_error("embed error");
-    }
+    (void)databuff_printf(msg_buf, sizeof(msg_buf), pos, "%s failed %.*s",
+                          action, err_msg.length(), err_msg.ptr());
   }
-  throw std::runtime_error(msg.ptr());
+  throw std::runtime_error(msg_buf);
 }
 
 std::shared_ptr<ObLiteEmbedConn> ObLiteEmbed::connect(const char* db_name, const bool autocommit)
