@@ -93,7 +93,7 @@ static pybind11::module builtins = pybind11::module::import("builtins");
 
 #define MPRINT(format, ...) fprintf(stderr, "[seekdb] " format "\n", ##__VA_ARGS__)
 
-std::string handle_err_msg(int ret);
+ObString handle_err_msg(int ret);
 ObString format_embed_error(int ret);
 void throw_embed_error(const char *action, int ret);
 
@@ -280,36 +280,37 @@ void ObLiteEmbed::close()
   _Exit(0);
 }
 
-std::string handle_err_msg(int ret)
+ObString handle_err_msg(int ret)
 {
-  std::string errmsg;
+  static thread_local ObSqlString err_buf;
+  err_buf.reset();
   if (OB_FAIL(ret)) {
     const common::ObWarningBuffer *wb = common::ob_get_tsi_warning_buffer();
     if (nullptr != wb) {
       if (wb->get_err_code() == ret ||
           (ret >= OB_MIN_RAISE_APPLICATION_ERROR && ret <= OB_MAX_RAISE_APPLICATION_ERROR)) {
         if (wb->get_err_msg() != nullptr && wb->get_err_msg()[0] != '\0') {
-          errmsg = std::string(wb->get_err_msg());
+          err_buf.append(wb->get_err_msg());
         }
       }
     }
-    if (errmsg.empty()) {
+    if (err_buf.empty()) {
       const char *user_msg = ob_errpkt_str_user_error(ret, false);
       if (nullptr != user_msg && user_msg[0] != '\0') {
-        errmsg = std::string(user_msg);
+        err_buf.append(user_msg);
       } else {
-        errmsg = std::string(ob_errpkt_strerror(ret, false));
+        err_buf.append(ob_errpkt_strerror(ret, false));
       }
     }
   }
-  return errmsg;
+  return err_buf.empty() ? ObString() : ObString(err_buf.length(), err_buf.ptr());
 }
 
 ObString format_embed_error(int ret)
 {
   static thread_local ObSqlString err_buf;
   err_buf.reset();
-  std::string errmsg = handle_err_msg(ret);
+  ObString errmsg = handle_err_msg(ret);
   const int err_no = ob_errpkt_errno(ret, false);
   const char *err_name = ob_error_name(ret);
   if (nullptr == err_name || '\0' == err_name[0]) {
@@ -318,7 +319,7 @@ ObString format_embed_error(int ret)
   if (errmsg.empty()) {
     err_buf.append_fmt("%s(%d)", err_name, err_no);
   } else {
-    err_buf.append_fmt("%s(%d): %s", err_name, err_no, errmsg.c_str());
+    err_buf.append_fmt("%s(%d): %.*s", err_name, err_no, errmsg.length(), errmsg.ptr());
   }
   return ObString(err_buf.length(), err_buf.ptr());
 }
@@ -326,12 +327,13 @@ ObString format_embed_error(int ret)
 void throw_embed_error(const char *action, int ret)
 {
   ObString err_msg = format_embed_error(ret);
-  std::string msg;
-  msg.reserve(strlen(action) + 8 + err_msg.length());
-  msg.append(action);
-  msg.append(" failed ");
-  msg.append(err_msg.ptr(), err_msg.length());
-  throw std::runtime_error(msg);
+  ObSqlString msg;
+  if (err_msg.empty()) {
+    msg.append_fmt("%s failed", action);
+  } else {
+    msg.append_fmt("%s failed %.*s", action, err_msg.length(), err_msg.ptr());
+  }
+  throw std::runtime_error(msg.ptr());
 }
 
 std::shared_ptr<ObLiteEmbedConn> ObLiteEmbed::connect(const char* db_name, const bool autocommit)
@@ -482,7 +484,14 @@ int ObLiteEmbedConn::execute(const char *sql, uint64_t &affected_rows, int64_t &
     FLOG_INFO("execute", K(sql), K(conn_->is_in_trans()), K(session_->is_in_transaction()), K(affected_rows), K(res.result_set().get_stmt_type()),
         "cost", end_time-start_time);
   }
-  errmsg = handle_err_msg(ret);
+  {
+    ObString err_msg = handle_err_msg(ret);
+    if (!err_msg.empty()) {
+      errmsg.assign(err_msg.ptr(), err_msg.length());
+    } else {
+      errmsg.clear();
+    }
+  }
   if (OB_NOT_NULL(session_)) {
     session_->reset_warnings_buf();
   }
