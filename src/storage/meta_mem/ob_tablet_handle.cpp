@@ -252,6 +252,8 @@ int ObTabletTableIterator::assign(const ObTabletTableIterator& other)
       LOG_WARN("failed to build fork ctx", K(ret));
     } else if (OB_FAIL(fork_ctx_->fork_infos_.assign(other.fork_ctx_->fork_infos_))) {
       LOG_WARN("failed to assign fork infos", K(ret));
+    } else if (OB_FAIL(fork_ctx_->fork_tablet_handles_.assign(other.fork_ctx_->fork_tablet_handles_))) {
+      LOG_WARN("failed to assign fork tablet handles", K(ret));
     }
   }
   return ret;
@@ -314,8 +316,9 @@ int ObTabletTableIterator::add_fork_tablet_handle(const ObTabletHandle &tablet_h
     LOG_WARN("failed to build fork tablet ctx", K(ret));
   } else if (OB_FAIL(fork_ctx_->fork_infos_.push_back(fork_info))) {
     LOG_WARN("failed to push back", K(ret));
+  } else if (OB_FAIL(fork_ctx_->fork_tablet_handles_.push_back(tablet_handle))) {
+    LOG_WARN("failed to push back fork tablet handle", K(ret));
   }
-  UNUSED(tablet_handle);
   return ret;
 }
 
