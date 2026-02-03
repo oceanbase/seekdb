@@ -83,63 +83,64 @@ public:
   DATBuilderThreadPool()
       : all_tries_(nullptr),
         desc_(nullptr),
-        container_(nullptr),
-        error_code_(OB_SUCCESS)
+        error_code_(OB_SUCCESS),
+        handles_(nullptr)
   {}
 
   void set_tries(ObVector<ObFTTrie<void> *, ObArenaAllocator> *tries) { all_tries_ = tries; }
   void set_desc(const ObFTDictDesc *desc) { desc_ = desc; }
-  void set_container(ObFTCacheRangeContainer *container) { container_ = container; }
   int64_t get_range_count() const { return all_tries_ ? all_tries_->size() : 0; }
   int get_error_code() const { return error_code_.load(); }
-
+  void set_handles(ObArray<ObFTCacheRangeHandle *> *handles) { handles_ = handles; }
   void run1() override
   {
     int ret = OB_SUCCESS;
     int64_t idx = get_thread_idx();
 
-    if (OB_ISNULL(all_tries_) || idx >= static_cast<int64_t>(all_tries_->size())) {
-      return;
-    }
+    if (OB_ISNULL(all_tries_) || idx >= static_cast<int64_t>(all_tries_->size()) || OB_ISNULL(all_tries_->at(idx))) {
+      ret = OB_ARRAY_OUT_OF_RANGE;
+      LOG_WARN("all_tries_ is null or idx is out of range", K(idx), K(all_tries_->size()));
+    } else if (OB_ISNULL(handles_) || idx >= static_cast<int64_t>(handles_->size()) || OB_ISNULL(handles_->at(idx))) {
+      ret = OB_ARRAY_OUT_OF_RANGE;
+      LOG_WARN("handles_ is null or idx is out of range", K(idx), K(handles_->size()));
+    } else {
 
-    ObFTTrie<void> *trie = (*all_tries_)[idx];
-    ObArenaAllocator dat_alloc(lib::ObMemAttr(OB_SERVER_TENANT_ID, "DATBuild"));
-    ObFTDATBuilder<void> builder(dat_alloc);
+      ObFTTrie<void> *trie = (*all_tries_)[idx];
+      ObArenaAllocator dat_alloc(lib::ObMemAttr(MTL_ID(), "DATBuild"));
+      ObFTDATBuilder<void> builder(dat_alloc);
 
-    ObFTDAT *dat_buff = nullptr;
-    size_t buffer_size = 0;
-    ObFTCacheRangeHandle *info = nullptr;
+      ObFTDAT *dat_buff = nullptr;
+      size_t buffer_size = 0;
+      ObFTCacheRangeHandle *info = handles_->at(idx);
 
-    if (OB_FAIL(builder.init(*trie))) {
-      LOG_WARN("Failed to init builder.", K(ret), K(idx));
-    } else if (OB_FAIL(builder.build_from_trie(*trie))) {
-      LOG_WARN("Failed to build datrie.", K(ret), K(idx));
-    } else if (OB_FAIL(builder.get_mem_block(dat_buff, buffer_size))) {
-      LOG_WARN("Failed to get mem block.", K(ret), K(idx));
-    } else if (OB_FAIL(container_->fetch_info_for_dict(info))) {
-      LOG_WARN("Failed to fetch info for dict.", K(ret), K(idx));
-    } else if (OB_FAIL(ObFTCacheDict::make_and_fetch_cache_entry(*desc_,
-                                                                  dat_buff,
-                                                                  buffer_size,
-                                                                  static_cast<int32_t>(idx),
-                                                                  info->value_,
-                                                                  info->handle_))) {
-      LOG_WARN("Failed to put dict into kv cache", K(ret), K(idx));
+      if (OB_FAIL(builder.init(*trie))) {
+        LOG_WARN("Failed to init builder.", K(ret), K(idx));
+      } else if (OB_FAIL(builder.build_from_trie(*trie))) {
+        LOG_WARN("Failed to build datrie.", K(ret), K(idx));
+      } else if (OB_FAIL(builder.get_mem_block(dat_buff, buffer_size))) {
+        LOG_WARN("Failed to get mem block.", K(ret), K(idx));
+      } else if (OB_FAIL(ObFTCacheDict::make_and_fetch_cache_entry(*desc_,
+                                                                    dat_buff,
+                                                                    buffer_size,
+                                                                    static_cast<int32_t>(idx),
+                                                                    info->value_,
+                                                                    info->handle_))) {
+        LOG_WARN("Failed to put dict into kv cache", K(ret), K(idx));
+      }
+      dat_alloc.reset();
     }
 
     if (OB_FAIL(ret)) {
       int expected = OB_SUCCESS;
       error_code_.compare_exchange_strong(expected, ret);
     }
-
-    dat_alloc.reset();
   }
 
 private:
   ObVector<ObFTTrie<void> *, ObArenaAllocator> *all_tries_;
   const ObFTDictDesc *desc_;
-  ObFTCacheRangeContainer *container_;
   std::atomic<int> error_code_;
+  ObArray<ObFTCacheRangeHandle *> *handles_;
 };
 
 int ObFTRangeDict::build_ranges_concurrently_thread_pool(const ObFTDictDesc &desc,
@@ -209,19 +210,37 @@ int ObFTRangeDict::build_ranges_concurrently_thread_pool(const ObFTDictDesc &des
 
   // Phase 2: Build DATs concurrently using DATBuilderThreadPool
   if (OB_SUCC(ret) && all_tries.size() > 0) {
-    DATBuilderThreadPool pool;
-    pool.set_tries(&all_tries);
-    pool.set_desc(&desc);
-    pool.set_container(&range_container);
-    pool.set_thread_count(static_cast<int64_t>(all_tries.size()));
-
-    if (OB_FAIL(pool.start())) {
-      LOG_WARN("Failed to start thread pool", K(ret));
+    ObArray<ObFTCacheRangeHandle *> handles;
+    handles.set_attr(lib::ObMemAttr(MTL_ID(), "DATBuild"));
+    for (int64_t i = 0; OB_SUCC(ret) && i < all_tries.size(); i++) {
+      ObFTCacheRangeHandle *handle = nullptr;
+      if (OB_FAIL(range_container.fetch_info_for_dict(handle))) {
+        LOG_WARN("Failed to fetch info for dict.", K(ret), K(i));
+      } else if (OB_FAIL(handles.push_back(handle))) {
+        OB_DELETEx(ObFTCacheRangeHandle, &tmp_alloc, handle);
+        LOG_WARN("Failed to push back handle", K(ret), K(i));
+      }
+    }
+    if (OB_FAIL(ret)) {
+      for (int64_t i = 0; i < handles.size(); i++) {
+        OB_DELETEx(ObFTCacheRangeHandle, &tmp_alloc, handles[i]);
+      }
+      handles.reset();
     } else {
-      pool.wait();
-      ret = pool.get_error_code();
-      if (OB_FAIL(ret)) {
-        LOG_WARN("Thread pool encountered error", K(ret));
+      DATBuilderThreadPool pool;
+      pool.set_tries(&all_tries);
+      pool.set_desc(&desc);
+      pool.set_thread_count(static_cast<int64_t>(all_tries.size()));
+      pool.set_handles(&handles);
+
+      if (OB_FAIL(pool.start())) {
+        LOG_WARN("Failed to start thread pool", K(ret));
+      } else {
+        pool.wait();
+        ret = pool.get_error_code();
+        if (OB_FAIL(ret)) {
+          LOG_WARN("Thread pool encountered error", K(ret));
+        }
       }
     }
   }
