@@ -146,9 +146,8 @@ int send(ObRpcProxy& proxy, ObRpcPacketCode pcode, const Input& args, Output& ou
         req->set_receive_timestamp(pkt->get_receive_ts());
         req->set_server_handle_context(static_cast<ObLocalProcedureCallContext*>(&ctx));
         // deliver rpc request
-        if (OB_FAIL(deliver->deliver(*req))) {
-          RPC_OBRPC_LOG(WARN, "deliver rpc request fail", K(ret));
-        }
+        // ignore return value, if deliver failed, error code will be set in ctx
+        IGNORE_RETURN deliver->deliver(*req);
       }
     }
   }
@@ -255,9 +254,8 @@ int post(ObRpcProxy& proxy, ObRpcPacketCode pcode, const Input& args, UCB* ucb, 
           req->set_receive_timestamp(pkt->get_receive_ts());
           req->set_server_handle_context(static_cast<ObLocalProcedureCallContext*>(ctx));
           // deliver rpc request
-          if (OB_FAIL(deliver->deliver(*req))) {
-            RPC_OBRPC_LOG(WARN, "deliver rpc request fail", K(ret));
-          }
+          // ignore return value, if deliver failed, it will be handled in callback function
+          IGNORE_RETURN deliver->deliver(*req);
         }
       }
     }
