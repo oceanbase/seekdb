@@ -326,7 +326,7 @@ int ObTabletMeta::init(
     ddl_execution_id_ = old_tablet_meta.ddl_execution_id_;
     ddl_data_format_version_ = old_tablet_meta.ddl_data_format_version_;
     ddl_replay_status_ = old_tablet_meta.ddl_replay_status_;
-    mds_checkpoint_scn_ = mds_checkpoint_scn;
+    mds_checkpoint_scn_ = old_tablet_meta.mds_checkpoint_scn_;
     transfer_info_ = old_tablet_meta.transfer_info_;
     extra_medium_info_ = old_tablet_meta.extra_medium_info_;
     space_usage_ = old_tablet_meta.space_usage_;
