@@ -377,7 +377,7 @@ void ObCommandLineParser::print_help() const
   MPRINT("  --port, -P <port>               the port, default is 2881");
   MPRINT("  --use-ipv6, -6                  whether to use ipv6");
   MPRINT("  --base-dir <dir>                The base/work directory which seekdb process will run in(default: current directory). ");
-  MPRINT("                                      NOTE: You must specify this option if you will start seekdb at other directory.");
+  MPRINT("                                  NOTE: You must specify this option if you will start seekdb at other directory.");
   MPRINT("  --data-dir <dir>                The data directory which seekdb will store data in. Default is ${base-dir}/store in initialize mode.");
   MPRINT("  --redo-dir <dir>                The redo log directory which seekdb will store redo log in. Default is ${data-dir}/redo in initialize mode.");
   MPRINT("  --log-level <level>             The server log level. Can be one of [ERROR, WARN, INFO, EDIAG, WDIAG, TRACE, DEBUG]");
