@@ -413,6 +413,8 @@ seekdb 继承了 OceanBase 单机存储引擎、执行引擎、事务引擎、�
 
 ### 从源码构建
 
+在构建之前，请先根据你的操作系统安装所需的工具链和依赖。详见 [安装工具链](docs/developer-guide/zh/toolchain.md)。
+
 ```bash
 # Clone the repository
 git clone https://github.com/oceanbase/seekdb.git

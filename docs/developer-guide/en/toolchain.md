@@ -4,9 +4,11 @@ To build OceanBase seekdb from source code, you need to install the C++ toolchai
 
 ## Supported OS
 
-OceanBase makes strong assumption on the underlying operating systems. Not all the operating systems are supported; especially, Windows and Mac OS X are not supported yet.
+OceanBase makes strong assumption on the underlying operating systems. Not all the operating systems are supported; especially, Windows is not supported yet.
 
 Below is the OS compatibility list:
+
+### Linux
 
  | Alibaba Cloud Linux | 3                     | x86_64 / aarch64 | Yes        | Yes                | Yes                        | Yes              |
  | CentOS              | 7 / 8 / 9             | x86_64 / aarch64 | Yes        | Yes                | Yes                        | Yes              |
@@ -21,6 +23,16 @@ Below is the OS compatibility list:
  | SUSE                | 15.2                  | x86_84 / aarch64 | Yes        | Yes                | Yes                        | Yes              |
  | Ubuntu              | 20.04 / 22.04 / 24.04 | x86_84 / aarch64 | Yes        | Yes                | Yes                        | Yes              |
  | UOS                 | 20                    | x86_84 / aarch64 | Yes        | Yes                | Yes                        | Yes              |
+
+### macOS
+
+| OS      | Version | Architecture       | Supported |
+| ------- | ------- | ------------------ | --------- |
+| macOS   | 13+     | Apple Silicon (M-series) | Yes       |
+
+> **Note**:
+>
+> - macOS support is limited to **macOS 13 (Ventura) or later** with **Apple Silicon (M1/M2/M3/M4) chips only**. Intel-based Macs are not supported.
 
 > **Note**:
 >
@@ -59,3 +71,14 @@ This includes SUSE, openSUSE, etc.
 ```shell
 zypper install git wget rpm cpio make glibc-devel binutils m4 python3
 ```
+
+### macOS (Apple Silicon)
+
+> **Note**: Only macOS 13+ with M-series chips (M1/M2/M3/M4) is supported.
+
+```shell
+brew install git cmake pkg-config openssl@3 ncurses googletest
+brew install zstd utf8proc thrift re2 brotli
+```
+
+> **Tip**: If Homebrew downloads are slow, see [Homebrew Optimization](homebrew.md) for mirror configuration.

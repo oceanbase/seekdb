@@ -198,6 +198,8 @@
   https://www.contributor-covenant.org/*
   https://github.com/oceanbase/*
   https://openwebapi.oceanbase.com*
+  https://mirrors.tuna.tsinghua.edu.cn*
+  https://lldb.llvm.org*
 **/Doxyfile
   www.doxygen.org)
   https://www.gnu.org/software/libiconv/
