@@ -29,7 +29,6 @@ ObCompressorPool::ObCompressorPool()
      zlib_compressor(),
      zstd_compressor(allocator_),
      zstd_compressor_1_3_8(allocator_),
-     zlib_lite_compressor(),
      lz4_stream_compressor(),
      zstd_stream_compressor(allocator_),
      zstd_stream_compressor_1_3_8(allocator_)
@@ -85,9 +84,6 @@ int ObCompressorPool::get_compressor(const ObCompressorType &compressor_type,
     case ZSTD_1_3_8_COMPRESSOR:
       compressor = &zstd_compressor_1_3_8;
       break;
-    case ZLIB_LITE_COMPRESSOR:
-      compressor = &zlib_lite_compressor;
-      break;
     default:
       compressor = NULL;
       ret = OB_NOT_SUPPORTED;
@@ -123,8 +119,6 @@ int ObCompressorPool::get_compressor_type(const char *compressor_name,
     compressor_type = STREAM_ZSTD_COMPRESSOR;
   } else if (!STRCASECMP(compressor_name, "stream_zstd_1.3.8")) {
     compressor_type = STREAM_ZSTD_1_3_8_COMPRESSOR;
-  } else if (!strcmp(compressor_name, "zlib_lite_1.0")) {
-    compressor_type = ZLIB_LITE_COMPRESSOR;
   }
   else {
     ret = OB_NOT_SUPPORTED;
