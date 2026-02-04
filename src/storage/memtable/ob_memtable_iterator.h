@@ -115,7 +115,7 @@ public:
                    const void *query_range) override;
   virtual void reset();
   virtual void reuse() override { reset(); }
-
+  virtual int advance_scan(const blocksstable::ObDatumRange &range) override;
 protected:
   virtual int inner_get_next_row(const blocksstable::ObDatumRow *&row);
   int base_init_(const storage::ObTableIterParam &param,
@@ -139,6 +139,7 @@ protected:
   ObMemtableBlockRowScanner *mt_blk_scanner_;
   ObMemtableSingleRowReader single_row_reader_;
   blocksstable::ObDatumRange cur_range_;
+  ObMemtable *memtable_;
 private:
   static const uint64_t VALID_MAGIC_NUM = 0x524554494e414353;
   DISALLOW_COPY_AND_ASSIGN(ObMemtableScanIterator);

@@ -163,6 +163,7 @@ protected:
     }
     return ret;
   }
+  bool need_fill_token_cnt() const;
  
 protected:
   static const int64_t FWD_IDX_ROWKEY_COL_CNT = 2;

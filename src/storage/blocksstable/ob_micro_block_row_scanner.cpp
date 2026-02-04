@@ -1322,6 +1322,78 @@ int ObIMicroBlockRowScanner::init_bitmap(ObCGBitmap *&bitmap, bool is_all_true)
   return ret;
 }
 
+int ObIMicroBlockRowScanner::skip_to_range(
+    const int64_t begin,
+    const int64_t end,
+    const ObDatumRange &range,
+    const bool is_left_border,
+    const bool is_right_border,
+    int64_t &skip_row_idx,
+    bool &has_data,
+    bool &range_finished)
+{
+  int ret = OB_SUCCESS;
+  bool equal = false;
+  int64_t begin_row_idx = ObIMicroBlockReaderInfo::INVALID_ROW_INDEX;
+  int64_t end_row_idx = ObIMicroBlockReaderInfo::INVALID_ROW_INDEX;
+  const int64_t last = end + 1;
+  has_data = true;
+  range_finished = false;
+  if (OB_UNLIKELY(begin < 0 || begin > end || !range.is_valid())) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid range", K(ret), K(begin), K(end), K(range));
+  } else if (range.get_start_key().is_min_rowkey()) {
+    begin_row_idx = begin;
+  } else if (OB_FAIL(reader_->find_bound(range.get_start_key(), true, begin, last, begin_row_idx, equal))) {
+    LOG_WARN("fail to find bound", K(ret), K(range));
+  } else if (begin_row_idx == last) {
+    has_data = false;
+  } else if (!range.get_border_flag().inclusive_start()) {
+    if (equal) {
+      ++begin_row_idx;
+      if (begin_row_idx == last) {
+        has_data = false;
+      }
+    }
+  }
+  LOG_DEBUG("[INDEX SKIP SCAN] micro skip to range, locate start key", K(ret), K(begin), K(end), K(range),
+            K(has_data), K(equal), K(begin_row_idx));
+  if (OB_SUCC(ret) && has_data) {
+    if (range.get_end_key().is_max_rowkey()) {
+      end_row_idx = end;
+    } else if (OB_FAIL(reader_->find_bound(range.get_end_key(), !range.get_border_flag().inclusive_end(), begin_row_idx, last, end_row_idx, equal))) {
+      LOG_WARN("fail to find bound", K(ret), K(range));
+    } else if (end_row_idx == last) {
+      --end_row_idx;
+    } else if (end_row_idx == begin_row_idx) {
+      has_data = false;
+    } else {
+      --end_row_idx;
+    }
+  }
+  if (OB_SUCC(ret)) {
+    skip_row_idx = reverse_scan_ ? end_row_idx : begin_row_idx;
+    range_finished = reverse_scan_ ? begin_row_idx > begin : (begin_row_idx < last && end_row_idx < end);
+    is_left_border_ = begin_row_idx > 0 || (0 == begin_row_idx && is_left_border);
+    is_right_border_ = end_row_idx < reader_->row_count() || (end_row_idx == reader_->row_count() && is_right_border);
+    if (!has_data) {
+      current_ = ObIMicroBlockReaderInfo::INVALID_ROW_INDEX;
+      start_ = ObIMicroBlockReaderInfo::INVALID_ROW_INDEX;
+      last_ = ObIMicroBlockReaderInfo::INVALID_ROW_INDEX;
+    } else if (reverse_scan_) {
+      current_ = start_ = end_row_idx;
+      last_ = begin_row_idx;
+    } else {
+      current_ = start_ = begin_row_idx;
+      last_ = end_row_idx;
+    }
+  }
+  LOG_DEBUG("[INDEX SKIP SCAN] micro skip to range, locate end key", K(ret), K(begin), K(end), K(range),
+             K(has_data), K(equal), K(begin_row_idx), K(end_row_idx), K_(current), K_(start), K_(last),
+             K(range_finished), K(skip_row_idx));
+  return ret;
+}
+
 ////////////////////////////////// ObMicroBlockRowScanner ////////////////////////////////////////////
 int ObMicroBlockRowScanner::init(
     const storage::ObTableIterParam &param,

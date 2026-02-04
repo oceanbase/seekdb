@@ -589,6 +589,7 @@ ob_set_subtarget(ob_storage access
   access/ob_multiple_skip_scan_merge.cpp
   access/ob_multiple_multi_skip_scan_merge.cpp
   access/ob_multiple_mview_merge.cpp
+  access/ob_index_skip_scanner.cpp
   access/ob_table_scan_iterator.cpp
   access/ob_store_row_iterator.cpp
   access/ob_i_sample_iterator.cpp

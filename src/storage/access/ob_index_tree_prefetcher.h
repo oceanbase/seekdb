@@ -36,6 +36,7 @@ using namespace blocksstable;
 namespace storage {
 class ObAggStoreBase;
 class ObRowsInfo;
+class ObAdvanceSkipScanner;
 
 struct ObSSTableReadHandle
 {
@@ -516,6 +517,7 @@ public:
       micro_data_prefetch_idx_(0),
       row_lock_check_version_(transaction::ObTransVersion::INVALID_TRANS_VERSION),
       agg_store_(nullptr),
+      skip_scanner_(nullptr),
       can_blockscan_(false),
       need_check_prefetch_depth_(false),
       use_multi_block_prefetch_(false),
@@ -611,6 +613,14 @@ public:
   OB_INLINE int32_t get_micro_data_pefetch_depth() const
   {
     return DEFAULT_SCAN_MICRO_DATA_HANDLE_CNT;
+  }
+  OB_INLINE const ObIndexSkipState *get_next_skip_state() const
+  {
+    const ObIndexSkipState *tmp_state = nullptr;
+    if (cur_micro_data_fetch_idx_ + 1 < micro_data_prefetch_idx_) {
+      tmp_state = &micro_data_infos_[(cur_micro_data_fetch_idx_ + 1) % MAX_DATA_PREFETCH_DEPTH].skip_state_;
+    }
+    return tmp_state;
   }
 
   static const int16_t MIN_DATA_READ_BATCH_COUNT = 4;
@@ -731,10 +741,11 @@ protected:
     }
         OB_INLINE int get_next_data_row(
         const bool is_multi_check,
-        ObMicroIndexInfo &block_info)
+        ObMicroIndexInfo &block_info,
+        ObAdvanceSkipScanner *skip_scanner = nullptr)
     {
       int ret = OB_SUCCESS;
-      if (OB_FAIL(index_scanner_.get_next(block_info, is_multi_check))) {
+      if (OB_FAIL(index_scanner_.get_next(block_info, is_multi_check, false/*is_sorted_multi_get*/, skip_scanner))) {
         if (OB_UNLIKELY(OB_ITER_END != ret)) {
           STORAGE_LOG(WARN, "Fail to get_next index row", K(ret), K_(index_scanner));
         }
@@ -756,8 +767,9 @@ protected:
         ObIndexTreeMultiPassPrefetcher &prefetcher)
     {
       int ret = OB_SUCCESS;
+      ObAdvanceSkipScanner *skip_scanner = prefetcher.access_ctx_->query_flag_.is_reverse_scan() ? nullptr : prefetcher.skip_scanner_;
       while (OB_SUCC(ret)) {
-        if (OB_FAIL(index_scanner_.get_next(block_info, prefetcher.is_multi_check()))) {
+        if (OB_FAIL(index_scanner_.get_next(block_info, prefetcher.is_multi_check(), false/*is_sorted_multi_get*/, skip_scanner))) {
           if (OB_UNLIKELY(OB_ITER_END != ret)) {
             STORAGE_LOG(WARN, "Fail to get_next index row", K(ret), K_(index_scanner));
           } else if (fetch_idx_ < prefetch_idx_) {
@@ -873,6 +885,7 @@ public:
   int64_t micro_data_prefetch_idx_;
   int64_t row_lock_check_version_;
   ObAggStoreBase *agg_store_;
+  ObAdvanceSkipScanner *skip_scanner_;
 protected:
   bool can_blockscan_;
   bool need_check_prefetch_depth_;

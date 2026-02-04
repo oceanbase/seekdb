@@ -20,4 +20,3 @@ storage_dml_unittest(test_sstable_row_multi_getter)
 storage_dml_unittest(test_sstable_row_multi_scanner)
 storage_dml_unittest(test_sstable_row_scanner)
 storage_dml_unittest(test_sstable_row_whole_scanner)
-

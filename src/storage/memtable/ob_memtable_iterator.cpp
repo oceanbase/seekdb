@@ -171,7 +171,8 @@ ObMemtableScanIterator::ObMemtableScanIterator()
       context_(nullptr),
       mt_blk_scanner_(nullptr),
       single_row_reader_(),
-      cur_range_()
+      cur_range_(),
+      memtable_(nullptr)
 {
 }
 
@@ -193,6 +194,7 @@ int ObMemtableScanIterator::init(const ObTableIterParam &param,
     STORAGE_LOG(WARN, "init failed", KR(ret), K(param), K(context));
   } else {
     is_inited_ = true;
+    memtable_ = static_cast<ObMemtable *>(table);
     if (OB_FAIL(set_range(*range))) {
       is_inited_ = false;
       STORAGE_LOG(WARN, "set scan range fail", K(ret), K(*range));
@@ -311,6 +313,26 @@ void ObMemtableScanIterator::reset()
   param_ = nullptr;
   cur_range_.reset();
   single_row_reader_.reset();
+  memtable_ = nullptr;
+}
+
+int ObMemtableScanIterator::advance_scan(const blocksstable::ObDatumRange &range)
+{
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(!range.is_valid())) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid range", K(ret), K(range));
+  } else {
+    const storage::ObTableIterParam *param = param_;
+    storage::ObTableAccessContext *context = context_;
+    ObMemtable *memtable = memtable_;
+    reset();
+    if (OB_FAIL(init(*param, *context, memtable, &range))) {
+      LOG_WARN("failed to init memtable iter", K(ret));
+    }
+    LOG_DEBUG("[INDEX SKIP SCAN] memtable skip to range", K(ret), K(range));
+  }
+  return ret;
 }
 
 

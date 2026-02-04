@@ -167,6 +167,19 @@ public:
       const ObDatumRowkey &border_rowkey, 
       const ObDatumRow &deleted_row, 
       ObCSRowId &co_current);
+  int skip_to_range(
+      const int64_t begin,
+      const int64_t end,
+      const ObDatumRange &range,
+      const bool is_left_border,
+      const bool is_right_border,
+      int64_t &skip_row_idx,
+      bool &has_data,
+      bool &range_finished);
+  OB_INLINE void skip_to_end()
+  {
+    current_ = ObIMicroBlockReaderInfo::INVALID_ROW_INDEX;
+  }
   VIRTUAL_TO_STRING_KV(K_(is_left_border), K_(is_right_border), K_(can_ignore_multi_version), K_(use_private_bitmap),
                        K_(can_blockscan), K_(is_filter_applied), K_(current), K_(start), K_(last), K_(step));
 protected:
