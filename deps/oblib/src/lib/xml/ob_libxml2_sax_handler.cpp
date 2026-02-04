@@ -370,23 +370,32 @@ static int create_memory_parser_ctxt(const ObString& xml_text, xmlParserCtxt*& c
     LOG_WARN("create parser input buffer failed", K(ret));
     // free when error
     xmlFreeParserCtxt(ctxt);
-  } else if ((lib_ret = xmlParserInputBufferGrow(buf, xml_text.length())) != xml_text.length()) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("parser push input failed", K(lib_ret), K(xml_text.length()));
-    // free when error
-    xmlFreeParserInputBuffer(buf);
-    xmlFreeParserCtxt(ctxt);
-  } else if (OB_ISNULL(input = xmlNewIOInputStream(ctxt, buf, XML_CHAR_ENCODING_NONE))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("create parser input failed", K(ret));
-    xmlFreeParserInputBuffer(buf);
-	  xmlFreeParserCtxt(ctxt);
-  } else if (xmlPushInput(ctxt, input) == -1) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("parser push input failed", K(ret));
-    // free when error
-    xmlFreeInputStream(input); // this will free buf, so no need free buf
-    xmlFreeParserCtxt(ctxt);
+  } else {
+    // Note: For memory buffers created by xmlParserInputBufferCreateMem,
+    // the content is already loaded. xmlParserInputBufferGrow may return
+    // different values on Mac vs Linux:
+    // - Linux: may return xml_text.length() (total buffer size)
+    // - Mac: may return 0 (no additional data to read from source)
+    // We call it to ensure the buffer is ready, but only check for negative return (error).
+    lib_ret = xmlParserInputBufferGrow(buf, xml_text.length());
+    if (lib_ret < 0) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("parser push input failed", K(lib_ret), K(xml_text.length()));
+      // free when error
+      xmlFreeParserInputBuffer(buf);
+      xmlFreeParserCtxt(ctxt);
+    } else if (OB_ISNULL(input = xmlNewIOInputStream(ctxt, buf, XML_CHAR_ENCODING_NONE))) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("create parser input failed", K(ret));
+      xmlFreeParserInputBuffer(buf);
+      xmlFreeParserCtxt(ctxt);
+    } else if (xmlPushInput(ctxt, input) == -1) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("parser push input failed", K(ret));
+      // free when error
+      xmlFreeInputStream(input); // this will free buf, so no need free buf
+      xmlFreeParserCtxt(ctxt);
+    }
   }
   if (OB_FAIL(ret)) {
     ctxt = nullptr;

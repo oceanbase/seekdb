@@ -306,6 +306,10 @@ int ObSQLCCLRuleManager::match_keywords_in_sql(const ObString &sql,
     const char *text_ptr = sql.ptr();
     uint32_t text_len = sql.length();
     for (size_t i = 0; match && i < ccl_keywords_array.count(); i++) {
+      // Skip empty keywords - they should not affect matching
+      if (ccl_keywords_array.at(i).empty()) {
+        continue;
+      }
       char *new_text = static_cast<char*>(MEMMEM(text_ptr, text_len, 
                                                ccl_keywords_array.at(i).ptr(), 
                                                ccl_keywords_array.at(i).length()));
@@ -325,7 +329,11 @@ int ObSQLCCLRuleManager::match_keywords_in_sql(const ObString &sql,
 
 int ObSQLCCLRuleManager::is_whitelist_sql(const ObString &sql, bool &match) const {
   int ret = OB_SUCCESS;
+  // Initialize match to false - SQL is not in whitelist by default
+  match = false;
   for (size_t i = 0; i < whitelist_keywords_array_.count(); i++) {
+    // Set match to true before each check, match_keywords_in_sql will set it to false if not found
+    match = true;
     if (OB_FAIL(match_keywords_in_sql(sql, whitelist_keywords_array_.at(i), match))) {
       LOG_WARN("fail to match keywords in sql", K(ret));
     } else if (match) {
@@ -401,7 +409,7 @@ int ObSQLCCLRuleManager::match_ccl_rule(
     }
   }
   // 4. match keywords and check whether match whitelist keywords
-  bool match_whitelist_keywords = true;
+  bool match_whitelist_keywords = false;
   ObString sql_upper_case;
   if (match && OB_FAIL(match_keywords_in_sql(sql, ccl_rule.get_ccl_keywords_array(), match))) {
     LOG_WARN("fail to match keywords in sql", K(ret));
