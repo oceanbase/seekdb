@@ -1945,18 +1945,10 @@ int ObJoinOrder::init_sample_info_for_access_path(AccessPath *ap,
     // do nothing
     // sample scan doesn't support DML other than SELECT.
   } else {
-    const ObSelectStmt *stmt = static_cast<const ObSelectStmt *>(get_plan()->get_stmt());
     const SampleInfo *sample_info = table_item->sample_info_;
 
     if (sample_info != NULL) {
       ap->sample_info_ = *sample_info;
-      ap->sample_info_.table_id_ = ap->get_index_table_id();
-    } else if (get_plan()->get_optimizer_context().is_online_ddl() &&
-               get_plan()->get_optimizer_context().get_root_stmt()->is_insert_stmt() &&
-               !get_plan()->get_optimizer_context().is_heap_table_ddl()) {
-      ap->sample_info_.method_ = SampleInfo::SampleMethod::DDL_BLOCK_SAMPLE;
-      ap->sample_info_.scope_ = SampleInfo::SAMPLE_ALL_DATA;
-      ap->sample_info_.percent_ = (double)get_plan()->get_optimizer_context().get_px_object_sample_rate() / 1000;
       ap->sample_info_.table_id_ = ap->get_index_table_id();
     }
     ap->est_cost_info_.sample_info_ = ap->sample_info_;

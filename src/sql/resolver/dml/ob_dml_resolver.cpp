@@ -2969,6 +2969,11 @@ int ObDMLResolver::resolve_basic_table_without_cte(const ParseNode &parse_tree, 
           LOG_WARN("resolve sample clause failed", K(ret));
         } else { }
       }
+      if (OB_SUCC(ret) && NULL == table_item->sample_info_) {
+        if (OB_FAIL(generate_ddl_sample_info_if_needed(*table_item))) {
+          LOG_WARN("failed to generate ddl sample info", K(ret));
+        }
+      }
       //resolve flashback query node
       if (OB_SUCCESS == ret && time_node != NULL) {
         if (OB_FAIL(resolve_flashback_query_node(time_node, table_item))) {
@@ -11103,6 +11108,45 @@ int ObDMLResolver::resolve_sample_clause(const ParseNode *sample_node,
     }
   }
 
+  return ret;
+}
+
+int ObDMLResolver::generate_ddl_sample_info_if_needed(TableItem &table_item)
+{
+  int ret = OB_SUCCESS;
+  if (stmt_->is_select_stmt() &&
+      session_info_->get_ddl_info().is_ddl() &&
+      params_.resolver_scope_stmt_type_ == T_INSERT &&
+      !session_info_->get_ddl_info().is_heap_table_ddl()) {
+    void *buf = allocator_->alloc(sizeof(SampleInfo));
+    if (OB_ISNULL(buf)) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("failed to allocate memory for sample info", K(ret));
+    } else {
+      SampleInfo *sample_info = new(buf) SampleInfo();
+      sample_info->method_ = SampleInfo::SampleMethod::DDL_BLOCK_SAMPLE;
+      sample_info->scope_ = SampleInfo::SAMPLE_ALL_DATA;
+      int64_t px_object_sample_rate = 0;
+      omt::ObTenantConfigGuard tenant_config(TENANT_CONF(session_info_->get_effective_tenant_id()));
+      if (tenant_config.is_valid()) {
+        px_object_sample_rate = tenant_config->_px_object_sampling;
+      }
+      sample_info->percent_ = (double)px_object_sample_rate / 1000;
+      sample_info->table_id_ = table_item.table_id_;
+      // Check if target table is FTS or vector index via upper_insert_resolver_
+      if (OB_NOT_NULL(upper_insert_resolver_)) {
+        const ObTableSchema *ddl_table_schema = NULL;
+        int tmp_ret = OB_SUCCESS;
+        if (OB_SUCCESS != (tmp_ret = upper_insert_resolver_->get_ddl_schema_in_insert_into_select_clause(ddl_table_schema))) {
+          LOG_WARN("get ddl schema failed", K(tmp_ret));
+        } else if (OB_NOT_NULL(ddl_table_schema) &&
+                   (ddl_table_schema->is_fts_index() || ddl_table_schema->is_vec_index())) {
+          sample_info->method_ = SampleInfo::SampleMethod::HYBRID_SAMPLE;
+        }
+      }
+      table_item.sample_info_ = sample_info;
+    }
+  }
   return ret;
 }
 
